@@ -101,7 +101,7 @@ Evidence ZFS / storage is **not** the bottleneck:
    disk-bound — a disk bottleneck would show in IO wait, which
    doesn't appear in `kubectl top` averages.
 
-### 2.3 Actual root cause — config-level, not infra
+### 2.3 Actual root cause — config, confirmed with a live log trace
 
 Reading the `stellar-core-v1` ConfigMap reveals:
 
@@ -110,11 +110,42 @@ CATCHUP_COMPLETE=true    # ← replay from genesis
 CATCHUP_RECENT=100       # ← AND catch up recent 100
 ```
 
-**Per SDF documentation these two are mutually exclusive.** Having
-both set causes stellar-core to pick an unexpected mode. In practice
-this configuration tries to replay from genesis (`CATCHUP_COMPLETE`)
-while also setting a recent bound — which manifests as slow
-progress.
+Live log output from the running pod confirms it picked the
+`CATCHUP_COMPLETE` branch and is doing a full genesis replay:
+
+```
+[History INFO] Catching up to ledger 62099519: Download & apply
+  checkpoints: num checkpoints left to apply: 143072 (6% done)
+[History INFO] Selected archive SDF 1 to download
+  transactions-0327dc3f.xdr.gz
+```
+
+The archive fetch itself is working (SDF's public `core_live_001`
+archive, reached via the `HISTORY=curl …` lines attached to quorum
+validators). **The issue is not archive unavailability.** The issue
+is that full genesis replay of ~9.3 M ledgers is exactly what we
+asked for.
+
+#### Measured progress rate
+
+Two readings of "Ledger close complete: …" taken ~7 minutes apart:
+
+| t | Ledger applied |
+| - | -------------- |
+| 21:19 UTC | 52 942 513 |
+| 21:26 UTC | 52 942 959 |
+| **Δ** | **446 ledgers in 7 min = ~63 ledgers/min = ~1 ledger/sec** |
+
+Network tip advances at ~1 ledger per 5 seconds. So the node gains
+about 4 ledgers of real-world time per 5 seconds of wall clock —
+**closing the 9.3 M-ledger gap takes ~134 days at this rate**,
+assuming zero restarts. Six restarts in 9 days have been shaving
+real progress off that budget every time they happen.
+
+**This is not "struggling to sync" in a broken sense.** It's a
+very slow configuration doing what it was told, while the
+workload owners have been expecting "synced to tip within hours."
+The config asks for 4–5 months; it gets 4–5 months.
 
 Secondary contributors:
 
@@ -289,6 +320,93 @@ With 5 workers × 8c/40GB and current usage ~10 % CPU average:
   is "fast but not bare-metal" — good enough for Phase A based on
   the existing stellar-rpc keeping up; worth benchmarking before
   committing to production.
+
+### 4.5 Spec adequacy — explicit workload-to-capacity mapping
+
+Phase A Rates Engine, R1-only, spread across pods on the 5-worker
+cluster. Each worker: 8 CPU / 40 GB / 48 GB ephemeral.
+
+| Workload | CPU req | RAM req | Storage req | Fits a pod? |
+| -------- | ------- | ------- | ----------- | ----------- |
+| `stellar-core` (CATCHUP_RECENT, non-voting) | 4 | 16 GB | 100 GB NVMe + room for buckets | yes |
+| `galexie` (captive-core + exporter) | 4 | 8 GB | 1 TB NVMe (live bucket; archival can go to S3) | yes |
+| `stellar-rpc` (captive-core) | 4 | 16 GB | 500 GB NVMe | yes |
+| Postgres 15 + Timescale extension | 4 | 16 GB | 2 TB NVMe | yes |
+| Redis cluster (3 masters + 3 replicas) | 6 × 1 | 6 × 2 GB | ephemeral | yes (spread) |
+| MinIO (single-node; optional if using external S3) | 2 | 4 GB | ~10 TB | maybe (storage question) |
+| `ratesengine-indexer` | 2 | 2 GB | — | yes |
+| `ratesengine-aggregator` | 2 | 4 GB | — | yes |
+| `ratesengine-api` (3 replicas) | 3 × 1 | 3 × 2 GB | — | yes |
+| **Totals** | **~31 c** | **~84 GB** | **~14 TB NVMe** | |
+
+**Cluster capacity:** 40 CPU / 200 GB / NVMe PV class (host-side
+free capacity unknown but ≥ 8 TB is already allocated to existing
+PVs; likely room for more but needs confirmation from @ash's
+cofounder).
+
+**Headroom analysis:**
+
+- **CPU:** 31 c of 40 c = 77 % utilised at all-pods-maxed-out. Fine
+  at steady-state average (burstable requests would leave room),
+  but tight during a full catchup + large backfill that can briefly
+  push every pod to requested limits. Advice: set requests at ~70 %
+  of these numbers and let burst limits absorb spikes.
+- **RAM:** 84 GB of 200 GB = 42 %. Comfortable.
+- **Storage:** 14 TB is the real question. Existing allocated PVs
+  total ~8 TB. Whether the Proxmox host has another ~14 TB of NVMe
+  free is the single piece of information that decides whether
+  MinIO can live in-cluster vs having to use external S3. **Need
+  @ash to check Proxmox host storage capacity**; if <14 TB free,
+  point Galexie at an external S3-compat (Backblaze B2, Cloudflare
+  R2) and drop in-cluster MinIO.
+- **Ephemeral:** 48 GB per worker is enough for OS + scratch. Go
+  binaries + logs are MB, not GB.
+
+**Adequacy verdict:**
+
+- **Phase A all-in-one R1:** ✅ **yes, this cluster is sufficient.**
+  The workloads fit, with storage being the one place to verify
+  host-level capacity.
+- **Phase B validator on same cluster:** ⚠️ doable but awkward —
+  USB HSM passthrough into a pod is operational work we haven't
+  designed. Easier to run the validator externally and leave the
+  cluster for archival + serving.
+- **Multi-region (R1+R2+R3):** ❌ one Proxmox cluster = one
+  failure domain. This cluster is R1 at most; R2 and R3 must live
+  elsewhere (Hetzner, Latitude, etc.).
+- **Steady-state growth headroom:** 🟡 fine for the first year.
+  Stellar trade volume + cluster capacity headroom give maybe 2×
+  runway before we'd need to add workers. Not a launch concern.
+
+---
+
+## 4a. How to unstick the existing stellar-core (reference only)
+
+For completeness, the minimum config change that would flip the
+existing node from "genesis replay" to "caught up tonight":
+
+```diff
+-CATCHUP_COMPLETE=true
+-CATCHUP_RECENT=100
++CATCHUP_RECENT=262144
+```
+
+Plus add SDF archive fallbacks to the top-level `[HISTORY]`
+sections so core has explicit archive endpoints (it's finding SDF's
+archive today via the quorum-validator `HISTORY=` lines, which works
+but is incidental).
+
+Expected outcome after config change + pod restart:
+
+- ~10–20 min to fetch the recent checkpoint range.
+- ~5–10 min to apply and catch up to tip.
+- Node enters `Synced!` state within ~30 min.
+
+**No data loss.** Buckets and Postgres state are preserved; the node
+just stops trying to replay history it doesn't need.
+
+**We are not doing this.** The user asked for no changes. This is
+the recipe for when they choose to apply it.
 
 ---
 
