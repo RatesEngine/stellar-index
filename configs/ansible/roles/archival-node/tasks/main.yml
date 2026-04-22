@@ -1,0 +1,60 @@
+---
+# Orchestrates the archival-node bootstrap. Each included task file
+# carries a tag matching its file name so operators can run a subset:
+#
+#   ansible-playbook ... --tags zfs,postgres
+#   ansible-playbook ... --skip-tags minio
+
+- name: "Preflight checks"
+  ansible.builtin.import_tasks: 01-preflight.yml
+  tags: [preflight, always]
+
+- name: "Kernel + sysctl tuning"
+  ansible.builtin.import_tasks: 02-kernel.yml
+  tags: [kernel]
+
+- name: "ZFS install + pool + datasets"
+  ansible.builtin.import_tasks: 03-zfs.yml
+  tags: [zfs]
+
+- name: "Service users"
+  ansible.builtin.import_tasks: 04-users.yml
+  tags: [users]
+
+- name: "Postgres 15"
+  ansible.builtin.import_tasks: 05-postgres.yml
+  when: run_postgres | bool
+  tags: [postgres]
+
+- name: "stellar-core"
+  ansible.builtin.import_tasks: 06-stellar-core.yml
+  when: run_stellar_core | bool
+  tags: [stellar-core, core]
+
+- name: "Galexie"
+  ansible.builtin.import_tasks: 07-galexie.yml
+  when: run_galexie | bool
+  tags: [galexie]
+
+- name: "stellar-rpc"
+  ansible.builtin.import_tasks: 08-stellar-rpc.yml
+  when: run_stellar_rpc | bool
+  tags: [stellar-rpc, rpc]
+
+- name: "MinIO (single-node local)"
+  ansible.builtin.import_tasks: 09-minio.yml
+  when: run_minio | bool
+  tags: [minio]
+
+- name: "Observability (node_exporter + core exporter)"
+  ansible.builtin.import_tasks: 10-observability.yml
+  when: run_observability | bool
+  tags: [observability, monitoring]
+
+- name: "Firewall (nftables)"
+  ansible.builtin.import_tasks: 11-firewall.yml
+  tags: [firewall]
+
+- name: "SSH + base hardening"
+  ansible.builtin.import_tasks: 12-hardening.yml
+  tags: [hardening, ssh]

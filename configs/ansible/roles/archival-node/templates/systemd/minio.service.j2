@@ -1,0 +1,29 @@
+[Unit]
+Description=MinIO object storage (single-node)
+Documentation=https://min.io/docs/minio/linux/index.html
+After=network-online.target
+Wants=network-online.target
+AssertFileIsExecutable=/usr/local/bin/minio
+
+[Service]
+Type=notify
+User=minio
+Group=minio
+EnvironmentFile=/etc/default/minio
+ExecStart=/usr/local/bin/minio server $MINIO_OPTS $MINIO_VOLUMES
+
+LimitNOFILE=1048576
+
+Restart=on-failure
+RestartSec=5s
+# Use notify socket; MinIO signals readiness after bucket load.
+NotifyAccess=main
+
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+
+[Install]
+WantedBy=multi-user.target

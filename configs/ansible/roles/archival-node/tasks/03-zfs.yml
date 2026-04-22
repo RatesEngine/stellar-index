@@ -1,0 +1,71 @@
+---
+# ZFS: install, create the `data` pool across the declared NVMe devices
+# in the configured topology (raidz2 by default), then create the
+# per-workload datasets with tuned recordsize + compression.
+#
+# IMPORTANT: creating the pool is DESTRUCTIVE. The task guards against
+# re-creation with `creates:` — if the pool already exists, nothing
+# happens. To re-create, operator must manually `zpool destroy` first.
+
+- name: Install ZFS userspace + kernel modules
+  ansible.builtin.apt:
+    name:
+      - zfsutils-linux
+      - zfs-initramfs
+    state: present
+
+- name: Check if pool "{{ zfs_data_pool_name }}" already exists
+  ansible.builtin.command: "zpool list -H {{ zfs_data_pool_name }}"
+  register: zpool_list
+  failed_when: false
+  changed_when: false
+
+- name: Create ZFS pool {{ zfs_data_pool_name }} ({{ zfs_data_pool_type }})
+  ansible.builtin.command: >-
+    zpool create
+    -o ashift={{ zfs_ashift }}
+    -O compression=zstd
+    -O atime=off
+    -O xattr=sa
+    -O acltype=posixacl
+    -O canmount=off
+    -O mountpoint=/mnt/{{ zfs_data_pool_name }}
+    {{ zfs_data_pool_name }}
+    {{ zfs_data_pool_type if zfs_data_pool_type != 'stripe' else '' }}
+    {{ zfs_data_devices | join(' ') }}
+  when: zpool_list.rc != 0
+  register: zpool_create
+  changed_when: zpool_create.rc == 0
+
+- name: Create ZFS datasets (per-workload tuning)
+  community.general.zfs:
+    name: "{{ zfs_data_pool_name }}/{{ item.name }}"
+    state: present
+    extra_zfs_properties:
+      recordsize: "{{ item.recordsize | default('128K') }}"
+      compression: "{{ item.compression | default('zstd') }}"
+      atime: "{{ item.atime | default('off') }}"
+      mountpoint: "{{ item.mountpoint }}"
+      logbias: "{{ item.logbias | default('latency') }}"
+      primarycache: "{{ item.primarycache | default('all') }}"
+  loop: "{{ zfs_datasets }}"
+  loop_control:
+    label: "{{ item.name }} → {{ item.mountpoint }}"
+
+- name: Ensure dataset mount points exist with correct perms
+  ansible.builtin.file:
+    path: "{{ item.mountpoint }}"
+    state: directory
+    mode: "0755"
+  loop: "{{ zfs_datasets }}"
+  loop_control:
+    label: "{{ item.mountpoint }}"
+
+- name: Show final pool layout
+  ansible.builtin.command: "zpool status -v {{ zfs_data_pool_name }}"
+  register: zpool_status
+  changed_when: false
+
+- name: Log pool layout
+  ansible.builtin.debug:
+    var: zpool_status.stdout_lines

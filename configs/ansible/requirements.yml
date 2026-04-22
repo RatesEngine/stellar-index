@@ -1,0 +1,20 @@
+---
+# Ansible Galaxy collection requirements.
+# Install with: ansible-galaxy collection install -r requirements.yml
+
+collections:
+  # Core modules (copy, template, file, service, user, etc.)
+  - name: ansible.posix
+    version: ">=1.5.0"
+
+  # Apt + debconf, systemd, ufw/nftables
+  - name: community.general
+    version: ">=8.0.0"
+
+  # Postgres role management, DB creation, user creation
+  - name: community.postgresql
+    version: ">=3.4.0"
+
+  # ZFS filesystem + pool management
+  - name: community.general
+    version: ">=8.0.0"

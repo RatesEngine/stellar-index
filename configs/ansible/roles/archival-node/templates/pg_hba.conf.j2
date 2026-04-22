@@ -1,0 +1,8 @@
+# pg_hba.conf — only local connections allowed. stellar-core is on
+# the same host; remote reads go through PgBouncer (future HA).
+
+# TYPE  DATABASE        USER              ADDRESS         METHOD
+local   all             postgres                          peer
+local   all             all                               peer
+host    all             all               127.0.0.1/32    scram-sha-256
+host    all             all               ::1/128         scram-sha-256

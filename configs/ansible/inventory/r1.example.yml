@@ -1,0 +1,70 @@
+---
+# Inventory for R1 (London / Hetzner EX63).
+# Copy to r1.yml and fill in the Xs.
+#
+# Secrets (DB password, etc.) live in r1.secrets.yml (ansible-vault).
+
+all:
+  vars:
+    # ───── Region identity ─────────────────────────────────────────
+    region_id:           "r1"
+    region_name:         "London"
+    home_domain:         "ratesengine.net"
+
+    # ───── Stellar network ─────────────────────────────────────────
+    stellar_network:     "pubnet"            # pubnet | testnet | futurenet
+    catchup_mode:        "CATCHUP_RECENT"    # RECENT | COMPLETE
+    is_validator:        false                # true = SCP voter (Phase B+)
+    node_is_validator:   "{{ is_validator }}"
+
+    # ───── Storage layout ──────────────────────────────────────────
+    # The four NVMe drives on EX63 as enumerated by the kernel.
+    # Verify with `lsblk` before running — order is not guaranteed.
+    zfs_data_devices:
+      - /dev/disk/by-id/nvme-SAMSUNG_MZQL27T6HBLA-XXXX # replace
+      - /dev/disk/by-id/nvme-SAMSUNG_MZQL27T6HBLA-YYYY
+      - /dev/disk/by-id/nvme-SAMSUNG_MZQL27T6HBLA-ZZZZ
+      - /dev/disk/by-id/nvme-SAMSUNG_MZQL27T6HBLA-WWWW
+    zfs_data_pool_type:  "raidz2"             # raidz2 | mirror | stripe
+    zfs_data_pool_name:  "data"
+
+    # ───── Roles colocated on this host ────────────────────────────
+    run_postgres:        true
+    run_stellar_core:    true
+    run_galexie:         true
+    run_stellar_rpc:     true
+    run_minio:           true                 # local single-node MinIO
+    run_observability:   true
+
+    # ───── Galexie export target ───────────────────────────────────
+    # Use the local MinIO endpoint by default. For a remote target,
+    # override `galexie_backend_type=s3` and set galexie_s3_endpoint.
+    galexie_backend_type: "s3"
+    galexie_s3_endpoint:  "http://127.0.0.1:9000"
+    galexie_s3_bucket:    "galexie-live"
+    galexie_s3_region:    "{{ region_id }}"
+
+    # ───── Observability targets ───────────────────────────────────
+    prometheus_scrape_allow_cidrs:
+      - "10.0.0.0/8"
+      - "172.16.0.0/12"
+      - "127.0.0.1/32"
+    loki_push_url:       "https://loki.ratesengine.net/loki/api/v1/push"
+
+    # ───── SSH hardening ───────────────────────────────────────────
+    admin_ssh_keys:
+      - "ssh-ed25519 AAAA... ash@ashfrancis.com"   # replace
+    allowed_ssh_cidrs:
+      - "0.0.0.0/0"                            # tighten to VPN/jump host later
+
+  children:
+    archival_nodes:
+      hosts:
+        r1-01.ratesengine.net:
+          ansible_host:         "X.X.X.X"      # Hetzner-assigned IP
+          ansible_user:         "root"
+          ansible_port:         22
+          ansible_ssh_private_key_file: "~/.ssh/id_ed25519"
+
+          # Host-specific overrides go here; most values inherit
+          # from the group-level vars above.

@@ -1,0 +1,51 @@
+---
+# Preflight checks — fail fast if the host doesn't match expectations.
+# Every other task assumes the checks below passed.
+
+- name: Verify RAM sufficient (≥ 32 GB per archival-node-spec "minimum" tier)
+  ansible.builtin.assert:
+    that:
+      - ansible_memtotal_mb >= 30000   # 32 GB DIMMs report ~31.3 GB usable
+    fail_msg: >-
+      This host has {{ (ansible_memtotal_mb / 1024) | round(1) }} GB RAM;
+      the archival-node spec requires 32 GB minimum.
+      See docs/architecture/infrastructure/archival-node-spec.md §3.2.
+
+- name: Verify x86_64 architecture (stellar-core binaries target x86_64)
+  ansible.builtin.assert:
+    that:
+      - ansible_architecture == "x86_64"
+
+- name: Check that ZFS data devices are declared
+  ansible.builtin.assert:
+    that:
+      - zfs_data_devices | length >= 2
+    fail_msg: "zfs_data_devices must be set in inventory (see inventory/r1.example.yml)."
+
+- name: Verify each declared ZFS device exists
+  ansible.builtin.stat:
+    path: "{{ item }}"
+  loop: "{{ zfs_data_devices }}"
+  register: device_stat
+
+- name: Fail if any declared ZFS device is missing
+  ansible.builtin.assert:
+    that:
+      - item.stat.exists
+    fail_msg: "Device {{ item.item }} does not exist on the host."
+  loop: "{{ device_stat.results }}"
+  loop_control:
+    label: "{{ item.item }}"
+
+- name: Verify admin_ssh_keys is non-empty
+  ansible.builtin.assert:
+    that:
+      - admin_ssh_keys | length >= 1
+    fail_msg: >-
+      admin_ssh_keys must contain at least one key — otherwise hardening
+      will lock us out.
+
+- name: Gather information about network interfaces
+  ansible.builtin.setup:
+    gather_subset:
+      - network

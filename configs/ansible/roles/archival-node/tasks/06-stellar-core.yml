@@ -1,0 +1,67 @@
+---
+# stellar-core: install from apt.stellar.org (signed with SDF's key),
+# configure non-voting archival quorum set, publish history archive
+# to the local filesystem dataset (/srv/history-archive) which in
+# Phase B+ gets mirrored to MinIO/S3.
+
+- name: Add SDF apt key
+  ansible.builtin.get_url:
+    url: "https://apt.stellar.org/SDF.asc"
+    dest: /etc/apt/keyrings/sdf.asc
+    mode: "0644"
+
+- name: Add SDF apt repo (stable)
+  ansible.builtin.apt_repository:
+    repo: "deb [signed-by=/etc/apt/keyrings/sdf.asc] https://apt.stellar.org {{ ansible_distribution_release }} stable"
+    state: present
+    filename: sdf
+
+- name: Install stellar-core + support packages
+  ansible.builtin.apt:
+    name:
+      - stellar-core
+      - stellar-archivist
+      - stellar-core-prometheus-exporter
+    state: present
+    update_cache: true
+
+- name: Template stellar-core.cfg
+  ansible.builtin.template:
+    src: stellar-core.cfg.j2
+    dest: /etc/stellar/stellar-core.cfg
+    owner: stellar
+    group: stellar
+    mode: "0640"
+  notify: Restart stellar-core
+
+- name: Install stellar-core systemd unit
+  ansible.builtin.template:
+    src: systemd/stellar-core.service.j2
+    dest: /etc/systemd/system/stellar-core.service
+    mode: "0644"
+  notify:
+    - Reload systemd
+    - Restart stellar-core
+
+- name: Initialise stellar-core DB (first run only)
+  ansible.builtin.command: stellar-core new-db
+  args:
+    creates: /var/lib/stellar-core/buckets/.stellar-core-initialised
+  become_user: stellar
+  environment:
+    STELLAR_CORE_CONFIG: /etc/stellar/stellar-core.cfg
+
+- name: Mark stellar-core as initialised
+  ansible.builtin.file:
+    path: /var/lib/stellar-core/buckets/.stellar-core-initialised
+    state: touch
+    owner: stellar
+    group: stellar
+    mode: "0644"
+
+- name: Enable + start stellar-core
+  ansible.builtin.systemd:
+    name: stellar-core
+    state: started
+    enabled: true
+    daemon_reload: true

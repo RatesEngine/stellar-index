@@ -1,0 +1,75 @@
+---
+# Kernel + sysctl tuning for the Postgres + stellar-core workload.
+# Defaults to sensible values for a 192 GB ECC box; each is overridable
+# via the `sysctl_tunings` map in defaults/main.yml.
+
+- name: Apt update (cache max 1 h)
+  ansible.builtin.apt:
+    update_cache: true
+    cache_valid_time: 3600
+
+- name: Install baseline packages
+  ansible.builtin.apt:
+    name:
+      - build-essential
+      - ca-certificates
+      - curl
+      - wget
+      - gnupg
+      - lsb-release
+      - software-properties-common
+      - jq
+      - htop
+      - iotop
+      - sysstat
+      - tmux
+      - rsync
+      - unattended-upgrades
+      - apt-transport-https
+      - ntpsec
+    state: present
+
+- name: Disable transparent huge pages at boot (Postgres recommendation)
+  ansible.builtin.copy:
+    dest: /etc/systemd/system/disable-thp.service
+    mode: "0644"
+    content: |
+      [Unit]
+      Description=Disable Transparent Huge Pages (THP)
+      DefaultDependencies=no
+      After=sysinit.target local-fs.target
+      Before=basic.target
+
+      [Service]
+      Type=oneshot
+      ExecStart=/bin/sh -c 'echo never > /sys/kernel/mm/transparent_hugepage/enabled && echo never > /sys/kernel/mm/transparent_hugepage/defrag'
+
+      [Install]
+      WantedBy=basic.target
+  notify: Reload systemd
+
+- name: Enable + start disable-thp service
+  ansible.builtin.systemd:
+    name: disable-thp
+    enabled: true
+    state: started
+    daemon_reload: true
+
+- name: Write sysctl profile
+  ansible.posix.sysctl:
+    name: "{{ item.key }}"
+    value: "{{ item.value }}"
+    state: present
+    reload: true
+    sysctl_file: /etc/sysctl.d/90-ratesengine.conf
+  loop: "{{ sysctl_tunings | dict2items }}"
+
+- name: Raise systemd default file-descriptor limits
+  ansible.builtin.copy:
+    dest: /etc/systemd/system.conf.d/limits.conf
+    mode: "0644"
+    content: |
+      [Manager]
+      DefaultLimitNOFILE=1048576
+      DefaultLimitNPROC=1048576
+  notify: Reload systemd

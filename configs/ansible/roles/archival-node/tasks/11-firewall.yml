@@ -1,0 +1,34 @@
+---
+# nftables firewall. Public interface: only SSH + stellar-core SCP
+# peer port. Everything else: rejected. Internal services exposed
+# only to internal_cidrs.
+#
+# Uses the nftables package + a templated ruleset.
+
+- name: Install nftables
+  ansible.builtin.apt:
+    name: nftables
+    state: present
+
+- name: Template nftables ruleset
+  ansible.builtin.template:
+    src: nftables.conf.j2
+    dest: /etc/nftables.conf
+    owner: root
+    group: root
+    mode: "0644"
+    validate: "nft -c -f %s"
+  notify: Restart nftables
+
+- name: Enable + start nftables
+  ansible.builtin.systemd:
+    name: nftables
+    state: started
+    enabled: true
+
+- name: Disable UFW (we use nftables directly)
+  ansible.builtin.systemd:
+    name: ufw
+    state: stopped
+    enabled: false
+  failed_when: false

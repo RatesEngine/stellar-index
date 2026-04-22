@@ -1,0 +1,26 @@
+---
+# Top-level playbook — brings a fresh Ubuntu 22.04 box up as a Rates
+# Engine archival node. Idempotent; safe to re-run.
+#
+# Usage:
+#   ansible-playbook -i inventory/r1.yml playbooks/archival-node.yml
+#
+# See configs/ansible/README.md for prerequisites.
+
+- name: Bootstrap archival node
+  hosts: archival_nodes
+  become: true
+  gather_facts: true
+
+  pre_tasks:
+    - name: Confirm Ubuntu 22.04
+      ansible.builtin.assert:
+        that:
+          - ansible_distribution == "Ubuntu"
+          - ansible_distribution_major_version == "22"
+        fail_msg: >-
+          This role targets Ubuntu 22.04 LTS. Got
+          {{ ansible_distribution }} {{ ansible_distribution_version }}.
+
+  roles:
+    - role: archival-node

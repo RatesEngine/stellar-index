@@ -1,0 +1,25 @@
+# stellar-rpc config.
+# SQLite path on the ZFS rpc dataset (recordsize=16K).
+# Event retention capped to keep SQLite bounded.
+
+ENDPOINT                   = "0.0.0.0:{{ stellar_rpc_port }}"
+ADMIN_ENDPOINT             = "127.0.0.1:{{ stellar_rpc_admin_port }}"
+
+NETWORK_PASSPHRASE         = "{% if stellar_network == 'pubnet' %}Public Global Stellar Network ; September 2015{% elif stellar_network == 'testnet' %}Test SDF Network ; September 2015{% else %}{{ stellar_network }}{% endif %}"
+
+CAPTIVE_CORE_CONFIG_PATH   = "/etc/stellar/stellar-core.cfg"
+STELLAR_CORE_BINARY_PATH   = "/usr/bin/stellar-core"
+CAPTIVE_CORE_STORAGE_PATH  = "/var/lib/stellar-rpc/captive"
+
+DB_PATH                    = "/var/lib/stellar-rpc/rpc.sqlite"
+
+# Retention — see archival-node-spec.md §3.3.1
+HISTORY_RETENTION_WINDOW   = {{ stellar_rpc_event_retention_ledgers }}
+TRANSACTION_RETENTION_WINDOW = {{ stellar_rpc_tx_retention_ledgers }}
+
+# HISTORY_ARCHIVE_URLS must match at least one archive in stellar-core.cfg
+HISTORY_ARCHIVE_URLS = [
+    "https://history.stellar.org/prd/core-live/core_live_001",
+    "https://history.stellar.org/prd/core-live/core_live_002",
+    "https://history.stellar.org/prd/core-live/core_live_003",
+]

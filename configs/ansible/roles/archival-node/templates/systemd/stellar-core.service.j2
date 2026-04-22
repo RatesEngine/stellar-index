@@ -1,0 +1,32 @@
+[Unit]
+Description=Stellar Core — Rates Engine archival node
+Documentation=https://github.com/stellar/stellar-core
+After=network-online.target postgresql@{{ postgres_version }}-main.service
+Wants=network-online.target
+Requires=postgresql@{{ postgres_version }}-main.service
+
+[Service]
+Type=simple
+User=stellar
+Group=stellar
+EnvironmentFile=-/etc/default/stellar-core
+WorkingDirectory=/var/lib/stellar-core
+ExecStart=/usr/bin/stellar-core run --conf /etc/stellar/stellar-core.cfg
+ExecReload=/bin/kill -HUP $MAINPID
+
+LimitNOFILE=1048576
+LimitNPROC=1048576
+
+Restart=on-failure
+RestartSec=10s
+
+# Minimal hardening — services with legitimate file access so we
+# avoid ProtectSystem=strict which interferes with history publishing.
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+
+[Install]
+WantedBy=multi-user.target

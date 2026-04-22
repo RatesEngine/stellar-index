@@ -1,0 +1,30 @@
+[Unit]
+Description=Stellar Galexie — ledger-meta exporter
+Documentation=https://github.com/stellar/stellar-galexie
+After=network-online.target{% if run_minio %} minio.service{% endif %}
+
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=galexie
+Group=galexie
+WorkingDirectory=/var/lib/galexie
+EnvironmentFile=-/etc/default/galexie
+ExecStart=/usr/local/bin/galexie append --config /etc/galexie/galexie.toml
+ExecStop=/bin/kill -TERM $MAINPID
+
+LimitNOFILE=1048576
+LimitNPROC=1048576
+
+Restart=on-failure
+RestartSec=10s
+
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+
+[Install]
+WantedBy=multi-user.target

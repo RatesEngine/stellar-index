@@ -1,0 +1,28 @@
+[Unit]
+Description=Stellar RPC — Rates Engine read surface
+Documentation=https://github.com/stellar/stellar-rpc
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=stellar
+Group=stellar
+WorkingDirectory=/var/lib/stellar-rpc
+EnvironmentFile=-/etc/default/stellar-rpc
+ExecStart=/usr/bin/stellar-rpc --config-path /etc/stellar/stellar-rpc.cfg
+
+LimitNOFILE=1048576
+LimitNPROC=1048576
+
+Restart=on-failure
+RestartSec=10s
+
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+
+[Install]
+WantedBy=multi-user.target

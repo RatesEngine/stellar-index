@@ -1,0 +1,60 @@
+---
+# Galexie: download the pinned release tarball, install binary, render
+# TOML config, install + enable systemd unit.
+# Pinned version lives in defaults/main.yml → VERSIONS.md.
+
+- name: Check existing galexie version
+  ansible.builtin.command: /usr/local/bin/galexie version
+  register: galexie_current
+  failed_when: false
+  changed_when: false
+
+- name: Download pinned galexie release
+  ansible.builtin.get_url:
+    url: "https://github.com/stellar/stellar-galexie/releases/download/{{ galexie_version }}/stellar-galexie-linux-amd64-{{ galexie_version }}.tar.gz"
+    dest: "/tmp/galexie-{{ galexie_version }}.tar.gz"
+    mode: "0644"
+    # TODO(#0): pin checksum — gh release SHA256.
+  when: galexie_version not in galexie_current.stdout
+
+- name: Extract galexie binary
+  ansible.builtin.unarchive:
+    src: "/tmp/galexie-{{ galexie_version }}.tar.gz"
+    dest: /usr/local/bin/
+    remote_src: true
+    extra_opts:
+      - "--strip-components=1"
+  when: galexie_version not in galexie_current.stdout
+  notify: Restart galexie
+
+- name: Ensure galexie binary is executable
+  ansible.builtin.file:
+    path: /usr/local/bin/galexie
+    mode: "0755"
+    owner: root
+    group: root
+
+- name: Template galexie.toml
+  ansible.builtin.template:
+    src: galexie.toml.j2
+    dest: /etc/galexie/galexie.toml
+    owner: galexie
+    group: galexie
+    mode: "0640"
+  notify: Restart galexie
+
+- name: Install galexie systemd unit
+  ansible.builtin.template:
+    src: systemd/galexie.service.j2
+    dest: /etc/systemd/system/galexie.service
+    mode: "0644"
+  notify:
+    - Reload systemd
+    - Restart galexie
+
+- name: Enable + start galexie
+  ansible.builtin.systemd:
+    name: galexie
+    state: started
+    enabled: true
+    daemon_reload: true

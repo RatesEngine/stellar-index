@@ -1,0 +1,63 @@
+{#
+  stellar-core config template.
+  Rendered from roles/archival-node/defaults/main.yml + inventory.
+  See https://github.com/stellar/stellar-core/blob/master/docs/stellar-core_example.cfg
+#}
+
+HTTP_PORT = {{ stellar_http_port }}
+PUBLIC_HTTP_PORT = false
+PEER_PORT = {{ stellar_peer_port }}
+
+NETWORK_PASSPHRASE = "{% if stellar_network == 'pubnet' %}Public Global Stellar Network ; September 2015{% elif stellar_network == 'testnet' %}Test SDF Network ; September 2015{% else %}{{ stellar_network }}{% endif %}"
+
+NODE_IS_VALIDATOR = {{ node_is_validator | lower }}
+NODE_HOME_DOMAIN  = "{{ home_domain }}"
+{% if is_validator %}
+# NODE_SEED is resolved via the HSM signer daemon in validator mode.
+# See docs/architecture/infrastructure/validator-rollout.md §5.
+# NODE_SEED = "SX..."   # DO NOT set on disk
+{% endif %}
+
+DATABASE = "postgresql://dbname={{ postgres_db_core }} host=127.0.0.1 user={{ postgres_user_core }} password={{ postgres_pass_core }}"
+
+BUCKET_DIR_PATH = "/var/lib/stellar-core/buckets"
+
+{% if catchup_mode == "COMPLETE" %}
+CATCHUP_COMPLETE = true
+{% else %}
+CATCHUP_RECENT = 1024
+{% endif %}
+
+# History archives — ours published locally, plus SDF for cross-verify
+[HISTORY.ratesengine]
+get = "cp /srv/history-archive/{0} {1}"
+put = "cp {0} /srv/history-archive/{1}"
+mkdir = "mkdir -p /srv/history-archive/{0}"
+
+[HISTORY.sdf1]
+get = "curl -sfL https://history.stellar.org/prd/core-live/core_live_001/{0} -o {1}"
+
+[HISTORY.sdf2]
+get = "curl -sfL https://history.stellar.org/prd/core-live/core_live_002/{0} -o {1}"
+
+[HISTORY.sdf3]
+get = "curl -sfL https://history.stellar.org/prd/core-live/core_live_003/{0} -o {1}"
+
+# Known peers — stellar-core gossips more from these
+KNOWN_PEERS = [
+{% for peer in stellar_known_peers %}
+    "{{ peer }}"{% if not loop.last %},{% endif %}
+{% endfor %}
+]
+
+# ──── Quorum set ────────────────────────────────────────────────────
+# Non-voting archival mode: we trust these validators to decide the
+# ledger. Do not promote to voting without an ADR.
+
+[QUORUM_SET]
+THRESHOLD_PERCENT = {{ stellar_quorum_set.threshold_percent }}
+VALIDATORS = [
+{% for v in stellar_quorum_set.validators %}
+    "{{ v.publickey }} {{ v.name }}"{% if not loop.last %},{% endif %}
+{% endfor %}
+]

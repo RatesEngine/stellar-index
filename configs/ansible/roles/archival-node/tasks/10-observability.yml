@@ -1,0 +1,84 @@
+---
+# node_exporter + stellar-core-prometheus-exporter. Ships metrics on
+# :9100 and :9473 respectively; both bound to loopback and reachable
+# only over the internal_cidrs (nftables enforces).
+
+- name: Download node_exporter
+  ansible.builtin.get_url:
+    url: "https://github.com/prometheus/node_exporter/releases/download/v{{ node_exporter_version }}/node_exporter-{{ node_exporter_version }}.linux-amd64.tar.gz"
+    dest: "/tmp/node_exporter-{{ node_exporter_version }}.tar.gz"
+    mode: "0644"
+
+- name: Extract node_exporter
+  ansible.builtin.unarchive:
+    src: "/tmp/node_exporter-{{ node_exporter_version }}.tar.gz"
+    dest: /usr/local/bin/
+    remote_src: true
+    extra_opts:
+      - "--strip-components=1"
+      - "--wildcards"
+      - "*/node_exporter"
+
+- name: Create node_exporter user
+  ansible.builtin.user:
+    name: node_exporter
+    system: true
+    shell: /usr/sbin/nologin
+    home: /var/lib/node_exporter
+    create_home: false
+    state: present
+
+- name: Install node_exporter systemd unit
+  ansible.builtin.copy:
+    dest: /etc/systemd/system/node_exporter.service
+    mode: "0644"
+    content: |
+      [Unit]
+      Description=Prometheus Node Exporter
+      After=network-online.target
+      Wants=network-online.target
+
+      [Service]
+      User=node_exporter
+      Group=node_exporter
+      Type=simple
+      ExecStart=/usr/local/bin/node_exporter \
+        --web.listen-address=0.0.0.0:{{ node_exporter_port }} \
+        --collector.systemd \
+        --collector.processes
+      Restart=on-failure
+      RestartSec=5s
+
+      [Install]
+      WantedBy=multi-user.target
+  notify:
+    - Reload systemd
+    - Restart node_exporter
+
+- name: Enable + start node_exporter
+  ansible.builtin.systemd:
+    name: node_exporter
+    state: started
+    enabled: true
+    daemon_reload: true
+
+- name: Install stellar-core-prometheus-exporter systemd override
+  ansible.builtin.copy:
+    dest: /etc/systemd/system/stellar-core-prometheus-exporter.service.d/override.conf
+    mode: "0644"
+    directory_mode: "0755"
+    content: |
+      [Service]
+      ExecStart=
+      ExecStart=/usr/bin/stellar-core-prometheus-exporter --port {{ core_exporter_port }}
+  notify:
+    - Reload systemd
+    - Restart core exporter
+
+- name: Enable + start stellar-core-prometheus-exporter
+  ansible.builtin.systemd:
+    name: stellar-core-prometheus-exporter
+    state: started
+    enabled: true
+
+# TODO(#0): wire promtail → loki_push_url. Skeleton only this round.

@@ -1,0 +1,34 @@
+---
+# stellar-rpc: installed from apt.stellar.org. Captive-core pointed
+# at our quorum set; event retention capped per defaults to avoid the
+# SQLite growth flagged in the Phase-1 audit.
+
+- name: Install stellar-rpc
+  ansible.builtin.apt:
+    name: stellar-rpc
+    state: present
+
+- name: Template stellar-rpc.cfg
+  ansible.builtin.template:
+    src: stellar-rpc.cfg.j2
+    dest: /etc/stellar/stellar-rpc.cfg
+    owner: stellar
+    group: stellar
+    mode: "0640"
+  notify: Restart stellar-rpc
+
+- name: Install stellar-rpc systemd override
+  ansible.builtin.template:
+    src: systemd/stellar-rpc.service.j2
+    dest: /etc/systemd/system/stellar-rpc.service
+    mode: "0644"
+  notify:
+    - Reload systemd
+    - Restart stellar-rpc
+
+- name: Enable + start stellar-rpc
+  ansible.builtin.systemd:
+    name: stellar-rpc
+    state: started
+    enabled: true
+    daemon_reload: true

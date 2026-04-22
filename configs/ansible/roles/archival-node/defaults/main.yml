@@ -1,0 +1,199 @@
+---
+# Defaults for the archival-node role.
+# Every value here is overridable via inventory group_vars / host_vars.
+# See inventory/r1.example.yml for the operator-facing knobs.
+
+# ───── Region ────────────────────────────────────────────────────────
+region_id:           "r1"
+region_name:         "London"
+home_domain:         "ratesengine.net"
+
+# ───── Which subsystems to run on this host ──────────────────────────
+run_postgres:        true
+run_stellar_core:    true
+run_galexie:         true
+run_stellar_rpc:     true
+run_minio:           true
+run_observability:   true
+
+# ───── ZFS ───────────────────────────────────────────────────────────
+zfs_data_pool_name:  "data"
+zfs_data_pool_type:  "raidz2"
+zfs_data_devices:    []          # set in inventory, validated in preflight
+zfs_ashift:          12          # 4K NVMe sector alignment
+
+# Per-workload dataset tuning
+zfs_datasets:
+  - name: "os"
+    recordsize: "128K"
+    compression: "zstd"
+    atime: "off"
+    mountpoint: "/var/lib/ratesengine"
+  - name: "postgres"
+    recordsize: "8K"
+    compression: "zstd"
+    atime: "off"
+    logbias: "throughput"
+    primarycache: "metadata"
+    mountpoint: "/var/lib/postgresql"
+  - name: "core"
+    recordsize: "128K"
+    compression: "zstd"
+    atime: "off"
+    mountpoint: "/var/lib/stellar-core"
+  - name: "rpc"
+    recordsize: "16K"
+    compression: "zstd"
+    atime: "off"
+    mountpoint: "/var/lib/stellar-rpc"
+  - name: "galexie"
+    recordsize: "1M"
+    compression: "zstd"
+    atime: "off"
+    mountpoint: "/var/lib/galexie"
+  - name: "minio"
+    recordsize: "1M"
+    compression: "zstd"
+    atime: "off"
+    mountpoint: "/var/lib/minio"
+  - name: "archive"
+    recordsize: "1M"
+    compression: "zstd"
+    atime: "off"
+    mountpoint: "/srv/history-archive"
+
+# ───── OS kernel tuning ──────────────────────────────────────────────
+sysctl_tunings:
+  # File descriptor headroom (stellar-core + Postgres + Galexie keep many open)
+  fs.file-max: 2097152
+  fs.nr_open: 2097152
+  # Network buffers for the SCP overlay + Galexie writers
+  net.core.rmem_max: 16777216
+  net.core.wmem_max: 16777216
+  net.core.netdev_max_backlog: 5000
+  net.ipv4.tcp_rmem: "4096 87380 16777216"
+  net.ipv4.tcp_wmem: "4096 65536 16777216"
+  # Swap sanity for a DB workload
+  vm.swappiness: 1
+  vm.dirty_ratio: 10
+  vm.dirty_background_ratio: 3
+  # Transparent huge pages OFF (Postgres + BucketListDB recommendation)
+  vm.overcommit_memory: 2
+  vm.overcommit_ratio: 80
+
+# ───── Postgres ──────────────────────────────────────────────────────
+postgres_version:        "15"
+postgres_listen_addresses: "127.0.0.1"          # stellar-core is local
+postgres_port:           5432
+postgres_shared_buffers: "{{ (ansible_memtotal_mb * 0.25) | int }}MB"
+postgres_effective_cache_size: "{{ (ansible_memtotal_mb * 0.5) | int }}MB"
+postgres_work_mem:       "32MB"
+postgres_maintenance_work_mem: "1GB"
+postgres_wal_compression: "zstd"
+postgres_max_connections: 200
+
+postgres_db_core:        "stellar_core"
+postgres_user_core:      "stellar_core"
+# postgres_pass_core ← set in ansible-vault secrets file
+
+# ───── Stellar network / quorum ──────────────────────────────────────
+stellar_network:         "pubnet"
+catchup_mode:            "CATCHUP_RECENT"       # RECENT | COMPLETE
+is_validator:            false
+node_is_validator:       "{{ is_validator }}"
+
+# Known peers (SDF + Tier-1) — stellar-core picks up more via peer gossip
+stellar_known_peers:
+  - "core-live-a.stellar.org:11625"
+  - "core-live-b.stellar.org:11625"
+  - "core-live-c.stellar.org:11625"
+  - "core.lobstr.co:11625"
+  - "stellar.satoshipay.io:11625"
+
+# Quorum set — the trust anchors we follow. 3 SDF + 2 T1 orgs = sensible
+# starting shape. Replace with a proper ADR-backed quorum when we
+# promote to voting.
+stellar_quorum_set:
+  threshold_percent: 67
+  validators:
+    - name: "SDF_1"
+      publickey: "GCGB2S2KGYARPVIA37HYZXVRM2YZUEXA6S33ZU5BUDC6THSB62LZSTYH"
+      home_domain: "stellar.org"
+    - name: "SDF_2"
+      publickey: "GCM6QMP3DLRPTAZW2UZPCPX2LF3SXWXKPMP3GKFZBDSF3QZGV2G5QSTK"
+      home_domain: "stellar.org"
+    - name: "SDF_3"
+      publickey: "GABMKJM6I25XI4K7U6XWMULOUQIQ27BCTMLS6BYYSOWKTBUXI3JZZWNM"
+      home_domain: "stellar.org"
+    - name: "LOBSTR_1"
+      publickey: "GDKWELGJURRKXECG3HHFHXMRX64YWQPUHKCVRESOX3E5PM6DM4ZB58MK"
+      home_domain: "lobstr.co"
+    - name: "SATOSHIPAY"
+      publickey: "GC5SXLNAM3C4NMGK2PXK4R34B5GNZ47FYQ24ZIBFDFOCU6D4KBN4POAE"
+      home_domain: "satoshipay.io"
+
+stellar_http_port:       11626
+stellar_peer_port:       11625
+
+# ───── Galexie ───────────────────────────────────────────────────────
+galexie_version:         "v0.9.0"      # pinned — update via VERSIONS.md
+galexie_backend_type:    "s3"          # s3 | filesystem
+galexie_s3_endpoint:     "http://127.0.0.1:9000"
+galexie_s3_bucket:       "galexie-live"
+galexie_s3_region:       "{{ region_id }}"
+# galexie_s3_access_key ← vault
+# galexie_s3_secret_key ← vault
+galexie_ledgers_per_file: 1
+galexie_files_per_partition: 64000      # ~1 checkpoint per partition
+
+# ───── stellar-rpc ───────────────────────────────────────────────────
+stellar_rpc_port:        8000
+stellar_rpc_admin_port:  8080
+stellar_rpc_event_retention_ledgers: 518400   # ~30 days at 5 s/ledger
+stellar_rpc_tx_retention_ledgers:    17280    # ~24 h
+
+# ───── MinIO ─────────────────────────────────────────────────────────
+minio_version:           "RELEASE.2024-11-07T00-52-20Z"
+minio_port:              9000
+minio_console_port:      9001
+minio_data_path:         "/var/lib/minio"
+# minio_root_user ← vault
+# minio_root_password ← vault
+minio_buckets:
+  - "galexie-live"
+  - "galexie-archive"
+  - "backups"
+
+# ───── Firewall ──────────────────────────────────────────────────────
+# Ports open on the public interface. Everything else rejects.
+public_allow_ports:
+  - { port: 22,    proto: "tcp", comment: "SSH (rate-limited)" }
+  - { port: 11625, proto: "tcp", comment: "stellar-core SCP peer" }
+
+allowed_ssh_cidrs:
+  - "0.0.0.0/0"     # tighten to jump host / VPN once that exists
+
+# Internal ports accessible from the LAN / VPN CIDRs only
+internal_allow_ports:
+  - { port: 11626, proto: "tcp", comment: "stellar-core admin HTTP" }
+  - { port: 5432,  proto: "tcp", comment: "Postgres" }
+  - { port: 8000,  proto: "tcp", comment: "stellar-rpc" }
+  - { port: 9000,  proto: "tcp", comment: "MinIO S3 API" }
+  - { port: 9100,  proto: "tcp", comment: "node_exporter" }
+
+internal_cidrs:
+  - "10.0.0.0/8"
+  - "172.16.0.0/12"
+  - "192.168.0.0/16"
+
+# ───── Observability ─────────────────────────────────────────────────
+node_exporter_version:   "1.8.2"
+node_exporter_port:      9100
+
+core_exporter_port:      9473
+
+# ───── SSH hardening ─────────────────────────────────────────────────
+admin_ssh_keys: []
+ssh_permit_root_login: "prohibit-password"
+ssh_permit_password_auth: false
+ssh_max_auth_tries: 3

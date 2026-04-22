@@ -1,0 +1,48 @@
+# sshd_config — rendered by ansible.
+# Reference: man 5 sshd_config.
+
+Port 22
+AddressFamily any
+ListenAddress 0.0.0.0
+ListenAddress ::
+
+HostKey /etc/ssh/ssh_host_ed25519_key
+HostKey /etc/ssh/ssh_host_rsa_key
+
+# ─── Protocol + ciphers ─────────────────────────────────────────────
+Protocol 2
+KexAlgorithms curve25519-sha256,curve25519-sha256@libssh.org,diffie-hellman-group16-sha512,diffie-hellman-group18-sha512
+Ciphers chacha20-poly1305@openssh.com,aes256-gcm@openssh.com,aes128-gcm@openssh.com
+MACs hmac-sha2-512-etm@openssh.com,hmac-sha2-256-etm@openssh.com
+HostKeyAlgorithms ssh-ed25519,rsa-sha2-512,rsa-sha2-256
+
+# ─── Authentication ─────────────────────────────────────────────────
+PermitRootLogin {{ ssh_permit_root_login }}
+PubkeyAuthentication yes
+PasswordAuthentication {{ 'no' if not ssh_permit_password_auth else 'yes' }}
+ChallengeResponseAuthentication no
+KbdInteractiveAuthentication no
+UsePAM yes
+MaxAuthTries {{ ssh_max_auth_tries }}
+LoginGraceTime 30s
+MaxSessions 10
+
+# ─── Session ────────────────────────────────────────────────────────
+X11Forwarding no
+AllowTcpForwarding yes
+AllowAgentForwarding no
+PermitTunnel no
+ClientAliveInterval 60
+ClientAliveCountMax 3
+TCPKeepAlive yes
+
+# ─── Logging ────────────────────────────────────────────────────────
+SyslogFacility AUTH
+LogLevel VERBOSE
+
+# ─── Misc ───────────────────────────────────────────────────────────
+Subsystem sftp /usr/lib/openssh/sftp-server
+PrintMotd no
+PrintLastLog yes
+AcceptEnv LANG LC_*
+UseDNS no

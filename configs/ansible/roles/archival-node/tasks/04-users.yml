@@ -1,0 +1,73 @@
+---
+# Service users for the long-running daemons. Each runs under its own
+# UID with no login shell. Ownership of ZFS dataset mountpoints is
+# fixed here once users exist.
+
+- name: Service user — stellar
+  ansible.builtin.user:
+    name: stellar
+    system: true
+    shell: /usr/sbin/nologin
+    home: /var/lib/stellar-core
+    create_home: false
+    state: present
+
+- name: Service user — galexie
+  ansible.builtin.user:
+    name: galexie
+    system: true
+    shell: /usr/sbin/nologin
+    home: /var/lib/galexie
+    create_home: false
+    state: present
+
+- name: Service user — minio
+  ansible.builtin.user:
+    name: minio
+    system: true
+    shell: /usr/sbin/nologin
+    home: /var/lib/minio
+    create_home: false
+    state: present
+  when: run_minio | bool
+
+- name: Ownership — stellar-core data dir
+  ansible.builtin.file:
+    path: /var/lib/stellar-core
+    state: directory
+    owner: stellar
+    group: stellar
+    mode: "0750"
+
+- name: Ownership — stellar-rpc data dir
+  ansible.builtin.file:
+    path: /var/lib/stellar-rpc
+    state: directory
+    owner: stellar
+    group: stellar
+    mode: "0750"
+
+- name: Ownership — galexie data dir
+  ansible.builtin.file:
+    path: /var/lib/galexie
+    state: directory
+    owner: galexie
+    group: galexie
+    mode: "0750"
+
+- name: Ownership — minio data dir
+  ansible.builtin.file:
+    path: /var/lib/minio
+    state: directory
+    owner: minio
+    group: minio
+    mode: "0750"
+  when: run_minio | bool
+
+- name: Ownership — published history archive
+  ansible.builtin.file:
+    path: /srv/history-archive
+    state: directory
+    owner: stellar
+    group: stellar
+    mode: "0755"

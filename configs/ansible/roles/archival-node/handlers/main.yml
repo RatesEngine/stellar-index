@@ -1,0 +1,49 @@
+---
+- name: Reload systemd
+  ansible.builtin.systemd:
+    daemon_reload: true
+
+- name: Restart postgres
+  ansible.builtin.systemd:
+    name: "postgresql@{{ postgres_version }}-main"
+    state: restarted
+
+- name: Restart stellar-core
+  ansible.builtin.systemd:
+    name: stellar-core
+    state: restarted
+
+- name: Restart galexie
+  ansible.builtin.systemd:
+    name: galexie
+    state: restarted
+
+- name: Restart stellar-rpc
+  ansible.builtin.systemd:
+    name: stellar-rpc
+    state: restarted
+
+- name: Restart minio
+  ansible.builtin.systemd:
+    name: minio
+    state: restarted
+
+- name: Restart node_exporter
+  ansible.builtin.systemd:
+    name: node_exporter
+    state: restarted
+
+- name: Restart core exporter
+  ansible.builtin.systemd:
+    name: stellar-core-prometheus-exporter
+    state: restarted
+
+- name: Restart nftables
+  ansible.builtin.systemd:
+    name: nftables
+    state: restarted
+
+- name: Restart ssh
+  ansible.builtin.systemd:
+    name: ssh
+    state: restarted

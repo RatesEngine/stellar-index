@@ -1,0 +1,60 @@
+---
+# SSH hardening + baseline host security. Keeps the bar reasonable for
+# Phase A; full CIS L2 auditd profile lands in Week-9 hardening pass.
+
+- name: Install admin SSH keys for root
+  ansible.posix.authorized_key:
+    user: root
+    state: present
+    exclusive: true                # replace existing keys
+    key: "{{ admin_ssh_keys | join('\n') }}"
+
+- name: Template sshd_config
+  ansible.builtin.template:
+    src: sshd_config.j2
+    dest: /etc/ssh/sshd_config
+    owner: root
+    group: root
+    mode: "0644"
+    validate: "sshd -t -f %s"
+  notify: Restart ssh
+
+- name: Install fail2ban
+  ansible.builtin.apt:
+    name: fail2ban
+    state: present
+
+- name: Template fail2ban jail.local
+  ansible.builtin.copy:
+    dest: /etc/fail2ban/jail.local
+    mode: "0644"
+    content: |
+      [DEFAULT]
+      bantime  = 3600
+      findtime = 600
+      maxretry = 3
+      backend  = systemd
+
+      [sshd]
+      enabled  = true
+      mode     = aggressive
+
+- name: Enable + start fail2ban
+  ansible.builtin.systemd:
+    name: fail2ban
+    state: started
+    enabled: true
+
+- name: Enable unattended security upgrades only
+  ansible.builtin.copy:
+    dest: /etc/apt/apt.conf.d/50unattended-upgrades
+    mode: "0644"
+    content: |
+      Unattended-Upgrade::Allowed-Origins {
+          "${distro_id}:${distro_codename}-security";
+      };
+      Unattended-Upgrade::Automatic-Reboot "false";
+
+# TODO(#0): CIS L2 auditd profile, sudo logging to Loki, kernel
+# hardening (kptr_restrict, dmesg_restrict, yama ptrace). See
+# docs/architecture/repo-hygiene-plan.md §16.

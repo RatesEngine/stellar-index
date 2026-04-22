@@ -1,0 +1,82 @@
+---
+# Postgres 15 from the PGDG repository. stellar-core uses BucketListDB
+# (Postgres-backed) per ADR discussion in the archival-node spec.
+#
+# Secrets (postgres_pass_core) come from ansible-vault.
+
+- name: Add PGDG apt key
+  ansible.builtin.get_url:
+    url: "https://www.postgresql.org/media/keys/ACCC4CF8.asc"
+    dest: /etc/apt/keyrings/pgdg.asc
+    mode: "0644"
+
+- name: Add PGDG apt repo
+  ansible.builtin.apt_repository:
+    repo: "deb [signed-by=/etc/apt/keyrings/pgdg.asc] https://apt.postgresql.org/pub/repos/apt {{ ansible_distribution_release }}-pgdg main"
+    state: present
+    filename: pgdg
+
+- name: Install Postgres {{ postgres_version }}
+  ansible.builtin.apt:
+    name:
+      - "postgresql-{{ postgres_version }}"
+      - "postgresql-contrib-{{ postgres_version }}"
+      - "postgresql-client-{{ postgres_version }}"
+      - python3-psycopg2          # required by community.postgresql modules
+    state: present
+    update_cache: true
+
+- name: Verify Postgres cluster dir is on the ZFS dataset
+  ansible.builtin.stat:
+    path: "/var/lib/postgresql/{{ postgres_version }}/main"
+  register: pg_main_dir
+
+- name: Template postgresql.conf
+  ansible.builtin.template:
+    src: postgresql.conf.j2
+    dest: "/etc/postgresql/{{ postgres_version }}/main/postgresql.conf"
+    owner: postgres
+    group: postgres
+    mode: "0640"
+  notify: Restart postgres
+
+- name: Template pg_hba.conf
+  ansible.builtin.template:
+    src: pg_hba.conf.j2
+    dest: "/etc/postgresql/{{ postgres_version }}/main/pg_hba.conf"
+    owner: postgres
+    group: postgres
+    mode: "0640"
+  notify: Restart postgres
+
+- name: Ensure Postgres is running
+  ansible.builtin.systemd:
+    name: "postgresql@{{ postgres_version }}-main"
+    state: started
+    enabled: true
+
+- name: Create stellar-core Postgres role
+  community.postgresql.postgresql_user:
+    name: "{{ postgres_user_core }}"
+    password: "{{ postgres_pass_core }}"
+    encrypted: true
+    state: present
+  become_user: postgres
+
+- name: Create stellar-core database
+  community.postgresql.postgresql_db:
+    name: "{{ postgres_db_core }}"
+    owner: "{{ postgres_user_core }}"
+    encoding: "UTF8"
+    lc_collate: "en_US.UTF-8"
+    lc_ctype: "en_US.UTF-8"
+    template: "template0"
+    state: present
+  become_user: postgres
+
+- name: Enable pg_stat_statements extension
+  community.postgresql.postgresql_ext:
+    db: "{{ postgres_db_core }}"
+    name: "pg_stat_statements"
+    state: present
+  become_user: postgres

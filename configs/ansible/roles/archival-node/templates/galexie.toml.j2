@@ -1,0 +1,29 @@
+# Galexie config — renders from defaults/main.yml + inventory.
+
+network = "{{ stellar_network }}"
+
+[captive_core]
+binary_path          = "/usr/bin/stellar-core"
+storage_path         = "/var/lib/galexie/captive"
+toml_path            = "/etc/stellar/stellar-core.cfg"
+use_db               = true
+
+[datastore]
+{% if galexie_backend_type == "s3" %}
+type = "s3"
+
+[datastore.config.s3]
+endpoint_url    = "{{ galexie_s3_endpoint }}"
+bucket_name     = "{{ galexie_s3_bucket }}"
+region          = "{{ galexie_s3_region }}"
+# Access + secret keys read from environment (systemd Env files)
+{% elif galexie_backend_type == "filesystem" %}
+type = "filesystem"
+
+[datastore.config.filesystem]
+base_dir = "/var/lib/galexie/data"
+{% endif %}
+
+[exporter_config]
+ledgers_per_file     = {{ galexie_ledgers_per_file }}
+files_per_partition  = {{ galexie_files_per_partition }}
