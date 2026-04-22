@@ -1,0 +1,202 @@
+//go:build integration
+
+package integration_test
+
+import (
+	"context"
+	"math/big"
+	"testing"
+	"time"
+
+	c "github.com/RatesEngine/rates-engine/internal/canonical"
+	"github.com/RatesEngine/rates-engine/internal/storage/timescale"
+)
+
+// TestAssetsReader exercises DistinctAssets + HasAsset against a
+// real Timescale with our migrations applied. Requires the
+// `integration` build tag.
+func TestAssetsReader(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+	defer cancel()
+
+	dsn := startTimescale(t, ctx)
+	applyMigrations(t, dsn)
+
+	store, err := timescale.Open(ctx, dsn)
+	if err != nil {
+		t.Fatalf("store open: %v", err)
+	}
+	t.Cleanup(func() { _ = store.Close() })
+
+	// Empty DB → empty list, empty HasAsset.
+	got, next, err := store.DistinctAssets(ctx, "", 100)
+	if err != nil {
+		t.Fatalf("DistinctAssets (empty): %v", err)
+	}
+	if len(got) != 0 {
+		t.Errorf("expected empty, got %d assets", len(got))
+	}
+	if next != "" {
+		t.Errorf("next cursor should be empty, got %q", next)
+	}
+	has, _ := store.HasAsset(ctx, c.NativeAsset())
+	if has {
+		t.Error("HasAsset should be false on empty db")
+	}
+
+	// Seed 3 assets via trades: XLM, USDC, PHOENIX.
+	xlm := c.NativeAsset()
+	usdc, _ := c.NewClassicAsset("USDC", "GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN")
+	pho, _ := c.NewSorobanAsset("CBCZGGNOEUZG4CAAE7TGTQQHETZMKUT4OIPFHHPKEUX46U4KXBBZ3GLH")
+
+	for i, pair := range []c.Pair{
+		mustPair(xlm, usdc),
+		mustPair(pho, usdc),
+		mustPair(xlm, pho),
+	} {
+		tr := c.Trade{
+			Source:      "test",
+			Ledger:      uint32(52_000_000 + i),
+			TxHash:      hexTx(i),
+			OpIndex:     0,
+			Timestamp:   time.Now().UTC().Truncate(time.Second).Add(time.Duration(i) * time.Second),
+			Pair:        pair,
+			BaseAmount:  c.NewAmount(big.NewInt(1_000_000_000)),
+			QuoteAmount: c.NewAmount(big.NewInt(12_000_000)),
+		}
+		if err := store.InsertTrade(ctx, tr); err != nil {
+			t.Fatalf("InsertTrade %d: %v", i, err)
+		}
+	}
+
+	// After seeding, the distinct union is {XLM(native), USDC-G..., CBCZ...}.
+	got, next, err = store.DistinctAssets(ctx, "", 100)
+	if err != nil {
+		t.Fatalf("DistinctAssets: %v", err)
+	}
+	if len(got) != 3 {
+		t.Fatalf("expected 3 distinct assets, got %d: %v", len(got), ids(got))
+	}
+	if next != "" {
+		t.Errorf("next cursor should be empty when page not full, got %q", next)
+	}
+
+	for _, want := range []c.Asset{xlm, usdc, pho} {
+		has, err := store.HasAsset(ctx, want)
+		if err != nil {
+			t.Fatalf("HasAsset %s: %v", want.String(), err)
+		}
+		if !has {
+			t.Errorf("HasAsset(%s) = false, want true", want.String())
+		}
+	}
+	// And a seeded-but-different asset should NOT be found.
+	notInDB, _ := c.NewFiatAsset("EUR")
+	if has, _ := store.HasAsset(ctx, notInDB); has {
+		t.Error("HasAsset(EUR) should be false")
+	}
+}
+
+func TestAssetsReaderPagination(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+	defer cancel()
+
+	dsn := startTimescale(t, ctx)
+	applyMigrations(t, dsn)
+
+	store, err := timescale.Open(ctx, dsn)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = store.Close() })
+
+	// Seed 5 soroban assets (ordered by string so pagination order
+	// is deterministic).
+	assets := []c.Asset{
+		mustSorobanTest("CA001JYLGXMF6TDJBBYYSE3HQ6BBSMLNUQ34T6TZMYMW2EVH34XOWMA"),
+		mustSorobanTest("CA002JYLGXMF6TDJBBYYSE3HQ6BBSMLNUQ34T6TZMYMW2EVH34XOWMA"),
+		mustSorobanTest("CA003JYLGXMF6TDJBBYYSE3HQ6BBSMLNUQ34T6TZMYMW2EVH34XOWMA"),
+		mustSorobanTest("CA004JYLGXMF6TDJBBYYSE3HQ6BBSMLNUQ34T6TZMYMW2EVH34XOWMA"),
+		mustSorobanTest("CA005JYLGXMF6TDJBBYYSE3HQ6BBSMLNUQ34T6TZMYMW2EVH34XOWMA"),
+	}
+	// Seed each as BASE paired with native XLM.
+	for i, a := range assets {
+		tr := c.Trade{
+			Source: "test", Ledger: uint32(52_000_000 + i),
+			TxHash: hexTx(i), OpIndex: 0,
+			Timestamp:   time.Now().UTC().Truncate(time.Second).Add(time.Duration(i) * time.Second),
+			Pair:        mustPair(a, c.NativeAsset()),
+			BaseAmount:  c.NewAmount(big.NewInt(1_000)),
+			QuoteAmount: c.NewAmount(big.NewInt(12)),
+		}
+		if err := store.InsertTrade(ctx, tr); err != nil {
+			t.Fatalf("seed %d: %v", i, err)
+		}
+	}
+
+	// Request a page size of 2 — expect 3 pages (2+2+2 where last
+	// page includes 1 extra native + 1 overflow = …). Actually
+	// with 5 seeded sorobans + 1 native = 6 distinct assets total.
+	// Iterate with cursor until next is empty.
+	var allSeen []c.Asset
+	cursor := ""
+	for iter := 0; iter < 10; iter++ {
+		page, next, err := store.DistinctAssets(ctx, cursor, 2)
+		if err != nil {
+			t.Fatalf("iter %d: %v", iter, err)
+		}
+		allSeen = append(allSeen, page...)
+		if next == "" {
+			break
+		}
+		cursor = next
+	}
+	if len(allSeen) != 6 {
+		t.Errorf("expected 6 distinct assets across pages, got %d: %v",
+			len(allSeen), ids(allSeen))
+	}
+
+	// Ordering: ascending by asset string. C... sort after "native".
+	for i := 1; i < len(allSeen); i++ {
+		if allSeen[i-1].String() >= allSeen[i].String() {
+			t.Errorf("not sorted at %d: %q >= %q",
+				i, allSeen[i-1].String(), allSeen[i].String())
+		}
+	}
+}
+
+// ─── helpers ──────────────────────────────────────────────────────
+
+func mustPair(base, quote c.Asset) c.Pair {
+	p, err := c.NewPair(base, quote)
+	if err != nil {
+		panic(err)
+	}
+	return p
+}
+
+func mustSorobanTest(id string) c.Asset {
+	a, err := c.NewSorobanAsset(id)
+	if err != nil {
+		panic(err)
+	}
+	return a
+}
+
+func hexTx(i int) string {
+	// Deterministic 64-char hex tx-hash for fixture data.
+	base := "cafebabecafebabecafebabecafebabecafebabecafebabecafebabecafebabe"
+	// Swap two chars to differentiate; trades hypertable unique
+	// key tolerates duplicates via ON CONFLICT DO NOTHING, but
+	// we want distinct rows for counting.
+	tail := "0123456789abcdef"[i%16]
+	return base[:63] + string(tail)
+}
+
+func ids(as []c.Asset) []string {
+	out := make([]string, len(as))
+	for i, a := range as {
+		out[i] = a.String()
+	}
+	return out
+}

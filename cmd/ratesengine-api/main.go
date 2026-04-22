@@ -31,6 +31,7 @@ import (
 	"time"
 
 	v1 "github.com/RatesEngine/rates-engine/internal/api/v1"
+	"github.com/RatesEngine/rates-engine/internal/canonical"
 	"github.com/RatesEngine/rates-engine/internal/config"
 	"github.com/RatesEngine/rates-engine/internal/storage/timescale"
 	"github.com/RatesEngine/rates-engine/internal/version"
@@ -97,6 +98,7 @@ func run(cfgPath string, dryRun bool) error {
 	apiSrv := v1.New(v1.Options{
 		Logger:      logger.With("component", "api"),
 		ReadyChecks: checks,
+		Assets:      storeAssetReader{s: store},
 	})
 
 	if dryRun {
@@ -150,6 +152,59 @@ type storeChecker struct{ s *timescale.Store }
 func (c storeChecker) Name() string { return "postgres" }
 func (c storeChecker) Ping(ctx context.Context) error {
 	return c.s.DB().PingContext(ctx)
+}
+
+// storeAssetReader adapts *timescale.Store to v1.AssetReader. Keeps
+// the typed boundary: the store returns canonical.Asset; the API
+// layer owns the wire-shape conversion to v1.AssetDetail.
+type storeAssetReader struct{ s *timescale.Store }
+
+func (r storeAssetReader) ListAssets(ctx context.Context, cursor string, limit int) ([]v1.AssetDetail, string, error) {
+	assets, next, err := r.s.DistinctAssets(ctx, cursor, limit)
+	if err != nil {
+		return nil, "", err
+	}
+	out := make([]v1.AssetDetail, len(assets))
+	for i, a := range assets {
+		out[i] = assetToDetail(a)
+	}
+	return out, next, nil
+}
+
+func (r storeAssetReader) GetAsset(ctx context.Context, a canonical.Asset) (v1.AssetDetail, error) {
+	has, err := r.s.HasAsset(ctx, a)
+	if err != nil {
+		return v1.AssetDetail{}, err
+	}
+	if !has {
+		return v1.AssetDetail{}, v1.ErrAssetNotFound
+	}
+	return assetToDetail(a), nil
+}
+
+// assetToDetail converts canonical.Asset → v1.AssetDetail. Nullable
+// fields become nil pointers when empty so the JSON omits them.
+//
+// SEP-1 + home-domain overlay is future work — once
+// internal/metadata is wired we'll enrich this with the stellar.toml
+// fields (name, description, image, sep1_status).
+func assetToDetail(a canonical.Asset) v1.AssetDetail {
+	d := v1.AssetDetail{
+		AssetID:    a.String(),
+		Type:       string(a.Type),
+		Code:       a.Code,
+		Decimals:   7, // overlay from SEP-41 decimals() in follow-up
+		Sep1Status: "not_applicable",
+	}
+	if a.Issuer != "" {
+		v := a.Issuer
+		d.Issuer = &v
+	}
+	if a.ContractID != "" {
+		v := a.ContractID
+		d.ContractID = &v
+	}
+	return d
 }
 
 // mkLogger mirrors the indexer's logger factory. Could extract to
