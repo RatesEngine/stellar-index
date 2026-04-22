@@ -77,12 +77,22 @@ curl-to-bash install scripts.
 
 ### 3.1 CPU
 
-| Requirement | Spec | Why |
-| ----------- | ---- | --- |
+Like storage (§3.3), CPU scales with how many of the roles in §1
+you colocate. Tiered:
+
+| Tier | Cores | Covers |
+| ---- | ----- | ------ |
+| **Minimum** | 8c / 16t @ ≥ 2.5 GHz | `stellar-core` alone (SDF validator baseline) |
+| **Comfortable** | 16c / 32t @ ≥ 2.5 GHz | core + one captive-core sidecar (Galexie **or** stellar-rpc) + Postgres |
+| **All-in-one** | 32c / 64t @ ≥ 2.5 GHz | core + Galexie + stellar-rpc + ratesengine-indexer on one host (the spec's original assumption) |
+| **Over-provisioned** | 64c+ | spare cycles for chaos testing and future Soroban volume |
+
+| Axis | Spec | Why |
+| ---- | ---- | --- |
 | Architecture | x86-64 (AMD EPYC or Intel Xeon) | stellar-core upstream binaries target x86-64; ARM support exists but is not default-tested by SDF. |
-| Core count | **32 physical cores / 64 threads** minimum; 64c/128t recommended | Three captive-cores + postgres + network I/O + Go binaries. Stellar-core is single-threaded-per-ledger during catchup but benefits from parallel validation work. |
-| Base clock | ≥ 2.4 GHz | Catchup is latency-bound, not throughput-bound. Higher clock > more cores up to ~16c. |
-| Feature requirements | AES-NI, AVX2, SHA extensions | stellar-core uses all three for XDR hashing + crypto. |
+| Base clock | ≥ 2.4 GHz | Catchup is latency-bound per ledger; single-thread clock > core count up to ~16c. A 3.5 GHz 4c beats a 2.2 GHz 8c for pure catchup speed. |
+| Feature requirements | AES-NI, AVX2, SHA extensions | stellar-core uses all three for XDR hashing + crypto. AVX-512 not required; older CPUs (Xeon E3/E5 v3+) have AES-NI + AVX2. |
+| ECC RAM support | mandatory | Xeon E3 v5+, Xeon E5 all ECC-capable. Ryzen + EPYC ECC-capable. Consumer Core i-series is NOT. |
 
 **Recommended parts (2026):**
 
@@ -96,15 +106,22 @@ massively under-spec for an **archival** node. That number is for a
 
 ### 3.2 Memory
 
-| Requirement | Spec | Why |
-| ----------- | ---- | --- |
-| Capacity | **128 GB ECC** minimum; **256 GB** recommended | Three captive-cores, one native core, Postgres 15 (BucketListDB caches), OS page cache for NVMe-backed ZFS, Redis sidecar (if co-resident). |
-| Type | DDR4-3200 ECC RDIMM or DDR5-4800 ECC RDIMM | ECC is mandatory for a node claiming archive integrity. Bit-flips in a 20TB archive are inevitable without ECC over multi-year runtime. |
+Tiered with CPU:
 
-Memory headroom is protection against the "3×captive-core" footprint
-we've flagged as unmeasured risk. If measurement in Week 3 shows
-actual steady-state at ~60 GB, we can skip the 256 GB tier. Until
-measured, over-provision.
+| Tier | RAM | Covers |
+| ---- | --- | ------ |
+| **Minimum** | 32 GB ECC | `stellar-core` alone |
+| **Comfortable** | 64 GB ECC | core + one captive-core sidecar + Postgres |
+| **All-in-one** | 128 GB ECC | core + Galexie + stellar-rpc + indexer on one host (tight; monitor) |
+| **Over-provisioned** | 256 GB ECC | adversarial-audit-safe against the unmeasured "3× captive-core" footprint |
+
+ECC is mandatory at every tier. Bit-flips in a multi-TB archive
+are inevitable on non-ECC RAM over a multi-year runtime. Xeon
+E3 v5+, Xeon E5 all-generations, Ryzen with Pro chipsets, EPYC all
+support ECC; consumer Core i-series does not.
+
+Until Week 3's measurement supersedes this, the "all-in-one" 128 GB
+tier is the default for a single-host Phase-A/B deployment.
 
 ### 3.3 Storage
 
@@ -114,35 +131,103 @@ mark what's verified vs extrapolated.
 
 #### 3.3.1 Growth projections (from 2024 baselines)
 
-| Asset | 2024 size (verified) | 2026 estimate (extrapolated ×2) | 2028 plan-ahead |
-| ----- | -------------------- | ------------------------------- | --------------- |
-| Current ledger (BucketListDB + buckets) | ~10 GB | ~25 GB | ~60 GB |
-| Full history archive (buckets + history since genesis) | ~800 GB (community reports) | ~1.6 TB | ~4 TB |
-| 30-day transaction-meta lake (Galexie, zstd) | n/a | ~150 GB | ~300 GB |
-| Full transaction-meta since P20 (Galexie, zstd) | n/a | ~2 TB | ~5 TB |
-| stellar-rpc SQLite (full-event retention since P20) | n/a | ~500 GB (projected; untested) | ~1.5 TB |
+| Asset | 2024 size (verified) | 2026 estimate | 2028 plan-ahead |
+| ----- | -------------------- | ------------- | --------------- |
+| Current ledger (BucketListDB + buckets for CATCHUP_RECENT) | ~10 GB | ~25 GB | ~60 GB |
+| Full history archive (since genesis) | ~800 GB (community reports) | ~1.5–2 TB | ~3–4 TB |
+| 30-day Galexie meta lake (zstd) | n/a | ~150 GB | ~300 GB |
+| 90-day Galexie meta lake | n/a | ~450 GB | ~900 GB |
+| Full Galexie meta since P20 | n/a | ~2 TB | ~5 TB |
+| stellar-rpc SQLite (30-day event retention) | n/a | ~50–100 GB | ~150 GB |
+| stellar-rpc SQLite (full since-P20 — **not recommended**) | n/a | ~500 GB (untested) | ~1.5 TB |
 | Postgres for core BucketListDB | ~40 GB | ~100 GB | ~250 GB |
-| Logs, monitoring, misc | — | ~50 GB working set | ~100 GB |
-| **Total working set** | | **~4.5 TB usable** | **~11 TB usable** |
+| Logs, monitoring, misc | — | ~50 GB | ~100 GB |
 
 **Verified vs extrapolated:**
 
 - 10 GB / 800 GB figures: SDF `prerequisites.mdx` + community
   archive size reports from early 2024. Verified during Phase 1.
-- 2026 `×2` extrapolation: based on historical Stellar data-growth
-  ~doubling every 18 months. Not verified; re-measure in Week 3.
+- 2026 estimates: historical Stellar data-growth ~doubles every
+  18 months. Not verified; re-measure in Week 3 (the first node's
+  real footprint after catchup supersedes this table).
 - SQLite retention-window size: not benchmarked (adversarial audit
-  §6c). The ~500 GB number is a rough bounds-estimate; could be
-  much larger. This is why we route historical event reads through
-  Galexie, not stellar-rpc.
+  §6c). The ~500 GB number is a rough bounds-estimate — we route
+  historical event reads through Galexie rather than stellar-rpc
+  specifically to avoid growing that SQLite unboundedly.
 
-#### 3.3.2 Disk layout
+#### 3.3.2 Sizing tiers — pick one based on the deployment phase
 
-| Pool | Devices | Topology | Capacity (usable) | Use |
-| ---- | ------- | -------- | ----------------- | --- |
-| `rpool` | 2× 512 GB NVMe (enterprise) | ZFS mirror | 512 GB | OS, packages, logs |
-| `data` | 8× 3.84 TB NVMe U.2 (Kioxia CD6 / Samsung PM9A3) | ZFS raidz2 (6+2) | ~23 TB | history archive, Galexie lake, Postgres, stellar-rpc SQLite |
-| `scratch` | 1× 1.92 TB NVMe | single device | 1.92 TB | catchup staging, replay scratch, backup repo cache |
+Total disk need varies dramatically by what you're running. Don't
+buy for the 5-year ceiling; buy for the tier you need now and
+re-provision when it fills.
+
+| Tier | Usable capacity | Covers | Phase |
+| ---- | --------------- | ------ | ----- |
+| **Minimum viable** | **2 TB** | CATCHUP_RECENT + 30-day Galexie + 30-day rpc events + Postgres | Phase A shake-out only |
+| **Comfortable Phase A/B** | **4 TB** | as above + 90-day Galexie retention + validator signer + headroom | Phase A, Phase B (validator promotion) |
+| **Full CATCHUP_COMPLETE** | **8 TB** | full history archive + Galexie meta + rpc + Postgres + ~2-year runway | when promoting a node to full archival (Phase B+) |
+| **Long-runway** | **16 TB** | CATCHUP_COMPLETE + 3+ years before re-provisioning | steady-state operational target |
+| **Over-provisioned** | 24 TB+ | 5+ years ceiling; only justified in owned colo where re-racking is expensive | not recommended for launch |
+
+The previous revision of this section specified 23 TB usable as
+the baseline. That's a 5-year ceiling dressed up as "day-one
+minimum," and it drove procurement over-spec. The tiered framing
+above is the honest shape: most first nodes should start at
+the 4 TB comfortable tier and grow.
+
+#### 3.3.3 Disk layout per tier
+
+All tiers use ZFS with native compression (zstd), block
+checksums, and `zfs send`-able snapshots.
+
+**Minimum viable (2 TB)** — Phase A shake-out:
+
+| Pool | Devices | Topology | Usable |
+| ---- | ------- | -------- | ------ |
+| `rpool` | 2× 512 GB NVMe | ZFS mirror | 512 GB |
+| `data` | 4× 1 TB NVMe | ZFS raidz2 (2+2) | ~2 TB |
+
+**Comfortable Phase A/B (4 TB):**
+
+| Pool | Devices | Topology | Usable |
+| ---- | ------- | -------- | ------ |
+| `rpool` | 2× 512 GB NVMe | ZFS mirror | 512 GB |
+| `data` | 4× 2 TB NVMe | ZFS raidz2 (2+2) | ~4 TB |
+
+**Full CATCHUP_COMPLETE (8 TB):**
+
+| Pool | Devices | Topology | Usable |
+| ---- | ------- | -------- | ------ |
+| `rpool` | 2× 512 GB NVMe | ZFS mirror | 512 GB |
+| `data` | 6× 2 TB NVMe | ZFS raidz2 (4+2) | ~8 TB |
+
+**Long-runway (16 TB):**
+
+| Pool | Devices | Topology | Usable |
+| ---- | ------- | -------- | ------ |
+| `rpool` | 2× 512 GB NVMe | ZFS mirror | 512 GB |
+| `data` | 6× 3.84 TB NVMe | ZFS raidz2 (4+2) | ~15 TB |
+| `scratch` | 1× 1.92 TB NVMe | single | 1.92 TB |
+
+**Why ZFS:**
+- Block-level checksums catch silent bit-rot on the archive.
+- Snapshots cheap for point-in-time rollback during a core upgrade.
+- `zfs send | zfs recv` is our cross-region archive replication
+  primitive.
+- Native compression (zstd) reduces Postgres+SQLite footprint
+  another ~2×.
+
+**Why not raidz3:** raidz2 tolerates 2 simultaneous failures; raidz3
+adds one more at a 1-drive capacity cost. For a 4-drive pool,
+raidz2 (2+2) is already at the point where adding parity eats most
+of the capacity. For archival (not hot-serving) we accept the
+raidz2 trade-off.
+
+**Why NVMe not SATA:** latency during catchup is dominated by
+small synchronous writes to the Postgres WAL and the BucketListDB.
+NVMe is ~10–100× lower-latency than SATA for this workload.
+SATA SSDs push catchup times from hours toward 1–2 days. Workable
+if the provider only offers SATA, but expect a slower bring-up.
 
 **Why ZFS:**
 - Block-level checksums catch silent bit-rot on the archive.
