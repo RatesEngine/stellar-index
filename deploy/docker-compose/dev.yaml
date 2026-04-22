@@ -1,0 +1,133 @@
+# Local development stack.
+#
+# Brings up everything a Rates Engine binary needs to run locally:
+#   - TimescaleDB (PostgreSQL 15 + TimescaleDB extension)
+#   - Redis 7
+#   - MinIO (single-node, S3-compatible)
+#
+# Usage:
+#   make dev                         # bring up
+#   make db-migrate-up               # apply migrations
+#   make dev-teardown                # stop + remove volumes
+#
+# Intentionally NOT production-shaped — no HA, no backups, no TLS.
+# Production shape lives in docs/architecture/ha-plan.md.
+#
+# Environment variables are read from `.env` in the same directory.
+# Copy `.env.example` → `.env` and adjust as needed.
+
+name: ratesengine-dev
+
+services:
+
+  # ─── PostgreSQL + TimescaleDB ────────────────────────────────────
+  timescale:
+    image: timescale/timescaledb:${TIMESCALE_IMAGE_TAG:-2.17.2-pg15}
+    container_name: ratesengine-timescale
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB:       ${POSTGRES_DB:-ratesengine}
+      POSTGRES_USER:     ${POSTGRES_USER:-ratesengine}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-ratesengine-dev}
+      # Make startup deterministic: initialise with a UTF-8 locale
+      # regardless of host. Matches migrations/0001.
+      POSTGRES_INITDB_ARGS: "--locale=C.UTF-8 --encoding=UTF8"
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - timescale_data:/var/lib/postgresql/data
+      # Preload TimescaleDB extension into template1 so a fresh DB
+      # always has it ready (our migration enables it explicitly too,
+      # but this matches production posture).
+      - ./init/00-timescale-extension.sql:/docker-entrypoint-initdb.d/00-timescale-extension.sql:ro
+    healthcheck:
+      test:     ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-ratesengine} -d ${POSTGRES_DB:-ratesengine}"]
+      interval: 5s
+      timeout:  3s
+      retries:  20
+    command:
+      - "postgres"
+      - "-c"
+      - "shared_preload_libraries=timescaledb"
+      - "-c"
+      - "max_connections=200"
+      - "-c"
+      - "log_statement=none"
+
+  # ─── Redis ────────────────────────────────────────────────────────
+  redis:
+    image: redis:${REDIS_IMAGE_TAG:-7.4-alpine}
+    container_name: ratesengine-redis
+    restart: unless-stopped
+    command:
+      - "redis-server"
+      - "--appendonly"
+      - "yes"
+      - "--save"
+      - "900 1"
+      - "--save"
+      - "300 10"
+      - "--maxmemory"
+      - "${REDIS_MAXMEM:-512mb}"
+      - "--maxmemory-policy"
+      - "allkeys-lru"
+      # Password optional; only set if provided.
+      # Override the CMD entirely in your .env if you need auth.
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test:     ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout:  3s
+      retries:  10
+
+  # ─── MinIO ────────────────────────────────────────────────────────
+  minio:
+    image: minio/minio:${MINIO_IMAGE_TAG:-RELEASE.2024-11-07T00-52-20Z}
+    container_name: ratesengine-minio
+    restart: unless-stopped
+    environment:
+      MINIO_ROOT_USER:     ${MINIO_ROOT_USER:-ratesengine}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-ratesengine-dev-minio}
+    command:
+      - "server"
+      - "/data"
+      - "--console-address"
+      - ":9001"
+    ports:
+      - "${MINIO_API_PORT:-9000}:9000"       # S3 API
+      - "${MINIO_CONSOLE_PORT:-9001}:9001"   # Web console
+    volumes:
+      - minio_data:/data
+    healthcheck:
+      test:     ["CMD", "mc", "ready", "local"]
+      interval: 10s
+      timeout:  5s
+      retries:  5
+
+  # ─── Bucket initialiser ──────────────────────────────────────────
+  # One-shot: wait for MinIO, create the default buckets, exit.
+  minio-init:
+    image: minio/mc:${MC_IMAGE_TAG:-RELEASE.2024-11-05T11-29-45Z}
+    depends_on:
+      minio:
+        condition: service_healthy
+    entrypoint: >-
+      /bin/sh -c "
+        mc alias set local http://minio:9000 $$MINIO_ROOT_USER $$MINIO_ROOT_PASSWORD &&
+        mc mb -p local/galexie-live     || true &&
+        mc mb -p local/galexie-archive  || true &&
+        mc mb -p local/backups          || true &&
+        echo 'buckets ready'
+      "
+    environment:
+      MINIO_ROOT_USER:     ${MINIO_ROOT_USER:-ratesengine}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-ratesengine-dev-minio}
+    restart: "no"
+
+volumes:
+  timescale_data:
+  redis_data:
+  minio_data:
