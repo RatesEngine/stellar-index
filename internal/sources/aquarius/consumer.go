@@ -234,3 +234,6 @@ type TradeEvent struct {
 
 // EventKind implements [consumer.Event].
 func (TradeEvent) EventKind() string { return "aquarius.trade" }
+
+// Source implements [consumer.Event].
+func (TradeEvent) Source() string { return SourceName }

@@ -264,6 +264,9 @@ type TradeEvent struct {
 // EventKind implements [consumer.Event].
 func (TradeEvent) EventKind() string { return "soroswap.trade" }
 
+// Source implements [consumer.Event] — matches [SourceName].
+func (TradeEvent) Source() string { return SourceName }
+
 // ─── Correlation buffer ─────────────────────────────────────────
 // Groups swap + sync by (ledger, tx_hash, op_index). Emits complete
 // pairs back to the caller; holds incompletes until eviction by a

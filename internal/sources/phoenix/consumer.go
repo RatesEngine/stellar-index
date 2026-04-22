@@ -196,6 +196,9 @@ type TradeEvent struct {
 // EventKind implements [consumer.Event].
 func (TradeEvent) EventKind() string { return "phoenix.trade" }
 
+// Source implements [consumer.Event].
+func (TradeEvent) Source() string { return SourceName }
+
 // ─── 8-field correlation buffer ─────────────────────────────────
 
 type buffer struct {

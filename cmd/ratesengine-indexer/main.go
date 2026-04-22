@@ -36,6 +36,7 @@ import (
 	"github.com/RatesEngine/rates-engine/internal/canonical"
 	"github.com/RatesEngine/rates-engine/internal/config"
 	"github.com/RatesEngine/rates-engine/internal/consumer"
+	"github.com/RatesEngine/rates-engine/internal/obs"
 	"github.com/RatesEngine/rates-engine/internal/sources/aquarius"
 	"github.com/RatesEngine/rates-engine/internal/sources/phoenix"
 	"github.com/RatesEngine/rates-engine/internal/sources/soroswap"
@@ -222,12 +223,21 @@ func buildSources(names []string, rpc *stellarrpc.Client) ([]consumer.Source, er
 
 // persistEvents is the event-sink loop. Writes Trade events to the
 // trades hypertable; logs unknown event kinds as a soft warning.
+// Every accepted event increments per-source Prometheus counters.
 func persistEvents(ctx context.Context, logger *slog.Logger, store *timescale.Store, in <-chan consumer.Event) {
 	for {
 		select {
 		case <-ctx.Done():
 			return
 		case ev := <-in:
+			// Metric emission happens before the type-switch so the
+			// counter reflects every event the orchestrator emitted,
+			// even ones we couldn't type-dispatch (which shouldn't
+			// happen but guards against future-source mis-wiring).
+			source := ev.Source()
+			obs.SourceEventsTotal.WithLabelValues(source).Inc()
+			obs.SourceLastEventUnix.WithLabelValues(source).Set(float64(time.Now().Unix()))
+
 			switch e := ev.(type) {
 			case soroswap.TradeEvent:
 				persistTrade(ctx, logger, store, e.Trade)
@@ -236,7 +246,9 @@ func persistEvents(ctx context.Context, logger *slog.Logger, store *timescale.St
 			case phoenix.TradeEvent:
 				persistTrade(ctx, logger, store, e.Trade)
 			default:
-				logger.Warn("unhandled event kind", "kind", ev.EventKind())
+				logger.Warn("unhandled event kind",
+					"kind", ev.EventKind(),
+					"source", source)
 			}
 		}
 	}

@@ -8,6 +8,8 @@ import (
 	"math/rand/v2"
 	"sync"
 	"time"
+
+	"github.com/RatesEngine/rates-engine/internal/obs"
 )
 
 // CursorStore is the subset of the storage API the orchestrator
@@ -138,6 +140,12 @@ func (o *Orchestrator) runSource(ctx context.Context, src Source) {
 	log := o.logger.With("source", src.Name())
 	backoff := o.cfg.MinBackoff
 
+	// Enabled=1 while this source is in the runSource loop; flipped
+	// to 0 on exit. Source-stopped alerts use this to qualify
+	// zero-event-rate ("but it was supposed to be running").
+	obs.SourceEnabled.WithLabelValues(src.Name()).Set(1)
+	defer obs.SourceEnabled.WithLabelValues(src.Name()).Set(0)
+
 	for {
 		if err := ctx.Err(); err != nil {
 			return
@@ -232,7 +240,11 @@ func (o *Orchestrator) cursorPersister(ctx context.Context, src Source, seedLast
 		_ = h
 		if err := o.cursors.UpsertCursor(ctx, src.Name(), "", lastPersisted); err != nil {
 			log.Warn("persist cursor failed", "err", err)
+			continue
 		}
+		// Mirror the persisted cursor value into Prometheus so the
+		// cursor-stuck alert can see it.
+		obs.CursorLastLedger.WithLabelValues(src.Name()).Set(float64(lastPersisted))
 	}
 }
 

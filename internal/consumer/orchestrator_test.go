@@ -50,9 +50,10 @@ func (f *fakeSource) Health() consumer.HealthStatus {
 }
 
 // testEvent is a trivial consumer.Event for the orchestrator tests.
-type testEvent struct{ kind string }
+type testEvent struct{ kind, source string }
 
 func (t testEvent) EventKind() string { return t.kind }
+func (t testEvent) Source() string    { return t.source }
 
 // inmemCursors is a minimal CursorStore.
 type inmemCursors struct {

@@ -46,9 +46,15 @@ type Source interface {
 // Concrete shapes are defined in internal/canonical; consumers
 // type-switch on the concrete type, not this interface.
 type Event interface {
-	// EventKind is a constant string — matches the Prometheus
-	// label we attach to throughput counters.
+	// EventKind is a constant string — e.g. "soroswap.trade",
+	// "aquarius.trade". Used as the "kind" label on
+	// event-classification metrics.
 	EventKind() string
+
+	// Source returns the stable source-name (matches [Source.Name])
+	// so the event-sink pipeline can attribute metrics + logs
+	// without type-switching.
+	Source() string
 }
 
 // HealthStatus is the point-in-time state of a source. Exposed
