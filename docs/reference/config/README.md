@@ -61,6 +61,14 @@ the `env:` column.
 | `ingestion.backfill_batch_size` | `uint32` | `64` | — | Ledgers per backfill fetch batch. |
 | `ingestion.cursor_store_scheme` | `string` | `postgres` | — | Where per-source cursors live — postgres / redis. |
 
+### `[oracle]`
+
+| Key | Type | Default | Env override | Description |
+| --- | ---- | ------- | ------------ | ----------- |
+| `oracle.reflector.dex_contract` | `string` | _(required)_ | — | Reflector DEX contract (C-prefix) on mainnet. |
+| `oracle.reflector.cex_contract` | `string` | _(required)_ | — | Reflector CEX contract (C-prefix) on mainnet. |
+| `oracle.reflector.fx_contract` | `string` | _(required)_ | — | Reflector FX contract (C-prefix) on mainnet. |
+
 ### `[aggregate]`
 
 | Key | Type | Default | Env override | Description |

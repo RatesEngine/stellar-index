@@ -15,9 +15,31 @@ type Config struct {
 	Stellar   StellarConfig   `toml:"stellar" doc:"Endpoints for stellar-core and stellar-rpc."`
 	Storage   StorageConfig   `toml:"storage" doc:"Postgres/TimescaleDB, Redis, MinIO connection details."`
 	Ingestion IngestionConfig `toml:"ingestion" doc:"Source orchestration — which connectors to run, backfill bounds, cursor store."`
+	Oracle    OracleConfig    `toml:"oracle" doc:"On-chain oracle contract addresses (Reflector, Redstone, Band)."`
 	Aggregate AggregateConfig `toml:"aggregate" doc:"VWAP/TWAP windows + outlier thresholds."`
 	API       APIConfig       `toml:"api" doc:"Public API serving plane — port, auth mode, rate limits, CDN."`
 	Obs       ObsConfig       `toml:"obs" doc:"Metrics, logs, traces — exporters + sampling."`
+}
+
+// OracleConfig gathers on-chain oracle contract addresses. Each
+// provider nests its own sub-struct so the TOML reads naturally:
+//
+//	[oracle.reflector]
+//	dex_contract = "C..."
+//	cex_contract = "C..."
+//	fx_contract  = "C..."
+type OracleConfig struct {
+	Reflector ReflectorOracleConfig `toml:"reflector" doc:"Reflector oracle contract addresses per variant (DEX / CEX / FX)."`
+}
+
+// ReflectorOracleConfig carries the three Reflector contract
+// addresses. Leave any variant empty to disable it; the indexer's
+// buildSources will reject an enabled source whose address is
+// unset rather than silently no-op.
+type ReflectorOracleConfig struct {
+	DEXContract string `toml:"dex_contract" doc:"Reflector DEX contract (C-prefix) on mainnet."`
+	CEXContract string `toml:"cex_contract" doc:"Reflector CEX contract (C-prefix) on mainnet."`
+	FXContract  string `toml:"fx_contract"  doc:"Reflector FX contract (C-prefix) on mainnet."`
 }
 
 // RegionConfig identifies the region this node belongs to, to tag
@@ -121,6 +143,14 @@ func Default() Config {
 			BackfillFromLedger: 0,
 			BackfillBatchSize:  64,
 			CursorStoreScheme:  "postgres",
+		},
+		Oracle: OracleConfig{
+			// Reflector mainnet addresses are operator-supplied
+			// (Phase-1 audit left exact values TBD; see
+			// docs/discovery/oracles/reflector.md). Empty by
+			// default — enabling a reflector-* source without
+			// setting its address is a startup error.
+			Reflector: ReflectorOracleConfig{},
 		},
 		Aggregate: AggregateConfig{
 			VWAPWindowSeconds:     300,

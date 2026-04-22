@@ -58,6 +58,22 @@ backfill_from_ledger  = 0                # 0 = resume from persisted cursor
 backfill_batch_size   = 64
 cursor_store_scheme   = "postgres"
 
+# Enable reflector-dex / reflector-cex / reflector-fx by adding
+# them to enabled_sources. Each requires its contract address set
+# under [oracle.reflector] below — the indexer fails at startup if
+# you enable a variant without setting its address.
+
+# ──────────────────────────────────────────────────────────────────
+# Oracle — on-chain oracle contract addresses.
+# Mainnet Reflector addresses are operator-supplied. Verify via
+# stellar.expert before pasting. Phase-1 audit flagged these as
+# TBD (see docs/discovery/oracles/reflector.md).
+# ──────────────────────────────────────────────────────────────────
+[oracle.reflector]
+# dex_contract = "C…"   # set when enabling reflector-dex
+# cex_contract = "C…"   # set when enabling reflector-cex
+# fx_contract  = "C…"   # set when enabling reflector-fx
+
 # ──────────────────────────────────────────────────────────────────
 # Aggregate — VWAP/TWAP windows + filters (aggregator binary only).
 # ──────────────────────────────────────────────────────────────────

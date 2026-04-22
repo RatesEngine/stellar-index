@@ -117,7 +117,7 @@ func run(cfgPath string, dryRun bool) error {
 	}
 
 	// ─── Source registry ────────────────────────────────────────
-	sources, err := buildSources(cfg.Ingestion.EnabledSources, rpc)
+	sources, err := buildSources(cfg.Ingestion.EnabledSources, rpc, cfg.Oracle)
 	if err != nil {
 		return err
 	}
@@ -202,8 +202,11 @@ func (a cursorAdapter) UpsertCursor(ctx context.Context, source, sub string, las
 }
 
 // buildSources constructs a Source per configured name. Unknown
-// names are a fatal config error.
-func buildSources(names []string, rpc *stellarrpc.Client) ([]consumer.Source, error) {
+// names are a fatal config error. Sources that require per-source
+// config (Reflector's contract addresses, future CEX/FX creds)
+// read from `oracle` (and future `cex`, `fx` config sections);
+// missing required fields are also fatal at startup.
+func buildSources(names []string, rpc *stellarrpc.Client, oracle config.OracleConfig) ([]consumer.Source, error) {
 	var out []consumer.Source
 	for _, name := range names {
 		switch strings.ToLower(name) {
@@ -213,8 +216,30 @@ func buildSources(names []string, rpc *stellarrpc.Client) ([]consumer.Source, er
 			out = append(out, aquarius.New(rpc))
 		case phoenix.SourceName:
 			out = append(out, phoenix.New(rpc))
-		// TODO(#0): comet, blend, sdex, reflector, redstone, band,
-		// cex-*, fx-*. Each adds one case here.
+
+		case reflector.SourceDEX:
+			if oracle.Reflector.DEXContract == "" {
+				return nil, fmt.Errorf(
+					"source %q enabled but oracle.reflector.dex_contract is empty — see docs/discovery/oracles/reflector.md",
+					name)
+			}
+			out = append(out, reflector.NewDEX(rpc, oracle.Reflector.DEXContract))
+		case reflector.SourceCEX:
+			if oracle.Reflector.CEXContract == "" {
+				return nil, fmt.Errorf(
+					"source %q enabled but oracle.reflector.cex_contract is empty — see docs/discovery/oracles/reflector.md",
+					name)
+			}
+			out = append(out, reflector.NewCEX(rpc, oracle.Reflector.CEXContract))
+		case reflector.SourceFX:
+			if oracle.Reflector.FXContract == "" {
+				return nil, fmt.Errorf(
+					"source %q enabled but oracle.reflector.fx_contract is empty — see docs/discovery/oracles/reflector.md",
+					name)
+			}
+			out = append(out, reflector.NewFX(rpc, oracle.Reflector.FXContract))
+
+		// TODO(#0): comet, blend, sdex, redstone, band, cex-*, fx-*.
 		default:
 			return nil, fmt.Errorf("unknown source %q in ingestion.enabled_sources — check internal/sources/", name)
 		}
