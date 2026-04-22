@@ -36,6 +36,7 @@ import (
 	"github.com/RatesEngine/rates-engine/internal/canonical"
 	"github.com/RatesEngine/rates-engine/internal/config"
 	"github.com/RatesEngine/rates-engine/internal/consumer"
+	"github.com/RatesEngine/rates-engine/internal/sources/aquarius"
 	"github.com/RatesEngine/rates-engine/internal/sources/soroswap"
 	"github.com/RatesEngine/rates-engine/internal/stellarrpc"
 	"github.com/RatesEngine/rates-engine/internal/storage/timescale"
@@ -205,8 +206,10 @@ func buildSources(names []string, rpc *stellarrpc.Client) ([]consumer.Source, er
 		switch strings.ToLower(name) {
 		case soroswap.SourceName:
 			out = append(out, soroswap.New(rpc))
-		// TODO(#0): aquarius, phoenix, comet, blend, sdex, reflector,
-		// redstone, band, cex-*, fx-*. Each adds one case here.
+		case aquarius.SourceName:
+			out = append(out, aquarius.New(rpc))
+		// TODO(#0): phoenix, comet, blend, sdex, reflector, redstone,
+		// band, cex-*, fx-*. Each adds one case here.
 		default:
 			return nil, fmt.Errorf("unknown source %q in ingestion.enabled_sources — check internal/sources/", name)
 		}
@@ -224,6 +227,8 @@ func persistEvents(ctx context.Context, logger *slog.Logger, store *timescale.St
 		case ev := <-in:
 			switch e := ev.(type) {
 			case soroswap.TradeEvent:
+				persistTrade(ctx, logger, store, e.Trade)
+			case aquarius.TradeEvent:
 				persistTrade(ctx, logger, store, e.Trade)
 			default:
 				logger.Warn("unhandled event kind", "kind", ev.EventKind())
