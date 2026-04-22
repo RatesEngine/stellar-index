@@ -29,14 +29,21 @@ err() {
   echo "$((count + 1))" > "$ERROR_FILE"
 }
 
-# ─── 1. Every exported config field must appear in config reference ─────────
+# ─── 1. Every config `toml:"..."` tag must appear in the generated ref ──────
+#
+# The generated reference (docs/reference/config/README.md) uses the
+# TOML field name (`toml:"xxx_yyy"` → "xxx_yyy" in the table), not the
+# Go field identifier. So we check TOML names, not Go field names —
+# the wire contract is what operators see.
 
 echo "Checking config reference sync..."
 if [ -f internal/config/config.go ] && [ -f docs/reference/config/README.md ]; then
-  grep -E '^\s+[A-Z][a-zA-Z0-9]+\s' internal/config/config.go | \
-    awk '{print $1}' | sort -u | while read -r field; do
-      if ! grep -qF "$field" docs/reference/config/README.md; then
-        err "Config field '$field' in config.go is missing from docs/reference/config/README.md"
+  # Extract every `toml:"name"` tag value from config.go. Keeps only
+  # the name (no commas, no omitempty).
+  grep -oE 'toml:"[a-z_]+"' internal/config/config.go | \
+    sed -E 's/toml:"([a-z_]+)"/\1/' | sort -u | while read -r tomlname; do
+      if ! grep -qF "$tomlname" docs/reference/config/README.md; then
+        err "Config TOML key '$tomlname' in config.go missing from docs/reference/config/README.md — run 'make docs-config' to regen"
       fi
   done
 fi
