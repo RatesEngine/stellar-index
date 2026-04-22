@@ -146,6 +146,73 @@ type ledgersParams struct {
 	Pagination  *Pagination `json:"pagination,omitempty"`
 }
 
+// ─── getTransaction / getTransactions ─────────────────────────────
+
+// TransactionStatus is the coarse outcome of a single tx per
+// stellar-rpc. SUCCESS = included and applied; FAILED = included but
+// errored; NOT_FOUND = not in the RPC's retention window (check
+// archive for older txs).
+type TransactionStatus string
+
+const (
+	TxStatusSuccess  TransactionStatus = "SUCCESS"
+	TxStatusFailed   TransactionStatus = "FAILED"
+	TxStatusNotFound TransactionStatus = "NOT_FOUND"
+)
+
+// TransactionResponse is the response from getTransaction.
+//
+// XDR fields are base64-encoded; callers decode via
+// github.com/stellar/go-stellar-sdk/xdr (monorepo archived
+// 2025-12-16, see ADR-0001 + CLAUDE.md).
+type TransactionResponse struct {
+	Status TransactionStatus `json:"status"`
+
+	LatestLedger          uint32 `json:"latestLedger"`
+	LatestLedgerCloseTime string `json:"latestLedgerCloseTime,omitempty"`
+	OldestLedger          uint32 `json:"oldestLedger"`
+	OldestLedgerCloseTime string `json:"oldestLedgerCloseTime,omitempty"`
+
+	// Present only when Status != NOT_FOUND.
+	Ledger            uint32 `json:"ledger,omitempty"`
+	CreatedAt         string `json:"createdAt,omitempty"` // RFC 3339
+	ApplicationOrder  int    `json:"applicationOrder,omitempty"`
+	FeeBump           bool   `json:"feeBump,omitempty"`
+	EnvelopeXdr       string `json:"envelopeXdr,omitempty"`
+	ResultXdr         string `json:"resultXdr,omitempty"`
+	ResultMetaXdr     string `json:"resultMetaXdr,omitempty"`
+	LedgerCloseTime   string `json:"ledgerCloseTime,omitempty"`
+
+	// DiagnosticEventsXdr is populated only on stellar-rpc v23+. On
+	// older nodes this field is empty; decoders should treat absence
+	// as "unknown" rather than "none". Useful for understanding why a
+	// Soroban tx failed — errors are surfaced here as events.
+	DiagnosticEventsXdr []string `json:"diagnosticEventsXdr,omitempty"`
+}
+
+type transactionParams struct {
+	Hash string `json:"hash"`
+}
+
+// TransactionsResponse is the response from getTransactions.
+//
+// stellar-rpc paginates via cursor. Each entry is a full
+// TransactionResponse (minus the envelope-level latest/oldest ledger
+// fields which live on the outer response).
+type TransactionsResponse struct {
+	Transactions          []TransactionResponse `json:"transactions"`
+	Cursor                string                `json:"cursor,omitempty"`
+	LatestLedger          uint32                `json:"latestLedger"`
+	LatestLedgerCloseTime string                `json:"latestLedgerCloseTime,omitempty"`
+	OldestLedger          uint32                `json:"oldestLedger"`
+	OldestLedgerCloseTime string                `json:"oldestLedgerCloseTime,omitempty"`
+}
+
+type transactionsParams struct {
+	StartLedger uint32      `json:"startLedger,omitempty"`
+	Pagination  *Pagination `json:"pagination,omitempty"`
+}
+
 // FeeStats is the response from getFeeStats.
 type FeeStats struct {
 	SorobanInclusionFee FeePercentiles `json:"sorobanInclusionFee"`

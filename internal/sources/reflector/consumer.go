@@ -168,11 +168,12 @@ func (s *Source) processPage(ctx context.Context, events []stellarrpc.Event, out
 		}
 
 		closedAt, _ := time.Parse(time.RFC3339, e.LedgerClosedAt)
-		// Observer is the tx source account. We don't have direct
-		// access to it from the event payload alone (getEvents
-		// doesn't include tx source_account); fetched via an
-		// accompanying getTransaction call in a follow-up. Leave
-		// blank for now — still a valid OracleUpdate.
+		// Observer is the tx source account. stellarrpc.Client now
+		// has GetTransaction which returns the envelope XDR — we
+		// decode SourceAccount once we pull in the stellar-sdk Go
+		// module. Until then Observer stays blank, still a valid
+		// OracleUpdate (the ingest writes it as "" and the API omits
+		// the field on serialization).
 		updates, err := decodeUpdate(e, s.variant, s.decimals, "", closedAt)
 		if err != nil {
 			// Per-event decode failures are counted as metrics

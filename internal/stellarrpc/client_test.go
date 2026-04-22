@@ -182,6 +182,102 @@ func TestNextIDIncrements(t *testing.T) {
 	}
 }
 
+func TestGetTransactionSuccess(t *testing.T) {
+	s := mockRPC(t, map[string]any{
+		"getTransaction": map[string]any{
+			"status":                "SUCCESS",
+			"latestLedger":          61521295,
+			"latestLedgerCloseTime": "1772766017",
+			"oldestLedger":          61400336,
+			"oldestLedgerCloseTime": "1772067154",
+			"ledger":                61521000,
+			"createdAt":             "2026-03-06T02:32:13Z",
+			"applicationOrder":      4,
+			"feeBump":               false,
+			"envelopeXdr":           "AAAAAgAAAAA=",
+			"resultXdr":             "AAAAAAAAAMgAAAA=",
+			"resultMetaXdr":         "AAAAAwAAAAA=",
+			"diagnosticEventsXdr":   []string{"AAAACg==", "AAAADw=="},
+		},
+	})
+	defer s.Close()
+
+	c := rpc.New(s.URL)
+	got, err := c.GetTransaction(context.Background(),
+		"f95e8788b9dfe1f94813f50b90c2a77413eda5c32ba179b8a7867d50ec4f7aa8")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Status != rpc.TxStatusSuccess {
+		t.Errorf("status = %q, want SUCCESS", got.Status)
+	}
+	if got.Ledger != 61_521_000 {
+		t.Errorf("ledger = %d, want 61521000", got.Ledger)
+	}
+	if got.ApplicationOrder != 4 {
+		t.Errorf("applicationOrder = %d, want 4", got.ApplicationOrder)
+	}
+	if len(got.DiagnosticEventsXdr) != 2 {
+		t.Errorf("diagnosticEventsXdr count = %d, want 2 (v23+ field)", len(got.DiagnosticEventsXdr))
+	}
+}
+
+func TestGetTransactionNotFound(t *testing.T) {
+	// NOT_FOUND is a Status value, not an error envelope — callers
+	// must branch on Status, not err.
+	s := mockRPC(t, map[string]any{
+		"getTransaction": map[string]any{
+			"status":       "NOT_FOUND",
+			"latestLedger": 61521295,
+			"oldestLedger": 61400336,
+		},
+	})
+	defer s.Close()
+
+	c := rpc.New(s.URL)
+	got, err := c.GetTransaction(context.Background(), "deadbeef")
+	if err != nil {
+		t.Fatalf("NOT_FOUND must not bubble as err: %v", err)
+	}
+	if got.Status != rpc.TxStatusNotFound {
+		t.Errorf("status = %q, want NOT_FOUND", got.Status)
+	}
+	if got.Ledger != 0 {
+		t.Errorf("ledger = %d, want 0 for NOT_FOUND", got.Ledger)
+	}
+}
+
+func TestGetTransactionsBatch(t *testing.T) {
+	s := mockRPC(t, map[string]any{
+		"getTransactions": map[string]any{
+			"transactions": []map[string]any{
+				{"status": "SUCCESS", "ledger": 100, "applicationOrder": 1},
+				{"status": "FAILED", "ledger": 100, "applicationOrder": 2},
+				{"status": "SUCCESS", "ledger": 101, "applicationOrder": 1},
+			},
+			"cursor":       "opaque-cursor",
+			"latestLedger": 200,
+			"oldestLedger": 50,
+		},
+	})
+	defer s.Close()
+
+	c := rpc.New(s.URL)
+	got, err := c.GetTransactions(context.Background(), 100, &rpc.Pagination{Limit: 10})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got.Transactions) != 3 {
+		t.Fatalf("got %d tx, want 3", len(got.Transactions))
+	}
+	if got.Transactions[1].Status != rpc.TxStatusFailed {
+		t.Errorf("tx[1].status = %q, want FAILED", got.Transactions[1].Status)
+	}
+	if got.Cursor != "opaque-cursor" {
+		t.Errorf("cursor = %q", got.Cursor)
+	}
+}
+
 func TestContextCancellation(t *testing.T) {
 	// Slow server — make sure ctx cancel kills the call.
 	s := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

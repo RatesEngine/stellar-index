@@ -161,3 +161,24 @@ func (c *Client) GetLedgers(ctx context.Context, startLedger uint32, pag *Pagina
 	var r LedgersResponse
 	return &r, c.call(ctx, "getLedgers", p, &r)
 }
+
+// GetTransaction calls getTransaction.
+//
+// hash is the tx envelope hash as a hex string (no "0x" prefix).
+// Returns status=NOT_FOUND when the tx is outside the RPC node's
+// retention window — NOT an error. Callers should branch on Status
+// rather than relying on error to signal "not found".
+func (c *Client) GetTransaction(ctx context.Context, hash string) (*TransactionResponse, error) {
+	var r TransactionResponse
+	return &r, c.call(ctx, "getTransaction", transactionParams{Hash: hash}, &r)
+}
+
+// GetTransactions calls getTransactions (paginated batch lookup).
+//
+// startLedger=0 uses the pagination cursor only. Cursor format is
+// an opaque stellar-rpc value — pass through from a prior response.
+func (c *Client) GetTransactions(ctx context.Context, startLedger uint32, pag *Pagination) (*TransactionsResponse, error) {
+	p := transactionsParams{StartLedger: startLedger, Pagination: pag}
+	var r TransactionsResponse
+	return &r, c.call(ctx, "getTransactions", p, &r)
+}
