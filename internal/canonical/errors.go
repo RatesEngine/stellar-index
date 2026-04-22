@@ -26,4 +26,16 @@ var (
 	// ErrPairMismatch — two rates expected to share the same
 	// (base, quote) pair had different pairs.
 	ErrPairMismatch = errors.New("canonical: pair mismatch")
+
+	// ErrInvalidAsset — an Asset struct is malformed (wrong Type tag,
+	// missing required field, etc.).
+	ErrInvalidAsset = errors.New("canonical: invalid asset")
+
+	// ErrInvalidStrkey — a string did not parse as a Stellar strkey
+	// (G-address, C-address, etc. per SEP-23).
+	ErrInvalidStrkey = errors.New("canonical: invalid strkey")
+
+	// ErrInvalidTrade — a Trade is missing a required field or has a
+	// nonsense combination of values (e.g., zero base amount).
+	ErrInvalidTrade = errors.New("canonical: invalid trade")
 )
