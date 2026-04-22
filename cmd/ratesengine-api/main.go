@@ -30,9 +30,12 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/redis/go-redis/v9"
+
 	v1 "github.com/RatesEngine/rates-engine/internal/api/v1"
 	"github.com/RatesEngine/rates-engine/internal/canonical"
 	"github.com/RatesEngine/rates-engine/internal/config"
+	"github.com/RatesEngine/rates-engine/internal/metadata"
 	"github.com/RatesEngine/rates-engine/internal/storage/timescale"
 	"github.com/RatesEngine/rates-engine/internal/version"
 )
@@ -88,18 +91,42 @@ func run(cfgPath string, dryRun bool) error {
 	}()
 	logger.Info("storage connected")
 
+	// Redis — optional at the API layer. When reachable, it backs
+	// the SEP-1 metadata cache; when not, the resolver falls
+	// through to upstream fetches on every request (slow but
+	// correct). We don't block startup on Redis — the readiness
+	// probe reflects the truth.
+	var rdb *redis.Client
+	if cfg.Storage.RedisAddr != "" {
+		rdb = redis.NewClient(&redis.Options{
+			Addr:     cfg.Storage.RedisAddr,
+			Password: cfg.Storage.RedisPassword,
+		})
+		defer func() { _ = rdb.Close() }()
+	}
+
 	// Build readiness-check set. Each implements v1.ReadyChecker.
 	checks := []v1.ReadyChecker{
 		storeChecker{s: store},
-		// TODO(#0): redis readiness-check adapter once we wire the
-		// Redis client at this level.
 	}
+	if rdb != nil {
+		checks = append(checks, redisChecker{rdb: rdb})
+	}
+
+	// SEP-1 resolver + cache. AllowPrivateIPs left false — production
+	// must refuse private/loopback dials. Cache is tolerant of a nil
+	// rdb (falls through to the resolver every call).
+	sep1Resolver := metadata.NewResolver(metadata.Options{
+		Timeout: 8 * time.Second,
+	})
+	sep1Cache := metadata.NewCache(sep1Resolver, rdb)
 
 	apiSrv := v1.New(v1.Options{
 		Logger:      logger.With("component", "api"),
 		ReadyChecks: checks,
 		Assets:      storeAssetReader{s: store},
 		Prices:      storePriceReader{s: store},
+		Meta:        sep1Cache,
 	})
 
 	if dryRun {
@@ -153,6 +180,15 @@ type storeChecker struct{ s *timescale.Store }
 func (c storeChecker) Name() string { return "postgres" }
 func (c storeChecker) Ping(ctx context.Context) error {
 	return c.s.DB().PingContext(ctx)
+}
+
+// redisChecker adapts *redis.Client to the v1.ReadyChecker interface.
+// Redis is optional at API layer — readyz reports the actual state.
+type redisChecker struct{ rdb *redis.Client }
+
+func (c redisChecker) Name() string { return "redis" }
+func (c redisChecker) Ping(ctx context.Context) error {
+	return c.rdb.Ping(ctx).Err()
 }
 
 // storeAssetReader adapts *timescale.Store to v1.AssetReader. Keeps
