@@ -109,6 +109,16 @@ func TestMigrationsRoundTrip(t *testing.T) {
 	// Verify ingestion_cursors table exists (non-hyper).
 	assertTableExists(t, db, ctx, "ingestion_cursors")
 
+	// Verify oracle_updates hypertable + its indexes (0003).
+	assertHypertableExists(t, db, ctx, "oracle_updates")
+	for _, idx := range []string{
+		"oracle_updates_asset_ts_idx",
+		"oracle_updates_pair_ts_idx",
+		"oracle_updates_source_ledger_idx",
+	} {
+		assertIndexExists(t, db, ctx, "oracle_updates", idx)
+	}
+
 	// Verify every continuous aggregate is present and a CAGG
 	// (not a plain view) + has a refresh policy attached.
 	for _, caggName := range []string{
@@ -138,6 +148,7 @@ func TestMigrationsRoundTrip(t *testing.T) {
 	// After a full rollback, none of our tables / CAGGs should remain.
 	assertTableAbsent(t, db, ctx, "trades")
 	assertTableAbsent(t, db, ctx, "ingestion_cursors")
+	assertTableAbsent(t, db, ctx, "oracle_updates")
 	assertContinuousAggregateAbsent(t, db, ctx, "prices_1m")
 }
 
