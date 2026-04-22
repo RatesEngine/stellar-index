@@ -36,6 +36,7 @@ type Server struct {
 	checks  []ReadyChecker
 	assets  AssetReader
 	prices  PriceReader
+	meta    MetadataResolver
 	mux     *http.ServeMux
 	started time.Time
 }
@@ -55,6 +56,10 @@ type Options struct {
 	// integrate against the wire contract before we have a
 	// reader wired.
 	Prices PriceReader
+	// Meta, when non-nil, enables the SEP-1 overlay on
+	// /v1/assets/{id}. Typically a *metadata.Cache wrapping a
+	// *metadata.Resolver backed by Redis.
+	Meta MetadataResolver
 }
 
 // New constructs a Server and mounts all v1 routes.
@@ -68,6 +73,7 @@ func New(opts Options) *Server {
 		checks:  opts.ReadyChecks,
 		assets:  opts.Assets,
 		prices:  opts.Prices,
+		meta:    opts.Meta,
 		mux:     http.NewServeMux(),
 		started: time.Now().UTC(),
 	}

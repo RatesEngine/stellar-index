@@ -5,9 +5,25 @@ import (
 	"errors"
 	"net/http"
 	"strconv"
+	"strings"
+	"time"
 
 	"github.com/RatesEngine/rates-engine/internal/canonical"
+	"github.com/RatesEngine/rates-engine/internal/metadata"
 )
+
+// MetadataResolver is the narrow dependency the assets handler needs
+// from [internal/metadata]. Both [*metadata.Resolver] and
+// [*metadata.Cache] satisfy it.
+type MetadataResolver interface {
+	Resolve(ctx context.Context, domain string) (*metadata.SEP1, error)
+}
+
+// sep1OverlayTimeout caps how long a single /v1/assets/{id} request
+// will wait on a SEP-1 fetch. Above this budget we return the core
+// asset detail with sep1_status="unreachable" rather than blocking
+// the caller.
+const sep1OverlayTimeout = 500 * time.Millisecond
 
 // AssetReader is the storage-side interface for asset reads.
 // Implementations:
@@ -38,7 +54,31 @@ type AssetDetail struct {
 	ContractID *string `json:"contract_id,omitempty"`
 	HomeDomain *string `json:"home_domain,omitempty"`
 	Decimals   int     `json:"decimals"`
-	Sep1Status string  `json:"sep1_status"`
+	// Sep1Status is the state of the SEP-1 overlay for this asset:
+	//   - "not_applicable" — no home-domain (native, fiat, SAC-only).
+	//   - "not_fetched"    — has a home-domain but overlay not configured.
+	//   - "verified"       — SEP-1 fetched + matching [[CURRENCIES]] entry found.
+	//   - "no_match"       — SEP-1 fetched but no matching issuer+code entry.
+	//   - "unreachable"    — fetch / parse failed (see server logs).
+	Sep1Status string `json:"sep1_status"`
+
+	// ─── SEP-1 overlay fields (populated when Sep1Status=="verified") ─
+
+	// Name is the currency's human-readable name from [[CURRENCIES]]
+	// (e.g. "USD Coin").
+	Name *string `json:"name,omitempty"`
+	// Description is the currency's `desc` field (short blurb).
+	Description *string `json:"description,omitempty"`
+	// Image is an absolute URL to the asset logo (from `image`).
+	Image *string `json:"image,omitempty"`
+	// OrgName is the issuer organisation's name
+	// (DOCUMENTATION.ORG_NAME in stellar.toml).
+	OrgName *string `json:"org_name,omitempty"`
+	// AnchorAsset is the off-chain asset this token anchors to (e.g.
+	// "USD"). Empty for non-anchored tokens.
+	AnchorAsset *string `json:"anchor_asset,omitempty"`
+	// AnchorAssetType classifies the anchor (fiat, crypto, stock, …).
+	AnchorAssetType *string `json:"anchor_asset_type,omitempty"`
 }
 
 // detailFromAsset populates an AssetDetail from the canonical shape.
@@ -176,5 +216,96 @@ func (s *Server) handleAssetGet(w http.ResponseWriter, r *http.Request) {
 		detail = detailFromAsset(parsed)
 	}
 
+	// SEP-1 overlay — only for assets with a home-domain and only if
+	// the operator has wired a metadata resolver. Budgeted with a
+	// short timeout so a slow issuer domain doesn't stall the API.
+	if s.meta != nil && detail.HomeDomain != nil && *detail.HomeDomain != "" {
+		s.applySep1Overlay(r.Context(), &detail, parsed)
+	} else if detail.HomeDomain != nil && *detail.HomeDomain != "" && detail.Sep1Status == "" {
+		detail.Sep1Status = "not_fetched"
+	}
+
 	writeJSON(w, detail, Flags{})
+}
+
+// applySep1Overlay resolves the issuer's stellar.toml and attaches
+// the matching [[CURRENCIES]] entry's fields to detail. On any
+// failure it sets sep1_status="unreachable" and leaves the core
+// fields untouched.
+func (s *Server) applySep1Overlay(ctx context.Context, detail *AssetDetail, asset canonical.Asset) {
+	ctx, cancel := context.WithTimeout(ctx, sep1OverlayTimeout)
+	defer cancel()
+
+	sep, err := s.meta.Resolve(ctx, *detail.HomeDomain)
+	if err != nil {
+		s.logger.Debug("sep1 overlay failed", "asset_id", asset.String(),
+			"home_domain", *detail.HomeDomain, "err", err)
+		detail.Sep1Status = "unreachable"
+		return
+	}
+
+	// Find matching currency: classic asset matches on (code, issuer);
+	// Soroban asset matches on (code) alone since SEP-1 doesn't
+	// currently specify contract_id per-currency.
+	match := findMatchingCurrency(sep, asset)
+	if match == nil {
+		detail.Sep1Status = "no_match"
+		if name := strings.TrimSpace(sep.OrgName); name != "" {
+			detail.OrgName = &name
+		}
+		return
+	}
+
+	detail.Sep1Status = "verified"
+	if name := strings.TrimSpace(sep.OrgName); name != "" {
+		detail.OrgName = &name
+	}
+	if v := strings.TrimSpace(match.Name); v != "" {
+		detail.Name = &v
+	}
+	if v := strings.TrimSpace(match.Description); v != "" {
+		detail.Description = &v
+	}
+	if v := strings.TrimSpace(match.Image); v != "" {
+		detail.Image = &v
+	}
+	if v := strings.TrimSpace(match.AnchorAsset); v != "" {
+		detail.AnchorAsset = &v
+	}
+	if v := strings.TrimSpace(match.AnchorAssetType); v != "" {
+		detail.AnchorAssetType = &v
+	}
+	// Prefer issuer-declared display_decimals over our canonical
+	// default (7) — it's the value Freighter + wallets will surface
+	// to users. Fall back to decimals if display_decimals is zero.
+	if match.DisplayDecimals > 0 {
+		detail.Decimals = match.DisplayDecimals
+	} else if match.Decimals > 0 {
+		detail.Decimals = match.Decimals
+	}
+}
+
+// findMatchingCurrency finds the [[CURRENCIES]] entry that matches
+// asset. Returns nil if no entry matches. Classic assets match by
+// (code, issuer) exactly; Soroban-only assets match by code.
+func findMatchingCurrency(sep *metadata.SEP1, asset canonical.Asset) *metadata.Currency {
+	for i := range sep.Currencies {
+		c := &sep.Currencies[i]
+		if asset.Code != "" && !strings.EqualFold(c.Code, asset.Code) {
+			continue
+		}
+		// When the canonical asset has an issuer (classic), require
+		// the SEP-1 entry to match that issuer exactly. If the SEP-1
+		// entry lacks an issuer (malformed), skip it.
+		if asset.Issuer != "" {
+			if c.Issuer != "" && c.Issuer != asset.Issuer {
+				continue
+			}
+			if c.Issuer == "" {
+				continue
+			}
+		}
+		return c
+	}
+	return nil
 }
