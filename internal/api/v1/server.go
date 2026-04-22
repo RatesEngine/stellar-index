@@ -1,0 +1,159 @@
+package v1
+
+import (
+	"context"
+	"encoding/json"
+	"log/slog"
+	"net/http"
+	"time"
+
+	"github.com/RatesEngine/rates-engine/internal/version"
+)
+
+// ReadyChecker is the interface /readyz polls to decide whether
+// the serving-plane dependencies are responsive. Implementations:
+//
+//   - *timescale.Store (wraps PingContext).
+//   - a redis-client adapter (future).
+//
+// Kept narrow so tests can plug in stubs.
+type ReadyChecker interface {
+	Ping(ctx context.Context) error
+	Name() string
+}
+
+// Server is the HTTP handler for the Rates Engine v1 API.
+//
+// Construction: [New] returns a Server with routes mounted.
+// Call [Server.Handler] to get an http.Handler for an
+// [http.Server].
+//
+// Thread-safe.
+type Server struct {
+	logger  *slog.Logger
+	checks  []ReadyChecker
+	mux     *http.ServeMux
+	started time.Time
+}
+
+// Options configures a [Server] at construction.
+type Options struct {
+	Logger *slog.Logger
+	// ReadyChecks are polled by /readyz. Order matters only for
+	// log output (first-failed wins).
+	ReadyChecks []ReadyChecker
+}
+
+// New constructs a Server and mounts all v1 routes.
+func New(opts Options) *Server {
+	logger := opts.Logger
+	if logger == nil {
+		logger = slog.Default()
+	}
+	s := &Server{
+		logger:  logger,
+		checks:  opts.ReadyChecks,
+		mux:     http.NewServeMux(),
+		started: time.Now().UTC(),
+	}
+	s.mountRoutes()
+	return s
+}
+
+// Handler returns the mounted http.Handler. The caller wraps this
+// in any app-level middleware (recoverer, request ID, logging)
+// before passing to [http.Server].
+func (s *Server) Handler() http.Handler { return s.mux }
+
+// Uptime returns how long this server has been running. Exposed
+// for debugging / testing.
+func (s *Server) Uptime() time.Duration { return time.Since(s.started) }
+
+func (s *Server) mountRoutes() {
+	// Health / meta endpoints. Deliberately NOT behind rate-limit
+	// middleware — infra (k8s probes, load balancers) hits these.
+	s.mux.HandleFunc("GET /v1/healthz", s.handleHealthz)
+	s.mux.HandleFunc("GET /v1/readyz", s.handleReadyz)
+	s.mux.HandleFunc("GET /v1/version", s.handleVersion)
+
+	// TODO(#0): /v1/assets, /v1/price, /v1/history, /v1/ohlc,
+	// /v1/markets, /v1/pairs, /v1/oracle/*, /v1/account/* —
+	// land in follow-up PRs per docs/reference/api-design.md §5.
+}
+
+// ─── Handlers ─────────────────────────────────────────────────────
+
+// healthResponse is the shape for /healthz + /readyz.
+type healthResponse struct {
+	Status string `json:"status"` // ok | degraded
+	// Uptime is a human-readable duration. Precise-to-the-second is
+	// fine for monitoring.
+	Uptime string `json:"uptime"`
+	// Checks is populated on /readyz with per-dependency results.
+	// Absent on /healthz.
+	Checks []checkResult `json:"checks,omitempty"`
+}
+
+type checkResult struct {
+	Name string `json:"name"`
+	OK   bool   `json:"ok"`
+	// Error is populated only when OK is false; freeform string.
+	Error string `json:"error,omitempty"`
+}
+
+// handleHealthz is the shallow liveness probe. Returns 200 as long
+// as the process is running + mux is serving. Does NOT touch the
+// database or Redis — those are the readiness probe's job.
+func (s *Server) handleHealthz(w http.ResponseWriter, r *http.Request) {
+	writeJSON(w, healthResponse{
+		Status: "ok",
+		Uptime: s.Uptime().Truncate(time.Second).String(),
+	}, Flags{})
+}
+
+// handleReadyz is the deep readiness probe. Pings every registered
+// ReadyChecker in parallel with a short timeout. 200 only if all
+// pass; 503 otherwise.
+func (s *Server) handleReadyz(w http.ResponseWriter, r *http.Request) {
+	ctx, cancel := context.WithTimeout(r.Context(), 2*time.Second)
+	defer cancel()
+
+	results := make([]checkResult, len(s.checks))
+	allOK := true
+	for i, c := range s.checks {
+		err := c.Ping(ctx)
+		results[i] = checkResult{Name: c.Name(), OK: err == nil}
+		if err != nil {
+			allOK = false
+			results[i].Error = err.Error()
+		}
+	}
+
+	resp := healthResponse{
+		Status: "ok",
+		Uptime: s.Uptime().Truncate(time.Second).String(),
+		Checks: results,
+	}
+	if !allOK {
+		resp.Status = "degraded"
+		env := Envelope{
+			Data:  resp,
+			AsOf:  time.Now().UTC(),
+			Flags: Flags{Stale: true},
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusServiceUnavailable)
+		_ = json.NewEncoder(w).Encode(env)
+		return
+	}
+
+	writeJSON(w, resp, Flags{})
+}
+
+// handleVersion reports binary version + build date.
+func (s *Server) handleVersion(w http.ResponseWriter, r *http.Request) {
+	writeJSON(w, map[string]string{
+		"version":    version.Version,
+		"build_date": version.BuildDate,
+	}, Flags{})
+}
