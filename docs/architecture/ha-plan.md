@@ -53,6 +53,18 @@ it protects.
 
 ## 2. Physical topology
 
+**Cross-region context:** this section shows the **per-region**
+layout — one full stack, as deployed in each of three regions. The
+3-region architecture (primary / sync-replica / async-replica,
+graceful degradation across regions) lives in
+[infrastructure/multi-region-topology.md](infrastructure/multi-region-topology.md).
+The phased 1 → 3 validator rollout lives in
+[infrastructure/validator-rollout.md](infrastructure/validator-rollout.md).
+Per-node hardware spec is in
+[infrastructure/archival-node-spec.md](infrastructure/archival-node-spec.md).
+At launch we run exactly **one** region (R1/London) with this
+topology; R2 and R3 join over Weeks 6–8 with the same shape.
+
 ### 2.1 Primary (colo)
 
 ```
