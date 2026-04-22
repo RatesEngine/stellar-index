@@ -1,0 +1,253 @@
+package v1_test
+
+import (
+	"context"
+	"encoding/json"
+	"net/http"
+	"strings"
+	"testing"
+
+	v1 "github.com/RatesEngine/rates-engine/internal/api/v1"
+	"github.com/RatesEngine/rates-engine/internal/canonical"
+)
+
+const testUSDCIssuer = "GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN"
+
+// stubAssetReader implements v1.AssetReader in-memory. Each test
+// instantiates one with the fixture data it needs.
+type stubAssetReader struct {
+	byID     map[string]v1.AssetDetail
+	page     []v1.AssetDetail
+	nextCur  string
+}
+
+func (r *stubAssetReader) GetAsset(_ context.Context, a canonical.Asset) (v1.AssetDetail, error) {
+	d, ok := r.byID[a.String()]
+	if !ok {
+		return v1.AssetDetail{}, v1.ErrAssetNotFound
+	}
+	return d, nil
+}
+
+func (r *stubAssetReader) ListAssets(_ context.Context, cursor string, limit int) ([]v1.AssetDetail, string, error) {
+	return r.page, r.nextCur, nil
+}
+
+// ─── /v1/assets (list) ────────────────────────────────────────────
+
+func TestAssetList_EmptyWhenReaderNil(t *testing.T) {
+	// Prove the default "reader not wired yet" path is 200 + empty.
+	srv := v1.New(v1.Options{})
+	ts := httpTestServer(t, srv)
+
+	resp := mustGet(t, ts.URL+"/v1/assets")
+	if resp.StatusCode != 200 {
+		t.Fatalf("status = %d", resp.StatusCode)
+	}
+	var env struct {
+		Data []v1.AssetDetail `json:"data"`
+	}
+	mustDecode(t, resp, &env)
+	if len(env.Data) != 0 {
+		t.Errorf("expected empty list, got %d rows", len(env.Data))
+	}
+}
+
+func TestAssetList_ReturnsFixtureWithPagination(t *testing.T) {
+	native := v1.AssetDetail{
+		AssetID: "native", Type: "native", Code: "XLM",
+		Decimals: 7, Sep1Status: "not_applicable",
+	}
+	reader := &stubAssetReader{
+		page:    []v1.AssetDetail{native},
+		nextCur: "opaque-next",
+	}
+	srv := v1.New(v1.Options{Assets: reader})
+	ts := httpTestServer(t, srv)
+
+	resp := mustGet(t, ts.URL+"/v1/assets?limit=50")
+	if resp.StatusCode != 200 {
+		t.Fatalf("status = %d", resp.StatusCode)
+	}
+	var env struct {
+		Data       []v1.AssetDetail `json:"data"`
+		Pagination struct {
+			Next string `json:"next"`
+		} `json:"pagination"`
+	}
+	mustDecode(t, resp, &env)
+	if len(env.Data) != 1 || env.Data[0].AssetID != "native" {
+		t.Fatalf("data wrong: %+v", env.Data)
+	}
+	if env.Pagination.Next != "opaque-next" {
+		t.Errorf("pagination next = %q", env.Pagination.Next)
+	}
+}
+
+func TestAssetList_InvalidLimitRejected(t *testing.T) {
+	srv := v1.New(v1.Options{})
+	ts := httpTestServer(t, srv)
+
+	for _, raw := range []string{"0", "501", "abc", "-1"} {
+		t.Run("limit="+raw, func(t *testing.T) {
+			resp := mustGet(t, ts.URL+"/v1/assets?limit="+raw)
+			if resp.StatusCode != 400 {
+				t.Errorf("status = %d, want 400", resp.StatusCode)
+			}
+			body, _ := readAll(resp)
+			if !strings.Contains(body, "invalid-limit") {
+				t.Errorf("error type missing: %s", body)
+			}
+		})
+	}
+}
+
+// ─── /v1/assets/{asset_id} (single) ───────────────────────────────
+
+func TestAssetGet_native(t *testing.T) {
+	srv := v1.New(v1.Options{})
+	ts := httpTestServer(t, srv)
+
+	resp := mustGet(t, ts.URL+"/v1/assets/native")
+	if resp.StatusCode != 200 {
+		t.Fatalf("status = %d", resp.StatusCode)
+	}
+	var env struct {
+		Data v1.AssetDetail `json:"data"`
+	}
+	mustDecode(t, resp, &env)
+	if env.Data.AssetID != "native" || env.Data.Type != "native" {
+		t.Errorf("wrong asset: %+v", env.Data)
+	}
+}
+
+func TestAssetGet_classicEcho(t *testing.T) {
+	srv := v1.New(v1.Options{}) // nil reader → canonical-echo path
+	ts := httpTestServer(t, srv)
+
+	url := ts.URL + "/v1/assets/USDC-" + testUSDCIssuer
+	resp := mustGet(t, url)
+	if resp.StatusCode != 200 {
+		t.Fatalf("status = %d", resp.StatusCode)
+	}
+	var env struct {
+		Data v1.AssetDetail `json:"data"`
+	}
+	mustDecode(t, resp, &env)
+	if env.Data.Type != "classic" || env.Data.Code != "USDC" {
+		t.Errorf("wrong decode: %+v", env.Data)
+	}
+	if env.Data.Issuer == nil || *env.Data.Issuer != testUSDCIssuer {
+		t.Errorf("issuer missing: %+v", env.Data.Issuer)
+	}
+}
+
+func TestAssetGet_fiatVariant(t *testing.T) {
+	// ADR-0010: fiat:USD is a first-class asset.
+	srv := v1.New(v1.Options{})
+	ts := httpTestServer(t, srv)
+
+	resp := mustGet(t, ts.URL+"/v1/assets/fiat:USD")
+	if resp.StatusCode != 200 {
+		t.Fatalf("status = %d", resp.StatusCode)
+	}
+	var env struct {
+		Data v1.AssetDetail `json:"data"`
+	}
+	mustDecode(t, resp, &env)
+	if env.Data.Type != "fiat" || env.Data.Code != "USD" {
+		t.Errorf("fiat decode wrong: %+v", env.Data)
+	}
+}
+
+func TestAssetGet_invalidIdReturns400(t *testing.T) {
+	srv := v1.New(v1.Options{})
+	ts := httpTestServer(t, srv)
+
+	resp := mustGet(t, ts.URL+"/v1/assets/garbage-but-not-any-format")
+	if resp.StatusCode != 400 {
+		t.Fatalf("status = %d, want 400", resp.StatusCode)
+	}
+	if ct := resp.Header.Get("Content-Type"); ct != "application/problem+json" {
+		t.Errorf("content-type = %q, want problem+json", ct)
+	}
+}
+
+func TestAssetGet_notFound(t *testing.T) {
+	reader := &stubAssetReader{byID: map[string]v1.AssetDetail{}}
+	srv := v1.New(v1.Options{Assets: reader})
+	ts := httpTestServer(t, srv)
+
+	resp := mustGet(t, ts.URL+"/v1/assets/native")
+	if resp.StatusCode != 404 {
+		t.Fatalf("status = %d, want 404", resp.StatusCode)
+	}
+	body, _ := readAll(resp)
+	if !strings.Contains(body, "asset-not-found") {
+		t.Errorf("body missing error type: %s", body)
+	}
+}
+
+func TestAssetGet_readerPopulatesSep1Status(t *testing.T) {
+	// When the reader returns a detail, we use its fields verbatim
+	// (vs canonical-echo which fills defaults).
+	issuer := testUSDCIssuer
+	domain := "circle.com"
+	reader := &stubAssetReader{
+		byID: map[string]v1.AssetDetail{
+			"USDC-" + testUSDCIssuer: {
+				AssetID:    "USDC-" + testUSDCIssuer,
+				Type:       "classic",
+				Code:       "USDC",
+				Issuer:     &issuer,
+				HomeDomain: &domain,
+				Decimals:   7,
+				Sep1Status: "verified",
+			},
+		},
+	}
+	srv := v1.New(v1.Options{Assets: reader})
+	ts := httpTestServer(t, srv)
+
+	resp := mustGet(t, ts.URL+"/v1/assets/USDC-"+testUSDCIssuer)
+	var env struct {
+		Data v1.AssetDetail `json:"data"`
+	}
+	mustDecode(t, resp, &env)
+	if env.Data.Sep1Status != "verified" || env.Data.HomeDomain == nil {
+		t.Fatalf("reader fields lost: %+v", env.Data)
+	}
+}
+
+// ─── helpers ──────────────────────────────────────────────────────
+
+func httpTestServer(t *testing.T, srv *v1.Server) *testServer {
+	t.Helper()
+	ts := newTestServerFromHandler(t, srv.Handler())
+	return ts
+}
+
+// Tiny wrapper around httptest.NewServer for readable test code.
+type testServer = testServerImpl
+
+func newTestServerFromHandler(t *testing.T, h http.Handler) *testServerImpl {
+	t.Helper()
+	return startHTTPTest(t, h)
+}
+
+func mustGet(t *testing.T, url string) *http.Response {
+	t.Helper()
+	resp, err := http.Get(url)
+	if err != nil {
+		t.Fatalf("GET %s: %v", url, err)
+	}
+	t.Cleanup(func() { _ = resp.Body.Close() })
+	return resp
+}
+
+func mustDecode(t *testing.T, resp *http.Response, v any) {
+	t.Helper()
+	if err := json.NewDecoder(resp.Body).Decode(v); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+}

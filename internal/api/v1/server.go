@@ -32,6 +32,7 @@ type ReadyChecker interface {
 type Server struct {
 	logger  *slog.Logger
 	checks  []ReadyChecker
+	assets  AssetReader
 	mux     *http.ServeMux
 	started time.Time
 }
@@ -42,6 +43,10 @@ type Options struct {
 	// ReadyChecks are polled by /readyz. Order matters only for
 	// log output (first-failed wins).
 	ReadyChecks []ReadyChecker
+	// Assets, when non-nil, backs /v1/assets and /v1/assets/{id}.
+	// Leave nil during early bring-up; handlers return an empty
+	// list + degrade single-asset lookups to pure canonical echo.
+	Assets AssetReader
 }
 
 // New constructs a Server and mounts all v1 routes.
@@ -53,6 +58,7 @@ func New(opts Options) *Server {
 	s := &Server{
 		logger:  logger,
 		checks:  opts.ReadyChecks,
+		assets:  opts.Assets,
 		mux:     http.NewServeMux(),
 		started: time.Now().UTC(),
 	}
@@ -76,9 +82,13 @@ func (s *Server) mountRoutes() {
 	s.mux.HandleFunc("GET /v1/readyz", s.handleReadyz)
 	s.mux.HandleFunc("GET /v1/version", s.handleVersion)
 
-	// TODO(#0): /v1/assets, /v1/price, /v1/history, /v1/ohlc,
-	// /v1/markets, /v1/pairs, /v1/oracle/*, /v1/account/* —
-	// land in follow-up PRs per docs/reference/api-design.md §5.
+	// Asset catalogue — first real data endpoint.
+	s.mux.HandleFunc("GET /v1/assets", s.handleAssetList)
+	s.mux.HandleFunc("GET /v1/assets/{asset_id}", s.handleAssetGet)
+
+	// TODO(#0): /v1/price, /v1/history, /v1/ohlc, /v1/markets,
+	// /v1/pairs, /v1/oracle/*, /v1/account/* — follow-up PRs
+	// per docs/reference/api-design.md §5.
 }
 
 // ─── Handlers ─────────────────────────────────────────────────────

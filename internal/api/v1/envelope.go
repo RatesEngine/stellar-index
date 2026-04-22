@@ -42,11 +42,20 @@ type Problem struct {
 // writeJSON writes the Envelope + 200. The convention everywhere in
 // v1 handlers.
 func writeJSON(w http.ResponseWriter, data any, flags Flags, sources ...string) {
-	env := Envelope{
+	writeEnvelope(w, Envelope{
 		Data:    data,
 		AsOf:    time.Now().UTC(),
 		Sources: sources,
 		Flags:   flags,
+	})
+}
+
+// writeEnvelope writes a pre-constructed Envelope. Used by handlers
+// that need to set Pagination or other fields writeJSON doesn't
+// accept as params.
+func writeEnvelope(w http.ResponseWriter, env Envelope) {
+	if env.AsOf.IsZero() {
+		env.AsOf = time.Now().UTC()
 	}
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
