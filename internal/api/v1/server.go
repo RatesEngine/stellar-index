@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/RatesEngine/rates-engine/internal/api/v1/middleware"
 	"github.com/RatesEngine/rates-engine/internal/version"
 )
 
@@ -73,10 +74,18 @@ func New(opts Options) *Server {
 	return s
 }
 
-// Handler returns the mounted http.Handler. The caller wraps this
-// in any app-level middleware (recoverer, request ID, logging)
-// before passing to [http.Server].
-func (s *Server) Handler() http.Handler { return s.mux }
+// Handler returns the mux wrapped in the standard middleware stack
+// (outermost-first): RequestID → Logger → Recoverer. RateLimit +
+// CORS are applied by callers that have those pieces wired
+// (typically the api binary, per docs/reference/api-design.md
+// §6–§7).
+func (s *Server) Handler() http.Handler {
+	return middleware.Chain(s.mux,
+		middleware.RequestID,
+		middleware.Logger(s.logger),
+		middleware.Recoverer(s.logger),
+	)
+}
 
 // Uptime returns how long this server has been running. Exposed
 // for debugging / testing.
