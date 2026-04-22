@@ -39,6 +39,7 @@ import (
 	"github.com/RatesEngine/rates-engine/internal/obs"
 	"github.com/RatesEngine/rates-engine/internal/sources/aquarius"
 	"github.com/RatesEngine/rates-engine/internal/sources/phoenix"
+	"github.com/RatesEngine/rates-engine/internal/sources/reflector"
 	"github.com/RatesEngine/rates-engine/internal/sources/soroswap"
 	"github.com/RatesEngine/rates-engine/internal/stellarrpc"
 	"github.com/RatesEngine/rates-engine/internal/storage/timescale"
@@ -245,6 +246,8 @@ func persistEvents(ctx context.Context, logger *slog.Logger, store *timescale.St
 				persistTrade(ctx, logger, store, e.Trade)
 			case phoenix.TradeEvent:
 				persistTrade(ctx, logger, store, e.Trade)
+			case reflector.UpdateEvent:
+				persistOracle(ctx, logger, store, e.Update)
 			default:
 				logger.Warn("unhandled event kind",
 					"kind", ev.EventKind(),
@@ -269,6 +272,33 @@ func persistTrade(ctx context.Context, logger *slog.Logger, store *timescale.Sto
 		"source", t.Source,
 		"ledger", t.Ledger,
 		"pair", t.Pair.String(),
+	)
+}
+
+// persistOracle writes one OracleUpdate to the oracle_updates
+// hypertable. Mirrors persistTrade for the oracle side — the
+// indexer's event-sink type-switch routes each event type to its
+// matching sink.
+func persistOracle(ctx context.Context, logger *slog.Logger, store *timescale.Store, u canonical.OracleUpdate) {
+	if err := store.InsertOracleUpdate(ctx, u); err != nil {
+		logger.Error("insert oracle update failed",
+			"source", u.Source,
+			"ledger", u.Ledger,
+			"tx_hash", u.TxHash,
+			"op_index", u.OpIndex,
+			"asset", u.Asset.String(),
+			"err", err,
+		)
+		return
+	}
+	obs.OracleLastUpdateUnix.WithLabelValues(u.Source, u.Asset.String()).
+		Set(float64(u.Timestamp.Unix()))
+	logger.Debug("oracle update ingested",
+		"source", u.Source,
+		"ledger", u.Ledger,
+		"asset", u.Asset.String(),
+		"price", u.Price.String(),
+		"decimals", u.Decimals,
 	)
 }
 
