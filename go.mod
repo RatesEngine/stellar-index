@@ -14,6 +14,7 @@ go 1.25.0
 // use them. See CHANGELOG [Unreleased].
 
 require (
+	github.com/BurntSushi/toml v1.6.0
 	github.com/golang-migrate/migrate/v4 v4.19.1
 	github.com/lib/pq v1.12.3
 	github.com/testcontainers/testcontainers-go v0.42.0

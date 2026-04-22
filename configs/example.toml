@@ -1,0 +1,91 @@
+# Rates Engine — example configuration.
+#
+# Copy this file, edit the fields you care about, point a binary at
+# it with `-config path/to/your.toml`. Any field omitted here falls
+# back to the default baked into internal/config/config.go.
+#
+# Secrets (passwords, access keys) NEVER belong in this file. The
+# fields below reference env-var names that hold the actual secret
+# at runtime. Set those envs via your secret manager (Vault, AWS
+# Secrets Manager, etc.) before starting the binary.
+#
+# Generated reference: docs/reference/config/README.md.
+# Operator runbook for deploying: docs/operations/runbooks/
+# bootstrap-archival-node.md.
+
+# ──────────────────────────────────────────────────────────────────
+# Region — who am I in the multi-region topology?
+# ──────────────────────────────────────────────────────────────────
+[region]
+id          = "r1"
+name        = "London"
+home_domain = "ratesengine.net"
+
+# ──────────────────────────────────────────────────────────────────
+# Stellar — where does my ledger data come from?
+# ──────────────────────────────────────────────────────────────────
+[stellar]
+network             = "pubnet"                                    # pubnet | testnet | futurenet
+core_http_endpoint  = "http://127.0.0.1:11626"                    # stellar-core admin
+rpc_endpoints       = ["http://127.0.0.1:8000"]                   # tried in order on failure
+history_archive_url = "https://history.stellar.org/prd/core-live/core_live_001"
+
+# ──────────────────────────────────────────────────────────────────
+# Storage — Postgres/Timescale, Redis, MinIO / S3.
+# Secrets come from env vars named in the *_env fields.
+# ──────────────────────────────────────────────────────────────────
+[storage]
+# DSN — override the password at runtime via RATESENGINE_POSTGRES_DSN.
+postgres_dsn       = "postgres://ratesengine@127.0.0.1:5432/ratesengine?sslmode=disable"
+
+redis_addr         = "127.0.0.1:6379"
+# redis_password_env = "RATESENGINE_REDIS_PASSWORD"   # uncomment + set env
+
+s3_endpoint        = "http://127.0.0.1:9000"
+s3_region          = "r1"
+s3_bucket_archive  = "galexie-archive"
+s3_bucket_live     = "galexie-live"
+s3_access_key_env  = "RATESENGINE_S3_ACCESS_KEY"
+s3_secret_key_env  = "RATESENGINE_S3_SECRET_KEY"
+
+# ──────────────────────────────────────────────────────────────────
+# Ingestion — which source connectors to run on this indexer replica.
+# Each name must exist in internal/sources/<name>/.
+# ──────────────────────────────────────────────────────────────────
+[ingestion]
+enabled_sources       = ["soroswap"]    # expand as connectors land
+backfill_from_ledger  = 0                # 0 = resume from persisted cursor
+backfill_batch_size   = 64
+cursor_store_scheme   = "postgres"
+
+# ──────────────────────────────────────────────────────────────────
+# Aggregate — VWAP/TWAP windows + filters (aggregator binary only).
+# ──────────────────────────────────────────────────────────────────
+[aggregate]
+vwap_window_seconds       = 300
+twap_window_seconds       = 300
+min_usd_volume            = 10000.0
+outlier_sigma_threshold   = 4.0
+triangulation_enabled     = true
+
+# ──────────────────────────────────────────────────────────────────
+# API — public serving plane (api binary only).
+# ──────────────────────────────────────────────────────────────────
+[api]
+listen_addr              = "0.0.0.0:3000"
+external_base_url        = "https://api.ratesengine.net/v1"
+auth_mode                = "apikey"          # none | apikey | sep10 (future)
+anon_rate_limit_per_min  = 60
+key_rate_limit_per_min   = 1000
+cdn_enabled              = true
+allowed_origins          = ["*"]
+
+# ──────────────────────────────────────────────────────────────────
+# Obs — metrics, logs, traces.
+# ──────────────────────────────────────────────────────────────────
+[obs]
+metrics_listen  = "127.0.0.1:9464"
+log_level       = "info"          # debug | info | warn | error
+log_format      = "json"          # json | text
+trace_exporter  = "none"          # none | otlp
+trace_sample    = 0.1             # 0.0 – 1.0
