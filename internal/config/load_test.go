@@ -81,6 +81,31 @@ name = "Singapore"
 	}
 }
 
+func TestLoad_ExampleConfigValid(t *testing.T) {
+	// The checked-in configs/example.toml is the reference operators
+	// copy for fresh deployments — it MUST load + validate cleanly.
+	// Resolve relative to the test file: ../../configs/example.toml.
+	wd, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(wd, "..", "..", "configs", "example.toml")
+	if _, err := os.Stat(path); err != nil {
+		t.Skipf("example.toml not at %s: %v", path, err)
+	}
+	c, err := cfg.Load(path)
+	if err != nil {
+		t.Fatalf("Load(%s): %v", path, err)
+	}
+	// Smoke-check: region + listen came from the file, not defaults.
+	if c.Region.ID == "" {
+		t.Error("region.id didn't populate from file")
+	}
+	if c.API.ListenAddr == "" {
+		t.Error("api.listen_addr didn't populate from file")
+	}
+}
+
 func TestLoad_missingFileErrorsNice(t *testing.T) {
 	_, err := cfg.Load("/absolutely/not/a/real/path.toml")
 	if err == nil {
