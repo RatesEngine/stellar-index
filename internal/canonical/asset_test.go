@@ -53,6 +53,15 @@ func TestNewClassicAsset_errors(t *testing.T) {
 		{"too long code", "THIRTEEN_CHAR", usdcIssuer},
 		{"bad issuer - too short", "USDC", "GSHORT"},
 		{"bad issuer - wrong prefix", "USDC", "A" + usdcIssuer[1:]},
+		// Non-alphanumeric codes must be rejected — these pass the
+		// length check but aren't valid per Stellar's CREDIT_ALPHANUM
+		// XDR definitions.
+		{"code with emoji", "💩", usdcIssuer},
+		{"code with space", "US D", usdcIssuer},
+		{"code with hyphen", "USD-C", usdcIssuer},
+		{"code with colon", "USD:C", usdcIssuer},
+		{"code with null byte", "USD\x00", usdcIssuer},
+		{"code with non-ASCII", "USDé", usdcIssuer},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

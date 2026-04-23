@@ -71,14 +71,37 @@ func NativeAsset() Asset {
 // NewClassicAsset constructs a classic Stellar asset. Returns an
 // error if code or issuer fail validation.
 func NewClassicAsset(code, issuer string) (Asset, error) {
-	if l := len(code); l == 0 || l > 12 {
-		return Asset{}, fmt.Errorf("%w: code %q length %d (expected 1-12)",
-			ErrInvalidAsset, code, l)
+	if err := validateClassicAssetCode(code); err != nil {
+		return Asset{}, err
 	}
 	if err := validateAccountID(issuer); err != nil {
 		return Asset{}, err
 	}
 	return Asset{Type: AssetClassic, Code: code, Issuer: issuer}, nil
+}
+
+// validateClassicAssetCode enforces Stellar's alphanum4/alphanum12
+// asset-code rules: length 1–12, chars [a-zA-Z0-9] only. Rejected
+// inputs include empty, over-length, and non-ASCII-alphanumeric
+// characters (emoji, spaces, punctuation). Matches XDR
+// ASSET_TYPE_CREDIT_ALPHANUM4 / ALPHANUM12 validity.
+func validateClassicAssetCode(code string) error {
+	l := len(code)
+	if l == 0 || l > 12 {
+		return fmt.Errorf("%w: code %q length %d (expected 1-12)",
+			ErrInvalidAsset, code, l)
+	}
+	for i := 0; i < l; i++ {
+		c := code[i]
+		ok := (c >= 'a' && c <= 'z') ||
+			(c >= 'A' && c <= 'Z') ||
+			(c >= '0' && c <= '9')
+		if !ok {
+			return fmt.Errorf("%w: code %q contains non-alphanumeric byte %q",
+				ErrInvalidAsset, code, c)
+		}
+	}
+	return nil
 }
 
 // NewSorobanAsset constructs a Soroban contract-based asset.
@@ -131,8 +154,8 @@ func (a Asset) Validate() error {
 		if a.ContractID != "" {
 			return fmt.Errorf("%w: classic asset must not carry contract_id", ErrInvalidAsset)
 		}
-		if l := len(a.Code); l == 0 || l > 12 {
-			return fmt.Errorf("%w: classic asset code %q length %d", ErrInvalidAsset, a.Code, l)
+		if err := validateClassicAssetCode(a.Code); err != nil {
+			return err
 		}
 		return validateAccountID(a.Issuer)
 	case AssetSoroban:
