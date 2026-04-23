@@ -139,6 +139,22 @@ func (u OracleUpdate) Validate() error {
 	if u.Confidence < 0 || u.Confidence > 1 {
 		return fmt.Errorf("%w: confidence %f out of [0,1]", ErrInvalidOracle, u.Confidence)
 	}
+	// Observer is optional (off-chain sources synthesise it empty),
+	// but when present it MUST be a valid G-strkey. Empty string
+	// is NOT a valid G-strkey so we can't call validateAccountID
+	// unconditionally.
+	if u.Observer != "" {
+		if err := validateAccountID(u.Observer); err != nil {
+			return fmt.Errorf("%w: observer: %v", ErrInvalidOracle, err)
+		}
+	}
+	// ContractID is optional (off-chain sources don't have one).
+	// When present it MUST be a valid C-strkey.
+	if u.ContractID != "" {
+		if err := validateContractID(u.ContractID); err != nil {
+			return fmt.Errorf("%w: contract_id: %v", ErrInvalidOracle, err)
+		}
+	}
 	return nil
 }
 

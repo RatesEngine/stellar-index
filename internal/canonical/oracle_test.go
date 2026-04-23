@@ -57,6 +57,11 @@ func TestOracle_Validate_errors(t *testing.T) {
 		"too many decimals": func(u *c.OracleUpdate) { u.Decimals = 40 },
 		"negative conf":     func(u *c.OracleUpdate) { u.Confidence = -0.1 },
 		"conf > 1":          func(u *c.OracleUpdate) { u.Confidence = 1.5 },
+		// Observer, when present, MUST be a valid G-strkey.
+		"short observer":    func(u *c.OracleUpdate) { u.Observer = "GSHORT" },
+		"bad observer":      func(u *c.OracleUpdate) { u.Observer = "NOTG" + "A" + "BCDEFGHIJKLMNOPQRSTUVWXYZ234567ABCDEFGHIJKLMNOPQRSTUVW" },
+		// ContractID, when present, MUST be a valid C-strkey.
+		"bad contract_id":   func(u *c.OracleUpdate) { u.ContractID = "not-a-c-key" },
 	}
 	for name, mutate := range cases {
 		t.Run(name, func(t *testing.T) {
