@@ -163,6 +163,9 @@ func (s *Server) mountRoutes() {
 	// Single-bar OHLC over a time window.
 	s.mux.HandleFunc("GET /v1/ohlc", s.handleOHLC)
 
+	// Volume-weighted average price over a time window.
+	s.mux.HandleFunc("GET /v1/vwap", s.handleVWAP)
+
 	// Distinct trading pairs.
 	s.mux.HandleFunc("GET /v1/markets", s.handleMarkets)
 
