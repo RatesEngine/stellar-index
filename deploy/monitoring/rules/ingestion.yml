@@ -104,3 +104,22 @@ groups:
             Source {{ $labels.source }} failed to decode > 1 event/sec for 5+
             minutes. Usually a contract-event-schema change or a regression
             in the decoder.
+
+      - alert: ratesengine_ingestion_insert_errors
+        expr: sum by (source, kind) (rate(ratesengine_source_insert_errors_total[5m])) > 0.1
+        for: 5m
+        labels:
+          severity: ticket
+          team: ratesengine
+          component: ingestion
+          runbook_url: https://github.com/RatesEngine/rates-engine/blob/main/docs/operations/runbooks/insert-errors.md
+        annotations:
+          summary: "Insert errors on {{ $labels.source }}/{{ $labels.kind }} at {{ $value }}/sec"
+          description: |
+            Source {{ $labels.source }} failed to persist {{ $labels.kind }}
+            events (>6/min sustained for 5 min). Storage layer is rejecting
+            writes — usually Timescale outage, disk-full, or a schema
+            mismatch after a migration.
+
+            Without a retry queue, these events are LOST from the pipeline.
+            Escalate quickly if the rate is high.

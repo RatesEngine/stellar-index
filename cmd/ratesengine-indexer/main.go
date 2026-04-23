@@ -284,6 +284,7 @@ func persistEvents(ctx context.Context, logger *slog.Logger, store *timescale.St
 
 func persistTrade(ctx context.Context, logger *slog.Logger, store *timescale.Store, t canonical.Trade) {
 	if err := store.InsertTrade(ctx, t); err != nil {
+		obs.SourceInsertErrorsTotal.WithLabelValues(t.Source, "trade").Inc()
 		logger.Error("insert trade failed",
 			"source", t.Source,
 			"ledger", t.Ledger,
@@ -306,6 +307,7 @@ func persistTrade(ctx context.Context, logger *slog.Logger, store *timescale.Sto
 // matching sink.
 func persistOracle(ctx context.Context, logger *slog.Logger, store *timescale.Store, u canonical.OracleUpdate) {
 	if err := store.InsertOracleUpdate(ctx, u); err != nil {
+		obs.SourceInsertErrorsTotal.WithLabelValues(u.Source, "oracle").Inc()
 		logger.Error("insert oracle update failed",
 			"source", u.Source,
 			"ledger", u.Ledger,

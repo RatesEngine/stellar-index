@@ -34,6 +34,7 @@ func init() {
 		SourceLastEventUnix,
 		SourceEnabled,
 		SourceDecodeErrorsTotal,
+		SourceInsertErrorsTotal,
 		CursorLastLedger,
 
 		PriceStalenessSeconds,
@@ -134,6 +135,20 @@ var SourceDecodeErrorsTotal = prometheus.NewCounterVec(
 		Help: "Events that failed to decode, per source.",
 	},
 	[]string{"source"},
+)
+
+// SourceInsertErrorsTotal — per-source counter of persistence
+// failures (DB connection lost, constraint violation, etc.).
+// Separate from decode errors because operators respond differently:
+// decode errors mean the source schema drifted; insert errors mean
+// the storage layer is struggling. kind="trade"|"oracle" lets
+// dashboards split trade vs oracle-update writes.
+var SourceInsertErrorsTotal = prometheus.NewCounterVec(
+	prometheus.CounterOpts{
+		Name: "ratesengine_source_insert_errors_total",
+		Help: "Events that failed to persist to the store, per source + kind (trade/oracle).",
+	},
+	[]string{"source", "kind"},
 )
 
 // CursorLastLedger — per-source gauge, the last-committed cursor

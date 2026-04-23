@@ -22,6 +22,7 @@ func TestHandler_ExposesMetrics(t *testing.T) {
 	obs.SourceLastEventUnix.WithLabelValues("_warmup").Set(0)
 	obs.SourceEnabled.WithLabelValues("_warmup").Set(0)
 	obs.SourceDecodeErrorsTotal.WithLabelValues("_warmup").Inc()
+	obs.SourceInsertErrorsTotal.WithLabelValues("_warmup", "trade").Inc()
 	obs.CursorLastLedger.WithLabelValues("_warmup").Set(0)
 	obs.PriceStalenessSeconds.WithLabelValues("_warmup").Set(0)
 	obs.OracleLastUpdateUnix.WithLabelValues("_warmup", "_warmup").Set(0)
@@ -50,6 +51,7 @@ func TestHandler_ExposesMetrics(t *testing.T) {
 		"ratesengine_source_last_event_unix",
 		"ratesengine_source_enabled",
 		"ratesengine_source_decode_errors_total",
+		"ratesengine_source_insert_errors_total",
 		"ratesengine_cursor_last_ledger",
 		"ratesengine_price_staleness_seconds",
 		"ratesengine_oracle_last_update_unix",
