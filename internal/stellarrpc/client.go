@@ -97,6 +97,13 @@ func (c *Client) call(ctx context.Context, method string, params any, result any
 	if envelope.Error != nil {
 		return envelope.Error
 	}
+	// Non-2xx status without a JSON-RPC error envelope is still a
+	// failure — we must not let the caller treat it as success just
+	// because the body happened to be valid JSON. Synthesize.
+	if resp.StatusCode >= 400 {
+		return fmt.Errorf("stellarrpc: %s: HTTP %d (no JSON-RPC error envelope): %s",
+			method, resp.StatusCode, truncate(string(respBody), 256))
+	}
 	if result != nil && len(envelope.Result) > 0 {
 		if err := json.Unmarshal(envelope.Result, result); err != nil {
 			return fmt.Errorf("stellarrpc: %s: decode result: %w", method, err)

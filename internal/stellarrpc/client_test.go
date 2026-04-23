@@ -278,6 +278,44 @@ func TestGetTransactionsBatch(t *testing.T) {
 	}
 }
 
+func TestNonEnvelopeHTTPErrorSurfaces(t *testing.T) {
+	// Servers / reverse proxies sometimes return HTTP 5xx with a JSON
+	// body that ISN'T a JSON-RPC error envelope — e.g. AWS ALB's
+	// {"message":"Internal server error"} or Cloudflare's
+	// {"errors":[{...}]}. The client must NOT treat those as success
+	// just because the body parses as JSON.
+	s := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusInternalServerError)
+		_, _ = w.Write([]byte(`{"message":"Internal server error"}`))
+	}))
+	defer s.Close()
+
+	c := rpc.New(s.URL)
+	_, err := c.LatestLedger(context.Background())
+	if err == nil {
+		t.Fatal("expected error for HTTP 500, got nil")
+	}
+	if !strings.Contains(err.Error(), "HTTP 500") {
+		t.Errorf("error should mention status: %v", err)
+	}
+}
+
+func TestNonEnvelopeHTTP4xxSurfaces(t *testing.T) {
+	// Same class of bug at the 4xx boundary — 429 from a rate limiter
+	// with a non-envelope body.
+	s := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusTooManyRequests)
+		_, _ = w.Write([]byte(`{"error":"rate limited","retry_after":60}`))
+	}))
+	defer s.Close()
+
+	c := rpc.New(s.URL)
+	_, err := c.LatestLedger(context.Background())
+	if err == nil {
+		t.Fatal("expected error for HTTP 429, got nil")
+	}
+}
+
 func TestContextCancellation(t *testing.T) {
 	// Slow server — make sure ctx cancel kills the call.
 	s := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
