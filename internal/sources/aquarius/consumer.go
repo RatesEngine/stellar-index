@@ -8,6 +8,7 @@ import (
 
 	"github.com/RatesEngine/rates-engine/internal/canonical"
 	"github.com/RatesEngine/rates-engine/internal/consumer"
+	"github.com/RatesEngine/rates-engine/internal/obs"
 	"github.com/RatesEngine/rates-engine/internal/stellarrpc"
 )
 
@@ -168,8 +169,10 @@ func (s *Source) processPage(ctx context.Context, events []stellarrpc.Event, out
 		closedAt, _ := time.Parse(time.RFC3339, e.LedgerClosedAt)
 		trades, err := decodeTrade(e, pool, closedAt)
 		if err != nil {
-			// Per-event parse errors don't bubble up. Track via
-			// metrics (TODO(#0)) + continue.
+			// Per-event parse errors don't bubble up — bad data
+			// shouldn't kill the stream. Counted so sustained rates
+			// trigger alerts.
+			obs.SourceDecodeErrorsTotal.WithLabelValues(SourceName).Inc()
 			continue
 		}
 		for _, t := range trades {

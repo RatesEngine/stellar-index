@@ -8,6 +8,7 @@ import (
 
 	"github.com/RatesEngine/rates-engine/internal/canonical"
 	"github.com/RatesEngine/rates-engine/internal/consumer"
+	"github.com/RatesEngine/rates-engine/internal/obs"
 	"github.com/RatesEngine/rates-engine/internal/stellarrpc"
 )
 
@@ -183,8 +184,10 @@ func (s *Source) processPage(ctx context.Context, events []stellarrpc.Event, out
 		// the field on serialization).
 		updates, err := decodeUpdate(e, s.variant, s.decimals, "", closedAt)
 		if err != nil {
-			// Per-event decode failures are counted as metrics
-			// (handled by the indexer's sink) but don't bubble up.
+			// Per-event decode failures don't bubble up — bad data on
+			// a single event shouldn't kill the stream. Counted so
+			// operators can alert on a sustained rate.
+			obs.SourceDecodeErrorsTotal.WithLabelValues(s.variant.SourceName()).Inc()
 			continue
 		}
 

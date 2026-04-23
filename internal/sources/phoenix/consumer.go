@@ -8,6 +8,7 @@ import (
 
 	"github.com/RatesEngine/rates-engine/internal/canonical"
 	"github.com/RatesEngine/rates-engine/internal/consumer"
+	"github.com/RatesEngine/rates-engine/internal/obs"
 	"github.com/RatesEngine/rates-engine/internal/stellarrpc"
 )
 
@@ -146,12 +147,15 @@ func (s *Source) processPage(ctx context.Context, events []stellarrpc.Event, buf
 
 		completed, evicted, err := buf.absorb(e, fieldTopic)
 		if len(evicted) > 0 {
-			// Stale incompletes; drop silently for now. TODO(#0):
-			// phoenix_orphan_swaps_total metric emission.
-			_ = evicted
+			// Stale incompletes aged out of the buffer — one "decode"
+			// that didn't produce a trade, per evicted entry.
+			for range evicted {
+				obs.SourceDecodeErrorsTotal.WithLabelValues(SourceName).Inc()
+			}
 		}
 		if err != nil {
-			// Unknown field: skip silently (future: metric).
+			// Unknown field — event didn't match any of the 8 slots.
+			obs.SourceDecodeErrorsTotal.WithLabelValues(SourceName).Inc()
 			continue
 		}
 		if completed == nil {
@@ -160,7 +164,10 @@ func (s *Source) processPage(ctx context.Context, events []stellarrpc.Event, buf
 
 		trade, err := decodeSwap(completed)
 		if err != nil {
-			// Per-event decode failures don't bubble up.
+			// Per-event decode failures don't bubble up — bad data
+			// shouldn't kill the stream. Counted so sustained rates
+			// trigger alerts.
+			obs.SourceDecodeErrorsTotal.WithLabelValues(SourceName).Inc()
 			continue
 		}
 		s.mu.Lock()

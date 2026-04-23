@@ -8,6 +8,7 @@ import (
 
 	"github.com/RatesEngine/rates-engine/internal/canonical"
 	"github.com/RatesEngine/rates-engine/internal/consumer"
+	"github.com/RatesEngine/rates-engine/internal/obs"
 	"github.com/RatesEngine/rates-engine/internal/stellarrpc"
 )
 
@@ -208,7 +209,9 @@ func (s *Source) processPage(events []stellarrpc.Event, buf *buffer, out chan<- 
 				trade, derr := decodeSwap(r, tokens.Token0, tokens.Token1)
 				if derr != nil {
 					// Per-event parse failures don't bubble up —
-					// metric+log (TODO(#0)) and continue.
+					// bad data shouldn't kill the stream. Counted so
+					// sustained rates trigger alerts.
+					obs.SourceDecodeErrorsTotal.WithLabelValues(SourceName).Inc()
 					continue
 				}
 				s.mu.Lock()
