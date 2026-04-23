@@ -33,6 +33,25 @@
     mode: "0640"
   notify: Restart stellar-rpc
 
+- name: Template /etc/default/stellar-rpc (S3 creds for datastore-fallback)
+  # stellar-rpc reads the MinIO bucket galexie writes to, for
+  # historical-ledger fallback beyond HISTORY_RETENTION_WINDOW.
+  # Standard AWS_* env-var pattern (same creds galexie uses). The
+  # systemd unit sources this via EnvironmentFile=-.
+  ansible.builtin.copy:
+    dest: /etc/default/stellar-rpc
+    owner: root
+    group: stellar
+    mode: "0640"
+    content: |
+      # Rendered by Ansible. Do not edit by hand.
+      AWS_ACCESS_KEY_ID={{ galexie_s3_access_key }}
+      AWS_SECRET_ACCESS_KEY={{ galexie_s3_secret_key }}
+      AWS_REGION={{ galexie_s3_region }}
+      AWS_ENDPOINT_URL={{ galexie_s3_endpoint }}
+  no_log: true
+  notify: Restart stellar-rpc
+
 - name: Install stellar-rpc systemd override
   ansible.builtin.template:
     src: systemd/stellar-rpc.service.j2

@@ -186,6 +186,22 @@ These are all now fixed in the role, but noted so the lessons survive:
    `.well-known/stellar-history.json`) and ingestion stalls
    mid-ledger. Our template now gates the block on cfg_mode=='full'.
 
+8. **stellar-rpc v26.0.0-189 requires CAPTIVE_CORE_CONFIG_PATH.**
+   Tested 2026-04-23: writing a cfg with just the datastore stanzas
+   (`[datastore_config]` + `[buffered_storage_backend_config]`)
+   and `SERVE_LEDGERS_FROM_DATASTORE = true` but no captive-core
+   path makes stellar-rpc exit on startup with "captive-core-config-path
+   is required". The `SERVE_LEDGERS_FROM_DATASTORE` flag is an
+   augmentation for historical-fallback reads, not a replacement
+   for captive-core-driven live ingestion. Closes the open item
+   in docs/discovery/data-sources/composable-data-platform.md.
+   **For Phase 1 we run captive + datastore-fallback (see
+   templates/stellar-rpc.cfg.j2).** To get to 1-captive-core on
+   the box, either wait for a stellar-rpc release that supports
+   captive-less mode, or drop stellar-rpc and build our own
+   consumer around `ingest.ApplyLedgerMetadata` from the galexie
+   datastore.
+
 ## Credentials (pointers, not values)
 
 - Vault password: in ash's password manager

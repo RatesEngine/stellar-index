@@ -1,36 +1,68 @@
-# stellar-rpc config.
-# SQLite path on the ZFS rpc dataset (recordsize=16K).
-# Event retention capped to keep SQLite bounded.
+# stellar-rpc — captive-core for LIVE ingestion + datastore fallback
+# for HISTORICAL reads beyond the retention window.
+#
+# Why not datastore-only?
+#   v26.0.0 requires CAPTIVE_CORE_CONFIG_PATH — it will not start
+#   without a captive-core. Confirmed by test on 2026-04-23 against
+#   r1's installed v26.0.0-189. The `SERVE_LEDGERS_FROM_DATASTORE`
+#   flag is an augmentation, not a replacement: it only makes
+#   out-of-window historical lookups fall through to the datastore.
+#   A future stellar-rpc may support captive-less operation; when it
+#   does we revisit.
 
 ENDPOINT                   = "0.0.0.0:{{ stellar_rpc_port }}"
 ADMIN_ENDPOINT             = "127.0.0.1:{{ stellar_rpc_admin_port }}"
 
 NETWORK_PASSPHRASE         = "{% if stellar_network == 'pubnet' %}Public Global Stellar Network ; September 2015{% elif stellar_network == 'testnet' %}Test SDF Network ; September 2015{% else %}{{ stellar_network }}{% endif %}"
 
-# Captive-core's config is a STRICT SUBSET of stellar-core's — it
-# rejects NODE_IS_VALIDATOR, NODE_HOME_DOMAIN, CATCHUP_*, HTTP_PORT,
-# PEER_PORT, DATABASE (those are driven by stellar-rpc itself).
-# We render it as a separate file from the same Jinja template in
-# "captive" mode.
-CAPTIVE_CORE_CONFIG_PATH   = "/etc/stellar/captive-core.cfg"
-STELLAR_CORE_BINARY_PATH   = "/usr/bin/stellar-core"
-CAPTIVE_CORE_STORAGE_PATH  = "/var/lib/stellar-rpc/captive"
-
-# Disable captive-core's HTTP server. Default is 11626 which is
-# taken by the primary stellar-core on this box. captive-core.cfg
-# also has HTTP_PORT=0; captive-core validates the parent's value
-# against the config's, so both must agree. 0 = don't bind.
-STELLAR_CAPTIVE_CORE_HTTP_PORT = 0
-
 DB_PATH                    = "/var/lib/stellar-rpc/rpc.sqlite"
 
-# Retention — see archival-node-spec.md §3.3.1
+# HISTORY_RETENTION_WINDOW covers both transactions and events in
+# v26.0.0 (the separate TRANSACTION_RETENTION_WINDOW was removed
+# upstream). Requests for ledgers older than this fall through to
+# the datastore-fallback config below.
 HISTORY_RETENTION_WINDOW   = {{ stellar_rpc_event_retention_ledgers }}
-TRANSACTION_RETENTION_WINDOW = {{ stellar_rpc_tx_retention_ledgers }}
 
-# HISTORY_ARCHIVE_URLS must match at least one archive in stellar-core.cfg
+# HISTORY_ARCHIVE_URLS — used by captive-core's catchup to bootstrap.
 HISTORY_ARCHIVE_URLS = [
     "https://history.stellar.org/prd/core-live/core_live_001",
     "https://history.stellar.org/prd/core-live/core_live_002",
     "https://history.stellar.org/prd/core-live/core_live_003",
 ]
+
+# ──── Captive-core for LIVE ingest (required) ────────────────────
+# Captive-core's config is a STRICT SUBSET of stellar-core's — it
+# rejects NODE_IS_VALIDATOR, NODE_HOME_DOMAIN, CATCHUP_*, HTTP_PORT,
+# PEER_PORT, DATABASE (those are driven by stellar-rpc itself).
+CAPTIVE_CORE_CONFIG_PATH   = "/etc/stellar/captive-core.cfg"
+STELLAR_CORE_BINARY_PATH   = "/usr/bin/stellar-core"
+CAPTIVE_CORE_STORAGE_PATH  = "/var/lib/stellar-rpc/captive"
+
+# Disable captive-core's HTTP admin server. 0 = don't bind. Must
+# match HTTP_PORT=0 in the captive-core.cfg (parent validates
+# against child's rendered config).
+STELLAR_CAPTIVE_CORE_HTTP_PORT = 0
+
+# ──── Datastore fallback for HISTORICAL reads ────────────────────
+# When a client requests a ledger older than HISTORY_RETENTION_WINDOW,
+# stellar-rpc reads from the galexie-produced datastore (our MinIO).
+# Credentials come from AWS_* env vars in /etc/default/stellar-rpc.
+SERVE_LEDGERS_FROM_DATASTORE = true
+
+[datastore_config]
+type = "S3"
+
+[datastore_config.params]
+destination_bucket_path = "{{ galexie_s3_bucket }}"
+endpoint_url            = "{{ galexie_s3_endpoint }}"
+region                  = "{{ galexie_s3_region }}"
+
+[datastore_config.schema]
+# Must match galexie's producer schema exactly.
+ledgers_per_file     = {{ galexie_ledgers_per_file }}
+files_per_partition  = {{ galexie_files_per_partition }}
+
+[buffered_storage_backend_config]
+num_workers  = 4
+retry_limit  = 20
+retry_wait   = "3s"
