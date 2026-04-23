@@ -46,14 +46,19 @@ FAILS=()
 add_fail() { FAILS+=("$1"); }
 
 # --- Check 1: systemd service liveness -------------------------
+# Primary stellar-core was removed 2026-04-23 — we don't publish our
+# own archive yet and aren't a validator, so it was paying its cost
+# (3.6G RAM, 25% CPU, peer-slot contention with the captives) with
+# no corresponding value. Galexie's captive-core is our single
+# producer; stellar-rpc has its own captive for ingest.
+# stellar-core-prometheus-exporter is gone with the primary (no
+# /info endpoint to scrape).
 SERVICES=(
   postgresql@15-main
-  stellar-core
   stellar-rpc
   galexie
   minio
   node_exporter
-  stellar-core-prometheus-exporter
 )
 for s in "${SERVICES[@]}"; do
   state=$(systemctl is-active "$s" 2>&1)
@@ -62,21 +67,14 @@ for s in "${SERVICES[@]}"; do
   fi
 done
 
-# --- Check 2 + 3: stellar-core sync state + ledger age ---------
-if info=$(curl -sfm 5 http://127.0.0.1:11626/info 2>&1); then
-  core_state=$(echo "$info" | jq -r '.info.state // ""')
-  close_time=$(echo "$info" | jq -r '.info.ledger.closeTime // 0')
-  if [ "$core_state" != "Synced!" ]; then
-    add_fail "stellar-core state=$core_state (expected Synced!)"
-  fi
-  now_epoch=$(date +%s)
-  age=$(( now_epoch - close_time ))
-  if [ "$age" -gt "$MAX_LEDGER_AGE_SEC" ]; then
-    add_fail "stellar-core last ledger is ${age}s old (threshold ${MAX_LEDGER_AGE_SEC}s)"
-  fi
-else
-  add_fail "stellar-core /info unreachable on :11626"
-fi
+# Check 2 + 3 (direct stellar-core /info probe on :11626) were
+# removed along with the primary stellar-core. The "is the network
+# being followed?" question is now answered by:
+#   * Check 4   — stellar-rpc getHealth latency (covers captive-core
+#                 freshness on the RPC side)
+#   * Check 4.5 — galexie upload mtime to MinIO (covers the galexie
+#                 captive-core freshness)
+# If both pass, at least one captive-core is tailing the network.
 
 # --- Check 4: stellar-rpc is reachable + reasonably fresh ------
 # stellar-rpc has two "not broken, just catching up" states we
@@ -173,11 +171,16 @@ if [ "$pool_state" != "ONLINE" ]; then
   add_fail "zpool $POOL_NAME state=$pool_state (expected ONLINE)"
 fi
 
-# --- Check 6: disk free on stellar-core data dir ---------------
-disk_pct_used=$(df --output=pcent /var/lib/stellar-core | tail -1 | tr -d ' %')
-if [ "${disk_pct_used:-0}" -gt 90 ]; then
-  add_fail "/var/lib/stellar-core is ${disk_pct_used}% full"
-fi
+# --- Check 6: disk free on the captive-core bucket dirs --------
+# Check galexie's captive-core first (it's the primary producer).
+# stellar-rpc's captive is secondary.
+for d in /var/lib/galexie /var/lib/stellar-rpc; do
+  [ -d "$d" ] || continue
+  disk_pct_used=$(df --output=pcent "$d" | tail -1 | tr -d ' %')
+  if [ "${disk_pct_used:-0}" -gt 90 ]; then
+    add_fail "$d is ${disk_pct_used}% full"
+  fi
+done
 
 # --- Report ----------------------------------------------------
 if [ ${#FAILS[@]} -eq 0 ]; then

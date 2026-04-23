@@ -62,23 +62,23 @@
     enabled: true
     daemon_reload: true
 
+# stellar-core-prometheus-exporter scrapes the primary stellar-core
+# daemon's /info endpoint. Only install when we actually run the
+# primary — captive-cores don't expose /info.
 - name: Install stellar-core-prometheus-exporter apt package
-  # Ships in SDF's stable repo. This provides the binary AND the
-  # base systemd unit that our override below adjusts.
   ansible.builtin.apt:
     name: stellar-core-prometheus-exporter
     state: present
+  when: run_stellar_core | bool
 
 - name: Ensure stellar-core-prometheus-exporter systemd drop-in dir
-  # systemd drop-in directories aren't auto-created when the base
-  # unit installs; we create it explicitly so the override file can
-  # land.
   ansible.builtin.file:
     path: /etc/systemd/system/stellar-core-prometheus-exporter.service.d
     state: directory
     mode: "0755"
     owner: root
     group: root
+  when: run_stellar_core | bool
 
 - name: Install stellar-core-prometheus-exporter systemd override
   ansible.builtin.copy:
@@ -88,6 +88,7 @@
       [Service]
       ExecStart=
       ExecStart=/usr/bin/stellar-core-prometheus-exporter --port {{ core_exporter_port }}
+  when: run_stellar_core | bool
   notify:
     - Reload systemd
     - Restart core exporter
@@ -97,5 +98,6 @@
     name: stellar-core-prometheus-exporter
     state: started
     enabled: true
+  when: run_stellar_core | bool
 
 # TODO(#0): wire promtail → loki_push_url. Skeleton only this round.

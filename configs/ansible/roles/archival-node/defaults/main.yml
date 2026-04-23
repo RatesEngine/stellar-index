@@ -10,7 +10,11 @@ home_domain:         "ratesengine.net"
 
 # ───── Which subsystems to run on this host ──────────────────────────
 run_postgres:        true
-run_stellar_core:    true
+# Primary stellar-core daemon. Off by default — the archive we ship
+# (galexie → MinIO) doesn't need it, and running it alongside the
+# captive-cores costs RAM/CPU/peer-slots for no gain. Flip to true
+# when we're ready to become a validator (ADR-0004).
+run_stellar_core:    false
 run_galexie:         true
 run_stellar_rpc:     true
 run_minio:           true
