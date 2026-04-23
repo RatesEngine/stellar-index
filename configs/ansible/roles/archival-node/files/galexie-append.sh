@@ -6,20 +6,26 @@
 # fresh deploy there's no prior cursor, so we need to pick a start
 # ledger that is actually reachable from the history archives.
 #
-# CRITICAL: do NOT start from stellar-core's live tip. Archives
-# publish checkpoints with ~5-15 min lag. If galexie starts at
-# "now," every archive 404s on the HAS file and captive-core
-# spins forever waiting for it to appear. Instead, query SDF's
-# `.well-known/stellar-history.json` for the *archive's* current
-# tip — that's guaranteed to have an HAS file already uploaded.
-# We additionally round down to a checkpoint boundary and subtract
-# a safety margin so captive-core has solid ground.
+# CRITICAL: do NOT start from "now" (i.e. the live network tip).
+# Archives publish checkpoints with ~5-15 min lag. If galexie
+# starts at "now," every archive 404s on the HAS file and
+# galexie's embedded captive-core spins forever waiting for it to
+# appear. Instead, query SDF's `.well-known/stellar-history.json`
+# for the *archive's* current tip — that's guaranteed to have an
+# HAS file already uploaded. We additionally round down to a
+# checkpoint boundary and subtract a safety margin so captive-core
+# has solid ground.
 #
 # On a restart after galexie has already exported some ledgers,
 # we'd ideally resume from "last-exported-ledger + 1." TODO: probe
 # MinIO galexie-live for the latest object and derive. For Phase 1
 # we always start from the archive tip; duplicate exports are
 # content-addressed so reprocessing is idempotent.
+#
+# 2026-04-23: removed the "wait for primary stellar-core" preamble —
+# we no longer run a separate stellar-core daemon on the box. The
+# ONLY stellar-core here is galexie's own captive-core, which this
+# wrapper doesn't need to wait for (galexie spawns it itself).
 
 set -euo pipefail
 
@@ -27,24 +33,8 @@ CONF=/etc/galexie/galexie.toml
 
 # SDF's primary archive — same source our captive-core trusts.
 SDF_HAS_URL="https://history.stellar.org/prd/core-live/core_live_001/.well-known/stellar-history.json"
-CORE_URL="http://127.0.0.1:11626/info"
 
-# --- 1. Wait for local stellar-core to be queryable -------------
-# If the primary stellar-core isn't reachable, galexie's own
-# captive-core likely has the same network-path problem — bail
-# early with a clear error instead of hanging.
-for i in $(seq 1 90); do
-  if curl -sfm3 "$CORE_URL" >/dev/null 2>&1; then
-    break
-  fi
-  sleep 1
-done
-if ! curl -sfm3 "$CORE_URL" >/dev/null 2>&1; then
-  echo "galexie-append.sh: stellar-core unreachable at $CORE_URL after 90s" >&2
-  exit 1
-fi
-
-# --- 2. Discover archive tip, subtract safety margin -----------
+# --- 1. Discover archive tip, subtract safety margin -----------
 # CHECKPOINT_MARGIN: how many ledgers to back off from the
 # archive's reported tip. 128 ledgers ≈ 2 checkpoints ≈ 10 min —
 # enough slack that even a straggling archive has the file.
@@ -77,7 +67,5 @@ if [[ "$start" -le 1 ]]; then
   start=64
 fi
 
-core_tip=$(curl -sfm3 "$CORE_URL" 2>/dev/null | jq -r '.info.ledger.num // 0')
-
-echo "galexie-append.sh: archive tip=$archive_tip, local core tip=$core_tip, starting at $start (margin=$CHECKPOINT_MARGIN)"
+echo "galexie-append.sh: archive tip=$archive_tip, starting at $start (margin=$CHECKPOINT_MARGIN)"
 exec /usr/local/bin/galexie append --config-file "$CONF" --start "$start"
