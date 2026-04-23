@@ -16,8 +16,10 @@ import (
 type stubHistoryReader struct {
 	trades   []canonical.Trade
 	lastCall struct {
-		from, to time.Time
-		limit    int
+		from, to    time.Time
+		limit       int
+		afterTs     time.Time
+		afterLedger uint32
 	}
 	err error
 }
@@ -26,6 +28,21 @@ func (r *stubHistoryReader) TradesInRange(_ context.Context, _ canonical.Pair, f
 	r.lastCall.from = from
 	r.lastCall.to = to
 	r.lastCall.limit = limit
+	if r.err != nil {
+		return nil, r.err
+	}
+	return r.trades, nil
+}
+
+// TradesInRangeAfter: the stub ignores the cursor (tests construct
+// their own trade slices per-assertion) but records it so cursor
+// tests can verify the handler forwarded it.
+func (r *stubHistoryReader) TradesInRangeAfter(_ context.Context, _ canonical.Pair, from, to, afterTs time.Time, afterLedger uint32, limit int) ([]canonical.Trade, error) {
+	r.lastCall.from = from
+	r.lastCall.to = to
+	r.lastCall.limit = limit
+	r.lastCall.afterTs = afterTs
+	r.lastCall.afterLedger = afterLedger
 	if r.err != nil {
 		return nil, r.err
 	}
@@ -152,6 +169,97 @@ func TestHistory_DefaultWindowIs1Hour(t *testing.T) {
 	dur := reader.lastCall.to.Sub(reader.lastCall.from)
 	if dur != time.Hour {
 		t.Errorf("default window = %v, want 1h", dur)
+	}
+}
+
+func TestHistory_EmitsNextCursorWhenPageFull(t *testing.T) {
+	// With limit=2 and reader returning exactly 2 rows, the handler
+	// treats the page as full and emits a next cursor. Clients then
+	// re-issue with ?cursor=<that> to get subsequent pages.
+	trades := []canonical.Trade{mkHistTrade(100), mkHistTrade(101)}
+	srv := v1.New(v1.Options{History: &stubHistoryReader{trades: trades}})
+	ts := httpTestServer(t, srv)
+
+	resp := mustGet(t, ts.URL+"/v1/history?base=native&quote=fiat:USD&limit=2")
+	var env struct {
+		Data       []v1.TradeRow `json:"data"`
+		Pagination *struct {
+			Next string `json:"next"`
+		} `json:"pagination"`
+	}
+	mustDecode(t, resp, &env)
+	if env.Pagination == nil || env.Pagination.Next == "" {
+		t.Fatalf("page full → expected next cursor, got: %+v", env.Pagination)
+	}
+}
+
+func TestHistory_NoCursorWhenPageNotFull(t *testing.T) {
+	// Reader returns fewer rows than limit → window exhausted →
+	// no next cursor.
+	trades := []canonical.Trade{mkHistTrade(100)}
+	srv := v1.New(v1.Options{History: &stubHistoryReader{trades: trades}})
+	ts := httpTestServer(t, srv)
+
+	resp := mustGet(t, ts.URL+"/v1/history?base=native&quote=fiat:USD&limit=50")
+	var env struct {
+		Data       []v1.TradeRow `json:"data"`
+		Pagination *struct {
+			Next string `json:"next"`
+		} `json:"pagination"`
+	}
+	mustDecode(t, resp, &env)
+	if env.Pagination != nil && env.Pagination.Next != "" {
+		t.Errorf("short page → no next cursor, got %q", env.Pagination.Next)
+	}
+}
+
+func TestHistory_CursorForwardedToReader(t *testing.T) {
+	// A valid cursor decodes to the (ts, ledger) pair that was
+	// encoded, and gets forwarded to the reader.
+	reader := &stubHistoryReader{trades: []canonical.Trade{mkHistTrade(100)}}
+	srv := v1.New(v1.Options{History: reader})
+	ts := httpTestServer(t, srv)
+
+	// First request → get a cursor back.
+	reader.trades = []canonical.Trade{mkHistTrade(100), mkHistTrade(101)}
+	resp := mustGet(t, ts.URL+"/v1/history?base=native&quote=fiat:USD&limit=2")
+	var env struct {
+		Pagination *struct {
+			Next string `json:"next"`
+		} `json:"pagination"`
+	}
+	mustDecode(t, resp, &env)
+	if env.Pagination == nil {
+		t.Fatal("first request should have produced a cursor")
+	}
+	next := env.Pagination.Next
+
+	// Second request with that cursor → reader sees non-zero
+	// afterTs / afterLedger.
+	reader.lastCall.afterTs = time.Time{}
+	reader.lastCall.afterLedger = 0
+	_ = mustGet(t, ts.URL+"/v1/history?base=native&quote=fiat:USD&cursor="+next)
+	if reader.lastCall.afterTs.IsZero() {
+		t.Error("cursor not decoded into afterTs")
+	}
+	if reader.lastCall.afterLedger == 0 {
+		// mkHistTrade uses Ledger=1, so decoded cursor should be 1 too.
+		t.Errorf("afterLedger = 0, want 1 (from the returned trade)")
+	}
+}
+
+func TestHistory_InvalidCursor400(t *testing.T) {
+	srv := v1.New(v1.Options{History: &stubHistoryReader{}})
+	ts := httpTestServer(t, srv)
+
+	for _, bad := range []string{
+		"not-base64!!!",
+		"dGVzdA==", // base64 of "test" — no colon separator
+	} {
+		resp := mustGet(t, ts.URL+"/v1/history?base=native&quote=fiat:USD&cursor="+bad)
+		if resp.StatusCode != 400 {
+			t.Errorf("cursor=%q: status = %d, want 400", bad, resp.StatusCode)
+		}
 	}
 }
 

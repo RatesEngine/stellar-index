@@ -187,6 +187,10 @@ func (r apiHistoryAdapter) TradesInRange(ctx context.Context, pair c.Pair, from,
 	return r.s.TradesInRange(ctx, pair, from, to, limit)
 }
 
+func (r apiHistoryAdapter) TradesInRangeAfter(ctx context.Context, pair c.Pair, from, to, afterTs time.Time, afterLedger uint32, limit int) ([]c.Trade, error) {
+	return r.s.TradesInRangeAfter(ctx, pair, from, to, afterTs, afterLedger, limit)
+}
+
 type apiMarketsAdapter struct{ s *timescale.Store }
 
 func (r apiMarketsAdapter) DistinctPairs(ctx context.Context, cursor string, limit int) ([]v1.Market, string, error) {

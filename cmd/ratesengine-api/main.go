@@ -279,6 +279,10 @@ func (r storeHistoryReader) TradesInRange(ctx context.Context, pair canonical.Pa
 	return r.s.TradesInRange(ctx, pair, from, to, limit)
 }
 
+func (r storeHistoryReader) TradesInRangeAfter(ctx context.Context, pair canonical.Pair, from, to, afterTs time.Time, afterLedger uint32, limit int) ([]canonical.Trade, error) {
+	return r.s.TradesInRangeAfter(ctx, pair, from, to, afterTs, afterLedger, limit)
+}
+
 // storePriceReader adapts *timescale.Store to v1.PriceReader.
 //
 // This MVP impl always falls back to "last trade in the trades

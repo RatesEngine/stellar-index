@@ -2,20 +2,30 @@ package v1
 
 import (
 	"context"
+	"encoding/base64"
+	"fmt"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/RatesEngine/rates-engine/internal/canonical"
 )
 
 // HistoryReader is the storage-side interface for /v1/history
-// lookups. Implementations: *timescale.Store (TradesInRange).
+// lookups.
 type HistoryReader interface {
 	// TradesInRange returns trades for pair whose close-time is in
-	// [from, to). Ordered chronologically (ts ASC).
-	// limit is clamped by the implementation.
+	// [from, to). Ordered chronologically (ts ASC). Used by the
+	// aggregation endpoints (/v1/vwap, /v1/twap, /v1/ohlc) which
+	// consume the whole window at once.
 	TradesInRange(ctx context.Context, pair canonical.Pair, from, to time.Time, limit int) ([]canonical.Trade, error)
+
+	// TradesInRangeAfter is TradesInRange with a `(ts, ledger)`
+	// cursor. Rows are filtered to (ts, ledger) > (afterTs,
+	// afterLedger). afterTs = zero time disables the cursor.
+	// Used by /v1/history's cursor pagination.
+	TradesInRangeAfter(ctx context.Context, pair canonical.Pair, from, to, afterTs time.Time, afterLedger uint32, limit int) ([]canonical.Trade, error)
 }
 
 // TradeRow is the wire shape for /v1/history entries.
@@ -106,9 +116,26 @@ func (s *Server) handleHistory(w http.ResponseWriter, r *http.Request) {
 		limit = parsed
 	}
 
-	trades, err := reader.TradesInRange(r.Context(), pair, from, to, limit)
+	// Optional cursor (opaque to clients; base64 of "<ts>:<ledger>").
+	// Shadows `from` when present — otherwise paginating callers
+	// would re-request duplicate rows on each page.
+	var afterTs time.Time
+	var afterLedger uint32
+	if raw := r.URL.Query().Get("cursor"); raw != "" {
+		ts, ledger, err := decodeHistoryCursor(raw)
+		if err != nil {
+			writeProblem(w, r,
+				"https://api.ratesengine.net/errors/invalid-cursor",
+				"Invalid cursor", http.StatusBadRequest, err.Error())
+			return
+		}
+		afterTs = ts
+		afterLedger = ledger
+	}
+
+	trades, err := reader.TradesInRangeAfter(r.Context(), pair, from, to, afterTs, afterLedger, limit)
 	if err != nil {
-		s.logger.Error("TradesInRange failed",
+		s.logger.Error("TradesInRangeAfter failed",
 			"err", err,
 			"base", base.String(), "quote", quote.String(),
 			"from", from, "to", to)
@@ -122,7 +149,51 @@ func (s *Server) handleHistory(w http.ResponseWriter, r *http.Request) {
 	for i, t := range trades {
 		rows[i] = tradeRowFrom(t, 10)
 	}
-	writeJSON(w, rows, Flags{})
+
+	// If the page is full, emit a next-cursor pointing at the last
+	// row we returned. Clients just re-issue the same request with
+	// ?cursor=<next> to drain subsequent pages. When len < limit, the
+	// window is exhausted — no cursor, no next.
+	env := Envelope{Data: rows, Flags: Flags{}}
+	if len(trades) == limit {
+		last := trades[len(trades)-1]
+		env.Pagination = &Pagination{
+			Next: encodeHistoryCursor(last.Timestamp, last.Ledger),
+		}
+	}
+	writeEnvelope(w, env)
+}
+
+// encodeHistoryCursor / decodeHistoryCursor are the opaque
+// over-the-wire form of a (ts, ledger) pair. Base64 keeps the
+// cursor URL-safe without needing client-side URL encoding.
+//
+// Format inside the base64: "<unix_nanos>:<ledger>" — time is
+// nanosecond-precision because a ledger's close time can be
+// finer than 1s if the source ever hands us sub-second timestamps.
+func encodeHistoryCursor(ts time.Time, ledger uint32) string {
+	raw := fmt.Sprintf("%d:%d", ts.UnixNano(), ledger)
+	return base64.RawURLEncoding.EncodeToString([]byte(raw))
+}
+
+func decodeHistoryCursor(s string) (time.Time, uint32, error) {
+	raw, err := base64.RawURLEncoding.DecodeString(s)
+	if err != nil {
+		return time.Time{}, 0, fmt.Errorf("cursor base64: %w", err)
+	}
+	parts := strings.SplitN(string(raw), ":", 2)
+	if len(parts) != 2 {
+		return time.Time{}, 0, fmt.Errorf("cursor must be <ts_ns>:<ledger>")
+	}
+	tsNano, err := strconv.ParseInt(parts[0], 10, 64)
+	if err != nil {
+		return time.Time{}, 0, fmt.Errorf("cursor ts: %w", err)
+	}
+	ledger, err := strconv.ParseUint(parts[1], 10, 32)
+	if err != nil {
+		return time.Time{}, 0, fmt.Errorf("cursor ledger: %w", err)
+	}
+	return time.Unix(0, tsNano).UTC(), uint32(ledger), nil
 }
 
 // parseBaseQuote extracts + validates base/quote from the request.
