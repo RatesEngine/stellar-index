@@ -44,7 +44,7 @@ ZFS pool `data` (raidz2, ~13.3 TB usable) with 7 datasets:
 | postgresql@15-main | active | |
 | stellar-core | Synced! | pubnet, quorum 21/21 agree, full tier-1 intersection |
 | stellar-rpc | active | captive-core catching up; DB empty → getHealth says so |
-| galexie | active, post-catchup online | Captive-core in online mode at 13:56 streaming ledger meta; sync to network head in progress |
+| galexie | active, exporting | Captive-core synced; uploading `FC4AXXXX--<ledger>.xdr.zst` objects to MinIO galexie-live, 1 per closed ledger. 300+ objects within 5 min of sync. |
 | minio | active | Buckets: `galexie-live`, `galexie-archive`, `backups` |
 | node_exporter | active | :9100 |
 | stellar-core-prometheus-exporter | active | :9473 |
@@ -79,9 +79,9 @@ fetched 2026-04-23:
 
 ## Known gaps / next-session priorities
 
-### Blocking
-1. **Galexie PEER_PORT collision fixed — exports imminent.**
-   (Updated 2026-04-23 13:58.) Earlier today galexie + stellar-rpc
+### Unblocked ✓
+1. **Galexie PEER_PORT collision fixed — exports flowing.**
+   (Updated 2026-04-23 14:03.) Earlier today galexie + stellar-rpc
    were stuck in a restart loop (152+ restarts); root cause was
    `PEER_PORT = 0` in captive-core.cfg getting stripped by the
    go-stellar-sdk toml marshaller (omitempty on zero), leaving
@@ -89,12 +89,11 @@ fetched 2026-04-23:
    primary → SIGABRT. Fixed by giving each captive a distinct
    non-zero PEER_PORT (primary 11625, stellar-rpc captive 11725,
    galexie captive 11726) in separate /etc/stellar/captive-core*.cfg
-   files. Commit 507e4de. Post-fix: 0 restarts, captive-core in
-   online mode peering with the network, catching up from LCL
-   62249726 to the network head (~62249990 at time of writing).
-   First MinIO upload expected within minutes after state
-   populates. Objects in galexie-live bucket: 1 (the `.config.json`
-   sentinel written at galexie startup).
+   files. Commit `507e4de`. Post-fix: 0 restarts, captive-core
+   reached network head at 62250034, galexie uploading one
+   `.xdr.zst` object per closed ledger to `local/galexie-live/`.
+   300+ objects landed within 5 min of sync. Ingestion pipeline
+   is end-to-end working.
 
 2. **SCVal decoders are stubs.** Nothing in our Go code actually
    decodes events yet. Even once stellar-rpc's DB is populated,
