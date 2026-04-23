@@ -61,6 +61,9 @@ func (s *Server) handleMarkets(w http.ResponseWriter, r *http.Request) {
 
 	rows, next, err := reader.DistinctPairs(r.Context(), cursor, limit)
 	if err != nil {
+		if clientAborted(r, err) {
+			return
+		}
 		s.logger.Error("DistinctPairs failed", "err", err)
 		writeProblem(w, r,
 			"https://api.ratesengine.net/errors/internal",

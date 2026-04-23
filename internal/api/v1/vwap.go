@@ -93,6 +93,9 @@ func (s *Server) handleVWAP(w http.ResponseWriter, r *http.Request) {
 	const maxTrades = 10000
 	trades, err := reader.TradesInRange(r.Context(), pair, from, to, maxTrades)
 	if err != nil {
+		if clientAborted(r, err) {
+			return
+		}
 		s.logger.Error("TradesInRange failed for VWAP",
 			"err", err, "base", base.String(), "quote", quote.String(),
 			"from", from, "to", to)

@@ -152,6 +152,9 @@ func (s *Server) handleAssetList(w http.ResponseWriter, r *http.Request) {
 
 	rows, next, err := reader.ListAssets(r.Context(), cursor, limit)
 	if err != nil {
+		if clientAborted(r, err) {
+			return
+		}
 		s.logger.Error("ListAssets failed", "err", err)
 		writeProblem(w, r,
 			"https://api.ratesengine.net/errors/internal",
@@ -202,6 +205,9 @@ func (s *Server) handleAssetGet(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		if err != nil {
+			if clientAborted(r, err) {
+				return
+			}
 			s.logger.Error("GetAsset failed", "err", err, "asset_id", parsed.String())
 			writeProblem(w, r,
 				"https://api.ratesengine.net/errors/internal",

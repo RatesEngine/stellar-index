@@ -64,6 +64,9 @@ func (s *Server) handleTWAP(w http.ResponseWriter, r *http.Request) {
 	const maxTrades = 10000
 	trades, err := reader.TradesInRange(r.Context(), pair, from, to, maxTrades)
 	if err != nil {
+		if clientAborted(r, err) {
+			return
+		}
 		s.logger.Error("TradesInRange failed for TWAP",
 			"err", err, "base", base.String(), "quote", quote.String())
 		writeProblem(w, r,

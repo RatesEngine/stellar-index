@@ -126,6 +126,9 @@ func (s *Server) handlePrice(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err != nil {
+		if clientAborted(r, err) {
+			return // middleware labels request as 499
+		}
 		s.logger.Error("LatestPrice failed",
 			"err", err,
 			"asset", asset.String(),

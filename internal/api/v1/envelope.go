@@ -1,7 +1,9 @@
 package v1
 
 import (
+	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"time"
 )
@@ -80,4 +82,22 @@ func writeProblem(w http.ResponseWriter, r *http.Request, typeURL, title string,
 	w.Header().Set("Content-Type", "application/problem+json")
 	w.WriteHeader(status)
 	_ = json.NewEncoder(w).Encode(p)
+}
+
+// clientAborted reports whether a reader-returned error came from
+// the client cancelling its request. When true, handlers SHOULD
+// return without writing a response — the client has already gone,
+// and the obs.HTTPMetrics middleware will then label the request
+// 499 (NGINX-style "client closed request") rather than the
+// misleading 500 a writeProblem would produce.
+//
+// Returns true for either (a) the raw ctx error wrapping context.
+// Canceled / DeadlineExceeded, or (b) the request's own context
+// being done (handles the case where a downstream wrapped the
+// error).
+func clientAborted(r *http.Request, err error) bool {
+	if err != nil && (errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded)) {
+		return true
+	}
+	return r.Context().Err() != nil
 }

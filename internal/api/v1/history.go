@@ -157,6 +157,9 @@ func (s *Server) handleHistory(w http.ResponseWriter, r *http.Request) {
 	trades, err := reader.TradesInRangeAfter(r.Context(), pair,
 		from, to, afterTs, afterLedger, afterTxHash, afterSource, afterOpIndex, limit)
 	if err != nil {
+		if clientAborted(r, err) {
+			return
+		}
 		s.logger.Error("TradesInRangeAfter failed",
 			"err", err,
 			"base", base.String(), "quote", quote.String(),

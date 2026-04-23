@@ -79,6 +79,9 @@ func (s *Server) handleOHLC(w http.ResponseWriter, r *http.Request) {
 	const maxTradesForOHLC = 10000
 	trades, err := reader.TradesInRange(r.Context(), pair, from, to, maxTradesForOHLC)
 	if err != nil {
+		if clientAborted(r, err) {
+			return
+		}
 		s.logger.Error("TradesInRange failed for OHLC",
 			"err", err,
 			"base", base.String(), "quote", quote.String(),

@@ -92,6 +92,9 @@ func (s *Server) handleOracleLatest(w http.ResponseWriter, r *http.Request) {
 
 	updates, err := reader.LatestOracleUpdatesForAsset(r.Context(), asset, source)
 	if err != nil {
+		if clientAborted(r, err) {
+			return
+		}
 		s.logger.Error("LatestOracleUpdatesForAsset failed",
 			"err", err, "asset", asset.String(), "source", source)
 		writeProblem(w, r,
