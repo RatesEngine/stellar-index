@@ -130,6 +130,43 @@ else
   add_fail "stellar-rpc unhealthy: status='$rpc_status' error='$rpc_error'"
 fi
 
+# --- Check 4.5: galexie upload freshness -----------------------
+# Galexie's metrics endpoint (admin_port 6061) has been observed
+# to HANG for minutes when captive-core is stuck — so we can't
+# use it as a liveness signal. The true signal is: is the
+# galexie-live MinIO bucket growing?
+#
+# We check the mtime of the most-recent object in the bucket
+# against wall clock. In steady state a new object lands every
+# ~5 sec (one per closed ledger). If the most recent is > 10 min
+# old AND galexie has been running > GALEXIE_WARMUP_SEC, fail.
+#
+# Requires `mc alias set local` to have been run (done at role-
+# apply time, credentials in /etc/default/node-healthcheck or
+# implicit via the `mc` config under HOME). If mc isn't reachable
+# we don't FAIL here — MinIO-down is caught by check 1.
+GALEXIE_MAX_LAG_SEC="${GALEXIE_MAX_LAG_SEC:-600}"
+GALEXIE_WARMUP_SEC="${GALEXIE_WARMUP_SEC:-1800}"
+g_enter_iso=$(systemctl show -p ActiveEnterTimestamp --value galexie 2>/dev/null)
+g_enter_epoch=$(date -d "$g_enter_iso" +%s 2>/dev/null || echo 0)
+g_age=$(( $(date +%s) - g_enter_epoch ))
+if [ "$g_age" -gt "$GALEXIE_WARMUP_SEC" ]; then
+  # mc --json gives a machine-readable listing; sort by lastModified.
+  last_iso=$(mc ls --json --recursive local/galexie-live/ 2>/dev/null \
+    | jq -r 'select(.key | test("\\.xdr\\.zst$")) | .lastModified' 2>/dev/null \
+    | sort -r | head -1)
+  if [ -n "$last_iso" ]; then
+    last_epoch=$(date -d "$last_iso" +%s 2>/dev/null || echo 0)
+    lag=$(( $(date +%s) - last_epoch ))
+    if [ "$lag" -gt "$GALEXIE_MAX_LAG_SEC" ]; then
+      add_fail "galexie last upload was ${lag}s ago (threshold ${GALEXIE_MAX_LAG_SEC}s) — captive-core likely stuck"
+    fi
+  fi
+  # If last_iso is empty: either bucket is empty (never uploaded)
+  # or mc is broken. Leave to check 1 (minio service) + manual
+  # inspection; don't flag here.
+fi
+
 # --- Check 5: ZFS pool state -----------------------------------
 pool_state=$(zpool list -H -o health "$POOL_NAME" 2>&1 || echo "MISSING")
 if [ "$pool_state" != "ONLINE" ]; then
