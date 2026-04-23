@@ -197,8 +197,13 @@ func (o *Orchestrator) runOne(ctx context.Context, src Source, log *slog.Logger)
 	case err == nil:
 		log.Info("cursor loaded", "last_ledger", cursor.LastLedger)
 	case errors.Is(err, ErrNoCursor):
-		log.Info("no cursor — starting from config backfill_from_ledger",
-			"from", o.cfg.BackfillFromLedger)
+		// The source seeds its own startLedger from tip via
+		// rpc.LatestLedgerSequence on StreamLive entry; the
+		// cursorPersister floor is still 0 until the source
+		// reports its first LastLedger. backfill_from_ledger
+		// becomes relevant only once the backfill bootstrap lands.
+		log.Info("no cursor — source will seed from network tip",
+			"config_backfill_from", o.cfg.BackfillFromLedger)
 	default:
 		return fmt.Errorf("load cursor: %w", err)
 	}
