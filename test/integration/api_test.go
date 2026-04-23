@@ -5,6 +5,7 @@ package integration_test
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"io"
 	"math/big"
 	"net/http"
@@ -146,6 +147,55 @@ func TestAPI_EndToEnd(t *testing.T) {
 		}
 	})
 
+	t.Run("/v1/history cursor drain", func(t *testing.T) {
+		// Walk the 4 seeded trades with limit=1 to exercise cursor
+		// pagination end-to-end. Must return all 4 in chronological
+		// order with no duplicates and no losses — this is the path
+		// that exercises the full-PK tiebreak (otherwise a page
+		// break mid-ledger could drop a row).
+		var collected []v1.TradeRow
+		seenKeys := map[string]bool{}
+		cursor := ""
+		for page := 0; page < 10; page++ {
+			qs := pairQS + windowQS + "&limit=1"
+			if cursor != "" {
+				qs += "&cursor=" + cursor
+			}
+			var env struct {
+				Data       []v1.TradeRow `json:"data"`
+				Pagination *struct {
+					Next string `json:"next"`
+				} `json:"pagination"`
+			}
+			getJSON(t, ts.URL+"/v1/history?"+qs, &env)
+			if len(env.Data) == 0 {
+				break
+			}
+			for _, row := range env.Data {
+				// Trade.ID()-equivalent uniqueness check.
+				key := row.Source + ":" + row.TxHash + ":" +
+					rowOpIndexString(row)
+				if seenKeys[key] {
+					t.Errorf("duplicate row across pages: %s", key)
+				}
+				seenKeys[key] = true
+				collected = append(collected, row)
+			}
+			if env.Pagination == nil || env.Pagination.Next == "" {
+				break
+			}
+			cursor = env.Pagination.Next
+		}
+		if len(collected) != 4 {
+			t.Fatalf("drain returned %d rows, want 4", len(collected))
+		}
+		for i := 1; i < len(collected); i++ {
+			if !collected[i-1].Timestamp.Before(collected[i].Timestamp) {
+				t.Errorf("drain not chronological at i=%d", i)
+			}
+		}
+	})
+
 	t.Run("/v1/history empty window → empty array", func(t *testing.T) {
 		// Window before all seeded trades → 0 rows.
 		emptyFrom := t0.Add(-2 * time.Hour).Format(time.RFC3339)
@@ -233,6 +283,13 @@ func mkAPITrade(nonce int, ts time.Time, pair c.Pair, base, quote int64) c.Trade
 		BaseAmount:  c.NewAmount(big.NewInt(base)),
 		QuoteAmount: c.NewAmount(big.NewInt(quote)),
 	}
+}
+
+// rowOpIndexString gives a deterministic key component for the
+// cursor-drain dedup check. TradeRow.OpIndex is uint32; we just
+// want a stable string form.
+func rowOpIndexString(r v1.TradeRow) string {
+	return fmt.Sprintf("%d", r.OpIndex)
 }
 
 // getJSON fetches URL and decodes the response body into out. The
