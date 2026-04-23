@@ -212,6 +212,59 @@ func TestAPI_EndToEnd(t *testing.T) {
 		}
 	})
 
+	// Separate insert + drain for the "multiple trades share
+	// (ts, ledger)" case. The previous drain test had trades at
+	// distinct (ts, ledger) so the (ts, ledger)-only cursor would
+	// pass — but real pagination across high-volume ledgers needs
+	// the full-PK tiebreak. Seed a mini-cluster and prove no row
+	// is dropped when the page break falls mid-cluster.
+	t.Run("/v1/history cursor tiebreak — same (ts, ledger)", func(t *testing.T) {
+		sharedTS := t0.Add(45 * time.Minute)
+		for nonce := 10; nonce < 13; nonce++ {
+			tr := mkAPITrade(nonce, sharedTS, pair, 1_000_000_000, 12_000_000)
+			// Force same Ledger so the (ts, ledger) pair is shared.
+			tr.Ledger = 60_000_000
+			if err := store.InsertTrade(ctx, tr); err != nil {
+				t.Fatalf("InsertTrade tiebreak trade %d: %v", nonce, err)
+			}
+		}
+
+		// Narrow window + limit=1 → three separate pages.
+		from := sharedTS.Add(-time.Second).Format(time.RFC3339)
+		to := sharedTS.Add(time.Second).Format(time.RFC3339)
+		var seenTxs = map[string]bool{}
+		cursor := ""
+		for page := 0; page < 5; page++ {
+			qs := pairQS + "&from=" + from + "&to=" + to + "&limit=1"
+			if cursor != "" {
+				qs += "&cursor=" + cursor
+			}
+			var env struct {
+				Data       []v1.TradeRow `json:"data"`
+				Pagination *struct {
+					Next string `json:"next"`
+				} `json:"pagination"`
+			}
+			getJSON(t, ts.URL+"/v1/history?"+qs, &env)
+			if len(env.Data) == 0 {
+				break
+			}
+			for _, row := range env.Data {
+				if seenTxs[row.TxHash] {
+					t.Errorf("duplicate tx_hash across pages: %s", row.TxHash)
+				}
+				seenTxs[row.TxHash] = true
+			}
+			if env.Pagination == nil || env.Pagination.Next == "" {
+				break
+			}
+			cursor = env.Pagination.Next
+		}
+		if len(seenTxs) != 3 {
+			t.Errorf("drain saw %d unique trades, want 3 — PK tiebreak likely broken", len(seenTxs))
+		}
+	})
+
 	t.Run("/v1/vwap empty window → 404", func(t *testing.T) {
 		emptyFrom := t0.Add(-2 * time.Hour).Format(time.RFC3339)
 		emptyTo := t0.Add(-1 * time.Hour).Format(time.RFC3339)
