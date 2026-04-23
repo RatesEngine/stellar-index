@@ -48,11 +48,16 @@ zfs_datasets:
     logbias: "throughput"
     primarycache: "metadata"
     mountpoint: "/var/lib/postgresql"
-  - name: "core"
-    recordsize: "128K"
-    compression: "zstd"
-    atime: "off"
-    mountpoint: "/var/lib/stellar-core"
+  # "core" dataset (for the primary stellar-core daemon's bucket dir
+  # at /var/lib/stellar-core) is intentionally NOT in this list
+  # while run_stellar_core=false. When flipping to true for Phase-3
+  # validator work, add this entry back and re-apply the zfs tag:
+  #
+  #   - name: "core"
+  #     recordsize: "128K"
+  #     compression: "zstd"
+  #     atime: "off"
+  #     mountpoint: "/var/lib/stellar-core"
   - name: "rpc"
     recordsize: "16K"
     compression: "zstd"
@@ -315,20 +320,27 @@ minio_buckets:
 
 # ───── Firewall ──────────────────────────────────────────────────────
 # Ports open on the public interface. Everything else rejects.
-public_allow_ports:
+# Port 11625 (SCP peer) is only added when run_stellar_core=true —
+# the captive-cores dial OUT to peers and don't accept inbound.
+public_allow_ports: "{{ public_allow_ports_base + (public_allow_ports_primary_core if run_stellar_core | bool else []) }}"
+public_allow_ports_base:
   - { port: 22,    proto: "tcp", comment: "SSH (rate-limited)" }
-  - { port: 11625, proto: "tcp", comment: "stellar-core SCP peer" }
+public_allow_ports_primary_core:
+  - { port: 11625, proto: "tcp", comment: "stellar-core SCP peer (Phase 3 validator)" }
 
 allowed_ssh_cidrs:
   - "0.0.0.0/0"     # tighten to jump host / VPN once that exists
 
-# Internal ports accessible from the LAN / VPN CIDRs only
-internal_allow_ports:
-  - { port: 11626, proto: "tcp", comment: "stellar-core admin HTTP" }
+# Internal ports accessible from the LAN / VPN CIDRs only.
+# 11626 (stellar-core admin /info) only when primary daemon is running.
+internal_allow_ports: "{{ internal_allow_ports_base + (internal_allow_ports_primary_core if run_stellar_core | bool else []) }}"
+internal_allow_ports_base:
   - { port: 5432,  proto: "tcp", comment: "Postgres" }
   - { port: 8000,  proto: "tcp", comment: "stellar-rpc" }
   - { port: 9000,  proto: "tcp", comment: "MinIO S3 API" }
   - { port: 9100,  proto: "tcp", comment: "node_exporter" }
+internal_allow_ports_primary_core:
+  - { port: 11626, proto: "tcp", comment: "stellar-core admin HTTP (Phase 3 validator)" }
 
 internal_cidrs:
   - "10.0.0.0/8"
