@@ -177,6 +177,15 @@ These are all now fixed in the role, but noted so the lessons survive:
    and copy (NOT symlink) out of `/root/go/bin/` into `/usr/local/bin/`
    because `/root` is mode 0700.
 
+7. `[HISTORY.ratesengine]` (our local history-archive block with
+   `put`/`mkdir` commands) must ONLY appear in the PRIMARY
+   stellar-core config — never in any captive. Captive-cores that
+   see `put`/`mkdir` assume they're supposed to publish checkpoints
+   too; they then loop "Activating publish for ledger X" every 2s
+   against an archive that hasn't been initialised (no
+   `.well-known/stellar-history.json`) and ingestion stalls
+   mid-ledger. Our template now gates the block on cfg_mode=='full'.
+
 ## Credentials (pointers, not values)
 
 - Vault password: in ash's password manager
