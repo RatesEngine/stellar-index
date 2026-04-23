@@ -78,14 +78,22 @@ KNOWN_PEERS = [
 {% endif %}
 
 # ──── Our own history archive ────────────────────────────────────────
-# Local publishing target. [HISTORY.*] entries for SDF archives live
-# inside each [[VALIDATORS]] block below via the HISTORY field, which
-# is the preferred 1:1 pairing of validator → their canonical archive.
+# Local publishing target. Only the PRIMARY stellar-core publishes
+# here — captive-cores would otherwise try to publish too (because
+# put/mkdir are defined), and their catchup hangs retrying publish
+# operations against an archive that the primary hasn't yet
+# initialised with a `.well-known/stellar-history.json`. Observed
+# symptom: "History: Activating publish for ledger X" looped every
+# 2 s, ingestion stalled.
+# [HISTORY.*] entries for SDF archives live inside each [[VALIDATORS]]
+# block below via the HISTORY field (the preferred 1:1 pairing).
+{% if cfg_mode == 'full' %}
 
 [HISTORY.ratesengine]
 get = "cp /srv/history-archive/{0} {1}"
 put = "cp {0} /srv/history-archive/{1}"
 mkdir = "mkdir -p /srv/history-archive/{0}"
+{% endif %}
 
 # ──── Home domain quality tiers ─────────────────────────────────────
 # Must appear BEFORE [[VALIDATORS]] blocks reference them. QUALITY
