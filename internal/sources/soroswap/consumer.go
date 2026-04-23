@@ -107,7 +107,7 @@ func (s *Source) BackfillRange(ctx context.Context, from, to uint32, out chan<- 
 		}
 		s.setOK()
 
-		if err := s.processPage(resp.Events, buf, out); err != nil {
+		if err := s.processPage(ctx, resp.Events, buf, out); err != nil {
 			return err
 		}
 
@@ -159,7 +159,7 @@ func (s *Source) StreamLive(ctx context.Context, out chan<- consumer.Event) erro
 		}
 		s.setOK()
 
-		if err := s.processPage(resp.Events, buf, out); err != nil {
+		if err := s.processPage(ctx, resp.Events, buf, out); err != nil {
 			s.setError(err)
 			continue
 		}
@@ -182,8 +182,12 @@ func (s *Source) StreamLive(ctx context.Context, out chan<- consumer.Event) erro
 	}
 }
 
-// processPage is shared between backfill + live-stream.
-func (s *Source) processPage(events []stellarrpc.Event, buf *buffer, out chan<- consumer.Event) error {
+// processPage is shared between backfill + live-stream. ctx is
+// threaded through so the channel send can unblock on shutdown —
+// without it, a full Events() channel during shutdown would pin
+// the source goroutine and stall the whole orchestrator's
+// graceful exit.
+func (s *Source) processPage(ctx context.Context, events []stellarrpc.Event, buf *buffer, out chan<- consumer.Event) error {
 	for i := range events {
 		e := &events[i]
 		kind := classify(e)
@@ -227,7 +231,11 @@ func (s *Source) processPage(events []stellarrpc.Event, buf *buffer, out chan<- 
 					s.health.LastLedger = trade.Ledger
 				}
 				s.mu.Unlock()
-				out <- TradeEvent{Trade: trade}
+				select {
+				case <-ctx.Done():
+					return ctx.Err()
+				case out <- TradeEvent{Trade: trade}:
+				}
 			}
 		}
 	}
