@@ -2,6 +2,7 @@ package v1
 
 import (
 	"errors"
+	"fmt"
 	"math"
 	"net/http"
 	"strconv"
@@ -97,6 +98,17 @@ func (s *Server) handleVWAP(w http.ResponseWriter, r *http.Request) {
 
 	price, err := aggregate.VWAP(trades)
 	if errors.Is(err, aggregate.ErrNoTrades) {
+		// Distinguish two failure modes — the wire message drives
+		// client behaviour (retry with different window vs retry
+		// with different sigma), so misleading it is a bug.
+		if pre > 0 {
+			writeProblem(w, r,
+				"https://api.ratesengine.net/errors/all-filtered",
+				"All trades filtered as outliers", http.StatusUnprocessableEntity,
+				fmt.Sprintf("outlier_sigma=%v removed all %d trades in window; relax the threshold or omit outlier_sigma",
+					sigma, pre))
+			return
+		}
 		writeProblem(w, r,
 			"https://api.ratesengine.net/errors/no-trades",
 			"No trades in window", http.StatusNotFound,

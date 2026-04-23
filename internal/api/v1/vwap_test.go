@@ -2,6 +2,8 @@ package v1_test
 
 import (
 	"math/big"
+	"net/http"
+	"strings"
 	"testing"
 	"time"
 
@@ -115,6 +117,33 @@ func TestVWAP_AppliesOutlierFilter(t *testing.T) {
 	// unfiltered VWAP to ~571. Filtered VWAP should be ~100.
 	if env.Data.Price[:3] != "100" {
 		t.Errorf("filtered Price = %q, want ~100 prefix", env.Data.Price)
+	}
+}
+
+func TestVWAP_AllFilteredReturns422(t *testing.T) {
+	// When every trade in the window is removed by the sigma filter,
+	// the handler must distinguish "empty window" (404) from
+	// "everything filtered out" (422 — client should relax sigma).
+	// Construct a distribution where every trade is an "outlier"
+	// relative to a near-zero sigma.
+	baseline := []int64{100, 200, 300, 400, 500, 600, 700, 800, 900, 1000, 1100, 1200}
+	trades := make([]canonical.Trade, 0, len(baseline))
+	for _, p := range baseline {
+		trades = append(trades, mkVWAPTrade(1, p))
+	}
+	reader := &stubHistoryReader{trades: trades}
+	srv := v1.New(v1.Options{History: reader})
+	ts := httpTestServer(t, srv)
+
+	// sigma=0.01 → basically nothing survives; σ²≈120000 for this
+	// range so 0.01σ is far tighter than any trade's deviation.
+	resp := mustGet(t, ts.URL+"/v1/vwap?base=native&quote=fiat:USD&outlier_sigma=0.01")
+	if resp.StatusCode != http.StatusUnprocessableEntity {
+		t.Errorf("status = %d, want 422 (all filtered)", resp.StatusCode)
+	}
+	body, _ := readAll(resp)
+	if !strings.Contains(body, "all-filtered") {
+		t.Errorf("body should cite all-filtered: %s", body)
 	}
 }
 
