@@ -42,12 +42,12 @@ ZFS pool `data` (raidz2, ~13.3 TB usable) with 7 datasets:
 | Service | State 2026-04-23 | Notes |
 |---------|------------------|-------|
 | postgresql@15-main | active | |
-| stellar-core | Synced! | pubnet, quorum 21/21 agree, full tier-1 intersection |
-| stellar-rpc | active | captive-core catching up; DB empty → getHealth says so |
-| galexie | active, exporting | Captive-core synced; uploading `FC4AXXXX--<ledger>.xdr.zst` objects to MinIO galexie-live, 1 per closed ledger. 300+ objects within 5 min of sync. |
+| ~~stellar-core~~ | **REMOVED 2026-04-23** | Primary daemon dropped — archive pipeline doesn't need it; see [archival-nodes.md](../../discovery/data-sources/archival-nodes.md) for revival path in Phase 3. |
+| stellar-rpc | active, healthy | Own captive-core, ingests live from pubnet, getHealth = healthy |
+| galexie | active, exporting | Own captive-core; uploading `FC4A....xdr.zst` objects to MinIO galexie-live at ~1/ledger. ~100 objects/5min at steady state. |
 | minio | active | Buckets: `galexie-live`, `galexie-archive`, `backups` |
 | node_exporter | active | :9100 |
-| stellar-core-prometheus-exporter | active | :9473 |
+| ~~stellar-core-prometheus-exporter~~ | **REMOVED 2026-04-23** | Scraped primary /info endpoint; captives don't expose one. |
 | node-healthcheck.timer | active | 5-min push to Healthchecks.io UUID 4cb3daba |
 
 ## Stellar quorum set (trust anchors)
