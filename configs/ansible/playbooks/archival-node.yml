@@ -1,6 +1,11 @@
 ---
-# Top-level playbook — brings a fresh Ubuntu 22.04 box up as a Rates
-# Engine archival node. Idempotent; safe to re-run.
+# Top-level playbook — brings a fresh Ubuntu 24.04 (or 22.04) box up
+# as a Rates Engine archival node. Idempotent; safe to re-run.
+#
+# All apt-repo tasks use {{ ansible_distribution_release }} so the
+# role itself is codename-agnostic; the assertion below just pins
+# the supported-OS set explicitly so an accidental install on, say,
+# Debian or CentOS fails loud rather than halfway-through.
 #
 # Usage:
 #   ansible-playbook -i inventory/r1.yml playbooks/archival-node.yml
@@ -13,13 +18,13 @@
   gather_facts: true
 
   pre_tasks:
-    - name: Confirm Ubuntu 22.04
+    - name: Confirm Ubuntu 22.04 or 24.04 LTS
       ansible.builtin.assert:
         that:
           - ansible_distribution == "Ubuntu"
-          - ansible_distribution_major_version == "22"
+          - ansible_distribution_major_version in ["22", "24"]
         fail_msg: >-
-          This role targets Ubuntu 22.04 LTS. Got
+          This role targets Ubuntu 22.04 or 24.04 LTS. Got
           {{ ansible_distribution }} {{ ansible_distribution_version }}.
 
   roles:

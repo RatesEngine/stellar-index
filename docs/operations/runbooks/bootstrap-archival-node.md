@@ -235,9 +235,10 @@ The node is now producing ledger meta. The next work is:
    MinIO `backups/`. Separate runbook (Week 3).
 3. **Week-2 ingestion code.** `internal/sources/sdex` reads from
    Galexie's output + populates `trades`. Separate PR (in flight).
-4. **First CATCHUP_COMPLETE attempt.** Once CATCHUP_RECENT is
-   stable, flip the switch and mirror the full archive. Budget
-   4–5 h on 1 Gbps. Runbook TBD.
+4. **Full history archive mirror + stellar-rpc genesis replay.**
+   See [first-archival-node-deployment.md](first-archival-node-deployment.md)
+   §4–§5 for the end-to-end sequence, including the mandatory
+   burn-test checkpoint before committing to days of replay.
 
 ---
 

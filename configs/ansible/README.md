@@ -1,8 +1,8 @@
 # Rates Engine — Ansible bootstrap
 
 Config-management entrypoint for Rates Engine hosts. Today the only
-role is `archival-node` — it takes a bare Ubuntu 22.04 install and
-brings it up as a fully configured Stellar archival node running
+role is `archival-node` — it takes a bare Ubuntu 24.04 (or 22.04)
+install and brings it up as a fully configured Stellar archival node running
 stellar-core, Galexie, stellar-rpc, and Postgres 15, with ZFS, a
 locked-down firewall, and Prometheus exporters wired in.
 
@@ -15,9 +15,12 @@ pip install --user "ansible-core>=2.16"
 ansible-galaxy collection install -r configs/ansible/requirements.yml
 ```
 
-On the target host: a fresh Ubuntu 22.04 LTS install (Hetzner's
-standard image works) with SSH reachable as `root` or a sudo-enabled
-user.
+On the target host: a fresh Ubuntu 24.04 LTS install — Hetzner's
+standard "Ubuntu 24.04 base" image works out of the box — with SSH
+reachable as `root` or a sudo-enabled user. 22.04 still works if you
+have an older box around; apt-repo tasks use
+`{{ ansible_distribution_release }}` so both codenames resolve
+correctly.
 
 ## First-run bootstrap
 
