@@ -1,0 +1,67 @@
+---
+# External health monitoring — push-based heartbeat to a
+# Healthchecks.io-compatible endpoint every 5 min. If the heartbeat
+# stops or reports failure, operators get an email/Slack/SMS.
+#
+# This is LAYER 1 monitoring: external watcher survives local-box
+# death. It's the absolute minimum that would have caught the CTX
+# node's restart loops. Proper Prometheus/Alertmanager stack lives
+# on a separate box (TODO, Phase B).
+#
+# The ping URL is a shared secret (anyone with it can forge healthy
+# pings) so it lives in r1.secrets.yml (vault-encrypted). When
+# unset, the script is installed but exits 0 silently — makes this
+# idempotent before operator has populated the vault.
+
+- name: Install jq (required by healthcheck script)
+  ansible.builtin.apt:
+    name: jq
+    state: present
+
+- name: Install node-healthcheck script
+  ansible.builtin.copy:
+    src: node-healthcheck.sh
+    dest: /usr/local/bin/node-healthcheck.sh
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Template /etc/default/node-healthcheck with ping URL
+  # healthcheck_ping_url should live in the vault-encrypted secrets
+  # file (r1.secrets.yml). Absent = skip silently.
+  ansible.builtin.copy:
+    dest: /etc/default/node-healthcheck
+    owner: root
+    group: root
+    mode: "0600"
+    content: |
+      # Rendered by Ansible. Do not edit by hand.
+      HEALTHCHECK_PING_URL={{ healthcheck_ping_url | default('') }}
+      MAX_LEDGER_AGE_SEC={{ healthcheck_max_ledger_age_sec | default(90) }}
+      POOL_NAME={{ zfs_data_pool_name }}
+  no_log: true
+
+- name: Install node-healthcheck systemd service
+  ansible.builtin.template:
+    src: systemd/node-healthcheck.service.j2
+    dest: /etc/systemd/system/node-healthcheck.service
+    owner: root
+    group: root
+    mode: "0644"
+  notify: Reload systemd
+
+- name: Install node-healthcheck systemd timer
+  ansible.builtin.template:
+    src: systemd/node-healthcheck.timer.j2
+    dest: /etc/systemd/system/node-healthcheck.timer
+    owner: root
+    group: root
+    mode: "0644"
+  notify: Reload systemd
+
+- name: Enable + start node-healthcheck timer
+  ansible.builtin.systemd:
+    name: node-healthcheck.timer
+    state: started
+    enabled: true
+    daemon_reload: true

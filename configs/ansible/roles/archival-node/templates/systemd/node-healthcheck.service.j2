@@ -1,0 +1,18 @@
+[Unit]
+Description=Archival-node health probe — reports to Healthchecks.io
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+# Script reads /etc/default/node-healthcheck for the ping URL.
+ExecStart=/usr/local/bin/node-healthcheck.sh
+
+# Lock it down — this script only needs to run a few curls, read
+# /info and /getHealth over localhost, call systemctl, and run
+# zpool/df.
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+ReadOnlyPaths=/
+PrivateTmp=true

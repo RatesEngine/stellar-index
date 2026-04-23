@@ -1,0 +1,14 @@
+[Unit]
+Description=Archival-node health probe — every 5 min
+
+[Timer]
+# On boot + every 5 min thereafter. RandomizedDelaySec spreads load
+# if we ever have multiple boxes pinging the same account.
+OnBootSec=2min
+OnUnitActiveSec=5min
+RandomizedDelaySec=30s
+AccuracySec=10s
+Unit=node-healthcheck.service
+
+[Install]
+WantedBy=timers.target

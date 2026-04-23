@@ -58,3 +58,7 @@
 - name: "SSH + base hardening"
   ansible.builtin.import_tasks: 12-hardening.yml
   tags: [hardening, ssh]
+
+- name: "External healthcheck (Healthchecks.io push)"
+  ansible.builtin.import_tasks: 13-healthcheck.yml
+  tags: [healthcheck, monitoring]
