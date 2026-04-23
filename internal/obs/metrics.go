@@ -36,6 +36,7 @@ func init() {
 		SourceDecodeErrorsTotal,
 		SourceOrphanEventsTotal,
 		SourceInsertErrorsTotal,
+		RateLimitFailOpenTotal,
 		CursorLastLedger,
 
 		PriceStalenessSeconds,
@@ -153,6 +154,19 @@ var SourceOrphanEventsTotal = prometheus.NewCounterVec(
 		Help: "Events that arrived without their required correlation partner, per source.",
 	},
 	[]string{"source"},
+)
+
+// RateLimitFailOpenTotal — counter of requests that skipped the
+// rate-limit check because of a backing-store (Redis) error. The
+// middleware fails-open on error so a Redis outage doesn't take
+// the whole API down, but operators need a quantitative signal of
+// how often it's happening. A spike here usually correlates with
+// the redis readyz probe turning red.
+var RateLimitFailOpenTotal = prometheus.NewCounter(
+	prometheus.CounterOpts{
+		Name: "ratesengine_ratelimit_fail_open_total",
+		Help: "Requests that bypassed rate-limiting because Redis errored.",
+	},
 )
 
 // SourceInsertErrorsTotal — per-source counter of persistence

@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"strconv"
 
+	"github.com/RatesEngine/rates-engine/internal/obs"
 	"github.com/RatesEngine/rates-engine/internal/ratelimit"
 )
 
@@ -55,8 +56,12 @@ func RateLimit(bucket *ratelimit.Bucket, keyFn func(*http.Request) string, skip 
 
 			res, err := bucket.Take(r.Context(), key)
 			if err != nil {
+				// Log at debug so a Redis outage doesn't flood the
+				// error log — the metric below is the alertable
+				// signal, the log is for post-mortem detail.
 				logger.Debug("ratelimit redis error — failing open",
 					"err", err, "key", key, "request_id", RequestIDFrom(r))
+				obs.RateLimitFailOpenTotal.Inc()
 				next.ServeHTTP(w, r)
 				return
 			}
