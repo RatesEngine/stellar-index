@@ -283,6 +283,13 @@ func handleOneEvent(ctx context.Context, logger *slog.Logger, store *timescale.S
 	}()
 
 	source := ev.Source()
+	if source == "" {
+		// A Source() returning empty is a contract violation —
+		// would show up as "empty-string" label in metrics and
+		// confuse dashboards. Log + attribute to a sentinel.
+		logger.Warn("event with empty source", "kind", ev.EventKind())
+		source = "_unknown"
+	}
 	obs.SourceEventsTotal.WithLabelValues(source).Inc()
 	obs.SourceLastEventUnix.WithLabelValues(source).Set(float64(time.Now().Unix()))
 
