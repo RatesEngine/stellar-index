@@ -134,6 +134,53 @@ func TestAssetGet_Sep1OverlayNoMatch(t *testing.T) {
 	}
 }
 
+func TestAssetGet_Sep1OverlayRefusesNonClassicMatch(t *testing.T) {
+	// Regression: Soroban / native / fiat assets must NOT match any
+	// SEP-1 currency entry by accident. Previously findMatchingCurrency
+	// fell through the (empty code, empty issuer) checks and returned
+	// the FIRST entry — silently attaching random USDC metadata to
+	// any Soroban contract with the same home-domain.
+	domain := "circle.com"
+	sorobanContract := "CAS3J7GYLGXMF6TDJBBYYSE3HQ6BBSMLNUQ34T6TZMYMW2EVH34XOWMA"
+	reader := &stubAssetReader{
+		byID: map[string]v1.AssetDetail{
+			sorobanContract: {
+				AssetID:    sorobanContract,
+				Type:       "soroban",
+				ContractID: &sorobanContract,
+				HomeDomain: &domain,
+				Decimals:   7,
+			},
+		},
+	}
+	meta := &stubMetaResolver{
+		byDomain: map[string]*metadata.SEP1{
+			"circle.com": {
+				OrgName: "Circle",
+				Currencies: []metadata.Currency{{
+					Code: "USDC", Issuer: testUSDCIssuer, Name: "USD Coin",
+				}},
+			},
+		},
+	}
+
+	srv := v1.New(v1.Options{Assets: reader, Meta: meta})
+	ts := httpTestServer(t, srv)
+
+	resp := mustGet(t, ts.URL+"/v1/assets/"+sorobanContract)
+	var env struct {
+		Data v1.AssetDetail `json:"data"`
+	}
+	mustDecode(t, resp, &env)
+
+	if env.Data.Sep1Status != "no_match" {
+		t.Errorf("sep1_status = %q, want no_match (Soroban can't match classic entries)", env.Data.Sep1Status)
+	}
+	if env.Data.Name != nil {
+		t.Errorf("Soroban asset should NOT inherit USDC's Name: %v", env.Data.Name)
+	}
+}
+
 func TestAssetGet_Sep1OverlayUnreachable(t *testing.T) {
 	issuer := testUSDCIssuer
 	domain := "offline.example"

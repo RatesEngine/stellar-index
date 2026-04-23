@@ -286,24 +286,39 @@ func (s *Server) applySep1Overlay(ctx context.Context, detail *AssetDetail, asse
 }
 
 // findMatchingCurrency finds the [[CURRENCIES]] entry that matches
-// asset. Returns nil if no entry matches. Classic assets match by
-// (code, issuer) exactly; Soroban-only assets match by code.
+// asset. Returns nil if no entry matches.
+//
+// Matching is strict — we refuse to guess. Specifically:
+//
+//   - Classic assets match on (code, issuer) exactly. SEP-1 entries
+//     with empty issuers are malformed and skipped.
+//   - Soroban assets can't be matched today: our Currency struct
+//     doesn't carry contract_id (SEP-1 added it in a later revision
+//     we haven't caught up to). Return nil so the caller surfaces
+//     sep1_status="no_match" rather than attaching random metadata
+//     from the first entry in the TOML.
+//   - Fiat and native assets never have a home-domain to overlay
+//     from; callers shouldn't be calling this for them. Return nil
+//     defensively.
 func findMatchingCurrency(sep *metadata.SEP1, asset canonical.Asset) *metadata.Currency {
+	// Only classic assets have enough identity (code + issuer) to
+	// match a SEP-1 currency entry safely. Everything else — Soroban,
+	// native, fiat — can't be matched without contract_id support.
+	if asset.Type != canonical.AssetClassic {
+		return nil
+	}
+	if asset.Code == "" || asset.Issuer == "" {
+		return nil
+	}
 	for i := range sep.Currencies {
 		c := &sep.Currencies[i]
-		if asset.Code != "" && !strings.EqualFold(c.Code, asset.Code) {
+		if !strings.EqualFold(c.Code, asset.Code) {
 			continue
 		}
-		// When the canonical asset has an issuer (classic), require
-		// the SEP-1 entry to match that issuer exactly. If the SEP-1
-		// entry lacks an issuer (malformed), skip it.
-		if asset.Issuer != "" {
-			if c.Issuer != "" && c.Issuer != asset.Issuer {
-				continue
-			}
-			if c.Issuer == "" {
-				continue
-			}
+		// SEP-1 entry MUST have a non-empty issuer that matches —
+		// otherwise we can't confidently attribute metadata.
+		if c.Issuer == "" || c.Issuer != asset.Issuer {
+			continue
 		}
 		return c
 	}
