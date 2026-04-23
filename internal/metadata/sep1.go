@@ -167,12 +167,15 @@ func (r *Resolver) Resolve(ctx context.Context, domain string) (*SEP1, error) {
 	if domain == "" {
 		return nil, errors.New("sep1: empty domain")
 	}
-	// Reject if the operator passed a URL by mistake. Note: a bare
-	// "host:port" is allowed (tests hit httptest on 127.0.0.1:NNNN);
-	// we only flag scheme-prefixed or path-bearing inputs.
+	// Friendlier error first: a full URL is a very common user
+	// mistake ("pass just the hostname"). Other bad characters get
+	// the generic hostname-validation error.
 	if strings.Contains(domain, "://") || strings.Contains(domain, "/") ||
 		strings.HasPrefix(domain, "http:") || strings.HasPrefix(domain, "https:") {
 		return nil, fmt.Errorf("sep1: %q looks like a URL; pass just the hostname", domain)
+	}
+	if !isValidDomainOrHostPort(domain) {
+		return nil, fmt.Errorf("sep1: %q is not a valid hostname (or host:port)", domain)
 	}
 
 	rawURL := "https://" + domain + "/.well-known/stellar.toml"
@@ -355,6 +358,57 @@ func (d *ssrfDialer) DialContext(ctx context.Context, network, address string) (
 
 // isBlocked reports whether ip is in a range we refuse to dial.
 //
+// isValidDomainOrHostPort reports whether s is a syntactically valid
+// DNS name (optionally with a :port suffix). Guards the URL builder
+// from query strings, fragments, whitespace, and other shenanigans
+// that would otherwise survive into the request URL.
+//
+// Tolerates IPv4 literals (for httptest) but not IPv6 bracket form
+// — we never ingest IPv6 literals as home-domains in practice.
+func isValidDomainOrHostPort(s string) bool {
+	// Split off optional :port.
+	host, port, hasPort := strings.Cut(s, ":")
+	if hasPort {
+		// Port must be 1-5 digits, value 1-65535.
+		if port == "" || len(port) > 5 {
+			return false
+		}
+		for _, c := range port {
+			if c < '0' || c > '9' {
+				return false
+			}
+		}
+	}
+	if host == "" || len(host) > 253 {
+		return false
+	}
+	// Hostname character set per RFC 952 + RFC 1123: letters,
+	// digits, hyphens, and dots. No underscores, spaces, query
+	// chars, slashes, etc.
+	for _, c := range host {
+		if (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || c == '-' || c == '.' {
+			continue
+		}
+		return false
+	}
+	// Labels (between dots) must not start or end with a hyphen,
+	// and must not be empty. "-foo" and "foo-" are invalid; ".foo"
+	// (leading dot) is invalid; "foo..bar" (double dot) is invalid.
+	labels := strings.Split(host, ".")
+	for _, lbl := range labels {
+		if lbl == "" {
+			return false
+		}
+		if lbl[0] == '-' || lbl[len(lbl)-1] == '-' {
+			return false
+		}
+		if len(lbl) > 63 {
+			return false
+		}
+	}
+	return true
+}
+
 // Allow-overrides in tests via Options.AllowPrivateIPs.
 func (d *ssrfDialer) isBlocked(ip net.IP) bool {
 	if d.allowPrivateIPs {

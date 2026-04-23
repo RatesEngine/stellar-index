@@ -140,6 +140,63 @@ func TestResolver_RejectsURLMistakenlyPassedAsDomain(t *testing.T) {
 	}
 }
 
+func TestResolver_RejectsInvalidHostnameChars(t *testing.T) {
+	// Domains with query chars, whitespace, underscores, etc. must
+	// be rejected before we construct the request URL — otherwise
+	// a crafted input could break out of the path portion.
+	r := metadata.NewResolver(metadata.Options{})
+	ctx := context.Background()
+
+	for _, bad := range []string{
+		"example.com?foo=bar", // query-char
+		"example.com#frag",    // fragment
+		"has space.com",       // space in middle
+		"under_score.com",     // underscore
+		"-leading-hyphen.com",
+		"trailing-hyphen-.com",
+		"double..dot.com",
+		".leading.dot",
+	} {
+		_, err := r.Resolve(ctx, bad)
+		if err == nil {
+			t.Errorf("domain %q: expected error, got nil", bad)
+			continue
+		}
+		// Either the URL-looks-like pre-check or the hostname
+		// validator catches it; both are acceptable.
+		if !strings.Contains(err.Error(), "not a valid hostname") &&
+			!strings.Contains(err.Error(), "looks like a URL") {
+			t.Errorf("domain %q: unexpected error %v", bad, err)
+		}
+	}
+}
+
+func TestResolver_AcceptsHostPort(t *testing.T) {
+	// Bare host, hostport, and subdomains all pass the validator
+	// (httptest servers come in as 127.0.0.1:NNNN).
+	r := metadata.NewResolver(metadata.Options{
+		Timeout: 100 * time.Millisecond,
+	})
+	ctx := context.Background()
+
+	// These should all get PAST validation (but will likely fail
+	// connection or SSRF block — that's fine, we're testing the
+	// validator, not the HTTP path).
+	for _, good := range []string{
+		"circle.com",
+		"sub.circle.com",
+		"deep.sub.circle.com",
+		"127.0.0.1:8080",
+		"example-site.com",
+	} {
+		_, err := r.Resolve(ctx, good)
+		if err != nil && (strings.Contains(err.Error(), "not a valid hostname") ||
+			strings.Contains(err.Error(), "looks like a URL")) {
+			t.Errorf("domain %q: validator incorrectly rejected — %v", good, err)
+		}
+	}
+}
+
 func TestResolver_SSRFBlocksLoopback(t *testing.T) {
 	// Default Resolver (AllowPrivateIPs=false) MUST block
 	// 127.0.0.1 dials. Attempt to hit a localhost target and
