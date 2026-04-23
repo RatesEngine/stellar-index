@@ -37,6 +37,52 @@
     enabled: true
     daemon_reload: true
 
-# Bucket creation happens after MinIO is up; we do it via `mc` from
-# the operator's workstation rather than here, because it needs the
-# access/secret keys in a running API state. Runbook documents this.
+# ──── Bucket creation ─────────────────────────────────────────────
+# Bootstrap the buckets galexie + pgBackRest + ad-hoc backups need.
+# `mc` is MinIO's CLI; we install the standalone binary (not the
+# apt package — there isn't one in stable at time of writing).
+# Both `mc alias set` and `mc mb -p` are idempotent so this re-runs
+# safely.
+
+- name: Install mc (MinIO CLI) for bucket bootstrap + operator use
+  ansible.builtin.get_url:
+    url: "https://dl.min.io/client/mc/release/linux-amd64/mc"
+    dest: /usr/local/bin/mc
+    mode: "0755"
+    owner: root
+    group: root
+  # TODO(#0): pin MinIO mc version + SHA256.
+
+- name: Wait for MinIO API to be reachable on :9000
+  ansible.builtin.uri:
+    url: "http://127.0.0.1:9000/minio/health/live"
+    status_code: 200
+  retries: 15
+  delay: 2
+  register: minio_live
+  until: minio_live.status == 200
+
+- name: Configure mc alias for local MinIO
+  # Env vars carry the credentials so they never land on argv (which
+  # shows up in ps + journald). no_log prevents Ansible from
+  # echoing them to stdout on failure.
+  ansible.builtin.command:
+    argv:
+      - /usr/local/bin/mc
+      - alias
+      - set
+      - local
+      - "http://127.0.0.1:9000"
+      - "{{ minio_root_user }}"
+      - "{{ minio_root_password }}"
+  changed_when: false
+  no_log: true
+
+- name: Ensure required MinIO buckets exist
+  ansible.builtin.command: "/usr/local/bin/mc mb --ignore-existing local/{{ item }}"
+  loop:
+    - galexie-live       # galexie's continuous ledger-meta export target
+    - galexie-archive    # mirror of SDF's history archive (phase 2)
+    - backups            # pgBackRest WAL + rdb dumps (phase 2)
+  register: mc_mb
+  changed_when: "'Bucket created successfully' in mc_mb.stdout"

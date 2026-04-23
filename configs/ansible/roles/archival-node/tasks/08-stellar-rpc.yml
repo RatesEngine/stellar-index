@@ -13,12 +13,17 @@
   # mode — omits HTTP_PORT / PEER_PORT / NODE_* / DATABASE / CATCHUP_*,
   # which captive-core rejects. [[HOME_DOMAINS]], [[VALIDATORS]], and
   # [HISTORY.*] blocks are identical to the full stellar-core config.
+  #
+  # Mode 0644 (world-readable) is deliberate: galexie's captive-core
+  # also needs to read this file, and galexie's service user isn't
+  # in the stellar group. Nothing in captive-core.cfg is secret —
+  # just public validator keys + archive URLs.
   ansible.builtin.template:
     src: stellar-core.cfg.j2
     dest: /etc/stellar/captive-core.cfg
     owner: stellar
     group: stellar
-    mode: "0640"
+    mode: "0644"
   vars:
     cfg_mode: captive
   notify: Restart stellar-rpc
