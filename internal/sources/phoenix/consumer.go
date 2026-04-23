@@ -84,8 +84,8 @@ func (s *Source) BackfillRange(ctx context.Context, from, to uint32, out chan<- 
 		cursor = resp.Cursor
 	}
 
-	for _, orphan := range buf.orphans() {
-		_ = orphan // TODO(#0): metric counter phoenix_orphan_swaps_total{fields=N}
+	for range buf.orphans() {
+		obs.SourceOrphanEventsTotal.WithLabelValues(SourceName).Inc()
 	}
 	return nil
 }
@@ -153,10 +153,11 @@ func (s *Source) processPage(ctx context.Context, events []stellarrpc.Event, buf
 
 		completed, evicted, err := buf.absorb(e, fieldTopic)
 		if len(evicted) > 0 {
-			// Stale incompletes aged out of the buffer — one "decode"
-			// that didn't produce a trade, per evicted entry.
+			// Stale incompletes aged out of the buffer — these are
+			// orphans (partial 8-field set that never completed),
+			// not decode errors.
 			for range evicted {
-				obs.SourceDecodeErrorsTotal.WithLabelValues(SourceName).Inc()
+				obs.SourceOrphanEventsTotal.WithLabelValues(SourceName).Inc()
 			}
 		}
 		if err != nil {

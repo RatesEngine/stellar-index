@@ -75,7 +75,7 @@ groups:
             is wedged.
 
       - alert: ratesengine_ingestion_orphan_events
-        expr: rate(ratesengine_soroswap_orphan_events_total[10m]) > 10/60
+        expr: sum by (source) (rate(ratesengine_source_orphan_events_total[10m])) > 10/60
         for: 15m
         labels:
           severity: informational
@@ -83,12 +83,13 @@ groups:
           component: ingestion
           runbook_url: https://github.com/RatesEngine/rates-engine/blob/main/docs/operations/runbooks/orphan-events.md
         annotations:
-          summary: "Soroswap orphan events {{ $value | humanize }}/sec"
+          summary: "Source {{ $labels.source }} orphan events {{ $value | humanize }}/sec"
           description: |
-            Soroswap swap-without-sync or sync-without-swap events exceed
-            10/min sustained. Likely a page-boundary issue in our backfill
-            that drops swap/sync pairs — or a contract change we haven't
-            accounted for.
+            Source {{ $labels.source }} has events arriving without their
+            correlation partner (Soroswap swap-without-sync, Phoenix
+            incomplete 8-field swap) at a rate above 10/min sustained
+            15 min. Likely a page-boundary issue in the RPC subscription
+            or a contract-schema shift we haven't accounted for.
 
       - alert: ratesengine_ingestion_decode_error
         expr: rate(ratesengine_source_decode_errors_total[5m]) > 1

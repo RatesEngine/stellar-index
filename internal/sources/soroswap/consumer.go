@@ -118,9 +118,9 @@ func (s *Source) BackfillRange(ctx context.Context, from, to uint32, out chan<- 
 	}
 
 	// Any buffered swap that never got its sync is a bug or a page
-	// boundary we didn't handle. Surface + drop.
-	for _, orphan := range buf.orphans() {
-		_ = orphan // TODO(#0): metric counter soroswap_orphan_swaps_total
+	// boundary we didn't handle. Surface to metrics + drop.
+	for range buf.orphans() {
+		obs.SourceOrphanEventsTotal.WithLabelValues(SourceName).Inc()
 	}
 	return nil
 }
@@ -198,10 +198,11 @@ func (s *Source) processPage(events []stellarrpc.Event, buf *buffer, out chan<- 
 			completed, evicted := buf.absorb(e, kind)
 			if len(evicted) > 0 {
 				// Stale entries that timed out waiting for their
-				// partner. TODO(#0): increment soroswap_orphan_pairs_total
-				// metric with a `reason=age` label. For now they
-				// drop silently — the memory bound is the priority.
-				_ = evicted
+				// partner — record each as an orphan so the
+				// ingestion_orphan_events alert can fire.
+				for range evicted {
+					obs.SourceOrphanEventsTotal.WithLabelValues(SourceName).Inc()
+				}
 			}
 			for _, r := range completed {
 				tokens, ok := s.lookupPair(r.Pair)

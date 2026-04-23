@@ -34,6 +34,7 @@ func init() {
 		SourceLastEventUnix,
 		SourceEnabled,
 		SourceDecodeErrorsTotal,
+		SourceOrphanEventsTotal,
 		SourceInsertErrorsTotal,
 		CursorLastLedger,
 
@@ -133,6 +134,23 @@ var SourceDecodeErrorsTotal = prometheus.NewCounterVec(
 	prometheus.CounterOpts{
 		Name: "ratesengine_source_decode_errors_total",
 		Help: "Events that failed to decode, per source.",
+	},
+	[]string{"source"},
+)
+
+// SourceOrphanEventsTotal — per-source counter of events that
+// arrived but never correlated into a complete observation.
+// Soroswap emits one per aged-out half of a swap/sync pair;
+// Phoenix emits one per aged-out incomplete 8-field set.
+//
+// Distinct from SourceDecodeErrorsTotal because an orphan event
+// was well-formed on its own — the surrounding context is what's
+// missing. A sustained rate usually means the RPC is dropping
+// events or the contract shape shifted.
+var SourceOrphanEventsTotal = prometheus.NewCounterVec(
+	prometheus.CounterOpts{
+		Name: "ratesengine_source_orphan_events_total",
+		Help: "Events that arrived without their required correlation partner, per source.",
 	},
 	[]string{"source"},
 )
