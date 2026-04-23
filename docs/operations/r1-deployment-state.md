@@ -44,7 +44,7 @@ ZFS pool `data` (raidz2, ~13.3 TB usable) with 7 datasets:
 | postgresql@15-main | active | |
 | stellar-core | Synced! | pubnet, quorum 21/21 agree, full tier-1 intersection |
 | stellar-rpc | active | captive-core catching up; DB empty → getHealth says so |
-| galexie | active, not-yet-exporting | Waiting for captive-core catchup to reach start ledger |
+| galexie | active, post-catchup online | Captive-core in online mode at 13:56 streaming ledger meta; sync to network head in progress |
 | minio | active | Buckets: `galexie-live`, `galexie-archive`, `backups` |
 | node_exporter | active | :9100 |
 | stellar-core-prometheus-exporter | active | :9473 |
@@ -80,13 +80,19 @@ fetched 2026-04-23:
 ## Known gaps / next-session priorities
 
 ### Blocking
-1. **Galexie catchup finished, export imminent.** (Updated 2026-04-23 13:37.)
-   Galexie's embedded stellar-core completed catchup to ledger
-   62,249,470 in ~12 min from service start. Captive-core stores
-   data at `/var/lib/galexie/captive-core/` (with dash — NOT
-   `/captive/` as earlier role versions predicted). Currently
-   populating in-memory Soroban state (1,369 contracts ≈ 32 MB
-   Wasm). First MinIO upload expected within minutes after state
+1. **Galexie PEER_PORT collision fixed — exports imminent.**
+   (Updated 2026-04-23 13:58.) Earlier today galexie + stellar-rpc
+   were stuck in a restart loop (152+ restarts); root cause was
+   `PEER_PORT = 0` in captive-core.cfg getting stripped by the
+   go-stellar-sdk toml marshaller (omitempty on zero), leaving
+   stellar-core to default to pubnet's 11625 → collision with
+   primary → SIGABRT. Fixed by giving each captive a distinct
+   non-zero PEER_PORT (primary 11625, stellar-rpc captive 11725,
+   galexie captive 11726) in separate /etc/stellar/captive-core*.cfg
+   files. Commit 507e4de. Post-fix: 0 restarts, captive-core in
+   online mode peering with the network, catching up from LCL
+   62249726 to the network head (~62249990 at time of writing).
+   First MinIO upload expected within minutes after state
    populates. Objects in galexie-live bucket: 1 (the `.config.json`
    sentinel written at galexie startup).
 
@@ -95,6 +101,10 @@ fetched 2026-04-23:
    `internal/sources/{soroswap,aquarius,phoenix,reflector}/decode.go`
    all return placeholder errors. This is the single biggest
    unblocker between "stack running" and "trade data flowing."
+   Precondition: take a dependency on `github.com/stellar/go-stellar-sdk/xdr`
+   (not yet in go.mod — callers use `stellarrpc.Event.Value` as
+   opaque base64 today). The `decoderHooks` pattern in each
+   decode.go is ready for real impls to replace the stubs.
 
 ### Important but not urgent
 3. **Firewall + SSH hardening (phase 3)** not applied. Intentional —
