@@ -143,6 +143,80 @@ func TestDecodeUpdate_fanout(t *testing.T) {
 	}
 }
 
+func TestDecodeUpdate_OpIndexStrideIsFixed(t *testing.T) {
+	// Regression: previously OpIndex used `OperationIndex × len(prices)
+	// + i`, which could collide across events in the same tx with
+	// different vector sizes. With a fixed stride (opIndexFanoutStride),
+	// the op_index ranges never overlap.
+	prev := decodeUpdateBody
+	defer func() { decodeUpdateBody = prev }()
+
+	xlm := canonical.NativeAsset()
+	usdc, _ := canonical.NewFiatAsset("USD")
+	v := func(s string) canonical.Amount {
+		n, _ := new(big.Int).SetString(s, 10)
+		return canonical.NewAmount(n)
+	}
+
+	// Event A: op_index=0 with 3 prices.
+	decodeUpdateBody = func(_ string) ([]PriceEntry, uint64, error) {
+		return []PriceEntry{
+			{Asset: xlm, Price: v("100")},
+			{Asset: usdc, Price: v("100")},
+			{Asset: xlm, Price: v("100")},
+		}, 0, nil
+	}
+	eA := &stellarrpc.Event{
+		Topic:          []string{TopicSymbolReflector, TopicSymbolUpdate},
+		ContractID:     dexContractID,
+		Ledger:         1, TxHash: reflectorTxHash, OperationIndex: 0,
+		LedgerClosedAt: time.Now().UTC().Format(time.RFC3339),
+	}
+	closedAt, _ := time.Parse(time.RFC3339, eA.LedgerClosedAt)
+	updatesA, err := decodeUpdate(eA, VariantDEX, DefaultDecimals, "", closedAt)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Event B: op_index=1 with 2 prices — if the old formula was
+	// still in place, B's first slot would be OpIndex=2 which
+	// collides with A's third slot at OpIndex=2 (0×3+2).
+	decodeUpdateBody = func(_ string) ([]PriceEntry, uint64, error) {
+		return []PriceEntry{
+			{Asset: xlm, Price: v("100")},
+			{Asset: usdc, Price: v("100")},
+		}, 0, nil
+	}
+	eB := &stellarrpc.Event{
+		Topic:          []string{TopicSymbolReflector, TopicSymbolUpdate},
+		ContractID:     dexContractID,
+		Ledger:         1, TxHash: reflectorTxHash, OperationIndex: 1,
+		LedgerClosedAt: eA.LedgerClosedAt,
+	}
+	updatesB, err := decodeUpdate(eB, VariantDEX, DefaultDecimals, "", closedAt)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	seen := map[uint32]bool{}
+	for _, u := range updatesA {
+		if seen[u.OpIndex] {
+			t.Errorf("duplicate OpIndex in A: %d", u.OpIndex)
+		}
+		seen[u.OpIndex] = true
+	}
+	for _, u := range updatesB {
+		if seen[u.OpIndex] {
+			t.Errorf("cross-event OpIndex collision: %d in both A and B", u.OpIndex)
+		}
+		seen[u.OpIndex] = true
+	}
+	if len(seen) != len(updatesA)+len(updatesB) {
+		t.Errorf("op_index uniqueness violated: %d unique across %d total",
+			len(seen), len(updatesA)+len(updatesB))
+	}
+}
+
 func TestDecodeUpdate_skipsZeroPrices(t *testing.T) {
 	prev := decodeUpdateBody
 	defer func() { decodeUpdateBody = prev }()

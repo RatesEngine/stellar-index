@@ -8,6 +8,12 @@ import (
 	"github.com/RatesEngine/rates-engine/internal/stellarrpc"
 )
 
+// opIndexFanoutStride spaces the synthetic op_index values emitted
+// from one Reflector event's price vector. 1024 comfortably holds
+// any vector size we've observed (dozens of assets) with room to
+// grow; well within uint32 since Stellar caps ops/tx at 100.
+const opIndexFanoutStride = 1024
+
 // classify reports whether this is a Reflector "update" event. We
 // match both topics (position 0 = "REFLECTOR", position 1 =
 // "update"); anything else returns false and the caller skips.
@@ -64,10 +70,17 @@ func decodeUpdate(e *stellarrpc.Event, variant Variant, decimals uint8, observer
 			ContractID: e.ContractID,
 			Ledger:     e.Ledger,
 			TxHash:     e.TxHash,
-			// OpIndex = tx-level operation-index × vector-size + vector-position
-			// keeps identity unique even when two price updates
-			// land in the same (ledger, tx) pair.
-			OpIndex:   uint32(e.OperationIndex)*uint32(len(prices)) + uint32(i),
+			// OpIndex uses a FIXED stride, not len(prices) — otherwise
+			// two events in the same tx with different vector sizes
+			// could collide on identity. E.g. event A at op=0 with 3
+			// prices (→ OpIndexes 0,1,2) vs event B at op=1 with 2
+			// prices (→ OpIndexes 2,3) — both emit OpIndex=2.
+			//
+			// Stride = opIndexFanoutStride (1024) is large enough to
+			// hold any Reflector price vector we've observed in the
+			// wild (typical sizes: dozens of assets). Well within
+			// uint32 since Stellar caps ops/tx at 100.
+			OpIndex:   uint32(e.OperationIndex)*opIndexFanoutStride + uint32(i),
 			Timestamp: ts,
 			Asset:     entry.Asset,
 			Quote:     quoteForVariant(variant),
