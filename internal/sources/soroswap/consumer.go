@@ -182,7 +182,14 @@ func (s *Source) processPage(events []stellarrpc.Event, buf *buffer, out chan<- 
 		case EventNewPair:
 			s.recordNewPair(e)
 		case EventSwap, EventSync:
-			completed := buf.absorb(e, kind)
+			completed, evicted := buf.absorb(e, kind)
+			if len(evicted) > 0 {
+				// Stale entries that timed out waiting for their
+				// partner. TODO(#0): increment soroswap_orphan_pairs_total
+				// metric with a `reason=age` label. For now they
+				// drop silently — the memory bound is the priority.
+				_ = evicted
+			}
 			for _, r := range completed {
 				tokens, ok := s.lookupPair(r.Pair)
 				if !ok {
@@ -269,17 +276,48 @@ func (TradeEvent) Source() string { return SourceName }
 
 // ─── Correlation buffer ─────────────────────────────────────────
 // Groups swap + sync by (ledger, tx_hash, op_index). Emits complete
-// pairs back to the caller; holds incompletes until eviction by a
-// later ledger boundary or orphan sweep.
+// pairs back to the caller; holds incompletes until either their
+// partner event arrives, or their ClosedAt is older than maxAge
+// (at which point they're returned as orphans and dropped).
+//
+// Bounded memory: without age-based eviction, StreamLive's buffer
+// would grow unbounded whenever a swap arrives without its matching
+// sync (page boundary races, malformed pair contracts, etc.).
+
+// defaultOrphanMaxAge is how long we hold an incomplete entry
+// waiting for its partner before treating it as an orphan.
+//
+// Soroswap swap+sync are emitted in the same transaction — they
+// SHOULD always arrive within a single RPC page. Cross-page splits
+// happen at the page boundary but resolve within seconds on the
+// next poll. Five minutes is a generous ceiling that tolerates
+// worst-case pagination lag without holding references to events
+// that will never resolve.
+const defaultOrphanMaxAge = 5 * time.Minute
 
 type buffer struct {
-	m map[groupKey]*RawPair
+	m      map[groupKey]*RawPair
+	maxAge time.Duration
+	nowFn  func() time.Time
 }
 
-func newBuffer() *buffer { return &buffer{m: map[groupKey]*RawPair{}} }
+func newBuffer() *buffer {
+	return &buffer{
+		m:      map[groupKey]*RawPair{},
+		maxAge: defaultOrphanMaxAge,
+		nowFn:  time.Now,
+	}
+}
 
 // absorb records an event; returns any pairs that just completed.
-func (b *buffer) absorb(e *stellarrpc.Event, kind string) []RawPair {
+// Also sweeps the buffer for entries older than maxAge; evicted
+// orphans are RETURNED so the caller can emit metrics — they're
+// NOT returned as completed pairs (they have no Sync to finalise).
+func (b *buffer) absorb(e *stellarrpc.Event, kind string) (completed []RawPair, evicted []RawPair) {
+	// Evict stale orphans first — keeps the map bounded in size
+	// regardless of how long the process runs.
+	evicted = b.sweepStale()
+
 	k := keyOf(e)
 	p, ok := b.m[k]
 	if !ok {
@@ -295,9 +333,26 @@ func (b *buffer) absorb(e *stellarrpc.Event, kind string) []RawPair {
 	}
 	if p.Complete() {
 		delete(b.m, k)
-		return []RawPair{*p}
+		completed = []RawPair{*p}
 	}
-	return nil
+	return completed, evicted
+}
+
+// sweepStale removes every entry whose ClosedAt is older than
+// maxAge relative to nowFn(), returning them as orphans.
+func (b *buffer) sweepStale() []RawPair {
+	if b.maxAge <= 0 {
+		return nil
+	}
+	cutoff := b.nowFn().Add(-b.maxAge)
+	var evicted []RawPair
+	for k, p := range b.m {
+		if p.ClosedAt.Before(cutoff) {
+			evicted = append(evicted, *p)
+			delete(b.m, k)
+		}
+	}
+	return evicted
 }
 
 // orphans returns every incomplete entry; called after a backfill
@@ -310,3 +365,7 @@ func (b *buffer) orphans() []RawPair {
 	}
 	return out
 }
+
+// size returns the number of in-flight (incomplete) pairs. Used by
+// tests to assert the buffer stays bounded.
+func (b *buffer) size() int { return len(b.m) }

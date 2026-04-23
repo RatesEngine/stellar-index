@@ -41,12 +41,12 @@ func TestBufferAbsorbsAndPairs(t *testing.T) {
 	companion := event(EventSync, pair, 100, "tx1", 0, TopicSymbolSync)
 
 	// Swap first → nothing complete.
-	if got := buf.absorb(base, EventSwap); len(got) != 0 {
+	if got, _ := buf.absorb(base, EventSwap); len(got) != 0 {
 		t.Fatalf("absorb(swap): expected 0 completes, got %d", len(got))
 	}
 
 	// Sync completes the pair.
-	completed := buf.absorb(companion, EventSync)
+	completed, _ := buf.absorb(companion, EventSync)
 	if len(completed) != 1 {
 		t.Fatalf("absorb(sync): expected 1 complete, got %d", len(completed))
 	}
@@ -63,7 +63,7 @@ func TestBufferOrphanSyncStaysBuffered(t *testing.T) {
 	// A sync-only event (no preceding swap in the same group) is
 	// held in the buffer as Sync-set-but-Swap-nil. It's NOT emitted
 	// as a complete pair; orphans() surfaces it.
-	completed := buf.absorb(event(EventSync, "CXYZ...", 42, "tx2", 0, TopicSymbolSync), EventSync)
+	completed, _ := buf.absorb(event(EventSync, "CXYZ...", 42, "tx2", 0, TopicSymbolSync), EventSync)
 	if len(completed) != 0 {
 		t.Fatalf("orphan sync should not complete; got %d", len(completed))
 	}
@@ -87,7 +87,7 @@ func TestBufferSeparatesByGroupKey(t *testing.T) {
 
 	buf.absorb(swapA, EventSwap)
 	buf.absorb(swapB, EventSwap)
-	completed := buf.absorb(syncA, EventSync)
+	completed, _ := buf.absorb(syncA, EventSync)
 	if len(completed) != 1 {
 		t.Fatalf("expected only A to complete, got %d", len(completed))
 	}
@@ -164,6 +164,77 @@ func TestSource_NameAndNewBasics(t *testing.T) {
 	// Health starts zero.
 	if h := s.Health(); h.Connected || !h.LastEvent.IsZero() || h.LagLedgers != 0 {
 		t.Errorf("initial health: %+v", h)
+	}
+}
+
+func TestBufferEvictsStaleOrphans(t *testing.T) {
+	// StreamLive must not leak memory when a swap never gets its
+	// sync. After maxAge, the stale entry is returned as `evicted`
+	// and dropped from the map.
+	buf := newBuffer()
+	buf.maxAge = 100 * time.Millisecond
+
+	// Inject an old orphan swap — ClosedAt = 1s ago (past cutoff).
+	oldTS := time.Now().UTC().Add(-time.Second).Format(time.RFC3339)
+	orphan := &stellarrpc.Event{
+		Type: "contract", Ledger: 1, LedgerClosedAt: oldTS,
+		ContractID: "CORPHAN", TxHash: "txOrphan", OperationIndex: 0,
+		Topic: []string{TopicSymbolSwap}, Value: "stub",
+	}
+	completed, evicted := buf.absorb(orphan, EventSwap)
+	if len(completed) != 0 {
+		t.Errorf("absorbed orphan should not complete; got %d", len(completed))
+	}
+	// On this first call there's nothing to evict (the orphan was
+	// JUST added). Size should be 1.
+	if len(evicted) != 0 {
+		t.Errorf("first-insert should evict nothing; got %d", len(evicted))
+	}
+	if buf.size() != 1 {
+		t.Fatalf("buffer size = %d, want 1", buf.size())
+	}
+
+	// Second call with a fresh event. sweepStale runs BEFORE the
+	// new event is added, so the old orphan is evicted.
+	fresh := &stellarrpc.Event{
+		Type: "contract", Ledger: 2,
+		LedgerClosedAt: time.Now().UTC().Format(time.RFC3339),
+		ContractID:     "CFRESH", TxHash: "txFresh", OperationIndex: 0,
+		Topic: []string{TopicSymbolSwap}, Value: "stub",
+	}
+	_, evicted = buf.absorb(fresh, EventSwap)
+	if len(evicted) != 1 {
+		t.Fatalf("expected 1 eviction, got %d", len(evicted))
+	}
+	if evicted[0].TxHash != "txOrphan" {
+		t.Errorf("wrong orphan evicted: %q", evicted[0].TxHash)
+	}
+	// The fresh entry stays; the orphan is gone.
+	if buf.size() != 1 {
+		t.Errorf("buffer size after eviction = %d, want 1 (fresh only)", buf.size())
+	}
+}
+
+func TestBufferNoEvictionWithFreshEntries(t *testing.T) {
+	// When every entry is fresh, sweepStale should evict nothing —
+	// regardless of how many times absorb runs.
+	buf := newBuffer()
+	buf.maxAge = time.Hour
+
+	for i := 0; i < 10; i++ {
+		e := &stellarrpc.Event{
+			Type: "contract", Ledger: uint32(i + 1),
+			LedgerClosedAt: time.Now().UTC().Format(time.RFC3339),
+			ContractID:     "CFRESH", TxHash: "tx" + string(rune('0'+i)), OperationIndex: 0,
+			Topic: []string{TopicSymbolSwap}, Value: "stub",
+		}
+		_, evicted := buf.absorb(e, EventSwap)
+		if len(evicted) > 0 {
+			t.Fatalf("step %d: evicted %d fresh entries", i, len(evicted))
+		}
+	}
+	if buf.size() != 10 {
+		t.Errorf("buffer size = %d, want 10 (all fresh)", buf.size())
 	}
 }
 
