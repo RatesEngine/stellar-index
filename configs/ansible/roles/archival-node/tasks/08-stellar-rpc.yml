@@ -10,22 +10,18 @@
 
 - name: Template captive-core.cfg for stellar-rpc's embedded core
   # Same Jinja template as stellar-core.cfg but rendered in "captive"
-  # mode — omits HTTP_PORT / PEER_PORT / NODE_* / DATABASE / CATCHUP_*,
-  # which captive-core rejects. [[HOME_DOMAINS]], [[VALIDATORS]], and
-  # [HISTORY.*] blocks are identical to the full stellar-core config.
-  #
-  # Mode 0644 (world-readable) is deliberate: galexie's captive-core
-  # also needs to read this file, and galexie's service user isn't
-  # in the stellar group. Nothing in captive-core.cfg is secret —
-  # just public validator keys + archive URLs.
+  # mode — disables HTTP, sets a distinct PEER_PORT (see comment in
+  # template). [[HOME_DOMAINS]], [[VALIDATORS]], and [HISTORY.*] blocks
+  # are identical to the full stellar-core config.
   ansible.builtin.template:
     src: stellar-core.cfg.j2
     dest: /etc/stellar/captive-core.cfg
     owner: stellar
     group: stellar
-    mode: "0644"
+    mode: "0640"
   vars:
     cfg_mode: captive
+    captive_peer_port: "{{ captive_peer_port_rpc }}"
   notify: Restart stellar-rpc
 
 - name: Template stellar-rpc.cfg

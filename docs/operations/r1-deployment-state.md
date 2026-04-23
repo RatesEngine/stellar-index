@@ -129,9 +129,19 @@ fetched 2026-04-23:
 These are all now fixed in the role, but noted so the lessons survive:
 
 1. Captive-core runs WITH a separate primary stellar-core on one box
-   → every captive-core child MUST set `HTTP_PORT=0`, `PEER_PORT=0`,
-   and the parent must pass matching values (stellar-rpc:
-   `STELLAR_CAPTIVE_CORE_HTTP_PORT=0`).
+   → every captive-core child MUST set `HTTP_PORT=0` and a **non-zero**,
+   **distinct** `PEER_PORT`. `PEER_PORT = 0` looks right but gets
+   stripped by the go-stellar-sdk toml marshaller (the `PeerPort`
+   field has `toml:"PEER_PORT,omitempty"` in toml.go:90), and
+   stellar-core then falls back to the pubnet default 11625 — which
+   the primary daemon owns. Collision manifests as
+   `std::system_error(98, "Address already in use", "bind: …")` →
+   SIGABRT → ingestion restart loop. Our layout: primary 11625,
+   stellar-rpc captive 11725, galexie captive 11726. Every captive
+   needs its OWN captive-core.cfg file since the port must differ
+   per consumer. The parent must also pass
+   `STELLAR_CAPTIVE_CORE_HTTP_PORT=0` to match `HTTP_PORT=0` in the
+   captive file (stellar-rpc validates parent↔child agreement).
 
 2. Galexie's config schema is `[datastore_config]` / `[stellar_core_config]`
    — not what older docs suggest. Match `config/config.example.toml`

@@ -102,6 +102,23 @@
     mode: "0755"
   notify: Restart galexie
 
+- name: Template galexie-specific captive-core.cfg
+  # Galexie needs its OWN captive config because the PEER_PORT must
+  # differ from stellar-rpc's (otherwise both captive-cores race
+  # to bind the same port and whichever comes second aborts). Same
+  # validator list / history archives as stellar-rpc's captive —
+  # only PEER_PORT differs.
+  ansible.builtin.template:
+    src: stellar-core.cfg.j2
+    dest: /etc/stellar/captive-core-galexie.cfg
+    owner: stellar
+    group: galexie
+    mode: "0640"
+  vars:
+    cfg_mode: captive
+    captive_peer_port: "{{ captive_peer_port_galexie }}"
+  notify: Restart galexie
+
 - name: Template galexie.toml
   ansible.builtin.template:
     src: galexie.toml.j2

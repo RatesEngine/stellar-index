@@ -271,6 +271,13 @@ stellar_validators:
 
 stellar_http_port:       11626
 stellar_peer_port:       11625
+# Distinct PEER_PORTs per captive-core so they don't collide with the
+# primary daemon (11625) or each other. stellar-core's pubnet default
+# is 11625 and will be used if PEER_PORT is missing from the rendered
+# captive config — which happens if we set 0, since the toml marshaller
+# drops zero values with omitempty. So: pick unique non-zero ports.
+captive_peer_port_rpc:     11725
+captive_peer_port_galexie: 11726
 
 # ───── Galexie ───────────────────────────────────────────────────────
 galexie_version:         "galexie-v26.0.0"   # pinned — update via VERSIONS.md. Tag format: galexie-vX.Y.Z (matches Stellar protocol version).
