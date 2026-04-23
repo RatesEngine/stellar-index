@@ -98,13 +98,19 @@ func (s *Source) BackfillRange(ctx context.Context, from, to uint32, out chan<- 
 	return nil
 }
 
-// StreamLive implements [consumer.Source].
+// StreamLive implements [consumer.Source]. First-poll bootstrap:
+// see reflector.StreamLive for why startLedger MUST be a concrete
+// ledger (we seed from the tip) instead of the 0 that stellar-rpc
+// would reject.
 func (s *Source) StreamLive(ctx context.Context, out chan<- consumer.Event) error {
 	ticker := time.NewTicker(s.pollInterval)
 	defer ticker.Stop()
 
 	var cursor string
-	var lastSeenLedger uint32
+	startLedger, err := s.rpc.LatestLedgerSequence(ctx)
+	if err != nil {
+		return fmt.Errorf("aquarius seed tip: %w", err)
+	}
 
 	for {
 		select {
@@ -113,7 +119,7 @@ func (s *Source) StreamLive(ctx context.Context, out chan<- consumer.Event) erro
 		case <-ticker.C:
 		}
 
-		resp, err := s.rpc.GetEvents(ctx, lastSeenLedger, 0, s.filters(), &stellarrpc.Pagination{
+		resp, err := s.rpc.GetEvents(ctx, startLedger, 0, s.filters(), &stellarrpc.Pagination{
 			Cursor: cursor, Limit: 200,
 		})
 		if err != nil {
@@ -131,7 +137,7 @@ func (s *Source) StreamLive(ctx context.Context, out chan<- consumer.Event) erro
 			cursor = resp.Cursor
 		}
 		if resp.LatestLedger > 0 {
-			lastSeenLedger = resp.LatestLedger
+			startLedger = resp.LatestLedger
 			s.mu.Lock()
 			if s.health.LastLedger > 0 && resp.LatestLedger > s.health.LastLedger {
 				s.health.LagLedgers = resp.LatestLedger - s.health.LastLedger

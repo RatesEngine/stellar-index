@@ -129,13 +129,19 @@ func (s *Source) BackfillRange(ctx context.Context, from, to uint32, out chan<- 
 // getEvents starting from the configured cursor, emits trades, and
 // persists progress via cursor updates at the caller (the
 // orchestrator owns cursor persistence, not this method).
+// StreamLive. First-poll bootstrap: see reflector.StreamLive for
+// why startLedger MUST be a concrete ledger (we seed from the tip
+// via getLatestLedger) instead of the 0 that stellar-rpc rejects.
 func (s *Source) StreamLive(ctx context.Context, out chan<- consumer.Event) error {
 	ticker := time.NewTicker(s.pollInterval)
 	defer ticker.Stop()
 
 	var cursor string
 	buf := newBuffer()
-	var lastSeenLedger uint32
+	startLedger, err := s.rpc.LatestLedgerSequence(ctx)
+	if err != nil {
+		return fmt.Errorf("soroswap seed tip: %w", err)
+	}
 
 	for {
 		select {
@@ -144,7 +150,7 @@ func (s *Source) StreamLive(ctx context.Context, out chan<- consumer.Event) erro
 		case <-ticker.C:
 		}
 
-		resp, err := s.rpc.GetEvents(ctx, lastSeenLedger, 0, s.filters(), &stellarrpc.Pagination{
+		resp, err := s.rpc.GetEvents(ctx, startLedger, 0, s.filters(), &stellarrpc.Pagination{
 			Cursor: cursor, Limit: 200,
 		})
 		if err != nil {
@@ -162,7 +168,7 @@ func (s *Source) StreamLive(ctx context.Context, out chan<- consumer.Event) erro
 			cursor = resp.Cursor
 		}
 		if resp.LatestLedger > 0 {
-			lastSeenLedger = resp.LatestLedger
+			startLedger = resp.LatestLedger
 			s.mu.Lock()
 			// Lag = network tip - our last-processed ledger. Zero at
 			// tip or when we haven't observed any events yet.

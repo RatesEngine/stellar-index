@@ -114,12 +114,22 @@ func (s *Source) BackfillRange(ctx context.Context, from, to uint32, out chan<- 
 }
 
 // StreamLive implements [consumer.Source].
+//
+// First-poll bootstrap: when cursor is empty, startLedger must be a
+// concrete ledger number (stellar-rpc rejects startLedger=0 and
+// falling back to the retention-window start would fetch tens of
+// thousands of events on the first call). We seed from the network
+// tip via getLatestLedger so StreamLive picks up where live traffic
+// is happening.
 func (s *Source) StreamLive(ctx context.Context, out chan<- consumer.Event) error {
 	ticker := time.NewTicker(s.pollInterval)
 	defer ticker.Stop()
 
 	var cursor string
-	var lastSeenLedger uint32
+	startLedger, err := s.rpc.LatestLedgerSequence(ctx)
+	if err != nil {
+		return fmt.Errorf("reflector seed tip: %w", err)
+	}
 
 	for {
 		select {
@@ -128,7 +138,7 @@ func (s *Source) StreamLive(ctx context.Context, out chan<- consumer.Event) erro
 		case <-ticker.C:
 		}
 
-		resp, err := s.rpc.GetEvents(ctx, lastSeenLedger, 0, s.filters(), &stellarrpc.Pagination{
+		resp, err := s.rpc.GetEvents(ctx, startLedger, 0, s.filters(), &stellarrpc.Pagination{
 			Cursor: cursor, Limit: 200,
 		})
 		if err != nil {
@@ -146,7 +156,11 @@ func (s *Source) StreamLive(ctx context.Context, out chan<- consumer.Event) erro
 			cursor = resp.Cursor
 		}
 		if resp.LatestLedger > 0 {
-			lastSeenLedger = resp.LatestLedger
+			// startLedger is only consulted on the first call (before
+			// the cursor kicks in); keeping it in sync with the tip
+			// is harmless and helps if the server ever resets the
+			// cursor.
+			startLedger = resp.LatestLedger
 			s.mu.Lock()
 			// Lag = network tip - our last-processed ledger. Zero when
 			// we've never processed an event (can't compute lag without

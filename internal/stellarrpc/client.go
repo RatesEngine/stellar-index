@@ -129,6 +129,19 @@ func (c *Client) LatestLedger(ctx context.Context) (*LatestLedger, error) {
 	return &l, c.call(ctx, "getLatestLedger", nil, &l)
 }
 
+// LatestLedgerSequence is a convenience wrapper that returns just
+// the ledger sequence number. Source implementations seed their
+// startLedger from this on first poll — stellar-rpc's getEvents
+// rejects startLedger=0, so sources MUST pick a real number before
+// their first subscription.
+func (c *Client) LatestLedgerSequence(ctx context.Context) (uint32, error) {
+	l, err := c.LatestLedger(ctx)
+	if err != nil {
+		return 0, err
+	}
+	return l.Sequence, nil
+}
+
 // Network calls getNetwork.
 func (c *Client) Network(ctx context.Context) (*Network, error) {
 	var n Network
