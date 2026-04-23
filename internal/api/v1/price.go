@@ -39,6 +39,21 @@ type PriceReader interface {
 // problem+json.
 var ErrPriceNotFound = errors.New("api: price not found for pair")
 
+// defaultPriceQuote is the implicit `quote` used by /v1/price when
+// the client omits the query param. Parsed once at package init
+// so a regression that removes USD from the fiat allow-list
+// produces a loud init panic — instead of silently 400ing every
+// no-quote /v1/price request in production.
+var defaultPriceQuote = mustParseAsset("fiat:USD")
+
+func mustParseAsset(s string) canonical.Asset {
+	a, err := canonical.ParseAsset(s)
+	if err != nil {
+		panic("api/v1: defaultPriceQuote " + s + " must parse: " + err.Error())
+	}
+	return a
+}
+
 // PriceSnapshot is the neutral shape returned by [PriceReader]. The
 // handler wraps it in [Envelope].
 type PriceSnapshot struct {
@@ -97,16 +112,19 @@ func (s *Server) handlePrice(w http.ResponseWriter, r *http.Request) {
 	}
 
 	rawQuote := r.URL.Query().Get("quote")
+	var quote canonical.Asset
 	if rawQuote == "" {
-		rawQuote = "fiat:USD"
-	}
-	quote, err := canonical.ParseAsset(rawQuote)
-	if err != nil {
-		writeProblem(w, r,
-			"https://api.ratesengine.net/errors/invalid-quote",
-			"Invalid quote identifier", http.StatusBadRequest,
-			err.Error())
-		return
+		quote = defaultPriceQuote
+	} else {
+		var err error
+		quote, err = canonical.ParseAsset(rawQuote)
+		if err != nil {
+			writeProblem(w, r,
+				"https://api.ratesengine.net/errors/invalid-quote",
+				"Invalid quote identifier", http.StatusBadRequest,
+				err.Error())
+			return
+		}
 	}
 
 	if asset.Equal(quote) {
