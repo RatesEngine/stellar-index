@@ -48,6 +48,11 @@ func decodeUpdate(e *stellarrpc.Event, variant Variant, decimals uint8, observer
 	if len(prices) == 0 {
 		return nil, ErrEmptyPrices
 	}
+	if len(prices) > opIndexFanoutStride {
+		// Refuse rather than silently emitting PK-colliding rows.
+		// See ErrPriceVectorOverflow for rationale.
+		return nil, fmt.Errorf("%w: got %d prices", ErrPriceVectorOverflow, len(prices))
+	}
 
 	// Prefer the oracle's own timestamp when present; fall back to
 	// ledger close time. On-chain, timestamp is second-precision.
@@ -107,12 +112,24 @@ func quoteForVariant(v Variant) canonical.Asset {
 	case VariantDEX:
 		return canonical.NativeAsset()
 	case VariantCEX, VariantFX:
-		// NewFiatAsset("USD") can't error — USD is in the allow-list.
-		a, _ := canonical.NewFiatAsset("USD")
-		return a
+		return usdFiat
 	default:
 		return canonical.NativeAsset()
 	}
+}
+
+// usdFiat is the implicit USD quote for CEX/FX Reflector variants.
+// Parsed once at package init: a regression that drops USD from the
+// fiat allow-list fires a loud init panic instead of silently
+// writing zero-asset oracle updates on every Reflector event.
+var usdFiat = mustUSDFiat()
+
+func mustUSDFiat() canonical.Asset {
+	a, err := canonical.NewFiatAsset("USD")
+	if err != nil {
+		panic("reflector: NewFiatAsset(\"USD\") must succeed: " + err.Error())
+	}
+	return a
 }
 
 // PriceEntry is one (asset, price) pair from the prices vector.

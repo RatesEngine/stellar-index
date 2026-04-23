@@ -56,7 +56,7 @@ the `env:` column.
 
 | Key | Type | Default | Env override | Description |
 | --- | ---- | ------- | ------------ | ----------- |
-| `ingestion.enabled_sources` | `[]string` | `["sdex","soroswap","aquarius"]` | — | List of source connector names to run on this indexer replica. |
+| `ingestion.enabled_sources` | `[]string` | `["soroswap","aquarius","phoenix"]` | — | List of source connector names to run on this indexer replica. See config.KnownSources for valid values. |
 | `ingestion.backfill_from_ledger` | `uint32` | `0` | — | Earliest ledger to backfill from; 0 = continue-from-persisted-cursor. |
 | `ingestion.backfill_batch_size` | `uint32` | `64` | — | Ledgers per backfill fetch batch. |
 | `ingestion.cursor_store_scheme` | `string` | `postgres` | — | Where per-source cursors live — postgres / redis. |
@@ -85,7 +85,7 @@ the `env:` column.
 | --- | ---- | ------- | ------------ | ----------- |
 | `api.listen_addr` | `string` | `0.0.0.0:3000` | — | Bind address for the HTTP server. |
 | `api.external_base_url` | `string` | `https://api.ratesengine.net/v1` | — | Public-facing base URL (e.g. https://api.ratesengine.net/v1). |
-| `api.auth_mode` | `string` | `apikey` | — | Authentication mode — none / apikey / sep10 (future). |
+| `api.auth_mode` | `string` | `none` | — | Authentication mode — none / apikey (planned) / sep10 (planned). Default 'none' because the auth middleware has not shipped yet; a non-'none' value with the current binary is cosmetic, not enforced. |
 | `api.anon_rate_limit_per_min` | `int` | `60` | — | Per-IP rate limit for anonymous requests. |
 | `api.key_rate_limit_per_min` | `int` | `1000` | — | Per-API-key rate limit, default tier. |
 | `api.cdn_enabled` | `bool` | `true` | — | Emit CDN-friendly Cache-Control headers on long-immutable endpoints. |

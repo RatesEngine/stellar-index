@@ -146,7 +146,7 @@ offending middleware via config, then follow up with a proper fix.
 If /v1/readyz points at a dep being down, the dependency's runbook
 is the one to follow:
 - [timescale-primary-down](timescale-primary-down.md)
-- [redis-master-down](redis-master-down.md) (TODO(#0))
+- [redis-master-down](redis-master-down.md)
 - [all-ingestion-down](all-ingestion-down.md)
 
 This alert will auto-resolve once the dep recovers.

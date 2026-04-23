@@ -207,6 +207,63 @@ func TestDecodeTrade_multiTradeFanoutUniqueOpIndex(t *testing.T) {
 	}
 }
 
+func TestDecodeTrade_fanoutDoesNotCollideAcrossOperations(t *testing.T) {
+	// Regression: the previous fanout used subIdx = i×stride+j AND
+	// outer op×stride with the same stride, so op=0 i=1 j=0 (OpIndex
+	// 256) collided with op=1 i=0 j=0 (OpIndex 256). Two operations
+	// on the same tx would write rows that shared the trades PK —
+	// InsertTrade's ON CONFLICT DO NOTHING silently dropped the
+	// second.
+	usdc, _ := canonical.NewClassicAsset("USDC", "GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN")
+	usdt, _ := canonical.NewClassicAsset("USDT", "GB5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN")
+	pool := PoolInfo{
+		Type:   PoolStableswap,
+		Tokens: []canonical.Asset{usdc, usdt},
+	}
+
+	prev := decodeTradeAmounts
+	defer func() { decodeTradeAmounts = prev }()
+
+	// Two different operations in the same tx, each doing a 2-asset
+	// swap but with i=1,j=0 (op A) vs i=0,j=1 (op B). Flat-counter
+	// fanout gives each a distinct n=0, but different op multiplies
+	// to distinct base → unique OpIndex overall.
+	decodeTradeAmounts = func(_ string) ([]canonical.Amount, []canonical.Amount, string, error) {
+		return []canonical.Amount{
+				canonical.NewAmount(big.NewInt(0)),
+				canonical.NewAmount(big.NewInt(100)),
+			}, []canonical.Amount{
+				canonical.NewAmount(big.NewInt(100)),
+				canonical.NewAmount(big.NewInt(0)),
+			}, "", nil
+	}
+	txHash := "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
+	eOp0 := &stellarrpc.Event{Ledger: 42, OperationIndex: 0, TxHash: txHash}
+	eOp1 := &stellarrpc.Event{Ledger: 42, OperationIndex: 1, TxHash: txHash}
+
+	t0, err := decodeTrade(eOp0, pool, time.Now())
+	if err != nil {
+		t.Fatal(err)
+	}
+	t1, err := decodeTrade(eOp1, pool, time.Now())
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Each event emits exactly one trade (i=1→j=0 only).
+	if len(t0) != 1 || len(t1) != 1 {
+		t.Fatalf("expected 1 trade per event, got %d + %d", len(t0), len(t1))
+	}
+
+	if t0[0].OpIndex == t1[0].OpIndex {
+		t.Errorf("cross-operation OpIndex collision: both %d (old i×stride+j fanout regressed?)",
+			t0[0].OpIndex)
+	}
+	if t0[0].ID() == t1[0].ID() {
+		t.Errorf("cross-operation trade ID collision: %q", t0[0].ID())
+	}
+}
+
 func TestDecodeTrade_concentratedRefused(t *testing.T) {
 	pool := PoolInfo{Type: PoolConcentrated, Tokens: []canonical.Asset{canonical.NativeAsset(), canonical.NativeAsset()}}
 	_, err := decodeTrade(&stellarrpc.Event{}, pool, time.Now())

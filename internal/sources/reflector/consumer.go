@@ -194,7 +194,11 @@ func (s *Source) processPage(ctx context.Context, events []stellarrpc.Event, out
 			continue
 		}
 
-		closedAt, _ := time.Parse(time.RFC3339, e.LedgerClosedAt)
+		closedAt, err := e.EventClosedAt()
+		if err != nil {
+			obs.SourceDecodeErrorsTotal.WithLabelValues(s.variant.SourceName()).Inc()
+			continue
+		}
 		// Observer is the tx source account. stellarrpc.Client now
 		// has GetTransaction which returns the envelope XDR — we
 		// decode SourceAccount once we pull in the stellar-sdk Go
@@ -271,3 +275,10 @@ func (UpdateEvent) EventKind() string { return "reflector.update" }
 // per-variant (reflector-dex / reflector-cex / reflector-fx)
 // without type-assertion.
 func (u UpdateEvent) Source() string { return u.Update.Source }
+
+// Compile-time conformance checks — see soroswap/consumer.go for
+// rationale.
+var (
+	_ consumer.Source = (*Source)(nil)
+	_ consumer.Event  = UpdateEvent{}
+)

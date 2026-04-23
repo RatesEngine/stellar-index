@@ -6,6 +6,8 @@ import (
 	"errors"
 	"net/http"
 	"time"
+
+	"github.com/RatesEngine/rates-engine/internal/api/v1/middleware"
 )
 
 // Envelope is the shape of every 2xx JSON response. See
@@ -33,12 +35,19 @@ type Pagination struct {
 
 // Problem is the RFC 9457 error payload. Custom fields are
 // snake_case; `Instance` is typically the request URL.
+//
+// RequestID is an extension field per RFC 9457 §3.2 (unknown
+// members allowed). It echoes the X-Request-ID header so clients
+// can correlate a failure they saw with server logs without
+// parsing headers separately — and so bug reports that include
+// the body are sufficient for support to find the trace.
 type Problem struct {
-	Type     string `json:"type"`
-	Title    string `json:"title"`
-	Status   int    `json:"status"`
-	Detail   string `json:"detail,omitempty"`
-	Instance string `json:"instance,omitempty"`
+	Type      string `json:"type"`
+	Title     string `json:"title"`
+	Status    int    `json:"status"`
+	Detail    string `json:"detail,omitempty"`
+	Instance  string `json:"instance,omitempty"`
+	RequestID string `json:"request_id,omitempty"`
 }
 
 // writeJSON writes the Envelope + 200. The convention everywhere in
@@ -73,11 +82,12 @@ func writeEnvelope(w http.ResponseWriter, env Envelope) {
 // per-request message (optional).
 func writeProblem(w http.ResponseWriter, r *http.Request, typeURL, title string, status int, detail string) {
 	p := Problem{
-		Type:     typeURL,
-		Title:    title,
-		Status:   status,
-		Detail:   detail,
-		Instance: r.URL.RequestURI(),
+		Type:      typeURL,
+		Title:     title,
+		Status:    status,
+		Detail:    detail,
+		Instance:  r.URL.RequestURI(),
+		RequestID: middleware.RequestIDFrom(r),
 	}
 	w.Header().Set("Content-Type", "application/problem+json")
 	w.WriteHeader(status)

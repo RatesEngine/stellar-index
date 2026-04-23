@@ -11,6 +11,14 @@ import (
 	"time"
 )
 
+// MaxResponseBytes caps how much we will read off the wire per call.
+// stellar-rpc's getEvents / getTransactions / getLedgers can return
+// several MB on a big page; 64 MiB leaves comfortable headroom while
+// bounding memory if an upstream proxy ever misbehaves (returns a
+// streaming error page, gets man-in-the-middled by a captive portal,
+// etc.). Exceeding the cap is an error, not a silent truncation.
+const MaxResponseBytes = 64 << 20
+
 // Client is a JSON-RPC client for a single stellar-rpc endpoint.
 // Safe for concurrent use.
 type Client struct {
@@ -33,7 +41,7 @@ func WithHTTPClient(h *http.Client) Option {
 func WithTimeout(d time.Duration) Option {
 	return func(c *Client) {
 		if c.http == nil {
-			c.http = &http.Client{Timeout: d}
+			c.http = &http.Client{Timeout: d, Transport: newDefaultTransport()}
 		}
 	}
 }
@@ -46,9 +54,26 @@ func New(endpoint string, opts ...Option) *Client {
 		opt(c)
 	}
 	if c.http == nil {
-		c.http = &http.Client{Timeout: 30 * time.Second}
+		c.http = &http.Client{
+			Timeout:   30 * time.Second,
+			Transport: newDefaultTransport(),
+		}
 	}
 	return c
+}
+
+// newDefaultTransport returns an http.Transport tuned for the
+// indexer's access pattern: one RPC endpoint shared by many source
+// goroutines. The stdlib default MaxIdleConnsPerHost=2 forces
+// most sources to dial fresh TCP on every call, which burns
+// connection setup + TLS handshake cost 100×/s under load. Raising
+// it lets keep-alive reuse kick in the way it's supposed to.
+func newDefaultTransport() http.RoundTripper {
+	t := http.DefaultTransport.(*http.Transport).Clone()
+	t.MaxIdleConns = 200
+	t.MaxIdleConnsPerHost = 100
+	t.IdleConnTimeout = 90 * time.Second
+	return t
 }
 
 // Endpoint returns the URL the client talks to.
@@ -72,6 +97,9 @@ func (c *Client) call(ctx context.Context, method string, params any, result any
 	}
 	httpReq.Header.Set("Content-Type", "application/json")
 	httpReq.Header.Set("Accept", "application/json")
+	// Identifiable User-Agent so stellar-rpc operators can correlate
+	// traffic in their logs (mirrors internal/metadata/sep1.go).
+	httpReq.Header.Set("User-Agent", "rates-engine/stellarrpc (+https://ratesengine.net)")
 
 	resp, err := c.http.Do(httpReq)
 	if err != nil {
@@ -79,10 +107,18 @@ func (c *Client) call(ctx context.Context, method string, params any, result any
 	}
 	defer func() { _ = resp.Body.Close() }()
 
-	// Read full body so callers see JSON-level errors even on !=200.
-	respBody, err := io.ReadAll(resp.Body)
+	// Read full body so callers see JSON-level errors even on !=200,
+	// but cap the read so a runaway upstream can't OOM us. The +1
+	// lets us detect overshoot cleanly — if we read MaxResponseBytes+1
+	// bytes, the stream wasn't done.
+	limited := io.LimitReader(resp.Body, MaxResponseBytes+1)
+	respBody, err := io.ReadAll(limited)
 	if err != nil {
 		return fmt.Errorf("stellarrpc: %s: read body: %w", method, err)
+	}
+	if int64(len(respBody)) > MaxResponseBytes {
+		return fmt.Errorf("stellarrpc: %s: response exceeded %d bytes (upstream misbehaving?)",
+			method, MaxResponseBytes)
 	}
 
 	// Upstream proxies sometimes return HTML on 5xx — guard.
@@ -169,10 +205,21 @@ func (c *Client) FeeStats(ctx context.Context) (*FeeStats, error) {
 
 // GetEvents calls getEvents with the given filters + pagination.
 // Pass nil for pagination to use server defaults.
+//
+// The response is sanity-checked (see EventsResponse.sanityCheck)
+// before being returned — a node serving inconsistent ledger
+// bounds or out-of-order events surfaces as an error here, not as
+// a silent ingestion bug downstream.
 func (c *Client) GetEvents(ctx context.Context, startLedger, endLedger uint32, filters []EventFilter, pag *Pagination) (*EventsResponse, error) {
 	p := eventsParams{StartLedger: startLedger, EndLedger: endLedger, Filters: filters, Pagination: pag}
 	var r EventsResponse
-	return &r, c.call(ctx, "getEvents", p, &r)
+	if err := c.call(ctx, "getEvents", p, &r); err != nil {
+		return nil, err
+	}
+	if err := r.sanityCheck(); err != nil {
+		return nil, err
+	}
+	return &r, nil
 }
 
 // GetLedgers calls getLedgers.

@@ -3,6 +3,7 @@ package timescale
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 
 	"github.com/RatesEngine/rates-engine/internal/canonical"
@@ -74,7 +75,7 @@ func (s *Store) LatestOracleUpdateForAsset(ctx context.Context, source string, a
 		&u.Confidence,
 		&u.Observer,
 	)
-	if err == sql.ErrNoRows {
+	if errors.Is(err, sql.ErrNoRows) {
 		return nil, ErrNotFound
 	}
 	if err != nil {

@@ -1,7 +1,6 @@
 package canonical
 
 import (
-	"encoding/hex"
 	"fmt"
 	"math/big"
 	"time"
@@ -187,7 +186,5 @@ func (u OracleUpdate) Equal(o OracleUpdate) bool {
 
 // (Formerly had isFiatSentinel here — removed per ADR-0010 which
 // promoted fiat to a first-class AssetType variant.)
-
+//
 // validTxHash defined in trade.go; we re-use it here.
-// This file only references hex.DecodeString through that helper.
-var _ = hex.DecodeString // keep the import used if trade.go changes

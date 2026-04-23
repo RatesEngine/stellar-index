@@ -110,6 +110,25 @@ func TestVWAP_AllZeroBaseReturnsErr(t *testing.T) {
 	}
 }
 
+func TestVWAP_NegativeAmountsSkipped(t *testing.T) {
+	// canonical.Trade.Validate rejects negative amounts, but VWAP is
+	// called from rollup paths that sometimes bypass Validate (tests,
+	// intermediate buckets). A negative base or quote would pollute
+	// the sum and flip the sign of the result — skip them defensively.
+	trades := []canonical.Trade{
+		mkTrade(-10, 50), // negative base, skip
+		mkTrade(10, -50), // negative quote, skip
+		mkTrade(10, 50),  // legit: price 5.0
+	}
+	got, err := aggregate.VWAP(trades)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Cmp(big.NewRat(5, 1)) != 0 {
+		t.Errorf("VWAP = %v, want 5/1 (negative skip)", got)
+	}
+}
+
 func TestVWAP_I128ScaleExactPrecision(t *testing.T) {
 	// Realistic Soroban magnitudes — amounts that would lose
 	// precision if they passed through float64. ADR-0003 invariant:

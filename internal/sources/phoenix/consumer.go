@@ -151,7 +151,12 @@ func (s *Source) processPage(ctx context.Context, events []stellarrpc.Event, buf
 			continue
 		}
 
-		completed, evicted, err := buf.absorb(e, fieldTopic)
+		closedAt, err := e.EventClosedAt()
+		if err != nil {
+			obs.SourceDecodeErrorsTotal.WithLabelValues(SourceName).Inc()
+			continue
+		}
+		completed, evicted, err := buf.absorb(e, fieldTopic, closedAt)
 		if len(evicted) > 0 {
 			// Stale incompletes aged out of the buffer — these are
 			// orphans (partial 8-field set that never completed),
@@ -225,6 +230,13 @@ func (TradeEvent) EventKind() string { return "phoenix.trade" }
 // Source implements [consumer.Event].
 func (TradeEvent) Source() string { return SourceName }
 
+// Compile-time conformance checks — see soroswap/consumer.go for
+// rationale.
+var (
+	_ consumer.Source = (*Source)(nil)
+	_ consumer.Event  = TradeEvent{}
+)
+
 // ─── 8-field correlation buffer ─────────────────────────────────
 //
 // Phoenix emits one swap as 8 separate events (one per field, per
@@ -259,16 +271,19 @@ func newBuffer() *buffer {
 //   - evicted:   entries whose ClosedAt is older than maxAge — the
 //     caller emits orphan metrics and drops them.
 //   - err:       ErrUnknownField / decode errors for the current event.
-func (b *buffer) absorb(e *stellarrpc.Event, fieldTopic string) (completed *RawSwap, evicted []RawSwap, err error) {
-	evicted = b.sweepStale()
+func (b *buffer) absorb(e *stellarrpc.Event, fieldTopic string, closedAt time.Time) (completed *RawSwap, evicted []RawSwap, err error) {
+	// The reference time for orphan eviction is the incoming
+	// event's ClosedAt, not wall-clock — so backfill of
+	// historical events correctly compares against the timeline
+	// being replayed. See soroswap/consumer.go sweepStale docs.
+	evicted = b.sweepStale(closedAt)
 
 	k := keyOf(e)
 	r, ok := b.m[k]
 	if !ok {
-		t, _ := time.Parse(time.RFC3339, e.LedgerClosedAt)
 		r = &RawSwap{
 			Ledger: e.Ledger, TxHash: e.TxHash, OpIndex: uint32(e.OperationIndex),
-			Pool: e.ContractID, ClosedAt: t,
+			Pool: e.ContractID, ClosedAt: closedAt,
 		}
 		b.m[k] = r
 	}
@@ -282,13 +297,20 @@ func (b *buffer) absorb(e *stellarrpc.Event, fieldTopic string) (completed *RawS
 	return nil, evicted, nil
 }
 
-// sweepStale removes entries older than maxAge, returning them as
-// orphans. Called automatically from absorb.
-func (b *buffer) sweepStale() []RawSwap {
+// sweepStale removes entries older than maxAge relative to `ref`,
+// returning them as orphans. Called automatically from absorb.
+// Callers normally pass the incoming event's ClosedAt — backfill
+// of old events would otherwise evict every entry on the very
+// next absorb (ClosedAt would be far behind wall-clock).
+// A zero `ref` falls back to nowFn() for drain-at-shutdown calls.
+func (b *buffer) sweepStale(ref time.Time) []RawSwap {
 	if b.maxAge <= 0 {
 		return nil
 	}
-	cutoff := b.nowFn().Add(-b.maxAge)
+	if ref.IsZero() {
+		ref = b.nowFn()
+	}
+	cutoff := ref.Add(-b.maxAge)
 	var evicted []RawSwap
 	for k, r := range b.m {
 		if r.ClosedAt.Before(cutoff) {

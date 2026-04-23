@@ -9,8 +9,8 @@
 //	                No events consumed. Useful for boot sanity checks.
 //
 // Environment overrides for secrets apply on top of the file (see
-// internal/config/load.go ApplyEnvOverrides). Logging is JSON-
-// formatted via slog at the level configured in [obs] section.
+// internal/config/load.go LoadWithEnv). Logging is JSON-formatted
+// via slog at the level configured in [obs] section.
 //
 // Graceful shutdown: SIGINT + SIGTERM trigger context cancellation;
 // the binary waits up to 30 s for in-flight work to finish before
@@ -27,6 +27,7 @@ import (
 	"flag"
 	"fmt"
 	"log/slog"
+	"net/http"
 	"os"
 	"os/signal"
 	"strings"
@@ -66,11 +67,10 @@ func main() {
 }
 
 func run(cfgPath string, dryRun bool) error {
-	cfg, err := config.Load(cfgPath)
+	cfg, err := config.LoadWithEnv(cfgPath)
 	if err != nil {
 		return err
 	}
-	cfg.ApplyEnvOverrides()
 
 	logger := mkLogger(cfg.Obs)
 	logger.Info("starting",
@@ -106,6 +106,15 @@ func run(cfgPath string, dryRun bool) error {
 
 	vi, err := rpc.VersionInfo(rootCtx)
 	if err != nil {
+		// Under normal run, orchestrator retry+backoff handles
+		// transient RPC outages, so a boot-time failure is a soft
+		// warning — the ingester may recover without operator action.
+		// Under -dry-run the operator is explicitly asking "does this
+		// config work?" — answering "yes" when RPC is unreachable is
+		// a lie. Fail hard there.
+		if dryRun {
+			return fmt.Errorf("rpc: version probe failed: %w", err)
+		}
 		logger.Warn("rpc version probe failed (continuing)", "err", err)
 	} else {
 		logger.Info("rpc reachable",
@@ -131,6 +140,36 @@ func run(cfgPath string, dryRun bool) error {
 	if dryRun {
 		logger.Info("dry-run complete — exiting")
 		return nil
+	}
+
+	// ─── Metrics HTTP endpoint ──────────────────────────────────
+	// The indexer emits SourceEvents, SourceLag, CursorLastLedger,
+	// SourceDecode/Orphan/InsertErrors, OracleLastUpdate, etc. —
+	// every ingestion alert in deploy/monitoring/rules/ depends
+	// on Prometheus being able to scrape these. Without this
+	// server the alerts' metric expressions always return "no
+	// data" and never fire.
+	var metricsSrv *http.Server
+	if cfg.Obs.MetricsListen != "" {
+		mux := http.NewServeMux()
+		mux.Handle("GET /metrics", obs.Handler())
+		mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, _ *http.Request) {
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write([]byte("ok\n"))
+		})
+		metricsSrv = &http.Server{
+			Addr:              cfg.Obs.MetricsListen,
+			Handler:           mux,
+			ReadHeaderTimeout: 5 * time.Second,
+		}
+		go func() {
+			logger.Info("metrics endpoint listening", "addr", cfg.Obs.MetricsListen)
+			if err := metricsSrv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+				logger.Error("metrics server exited", "err", err)
+			}
+		}()
+	} else {
+		logger.Warn("obs.metrics_listen is empty — /metrics endpoint disabled; Prometheus alerts on source metrics will not fire")
 	}
 
 	// ─── Orchestration ──────────────────────────────────────────
@@ -168,6 +207,18 @@ func run(cfgPath string, dryRun bool) error {
 
 	shutdownCtx, stopDrain := context.WithTimeout(context.Background(), 30*time.Second)
 	defer stopDrain()
+
+	if metricsSrv != nil {
+		// Stop /metrics first so Prometheus's `up{job="indexer"}`
+		// goes to 0 promptly (k8s pod-termination is expected to
+		// look offline — better than staying up while the sink
+		// drain holds it). Shutdown is synchronous; any in-flight
+		// scrape either completes or is aborted at shutdownCtx
+		// expiry, which is also the sink-drain budget.
+		if err := metricsSrv.Shutdown(shutdownCtx); err != nil {
+			logger.Warn("metrics server shutdown", "err", err)
+		}
+	}
 
 	select {
 	case <-sinkDone:
@@ -303,6 +354,13 @@ func handleOneEvent(ctx context.Context, logger *slog.Logger, store *timescale.S
 	case reflector.UpdateEvent:
 		persistOracle(ctx, logger, store, e.Update)
 	default:
+		// A source emitted an event type this sink doesn't know how
+		// to persist. Usually means a new source was registered in
+		// buildSources() but the type-switch wasn't updated in
+		// lock-step. Count + log so ops dashboards flag it — silent
+		// drops would otherwise look like "metrics say we're ingesting
+		// but the tables stay empty" from the operator's POV.
+		obs.SourceInsertErrorsTotal.WithLabelValues(source, "unhandled").Inc()
 		logger.Warn("unhandled event kind",
 			"kind", ev.EventKind(),
 			"source", source)

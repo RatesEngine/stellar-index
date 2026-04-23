@@ -2,15 +2,12 @@ package cachekeys
 
 import (
 	"fmt"
+	"net/url"
 	"strings"
 	"time"
 
 	"github.com/RatesEngine/rates-engine/internal/canonical"
 )
-
-// Prefix is the global namespace for every Rates Engine cache key.
-// Nothing else should produce keys under this prefix.
-const Prefix = ""
 
 // ─── Price — latest aggregated price per asset ────────────────────
 //
@@ -50,7 +47,10 @@ func VWAPTTL(window time.Duration) time.Duration { return window }
 // and bucket-epoch is the Unix seconds of the candle start.
 //
 // Closed candles are immutable — cached with NO TTL (CDN-pinned).
-// Open candles TTL short (5 s) so the aggregator can refresh.
+// Open candles TTL is a safety-net upper bound; in practice the
+// aggregator overwrites the key on every refresh cycle (30 s for 1m,
+// longer for coarser grains per migration 0002), so the cached value
+// is much fresher than the TTL suggests.
 
 // OHLC returns the cache key for one OHLC candle.
 func OHLC(base, quote canonical.Asset, granularity string, bucketStart time.Time) string {
@@ -59,9 +59,13 @@ func OHLC(base, quote canonical.Asset, granularity string, bucketStart time.Time
 		granularity, bucketStart.Unix())
 }
 
-// OHLCOpenTTL is the TTL for the currently-open candle at any
-// granularity. Short — aggregator overwrites each refresh cycle.
-const OHLCOpenTTL = 5 * time.Second
+// OHLCOpenTTL is the SAFETY-NET TTL for the currently-open candle at
+// any granularity. Matches ADR-0007. The aggregator refreshes each
+// candle on a cadence tied to its granularity (sub-1m; sub-15m;
+// sub-1h; …), so the cached value rolls well before this TTL fires.
+// The TTL exists only so that if the aggregator stops writing, stale
+// open-candle data doesn't live indefinitely.
+const OHLCOpenTTL = time.Hour
 
 // OHLCClosedTTL is the TTL for a closed (historical) candle.
 // Zero = no expiry (the candle is immutable; CDN pins it upstream).
@@ -81,9 +85,15 @@ const OHLCClosedTTL = time.Duration(0)
 // Deliberately named "...Key" not just "RateLimit" because callers
 // are usually reading this for display, not as the write-path.
 // window is the fixed-window size (typically 60 s).
+//
+// Subject is url.QueryEscape'd for parity with the writer in
+// internal/ratelimit/bucket.go — IPv6 addresses contain `:` and
+// without escaping two distinct subjects could land on the same
+// Redis slot. Keep this in lock-step with the writer; the tests
+// round-trip a sample subject to detect drift.
 func RateLimitKey(subject string, now time.Time, window time.Duration) string {
 	bucket := now.Unix() / int64(window.Seconds())
-	return fmt.Sprintf("rl:%s:%d", subject, bucket)
+	return fmt.Sprintf("rl:%s:%d", url.QueryEscape(subject), bucket)
 }
 
 // RateLimitTTL is the TTL set on rl: keys. 2× window, per ADR-0007

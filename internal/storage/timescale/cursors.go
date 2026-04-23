@@ -70,8 +70,16 @@ func (s *Store) ListCursors(ctx context.Context) ([]Cursor, error) {
 	return out, nil
 }
 
-// UpsertCursor stores the cursor, replacing any existing row for
+// UpsertCursor stores the cursor, advancing any existing row for
 // (source, sub). The last_updated column is server-side `now()`.
+//
+// Monotonic-advance guard: the `WHERE` clause on DO UPDATE refuses
+// to regress last_ledger. A lower-or-equal value is a silent no-op
+// at the DB layer — protects against a caller that forgot its own
+// guard (the orchestrator's cursorPersister has one too; this is
+// defense-in-depth) and against two indexers briefly racing during
+// a misconfigured deploy. Inserts of brand-new (source, sub) rows
+// still succeed regardless; the WHERE only gates the UPDATE path.
 func (s *Store) UpsertCursor(ctx context.Context, source, sub string, lastLedger uint32) error {
 	const q = `
         INSERT INTO ingestion_cursors (source, sub_source, last_ledger, last_updated)
@@ -79,6 +87,7 @@ func (s *Store) UpsertCursor(ctx context.Context, source, sub string, lastLedger
         ON CONFLICT (source, sub_source)
         DO UPDATE SET last_ledger  = EXCLUDED.last_ledger,
                       last_updated = EXCLUDED.last_updated
+         WHERE EXCLUDED.last_ledger > ingestion_cursors.last_ledger
     `
 	_, err := s.db.ExecContext(ctx, q, source, sub, lastLedger)
 	if err != nil {

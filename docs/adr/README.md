@@ -16,8 +16,11 @@ here as an **ADR** — a numbered, dated, immutable record.
    superseded_by: 0017
    ```
 
-3. **Numbered sequentially.** ADR-0001, ADR-0002, … No gaps, no
-   renumbering.
+3. **Numbered sequentially.** ADR-0001, ADR-0002, … No renumbering.
+   Gaps are allowed when a number has been reserved for a planned
+   ADR that hasn't been written yet — list it in the index below
+   with status *Planned* and the doc/ref that depends on it, so the
+   reservation is visible and the number isn't silently re-used.
 4. **One topic per ADR.** Don't bundle.
 5. **Every PR that makes an architectural decision includes an ADR.**
    Review-gate: ADR + code together or neither.
@@ -44,6 +47,13 @@ See [_template.md](_template.md) for the boilerplate.
 | [0003](0003-i128-no-truncation.md) | Accepted | i128 / u128 preserved end-to-end; never int64 | 2026-04-22 |
 | [0004](0004-tier1-validator-aspiration.md) | Accepted | Tier-1 three-validator aspiration | 2026-04-22 |
 | [0005](0005-monorepo.md) | Accepted | Monorepo with one Go module | 2026-04-22 |
+| [0006](0006-timescaledb-for-price-time-series.md) | Accepted | TimescaleDB for price time-series storage | 2026-04-22 |
+| [0007](0007-redis-cache-schema.md) | Accepted | Redis as hot-path cache + rate-limit + ephemeral state | 2026-04-22 |
+| 0008 | *Planned* | HA topology (referenced by coverage-matrix S9.1) | — |
+| 0009 | *Planned* | Possible follow-up to 0007 (referenced by coverage-matrix S9.2) | — |
+| [0010](0010-off-chain-fiat-representation.md) | Accepted | Off-chain fiat currencies as AssetType "fiat" | 2026-04-22 |
+| 0011 | *Planned* | Supply policy (referenced by coverage-matrix F2.4) | — |
+| 0012 | *Planned* | Quorum-set composition (referenced by multi-region-topology) | — |
 
 ## Related
 

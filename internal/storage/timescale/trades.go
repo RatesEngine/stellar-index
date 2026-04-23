@@ -217,6 +217,13 @@ func (s *Store) TradesInRangeAfter(
 	// column order so the comparison is monotonic with the sort.
 	// Source sorts last so the common case (single-source trades)
 	// doesn't pay an unnecessary string compare cost on the index.
+	//
+	// NOTE: the Go function signature declares afterSource BEFORE
+	// afterOpIndex (by-type grouping of the two strings), but the
+	// SQL tuple expects them in PK order (tx_hash, op_index, source).
+	// The parameter BINDING below — not the signature — is what
+	// matters; it hands values to the placeholders in PK order.
+	// If you reorder the signature, reorder the binding too.
 	const q = `
         SELECT source, ledger, tx_hash, op_index, ts,
                base_asset, quote_asset,
@@ -232,10 +239,12 @@ func (s *Store) TradesInRangeAfter(
          LIMIT $10
     `
 	rows, err := s.db.QueryContext(ctx, q,
-		p.Base.String(), p.Quote.String(),
-		from.UTC(), to.UTC(),
+		p.Base.String(), p.Quote.String(), // $1, $2
+		from.UTC(), to.UTC(), // $3, $4
+		// $5..$9 — must match the PK tuple order in the SQL above,
+		// NOT the function-signature order.
 		afterTs.UTC(), afterLedger, afterTxHash, afterOpIndex, afterSource,
-		limit,
+		limit, // $10
 	)
 	if err != nil {
 		return nil, fmt.Errorf("timescale: TradesInRangeAfter: %w", err)

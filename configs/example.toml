@@ -90,7 +90,7 @@ triangulation_enabled     = true
 [api]
 listen_addr              = "0.0.0.0:3000"
 external_base_url        = "https://api.ratesengine.net/v1"
-auth_mode                = "apikey"          # none | apikey | sep10 (future)
+auth_mode                = "none"            # none | apikey (planned) | sep10 (planned) — only 'none' is enforced today
 anon_rate_limit_per_min  = 60
 key_rate_limit_per_min   = 1000
 cdn_enabled              = true

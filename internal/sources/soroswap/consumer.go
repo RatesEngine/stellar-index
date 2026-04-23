@@ -199,7 +199,12 @@ func (s *Source) processPage(ctx context.Context, events []stellarrpc.Event, buf
 		case EventNewPair:
 			s.recordNewPair(e)
 		case EventSwap, EventSync:
-			completed, evicted := buf.absorb(e, kind)
+			closedAt, err := e.EventClosedAt()
+			if err != nil {
+				obs.SourceDecodeErrorsTotal.WithLabelValues(SourceName).Inc()
+				continue
+			}
+			completed, evicted := buf.absorb(e, kind, closedAt)
 			if len(evicted) > 0 {
 				// Stale entries that timed out waiting for their
 				// partner — record each as an orphan so the
@@ -324,6 +329,16 @@ func (TradeEvent) EventKind() string { return "soroswap.trade" }
 // Source implements [consumer.Event] — matches [SourceName].
 func (TradeEvent) Source() string { return SourceName }
 
+// Compile-time checks that *Source satisfies consumer.Source and
+// TradeEvent satisfies consumer.Event. Catches a missing method
+// signature during `go build` in this package rather than at the
+// indexer's buildSources() — which only fails if the source is
+// actually wired up. Belt and braces.
+var (
+	_ consumer.Source = (*Source)(nil)
+	_ consumer.Event  = TradeEvent{}
+)
+
 // ─── Correlation buffer ─────────────────────────────────────────
 // Groups swap + sync by (ledger, tx_hash, op_index). Emits complete
 // pairs back to the caller; holds incompletes until either their
@@ -363,16 +378,18 @@ func newBuffer() *buffer {
 // Also sweeps the buffer for entries older than maxAge; evicted
 // orphans are RETURNED so the caller can emit metrics — they're
 // NOT returned as completed pairs (they have no Sync to finalise).
-func (b *buffer) absorb(e *stellarrpc.Event, kind string) (completed []RawPair, evicted []RawPair) {
+func (b *buffer) absorb(e *stellarrpc.Event, kind string, closedAt time.Time) (completed []RawPair, evicted []RawPair) {
 	// Evict stale orphans first — keeps the map bounded in size
-	// regardless of how long the process runs.
-	evicted = b.sweepStale()
+	// regardless of how long the process runs. The reference time
+	// is the incoming event's ClosedAt, not wall-clock — so
+	// backfill of historical events correctly compares against the
+	// timeline being replayed, not the operator's local now.
+	evicted = b.sweepStale(closedAt)
 
 	k := keyOf(e)
 	p, ok := b.m[k]
 	if !ok {
-		t, _ := time.Parse(time.RFC3339, e.LedgerClosedAt)
-		p = &RawPair{Ledger: e.Ledger, TxHash: e.TxHash, OpIndex: uint32(e.OperationIndex), Pair: e.ContractID, ClosedAt: t}
+		p = &RawPair{Ledger: e.Ledger, TxHash: e.TxHash, OpIndex: uint32(e.OperationIndex), Pair: e.ContractID, ClosedAt: closedAt}
 		b.m[k] = p
 	}
 	switch kind {
@@ -389,12 +406,23 @@ func (b *buffer) absorb(e *stellarrpc.Event, kind string) (completed []RawPair, 
 }
 
 // sweepStale removes every entry whose ClosedAt is older than
-// maxAge relative to nowFn(), returning them as orphans.
-func (b *buffer) sweepStale() []RawPair {
+// maxAge relative to `ref`, returning them as orphans.
+//
+// `ref` is normally the most-recent event's ClosedAt (from
+// absorb's caller). For a buffer drain at source shutdown where
+// no event is on hand, pass nowFn() — that's equivalent to the
+// pre-2026-04 behaviour and still works for live streams. Never
+// use nowFn() during backfill: historical events have ClosedAt
+// far behind wall-clock, and every entry would evict on the next
+// absorb before its partner arrived.
+func (b *buffer) sweepStale(ref time.Time) []RawPair {
 	if b.maxAge <= 0 {
 		return nil
 	}
-	cutoff := b.nowFn().Add(-b.maxAge)
+	if ref.IsZero() {
+		ref = b.nowFn()
+	}
+	cutoff := ref.Add(-b.maxAge)
 	var evicted []RawPair
 	for k, p := range b.m {
 		if p.ClosedAt.Before(cutoff) {

@@ -50,7 +50,7 @@ func (s *Store) DistinctAssets(ctx context.Context, cursor string, limit int) ([
 	defer func() { _ = rows.Close() }()
 
 	out := make([]canonical.Asset, 0, limit)
-	var lastSeen string
+	hasMore := false
 	n := 0
 	for rows.Next() {
 		var raw string
@@ -59,9 +59,10 @@ func (s *Store) DistinctAssets(ctx context.Context, cursor string, limit int) ([
 		}
 		n++
 		if n > limit {
-			// Extra row — don't add it to the page; its value is
-			// the next-page cursor.
-			lastSeen = raw
+			// Extra row — not returned; it only tells us another page
+			// exists. The nextCursor below is still the last row IN
+			// the page so the next query resumes via `asset > cursor`.
+			hasMore = true
 			break
 		}
 		parsed, perr := canonical.ParseAsset(raw)
@@ -75,9 +76,7 @@ func (s *Store) DistinctAssets(ctx context.Context, cursor string, limit int) ([
 	}
 
 	nextCursor := ""
-	if lastSeen != "" {
-		// Cursor points at the LAST row IN the returned page — next
-		// query uses `WHERE asset > cursor`. That's `out[last].String()`.
+	if hasMore && len(out) > 0 {
 		nextCursor = out[len(out)-1].String()
 	}
 	return out, nextCursor, nil

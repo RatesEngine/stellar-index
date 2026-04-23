@@ -14,6 +14,25 @@ import (
 // to distinguish config bugs from I/O / decode failures.
 var ErrInvalidConfig = errors.New("config: invalid")
 
+// KnownSources is the set of source names the indexer's
+// buildSources() switch recognises today. Listed here so
+// config.Validate can reject typos at boot rather than at
+// runtime — an operator running `-dry-run` with `sorowsap`
+// in enabled_sources should get a clear error before storage
+// connect + RPC probe burn 5+ seconds.
+//
+// DO NOT import source packages from config (cycle avoidance, see
+// contractIDPattern). When you add a source in cmd/ratesengine-indexer/
+// main.go buildSources(), mirror the name here.
+var KnownSources = map[string]struct{}{
+	"soroswap":      {},
+	"aquarius":      {},
+	"phoenix":       {},
+	"reflector-dex": {},
+	"reflector-cex": {},
+	"reflector-fx":  {},
+}
+
 // Validate checks the loaded Config against the same constraints
 // the operator's runbook assumes. Called by [Load] so a malformed
 // config fails at startup, not mid-request.
@@ -44,6 +63,43 @@ func (c Config) Validate() error {
 	}
 	if err := c.Obs.validate(); err != nil {
 		return err
+	}
+	// Cross-section checks: enabled sources must have the config
+	// they need. These can't live on the individual sub-structs
+	// because they span two sections (ingestion + oracle).
+	if err := c.validateCrossSection(); err != nil {
+		return err
+	}
+	return nil
+}
+
+// validateCrossSection catches config errors that span multiple
+// sections — e.g. "you enabled reflector-dex but didn't set the
+// contract address." Runs after per-section validates so we can
+// assume each section's internal shape is already sound.
+func (c Config) validateCrossSection() error {
+	for _, name := range c.Ingestion.EnabledSources {
+		key := strings.ToLower(strings.TrimSpace(name))
+		switch key {
+		case "reflector-dex":
+			if c.Oracle.Reflector.DEXContract == "" {
+				return fmt.Errorf(
+					"%w: ingestion.enabled_sources lists %q but oracle.reflector.dex_contract is empty",
+					ErrInvalidConfig, name)
+			}
+		case "reflector-cex":
+			if c.Oracle.Reflector.CEXContract == "" {
+				return fmt.Errorf(
+					"%w: ingestion.enabled_sources lists %q but oracle.reflector.cex_contract is empty",
+					ErrInvalidConfig, name)
+			}
+		case "reflector-fx":
+			if c.Oracle.Reflector.FXContract == "" {
+				return fmt.Errorf(
+					"%w: ingestion.enabled_sources lists %q but oracle.reflector.fx_contract is empty",
+					ErrInvalidConfig, name)
+			}
+		}
 	}
 	return nil
 }
@@ -95,6 +151,14 @@ func (s StellarConfig) validate() error {
 		}
 		seen[key] = struct{}{}
 	}
+	// CoreHTTPEndpoint is optional — empty means "don't probe core".
+	// When set it must parse as an absolute URL.
+	if s.CoreHTTPEndpoint != "" {
+		if _, err := url.Parse(s.CoreHTTPEndpoint); err != nil || !strings.Contains(s.CoreHTTPEndpoint, "://") {
+			return fmt.Errorf("%w: stellar.core_http_endpoint %q must be a full URL",
+				ErrInvalidConfig, s.CoreHTTPEndpoint)
+		}
+	}
 	if _, err := url.Parse(s.HistoryArchiveURL); err != nil {
 		return fmt.Errorf("%w: stellar.history_archive_url %q: %v",
 			ErrInvalidConfig, s.HistoryArchiveURL, err)
@@ -117,6 +181,45 @@ func (s StorageConfig) validate() error {
 				ErrInvalidConfig, s.RedisAddr, err)
 		}
 	}
+	// S3 block is all-or-nothing. If an endpoint is set, the
+	// dependent fields must also be set — operators who set only
+	// some of them get a silent failure at archive-publish time.
+	// Empty endpoint disables object storage (local dev / testing).
+	if s.S3Endpoint != "" {
+		if _, err := url.Parse(s.S3Endpoint); err != nil || !strings.Contains(s.S3Endpoint, "://") {
+			return fmt.Errorf("%w: storage.s3_endpoint %q must be a full URL",
+				ErrInvalidConfig, s.S3Endpoint)
+		}
+		if s.S3BucketArchive == "" {
+			return fmt.Errorf("%w: storage.s3_bucket_archive required when s3_endpoint is set",
+				ErrInvalidConfig)
+		}
+		if s.S3BucketLive == "" {
+			return fmt.Errorf("%w: storage.s3_bucket_live required when s3_endpoint is set",
+				ErrInvalidConfig)
+		}
+		if s.S3AccessKeyEnv == "" {
+			return fmt.Errorf("%w: storage.s3_access_key_env required when s3_endpoint is set",
+				ErrInvalidConfig)
+		}
+		if s.S3SecretKeyEnv == "" {
+			return fmt.Errorf("%w: storage.s3_secret_key_env required when s3_endpoint is set",
+				ErrInvalidConfig)
+		}
+		// Bucket names must be DNS-compatible per AWS S3 rules:
+		// lowercase, 3–63 chars, alnum + hyphen, can't be an IP.
+		// MinIO is more permissive but the AWS rule is a safe
+		// super-set for portability.
+		for _, b := range []struct{ name, v string }{
+			{"s3_bucket_archive", s.S3BucketArchive},
+			{"s3_bucket_live", s.S3BucketLive},
+		} {
+			if !s3BucketPattern.MatchString(b.v) {
+				return fmt.Errorf("%w: storage.%s %q must be lowercase alnum + hyphen, 3-63 chars",
+					ErrInvalidConfig, b.name, b.v)
+			}
+		}
+	}
 	return nil
 }
 
@@ -136,6 +239,12 @@ func (i IngestionConfig) validate() error {
 	// same event stream — double-counting metrics and doubling orphan
 	// buffer memory. Case-fold so ["soroswap", "Soroswap"] is caught
 	// too (buildSources lowercases before dispatch).
+	//
+	// Unknown names are also rejected here. Without this check a typo
+	// like "sorowsap" reaches the indexer's buildSources() switch at
+	// startup — by then -dry-run has already paid for storage Open +
+	// RPC probe, so the operator waits 5+ seconds for a one-char typo
+	// to surface. Cross-checking KnownSources closes that loop.
 	seen := make(map[string]struct{}, len(i.EnabledSources))
 	for _, name := range i.EnabledSources {
 		key := strings.ToLower(strings.TrimSpace(name))
@@ -145,6 +254,11 @@ func (i IngestionConfig) validate() error {
 		}
 		if _, dup := seen[key]; dup {
 			return fmt.Errorf("%w: ingestion.enabled_sources has duplicate %q",
+				ErrInvalidConfig, name)
+		}
+		if _, known := KnownSources[key]; !known {
+			return fmt.Errorf("%w: ingestion.enabled_sources has unknown source %q "+
+				"(expected one of: see config.KnownSources)",
 				ErrInvalidConfig, name)
 		}
 		seen[key] = struct{}{}
@@ -261,4 +375,10 @@ var (
 	// identical to canonical.IsContractID, duplicated here so config
 	// doesn't depend on canonical (cycle avoidance).
 	contractIDPattern = regexp.MustCompile(`^C[A-Z2-7]{55}$`)
+
+	// s3BucketPattern — AWS S3 DNS-compatible bucket naming rules:
+	// lowercase, 3–63 chars, alnum + hyphen, must start/end alnum.
+	// MinIO is more permissive but we pick the strictest rule so
+	// configs stay portable across providers.
+	s3BucketPattern = regexp.MustCompile(`^[a-z0-9][a-z0-9-]{1,61}[a-z0-9]$`)
 )

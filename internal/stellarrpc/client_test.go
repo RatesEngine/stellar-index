@@ -316,6 +316,33 @@ func TestNonEnvelopeHTTP4xxSurfaces(t *testing.T) {
 	}
 }
 
+func TestResponseSizeCap(t *testing.T) {
+	// Upstream returns a body larger than MaxResponseBytes. The client
+	// must refuse with a clear error rather than swallow the whole
+	// thing into memory. We write just over the cap — enough to
+	// trigger the check, small enough to keep the test cheap.
+	const overcap = rpc.MaxResponseBytes + 1024
+	s := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		// Pad a valid-looking JSON envelope out to > MaxResponseBytes.
+		w.WriteHeader(http.StatusOK)
+		_, _ = io.WriteString(w, `{"jsonrpc":"2.0","id":1,"result":{"id":"`)
+		pad := strings.Repeat("a", overcap)
+		_, _ = io.WriteString(w, pad)
+		_, _ = io.WriteString(w, `"}}`)
+	}))
+	defer s.Close()
+
+	c := rpc.New(s.URL)
+	_, err := c.LatestLedger(context.Background())
+	if err == nil {
+		t.Fatal("expected size-cap error, got nil")
+	}
+	if !strings.Contains(err.Error(), "exceeded") {
+		t.Errorf("error should mention cap: %v", err)
+	}
+}
+
 func TestContextCancellation(t *testing.T) {
 	// Slow server — make sure ctx cancel kills the call.
 	s := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -330,5 +357,148 @@ func TestContextCancellation(t *testing.T) {
 	_, err := c.LatestLedger(ctx)
 	if err == nil {
 		t.Fatal("expected context deadline error")
+	}
+}
+
+func TestEventClosedAtParse(t *testing.T) {
+	// Well-formed RFC 3339 round-trips to UTC time.
+	e := &rpc.Event{ID: "ok", LedgerClosedAt: "2026-04-23T12:34:56Z"}
+	got, err := e.EventClosedAt()
+	if err != nil {
+		t.Fatalf("valid timestamp errored: %v", err)
+	}
+	want := time.Date(2026, 4, 23, 12, 34, 56, 0, time.UTC)
+	if !got.Equal(want) {
+		t.Errorf("got %v, want %v", got, want)
+	}
+}
+
+func TestEventClosedAtEmptyIsError(t *testing.T) {
+	// Empty ledgerClosedAt must error — the previous behaviour of
+	// returning time.Time{} silently is the bug we fixed on
+	// 2026-04-23. Zero-time events were sneaking through into
+	// trades with observed_at = 0.
+	e := &rpc.Event{ID: "bad-1"}
+	if _, err := e.EventClosedAt(); err == nil {
+		t.Fatal("empty LedgerClosedAt must error, got nil")
+	}
+}
+
+func TestGetEventsRejectsInconsistentBounds(t *testing.T) {
+	// RPC node mid-catchup / forked / buggy: response claims
+	// OldestLedger > LatestLedger. The client must reject rather
+	// than hand the caller a corrupt envelope.
+	s := mockRPC(t, map[string]any{
+		"getEvents": map[string]any{
+			"events":       []any{},
+			"latestLedger": 1_000_000,
+			"oldestLedger": 2_000_000, // inverted on purpose
+		},
+	})
+	defer s.Close()
+
+	c := rpc.New(s.URL)
+	_, err := c.GetEvents(context.Background(), 1_000_500, 0, nil, nil)
+	if err == nil {
+		t.Fatal("inverted bounds must error")
+	}
+	if !strings.Contains(err.Error(), "OldestLedger") {
+		t.Errorf("err = %v; want OldestLedger substring", err)
+	}
+}
+
+func TestGetEventsRejectsOutOfBoundEvent(t *testing.T) {
+	// Event with Ledger > LatestLedger. Either the envelope or the
+	// event is wrong — don't guess which, just reject.
+	s := mockRPC(t, map[string]any{
+		"getEvents": map[string]any{
+			"events": []map[string]any{
+				{
+					"type":       "contract",
+					"ledger":     999_999_999, // past the claimed tip
+					"id":         "evt1",
+					"contractId": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+					"topic":      []string{},
+				},
+			},
+			"latestLedger": 1_000_000,
+			"oldestLedger": 900_000,
+		},
+	})
+	defer s.Close()
+
+	c := rpc.New(s.URL)
+	_, err := c.GetEvents(context.Background(), 900_500, 0, nil, nil)
+	if err == nil {
+		t.Fatal("out-of-bounds event must error")
+	}
+}
+
+func TestGetEventsRejectsOutOfOrder(t *testing.T) {
+	// Events must arrive in ascending ledger order — source
+	// correlators (Soroswap swap+sync) depend on it.
+	s := mockRPC(t, map[string]any{
+		"getEvents": map[string]any{
+			"events": []map[string]any{
+				{"type": "contract", "ledger": 950_500, "id": "e1", "contractId": "C", "topic": []string{}},
+				{"type": "contract", "ledger": 950_400, "id": "e2", "contractId": "C", "topic": []string{}}, // earlier
+			},
+			"latestLedger": 1_000_000,
+			"oldestLedger": 900_000,
+		},
+	})
+	defer s.Close()
+
+	c := rpc.New(s.URL)
+	_, err := c.GetEvents(context.Background(), 900_500, 0, nil, nil)
+	if err == nil {
+		t.Fatal("out-of-order events must error")
+	}
+	if !strings.Contains(err.Error(), "out of order") {
+		t.Errorf("err = %v; want 'out of order' substring", err)
+	}
+}
+
+func TestGetEventsRejectsZeroLedger(t *testing.T) {
+	// Stellar genesis is ledger 1 — Ledger=0 on an event means the
+	// JSON was malformed or the field was absent from the payload.
+	// Accepting it would let group-keys collide on (0, tx, opIdx)
+	// in the phoenix/soroswap fanout buffers.
+	s := mockRPC(t, map[string]any{
+		"getEvents": map[string]any{
+			"events": []map[string]any{
+				{"type": "contract", "ledger": 0, "id": "genesis?", "contractId": "C", "topic": []string{}},
+			},
+			"latestLedger": 1_000_000,
+			"oldestLedger": 900_000,
+		},
+	})
+	defer s.Close()
+
+	c := rpc.New(s.URL)
+	_, err := c.GetEvents(context.Background(), 900_500, 0, nil, nil)
+	if err == nil {
+		t.Fatal("zero-ledger event must error")
+	}
+	if !strings.Contains(err.Error(), "zero ledger") {
+		t.Errorf("err = %v; want 'zero ledger' substring", err)
+	}
+}
+
+func TestEventClosedAtMalformedIsError(t *testing.T) {
+	// Unparseable timestamp must error, not silently coerce to
+	// zero. Wrong format (missing T) and wrong offset shape both
+	// caught here.
+	cases := []string{
+		"not-a-date",
+		"2026-04-23 12:34:56",       // space, not T
+		"2026-13-23T12:34:56Z",      // month 13
+		"2026-04-23T12:34:56+25:00", // bad offset
+	}
+	for _, ts := range cases {
+		e := &rpc.Event{ID: "bad-2", LedgerClosedAt: ts}
+		if _, err := e.EventClosedAt(); err == nil {
+			t.Errorf("malformed %q did not error", ts)
+		}
 	}
 }

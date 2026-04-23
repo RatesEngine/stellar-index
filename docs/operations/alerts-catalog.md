@@ -1,6 +1,6 @@
 ---
 title: Alerts Catalogue
-last_verified: 2026-04-22
+last_verified: 2026-04-23
 status: ratified — incremental growth
 ---
 
@@ -12,7 +12,8 @@ runbook").
 
 Every row is a Prometheus / AlertManager rule. The `Runbook` column
 links to `docs/operations/runbooks/<name>.md`; a missing runbook
-fails `scripts/ci/lint-docs.sh` (TODO(#0) — add that check).
+fails `scripts/ci/lint-docs.sh` section 9 (runbook-url check,
+enforced 2026-04-23 onward).
 
 Severity maps to [sev-playbook.md §1](sev-playbook.md#1-severity-definitions).
 
@@ -36,8 +37,9 @@ Severity maps to [sev-playbook.md §1](sev-playbook.md#1-severity-definitions).
 | `ratesengine_ingestion_all_sources_stopped` | `sum(rate(ratesengine_source_events_total[5m]))` | == 0 for > 3 min | **P1** | [all-ingestion-down](runbooks/all-ingestion-down.md) |
 | `ratesengine_ingestion_lag_high` | `ratesengine_source_lag_ledgers` per source | > 1000 for > 10 min | P2 | [ingestion-lag](runbooks/ingestion-lag.md) |
 | `ratesengine_ingestion_cursor_stuck` | `increase(ratesengine_cursor_last_ledger[5m])` per source | == 0 while source is live | P2 | [cursor-stuck](runbooks/cursor-stuck.md) |
-| `ratesengine_ingestion_orphan_events` | `rate(ratesengine_soroswap_orphan_events_total[10m])` | > 10/min | P3 | [orphan-events](runbooks/orphan-events.md) |
+| `ratesengine_ingestion_orphan_events` | `rate(ratesengine_source_orphan_events_total[10m])` | > 10/min per source | P3 | [orphan-events](runbooks/orphan-events.md) |
 | `ratesengine_ingestion_decode_error` | `rate(ratesengine_source_decode_errors_total[5m])` | > 1/s sustained 5 min | P3 | [decode-errors](runbooks/decode-errors.md) |
+| `ratesengine_ingestion_insert_errors` | `rate(ratesengine_source_insert_errors_total[5m])` per (source, kind) | > 0.1/s (≈6/min) sustained 5 min | P2 | [insert-errors](runbooks/insert-errors.md) |
 
 ## Storage alerts
 

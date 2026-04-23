@@ -2,6 +2,7 @@ package canonical_test
 
 import (
 	"encoding/json"
+	"errors"
 	"math/big"
 	"testing"
 	"time"
@@ -60,8 +61,14 @@ func TestTrade_Validate_errors(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			tr := validTrade()
 			mutate(&tr)
-			if err := tr.Validate(); err == nil {
+			err := tr.Validate()
+			if err == nil {
 				t.Fatal("expected error, got nil")
+			}
+			// Must wrap the ErrInvalidTrade sentinel so callers can
+			// errors.Is classify; mirrors TestOracle_Validate_errors.
+			if !errors.Is(err, c.ErrInvalidTrade) {
+				t.Errorf("err %v does not wrap ErrInvalidTrade", err)
 			}
 		})
 	}

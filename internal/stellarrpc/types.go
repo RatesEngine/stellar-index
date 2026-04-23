@@ -3,7 +3,78 @@ package stellarrpc
 import (
 	"encoding/json"
 	"fmt"
+	"time"
 )
+
+// EventClosedAt parses the RFC 3339 ledgerClosedAt on an Event.
+//
+// Every source package used to write `t, _ := time.Parse(...)` and
+// silently drop parse errors — unparseable timestamps then flowed
+// through as time.Time{} and landed in the trades hypertable with
+// a zero observed_at, breaking VWAP windows and time-ordered
+// queries. Centralising the parse lets callers treat a bad
+// timestamp as a decode error (metric + skip) instead of garbage
+// data.
+func (e *Event) EventClosedAt() (time.Time, error) {
+	if e.LedgerClosedAt == "" {
+		return time.Time{}, fmt.Errorf("stellarrpc: event %s has empty ledgerClosedAt", e.ID)
+	}
+	t, err := time.Parse(time.RFC3339, e.LedgerClosedAt)
+	if err != nil {
+		return time.Time{}, fmt.Errorf("stellarrpc: event %s ledgerClosedAt %q: %w", e.ID, e.LedgerClosedAt, err)
+	}
+	return t, nil
+}
+
+// sanityCheck validates that a getEvents response is internally
+// consistent. Caught conditions:
+//
+//   - OldestLedger > LatestLedger — RPC served from an inconsistent
+//     view (node mid-catchup, node forked, node buggy).
+//   - Any event's Ledger outside [OldestLedger, LatestLedger] —
+//     event slipped in from a different shard or is stale past
+//     retention; either way we don't trust it.
+//   - Events not in monotonically-ascending Ledger order — source
+//     buffers (Soroswap swap+sync, Phoenix 8-field) assume in-order
+//     delivery; an out-of-order page could silently correlate the
+//     wrong events.
+//
+// Checks run at zero cost when the response is well-formed.
+// Returns a wrapped error pointing at the offending event when it
+// isn't — call site turns that into a retry with backoff (the
+// source's existing error path) rather than ingesting garbage.
+func (r *EventsResponse) sanityCheck() error {
+	if r.OldestLedger > 0 && r.LatestLedger > 0 && r.OldestLedger > r.LatestLedger {
+		return fmt.Errorf("stellarrpc: response has OldestLedger %d > LatestLedger %d",
+			r.OldestLedger, r.LatestLedger)
+	}
+	var prev uint32
+	for i := range r.Events {
+		l := r.Events[i].Ledger
+		// Stellar genesis is ledger 1; Ledger=0 means the field was
+		// either absent from the JSON payload or the node returned a
+		// malformed record. Either way, downstream groupKey builders
+		// (phoenix/soroswap fanout) would collide on (0, tx, opIdx)
+		// for multiple unrelated events. Reject at the boundary.
+		if l == 0 {
+			return fmt.Errorf("stellarrpc: event %s has zero ledger", r.Events[i].ID)
+		}
+		if r.LatestLedger > 0 && l > r.LatestLedger {
+			return fmt.Errorf("stellarrpc: event %s ledger %d > response LatestLedger %d",
+				r.Events[i].ID, l, r.LatestLedger)
+		}
+		if r.OldestLedger > 0 && l < r.OldestLedger {
+			return fmt.Errorf("stellarrpc: event %s ledger %d < response OldestLedger %d",
+				r.Events[i].ID, l, r.OldestLedger)
+		}
+		if l < prev {
+			return fmt.Errorf("stellarrpc: events out of order — event %s ledger %d after %d",
+				r.Events[i].ID, l, prev)
+		}
+		prev = l
+	}
+	return nil
+}
 
 // ─── Envelope ──────────────────────────────────────────────────────
 

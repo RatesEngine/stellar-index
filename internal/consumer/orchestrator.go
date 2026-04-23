@@ -68,6 +68,13 @@ func (c *Config) applyDefaults() {
 	if c.MaxBackoff <= 0 {
 		c.MaxBackoff = 60 * time.Second
 	}
+	// An operator supplying Min > Max is incoherent — nextBackoff
+	// clamps to Max and the "min" becomes a no-op. Rather than
+	// silently papering over the config bug, coerce Max up to Min
+	// and keep the backoff meaningful.
+	if c.MinBackoff > c.MaxBackoff {
+		c.MaxBackoff = c.MinBackoff
+	}
 	if c.CursorPersistEvery <= 0 {
 		c.CursorPersistEvery = 30 * time.Second
 	}
@@ -250,6 +257,17 @@ func (o *Orchestrator) cursorPersister(ctx context.Context, src Source, seedLast
 	defer t.Stop()
 	log := o.logger.With("source", src.Name())
 	lastPersisted := seedLastLedger
+
+	// Panic-recovery wrapper: runSource's runOneSafe already isolates
+	// source panics, but the persister runs as its own goroutine and
+	// isn't wrapped. A panic here would kill the process. Declared
+	// first so it's the last defer to execute (outermost recovery).
+	defer func() {
+		if r := recover(); r != nil {
+			log.Error("cursor persister panicked — recovered",
+				"panic", fmt.Sprintf("%v", r))
+		}
+	}()
 
 	// flushFinal runs once on exit. Uses a detached context because
 	// the parent is typically the shutdown-triggering one.

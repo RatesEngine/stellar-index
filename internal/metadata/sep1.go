@@ -448,22 +448,51 @@ func isValidDomainOrHostPort(s string) bool {
 	return true
 }
 
+// extraBlockedNets covers ranges the stdlib helpers don't flag.
+// Parsed once at init — failure here is a programmer bug.
+//
+//   - 100.64.0.0/10  — RFC 6598 Carrier-Grade NAT / shared address
+//     space. Includes Alibaba Cloud's metadata IP 100.100.100.200.
+//   - 192.0.0.0/24   — IETF Protocol Assignments. Includes Oracle
+//     Cloud's metadata IP 192.0.0.192.
+//   - 198.18.0.0/15  — RFC 2544 network-interconnect benchmarking.
+//     Not internet-routable; a home-domain resolving here is
+//     either broken or malicious.
+var extraBlockedNets = func() []*net.IPNet {
+	out := make([]*net.IPNet, 0, 3)
+	for _, cidr := range []string{
+		"100.64.0.0/10",
+		"192.0.0.0/24",
+		"198.18.0.0/15",
+	} {
+		_, n, err := net.ParseCIDR(cidr)
+		if err != nil {
+			panic("metadata: bad extraBlockedNets CIDR: " + cidr)
+		}
+		out = append(out, n)
+	}
+	return out
+}()
+
 // Allow-overrides in tests via Options.AllowPrivateIPs.
 func (d *ssrfDialer) isBlocked(ip net.IP) bool {
 	if d.allowPrivateIPs {
 		return false
 	}
+	// Loopback / link-local (covers 169.254.169.254, the classic
+	// AWS/GCP/Azure metadata IP) / multicast / unspecified.
 	if ip.IsLoopback() || ip.IsUnspecified() || ip.IsLinkLocalUnicast() ||
 		ip.IsLinkLocalMulticast() || ip.IsMulticast() || ip.IsInterfaceLocalMulticast() {
 		return true
 	}
+	// RFC 1918 (10/8, 172.16/12, 192.168/16) + RFC 4193 (fc00::/7 ULA).
 	if ip.IsPrivate() {
 		return true
 	}
-	// Cloud-metadata well-known address (the classic SSRF pivot
-	// target). IsPrivate() doesn't cover this one.
-	if ip.Equal(net.ParseIP("169.254.169.254")) {
-		return true
+	for _, n := range extraBlockedNets {
+		if n.Contains(ip) {
+			return true
+		}
 	}
 	return false
 }

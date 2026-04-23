@@ -132,6 +132,8 @@ func TestAsset_JSON_stringRoundTrip(t *testing.T) {
 		c.NativeAsset(),
 		mustClassic("USDC", usdcIssuer),
 		mustSoroban(xlmSAC),
+		mustFiat("USD"),
+		mustFiat("EUR"),
 	} {
 		b, err := json.Marshal(a)
 		if err != nil {
@@ -160,6 +162,41 @@ func TestAsset_JSON_objectForm(t *testing.T) {
 	}
 	if a.Code != "USDC" || a.Issuer != usdcIssuer {
 		t.Fatalf("got %+v", a)
+	}
+}
+
+func TestAsset_JSON_rejectsNonStringNonObject(t *testing.T) {
+	// UnmarshalJSON's two-stage fallback (try string, then object)
+	// must reject numbers / bools / arrays — otherwise something like
+	// `true` would fall through to the object path and happen to
+	// decode as a zero-value Asset whose Validate() fails. Confirm we
+	// get a real error, not a silent zero value.
+	for name, body := range map[string]string{
+		"number":       `123`,
+		"bool true":    `true`,
+		"bool false":   `false`,
+		"array":        `["native"]`,
+		"empty string": `""`,
+		"empty object": `{}`,
+	} {
+		t.Run(name, func(t *testing.T) {
+			var a c.Asset
+			err := json.Unmarshal([]byte(body), &a)
+			if err == nil {
+				t.Errorf("expected error for %s input %q, got %+v", name, body, a)
+			}
+		})
+	}
+}
+
+func TestAsset_JSON_rejectsNull(t *testing.T) {
+	// JSON null parses the empty string via the `try string first`
+	// branch, which then fails ParseAsset("") → empty-asset error.
+	// Confirm the error path is taken rather than silently producing
+	// a zero-value Asset.
+	var a c.Asset
+	if err := json.Unmarshal([]byte(`null`), &a); err == nil {
+		t.Errorf("expected error for null input, got %+v", a)
 	}
 }
 
@@ -220,6 +257,33 @@ func TestAsset_Validate_bad(t *testing.T) {
 	}
 }
 
+func TestAsset_Equal_identityAcrossVariants(t *testing.T) {
+	// Reflexivity + cross-variant inequality. Pair.Validate rejects
+	// a base==quote pair via this method, so a subtle regression
+	// here (e.g. "native equals native returns false") would make
+	// Pair.Validate accept native/native and break invariants way
+	// downstream. Cheap guard.
+	native := c.NativeAsset()
+	if !native.Equal(native) {
+		t.Error("NativeAsset().Equal(NativeAsset()) must be true")
+	}
+	usd := mustFiat("USD")
+	if !usd.Equal(usd) {
+		t.Error("fiat USD must equal itself")
+	}
+	// A classic asset and its would-be SAC wrap compare NOT equal
+	// (documented — ADR-0010 promotes them as distinct representations).
+	usdc := mustClassic("USDC", usdcIssuer)
+	sac := mustSoroban(xlmSAC)
+	if usdc.Equal(sac) {
+		t.Error("classic and soroban variants must compare unequal")
+	}
+	// Native vs fiat USD: different types, not equal.
+	if native.Equal(usd) {
+		t.Error("native and fiat-USD must compare unequal")
+	}
+}
+
 // helpers
 
 func mustClassic(code, issuer string) c.Asset {
@@ -232,6 +296,14 @@ func mustClassic(code, issuer string) c.Asset {
 
 func mustSoroban(id string) c.Asset {
 	a, err := c.NewSorobanAsset(id)
+	if err != nil {
+		panic(err)
+	}
+	return a
+}
+
+func mustFiat(code string) c.Asset {
+	a, err := c.NewFiatAsset(code)
 	if err != nil {
 		panic(err)
 	}

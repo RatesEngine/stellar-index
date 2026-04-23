@@ -12,6 +12,7 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"sort"
 	"text/tabwriter"
 	"time"
 
@@ -58,7 +59,7 @@ func main() {
 	case "help", "--help", "-h":
 		printUsage()
 	default:
-		// TODO(#0): backfill, detect-gaps, cache-prime, verify-invariants
+		// TODO(#0): backfill, cache-prime, verify-invariants.
 		fmt.Fprintf(os.Stderr, "ratesengine-ops: unknown subcommand %q\n", args[0])
 		printUsage()
 		os.Exit(2)
@@ -108,11 +109,10 @@ func listCursors(args []string) error {
 		return fmt.Errorf("-config is required")
 	}
 
-	cfg, err := config.Load(*cfgPath)
+	cfg, err := config.LoadWithEnv(*cfgPath)
 	if err != nil {
 		return err
 	}
-	cfg.ApplyEnvOverrides()
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
@@ -167,11 +167,10 @@ func detectGaps(args []string) error {
 		return fmt.Errorf("-config is required")
 	}
 
-	cfg, err := config.Load(*cfgPath)
+	cfg, err := config.LoadWithEnv(*cfgPath)
 	if err != nil {
 		return err
 	}
-	cfg.ApplyEnvOverrides()
 
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
@@ -215,7 +214,15 @@ func detectGaps(args []string) error {
 	var lagging []string
 	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
 	fmt.Fprintf(w, "SOURCE\tLAST LEDGER\tTIP\tLAG\tSTATUS\n")
-	for source, last := range minBySource {
+	// Sorted iteration so output is reproducible across invocations
+	// — operators pipe into diff / grep and expect stable ordering.
+	sources := make([]string, 0, len(minBySource))
+	for s := range minBySource {
+		sources = append(sources, s)
+	}
+	sort.Strings(sources)
+	for _, source := range sources {
+		last := minBySource[source]
 		lag := uint32(0)
 		if tip.Sequence > last {
 			lag = tip.Sequence - last
@@ -248,9 +255,20 @@ func rpcProbe(endpoint string) error {
 	c := stellarrpc.New(endpoint, stellarrpc.WithTimeout(5*time.Second))
 	fmt.Printf("stellar-rpc probe — %s\n\n", c.Endpoint())
 
-	// getVersionInfo first — cheapest and tells us we can reach the thing at all.
+	// getVersionInfo first — cheapest and tells us we can reach the
+	// thing at all. On failure, print actionable context before
+	// propagating the error so an operator running `rpc-probe` at
+	// 3 AM sees WHY the connection failed rather than just a Go
+	// error string.
 	vi, err := c.VersionInfo(ctx)
 	if err != nil {
+		fmt.Fprintf(os.Stderr, "\n❌ cannot reach stellar-rpc at %s\n", endpoint)
+		fmt.Fprintf(os.Stderr, "   error: %v\n", err)
+		fmt.Fprintf(os.Stderr, "\n   Likely causes, in order:\n")
+		fmt.Fprintf(os.Stderr, "     1. URL scheme/port wrong (expected http://<host>:8000)\n")
+		fmt.Fprintf(os.Stderr, "     2. stellar-rpc process not running on that host\n")
+		fmt.Fprintf(os.Stderr, "     3. Firewall / NetworkPolicy blocks outbound\n")
+		fmt.Fprintf(os.Stderr, "     4. DNS for %q doesn't resolve\n", endpoint)
 		return fmt.Errorf("getVersionInfo: %w", err)
 	}
 	fmt.Printf("  version:         %s\n", vi.Version)
@@ -275,7 +293,7 @@ func rpcProbe(endpoint string) error {
 	if err != nil {
 		return fmt.Errorf("getLatestLedger: %w", err)
 	}
-	fmt.Printf("  latestLedger:    %d (closeTime %s, id %s…)\n\n", l.Sequence, l.CloseTime, l.ID[:12])
+	fmt.Printf("  latestLedger:    %d (closeTime %s, id %s…)\n\n", l.Sequence, l.CloseTime, shortHex(l.ID, 12))
 
 	fs, err := c.FeeStats(ctx)
 	if err != nil {
@@ -300,7 +318,7 @@ func rpcProbe(endpoint string) error {
 			er.OldestLedger, er.LatestLedger, window, float64(window)*5/86400)
 		if len(er.Events) > 0 {
 			fmt.Printf("  sample event:    contract=%s… type=%s topics=%d\n",
-				er.Events[0].ContractID[:12], er.Events[0].Type, len(er.Events[0].Topic))
+				shortHex(er.Events[0].ContractID, 12), er.Events[0].Type, len(er.Events[0].Topic))
 		}
 
 		// getTransaction round-trip against the sample event's tx
@@ -316,7 +334,7 @@ func rpcProbe(endpoint string) error {
 				// Should not happen for a tx we JUST saw in getEvents,
 				// but surfaces any retention-window mismatch.
 				fmt.Printf("  getTransaction:  ⚠ tx %s… not found (retention window mismatch)\n",
-					er.Events[0].TxHash[:8])
+					shortHex(er.Events[0].TxHash, 8))
 			default:
 				fmt.Printf("  getTransaction:  ✓ status=%s ledger=%d appOrder=%d\n",
 					tx.Status, tx.Ledger, tx.ApplicationOrder)
@@ -326,4 +344,16 @@ func rpcProbe(endpoint string) error {
 
 	fmt.Println()
 	return nil
+}
+
+// shortHex returns the first `n` characters of s, or s if it is
+// already shorter. Guards the probe against panicking on a
+// malformed-RPC response whose ID/hash is shorter than expected —
+// a diagnostic binary should never crash on bad input, it should
+// report whatever it got.
+func shortHex(s string, n int) string {
+	if len(s) <= n {
+		return s
+	}
+	return s[:n]
 }

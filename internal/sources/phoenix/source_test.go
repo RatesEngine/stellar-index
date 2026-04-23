@@ -9,6 +9,19 @@ import (
 	"github.com/RatesEngine/rates-engine/internal/stellarrpc"
 )
 
+// mustClosed is the test-side equivalent of the processPage
+// `e.EventClosedAt() + bail on error` guard. Test fixtures always
+// have well-formed RFC 3339 timestamps, so parse failure here is a
+// fixture bug.
+func mustClosed(t *testing.T, e *stellarrpc.Event) time.Time {
+	t.Helper()
+	ts, err := e.EventClosedAt()
+	if err != nil {
+		t.Fatalf("fixture LedgerClosedAt %q: %v", e.LedgerClosedAt, err)
+	}
+	return ts
+}
+
 const (
 	phoenixTxHash = "fadefadefadefadefadefadefadefadefadefadefadefadefadefadefadefade"
 	testAddress   = "GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN"
@@ -64,7 +77,7 @@ func TestBufferCollectsEightFieldsInOrder(t *testing.T) {
 	var completed *RawSwap
 	for i, e := range events {
 		fieldTopic := e.Topic[1]
-		got, _, err := buf.absorb(e, fieldTopic)
+		got, _, err := buf.absorb(e, fieldTopic, mustClosed(t, e))
 		if err != nil {
 			t.Fatalf("event %d absorb: %v", i, err)
 		}
@@ -94,7 +107,7 @@ func TestBufferHandlesOutOfOrderArrival(t *testing.T) {
 	var completed *RawSwap
 	for i := len(events) - 1; i >= 0; i-- {
 		e := events[i]
-		got, _, _ := buf.absorb(e, e.Topic[1])
+		got, _, _ := buf.absorb(e, e.Topic[1], mustClosed(t, e))
 		if i == 0 {
 			completed = got
 		}
@@ -118,12 +131,12 @@ func TestBufferSeparatesSwapsByGroupKey(t *testing.T) {
 	var completedA, completedB *RawSwap
 	for i := 0; i < 8; i++ {
 		eA := evsA[i]
-		got, _, _ := buf.absorb(eA, eA.Topic[1])
+		got, _, _ := buf.absorb(eA, eA.Topic[1], mustClosed(t, eA))
 		if i == 7 {
 			completedA = got
 		}
 		eB := evsB[i]
-		got, _, _ = buf.absorb(eB, eB.Topic[1])
+		got, _, _ = buf.absorb(eB, eB.Topic[1], mustClosed(t, eB))
 		if i == 7 {
 			completedB = got
 		}
@@ -141,7 +154,7 @@ func TestBufferOrphansReportIncompletes(t *testing.T) {
 	events := allEightSwapEvents()
 	// Only absorb 5 of the 8 — the other 3 never arrive.
 	for _, e := range events[:5] {
-		_, _, _ = buf.absorb(e, e.Topic[1])
+		_, _, _ = buf.absorb(e, e.Topic[1], mustClosed(t, e))
 	}
 	orphans := buf.orphans()
 	if len(orphans) != 1 {
@@ -159,9 +172,10 @@ func TestBufferRejectsUnknownField(t *testing.T) {
 	buf := newBuffer()
 	e := &stellarrpc.Event{
 		Ledger: 1, TxHash: phoenixTxHash, OperationIndex: 0,
-		Topic: []string{TopicSymbolSwap, "nonexistent_field"},
+		LedgerClosedAt: time.Now().UTC().Format(time.RFC3339),
+		Topic:          []string{TopicSymbolSwap, "nonexistent_field"},
 	}
-	_, _, err := buf.absorb(e, "nonexistent_field")
+	_, _, err := buf.absorb(e, "nonexistent_field", mustClosed(t, e))
 	if err == nil {
 		t.Fatal("expected ErrUnknownField for nonsense topic")
 	}
@@ -178,7 +192,7 @@ func TestBufferEvictsStaleOrphans(t *testing.T) {
 	old := events[0]
 	old.LedgerClosedAt = oldTS
 
-	if _, evicted, err := buf.absorb(old, old.Topic[1]); err != nil || len(evicted) != 0 {
+	if _, evicted, err := buf.absorb(old, old.Topic[1], mustClosed(t, old)); err != nil || len(evicted) != 0 {
 		t.Fatalf("first insert: err=%v evicted=%d", err, len(evicted))
 	}
 	if buf.size() != 1 {
@@ -187,7 +201,7 @@ func TestBufferEvictsStaleOrphans(t *testing.T) {
 
 	// Fresh event from a different swap triggers sweepStale → evict.
 	fresh := allEightSwapEventsKeyed(999, "txFresh", 0)[0]
-	_, evicted, _ := buf.absorb(fresh, fresh.Topic[1])
+	_, evicted, _ := buf.absorb(fresh, fresh.Topic[1], mustClosed(t, fresh))
 	if len(evicted) != 1 {
 		t.Fatalf("expected 1 eviction, got %d", len(evicted))
 	}
@@ -283,6 +297,33 @@ func TestSource_Basics(t *testing.T) {
 	}
 }
 
+func TestBufferBackfillOldEventsComplete(t *testing.T) {
+	// Regression: the planned backfill path replays ancient events;
+	// without using the event's own ClosedAt as the eviction
+	// reference, the first-absorbed field would evict immediately
+	// when the 2nd through 8th arrived. Verify an 8-field set with
+	// a 6-hour-old ClosedAt still completes in one buffer.
+	buf := newBuffer()
+	events := allEightSwapEventsAt(100, phoenixTxHash, 0, time.Now().UTC().Add(-6*time.Hour))
+
+	var completed *RawSwap
+	for i, e := range events {
+		got, evicted, err := buf.absorb(e, e.Topic[1], mustClosed(t, e))
+		if err != nil {
+			t.Fatalf("step %d absorb: %v", i, err)
+		}
+		if len(evicted) != 0 {
+			t.Errorf("step %d: evicted %d backfilled fields during correlation", i, len(evicted))
+		}
+		if got != nil {
+			completed = got
+		}
+	}
+	if completed == nil {
+		t.Fatal("backfilled 8-field set failed to complete")
+	}
+}
+
 // ─── helpers ──────────────────────────────────────────────────────
 
 // allEightSwapEvents returns 8 synthetic events with stable
@@ -294,7 +335,11 @@ func allEightSwapEvents() []*stellarrpc.Event {
 }
 
 func allEightSwapEventsKeyed(ledger uint32, tx string, op int) []*stellarrpc.Event {
-	closedAt := time.Now().UTC().Format(time.RFC3339)
+	return allEightSwapEventsAt(ledger, tx, op, time.Now().UTC())
+}
+
+func allEightSwapEventsAt(ledger uint32, tx string, op int, ts time.Time) []*stellarrpc.Event {
+	closedAt := ts.Format(time.RFC3339)
 	field := func(topic1 string) *stellarrpc.Event {
 		return &stellarrpc.Event{
 			Ledger: ledger, TxHash: tx, OperationIndex: op,

@@ -189,6 +189,89 @@ func TestStoreRoundTrip(t *testing.T) {
 			t.Errorf("cursor %s/%s has zero UpdatedAt", c.Source, c.Sub)
 		}
 	}
+
+	// ─── Cursor monotonic-advance guard ─────────────────────────
+	// DB-level refusal to regress last_ledger (ON CONFLICT DO UPDATE
+	// ... WHERE EXCLUDED.last_ledger > ingestion_cursors.last_ledger).
+	// Defense in depth: the orchestrator's Go-level advance-only rule
+	// can't be the only line of defense for a misconfigured two-
+	// indexer race.
+	if err := store.UpsertCursor(ctx, "soroswap", "", 10_000); err != nil {
+		t.Fatalf("UpsertCursor (regression attempt): %v", err)
+	}
+	cur, _ = store.GetCursor(ctx, "soroswap", "")
+	if cur.LastLedger != 52_430_100 {
+		t.Errorf("regression-attempt should have been ignored; got %d, want 52430100",
+			cur.LastLedger)
+	}
+	// Equal-value attempt also no-ops (WHERE > , not >=).
+	if err := store.UpsertCursor(ctx, "soroswap", "", 52_430_100); err != nil {
+		t.Fatalf("UpsertCursor (same value): %v", err)
+	}
+	cur, _ = store.GetCursor(ctx, "soroswap", "")
+	if cur.LastLedger != 52_430_100 {
+		t.Errorf("same-value upsert shouldn't change stored cursor")
+	}
+	// Advancement still works.
+	if err := store.UpsertCursor(ctx, "soroswap", "", 52_430_200); err != nil {
+		t.Fatal(err)
+	}
+	cur, _ = store.GetCursor(ctx, "soroswap", "")
+	if cur.LastLedger != 52_430_200 {
+		t.Errorf("advance after regression-attempt lost: got %d", cur.LastLedger)
+	}
+}
+
+// TestInsertTrade_MultiOpSameTxBothLand covers the most common
+// real-world pattern that would have caught the Aquarius fanout
+// bug: a single Soroban tx with multiple operations, each emitting
+// its own trade. The trades share (source, ledger, tx_hash, ts)
+// but differ on OpIndex — both MUST persist. Before the fanout
+// fix, op=0,i=1,j=0 and op=1,i=0,j=0 collided on OpIndex=256 and
+// ON CONFLICT DO NOTHING silently dropped the second.
+func TestInsertTrade_MultiOpSameTxBothLand(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+	defer cancel()
+
+	dsn := startTimescale(t, ctx)
+	applyMigrations(t, dsn)
+
+	store, err := timescale.Open(ctx, dsn)
+	if err != nil {
+		t.Fatalf("store open: %v", err)
+	}
+	t.Cleanup(func() { _ = store.Close() })
+
+	usdc, _ := c.NewClassicAsset("USDC", "GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN")
+	pair, _ := c.NewPair(c.NativeAsset(), usdc)
+
+	ts := time.Now().UTC().Truncate(time.Second)
+	tx := "1111111111111111111111111111111111111111111111111111111111111111"
+	base := c.Trade{
+		Source: "sdex", Ledger: 52_430_001, TxHash: tx,
+		Timestamp: ts, Pair: pair,
+		BaseAmount:  c.NewAmount(big.NewInt(1_000_000_000)),
+		QuoteAmount: c.NewAmount(big.NewInt(12_420_000)),
+	}
+	tr0 := base
+	tr0.OpIndex = 0
+	tr1 := base
+	tr1.OpIndex = 1
+
+	if err := store.InsertTrade(ctx, tr0); err != nil {
+		t.Fatalf("op=0: %v", err)
+	}
+	if err := store.InsertTrade(ctx, tr1); err != nil {
+		t.Fatalf("op=1: %v", err)
+	}
+
+	n, err := store.CountTrades(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if n != 2 {
+		t.Errorf("CountTrades = %d, want 2 — multi-op trades dropped?", n)
+	}
 }
 
 // startTimescale is extracted so both tests can share it without

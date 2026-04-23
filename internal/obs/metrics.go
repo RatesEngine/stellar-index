@@ -193,12 +193,15 @@ var RateLimitFailOpenTotal = prometheus.NewCounter(
 // failures (DB connection lost, constraint violation, etc.).
 // Separate from decode errors because operators respond differently:
 // decode errors mean the source schema drifted; insert errors mean
-// the storage layer is struggling. kind="trade"|"oracle" lets
-// dashboards split trade vs oracle-update writes.
+// the storage layer is struggling. kind="trade"|"oracle"|"panic"|
+// "unhandled" lets dashboards split trade vs oracle-update writes,
+// flag recovered sink panics distinctly from storage-layer rejects,
+// and surface half-wired sources whose event type the sink's
+// type-switch doesn't recognise.
 var SourceInsertErrorsTotal = prometheus.NewCounterVec(
 	prometheus.CounterOpts{
 		Name: "ratesengine_source_insert_errors_total",
-		Help: "Events that failed to persist to the store, per source + kind (trade/oracle).",
+		Help: "Events that failed to persist to the store, per source + kind (trade/oracle/panic).",
 	},
 	[]string{"source", "kind"},
 )
@@ -218,16 +221,30 @@ var CursorLastLedger = prometheus.NewGaugeVec(
 
 // PriceStalenessSeconds — per-asset gauge showing how old our
 // latest aggregated-price observation is. Alert fires when >120s.
+//
+// CARDINALITY WARNING: Stellar has tens of thousands of classic
+// assets. Writers MUST restrict emission to an allow-list (top-N
+// by volume, per-asset-quality tier, or similar) — never emit for
+// every asset seen. Prometheus recommends <10^4 series per metric;
+// unrestricted per-asset emission blows past that on a busy chain.
+// The aggregator owns this allow-list; see
+// docs/architecture/aggregation-plan.md when it lands.
 var PriceStalenessSeconds = prometheus.NewGaugeVec(
 	prometheus.GaugeOpts{
 		Name: "ratesengine_price_staleness_seconds",
-		Help: "Age of the most recent aggregated price per asset (seconds).",
+		Help: "Age of the most recent aggregated price per asset (seconds). Writers MUST restrict to a top-N allow-list.",
 	},
 	[]string{"asset"},
 )
 
 // OracleLastUpdateUnix — per-(source, asset) gauge with the Unix
 // timestamp of the most recent oracle observation for that pair.
+//
+// Cardinality: Reflector/Band/Redstone each track O(30) assets, so
+// the shipped sources together stay well inside Prometheus's
+// comfort zone. If we ever wire a "passthrough every asset"
+// oracle, revisit — this would need the same allow-list discipline
+// as PriceStalenessSeconds.
 var OracleLastUpdateUnix = prometheus.NewGaugeVec(
 	prometheus.GaugeOpts{
 		Name: "ratesengine_oracle_last_update_unix",

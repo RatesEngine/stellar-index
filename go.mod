@@ -14,15 +14,15 @@ go 1.25.0
 // use them. See CHANGELOG [Unreleased].
 
 require (
-	github.com/BurntSushi/toml v1.6.0
-	github.com/alicebob/miniredis/v2 v2.37.0
-	github.com/golang-migrate/migrate/v4 v4.19.1
-	github.com/lib/pq v1.12.3
-	github.com/prometheus/client_golang v1.23.2
-	github.com/redis/go-redis/v9 v9.18.0
-	github.com/testcontainers/testcontainers-go v0.42.0
-	github.com/testcontainers/testcontainers-go/modules/postgres v0.42.0
-	golang.org/x/sync v0.19.0
+	github.com/BurntSushi/toml v1.6.0                                        // TOML parser for config/ + metadata/sep1.go
+	github.com/alicebob/miniredis/v2 v2.37.0                                 // In-memory Redis for ratelimit/ tests (test-only)
+	github.com/golang-migrate/migrate/v4 v4.19.1                             // Schema migrations; cmd/ratesengine-migrate (ADR-0006)
+	github.com/lib/pq v1.12.3                                                // Postgres driver (ADR-0006)
+	github.com/prometheus/client_golang v1.23.2                              // /metrics + counters/gauges in internal/obs
+	github.com/redis/go-redis/v9 v9.18.0                                     // Redis client (ADR-0007) — rate-limit + SEP-1 cache
+	github.com/testcontainers/testcontainers-go v0.42.0                      // Integration-test Postgres container
+	github.com/testcontainers/testcontainers-go/modules/postgres v0.42.0     // Timescale-flavoured container helper
+	golang.org/x/sync v0.19.0                                                // singleflight for metadata/cache.go
 )
 
 require (

@@ -25,6 +25,13 @@ func TestPriceKey(t *testing.T) {
 	if !strings.HasPrefix(k2, "price:USDC-") {
 		t.Errorf("Price(USDC) = %q, want prefix 'price:USDC-'", k2)
 	}
+
+	// TTL pinned to ADR-0007 (60 s). Mirrors the assertion style used
+	// by the other key classes so a drift in either direction is
+	// caught by the test suite.
+	if cachekeys.PriceTTL != 60*time.Second {
+		t.Errorf("PriceTTL = %v, want 60s (ADR-0007)", cachekeys.PriceTTL)
+	}
 }
 
 func TestVWAP(t *testing.T) {
@@ -60,9 +67,10 @@ func TestOHLC(t *testing.T) {
 		t.Errorf("OHLC key does not end with granularity:bucket: %q", k)
 	}
 
-	// Open-candle TTL is short; closed is zero (immutable).
-	if cachekeys.OHLCOpenTTL != 5*time.Second {
-		t.Errorf("OHLCOpenTTL = %v", cachekeys.OHLCOpenTTL)
+	// Open-candle TTL is a safety-net upper bound matching ADR-0007;
+	// closed is zero (immutable — CDN-pinned).
+	if cachekeys.OHLCOpenTTL != time.Hour {
+		t.Errorf("OHLCOpenTTL = %v, want 1h (ADR-0007)", cachekeys.OHLCOpenTTL)
 	}
 	if cachekeys.OHLCClosedTTL != 0 {
 		t.Errorf("OHLCClosedTTL should be 0 (immutable), got %v", cachekeys.OHLCClosedTTL)
@@ -84,13 +92,26 @@ func TestRateLimitKey(t *testing.T) {
 }
 
 func TestRateLimitKey_MatchesRatelimitPackagePrefix(t *testing.T) {
-	// Consistency check: internal/ratelimit builds "rl:<key>:<bucket>"
+	// Consistency check: internal/ratelimit builds "rl:<escape(key)>:<bucket>"
 	// directly; this package mirrors that shape. If someone changes
 	// either side, this test highlights the drift.
 	now := time.Unix(1_750_000_000, 0).UTC()
 	k := cachekeys.RateLimitKey("x", now, time.Minute)
 	if !strings.HasPrefix(k, "rl:") {
 		t.Errorf("RateLimitKey must use rl: prefix, got %q", k)
+	}
+}
+
+func TestRateLimitKey_EscapesSubjectForParityWithBucket(t *testing.T) {
+	// Subjects containing `:` (e.g. IPv6 addresses) are url.QueryEscape'd
+	// by internal/ratelimit/bucket.go's Take() to prevent
+	// cross-subject collisions on the Redis slot. This mirror
+	// function MUST escape identically or the two sides produce
+	// different keys for the same subject.
+	now := time.Unix(1_750_000_000, 0).UTC()
+	k := cachekeys.RateLimitKey("2001:db8::1", now, time.Minute)
+	if !strings.HasPrefix(k, "rl:2001%3Adb8%3A%3A1:") {
+		t.Errorf("RateLimitKey did not escape `:` in IPv6 subject: got %q", k)
 	}
 }
 

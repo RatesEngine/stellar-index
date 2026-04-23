@@ -2,6 +2,7 @@ package ratelimit_test
 
 import (
 	"context"
+	"strconv"
 	"testing"
 	"time"
 
@@ -120,6 +121,32 @@ func TestBucket_KeysAreIndependent(t *testing.T) {
 	}
 }
 
+func TestBucket_ColonInKeyDoesNotCollide(t *testing.T) {
+	// Keys containing `:` (IPv6 addresses, future API-key formats)
+	// must not collide with distinct keys. Previously Take() built
+	// the Redis key as `rl:<key>:<minute>`, so two IPv6 clients
+	// whose addresses share a prefix could land on the same slot.
+	// url.QueryEscape in Take() closes this.
+	rdb, _ := newRedis(t)
+	b := ratelimit.New(rdb, 1, time.Minute)
+	ctx := context.Background()
+
+	// Two realistic IPv6 addresses. Without escaping, the bucket
+	// key for "2001:db8::1" in minute M ends with ":<M>"; for
+	// "2001:db8::1:<M>" in minute 0 also ends with ":<M>". The
+	// safety here is that neither collides with the other OR with
+	// the minute suffix.
+	if r, _ := b.Take(ctx, "2001:db8::1"); !r.Allowed {
+		t.Fatal("client A 1st should be allowed")
+	}
+	if r, _ := b.Take(ctx, "2001:db8::1"); r.Allowed {
+		t.Fatal("client A 2nd should be denied (same key)")
+	}
+	if r, _ := b.Take(ctx, "2001:db8::2"); !r.Allowed {
+		t.Fatal("client B 1st should be allowed (distinct IPv6)")
+	}
+}
+
 func TestBucket_AtomicUnderConcurrency(t *testing.T) {
 	// Atomicity check — fire 100 concurrent takes with limit=5 and
 	// verify exactly 5 are allowed. A non-atomic INCR+EXPIRE would
@@ -153,7 +180,7 @@ func TestBucket_AtomicUnderConcurrency(t *testing.T) {
 	}
 }
 
-func TestBucket_RetryAfterApproximatesWindowTTL(t *testing.T) {
+func TestBucket_RetryAfterIsWindowRemaining(t *testing.T) {
 	rdb, _ := newRedis(t)
 	b := ratelimit.New(rdb, 1, time.Minute)
 	ctx := context.Background()
@@ -163,11 +190,55 @@ func TestBucket_RetryAfterApproximatesWindowTTL(t *testing.T) {
 	if r.Allowed {
 		t.Fatal("second should be denied")
 	}
-	// Window is 60s; Take() sets TTL to 2×window = 120s. TTL returned
-	// should be ≤ 120s (fresh) and > 0. Miniredis's fake clock doesn't
-	// advance on its own, so this is effectively ~120s.
-	if r.RetryAfter <= 0 || r.RetryAfter > 2*time.Minute {
-		t.Errorf("retry_after = %v (want (0, 120s])", r.RetryAfter)
+	// RetryAfter is "seconds until caller can succeed" = remaining
+	// in the current fixed window, not Redis's drain TTL. Window
+	// is 60s, so RetryAfter must be in [1, 60] — never exceed the
+	// window size (old bug: it was Redis's 2×window drain TTL).
+	if r.RetryAfter < time.Second || r.RetryAfter > time.Minute {
+		t.Errorf("retry_after = %v (want [1s, 60s] = remaining-in-window)", r.RetryAfter)
+	}
+}
+
+func TestBucket_DenyHoldsWhenTTLReportsNegative(t *testing.T) {
+	// Regression: the Lua clamps a negative TTL to 0 on the deny path
+	// (see bucket.go's `if ttl < 0 then ttl = 0`), so Go MUST NOT read
+	// "retryTTL == 0" as "allowed". Use `count > max` as the
+	// authoritative signal.
+	//
+	// Reproduce the condition by stripping the TTL from the bucket's
+	// Redis key via miniredis's Persist — simulating the rare race
+	// where a key survives past its EXPIRE (e.g. lazy eviction ordering).
+	rdb, mr := newRedis(t)
+	fakeNow := time.Unix(1_750_000_000, 0)
+	b := ratelimit.New(rdb, 1, time.Minute,
+		ratelimit.WithClock(func() time.Time { return fakeNow }),
+	)
+	ctx := context.Background()
+
+	// Consume the budget.
+	if r, _ := b.Take(ctx, "k"); !r.Allowed {
+		t.Fatal("first should be allowed")
+	}
+
+	// Derive the bucket key the same way Take() does and strip its
+	// TTL. Under the old code, the next Take() would see retryTTL=0
+	// and incorrectly report Allowed=true even though count > max.
+	minute := fakeNow.Unix() / int64(time.Minute.Seconds())
+	bucketKey := "rl:k:" + strconv.FormatInt(minute, 10)
+	if _, err := mr.Get(bucketKey); err != nil {
+		t.Fatalf("bucket key %q missing: %v", bucketKey, err)
+	}
+	mr.SetTTL(bucketKey, 0) // 0 → no TTL in miniredis
+
+	r, err := b.Take(ctx, "k")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if r.Allowed {
+		t.Error("denial must survive TTL<0 race — got Allowed=true with count > max")
+	}
+	if r.Count <= 1 {
+		t.Errorf("expected count > max after second take, got %d", r.Count)
 	}
 }
 

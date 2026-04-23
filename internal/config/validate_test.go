@@ -58,6 +58,15 @@ func TestValidate_RejectsBadFields(t *testing.T) {
 		"bad trace exporter":    {func(c *config.Config) { c.Obs.TraceExporter = "jaeger" }, "trace_exporter"},
 		"trace sample over 1":   {func(c *config.Config) { c.Obs.TraceSample = 1.5 }, "trace_sample"},
 		"trace sample neg":      {func(c *config.Config) { c.Obs.TraceSample = -0.1 }, "trace_sample"},
+		"core http not url":     {func(c *config.Config) { c.Stellar.CoreHTTPEndpoint = "host:11626" }, "core_http_endpoint"},
+		"s3 endpoint not url":   {func(c *config.Config) { c.Storage.S3Endpoint = "minio-host" }, "s3_endpoint"},
+		"s3 bucket archive missing": {func(c *config.Config) { c.Storage.S3BucketArchive = "" }, "s3_bucket_archive"},
+		"s3 bucket live missing": {func(c *config.Config) { c.Storage.S3BucketLive = "" }, "s3_bucket_live"},
+		"s3 access key env missing": {func(c *config.Config) { c.Storage.S3AccessKeyEnv = "" }, "s3_access_key_env"},
+		"s3 secret key env missing": {func(c *config.Config) { c.Storage.S3SecretKeyEnv = "" }, "s3_secret_key_env"},
+		"s3 bucket uppercase": {func(c *config.Config) { c.Storage.S3BucketArchive = "MyBucket" }, "s3_bucket_archive"},
+		"s3 bucket too short": {func(c *config.Config) { c.Storage.S3BucketArchive = "ab" }, "s3_bucket_archive"},
+		"s3 bucket underscore": {func(c *config.Config) { c.Storage.S3BucketArchive = "my_bucket" }, "s3_bucket_archive"},
 	}
 
 	for name, tc := range cases {
@@ -95,5 +104,80 @@ func TestValidate_ValidReflectorAddressPasses(t *testing.T) {
 	c.Oracle.Reflector.DEXContract = "CAS3J7GYLGXMF6TDJBBYYSE3HQ6BBSMLNUQ34T6TZMYMW2EVH34XOWMA"
 	if err := c.Validate(); err != nil {
 		t.Fatalf("valid C-strkey should pass: %v", err)
+	}
+}
+
+func TestValidate_S3BlockOptional(t *testing.T) {
+	// Operator running local dev without any object store: all S3
+	// fields empty. Validate must accept this (Default() sets them
+	// but clearing the whole block should be valid).
+	c := config.Default()
+	c.Storage.S3Endpoint = ""
+	c.Storage.S3BucketArchive = ""
+	c.Storage.S3BucketLive = ""
+	c.Storage.S3AccessKeyEnv = ""
+	c.Storage.S3SecretKeyEnv = ""
+	c.Storage.S3Region = ""
+	if err := c.Validate(); err != nil {
+		t.Fatalf("empty S3 block should validate: %v", err)
+	}
+}
+
+func TestValidate_RejectsUnknownSource(t *testing.T) {
+	// A typo in enabled_sources must be caught at Validate time so
+	// dry-run doesn't waste the storage-open + RPC-probe budget before
+	// reporting it.
+	c := config.Default()
+	c.Ingestion.EnabledSources = []string{"soroswap", "sorowsap"}
+	err := c.Validate()
+	if err == nil {
+		t.Fatal("expected validation error for unknown source")
+	}
+	if !errors.Is(err, config.ErrInvalidConfig) {
+		t.Errorf("err not wrapped as ErrInvalidConfig: %v", err)
+	}
+	if !strings.Contains(err.Error(), "unknown source") {
+		t.Errorf("expected 'unknown source' in error: %v", err)
+	}
+}
+
+func TestValidate_ReflectorSourceRequiresContract(t *testing.T) {
+	// enabled_sources lists reflector-dex but dex_contract is empty →
+	// must fail Validate, not defer to indexer startup.
+	cases := map[string]struct {
+		source string
+		clear  func(*config.Config)
+	}{
+		"reflector-dex": {"reflector-dex", func(c *config.Config) { c.Oracle.Reflector.DEXContract = "" }},
+		"reflector-cex": {"reflector-cex", func(c *config.Config) { c.Oracle.Reflector.CEXContract = "" }},
+		"reflector-fx":  {"reflector-fx", func(c *config.Config) { c.Oracle.Reflector.FXContract = "" }},
+	}
+	for name, tc := range cases {
+		t.Run(name, func(t *testing.T) {
+			c := config.Default()
+			c.Ingestion.EnabledSources = []string{tc.source}
+			// Set ALL reflector contracts first so only the one we
+			// clear below is empty; avoids false-positive matches.
+			c.Oracle.Reflector.DEXContract = "CAS3J7GYLGXMF6TDJBBYYSE3HQ6BBSMLNUQ34T6TZMYMW2EVH34XOWMA"
+			c.Oracle.Reflector.CEXContract = "CAS3J7GYLGXMF6TDJBBYYSE3HQ6BBSMLNUQ34T6TZMYMW2EVH34XOWMA"
+			c.Oracle.Reflector.FXContract = "CAS3J7GYLGXMF6TDJBBYYSE3HQ6BBSMLNUQ34T6TZMYMW2EVH34XOWMA"
+			tc.clear(&c)
+			err := c.Validate()
+			if err == nil {
+				t.Fatalf("expected error when %s enabled but contract empty", tc.source)
+			}
+			if !strings.Contains(err.Error(), tc.source) {
+				t.Errorf("error should name the source %q: %v", tc.source, err)
+			}
+		})
+	}
+}
+
+func TestValidate_CoreHTTPEndpointOptional(t *testing.T) {
+	// Empty CoreHTTPEndpoint means "don't probe core" — valid.
+	c := config.Default()
+	c.Stellar.CoreHTTPEndpoint = ""
+	if err := c.Validate(); err != nil {
+		t.Fatalf("empty core_http_endpoint should validate: %v", err)
 	}
 }

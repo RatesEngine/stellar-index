@@ -8,7 +8,6 @@ import (
 	"time"
 
 	"github.com/RatesEngine/rates-engine/internal/canonical"
-	"github.com/RatesEngine/rates-engine/internal/obs"
 )
 
 // PriceReader is the storage-side interface for /v1/price lookups.
@@ -157,16 +156,12 @@ func (s *Server) handlePrice(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Mirror staleness into Prometheus. The gauge is a per-asset
-	// snapshot of "how old was the most recent price we just
-	// served" — cheap on cardinality (bounded by distinct queried
-	// assets) and lets the price-stale alert fire without an
-	// aggregator pipeline being live.
-	if !snapshot.ObservedAt.IsZero() {
-		age := time.Since(snapshot.ObservedAt).Seconds()
-		obs.PriceStalenessSeconds.WithLabelValues(asset.String()).Set(age)
-	}
-
+	// Intentionally do NOT emit obs.PriceStalenessSeconds here —
+	// the handler would create one series per distinct queried
+	// asset, and Stellar has tens of thousands of them (see the
+	// cardinality warning on the metric declaration). The
+	// aggregator owns this metric when it ships and will restrict
+	// emission to a top-N allow-list.
 	writeJSON(w, snapshot, Flags{Stale: stale}, sources...)
 }
 

@@ -29,14 +29,19 @@
 //
 // # Adding a new source
 //
-// See [docs/development/contributing-a-source.md] (lands with
-// Week-2 of the delivery plan). Short form:
+// Short form (see existing sources in internal/sources/ for
+// templates):
 //
 //  1. Create internal/sources/<name>/ with doc.go + events.go +
-//     decode.go + consumer.go + source_test.go.
-//  2. Implement Source.
-//  3. Register in internal/sources/registry.go.
-//  4. Add fixtures under test/fixtures/<name>/.
-//
-// [docs/development/contributing-a-source.md]: ../../docs/development/contributing-a-source.md
+//     decode.go + consumer.go + source_test.go. Follow the
+//     five-file convention of soroswap / aquarius / phoenix /
+//     reflector.
+//  2. Implement [Source] on a `*Source` struct. Add compile-time
+//     assertions at the bottom of consumer.go:
+//         var _ consumer.Source = (*Source)(nil)
+//         var _ consumer.Event  = TradeEvent{}
+//  3. Register the source name in cmd/ratesengine-indexer/main.go's
+//     buildSources() switch.
+//  4. Add golden-file fixtures under test/fixtures/<name>/ when
+//     the real SCVal decoder wiring is ready.
 package consumer

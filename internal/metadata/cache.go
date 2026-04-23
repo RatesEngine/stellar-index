@@ -34,8 +34,11 @@ type Cache struct {
 // NewCache constructs a cache-wrapped resolver.
 //
 // rdb may be nil for local/test runs that want no caching — the
-// cache falls through to the resolver every call. Production always
-// provides a live redis client.
+// cache then has no persistent layer and each new request falls
+// through to the resolver. Note: concurrent callers for the same
+// domain still share a single upstream fetch via singleflight
+// (even with nil rdb); only sequential callers repeat work.
+// Production always provides a live redis client.
 func NewCache(resolver *Resolver, rdb redis.Cmdable) *Cache {
 	return &Cache{
 		resolver: resolver,

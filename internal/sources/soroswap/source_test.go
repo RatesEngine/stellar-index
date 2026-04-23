@@ -41,12 +41,12 @@ func TestBufferAbsorbsAndPairs(t *testing.T) {
 	companion := event(EventSync, pair, 100, "tx1", 0, TopicSymbolSync)
 
 	// Swap first → nothing complete.
-	if got, _ := buf.absorb(base, EventSwap); len(got) != 0 {
+	if got, _ := buf.absorb(base, EventSwap, mustClosed(t, base)); len(got) != 0 {
 		t.Fatalf("absorb(swap): expected 0 completes, got %d", len(got))
 	}
 
 	// Sync completes the pair.
-	completed, _ := buf.absorb(companion, EventSync)
+	completed, _ := buf.absorb(companion, EventSync, mustClosed(t, companion))
 	if len(completed) != 1 {
 		t.Fatalf("absorb(sync): expected 1 complete, got %d", len(completed))
 	}
@@ -63,7 +63,8 @@ func TestBufferOrphanSyncStaysBuffered(t *testing.T) {
 	// A sync-only event (no preceding swap in the same group) is
 	// held in the buffer as Sync-set-but-Swap-nil. It's NOT emitted
 	// as a complete pair; orphans() surfaces it.
-	completed, _ := buf.absorb(event(EventSync, "CXYZ...", 42, "tx2", 0, TopicSymbolSync), EventSync)
+	e := event(EventSync, "CXYZ...", 42, "tx2", 0, TopicSymbolSync)
+	completed, _ := buf.absorb(e, EventSync, mustClosed(t, e))
 	if len(completed) != 0 {
 		t.Fatalf("orphan sync should not complete; got %d", len(completed))
 	}
@@ -85,9 +86,9 @@ func TestBufferSeparatesByGroupKey(t *testing.T) {
 	swapB := event(EventSwap, "CBBB", 1, "txB", 0, TopicSymbolSwap)
 	syncA := event(EventSync, "CAAA", 1, "txA", 0, TopicSymbolSync)
 
-	buf.absorb(swapA, EventSwap)
-	buf.absorb(swapB, EventSwap)
-	completed, _ := buf.absorb(syncA, EventSync)
+	buf.absorb(swapA, EventSwap, mustClosed(t, swapA))
+	buf.absorb(swapB, EventSwap, mustClosed(t, swapB))
+	completed, _ := buf.absorb(syncA, EventSync, mustClosed(t, syncA))
 	if len(completed) != 1 {
 		t.Fatalf("expected only A to complete, got %d", len(completed))
 	}
@@ -224,7 +225,7 @@ func TestBufferEvictsStaleOrphans(t *testing.T) {
 		ContractID: "CORPHAN", TxHash: "txOrphan", OperationIndex: 0,
 		Topic: []string{TopicSymbolSwap}, Value: "stub",
 	}
-	completed, evicted := buf.absorb(orphan, EventSwap)
+	completed, evicted := buf.absorb(orphan, EventSwap, mustClosed(t, orphan))
 	if len(completed) != 0 {
 		t.Errorf("absorbed orphan should not complete; got %d", len(completed))
 	}
@@ -245,7 +246,7 @@ func TestBufferEvictsStaleOrphans(t *testing.T) {
 		ContractID:     "CFRESH", TxHash: "txFresh", OperationIndex: 0,
 		Topic: []string{TopicSymbolSwap}, Value: "stub",
 	}
-	_, evicted = buf.absorb(fresh, EventSwap)
+	_, evicted = buf.absorb(fresh, EventSwap, mustClosed(t, fresh))
 	if len(evicted) != 1 {
 		t.Fatalf("expected 1 eviction, got %d", len(evicted))
 	}
@@ -255,6 +256,39 @@ func TestBufferEvictsStaleOrphans(t *testing.T) {
 	// The fresh entry stays; the orphan is gone.
 	if buf.size() != 1 {
 		t.Errorf("buffer size after eviction = %d, want 1 (fresh only)", buf.size())
+	}
+}
+
+func TestBufferBackfillOldEventsPair(t *testing.T) {
+	// Regression: when the orchestrator's backfill path replays a
+	// 6-hour-old ledger range, swap + sync events share an ancient
+	// ClosedAt. Previously `sweepStale` compared against wall-clock
+	// — which meant the swap got evicted as an "orphan" the moment
+	// the sync arrived, because now-5min > 6h-ago. Now sweepStale
+	// uses the incoming event's ClosedAt as the reference, so
+	// same-batch correlated pairs complete regardless of age.
+	buf := newBuffer()
+
+	oldTS := time.Now().UTC().Add(-6 * time.Hour).Format(time.RFC3339)
+	swap := &stellarrpc.Event{
+		Type: "contract", Ledger: 1, LedgerClosedAt: oldTS,
+		ContractID: "COLD", TxHash: "txOld", OperationIndex: 0,
+		Topic: []string{TopicSymbolSwap}, Value: "stub",
+	}
+	sync := &stellarrpc.Event{
+		Type: "contract", Ledger: 1, LedgerClosedAt: oldTS,
+		ContractID: "COLD", TxHash: "txOld", OperationIndex: 0,
+		Topic: []string{TopicSymbolSync}, Value: "stub",
+	}
+	if got, evicted := buf.absorb(swap, EventSwap, mustClosed(t, swap)); len(got) != 0 || len(evicted) != 0 {
+		t.Fatalf("swap: got completed=%d evicted=%d; want both 0", len(got), len(evicted))
+	}
+	got, evicted := buf.absorb(sync, EventSync, mustClosed(t, sync))
+	if len(evicted) != 0 {
+		t.Errorf("sync: evicted %d entries during correlation; want 0", len(evicted))
+	}
+	if len(got) != 1 {
+		t.Fatalf("sync: completed=%d; want 1 (backfill pair must complete)", len(got))
 	}
 }
 
@@ -271,7 +305,7 @@ func TestBufferNoEvictionWithFreshEntries(t *testing.T) {
 			ContractID:     "CFRESH", TxHash: "tx" + string(rune('0'+i)), OperationIndex: 0,
 			Topic: []string{TopicSymbolSwap}, Value: "stub",
 		}
-		_, evicted := buf.absorb(e, EventSwap)
+		_, evicted := buf.absorb(e, EventSwap, mustClosed(t, e))
 		if len(evicted) > 0 {
 			t.Fatalf("step %d: evicted %d fresh entries", i, len(evicted))
 		}
@@ -294,4 +328,17 @@ func event(kind string, contract string, ledger uint32, tx string, op int, topic
 		Topic:          []string{topic0},
 		Value:          "stub",
 	}
+}
+
+// mustClosed is the test-side equivalent of the processPage loop's
+// `e.EventClosedAt() + bail on error`. Every test event is built by
+// `event()` with a well-formed LedgerClosedAt, so parse errors here
+// are a test-fixture bug, not a real condition.
+func mustClosed(t *testing.T, e *stellarrpc.Event) time.Time {
+	t.Helper()
+	ts, err := e.EventClosedAt()
+	if err != nil {
+		t.Fatalf("fixture has unparseable LedgerClosedAt %q: %v", e.LedgerClosedAt, err)
+	}
+	return ts
 }

@@ -166,13 +166,20 @@ func (s *Source) processPage(ctx context.Context, events []stellarrpc.Event, out
 		pool, ok := s.lookupPool(e.ContractID)
 		if !ok {
 			// TODO(#0): fetch pool info via router read (async).
-			// For now skip — the orchestrator's restart loop will
-			// re-visit this ledger range on the next backfill,
-			// giving us time to seed the cache.
+			// For now skip — these events are PERMANENTLY DROPPED
+			// (StreamLive advances the cursor past them; no
+			// re-visit on restart). Count as a decode error so a
+			// sustained rate pages ops — operators will notice
+			// before a phase-1 deploy misses weeks of trades.
+			obs.SourceDecodeErrorsTotal.WithLabelValues(SourceName).Inc()
 			continue
 		}
 
-		closedAt, _ := time.Parse(time.RFC3339, e.LedgerClosedAt)
+		closedAt, err := e.EventClosedAt()
+		if err != nil {
+			obs.SourceDecodeErrorsTotal.WithLabelValues(SourceName).Inc()
+			continue
+		}
 		trades, err := decodeTrade(e, pool, closedAt)
 		if err != nil {
 			// Per-event parse errors don't bubble up — bad data
@@ -253,3 +260,10 @@ func (TradeEvent) EventKind() string { return "aquarius.trade" }
 
 // Source implements [consumer.Event].
 func (TradeEvent) Source() string { return SourceName }
+
+// Compile-time conformance checks — see soroswap/consumer.go for
+// rationale (catches interface drift at `go build` of this package).
+var (
+	_ consumer.Source = (*Source)(nil)
+	_ consumer.Event  = TradeEvent{}
+)

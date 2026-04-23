@@ -185,14 +185,16 @@ Response `data` for `/v1/price`:
   "price": "1.0003",                      // string!
   "price_type": "vwap",                   // one of: vwap, twap, last_trade
   "window_seconds": 300,                  // VWAP window or TWAP window
-  "last_trade_at": "2026-04-22T14:30:12.182Z",
-  "change_24h_pct": "-0.02",              // Freighter V1 / %change
-  "volume_24h_usd": "42185923.44",        // Freighter V2
-  "market_cap_usd": "25394841030.00",     // Freighter V2 (null if supply unknown)
-  "fdv_usd": null,                        // Freighter V2
-  "circulating_supply": "25394841030.00", // Freighter V2 (null if unknown)
-  "total_supply": "25394841030.00",       // Freighter V2
-  "max_supply": null                      // Freighter V2 (null if uncapped)
+  "observed_at": "2026-04-22T14:30:12.182Z", // close-time of underlying
+                                             // last_trade, or aggregation-
+                                             // window end for vwap/twap
+  "change_24h_pct": "-0.02",              // aggregator (not yet wired)
+  "volume_24h_usd": "42185923.44",        // aggregator (not yet wired)
+  "market_cap_usd": "25394841030.00",     // supply derivation (null if unknown)
+  "fdv_usd": null,                        // supply derivation
+  "circulating_supply": "25394841030.00", // supply derivation
+  "total_supply": "25394841030.00",       // supply derivation
+  "max_supply": null                      // supply derivation (null if uncapped)
 }
 ```
 
@@ -511,9 +513,11 @@ All SDKs have:
 
 ---
 
-## 16. First PR — OpenAPI skeleton
+## 16. OpenAPI spec
 
 Lives at [openapi/rates-engine.v1.yaml](../../openapi/rates-engine.v1.yaml).
-Populated with every endpoint above stubbed as `paths:` entries
-with parameter definitions. Handlers arrive Weeks 7–8 per
+Source-of-truth for the wire contract; every implemented handler
+has an entry. Remaining paths (price/batch, price/stream,
+history/since-inception, account/*, SEP-40 passthrough) are on
+the lint's planned_regex allow-list per
 [delivery-plan.md](../discovery/delivery-plan.md).

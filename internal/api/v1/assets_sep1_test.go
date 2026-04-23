@@ -89,6 +89,59 @@ func TestAssetGet_Sep1OverlayVerified(t *testing.T) {
 	}
 }
 
+func TestAssetGet_Sep1OverlayRejectsHostileImageURL(t *testing.T) {
+	// An issuer's stellar.toml is attacker-controlled ground for any
+	// asset on its domain. A hostile image like "javascript:alert(1)"
+	// could be served back to browser-based API consumers. Verify
+	// non-http(s) schemes are dropped, not propagated.
+	issuer := testUSDCIssuer
+	domain := "evil.example.com"
+	reader := &stubAssetReader{
+		byID: map[string]v1.AssetDetail{
+			"USDC-" + testUSDCIssuer: {
+				AssetID: "USDC-" + testUSDCIssuer, Type: "classic",
+				Code: "USDC", Issuer: &issuer, HomeDomain: &domain,
+				Decimals: 7,
+			},
+		},
+	}
+
+	for _, badImage := range []string{
+		"javascript:alert(1)",
+		"data:text/html,<script>alert(1)</script>",
+		"file:///etc/passwd",
+		"blob:abc",
+		"//protocol-relative.example.com/x.png",
+		"   not a url   ",
+	} {
+		meta := &stubMetaResolver{
+			byDomain: map[string]*metadata.SEP1{
+				domain: {Currencies: []metadata.Currency{{
+					Code: "USDC", Issuer: testUSDCIssuer,
+					Name:  "X", Image: badImage,
+				}}},
+			},
+		}
+		srv := v1.New(v1.Options{Assets: reader, Meta: meta})
+		ts := httpTestServer(t, srv)
+
+		resp := mustGet(t, ts.URL+"/v1/assets/USDC-"+testUSDCIssuer)
+		var env struct {
+			Data v1.AssetDetail `json:"data"`
+		}
+		mustDecode(t, resp, &env)
+		if env.Data.Image != nil {
+			t.Errorf("image = %q; hostile URL %q should have been dropped",
+				*env.Data.Image, badImage)
+		}
+		// Other overlay fields should still land — the guard is
+		// image-specific, not a full overlay bail-out.
+		if env.Data.Name == nil {
+			t.Errorf("name dropped alongside hostile image %q — guard should be image-only", badImage)
+		}
+	}
+}
+
 func TestAssetGet_Sep1OverlayNoMatch(t *testing.T) {
 	// SEP-1 loads, but the currency under a different issuer.
 	issuer := testUSDCIssuer

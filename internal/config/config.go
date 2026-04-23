@@ -77,7 +77,7 @@ type StorageConfig struct {
 
 // IngestionConfig controls the indexer's source fleet.
 type IngestionConfig struct {
-	EnabledSources     []string `toml:"enabled_sources" doc:"List of source connector names to run on this indexer replica." default:"[\"sdex\",\"soroswap\",\"aquarius\"]"`
+	EnabledSources     []string `toml:"enabled_sources" doc:"List of source connector names to run on this indexer replica. See config.KnownSources for valid values." default:"[\"soroswap\",\"aquarius\",\"phoenix\"]"`
 	BackfillFromLedger uint32   `toml:"backfill_from_ledger" doc:"Earliest ledger to backfill from; 0 = continue-from-persisted-cursor." default:"0"`
 	BackfillBatchSize  uint32   `toml:"backfill_batch_size" doc:"Ledgers per backfill fetch batch." default:"64"`
 	CursorStoreScheme  string   `toml:"cursor_store_scheme" doc:"Where per-source cursors live — postgres / redis." default:"postgres"`
@@ -96,7 +96,7 @@ type AggregateConfig struct {
 type APIConfig struct {
 	ListenAddr          string   `toml:"listen_addr" doc:"Bind address for the HTTP server." default:"0.0.0.0:3000"`
 	ExternalBaseURL     string   `toml:"external_base_url" doc:"Public-facing base URL (e.g. https://api.ratesengine.net/v1)." default:"https://api.ratesengine.net/v1"`
-	AuthMode            string   `toml:"auth_mode" doc:"Authentication mode — none / apikey / sep10 (future)." default:"apikey"`
+	AuthMode            string   `toml:"auth_mode" doc:"Authentication mode — none / apikey (planned) / sep10 (planned). Default 'none' because the auth middleware has not shipped yet; a non-'none' value with the current binary is cosmetic, not enforced." default:"none"`
 	AnonRateLimitPerMin int      `toml:"anon_rate_limit_per_min" doc:"Per-IP rate limit for anonymous requests." default:"60"`
 	KeyRateLimitPerMin  int      `toml:"key_rate_limit_per_min" doc:"Per-API-key rate limit, default tier." default:"1000"`
 	CDNEnabled          bool     `toml:"cdn_enabled" doc:"Emit CDN-friendly Cache-Control headers on long-immutable endpoints." default:"true"`
@@ -139,7 +139,7 @@ func Default() Config {
 			S3SecretKeyEnv:  "RATESENGINE_S3_SECRET_KEY",
 		},
 		Ingestion: IngestionConfig{
-			EnabledSources:     []string{"sdex", "soroswap", "aquarius"},
+			EnabledSources:     []string{"soroswap", "aquarius", "phoenix"},
 			BackfillFromLedger: 0,
 			BackfillBatchSize:  64,
 			CursorStoreScheme:  "postgres",
@@ -162,7 +162,7 @@ func Default() Config {
 		API: APIConfig{
 			ListenAddr:          "0.0.0.0:3000",
 			ExternalBaseURL:     "https://api.ratesengine.net/v1",
-			AuthMode:            "apikey",
+			AuthMode:            "none",
 			AnonRateLimitPerMin: 60,
 			KeyRateLimitPerMin:  1000,
 			CDNEnabled:          true,

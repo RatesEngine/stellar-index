@@ -110,7 +110,7 @@ Patterns observed:
 
 ## Known false-positive patterns
 
-- **Network event retention window rolled over** — stellar-rpc stopped serving the ledger range our cursor is in. The indexer correctly stops producing trade events while it seeks forward. Alert fires spuriously. Mitigation: tune the alert to look at `ratesengine_source_last_event_age_seconds` instead of raw rate.
+- **Network event retention window rolled over** — stellar-rpc stopped serving the ledger range our cursor is in. The indexer correctly stops producing trade events while it seeks forward. Alert fires spuriously. Mitigation: tune the alert to look at `time() - ratesengine_source_last_event_unix` (staleness age) instead of raw rate.
 - **Midnight UTC continuous-aggregate refresh** — the aggregator's heavy CAGG refresh briefly blocks trade inserts. Indexer queues up, then drains. Alert might fire at the window if duration is short. Tune `for: 3m → for: 5m` if this recurs.
 
 ## Related

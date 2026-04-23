@@ -270,6 +270,34 @@ func TestDecodeUpdate_emptyPricesError(t *testing.T) {
 	}
 }
 
+func TestDecodeUpdate_rejectsPriceVectorLargerThanStride(t *testing.T) {
+	// Safety: a prices vector bigger than opIndexFanoutStride would
+	// overflow the fanned-out OpIndex range into the next operation's
+	// synthetic slot and cause PK collisions in oracle_updates.
+	// Refuse loudly with ErrPriceVectorOverflow instead.
+	prev := decodeUpdateBody
+	defer func() { decodeUpdateBody = prev }()
+
+	xlm := canonical.NativeAsset()
+	oversized := make([]PriceEntry, opIndexFanoutStride+1)
+	price := canonical.NewAmount(big.NewInt(1))
+	for i := range oversized {
+		oversized[i] = PriceEntry{Asset: xlm, Price: price}
+	}
+	decodeUpdateBody = func(_ string) ([]PriceEntry, uint64, error) {
+		return oversized, 0, nil
+	}
+
+	e := &stellarrpc.Event{
+		Topic:      []string{TopicSymbolReflector, TopicSymbolUpdate},
+		ContractID: dexContractID,
+	}
+	_, err := decodeUpdate(e, VariantDEX, DefaultDecimals, "", time.Now())
+	if !errors.Is(err, ErrPriceVectorOverflow) {
+		t.Errorf("expected ErrPriceVectorOverflow, got %v", err)
+	}
+}
+
 func TestSource_BasicsByVariant(t *testing.T) {
 	cases := []struct {
 		name     string

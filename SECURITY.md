@@ -28,7 +28,8 @@ In scope:
 
 - The Rates Engine server binaries (`ratesengine-indexer`, `ratesengine-aggregator`,
   `ratesengine-api`, `ratesengine-ops`, `ratesengine-migrate`).
-- The Go SDK in `pkg/client/`.
+- The Go SDK in `pkg/client/` (planned; will be in scope once it ships —
+  tracked in CLAUDE.md repo map).
 - The deployment kits in `deploy/`.
 - The API surface exposed at our hosted endpoint.
 

@@ -77,18 +77,18 @@ func decodeTrade(e *stellarrpc.Event, pool PoolInfo, closedAt time.Time) ([]cano
 	// ts); if we reused e.OperationIndex for every trade, `InsertTrade`'s
 	// ON CONFLICT DO NOTHING would silently drop all but the first.
 	//
-	// Encode a synthetic sub-index as:
+	// Flat sub-counter fanout:
 	//
-	//     op_index = e.OperationIndex × opIndexFanoutStride + subIdx
+	//     op_index = e.OperationIndex × opIndexFanoutStride + n
 	//
-	// where subIdx = i × opIndexFanoutStride + j, scaling the outer
-	// operation index by a stride large enough to avoid collision with
-	// adjacent operations in the same transaction. Max tokens is ~4,
-	// so stride=256 leaves room to 4×4=16 sub-indices with a 16×
-	// safety margin. Soroswap's uint32 op_index is bounded by the
-	// tx-level op count (≤ 100 per Stellar CAP-67), so we're well
-	// within overflow.
+	// where `n` is the 0-based position of this trade in the emitted
+	// slice. Using a flat counter (not a 2D i,j encoding) bounds the
+	// sub-index by the number of valid (in, out) pairs — at most
+	// N×(N-1) ≤ 12 for a 4-token pool, well below the 256 stride.
+	// The earlier i×stride+j scheme collided across adjacent
+	// operations (op=0,i=1,j=0 → 256 == op=1,i=0,j=0 → 256).
 	var out []canonical.Trade
+	var n uint32
 	for i, inAmt := range amountsIn {
 		if inAmt.Sign() <= 0 {
 			continue
@@ -101,18 +101,25 @@ func decodeTrade(e *stellarrpc.Event, pool PoolInfo, closedAt time.Time) ([]cano
 			if err != nil {
 				return nil, fmt.Errorf("pair: %w", err)
 			}
-			subIdx := uint32(i)*opIndexFanoutStride + uint32(j)
+			if n >= opIndexFanoutStride {
+				// Should never hit in practice (N×(N-1) ≪ stride),
+				// but refuse loudly rather than silently colliding
+				// into the next operation's OpIndex range.
+				return nil, fmt.Errorf("%w: too many (in,out) pairs (%d) for stride %d",
+					ErrMalformedPayload, n+1, opIndexFanoutStride)
+			}
 			out = append(out, canonical.Trade{
 				Source:      SourceName,
 				Ledger:      e.Ledger,
 				TxHash:      e.TxHash,
-				OpIndex:     uint32(e.OperationIndex)*opIndexFanoutStride + subIdx,
+				OpIndex:     uint32(e.OperationIndex)*opIndexFanoutStride + n,
 				Timestamp:   closedAt,
 				Pair:        pair,
 				BaseAmount:  inAmt,
 				QuoteAmount: outAmt,
 				Taker:       user,
 			})
+			n++
 		}
 	}
 	if len(out) == 0 {

@@ -94,6 +94,50 @@ func TestFilterOutliers_SkipsZeroBaseTrades(t *testing.T) {
 	}
 }
 
+func TestFilterOutliers_SkipsZeroQuoteTrades(t *testing.T) {
+	// Symmetric to zero-base: a trade with zero quote has no defined
+	// price either. Must be dropped pre-statistics, not treated as
+	// "price = 0" and dragged into the σ computation.
+	trades := []canonical.Trade{
+		mkTrade(1, 100),
+		mkTrade(1, 101),
+		mkTrade(1, 0), // zero quote
+		mkTrade(1, 99),
+		mkTrade(1, 100),
+	}
+	got := aggregate.FilterOutliers(trades, 3.0)
+	if len(got) != 4 {
+		t.Errorf("got %d, want 4 (zero-quote must be filtered)", len(got))
+	}
+	for _, trade := range got {
+		if trade.QuoteAmount.IsZero() {
+			t.Error("zero-quote trade survived filter")
+		}
+	}
+}
+
+func TestFilterOutliers_FewValidAfterPrefilter(t *testing.T) {
+	// Post-filter prices count is what matters for the "< 3"
+	// short-circuit. 5 total, 3 invalid → only 2 usable → passthrough
+	// (returning just the valid ones, not the invalid ones).
+	trades := []canonical.Trade{
+		mkTrade(0, 100), // invalid
+		mkTrade(1, 101),
+		mkTrade(1, 99),
+		mkTrade(0, 999), // invalid
+		mkTrade(1, 0),   // invalid (zero quote)
+	}
+	got := aggregate.FilterOutliers(trades, 3.0)
+	if len(got) != 2 {
+		t.Errorf("got %d, want 2 (only valid trades returned when σ can't be computed)", len(got))
+	}
+	for _, trade := range got {
+		if trade.BaseAmount.IsZero() || trade.QuoteAmount.IsZero() {
+			t.Error("invalid trade survived filter")
+		}
+	}
+}
+
 func TestFilterOutliers_IdenticalPricesAllKept(t *testing.T) {
 	// σ = 0 edge case. Every price identical — no trade is an outlier
 	// no matter the threshold.

@@ -186,6 +186,48 @@ func TestCache_TTLExpiry(t *testing.T) {
 	}
 }
 
+func TestCache_CoalescesConcurrentFetches(t *testing.T) {
+	// singleflight contract: N concurrent callers for the SAME domain
+	// share ONE upstream fetch. Proves we don't hammer the issuer's
+	// server when a popular asset fans out across request handlers.
+	//
+	// The handler waits 50 ms before responding so all callers are
+	// provably in the singleflight window concurrently. Without
+	// coalescing, hits = 10 (or close). With it, hits = 1.
+	var hits int64
+	slowSrv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/.well-known/stellar.toml" {
+			http.NotFound(w, r)
+			return
+		}
+		time.Sleep(50 * time.Millisecond)
+		atomic.AddInt64(&hits, 1)
+		_, _ = w.Write([]byte(fixtureTOML))
+	}))
+	defer slowSrv.Close()
+
+	rdb, _ := newCacheRedis(t)
+	c := metadata.NewCache(newLocalResolver(t, slowSrv), rdb)
+	dom := hostOf(t, slowSrv)
+
+	const N = 10
+	errs := make(chan error, N)
+	for i := 0; i < N; i++ {
+		go func() {
+			_, err := c.Resolve(context.Background(), dom)
+			errs <- err
+		}()
+	}
+	for i := 0; i < N; i++ {
+		if err := <-errs; err != nil {
+			t.Errorf("caller %d: %v", i, err)
+		}
+	}
+	if got := atomic.LoadInt64(&hits); got != 1 {
+		t.Errorf("upstream hits with %d concurrent callers: %d (want 1 — singleflight should coalesce)", N, got)
+	}
+}
+
 func TestCache_NilRedisFallsThrough(t *testing.T) {
 	// NewCache(r, nil) should still work — it just always calls
 	// upstream. Useful for local dev without redis.

@@ -15,9 +15,12 @@ var ErrNoTrades = errors.New("aggregate: no trades in window")
 // VWAP returns the volume-weighted average price of a slice of
 // trades as an exact-precision big.Rat (quote-per-base).
 //
-// Definition: VWAP = Σ(QuoteAmount_i) / Σ(BaseAmount_i). Trades with
-// zero base volume are skipped silently — they can't contribute to
-// a weighted price.
+// Definition: VWAP = Σ(QuoteAmount_i) / Σ(BaseAmount_i). Trades
+// whose base OR quote is non-positive are skipped — they can't
+// contribute to a meaningful weighted price. canonical.Trade.Validate
+// already enforces both > 0, but VWAP is defensive because callers
+// occasionally construct Trade values bypassing Validate (tests,
+// future aggregator rollups).
 //
 // Returns [ErrNoTrades] when the sum of base volumes is zero (either
 // an empty input or every trade skipped). The returned *big.Rat is
@@ -33,11 +36,15 @@ func VWAP(trades []canonical.Trade) (*big.Rat, error) {
 	for i := range trades {
 		t := &trades[i]
 		b := t.BaseAmount.BigInt()
-		if b.Sign() == 0 {
+		if b.Sign() <= 0 {
+			continue
+		}
+		q := t.QuoteAmount.BigInt()
+		if q.Sign() <= 0 {
 			continue
 		}
 		sumBase.Add(sumBase, b)
-		sumQuote.Add(sumQuote, t.QuoteAmount.BigInt())
+		sumQuote.Add(sumQuote, q)
 	}
 	if sumBase.Sign() == 0 {
 		return nil, ErrNoTrades

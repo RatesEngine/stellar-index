@@ -1,6 +1,7 @@
 package v1_test
 
 import (
+	"bytes"
 	"context"
 	"testing"
 	"time"
@@ -35,6 +36,23 @@ func TestMarkets_EmptyWhenReaderNil(t *testing.T) {
 	mustDecode(t, resp, &env)
 	if len(env.Data) != 0 {
 		t.Errorf("want empty list, got %d", len(env.Data))
+	}
+}
+
+func TestMarkets_NilSliceFromReaderMarshalsAsEmptyArray(t *testing.T) {
+	// Regression: reader returning (nil, "", nil) must not surface as
+	// "data": null — OpenAPI MarketsEnvelope.data is `type: array`.
+	reader := &stubMarketsReader{pairs: nil, nextCur: ""}
+	srv := v1.New(v1.Options{Markets: reader})
+	ts := httpTestServer(t, srv)
+
+	resp := mustGet(t, ts.URL+"/v1/markets")
+	if resp.StatusCode != 200 {
+		t.Fatalf("status = %d", resp.StatusCode)
+	}
+	body, _ := readAll(resp)
+	if !bytes.Contains([]byte(body), []byte(`"data":[]`)) {
+		t.Errorf("expected \"data\":[] in body, got: %s", body)
 	}
 }
 

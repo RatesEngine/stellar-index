@@ -2,6 +2,7 @@ package canonical_test
 
 import (
 	"encoding/json"
+	"errors"
 	"math/big"
 	"testing"
 	"time"
@@ -67,8 +68,17 @@ func TestOracle_Validate_errors(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			u := validOracle()
 			mutate(&u)
-			if err := u.Validate(); err == nil {
+			err := u.Validate()
+			if err == nil {
 				t.Fatal("expected error, got nil")
+			}
+			// Every Validate failure must wrap the canonical sentinel
+			// so callers can `errors.Is(err, ErrInvalidOracle)` to
+			// classify. A missing %w in a future check would still
+			// trip `err == nil` → t.Fatal above and pass this test
+			// silently; this check catches that regression too.
+			if !errors.Is(err, c.ErrInvalidOracle) {
+				t.Errorf("err %v does not wrap ErrInvalidOracle", err)
 			}
 		})
 	}

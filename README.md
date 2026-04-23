@@ -1,6 +1,7 @@
 # Rates Engine
 
-**Status:** Pre-v1 (Phase 1 discovery complete, Phase 2 build starting).
+**Status:** Pre-v1. Ingestion + storage + REST API shipped;
+aggregator + hardening in progress.
 **License:** Apache-2.0.
 **Tested against:** Stellar protocol 25.x.
 
@@ -27,8 +28,9 @@ See **[CLAUDE.md](CLAUDE.md)**. It's your orientation map.
 
 - **Users of the hosted API:** <https://docs.ratesengine.net>
   (post-launch — placeholder).
-- **Self-hosting:** [docs/development/getting-started.md](docs/development/getting-started.md)
-  (coming in Week 1).
+- **Self-hosting:** `make dev` boots the full local stack
+  (TimescaleDB + Redis + MinIO). See
+  [deploy/docker-compose/dev.yaml](deploy/docker-compose/dev.yaml).
 - **Contributors:** [CONTRIBUTING.md](CONTRIBUTING.md).
 - **Architects / reviewers:** [docs/discovery/](docs/discovery/) —
   Phase-1 audit artefacts.
@@ -81,9 +83,17 @@ long-form rationale; each becomes a numbered ADR.
   [`docs/discovery/`](docs/discovery/).
 - ✅ Repo structure plan, engineering standards, 10-week delivery
   plan locked.
-- ⏳ Phase 2 (Weeks 2–3): ingestion scaffold.
-- ⏳ Phase 3 (Weeks 4–5): aggregation engine.
-- ⏳ Phase 4–7: historical, API, hardening, launch.
+- ✅ Phase 2 ingestion scaffold: Soroswap / Aquarius / Phoenix /
+  Reflector sources, TimescaleDB hypertables + continuous
+  aggregates, stellar-rpc client, indexer binary with
+  Prometheus scrape target.
+- ✅ REST API v1 serving `/healthz`, `/readyz`, `/version`,
+  `/assets`, `/price`, `/history`, `/ohlc`, `/vwap`, `/twap`,
+  `/markets`, `/oracle/latest` behind CORS + per-IP rate limit.
+- ⏳ Aggregation engine (VWAP/TWAP cache refresh, cross-source
+  divergence detection).
+- ⏳ Historical backfill, remaining sources (SDEX / Comet / Blend /
+  Redstone / Band / CEX / FX), hardening, launch.
 
 **Production deadline:** 2026-06-30 per
 [docs/discovery/delivery-plan.md](docs/discovery/delivery-plan.md).

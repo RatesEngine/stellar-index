@@ -279,6 +279,168 @@ func TestAPI_EndToEnd(t *testing.T) {
 	})
 }
 
+// TestAPI_Readyz stands up the same server with a real Timescale
+// ReadyChecker and asserts /v1/readyz reports `ok` + the check
+// round-trip covers the production Ping path. Before: readyz was
+// only unit-tested with stubs — a regression in
+// timescale.Store.DB().PingContext (e.g. a driver swap) wouldn't
+// be caught here.
+func TestAPI_Readyz(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+	defer cancel()
+
+	dsn := startTimescale(t, ctx)
+	applyMigrations(t, dsn)
+
+	store, err := timescale.Open(ctx, dsn)
+	if err != nil {
+		t.Fatalf("store open: %v", err)
+	}
+	t.Cleanup(func() { _ = store.Close() })
+
+	srv := v1.New(v1.Options{
+		ReadyChecks: []v1.ReadyChecker{pgReadyChecker{s: store}},
+	})
+	ts := httptest.NewServer(srv.Handler())
+	t.Cleanup(ts.Close)
+
+	resp, err := http.Get(ts.URL + "/v1/readyz")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != 200 {
+		t.Fatalf("readyz status = %d, want 200", resp.StatusCode)
+	}
+
+	var env struct {
+		Data struct {
+			Status string `json:"status"`
+			Checks []struct {
+				Name string `json:"name"`
+				OK   bool   `json:"ok"`
+			} `json:"checks"`
+		} `json:"data"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&env); err != nil {
+		t.Fatalf("decode readyz: %v", err)
+	}
+	if env.Data.Status != "ok" {
+		t.Errorf("status = %q, want ok; env=%+v", env.Data.Status, env.Data)
+	}
+	found := false
+	for _, ch := range env.Data.Checks {
+		if ch.Name == "postgres" {
+			found = true
+			if !ch.OK {
+				t.Errorf("postgres check reported not-OK against a live container")
+			}
+		}
+	}
+	if !found {
+		t.Errorf("postgres check not in readyz response: %+v", env.Data.Checks)
+	}
+}
+
+// pgReadyChecker mirrors cmd/ratesengine-api/main.go's
+// storeChecker so the readyz integration exercises the exact Ping
+// path production uses.
+type pgReadyChecker struct{ s *timescale.Store }
+
+func (c pgReadyChecker) Name() string                     { return "postgres" }
+func (c pgReadyChecker) Ping(ctx context.Context) error   { return c.s.DB().PingContext(ctx) }
+
+// TestAPI_OracleLatest stands up the v1 handler against a real
+// Timescale with seeded oracle updates and walks the full path:
+// InsertOracleUpdate → DISTINCT ON SQL → canonical parse round-
+// trip → oracleReadingFrom rendering. Covers the behaviour the
+// unit tests can only stub.
+func TestAPI_OracleLatest(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+	defer cancel()
+
+	dsn := startTimescale(t, ctx)
+	applyMigrations(t, dsn)
+
+	store, err := timescale.Open(ctx, dsn)
+	if err != nil {
+		t.Fatalf("store open: %v", err)
+	}
+	t.Cleanup(func() { _ = store.Close() })
+
+	// Seed two observations of XLM/USDC: reflector-dex older,
+	// reflector-cex newer. /v1/oracle/latest returns the most-
+	// recent reading per source — so both show up.
+	usdc, _ := c.NewClassicAsset("USDC", "GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN")
+	price, _ := new(big.Int).SetString("12420000000000", 10)
+	ts := time.Now().UTC().Truncate(time.Second)
+
+	seeds := []c.OracleUpdate{
+		{
+			Source:    "reflector-dex",
+			Ledger:    52_430_001,
+			TxHash:    "1111111111111111111111111111111111111111111111111111111111111111",
+			OpIndex:   0,
+			Timestamp: ts.Add(-1 * time.Minute),
+			Asset:     c.NativeAsset(), Quote: usdc,
+			Price: c.NewAmount(price), Decimals: 14,
+		},
+		{
+			Source:    "reflector-cex",
+			Ledger:    52_430_002,
+			TxHash:    "2222222222222222222222222222222222222222222222222222222222222222",
+			OpIndex:   0,
+			Timestamp: ts,
+			Asset:     c.NativeAsset(), Quote: usdc,
+			Price: c.NewAmount(price), Decimals: 14,
+		},
+	}
+	for _, u := range seeds {
+		if err := store.InsertOracleUpdate(ctx, u); err != nil {
+			t.Fatalf("InsertOracleUpdate: %v", err)
+		}
+	}
+
+	srv := v1.New(v1.Options{Oracle: oracleAdapter{s: store}})
+	hts := httptest.NewServer(srv.Handler())
+	t.Cleanup(hts.Close)
+
+	// No source filter — expect both sources back.
+	var env struct {
+		Data []v1.OracleReading `json:"data"`
+	}
+	getJSON(t, hts.URL+"/v1/oracle/latest?asset=native", &env)
+	if len(env.Data) != 2 {
+		t.Fatalf("got %d readings, want 2 (dex + cex)", len(env.Data))
+	}
+	gotSources := map[string]bool{}
+	for _, r := range env.Data {
+		gotSources[r.Source] = true
+		if r.Price != "0.12420000000000" {
+			t.Errorf("source %q price = %q, want 0.12420000000000",
+				r.Source, r.Price)
+		}
+	}
+	if !gotSources["reflector-dex"] || !gotSources["reflector-cex"] {
+		t.Errorf("missing sources in response: %v", gotSources)
+	}
+
+	// With source filter — exactly one reading back.
+	env = struct {
+		Data []v1.OracleReading `json:"data"`
+	}{}
+	getJSON(t, hts.URL+"/v1/oracle/latest?asset=native&source=reflector-cex", &env)
+	if len(env.Data) != 1 || env.Data[0].Source != "reflector-cex" {
+		t.Fatalf("filtered response = %+v", env.Data)
+	}
+}
+
+type oracleAdapter struct{ s *timescale.Store }
+
+func (a oracleAdapter) LatestOracleUpdatesForAsset(ctx context.Context, asset c.Asset, sourceFilter string) ([]c.OracleUpdate, error) {
+	return a.s.LatestOracleUpdatesForAsset(ctx, asset, sourceFilter)
+}
+
 // ─── Adapters + helpers ───────────────────────────────────────────
 
 // apiHistoryAdapter mirrors cmd/ratesengine-api/main.go's

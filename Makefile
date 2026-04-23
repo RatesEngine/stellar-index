@@ -94,7 +94,7 @@ test-cover: ## Unit tests + coverage report
 	@echo "Coverage report: coverage.html"
 
 .PHONY: test-integration
-test-integration: ## Integration tests (requires `make dev`)
+test-integration: ## Integration tests (requires Docker; spins its own containers via testcontainers-go)
 	$(GO) test -tags=integration -timeout 10m $(INT_TEST_PKGS)
 
 .PHONY: test-load
@@ -136,7 +136,12 @@ build: ## Build all binaries into bin/
 	done
 
 .PHONY: build-docker
-build-docker: ## Build all component Docker images locally
+build-docker: ## Build all component Docker images locally (requires per-binary Dockerfiles in docker/)
+	@if [ ! -d docker ]; then \
+	  echo "build-docker: docker/ directory not present yet — per-binary Dockerfiles land with the packaging PR." >&2; \
+	  echo "build-docker: local dev uses deploy/docker-compose/dev.yaml; production deploys via configs/ansible/." >&2; \
+	  exit 2; \
+	fi
 	@for b in $(BINARIES); do \
 	  docker build -t ratesengine/$$b:local -f docker/$$b.Dockerfile . || exit 1; \
 	done
@@ -164,8 +169,20 @@ docs: docs-all ## Alias for docs-all
 docs-all: docs-api docs-config docs-metrics ## Regenerate all reference docs
 
 .PHONY: docs-api
-docs-api: ## Regenerate API reference from openapi/ctx-rates.v1.yaml
-	@./scripts/ci/regen-api-docs.sh
+docs-api: ## Regenerate API reference from openapi/rates-engine.v1.yaml
+	@if command -v redocly >/dev/null 2>&1; then \
+	  mkdir -p docs/reference/api; \
+	  redocly build-docs openapi/rates-engine.v1.yaml \
+	    --output docs/reference/api/index.html; \
+	  echo "GENERATED FILE - DO NOT EDIT. Source: openapi/rates-engine.v1.yaml" \
+	    > docs/reference/api/README.md; \
+	  echo "" >> docs/reference/api/README.md; \
+	  echo "The rendered reference is [index.html](index.html)." >> docs/reference/api/README.md; \
+	else \
+	  echo "redocly not installed. Install with 'npm i -g @redocly/cli' to render the API reference."; \
+	  echo "Source of truth: openapi/rates-engine.v1.yaml"; \
+	  exit 1; \
+	fi
 
 .PHONY: docs-config
 docs-config: ## Regenerate config reference from struct tags
@@ -173,7 +190,12 @@ docs-config: ## Regenerate config reference from struct tags
 
 .PHONY: docs-metrics
 docs-metrics: ## Regenerate metrics registry reference
-	@./scripts/ci/regen-metrics-docs.sh
+	@# The metrics reference at docs/reference/metrics/README.md is hand-
+	@# written today — there's no Prometheus Registry walker wired up.
+	@# Drift is guarded by scripts/ci/lint-docs.sh section 3 (every
+	@# registered metric in internal/obs must appear in the README).
+	@echo "docs-metrics is manual today; docs/reference/metrics/README.md is hand-edited."
+	@echo "Drift enforced by 'make lint-docs'. See TODO in metrics/README.md."
 
 .PHONY: docs-serve
 docs-serve: ## Preview docs site locally on :8080

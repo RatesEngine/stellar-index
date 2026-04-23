@@ -5,6 +5,12 @@
 *.out
 coverage.txt
 coverage.html
+# Stray binaries built without -o bin/ (prevent accidental root-level commits).
+/ratesengine-indexer
+/ratesengine-aggregator
+/ratesengine-api
+/ratesengine-ops
+/ratesengine-migrate
 
 # Go tool caches
 /.gocache/

@@ -70,6 +70,12 @@ func (s *Server) handleMarkets(w http.ResponseWriter, r *http.Request) {
 			"Internal error", http.StatusInternalServerError, "")
 		return
 	}
+	// Defensive nil-to-empty: OpenAPI's MarketsEnvelope.data is
+	// `type: array`, which means "data": null violates the schema.
+	// Mirrors the handleAssetList guard.
+	if rows == nil {
+		rows = []Market{}
+	}
 
 	env := Envelope{
 		Data:  rows,

@@ -110,3 +110,24 @@ func TestTriangulateChain_Empty(t *testing.T) {
 		t.Fatalf("err = %v, want ErrTriangulateZero", err)
 	}
 }
+
+func TestTriangulateChain_RejectsBadElement(t *testing.T) {
+	// One bad element anywhere in the chain must kill the whole
+	// computation — we never "skip" a missing hop because the
+	// resulting price would be wildly wrong but look plausible.
+	valid := big.NewRat(2, 1)
+	zero := new(big.Rat)
+	neg := big.NewRat(-1, 1)
+	for name, chain := range map[string][]*big.Rat{
+		"nil in middle":  {valid, nil, valid},
+		"zero in middle": {valid, zero, valid},
+		"neg in middle":  {valid, neg, valid},
+		"nil at end":     {valid, valid, nil},
+		"zero at end":    {valid, valid, zero},
+	} {
+		_, err := aggregate.TriangulateChain(chain...)
+		if !errors.Is(err, aggregate.ErrTriangulateZero) {
+			t.Errorf("%s: err = %v, want ErrTriangulateZero", name, err)
+		}
+	}
+}

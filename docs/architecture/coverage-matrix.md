@@ -89,7 +89,7 @@ Any row with **status ❌** is a blocker for launch. Any row with
 | S5.1 | Live event ingest (Soroban getEvents + ledger stream) | §Real-time — Hot path | 3 | `internal/consumer` + `internal/sources/*` StreamLive | — | [data-sources/archival-nodes.md](../discovery/data-sources/archival-nodes.md) | ✅ verified | 5 |
 | S5.2 | ≤ 30s staleness (Freighter SLA) | §Latency Targets | 6 | cross-cutting | — | [data-sources/archival-nodes.md](../discovery/data-sources/archival-nodes.md) + HA plan | 🧪 designed | 3 |
 | S5.3 | SSE streaming for subscribers | §Streaming Support | 7 | `internal/api/stream` | ADR-0006 (planned) | [oracles/reflector.md](../discovery/oracles/reflector.md) | 🧪 designed | 2 |
-| S5.4 | Degradation signals (`stale_flag`, `reduced_redundancy`) | §Error Handling and Degradation | 5 | `internal/api/envelope` | — | (design only) | 🧪 designed | 2 |
+| S5.4 | Degradation signals (`stale_flag`, `reduced_redundancy`) | §Error Handling and Degradation | 5 | `internal/api/envelope` | — | `envelope.Flags` shipped (stale, reduced_redundancy, triangulated, divergence_warning) | ✅ verified | 3 |
 
 ### S6. Historical price endpoints + OHLC
 
@@ -98,15 +98,15 @@ Any row with **status ❌** is a blocker for launch. Any row with
 | S6.1 | Since-inception backfill (ledger 2 → today) | §Historical Data | 2 (scaffold), 5 (run) | `cmd/ratesengine-ops backfill` | — | [data-sources/galexie.md](../discovery/data-sources/galexie.md) + [data-sources/stellar-data-lakes.md](../discovery/data-sources/stellar-data-lakes.md) | ✅ verified | 4 |
 | S6.2 | Pre-P20 (no-Soroban) coverage via ClaimAtom | §Historical Data | 2 | `internal/sources/sdex` | — | [dexes-amms/sdex.md](../discovery/dexes-amms/sdex.md), [protocol-versions.md](../discovery/protocol-versions.md) | ✅ verified | 5 |
 | S6.3 | Post-P23 unified events handling | §Historical Data | 2 | `internal/sources/sdex` | — | [notes/cap-67-unified-events.md](../discovery/notes/cap-67-unified-events.md) | ✅ verified | 5 |
-| S6.4 | OHLC continuous aggregates | §Historical — storage | 4 | `internal/storage/timescale` + migrations | ADR-0007 (planned: TimescaleDB) | (design in HA plan) | 🧪 designed | 3 |
-| S6.5 | Retention: 1h+ granularity indefinite; <1h capped | §Historical — retention | 4 | Timescale retention policies | ADR-0007 | (design in HA plan) | 🧪 designed | 3 |
+| S6.4 | OHLC continuous aggregates | §Historical — storage | 4 | `internal/storage/timescale` + migrations | ADR-0006 | migrations/0002 creates prices_{1m,15m,1h,4h,1d,1w,1mo} CAGGs; covered by test/integration/migrations_test.go. OHLC fields in CAGGs still need aggregator binary to populate at runtime. | ⚠ caveat | 3 |
+| S6.5 | Retention: 1h+ granularity indefinite; <1h capped | §Historical — retention | 4 | Timescale retention policies | ADR-0006 | migrations/0002 wires retention policies per CAGG; covered by TestMigrationsRoundTrip + policy-attachment assertions. | ✅ verified | 4 |
 
 ### S7. Supported timeframes (1h / 24h / 1w / 1mo / 1yr / all-time)
 
 | # | Requirement | Proposal | Week | Owner | ADR | Verified by | Status | Conf |
 | - | ----------- | -------- | ---- | ----- | --- | ----------- | ------ | ---- |
-| S7.1 | 1m / 15m / 1h / 4h / 1d / 1w / 1mo granularities | Verbatim in §Historical Data | 4 | Timescale continuous aggregates | ADR-0007 | (design; impl pending) | 🧪 designed | 3 |
-| S7.2 | 1h+ kept indefinitely, <1h capped | Verbatim in §Historical Data | 4 | Timescale retention | ADR-0007 | (design; impl pending) | 🧪 designed | 3 |
+| S7.1 | 1m / 15m / 1h / 4h / 1d / 1w / 1mo granularities | Verbatim in §Historical Data | 4 | Timescale continuous aggregates | ADR-0006 | migrations/0002 ships all 7 CAGGs; verified by TestMigrationsRoundTrip. | ✅ verified | 4 |
+| S7.2 | 1h+ kept indefinitely, <1h capped | Verbatim in §Historical Data | 4 | Timescale retention | ADR-0006 | migrations/0002 adds 30-day retention only on prices_1m + prices_15m; hourly+ have no retention = indefinite. Verified by assertPolicyAttached in migrations_test.go. | ✅ verified | 4 |
 
 ### S8. Base and quote volume in USD
 
@@ -121,7 +121,7 @@ Any row with **status ❌** is a blocker for launch. Any row with
 | - | ----------- | -------- | ---- | ----- | --- | ----------- | ------ | ---- |
 | S9.1 | ≥ 99.99 % uptime | §Availability | 8–9 | HA plan | ADR-0008 (planned: HA topology) | (HA plan) | 🧪 designed | 2 |
 | S9.2 | p95 ≤ 200 ms, p99 ≤ 500 ms | §Latency Targets | 9 | `internal/api` + Redis caching | ADR-0009 (planned: Redis cache schema) | (API design + HA plan) | 🧪 designed | 2 |
-| S9.3 | 1000 req/min per client | §Rate Limits | 7 | `internal/ratelimit` | — | (API design) | 🧪 designed | 3 |
+| S9.3 | 1000 req/min per client | §Rate Limits | 7 | `internal/ratelimit` | — | Bucket + middleware shipped; anonymous tier at 60/min today, apikey tier (1000/min) gated on auth middleware landing. | ⚠ caveat | 3 |
 | S9.4 | Defined degradation when prices unavailable | §Degradation Strategy + divergence | 5 | `internal/divergence` + `/api/envelope` | — | (design; impl pending) | 🧪 designed | 2 |
 
 ### S10. Open source
@@ -181,7 +181,7 @@ Same as S7. No additional requirement.
 | # | Requirement | Proposal | Week | Owner | Verified by | Status | Conf |
 | - | ----------- | -------- | ---- | ----- | ----------- | ------ | ---- |
 | F5.1 | REST or GraphQL | §API Layer | 7 | `internal/api/v1` (REST), optional `/graphql` later | (API design) | 🧪 designed | 3 |
-| F5.2 | Rate limits ≥ 1000 req/min | §Rate Limits and Throughput | 7 | `internal/ratelimit` | (API design) | 🧪 designed | 3 |
+| F5.2 | Rate limits ≥ 1000 req/min | §Rate Limits and Throughput | 7 | `internal/ratelimit` | Bucket + middleware shipped; anonymous tier 60/min today, 1000/min on apikey tier pending auth. | ⚠ caveat | 3 |
 | F5.3 | Bulk / batch query support | §Batch Queries | 7 | `internal/api/batch` | (API design) | 🧪 designed | 3 |
 
 ## Freighter RFP — Misc requirements

@@ -86,4 +86,15 @@ var (
 	// never emit this (5-min cadence implies always at least one
 	// price), but guard against it defensively.
 	ErrEmptyPrices = errors.New("reflector: empty prices vector")
+
+	// ErrPriceVectorOverflow — prices vector size exceeded the
+	// op-index fanout stride (opIndexFanoutStride = 1024). If this
+	// ever happens the fanned-out OpIndex values would spill into
+	// the next operation's synthetic range and collide on the
+	// oracle_updates hypertable's (source, ledger, tx_hash,
+	// op_index, ts) primary key. Refusing the event loudly is
+	// safer than silently writing colliding rows — observed max in
+	// the wild is ~50 assets/update, so hitting 1024 means either
+	// a feed explosion or a decoder bug.
+	ErrPriceVectorOverflow = errors.New("reflector: price vector exceeds OpIndex fanout stride")
 )

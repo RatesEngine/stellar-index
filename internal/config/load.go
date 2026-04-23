@@ -58,6 +58,10 @@ func LoadReader(r io.Reader, origin string) (Config, error) {
 //
 // Unknown / empty env vars are ignored; no field is overwritten with
 // an empty string.
+//
+// Does NOT re-validate. Callers that want env-driven values held to
+// the same invariants as file-driven values should use [LoadWithEnv]
+// or call [Config.Validate] after this.
 func (c *Config) ApplyEnvOverrides() {
 	if v := os.Getenv("RATESENGINE_POSTGRES_DSN"); v != "" {
 		c.Storage.PostgresDSN = v
@@ -71,4 +75,22 @@ func (c *Config) ApplyEnvOverrides() {
 	if v := os.Getenv("RATESENGINE_S3_SECRET_KEY"); v != "" {
 		c.Storage.S3SecretKeyEnv = v
 	}
+}
+
+// LoadWithEnv is [Load] + [ApplyEnvOverrides] + a second [Validate].
+// Use this in binaries so a bad env-var value (e.g., malformed
+// RATESENGINE_POSTGRES_DSN overriding a known-good DSN from the file)
+// fails fast with the same ErrInvalidConfig error as a bad file,
+// instead of opening the pool and getting a confusing DB error
+// at connect time.
+func LoadWithEnv(path string) (Config, error) {
+	c, err := Load(path)
+	if err != nil {
+		return Config{}, err
+	}
+	c.ApplyEnvOverrides()
+	if err := c.Validate(); err != nil {
+		return Config{}, fmt.Errorf("config: %s (with env overrides): %w", path, err)
+	}
+	return c, nil
 }

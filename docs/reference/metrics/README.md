@@ -8,7 +8,13 @@ appear here, and vice versa.
 Declaration source of truth: `internal/obs/metrics.go`.
 Emission sites: `grep -rn <metric_name> internal/ cmd/`.
 
-## HTTP layer (all binaries serving an HTTP mux)
+## HTTP layer (emitted by the API binary only)
+
+The indexer also exposes an HTTP mux (for `/metrics` + `/healthz`)
+but deliberately does NOT wrap it with `obs.HTTPMetrics`
+middleware — every Prometheus scrape would otherwise inflate
+`http_requests_total`. These counters reflect only the public API
+request path.
 
 ### `http_requests_total`
 
@@ -78,7 +84,13 @@ observation.
 
 ### `ratesengine_source_insert_errors_total`
 
-Counter, labels `source`, `kind` (`trade` / `oracle` / `panic`).
+Counter, labels `source`, `kind` (`trade` / `oracle` / `panic` / `unhandled`).
+
+`unhandled` fires when a source emits an event type the sink's
+type-switch doesn't recognise — usually a half-wired new source
+registered in `buildSources()` without a matching case in
+`handleOneEvent`. Silent drops would otherwise look like "metrics
+say we're ingesting" with empty tables.
 
 Events that failed to persist to the store. `panic` kind flags a
 recovered panic in the event-sink handler. A sustained rate signals

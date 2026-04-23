@@ -25,7 +25,7 @@ The repo is Go (primary), Apache-2.0, pre-v1 at time of writing.
 make help              # list all targets
 make dev               # docker-compose up the full stack locally
 make test              # unit tests (fast; ~2 min)
-make test-integration  # integration tests against real Postgres/Redis/MinIO
+make test-integration  # integration tests — spins its own containers via testcontainers-go (requires Docker)
 make lint              # gofumpt + golangci-lint + archlint
 make build             # all binaries into bin/
 make docs-all          # regenerate docs/reference/ from OpenAPI + struct tags
@@ -65,40 +65,37 @@ development. If one does, it's a bug.
 │   ├── canonical/                core types: Trade, Price, Asset, Pair, Amount
 │   ├── config/                   config loading + schema
 │   ├── consumer/                 the Source interface + orchestration
-│   ├── extract/                  thin wrapper over withObsrvr/stellar-extract
+│   ├── stellarrpc/               JSON-RPC client for stellar-rpc (getEvents, getTransaction, …)
 │   ├── sources/                  one package per source (on-chain + CEX + FX)
 │   ├── aggregate/                VWAP/TWAP/outlier/triangulation
-│   ├── supply/                   circulating/total/max supply derivation
 │   ├── storage/                  TimescaleDB + Redis + MinIO adapters
 │   ├── api/                      REST/SSE handlers (v1)
-│   ├── auth/                     API-key + optional SEP-10
 │   ├── ratelimit/                Redis-backed token bucket
 │   ├── metadata/                 SEP-1 / stellar.toml resolution
-│   ├── divergence/               cross-check against CoinGecko/CMC/Chainlink-HTTP
-│   └── obs/                      metrics, tracing, logging
+│   ├── cachekeys/                canonical Redis key builders (ADR-0007)
+│   ├── version/                  build-time version info (ldflags-populated)
+│   ├── obs/                      metrics, tracing, logging
+│   ├── supply/        (planned)  circulating/total/max supply derivation
+│   ├── auth/          (planned)  API-key + optional SEP-10
+│   └── divergence/    (planned)  cross-check against CoinGecko/CMC/Chainlink-HTTP
 │
-├── pkg/                       public surface (import this externally)
+├── pkg/            (planned)  public surface — no stable API yet
 │   ├── client/                   Go client SDK for our API
 │   └── types/                    stable types API consumers depend on
 │
 ├── migrations/                TimescaleDB migrations (golang-migrate)
-├── configs/                   default + example YAML configs
+├── configs/                   default + example YAML + Ansible roles
 ├── openapi/                   rates-engine.v1.yaml — source of truth for API
-├── deploy/                    docker-compose / k8s / nomad / baremetal kits
-├── docker/                    Dockerfiles per component
-├── scripts/                   dev/ops/ci helpers
-├── test/                      integration / load / chaos / fixtures
-├── tools/                     Go tools pinned via go.mod (not shipped)
+├── deploy/                    docker-compose dev stack, k8s / baremetal kits
+├── scripts/                   dev/ops/ci helpers (incl. ci/lint-docs.sh)
+├── test/                      integration / fixtures (build tag: integration)
 │
 └── docs/
-    ├── README.md                 docs index
     ├── architecture/             narrative designs (last_verified checked in CI)
     ├── adr/                      Architecture Decision Records (immutable)
     ├── reference/                auto-generated from OpenAPI + struct tags
-    ├── operations/               runbooks, SEV playbook, backup/DR
-    ├── development/              dev setup, contribution patterns
-    ├── discovery/                Phase-1 audit archive (read-only going forward)
-    └── _archive/                 superseded docs (never deleted, always archived)
+    ├── operations/               runbooks (1 per alert), SEV playbook
+    └── discovery/                Phase-1 audit archive (read-only, closed 2026-04-22)
 ```
 
 ---

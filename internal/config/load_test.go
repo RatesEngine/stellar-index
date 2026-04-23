@@ -222,3 +222,42 @@ func TestApplyEnvOverrides(t *testing.T) {
 		t.Errorf("empty env should not override: %q", c2.Storage.PostgresDSN)
 	}
 }
+
+func TestLoadWithEnv_RevalidatesAfterOverride(t *testing.T) {
+	// A file that Validate() accepts, then env override with a
+	// malformed DSN. Previously (Load + ApplyEnvOverrides) this got
+	// past startup and errored at DB dial time. LoadWithEnv must
+	// catch it as ErrInvalidConfig.
+	dir := t.TempDir()
+	path := filepath.Join(dir, "c.toml")
+	good := `
+[region]
+id = "r1"
+home_domain = "ratesengine.net"
+
+[stellar]
+network = "pubnet"
+rpc_endpoints = ["http://rpc:8000"]
+
+[storage]
+postgres_dsn = "postgres://valid@host/db"
+`
+	if err := os.WriteFile(path, []byte(good), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	// Sanity: file validates.
+	if _, err := cfg.LoadWithEnv(path); err != nil {
+		t.Fatalf("clean env should load: %v", err)
+	}
+
+	// Env override with a malformed DSN.
+	t.Setenv("RATESENGINE_POSTGRES_DSN", "mysql://not-a-postgres-url")
+	_, err := cfg.LoadWithEnv(path)
+	if err == nil {
+		t.Fatal("bad env-var DSN must be rejected by LoadWithEnv")
+	}
+	if !strings.Contains(err.Error(), "postgres_dsn") {
+		t.Errorf("err should name the offending field: %v", err)
+	}
+}

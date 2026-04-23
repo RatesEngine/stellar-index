@@ -36,15 +36,24 @@ func (s *Store) DistinctPairs(ctx context.Context, cursor string, limit int) ([]
 		limit = 500
 	}
 
-	// The cursor is the concatenation "<base>|<quote>". We compare
-	// on the same expression in SQL for stable page breaks.
+	// The cursor is the concatenation "<base>|<quote>". We filter in
+	// WHERE (not HAVING) so pairs before the cursor are excluded
+	// BEFORE the per-group aggregation runs — the 24h-count CASE/SUM
+	// is the expensive part of this query, and with HAVING the
+	// planner can't skip any trade rows for filtered-out pairs. Also
+	// opens the door for an index-only scan on (base_asset,
+	// quote_asset) if one ever lands.
+	//
+	// Overfetch by one (LIMIT $2 = limit+1) to detect "more pages
+	// exist". The extra row isn't returned to the caller; its only
+	// purpose is to toggle whether we emit a nextCursor.
 	const q = `
         SELECT base_asset, quote_asset,
                MAX(ts) AS last_trade_at,
                SUM(CASE WHEN ts > NOW() - INTERVAL '24 hours' THEN 1 ELSE 0 END) AS count_24h
           FROM trades
+         WHERE $1 = '' OR (base_asset || '|' || quote_asset) > $1
          GROUP BY base_asset, quote_asset
-        HAVING ($1 = '' OR (base_asset || '|' || quote_asset) > $1)
          ORDER BY (base_asset || '|' || quote_asset) ASC
          LIMIT $2
     `
@@ -56,7 +65,7 @@ func (s *Store) DistinctPairs(ctx context.Context, cursor string, limit int) ([]
 
 	out := make([]Market, 0, limit)
 	n := 0
-	var extraCursor string
+	hasMore := false
 	for rows.Next() {
 		var (
 			baseRaw, quoteRaw string
@@ -68,7 +77,7 @@ func (s *Store) DistinctPairs(ctx context.Context, cursor string, limit int) ([]
 		}
 		n++
 		if n > limit {
-			extraCursor = baseRaw + "|" + quoteRaw
+			hasMore = true
 			break
 		}
 		base, err := canonical.ParseAsset(baseRaw)
@@ -94,8 +103,9 @@ func (s *Store) DistinctPairs(ctx context.Context, cursor string, limit int) ([]
 	}
 
 	nextCursor := ""
-	if extraCursor != "" && len(out) > 0 {
-		// Cursor points at the LAST row IN the returned page.
+	if hasMore && len(out) > 0 {
+		// Cursor points at the LAST row IN the returned page — next
+		// call resumes at "strictly greater than this pair".
 		last := out[len(out)-1]
 		nextCursor = last.Pair.Base.String() + "|" + last.Pair.Quote.String()
 	}

@@ -18,6 +18,16 @@ import (
 // Zero value is a valid zero Amount (big.Int's zero value is 0).
 // Callers MUST NOT mutate the underlying *big.Int — create a new
 // Amount for any arithmetic result.
+//
+// JSON wire form is ALWAYS a decimal string, never a JSON number —
+// JSON numbers are IEEE 754 doubles (53-bit precision) and silently
+// lose precision above 2^53. See [Amount.MarshalJSON].
+//
+// Parse-side DoS guard: [FromString] rejects inputs longer than
+// [MaxAmountStringLen] digits (512 — far past any legitimate i128
+// or Postgres NUMERIC value). Prevents a multi-MB decimal string
+// from an untrusted source (future POST body, malformed JSON)
+// triggering an unbounded big.Int allocation.
 type Amount struct {
 	// value is never nil after a successful construction. Helpers
 	// below guard against nil by constructing on demand.
@@ -65,11 +75,28 @@ func FromUInt128Parts(hi, lo uint64) Amount {
 	return Amount{value: new(big.Int).Add(h, l)}
 }
 
+// MaxAmountStringLen caps the decimal-digit budget accepted by
+// [FromString] / [Amount.UnmarshalJSON] / [Amount.Scan]. 512 digits
+// is comfortably past any legitimate Soroban i128 / Postgres
+// NUMERIC value (~39 / ~131072 digits respectively) but forecloses
+// the DoS path of feeding us a multi-megabyte decimal string and
+// watching big.Int allocate. Internal call sites are trusted (XDR
+// decode, DB scan) but JSON UnmarshalJSON flows through untrusted
+// input on future POST endpoints — the cap lives here so every
+// entry point gets it for free.
+const MaxAmountStringLen = 512
+
 // FromString parses a decimal string (no scientific notation, no
 // thousands separators). Empty string returns a zero Amount.
+// Rejects inputs longer than [MaxAmountStringLen] digits as a DoS
+// guard — far past any real i128 value.
 func FromString(s string) (Amount, error) {
 	if s == "" {
 		return Amount{value: new(big.Int)}, nil
+	}
+	if len(s) > MaxAmountStringLen {
+		return Amount{}, fmt.Errorf("canonical: amount string length %d exceeds cap %d: %w",
+			len(s), MaxAmountStringLen, ErrInvalidAmount)
 	}
 	v, ok := new(big.Int).SetString(s, 10)
 	if !ok {

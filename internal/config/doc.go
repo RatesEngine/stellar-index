@@ -22,7 +22,12 @@
 // # Invariants
 //
 //   - TOML is the wire format (operators hand-edit config.toml).
-//   - Every field has a default; zero-value structs must be valid.
+//   - Every field has a `default:` tag. The fully defaulted Config
+//     (as returned by [Default]) always passes [Config.Validate] —
+//     guarded by TestValidate_DefaultPasses. A literal zero-value
+//     Config{} is NOT valid because required fields like Region.ID
+//     are empty; always load via [Load] / [LoadWithEnv] which
+//     apply defaults first.
 //   - Secrets (passwords, API keys) are never in this file. They
 //     come from environment variables or a secret store, referenced
 //     by name here (e.g. `Password: "env:RATESENGINE_PG_PASSWORD"`).

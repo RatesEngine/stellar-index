@@ -1,6 +1,7 @@
 package v1_test
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"net/http"
@@ -50,6 +51,27 @@ func TestAssetList_EmptyWhenReaderNil(t *testing.T) {
 	mustDecode(t, resp, &env)
 	if len(env.Data) != 0 {
 		t.Errorf("expected empty list, got %d rows", len(env.Data))
+	}
+}
+
+func TestAssetList_NilSliceFromReaderMarshalsAsEmptyArray(t *testing.T) {
+	// Regression: a reader returning (nil, "", nil) must not leak
+	// "data": null onto the wire — OpenAPI's AssetListEnvelope.data
+	// is `type: array`, which rejects null. The handler's nil guard
+	// converts nil → [].
+	reader := &stubAssetReader{page: nil, nextCur: ""}
+	srv := v1.New(v1.Options{Assets: reader})
+	ts := httpTestServer(t, srv)
+
+	resp := mustGet(t, ts.URL+"/v1/assets")
+	if resp.StatusCode != 200 {
+		t.Fatalf("status = %d", resp.StatusCode)
+	}
+	body, _ := readAll(resp)
+	// Don't decode through []T — that hides null. Assert on the raw
+	// bytes that the field is an empty array.
+	if !bytes.Contains([]byte(body), []byte(`"data":[]`)) {
+		t.Errorf("expected \"data\":[] in body, got: %s", body)
 	}
 }
 

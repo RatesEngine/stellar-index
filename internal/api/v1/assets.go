@@ -162,6 +162,14 @@ func (s *Server) handleAssetList(w http.ResponseWriter, r *http.Request) {
 			"")
 		return
 	}
+	// Defensive: a reader that returns a nil slice on empty would
+	// marshal as "data": null, which violates the OpenAPI
+	// required-array contract. The production adapter already
+	// returns non-nil empty, but we don't want correctness to depend
+	// on that for every future reader.
+	if rows == nil {
+		rows = []AssetDetail{}
+	}
 
 	env := Envelope{
 		Data:  rows,
@@ -272,7 +280,7 @@ func (s *Server) applySep1Overlay(ctx context.Context, detail *AssetDetail, asse
 	if v := strings.TrimSpace(match.Description); v != "" {
 		detail.Description = &v
 	}
-	if v := strings.TrimSpace(match.Image); v != "" {
+	if v := strings.TrimSpace(match.Image); isSafeImageURL(v) {
 		detail.Image = &v
 	}
 	if v := strings.TrimSpace(match.AnchorAsset); v != "" {
@@ -289,6 +297,20 @@ func (s *Server) applySep1Overlay(ctx context.Context, detail *AssetDetail, asse
 	} else if match.Decimals > 0 {
 		detail.Decimals = match.Decimals
 	}
+}
+
+// isSafeImageURL reports whether s is a plausible http(s) image
+// URL. Refuses the tricky schemes (javascript:, data:, file:,
+// blob:) that an issuer could embed in a hostile stellar.toml's
+// [[CURRENCIES]] image field. An API consumer rendering
+// `<img src={data.image}>` without further validation must be
+// safe on today's browsers; this makes it so.
+//
+// We don't try to validate the host or fetch the image — that
+// would leak outbound requests. Scheme-only check is enough to
+// rule out script-execution vectors.
+func isSafeImageURL(s string) bool {
+	return strings.HasPrefix(s, "http://") || strings.HasPrefix(s, "https://")
 }
 
 // findMatchingCurrency finds the [[CURRENCIES]] entry that matches

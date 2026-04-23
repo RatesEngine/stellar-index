@@ -11,7 +11,7 @@
 //	-dry-run        Load config, open connections, validate, exit.
 //
 // Environment overrides for secrets apply on top of the file. See
-// internal/config/load.go ApplyEnvOverrides.
+// internal/config/load.go LoadWithEnv.
 //
 // Graceful shutdown: SIGINT / SIGTERM cancel the root context;
 // the HTTP server drains for up to 30 s before hard-exiting.
@@ -62,11 +62,10 @@ func main() {
 }
 
 func run(cfgPath string, dryRun bool) error {
-	cfg, err := config.Load(cfgPath)
+	cfg, err := config.LoadWithEnv(cfgPath)
 	if err != nil {
 		return err
 	}
-	cfg.ApplyEnvOverrides()
 
 	logger := mkLogger(cfg.Obs)
 	logger.Info("starting",
@@ -74,8 +73,20 @@ func run(cfgPath string, dryRun bool) error {
 		"region", cfg.Region.ID,
 		"listen", cfg.API.ListenAddr,
 		"external_url", cfg.API.ExternalBaseURL,
+		"auth_mode", cfg.API.AuthMode,
 		"dry_run", dryRun,
 	)
+
+	// Auth middleware (apikey / sep10) has not shipped. An operator
+	// who set auth_mode to anything other than "none" is expecting
+	// authentication that isn't enforced — surface that loudly at
+	// startup. Demoting the log to an error-level line also catches
+	// an eye in log aggregators that filter by severity.
+	if cfg.API.AuthMode != "none" {
+		logger.Error("auth_mode requested but NOT ENFORCED — the API is serving without authentication",
+			"configured_mode", cfg.API.AuthMode,
+			"reason", "auth middleware not yet wired; see CLAUDE.md `internal/auth/ (planned)`")
+	}
 
 	rootCtx, cancel := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer cancel()
@@ -98,6 +109,13 @@ func run(cfgPath string, dryRun bool) error {
 	// through to upstream fetches on every request (slow but
 	// correct). We don't block startup on Redis — the readiness
 	// probe reflects the truth.
+	//
+	// Exception: under -dry-run we ping explicitly. Without the
+	// ping dry-run is a liar — redis.NewClient is lazy, so a bad
+	// RedisAddr / wrong password / wrong network never surfaces.
+	// The whole point of dry-run is "does this config actually
+	// work?" so a misconfig that only reveals itself under real
+	// traffic defeats the flag.
 	var rdb *redis.Client
 	if cfg.Storage.RedisAddr != "" {
 		rdb = redis.NewClient(&redis.Options{
@@ -105,6 +123,15 @@ func run(cfgPath string, dryRun bool) error {
 			Password: cfg.Storage.RedisPassword,
 		})
 		defer func() { _ = rdb.Close() }()
+		if dryRun {
+			pingCtx, cancelPing := context.WithTimeout(rootCtx, 5*time.Second)
+			err := rdb.Ping(pingCtx).Err()
+			cancelPing()
+			if err != nil {
+				return fmt.Errorf("redis: ping: %w", err)
+			}
+			logger.Info("redis reachable", "addr", cfg.Storage.RedisAddr)
+		}
 	}
 
 	// Build readiness-check set. Each implements v1.ReadyChecker.

@@ -2,6 +2,7 @@ package canonical
 
 import (
 	"encoding/json"
+	"errors"
 	"math"
 	"math/big"
 	"strings"
@@ -189,6 +190,37 @@ func TestAmount_UnmarshalJSONNumber(t *testing.T) {
 // TestAmount_SQLRoundTrip verifies the database/sql Valuer + Scanner
 // round-trip via both string and []byte paths (Postgres NUMERIC
 // drivers use both historically).
+func TestAmount_FromStringRejectsOversize(t *testing.T) {
+	// DoS guard: a multi-megabyte decimal string must be rejected
+	// at parse time rather than triggering a giant big.Int alloc.
+	// Any input past MaxAmountStringLen is refused.
+	t.Parallel()
+	oversize := strings.Repeat("9", MaxAmountStringLen+1)
+	_, err := FromString(oversize)
+	if err == nil {
+		t.Fatal("oversize decimal string must be rejected")
+	}
+	if !errors.Is(err, ErrInvalidAmount) {
+		t.Errorf("err should wrap ErrInvalidAmount, got %v", err)
+	}
+	// Exactly at the cap still parses.
+	atCap := strings.Repeat("9", MaxAmountStringLen)
+	if _, err := FromString(atCap); err != nil {
+		t.Errorf("at-cap input (len=%d) must parse, got %v", MaxAmountStringLen, err)
+	}
+}
+
+func TestAmount_UnmarshalJSONRejectsOversize(t *testing.T) {
+	// JSON path also enforces the cap (inherited via FromString).
+	// Covers untrusted-input entry points like future POST bodies.
+	t.Parallel()
+	oversize := `"` + strings.Repeat("9", MaxAmountStringLen+1) + `"`
+	var a Amount
+	if err := a.UnmarshalJSON([]byte(oversize)); err == nil {
+		t.Fatal("oversize JSON string must be rejected")
+	}
+}
+
 func TestAmount_SQLRoundTrip(t *testing.T) {
 	t.Parallel()
 
@@ -223,5 +255,44 @@ func TestAmount_SQLRoundTrip(t *testing.T) {
 	}
 	if viaBytes.Cmp(original) != 0 {
 		t.Fatalf("Scan([]byte) round-trip: got %q, want %q", viaBytes, original)
+	}
+}
+
+func TestAmount_ScanNullProducesZero(t *testing.T) {
+	// Every trade/oracle column storing an Amount is NOT NULL per
+	// migrations/0001 + 0003, so nil-src Scan shouldn't fire in
+	// production. Keep the defensive path test-pinned so a refactor
+	// that removes it — or changes nil → error — surfaces in CI.
+	var a Amount
+	if err := a.Scan(nil); err != nil {
+		t.Fatalf("Scan(nil): %v", err)
+	}
+	if !a.IsZero() {
+		t.Errorf("Scan(nil) must produce zero Amount, got %q", a.String())
+	}
+	// And the subsequent Value() returns "0" (never nil), so a
+	// round-tripped NULL lands in a NOT-NULL column safely.
+	v, err := a.Value()
+	if err != nil {
+		t.Fatalf("Value after Scan(nil): %v", err)
+	}
+	if v != "0" {
+		t.Errorf("Value after Scan(nil) = %v, want \"0\"", v)
+	}
+}
+
+func TestAmount_ScanRejectsUnsupportedTypes(t *testing.T) {
+	// Defensive: time.Time, float64, bool, etc. are not NUMERIC-
+	// compatible and must surface as errors rather than silently
+	// coerce to zero or panic.
+	var a Amount
+	for _, src := range []any{
+		3.14,
+		true,
+		struct{}{},
+	} {
+		if err := a.Scan(src); err == nil {
+			t.Errorf("Scan(%T) should error, got nil", src)
+		}
 	}
 }

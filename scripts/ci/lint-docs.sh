@@ -101,11 +101,14 @@ fi
 
 echo "Checking metrics registry..."
 if [ -d internal/obs ] && [ -f docs/reference/metrics/README.md ]; then
-  # Prefixed metric names only. [a-z0-9_]+ (not [a-z_]+) because
-  # names like `sep1_cache_ops_total` contain digits — early
-  # revision of this regex silently missed them.
-  grep -rhE 'Name:\s*"(ctx|ratesengine)_[a-z0-9_]+"' internal/obs/ 2>/dev/null | \
-    sed -E 's|.*Name:\s*"([^"]+)".*|\1|' | sort -u | while read -r metric; do
+  # Every metric registered in internal/obs must appear in the
+  # reference doc. Scope is all prometheus `Name: "..."` fields —
+  # not just ratesengine_*/ctx_* — so `http_requests_total` and
+  # `http_request_duration_seconds` (unprefixed per standard
+  # Prometheus convention) are also enforced.
+  # BSD sed (macOS default) doesn't support \s — use [[:space:]].
+  grep -rhE 'Name:[[:space:]]*"[a-z][a-z0-9_]+"' internal/obs/ 2>/dev/null | \
+    sed -E 's|.*Name:[[:space:]]*"([^"]+)".*|\1|' | sort -u | while read -r metric; do
       if ! grep -qF "$metric" docs/reference/metrics/README.md; then
         err "Metric '$metric' is registered in code but not in docs/reference/metrics/README.md"
       fi
@@ -193,12 +196,28 @@ done
 # narrative (e.g. api-design.md).
 
 echo "Checking generated-file banners..."
-find docs/reference/api docs/reference/config docs/reference/metrics \
-     -type f -name '*.md' 2>/dev/null | while read -r f; do
-  if ! head -1 "$f" | grep -qF "GENERATED FILE"; then
-    err "Generated file '$f' is missing the 'GENERATED FILE - DO NOT EDIT' banner at line 1"
-  fi
+# docs/reference/metrics/README.md is the ONLY hand-written file
+# under docs/reference/ — there's no metrics generator yet (would
+# need a Prometheus-registry walker). It's still lint-enforced
+# for drift via section 3. Exempt only by exact path.
+#
+# Enumerate only existing subdirs — `find` errors on missing ones
+# with set -e + pipefail, silently killing the script before later
+# sections run.
+gen_dirs=()
+for d in docs/reference/api docs/reference/config docs/reference/metrics; do
+  [ -d "$d" ] && gen_dirs+=("$d")
 done
+if [ ${#gen_dirs[@]} -gt 0 ]; then
+  find "${gen_dirs[@]}" -type f -name '*.md' 2>/dev/null | while read -r f; do
+    if [ "$f" = "docs/reference/metrics/README.md" ]; then
+      continue
+    fi
+    if ! head -1 "$f" | grep -qF "GENERATED FILE"; then
+      err "Generated file '$f' is missing the 'GENERATED FILE - DO NOT EDIT' banner at line 1"
+    fi
+  done
+fi
 
 # ─── 8. Every ADR has valid status + not-superseded-unless-noted ────────────
 
@@ -217,7 +236,7 @@ if [ -d docs/adr ]; then
   done
 fi
 
-# ─── 7. Every alert rule's runbook_url must point to an existing file ──────
+# ─── 9. Every alert rule's runbook_url must point to an existing file ──────
 #
 # Prometheus alert rules ship with `runbook_url` so the pager routes
 # oncall to a specific diagnosis page. A 404 runbook URL means the
@@ -239,6 +258,60 @@ if [ -d deploy/monitoring/rules ]; then
         fi
       done
   done
+fi
+
+# ─── 10. Every alert rule must have a row in the alerts catalogue ──────────
+#
+# Catalogue is docs/operations/alerts-catalog.md; every rule file's
+# `alert: <name>` must appear verbatim somewhere in that doc. Caught
+# the `ratesengine_ingestion_insert_errors` drift on 2026-04-23 —
+# the alert was live but the catalogue didn't list it.
+
+echo "Checking alerts-catalog drift..."
+if [ -d deploy/monitoring/rules ] && [ -f docs/operations/alerts-catalog.md ]; then
+  grep -rhE '^[[:space:]]*-[[:space:]]*alert:[[:space:]]*' deploy/monitoring/rules/ 2>/dev/null | \
+    sed -E 's|.*alert:[[:space:]]*||' | sort -u | while IFS= read -r alert; do
+      [ -z "$alert" ] && continue
+      if ! grep -qF "$alert" docs/operations/alerts-catalog.md; then
+        err "alert rule '$alert' not listed in docs/operations/alerts-catalog.md"
+      fi
+    done
+fi
+
+# ─── 11. Runbook body references to `ratesengine_source_*` metrics ─────────
+#
+# Narrow rule: only `ratesengine_source_*` (the namespace fully
+# owned by internal/obs/metrics.go). External-exporter metrics
+# (ratesengine_stellar_core_*, pgbackrest_*, etc.) are intentionally
+# out of scope — those live in node-side exporters we don't control.
+#
+# Caught `ratesengine_source_last_event_age_seconds` drift on
+# 2026-04-23 — runbook referenced a metric name that never existed.
+
+echo "Checking runbook metric-name freshness..."
+if [ -d docs/operations/runbooks ] && [ -f internal/obs/metrics.go ]; then
+  # Build the allowed set: names registered in obs.metrics.go +
+  # alert names in Prometheus rules (runbooks use either). `|| true`
+  # because under set -e + pipefail, grep returning 1 for no-match
+  # would kill the whole script — we explicitly want an empty set
+  # if no matches.
+  allowed=$(mktemp)
+  {
+    (grep -hE 'Name:[[:space:]]*"ratesengine_source_[a-z_]+"' internal/obs/metrics.go 2>/dev/null || true) | \
+      sed -E 's|.*"(ratesengine_source_[a-z_]+)".*|\1|'
+    (grep -rhE '^[[:space:]]*-[[:space:]]*alert:[[:space:]]*ratesengine_source_' deploy/monitoring/rules/ 2>/dev/null || true) | \
+      sed -E 's|.*alert:[[:space:]]*||'
+  } | sort -u > "$allowed"
+
+  # Extract every ratesengine_source_* token from runbook bodies.
+  (grep -rhoE 'ratesengine_source_[a-z_]+' docs/operations/runbooks/ 2>/dev/null || true) | \
+    sort -u | while IFS= read -r metric; do
+      [ -z "$metric" ] && continue
+      if ! grep -qxF "$metric" "$allowed"; then
+        err "runbook references unknown metric '$metric' (not in internal/obs or rules/)"
+      fi
+    done
+  rm -f "$allowed"
 fi
 
 # ─── Summary ────────────────────────────────────────────────────────────────

@@ -237,6 +237,18 @@ func decodeHistoryCursor(s string) (historyCursor, error) {
 	if err != nil {
 		return historyCursor{}, fmt.Errorf("cursor ledger: %w", err)
 	}
+	source := parts[2]
+	if source == "" {
+		// An empty source would weaken the full-PK cursor comparison
+		// into a partial one, reintroducing the same-ledger page-skip
+		// bug the full-PK cursor was designed to fix. Reject rather
+		// than silently serve wrong-looking pages.
+		return historyCursor{}, fmt.Errorf("cursor source must not be empty")
+	}
+	txHash := parts[3]
+	if !isLowerHex64(txHash) {
+		return historyCursor{}, fmt.Errorf("cursor tx_hash must be 64 lowercase hex chars")
+	}
 	opIndex, err := strconv.ParseUint(parts[4], 10, 32)
 	if err != nil {
 		return historyCursor{}, fmt.Errorf("cursor op_index: %w", err)
@@ -244,10 +256,27 @@ func decodeHistoryCursor(s string) (historyCursor, error) {
 	return historyCursor{
 		ts:      time.Unix(0, tsNano).UTC(),
 		ledger:  uint32(ledger),
-		source:  parts[2],
-		txHash:  parts[3],
+		source:  source,
+		txHash:  txHash,
 		opIndex: uint32(opIndex),
 	}, nil
+}
+
+// isLowerHex64 returns true iff s is exactly 64 characters of
+// lowercase hex. Same invariant canonical.validTxHash enforces on
+// the ingest side; mirrored here (without importing canonical) so
+// decodeHistoryCursor doesn't create a cycle.
+func isLowerHex64(s string) bool {
+	if len(s) != 64 {
+		return false
+	}
+	for i := 0; i < len(s); i++ {
+		c := s[i]
+		if !(c >= '0' && c <= '9' || c >= 'a' && c <= 'f') {
+			return false
+		}
+	}
+	return true
 }
 
 // parseBaseQuote extracts + validates base/quote from the request.

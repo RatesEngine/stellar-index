@@ -40,7 +40,7 @@ At deploy-time we will pin these:
 
 ```go
 // go.mod — verified to resolve + build 2026-04-22 per the compat test
-module github.com/ctx/ratesengine
+module github.com/RatesEngine/rates-engine
 go 1.25
 
 require (
@@ -98,10 +98,8 @@ Process when upgrading a dep:
 
 ## Related
 
-- [adversarial-audit.md](adversarial-audit.md) §11 — the "claims
+- [adversarial-audit.md](docs/discovery/adversarial-audit.md) §11 — the "claims
   I stand behind" list is tied to these SHAs.
-- [rfp-requirements-matrix.md](rfp-requirements-matrix.md) — the
+- [rfp-requirements-matrix.md](docs/discovery/rfp-requirements-matrix.md) — the
   RFP-requirement-to-audit-doc mapping implicitly depends on
   these snapshots.
-- This file should live at the root of our implementation repo as
-  `VERSIONS.md` once we move from discovery to build.

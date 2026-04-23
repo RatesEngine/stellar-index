@@ -88,7 +88,11 @@ func TestRequestID_PreservesClientValue(t *testing.T) {
 	}
 }
 
-func TestRequestID_TruncatesOversizeValue(t *testing.T) {
+func TestRequestID_RejectsOversizeValue(t *testing.T) {
+	// Oversize (> 128 bytes) → replaced with a freshly-minted 32-hex
+	// ID rather than truncated. Truncation risked cutting a client's
+	// ID in the middle, yielding an ID that matches neither what
+	// they sent nor anything else — the fresh mint is clearer.
 	oversize := strings.Repeat("x", 200)
 	h := mw.RequestID(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {}))
 	req := httptest.NewRequest("GET", "/", nil)
@@ -96,8 +100,46 @@ func TestRequestID_TruncatesOversizeValue(t *testing.T) {
 	rec := httptest.NewRecorder()
 	h.ServeHTTP(rec, req)
 
-	if got := rec.Header().Get("X-Request-ID"); len(got) != 128 {
-		t.Errorf("id len = %d, want 128 (truncated)", len(got))
+	got := rec.Header().Get("X-Request-ID")
+	if len(got) != 32 {
+		t.Errorf("id len = %d, want 32 (freshly minted)", len(got))
+	}
+	if got == oversize[:32] {
+		t.Errorf("id looks like a truncation of the client-supplied value")
+	}
+}
+
+func TestRequestID_RejectsUnsafeChars(t *testing.T) {
+	// IDs with CR/LF, spaces, or exotic chars get replaced with a
+	// freshly-minted one rather than propagated into response
+	// headers and logs.
+	cases := []string{
+		"has space",
+		"has\ttab",
+		"crlf\r\ninjection",
+		`quoted "value"`,
+		"unicode-é",
+		"slash/path",
+	}
+	for _, bad := range cases {
+		h := mw.RequestID(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {}))
+		req := httptest.NewRequest("GET", "/", nil)
+		// Bypass net/http's header validation by setting via the map
+		// directly. Real HTTP parsers would reject the connection
+		// before this middleware sees it, but once set programmatically
+		// (e.g. reverse-proxy misconfig) the middleware is the
+		// remaining safety net.
+		req.Header["X-Request-Id"] = []string{bad}
+		rec := httptest.NewRecorder()
+		h.ServeHTTP(rec, req)
+
+		got := rec.Header().Get("X-Request-ID")
+		if got == bad {
+			t.Errorf("unsafe id %q propagated to response", bad)
+		}
+		if len(got) != 32 {
+			t.Errorf("expected freshly minted 32-char id for %q, got %q", bad, got)
+		}
 	}
 }
 
@@ -243,5 +285,41 @@ func TestRecoverer_NormalHandlerUntouched(t *testing.T) {
 	h.ServeHTTP(rec, httptest.NewRequest("GET", "/", nil))
 	if rec.Code != 200 || rec.Body.String() != "ok" {
 		t.Errorf("non-panicking handler was mangled: %d %q", rec.Code, rec.Body.String())
+	}
+}
+
+// ─── SecurityHeaders ──────────────────────────────────────────────
+
+func TestSecurityHeaders_SetsNosniff(t *testing.T) {
+	// Every response carries X-Content-Type-Options: nosniff, even
+	// if the handler wrote its own headers first.
+	h := mw.SecurityHeaders(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(200)
+		_, _ = w.Write([]byte(`{"ok": true}`))
+	}))
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest("GET", "/", nil))
+	if got := rec.Header().Get("X-Content-Type-Options"); got != "nosniff" {
+		t.Errorf("nosniff = %q, want nosniff", got)
+	}
+}
+
+func TestSecurityHeaders_IdempotentWithEdgeProxy(t *testing.T) {
+	// Wrap a handler that pretends the edge proxy already set
+	// nosniff. Verify middleware's set leaves the final value
+	// equal to "nosniff" (last-write-wins in net/http, but same
+	// value either way).
+	h := mw.SecurityHeaders(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Edge already set it — middleware's own set should run
+		// BEFORE the handler writes, which it does via the outer
+		// wrapper, so this is just belt-and-braces.
+		w.Header().Set("X-Content-Type-Options", "nosniff")
+		w.WriteHeader(200)
+	}))
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest("GET", "/", nil))
+	if got := rec.Header().Get("X-Content-Type-Options"); got != "nosniff" {
+		t.Errorf("nosniff = %q, want nosniff", got)
 	}
 }

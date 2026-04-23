@@ -113,6 +113,32 @@ func TestTradesInRangeAndMarkets(t *testing.T) {
 				m.Pair.Base.String(), m.Pair.Quote.String())
 		}
 	}
+
+	// ─── DistinctPairs pagination round-trip ────────────────────────
+	// Limit=1 forces paging; confirm the two pairs come back across
+	// pages with a non-empty cursor after page 1 and an empty cursor
+	// after page 2. Guards the recent markets.go change where the
+	// page-break logic was rewritten — the `hasMore` signal must
+	// fire only when a page was actually held back.
+	var paged []timescale.Market
+	cursor := ""
+	for iter := 0; iter < 5; iter++ {
+		page, nextC, err := store.DistinctPairs(ctx, cursor, 1)
+		if err != nil {
+			t.Fatalf("paged iter %d: %v", iter, err)
+		}
+		if len(page) > 1 {
+			t.Fatalf("paged iter %d: limit=1 returned %d rows", iter, len(page))
+		}
+		paged = append(paged, page...)
+		if nextC == "" {
+			break
+		}
+		cursor = nextC
+	}
+	if len(paged) != 2 {
+		t.Errorf("paginated DistinctPairs returned %d total rows, want 2", len(paged))
+	}
 }
 
 func mkIntegrationTrade(source string, nonce int, ts time.Time, pair c.Pair, base, quote int64) c.Trade {

@@ -10,6 +10,14 @@ import (
 	"github.com/RatesEngine/rates-engine/internal/ratelimit"
 )
 
+// MaxRateLimitKeyLen caps the caller-supplied KeyFn output so a
+// hostile header (multi-KB X-Forwarded-For) can't blow up the
+// Redis key space or the url.QueryEscape allocation inside
+// Bucket.Take. 256 bytes fits any legitimate IP (including
+// IPv6 + zone) and any realistic API-key / SEP-10 account id
+// with headroom.
+const MaxRateLimitKeyLen = 256
+
 // RateLimit returns middleware that enforces the given Bucket on
 // every request whose KeyFn produces a non-empty key.
 //
@@ -33,6 +41,13 @@ import (
 // KeyFn decides the key: per-IP (default if nil), per-API-key, etc.
 // If KeyFn returns "" the request is not rate-limited. Skip allows
 // full bypass for infra endpoints (health probes, metrics).
+//
+// Key length is capped at [MaxRateLimitKeyLen]. A hostile
+// X-Forwarded-For can grow up to the server's MaxHeaderBytes
+// (1 MB default in net/http); without a cap here that would
+// propagate through url.QueryEscape into the Redis key space.
+// Oversize keys get truncated to the cap — still bucketed, just
+// not uniquely per-caller past the first N bytes.
 func RateLimit(bucket *ratelimit.Bucket, keyFn func(*http.Request) string, skip func(*http.Request) bool, logger *slog.Logger) Middleware {
 	if logger == nil {
 		logger = slog.Default()
@@ -52,6 +67,9 @@ func RateLimit(bucket *ratelimit.Bucket, keyFn func(*http.Request) string, skip 
 				// in practice since Logger populates remote_ip.
 				next.ServeHTTP(w, r)
 				return
+			}
+			if len(key) > MaxRateLimitKeyLen {
+				key = key[:MaxRateLimitKeyLen]
 			}
 
 			res, err := bucket.Take(r.Context(), key)

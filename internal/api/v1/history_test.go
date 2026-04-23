@@ -2,6 +2,7 @@ package v1_test
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"math/big"
 	"net/url"
@@ -272,9 +273,24 @@ func TestHistory_InvalidCursor400(t *testing.T) {
 	srv := v1.New(v1.Options{History: &stubHistoryReader{}})
 	ts := httpTestServer(t, srv)
 
+	// base64-encode each "raw" cursor shape below.
+	b64 := func(s string) string {
+		return base64.RawURLEncoding.EncodeToString([]byte(s))
+	}
+	lowerHex64 := "fadefadefadefadefadefadefadefadefadefadefadefadefadefadefadefade"
+	uppercaseHex := "FADEFADEFADEFADEFADEFADEFADEFADEFADEFADEFADEFADEFADEFADEFADEFADE"
+
 	for _, bad := range []string{
 		"not-base64!!!",
-		"dGVzdA==", // base64 of "test" — no colon separator
+		"dGVzdA", // base64 of "test" — no colon separator
+		// Empty source — would degenerate the full-PK cursor back
+		// into the (ts, ledger)-only shape that loses rows sharing a
+		// ledger.
+		b64("100:1::" + lowerHex64 + ":0"),
+		// Bad tx_hash format (63 chars, missing one).
+		b64("100:1:soroswap:" + lowerHex64[:63] + ":0"),
+		// Uppercase hex tx_hash (canonical form is lowercase).
+		b64("100:1:soroswap:" + uppercaseHex + ":0"),
 	} {
 		resp := mustGet(t, ts.URL+"/v1/history?base=native&quote=fiat:USD&cursor="+bad)
 		if resp.StatusCode != 400 {

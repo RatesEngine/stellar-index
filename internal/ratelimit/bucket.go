@@ -3,6 +3,7 @@ package ratelimit
 import (
 	"context"
 	"fmt"
+	"net/url"
 	"strconv"
 	"time"
 
@@ -138,7 +139,14 @@ var luaScript = redis.NewScript(lua)
 // the whole API offline.
 func (b *Bucket) Take(ctx context.Context, key string) (Result, error) {
 	minute := b.nowFn().Unix() / int64(b.window.Seconds())
-	rlKey := b.keyPrefix + key + ":" + strconv.FormatInt(minute, 10)
+	// url.QueryEscape the caller-supplied key before concatenating
+	// with ":<minute>". Callers pass things like IPv6 addresses (which
+	// contain `:`), future API-key strings, SEP-10 account IDs; any
+	// `:` in the key would make two distinct keys collide on the same
+	// Redis slot — a silent cross-client rate-limit smear. Escaping
+	// all RFC 3986 reserved chars also hardens against injection of
+	// exotic control bytes. Still human-readable in Redis for ops.
+	rlKey := b.keyPrefix + url.QueryEscape(key) + ":" + strconv.FormatInt(minute, 10)
 	// Double-window TTL so keys drain naturally. Floor-at-1 guards
 	// sub-second windows — Redis treats EXPIRE 0 as "no expiry",
 	// which would leak keys forever for any window < 500ms. 1s
@@ -170,15 +178,40 @@ func (b *Bucket) Take(ctx context.Context, key string) (Result, error) {
 		return Result{}, fmt.Errorf("ratelimit: retry_after not int64: %T", arr[1])
 	}
 
-	allowed := retryTTL == 0
+	// Use `count` as the authoritative allow-signal, not retryTTL.
+	// The Lua clamps a negative TTL to 0 on the deny path, and Go
+	// must not read "retryTTL == 0" as "allowed" — a TTL<0 race
+	// (key lazy-evicted between INCR and TTL) would otherwise flip
+	// a deny into an allow. Pair-comparing against max_count is the
+	// same check the Lua makes; keeping them symmetric eliminates
+	// the decoupling bug entirely.
+	allowed := int(count) <= b.max
 	remaining := b.max - int(count)
 	if remaining < 0 {
 		remaining = 0
 	}
+	// RetryAfter is "time until caller can succeed". That's the
+	// REMAINING SECONDS IN THE CURRENT WINDOW, not the Redis-side
+	// key TTL (which is 2× window for drain purposes). Computing
+	// on the Go side instead of reading ttl from Lua means the
+	// client's Retry-After header doesn't sit at a drain-padded
+	// value that's up to 60× longer than the actual reset. Floor
+	// at 1s so the HTTP header is never zero on a denial.
+	var retryAfter time.Duration
+	if !allowed {
+		windowSec := int64(b.window.Seconds())
+		elapsed := b.nowFn().Unix() - minute*windowSec
+		remainingSec := windowSec - elapsed
+		if remainingSec < 1 {
+			remainingSec = 1
+		}
+		retryAfter = time.Duration(remainingSec) * time.Second
+	}
+	_ = retryTTL // intentionally unused — kept on the wire for debug
 	return Result{
 		Allowed:    allowed,
 		Remaining:  remaining,
-		RetryAfter: time.Duration(retryTTL) * time.Second,
+		RetryAfter: retryAfter,
 		Count:      int(count),
 	}, nil
 }

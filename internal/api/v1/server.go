@@ -14,12 +14,16 @@ import (
 )
 
 // ReadyChecker is the interface /readyz polls to decide whether
-// the serving-plane dependencies are responsive. Implementations:
+// the serving-plane dependencies are responsive. Implementations
+// in cmd/ratesengine-api/main.go:
 //
-//   - *timescale.Store (wraps PingContext).
-//   - a redis-client adapter (future).
+//   - storeChecker (wraps *timescale.Store.DB().PingContext)
+//   - redisChecker (wraps *redis.Client.Ping)
 //
-// Kept narrow so tests can plug in stubs.
+// Ping MUST respect ctx and return promptly on cancellation — the
+// handler runs every checker in parallel under a shared 2 s
+// deadline; a misbehaving checker that ignores ctx can turn readyz
+// into a cascade-failure vector for the liveness probe.
 type ReadyChecker interface {
 	Ping(ctx context.Context) error
 	Name() string
@@ -121,11 +125,17 @@ func New(opts Options) *Server {
 
 // Handler returns the mux wrapped in the standard middleware stack
 // (outermost-first): RequestID → HTTPMetrics → Logger → Recoverer
-// → [optional CORS] → [optional RateLimit].
+// → SecurityHeaders → [optional CORS] → [optional RateLimit].
 //
 // HTTPMetrics sits inside RequestID so future trace-exemplar links
 // work, and outside Logger+Recoverer so metrics count every
 // request including those where the handler panicked.
+//
+// SecurityHeaders runs INSIDE Recoverer so a panic's 500
+// problem+json response still carries the nosniff header — the
+// recoverer synthesises a response header, and SecurityHeaders
+// hasn't written yet at that point because the inner handler is
+// what panics, not the middleware around it.
 //
 // CORS runs outside RateLimit so preflight OPTIONS requests don't
 // consume rate-limit budget. RateLimit runs innermost — AFTER
@@ -137,6 +147,10 @@ func (s *Server) Handler() http.Handler {
 		obs.HTTPMetrics,
 		middleware.Logger(s.logger),
 		middleware.Recoverer(s.logger),
+		// Security headers live inside Recoverer so even a panic's
+		// 500 problem+json response carries nosniff. Cheap, always
+		// safe, idempotent with any edge-proxy that also sets it.
+		middleware.SecurityHeaders,
 	}
 	if s.cors != nil {
 		stack = append(stack, s.cors)

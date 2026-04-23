@@ -52,8 +52,17 @@ func Recoverer(logger *slog.Logger) Middleware {
 // writeProblem emits an RFC 9457 problem+json body for a recovered
 // panic. Kept local to avoid pulling the v1 package as a dependency
 // (which would create a cycle — v1 imports middleware).
+//
+// If the panicking handler already wrote a response header, the
+// WriteHeader call below is a no-op and net/http logs a
+// "superfluous response.WriteHeader" warning — the body we write
+// here is appended to whatever the handler had already streamed.
+// That's acceptable on the panic path: the client was about to
+// receive a broken response anyway, and operators get the full
+// stack in the structured log. There's no portable way to detect
+// "have I already written?" without wrapping the writer and we
+// don't pay that cost on every request for a rare failure mode.
 func writeProblem(w http.ResponseWriter, r *http.Request, _ any) {
-	// Only write the header if none has been sent yet.
 	w.Header().Set("Content-Type", "application/problem+json")
 	w.WriteHeader(http.StatusInternalServerError)
 	body := map[string]any{
