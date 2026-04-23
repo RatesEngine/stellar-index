@@ -78,37 +78,51 @@ else
   add_fail "stellar-core /info unreachable on :11626"
 fi
 
-# --- Check 4: stellar-rpc is reachable -------------------------
-# On initial catchup stellar-rpc's DB is empty and getHealth
-# returns a JSON-RPC error about that state. That's "still
-# warming up," not "broken." Distinguish:
-#   * transport error (empty response, non-JSON, connection refused)
-#     → stellar-rpc is actually down: FAIL
-#   * valid JSON-RPC response with status=healthy → OK
-#   * valid JSON-RPC response with "data stores are not initialized"
-#     error → warming-up state, treat as OK until we've been in this
-#     state for > STELLAR_RPC_WARMUP_SEC (default 2 h). After that,
-#     escalate — it probably means captive-core is stuck.
+# --- Check 4: stellar-rpc is reachable + reasonably fresh ------
+# stellar-rpc has two "not broken, just catching up" states we
+# must treat as OK during a grace window:
 #
-# The warmup timer starts at service ActiveEnterTimestamp, so a
-# stellar-rpc restart resets the grace window automatically.
+#   A) DB empty → error.message contains "data stores are not initialized"
+#      Seen on first-ever start (fresh SQLite).
+#   B) Latency too high → error.message contains "latency (...) since last
+#      known ledger closed is too high"
+#      Seen for 3-7 minutes after EVERY captive-core restart, because
+#      stellar-core has to download the next checkpoint HAS file from
+#      the SDF archives before it can tail the live network.
+#
+# Both states are bounded by STELLAR_RPC_WARMUP_SEC (default 2 h)
+# measured from the service's ActiveEnterTimestamp. After that,
+# any non-healthy response is a real failure — captive-core is
+# likely stuck on a config issue.
+#
+# Distinguishes:
+#   * transport error (empty/non-JSON/refused) → FAIL (always)
+#   * status=healthy → OK (always)
+#   * catchup error (A or B) + within grace → OK
+#   * catchup error (A or B) + grace exceeded → FAIL
+#   * anything else → FAIL
 rpc_resp=$(curl -sfm 5 -X POST -H 'Content-Type: application/json' \
   -d '{"jsonrpc":"2.0","id":1,"method":"getHealth"}' \
   http://127.0.0.1:8000 2>&1) || rpc_resp=""
 rpc_status=$(echo "$rpc_resp" | jq -r '.result.status // ""' 2>/dev/null)
 rpc_error=$(echo "$rpc_resp" | jq -r '.error.message // ""' 2>/dev/null)
 
+# True if the error is a benign "still catching up" state.
+is_catchup_err=0
+if echo "$rpc_error" | grep -qE 'data stores are not initialized|latency \([^)]+\) since last known ledger closed'; then
+  is_catchup_err=1
+fi
+
 if [ "$rpc_status" = "healthy" ]; then
   : # fully healthy, no action
-elif echo "$rpc_error" | grep -q "data stores are not initialized"; then
-  # Warming up. Escalate only if we've been in this state too long.
+elif [ "$is_catchup_err" = 1 ]; then
   WARMUP_MAX="${STELLAR_RPC_WARMUP_SEC:-7200}"
   enter_iso=$(systemctl show -p ActiveEnterTimestamp --value stellar-rpc 2>/dev/null)
   enter_epoch=$(date -d "$enter_iso" +%s 2>/dev/null || echo 0)
   now_epoch=$(date +%s)
   age=$(( now_epoch - enter_epoch ))
   if [ "$age" -gt "$WARMUP_MAX" ]; then
-    add_fail "stellar-rpc still has empty DB after ${age}s (warmup cap ${WARMUP_MAX}s) — captive-core likely stuck"
+    add_fail "stellar-rpc still catching up after ${age}s (warmup cap ${WARMUP_MAX}s): ${rpc_error}"
   fi
 elif [ -z "$rpc_resp" ] || ! echo "$rpc_resp" | jq -e . >/dev/null 2>&1; then
   add_fail "stellar-rpc unreachable or non-JSON response"
