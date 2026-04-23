@@ -178,6 +178,30 @@ if [ -d docs/adr ]; then
   done
 fi
 
+# ─── 7. Every alert rule's runbook_url must point to an existing file ──────
+#
+# Prometheus alert rules ship with `runbook_url` so the pager routes
+# oncall to a specific diagnosis page. A 404 runbook URL means the
+# responder gets dumped on a GitHub error page at 3 AM — the opposite
+# of useful. This check greps every runbook_url out of deploy/
+# monitoring/rules/*.yml and asserts the referenced file exists.
+
+echo "Checking alert-rule runbook_url targets..."
+if [ -d deploy/monitoring/rules ]; then
+  for rule_file in deploy/monitoring/rules/*.yml; do
+    # Extract the path suffix after /runbooks/ for every runbook_url.
+    grep -oE 'runbook_url:[[:space:]]*https://[^[:space:]]+/docs/operations/runbooks/[^[:space:]]+\.md' "$rule_file" 2>/dev/null | \
+      sed -E 's|.*/docs/operations/runbooks/|docs/operations/runbooks/|' | \
+      sort -u | \
+      while IFS= read -r runbook_path; do
+        [ -z "$runbook_path" ] && continue
+        if [ ! -f "$runbook_path" ]; then
+          err "alert rule references missing runbook: $runbook_path (from $rule_file)"
+        fi
+      done
+  done
+fi
+
 # ─── Summary ────────────────────────────────────────────────────────────────
 
 count=$(cat "$ERROR_FILE")
