@@ -136,6 +136,11 @@ func (o *Orchestrator) Run(ctx context.Context) error {
 
 // runSource is the per-source loop: load cursor, pick mode,
 // execute, persist, backoff on error, repeat.
+//
+// A panic inside the source (nil deref in a decoder, arithmetic
+// overflow, etc.) is converted to an error + exponential backoff.
+// One misbehaving source MUST NOT kill the whole indexer — the
+// recover keeps the other sources running.
 func (o *Orchestrator) runSource(ctx context.Context, src Source) {
 	log := o.logger.With("source", src.Name())
 	backoff := o.cfg.MinBackoff
@@ -151,7 +156,7 @@ func (o *Orchestrator) runSource(ctx context.Context, src Source) {
 			return
 		}
 
-		err := o.runOne(ctx, src, log)
+		err := o.runOneSafe(ctx, src, log)
 		if err == nil || errors.Is(err, context.Canceled) {
 			// Clean exit — source returned without error. Reset backoff.
 			backoff = o.cfg.MinBackoff
@@ -166,6 +171,20 @@ func (o *Orchestrator) runSource(ctx context.Context, src Source) {
 		}
 		backoff = nextBackoff(backoff, o.cfg.MaxBackoff)
 	}
+}
+
+// runOneSafe is runOne with a recover so panics become errors. The
+// restart loop then applies exponential backoff rather than
+// crashing the process.
+func (o *Orchestrator) runOneSafe(ctx context.Context, src Source, log *slog.Logger) (err error) {
+	defer func() {
+		if r := recover(); r != nil {
+			log.Error("source panicked — recovered",
+				"panic", fmt.Sprintf("%v", r))
+			err = fmt.Errorf("orchestrator: %s panicked: %v", src.Name(), r)
+		}
+	}()
+	return o.runOne(ctx, src, log)
 }
 
 // runOne runs a single "load cursor → execute → persist" cycle.

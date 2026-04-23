@@ -24,6 +24,11 @@ type fakeSource struct {
 	// checkpoint. Zero means "source hasn't observed any events yet"
 	// and the persister declines to regress the cursor.
 	lastLedger uint32
+	// streamPanic, when non-nil, is the value StreamLive panics with
+	// on first invocation. The orchestrator should recover and restart
+	// via the backoff loop, not crash the process.
+	streamPanic any
+	panicked    atomic.Bool
 }
 
 func (f *fakeSource) Name() string { return f.name }
@@ -35,6 +40,14 @@ func (f *fakeSource) BackfillRange(ctx context.Context, from, to uint32, out cha
 func (f *fakeSource) StreamLive(ctx context.Context, out chan<- consumer.Event) error {
 	f.started.Add(1)
 	defer f.streamDone.Add(1)
+
+	// Panic only once so the restart loop eventually converges on
+	// the normal error path. This mirrors real behaviour — a panic
+	// is from a transient bad event, not a repeating condition.
+	if f.streamPanic != nil && !f.panicked.Load() {
+		f.panicked.Store(true)
+		panic(f.streamPanic)
+	}
 
 	for _, ev := range f.emit {
 		select {
@@ -240,6 +253,49 @@ func TestOrchestrator_CursorPersisted(t *testing.T) {
 	}
 	if got.LastLedger != 42_000_000 {
 		t.Errorf("cursor LastLedger = %d, want 42000000 (from Health.LastLedger)", got.LastLedger)
+	}
+}
+
+func TestOrchestrator_RecoversFromSourcePanic(t *testing.T) {
+	// A source that panics on its first StreamLive invocation must
+	// NOT take down the orchestrator. The restart loop converts the
+	// panic into an error, backs off, and tries again.
+	cursors := newInmemCursors()
+	src := &fakeSource{
+		name:        "panicky",
+		streamPanic: "nil pointer deref in decoder",
+	}
+	o := consumer.New(cursors, []consumer.Source{src}, consumer.Config{
+		MinBackoff:         10 * time.Millisecond,
+		CursorPersistEvery: 20 * time.Millisecond,
+	}, nil)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
+	defer cancel()
+
+	done := make(chan error, 1)
+	go func() {
+		for range o.Events() {
+		}
+	}()
+	go func() {
+		done <- o.Run(ctx)
+	}()
+
+	select {
+	case err := <-done:
+		// Run should return ctx.Err(), not re-throw the panic.
+		if err != nil && !errors.Is(err, context.DeadlineExceeded) {
+			t.Errorf("Run returned unexpected error: %v", err)
+		}
+	case <-time.After(500 * time.Millisecond):
+		t.Fatal("Run didn't return — panic may have crashed the goroutine")
+	}
+
+	// Proof the restart loop actually re-entered StreamLive after
+	// the panic: `started` > 1 means it tried at least twice.
+	if started := src.started.Load(); started < 2 {
+		t.Errorf("expected at least 2 StreamLive starts (panic + restart), got %d", started)
 	}
 }
 
