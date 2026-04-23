@@ -110,6 +110,46 @@ func TestVWAP_AllZeroBaseReturnsErr(t *testing.T) {
 	}
 }
 
+func TestVWAP_I128ScaleExactPrecision(t *testing.T) {
+	// Realistic Soroban magnitudes — amounts that would lose
+	// precision if they passed through float64. ADR-0003 invariant:
+	// prices stay as *big.Rat throughout the pipeline.
+	//
+	// Mix of trades near u128 boundaries + one near the low end,
+	// proving the big.Int arithmetic doesn't overflow or round.
+	tradeA := canonical.Trade{ // base=10^36, quote=2*10^36 → price 2
+		Source: "test", Ledger: 1,
+		TxHash:      "0000000000000000000000000000000000000000000000000000000000000001",
+		OpIndex:     0, Timestamp: time.Unix(0, 0).UTC(),
+		BaseAmount:  mustBigAmount("1000000000000000000000000000000000000"),    // 10^36
+		QuoteAmount: mustBigAmount("2000000000000000000000000000000000000"),    // 2×10^36
+	}
+	tradeB := canonical.Trade{ // base=10^38, quote=3*10^38 → price 3
+		Source: "test", Ledger: 2,
+		TxHash:      "0000000000000000000000000000000000000000000000000000000000000002",
+		OpIndex:     0, Timestamp: time.Unix(0, 0).UTC(),
+		BaseAmount:  mustBigAmount("100000000000000000000000000000000000000"),  // 10^38
+		QuoteAmount: mustBigAmount("300000000000000000000000000000000000000"),  // 3×10^38
+	}
+	// VWAP = (2e36 + 3e38) / (1e36 + 1e38) = 302e36 / 101e36 = 302/101.
+	got, err := aggregate.VWAP([]canonical.Trade{tradeA, tradeB})
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := big.NewRat(302, 101)
+	if got.Cmp(want) != 0 {
+		t.Errorf("VWAP = %v, want 302/101 — precision lost at i128 scale", got)
+	}
+}
+
+func mustBigAmount(s string) canonical.Amount {
+	n, ok := new(big.Int).SetString(s, 10)
+	if !ok {
+		panic("bad big int literal: " + s)
+	}
+	return canonical.NewAmount(n)
+}
+
 func TestTotalVolumes(t *testing.T) {
 	trades := []canonical.Trade{
 		mkTrade(10, 100),
