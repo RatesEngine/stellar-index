@@ -57,7 +57,19 @@ func (c *Cache) Resolve(ctx context.Context, domain string) (*SEP1, error) {
 		return sep, nil
 	}
 
-	v, err, _ := c.sf.Do(key, func() (any, error) {
+	// DoChan (not Do) so a waiter whose ctx cancels doesn't block
+	// past its own deadline. With Do, if caller A enters the
+	// singleflight slot and caller B joins, B waits for A's
+	// function to complete — B's ctx cancellation is ignored.
+	// DoChan returns a channel; we select (ctx.Done, chan) per
+	// caller independently.
+	//
+	// The function runs in a DETACHED context (context.Background)
+	// so the first caller's cancellation doesn't kill an in-flight
+	// fetch that would benefit other waiters. The resolver still
+	// has its own 8s timeout built in; detaching just means we
+	// don't truncate it short when one caller gives up early.
+	ch := c.sf.DoChan(key, func() (any, error) {
 		// Re-check inside the singleflight slot: if another caller
 		// already populated while we were queued, skip the upstream
 		// fetch entirely. Counts as a hit — the alternative would
@@ -67,19 +79,28 @@ func (c *Cache) Resolve(ctx context.Context, domain string) (*SEP1, error) {
 			return sep, nil
 		}
 
-		sep, err := c.resolver.Resolve(ctx, domain)
+		// Detached fetch context — see comment above.
+		fetchCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		sep, err := c.resolver.Resolve(fetchCtx, domain)
 		if err != nil {
 			obs.Sep1CacheOpsTotal.WithLabelValues("upstream_error").Inc()
 			return nil, err
 		}
 		obs.Sep1CacheOpsTotal.WithLabelValues("miss").Inc()
-		c.setCached(ctx, key, sep)
+		c.setCached(fetchCtx, key, sep)
 		return sep, nil
 	})
-	if err != nil {
-		return nil, err
+
+	select {
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	case r := <-ch:
+		if r.Err != nil {
+			return nil, r.Err
+		}
+		return r.Val.(*SEP1), nil
 	}
-	return v.(*SEP1), nil
 }
 
 func (c *Cache) getCached(ctx context.Context, key string) (*SEP1, bool) {

@@ -99,6 +99,42 @@ func TestCache_InvalidateForcesRefresh(t *testing.T) {
 	}
 }
 
+func TestCache_RespectsCallerCtxCancellation(t *testing.T) {
+	// Regression: singleflight.Group.Do blocks the waiting caller
+	// past its own ctx deadline because Do doesn't accept a ctx.
+	// Switched to DoChan with a per-caller select so a caller
+	// whose ctx cancels returns promptly with ctx.Err, regardless
+	// of whether the underlying fetch is still in flight.
+	// Server blocks "long enough" — 2s — not forever, so the test
+	// doesn't hang at srv.Close() drain time.
+	slowSrv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		select {
+		case <-time.After(2 * time.Second):
+		case <-r.Context().Done():
+		}
+	}))
+	defer slowSrv.Close()
+
+	rdb, _ := newCacheRedis(t)
+	c := metadata.NewCache(newLocalResolver(t, slowSrv), rdb)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
+	defer cancel()
+
+	start := time.Now()
+	_, err := c.Resolve(ctx, hostOf(t, slowSrv))
+	elapsed := time.Since(start)
+
+	if err == nil {
+		t.Fatal("expected ctx cancellation error")
+	}
+	// Caller must return within a small multiple of the ctx deadline
+	// — NOT wait for the resolver's 8s timeout.
+	if elapsed > 500*time.Millisecond {
+		t.Errorf("Resolve took %v — should return within ctx deadline (~50ms)", elapsed)
+	}
+}
+
 func TestCache_NegativeResultsNotCached(t *testing.T) {
 	// 404-only server; cache should fall through every call.
 	var hits int64
