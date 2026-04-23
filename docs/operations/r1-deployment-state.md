@@ -43,12 +43,29 @@ ZFS pool `data` (raidz2, ~13.3 TB usable) with 7 datasets:
 |---------|------------------|-------|
 | postgresql@15-main | active | |
 | ~~stellar-core~~ | **REMOVED 2026-04-23** | Primary daemon dropped — archive pipeline doesn't need it; see [archival-nodes.md](../../discovery/data-sources/archival-nodes.md) for revival path in Phase 3. |
-| stellar-rpc | active, healthy | Own captive-core, ingests live from pubnet, getHealth = healthy |
-| galexie | active, exporting | Own captive-core; uploading `FC4A....xdr.zst` objects to MinIO galexie-live at ~1/ledger. ~100 objects/5min at steady state. |
+| ~~stellar-rpc~~ | **REMOVED 2026-04-23** | Redundant for our data path — our own indexer will consume galexie's MinIO output directly via `ingest.ApplyLedgerMetadata`. Public API is `/v1/prices`, not `/rpc`. See §Architecture below. |
+| galexie | active, exporting | Own captive-core; uploading `FC4A....xdr.zst` objects to MinIO galexie-live at ~1/ledger. ~100 objects/5min at steady state. **The single stellar-core on the box.** |
 | minio | active | Buckets: `galexie-live`, `galexie-archive`, `backups` |
 | node_exporter | active | :9100 |
 | ~~stellar-core-prometheus-exporter~~ | **REMOVED 2026-04-23** | Scraped primary /info endpoint; captives don't expose one. |
 | node-healthcheck.timer | active | 5-min push to Healthchecks.io UUID 4cb3daba |
+
+### Architecture after 2026-04-23 trim
+
+```
+Stellar pubnet ─(SCP)─► galexie's captive-core ─► galexie ─► MinIO galexie-live
+                                                                  │
+                                                                  ▼
+                                                           our indexer (TBD, Task #164)
+                                                                  │
+                                                                  ▼
+                                                             TimescaleDB
+                                                                  │
+                                                                  ▼
+                                                            `/v1/prices` API
+```
+
+One stellar-core on the box. Everything downstream of MinIO is a batch/stream consumer via the Ingest SDK — no more captive-cores.
 
 ## Stellar quorum set (trust anchors)
 

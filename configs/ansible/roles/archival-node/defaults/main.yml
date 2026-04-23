@@ -16,7 +16,14 @@ run_postgres:        true
 # when we're ready to become a validator (ADR-0004).
 run_stellar_core:    false
 run_galexie:         true
-run_stellar_rpc:     true
+# stellar-rpc. Off by default — our own indexer reads from galexie's
+# MinIO output directly via ingest.ApplyLedgerMetadata, so stellar-rpc's
+# JSON-RPC surface isn't on the Rates Engine data path. Removed from
+# r1 on 2026-04-23; see docs/operations/r1-deployment-state.md for the
+# architecture rationale. If re-enabled, operator must also re-enable
+# its captive_peer_port_rpc + data/rpc dataset + firewall port 8000
+# below (currently gated off).
+run_stellar_rpc:     false
 run_minio:           true
 run_observability:   true
 
@@ -58,11 +65,14 @@ zfs_datasets:
   #     compression: "zstd"
   #     atime: "off"
   #     mountpoint: "/var/lib/stellar-core"
-  - name: "rpc"
-    recordsize: "16K"
-    compression: "zstd"
-    atime: "off"
-    mountpoint: "/var/lib/stellar-rpc"
+  # "rpc" dataset — for stellar-rpc's SQLite + captive-core bucket dir
+  # at /var/lib/stellar-rpc. Not in this list while run_stellar_rpc=
+  # false. To re-enable, add back:
+  #   - name: "rpc"
+  #     recordsize: "16K"
+  #     compression: "zstd"
+  #     atime: "off"
+  #     mountpoint: "/var/lib/stellar-rpc"
   - name: "galexie"
     recordsize: "1M"
     compression: "zstd"
@@ -280,13 +290,13 @@ stellar_validators:
 
 stellar_http_port:       11626
 stellar_peer_port:       11625
-# Distinct PEER_PORTs per captive-core so they don't collide with the
-# primary daemon (11625) or each other. stellar-core's pubnet default
-# is 11625 and will be used if PEER_PORT is missing from the rendered
-# captive config — which happens if we set 0, since the toml marshaller
-# drops zero values with omitempty. So: pick unique non-zero ports.
-captive_peer_port_rpc:     11725
+# PEER_PORTs for captive-cores. Must be non-zero (toml marshaller
+# drops zero values with omitempty, causing stellar-core to fall back
+# to pubnet default 11625). Must also differ per captive so they don't
+# collide. Only galexie's captive is live today; _rpc is kept for
+# the case where run_stellar_rpc is flipped back to true.
 captive_peer_port_galexie: 11726
+captive_peer_port_rpc:     11725
 
 # ───── Galexie ───────────────────────────────────────────────────────
 galexie_version:         "galexie-v26.0.0"   # pinned — update via VERSIONS.md. Tag format: galexie-vX.Y.Z (matches Stellar protocol version).
@@ -333,14 +343,15 @@ allowed_ssh_cidrs:
 
 # Internal ports accessible from the LAN / VPN CIDRs only.
 # 11626 (stellar-core admin /info) only when primary daemon is running.
-internal_allow_ports: "{{ internal_allow_ports_base + (internal_allow_ports_primary_core if run_stellar_core | bool else []) }}"
+internal_allow_ports: "{{ internal_allow_ports_base + (internal_allow_ports_primary_core if run_stellar_core | bool else []) + (internal_allow_ports_rpc if run_stellar_rpc | bool else []) }}"
 internal_allow_ports_base:
   - { port: 5432,  proto: "tcp", comment: "Postgres" }
-  - { port: 8000,  proto: "tcp", comment: "stellar-rpc" }
   - { port: 9000,  proto: "tcp", comment: "MinIO S3 API" }
   - { port: 9100,  proto: "tcp", comment: "node_exporter" }
 internal_allow_ports_primary_core:
   - { port: 11626, proto: "tcp", comment: "stellar-core admin HTTP (Phase 3 validator)" }
+internal_allow_ports_rpc:
+  - { port: 8000,  proto: "tcp", comment: "stellar-rpc JSON-RPC" }
 
 internal_cidrs:
   - "10.0.0.0/8"

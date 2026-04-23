@@ -46,16 +46,14 @@ FAILS=()
 add_fail() { FAILS+=("$1"); }
 
 # --- Check 1: systemd service liveness -------------------------
-# Primary stellar-core was removed 2026-04-23 — we don't publish our
-# own archive yet and aren't a validator, so it was paying its cost
-# (3.6G RAM, 25% CPU, peer-slot contention with the captives) with
-# no corresponding value. Galexie's captive-core is our single
-# producer; stellar-rpc has its own captive for ingest.
-# stellar-core-prometheus-exporter is gone with the primary (no
-# /info endpoint to scrape).
+# r1's Phase 1 shape after trimming: just postgres, galexie (with
+# its captive-core producing to MinIO), minio, and node_exporter.
+# Removed 2026-04-23: primary stellar-core (see r1-deployment-state
+# pitfall #1/#7), stellar-core-prometheus-exporter (scraped primary),
+# and stellar-rpc (redundant — our indexer consumes galexie's MinIO
+# output directly via Ingest SDK).
 SERVICES=(
   postgresql@15-main
-  stellar-rpc
   galexie
   minio
   node_exporter
@@ -67,66 +65,13 @@ for s in "${SERVICES[@]}"; do
   fi
 done
 
-# Check 2 + 3 (direct stellar-core /info probe on :11626) were
-# removed along with the primary stellar-core. The "is the network
-# being followed?" question is now answered by:
-#   * Check 4   — stellar-rpc getHealth latency (covers captive-core
-#                 freshness on the RPC side)
-#   * Check 4.5 — galexie upload mtime to MinIO (covers the galexie
-#                 captive-core freshness)
-# If both pass, at least one captive-core is tailing the network.
-
-# --- Check 4: stellar-rpc is reachable + reasonably fresh ------
-# stellar-rpc has two "not broken, just catching up" states we
-# must treat as OK during a grace window:
+# Primary stellar-core /info probe and stellar-rpc getHealth probe
+# were both removed when we trimmed the stack on 2026-04-23. The
+# "is the network being followed?" signal is now exclusively the
+# galexie upload-freshness check below (Check 4.5).
 #
-#   A) DB empty → error.message contains "data stores are not initialized"
-#      Seen on first-ever start (fresh SQLite).
-#   B) Latency too high → error.message contains "latency (...) since last
-#      known ledger closed is too high"
-#      Seen for 3-7 minutes after EVERY captive-core restart, because
-#      stellar-core has to download the next checkpoint HAS file from
-#      the SDF archives before it can tail the live network.
-#
-# Both states are bounded by STELLAR_RPC_WARMUP_SEC (default 2 h)
-# measured from the service's ActiveEnterTimestamp. After that,
-# any non-healthy response is a real failure — captive-core is
-# likely stuck on a config issue.
-#
-# Distinguishes:
-#   * transport error (empty/non-JSON/refused) → FAIL (always)
-#   * status=healthy → OK (always)
-#   * catchup error (A or B) + within grace → OK
-#   * catchup error (A or B) + grace exceeded → FAIL
-#   * anything else → FAIL
-rpc_resp=$(curl -sfm 5 -X POST -H 'Content-Type: application/json' \
-  -d '{"jsonrpc":"2.0","id":1,"method":"getHealth"}' \
-  http://127.0.0.1:8000 2>&1) || rpc_resp=""
-rpc_status=$(echo "$rpc_resp" | jq -r '.result.status // ""' 2>/dev/null)
-rpc_error=$(echo "$rpc_resp" | jq -r '.error.message // ""' 2>/dev/null)
-
-# True if the error is a benign "still catching up" state.
-is_catchup_err=0
-if echo "$rpc_error" | grep -qE 'data stores are not initialized|latency \([^)]+\) since last known ledger closed'; then
-  is_catchup_err=1
-fi
-
-if [ "$rpc_status" = "healthy" ]; then
-  : # fully healthy, no action
-elif [ "$is_catchup_err" = 1 ]; then
-  WARMUP_MAX="${STELLAR_RPC_WARMUP_SEC:-7200}"
-  enter_iso=$(systemctl show -p ActiveEnterTimestamp --value stellar-rpc 2>/dev/null)
-  enter_epoch=$(date -d "$enter_iso" +%s 2>/dev/null || echo 0)
-  now_epoch=$(date +%s)
-  age=$(( now_epoch - enter_epoch ))
-  if [ "$age" -gt "$WARMUP_MAX" ]; then
-    add_fail "stellar-rpc still catching up after ${age}s (warmup cap ${WARMUP_MAX}s): ${rpc_error}"
-  fi
-elif [ -z "$rpc_resp" ] || ! echo "$rpc_resp" | jq -e . >/dev/null 2>&1; then
-  add_fail "stellar-rpc unreachable or non-JSON response"
-else
-  add_fail "stellar-rpc unhealthy: status='$rpc_status' error='$rpc_error'"
-fi
+# If stellar-rpc is ever re-added, restore a getHealth probe here
+# with the latency-grace logic that was in git ref f7527f7.
 
 # --- Check 4.5: galexie upload freshness -----------------------
 # Galexie's metrics endpoint (admin_port 6061) has been observed
