@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"log/slog"
 	"net/http"
+	"sync"
 	"time"
 
 	"github.com/RatesEngine/rates-engine/internal/api/v1/middleware"
@@ -203,20 +204,38 @@ func (s *Server) handleHealthz(w http.ResponseWriter, r *http.Request) {
 }
 
 // handleReadyz is the deep readiness probe. Pings every registered
-// ReadyChecker in parallel with a short timeout. 200 only if all
-// pass; 503 otherwise.
+// ReadyChecker in parallel with a short shared timeout. 200 only if
+// all pass; 503 otherwise.
+//
+// Parallelism matters: with 3 checks at 500ms each, serial execution
+// uses 1.5s of the 2s budget; parallel uses the max of any single
+// check. The k8s liveness-probe timeout is typically 1s — blowing
+// past it flaps the pod.
 func (s *Server) handleReadyz(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(r.Context(), 2*time.Second)
 	defer cancel()
 
 	results := make([]checkResult, len(s.checks))
-	allOK := true
+	var wg sync.WaitGroup
 	for i, c := range s.checks {
-		err := c.Ping(ctx)
-		results[i] = checkResult{Name: c.Name(), OK: err == nil}
-		if err != nil {
+		wg.Add(1)
+		go func(i int, c ReadyChecker) {
+			defer wg.Done()
+			err := c.Ping(ctx)
+			r := checkResult{Name: c.Name(), OK: err == nil}
+			if err != nil {
+				r.Error = err.Error()
+			}
+			results[i] = r // distinct indices — no mutex needed
+		}(i, c)
+	}
+	wg.Wait()
+
+	allOK := true
+	for _, r := range results {
+		if !r.OK {
 			allOK = false
-			results[i].Error = err.Error()
+			break
 		}
 	}
 

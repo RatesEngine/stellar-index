@@ -9,18 +9,31 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	v1 "github.com/RatesEngine/rates-engine/internal/api/v1"
 )
 
 // stubCheck is a ReadyChecker that returns a configurable error.
+// An optional `sleep` models a slow dependency so tests can verify
+// the readyz handler runs probes in parallel.
 type stubCheck struct {
-	name string
-	err  error
+	name  string
+	err   error
+	sleep time.Duration
 }
 
-func (s *stubCheck) Ping(context.Context) error { return s.err }
-func (s *stubCheck) Name() string               { return s.name }
+func (s *stubCheck) Ping(ctx context.Context) error {
+	if s.sleep > 0 {
+		select {
+		case <-time.After(s.sleep):
+		case <-ctx.Done():
+			return ctx.Err()
+		}
+	}
+	return s.err
+}
+func (s *stubCheck) Name() string { return s.name }
 
 func newTestServer(t *testing.T, checks ...v1.ReadyChecker) *httptest.Server {
 	t.Helper()
@@ -124,6 +137,35 @@ func TestReadyz_OneFailure(t *testing.T) {
 	// Stale flag must be set when degraded.
 	if !strings.Contains(body, `"stale":true`) {
 		t.Errorf("body should set stale flag: %s", body)
+	}
+}
+
+func TestReadyz_ProbesRunInParallel(t *testing.T) {
+	// Three 400ms-sleep checks. Serial execution would take ~1.2s
+	// (over the 2s budget). Parallel should land well under 1s.
+	// Generous cap (900ms) so we don't flake on CPU-stressed CI.
+	const perProbeSleep = 400 * time.Millisecond
+	const cap = 900 * time.Millisecond
+
+	ts := newTestServer(t,
+		&stubCheck{name: "a", sleep: perProbeSleep},
+		&stubCheck{name: "b", sleep: perProbeSleep},
+		&stubCheck{name: "c", sleep: perProbeSleep},
+	)
+
+	start := time.Now()
+	resp, err := http.Get(ts.URL + "/v1/readyz")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	elapsed := time.Since(start)
+
+	if resp.StatusCode != 200 {
+		t.Fatalf("status = %d", resp.StatusCode)
+	}
+	if elapsed >= cap {
+		t.Errorf("readyz took %v — expected < %v (serial execution regression)", elapsed, cap)
 	}
 }
 
