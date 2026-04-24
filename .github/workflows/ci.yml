@@ -38,9 +38,9 @@ jobs:
             exit 1
           fi
       - name: golangci-lint
-        uses: golangci/golangci-lint-action@v6
+        uses: golangci/golangci-lint-action@v8
         with:
-          version: latest
+          version: v2.11.4
           args: --timeout=5m
       - name: go vet
         run: go vet ./...
