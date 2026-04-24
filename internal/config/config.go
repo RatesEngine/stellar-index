@@ -148,6 +148,37 @@ type StellarConfig struct {
 	HistoryArchiveURL string   `toml:"history_archive_url" doc:"Public history archive (SDF or ours) for backfill catchup." default:"https://history.stellar.org/prd/core-live/core_live_001"`
 }
 
+// Well-known Stellar network passphrases, copied from
+// github.com/stellar/go-stellar-sdk/network. Kept local so
+// internal/config doesn't pull the SDK just for string constants.
+const (
+	pubnetPassphrase    = "Public Global Stellar Network ; September 2015"
+	testnetPassphrase   = "Test SDF Network ; September 2015"
+	futurenetPassphrase = "Test SDF Future Network ; October 2022"
+)
+
+// Passphrase translates the TOML-friendly short network name
+// (pubnet / testnet / futurenet) into the full network passphrase
+// string that the Stellar protocol actually uses everywhere —
+// stellar-core, go-stellar-sdk datastore manifests, transaction
+// signatures. Callers that talk to those subsystems must pass the
+// passphrase, not the short name.
+//
+// Returns "" for unknown values; callers treat that as a config
+// error. Validate() rejects unknown names at startup, so a real
+// runtime "" here would mean someone bypassed validation.
+func (s StellarConfig) Passphrase() string {
+	switch s.Network {
+	case "pubnet":
+		return pubnetPassphrase
+	case "testnet":
+		return testnetPassphrase
+	case "futurenet":
+		return futurenetPassphrase
+	}
+	return ""
+}
+
 // StorageConfig captures every persistent-store connection. DSN
 // strings NEVER include passwords directly — use the `env:` tag
 // pattern to reference a secret store.

@@ -167,7 +167,7 @@ func run(cfgPath string, dryRun bool) error {
 	go func() {
 		streamErr <- ledgerstream.Stream(rootCtx, lsConfig, from, 0, /*unbounded*/
 			func(lcm sdkxdr.LedgerCloseMeta) error {
-				return processAndPersist(rootCtx, disp, events, store, logger, lcm, cfg.Stellar.Network)
+				return processAndPersist(rootCtx, disp, events, store, logger, lcm, cfg.Stellar.Passphrase())
 			},
 		)
 	}()
@@ -647,7 +647,7 @@ func ledgerstreamConfig(cfg config.Config) ledgerstream.Config {
 				"region":                  cfg.Storage.S3Region,
 				"endpoint_url":            cfg.Storage.S3Endpoint,
 			},
-			NetworkPassphrase: cfg.Stellar.Network,
+			NetworkPassphrase: cfg.Stellar.Passphrase(),
 			Compression:       "zstd",
 		},
 	}

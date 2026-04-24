@@ -703,7 +703,7 @@ func verifyDecoders(args []string) error { //nolint:funlen,gocognit,gocyclo // l
 				"region":                  cfg.Storage.S3Region,
 				"endpoint_url":            cfg.Storage.S3Endpoint,
 			},
-			NetworkPassphrase: cfg.Stellar.Network,
+			NetworkPassphrase: cfg.Stellar.Passphrase(),
 			Compression:       "zstd",
 		},
 	}
@@ -722,10 +722,10 @@ func verifyDecoders(args []string) error { //nolint:funlen,gocognit,gocyclo // l
 	// the dispatcher's internal unmatched hit counter tracks "events
 	// the decoders saw but ignored"; here we're interested in what
 	// each decoder OUTPUTTED, which is the verify claim).
-	err = ledgerstream.Stream(ctx, lsCfg, uint32(*from), uint32(*to-*from+1),
+	err = ledgerstream.Stream(ctx, lsCfg, uint32(*from), uint32(*to),
 		func(lcm sdkxdr.LedgerCloseMeta) error {
 			totalLedgers++
-			outputs, perr := disp.ProcessLedger(lcm, cfg.Stellar.Network)
+			outputs, perr := disp.ProcessLedger(lcm, cfg.Stellar.Passphrase())
 			if perr != nil {
 				fmt.Fprintf(os.Stderr, "verify-decoders: ledger %d: %v\n",
 					lcm.LedgerSequence(), perr)
