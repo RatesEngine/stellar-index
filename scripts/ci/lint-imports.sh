@@ -86,6 +86,7 @@ RULES = [
             "cmd/ratesengine-ops/",             # rpc-probe diag
             "scripts/dev/",                     # fixture-capture
             "/decode.go",                       # source decode.go — uses Event type only (PR 165b will move)
+            "/factory_seed.go",                 # cold-start factory state via simulateTransaction (PR 14) — not a runtime decoder
             "_test.go",                         # tests
         ],
         "why": (
