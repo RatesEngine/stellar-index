@@ -105,6 +105,7 @@ RULES = [
             "internal/dispatcher/",             # routes tx / events (PR 165b)
             "internal/sources/sdex/",           # SDEX decodes non-SCVal xdr (classic ops) (PR 165c)
             "cmd/ratesengine-indexer/",         # glue: wires ledgerstream → dispatcher (PR 165d)
+            "cmd/ratesengine-ops/",             # verify-decoders mirrors the indexer's ledger plumbing
             "_test.go",                         # fixture construction
         ],
         "why": (
