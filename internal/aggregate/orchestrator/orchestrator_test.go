@@ -438,6 +438,88 @@ func TestTick_ClassFilter_EmptyAfterFilterCountsAsEmpty(t *testing.T) {
 	}
 }
 
+func TestTick_OutlierFilter_DropsAnomalousPriceRow(t *testing.T) {
+	// Three exchange-class XLM/USDT trades at ~0.20 plus one wild
+	// outlier at 200.0 (1000× the others). With a 4σ threshold the
+	// outlier should be discarded; the resulting VWAP should land
+	// near 0.20, not the unfiltered weighted mean.
+	now := time.Now()
+	store := &mockStore{
+		trades: []canonical.Trade{
+			buildTradeFrom(t, "binance",
+				big.NewInt(100_000_000), big.NewInt(20_000_000), now.Add(-4*time.Minute)),
+			buildTradeFrom(t, "binance",
+				big.NewInt(100_000_000), big.NewInt(20_000_000), now.Add(-3*time.Minute)),
+			buildTradeFrom(t, "kraken",
+				big.NewInt(100_000_000), big.NewInt(20_000_000), now.Add(-2*time.Minute)),
+			// The 200.0-priced anomaly. Same volume as siblings so it
+			// can't hide behind a tiny weight.
+			buildTradeFrom(t, "kraken",
+				big.NewInt(100_000_000), big.NewInt(20_000_000_000), now.Add(-1*time.Minute)),
+		},
+	}
+	rdb, mr := newTestRedis(t)
+	orch := New(store, rdb, Config{
+		Pairs:                 []canonical.Pair{xlmUsdtPair(t)},
+		Windows:               []time.Duration{5 * time.Minute},
+		OutlierSigmaThreshold: 1.0, // tight enough that the 1000× row falls outside.
+	})
+	if err := orch.Tick(context.Background()); err != nil {
+		t.Fatalf("Tick: %v", err)
+	}
+
+	xlm, _ := canonical.NewCryptoAsset("XLM")
+	usdt, _ := canonical.NewCryptoAsset("USDT")
+	key := "vwap:" + xlm.String() + ":" + usdt.String() + ":300"
+	val, err := mr.Get(key)
+	if err != nil {
+		t.Fatalf("miniredis Get %q: %v", key, err)
+	}
+	// Without the outlier filter this would be ≈50.15 — the 200×
+	// row dominates. With the filter the three sane rows yield
+	// 0.20.
+	if val[:4] != "0.20" {
+		t.Errorf("outlier-filtered VWAP = %q want prefix 0.20", val)
+	}
+}
+
+func TestTick_OutlierFilter_ZeroSigmaIsOff(t *testing.T) {
+	// Sigma=0 (default) leaves every row in the VWAP. Verify the
+	// 200× outlier carries through to the cached value.
+	now := time.Now()
+	store := &mockStore{
+		trades: []canonical.Trade{
+			buildTradeFrom(t, "binance",
+				big.NewInt(100_000_000), big.NewInt(20_000_000), now.Add(-3*time.Minute)),
+			buildTradeFrom(t, "binance",
+				big.NewInt(100_000_000), big.NewInt(20_000_000), now.Add(-2*time.Minute)),
+			buildTradeFrom(t, "kraken",
+				big.NewInt(100_000_000), big.NewInt(20_000_000_000), now.Add(-1*time.Minute)),
+		},
+	}
+	rdb, mr := newTestRedis(t)
+	orch := New(store, rdb, Config{
+		Pairs:   []canonical.Pair{xlmUsdtPair(t)},
+		Windows: []time.Duration{5 * time.Minute},
+		// OutlierSigmaThreshold not set → 0 → filter off.
+	})
+	if err := orch.Tick(context.Background()); err != nil {
+		t.Fatalf("Tick: %v", err)
+	}
+
+	xlm, _ := canonical.NewCryptoAsset("XLM")
+	usdt, _ := canonical.NewCryptoAsset("USDT")
+	key := "vwap:" + xlm.String() + ":" + usdt.String() + ":300"
+	val, err := mr.Get(key)
+	if err != nil {
+		t.Fatalf("miniredis Get %q: %v", key, err)
+	}
+	// Equal-volume mean = (0.20 + 0.20 + 200.00) / 3 = ~66.8.
+	if val[:2] == "0." {
+		t.Errorf("disabled outlier filter let through small VWAP %q — outlier should still dominate", val)
+	}
+}
+
 // xlmUsdFiatPair builds the XLM/fiat:USD target pair used by the
 // stablecoin-expansion tests.
 func xlmUsdFiatPair(t *testing.T) canonical.Pair {
