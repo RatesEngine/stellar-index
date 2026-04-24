@@ -3,6 +3,7 @@ package v1_test
 import (
 	"context"
 	"errors"
+	"net/http"
 	"testing"
 
 	v1 "github.com/RatesEngine/rates-engine/internal/api/v1"
@@ -63,7 +64,7 @@ func TestAssetGet_Sep1OverlayVerified(t *testing.T) {
 	ts := httpTestServer(t, srv)
 
 	resp := mustGet(t, ts.URL+"/v1/assets/USDC-"+testUSDCIssuer)
-	if resp.StatusCode != 200 {
+	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("status = %d", resp.StatusCode)
 	}
 	var env struct {
@@ -251,7 +252,7 @@ func TestAssetGet_Sep1OverlayUnreachable(t *testing.T) {
 	ts := httpTestServer(t, srv)
 
 	resp := mustGet(t, ts.URL+"/v1/assets/USDC-"+testUSDCIssuer)
-	if resp.StatusCode != 200 {
+	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("status = %d, want 200 (unreachable is not fatal)", resp.StatusCode)
 	}
 	var env struct {

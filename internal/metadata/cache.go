@@ -83,15 +83,15 @@ func (c *Cache) Resolve(ctx context.Context, domain string) (*SEP1, error) {
 		}
 
 		// Detached fetch context — see comment above.
-		fetchCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		fetchCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second) //nolint:contextcheck // singleflight deliberately survives per-caller cancellation
 		defer cancel()
-		sep, err := c.resolver.Resolve(fetchCtx, domain)
+		sep, err := c.resolver.Resolve(fetchCtx, domain) //nolint:contextcheck // see above
 		if err != nil {
 			obs.Sep1CacheOpsTotal.WithLabelValues("upstream_error").Inc()
 			return nil, err
 		}
 		obs.Sep1CacheOpsTotal.WithLabelValues("miss").Inc()
-		c.setCached(fetchCtx, key, sep)
+		c.setCached(fetchCtx, key, sep) //nolint:contextcheck // writes use the same detached context as the fetch above
 		return sep, nil
 	})
 

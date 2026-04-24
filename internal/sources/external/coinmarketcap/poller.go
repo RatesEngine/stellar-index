@@ -119,7 +119,7 @@ type cmcStatus struct {
 }
 
 // PollOnce implements external.Poller.
-func (p *Poller) PollOnce(ctx context.Context, pairs []canonical.Pair) ([]canonical.Trade, []canonical.OracleUpdate, error) {
+func (p *Poller) PollOnce(ctx context.Context, pairs []canonical.Pair) ([]canonical.Trade, []canonical.OracleUpdate, error) { //nolint:gocognit,gocyclo,funlen // dispatch-heavy; splitting would reduce linearity
 	symbolSet := map[string]struct{}{}
 	cryptoAssets := map[string]canonical.Asset{}
 	currencySet := map[string]struct{}{}

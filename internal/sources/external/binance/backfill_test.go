@@ -58,7 +58,7 @@ func newTestREST(t *testing.T, responses [][]kline) *httptest.Server {
 	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != klinesPath {
 			t.Errorf("unexpected path %q", r.URL.Path)
-			http.Error(w, "nope", 404)
+			http.Error(w, "nope", http.StatusNotFound)
 			return
 		}
 		mu.Lock()

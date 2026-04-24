@@ -81,7 +81,7 @@ type lastQuote struct {
 // Emission shape mirrors ExchangeRatesApi: asset = quote currency,
 // quote = base currency, price = how many base units cost 1 asset
 // unit (inverse of Polygon's "1 base → X quote" quote).
-func (p *Poller) PollOnce(ctx context.Context, pairs []canonical.Pair) ([]canonical.Trade, []canonical.OracleUpdate, error) {
+func (p *Poller) PollOnce(ctx context.Context, pairs []canonical.Pair) ([]canonical.Trade, []canonical.OracleUpdate, error) { //nolint:gocognit,gocyclo,funlen // dispatch-heavy; splitting would reduce linearity
 	base := p.Base
 	if base == "" {
 		base = DefaultBase

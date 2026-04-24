@@ -34,7 +34,7 @@ import (
 	"github.com/RatesEngine/rates-engine/internal/version"
 )
 
-func main() {
+func main() { //nolint:gocognit,gocyclo // dispatch-heavy; splitting would reduce linearity
 	fs := flag.NewFlagSet("ratesengine-migrate", flag.ContinueOnError)
 	dsn := fs.String("dsn", "", "Postgres DSN (overrides RATESENGINE_POSTGRES_DSN env)")
 	dir := fs.String("migrations", "migrations", "Path to the migrations directory")

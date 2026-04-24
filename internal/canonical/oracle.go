@@ -122,12 +122,12 @@ func (u OracleUpdate) Validate() error {
 		return fmt.Errorf("%w: zero timestamp", ErrInvalidOracle)
 	}
 	if err := u.Asset.Validate(); err != nil {
-		return fmt.Errorf("%w: asset: %v", ErrInvalidOracle, err)
+		return fmt.Errorf("%w: asset: %w", ErrInvalidOracle, err)
 	}
 	// Quote validates via the ordinary Asset.Validate path —
 	// AssetFiat is a first-class variant per ADR-0010. No sentinel.
 	if err := u.Quote.Validate(); err != nil {
-		return fmt.Errorf("%w: quote: %v", ErrInvalidOracle, err)
+		return fmt.Errorf("%w: quote: %w", ErrInvalidOracle, err)
 	}
 	if u.Price.Sign() <= 0 {
 		return fmt.Errorf("%w: price must be positive, got %s", ErrInvalidOracle, u.Price)
@@ -144,14 +144,14 @@ func (u OracleUpdate) Validate() error {
 	// unconditionally.
 	if u.Observer != "" {
 		if err := validateAccountID(u.Observer); err != nil {
-			return fmt.Errorf("%w: observer: %v", ErrInvalidOracle, err)
+			return fmt.Errorf("%w: observer: %w", ErrInvalidOracle, err)
 		}
 	}
 	// ContractID is optional (off-chain sources don't have one).
 	// When present it MUST be a valid C-strkey.
 	if u.ContractID != "" {
 		if err := validateContractID(u.ContractID); err != nil {
-			return fmt.Errorf("%w: contract_id: %v", ErrInvalidOracle, err)
+			return fmt.Errorf("%w: contract_id: %w", ErrInvalidOracle, err)
 		}
 	}
 	return nil

@@ -20,7 +20,6 @@ import (
 	"encoding/base64"
 	"errors"
 	"fmt"
-	"math/big"
 
 	"github.com/stellar/go-stellar-sdk/strkey"
 	"github.com/stellar/go-stellar-sdk/xdr"
@@ -62,7 +61,7 @@ var (
 func Parse(b64 string) (xdr.ScVal, error) {
 	var sv xdr.ScVal
 	if err := xdr.SafeUnmarshalBase64(b64, &sv); err != nil {
-		return xdr.ScVal{}, fmt.Errorf("%w: %v", ErrScValDecode, err)
+		return xdr.ScVal{}, fmt.Errorf("%w: %w", ErrScValDecode, err)
 	}
 	return sv, nil
 }
@@ -107,7 +106,7 @@ func EncodeString(s string) (string, error) {
 	sv.Str = &str
 	b, err := sv.MarshalBinary()
 	if err != nil {
-		return "", fmt.Errorf("%w: %v", ErrScValDecode, err)
+		return "", fmt.Errorf("%w: %w", ErrScValDecode, err)
 	}
 	return base64.StdEncoding.EncodeToString(b), nil
 }
@@ -150,7 +149,7 @@ func EncodeSymbol(s string) (string, error) {
 	sv.Sym = &sym
 	b, err := sv.MarshalBinary()
 	if err != nil {
-		return "", fmt.Errorf("%w: %v", ErrScValDecode, err)
+		return "", fmt.Errorf("%w: %w", ErrScValDecode, err)
 	}
 	return base64.StdEncoding.EncodeToString(b), nil
 }
@@ -345,6 +344,3 @@ func DecodeAddressOrSymbol(sv xdr.ScVal) (AddressOrSymbol, error) {
 			ErrScValType, sv.Type.String())
 	}
 }
-
-// bigIntToAmount is a small bridge used by tests.
-func bigIntToAmount(n *big.Int) canonical.Amount { return canonical.NewAmount(n) }

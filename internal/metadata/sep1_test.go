@@ -304,7 +304,7 @@ func TestResolver_DomainIsLowercased(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if strings.ToUpper(receivedHost) != strings.ToUpper(host) {
+	if !strings.EqualFold(receivedHost, host) {
 		t.Errorf("host mismatch: %q vs %q", receivedHost, host)
 	}
 	// Lowercasing is the key invariant — toml:<domain> cache keys

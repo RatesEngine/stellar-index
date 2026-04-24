@@ -44,7 +44,7 @@ func TestRateLimit_AllowsUnderLimit(t *testing.T) {
 	h := middleware.RateLimit(b, fixedKeyFn("k1"), nil, nil)(okHandler())
 
 	for i := 0; i < 3; i++ {
-		r := httptest.NewRequest("GET", "/", nil)
+		r := httptest.NewRequest(http.MethodGet, "/", nil)
 		w := httptest.NewRecorder()
 		h.ServeHTTP(w, r)
 		if w.Code != 200 {
@@ -68,13 +68,13 @@ func TestRateLimit_Rejects429AfterLimit(t *testing.T) {
 
 	// Exhaust the budget.
 	for i := 0; i < 2; i++ {
-		r := httptest.NewRequest("GET", "/", nil)
+		r := httptest.NewRequest(http.MethodGet, "/", nil)
 		w := httptest.NewRecorder()
 		h.ServeHTTP(w, r)
 	}
 
 	// Over-limit request.
-	r := httptest.NewRequest("GET", "/some-path", nil)
+	r := httptest.NewRequest(http.MethodGet, "/some-path", nil)
 	w := httptest.NewRecorder()
 	h.ServeHTTP(w, r)
 	if w.Code != http.StatusTooManyRequests {
@@ -113,7 +113,7 @@ func TestRateLimit_EmptyKeyBypasses(t *testing.T) {
 	h := middleware.RateLimit(b, fixedKeyFn(""), nil, nil)(inner)
 
 	for i := 0; i < 5; i++ {
-		r := httptest.NewRequest("GET", "/", nil)
+		r := httptest.NewRequest(http.MethodGet, "/", nil)
 		w := httptest.NewRecorder()
 		h.ServeHTTP(w, r)
 		if w.Code != 200 {
@@ -137,7 +137,7 @@ func TestRateLimit_SkipsWhenSkipReturnsTrue(t *testing.T) {
 
 	// Budget is 1. Call /v1/healthz 10× — none should count.
 	for i := 0; i < 10; i++ {
-		r := httptest.NewRequest("GET", "/v1/healthz", nil)
+		r := httptest.NewRequest(http.MethodGet, "/v1/healthz", nil)
 		w := httptest.NewRecorder()
 		h.ServeHTTP(w, r)
 		if w.Code != 200 {
@@ -145,7 +145,7 @@ func TestRateLimit_SkipsWhenSkipReturnsTrue(t *testing.T) {
 		}
 	}
 	// Now a regular request should still get its one allowance.
-	r := httptest.NewRequest("GET", "/", nil)
+	r := httptest.NewRequest(http.MethodGet, "/", nil)
 	w := httptest.NewRecorder()
 	h.ServeHTTP(w, r)
 	if w.Code != 200 {
@@ -162,7 +162,7 @@ func TestRateLimit_FailsOpenOnRedisError(t *testing.T) {
 	// Blow up the backing miniredis — future Take() calls error.
 	mr.Close()
 
-	r := httptest.NewRequest("GET", "/", nil)
+	r := httptest.NewRequest(http.MethodGet, "/", nil)
 	w := httptest.NewRecorder()
 	h.ServeHTTP(w, r)
 	if w.Code != 200 {
@@ -185,7 +185,7 @@ func TestSkipHealthAndMetrics(t *testing.T) {
 		"/v1/metrics-fake": false,
 	}
 	for path, want := range cases {
-		r := httptest.NewRequest("GET", path, nil)
+		r := httptest.NewRequest(http.MethodGet, path, nil)
 		if got := middleware.SkipHealthAndMetrics(r); got != want {
 			t.Errorf("SkipHealthAndMetrics(%q) = %v, want %v", path, got, want)
 		}

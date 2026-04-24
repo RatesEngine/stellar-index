@@ -84,10 +84,6 @@ func TestStreamer_EndToEnd(t *testing.T) {
 	s := NewStreamer(mustPairMap(t))
 	s.Endpoint = replaceScheme(srv.URL)
 
-	pairs, err := DefaultPairList()
-	if err != nil {
-		t.Fatalf("DefaultPairList: %v", err)
-	}
 	// Scope the test to a couple of pairs the fixture emits — the
 	// real DefaultPairList has 8 symbols, overkill for this test.
 	xlm, _ := canonical.NewCryptoAsset("XLM")
@@ -95,7 +91,7 @@ func TestStreamer_EndToEnd(t *testing.T) {
 	eur, _ := canonical.NewFiatAsset("EUR")
 	xlmUsd, _ := canonical.NewPair(xlm, usd)
 	xlmEur, _ := canonical.NewPair(xlm, eur)
-	pairs = []canonical.Pair{xlmUsd, xlmEur}
+	pairs := []canonical.Pair{xlmUsd, xlmEur}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()

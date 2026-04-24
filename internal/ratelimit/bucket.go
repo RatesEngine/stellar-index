@@ -71,8 +71,8 @@ type Result struct {
 //   - window — size of the fixed window.
 //
 // Panics on invalid arguments (zero or negative).
-func New(rdb redis.Cmdable, max int, window time.Duration, opts ...Option) *Bucket {
-	if max <= 0 {
+func New(rdb redis.Cmdable, limit int, window time.Duration, opts ...Option) *Bucket {
+	if limit <= 0 {
 		panic("ratelimit: max must be positive")
 	}
 	// Windows below 1s would integer-divide to zero in Take()'s
@@ -85,7 +85,7 @@ func New(rdb redis.Cmdable, max int, window time.Duration, opts ...Option) *Buck
 	}
 	b := &Bucket{
 		rdb:       rdb,
-		max:       max,
+		max:       limit,
 		window:    window,
 		keyPrefix: "rl:",
 		nowFn:     time.Now,

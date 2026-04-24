@@ -125,10 +125,8 @@ func decodeClaimAtom(
 		// the Maker so analysts can distinguish order-book trades
 		// from LP trades.
 		lp := atom.MustLiquidityPool()
-		sellerAccount = ""
 		// PoolID is a Hash; encode as hex for the Maker field.
-		poolHex := fmt.Sprintf("%x", lp.LiquidityPoolId)
-		sellerAccount = poolHex
+		sellerAccount = fmt.Sprintf("%x", lp.LiquidityPoolId)
 		soldAsset = lp.AssetSold
 		boughtAsset = lp.AssetBought
 		soldAmount = lp.AmountSold

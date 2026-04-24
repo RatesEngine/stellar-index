@@ -147,6 +147,9 @@ func buildTrade(t tradePayload, pairMap map[string]canonical.Pair) (canonical.Tr
 // helper — duplicated rather than shared because the amount-scaling
 // convention is source-package-local and a future refactor to
 // per-source scales would prefer the duplication.
+// decimalStringToScaledInt — targetDecimals kept as param for symmetry with the other external parsers.
+//
+//nolint:unparam // currently always externalAmountDecimals
 func decimalStringToScaledInt(s string, targetDecimals int) (*big.Int, error) {
 	if s == "" {
 		return nil, fmt.Errorf("empty decimal string")

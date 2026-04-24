@@ -553,8 +553,8 @@ func summariseDryRun(trades []canonical.Trade) {
 		// Convert 10^8-scaled Amount to float for display. Precision
 		// loss here is fine — it's a dry-run summary, not a computed
 		// price.
-		bf, _ := amountToFloat(t.BaseAmount, 8)
-		qf, _ := amountToFloat(t.QuoteAmount, 8)
+		bf := amountToFloat(t.BaseAmount, 8)
+		qf := amountToFloat(t.QuoteAmount, 8)
 		totalBase += bf
 		totalQuote += qf
 	}
@@ -575,10 +575,10 @@ func summariseDryRun(trades []canonical.Trade) {
 // amountToFloat converts a canonical.Amount at the given decimal
 // scale to a float64 for display. Precision-lossy; never use this
 // path for anything that writes back to storage.
-func amountToFloat(a canonical.Amount, decimals int) (float64, bool) {
+func amountToFloat(a canonical.Amount, decimals int) float64 {
 	bi := a.BigInt()
 	if bi == nil {
-		return 0, false
+		return 0
 	}
 	// Build "INT.FRAC" then parse via strconv.
 	s := bi.String()
@@ -595,6 +595,6 @@ func amountToFloat(a canonical.Amount, decimals int) (float64, bool) {
 	if neg {
 		formatted = "-" + formatted
 	}
-	f, err := strconv.ParseFloat(formatted, 64)
-	return f, err == nil
+	f, _ := strconv.ParseFloat(formatted, 64)
+	return f
 }

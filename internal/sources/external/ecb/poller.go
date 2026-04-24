@@ -141,7 +141,7 @@ type rateRow struct {
 // pollers (which filter by exact combo), ECB's natural semantics
 // are "EUR vs N other currencies" — operator who configures
 // XLM/EUR still wants the USD/EUR rate to triangulate through.
-func (p *Poller) PollOnce(ctx context.Context, pairs []canonical.Pair) ([]canonical.Trade, []canonical.OracleUpdate, error) {
+func (p *Poller) PollOnce(ctx context.Context, pairs []canonical.Pair) ([]canonical.Trade, []canonical.OracleUpdate, error) { //nolint:gocognit,gocyclo,funlen // dispatch-heavy; splitting would reduce linearity
 	endpoint := p.Endpoint
 	if endpoint == "" {
 		endpoint = DefaultEndpoint

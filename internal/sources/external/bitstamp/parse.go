@@ -151,6 +151,9 @@ func parseMicrotimestamp(micro, secs string) (time.Time, error) {
 // decimalStringToScaledInt — same semantics as the Binance/Kraken
 // helpers; duplicated per-package so each source's scaling
 // convention stays local and auditable.
+// decimalStringToScaledInt — targetDecimals kept as param for symmetry with the other external parsers.
+//
+//nolint:unparam // currently always externalAmountDecimals
 func decimalStringToScaledInt(s string, targetDecimals int) (*big.Int, error) {
 	if s == "" {
 		return nil, fmt.Errorf("empty decimal string")

@@ -162,14 +162,14 @@ func TestPollOnce_CryptoOnlyPairs_NoOp(t *testing.T) {
 
 func TestPollOnce_HTTPError(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		http.Error(w, "maintenance", 503)
+		http.Error(w, "maintenance", http.StatusServiceUnavailable)
 	}))
 	defer srv.Close()
 	p := NewPoller()
 	p.Endpoint = srv.URL
 	_, _, err := p.PollOnce(context.Background(), buildPairs(t))
 	if err == nil {
-		t.Error("expected error on HTTP 503")
+		t.Error("expected error on HTTP http.StatusServiceUnavailable")
 	}
 }
 

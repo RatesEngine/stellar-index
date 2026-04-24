@@ -61,7 +61,7 @@ func main() {
 	}
 }
 
-func run(cfgPath string, dryRun bool) error {
+func run(cfgPath string, dryRun bool) error { //nolint:gocognit,funlen // dispatch-heavy wiring; splitting would reduce linearity
 	cfg, err := config.LoadWithEnv(cfgPath)
 	if err != nil {
 		return err

@@ -83,7 +83,7 @@ func (s *Streamer) Backfill(ctx context.Context, pair canonical.Pair, from, to t
 		// Advance: one step past the last candle's open time.
 		lastTs, err := strconv.ParseInt(candles[len(candles)-1].Timestamp, 10, 64)
 		if err != nil {
-			break
+			return nil, fmt.Errorf("bitstamp.Backfill: parse candle timestamp: %w", err)
 		}
 		next := lastTs + int64(stepSec)
 		if next <= startSec {

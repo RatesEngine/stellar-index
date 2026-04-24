@@ -233,7 +233,7 @@ func TestAsset_SQL_valueScan(t *testing.T) {
 	}
 
 	// Scan nil → zero
-	var e c.Asset = a
+	e := a
 	if err := e.Scan(nil); err != nil {
 		t.Fatal(err)
 	}

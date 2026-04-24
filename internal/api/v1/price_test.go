@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"math/big"
+	"net/http"
 	"strings"
 	"testing"
 	"time"
@@ -38,7 +39,7 @@ func TestPrice_NoReader_Returns503(t *testing.T) {
 	ts := startHTTPTest(t, srv.Handler())
 
 	resp := mustGet(t, ts.URL+"/v1/price?asset=native&quote=fiat:USD")
-	if resp.StatusCode != 503 {
+	if resp.StatusCode != http.StatusServiceUnavailable {
 		t.Errorf("status = %d, want 503", resp.StatusCode)
 	}
 	body, _ := readAll(resp)
@@ -52,7 +53,7 @@ func TestPrice_MissingAssetParam(t *testing.T) {
 	ts := startHTTPTest(t, srv.Handler())
 
 	resp := mustGet(t, ts.URL+"/v1/price")
-	if resp.StatusCode != 400 {
+	if resp.StatusCode != http.StatusBadRequest {
 		t.Errorf("status = %d, want 400", resp.StatusCode)
 	}
 }
@@ -62,7 +63,7 @@ func TestPrice_InvalidAssetReturns400(t *testing.T) {
 	ts := startHTTPTest(t, srv.Handler())
 
 	resp := mustGet(t, ts.URL+"/v1/price?asset=garbage-format")
-	if resp.StatusCode != 400 {
+	if resp.StatusCode != http.StatusBadRequest {
 		t.Errorf("status = %d, want 400", resp.StatusCode)
 	}
 }
@@ -73,7 +74,7 @@ func TestPrice_IdentityPairReturns400(t *testing.T) {
 	ts := startHTTPTest(t, srv.Handler())
 
 	resp := mustGet(t, ts.URL+"/v1/price?asset=native&quote=native")
-	if resp.StatusCode != 400 {
+	if resp.StatusCode != http.StatusBadRequest {
 		t.Errorf("status = %d, want 400", resp.StatusCode)
 	}
 	body, _ := readAll(resp)
@@ -98,7 +99,7 @@ func TestPrice_HappyPath(t *testing.T) {
 	ts := startHTTPTest(t, srv.Handler())
 
 	resp := mustGet(t, ts.URL+"/v1/price?asset=native&quote=fiat:USD")
-	if resp.StatusCode != 200 {
+	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("status = %d", resp.StatusCode)
 	}
 	body, _ := readAll(resp)
@@ -143,7 +144,7 @@ func TestPrice_DefaultQuoteIsUSD(t *testing.T) {
 	ts := startHTTPTest(t, srv.Handler())
 
 	resp := mustGet(t, ts.URL+"/v1/price?asset=native")
-	if resp.StatusCode != 200 {
+	if resp.StatusCode != http.StatusOK {
 		t.Errorf("status = %d", resp.StatusCode)
 	}
 }
@@ -153,7 +154,7 @@ func TestPrice_NotFoundReturns404(t *testing.T) {
 	ts := startHTTPTest(t, srv.Handler())
 
 	resp := mustGet(t, ts.URL+"/v1/price?asset=native&quote=fiat:USD")
-	if resp.StatusCode != 404 {
+	if resp.StatusCode != http.StatusNotFound {
 		t.Errorf("status = %d, want 404", resp.StatusCode)
 	}
 }
@@ -163,7 +164,7 @@ func TestPrice_InternalErrorReturns500(t *testing.T) {
 	ts := startHTTPTest(t, srv.Handler())
 
 	resp := mustGet(t, ts.URL+"/v1/price?asset=native&quote=fiat:USD")
-	if resp.StatusCode != 500 {
+	if resp.StatusCode != http.StatusInternalServerError {
 		t.Errorf("status = %d, want 500", resp.StatusCode)
 	}
 	// Body must NOT leak the underlying error message.

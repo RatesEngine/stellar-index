@@ -1,0 +1,27 @@
+# Gitleaks config — allowlists only, no custom rules. The default
+# ruleset still applies (extends = "gitleaks"). We lean on path-
+# based allowlists instead of fingerprint-in-.gitleaksignore
+# because squash merges change commit hashes, which breaks
+# fingerprint-based ignores every time a PR lands on main.
+#
+# Each allowlist below documents the reason the flagged string is
+# a false positive.
+
+title = "rates-engine gitleaks config"
+
+[extend]
+useDefault = true
+
+[[rules]]
+id = "generic-api-key"
+[[rules.allowlists]]
+description = "Redacted third-party NODE_SEED quoted in a security-finding writeup for the legacy Dash k8s cluster. Not our credential; documentation of a known violation."
+paths = [
+  '''docs/architecture/infrastructure/existing-k8s-assessment\.md''',
+]
+
+[[rules.allowlists]]
+description = "Test-only Stellar G-strkey (public account ID, not a secret) used to stamp a known observer identity in reflector decoder tests. No private key paired."
+paths = [
+  '''test/integration/ledgerstream_to_storage_test\.go''',
+]

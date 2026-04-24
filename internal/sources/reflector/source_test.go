@@ -7,7 +7,7 @@ import (
 	"time"
 
 	"github.com/RatesEngine/rates-engine/internal/canonical"
-	"github.com/RatesEngine/rates-engine/internal/stellarrpc"
+	"github.com/RatesEngine/rates-engine/internal/events"
 )
 
 const (
@@ -30,7 +30,7 @@ func TestClassify(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			got := classify(&stellarrpc.Event{Topic: tc.topics})
+			got := classify(&events.Event{Topic: tc.topics})
 			if got != tc.want {
 				t.Errorf("classify = %v, want %v", got, tc.want)
 			}
@@ -89,7 +89,7 @@ func TestDecodeUpdate_fanout(t *testing.T) {
 	// 1745000000000 ms = 2025-04-18T17:33:20Z.
 	decodeUpdateTimestamp = func(_ string) (uint64, error) { return 1745000000000, nil }
 
-	e := &stellarrpc.Event{
+	e := &events.Event{
 		Topic:          []string{TopicSymbolReflector, TopicSymbolUpdate, "ts-placeholder"},
 		ContractID:     cexContractID,
 		Ledger:         52_430_001,
@@ -171,7 +171,7 @@ func TestDecodeUpdate_OpIndexStrideIsFixed(t *testing.T) {
 			{Asset: xlm, Price: v("100")},
 		}, nil
 	}
-	eA := &stellarrpc.Event{
+	eA := &events.Event{
 		Topic:      []string{TopicSymbolReflector, TopicSymbolUpdate, "ts"},
 		ContractID: dexContractID,
 		Ledger:     1, TxHash: reflectorTxHash, OperationIndex: 0,
@@ -192,7 +192,7 @@ func TestDecodeUpdate_OpIndexStrideIsFixed(t *testing.T) {
 			{Asset: usdc, Price: v("100")},
 		}, nil
 	}
-	eB := &stellarrpc.Event{
+	eB := &events.Event{
 		Topic:      []string{TopicSymbolReflector, TopicSymbolUpdate, "ts"},
 		ContractID: dexContractID,
 		Ledger:     1, TxHash: reflectorTxHash, OperationIndex: 1,
@@ -235,7 +235,7 @@ func TestDecodeUpdate_skipsZeroPrices(t *testing.T) {
 		}, nil
 	}
 
-	e := &stellarrpc.Event{
+	e := &events.Event{
 		Topic:      []string{TopicSymbolReflector, TopicSymbolUpdate, "ts"},
 		ContractID: dexContractID,
 		Ledger:     1, TxHash: reflectorTxHash, OperationIndex: 0,
@@ -252,7 +252,7 @@ func TestDecodeUpdate_skipsZeroPrices(t *testing.T) {
 }
 
 func TestDecodeUpdate_refusesWrongTopic(t *testing.T) {
-	e := &stellarrpc.Event{Topic: []string{"wrong", "update"}}
+	e := &events.Event{Topic: []string{"wrong", "update"}}
 	_, err := decodeUpdate(e, VariantDEX, DefaultDecimals, "", time.Now())
 	if !errors.Is(err, ErrNotReflectorEvent) {
 		t.Errorf("expected ErrNotReflectorEvent, got %v", err)
@@ -267,7 +267,7 @@ func TestDecodeUpdate_emptyPricesError(t *testing.T) {
 		return []PriceEntry{}, nil
 	}
 
-	e := &stellarrpc.Event{
+	e := &events.Event{
 		Topic:      []string{TopicSymbolReflector, TopicSymbolUpdate, "ts"},
 		ContractID: dexContractID,
 	}
@@ -296,7 +296,7 @@ func TestDecodeUpdate_rejectsPriceVectorLargerThanStride(t *testing.T) {
 		return oversized, nil
 	}
 
-	e := &stellarrpc.Event{
+	e := &events.Event{
 		Topic:      []string{TopicSymbolReflector, TopicSymbolUpdate, "ts"},
 		ContractID: dexContractID,
 	}

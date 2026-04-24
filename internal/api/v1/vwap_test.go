@@ -31,7 +31,7 @@ func TestVWAP_503WhenReaderNil(t *testing.T) {
 	ts := httpTestServer(t, srv)
 
 	resp := mustGet(t, ts.URL+"/v1/vwap?base=native&quote=fiat:USD")
-	if resp.StatusCode != 503 {
+	if resp.StatusCode != http.StatusServiceUnavailable {
 		t.Fatalf("status = %d, want 503", resp.StatusCode)
 	}
 }
@@ -41,7 +41,7 @@ func TestVWAP_404WhenNoTrades(t *testing.T) {
 	ts := httpTestServer(t, srv)
 
 	resp := mustGet(t, ts.URL+"/v1/vwap?base=native&quote=fiat:USD")
-	if resp.StatusCode != 404 {
+	if resp.StatusCode != http.StatusNotFound {
 		t.Errorf("status = %d, want 404", resp.StatusCode)
 	}
 }
@@ -59,7 +59,7 @@ func TestVWAP_ComputesVolumeWeightedPrice(t *testing.T) {
 	ts := httpTestServer(t, srv)
 
 	resp := mustGet(t, ts.URL+"/v1/vwap?base=native&quote=fiat:USD")
-	if resp.StatusCode != 200 {
+	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("status = %d", resp.StatusCode)
 	}
 	var env struct {
@@ -153,7 +153,7 @@ func TestVWAP_InvalidSigma400(t *testing.T) {
 
 	for _, bad := range []string{"-1", "abc", "NaN"} {
 		resp := mustGet(t, ts.URL+"/v1/vwap?base=native&quote=fiat:USD&outlier_sigma="+bad)
-		if resp.StatusCode != 400 {
+		if resp.StatusCode != http.StatusBadRequest {
 			t.Errorf("outlier_sigma=%q: status = %d, want 400", bad, resp.StatusCode)
 		}
 	}

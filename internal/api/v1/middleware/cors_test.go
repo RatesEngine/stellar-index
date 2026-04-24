@@ -21,7 +21,7 @@ func TestCORS_WildcardOrigin(t *testing.T) {
 		AllowedOrigins: []string{"*"},
 	})(corsOK())
 
-	r := httptest.NewRequest("GET", "/v1/assets", nil)
+	r := httptest.NewRequest(http.MethodGet, "/v1/assets", nil)
 	r.Header.Set("Origin", "https://wallet.example.com")
 	w := httptest.NewRecorder()
 	h.ServeHTTP(w, r)
@@ -42,7 +42,7 @@ func TestCORS_ExactMatchOrigin(t *testing.T) {
 		},
 	})(corsOK())
 
-	r := httptest.NewRequest("GET", "/v1/assets", nil)
+	r := httptest.NewRequest(http.MethodGet, "/v1/assets", nil)
 	r.Header.Set("Origin", "https://freighter.app")
 	w := httptest.NewRecorder()
 	h.ServeHTTP(w, r)
@@ -62,7 +62,7 @@ func TestCORS_UnknownOriginGetsNoAllowHeader(t *testing.T) {
 		AllowedOrigins: []string{"https://allowed.example.com"},
 	})(corsOK())
 
-	r := httptest.NewRequest("GET", "/v1/assets", nil)
+	r := httptest.NewRequest(http.MethodGet, "/v1/assets", nil)
 	r.Header.Set("Origin", "https://evil.example.com")
 	w := httptest.NewRecorder()
 	h.ServeHTTP(w, r)
@@ -86,7 +86,7 @@ func TestCORS_Preflight(t *testing.T) {
 		MaxAge:         1800,
 	})(corsOK())
 
-	r := httptest.NewRequest("OPTIONS", "/v1/assets", nil)
+	r := httptest.NewRequest(http.MethodOptions, "/v1/assets", nil)
 	r.Header.Set("Origin", "https://wallet.example.com")
 	r.Header.Set("Access-Control-Request-Method", "GET")
 	w := httptest.NewRecorder()
@@ -115,10 +115,10 @@ func TestCORS_OPTIONSWithoutPreflightHeaderPassesThrough(t *testing.T) {
 		AllowedOrigins: []string{"*"},
 	})(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		called = true
-		w.WriteHeader(200)
+		w.WriteHeader(http.StatusOK)
 	}))
 
-	r := httptest.NewRequest("OPTIONS", "/v1/assets", nil)
+	r := httptest.NewRequest(http.MethodOptions, "/v1/assets", nil)
 	r.Header.Set("Origin", "https://wallet.example.com")
 	// No Access-Control-Request-Method.
 	w := httptest.NewRecorder()
@@ -139,7 +139,7 @@ func TestCORS_NoOriginNoHeaders(t *testing.T) {
 		AllowedOrigins: []string{"*"},
 	})(corsOK())
 
-	r := httptest.NewRequest("GET", "/v1/assets", nil)
+	r := httptest.NewRequest(http.MethodGet, "/v1/assets", nil)
 	w := httptest.NewRecorder()
 	h.ServeHTTP(w, r)
 

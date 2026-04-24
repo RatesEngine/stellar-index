@@ -42,7 +42,7 @@ func TestAssetList_EmptyWhenReaderNil(t *testing.T) {
 	ts := httpTestServer(t, srv)
 
 	resp := mustGet(t, ts.URL+"/v1/assets")
-	if resp.StatusCode != 200 {
+	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("status = %d", resp.StatusCode)
 	}
 	var env struct {
@@ -64,7 +64,7 @@ func TestAssetList_NilSliceFromReaderMarshalsAsEmptyArray(t *testing.T) {
 	ts := httpTestServer(t, srv)
 
 	resp := mustGet(t, ts.URL+"/v1/assets")
-	if resp.StatusCode != 200 {
+	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("status = %d", resp.StatusCode)
 	}
 	body, _ := readAll(resp)
@@ -88,7 +88,7 @@ func TestAssetList_ReturnsFixtureWithPagination(t *testing.T) {
 	ts := httpTestServer(t, srv)
 
 	resp := mustGet(t, ts.URL+"/v1/assets?limit=50")
-	if resp.StatusCode != 200 {
+	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("status = %d", resp.StatusCode)
 	}
 	var env struct {
@@ -113,7 +113,7 @@ func TestAssetList_InvalidLimitRejected(t *testing.T) {
 	for _, raw := range []string{"0", "501", "abc", "-1"} {
 		t.Run("limit="+raw, func(t *testing.T) {
 			resp := mustGet(t, ts.URL+"/v1/assets?limit="+raw)
-			if resp.StatusCode != 400 {
+			if resp.StatusCode != http.StatusBadRequest {
 				t.Errorf("status = %d, want 400", resp.StatusCode)
 			}
 			body, _ := readAll(resp)
@@ -131,7 +131,7 @@ func TestAssetGet_native(t *testing.T) {
 	ts := httpTestServer(t, srv)
 
 	resp := mustGet(t, ts.URL+"/v1/assets/native")
-	if resp.StatusCode != 200 {
+	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("status = %d", resp.StatusCode)
 	}
 	var env struct {
@@ -149,7 +149,7 @@ func TestAssetGet_classicEcho(t *testing.T) {
 
 	url := ts.URL + "/v1/assets/USDC-" + testUSDCIssuer
 	resp := mustGet(t, url)
-	if resp.StatusCode != 200 {
+	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("status = %d", resp.StatusCode)
 	}
 	var env struct {
@@ -170,7 +170,7 @@ func TestAssetGet_fiatVariant(t *testing.T) {
 	ts := httpTestServer(t, srv)
 
 	resp := mustGet(t, ts.URL+"/v1/assets/fiat:USD")
-	if resp.StatusCode != 200 {
+	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("status = %d", resp.StatusCode)
 	}
 	var env struct {
@@ -187,7 +187,7 @@ func TestAssetGet_invalidIdReturns400(t *testing.T) {
 	ts := httpTestServer(t, srv)
 
 	resp := mustGet(t, ts.URL+"/v1/assets/garbage-but-not-any-format")
-	if resp.StatusCode != 400 {
+	if resp.StatusCode != http.StatusBadRequest {
 		t.Fatalf("status = %d, want 400", resp.StatusCode)
 	}
 	if ct := resp.Header.Get("Content-Type"); ct != "application/problem+json" {
@@ -201,7 +201,7 @@ func TestAssetGet_notFound(t *testing.T) {
 	ts := httpTestServer(t, srv)
 
 	resp := mustGet(t, ts.URL+"/v1/assets/native")
-	if resp.StatusCode != 404 {
+	if resp.StatusCode != http.StatusNotFound {
 		t.Fatalf("status = %d, want 404", resp.StatusCode)
 	}
 	body, _ := readAll(resp)

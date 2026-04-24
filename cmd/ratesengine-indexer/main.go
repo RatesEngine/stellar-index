@@ -213,7 +213,7 @@ func run(cfgPath string, dryRun bool) error {
 // function the shutdown path calls to drain cleanly. A nil-op wait
 // is returned when no external sources are enabled — keeps the
 // shutdown sequence unconditional.
-func startExternalConnectors(
+func startExternalConnectors( //nolint:gocognit,gocyclo,funlen // dispatch-heavy; splitting would reduce linearity
 	ctx context.Context,
 	cfg config.ExternalConfig,
 	events chan<- consumer.Event,

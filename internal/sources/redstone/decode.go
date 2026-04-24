@@ -126,7 +126,7 @@ func decodeWritePrices(e *events.Event, closedAt time.Time) ([]canonical.OracleU
 			// events in one tx (unlikely but possible) can't collide
 			// on the oracle_updates PK.
 			OpIndex:   uint32(e.OperationIndex)*opIndexFanoutStride + uint32(i),
-			Timestamp: time.UnixMilli(int64(pd.PackageTimestamp)).UTC(),
+			Timestamp: pickTimestamp(pd.PackageTimestamp, closedAt),
 			Asset:     asset,
 			Quote:     usdQuote,
 			Price:     pd.Price,
@@ -310,4 +310,15 @@ func sdkDecodeFeedIDsFromArg(sv scval.ScVal) ([]string, error) {
 // formatting for all address types.
 func sdkDecodeAddress(sv scval.ScVal) (string, error) {
 	return scval.AsAddressStrkey(sv)
+}
+
+// pickTimestamp prefers the contract-supplied PackageTimestamp
+// (ms UNIX) but falls back to the ledger close time when the
+// contract reports 0 — a defensive case against a contract
+// upgrade that relaxes the "non-zero timestamp" invariant.
+func pickTimestamp(packageMs uint64, closedAt time.Time) time.Time {
+	if packageMs == 0 {
+		return closedAt.UTC()
+	}
+	return time.UnixMilli(int64(packageMs)).UTC()
 }

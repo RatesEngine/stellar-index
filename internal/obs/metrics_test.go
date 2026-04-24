@@ -41,7 +41,7 @@ func TestHandler_ExposesMetrics(t *testing.T) {
 	}
 	defer resp.Body.Close()
 
-	if resp.StatusCode != 200 {
+	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("status = %d", resp.StatusCode)
 	}
 	body, _ := io.ReadAll(resp.Body)
@@ -78,10 +78,10 @@ func TestHTTPMetrics_CountsRequests(t *testing.T) {
 	// Use a fresh sub-mux to avoid polluting counters across tests.
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /foo", func(w http.ResponseWriter, _ *http.Request) {
-		w.WriteHeader(200)
+		w.WriteHeader(http.StatusOK)
 	})
 	mux.HandleFunc("GET /bar", func(w http.ResponseWriter, _ *http.Request) {
-		w.WriteHeader(500)
+		w.WriteHeader(http.StatusInternalServerError)
 	})
 
 	h := obs.HTTPMetrics(mux)
@@ -89,10 +89,10 @@ func TestHTTPMetrics_CountsRequests(t *testing.T) {
 	// Hit /foo twice, /bar once.
 	for i := 0; i < 2; i++ {
 		rr := httptest.NewRecorder()
-		h.ServeHTTP(rr, httptest.NewRequest("GET", "/foo", nil))
+		h.ServeHTTP(rr, httptest.NewRequest(http.MethodGet, "/foo", nil))
 	}
 	rr := httptest.NewRecorder()
-	h.ServeHTTP(rr, httptest.NewRequest("GET", "/bar", nil))
+	h.ServeHTTP(rr, httptest.NewRequest(http.MethodGet, "/bar", nil))
 
 	// Scrape the registry + look for the counts.
 	ts := httptest.NewServer(obs.Handler())
@@ -126,7 +126,7 @@ func TestHTTPMetrics_LowercaseMethodIsCanonicalised(t *testing.T) {
 	// Handler catches everything with no pattern so the method label
 	// is the only axis varying across requests.
 	h := obs.HTTPMetrics(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		w.WriteHeader(200)
+		w.WriteHeader(http.StatusOK)
 	}))
 
 	for _, verb := range []string{"get", "GeT", "GET"} {
@@ -174,7 +174,7 @@ func TestHTTPMetrics_ClientAbortLabelled499(t *testing.T) {
 
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel() // immediately cancelled
-	r := httptest.NewRequest("GET", "/v1/slow-op", nil).WithContext(ctx)
+	r := httptest.NewRequest(http.MethodGet, "/v1/slow-op", nil).WithContext(ctx)
 	rr := httptest.NewRecorder()
 	h.ServeHTTP(rr, r)
 
@@ -200,7 +200,7 @@ func TestHTTPMetrics_UnmatchedRouteLabelled(t *testing.T) {
 
 	h := obs.HTTPMetrics(mux)
 	rr := httptest.NewRecorder()
-	h.ServeHTTP(rr, httptest.NewRequest("GET", "/does-not-exist", nil))
+	h.ServeHTTP(rr, httptest.NewRequest(http.MethodGet, "/does-not-exist", nil))
 
 	ts := httptest.NewServer(obs.Handler())
 	defer ts.Close()

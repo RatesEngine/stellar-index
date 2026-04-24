@@ -175,13 +175,13 @@ func (s StellarConfig) validate() error {
 		}
 	}
 	if _, err := url.Parse(s.HistoryArchiveURL); err != nil {
-		return fmt.Errorf("%w: stellar.history_archive_url %q: %v",
+		return fmt.Errorf("%w: stellar.history_archive_url %q: %w",
 			ErrInvalidConfig, s.HistoryArchiveURL, err)
 	}
 	return nil
 }
 
-func (s StorageConfig) validate() error {
+func (s StorageConfig) validate() error { //nolint:gocognit // dispatch-heavy; splitting would reduce linearity
 	if s.PostgresDSN == "" {
 		return fmt.Errorf("%w: storage.postgres_dsn required", ErrInvalidConfig)
 	}
@@ -192,7 +192,7 @@ func (s StorageConfig) validate() error {
 	}
 	if s.RedisAddr != "" {
 		if _, _, err := net.SplitHostPort(s.RedisAddr); err != nil {
-			return fmt.Errorf("%w: storage.redis_addr %q must be host:port: %v",
+			return fmt.Errorf("%w: storage.redis_addr %q must be host:port: %w",
 				ErrInvalidConfig, s.RedisAddr, err)
 		}
 	}
@@ -327,7 +327,7 @@ func (a APIConfig) validate() error {
 		return fmt.Errorf("%w: api.listen_addr required", ErrInvalidConfig)
 	}
 	if _, _, err := net.SplitHostPort(a.ListenAddr); err != nil {
-		return fmt.Errorf("%w: api.listen_addr %q must be host:port: %v",
+		return fmt.Errorf("%w: api.listen_addr %q must be host:port: %w",
 			ErrInvalidConfig, a.ListenAddr, err)
 	}
 	switch a.AuthMode {
@@ -376,7 +376,7 @@ func (o ObsConfig) validate() error {
 	}
 	if o.MetricsListen != "" {
 		if _, _, err := net.SplitHostPort(o.MetricsListen); err != nil {
-			return fmt.Errorf("%w: obs.metrics_listen %q must be host:port: %v",
+			return fmt.Errorf("%w: obs.metrics_listen %q must be host:port: %w",
 				ErrInvalidConfig, o.MetricsListen, err)
 		}
 	}

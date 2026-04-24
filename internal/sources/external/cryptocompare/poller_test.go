@@ -96,14 +96,14 @@ func TestPollOnce_ErrorResponse(t *testing.T) {
 
 func TestPollOnce_HTTP5xx(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		http.Error(w, "upstream", 503)
+		http.Error(w, "upstream", http.StatusServiceUnavailable)
 	}))
 	defer srv.Close()
 	p, _ := NewPoller("TEST")
 	p.Endpoint = srv.URL
 	_, _, err := p.PollOnce(context.Background(), buildPairs(t))
 	if err == nil {
-		t.Error("expected error on HTTP 503")
+		t.Error("expected error on HTTP http.StatusServiceUnavailable")
 	}
 }
 

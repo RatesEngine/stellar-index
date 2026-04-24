@@ -51,7 +51,7 @@ func TestHealthz(t *testing.T) {
 	}
 	defer resp.Body.Close()
 
-	if resp.StatusCode != 200 {
+	if resp.StatusCode != http.StatusOK {
 		t.Errorf("status = %d", resp.StatusCode)
 	}
 	if ct := resp.Header.Get("Content-Type"); ct != "application/json" {
@@ -87,7 +87,7 @@ func TestReadyz_AllChecksPass(t *testing.T) {
 	}
 	defer resp.Body.Close()
 
-	if resp.StatusCode != 200 {
+	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("status = %d, want 200", resp.StatusCode)
 	}
 	var env struct {
@@ -124,7 +124,7 @@ func TestReadyz_OneFailure(t *testing.T) {
 	}
 	defer resp.Body.Close()
 
-	if resp.StatusCode != 503 {
+	if resp.StatusCode != http.StatusServiceUnavailable {
 		t.Errorf("status = %d, want 503", resp.StatusCode)
 	}
 	body, _ := readAll(resp)
@@ -145,7 +145,7 @@ func TestReadyz_ProbesRunInParallel(t *testing.T) {
 	// (over the 2s budget). Parallel should land well under 1s.
 	// Generous cap (900ms) so we don't flake on CPU-stressed CI.
 	const perProbeSleep = 400 * time.Millisecond
-	const cap = 900 * time.Millisecond
+	const elapsedCap = 900 * time.Millisecond
 
 	ts := newTestServer(t,
 		&stubCheck{name: "a", sleep: perProbeSleep},
@@ -161,11 +161,11 @@ func TestReadyz_ProbesRunInParallel(t *testing.T) {
 	defer resp.Body.Close()
 	elapsed := time.Since(start)
 
-	if resp.StatusCode != 200 {
+	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("status = %d", resp.StatusCode)
 	}
-	if elapsed >= cap {
-		t.Errorf("readyz took %v — expected < %v (serial execution regression)", elapsed, cap)
+	if elapsed >= elapsedCap {
+		t.Errorf("readyz took %v — expected < %v (serial execution regression)", elapsed, elapsedCap)
 	}
 }
 
@@ -177,7 +177,7 @@ func TestVersion(t *testing.T) {
 	}
 	defer resp.Body.Close()
 
-	if resp.StatusCode != 200 {
+	if resp.StatusCode != http.StatusOK {
 		t.Errorf("status = %d", resp.StatusCode)
 	}
 	var env struct {
@@ -199,7 +199,7 @@ func TestUnknownRouteReturns404(t *testing.T) {
 		t.Fatalf("GET /v1/nonsense: %v", err)
 	}
 	defer resp.Body.Close()
-	if resp.StatusCode != 404 {
+	if resp.StatusCode != http.StatusNotFound {
 		t.Errorf("status = %d, want 404", resp.StatusCode)
 	}
 }
@@ -207,13 +207,13 @@ func TestUnknownRouteReturns404(t *testing.T) {
 func TestMethodMismatch(t *testing.T) {
 	// /v1/healthz is GET-only; POST should be 405.
 	ts := newTestServer(t)
-	req, _ := http.NewRequest("POST", ts.URL+"/v1/healthz", nil)
+	req, _ := http.NewRequest(http.MethodPost, ts.URL+"/v1/healthz", nil)
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer resp.Body.Close()
-	if resp.StatusCode != 405 {
+	if resp.StatusCode != http.StatusMethodNotAllowed {
 		t.Errorf("status = %d, want 405 for POST /healthz", resp.StatusCode)
 	}
 }
@@ -224,7 +224,7 @@ func TestMiddlewareStackAppliedEndToEnd(t *testing.T) {
 	ts := newTestServer(t)
 
 	// 1. Client-supplied X-Request-ID is preserved verbatim.
-	req, err := http.NewRequest("GET", ts.URL+"/v1/healthz", nil)
+	req, err := http.NewRequest(http.MethodGet, ts.URL+"/v1/healthz", nil)
 	if err != nil {
 		t.Fatal(err)
 	}

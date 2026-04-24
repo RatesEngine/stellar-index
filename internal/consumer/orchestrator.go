@@ -270,8 +270,10 @@ func (o *Orchestrator) cursorPersister(ctx context.Context, src Source, seedLast
 	}()
 
 	// flushFinal runs once on exit. Uses a detached context because
-	// the parent is typically the shutdown-triggering one.
-	defer func() {
+	// the parent is typically the shutdown-triggering one — a
+	// cancelled parent would abort the final cursor upsert, which is
+	// exactly the write we need to keep.
+	defer func() { //nolint:contextcheck // detached intentionally, see comment above
 		h := src.Health()
 		if h.LastLedger > lastPersisted {
 			lastPersisted = h.LastLedger
@@ -328,11 +330,11 @@ func (o *Orchestrator) cursorPersister(ctx context.Context, src Source, seedLast
 
 // ─── Helpers ─────────────────────────────────────────────────────
 
-// nextBackoff doubles the interval, capping at max. Pure function.
-func nextBackoff(cur, max time.Duration) time.Duration {
+// nextBackoff doubles the interval, capping at maxInterval. Pure function.
+func nextBackoff(cur, maxInterval time.Duration) time.Duration {
 	next := cur * 2
-	if next > max {
-		return max
+	if next > maxInterval {
+		return maxInterval
 	}
 	return next
 }

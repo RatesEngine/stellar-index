@@ -2,6 +2,7 @@ package v1_test
 
 import (
 	"math/big"
+	"net/http"
 	"testing"
 	"time"
 
@@ -29,7 +30,7 @@ func TestOHLC_503WhenReaderNil(t *testing.T) {
 	ts := httpTestServer(t, srv)
 
 	resp := mustGet(t, ts.URL+"/v1/ohlc?base=native&quote=fiat:USD")
-	if resp.StatusCode != 503 {
+	if resp.StatusCode != http.StatusServiceUnavailable {
 		t.Fatalf("status = %d, want 503", resp.StatusCode)
 	}
 }
@@ -39,7 +40,7 @@ func TestOHLC_404WhenNoTradesInWindow(t *testing.T) {
 	ts := httpTestServer(t, srv)
 
 	resp := mustGet(t, ts.URL+"/v1/ohlc?base=native&quote=fiat:USD")
-	if resp.StatusCode != 404 {
+	if resp.StatusCode != http.StatusNotFound {
 		t.Fatalf("status = %d, want 404", resp.StatusCode)
 	}
 }
@@ -59,7 +60,7 @@ func TestOHLC_ComputesBarFromTrades(t *testing.T) {
 	ts := httpTestServer(t, srv)
 
 	resp := mustGet(t, ts.URL+"/v1/ohlc?base=native&quote=fiat:USD")
-	if resp.StatusCode != 200 {
+	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("status = %d", resp.StatusCode)
 	}
 	var env struct {
@@ -121,7 +122,7 @@ func TestOHLC_InvalidTime400(t *testing.T) {
 	ts := httpTestServer(t, srv)
 
 	resp := mustGet(t, ts.URL+"/v1/ohlc?base=native&quote=fiat:USD&from=bogus")
-	if resp.StatusCode != 400 {
+	if resp.StatusCode != http.StatusBadRequest {
 		t.Errorf("status = %d, want 400", resp.StatusCode)
 	}
 }

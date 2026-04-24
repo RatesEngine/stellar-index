@@ -3,6 +3,7 @@ package v1_test
 import (
 	"bytes"
 	"context"
+	"net/http"
 	"testing"
 	"time"
 
@@ -27,7 +28,7 @@ func TestMarkets_EmptyWhenReaderNil(t *testing.T) {
 	ts := httpTestServer(t, srv)
 
 	resp := mustGet(t, ts.URL+"/v1/markets")
-	if resp.StatusCode != 200 {
+	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("status = %d, want 200", resp.StatusCode)
 	}
 	var env struct {
@@ -47,7 +48,7 @@ func TestMarkets_NilSliceFromReaderMarshalsAsEmptyArray(t *testing.T) {
 	ts := httpTestServer(t, srv)
 
 	resp := mustGet(t, ts.URL+"/v1/markets")
-	if resp.StatusCode != 200 {
+	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("status = %d", resp.StatusCode)
 	}
 	body, _ := readAll(resp)
@@ -69,7 +70,7 @@ func TestMarkets_ReturnsPairsWithCursor(t *testing.T) {
 	ts := httpTestServer(t, srv)
 
 	resp := mustGet(t, ts.URL+"/v1/markets?limit=50")
-	if resp.StatusCode != 200 {
+	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("status = %d", resp.StatusCode)
 	}
 	var env struct {
@@ -100,7 +101,7 @@ func TestMarkets_InvalidLimit400(t *testing.T) {
 
 	for _, bad := range []string{"0", "501", "-1", "xyz"} {
 		resp := mustGet(t, ts.URL+"/v1/markets?limit="+bad)
-		if resp.StatusCode != 400 {
+		if resp.StatusCode != http.StatusBadRequest {
 			t.Errorf("limit=%q: status = %d, want 400", bad, resp.StatusCode)
 		}
 	}

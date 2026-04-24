@@ -2,6 +2,7 @@ package middleware
 
 import (
 	"encoding/json"
+	"errors"
 	"log/slog"
 	"net/http"
 	"runtime/debug"
@@ -29,7 +30,7 @@ func Recoverer(logger *slog.Logger) Middleware {
 				}
 				// http.ErrAbortHandler is the stdlib signal for
 				// "abort but don't log as a panic" — honour it.
-				if rec == http.ErrAbortHandler {
+				if recErr, ok := rec.(error); ok && errors.Is(recErr, http.ErrAbortHandler) {
 					panic(rec)
 				}
 

@@ -3,6 +3,7 @@ package middleware_test
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
@@ -36,7 +37,7 @@ func TestChain_OrderIsOutermostFirst(t *testing.T) {
 		mkMW("A"), mkMW("B"), mkMW("C"),
 	)
 
-	req := httptest.NewRequest("GET", "/", nil)
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
 	h.ServeHTTP(httptest.NewRecorder(), req)
 
 	want := []string{
@@ -61,7 +62,7 @@ func TestRequestID_MintsWhenAbsent(t *testing.T) {
 		gotID = mw.RequestIDFrom(r)
 	}))
 
-	req := httptest.NewRequest("GET", "/", nil)
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
 	rec := httptest.NewRecorder()
 	h.ServeHTTP(rec, req)
 
@@ -78,7 +79,7 @@ func TestRequestID_MintsWhenAbsent(t *testing.T) {
 
 func TestRequestID_PreservesClientValue(t *testing.T) {
 	h := mw.RequestID(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {}))
-	req := httptest.NewRequest("GET", "/", nil)
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
 	req.Header.Set("X-Request-ID", "client-supplied-123")
 	rec := httptest.NewRecorder()
 	h.ServeHTTP(rec, req)
@@ -95,7 +96,7 @@ func TestRequestID_RejectsOversizeValue(t *testing.T) {
 	// they sent nor anything else — the fresh mint is clearer.
 	oversize := strings.Repeat("x", 200)
 	h := mw.RequestID(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {}))
-	req := httptest.NewRequest("GET", "/", nil)
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
 	req.Header.Set("X-Request-ID", oversize)
 	rec := httptest.NewRecorder()
 	h.ServeHTTP(rec, req)
@@ -123,7 +124,7 @@ func TestRequestID_RejectsUnsafeChars(t *testing.T) {
 	}
 	for _, bad := range cases {
 		h := mw.RequestID(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {}))
-		req := httptest.NewRequest("GET", "/", nil)
+		req := httptest.NewRequest(http.MethodGet, "/", nil)
 		// Bypass net/http's header validation by setting via the map
 		// directly. Real HTTP parsers would reject the connection
 		// before this middleware sees it, but once set programmatically
@@ -151,14 +152,14 @@ func TestLogger_EmitsStructuredLog(t *testing.T) {
 
 	h := mw.Chain(
 		http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			w.WriteHeader(200)
+			w.WriteHeader(http.StatusOK)
 			_, _ = w.Write([]byte("ok"))
 		}),
 		mw.RequestID,
 		mw.Logger(logger),
 	)
 
-	req := httptest.NewRequest("GET", "/v1/healthz", nil)
+	req := httptest.NewRequest(http.MethodGet, "/v1/healthz", nil)
 	req.RemoteAddr = "1.2.3.4:56789"
 	req.Header.Set("User-Agent", "test-agent/1.0")
 	rec := httptest.NewRecorder()
@@ -188,7 +189,7 @@ func TestLogger_XForwardedForWins(t *testing.T) {
 
 	h := mw.Logger(logger)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {}))
 
-	req := httptest.NewRequest("GET", "/", nil)
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
 	req.RemoteAddr = "10.0.0.1:80" // "direct" (our proxy)
 	req.Header.Set("X-Forwarded-For", "203.0.113.42, 10.0.0.1")
 	h.ServeHTTP(httptest.NewRecorder(), req)
@@ -205,10 +206,10 @@ func TestLogger_ServerErrorLogsAtErrorLevel(t *testing.T) {
 	logger := slog.New(slog.NewJSONHandler(&buf, nil))
 
 	h := mw.Logger(logger)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(503)
+		w.WriteHeader(http.StatusServiceUnavailable)
 	}))
 
-	h.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest("GET", "/", nil))
+	h.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest(http.MethodGet, "/", nil))
 
 	var entry map[string]any
 	_ = json.Unmarshal(bytes.TrimSpace(buf.Bytes()), &entry)
@@ -231,7 +232,7 @@ func TestRecoverer_CatchesPanic(t *testing.T) {
 		mw.Recoverer(logger),
 	)
 
-	req := httptest.NewRequest("GET", "/v1/explode", nil)
+	req := httptest.NewRequest(http.MethodGet, "/v1/explode", nil)
 	rec := httptest.NewRecorder()
 	h.ServeHTTP(rec, req)
 
@@ -261,7 +262,8 @@ func TestRecoverer_PropagatesAbortHandler(t *testing.T) {
 	// http.ErrAbortHandler is the stdlib signal "cancel, don't
 	// recover" — tests assert we re-raise it.
 	defer func() {
-		if rec := recover(); rec != http.ErrAbortHandler {
+		rec := recover()
+		if recErr, ok := rec.(error); !ok || !errors.Is(recErr, http.ErrAbortHandler) {
 			t.Errorf("expected re-raised ErrAbortHandler, got %v", rec)
 		}
 	}()
@@ -271,18 +273,18 @@ func TestRecoverer_PropagatesAbortHandler(t *testing.T) {
 			panic(http.ErrAbortHandler)
 		}),
 	)
-	h.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest("GET", "/", nil))
+	h.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest(http.MethodGet, "/", nil))
 }
 
 func TestRecoverer_NormalHandlerUntouched(t *testing.T) {
 	h := mw.Recoverer(slog.Default())(
 		http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			w.WriteHeader(200)
+			w.WriteHeader(http.StatusOK)
 			_, _ = w.Write([]byte(`ok`))
 		}),
 	)
 	rec := httptest.NewRecorder()
-	h.ServeHTTP(rec, httptest.NewRequest("GET", "/", nil))
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/", nil))
 	if rec.Code != 200 || rec.Body.String() != "ok" {
 		t.Errorf("non-panicking handler was mangled: %d %q", rec.Code, rec.Body.String())
 	}
@@ -295,11 +297,11 @@ func TestSecurityHeaders_SetsNosniff(t *testing.T) {
 	// if the handler wrote its own headers first.
 	h := mw.SecurityHeaders(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(200)
+		w.WriteHeader(http.StatusOK)
 		_, _ = w.Write([]byte(`{"ok": true}`))
 	}))
 	rec := httptest.NewRecorder()
-	h.ServeHTTP(rec, httptest.NewRequest("GET", "/", nil))
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/", nil))
 	if got := rec.Header().Get("X-Content-Type-Options"); got != "nosniff" {
 		t.Errorf("nosniff = %q, want nosniff", got)
 	}
@@ -315,10 +317,10 @@ func TestSecurityHeaders_IdempotentWithEdgeProxy(t *testing.T) {
 		// BEFORE the handler writes, which it does via the outer
 		// wrapper, so this is just belt-and-braces.
 		w.Header().Set("X-Content-Type-Options", "nosniff")
-		w.WriteHeader(200)
+		w.WriteHeader(http.StatusOK)
 	}))
 	rec := httptest.NewRecorder()
-	h.ServeHTTP(rec, httptest.NewRequest("GET", "/", nil))
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/", nil))
 	if got := rec.Header().Get("X-Content-Type-Options"); got != "nosniff" {
 		t.Errorf("nosniff = %q, want nosniff", got)
 	}

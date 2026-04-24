@@ -143,9 +143,12 @@ func (s *Streamer) run(ctx context.Context, streamURL string, logger *slog.Logge
 // close returns nil; disconnect scenarios return an error so run()
 // can decide whether to backoff.
 func (s *Streamer) runOnce(ctx context.Context, streamURL string, out chan<- canonical.Trade) error {
-	conn, _, err := websocket.Dial(ctx, streamURL, nil)
+	conn, resp, err := websocket.Dial(ctx, streamURL, nil)
 	if err != nil {
 		return fmt.Errorf("dial: %w", err)
+	}
+	if resp != nil && resp.Body != nil {
+		_ = resp.Body.Close()
 	}
 	defer func() {
 		_ = conn.Close(websocket.StatusNormalClosure, "client shutdown")

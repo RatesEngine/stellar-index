@@ -3,6 +3,7 @@ package v1_test
 import (
 	"context"
 	"math/big"
+	"net/http"
 	"testing"
 	"time"
 
@@ -50,7 +51,7 @@ func TestOracleLatest_503WhenReaderNil(t *testing.T) {
 	ts := httpTestServer(t, srv)
 
 	resp := mustGet(t, ts.URL+"/v1/oracle/latest?asset=native")
-	if resp.StatusCode != 503 {
+	if resp.StatusCode != http.StatusServiceUnavailable {
 		t.Fatalf("status = %d, want 503", resp.StatusCode)
 	}
 }
@@ -60,7 +61,7 @@ func TestOracleLatest_MissingAsset400(t *testing.T) {
 	ts := httpTestServer(t, srv)
 
 	resp := mustGet(t, ts.URL+"/v1/oracle/latest")
-	if resp.StatusCode != 400 {
+	if resp.StatusCode != http.StatusBadRequest {
 		t.Errorf("status = %d, want 400", resp.StatusCode)
 	}
 }
@@ -70,7 +71,7 @@ func TestOracleLatest_InvalidAsset400(t *testing.T) {
 	ts := httpTestServer(t, srv)
 
 	resp := mustGet(t, ts.URL+"/v1/oracle/latest?asset=not-an-asset")
-	if resp.StatusCode != 400 {
+	if resp.StatusCode != http.StatusBadRequest {
 		t.Errorf("status = %d, want 400", resp.StatusCode)
 	}
 }
@@ -88,7 +89,7 @@ func TestOracleLatest_ReturnsReadings(t *testing.T) {
 	ts := httpTestServer(t, srv)
 
 	resp := mustGet(t, ts.URL+"/v1/oracle/latest?asset=native")
-	if resp.StatusCode != 200 {
+	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("status = %d", resp.StatusCode)
 	}
 	var env struct {
@@ -136,7 +137,7 @@ func TestOracleLatest_EmptyIsEmptyArray(t *testing.T) {
 	ts := httpTestServer(t, srv)
 
 	resp := mustGet(t, ts.URL+"/v1/oracle/latest?asset=native")
-	if resp.StatusCode != 200 {
+	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("status = %d, want 200 (empty != error)", resp.StatusCode)
 	}
 	var env struct {

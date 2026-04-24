@@ -121,7 +121,7 @@ type simplePriceResponse map[string]map[string]float64
 // (id, vs_currency) combo in a single JSON map. We derive id +
 // vs_currency sets from the configured pair list, batch them,
 // then emit one OracleUpdate per (ticker, currency) hit.
-func (p *Poller) PollOnce(ctx context.Context, pairs []canonical.Pair) ([]canonical.Trade, []canonical.OracleUpdate, error) {
+func (p *Poller) PollOnce(ctx context.Context, pairs []canonical.Pair) ([]canonical.Trade, []canonical.OracleUpdate, error) { //nolint:gocognit,gocyclo,funlen // dispatch-heavy; splitting would reduce linearity
 	idSet := map[string]struct{}{}
 	tickerForID := map[string]string{}
 	cryptoAssets := map[string]canonical.Asset{}

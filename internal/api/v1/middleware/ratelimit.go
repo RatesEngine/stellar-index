@@ -48,7 +48,7 @@ const MaxRateLimitKeyLen = 256
 // propagate through url.QueryEscape into the Redis key space.
 // Oversize keys get truncated to the cap — still bucketed, just
 // not uniquely per-caller past the first N bytes.
-func RateLimit(bucket *ratelimit.Bucket, keyFn func(*http.Request) string, skip func(*http.Request) bool, logger *slog.Logger) Middleware {
+func RateLimit(bucket *ratelimit.Bucket, keyFn func(*http.Request) string, skip func(*http.Request) bool, logger *slog.Logger) Middleware { //nolint:gocognit // dispatch-heavy; splitting would reduce linearity
 	if logger == nil {
 		logger = slog.Default()
 	}

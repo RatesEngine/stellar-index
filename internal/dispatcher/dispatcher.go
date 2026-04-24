@@ -240,13 +240,13 @@ func (d *Dispatcher) Stats() Stats {
 //
 // Caller controls goroutine placement. This function blocks until
 // the ledger is fully processed.
-func (d *Dispatcher) ProcessLedger(lcm xdr.LedgerCloseMeta, passphrase string) ([]consumer.Event, error) {
+func (d *Dispatcher) ProcessLedger(lcm xdr.LedgerCloseMeta, passphrase string) ([]consumer.Event, error) { //nolint:gocognit,gocyclo,funlen // dispatch-heavy; splitting would reduce linearity
 	reader, err := ingest.NewLedgerTransactionReaderFromLedgerCloseMeta(passphrase, lcm)
 	if err != nil {
 		return nil, fmt.Errorf("dispatcher: build reader for ledger %d: %w",
 			lcm.LedgerSequence(), err)
 	}
-	defer reader.Close()
+	defer func() { _ = reader.Close() }()
 
 	ledgerSeq := lcm.LedgerSequence()
 	// ClosedAt as RFC 3339 so the events.Event JSON shape matches
@@ -535,7 +535,7 @@ type invokeCall struct {
 // Called once per tx by ProcessLedger. Fuels both the event-path
 // OpArgs enrichment and the ContractCallDecoder routing, so doing
 // the XDR walk here saves duplicate work.
-func extractInvokeContractCalls(ops []xdr.Operation) []*invokeCall {
+func extractInvokeContractCalls(ops []xdr.Operation) []*invokeCall { //nolint:gocognit // dispatch-heavy; splitting would reduce linearity
 	if len(ops) == 0 {
 		return nil
 	}

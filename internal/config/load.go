@@ -17,7 +17,10 @@ import (
 // Returns a wrapped error identifying the path + offending line on
 // parse failure.
 func Load(path string) (Config, error) {
-	f, err := os.Open(path)
+	// G304 false positive: operator-supplied config path is the
+	// whole point of the flag. No user-controlled input reaches
+	// here — the indexer's -config flag is parsed from argv.
+	f, err := os.Open(path) //nolint:gosec // operator-supplied path
 	if err != nil {
 		return Config{}, fmt.Errorf("config: open %q: %w", path, err)
 	}

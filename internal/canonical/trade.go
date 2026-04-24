@@ -97,7 +97,7 @@ func (t Trade) Validate() error {
 		return fmt.Errorf("%w: zero timestamp", ErrInvalidTrade)
 	}
 	if err := t.Pair.Validate(); err != nil {
-		return fmt.Errorf("%w: %v", ErrInvalidTrade, err)
+		return fmt.Errorf("%w: %w", ErrInvalidTrade, err)
 	}
 	if t.BaseAmount.Sign() <= 0 {
 		return fmt.Errorf("%w: base_amount must be positive, got %s", ErrInvalidTrade, t.BaseAmount)
@@ -147,7 +147,7 @@ func validTxHash(s string) bool {
 	}
 	for i := 0; i < 64; i++ {
 		c := s[i]
-		if !((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f')) {
+		if (c < '0' || c > '9') && (c < 'a' || c > 'f') {
 			return false
 		}
 	}

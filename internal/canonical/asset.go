@@ -153,7 +153,7 @@ func (a Asset) IsZero() bool {
 
 // Validate returns nil if a is one of the three valid shapes; an
 // error otherwise.
-func (a Asset) Validate() error {
+func (a Asset) Validate() error { //nolint:gocognit // dispatch-heavy; splitting would reduce linearity
 	switch a.Type {
 	case AssetNative:
 		if a.Code != "" || a.Issuer != "" || a.ContractID != "" {
@@ -272,7 +272,7 @@ func (a *Asset) UnmarshalJSON(b []byte) error {
 	type raw Asset
 	var r raw
 	if err := json.Unmarshal(b, &r); err != nil {
-		return fmt.Errorf("%w: must be string or object: %v", ErrInvalidAsset, err)
+		return fmt.Errorf("%w: must be string or object: %w", ErrInvalidAsset, err)
 	}
 	*a = Asset(r)
 	return a.Validate()

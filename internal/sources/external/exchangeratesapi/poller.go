@@ -113,7 +113,7 @@ type apiError struct {
 // are normal (operator enables the FX poller for fiat triangulation
 // without needing to audit the crypto pairs already covered by
 // Binance/Kraken/Bitstamp).
-func (p *Poller) PollOnce(ctx context.Context, pairs []canonical.Pair) ([]canonical.Trade, []canonical.OracleUpdate, error) {
+func (p *Poller) PollOnce(ctx context.Context, pairs []canonical.Pair) ([]canonical.Trade, []canonical.OracleUpdate, error) { //nolint:gocognit,funlen // dispatch-heavy; splitting would reduce linearity
 	base := p.Base
 	if base == "" {
 		base = DefaultBase

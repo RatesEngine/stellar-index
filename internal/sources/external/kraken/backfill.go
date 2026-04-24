@@ -42,7 +42,7 @@ const krakenMaxResponse = 720
 // not a bug in our code. Documented in
 // docs/discovery/oracles/band.md and external.Registry
 // (BackfillAvailable=true with 30-day caveat).
-func (s *Streamer) Backfill(ctx context.Context, pair canonical.Pair, from, to time.Time, granularity time.Duration) ([]canonical.Trade, error) {
+func (s *Streamer) Backfill(ctx context.Context, pair canonical.Pair, from, to time.Time, granularity time.Duration) ([]canonical.Trade, error) { //nolint:gocognit // dispatch-heavy; splitting would reduce linearity
 	if !from.Before(to) {
 		return nil, fmt.Errorf("kraken.Backfill: from %v must be before to %v", from, to)
 	}

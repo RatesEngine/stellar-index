@@ -2,6 +2,7 @@ package v1_test
 
 import (
 	"math/big"
+	"net/http"
 	"testing"
 	"time"
 
@@ -29,7 +30,7 @@ func TestTWAP_503WhenReaderNil(t *testing.T) {
 	ts := httpTestServer(t, srv)
 
 	resp := mustGet(t, ts.URL+"/v1/twap?base=native&quote=fiat:USD")
-	if resp.StatusCode != 503 {
+	if resp.StatusCode != http.StatusServiceUnavailable {
 		t.Fatalf("status = %d, want 503", resp.StatusCode)
 	}
 }
@@ -39,7 +40,7 @@ func TestTWAP_404WhenNoTrades(t *testing.T) {
 	ts := httpTestServer(t, srv)
 
 	resp := mustGet(t, ts.URL+"/v1/twap?base=native&quote=fiat:USD")
-	if resp.StatusCode != 404 {
+	if resp.StatusCode != http.StatusNotFound {
 		t.Errorf("status = %d, want 404", resp.StatusCode)
 	}
 }
@@ -59,7 +60,7 @@ func TestTWAP_TimeWeightsCorrectly(t *testing.T) {
 	to := t0.Add(40 * time.Second).Format(time.RFC3339)
 	from := t0.Format(time.RFC3339)
 	resp := mustGet(t, ts.URL+"/v1/twap?base=native&quote=fiat:USD&from="+from+"&to="+to)
-	if resp.StatusCode != 200 {
+	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("status = %d", resp.StatusCode)
 	}
 	var env struct {

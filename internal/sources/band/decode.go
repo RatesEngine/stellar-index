@@ -28,7 +28,7 @@ const opIndexFanoutStride = 1024
 // Updates share (ledger, tx_hash) but get distinct OpIndex values
 // derived from the vector position, mirroring the Reflector /
 // Redstone fan-out.
-func decodeRelayArgs(
+func decodeRelayArgs( //nolint:gocognit,gocyclo,funlen // dispatch-heavy; splitting would reduce linearity
 	fnName string,
 	args []string,
 	contractID string,
@@ -86,8 +86,11 @@ func decodeRelayArgs(
 			len(pairs), opIndexFanoutStride)
 	}
 
-	// args[timeIdx] = resolve_time: u64 (UNIX seconds)
-	timeSv, err := scval.Parse(args[timeIdx])
+	// args[timeIdx] = resolve_time: u64 (UNIX seconds).
+	// Bound guaranteed by the len(args) check in the switch above
+	// — FnRelay: len ≥ 4, timeIdx = 2; FnForceRelay: len ≥ 3,
+	// timeIdx = 1. gosec can't trace the invariant across cases.
+	timeSv, err := scval.Parse(args[timeIdx]) //nolint:gosec // bounds-checked in switch case above
 	if err != nil {
 		return nil, fmt.Errorf("%w: resolve_time: %w", ErrMalformedArgs, err)
 	}

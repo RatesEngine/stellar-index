@@ -166,7 +166,7 @@ func parseFromTo(w http.ResponseWriter, r *http.Request) (from, to time.Time, ok
 // /v1/price and /v1/history.
 //
 // Returns "0" for nil input.
-func ratToDecimal(r *big.Rat, digits int) string {
+func ratToDecimal(r *big.Rat, digits int) string { //nolint:unparam // digits kept for API flexibility; currently always ohlcPriceDigits
 	if r == nil {
 		return "0"
 	}

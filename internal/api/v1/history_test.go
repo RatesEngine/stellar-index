@@ -5,6 +5,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"math/big"
+	"net/http"
 	"net/url"
 	"testing"
 	"time"
@@ -76,7 +77,7 @@ func TestHistory_503WhenReaderNil(t *testing.T) {
 	ts := httpTestServer(t, srv)
 
 	resp := mustGet(t, ts.URL+"/v1/history?base=native&quote=fiat:USD")
-	if resp.StatusCode != 503 {
+	if resp.StatusCode != http.StatusServiceUnavailable {
 		t.Fatalf("status = %d, want 503 (no reader wired)", resp.StatusCode)
 	}
 }
@@ -86,7 +87,7 @@ func TestHistory_MissingBase400(t *testing.T) {
 	ts := httpTestServer(t, srv)
 
 	resp := mustGet(t, ts.URL+"/v1/history?quote=fiat:USD")
-	if resp.StatusCode != 400 {
+	if resp.StatusCode != http.StatusBadRequest {
 		t.Errorf("status = %d, want 400", resp.StatusCode)
 	}
 }
@@ -96,7 +97,7 @@ func TestHistory_InvalidTime400(t *testing.T) {
 	ts := httpTestServer(t, srv)
 
 	resp := mustGet(t, ts.URL+"/v1/history?base=native&quote=fiat:USD&from=yesterday")
-	if resp.StatusCode != 400 {
+	if resp.StatusCode != http.StatusBadRequest {
 		t.Errorf("status = %d, want 400", resp.StatusCode)
 	}
 }
@@ -111,7 +112,7 @@ func TestHistory_FromAfterTo400(t *testing.T) {
 	q.Set("from", "2026-04-23T12:00:00Z")
 	q.Set("to", "2026-04-23T11:00:00Z")
 	resp := mustGet(t, ts.URL+"/v1/history?"+q.Encode())
-	if resp.StatusCode != 400 {
+	if resp.StatusCode != http.StatusBadRequest {
 		t.Errorf("status = %d, want 400", resp.StatusCode)
 	}
 }
@@ -122,7 +123,7 @@ func TestHistory_InvalidLimit400(t *testing.T) {
 
 	for _, bad := range []string{"0", "10001", "-5", "abc"} {
 		resp := mustGet(t, ts.URL+"/v1/history?base=native&quote=fiat:USD&limit="+bad)
-		if resp.StatusCode != 400 {
+		if resp.StatusCode != http.StatusBadRequest {
 			t.Errorf("limit=%q: status = %d, want 400", bad, resp.StatusCode)
 		}
 	}
@@ -136,7 +137,7 @@ func TestHistory_ReturnsTrades(t *testing.T) {
 	ts := httpTestServer(t, srv)
 
 	resp := mustGet(t, ts.URL+"/v1/history?base=native&quote=fiat:USD&limit=50")
-	if resp.StatusCode != 200 {
+	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("status = %d", resp.StatusCode)
 	}
 	var env struct {
@@ -293,7 +294,7 @@ func TestHistory_InvalidCursor400(t *testing.T) {
 		b64("100:1:soroswap:" + uppercaseHex + ":0"),
 	} {
 		resp := mustGet(t, ts.URL+"/v1/history?base=native&quote=fiat:USD&cursor="+bad)
-		if resp.StatusCode != 400 {
+		if resp.StatusCode != http.StatusBadRequest {
 			t.Errorf("cursor=%q: status = %d, want 400", bad, resp.StatusCode)
 		}
 	}
@@ -305,7 +306,7 @@ func TestHistory_EmptyListReturnsEmptyArray(t *testing.T) {
 	ts := httpTestServer(t, srv)
 
 	resp := mustGet(t, ts.URL+"/v1/history?base=native&quote=fiat:USD")
-	if resp.StatusCode != 200 {
+	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("status = %d", resp.StatusCode)
 	}
 	body, _ := readAll(resp)

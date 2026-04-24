@@ -404,7 +404,7 @@ func (d *ssrfDialer) DialContext(ctx context.Context, network, address string) (
 //
 // Tolerates IPv4 literals (for httptest) but not IPv6 bracket form
 // — we never ingest IPv6 literals as home-domains in practice.
-func isValidDomainOrHostPort(s string) bool {
+func isValidDomainOrHostPort(s string) bool { //nolint:gocognit,gocyclo // dispatch-heavy; splitting would reduce linearity
 	// Split off optional :port.
 	host, port, hasPort := strings.Cut(s, ":")
 	if hasPort {

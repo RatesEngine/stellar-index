@@ -116,9 +116,12 @@ func (s *Streamer) runOnce(ctx context.Context, products []string, out chan<- ca
 	if s.Endpoint == "" {
 		s.Endpoint = WSEndpoint
 	}
-	conn, _, err := websocket.Dial(ctx, s.Endpoint, nil)
+	conn, resp, err := websocket.Dial(ctx, s.Endpoint, nil)
 	if err != nil {
 		return fmt.Errorf("dial: %w", err)
+	}
+	if resp != nil && resp.Body != nil {
+		_ = resp.Body.Close()
 	}
 	defer func() { _ = conn.Close(websocket.StatusNormalClosure, "client shutdown") }()
 
