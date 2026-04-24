@@ -142,6 +142,19 @@ Post-launch we run three geographically-separated full validators
 with independent history archives. Validator keys live in an HSM;
 never on disk unencrypted.
 
+### 6. Ingest goes via Galexie → dispatcher → decoder. Never stellar-rpc.
+
+**Production ingest:** `Galexie MinIO → internal/ledgerstream →
+internal/dispatcher → internal/sources/<venue>/decode`. Decoders are
+pure functions; no RPC client, no pagination loop, no per-source
+goroutine. stellar-rpc was removed from r1 on 2026-04-23; it exists
+only for the `rpc-probe` operator diagnostic and for capturing test
+fixtures via `scripts/dev/`. Any new source that adds a
+`rpc *stellarrpc.Client` field or a `BackfillRange` / `StreamLive`
+method is wrong.
+
+Full picture + binding rules: [docs/architecture/ingest-pipeline.md](docs/architecture/ingest-pipeline.md).
+
 ---
 
 ## Things that will surprise you
@@ -158,6 +171,14 @@ linked doc first.
   topic `("swap", "<field>")`). A single swap reconstruction
   requires grouping all 8. →
   [docs/discovery/dexes-amms/phoenix.md](docs/discovery/dexes-amms/phoenix.md)
+- **Comet uses a shared `("POOL", <event>)` topic across every pool
+  contract**, not a per-protocol namespace. The decoder matches by
+  topic bytes, not pool contract ID — any pubnet contract that
+  deploys Balancer-v1 Comet code will look identical on the wire.
+  Operators who want narrow coverage (e.g. only Blend's backstop
+  pool) filter downstream by `Trade.Source = "comet"` +
+  contract-address context rather than at dispatch time. →
+  [docs/discovery/dexes-amms/comet.md](docs/discovery/dexes-amms/comet.md)
 - **Reflector v3 has no on-chain `twap` or `x_*` methods.**
   Proposal says it does; it doesn't. We compute TWAP and cross-pair
   locally. →
@@ -168,10 +189,50 @@ linked doc first.
 - **Band stores pair rates at E18 scale**. Relayed single-asset
   rates are at E9. →
   [docs/discovery/oracles/band.md](docs/discovery/oracles/band.md)
+- **Band's Soroban contract emits zero events.** A conventional
+  topic-match Decoder never fires on Band. We observe the
+  `relay()` / `force_relay()` InvokeContract call instead via
+  the dispatcher's `ContractCallDecoder` interface (PR 168). Any
+  future Soroban source that updates storage without publishing
+  events plugs into the same hook — match by (contract_id,
+  function_name), decode from op args. →
+  [docs/discovery/oracles/band.md](docs/discovery/oracles/band.md)
+- **Off-chain sources (CEX/FX) live in `internal/sources/external/`,
+  not `internal/sources/<venue>/`.** They run their own goroutines
+  speaking HTTPS / WebSocket to vendor APIs — parallel to the
+  Galexie → dispatcher path, not under it. Source-class metadata
+  (`exchange`/`aggregator`/`oracle`/`authority_sanity`) lives in
+  `external.Registry` — a single Go map the aggregator queries at
+  VWAP compute time to decide which sources contribute. Only
+  `ClassExchange` contributes by default; aggregators and oracles
+  are reported alongside but excluded (mixing them double-counts
+  upstream markets or imposes their methodology on our output).
+- **External-source amount scaling: uniform 10^8.** On-chain
+  sources stamp `canonical.Trade.BaseAmount` / `QuoteAmount` at
+  per-asset decimals (XLM=7, Soroban tokens vary). Off-chain
+  sources normalise to a fixed 10^8 integer scale
+  (`binance.externalAmountDecimals`). Aggregator looks up
+  `external.Lookup(trade.Source).Class` to know which side of
+  the boundary a trade came from.
+- **Stablecoin fiat-proxy is aggregator policy, not decoder
+  policy.** Ingest stores the real pair (`XLM/USDT`, `XLM/USDC`).
+  The aggregator maps `USDT→USD`, `USDC→USD`, `PYUSD→USD`,
+  `EUROC→EUR`, `EUROB→EUR`, `MXNe→MXN` at VWAP compute time.
+  Eager normalisation at ingest would hide a depeg event; late
+  binding keeps data honest.
 - **Redstone Adapter DOES emit events** (topic `"REDSTONE"`) — one
   per batch push containing all updated feeds. Subscribe rather
   than poll all 19 per-feed contracts. →
   [docs/discovery/oracles/redstone.md](docs/discovery/oracles/redstone.md)
+- **Redstone's event body carries no feed_id.** `WritePrices
+  { updater, updated_feeds: Vec<PriceData> }` gives prices +
+  timestamps, not which feed each entry is. Feed IDs live in the
+  tx's `write_prices(updater, feed_ids, payload)` InvokeContract
+  op args — plumbed through `events.Event.OpArgs` (PR 166). The
+  adapter's freshness verifier can filter `updated_feeds` to a
+  subset of `feed_ids`; zip only when lengths match, else skip
+  the whole event (`ErrFeedIDCountMismatch`). Any new decoder that
+  needs tx args follows the same `events.Event.OpArgs` pattern.
 - **Post-P23 (Whisk, mainnet 2025-09-03) every classic asset
   movement emits a unified transfer/mint/burn event with a 4th
   `sep0011_asset` topic.** Pre-P23 you parse operations+effects.
@@ -189,6 +250,22 @@ linked doc first.
   bugs** in its i128 decoding and SDEX trade extraction. We do
   **not** inherit from it. →
   [docs/discovery/data-sources/withobsrvr-cdp-pipeline-workflow.md](docs/discovery/data-sources/withobsrvr-cdp-pipeline-workflow.md)
+- **stellar-rpc is NOT in our production ingest path.** Removed
+  from r1 on 2026-04-23 alongside stellar-core and the core
+  prometheus exporter. The indexer reads Galexie's MinIO output
+  directly via `go-stellar-sdk/ingest.ApplyLedgerMetadata`. If you
+  catch yourself writing `rpc.GetEvents` for ingest, stop and read
+  [docs/architecture/ingest-pipeline.md](docs/architecture/ingest-pipeline.md). →
+  [docs/operations/r1-deployment-state.md](docs/operations/r1-deployment-state.md)
+- **Soroban DeFi contracts upgrade in place.** Soroswap / Phoenix /
+  Aquarius / Reflector can each `update_contract` without changing
+  their contract address. Event body schemas (field names, types,
+  arity) and topic shapes can change across an upgrade. Live ingest
+  only sees current WASM; **backfill sees every prior version** that
+  ran for the replayed range. Decode by Map-field-name not position,
+  dispatch on topic[0] symbol not contract address, and gate
+  backfill behind a per-WASM-hash decoder audit. →
+  [docs/architecture/contract-schema-evolution.md](docs/architecture/contract-schema-evolution.md)
 
 ---
 
@@ -277,6 +354,37 @@ Make the smallest possible PR that advances one thing and is easy
 to review. Never "ship and clean up later." See
 [docs/discovery/engineering-standards.md §2](docs/discovery/engineering-standards.md)
 for the full Definition of Done.
+
+---
+
+## Working in a long session: commit-merge-repeat, not stack-then-split
+
+If you are an AI agent running a multi-hour task (e.g. `/loop keep
+going`), the default cadence is **one PR → one merge → next PR**.
+Do NOT accumulate multiple narrative PRs of uncommitted work in the
+tree and try to split them later — shared files
+(`cmd/ratesengine-indexer/main.go`, `internal/config/*`,
+`CHANGELOG.md`, `CLAUDE.md`) will be touched by several narrative
+PRs and cannot be cleanly split into per-PR commits without hunk
+surgery.
+
+The rule:
+
+1. Pick one logical unit of work.
+2. Make it build + its tests pass.
+3. Commit, push, open PR, merge. (`gh pr merge --squash` once CI is
+   green; merge with failing optional checks only if the failure is
+   pre-existing CI infra, not caused by this PR.)
+4. Pull main, branch again, return to step 1 for the NEXT unit.
+
+Never plan a pipeline of 3–4 PRs before the first one has landed.
+If you realise a task is bigger than one PR, split it into linear,
+merge-as-you-go units — not parallel branches that will collide on
+shared files.
+
+The one exception: if the user is actively reviewing mid-session
+and explicitly says "don't merge yet, I want to see the whole thing
+first." Otherwise, merge.
 
 ---
 
