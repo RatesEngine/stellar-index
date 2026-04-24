@@ -77,10 +77,12 @@ Canonical wire form for fiat:
   ts)` work identically.
 
 Allow-listed codes (ISO-4217 three-letter plus a small extension
-set for the RFPs' "AQUA/BRL" case):
+set for the RFPs' "AQUA/BRL" case and currencies observed in live
+Reflector FX oracle traffic — see Amendments):
 
 ```
-AUD BRL CAD CHF CNY EUR GBP HKD INR JPY KRW MXN NGN NZD RUB SGD TRY USD ZAR
+ARS AUD BRL CAD CHF CLP CNY COP EUR GBP HKD IDR ILS INR JPY KRW
+MXN MYR NGN NOK NZD PHP PLN RUB SEK SGD THB TRY UAH USD VND ZAR
 ```
 
 New fiat codes require a one-line ADR amendment (added to this
@@ -225,6 +227,13 @@ _Append new fiat codes here as a one-liner. Never supersede this
 ADR for an addition._
 
 - 2026-04-22 — initial allow-list of 19 codes.
+- 2026-04-23 — added 13 codes observed in the mainnet Reflector FX
+  oracle's live payload (PR 164a, fixture capture under
+  `test/fixtures/reflector/v6-2026-04-23/`): ARS, CLP, COP, IDR,
+  ILS, MYR, NOK, PHP, PLN, SEK, THB, UAH, VND. Total: 32 codes.
+  Crypto tickers (BTC, ETH, USDT…) emitted by Reflector's CEX
+  oracle remain **out** of the fiat allow-list — they need a
+  separate canonical asset type tracked as PR 164e.
 
 ## References
 

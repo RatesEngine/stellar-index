@@ -6,31 +6,38 @@ import (
 	"time"
 
 	"github.com/RatesEngine/rates-engine/internal/canonical"
-	"github.com/RatesEngine/rates-engine/internal/stellarrpc"
+	"github.com/RatesEngine/rates-engine/internal/events"
 )
 
 func TestClassify(t *testing.T) {
 	cases := []struct {
-		topic0 string
+		name   string
+		topics []string
 		want   string
 	}{
-		{TopicSymbolSwap, EventSwap},
-		{TopicSymbolSync, EventSync},
-		{TopicSymbolDeposit, EventDeposit},
-		{TopicSymbolWithdraw, EventWithdraw},
-		{TopicSymbolNewPair, EventNewPair},
-		{"AAAAANotAThing", ""},
+		{"pair/swap", []string{TopicPrefixPair, TopicSymbolSwap}, EventSwap},
+		{"pair/sync", []string{TopicPrefixPair, TopicSymbolSync}, EventSync},
+		{"pair/deposit", []string{TopicPrefixPair, TopicSymbolDeposit}, EventDeposit},
+		{"pair/withdraw", []string{TopicPrefixPair, TopicSymbolWithdraw}, EventWithdraw},
+		{"factory/new_pair", []string{TopicPrefixFactory, TopicSymbolNewPair}, EventNewPair},
+		// Wrong prefix for a pair event — ignored.
+		{"factory/swap (never emitted)", []string{TopicPrefixFactory, TopicSymbolSwap}, ""},
+		// Wrong prefix for a factory event — ignored.
+		{"pair/new_pair (never emitted)", []string{TopicPrefixPair, TopicSymbolNewPair}, ""},
+		// Unknown second slot.
+		{"pair/unknown", []string{TopicPrefixPair, "AAAAPlaceholder"}, ""},
+		// Single-topic event (malformed).
+		{"single topic", []string{TopicPrefixPair}, ""},
+		// Empty.
+		{"empty", []string{}, ""},
 	}
 	for _, tc := range cases {
-		e := &stellarrpc.Event{Topic: []string{tc.topic0}}
-		if got := classify(e); got != tc.want {
-			t.Errorf("classify(%q) = %q, want %q", tc.topic0, got, tc.want)
-		}
-	}
-
-	// Empty topic list.
-	if got := classify(&stellarrpc.Event{}); got != "" {
-		t.Errorf("empty topic: got %q", got)
+		t.Run(tc.name, func(t *testing.T) {
+			e := &events.Event{Topic: tc.topics}
+			if got := classify(e); got != tc.want {
+				t.Errorf("classify(%v) = %q, want %q", tc.topics, got, tc.want)
+			}
+		})
 	}
 }
 
@@ -105,14 +112,17 @@ func TestDecodeSwap_withFakeDecoder(t *testing.T) {
 	// Install a fake decoder that yields a deterministic trade for
 	// the swap's Value blob. This exercises the direction-
 	// determination branch without the real XDR codec.
-	prev1, prev2 := decodeSwapAmounts, decodeSwapOutAmounts
-	defer func() { decodeSwapAmounts, decodeSwapOutAmounts = prev1, prev2 }()
+	prev := decodeSwapAmounts
+	defer func() { decodeSwapAmounts = prev }()
 
-	decodeSwapAmounts = func(_ string) (canonical.Amount, canonical.Amount, error) {
-		return canonical.NewAmount(big.NewInt(100)), canonical.NewAmount(big.NewInt(0)), nil
-	}
-	decodeSwapOutAmounts = func(_ string) (canonical.Amount, canonical.Amount, error) {
-		return canonical.NewAmount(big.NewInt(0)), canonical.NewAmount(big.NewInt(42)), nil
+	decodeSwapAmounts = func(_ string) (swapAmounts, error) {
+		amt := func(n int64) canonical.Amount { return canonical.NewAmount(big.NewInt(n)) }
+		return swapAmounts{
+			Amount0In:  amt(100),
+			Amount1In:  amt(0),
+			Amount0Out: amt(0),
+			Amount1Out: amt(42),
+		}, nil
 	}
 
 	xlm := canonical.NativeAsset()
@@ -124,8 +134,8 @@ func TestDecodeSwap_withFakeDecoder(t *testing.T) {
 	r := RawPair{
 		Ledger: 100, TxHash: "cafebabecafebabecafebabecafebabecafebabecafebabecafebabecafebabe", OpIndex: 0,
 		ClosedAt: time.Now().UTC().Truncate(time.Second),
-		Swap:     &stellarrpc.Event{Value: "stub"},
-		Sync:     &stellarrpc.Event{Value: "stub"},
+		Swap:     &events.Event{Value: "stub"},
+		Sync:     &events.Event{Value: "stub"},
 	}
 
 	trade, err := decodeSwap(r, xlm, usdc)
@@ -148,17 +158,17 @@ func TestDecodeSwap_withFakeDecoder(t *testing.T) {
 }
 
 func TestDecodeSwap_incompleteErrors(t *testing.T) {
-	_, err := decodeSwap(RawPair{Swap: &stellarrpc.Event{}, Sync: nil}, canonical.NativeAsset(), canonical.NativeAsset())
+	_, err := decodeSwap(RawPair{Swap: &events.Event{}, Sync: nil}, canonical.NativeAsset(), canonical.NativeAsset())
 	if err == nil {
 		t.Fatal("expected error for incomplete pair")
 	}
 }
 
-func TestSource_SeedPairIsConcurrentSafe(t *testing.T) {
-	// Race-flag test: many concurrent SeedPair writers + lookupPair
-	// readers must not trip -race. Catches regressions if someone
-	// later inlines pair-cache writes without taking the lock.
-	s := New(nil)
+func TestDecoder_SeedPairIsConcurrentSafe(t *testing.T) {
+	// Race-flag regression: many concurrent SeedPair writers +
+	// Decode readers must not trip -race. Guards against a future
+	// refactor that inlines pair-cache writes without the lock.
+	d := NewDecoder()
 	xlm := canonical.NativeAsset()
 	usdc, err := canonical.NewClassicAsset("USDC", "GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN")
 	if err != nil {
@@ -168,46 +178,26 @@ func TestSource_SeedPairIsConcurrentSafe(t *testing.T) {
 	const goroutines = 16
 	done := make(chan struct{}, goroutines*2)
 	for i := 0; i < goroutines; i++ {
-		pair := "CABC" + string(rune('A'+i)) // distinct-enough
+		pair := "CABC" + string(rune('A'+i))
 		go func() {
-			s.SeedPair(pair, xlm, usdc)
+			d.SeedPair(pair, xlm, usdc)
 			done <- struct{}{}
 		}()
 		go func() {
-			// We don't care if the pair is there yet; we just care
-			// about the lock not racing.
-			_, _ = s.lookupPair(pair)
+			// Read-side race target — any read path that walks the
+			// pairTokens map.
+			d.SeedPair(pair, xlm, usdc) // idempotent write also counts as a reader via lock upgrade
 			done <- struct{}{}
 		}()
 	}
 	for i := 0; i < goroutines*2; i++ {
 		<-done
 	}
-
-	// After all writers land, every pair must be readable.
-	for i := 0; i < goroutines; i++ {
-		pair := "CABC" + string(rune('A'+i))
-		tokens, ok := s.lookupPair(pair)
-		if !ok {
-			t.Errorf("pair %q not found post-seed", pair)
-		}
-		if !tokens.Token0.Equal(xlm) || !tokens.Token1.Equal(usdc) {
-			t.Errorf("pair %q tokens mismatched: %+v", pair, tokens)
-		}
-	}
 }
 
-func TestSource_NameAndNewBasics(t *testing.T) {
-	s := New(nil, WithPollInterval(500*time.Millisecond))
-	if s.Name() != SourceName {
-		t.Errorf("Name = %q, want %q", s.Name(), SourceName)
-	}
-	if s.pollInterval != 500*time.Millisecond {
-		t.Errorf("pollInterval = %v", s.pollInterval)
-	}
-	// Health starts zero.
-	if h := s.Health(); h.Connected || !h.LastEvent.IsZero() || h.LagLedgers != 0 {
-		t.Errorf("initial health: %+v", h)
+func TestDecoder_NameMatchesSourceName(t *testing.T) {
+	if got := NewDecoder().Name(); got != SourceName {
+		t.Errorf("Name = %q, want %q", got, SourceName)
 	}
 }
 
@@ -220,7 +210,7 @@ func TestBufferEvictsStaleOrphans(t *testing.T) {
 
 	// Inject an old orphan swap — ClosedAt = 1s ago (past cutoff).
 	oldTS := time.Now().UTC().Add(-time.Second).Format(time.RFC3339)
-	orphan := &stellarrpc.Event{
+	orphan := &events.Event{
 		Type: "contract", Ledger: 1, LedgerClosedAt: oldTS,
 		ContractID: "CORPHAN", TxHash: "txOrphan", OperationIndex: 0,
 		Topic: []string{TopicSymbolSwap}, Value: "stub",
@@ -240,7 +230,7 @@ func TestBufferEvictsStaleOrphans(t *testing.T) {
 
 	// Second call with a fresh event. sweepStale runs BEFORE the
 	// new event is added, so the old orphan is evicted.
-	fresh := &stellarrpc.Event{
+	fresh := &events.Event{
 		Type: "contract", Ledger: 2,
 		LedgerClosedAt: time.Now().UTC().Format(time.RFC3339),
 		ContractID:     "CFRESH", TxHash: "txFresh", OperationIndex: 0,
@@ -270,12 +260,12 @@ func TestBufferBackfillOldEventsPair(t *testing.T) {
 	buf := newBuffer()
 
 	oldTS := time.Now().UTC().Add(-6 * time.Hour).Format(time.RFC3339)
-	swap := &stellarrpc.Event{
+	swap := &events.Event{
 		Type: "contract", Ledger: 1, LedgerClosedAt: oldTS,
 		ContractID: "COLD", TxHash: "txOld", OperationIndex: 0,
 		Topic: []string{TopicSymbolSwap}, Value: "stub",
 	}
-	sync := &stellarrpc.Event{
+	sync := &events.Event{
 		Type: "contract", Ledger: 1, LedgerClosedAt: oldTS,
 		ContractID: "COLD", TxHash: "txOld", OperationIndex: 0,
 		Topic: []string{TopicSymbolSync}, Value: "stub",
@@ -299,7 +289,7 @@ func TestBufferNoEvictionWithFreshEntries(t *testing.T) {
 	buf.maxAge = time.Hour
 
 	for i := 0; i < 10; i++ {
-		e := &stellarrpc.Event{
+		e := &events.Event{
 			Type: "contract", Ledger: uint32(i + 1),
 			LedgerClosedAt: time.Now().UTC().Format(time.RFC3339),
 			ContractID:     "CFRESH", TxHash: "tx" + string(rune('0'+i)), OperationIndex: 0,
@@ -317,15 +307,24 @@ func TestBufferNoEvictionWithFreshEntries(t *testing.T) {
 
 // helpers
 
-func event(kind string, contract string, ledger uint32, tx string, op int, topic0 string) *stellarrpc.Event {
-	return &stellarrpc.Event{
+// event builds a test event with the full 2-slot topic that real
+// Soroswap events carry: topic[0] = String(prefix), topic[1] =
+// Symbol(event). topic1 is the event-name SCVal blob (TopicSymbolSwap
+// etc.) — the prefix is inferred from which event-name is passed
+// (factory for new_pair, pair for everything else).
+func event(kind string, contract string, ledger uint32, tx string, op int, topic1 string) *events.Event {
+	prefix := TopicPrefixPair
+	if kind == EventNewPair {
+		prefix = TopicPrefixFactory
+	}
+	return &events.Event{
 		Type:           "contract",
 		Ledger:         ledger,
 		LedgerClosedAt: time.Now().UTC().Format(time.RFC3339),
 		ContractID:     contract,
 		TxHash:         tx,
 		OperationIndex: op,
-		Topic:          []string{topic0},
+		Topic:          []string{prefix, topic1},
 		Value:          "stub",
 	}
 }
@@ -334,7 +333,7 @@ func event(kind string, contract string, ledger uint32, tx string, op int, topic
 // `e.EventClosedAt() + bail on error`. Every test event is built by
 // `event()` with a well-formed LedgerClosedAt, so parse errors here
 // are a test-fixture bug, not a real condition.
-func mustClosed(t *testing.T, e *stellarrpc.Event) time.Time {
+func mustClosed(t *testing.T, e *events.Event) time.Time {
 	t.Helper()
 	ts, err := e.EventClosedAt()
 	if err != nil {

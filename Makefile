@@ -108,6 +108,10 @@ test-all: lint vet test test-integration ## Everything short of load + chaos
 lint-docs: ## Doc-code consistency linter (freshness, links, ADR integrity, TODO discipline)
 	@./scripts/ci/lint-docs.sh
 
+.PHONY: lint-imports
+lint-imports: ## Import-boundary lint (production ingest doesn't import stellar-rpc, xdr scoped to scval, etc.)
+	@./scripts/ci/lint-imports.sh
+
 .PHONY: monitoring-check
 monitoring-check: ## Validate Prometheus rule files with promtool
 	@if ! command -v promtool >/dev/null 2>&1; then \

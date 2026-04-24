@@ -81,6 +81,23 @@ jobs:
         # + superseded-by validity.
         run: ./scripts/ci/lint-docs.sh
 
+  import-checks:
+    name: import-boundary lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: lint-imports
+        # Enforces architectural import rules:
+        # - No stellar-rpc in production ingest (removed from r1
+        #   2026-04-23; see docs/architecture/ingest-pipeline.md).
+        # - go-stellar-sdk/xdr scoped to internal/scval (ADR-0013).
+        # - No Horizon anywhere (ADR-0001).
+        # Grandfathered legacy violations live in
+        # scripts/ci/lint-imports.baseline; the lint fails on NEW
+        # violations or on stale baseline entries, forcing the
+        # baseline to shrink monotonically.
+        run: ./scripts/ci/lint-imports.sh
+
   # ────────────────────────────────────────────────────────────────
   # Security — fast scans on every PR.
   # Heavier scans (trivy, SBOM) live in security.yml on a schedule.

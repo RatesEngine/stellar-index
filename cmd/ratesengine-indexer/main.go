@@ -1,24 +1,25 @@
-// Binary ratesengine-indexer runs the ingestion fleet: one goroutine
-// per configured source, each feeding its events into the trades
-// hypertable via internal/storage/timescale.
+// Binary ratesengine-indexer runs the production ingestion
+// pipeline:
+//
+//	Galexie MinIO → internal/ledgerstream → internal/dispatcher
+//	              → per-source decoders → canonical.Trade /
+//	                canonical.OracleUpdate → TimescaleDB
+//
+// Per docs/architecture/ingest-pipeline.md this is the SINGLE
+// production code path. No stellar-rpc client, no per-source
+// goroutines, no poll loops. One goroutine drives ledgerstream +
+// dispatcher; a second drains the resulting consumer.Events to
+// Timescale with panic isolation.
 //
 // Flags:
 //
 //	-config PATH    TOML config file (required)
 //	-dry-run        Load config, open connections, validate, exit.
-//	                No events consumed. Useful for boot sanity checks.
+//	                No ledgers consumed. Boot sanity only.
 //
-// Environment overrides for secrets apply on top of the file (see
-// internal/config/load.go LoadWithEnv). Logging is JSON-formatted
-// via slog at the level configured in [obs] section.
-//
-// Graceful shutdown: SIGINT + SIGTERM trigger context cancellation;
+// Graceful shutdown: SIGINT + SIGTERM cancel the root context;
 // the binary waits up to 30 s for in-flight work to finish before
 // hard-exiting.
-//
-// Orchestration lives in internal/consumer/orchestrator.go — this
-// binary is a thin launcher that wires config + storage + RPC +
-// sources together and hands them to the Orchestrator.
 package main
 
 import (
@@ -34,18 +35,30 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/stellar/go-stellar-sdk/support/datastore"
+	sdkxdr "github.com/stellar/go-stellar-sdk/xdr"
+
 	"github.com/RatesEngine/rates-engine/internal/canonical"
 	"github.com/RatesEngine/rates-engine/internal/config"
 	"github.com/RatesEngine/rates-engine/internal/consumer"
+	"github.com/RatesEngine/rates-engine/internal/dispatcher"
+	"github.com/RatesEngine/rates-engine/internal/ledgerstream"
 	"github.com/RatesEngine/rates-engine/internal/obs"
 	"github.com/RatesEngine/rates-engine/internal/sources/aquarius"
 	"github.com/RatesEngine/rates-engine/internal/sources/phoenix"
 	"github.com/RatesEngine/rates-engine/internal/sources/reflector"
+	"github.com/RatesEngine/rates-engine/internal/sources/sdex"
 	"github.com/RatesEngine/rates-engine/internal/sources/soroswap"
-	"github.com/RatesEngine/rates-engine/internal/stellarrpc"
 	"github.com/RatesEngine/rates-engine/internal/storage/timescale"
 	"github.com/RatesEngine/rates-engine/internal/version"
 )
+
+// cursorSource is the single `source` label stored in the
+// ingestion_cursors table for the ledgerstream pipeline. There's
+// exactly one cursor now — the whole pipeline tracks one
+// last-processed ledger. (Per-source cursors were part of the
+// pre-165 orchestrator topology.)
+const cursorSource = "ledgerstream"
 
 func main() {
 	var (
@@ -81,7 +94,6 @@ func run(cfgPath string, dryRun bool) error {
 		"dry_run", dryRun,
 	)
 
-	// Root context with SIGINT/SIGTERM cancel.
 	rootCtx, cancel := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer cancel()
 
@@ -97,45 +109,18 @@ func run(cfgPath string, dryRun bool) error {
 	}()
 	logger.Info("storage connected")
 
-	// ─── RPC client ─────────────────────────────────────────────
-	// Pick the first endpoint; retries + round-robin are a follow-up.
-	if len(cfg.Stellar.RPCEndpoints) == 0 {
-		return fmt.Errorf("stellar.rpc_endpoints is empty — nothing to ingest from")
-	}
-	rpc := stellarrpc.New(cfg.Stellar.RPCEndpoints[0], stellarrpc.WithTimeout(30*time.Second))
-
-	vi, err := rpc.VersionInfo(rootCtx)
+	// ─── Dispatcher + decoders ─────────────────────────────────
+	disp, err := buildDispatcher(cfg.Ingestion.EnabledSources, cfg.Oracle)
 	if err != nil {
-		// Under normal run, orchestrator retry+backoff handles
-		// transient RPC outages, so a boot-time failure is a soft
-		// warning — the ingester may recover without operator action.
-		// Under -dry-run the operator is explicitly asking "does this
-		// config work?" — answering "yes" when RPC is unreachable is
-		// a lie. Fail hard there.
-		if dryRun {
-			return fmt.Errorf("rpc: version probe failed: %w", err)
-		}
-		logger.Warn("rpc version probe failed (continuing)", "err", err)
-	} else {
-		logger.Info("rpc reachable",
-			"endpoint", rpc.Endpoint(),
-			"rpc_version", vi.Version,
-			"captive_core", vi.CaptiveCoreVersion,
-			"protocol", vi.ProtocolVersion,
-		)
+		return fmt.Errorf("build dispatcher: %w", err)
 	}
 
-	// ─── Source registry ────────────────────────────────────────
-	sources, err := buildSources(cfg.Ingestion.EnabledSources, rpc, cfg.Oracle)
+	// ─── Starting ledger ───────────────────────────────────────
+	from, err := resolveStartLedger(rootCtx, store, cfg.Ingestion.BackfillFromLedger)
 	if err != nil {
-		return err
+		return fmt.Errorf("resolve start ledger: %w", err)
 	}
-	if len(sources) == 0 {
-		return fmt.Errorf("no sources enabled in ingestion.enabled_sources")
-	}
-	for _, s := range sources {
-		logger.Info("source registered", "name", s.Name())
-	}
+	logger.Info("starting ledger resolved", "from", from)
 
 	if dryRun {
 		logger.Info("dry-run complete — exiting")
@@ -143,64 +128,34 @@ func run(cfgPath string, dryRun bool) error {
 	}
 
 	// ─── Metrics HTTP endpoint ──────────────────────────────────
-	// The indexer emits SourceEvents, SourceLag, CursorLastLedger,
-	// SourceDecode/Orphan/InsertErrors, OracleLastUpdate, etc. —
-	// every ingestion alert in deploy/monitoring/rules/ depends
-	// on Prometheus being able to scrape these. Without this
-	// server the alerts' metric expressions always return "no
-	// data" and never fire.
-	var metricsSrv *http.Server
-	if cfg.Obs.MetricsListen != "" {
-		mux := http.NewServeMux()
-		mux.Handle("GET /metrics", obs.Handler())
-		mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, _ *http.Request) {
-			w.WriteHeader(http.StatusOK)
-			_, _ = w.Write([]byte("ok\n"))
-		})
-		metricsSrv = &http.Server{
-			Addr:              cfg.Obs.MetricsListen,
-			Handler:           mux,
-			ReadHeaderTimeout: 5 * time.Second,
-		}
-		go func() {
-			logger.Info("metrics endpoint listening", "addr", cfg.Obs.MetricsListen)
-			if err := metricsSrv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
-				logger.Error("metrics server exited", "err", err)
-			}
-		}()
-	} else {
-		logger.Warn("obs.metrics_listen is empty — /metrics endpoint disabled; Prometheus alerts on source metrics will not fire")
-	}
+	metricsSrv := startMetricsServer(cfg.Obs, logger)
 
-	// ─── Orchestration ──────────────────────────────────────────
-	// consumer.Orchestrator runs each source in its own goroutine
-	// with restart-backoff + periodic cursor persistence.
-	orch := consumer.New(
-		cursorAdapter{store},
-		sources,
-		consumer.Config{
-			BackfillFromLedger: cfg.Ingestion.BackfillFromLedger,
-		},
-		logger,
-	)
-
-	orchDone := make(chan error, 1)
-	go func() { orchDone <- orch.Run(rootCtx) }()
-
-	// Consumer goroutine: pull events off the orchestrator, persist.
+	// ─── Sink goroutine ────────────────────────────────────────
+	events := make(chan consumer.Event, 256)
 	sinkDone := make(chan struct{})
 	go func() {
 		defer close(sinkDone)
-		persistEvents(rootCtx, logger, store, orch.Events())
+		persistEvents(rootCtx, logger, store, events)
 	}()
 
-	// Wait for shutdown signal OR orchestrator exit.
+	// ─── Ledgerstream → dispatcher loop ─────────────────────────
+	lsConfig := ledgerstreamConfig(cfg)
+	streamErr := make(chan error, 1)
+	go func() {
+		streamErr <- ledgerstream.Stream(rootCtx, lsConfig, from, 0, /*unbounded*/
+			func(lcm sdkxdr.LedgerCloseMeta) error {
+				return processAndPersist(rootCtx, disp, events, store, logger, lcm, cfg.Stellar.Network)
+			},
+		)
+	}()
+
+	// ─── Shutdown ──────────────────────────────────────────────
 	select {
 	case <-rootCtx.Done():
 		logger.Info("shutdown signal received — draining for up to 30s")
-	case err := <-orchDone:
+	case err := <-streamErr:
 		if err != nil && !errors.Is(err, context.Canceled) {
-			logger.Error("orchestrator exited with error", "err", err)
+			logger.Error("ledgerstream exited with error", "err", err)
 			return err
 		}
 	}
@@ -209,17 +164,13 @@ func run(cfgPath string, dryRun bool) error {
 	defer stopDrain()
 
 	if metricsSrv != nil {
-		// Stop /metrics first so Prometheus's `up{job="indexer"}`
-		// goes to 0 promptly (k8s pod-termination is expected to
-		// look offline — better than staying up while the sink
-		// drain holds it). Shutdown is synchronous; any in-flight
-		// scrape either completes or is aborted at shutdownCtx
-		// expiry, which is also the sink-drain budget.
 		if err := metricsSrv.Shutdown(shutdownCtx); err != nil {
 			logger.Warn("metrics server shutdown", "err", err)
 		}
 	}
 
+	// Close events channel so the sink returns after draining.
+	close(events)
 	select {
 	case <-sinkDone:
 		logger.Info("clean shutdown")
@@ -229,78 +180,189 @@ func run(cfgPath string, dryRun bool) error {
 	return nil
 }
 
-// cursorAdapter bridges *timescale.Store and consumer.CursorStore.
-// Translates timescale.ErrNotFound → consumer.ErrNoCursor and
-// converts between the twin Cursor shapes.
-type cursorAdapter struct{ s *timescale.Store }
+// ─── Dispatcher wiring ──────────────────────────────────────────
 
-func (a cursorAdapter) GetCursor(ctx context.Context, source, sub string) (consumer.Cursor, error) {
-	c, err := a.s.GetCursor(ctx, source, sub)
-	if errors.Is(err, timescale.ErrNotFound) {
-		return consumer.Cursor{}, consumer.ErrNoCursor
-	}
-	if err != nil {
-		return consumer.Cursor{}, err
-	}
-	return consumer.Cursor{
-		Source: c.Source, Sub: c.Sub,
-		LastLedger: c.LastLedger, UpdatedAt: c.UpdatedAt,
-	}, nil
-}
-
-func (a cursorAdapter) UpsertCursor(ctx context.Context, source, sub string, lastLedger uint32) error {
-	return a.s.UpsertCursor(ctx, source, sub, lastLedger)
-}
-
-// buildSources constructs a Source per configured name. Unknown
-// names are a fatal config error. Sources that require per-source
-// config (Reflector's contract addresses, future CEX/FX creds)
-// read from `oracle` (and future `cex`, `fx` config sections);
-// missing required fields are also fatal at startup.
-func buildSources(names []string, rpc *stellarrpc.Client, oracle config.OracleConfig) ([]consumer.Source, error) {
-	var out []consumer.Source
+// buildDispatcher maps cfg.Ingestion.EnabledSources to a configured
+// Dispatcher. Unknown source names are a fatal config error.
+//
+// Reflector variants each take the mainnet contract address from
+// cfg.Oracle; any variant enabled without its corresponding
+// contract configured is rejected at startup.
+func buildDispatcher(names []string, oracle config.OracleConfig) (*dispatcher.Dispatcher, error) {
+	var decoders []dispatcher.Decoder
+	var opDecoders []dispatcher.OpDecoder
 	for _, name := range names {
 		switch strings.ToLower(name) {
 		case soroswap.SourceName:
-			out = append(out, soroswap.New(rpc))
+			// Decoder loads pair registry lazily from factory
+			// new_pair events seen during ingest. Operator can
+			// also call SeedPair at startup from Timescale's
+			// distinct (source, pair_contract) set — future
+			// ratesengine-ops subcommand.
+			decoders = append(decoders, soroswap.NewDecoder())
 		case aquarius.SourceName:
-			out = append(out, aquarius.New(rpc))
+			decoders = append(decoders, aquarius.NewDecoder())
 		case phoenix.SourceName:
-			out = append(out, phoenix.New(rpc))
-
+			decoders = append(decoders, phoenix.NewDecoder())
 		case reflector.SourceDEX:
 			if oracle.Reflector.DEXContract == "" {
 				return nil, fmt.Errorf(
-					"source %q enabled but oracle.reflector.dex_contract is empty — see docs/discovery/oracles/reflector.md",
+					"source %q enabled but oracle.reflector.dex_contract is empty",
 					name)
 			}
-			out = append(out, reflector.NewDEX(rpc, oracle.Reflector.DEXContract))
+			decoders = append(decoders,
+				reflector.NewDecoder(reflector.VariantDEX, oracle.Reflector.DEXContract))
 		case reflector.SourceCEX:
 			if oracle.Reflector.CEXContract == "" {
 				return nil, fmt.Errorf(
-					"source %q enabled but oracle.reflector.cex_contract is empty — see docs/discovery/oracles/reflector.md",
+					"source %q enabled but oracle.reflector.cex_contract is empty",
 					name)
 			}
-			out = append(out, reflector.NewCEX(rpc, oracle.Reflector.CEXContract))
+			decoders = append(decoders,
+				reflector.NewDecoder(reflector.VariantCEX, oracle.Reflector.CEXContract))
 		case reflector.SourceFX:
 			if oracle.Reflector.FXContract == "" {
 				return nil, fmt.Errorf(
-					"source %q enabled but oracle.reflector.fx_contract is empty — see docs/discovery/oracles/reflector.md",
+					"source %q enabled but oracle.reflector.fx_contract is empty",
 					name)
 			}
-			out = append(out, reflector.NewFX(rpc, oracle.Reflector.FXContract))
-
-		// TODO(#0): comet, blend, sdex, redstone, band, cex-*, fx-*.
+			decoders = append(decoders,
+				reflector.NewDecoder(reflector.VariantFX, oracle.Reflector.FXContract))
+		case sdex.SourceName:
+			opDecoders = append(opDecoders, sdex.NewDecoder())
 		default:
 			return nil, fmt.Errorf("unknown source %q in ingestion.enabled_sources — check internal/sources/", name)
 		}
 	}
-	return out, nil
+	disp := dispatcher.New(decoders...)
+	for _, od := range opDecoders {
+		disp.AddOpDecoder(od)
+	}
+	return disp, nil
 }
 
-// persistEvents is the event-sink loop. Writes Trade events to the
-// trades hypertable; logs unknown event kinds as a soft warning.
-// Every accepted event increments per-source Prometheus counters.
+// ─── Ledger processing ─────────────────────────────────────────
+
+// processAndPersist is invoked by ledgerstream for each received
+// LedgerCloseMeta. Runs the dispatcher, forwards outputs to the
+// sink channel, and persists the last-processed cursor after
+// successful emission.
+//
+// Returns a non-nil error only if the context is canceled mid-
+// ledger (ledgerstream treats that as shutdown). Per-event decode
+// errors are absorbed by the dispatcher.
+func processAndPersist(
+	ctx context.Context,
+	disp *dispatcher.Dispatcher,
+	events chan<- consumer.Event,
+	store *timescale.Store,
+	logger *slog.Logger,
+	lcm sdkxdr.LedgerCloseMeta,
+	networkPassphrase string,
+) error {
+	outputs, err := disp.ProcessLedger(lcm, networkPassphrase)
+	if err != nil {
+		// Hard structural error (bad LCM) — log + keep going so a
+		// single malformed ledger doesn't abort the whole
+		// pipeline. The ledgerstream retry layer will eventually
+		// surface persistent failures via its own error channel.
+		logger.Warn("dispatcher rejected ledger",
+			"ledger", lcm.LedgerSequence(),
+			"err", err,
+		)
+		return nil
+	}
+	for _, ev := range outputs {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case events <- ev:
+		}
+	}
+	if err := store.UpsertCursor(ctx, cursorSource, "", lcm.LedgerSequence()); err != nil {
+		logger.Warn("cursor upsert",
+			"ledger", lcm.LedgerSequence(),
+			"err", err,
+		)
+	}
+	obs.CursorLastLedger.WithLabelValues(cursorSource, "").Set(float64(lcm.LedgerSequence()))
+	return nil
+}
+
+// resolveStartLedger chooses where to begin ingesting on startup:
+//  1. A persisted cursor wins — resume from one ledger past it.
+//  2. Otherwise, cfg.Ingestion.BackfillFromLedger.
+//  3. Otherwise, an error — we refuse to pick a default ledger
+//     silently because that's how operators end up re-ingesting
+//     genesis by accident.
+func resolveStartLedger(ctx context.Context, store *timescale.Store, backfillFrom uint32) (uint32, error) {
+	c, err := store.GetCursor(ctx, cursorSource, "")
+	switch {
+	case errors.Is(err, timescale.ErrNotFound):
+		if backfillFrom == 0 {
+			return 0, fmt.Errorf(
+				"no persisted cursor and ingestion.backfill_from_ledger=0 — " +
+					"set backfill_from_ledger to an explicit start, e.g. the " +
+					"current network tip",
+			)
+		}
+		return backfillFrom, nil
+	case err != nil:
+		return 0, fmt.Errorf("load cursor: %w", err)
+	}
+	return c.LastLedger + 1, nil
+}
+
+// ─── Config → ledgerstream ──────────────────────────────────────
+
+// ledgerstreamConfig builds a ledgerstream.Config from our TOML
+// config. Only S3/MinIO is wired today; Filesystem is reserved
+// for tests, GCS for a hypothetical cloud deploy.
+func ledgerstreamConfig(cfg config.Config) ledgerstream.Config {
+	return ledgerstream.Config{
+		DataStore: datastore.DataStoreConfig{
+			Type: "S3",
+			Params: map[string]string{
+				"destination_bucket_path": cfg.Storage.S3BucketLive,
+				"region":                  cfg.Storage.S3Region,
+				"endpoint_url":            cfg.Storage.S3Endpoint,
+			},
+			NetworkPassphrase: cfg.Stellar.Network,
+			Compression:       "zstd",
+		},
+	}
+}
+
+// ─── Metrics + sink — unchanged from prior revision ─────────────
+
+func startMetricsServer(obsCfg config.ObsConfig, logger *slog.Logger) *http.Server {
+	if obsCfg.MetricsListen == "" {
+		logger.Warn("obs.metrics_listen is empty — /metrics endpoint disabled; Prometheus alerts on source metrics will not fire")
+		return nil
+	}
+	mux := http.NewServeMux()
+	mux.Handle("GET /metrics", obs.Handler())
+	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte("ok\n"))
+	})
+	srv := &http.Server{
+		Addr:              obsCfg.MetricsListen,
+		Handler:           mux,
+		ReadHeaderTimeout: 5 * time.Second,
+	}
+	go func() {
+		logger.Info("metrics endpoint listening", "addr", obsCfg.MetricsListen)
+		if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+			logger.Error("metrics server exited", "err", err)
+		}
+	}()
+	return srv
+}
+
+// persistEvents is the event-sink loop. Writes each dispatcher
+// output to the right hypertable. Every accepted event increments
+// per-source Prometheus counters.
 func persistEvents(ctx context.Context, logger *slog.Logger, store *timescale.Store, in <-chan consumer.Event) {
 	for {
 		select {
@@ -308,8 +370,6 @@ func persistEvents(ctx context.Context, logger *slog.Logger, store *timescale.St
 			return
 		case ev, ok := <-in:
 			if !ok {
-				// Events channel closed — orchestrator is shutting
-				// down. Exit cleanly rather than looping on nil events.
 				return
 			}
 			handleOneEvent(ctx, logger, store, ev)
@@ -317,11 +377,10 @@ func persistEvents(ctx context.Context, logger *slog.Logger, store *timescale.St
 	}
 }
 
-// handleOneEvent processes one event with panic recovery. A panic
-// in a single event (e.g. a malformed Amount that blows up in the
-// SQL driver) must not take down the sink. The source sending the
-// event has its own decoder-error metric; here we focus on keeping
-// the sink alive.
+// handleOneEvent dispatches one event to its hypertable insert.
+// Panic recovery keeps the sink alive when a single malformed
+// Amount would otherwise crash the SQL driver — the source-level
+// decoder error metric has already counted the upstream event.
 func handleOneEvent(ctx context.Context, logger *slog.Logger, store *timescale.Store, ev consumer.Event) {
 	defer func() {
 		if r := recover(); r != nil {
@@ -335,9 +394,6 @@ func handleOneEvent(ctx context.Context, logger *slog.Logger, store *timescale.S
 
 	source := ev.Source()
 	if source == "" {
-		// A Source() returning empty is a contract violation —
-		// would show up as "empty-string" label in metrics and
-		// confuse dashboards. Log + attribute to a sentinel.
 		logger.Warn("event with empty source", "kind", ev.EventKind())
 		source = "_unknown"
 	}
@@ -351,15 +407,17 @@ func handleOneEvent(ctx context.Context, logger *slog.Logger, store *timescale.S
 		persistTrade(ctx, logger, store, e.Trade)
 	case phoenix.TradeEvent:
 		persistTrade(ctx, logger, store, e.Trade)
+	case sdex.TradeEvent:
+		persistTrade(ctx, logger, store, e.Trade)
 	case reflector.UpdateEvent:
 		persistOracle(ctx, logger, store, e.Update)
 	default:
-		// A source emitted an event type this sink doesn't know how
+		// A source emitted an event type the sink doesn't know how
 		// to persist. Usually means a new source was registered in
-		// buildSources() but the type-switch wasn't updated in
-		// lock-step. Count + log so ops dashboards flag it — silent
-		// drops would otherwise look like "metrics say we're ingesting
-		// but the tables stay empty" from the operator's POV.
+		// buildDispatcher but the type-switch wasn't updated in
+		// lock-step. Count + log — silent drops would otherwise
+		// look like "metrics say we're ingesting but the tables
+		// stay empty" from the operator's POV.
 		obs.SourceInsertErrorsTotal.WithLabelValues(source, "unhandled").Inc()
 		logger.Warn("unhandled event kind",
 			"kind", ev.EventKind(),
@@ -386,10 +444,6 @@ func persistTrade(ctx context.Context, logger *slog.Logger, store *timescale.Sto
 	)
 }
 
-// persistOracle writes one OracleUpdate to the oracle_updates
-// hypertable. Mirrors persistTrade for the oracle side — the
-// indexer's event-sink type-switch routes each event type to its
-// matching sink.
 func persistOracle(ctx context.Context, logger *slog.Logger, store *timescale.Store, u canonical.OracleUpdate) {
 	if err := store.InsertOracleUpdate(ctx, u); err != nil {
 		obs.SourceInsertErrorsTotal.WithLabelValues(u.Source, "oracle").Inc()
@@ -414,7 +468,6 @@ func persistOracle(ctx context.Context, logger *slog.Logger, store *timescale.St
 	)
 }
 
-// mkLogger returns a slog logger at the configured level + format.
 func mkLogger(obs config.ObsConfig) *slog.Logger {
 	level := slog.LevelInfo
 	switch strings.ToLower(obs.LogLevel) {
@@ -425,7 +478,6 @@ func mkLogger(obs config.ObsConfig) *slog.Logger {
 	case "error":
 		level = slog.LevelError
 	}
-
 	var handler slog.Handler
 	opts := &slog.HandlerOptions{Level: level}
 	switch strings.ToLower(obs.LogFormat) {
@@ -434,7 +486,5 @@ func mkLogger(obs config.ObsConfig) *slog.Logger {
 	default:
 		handler = slog.NewJSONHandler(os.Stderr, opts)
 	}
-	return slog.New(handler).With(
-		"binary", "ratesengine-indexer",
-	)
+	return slog.New(handler).With("binary", "ratesengine-indexer")
 }

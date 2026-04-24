@@ -6,14 +6,14 @@ import (
 	"time"
 
 	"github.com/RatesEngine/rates-engine/internal/canonical"
-	"github.com/RatesEngine/rates-engine/internal/stellarrpc"
+	"github.com/RatesEngine/rates-engine/internal/events"
 )
 
 // mustClosed is the test-side equivalent of the processPage
 // `e.EventClosedAt() + bail on error` guard. Test fixtures always
 // have well-formed RFC 3339 timestamps, so parse failure here is a
 // fixture bug.
-func mustClosed(t *testing.T, e *stellarrpc.Event) time.Time {
+func mustClosed(t *testing.T, e *events.Event) time.Time {
 	t.Helper()
 	ts, err := e.EventClosedAt()
 	if err != nil {
@@ -44,7 +44,7 @@ func TestClassify(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			field, isSwap := classify(&stellarrpc.Event{Topic: tc.topics})
+			field, isSwap := classify(&events.Event{Topic: tc.topics})
 			if isSwap != tc.wantIsSwap {
 				t.Errorf("isSwap = %v, want %v", isSwap, tc.wantIsSwap)
 			}
@@ -60,8 +60,8 @@ func TestRawSwapCompleteCount(t *testing.T) {
 	if r.Complete() || r.fieldsPresent() != 0 {
 		t.Fatal("zero value should be empty")
 	}
-	r.Sender = &stellarrpc.Event{}
-	r.BuyToken = &stellarrpc.Event{}
+	r.Sender = &events.Event{}
+	r.BuyToken = &events.Event{}
 	if r.Complete() {
 		t.Fatal("2/8 should not be complete")
 	}
@@ -170,7 +170,7 @@ func TestBufferOrphansReportIncompletes(t *testing.T) {
 
 func TestBufferRejectsUnknownField(t *testing.T) {
 	buf := newBuffer()
-	e := &stellarrpc.Event{
+	e := &events.Event{
 		Ledger: 1, TxHash: phoenixTxHash, OperationIndex: 0,
 		LedgerClosedAt: time.Now().UTC().Format(time.RFC3339),
 		Topic:          []string{TopicSymbolSwap, "nonexistent_field"},
@@ -248,14 +248,14 @@ func TestDecodeSwap_happyPath(t *testing.T) {
 	r := &RawSwap{
 		Ledger: 52_430_001, TxHash: phoenixTxHash, OpIndex: 0,
 		Pool: usdcContract, ClosedAt: now,
-		Sender:         &stellarrpc.Event{Value: "sender"},
-		SellToken:      &stellarrpc.Event{Value: "sell"},
-		OfferAmount:    &stellarrpc.Event{Value: "offer"},
-		ActualReceived: &stellarrpc.Event{Value: "received"},
-		BuyToken:       &stellarrpc.Event{Value: "buy"},
-		ReturnAmount:   &stellarrpc.Event{Value: "return"},
-		SpreadAmount:   &stellarrpc.Event{Value: "spread"},
-		ReferralFee:    &stellarrpc.Event{Value: "refferral"},
+		Sender:         &events.Event{Value: "sender"},
+		SellToken:      &events.Event{Value: "sell"},
+		OfferAmount:    &events.Event{Value: "offer"},
+		ActualReceived: &events.Event{Value: "received"},
+		BuyToken:       &events.Event{Value: "buy"},
+		ReturnAmount:   &events.Event{Value: "return"},
+		SpreadAmount:   &events.Event{Value: "spread"},
+		ReferralFee:    &events.Event{Value: "refferral"},
 	}
 
 	trade, err := decodeSwap(r)
@@ -280,20 +280,16 @@ func TestDecodeSwap_happyPath(t *testing.T) {
 }
 
 func TestDecodeSwap_incomplete(t *testing.T) {
-	r := &RawSwap{Sender: &stellarrpc.Event{}}
+	r := &RawSwap{Sender: &events.Event{}}
 	_, err := decodeSwap(r)
 	if err == nil {
 		t.Fatal("expected error for incomplete swap")
 	}
 }
 
-func TestSource_Basics(t *testing.T) {
-	s := New(nil, WithPollInterval(500*time.Millisecond))
-	if s.Name() != SourceName {
-		t.Errorf("Name() = %q", s.Name())
-	}
-	if h := s.Health(); h.Connected {
-		t.Errorf("initial Connected should be false, got %+v", h)
+func TestDecoder_NameMatchesSourceName(t *testing.T) {
+	if got := NewDecoder().Name(); got != SourceName {
+		t.Errorf("Name() = %q, want %q", got, SourceName)
 	}
 }
 
@@ -330,18 +326,18 @@ func TestBufferBackfillOldEventsComplete(t *testing.T) {
 // (ledger, tx, op) = (100, phoenixTxHash, 0). Order: sender,
 // sell_token, offer_amount, actual_received, buy_token,
 // return_amount, spread, referral.
-func allEightSwapEvents() []*stellarrpc.Event {
+func allEightSwapEvents() []*events.Event {
 	return allEightSwapEventsKeyed(100, phoenixTxHash, 0)
 }
 
-func allEightSwapEventsKeyed(ledger uint32, tx string, op int) []*stellarrpc.Event {
+func allEightSwapEventsKeyed(ledger uint32, tx string, op int) []*events.Event {
 	return allEightSwapEventsAt(ledger, tx, op, time.Now().UTC())
 }
 
-func allEightSwapEventsAt(ledger uint32, tx string, op int, ts time.Time) []*stellarrpc.Event {
+func allEightSwapEventsAt(ledger uint32, tx string, op int, ts time.Time) []*events.Event {
 	closedAt := ts.Format(time.RFC3339)
-	field := func(topic1 string) *stellarrpc.Event {
-		return &stellarrpc.Event{
+	field := func(topic1 string) *events.Event {
+		return &events.Event{
 			Ledger: ledger, TxHash: tx, OperationIndex: op,
 			LedgerClosedAt: closedAt,
 			ContractID:     usdcContract,
@@ -349,7 +345,7 @@ func allEightSwapEventsAt(ledger uint32, tx string, op int, ts time.Time) []*ste
 			Value:          "stub",
 		}
 	}
-	return []*stellarrpc.Event{
+	return []*events.Event{
 		field(TopicSymbolSender),
 		field(TopicSymbolSellToken),
 		field(TopicSymbolOfferAmount),

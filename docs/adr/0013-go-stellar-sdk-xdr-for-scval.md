@@ -1,8 +1,9 @@
 ---
 adr: 0013
 title: Adopt go-stellar-sdk/xdr for SCVal decoding in source connectors
-status: Proposed
+status: Accepted
 date: 2026-04-23
+accepted: 2026-04-23
 supersedes: []
 superseded_by: null
 ---
@@ -116,11 +117,30 @@ PR doesn't re-derive it:
    shape (per [sep-41-token-events.md](../discovery/notes/sep-41-token-events.md)),
    CAP-67 unified 4-topic shape (per [cap-67-unified-events.md](../discovery/notes/cap-67-unified-events.md)).
 
+## Implementation status (2026-04-23)
+
+PR 164a landed the scaffolding — Accepted status reflects that code.
+
+- Wrapper package lives at `internal/scval/` (not `internal/xdr/`).
+  Name change made because every connector operates on SCVal, not
+  on arbitrary XDR unions; the narrower name steers usage toward
+  the intended surface.
+- Re-exports `scval.ScVal` and `scval.ScMapEntry` as type aliases so
+  connectors never import `github.com/stellar/go-stellar-sdk/xdr`
+  directly. The xdr import is confined to `internal/scval/` and
+  `canonical/strkey.go` (still pending conversion — separate PR).
+- Golden regression in `internal/scval/scval_test.go`
+  (`TestGolden_symbolBytes`) pins the base64 bytes for
+  `Symbol("REFLECTOR")` and `Symbol("update")` so an SDK upgrade
+  that changes wire encoding fires a test before shipping.
+- Reflector is the first connector off stubs; Soroswap / Aquarius
+  / Phoenix follow in PRs 164b / 164c / 164d.
+
 ## References
 
 - Related ADRs: ADR-0001 (Horizon ruled out), ADR-0003 (i128 no
   truncation — must survive decoding path), ADR-0005 (monorepo
-  structure — `internal/xdr/` wrapper placement)
+  structure — `internal/scval/` wrapper placement)
 - Discovery doc: [stellar-archivist.md](../discovery/data-sources/stellar-archivist.md)
   (SDK re-homing), [soroswap.md §4](../discovery/dexes-amms/soroswap.md)
   (swap+sync correlation)
