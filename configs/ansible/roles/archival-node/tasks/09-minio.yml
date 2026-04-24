@@ -86,3 +86,88 @@
     - backups            # pgBackRest WAL + rdb dumps (phase 2)
   register: mc_mb
   changed_when: "'Bucket created successfully' in mc_mb.stdout"
+
+# ──── Least-privilege user for galexie ────────────────────────────
+# galexie had been using MinIO root creds. Task #156 scoped it to
+# its own user with a bucket-restricted policy — can write to
+# galexie-live only, not backups or galexie-archive.
+
+- name: Render galexie-writer MinIO policy
+  ansible.builtin.copy:
+    dest: /etc/minio/policies/galexie-writer.json
+    owner: root
+    group: root
+    mode: "0644"
+    content: |
+      {
+        "Version": "2012-10-17",
+        "Statement": [
+          {
+            "Effect": "Allow",
+            "Action": [
+              "s3:PutObject",
+              "s3:GetObject",
+              "s3:ListBucket",
+              "s3:GetBucketLocation",
+              "s3:ListBucketMultipartUploads",
+              "s3:ListMultipartUploadParts",
+              "s3:AbortMultipartUpload"
+            ],
+            "Resource": [
+              "arn:aws:s3:::{{ galexie_s3_bucket }}",
+              "arn:aws:s3:::{{ galexie_s3_bucket }}/*"
+            ]
+          }
+        ]
+      }
+  register: galexie_policy_file
+
+- name: Ensure /etc/minio/policies directory exists
+  ansible.builtin.file:
+    path: /etc/minio/policies
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Install / update galexie-writer MinIO policy
+  # `mc admin policy create` is idempotent when the policy exists —
+  # pass the same JSON and it's a no-op. If JSON changed it updates.
+  ansible.builtin.command:
+    argv:
+      - /usr/local/bin/mc
+      - admin
+      - policy
+      - create
+      - local
+      - galexie-writer
+      - /etc/minio/policies/galexie-writer.json
+  changed_when: false
+
+- name: Create galexie-writer MinIO user (vault-supplied creds)
+  # `mc admin user add` updates the secret if the user already exists.
+  ansible.builtin.command:
+    argv:
+      - /usr/local/bin/mc
+      - admin
+      - user
+      - add
+      - local
+      - "{{ galexie_s3_access_key }}"
+      - "{{ galexie_s3_secret_key }}"
+  changed_when: false
+  no_log: true
+
+- name: Attach galexie-writer policy to galexie-writer user
+  ansible.builtin.command:
+    argv:
+      - /usr/local/bin/mc
+      - admin
+      - policy
+      - attach
+      - local
+      - galexie-writer
+      - --user
+      - "{{ galexie_s3_access_key }}"
+  changed_when: false
+  failed_when: false   # mc returns non-zero if policy already attached

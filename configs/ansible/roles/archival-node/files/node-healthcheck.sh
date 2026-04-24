@@ -46,14 +46,17 @@ FAILS=()
 add_fail() { FAILS+=("$1"); }
 
 # --- Check 1: systemd service liveness -------------------------
+# r1's Phase 1 shape after trimming: just postgres, galexie (with
+# its captive-core producing to MinIO), minio, and node_exporter.
+# Removed 2026-04-23: primary stellar-core (see r1-deployment-state
+# pitfall #1/#7), stellar-core-prometheus-exporter (scraped primary),
+# and stellar-rpc (redundant — our indexer consumes galexie's MinIO
+# output directly via Ingest SDK).
 SERVICES=(
   postgresql@15-main
-  stellar-core
-  stellar-rpc
   galexie
   minio
   node_exporter
-  stellar-core-prometheus-exporter
 )
 for s in "${SERVICES[@]}"; do
   state=$(systemctl is-active "$s" 2>&1)
@@ -62,58 +65,49 @@ for s in "${SERVICES[@]}"; do
   fi
 done
 
-# --- Check 2 + 3: stellar-core sync state + ledger age ---------
-if info=$(curl -sfm 5 http://127.0.0.1:11626/info 2>&1); then
-  core_state=$(echo "$info" | jq -r '.info.state // ""')
-  close_time=$(echo "$info" | jq -r '.info.ledger.closeTime // 0')
-  if [ "$core_state" != "Synced!" ]; then
-    add_fail "stellar-core state=$core_state (expected Synced!)"
-  fi
-  now_epoch=$(date +%s)
-  age=$(( now_epoch - close_time ))
-  if [ "$age" -gt "$MAX_LEDGER_AGE_SEC" ]; then
-    add_fail "stellar-core last ledger is ${age}s old (threshold ${MAX_LEDGER_AGE_SEC}s)"
-  fi
-else
-  add_fail "stellar-core /info unreachable on :11626"
-fi
-
-# --- Check 4: stellar-rpc is reachable -------------------------
-# On initial catchup stellar-rpc's DB is empty and getHealth
-# returns a JSON-RPC error about that state. That's "still
-# warming up," not "broken." Distinguish:
-#   * transport error (empty response, non-JSON, connection refused)
-#     → stellar-rpc is actually down: FAIL
-#   * valid JSON-RPC response with status=healthy → OK
-#   * valid JSON-RPC response with "data stores are not initialized"
-#     error → warming-up state, treat as OK until we've been in this
-#     state for > STELLAR_RPC_WARMUP_SEC (default 2 h). After that,
-#     escalate — it probably means captive-core is stuck.
+# Primary stellar-core /info probe and stellar-rpc getHealth probe
+# were both removed when we trimmed the stack on 2026-04-23. The
+# "is the network being followed?" signal is now exclusively the
+# galexie upload-freshness check below (Check 4.5).
 #
-# The warmup timer starts at service ActiveEnterTimestamp, so a
-# stellar-rpc restart resets the grace window automatically.
-rpc_resp=$(curl -sfm 5 -X POST -H 'Content-Type: application/json' \
-  -d '{"jsonrpc":"2.0","id":1,"method":"getHealth"}' \
-  http://127.0.0.1:8000 2>&1) || rpc_resp=""
-rpc_status=$(echo "$rpc_resp" | jq -r '.result.status // ""' 2>/dev/null)
-rpc_error=$(echo "$rpc_resp" | jq -r '.error.message // ""' 2>/dev/null)
+# If stellar-rpc is ever re-added, restore a getHealth probe here
+# with the latency-grace logic that was in git ref f7527f7.
 
-if [ "$rpc_status" = "healthy" ]; then
-  : # fully healthy, no action
-elif echo "$rpc_error" | grep -q "data stores are not initialized"; then
-  # Warming up. Escalate only if we've been in this state too long.
-  WARMUP_MAX="${STELLAR_RPC_WARMUP_SEC:-7200}"
-  enter_iso=$(systemctl show -p ActiveEnterTimestamp --value stellar-rpc 2>/dev/null)
-  enter_epoch=$(date -d "$enter_iso" +%s 2>/dev/null || echo 0)
-  now_epoch=$(date +%s)
-  age=$(( now_epoch - enter_epoch ))
-  if [ "$age" -gt "$WARMUP_MAX" ]; then
-    add_fail "stellar-rpc still has empty DB after ${age}s (warmup cap ${WARMUP_MAX}s) — captive-core likely stuck"
+# --- Check 4.5: galexie upload freshness -----------------------
+# Galexie's metrics endpoint (admin_port 6061) has been observed
+# to HANG for minutes when captive-core is stuck — so we can't
+# use it as a liveness signal. The true signal is: is the
+# galexie-live MinIO bucket growing?
+#
+# We check the mtime of the most-recent object in the bucket
+# against wall clock. In steady state a new object lands every
+# ~5 sec (one per closed ledger). If the most recent is > 10 min
+# old AND galexie has been running > GALEXIE_WARMUP_SEC, fail.
+#
+# Requires `mc alias set local` to have been run (done at role-
+# apply time, credentials in /etc/default/node-healthcheck or
+# implicit via the `mc` config under HOME). If mc isn't reachable
+# we don't FAIL here — MinIO-down is caught by check 1.
+GALEXIE_MAX_LAG_SEC="${GALEXIE_MAX_LAG_SEC:-600}"
+GALEXIE_WARMUP_SEC="${GALEXIE_WARMUP_SEC:-1800}"
+g_enter_iso=$(systemctl show -p ActiveEnterTimestamp --value galexie 2>/dev/null)
+g_enter_epoch=$(date -d "$g_enter_iso" +%s 2>/dev/null || echo 0)
+g_age=$(( $(date +%s) - g_enter_epoch ))
+if [ "$g_age" -gt "$GALEXIE_WARMUP_SEC" ]; then
+  # mc --json gives a machine-readable listing; sort by lastModified.
+  last_iso=$(mc ls --json --recursive local/galexie-live/ 2>/dev/null \
+    | jq -r 'select(.key | test("\\.xdr\\.zst$")) | .lastModified' 2>/dev/null \
+    | sort -r | head -1)
+  if [ -n "$last_iso" ]; then
+    last_epoch=$(date -d "$last_iso" +%s 2>/dev/null || echo 0)
+    lag=$(( $(date +%s) - last_epoch ))
+    if [ "$lag" -gt "$GALEXIE_MAX_LAG_SEC" ]; then
+      add_fail "galexie last upload was ${lag}s ago (threshold ${GALEXIE_MAX_LAG_SEC}s) — captive-core likely stuck"
+    fi
   fi
-elif [ -z "$rpc_resp" ] || ! echo "$rpc_resp" | jq -e . >/dev/null 2>&1; then
-  add_fail "stellar-rpc unreachable or non-JSON response"
-else
-  add_fail "stellar-rpc unhealthy: status='$rpc_status' error='$rpc_error'"
+  # If last_iso is empty: either bucket is empty (never uploaded)
+  # or mc is broken. Leave to check 1 (minio service) + manual
+  # inspection; don't flag here.
 fi
 
 # --- Check 5: ZFS pool state -----------------------------------
@@ -122,11 +116,16 @@ if [ "$pool_state" != "ONLINE" ]; then
   add_fail "zpool $POOL_NAME state=$pool_state (expected ONLINE)"
 fi
 
-# --- Check 6: disk free on stellar-core data dir ---------------
-disk_pct_used=$(df --output=pcent /var/lib/stellar-core | tail -1 | tr -d ' %')
-if [ "${disk_pct_used:-0}" -gt 90 ]; then
-  add_fail "/var/lib/stellar-core is ${disk_pct_used}% full"
-fi
+# --- Check 6: disk free on the captive-core bucket dirs --------
+# Check galexie's captive-core first (it's the primary producer).
+# stellar-rpc's captive is secondary.
+for d in /var/lib/galexie /var/lib/stellar-rpc; do
+  [ -d "$d" ] || continue
+  disk_pct_used=$(df --output=pcent "$d" | tail -1 | tr -d ' %')
+  if [ "${disk_pct_used:-0}" -gt 90 ]; then
+    add_fail "$d is ${disk_pct_used}% full"
+  fi
+done
 
 # --- Report ----------------------------------------------------
 if [ ${#FAILS[@]} -eq 0 ]; then

@@ -27,7 +27,7 @@ func (s *Store) InsertOracleUpdate(ctx context.Context, u canonical.OracleUpdate
             $3, $4, $5, $6,
             $7, $8,
             $9, $10,
-            NULLIF($11, 0), NULLIF($12, '')
+            NULLIF($11, 0.0), NULLIF($12, '')
         )
         ON CONFLICT (source, ledger, tx_hash, op_index, ts) DO NOTHING
     `

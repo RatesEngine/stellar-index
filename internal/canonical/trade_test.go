@@ -43,19 +43,19 @@ func TestTrade_Validate_happy(t *testing.T) {
 
 func TestTrade_Validate_errors(t *testing.T) {
 	cases := map[string]func(*c.Trade){
-		"empty source":     func(t *c.Trade) { t.Source = "" },
-		"zero ledger":      func(t *c.Trade) { t.Ledger = 0 },
-		"short tx hash":    func(t *c.Trade) { t.TxHash = "cafe" },
-		"non-hex tx hash":  func(t *c.Trade) { t.TxHash = "z" + goodTxHash[1:] },
+		"empty source":    func(t *c.Trade) { t.Source = "" },
+		"zero ledger":     func(t *c.Trade) { t.Ledger = 0 },
+		"short tx hash":   func(t *c.Trade) { t.TxHash = "cafe" },
+		"non-hex tx hash": func(t *c.Trade) { t.TxHash = "z" + goodTxHash[1:] },
 		// Uppercase hex decodes but isn't canonical — Postgres would
 		// treat upper and lower hex as distinct primary keys, so the
 		// same on-chain tx from different sources could duplicate.
-		"uppercase tx hash":   func(t *c.Trade) { t.TxHash = "CAFEBABECAFEBABECAFEBABECAFEBABECAFEBABECAFEBABECAFEBABECAFEBABE" },
-		"mixed case tx hash":  func(t *c.Trade) { t.TxHash = "CafeBabe" + goodTxHash[8:] },
-		"zero timestamp":   func(t *c.Trade) { t.Timestamp = time.Time{} },
-		"zero base amount": func(t *c.Trade) { t.BaseAmount = c.NewAmount(big.NewInt(0)) },
-		"neg quote amount": func(t *c.Trade) { t.QuoteAmount = c.NewAmount(big.NewInt(-1)) },
-		"self-pair":        func(t *c.Trade) { t.Pair = c.Pair{Base: c.NativeAsset(), Quote: c.NativeAsset()} },
+		"uppercase tx hash":  func(t *c.Trade) { t.TxHash = "CAFEBABECAFEBABECAFEBABECAFEBABECAFEBABECAFEBABECAFEBABECAFEBABE" },
+		"mixed case tx hash": func(t *c.Trade) { t.TxHash = "CafeBabe" + goodTxHash[8:] },
+		"zero timestamp":     func(t *c.Trade) { t.Timestamp = time.Time{} },
+		"zero base amount":   func(t *c.Trade) { t.BaseAmount = c.NewAmount(big.NewInt(0)) },
+		"neg quote amount":   func(t *c.Trade) { t.QuoteAmount = c.NewAmount(big.NewInt(-1)) },
+		"self-pair":          func(t *c.Trade) { t.Pair = c.Pair{Base: c.NativeAsset(), Quote: c.NativeAsset()} },
 	}
 	for name, mutate := range cases {
 		t.Run(name, func(t *testing.T) {

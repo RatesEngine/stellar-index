@@ -1,8 +1,28 @@
 ---
 title: First archival-node deployment — plan from zero to replay-ready
 last_verified: 2026-04-23
-status: draft — ratified after first live run
+status: SUPERSEDED 2026-04-23 (late) — retained for historical context
+superseded_by:
+  - docs/operations/r1-deployment-state.md
+  - docs/architecture/ecosystem-review-2026-04-23.md
 ---
+
+> **⚠️ SUPERSEDED (same day as drafted).**
+>
+> This plan centered on `stellar-rpc` with infinite retention as the
+> indexer's query surface. After running the live deploy we concluded
+> stellar-rpc is redundant on our data path: our indexer will consume
+> galexie's MinIO output directly via `ingest.ApplyLedgerMetadata`.
+> r1 was trimmed to a single stellar-core process (galexie's captive)
+> on 2026-04-23.
+>
+> **For current state:** [r1-deployment-state.md](../r1-deployment-state.md).
+> **For architectural rationale:** [ecosystem-review-2026-04-23.md](../../architecture/ecosystem-review-2026-04-23.md).
+>
+> The sections below are preserved because the hardware sizing,
+> ZFS layout, burn-test approach, and archive-mirror sequencing
+> are still broadly right — just without the stellar-rpc-centric
+> framing. Re-read with that substitution in mind.
 
 # First archival-node deployment
 

@@ -23,11 +23,11 @@
 //   - getNetwork                 — network passphrase + protocol
 //   - getVersionInfo             — build version, captive-core version
 //   - getEvents                  — contract event stream with filters;
-//                                  envelope sanity-checked (see
-//                                  EventsResponse.sanityCheck)
+//     envelope sanity-checked (see
+//     EventsResponse.sanityCheck)
 //   - getLedgers                 — raw ledger XDR batch (headerXdr + metadataXdr)
 //   - getTransaction             — single-tx lookup by hash (Status may
-//                                  be NOT_FOUND outside retention window)
+//     be NOT_FOUND outside retention window)
 //   - getTransactions            — batch tx lookup (paginated)
 //   - getFeeStats                — inclusion-fee percentiles (divergence input)
 //

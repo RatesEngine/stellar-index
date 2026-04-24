@@ -6,17 +6,23 @@
 // correlation (Q1).
 package phoenix
 
-import "errors"
+import (
+	"errors"
+
+	"github.com/RatesEngine/rates-engine/internal/scval"
+)
 
 // SourceName — stable identifier.
 const SourceName = "phoenix"
 
 // Phoenix emits a constant-product swap as 8 distinct events, each
 // carrying a single field value. These constants name the fields
-// exactly as they appear in contracts/pool/src/contract.rs line
-// 1172-1185. The string spelling MATTERS — "actual received amount"
-// has embedded spaces (Q2), and our placeholder topic-blobs derive
-// from the exact symbol bytes.
+// exactly as they appear in contracts/pool/src/contract.rs:1172-1185.
+// The string spelling MATTERS — "actual received amount" has
+// embedded spaces (Q2), which means it CAN'T be encoded as an
+// ScvSymbol (identifier-only) — soroban-sdk emits it as ScvString
+// instead. Verified 2026-04-23 against mainnet: every Phoenix swap
+// topic slot is ScvString, not ScvSymbol.
 const (
 	FieldSender         = "sender"
 	FieldSellToken      = "sell_token"
@@ -49,20 +55,23 @@ const (
 	MainnetXLMSAC = "CDLZFC3SYJYDZT7K67VZ75HPJVIEUVNIXF47ZG2FB2RMQQVU2HHGCYSC"
 )
 
-// Pre-encoded base64 SCVal::Symbol placeholders for topic[1] dispatch.
-// Same pattern as soroswap/aquarius — real bytes land with the XDR
-// codec. Uniqueness enforced by Go's switch-with-duplicate-case
-// compile error.
-const (
-	TopicSymbolSwap           = "PLACEHOLDER_PHOENIX_TOPIC_SWAP"   // topic[0]
-	TopicSymbolSender         = "PLACEHOLDER_PHOENIX_FIELD_SENDER" // topic[1]
-	TopicSymbolSellToken      = "PLACEHOLDER_PHOENIX_FIELD_SELL_TOKEN"
-	TopicSymbolOfferAmount    = "PLACEHOLDER_PHOENIX_FIELD_OFFER_AMOUNT"
-	TopicSymbolActualReceived = "PLACEHOLDER_PHOENIX_FIELD_ACTUAL_RECEIVED"
-	TopicSymbolBuyToken       = "PLACEHOLDER_PHOENIX_FIELD_BUY_TOKEN"
-	TopicSymbolReturnAmount   = "PLACEHOLDER_PHOENIX_FIELD_RETURN_AMOUNT"
-	TopicSymbolSpreadAmount   = "PLACEHOLDER_PHOENIX_FIELD_SPREAD_AMOUNT"
-	TopicSymbolReferralFee    = "PLACEHOLDER_PHOENIX_FIELD_REFERRAL_FEE"
+// Pre-encoded base64 SCVal::String blobs for topic[0] and topic[1],
+// computed at init via scval.MustEncodeString. Phoenix emits both
+// topic positions as Strings (not Symbols) because the pool contract
+// publishes `(str_literal, str_literal)` tuples — soroban-sdk
+// serializes string literals as ScvString. Verified against real
+// mainnet capture 2026-04-23.
+var (
+	TopicSymbolSwap = scval.MustEncodeString(EventActionSwap) // topic[0]
+
+	TopicSymbolSender         = scval.MustEncodeString(FieldSender)         // topic[1] variants
+	TopicSymbolSellToken      = scval.MustEncodeString(FieldSellToken)      //
+	TopicSymbolOfferAmount    = scval.MustEncodeString(FieldOfferAmount)    //
+	TopicSymbolActualReceived = scval.MustEncodeString(FieldActualReceived) //
+	TopicSymbolBuyToken       = scval.MustEncodeString(FieldBuyToken)       //
+	TopicSymbolReturnAmount   = scval.MustEncodeString(FieldReturnAmount)   //
+	TopicSymbolSpreadAmount   = scval.MustEncodeString(FieldSpreadAmount)   //
+	TopicSymbolReferralFee    = scval.MustEncodeString(FieldReferralFee)    //
 )
 
 // Errors returned by the decode path.

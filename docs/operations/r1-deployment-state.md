@@ -42,13 +42,30 @@ ZFS pool `data` (raidz2, ~13.3 TB usable) with 7 datasets:
 | Service | State 2026-04-23 | Notes |
 |---------|------------------|-------|
 | postgresql@15-main | active | |
-| stellar-core | Synced! | pubnet, quorum 21/21 agree, full tier-1 intersection |
-| stellar-rpc | active | captive-core catching up; DB empty → getHealth says so |
-| galexie | active, not-yet-exporting | Waiting for captive-core catchup to reach start ledger |
+| ~~stellar-core~~ | **REMOVED 2026-04-23** | Primary daemon dropped — archive pipeline doesn't need it; see [archival-nodes.md](../../discovery/data-sources/archival-nodes.md) for revival path in Phase 3. |
+| ~~stellar-rpc~~ | **REMOVED 2026-04-23** | Redundant for our data path — our own indexer will consume galexie's MinIO output directly via `ingest.ApplyLedgerMetadata`. Public API is `/v1/prices`, not `/rpc`. See §Architecture below. |
+| galexie | active, exporting | Own captive-core; uploading `FC4A....xdr.zst` objects to MinIO galexie-live at ~1/ledger. ~100 objects/5min at steady state. **The single stellar-core on the box.** |
 | minio | active | Buckets: `galexie-live`, `galexie-archive`, `backups` |
 | node_exporter | active | :9100 |
-| stellar-core-prometheus-exporter | active | :9473 |
+| ~~stellar-core-prometheus-exporter~~ | **REMOVED 2026-04-23** | Scraped primary /info endpoint; captives don't expose one. |
 | node-healthcheck.timer | active | 5-min push to Healthchecks.io UUID 4cb3daba |
+
+### Architecture after 2026-04-23 trim
+
+```
+Stellar pubnet ─(SCP)─► galexie's captive-core ─► galexie ─► MinIO galexie-live
+                                                                  │
+                                                                  ▼
+                                                           our indexer (TBD, Task #164)
+                                                                  │
+                                                                  ▼
+                                                             TimescaleDB
+                                                                  │
+                                                                  ▼
+                                                            `/v1/prices` API
+```
+
+One stellar-core on the box. Everything downstream of MinIO is a batch/stream consumer via the Ingest SDK — no more captive-cores.
 
 ## Stellar quorum set (trust anchors)
 
@@ -79,22 +96,31 @@ fetched 2026-04-23:
 
 ## Known gaps / next-session priorities
 
-### Blocking
-1. **Galexie catchup finished, export imminent.** (Updated 2026-04-23 13:37.)
-   Galexie's embedded stellar-core completed catchup to ledger
-   62,249,470 in ~12 min from service start. Captive-core stores
-   data at `/var/lib/galexie/captive-core/` (with dash — NOT
-   `/captive/` as earlier role versions predicted). Currently
-   populating in-memory Soroban state (1,369 contracts ≈ 32 MB
-   Wasm). First MinIO upload expected within minutes after state
-   populates. Objects in galexie-live bucket: 1 (the `.config.json`
-   sentinel written at galexie startup).
+### Unblocked ✓
+1. **Galexie PEER_PORT collision fixed — exports flowing.**
+   (Updated 2026-04-23 14:03.) Earlier today galexie + stellar-rpc
+   were stuck in a restart loop (152+ restarts); root cause was
+   `PEER_PORT = 0` in captive-core.cfg getting stripped by the
+   go-stellar-sdk toml marshaller (omitempty on zero), leaving
+   stellar-core to default to pubnet's 11625 → collision with
+   primary → SIGABRT. Fixed by giving each captive a distinct
+   non-zero PEER_PORT (primary 11625, stellar-rpc captive 11725,
+   galexie captive 11726) in separate /etc/stellar/captive-core*.cfg
+   files. Commit `507e4de`. Post-fix: 0 restarts, captive-core
+   reached network head at 62250034, galexie uploading one
+   `.xdr.zst` object per closed ledger to `local/galexie-live/`.
+   300+ objects landed within 5 min of sync. Ingestion pipeline
+   is end-to-end working.
 
 2. **SCVal decoders are stubs.** Nothing in our Go code actually
    decodes events yet. Even once stellar-rpc's DB is populated,
    `internal/sources/{soroswap,aquarius,phoenix,reflector}/decode.go`
    all return placeholder errors. This is the single biggest
    unblocker between "stack running" and "trade data flowing."
+   Precondition: take a dependency on `github.com/stellar/go-stellar-sdk/xdr`
+   (not yet in go.mod — callers use `stellarrpc.Event.Value` as
+   opaque base64 today). The `decoderHooks` pattern in each
+   decode.go is ready for real impls to replace the stubs.
 
 ### Important but not urgent
 3. **Firewall + SSH hardening (phase 3)** not applied. Intentional —
@@ -129,9 +155,19 @@ fetched 2026-04-23:
 These are all now fixed in the role, but noted so the lessons survive:
 
 1. Captive-core runs WITH a separate primary stellar-core on one box
-   → every captive-core child MUST set `HTTP_PORT=0`, `PEER_PORT=0`,
-   and the parent must pass matching values (stellar-rpc:
-   `STELLAR_CAPTIVE_CORE_HTTP_PORT=0`).
+   → every captive-core child MUST set `HTTP_PORT=0` and a **non-zero**,
+   **distinct** `PEER_PORT`. `PEER_PORT = 0` looks right but gets
+   stripped by the go-stellar-sdk toml marshaller (the `PeerPort`
+   field has `toml:"PEER_PORT,omitempty"` in toml.go:90), and
+   stellar-core then falls back to the pubnet default 11625 — which
+   the primary daemon owns. Collision manifests as
+   `std::system_error(98, "Address already in use", "bind: …")` →
+   SIGABRT → ingestion restart loop. Our layout: primary 11625,
+   stellar-rpc captive 11725, galexie captive 11726. Every captive
+   needs its OWN captive-core.cfg file since the port must differ
+   per consumer. The parent must also pass
+   `STELLAR_CAPTIVE_CORE_HTTP_PORT=0` to match `HTTP_PORT=0` in the
+   captive file (stellar-rpc validates parent↔child agreement).
 
 2. Galexie's config schema is `[datastore_config]` / `[stellar_core_config]`
    — not what older docs suggest. Match `config/config.example.toml`
@@ -157,6 +193,31 @@ These are all now fixed in the role, but noted so the lessons survive:
    `go install github.com/stellar/stellar-galexie@galexie-vX.Y.Z`
    and copy (NOT symlink) out of `/root/go/bin/` into `/usr/local/bin/`
    because `/root` is mode 0700.
+
+7. `[HISTORY.ratesengine]` (our local history-archive block with
+   `put`/`mkdir` commands) must ONLY appear in the PRIMARY
+   stellar-core config — never in any captive. Captive-cores that
+   see `put`/`mkdir` assume they're supposed to publish checkpoints
+   too; they then loop "Activating publish for ledger X" every 2s
+   against an archive that hasn't been initialised (no
+   `.well-known/stellar-history.json`) and ingestion stalls
+   mid-ledger. Our template now gates the block on cfg_mode=='full'.
+
+8. **stellar-rpc v26.0.0-189 requires CAPTIVE_CORE_CONFIG_PATH.**
+   Tested 2026-04-23: writing a cfg with just the datastore stanzas
+   (`[datastore_config]` + `[buffered_storage_backend_config]`)
+   and `SERVE_LEDGERS_FROM_DATASTORE = true` but no captive-core
+   path makes stellar-rpc exit on startup with "captive-core-config-path
+   is required". The `SERVE_LEDGERS_FROM_DATASTORE` flag is an
+   augmentation for historical-fallback reads, not a replacement
+   for captive-core-driven live ingestion. Closes the open item
+   in docs/discovery/data-sources/composable-data-platform.md.
+   **For Phase 1 we run captive + datastore-fallback (see
+   templates/stellar-rpc.cfg.j2).** To get to 1-captive-core on
+   the box, either wait for a stellar-rpc release that supports
+   captive-less mode, or drop stellar-rpc and build our own
+   consumer around `ingest.ApplyLedgerMetadata` from the galexie
+   datastore.
 
 ## Credentials (pointers, not values)
 

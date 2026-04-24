@@ -1,0 +1,66 @@
+{
+  "wasm_hash": "v1-2026-04-23",
+  "ledger": 62152230,
+  "tx_hash": "f7f2d72d76edfd7d83986781b2c1c856567eaeaf1d285678fb2d608425e6ad22",
+  "op_index": 0,
+  "contract_id": "CBHCRSVX3ZZ7EGTSYMKPEFGZNWRVCSESQR3UABET4MIW52N4EVU6BIZX",
+  "ledger_closed_at": "2026-04-16T23:44:53Z",
+  "events": [
+    {
+      "topics": [
+        "AAAADgAAAARzd2Fw",
+        "AAAADgAAAAZzZW5kZXIAAA=="
+      ],
+      "value": "AAAAEgAAAAAAAAAAxRy/OA51yJ4u3YL0mKNf2jKqkAy3kYfYMFIdzMphcBg="
+    },
+    {
+      "topics": [
+        "AAAADgAAAARzd2Fw",
+        "AAAADgAAAApzZWxsX3Rva2VuAAA="
+      ],
+      "value": "AAAAEgAAAAGt785ZruUpaPdgYdSUwlJbdWWfpClqZfSZ7ynlZHfklg=="
+    },
+    {
+      "topics": [
+        "AAAADgAAAARzd2Fw",
+        "AAAADgAAAAxvZmZlcl9hbW91bnQ="
+      ],
+      "value": "AAAACgAAAAAAAAAAAAAAAHB9mfQ="
+    },
+    {
+      "topics": [
+        "AAAADgAAAARzd2Fw",
+        "AAAADgAAABZhY3R1YWwgcmVjZWl2ZWQgYW1vdW50AAA="
+      ],
+      "value": "AAAACgAAAAAAAAAAAAAAAHB9mfQ="
+    },
+    {
+      "topics": [
+        "AAAADgAAAARzd2Fw",
+        "AAAADgAAAAlidXlfdG9rZW4AAAA="
+      ],
+      "value": "AAAAEgAAAAEltPzYWa7C+mNIQ4xImzw8EMmLbSG+T9PLMMtolT75dw=="
+    },
+    {
+      "topics": [
+        "AAAADgAAAARzd2Fw",
+        "AAAADgAAAA1yZXR1cm5fYW1vdW50AAAA"
+      ],
+      "value": "AAAACgAAAAAAAAAAAAAAApiBJE8="
+    },
+    {
+      "topics": [
+        "AAAADgAAAARzd2Fw",
+        "AAAADgAAAA1zcHJlYWRfYW1vdW50AAAA"
+      ],
+      "value": "AAAACgAAAAAAAAAAAAAAAAAtfJY="
+    },
+    {
+      "topics": [
+        "AAAADgAAAARzd2Fw",
+        "AAAADgAAABNyZWZlcnJhbF9mZWVfYW1vdW50AA=="
+      ],
+      "value": "AAAACgAAAAAAAAAAAAAAAAAAAAA="
+    }
+  ]
+}

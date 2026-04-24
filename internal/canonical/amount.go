@@ -75,6 +75,23 @@ func FromUInt128Parts(hi, lo uint64) Amount {
 	return Amount{value: new(big.Int).Add(h, l)}
 }
 
+// FromUInt256Parts reconstructs an unsigned 256-bit integer from its
+// Soroban-XDR 4×uint64 representation. Required by Redstone's
+// PriceData.price field, which is U256 (common/src/lib.rs:15).
+// Most other sources stop at i128/u128 per ADR-0003.
+//
+// Composed big-endian: hiHi is the top 64 bits, loLo is the bottom.
+func FromUInt256Parts(hiHi, hiLo, loHi, loLo uint64) Amount {
+	r := new(big.Int).SetUint64(hiHi)
+	r.Lsh(r, 64)
+	r.Add(r, new(big.Int).SetUint64(hiLo))
+	r.Lsh(r, 64)
+	r.Add(r, new(big.Int).SetUint64(loHi))
+	r.Lsh(r, 64)
+	r.Add(r, new(big.Int).SetUint64(loLo))
+	return Amount{value: r}
+}
+
 // MaxAmountStringLen caps the decimal-digit budget accepted by
 // [FromString] / [Amount.UnmarshalJSON] / [Amount.Scan]. 512 digits
 // is comfortably past any legitimate Soroban i128 / Postgres

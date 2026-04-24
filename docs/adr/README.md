@@ -54,6 +54,7 @@ See [_template.md](_template.md) for the boilerplate.
 | [0010](0010-off-chain-fiat-representation.md) | Accepted | Off-chain fiat currencies as AssetType "fiat" | 2026-04-22 |
 | 0011 | *Planned* | Supply policy (referenced by coverage-matrix F2.4) | — |
 | 0012 | *Planned* | Quorum-set composition (referenced by multi-region-topology) | — |
+| [0013](0013-go-stellar-sdk-xdr-for-scval.md) | Proposed | Adopt go-stellar-sdk/xdr for SCVal decoding in source connectors | — |
 
 ## Related
 

@@ -8,6 +8,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stellar/go-stellar-sdk/strkey"
+
 	c "github.com/RatesEngine/rates-engine/internal/canonical"
 	"github.com/RatesEngine/rates-engine/internal/storage/timescale"
 )
@@ -110,14 +112,19 @@ func TestAssetsReaderPagination(t *testing.T) {
 	}
 	t.Cleanup(func() { _ = store.Close() })
 
-	// Seed 5 soroban assets (ordered by string so pagination order
-	// is deterministic).
+	// Seed 5 soroban assets with strkey-valid C-addresses derived
+	// from seed bytes. Previous hand-written literals
+	// (e.g. "CA001JYLG…XOWMA") were 55 chars — one short of the
+	// strkey 56-char requirement, so canonical.NewSorobanAsset
+	// rejected them as of 2026-04-23. strkey.Encode produces
+	// checksum-valid addresses indexed deterministically by seed so
+	// pagination ordering stays reproducible.
 	assets := []c.Asset{
-		mustSorobanTest("CA001JYLGXMF6TDJBBYYSE3HQ6BBSMLNUQ34T6TZMYMW2EVH34XOWMA"),
-		mustSorobanTest("CA002JYLGXMF6TDJBBYYSE3HQ6BBSMLNUQ34T6TZMYMW2EVH34XOWMA"),
-		mustSorobanTest("CA003JYLGXMF6TDJBBYYSE3HQ6BBSMLNUQ34T6TZMYMW2EVH34XOWMA"),
-		mustSorobanTest("CA004JYLGXMF6TDJBBYYSE3HQ6BBSMLNUQ34T6TZMYMW2EVH34XOWMA"),
-		mustSorobanTest("CA005JYLGXMF6TDJBBYYSE3HQ6BBSMLNUQ34T6TZMYMW2EVH34XOWMA"),
+		sorobanFromSeed(t, 1),
+		sorobanFromSeed(t, 2),
+		sorobanFromSeed(t, 3),
+		sorobanFromSeed(t, 4),
+		sorobanFromSeed(t, 5),
 	}
 	// Seed each as BASE paired with native XLM.
 	for i, a := range assets {
@@ -179,6 +186,26 @@ func mustSorobanTest(id string) c.Asset {
 	a, err := c.NewSorobanAsset(id)
 	if err != nil {
 		panic(err)
+	}
+	return a
+}
+
+// sorobanFromSeed builds a Soroban asset whose C-strkey encodes a
+// 32-byte contract ID whose first byte is `seed`. Produces a valid
+// checksum-encoded C-strkey (56 chars) so canonical.NewSorobanAsset
+// accepts it. Deterministic: the same seed always yields the same
+// address, preserving pagination-order reproducibility.
+func sorobanFromSeed(t *testing.T, seed byte) c.Asset {
+	t.Helper()
+	var raw [32]byte
+	raw[0] = seed
+	s, err := strkey.Encode(strkey.VersionByteContract, raw[:])
+	if err != nil {
+		t.Fatalf("strkey.Encode: %v", err)
+	}
+	a, err := c.NewSorobanAsset(s)
+	if err != nil {
+		t.Fatalf("NewSorobanAsset: %v", err)
 	}
 	return a
 }

@@ -7,7 +7,11 @@
 // before changing the decoder.
 package reflector
 
-import "errors"
+import (
+	"errors"
+
+	"github.com/RatesEngine/rates-engine/internal/scval"
+)
 
 // Source name constants — one per Reflector contract variant.
 // Appear in metrics labels + canonical.OracleUpdate.Source.
@@ -54,22 +58,48 @@ const DefaultDecimals uint8 = 14
 // alert has a threshold.
 const DefaultResolutionSeconds = 300
 
-// Event-topic constants. Verified from
-// `reflector-contract/oracle/src/events.rs`:
+// Event-topic constants. Re-verified 2026-04-23 against
+// `reflector-contract/oracle/src/events.rs:4-10` — soroban-sdk 25.3.0.
 //
-//	topic:  ["REFLECTOR", "update"]     both Symbols
-//	body:   Map{"prices": Vec<(Asset, i128)>, "timestamp": u64}
+// The contract definition is:
+//
+//	#[contractevent(topics = ["REFLECTOR", "update"])]
+//	pub struct UpdateEvent {
+//	    #[topic] timestamp: u64,           // <-- topic[2], NOT in body
+//	    update_data: Vec<(Val, i128)>,     // Val is Address | Symbol
+//	}
+//
+// So the on-wire shape is:
+//
+//	topic[0] = Symbol("REFLECTOR")
+//	topic[1] = Symbol("update")
+//	topic[2] = U64(timestamp)
+//	body     = Vec<(ScVal, I128)>  (per contractevent macro expansion)
+//
+// The previous comment here claimed body was
+// `Map{"prices": Vec<(Asset, i128)>, "timestamp": u64}` — that is
+// wrong; the Phase-1 decoder PR (#164a) must match the shape above
+// against real fixtures captured from mainnet. See
+// docs/architecture/contract-schema-evolution.md for why.
 const (
 	EventTopic0 = "REFLECTOR"
 	EventTopic1 = "update"
 )
 
-// Pre-encoded base64 SCVal::Symbol placeholders. Same pattern as
-// the DEX connectors until the SDK-backed XDR encoder lands.
-// Uniqueness enforced by Go's switch-with-duplicate-case rule.
-const (
-	TopicSymbolReflector = "PLACEHOLDER_REFLECTOR_TOPIC_REFLECTOR" // topic[0]
-	TopicSymbolUpdate    = "PLACEHOLDER_REFLECTOR_TOPIC_UPDATE"    // topic[1]
+// Pre-encoded base64 SCVal::Symbol blobs — produced at init via
+// scval.MustEncodeSymbol and used for byte-equality matching against
+// Event.Topic entries (and passed directly to stellar-rpc's
+// getEvents topic filter). Regenerated from [EventTopic0]/
+// [EventTopic1] at init to keep the source of truth in one place.
+//
+// Golden regression in internal/scval/scval_test.go
+// (TestGolden_symbolBytes) pins the exact base64 output of
+// EncodeSymbol("REFLECTOR") and EncodeSymbol("update") — if an SDK
+// upgrade shifts the wire encoding, that test fires before this
+// package ships.
+var (
+	TopicSymbolReflector = scval.MustEncodeSymbol(EventTopic0) // topic[0]
+	TopicSymbolUpdate    = scval.MustEncodeSymbol(EventTopic1) // topic[1]
 )
 
 // Errors returned by the decode path.
@@ -86,6 +116,19 @@ var (
 	// never emit this (5-min cadence implies always at least one
 	// price), but guard against it defensively.
 	ErrEmptyPrices = errors.New("reflector: empty prices vector")
+
+	// ErrUnknownSymbol — the asset slot of an update_data entry
+	// was a Symbol (Asset::Other variant) whose string matched
+	// neither the ADR-0010 fiat allow-list nor the ADR-0014 crypto
+	// allow-list. Operators extend these lists deliberately; the
+	// decoder skips unknown symbols per-entry (other prices in the
+	// same event still land) and the orchestrator's
+	// SourceDecodeErrorsTotal counter surfaces sustained rates.
+	//
+	// Renamed 2026-04-23 (was ErrUnknownFiatSymbol) — PR 164e
+	// added crypto-ticker support, so "unknown-fiat" is no longer
+	// the only reason a symbol gets skipped.
+	ErrUnknownSymbol = errors.New("reflector: asset symbol not in fiat or crypto allow-list")
 
 	// ErrPriceVectorOverflow — prices vector size exceeded the
 	// op-index fanout stride (opIndexFanoutStride = 1024). If this

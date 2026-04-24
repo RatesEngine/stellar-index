@@ -38,8 +38,8 @@
 //     reflector.
 //  2. Implement [Source] on a `*Source` struct. Add compile-time
 //     assertions at the bottom of consumer.go:
-//         var _ consumer.Source = (*Source)(nil)
-//         var _ consumer.Event  = TradeEvent{}
+//     var _ consumer.Source = (*Source)(nil)
+//     var _ consumer.Event  = TradeEvent{}
 //  3. Register the source name in cmd/ratesengine-indexer/main.go's
 //     buildSources() switch.
 //  4. Add golden-file fixtures under test/fixtures/<name>/ when

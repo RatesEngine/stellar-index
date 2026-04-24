@@ -118,7 +118,7 @@ func TestAssetGet_Sep1OverlayRejectsHostileImageURL(t *testing.T) {
 			byDomain: map[string]*metadata.SEP1{
 				domain: {Currencies: []metadata.Currency{{
 					Code: "USDC", Issuer: testUSDCIssuer,
-					Name:  "X", Image: badImage,
+					Name: "X", Image: badImage,
 				}}},
 			},
 		}

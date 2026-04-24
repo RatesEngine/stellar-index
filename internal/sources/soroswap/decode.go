@@ -5,7 +5,8 @@ import (
 	"time"
 
 	"github.com/RatesEngine/rates-engine/internal/canonical"
-	"github.com/RatesEngine/rates-engine/internal/stellarrpc"
+	"github.com/RatesEngine/rates-engine/internal/events"
+	"github.com/RatesEngine/rates-engine/internal/scval"
 )
 
 // RawPair is what a stellar-rpc event tells us about a swap/sync
@@ -19,8 +20,8 @@ type RawPair struct {
 	Pair     string    // pair contract address (C…)
 	ClosedAt time.Time // from event.ledgerClosedAt
 
-	Swap *stellarrpc.Event // populated when we see a swap
-	Sync *stellarrpc.Event // populated when we see a sync
+	Swap *events.Event // populated when we see a swap
+	Sync *events.Event // populated when we see a sync
 }
 
 // Complete reports whether this pair has both events and is ready
@@ -35,40 +36,60 @@ type groupKey struct {
 	OpIndex uint32
 }
 
-func keyOf(e *stellarrpc.Event) groupKey {
+func keyOf(e *events.Event) groupKey {
 	return groupKey{Ledger: e.Ledger, TxHash: e.TxHash, OpIndex: uint32(e.OperationIndex)}
 }
 
-// classify decides what kind of Soroswap event this is by looking
-// at topic[0]. Uses the pre-encoded Symbol blobs from events.go for
-// byte-match speed (no XDR decode per event).
-func classify(e *stellarrpc.Event) string {
-	if len(e.Topic) == 0 {
+// classify decides what kind of Soroswap event this is. Soroswap
+// topics are 2-tuples:
+//
+//	topic[0] = String("SoroswapPair" | "SoroswapFactory")
+//	topic[1] = Symbol("swap" | "sync" | "new_pair" | …)
+//
+// Both positions are compared as byte-equal base64 against the
+// constants computed at package init.
+func classify(e *events.Event) string {
+	if len(e.Topic) < 2 {
 		return ""
 	}
-	switch e.Topic[0] {
-	case TopicSymbolSwap:
-		return EventSwap
-	case TopicSymbolSync:
-		return EventSync
-	case TopicSymbolDeposit:
-		return EventDeposit
-	case TopicSymbolWithdraw:
-		return EventWithdraw
-	case TopicSymbolNewPair:
+	// Only pair-contract events are per-pair; factory events go
+	// through classifyFactory.
+	if e.Topic[0] == TopicPrefixPair {
+		switch e.Topic[1] {
+		case TopicSymbolSwap:
+			return EventSwap
+		case TopicSymbolSync:
+			return EventSync
+		case TopicSymbolDeposit:
+			return EventDeposit
+		case TopicSymbolWithdraw:
+			return EventWithdraw
+		}
+		return ""
+	}
+	if e.Topic[0] == TopicPrefixFactory && e.Topic[1] == TopicSymbolNewPair {
 		return EventNewPair
-	default:
-		return ""
 	}
+	return ""
 }
 
-// decodeSwap turns a swap+sync RawPair into a canonical.Trade. Needs
-// the real XDR SCVal decoder to pull amounts out of the events'
-// value fields — see the TODO(#0) below.
+// decodeSwap turns a swap+sync RawPair into a canonical.Trade.
 //
-// Token0 / token1 asset identities come from the factory's
-// new_pair event for this pair; the consumer holds that mapping
-// in an in-memory cache.
+// Contract reference (pair/src/event.rs):
+//
+//	SwapEvent  { to: Address, amount_0_in: i128, amount_1_in: i128,
+//	             amount_0_out: i128, amount_1_out: i128 }
+//	SyncEvent  { new_reserve_0: i128, new_reserve_1: i128 }
+//
+// Both are #[contracttype] structs → on the wire they're ScvMap with
+// field-name Symbol keys. We pull the four swap amount fields by
+// name (per contract-schema-evolution.md's decode-by-name rule) and
+// derive trade direction from which side has a positive `in` +
+// matching positive `out`.
+//
+// Token0 / token1 asset identities come from the factory's new_pair
+// event for this pair; the consumer holds that mapping in an
+// in-memory cache.
 func decodeSwap(r RawPair, tok0, tok1 canonical.Asset) (canonical.Trade, error) {
 	if !r.Complete() {
 		return canonical.Trade{}, ErrSwapWithoutSync
@@ -77,36 +98,29 @@ func decodeSwap(r RawPair, tok0, tok1 canonical.Asset) (canonical.Trade, error) 
 		return canonical.Trade{}, fmt.Errorf("%w: swap nil", ErrMalformedPayload)
 	}
 
-	// TODO(#0): XDR-decode Swap.Value into
-	//   { amount0_in, amount1_in, amount0_out, amount1_out, to }
-	// and Sync.Value into
-	//   { reserve0, reserve1 }
-	// per the pair contract schema in soroswap-core/contracts/pair.
-	//
-	// Until we take the SDK dep, the stubs below return zero —
-	// callers treat zero amounts as a decode failure and skip.
-	amount0In, amount1In, err := decodeSwapAmounts(r.Swap.Value)
+	amounts, err := decodeSwapAmounts(r.Swap.Value)
 	if err != nil {
-		return canonical.Trade{}, fmt.Errorf("decode swap value: %w", err)
-	}
-	amount0Out, amount1Out, err := decodeSwapOutAmounts(r.Swap.Value)
-	if err != nil {
-		return canonical.Trade{}, fmt.Errorf("decode swap outs: %w", err)
+		return canonical.Trade{}, fmt.Errorf("%w: %w", ErrMalformedPayload, err)
 	}
 
 	// Trade direction: whichever side had non-zero `in` is the base
 	// asset the trader sold; the other side is what they bought.
+	// (A well-formed Soroswap swap has exactly one in/out pair
+	// non-zero — either 0→1 or 1→0 — never both.)
 	var base, quote canonical.Asset
 	var baseAmt, quoteAmt canonical.Amount
 	switch {
-	case amount0In.Sign() > 0 && amount1Out.Sign() > 0:
-		base, baseAmt = tok0, amount0In
-		quote, quoteAmt = tok1, amount1Out
-	case amount1In.Sign() > 0 && amount0Out.Sign() > 0:
-		base, baseAmt = tok1, amount1In
-		quote, quoteAmt = tok0, amount0Out
+	case amounts.Amount0In.Sign() > 0 && amounts.Amount1Out.Sign() > 0:
+		base, baseAmt = tok0, amounts.Amount0In
+		quote, quoteAmt = tok1, amounts.Amount1Out
+	case amounts.Amount1In.Sign() > 0 && amounts.Amount0Out.Sign() > 0:
+		base, baseAmt = tok1, amounts.Amount1In
+		quote, quoteAmt = tok0, amounts.Amount0Out
 	default:
-		return canonical.Trade{}, fmt.Errorf("%w: neither side had a positive in+out", ErrMalformedPayload)
+		return canonical.Trade{}, fmt.Errorf("%w: no directional swap — in=(%s,%s) out=(%s,%s)",
+			ErrMalformedPayload,
+			amounts.Amount0In, amounts.Amount1In,
+			amounts.Amount0Out, amounts.Amount1Out)
 	}
 
 	pair, err := canonical.NewPair(base, quote)
@@ -126,24 +140,116 @@ func decodeSwap(r RawPair, tok0, tok1 canonical.Asset) (canonical.Trade, error) 
 	}, nil
 }
 
-// ─── Stubs awaiting the SDK-backed decoder ─────────────────────────
-// These compile and return zero-valued amounts; the unit tests
-// substitute them via the decoderHooks indirection below so we can
-// exercise the correlation logic without real XDR.
-
-// decoderHooks lets tests inject fake decoders. In production these
-// point at the real SDK-backed implementations.
-var (
-	decodeSwapAmounts    = stubDecodeSwapAmounts
-	decodeSwapOutAmounts = stubDecodeSwapOutAmounts
-)
-
-func stubDecodeSwapAmounts(valueB64 string) (canonical.Amount, canonical.Amount, error) {
-	// TODO(#0): replace with real SCVal -> (amount0_in, amount1_in)
-	return canonical.Amount{}, canonical.Amount{}, nil
+// swapAmounts holds the four i128 amounts from a SwapEvent body.
+type swapAmounts struct {
+	Amount0In  canonical.Amount
+	Amount1In  canonical.Amount
+	Amount0Out canonical.Amount
+	Amount1Out canonical.Amount
 }
 
-func stubDecodeSwapOutAmounts(valueB64 string) (canonical.Amount, canonical.Amount, error) {
-	// TODO(#0): replace with real SCVal -> (amount0_out, amount1_out)
-	return canonical.Amount{}, canonical.Amount{}, nil
+// ─── Real SCVal decoders ────────────────────────────────────────
+// Tests swap these via the package-level vars.
+
+var (
+	decodeSwapAmounts = sdkDecodeSwapAmounts
+	decodeNewPair     = sdkDecodeNewPair
+)
+
+// sdkDecodeSwapAmounts decodes the SwapEvent body. Pulls all four
+// amount fields by name from the top-level Map — positional decode
+// would break silently if Soroswap adds a field in a future upgrade.
+func sdkDecodeSwapAmounts(valueB64 string) (swapAmounts, error) {
+	body, err := scval.Parse(valueB64)
+	if err != nil {
+		return swapAmounts{}, fmt.Errorf("parse body: %w", err)
+	}
+	entries, err := scval.AsMap(body)
+	if err != nil {
+		return swapAmounts{}, fmt.Errorf("body not a Map: %w", err)
+	}
+	var out swapAmounts
+	for _, field := range []struct {
+		name string
+		dst  *canonical.Amount
+	}{
+		{"amount_0_in", &out.Amount0In},
+		{"amount_1_in", &out.Amount1In},
+		{"amount_0_out", &out.Amount0Out},
+		{"amount_1_out", &out.Amount1Out},
+	} {
+		sv, err := scval.MustMapField(entries, field.name)
+		if err != nil {
+			return swapAmounts{}, fmt.Errorf("SwapEvent.%s: %w", field.name, err)
+		}
+		amt, err := scval.AsAmountFromI128(sv)
+		if err != nil {
+			return swapAmounts{}, fmt.Errorf("SwapEvent.%s: %w", field.name, err)
+		}
+		*field.dst = amt
+	}
+	return out, nil
+}
+
+// NewPairFields is the decoded NewPairEvent — emitted by the factory
+// each time a pair contract is deployed. We use it to populate the
+// pair→(token0, token1) registry that decodeSwap depends on.
+//
+// Contract reference (factory/src/event.rs:19-43):
+//
+//	NewPairEvent {
+//	    token_0: Address,
+//	    token_1: Address,
+//	    pair:    Address,
+//	    new_pairs_length: u32,
+//	}
+type NewPairFields struct {
+	Token0 canonical.Asset // from Address
+	Token1 canonical.Asset
+	Pair   string // C-strkey
+}
+
+// sdkDecodeNewPair decodes a factory NewPairEvent body. Same
+// Map-by-field-name path as sdkDecodeSwapAmounts.
+func sdkDecodeNewPair(valueB64 string) (NewPairFields, error) {
+	body, err := scval.Parse(valueB64)
+	if err != nil {
+		return NewPairFields{}, fmt.Errorf("parse body: %w", err)
+	}
+	entries, err := scval.AsMap(body)
+	if err != nil {
+		return NewPairFields{}, fmt.Errorf("body not a Map: %w", err)
+	}
+	decodeAddrField := func(name string) (string, error) {
+		sv, err := scval.MustMapField(entries, name)
+		if err != nil {
+			return "", err
+		}
+		return scval.AsAddressStrkey(sv)
+	}
+	t0, err := decodeAddrField("token_0")
+	if err != nil {
+		return NewPairFields{}, fmt.Errorf("NewPairEvent.token_0: %w", err)
+	}
+	t1, err := decodeAddrField("token_1")
+	if err != nil {
+		return NewPairFields{}, fmt.Errorf("NewPairEvent.token_1: %w", err)
+	}
+	pairAddr, err := decodeAddrField("pair")
+	if err != nil {
+		return NewPairFields{}, fmt.Errorf("NewPairEvent.pair: %w", err)
+	}
+	// Soroban tokens → canonical.NewSorobanAsset. Native XLM has
+	// its own SAC contract but callers handle the native case via
+	// asset resolution; at the decoder layer every address is a
+	// contract, so NewSorobanAsset is the right constructor.
+	a0, err := canonical.NewSorobanAsset(t0)
+	if err != nil {
+		return NewPairFields{}, fmt.Errorf("token_0 asset: %w", err)
+	}
+	a1, err := canonical.NewSorobanAsset(t1)
+	if err != nil {
+		return NewPairFields{}, fmt.Errorf("token_1 asset: %w", err)
+	}
+	return NewPairFields{Token0: a0, Token1: a1, Pair: pairAddr}, nil
 }

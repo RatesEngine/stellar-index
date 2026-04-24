@@ -1,0 +1,15 @@
+{
+  "contract_id": "CA6GAFOJCW4MGQQBUCQUSA3CLIH25G4SNKB2JHYKZCVWZTNW5VXMSC4O",
+  "wasm_hash": "v2-2026-04-23",
+  "ledger": 62150002,
+  "tx_hash": "c10926193bbf5aaeb0cc5b9d3d9f9bb5ab457fca038ec501ea823bd7f1b8ca89",
+  "ledger_closed_at": "2026-04-16T20:09:38Z",
+  "topics": [
+    "AAAADwAAAAV0cmFkZQAAAA==",
+    "AAAAEgAAAAEohS9owZhIjjRvsSEu1QKQU3Ycwk9FM5LjU5ggGwgl5w==",
+    "AAAAEgAAAAGt785ZruUpaPdgYdSUwlJbdWWfpClqZfSZ7ynlZHfklg==",
+    "AAAAEgAAAAHswHX9FiP0toacKkm4Uk5tIzVkQsv0sCXcEV6FSqmGpQ=="
+  ],
+  "value": "AAAAEAAAAAEAAAADAAAACgAAAAAAAAAAAAACgU9a+9oAAAAKAAAAAAAAAAAAAAAAPLYTrgAAAAoAAAAAAAAAAAAAAAD2Q1Yk",
+  "event_name": "trade"
+}

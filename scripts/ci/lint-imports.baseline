@@ -1,0 +1,17 @@
+# Known import-lint violations awaiting cleanup.
+#
+# Format: one `<rule_name> <file_path>` per line, no wildcards.
+# Blank lines and lines starting with `#` are ignored.
+#
+# Any violation present in this file passes the lint; any
+# violation NOT listed fails CI. The lint FAILS on new
+# violations OR stale baseline entries, so the baseline shrinks
+# monotonically as reworks land.
+#
+# ─── CURRENT STATE: 0 entries ──────────────────────────────────
+#
+# All legacy RPC-based per-source orchestration code was removed
+# in PR 165d. New code must satisfy the rules in lint-imports.sh
+# or explicitly justify an allowlist addition there. Adding an
+# entry back to this file requires a PR description citing why
+# the exception is temporary.

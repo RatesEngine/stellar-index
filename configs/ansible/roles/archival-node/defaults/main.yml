@@ -10,9 +10,20 @@ home_domain:         "ratesengine.net"
 
 # ───── Which subsystems to run on this host ──────────────────────────
 run_postgres:        true
-run_stellar_core:    true
+# Primary stellar-core daemon. Off by default — the archive we ship
+# (galexie → MinIO) doesn't need it, and running it alongside the
+# captive-cores costs RAM/CPU/peer-slots for no gain. Flip to true
+# when we're ready to become a validator (ADR-0004).
+run_stellar_core:    false
 run_galexie:         true
-run_stellar_rpc:     true
+# stellar-rpc. Off by default — our own indexer reads from galexie's
+# MinIO output directly via ingest.ApplyLedgerMetadata, so stellar-rpc's
+# JSON-RPC surface isn't on the Rates Engine data path. Removed from
+# r1 on 2026-04-23; see docs/operations/r1-deployment-state.md for the
+# architecture rationale. If re-enabled, operator must also re-enable
+# its captive_peer_port_rpc + data/rpc dataset + firewall port 8000
+# below (currently gated off).
+run_stellar_rpc:     false
 run_minio:           true
 run_observability:   true
 
@@ -44,16 +55,24 @@ zfs_datasets:
     logbias: "throughput"
     primarycache: "metadata"
     mountpoint: "/var/lib/postgresql"
-  - name: "core"
-    recordsize: "128K"
-    compression: "zstd"
-    atime: "off"
-    mountpoint: "/var/lib/stellar-core"
-  - name: "rpc"
-    recordsize: "16K"
-    compression: "zstd"
-    atime: "off"
-    mountpoint: "/var/lib/stellar-rpc"
+  # "core" dataset (for the primary stellar-core daemon's bucket dir
+  # at /var/lib/stellar-core) is intentionally NOT in this list
+  # while run_stellar_core=false. When flipping to true for Phase-3
+  # validator work, add this entry back and re-apply the zfs tag:
+  #
+  #   - name: "core"
+  #     recordsize: "128K"
+  #     compression: "zstd"
+  #     atime: "off"
+  #     mountpoint: "/var/lib/stellar-core"
+  # "rpc" dataset — for stellar-rpc's SQLite + captive-core bucket dir
+  # at /var/lib/stellar-rpc. Not in this list while run_stellar_rpc=
+  # false. To re-enable, add back:
+  #   - name: "rpc"
+  #     recordsize: "16K"
+  #     compression: "zstd"
+  #     atime: "off"
+  #     mountpoint: "/var/lib/stellar-rpc"
   - name: "galexie"
     recordsize: "1M"
     compression: "zstd"
@@ -271,6 +290,13 @@ stellar_validators:
 
 stellar_http_port:       11626
 stellar_peer_port:       11625
+# PEER_PORTs for captive-cores. Must be non-zero (toml marshaller
+# drops zero values with omitempty, causing stellar-core to fall back
+# to pubnet default 11625). Must also differ per captive so they don't
+# collide. Only galexie's captive is live today; _rpc is kept for
+# the case where run_stellar_rpc is flipped back to true.
+captive_peer_port_galexie: 11726
+captive_peer_port_rpc:     11725
 
 # ───── Galexie ───────────────────────────────────────────────────────
 galexie_version:         "galexie-v26.0.0"   # pinned — update via VERSIONS.md. Tag format: galexie-vX.Y.Z (matches Stellar protocol version).
@@ -304,20 +330,28 @@ minio_buckets:
 
 # ───── Firewall ──────────────────────────────────────────────────────
 # Ports open on the public interface. Everything else rejects.
-public_allow_ports:
+# Port 11625 (SCP peer) is only added when run_stellar_core=true —
+# the captive-cores dial OUT to peers and don't accept inbound.
+public_allow_ports: "{{ public_allow_ports_base + (public_allow_ports_primary_core if run_stellar_core | bool else []) }}"
+public_allow_ports_base:
   - { port: 22,    proto: "tcp", comment: "SSH (rate-limited)" }
-  - { port: 11625, proto: "tcp", comment: "stellar-core SCP peer" }
+public_allow_ports_primary_core:
+  - { port: 11625, proto: "tcp", comment: "stellar-core SCP peer (Phase 3 validator)" }
 
 allowed_ssh_cidrs:
   - "0.0.0.0/0"     # tighten to jump host / VPN once that exists
 
-# Internal ports accessible from the LAN / VPN CIDRs only
-internal_allow_ports:
-  - { port: 11626, proto: "tcp", comment: "stellar-core admin HTTP" }
+# Internal ports accessible from the LAN / VPN CIDRs only.
+# 11626 (stellar-core admin /info) only when primary daemon is running.
+internal_allow_ports: "{{ internal_allow_ports_base + (internal_allow_ports_primary_core if run_stellar_core | bool else []) + (internal_allow_ports_rpc if run_stellar_rpc | bool else []) }}"
+internal_allow_ports_base:
   - { port: 5432,  proto: "tcp", comment: "Postgres" }
-  - { port: 8000,  proto: "tcp", comment: "stellar-rpc" }
   - { port: 9000,  proto: "tcp", comment: "MinIO S3 API" }
   - { port: 9100,  proto: "tcp", comment: "node_exporter" }
+internal_allow_ports_primary_core:
+  - { port: 11626, proto: "tcp", comment: "stellar-core admin HTTP (Phase 3 validator)" }
+internal_allow_ports_rpc:
+  - { port: 8000,  proto: "tcp", comment: "stellar-rpc JSON-RPC" }
 
 internal_cidrs:
   - "10.0.0.0/8"

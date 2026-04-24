@@ -27,16 +27,24 @@ const (
 	// AssetFiat is an off-chain reference currency (USD, EUR, …).
 	// NOT a Stellar asset. Wire form: `fiat:<ISO4217>`. See ADR-0010.
 	AssetFiat AssetType = "fiat"
+
+	// AssetCrypto is an off-chain crypto-ticker reference (BTC, ETH,
+	// USDT, …). NOT a Stellar asset — distinct from AssetSoroban
+	// (which requires a real on-chain C-address). Used by
+	// Reflector's CEX oracle, which publishes prices keyed on bare
+	// global tickers. Wire form: `crypto:<TICKER>`. See ADR-0014.
+	AssetCrypto AssetType = "crypto"
 )
 
 // Asset is a canonical identifier for any asset we price.
 //
-// The four valid shapes:
+// The five valid shapes:
 //
 //   - Native:  {Type: AssetNative}
 //   - Classic: {Type: AssetClassic, Code: "USDC", Issuer: "G..."}
 //   - Soroban: {Type: AssetSoroban, ContractID: "C..."}
-//   - Fiat:    {Type: AssetFiat, Code: "USD"}             ADR-0010
+//   - Fiat:    {Type: AssetFiat,   Code: "USD"}            ADR-0010
+//   - Crypto:  {Type: AssetCrypto, Code: "BTC"}            ADR-0014
 //
 // A SAC-wrapped classic asset can be represented either way —
 // canonical form is the **classic** representation; the SAC contract
@@ -131,6 +139,8 @@ func (a Asset) String() string {
 		return a.ContractID
 	case AssetFiat:
 		return "fiat:" + a.Code
+	case AssetCrypto:
+		return "crypto:" + a.Code
 	default:
 		return "invalid-asset"
 	}
@@ -171,6 +181,14 @@ func (a Asset) Validate() error {
 			return fmt.Errorf("%w: unknown fiat code %q (see ADR-0010)", ErrInvalidAsset, a.Code)
 		}
 		return nil
+	case AssetCrypto:
+		if a.Issuer != "" || a.ContractID != "" {
+			return fmt.Errorf("%w: crypto asset must not carry issuer/contract_id", ErrInvalidAsset)
+		}
+		if !IsKnownCrypto(a.Code) {
+			return fmt.Errorf("%w: unknown crypto code %q (see ADR-0014)", ErrInvalidAsset, a.Code)
+		}
+		return nil
 	default:
 		return fmt.Errorf("%w: unknown type %q", ErrInvalidAsset, a.Type)
 	}
@@ -202,6 +220,11 @@ func ParseAsset(s string) (Asset, error) {
 	// Fiat — unambiguous prefix dispatch (ADR-0010).
 	if rest, ok := strings.CutPrefix(s, "fiat:"); ok {
 		return NewFiatAsset(rest)
+	}
+
+	// Crypto — unambiguous prefix dispatch (ADR-0014).
+	if rest, ok := strings.CutPrefix(s, "crypto:"); ok {
+		return NewCryptoAsset(rest)
 	}
 
 	// Soroban — starts with C, 56 chars

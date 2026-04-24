@@ -232,7 +232,7 @@ func TestAPI_EndToEnd(t *testing.T) {
 		// Narrow window + limit=1 → three separate pages.
 		from := sharedTS.Add(-time.Second).Format(time.RFC3339)
 		to := sharedTS.Add(time.Second).Format(time.RFC3339)
-		var seenTxs = map[string]bool{}
+		seenTxs := map[string]bool{}
 		cursor := ""
 		for page := 0; page < 5; page++ {
 			qs := pairQS + "&from=" + from + "&to=" + to + "&limit=1"
@@ -347,8 +347,8 @@ func TestAPI_Readyz(t *testing.T) {
 // path production uses.
 type pgReadyChecker struct{ s *timescale.Store }
 
-func (c pgReadyChecker) Name() string                     { return "postgres" }
-func (c pgReadyChecker) Ping(ctx context.Context) error   { return c.s.DB().PingContext(ctx) }
+func (c pgReadyChecker) Name() string                   { return "postgres" }
+func (c pgReadyChecker) Ping(ctx context.Context) error { return c.s.DB().PingContext(ctx) }
 
 // TestAPI_OracleLatest stands up the v1 handler against a real
 // Timescale with seeded oracle updates and walks the full path:

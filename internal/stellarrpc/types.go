@@ -3,28 +3,19 @@ package stellarrpc
 import (
 	"encoding/json"
 	"fmt"
-	"time"
+
+	"github.com/RatesEngine/rates-engine/internal/events"
 )
 
-// EventClosedAt parses the RFC 3339 ledgerClosedAt on an Event.
+// Event is now a deprecated alias for [events.Event]. The type
+// moved to internal/events during PR 165b so source decoders
+// could stop depending on the JSON-RPC client package.
 //
-// Every source package used to write `t, _ := time.Parse(...)` and
-// silently drop parse errors — unparseable timestamps then flowed
-// through as time.Time{} and landed in the trades hypertable with
-// a zero observed_at, breaking VWAP windows and time-ordered
-// queries. Centralising the parse lets callers treat a bad
-// timestamp as a decode error (metric + skip) instead of garbage
-// data.
-func (e *Event) EventClosedAt() (time.Time, error) {
-	if e.LedgerClosedAt == "" {
-		return time.Time{}, fmt.Errorf("stellarrpc: event %s has empty ledgerClosedAt", e.ID)
-	}
-	t, err := time.Parse(time.RFC3339, e.LedgerClosedAt)
-	if err != nil {
-		return time.Time{}, fmt.Errorf("stellarrpc: event %s ledgerClosedAt %q: %w", e.ID, e.LedgerClosedAt, err)
-	}
-	return t, nil
-}
+// Deprecated: use events.Event directly. Alias retained so the
+// RPC-based consumer loops in the source packages keep compiling
+// during the 165b → 165d transition; removed in PR 165d when the
+// indexer retires the per-source orchestrator.
+type Event = events.Event
 
 // sanityCheck validates that a getEvents response is internally
 // consistent. Caught conditions:
@@ -141,23 +132,6 @@ type VersionInfo struct {
 	BuildTimestamp     string `json:"buildTimestamp"`
 	CaptiveCoreVersion string `json:"captiveCoreVersion"`
 	ProtocolVersion    int    `json:"protocolVersion"`
-}
-
-// Event is a single Soroban contract event from getEvents.
-type Event struct {
-	Type                     string `json:"type"` // contract | system | diagnostic
-	Ledger                   uint32 `json:"ledger"`
-	LedgerClosedAt           string `json:"ledgerClosedAt"` // RFC 3339
-	ContractID               string `json:"contractId"`
-	ID                       string `json:"id"`
-	OperationIndex           int    `json:"operationIndex"`
-	TransactionIndex         int    `json:"transactionIndex"`
-	TxHash                   string `json:"txHash"`
-	InSuccessfulContractCall bool   `json:"inSuccessfulContractCall"`
-	// Topic entries are base64-encoded SCVal. Callers decode.
-	Topic []string `json:"topic"`
-	// Value is base64-encoded SCVal. Callers decode.
-	Value string `json:"value"`
 }
 
 // EventsResponse is the response from getEvents.

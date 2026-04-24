@@ -23,12 +23,23 @@ PUBLIC_HTTP_PORT = false
 PEER_PORT = {{ stellar_peer_port }}
 {% else %}
 # Captive-core runs alongside the primary stellar-core on the same
-# box. Both ports set to 0 disables listening so captive-core
-# doesn't try to bind ports already taken by the primary daemon.
-# Outbound peer connections (needed for catchup) still work.
+# box. We must give each captive-core its OWN PEER_PORT because:
+#
+#   1. HTTP_PORT=0 disables the admin HTTP server — fine.
+#   2. PEER_PORT=0 *would* disable outbound peering too, BUT the
+#      go-stellar-sdk toml marshaller has `toml:"PEER_PORT,omitempty"`
+#      on the PeerPort field (toml.go:90). Zero values get dropped
+#      from the rendered captive config, and stellar-core falls back
+#      to the pubnet default 11625 — which is already bound by the
+#      primary daemon → std::system_error(98) bind: Address already
+#      in use → SIGABRT → ingestion restart loop.
+#
+# So we pass an explicit NON-ZERO port that's different from the
+# primary's (11625) and different per-captive. captive_peer_port
+# is injected by the caller (stellar-rpc: 11725, galexie: 11726).
 HTTP_PORT = 0
 PUBLIC_HTTP_PORT = false
-PEER_PORT = 0
+PEER_PORT = {{ captive_peer_port }}
 {% endif %}
 
 NETWORK_PASSPHRASE = "{% if stellar_network == 'pubnet' %}Public Global Stellar Network ; September 2015{% elif stellar_network == 'testnet' %}Test SDF Network ; September 2015{% else %}{{ stellar_network }}{% endif %}"
@@ -67,14 +78,22 @@ KNOWN_PEERS = [
 {% endif %}
 
 # ──── Our own history archive ────────────────────────────────────────
-# Local publishing target. [HISTORY.*] entries for SDF archives live
-# inside each [[VALIDATORS]] block below via the HISTORY field, which
-# is the preferred 1:1 pairing of validator → their canonical archive.
+# Local publishing target. Only the PRIMARY stellar-core publishes
+# here — captive-cores would otherwise try to publish too (because
+# put/mkdir are defined), and their catchup hangs retrying publish
+# operations against an archive that the primary hasn't yet
+# initialised with a `.well-known/stellar-history.json`. Observed
+# symptom: "History: Activating publish for ledger X" looped every
+# 2 s, ingestion stalled.
+# [HISTORY.*] entries for SDF archives live inside each [[VALIDATORS]]
+# block below via the HISTORY field (the preferred 1:1 pairing).
+{% if cfg_mode == 'full' %}
 
 [HISTORY.ratesengine]
 get = "cp /srv/history-archive/{0} {1}"
 put = "cp {0} /srv/history-archive/{1}"
 mkdir = "mkdir -p /srv/history-archive/{0}"
+{% endif %}
 
 # ──── Home domain quality tiers ─────────────────────────────────────
 # Must appear BEFORE [[VALIDATORS]] blocks reference them. QUALITY
