@@ -45,6 +45,39 @@ postgres_dsn = "postgres://u:p@h/db"
 	}
 }
 
+func TestLoadReader_AggregateFlags(t *testing.T) {
+	// Verify the new aggregator flags round-trip through TOML.
+	body := `
+[region]
+id = "r1"
+
+[storage]
+postgres_dsn = "postgres://u:p@h/db"
+
+[aggregate]
+disable_class_filter         = true
+enable_stablecoin_fiat_proxy = true
+interval_seconds             = 15
+max_trades_per_window        = 500
+`
+	c, err := cfg.LoadReader(strings.NewReader(body), "test.toml")
+	if err != nil {
+		t.Fatalf("LoadReader: %v", err)
+	}
+	if !c.Aggregate.DisableClassFilter {
+		t.Error("disable_class_filter not parsed")
+	}
+	if !c.Aggregate.EnableStablecoinFiatProxy {
+		t.Error("enable_stablecoin_fiat_proxy not parsed")
+	}
+	if c.Aggregate.IntervalSeconds != 15 {
+		t.Errorf("interval_seconds = %d want 15", c.Aggregate.IntervalSeconds)
+	}
+	if c.Aggregate.MaxTradesPerWindow != 500 {
+		t.Errorf("max_trades_per_window = %d want 500", c.Aggregate.MaxTradesPerWindow)
+	}
+}
+
 func TestLoadReader_rejectsUnknownKeys(t *testing.T) {
 	// Silent typos in config are a classic deployment bug. Unknown
 	// keys must be a hard error.

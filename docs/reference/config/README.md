@@ -103,6 +103,10 @@ the `env:` column.
 | `aggregate.min_usd_volume` | `float64` | `10000` | — | Per-pair minimum USD volume within the window for VWAP eligibility. |
 | `aggregate.outlier_sigma_threshold` | `float64` | `4` | — | Reject trades priced > N sigma from the rolling median before VWAP. |
 | `aggregate.triangulation_enabled` | `bool` | `true` | — | Enable cross-pair triangulation through USD/BTC when direct pair below threshold. |
+| `aggregate.interval_seconds` | `int` | `30` | — | Tick cadence — gap between successive (pair, window) refresh passes. 0 falls back to the library default (30s). |
+| `aggregate.max_trades_per_window` | `int` | `10000` | — | Per-(pair, window) cap on TradesInRange row count to bound a runaway scan. 0 falls back to the library default (10000). |
+| `aggregate.disable_class_filter` | `bool` | `false` | — | Disable the default ClassExchange-only VWAP filter so every fetched trade contributes regardless of source class. Off by default — see internal/sources/external/registry.go for class semantics. |
+| `aggregate.enable_stablecoin_fiat_proxy` | `bool` | `false` | — | Expand fiat-denominated target pairs to include stablecoin backers (XLM/fiat:USD also pulls XLM/USDT/USDC/DAI/PYUSD/USDP and collapses onto the target). Off by default — N+1 TradesInRange calls per (pair, window). |
 
 ### `[api]`
 

@@ -20,10 +20,18 @@
 //     today; manual triggering lands when we want tight refresh
 //     guarantees).
 //   - Triangulation worker (XLM/USD × USD/EUR = XLM/EUR).
-//   - Class-filtered VWAP (only ClassExchange contributes).
-//   - Stablecoin → fiat proxy (USDT→USD, USDC→USD …).
 //   - Divergence detector (flags aggregator-class drift).
 //   - Outlier filter wrap on the raw-trade fetch.
+//
+// Already wired through TOML (see [aggregate] in
+// docs/reference/config/README.md):
+//
+//   - disable_class_filter            — opt out of ClassExchange-only VWAP.
+//   - enable_stablecoin_fiat_proxy    — expand XLM/fiat:USD to pull
+//     XLM/USDT/USDC/DAI/PYUSD/USDP
+//     and collapse onto the target.
+//   - interval_seconds                — tick cadence override.
+//   - max_trades_per_window           — per-window scan cap.
 //
 // Flags:
 //
@@ -142,8 +150,12 @@ func run(cfgPath string, dryRun bool) error {
 	logger.Info("aggregator pair set resolved", "count", len(pairs))
 
 	orch := orchestrator.New(store, rdb, orchestrator.Config{
-		Pairs:  pairs,
-		Logger: logger,
+		Pairs:                     pairs,
+		Interval:                  time.Duration(cfg.Aggregate.IntervalSeconds) * time.Second,
+		MaxTradesPerWindow:        cfg.Aggregate.MaxTradesPerWindow,
+		DisableClassFilter:        cfg.Aggregate.DisableClassFilter,
+		EnableStablecoinFiatProxy: cfg.Aggregate.EnableStablecoinFiatProxy,
+		Logger:                    logger,
 	})
 
 	if dryRun {

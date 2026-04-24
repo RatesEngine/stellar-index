@@ -78,11 +78,15 @@ cursor_store_scheme   = "postgres"
 # Aggregate — VWAP/TWAP windows + filters (aggregator binary only).
 # ──────────────────────────────────────────────────────────────────
 [aggregate]
-vwap_window_seconds       = 300
-twap_window_seconds       = 300
-min_usd_volume            = 10000.0
-outlier_sigma_threshold   = 4.0
-triangulation_enabled     = true
+vwap_window_seconds          = 300
+twap_window_seconds          = 300
+min_usd_volume               = 10000.0
+outlier_sigma_threshold      = 4.0
+triangulation_enabled        = true
+interval_seconds             = 30
+max_trades_per_window        = 10000
+disable_class_filter         = false   # default: only ClassExchange sources contribute to VWAP
+enable_stablecoin_fiat_proxy = false   # opt-in: expand XLM/fiat:USD to also pull XLM/USDT/USDC/DAI/PYUSD/USDP and collapse onto the target
 
 # ──────────────────────────────────────────────────────────────────
 # API — public serving plane (api binary only).
