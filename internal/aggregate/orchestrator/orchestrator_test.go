@@ -46,11 +46,18 @@ func newTestRedis(t *testing.T) (*redis.Client, *miniredis.Miniredis) {
 // volume for a fixed XLM/USDT pair. Keeps each test short.
 func buildTrade(t *testing.T, base, quote *big.Int, ts time.Time) canonical.Trade {
 	t.Helper()
+	return buildTradeFrom(t, "binance", base, quote, ts)
+}
+
+// buildTradeFrom is buildTrade with an explicit Source, used by
+// class-filter tests that mix exchange / aggregator / oracle rows.
+func buildTradeFrom(t *testing.T, source string, base, quote *big.Int, ts time.Time) canonical.Trade {
+	t.Helper()
 	xlm, _ := canonical.NewCryptoAsset("XLM")
 	usdt, _ := canonical.NewCryptoAsset("USDT")
 	pair, _ := canonical.NewPair(xlm, usdt)
 	return canonical.Trade{
-		Source:      "binance",
+		Source:      source,
 		Ledger:      0,
 		TxHash:      "0000000000000000000000000000000000000000000000000000000000000000",
 		OpIndex:     0,
@@ -265,6 +272,144 @@ func TestFormatRatFixed(t *testing.T) {
 	got = formatRatFixed(r, 6)
 	if got != "0.010000" {
 		t.Errorf("1/100 @6 = %q want 0.010000", got)
+	}
+}
+
+func TestFilterForVWAP_KeepsExchangeClassOnly(t *testing.T) {
+	now := time.Now()
+	trades := []canonical.Trade{
+		buildTradeFrom(t, "binance", big.NewInt(1), big.NewInt(1), now),       // exchange ✓
+		buildTradeFrom(t, "coingecko", big.NewInt(2), big.NewInt(2), now),     // aggregator ✗
+		buildTradeFrom(t, "coinmarketcap", big.NewInt(3), big.NewInt(3), now), // aggregator ✗
+		buildTradeFrom(t, "reflector-dex", big.NewInt(4), big.NewInt(4), now), // oracle ✗
+		buildTradeFrom(t, "ecb", big.NewInt(5), big.NewInt(5), now),           // authority_sanity ✗
+		buildTradeFrom(t, "kraken", big.NewInt(6), big.NewInt(6), now),        // exchange ✓
+		buildTradeFrom(t, "unknown-venue", big.NewInt(7), big.NewInt(7), now), // unregistered → fallback IncludeInVWAP=false ✗
+		buildTradeFrom(t, "polygon-forex", big.NewInt(8), big.NewInt(8), now), // exchange ✓ (institutional FX)
+	}
+
+	got := filterForVWAP(append([]canonical.Trade(nil), trades...))
+	wantSources := []string{"binance", "kraken", "polygon-forex"}
+	if len(got) != len(wantSources) {
+		t.Fatalf("filterForVWAP: len=%d want %d (%v)", len(got), len(wantSources), got)
+	}
+	for i, src := range wantSources {
+		if got[i].Source != src {
+			t.Errorf("filterForVWAP[%d].Source = %q want %q", i, got[i].Source, src)
+		}
+	}
+}
+
+func TestTick_ClassFilter_ExcludesAggregatorAndOracleByDefault(t *testing.T) {
+	// Seed a window with trades from three classes at different
+	// prices. A no-filter VWAP would skew toward the off-class rows;
+	// the default class filter should yield a VWAP computed from the
+	// binance row alone (1 XLM → 0.20 USDT).
+	now := time.Now()
+	store := &mockStore{
+		trades: []canonical.Trade{
+			// binance (exchange): 1 XLM @ 0.20 USDT.
+			buildTradeFrom(t, "binance",
+				big.NewInt(100_000_000), big.NewInt(20_000_000), now.Add(-2*time.Minute)),
+			// coingecko (aggregator): 1 XLM @ 10.00 USDT — excluded.
+			buildTradeFrom(t, "coingecko",
+				big.NewInt(100_000_000), big.NewInt(1_000_000_000), now.Add(-1*time.Minute)),
+			// reflector-dex (oracle): 1 XLM @ 5.00 USDT — excluded.
+			buildTradeFrom(t, "reflector-dex",
+				big.NewInt(100_000_000), big.NewInt(500_000_000), now.Add(-30*time.Second)),
+		},
+	}
+	rdb, mr := newTestRedis(t)
+	orch := New(store, rdb, Config{
+		Pairs:   []canonical.Pair{xlmUsdtPair(t)},
+		Windows: []time.Duration{5 * time.Minute},
+	})
+	if err := orch.Tick(context.Background()); err != nil {
+		t.Fatalf("Tick: %v", err)
+	}
+
+	xlm, _ := canonical.NewCryptoAsset("XLM")
+	usdt, _ := canonical.NewCryptoAsset("USDT")
+	key := "vwap:" + xlm.String() + ":" + usdt.String() + ":300"
+	val, err := mr.Get(key)
+	if err != nil {
+		t.Fatalf("miniredis Get %q: %v", key, err)
+	}
+	// Expect VWAP = 0.20 (binance only). A mixed-class VWAP would
+	// have landed at (0.20 + 10.00 + 5.00) / 3 ≈ 5.07.
+	if val[:4] != "0.20" {
+		t.Errorf("class-filtered VWAP = %q, want prefix 0.20 (binance only)", val)
+	}
+}
+
+func TestTick_DisableClassFilter_IncludesEveryRow(t *testing.T) {
+	// Same fixture as above, but with DisableClassFilter=true the
+	// aggregator and oracle rows should contribute and the VWAP
+	// lands near the 3-row mean rather than binance alone.
+	now := time.Now()
+	store := &mockStore{
+		trades: []canonical.Trade{
+			buildTradeFrom(t, "binance",
+				big.NewInt(100_000_000), big.NewInt(20_000_000), now.Add(-2*time.Minute)),
+			buildTradeFrom(t, "coingecko",
+				big.NewInt(100_000_000), big.NewInt(1_000_000_000), now.Add(-1*time.Minute)),
+			buildTradeFrom(t, "reflector-dex",
+				big.NewInt(100_000_000), big.NewInt(500_000_000), now.Add(-30*time.Second)),
+		},
+	}
+	rdb, mr := newTestRedis(t)
+	orch := New(store, rdb, Config{
+		Pairs:              []canonical.Pair{xlmUsdtPair(t)},
+		Windows:            []time.Duration{5 * time.Minute},
+		DisableClassFilter: true,
+	})
+	if err := orch.Tick(context.Background()); err != nil {
+		t.Fatalf("Tick: %v", err)
+	}
+
+	xlm, _ := canonical.NewCryptoAsset("XLM")
+	usdt, _ := canonical.NewCryptoAsset("USDT")
+	key := "vwap:" + xlm.String() + ":" + usdt.String() + ":300"
+	val, err := mr.Get(key)
+	if err != nil {
+		t.Fatalf("miniredis Get %q: %v", key, err)
+	}
+	// Equal-volume 3-row VWAP: (0.20 + 10.00 + 5.00) / 3 ≈ 5.0666…
+	if val[:4] != "5.06" {
+		t.Errorf("disabled-filter VWAP = %q, want prefix 5.06 (all three rows)", val)
+	}
+}
+
+func TestTick_ClassFilter_EmptyAfterFilterCountsAsEmpty(t *testing.T) {
+	// Every row is off-class. Filter should drop them all, yielding
+	// the "no trades in window" branch and no Redis write.
+	now := time.Now()
+	store := &mockStore{
+		trades: []canonical.Trade{
+			buildTradeFrom(t, "coingecko",
+				big.NewInt(100_000_000), big.NewInt(20_000_000), now.Add(-1*time.Minute)),
+			buildTradeFrom(t, "reflector-dex",
+				big.NewInt(100_000_000), big.NewInt(20_000_000), now.Add(-30*time.Second)),
+		},
+	}
+	rdb, mr := newTestRedis(t)
+	orch := New(store, rdb, Config{
+		Pairs:   []canonical.Pair{xlmUsdtPair(t)},
+		Windows: []time.Duration{5 * time.Minute},
+	})
+	if err := orch.Tick(context.Background()); err != nil {
+		t.Fatalf("Tick: %v", err)
+	}
+
+	xlm, _ := canonical.NewCryptoAsset("XLM")
+	usdt, _ := canonical.NewCryptoAsset("USDT")
+	key := "vwap:" + xlm.String() + ":" + usdt.String() + ":300"
+	if mr.Exists(key) {
+		t.Errorf("filtered-to-empty window should not write key %q", key)
+	}
+	if orch.Stats().EmptyWindows != 1 {
+		t.Errorf("EmptyWindows = %d want 1 (filtered-empty branch)",
+			orch.Stats().EmptyWindows)
 	}
 }
 

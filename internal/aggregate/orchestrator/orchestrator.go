@@ -18,10 +18,6 @@
 // Deliberately out of scope for v1 (each is a follow-up PR the
 // orchestrator is shaped to accept cleanly):
 //
-//   - Class-based filtering (ClassExchange-only VWAP). Will live
-//     behind an `OnlyExchangeClass bool` flag on Config; when
-//     true the fetch path filters by `source IN (...)` where the
-//     list comes from external.Registry.
 //   - Stablecoin → fiat proxy mapping (USDT→USD, USDC→USD …).
 //     Will live as a post-fetch pair rewrite before VWAP computes.
 //   - Cross-pair triangulation (XLM/USD × USD/EUR = XLM/EUR).
@@ -54,6 +50,7 @@ import (
 	"github.com/RatesEngine/rates-engine/internal/aggregate"
 	"github.com/RatesEngine/rates-engine/internal/cachekeys"
 	"github.com/RatesEngine/rates-engine/internal/canonical"
+	"github.com/RatesEngine/rates-engine/internal/sources/external"
 )
 
 // Store is the subset of timescale.Store the orchestrator needs.
@@ -91,6 +88,28 @@ type Config struct {
 	// Timescale from a runaway scan on an unexpectedly active
 	// pair. Defaults to 10_000.
 	MaxTradesPerWindow int
+
+	// DisableClassFilter, when true, suppresses the aggregator's
+	// default "ClassExchange trades only" filter and lets every row
+	// in the fetched window contribute to VWAP regardless of source
+	// class.
+	//
+	// Default (zero value = false): filter is ON. Rationale lives
+	// in internal/sources/external/registry.go — aggregator-class
+	// sources (coingecko / coinmarketcap / cryptocompare) are
+	// derivatives of other venues' data and mixing them into our
+	// VWAP double-counts the upstream; oracle-class sources publish
+	// already-aggregated derived prices with their own governance.
+	// Both belong in the /v1/sources feed for transparency but not
+	// in the computed-VWAP numerator.
+	//
+	// Inverted phrasing (Disable-X rather than Only-X) is
+	// deliberate: a Go bool can't distinguish "left unset" from
+	// "explicitly false", so the safer default (filter on) is
+	// encoded as the zero value and opt-out is an explicit true.
+	// Flip this for historical-parity testing against a prior
+	// release that hadn't yet introduced class filtering.
+	DisableClassFilter bool
 
 	// Logger is the structured logger. If nil, slog.Default() is
 	// used.
@@ -230,6 +249,9 @@ func (o *Orchestrator) refreshPairWindow(
 	if err != nil {
 		return fmt.Errorf("fetch %s %v: %w", pair.String(), window, err)
 	}
+	if !o.cfg.DisableClassFilter {
+		trades = filterForVWAP(trades)
+	}
 	if len(trades) == 0 {
 		o.mu.Lock()
 		o.emptyWindows++
@@ -263,6 +285,29 @@ func (o *Orchestrator) refreshPairWindow(
 	o.vwapWrites++
 	o.mu.Unlock()
 	return nil
+}
+
+// filterForVWAP drops trades whose source is not registered as a
+// Class=Exchange + IncludeInVWAP=true venue. This is the
+// aggregator-policy layer that implements the "only genuine
+// exchange trades contribute to the average" rule.
+//
+// Unknown sources (not in external.Registry) are dropped — the
+// registry's fail-closed default (ClassExchange, IncludeInVWAP=
+// false) already handles that: they're VISIBLE in /v1/sources but
+// don't vote in VWAP unless an operator explicitly registers them.
+//
+// Preserves input order so VWAP's weighted-mean semantics stay
+// deterministic under the same input set.
+func filterForVWAP(trades []canonical.Trade) []canonical.Trade {
+	out := trades[:0]
+	for _, t := range trades {
+		md := external.Lookup(t.Source)
+		if md.Class == external.ClassExchange && md.IncludeInVWAP {
+			out = append(out, t)
+		}
+	}
+	return out
 }
 
 // formatRatFixed returns a fixed-precision decimal string
