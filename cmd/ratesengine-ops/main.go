@@ -10,11 +10,13 @@ package main
 import (
 	"context"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"flag"
 	"fmt"
 	"io"
 	"log/slog"
+	"net/http"
 	"os"
 	"path/filepath"
 	"sort"
@@ -149,10 +151,8 @@ Subcommands:
                           print per-venue first-trade/update samples. Exits
                           early once every enabled venue has emitted at
                           least one output. No DB, no Timescale, no cursors.
-  verify-archive -config PATH [-bucket NAME] [-from N] [-to N] [-tier MODE] [-archive-root PATH]
-                          Verify a galexie bucket against either or both
-                          of the mandatory tiers from
-                          docs/operations/galexie-backfill.md:
+  verify-archive -config PATH [-bucket NAME] [-from N] [-to N] [-tier MODE] [-archive-root PATH] [-peers URLs] [-peer-samples N]
+                          Verify a galexie bucket at one or more tiers:
                             chain      (Tier A) — chain-link hash integrity:
                                        each ledger N's PreviousLedgerHash
                                        equals ledger N-1's Hash. Default.
@@ -161,11 +161,16 @@ Subcommands:
                                        against the canonical header-hash
                                        from the local history-archive
                                        (-archive-root, default
-                                       /srv/history-archive). Cryptographic
-                                       proof our replay matches SDF's.
-                            all        run both.
-                          Exit 0 = clean; 1 = first break with diverging
-                          ledger/hashes.
+                                       /srv/history-archive).
+                            peers      (Tier D) — sample checkpoints
+                                       within the range and cross-compare
+                                       history-XXXXXXXX.json across N
+                                       tier-1 validator archives (-peers
+                                       URL list or default set of 7).
+                                       Consensus-level cryptographic
+                                       agreement.
+                            all        run all three.
+                          Exit 0 = clean; 1 = first break with details.
   backfill-external -config PATH -source SRC -pair SYM -from TS -to TS -granularity D
                           Pull historical candles from an external venue
                           (binance / kraken / bitstamp / coinbase) and
@@ -1311,16 +1316,21 @@ func verifyArchive(args []string) error { //nolint:funlen,gocognit,gocyclo // li
 	bucketOverride := fs.String("bucket", "", "Override bucket name (default: storage.s3_bucket_archive, then s3_bucket_live)")
 	from := fs.Uint("from", 2, "First ledger to verify (inclusive, default 2 — ledger 1 has no predecessor)")
 	to := fs.Uint("to", 0, "Last ledger to verify (inclusive, 0 = unbounded/live)")
-	tier := fs.String("tier", "chain", "Verification tier: chain (Tier A) | checkpoint (Tier B) | all")
+	tier := fs.String("tier", "chain", "Verification tier: chain (A) | checkpoint (B) | peers (D) | all")
 	archiveRoot := fs.String("archive-root", "/srv/history-archive",
-		"Path to local rs-stellar-archivist mirror (only used by checkpoint/all tier)")
+		"Path to local rs-stellar-archivist mirror (used by checkpoint/all tier)")
+	peerList := fs.String("peers", "",
+		"Comma-separated peer archive URLs for Tier D (empty → built-in tier-1 default set)")
+	peerSamples := fs.Int("peer-samples", 20,
+		"Number of checkpoints to sample for Tier D cross-peer diff")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
 	doChain := *tier == "chain" || *tier == "all"
 	doCheckpoint := *tier == "checkpoint" || *tier == "all"
-	if !doChain && !doCheckpoint {
-		return fmt.Errorf("unknown -tier %q (expected chain | checkpoint | all)", *tier)
+	doPeers := *tier == "peers" || *tier == "all"
+	if !doChain && !doCheckpoint && !doPeers {
+		return fmt.Errorf("unknown -tier %q (expected chain | checkpoint | peers | all)", *tier)
 	}
 	if *cfgPath == "" {
 		return fmt.Errorf("-config is required")
@@ -1347,6 +1357,27 @@ func verifyArchive(args []string) error { //nolint:funlen,gocognit,gocyclo // li
 		fmt.Fprintf(os.Stderr, "verify-archive: checkpoint anchor against %s\n", *archiveRoot)
 	}
 
+	// Tier A + B (LCM walk via ledgerstream). Skipped when tier=peers.
+	if doChain || doCheckpoint {
+		if err := verifyArchiveLCMWalk(cfg, bucket, uint32(*from), uint32(*to),
+			doChain, doCheckpoint, *archiveRoot); err != nil {
+			return err
+		}
+	}
+
+	// Tier D (multi-peer checkpoint diff). Independent of LCM walk.
+	if doPeers {
+		if err := verifyArchivePeers(uint32(*from), uint32(*to), *peerList, *peerSamples); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// verifyArchiveLCMWalk runs the Tier A + B passes over every LCM in
+// the given bucket range. Split from verifyArchive so Tier D can run
+// standalone without the ledgerstream setup.
+func verifyArchiveLCMWalk(cfg config.Config, bucket string, from, to uint32, doChain, doCheckpoint bool, archiveRoot string) error { //nolint:funlen,gocognit,gocyclo
 	lsCfg := ledgerstream.Config{
 		DataStore: datastore.DataStoreConfig{
 			Type: "S3",
@@ -1376,7 +1407,7 @@ func verifyArchive(args []string) error { //nolint:funlen,gocognit,gocyclo // li
 	)
 
 	startedAt := time.Now()
-	err = ledgerstream.Stream(ctx, lsCfg, uint32(*from), uint32(*to),
+	err := ledgerstream.Stream(ctx, lsCfg, from, to,
 		func(lcm sdkxdr.LedgerCloseMeta) error {
 			seq := lcm.LedgerSequence()
 			hash := lcm.LedgerHash()
@@ -1410,7 +1441,7 @@ func verifyArchive(args []string) error { //nolint:funlen,gocognit,gocyclo // li
 			// checkpoint; we match on LedgerSeq and compare the
 			// bundled Hash against our LCM's hash.
 			if doCheckpoint && seq%64 == 63 {
-				expected, hit, cerr := readArchivedLedgerHash(*archiveRoot, seq)
+				expected, hit, cerr := readArchivedLedgerHash(archiveRoot, seq)
 				switch {
 				case cerr != nil:
 					mismatches++
@@ -1468,7 +1499,216 @@ func verifyArchive(args []string) error { //nolint:funlen,gocognit,gocyclo // li
 			fmt.Fprintf(os.Stderr, "verify-archive: checkpoint anchor OK ✓  (%d matched, %d missed)\n", checkpointsOK, checkpointsMissed)
 		}
 	}
+	_ = mismatches // silence unused variable warning; set for future exit-code semantics
 	return nil
+}
+
+// defaultTier1Peers is a representative set of tier-1 validator
+// history-archive roots — one URL per operator-org. Chosen from the
+// HISTORY entries in /etc/stellar/captive-core-galexie.cfg and
+// cross-referenced against SEP-20 home-domain declarations.
+//
+// Each org runs 3 archives behind the same SCP quorum set; picking
+// one per org is sufficient — if org A's nodes disagree internally,
+// that's a different (intra-org) problem than what Tier D surfaces.
+// Operators can override with -peers if they want more coverage.
+var defaultTier1Peers = []string{
+	"https://bootes-history.publicnode.org",
+	"https://archive.v1.stellar.lobstr.co",
+	"https://stellar-history-de-fra.satoshipay.io",
+	"https://stellar-history-usc.franklintempleton.com/azuscshf401",
+	"https://alpha-history.validator.stellar.creit.tech",
+	"http://history.stellar.org/prd/core-live/core_live_001",
+	"https://stellar-full-history1.bdnodes.net",
+}
+
+// historyCheckpoint is the subset of a history-XXXXXXXX.json that we
+// compare across peers. We ignore `server` (version of stellar-core
+// that built the archive — varies by operator) and `version` (schema
+// version, rarely changes). What must agree across the network is
+// the consensus state: currentLedger + the bucket-list hashes.
+type historyCheckpoint struct {
+	CurrentLedger  uint32          `json:"currentLedger"`
+	CurrentBuckets []historyBucket `json:"currentBuckets"`
+}
+
+type historyBucket struct {
+	Curr string          `json:"curr"`
+	Snap string          `json:"snap"`
+	Next json.RawMessage `json:"next"` // opaque; compare raw bytes
+}
+
+// verifyArchivePeers samples checkpoints in [from, to] and cross-
+// compares each peer's history-XXXXXXXX.json. Any disagreement is a
+// consensus-level finding — either one peer has replayed wrong, or
+// a fork was retained somewhere. Either way, loud failure.
+//
+// sampleN is the target number of checkpoints to verify. Actual
+// count may be less if the range contains fewer checkpoints; always
+// includes the first and last checkpoint for edge coverage.
+func verifyArchivePeers(from, to uint32, peerList string, sampleN int) error { //nolint:funlen,gocognit,gocyclo
+	peers := defaultTier1Peers
+	if peerList != "" {
+		peers = strings.Split(peerList, ",")
+		for i := range peers {
+			peers[i] = strings.TrimSpace(peers[i])
+		}
+	}
+	if len(peers) < 2 {
+		return fmt.Errorf("tier peers needs ≥2 archive URLs; got %d", len(peers))
+	}
+
+	// Find checkpoint ledgers in range. Checkpoints are at seq
+	// 63, 127, 191, ... (seq mod 64 == 63).
+	firstCP := ((from + 63) / 64 * 64) - 1
+	if firstCP < from {
+		firstCP += 64
+	}
+	var lastCP uint32
+	if to == 0 {
+		// Unbounded range — pick "last few hours of pubnet" as a
+		// stand-in. 10k ledgers before the current guessed tip.
+		// This is coarse; better would be a HEAD query against one
+		// peer, but we keep Tier D self-contained.
+		lastCP = firstCP + 640 // 10 sample slots
+	} else {
+		lastCP = (to / 64 * 64) - 1
+		if lastCP < firstCP {
+			return fmt.Errorf("range [%d,%d] contains no checkpoint ledgers", from, to)
+		}
+	}
+
+	// Sample evenly-spaced checkpoints. Always include first and last.
+	samples := []uint32{firstCP}
+	if lastCP != firstCP && sampleN > 1 {
+		stride := uint32(1)
+		totalCP := (lastCP-firstCP)/64 + 1
+		if uint32(sampleN) < totalCP {
+			stride = totalCP / uint32(sampleN)
+		}
+		for seq := firstCP + stride*64; seq < lastCP; seq += stride * 64 {
+			samples = append(samples, seq)
+		}
+		if samples[len(samples)-1] != lastCP {
+			samples = append(samples, lastCP)
+		}
+	}
+
+	fmt.Fprintf(os.Stderr, "verify-archive: peer diff — %d peers × %d checkpoints\n",
+		len(peers), len(samples))
+	for _, p := range peers {
+		fmt.Fprintf(os.Stderr, "  peer: %s\n", p)
+	}
+
+	client := &http.Client{Timeout: 30 * time.Second}
+	matches, mismatches := 0, 0
+	for _, seq := range samples {
+		hexSeq := fmt.Sprintf("%08x", seq)
+		relPath := fmt.Sprintf("history/%s/%s/%s/history-%s.json",
+			hexSeq[0:2], hexSeq[2:4], hexSeq[4:6], hexSeq)
+
+		observed := make(map[string]historyCheckpoint)
+		for _, peer := range peers {
+			url := strings.TrimRight(peer, "/") + "/" + relPath
+			cp, err := fetchHistoryCheckpoint(client, url)
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "  ledger %d: peer %s: %v\n", seq, peer, err)
+				continue
+			}
+			observed[peer] = cp
+		}
+		if len(observed) < 2 {
+			fmt.Fprintf(os.Stderr, "  ledger %d: only %d peers responded; skipping (inconclusive)\n",
+				seq, len(observed))
+			continue
+		}
+
+		// Every peer's checkpoint must agree. Pick one as the
+		// canonical reference and compare the rest.
+		var ref historyCheckpoint
+		var refPeer string
+		for p, cp := range observed {
+			ref = cp
+			refPeer = p
+			break
+		}
+		allAgree := true
+		for p, cp := range observed {
+			if p == refPeer {
+				continue
+			}
+			if !checkpointsEqual(ref, cp) {
+				mismatches++
+				allAgree = false
+				fmt.Fprintf(os.Stderr, "  ledger %d: PEERS DISAGREE\n    ref=%s\n    odd=%s\n",
+					seq, refPeer, p)
+			}
+		}
+		if allAgree {
+			matches++
+			fmt.Fprintf(os.Stderr, "  ledger %d: %d peers agree ✓\n", seq, len(observed))
+		}
+	}
+
+	fmt.Fprintf(os.Stderr, "\nverify-archive: peer diff — %d consensus-verified checkpoints, %d disagreements\n",
+		matches, mismatches)
+	if mismatches > 0 {
+		return fmt.Errorf("peer cross-check FAILED (%d disagreements)", mismatches)
+	}
+	if matches == 0 {
+		return fmt.Errorf("peer cross-check INCONCLUSIVE — no checkpoint verified across ≥2 peers")
+	}
+	fmt.Fprintf(os.Stderr, "verify-archive: peer cross-check OK ✓\n")
+	return nil
+}
+
+// fetchHistoryCheckpoint retrieves and parses one history-XXXXXXXX.json
+// from a peer archive.
+func fetchHistoryCheckpoint(client *http.Client, url string) (historyCheckpoint, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	if err != nil {
+		return historyCheckpoint{}, err
+	}
+	req.Header.Set("User-Agent", "rates-engine/verify-archive")
+	resp, err := client.Do(req)
+	if err != nil {
+		return historyCheckpoint{}, err
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusOK {
+		return historyCheckpoint{}, fmt.Errorf("HTTP %d", resp.StatusCode)
+	}
+	body, err := io.ReadAll(io.LimitReader(resp.Body, 4<<20)) // 4 MiB cap
+	if err != nil {
+		return historyCheckpoint{}, err
+	}
+	var cp historyCheckpoint
+	if err := json.Unmarshal(body, &cp); err != nil {
+		return historyCheckpoint{}, fmt.Errorf("parse: %w", err)
+	}
+	return cp, nil
+}
+
+// checkpointsEqual compares the consensus-state fields of two
+// history-XXXXXXXX.json records. Ignores server + version which
+// vary legitimately across operators.
+func checkpointsEqual(a, b historyCheckpoint) bool {
+	if a.CurrentLedger != b.CurrentLedger {
+		return false
+	}
+	if len(a.CurrentBuckets) != len(b.CurrentBuckets) {
+		return false
+	}
+	for i := range a.CurrentBuckets {
+		if a.CurrentBuckets[i].Curr != b.CurrentBuckets[i].Curr ||
+			a.CurrentBuckets[i].Snap != b.CurrentBuckets[i].Snap ||
+			string(a.CurrentBuckets[i].Next) != string(b.CurrentBuckets[i].Next) {
+			return false
+		}
+	}
+	return true
 }
 
 // readArchivedLedgerHash fetches the canonical ledger-hash for
