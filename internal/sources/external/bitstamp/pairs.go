@@ -1,0 +1,83 @@
+package bitstamp
+
+import (
+	"fmt"
+
+	"github.com/RatesEngine/rates-engine/internal/canonical"
+)
+
+// DefaultPairs returns the Bitstamp symbol → canonical.Pair map for
+// the default set of markets the indexer subscribes to when Bitstamp
+// is enabled without operator pair overrides.
+//
+// Bitstamp symbols are lowercase concatenated ("xlmusd" not "XLM/USD"
+// or "XLMUSD"). We normalise to that format and the channel prefix
+// "live_trades_" is added by the streamer when subscribing.
+//
+// Coverage rationale:
+//   - XLM/USD, XLM/EUR, XLM/GBP — adds EUR/GBP native quotes Kraken
+//     already covers too, so redundancy across the two XLM fiat
+//     venues strengthens the aggregator's confidence.
+//   - XLM/BTC — deep European-retail BTC-pair XLM liquidity.
+//   - BTC/USD, ETH/USD — reference anchors.
+//   - BTC/EUR — European fiat BTC depth, used for triangulation.
+func DefaultPairs() (map[string]canonical.Pair, error) {
+	xlm, err := canonical.NewCryptoAsset("XLM")
+	if err != nil {
+		return nil, fmt.Errorf("XLM: %w", err)
+	}
+	btc, err := canonical.NewCryptoAsset("BTC")
+	if err != nil {
+		return nil, fmt.Errorf("BTC: %w", err)
+	}
+	eth, err := canonical.NewCryptoAsset("ETH")
+	if err != nil {
+		return nil, fmt.Errorf("ETH: %w", err)
+	}
+
+	fiats := map[string]canonical.Asset{}
+	for _, code := range []string{"USD", "EUR", "GBP"} {
+		a, err := canonical.NewFiatAsset(code)
+		if err != nil {
+			return nil, fmt.Errorf("%s: %w", code, err)
+		}
+		fiats[code] = a
+	}
+
+	spec := []struct {
+		symbol string
+		base   canonical.Asset
+		quote  canonical.Asset
+	}{
+		{"xlmusd", xlm, fiats["USD"]},
+		{"xlmeur", xlm, fiats["EUR"]},
+		{"xlmgbp", xlm, fiats["GBP"]},
+		{"xlmbtc", xlm, btc},
+		{"btcusd", btc, fiats["USD"]},
+		{"btceur", btc, fiats["EUR"]},
+		{"ethusd", eth, fiats["USD"]},
+	}
+
+	out := make(map[string]canonical.Pair, len(spec))
+	for _, s := range spec {
+		pair, err := canonical.NewPair(s.base, s.quote)
+		if err != nil {
+			return nil, fmt.Errorf("%s: %w", s.symbol, err)
+		}
+		out[s.symbol] = pair
+	}
+	return out, nil
+}
+
+// DefaultPairList returns the same set as DefaultPairs as a slice.
+func DefaultPairList() ([]canonical.Pair, error) {
+	m, err := DefaultPairs()
+	if err != nil {
+		return nil, err
+	}
+	out := make([]canonical.Pair, 0, len(m))
+	for _, p := range m {
+		out = append(out, p)
+	}
+	return out, nil
+}

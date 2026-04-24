@@ -47,6 +47,17 @@ import (
 	"github.com/RatesEngine/rates-engine/internal/sources/aquarius"
 	"github.com/RatesEngine/rates-engine/internal/sources/band"
 	"github.com/RatesEngine/rates-engine/internal/sources/comet"
+	"github.com/RatesEngine/rates-engine/internal/sources/external"
+	externalbinance "github.com/RatesEngine/rates-engine/internal/sources/external/binance"
+	externalbitstamp "github.com/RatesEngine/rates-engine/internal/sources/external/bitstamp"
+	externalcoinbase "github.com/RatesEngine/rates-engine/internal/sources/external/coinbase"
+	externalcoingecko "github.com/RatesEngine/rates-engine/internal/sources/external/coingecko"
+	externalcoinmarketcap "github.com/RatesEngine/rates-engine/internal/sources/external/coinmarketcap"
+	externalcryptocompare "github.com/RatesEngine/rates-engine/internal/sources/external/cryptocompare"
+	externalecb "github.com/RatesEngine/rates-engine/internal/sources/external/ecb"
+	externalexchangerates "github.com/RatesEngine/rates-engine/internal/sources/external/exchangeratesapi"
+	externalkraken "github.com/RatesEngine/rates-engine/internal/sources/external/kraken"
+	externalpolygonforex "github.com/RatesEngine/rates-engine/internal/sources/external/polygonforex"
 	"github.com/RatesEngine/rates-engine/internal/sources/phoenix"
 	"github.com/RatesEngine/rates-engine/internal/sources/redstone"
 	"github.com/RatesEngine/rates-engine/internal/sources/reflector"
@@ -141,6 +152,15 @@ func run(cfgPath string, dryRun bool) error {
 		persistEvents(rootCtx, logger, store, events)
 	}()
 
+	// ─── External streamers (off-chain CEX/FX/aggregators) ──────
+	// Parallel to the Galexie → dispatcher path — same sink.
+	// Per-venue goroutines live inside external.Run; we just
+	// collect the shutdown wait func to block on during drain.
+	externalWait, err := startExternalConnectors(rootCtx, cfg.External, events, logger)
+	if err != nil {
+		return fmt.Errorf("external connectors: %w", err)
+	}
+
 	// ─── Ledgerstream → dispatcher loop ─────────────────────────
 	lsConfig := ledgerstreamConfig(cfg)
 	streamErr := make(chan error, 1)
@@ -172,6 +192,11 @@ func run(cfgPath string, dryRun bool) error {
 		}
 	}
 
+	// Wait for external connectors to finish draining before
+	// closing the shared events channel — otherwise an in-flight
+	// trade write on a closed channel panics the runner goroutine.
+	externalWait()
+
 	// Close events channel so the sink returns after draining.
 	close(events)
 	select {
@@ -181,6 +206,273 @@ func run(cfgPath string, dryRun bool) error {
 		logger.Warn("drain timeout exceeded — hard exit")
 	}
 	return nil
+}
+
+// startExternalConnectors builds the enabled off-chain connectors
+// from config and hands them to external.Run. Returns the wait
+// function the shutdown path calls to drain cleanly. A nil-op wait
+// is returned when no external sources are enabled — keeps the
+// shutdown sequence unconditional.
+func startExternalConnectors(
+	ctx context.Context,
+	cfg config.ExternalConfig,
+	events chan<- consumer.Event,
+	logger *slog.Logger,
+) (func(), error) {
+	var streamers []external.StreamerSpec
+	var pollers []external.PollerSpec
+
+	if cfg.Binance.Enabled {
+		pairMap, err := externalbinance.DefaultPairs()
+		if err != nil {
+			return nil, fmt.Errorf("binance default pairs: %w", err)
+		}
+		pairs, err := externalbinance.DefaultPairList()
+		if err != nil {
+			return nil, fmt.Errorf("binance default pair list: %w", err)
+		}
+		s := externalbinance.NewStreamer(pairMap)
+		s.Logger = logger
+		streamers = append(streamers, external.StreamerSpec{
+			Streamer: s,
+			Pairs:    pairs,
+		})
+		logger.Info("external connector enabled",
+			"source", externalbinance.SourceName,
+			"pairs", len(pairs))
+	}
+
+	if cfg.Kraken.Enabled {
+		pairMap, err := externalkraken.DefaultPairs()
+		if err != nil {
+			return nil, fmt.Errorf("kraken default pairs: %w", err)
+		}
+		pairs, err := externalkraken.DefaultPairList()
+		if err != nil {
+			return nil, fmt.Errorf("kraken default pair list: %w", err)
+		}
+		s := externalkraken.NewStreamer(pairMap)
+		s.Logger = logger
+		streamers = append(streamers, external.StreamerSpec{
+			Streamer: s,
+			Pairs:    pairs,
+		})
+		logger.Info("external connector enabled",
+			"source", externalkraken.SourceName,
+			"pairs", len(pairs))
+	}
+
+	if cfg.Bitstamp.Enabled {
+		pairMap, err := externalbitstamp.DefaultPairs()
+		if err != nil {
+			return nil, fmt.Errorf("bitstamp default pairs: %w", err)
+		}
+		pairs, err := externalbitstamp.DefaultPairList()
+		if err != nil {
+			return nil, fmt.Errorf("bitstamp default pair list: %w", err)
+		}
+		s := externalbitstamp.NewStreamer(pairMap)
+		s.Logger = logger
+		streamers = append(streamers, external.StreamerSpec{
+			Streamer: s,
+			Pairs:    pairs,
+		})
+		logger.Info("external connector enabled",
+			"source", externalbitstamp.SourceName,
+			"pairs", len(pairs))
+	}
+
+	if cfg.Coinbase.Enabled {
+		pairMap, err := externalcoinbase.DefaultPairs()
+		if err != nil {
+			return nil, fmt.Errorf("coinbase default pairs: %w", err)
+		}
+		pairs, err := externalcoinbase.DefaultPairList()
+		if err != nil {
+			return nil, fmt.Errorf("coinbase default pair list: %w", err)
+		}
+		s := externalcoinbase.NewStreamer(pairMap)
+		s.Logger = logger
+		streamers = append(streamers, external.StreamerSpec{
+			Streamer: s,
+			Pairs:    pairs,
+		})
+		logger.Info("external connector enabled",
+			"source", externalcoinbase.SourceName,
+			"pairs", len(pairs))
+	}
+
+	if cfg.ExchangeRatesApi.Enabled {
+		// APIKey is resolved via env override at config load time
+		// (see config.ApplyEnvOverrides → EXCHANGERATESAPI_KEY).
+		p, err := externalexchangerates.NewPoller(cfg.ExchangeRatesApi.APIKey)
+		if err != nil {
+			return nil, fmt.Errorf("exchangeratesapi: %w", err)
+		}
+		if cfg.ExchangeRatesApi.Base != "" {
+			p.Base = cfg.ExchangeRatesApi.Base
+		}
+		pollers = append(pollers, external.PollerSpec{
+			Poller: p,
+			Pairs:  defaultFXPairs(p.Base),
+		})
+		logger.Info("external poller enabled",
+			"source", externalexchangerates.SourceName,
+			"base", p.Base)
+	}
+
+	if cfg.PolygonForex.Enabled {
+		p, err := externalpolygonforex.NewPoller(cfg.PolygonForex.APIKey)
+		if err != nil {
+			return nil, fmt.Errorf("polygon-forex: %w", err)
+		}
+		if cfg.PolygonForex.Base != "" {
+			p.Base = cfg.PolygonForex.Base
+		}
+		// Pair list: the union of every fiat appearing in the
+		// enabled streamers' default pair sets. For v1 we use
+		// a static default set — EUR/GBP/JPY/CAD/AUD/CHF + any
+		// base-currency override. Operators can extend via config
+		// in a follow-up PR.
+		pairs := defaultFXPairs(p.Base)
+		pollers = append(pollers, external.PollerSpec{
+			Poller: p,
+			Pairs:  pairs,
+		})
+		logger.Info("external poller enabled",
+			"source", externalpolygonforex.SourceName,
+			"base", p.Base,
+			"symbols", len(pairs))
+	}
+
+	// Aggregator pollers: cross-check only, class=aggregator →
+	// emitted OracleUpdates excluded from VWAP. Pair list is the
+	// union of fiat-quoted crypto pairs across enabled streamers;
+	// aggregator pollers follow wherever the exchanges are
+	// targeting.
+	aggregatorPairs := defaultAggregatorPairs()
+
+	if cfg.CoinGecko.Enabled {
+		p := externalcoingecko.NewPoller()
+		pollers = append(pollers, external.PollerSpec{
+			Poller: p,
+			Pairs:  aggregatorPairs,
+		})
+		logger.Info("external poller enabled",
+			"source", externalcoingecko.SourceName,
+			"pairs", len(aggregatorPairs))
+	}
+
+	if cfg.CoinMarketCap.Enabled {
+		p, err := externalcoinmarketcap.NewPoller(cfg.CoinMarketCap.APIKey)
+		if err != nil {
+			return nil, fmt.Errorf("coinmarketcap: %w", err)
+		}
+		pollers = append(pollers, external.PollerSpec{
+			Poller: p,
+			Pairs:  aggregatorPairs,
+		})
+		logger.Info("external poller enabled",
+			"source", externalcoinmarketcap.SourceName,
+			"pairs", len(aggregatorPairs))
+	}
+
+	if cfg.CryptoCompare.Enabled {
+		p, err := externalcryptocompare.NewPoller(cfg.CryptoCompare.APIKey)
+		if err != nil {
+			return nil, fmt.Errorf("cryptocompare: %w", err)
+		}
+		pollers = append(pollers, external.PollerSpec{
+			Poller: p,
+			Pairs:  aggregatorPairs,
+		})
+		logger.Info("external poller enabled",
+			"source", externalcryptocompare.SourceName,
+			"pairs", len(aggregatorPairs))
+	}
+
+	if cfg.ECB.Enabled {
+		p := externalecb.NewPoller()
+		// ECB speaks fiat-only; derive the pair list from anything
+		// with a fiat side. defaultFXPairs builds fiat/<base>
+		// crosses; ECB's poller further filters to fiats it has
+		// rates for.
+		pairs := defaultFXPairs("EUR")
+		pollers = append(pollers, external.PollerSpec{
+			Poller: p,
+			Pairs:  pairs,
+		})
+		logger.Info("external poller enabled",
+			"source", externalecb.SourceName,
+			"pairs", len(pairs))
+	}
+
+	if len(streamers) == 0 && len(pollers) == 0 {
+		logger.Info("no external connectors enabled")
+		return func() {}, nil
+	}
+
+	return external.Run(ctx, streamers, pollers, events, logger)
+}
+
+// defaultAggregatorPairs is the pair set aggregators (CoinGecko /
+// CMC / CryptoCompare) query for cross-check. Intentionally broad
+// — covers XLM against the common fiats + BTC/USD + ETH/USD as
+// reference anchors. Operators can narrow via a future per-poller
+// Symbols override; for v1 this fixed set matches what the
+// divergence detector will want to compare against the aggregator's
+// output.
+func defaultAggregatorPairs() []canonical.Pair {
+	cryptos := []string{"XLM", "BTC", "ETH"}
+	fiats := []string{"USD", "EUR", "GBP"}
+	out := make([]canonical.Pair, 0, len(cryptos)*len(fiats))
+	for _, c := range cryptos {
+		ca, err := canonical.NewCryptoAsset(c)
+		if err != nil {
+			continue
+		}
+		for _, f := range fiats {
+			fa, err := canonical.NewFiatAsset(f)
+			if err != nil {
+				continue
+			}
+			p, err := canonical.NewPair(ca, fa)
+			if err != nil {
+				continue
+			}
+			out = append(out, p)
+		}
+	}
+	return out
+}
+
+// defaultFXPairs returns the G10-ish fiat cross-rate set against
+// the given base currency. These feed ExchangeRatesApi / Polygon.io
+// / ECB — all FX pollers share the same target currency list.
+// Operator overrides via per-poller Symbols field when needed.
+func defaultFXPairs(base string) []canonical.Pair {
+	baseAsset, err := canonical.NewFiatAsset(base)
+	if err != nil {
+		// Base not on the ADR-0010 allow-list — poller will no-op.
+		return nil
+	}
+	targets := []string{"EUR", "GBP", "JPY", "CAD", "AUD", "CHF", "NZD", "SEK", "NOK", "MXN"}
+	out := make([]canonical.Pair, 0, len(targets))
+	for _, code := range targets {
+		if code == base {
+			continue
+		}
+		a, err := canonical.NewFiatAsset(code)
+		if err != nil {
+			continue
+		}
+		p, err := canonical.NewPair(a, baseAsset)
+		if err != nil {
+			continue
+		}
+		out = append(out, p)
+	}
+	return out
 }
 
 // ─── Dispatcher wiring ──────────────────────────────────────────
@@ -444,6 +736,10 @@ func handleOneEvent(ctx context.Context, logger *slog.Logger, store *timescale.S
 	case redstone.UpdateEvent:
 		persistOracle(ctx, logger, store, e.Update)
 	case band.UpdateEvent:
+		persistOracle(ctx, logger, store, e.Update)
+	case external.TradeEvent:
+		persistTrade(ctx, logger, store, e.Trade)
+	case external.UpdateEvent:
 		persistOracle(ctx, logger, store, e.Update)
 	default:
 		// A source emitted an event type the sink doesn't know how

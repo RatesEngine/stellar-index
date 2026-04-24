@@ -16,9 +16,77 @@ type Config struct {
 	Storage   StorageConfig   `toml:"storage" doc:"Postgres/TimescaleDB, Redis, MinIO connection details."`
 	Ingestion IngestionConfig `toml:"ingestion" doc:"Source orchestration — which connectors to run, backfill bounds, cursor store."`
 	Oracle    OracleConfig    `toml:"oracle" doc:"On-chain oracle contract addresses (Reflector, Redstone, Band)."`
+	External  ExternalConfig  `toml:"external" doc:"Off-chain connectors — CEX/FX/aggregator sources that run parallel to the on-chain dispatcher."`
 	Aggregate AggregateConfig `toml:"aggregate" doc:"VWAP/TWAP windows + outlier thresholds."`
 	API       APIConfig       `toml:"api" doc:"Public API serving plane — port, auth mode, rate limits, CDN."`
 	Obs       ObsConfig       `toml:"obs" doc:"Metrics, logs, traces — exporters + sampling."`
+}
+
+// ExternalConfig controls off-chain connectors that live in
+// internal/sources/external/. Each venue toggles via its own
+// sub-struct; disabled by default so fresh deployments don't
+// attempt network egress until the operator opts in.
+//
+// Pair lists are hardcoded per venue for v1 (see venue package's
+// DefaultPairs). A future PR adds per-venue pair override YAML once
+// the fleet stabilises; deferred to keep config surface narrow
+// until operators actually ask for it.
+type ExternalConfig struct {
+	Binance          ExternalVenueConfig         `toml:"binance"          doc:"Binance spot WebSocket aggTrade streamer (XLMUSDT / BTCUSDT / ETHUSDT / XLMBTC)."`
+	Kraken           ExternalVenueConfig         `toml:"kraken"           doc:"Kraken v2 WebSocket trade streamer (XLM in 6 fiats: USD/EUR/GBP/AUD/CAD/CHF + BTC/USD, ETH/USD)."`
+	Bitstamp         ExternalVenueConfig         `toml:"bitstamp"         doc:"Bitstamp v2 WebSocket live_trades streamer (XLM/USD, XLM/EUR, XLM/GBP, XLM/BTC, BTC/USD, BTC/EUR, ETH/USD)."`
+	Coinbase         ExternalVenueConfig         `toml:"coinbase"         doc:"Coinbase Exchange WebSocket matches streamer (XLM-USD, BTC-USD, ETH-USD)."`
+	ExchangeRatesApi ExchangeRatesApiVenueConfig `toml:"exchangeratesapi" doc:"ExchangeRatesApi.io REST poller for fiat cross-rates (Professional tier required for USD base + 1-min cadence + redistribution)."`
+	PolygonForex     PolygonForexVenueConfig     `toml:"polygon_forex"    doc:"Polygon.io Forex Snapshot poller — institutional-grade FX, Advanced tier ($199/mo+) required."`
+	CoinGecko        ExternalVenueConfig         `toml:"coingecko"        doc:"CoinGecko /simple/price poller. Class=aggregator (divergence-only). Free tier works; no auth."`
+	CoinMarketCap    CoinMarketCapVenueConfig    `toml:"coinmarketcap"    doc:"CoinMarketCap /v2 quotes poller. Class=aggregator. Paid API key; Standard tier ($79/mo+) for commercial redistribution."`
+	CryptoCompare    CryptoCompareVenueConfig    `toml:"cryptocompare"    doc:"CryptoCompare /data/pricemulti poller. Class=aggregator. Paid API key via Authorization header."`
+	ECB              ExternalVenueConfig         `toml:"ecb"              doc:"European Central Bank daily FX reference rates. Class=authority_sanity (daily anchor, not VWAP). Free, no auth."`
+}
+
+// ExternalVenueConfig is the common per-venue toggle shape for
+// credential-less public venues (Binance, Kraken, Bitstamp, Coinbase).
+// Paid-tier venues with API keys use their own struct (e.g.
+// [ExchangeRatesApiVenueConfig]) that embeds the same Enabled field.
+type ExternalVenueConfig struct {
+	Enabled bool `toml:"enabled" doc:"Whether this connector runs. Off by default — no network egress until operator opts in." default:"false"`
+}
+
+// ExchangeRatesApiVenueConfig extends the common toggle with the
+// API-key slot and base-currency override.
+//
+// APIKey follows the same secret-field convention as
+// [StorageConfig.PostgresDSN]: the field holds the actual secret,
+// and the `env:` tag names the env var that overrides it at
+// [ApplyEnvOverrides] time. Production configs keep APIKey empty
+// in the TOML and set the env var at the process level.
+type ExchangeRatesApiVenueConfig struct {
+	Enabled bool   `toml:"enabled" doc:"Whether this connector runs. Off by default." default:"false"`
+	APIKey  string `toml:"api_key" doc:"ExchangeRatesApi access key. Prefer env var; TOML fallback exists for local-dev convenience." env:"EXCHANGERATESAPI_KEY" default:""`
+	Base    string `toml:"base" doc:"Base currency (USD, EUR, GBP, …). Defaults to USD. Free tier locked to EUR; paid tier accepts any allow-listed fiat." default:"USD"`
+}
+
+// PolygonForexVenueConfig carries the Polygon.io Forex connector
+// settings. Advanced tier (~$199/mo) required for the snapshot
+// endpoint; lower tiers produce ErrAPIRejected at first poll.
+type PolygonForexVenueConfig struct {
+	Enabled bool   `toml:"enabled" doc:"Whether this connector runs. Off by default." default:"false"`
+	APIKey  string `toml:"api_key" doc:"Polygon.io API key. Prefer env var POLYGON_API_KEY; TOML fallback for local-dev only." env:"POLYGON_API_KEY" default:""`
+	Base    string `toml:"base" doc:"Base currency filter. Only tickers matching C:<base><quote> emit. Defaults to USD." default:"USD"`
+}
+
+// CoinMarketCapVenueConfig carries the CMC Pro API auth + toggle.
+// APIKey follows the same env-override convention as the FX sources.
+type CoinMarketCapVenueConfig struct {
+	Enabled bool   `toml:"enabled" doc:"Whether this connector runs. Off by default." default:"false"`
+	APIKey  string `toml:"api_key" doc:"CMC Pro API key, passed as X-CMC_PRO_API_KEY header. Prefer env var." env:"COINMARKETCAP_API_KEY" default:""`
+}
+
+// CryptoCompareVenueConfig carries the CryptoCompare API auth +
+// toggle.
+type CryptoCompareVenueConfig struct {
+	Enabled bool   `toml:"enabled" doc:"Whether this connector runs. Off by default." default:"false"`
+	APIKey  string `toml:"api_key" doc:"CryptoCompare API key, passed as 'Authorization: Apikey <KEY>'. Prefer env var." env:"CRYPTOCOMPARE_API_KEY" default:""`
 }
 
 // OracleConfig gathers on-chain oracle contract addresses. Each
@@ -47,8 +115,8 @@ type ReflectorOracleConfig struct {
 // RedstoneOracleConfig carries the mainnet RedStone Adapter address.
 // RedStone's 19 per-feed contracts are thin proxies that don't emit
 // events (verified 2026-04-23 via stellar.expert's contract API) —
-// the Adapter is the single source that emits WritePrices. See
-// docs/discovery/oracles/redstone.md.
+// all event activity is on the single Adapter, so one address is
+// the full configuration surface. See docs/discovery/oracles/redstone.md.
 type RedstoneOracleConfig struct {
 	AdapterContract string `toml:"adapter_contract" doc:"RedStone Adapter contract (C-prefix) on mainnet — CA526Y2NQWGWVVQ7RFFPGAZMU66PSYJ3UC2MTVAV4ZU7OM5BOPHDXUSG."`
 }
@@ -173,6 +241,21 @@ func Default() Config {
 			Reflector: ReflectorOracleConfig{},
 			Redstone:  RedstoneOracleConfig{},
 			Band:      BandOracleConfig{},
+		},
+		External: ExternalConfig{
+			// All off-chain connectors disabled by default.
+			// Operator opts in per-venue once they've confirmed
+			// network egress / credentials.
+			Binance:          ExternalVenueConfig{Enabled: false},
+			Kraken:           ExternalVenueConfig{Enabled: false},
+			Bitstamp:         ExternalVenueConfig{Enabled: false},
+			Coinbase:         ExternalVenueConfig{Enabled: false},
+			ExchangeRatesApi: ExchangeRatesApiVenueConfig{Enabled: false, Base: "USD"},
+			PolygonForex:     PolygonForexVenueConfig{Enabled: false, Base: "USD"},
+			CoinGecko:        ExternalVenueConfig{Enabled: false},
+			CoinMarketCap:    CoinMarketCapVenueConfig{Enabled: false},
+			CryptoCompare:    CryptoCompareVenueConfig{Enabled: false},
+			ECB:              ExternalVenueConfig{Enabled: false},
 		},
 		Aggregate: AggregateConfig{
 			VWAPWindowSeconds:     300,

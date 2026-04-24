@@ -75,6 +75,18 @@ func (c *Config) ApplyEnvOverrides() {
 	if v := os.Getenv("RATESENGINE_S3_SECRET_KEY"); v != "" {
 		c.Storage.S3SecretKeyEnv = v
 	}
+	if v := os.Getenv("EXCHANGERATESAPI_KEY"); v != "" {
+		c.External.ExchangeRatesApi.APIKey = v
+	}
+	if v := os.Getenv("POLYGON_API_KEY"); v != "" {
+		c.External.PolygonForex.APIKey = v
+	}
+	if v := os.Getenv("COINMARKETCAP_API_KEY"); v != "" {
+		c.External.CoinMarketCap.APIKey = v
+	}
+	if v := os.Getenv("CRYPTOCOMPARE_API_KEY"); v != "" {
+		c.External.CryptoCompare.APIKey = v
+	}
 }
 
 // LoadWithEnv is [Load] + [ApplyEnvOverrides] + a second [Validate].
