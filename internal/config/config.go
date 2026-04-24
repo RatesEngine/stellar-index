@@ -30,6 +30,8 @@ type Config struct {
 //	fx_contract  = "C..."
 type OracleConfig struct {
 	Reflector ReflectorOracleConfig `toml:"reflector" doc:"Reflector oracle contract addresses per variant (DEX / CEX / FX)."`
+	Redstone  RedstoneOracleConfig  `toml:"redstone"  doc:"RedStone Adapter contract address (single adapter owns every feed)."`
+	Band      BandOracleConfig      `toml:"band"      doc:"Band Protocol StandardReference contract address (Soroban-native, emits no events — observed via InvokeContract call args)."`
 }
 
 // ReflectorOracleConfig carries the three Reflector contract
@@ -40,6 +42,24 @@ type ReflectorOracleConfig struct {
 	DEXContract string `toml:"dex_contract" doc:"Reflector DEX contract (C-prefix) on mainnet."`
 	CEXContract string `toml:"cex_contract" doc:"Reflector CEX contract (C-prefix) on mainnet."`
 	FXContract  string `toml:"fx_contract"  doc:"Reflector FX contract (C-prefix) on mainnet."`
+}
+
+// RedstoneOracleConfig carries the mainnet RedStone Adapter address.
+// RedStone's 19 per-feed contracts are thin proxies that don't emit
+// events (verified 2026-04-23 via stellar.expert's contract API) —
+// the Adapter is the single source that emits WritePrices. See
+// docs/discovery/oracles/redstone.md.
+type RedstoneOracleConfig struct {
+	AdapterContract string `toml:"adapter_contract" doc:"RedStone Adapter contract (C-prefix) on mainnet — CA526Y2NQWGWVVQ7RFFPGAZMU66PSYJ3UC2MTVAV4ZU7OM5BOPHDXUSG."`
+}
+
+// BandOracleConfig carries the mainnet Band StandardReference
+// address. Band's Stellar contract emits zero events — we observe
+// `relay()` / `force_relay()` InvokeContract calls via the
+// dispatcher's ContractCallDecoder interface (PR 168). See
+// docs/discovery/oracles/band.md.
+type BandOracleConfig struct {
+	StandardReferenceContract string `toml:"standard_reference_contract" doc:"Band Protocol StandardReference contract (C-prefix) on mainnet — CCQXWMZVM3KRTXTUPTN53YHL272QGKF32L7XEDNZ2S6OSUFK3NFBGG5M."`
 }
 
 // RegionConfig identifies the region this node belongs to, to tag
@@ -151,6 +171,8 @@ func Default() Config {
 			// default — enabling a reflector-* source without
 			// setting its address is a startup error.
 			Reflector: ReflectorOracleConfig{},
+			Redstone:  RedstoneOracleConfig{},
+			Band:      BandOracleConfig{},
 		},
 		Aggregate: AggregateConfig{
 			VWAPWindowSeconds:     300,

@@ -45,7 +45,10 @@ import (
 	"github.com/RatesEngine/rates-engine/internal/ledgerstream"
 	"github.com/RatesEngine/rates-engine/internal/obs"
 	"github.com/RatesEngine/rates-engine/internal/sources/aquarius"
+	"github.com/RatesEngine/rates-engine/internal/sources/band"
+	"github.com/RatesEngine/rates-engine/internal/sources/comet"
 	"github.com/RatesEngine/rates-engine/internal/sources/phoenix"
+	"github.com/RatesEngine/rates-engine/internal/sources/redstone"
 	"github.com/RatesEngine/rates-engine/internal/sources/reflector"
 	"github.com/RatesEngine/rates-engine/internal/sources/sdex"
 	"github.com/RatesEngine/rates-engine/internal/sources/soroswap"
@@ -191,6 +194,7 @@ func run(cfgPath string, dryRun bool) error {
 func buildDispatcher(names []string, oracle config.OracleConfig) (*dispatcher.Dispatcher, error) {
 	var decoders []dispatcher.Decoder
 	var opDecoders []dispatcher.OpDecoder
+	var callDecoders []dispatcher.ContractCallDecoder
 	for _, name := range names {
 		switch strings.ToLower(name) {
 		case soroswap.SourceName:
@@ -204,6 +208,8 @@ func buildDispatcher(names []string, oracle config.OracleConfig) (*dispatcher.Di
 			decoders = append(decoders, aquarius.NewDecoder())
 		case phoenix.SourceName:
 			decoders = append(decoders, phoenix.NewDecoder())
+		case comet.SourceName:
+			decoders = append(decoders, comet.NewDecoder())
 		case reflector.SourceDEX:
 			if oracle.Reflector.DEXContract == "" {
 				return nil, fmt.Errorf(
@@ -228,6 +234,25 @@ func buildDispatcher(names []string, oracle config.OracleConfig) (*dispatcher.Di
 			}
 			decoders = append(decoders,
 				reflector.NewDecoder(reflector.VariantFX, oracle.Reflector.FXContract))
+		case redstone.SourceName:
+			if oracle.Redstone.AdapterContract == "" {
+				return nil, fmt.Errorf(
+					"source %q enabled but oracle.redstone.adapter_contract is empty",
+					name)
+			}
+			decoders = append(decoders,
+				redstone.NewDecoder(oracle.Redstone.AdapterContract))
+		case band.SourceName:
+			if oracle.Band.StandardReferenceContract == "" {
+				return nil, fmt.Errorf(
+					"source %q enabled but oracle.band.standard_reference_contract is empty",
+					name)
+			}
+			// Band is a ContractCallDecoder, not a Decoder — its
+			// Soroban contract emits no events. See
+			// docs/discovery/oracles/band.md.
+			callDecoders = append(callDecoders,
+				band.NewDecoder(oracle.Band.StandardReferenceContract))
 		case sdex.SourceName:
 			opDecoders = append(opDecoders, sdex.NewDecoder())
 		default:
@@ -237,6 +262,9 @@ func buildDispatcher(names []string, oracle config.OracleConfig) (*dispatcher.Di
 	disp := dispatcher.New(decoders...)
 	for _, od := range opDecoders {
 		disp.AddOpDecoder(od)
+	}
+	for _, ccd := range callDecoders {
+		disp.AddContractCallDecoder(ccd)
 	}
 	return disp, nil
 }
@@ -407,9 +435,15 @@ func handleOneEvent(ctx context.Context, logger *slog.Logger, store *timescale.S
 		persistTrade(ctx, logger, store, e.Trade)
 	case phoenix.TradeEvent:
 		persistTrade(ctx, logger, store, e.Trade)
+	case comet.TradeEvent:
+		persistTrade(ctx, logger, store, e.Trade)
 	case sdex.TradeEvent:
 		persistTrade(ctx, logger, store, e.Trade)
 	case reflector.UpdateEvent:
+		persistOracle(ctx, logger, store, e.Update)
+	case redstone.UpdateEvent:
+		persistOracle(ctx, logger, store, e.Update)
+	case band.UpdateEvent:
 		persistOracle(ctx, logger, store, e.Update)
 	default:
 		// A source emitted an event type the sink doesn't know how

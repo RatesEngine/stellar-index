@@ -28,9 +28,12 @@ var KnownSources = map[string]struct{}{
 	"soroswap":      {},
 	"aquarius":      {},
 	"phoenix":       {},
+	"comet":         {},
 	"reflector-dex": {},
 	"reflector-cex": {},
 	"reflector-fx":  {},
+	"redstone":      {},
+	"band":          {},
 }
 
 // Validate checks the loaded Config against the same constraints
@@ -97,6 +100,18 @@ func (c Config) validateCrossSection() error {
 			if c.Oracle.Reflector.FXContract == "" {
 				return fmt.Errorf(
 					"%w: ingestion.enabled_sources lists %q but oracle.reflector.fx_contract is empty",
+					ErrInvalidConfig, name)
+			}
+		case "redstone":
+			if c.Oracle.Redstone.AdapterContract == "" {
+				return fmt.Errorf(
+					"%w: ingestion.enabled_sources lists %q but oracle.redstone.adapter_contract is empty",
+					ErrInvalidConfig, name)
+			}
+		case "band":
+			if c.Oracle.Band.StandardReferenceContract == "" {
+				return fmt.Errorf(
+					"%w: ingestion.enabled_sources lists %q but oracle.band.standard_reference_contract is empty",
 					ErrInvalidConfig, name)
 			}
 		}
@@ -270,9 +285,11 @@ func (o OracleConfig) validate() error {
 	// Empty is allowed — operator can disable every oracle.
 	// When set, addresses must be valid C-strkeys.
 	for name, addr := range map[string]string{
-		"oracle.reflector.dex_contract": o.Reflector.DEXContract,
-		"oracle.reflector.cex_contract": o.Reflector.CEXContract,
-		"oracle.reflector.fx_contract":  o.Reflector.FXContract,
+		"oracle.reflector.dex_contract":           o.Reflector.DEXContract,
+		"oracle.reflector.cex_contract":           o.Reflector.CEXContract,
+		"oracle.reflector.fx_contract":            o.Reflector.FXContract,
+		"oracle.redstone.adapter_contract":        o.Redstone.AdapterContract,
+		"oracle.band.standard_reference_contract": o.Band.StandardReferenceContract,
 	} {
 		if addr == "" {
 			continue
