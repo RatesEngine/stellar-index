@@ -70,6 +70,8 @@ the `env:` column.
 | `oracle.reflector.fx_contract` | `string` | _(required)_ | — | Reflector FX contract (C-prefix) on mainnet. |
 | `oracle.redstone.adapter_contract` | `string` | _(required)_ | — | RedStone Adapter contract (C-prefix) on mainnet — CA526Y2NQWGWVVQ7RFFPGAZMU66PSYJ3UC2MTVAV4ZU7OM5BOPHDXUSG. |
 | `oracle.band.standard_reference_contract` | `string` | _(required)_ | — | Band Protocol StandardReference contract (C-prefix) on mainnet — CCQXWMZVM3KRTXTUPTN53YHL272QGKF32L7XEDNZ2S6OSUFK3NFBGG5M. |
+| `oracle.soroswap.factory_contract` | `string` | _(required)_ | — | Soroswap factory contract (C-prefix) on mainnet — CA4HEQTL2WPEUYKYKCDOHCDNIV4QHNJ7EL4J4NQ6VADP7SYHVRYZ7AW2. |
+| `oracle.soroswap.seed_rpc_endpoint` | `string` | _(required)_ | — | stellar-rpc URL used for the boot-time factory sweep. Any public pubnet endpoint works (e.g. https://mainnet.sorobanrpc.com). Falls back to stellar.rpc_endpoints[0] when empty. |
 
 ### `[external]`
 
