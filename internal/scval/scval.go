@@ -66,6 +66,19 @@ func Parse(b64 string) (xdr.ScVal, error) {
 	return sv, nil
 }
 
+// ParseBytes is the raw-bytes twin of [Parse] — XDR-unmarshals a
+// pre-decoded byte slice into an ScVal. Used by decoders whose
+// event body arrives as an ScVal::Bytes wrapping an XDR-encoded
+// struct (see redstone.sdkDecodeBody); they call [AsBytes] first,
+// then pass the raw bytes through here to get the inner ScVal.
+func ParseBytes(raw []byte) (xdr.ScVal, error) {
+	var sv xdr.ScVal
+	if err := sv.UnmarshalBinary(raw); err != nil {
+		return xdr.ScVal{}, fmt.Errorf("%w: %w", ErrScValDecode, err)
+	}
+	return sv, nil
+}
+
 // MustEncodeSymbol returns the base64-encoded SCVal::Symbol(s) blob
 // used for topic matching (both in stellar-rpc getEvents filters and
 // for byte-comparison against Event.Topic entries).
@@ -182,6 +195,18 @@ func AsU32(sv xdr.ScVal) (uint32, error) {
 		return 0, fmt.Errorf("%w: want U32, got %s", ErrScValType, sv.Type.String())
 	}
 	return uint32(*sv.U32), nil
+}
+
+// AsBytes returns the raw []byte value from sv. Used by decoders
+// whose event body is a Bytes-wrapped XDR-encoded struct (e.g.
+// Redstone: the adapter's Rust contract does `self.to_xdr(env).to_val()`
+// which wraps the serialized struct in ScVal::Bytes rather than
+// emitting the struct directly as a Map).
+func AsBytes(sv xdr.ScVal) ([]byte, error) {
+	if sv.Type != xdr.ScValTypeScvBytes {
+		return nil, fmt.Errorf("%w: want Bytes, got %s", ErrScValType, sv.Type.String())
+	}
+	return []byte(*sv.Bytes), nil
 }
 
 // NewU32 builds an ScVal wrapping a uint32, suitable for passing as

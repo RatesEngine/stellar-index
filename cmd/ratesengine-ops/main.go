@@ -704,8 +704,8 @@ func verifyDecoders(args []string) error { //nolint:funlen,gocognit,gocyclo // l
 				"set oracle.soroswap.seed_rpc_endpoint or stellar.rpc_endpoints")
 		}
 		fmt.Fprintf(os.Stderr, "verify-decoders: seeding soroswap pairs from %s...\n", seedEndpoint)
-		seedCtx, seedCancel := context.WithTimeout(context.Background(), 5*time.Minute)
-		rpc := stellarrpc.New(seedEndpoint, stellarrpc.WithTimeout(30*time.Second))
+		seedCtx, seedCancel := context.WithTimeout(context.Background(), 15*time.Minute)
+		rpc := stellarrpc.New(seedEndpoint, stellarrpc.WithTimeout(60*time.Second))
 		n, err := soroswapDec.SeedFromFactoryRPC(seedCtx, rpc, cfg.Oracle.Soroswap.FactoryContract)
 		seedCancel()
 		if err != nil {
@@ -804,6 +804,26 @@ func verifyDecoders(args []string) error { //nolint:funlen,gocognit,gocyclo // l
 		fmt.Fprintf(os.Stderr, "\nverify-decoders: %d/%d decoders emitted zero outputs — "+
 			"either the range genuinely lacks their events, or their topic/schema "+
 			"no longer matches.\n", silent, len(registered))
+	}
+
+	// Dispatcher-internal stats surface here. They distinguish
+	// "matched but Decode errored" (decodeErrors) from "no decoder
+	// claimed the event" (unmatchedHits) — essential for localising
+	// a silent-source finding to either the match or decode side.
+	dispStats := disp.Stats()
+	if len(dispStats.DecodeErrors) > 0 || dispStats.UnmatchedHits > 0 {
+		fmt.Fprintf(os.Stderr, "\ndispatcher stats — unmatched events: %d\n", dispStats.UnmatchedHits)
+		if len(dispStats.DecodeErrors) > 0 {
+			fmt.Fprintln(os.Stderr, "decoder errors by source:")
+			errNames := make([]string, 0, len(dispStats.DecodeErrors))
+			for k := range dispStats.DecodeErrors {
+				errNames = append(errNames, k)
+			}
+			sort.Strings(errNames)
+			for _, name := range errNames {
+				fmt.Fprintf(os.Stderr, "  %s: %d\n", name, dispStats.DecodeErrors[name])
+			}
+		}
 	}
 	return nil
 }

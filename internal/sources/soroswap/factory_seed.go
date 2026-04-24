@@ -3,11 +3,23 @@ package soroswap
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/RatesEngine/rates-engine/internal/canonical"
 	"github.com/RatesEngine/rates-engine/internal/scval"
 	"github.com/RatesEngine/rates-engine/internal/stellarrpc"
 )
+
+// seedThrottle is the delay inserted between simulateTransaction
+// calls during a factory sweep. Public stellar-rpc endpoints (e.g.
+// mainnet.sorobanrpc.com behind Cloudflare) return 429 above
+// ~3-5 req/s even on cached simulate responses. 300ms keeps us
+// comfortably under that. For a 200-pair factory the full sweep
+// takes ~3min of wall time — acceptable at boot and verify time.
+// Behind an unthrottled endpoint this is slow; a follow-up could
+// parallelise across a small worker pool or swap for paid-tier
+// throughput.
+const seedThrottle = 300 * time.Millisecond
 
 // SeedFromFactoryRPC populates the Decoder's pair→(token0, token1)
 // registry by reading the Soroswap factory's on-chain state via
@@ -48,16 +60,19 @@ func (d *Decoder) SeedFromFactoryRPC(ctx context.Context, rpc *stellarrpc.Client
 
 	seeded := 0
 	for i := uint32(0); i < length; i++ {
+		time.Sleep(seedThrottle)
 		pairAddr, err := callAddressStrkey(ctx, rpc, factoryContract, "all_pairs",
 			[]scval.ScVal{scval.NewU32(i)})
 		if err != nil {
 			return seeded, fmt.Errorf("soroswap seed: all_pairs(%d): %w", i, err)
 		}
 
+		time.Sleep(seedThrottle)
 		token0Addr, err := callAddressStrkey(ctx, rpc, pairAddr, "token_0", nil)
 		if err != nil {
 			return seeded, fmt.Errorf("soroswap seed: pair %s token_0: %w", pairAddr, err)
 		}
+		time.Sleep(seedThrottle)
 		token1Addr, err := callAddressStrkey(ctx, rpc, pairAddr, "token_1", nil)
 		if err != nil {
 			return seeded, fmt.Errorf("soroswap seed: pair %s token_1: %w", pairAddr, err)

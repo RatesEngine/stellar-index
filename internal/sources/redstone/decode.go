@@ -171,6 +171,13 @@ type priceDataDecoded struct {
 //
 //	Map { "updater": Address, "updated_feeds": Vec<PriceData> }
 //
+// On the wire the Rust adapter contract (redstone-adapter's
+// event.rs) emits the body as `ScVal::Bytes` wrapping the XDR-
+// encoded struct: `self.to_xdr(env).to_val()`. We unwrap that Bytes
+// layer once, then re-parse as ScVal::Map below. If we ever see a
+// body that's already a Map (e.g. a future contract upgrade that
+// drops the custom to_xdr), the fallback path still works.
+//
 // We only return the updated_feeds list — the updater is pulled
 // from the op args instead (the event's updater and args' updater
 // must agree by contract, and args are authoritative for observer
@@ -180,6 +187,17 @@ func sdkDecodeBody(valueB64 string) ([]priceDataDecoded, error) {
 	body, err := scval.Parse(valueB64)
 	if err != nil {
 		return nil, fmt.Errorf("parse body: %w", err)
+	}
+	// Unwrap the Bytes-wrapped XDR payload if present. The adapter
+	// uses `to_xdr().to_val()` which produces ScVal::Bytes holding
+	// the XDR-encoded Map; re-parsing those bytes yields the Map
+	// shape our existing downstream logic already handles.
+	if raw, bytesErr := scval.AsBytes(body); bytesErr == nil {
+		inner, parseErr := scval.ParseBytes(raw)
+		if parseErr != nil {
+			return nil, fmt.Errorf("unwrap Bytes body: %w", parseErr)
+		}
+		body = inner
 	}
 	entries, err := scval.AsMap(body)
 	if err != nil {

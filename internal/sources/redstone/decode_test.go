@@ -395,3 +395,60 @@ func TestDecode_NonRedstoneTopic_Rejects(t *testing.T) {
 		t.Errorf("expected ErrNotRedstoneEvent, got %v", err)
 	}
 }
+
+// TestDecode_RealMainnetEvent_BytesWrappedBody exercises the
+// exact on-wire body shape RedStone's adapter contract emits: an
+// `ScVal::Bytes` wrapping the XDR-encoded WritePrices struct
+// (the Rust impl uses `self.to_xdr(env).to_val()` — see
+// redstone-public-contracts/packages/stellar-connector/.../event.rs).
+// Earlier helper tests built the Map directly, which masked a bug
+// where the decoder's Map-assertion ran against the outer Bytes
+// wrapper and silently rejected every real event.
+//
+// Fixture: event pulled from mainnet ledger 62265977 (tx
+// 349bd590…c7a8b) on 2026-04-24 via sorobanrpc.com getEvents.
+// Contains one XLM price update at package_timestamp
+// 2026-04-23T12:30:06Z. Feed id from the tx's write_prices args.
+func TestDecode_RealMainnetEvent_BytesWrappedBody(t *testing.T) {
+	// The actual event body from ledger 62265977. Outer wrapper is
+	// ScVal::Bytes(248); inner parse yields Map{updater, updated_feeds}.
+	body := "AAAADQAAAPgAAAARAAAAAQAAAAIAAAAPAAAADXVwZGF0ZWRfZmVlZHMAAAAAAAAQAAAAAQAAAAEAAAARAAAAAQAAAAMAAAAPAAAAEXBhY2thZ2VfdGltZXN0YW1wAAAAAAAABQAAAZ2/ru8wAAAADwAAAAVwcmljZQAAAAAAAAsAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAABA0AaYAAAAA8AAAAPd3JpdGVfdGltZXN0YW1wAAAAAAUAAAGdv68KiAAAAA8AAAAHdXBkYXRlcgAAAAASAAAAAAAAAAAk1wP6EQQ6Z6YlFesVDZAkQ3o7tjIdDJoRh0/hHzC1Bw=="
+
+	// OpArgs built to match the real tx's write_prices(updater,
+	// feed_ids, payload) call with feed_ids=["XLM"] — matching the
+	// single entry in updated_feeds.
+	args := []string{
+		encodeAddressArg(t, relayerG),
+		encodeStringVecArg(t, []string{"XLM"}),
+		encodePayloadArg(t),
+	}
+
+	ev := &events.Event{
+		Topic:          []string{TopicSymbolRedstone},
+		Value:          body,
+		OpArgs:         args,
+		ContractID:     adapterC,
+		Ledger:         62_265_977,
+		TxHash:         "349bd590c679a9d69ac0ff3eb49a673f95cf9d77016fc3d019eb654c772c7a8b",
+		OperationIndex: 0,
+		LedgerClosedAt: "2026-04-24T13:30:13Z",
+	}
+	closedAt, _ := time.Parse(time.RFC3339, ev.LedgerClosedAt)
+
+	updates, err := decodeWritePrices(ev, closedAt)
+	if err != nil {
+		t.Fatalf("decodeWritePrices: %v", err)
+	}
+	if len(updates) != 1 {
+		t.Fatalf("expected 1 update, got %d", len(updates))
+	}
+
+	xlm, _ := canonical.NewCryptoAsset("XLM")
+	if !updates[0].Asset.Equal(xlm) {
+		t.Errorf("Asset = %+v want XLM", updates[0].Asset)
+	}
+	// Price from the event body: 4349500000 (0x103401A60 = U256).
+	if updates[0].Price.BigInt().Cmp(big.NewInt(4_349_500_000)) != 0 {
+		t.Errorf("Price = %s want 4349500000", updates[0].Price)
+	}
+}
