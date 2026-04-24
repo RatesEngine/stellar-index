@@ -152,11 +152,16 @@ func TestMigrationsRoundTrip(t *testing.T) {
             (source, ledger, tx_hash, op_index, ts,
              base_asset, quote_asset, base_amount, quote_amount)
         VALUES ('t', 1, 'aa', 0, now(), 'native', 'native', -1, 1)`)
-	assertInsertRejected(t, db, ctx, "zero ledger", `
+	// ledger=0 is ACCEPTED as of migration 0004 — off-chain
+	// sources (Binance / Kraken / Bitstamp / Coinbase / FX pollers
+	// / aggregators) deliberately stamp 0 and use (source, tx_hash,
+	// op_index) for uniqueness. Matches oracle_updates which has
+	// always allowed ledger >= 0.
+	assertInsertAccepted(t, db, ctx, "zero ledger allowed for off-chain", `
         INSERT INTO trades
             (source, ledger, tx_hash, op_index, ts,
              base_asset, quote_asset, base_amount, quote_amount)
-        VALUES ('t', 0, 'aa', 0, now(), 'native', 'native', 1, 1)`)
+        VALUES ('binance', 0, 'dead0000000000000000000000000000000000000000000000000000000000be', 0, now(), 'crypto:XLM', 'crypto:USDT', 1, 1)`)
 	assertInsertRejected(t, db, ctx, "negative op_index", `
         INSERT INTO trades
             (source, ledger, tx_hash, op_index, ts,
@@ -387,6 +392,18 @@ func assertInsertRejected(t *testing.T, db *sql.DB, ctx context.Context, name, s
 	if !strings.Contains(msg, "23514") && !strings.Contains(msg, "check constraint") &&
 		!strings.Contains(msg, "violates check") {
 		t.Errorf("%s: error %v is not a check-constraint violation", name, err)
+	}
+}
+
+// assertInsertAccepted is the complement to assertInsertRejected —
+// verifies a statement is accepted. Used for invariants that were
+// tightened in one migration and relaxed in a later one, like the
+// trades.ledger CHECK (0001 required >0; 0004 relaxed to >=0 so
+// off-chain sources could emit).
+func assertInsertAccepted(t *testing.T, db *sql.DB, ctx context.Context, name, stmt string) {
+	t.Helper()
+	if _, err := db.ExecContext(ctx, stmt); err != nil {
+		t.Errorf("%s: expected insert to succeed, got %v", name, err)
 	}
 }
 

@@ -78,12 +78,17 @@ func (t Trade) ID() string {
 // Validate returns nil iff every invariant holds. Intended to be
 // called by the ingestion pipeline before a write is attempted —
 // surfacing a violation as ErrInvalidTrade is always an upstream bug.
+//
+// Ledger is NOT required to be non-zero. On-chain sources stamp the
+// real pubnet sequence; off-chain sources (Binance/Kraken/Bitstamp/
+// Coinbase — any venue without a ledger concept) stamp 0 and rely on
+// Source + TxHash + OpIndex for uniqueness. The zero-ledger check
+// that used to live here caught stub decoders at the cost of
+// rejecting valid off-chain inserts; TxHash validation (64-char hex,
+// synthesised deterministically for off-chain) already catches stubs.
 func (t Trade) Validate() error {
 	if t.Source == "" {
 		return fmt.Errorf("%w: empty source", ErrInvalidTrade)
-	}
-	if t.Ledger == 0 {
-		return fmt.Errorf("%w: zero ledger", ErrInvalidTrade)
 	}
 	if !validTxHash(t.TxHash) {
 		return fmt.Errorf("%w: tx_hash %q is not a 64-char hex string", ErrInvalidTrade, t.TxHash)

@@ -43,8 +43,11 @@ func TestTrade_Validate_happy(t *testing.T) {
 
 func TestTrade_Validate_errors(t *testing.T) {
 	cases := map[string]func(*c.Trade){
-		"empty source":    func(t *c.Trade) { t.Source = "" },
-		"zero ledger":     func(t *c.Trade) { t.Ledger = 0 },
+		"empty source": func(t *c.Trade) { t.Source = "" },
+		// "zero ledger" is intentionally NOT an error case —
+		// off-chain sources (Binance/Kraken/Bitstamp/Coinbase)
+		// stamp Ledger=0 deliberately. Uniqueness comes from
+		// Source + TxHash + OpIndex. Documented in Validate().
 		"short tx hash":   func(t *c.Trade) { t.TxHash = "cafe" },
 		"non-hex tx hash": func(t *c.Trade) { t.TxHash = "z" + goodTxHash[1:] },
 		// Uppercase hex decodes but isn't canonical — Postgres would
