@@ -108,6 +108,7 @@ RULES = [
             "cmd/ratesengine-indexer/",         # glue: wires ledgerstream → dispatcher (PR 165d)
             "cmd/ratesengine-ops/",             # verify-decoders mirrors the indexer's ledger plumbing
             "internal/stellarrpc/",             # builds TransactionEnvelope XDR for simulateTransaction (not SCVal)
+            "scripts/dev/",                     # diagnostic helpers (decode-scval pretty-prints raw XDR)
             "_test.go",                         # fixture construction
         ],
         "why": (
