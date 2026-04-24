@@ -38,9 +38,9 @@ jobs:
             exit 1
           fi
       - name: golangci-lint
-        uses: golangci/golangci-lint-action@v6
+        uses: golangci/golangci-lint-action@v8
         with:
-          version: latest
+          version: v2.11.4
           args: --timeout=5m
       - name: go vet
         run: go vet ./...
@@ -119,9 +119,15 @@ jobs:
           go install golang.org/x/vuln/cmd/govulncheck@latest
           govulncheck ./...
       - name: gitleaks
-        uses: gitleaks/gitleaks-action@v2
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        # gitleaks/gitleaks-action@v2 changed to a paid-license model
+        # in late 2022 — fails every run without a GITLEAKS_LICENSE
+        # secret. We invoke the OSS CLI directly instead (same scan,
+        # MIT licensed, no key).
+        run: |
+          GITLEAKS_VERSION=8.21.2
+          curl -sSfL "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz" \
+            | tar -xz -C /usr/local/bin gitleaks
+          gitleaks detect --redact --verbose --no-banner
 
   # ────────────────────────────────────────────────────────────────
   # Build — the binaries must compile on every PR.
@@ -156,6 +162,6 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Spectral lint
-        uses: stoplightio/spectral-action@v0.8
+        uses: stoplightio/spectral-action@v0.8.13
         with:
           file_glob: openapi/*.yaml

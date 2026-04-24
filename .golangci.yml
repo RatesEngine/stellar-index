@@ -31,9 +31,10 @@ linters:
     - gosec
 
     # Style / clarity
-    - gofmt
-    - goimports
-    - gosimple
+    #
+    # gofmt + goimports moved to the `formatters:` section below —
+    # in golangci-lint v2 they are formatters, not linters.
+    # gosimple was merged into staticcheck in v2.
     - unparam
     - unused
     - misspell
@@ -46,10 +47,6 @@ linters:
     - funlen
 
   settings:
-    gofmt:
-      simplify: true
-    goimports:
-      local-prefixes: github.com/RatesEngine/rates-engine
     gocognit:
       min-complexity: 15
     gocyclo:
@@ -99,3 +96,14 @@ output:
       print-linter-name: true
       print-issued-lines: true
       colors: true
+
+formatters:
+  enable:
+    - gofmt
+    - goimports
+  settings:
+    gofmt:
+      simplify: true
+    goimports:
+      local-prefixes:
+        - github.com/RatesEngine/rates-engine
