@@ -30,16 +30,25 @@ func classify(e *events.Event) bool {
 // model canonically — those rows skip at the decoder, same pattern
 // as Reflector's per-entry ErrUnknownSymbol skip.
 //
-// v1 covers the four unambiguously-mappable market feeds (BTC, ETH,
-// USDC, XLM). RWA and stablecoin feeds (BENJI, GILTS, EUROC/EUR,
-// MXNe, PYUSD, etc.) need their own canonical-asset modeling —
-// tracked as follow-up work against docs/discovery/oracles/redstone.md.
-//
 // Quote asset is always USD for the covered set — Redstone publishes
 // USD-denominated market rates (adapter docs + app.redstone.finance).
+//
+// Strategy: delegate to canonical.NewCryptoAsset which consults the
+// ADR-0014 allow-list. Anything the allow-list recognizes — majors
+// (BTC/ETH/SOL/...), stablecoins (USDT/DAI/PYUSD/USDP), Euro-pegged
+// tokens (EURC/EUROC) — decodes cleanly. RWA-style feeds (BENJI,
+// GILTS, tokenized gilts/bonds) surface as ErrUnknownFeedID until
+// they have proper canonical-asset modeling, because their "price"
+// is a NAV-quoted reference, not a market rate, and treating them
+// as regular crypto would mis-feed the aggregator.
+//
+// Adding a new canonical-decoded feed is a one-line amendment to
+// canonical/asset_crypto.go (plus an ADR-0014 note). The switch
+// below used to be a whitelist; now it's just "is it in the allow-
+// list?" since RedStone's feed-ID naming convention already matches
+// the global-ticker form we use (BTC is BTC, not btc-usd or similar).
 func feedIDToCanonicalAsset(feedID string) (canonical.Asset, error) {
-	switch feedID {
-	case "BTC", "ETH", "USDC", "XLM":
+	if canonical.IsKnownCrypto(feedID) {
 		return canonical.NewCryptoAsset(feedID)
 	}
 	return canonical.Asset{}, fmt.Errorf("%w: %q", ErrUnknownFeedID, feedID)
