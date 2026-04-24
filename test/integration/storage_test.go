@@ -16,6 +16,7 @@ import (
 	_ "github.com/golang-migrate/migrate/v4/source/file"
 	_ "github.com/lib/pq"
 
+	"github.com/stellar/go-stellar-sdk/strkey"
 	"github.com/testcontainers/testcontainers-go"
 	tcpostgres "github.com/testcontainers/testcontainers-go/modules/postgres"
 	"github.com/testcontainers/testcontainers-go/wait"
@@ -23,6 +24,20 @@ import (
 	c "github.com/RatesEngine/rates-engine/internal/canonical"
 	"github.com/RatesEngine/rates-engine/internal/storage/timescale"
 )
+
+// gAccountFromSeed returns a strkey-valid 56-char G-address whose
+// ed25519 key's first byte is `seed`. Deterministic for a given
+// seed so fixture assertions stay reproducible.
+func gAccountFromSeed(t *testing.T, seed byte) string {
+	t.Helper()
+	var raw [32]byte
+	raw[0] = seed
+	s, err := strkey.Encode(strkey.VersionByteAccountID, raw[:])
+	if err != nil {
+		t.Fatalf("strkey.Encode: %v", err)
+	}
+	return s
+}
 
 // TestStoreRoundTrip exercises the trade / oracle / cursor paths
 // through a real TimescaleDB with our migrations applied. This is
@@ -106,7 +121,12 @@ func TestStoreRoundTrip(t *testing.T) {
 		Price:      c.NewAmount(price),
 		Decimals:   14,
 		Confidence: 0.95,
-		Observer:   "GRELAYER_FAKE",
+		// OracleUpdate.Validate requires a valid G-strkey Observer.
+		// Hand-crafted "GRELAYER_FAKE" is 13 chars (expected 56),
+		// so it was rejected after canonical tightened validation.
+		// Generate a checksum-valid G-address from a deterministic
+		// seed instead.
+		Observer: gAccountFromSeed(t, 0xAA),
 	}
 	if err := store.InsertOracleUpdate(ctx, up); err != nil {
 		t.Fatalf("InsertOracleUpdate: %v", err)

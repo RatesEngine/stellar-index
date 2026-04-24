@@ -142,20 +142,23 @@ func TestTradesInRangeAndMarkets(t *testing.T) {
 }
 
 func mkIntegrationTrade(source string, nonce int, ts time.Time, pair c.Pair, base, quote int64) c.Trade {
-	// Generate a unique 64-char hex tx_hash per (source, nonce).
+	// Generate a unique 64-char *hex* tx_hash per (source, nonce).
+	// Earlier revision embedded the literal source string ("sdex")
+	// into the hash, which broke canonical.Trade.Validate's
+	// 64-char-hex check once validation tightened. Now we hex-
+	// encode each source byte so the hash stays parseable.
+	const hex = "0123456789abcdef"
 	h := make([]byte, 64)
 	for i := range h {
 		h[i] = '0'
 	}
-	// Encode nonce + source prefix into the tail.
-	suffix := []byte(source)
-	for i, b := range suffix {
-		if i < 32 {
-			h[32+i] = b
+	for i, b := range []byte(source) {
+		if 2*i+1 >= 32 {
+			break
 		}
+		h[32+2*i] = hex[b>>4]
+		h[32+2*i+1] = hex[b&0xf]
 	}
-	// Nonce as 2-hex-digit suffix (enough for test uniqueness).
-	const hex = "0123456789abcdef"
 	h[62] = hex[(nonce>>4)&0xf]
 	h[63] = hex[nonce&0xf]
 
