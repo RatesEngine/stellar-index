@@ -155,6 +155,7 @@ func run(cfgPath string, dryRun bool) error {
 		MaxTradesPerWindow:        cfg.Aggregate.MaxTradesPerWindow,
 		DisableClassFilter:        cfg.Aggregate.DisableClassFilter,
 		EnableStablecoinFiatProxy: cfg.Aggregate.EnableStablecoinFiatProxy,
+		OutlierSigmaThreshold:     cfg.Aggregate.OutlierSigmaThreshold,
 		Logger:                    logger,
 	})
 

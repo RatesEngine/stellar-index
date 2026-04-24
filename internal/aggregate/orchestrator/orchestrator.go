@@ -112,6 +112,26 @@ type Config struct {
 	// raw trade feed).
 	EnableStablecoinFiatProxy bool
 
+	// OutlierSigmaThreshold, when > 0, drops trades whose
+	// QuoteAmount/BaseAmount price differs from the window's
+	// arithmetic-mean price by more than sigma standard deviations
+	// before VWAP computes. 0 (zero value) disables the filter —
+	// every fetched trade contributes.
+	//
+	// Applied AFTER class filtering and stablecoin expansion: the
+	// fetched-and-rewritten trade set is already homogenised onto
+	// the target pair, so the standard-deviation arithmetic is
+	// computed over comparable price values rather than across
+	// different markets. Windows with fewer than 3 valid prices
+	// fall through unchanged (see aggregate.FilterOutliers — too
+	// few samples to estimate σ meaningfully).
+	//
+	// Default value (0) leaves the filter off so a fresh
+	// orchestrator behaves identically to its pre-filter
+	// predecessor; AggregateConfig in internal/config/config.go
+	// stamps a 4.0 default at the binary boundary.
+	OutlierSigmaThreshold float64
+
 	// DisableClassFilter, when true, suppresses the aggregator's
 	// default "ClassExchange trades only" filter and lets every row
 	// in the fetched window contribute to VWAP regardless of source
@@ -274,6 +294,9 @@ func (o *Orchestrator) refreshPairWindow(
 	}
 	if !o.cfg.DisableClassFilter {
 		trades = filterForVWAP(trades)
+	}
+	if o.cfg.OutlierSigmaThreshold > 0 {
+		trades = aggregate.FilterOutliers(trades, o.cfg.OutlierSigmaThreshold)
 	}
 	if len(trades) == 0 {
 		o.mu.Lock()
