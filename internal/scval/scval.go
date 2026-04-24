@@ -175,6 +175,25 @@ func AsU64(sv xdr.ScVal) (uint64, error) {
 	return uint64(*sv.U64), nil
 }
 
+// AsU32 returns the uint32 value from sv. Used for view-function
+// returns like Soroswap factory all_pairs_length() -> u32.
+func AsU32(sv xdr.ScVal) (uint32, error) {
+	if sv.Type != xdr.ScValTypeScvU32 {
+		return 0, fmt.Errorf("%w: want U32, got %s", ErrScValType, sv.Type.String())
+	}
+	return uint32(*sv.U32), nil
+}
+
+// NewU32 builds an ScVal wrapping a uint32, suitable for passing as
+// a contract-invocation argument (e.g. factory.all_pairs(i: u32)).
+// Sibling of the existing Encode* helpers but returns the ScVal
+// directly rather than its base64 wire form — callers building
+// InvokeContract args work with ScVals, not blobs.
+func NewU32(v uint32) xdr.ScVal {
+	u := xdr.Uint32(v)
+	return xdr.ScVal{Type: xdr.ScValTypeScvU32, U32: &u}
+}
+
 // AsAmountFromI128 converts sv's I128 parts to canonical.Amount.
 // Preserves the full 128-bit signed range per ADR-0003 — the common
 // failure we guard against is truncating to int64(parts.Lo), which

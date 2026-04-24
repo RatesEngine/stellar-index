@@ -685,9 +685,33 @@ func verifyDecoders(args []string) error { //nolint:funlen,gocognit,gocyclo // l
 	// Build a dispatcher with every decoder we ship, not just the
 	// subset in cfg.Ingestion.EnabledSources. The whole point of
 	// verify is to confirm each one fires on the range.
-	disp, registered := buildVerifyDispatcher(cfg.Oracle)
+	disp, soroswapDec, registered := buildVerifyDispatcher(cfg.Oracle)
 	if len(registered) == 0 {
 		return fmt.Errorf("no decoders registered — check oracle contract addresses in config")
+	}
+
+	// Optional Soroswap factory seed. Without it, pairs created
+	// before the -from ledger are invisible to the decoder (see
+	// docs/discovery/dexes-amms/soroswap.md on the swap event's
+	// missing token identities).
+	if cfg.Oracle.Soroswap.FactoryContract != "" {
+		seedEndpoint := cfg.Oracle.Soroswap.SeedRPCEndpoint
+		if seedEndpoint == "" && len(cfg.Stellar.RPCEndpoints) > 0 {
+			seedEndpoint = cfg.Stellar.RPCEndpoints[0]
+		}
+		if seedEndpoint == "" {
+			return fmt.Errorf("soroswap.factory_contract is set but no RPC endpoint — " +
+				"set oracle.soroswap.seed_rpc_endpoint or stellar.rpc_endpoints")
+		}
+		fmt.Fprintf(os.Stderr, "verify-decoders: seeding soroswap pairs from %s...\n", seedEndpoint)
+		seedCtx, seedCancel := context.WithTimeout(context.Background(), 5*time.Minute)
+		rpc := stellarrpc.New(seedEndpoint, stellarrpc.WithTimeout(30*time.Second))
+		n, err := soroswapDec.SeedFromFactoryRPC(seedCtx, rpc, cfg.Oracle.Soroswap.FactoryContract)
+		seedCancel()
+		if err != nil {
+			return fmt.Errorf("soroswap seed: %w", err)
+		}
+		fmt.Fprintf(os.Stderr, "verify-decoders: seeded %d soroswap pairs\n", n)
 	}
 
 	fmt.Fprintf(os.Stderr, "verify-decoders: registered %d decoders: %s\n",
@@ -785,12 +809,14 @@ func verifyDecoders(args []string) error { //nolint:funlen,gocognit,gocyclo // l
 }
 
 // buildVerifyDispatcher wires every decoder we ship, returning the
-// dispatcher and the list of source names that were actually
+// dispatcher, the Soroswap decoder (so callers can seed it from the
+// factory RPC), and the list of source names that were actually
 // registered (oracle variants with an unset contract address are
 // skipped).
-func buildVerifyDispatcher(oracle config.OracleConfig) (*dispatcher.Dispatcher, []string) {
+func buildVerifyDispatcher(oracle config.OracleConfig) (*dispatcher.Dispatcher, *soroswap.Decoder, []string) {
+	soroswapDec := soroswap.NewDecoder()
 	decoders := []dispatcher.Decoder{
-		soroswap.NewDecoder(),
+		soroswapDec,
 		aquarius.NewDecoder(),
 		phoenix.NewDecoder(),
 		comet.NewDecoder(),
@@ -842,7 +868,7 @@ func buildVerifyDispatcher(oracle config.OracleConfig) (*dispatcher.Dispatcher, 
 	for _, ccd := range callDecoders {
 		disp.AddContractCallDecoder(ccd)
 	}
-	return disp, registered
+	return disp, soroswapDec, registered
 }
 
 // summariseEvent renders one consumer.Event as a one-line human

@@ -265,6 +265,38 @@ type FeeStats struct {
 	LatestLedger        uint32         `json:"latestLedger"`
 }
 
+// simulateParams is the JSON-RPC params for simulateTransaction.
+type simulateParams struct {
+	Transaction string `json:"transaction"` // base64-encoded xdr.TransactionEnvelope
+}
+
+// SimulationResponse is the simulateTransaction response. Only the
+// fields we actually consume are modelled; the full response also
+// includes resource-fee estimates, state-entry deltas, and auth
+// hints that aren't useful for read-only view calls.
+type SimulationResponse struct {
+	LatestLedger uint32             `json:"latestLedger"`
+	Results      []SimulationResult `json:"results,omitempty"`
+	// Error is populated when the contract call failed (host trap,
+	// panic, out-of-gas). Non-empty Error means Results is empty.
+	Error string `json:"error,omitempty"`
+	// MinResourceFee is a string decimal per stellar-rpc schema;
+	// unused for simulation-only callers but exposed for any future
+	// tx-building path.
+	MinResourceFee string `json:"minResourceFee,omitempty"`
+}
+
+// SimulationResult is one entry in SimulationResponse.Results. XDR
+// holds the base64-encoded SCVal return value of the invoked
+// contract function. Auth is the list of required authorization
+// entries (empty for public view functions); included so callers
+// building a real tx from a simulation see what still needs
+// signing.
+type SimulationResult struct {
+	XDR  string   `json:"xdr"`            // base64 SCVal return value
+	Auth []string `json:"auth,omitempty"` // base64 SorobanAuthorizationEntry
+}
+
 // FeePercentiles are p10/p20/…/p99 distributions, as decimal strings
 // to preserve i128 safety.
 type FeePercentiles struct {

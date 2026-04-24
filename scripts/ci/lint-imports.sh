@@ -86,6 +86,7 @@ RULES = [
             "cmd/ratesengine-ops/",             # rpc-probe diag
             "scripts/dev/",                     # fixture-capture
             "/decode.go",                       # source decode.go — uses Event type only (PR 165b will move)
+            "/factory_seed.go",                 # cold-start factory state via simulateTransaction (PR 14) — not a runtime decoder
             "_test.go",                         # tests
         ],
         "why": (
@@ -106,6 +107,7 @@ RULES = [
             "internal/sources/sdex/",           # SDEX decodes non-SCVal xdr (classic ops) (PR 165c)
             "cmd/ratesengine-indexer/",         # glue: wires ledgerstream → dispatcher (PR 165d)
             "cmd/ratesengine-ops/",             # verify-decoders mirrors the indexer's ledger plumbing
+            "internal/stellarrpc/",             # builds TransactionEnvelope XDR for simulateTransaction (not SCVal)
             "_test.go",                         # fixture construction
         ],
         "why": (

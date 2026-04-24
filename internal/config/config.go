@@ -100,6 +100,7 @@ type OracleConfig struct {
 	Reflector ReflectorOracleConfig `toml:"reflector" doc:"Reflector oracle contract addresses per variant (DEX / CEX / FX)."`
 	Redstone  RedstoneOracleConfig  `toml:"redstone"  doc:"RedStone Adapter contract address (single adapter owns every feed)."`
 	Band      BandOracleConfig      `toml:"band"      doc:"Band Protocol StandardReference contract address (Soroban-native, emits no events — observed via InvokeContract call args)."`
+	Soroswap  SoroswapConfig        `toml:"soroswap"  doc:"Soroswap factory contract — used at boot to seed the pair→tokens registry via stellar-rpc view calls. Not required for live ingest, but without it the decoder skips swaps from pairs created before the first processed ledger."`
 }
 
 // ReflectorOracleConfig carries the three Reflector contract
@@ -128,6 +129,23 @@ type RedstoneOracleConfig struct {
 // docs/discovery/oracles/band.md.
 type BandOracleConfig struct {
 	StandardReferenceContract string `toml:"standard_reference_contract" doc:"Band Protocol StandardReference contract (C-prefix) on mainnet — CCQXWMZVM3KRTXTUPTN53YHL272QGKF32L7XEDNZ2S6OSUFK3NFBGG5M."`
+}
+
+// SoroswapConfig carries the Soroswap factory contract address plus
+// an optional stellar-rpc endpoint used to seed the pair→tokens
+// registry at boot. Soroswap pair contracts emit swap events that
+// carry amounts but NOT token identities; decoding to a canonical
+// trade requires the (pair_contract → token0, token1) map that the
+// factory maintains. Live dispatch records every new pair on the
+// fly via the SoroswapFactory:new_pair event, but pairs created
+// before the dispatcher's first ledger are invisible — the seed
+// fills that gap.
+//
+// Leave FactoryContract empty to disable the seed; decoder still
+// works for pairs it learns about from live new_pair events.
+type SoroswapConfig struct {
+	FactoryContract string `toml:"factory_contract" doc:"Soroswap factory contract (C-prefix) on mainnet — CA4HEQTL2WPEUYKYKCDOHCDNIV4QHNJ7EL4J4NQ6VADP7SYHVRYZ7AW2."`
+	SeedRPCEndpoint string `toml:"seed_rpc_endpoint" doc:"stellar-rpc URL used for the boot-time factory sweep. Any public pubnet endpoint works (e.g. https://mainnet.sorobanrpc.com). Falls back to stellar.rpc_endpoints[0] when empty."`
 }
 
 // RegionConfig identifies the region this node belongs to, to tag
@@ -272,6 +290,7 @@ func Default() Config {
 			Reflector: ReflectorOracleConfig{},
 			Redstone:  RedstoneOracleConfig{},
 			Band:      BandOracleConfig{},
+			Soroswap:  SoroswapConfig{},
 		},
 		External: ExternalConfig{
 			// All off-chain connectors disabled by default.

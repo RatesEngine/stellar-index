@@ -249,3 +249,21 @@ func (c *Client) GetTransactions(ctx context.Context, startLedger uint32, pag *P
 	var r TransactionsResponse
 	return &r, c.call(ctx, "getTransactions", p, &r)
 }
+
+// SimulateTransaction calls simulateTransaction.
+//
+// txEnvelope is a base64-encoded xdr.TransactionEnvelope. For read-
+// only Soroban view calls (all_pairs_length, token_0, etc.) the
+// envelope is unsigned — stellar-rpc doesn't validate signatures
+// during simulation. Build one with [InvokeContractTxEnvelope].
+//
+// Returns the SimulationResponse verbatim; callers inspect
+// response.Results[0].XDR (base64 SCVal) for the function return
+// value. response.Error is non-empty when the contract call itself
+// failed (e.g. panicking, out-of-gas); a nil Go error from this
+// method only means "the RPC round-trip succeeded."
+func (c *Client) SimulateTransaction(ctx context.Context, txEnvelope string) (*SimulationResponse, error) {
+	p := simulateParams{Transaction: txEnvelope}
+	var r SimulationResponse
+	return &r, c.call(ctx, "simulateTransaction", p, &r)
+}
