@@ -9,6 +9,7 @@ package main
 
 import (
 	"context"
+	"encoding/hex"
 	"flag"
 	"fmt"
 	"log/slog"
@@ -51,7 +52,7 @@ import (
 	"github.com/RatesEngine/rates-engine/internal/version"
 )
 
-func main() {
+func main() { //nolint:gocyclo // subcommand switch; each case is trivial, splitting adds indirection without clarity
 	args := os.Args[1:]
 	if len(args) == 0 {
 		printUsage()
@@ -98,6 +99,11 @@ func main() {
 			fmt.Fprintf(os.Stderr, "verify-external: %v\n", err)
 			os.Exit(1)
 		}
+	case "verify-archive":
+		if err := verifyArchive(args[1:]); err != nil {
+			fmt.Fprintf(os.Stderr, "verify-archive: %v\n", err)
+			os.Exit(1)
+		}
 	case "version", "--version", "-v":
 		fmt.Println(version.String())
 	case "help", "--help", "-h":
@@ -140,6 +146,18 @@ Subcommands:
                           print per-venue first-trade/update samples. Exits
                           early once every enabled venue has emitted at
                           least one output. No DB, no Timescale, no cursors.
+  verify-archive -config PATH [-bucket NAME] [-from N] [-to N]
+                          Walk every LCM in a galexie bucket in order and
+                          assert chain-link integrity: each ledger N's
+                          PreviousLedgerHash equals ledger N-1's Hash.
+                          Catches internal corruption, dropped ledgers, or
+                          replay divergence regardless of upstream trust.
+                          This is Tier A from
+                          docs/operations/galexie-backfill.md. Tier B
+                          (checkpoint anchoring against local
+                          history-archive) lands in a follow-up. Exit
+                          code 0 = chain intact; 1 = first break reported
+                          with ledger numbers + diverging hashes.
   backfill-external -config PATH -source SRC -pair SYM -from TS -to TS -granularity D
                           Pull historical candles from an external venue
                           (binance / kraken / bitstamp / coinbase) and
@@ -1250,4 +1268,172 @@ func summariseExternalEvent(ev consumer.Event) string {
 	default:
 		return fmt.Sprintf("event kind=%s", ev.EventKind())
 	}
+}
+
+// ─── verify-archive ─────────────────────────────────────────────
+
+// verifyArchive walks every LCM in a galexie bucket in sequence and
+// asserts chain-link integrity — for each ledger N, we check that
+// ledger[N].Header.PreviousLedgerHash == ledger[N-1].Hash. Any
+// mismatch is a hard stop with the diverging ledger numbers and
+// hashes printed for diagnosis.
+//
+// This is Tier A from docs/operations/galexie-backfill.md:
+//
+//	Catches any internal corruption, dropped ledger, or replay
+//	divergence regardless of upstream trust.
+//
+// Tier B (checkpoint anchoring against the local history-archive)
+// needs to parse ledger-XXXXXXXX.xdr.gz files to extract the
+// canonical ledger-hash at each 64-ledger boundary; that lands in
+// a follow-up.
+//
+// Defaults:
+//   - bucket: cfg.Storage.S3BucketArchive, falling back to
+//     S3BucketLive when -bucket is unset AND S3BucketArchive is
+//     empty. Usually set -bucket explicitly when verifying the
+//     historical half.
+//   - from: 2 (ledger 1 has no predecessor; the chain-link check
+//     starts from ledger 2).
+//   - to: 0 = unbounded. For a bounded verify of a specific range
+//     set both -from and -to.
+func verifyArchive(args []string) error { //nolint:funlen,gocognit,gocyclo // linear diagnostic; splitting reduces readability
+	fs := flag.NewFlagSet("verify-archive", flag.ContinueOnError)
+	cfgPath := fs.String("config", "", "Path to TOML config file (required)")
+	bucketOverride := fs.String("bucket", "", "Override bucket name (default: storage.s3_bucket_archive, then s3_bucket_live)")
+	from := fs.Uint("from", 2, "First ledger to verify (inclusive, default 2 — ledger 1 has no predecessor)")
+	to := fs.Uint("to", 0, "Last ledger to verify (inclusive, 0 = unbounded/live)")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	if *cfgPath == "" {
+		return fmt.Errorf("-config is required")
+	}
+
+	cfg, err := config.LoadWithEnv(*cfgPath)
+	if err != nil {
+		return err
+	}
+
+	bucket := *bucketOverride
+	if bucket == "" {
+		bucket = cfg.Storage.S3BucketArchive
+	}
+	if bucket == "" {
+		bucket = cfg.Storage.S3BucketLive
+	}
+	if bucket == "" {
+		return fmt.Errorf("no bucket resolved — set -bucket or storage.s3_bucket_archive / storage.s3_bucket_live")
+	}
+
+	fmt.Fprintf(os.Stderr, "verify-archive: bucket=%s range=[%d,%d]\n", bucket, *from, *to)
+
+	lsCfg := ledgerstream.Config{
+		DataStore: datastore.DataStoreConfig{
+			Type: "S3",
+			Params: map[string]string{
+				"destination_bucket_path": bucket,
+				"region":                  cfg.Storage.S3Region,
+				"endpoint_url":            cfg.Storage.S3Endpoint,
+			},
+			NetworkPassphrase: cfg.Stellar.Passphrase(),
+			Compression:       "zstd",
+		},
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 24*time.Hour)
+	defer cancel()
+
+	var (
+		prevSeq       uint32
+		prevHash      sdkxdr.Hash
+		hasPrev       bool
+		verified      int
+		mismatches    int
+		lastProgress  time.Time
+		progressEvery = 10 * time.Second
+	)
+
+	startedAt := time.Now()
+	err = ledgerstream.Stream(ctx, lsCfg, uint32(*from), uint32(*to),
+		func(lcm sdkxdr.LedgerCloseMeta) error {
+			seq := lcm.LedgerSequence()
+			hash := lcm.LedgerHash()
+			header, ok := extractLedgerHeader(lcm)
+			if !ok {
+				return fmt.Errorf("ledger %d: cannot extract LedgerHeader", seq)
+			}
+
+			if hasPrev {
+				// Gap in sequence (missing ledger) is itself a chain
+				// break — the sequence must be dense.
+				if seq != prevSeq+1 {
+					mismatches++
+					return fmt.Errorf("ledger sequence gap: %d → %d (expected %d)",
+						prevSeq, seq, prevSeq+1)
+				}
+				if header.PreviousLedgerHash != prevHash {
+					mismatches++
+					return fmt.Errorf("chain break at ledger %d:\n"+
+						"  ledger[%d].Hash              = %s\n"+
+						"  ledger[%d].PreviousLedgerHash = %s",
+						seq, prevSeq, hashToHex(prevHash),
+						seq, hashToHex(header.PreviousLedgerHash))
+				}
+			}
+
+			prevSeq = seq
+			prevHash = hash
+			hasPrev = true
+			verified++
+
+			if time.Since(lastProgress) >= progressEvery {
+				fmt.Fprintf(os.Stderr, "verify-archive: ledger %d, %d verified, %.0f ledgers/s\n",
+					seq, verified, float64(verified)/time.Since(startedAt).Seconds())
+				lastProgress = time.Now()
+			}
+			return nil
+		},
+	)
+	elapsed := time.Since(startedAt)
+
+	fmt.Fprintf(os.Stderr, "\nverify-archive: verified %d ledgers in %s (%.0f ledgers/s)\n",
+		verified, elapsed.Round(time.Second), float64(verified)/elapsed.Seconds())
+	if err != nil {
+		return fmt.Errorf("chain integrity FAILED: %w", err)
+	}
+	if verified == 0 {
+		return fmt.Errorf("verified 0 ledgers — bucket empty or range out of scope")
+	}
+	fmt.Fprintf(os.Stderr, "verify-archive: chain-link integrity OK ✓\n")
+	return nil
+}
+
+// extractLedgerHeader pulls the header out of an LCM regardless of
+// version. V0 (pre-p20) and V1 (p20+) differ in structure; both
+// expose a LedgerHeaderHistoryEntry at different paths.
+func extractLedgerHeader(lcm sdkxdr.LedgerCloseMeta) (sdkxdr.LedgerHeader, bool) {
+	switch lcm.V {
+	case 0:
+		if lcm.V0 == nil {
+			return sdkxdr.LedgerHeader{}, false
+		}
+		return lcm.V0.LedgerHeader.Header, true
+	case 1:
+		if lcm.V1 == nil {
+			return sdkxdr.LedgerHeader{}, false
+		}
+		return lcm.V1.LedgerHeader.Header, true
+	case 2:
+		if lcm.V2 == nil {
+			return sdkxdr.LedgerHeader{}, false
+		}
+		return lcm.V2.LedgerHeader.Header, true
+	}
+	return sdkxdr.LedgerHeader{}, false
+}
+
+// hashToHex renders an xdr.Hash as a lowercase 64-char hex string.
+func hashToHex(h sdkxdr.Hash) string {
+	return hex.EncodeToString(h[:])
 }
