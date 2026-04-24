@@ -68,6 +68,8 @@ the `env:` column.
 | `oracle.reflector.dex_contract` | `string` | _(required)_ | — | Reflector DEX contract (C-prefix) on mainnet. |
 | `oracle.reflector.cex_contract` | `string` | _(required)_ | — | Reflector CEX contract (C-prefix) on mainnet. |
 | `oracle.reflector.fx_contract` | `string` | _(required)_ | — | Reflector FX contract (C-prefix) on mainnet. |
+| `oracle.redstone.adapter_contract` | `string` | _(required)_ | — | RedStone Adapter contract (C-prefix) on mainnet — CA526Y2NQWGWVVQ7RFFPGAZMU66PSYJ3UC2MTVAV4ZU7OM5BOPHDXUSG. |
+| `oracle.band.standard_reference_contract` | `string` | _(required)_ | — | Band Protocol StandardReference contract (C-prefix) on mainnet — CCQXWMZVM3KRTXTUPTN53YHL272QGKF32L7XEDNZ2S6OSUFK3NFBGG5M. |
 
 ### `[aggregate]`
 
