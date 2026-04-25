@@ -1,5 +1,7 @@
 // Package timescale is the data-access layer over our TimescaleDB
-// schema (see migrations/0001, 0002, 0003).
+// schema. See migrations/README.md for the manifest of currently
+// applied migrations (0001 trades-hypertable, 0002 price-aggregates,
+// 0003 oracle-updates-hypertable, 0004 relax-trades-ledger-for-offchain).
 //
 // # Scope
 //
