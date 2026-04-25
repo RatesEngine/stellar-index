@@ -2,7 +2,9 @@ package v1
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
+	"fmt"
 	"math/big"
 	"net/http"
 	"strings"
@@ -12,9 +14,13 @@ import (
 )
 
 // priceBatchMaxAssets is the upper bound on asset_ids per
-// /v1/price/batch GET. Mirrors the OpenAPI spec; the POST variant
-// (planned) raises this to 1000.
+// /v1/price/batch GET. Mirrors the OpenAPI spec.
 const priceBatchMaxAssets = 100
+
+// priceBatchMaxAssetsPOST is the upper bound on asset_ids per
+// /v1/price/batch POST. The JSON-body variant exists precisely to
+// raise the GET ceiling without bloating query strings.
+const priceBatchMaxAssetsPOST = 1000
 
 // PriceReader is the storage-side interface for /v1/price lookups.
 //
@@ -183,14 +189,68 @@ func (s *Server) handlePrice(w http.ResponseWriter, r *http.Request) {
 //
 // Limits:
 //   - asset_ids count: 1..100 (priceBatchMaxAssets). Above 100, use
-//     the planned POST /v1/price/batch variant which accepts up to
-//     1000 in the JSON body.
+//     POST /v1/price/batch which accepts up to 1000 in the JSON body.
 //   - duplicates are de-duplicated server-side.
 //
 // Top-level Stale flag is the OR over per-row stale flags — if any
 // returned price is stale, the envelope flag is set. This matches
 // the single-asset /v1/price contract.
 func (s *Server) handlePriceBatch(w http.ResponseWriter, r *http.Request) {
+	rawIDs := r.URL.Query().Get("asset_ids")
+	if rawIDs == "" {
+		writeProblem(w, r,
+			"https://api.ratesengine.net/errors/missing-asset-ids",
+			"Missing asset_ids parameter", http.StatusBadRequest,
+			"asset_ids query parameter is required (comma-separated)")
+		return
+	}
+	s.runPriceBatch(w, r, strings.Split(rawIDs, ","), r.URL.Query().Get("quote"), priceBatchMaxAssets)
+}
+
+// handlePriceBatchPost serves POST /v1/price/batch with JSON body
+// {"asset_ids": [...], "quote": "..."}. Same semantics as the GET
+// variant, with the asset_ids ceiling raised to 1000 — that's the
+// reason the JSON body shape exists at all (a 1000-entry query
+// string blows past most reverse-proxies' default 8 KiB header
+// limit).
+func (s *Server) handlePriceBatchPost(w http.ResponseWriter, r *http.Request) {
+	// Cap the request body so a malicious client can't make us spend
+	// memory parsing a 100 MiB JSON object. 1 MiB is plenty for 1000
+	// canonical asset ids — the largest realistic ones (contract
+	// strkeys at 56 bytes + quotes/commas) are well under 100 KiB.
+	const maxBody = 1 << 20
+	r.Body = http.MaxBytesReader(w, r.Body, maxBody)
+
+	var body struct {
+		AssetIDs []string `json:"asset_ids"`
+		Quote    string   `json:"quote"`
+	}
+	dec := json.NewDecoder(r.Body)
+	dec.DisallowUnknownFields()
+	if err := dec.Decode(&body); err != nil {
+		writeProblem(w, r,
+			"https://api.ratesengine.net/errors/invalid-body",
+			"Invalid JSON body", http.StatusBadRequest, err.Error())
+		return
+	}
+	if len(body.AssetIDs) == 0 {
+		writeProblem(w, r,
+			"https://api.ratesengine.net/errors/missing-asset-ids",
+			"Missing asset_ids", http.StatusBadRequest,
+			"request body must include a non-empty asset_ids array")
+		return
+	}
+	s.runPriceBatch(w, r, body.AssetIDs, body.Quote, priceBatchMaxAssetsPOST)
+}
+
+// runPriceBatch is the shared core of GET + POST /v1/price/batch.
+// Trims, de-duplicates, enforces `limit`, parses the quote (default
+// fiat:USD), and writes the response. Either dispatches directly on
+// successful completion or has already written a problem+json.
+//
+// Caller passes `rawIDs` in the order the user supplied; output
+// preserves first-occurrence order.
+func (s *Server) runPriceBatch(w http.ResponseWriter, r *http.Request, rawIDs []string, rawQuote string, limit int) {
 	reader := s.prices
 	if reader == nil {
 		writeProblem(w, r,
@@ -200,21 +260,9 @@ func (s *Server) handlePriceBatch(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	rawIDs := r.URL.Query().Get("asset_ids")
-	if rawIDs == "" {
-		writeProblem(w, r,
-			"https://api.ratesengine.net/errors/missing-asset-ids",
-			"Missing asset_ids parameter", http.StatusBadRequest,
-			"asset_ids query parameter is required (comma-separated)")
-		return
-	}
-	parts := strings.Split(rawIDs, ",")
-	// Trim whitespace + drop empty entries — `?asset_ids=A,,B,` should
-	// resolve to ["A","B"], not 4 entries with two empty strings, so
-	// the limit check counts only real assets.
-	ids := make([]string, 0, len(parts))
-	seen := make(map[string]struct{}, len(parts))
-	for _, p := range parts {
+	ids := make([]string, 0, len(rawIDs))
+	seen := make(map[string]struct{}, len(rawIDs))
+	for _, p := range rawIDs {
 		t := strings.TrimSpace(p)
 		if t == "" {
 			continue
@@ -228,19 +276,18 @@ func (s *Server) handlePriceBatch(w http.ResponseWriter, r *http.Request) {
 	if len(ids) == 0 {
 		writeProblem(w, r,
 			"https://api.ratesengine.net/errors/missing-asset-ids",
-			"Missing asset_ids parameter", http.StatusBadRequest,
-			"asset_ids query parameter must contain at least one id")
+			"Missing asset_ids", http.StatusBadRequest,
+			"asset_ids must contain at least one non-empty id")
 		return
 	}
-	if len(ids) > priceBatchMaxAssets {
+	if len(ids) > limit {
 		writeProblem(w, r,
 			"https://api.ratesengine.net/errors/too-many-assets",
 			"Too many assets", http.StatusBadRequest,
-			"asset_ids may contain at most 100 entries — use POST /v1/price/batch for larger batches")
+			fmt.Sprintf("asset_ids may contain at most %d entries", limit))
 		return
 	}
 
-	rawQuote := r.URL.Query().Get("quote")
 	var quote canonical.Asset
 	if rawQuote == "" {
 		quote = defaultPriceQuote

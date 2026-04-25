@@ -187,6 +187,10 @@ func (s *Server) mountRoutes() {
 	// Batch price lookup, up to 100 assets per request.
 	s.mux.HandleFunc("GET /v1/price/batch", s.handlePriceBatch)
 
+	// Batch price lookup via JSON body — same shape, raises the
+	// per-request ceiling to 1000.
+	s.mux.HandleFunc("POST /v1/price/batch", s.handlePriceBatchPost)
+
 	// Trade history within a time window.
 	s.mux.HandleFunc("GET /v1/history", s.handleHistory)
 

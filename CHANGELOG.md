@@ -26,7 +26,15 @@ against.
   envelope's `flags.stale` is the OR of per-row staleness, and
   `sources` is the union across all returned rows. Reuses the
   existing `PriceReader` interface — no storage-layer changes.
-  POST variant (1000-asset bodies) is still pending.
+
+- **`POST /v1/price/batch`**: JSON-body variant accepting up to
+  1000 `asset_ids`. Same semantics as GET; the body shape exists
+  precisely to raise the GET ceiling without bloating query
+  strings (a 1000-id query would blow past most reverse-proxy
+  default 8 KiB header limits). Body capped at 1 MiB,
+  `DisallowUnknownFields()` rejects unrecognised keys. Shared
+  core (`runPriceBatch`) under both GET and POST so behaviour
+  stays in lockstep.
 
 - **`GET /v1/pairs?base=&quote=`**: single-pair activity summary
   promised by the OpenAPI spec but previously unimplemented.
