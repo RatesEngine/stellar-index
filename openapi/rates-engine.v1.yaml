@@ -66,6 +66,10 @@ tags:
       are planned, not implemented today.
   - name: account
     description: Self-service for API-key holders.
+  - name: meta
+    description: |
+      Metadata about the deployment itself — source catalogue,
+      build info — not the trade / oracle / price data.
 
 security:
   - {}                          # anonymous allowed on most endpoints
