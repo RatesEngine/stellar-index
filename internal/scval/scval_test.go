@@ -307,6 +307,274 @@ func vecScVal(elts []xdr.ScVal) xdr.ScVal {
 	return xdr.ScVal{Type: xdr.ScValTypeScvVec, Vec: &pv}
 }
 
+// ─── String encode/decode ────────────────────────────────────────
+
+func TestEncodeString_roundtrip(t *testing.T) {
+	// String differs from Symbol: arbitrary bytes allowed (no
+	// identifier-character restriction).
+	cases := []string{"SoroswapPair", "hello world", "with-dash", ""}
+	for _, s := range cases {
+		t.Run(s, func(t *testing.T) {
+			b64, err := EncodeString(s)
+			if err != nil {
+				t.Fatalf("EncodeString(%q): %v", s, err)
+			}
+			sv, err := Parse(b64)
+			if err != nil {
+				t.Fatalf("Parse: %v", err)
+			}
+			got, err := AsString(sv)
+			if err != nil {
+				t.Fatalf("AsString: %v", err)
+			}
+			if got != s {
+				t.Errorf("roundtrip: got %q want %q", got, s)
+			}
+		})
+	}
+}
+
+func TestAsString_wrongType(t *testing.T) {
+	_, err := AsString(symScVal("not-a-string"))
+	if !errors.Is(err, ErrScValType) {
+		t.Errorf("expected ErrScValType, got %v", err)
+	}
+}
+
+// ─── U32 / U64 / Bytes ───────────────────────────────────────────
+
+func TestNewU32_AsU32_roundtrip(t *testing.T) {
+	for _, v := range []uint32{0, 1, 42, 4_294_967_295} {
+		sv := NewU32(v)
+		got, err := AsU32(sv)
+		if err != nil {
+			t.Fatalf("AsU32(%d): %v", v, err)
+		}
+		if got != v {
+			t.Errorf("got %d want %d", got, v)
+		}
+	}
+}
+
+func TestAsU32_wrongType(t *testing.T) {
+	_, err := AsU32(u64ScVal(123))
+	if !errors.Is(err, ErrScValType) {
+		t.Errorf("expected ErrScValType, got %v", err)
+	}
+}
+
+func TestAsU64_wrongType(t *testing.T) {
+	_, err := AsU64(symScVal("nope"))
+	if !errors.Is(err, ErrScValType) {
+		t.Errorf("expected ErrScValType, got %v", err)
+	}
+}
+
+func TestAsBytes_roundtrip(t *testing.T) {
+	want := []byte{0xde, 0xad, 0xbe, 0xef}
+	b := xdr.ScBytes(want)
+	sv := xdr.ScVal{Type: xdr.ScValTypeScvBytes, Bytes: &b}
+	got, err := AsBytes(sv)
+	if err != nil {
+		t.Fatalf("AsBytes: %v", err)
+	}
+	if string(got) != string(want) {
+		t.Errorf("AsBytes = %x, want %x", got, want)
+	}
+}
+
+func TestAsBytes_wrongType(t *testing.T) {
+	_, err := AsBytes(symScVal("not-bytes"))
+	if !errors.Is(err, ErrScValType) {
+		t.Errorf("expected ErrScValType, got %v", err)
+	}
+}
+
+// ParseBytes is the raw-bytes twin of Parse — used by decoders
+// (e.g. Redstone) whose body is an ScVal::Bytes wrapping an
+// inner XDR-encoded ScVal. Verify the round-trip.
+func TestParseBytes_roundtrip(t *testing.T) {
+	inner := symScVal("inner")
+	raw, err := inner.MarshalBinary()
+	if err != nil {
+		t.Fatalf("MarshalBinary: %v", err)
+	}
+	got, err := ParseBytes(raw)
+	if err != nil {
+		t.Fatalf("ParseBytes: %v", err)
+	}
+	gotSym, err := AsSymbol(got)
+	if err != nil {
+		t.Fatalf("AsSymbol: %v", err)
+	}
+	if gotSym != "inner" {
+		t.Errorf("got %q, want \"inner\"", gotSym)
+	}
+}
+
+func TestParseBytes_truncated(t *testing.T) {
+	_, err := ParseBytes([]byte{0x00, 0x00})
+	if !errors.Is(err, ErrScValDecode) {
+		t.Errorf("expected ErrScValDecode, got %v", err)
+	}
+}
+
+// ─── U128 / U256 ────────────────────────────────────────────────
+
+func TestAsAmountFromU128(t *testing.T) {
+	// 2^65: split into (Hi=2, Lo=0). Tests the full unsigned range,
+	// past int64.
+	hi := uint64(2)
+	lo := uint64(0)
+	p := xdr.UInt128Parts{Hi: xdr.Uint64(hi), Lo: xdr.Uint64(lo)}
+	sv := xdr.ScVal{Type: xdr.ScValTypeScvU128, U128: &p}
+	got, err := AsAmountFromU128(sv)
+	if err != nil {
+		t.Fatalf("AsAmountFromU128: %v", err)
+	}
+	want := new(big.Int).Lsh(big.NewInt(1), 65)
+	if got.BigInt().Cmp(want) != 0 {
+		t.Errorf("got %s want %s", got.BigInt(), want)
+	}
+}
+
+func TestAsAmountFromU128_wrongType(t *testing.T) {
+	_, err := AsAmountFromU128(u64ScVal(1))
+	if !errors.Is(err, ErrScValType) {
+		t.Errorf("expected ErrScValType, got %v", err)
+	}
+}
+
+func TestAsAmountFromU256(t *testing.T) {
+	// 2^130: split as (HiHi=0, HiLo=4, LoHi=0, LoLo=0).
+	// 2^130 = 4 * 2^128, so the second word from the top = 4.
+	p := xdr.UInt256Parts{
+		HiHi: 0, HiLo: 4, LoHi: 0, LoLo: 0,
+	}
+	sv := xdr.ScVal{Type: xdr.ScValTypeScvU256, U256: &p}
+	got, err := AsAmountFromU256(sv)
+	if err != nil {
+		t.Fatalf("AsAmountFromU256: %v", err)
+	}
+	want := new(big.Int).Lsh(big.NewInt(1), 130)
+	if got.BigInt().Cmp(want) != 0 {
+		t.Errorf("got %s want %s", got.BigInt(), want)
+	}
+}
+
+func TestAsAmountFromU256_wrongType(t *testing.T) {
+	_, err := AsAmountFromU256(symScVal("nope"))
+	if !errors.Is(err, ErrScValType) {
+		t.Errorf("expected ErrScValType, got %v", err)
+	}
+}
+
+// ─── Vec / Map / DecodeAddressOrSymbol ──────────────────────────
+
+func TestAsVec_normalAndNil(t *testing.T) {
+	full := vecScVal([]xdr.ScVal{symScVal("a"), symScVal("b")})
+	got, err := AsVec(full)
+	if err != nil {
+		t.Fatalf("AsVec: %v", err)
+	}
+	if len(got) != 2 {
+		t.Errorf("got %d elts, want 2", len(got))
+	}
+
+	// Present-but-nil Vec — must yield empty slice, not nil.
+	var nilVec *xdr.ScVec
+	emptySV := xdr.ScVal{Type: xdr.ScValTypeScvVec, Vec: &nilVec}
+	got, err = AsVec(emptySV)
+	if err != nil {
+		t.Fatalf("AsVec (nil-inner): %v", err)
+	}
+	if got == nil || len(got) != 0 {
+		t.Errorf("nil-inner Vec: got %v, want empty slice", got)
+	}
+}
+
+func TestAsVec_wrongType(t *testing.T) {
+	_, err := AsVec(symScVal("not-vec"))
+	if !errors.Is(err, ErrScValType) {
+		t.Errorf("expected ErrScValType, got %v", err)
+	}
+}
+
+func TestAsMap_normalAndNil(t *testing.T) {
+	// Map with one entry: { sym "k" -> sym "v" }.
+	entries := xdr.ScMap{
+		{Key: symScVal("k"), Val: symScVal("v")},
+	}
+	pmap := &entries
+	full := xdr.ScVal{Type: xdr.ScValTypeScvMap, Map: &pmap}
+	got, err := AsMap(full)
+	if err != nil {
+		t.Fatalf("AsMap: %v", err)
+	}
+	if len(got) != 1 {
+		t.Errorf("got %d entries, want 1", len(got))
+	}
+
+	// Present-but-nil Map — same empty-not-nil contract as AsVec.
+	var nilMap *xdr.ScMap
+	emptySV := xdr.ScVal{Type: xdr.ScValTypeScvMap, Map: &nilMap}
+	got, err = AsMap(emptySV)
+	if err != nil {
+		t.Fatalf("AsMap (nil-inner): %v", err)
+	}
+	if got == nil || len(got) != 0 {
+		t.Errorf("nil-inner Map: got %v, want empty slice", got)
+	}
+}
+
+func TestAsMap_wrongType(t *testing.T) {
+	_, err := AsMap(symScVal("not-map"))
+	if !errors.Is(err, ErrScValType) {
+		t.Errorf("expected ErrScValType, got %v", err)
+	}
+}
+
+func TestDecodeAddressOrSymbol(t *testing.T) {
+	// Symbol form (Reflector's Asset::Other variant).
+	got, err := DecodeAddressOrSymbol(symScVal("XLM"))
+	if err != nil {
+		t.Fatalf("DecodeAddressOrSymbol(symbol): %v", err)
+	}
+	if got.Symbol != "XLM" || got.Address != "" {
+		t.Errorf("symbol case: got %+v", got)
+	}
+
+	// Address form — build a contract-typed ScAddress (no need to
+	// know a real account; the strkey codec handles encoding).
+	var contractID xdr.ContractId
+	for i := range contractID {
+		contractID[i] = byte(i)
+	}
+	addr := xdr.ScAddress{
+		Type:       xdr.ScAddressTypeScAddressTypeContract,
+		ContractId: &contractID,
+	}
+	addrSV := xdr.ScVal{Type: xdr.ScValTypeScvAddress, Address: &addr}
+	got, err = DecodeAddressOrSymbol(addrSV)
+	if err != nil {
+		t.Fatalf("DecodeAddressOrSymbol(address): %v", err)
+	}
+	if got.Address == "" || got.Symbol != "" {
+		t.Errorf("address case: got %+v", got)
+	}
+	// Strkey-encoded contract IDs always start with 'C'.
+	if got.Address[0] != 'C' {
+		t.Errorf("expected C-prefix strkey, got %q", got.Address)
+	}
+}
+
+func TestDecodeAddressOrSymbol_wrongType(t *testing.T) {
+	_, err := DecodeAddressOrSymbol(u64ScVal(123))
+	if !errors.Is(err, ErrScValType) {
+		t.Errorf("expected ErrScValType, got %v", err)
+	}
+}
+
 // splitBigInt128 decomposes a 128-bit-fitting big.Int into
 // (hi int64, lo uint64) in two's-complement form — the inverse of
 // canonical.FromInt128Parts.
