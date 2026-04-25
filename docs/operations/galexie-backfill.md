@@ -42,7 +42,18 @@ afterwards to prove the bytes are canonical.
 6. **Throughput expectation** — full pubnet ≈ 62 M ledgers →
    **8–14 h wall-clock** on r1-class hardware (observed
    2026-04-25 backfill run on r1: 9 h 33 m for phase 1 alone).
-   Monitor via `mc du local/galexie-archive` every hour.
+
+   **Monitoring**: r1 ships a `galexie-backfill-status` TUI at
+   `/usr/local/bin/galexie-backfill-status` (history download
+   progress + LCM-bucket object count + zpool I/O + process
+   table). Run it under `watch`:
+
+   ```sh
+   ssh -t r1 'watch -c -n 5 galexie-backfill-status'
+   ```
+
+   For raw bucket-size sampling without ssh: `mc du
+   local/galexie-archive` every hour.
 
    The run unfolds in three roughly-equal-cost phases (the live
    TUI shows phase 1 explicitly; phases 2 and 3 read as
