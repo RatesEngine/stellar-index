@@ -39,11 +39,32 @@ afterwards to prove the bytes are canonical.
    the bucket). `--end` is `first-live-ledger − 1`. Run in tmux or
    as a `galexie-backfill.service` oneshot systemd unit so it
    survives SSH disconnects.
-6. **Throughput expectation** — ~500–1500 ledgers/sec bounded by
-   captive-core replay CPU on the local `/srv/history-archive`
-   mirror. Full pubnet ≈ 62 M ledgers → **5–12 h wall-clock** on
-   r1-class hardware. Monitor via `mc du local/galexie-archive`
-   every hour.
+6. **Throughput expectation** — full pubnet ≈ 62 M ledgers →
+   **8–14 h wall-clock** on r1-class hardware (observed
+   2026-04-25 backfill run on r1: 9 h 33 m for phase 1 alone).
+   Monitor via `mc du local/galexie-archive` every hour.
+
+   The run unfolds in three roughly-equal-cost phases (the live
+   TUI shows phase 1 explicitly; phases 2 and 3 read as
+   continuous LCM uploads):
+
+   1. **History download** — captive-core fetches every
+      checkpoint's bucket files from the configured peer
+      archives into `/srv/history-archive`. Throughput is
+      bounded by upstream archive availability (FT SCV /
+      LOBSTR / SatoshiPay etc); per-archive 404s on missing
+      checkpoints are normal and self-heal via fail-over.
+   2. **Bucket apply** — captive-core hydrates its in-memory
+      ledger state from the downloaded buckets. Brief, mostly
+      CPU-bound, no significant zpool I/O.
+   3. **Ledger replay + LCM upload** — captive-core replays
+      ledger-by-ledger from genesis; galexie wraps each
+      `LedgerCloseMeta` in a zstd-compressed `xdr.zst` object
+      and uploads to `galexie-archive`. Visible as steady
+      `Uploading FFFFFFFF--…/<seq>.xdr.zst` log lines + zpool
+      writes near 5–10 MiB/s. Object count grows from
+      checkpoint-count to per-ledger-count
+      (~62 M for full pubnet at `LedgersPerFile = 1`).
 
 ## Verification tiers
 
