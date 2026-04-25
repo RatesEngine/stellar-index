@@ -52,19 +52,22 @@
 //
 // # Adding a new on-chain source
 //
-//   1. Create internal/sources/<name>/ with events.go +
-//      decode.go + consumer.go + dispatcher_adapter.go +
-//      tests. Follow the existing sources as templates.
-//   2. Define a TradeEvent / UpdateEvent in `events.go`:
+//  1. Create internal/sources/<name>/ with events.go +
+//     decode.go + consumer.go + dispatcher_adapter.go +
+//     tests. Follow the existing sources as templates.
 //
-//        type TradeEvent struct{ Trade canonical.Trade }
-//        func (TradeEvent) EventKind() string { return "<name>.trade" }
-//        func (e TradeEvent) Source() string  { return e.Trade.Source }
-//        var _ consumer.Event = TradeEvent{}
+//  2. Define a TradeEvent / UpdateEvent in `events.go`:
 //
-//   3. Wire `dispatcher_adapter.go` to register the right
-//      seam (Decoder / OpDecoder / ContractCallDecoder).
-//   4. Add the source name + builder to
-//      cmd/ratesengine-indexer/main.go's `buildDispatcher()`.
-//   5. Add real-fixture tests under test/fixtures/<name>/.
+//     type TradeEvent struct{ Trade canonical.Trade }
+//     func (TradeEvent) EventKind() string { return "<name>.trade" }
+//     func (e TradeEvent) Source() string  { return e.Trade.Source }
+//     var _ consumer.Event = TradeEvent{}
+//
+//  3. Wire `dispatcher_adapter.go` to register the right
+//     seam (Decoder / OpDecoder / ContractCallDecoder).
+//
+//  4. Add the source name + builder to
+//     cmd/ratesengine-indexer/main.go's `buildDispatcher()`.
+//
+//  5. Add real-fixture tests under test/fixtures/<name>/.
 package consumer
