@@ -265,6 +265,27 @@ With the spec above:
 
 We run the first full catchup once, then siblings seed from it.
 
+#### 3.3.4 Galexie backfill time (genesis → live tip)
+
+Stellar-core catchup is only half the story for an archival node
+— we also need every `LedgerCloseMeta` written into the
+`galexie-archive` MinIO bucket so the indexer / aggregator can
+read history.
+
+Galexie's stock `scan-and-fill` is **single-goroutine on the S3
+PUT side** — observed at ~59 ledgers/sec on r1 (2026-04-25
+run), so a single-process full backfill from genesis takes
+**~12 days**. The tuning section in
+[galexie-backfill.md](../../operations/galexie-backfill.md#tuning--when-60-ledgerssec-isnt-enough)
+documents the workaround: run 8 disjoint-range `scan-and-fill`
+processes in parallel (each with its own captive-core
+`storage_path` + `admin_port`), expected throughput ~470
+ledgers/sec → **~1.5 days** for a full pubnet backfill.
+
+Plan accordingly when budgeting bring-up time for a new
+archival node — the galexie phase is the long pole, not
+stellar-core's `CATCHUP_COMPLETE`.
+
 ### 3.4 Network
 
 | Requirement | Spec | Why |
