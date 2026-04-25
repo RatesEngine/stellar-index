@@ -1,18 +1,39 @@
 // Package stellarrpc is a minimal JSON-RPC client for stellar-rpc.
 //
-// Why roll our own instead of importing
-// github.com/stellar/go-stellar-sdk/clients/stellarrpc? Two reasons:
+// # Scope after r1 stellar-rpc removal (2026-04-23)
+//
+// stellar-rpc was removed from r1's production ingest path on
+// 2026-04-23 — every trade and oracle update now flows through
+// Galexie → ledgerstream → dispatcher per
+// docs/architecture/ingest-pipeline.md. This package's remaining
+// callers are:
+//
+//   - cmd/ratesengine-ops/main.go's `rpc-probe` operator diagnostic
+//     (one-shot health/liveness check against any stellar-rpc).
+//   - internal/sources/soroswap/factory_seed.go — boot-time
+//     factory sweep via simulateTransaction to seed the
+//     pair→tokens registry for pre-history pairs (PR #14). Not
+//     on the live-ingest hot path; idempotent on restart.
+//   - scripts/dev/* fixture-capture scripts.
+//
+// The scripts/ci/lint-imports.sh rule A/no-rpc-in-ingest blocks
+// any new caller outside this allow-list as a structural guardrail.
+//
+// # Why roll our own
+//
+// Two reasons it's not the SDK's stellar-rpc client:
 //
 //  1. The SDK brings a large dependency surface (full XDR codegen,
-//     sdk-internal helpers). For our pricing use case we need a
-//     small, auditable surface covering the ~6 RPC methods we
-//     actually call.
-//  2. Our callers (indexers, probes, health checks) need a client
-//     they can mock in unit tests without instantiating the full SDK.
+//     sdk-internal helpers). For our diag + factory-seed use case
+//     we need a small, auditable surface covering the ~6 RPC
+//     methods we actually call.
+//  2. Our callers (probes, health checks, soroswap factory seed)
+//     need a client they can mock in unit tests without
+//     instantiating the full SDK.
 //
-// If a complex method shows up in our roadmap (e.g. simulating
-// Soroban transactions), we take the SDK dep for that one path and
-// keep this package for the simple read methods.
+// If a complex method shows up in a future roadmap path, we take
+// the SDK dep for that one path and keep this package for the
+// simple read methods.
 //
 // # Methods
 //
