@@ -39,14 +39,9 @@ import (
 // Some oracle sources emit single-asset-USD updates ("XLM = 0.12 USD");
 // others emit cross-pair ("XLM/EUR = 0.11"). [Quote] is the
 // denominator asset for the price; for single-asset-USD the Quote is
-// a synthetic "USD" off-chain reference (not a Stellar asset). We
-// represent those as ClassicAsset{Code:"USD", Issuer:"<fixed-sentinel-issuer>"}
-// per ADR TBD, but for now [Quote] can be the literal
-// `Asset{Type: AssetClassic, Code: "USD"}` with an empty Issuer and
-// a documentation note.
-//
-// TODO(#0): file an ADR for the off-chain fiat representation in
-// canonical form. Current placeholder is code-only Asset; not ideal.
+// a synthetic off-chain fiat reference (not a Stellar asset),
+// constructed via [NewFiatAsset]: `Asset{Type: AssetFiat, Code: "USD"}`
+// with the wire form `fiat:USD`. See ADR-0010.
 type OracleUpdate struct {
 	// Source is the oracle name: "reflector-dex", "reflector-cex",
 	// "reflector-fx", "redstone", "band", "chainlink-http",
