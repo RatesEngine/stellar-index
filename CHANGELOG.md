@@ -17,6 +17,47 @@ against.
 
 ### Added
 
+- **PRs 30–40 — Aggregator stack documentation, refactors, and
+  Tier E** (2026-04-25): rounds out the aggregator build-out
+  with as-built docs, a couple of code refactors, and the final
+  verify-archive tier.
+
+  - **PR 30 — CHANGELOG rollup** for PRs 21–29 (the entry above
+    this one).
+  - **PR 31–35 — Per-source READMEs**: Comet, Redstone, Band,
+    SDEX, plus a single consolidated catalogue for the 10
+    external connectors. Every `internal/sources/*` package now
+    has a README following the same shape (what this ingests,
+    topic shape, events table, quirks, files).
+  - **PR 32 — `docs/architecture/aggregation-plan.md`**: the
+    single anchor for the aggregator-layer design. Data flow,
+    policy chain ordering, configuration surface, observability,
+    API surface, boundaries, and deferred items in one place.
+  - **PR 37 — strkey CRC validation via go-stellar-sdk**:
+    replaces the regex-only `IsAccountID` / `IsContractID` with
+    the SDK's `strkey.Decode(VersionByte*, str)`. Now rejects
+    CRC-mismatched and wrong-version-byte strkeys (silently
+    accepted under the regex). Resolves the standing TODO.
+  - **PR 38 — drop stale ADR-TBD comment in oracle.go**:
+    points the pair-vs-single-asset note at accepted ADR-0010
+    instead of "TBD".
+  - **PR 39 — verify-archive Tier E**: wraps `stellar-archivist
+    scan` (or `rs-stellar-archivist scan`) for a full
+    bucket-by-bucket sha256 audit of an archive — the fifth and
+    final tier of the verification playbook. Defaults to
+    scanning the local mirror at `file://<archive-root>`; any
+    peer's `https://` archive URL also works.
+  - **PR 40 — `/v1/sources?class=` filter**: optional class
+    query parameter on the source catalogue endpoint. Useful
+    for dashboards that split sources by role
+    (exchange / aggregator / oracle / authority_sanity).
+
+  Net effect: the verification playbook is fully implemented
+  (Tiers A/B/D/E; Tier C deferred pending GCS public-read
+  confirmation), the aggregator's design + ops surface is
+  documented end-to-end, and one stable-named code path
+  (canonical strkey) became stricter without API churn.
+
 - **PRs 21–29 — Aggregator policy + observability layer**
   (2026-04-25): builds out the orchestrator from PR 182's
   passthrough VWAP into a configurable, observable, alerting-
