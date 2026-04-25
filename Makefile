@@ -97,6 +97,10 @@ test-cover: ## Unit tests + coverage report
 test-integration: ## Integration tests (requires Docker; spins its own containers via testcontainers-go)
 	$(GO) test -tags=integration -timeout 10m $(INT_TEST_PKGS)
 
+.PHONY: test-integration-build
+test-integration-build: ## Compile integration tests without running them (no Docker, fast). Catches build-tag breakage from interface changes.
+	$(GO) test -tags=integration -run nothing -count=0 $(INT_TEST_PKGS)
+
 .PHONY: test-load
 test-load: ## Run k6 load suite against staging (requires K6_TARGET env)
 	@k6 run test/load/api_steady_state.js

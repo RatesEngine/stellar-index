@@ -250,16 +250,35 @@ func (s *Server) handlePriceBatchPost(w http.ResponseWriter, r *http.Request) {
 //
 // Caller passes `rawIDs` in the order the user supplied; output
 // preserves first-occurrence order.
+//
+// Implementation note: split into helpers (parsePriceBatchIDs,
+// parsePriceBatchQuote, lookupPriceBatch) to keep each step's
+// cognitive complexity within the gocognit lint budget. Each
+// helper writes its own problem+json on failure and signals back
+// via a sentinel return; the orchestrator only sequences them.
 func (s *Server) runPriceBatch(w http.ResponseWriter, r *http.Request, rawIDs []string, rawQuote string, limit int) {
-	reader := s.prices
-	if reader == nil {
+	if s.prices == nil {
 		writeProblem(w, r,
 			"https://api.ratesengine.net/errors/price-unavailable",
 			"Price serving not configured", http.StatusServiceUnavailable,
 			"this deployment has no PriceReader wired — check binary configuration")
 		return
 	}
+	ids, ok := s.parsePriceBatchIDs(w, r, rawIDs, limit)
+	if !ok {
+		return
+	}
+	quote, ok := s.parsePriceBatchQuote(w, r, rawQuote)
+	if !ok {
+		return
+	}
+	s.lookupPriceBatch(w, r, ids, quote)
+}
 
+// parsePriceBatchIDs trims, de-duplicates, and length-checks the
+// requested asset_ids. ok=false means a problem+json has already
+// been written.
+func (s *Server) parsePriceBatchIDs(w http.ResponseWriter, r *http.Request, rawIDs []string, limit int) ([]string, bool) {
 	ids := make([]string, 0, len(rawIDs))
 	seen := make(map[string]struct{}, len(rawIDs))
 	for _, p := range rawIDs {
@@ -278,35 +297,44 @@ func (s *Server) runPriceBatch(w http.ResponseWriter, r *http.Request, rawIDs []
 			"https://api.ratesengine.net/errors/missing-asset-ids",
 			"Missing asset_ids", http.StatusBadRequest,
 			"asset_ids must contain at least one non-empty id")
-		return
+		return nil, false
 	}
 	if len(ids) > limit {
 		writeProblem(w, r,
 			"https://api.ratesengine.net/errors/too-many-assets",
 			"Too many assets", http.StatusBadRequest,
 			fmt.Sprintf("asset_ids may contain at most %d entries", limit))
-		return
+		return nil, false
 	}
+	return ids, true
+}
 
-	var quote canonical.Asset
-	if rawQuote == "" {
-		quote = defaultPriceQuote
-	} else {
-		var err error
-		quote, err = canonical.ParseAsset(rawQuote)
-		if err != nil {
-			writeProblem(w, r,
-				"https://api.ratesengine.net/errors/invalid-quote",
-				"Invalid quote identifier", http.StatusBadRequest,
-				err.Error())
-			return
-		}
+// parsePriceBatchQuote parses the optional quote, defaulting to
+// fiat:USD. ok=false means a 400 has already been written.
+func (s *Server) parsePriceBatchQuote(w http.ResponseWriter, r *http.Request, raw string) (canonical.Asset, bool) {
+	if raw == "" {
+		return defaultPriceQuote, true
 	}
+	q, err := canonical.ParseAsset(raw)
+	if err != nil {
+		writeProblem(w, r,
+			"https://api.ratesengine.net/errors/invalid-quote",
+			"Invalid quote identifier", http.StatusBadRequest,
+			err.Error())
+		return canonical.Asset{}, false
+	}
+	return q, true
+}
 
+// lookupPriceBatch fetches the latest price for each id and writes
+// the envelope. Missing observations (ErrPriceNotFound) are omitted
+// from the response, not 404'd. Any other reader error aborts the
+// whole batch with a 500.
+func (s *Server) lookupPriceBatch(w http.ResponseWriter, r *http.Request, ids []string, quote canonical.Asset) {
+	reader := s.prices
 	out := make([]PriceSnapshot, 0, len(ids))
 	allSources := map[string]struct{}{}
 	anyStale := false
-
 	for _, raw := range ids {
 		asset, err := canonical.ParseAsset(raw)
 		if err != nil {
@@ -317,16 +345,12 @@ func (s *Server) runPriceBatch(w http.ResponseWriter, r *http.Request, rawIDs []
 			return
 		}
 		if asset.Equal(quote) {
-			// Identity pair is meaningless; reject the whole request
-			// rather than silently dropping the entry. Same logic as
-			// /v1/price.
 			writeProblem(w, r,
 				"https://api.ratesengine.net/errors/identity-price",
 				"Asset and quote are the same", http.StatusBadRequest,
 				"price of an asset in itself is always 1; "+raw+" matches the quote")
 			return
 		}
-
 		snapshot, sources, stale, err := reader.LatestPrice(r.Context(), asset, quote)
 		if errors.Is(err, ErrPriceNotFound) {
 			// Per the docstring: omit, do not 404 the whole batch.
@@ -351,10 +375,9 @@ func (s *Server) runPriceBatch(w http.ResponseWriter, r *http.Request, rawIDs []
 		}
 		out = append(out, snapshot)
 	}
-
 	srcs := make([]string, 0, len(allSources))
-	for s := range allSources {
-		srcs = append(srcs, s)
+	for src := range allSources {
+		srcs = append(srcs, src)
 	}
 	writeJSON(w, out, Flags{Stale: anyStale}, srcs...)
 }
