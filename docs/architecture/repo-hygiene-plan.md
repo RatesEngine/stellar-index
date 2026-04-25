@@ -180,9 +180,15 @@ deadline, owner, and context; the TODO just points.
 No other comment markers are allowed in code. `XXX` is especially
 banned (`lint-docs.sh` flags).
 
-**Temporary exception:** during Phase-1 scaffolding, some TODOs
-reference `#0` (placeholder for "not yet filed"). Convert to real
-issue numbers by end of Week 1. CI grace until Week 2.
+**Practical exception:** `TODO(#0)` is the explicit placeholder
+for "issue not yet filed" — accepted by `lint-docs.sh` so a
+contributor can land a known-future-work pointer without
+blocking on GitHub-issue creation. Originally scoped to
+Phase-1 scaffolding with a Week-2 grace; in practice we've
+kept the placeholder around for the same reason since Phase 1
+closed (2026-04-22) — incremental conversion as issues get
+filed. ~16 markers in the tree as of 2026-04-25; track the
+counter trending down rather than a hard deadline.
 
 ---
 
