@@ -56,7 +56,7 @@ ZFS pool `data` (raidz2, ~13.3 TB usable) with 7 datasets:
 Stellar pubnet ─(SCP)─► galexie's captive-core ─► galexie ─► MinIO galexie-live
                                                                   │
                                                                   ▼
-                                                           our indexer (TBD, Task #164)
+                                                       cmd/ratesengine-indexer (Galexie → ledgerstream → dispatcher)
                                                                   │
                                                                   ▼
                                                              TimescaleDB
