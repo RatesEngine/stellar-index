@@ -58,7 +58,7 @@ ledger[N+1].LedgerHeader.PreviousLedgerHash`. Catches any internal
 corruption, dropped ledger, or replay divergence regardless of
 upstream trust.
 
-Command (planned): `ratesengine-ops verify-archive --tier chain`
+Command: `ratesengine-ops verify-archive -tier chain` (PR #17).
 
 ### Tier B — Checkpoint anchoring against local history archive (primary, free, mandatory)
 
@@ -75,7 +75,7 @@ checkpoint hashes match at every 64th ledger, inter-checkpoint
 content is byte-identical by induction (each ledger's hash chains to
 the next).
 
-Command (planned): `ratesengine-ops verify-archive --tier checkpoint`
+Command: `ratesengine-ops verify-archive -tier checkpoint` (PR #18).
 
 ### Tier C — Byte-compare sample against SDF's GCS bucket (optional, belt-and-braces)
 
@@ -92,7 +92,7 @@ Doesn't add evidence beyond Tier B (same upstream source), but:
 - Surfaces GCS requester-pays / egress issues before an actual DR
   event.
 
-Command (planned): `ratesengine-ops verify-archive --tier sdf-sample --samples 1000`
+Command (planned): `ratesengine-ops verify-archive -tier sdf-sample --samples 1000`. Deferred pending public-read confirmation on the SDF bucket — see open items in [stellar-data-lakes.md](../discovery/data-sources/stellar-data-lakes.md).
 
 Caveat: SDF's galexie bucket may not retain to genesis; check
 coverage before relying on it (open item in
@@ -115,8 +115,9 @@ ledger K, and our replay produces the same hash, the network
 agreed on those bytes via SCP consensus. Cryptographically the
 strongest evidence available short of running our own validator.
 
-Command (planned): `ratesengine-ops verify-archive --tier peers
---samples 20 --peers <url>,<url>,...`
+Command: `ratesengine-ops verify-archive -tier peers -peer-samples
+20 -peers <url>,<url>,...` (PR #20). Defaults to a built-in
+seven-peer set when `-peers` is empty.
 
 Cost: tiny — one HTTP GET per (checkpoint × peer). ~20 × 6 = 120
 JSON fetches of ~1 KB each. Run on demand.
