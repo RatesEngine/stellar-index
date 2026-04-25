@@ -246,43 +246,90 @@ pubnet backfill in ~1.5 days instead of ~12.
 | S3 client tuning (PUT timeout, keep-alive pool, multipart) | hard-coded defaults | `s3.go` `NewS3DataStore` calls `config.LoadDefaultConfig(ctx)` with no transport overrides. |
 | Multipart upload | irrelevant | `manager.NewUploader` defaults to 5 MB part size, 5 concurrent parts per upload — but parts only kick in for objects ≥ 5 MB. LCM-per-file is small. |
 
-### Alternative: skip the export, mirror from AWS public bucket
+### Highest-impact lever (in practice): mirror from the AWS public bucket
 
 AWS hosts a publicly-readable galexie-format Stellar dataset at
 `s3://aws-public-blockchain/v1.1/stellar/ledgers/pubnet/`. For
 historical backfill (genesis → live tip), we don't need to run
-galexie ourselves — we can `mc mirror` (or `aws s3 sync`) the
+galexie ourselves — we can `mc mirror` / `aws s3 sync` the
 public bucket into our `galexie-archive` and skip the
-12-day-serial / 1.5-day-parallel export step entirely.
+~12-day-serial / ~1.5-day-parallel export step entirely.
 
-OBSRVR's `nebu` tool does exactly this — its archive mode reads
-straight from the AWS bucket via the SDK's
-`BufferedStorageBackend` (per
-`nebu/docs/ARCHIVE_MODE.md`). The 2026-04-25 OBSRVR-fork
-research (see commit log for the linked agent report) confirmed
-they have **no parallel-write galexie fork** — they just
-piggy-back on the AWS public dataset for backfill and the
-SDK's `NumWorkers` parallel prefetch on the read side.
+OBSRVR's `nebu` tool does exactly this in its archive mode
+(per `nebu/docs/ARCHIVE_MODE.md`). The 2026-04-25 OBSRVR-fork
+research confirmed they have **no parallel-write galexie fork**
+— they piggy-back on the AWS public dataset for backfill and
+the SDK's `NumWorkers` parallel prefetch on the read side.
 
-When this is the right call:
+#### Verified 2026-04-25
 
-- Bringing up a brand-new archival node from cold (no sunk
-  galexie work yet — switch to mirror immediately).
-- Disaster recovery on a corrupt `galexie-archive` (re-seed
-  from AWS instead of re-running scan-and-fill).
+- **Retention floor: genesis.** Anonymous `aws s3 ls
+  --no-sign-request` against the bucket lists partition
+  `FFFFFFFF--0-63999/` (Galexie reverse-hex naming for ledgers
+  0-63999) with all 63,997 expected objects (pubnet ledger
+  numbering starts at 3; ledgers 0/1/2 don't exist on
+  pubnet). No gaps, no missing objects. Object timestamps
+  cluster around 2025-09-20 — single full backfill / re-write,
+  not rolling pruning.
+- **Egress: free.** The bucket is registered in the AWS Open
+  Data Sponsorship Program at
+  <https://registry.opendata.aws/aws-public-blockchain/>. The
+  registry YAML carries the `aws-pds` tag and **no
+  `RequesterPays: true` field**; anonymous reads with
+  `--no-sign-request` succeed without the
+  `--request-payer requester` flag (a requester-pays bucket
+  would 403). The standard $0.09/GB egress does not apply.
 
-When it isn't:
+So pulling the full ~2.5 TB pubnet archive costs **$0** in
+egress and ~5–6 h at sustained 1 Gbps Hetzner-to-AWS
+bandwidth.
 
-- AWS's bucket retention isn't guaranteed to genesis (verify
-  per backfill); the lower-bound ledger of their dataset is
-  the de-facto floor.
-- Egress cost — pulling 100s of GB out of AWS to our colo
-  isn't free. Compare against the captive-core CPU cost of
-  the in-house export.
-- We give up cross-validation: re-running our own export +
-  byte-comparing against AWS would be a Tier-C-style
-  audit but we'd have to actually run the export anyway,
-  defeating the purpose.
+#### When this is the right call
+
+- Bringing up a brand-new archival node from cold — switch to
+  mirror immediately, don't run scan-and-fill at all for the
+  historical chunk.
+- Disaster recovery on a corrupt `galexie-archive` — re-seed
+  from AWS.
+- Mid-backfill cutover (current 2026-04-25 r1 case): galexie's
+  `IfNoneMatch: "*"` precondition makes the mirror idempotent
+  against already-uploaded objects, so killing the in-flight
+  scan-and-fill and switching to mirror is a clean cutover.
+
+#### When it isn't
+
+- We give up the cross-validation we'd otherwise have between
+  our own captive-core export and someone else's. If the
+  audit story matters more than the wall-clock cost, run our
+  own scan-and-fill at least once and Tier-C compare against
+  AWS afterwards (still TBD per the verify-archive playbook).
+- The bucket is in `us-east-2` (Ohio); transatlantic latency
+  to a European colo is real. Throughput's still bounded by
+  network, not RTT, but small-object listings can feel
+  slower.
+
+#### Runbook
+
+```sh
+# 1. Stop the in-flight scan-and-fill (if any).
+sudo systemctl stop galexie-backfill   # or: kill <pid>
+
+# 2. Configure mc with anonymous AWS access.
+mc alias set aws https://s3.us-east-2.amazonaws.com "" "" --api S3v4
+
+# 3. Mirror, idempotent — won't re-write objects already in our bucket.
+mc mirror --overwrite=false \
+  aws/aws-public-blockchain/v1.1/stellar/ledgers/pubnet/ \
+  local/galexie-archive/
+
+# 4. Sanity-check the floor.
+mc ls local/galexie-archive/FFFFFFFF--0-63999/ | head
+# Expect: FFFFFFFC--3.xdr.zst, FFFFFFFB--4.xdr.zst, FFFFFFFA--5.xdr.zst, ...
+
+# 5. Run verify-archive (Tier A + B) before declaring success:
+ratesengine-ops verify-archive -config /etc/ratesengine.toml \
+  -tier all -from 2 -to <last-mirrored-ledger>
+```
 
 The verify-archive playbook's Tier C (deferred) was originally
 shaped around the SDF GCS bucket. The AWS public bucket is the
