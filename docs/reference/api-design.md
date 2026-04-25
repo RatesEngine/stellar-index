@@ -127,7 +127,8 @@ Grouped by RFP requirement. Numbered IDs (A.1, B.2) map back to the
 | ------ | ---- | ------- | --- |
 | GET | `/v1/healthz` | Shallow: process up. Returns `200 {"status":"ok"}`. | — |
 | GET | `/v1/readyz` | Deep: Timescale + Redis + captive-core reachable. | F3.* |
-| GET | `/v1/version` | Build SHA, version, build date. | — |
+| GET | `/v1/version` | Version, build date, full commit SHA, dirty flag, Go runtime version. | — |
+| GET | `/v1/sources` | Source catalogue + class metadata (`exchange` / `aggregator` / `oracle` / `authority_sanity` + `include_in_vwap`). Optional `?class=` filter. | — |
 
 ### 5.2 Asset catalog
 
