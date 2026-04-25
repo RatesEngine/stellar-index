@@ -118,13 +118,16 @@ The ingestion side (orchestrator, indexer event-sink) gains a new
 case arm to persist `OracleUpdate` via
 `store.InsertOracleUpdate`.
 
-## Phase status
+## Status
 
-**Skeleton.** Contract address seeding + event correlation work
-is present; SCVal XDR decoding of the Vec<(Asset, i128)> payload
-is stubbed behind `decoderHooks` pending the SDK-dep PR. The
-address-type switch (Stellar / Other) within SCVal Asset decoding
-is the tricky bit that needs real XDR; the rest is bookkeeping.
+Production. Contract address seeding, event correlation, and
+the Vec<(Asset, i128)> SCVal payload decoding (including the
+`Asset::Stellar(Address)` vs `Asset::Other(Symbol)` discriminant
+switch) all run via `internal/scval` (ADR-0013). Real-mainnet
+event fixtures live in `test/fixtures/reflector/v6-2026-04-23/`
+and run on every `go test` cycle.
 
-Sets the pattern for **Redstone** (per-feed contracts + adapter)
-and **Band** (native StandardReference contract) connectors.
+Set the pattern for [**Redstone**](../redstone/) (per-feed
+contracts + Adapter-only event surface) and [**Band**](../band/)
+(native StandardReference contract; observed via
+`ContractCallDecoder` because the contract emits zero events).
