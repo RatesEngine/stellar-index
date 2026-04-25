@@ -31,6 +31,10 @@ func TestHandler_ExposesMetrics(t *testing.T) {
 	obs.PriceStalenessSeconds.WithLabelValues("_warmup").Set(0)
 	obs.OracleLastUpdateUnix.WithLabelValues("_warmup", "_warmup").Set(0)
 	obs.OracleResolutionSeconds.WithLabelValues("_warmup").Set(0)
+	obs.AggregatorTicksTotal.WithLabelValues("_warmup").Inc()
+	obs.AggregatorVWAPWritesTotal.Inc()
+	obs.AggregatorEmptyWindowsTotal.Inc()
+	obs.AggregatorDroppedTradesTotal.WithLabelValues("_warmup").Inc()
 
 	ts := httptest.NewServer(obs.Handler())
 	defer ts.Close()
@@ -63,6 +67,10 @@ func TestHandler_ExposesMetrics(t *testing.T) {
 		"ratesengine_price_staleness_seconds",
 		"ratesengine_oracle_last_update_unix",
 		"ratesengine_oracle_resolution_seconds",
+		"ratesengine_aggregator_ticks_total",
+		"ratesengine_aggregator_vwap_writes_total",
+		"ratesengine_aggregator_empty_windows_total",
+		"ratesengine_aggregator_dropped_trades_total",
 		// Language-native + process metrics from collectors.
 		"go_goroutines",
 		"process_open_fds",

@@ -152,6 +152,52 @@ errored. The middleware fails open deliberately (Redis outage
 shouldn't take down the API); this metric gives ops a quantitative
 signal that correlates with `redis` readyz turning red.
 
+### `ratesengine_aggregator_ticks_total`
+
+Counter, label `outcome` (`ok` / `error`).
+
+One increment per aggregator orchestrator tick. `error` fires when
+at least one (pair, window) refresh inside the tick failed — a tick
+with all-pair-success records as `ok`. Per-pair errors still surface
+as soft warnings; this counter is the tick-level rollup operators
+watch for sustained instability.
+
+### `ratesengine_aggregator_vwap_writes_total`
+
+Counter, no labels.
+
+Cumulative VWAP cache writes performed by the aggregator. Pair-level
+detail intentionally excluded — Prometheus cardinality stays bounded
+and the per-pair lens lives in the Redis key namespace
+(`vwap:<base>:<quote>:<window>`). Operators alert on a sustained
+zero-rate as the "aggregator is silent" signal.
+
+### `ratesengine_aggregator_empty_windows_total`
+
+Counter, no labels.
+
+Count of (pair, window) refreshes that produced zero VWAP-eligible
+trades after class filtering, stablecoin expansion, and outlier
+filtering. The `vwap_writes / empty_windows` ratio surfaces pair
+coverage gaps without per-pair cardinality cost — a sustained
+all-empty signal usually means the configured pair set has
+out-grown the live data.
+
+### `ratesengine_aggregator_dropped_trades_total`
+
+Counter, label `reason` (`class` / `outlier`).
+
+Trades removed from the VWAP input set, broken down by which filter
+discarded them. `class` = removed by the ClassExchange-only filter
+(non-exchange source: aggregator / oracle / authority_sanity / not
+registered). `outlier` = removed by the σ-threshold filter
+(`OutlierSigmaThreshold > 0`). A spike in `class` is usually a venue
+mis-registered in `external.Registry`; a spike in `outlier` is
+usually a market-distress event flooding the window with anomalies.
+
 ## Changelog
 
+- 2026-04-25 — added aggregator orchestrator metrics
+  (`ratesengine_aggregator_*`) covering tick outcomes, VWAP writes,
+  empty windows, and per-stage trade drops.
 - 2026-04-23 — initial reference document to close the lint drift.
