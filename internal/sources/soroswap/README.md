@@ -84,26 +84,32 @@ new_pair  topic: ["new_pair",   <token0>, <token1>]   (on factory)
 Topic[0] is a `Symbol` SCVal; topic[1+] are `Address` SCVals.
 See `events.go` for the typed enum.
 
-## File layout (CONTRIBUTING.md §five-file convention)
+## File layout
 
 | File | Purpose |
 | --- | --- |
 | `README.md` | This file. |
-| `events.go` | Event identifier constants + topic-shape predicates. |
-| `decode.go` | Raw RPC event → `canonical.Trade` (swap+sync). |
-| `consumer.go` | Implements `consumer.Source`. Orchestrates the poll loop via `internal/stellarrpc`. |
-| `source_test.go` | Unit tests against hand-crafted + fixture events. |
-| `../../../test/fixtures/soroswap/` | Golden-file event fixtures. |
+| `events.go` | Event identifier constants + topic-shape predicates + `Event` wrapper for the dispatcher seam. |
+| `decode.go` | `LedgerCloseMeta` event → `canonical.Trade` (swap+sync correlation, real SCVal decoding via `internal/scval`). |
+| `consumer.go` | Implements `consumer.Source` — the in-memory swap+sync correlation buffer. |
+| `dispatcher_adapter.go` | Topic-match registration with `internal/dispatcher`. |
+| `factory_seed.go` | Boot-time `pair-contract → (token0, token1)` registry sweep via stellar-rpc `simulateTransaction` — covers pairs created before the dispatcher's first ledger. |
+| `decode_test.go`, `source_test.go`, `real_fixture_test.go` | Unit + golden-file + real-mainnet-fixture tests. |
+| `../../../test/fixtures/soroswap/` | Captured mainnet event fixtures. |
 
-## Phase status
+## Status
 
-- Events + decode: **skeleton**. Topic predicates + the swap+sync
-  correlation machinery are implemented; XDR-level SCVal decoding
-  is stubbed pending the SDK dependency decision.
-- Consumer: **skeleton**. Implements the `consumer.Source`
-  interface; backfill + stream both drive through
-  `stellarrpc.GetEvents`.
-
-When the XDR decoder lands (separate ADR + PR), `decode.go`'s
-`decodeAmount` and `decodeAddress` stubs get real implementations
-without touching `consumer.go` or the topic predicates.
+- **Decode**: real. SCVal decoding via `internal/scval`
+  (the `go-stellar-sdk/xdr`-backed wrapper per ADR-0013). The
+  `swap+sync` correlation, the 2-vs-4-topic detection, and the
+  factory-RPC seed for pre-history pairs (PR #14) are all
+  implemented and tested against real mainnet fixtures captured
+  under `test/fixtures/soroswap/`.
+- **Consumer**: production. Plugs into the
+  Galexie → `internal/ledgerstream` → `internal/dispatcher` →
+  decoder pipeline per
+  [`docs/architecture/ingest-pipeline.md`](../../../docs/architecture/ingest-pipeline.md).
+  No `stellarrpc.GetEvents` polling on the live path —
+  stellar-rpc was removed from r1 production ingest 2026-04-23.
+  `factory_seed.go` is the only remaining caller and only fires
+  once at boot to populate the in-memory pair-token registry.
