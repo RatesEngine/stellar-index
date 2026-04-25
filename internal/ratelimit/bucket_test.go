@@ -267,3 +267,37 @@ func TestBucket_ZeroArgsPanic(t *testing.T) {
 		})
 	}
 }
+
+func TestBucket_MaxAndWindowAccessors(t *testing.T) {
+	rdb, _ := newRedis(t)
+	b := ratelimit.New(rdb, 42, 7*time.Minute)
+	if got := b.Max(); got != 42 {
+		t.Errorf("Max() = %d, want 42", got)
+	}
+	if got := b.Window(); got != 7*time.Minute {
+		t.Errorf("Window() = %v, want 7m", got)
+	}
+}
+
+func TestBucket_WithKeyPrefixOverridesDefault(t *testing.T) {
+	// Default prefix is "rl:". Override via WithKeyPrefix and verify
+	// the new prefix shows up on the actual Redis key — observable
+	// via miniredis's key listing. This is the only way to confirm
+	// the option threaded through to the codepath that builds keys.
+	rdb, mr := newRedis(t)
+	b := ratelimit.New(rdb, 5, time.Minute, ratelimit.WithKeyPrefix("custom:"))
+	ctx := context.Background()
+	if _, err := b.Take(ctx, "ident"); err != nil {
+		t.Fatalf("Take: %v", err)
+	}
+	matched := false
+	for _, k := range mr.Keys() {
+		if len(k) >= 7 && k[:7] == "custom:" {
+			matched = true
+			break
+		}
+	}
+	if !matched {
+		t.Errorf("no key with prefix \"custom:\" found in miniredis; have %v", mr.Keys())
+	}
+}
