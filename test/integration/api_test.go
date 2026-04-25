@@ -475,6 +475,19 @@ func (r apiMarketsAdapter) DistinctPairs(ctx context.Context, cursor string, lim
 	return out, next, nil
 }
 
+func (r apiMarketsAdapter) PairMarket(ctx context.Context, base, quote c.Asset) (v1.Market, bool, error) {
+	m, ok, err := r.s.PairMarket(ctx, base, quote)
+	if err != nil || !ok {
+		return v1.Market{}, ok, err
+	}
+	return v1.Market{
+		Base:          m.Pair.Base.String(),
+		Quote:         m.Pair.Quote.String(),
+		LastTradeAt:   m.LastTradeAt,
+		TradeCount24h: m.TradeCount24h,
+	}, true, nil
+}
+
 // mkAPITrade builds a Trade with a unique TxHash per (ledger, nonce).
 // Reuses the integration-test hex-encoding trick from
 // trades_range_test.go — keeps trade IDs distinct so the primary key
