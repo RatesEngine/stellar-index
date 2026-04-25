@@ -17,6 +17,63 @@ against.
 
 ### Added
 
+- **PRs 21–29 — Aggregator policy + observability layer**
+  (2026-04-25): builds out the orchestrator from PR 182's
+  passthrough VWAP into a configurable, observable, alerting-
+  ready computation:
+
+  - **PR 21 (class filter)**: orchestrator drops non-`ClassExchange`
+    trades from the VWAP input set by default. Aggregator-class
+    sources (CoinGecko / CMC / CryptoCompare) and oracle-class
+    sources (Reflector / Redstone / Band) stay visible in
+    `/v1/sources` for transparency but no longer skew the
+    computed price. Inverted `DisableClassFilter` flag —
+    zero value is the safer default.
+  - **PR 22 (stablecoin helper)**: `internal/aggregate/stablecoin.go`
+    with `FiatProxy` / `ProxyPair` / `ProxyTrade`. Maps quote-
+    side stablecoins (USDT/USDC/DAI/PYUSD/USDP → USD,
+    EURC/EUROC/EUROB → EUR, MXNe → MXN). Aggregator policy
+    only — decoders still record the raw pair so a depeg event
+    stays visible in the trade feed.
+  - **PR 23 (orchestrator stablecoin wire-up)**:
+    `Config.EnableStablecoinFiatProxy`. When on, a fiat-
+    denominated target pair fans out to direct + stablecoin
+    backers and collapses onto the target via `ProxyPair`
+    before VWAP. Single-backer fetch failure logs and skips
+    rather than aborting the window.
+  - **PR 24 (TOML plumbing for filter flags)**: exposes
+    `disable_class_filter`, `enable_stablecoin_fiat_proxy`,
+    `interval_seconds`, `max_trades_per_window` in
+    `[aggregate]`.
+  - **PR 25 (outlier filter wire-up)**: orchestrator's
+    `OutlierSigmaThreshold` (driven by `aggregate.outlier_sigma_threshold`,
+    default 4.0) drops trades > σ from the window mean before
+    VWAP. Applied after class + stablecoin steps so the σ
+    arithmetic runs over comparable price values.
+  - **PR 26 (Prometheus metrics)**: `ratesengine_aggregator_*`
+    counters — ticks (by outcome), VWAP writes, empty windows,
+    dropped trades (by reason: `class` / `outlier`).
+  - **PR 27 (alerts + runbooks)**: three Prometheus rules
+    (`aggregator_silent` P1, `aggregator_outlier_storm` P3,
+    `aggregator_class_drop_spike` P3) with full runbooks.
+    Baseline-comparator alerts use `offset 1h` to auto-tune to
+    operator traffic.
+  - **PR 28 (`GET /v1/sources`)**: surfaces `external.Registry`
+    on the API so consumers can confirm a venue's class +
+    `include_in_vwap` without internal access. Same metadata
+    the class filter consults — they agree by construction.
+  - **PR 29 (configurable pairs + windows)**: `aggregate.pairs`
+    and `aggregate.windows` accept operator overrides as
+    canonical pair strings (`"crypto:XLM/fiat:USD"`) and Go
+    `time.Duration` strings (`"5m"`). Empty falls back to the
+    binary's built-in defaults.
+
+  Together: the aggregator can now be deployed with operator-
+  chosen coverage, the class/stablecoin/outlier policy chain
+  applied in order, observable via Prometheus + paged via
+  Alertmanager when it goes silent or throws an unusually high
+  drop rate.
+
 - **PR 182 — Aggregator orchestrator v1** (2026-04-24): turns
   `cmd/ratesengine-aggregator` from a deliberate `os.Exit(1)`
   stub into a running binary. Rolling-window VWAP pre-computed
