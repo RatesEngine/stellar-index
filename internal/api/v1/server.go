@@ -202,6 +202,10 @@ func (s *Server) mountRoutes() {
 	// Latest oracle readings per source for an asset.
 	s.mux.HandleFunc("GET /v1/oracle/latest", s.handleOracleLatest)
 
+	// Source catalogue — every venue the aggregator knows about,
+	// with class + IncludeInVWAP metadata.
+	s.mux.HandleFunc("GET /v1/sources", s.handleSources)
+
 	// TODO(#0): /v1/pairs (alias), /v1/account/*, SSE streams
 	// — follow-up PRs per docs/reference/api-design.md §5.
 }

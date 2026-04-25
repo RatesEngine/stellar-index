@@ -449,6 +449,28 @@ paths:
         "500": { $ref: "#/components/responses/InternalError" }
         "503": { $ref: "#/components/responses/ServiceUnavailable" }
 
+  /sources:
+    get:
+      tags: [meta]
+      summary: Source catalogue with class + IncludeInVWAP metadata.
+      description: |
+        Static projection of the aggregator's source registry — every
+        venue we know about, labelled with the class semantic that
+        decides whether it contributes to VWAP. Sources with
+        `include_in_vwap=false` are intentional policy
+        (aggregator/oracle/authority_sanity classes), not missing
+        connectors. Operators consult this endpoint to confirm a
+        venue is recognised before debugging an absence in /v1/markets
+        or /v1/vwap.
+      responses:
+        "200":
+          description: Array of sources, sorted by name.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SourcesEnvelope" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+        "500": { $ref: "#/components/responses/InternalError" }
+
   /pairs:
     get:
       tags: [markets]
@@ -1068,6 +1090,27 @@ components:
               type: array
               items: { $ref: "#/components/schemas/MarketRow" }
             pagination: { $ref: "#/components/schemas/Pagination" }
+          required: [data]
+
+    Source:
+      type: object
+      properties:
+        name:               { type: string, description: "Stable connector identifier (matches canonical.Trade.Source)." }
+        class:              { type: string, enum: [exchange, aggregator, oracle, authority_sanity] }
+        include_in_vwap:    { type: boolean, description: "Whether this source's trades contribute to VWAP." }
+        paid:               { type: boolean, description: "Whether this connector requires a paid licence / API key." }
+        backfill_available: { type: boolean, description: "Whether the source supports historical backfill via its native API." }
+        default_weight:     { type: integer, description: "Default per-source weight for weighted-aggregation paths (when those land)." }
+      required: [name, class, include_in_vwap, paid, backfill_available, default_weight]
+
+    SourcesEnvelope:
+      allOf:
+        - { $ref: "#/components/schemas/EnvelopeMeta" }
+        - type: object
+          properties:
+            data:
+              type: array
+              items: { $ref: "#/components/schemas/Source" }
           required: [data]
 
     PairsEnvelope:
