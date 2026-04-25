@@ -8,9 +8,11 @@ import (
 	"time"
 
 	"github.com/alicebob/miniredis/v2"
+	"github.com/prometheus/client_golang/prometheus/testutil"
 	"github.com/redis/go-redis/v9"
 
 	"github.com/RatesEngine/rates-engine/internal/canonical"
+	"github.com/RatesEngine/rates-engine/internal/obs"
 )
 
 // mockStore is a hand-controlled Store for deterministic tick tests.
@@ -517,6 +519,61 @@ func TestTick_OutlierFilter_ZeroSigmaIsOff(t *testing.T) {
 	// Equal-volume mean = (0.20 + 0.20 + 200.00) / 3 = ~66.8.
 	if val[:2] == "0." {
 		t.Errorf("disabled outlier filter let through small VWAP %q — outlier should still dominate", val)
+	}
+}
+
+func TestTick_EmitsPrometheusMetrics(t *testing.T) {
+	// Snapshot the relevant counters, run a tick that performs one
+	// VWAP write + drops one off-class trade, then assert each
+	// counter advanced by the expected delta.
+	now := time.Now()
+	store := &mockStore{
+		trades: []canonical.Trade{
+			buildTradeFrom(t, "binance",
+				big.NewInt(100_000_000), big.NewInt(20_000_000), now.Add(-2*time.Minute)),
+			buildTradeFrom(t, "coingecko", // class=aggregator → dropped
+				big.NewInt(100_000_000), big.NewInt(20_000_000), now.Add(-1*time.Minute)),
+		},
+	}
+	rdb, _ := newTestRedis(t)
+	orch := New(store, rdb, Config{
+		Pairs:   []canonical.Pair{xlmUsdtPair(t)},
+		Windows: []time.Duration{5 * time.Minute},
+	})
+
+	beforeOK := testutil.ToFloat64(obs.AggregatorTicksTotal.WithLabelValues("ok"))
+	beforeWrites := testutil.ToFloat64(obs.AggregatorVWAPWritesTotal)
+	beforeDroppedClass := testutil.ToFloat64(obs.AggregatorDroppedTradesTotal.WithLabelValues("class"))
+
+	if err := orch.Tick(context.Background()); err != nil {
+		t.Fatalf("Tick: %v", err)
+	}
+
+	if got := testutil.ToFloat64(obs.AggregatorTicksTotal.WithLabelValues("ok")) - beforeOK; got != 1 {
+		t.Errorf("ticks{ok} delta = %v want 1", got)
+	}
+	if got := testutil.ToFloat64(obs.AggregatorVWAPWritesTotal) - beforeWrites; got != 1 {
+		t.Errorf("vwap_writes delta = %v want 1", got)
+	}
+	if got := testutil.ToFloat64(obs.AggregatorDroppedTradesTotal.WithLabelValues("class")) - beforeDroppedClass; got != 1 {
+		t.Errorf("dropped{class} delta = %v want 1 (coingecko row)", got)
+	}
+}
+
+func TestTick_StoreErrorIncrementsTickErrorOutcome(t *testing.T) {
+	store := &mockStore{returnErr: context.DeadlineExceeded}
+	rdb, _ := newTestRedis(t)
+	orch := New(store, rdb, Config{
+		Pairs:   []canonical.Pair{xlmUsdtPair(t)},
+		Windows: []time.Duration{5 * time.Minute},
+	})
+
+	beforeErr := testutil.ToFloat64(obs.AggregatorTicksTotal.WithLabelValues("error"))
+	if err := orch.Tick(context.Background()); err != nil {
+		t.Fatalf("Tick: %v", err)
+	}
+	if got := testutil.ToFloat64(obs.AggregatorTicksTotal.WithLabelValues("error")) - beforeErr; got != 1 {
+		t.Errorf("ticks{error} delta = %v want 1", got)
 	}
 }
 

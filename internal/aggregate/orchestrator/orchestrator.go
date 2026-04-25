@@ -50,6 +50,7 @@ import (
 	"github.com/RatesEngine/rates-engine/internal/aggregate"
 	"github.com/RatesEngine/rates-engine/internal/cachekeys"
 	"github.com/RatesEngine/rates-engine/internal/canonical"
+	"github.com/RatesEngine/rates-engine/internal/obs"
 	"github.com/RatesEngine/rates-engine/internal/sources/external"
 )
 
@@ -258,12 +259,14 @@ func (o *Orchestrator) Tick(ctx context.Context) error {
 
 	now := time.Now().UTC()
 
+	tickHadError := false
 	for _, pair := range o.cfg.Pairs {
 		for _, window := range o.cfg.Windows {
 			if err := ctx.Err(); err != nil {
 				return err
 			}
 			if err := o.refreshPairWindow(ctx, pair, window, now); err != nil {
+				tickHadError = true
 				o.mu.Lock()
 				o.errors++
 				o.mu.Unlock()
@@ -275,6 +278,11 @@ func (o *Orchestrator) Tick(ctx context.Context) error {
 			}
 		}
 	}
+	outcome := "ok"
+	if tickHadError {
+		outcome = "error"
+	}
+	obs.AggregatorTicksTotal.WithLabelValues(outcome).Inc()
 	return nil
 }
 
@@ -292,16 +300,25 @@ func (o *Orchestrator) refreshPairWindow(
 	if err != nil {
 		return fmt.Errorf("fetch %s %v: %w", pair.String(), window, err)
 	}
+	preFilter := len(trades)
 	if !o.cfg.DisableClassFilter {
 		trades = filterForVWAP(trades)
+		if dropped := preFilter - len(trades); dropped > 0 {
+			obs.AggregatorDroppedTradesTotal.WithLabelValues("class").Add(float64(dropped))
+		}
 	}
 	if o.cfg.OutlierSigmaThreshold > 0 {
+		preOutlier := len(trades)
 		trades = aggregate.FilterOutliers(trades, o.cfg.OutlierSigmaThreshold)
+		if dropped := preOutlier - len(trades); dropped > 0 {
+			obs.AggregatorDroppedTradesTotal.WithLabelValues("outlier").Add(float64(dropped))
+		}
 	}
 	if len(trades) == 0 {
 		o.mu.Lock()
 		o.emptyWindows++
 		o.mu.Unlock()
+		obs.AggregatorEmptyWindowsTotal.Inc()
 		return nil
 	}
 
@@ -311,6 +328,7 @@ func (o *Orchestrator) refreshPairWindow(
 			o.mu.Lock()
 			o.emptyWindows++
 			o.mu.Unlock()
+			obs.AggregatorEmptyWindowsTotal.Inc()
 			return nil
 		}
 		return fmt.Errorf("vwap %s %v: %w", pair.String(), window, err)
@@ -330,6 +348,7 @@ func (o *Orchestrator) refreshPairWindow(
 	o.mu.Lock()
 	o.vwapWrites++
 	o.mu.Unlock()
+	obs.AggregatorVWAPWritesTotal.Inc()
 	return nil
 }
 

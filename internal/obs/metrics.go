@@ -43,6 +43,11 @@ func init() {
 		PriceStalenessSeconds,
 		OracleLastUpdateUnix,
 		OracleResolutionSeconds,
+
+		AggregatorTicksTotal,
+		AggregatorVWAPWritesTotal,
+		AggregatorEmptyWindowsTotal,
+		AggregatorDroppedTradesTotal,
 	)
 }
 
@@ -262,4 +267,54 @@ var OracleResolutionSeconds = prometheus.NewGaugeVec(
 		Help: "Declared resolution interval of each oracle source (seconds).",
 	},
 	[]string{"source"},
+)
+
+// ─── Aggregator orchestrator metrics ─────────────────────────────
+
+// AggregatorTicksTotal — count of orchestrator ticks completed,
+// labelled by outcome ("ok" when the tick ran without surfacing an
+// error, "error" when at least one (pair, window) refresh failed).
+// Per-pair errors are still recorded as soft warnings; this counter
+// is the tick-level rollup.
+var AggregatorTicksTotal = prometheus.NewCounterVec(
+	prometheus.CounterOpts{
+		Name: "ratesengine_aggregator_ticks_total",
+		Help: "Aggregator orchestrator tick count, labelled by outcome (ok|error).",
+	},
+	[]string{"outcome"},
+)
+
+// AggregatorVWAPWritesTotal — count of (pair, window) Redis writes
+// performed by the orchestrator. Unlabelled to keep cardinality
+// bounded — the per-pair lens lives in the Redis key namespace.
+var AggregatorVWAPWritesTotal = prometheus.NewCounter(
+	prometheus.CounterOpts{
+		Name: "ratesengine_aggregator_vwap_writes_total",
+		Help: "Cumulative VWAP cache writes performed by the aggregator.",
+	},
+)
+
+// AggregatorEmptyWindowsTotal — count of (pair, window) refreshes
+// that produced zero VWAP-eligible trades after class filtering /
+// stablecoin expansion / outlier filtering. Unlabelled for the same
+// reason as VWAPWritesTotal.
+var AggregatorEmptyWindowsTotal = prometheus.NewCounter(
+	prometheus.CounterOpts{
+		Name: "ratesengine_aggregator_empty_windows_total",
+		Help: "Aggregator (pair, window) refreshes that produced zero eligible trades.",
+	},
+)
+
+// AggregatorDroppedTradesTotal — count of trades the orchestrator
+// removed from the VWAP input set, labelled by reason. "class" =
+// removed by the ClassExchange-only filter; "outlier" = removed by
+// the σ-threshold filter. Operators alert on a sudden spike in
+// "class" (a new venue mis-registered) or "outlier" (a market in
+// distress flooding the window with anomalies).
+var AggregatorDroppedTradesTotal = prometheus.NewCounterVec(
+	prometheus.CounterOpts{
+		Name: "ratesengine_aggregator_dropped_trades_total",
+		Help: "Trades removed from the VWAP input set, labelled by reason (class|outlier).",
+	},
+	[]string{"reason"},
 )
