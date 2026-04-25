@@ -73,18 +73,24 @@ so divergence analysis can detect a single relayer compromise.
 
 ### Q5 — Addresses
 
-Mainnet contract addresses (TBC via stellar.expert — Phase-1 flagged
-as unverified at audit time; we fill these at operator-config time
-rather than hard-coding):
+Mainnet contract addresses (Reflector v3, public — see the
+address tables in
+[`docs/discovery/oracles/reflector.md`](../../../docs/discovery/oracles/reflector.md)):
 
 | Contract | Mainnet address | Owner |
 | --- | --- | --- |
-| Reflector DEX | `TBD via config` | SDF + Reflector team |
-| Reflector CEX | `TBD via config` | same |
-| Reflector FX | `TBD via config` | same |
+| Reflector DEX | `CALI2BYU2JE6WVRUFYTS6MSBNEHGJ35P4AVCZYF3B6QOE3QKOB2PLE6M` | Reflector DAO |
+| Reflector CEX | `CAFJZQWSED6YAWZU3GWRTOCNPPCGBN32L7QV43XX5LZLFTK6JLN34DLN` | Reflector DAO |
+| Reflector FX | `CBKGPWGKSKZF52CFHMTRR23TBWTPMRDIYZ4O2P5VS65BMHYH4DXMCJZC` | Reflector DAO |
 
-Operator supplies each via config + each gets its own Source
-instance via `NewDEX()` / `NewCEX()` / `NewFX()` helpers.
+Verify via stellar.expert before pasting into config — the DAO
+can rotate addresses on a v4 spawn, in which case the discovery
+doc gets the update first.
+
+Operators set each via `[oracle.reflector]` in TOML; each gets
+its own Source instance via `NewDEX()` / `NewCEX()` / `NewFX()`
+helpers, with independent backfill state and metric labels
+(`reflector-dex` / `reflector-cex` / `reflector-fx`).
 
 ## File layout (five-file convention)
 
