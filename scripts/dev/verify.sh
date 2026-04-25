@@ -15,5 +15,10 @@ echo "=== Lint ==="          && make lint
 echo "=== Docs ==="          && ./scripts/ci/lint-docs.sh
 echo "=== Imports ==="       && ./scripts/ci/lint-imports.sh
 echo "=== Test ==="          && make test
+# Compile-only: catches interface-extension breakage in
+# build-tagged integration adapters without spinning testcontainers.
+# Real `make test-integration` lives outside verify because Docker
+# isn't always available locally.
+echo "=== Integration build ===" && make test-integration-build
 echo ""
 echo "✅ ALL CHECKS PASSED"
