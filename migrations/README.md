@@ -55,6 +55,27 @@ migrate -path migrations -database "${RATESENGINE_POSTGRES_DSN}" down 1
   (golang-migrate); disable with `-- migrate:no-transaction` when
   creating a hypertable on a very large existing table.
 
+## Current migrations
+
+Sequential index of what each migration adds (read the `.up.sql`
+header for the full motivation). Update this table when a new
+migration lands.
+
+| Number | File | Adds |
+| --- | --- | --- |
+| 0001 | [`0001_create_trades_hypertable.up.sql`](0001_create_trades_hypertable.up.sql) | Core `trades` hypertable, retention policy, primary indexes |
+| 0002 | [`0002_create_price_aggregates.up.sql`](0002_create_price_aggregates.up.sql) | Continuous aggregates (1m/15m/1h/4h/1d/1w/1mo) + refresh + retention. **CAVEAT**: `twap` column is `avg(quote/base)` — arithmetic mean of trade prices, NOT a time-weighted average. True TWAP needs inter-trade durations the CAGG definitions don't capture; computed in Go via `internal/aggregate/twap.go` instead |
+| 0003 | [`0003_create_oracle_updates_hypertable.up.sql`](0003_create_oracle_updates_hypertable.up.sql) | `oracle_updates` hypertable for Reflector / Redstone / Band observations + compression + retention |
+| 0004 | [`0004_relax_trades_ledger_for_offchain.up.sql`](0004_relax_trades_ledger_for_offchain.up.sql) | Relaxes the `trades.ledger > 0` constraint so off-chain sources (Binance / Kraken / etc) can stamp `ledger = 0` |
+
+**Pending future work** (not yet numbered, takes the next free
+slot when it lands): a materialised `asset_catalogue` +
+`market_catalogue` populated incrementally by the indexer. Today
+`internal/storage/timescale/{assets,markets}.go` does on-query
+DISTINCT scans across `trades`, which works at current scale but
+won't at millions-of-rows scale. See those packages' performance
+notes for the call site.
+
 ## References
 
 - [ADR-0003 i128 no-truncation](../docs/adr/0003-i128-no-truncation.md)
