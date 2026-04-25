@@ -51,7 +51,19 @@ kubectl logs deploy/ratesengine-indexer | grep -E "orphan|evicted" | tail -20
 # ordering happening to fall outside our buffer window.
 ```
 
-## Investigation (not mitigation — no runtime fix)
+## Mitigation (≤ 15 min)
+
+**No live-fix path** — this is an informational alert. Don't
+restart or roll back on the basis of orphan-events alone; orphans
+are a subset of events that couldn't be correlated, not a blocking
+failure. The conventional mitigation step is "investigate upstream"
+— see the next section.
+
+If the rate is genuinely catastrophic (`> 100/sec`, see "When to
+escalate" below), promote to a `source-stopped` response: the
+source is effectively not working, not just dropping a few rows.
+
+## Investigation
 
 This alert is informational; there's no live-fix path. Instead, gather:
 
