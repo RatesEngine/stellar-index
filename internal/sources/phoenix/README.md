@@ -116,13 +116,21 @@ TODO(#0) once the volatile path is validated in production.
 | File | Purpose |
 | --- | --- |
 | `README.md` | this file |
-| `events.go` | 8 field-name constants + their SCVal topic placeholders + mainnet addresses + errors |
-| `decode.go` | 8-event correlation buffer + single-Trade emission |
-| `consumer.go` | implements `consumer.Source` (same shape as other venues) |
-| `source_test.go` | unit tests covering happy path + out-of-order + partial-set orphan |
+| `events.go` | 8 field-name constants + their SCVal topic constants + mainnet addresses + errors |
+| `decode.go` | 8-event correlation buffer + single-Trade emission, decoded via `internal/scval` |
+| `consumer.go` | implements `consumer.Source` (the dispatcher seam) |
+| `dispatcher_adapter.go` | topic-match registration with `internal/dispatcher` |
+| `decode_test.go`, `source_test.go`, `real_fixture_test.go` | unit + happy-path-and-orphan + real-mainnet-fixture tests |
 
-## Phase status
+## Status
 
-**Skeleton.** 8-field correlation logic is implemented + tested via
-hooks; SCVal XDR decoding is stubbed pending the SDK-dep ADR +
-implementation PR. Stableswap pools are TODO(#0).
+Production for volatile (constant-product) pools. The 8-event
+correlation buffer, the SCVal decoding via `internal/scval`
+(ADR-0013), and the topic-match dispatch all run against real
+mainnet event fixtures captured under `test/fixtures/phoenix/`.
+
+Stableswap pool support is TODO(#0) — Phoenix's stableswap
+emits a different field set we haven't enumerated yet. The
+volatile path is the dominant traffic and runs cleanly without
+it; stableswap drops to the orphan-events counter rather than
+mis-decoding.

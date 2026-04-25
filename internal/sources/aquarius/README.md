@@ -80,8 +80,7 @@ indexer consults the router's `pool_tokens(pool_id)` function
 Soroswap emits `amount0_in / amount1_in / amount0_out / amount1_out`
 as four scalars. Aquarius emits them as two arrays indexed by asset
 position. This means our SCVal decoder needs Vec-of-i128 support,
-not just scalar i128. (The real XDR decoder handles this when the
-SDK dep lands; for now we stub it.)
+not just scalar i128 — handled in `internal/scval` (ADR-0013).
 
 ### Q4 — Concentrated-liquidity pools are WIP
 
@@ -96,14 +95,15 @@ before Week 3 — it may have shipped since Phase-1 audit.
 | --- | --- |
 | `README.md` | this file |
 | `events.go` | event-name + topic-symbol constants, pool type enum, mainnet router address |
-| `decode.go` | trade-event → `canonical.Trade` (single-event decode; variable-arity handled) |
-| `consumer.go` | implements `consumer.Source`; maintains the pool→tokens map |
-| `source_test.go` | unit tests with fake SCVal decoder hooks |
+| `decode.go` | trade-event → `canonical.Trade` (single-event decode; variable-arity handled via `internal/scval`) |
+| `consumer.go` | implements `consumer.Source` (the dispatcher seam); maintains the pool→tokens map |
+| `dispatcher_adapter.go` | topic-match registration with `internal/dispatcher` |
+| `decode_test.go`, `source_test.go`, `real_fixture_test.go` | unit + golden-file + real-mainnet-fixture tests |
 
 ## Relationship to Soroswap connector
 
-Both connectors implement `consumer.Source` and feed the same
-orchestrator. Differences that shape the code:
+Both connectors plug into the same Galexie → ledgerstream →
+dispatcher pipeline. Differences that shape the code:
 
 | Aspect | Soroswap | Aquarius |
 | --- | --- | --- |
@@ -113,13 +113,14 @@ orchestrator. Differences that shape the code:
 | Event topics | per-pair contract | per-router contract |
 | Correlation buffer | yes (`(ledger, tx_hash, op_index)`) | no |
 
-The common plumbing (orchestrator, cursors, config, stellarrpc
-client) is shared.
+The common plumbing (`internal/dispatcher` routing,
+`internal/scval` SCVal decoding, `internal/canonical` types) is
+shared across every Soroban source.
 
-## Phase status
+## Status
 
-**Skeleton only.** Topic byte-match dispatching + single-event
-decode + variable-arity normalisation are implemented as Go code,
-but SCVal XDR decoding is behind the `decoderHooks` package-level
-vars (stubs today; real implementations land with the SDK dep).
-Unit tests exercise the orchestration without the XDR codec.
+Production. Topic byte-match dispatching, single-event decode,
+variable-arity Vec-of-i128 normalisation, and the pool→tokens
+router lookup all run against real SCVal decoding via
+`internal/scval` (ADR-0013). Real-mainnet event fixtures live in
+`test/fixtures/aquarius/` and run on every `go test` cycle.
