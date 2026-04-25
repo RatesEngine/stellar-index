@@ -252,12 +252,11 @@ func (o *Orchestrator) Run(ctx context.Context) error {
 // Exported so tests can drive deterministic cycles without waiting
 // on the ticker.
 func (o *Orchestrator) Tick(ctx context.Context) error {
+	now := time.Now().UTC()
 	o.mu.Lock()
-	o.lastTickAt = time.Now()
+	o.lastTickAt = now
 	o.ticksTotal++
 	o.mu.Unlock()
-
-	now := time.Now().UTC()
 
 	tickHadError := false
 	for _, pair := range o.cfg.Pairs {
