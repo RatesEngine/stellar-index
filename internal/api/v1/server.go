@@ -184,6 +184,9 @@ func (s *Server) mountRoutes() {
 	// the aggregator ships.
 	s.mux.HandleFunc("GET /v1/price", s.handlePrice)
 
+	// Batch price lookup, up to 100 assets per request.
+	s.mux.HandleFunc("GET /v1/price/batch", s.handlePriceBatch)
+
 	// Trade history within a time window.
 	s.mux.HandleFunc("GET /v1/history", s.handleHistory)
 

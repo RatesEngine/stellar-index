@@ -5,10 +5,16 @@ import (
 	"errors"
 	"math/big"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/RatesEngine/rates-engine/internal/canonical"
 )
+
+// priceBatchMaxAssets is the upper bound on asset_ids per
+// /v1/price/batch GET. Mirrors the OpenAPI spec; the POST variant
+// (planned) raises this to 1000.
+const priceBatchMaxAssets = 100
 
 // PriceReader is the storage-side interface for /v1/price lookups.
 //
@@ -163,6 +169,147 @@ func (s *Server) handlePrice(w http.ResponseWriter, r *http.Request) {
 	// aggregator owns this metric when it ships and will restrict
 	// emission to a top-N allow-list.
 	writeJSON(w, snapshot, Flags{Stale: stale}, sources...)
+}
+
+// handlePriceBatch serves GET /v1/price/batch?asset_ids=A,B,C&quote=<id>.
+//
+// Looks up the latest price for each asset_id in turn. Missing
+// observations are omitted from the response — not 404'd —
+// because the envelope's data field is `array, items: Price`,
+// and "we have prices for some of the requested assets but not
+// others" is meaningfully different from "the request was
+// malformed." A caller asking for 5 assets and getting back 3
+// rows knows immediately which 2 we don't have data for.
+//
+// Limits:
+//   - asset_ids count: 1..100 (priceBatchMaxAssets). Above 100, use
+//     the planned POST /v1/price/batch variant which accepts up to
+//     1000 in the JSON body.
+//   - duplicates are de-duplicated server-side.
+//
+// Top-level Stale flag is the OR over per-row stale flags — if any
+// returned price is stale, the envelope flag is set. This matches
+// the single-asset /v1/price contract.
+func (s *Server) handlePriceBatch(w http.ResponseWriter, r *http.Request) {
+	reader := s.prices
+	if reader == nil {
+		writeProblem(w, r,
+			"https://api.ratesengine.net/errors/price-unavailable",
+			"Price serving not configured", http.StatusServiceUnavailable,
+			"this deployment has no PriceReader wired — check binary configuration")
+		return
+	}
+
+	rawIDs := r.URL.Query().Get("asset_ids")
+	if rawIDs == "" {
+		writeProblem(w, r,
+			"https://api.ratesengine.net/errors/missing-asset-ids",
+			"Missing asset_ids parameter", http.StatusBadRequest,
+			"asset_ids query parameter is required (comma-separated)")
+		return
+	}
+	parts := strings.Split(rawIDs, ",")
+	// Trim whitespace + drop empty entries — `?asset_ids=A,,B,` should
+	// resolve to ["A","B"], not 4 entries with two empty strings, so
+	// the limit check counts only real assets.
+	ids := make([]string, 0, len(parts))
+	seen := make(map[string]struct{}, len(parts))
+	for _, p := range parts {
+		t := strings.TrimSpace(p)
+		if t == "" {
+			continue
+		}
+		if _, dup := seen[t]; dup {
+			continue
+		}
+		seen[t] = struct{}{}
+		ids = append(ids, t)
+	}
+	if len(ids) == 0 {
+		writeProblem(w, r,
+			"https://api.ratesengine.net/errors/missing-asset-ids",
+			"Missing asset_ids parameter", http.StatusBadRequest,
+			"asset_ids query parameter must contain at least one id")
+		return
+	}
+	if len(ids) > priceBatchMaxAssets {
+		writeProblem(w, r,
+			"https://api.ratesengine.net/errors/too-many-assets",
+			"Too many assets", http.StatusBadRequest,
+			"asset_ids may contain at most 100 entries — use POST /v1/price/batch for larger batches")
+		return
+	}
+
+	rawQuote := r.URL.Query().Get("quote")
+	var quote canonical.Asset
+	if rawQuote == "" {
+		quote = defaultPriceQuote
+	} else {
+		var err error
+		quote, err = canonical.ParseAsset(rawQuote)
+		if err != nil {
+			writeProblem(w, r,
+				"https://api.ratesengine.net/errors/invalid-quote",
+				"Invalid quote identifier", http.StatusBadRequest,
+				err.Error())
+			return
+		}
+	}
+
+	out := make([]PriceSnapshot, 0, len(ids))
+	allSources := map[string]struct{}{}
+	anyStale := false
+
+	for _, raw := range ids {
+		asset, err := canonical.ParseAsset(raw)
+		if err != nil {
+			writeProblem(w, r,
+				"https://api.ratesengine.net/errors/invalid-asset-id",
+				"Invalid asset identifier", http.StatusBadRequest,
+				raw+": "+err.Error())
+			return
+		}
+		if asset.Equal(quote) {
+			// Identity pair is meaningless; reject the whole request
+			// rather than silently dropping the entry. Same logic as
+			// /v1/price.
+			writeProblem(w, r,
+				"https://api.ratesengine.net/errors/identity-price",
+				"Asset and quote are the same", http.StatusBadRequest,
+				"price of an asset in itself is always 1; "+raw+" matches the quote")
+			return
+		}
+
+		snapshot, sources, stale, err := reader.LatestPrice(r.Context(), asset, quote)
+		if errors.Is(err, ErrPriceNotFound) {
+			// Per the docstring: omit, do not 404 the whole batch.
+			continue
+		}
+		if err != nil {
+			if clientAborted(r, err) {
+				return
+			}
+			s.logger.Error("LatestPrice (batch) failed",
+				"err", err, "asset", asset.String(), "quote", quote.String())
+			writeProblem(w, r,
+				"https://api.ratesengine.net/errors/internal",
+				"Internal error", http.StatusInternalServerError, "")
+			return
+		}
+		if stale {
+			anyStale = true
+		}
+		for _, src := range sources {
+			allSources[src] = struct{}{}
+		}
+		out = append(out, snapshot)
+	}
+
+	srcs := make([]string, 0, len(allSources))
+	for s := range allSources {
+		srcs = append(srcs, s)
+	}
+	writeJSON(w, out, Flags{Stale: anyStale}, srcs...)
 }
 
 // ─── Helpers for PriceReader implementations ──────────────────────

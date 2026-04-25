@@ -17,6 +17,17 @@ against.
 
 ### Added
 
+- **`GET /v1/price/batch?asset_ids=A,B,C&quote=`**: batch
+  price lookup for up to 100 assets in one round-trip. Promised
+  by the OpenAPI spec but previously unmounted. Missing assets
+  are omitted from the response (not 404'd) so callers asking
+  for 5 assets and getting 3 rows know exactly which 2 we don't
+  have data for. Server-side dedupe collapses repeats; the
+  envelope's `flags.stale` is the OR of per-row staleness, and
+  `sources` is the union across all returned rows. Reuses the
+  existing `PriceReader` interface — no storage-layer changes.
+  POST variant (1000-asset bodies) is still pending.
+
 - **`GET /v1/pairs?base=&quote=`**: single-pair activity summary
   promised by the OpenAPI spec but previously unimplemented.
   Returns the same `MarketRow` shape as `/v1/markets`, filtered
