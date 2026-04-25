@@ -123,7 +123,7 @@ year-partitioned cold table driven by the medallion flush.
 
 **Our status:** ✅ Cache layer specified in [ADR-0007](../adr/0007-redis-cache-schema.md).
 Cache-key conventions live in `internal/cachekeys/`. Per-grain TTLs
-are planned in the query plane (sub-minute cache for `/v1/prices`,
+are planned in the query plane (sub-minute cache for `/v1/price`,
 longer for coarser `/v1/history` grains).
 
 ### 7. At least 2 servers: prod + experimental
