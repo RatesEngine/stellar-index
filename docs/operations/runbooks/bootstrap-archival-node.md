@@ -193,6 +193,17 @@ If catchup has not reached the network tip after the upper bound
 above: check for peer connectivity issues (`curl :11626/peers`),
 disk I/O (`iostat -xm 5`), or resource pressure (`htop`).
 
+**Genesis-to-tip galexie backfill is a separate, much longer
+phase** — the table above is just stellar-core catchup. Plan
+for an additional **8–14 h** for serial galexie scan-and-fill,
+or **~1.5 days** with 8-worker parallel scan-and-fill (recipe
+in
+[galexie-backfill.md § Tuning](../galexie-backfill.md#tuning--when-60-ledgerssec-isnt-enough)).
+The galexie backfill is the long pole when budgeting bring-up
+time for an archival node — see
+[archival-node-spec.md § 3.3.4](../../architecture/infrastructure/archival-node-spec.md#334-galexie-backfill-time-genesis--live-tip)
+for the per-tier breakdown.
+
 ---
 
 ## 8. First failures to expect (and what they mean)
