@@ -18,6 +18,7 @@ import (
 	"log/slog"
 	"net/http"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"sort"
 	"strconv"
@@ -151,7 +152,7 @@ Subcommands:
                           print per-venue first-trade/update samples. Exits
                           early once every enabled venue has emitted at
                           least one output. No DB, no Timescale, no cursors.
-  verify-archive -config PATH [-bucket NAME] [-from N] [-to N] [-tier MODE] [-archive-root PATH] [-peers URLs] [-peer-samples N]
+  verify-archive -config PATH [-bucket NAME] [-from N] [-to N] [-tier MODE] [-archive-root PATH] [-peers URLs] [-peer-samples N] [-archivist-bin BIN] [-archivist-url URL] [-archivist-timeout DUR]
                           Verify a galexie bucket at one or more tiers:
                             chain      (Tier A) — chain-link hash integrity:
                                        each ledger N's PreviousLedgerHash
@@ -169,7 +170,18 @@ Subcommands:
                                        URL list or default set of 7).
                                        Consensus-level cryptographic
                                        agreement.
-                            all        run all three.
+                            archivist  (Tier E) — shell out to
+                                       stellar-archivist scan for a full
+                                       bucket-by-bucket sha256 audit of
+                                       the archive. -archivist-url
+                                       defaults to file://<archive-root>;
+                                       any peer's https:// archive URL
+                                       also works. Requires
+                                       stellar-archivist (or rs-stellar-
+                                       archivist via -archivist-bin) on
+                                       PATH; long-running, gated by
+                                       -archivist-timeout (default 30m).
+                            all        run all four.
                           Exit 0 = clean; 1 = first break with details.
   backfill-external -config PATH -source SRC -pair SYM -from TS -to TS -granularity D
                           Pull historical candles from an external venue
@@ -1316,21 +1328,28 @@ func verifyArchive(args []string) error { //nolint:funlen,gocognit,gocyclo // li
 	bucketOverride := fs.String("bucket", "", "Override bucket name (default: storage.s3_bucket_archive, then s3_bucket_live)")
 	from := fs.Uint("from", 2, "First ledger to verify (inclusive, default 2 — ledger 1 has no predecessor)")
 	to := fs.Uint("to", 0, "Last ledger to verify (inclusive, 0 = unbounded/live)")
-	tier := fs.String("tier", "chain", "Verification tier: chain (A) | checkpoint (B) | peers (D) | all")
+	tier := fs.String("tier", "chain", "Verification tier: chain (A) | checkpoint (B) | peers (D) | archivist (E) | all")
 	archiveRoot := fs.String("archive-root", "/srv/history-archive",
 		"Path to local rs-stellar-archivist mirror (used by checkpoint/all tier)")
 	peerList := fs.String("peers", "",
 		"Comma-separated peer archive URLs for Tier D (empty → built-in tier-1 default set)")
 	peerSamples := fs.Int("peer-samples", 20,
 		"Number of checkpoints to sample for Tier D cross-peer diff")
+	archivistBin := fs.String("archivist-bin", "stellar-archivist",
+		"Path to rs-stellar-archivist binary for Tier E (used in archivist/all tier)")
+	archivistURL := fs.String("archivist-url", "",
+		"Archive URL for Tier E (empty → file://<archive-root>)")
+	archivistTimeout := fs.Duration("archivist-timeout", 30*time.Minute,
+		"Maximum runtime for the rs-stellar-archivist scan command")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
 	doChain := *tier == "chain" || *tier == "all"
 	doCheckpoint := *tier == "checkpoint" || *tier == "all"
 	doPeers := *tier == "peers" || *tier == "all"
-	if !doChain && !doCheckpoint && !doPeers {
-		return fmt.Errorf("unknown -tier %q (expected chain | checkpoint | peers | all)", *tier)
+	doArchivist := *tier == "archivist" || *tier == "all"
+	if !doChain && !doCheckpoint && !doPeers && !doArchivist {
+		return fmt.Errorf("unknown -tier %q (expected chain | checkpoint | peers | archivist | all)", *tier)
 	}
 	if *cfgPath == "" {
 		return fmt.Errorf("-config is required")
@@ -1368,6 +1387,17 @@ func verifyArchive(args []string) error { //nolint:funlen,gocognit,gocyclo // li
 	// Tier D (multi-peer checkpoint diff). Independent of LCM walk.
 	if doPeers {
 		if err := verifyArchivePeers(uint32(*from), uint32(*to), *peerList, *peerSamples); err != nil {
+			return err
+		}
+	}
+
+	// Tier E (rs-stellar-archivist scan). Independent of LCM walk and peer diff.
+	if doArchivist {
+		url := *archivistURL
+		if url == "" {
+			url = "file://" + *archiveRoot
+		}
+		if err := verifyArchiveArchivist(*archivistBin, url, *archivistTimeout); err != nil {
 			return err
 		}
 	}
@@ -1659,6 +1689,60 @@ func verifyArchivePeers(from, to uint32, peerList string, sampleN int) error { /
 		return fmt.Errorf("peer cross-check INCONCLUSIVE — no checkpoint verified across ≥2 peers")
 	}
 	fmt.Fprintf(os.Stderr, "verify-archive: peer cross-check OK ✓\n")
+	return nil
+}
+
+// verifyArchiveArchivist runs `<bin> scan <url>` against an archive
+// URL (file:// for the local mirror, https:// for any peer's
+// published archive) and surfaces the result.
+//
+// rs-stellar-archivist's scan walks every checkpoint in the
+// archive, fetches every referenced bucket file, recomputes the
+// sha256 of each, and confirms it matches the manifest. A
+// successful scan is a strong integrity signal — orthogonal to
+// Tier B (LCM-vs-checkpoint anchor) because Tier B trusts the
+// local mirror's manifest, while Tier E re-validates the manifest
+// itself by recomputing every bucket hash.
+//
+// We don't parse the binary's stdout structurally — formatting
+// shifts across rs-stellar-archivist releases. Instead we stream
+// the output to our stderr (so the operator sees progress) and
+// rely on the exit code.
+//
+// Failure modes:
+//   - bin not on $PATH                    → ErrNotFound, exits 127
+//   - archive URL doesn't resolve         → non-zero exit
+//   - any checkpoint / bucket fails hash  → non-zero exit
+//   - takes longer than the timeout       → ctx cancel, killed
+//
+// The CLI flag default is "stellar-archivist" (the Go binary
+// shipped with stellar-archivist). Operators using the Rust port
+// (`rs-stellar-archivist`) override via `-archivist-bin`.
+func verifyArchiveArchivist(bin, url string, timeout time.Duration) error {
+	fmt.Fprintf(os.Stderr, "verify-archive: archivist scan bin=%s url=%s timeout=%s\n",
+		bin, url, timeout)
+
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+
+	// gosec G204: bin + url are operator-supplied diagnostic flags
+	// on a CLI that ALREADY shells the operator's environment —
+	// any "untrusted input" boundary at this point has already
+	// been crossed by the operator running this command at all.
+	cmd := exec.CommandContext(ctx, bin, "scan", url) //nolint:gosec // operator-supplied flags
+
+	cmd.Stdout = os.Stderr
+	cmd.Stderr = os.Stderr
+	if err := cmd.Run(); err != nil {
+		// CommandContext closes stdin and surfaces a context-deadline
+		// exit as a *exec.Error wrapping context.DeadlineExceeded;
+		// preserve that signal.
+		if errors.Is(ctx.Err(), context.DeadlineExceeded) {
+			return fmt.Errorf("archivist scan timed out after %s — re-run with longer -archivist-timeout", timeout)
+		}
+		return fmt.Errorf("archivist scan FAILED: %w", err)
+	}
+	fmt.Fprintf(os.Stderr, "verify-archive: archivist scan OK ✓\n")
 	return nil
 }
 

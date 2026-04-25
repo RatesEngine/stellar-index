@@ -127,12 +127,28 @@ Validates `/srv/history-archive` itself is internally consistent —
 that no checkpoint JSON files are corrupt, no ledger XDR blobs are
 missing, no SCP messages truncated.
 
-`rs-stellar-archivist scan file:///srv/history-archive`
+Wired into `verify-archive` as a tier — under the hood it shells
+out to `stellar-archivist scan <url>`. Defaults to scanning the
+local mirror at `file://<archive-root>`; pass `-archivist-url
+https://...` to scan a peer's published archive instead.
+
+```sh
+ratesengine-ops verify-archive -config /etc/ratesengine.toml \
+  -tier archivist
+# or against a remote archive:
+ratesengine-ops verify-archive -config /etc/ratesengine.toml \
+  -tier archivist \
+  -archivist-url https://history.stellar.org/prd/core-live/core_live_001
+# or with the Rust port:
+ratesengine-ops verify-archive -config /etc/ratesengine.toml \
+  -tier archivist -archivist-bin rs-stellar-archivist
+```
 
 Run occasionally (monthly?) to make sure the mirror hasn't rotted on
 disk. Also the right command to run immediately before kicking off a
 backfill, just to catch any disk corruption before we build an hour
-of replay work on top of it.
+of replay work on top of it. Long-running — gated by
+`-archivist-timeout` (default 30 min).
 
 ## What we do today
 
