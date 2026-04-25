@@ -222,15 +222,17 @@ type IngestionConfig struct {
 
 // AggregateConfig controls the aggregator's VWAP/TWAP computation.
 type AggregateConfig struct {
-	VWAPWindowSeconds         int     `toml:"vwap_window_seconds" doc:"Rolling VWAP window in seconds." default:"300"`
-	TWAPWindowSeconds         int     `toml:"twap_window_seconds" doc:"Rolling TWAP window in seconds (fallback when volume below threshold)." default:"300"`
-	MinUSDVolume              float64 `toml:"min_usd_volume" doc:"Per-pair minimum USD volume within the window for VWAP eligibility." default:"10000"`
-	OutlierSigmaThreshold     float64 `toml:"outlier_sigma_threshold" doc:"Reject trades priced > N sigma from the rolling median before VWAP." default:"4"`
-	TriangulationEnabled      bool    `toml:"triangulation_enabled" doc:"Enable cross-pair triangulation through USD/BTC when direct pair below threshold." default:"true"`
-	IntervalSeconds           int     `toml:"interval_seconds" doc:"Tick cadence — gap between successive (pair, window) refresh passes. 0 falls back to the library default (30s)." default:"30"`
-	MaxTradesPerWindow        int     `toml:"max_trades_per_window" doc:"Per-(pair, window) cap on TradesInRange row count to bound a runaway scan. 0 falls back to the library default (10000)." default:"10000"`
-	DisableClassFilter        bool    `toml:"disable_class_filter" doc:"Disable the default ClassExchange-only VWAP filter so every fetched trade contributes regardless of source class. Off by default — see internal/sources/external/registry.go for class semantics." default:"false"`
-	EnableStablecoinFiatProxy bool    `toml:"enable_stablecoin_fiat_proxy" doc:"Expand fiat-denominated target pairs to include stablecoin backers (XLM/fiat:USD also pulls XLM/USDT/USDC/DAI/PYUSD/USDP and collapses onto the target). Off by default — N+1 TradesInRange calls per (pair, window)." default:"false"`
+	VWAPWindowSeconds         int      `toml:"vwap_window_seconds" doc:"Rolling VWAP window in seconds." default:"300"`
+	TWAPWindowSeconds         int      `toml:"twap_window_seconds" doc:"Rolling TWAP window in seconds (fallback when volume below threshold)." default:"300"`
+	MinUSDVolume              float64  `toml:"min_usd_volume" doc:"Per-pair minimum USD volume within the window for VWAP eligibility." default:"10000"`
+	OutlierSigmaThreshold     float64  `toml:"outlier_sigma_threshold" doc:"Reject trades priced > N sigma from the rolling median before VWAP." default:"4"`
+	TriangulationEnabled      bool     `toml:"triangulation_enabled" doc:"Enable cross-pair triangulation through USD/BTC when direct pair below threshold." default:"true"`
+	IntervalSeconds           int      `toml:"interval_seconds" doc:"Tick cadence — gap between successive (pair, window) refresh passes. 0 falls back to the library default (30s)." default:"30"`
+	MaxTradesPerWindow        int      `toml:"max_trades_per_window" doc:"Per-(pair, window) cap on TradesInRange row count to bound a runaway scan. 0 falls back to the library default (10000)." default:"10000"`
+	DisableClassFilter        bool     `toml:"disable_class_filter" doc:"Disable the default ClassExchange-only VWAP filter so every fetched trade contributes regardless of source class. Off by default — see internal/sources/external/registry.go for class semantics." default:"false"`
+	EnableStablecoinFiatProxy bool     `toml:"enable_stablecoin_fiat_proxy" doc:"Expand fiat-denominated target pairs to include stablecoin backers (XLM/fiat:USD also pulls XLM/USDT/USDC/DAI/PYUSD/USDP and collapses onto the target). Off by default — N+1 TradesInRange calls per (pair, window)." default:"false"`
+	Pairs                     []string `toml:"pairs" doc:"Aggregator coverage set as canonical pair strings (\"crypto:XLM/fiat:USD\", \"native/USDC-G…\"). Empty leaves the binary's built-in default (XLM/BTC/ETH × USD/EUR/GBP). Each entry is parsed via canonical.ParseAsset on both sides; an unparseable entry fails Validate." default:"[]"`
+	Windows                   []string `toml:"windows" doc:"Per-window cadences as Go time.Duration strings (\"5m\", \"1h\", \"24h\"). Empty leaves the orchestrator's built-in default ([5m, 1h, 24h])." default:"[]"`
 }
 
 // APIConfig controls the public REST+SSE server.

@@ -87,6 +87,21 @@ interval_seconds             = 30
 max_trades_per_window        = 10000
 disable_class_filter         = false   # default: only ClassExchange sources contribute to VWAP
 enable_stablecoin_fiat_proxy = false   # opt-in: expand XLM/fiat:USD to also pull XLM/USDT/USDC/DAI/PYUSD/USDP and collapse onto the target
+# Operator-override coverage set. Empty = built-in default (XLM/BTC/ETH × USD/EUR/GBP).
+# Format: "<base>/<quote>" using the canonical asset wire form
+# ("native", "<code>-<issuer>", "C…", "fiat:<ISO>", "crypto:<TICKER>").
+pairs = [
+  # "native/fiat:USD",
+  # "crypto:XLM/fiat:USD",
+  # "crypto:BTC/fiat:USD",
+]
+# Operator-override window set. Empty = built-in default ([5m, 1h, 24h]).
+# Format: Go time.Duration strings ("5m", "1h", "24h").
+windows = [
+  # "5m",
+  # "1h",
+  # "24h",
+]
 
 # ──────────────────────────────────────────────────────────────────
 # API — public serving plane (api binary only).

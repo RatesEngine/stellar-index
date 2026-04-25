@@ -107,6 +107,8 @@ the `env:` column.
 | `aggregate.max_trades_per_window` | `int` | `10000` | — | Per-(pair, window) cap on TradesInRange row count to bound a runaway scan. 0 falls back to the library default (10000). |
 | `aggregate.disable_class_filter` | `bool` | `false` | — | Disable the default ClassExchange-only VWAP filter so every fetched trade contributes regardless of source class. Off by default — see internal/sources/external/registry.go for class semantics. |
 | `aggregate.enable_stablecoin_fiat_proxy` | `bool` | `false` | — | Expand fiat-denominated target pairs to include stablecoin backers (XLM/fiat:USD also pulls XLM/USDT/USDC/DAI/PYUSD/USDP and collapses onto the target). Off by default — N+1 TradesInRange calls per (pair, window). |
+| `aggregate.pairs` | `[]string` | `[]` | — | Aggregator coverage set as canonical pair strings ("crypto:XLM/fiat:USD", "native/USDC-G…"). Empty leaves the binary's built-in default (XLM/BTC/ETH × USD/EUR/GBP). Each entry is parsed via canonical.ParseAsset on both sides; an unparseable entry fails Validate. |
+| `aggregate.windows` | `[]string` | `[]` | — | Per-window cadences as Go time.Duration strings ("5m", "1h", "24h"). Empty leaves the orchestrator's built-in default ([5m, 1h, 24h]). |
 
 ### `[api]`
 

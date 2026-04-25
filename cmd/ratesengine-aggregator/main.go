@@ -142,15 +142,35 @@ func run(cfgPath string, dryRun bool) error {
 		logger.Info("redis reachable", "addr", cfg.Storage.RedisAddr)
 	}
 
-	// ─── Pair list ───────────────────────────────────────────────
-	// v1 uses a built-in coverage set (crypto × fiat). Operator
-	// override via config is a follow-up once the aggregator is
-	// exercised in ops.
-	pairs := defaultPairs()
-	logger.Info("aggregator pair set resolved", "count", len(pairs))
+	// ─── Pair + window resolution ────────────────────────────────
+	// Operator override via [aggregate].pairs / .windows wins; an
+	// empty list falls back to the built-in defaults so a fresh
+	// deployment with no aggregator config still runs.
+	pairs, err := cfg.Aggregate.AggregatorPairs()
+	if err != nil {
+		// Validate() already rejected this at startup; reaching here
+		// means validation was bypassed. Fail loud rather than silently
+		// fall back.
+		return fmt.Errorf("aggregator: %w", err)
+	}
+	if len(pairs) == 0 {
+		pairs = defaultPairs()
+		logger.Info("aggregator pair set: using built-in default", "count", len(pairs))
+	} else {
+		logger.Info("aggregator pair set: operator override", "count", len(pairs))
+	}
+
+	windows, err := cfg.Aggregate.AggregatorWindows()
+	if err != nil {
+		return fmt.Errorf("aggregator: %w", err)
+	}
+	if len(windows) > 0 {
+		logger.Info("aggregator windows: operator override", "count", len(windows))
+	}
 
 	orch := orchestrator.New(store, rdb, orchestrator.Config{
 		Pairs:                     pairs,
+		Windows:                   windows, // nil → orchestrator.DefaultWindows
 		Interval:                  time.Duration(cfg.Aggregate.IntervalSeconds) * time.Second,
 		MaxTradesPerWindow:        cfg.Aggregate.MaxTradesPerWindow,
 		DisableClassFilter:        cfg.Aggregate.DisableClassFilter,
