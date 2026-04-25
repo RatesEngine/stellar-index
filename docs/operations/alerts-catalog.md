@@ -154,14 +154,14 @@ Prometheus-down scenarios).
 3. Write the runbook at `docs/operations/runbooks/<name>.md` —
    copy `_template.md`.
 4. Add a row to this catalogue.
-5. Write an alert-firing test at `test/monitoring/<name>_test.go`.
+5. Write an alert-firing test at `test/monitoring/<name>_test.yml`.
 
 All five in one PR. The lint enforces the most-load-bearing
 piece (`scripts/ci/lint-docs.sh` §9 — every rule's
 `runbook_url` must point at an existing runbook file); the
 metric-doc and catalogue-row checks catch the two next-most
 common drifts. The alert-firing test at
-`test/monitoring/<name>_test.go` is not yet machine-checked
+`test/monitoring/<name>_test.yml` is not yet machine-checked
 (`test/monitoring/` doesn't exist as a directory today) — write
 it anyway as part of the same PR; the convention precedes the
 enforcement.
