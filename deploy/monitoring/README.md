@@ -61,8 +61,11 @@ Per [repo-hygiene-plan.md §16](../../docs/architecture/repo-hygiene-plan.md#16-
 4. Add a row to `docs/operations/alerts-catalog.md`.
 5. Write a unit test at `test/monitoring/<name>_test.yml`.
 
-All five in one PR. The `lint-docs.sh` script fails the build if any
-runbook referenced by a rule is missing (TODO(#0) — add that check).
+All five in one PR. The `scripts/ci/lint-docs.sh` script fails the
+build if any rule's `runbook_url` points at a missing runbook
+file (rule §9, "Every alert rule's runbook_url must point to an
+existing file") — so a fully-wired alert with a missing runbook
+won't merge.
 
 ## Labels convention
 
