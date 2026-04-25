@@ -27,6 +27,20 @@ against.
   `sources` is the union across all returned rows. Reuses the
   existing `PriceReader` interface — no storage-layer changes.
 
+- **`GET /v1/oracle/lastprice?asset=` and
+  `GET /v1/oracle/x_last_price?base=&quote=`**: SEP-40
+  passthrough surface promised by the OpenAPI spec but
+  previously unmounted. Returns the SEP-40 `(asset, price,
+  timestamp)` shape using the same VWAP / last-trade pipeline
+  that backs `/v1/price`. `lastprice` is fixed at `fiat:USD`
+  quote (matches the SEP-40 contract semantic — the on-chain
+  oracle has one configured quote per contract);
+  `x_last_price` takes explicit base + quote. The richer
+  per-source readings remain on `/v1/oracle/latest`.
+  `/v1/oracle/prices` (N historical records) deferred —
+  needs a CAGG read path that the aggregator's continuous-
+  aggregates surface hasn't grown yet.
+
 - **`POST /v1/price/batch`**: JSON-body variant accepting up to
   1000 `asset_ids`. Same semantics as GET; the body shape exists
   precisely to raise the GET ceiling without bloating query

@@ -212,6 +212,13 @@ func (s *Server) mountRoutes() {
 	// Latest oracle readings per source for an asset.
 	s.mux.HandleFunc("GET /v1/oracle/latest", s.handleOracleLatest)
 
+	// SEP-40 passthrough surface — same data as /v1/price, reshaped
+	// to the single-quote SEP-40 contract that on-chain oracle
+	// readers expect. Quote fixed at fiat:USD on /lastprice;
+	// /x_last_price takes explicit base + quote.
+	s.mux.HandleFunc("GET /v1/oracle/lastprice", s.handleOracleLastPrice)
+	s.mux.HandleFunc("GET /v1/oracle/x_last_price", s.handleOracleXLastPrice)
+
 	// Source catalogue — every venue the aggregator knows about,
 	// with class + IncludeInVWAP metadata.
 	s.mux.HandleFunc("GET /v1/sources", s.handleSources)
