@@ -190,6 +190,19 @@ func TestVersion(t *testing.T) {
 	if env.Data["build_date"] == "" {
 		t.Error("build_date should be non-empty")
 	}
+	// Commit + Dirty come from runtime/debug.BuildInfo. Under
+	// `go test` they're typically "unknown" (no -buildvcs in the
+	// test invocation); under `go build -buildvcs=true` they're
+	// populated. Either way the keys must be present + non-empty.
+	if env.Data["commit"] == "" {
+		t.Error("commit should be non-empty (defaults to 'unknown' if VCS unavailable)")
+	}
+	if env.Data["dirty"] == "" {
+		t.Error("dirty should be non-empty")
+	}
+	if env.Data["go_version"] == "" {
+		t.Error("go_version should be non-empty (runtime.Version())")
+	}
 }
 
 func TestUnknownRouteReturns404(t *testing.T) {

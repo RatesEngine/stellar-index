@@ -297,10 +297,20 @@ func (s *Server) handleReadyz(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, resp, Flags{})
 }
 
-// handleVersion reports binary version + build date.
-func (s *Server) handleVersion(w http.ResponseWriter, r *http.Request) {
+// handleVersion reports binary version + build date + VCS info.
+//
+// Operators use this for quick fleet-wide "what's running" checks
+// over the API rather than ssh-ing into every host. `version` is
+// the human-readable git-describe; `commit` is the full VCS SHA;
+// `dirty` reports whether the build tree had uncommitted changes
+// (production builds should always be `dirty=false`); `go_version`
+// is the runtime Go version.
+func (s *Server) handleVersion(w http.ResponseWriter, _ *http.Request) {
 	writeJSON(w, map[string]string{
 		"version":    version.Version,
 		"build_date": version.BuildDate,
+		"commit":     version.Commit,
+		"dirty":      version.Dirty,
+		"go_version": version.GoVersion,
 	}, Flags{})
 }

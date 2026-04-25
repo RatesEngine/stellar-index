@@ -797,11 +797,20 @@ components:
       required: [status]
 
     VersionResponse:
-      type: object
-      properties:
-        version:    { type: string }
-        git_sha:    { type: string }
-        build_date: { type: string, format: date-time }
+      allOf:
+        - { $ref: "#/components/schemas/EnvelopeMeta" }
+        - type: object
+          properties:
+            data:
+              type: object
+              properties:
+                version:    { type: string, description: "Human-readable git-describe (or `dev`)." }
+                build_date: { type: string, description: "ISO-8601 UTC build timestamp (or `unknown`)." }
+                commit:     { type: string, description: "Full VCS revision SHA from runtime/debug.BuildInfo (or `unknown`)." }
+                dirty:      { type: string, description: "`true` if the build tree had uncommitted changes; `false` otherwise. Production builds should always be `false`." }
+                go_version: { type: string, description: "Runtime Go version (e.g. `go1.22.3`)." }
+              required: [version, build_date, commit, dirty, go_version]
+          required: [data]
 
     # Asset catalogue
     Asset:
