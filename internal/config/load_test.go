@@ -45,6 +45,82 @@ postgres_dsn = "postgres://u:p@h/db"
 	}
 }
 
+func TestLoadReader_AggregatePairsAndWindows(t *testing.T) {
+	body := `
+[region]
+id = "r1"
+
+[storage]
+postgres_dsn = "postgres://u:p@h/db"
+
+[aggregate]
+pairs   = ["crypto:XLM/fiat:USD", "crypto:BTC/fiat:USD"]
+windows = ["5m", "1h", "24h"]
+`
+	c, err := cfg.LoadReader(strings.NewReader(body), "test.toml")
+	if err != nil {
+		t.Fatalf("LoadReader: %v", err)
+	}
+	if got := len(c.Aggregate.Pairs); got != 2 {
+		t.Errorf("Pairs len = %d want 2", got)
+	}
+	pairs, perr := c.Aggregate.AggregatorPairs()
+	if perr != nil {
+		t.Fatalf("AggregatorPairs: %v", perr)
+	}
+	if len(pairs) != 2 || pairs[0].Base.Code != "XLM" || pairs[1].Base.Code != "BTC" {
+		t.Errorf("AggregatorPairs result: %+v", pairs)
+	}
+
+	wins, werr := c.Aggregate.AggregatorWindows()
+	if werr != nil {
+		t.Fatalf("AggregatorWindows: %v", werr)
+	}
+	if len(wins) != 3 || wins[0].String() != "5m0s" {
+		t.Errorf("AggregatorWindows result: %v", wins)
+	}
+}
+
+func TestLoadReader_AggregatePairsRejectsMalformed(t *testing.T) {
+	body := `
+[region]
+id = "r1"
+
+[storage]
+postgres_dsn = "postgres://u:p@h/db"
+
+[aggregate]
+pairs = ["not-a-real-pair-format"]
+`
+	_, err := cfg.LoadReader(strings.NewReader(body), "test.toml")
+	if err == nil {
+		t.Fatal("expected validation error for malformed pair")
+	}
+	if !strings.Contains(err.Error(), "aggregate.pairs") {
+		t.Errorf("error should name the field: %v", err)
+	}
+}
+
+func TestLoadReader_AggregateWindowsRejectsMalformed(t *testing.T) {
+	body := `
+[region]
+id = "r1"
+
+[storage]
+postgres_dsn = "postgres://u:p@h/db"
+
+[aggregate]
+windows = ["1 fortnight"]
+`
+	_, err := cfg.LoadReader(strings.NewReader(body), "test.toml")
+	if err == nil {
+		t.Fatal("expected validation error for malformed window")
+	}
+	if !strings.Contains(err.Error(), "aggregate.windows") {
+		t.Errorf("error should name the field: %v", err)
+	}
+}
+
 func TestLoadReader_AggregateFlags(t *testing.T) {
 	// Verify the new aggregator flags round-trip through TOML.
 	body := `

@@ -7,6 +7,9 @@ import (
 	"net/url"
 	"regexp"
 	"strings"
+	"time"
+
+	"github.com/RatesEngine/rates-engine/internal/canonical"
 )
 
 // ErrInvalidConfig is the sentinel error every validation failure
@@ -319,7 +322,81 @@ func (a AggregateConfig) validate() error {
 		return fmt.Errorf("%w: aggregate.outlier_sigma_threshold must be > 0",
 			ErrInvalidConfig)
 	}
+	for _, raw := range a.Pairs {
+		if _, err := parsePairString(raw); err != nil {
+			return fmt.Errorf("%w: aggregate.pairs entry %q: %w",
+				ErrInvalidConfig, raw, err)
+		}
+	}
+	for _, raw := range a.Windows {
+		if _, err := time.ParseDuration(raw); err != nil {
+			return fmt.Errorf("%w: aggregate.windows entry %q: %w",
+				ErrInvalidConfig, raw, err)
+		}
+	}
 	return nil
+}
+
+// parsePairString resolves a "<base>/<quote>" string into a
+// canonical.Pair via canonical.ParseAsset on each side. Lives here
+// (not in canonical/) so the canonical package stays free of
+// validation-message specifics — the aggregator binary calls the
+// same helper at startup to materialise its [Pair] slice.
+func parsePairString(s string) (canonical.Pair, error) {
+	slash := strings.LastIndex(s, "/")
+	if slash <= 0 || slash == len(s)-1 {
+		return canonical.Pair{}, fmt.Errorf("expected \"<base>/<quote>\" with a single slash separator")
+	}
+	base, err := canonical.ParseAsset(s[:slash])
+	if err != nil {
+		return canonical.Pair{}, fmt.Errorf("base: %w", err)
+	}
+	quote, err := canonical.ParseAsset(s[slash+1:])
+	if err != nil {
+		return canonical.Pair{}, fmt.Errorf("quote: %w", err)
+	}
+	return canonical.NewPair(base, quote)
+}
+
+// AggregatorPairs resolves the operator-supplied pair strings into
+// canonical.Pair instances. Returns nil when no pairs are
+// configured — callers fall back to their built-in default.
+//
+// validate() already rejects unparseable entries at startup, so
+// this re-parse is infallible in practice; we still return an
+// error to keep the seam testable and to surface the regression
+// loudly if validation is ever bypassed.
+func (a AggregateConfig) AggregatorPairs() ([]canonical.Pair, error) {
+	if len(a.Pairs) == 0 {
+		return nil, nil
+	}
+	out := make([]canonical.Pair, 0, len(a.Pairs))
+	for _, raw := range a.Pairs {
+		p, err := parsePairString(raw)
+		if err != nil {
+			return nil, fmt.Errorf("aggregate.pairs entry %q: %w", raw, err)
+		}
+		out = append(out, p)
+	}
+	return out, nil
+}
+
+// AggregatorWindows is the time.Duration twin of AggregatorPairs —
+// resolves the configured window strings, returning nil when the
+// list is empty so callers fall back to orchestrator.DefaultWindows.
+func (a AggregateConfig) AggregatorWindows() ([]time.Duration, error) {
+	if len(a.Windows) == 0 {
+		return nil, nil
+	}
+	out := make([]time.Duration, 0, len(a.Windows))
+	for _, raw := range a.Windows {
+		d, err := time.ParseDuration(raw)
+		if err != nil {
+			return nil, fmt.Errorf("aggregate.windows entry %q: %w", raw, err)
+		}
+		out = append(out, d)
+	}
+	return out, nil
 }
 
 func (a APIConfig) validate() error {
