@@ -2,50 +2,38 @@ package canonical
 
 import (
 	"fmt"
-	"regexp"
+
+	"github.com/stellar/go-stellar-sdk/strkey"
 )
 
-// Strkey format validators.
+// Strkey validators backed by the go-stellar-sdk strkey package —
+// SEP-23 base32 + CRC-16 checksum verification, not just format.
 //
-// Full strkey encoding (SEP-23) is a base32-encoded payload with a
-// CRC-16 checksum byte. Validating the checksum requires the
-// base32 decoder + CRC computation. At this package boundary we
-// do a **format-only** check — the prefix letter + total length.
-//
-// Full SEP-23 validation (including CRC) will come from the
-// stellar-go SDK's strkey package when we import it for the decoder
-// wrapper. Until then, the format check is sufficient because every
-// strkey that reaches this package was already produced by an SDK
-// decoder upstream.
-//
-// TODO(#0): switch to github.com/stellar/go-stellar-sdk/strkey once
-// we take the SDK dependency for the ledger-meta decoder.
+// Earlier revisions did a format-only regex check at this boundary
+// because we hadn't yet taken the SDK dependency. Now that the SDK
+// is widely used (ledgerstream, sdex, scval, …), there's no reason
+// to accept a strkey whose prefix + length match but whose checksum
+// is wrong — the SDK's decoder is the single source of truth.
 
-var (
-	// G-address: account / issuer.  56 base32 chars starting with G.
-	accountIDPattern = regexp.MustCompile(`^G[A-Z2-7]{55}$`)
-
-	// C-address: Soroban contract.  56 base32 chars starting with C.
-	contractIDPattern = regexp.MustCompile(`^C[A-Z2-7]{55}$`)
-)
-
-// IsAccountID reports whether s looks like a Stellar account / issuer
-// public key (format-only, not CRC-verified).
+// IsAccountID reports whether s is a valid Stellar account / issuer
+// public key (G-strkey), CRC-checked.
 func IsAccountID(s string) bool {
-	return accountIDPattern.MatchString(s)
+	_, err := strkey.Decode(strkey.VersionByteAccountID, s)
+	return err == nil
 }
 
-// IsContractID reports whether s looks like a Soroban contract
-// address (format-only, not CRC-verified).
+// IsContractID reports whether s is a valid Soroban contract
+// address (C-strkey), CRC-checked.
 func IsContractID(s string) bool {
-	return contractIDPattern.MatchString(s)
+	_, err := strkey.Decode(strkey.VersionByteContract, s)
+	return err == nil
 }
 
 // validateAccountID returns an error describing why s is not a
-// valid account/issuer strkey, or nil if it passes the format check.
+// valid account/issuer strkey, or nil on success.
 func validateAccountID(s string) error {
 	if !IsAccountID(s) {
-		return fmt.Errorf("%w: %q is not a valid G-strkey (expected 56 chars starting with G)",
+		return fmt.Errorf("%w: %q is not a valid G-strkey (must be 56 chars starting with G with a valid CRC)",
 			ErrInvalidStrkey, s)
 	}
 	return nil
@@ -54,7 +42,7 @@ func validateAccountID(s string) error {
 // validateContractID is the contract-address analogue of validateAccountID.
 func validateContractID(s string) error {
 	if !IsContractID(s) {
-		return fmt.Errorf("%w: %q is not a valid C-strkey (expected 56 chars starting with C)",
+		return fmt.Errorf("%w: %q is not a valid C-strkey (must be 56 chars starting with C with a valid CRC)",
 			ErrInvalidStrkey, s)
 	}
 	return nil
