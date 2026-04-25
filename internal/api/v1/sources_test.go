@@ -1,6 +1,8 @@
 package v1_test
 
 import (
+	"bytes"
+	"io"
 	"net/http"
 	"sort"
 	"testing"
@@ -53,6 +55,68 @@ func TestSources_ReturnsRegistry(t *testing.T) {
 		if s.IncludeInVWAP != exp.inVWAP {
 			t.Errorf("%s.include_in_vwap = %v want %v", name, s.IncludeInVWAP, exp.inVWAP)
 		}
+	}
+}
+
+func TestSources_FilterByClass(t *testing.T) {
+	srv := v1.New(v1.Options{})
+	ts := httpTestServer(t, srv)
+
+	cases := []struct {
+		class string
+		want  map[string]bool // expected names
+	}{
+		{
+			class: "aggregator",
+			want:  map[string]bool{"coingecko": true, "coinmarketcap": true, "cryptocompare": true},
+		},
+		{
+			class: "oracle",
+			want:  map[string]bool{"reflector-dex": true, "reflector-cex": true, "reflector-fx": true, "redstone": true, "band": true},
+		},
+		{
+			class: "authority_sanity",
+			want:  map[string]bool{"ecb": true, "fed-h10": true},
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.class, func(t *testing.T) {
+			resp := mustGet(t, ts.URL+"/v1/sources?class="+tc.class)
+			if resp.StatusCode != http.StatusOK {
+				t.Fatalf("status = %d", resp.StatusCode)
+			}
+			var env struct {
+				Data []v1.Source `json:"data"`
+			}
+			mustDecode(t, resp, &env)
+
+			got := map[string]bool{}
+			for _, s := range env.Data {
+				if s.Class != tc.class {
+					t.Errorf("class filter leaked: got %q in class=%q result", s.Class, tc.class)
+				}
+				got[s.Name] = true
+			}
+			for name := range tc.want {
+				if !got[name] {
+					t.Errorf("expected %s in class=%q result, got %v", name, tc.class, got)
+				}
+			}
+		})
+	}
+}
+
+func TestSources_FilterByClass_Unknown(t *testing.T) {
+	srv := v1.New(v1.Options{})
+	ts := httpTestServer(t, srv)
+
+	resp := mustGet(t, ts.URL+"/v1/sources?class=nonsense")
+	if resp.StatusCode != http.StatusBadRequest {
+		t.Errorf("status = %d, want 400 for unknown class", resp.StatusCode)
+	}
+	body, _ := io.ReadAll(resp.Body)
+	if !bytes.Contains(body, []byte("invalid-class")) {
+		t.Errorf("expected invalid-class error type in body: %s", body)
 	}
 }
 

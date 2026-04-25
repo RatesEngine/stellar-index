@@ -26,13 +26,28 @@ type Source struct {
 	DefaultWeight     int    `json:"default_weight"`
 }
 
+// validSourceClasses is the allow-list of values accepted for the
+// `class` query parameter. Mirrors external.Class — we deliberately
+// duplicate the strings here so the API surface stays stable if the
+// internal package ever renames a constant.
+var validSourceClasses = map[string]bool{
+	string(external.ClassExchange):        true,
+	string(external.ClassAggregator):      true,
+	string(external.ClassOracle):          true,
+	string(external.ClassAuthoritySanity): true,
+}
+
 // handleSources serves GET /v1/sources.
 //
 // Returns the static external.Registry projected onto the wire
 // shape, sorted by name for deterministic responses + cache-
-// friendliness behind a CDN. No query parameters; the whole
-// catalogue is small enough (~25 entries today) that pagination
-// would be over-engineering.
+// friendliness behind a CDN. The whole catalogue is small enough
+// (~25 entries today) that pagination would be over-engineering.
+//
+// Query parameters:
+//   - class (optional): filter by source class
+//     (`exchange` / `aggregator` / `oracle` / `authority_sanity`).
+//     Unknown value → 400.
 //
 // This endpoint is the operator-facing rendering of the same
 // metadata the aggregator's class filter consults internally —
@@ -41,9 +56,21 @@ type Source struct {
 // with `include_in_vwap=false` is intentional policy
 // (aggregator/oracle/authority-sanity classes), not a missing
 // connector.
-func (s *Server) handleSources(w http.ResponseWriter, _ *http.Request) {
+func (s *Server) handleSources(w http.ResponseWriter, r *http.Request) {
+	classFilter := r.URL.Query().Get("class")
+	if classFilter != "" && !validSourceClasses[classFilter] {
+		writeProblem(w, r,
+			"https://api.ratesengine.net/errors/invalid-class",
+			"Invalid class", http.StatusBadRequest,
+			"class must be one of: exchange, aggregator, oracle, authority_sanity")
+		return
+	}
+
 	out := make([]Source, 0, len(external.Registry))
 	for name, md := range external.Registry {
+		if classFilter != "" && string(md.Class) != classFilter {
+			continue
+		}
 		out = append(out, Source{
 			Name:              name,
 			Class:             string(md.Class),

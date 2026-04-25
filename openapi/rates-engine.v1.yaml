@@ -462,12 +462,24 @@ paths:
         connectors. Operators consult this endpoint to confirm a
         venue is recognised before debugging an absence in /v1/markets
         or /v1/vwap.
+      parameters:
+        - name: class
+          in: query
+          required: false
+          description: |
+            Optional class filter. When set, only sources of the
+            given class are returned. Useful for dashboards that
+            split the catalogue by role.
+          schema:
+            type: string
+            enum: [exchange, aggregator, oracle, authority_sanity]
       responses:
         "200":
           description: Array of sources, sorted by name.
           content:
             application/json:
               schema: { $ref: "#/components/schemas/SourcesEnvelope" }
+        "400": { $ref: "#/components/responses/BadRequest" }
         "429": { $ref: "#/components/responses/RateLimited" }
         "500": { $ref: "#/components/responses/InternalError" }
 
