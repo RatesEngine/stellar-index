@@ -55,7 +55,7 @@ deps: ## Download + verify Go module deps and tools
 	fi
 
 .PHONY: dev
-dev: ## Start the full local stack (Postgres/Timescale, Redis, MinIO, stellar-core, Galexie, stellar-rpc)
+dev: ## Start the local dev stack — Postgres/Timescale + Redis + MinIO (deploy/docker-compose/dev.yaml). stellar-core/Galexie/stellar-rpc run on a remote box (r1), not in compose.
 	@docker compose -f deploy/docker-compose/dev.yaml up -d
 	@echo "Stack up. API at http://localhost:3000; docs at http://localhost:8080"
 
