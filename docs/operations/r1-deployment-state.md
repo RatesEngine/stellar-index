@@ -43,7 +43,7 @@ ZFS pool `data` (raidz2, ~13.3 TB usable) with 7 datasets:
 |---------|------------------|-------|
 | postgresql@15-main | active | |
 | ~~stellar-core~~ | **REMOVED 2026-04-23** | Primary daemon dropped — archive pipeline doesn't need it; see [archival-nodes.md](../../discovery/data-sources/archival-nodes.md) for revival path in Phase 3. |
-| ~~stellar-rpc~~ | **REMOVED 2026-04-23** | Redundant for our data path — our own indexer will consume galexie's MinIO output directly via `ingest.ApplyLedgerMetadata`. Public API is `/v1/prices`, not `/rpc`. See §Architecture below. |
+| ~~stellar-rpc~~ | **REMOVED 2026-04-23** | Redundant for our data path — our own indexer will consume galexie's MinIO output directly via `ingest.ApplyLedgerMetadata`. Public API is `/v1/price` + `/v1/vwap` + `/v1/twap` + `/v1/ohlc` + …, not `/rpc`. See §Architecture below. |
 | galexie | active, exporting | Own captive-core; uploading `FC4A....xdr.zst` objects to MinIO galexie-live at ~1/ledger. ~100 objects/5min at steady state. **The single stellar-core on the box.** |
 | minio | active | Buckets: `galexie-live`, `galexie-archive`, `backups` |
 | node_exporter | active | :9100 |
@@ -62,7 +62,7 @@ Stellar pubnet ─(SCP)─► galexie's captive-core ─► galexie ─► MinIO
                                                              TimescaleDB
                                                                   │
                                                                   ▼
-                                                            `/v1/prices` API
+                                                          `/v1/{price,vwap,twap,ohlc,...}` API
 ```
 
 One stellar-core on the box. Everything downstream of MinIO is a batch/stream consumer via the Ingest SDK — no more captive-cores.
