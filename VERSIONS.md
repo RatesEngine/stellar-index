@@ -16,7 +16,7 @@ changes need to flow into the audit docs.
 | `stellar/rs-stellar-archivist` | `a6a25033dc2dd1783314ff5b009123e6bfc00e7a` | 2026-04-20 | (no tag yet) | Runtime binary — we call it from scripts. Pin SHA since no tag. |
 | `stellar/stellar-rpc` | `99a61f337b66635ba6f9d70d2403ee5faed1d7c1` | 2026-04-07 | (no tag visible locally) | Runtime binary — self-hosted RPC. |
 | `stellar/go-stellar-sdk` | `9d52d04a911d9ee7451073e8178157a36e66cd42` | 2026-04-22 | (no tag visible locally) | **Go library — direct dep.** `v0.5.0` resolved by `go mod tidy` per the compat test. |
-| `withObsrvr/stellar-extract` | `e3658ced9023bc30f0e19871987dd50270dfe192` | 2026-04-20 | `v0.1.2` | **Go library — direct dep.** Published tag. |
+| `withObsrvr/stellar-extract` | `e3658ced9023bc30f0e19871987dd50270dfe192` | 2026-04-20 | `v0.1.2` | **Reference only — not a dep today.** Phase-1 eyed it for SDEX trade extraction; we ended up implementing that path against the SDK directly (`internal/sources/sdex/decode.go`). Kept as the reference fixture source per CLAUDE.md. |
 | `stellar/stellar-etl` | `427d2e2565c8cc98c7a2fbc65305a314c114aa33` | 2026-04-09 | `v2.8.18` | Reference implementation + test-fixture source. Not a dep. |
 | `withObsrvr/cdp-pipeline-workflow` | `741ac3d206be99dd22589b1ed4c6aa082f76c904` | 2026-04-16 | (no tag) | Not a dep. Reference only; contains verified bugs. |
 | `withObsrvr/nebu` | `72eca11c148c03ab1d18dd945e828ada8f3c61f3` | 2026-04-13 | (no tag) | Design inspiration. Not a dep. |
@@ -45,10 +45,15 @@ go 1.25
 
 require (
     github.com/stellar/go-stellar-sdk v0.5.0              // 9d52d04a (2026-04-22)
-    github.com/withObsrvr/stellar-extract v0.1.2          // e3658ced (2026-04-20)
     // + our own deps (timescale driver, redis client, echo/chi, prometheus, etc.)
 )
 ```
+
+`withObsrvr/stellar-extract` was on the Phase-1 candidate list but
+didn't make it into go.mod — the SDEX trade-extraction logic is
+in `internal/sources/sdex/decode.go` running against the SDK
+directly. Reference link kept in the audited-snapshots table
+above.
 
 Runtime binaries / Debian packages:
 
