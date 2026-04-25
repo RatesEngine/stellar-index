@@ -27,7 +27,8 @@ type Market struct {
 // Performance: scans the trades hypertable with GROUP BY over two
 // string columns. Correct but not cheap at scale. Planned
 // optimisation: materialised market_catalogue populated by the
-// indexer alongside the asset catalogue (TODO migrations/0004).
+// indexer alongside the asset catalogue (see DistinctAssets's
+// performance note — both rides on the same future migration).
 func (s *Store) DistinctPairs(ctx context.Context, cursor string, limit int) ([]Market, string, error) {
 	if limit < 1 {
 		limit = 100
