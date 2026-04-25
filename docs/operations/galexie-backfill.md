@@ -281,8 +281,14 @@ the SDK's `NumWorkers` parallel prefetch on the read side.
   would 403). The standard $0.09/GB egress does not apply.
 
 So pulling the full ~2.5 TB pubnet archive costs **$0** in
-egress and ~5–6 h at sustained 1 Gbps Hetzner-to-AWS
-bandwidth.
+egress. Wall-clock time depends on what fraction of the
+1 Gbps link the source actually delivers, not the link's
+rated speed. Observed on r1 during the 2026-04-25 cutover:
+**sustained ~80 MB/s (640 Mbps)** = ~65% link utilisation,
+which works out to roughly **9 h** for the full ~2.5 TB.
+The "5–6 h at 1 Gbps" figure you'll see in older planning
+notes assumed the link saturates; in practice S3 GETs from
+us-east-2 to Hetzner FRA cap out around two-thirds of that.
 
 #### When this is the right call
 
