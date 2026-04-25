@@ -17,6 +17,88 @@ against.
 
 ### Added
 
+- **PRs 41–73 — As-built audit + galexie tuning playbook**
+  (2026-04-25): an autonomous-loop session focused on bringing
+  the docs flush with the shipped code and capturing live-run
+  findings. Mostly housekeeping, two small bugfixes, one
+  substantive operational discovery.
+
+  Code-side fixes:
+
+  - **PR 66 — orchestrator `lastTickAt` UTC**: was recording in
+    host local timezone while the rest of the tick used UTC;
+    `Stats()` now returns consistent UTC throughout.
+  - **PR 67 — orchestrator `Stats` doc**: corrected the
+    "zero-copy" claim to the accurate "value-type return,
+    independent snapshot."
+
+  Galexie + archival-node operational findings:
+
+  - **PR 57 — `docs/operations/galexie-backfill.md § Tuning`**:
+    the 2026-04-25 r1 backfill ran phase 3 at ~58 ledgers/sec —
+    10–25× under galexie's claimed ceiling. Bottleneck is the
+    single-goroutine S3 PUT loop (verified against
+    `stellar/stellar-galexie@6dec23e2:internal/uploader.go`).
+    Highest-impact lever without forking is parallel
+    `scan-and-fill` processes on disjoint ranges (idempotent
+    via the per-object `IfNoneMatch: "*"` precondition);
+    8 workers ≈ 1.5 days vs ~12 days serial. Recipe in the
+    section.
+  - **PR 58 — `archival-node-spec.md § 3.3.4`**: galexie
+    backfill is the actually-long pole when bringing up a new
+    archival node, not stellar-core catchup. Cite the live
+    numbers.
+  - **PR 71 — bootstrap-runbook galexie pointer**: §7
+    "Catchup Timeline Expectations" now warns operators that
+    the table only covers stellar-core, not galexie.
+  - **PR 73 — AWS public-bucket mirror alternative**: AWS
+    hosts a public Stellar dataset at
+    `s3://aws-public-blockchain/v1.1/stellar/ledgers/pubnet/`.
+    For new-node bootstrap or DR, mirroring it is much faster
+    than running scan-and-fill at all. OBSRVR's `nebu`
+    archive mode reads directly from there. Documented
+    trade-offs (retention floor, egress cost, loss of
+    cross-validation).
+
+  As-built doc audit (the mass of small fixes, none individually
+  load-bearing — listed for the audit trail):
+
+  - PRs 31–36 (per-source READMEs) and 32 (aggregation-plan)
+    were already covered in the PRs 30–40 rollup above.
+  - **PRs 38, 47, 109** dropped stale ADR-TBD / planned-package
+    notes now that ADR-0010 + ADR-0014 are accepted and
+    stellar-rpc is removed from r1 ingest.
+  - **PRs 41, 50, 112, 130** brought the CHANGELOG, aggregate
+    package doc, and canonical package doc current with the
+    fiat / crypto / aggregation-plan additions.
+  - **PRs 51, 53, 113, 115** captured the live-run backfill
+    phase-shape + TUI status pointer in the operations
+    playbook.
+  - **PRs 44, 45, 106, 107** fixed `migrations/0004` collisions
+    in storage-package comments and added the migrations
+    manifest table.
+  - **PRs 48, 55, 105, 110, 117** re-aligned OpenAPI / api-design
+    with what `/v1` actually serves (`/v1/sources` listed,
+    `/v1/version` enriched fields, missing meta tag, sigling
+    `/v1/prices` → `/v1/price` typo).
+  - **PRs 54, 111, 116, 121, 124, 125** corrected stale facts
+    in r1-deployment-state, makefile, monitoring README, and
+    one stray ecosystem-review entry.
+  - **PRs 60, 65, 114, 122, 126, 127, 132** brought the
+    operations runbook + alerts-catalog into compliance with
+    the `_template.md` shape and made the "CI enforces this"
+    claims honest.
+  - **PRs 61, 68, 134** pulled the public Reflector v3 mainnet
+    addresses into example.toml + the source-package READMEs
+    (Phase-1 audit had left them as TBD).
+  - **PRs 99, 131** dropped truly-stale references — PR 99
+    switched canonical strkey from regex format-only validation
+    to SDK-backed CRC verification (caught real bugs:
+    CRC-mismatched and wrong-version-byte strkeys were being
+    accepted); PR 131 dropped `withObsrvr/stellar-extract` from
+    VERSIONS.md's active-deps list since it never landed in
+    `go.mod`.
+
 - **PRs 30–40 — Aggregator stack documentation, refactors, and
   Tier E** (2026-04-25): rounds out the aggregator build-out
   with as-built docs, a couple of code refactors, and the final
