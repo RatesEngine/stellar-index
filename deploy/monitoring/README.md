@@ -17,6 +17,7 @@ deploy/monitoring/
 │   ├── api.yml                 HTTP serving-plane alerts
 │   ├── stellar.yml             stellar-core / stellar-rpc / archive alerts
 │   ├── divergence.yml          price-quality / oracle-stale alerts
+│   ├── aggregator.yml          aggregator-silent / outlier-storm / class-drop-spike
 │   ├── infra.yml               host / disk / ZFS / NVMe alerts
 │   └── meta.yml                Prometheus self-health + deadmansswitch
 ```
