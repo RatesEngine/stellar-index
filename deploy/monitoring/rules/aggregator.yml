@@ -1,0 +1,80 @@
+---
+# Aggregator alerts — matches docs/operations/alerts-catalog.md
+# "Aggregator alerts" section. Every alert here has a runbook
+# under docs/operations/runbooks/.
+#
+# These rules consume the orchestrator-level metrics added in
+# internal/obs/metrics.go (see docs/reference/metrics/README.md
+# § "Aggregator orchestrator metrics"). For alert thresholds we
+# weight false-positive risk highest — operators can tune the
+# durations/values once we have several weeks of pubnet runtime
+# data on the new metric series.
+
+groups:
+  - name: ratesengine.aggregator
+    interval: 30s
+    rules:
+
+      - alert: ratesengine_aggregator_silent
+        expr: |
+          sum(rate(ratesengine_aggregator_vwap_writes_total[5m])) == 0
+        for: 5m
+        labels:
+          severity: page
+          team: ratesengine
+          component: aggregator
+          runbook_url: https://github.com/RatesEngine/rates-engine/blob/main/docs/operations/runbooks/aggregator-silent.md
+        annotations:
+          summary: "Aggregator has stopped writing VWAP cache (P1)"
+          description: |
+            Zero VWAP writes for 5+ minutes. Either the orchestrator
+            tick loop is wedged, the (pair, window) refresh path is
+            consistently empty, or the Redis write is erroring on every
+            attempt. /v1/vwap responses fall back to raw aggregation —
+            slow, and the freshness signal API consumers depend on goes
+            quiet within 60 s.
+            Runbook: https://github.com/RatesEngine/rates-engine/blob/main/docs/operations/runbooks/aggregator-silent.md
+
+      - alert: ratesengine_aggregator_outlier_storm
+        expr: |
+          sum(rate(ratesengine_aggregator_dropped_trades_total{reason="outlier"}[10m]))
+            > 5 * sum(rate(ratesengine_aggregator_dropped_trades_total{reason="outlier"}[1h] offset 1h))
+        for: 15m
+        labels:
+          severity: ticket
+          team: ratesengine
+          component: aggregator
+          runbook_url: https://github.com/RatesEngine/rates-engine/blob/main/docs/operations/runbooks/aggregator-outlier-storm.md
+        annotations:
+          summary: "Outlier-filter drop rate >5× baseline (P3)"
+          description: |
+            The σ-threshold filter is dropping trades at >5× its
+            baseline rate (computed as the prior hour's drop rate one
+            hour ago, so a sustained shift doesn't suppress the
+            comparator). Usually a market-distress event flooding the
+            window with anomalies; occasionally an upstream connector
+            mis-decoding amounts. Either way the VWAP signal is
+            degraded — a paged divergence alert is likely to follow.
+            Runbook: https://github.com/RatesEngine/rates-engine/blob/main/docs/operations/runbooks/aggregator-outlier-storm.md
+
+      - alert: ratesengine_aggregator_class_drop_spike
+        expr: |
+          sum(rate(ratesengine_aggregator_dropped_trades_total{reason="class"}[10m]))
+            > 10 * sum(rate(ratesengine_aggregator_dropped_trades_total{reason="class"}[1h] offset 1h))
+        for: 15m
+        labels:
+          severity: ticket
+          team: ratesengine
+          component: aggregator
+          runbook_url: https://github.com/RatesEngine/rates-engine/blob/main/docs/operations/runbooks/aggregator-class-drop-spike.md
+        annotations:
+          summary: "Class-filter drop rate >10× baseline (P3)"
+          description: |
+            The class filter is dropping trades at >10× its baseline
+            rate. Most common cause: a new venue connector emitting
+            trades that aren't yet registered in
+            internal/sources/external/registry.go (so they hit the
+            fail-closed fallback IncludeInVWAP=false). Less common:
+            an existing aggregator/oracle source unexpectedly
+            increased volume.
+            Runbook: https://github.com/RatesEngine/rates-engine/blob/main/docs/operations/runbooks/aggregator-class-drop-spike.md
