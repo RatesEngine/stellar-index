@@ -65,9 +65,11 @@ cursor_store_scheme   = "postgres"
 
 # ──────────────────────────────────────────────────────────────────
 # Oracle — on-chain oracle contract addresses.
-# Mainnet Reflector addresses are operator-supplied. Verify via
-# stellar.expert before pasting. Phase-1 audit flagged these as
-# TBD (see docs/discovery/oracles/reflector.md).
+# Mainnet Reflector addresses are public (DEX/CEX/FX variants) —
+# see the address tables in docs/discovery/oracles/reflector.md
+# for the v3 set. Verify via stellar.expert before pasting; the
+# DAO can rotate addresses on a v4 spawn, in which case the
+# discovery doc gets the update first.
 # ──────────────────────────────────────────────────────────────────
 [oracle.reflector]
 # dex_contract = "C…"   # set when enabling reflector-dex
