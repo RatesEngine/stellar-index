@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/RatesEngine/rates-engine/internal/canonical"
+	"github.com/RatesEngine/rates-engine/internal/metadata"
 )
 
 // tradeRowFrom: the existing handler-level history_test exercises
@@ -232,6 +233,77 @@ func TestPriceRatioDecimal_paddingNeeded(t *testing.T) {
 	// 1 * 10^10 / 1e9 = 10 → "10" → padded to "0000000010" → "0.0000000010"
 	if got != "0.0000000010" {
 		t.Errorf("got %q, want \"0.0000000010\"", got)
+	}
+}
+
+// findMatchingCurrency walks a SEP-1 [[CURRENCIES]] list looking
+// for a (code, issuer) match. Pin all early-return branches so a
+// regression can't silently mis-attribute SEP-1 metadata.
+
+func TestFindMatchingCurrency_nonClassicReturnsNil(t *testing.T) {
+	// Native, fiat, and Soroban assets all bail before the loop.
+	sep := &metadata.SEP1{Currencies: []metadata.Currency{
+		{Code: "USDC", Issuer: "GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN"},
+	}}
+	for _, a := range []canonical.Asset{
+		canonical.NativeAsset(),
+		mustParseAsset("fiat:USD"),
+	} {
+		if got := findMatchingCurrency(sep, a); got != nil {
+			t.Errorf("non-classic %v should not match, got %+v", a, got)
+		}
+	}
+}
+
+func TestFindMatchingCurrency_emptyCodeOrIssuerRejected(t *testing.T) {
+	// A zero-value classic asset (Code or Issuer empty) shouldn't
+	// match anything — even a SEP-1 entry with empty fields.
+	sep := &metadata.SEP1{Currencies: []metadata.Currency{
+		{Code: "", Issuer: ""}, // sentinel — would match if the guard were removed
+	}}
+	if got := findMatchingCurrency(sep, canonical.Asset{Type: canonical.AssetClassic}); got != nil {
+		t.Errorf("zero-value classic should not match empty SEP-1 entry, got %+v", got)
+	}
+}
+
+func TestFindMatchingCurrency_caseInsensitiveCode(t *testing.T) {
+	const issuer = "GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN"
+	sep := &metadata.SEP1{Currencies: []metadata.Currency{
+		{Code: "usdc", Issuer: issuer}, // lower-case in SEP-1
+	}}
+	a, err := canonical.NewClassicAsset("USDC", issuer) // upper in canonical
+	if err != nil {
+		t.Fatalf("NewClassicAsset: %v", err)
+	}
+	got := findMatchingCurrency(sep, a)
+	if got == nil {
+		t.Error("expected case-insensitive match, got nil")
+	}
+}
+
+func TestFindMatchingCurrency_issuerMismatchSkipped(t *testing.T) {
+	const issuerA = "GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN"
+	const issuerB = "GBVTRWVODF3HTCSAYJBJOPVZSWFYTOJDV6FBLEIFCTUW2P3QXMAYWS6E"
+	// Same code, different issuer — must NOT match.
+	sep := &metadata.SEP1{Currencies: []metadata.Currency{
+		{Code: "USDC", Issuer: issuerB},
+	}}
+	a, _ := canonical.NewClassicAsset("USDC", issuerA)
+	if got := findMatchingCurrency(sep, a); got != nil {
+		t.Error("expected nil on issuer mismatch, got match")
+	}
+}
+
+func TestFindMatchingCurrency_issuerEmptyInSEP1Skipped(t *testing.T) {
+	// SEP-1 entry with empty Issuer must be skipped — we can't
+	// confidently attribute metadata without a unique issuer.
+	const issuer = "GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN"
+	sep := &metadata.SEP1{Currencies: []metadata.Currency{
+		{Code: "USDC", Issuer: ""}, // matching code, empty issuer
+	}}
+	a, _ := canonical.NewClassicAsset("USDC", issuer)
+	if got := findMatchingCurrency(sep, a); got != nil {
+		t.Error("expected nil when SEP-1 issuer empty, got match")
 	}
 }
 
