@@ -337,6 +337,33 @@ ratesengine-ops verify-archive -config /etc/ratesengine.toml \
   -tier all -from 2 -to <last-mirrored-ledger>
 ```
 
+#### Antipattern: do not substitute `mc cp --recursive` in xargs
+
+`mc mirror --overwrite=false` is the only correct tool for step 3.
+Do NOT replace it with parallel `mc cp --recursive` loops driven
+from a `comm -23 aws.txt local.txt` worklist, even if the worklist
+appears equivalent. Three reasons (all observed on r1 2026-04-26):
+
+1. **`mc cp` has no skip-if-exists.** It always copies. Two parallel
+   loops reading the same worklist double S3 GETs; a single loop on
+   a stale worklist re-fetches partitions completed since the
+   snapshot. `mc mirror`'s default *is* skip-if-exists at the object
+   level — the `--overwrite` flag is opt-in.
+2. **Partition-level worklists hide partial partitions.** A galexie
+   partition contains 64 000 `.xdr.zst` objects. `mc ls` reports the
+   directory as present even if it holds 21 307 of 64 000 — and
+   `comm -23` then excludes it from the worklist. Both loops skip it
+   forever. `mc mirror` walks objects, not directories, so partials
+   self-heal.
+3. **`mc cp --recursive partition/` is not resumable.** Killed mid-
+   partition, restart re-fetches all 64 000 objects from scratch.
+   `mc mirror` resumes from the missing object.
+
+If you find an existing `xargs ... mc cp --recursive ...` running:
+SIGTERM the xargs (lets in-flight copies drain naturally), wait for
+`mc cp` to clear, then restart with the canonical `mc mirror`
+command above. Mirror will fix any partials the cp loop left.
+
 The verify-archive playbook's Tier C (deferred) was originally
 shaped around the SDF GCS bucket. The AWS public bucket is the
 same shape and accessible via S3-native APIs (no GCS auth
