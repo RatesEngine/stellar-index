@@ -314,7 +314,7 @@ us-east-2 to Hetzner FRA cap out around two-thirds of that.
   network, not RTT, but small-object listings can feel
   slower.
 
-#### Runbook
+#### Runbook — fresh bucket (greenfield)
 
 ```sh
 # 1. Stop the in-flight scan-and-fill (if any).
@@ -323,8 +323,9 @@ sudo systemctl stop galexie-backfill   # or: kill <pid>
 # 2. Configure mc with anonymous AWS access.
 mc alias set aws https://s3.us-east-2.amazonaws.com "" "" --api S3v4
 
-# 3. Mirror, idempotent — won't re-write objects already in our bucket.
-mc mirror --overwrite=false \
+# 3. Mirror with --skip-errors. NOT --overwrite=false.
+#    See "mc mirror gotcha" below for why.
+mc mirror --skip-errors \
   aws/aws-public-blockchain/v1.1/stellar/ledgers/pubnet/ \
   local/galexie-archive/
 
@@ -337,32 +338,79 @@ ratesengine-ops verify-archive -config /etc/ratesengine.toml \
   -tier all -from 2 -to <last-mirrored-ledger>
 ```
 
-#### Antipattern: do not substitute `mc cp --recursive` in xargs
+#### Runbook — recovering from a partial / mc-cp-poisoned bucket
 
-`mc mirror --overwrite=false` is the only correct tool for step 3.
-Do NOT replace it with parallel `mc cp --recursive` loops driven
-from a `comm -23 aws.txt local.txt` worklist, even if the worklist
-appears equivalent. Three reasons (all observed on r1 2026-04-26):
+If `galexie-archive` already contains objects with mtimes that don't
+match AWS source mtimes — typically because someone ran `mc cp` against
+it — bucket-level `mc mirror` will deadlock (see gotcha below). Use
+the per-partition recovery script instead:
+
+```sh
+# Audits local bucket → identifies partials → deletes them →
+# mirrors only missing/just-deleted partitions, never the
+# fully-present ones (those would trigger mtime stalls).
+galexie-archive-fill          # /usr/local/bin on r1
+```
+
+Source: `/usr/local/bin/galexie-archive-fill` on r1, restartable.
+Logs to `/var/log/galexie-mirror.log`. Monitor via
+`galexie-backfill-status`.
+
+#### `mc mirror` gotcha — `--overwrite=false` doesn't mean what it says
+
+Verified against `mc RELEASE.2025-08-13T08-35-41Z` on r1 2026-04-26:
+
+`mc mirror --overwrite=false` does NOT silently skip already-present
+objects. For every dest object whose mtime differs from source (which
+in our case is *every* object copied via `mc cp`, since the upload
+timestamp != AWS's original timestamp), mc emits:
+
+```
+mc: <ERROR> Failed to perform mirroring, with error condition
+(mm-source-mtime) Overwrite not allowed for `…`. Use `--overwrite`
+to override this behavior.
+```
+
+…and after enough error spam (~120 K errors observed before stall),
+the worker pool deadlocks in `futex_` wait. The process stays alive,
+emits no further output, makes no further progress.
+
+`--skip-errors` keeps the same per-object error noise but lets the
+worker pool drain through it without deadlocking — which is fine for
+**fresh** buckets (no mtime conflicts to trigger the error path) but
+useless for buckets with pre-existing mc-cp content (the error storm
+itself becomes the bottleneck and drowns out genuine copy progress).
+
+The only reliable recovery from an mc-cp-poisoned bucket is the
+per-partition script: skip fully-present partitions entirely, delete
++ re-mirror partial ones, mirror the missing ones.
+
+#### Antipattern: do not run `mc cp --recursive` in xargs against galexie-archive
+
+Three failure modes (all observed on r1 2026-04-26):
 
 1. **`mc cp` has no skip-if-exists.** It always copies. Two parallel
    loops reading the same worklist double S3 GETs; a single loop on
    a stale worklist re-fetches partitions completed since the
-   snapshot. `mc mirror`'s default *is* skip-if-exists at the object
-   level — the `--overwrite` flag is opt-in.
+   snapshot.
 2. **Partition-level worklists hide partial partitions.** A galexie
    partition contains 64 000 `.xdr.zst` objects. `mc ls` reports the
    directory as present even if it holds 21 307 of 64 000 — and
-   `comm -23` then excludes it from the worklist. Both loops skip it
-   forever. `mc mirror` walks objects, not directories, so partials
-   self-heal.
+   `comm -23 aws.txt local.txt` then excludes it from the worklist.
+   The partial stays partial forever.
 3. **`mc cp --recursive partition/` is not resumable.** Killed mid-
    partition, restart re-fetches all 64 000 objects from scratch.
-   `mc mirror` resumes from the missing object.
+
+`mc cp` also poisons future `mc mirror` runs (its uploads carry
+current-time mtimes that mismatch AWS's original mtimes — see gotcha
+above). Once a bucket has been touched by `mc cp`, the only clean way
+to mirror missing data is per-partition (the `galexie-archive-fill`
+script).
 
 If you find an existing `xargs ... mc cp --recursive ...` running:
-SIGTERM the xargs (lets in-flight copies drain naturally), wait for
-`mc cp` to clear, then restart with the canonical `mc mirror`
-command above. Mirror will fix any partials the cp loop left.
+SIGTERM the **outer bash** of the pipeline (xargs alone often isn't
+enough — bash respawns the inner dispatchers). Then wait for orphan
+`mc cp` workers to drain. Then run `galexie-archive-fill`.
 
 The verify-archive playbook's Tier C (deferred) was originally
 shaped around the SDF GCS bucket. The AWS public bucket is the
