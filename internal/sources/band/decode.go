@@ -69,8 +69,11 @@ func decodeRelayArgs( //nolint:gocognit,gocyclo,funlen // dispatch-heavy; splitt
 		return nil, ErrNotBandCall
 	}
 
-	// args[ratesIdx] = symbol_rates: Vec<(Symbol, u64)>
-	ratesSv, err := scval.Parse(args[ratesIdx])
+	// args[ratesIdx] = symbol_rates: Vec<(Symbol, u64)>.
+	// Bound guaranteed by the len(args) check in the switch above
+	// — FnRelay: len ≥ 4, ratesIdx = 1; FnForceRelay: len ≥ 3,
+	// ratesIdx = 0. gosec can't trace the invariant across cases.
+	ratesSv, err := scval.Parse(args[ratesIdx]) //nolint:gosec // bounds-checked in switch case above
 	if err != nil {
 		return nil, fmt.Errorf("%w: symbol_rates: %w", ErrMalformedArgs, err)
 	}
