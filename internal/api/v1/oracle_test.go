@@ -2,6 +2,7 @@ package v1_test
 
 import (
 	"context"
+	"errors"
 	"math/big"
 	"net/http"
 	"testing"
@@ -146,5 +147,48 @@ func TestOracleLatest_EmptyIsEmptyArray(t *testing.T) {
 	mustDecode(t, resp, &env)
 	if env.Data == nil {
 		t.Error("empty should serialise as [] not null")
+	}
+}
+
+func TestOracleLatest_ReaderError500(t *testing.T) {
+	reader := &stubOracleReader{err: errors.New("storage broke")}
+	srv := v1.New(v1.Options{Oracle: reader})
+	tsrv := httpTestServer(t, srv)
+
+	resp := mustGet(t, tsrv.URL+"/v1/oracle/latest?asset=native")
+	if resp.StatusCode != http.StatusInternalServerError {
+		t.Errorf("status = %d, want 500", resp.StatusCode)
+	}
+}
+
+// Negative-Price rendering through the full HTTP handler — pins
+// the sign-preserving scaledDecimalString path (the
+// oracleReadingFrom helper is unexported, so this exercises it
+// indirectly).
+func TestOracleLatest_negativePricePreservesSign(t *testing.T) {
+	reader := &stubOracleReader{
+		updates: []canonical.OracleUpdate{
+			mkReflectorUpdate("reflector-cex", "-12420000000000", 14),
+		},
+	}
+	srv := v1.New(v1.Options{Oracle: reader})
+	tsrv := httpTestServer(t, srv)
+
+	resp := mustGet(t, tsrv.URL+"/v1/oracle/latest?asset=native")
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d, want 200", resp.StatusCode)
+	}
+	var env struct {
+		Data []v1.OracleReading `json:"data"`
+	}
+	mustDecode(t, resp, &env)
+	if len(env.Data) != 1 {
+		t.Fatalf("got %d rows, want 1", len(env.Data))
+	}
+	if env.Data[0].Price[0] != '-' {
+		t.Errorf("Price = %q, want leading \"-\"", env.Data[0].Price)
+	}
+	if env.Data[0].Decimals != 14 {
+		t.Errorf("Decimals = %d, want 14", env.Data[0].Decimals)
 	}
 }
