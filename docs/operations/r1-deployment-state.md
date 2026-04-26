@@ -1,12 +1,12 @@
 ---
 title: r1 archival node — current state and next-steps
-last_verified: 2026-04-23
+last_verified: 2026-04-26
 status: living doc
 ---
 
 # r1-01 (FSN1) deployment state
 
-Snapshot of what's running on `136.243.90.96` as of 2026-04-23. Updated
+Snapshot of what's running on `136.243.90.96` as of 2026-04-26. Updated
 at each session.
 
 ## Hardware
@@ -28,14 +28,18 @@ nvme0n1 / nvme1n1 : OS mirror (mdadm RAID1)
 nvme2n1 / nvme3n1 : untouched, full 7.68T (ZFS raidz2 vdevs)
 ```
 
-ZFS pool `data` (raidz2, ~13.3 TB usable) with 7 datasets:
+ZFS pool `data` (raidz2, ~13.3 TB usable) with 5 datasets currently:
 - `data/os` → `/var/lib/ratesengine`
 - `data/postgres` → `/var/lib/postgresql` (recordsize=8K, logbias=throughput)
-- `data/core` → `/var/lib/stellar-core`
-- `data/rpc` → `/var/lib/stellar-rpc` (recordsize=16K)
 - `data/galexie` → `/var/lib/galexie`
 - `data/minio` → `/var/lib/minio`
 - `data/archive` → `/srv/history-archive`
+
+The `data/core` and `data/rpc` datasets are gated behind
+`run_stellar_core` / `run_stellar_rpc` in the ansible role
+(`defaults/main.yml`); both default false since 2026-04-23 and
+neither dataset exists on r1 today. Re-enable when validating
+Phase-3 validator work.
 
 ## Services (systemd)
 
@@ -83,16 +87,26 @@ fetched 2026-04-23:
 
 ## What's running in background
 
-- **`stellar-archivist mirror`** in tmux session `archive-mirror`:
-  pulling SDF's core_live_001 into `/srv/history-archive/`.
-  Started 2026-04-23 13:26, ~467 MB after 5 min (→ ~1 TB in 3-4 h).
-  Logs at `/var/log/stellar-archivist-mirror.log`.
-  Check progress: `ssh root@… "tmux attach -t archive-mirror"` then
-  Ctrl+B D to detach.
+- ~~**`stellar-archivist mirror`**~~ — completed; `/srv/history-archive`
+  is at 7.0 TB with the full pubnet history (used by `verify-archive`
+  Tier B as the trusted reference). 59 zero-byte files left over
+  from peer fetch failures during the initial run were re-fetched
+  individually on 2026-04-26.
+
+- **`galexie.service`** — live tail running continuously, currently
+  appending `.xdr.zst` objects to `galexie-live/` at one per closed
+  ledger. Live-tip ~62.3 M and tracking network head.
+
+- **`galexie-archive` bucket** — historical backfill complete as of
+  2026-04-26 (4.76 TB, 974 partitions covering ledgers 1 → ~62.3 M).
+  Mirrored from the AWS public bucket via per-partition `mc mirror`
+  (see [galexie-backfill.md](galexie-backfill.md) for the recovery
+  runbook and the `mc mirror --overwrite=false` gotcha).
 
 - **Healthchecks.io push every 5 min** reports service health +
-  ledger-age + ZFS health + disk space. Currently pings `/fail` if
-  stellar-rpc isn't yet `active` (expected on fresh start).
+  ledger-age + ZFS health + disk space. Healthchecks watches
+  galexie + minio + postgresql + node_exporter (stellar-rpc is no
+  longer in the watched set since its 2026-04-23 removal).
 
 ## Known gaps / next-session priorities
 
@@ -112,15 +126,17 @@ fetched 2026-04-23:
    300+ objects landed within 5 min of sync. Ingestion pipeline
    is end-to-end working.
 
-2. **SCVal decoders are stubs.** Nothing in our Go code actually
-   decodes events yet. Even once stellar-rpc's DB is populated,
-   `internal/sources/{soroswap,aquarius,phoenix,reflector}/decode.go`
-   all return placeholder errors. This is the single biggest
-   unblocker between "stack running" and "trade data flowing."
-   Precondition: take a dependency on `github.com/stellar/go-stellar-sdk/xdr`
-   (not yet in go.mod — callers use `stellarrpc.Event.Value` as
-   opaque base64 today). The `decoderHooks` pattern in each
-   decode.go is ready for real impls to replace the stubs.
+2. **SCVal decoders implemented.** (Updated 2026-04-26.) All 8 source
+   decoders have real bodies — soroswap, aquarius, phoenix, reflector,
+   sdex, comet, band, redstone — landed across PRs #5, #7, #15, #19
+   plus subsequent fix-ups (Reflector OpIndex stride, Aquarius event
+   fan-out, Redstone Bytes unwrap, Band ContractCallDecoder). Per-decoder
+   unit-test coverage in flight (e.g. PR #148 pinning Band reject paths).
+   **Open question** for full historical backfill: each decoder needs a
+   per-WASM-hash audit before being turned loose on the 62 M-ledger
+   replay — current decoders target current-WASM events; replay sees
+   every prior version that ran during the range
+   (see [docs/architecture/contract-schema-evolution.md](../architecture/contract-schema-evolution.md)).
 
 ### Important but not urgent
 3. **Firewall + SSH hardening (phase 3)** not applied. Intentional —
@@ -140,15 +156,15 @@ fetched 2026-04-23:
    bucket for durability. TODO after mirror completes.
 
 ### Backlog (no urgency)
-7. Scope Galexie to a dedicated MinIO user with bucket-scoped
-   write-only policy (task #156). Right now it uses root creds.
+7. ~~Scope Galexie to a dedicated MinIO user with bucket-scoped
+   write-only policy.~~ **Done — PR #156 (2026-04-23):** `galexie-writer`
+   has write-only on `galexie-live`; `galexie-archive-writer` has
+   write-only on `galexie-archive` (used during the historical fill);
+   `ratesengine-reader` has read on both (PR #162, 2026-04-26).
 
 8. Galexie's resume-from-last-ledger behaviour: wrapper currently
    restarts from `archive_tip - 128` every time. Long-term should
    probe MinIO for last-exported-ledger and resume past it.
-
-9. stellar-rpc full-history replay (multi-day). Only valuable once
-   decoders work — otherwise nothing consumes the indexed events.
 
 ## Configuration pitfalls captured during first deploy
 
