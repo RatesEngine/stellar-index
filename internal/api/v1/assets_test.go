@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"strings"
 	"testing"
@@ -20,9 +21,13 @@ type stubAssetReader struct {
 	byID    map[string]v1.AssetDetail
 	page    []v1.AssetDetail
 	nextCur string
+	err     error // non-nil → both methods return this; for the 500-path tests
 }
 
 func (r *stubAssetReader) GetAsset(_ context.Context, a canonical.Asset) (v1.AssetDetail, error) {
+	if r.err != nil {
+		return v1.AssetDetail{}, r.err
+	}
 	d, ok := r.byID[a.String()]
 	if !ok {
 		return v1.AssetDetail{}, v1.ErrAssetNotFound
@@ -31,6 +36,9 @@ func (r *stubAssetReader) GetAsset(_ context.Context, a canonical.Asset) (v1.Ass
 }
 
 func (r *stubAssetReader) ListAssets(_ context.Context, cursor string, limit int) ([]v1.AssetDetail, string, error) {
+	if r.err != nil {
+		return nil, "", r.err
+	}
 	return r.page, r.nextCur, nil
 }
 
@@ -271,5 +279,32 @@ func mustDecode(t *testing.T, resp *http.Response, v any) {
 	t.Helper()
 	if err := json.NewDecoder(resp.Body).Decode(v); err != nil {
 		t.Fatalf("decode: %v", err)
+	}
+}
+
+// ─── 500 error paths ─────────────────────────────────────────
+
+func TestAssetList_ReaderError500(t *testing.T) {
+	reader := &stubAssetReader{err: errors.New("storage broke")}
+	srv := v1.New(v1.Options{Assets: reader})
+	ts := httpTestServer(t, srv)
+
+	resp := mustGet(t, ts.URL+"/v1/assets")
+	if resp.StatusCode != http.StatusInternalServerError {
+		t.Errorf("status = %d, want 500", resp.StatusCode)
+	}
+}
+
+func TestAssetGet_ReaderError500(t *testing.T) {
+	// Reader returning a non-NotFound error → 500 with the
+	// internal error-type URL. Previously the only reader-returning
+	// test path returned ErrAssetNotFound.
+	reader := &stubAssetReader{err: errors.New("storage broke")}
+	srv := v1.New(v1.Options{Assets: reader})
+	ts := httpTestServer(t, srv)
+
+	resp := mustGet(t, ts.URL+"/v1/assets/native")
+	if resp.StatusCode != http.StatusInternalServerError {
+		t.Errorf("status = %d, want 500", resp.StatusCode)
 	}
 }

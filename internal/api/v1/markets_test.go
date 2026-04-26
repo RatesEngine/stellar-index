@@ -3,6 +3,7 @@ package v1_test
 import (
 	"bytes"
 	"context"
+	"errors"
 	"net/http"
 	"testing"
 	"time"
@@ -117,5 +118,16 @@ func TestMarkets_InvalidLimit400(t *testing.T) {
 		if resp.StatusCode != http.StatusBadRequest {
 			t.Errorf("limit=%q: status = %d, want 400", bad, resp.StatusCode)
 		}
+	}
+}
+
+func TestMarkets_ReaderError500(t *testing.T) {
+	reader := &stubMarketsReader{err: errors.New("storage broke")}
+	srv := v1.New(v1.Options{Markets: reader})
+	ts := httpTestServer(t, srv)
+
+	resp := mustGet(t, ts.URL+"/v1/markets")
+	if resp.StatusCode != http.StatusInternalServerError {
+		t.Errorf("status = %d, want 500", resp.StatusCode)
 	}
 }
