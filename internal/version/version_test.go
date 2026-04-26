@@ -2,6 +2,7 @@ package version
 
 import (
 	"runtime"
+	"runtime/debug"
 	"strings"
 	"testing"
 )
@@ -41,6 +42,35 @@ func TestReadVCSSetting_UnknownKey(t *testing.T) {
 	got := readVCSSetting("definitely-not-a-real-vcs-key")
 	if got != "unknown" {
 		t.Errorf("readVCSSetting(unknown key) = %q, want %q", got, "unknown")
+	}
+}
+
+func TestReadVCSSetting_MatchedKey(t *testing.T) {
+	// The "key not found" path is covered by TestReadVCSSetting_UnknownKey;
+	// this pins the matched-key path so a refactor that breaks the
+	// loop-match (e.g. accidentally returning "unknown" for every
+	// lookup) gets caught. Use a setting Go's build system always
+	// records into a test binary — GOARCH — and assert that the
+	// helper returns the same value the runtime confirms.
+	info, ok := debug.ReadBuildInfo()
+	if !ok {
+		t.Skip("build info unavailable — cannot exercise matched-key path")
+	}
+	var want string
+	for _, s := range info.Settings {
+		if s.Key == "GOARCH" {
+			want = s.Value
+			break
+		}
+	}
+	if want == "" {
+		t.Skip("GOARCH not present in BuildInfo settings on this toolchain")
+	}
+	if got := readVCSSetting("GOARCH"); got != want {
+		t.Errorf("readVCSSetting(\"GOARCH\") = %q, want %q", got, want)
+	}
+	if want != runtime.GOARCH {
+		t.Errorf("BuildInfo GOARCH=%q != runtime.GOARCH=%q (sanity)", want, runtime.GOARCH)
 	}
 }
 
