@@ -157,6 +157,47 @@ func TestOracleXLastPrice_NotFound404(t *testing.T) {
 	}
 }
 
+func TestOracleXLastPrice_InvalidBase400(t *testing.T) {
+	srv := v1.New(v1.Options{Prices: &stubPriceReader{}})
+	ts := startHTTPTest(t, srv.Handler())
+
+	resp := mustGet(t, ts.URL+"/v1/oracle/x_last_price?base=garbage&quote=fiat:USD")
+	if resp.StatusCode != http.StatusBadRequest {
+		t.Errorf("status = %d, want 400", resp.StatusCode)
+	}
+}
+
+func TestOracleXLastPrice_InvalidQuote400(t *testing.T) {
+	srv := v1.New(v1.Options{Prices: &stubPriceReader{}})
+	ts := startHTTPTest(t, srv.Handler())
+
+	resp := mustGet(t, ts.URL+"/v1/oracle/x_last_price?base=native&quote=garbage")
+	if resp.StatusCode != http.StatusBadRequest {
+		t.Errorf("status = %d, want 400", resp.StatusCode)
+	}
+}
+
+func TestOracleXLastPrice_ReaderError500(t *testing.T) {
+	reader := &stubPriceReader{err: errors.New("boom")}
+	srv := v1.New(v1.Options{Prices: reader})
+	ts := startHTTPTest(t, srv.Handler())
+
+	resp := mustGet(t, ts.URL+"/v1/oracle/x_last_price?base=native&quote=fiat:EUR")
+	if resp.StatusCode != http.StatusInternalServerError {
+		t.Errorf("status = %d, want 500", resp.StatusCode)
+	}
+}
+
+func TestOracleXLastPrice_NoReader503(t *testing.T) {
+	srv := v1.New(v1.Options{})
+	ts := startHTTPTest(t, srv.Handler())
+
+	resp := mustGet(t, ts.URL+"/v1/oracle/x_last_price?base=native&quote=fiat:EUR")
+	if resp.StatusCode != http.StatusServiceUnavailable {
+		t.Errorf("status = %d, want 503", resp.StatusCode)
+	}
+}
+
 func TestOracleXLastPrice_HappyPath(t *testing.T) {
 	t0 := time.Unix(1_770_000_000, 0).UTC()
 	reader := &stubPriceReader{
