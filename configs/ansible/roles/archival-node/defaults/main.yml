@@ -328,6 +328,15 @@ minio_buckets:
   - "galexie-archive"
   - "backups"
 
+# ───── ratesengine-reader (read-only on both buckets) ────────────────
+# Used by ratesengine-ops verify-archive and (eventually) the indexer
+# + api. galexie-writer / galexie-archive-writer are write-only and
+# scoped per bucket; this is the read counterpart, scoped to BOTH
+# buckets because the indexer stitches across them at the live/archive
+# seam.
+ratesengine_reader_access_key: "ratesengine-reader"
+# ratesengine_reader_secret_key ← vault
+
 # ───── Firewall ──────────────────────────────────────────────────────
 # Ports open on the public interface. Everything else rejects.
 # Port 11625 (SCP peer) is only added when run_stellar_core=true —

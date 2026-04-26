@@ -333,10 +333,20 @@ mc mirror --skip-errors \
 mc ls local/galexie-archive/FFFFFFFF--0-63999/ | head
 # Expect: FFFFFFFC--3.xdr.zst, FFFFFFFB--4.xdr.zst, FFFFFFFA--5.xdr.zst, ...
 
-# 5. Run verify-archive (Tier A + B) before declaring success:
+# 5. Source the reader credentials, then run verify-archive
+#    (Tier A + B) before declaring success:
+set -a; source /etc/default/ratesengine-ops; set +a
 ratesengine-ops verify-archive -config /etc/ratesengine.toml \
   -tier all -from 2 -to <last-mirrored-ledger>
 ```
+
+`/etc/default/ratesengine-ops` sets `AWS_ACCESS_KEY_ID` /
+`AWS_SECRET_ACCESS_KEY` (which the AWS SDK actually consumes) plus
+the `RATESENGINE_S3_*` duplicates for the config loader. Without
+sourcing it, verify-archive falls through to the default credential
+chain and gets a 403 from MinIO. Provisioned by the
+`ratesengine-reader` MinIO user — see
+`roles/archival-node/tasks/09-minio.yml`.
 
 #### Runbook — recovering from a partial / mc-cp-poisoned bucket
 
