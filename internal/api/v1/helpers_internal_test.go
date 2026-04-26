@@ -168,6 +168,73 @@ func TestMustParseAsset_invalidPanics(t *testing.T) {
 	_ = mustParseAsset("definitely-not-a-real-asset-id")
 }
 
+// priceRatioDecimal computes QuoteAmount / BaseAmount at `decimals`
+// fractional digits. Pin all branch arms: zero-base sentinel,
+// decimals<0 clamp, no-padding, padding-needed, decimals=0
+// fast-path.
+
+func TestPriceRatioDecimal_zeroBaseReturnsZero(t *testing.T) {
+	xlm, _ := canonical.ParseAsset("native")
+	usd, _ := canonical.ParseAsset("fiat:USD")
+	pair, _ := canonical.NewPair(xlm, usd)
+	tr := canonical.Trade{
+		Pair:        pair,
+		BaseAmount:  canonical.NewAmount(big.NewInt(0)),
+		QuoteAmount: canonical.NewAmount(big.NewInt(100)),
+	}
+	if got := priceRatioDecimal(tr, 7); got != "0" {
+		t.Errorf("got %q, want \"0\" (zero-base sentinel)", got)
+	}
+}
+
+func TestPriceRatioDecimal_negativeDecimalsClamped(t *testing.T) {
+	xlm, _ := canonical.ParseAsset("native")
+	usd, _ := canonical.ParseAsset("fiat:USD")
+	pair, _ := canonical.NewPair(xlm, usd)
+	tr := canonical.Trade{
+		Pair:        pair,
+		BaseAmount:  canonical.NewAmount(big.NewInt(2)),
+		QuoteAmount: canonical.NewAmount(big.NewInt(7)),
+	}
+	// decimals<0 must clamp to 0; integer-only output (3 from 7/2).
+	if got := priceRatioDecimal(tr, -3); got != "3" {
+		t.Errorf("got %q, want \"3\" (clamp negative decimals → 0)", got)
+	}
+}
+
+func TestPriceRatioDecimal_decimalsZeroFastPath(t *testing.T) {
+	xlm, _ := canonical.ParseAsset("native")
+	usd, _ := canonical.ParseAsset("fiat:USD")
+	pair, _ := canonical.NewPair(xlm, usd)
+	tr := canonical.Trade{
+		Pair:        pair,
+		BaseAmount:  canonical.NewAmount(big.NewInt(2)),
+		QuoteAmount: canonical.NewAmount(big.NewInt(11)),
+	}
+	if got := priceRatioDecimal(tr, 0); got != "5" {
+		t.Errorf("got %q, want \"5\" (decimals=0 fast-path: 11/2 floor=5)", got)
+	}
+}
+
+func TestPriceRatioDecimal_paddingNeeded(t *testing.T) {
+	// quote < base, decimals=10 → very small quotient that needs
+	// leading-zero padding in the integer part. 1/1_000_000_000 at
+	// 10 dp = 0.0000000010 (truncating to 10 dp).
+	xlm, _ := canonical.ParseAsset("native")
+	usd, _ := canonical.ParseAsset("fiat:USD")
+	pair, _ := canonical.NewPair(xlm, usd)
+	tr := canonical.Trade{
+		Pair:        pair,
+		BaseAmount:  canonical.NewAmount(big.NewInt(1_000_000_000)),
+		QuoteAmount: canonical.NewAmount(big.NewInt(1)),
+	}
+	got := priceRatioDecimal(tr, 10)
+	// 1 * 10^10 / 1e9 = 10 → "10" → padded to "0000000010" → "0.0000000010"
+	if got != "0.0000000010" {
+		t.Errorf("got %q, want \"0.0000000010\"", got)
+	}
+}
+
 func TestTradeRowFrom_defaultDecimalsOnZero(t *testing.T) {
 	xlm, _ := canonical.ParseAsset("native")
 	usd, _ := canonical.ParseAsset("fiat:USD")
