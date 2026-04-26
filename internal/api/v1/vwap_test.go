@@ -1,6 +1,7 @@
 package v1_test
 
 import (
+	"errors"
 	"math/big"
 	"net/http"
 	"strings"
@@ -156,5 +157,39 @@ func TestVWAP_InvalidSigma400(t *testing.T) {
 		if resp.StatusCode != http.StatusBadRequest {
 			t.Errorf("outlier_sigma=%q: status = %d, want 400", bad, resp.StatusCode)
 		}
+	}
+}
+
+// ─── error-path coverage to parity with TWAP/OHLC ───────────
+
+func TestVWAP_InvalidTime400(t *testing.T) {
+	srv := v1.New(v1.Options{History: &stubHistoryReader{}})
+	ts := httpTestServer(t, srv)
+
+	resp := mustGet(t, ts.URL+"/v1/vwap?base=native&quote=fiat:USD&from=bogus")
+	if resp.StatusCode != http.StatusBadRequest {
+		t.Errorf("status = %d, want 400", resp.StatusCode)
+	}
+}
+
+func TestVWAP_InvalidPair400(t *testing.T) {
+	srv := v1.New(v1.Options{History: &stubHistoryReader{}})
+	ts := httpTestServer(t, srv)
+
+	// base == quote — NewPair rejects with invalid-pair.
+	resp := mustGet(t, ts.URL+"/v1/vwap?base=native&quote=native")
+	if resp.StatusCode != http.StatusBadRequest {
+		t.Errorf("status = %d, want 400", resp.StatusCode)
+	}
+}
+
+func TestVWAP_ReaderError500(t *testing.T) {
+	reader := &stubHistoryReader{err: errors.New("storage broke")}
+	srv := v1.New(v1.Options{History: reader})
+	ts := httpTestServer(t, srv)
+
+	resp := mustGet(t, ts.URL+"/v1/vwap?base=native&quote=fiat:USD")
+	if resp.StatusCode != http.StatusInternalServerError {
+		t.Errorf("status = %d, want 500", resp.StatusCode)
 	}
 }
