@@ -71,6 +71,27 @@ func TestPriceBatch_InvalidAssetReturns400(t *testing.T) {
 	}
 }
 
+func TestPriceBatch_InvalidQuote400(t *testing.T) {
+	srv := v1.New(v1.Options{Prices: &stubPriceReader{}})
+	ts := startHTTPTest(t, srv.Handler())
+
+	resp := mustGet(t, ts.URL+"/v1/price/batch?asset_ids=native&quote=garbage")
+	if resp.StatusCode != http.StatusBadRequest {
+		t.Errorf("status = %d, want 400 (invalid quote id)", resp.StatusCode)
+	}
+}
+
+func TestPriceBatchPost_InvalidQuote400(t *testing.T) {
+	srv := v1.New(v1.Options{Prices: &stubPriceReader{}})
+	ts := startHTTPTest(t, srv.Handler())
+
+	resp := mustPostJSON(t, ts.URL+"/v1/price/batch",
+		`{"asset_ids":["native"],"quote":"garbage"}`)
+	if resp.StatusCode != http.StatusBadRequest {
+		t.Errorf("status = %d, want 400 (invalid quote id)", resp.StatusCode)
+	}
+}
+
 func TestPriceBatch_IdentityRejected400(t *testing.T) {
 	srv := v1.New(v1.Options{Prices: &stubPriceReader{}})
 	ts := startHTTPTest(t, srv.Handler())
