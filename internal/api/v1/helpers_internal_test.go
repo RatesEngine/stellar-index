@@ -73,6 +73,101 @@ func TestRatToDecimal_fractional(t *testing.T) {
 	}
 }
 
+// detailFromAsset shapes the wire payload for every Asset variant.
+// Pin all four shapes plus the nullable-field wiring so a regression
+// can't quietly drop Issuer/ContractID from the JSON response.
+
+func TestDetailFromAsset_native(t *testing.T) {
+	a := canonical.NativeAsset()
+	d := detailFromAsset(a)
+	if d.AssetID != "native" {
+		t.Errorf("AssetID = %q, want \"native\"", d.AssetID)
+	}
+	if d.Issuer != nil {
+		t.Errorf("Issuer = %v, want nil for native", d.Issuer)
+	}
+	if d.ContractID != nil {
+		t.Errorf("ContractID = %v, want nil for native", d.ContractID)
+	}
+	if d.Decimals != 7 {
+		t.Errorf("Decimals = %d, want 7 (XLM stroops)", d.Decimals)
+	}
+	if d.Sep1Status != "not_applicable" {
+		t.Errorf("Sep1Status = %q, want \"not_applicable\"", d.Sep1Status)
+	}
+}
+
+func TestDetailFromAsset_classic(t *testing.T) {
+	a, err := canonical.NewClassicAsset("USDC",
+		"GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN")
+	if err != nil {
+		t.Fatalf("NewClassicAsset: %v", err)
+	}
+	d := detailFromAsset(a)
+	if d.Code != "USDC" {
+		t.Errorf("Code = %q, want \"USDC\"", d.Code)
+	}
+	if d.Issuer == nil || *d.Issuer == "" {
+		t.Errorf("Issuer = %v, want populated", d.Issuer)
+	}
+	if d.ContractID != nil {
+		t.Errorf("ContractID = %v, want nil for classic", d.ContractID)
+	}
+}
+
+func TestDetailFromAsset_soroban(t *testing.T) {
+	cid := "CCQXWMZVM3KRTXTUPTN53YHL272QGKF32L7XEDNZ2S6OSUFK3NFBGG5M"
+	a, err := canonical.NewSorobanAsset(cid)
+	if err != nil {
+		t.Fatalf("NewSorobanAsset: %v", err)
+	}
+	d := detailFromAsset(a)
+	if d.ContractID == nil || *d.ContractID != cid {
+		t.Errorf("ContractID = %v, want %q", d.ContractID, cid)
+	}
+	if d.Issuer != nil {
+		t.Errorf("Issuer = %v, want nil for soroban", d.Issuer)
+	}
+}
+
+func TestDetailFromAsset_fiat(t *testing.T) {
+	a, err := canonical.ParseAsset("fiat:USD")
+	if err != nil {
+		t.Fatalf("ParseAsset: %v", err)
+	}
+	d := detailFromAsset(a)
+	if d.AssetID != "fiat:USD" {
+		t.Errorf("AssetID = %q, want \"fiat:USD\"", d.AssetID)
+	}
+	if d.Issuer != nil {
+		t.Errorf("Issuer = %v, want nil for fiat", d.Issuer)
+	}
+	if d.ContractID != nil {
+		t.Errorf("ContractID = %v, want nil for fiat", d.ContractID)
+	}
+}
+
+// mustParseAsset has a panic branch reached only when defaultPriceQuote
+// (or any other compile-time constant the package builds atop it)
+// drifts from the canonical allow-list. Pin both arms.
+
+func TestMustParseAsset_validReturnsAsset(t *testing.T) {
+	a := mustParseAsset("native")
+	if a.Type != canonical.AssetNative {
+		t.Errorf("Type = %q, want native", a.Type)
+	}
+}
+
+func TestMustParseAsset_invalidPanics(t *testing.T) {
+	defer func() {
+		r := recover()
+		if r == nil {
+			t.Error("expected panic on garbage input, got none")
+		}
+	}()
+	_ = mustParseAsset("definitely-not-a-real-asset-id")
+}
+
 func TestTradeRowFrom_defaultDecimalsOnZero(t *testing.T) {
 	xlm, _ := canonical.ParseAsset("native")
 	usd, _ := canonical.ParseAsset("fiat:USD")
