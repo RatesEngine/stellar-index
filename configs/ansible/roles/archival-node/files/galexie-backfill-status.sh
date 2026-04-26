@@ -34,8 +34,14 @@ elif [ -n "$dl_line" ]; then
 fi
 
 # ─── Bucket counts ──────────────────────────────────────────
-archive_count=$(mc ls --quiet --recursive local/galexie-archive/ 2>/dev/null | wc -l)
-archive_size=$(mc du --quiet local/galexie-archive/ 2>/dev/null | awk "{print \$1}" | head -1)
+# IMPORTANT: never `mc ls --recursive local/galexie-archive/` here.
+# The bucket holds ~62M objects when full; a recursive listing takes
+# minutes and contends with any active mc mirror workers — running
+# the TUI under `watch -n 5` during a fill will starve the fill.
+# Top-level partition count is the cheap proxy (one LIST, ~975 max).
+archive_partitions=$(mc ls local/galexie-archive/ 2>/dev/null | grep -c -- "--")
+archive_size=$(zfs list -Ho used data/minio 2>/dev/null)
+# galexie-live is small (~tens of K objects), recursive listing is fine.
 live_tip=$(mc ls --quiet --recursive local/galexie-live/ 2>/dev/null | awk "{print \$NF}" | grep xdr.zst | sed -E "s/.*--([0-9]+)\.xdr\.zst/\1/" | sort -n | tail -1)
 
 # ─── Host ───────────────────────────────────────────────────
@@ -120,12 +126,14 @@ if [ -n "$prev_m_epoch" ] && [ -n "$prev_m_files" ] && [ -n "$mirror_files" ] &&
     if [ "$mdt" -gt 0 ] && [ "$mdf" -gt 0 ]; then
         mirror_rate=$((mdf / mdt))
         mirror_rate_str="${mirror_rate} files/sec"
-        # AWS public bucket has ~62.3M ledgers (one .xdr.zst each, plus
-        # ~975 .config.json manifests). Use that as the ETA target.
-        target_total=62300000
-        remaining=$((target_total - archive_count))
-        if [ "$remaining" -gt 0 ] && [ "$mirror_rate" -gt 0 ]; then
-            meta_s=$((remaining / mirror_rate))
+        # ETA = remaining_partitions * 64000 files/partition / rate.
+        # We avoid counting actual files in galexie-archive (would
+        # require a recursive bucket listing) and use partition count
+        # × 64000 as the proxy. AWS pubnet has 975 partitions full.
+        remaining_partitions=$((975 - ${archive_partitions:-0}))
+        if [ "$remaining_partitions" -gt 0 ] && [ "$mirror_rate" -gt 0 ]; then
+            remaining_files=$((remaining_partitions * 64000))
+            meta_s=$((remaining_files / mirror_rate))
             meta_h=$((meta_s / 3600))
             meta_m=$(((meta_s % 3600) / 60))
             mirror_eta_str="${meta_h}h ${meta_m}m"
@@ -160,8 +168,8 @@ fi
 printf "\n"
 
 printf "${BOLD}${MAGENTA}── LCM output (galexie-archive bucket) ──${RESET}\n"
-printf "  objects:   %s\n" "$archive_count"
-printf "  size:      %s\n\n" "${archive_size:-?}"
+printf "  partitions: %s of 975 (top-level only — see note in script)\n" "${archive_partitions:-?}"
+printf "  zfs used:   %s\n\n" "${archive_size:-?}"
 
 printf "${BOLD}${GREEN}── host ──${RESET}\n"
 printf "  load:      %s\n" "${load:-?}"
