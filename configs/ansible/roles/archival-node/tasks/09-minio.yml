@@ -247,16 +247,20 @@
   changed_when: false
   failed_when: false   # mc returns non-zero if policy already attached
 
-- name: Template /etc/default/ratesengine-ops (env vars for verify-archive + future indexer/api)
-  # The AWS SDK that powers verify-archive (and the indexer's
-  # datastore.S3DataStore) reads creds from AWS_ACCESS_KEY_ID /
+- name: Template /etc/default/ratesengine-ops (env vars for verify-archive + indexer/api)
+  # Sourced both by interactive `ratesengine-ops` invocations and
+  # by the ratesengine-indexer.service systemd unit (07-galexie /
+  # ratesengine-indexer task wires EnvironmentFile to this file).
+  #
+  # The AWS SDK that powers the datastore reader (verify-archive +
+  # indexer ledgerstream) reads creds from AWS_ACCESS_KEY_ID /
   # AWS_SECRET_ACCESS_KEY. The RATESENGINE_S3_* duplicates are for
-  # config-load.go's ApplyEnvOverrides path. Set both for safety.
+  # config-load.go's ApplyEnvOverrides path. RATESENGINE_POSTGRES_DSN
+  # carries the application-db password so the file-on-disk
+  # /etc/ratesengine.toml stays password-free.
   #
   # Mode 0640 + group root for now; tighten to a `ratesengine`
-  # service group once the indexer/api have systemd units and
-  # need group-readable env files (no such user/group exists in
-  # the role yet — operator runs verify-archive as root today).
+  # service group once the indexer/api have a dedicated user.
   ansible.builtin.copy:
     dest: /etc/default/ratesengine-ops
     owner: root
@@ -273,4 +277,5 @@
       AWS_SECRET_ACCESS_KEY={{ ratesengine_reader_secret_key }}
       RATESENGINE_S3_ACCESS_KEY={{ ratesengine_reader_access_key }}
       RATESENGINE_S3_SECRET_KEY={{ ratesengine_reader_secret_key }}
+      RATESENGINE_POSTGRES_DSN=postgres://{{ postgres_user_ratesengine }}:{{ postgres_pass_ratesengine }}@127.0.0.1:5432/{{ postgres_db_ratesengine }}?sslmode=disable
   no_log: true

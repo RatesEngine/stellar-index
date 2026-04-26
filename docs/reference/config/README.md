@@ -60,6 +60,7 @@ the `env:` column.
 | `ingestion.backfill_from_ledger` | `uint32` | `0` | — | Earliest ledger to backfill from; 0 = continue-from-persisted-cursor. |
 | `ingestion.backfill_batch_size` | `uint32` | `64` | — | Ledgers per backfill fetch batch. |
 | `ingestion.cursor_store_scheme` | `string` | `postgres` | — | Where per-source cursors live — postgres / redis. |
+| `ingestion.live_seam_ledger` | `uint32` | `0` | — | First ledger in the live bucket. Below this, indexer reads from galexie-archive. 0 disables the archive bucket entirely. |
 
 ### `[oracle]`
 

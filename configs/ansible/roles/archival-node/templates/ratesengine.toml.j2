@@ -1,0 +1,38 @@
+# Rendered by Ansible. Do not edit by hand — regenerate via
+# `ansible-playbook ... --tags ratesengine`.
+#
+# Contains everything except secrets. S3 credentials and the
+# postgres password are injected at runtime via
+# /etc/default/ratesengine-ops (sourced by the systemd unit's
+# EnvironmentFile and overriding any DSN here).
+
+[region]
+id          = "{{ region_id }}"
+name        = "{{ region_name }}"
+home_domain = "{{ home_domain }}"
+
+[stellar]
+network             = "{{ stellar_network }}"
+core_http_endpoint  = "http://127.0.0.1:11626"
+rpc_endpoints       = ["http://127.0.0.1:8000"]
+history_archive_url = "https://history.stellar.org/prd/core-live/core_live_001"
+
+[storage]
+# Password is replaced at runtime by RATESENGINE_POSTGRES_DSN env.
+postgres_dsn       = "postgres://{{ postgres_user_ratesengine }}@127.0.0.1:5432/{{ postgres_db_ratesengine }}?sslmode=disable"
+redis_addr         = "127.0.0.1:6379"
+s3_endpoint        = "http://127.0.0.1:9000"
+s3_region          = "{{ region_id }}"
+s3_bucket_archive  = "galexie-archive"
+s3_bucket_live     = "galexie-live"
+s3_access_key_env  = "RATESENGINE_S3_ACCESS_KEY"
+s3_secret_key_env  = "RATESENGINE_S3_SECRET_KEY"
+
+[ingestion]
+enabled_sources      = {{ ratesengine_enabled_sources | to_json }}
+backfill_from_ledger = {{ ratesengine_backfill_from_ledger | int }}
+# First ledger written to galexie-live. Below this, the indexer
+# reads from galexie-archive. Set to whatever galexie-append.sh
+# passed as --start when the live tail first started.
+# 0 = no archive bucket; live-only.
+live_seam_ledger     = {{ ratesengine_live_seam_ledger | int }}

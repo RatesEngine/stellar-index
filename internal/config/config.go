@@ -218,6 +218,18 @@ type IngestionConfig struct {
 	BackfillFromLedger uint32   `toml:"backfill_from_ledger" doc:"Earliest ledger to backfill from; 0 = continue-from-persisted-cursor." default:"0"`
 	BackfillBatchSize  uint32   `toml:"backfill_batch_size" doc:"Ledgers per backfill fetch batch." default:"64"`
 	CursorStoreScheme  string   `toml:"cursor_store_scheme" doc:"Where per-source cursors live — postgres / redis." default:"postgres"`
+
+	// LiveSeamLedger is the first ledger written to the live bucket
+	// (galexie-live). Ledgers below it live in the historical bucket
+	// (galexie-archive); ledgers at or above live in galexie-live.
+	// The indexer reads from archive for [from, seam-1] and from live
+	// for [seam, ∞), in that order, when from < seam.
+	//
+	// Set to whatever galexie-append.sh passed as --start when
+	// galexie.service first started writing — for r1 today, query
+	// the running process args. 0 = no seam configured; indexer
+	// reads only galexie-live (the pre-2026-04-26 default).
+	LiveSeamLedger uint32 `toml:"live_seam_ledger" doc:"First ledger in the live bucket. Below this, indexer reads from galexie-archive. 0 disables the archive bucket entirely." default:"0"`
 }
 
 // AggregateConfig controls the aggregator's VWAP/TWAP computation.
@@ -286,6 +298,7 @@ func Default() Config {
 			BackfillFromLedger: 0,
 			BackfillBatchSize:  64,
 			CursorStoreScheme:  "postgres",
+			LiveSeamLedger:     0,
 		},
 		Oracle: OracleConfig{
 			// Reflector mainnet addresses are operator-supplied

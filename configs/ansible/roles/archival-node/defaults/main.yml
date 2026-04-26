@@ -123,6 +123,36 @@ postgres_db_core:        "stellar_core"
 postgres_user_core:      "stellar_core"
 # postgres_pass_core ← set in ansible-vault secrets file
 
+# Application database for the indexer / aggregator / api binaries.
+# Owns the trades + oracle_updates hypertables + price_aggregates
+# CAGGs (see migrations/). TimescaleDB extension is enabled at db
+# create time so the migrations can `CREATE EXTENSION IF NOT EXISTS
+# timescaledb` without elevation.
+postgres_db_ratesengine:    "ratesengine"
+postgres_user_ratesengine:  "ratesengine"
+# postgres_pass_ratesengine ← set in ansible-vault secrets file
+
+# ───── ratesengine-indexer / aggregator / api services ───────────────
+run_ratesengine: true
+
+# Indexer source fleet — empty array → fall back to the binary's
+# built-in default ([soroswap, aquarius, phoenix]). Keep small at
+# first; broaden as decoders earn coverage.
+ratesengine_enabled_sources: ["soroswap", "aquarius", "phoenix"]
+
+# Earliest ledger to backfill from on a fresh install (no persisted
+# cursor yet). 0 = refuse to start without a cursor — operator must
+# pick an explicit ledger to avoid accidental genesis re-ingest.
+ratesengine_backfill_from_ledger: 0
+
+# First ledger present in the galexie-live bucket. Below this the
+# indexer reads from galexie-archive. Set to whatever galexie-append.sh
+# passed as --start when the live tail first started writing —
+# query the running galexie process args:
+#   pgrep -af 'galexie append'
+# 0 = live-only mode (pre-2026-04-26 default; archive bucket unused).
+ratesengine_live_seam_ledger: 0
+
 # ───── Stellar network / quorum ──────────────────────────────────────
 stellar_network:         "pubnet"
 catchup_mode:            "CATCHUP_RECENT"       # RECENT | COMPLETE

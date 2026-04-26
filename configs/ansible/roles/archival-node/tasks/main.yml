@@ -62,3 +62,8 @@
 - name: "External healthcheck (Healthchecks.io push)"
   ansible.builtin.import_tasks: 13-healthcheck.yml
   tags: [healthcheck, monitoring]
+
+- name: "Rates Engine services (build, deploy, migrate, indexer)"
+  ansible.builtin.import_tasks: 14-ratesengine-services.yml
+  when: run_ratesengine | bool
+  tags: [ratesengine, indexer]
