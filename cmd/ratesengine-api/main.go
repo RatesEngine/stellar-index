@@ -179,7 +179,7 @@ func run(cfgPath string, dryRun bool) error { //nolint:gocognit,funlen // dispat
 	apiSrv := v1.New(v1.Options{
 		Logger:      logger.With("component", "api"),
 		ReadyChecks: checks,
-		Assets:      storeAssetReader{s: store},
+		Assets:      storeAssetReader{s: store, homeDomainLookup: cfg.Metadata.HomeDomainFor},
 		Prices:      storePriceReader{s: store},
 		History:     storeHistoryReader{s: store},
 		Markets:     storeMarketsReader{s: store},
@@ -254,7 +254,15 @@ func (c redisChecker) Ping(ctx context.Context) error {
 // storeAssetReader adapts *timescale.Store to v1.AssetReader. Keeps
 // the typed boundary: the store returns canonical.Asset; the API
 // layer owns the wire-shape conversion to v1.AssetDetail.
-type storeAssetReader struct{ s *timescale.Store }
+//
+// homeDomainLookup is the curated issuer → home-domain map from
+// cfg.Metadata. Returns ("", false) for un-curated issuers; the
+// AssetDetail then has HomeDomain==nil and the overlay handler
+// stamps sep1_status="not_fetched" for that case.
+type storeAssetReader struct {
+	s                *timescale.Store
+	homeDomainLookup func(issuer string) (string, bool)
+}
 
 func (r storeAssetReader) ListAssets(ctx context.Context, cursor string, limit int) ([]v1.AssetDetail, string, error) {
 	assets, next, err := r.s.DistinctAssets(ctx, cursor, limit)
@@ -263,7 +271,7 @@ func (r storeAssetReader) ListAssets(ctx context.Context, cursor string, limit i
 	}
 	out := make([]v1.AssetDetail, len(assets))
 	for i, a := range assets {
-		out[i] = assetToDetail(a)
+		out[i] = assetToDetail(a, r.homeDomainLookup)
 	}
 	return out, next, nil
 }
@@ -276,7 +284,7 @@ func (r storeAssetReader) GetAsset(ctx context.Context, a canonical.Asset) (v1.A
 	if !has {
 		return v1.AssetDetail{}, v1.ErrAssetNotFound
 	}
-	return assetToDetail(a), nil
+	return assetToDetail(a, r.homeDomainLookup), nil
 }
 
 // storeMarketsReader adapts *timescale.Store to v1.MarketsReader.
@@ -384,10 +392,18 @@ func (r storePriceReader) LatestPrice(ctx context.Context, asset, quote canonica
 // assetToDetail converts canonical.Asset → v1.AssetDetail. Nullable
 // fields become nil pointers when empty so the JSON omits them.
 //
-// SEP-1 + home-domain overlay is future work — once
-// internal/metadata is wired we'll enrich this with the stellar.toml
-// fields (name, description, image, sep1_status).
-func assetToDetail(a canonical.Asset) v1.AssetDetail {
+// homeDomainLookup populates HomeDomain for classic assets whose
+// issuer is on the operator's curated map (cfg.Metadata.IssuerHomeDomains).
+// When the issuer is curated, the SEP-1 overlay handler downstream
+// resolves stellar.toml and fills the overlay fields. When the
+// issuer is NOT curated, HomeDomain stays nil and the handler
+// stamps sep1_status="not_fetched". Pass nil for the lookup if the
+// caller doesn't have one (tests + scaffolding paths).
+//
+// SAC-wrapped classics + Soroban tokens have no issuer in the
+// classic sense — HomeDomain stays nil; sep1_status falls through
+// to "not_applicable" via the handler.
+func assetToDetail(a canonical.Asset, homeDomainLookup func(issuer string) (string, bool)) v1.AssetDetail {
 	d := v1.AssetDetail{
 		AssetID:    a.String(),
 		Type:       string(a.Type),
@@ -398,6 +414,20 @@ func assetToDetail(a canonical.Asset) v1.AssetDetail {
 	if a.Issuer != "" {
 		v := a.Issuer
 		d.Issuer = &v
+		// Classic asset with a known issuer — try the curated lookup
+		// to populate HomeDomain. The handler's overlay logic takes
+		// over from here: with HomeDomain set + s.meta wired,
+		// applySep1Overlay runs and stamps the resulting status; with
+		// HomeDomain set + s.meta nil, the handler stamps "not_fetched".
+		if homeDomainLookup != nil {
+			if hd, ok := homeDomainLookup(a.Issuer); ok {
+				d.HomeDomain = &hd
+				// Clear the "not_applicable" so the handler's overlay
+				// logic kicks in. The handler stamps the right value
+				// based on overlay outcome.
+				d.Sep1Status = ""
+			}
+		}
 	}
 	if a.ContractID != "" {
 		v := a.ContractID

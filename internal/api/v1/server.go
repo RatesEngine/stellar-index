@@ -196,6 +196,7 @@ func (s *Server) mountRoutes() {
 	// Asset catalogue.
 	s.mux.HandleFunc("GET /v1/assets", s.handleAssetList)
 	s.mux.HandleFunc("GET /v1/assets/{asset_id}", s.handleAssetGet)
+	s.mux.HandleFunc("GET /v1/assets/{asset_id}/metadata", s.handleAssetMetadata)
 
 	// Current price — last-trade fallback today; VWAP path when
 	// the aggregator ships.

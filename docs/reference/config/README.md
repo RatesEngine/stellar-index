@@ -117,11 +117,17 @@ the `env:` column.
 | --- | ---- | ------- | ------------ | ----------- |
 | `api.listen_addr` | `string` | `0.0.0.0:3000` | — | Bind address for the HTTP server. |
 | `api.external_base_url` | `string` | `https://api.ratesengine.net/v1` | — | Public-facing base URL (e.g. https://api.ratesengine.net/v1). |
-| `api.auth_mode` | `string` | `none` | — | Authentication mode — none / apikey (planned) / sep10 (planned). Default 'none' because the auth middleware has not shipped yet; a non-'none' value with the current binary is cosmetic, not enforced. |
+| `api.auth_mode` | `string` | `none` | — | Authentication mode — none / apikey / sep10. The middleware (internal/api/v1/middleware/Auth) is scaffolded; validators (internal/auth/{APIKeyValidator,SEP10Validator}) ship as Noop stubs that return ErrNotImplemented. A deployment with auth_mode=apikey or sep10 BUT no validator implementation wired in cmd/ratesengine-api/main.go fails-loud at 503 on every request — never silently demotes to anonymous. Stay on 'none' until validators land. |
 | `api.anon_rate_limit_per_min` | `int` | `60` | — | Per-IP rate limit for anonymous requests. |
 | `api.key_rate_limit_per_min` | `int` | `1000` | — | Per-API-key rate limit, default tier. |
 | `api.cdn_enabled` | `bool` | `true` | — | Emit CDN-friendly Cache-Control headers on long-immutable endpoints. |
 | `api.allowed_origins` | `[]string` | `["*"]` | — | CORS allow-list for browser clients. |
+
+### `[metadata]`
+
+| Key | Type | Default | Env override | Description |
+| --- | ---- | ------- | ------------ | ----------- |
+| `metadata.issuer_home_domains` | `map` | `{}` | — | Static curated map of issuer-account G-strkey → home-domain. Populates AssetDetail.HomeDomain so the SEP-1 overlay handler can resolve stellar.toml. Until the on-chain AccountEntry observer ships, this is the only way to enable the overlay for a given issuer. |
 
 ### `[obs]`
 

@@ -249,6 +249,72 @@ func TestAssetGet_readerPopulatesSep1Status(t *testing.T) {
 	}
 }
 
+// TestAssetMetadata_ReturnsOnlyOverlayFields checks the
+// /v1/assets/{id}/metadata endpoint returns the SEP-1 slice
+// without the canonical core (Code, Decimals, Issuer / ContractID).
+// Same overlay path as /v1/assets/{id}; status field carries the
+// resolution outcome.
+func TestAssetMetadata_ReturnsOnlyOverlayFields(t *testing.T) {
+	issuer := testUSDCIssuer
+	domain := "circle.com"
+	reader := &stubAssetReader{
+		byID: map[string]v1.AssetDetail{
+			"USDC-" + testUSDCIssuer: {
+				AssetID:    "USDC-" + testUSDCIssuer,
+				Type:       "classic",
+				Code:       "USDC",
+				Issuer:     &issuer,
+				HomeDomain: &domain,
+				Decimals:   7,
+				Sep1Status: "verified",
+				// Pre-populate name/desc to simulate the post-overlay state.
+				Name:        ptr("USD Coin"),
+				Description: ptr("Centre-issued USDC stablecoin"),
+			},
+		},
+	}
+	srv := v1.New(v1.Options{Assets: reader})
+	ts := httpTestServer(t, srv)
+
+	resp := mustGet(t, ts.URL+"/v1/assets/USDC-"+testUSDCIssuer+"/metadata")
+	var env struct {
+		Data v1.AssetMetadata `json:"data"`
+	}
+	mustDecode(t, resp, &env)
+
+	if env.Data.AssetID != "USDC-"+testUSDCIssuer {
+		t.Errorf("asset_id = %q, want USDC-%s", env.Data.AssetID, testUSDCIssuer)
+	}
+	if env.Data.Sep1Status != "verified" {
+		t.Errorf("sep1_status = %q, want verified", env.Data.Sep1Status)
+	}
+	if env.Data.HomeDomain == nil || *env.Data.HomeDomain != "circle.com" {
+		t.Errorf("home_domain mismatch: %+v", env.Data.HomeDomain)
+	}
+	if env.Data.Name == nil || *env.Data.Name != "USD Coin" {
+		t.Errorf("name not populated: %+v", env.Data.Name)
+	}
+	if env.Data.Description == nil || *env.Data.Description != "Centre-issued USDC stablecoin" {
+		t.Errorf("description not populated: %+v", env.Data.Description)
+	}
+}
+
+// TestAssetMetadata_NotFoundOn404 confirms that an unknown asset
+// surfaces as 404 even on the metadata endpoint — same shape as
+// /v1/assets/{id}, not a 200-with-empty-overlay.
+func TestAssetMetadata_NotFoundOn404(t *testing.T) {
+	reader := &stubAssetReader{byID: map[string]v1.AssetDetail{}} // empty
+	srv := v1.New(v1.Options{Assets: reader})
+	ts := httpTestServer(t, srv)
+
+	resp := mustGet(t, ts.URL+"/v1/assets/USDC-"+testUSDCIssuer+"/metadata")
+	if resp.StatusCode != http.StatusNotFound {
+		t.Errorf("status = %d, want 404 for unknown asset", resp.StatusCode)
+	}
+}
+
+func ptr[T any](v T) *T { return &v }
+
 // ─── helpers ──────────────────────────────────────────────────────
 
 func httpTestServer(t *testing.T, srv *v1.Server) *testServer {

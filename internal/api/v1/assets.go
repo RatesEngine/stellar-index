@@ -84,6 +84,14 @@ type AssetDetail struct {
 // detailFromAsset populates an AssetDetail from the canonical shape.
 // Nullable fields are nil-pointered when empty so JSON omits them
 // cleanly.
+//
+// This is the SCAFFOLDING path used when no AssetReader is wired
+// (tests, the dev binary before the storage layer is up). The
+// production cmd/ratesengine-api path uses its own assetToDetail
+// that consults the operator's curated home-domain map; this stub
+// version doesn't have access to that map, so HomeDomain stays nil
+// and the overlay handler stamps sep1_status="not_applicable" via
+// the existing default.
 func detailFromAsset(a canonical.Asset) AssetDetail {
 	d := AssetDetail{
 		AssetID:  a.String(),
@@ -240,6 +248,99 @@ func (s *Server) handleAssetGet(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeJSON(w, detail, Flags{})
+}
+
+// AssetMetadata is the wire shape of /v1/assets/{id}/metadata —
+// the SEP-1 overlay slice of AssetDetail without the core
+// canonical fields. Distinct endpoint for clients (Freighter,
+// wallets) that just want the metadata and not the per-asset
+// canonical info they already have. Reuses the same pointer-
+// elision-on-empty pattern as AssetDetail.
+type AssetMetadata struct {
+	AssetID         string  `json:"asset_id"`
+	HomeDomain      *string `json:"home_domain,omitempty"`
+	Sep1Status      string  `json:"sep1_status"`
+	Name            *string `json:"name,omitempty"`
+	Description     *string `json:"description,omitempty"`
+	Image           *string `json:"image,omitempty"`
+	OrgName         *string `json:"org_name,omitempty"`
+	AnchorAsset     *string `json:"anchor_asset,omitempty"`
+	AnchorAssetType *string `json:"anchor_asset_type,omitempty"`
+}
+
+// handleAssetMetadata serves GET /v1/assets/{asset_id}/metadata.
+// Same overlay-resolution path as handleAssetGet but returns ONLY
+// the SEP-1 fields. Useful for clients that need refresh of the
+// metadata slice without re-fetching the canonical asset core.
+//
+// Returns 404 when the asset isn't indexed; 200 with sep1_status =
+// "not_applicable" / "not_fetched" / "unreachable" / "no_match" /
+// "verified" otherwise. Never 503 (the resolver fail mode is
+// reflected in sep1_status, not HTTP status — same behaviour as
+// /v1/assets/{id}).
+func (s *Server) handleAssetMetadata(w http.ResponseWriter, r *http.Request) {
+	rawID := r.PathValue("asset_id")
+
+	parsed, err := canonical.ParseAsset(rawID)
+	if err != nil {
+		writeProblem(w, r,
+			"https://api.ratesengine.net/errors/invalid-asset-id",
+			"Invalid asset identifier", http.StatusBadRequest,
+			"asset_id must match: native | <code>-<G-issuer> | <C-contract> | fiat:<CODE>")
+		return
+	}
+	if err := parsed.Validate(); err != nil {
+		writeProblem(w, r,
+			"https://api.ratesengine.net/errors/invalid-asset-id",
+			"Invalid asset identifier", http.StatusBadRequest,
+			err.Error())
+		return
+	}
+
+	reader := s.assetReaderOrNil()
+	var detail AssetDetail
+	if reader != nil {
+		d, err := reader.GetAsset(r.Context(), parsed)
+		if errors.Is(err, ErrAssetNotFound) {
+			writeProblem(w, r,
+				"https://api.ratesengine.net/errors/asset-not-found",
+				"Asset not found", http.StatusNotFound,
+				"no trades or oracle observations for "+parsed.String())
+			return
+		}
+		if err != nil {
+			if clientAborted(r, err) {
+				return
+			}
+			s.logger.Error("GetAsset failed (metadata)", "err", err, "asset_id", parsed.String())
+			writeProblem(w, r,
+				"https://api.ratesengine.net/errors/internal",
+				"Internal error", http.StatusInternalServerError, "")
+			return
+		}
+		detail = d
+	} else {
+		detail = detailFromAsset(parsed)
+	}
+
+	if s.meta != nil && detail.HomeDomain != nil && *detail.HomeDomain != "" {
+		s.applySep1Overlay(r.Context(), &detail, parsed)
+	} else if detail.HomeDomain != nil && *detail.HomeDomain != "" && detail.Sep1Status == "" {
+		detail.Sep1Status = "not_fetched"
+	}
+
+	out := AssetMetadata{
+		AssetID:         detail.AssetID,
+		HomeDomain:      detail.HomeDomain,
+		Sep1Status:      detail.Sep1Status,
+		Name:            detail.Name,
+		Description:     detail.Description,
+		Image:           detail.Image,
+		OrgName:         detail.OrgName,
+		AnchorAsset:     detail.AnchorAsset,
+		AnchorAssetType: detail.AnchorAssetType,
+	}
+	writeJSON(w, out, Flags{})
 }
 
 // applySep1Overlay resolves the issuer's stellar.toml and attaches
