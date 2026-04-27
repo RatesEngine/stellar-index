@@ -22,7 +22,7 @@ require (
 	github.com/redis/go-redis/v9 v9.18.0 // Redis client (ADR-0007) — rate-limit + SEP-1 cache
 	github.com/testcontainers/testcontainers-go v0.42.0 // Integration-test Postgres container
 	github.com/testcontainers/testcontainers-go/modules/postgres v0.42.0 // Timescale-flavoured container helper
-	golang.org/x/sync v0.19.0 // singleflight for metadata/cache.go
+	golang.org/x/sync v0.20.0 // singleflight for metadata/cache.go
 )
 
 require github.com/stellar/go-stellar-sdk v0.5.0 // SCVal/XDR decoding for Soroban event connectors (ADR-0013). Pinned SHA in VERSIONS.md.
