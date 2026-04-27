@@ -134,9 +134,12 @@ func main() { //nolint:gocyclo,gocognit // subcommand switch; each case is trivi
 	}
 }
 
-func printUsage() {
-	fmt.Fprintf(os.Stderr, `ratesengine-ops %s
-
+// usageBody is the static portion of `ratesengine-ops -h`. The header
+// (with version) is prepended at print time so the binary's build
+// version shows in the output. Kept as a package-level const so the
+// printUsage func itself stays short — funlen lint counts the
+// multi-line string literal against the function it's defined in.
+const usageBody = `
 Usage:
   ratesengine-ops <subcommand>
 
@@ -245,7 +248,10 @@ TODO subcommands (land with their feature PRs):
   backfill                Replay a ledger range into the trades hypertable.
   cache-prime             Warm the Redis hot-path cache from Timescale.
   verify-invariants       Cross-check aggregated prices against divergence.
-`, version.String())
+`
+
+func printUsage() {
+	fmt.Fprintf(os.Stderr, "ratesengine-ops %s\n%s", version.String(), usageBody)
 }
 
 // listCursors loads the storage layer and prints every per-source
