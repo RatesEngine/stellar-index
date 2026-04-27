@@ -132,6 +132,11 @@ func main() { //nolint:gocyclo,gocognit,funlen // subcommand switch; each case i
 			fmt.Fprintf(os.Stderr, "backfill: %v\n", err)
 			os.Exit(1)
 		}
+	case "hubble-check":
+		if err := hubbleCheck(args[1:]); err != nil {
+			fmt.Fprintf(os.Stderr, "hubble-check: %v\n", err)
+			os.Exit(1)
+		}
 	case "version", "--version", "-v":
 		fmt.Println(version.String())
 	case "help", "--help", "-h":
@@ -267,6 +272,27 @@ Subcommands:
                               -from 2024-01-01T00:00:00Z \
                               -to   2024-12-31T00:00:00Z \
                               -granularity 1h
+  hubble-check -config PATH -from N -to N -bigquery-project PROJ [-max-mismatches N] [-dry-run-bytes]
+                          Cross-check our SDEX trades against SDF's
+                          published hubble-public.crypto_stellar.history_trades
+                          BigQuery table for the same ledger range.
+                          Reports every ledger where the counts disagree.
+                          Catches decoder coverage gaps + over-eager
+                          decoding on classic SDEX (ManageOffer +
+                          classic LP) which Tier A/B/D/E (bytes-level)
+                          and cross-region-check (intra-fleet) do not.
+                          Soroban DEXes have no decoded Hubble counterpart;
+                          covered by the per-WASM decoder audit instead.
+                          Off-chain sources (CEX/FX) are out of scope.
+                          Auth: Application Default Credentials (run
+                          gcloud auth application-default login first).
+                          Cost: ~$0.05 per 1M-ledger range at on-demand
+                          pricing. Use -dry-run-bytes for a pre-flight
+                          estimate. Example:
+                            ratesengine-ops hubble-check \
+                              -config /etc/ratesengine.toml \
+                              -from 21000000 -to 22000000 \
+                              -bigquery-project my-gcp-project
   backfill -config PATH -from N -to N [-source S,S,...] [-bucket NAME] [-dry-run]
                           Replay a bounded ledger range through the
                           full ingest pipeline (galexie → dispatcher
