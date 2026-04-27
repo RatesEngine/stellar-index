@@ -103,6 +103,31 @@ type Metadata struct {
 	// here (30-day cap at 1h is too shallow to matter); Binance and
 	// Bitstamp would be true.
 	BackfillAvailable bool
+	// BackfillSafe reports whether this source's decoder is safe to
+	// run during a backfill against historical ledgers.
+	//
+	// For on-chain Soroban sources (soroswap, aquarius, phoenix, …)
+	// "safe" means the decoder has been audited against every WASM
+	// version that ran for the replay range — Soroban contracts can
+	// `update_contract` in place without changing their address, so
+	// event body schemas can vary across the same contract over time.
+	// Live ingest only ever sees current WASM; backfill sees every
+	// prior version. Decoding old events with a current-only decoder
+	// produces silently wrong trades. See CLAUDE.md "Soroban DeFi
+	// contracts upgrade in place" + docs/architecture/contract-
+	// schema-evolution.md for the full picture.
+	//
+	// For off-chain sources (CEX/FX/aggregator/oracle-via-API)
+	// BackfillSafe is always true: their backfill hits a vendor REST
+	// endpoint whose schema we control via the connector code, not a
+	// historical on-chain artifact. SDEX is also true (classic
+	// Stellar, no WASM upgrades).
+	//
+	// This flag gates `ratesengine-ops backfill` from running a
+	// source against historical ranges before its decoder has been
+	// audited. Default-false for on-chain Soroban sources; flip to
+	// true per-source as `wasm-history` audits land.
+	BackfillSafe bool
 }
 
 // Connector is the common root interface. Every venue package

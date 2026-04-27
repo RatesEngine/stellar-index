@@ -59,6 +59,56 @@ func TestRegistry_FailClosedOnUnknown(t *testing.T) {
 	}
 }
 
+// TestRegistry_BackfillSafePolicy locks down the WASM-aware default:
+// every on-chain Soroban source starts at BackfillSafe=false until its
+// decoder has been audited against every WASM version that ran for the
+// replay range. SDEX (classic, no WASM) and every off-chain source are
+// BackfillSafe=true. Unknown sources fall back to false (fail-closed).
+//
+// Flipping a source from false→true is the *only* allowed direction,
+// and only after a wasm-history audit. This test exists to make the
+// flip a deliberate, reviewed change rather than a quiet flag toggle.
+func TestRegistry_BackfillSafePolicy(t *testing.T) {
+	wantUnsafe := []string{
+		// Soroban DeFi — `update_contract` can change event schemas
+		// without changing the contract address. See CLAUDE.md.
+		"soroswap", "aquarius", "phoenix", "comet",
+		// Soroban oracles — same upgradeability concern.
+		"reflector-dex", "reflector-cex", "reflector-fx",
+		"redstone", "band",
+	}
+	for _, name := range wantUnsafe {
+		if Registry[name].BackfillSafe {
+			t.Errorf("source %q has BackfillSafe=true but is on-chain Soroban; flip only after wasm-history audit lands", name)
+		}
+		if BackfillSafe(name) {
+			t.Errorf("BackfillSafe(%q) returned true; must be false until per-WASM-hash audit completes", name)
+		}
+	}
+
+	wantSafe := []string{
+		"sdex", // classic Stellar, no WASM
+		"binance", "kraken", "bitstamp", "coinbase", "bitfinex",
+		"polygon-forex", "exchangeratesapi",
+		"coingecko", "coinmarketcap", "cryptocompare",
+		"ecb", "fed-h10",
+	}
+	for _, name := range wantSafe {
+		if !Registry[name].BackfillSafe {
+			t.Errorf("source %q must be BackfillSafe=true (off-chain or pre-Soroban)", name)
+		}
+		if !BackfillSafe(name) {
+			t.Errorf("BackfillSafe(%q) returned false; off-chain + SDEX have no on-chain WASM dependency", name)
+		}
+	}
+
+	// Unknown source → fail-closed false. An unaudited or typoed
+	// source must never be allowed to run a backfill.
+	if BackfillSafe("definitely-not-a-real-source") {
+		t.Error("BackfillSafe on unknown source returned true; must fail-closed false")
+	}
+}
+
 func TestEvents_SourceFieldDelegatesToCanonical(t *testing.T) {
 	// The consumer.Event contract's Source() method labels metrics
 	// by venue. For external sources where one TradeEvent type
