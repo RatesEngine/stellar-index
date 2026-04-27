@@ -49,7 +49,7 @@ See [_template.md](_template.md) for the boilerplate.
 | [0005](0005-monorepo.md) | Accepted | Monorepo with one Go module | 2026-04-22 |
 | [0006](0006-timescaledb-for-price-time-series.md) | Accepted | TimescaleDB for price time-series storage | 2026-04-22 |
 | [0007](0007-redis-cache-schema.md) | Accepted | Redis as hot-path cache + rate-limit + ephemeral state | 2026-04-22 |
-| 0008 | *Planned* | HA topology (referenced by coverage-matrix S9.1) | — |
+| [0008](0008-ha-topology.md) | Accepted | Per-region HA topology — colo primary + cloud DR, three-tier hot/warm/cold storage | 2026-04-27 |
 | 0009 | *Planned* | Possible follow-up to 0007 (referenced by coverage-matrix S9.2) | — |
 | [0010](0010-off-chain-fiat-representation.md) | Accepted | Off-chain fiat currencies as AssetType "fiat" | 2026-04-22 |
 | [0011](0011-supply-algorithm.md) | Accepted | Three-domain supply algorithm — XLM hard-coded, classic from ledger entries, SEP-41 from event sums | 2026-04-27 |

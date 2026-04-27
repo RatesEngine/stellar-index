@@ -1,7 +1,7 @@
 ---
 title: High-Availability Infrastructure Plan
-last_verified: 2026-04-22
-status: draft — Week 1 design artefact, ratified at Week 2 design review
+last_verified: 2026-04-27
+status: ratified — binding decisions in [ADR-0008](../adr/0008-ha-topology.md); long-form design here
 ---
 
 # High-Availability Infrastructure Plan
