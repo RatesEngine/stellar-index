@@ -1,0 +1,248 @@
+---
+title: SEP-1 stellar.toml resolution — operational reference
+last_verified: 2026-04-27
+status: living procedure
+---
+
+# SEP-1 stellar.toml resolution — operational reference
+
+Companion to [`docs/discovery/data-sources/sep1-home-domain.md`](../discovery/data-sources/sep1-home-domain.md)
+(the design-time audit). This doc covers the **runtime** + **on-call**
+concerns that don't fit a design audit:
+
+- HTTP failure-mode handling per home-domain
+- Cache invalidation policy
+- SSRF guard playbook
+- Operator-facing instructions
+
+The implementation lives in `internal/metadata/`; see that
+package's [`doc.go`](../../internal/metadata/doc.go) for the
+in-code overview.
+
+## Resolution flow
+
+```
+asset request →
+  v1/assets/{id} handler →
+    metadata.Cache.Get(home_domain)
+      ↓ Redis HIT (15-min TTL)
+        return cached SEP1 struct
+      ↓ Redis MISS
+        singleflight gate (one fetch per home_domain at a time)
+        metadata.Resolver.Resolve(home_domain)
+          ↓ HTTP GET https://<home_domain>/.well-known/stellar.toml
+              ↓ DNS resolve → SSRF guard (private/loopback/link-local rejected)
+              ↓ TLS handshake (5s timeout)
+              ↓ HTTP read (10s total budget)
+              ↓ TOML parse
+          ↓ on success: write to Redis with 15-min TTL, return SEP1
+          ↓ on failure: return error to caller; DO NOT cache the error
+```
+
+Every parameter — TTL, timeouts, SSRF allow-list — is documented
+in `cachekeys.TOMLTTL` / `metadata.ResolverConfig` and bound by the
+ADR-0007 Redis cache schema (`toml:<domain>` namespace).
+
+## Failure modes
+
+### 404 from upstream
+
+The home-domain server returns 404 for `/.well-known/stellar.toml`.
+Common causes:
+
+- Issuer hasn't published a SEP-1 file (most cases — many small
+  issuers don't bother).
+- Issuer rotated the file path (very rare; SEP-1 mandates the
+  `.well-known` location).
+
+**Resolver behaviour:** returns `ErrSEP1NotFound`. **Cache
+behaviour:** the error is NOT cached (per design — a transient
+404 during a deployment shouldn't poison the cache for 15 min).
+**Handler behaviour:** asset overlay degrades cleanly — fields
+that come from SEP-1 are reported as `null`, the `home_domain`
+field on the asset response stays populated from the `AccountEntry`,
+the `sep1_status` field is set to `"not_found"`.
+
+**On-call action:** none if a single asset is affected; investigate
+if many home-domains report `not_found` simultaneously (suggests a
+network egress problem on our side, not the issuers').
+
+### TLS / connection error
+
+Common causes:
+
+- Issuer's TLS cert expired
+- Hosting provider DNS down
+- HTTPS-redirect loop
+- Cert issued for a different name (CN mismatch)
+
+**Resolver behaviour:** returns `ErrSEP1HTTP` wrapping the network
+error. **Handler behaviour:** same as 404 — overlay degrades,
+`sep1_status` becomes `"unreachable"`.
+
+**On-call action:** scoped to that asset. The `host-down` and
+`scrape-failing` runbooks don't apply here — this is third-party
+infrastructure.
+
+### Timeout
+
+`metadata.ResolverConfig.HTTPTimeout` (default 10s) is the total
+read budget. Slow issuers can blow this; we don't tune it per
+host because that defeats the bound.
+
+**Resolver behaviour:** `ErrSEP1Timeout`. **Cache:** not cached.
+**Alert:** `ratesengine_metadata_resolver_timeout_total` increases
+beyond baseline (P3 alert, designed but not yet shipping at v1).
+
+### TOML parse error
+
+The fetched bytes don't parse as valid TOML. Causes seen in the wild:
+
+- Issuer's CMS injected HTML around the TOML
+- BOM byte at the start (not always handled by the TOML parser)
+- Trailing garbage
+- Invalid UTF-8 sequences
+
+**Resolver behaviour:** `ErrSEP1MalformedTOML`. **On-call action:**
+report the issuer; we don't try to "fix" their published file.
+
+### SSRF rejection
+
+The `metadata.Resolver` resolves DNS first, then checks the
+resolved IP against a private-range deny-list:
+
+- IPv4 RFC 1918: 10/8, 172.16/12, 192.168/16
+- IPv4 loopback: 127/8
+- IPv4 link-local: 169.254/16 (catches AWS instance metadata
+  service — `169.254.169.254`)
+- IPv4 multicast: 224/4
+- IPv6 RFC 4193 (private): fc00::/7
+- IPv6 loopback: ::1
+- IPv6 link-local: fe80::/10
+
+**Resolver behaviour:** `ErrSEP1PrivateIP`. **On-call action:**
+malicious-issuer event — investigate. The `home_domain` value on
+the affected asset's account is operator-supplied but came from
+the chain (issuer set it via `SetOptionsOp`); the offender is the
+issuer, not us. Report to the security mailing list per
+[security.md](../../SECURITY.md).
+
+## Cache invalidation
+
+The 15-min TTL handles routine staleness. Three cases need
+explicit invalidation:
+
+### 1. Issuer publishes a corrected stellar.toml
+
+After a fix the issuer wants visible immediately. Invalidate the
+single key:
+
+```sh
+redis-cli -h <redis-master> DEL "toml:<home_domain>"
+```
+
+The next request triggers a fresh fetch. Singleflight ensures
+only one fetch even if many requests pile up at once.
+
+### 2. Asset's `home_domain` changes on chain
+
+Issuer sets a new `home_domain` via `SetOptionsOp`. The trades
+hypertable + asset metadata table observe this in the
+LedgerEntryChange stream. The OLD home-domain's cache entry is
+still valid (it's the toml content that hasn't changed); the
+asset's link to it is what flipped.
+
+The asset-overlay handler reads the asset's CURRENT home_domain
+and looks up the cache by that key. So a domain change is
+self-resolving — no operator action needed unless the operator
+specifically wants to evict the OLD domain's cache entry.
+
+### 3. Bulk eviction (post-incident)
+
+If a CDN or DNS provider issue caused many issuers to look broken
+simultaneously, we may have cached degraded responses. Evict the
+whole namespace:
+
+```sh
+redis-cli -h <redis-master> --scan --pattern "toml:*" | \
+  xargs -n 100 redis-cli -h <redis-master> DEL
+```
+
+Sub-second on a few hundred entries. Won't melt Redis. Subsequent
+asset requests trigger fresh fetches; singleflight gates the
+thundering herd.
+
+## Operator-facing tasks
+
+### Adding a curated home-domain override
+
+Some issuers don't publish stellar.toml; we want the asset detail
+to still display useful metadata. The operator config has a
+per-asset override map:
+
+```yaml
+# config/asset_metadata_overrides.yaml
+overrides:
+  "USDC:GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN":
+    name: "USD Coin"
+    desc: "USDC issued by Circle on Stellar"
+    image: "https://example.cdn/usdc.png"
+    max_supply: null  # uncapped
+```
+
+Override values stamp `sep1_status: "operator_override"` on the
+asset response so consumers know the source.
+
+### Removing a stale override
+
+Same file; delete the entry. Server reloads on SIGHUP (no restart
+needed) — the resolver picks up the new map within one request.
+
+### Tracing a specific asset's resolution
+
+`ratesengine-ops sep1-trace -domain <home_domain>` (Phase 5
+deliverable; not yet implemented) would dump the full resolution
+path: DNS, IP, SSRF check result, HTTP status, parsed fields.
+For now the manual playbook is:
+
+```sh
+# 1. Confirm what the API sees
+curl -sf https://api.ratesengine.net/v1/assets/<asset_id> | jq .
+
+# 2. Confirm what the cache holds
+redis-cli -h <redis-master> GET "toml:<home_domain>"
+
+# 3. Bypass the cache, hit the issuer directly
+curl -sfL "https://<home_domain>/.well-known/stellar.toml"
+
+# 4. If 1 and 3 disagree but 2 looks stale, force-refresh:
+redis-cli -h <redis-master> DEL "toml:<home_domain>"
+```
+
+## Metrics + alerts
+
+The `internal/metadata` package emits these counters / gauges via
+`internal/obs`:
+
+- `ratesengine_metadata_resolver_requests_total{status}` —
+  status ∈ {ok, not_found, http_error, timeout, parse_error,
+  private_ip_blocked}.
+- `ratesengine_metadata_cache_hits_total` /
+  `ratesengine_metadata_cache_misses_total`.
+- `ratesengine_metadata_resolver_duration_seconds` histogram.
+
+Alert: `ratesengine_metadata_resolver_error_rate_high` (P3 in
+[alerts-catalog.md](alerts-catalog.md) — "designed but not yet
+shipping" pending Phase-5 wiring of the metadata overlay into
+the asset handler).
+
+## References
+
+- Design doc: [`docs/discovery/data-sources/sep1-home-domain.md`](../discovery/data-sources/sep1-home-domain.md)
+- Cache schema: [ADR-0007](../adr/0007-redis-cache-schema.md)
+  (`toml:<domain>` namespace, 15-min TTL)
+- Supply policy: [ADR-0011](../adr/0011-supply-algorithm.md) (uses
+  SEP-1 `[[CURRENCIES]].max_supply` as the off-chain max-supply
+  source)
+- Package: `internal/metadata/`
+- SEP-1 spec: <https://github.com/stellar/stellar-protocol/blob/master/ecosystem/sep-0001.md>

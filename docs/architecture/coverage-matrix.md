@@ -141,7 +141,7 @@ Any row with **status ❌** is a blocker for launch. Any row with
 | F1.3 | Asset Type enum (`classic`/`soroban`) | §Asset Identification | 4 | `pkg/types.AssetType` | — | [dexes-amms/sdex.md](../discovery/dexes-amms/sdex.md) | ✅ verified | 5 |
 | F1.4 | Issuer Address (G…) | §Asset Identification | 4 | `pkg/types.ClassicAsset` | — | [protocol-versions.md](../discovery/protocol-versions.md) | ✅ verified | 5 |
 | F1.5 | Contract Address (C…) | §Asset Identification | 4 | `pkg/types.SorobanAsset` | — | [notes/sep-41-token-events.md](../discovery/notes/sep-41-token-events.md) | ✅ verified | 5 |
-| F1.6 | Home Domain (SEP-1) | §Asset Identification (needs proposal amendment) | 5 | `internal/metadata/homedomain` | ADR-0010 (planned: SEP-1 cache) | [data-sources/sep1-home-domain.md](../discovery/data-sources/sep1-home-domain.md) | 🧪 designed | 3 |
+| F1.6 | Home Domain (SEP-1) | §Asset Identification (needs proposal amendment) | 5 | `internal/metadata` | [ADR-0007](../adr/0007-redis-cache-schema.md) (SEP-1 cache, 15-min TTL) | [data-sources/sep1-home-domain.md](../discovery/data-sources/sep1-home-domain.md) + [operations/sep1-resolution.md](../operations/sep1-resolution.md) | ✅ verified resolver + cache; overlay handlers Phase 5 | 4 |
 
 ## Freighter RFP — V1: Historical price chart
 
@@ -156,7 +156,7 @@ Same as S7. No additional requirement.
 | F2.3 | 24h Trading Volume (USD) | §V2 | 6 | Timescale materialised view | ADR-0007 | cross-cutting | 🧪 designed | 3 |
 | F2.4 | Circulating Supply (provider-supplied) | §V2 | 6 | `internal/supply/circulating` | [ADR-0011](../adr/0011-supply-algorithm.md) | [data-sources/supply-data.md](../discovery/data-sources/supply-data.md) | 🧪 designed | 3 |
 | F2.5 | Total Supply (mint − burn − clawback) | §V2 | 6 | `internal/supply/total` | — | [notes/sep-41-token-events.md](../discovery/notes/sep-41-token-events.md) | ✅ verified math; impl pending | 4 |
-| F2.6 | Max Supply (nullable, off-chain metadata) | §V2 | 6 | `internal/metadata/maxsupply` | ADR-0010 | [data-sources/sep1-home-domain.md](../discovery/data-sources/sep1-home-domain.md) | 🧪 designed | 2 |
+| F2.6 | Max Supply (nullable, off-chain metadata) | §V2 | 6 | `internal/metadata` | [ADR-0011](../adr/0011-supply-algorithm.md) (no-fabrication policy) + [ADR-0007](../adr/0007-redis-cache-schema.md) (cache) | [data-sources/sep1-home-domain.md](../discovery/data-sources/sep1-home-domain.md) + [operations/sep1-resolution.md](../operations/sep1-resolution.md) | 🧪 designed | 2 |
 
 ## Freighter RFP — Performance SLAs
 
