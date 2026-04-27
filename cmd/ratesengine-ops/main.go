@@ -26,6 +26,7 @@ import (
 	"text/tabwriter"
 	"time"
 
+	"github.com/stellar/go-stellar-sdk/strkey"
 	"github.com/stellar/go-stellar-sdk/support/datastore"
 	sdkxdr "github.com/stellar/go-stellar-sdk/xdr"
 
@@ -110,6 +111,11 @@ func main() { //nolint:gocyclo // subcommand switch; each case is trivial, split
 			fmt.Fprintf(os.Stderr, "verify-archive: %v\n", err)
 			os.Exit(1)
 		}
+	case "wasm-history":
+		if err := wasmHistory(args[1:]); err != nil {
+			fmt.Fprintf(os.Stderr, "wasm-history: %v\n", err)
+			os.Exit(1)
+		}
 	case "version", "--version", "-v":
 		fmt.Println(version.String())
 	case "help", "--help", "-h":
@@ -183,6 +189,20 @@ Subcommands:
                                        -archivist-timeout (default 30m).
                             all        run all four.
                           Exit 0 = clean; 1 = first break with details.
+  wasm-history -config PATH -contracts ID,ID,... [-from N] [-to N] [-bucket NAME]
+                          Walk a galexie bucket and emit a per-contract
+                          WASM-version timeline. For each watched contract,
+                          tracks every change to its instance's executable
+                          hash and reports the active ledger range per hash.
+                          Read-only audit; no DB writes. Output is JSON to
+                          stdout. Defaults to S3BucketArchive (the historical
+                          bucket) — pass -bucket to override.
+                          Example:
+                            ratesengine-ops wasm-history \
+                              -config /etc/ratesengine.toml \
+                              -from 21000000 -to 25000000 \
+                              -contracts CDLZ...,CARFAC... \
+                              > soroswap-wasm-history.json
   backfill-external -config PATH -source SRC -pair SYM -from TS -to TS -granularity D
                           Pull historical candles from an external venue
                           (binance / kraken / bitstamp / coinbase) and
@@ -1872,4 +1892,297 @@ func extractLedgerHeader(lcm sdkxdr.LedgerCloseMeta) (sdkxdr.LedgerHeader, bool)
 // hashToHex renders an xdr.Hash as a lowercase 64-char hex string.
 func hashToHex(h sdkxdr.Hash) string {
 	return hex.EncodeToString(h[:])
+}
+
+// ─── wasm-history ───────────────────────────────────────────────
+//
+// wasmHistory walks a galexie bucket over [from, to] and tracks
+// when each watched contract's instance executable hash changes.
+// Detection signal: any LedgerEntryChange (Created or Updated)
+// whose entry is a CONTRACT_DATA with a LedgerKeyContractInstance
+// key — that's the contract's instance row, and its Val is an
+// ScContractInstance whose Executable field carries the WASM hash.
+// Both deploys and `update_current_contract_wasm` invocations
+// surface the same way.
+//
+// Output: a JSON document keyed by contract C-strkey, with the
+// timeline of (wasm_hash, from_ledger, to_ledger) ranges.
+// Read-only — no DB writes, no Timescale, no cursor changes.
+//
+// Default bucket is cfg.Storage.S3BucketArchive (historical) since
+// audits typically span ranges before galexie-live's seam.
+
+type wasmRange struct {
+	WasmHash   string `json:"wasm_hash"`
+	FromLedger uint32 `json:"from_ledger"`
+	ToLedger   uint32 `json:"to_ledger,omitempty"` // 0 = open / current
+}
+
+type contractHistory struct {
+	Contract string      `json:"contract"`
+	Ranges   []wasmRange `json:"ranges"`
+}
+
+// wasmContractState tracks the open (most recently seen) WASM hash
+// for one contract, plus the closed ranges that preceded it.
+type wasmContractState struct {
+	ranges  []wasmRange
+	current string // current open WASM hash hex; empty = no open range
+}
+
+func wasmHistory(args []string) error { //nolint:funlen,gocognit,gocyclo // linear diagnostic, splitting reduces readability
+	fs := flag.NewFlagSet("wasm-history", flag.ContinueOnError)
+	cfgPath := fs.String("config", "", "Path to TOML config file (required)")
+	from := fs.Uint("from", 2, "First ledger sequence (inclusive)")
+	to := fs.Uint("to", 0, "Last ledger sequence (inclusive). 0 → run unbounded until ctx cancellation.")
+	contractsCSV := fs.String("contracts", "",
+		"Comma-separated contract C-strkey IDs to watch (required, at least one)")
+	bucket := fs.String("bucket", "",
+		"Galexie bucket name. Default: cfg.Storage.S3BucketArchive.")
+	progressEvery := fs.Uint("progress-every", 100_000, "Emit progress lines to stderr every N ledgers")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	if *cfgPath == "" {
+		return fmt.Errorf("-config is required")
+	}
+	if *contractsCSV == "" {
+		return fmt.Errorf("-contracts is required (one or more comma-separated C-strkey IDs)")
+	}
+
+	cfg, err := config.LoadWithEnv(*cfgPath)
+	if err != nil {
+		return err
+	}
+
+	// Decode the watch list to fixed 32-byte hashes for cheap matching.
+	watch := make(map[sdkxdr.Hash]string) // hash → C-strkey (for output)
+	for _, s := range strings.Split(*contractsCSV, ",") {
+		s = strings.TrimSpace(s)
+		if s == "" {
+			continue
+		}
+		raw, err := strkey.Decode(strkey.VersionByteContract, s)
+		if err != nil {
+			return fmt.Errorf("invalid contract ID %q: %w", s, err)
+		}
+		if len(raw) != 32 {
+			return fmt.Errorf("contract ID %q decoded to %d bytes, expected 32", s, len(raw))
+		}
+		var h sdkxdr.Hash
+		copy(h[:], raw)
+		watch[h] = s
+	}
+	if len(watch) == 0 {
+		return fmt.Errorf("-contracts parsed to empty watch list")
+	}
+
+	bucketName := *bucket
+	if bucketName == "" {
+		bucketName = cfg.Storage.S3BucketArchive
+	}
+	fmt.Fprintf(os.Stderr, "wasm-history: watching %d contract(s), bucket=%s, range=[%d, %d]\n",
+		len(watch), bucketName, *from, *to)
+
+	lsCfg := ledgerstream.Config{
+		DataStore: datastore.DataStoreConfig{
+			Type: "S3",
+			Params: map[string]string{
+				"destination_bucket_path": bucketName,
+				"region":                  cfg.Storage.S3Region,
+				"endpoint_url":            cfg.Storage.S3Endpoint,
+			},
+			NetworkPassphrase: cfg.Stellar.Passphrase(),
+			Compression:       "zstd",
+		},
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	state := make(map[sdkxdr.Hash]*wasmContractState, len(watch))
+
+	scanned := uint64(0)
+	startedAt := time.Now()
+	lastProgress := startedAt
+
+	err = ledgerstream.Stream(ctx, lsCfg, uint32(*from), uint32(*to),
+		func(lcm sdkxdr.LedgerCloseMeta) error {
+			seq := lcm.LedgerSequence()
+			scanLCMForWasmChanges(lcm, watch, state, seq)
+			scanned++
+			if *progressEvery > 0 && scanned%uint64(*progressEvery) == 0 && time.Since(lastProgress) > 5*time.Second {
+				rate := float64(scanned) / time.Since(startedAt).Seconds()
+				fmt.Fprintf(os.Stderr, "wasm-history: ledger %d, %d scanned, %.0f ledgers/s\n",
+					seq, scanned, rate)
+				lastProgress = time.Now()
+			}
+			return nil
+		},
+	)
+	if err != nil && !errors.Is(err, context.Canceled) {
+		return fmt.Errorf("stream: %w", err)
+	}
+
+	fmt.Fprintf(os.Stderr, "\nwasm-history: scanned %d ledgers in %s\n",
+		scanned, time.Since(startedAt).Round(time.Second))
+
+	// Render: stable order by C-strkey for deterministic output.
+	out := make([]contractHistory, 0, len(watch))
+	for h, s := range state {
+		out = append(out, contractHistory{
+			Contract: watch[h],
+			Ranges:   s.ranges,
+		})
+	}
+	// Also emit watched contracts that produced zero changes — useful
+	// signal that the audit ran and saw nothing rather than was misconfigured.
+	for h, name := range watch {
+		if _, seen := state[h]; !seen {
+			out = append(out, contractHistory{Contract: name, Ranges: nil})
+		}
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].Contract < out[j].Contract })
+
+	enc := json.NewEncoder(os.Stdout)
+	enc.SetIndent("", "  ")
+	return enc.Encode(out)
+}
+
+// scanLCMForWasmChanges walks every operation's LedgerEntryChanges
+// in lcm and updates state when a watched contract's instance
+// executable hash changes (or first appears).
+//
+// Both pre-V3 (no Soroban) and post-V3 transaction metas are
+// handled — pre-V3 contributes nothing because contracts didn't
+// exist, but the function returns silently rather than erroring
+// so it can scan a full backfill range without per-protocol gating.
+func scanLCMForWasmChanges(
+	lcm sdkxdr.LedgerCloseMeta,
+	watch map[sdkxdr.Hash]string,
+	state map[sdkxdr.Hash]*wasmContractState,
+	seq uint32,
+) {
+	v1, ok := lcm.GetV1()
+	if !ok {
+		return // pre-V1 LCM (very old ledgers); no Soroban; nothing to scan
+	}
+	for i := range v1.TxProcessing {
+		txMeta := v1.TxProcessing[i].TxApplyProcessing
+		var ops []sdkxdr.LedgerEntryChanges
+		switch {
+		case txMeta.V3 != nil:
+			for _, op := range txMeta.V3.Operations {
+				ops = append(ops, op.Changes)
+			}
+		case txMeta.V4 != nil:
+			for _, op := range txMeta.V4.Operations {
+				ops = append(ops, op.Changes)
+			}
+		default:
+			// V1/V2 didn't have ContractData. Skip.
+			continue
+		}
+		for _, changes := range ops {
+			for _, change := range changes {
+				scanLedgerEntryChange(change, watch, state, seq)
+			}
+		}
+	}
+}
+
+// scanLedgerEntryChange checks one LedgerEntryChange for a
+// watched-contract instance update. Updates state in place.
+func scanLedgerEntryChange(
+	change sdkxdr.LedgerEntryChange,
+	watch map[sdkxdr.Hash]string,
+	state map[sdkxdr.Hash]*wasmContractState,
+	seq uint32,
+) {
+	var entry *sdkxdr.LedgerEntry
+	switch change.Type {
+	case sdkxdr.LedgerEntryChangeTypeLedgerEntryCreated:
+		entry = change.Created
+	case sdkxdr.LedgerEntryChangeTypeLedgerEntryUpdated:
+		entry = change.Updated
+	case sdkxdr.LedgerEntryChangeTypeLedgerEntryRestored:
+		// Restored counts as "the entry exists at this hash again" —
+		// treat like Created for tracking purposes.
+		entry = change.Restored
+	default:
+		return
+	}
+	if entry == nil {
+		return
+	}
+
+	cd, ok := entry.Data.GetContractData()
+	if !ok {
+		return
+	}
+
+	// Only the LedgerKeyContractInstance row carries the executable;
+	// per-storage-key data rows have unrelated keys.
+	if cd.Key.Type != sdkxdr.ScValTypeScvLedgerKeyContractInstance {
+		return
+	}
+
+	// Match against our watch list. ContractId is *Hash on the
+	// ScAddress union when Type == ScAddressTypeScAddressTypeContract.
+	if cd.Contract.Type != sdkxdr.ScAddressTypeScAddressTypeContract {
+		return
+	}
+	if cd.Contract.ContractId == nil {
+		return
+	}
+	contractHash := sdkxdr.Hash(*cd.Contract.ContractId)
+	if _, watched := watch[contractHash]; !watched {
+		return
+	}
+
+	// The Val should be an ScContractInstance carrying an Executable.
+	if cd.Val.Type != sdkxdr.ScValTypeScvContractInstance {
+		return
+	}
+	inst, ok := cd.Val.GetInstance()
+	if !ok {
+		return
+	}
+	if inst.Executable.Type != sdkxdr.ContractExecutableTypeContractExecutableWasm {
+		// Stellar-asset contracts have no WASM; skip them but record
+		// a placeholder hash so the timeline is unambiguous.
+		recordWasmTransition(state, contractHash, "stellar-asset", seq)
+		return
+	}
+	if inst.Executable.WasmHash == nil {
+		return
+	}
+	hashHex := hex.EncodeToString(inst.Executable.WasmHash[:])
+	recordWasmTransition(state, contractHash, hashHex, seq)
+}
+
+// recordWasmTransition advances a contract's history when its
+// executable hash differs from the previously seen one. First-seen
+// opens an initial range; same-hash repeats are no-ops.
+func recordWasmTransition(
+	state map[sdkxdr.Hash]*wasmContractState,
+	contract sdkxdr.Hash,
+	wasmHash string,
+	seq uint32,
+) {
+	s, ok := state[contract]
+	if !ok {
+		s = &wasmContractState{}
+		state[contract] = s
+	}
+	if s.current == wasmHash {
+		return // no transition
+	}
+	// Close the previous open range (if any).
+	if s.current != "" && len(s.ranges) > 0 {
+		s.ranges[len(s.ranges)-1].ToLedger = seq - 1
+	}
+	// Open a new range at this ledger.
+	s.ranges = append(s.ranges, wasmRange{WasmHash: wasmHash, FromLedger: seq})
+	s.current = wasmHash
 }
