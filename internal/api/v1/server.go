@@ -46,6 +46,7 @@ type Server struct {
 	oracle    OracleReader
 	meta      MetadataResolver
 	cors      middleware.Middleware
+	auth      middleware.Middleware
 	rateLimit middleware.Middleware
 	mux       *http.ServeMux
 	started   time.Time
@@ -91,6 +92,15 @@ type Options struct {
 	// drawn from cfg.API.AllowedOrigins.
 	CORS middleware.Middleware
 
+	// Auth, when non-nil, is inserted between CORS and RateLimit.
+	// Sets a Subject in the request context that downstream
+	// middleware (rate-limit, request logger) and handlers can
+	// read via [auth.SubjectFrom]. Typically constructed via
+	// middleware.Auth(middleware.AuthOptions{Mode: cfg.API.AuthMode, …}).
+	// Leave nil for legacy "no auth, anonymous-only" behaviour;
+	// the rate-limit middleware then keys on RemoteIP only.
+	Auth middleware.Middleware
+
 	// RateLimit, when non-nil, is appended to the middleware stack
 	// as the innermost wrapper — so the Logger middleware has
 	// already populated remote_ip into the request context.
@@ -115,6 +125,7 @@ func New(opts Options) *Server {
 		oracle:    opts.Oracle,
 		meta:      opts.Meta,
 		cors:      opts.CORS,
+		auth:      opts.Auth,
 		rateLimit: opts.RateLimit,
 		mux:       http.NewServeMux(),
 		started:   time.Now().UTC(),
@@ -154,6 +165,12 @@ func (s *Server) Handler() http.Handler {
 	}
 	if s.cors != nil {
 		stack = append(stack, s.cors)
+	}
+	// Auth runs INSIDE CORS (so preflight OPTIONS short-circuits
+	// before any credential check) but OUTSIDE RateLimit (so
+	// per-tier limits see the authenticated Subject in context).
+	if s.auth != nil {
+		stack = append(stack, s.auth)
 	}
 	if s.rateLimit != nil {
 		stack = append(stack, s.rateLimit)
