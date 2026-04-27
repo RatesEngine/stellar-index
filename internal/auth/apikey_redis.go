@@ -49,10 +49,21 @@ type RedisAPIKeyValidator struct {
 // time and are interpreted as "no constraint" (no expiry / not
 // revoked).
 type APIKeyRecord struct {
+	// KeyID — public-safe identifier for this key. Distinct from
+	// the secret hash (the Redis key) so it can appear in logs and
+	// /v1/account/me responses without leaking the credential.
+	// Generated at issuance time; stable for the key's lifetime.
+	KeyID string `json:"key_id"`
+
 	// Identifier — owner-account reference. Plain string; the
 	// validator passes it through to [Subject.Identifier]. Used as
 	// the rate-limit bucket key for the apikey tier.
 	Identifier string `json:"identifier"`
+
+	// Label — human-readable name set by the customer at creation
+	// (`/v1/account/keys` POST body). Unused by the auth layer;
+	// surfaced via /v1/account/me. Optional.
+	Label string `json:"label,omitempty"`
 
 	// Tier — the [Tier] this key authenticates as. Production
 	// records carry [TierAPIKey]; an operator key may use
@@ -62,6 +73,16 @@ type APIKeyRecord struct {
 	// Scopes — optional capability list. Empty slice and absent are
 	// equivalent ("no special scopes").
 	Scopes []string `json:"scopes,omitempty"`
+
+	// RateLimitPerMin — overrides the per-tier default (zero means
+	// "use the tier default"). Set to a non-zero value for paid
+	// customers on a custom plan.
+	RateLimitPerMin int `json:"rate_limit_per_min,omitempty"`
+
+	// CreatedAt — when the key was issued. Required — the
+	// /v1/account/me response surfaces it. The store sets it on
+	// Create; the validator passes it through.
+	CreatedAt time.Time `json:"created_at,omitempty"`
 
 	// ExpiresAt — zero means never. A non-zero value in the past
 	// triggers [ErrTokenExpired].
@@ -142,9 +163,12 @@ func (v *RedisAPIKeyValidator) Lookup(ctx context.Context, key string) (Subject,
 		tier = TierAPIKey
 	}
 	return Subject{
-		Identifier: rec.Identifier,
-		Tier:       tier,
-		Scopes:     rec.Scopes,
+		Identifier:      rec.Identifier,
+		Tier:            tier,
+		Scopes:          rec.Scopes,
+		KeyID:           rec.KeyID,
+		RateLimitPerMin: rec.RateLimitPerMin,
+		CreatedAt:       rec.CreatedAt,
 	}, nil
 }
 

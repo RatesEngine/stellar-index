@@ -73,7 +73,7 @@ if [ -d internal/api/v1 ] && [ -f openapi/rates-engine.v1.yaml ]; then
   # The planned_regex below is the explicit allow-list of
   # "documented but not yet shipped" — deliberately adjusted in
   # a docs PR when endpoints land or get cut.
-  planned_regex='^/(price/stream|account/me|account/usage|account/keys)$'
+  planned_regex='^/(price/stream)$'
   grep -oE "^  /[^:]+:" openapi/rates-engine.v1.yaml | \
     sed -E 's|^  ||; s|:$||' | sort -u | while IFS= read -r route; do
       [ -z "$route" ] && continue

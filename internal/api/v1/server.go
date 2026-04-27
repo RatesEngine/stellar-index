@@ -45,6 +45,7 @@ type Server struct {
 	markets   MarketsReader
 	oracle    OracleReader
 	meta      MetadataResolver
+	accounts  AccountStore
 	cors      middleware.Middleware
 	auth      middleware.Middleware
 	rateLimit middleware.Middleware
@@ -92,6 +93,13 @@ type Options struct {
 	// drawn from cfg.API.AllowedOrigins.
 	CORS middleware.Middleware
 
+	// Accounts, when non-nil, backs POST /v1/account/keys (key
+	// issuance). Leave nil to make that endpoint return 503 — the
+	// GET endpoints (/me, /usage) only consult the request-context
+	// Subject and don't need the store. Wire only when Redis is
+	// reachable; the binary's auth.NewRedisAPIKeyStore enforces that.
+	Accounts AccountStore
+
 	// Auth, when non-nil, is inserted between CORS and RateLimit.
 	// Sets a Subject in the request context that downstream
 	// middleware (rate-limit, request logger) and handlers can
@@ -124,6 +132,7 @@ func New(opts Options) *Server {
 		markets:   opts.Markets,
 		oracle:    opts.Oracle,
 		meta:      opts.Meta,
+		accounts:  opts.Accounts,
 		cors:      opts.CORS,
 		auth:      opts.Auth,
 		rateLimit: opts.RateLimit,
@@ -247,8 +256,16 @@ func (s *Server) mountRoutes() {
 	// with class + IncludeInVWAP metadata.
 	s.mux.HandleFunc("GET /v1/sources", s.handleSources)
 
-	// TODO(#0): /v1/pairs (alias), /v1/account/*, SSE streams
-	// — follow-up PRs per docs/reference/api-design.md §5.
+	// Account self-service. /me and /usage require an authenticated
+	// Subject; /keys (POST) additionally requires the AccountStore
+	// to be wired (typically only when Redis is reachable). All
+	// three return 401 for anonymous callers.
+	s.mux.HandleFunc("GET /v1/account/me", s.handleAccountMe)
+	s.mux.HandleFunc("GET /v1/account/usage", s.handleAccountUsage)
+	s.mux.HandleFunc("POST /v1/account/keys", s.handleAccountKeysCreate)
+
+	// TODO(#0): SSE streams — follow-up PRs per
+	// docs/reference/api-design.md §5.
 }
 
 // ─── Handlers ─────────────────────────────────────────────────────

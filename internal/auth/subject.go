@@ -1,6 +1,9 @@
 package auth
 
-import "context"
+import (
+	"context"
+	"time"
+)
 
 // Tier identifies the rate-limit + feature-access bucket a caller
 // belongs to. Stable string values — appear in metrics labels and
@@ -50,6 +53,24 @@ type Subject struct {
 	// "history:read", "admin:*"]). Empty for v1; reserved for
 	// per-endpoint scope checks once auth lands.
 	Scopes []string
+
+	// KeyID — public-safe identifier for the credential the caller
+	// presented. For apikey, populated from APIKeyRecord.KeyID
+	// (distinct from the secret hash so it's safe to appear in
+	// logs / /v1/account/me responses). Empty for anonymous and
+	// pre-#190 SEP-10 stubs.
+	KeyID string
+
+	// RateLimitPerMin — per-tier budget the rate-limit middleware
+	// applies. Zero means "use the deployment default for this
+	// tier"; a non-zero value overrides at the per-key level
+	// (paid customers on a custom plan).
+	RateLimitPerMin int
+
+	// CreatedAt — when the credential was issued. Zero for
+	// anonymous. Surfaced via /v1/account/me; not load-bearing
+	// elsewhere.
+	CreatedAt time.Time
 }
 
 // Anonymous returns the subject the middleware attaches when no
