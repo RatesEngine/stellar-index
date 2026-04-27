@@ -311,6 +311,16 @@ Same five-file convention. Template PR: look at how Soroswap was
 added (`internal/sources/soroswap/`). Differences per DEX usually
 boil down to event topic shape + amount-decoding quirks.
 
+### "Audit a Soroban source's WASM history (flip BackfillSafe)"
+
+Procedure: [docs/operations/wasm-audits/README.md](docs/operations/wasm-audits/README.md).
+One audit log per source under that directory; each is the
+evidence trail for flipping `internal/sources/external/registry.go`'s
+`BackfillSafe` flag from `false` → `true`. The flag gates
+`ratesengine-ops backfill` from running an unaudited Soroban
+source against historical ranges (CLAUDE.md "Soroban DeFi
+contracts upgrade in place").
+
 ### "Investigate a price divergence"
 
 Start at [docs/operations/runbooks/price-divergence.md](docs/operations/runbooks/price-divergence.md).
