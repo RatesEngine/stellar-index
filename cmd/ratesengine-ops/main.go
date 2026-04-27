@@ -23,6 +23,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"text/tabwriter"
 	"time"
 
@@ -1934,12 +1935,16 @@ func wasmHistory(args []string) error { //nolint:funlen,gocognit,gocyclo // line
 	fs := flag.NewFlagSet("wasm-history", flag.ContinueOnError)
 	cfgPath := fs.String("config", "", "Path to TOML config file (required)")
 	from := fs.Uint("from", 2, "First ledger sequence (inclusive)")
-	to := fs.Uint("to", 0, "Last ledger sequence (inclusive). 0 → run unbounded until ctx cancellation.")
+	to := fs.Uint("to", 0, "Last ledger sequence (inclusive). Required when -parallel > 1.")
 	contractsCSV := fs.String("contracts", "",
 		"Comma-separated contract C-strkey IDs to watch (required, at least one)")
 	bucket := fs.String("bucket", "",
 		"Galexie bucket name. Default: cfg.Storage.S3BucketArchive.")
 	progressEvery := fs.Uint("progress-every", 100_000, "Emit progress lines to stderr every N ledgers")
+	parallel := fs.Uint("parallel", 1,
+		"Number of concurrent worker ranges. Range [from,to] is split into "+
+			"N contiguous chunks. Each worker has its own ledgerstream + dispatcher; "+
+			"results are merged at the end. Worth setting >1 for ranges of 1M+ ledgers.")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -1948,6 +1953,15 @@ func wasmHistory(args []string) error { //nolint:funlen,gocognit,gocyclo // line
 	}
 	if *contractsCSV == "" {
 		return fmt.Errorf("-contracts is required (one or more comma-separated C-strkey IDs)")
+	}
+	if *parallel == 0 {
+		*parallel = 1
+	}
+	if *parallel > 1 && *to == 0 {
+		return fmt.Errorf("-parallel > 1 requires -to (workers split a bounded range)")
+	}
+	if *to != 0 && *to < *from {
+		return fmt.Errorf("-to (%d) must be >= -from (%d)", *to, *from)
 	}
 
 	cfg, err := config.LoadWithEnv(*cfgPath)
@@ -1981,8 +1995,8 @@ func wasmHistory(args []string) error { //nolint:funlen,gocognit,gocyclo // line
 	if bucketName == "" {
 		bucketName = cfg.Storage.S3BucketArchive
 	}
-	fmt.Fprintf(os.Stderr, "wasm-history: watching %d contract(s), bucket=%s, range=[%d, %d]\n",
-		len(watch), bucketName, *from, *to)
+	fmt.Fprintf(os.Stderr, "wasm-history: watching %d contract(s), bucket=%s, range=[%d, %d], parallel=%d\n",
+		len(watch), bucketName, *from, *to, *parallel)
 
 	lsCfg := ledgerstream.Config{
 		DataStore: datastore.DataStoreConfig{
@@ -2000,45 +2014,38 @@ func wasmHistory(args []string) error { //nolint:funlen,gocognit,gocyclo // line
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	state := make(map[sdkxdr.Hash]*wasmContractState, len(watch))
-
-	scanned := uint64(0)
 	startedAt := time.Now()
-	lastProgress := startedAt
 
-	err = ledgerstream.Stream(ctx, lsCfg, uint32(*from), uint32(*to),
-		func(lcm sdkxdr.LedgerCloseMeta) error {
-			seq := lcm.LedgerSequence()
-			scanLCMForWasmChanges(lcm, watch, state, seq)
-			scanned++
-			if *progressEvery > 0 && scanned%uint64(*progressEvery) == 0 && time.Since(lastProgress) > 5*time.Second {
-				rate := float64(scanned) / time.Since(startedAt).Seconds()
-				fmt.Fprintf(os.Stderr, "wasm-history: ledger %d, %d scanned, %.0f ledgers/s\n",
-					seq, scanned, rate)
-				lastProgress = time.Now()
-			}
-			return nil
-		},
-	)
-	if err != nil && !errors.Is(err, context.Canceled) {
-		return fmt.Errorf("stream: %w", err)
+	// Split the range into N contiguous chunks. Worker i gets
+	// [from + i*size, from + (i+1)*size - 1] except the last
+	// worker absorbs the remainder.
+	workerStates, totalScanned, err := runWasmHistoryWorkers(
+		ctx, lsCfg, watch, uint32(*from), uint32(*to), int(*parallel), uint64(*progressEvery))
+	if err != nil {
+		return err
 	}
 
-	fmt.Fprintf(os.Stderr, "\nwasm-history: scanned %d ledgers in %s\n",
-		scanned, time.Since(startedAt).Round(time.Second))
+	fmt.Fprintf(os.Stderr, "\nwasm-history: scanned %d ledgers across %d worker(s) in %s\n",
+		totalScanned, *parallel, time.Since(startedAt).Round(time.Second))
+
+	// Merge worker outputs. Each worker's per-contract ranges are
+	// already in ledger-order within its chunk; concatenating in
+	// worker-order produces a globally ordered list, then we collapse
+	// adjacent same-hash ranges across the boundaries.
+	merged := mergeWasmHistories(workerStates, watch)
 
 	// Render: stable order by C-strkey for deterministic output.
 	out := make([]contractHistory, 0, len(watch))
-	for h, s := range state {
+	for h, ranges := range merged {
 		out = append(out, contractHistory{
 			Contract: watch[h],
-			Ranges:   s.ranges,
+			Ranges:   ranges,
 		})
 	}
 	// Also emit watched contracts that produced zero changes — useful
 	// signal that the audit ran and saw nothing rather than was misconfigured.
 	for h, name := range watch {
-		if _, seen := state[h]; !seen {
+		if _, seen := merged[h]; !seen {
 			out = append(out, contractHistory{Contract: name, Ranges: nil})
 		}
 	}
@@ -2047,6 +2054,163 @@ func wasmHistory(args []string) error { //nolint:funlen,gocognit,gocyclo // line
 	enc := json.NewEncoder(os.Stdout)
 	enc.SetIndent("", "  ")
 	return enc.Encode(out)
+}
+
+// workerResult is what each parallel worker produces: a state map
+// covering its bounded range, plus the actual upper bound it reached
+// (used by merge to know where this worker's open ranges should close).
+type workerResult struct {
+	state    map[sdkxdr.Hash]*wasmContractState
+	scanned  uint64
+	upperEnd uint32 // last ledger the worker actually saw (inclusive)
+}
+
+// runWasmHistoryWorkers splits [from,to] into `parallel` contiguous
+// chunks and runs each in its own goroutine. Returns per-worker
+// state maps in worker-order plus the total ledgers scanned.
+func runWasmHistoryWorkers(
+	ctx context.Context,
+	lsCfg ledgerstream.Config,
+	watch map[sdkxdr.Hash]string,
+	from, to uint32,
+	parallel int,
+	progressEvery uint64,
+) ([]workerResult, uint64, error) {
+	if parallel < 1 {
+		parallel = 1
+	}
+	results := make([]workerResult, parallel)
+	for i := range results {
+		results[i].state = make(map[sdkxdr.Hash]*wasmContractState)
+	}
+
+	// Range partition. Use the unbounded form (to == 0) only when
+	// parallel == 1 — the parallel path always works on bounded
+	// chunks since unbounded only makes sense for live tail.
+	bounds := splitRange(from, to, parallel)
+	startedAt := time.Now()
+
+	var wg sync.WaitGroup
+	errCh := make(chan error, parallel)
+	totalScanned := atomicUint64{}
+
+	for i, b := range bounds {
+		i, b := i, b
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			results[i].upperEnd = b.to
+			workerScanned := uint64(0)
+			err := ledgerstream.Stream(ctx, lsCfg, b.from, b.to,
+				func(lcm sdkxdr.LedgerCloseMeta) error {
+					seq := lcm.LedgerSequence()
+					scanLCMForWasmChanges(lcm, watch, results[i].state, seq)
+					workerScanned++
+					if progressEvery > 0 && workerScanned%progressEvery == 0 {
+						total := totalScanned.add(progressEvery)
+						rate := float64(total) / time.Since(startedAt).Seconds()
+						fmt.Fprintf(os.Stderr, "wasm-history: w%d ledger %d, total scanned %d, %.0f ledgers/s\n",
+							i, seq, total, rate)
+					}
+					return nil
+				},
+			)
+			results[i].scanned = workerScanned
+			// Add the un-counted residue (workerScanned mod progressEvery).
+			totalScanned.add(workerScanned % progressEvery)
+			if err != nil && !errors.Is(err, context.Canceled) {
+				errCh <- fmt.Errorf("worker %d [%d,%d]: %w", i, b.from, b.to, err)
+			}
+		}()
+	}
+	wg.Wait()
+	close(errCh)
+	for err := range errCh {
+		return nil, totalScanned.load(), err // first error wins
+	}
+	return results, totalScanned.load(), nil
+}
+
+// rangeChunk is one worker's slice of the overall [from,to] range.
+type rangeChunk struct{ from, to uint32 }
+
+// splitRange divides [from,to] into n contiguous chunks. The last
+// chunk absorbs any remainder so the union exactly covers [from,to].
+func splitRange(from, to uint32, n int) []rangeChunk {
+	if n <= 1 || to <= from {
+		return []rangeChunk{{from, to}}
+	}
+	width := uint32(int(to-from+1) / n)
+	out := make([]rangeChunk, n)
+	for i := 0; i < n; i++ {
+		chunkFrom := from + uint32(i)*width
+		chunkTo := chunkFrom + width - 1
+		if i == n-1 {
+			chunkTo = to // last chunk absorbs remainder
+		}
+		out[i] = rangeChunk{chunkFrom, chunkTo}
+	}
+	return out
+}
+
+// mergeWasmHistories combines per-worker state maps into one
+// per-contract timeline. Open ranges from each worker (where the
+// worker exited mid-WASM-version) are closed at the worker's upper
+// bound, then the timelines are concatenated in worker-order.
+// Adjacent ranges with the same hash across worker boundaries are
+// collapsed into a single range.
+func mergeWasmHistories(
+	workers []workerResult,
+	watch map[sdkxdr.Hash]string,
+) map[sdkxdr.Hash][]wasmRange {
+	merged := make(map[sdkxdr.Hash][]wasmRange)
+	for _, w := range workers {
+		for h, s := range w.state {
+			// Close the worker's open range at its upper bound.
+			if len(s.ranges) > 0 && s.ranges[len(s.ranges)-1].ToLedger == 0 {
+				s.ranges[len(s.ranges)-1].ToLedger = w.upperEnd
+			}
+			existing := merged[h]
+			for _, r := range s.ranges {
+				if len(existing) > 0 && existing[len(existing)-1].WasmHash == r.WasmHash &&
+					existing[len(existing)-1].ToLedger+1 == r.FromLedger {
+					// Adjacent same-hash → extend the prior range.
+					existing[len(existing)-1].ToLedger = r.ToLedger
+				} else {
+					existing = append(existing, r)
+				}
+			}
+			merged[h] = existing
+		}
+	}
+	// Reopen the LAST range of each contract — i.e. clear ToLedger
+	// if it hits the very last worker's upperEnd, since "we don't
+	// know yet" is more honest than "ends here" for the operator
+	// reading the JSON. Actually no — the operator scoped -to
+	// explicitly; closing at to is correct. Leave as-is.
+	_ = watch // referenced only for godoc symmetry; merging is keyed by Hash.
+	return merged
+}
+
+// atomicUint64 is a tiny helper for thread-safe counter increments
+// without pulling in sync/atomic boilerplate at every call site.
+type atomicUint64 struct {
+	mu sync.Mutex
+	v  uint64
+}
+
+func (a *atomicUint64) add(n uint64) uint64 {
+	a.mu.Lock()
+	a.v += n
+	r := a.v
+	a.mu.Unlock()
+	return r
+}
+
+func (a *atomicUint64) load() uint64 {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	return a.v
 }
 
 // scanLCMForWasmChanges walks every operation's LedgerEntryChanges
