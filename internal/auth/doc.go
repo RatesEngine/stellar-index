@@ -14,17 +14,24 @@
 // Operator config picks the active mode via [config.APIConfig].AuthMode:
 // "none" (anonymous-only, no validators wired), "apikey", or "sep10".
 //
-// THIS PACKAGE IS SCAFFOLDING. The protocol-level functions
-// ([SEP10.Challenge], [SEP10.Verify], [APIKey.Lookup]) currently
-// return [ErrNotImplemented]. The middleware structure is correct;
-// the validators are stubs awaiting Phase-5 implementation.
+// Implementation status:
 //
-// Why ship the scaffolding now: the API spec already documents
-// auth_mode and per-tier rate limits. Without the package + the
-// middleware slot, every Phase-5 PR that touches auth has to
-// re-litigate where the code goes. With the scaffolding, "implement
-// SEP-10 challenge generation" is a pure body-fill on an existing
-// signature.
+//   - APIKey.Lookup — implemented by [RedisAPIKeyValidator]. Records
+//     are stored under `apikey:<sha256-hex>` (see [APIKeyRecord]
+//     for the JSON shape) with no TTL; expiry/revocation are encoded
+//     in the record. The Noop stub remains as the failure-mode the
+//     middleware lands on when auth_mode=apikey is configured but
+//     no validator is wired (e.g. Redis unavailable at startup).
+//   - SEP10.{Challenge,Verify,VerifyJWT} — still scaffolding;
+//     [NoopSEP10Validator] returns [ErrNotImplemented] from each.
+//     Awaiting Phase-5 implementation.
+//
+// Why ship the scaffolding ahead of the SEP-10 body: the API spec
+// already documents auth_mode and per-tier rate limits. Without the
+// package + the middleware slot, every Phase-5 PR that touches auth
+// has to re-litigate where the code goes. With the scaffolding,
+// "implement SEP-10 challenge generation" is a pure body-fill on an
+// existing signature.
 //
 // References:
 //

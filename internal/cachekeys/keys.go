@@ -160,6 +160,39 @@ func Divergence(asset canonical.Asset) string {
 // DivergenceTTL is the expiry for div: keys.
 const DivergenceTTL = 5 * time.Minute
 
+// ─── API-key records ──────────────────────────────────────────────
+//
+// Wire shape: `apikey:<sha256-hex>`
+// Value: JSON record `{identifier, tier, scopes, expires_at?, revoked_at?}`.
+// Writer: `/v1/account/keys` self-service handler (Phase 5) +
+//         operator seeding scripts.
+// Reader: `internal/auth/RedisAPIKeyValidator` on every authenticated
+//         request when auth_mode=apikey.
+//
+// Plaintext keys are NEVER stored — the lookup hashes the
+// caller-supplied bytes with SHA-256 (32-byte high-entropy keys are
+// preimage-safe; HMAC with a server pepper is a future hardening if
+// keys are ever shorter or operator-set). A Redis dump leaks
+// metadata but not the keys themselves.
+//
+// No TTL: API keys are long-lived; expiry + revocation are encoded
+// in the JSON record, not at the Redis layer. An operator rotating
+// keys deletes the record explicitly.
+
+// APIKey returns the cache key for the API-key record identified by
+// keyHash. keyHash MUST be hex-encoded SHA-256 of the plaintext key
+// (the auth package does the hashing — callers don't construct this
+// directly except in admin tooling that already has the hash).
+func APIKey(keyHash string) string {
+	return "apikey:" + keyHash
+}
+
+// APIKeyTTL is the TTL for apikey: records. Zero — keys live until
+// explicitly deleted; expiry/revocation are encoded in the JSON
+// payload so the lookup can return the right error sentinel
+// (ErrTokenExpired vs ErrUnauthorized).
+const APIKeyTTL = time.Duration(0)
+
 // ─── Per-source freshness gauge ───────────────────────────────────
 //
 // Wire shape: `health:<source>`

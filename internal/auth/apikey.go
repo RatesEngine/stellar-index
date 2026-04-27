@@ -7,11 +7,13 @@ import "context"
 // (Redis or Postgres); the interface keeps the middleware
 // store-agnostic.
 //
-// Production implementation lands in Phase 5 alongside the
-// `/v1/account/keys` self-service endpoints. The current
-// [NoopAPIKeyValidator] returns [ErrNotImplemented] so a deployment
-// with auth_mode=apikey but no validator wired fails loud rather
-// than silently accepting any key.
+// Production implementation: [RedisAPIKeyValidator] (records under
+// `apikey:<sha256-hex>`). The [NoopAPIKeyValidator] remains the
+// fallback when auth_mode=apikey but the validator can't be
+// constructed (e.g. Redis unavailable at startup) — every Lookup
+// returns [ErrNotImplemented] which the middleware translates to
+// 503 Service Unavailable, surfacing the misconfiguration on the
+// first failed request rather than silently demoting to anonymous.
 type APIKeyValidator interface {
 	// Lookup resolves the supplied key bytes to a Subject. Returns
 	// [ErrUnauthorized] if the key isn't recognised, [ErrTokenExpired]

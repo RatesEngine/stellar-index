@@ -35,6 +35,7 @@ import (
 
 	v1 "github.com/RatesEngine/rates-engine/internal/api/v1"
 	"github.com/RatesEngine/rates-engine/internal/api/v1/middleware"
+	"github.com/RatesEngine/rates-engine/internal/auth"
 	"github.com/RatesEngine/rates-engine/internal/canonical"
 	"github.com/RatesEngine/rates-engine/internal/config"
 	"github.com/RatesEngine/rates-engine/internal/metadata"
@@ -78,15 +79,13 @@ func run(cfgPath string, dryRun bool) error { //nolint:gocognit,funlen // dispat
 		"dry_run", dryRun,
 	)
 
-	// Auth middleware (apikey / sep10) has not shipped. An operator
-	// who set auth_mode to anything other than "none" is expecting
-	// authentication that isn't enforced — surface that loudly at
-	// startup. Demoting the log to an error-level line also catches
-	// an eye in log aggregators that filter by severity.
-	if cfg.API.AuthMode != "none" {
-		logger.Error("auth_mode requested but NOT ENFORCED — the API is serving without authentication",
-			"configured_mode", cfg.API.AuthMode,
-			"reason", "auth middleware not yet wired; see CLAUDE.md `internal/auth/ (planned)`")
+	// Auth wiring happens later, once Redis is up — the apikey
+	// validator needs Redis to read records. SEP-10 still ships as
+	// a Noop; surface that here so an operator sees the gap before
+	// the first failed request.
+	if cfg.API.AuthMode == "sep10" {
+		logger.Error("auth_mode=sep10 requested but SEP-10 validator is NOT IMPLEMENTED — the middleware will return 503 on every request",
+			"configured_mode", cfg.API.AuthMode)
 	}
 
 	rootCtx, cancel := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
@@ -176,6 +175,15 @@ func run(cfgPath string, dryRun bool) error { //nolint:gocognit,funlen // dispat
 		)
 	}
 
+	// Auth — translate the configured auth_mode into the middleware.
+	// auth_mode=none yields a nil middleware (server stack omits it
+	// and downstream code treats absence-of-Subject as anonymous).
+	// auth_mode=apikey wires the Redis-backed validator when Redis
+	// is reachable; if Redis is unavailable the middleware still
+	// runs but the validator returns ErrNotImplemented → 503, which
+	// is the correct fail-loud behaviour for an opted-into mode.
+	authMW := buildAuthMiddleware(cfg.API.AuthMode, rdb, logger)
+
 	apiSrv := v1.New(v1.Options{
 		Logger:      logger.With("component", "api"),
 		ReadyChecks: checks,
@@ -186,6 +194,7 @@ func run(cfgPath string, dryRun bool) error { //nolint:gocognit,funlen // dispat
 		Oracle:      storeOracleReader{s: store},
 		Meta:        sep1Cache,
 		CORS:        cors,
+		Auth:        authMW,
 		RateLimit:   rateLimit,
 	})
 
@@ -230,6 +239,53 @@ func run(cfgPath string, dryRun bool) error { //nolint:gocognit,funlen // dispat
 	} else {
 		logger.Info("clean shutdown")
 	}
+	return nil
+}
+
+// buildAuthMiddleware translates the configured auth_mode into a
+// concrete middleware. Returns nil for mode=none — the server stack
+// omits absent middleware entirely so anonymous traffic doesn't
+// pay a per-request closure cost.
+//
+// auth_mode=apikey requires Redis: when rdb is nil the middleware
+// still wires up but with a Noop validator, so every request 503s
+// — the correct fail-loud behaviour for a deployment that opted in
+// without Redis. Same logic for auth_mode=sep10 (validator is the
+// Noop stub regardless of Redis until the implementation lands).
+func buildAuthMiddleware(mode string, rdb *redis.Client, logger *slog.Logger) middleware.Middleware {
+	switch mode {
+	case "", "none":
+		return nil
+
+	case "apikey":
+		var validator auth.APIKeyValidator = auth.NoopAPIKeyValidator{}
+		if rdb != nil {
+			validator = auth.NewRedisAPIKeyValidator(rdb)
+			logger.Info("auth: apikey validator wired", "backend", "redis")
+		} else {
+			logger.Error("auth_mode=apikey but Redis is not configured — every request will 503",
+				"reason", "RedisAPIKeyValidator requires a Redis client")
+		}
+		return middleware.Auth(middleware.AuthOptions{
+			Mode:   middleware.AuthModeAPIKey,
+			APIKey: validator,
+		})
+
+	case "sep10":
+		// SEP-10 validator implementation lands separately. Wire
+		// the middleware with the Noop validator so the stack is
+		// faithful to the operator's opt-in (every request 503s
+		// rather than silently downgrading to anonymous).
+		return middleware.Auth(middleware.AuthOptions{
+			Mode:  middleware.AuthModeSEP10,
+			SEP10: auth.NoopSEP10Validator{},
+		})
+	}
+	// Unknown mode reaches here only if config validation regressed.
+	// Returning nil silently demotes to anonymous, which is the wrong
+	// default; log loudly and rely on the validate.go gate to keep
+	// this branch unreachable.
+	logger.Error("unknown auth_mode — server falling through to no-auth", "mode", mode)
 	return nil
 }
 
