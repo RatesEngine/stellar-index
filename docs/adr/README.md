@@ -52,7 +52,7 @@ See [_template.md](_template.md) for the boilerplate.
 | 0008 | *Planned* | HA topology (referenced by coverage-matrix S9.1) | — |
 | 0009 | *Planned* | Possible follow-up to 0007 (referenced by coverage-matrix S9.2) | — |
 | [0010](0010-off-chain-fiat-representation.md) | Accepted | Off-chain fiat currencies as AssetType "fiat" | 2026-04-22 |
-| 0011 | *Planned* | Supply policy (referenced by coverage-matrix F2.4) | — |
+| [0011](0011-supply-algorithm.md) | Accepted | Three-domain supply algorithm — XLM hard-coded, classic from ledger entries, SEP-41 from event sums | 2026-04-27 |
 | 0012 | *Planned* | Quorum-set composition (referenced by multi-region-topology) | — |
 | [0013](0013-go-stellar-sdk-xdr-for-scval.md) | Accepted | Adopt go-stellar-sdk/xdr for SCVal decoding in source connectors | 2026-04-23 |
 | [0014](0014-crypto-ticker-representation.md) | Accepted | Crypto tickers as AssetType "crypto" | 2026-04-23 |
