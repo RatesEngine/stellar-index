@@ -2,8 +2,26 @@
 # Defaults for the archival-node role.
 # Every value here is overridable via inventory group_vars / host_vars.
 # See inventory/r1.example.yml for the operator-facing knobs.
+#
+# ─── Per-region differences (ADR-0016) ──────────────────────────────
+# Knobs marked `[Per-region: ...]` below differ between regions per
+# the storage strategy in docs/adr/0016-per-region-storage-strategy.md:
+#
+#   R1 Frankfurt (Hetzner)   — full local mirror, all 4 verify tiers
+#   R2 US-East-1 (AWS)       — galexie-archive read from
+#                              s3://aws-public-blockchain (no local
+#                              archive bucket); Tier A + D weekly
+#   R3 Singapore (Vultr)     — galexie-archive on Vultr Object Storage
+#                              (S3, region-local); Tier A + D weekly
+#
+# When provisioning a new region, copy r1.example.yml → rN.yml and
+# override only the [Per-region] knobs. The inventory file is also
+# the right place for the per-region cron settings (verify-archive
+# tier flags) and for the ratesengine_live_seam_ledger value (each
+# region has its own seam where its galexie-live bucket starts).
 
 # ───── Region ────────────────────────────────────────────────────────
+# [Per-region: r1=Frankfurt, r2=US-East-1, r3=Singapore]
 region_id:           "r1"
 region_name:         "London"
 home_domain:         "ratesengine.net"
@@ -28,6 +46,12 @@ run_minio:           true
 run_observability:   true
 
 # ───── ZFS ───────────────────────────────────────────────────────────
+# [Per-region:
+#   r1 = raidz2 across 4× NVMe (full local mirror, two-drive tolerance)
+#   r2 = NOT used — EBS gp3 directly, no ZFS layer
+#   r3 = mirror across 2× NVMe (Vultr SG SKU only ships 2 drives;
+#        single-drive tolerance, acceptable for an async DR replica)
+# ]
 zfs_data_pool_name:  "data"
 zfs_data_pool_type:  "raidz2"
 zfs_data_devices:    []          # set in inventory, validated in preflight
@@ -151,6 +175,11 @@ ratesengine_backfill_from_ledger: 0
 # query the running galexie process args:
 #   pgrep -af 'galexie append'
 # 0 = live-only mode (pre-2026-04-26 default; archive bucket unused).
+#
+# [Per-region: each region has its own seam — the ledger where that
+#  region's *own* galexie-live bucket starts emitting. R1's seam was
+#  the cutover from archive-fill to live-tail (~April 2026). R2/R3
+#  will have later seams set when their indexers first start.]
 ratesengine_live_seam_ledger: 0
 
 # ───── Stellar network / quorum ──────────────────────────────────────
@@ -329,6 +358,15 @@ captive_peer_port_galexie: 11726
 captive_peer_port_rpc:     11725
 
 # ───── Galexie ───────────────────────────────────────────────────────
+# [Per-region: galexie endpoint + buckets vary per ADR-0016.
+#   r1: writes to local MinIO at 127.0.0.1:9000 (galexie-live +
+#       galexie-archive both local).
+#   r2: galexie-live still local (region-isolated tail); galexie-
+#       archive READS from s3://aws-public-blockchain (override
+#       galexie_archive_endpoint + galexie_archive_bucket below).
+#   r3: galexie-live local; galexie-archive on Vultr Object Storage
+#       (S3-compatible, region-local Singapore endpoint).
+# ]
 galexie_version:         "galexie-v26.0.0"   # pinned — update via VERSIONS.md. Tag format: galexie-vX.Y.Z (matches Stellar protocol version).
 galexie_backend_type:    "s3"          # s3 | filesystem
 galexie_s3_endpoint:     "http://127.0.0.1:9000"
@@ -347,6 +385,14 @@ stellar_rpc_event_retention_ledgers: 518400   # ~30 days at 5 s/ledger
 stellar_rpc_tx_retention_ledgers:    17280    # ~24 h
 
 # ───── MinIO ─────────────────────────────────────────────────────────
+# [Per-region:
+#   r1: local MinIO with both buckets (galexie-live + galexie-archive).
+#   r2: local MinIO with galexie-live ONLY; galexie-archive lives in
+#       s3://aws-public-blockchain — set run_minio=true and override
+#       minio_buckets to ["galexie-live", "backups"].
+#   r3: local MinIO with galexie-live ONLY; galexie-archive on Vultr
+#       Object Storage. Same minio_buckets override as r2.
+# ]
 minio_version:           "RELEASE.2024-11-07T00-52-20Z"
 minio_port:              9000
 minio_console_port:      9001
