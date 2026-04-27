@@ -104,6 +104,7 @@ RULES = [
             "internal/scval/",                  # the Soroban-event scval wrapper
             "internal/ledgerstream/",           # transport layer — exposes xdr.LedgerCloseMeta
             "internal/dispatcher/",             # routes tx / events (PR 165b)
+            "internal/pipeline/",               # shared ledger-meta plumbing (indexer + backfill)
             "internal/sources/sdex/",           # SDEX decodes non-SCVal xdr (classic ops) (PR 165c)
             "cmd/ratesengine-indexer/",         # glue: wires ledgerstream → dispatcher (PR 165d)
             "cmd/ratesengine-ops/",             # verify-decoders mirrors the indexer's ledger plumbing
