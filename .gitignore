@@ -57,6 +57,13 @@ service-account*.json
 /configs/ansible/inventory/*.secrets.yaml
 /configs/ansible/vault-password.txt
 
+# Real per-region inventories carry public IPs, drive serials, SSH
+# pubkeys, etc. — operationally sensitive even if not strictly
+# secret. Operators copy r*.example.yml → r*.yml locally; the .yml
+# stays local-only. The .example template is the public reference.
+/configs/ansible/inventory/r*.yml
+!/configs/ansible/inventory/r*.example.yml
+
 # Docs build output
 /docs/_site/
 /docs/_build/

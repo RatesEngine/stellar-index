@@ -6,8 +6,9 @@ status: living doc
 
 # r1-01 (FSN1) deployment state
 
-Snapshot of what's running on `136.243.90.96` as of 2026-04-26. Updated
-at each session.
+Snapshot of what's running on the r1 host (Hetzner FSN1 dedicated;
+public IP held in `configs/ansible/inventory/r1.yml`, gitignored)
+as of 2026-04-26. Updated at each session.
 
 > **Bringing up a new archival node?** Follow the end-to-end recipe in
 > [archival-node-bringup.md](archival-node-bringup.md). This doc is a

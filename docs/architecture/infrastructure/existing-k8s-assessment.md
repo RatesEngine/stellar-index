@@ -241,9 +241,11 @@ Tier-1 org.
 
 ### 3.2 Postgres password in plaintext ConfigMap
 
-```
-DATABASE="postgresql://user=stellar password=a61d521ca96b478fcd62b6650d8ea36b host=stellar-db ..."
-```
+The same `stellar-core-v1` ConfigMap embeds the Postgres connection
+string for the `crypto-stellar` namespace's `stellar-db`, with the
+password as a plaintext field. The literal value is held privately
+in the ops triage notes (rotated upstream as of the disclosure);
+it is **not** captured here so this doc is safe to publish.
 
 Same ConfigMap. Same risk surface. Should move to a Secret.
 
