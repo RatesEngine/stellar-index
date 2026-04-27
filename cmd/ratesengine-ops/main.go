@@ -60,7 +60,7 @@ import (
 	"github.com/RatesEngine/rates-engine/internal/version"
 )
 
-func main() { //nolint:gocyclo,gocognit // subcommand switch; each case is trivial, splitting adds indirection without clarity
+func main() { //nolint:gocyclo,gocognit,funlen // subcommand switch; each case is trivial, splitting adds indirection without clarity
 	args := os.Args[1:]
 	if len(args) == 0 {
 		printUsage()
@@ -125,6 +125,11 @@ func main() { //nolint:gocyclo,gocognit // subcommand switch; each case is trivi
 	case "cross-region-monitor":
 		if err := crossRegionMonitor(args[1:]); err != nil {
 			fmt.Fprintf(os.Stderr, "cross-region-monitor: %v\n", err)
+			os.Exit(1)
+		}
+	case "backfill":
+		if err := backfill(args[1:]); err != nil {
+			fmt.Fprintf(os.Stderr, "backfill: %v\n", err)
 			os.Exit(1)
 		}
 	case "version", "--version", "-v":
@@ -262,11 +267,30 @@ Subcommands:
                               -from 2024-01-01T00:00:00Z \
                               -to   2024-12-31T00:00:00Z \
                               -granularity 1h
+  backfill -config PATH -from N -to N [-source S,S,...] [-bucket NAME] [-dry-run]
+                          Replay a bounded ledger range through the
+                          full ingest pipeline (galexie → dispatcher
+                          → decoders → trades hypertable). Same code
+                          path as the live indexer, no live tail; CAGGs
+                          auto-roll on the inserted rows. Refuses to
+                          run any source that isn't BackfillSafe in
+                          internal/sources/external/registry.go — for
+                          on-chain Soroban sources that means the
+                          per-WASM-hash audit (ratesengine-ops
+                          wasm-history) must land first per CLAUDE.md
+                          "Soroban DeFi contracts upgrade in place".
+                          Idempotent: the trades hypertable's unique
+                          index on (source, ledger, tx_hash, op_index)
+                          makes re-runs over the same range a no-op.
+                          Example:
+                            ratesengine-ops backfill \
+                              -config /etc/ratesengine.toml \
+                              -from 21000000 -to 25000000 \
+                              -source soroswap,aquarius
   version                 Print version + build date.
   help                    This help.
 
 TODO subcommands (land with their feature PRs):
-  backfill                Replay a ledger range into the trades hypertable.
   cache-prime             Warm the Redis hot-path cache from Timescale.
   verify-invariants       Cross-check aggregated prices against divergence.
 `

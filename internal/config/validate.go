@@ -32,6 +32,7 @@ var KnownSources = map[string]struct{}{
 	"aquarius":      {},
 	"phoenix":       {},
 	"comet":         {},
+	"sdex":          {},
 	"reflector-dex": {},
 	"reflector-cex": {},
 	"reflector-fx":  {},
