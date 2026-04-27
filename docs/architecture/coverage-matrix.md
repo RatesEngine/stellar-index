@@ -119,8 +119,8 @@ Any row with **status ❌** is a blocker for launch. Any row with
 
 | # | Requirement | Proposal | Week | Owner | ADR | Verified by | Status | Conf |
 | - | ----------- | -------- | ---- | ----- | --- | ----------- | ------ | ---- |
-| S9.1 | ≥ 99.99 % uptime | §Availability | 8–9 | HA plan | ADR-0008 (planned: HA topology) | (HA plan) | 🧪 designed | 2 |
-| S9.2 | p95 ≤ 200 ms, p99 ≤ 500 ms | §Latency Targets | 9 | `internal/api` + Redis caching | ADR-0009 (planned: Redis cache schema) | (API design + HA plan) | 🧪 designed | 2 |
+| S9.1 | ≥ 99.99 % uptime | §Availability | 8–9 | HA plan | [ADR-0008](../adr/0008-ha-topology.md) | (HA plan) | 🧪 designed | 2 |
+| S9.2 | p95 ≤ 200 ms, p99 ≤ 500 ms | §Latency Targets | 9 | `internal/api` + Redis caching | [ADR-0009](../adr/0009-latency-budget.md) | (API design + HA plan) | 🧪 designed | 2 |
 | S9.3 | 1000 req/min per client | §Rate Limits | 7 | `internal/ratelimit` | — | Bucket + middleware shipped; anonymous tier at 60/min today, apikey tier (1000/min) gated on auth middleware landing. | ⚠ caveat | 3 |
 | S9.4 | Defined degradation when prices unavailable | §Degradation Strategy + divergence | 5 | `internal/divergence` + `/api/envelope` | — | (design; impl pending) | 🧪 designed | 2 |
 
@@ -154,7 +154,7 @@ Same as S7. No additional requirement.
 | F2.1 | Market Cap = `circulating × price` | §V2 (addendum) | 6 | `internal/supply` + `/aggregate` | — | [data-sources/supply-data.md](../discovery/data-sources/supply-data.md) | 🧪 designed | 3 |
 | F2.2 | FDV = `max_supply × price` | §V2 | 6 | `internal/supply` | — | [data-sources/supply-data.md](../discovery/data-sources/supply-data.md) | 🧪 designed | 3 |
 | F2.3 | 24h Trading Volume (USD) | §V2 | 6 | Timescale materialised view | ADR-0007 | cross-cutting | 🧪 designed | 3 |
-| F2.4 | Circulating Supply (provider-supplied) | §V2 | 6 | `internal/supply/circulating` | ADR-0011 (planned: supply policy) | [data-sources/supply-data.md](../discovery/data-sources/supply-data.md) | 🧪 designed | 3 |
+| F2.4 | Circulating Supply (provider-supplied) | §V2 | 6 | `internal/supply/circulating` | [ADR-0011](../adr/0011-supply-algorithm.md) | [data-sources/supply-data.md](../discovery/data-sources/supply-data.md) | 🧪 designed | 3 |
 | F2.5 | Total Supply (mint − burn − clawback) | §V2 | 6 | `internal/supply/total` | — | [notes/sep-41-token-events.md](../discovery/notes/sep-41-token-events.md) | ✅ verified math; impl pending | 4 |
 | F2.6 | Max Supply (nullable, off-chain metadata) | §V2 | 6 | `internal/metadata/maxsupply` | ADR-0010 | [data-sources/sep1-home-domain.md](../discovery/data-sources/sep1-home-domain.md) | 🧪 designed | 2 |
 
