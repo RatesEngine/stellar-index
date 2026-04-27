@@ -9,6 +9,10 @@ status: living doc
 Snapshot of what's running on `136.243.90.96` as of 2026-04-26. Updated
 at each session.
 
+> **Bringing up a new archival node?** Follow the end-to-end recipe in
+> [archival-node-bringup.md](archival-node-bringup.md). This doc is a
+> snapshot of one specific node, not a how-to.
+
 ## Hardware
 
 - Intel Core Ultra 7 265 (20 cores — 8 P + 12 E)

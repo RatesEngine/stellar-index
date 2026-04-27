@@ -271,6 +271,14 @@ linked doc first.
 
 ## Common task recipes
 
+### "Bring up a new archival node" / "recover from disaster"
+
+End-to-end recipe in [docs/operations/archival-node-bringup.md](docs/operations/archival-node-bringup.md).
+Six steps from a fresh box to a running indexer (greenfield ≈ 10–13 h
+wall, mostly bandwidth). Same doc has the disaster-recovery triage
+tree (corrupt history-archive, partial galexie-archive partition,
+wiped postgres, lost MinIO data dir).
+
 ### "Add a new CEX connector"
 
 1. Read [docs/discovery/external-refs/cex-feeds.md](docs/discovery/external-refs/cex-feeds.md).
