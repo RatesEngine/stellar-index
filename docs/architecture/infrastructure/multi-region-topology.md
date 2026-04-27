@@ -251,21 +251,104 @@ Why not replicate Redis:
 
 ---
 
-## 7. MinIO — per-region bucket sets + cross-region replication
+## 7. Storage — per-region, three shapes (per ADR-0016)
 
-Each region has its own 9-node MinIO cluster (per HA plan §3.5).
+Originally this section assumed every region ran the same 9-node
+MinIO cluster (per HA plan §3.5). [ADR-0016](../../adr/0016-per-region-storage-strategy.md)
+revises that: each region picks the storage shape that fits its
+provider's natural strengths and its role in the fleet. The
+consistency property (ADR-0015) is preserved — what the API serves
+is closed-bucket VWAP/TWAP/OHLC, byte-equivalent across regions —
+so different storage shapes don't break the cross-region rate
+agreement.
 
-- `galexie-live/`: per-region. No cross-region replication needed —
-  we have three Galexies, they each write their own view.
-- `galexie-archive/`: per-region. **Cross-region replicated** via
-  `mc mirror` every hour. If R1 loses its archive bucket, we rebuild
-  from R2 or R3. Object-lock retention is per-region.
-- `backups/`: per-region. Cross-region replicated for Postgres
-  pgBackRest repos (sync lag 5 min), MinIO snapshot data (1 h).
-- `history-archive/` (the SCP-published history archive): per-region,
-  **not** replicated in the MinIO sense — each region's archive is
-  independently authoritative and the cross-check in §4.2 validates
-  them. These buckets are publicly readable.
+### 7.1 R1 (Frankfurt, Hetzner) — full local mirror
+
+- Local MinIO single-node on raidz2 across 4 × 7.68 TB NVMe.
+- `galexie-live/`: ingested by R1's own captive-core galexie.
+- `galexie-archive/`: full local mirror, ~4.76 TB, sourced
+  initially from `s3://aws-public-blockchain/v1.1/stellar/ledgers/pubnet/`
+  via the per-partition `galexie-archive-fill` recipe.
+- `/srv/history-archive/`: full SDF mirror, ~7 TB, on a separate ZFS
+  dataset (not in MinIO).
+- **R1 is the integrity leader** — runs all four verify-archive
+  tiers (A + B + D + E) on a schedule. R2 and R3 trust R1's
+  primary verification.
+
+### 7.2 R2 (US-East-1, AWS) — AWS-hybrid, no galexie mirror
+
+- No local MinIO for galexie-archive.
+- `galexie-archive`: read direct from
+  `s3://aws-public-blockchain/v1.1/stellar/ledgers/pubnet/`. Sub-15 ms
+  intra-region S3 latency, free egress (AWS Open Data Sponsorship).
+- `galexie-live/`: small EBS-backed bucket if R2 runs its own
+  captive-core for redundancy; otherwise read from AWS public's
+  near-tip range (subject to that bucket's catch-up lag).
+- postgres + OS: EBS gp3, ~1-2 TB.
+- `/srv/history-archive`: NOT mirrored locally. R2 trusts R1's
+  Tier B + E. Runs its own Tier A (chain integrity, no external
+  data) + Tier D (multi-peer cross-validation) on a weekly cron
+  for defence-in-depth.
+
+### 7.3 R3 (Singapore, Vultr) — bare-metal + object-storage hybrid
+
+- Bare metal Intel Xeon E-2388G + 128 GB DDR4 ECC + 2 × 1.92 TB
+  NVMe RAID-1 (Vultr's standard SG SKU at ~$350/mo).
+- `galexie-archive`: Vultr Object Storage (S3-compatible) at
+  ~$25/mo for 5 TB. Region-local to the Singapore facility
+  (~5-10 ms latency).
+- postgres + galexie-live (rolling ~30 days) + captive-core state +
+  OS: local NVMe.
+- `/srv/history-archive`: NOT mirrored locally — same trust model
+  as R2. Tier A + D run on weekly cron.
+- **RAID-1, not raidz2** — single-drive failure tolerance. Acceptable
+  for an async DR replica because multi-drive failures are
+  recoverable via the bring-up recipe (~half day).
+
+### 7.4 Trust model + drift detection (defence-in-depth)
+
+R2/R3 don't run Tier B + E (which need a local SDF history mirror),
+so they rely on:
+
+1. **Local Tier A (weekly cron):** walks each region's own ingested
+   ledgers; confirms `header.PreviousLedgerHash == prev.LedgerHash`.
+   Catches local bit-rot AND any internally-inconsistent stream from
+   upstream.
+2. **Local Tier D (weekly cron):** HTTP fetches checkpoint hashes
+   from ~6 tier-1 validator archives (LOBSTR, SatoshiPay, SDF,
+   PublicNode, Blockdaemon, Franklin Templeton); compares against
+   the local chain. Catches **forks** (internally-consistent chains
+   that don't match the network's signed reality).
+3. **Cross-region CAGG consistency check:** monitoring job samples
+   `(pair, window, from_ts)` triples across R1/R2/R3 and asserts
+   the closed-bucket VWAP rows match. Tests the actual API outcome
+   rather than intermediate bytes — strongest detection for
+   indexer-output divergence.
+
+Optional belt-and-braces (defer until needed): per-region
+`(ledger_seq → sha256(LCM bytes))` hash database to catch
+upstream byte rewrites. ~2 GB per region. Implement only if a
+real drift event surfaces.
+
+### 7.5 Backups + cross-region replication (unchanged from original plan)
+
+- `backups/`: per-region MinIO bucket. Cross-region replicated for
+  Postgres pgBackRest repos (sync lag 5 min).
+- Postgres WAL replication handles trade-row durability across
+  regions; pgBackRest is the secondary (point-in-time-recovery)
+  layer.
+- `history-archive` content (SCP-published): per-region in R1,
+  not present in R2/R3 (per the trust model above).
+
+### 7.6 Failure-mode handoffs
+
+| Scenario | Effect | Mitigation |
+|---|---|---|
+| R2 loses access to `aws-public-blockchain` | R2 ingest stalls | Switch to mirroring from R1's MinIO over WAN (slower but works); document in r2 runbook |
+| R3 Vultr Object Storage outage | R3 indexer can't read archive ledgers | Indexer pauses backfill; live-tail continues from local NVMe; resumes when storage is back |
+| R3 RAID-1 single-drive failure | local NVMe degraded but operational | Replace drive via Vultr support; resilver |
+| R1 disk loss | R1 down for ~half day | Promote R2 to writer; rebuild R1 from bring-up recipe |
+| Tier D detects divergence on R2 or R3 | Indexer alerted; potential fork | Investigate; failover writer to a region whose local chain matches the validator quorum |
 
 ---
 

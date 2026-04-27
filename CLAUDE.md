@@ -279,6 +279,17 @@ wall, mostly bandwidth). Same doc has the disaster-recovery triage
 tree (corrupt history-archive, partial galexie-archive partition,
 wiped postgres, lost MinIO data dir).
 
+Per-region storage shape varies by provider — see
+[ADR-0016](docs/adr/0016-per-region-storage-strategy.md): R1
+(Hetzner) is the full-mirror integrity leader; R2 (AWS) reads
+galexie data direct from `aws-public-blockchain` S3, no local
+mirror; R3 (Vultr) keeps galexie-archive on Vultr Object Storage
+hybrid. R2 + R3 trust R1's primary verification but run their own
+Tier A + Tier D periodically as defence-in-depth. The cross-region
+"all regions serve the same rate" property is preserved by
+[ADR-0015](docs/adr/0015-last-closed-bucket-rate-serving.md)'s
+closed-bucket-only API contract.
+
 ### "Add a new CEX connector"
 
 1. Read [docs/discovery/external-refs/cex-feeds.md](docs/discovery/external-refs/cex-feeds.md).
