@@ -75,6 +75,24 @@ Severity maps to [sev-playbook.md §1](sev-playbook.md#1-severity-definitions).
 | `ratesengine_api_error_rate_critical` | same | > 5 % for > 2 min | **P1** | [api-5xx](runbooks/api-5xx.md) |
 | `ratesengine_api_price_stale` | `ratesengine_price_staleness_seconds` per asset | > 120 s sustained 5 min | P2 | [price-stale](runbooks/price-stale.md) |
 
+## SLO burn-rate alerts (multi-window)
+
+Per [ADR-0009](../adr/0009-latency-budget.md). Pattern from the
+Google SRE workbook: short + long windows must BOTH agree before
+firing. Suppresses single-spike noise; catches both fast burns
+(near-immediate budget consumption) and slow drifts (sustained
+sub-target). Backstop direct-threshold alerts (above) stay live
+for incident-time clarity.
+
+| Name | SLO | Burn rate (× monthly budget) | Severity | Runbook |
+| ---- | --- | ---------------------------- | -------- | ------- |
+| `ratesengine_slo_latency_burn_fast` | 99.9% under 200ms | > 14.4× over 5m AND 1h | **P1** | [api-latency](runbooks/api-latency.md) |
+| `ratesengine_slo_latency_burn_medium` | same | > 6× over 30m AND 6h | **P1** | [api-latency](runbooks/api-latency.md) |
+| `ratesengine_slo_latency_burn_slow` | same | > 1× over 6h AND 24h | P3 | [api-latency](runbooks/api-latency.md) |
+| `ratesengine_slo_availability_burn_fast` | 99.99% non-5xx | > 14.4× over 5m AND 1h | **P1** | [api-5xx](runbooks/api-5xx.md) |
+| `ratesengine_slo_availability_burn_medium` | same | > 6× over 30m AND 6h | **P1** | [api-5xx](runbooks/api-5xx.md) |
+| `ratesengine_slo_availability_burn_slow` | same | > 1× over 6h AND 24h | P3 | [api-5xx](runbooks/api-5xx.md) |
+
 ## Stellar / node alerts
 
 | Name | Metric | Condition | Severity | Runbook |

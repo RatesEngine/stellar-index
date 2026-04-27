@@ -1,0 +1,262 @@
+---
+# Service-level-objective (SLO) burn-rate alerts.
+#
+# Pattern from the Google SRE workbook (chapter 5: "Alerting on
+# SLOs"): multi-window, multi-burn-rate. An alert fires when BOTH:
+#
+#   - a SHORT window shows a high error rate (catches fast burns)
+#   - a LONG window shows the same (filters out one-off spikes)
+#
+# Three sensitivity tiers per SLO, mapped to severity:
+#
+#   - "fast burn"   — 5m + 1h windows, both > 14.4× — would consume
+#                     5% of monthly budget in 1h. Severity: page.
+#   - "medium burn" — 30m + 6h windows, both > 6× — would consume
+#                     5% of monthly budget in 6h. Severity: page.
+#   - "slow burn"   — 6h + 24h windows, both > 1× — sustained budget
+#                     consumption at exactly the 30-day rate.
+#                     Severity: ticket.
+#
+# Both windows must agree to suppress noise. The single-window
+# threshold-style alerts in api.yml stay as a backstop for the
+# "p95 actually crossed the line" case (more direct signal during
+# incidents); SLO alerts here track the longer-term budget.
+#
+# SLO targets per ADR-0009 (latency budget) + Freighter RFP §SLA:
+#
+#   - Latency: 99.9% of /v1/price + /v1/oracle/* requests under 200 ms
+#     over 30 days. Steady-state target; cache-cold tail counts
+#     against the p99 contract (≤ 500 ms) but not this SLO.
+#   - Availability: 99.99% of API requests return non-5xx over 30
+#     days. RFP §S9.1 commits to 99.99% uptime; this SLO operationalises
+#     it.
+
+groups:
+  - name: ratesengine.slo.latency
+    interval: 30s
+    rules:
+
+      # ─── Recording rules — slow-request fraction at multiple windows ──
+      #
+      # A request is "slow" if it exceeds the p95 target (200 ms).
+      # The fraction is slow_count / total_count over each window.
+      # Pre-computed so the burn-rate alerts read scalars, not
+      # joins of histograms.
+
+      - record: ratesengine:api_slow_request_ratio:5m
+        expr: |
+          sum(rate(http_request_duration_seconds_bucket{job="api",route!="/metrics",route!~"/(healthz|readyz|version)",le="0.2"}[5m]))
+          /
+          sum(rate(http_request_duration_seconds_count{job="api",route!="/metrics",route!~"/(healthz|readyz|version)"}[5m]))
+        labels:
+          slo: api_latency_p95_under_200ms
+
+      - record: ratesengine:api_slow_request_ratio:30m
+        expr: |
+          sum(rate(http_request_duration_seconds_bucket{job="api",route!="/metrics",route!~"/(healthz|readyz|version)",le="0.2"}[30m]))
+          /
+          sum(rate(http_request_duration_seconds_count{job="api",route!="/metrics",route!~"/(healthz|readyz|version)"}[30m]))
+        labels:
+          slo: api_latency_p95_under_200ms
+
+      - record: ratesengine:api_slow_request_ratio:1h
+        expr: |
+          sum(rate(http_request_duration_seconds_bucket{job="api",route!="/metrics",route!~"/(healthz|readyz|version)",le="0.2"}[1h]))
+          /
+          sum(rate(http_request_duration_seconds_count{job="api",route!="/metrics",route!~"/(healthz|readyz|version)"}[1h]))
+        labels:
+          slo: api_latency_p95_under_200ms
+
+      - record: ratesengine:api_slow_request_ratio:6h
+        expr: |
+          sum(rate(http_request_duration_seconds_bucket{job="api",route!="/metrics",route!~"/(healthz|readyz|version)",le="0.2"}[6h]))
+          /
+          sum(rate(http_request_duration_seconds_count{job="api",route!="/metrics",route!~"/(healthz|readyz|version)"}[6h]))
+        labels:
+          slo: api_latency_p95_under_200ms
+
+      - record: ratesengine:api_slow_request_ratio:24h
+        expr: |
+          sum(rate(http_request_duration_seconds_bucket{job="api",route!="/metrics",route!~"/(healthz|readyz|version)",le="0.2"}[24h]))
+          /
+          sum(rate(http_request_duration_seconds_count{job="api",route!="/metrics",route!~"/(healthz|readyz|version)"}[24h]))
+        labels:
+          slo: api_latency_p95_under_200ms
+
+      # The "fraction below 200ms" math is `1 - bucket_le_0.2 / count`,
+      # but the bucket is cumulative so we subtract directly. Above
+      # we recorded the GOOD ratio (≤ 200 ms); the burn-rate alerts
+      # below compare 1 - good against the target budget.
+
+      # ─── Burn-rate alerts ─────────────────────────────────────────
+
+      - alert: ratesengine_slo_latency_burn_fast
+        # Fast burn: short + long both > 14.4× the budget burn.
+        # Budget = 0.1% of requests slow over 30d → burn = 14.4× means
+        # consuming 5% of monthly budget in 1 hour. Page.
+        expr: |
+          (1 - ratesengine:api_slow_request_ratio:5m{slo="api_latency_p95_under_200ms"}) > (14.4 * 0.001)
+          and
+          (1 - ratesengine:api_slow_request_ratio:1h{slo="api_latency_p95_under_200ms"}) > (14.4 * 0.001)
+        for: 2m
+        labels:
+          severity: page
+          team: ratesengine
+          component: api
+          slo: api_latency_p95_under_200ms
+          runbook_url: https://github.com/RatesEngine/rates-engine/blob/main/docs/operations/runbooks/api-latency.md
+        annotations:
+          summary: "FAST burn — consuming SLO budget at >14.4× rate"
+          description: |
+            Latency SLO (99.9% under 200 ms over 30d) is burning fast.
+            At current rate we would consume 5% of monthly budget in 1
+            hour. Both 5m and 1h windows agree — not a one-off spike.
+            Follow the api-latency runbook; check Redis cache hit rate
+            + Postgres connection pool first.
+
+      - alert: ratesengine_slo_latency_burn_medium
+        expr: |
+          (1 - ratesengine:api_slow_request_ratio:30m{slo="api_latency_p95_under_200ms"}) > (6 * 0.001)
+          and
+          (1 - ratesengine:api_slow_request_ratio:6h{slo="api_latency_p95_under_200ms"}) > (6 * 0.001)
+        for: 5m
+        labels:
+          severity: page
+          team: ratesengine
+          component: api
+          slo: api_latency_p95_under_200ms
+          runbook_url: https://github.com/RatesEngine/rates-engine/blob/main/docs/operations/runbooks/api-latency.md
+        annotations:
+          summary: "MEDIUM burn — consuming SLO budget at >6× rate"
+          description: |
+            Latency SLO is burning medium-fast. 30m and 6h windows both
+            confirm. At this rate we'd exhaust the monthly budget in
+            ~5 days. Page; investigate before it crosses fast-burn.
+
+      - alert: ratesengine_slo_latency_burn_slow
+        expr: |
+          (1 - ratesengine:api_slow_request_ratio:6h{slo="api_latency_p95_under_200ms"}) > (1 * 0.001)
+          and
+          (1 - ratesengine:api_slow_request_ratio:24h{slo="api_latency_p95_under_200ms"}) > (1 * 0.001)
+        for: 30m
+        labels:
+          severity: ticket
+          team: ratesengine
+          component: api
+          slo: api_latency_p95_under_200ms
+          runbook_url: https://github.com/RatesEngine/rates-engine/blob/main/docs/operations/runbooks/api-latency.md
+        annotations:
+          summary: "SLOW burn — sustained SLO budget consumption at 30d rate"
+          description: |
+            Latency SLO is consuming budget at exactly the 30-day rate.
+            Not urgent (budget will be respected); ticket for the next
+            workday so the underlying inefficiency gets addressed.
+
+  - name: ratesengine.slo.availability
+    interval: 30s
+    rules:
+
+      # ─── Recording rules — error fraction at multiple windows ─────
+      #
+      # "Error" = any non-5xx response. 4xx counts as success because
+      # it's the client's fault, not ours. The SLO target is 99.99%
+      # over 30 days (per RFP §S9.1).
+
+      - record: ratesengine:api_error_ratio:5m
+        expr: |
+          sum(rate(http_requests_total{job="api",status=~"5.."}[5m]))
+          /
+          sum(rate(http_requests_total{job="api"}[5m]))
+        labels:
+          slo: api_availability_3_nines_9
+
+      - record: ratesengine:api_error_ratio:30m
+        expr: |
+          sum(rate(http_requests_total{job="api",status=~"5.."}[30m]))
+          /
+          sum(rate(http_requests_total{job="api"}[30m]))
+        labels:
+          slo: api_availability_3_nines_9
+
+      - record: ratesengine:api_error_ratio:1h
+        expr: |
+          sum(rate(http_requests_total{job="api",status=~"5.."}[1h]))
+          /
+          sum(rate(http_requests_total{job="api"}[1h]))
+        labels:
+          slo: api_availability_3_nines_9
+
+      - record: ratesengine:api_error_ratio:6h
+        expr: |
+          sum(rate(http_requests_total{job="api",status=~"5.."}[6h]))
+          /
+          sum(rate(http_requests_total{job="api"}[6h]))
+        labels:
+          slo: api_availability_3_nines_9
+
+      - record: ratesengine:api_error_ratio:24h
+        expr: |
+          sum(rate(http_requests_total{job="api",status=~"5.."}[24h]))
+          /
+          sum(rate(http_requests_total{job="api"}[24h]))
+        labels:
+          slo: api_availability_3_nines_9
+
+      # ─── Burn-rate alerts ─────────────────────────────────────────
+      # Budget = 0.0001 (1 - 0.9999). Burn = error_rate / 0.0001.
+
+      - alert: ratesengine_slo_availability_burn_fast
+        expr: |
+          ratesengine:api_error_ratio:5m{slo="api_availability_3_nines_9"} > (14.4 * 0.0001)
+          and
+          ratesengine:api_error_ratio:1h{slo="api_availability_3_nines_9"} > (14.4 * 0.0001)
+        for: 2m
+        labels:
+          severity: page
+          team: ratesengine
+          component: api
+          slo: api_availability_3_nines_9
+          runbook_url: https://github.com/RatesEngine/rates-engine/blob/main/docs/operations/runbooks/api-5xx.md
+        annotations:
+          summary: "FAST burn — availability SLO budget consuming at >14.4× rate"
+          description: |
+            Availability SLO (99.99% non-5xx over 30d) is burning fast.
+            At current rate we would consume 5% of monthly budget in 1h.
+            Both 5m and 1h windows agree. Follow the api-5xx runbook.
+
+      - alert: ratesengine_slo_availability_burn_medium
+        expr: |
+          ratesengine:api_error_ratio:30m{slo="api_availability_3_nines_9"} > (6 * 0.0001)
+          and
+          ratesengine:api_error_ratio:6h{slo="api_availability_3_nines_9"} > (6 * 0.0001)
+        for: 5m
+        labels:
+          severity: page
+          team: ratesengine
+          component: api
+          slo: api_availability_3_nines_9
+          runbook_url: https://github.com/RatesEngine/rates-engine/blob/main/docs/operations/runbooks/api-5xx.md
+        annotations:
+          summary: "MEDIUM burn — availability SLO budget consuming at >6× rate"
+          description: |
+            Availability SLO is burning medium-fast. 30m and 6h windows
+            both confirm. Page; investigate the api-5xx runbook before
+            it crosses fast-burn.
+
+      - alert: ratesengine_slo_availability_burn_slow
+        expr: |
+          ratesengine:api_error_ratio:6h{slo="api_availability_3_nines_9"} > (1 * 0.0001)
+          and
+          ratesengine:api_error_ratio:24h{slo="api_availability_3_nines_9"} > (1 * 0.0001)
+        for: 30m
+        labels:
+          severity: ticket
+          team: ratesengine
+          component: api
+          slo: api_availability_3_nines_9
+          runbook_url: https://github.com/RatesEngine/rates-engine/blob/main/docs/operations/runbooks/api-5xx.md
+        annotations:
+          summary: "SLOW burn — sustained availability SLO budget consumption"
+          description: |
+            Availability SLO is consuming budget at the 30-day rate.
+            Not urgent; ticket for the next workday.
