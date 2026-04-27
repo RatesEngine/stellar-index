@@ -314,6 +314,47 @@ if [ -d docs/operations/runbooks ] && [ -f internal/obs/metrics.go ]; then
   rm -f "$allowed"
 fi
 
+# ─── 12. Every runbook referenced from alerts-catalog must exist ────────────
+#
+# Symmetric counterpart to §9 (which checks rule-file → runbook). The
+# catalog is the operator-facing index; a stale `runbooks/X.md` link
+# in it means oncall clicks through to a 404. Caught nothing yet —
+# verified clean as of 2026-04-27 — but adding the check before the
+# next runbook reorganisation introduces drift.
+
+echo "Checking alerts-catalog runbook link freshness..."
+if [ -f docs/operations/alerts-catalog.md ] && [ -d docs/operations/runbooks ]; then
+  grep -oE 'runbooks/[a-z0-9-]+\.md' docs/operations/alerts-catalog.md | sort -u | while IFS= read -r path; do
+    [ -z "$path" ] && continue
+    if [ ! -f "docs/operations/$path" ]; then
+      err "alerts-catalog references missing runbook: docs/operations/$path"
+    fi
+  done
+fi
+
+# ─── 13. Every operational runbook should be referenced ────────────────────
+#
+# Orphan runbooks are stale by definition — a runbook nobody can
+# find isn't a runbook. Allow-list the four that intentionally
+# stand alone (template, bring-up procedures, dead-man's switch).
+# All other docs/operations/runbooks/*.md must appear in either
+# alerts-catalog.md or sev-playbook.md or be cross-referenced from
+# another runbook (chained-procedure case).
+
+echo "Checking runbook orphans..."
+if [ -d docs/operations/runbooks ]; then
+  for r in docs/operations/runbooks/*.md; do
+    fname="${r##*/}"
+    case "$fname" in
+      _template.md|README.md|bootstrap-archival-node.md|first-archival-node-deployment.md|deadmansswitch.md) continue ;;
+    esac
+    # Look for a reference in alerts-catalog, sev-playbook, or peer runbooks.
+    if ! grep -qrF "runbooks/$fname" docs/operations/ 2>/dev/null; then
+      err "orphan runbook with no referrer: $r — link from alerts-catalog, sev-playbook, or another runbook"
+    fi
+  done
+fi
+
 # ─── Summary ────────────────────────────────────────────────────────────────
 
 count=$(cat "$ERROR_FILE")
