@@ -251,7 +251,7 @@ type AggregateConfig struct {
 type APIConfig struct {
 	ListenAddr          string   `toml:"listen_addr" doc:"Bind address for the HTTP server." default:"0.0.0.0:3000"`
 	ExternalBaseURL     string   `toml:"external_base_url" doc:"Public-facing base URL (e.g. https://api.ratesengine.net/v1)." default:"https://api.ratesengine.net/v1"`
-	AuthMode            string   `toml:"auth_mode" doc:"Authentication mode — none / apikey (planned) / sep10 (planned). Default 'none' because the auth middleware has not shipped yet; a non-'none' value with the current binary is cosmetic, not enforced." default:"none"`
+	AuthMode            string   `toml:"auth_mode" doc:"Authentication mode — none / apikey / sep10. The middleware (internal/api/v1/middleware/Auth) is scaffolded; validators (internal/auth/{APIKeyValidator,SEP10Validator}) ship as Noop stubs that return ErrNotImplemented. A deployment with auth_mode=apikey or sep10 BUT no validator implementation wired in cmd/ratesengine-api/main.go fails-loud at 503 on every request — never silently demotes to anonymous. Stay on 'none' until validators land." default:"none"`
 	AnonRateLimitPerMin int      `toml:"anon_rate_limit_per_min" doc:"Per-IP rate limit for anonymous requests." default:"60"`
 	KeyRateLimitPerMin  int      `toml:"key_rate_limit_per_min" doc:"Per-API-key rate limit, default tier." default:"1000"`
 	CDNEnabled          bool     `toml:"cdn_enabled" doc:"Emit CDN-friendly Cache-Control headers on long-immutable endpoints." default:"true"`
