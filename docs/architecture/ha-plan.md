@@ -213,6 +213,13 @@ provisioned; cloud is pay-as-you-use for DR.
 - **Failover:** Patroni leader election. Target RTO 60 s.
 - **Connection secret:** read via secret manager at startup, never
   on disk.
+- **Cross-region consistency:** API endpoints reading from the CAGG
+  tables serve only **closed** buckets per
+  [ADR-0015](../adr/0015-last-closed-bucket-rate-serving.md); the
+  in-progress window is never exposed. This makes "all 3 regions
+  return the same rate" a property of the design rather than a
+  hopeful side-effect of replication latency. See the ADR for
+  trade-offs and the ≤30 s freshness contract it implies.
 
 ### 3.4 Redis cluster
 

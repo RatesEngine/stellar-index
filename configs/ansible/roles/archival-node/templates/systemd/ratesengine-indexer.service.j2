@@ -1,0 +1,31 @@
+[Unit]
+Description=Rates Engine indexer (Galexie → ledgerstream → dispatcher → TimescaleDB)
+Documentation=https://github.com/RatesEngine/rates-engine/blob/main/docs/architecture/ingest-pipeline.md
+After=network-online.target minio.service postgresql@{{ postgres_version }}-main.service
+Wants=network-online.target
+Requires=minio.service postgresql@{{ postgres_version }}-main.service
+
+[Service]
+Type=simple
+# Run as root for now — same as galexie. Tighten to a dedicated
+# `ratesengine` system user once 04-users.yml grows one.
+User=root
+Group=root
+EnvironmentFile=/etc/default/ratesengine-ops
+ExecStart=/usr/local/bin/ratesengine-indexer -config /etc/ratesengine.toml
+ExecStop=/bin/kill -TERM $MAINPID
+
+LimitNOFILE=1048576
+Restart=on-failure
+RestartSec=10s
+
+# Sandboxing — same defaults as galexie. Loosen if the indexer ever
+# needs to write somewhere outside /tmp and its journald output.
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+
+[Install]
+WantedBy=multi-user.target

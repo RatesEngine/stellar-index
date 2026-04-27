@@ -23,9 +23,11 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"text/tabwriter"
 	"time"
 
+	"github.com/stellar/go-stellar-sdk/strkey"
 	"github.com/stellar/go-stellar-sdk/support/datastore"
 	sdkxdr "github.com/stellar/go-stellar-sdk/xdr"
 
@@ -58,7 +60,7 @@ import (
 	"github.com/RatesEngine/rates-engine/internal/version"
 )
 
-func main() { //nolint:gocyclo // subcommand switch; each case is trivial, splitting adds indirection without clarity
+func main() { //nolint:gocyclo,gocognit // subcommand switch; each case is trivial, splitting adds indirection without clarity
 	args := os.Args[1:]
 	if len(args) == 0 {
 		printUsage()
@@ -110,6 +112,16 @@ func main() { //nolint:gocyclo // subcommand switch; each case is trivial, split
 			fmt.Fprintf(os.Stderr, "verify-archive: %v\n", err)
 			os.Exit(1)
 		}
+	case "wasm-history":
+		if err := wasmHistory(args[1:]); err != nil {
+			fmt.Fprintf(os.Stderr, "wasm-history: %v\n", err)
+			os.Exit(1)
+		}
+	case "cross-region-check":
+		if err := crossRegionCheck(args[1:]); err != nil {
+			fmt.Fprintf(os.Stderr, "cross-region-check: %v\n", err)
+			os.Exit(1)
+		}
 	case "version", "--version", "-v":
 		fmt.Println(version.String())
 	case "help", "--help", "-h":
@@ -122,9 +134,12 @@ func main() { //nolint:gocyclo // subcommand switch; each case is trivial, split
 	}
 }
 
-func printUsage() {
-	fmt.Fprintf(os.Stderr, `ratesengine-ops %s
-
+// usageBody is the static portion of `ratesengine-ops -h`. The header
+// (with version) is prepended at print time so the binary's build
+// version shows in the output. Kept as a package-level const so the
+// printUsage func itself stays short — funlen lint counts the
+// multi-line string literal against the function it's defined in.
+const usageBody = `
 Usage:
   ratesengine-ops <subcommand>
 
@@ -183,6 +198,37 @@ Subcommands:
                                        -archivist-timeout (default 30m).
                             all        run all four.
                           Exit 0 = clean; 1 = first break with details.
+  cross-region-check -regions name=URL,name=URL,... [-pairs PAIR,...] [-metric vwap|twap|ohlc] [-window DUR] [-samples N] [-to TS]
+                          Hit each region's /v1/{vwap|twap|ohlc} endpoint
+                          for the same closed-bucket window and assert
+                          byte-equality on the price field (and OHLC
+                          open/high/low/close where applicable). Per
+                          ADR-0015 the response should be byte-identical
+                          across regions once trades have replicated;
+                          divergence here flags one of: replication lag,
+                          decoder version drift, upstream divergence,
+                          or postgres replication broken. Designed for
+                          periodic execution from a monitoring host.
+                          Exit 0 = clean; 1 = divergence with diff.
+                          Example:
+                            ratesengine-ops cross-region-check \
+                              -regions r1=https://r1.api.example.net,r2=https://r2.api.example.net \
+                              -pairs native/fiat:USD,crypto:BTC/fiat:USD \
+                              -metric vwap -samples 5
+  wasm-history -config PATH -contracts ID,ID,... [-from N] [-to N] [-bucket NAME]
+                          Walk a galexie bucket and emit a per-contract
+                          WASM-version timeline. For each watched contract,
+                          tracks every change to its instance's executable
+                          hash and reports the active ledger range per hash.
+                          Read-only audit; no DB writes. Output is JSON to
+                          stdout. Defaults to S3BucketArchive (the historical
+                          bucket) — pass -bucket to override.
+                          Example:
+                            ratesengine-ops wasm-history \
+                              -config /etc/ratesengine.toml \
+                              -from 21000000 -to 25000000 \
+                              -contracts CDLZ...,CARFAC... \
+                              > soroswap-wasm-history.json
   backfill-external -config PATH -source SRC -pair SYM -from TS -to TS -granularity D
                           Pull historical candles from an external venue
                           (binance / kraken / bitstamp / coinbase) and
@@ -202,7 +248,10 @@ TODO subcommands (land with their feature PRs):
   backfill                Replay a ledger range into the trades hypertable.
   cache-prime             Warm the Redis hot-path cache from Timescale.
   verify-invariants       Cross-check aggregated prices against divergence.
-`, version.String())
+`
+
+func printUsage() {
+	fmt.Fprintf(os.Stderr, "ratesengine-ops %s\n%s", version.String(), usageBody)
 }
 
 // listCursors loads the storage layer and prints every per-source
@@ -1872,4 +1921,471 @@ func extractLedgerHeader(lcm sdkxdr.LedgerCloseMeta) (sdkxdr.LedgerHeader, bool)
 // hashToHex renders an xdr.Hash as a lowercase 64-char hex string.
 func hashToHex(h sdkxdr.Hash) string {
 	return hex.EncodeToString(h[:])
+}
+
+// ─── wasm-history ───────────────────────────────────────────────
+//
+// wasmHistory walks a galexie bucket over [from, to] and tracks
+// when each watched contract's instance executable hash changes.
+// Detection signal: any LedgerEntryChange (Created or Updated)
+// whose entry is a CONTRACT_DATA with a LedgerKeyContractInstance
+// key — that's the contract's instance row, and its Val is an
+// ScContractInstance whose Executable field carries the WASM hash.
+// Both deploys and `update_current_contract_wasm` invocations
+// surface the same way.
+//
+// Output: a JSON document keyed by contract C-strkey, with the
+// timeline of (wasm_hash, from_ledger, to_ledger) ranges.
+// Read-only — no DB writes, no Timescale, no cursor changes.
+//
+// Default bucket is cfg.Storage.S3BucketArchive (historical) since
+// audits typically span ranges before galexie-live's seam.
+
+type wasmRange struct {
+	WasmHash   string `json:"wasm_hash"`
+	FromLedger uint32 `json:"from_ledger"`
+	ToLedger   uint32 `json:"to_ledger,omitempty"` // 0 = open / current
+}
+
+type contractHistory struct {
+	Contract string      `json:"contract"`
+	Ranges   []wasmRange `json:"ranges"`
+}
+
+// wasmContractState tracks the open (most recently seen) WASM hash
+// for one contract, plus the closed ranges that preceded it.
+type wasmContractState struct {
+	ranges  []wasmRange
+	current string // current open WASM hash hex; empty = no open range
+}
+
+func wasmHistory(args []string) error { //nolint:funlen,gocognit,gocyclo // linear diagnostic, splitting reduces readability
+	fs := flag.NewFlagSet("wasm-history", flag.ContinueOnError)
+	cfgPath := fs.String("config", "", "Path to TOML config file (required)")
+	from := fs.Uint("from", 2, "First ledger sequence (inclusive)")
+	to := fs.Uint("to", 0, "Last ledger sequence (inclusive). Required when -parallel > 1.")
+	contractsCSV := fs.String("contracts", "",
+		"Comma-separated contract C-strkey IDs to watch (required, at least one)")
+	bucket := fs.String("bucket", "",
+		"Galexie bucket name. Default: cfg.Storage.S3BucketArchive.")
+	progressEvery := fs.Uint("progress-every", 100_000, "Emit progress lines to stderr every N ledgers")
+	parallel := fs.Uint("parallel", 1,
+		"Number of concurrent worker ranges. Range [from,to] is split into "+
+			"N contiguous chunks. Each worker has its own ledgerstream + dispatcher; "+
+			"results are merged at the end. Worth setting >1 for ranges of 1M+ ledgers.")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	if *cfgPath == "" {
+		return fmt.Errorf("-config is required")
+	}
+	if *contractsCSV == "" {
+		return fmt.Errorf("-contracts is required (one or more comma-separated C-strkey IDs)")
+	}
+	if *parallel == 0 {
+		*parallel = 1
+	}
+	if *parallel > 1 && *to == 0 {
+		return fmt.Errorf("-parallel > 1 requires -to (workers split a bounded range)")
+	}
+	if *to != 0 && *to < *from {
+		return fmt.Errorf("-to (%d) must be >= -from (%d)", *to, *from)
+	}
+
+	cfg, err := config.LoadWithEnv(*cfgPath)
+	if err != nil {
+		return err
+	}
+
+	// Decode the watch list to fixed 32-byte hashes for cheap matching.
+	watch := make(map[sdkxdr.Hash]string) // hash → C-strkey (for output)
+	for _, s := range strings.Split(*contractsCSV, ",") {
+		s = strings.TrimSpace(s)
+		if s == "" {
+			continue
+		}
+		raw, err := strkey.Decode(strkey.VersionByteContract, s)
+		if err != nil {
+			return fmt.Errorf("invalid contract ID %q: %w", s, err)
+		}
+		if len(raw) != 32 {
+			return fmt.Errorf("contract ID %q decoded to %d bytes, expected 32", s, len(raw))
+		}
+		var h sdkxdr.Hash
+		copy(h[:], raw)
+		watch[h] = s
+	}
+	if len(watch) == 0 {
+		return fmt.Errorf("-contracts parsed to empty watch list")
+	}
+
+	bucketName := *bucket
+	if bucketName == "" {
+		bucketName = cfg.Storage.S3BucketArchive
+	}
+	fmt.Fprintf(os.Stderr, "wasm-history: watching %d contract(s), bucket=%s, range=[%d, %d], parallel=%d\n",
+		len(watch), bucketName, *from, *to, *parallel)
+
+	lsCfg := ledgerstream.Config{
+		DataStore: datastore.DataStoreConfig{
+			Type: "S3",
+			Params: map[string]string{
+				"destination_bucket_path": bucketName,
+				"region":                  cfg.Storage.S3Region,
+				"endpoint_url":            cfg.Storage.S3Endpoint,
+			},
+			NetworkPassphrase: cfg.Stellar.Passphrase(),
+			Compression:       "zstd",
+		},
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	startedAt := time.Now()
+
+	// Split the range into N contiguous chunks. Worker i gets
+	// [from + i*size, from + (i+1)*size - 1] except the last
+	// worker absorbs the remainder.
+	workerStates, totalScanned, err := runWasmHistoryWorkers(
+		ctx, lsCfg, watch, uint32(*from), uint32(*to), int(*parallel), uint64(*progressEvery))
+	if err != nil {
+		return err
+	}
+
+	fmt.Fprintf(os.Stderr, "\nwasm-history: scanned %d ledgers across %d worker(s) in %s\n",
+		totalScanned, *parallel, time.Since(startedAt).Round(time.Second))
+
+	// Merge worker outputs. Each worker's per-contract ranges are
+	// already in ledger-order within its chunk; concatenating in
+	// worker-order produces a globally ordered list, then we collapse
+	// adjacent same-hash ranges across the boundaries.
+	merged := mergeWasmHistories(workerStates, watch)
+
+	// Render: stable order by C-strkey for deterministic output.
+	out := make([]contractHistory, 0, len(watch))
+	for h, ranges := range merged {
+		out = append(out, contractHistory{
+			Contract: watch[h],
+			Ranges:   ranges,
+		})
+	}
+	// Also emit watched contracts that produced zero changes — useful
+	// signal that the audit ran and saw nothing rather than was misconfigured.
+	for h, name := range watch {
+		if _, seen := merged[h]; !seen {
+			out = append(out, contractHistory{Contract: name, Ranges: nil})
+		}
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].Contract < out[j].Contract })
+
+	enc := json.NewEncoder(os.Stdout)
+	enc.SetIndent("", "  ")
+	return enc.Encode(out)
+}
+
+// workerResult is what each parallel worker produces: a state map
+// covering its bounded range, plus the actual upper bound it reached
+// (used by merge to know where this worker's open ranges should close).
+type workerResult struct {
+	state    map[sdkxdr.Hash]*wasmContractState
+	scanned  uint64
+	upperEnd uint32 // last ledger the worker actually saw (inclusive)
+}
+
+// runWasmHistoryWorkers splits [from,to] into `parallel` contiguous
+// chunks and runs each in its own goroutine. Returns per-worker
+// state maps in worker-order plus the total ledgers scanned.
+func runWasmHistoryWorkers(
+	ctx context.Context,
+	lsCfg ledgerstream.Config,
+	watch map[sdkxdr.Hash]string,
+	from, to uint32,
+	parallel int,
+	progressEvery uint64,
+) ([]workerResult, uint64, error) {
+	if parallel < 1 {
+		parallel = 1
+	}
+	results := make([]workerResult, parallel)
+	for i := range results {
+		results[i].state = make(map[sdkxdr.Hash]*wasmContractState)
+	}
+
+	// Range partition. Use the unbounded form (to == 0) only when
+	// parallel == 1 — the parallel path always works on bounded
+	// chunks since unbounded only makes sense for live tail.
+	bounds := splitRange(from, to, parallel)
+	startedAt := time.Now()
+
+	var wg sync.WaitGroup
+	errCh := make(chan error, parallel)
+	totalScanned := atomicUint64{}
+
+	for i, b := range bounds {
+		i, b := i, b
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			results[i].upperEnd = b.to
+			workerScanned := uint64(0)
+			err := ledgerstream.Stream(ctx, lsCfg, b.from, b.to,
+				func(lcm sdkxdr.LedgerCloseMeta) error {
+					seq := lcm.LedgerSequence()
+					scanLCMForWasmChanges(lcm, watch, results[i].state, seq)
+					workerScanned++
+					if progressEvery > 0 && workerScanned%progressEvery == 0 {
+						total := totalScanned.add(progressEvery)
+						rate := float64(total) / time.Since(startedAt).Seconds()
+						fmt.Fprintf(os.Stderr, "wasm-history: w%d ledger %d, total scanned %d, %.0f ledgers/s\n",
+							i, seq, total, rate)
+					}
+					return nil
+				},
+			)
+			results[i].scanned = workerScanned
+			// Add the un-counted residue (workerScanned mod progressEvery).
+			totalScanned.add(workerScanned % progressEvery)
+			if err != nil && !errors.Is(err, context.Canceled) {
+				errCh <- fmt.Errorf("worker %d [%d,%d]: %w", i, b.from, b.to, err)
+			}
+		}()
+	}
+	wg.Wait()
+	close(errCh)
+	for err := range errCh {
+		return nil, totalScanned.load(), err // first error wins
+	}
+	return results, totalScanned.load(), nil
+}
+
+// rangeChunk is one worker's slice of the overall [from,to] range.
+type rangeChunk struct{ from, to uint32 }
+
+// splitRange divides [from,to] into n contiguous chunks. The last
+// chunk absorbs any remainder so the union exactly covers [from,to].
+func splitRange(from, to uint32, n int) []rangeChunk {
+	if n <= 1 || to <= from {
+		return []rangeChunk{{from, to}}
+	}
+	width := uint32(int(to-from+1) / n)
+	out := make([]rangeChunk, n)
+	for i := 0; i < n; i++ {
+		chunkFrom := from + uint32(i)*width
+		chunkTo := chunkFrom + width - 1
+		if i == n-1 {
+			chunkTo = to // last chunk absorbs remainder
+		}
+		out[i] = rangeChunk{chunkFrom, chunkTo}
+	}
+	return out
+}
+
+// mergeWasmHistories combines per-worker state maps into one
+// per-contract timeline. Open ranges from each worker (where the
+// worker exited mid-WASM-version) are closed at the worker's upper
+// bound, then the timelines are concatenated in worker-order.
+// Adjacent ranges with the same hash across worker boundaries are
+// collapsed into a single range.
+func mergeWasmHistories(
+	workers []workerResult,
+	watch map[sdkxdr.Hash]string,
+) map[sdkxdr.Hash][]wasmRange {
+	merged := make(map[sdkxdr.Hash][]wasmRange)
+	for _, w := range workers {
+		for h, s := range w.state {
+			// Close the worker's open range at its upper bound.
+			if len(s.ranges) > 0 && s.ranges[len(s.ranges)-1].ToLedger == 0 {
+				s.ranges[len(s.ranges)-1].ToLedger = w.upperEnd
+			}
+			existing := merged[h]
+			for _, r := range s.ranges {
+				if len(existing) > 0 && existing[len(existing)-1].WasmHash == r.WasmHash &&
+					existing[len(existing)-1].ToLedger+1 == r.FromLedger {
+					// Adjacent same-hash → extend the prior range.
+					existing[len(existing)-1].ToLedger = r.ToLedger
+				} else {
+					existing = append(existing, r)
+				}
+			}
+			merged[h] = existing
+		}
+	}
+	// Reopen the LAST range of each contract — i.e. clear ToLedger
+	// if it hits the very last worker's upperEnd, since "we don't
+	// know yet" is more honest than "ends here" for the operator
+	// reading the JSON. Actually no — the operator scoped -to
+	// explicitly; closing at to is correct. Leave as-is.
+	_ = watch // referenced only for godoc symmetry; merging is keyed by Hash.
+	return merged
+}
+
+// atomicUint64 is a tiny helper for thread-safe counter increments
+// without pulling in sync/atomic boilerplate at every call site.
+type atomicUint64 struct {
+	mu sync.Mutex
+	v  uint64
+}
+
+func (a *atomicUint64) add(n uint64) uint64 {
+	a.mu.Lock()
+	a.v += n
+	r := a.v
+	a.mu.Unlock()
+	return r
+}
+
+func (a *atomicUint64) load() uint64 {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	return a.v
+}
+
+// scanLCMForWasmChanges walks every operation's LedgerEntryChanges
+// in lcm and updates state when a watched contract's instance
+// executable hash changes (or first appears).
+//
+// Performance note: every value access on the SDK XDR types is a
+// deep copy (LedgerCloseMetaV1 includes TxProcessing[] — potentially
+// thousands of bytes per ledger). At this hot path we use pointer
+// access exclusively — `lcm.V1`, `entry.Data.ContractData`,
+// `cd.Val.Instance` — to avoid per-ledger XDR copies. An earlier
+// implementation using GetV1() / GetContractData() / GetInstance()
+// burned ~6 minutes of 99% CPU on a 100k-ledger sample.
+func scanLCMForWasmChanges(
+	lcm sdkxdr.LedgerCloseMeta,
+	watch map[sdkxdr.Hash]string,
+	state map[sdkxdr.Hash]*wasmContractState,
+	seq uint32,
+) {
+	if lcm.V != 1 || lcm.V1 == nil {
+		return // pre-V1 LCM (very old ledgers); no Soroban; nothing to scan
+	}
+	v1 := lcm.V1
+	for i := range v1.TxProcessing {
+		txMeta := &v1.TxProcessing[i].TxApplyProcessing
+		switch {
+		case txMeta.V3 != nil:
+			for j := range txMeta.V3.Operations {
+				changes := txMeta.V3.Operations[j].Changes
+				for k := range changes {
+					scanLedgerEntryChange(&changes[k], watch, state, seq)
+				}
+			}
+		case txMeta.V4 != nil:
+			for j := range txMeta.V4.Operations {
+				changes := txMeta.V4.Operations[j].Changes
+				for k := range changes {
+					scanLedgerEntryChange(&changes[k], watch, state, seq)
+				}
+			}
+		default:
+			// V1/V2 didn't have ContractData. Skip.
+			continue
+		}
+	}
+}
+
+// scanLedgerEntryChange checks one LedgerEntryChange for a
+// watched-contract instance update. Updates state in place.
+//
+// Takes the change by pointer to avoid copying the (potentially
+// deep) LedgerEntry tree on every call.
+func scanLedgerEntryChange(
+	change *sdkxdr.LedgerEntryChange,
+	watch map[sdkxdr.Hash]string,
+	state map[sdkxdr.Hash]*wasmContractState,
+	seq uint32,
+) {
+	var entry *sdkxdr.LedgerEntry
+	switch change.Type {
+	case sdkxdr.LedgerEntryChangeTypeLedgerEntryCreated:
+		entry = change.Created
+	case sdkxdr.LedgerEntryChangeTypeLedgerEntryUpdated:
+		entry = change.Updated
+	case sdkxdr.LedgerEntryChangeTypeLedgerEntryRestored:
+		// Restored counts as "the entry exists at this hash again" —
+		// treat like Created for tracking purposes.
+		entry = change.Restored
+	default:
+		return
+	}
+	if entry == nil {
+		return
+	}
+
+	// Type discriminator first — most LedgerEntries are Account /
+	// Trustline / Offer / etc., not ContractData. Cheap reject path.
+	if entry.Data.Type != sdkxdr.LedgerEntryTypeContractData {
+		return
+	}
+	cd := entry.Data.ContractData
+	if cd == nil {
+		return
+	}
+
+	// Only the LedgerKeyContractInstance row carries the executable;
+	// per-storage-key data rows have unrelated keys.
+	if cd.Key.Type != sdkxdr.ScValTypeScvLedgerKeyContractInstance {
+		return
+	}
+
+	// Match against our watch list. ContractId is *ContractId on the
+	// ScAddress union when Type == ScAddressTypeScAddressTypeContract.
+	if cd.Contract.Type != sdkxdr.ScAddressTypeScAddressTypeContract {
+		return
+	}
+	if cd.Contract.ContractId == nil {
+		return
+	}
+	contractHash := sdkxdr.Hash(*cd.Contract.ContractId)
+	if _, watched := watch[contractHash]; !watched {
+		return
+	}
+
+	// The Val should be an ScContractInstance carrying an Executable.
+	if cd.Val.Type != sdkxdr.ScValTypeScvContractInstance {
+		return
+	}
+	inst := cd.Val.Instance
+	if inst == nil {
+		return
+	}
+	if inst.Executable.Type != sdkxdr.ContractExecutableTypeContractExecutableWasm {
+		// Stellar-asset contracts have no WASM; skip them but record
+		// a placeholder hash so the timeline is unambiguous.
+		recordWasmTransition(state, contractHash, "stellar-asset", seq)
+		return
+	}
+	if inst.Executable.WasmHash == nil {
+		return
+	}
+	hashHex := hex.EncodeToString(inst.Executable.WasmHash[:])
+	recordWasmTransition(state, contractHash, hashHex, seq)
+}
+
+// recordWasmTransition advances a contract's history when its
+// executable hash differs from the previously seen one. First-seen
+// opens an initial range; same-hash repeats are no-ops.
+func recordWasmTransition(
+	state map[sdkxdr.Hash]*wasmContractState,
+	contract sdkxdr.Hash,
+	wasmHash string,
+	seq uint32,
+) {
+	s, ok := state[contract]
+	if !ok {
+		s = &wasmContractState{}
+		state[contract] = s
+	}
+	if s.current == wasmHash {
+		return // no transition
+	}
+	// Close the previous open range (if any).
+	if s.current != "" && len(s.ranges) > 0 {
+		s.ranges[len(s.ranges)-1].ToLedger = seq - 1
+	}
+	// Open a new range at this ledger.
+	s.ranges = append(s.ranges, wasmRange{WasmHash: wasmHash, FromLedger: seq})
+	s.current = wasmHash
 }

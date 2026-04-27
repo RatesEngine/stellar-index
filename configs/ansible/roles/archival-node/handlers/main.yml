@@ -28,6 +28,16 @@
     name: minio
     state: restarted
 
+- name: Restart ratesengine-indexer
+  ansible.builtin.systemd:
+    name: ratesengine-indexer
+    state: restarted
+
+- name: Restart ratesengine-aggregator
+  ansible.builtin.systemd:
+    name: ratesengine-aggregator
+    state: restarted
+
 - name: Restart node_exporter
   ansible.builtin.systemd:
     name: node_exporter

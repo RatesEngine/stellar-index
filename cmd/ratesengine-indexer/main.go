@@ -162,10 +162,15 @@ func run(cfgPath string, dryRun bool) error {
 	}
 
 	// ─── Ledgerstream → dispatcher loop ─────────────────────────
-	lsConfig := ledgerstreamConfig(cfg)
+	// StreamArchiveThenLive switches from S3BucketArchive to S3BucketLive
+	// at cfg.Ingestion.LiveSeamLedger. When seam=0 or from>=seam, this
+	// degrades to a plain live-only Stream (the historical default).
+	archiveCfg := ledgerstreamConfig(cfg, cfg.Storage.S3BucketArchive)
+	liveCfg := ledgerstreamConfig(cfg, cfg.Storage.S3BucketLive)
 	streamErr := make(chan error, 1)
 	go func() {
-		streamErr <- ledgerstream.Stream(rootCtx, lsConfig, from, 0, /*unbounded*/
+		streamErr <- ledgerstream.StreamArchiveThenLive(
+			rootCtx, archiveCfg, liveCfg, from, cfg.Ingestion.LiveSeamLedger, logger,
 			func(lcm sdkxdr.LedgerCloseMeta) error {
 				return processAndPersist(rootCtx, disp, events, store, logger, lcm, cfg.Stellar.Passphrase())
 			},
@@ -635,15 +640,18 @@ func resolveStartLedger(ctx context.Context, store *timescale.Store, backfillFro
 
 // ─── Config → ledgerstream ──────────────────────────────────────
 
-// ledgerstreamConfig builds a ledgerstream.Config from our TOML
-// config. Only S3/MinIO is wired today; Filesystem is reserved
-// for tests, GCS for a hypothetical cloud deploy.
-func ledgerstreamConfig(cfg config.Config) ledgerstream.Config {
+// ledgerstreamConfig builds a ledgerstream.Config pointing at one
+// galexie bucket. Pass cfg.Storage.S3BucketArchive for historical
+// reads (ledger < seam) or S3BucketLive for the live tail.
+//
+// Only S3/MinIO is wired today; Filesystem is reserved for tests,
+// GCS for a hypothetical cloud deploy.
+func ledgerstreamConfig(cfg config.Config, bucket string) ledgerstream.Config {
 	return ledgerstream.Config{
 		DataStore: datastore.DataStoreConfig{
 			Type: "S3",
 			Params: map[string]string{
-				"destination_bucket_path": cfg.Storage.S3BucketLive,
+				"destination_bucket_path": bucket,
 				"region":                  cfg.Storage.S3Region,
 				"endpoint_url":            cfg.Storage.S3Endpoint,
 			},

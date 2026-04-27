@@ -65,7 +65,9 @@ func (s *Server) handleVWAP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	from, to, ok := parseFromTo(w, r)
+	// Clamped to a closed-bucket boundary when `to` defaults to "now"
+	// per ADR-0015 — guarantees cross-region answer agreement.
+	from, to, _, ok := parseFromToClamped(w, r)
 	if !ok {
 		return
 	}

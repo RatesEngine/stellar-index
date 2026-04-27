@@ -1,0 +1,165 @@
+---
+# Build + install the ratesengine-* binaries, ship migrations, run
+# them against the freshly-provisioned ratesengine database (05-
+# postgres.yml), and bring up the indexer systemd service.
+#
+# Build is cross-compiled on the operator's host (delegate_to:
+# localhost) and copied up — avoids cloning a private git repo on
+# r1 and avoids running a Go toolchain there. Operator must have
+# Go ≥1.25 locally; verified in 01-preflight.yml.
+#
+# Re-applying this task is idempotent:
+#   - Binary copies are content-hash idempotent (`copy` only writes
+#     when the source bytes change).
+#   - `ratesengine-migrate up` is idempotent by design (no-op when
+#     the schema is at the latest version).
+#   - The systemd unit handler restarts only on unit-file change.
+
+- name: Cross-compile ratesengine-* binaries (localhost)
+  delegate_to: localhost
+  ansible.builtin.command:
+    chdir: "{{ playbook_dir }}/../../.."
+    argv:
+      - go
+      - build
+      - -trimpath
+      - -ldflags
+      - "-s -w"
+      - -o
+      - "{{ playbook_dir }}/../../../bin/ratesengine-{{ item }}"
+      - "./cmd/ratesengine-{{ item }}"
+  environment:
+    GOOS: linux
+    GOARCH: amd64
+    CGO_ENABLED: "0"
+  loop:
+    - indexer
+    - aggregator
+    - api
+    - migrate
+    - ops
+  changed_when: true   # rebuild every apply; copy step decides if r1 changed
+
+- name: Install ratesengine binaries on r1
+  ansible.builtin.copy:
+    src: "{{ playbook_dir }}/../../../bin/ratesengine-{{ item }}"
+    dest: "/usr/local/bin/ratesengine-{{ item }}"
+    owner: root
+    group: root
+    mode: "0755"
+  loop:
+    - indexer
+    - aggregator
+    - api
+    - migrate
+    - ops
+  notify: Restart ratesengine-indexer
+
+# ──── Migrations (versioned schema for trades + oracle_updates + CAGGs) ───
+
+- name: Ensure migrations dir exists on r1
+  ansible.builtin.file:
+    path: /usr/local/share/ratesengine/migrations
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Sync migrations from repo to r1
+  ansible.posix.synchronize:
+    src: "{{ playbook_dir }}/../../../migrations/"
+    dest: /usr/local/share/ratesengine/migrations/
+    delete: true
+    rsync_opts:
+      - "--exclude=.DS_Store"
+
+- name: Run pending migrations against the ratesengine database
+  ansible.builtin.command:
+    argv:
+      - /usr/local/bin/ratesengine-migrate
+      - -migrations
+      - /usr/local/share/ratesengine/migrations
+      - up
+  environment:
+    RATESENGINE_POSTGRES_DSN: "postgres://{{ postgres_user_ratesengine }}:{{ postgres_pass_ratesengine }}@127.0.0.1:5432/{{ postgres_db_ratesengine }}?sslmode=disable"
+  register: migrate_result
+  changed_when: "'no change' not in (migrate_result.stdout | default(''))"
+  failed_when: migrate_result.rc != 0
+  no_log: true
+
+# ──── Indexer service ─────────────────────────────────────────────────
+
+- name: Template /etc/ratesengine.toml
+  # The on-disk config carries everything except secrets. Secrets
+  # come from /etc/default/ratesengine-ops via EnvironmentFile.
+  ansible.builtin.template:
+    src: ratesengine.toml.j2
+    dest: /etc/ratesengine.toml
+    owner: root
+    group: root
+    mode: "0644"
+  notify: Restart ratesengine-indexer
+
+- name: Install ratesengine-indexer systemd unit
+  ansible.builtin.template:
+    src: systemd/ratesengine-indexer.service.j2
+    dest: /etc/systemd/system/ratesengine-indexer.service
+    mode: "0644"
+  notify:
+    - Reload systemd
+    - Restart ratesengine-indexer
+
+- name: Enable + start ratesengine-indexer
+  ansible.builtin.systemd:
+    name: ratesengine-indexer
+    state: started
+    enabled: true
+    daemon_reload: true
+
+# ──── Aggregator service ──────────────────────────────────────────────
+# Reads Timescale `trades` rows + writes CAGG rollups (per-window VWAP/TWAP).
+# /v1/price closed-bucket serving (ADR-0015) depends on this populating
+# the CAGG tables — without aggregator running, the API falls back to
+# last-trade lookups which won't satisfy the cross-region consistency
+# property. See aggregation-plan.md for the pipeline.
+
+- name: Install ratesengine-aggregator systemd unit
+  ansible.builtin.template:
+    src: systemd/ratesengine-aggregator.service.j2
+    dest: /etc/systemd/system/ratesengine-aggregator.service
+    mode: "0644"
+  notify:
+    - Reload systemd
+    - Restart ratesengine-aggregator
+
+- name: Enable + start ratesengine-aggregator
+  ansible.builtin.systemd:
+    name: ratesengine-aggregator
+    state: started
+    enabled: true
+    daemon_reload: true
+
+# ──── Tier D weekly cron (multi-peer fork-detection) ──────────────────
+# Per ADR-0016 §7.4: each region runs verify-archive Tier D weekly to
+# catch upstream divergence (R2 reads from aws-public-blockchain S3,
+# R3 from Vultr Object Storage; if either upstream's bytes hash to a
+# different chain than the network's signed reality, Tier D catches it).
+# Runs as root because it needs to read /etc/default/ratesengine-ops
+# for galexie-archive S3 creds. Output to journald (logger -t).
+
+- name: Install Tier D verify-archive weekly cron
+  ansible.builtin.cron:
+    name: ratesengine-verify-archive-tier-d
+    cron_file: ratesengine-verify-archive-tier-d
+    user: root
+    minute: "23"
+    hour: "4"
+    weekday: "0"   # Sunday morning
+    job: >-
+      bash -c 'set -a; source /etc/default/ratesengine-ops; set +a;
+      /usr/local/bin/ratesengine-ops verify-archive
+      -config /etc/ratesengine.toml
+      -tier peers
+      -peer-samples 50
+      -from 2 -to {{ ratesengine_live_seam_ledger | default(0) | int - 1 }}
+      2>&1 | logger -t ratesengine-tier-d'

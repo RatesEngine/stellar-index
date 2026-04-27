@@ -102,6 +102,31 @@
     mode: "0755"
   notify: Restart galexie
 
+- name: Install galexie-backfill-status TUI
+  # Operator-only status snapshot. Combines scan-and-fill phase
+  # detection, mc mirror progress, bucket counts, host load, and
+  # process state. Run via `watch -n 5 galexie-backfill-status`.
+  # See docs/operations/galexie-backfill.md.
+  ansible.builtin.copy:
+    src: galexie-backfill-status.sh
+    dest: /usr/local/bin/galexie-backfill-status
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Install galexie-archive-fill recovery script
+  # Per-partition mirror that handles mtime-poisoned buckets where
+  # bucket-level `mc mirror` deadlocks. Audits local partitions,
+  # deletes any partials, then mirrors only missing/just-deleted
+  # partitions in parallel. See "mc mirror gotcha" in
+  # docs/operations/galexie-backfill.md.
+  ansible.builtin.copy:
+    src: galexie-archive-fill.sh
+    dest: /usr/local/bin/galexie-archive-fill
+    owner: root
+    group: root
+    mode: "0755"
+
 - name: Template galexie-specific captive-core.cfg
   # Galexie needs its OWN captive config because the PEER_PORT must
   # differ from stellar-rpc's (otherwise both captive-cores race

@@ -116,8 +116,9 @@ Full rules: [engineering-standards.md §2.1](docs/discovery/engineering-standard
 CEX, DEX, AMM, FX, oracle — same pattern. See:
 
 - [CLAUDE.md](CLAUDE.md) → "Common task recipes."
-- [docs/development/contributing-a-source.md](docs/development/contributing-a-source.md)
-  (lands in Week 1 of delivery).
+- [docs/architecture/ingest-pipeline.md](docs/architecture/ingest-pipeline.md)
+  — the binding rules for source packages (pure decoders, no
+  goroutines, no RPC clients, dispatcher owns routing).
 
 Five-file convention per source:
 

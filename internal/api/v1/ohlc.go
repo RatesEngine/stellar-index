@@ -67,7 +67,9 @@ func (s *Server) handleOHLC(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	from, to, ok := parseFromTo(w, r)
+	// Clamped to a closed-bucket boundary when `to` defaults to "now"
+	// per ADR-0015.
+	from, to, _, ok := parseFromToClamped(w, r)
 	if !ok {
 		return
 	}
@@ -126,6 +128,12 @@ func (s *Server) handleOHLC(w http.ResponseWriter, r *http.Request) {
 // parseFromTo parses the from/to query params, applying the same
 // 1-hour default as /v1/history. Writes problem + returns ok=false
 // on failure.
+//
+// `to` defaults to the request's wall-clock now. Use this for
+// /v1/history where the client wants exactly the trades in the
+// stated range — the API mustn't quietly snap their range to a
+// boundary. For aggregated rate endpoints (VWAP/TWAP/OHLC) use
+// [parseFromToClamped] instead, per ADR-0015.
 func parseFromTo(w http.ResponseWriter, r *http.Request) (from, to time.Time, ok bool) {
 	to = time.Now().UTC()
 	if raw := r.URL.Query().Get("to"); raw != "" {
@@ -158,6 +166,67 @@ func parseFromTo(w http.ResponseWriter, r *http.Request) (from, to time.Time, ok
 		return time.Time{}, time.Time{}, false
 	}
 	return from, to, true
+}
+
+// closedBucketWindow is the boundary granularity used by
+// [parseFromToClamped] when `to` defaults to "now". It's the smallest
+// window the aggregator's CAGG ladder will eventually expose
+// (matching `prices_30s`'s eventual chunk size); 30 s also matches
+// the Freighter ≤30 s freshness SLA.
+//
+// Per ADR-0015, snapping the implicit "now" to this boundary is what
+// makes "all 3 regions return the same rate" a real property: a
+// request landing at 12:00:01.234 across two regions both clamp to
+// 12:00:00.000 and answer over the identical [from, 12:00:00.000)
+// window — same trades, same result, same JSON bytes once
+// replication has carried the trades to both regions.
+const closedBucketWindow = 30 * time.Second
+
+// parseFromToClamped is the rate-endpoint flavour of [parseFromTo]:
+// when the client did NOT specify `to`, clamp the default-now value
+// to the previous [closedBucketWindow] boundary. When the client
+// DID specify `to`, use it verbatim — they're explicitly asking
+// about a specific historical range, not "now", and snapping their
+// timestamp would be surprising.
+//
+// Sets the *clamped flag so callers can surface "this response
+// reflects a closed-bucket window" in their wire output if they
+// want to (today the rate handlers don't expose it explicitly,
+// but the From/To fields they return already carry the snapped
+// values).
+func parseFromToClamped(w http.ResponseWriter, r *http.Request) (from, to time.Time, clamped, ok bool) {
+	toExplicit := r.URL.Query().Get("to") != ""
+	from, to, ok = parseFromTo(w, r)
+	if !ok {
+		return time.Time{}, time.Time{}, false, false
+	}
+	if !toExplicit {
+		// Snap to the previous boundary. time.Truncate rounds down to
+		// a multiple of the duration since the zero time (for UTC
+		// instants this is the Unix epoch's whole-second alignment),
+		// which is exactly the alignment we want for ADR-0015's "all
+		// regions agree" property.
+		clampedTo := to.Truncate(closedBucketWindow)
+		// If `from` was also defaulted (= to - 1h), shift it by the
+		// same delta so the window length stays 1h. If `from` was
+		// explicit, leave it alone — the client's range is preserved
+		// up to the new (closed) right edge.
+		fromExplicit := r.URL.Query().Get("from") != ""
+		if !fromExplicit {
+			from = from.Add(clampedTo.Sub(to))
+		}
+		to = clampedTo
+		clamped = true
+	}
+	if !from.Before(to) {
+		writeProblem(w, r,
+			"https://api.ratesengine.net/errors/invalid-time",
+			"`from` must be before `to` after closed-bucket clamp",
+			http.StatusBadRequest,
+			"the requested range collapsed below a single closed window — widen `from` or specify an explicit `to`")
+		return time.Time{}, time.Time{}, false, false
+	}
+	return from, to, clamped, true
 }
 
 // ratToDecimal renders a *big.Rat as a fixed-width decimal string

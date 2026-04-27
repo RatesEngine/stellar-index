@@ -248,8 +248,10 @@ link from here.
 - [docs/adr/0013-go-stellar-sdk-xdr-for-scval.md](../adr/0013-go-stellar-sdk-xdr-for-scval.md)
   — SDK dep decision; migration plan §5 explicitly calls for
   per-event-shape fixtures.
-- [docs/operations/r1-deployment-state.md §SCVal decoders are stubs](../operations/r1-deployment-state.md)
-  — Task #164 context.
+- [docs/operations/r1-deployment-state.md](../operations/r1-deployment-state.md)
+  — decoder rollout history (Task #164 context). All 8 source decoders
+  are implemented as of 2026-04-26; the per-WASM-hash audit gate this
+  doc covers is the remaining concern for full historical replay.
 - Per-source Phase-1 discovery:
   [soroswap](../discovery/dexes-amms/soroswap.md),
   [phoenix](../discovery/dexes-amms/phoenix.md),

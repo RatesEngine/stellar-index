@@ -142,6 +142,24 @@ the cached VWAP, and one with `false` *will not*. Discrepancies
 between the two surfaces are a bug to surface in PR review, not a
 runtime concern.
 
+### Closed-bucket-only serving (cross-region consistency)
+
+Per [ADR-0015](../adr/0015-last-closed-bucket-rate-serving.md), the
+API endpoints above (`/v1/price`, `/v1/vwap`, `/v1/twap`,
+`/v1/ohlc`) NEVER expose the in-progress (currently-filling)
+window — only the most recent **closed** bucket. The orchestrator
+writes both the in-progress and closed-window CAGG rows to
+Timescale; query handlers MUST filter `bucket_to_ts <= now()` so
+clients only ever see immutable, content-addressed values.
+
+This is what makes "all 3 regions serve exactly the same rate" a
+real property rather than a hopeful one: closed-bucket rows are
+deterministic given the same trade inputs, and (sub-second to
+seconds-of-replication-lag aside) replicate to all regions
+byte-identical. See ADR-0015 for the trade-off analysis and the
+≤30 s freshness contract this places on the default `/v1/price`
+window.
+
 ---
 
 ## Boundaries — what this layer does NOT do
