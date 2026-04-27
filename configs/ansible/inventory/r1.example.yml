@@ -3,6 +3,41 @@
 # Copy to r1.yml and fill in the Xs.
 #
 # Secrets (DB password, etc.) live in r1.secrets.yml (ansible-vault).
+#
+# ─── Deriving r2.yml / r3.yml from this template ─────────────────────
+# Per ADR-0016 (per-region storage strategies), r2 and r3 differ
+# from r1 in concrete ways. When provisioning either region, copy
+# this file and override at minimum:
+#
+#   r2 (US-East-1, AWS, no local archive mirror):
+#     region_id:                        "r2"
+#     region_name:                      "US-East-1"
+#     run_minio:                        true   (galexie-live only)
+#     minio_buckets:                    ["galexie-live", "backups"]
+#     galexie_archive_endpoint:         "https://s3.us-east-1.amazonaws.com"
+#     galexie_archive_bucket:           "aws-public-blockchain"
+#     galexie_archive_prefix:           "v1.1/stellar/ledgers/pubnet/"
+#     ratesengine_live_seam_ledger:     <r2-specific seam>
+#     zfs_data_devices:                 []   (EBS gp3, no ZFS)
+#     run_stellar_core:                 false
+#
+#   r3 (Singapore, Vultr, Object Storage for archive):
+#     region_id:                        "r3"
+#     region_name:                      "Singapore"
+#     run_minio:                        true   (galexie-live only)
+#     minio_buckets:                    ["galexie-live", "backups"]
+#     galexie_archive_endpoint:         "https://sgp1.vultrobjects.com"
+#     galexie_archive_bucket:           "ratesengine-galexie-archive"
+#     ratesengine_live_seam_ledger:     <r3-specific seam>
+#     zfs_data_pool_type:               "mirror"   (only 2 NVMes on Vultr SG SKU)
+#     zfs_data_devices:                 [/dev/nvme0n1, /dev/nvme1n1]
+#     run_stellar_core:                 false
+#
+# r2 and r3 inherit the same indexer source list, postgres tuning,
+# stellar quorum, and observability config as r1 — those values are
+# region-invariant by design (closed-bucket API contract per
+# ADR-0015 means all three regions must produce byte-equivalent
+# aggregate output from the same input data).
 
 all:
   vars:
