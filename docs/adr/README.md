@@ -54,7 +54,10 @@ See [_template.md](_template.md) for the boilerplate.
 | [0010](0010-off-chain-fiat-representation.md) | Accepted | Off-chain fiat currencies as AssetType "fiat" | 2026-04-22 |
 | 0011 | *Planned* | Supply policy (referenced by coverage-matrix F2.4) | — |
 | 0012 | *Planned* | Quorum-set composition (referenced by multi-region-topology) | — |
-| [0013](0013-go-stellar-sdk-xdr-for-scval.md) | Proposed | Adopt go-stellar-sdk/xdr for SCVal decoding in source connectors | — |
+| [0013](0013-go-stellar-sdk-xdr-for-scval.md) | Accepted | Adopt go-stellar-sdk/xdr for SCVal decoding in source connectors | 2026-04-23 |
+| [0014](0014-crypto-ticker-representation.md) | Accepted | Crypto tickers as AssetType "crypto" | 2026-04-23 |
+| [0015](0015-last-closed-bucket-rate-serving.md) | Accepted | API rates served from last-closed bucket, never in-progress | 2026-04-27 |
+| [0016](0016-per-region-storage-strategy.md) | Accepted | Per-region storage strategies (Hetzner full / AWS hybrid / Vultr hybrid) | 2026-04-27 |
 
 ## Related
 
