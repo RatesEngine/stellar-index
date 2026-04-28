@@ -6,8 +6,10 @@ import (
 
 	"github.com/stellar/go-stellar-sdk/xdr"
 
+	"github.com/RatesEngine/rates-engine/internal/canonical/discovery"
 	"github.com/RatesEngine/rates-engine/internal/consumer"
 	"github.com/RatesEngine/rates-engine/internal/events"
+	"github.com/RatesEngine/rates-engine/internal/scval"
 )
 
 // ─── test-only decoder implementation ────────────────────────────
@@ -239,5 +241,85 @@ func TestProcessLedger_emptyLedgerYieldsNoOutputs(t *testing.T) {
 	// No events → no matches → no unmatched hits either.
 	if got := disp.Stats().UnmatchedHits; got != 0 {
 		t.Errorf("UnmatchedHits = %d, want 0", got)
+	}
+}
+
+// ─── Discovery hook ──────────────────────────────────────────────
+
+// recordingSink captures every Push for assertion.
+type recordingSink struct {
+	hits []discovery.Hit
+}
+
+func (r *recordingSink) Push(hit discovery.Hit) {
+	r.hits = append(r.hits, hit)
+}
+
+// TestDispatch_DiscoveryHook_FiresOnSEP41Event — when a sink is
+// installed and the event is a SEP-41 transfer/mint/burn/clawback,
+// the dispatcher pushes a Hit BEFORE running decoders. Decoders
+// still run normally.
+func TestDispatch_DiscoveryHook_FiresOnSEP41Event(t *testing.T) {
+	sink := &recordingSink{}
+	dec := &fakeDecoder{name: "alpha", topic0: scval.MustEncodeSymbol("transfer")}
+	disp := New(dec)
+	disp.SetDiscoverySink(sink)
+
+	ev := events.Event{
+		Type:           "contract",
+		ContractID:     "CAS3J7GYLGXMF6TDJBBYYSE3HQ6BBSMLNUQ34T6TZMYMW2EVH34XOWMA",
+		Ledger:         50_000_000,
+		LedgerClosedAt: "2026-04-28T12:00:00Z",
+		Topic:          []string{scval.MustEncodeSymbol("transfer"), "from", "to"},
+	}
+	if _, err := disp.dispatchOne(ev); err != nil {
+		t.Fatalf("dispatchOne: %v", err)
+	}
+
+	if len(sink.hits) != 1 {
+		t.Fatalf("sink received %d hits, want 1", len(sink.hits))
+	}
+	if sink.hits[0].EventType != discovery.EventTransfer {
+		t.Errorf("EventType = %q, want %q", sink.hits[0].EventType, discovery.EventTransfer)
+	}
+	if dec.decodeCount != 1 {
+		t.Errorf("decoder.Decode called %d times, want 1 — discovery hook must NOT short-circuit dispatch", dec.decodeCount)
+	}
+}
+
+// TestDispatch_DiscoveryHook_SilentOnNonSEP41 — events whose topic[0]
+// isn't a SEP-41 symbol must NOT push to the sink, regardless of
+// whether a decoder matches.
+func TestDispatch_DiscoveryHook_SilentOnNonSEP41(t *testing.T) {
+	sink := &recordingSink{}
+	dec := &fakeDecoder{name: "alpha", topic0: scval.MustEncodeSymbol("swap")}
+	disp := New(dec)
+	disp.SetDiscoverySink(sink)
+
+	ev := events.Event{
+		Type:           "contract",
+		ContractID:     "CAS3J7GYLGXMF6TDJBBYYSE3HQ6BBSMLNUQ34T6TZMYMW2EVH34XOWMA",
+		LedgerClosedAt: "2026-04-28T12:00:00Z",
+		Topic:          []string{scval.MustEncodeSymbol("swap"), "from", "to"},
+	}
+	if _, err := disp.dispatchOne(ev); err != nil {
+		t.Fatal(err)
+	}
+	if len(sink.hits) != 0 {
+		t.Errorf("sink received %d hits on non-SEP-41 event, want 0", len(sink.hits))
+	}
+}
+
+// TestDispatch_DiscoveryHook_NilSinkIsNoop — without a sink
+// installed, dispatcher behaves identically (no nil-deref).
+func TestDispatch_DiscoveryHook_NilSinkIsNoop(t *testing.T) {
+	disp := New(&fakeDecoder{name: "alpha", topic0: "A"})
+	// No SetDiscoverySink call — sink stays nil.
+	if _, err := disp.dispatchOne(events.Event{
+		Type:       "contract",
+		ContractID: "CAS3J7GYLGXMF6TDJBBYYSE3HQ6BBSMLNUQ34T6TZMYMW2EVH34XOWMA",
+		Topic:      []string{scval.MustEncodeSymbol("transfer")},
+	}); err != nil {
+		t.Errorf("nil-sink path errored: %v", err)
 	}
 }

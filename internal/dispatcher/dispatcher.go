@@ -47,6 +47,7 @@ import (
 	"github.com/stellar/go-stellar-sdk/strkey"
 	"github.com/stellar/go-stellar-sdk/xdr"
 
+	"github.com/RatesEngine/rates-engine/internal/canonical/discovery"
 	"github.com/RatesEngine/rates-engine/internal/consumer"
 	"github.com/RatesEngine/rates-engine/internal/events"
 )
@@ -183,6 +184,13 @@ type Dispatcher struct {
 	opDecoders           []OpDecoder
 	contractCallDecoders []ContractCallDecoder
 
+	// discoverySink, when non-nil, receives every SEP-41-shaped event
+	// observed by [dispatchOne]. The dispatcher calls Sniff on each
+	// event and forwards [discovery.Hit] records via Push. A nil sink
+	// disables discovery — the dispatcher behaves as if the hook
+	// weren't there. See [Dispatcher.SetDiscoverySink].
+	discoverySink DiscoverySink
+
 	// Error counters — read via Stats(). Production wiring in
 	// cmd/ratesengine-indexer increments obs.SourceDecodeErrorsTotal
 	// per source name on decode failures; internal counters here are
@@ -216,6 +224,29 @@ func (d *Dispatcher) AddOpDecoder(od OpDecoder) {
 // determines first-match precedence.
 func (d *Dispatcher) AddContractCallDecoder(ccd ContractCallDecoder) {
 	d.contractCallDecoders = append(d.contractCallDecoders, ccd)
+}
+
+// DiscoverySink is the side-effect interface the dispatcher uses to
+// notify the auto-discovery layer about SEP-41-shaped events. Push
+// is called once per event whose topic[0] decodes to one of the
+// SEP-41 event symbols (transfer / mint / burn / clawback). Push
+// MUST be non-blocking — the dispatcher runs on the ingest hot
+// path and a slow Push would back-pressure the entire pipeline.
+//
+// The standard implementation buffers Hit records to a channel and
+// drains them in a worker goroutine that calls
+// discovery.Recorder.Record against the storage layer. See
+// internal/canonical/discovery for the Recorder contract +
+// in-memory variant; the binary-side async adapter wires the two.
+type DiscoverySink interface {
+	Push(hit discovery.Hit)
+}
+
+// SetDiscoverySink installs the sink the dispatcher calls on every
+// SEP-41-shaped event. Nil disables the hook. Not safe concurrent
+// with ProcessLedger; called once at startup.
+func (d *Dispatcher) SetDiscoverySink(sink DiscoverySink) {
+	d.discoverySink = sink
 }
 
 // Stats is a snapshot of the dispatcher's internal counters. Keyed
@@ -451,7 +482,20 @@ func (d *Dispatcher) Route(ev events.Event) ([]consumer.Event, error) {
 // returns outputs. Returns an error only when the matching decoder
 // fails Decode — mismatch is silent (events not claimed by any
 // decoder are counted and dropped).
+//
+// Discovery hook: BEFORE the decoder pass, every event is run
+// through [discovery.Sniff]. SEP-41-shaped events are forwarded to
+// the configured [DiscoverySink] (when set). Discovery runs first
+// so even events a decoder later rejects (e.g. malformed body)
+// still appear in discovered_assets — operators want to see every
+// contract emitting SEP-41 events, not just ones we successfully
+// decode.
 func (d *Dispatcher) dispatchOne(ev events.Event) ([]consumer.Event, error) {
+	if d.discoverySink != nil {
+		if hit, ok := discovery.Sniff(ev); ok {
+			d.discoverySink.Push(hit)
+		}
+	}
 	for _, dec := range d.decoders {
 		if !dec.Matches(ev) {
 			continue
