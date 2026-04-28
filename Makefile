@@ -181,20 +181,8 @@ docs: docs-all ## Alias for docs-all
 docs-all: docs-api docs-config docs-metrics ## Regenerate all reference docs
 
 .PHONY: docs-api
-docs-api: ## Regenerate API reference from openapi/rates-engine.v1.yaml
-	@if command -v redocly >/dev/null 2>&1; then \
-	  mkdir -p docs/reference/api; \
-	  redocly build-docs openapi/rates-engine.v1.yaml \
-	    --output docs/reference/api/index.html; \
-	  echo "GENERATED FILE - DO NOT EDIT. Source: openapi/rates-engine.v1.yaml" \
-	    > docs/reference/api/README.md; \
-	  echo "" >> docs/reference/api/README.md; \
-	  echo "The rendered reference is [index.html](index.html)." >> docs/reference/api/README.md; \
-	else \
-	  echo "redocly not installed. Install with 'npm i -g @redocly/cli' to render the API reference."; \
-	  echo "Source of truth: openapi/rates-engine.v1.yaml"; \
-	  exit 1; \
-	fi
+docs-api: ## Regenerate API reference from openapi/rates-engine.v1.yaml (Redocly via npx — no global install required)
+	@./scripts/dev/docs-api.sh
 
 .PHONY: docs-config
 docs-config: ## Regenerate config reference from struct tags

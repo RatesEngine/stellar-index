@@ -77,7 +77,7 @@ Within each surface, ordered by dependency.
 | L3.8 | `/v1/observations/stream` SSE | Wk 7 | half-day | L3.3, L3.6 | — | same | 🟡 |
 | L3.9 | `/v1/price/stream` SSE (closed-bucket events) | Wk 7 | half-day | L3.1, L3.6 | — | same | 🟡 |
 | L3.10 | `pkg/client/` Go SDK skeleton | Wk 7 | half-day | — | — | `pkg/client` | 🟡 |
-| L3.11 | Generated API reference (`make docs-api`) — Stoplight or Redocly + GitHub Pages | Wk 7 | half-day | — | — | docs pipeline | 🟡 |
+| L3.11 | Generated API reference via Redocly + GitHub Pages workflow + CI drift guard | Wk 7 | half-day | — | — | `scripts/dev/docs-api.sh`, `.github/workflows/api-docs.yml` | 🟢 |
 | L3.12 | SEP-10 protocol implementation (Web Auth) | Wk 7 | full day | — | — | `internal/auth/sep10` | 🟡 |
 | L3.13 | Envelope flag retrofit (`flags.frozen`, `flags.single_source`) — handler-side wired via `FrozenLooker`; aggregator populates the marker when L2.7 ships | Wk 7 | half-day | L2.7 | — | `internal/api/v1/{envelope,price,server}.go` | 🟢 |
 | L3.14 | CDN caching for historical endpoints (CloudFront / equivalent) | Wk 7 | half-day | infra | — | infra config | 🟡 |

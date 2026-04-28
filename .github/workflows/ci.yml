@@ -171,3 +171,13 @@ jobs:
           cache: true
       - name: ADR-0018 URL-discipline check
         run: go run ./scripts/ci/lint-openapi-urls openapi/rates-engine.v1.yaml
+      - uses: actions/setup-node@v6
+        with:
+          node-version: "22"
+      - name: Generated API reference is in sync
+        run: |
+          ./scripts/dev/docs-api.sh
+          if ! git diff --exit-code -- docs/reference/api/index.html docs/reference/api/README.md; then
+            echo "::error::Generated API reference is stale. Run 'make docs-api' locally and commit the result."
+            exit 1
+          fi
