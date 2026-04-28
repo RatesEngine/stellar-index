@@ -48,6 +48,9 @@ func init() {
 		AggregatorVWAPWritesTotal,
 		AggregatorEmptyWindowsTotal,
 		AggregatorDroppedTradesTotal,
+
+		SupplyCrossCheckDivergenceStroops,
+		SupplyCrossCheckTotal,
 	)
 }
 
@@ -317,4 +320,37 @@ var AggregatorDroppedTradesTotal = prometheus.NewCounterVec(
 		Help: "Trades removed from the VWAP input set, labelled by reason (class|outlier).",
 	},
 	[]string{"reason"},
+)
+
+// ─── Supply-derivation metrics ────────────────────────────────────
+
+// SupplyCrossCheckDivergenceStroops — gauge of the absolute stroop
+// difference between a classic asset's Algorithm 2 supply and its
+// SAC-wrapped Algorithm 3 supply. Per ADR-0011 the two MUST agree
+// within 1 stroop; the alert in
+// deploy/monitoring/rules/supply.yml fires when this exceeds the
+// tolerance.
+//
+// Labelled by classic_key (CODE:ISSUER) so a per-asset dashboard +
+// runbook can identify the offending asset without log dive. Cardinality
+// bound by the curated asset set with deployed SAC contracts (low
+// dozens at launch, hundreds at maturity).
+var SupplyCrossCheckDivergenceStroops = prometheus.NewGaugeVec(
+	prometheus.GaugeOpts{
+		Name: "ratesengine_supply_cross_check_divergence_stroops",
+		Help: "Absolute stroop difference between classic and SAC-wrapped supply for the same asset; alert when > 1 (ADR-0011).",
+	},
+	[]string{"classic_key"},
+)
+
+// SupplyCrossCheckTotal — counter of cross-check evaluations per
+// outcome (within | over). Drives the alert's rate-of-failure view
+// and gives operators a "is the cross-checker even running" check
+// orthogonal to the gauge.
+var SupplyCrossCheckTotal = prometheus.NewCounterVec(
+	prometheus.CounterOpts{
+		Name: "ratesengine_supply_cross_check_total",
+		Help: "Cross-check evaluations, labelled by outcome (within|over).",
+	},
+	[]string{"outcome"},
 )

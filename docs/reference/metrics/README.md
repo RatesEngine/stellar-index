@@ -195,8 +195,34 @@ registered). `outlier` = removed by the σ-threshold filter
 mis-registered in `external.Registry`; a spike in `outlier` is
 usually a market-distress event flooding the window with anomalies.
 
+## Supply derivation (aggregator binary)
+
+### `ratesengine_supply_cross_check_divergence_stroops`
+
+Gauge, label `classic_key` (`CODE:ISSUER`).
+
+Absolute stroop difference between a classic asset's Algorithm 2
+total_supply (ledger-entry sum) and its SAC-wrapped Algorithm 3
+total_supply (SEP-41 event sum). Per ADR-0011 the two MUST agree
+within 1 stroop because both algorithms observe the same underlying
+state. Drives the
+[`ratesengine_supply_cross_check_divergence`](../../operations/runbooks/supply-cross-check-divergence.md)
+alert when > 1.
+
+### `ratesengine_supply_cross_check_total`
+
+Counter, label `outcome` (`within` / `over`).
+
+Cross-check evaluations classified by whether the divergence stayed
+within tolerance. Drives the alert's rate-of-failure view and
+provides a "is the cross-checker even running" check orthogonal to
+the gauge — a flat gauge with zero counter increments means the
+orchestrator stopped invoking the cross-check, not that everything's
+healthy.
+
 ## Changelog
 
+- 2026-04-28 — added supply cross-check metrics (L2.12 PR 5)
 - 2026-04-25 — added aggregator orchestrator metrics
   (`ratesengine_aggregator_*`) covering tick outcomes, VWAP writes,
   empty windows, and per-stage trade drops.

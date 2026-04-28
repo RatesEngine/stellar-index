@@ -150,6 +150,12 @@ override.
 | `ratesengine_aggregator_outlier_storm` | `rate(ratesengine_aggregator_dropped_trades_total{reason="outlier"}[10m])` | > 5× baseline (offset 1h) for > 15 min | P3 | [aggregator-outlier-storm](runbooks/aggregator-outlier-storm.md) |
 | `ratesengine_aggregator_class_drop_spike` | `rate(ratesengine_aggregator_dropped_trades_total{reason="class"}[10m])` | > 10× baseline (offset 1h) for > 15 min | P3 | [aggregator-class-drop-spike](runbooks/aggregator-class-drop-spike.md) |
 
+## Supply alerts
+
+| Name | Metric | Condition | Severity | Runbook |
+| ---- | ------ | --------- | -------- | ------- |
+| `ratesengine_supply_cross_check_divergence` | `ratesengine_supply_cross_check_divergence_stroops` per `classic_key` | > 1 stroop for > 5 min | P3 | [supply-cross-check-divergence](runbooks/supply-cross-check-divergence.md) |
+
 ## Infra / host alerts
 
 | Name | Metric | Condition | Severity | Runbook |
