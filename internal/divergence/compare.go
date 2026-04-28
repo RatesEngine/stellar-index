@@ -1,0 +1,197 @@
+package divergence
+
+import (
+	"context"
+	"errors"
+	"math"
+	"sort"
+	"sync"
+	"time"
+
+	"github.com/RatesEngine/rates-engine/internal/canonical"
+)
+
+// Result is the outcome of one divergence comparison. Carries
+// enough detail for both the aggregator's flag-gating decision and
+// the operator's diagnostic dashboards.
+type Result struct {
+	// Pair is the pair being compared.
+	Pair canonical.Pair
+
+	// OurPrice is what our aggregator computed.
+	OurPrice float64
+
+	// Median is the median of references that returned a price.
+	// Zero when SuccessCount == 0 (no references reported);
+	// caller MUST check SuccessCount before reading Median.
+	Median float64
+
+	// DivergencePct is `abs(OurPrice - Median) / Median * 100`,
+	// or 0 when SuccessCount == 0.
+	DivergencePct float64
+
+	// Sources maps reference Name() → reported price. Only
+	// successful references appear here.
+	Sources map[string]float64
+
+	// Failures maps reference Name() → error message. Empty when
+	// every reference succeeded; non-empty entries indicate which
+	// sources we couldn't reach this run.
+	Failures map[string]string
+
+	// SuccessCount is len(Sources). Convenience for callers that
+	// gate "is this divergence signal trustworthy?" — typically
+	// require SuccessCount >= 2 before raising flags.divergence_warning.
+	SuccessCount int
+
+	// FailureCount is len(Failures). Combined with SuccessCount,
+	// the operator can see the full reference universe outcome.
+	FailureCount int
+}
+
+// CompareOptions tunes [Compare]'s behaviour.
+type CompareOptions struct {
+	// PerReferenceTimeout caps the time spent on each reference's
+	// LookupPrice call. Default 5s. Set lower for hot-path use
+	// where divergence is best-effort.
+	PerReferenceTimeout time.Duration
+
+	// MinSuccessForMedian — Compare returns a zero Median when
+	// fewer than this many references returned successfully.
+	// Default 1 (any reference is better than none); operators
+	// can require 2+ for stronger consensus.
+	MinSuccessForMedian int
+}
+
+// Compare gathers prices from each reference in parallel and
+// computes the divergence between ourPrice and the median of the
+// successful responses.
+//
+// Behaviour:
+//
+//   - Each reference runs in its own goroutine with the per-
+//     reference timeout from opts.
+//   - References returning [ErrAssetUnsupported] are recorded in
+//     Failures with a stable label (operator can decide whether
+//     that asset belongs in the source's supported set).
+//   - References returning [ErrPriceUnavailable] are recorded the
+//     same way; the divergence threshold logic distinguishes
+//     "this source is down" from "we disagree with this source".
+//   - Other errors (network timeout, panic recovered, etc.) are
+//     recorded in Failures with the verbatim error message.
+//
+// The aggregator's caller-side gating logic typically reads:
+//
+//	res := divergence.Compare(ctx, refs, pair, ourPrice, ts, opts)
+//	if res.SuccessCount >= 2 && res.DivergencePct > threshold {
+//	    flags.DivergenceWarning = true
+//	}
+func Compare(
+	ctx context.Context,
+	refs []Reference,
+	pair canonical.Pair,
+	ourPrice float64,
+	observedAt time.Time,
+	opts CompareOptions,
+) Result {
+	if opts.PerReferenceTimeout <= 0 {
+		opts.PerReferenceTimeout = 5 * time.Second
+	}
+	if opts.MinSuccessForMedian <= 0 {
+		opts.MinSuccessForMedian = 1
+	}
+
+	res := Result{
+		Pair:     pair,
+		OurPrice: ourPrice,
+		Sources:  map[string]float64{},
+		Failures: map[string]string{},
+	}
+
+	if len(refs) == 0 {
+		return res
+	}
+
+	type fetchOutcome struct {
+		name  string
+		price float64
+		err   error
+	}
+	results := make(chan fetchOutcome, len(refs))
+
+	var wg sync.WaitGroup
+	for _, ref := range refs {
+		wg.Add(1)
+		go func(r Reference) {
+			defer wg.Done()
+			perCtx, cancel := context.WithTimeout(ctx, opts.PerReferenceTimeout)
+			defer cancel()
+			price, err := r.LookupPrice(perCtx, pair, observedAt)
+			results <- fetchOutcome{name: r.Name(), price: price, err: err}
+		}(ref)
+	}
+	wg.Wait()
+	close(results)
+
+	prices := make([]float64, 0, len(refs))
+	for o := range results {
+		if o.err != nil {
+			res.Failures[o.name] = classifyError(o.err)
+			continue
+		}
+		if !isFinitePositive(o.price) {
+			res.Failures[o.name] = "non-positive or non-finite price"
+			continue
+		}
+		res.Sources[o.name] = o.price
+		prices = append(prices, o.price)
+	}
+	res.SuccessCount = len(res.Sources)
+	res.FailureCount = len(res.Failures)
+
+	if res.SuccessCount < opts.MinSuccessForMedian {
+		return res
+	}
+	sort.Float64s(prices)
+	res.Median = median(prices)
+	if res.Median > 0 {
+		res.DivergencePct = math.Abs(ourPrice-res.Median) / res.Median * 100.0
+	}
+	return res
+}
+
+// classifyError maps known sentinels to short stable labels so the
+// operator dashboard can distinguish "asset not on this source"
+// from "transport failure". Unknown errors pass through verbatim.
+func classifyError(err error) string {
+	switch {
+	case errors.Is(err, ErrAssetUnsupported):
+		return "asset_unsupported"
+	case errors.Is(err, ErrPriceUnavailable):
+		return "price_unavailable"
+	default:
+		return err.Error()
+	}
+}
+
+// isFinitePositive guards against +/-Inf and NaN making it through
+// JSON parsing of upstream responses, plus zero/negative prices.
+// Any of those land us in the failure bucket.
+func isFinitePositive(x float64) bool {
+	return !math.IsNaN(x) && !math.IsInf(x, 0) && x > 0
+}
+
+// median returns the median of a sorted slice. For even-length
+// slices it returns the arithmetic mean of the two middle values.
+// Caller MUST sort the slice ascending; we don't sort here so the
+// median computation is O(1) for the comparator's hot path.
+func median(sorted []float64) float64 {
+	n := len(sorted)
+	if n == 0 {
+		return 0
+	}
+	if n%2 == 1 {
+		return sorted[n/2]
+	}
+	return (sorted[n/2-1] + sorted[n/2]) / 2.0
+}
