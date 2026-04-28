@@ -18,6 +18,7 @@ type Config struct {
 	Oracle    OracleConfig    `toml:"oracle" doc:"On-chain oracle contract addresses (Reflector, Redstone, Band)."`
 	External  ExternalConfig  `toml:"external" doc:"Off-chain connectors — CEX/FX/aggregator sources that run parallel to the on-chain dispatcher."`
 	Aggregate AggregateConfig `toml:"aggregate" doc:"VWAP/TWAP windows + outlier thresholds."`
+	Anomaly   AnomalyConfig   `toml:"anomaly" doc:"Per-asset-class anomaly detection thresholds (ADR-0019 Phase 1 stop-gap)."`
 	API       APIConfig       `toml:"api" doc:"Public API serving plane — port, auth mode, rate limits, CDN."`
 	Metadata  MetadataConfig  `toml:"metadata" doc:"Asset metadata overlay — SEP-1 issuer→home-domain map, operator overrides."`
 	Obs       ObsConfig       `toml:"obs" doc:"Metrics, logs, traces — exporters + sampling."`
@@ -267,6 +268,58 @@ type IngestionConfig struct {
 	// the running process args. 0 = no seam configured; indexer
 	// reads only galexie-live (the pre-2026-04-26 default).
 	LiveSeamLedger uint32 `toml:"live_seam_ledger" doc:"First ledger in the live bucket. Below this, indexer reads from galexie-archive. 0 disables the archive bucket entirely." default:"0"`
+}
+
+// AnomalyConfig configures the Phase-1 per-asset-class anomaly
+// detection per ADR-0019. The aggregator consults these thresholds
+// at bucket-close time to decide whether to publish, warn, or
+// freeze the new VWAP.
+//
+// See `internal/aggregate/anomaly/` for the consumer + the
+// algorithm semantics. Phase 2 (statistical baselines) replaces
+// these operator-set numbers with per-asset learned thresholds —
+// at that point the [Thresholds] table becomes a fallback for
+// assets whose baseline isn't yet established.
+type AnomalyConfig struct {
+	// Enabled gates whether anomaly checks run at all. When false,
+	// every bucket is published as-is (no warn / no freeze). Off by
+	// default during initial roll-out to avoid surprise 401-with-
+	// freeze responses; flip to true once the operator has
+	// classified all assets.
+	Enabled bool `toml:"enabled" doc:"Master switch. When false, anomaly checks are disabled and every bucket is published as-is. Flip to true after operator has classified the asset set." default:"false"`
+
+	// Thresholds maps asset class → (warn_pct, freeze_pct). Empty
+	// or partial maps fall back to the package-default thresholds
+	// from `anomaly.DefaultThresholds()`. Each row must satisfy
+	// `0 < warn_pct < freeze_pct`. The map MUST contain a `default`
+	// entry (the fallback for unclassified assets); the loader
+	// fills it from package defaults if the operator omits it.
+	//
+	// TOML representation:
+	//   [anomaly.thresholds.stablecoin]  warn_pct=1.0   freeze_pct=3.0
+	//   [anomaly.thresholds.treasury]    warn_pct=1.0   freeze_pct=3.0
+	//   [anomaly.thresholds.crypto]      warn_pct=20.0  freeze_pct=50.0
+	//   [anomaly.thresholds.governance]  warn_pct=50.0  freeze_pct=100.0
+	//   [anomaly.thresholds.default]     warn_pct=30.0  freeze_pct=75.0
+	Thresholds map[string]AnomalyThreshold `toml:"thresholds" doc:"Per-class threshold table. Keys are asset class names (stablecoin/treasury/crypto/governance/default). Empty falls back to package defaults; partial maps merge over defaults. The default row is required (loader fills it from package defaults if absent)." default:"{}"`
+
+	// Classifications maps a canonical asset_id (as produced by
+	// canonical.Asset.String()) to its asset class. Anything not in
+	// the map falls through to ClassDefault.
+	//
+	// TOML representation:
+	//   [anomaly.classifications]
+	//   "USDC-GA5Z…" = "stablecoin"
+	//   "AQUA-GBN…"  = "governance"
+	Classifications map[string]string `toml:"classifications" doc:"Operator-curated map of canonical asset_id → asset class (stablecoin/treasury/crypto/governance). Anything absent falls through to the default class." default:"{}"`
+}
+
+// AnomalyThreshold is one row of the anomaly threshold table.
+// Mirrors `anomaly.Thresholds` but uses TOML-friendly types so the
+// loader doesn't need a custom unmarshaller.
+type AnomalyThreshold struct {
+	WarnPct   float64 `toml:"warn_pct" doc:"Deviation above this percentage triggers ActionWarn (publish with divergence_warning flag)." default:"30.0"`
+	FreezePct float64 `toml:"freeze_pct" doc:"Deviation above this percentage triggers ActionFreeze when source_count<=1 (don't publish; serve last-known-good)." default:"75.0"`
 }
 
 // AggregateConfig controls the aggregator's VWAP/TWAP computation.

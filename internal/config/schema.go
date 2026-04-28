@@ -47,6 +47,32 @@ func describe(t reflect.Type, prefix string) []SchemaField {
 			continue
 		}
 
+		// If this is a map[string]<struct>, also recurse into the
+		// struct value type using a synthetic `<key>` placeholder
+		// path. Operators see one row per nested-struct field with
+		// the same `<key>` literal so they understand the per-entry
+		// shape. The map field itself still emits its own row above.
+		if f.Type.Kind() == reflect.Map &&
+			f.Type.Key().Kind() == reflect.String &&
+			f.Type.Elem().Kind() == reflect.Struct {
+			doc := f.Tag.Get("doc")
+			def := f.Tag.Get("default")
+			env := f.Tag.Get("env")
+			if doc == "" {
+				panic(fmt.Sprintf("config schema: map field %s missing required `doc:` tag", path))
+			}
+			out = append(out, SchemaField{
+				Path:     path,
+				Type:     "map[string]" + f.Type.Elem().Name(),
+				Default:  def,
+				Env:      env,
+				Doc:      doc,
+				Required: def == "",
+			})
+			out = append(out, describe(f.Type.Elem(), path+".<key>")...)
+			continue
+		}
+
 		doc := f.Tag.Get("doc")
 		if doc == "" {
 			panic(fmt.Sprintf("config schema: field %s is missing the required `doc:` tag", path))

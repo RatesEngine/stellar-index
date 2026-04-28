@@ -184,6 +184,16 @@ func run(cfgPath string, dryRun bool) error { //nolint:gocognit,funlen // dispat
 	// is the correct fail-loud behaviour for an opted-into mode.
 	authMW := buildAuthMiddleware(cfg.API.AuthMode, rdb, logger)
 
+	// Account store backs POST /v1/account/keys. Only wired when
+	// Redis is reachable — without Redis there's nowhere to persist
+	// the issued record. The handler then returns 503 for that
+	// path; /me + /usage still serve from the request-context
+	// Subject without the store.
+	var accountStore v1.AccountStore
+	if rdb != nil {
+		accountStore = auth.NewRedisAPIKeyStore(rdb)
+	}
+
 	apiSrv := v1.New(v1.Options{
 		Logger:      logger.With("component", "api"),
 		ReadyChecks: checks,
@@ -193,6 +203,7 @@ func run(cfgPath string, dryRun bool) error { //nolint:gocognit,funlen // dispat
 		Markets:     storeMarketsReader{s: store},
 		Oracle:      storeOracleReader{s: store},
 		Meta:        sep1Cache,
+		Accounts:    accountStore,
 		CORS:        cors,
 		Auth:        authMW,
 		RateLimit:   rateLimit,
