@@ -17,6 +17,158 @@ against.
 
 ### Added
 
+- **`pkg/client/` Go SDK skeleton (#201)**: first public-package
+  surface under [ADR-0005](docs/adr/0005-monorepo.md)'s SemVer
+  promise. v0.1.0 pre-release. Generic `Envelope[T]` for type-
+  safe data fields; covered endpoints: `Price`, `HistorySinceInception`,
+  `Assets`, `Asset`, `AssetMetadata`, `Me`, `Usage`, `CreateKey`.
+  `*APIError` wraps RFC 9457 problem+json with convenience
+  predicates (`IsNotFound`, `IsRateLimited`, …); falls back to
+  status-only on text/plain bodies (reverse-proxy 502s). Auth via
+  `Options.APIKey` → `Authorization: Bearer …` header (omitted
+  when empty so anonymous callers don't trigger malformed-credential
+  rejections).
+
+- **`internal/divergence/` package (#204, #205)**: cross-reference
+  divergence layer per [ADR-0019](docs/adr/0019-anomaly-response-and-confidence-scoring.md)
+  §"Layer 5". `Reference` interface + parallel `Compare()` with
+  robust median + per-source breakdown. `CoinGeckoReference`
+  implementation as the working concrete example. `Service` writes
+  `div:<asset>` Redis keys per [ADR-0007](docs/adr/0007-redis-cache-schema.md);
+  `LookupCached` is the API hot-path read. `flags.divergence_warning`
+  now fires for real on `/v1/price` when the cached result says
+  warning is fired (5% deviation × 2 min sources defaults).
+  Best-effort: lookup errors log at WARN, flag stays default false.
+
+- **`internal/aggregate/anomaly/` Phase 1 (#199)**: ADR-0019
+  Phase 1 stop-gap. `Classifier` + `Thresholds` + `Checker.Evaluate`
+  with the 3-signal AND freeze condition (deviation > class
+  threshold AND source_count <= 1). Per-class defaults:
+  stablecoin/treasury 1%/3%, crypto 20%/50%, governance 50%/100%,
+  default 30%/75%. New envelope flags `Frozen` and `SingleSource`
+  on the wire. Config schema describer recurses into
+  `map[string]<struct>` value types so per-row sub-fields appear
+  in the generated config reference.
+
+- **`internal/archivecompleteness/` daemon (#200, #202, #203)**:
+  three-PR trilogy implementing [ADR-0017](docs/adr/0017-archive-completeness-invariants.md).
+  `ratesengine-ops archive-completeness check` (PR A) — read-only
+  scan + JSON Report. `… fix` (PR B) — multi-source fallback
+  fetcher with shuffled source order, atomic placement, gzip
+  validation, zip-bomb guards. `… verify` (PR C) — daily-cron
+  shape with Prometheus textfile output, systemd timer
+  (`02:17 UTC` + 5min jitter, `Persistent=true`), 4 alert rules
+  (`files_missing`, `stale`, `critical_stale`, `repair_source_degraded`).
+  Wires into node_exporter's textfile_collector; alerts fire from
+  `deploy/monitoring/rules/archive-completeness.yml`.
+
+- **`auth.RedisAPIKeyValidator` (#196)**: fills the [`internal/auth`](internal/auth/)
+  scaffolding from PR #190 with a Redis-backed validator. Storage
+  shape `apikey:<sha256-hex>` → JSON record (identifier, tier,
+  scopes, expires_at, revoked_at). Plaintext keys never enter
+  Redis. Sentinel mapping: missing/revoked → `ErrUnauthorized`;
+  `expires_at` past → `ErrTokenExpired` (middleware sets
+  WWW-Authenticate with refresh hint). Wired in `cmd/ratesengine-api`:
+  `auth_mode=apikey` + Redis reachable → real validator; without
+  Redis → Noop fallback so every request 503s (correct fail-loud).
+
+- **`/v1/account/{me,usage,keys}` self-service (#197)**: three
+  account endpoints from the OpenAPI spec. `/me` echoes the
+  authenticated `Subject`; `/usage` returns empty array (counter
+  store ships separately, wire shape locked); POST `/keys` issues
+  a fresh key inheriting the caller's identifier+tier verbatim.
+  New `auth.APIKeyStore` interface + `RedisAPIKeyStore`. Plaintext
+  generated as `rek_<64-hex>` from `crypto/rand`; KeyID as
+  `kid_<16-hex>`.
+
+- **`/v1/history/since-inception` (#195)**: CAGG-served full
+  historical series at the requested granularity. `1m / 15m / 1h /
+  4h / 1d / 1w / 1mo` granularities; default `1d`; capped at 50K
+  points. New `Store.HistoryPoints` against `prices_<granularity>`
+  tables with the closed-bucket guard scaling per granularity.
+
+- **`/v1/oracle/prices` (#193)**: SEP-40 `prices(asset, records)`
+  passthrough. Returns the last N closed 1m VWAP buckets. Capped
+  at 200 records per the SEP-40 contract.
+
+- **`/v1/assets/{id}/metadata` + SEP-1 overlay (#192)**: new
+  endpoint plus overlay handler that resolves home-domain →
+  stellar.toml. Operator-curated issuer→home-domain map in
+  `cfg.Metadata.IssuerHomeDomains`; on-chain AccountEntry
+  observation deferred until indexer pipework lands.
+
+- **SLO multi-window burn-rate alerts (#194)**: per
+  [ADR-0009](docs/adr/0009-latency-budget.md). Three sensitivity
+  tiers per SLO (fast/medium/slow burns) with both-windows-must-
+  agree to suppress single-spike noise. Wired in
+  `deploy/monitoring/rules/slo.yml`.
+
+### Changed
+
+- **`verify-archive -fail-on-missed` (#206)**: per
+  [ADR-0017](docs/adr/0017-archive-completeness-invariants.md) X1.7.
+  Off by default (preserves pre-bootstrap workflow that tolerated
+  scattered missed checkpoints). On after running the
+  archive-completeness bootstrap so a regression surfaces as a
+  P2 ticket within 24 h instead of being hidden in info logs.
+
+- **API consistency surfaces** per [ADR-0018](docs/adr/0018-api-consistency-surfaces.md):
+  established the three-URL model — `/v1/price` (closed-bucket,
+  cross-region consistent), `/v1/price/tip` (rolling window with
+  last-good-price fallback, not consistent), `/v1/observations`
+  (raw per-source). URL discipline as the contract enforcer; query
+  parameters MUST NOT change consistency tier. Forex factor snap
+  rule for chained-fiat preserves cross-region consistency on
+  `/v1/price`. Implementation of `tip` + `observations` follows.
+
+- **`flags.stale` semantic clarified** (ADR-0018): means "below
+  this surface's documented baseline contract." Fires on `/v1/price`
+  for closed-bucket degradation; never on `/v1/price/tip` (the
+  last-good-price fallback is in-contract there); never on
+  `/v1/observations` (no aggregation contract).
+
+### Documentation
+
+- **3 new ADRs (#198)**:
+  [ADR-0017](docs/adr/0017-archive-completeness-invariants.md)
+  archive completeness invariants (4 hard contracts; per-region
+  asymmetric trust model — R1 leader, R2/R3 delegate via metric
+  scrape with 26h staleness budget);
+  [ADR-0018](docs/adr/0018-api-consistency-surfaces.md) three API
+  consistency surfaces;
+  [ADR-0019](docs/adr/0019-anomaly-response-and-confidence-scoring.md)
+  anomaly response with per-asset MAD-based statistical baselines
+  (not fixed thresholds), 3-signal AND freeze on closed-bucket only.
+
+- **`docs/architecture/oracle-manipulation-defense.md` (#198)**:
+  attack catalogue (Reflector/USTRY, Mango, Cream, Inverse,
+  Polter, Harvest, bZx) + worked USTRY scenario walkthrough
+  showing per-surface response under each ADR-0019 phase.
+
+- **`docs/operations/archive-completeness.md` (#198)**: daily-cron
+  design, multi-source fallback chain, Prometheus surface,
+  status-page integration. Per-region behaviour details
+  (R1 enforces / R2/R3 delegate).
+
+- **`docs/architecture/launch-readiness-backlog.md` (#198)**:
+  canonical 47-item launch-blocking backlog with dependency
+  graph + critical path. Operator decision 2026-04-28: every
+  non-deferred item ships before launch.
+
+- **4 new operator runbooks (#198)**: `anomaly-freeze-engaged`,
+  `archive-files-missing`, `archive-completeness-stale`,
+  `archive-repair-source-degraded`. Wired into `alerts-catalog.md`.
+
+- **`coverage-matrix.md` refreshed (#198)**: 22 new cross-cutting
+  integrity invariant rows (X1.* archive, X2.* API surfaces,
+  X3.* anomaly). Gap-triage reflects every outstanding item as
+  launch-blocking.
+
+- **SemVer policy formalised**: see
+  [`docs/architecture/semver-policy.md`](docs/architecture/semver-policy.md)
+  for the binding rules on `pkg/*` API stability and binary
+  CalVer release tagging.
+
 - **`GET /v1/price/batch?asset_ids=A,B,C&quote=`**: batch
   price lookup for up to 100 assets in one round-trip. Promised
   by the OpenAPI spec but previously unmounted. Missing assets
