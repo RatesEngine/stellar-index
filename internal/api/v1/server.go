@@ -203,6 +203,11 @@ func (s *Server) Handler() http.Handler {
 		// 500 problem+json response carries nosniff. Cheap, always
 		// safe, idempotent with any edge-proxy that also sets it.
 		middleware.SecurityHeaders,
+		// Cache-Control directives per route — set BEFORE handlers
+		// run so writeJSON / writeProblem responses inherit the
+		// directive. Handlers may override (Etag flows, immutable
+		// historical buckets) by setting Cache-Control themselves.
+		middleware.CacheControl,
 	}
 	if s.cors != nil {
 		stack = append(stack, s.cors)
