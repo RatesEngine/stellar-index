@@ -1,0 +1,178 @@
+package timescale
+
+import (
+	"context"
+	"database/sql"
+	"errors"
+	"fmt"
+	"math/big"
+	"time"
+
+	"github.com/RatesEngine/rates-engine/internal/supply"
+)
+
+// InsertSupply appends a [supply.Supply] snapshot to
+// asset_supply_history. Idempotent on (asset_key, ledger_sequence) —
+// re-deriving at the same ledger is a no-op via ON CONFLICT DO
+// NOTHING. The aggregator writes one snapshot per
+// asset-affecting bucket close.
+//
+// Validates that AssetKey + TotalSupply + CirculatingSupply are
+// populated (the supply-package computers always populate them; this
+// is a defensive guard against an upstream bug calling InsertSupply
+// with a zero-value struct). Per-field non-negativity is enforced by
+// the migration's CHECK constraints — a violation here surfaces as a
+// pgx error rather than a quiet write of bad data.
+func (s *Store) InsertSupply(ctx context.Context, snap supply.Supply) error {
+	if snap.AssetKey == "" {
+		return errors.New("timescale: InsertSupply: AssetKey is empty")
+	}
+	if snap.TotalSupply == nil {
+		return fmt.Errorf("timescale: InsertSupply %s: TotalSupply is nil", snap.AssetKey)
+	}
+	if snap.CirculatingSupply == nil {
+		return fmt.Errorf("timescale: InsertSupply %s: CirculatingSupply is nil", snap.AssetKey)
+	}
+
+	var maxSupply sql.NullString
+	if snap.MaxSupply != nil {
+		maxSupply = sql.NullString{Valid: true, String: snap.MaxSupply.String()}
+	}
+
+	const q = `
+		INSERT INTO asset_supply_history
+		    (time, asset_key, total_supply, circulating_supply, max_supply, basis, ledger_sequence)
+		VALUES
+		    ($1, $2, $3::numeric, $4::numeric, $5::numeric, $6, $7)
+		ON CONFLICT (asset_key, ledger_sequence) DO NOTHING
+	`
+	_, err := s.db.ExecContext(ctx, q,
+		snap.ObservedAt.UTC(),
+		snap.AssetKey,
+		snap.TotalSupply.String(),
+		snap.CirculatingSupply.String(),
+		maxSupply,
+		string(snap.Basis),
+		int64(snap.LedgerSequence),
+	)
+	if err != nil {
+		return fmt.Errorf("timescale: InsertSupply %s @ ledger %d: %w",
+			snap.AssetKey, snap.LedgerSequence, err)
+	}
+	return nil
+}
+
+// LatestSupply returns the most-recent snapshot for assetKey. Used
+// by the API's /v1/assets/{id} F2-fields path. Returns
+// [ErrNotFound] when the asset has no recorded supply (the asset-
+// detail handler then publishes nil for every supply field, with a
+// "no_metadata" basis hint).
+func (s *Store) LatestSupply(ctx context.Context, assetKey string) (supply.Supply, error) {
+	const q = `
+		SELECT time, total_supply::text, circulating_supply::text, max_supply::text, basis, ledger_sequence
+		  FROM asset_supply_history
+		 WHERE asset_key = $1
+		 ORDER BY time DESC
+		 LIMIT 1
+	`
+	var (
+		observedAt     time.Time
+		totalStr       string
+		circulatingStr string
+		maxStr         sql.NullString
+		basis          string
+		ledger         int64
+	)
+	err := s.db.QueryRowContext(ctx, q, assetKey).Scan(
+		&observedAt, &totalStr, &circulatingStr, &maxStr, &basis, &ledger,
+	)
+	if errors.Is(err, sql.ErrNoRows) {
+		return supply.Supply{}, ErrNotFound
+	}
+	if err != nil {
+		return supply.Supply{}, fmt.Errorf("timescale: LatestSupply %s: %w", assetKey, err)
+	}
+	return assembleSupply(assetKey, observedAt, totalStr, circulatingStr, maxStr, basis, ledger)
+}
+
+// SupplyHistory returns snapshots for assetKey between [from, to)
+// in ascending time order. limit caps the result count; pass 0 for
+// no limit. Used by the asset-detail historical-supply chart.
+//
+// Empty slice + nil error when no rows match the window — the asset
+// is known but has no supply observations in the requested range.
+func (s *Store) SupplyHistory(ctx context.Context, assetKey string, from, to time.Time, limit int) ([]supply.Supply, error) {
+	q := `
+		SELECT time, total_supply::text, circulating_supply::text, max_supply::text, basis, ledger_sequence
+		  FROM asset_supply_history
+		 WHERE asset_key = $1
+		   AND time >= $2
+		   AND time < $3
+		 ORDER BY time ASC
+	`
+	args := []any{assetKey, from.UTC(), to.UTC()}
+	if limit > 0 {
+		q += " LIMIT $4"
+		args = append(args, limit)
+	}
+	rows, err := s.db.QueryContext(ctx, q, args...)
+	if err != nil {
+		return nil, fmt.Errorf("timescale: SupplyHistory %s: %w", assetKey, err)
+	}
+	defer func() { _ = rows.Close() }()
+
+	out := make([]supply.Supply, 0, 128)
+	for rows.Next() {
+		var (
+			observedAt     time.Time
+			totalStr       string
+			circulatingStr string
+			maxStr         sql.NullString
+			basis          string
+			ledger         int64
+		)
+		if err := rows.Scan(&observedAt, &totalStr, &circulatingStr, &maxStr, &basis, &ledger); err != nil {
+			return nil, fmt.Errorf("timescale: SupplyHistory %s scan: %w", assetKey, err)
+		}
+		snap, err := assembleSupply(assetKey, observedAt, totalStr, circulatingStr, maxStr, basis, ledger)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, snap)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("timescale: SupplyHistory %s rows: %w", assetKey, err)
+	}
+	return out, nil
+}
+
+// assembleSupply parses the text-cast NUMERIC columns into *big.Int
+// and assembles a supply.Supply. Centralised so InsertSupply's
+// round-trip and SupplyHistory share identical decode logic — a bug
+// in one is a bug in both, easier to fix once.
+func assembleSupply(assetKey string, observedAt time.Time, totalStr, circulatingStr string, maxStr sql.NullString, basis string, ledger int64) (supply.Supply, error) {
+	total, ok := new(big.Int).SetString(totalStr, 10)
+	if !ok {
+		return supply.Supply{}, fmt.Errorf("timescale: parse total_supply %q for %s", totalStr, assetKey)
+	}
+	circulating, ok := new(big.Int).SetString(circulatingStr, 10)
+	if !ok {
+		return supply.Supply{}, fmt.Errorf("timescale: parse circulating_supply %q for %s", circulatingStr, assetKey)
+	}
+	var maxSupply *big.Int
+	if maxStr.Valid {
+		maxSupply, ok = new(big.Int).SetString(maxStr.String, 10)
+		if !ok {
+			return supply.Supply{}, fmt.Errorf("timescale: parse max_supply %q for %s", maxStr.String, assetKey)
+		}
+	}
+	return supply.Supply{
+		AssetKey:          assetKey,
+		TotalSupply:       total,
+		CirculatingSupply: circulating,
+		MaxSupply:         maxSupply,
+		Basis:             supply.Basis(basis),
+		LedgerSequence:    uint32(ledger), //nolint:gosec // ledger is a positive uint32 by domain; CHECK constraint enforces >= 1
+		ObservedAt:        observedAt,
+	}, nil
+}
