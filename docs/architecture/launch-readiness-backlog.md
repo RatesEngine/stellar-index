@@ -61,7 +61,7 @@ Within each surface, ordered by dependency.
 | L2.9 | Bootstrap (warmup) policy for new assets | Wk 6 | half-day | L2.6 | — | `internal/aggregate/baseline` | 🟡 |
 | L2.10 | `internal/divergence/` package — cross-reference vs CoinGecko / CMC / Reflector / Band / Redstone | Wk 5–6 | full day | — | L2.11, L3.5 | `internal/divergence` | 🟡 |
 | L2.11 | Wire `flags.divergence_warning` firing logic | Wk 6 | half-day | L2.10 | L3.5 | `internal/api/v1/envelope.go` consumers | 🟡 |
-| L2.12 | `internal/supply/` package — circulating supply per ADR-0011 | Wk 6 | ~2 days | — | L3.* (F2 fields) | `internal/supply/{circulating,total,max}` | 🟡 |
+| L2.12 | `internal/supply/` package — circulating supply per ADR-0011 (multi-PR; PR 1 ships skeleton + Algorithm 1 XLM) | Wk 6 | ~2 days | — | L3.* (F2 fields) | `internal/supply/{supply,policy,xlm,classic,sep41}.go` | 🟠 |
 
 ## API layer
 
