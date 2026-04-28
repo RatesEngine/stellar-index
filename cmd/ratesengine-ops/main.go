@@ -225,18 +225,25 @@ Subcommands:
                             all        run all four.
                           Exit 0 = clean; 1 = first break with details.
   archive-completeness <mode> [flags]
-                          Read-only completeness check across the dual-archive
+                          Completeness check + repair across the dual-archive
                           stack per ADR-0017. Modes:
-                            check      Enumerate missing checkpoint files in the
-                                       cross-anchor archive (/srv/history-archive
-                                       by default) and write a JSON gap report.
-                                       Read-only; never modifies an archive.
+                            check      Read-only enumeration. Walks expected
+                                       checkpoint positions in the cross-anchor
+                                       archive and writes a JSON gap report.
                                        Flags: -archive-root PATH, -from N, -to N,
                                               -output-file PATH (default stdout).
-                          PR A: cross-anchor scan only (PR B adds the primary
-                          MinIO bucket scan + multi-source fallback fetcher;
-                          PR C ties them together with the systemd timer).
-                          Exit 0 = clean; 1 = at least one missing file.
+                            fix        Run check, then fetch every missing
+                                       checkpoint via the multi-source fallback
+                                       chain (SDF core_live_001/002/003 +
+                                       tier-1 validators) and place each file
+                                       atomically. Re-checks after the fill so
+                                       the emitted report reflects post-fix
+                                       state. Flags: -archive-root, -from, -to,
+                                              -workers N, -owner-user STR,
+                                              -owner-group STR, -output-file.
+                          PR A/B: cross-anchor only (PR C will add the primary
+                          MinIO bucket and the systemd timer).
+                          Exit 0 = clean; 1 = at least one missing file remains.
   cross-region-check -regions name=URL,name=URL,... [-pairs PAIR,...] [-metric vwap|twap|ohlc] [-window DUR] [-samples N] [-to TS]
                           Hit each region's /v1/{vwap|twap|ohlc} endpoint
                           for the same closed-bucket window and assert
@@ -2070,19 +2077,125 @@ type wasmContractState struct {
 }
 
 // archiveCompleteness dispatches the `archive-completeness <mode>`
-// subcommand per ADR-0017. PR A only implements `check` mode
-// (read-only cross-anchor enumeration); PR B/C add `fix` and
-// `verify`.
+// subcommand per ADR-0017. PR A implemented `check`; PR B adds
+// `fix` (multi-source fallback fetcher); PR C will wire `verify`.
 func archiveCompleteness(args []string) error {
 	if len(args) == 0 {
-		return fmt.Errorf("archive-completeness: subcommand required (currently: check)")
+		return fmt.Errorf("archive-completeness: subcommand required (check / fix)")
 	}
 	switch args[0] {
 	case "check":
 		return archiveCompletenessCheck(args[1:])
+	case "fix":
+		return archiveCompletenessFix(args[1:])
 	default:
-		return fmt.Errorf("archive-completeness: unknown mode %q (PR A supports: check)", args[0])
+		return fmt.Errorf("archive-completeness: unknown mode %q (supported: check, fix)", args[0])
 	}
+}
+
+// archiveCompletenessFix runs the `check` then fetches every
+// missing checkpoint via the multi-source fallback chain. Read-
+// then-write — does NOT mutate either archive without first
+// confirming the file is missing.
+//
+// Exit semantics:
+//   - 0: every previously-missing file has been placed
+//   - 1: some files still missing after exhausting the chain
+//   - other: I/O / config error
+func archiveCompletenessFix(args []string) error {
+	fs := flag.NewFlagSet("archive-completeness fix", flag.ContinueOnError)
+	archiveRoot := fs.String("archive-root", "/srv/history-archive",
+		"Cross-anchor archive root (default: /srv/history-archive).")
+	from := fs.Uint("from", 2, "First ledger sequence (inclusive).")
+	to := fs.Uint("to", 0, "Last ledger sequence (inclusive). Required.")
+	workers := fs.Int("workers", 8, "Parallel fetch workers (default 8).")
+	ownerUser := fs.String("owner-user", "stellar",
+		"Local user that should own placed files. Empty disables chown.")
+	ownerGroup := fs.String("owner-group", "stellar",
+		"Local group that should own placed files. Empty disables chown.")
+	outputFile := fs.String("output-file", "",
+		"Path to write JSON post-fix report. Default: stdout.")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	if *to == 0 {
+		return fmt.Errorf("-to is required (pass the network head ledger sequence)")
+	}
+	if uint64(*from) > uint64(*to) {
+		return fmt.Errorf("-from (%d) must be <= -to (%d)", *from, *to)
+	}
+
+	// Phase 1 — check: enumerate the missing list.
+	checker := archivecompleteness.NewCrossAnchorChecker(*archiveRoot)
+	res, err := checker.Check(uint32(*from), uint32(*to))
+	if err != nil {
+		return fmt.Errorf("cross-anchor check: %w", err)
+	}
+
+	report := archivecompleteness.NewReport(uint32(*from), uint32(*to))
+	report.SetCrossAnchor(*archiveRoot, res)
+
+	if len(res.Missing) == 0 {
+		// Already complete; nothing to do.
+		return writeReport(report, *outputFile)
+	}
+
+	// Phase 2 — fix: fetch each missing checkpoint via the
+	// multi-source fallback chain.
+	filler, err := archivecompleteness.NewCrossAnchorFiller(archivecompleteness.FillerOptions{
+		ArchiveRoot: *archiveRoot,
+		Workers:     *workers,
+		OwnerUser:   *ownerUser,
+		OwnerGroup:  *ownerGroup,
+	})
+	if err != nil {
+		return fmt.Errorf("filler: %w", err)
+	}
+	fillRes := filler.Fill(context.Background(), res.Missing)
+	fmt.Fprintf(os.Stderr,
+		"archive-completeness fix: %d filled / %d failed (workers=%d)\n",
+		fillRes.Filled, len(fillRes.Failed), *workers)
+	for source, count := range fillRes.PerSourceSuccess {
+		fmt.Fprintf(os.Stderr, "  source %s: %d fetched\n", source, count)
+	}
+	for _, f := range fillRes.Failed {
+		fmt.Fprintf(os.Stderr, "  FAILED seq=%d reason=%s\n", f.Seq, f.Reason)
+	}
+
+	// Phase 3 — re-check: after the fill, scan again so the report
+	// reflects post-fix state. The Filler is idempotent (next run
+	// will just skip files now present), so the re-check is the
+	// authoritative measure of what's still missing.
+	postRes, err := checker.Check(uint32(*from), uint32(*to))
+	if err != nil {
+		return fmt.Errorf("post-fix cross-anchor check: %w", err)
+	}
+	report.SetCrossAnchor(*archiveRoot, postRes)
+
+	if err := writeReport(report, *outputFile); err != nil {
+		return err
+	}
+	if report.AnyMissing() {
+		fmt.Fprintf(os.Stderr,
+			"archive-completeness fix: %d checkpoint(s) still missing after fallback chain — see report\n",
+			report.CrossAnchor.MissingCount)
+		os.Exit(1)
+	}
+	return nil
+}
+
+// writeReport encodes the Report to outputFile (or stdout when empty).
+func writeReport(report *archivecompleteness.Report, outputFile string) error {
+	var w io.Writer = os.Stdout
+	if outputFile != "" {
+		f, err := os.Create(outputFile) //nolint:gosec // operator-supplied path
+		if err != nil {
+			return fmt.Errorf("create output file: %w", err)
+		}
+		defer func() { _ = f.Close() }()
+		w = f
+	}
+	return report.WriteJSON(w)
 }
 
 // archiveCompletenessCheck implements the read-only `check` mode.
@@ -2124,17 +2237,8 @@ func archiveCompletenessCheck(args []string) error {
 	// PR A scope: cross-anchor only. Primary section stays nil; PR B
 	// will populate it.
 
-	var w io.Writer = os.Stdout
-	if *outputFile != "" {
-		f, err := os.Create(*outputFile) //nolint:gosec // operator-supplied path
-		if err != nil {
-			return fmt.Errorf("create output file: %w", err)
-		}
-		defer func() { _ = f.Close() }()
-		w = f
-	}
-	if err := report.WriteJSON(w); err != nil {
-		return fmt.Errorf("write report: %w", err)
+	if err := writeReport(report, *outputFile); err != nil {
+		return err
 	}
 
 	// Non-zero exit when anything is missing so cron / k8s Job
