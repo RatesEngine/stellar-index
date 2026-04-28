@@ -33,3 +33,9 @@ paths = [
   '''internal/supply/classic_test\.go''',
   '''internal/supply/sep41_test\.go''',
 ]
+
+[[rules.allowlists]]
+description = "Generated Redocly HTML — embeds OpenAPI example values (canonical asset_ids: G-strkeys, C-strkeys, transaction hashes) that look like high-entropy secrets to gitleaks. The file is a build artefact regenerated from openapi/rates-engine.v1.yaml; the spec itself is scanned and any real secret would be caught there."
+paths = [
+  '''docs/reference/api/index\.html''',
+]
