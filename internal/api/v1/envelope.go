@@ -21,11 +21,37 @@ type Envelope struct {
 }
 
 // Flags are the advisory quality markers per HA plan §9.
+//
+// Field semantics:
+//
+//   - Stale: response is below this surface's documented baseline
+//     contract — e.g. on /v1/price the closed-bucket VWAP wasn't
+//     available so we degraded to last-trade. NOT used on
+//     /v1/price/tip's last-good-price fallback (that's in-contract;
+//     see ADR-0018 §"flags.stale semantic").
+//   - ReducedRedundancy: cross-region redundancy is degraded —
+//     R2/R3 set this when R1's last successful completeness run is
+//     stale per ADR-0017.
+//   - Triangulated: rate was computed via chain-pricing through a
+//     pivot (typically USD), not from a directly-traded pair.
+//   - DivergenceWarning: anomaly-detection or cross-reference
+//     observed a meaningful divergence; consumers should treat the
+//     value with caution. Fires per ADR-0019 anomaly.ActionWarn AND
+//     per future internal/divergence/ cross-reference checks.
+//   - Frozen: anomaly detection refused to publish the new bucket;
+//     this response carries the previous bucket's last-known-good
+//     value (ADR-0019 freeze policy). Only fires on /v1/price; the
+//     tip + observations surfaces ignore freeze.
+//   - SingleSource: the bucket had only one contributing source.
+//     Informational; combined with Frozen this is the manipulation
+//     signature.
 type Flags struct {
 	Stale             bool `json:"stale"`
 	ReducedRedundancy bool `json:"reduced_redundancy"`
 	Triangulated      bool `json:"triangulated"`
 	DivergenceWarning bool `json:"divergence_warning"`
+	Frozen            bool `json:"frozen,omitempty"`
+	SingleSource      bool `json:"single_source,omitempty"`
 }
 
 // Pagination is present on list-returning endpoints only.

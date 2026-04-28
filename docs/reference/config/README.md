@@ -111,6 +111,16 @@ the `env:` column.
 | `aggregate.pairs` | `[]string` | `[]` | — | Aggregator coverage set as canonical pair strings ("crypto:XLM/fiat:USD", "native/USDC-G…"). Empty leaves the binary's built-in default (XLM/BTC/ETH × USD/EUR/GBP). Each entry is parsed via canonical.ParseAsset on both sides; an unparseable entry fails Validate. |
 | `aggregate.windows` | `[]string` | `[]` | — | Per-window cadences as Go time.Duration strings ("5m", "1h", "24h"). Empty leaves the orchestrator's built-in default ([5m, 1h, 24h]). |
 
+### `[anomaly]`
+
+| Key | Type | Default | Env override | Description |
+| --- | ---- | ------- | ------------ | ----------- |
+| `anomaly.enabled` | `bool` | `false` | — | Master switch. When false, anomaly checks are disabled and every bucket is published as-is. Flip to true after operator has classified the asset set. |
+| `anomaly.thresholds` | `map[string]AnomalyThreshold` | `{}` | — | Per-class threshold table. Keys are asset class names (stablecoin/treasury/crypto/governance/default). Empty falls back to package defaults; partial maps merge over defaults. The default row is required (loader fills it from package defaults if absent). |
+| `anomaly.thresholds.<key>.warn_pct` | `float64` | `30.0` | — | Deviation above this percentage triggers ActionWarn (publish with divergence_warning flag). |
+| `anomaly.thresholds.<key>.freeze_pct` | `float64` | `75.0` | — | Deviation above this percentage triggers ActionFreeze when source_count<=1 (don't publish; serve last-known-good). |
+| `anomaly.classifications` | `map` | `{}` | — | Operator-curated map of canonical asset_id → asset class (stablecoin/treasury/crypto/governance). Anything absent falls through to the default class. |
+
 ### `[api]`
 
 | Key | Type | Default | Env override | Description |
