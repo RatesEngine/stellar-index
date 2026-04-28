@@ -48,6 +48,7 @@ type Server struct {
 	accounts   AccountStore
 	divergence DivergenceLooker
 	freeze     FrozenLooker
+	supply     SupplyLooker
 	cors       middleware.Middleware
 	auth       middleware.Middleware
 	rateLimit  middleware.Middleware
@@ -120,6 +121,14 @@ type Options struct {
 	// aggregator's freeze-marker writer + Redis are both running.
 	Freeze FrozenLooker
 
+	// Supply, when non-nil, populates the F2 fields
+	// (total_supply, circulating_supply, max_supply, market_cap_usd,
+	// fdv_usd, supply_basis) on /v1/assets/{id} per ADR-0011.
+	// Production wiring: a thin adapter around timescale.Store.LatestSupply.
+	// Nil means "F2 fields unavailable" — the asset-detail body
+	// still serves; F2 fields stay null.
+	Supply SupplyLooker
+
 	// Auth, when non-nil, is inserted between CORS and RateLimit.
 	// Sets a Subject in the request context that downstream
 	// middleware (rate-limit, request logger) and handlers can
@@ -155,6 +164,7 @@ func New(opts Options) *Server {
 		accounts:   opts.Accounts,
 		divergence: opts.Divergence,
 		freeze:     opts.Freeze,
+		supply:     opts.Supply,
 		cors:       opts.CORS,
 		auth:       opts.Auth,
 		rateLimit:  opts.RateLimit,
