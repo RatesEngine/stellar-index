@@ -916,7 +916,7 @@ components:
         volume_24h_usd:    { type: string, nullable: true, description: "aggregator" }
         market_cap_usd:    { type: string, nullable: true, description: "aggregator + supply derivation" }
         fdv_usd:           { type: string, nullable: true, description: "aggregator + supply derivation" }
-        circulating_supply:{ type: string, nullable: true, description: "supply derivation" }
+        circulating_supply: { type: string, nullable: true, description: "supply derivation" }
         total_supply:      { type: string, nullable: true, description: "supply derivation" }
         max_supply:        { type: string, nullable: true, description: "supply derivation" }
       required: [asset_id, quote, price, price_type, observed_at]

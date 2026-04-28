@@ -116,6 +116,10 @@ lint-docs: ## Doc-code consistency linter (freshness, links, ADR integrity, TODO
 lint-imports: ## Import-boundary lint (production ingest doesn't import stellar-rpc, xdr scoped to scval, etc.)
 	@./scripts/ci/lint-imports.sh
 
+.PHONY: lint-openapi-urls
+lint-openapi-urls: ## ADR-0018 URL-discipline check on the OpenAPI spec
+	@$(GO) run ./scripts/ci/lint-openapi-urls openapi/rates-engine.v1.yaml
+
 .PHONY: monitoring-check
 monitoring-check: ## Validate Prometheus rule files with promtool
 	@if ! command -v promtool >/dev/null 2>&1; then \

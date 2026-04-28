@@ -165,3 +165,9 @@ jobs:
         uses: stoplightio/spectral-action@v0.8.13
         with:
           file_glob: openapi/*.yaml
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+          cache: true
+      - name: ADR-0018 URL-discipline check
+        run: go run ./scripts/ci/lint-openapi-urls openapi/rates-engine.v1.yaml

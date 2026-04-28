@@ -82,7 +82,7 @@ Within each surface, ordered by dependency.
 | L3.13 | Envelope flag retrofit (`flags.frozen`, `flags.single_source`) | Wk 7 | half-day | L2.7 | — | `internal/api/v1/envelope.go` | 🟡 |
 | L3.14 | CDN caching for historical endpoints (CloudFront / equivalent) | Wk 7 | half-day | infra | — | infra config | 🟡 |
 | L3.15 | Self-service onboarding page at `docs.ratesengine.net/getting-started` | Wk 7 | half-day | — | — | docs site | 🟡 |
-| L3.16 | URL discipline OpenAPI lint — query params don't change consistency contract (ADR-0018) | Wk 7 | half-day | — | — | `scripts/ci/lint-openapi.sh` (new) | 🟡 |
+| L3.16 | URL discipline OpenAPI lint — query params don't change consistency contract (ADR-0018) | Wk 7 | half-day | — | — | `scripts/ci/lint-openapi-urls/` | 🟢 |
 
 ## Operations / infrastructure
 

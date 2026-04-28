@@ -14,6 +14,7 @@ echo "=== Vet ==="           && make vet
 echo "=== Lint ==="          && make lint
 echo "=== Docs ==="          && ./scripts/ci/lint-docs.sh
 echo "=== Imports ==="       && ./scripts/ci/lint-imports.sh
+echo "=== OpenAPI URLs ===" && go run ./scripts/ci/lint-openapi-urls openapi/rates-engine.v1.yaml
 echo "=== Test ==="          && make test
 # Compile-only: catches interface-extension breakage in
 # build-tagged integration adapters without spinning testcontainers.

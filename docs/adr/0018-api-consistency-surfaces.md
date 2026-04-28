@@ -235,6 +235,10 @@ prevent silent contract changes:
   load-bearing.
 - [ADR-0017](0017-archive-completeness-invariants.md) — archive
   invariants underlying the closed-bucket contract.
+- [`scripts/ci/lint-openapi-urls/`](../../scripts/ci/lint-openapi-urls/) —
+  CI lint that enforces the URL-discipline rule from this ADR; rejects
+  query parameters whose name or enum implies selecting between
+  consistency surfaces.
 - [`docs/operations/api-design.md`](../reference/api-design.md) §5 —
   per-endpoint surface descriptions; this ADR drives the per-surface
   rows.
