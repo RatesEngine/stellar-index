@@ -757,12 +757,34 @@ components:
     # Base envelope pieces
     Flags:
       type: object
-      description: Advisory quality markers. See docs/architecture/ha-plan.md §9.
+      description: |
+        Advisory quality markers. See docs/architecture/ha-plan.md §9
+        and ADR-0019 (anomaly detection / freeze policy).
+
+        - `stale` — response is below this surface's documented
+          baseline contract.
+        - `reduced_redundancy` — cross-region redundancy is degraded
+          (R2/R3 set this when R1's last completeness run is stale
+          per ADR-0017).
+        - `triangulated` — rate computed via chain-pricing through a
+          pivot (typically USD), not a directly-traded pair.
+        - `divergence_warning` — anomaly check or cross-reference
+          observed a meaningful divergence; treat with caution.
+        - `frozen` — anomaly detection refused to publish the new
+          bucket; this response carries the previous bucket's
+          last-known-good value (ADR-0019). Only fires on `/v1/price`;
+          tip + observations surfaces ignore freeze.
+        - `single_source` — the bucket had only one contributing
+          source. When `frozen=true` this is forced true (an LKG
+          fallback is by definition single-sourced). Informational;
+          combined with `frozen` this is the manipulation signature.
       properties:
         stale:              { type: boolean, default: false }
         reduced_redundancy: { type: boolean, default: false }
         triangulated:       { type: boolean, default: false }
         divergence_warning: { type: boolean, default: false }
+        frozen:             { type: boolean, default: false }
+        single_source:      { type: boolean, default: false }
       required: [stale, reduced_redundancy, triangulated, divergence_warning]
 
     Pagination:

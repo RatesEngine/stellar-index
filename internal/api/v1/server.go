@@ -47,6 +47,7 @@ type Server struct {
 	meta       MetadataResolver
 	accounts   AccountStore
 	divergence DivergenceLooker
+	freeze     FrozenLooker
 	cors       middleware.Middleware
 	auth       middleware.Middleware
 	rateLimit  middleware.Middleware
@@ -109,6 +110,16 @@ type Options struct {
 	// Wire when both the divergence worker and Redis are running.
 	Divergence DivergenceLooker
 
+	// Freeze, when non-nil, is consulted by /v1/price (and
+	// /v1/price/batch) after a successful LatestPrice lookup. When
+	// it reports "frozen" for the pair, the response carries
+	// flags.frozen=true and flags.single_source=true (per
+	// anomaly.ActionFreeze, ADR-0019). Nil means "no freeze signal
+	// available" — flags.frozen stays false and flags.single_source
+	// is derived from the observation count instead. Wire when the
+	// aggregator's freeze-marker writer + Redis are both running.
+	Freeze FrozenLooker
+
 	// Auth, when non-nil, is inserted between CORS and RateLimit.
 	// Sets a Subject in the request context that downstream
 	// middleware (rate-limit, request logger) and handlers can
@@ -143,6 +154,7 @@ func New(opts Options) *Server {
 		meta:       opts.Meta,
 		accounts:   opts.Accounts,
 		divergence: opts.Divergence,
+		freeze:     opts.Freeze,
 		cors:       opts.CORS,
 		auth:       opts.Auth,
 		rateLimit:  opts.RateLimit,

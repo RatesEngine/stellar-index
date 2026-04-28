@@ -35,6 +35,27 @@ type DivergenceLooker interface {
 	DivergenceFiringFor(ctx context.Context, asset canonical.Asset) (bool, error)
 }
 
+// FrozenLooker is the read-side interface the v1 server uses to
+// determine whether the most-recent published bucket for an
+// asset/quote pair was frozen by the anomaly checker (ADR-0019).
+// Production implementation: a Redis-backed adapter the aggregator
+// populates at bucket-close time, wired in the binary.
+//
+// When FrozenForPair returns true, the snapshot served by
+// PriceReader.LatestPrice IS the previous bucket's last-known-good
+// VWAP — not a fresh aggregation. The handler sets flags.frozen=true
+// and flags.single_source=true on the response (per the
+// anomaly.ActionFreeze contract in
+// internal/aggregate/anomaly/decision.go).
+//
+// Read errors fall through with frozen=false (better to serve a
+// price without the warning flag than to 5xx because of a Redis
+// blip). Absence (no freeze marker) means "not frozen" — the
+// steady-state for healthy buckets.
+type FrozenLooker interface {
+	FrozenForPair(ctx context.Context, asset, quote canonical.Asset) (bool, error)
+}
+
 // PriceReader is the storage-side interface for /v1/price lookups.
 //
 // Production implementation: Redis hot path (the `price:<asset>`
@@ -201,6 +222,17 @@ func (s *Server) handlePrice(w http.ResponseWriter, r *http.Request) {
 	// aggregator owns this metric when it ships and will restrict
 	// emission to a top-N allow-list.
 	flags := Flags{Stale: stale}
+	frozen := s.lookupFrozen(r, asset, quote)
+	flags.Frozen = frozen
+	// SingleSource is forced true when the snapshot is the LKG
+	// fallback — by the ActionFreeze contract every frozen response
+	// is single-sourced (a multi-source bucket couldn't have been
+	// frozen). When NOT frozen, derive from the observation count.
+	if frozen {
+		flags.SingleSource = true
+	} else {
+		flags.SingleSource = len(sources) == 1
+	}
 	if s.divergence != nil {
 		// Divergence lookup is best-effort. A failure here logs at
 		// WARN and falls through with the flag unset — better to
@@ -215,6 +247,27 @@ func (s *Server) handlePrice(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	writeJSON(w, snapshot, flags, sources...)
+}
+
+// lookupFrozen consults the FrozenLooker (when wired) for the
+// supplied pair and returns whether the most-recent published bucket
+// was frozen. Read errors and absence both fall through with
+// frozen=false — same best-effort posture as divergence lookup.
+func (s *Server) lookupFrozen(r *http.Request, asset, quote canonical.Asset) bool {
+	if s.freeze == nil {
+		return false
+	}
+	frozen, err := s.freeze.FrozenForPair(r.Context(), asset, quote)
+	if err != nil {
+		if !clientAborted(r, err) {
+			s.logger.Warn("freeze lookup failed",
+				"err", err,
+				"asset", asset.String(),
+				"quote", quote.String())
+		}
+		return false
+	}
+	return frozen
 }
 
 // handlePriceBatch serves GET /v1/price/batch?asset_ids=A,B,C&quote=<id>.
@@ -375,6 +428,8 @@ func (s *Server) lookupPriceBatch(w http.ResponseWriter, r *http.Request, ids []
 	out := make([]PriceSnapshot, 0, len(ids))
 	allSources := map[string]struct{}{}
 	anyStale := false
+	anyFrozen := false
+	anySingleSource := false
 	for _, raw := range ids {
 		asset, err := canonical.ParseAsset(raw)
 		if err != nil {
@@ -413,13 +468,27 @@ func (s *Server) lookupPriceBatch(w http.ResponseWriter, r *http.Request, ids []
 		for _, src := range sources {
 			allSources[src] = struct{}{}
 		}
+		// Per-row freeze lookup → OR into envelope flag. Same
+		// best-effort posture as the single-asset path; an absent
+		// freeze marker means "not frozen" and a Redis blip just
+		// leaves the flag at its previous value.
+		if s.lookupFrozen(r, asset, quote) {
+			anyFrozen = true
+			anySingleSource = true // freeze implies single-source
+		} else if len(sources) == 1 {
+			anySingleSource = true
+		}
 		out = append(out, snapshot)
 	}
 	srcs := make([]string, 0, len(allSources))
 	for src := range allSources {
 		srcs = append(srcs, src)
 	}
-	writeJSON(w, out, Flags{Stale: anyStale}, srcs...)
+	writeJSON(w, out, Flags{
+		Stale:        anyStale,
+		Frozen:       anyFrozen,
+		SingleSource: anySingleSource,
+	}, srcs...)
 }
 
 // ─── Helpers for PriceReader implementations ──────────────────────

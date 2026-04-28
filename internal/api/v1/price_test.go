@@ -371,6 +371,194 @@ func TestLastTradeToSnapshot_zeroDecimals(t *testing.T) {
 	}
 }
 
+// stubFrozenLooker implements v1.FrozenLooker for tests. `frozen`
+// controls FrozenForPair's bool return; `err` is the surfaced error.
+type stubFrozenLooker struct {
+	frozen bool
+	err    error
+	calls  int
+}
+
+func (s *stubFrozenLooker) FrozenForPair(_ context.Context, _, _ canonical.Asset) (bool, error) {
+	s.calls++
+	return s.frozen, s.err
+}
+
+// TestPrice_FrozenSetsBothFlags — when the looker says frozen, the
+// envelope carries flags.frozen=true AND flags.single_source=true,
+// regardless of how many sources the snapshot reports. (Per
+// anomaly.ActionFreeze a frozen response IS the LKG, which is by
+// definition single-sourced.)
+func TestPrice_FrozenSetsBothFlags(t *testing.T) {
+	reader := &stubPriceReader{
+		snapshots: map[string]v1.PriceSnapshot{
+			"native/fiat:USD": {Price: "0.07", PriceType: "vwap"},
+		},
+		// Multi-source on the underlying snapshot to prove the freeze
+		// override forces single_source=true even so.
+		sources: map[string][]string{
+			"native/fiat:USD": {"sdex", "soroswap", "binance"},
+		},
+	}
+	frz := &stubFrozenLooker{frozen: true}
+	srv := v1.New(v1.Options{Prices: reader, Freeze: frz})
+	ts := startHTTPTest(t, srv.Handler())
+
+	resp := mustGet(t, ts.URL+"/v1/price?asset=native&quote=fiat:USD")
+	body, _ := readAll(resp)
+	if !strings.Contains(body, `"frozen":true`) {
+		t.Errorf("frozen flag not set: %s", body)
+	}
+	if !strings.Contains(body, `"single_source":true`) {
+		t.Errorf("single_source flag should be forced true on freeze: %s", body)
+	}
+	if frz.calls != 1 {
+		t.Errorf("freeze lookup calls = %d, want 1", frz.calls)
+	}
+}
+
+// TestPrice_NotFrozenSingleSourceFromSourceCount — when not frozen,
+// single_source mirrors len(sources)==1.
+func TestPrice_NotFrozenSingleSourceFromSourceCount(t *testing.T) {
+	reader := &stubPriceReader{
+		snapshots: map[string]v1.PriceSnapshot{
+			"native/fiat:USD": {Price: "0.07", PriceType: "last_trade"},
+		},
+		sources: map[string][]string{
+			"native/fiat:USD": {"sdex"}, // single source
+		},
+	}
+	frz := &stubFrozenLooker{frozen: false}
+	srv := v1.New(v1.Options{Prices: reader, Freeze: frz})
+	ts := startHTTPTest(t, srv.Handler())
+
+	resp := mustGet(t, ts.URL+"/v1/price?asset=native&quote=fiat:USD")
+	body, _ := readAll(resp)
+	if strings.Contains(body, `"frozen":true`) {
+		t.Errorf("frozen flag should not fire: %s", body)
+	}
+	if !strings.Contains(body, `"single_source":true`) {
+		t.Errorf("single_source should be true with 1 source: %s", body)
+	}
+}
+
+// TestPrice_NotFrozenMultiSourceLeavesSingleSourceFalse — multi-source
+// + not-frozen leaves single_source absent (omitempty).
+func TestPrice_NotFrozenMultiSourceLeavesSingleSourceFalse(t *testing.T) {
+	reader := &stubPriceReader{
+		snapshots: map[string]v1.PriceSnapshot{
+			"native/fiat:USD": {Price: "0.07", PriceType: "vwap"},
+		},
+		sources: map[string][]string{
+			"native/fiat:USD": {"sdex", "soroswap"},
+		},
+	}
+	frz := &stubFrozenLooker{frozen: false}
+	srv := v1.New(v1.Options{Prices: reader, Freeze: frz})
+	ts := startHTTPTest(t, srv.Handler())
+
+	resp := mustGet(t, ts.URL+"/v1/price?asset=native&quote=fiat:USD")
+	body, _ := readAll(resp)
+	if strings.Contains(body, `"single_source":true`) {
+		t.Errorf("single_source should not fire on multi-source: %s", body)
+	}
+	if strings.Contains(body, `"frozen":true`) {
+		t.Errorf("frozen should not fire when looker says false: %s", body)
+	}
+}
+
+// TestPrice_FreezeErrorIsBestEffort — a freeze lookup error must NOT
+// cause the price call to fail. Flag stays false; the price still
+// flows. Mirrors the divergence-error contract.
+func TestPrice_FreezeErrorIsBestEffort(t *testing.T) {
+	reader := &stubPriceReader{
+		snapshots: map[string]v1.PriceSnapshot{
+			"native/fiat:USD": {Price: "0.07", PriceType: "vwap"},
+		},
+		sources: map[string][]string{
+			"native/fiat:USD": {"sdex", "soroswap"},
+		},
+	}
+	frz := &stubFrozenLooker{err: errors.New("redis exploded")}
+	srv := v1.New(v1.Options{Prices: reader, Freeze: frz})
+	ts := startHTTPTest(t, srv.Handler())
+
+	resp := mustGet(t, ts.URL+"/v1/price?asset=native&quote=fiat:USD")
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d, want 200 — freeze lookup error must NOT fail the price call", resp.StatusCode)
+	}
+	body, _ := readAll(resp)
+	if strings.Contains(body, `"frozen":true`) {
+		t.Errorf("frozen should default false on lookup error: %s", body)
+	}
+}
+
+// TestPrice_NoFreezeLooker_DerivesFromSources — without a FrozenLooker
+// wired, frozen never fires and single_source comes from the
+// observation count.
+func TestPrice_NoFreezeLooker_DerivesFromSources(t *testing.T) {
+	reader := &stubPriceReader{
+		snapshots: map[string]v1.PriceSnapshot{
+			"native/fiat:USD": {Price: "0.07", PriceType: "last_trade"},
+		},
+		sources: map[string][]string{
+			"native/fiat:USD": {"sdex"},
+		},
+	}
+	srv := v1.New(v1.Options{Prices: reader}) // no Freeze
+	ts := startHTTPTest(t, srv.Handler())
+
+	resp := mustGet(t, ts.URL+"/v1/price?asset=native&quote=fiat:USD")
+	body, _ := readAll(resp)
+	if strings.Contains(body, `"frozen":true`) {
+		t.Errorf("frozen should not fire without a looker: %s", body)
+	}
+	if !strings.Contains(body, `"single_source":true`) {
+		t.Errorf("single_source should derive from len(sources)==1: %s", body)
+	}
+}
+
+// TestPriceBatch_FrozenORedAcrossRows — a batch where one row freezes
+// and others don't sets envelope.flags.frozen=true (and
+// single_source=true). Envelope flags are OR over per-row signals,
+// matching the Stale flag's contract.
+func TestPriceBatch_FrozenORedAcrossRows(t *testing.T) {
+	reader := &stubPriceReader{
+		snapshots: map[string]v1.PriceSnapshot{
+			"native/fiat:USD":   {Price: "0.07", PriceType: "vwap"},
+			"fiat:EUR/fiat:USD": {Price: "1.10", PriceType: "vwap"},
+		},
+		sources: map[string][]string{
+			"native/fiat:USD":   {"sdex", "soroswap"},
+			"fiat:EUR/fiat:USD": {"sdex", "soroswap"},
+		},
+	}
+	// Looker freezes only the EUR row, not native.
+	frz := &batchFreezeLooker{frozenForBase: "EUR"}
+	srv := v1.New(v1.Options{Prices: reader, Freeze: frz})
+	ts := startHTTPTest(t, srv.Handler())
+
+	resp := mustGet(t, ts.URL+"/v1/price/batch?asset_ids=native,fiat:EUR&quote=fiat:USD")
+	body, _ := readAll(resp)
+	if !strings.Contains(body, `"frozen":true`) {
+		t.Errorf("envelope frozen should fire when ANY row is frozen: %s", body)
+	}
+	if !strings.Contains(body, `"single_source":true`) {
+		t.Errorf("envelope single_source should follow frozen: %s", body)
+	}
+}
+
+// batchFreezeLooker freezes any pair whose base.Code matches the
+// configured value. Lets a single test cover "freeze fires for asset
+// X but not asset Y".
+type batchFreezeLooker struct {
+	frozenForBase string
+}
+
+func (b *batchFreezeLooker) FrozenForPair(_ context.Context, asset, _ canonical.Asset) (bool, error) {
+	return asset.Code == b.frozenForBase, nil
+}
+
 // helper
 func mustPair(base, quote canonical.Asset) canonical.Pair {
 	p, err := canonical.NewPair(base, quote)
