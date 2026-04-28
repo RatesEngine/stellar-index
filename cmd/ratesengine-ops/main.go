@@ -31,6 +31,7 @@ import (
 	"github.com/stellar/go-stellar-sdk/support/datastore"
 	sdkxdr "github.com/stellar/go-stellar-sdk/xdr"
 
+	"github.com/RatesEngine/rates-engine/internal/archivecompleteness"
 	"github.com/RatesEngine/rates-engine/internal/canonical"
 	"github.com/RatesEngine/rates-engine/internal/config"
 	"github.com/RatesEngine/rates-engine/internal/consumer"
@@ -110,6 +111,11 @@ func main() { //nolint:gocyclo,gocognit,funlen // subcommand switch; each case i
 	case "verify-archive":
 		if err := verifyArchive(args[1:]); err != nil {
 			fmt.Fprintf(os.Stderr, "verify-archive: %v\n", err)
+			os.Exit(1)
+		}
+	case "archive-completeness":
+		if err := archiveCompleteness(args[1:]); err != nil {
+			fmt.Fprintf(os.Stderr, "archive-completeness: %v\n", err)
 			os.Exit(1)
 		}
 	case "wasm-history":
@@ -218,6 +224,19 @@ Subcommands:
                                        -archivist-timeout (default 30m).
                             all        run all four.
                           Exit 0 = clean; 1 = first break with details.
+  archive-completeness <mode> [flags]
+                          Read-only completeness check across the dual-archive
+                          stack per ADR-0017. Modes:
+                            check      Enumerate missing checkpoint files in the
+                                       cross-anchor archive (/srv/history-archive
+                                       by default) and write a JSON gap report.
+                                       Read-only; never modifies an archive.
+                                       Flags: -archive-root PATH, -from N, -to N,
+                                              -output-file PATH (default stdout).
+                          PR A: cross-anchor scan only (PR B adds the primary
+                          MinIO bucket scan + multi-source fallback fetcher;
+                          PR C ties them together with the systemd timer).
+                          Exit 0 = clean; 1 = at least one missing file.
   cross-region-check -regions name=URL,name=URL,... [-pairs PAIR,...] [-metric vwap|twap|ohlc] [-window DUR] [-samples N] [-to TS]
                           Hit each region's /v1/{vwap|twap|ohlc} endpoint
                           for the same closed-bucket window and assert
@@ -2048,6 +2067,85 @@ type contractHistory struct {
 type wasmContractState struct {
 	ranges  []wasmRange
 	current string // current open WASM hash hex; empty = no open range
+}
+
+// archiveCompleteness dispatches the `archive-completeness <mode>`
+// subcommand per ADR-0017. PR A only implements `check` mode
+// (read-only cross-anchor enumeration); PR B/C add `fix` and
+// `verify`.
+func archiveCompleteness(args []string) error {
+	if len(args) == 0 {
+		return fmt.Errorf("archive-completeness: subcommand required (currently: check)")
+	}
+	switch args[0] {
+	case "check":
+		return archiveCompletenessCheck(args[1:])
+	default:
+		return fmt.Errorf("archive-completeness: unknown mode %q (PR A supports: check)", args[0])
+	}
+}
+
+// archiveCompletenessCheck implements the read-only `check` mode.
+// Walks the cross-anchor archive (PR A; the primary archive scan
+// lands in PR B), emits a JSON [archivecompleteness.Report].
+//
+// Exit semantics:
+//   - 0: every section clean (no missing files in scope)
+//   - 1: at least one section reported missing files
+//   - other: I/O / config error before scan completed
+func archiveCompletenessCheck(args []string) error {
+	fs := flag.NewFlagSet("archive-completeness check", flag.ContinueOnError)
+	archiveRoot := fs.String("archive-root", "/srv/history-archive",
+		"Cross-anchor archive root (default: /srv/history-archive).")
+	from := fs.Uint("from", 2, "First ledger sequence (inclusive).")
+	to := fs.Uint("to", 0,
+		"Last ledger sequence (inclusive). Required — pass the network head.")
+	outputFile := fs.String("output-file", "",
+		"Path to write JSON report. Default: stdout.")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	if *to == 0 {
+		return fmt.Errorf("-to is required (pass the network head ledger sequence)")
+	}
+	if uint64(*from) > uint64(*to) {
+		return fmt.Errorf("-from (%d) must be <= -to (%d)", *from, *to)
+	}
+
+	report := archivecompleteness.NewReport(uint32(*from), uint32(*to))
+
+	checker := archivecompleteness.NewCrossAnchorChecker(*archiveRoot)
+	res, err := checker.Check(uint32(*from), uint32(*to))
+	if err != nil {
+		return fmt.Errorf("cross-anchor scan: %w", err)
+	}
+	report.SetCrossAnchor(*archiveRoot, res)
+
+	// PR A scope: cross-anchor only. Primary section stays nil; PR B
+	// will populate it.
+
+	var w io.Writer = os.Stdout
+	if *outputFile != "" {
+		f, err := os.Create(*outputFile) //nolint:gosec // operator-supplied path
+		if err != nil {
+			return fmt.Errorf("create output file: %w", err)
+		}
+		defer func() { _ = f.Close() }()
+		w = f
+	}
+	if err := report.WriteJSON(w); err != nil {
+		return fmt.Errorf("write report: %w", err)
+	}
+
+	// Non-zero exit when anything is missing so cron / k8s Job
+	// invocations surface gaps as a Prometheus-style probe.
+	if report.AnyMissing() {
+		fmt.Fprintf(os.Stderr,
+			"archive-completeness check: %d missing checkpoint(s) in cross-anchor archive (range [%d, %d])\n",
+			report.CrossAnchor.MissingCount, *from, *to)
+		os.Exit(1)
+	}
+	return nil
 }
 
 func wasmHistory(args []string) error { //nolint:funlen,gocognit,gocyclo // linear diagnostic, splitting reduces readability
