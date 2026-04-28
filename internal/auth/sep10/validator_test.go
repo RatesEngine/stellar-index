@@ -245,7 +245,7 @@ func TestVerify_RejectsExpiredChallenge(t *testing.T) {
 		NetworkPassphrase: network.TestNetworkPassphrase,
 		WebAuthDomain:     testWebDomain,
 		HomeDomain:        testHomeDomain,
-		ChallengeTTL:      1 * time.Second, // SDK enforces ≥1s; smallest allowed window
+		ChallengeTTL:      2 * time.Second, // SDK enforces ≥1s; 2s gives CI headroom past sleep granularity
 		JWTTTL:            1 * time.Hour,
 		JWTSecret:         testJWTSecret,
 	})
@@ -260,8 +260,10 @@ func TestVerify_RejectsExpiredChallenge(t *testing.T) {
 	}
 	signedXDR := signChallenge(t, ch.TransactionXDR, client)
 
-	// Wait past the time-bound window.
-	time.Sleep(1500 * time.Millisecond)
+	// Wait past the time-bound window. 4 s past a 2 s TTL leaves
+	// generous slack for slow-CI clock granularity (the txnbuild
+	// SDK reads wall clock directly, not our injected one).
+	time.Sleep(4 * time.Second)
 
 	_, err = v.Verify(context.Background(), signedXDR)
 	if err == nil {
