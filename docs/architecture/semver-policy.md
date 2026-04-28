@@ -185,5 +185,7 @@ new source in `internal/sources/<venue>/` is the normal flow.
 
 - [ADR-0005](../adr/0005-monorepo.md) — monorepo / one-Go-module decision; the SemVer commitment on `pkg/*` lives here
 - [`docs/discovery/repo-structure-plan.md`](../discovery/repo-structure-plan.md) §10 — original rationale for the dual-versioning split
+- [`docs/operations/release-process.md`](../operations/release-process.md) — runbook the release engineer follows; implements this policy
+- [`.github/RELEASE_NOTES_TEMPLATE.md`](../../.github/RELEASE_NOTES_TEMPLATE.md) — fill-in template for GitHub Release notes
 - [`CHANGELOG.md`](../../CHANGELOG.md) — every release's entry follows the rules above
 - [`pkg/client/doc.go`](../../pkg/client/doc.go) — package-level statement of v0.x stability promise
