@@ -1,0 +1,68 @@
+# systemd unit: archive-completeness verify daemon.
+#
+# Per ADR-0017 §"Daily completeness cron". Runs once on each timer
+# tick (one-shot oneshot semantics); the timer file at
+# archive-completeness.timer schedules the cadence.
+#
+# Operator wiring:
+#
+#   sudo cp deploy/systemd/archive-completeness.{service,timer} /etc/systemd/system/
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable --now archive-completeness.timer
+#
+# Configuration (override via /etc/default/archive-completeness):
+#
+#   ARCHIVE_FROM       Default 2 (genesis)
+#   ARCHIVE_TO         Network head ledger (REQUIRED — operator-set;
+#                      typically pulled by an envrionment script
+#                      from `mc ls --recursive ... | tail -1`)
+#   TEXTFILE_OUTPUT    node_exporter's textfile_collector dir + filename
+#   REPORT_OUTPUT      JSON report path (operator audit trail)
+
+[Unit]
+Description=Rates Engine — archive-completeness verify (daily cron per ADR-0017)
+Documentation=https://github.com/RatesEngine/rates-engine/blob/main/docs/operations/archive-completeness.md
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+EnvironmentFile=-/etc/default/archive-completeness
+
+# Sensible defaults. Operators override via /etc/default/archive-completeness.
+Environment=ARCHIVE_FROM=2
+Environment=ARCHIVE_TO=0
+Environment=TEXTFILE_OUTPUT=/var/lib/node_exporter/textfile_collector/archive_completeness.prom
+Environment=REPORT_OUTPUT=/var/lib/galexie/last-completeness-report.json
+Environment=WORKERS=8
+
+ExecStart=/usr/local/bin/ratesengine-ops archive-completeness verify \
+  -from ${ARCHIVE_FROM} \
+  -to ${ARCHIVE_TO} \
+  -workers ${WORKERS} \
+  -textfile-output ${TEXTFILE_OUTPUT} \
+  -output-file ${REPORT_OUTPUT}
+
+# Run as root because we need to chown placed files to stellar:stellar
+# (see ADR-0017 §"Per-region behaviour" — R1 leader). On R2/R3
+# without local cross-anchor archive this whole timer is disabled
+# (the regions delegate to R1 via metric scrape).
+User=root
+
+# Hardening — read-only most of the filesystem, write only where we
+# need to: archive root, the textfile output dir, the report dir.
+ProtectSystem=full
+PrivateTmp=true
+NoNewPrivileges=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+ReadWritePaths=/srv/history-archive /var/lib/galexie /var/lib/node_exporter
+
+# A clean run is fast; a worst-case (lots of fallback chain
+# fetches) shouldn't exceed 30 min. Hard-cap so a hung HTTP source
+# can't wedge the timer.
+TimeoutStartSec=30min
+
+[Install]
+WantedBy=multi-user.target

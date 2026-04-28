@@ -1,0 +1,118 @@
+---
+# Archive completeness alerts per ADR-0017.
+#
+# Scrape source: node_exporter's textfile_collector reads
+# `/var/lib/node_exporter/textfile_collector/archive_completeness.prom`,
+# which the daily systemd-timer-driven `ratesengine-ops
+# archive-completeness verify` run writes to. Metric names + labels
+# defined in `internal/archivecompleteness/metrics.go`.
+#
+# Alert family:
+#
+#   - `ratesengine_archive_files_missing` — gauge > 0 sustained 4 h.
+#     The verify cron runs daily so a 4 h sustained > 0 means at
+#     least one cron cycle couldn't fix it via the fallback chain.
+#     Severity: ticket (the API still serves correct rates from
+#     the bytes that ARE present).
+#
+#   - `ratesengine_archive_completeness_stale` — last_success
+#     timestamp older than 26 h. Means either the daemon isn't
+#     running or every recent run had residuals. Severity: ticket
+#     at 26 h, page at 48 h.
+#
+#   - `ratesengine_archive_repair_source_degraded` — per-source
+#     failure ratio > 10% over 1 h. Informational; the fallback
+#     chain compensates so customers see no impact, but multiple
+#     sources degrading at once is a precursor to
+#     `ratesengine_archive_files_missing`.
+
+groups:
+  - name: ratesengine.archive_completeness
+    interval: 60s
+    rules:
+
+      - alert: ratesengine_archive_files_missing
+        expr: archive_files_missing > 0
+        for: 4h
+        labels:
+          severity: ticket
+          team: ratesengine
+          component: archive
+          runbook_url: https://github.com/RatesEngine/rates-engine/blob/main/docs/operations/runbooks/archive-files-missing.md
+        annotations:
+          summary: "{{ $value }} files missing in {{ $labels.archive }} archive (sustained > 4h)"
+          description: |
+            The daily archive-completeness verify run found {{ $value }}
+            missing checkpoint file(s) in the {{ $labels.archive }} archive
+            and the multi-source fallback chain couldn't fill them. Customer
+            impact: API still serves correct data from existing bytes;
+            cross-region redundancy is degraded until the gap closes.
+            Runbook walks through manual review (real upstream gap vs
+            transient source outage) + escalation to direct operator
+            outreach when public archives don't have the data.
+
+      # Two-tier staleness: 26h is the standard heartbeat budget
+      # (24h cron + 2h cushion); 48h is the page-the-on-call line.
+      - alert: ratesengine_archive_completeness_stale
+        expr: |
+          (time() - archive_completeness_last_success_timestamp) > (26 * 3600)
+        for: 5m
+        labels:
+          severity: ticket
+          team: ratesengine
+          component: archive
+          runbook_url: https://github.com/RatesEngine/rates-engine/blob/main/docs/operations/runbooks/archive-completeness-stale.md
+        annotations:
+          summary: "archive-completeness verify hasn't completed cleanly in {{ $value | humanizeDuration }}"
+          description: |
+            Either the systemd timer isn't running, or every run since the
+            last clean one exited with residuals. R2/R3 may set
+            `flags.reduced_redundancy: true` on API responses while this
+            fires on R1. Runbook: bisect by check / chain-link / cross-
+            anchor sub-checks to find which contract is broken.
+
+      - alert: ratesengine_archive_completeness_critical_stale
+        expr: |
+          (time() - archive_completeness_last_success_timestamp) > (48 * 3600)
+        for: 5m
+        labels:
+          severity: page
+          team: ratesengine
+          component: archive
+          runbook_url: https://github.com/RatesEngine/rates-engine/blob/main/docs/operations/runbooks/archive-completeness-stale.md
+        annotations:
+          summary: "(R1 integrity-leader) archive-completeness verify stale > 48h — SEV-2"
+          description: |
+            R1 is the integrity leader for the fleet (ADR-0016). 48h
+            without a clean verify is enough that R2/R3 should already
+            be flagging reduced_redundancy. Escalate to the SEV-2
+            playbook; manual archive-completeness verify run is the
+            first diagnostic.
+
+      # Per-source degradation: failure rate is per-source over the
+      # window. The numerator is cumulative across the run; the
+      # denominator should be too. Both are textfile-emitted by the
+      # `verify` mode in archivecompleteness/metrics.go.
+      - alert: ratesengine_archive_repair_source_degraded
+        expr: |
+          (
+            sum by (source) (rate(archive_completeness_repair_failures_total[1h]))
+            /
+            (sum by (source) (rate(archive_completeness_repair_attempts_total[1h])) > 0)
+          ) > 0.10
+        for: 1h
+        labels:
+          severity: informational
+          team: ratesengine
+          component: archive
+          runbook_url: https://github.com/RatesEngine/rates-engine/blob/main/docs/operations/runbooks/archive-repair-source-degraded.md
+        annotations:
+          summary: "Source {{ $labels.source }} repair failure ratio > 10% sustained 1h"
+          description: |
+            A specific archive source is failing > 10% of repair attempts
+            over the last hour. The fallback chain handles this — customers
+            see no impact unless multiple sources fail simultaneously, in
+            which case the `ratesengine_archive_files_missing` alert will
+            follow. Runbook: cross-check source's public status page,
+            confirm fallback chain is succeeding overall, ticket if the
+            degradation persists > 24 h.

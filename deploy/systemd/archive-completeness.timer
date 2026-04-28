@@ -1,0 +1,22 @@
+# systemd timer: daily archive-completeness verify run.
+#
+# Per ADR-0017 §"Daily completeness cron". Wakes once per day at
+# 02:17 UTC + up to 5 min of jitter — the offset from :00 avoids
+# AWS S3 thundering-herd patterns that other cron-aligned jobs
+# create; the jitter spreads the three regions' verifies apart.
+#
+# Persistent=true means: if the box was off at 02:17, fire on next
+# boot. So a planned reboot doesn't skip a day's check.
+
+[Unit]
+Description=Daily archive-completeness verify (per ADR-0017)
+Documentation=https://github.com/RatesEngine/rates-engine/blob/main/docs/operations/archive-completeness.md
+
+[Timer]
+OnCalendar=*-*-* 02:17:00 UTC
+RandomizedDelaySec=300
+Persistent=true
+Unit=archive-completeness.service
+
+[Install]
+WantedBy=timers.target

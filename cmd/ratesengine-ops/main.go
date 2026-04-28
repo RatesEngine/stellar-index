@@ -241,8 +241,16 @@ Subcommands:
                                        state. Flags: -archive-root, -from, -to,
                                               -workers N, -owner-user STR,
                                               -owner-group STR, -output-file.
-                          PR A/B: cross-anchor only (PR C will add the primary
-                          MinIO bucket and the systemd timer).
+                            verify     Daily-cron mode. Runs check → fix →
+                                       re-check, then emits a Prometheus
+                                       textfile for node_exporter to scrape.
+                                       Flags: same as fix, plus -textfile-output
+                                       PATH (target node_exporter's
+                                       textfile_collector dir, e.g.
+                                       /var/lib/node_exporter/textfile_collector/
+                                       archive_completeness.prom).
+                          PR A/B/C cover cross-anchor; primary MinIO bucket
+                          scan lands in PR D.
                           Exit 0 = clean; 1 = at least one missing file remains.
   cross-region-check -regions name=URL,name=URL,... [-pairs PAIR,...] [-metric vwap|twap|ohlc] [-window DUR] [-samples N] [-to TS]
                           Hit each region's /v1/{vwap|twap|ohlc} endpoint
@@ -2077,20 +2085,133 @@ type wasmContractState struct {
 }
 
 // archiveCompleteness dispatches the `archive-completeness <mode>`
-// subcommand per ADR-0017. PR A implemented `check`; PR B adds
-// `fix` (multi-source fallback fetcher); PR C will wire `verify`.
+// subcommand per ADR-0017. Modes: check (PR A), fix (PR B),
+// verify (PR C — this PR).
 func archiveCompleteness(args []string) error {
 	if len(args) == 0 {
-		return fmt.Errorf("archive-completeness: subcommand required (check / fix)")
+		return fmt.Errorf("archive-completeness: subcommand required (check / fix / verify)")
 	}
 	switch args[0] {
 	case "check":
 		return archiveCompletenessCheck(args[1:])
 	case "fix":
 		return archiveCompletenessFix(args[1:])
+	case "verify":
+		return archiveCompletenessVerify(args[1:])
 	default:
-		return fmt.Errorf("archive-completeness: unknown mode %q (supported: check, fix)", args[0])
+		return fmt.Errorf("archive-completeness: unknown mode %q (supported: check, fix, verify)", args[0])
 	}
+}
+
+// archiveCompletenessVerify is the daily-cron mode: runs check →
+// fix → re-check, then emits a Prometheus textfile for
+// node_exporter's textfile_collector to scrape. Also writes the
+// JSON Report.
+//
+// This is the canonical command the systemd timer fires:
+//
+//	ratesengine-ops archive-completeness verify \
+//	  -from 2 -to <network_head> \
+//	  -textfile-output /var/lib/node_exporter/textfile_collector/archive_completeness.prom \
+//	  -output-file /var/lib/galexie/last-completeness-report.json
+//
+// Exit semantics:
+//   - 0: clean (no missing files after fix)
+//   - 1: residual missing files (fallback chain exhausted some)
+//   - other: I/O error
+func archiveCompletenessVerify(args []string) error {
+	fs := flag.NewFlagSet("archive-completeness verify", flag.ContinueOnError)
+	archiveRoot := fs.String("archive-root", "/srv/history-archive",
+		"Cross-anchor archive root.")
+	from := fs.Uint("from", 2, "First ledger sequence (inclusive).")
+	to := fs.Uint("to", 0, "Last ledger sequence (inclusive). Required.")
+	workers := fs.Int("workers", 8, "Parallel fetch workers.")
+	ownerUser := fs.String("owner-user", "stellar", "File owner user.")
+	ownerGroup := fs.String("owner-group", "stellar", "File owner group.")
+	outputFile := fs.String("output-file", "",
+		"Path to write JSON report. Empty = stdout.")
+	textfileOutput := fs.String("textfile-output", "",
+		"Path to write Prometheus textfile (node_exporter textfile_collector format). Empty = no metrics emit.")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	if *to == 0 {
+		return fmt.Errorf("-to is required")
+	}
+	if uint64(*from) > uint64(*to) {
+		return fmt.Errorf("-from (%d) must be <= -to (%d)", *from, *to)
+	}
+
+	startedAt := time.Now()
+
+	// Phase 1 — initial check.
+	checker := archivecompleteness.NewCrossAnchorChecker(*archiveRoot)
+	preRes, err := checker.Check(uint32(*from), uint32(*to))
+	if err != nil {
+		return fmt.Errorf("initial cross-anchor check: %w", err)
+	}
+
+	report := archivecompleteness.NewReport(uint32(*from), uint32(*to))
+	snapshot := archivecompleteness.NewMetricsSnapshot()
+
+	// Phase 2 — fix any missing.
+	var fillRes archivecompleteness.FillResult
+	if len(preRes.Missing) > 0 {
+		filler, err := archivecompleteness.NewCrossAnchorFiller(archivecompleteness.FillerOptions{
+			ArchiveRoot: *archiveRoot,
+			Workers:     *workers,
+			OwnerUser:   *ownerUser,
+			OwnerGroup:  *ownerGroup,
+		})
+		if err != nil {
+			return fmt.Errorf("filler: %w", err)
+		}
+		fillRes = filler.Fill(context.Background(), preRes.Missing)
+		fmt.Fprintf(os.Stderr,
+			"archive-completeness verify: filled %d / %d missing checkpoints (workers=%d)\n",
+			fillRes.Filled, len(preRes.Missing), *workers)
+	}
+
+	// Phase 3 — re-check; the post-fix state is what we report.
+	postRes, err := checker.Check(uint32(*from), uint32(*to))
+	if err != nil {
+		return fmt.Errorf("post-fix cross-anchor check: %w", err)
+	}
+	report.SetCrossAnchor(*archiveRoot, postRes)
+
+	// Populate metrics. LastSuccessTimestamp is set ONLY when the
+	// post-fix state is clean — alert rules rely on this gauge
+	// going stale when something's wrong.
+	snapshot.PopulateFromReport(report)
+	snapshot.PopulateFromFillResult(fillRes)
+	snapshot.RunDurationSeconds = time.Since(startedAt).Seconds()
+	if !report.AnyMissing() {
+		snapshot.LastSuccessTimestamp = startedAt
+	}
+
+	// Write JSON report (operator-readable diagnostic).
+	if err := writeReport(report, *outputFile); err != nil {
+		return err
+	}
+
+	// Write Prometheus textfile (node_exporter scrapes this dir).
+	if *textfileOutput != "" {
+		if err := archivecompleteness.WriteTextfileAtomic(*textfileOutput, snapshot); err != nil {
+			return fmt.Errorf("write textfile: %w", err)
+		}
+		fmt.Fprintf(os.Stderr,
+			"archive-completeness verify: metrics written to %s\n", *textfileOutput)
+	}
+
+	if report.AnyMissing() {
+		fmt.Fprintf(os.Stderr,
+			"archive-completeness verify: %d residual missing checkpoint(s); see report\n",
+			report.CrossAnchor.MissingCount)
+		os.Exit(1)
+	}
+	fmt.Fprintf(os.Stderr,
+		"archive-completeness verify: clean (%.1fs)\n", snapshot.RunDurationSeconds)
+	return nil
 }
 
 // archiveCompletenessFix runs the `check` then fetches every
