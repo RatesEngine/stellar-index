@@ -4,6 +4,13 @@ Procedure for replaying pubnet history into the `galexie-archive`
 MinIO bucket on an archival node, plus the verification we run
 afterwards to prove the bytes are canonical.
 
+> **See also:** [archive-completeness.md](archive-completeness.md) +
+> [ADR-0017](../adr/0017-archive-completeness-invariants.md) — the
+> *steady-state* completeness story (daily cron, multi-source
+> fallback, dual-archive invariants). This doc is the *one-shot*
+> historical bring-up; the completeness daemon takes over once the
+> bootstrap is clean.
+
 ## Why a separate bucket
 
 - `galexie-live` is appended to by the long-running `galexie.service`

@@ -103,6 +103,37 @@ for incident-time clarity.
 | `ratesengine_stellar_archive_publish_fail` | `increase(ratesengine_stellar_archive_publish_errors_total[1h])` | > 0 | P3 | [archive-publish](runbooks/archive-publish.md) |
 | `ratesengine_stellar_archive_divergence` | `ratesengine_archive_divergence_total` (cross-region hash check) | > 0 ever | **P1** | [archive-divergence](runbooks/archive-divergence.md) |
 
+## Archive completeness alerts
+
+Per [ADR-0017](../adr/0017-archive-completeness-invariants.md). Both
+the primary archive (`galexie-archive/` MinIO) and the cross-anchor
+archive (`/srv/history-archive/`) have hard completeness contracts.
+The daily `archive-completeness.timer` enforces them on R1; R2 + R3
+delegate to R1 for cross-anchor checks but verify their own
+chain-link locally. See [archive-completeness.md](archive-completeness.md).
+
+| Name | Metric | Condition | Severity | Runbook |
+| ---- | ------ | --------- | -------- | ------- |
+| `ratesengine_archive_files_missing` | `archive_files_missing` per archive | > 0 for > 4 h | P2 | [archive-files-missing](runbooks/archive-files-missing.md) |
+| `ratesengine_archive_completeness_stale` | `time() - archive_completeness_last_success_timestamp` | > 26 h | P2 | [archive-completeness-stale](runbooks/archive-completeness-stale.md) |
+| `ratesengine_archive_completeness_critical_stale` | same | > 48 h on R1 (integrity leader) | **P1** | [archive-completeness-stale](runbooks/archive-completeness-stale.md) |
+| `ratesengine_archive_repair_source_degraded` | `archive_completeness_repair_failures_total / archive_completeness_repair_attempts_total` per source | > 0.10 over 1 h | P3 | [archive-repair-source-degraded](runbooks/archive-repair-source-degraded.md) |
+
+## Anomaly + freeze alerts
+
+Per [ADR-0019](../adr/0019-anomaly-response-and-confidence-scoring.md).
+The freeze policy fires only when `confidence < 0.10 AND z_score >
+5σ AND source_count <= 1` — the extreme corner where multi-source
+consensus can't help. Operator runbook walks through review +
+override.
+
+| Name | Metric | Condition | Severity | Runbook |
+| ---- | ------ | --------- | -------- | ------- |
+| `ratesengine_anomaly_freeze_engaged` | `ratesengine_anomaly_freeze_engaged` per asset | == 1 (freeze active) | P2 | [anomaly-freeze-engaged](runbooks/anomaly-freeze-engaged.md) |
+| `ratesengine_anomaly_freeze_extended` | `ratesengine_anomaly_freeze_extensions_total` per asset | rate > 0 over 1 h (extension fired) | P2 | [anomaly-freeze-engaged](runbooks/anomaly-freeze-engaged.md) |
+| `ratesengine_anomaly_freeze_max_extensions` | `ratesengine_anomaly_freeze_extensions_total` per asset | == 4 (manual review required) | **P1** | [anomaly-freeze-engaged](runbooks/anomaly-freeze-engaged.md) |
+| `ratesengine_confidence_low_sustained` | `ratesengine_anomaly_confidence` per asset | < 0.30 sustained > 30 min on a previously-stable asset | P3 | [anomaly-freeze-engaged](runbooks/anomaly-freeze-engaged.md) |
+
 ## Divergence / quality alerts
 
 | Name | Metric | Condition | Severity | Runbook |

@@ -1,6 +1,6 @@
 ---
 title: RFP × Proposal × Delivery — Coverage Matrix
-last_verified: 2026-04-22
+last_verified: 2026-04-28
 status: ratified
 ---
 
@@ -196,6 +196,54 @@ Same as S7. No additional requirement.
 
 ---
 
+---
+
+## Cross-cutting integrity invariants (added post-Phase-1)
+
+The following requirements are not RFP rows but emerged from
+technical depth during Phase 5 implementation. Each is captured as
+an ADR and binds implementation. **All are launch-blocking** per
+operator decision 2026-04-28.
+
+### X1. Archive completeness invariants
+
+| # | Requirement | ADR | Week | Owner | Verified by | Status | Conf |
+| - | ----------- | --- | ---- | ----- | ----------- | ------ | ---- |
+| X1.1 | Primary archive (galexie-archive) — every closed partition has 64,000 files | [ADR-0017](../adr/0017-archive-completeness-invariants.md) | 8 | `cmd/ratesengine-ops` + `galexie-archive-fill` | bootstrap completed 2026-04-28; all 17 previously-partial partitions filled | ✅ verified | 5 |
+| X1.2 | Primary archive — chain-link integrity for every (N, N+1) | [ADR-0017](../adr/0017-archive-completeness-invariants.md) | 8 | `cmd/ratesengine-ops verify-archive -tier chain` | verifier running 2026-04-28 | 🧪 in-flight | 4 |
+| X1.3 | Cross-anchor archive (`/srv/history-archive/`) — every checkpoint file present | [ADR-0017](../adr/0017-archive-completeness-invariants.md) | 8 | `/usr/local/bin/cross-anchor-fill` | bootstrap completed 2026-04-28; 972,652/972,652 files | ✅ verified | 5 |
+| X1.4 | Cross-anchor archive — hash matches our LCM at every checkpoint | [ADR-0017](../adr/0017-archive-completeness-invariants.md) | 8 | `verify-archive -tier checkpoint` | verifier running 2026-04-28 | 🧪 in-flight | 4 |
+| X1.5 | Daily completeness cron (`archive-completeness verify`) | [ADR-0017](../adr/0017-archive-completeness-invariants.md) | 8 | `ratesengine-ops archive-completeness` (planned PRs A-D) | [archive-completeness.md](../operations/archive-completeness.md) | 🧪 designed | 3 |
+| X1.6 | Per-region asymmetric trust model (R1 leader, R2/R3 delegate) | [ADR-0017](../adr/0017-archive-completeness-invariants.md) | 8 | each region's binary | [archive-completeness.md](../operations/archive-completeness.md) §"Per-region behaviour" | 🧪 designed | 3 |
+| X1.7 | `verify-archive` hardened: `checkpointsMissed > 0` is hard failure | [ADR-0017](../adr/0017-archive-completeness-invariants.md) | 8 | `cmd/ratesengine-ops/main.go` | post-bootstrap PR D | 🧪 designed | 3 |
+
+### X2. API consistency surfaces (three URLs, three contracts)
+
+| # | Requirement | ADR | Week | Owner | Verified by | Status | Conf |
+| - | ----------- | --- | ---- | ----- | ----------- | ------ | ---- |
+| X2.1 | `/v1/price` — closed-bucket VWAP, cross-region consistent | [ADR-0015](../adr/0015-last-closed-bucket-rate-serving.md) + [ADR-0018](../adr/0018-api-consistency-surfaces.md) | 7 | `internal/api/v1/price.go` | shipped (PR #180); CAGG population pending | ⚠ caveat | 3 |
+| X2.2 | `/v1/price/tip` — rolling-window VWAP + last-good-price fallback | [ADR-0018](../adr/0018-api-consistency-surfaces.md) | 7 | `internal/api/v1/price_tip.go` (planned) | [ADR-0018](../adr/0018-api-consistency-surfaces.md) | 🧪 designed | 3 |
+| X2.3 | `/v1/observations` — raw per-source data | [ADR-0018](../adr/0018-api-consistency-surfaces.md) | 7 | `internal/api/v1/observations.go` (planned) | [ADR-0018](../adr/0018-api-consistency-surfaces.md) | 🧪 designed | 3 |
+| X2.4 | URL discipline: query params MUST NOT change consistency contract | [ADR-0018](../adr/0018-api-consistency-surfaces.md) | 7 | OpenAPI lint + handler validation | [ADR-0018](../adr/0018-api-consistency-surfaces.md) §"URL discipline" | 🧪 designed | 3 |
+| X2.5 | Forex factor snap rule for chained-fiat closed-bucket consistency | [ADR-0018](../adr/0018-api-consistency-surfaces.md) | 5 | `internal/aggregate/triangulate` | [ADR-0018](../adr/0018-api-consistency-surfaces.md) §"Forex factor handling" | 🧪 designed | 2 |
+| X2.6 | Streaming endpoints per surface (`/v1/price/stream`, `/v1/price/tip/stream`, `/v1/observations/stream`) | [ADR-0018](../adr/0018-api-consistency-surfaces.md) | 7 | `internal/api/streaming` | [ADR-0018](../adr/0018-api-consistency-surfaces.md) | 🧪 designed | 2 |
+| X2.7 | Per-surface application of `flags.stale` semantics | [ADR-0018](../adr/0018-api-consistency-surfaces.md) | 7 | each surface handler | [ADR-0018](../adr/0018-api-consistency-surfaces.md) §"flags.stale semantic" | 🧪 designed | 3 |
+
+### X3. Anomaly response and confidence scoring
+
+| # | Requirement | ADR | Week | Owner | Verified by | Status | Conf |
+| - | ----------- | --- | ---- | ----- | ----------- | ------ | ---- |
+| X3.1 | Per-asset-class threshold defaults (Phase 1 stop-gap) | [ADR-0019](../adr/0019-anomaly-response-and-confidence-scoring.md) | 5 | `internal/aggregate/anomaly` + config | [ADR-0019](../adr/0019-anomaly-response-and-confidence-scoring.md) §Phase 1 | 🧪 designed | 3 |
+| X3.2 | Per-asset statistical baseline (Phase 2 — `volatility_baseline_1m` CAGG) | [ADR-0019](../adr/0019-anomaly-response-and-confidence-scoring.md) | 6 | `internal/aggregate/baseline` + migration | [ADR-0019](../adr/0019-anomaly-response-and-confidence-scoring.md) §Phase 2 | 🧪 designed | 2 |
+| X3.3 | Multi-factor confidence score on every published price | [ADR-0019](../adr/0019-anomaly-response-and-confidence-scoring.md) | 6 | `internal/aggregate/confidence` | [ADR-0019](../adr/0019-anomaly-response-and-confidence-scoring.md) §"Multi-factor confidence score" | 🧪 designed | 2 |
+| X3.4 | Freeze policy (3-signal AND on closed-bucket only) | [ADR-0019](../adr/0019-anomaly-response-and-confidence-scoring.md) | 6 | `internal/aggregate/freeze` | [ADR-0019](../adr/0019-anomaly-response-and-confidence-scoring.md) §"Freeze policy" | 🧪 designed | 2 |
+| X3.5 | Cross-oracle factor (Phase 3 — depends on `internal/divergence/`) | [ADR-0019](../adr/0019-anomaly-response-and-confidence-scoring.md) | post-launch | `internal/aggregate/confidence` × `internal/divergence` | [ADR-0019](../adr/0019-anomaly-response-and-confidence-scoring.md) §Phase 3 | ⏳ deferred | 1 |
+| X3.6 | Multi-window safeguard against frog-boiling (1d/7d/30d MAD) | [ADR-0019](../adr/0019-anomaly-response-and-confidence-scoring.md) | 6 | `internal/aggregate/baseline` | [ADR-0019](../adr/0019-anomaly-response-and-confidence-scoring.md) §"Multi-window safeguard" | 🧪 designed | 2 |
+| X3.7 | Bootstrap (warmup) policy for new assets | [ADR-0019](../adr/0019-anomaly-response-and-confidence-scoring.md) | 6 | `internal/aggregate/baseline` | [ADR-0019](../adr/0019-anomaly-response-and-confidence-scoring.md) §"Bootstrap (warmup) policy" | 🧪 designed | 2 |
+| X3.8 | Operator runbook for freeze events | [ADR-0019](../adr/0019-anomaly-response-and-confidence-scoring.md) | 6 | runbook | [anomaly-freeze-engaged.md](../operations/runbooks/anomaly-freeze-engaged.md) | ✅ verified | 4 |
+
+---
+
 ## Claim verification — the most load-bearing proposal promises
 
 For each claim below we state the **as-written promise**, what we
@@ -302,38 +350,73 @@ For each claim below we state the **as-written promise**, what we
 
 ## Gap triage — the "must-close-before-launch" list
 
-Ranked by blast radius.
+**Operator decision 2026-04-28: every outstanding item is
+launch-blocking.** No "soft gap" / "post-launch" deferrals
+beyond items explicitly marked ⏳ (DIA mainnet, 99.99% production
+measurement, Phase 3 cross-oracle).
 
-### Hard gaps (block launch)
+Ranked by remaining work, not blast radius. See
+[`docs/architecture/launch-readiness-backlog.md`](launch-readiness-backlog.md)
+for the canonical work list with effort estimates and dependencies.
 
-1. **F3.5 / F3.6 SEV-1/SEV-2 runbook** — no runbook yet.
-   Owner: Week 9. Deliverable: `docs/operations/sev-playbook.md`.
-2. **S9.2 p95 ≤ 200 ms proof** — no load test yet.
-   Owner: Week 9. Deliverable: `test/load/` + report.
-3. **S6.5 / S7 Retention policy** — not in a migration yet.
-   Owner: Week 4. Deliverable: `migrations/0001_timescale_hypertables.sql`
-   + continuous-aggregate DDL.
+### Closed since Phase 1
 
-### Soft gaps (block a V2 milestone, not V1 launch)
+- **F1.6 SEP-1 home-domain resolution** — was open gap; landed in
+  PR #192 (overlay handler) + PR #190 scaffolding.
+- **S6.5 / S7 Retention policy** — was hard gap; landed in
+  `migrations/0002_create_price_aggregates.up.sql`.
+- **F3.5 / F3.6 SEV runbooks** — was hard gap; sev-playbook.md
+  shipped 2026-04-22, individual runbooks growing per
+  alerts-catalog.md.
+- **F2.4 circulating-supply policy** — was open; ratified in
+  ADR-0011 2026-04-27.
+- **X1.1 / X1.3 Archive completeness bootstrap** — added post-Phase-1
+  per ADR-0017; bootstrapped on R1 2026-04-28.
 
-4. **F2.4 circulating-supply policy** — algorithm designed, policy
-   choices (locked-set defaults) not ratified.
-   Owner: Week 6. Deliverable: ADR-0011.
-5. **F2.6 max_supply off-chain resolution** — SEP-1 path captured;
-   the `[CURRENCIES] max_supply` field is not universally populated.
-   Owner: Week 6. Deliverable: `internal/metadata/maxsupply` fallback
-   policy doc.
+### Open — implementation pending
 
-### Watch (monitor during 10-week window)
+| Area | Item | Owner | Week | Effort |
+|---|---|---|---|---|
+| Aggregator | S4.1–S4.4 VWAP/TWAP impl + USD volume + thresholds | `internal/aggregate` | 5 | ~1 week |
+| Aggregator | S8.1–S8.2 USD volume column + FX anchor | `internal/aggregate/triangulate` | 5 | half-day |
+| Aggregator | X2.5 Forex factor snap rule for chained-fiat | same | 5 | half-day |
+| Aggregator | X3.1 Phase 1 anomaly thresholds (stop-gap) | `internal/aggregate/anomaly` | 5 | half-day |
+| Aggregator | X3.2–X3.7 Phase 2 statistical baseline + freeze | `internal/aggregate/{baseline,confidence,freeze}` | 6 | ~1.5 weeks |
+| Aggregator | F2.4 circulating-supply impl (ADR-0011) | `internal/supply` | 6 | 1–2 days |
+| API | #2 SEP-10 protocol implementation | `internal/auth/sep10` | 7 | full day |
+| API | X2.2 `/v1/price/tip` + last-good-price fallback | `internal/api/v1/price_tip.go` | 7 | half-day |
+| API | X2.3 `/v1/observations` per-source raw | `internal/api/v1/observations.go` | 7 | half-day |
+| API | X2.6 Streaming endpoints (×4) | `internal/api/streaming` | 7 | ~2 days |
+| API | F5.3 Batch / bulk-query endpoint | `internal/api/v1/batch` | 7 | half-day |
+| API | #9 `pkg/client/` Go SDK skeleton | `pkg/client` | 7 | half-day |
+| API | #10 Generated API reference (`make docs-api`) | docs pipeline | 7 | half-day |
+| Connectors | S3.7 CEX connectors (Binance, Coinbase, Kraken, Bitstamp) | `internal/sources/external/<venue>` | 4 | ~1 week |
+| Connectors | S2.4 Chainlink HTTP cross-check | `internal/divergence/chainlink` | 4 | half-day |
+| Connectors | S1.4 Asset enumeration / discovery | `internal/canonical/discovery` | 4 | full day |
+| Divergence | #24 `internal/divergence/` package | `internal/divergence` | 5–6 | full day |
+| Operations | X1.5 archive-completeness daemon (4 PRs A-D) | `cmd/ratesengine-ops archive-completeness` | 8 | ~2 days |
+| Operations | X1.7 verify-archive hardening (`-fail-on-missed`) | `cmd/ratesengine-ops` | 8 | half-day |
+| Operations | #11–#16 Ansible roles (Patroni / Redis / HAProxy / Prometheus / Loki) | infra | 8 | ~1 week |
+| Operations | Public status page at `status.ratesengine.net` | infra | 9 | half-day |
+| Validation | #17–#18 k6 load test scenarios | `test/load` | 9 | ~1 week |
+| Validation | #19 Chaos suite | `test/chaos` | 9 | full day |
+| Validation | #20 SEV-1/SEV-2 dry-run | runbooks | 9 | half-day |
+| Validation | S9.2 p95 ≤ 200 ms proof | k6 + report | 9 | (above) |
+| Finalization | #21 CHANGELOG + SemVer policy | release process | 10 | half-day |
+| Finalization | #22 Public-flip prep | repo strategy | 10 | hour planning |
+| Finalization | #23 Release-notes template | docs | 10 | half-day |
+| Finalization | #26 Envelope flag retrofit | `internal/api/v1` | 5–6 | half-day |
 
-6. **S2.5 DIA mainnet ship** — testnet only today.
-7. **S9.1 99.99 % uptime** — need at least 30 days of production to
-   measure. Accepted as post-launch SLA with a gradient: Week 10 we
-   show a credible architecture, 90 days post-launch we show the
-   number.
-8. **S9.4 Degradation envelope** — `stale_flag`, `reduced_redundancy`
-   are design-only. Spec to land in `openapi/rates-engine.v1.yaml`
-   alongside each endpoint (Week 7).
+### Watch (post-launch only — explicitly accepted)
+
+1. **S2.5 DIA mainnet ship** — testnet only today; integration
+   conditional on DIA's mainnet launch.
+2. **S9.1 99.99 % uptime measurement** — needs ≥30 days production
+   to measure. Architecture credible at launch; number reported
+   90 days post-launch.
+3. **X3.5 Phase 3 cross-oracle factor** — depends on
+   `internal/divergence/` shipping; nominal post-launch unless
+   schedule allows pulling it forward.
 
 ---
 
@@ -361,3 +444,10 @@ week lands.
 
 - **2026-04-22** — Initial ratification alongside `phase1-closure.md`.
   All "Status" and "Confidence" values are as-of today.
+- **2026-04-28** — Added "Cross-cutting integrity invariants"
+  section (X1 archive completeness from ADR-0017, X2 API consistency
+  surfaces from ADR-0018, X3 anomaly response from ADR-0019).
+  Refreshed gap-triage to reflect operator decision that all
+  outstanding items are launch-blocking; closed F1.6, S6.5/S7,
+  F3.5/F3.6, F2.4 against shipped work; canonical backlog moved to
+  `launch-readiness-backlog.md`.

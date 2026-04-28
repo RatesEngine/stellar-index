@@ -58,6 +58,9 @@ See [_template.md](_template.md) for the boilerplate.
 | [0014](0014-crypto-ticker-representation.md) | Accepted | Crypto tickers as AssetType "crypto" | 2026-04-23 |
 | [0015](0015-last-closed-bucket-rate-serving.md) | Accepted | API rates served from last-closed bucket, never in-progress | 2026-04-27 |
 | [0016](0016-per-region-storage-strategy.md) | Accepted | Per-region storage strategies (Hetzner full / AWS hybrid / Vultr hybrid) | 2026-04-27 |
+| [0017](0017-archive-completeness-invariants.md) | Accepted | Archive completeness invariants — dual-archive integrity model with 4 hard contracts | 2026-04-27 |
+| [0018](0018-api-consistency-surfaces.md) | Accepted | API consistency surfaces — closed-bucket / tip / observations, three URLs three contracts | 2026-04-28 |
+| [0019](0019-anomaly-response-and-confidence-scoring.md) | Accepted | Anomaly response policy and confidence scoring — per-asset statistical baselines | 2026-04-28 |
 
 ## Related
 

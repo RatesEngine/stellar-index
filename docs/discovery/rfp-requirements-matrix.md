@@ -1,5 +1,23 @@
 # RFP requirements → source traceability matrix
 
+> **⚠️ Status: Phase 1 source-discovery artefact — superseded for current state.**
+>
+> This doc was the Phase 1 (discovery) traceability matrix. It maps each
+> RFP bullet to the *audit doc* that proved feasibility — useful as a
+> historical record and as the source-of-truth for "did we actually
+> verify this thing exists in the wild?"
+>
+> **For current implementation status, see
+> [`docs/architecture/coverage-matrix.md`](../architecture/coverage-matrix.md).**
+> That doc tracks status, ADR mapping, owner package, and confidence
+> per requirement; it's what gates launch readiness.
+>
+> This doc remains valid for what it documents (Phase 1 sources verified)
+> and stays as a historical artefact. Phase-1 audit archive closed
+> 2026-04-22 per CLAUDE.md.
+
+---
+
 **Purpose:** map every promise in the two RFPs (Stellar Prices API +
 Freighter Asset Detail) to the source / audit doc / open item that
 will fulfil it. If a row has no source, we have a coverage gap for
