@@ -78,7 +78,7 @@ Within each surface, ordered by dependency.
 | L3.9 | `/v1/price/stream` SSE (closed-bucket events) | Wk 7 | half-day | L3.1, L3.6 | — | same | 🟡 |
 | L3.10 | `pkg/client/` Go SDK skeleton | Wk 7 | half-day | — | — | `pkg/client` | 🟡 |
 | L3.11 | Generated API reference via Redocly + GitHub Pages workflow + CI drift guard | Wk 7 | half-day | — | — | `scripts/dev/docs-api.sh`, `.github/workflows/api-docs.yml` | 🟢 |
-| L3.12 | SEP-10 protocol implementation (Web Auth) | Wk 7 | full day | — | — | `internal/auth/sep10` | 🟡 |
+| L3.12 | SEP-10 protocol implementation (Web Auth) — Validator (Challenge / Verify / VerifyJWT) shipped; HTTP handler wire-up + main.go config-loader follow in a separate PR | Wk 7 | full day | — | — | `internal/auth/sep10/` | 🟢 |
 | L3.13 | Envelope flag retrofit (`flags.frozen`, `flags.single_source`) — handler-side wired via `FrozenLooker`; aggregator populates the marker when L2.7 ships | Wk 7 | half-day | L2.7 | — | `internal/api/v1/{envelope,price,server}.go` | 🟢 |
 | L3.14 | CDN caching for historical endpoints — origin-side `Cache-Control` middleware applied per ADR-0018 surface (CloudFront / equivalent config follows in deploy track) | Wk 7 | half-day | infra | — | `internal/api/v1/middleware/cachecontrol.go` | 🟢 |
 | L3.15 | Self-service onboarding page ([`docs/getting-started.md`](../getting-started.md)) — Pages workflow already deploys it via L3.11 | Wk 7 | half-day | — | — | `docs/getting-started.md` | 🟢 |
