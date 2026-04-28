@@ -160,6 +160,35 @@ func Divergence(asset canonical.Asset) string {
 // DivergenceTTL is the expiry for div: keys.
 const DivergenceTTL = 5 * time.Minute
 
+// ─── Anomaly freeze marker (ADR-0019) ─────────────────────────────
+//
+// Wire shape: `freeze:<asset_id>:<quote_id>`
+// Value: JSON with the underlying anomaly Decision (deviation_pct,
+//   reason, expires_at). Presence of the key means the most-recent
+//   bucket for the pair was frozen by the anomaly checker; the API
+//   reads it via FrozenLooker to set flags.frozen=true.
+//
+// Writer: aggregator orchestrator at bucket-close, when
+// anomaly.Checker.Evaluate returns ActionFreeze.
+// Reader: internal/api/v1.FrozenLooker — production wiring is the
+// freeze package's RedisLooker.
+//
+// TTL: 5 minutes — long enough that the next bucket close (1
+// minute) sees the marker still in place if the anomaly persists,
+// short enough that a transient anomaly clears within a few buckets
+// of the underlying signal returning to normal.
+
+// Freeze returns the cache key for the freeze marker on an
+// (asset, quote) pair. The marker's presence drives flags.frozen
+// on /v1/price; the value carries diagnostic context (which class
+// thresholds fired, observed deviation, last-known-good price).
+func Freeze(asset, quote canonical.Asset) string {
+	return "freeze:" + asset.String() + ":" + quote.String()
+}
+
+// FreezeTTL is the expiry for freeze: keys.
+const FreezeTTL = 5 * time.Minute
+
 // ─── API-key records ──────────────────────────────────────────────
 //
 // Wire shape: `apikey:<sha256-hex>`

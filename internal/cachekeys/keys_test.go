@@ -183,6 +183,7 @@ func TestAllKeysHaveDistinctPrefixes(t *testing.T) {
 		"meta":   cachekeys.Metadata(xlm),
 		"sub":    cachekeys.Subscriber("c", "s"),
 		"div":    cachekeys.Divergence(xlm),
+		"freeze": cachekeys.Freeze(xlm, usdc),
 		"health": cachekeys.Health("src"),
 	}
 	for want, got := range prefixes {
