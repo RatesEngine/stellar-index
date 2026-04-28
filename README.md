@@ -26,8 +26,14 @@ See **[CLAUDE.md](CLAUDE.md)**. It's your orientation map.
 
 ## Start here
 
-- **Users of the hosted API:** <https://docs.ratesengine.net>
-  (post-launch — placeholder).
+- **Users of the hosted API:** [`docs/getting-started.md`](docs/getting-started.md)
+  walks from zero to your first authenticated request in five
+  minutes. Rendered at <https://docs.ratesengine.net> post-launch.
+- **Reference docs:** generated Redocly output at
+  [`docs/reference/api/index.html`](docs/reference/api/index.html)
+  (regenerate via `make docs-api`); also published to
+  <https://docs.ratesengine.net> by the
+  [`api-docs` workflow](.github/workflows/api-docs.yml).
 - **Self-hosting:** `make dev` boots the full local stack
   (TimescaleDB + Redis + MinIO). See
   [deploy/docker-compose/dev.yaml](deploy/docker-compose/dev.yaml).
