@@ -79,6 +79,35 @@ type AssetDetail struct {
 	AnchorAsset *string `json:"anchor_asset,omitempty"`
 	// AnchorAssetType classifies the anchor (fiat, crypto, stock, …).
 	AnchorAssetType *string `json:"anchor_asset_type,omitempty"`
+
+	// ─── F2 fields (ADR-0011 supply derivation) ─────────────────
+
+	// CirculatingSupply / TotalSupply / MaxSupply are decimal
+	// strings in the asset's smallest integer unit (stroops for
+	// XLM / classic; contract-defined for SEP-41). Consumers divide
+	// by 10^decimals for display. Null when no supply snapshot
+	// exists for this asset (untracked, or supply orchestrator
+	// hasn't run yet).
+	CirculatingSupply *string `json:"circulating_supply,omitempty"`
+	TotalSupply       *string `json:"total_supply,omitempty"`
+	MaxSupply         *string `json:"max_supply,omitempty"`
+
+	// MarketCapUSD = circulating × USD price / 10^decimals,
+	// formatted to two fractional digits. Null when supply or USD
+	// price is unavailable.
+	MarketCapUSD *string `json:"market_cap_usd,omitempty"`
+
+	// FDVUSD = max_supply × USD price / 10^decimals. Null when
+	// max_supply is null (uncapped issuer + no override + no SEP-1
+	// declaration) or when USD price is unavailable.
+	FDVUSD *string `json:"fdv_usd,omitempty"`
+
+	// SupplyBasis identifies which ADR-0011 policy produced the
+	// supply numbers; null when no snapshot exists. Lets consumers
+	// decide how much to trust the absolute value (e.g. `override`
+	// indicates an operator curated the locked-set or SEP-1
+	// declared a max_supply).
+	SupplyBasis *string `json:"supply_basis,omitempty"`
 }
 
 // detailFromAsset populates an AssetDetail from the canonical shape.
@@ -246,6 +275,12 @@ func (s *Server) handleAssetGet(w http.ResponseWriter, r *http.Request) {
 	} else if detail.HomeDomain != nil && *detail.HomeDomain != "" && detail.Sep1Status == "" {
 		detail.Sep1Status = "not_fetched"
 	}
+
+	// F2 overlay — supply / market-cap / FDV. Best-effort; runs
+	// AFTER the SEP-1 overlay because applySep1Overlay may set
+	// detail.Decimals from the issuer's display_decimals
+	// declaration, which the market-cap math reads.
+	s.applyF2Fields(r.Context(), &detail, parsed)
 
 	writeJSON(w, detail, Flags{})
 }

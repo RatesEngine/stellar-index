@@ -868,6 +868,35 @@ components:
         org_name:          { type: string, nullable: true }
         anchor_asset:      { type: string, nullable: true }
         anchor_asset_type: { type: string, nullable: true }
+        # F2 fields — Market Cap / FDV / Circulating / Total / Max
+        # Supply per Freighter RFP V2 (ADR-0011).
+        #
+        # Supply values are decimal strings in the asset's smallest
+        # integer unit (stroops for XLM/classic; contract-defined for
+        # SEP-41). Consumers divide by 10^decimals for display.
+        # market_cap_usd / fdv_usd are decimal strings in dollars
+        # to two fractional digits.
+        #
+        # All F2 fields are nullable: any field whose data isn't
+        # available (no supply snapshot yet, no USD price for the
+        # pair, max_supply unknown for an uncapped issuer) emits null
+        # rather than fabricating per ADR-0011 "we don't fabricate".
+        circulating_supply: { type: string, nullable: true, description: "Raw integer in asset's smallest unit (per ADR-0011 supply derivation). Null when no snapshot exists." }
+        total_supply:       { type: string, nullable: true, description: "Raw integer in asset's smallest unit. Null when no snapshot exists." }
+        max_supply:         { type: string, nullable: true, description: "Raw integer in asset's smallest unit. Null for uncapped issuers without operator override or SEP-1 declaration." }
+        market_cap_usd:     { type: string, nullable: true, description: "circulating_supply × USD price / 10^decimals, two fractional digits. Null when supply or USD price is unavailable." }
+        fdv_usd:            { type: string, nullable: true, description: "max_supply × USD price / 10^decimals, two fractional digits. Null when max_supply is null or USD price unavailable." }
+        supply_basis:
+          type: string
+          enum: [xlm_sdf_reserve_exclusion, issuer_exclusion, admin_exclusion, override, no_metadata]
+          nullable: true
+          description: |
+            Which ADR-0011 policy produced the supply numbers.
+            Surfaced so consumers can decide how much to trust the
+            absolute value (e.g. `override` indicates an operator
+            curated the locked-set or SEP-1 declared a max_supply;
+            `issuer_exclusion`/`admin_exclusion` are algorithm
+            defaults). Null when no supply snapshot is available.
       required: [asset_id, type, code, decimals, sep1_status]
 
     AssetEnvelope:
