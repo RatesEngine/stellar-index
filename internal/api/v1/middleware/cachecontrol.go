@@ -69,6 +69,13 @@ func policyForPath(path string) string {
 	case strings.HasPrefix(path, "/v1/account/"):
 		return "private, no-store"
 
+	// ─── SEP-10 Web Auth — credential exchange MUST NOT hit CDN ─
+	// Caching the challenge would let a future request reuse a
+	// nonce; caching the token would expose it to anyone the CDN
+	// serves. Both unconditionally bypass cache.
+	case strings.HasPrefix(path, "/v1/auth/sep10"):
+		return "private, no-store"
+
 	// ─── Tip + observations — private surfaces (ADR-0018) ───────
 	// Tip has no cross-region consistency contract; caching
 	// would shift the contract. Same for observations.

@@ -614,6 +614,81 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/KeyCreatedEnvelope" }
 
+  /auth/sep10/challenge:
+    get:
+      tags: [auth]
+      summary: SEP-10 Web Auth — issue a challenge transaction.
+      description: |
+        Returns a Stellar challenge transaction the client must sign
+        with its account secret key. Per SEP-10 §3.2 the response
+        carries the unsigned XDR + the network passphrase the
+        challenge was crafted for. Unauthenticated by design.
+      parameters:
+        - name: account
+          in: query
+          required: true
+          schema: { type: string }
+          description: Stellar G-strkey of the account being authenticated.
+      responses:
+        "200":
+          description: Unsigned challenge transaction.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - { $ref: "#/components/schemas/EnvelopeMeta" }
+                  - type: object
+                    properties:
+                      data: { $ref: "#/components/schemas/SEP10Challenge" }
+                    required: [data]
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "503": { $ref: "#/components/responses/ServiceUnavailable" }
+
+  /auth/sep10/token:
+    post:
+      tags: [auth]
+      summary: SEP-10 Web Auth — exchange a signed challenge for a JWT.
+      description: |
+        Accepts a signed challenge transaction and returns a JWT
+        bearing the authenticated G-strkey. Per SEP-10 §3.3 the body
+        carries `{transaction: <base64-XDR>}`. Unauthenticated by
+        design — the SEP-10 protocol IS the authentication.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                transaction:
+                  type: string
+                  description: Base64-encoded signed XDR of the challenge.
+              required: [transaction]
+      responses:
+        "200":
+          description: Authenticated; JWT issued.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - { $ref: "#/components/schemas/EnvelopeMeta" }
+                  - type: object
+                    properties:
+                      data: { $ref: "#/components/schemas/SEP10Token" }
+                    required: [data]
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401":
+          description: Signature verification failed.
+          content:
+            application/problem+json:
+              schema: { $ref: "#/components/schemas/Problem" }
+        "410":
+          description: Challenge time-bounds expired; request a fresh challenge.
+          content:
+            application/problem+json:
+              schema: { $ref: "#/components/schemas/Problem" }
+        "503": { $ref: "#/components/responses/ServiceUnavailable" }
+
 components:
   securitySchemes:
     APIKeyAuth:
@@ -1336,6 +1411,31 @@ components:
                 label:     { type: string }
               required: [key_id, plaintext, label]
           required: [data]
+
+    SEP10Challenge:
+      type: object
+      properties:
+        transaction:
+          type: string
+          description: Base64-encoded XDR of the unsigned challenge transaction. Field name per SEP-10 §3.2.
+        network_passphrase:
+          type: string
+          description: Stellar network the challenge was crafted for (echoed so clients verify before signing). Per SEP-10 §3.2.
+        issued_at:  { type: string, format: date-time }
+        valid_until: { type: string, format: date-time }
+      required: [transaction, network_passphrase, issued_at, valid_until]
+
+    SEP10Token:
+      type: object
+      properties:
+        token:
+          type: string
+          description: JWT bearer the client sends as `Authorization` on subsequent requests.
+        expires_at: { type: string, format: date-time }
+        account:
+          type: string
+          description: G-strkey of the authenticated account; convenience for clients that don't decode the JWT.
+      required: [token, expires_at, account]
 
     # Error (RFC 9457)
     Problem:

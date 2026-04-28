@@ -27,6 +27,10 @@ func TestPolicyForPath_PinsDirectives(t *testing.T) {
 		{"/v1/account/usage", "private, no-store"},
 		{"/v1/account/keys", "private, no-store"},
 
+		// SEP-10 Web Auth — credential exchange MUST NOT hit CDN
+		{"/v1/auth/sep10/challenge", "private, no-store"},
+		{"/v1/auth/sep10/token", "private, no-store"},
+
 		// Tip + observations — private surfaces
 		{"/v1/price/tip", "private, no-cache, must-revalidate"},
 		{"/v1/price/tip/stream", "private, no-cache, must-revalidate"},

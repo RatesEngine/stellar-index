@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/RatesEngine/rates-engine/internal/api/v1/middleware"
+	"github.com/RatesEngine/rates-engine/internal/auth"
 	"github.com/RatesEngine/rates-engine/internal/obs"
 	"github.com/RatesEngine/rates-engine/internal/version"
 )
@@ -49,6 +50,7 @@ type Server struct {
 	divergence DivergenceLooker
 	freeze     FrozenLooker
 	supply     SupplyLooker
+	sep10      auth.SEP10Validator
 	cors       middleware.Middleware
 	auth       middleware.Middleware
 	rateLimit  middleware.Middleware
@@ -129,6 +131,14 @@ type Options struct {
 	// still serves; F2 fields stay null.
 	Supply SupplyLooker
 
+	// SEP10, when non-nil, backs GET /v1/auth/sep10/challenge and
+	// POST /v1/auth/sep10/token. Production wiring: an
+	// auth/sep10.Validator constructed from the binary's signing
+	// seed + JWT secret config. Nil makes both endpoints return 503
+	// (the binary didn't wire one — typically because the seed/
+	// secret config is absent in this deployment).
+	SEP10 auth.SEP10Validator
+
 	// Auth, when non-nil, is inserted between CORS and RateLimit.
 	// Sets a Subject in the request context that downstream
 	// middleware (rate-limit, request logger) and handlers can
@@ -165,6 +175,7 @@ func New(opts Options) *Server {
 		divergence: opts.Divergence,
 		freeze:     opts.Freeze,
 		supply:     opts.Supply,
+		sep10:      opts.SEP10,
 		cors:       opts.CORS,
 		auth:       opts.Auth,
 		rateLimit:  opts.RateLimit,
@@ -300,6 +311,14 @@ func (s *Server) mountRoutes() {
 	s.mux.HandleFunc("GET /v1/account/me", s.handleAccountMe)
 	s.mux.HandleFunc("GET /v1/account/usage", s.handleAccountUsage)
 	s.mux.HandleFunc("POST /v1/account/keys", s.handleAccountKeysCreate)
+
+	// SEP-10 Web Auth. Both endpoints are unauthenticated by design
+	// — challenge bootstraps auth from a public Stellar G-strkey;
+	// the JWT issued by /token is what authenticates subsequent
+	// requests. The validator is wired only when the binary has
+	// the server-signing seed + JWT secret configured.
+	s.mux.HandleFunc("GET /v1/auth/sep10/challenge", s.handleSEP10Challenge)
+	s.mux.HandleFunc("POST /v1/auth/sep10/token", s.handleSEP10Token)
 
 	// TODO(#0): SSE streams — follow-up PRs per
 	// docs/reference/api-design.md §5.
