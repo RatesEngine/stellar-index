@@ -123,6 +123,11 @@ func main() { //nolint:gocyclo,gocognit,funlen // subcommand switch; each case i
 			fmt.Fprintf(os.Stderr, "discovery: %v\n", err)
 			os.Exit(1)
 		}
+	case "supply":
+		if err := supplyCmd(args[1:]); err != nil {
+			fmt.Fprintf(os.Stderr, "supply: %v\n", err)
+			os.Exit(1)
+		}
 	case "wasm-history":
 		if err := wasmHistory(args[1:]); err != nil {
 			fmt.Fprintf(os.Stderr, "wasm-history: %v\n", err)
@@ -297,6 +302,24 @@ Subcommands:
                             ratesengine-ops cross-region-monitor \
                               -regions r1=...,r2=...,r3=... \
                               -interval 60s -listen :9479
+  supply audit <asset> -config PATH [-cross-check <other-asset>] [-history-hours N]
+                          Operator-side audit for ADR-0011 supply
+                          derivation. Prints the latest snapshot
+                          from asset_supply_history (total /
+                          circulating / max / basis / observed_at /
+                          ledger). When -cross-check is supplied,
+                          fetches the counterpart's snapshot and
+                          runs the SAC-wrapped cross-check from
+                          PR #216 (asserts the two totals agree
+                          within 1 stroop per ADR-0011). When
+                          -history-hours is set, also prints the
+                          recent N-hour snapshot trail so an
+                          operator can spot whether divergence is
+                          fresh or chronic. Asset accepts the
+                          canonical wire form (native | CODE-G… |
+                          C…). Cross-check pairing is operator-
+                          supplied because SAC contract-id
+                          derivation isn't wired in canonical yet.
   discovery list -config PATH [-since DUR] [-limit N]
                           List SEP-41 contracts auto-detected from the
                           event stream (the dispatcher's discovery
