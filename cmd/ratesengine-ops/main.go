@@ -118,6 +118,11 @@ func main() { //nolint:gocyclo,gocognit,funlen // subcommand switch; each case i
 			fmt.Fprintf(os.Stderr, "archive-completeness: %v\n", err)
 			os.Exit(1)
 		}
+	case "discovery":
+		if err := discoveryCmd(args[1:]); err != nil {
+			fmt.Fprintf(os.Stderr, "discovery: %v\n", err)
+			os.Exit(1)
+		}
 	case "wasm-history":
 		if err := wasmHistory(args[1:]); err != nil {
 			fmt.Fprintf(os.Stderr, "wasm-history: %v\n", err)
@@ -292,6 +297,20 @@ Subcommands:
                             ratesengine-ops cross-region-monitor \
                               -regions r1=...,r2=...,r3=... \
                               -interval 60s -listen :9479
+  discovery list -config PATH [-since DUR] [-limit N]
+                          List SEP-41 contracts auto-detected from the
+                          event stream (the dispatcher's discovery
+                          hook from #225 + the indexer wire-up from
+                          #230 populate discovered_assets in
+                          production). Output is one row per
+                          contract: contract_id, first_seen_at,
+                          first_seen_event, event_count. Ordered by
+                          first_seen_at DESC so the most-recent
+                          arrivals show up first.
+                            -since 1h    only contracts first seen
+                                         within the last 1h; default
+                                         empty (no filter, full table)
+                            -limit 100   cap result rows; default 100
   wasm-history -config PATH -contracts ID,ID,... [-from N] [-to N] [-bucket NAME]
                           Walk a galexie bucket and emit a per-contract
                           WASM-version timeline. For each watched contract,
