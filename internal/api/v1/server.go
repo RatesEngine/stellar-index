@@ -264,6 +264,11 @@ func (s *Server) mountRoutes() {
 	// is empty. NOT cross-region consistent; use /v1/price for that.
 	s.mux.HandleFunc("GET /v1/price/tip", s.handlePriceTip)
 
+	// Raw per-source observations (ADR-0018 Surface 3) — array of
+	// most-recent trade per source for the pair. No aggregation; the
+	// rawest of the three consistency surfaces.
+	s.mux.HandleFunc("GET /v1/observations", s.handleObservations)
+
 	// Batch price lookup, up to 100 assets per request.
 	s.mux.HandleFunc("GET /v1/price/batch", s.handlePriceBatch)
 

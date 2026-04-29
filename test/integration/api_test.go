@@ -456,6 +456,10 @@ func (r apiHistoryAdapter) TradesInRangeAfter(ctx context.Context, pair c.Pair, 
 	return r.s.TradesInRangeAfter(ctx, pair, from, to, afterTs, afterLedger, afterTxHash, afterSource, afterOpIndex, limit)
 }
 
+func (r apiHistoryAdapter) LatestTradePerSource(ctx context.Context, pair c.Pair, sourceFilter string) ([]c.Trade, error) {
+	return r.s.LatestTradePerSource(ctx, pair, sourceFilter)
+}
+
 func (r apiHistoryAdapter) HistoryPoints(ctx context.Context, pair c.Pair, granularity string, limit int) ([]v1.HistoryPoint, error) {
 	g := timescale.HistoryGranularity(granularity)
 	if err := g.Validate(); err != nil {

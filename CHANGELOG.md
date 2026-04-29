@@ -17,6 +17,20 @@ against.
 
 ### Added
 
+- **`/v1/observations` raw per-source surface (L3.3)**: implements
+  [ADR-0018](docs/adr/0018-api-consistency-surfaces.md) Surface 3 —
+  the lowest-level, no-aggregation surface. Returns the most-recent
+  trade per source for the (asset, quote) pair as an array.
+  `?source=X` narrows to one venue; `?aggregate=latest` collapses to
+  the single newest trade across sources. `flags.stale` is always
+  false; freeze + divergence flags intentionally not consulted (this
+  is the rawest surface, no aggregation contract). Empty pair returns
+  200 with `data: []`, not 404 — divergence-detection callers polling
+  for source coverage benefit from the 200/empty distinction.
+  URL discipline: `?granularity=` and `?window_seconds=` return 400.
+  New storage primitive `Store.LatestTradePerSource` does the work in
+  SQL via `DISTINCT ON (source)`.
+
 - **`/v1/price/tip` rolling-window tip surface (L3.2)**: implements
   [ADR-0018](docs/adr/0018-api-consistency-surfaces.md) Surface 2.
   VWAP over a configurable rolling window (default 5 s, clamp 1–60 s)
