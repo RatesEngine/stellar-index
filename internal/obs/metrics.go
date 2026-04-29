@@ -52,6 +52,8 @@ func init() {
 		SupplyCrossCheckDivergenceStroops,
 		SupplyCrossCheckTotal,
 
+		AnomalyFreezeEngagedTotal,
+
 		VerifyArchiveLedgersVerified,
 		VerifyArchiveCurrentLedger,
 		VerifyArchiveCheckpointsTotal,
@@ -371,6 +373,24 @@ var SupplyCrossCheckTotal = prometheus.NewCounterVec(
 // All vectors labelled by chunk_idx (decimal string) so a parallel
 // run with -workers 8 produces per-chunk series. Cardinality bound
 // by the -workers cap (currently [1,16]).
+
+// AnomalyFreezeEngagedTotal — counter of ActionFreeze decisions
+// the aggregator's anomaly checker emitted, labelled by the asset
+// class that drove the threshold lookup. Each increment means the
+// orchestrator declined to publish a fresh VWAP (kept the prior
+// bucket's last-known-good value); the API's /v1/price for the
+// affected pair will surface flags.frozen=true on the next read.
+//
+// Pair-specific freeze details live in the freeze marker JSON
+// (deviation_pct, reason) — labelled by class only here so
+// cardinality stays bound to the small AssetClass enum.
+var AnomalyFreezeEngagedTotal = prometheus.NewCounterVec(
+	prometheus.CounterOpts{
+		Name: "ratesengine_anomaly_freeze_engaged_total",
+		Help: "ActionFreeze decisions emitted by the aggregator anomaly checker, labelled by asset class.",
+	},
+	[]string{"class"},
+)
 
 // VerifyArchiveLedgersVerified — counter of ledgers successfully
 // walked + verified. Rate over time gives ledgers/sec per chunk —

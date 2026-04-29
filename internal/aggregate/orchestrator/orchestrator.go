@@ -48,6 +48,7 @@ import (
 	"github.com/redis/go-redis/v9"
 
 	"github.com/RatesEngine/rates-engine/internal/aggregate"
+	"github.com/RatesEngine/rates-engine/internal/aggregate/anomaly"
 	"github.com/RatesEngine/rates-engine/internal/cachekeys"
 	"github.com/RatesEngine/rates-engine/internal/canonical"
 	"github.com/RatesEngine/rates-engine/internal/obs"
@@ -65,6 +66,20 @@ type Store interface {
 // as an interface for test-time replacement.
 type Cache interface {
 	Set(ctx context.Context, key string, value any, expiration time.Duration) *redis.StatusCmd
+}
+
+// FreezeMarker is the side-effect interface the orchestrator uses
+// to record an ActionFreeze decision. Production wiring is
+// freeze.Writer from internal/aggregate/freeze; declared here as an
+// interface so tests can substitute a recorder without spinning up
+// a Redis client.
+//
+// Mark MUST be idempotent on (asset, quote) — calling it twice for
+// the same pair refreshes the marker's TTL, matching the policy
+// "freeze stays in effect as long as the underlying anomaly
+// persists".
+type FreezeMarker interface {
+	Mark(ctx context.Context, asset, quote canonical.Asset, decision anomaly.Decision) error
 }
 
 // Config controls the orchestrator's behaviour. Built from config.go
@@ -133,6 +148,35 @@ type Config struct {
 	// stamps a 4.0 default at the binary boundary.
 	OutlierSigmaThreshold float64
 
+	// Anomaly, when non-nil, evaluates each fresh VWAP against its
+	// previous bucket before publishing. Per ADR-0019:
+	//
+	//   - ActionAllow → publish normally.
+	//   - ActionWarn  → publish; downstream divergence-warning path
+	//                   (already handled out-of-band via #205).
+	//   - ActionFreeze → DO NOT publish the new bucket; serve the
+	//                    previous bucket's last-known-good value
+	//                    instead. FreezeWriter writes the marker so
+	//                    the API's flags.frozen fires.
+	//
+	// Nil = anomaly evaluation is off; every fresh VWAP publishes
+	// regardless of deviation. Acceptable for early-bring-up
+	// deployments where threshold tuning hasn't happened yet;
+	// production deployments wire this at the binary boundary.
+	Anomaly *anomaly.Checker
+
+	// FreezeWriter, when non-nil and Anomaly is also non-nil, writes
+	// a freeze marker to Redis when Anomaly returns ActionFreeze.
+	// The API's freeze.Looker (#226) reads the same key to set
+	// flags.frozen=true on /v1/price responses for the affected
+	// pair.
+	//
+	// Nil = freeze action is observed (logged + metric incremented)
+	// but no Redis marker is written. Acceptable when Anomaly is
+	// also nil; loud-but-not-actionable when Anomaly is wired but
+	// FreezeWriter isn't.
+	FreezeWriter FreezeMarker
+
 	// DisableClassFilter, when true, suppresses the aggregator's
 	// default "ClassExchange trades only" filter and lets every row
 	// in the fetched window contribute to VWAP regardless of source
@@ -186,13 +230,26 @@ type Orchestrator struct {
 	cfg    Config
 	logger *slog.Logger
 
+	// prevVWAPs holds the last published VWAP per (pair, window) for
+	// the anomaly evaluator's comparison input. Bounded by
+	// len(Pairs) × len(Windows) — small. Reset to nil on
+	// ActionFreeze (we publish-or-not but don't update the
+	// comparator slot during a freeze, so the next bucket compares
+	// against the same prev).
+	//
+	// Tick is serialised (the ticker drops events that arrive while
+	// a previous Tick is still running), and refreshPairWindow runs
+	// sequentially within Tick — so this map needs no separate lock.
+	prevVWAPs map[string]*big.Rat
+
 	// Stats exposed for metrics / test assertions. Zero-copy.
-	mu           sync.Mutex
-	lastTickAt   time.Time
-	ticksTotal   int64
-	vwapWrites   int64
-	emptyWindows int64
-	errors       int64
+	mu             sync.Mutex
+	lastTickAt     time.Time
+	ticksTotal     int64
+	vwapWrites     int64
+	emptyWindows   int64
+	errors         int64
+	freezesEngaged int64
 }
 
 // New constructs an Orchestrator with defaults applied.
@@ -211,10 +268,11 @@ func New(store Store, cache Cache, cfg Config) *Orchestrator {
 		logger = slog.Default()
 	}
 	return &Orchestrator{
-		store:  store,
-		cache:  cache,
-		cfg:    cfg,
-		logger: logger,
+		store:     store,
+		cache:     cache,
+		cfg:       cfg,
+		logger:    logger,
+		prevVWAPs: make(map[string]*big.Rat, len(cfg.Pairs)*max(len(cfg.Windows), 1)),
 	}
 }
 
@@ -333,6 +391,19 @@ func (o *Orchestrator) refreshPairWindow(
 		return fmt.Errorf("vwap %s %v: %w", pair.String(), window, err)
 	}
 
+	// Anomaly evaluation BEFORE cache write — when ActionFreeze
+	// fires we keep the previous bucket's value in cache (don't
+	// overwrite) so the API serves the LKG, and emit a freeze
+	// marker so flags.frozen=true on the next /v1/price read.
+	stateKey := pair.String() + ":" + window.String()
+	if action, ok := o.evaluateAndMaybeFreeze(ctx, pair, window, vwap, trades, stateKey); !ok {
+		// ActionFreeze — bail out before touching the cache. The
+		// previous bucket's VWAP stays valid; the marker has been
+		// written by FreezeWriter.
+		_ = action
+		return nil
+	}
+
 	// Serialise to a decimal-string representation. Aggregator
 	// writers stay in big.Rat / big.Int land; API readers parse
 	// the string back to a decimal. Float encoding is prohibited
@@ -344,11 +415,92 @@ func (o *Orchestrator) refreshPairWindow(
 		return fmt.Errorf("redis set %s: %w", key, err)
 	}
 
+	// Update the prev-VWAP comparator slot ONLY on successful
+	// publish — frozen buckets keep the prior slot intact so the
+	// next tick compares against the same baseline rather than
+	// drifting forward.
+	o.prevVWAPs[stateKey] = vwap
+
 	o.mu.Lock()
 	o.vwapWrites++
 	o.mu.Unlock()
 	obs.AggregatorVWAPWritesTotal.Inc()
 	return nil
+}
+
+// evaluateAndMaybeFreeze runs the anomaly check on a fresh VWAP
+// and writes a freeze marker when the decision says so. Returns
+// (decision, ok=true) for Allow / Warn — caller proceeds to the
+// cache write — and (decision, ok=false) for Freeze — caller skips
+// the cache write so the previous bucket's value continues to
+// serve.
+//
+// When o.cfg.Anomaly is nil, the evaluator is off — every fresh
+// VWAP returns Allow without computing a decision. Acceptable for
+// early bring-up; production deployments wire Anomaly + FreezeWriter
+// at the binary boundary.
+func (o *Orchestrator) evaluateAndMaybeFreeze(
+	ctx context.Context,
+	pair canonical.Pair,
+	window time.Duration,
+	currVWAP *big.Rat,
+	trades []canonical.Trade,
+	stateKey string,
+) (anomaly.Action, bool) {
+	if o.cfg.Anomaly == nil {
+		return anomaly.ActionAllow, true
+	}
+	prev := o.prevVWAPs[stateKey]
+	decision := o.cfg.Anomaly.Evaluate(anomaly.Observation{
+		Pair:        pair,
+		PrevVWAP:    prev,
+		CurrVWAP:    currVWAP,
+		SourceCount: distinctSourceCount(trades),
+	})
+	if !decision.IsFrozen() {
+		return decision.Action, true
+	}
+
+	o.mu.Lock()
+	o.freezesEngaged++
+	o.mu.Unlock()
+	obs.AnomalyFreezeEngagedTotal.WithLabelValues(string(decision.Class)).Inc()
+
+	o.logger.Warn("anomaly freeze engaged",
+		"pair", pair.String(),
+		"window", window,
+		"class", decision.Class,
+		"deviation_pct", decision.DeviationPct,
+		"reason", decision.Reason)
+
+	if o.cfg.FreezeWriter != nil {
+		if err := o.cfg.FreezeWriter.Mark(ctx, pair.Base, pair.Quote, decision); err != nil {
+			o.logger.Warn("freeze writer mark failed",
+				"pair", pair.String(),
+				"err", err)
+			// Soft-fail: anomaly was detected, marker write failed,
+			// API won't see flags.frozen. Operators alert on
+			// AnomalyFreezeEngagedTotal vs the API-side flag rate;
+			// a sustained gap = the writer is broken. Don't 5xx the
+			// tick over it.
+		}
+	}
+	return decision.Action, false
+}
+
+// distinctSourceCount returns how many distinct trade.Source values
+// contributed to the supplied trades. Zero on empty input — the
+// caller short-circuits before calling Evaluate, but the guard is
+// cheap enough to keep here too.
+func distinctSourceCount(trades []canonical.Trade) int {
+	if len(trades) == 0 {
+		return 0
+	}
+	seen := make(map[string]struct{}, 8)
+	for i := range trades {
+		seen[trades[i].Source] = struct{}{}
+	}
+	return len(seen)
 }
 
 // fetchForTarget pulls trades from the store for a single target

@@ -11,6 +11,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus/testutil"
 	"github.com/redis/go-redis/v9"
 
+	"github.com/RatesEngine/rates-engine/internal/aggregate/anomaly"
 	"github.com/RatesEngine/rates-engine/internal/canonical"
 	"github.com/RatesEngine/rates-engine/internal/obs"
 )
@@ -768,4 +769,231 @@ func intToStr(n int) string {
 		buf[i] = '-'
 	}
 	return string(buf[i:])
+}
+
+// ─── Anomaly evaluator + freeze writer ─────────────────────────────
+
+// recordingFreezeMarker captures Mark calls so tests can assert on
+// them without spinning up Redis. Implements FreezeMarker.
+type recordingFreezeMarker struct {
+	marks []recordedMark
+	err   error
+}
+
+type recordedMark struct {
+	asset    canonical.Asset
+	quote    canonical.Asset
+	decision anomaly.Decision
+}
+
+func (r *recordingFreezeMarker) Mark(_ context.Context, asset, quote canonical.Asset, decision anomaly.Decision) error {
+	r.marks = append(r.marks, recordedMark{asset: asset, quote: quote, decision: decision})
+	return r.err
+}
+
+// newAnomalyChecker builds a Checker with stablecoin-tight thresholds
+// (warn 1%, freeze 2%) so tests can flip between Allow and Freeze
+// with small price moves. Asset class for the test pair is forced
+// to stablecoin via the classifier override.
+func newAnomalyChecker(t *testing.T, pair canonical.Pair) *anomaly.Checker {
+	t.Helper()
+	thresholds := anomaly.DefaultThresholds()
+	thresholds[anomaly.ClassStablecoin] = anomaly.Thresholds{
+		WarnPct: 1.0, FreezePct: 2.0,
+	}
+	classifier := anomaly.NewClassifier(map[string]anomaly.AssetClass{
+		pair.Base.String(): anomaly.ClassStablecoin,
+	})
+	c, err := anomaly.NewChecker(thresholds, classifier)
+	if err != nil {
+		t.Fatalf("NewChecker: %v", err)
+	}
+	return c
+}
+
+// TestTick_AnomalyAllow_PublishesAndUpdatesPrev — when the decision
+// is Allow, VWAP is cached AND the orchestrator's prevVWAPs slot
+// updates so the next tick has a comparator.
+func TestTick_AnomalyAllow_PublishesAndUpdatesPrev(t *testing.T) {
+	pair := xlmUsdtPair(t)
+	store := &mockStore{
+		trades: []canonical.Trade{
+			buildTrade(t, big.NewInt(10_000_000_000), big.NewInt(1_758_200_000), time.Now()),
+		},
+	}
+	cache, mr := newTestRedis(t)
+	checker := newAnomalyChecker(t, pair)
+	o := New(store, cache, Config{
+		Pairs:   []canonical.Pair{pair},
+		Windows: []time.Duration{5 * time.Minute},
+		Anomaly: checker,
+	})
+
+	if err := o.Tick(context.Background()); err != nil {
+		t.Fatalf("Tick: %v", err)
+	}
+	stateKey := pair.String() + ":" + (5 * time.Minute).String()
+	if o.prevVWAPs[stateKey] == nil {
+		t.Error("prevVWAPs slot should populate on first publish")
+	}
+	if !mr.Exists("vwap:" + pair.Base.String() + ":" + pair.Quote.String() + ":300") {
+		t.Error("VWAP key should be present after Allow")
+	}
+}
+
+// TestTick_AnomalyFreeze_SkipsCacheAndMarks — when the decision is
+// Freeze, the cache is NOT overwritten (previous bucket stays valid)
+// and FreezeWriter.Mark is invoked with the decision.
+func TestTick_AnomalyFreeze_SkipsCacheAndMarks(t *testing.T) {
+	pair := xlmUsdtPair(t)
+	cache, mr := newTestRedis(t)
+	checker := newAnomalyChecker(t, pair)
+	marker := &recordingFreezeMarker{}
+
+	o := New(nil, cache, Config{
+		Pairs:        []canonical.Pair{pair},
+		Windows:      []time.Duration{5 * time.Minute},
+		Anomaly:      checker,
+		FreezeWriter: marker,
+	})
+
+	// Pre-populate prevVWAPs with $1.00 and pre-write a stale value
+	// to cache. The bucket-2 trade prices the asset at ~$2.10 (110%
+	// deviation, way above 2% freeze threshold) — single-source so
+	// freeze fires.
+	stateKey := pair.String() + ":" + (5 * time.Minute).String()
+	o.prevVWAPs[stateKey] = big.NewRat(1, 1) // prev = 1.00
+	const cacheKey = "vwap:crypto:XLM:crypto:USDT:300"
+	cache.Set(context.Background(), cacheKey, "1.000000000000", time.Minute)
+
+	store := &mockStore{
+		trades: []canonical.Trade{
+			// 1 XLM = ~2.10 USDT — single source.
+			buildTrade(t, big.NewInt(100_000_000), big.NewInt(210_000_000), time.Now()),
+		},
+	}
+	o.store = store
+
+	if err := o.Tick(context.Background()); err != nil {
+		t.Fatalf("Tick: %v", err)
+	}
+
+	// Cache value must NOT have been overwritten.
+	got, err := mr.Get(cacheKey)
+	if err != nil {
+		t.Fatalf("Get: %v", err)
+	}
+	if got != "1.000000000000" {
+		t.Errorf("cache overwritten despite freeze: got %q, want %q", got, "1.000000000000")
+	}
+
+	// FreezeWriter.Mark called once.
+	if len(marker.marks) != 1 {
+		t.Fatalf("Mark called %d times, want 1", len(marker.marks))
+	}
+	m := marker.marks[0]
+	if !m.decision.IsFrozen() {
+		t.Errorf("decision passed to Mark wasn't frozen: %+v", m.decision)
+	}
+
+	// prevVWAPs slot stayed at 1.00 — the next tick still compares
+	// against the LKG, not the bad reading.
+	if o.prevVWAPs[stateKey].Cmp(big.NewRat(1, 1)) != 0 {
+		t.Errorf("prevVWAPs slot moved during freeze; got %s, want 1/1",
+			o.prevVWAPs[stateKey].FloatString(6))
+	}
+}
+
+// TestTick_AnomalyNilChecker_PublishesEverything — when the
+// orchestrator has no Anomaly checker wired, every bucket publishes.
+// Identical to the pre-anomaly behaviour.
+func TestTick_AnomalyNilChecker_PublishesEverything(t *testing.T) {
+	pair := xlmUsdtPair(t)
+	cache, mr := newTestRedis(t)
+	store := &mockStore{
+		trades: []canonical.Trade{
+			buildTrade(t, big.NewInt(100_000_000), big.NewInt(210_000_000), time.Now()),
+		},
+	}
+	o := New(store, cache, Config{
+		Pairs:   []canonical.Pair{pair},
+		Windows: []time.Duration{5 * time.Minute},
+		// Anomaly nil — feature off
+	})
+
+	if err := o.Tick(context.Background()); err != nil {
+		t.Fatalf("Tick: %v", err)
+	}
+	if !mr.Exists("vwap:crypto:XLM:crypto:USDT:300") {
+		t.Error("VWAP must publish when Anomaly is nil")
+	}
+}
+
+// TestTick_AnomalyFreeze_NilFreezeWriter_StillEmitsMetric — when
+// Anomaly is wired but FreezeWriter is nil, freeze is observed (log
+// + metric) but no marker is written. API won't see flags.frozen.
+// Acceptable degradation; covered for clarity.
+func TestTick_AnomalyFreeze_NilFreezeWriter_StillEmitsMetric(t *testing.T) {
+	pair := xlmUsdtPair(t)
+	cache, _ := newTestRedis(t)
+	checker := newAnomalyChecker(t, pair)
+	o := New(nil, cache, Config{
+		Pairs:   []canonical.Pair{pair},
+		Windows: []time.Duration{5 * time.Minute},
+		Anomaly: checker,
+		// FreezeWriter nil
+	})
+	stateKey := pair.String() + ":" + (5 * time.Minute).String()
+	o.prevVWAPs[stateKey] = big.NewRat(1, 1)
+
+	o.store = &mockStore{
+		trades: []canonical.Trade{
+			buildTrade(t, big.NewInt(100_000_000), big.NewInt(210_000_000), time.Now()),
+		},
+	}
+
+	before := testutil.ToFloat64(obs.AnomalyFreezeEngagedTotal.WithLabelValues("stablecoin"))
+	if err := o.Tick(context.Background()); err != nil {
+		t.Fatalf("Tick: %v", err)
+	}
+	after := testutil.ToFloat64(obs.AnomalyFreezeEngagedTotal.WithLabelValues("stablecoin"))
+	if after-before != 1 {
+		t.Errorf("AnomalyFreezeEngagedTotal{stablecoin} delta = %v, want 1", after-before)
+	}
+}
+
+// TestDistinctSourceCount covers the small helper directly.
+func TestDistinctSourceCount(t *testing.T) {
+	tests := []struct {
+		name   string
+		trades []canonical.Trade
+		want   int
+	}{
+		{"empty", nil, 0},
+		{
+			name: "single source",
+			trades: []canonical.Trade{
+				buildTradeFrom(t, "binance", big.NewInt(1), big.NewInt(1), time.Now()),
+				buildTradeFrom(t, "binance", big.NewInt(1), big.NewInt(1), time.Now()),
+			},
+			want: 1,
+		},
+		{
+			name: "three distinct",
+			trades: []canonical.Trade{
+				buildTradeFrom(t, "binance", big.NewInt(1), big.NewInt(1), time.Now()),
+				buildTradeFrom(t, "kraken", big.NewInt(1), big.NewInt(1), time.Now()),
+				buildTradeFrom(t, "coinbase", big.NewInt(1), big.NewInt(1), time.Now()),
+				buildTradeFrom(t, "binance", big.NewInt(1), big.NewInt(1), time.Now()),
+			},
+			want: 3,
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := distinctSourceCount(tc.trades); got != tc.want {
+				t.Errorf("got %d, want %d", got, tc.want)
+			}
+		})
+	}
 }

@@ -66,6 +66,8 @@ import (
 
 	"github.com/redis/go-redis/v9"
 
+	"github.com/RatesEngine/rates-engine/internal/aggregate/anomaly"
+	"github.com/RatesEngine/rates-engine/internal/aggregate/freeze"
 	"github.com/RatesEngine/rates-engine/internal/aggregate/orchestrator"
 	"github.com/RatesEngine/rates-engine/internal/canonical"
 	"github.com/RatesEngine/rates-engine/internal/config"
@@ -92,6 +94,7 @@ func main() {
 	}
 }
 
+//nolint:gocognit,funlen // top-level binary lifecycle — splitting reduces readability of dependency-construction order
 func run(cfgPath string, dryRun bool) error {
 	cfg, err := config.LoadWithEnv(cfgPath)
 	if err != nil {
@@ -168,11 +171,33 @@ func run(cfgPath string, dryRun bool) error {
 		logger.Info("aggregator windows: operator override", "count", len(windows))
 	}
 
+	// ─── Anomaly checker + freeze writer (ADR-0019) ─────────────
+	// Wired only when the operator has flipped anomaly.enabled in
+	// TOML. nil values mean "feature off" — orchestrator skips the
+	// evaluate-and-maybe-freeze step.
+	checker, err := buildAnomalyChecker(cfg.Anomaly)
+	if err != nil {
+		return fmt.Errorf("anomaly checker: %w", err)
+	}
+	var freezeWriter orchestrator.FreezeMarker
+	if checker != nil && rdb != nil {
+		w, err := freeze.NewWriter(rdb, 0) // 0 → cachekeys.FreezeTTL default
+		if err != nil {
+			return fmt.Errorf("freeze writer: %w", err)
+		}
+		freezeWriter = w
+		logger.Info("anomaly + freeze: wired", "thresholds", len(cfg.Anomaly.Thresholds))
+	} else if checker != nil {
+		logger.Warn("anomaly enabled but no Redis — freeze markers won't be written; anomaly metric still emits")
+	}
+
 	orch := orchestrator.New(store, rdb, orchestrator.Config{
 		Pairs:                     pairs,
 		Windows:                   windows, // nil → orchestrator.DefaultWindows
 		Interval:                  time.Duration(cfg.Aggregate.IntervalSeconds) * time.Second,
 		MaxTradesPerWindow:        cfg.Aggregate.MaxTradesPerWindow,
+		Anomaly:                   checker,
+		FreezeWriter:              freezeWriter,
 		DisableClassFilter:        cfg.Aggregate.DisableClassFilter,
 		EnableStablecoinFiatProxy: cfg.Aggregate.EnableStablecoinFiatProxy,
 		OutlierSigmaThreshold:     cfg.Aggregate.OutlierSigmaThreshold,
@@ -242,4 +267,37 @@ func mkLogger(cfg config.ObsConfig) *slog.Logger {
 		h = slog.NewJSONHandler(os.Stderr, opts)
 	}
 	return slog.New(h)
+}
+
+// buildAnomalyChecker constructs an anomaly.Checker from
+// AnomalyConfig. Returns (nil, nil) when anomaly.enabled is false
+// — the orchestrator treats nil as "feature off" and publishes
+// every bucket without evaluation.
+//
+// Per-class threshold overrides merge over anomaly.DefaultThresholds
+// — an operator who only specifies the stablecoin row inherits
+// crypto/treasury/governance/default values from the package.
+//
+// Per-asset classifications are applied via Classifier overrides;
+// anything not in the map falls through to ClassDefault.
+func buildAnomalyChecker(cfg config.AnomalyConfig) (*anomaly.Checker, error) {
+	if !cfg.Enabled {
+		return nil, nil
+	}
+
+	thresholds := anomaly.DefaultThresholds()
+	for className, t := range cfg.Thresholds {
+		thresholds[anomaly.AssetClass(className)] = anomaly.Thresholds{
+			WarnPct:   t.WarnPct,
+			FreezePct: t.FreezePct,
+		}
+	}
+
+	overrides := make(map[string]anomaly.AssetClass, len(cfg.Classifications))
+	for assetID, className := range cfg.Classifications {
+		overrides[assetID] = anomaly.AssetClass(className)
+	}
+	classifier := anomaly.NewClassifier(overrides)
+
+	return anomaly.NewChecker(thresholds, classifier)
 }

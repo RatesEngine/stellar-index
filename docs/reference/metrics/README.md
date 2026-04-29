@@ -220,6 +220,22 @@ the gauge — a flat gauge with zero counter increments means the
 orchestrator stopped invoking the cross-check, not that everything's
 healthy.
 
+### `ratesengine_anomaly_freeze_engaged_total`
+
+Counter, label `class` (`stablecoin` / `treasury` / `crypto` /
+`governance` / `default`).
+
+ActionFreeze decisions emitted by the aggregator anomaly checker
+(ADR-0019). Each increment means the orchestrator declined to
+publish a fresh VWAP for some pair (kept the prior bucket's
+last-known-good value); the API's `/v1/price` for the affected
+pair will surface `flags.frozen=true` on the next read.
+
+Pair-specific freeze details live in the `freeze:<asset>:<quote>`
+Redis marker JSON (deviation_pct, reason, frozen_at) — labelled by
+class only here so cardinality stays bound to the small AssetClass
+enum.
+
 ## verify-archive (ratesengine-ops one-shot)
 
 Emitted by `ratesengine-ops verify-archive` when the operator
