@@ -193,7 +193,7 @@ Subcommands:
                           print per-venue first-trade/update samples. Exits
                           early once every enabled venue has emitted at
                           least one output. No DB, no Timescale, no cursors.
-  verify-archive -config PATH [-bucket NAME] [-from N] [-to N] [-tier MODE] [-archive-root PATH] [-peers URLs] [-peer-samples N] [-archivist-bin BIN] [-archivist-url URL] [-archivist-timeout DUR] [-fail-on-missed] [-max-runtime DUR]
+  verify-archive -config PATH [-bucket NAME] [-from N] [-to N] [-tier MODE] [-archive-root PATH] [-peers URLs] [-peer-samples N] [-archivist-bin BIN] [-archivist-url URL] [-archivist-timeout DUR] [-fail-on-missed] [-max-runtime DUR] [-workers N]
                           Verify a galexie bucket at one or more tiers:
                             chain      (Tier A) — chain-link hash integrity:
                                        each ledger N's PreviousLedgerHash
@@ -1532,8 +1532,17 @@ func verifyArchive(args []string) error { //nolint:funlen,gocognit,gocyclo // li
 			"completion or operator interrupt). Default 24h matches the "+
 			"backward-compat behaviour but full-archive runs that exceed "+
 			"the cap need 0 to avoid context-deadline-exceeded mid-walk.")
+	workers := fs.Int("workers", 1,
+		"Parallel chunk-walk workers. Each handles a contiguous "+
+			"sub-range; cross-chunk chain integrity is stitched after "+
+			"all workers complete. 1 (default) preserves the historical "+
+			"single-threaded path; 4-8 speeds full-archive runs ~Nx "+
+			"until disk I/O on /var/lib/minio saturates. Range [1, 16].")
 	if err := fs.Parse(args); err != nil {
 		return err
+	}
+	if *workers < 1 || *workers > 16 {
+		return fmt.Errorf("-workers must be in [1, 16] (got %d)", *workers)
 	}
 	doChain := *tier == "chain" || *tier == "all"
 	doCheckpoint := *tier == "checkpoint" || *tier == "all"
@@ -1569,7 +1578,7 @@ func verifyArchive(args []string) error { //nolint:funlen,gocognit,gocyclo // li
 
 	// Tier A + B (LCM walk via ledgerstream). Skipped when tier=peers.
 	if doChain || doCheckpoint {
-		if err := verifyArchiveLCMWalk(cfg, bucket, uint32(*from), uint32(*to), *maxRuntime,
+		if err := verifyArchiveLCMWalk(cfg, bucket, uint32(*from), uint32(*to), *maxRuntime, *workers,
 			doChain, doCheckpoint, *archiveRoot, *failOnMissed); err != nil {
 			return err
 		}
@@ -1603,7 +1612,7 @@ func verifyArchive(args []string) error { //nolint:funlen,gocognit,gocyclo // li
 // of the walk is treated as a hard failure per ADR-0017 X1.7.
 // When false (default), missed checkpoints are reported but tolerated
 // — matches the pre-bootstrap operator workflow.
-func verifyArchiveLCMWalk(cfg config.Config, bucket string, from, to uint32, maxRuntime time.Duration, doChain, doCheckpoint bool, archiveRoot string, failOnMissed bool) error { //nolint:funlen,gocognit,gocyclo
+func verifyArchiveLCMWalk(cfg config.Config, bucket string, from, to uint32, maxRuntime time.Duration, workers int, doChain, doCheckpoint bool, archiveRoot string, failOnMissed bool) error { //nolint:funlen,gocognit,gocyclo
 	lsCfg := ledgerstream.Config{
 		DataStore: datastore.DataStoreConfig{
 			Type: "S3",
@@ -1632,96 +1641,48 @@ func verifyArchiveLCMWalk(cfg config.Config, bucket string, from, to uint32, max
 	}
 	defer cancel()
 
+	chunks := splitRange(from, to, workers)
+	progressEvery := 10 * time.Second
+	startedAt := time.Now()
+
+	if len(chunks) > 1 {
+		fmt.Fprintf(os.Stderr, "verify-archive: %d workers across %d chunks of ~%d ledgers each\n",
+			workers, len(chunks), (to-from+1)/uint32(workers))
+	}
+
+	results, walkErr := runVerifyChunks(
+		ctx, lsCfg, chunks,
+		doChain, doCheckpoint, archiveRoot,
+		startedAt, progressEvery,
+	)
+
+	// Aggregate counters across chunks for the final summary. Match
+	// the pre-parallel field naming so log-scrapers don't break.
 	var (
-		prevSeq           uint32
-		prevHash          sdkxdr.Hash
-		hasPrev           bool
 		verified          int
 		mismatches        int
 		checkpointsOK     int
-		checkpointsMissed int // archive file absent; skip rather than fail
-		lastProgress      time.Time
-		progressEvery     = 10 * time.Second
+		checkpointsMissed int
 	)
+	for _, r := range results {
+		verified += r.Verified
+		mismatches += r.Mismatches
+		checkpointsOK += r.CheckpointsOK
+		checkpointsMissed += r.CheckpointsMissed
+	}
 
-	startedAt := time.Now()
-	err := ledgerstream.Stream(ctx, lsCfg, from, to,
-		func(lcm sdkxdr.LedgerCloseMeta) error {
-			seq := lcm.LedgerSequence()
-			hash := lcm.LedgerHash()
-			header, ok := extractLedgerHeader(lcm)
-			if !ok {
-				return fmt.Errorf("ledger %d: cannot extract LedgerHeader", seq)
-			}
+	// Stitch cross-chunk boundary chain integrity. Skip on walkErr
+	// (chunks may have aborted mid-flight; boundary check would be
+	// noisy on partial results).
+	var stitchErr error
+	if walkErr == nil && doChain {
+		stitchErr = stitchChunks(results)
+	}
 
-			if doChain && hasPrev {
-				// Gap in sequence (missing ledger) is itself a chain
-				// break — the sequence must be dense.
-				if seq != prevSeq+1 {
-					mismatches++
-					return fmt.Errorf("ledger sequence gap: %d → %d (expected %d)",
-						prevSeq, seq, prevSeq+1)
-				}
-				if header.PreviousLedgerHash != prevHash {
-					mismatches++
-					return fmt.Errorf("chain break at ledger %d:\n"+
-						"  ledger[%d].Hash              = %s\n"+
-						"  ledger[%d].PreviousLedgerHash = %s",
-						seq, prevSeq, hashToHex(prevHash),
-						seq, hashToHex(header.PreviousLedgerHash))
-				}
-			}
-
-			// Tier B — compare against the local history-archive at
-			// each 64-ledger checkpoint boundary. The archive's
-			// ledger-<hex>.xdr.gz file carries the canonical
-			// LedgerHeaderHistoryEntry for every ledger in the
-			// checkpoint; we match on LedgerSeq and compare the
-			// bundled Hash against our LCM's hash.
-			if doCheckpoint && seq%64 == 63 {
-				expected, hit, cerr := readArchivedLedgerHash(archiveRoot, seq)
-				switch {
-				case cerr != nil:
-					mismatches++
-					return fmt.Errorf("ledger %d: archive read failed: %w", seq, cerr)
-				case !hit:
-					// File not present (e.g. mirror behind latest
-					// checkpoints) — count and continue rather than
-					// fail the whole sweep.
-					checkpointsMissed++
-				case expected != hash:
-					mismatches++
-					return fmt.Errorf("checkpoint anchor mismatch at ledger %d:\n"+
-						"  our LCM hash          = %s\n"+
-						"  archive-signed hash   = %s",
-						seq, hashToHex(hash), hashToHex(expected))
-				default:
-					checkpointsOK++
-				}
-			}
-
-			prevSeq = seq
-			prevHash = hash
-			hasPrev = true
-			verified++
-
-			if time.Since(lastProgress) >= progressEvery {
-				fmt.Fprintf(os.Stderr, "verify-archive: ledger %d, %d verified, %.0f ledgers/s\n",
-					seq, verified, float64(verified)/time.Since(startedAt).Seconds())
-				lastProgress = time.Now()
-			}
-			return nil
-		},
-	)
 	elapsed := time.Since(startedAt)
-
-	fmt.Fprintf(os.Stderr, "\nverify-archive: verified %d ledgers in %s (%.0f ledgers/s)\n",
-		verified, elapsed.Round(time.Second), float64(verified)/elapsed.Seconds())
+	fmt.Fprintf(os.Stderr, "\nverify-archive: verified %d ledgers in %s (%.0f ledgers/s, %d workers)\n",
+		verified, elapsed.Round(time.Second), float64(verified)/elapsed.Seconds(), workers)
 	if doCheckpoint {
-		// Note phrasing flip-flops based on failOnMissed: pre-bootstrap
-		// operator workflow tolerated misses (the legacy `not a failure`
-		// note); post-bootstrap workflow per ADR-0017 X1.7 makes them
-		// load-bearing on the exit code.
 		if failOnMissed {
 			fmt.Fprintf(os.Stderr, "verify-archive: checkpoints matched=%d missed=%d (fail-on-missed: any miss = hard failure)\n",
 				checkpointsOK, checkpointsMissed)
@@ -1730,8 +1691,11 @@ func verifyArchiveLCMWalk(cfg config.Config, bucket string, from, to uint32, max
 				checkpointsOK, checkpointsMissed)
 		}
 	}
-	if err != nil {
-		return fmt.Errorf("verification FAILED: %w", err)
+	if walkErr != nil {
+		return fmt.Errorf("verification FAILED: %w", walkErr)
+	}
+	if stitchErr != nil {
+		return fmt.Errorf("verification FAILED: %w", stitchErr)
 	}
 	if verified == 0 {
 		return fmt.Errorf("verified 0 ledgers — bucket empty or range out of scope")
@@ -1748,15 +1712,11 @@ func verifyArchiveLCMWalk(cfg config.Config, bucket string, from, to uint32, max
 		} else {
 			fmt.Fprintf(os.Stderr, "verify-archive: checkpoint anchor OK ✓  (%d matched, %d missed)\n", checkpointsOK, checkpointsMissed)
 		}
-		// Post-bootstrap hard contract per ADR-0017 X1.7: any missed
-		// checkpoint means cross-anchor archive isn't structurally
-		// complete, which means the next layer (anchor verify per
-		// ADR-0017 X1.4) can't be guaranteed.
 		if failOnMissed && checkpointsMissed > 0 {
 			return fmt.Errorf("verification FAILED: %d checkpoint(s) missing from cross-anchor archive (with -fail-on-missed per ADR-0017 X1.7)", checkpointsMissed)
 		}
 	}
-	_ = mismatches // silence unused variable warning; set for future exit-code semantics
+	_ = mismatches // reserved for future exit-code semantics
 	return nil
 }
 
@@ -2631,11 +2591,19 @@ type rangeChunk struct{ from, to uint32 }
 
 // splitRange divides [from,to] into n contiguous chunks. The last
 // chunk absorbs any remainder so the union exactly covers [from,to].
+//
+// Degrades to a single chunk when n ≤ 1, the range is single-ledger,
+// or n exceeds the range span (would otherwise produce zero-width
+// chunks that the downstream walkers can't process).
 func splitRange(from, to uint32, n int) []rangeChunk {
 	if n <= 1 || to <= from {
 		return []rangeChunk{{from, to}}
 	}
-	width := uint32(int(to-from+1) / n)
+	span := to - from + 1
+	if uint32(n) > span {
+		return []rangeChunk{{from, to}}
+	}
+	width := span / uint32(n)
 	out := make([]rangeChunk, n)
 	for i := 0; i < n; i++ {
 		chunkFrom := from + uint32(i)*width
