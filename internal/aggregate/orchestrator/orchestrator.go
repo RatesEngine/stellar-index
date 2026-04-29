@@ -219,6 +219,19 @@ type Config struct {
 	// release that hadn't yet introduced class filtering.
 	DisableClassFilter bool
 
+	// Baselines, when non-nil, is consulted by the per-tick
+	// confidence-score step (ADR-0019 §"Multi-factor confidence
+	// score"). The orchestrator computes a [confidence.Score] from
+	// the freshly-published VWAP + the cached MultiBaseline and
+	// writes the result to Redis at `confidence:<base>:<quote>:<window>`.
+	//
+	// Nil = confidence step is skipped. Production wiring is an
+	// adapter around `*timescale.Store.LatestBaseline`. The score
+	// requires both a baseline (this field) and a previous-tick
+	// VWAP comparator slot (kept internally) — the first tick after
+	// startup always skips because there's no return to score yet.
+	Baselines BaselineSource
+
 	// Logger is the structured logger. If nil, slog.Default() is
 	// used.
 	Logger *slog.Logger
@@ -440,6 +453,14 @@ func (o *Orchestrator) refreshPairWindow(
 	if err := o.cache.Set(ctx, key, value, ttl).Err(); err != nil {
 		return fmt.Errorf("redis set %s: %w", key, err)
 	}
+
+	// Confidence score (ADR-0019). Computed AFTER the VWAP cache
+	// write so a confidence-side failure can't block the price
+	// publish. Uses the prior tick's VWAP (saved in prevVWAPs)
+	// as the comparator for return-% computation; first-tick
+	// publishes naturally skip the confidence step.
+	prevForConfidence := o.prevVWAPs[stateKey]
+	o.computeAndCacheConfidence(ctx, pair, window, vwap, prevForConfidence, trades)
 
 	// Update the prev-VWAP comparator slot ONLY on successful
 	// publish — frozen buckets keep the prior slot intact so the

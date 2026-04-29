@@ -175,16 +175,17 @@ func TestAllKeysHaveDistinctPrefixes(t *testing.T) {
 	now := time.Now()
 
 	prefixes := map[string]string{
-		"price":  cachekeys.Price(xlm),
-		"vwap":   cachekeys.VWAP(xlm, usdc, time.Minute),
-		"ohlc":   cachekeys.OHLC(xlm, usdc, "1m", now),
-		"rl":     cachekeys.RateLimitKey("x", now, time.Minute),
-		"toml":   cachekeys.TOML("example.com"),
-		"meta":   cachekeys.Metadata(xlm),
-		"sub":    cachekeys.Subscriber("c", "s"),
-		"div":    cachekeys.Divergence(xlm),
-		"freeze": cachekeys.Freeze(xlm, usdc),
-		"health": cachekeys.Health("src"),
+		"price":      cachekeys.Price(xlm),
+		"vwap":       cachekeys.VWAP(xlm, usdc, time.Minute),
+		"confidence": cachekeys.Confidence(xlm, usdc, time.Minute),
+		"ohlc":       cachekeys.OHLC(xlm, usdc, "1m", now),
+		"rl":         cachekeys.RateLimitKey("x", now, time.Minute),
+		"toml":       cachekeys.TOML("example.com"),
+		"meta":       cachekeys.Metadata(xlm),
+		"sub":        cachekeys.Subscriber("c", "s"),
+		"div":        cachekeys.Divergence(xlm),
+		"freeze":     cachekeys.Freeze(xlm, usdc),
+		"health":     cachekeys.Health("src"),
 	}
 	for want, got := range prefixes {
 		first := strings.SplitN(got, ":", 2)[0]

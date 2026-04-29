@@ -55,6 +55,7 @@ func init() {
 		AnomalyFreezeEngagedTotal,
 		AggregatorTriangulationsTotal,
 		AggregatorBaselineRefreshTotal,
+		AggregatorConfidenceComputeTotal,
 
 		VerifyArchiveLedgersVerified,
 		VerifyArchiveCurrentLedger,
@@ -419,6 +420,23 @@ var AggregatorBaselineRefreshTotal = prometheus.NewCounterVec(
 	prometheus.CounterOpts{
 		Name: "ratesengine_aggregator_baseline_refresh_total",
 		Help: "Baseline refresh outcomes per pair × refresh cycle. Outcome ∈ {ok, not_enough_samples, read_error, write_error}.",
+	},
+	[]string{"outcome"},
+)
+
+// AggregatorConfidenceComputeTotal — counter of confidence-score
+// compute outcomes per (pair, window) per tick (ADR-0019 §"Multi-
+// factor confidence score"). Outcome ∈ {ok, skipped, baseline_missing,
+// marshal_error, write_error}.
+//
+// `skipped` covers the first-tick / no-prev-VWAP case. `baseline_missing`
+// covers pairs in bootstrap (no MultiBaseline yet) — sustained values
+// here indicate the L2.5 baseline-refresh worker isn't keeping up
+// with the Pair set. `ok` should be the dominant value in steady state.
+var AggregatorConfidenceComputeTotal = prometheus.NewCounterVec(
+	prometheus.CounterOpts{
+		Name: "ratesengine_aggregator_confidence_compute_total",
+		Help: "Confidence-score compute outcomes per (pair, window) × tick. Outcome ∈ {ok, skipped, baseline_missing, marshal_error, write_error}.",
 	},
 	[]string{"outcome"},
 )

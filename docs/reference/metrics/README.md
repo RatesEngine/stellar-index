@@ -250,6 +250,26 @@ factor instead of using a per-asset baseline. Sustained `read_error`
 or `write_error` rates indicate the storage layer needs investigation
 (prices_1m read failing or volatility_baseline_1m write conflict).
 
+### `ratesengine_aggregator_confidence_compute_total`
+
+Counter, label `outcome` (`ok` / `skipped` / `baseline_missing` /
+`marshal_error` / `write_error`).
+
+Confidence-score compute outcomes per (pair, window) × tick (ADR-0019
+§"Multi-factor confidence score"). The aggregator computes a
+`confidence.Score` after each successful VWAP publish and writes it to
+Redis at `confidence:<base>:<quote>:<window>`.
+
+`skipped` covers the first-tick / no-prev-VWAP case (expected on
+startup until the comparator slot warms). `baseline_missing` covers
+pairs whose 30d baseline isn't yet computed — sustained values here
+indicate the L2.5 baseline-refresh worker isn't keeping up with the
+configured Pair set, and the API's confidence on those pairs falls
+back to bootstrap. `ok` should be the dominant value in steady state.
+
+`marshal_error` / `write_error` indicate the JSON encoder or Redis
+itself misbehaved — both should be flat-zero in healthy operation.
+
 ### `ratesengine_anomaly_freeze_engaged_total`
 
 Counter, label `class` (`stablecoin` / `treasury` / `crypto` /

@@ -40,6 +40,29 @@ func VWAP(base, quote canonical.Asset, window time.Duration) string {
 // for zero window (callers should treat as "don't cache").
 func VWAPTTL(window time.Duration) time.Duration { return window }
 
+// ─── Confidence — multi-factor score per (pair, window) ───────────
+//
+// Wire shape: `confidence:<base>:<quote>:<window-seconds>`
+// Writer: aggregator (alongside the corresponding vwap: key).
+// Reader: api (`/v1/price` envelope's confidence field).
+// TTL: matches the VWAP key — confidence becomes meaningless once
+// the VWAP it scored expires.
+//
+// Value is a JSON-encoded confidence.Score (Confidence + Factors)
+// rather than a bare float so the API can ship the full
+// decomposition without a second lookup.
+
+// Confidence returns the cache key for the confidence score on the
+// given (pair, window).
+func Confidence(base, quote canonical.Asset, window time.Duration) string {
+	return fmt.Sprintf("confidence:%s:%s:%d",
+		base.String(), quote.String(), int(window.Seconds()))
+}
+
+// ConfidenceTTL is the TTL for a confidence: key. Matches VWAPTTL —
+// the score is tied to its underlying VWAP and should expire with it.
+func ConfidenceTTL(window time.Duration) time.Duration { return window }
+
 // ─── OHLC — one candle per (pair, granularity, bucket-start) ──────
 //
 // Wire shape: `ohlc:<base>:<quote>:<granularity>:<bucket-epoch>`

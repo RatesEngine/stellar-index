@@ -17,6 +17,26 @@ against.
 
 ### Added
 
+- **Confidence score wired into the orchestrator (L2.6 wire-up
+  slice)**: per-tick confidence-score compute alongside VWAP
+  publishing. New `BaselineSource` interface on `orchestrator.Config`
+  reads the cached `MultiBaseline` for z-score lookup. After each
+  successful VWAP cache write, the orchestrator computes a return %
+  vs the prior tick's VWAP, runs `MultiBaseline.MaxZScore`, gathers
+  source count + class count + USD-quote volume + baseline age, and
+  writes the JSON-encoded `confidence.Score` to Redis at
+  `confidence:<base>:<quote>:<window>`. Confidence is enrichment,
+  not a publish gate — baseline-source errors / Redis blips on the
+  confidence path are logged + counted but never block the VWAP
+  publish itself. New cache key `cachekeys.Confidence` /
+  `ConfidenceTTL` (matches VWAP TTL). New Prometheus counter
+  `ratesengine_aggregator_confidence_compute_total` labelled by
+  `{ok, skipped, baseline_missing, marshal_error, write_error}`.
+  Cross-oracle divergence input still passes the "no data" sentinel
+  pending the next slice (which wires the `div:<asset>` Redis key
+  read). API hot-path read of the confidence cache key follows
+  separately.
+
 - **Multi-factor confidence score primitive (L2.6 math slice)**:
   pure-Go `internal/aggregate/confidence` package implementing the
   ADR-0019 §"Multi-factor confidence score" combiner. Six factors

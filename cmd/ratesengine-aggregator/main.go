@@ -225,6 +225,7 @@ func run(cfgPath string, dryRun bool) error {
 		Anomaly:                   checker,
 		FreezeWriter:              freezeWriter,
 		Triangulations:            triangulations,
+		Baselines:                 baselineLookupAdapter{store: store},
 		DisableClassFilter:        cfg.Aggregate.DisableClassFilter,
 		EnableStablecoinFiatProxy: cfg.Aggregate.EnableStablecoinFiatProxy,
 		OutlierSigmaThreshold:     cfg.Aggregate.OutlierSigmaThreshold,
@@ -307,6 +308,23 @@ func runBaselineRefresh(ctx context.Context, r *baseline.Refresher, pairs []cano
 			tick()
 		}
 	}
+}
+
+// baselineLookupAdapter wraps *timescale.Store to satisfy
+// orchestrator.BaselineSource — returns the cached MultiBaseline
+// for a pair plus its computed_at timestamp. Used by the per-tick
+// confidence-score step to read the baseline for z-score lookup.
+//
+// Returns the bare zero-value triple when the pair has no row;
+// the orchestrator's confidence step treats that as bootstrap.
+type baselineLookupAdapter struct{ store *timescale.Store }
+
+func (a baselineLookupAdapter) LatestBaseline(ctx context.Context, pair canonical.Pair) (baseline.MultiBaseline, time.Time, error) {
+	sb, err := a.store.LatestBaseline(ctx, pair)
+	if err != nil {
+		return baseline.MultiBaseline{}, time.Time{}, err
+	}
+	return sb.Multi, sb.ComputedAt, nil
 }
 
 // baselineSourceAdapter wraps *timescale.Store to satisfy
