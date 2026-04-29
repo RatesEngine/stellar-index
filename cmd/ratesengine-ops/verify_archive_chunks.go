@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"os"
@@ -13,6 +14,39 @@ import (
 
 	"github.com/RatesEngine/rates-engine/internal/ledgerstream"
 )
+
+// checkResumeFromHash compares the first chunk's FirstPrevHash
+// against an operator-supplied hex hash. Used to prove cross-run
+// continuity: when a previous verification halted partway, the
+// operator records its last verified ledger's hash and passes it on
+// the resume run via -resume-from-hash; this check enforces the
+// boundary explicitly rather than relying on the implicit-overlap
+// proof from re-reading the seam ledger.
+//
+// Errors:
+//   - hex parse failures (operator typo, wrong length) — surfaced
+//     with a clear message that names the expected format.
+//   - hash mismatch — names both hashes + the seam ledger so the
+//     operator can audit which side is wrong (likely indexer or
+//     archive corruption between runs).
+func checkResumeFromHash(expectedHex string, firstPrevHash sdkxdr.Hash, firstSeq uint32) error {
+	expectedBytes, err := hex.DecodeString(expectedHex)
+	if err != nil {
+		return fmt.Errorf("resume-from-hash: parse hex %q: %w", expectedHex, err)
+	}
+	if len(expectedBytes) != len(firstPrevHash) {
+		return fmt.Errorf("resume-from-hash: hex length %d, want %d (32-byte SHA-256)", len(expectedBytes), len(firstPrevHash))
+	}
+	var expected sdkxdr.Hash
+	copy(expected[:], expectedBytes)
+	if expected != firstPrevHash {
+		return fmt.Errorf("resume-from-hash boundary mismatch at ledger %d:\n"+
+			"  -resume-from-hash         = %s\n"+
+			"  observed FirstPrevHash    = %s",
+			firstSeq, expectedHex, hashToHex(firstPrevHash))
+	}
+	return nil
+}
 
 // chunkResult is what verifyChunk returns. Carries the running
 // counters AND the boundary hashes the orchestrator needs to stitch

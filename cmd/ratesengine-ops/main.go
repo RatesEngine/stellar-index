@@ -193,7 +193,7 @@ Subcommands:
                           print per-venue first-trade/update samples. Exits
                           early once every enabled venue has emitted at
                           least one output. No DB, no Timescale, no cursors.
-  verify-archive -config PATH [-bucket NAME] [-from N] [-to N] [-tier MODE] [-archive-root PATH] [-peers URLs] [-peer-samples N] [-archivist-bin BIN] [-archivist-url URL] [-archivist-timeout DUR] [-fail-on-missed] [-max-runtime DUR] [-workers N]
+  verify-archive -config PATH [-bucket NAME] [-from N] [-to N] [-tier MODE] [-archive-root PATH] [-peers URLs] [-peer-samples N] [-archivist-bin BIN] [-archivist-url URL] [-archivist-timeout DUR] [-fail-on-missed] [-max-runtime DUR] [-workers N] [-resume-from-hash HEX]
                           Verify a galexie bucket at one or more tiers:
                             chain      (Tier A) — chain-link hash integrity:
                                        each ledger N's PreviousLedgerHash
@@ -1538,6 +1538,15 @@ func verifyArchive(args []string) error { //nolint:funlen,gocognit,gocyclo // li
 			"all workers complete. 1 (default) preserves the historical "+
 			"single-threaded path; 4-8 speeds full-archive runs ~Nx "+
 			"until disk I/O on /var/lib/minio saturates. Range [1, 16].")
+	resumeFromHash := fs.String("resume-from-hash", "",
+		"Expected hash (hex) of the ledger immediately before -from "+
+			"(i.e. ledger -from − 1). When set, the first chunk's "+
+			"FirstPrevHash must match this value or verification fails. "+
+			"Used after a previous run halted partway: the operator "+
+			"records the previous run's last verified ledger hash and "+
+			"passes it here to prove the cross-run boundary explicitly. "+
+			"Empty (default) skips the check — the implicit-overlap "+
+			"proof from re-reading -from itself is usually sufficient.")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -1579,7 +1588,7 @@ func verifyArchive(args []string) error { //nolint:funlen,gocognit,gocyclo // li
 	// Tier A + B (LCM walk via ledgerstream). Skipped when tier=peers.
 	if doChain || doCheckpoint {
 		if err := verifyArchiveLCMWalk(cfg, bucket, uint32(*from), uint32(*to), *maxRuntime, *workers,
-			doChain, doCheckpoint, *archiveRoot, *failOnMissed); err != nil {
+			doChain, doCheckpoint, *archiveRoot, *failOnMissed, *resumeFromHash); err != nil {
 			return err
 		}
 	}
@@ -1612,7 +1621,7 @@ func verifyArchive(args []string) error { //nolint:funlen,gocognit,gocyclo // li
 // of the walk is treated as a hard failure per ADR-0017 X1.7.
 // When false (default), missed checkpoints are reported but tolerated
 // — matches the pre-bootstrap operator workflow.
-func verifyArchiveLCMWalk(cfg config.Config, bucket string, from, to uint32, maxRuntime time.Duration, workers int, doChain, doCheckpoint bool, archiveRoot string, failOnMissed bool) error { //nolint:funlen,gocognit,gocyclo
+func verifyArchiveLCMWalk(cfg config.Config, bucket string, from, to uint32, maxRuntime time.Duration, workers int, doChain, doCheckpoint bool, archiveRoot string, failOnMissed bool, resumeFromHash string) error { //nolint:funlen,gocognit,gocyclo
 	lsCfg := ledgerstream.Config{
 		DataStore: datastore.DataStoreConfig{
 			Type: "S3",
@@ -1679,6 +1688,16 @@ func verifyArchiveLCMWalk(cfg config.Config, bucket string, from, to uint32, max
 		stitchErr = stitchChunks(results)
 	}
 
+	// Cross-run boundary check: when -resume-from-hash is set, the
+	// first chunk's FirstPrevHash must match (proves continuity with
+	// a previous verification run that ended at -from − 1). Runs
+	// only when no other error has fired and at least one chunk
+	// processed a ledger.
+	var resumeErr error
+	if walkErr == nil && stitchErr == nil && doChain && resumeFromHash != "" && len(results) > 0 && results[0].Verified > 0 {
+		resumeErr = checkResumeFromHash(resumeFromHash, results[0].FirstPrevHash, results[0].FirstSeq)
+	}
+
 	elapsed := time.Since(startedAt)
 	fmt.Fprintf(os.Stderr, "\nverify-archive: verified %d ledgers in %s (%.0f ledgers/s, %d workers)\n",
 		verified, elapsed.Round(time.Second), float64(verified)/elapsed.Seconds(), workers)
@@ -1696,6 +1715,9 @@ func verifyArchiveLCMWalk(cfg config.Config, bucket string, from, to uint32, max
 	}
 	if stitchErr != nil {
 		return fmt.Errorf("verification FAILED: %w", stitchErr)
+	}
+	if resumeErr != nil {
+		return fmt.Errorf("verification FAILED: %w", resumeErr)
 	}
 	if verified == 0 {
 		return fmt.Errorf("verified 0 ledgers — bucket empty or range out of scope")

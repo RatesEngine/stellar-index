@@ -118,6 +118,55 @@ func TestStitchChunks_SeqGap(t *testing.T) {
 	}
 }
 
+// TestCheckResumeFromHash_HappyPath — operator-supplied hex matches
+// the observed FirstPrevHash → no error.
+func TestCheckResumeFromHash_HappyPath(t *testing.T) {
+	h := hashFrom(0xAA)
+	hex := "aa" + strings.Repeat("00", 31)
+	if err := checkResumeFromHash(hex, h, 100); err != nil {
+		t.Errorf("happy path failed: %v", err)
+	}
+}
+
+// TestCheckResumeFromHash_Mismatch — operator passed a hash that
+// doesn't match the observed FirstPrevHash; error names the seam
+// ledger + both hashes so the operator can audit.
+func TestCheckResumeFromHash_Mismatch(t *testing.T) {
+	h := hashFrom(0xAA)
+	wrongHex := "bb" + strings.Repeat("00", 31)
+	err := checkResumeFromHash(wrongHex, h, 100)
+	if err == nil {
+		t.Fatal("expected mismatch error")
+	}
+	for _, want := range []string{"ledger 100", "boundary mismatch", "FirstPrevHash"} {
+		if !strings.Contains(err.Error(), want) {
+			t.Errorf("error message lacks %q: %v", want, err)
+		}
+	}
+}
+
+// TestCheckResumeFromHash_BadHex — operator typo (non-hex chars,
+// wrong length) surfaces as a parse error rather than silently
+// passing.
+func TestCheckResumeFromHash_BadHex(t *testing.T) {
+	tests := []struct {
+		name string
+		in   string
+	}{
+		{"non-hex chars", "zzznotahex"},
+		{"odd length", "aab"},
+		{"too short", "aabb"},
+		{"too long", strings.Repeat("aa", 33)}, // 33 bytes = 66 chars
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			if err := checkResumeFromHash(tc.in, hashFrom(0xAA), 100); err == nil {
+				t.Errorf("expected error for %q; got nil", tc.in)
+			}
+		})
+	}
+}
+
 // TestStitchChunks_EmptyChunkSkipped — a chunk that processed zero
 // ledgers (no LCMs in its range — uncommon but legal) is skipped
 // in the boundary check; the chunks on either side are stitched
