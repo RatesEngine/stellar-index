@@ -314,6 +314,27 @@ type AnomalyConfig struct {
 	//   "USDC-GA5Z…" = "stablecoin"
 	//   "AQUA-GBN…"  = "governance"
 	Classifications map[string]string `toml:"classifications" doc:"Operator-curated map of canonical asset_id → asset class (stablecoin/treasury/crypto/governance). Anything absent falls through to the default class." default:"{}"`
+
+	// Phase2 holds the operator-tunable thresholds for the ADR-0019
+	// Phase 2 freeze policy (3-signal AND on confidence + z + source
+	// count). Defaults match the package-level hardcoded values; an
+	// operator override merges atop those.
+	Phase2 Phase2FreezeConfig `toml:"phase2" doc:"Phase 2 (per-asset baseline) freeze thresholds. All three conditions must hold for a freeze. Defaults match the ADR-0019 stop-gap (confidence < 0.10 AND z > 5.0 AND sources <= 1)."`
+}
+
+// Phase2FreezeConfig surfaces the ADR-0019 Phase 2 freeze
+// thresholds as TOML knobs. All three conditions must hold for a
+// freeze; tightening any single threshold makes the gate stricter.
+//
+// Defaults match the package-level constants in
+// `internal/aggregate/orchestrator/phase2_freeze.go`. Operators
+// who haven't validated the per-asset baseline against their own
+// market data are encouraged to leave these at the defaults until
+// they have a sense of false-positive rate.
+type Phase2FreezeConfig struct {
+	ConfidenceMaxFreeze  float64 `toml:"confidence_max_freeze" doc:"Freeze fires when confidence is strictly less than this. ADR-0019 default 0.10." default:"0.10"`
+	ZScoreMinFreeze      float64 `toml:"z_score_min_freeze" doc:"Freeze fires when z-score is strictly greater than this. ADR-0019 default 5.0 (the documented 5σ trigger)." default:"5.0"`
+	SourceCountMaxFreeze int     `toml:"source_count_max_freeze" doc:"Freeze fires when source count is at or below this. ADR-0019 default 1 (single-source pattern)." default:"1"`
 }
 
 // AnomalyThreshold is one row of the anomaly threshold table.
@@ -452,6 +473,15 @@ func Default() Config {
 			MinUSDVolume:          10_000,
 			OutlierSigmaThreshold: 4,
 			TriangulationEnabled:  true,
+		},
+		Anomaly: AnomalyConfig{
+			// Enabled defaults to false — operator opts in once
+			// classifications are set per ADR-0019 stop-gap.
+			Phase2: Phase2FreezeConfig{
+				ConfidenceMaxFreeze:  0.10,
+				ZScoreMinFreeze:      5.0,
+				SourceCountMaxFreeze: 1,
+			},
 		},
 		API: APIConfig{
 			ListenAddr:          "0.0.0.0:3000",

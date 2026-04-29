@@ -219,6 +219,14 @@ type Config struct {
 	// release that hadn't yet introduced class filtering.
 	DisableClassFilter bool
 
+	// Phase2Thresholds tunes the ADR-0019 Phase 2 freeze condition
+	// (3-signal AND on confidence + z + source count). Zero-value
+	// fields fall back to the [Default*] package constants — an
+	// operator with no override gets the documented stop-gap
+	// behaviour. Set per-field to tighten or loosen any single
+	// signal without restating the others.
+	Phase2Thresholds Phase2Thresholds
+
 	// Baselines, when non-nil, is consulted by the per-tick
 	// confidence-score step (ADR-0019 §"Multi-factor confidence
 	// score"). The orchestrator computes a [confidence.Score] from
@@ -452,7 +460,7 @@ func (o *Orchestrator) refreshPairWindow(
 			ZScore:      conf.ZScore,
 			SourceCount: distinctSourceCount(trades),
 		}
-		if phase2FreezeFires(input) {
+		if phase2FreezeFires(input, o.cfg.Phase2Thresholds) {
 			o.markPhase2Freeze(ctx, pair, input)
 			return nil
 		}

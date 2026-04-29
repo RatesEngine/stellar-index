@@ -123,6 +123,9 @@ the `env:` column.
 | `anomaly.thresholds.<key>.warn_pct` | `float64` | `30.0` | — | Deviation above this percentage triggers ActionWarn (publish with divergence_warning flag). |
 | `anomaly.thresholds.<key>.freeze_pct` | `float64` | `75.0` | — | Deviation above this percentage triggers ActionFreeze when source_count<=1 (don't publish; serve last-known-good). |
 | `anomaly.classifications` | `map` | `{}` | — | Operator-curated map of canonical asset_id → asset class (stablecoin/treasury/crypto/governance). Anything absent falls through to the default class. |
+| `anomaly.phase2.confidence_max_freeze` | `float64` | `0.10` | — | Freeze fires when confidence is strictly less than this. ADR-0019 default 0.10. |
+| `anomaly.phase2.z_score_min_freeze` | `float64` | `5.0` | — | Freeze fires when z-score is strictly greater than this. ADR-0019 default 5.0 (the documented 5σ trigger). |
+| `anomaly.phase2.source_count_max_freeze` | `int` | `1` | — | Freeze fires when source count is at or below this. ADR-0019 default 1 (single-source pattern). |
 
 ### `[api]`
 

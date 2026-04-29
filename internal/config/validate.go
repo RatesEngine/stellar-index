@@ -65,6 +65,9 @@ func (c Config) Validate() error {
 	if err := c.Aggregate.validate(); err != nil {
 		return err
 	}
+	if err := c.Anomaly.validate(); err != nil {
+		return err
+	}
 	if err := c.API.validate(); err != nil {
 		return err
 	}
@@ -334,6 +337,34 @@ func (a AggregateConfig) validate() error {
 			return fmt.Errorf("%w: aggregate.windows entry %q: %w",
 				ErrInvalidConfig, raw, err)
 		}
+	}
+	return nil
+}
+
+// validate checks the AnomalyConfig's Phase 2 thresholds. Most of
+// AnomalyConfig is loose-typed (Thresholds + Classifications maps
+// validated at consumer time); the Phase 2 thresholds have a
+// well-defined shape and are checked here.
+func (a AnomalyConfig) validate() error {
+	return a.Phase2.validate()
+}
+
+// validate enforces the per-field bounds documented on
+// [Phase2FreezeConfig]. Catches config errors at startup rather
+// than letting an out-of-band threshold silently disable the
+// freeze gate (e.g. confidence_max_freeze=2.0 means "always freeze").
+func (p Phase2FreezeConfig) validate() error {
+	if p.ConfidenceMaxFreeze < 0 || p.ConfidenceMaxFreeze > 1 {
+		return fmt.Errorf("%w: anomaly.phase2.confidence_max_freeze must be in [0, 1] (got %v)",
+			ErrInvalidConfig, p.ConfidenceMaxFreeze)
+	}
+	if p.ZScoreMinFreeze <= 0 {
+		return fmt.Errorf("%w: anomaly.phase2.z_score_min_freeze must be > 0 (got %v)",
+			ErrInvalidConfig, p.ZScoreMinFreeze)
+	}
+	if p.SourceCountMaxFreeze < 0 {
+		return fmt.Errorf("%w: anomaly.phase2.source_count_max_freeze must be >= 0 (got %d)",
+			ErrInvalidConfig, p.SourceCountMaxFreeze)
 	}
 	return nil
 }

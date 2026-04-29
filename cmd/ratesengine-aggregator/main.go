@@ -218,14 +218,19 @@ func run(cfgPath string, dryRun bool) error {
 	}
 
 	orch := orchestrator.New(store, rdb, orchestrator.Config{
-		Pairs:                     pairs,
-		Windows:                   windows, // nil → orchestrator.DefaultWindows
-		Interval:                  time.Duration(cfg.Aggregate.IntervalSeconds) * time.Second,
-		MaxTradesPerWindow:        cfg.Aggregate.MaxTradesPerWindow,
-		Anomaly:                   checker,
-		FreezeWriter:              freezeWriter,
-		Triangulations:            triangulations,
-		Baselines:                 baselineLookupAdapter{store: store},
+		Pairs:              pairs,
+		Windows:            windows, // nil → orchestrator.DefaultWindows
+		Interval:           time.Duration(cfg.Aggregate.IntervalSeconds) * time.Second,
+		MaxTradesPerWindow: cfg.Aggregate.MaxTradesPerWindow,
+		Anomaly:            checker,
+		FreezeWriter:       freezeWriter,
+		Triangulations:     triangulations,
+		Baselines:          baselineLookupAdapter{store: store},
+		Phase2Thresholds: orchestrator.Phase2Thresholds{
+			ConfidenceMaxFreeze:  cfg.Anomaly.Phase2.ConfidenceMaxFreeze,
+			ZScoreMinFreeze:      cfg.Anomaly.Phase2.ZScoreMinFreeze,
+			SourceCountMaxFreeze: cfg.Anomaly.Phase2.SourceCountMaxFreeze,
+		},
 		DisableClassFilter:        cfg.Aggregate.DisableClassFilter,
 		EnableStablecoinFiatProxy: cfg.Aggregate.EnableStablecoinFiatProxy,
 		OutlierSigmaThreshold:     cfg.Aggregate.OutlierSigmaThreshold,

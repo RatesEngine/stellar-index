@@ -17,6 +17,20 @@ against.
 
 ### Added
 
+- **Operator-tunable Phase 2 freeze thresholds (L2.7 follow-up)**:
+  the ADR-0019 Phase 2 freeze condition's three thresholds —
+  `confidence_max_freeze` (0.10), `z_score_min_freeze` (5.0),
+  `source_count_max_freeze` (1) — are now surfaced as
+  `[anomaly.phase2]` TOML knobs. Defaults match the package-level
+  values from #256 so unset operators see no behaviour change.
+  Partial overrides merge with defaults (`Phase2Thresholds.withDefaults`)
+  so an operator who only wants to tighten one signal doesn't have
+  to restate the others. Validation runs at startup —
+  out-of-range values surface clear errors instead of silently
+  disabling the gate. New `DefaultPhase2*` package constants
+  document the canonical values; tests cover boundary cases plus
+  partial-override merging.
+
 - **Bootstrap confidence cap (L2.9)**: per ADR-0019 §"Bootstrap
   policy", assets with fewer than 30 days of history have their
   confidence score hard-capped at 0.5 regardless of how healthy

@@ -16,35 +16,78 @@ import (
 // USTRY-shape attack pattern (single source, large deviation,
 // confidence-killing combination of factors).
 //
-// Hardcoded for the MVP. Operator-tunable via TOML lands as a
-// follow-up; the current values match the ADR's documented
-// stop-gap.
+// The package-level defaults match the ADR-0019 documented values
+// and are used when [Config.Phase2Thresholds] is the zero value
+// (operator hasn't overridden via TOML). Operators tune via the
+// `[anomaly.phase2]` config block.
 const (
-	phase2ConfidenceMaxFreeze  = 0.10 // freeze when confidence < this
-	phase2ZScoreMinFreeze      = 5.0  // freeze when z > this
-	phase2SourceCountMaxFreeze = 1    // freeze when source_count <= this
+	DefaultPhase2ConfidenceMaxFreeze  = 0.10 // freeze when confidence < this
+	DefaultPhase2ZScoreMinFreeze      = 5.0  // freeze when z > this
+	DefaultPhase2SourceCountMaxFreeze = 1    // freeze when source_count <= this
 )
+
+// Phase2Thresholds is the operator-tunable shape of the Phase 2
+// freeze condition. The orchestrator's [Config.Phase2Thresholds]
+// holds an instance of this struct; zero values fall back to the
+// `Default*` package constants so unset fields do the right thing.
+type Phase2Thresholds struct {
+	ConfidenceMaxFreeze  float64
+	ZScoreMinFreeze      float64
+	SourceCountMaxFreeze int
+}
+
+// withDefaults returns a Phase2Thresholds with any zero-valued
+// field replaced by the package default. Lets the orchestrator
+// merge an operator's partial override over the documented
+// stop-gap without forcing the operator to repeat every value.
+//
+// The zero value sentinel: ConfidenceMaxFreeze == 0 means "use
+// default" because a literal 0.0 would mean "never freeze on
+// confidence" (any value < 0 is impossible since confidence is
+// clamped [0, 1]) — equivalent to disabling that condition. We
+// treat the zero value as "use default"; operators who genuinely
+// want to disable the confidence check set a value >= 1.0 (always
+// fires the confidence sub-condition; freeze still requires z +
+// source_count to also pass).
+func (p Phase2Thresholds) withDefaults() Phase2Thresholds {
+	if p.ConfidenceMaxFreeze == 0 {
+		p.ConfidenceMaxFreeze = DefaultPhase2ConfidenceMaxFreeze
+	}
+	if p.ZScoreMinFreeze == 0 {
+		p.ZScoreMinFreeze = DefaultPhase2ZScoreMinFreeze
+	}
+	// SourceCountMaxFreeze: zero is a valid threshold ("freeze only
+	// when zero contributing sources") — we can't use the zero
+	// sentinel here. Operators who want to override this MUST set a
+	// non-zero value; the documented default fires below.
+	if p.SourceCountMaxFreeze == 0 {
+		p.SourceCountMaxFreeze = DefaultPhase2SourceCountMaxFreeze
+	}
+	return p
+}
 
 // phase2FreezeFires reports whether the Phase 2 freeze condition
 // (3-signal AND) holds for a bucket given its confidence score,
-// raw z-score, and contributing source count.
+// raw z-score, and contributing source count, evaluated against
+// the supplied (or default-merged) thresholds.
 //
 // Per ADR-0019 §"Freeze policy":
 //
 //	freeze_condition = (
-//	  confidence  < 0.10
-//	  AND z_score > 5.0
-//	  AND source_count <= 1
+//	  confidence  < ConfidenceMaxFreeze
+//	  AND z_score > ZScoreMinFreeze
+//	  AND source_count <= SourceCountMaxFreeze
 //	)
 //
 // All three must be true. A two-of-three pattern (e.g. anomalous
 // z + low confidence but multi-source) does NOT freeze — those
 // scenarios surface via flags.divergence_warning instead, set by
 // the API's read-side divergence check.
-func phase2FreezeFires(c confidenceWithSourceCount) bool {
-	return c.Confidence < phase2ConfidenceMaxFreeze &&
-		c.ZScore > phase2ZScoreMinFreeze &&
-		c.SourceCount <= phase2SourceCountMaxFreeze
+func phase2FreezeFires(c confidenceWithSourceCount, t Phase2Thresholds) bool {
+	t = t.withDefaults()
+	return c.Confidence < t.ConfidenceMaxFreeze &&
+		c.ZScore > t.ZScoreMinFreeze &&
+		c.SourceCount <= t.SourceCountMaxFreeze
 }
 
 // confidenceWithSourceCount is the Phase 2 input bundle. Pulled
