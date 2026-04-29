@@ -76,7 +76,7 @@ func (s *Server) handleObservations(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	trades, err := s.history.LatestTradePerSource(r.Context(), pair, source)
+	trades, err := s.computeObservations(r.Context(), pair, source, aggregate)
 	if err != nil {
 		if clientAborted(r, err) {
 			return
@@ -88,10 +88,6 @@ func (s *Server) handleObservations(w http.ResponseWriter, r *http.Request) {
 			"https://api.ratesengine.net/errors/internal",
 			"Internal error", http.StatusInternalServerError, "")
 		return
-	}
-
-	if aggregate == "latest" {
-		trades = collapseToLatest(trades)
 	}
 
 	rows := make([]TradeRow, len(trades))
