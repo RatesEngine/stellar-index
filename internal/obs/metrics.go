@@ -426,17 +426,25 @@ var AggregatorBaselineRefreshTotal = prometheus.NewCounterVec(
 
 // AggregatorConfidenceComputeTotal — counter of confidence-score
 // compute outcomes per (pair, window) per tick (ADR-0019 §"Multi-
-// factor confidence score"). Outcome ∈ {ok, skipped, baseline_missing,
-// marshal_error, write_error}.
+// factor confidence score"). Outcome labels:
 //
-// `skipped` covers the first-tick / no-prev-VWAP case. `baseline_missing`
-// covers pairs in bootstrap (no MultiBaseline yet) — sustained values
-// here indicate the L2.5 baseline-refresh worker isn't keeping up
-// with the Pair set. `ok` should be the dominant value in steady state.
+//   - ok                       — score computed + cached cleanly
+//   - skipped                  — first-tick / no prev-VWAP comparator
+//   - baseline_missing         — MultiBaseline absent or in full bootstrap
+//   - marshal_error            — score JSON encode failed (unreachable in practice)
+//   - write_error              — Redis write of confidence: key failed
+//   - divergence_read_error    — Redis Get on div:<asset> errored (best-effort; sentinel passed)
+//   - divergence_decode_error  — div:<asset> JSON decode failed
+//
+// `skipped` and `baseline_missing` are normal during pair bring-up;
+// `ok` should dominate in steady state. divergence_* errors are
+// non-fatal (the confidence step continues with the "no data"
+// sentinel) but sustained rates indicate the divergence worker /
+// Redis is misbehaving.
 var AggregatorConfidenceComputeTotal = prometheus.NewCounterVec(
 	prometheus.CounterOpts{
 		Name: "ratesengine_aggregator_confidence_compute_total",
-		Help: "Confidence-score compute outcomes per (pair, window) × tick. Outcome ∈ {ok, skipped, baseline_missing, marshal_error, write_error}.",
+		Help: "Confidence-score compute outcomes per (pair, window) × tick. See package docs for the full label vocabulary.",
 	},
 	[]string{"outcome"},
 )

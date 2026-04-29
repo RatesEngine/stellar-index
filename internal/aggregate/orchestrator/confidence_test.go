@@ -12,6 +12,7 @@ import (
 	"github.com/RatesEngine/rates-engine/internal/aggregate/confidence"
 	"github.com/RatesEngine/rates-engine/internal/cachekeys"
 	"github.com/RatesEngine/rates-engine/internal/canonical"
+	"github.com/RatesEngine/rates-engine/internal/divergence"
 )
 
 // stubBaselineSource implements orchestrator.BaselineSource with a
@@ -144,6 +145,150 @@ func TestConfidence_SkipsWhenBaselinesNil(t *testing.T) {
 	confKey := cachekeys.Confidence(pair.Base, pair.Quote, time.Minute)
 	if exists, _ := rdb.Exists(context.Background(), confKey).Result(); exists != 0 {
 		t.Errorf("confidence key %q present despite nil Baselines", confKey)
+	}
+}
+
+// TestConfidence_DivergenceWiredFromCache — pre-seed a cached
+// divergence Result in Redis (the same shape `internal/divergence`
+// writes), tick the orchestrator, and confirm the resulting
+// confidence factor reflects the cached divergence.
+//
+// We can't directly read `Factors.CrossOracle` from inside the
+// orchestrator (it's part of the JSON-encoded Score), so we do the
+// inverse: set up two scenarios — one with no cached divergence
+// (sentinel = -1 → factor = 0.7), one with a low-divergence cached
+// result (factor → 1.0). Confirm the second has higher confidence.
+func TestConfidence_DivergenceWiredFromCache(t *testing.T) {
+	pair := xlmUSDPair(t)
+	now := time.Now().UTC()
+	bsrc := stubBaselineSource{
+		multi: baseline.MultiBaseline{
+			Day30: &baseline.Baseline{Median: 0.0001, MAD: 0.001, N: 1000},
+		},
+		computedAt: now,
+	}
+
+	runOnce := func(t *testing.T, seedDiv *divergence.CachedResult) confidence.Score {
+		t.Helper()
+		store := &mockStore{
+			trades: []canonical.Trade{
+				makeXLMUSDTrade(t, "soroswap", 1_000_000, 1_242_000, now.Add(-30*time.Second)),
+				makeXLMUSDTrade(t, "phoenix", 1_000_000, 1_245_000, now.Add(-20*time.Second)),
+			},
+		}
+		rdb, _ := newTestRedis(t)
+		if seedDiv != nil {
+			body, err := json.Marshal(seedDiv)
+			if err != nil {
+				t.Fatalf("seed marshal: %v", err)
+			}
+			if err := rdb.Set(context.Background(),
+				cachekeys.Divergence(pair.Base), body, 5*time.Minute).Err(); err != nil {
+				t.Fatalf("seed cache set: %v", err)
+			}
+		}
+		orch := New(store, rdb, Config{
+			Pairs:     []canonical.Pair{pair},
+			Windows:   []time.Duration{1 * time.Minute},
+			Interval:  1 * time.Hour,
+			Baselines: bsrc,
+		})
+		_ = orch.Tick(context.Background())
+		_ = orch.Tick(context.Background())
+		body, err := rdb.Get(context.Background(),
+			cachekeys.Confidence(pair.Base, pair.Quote, time.Minute)).Bytes()
+		if err != nil {
+			t.Fatalf("confidence read: %v", err)
+		}
+		var s confidence.Score
+		if err := json.Unmarshal(body, &s); err != nil {
+			t.Fatalf("confidence unmarshal: %v", err)
+		}
+		return s
+	}
+
+	noCache := runOnce(t, nil)
+	withinTolerance := runOnce(t, &divergence.CachedResult{
+		PairID:        pair.String(),
+		DivergencePct: 0.3, // within 1% tolerance → factor 1.0
+		SuccessCount:  3,
+	})
+
+	// "No data" returns the neutral 0.7; "within tolerance" returns
+	// 1.0 — so the wired-up scenario must score the CrossOracle
+	// factor strictly higher. Asserting on the per-factor value
+	// (rather than the combined Confidence) sidesteps the
+	// LiquidityFactor's behaviour for our small fixture trades —
+	// the wiring is what's under test, not the combiner output.
+	if withinTolerance.Factors.CrossOracle <= noCache.Factors.CrossOracle {
+		t.Errorf("CrossOracle factor: with-cache=%v should exceed no-cache=%v",
+			withinTolerance.Factors.CrossOracle, noCache.Factors.CrossOracle)
+	}
+	if noCache.Factors.CrossOracle != 0.7 {
+		t.Errorf("no-cache CrossOracle = %v, want 0.7 (neutral)", noCache.Factors.CrossOracle)
+	}
+	if withinTolerance.Factors.CrossOracle != 1.0 {
+		t.Errorf("within-tolerance CrossOracle = %v, want 1.0", withinTolerance.Factors.CrossOracle)
+	}
+}
+
+// TestConfidence_DivergenceLowSuccessCountIgnored — a cached
+// Result with SuccessCount < 2 doesn't count: the divergence input
+// passes the "no data" sentinel even when DivergencePct is set.
+//
+// This guards against scoring a single reference's hiccup as a
+// trustworthy multi-source signal.
+func TestConfidence_DivergenceLowSuccessCountIgnored(t *testing.T) {
+	pair := xlmUSDPair(t)
+	now := time.Now().UTC()
+	bsrc := stubBaselineSource{
+		multi: baseline.MultiBaseline{
+			Day30: &baseline.Baseline{Median: 0.0001, MAD: 0.001, N: 1000},
+		},
+		computedAt: now,
+	}
+
+	store := &mockStore{
+		trades: []canonical.Trade{
+			makeXLMUSDTrade(t, "soroswap", 1_000_000, 1_242_000, now.Add(-30*time.Second)),
+		},
+	}
+	rdb, _ := newTestRedis(t)
+
+	body, _ := json.Marshal(&divergence.CachedResult{
+		PairID:        pair.String(),
+		DivergencePct: 0.3, // would be in-tolerance, but…
+		SuccessCount:  1,   // … below trust floor; should be ignored
+	})
+	if err := rdb.Set(context.Background(),
+		cachekeys.Divergence(pair.Base), body, 5*time.Minute).Err(); err != nil {
+		t.Fatalf("seed cache set: %v", err)
+	}
+
+	orch := New(store, rdb, Config{
+		Pairs:     []canonical.Pair{pair},
+		Windows:   []time.Duration{1 * time.Minute},
+		Interval:  1 * time.Hour,
+		Baselines: bsrc,
+	})
+	_ = orch.Tick(context.Background())
+	_ = orch.Tick(context.Background())
+
+	scoreBody, err := rdb.Get(context.Background(),
+		cachekeys.Confidence(pair.Base, pair.Quote, time.Minute)).Bytes()
+	if err != nil {
+		t.Fatalf("confidence read: %v", err)
+	}
+	var s confidence.Score
+	if err := json.Unmarshal(scoreBody, &s); err != nil {
+		t.Fatalf("confidence unmarshal: %v", err)
+	}
+	// 0.7 is the documented "no cross-oracle data" neutral. With a
+	// single-source cached result we expect the same value.
+	const wantNeutral = 0.7
+	if s.Factors.CrossOracle < wantNeutral-1e-6 || s.Factors.CrossOracle > wantNeutral+1e-6 {
+		t.Errorf("CrossOracle factor = %v, want %v (neutral; single-source ignored)",
+			s.Factors.CrossOracle, wantNeutral)
 	}
 }
 

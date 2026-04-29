@@ -17,6 +17,22 @@ against.
 
 ### Added
 
+- **Cross-oracle divergence wired into confidence (L2.6 slice 3)**:
+  the orchestrator's confidence step now reads `div:<asset>` from
+  Redis (the cache the divergence worker writes via
+  `Service.RefreshPair`) and feeds the cached `DivergencePct` into
+  `confidence.Inputs.CrossOracleDivergencePct` when
+  `SuccessCount >= 2`. Single-source cached results are ignored
+  (pass the "no data" sentinel — guards against scoring one
+  reference's hiccup as a multi-source signal). Best-effort:
+  `divergence_read_error` / `divergence_decode_error` outcomes
+  surface on the existing
+  `ratesengine_aggregator_confidence_compute_total` counter and
+  the confidence step continues with the neutral sentinel rather
+  than blocking on a Redis blip. Two new tests confirm wiring
+  (within-1% cached → CrossOracle factor 1.0, no cache → 0.7
+  neutral) and the SuccessCount<2 ignore policy.
+
 - **Confidence score wired into the orchestrator (L2.6 wire-up
   slice)**: per-tick confidence-score compute alongside VWAP
   publishing. New `BaselineSource` interface on `orchestrator.Config`

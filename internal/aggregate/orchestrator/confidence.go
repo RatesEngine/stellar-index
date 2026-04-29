@@ -3,15 +3,28 @@ package orchestrator
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"math/big"
 	"time"
+
+	"github.com/redis/go-redis/v9"
 
 	"github.com/RatesEngine/rates-engine/internal/aggregate/baseline"
 	"github.com/RatesEngine/rates-engine/internal/aggregate/confidence"
 	"github.com/RatesEngine/rates-engine/internal/cachekeys"
 	"github.com/RatesEngine/rates-engine/internal/canonical"
+	"github.com/RatesEngine/rates-engine/internal/divergence"
 	"github.com/RatesEngine/rates-engine/internal/obs"
 )
+
+// divergenceMinSources is the floor on a cached divergence result's
+// SuccessCount before its DivergencePct is trusted as a confidence
+// input. Below this we pass the "no cross-oracle data" sentinel —
+// safer to neutralise the factor than to score a single reference's
+// hiccup as a multi-source signal.
+//
+// Matches the divergence Service's default minSources gate.
+const divergenceMinSources = 2
 
 // BaselineSource is the read-side interface the confidence step
 // uses to look up a per-pair MultiBaseline. Production wiring
@@ -89,17 +102,14 @@ func (o *Orchestrator) computeAndCacheConfidence(
 	classCount := distinctSourceClassCount(trades)
 	usdVolume := approxUSDVolume(trades, pair)
 	ageDays := baselineAgeDays(multi, computedAt)
+	divergencePct := o.lookupDivergencePct(ctx, pair.Base)
 
 	score := confidence.Compute(confidence.Inputs{
-		ZScore:           z,
-		SourceCount:      distinctSourceCount(trades),
-		SourceClassCount: classCount,
-		LiquidityUSD:     usdVolume,
-		// Negative = "no cross-oracle data" sentinel; the next L2.6
-		// slice wires this from the `div:<asset>` Redis key written
-		// by `internal/divergence` (the cached Result carries
-		// DivergencePct + SuccessCount; we use the pct when count >= 2).
-		CrossOracleDivergencePct: -1,
+		ZScore:                   z,
+		SourceCount:              distinctSourceCount(trades),
+		SourceClassCount:         classCount,
+		LiquidityUSD:             usdVolume,
+		CrossOracleDivergencePct: divergencePct,
 		BaselineAgeDays:          ageDays,
 	}, confidence.DefaultWeights())
 
@@ -124,6 +134,41 @@ func (o *Orchestrator) computeAndCacheConfidence(
 // the orchestrator's Trade-handling helpers live next to the
 // canonical package import. Same shape; same semantics.
 type canonicalTrade = canonical.Trade
+
+// lookupDivergencePct reads the cached divergence result for `asset`
+// and returns its DivergencePct when the SuccessCount meets the
+// trust floor (`divergenceMinSources`). Otherwise (no key, decode
+// error, transient cache failure, single-source success) returns -1
+// — the [confidence.CrossOracleFactor] "no cross-oracle data"
+// sentinel.
+//
+// Best-effort: divergence is enrichment, not a publish-blocker.
+// Read failures don't propagate; the confidence step continues with
+// the neutral sentinel.
+func (o *Orchestrator) lookupDivergencePct(ctx context.Context, asset canonical.Asset) float64 {
+	raw, err := o.cache.Get(ctx, cachekeys.Divergence(asset)).Bytes()
+	if errors.Is(err, redis.Nil) {
+		return -1 // no cache entry; treat as "no data"
+	}
+	if err != nil {
+		// Transient Redis read failure — log debug-level (not warn)
+		// because we don't want a Redis blip to flood logs every tick;
+		// the metric label captures this cleanly enough.
+		obs.AggregatorConfidenceComputeTotal.WithLabelValues("divergence_read_error").Inc()
+		return -1
+	}
+	var cached divergence.CachedResult
+	if err := json.Unmarshal(raw, &cached); err != nil {
+		obs.AggregatorConfidenceComputeTotal.WithLabelValues("divergence_decode_error").Inc()
+		return -1
+	}
+	if cached.SuccessCount < divergenceMinSources {
+		// Single-reference signal: don't trust as a multi-source
+		// divergence input. Pass "no data" sentinel.
+		return -1
+	}
+	return cached.DivergencePct
+}
 
 // distinctSourceClassCount returns the count of distinct
 // source CLASSES (as understood by external.Lookup) in the trade
