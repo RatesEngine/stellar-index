@@ -86,12 +86,30 @@ const (
 	ClassAuthoritySanity Class = "authority_sanity"
 )
 
+// Subclass is a finer-grained partition within a [Class]. Used by
+// the confidence diversity factor (ADR-0019): a CEX (subclass "cex")
+// and a DEX (subclass "dex") under the same `ClassExchange` parent
+// are economically distinct sources for diversity-counting purposes.
+//
+// Empty string means "no further partitioning"; sources outside
+// ClassExchange (oracles, aggregators, authority anchors) typically
+// leave this blank — their parent Class already captures the
+// economic distinction.
+type Subclass string
+
+const (
+	SubclassCEX Subclass = "cex" // centralised exchange, off-chain
+	SubclassDEX Subclass = "dex" // decentralised exchange, on-chain
+	SubclassFX  Subclass = "fx"  // institutional FX feed
+)
+
 // Metadata is the source-registry record. Static at startup — not
 // mutated during ingest. Operators may override DefaultWeight and
-// IncludeInVWAP via config, but Class and Paid are facts about the
-// venue that don't change per deployment.
+// IncludeInVWAP via config, but Class, Subclass and Paid are facts
+// about the venue that don't change per deployment.
 type Metadata struct {
 	Class         Class
+	Subclass      Subclass
 	DefaultWeight int
 	IncludeInVWAP bool
 	// Paid indicates the source requires a commercial license or API

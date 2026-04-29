@@ -306,17 +306,26 @@ func TestDistinctSourceClassCount(t *testing.T) {
 		want    int
 	}{
 		{"empty", nil, 0},
-		// Both ClassExchange — collapse to 1 distinct class.
+		// Both CEXes — same Class:Subclass bucket → 1.
 		{"two CEXes", []string{"binance", "coinbase"}, 1},
-		// CEX + Oracle — distinct classes.
+		// CEX + DEX — same Class but distinct Subclass → 2.
+		// This is the ADR-0019 worked example case the Subclass
+		// field exists for.
+		{"CEX + DEX", []string{"binance", "soroswap"}, 2},
+		// CEX + DEX + FX — three Subclasses under ClassExchange → 3.
+		{"CEX + DEX + FX", []string{"binance", "soroswap", "polygon-forex"}, 3},
+		// CEX + Oracle — distinct parent classes → 2.
 		{"CEX + Oracle", []string{"binance", "reflector-dex"}, 2},
-		// Three classes: Exchange + Oracle + Aggregator.
-		{"three classes", []string{"binance", "reflector-dex", "coingecko"}, 3},
-		// Unknown source falls into ClassExchange (registry default);
-		// adds nothing if another exchange is already counted.
-		{"unknown + CEX", []string{"unknown_source", "binance"}, 1},
-		// Sovereign anchor is its own class.
-		{"CEX + ECB anchor", []string{"binance", "ecb"}, 2},
+		// Four buckets: CEX + Oracle + Aggregator + AuthoritySanity.
+		{"four buckets", []string{"binance", "reflector-dex", "coingecko", "ecb"}, 4},
+		// Unknown source falls into the registry's default
+		// (ClassExchange + empty Subclass). If no other exchange:cex
+		// is present it counts as its own bucket.
+		{"unknown alone", []string{"unknown_source"}, 1},
+		// Two unknowns collapse (same fallback bucket).
+		{"two unknowns", []string{"unknown_a", "unknown_b"}, 1},
+		// Two same-DEX-subclass sources collapse to 1.
+		{"two DEXes", []string{"soroswap", "phoenix"}, 1},
 	}
 	for _, tc := range cases {
 		trades := make([]canonical.Trade, 0, len(tc.sources))

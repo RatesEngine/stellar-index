@@ -173,31 +173,33 @@ func (o *Orchestrator) lookupDivergencePct(ctx context.Context, asset canonical.
 }
 
 // distinctSourceClassCount returns the count of distinct
-// [external.Class] values represented in the trade slice. Used by
-// the confidence diversity factor (ADR-0019): two sources of the
-// SAME class agree less informatively than two sources of
-// DIFFERENT classes (e.g. CEX + Oracle is more diverse than two
-// CEXes).
+// (Class, Subclass) buckets represented in the trade slice. Used
+// by the confidence diversity factor (ADR-0019): sources of the
+// same economic kind agree less informatively than sources from
+// different kinds.
 //
-// Caveat: the existing Class enum lumps CEX + DEX both under
-// `ClassExchange`. The ADR's worked example treats CEX + DEX as
-// 2 distinct classes; this implementation reads them as 1 because
-// the registry doesn't yet split them. A follow-up that adds a
-// Subclass field to [external.Metadata] would fix this; for now
-// the function is a more meaningful approximation than the
-// previous distinct-source-name proxy.
+// Bucket key is `Class:Subclass`. This means:
+//   - two CEXes (binance + coinbase) → both `exchange:cex` → 1
+//   - CEX + DEX (binance + soroswap) → `exchange:cex` + `exchange:dex` → 2
+//   - CEX + Oracle (binance + reflector-dex) → 2
+//   - DEX + FX (soroswap + polygon-forex) → 2
+//
+// Sources outside ClassExchange typically have empty Subclass —
+// their parent Class already captures the economic distinction
+// (oracles, aggregators, authority anchors don't sub-partition).
 //
 // Sources missing from the registry fall into the [external.Lookup]
-// fallback class (also `ClassExchange`), so an unknown source name
+// fallback (`exchange:`, no subclass) — an unknown source name
 // doesn't get its own bucket.
 func distinctSourceClassCount(trades []canonicalTrade) int {
 	if len(trades) == 0 {
 		return 0
 	}
-	seen := make(map[external.Class]struct{}, 4)
+	seen := make(map[string]struct{}, 4)
 	for i := range trades {
 		md := external.Lookup(trades[i].Source)
-		seen[md.Class] = struct{}{}
+		key := string(md.Class) + ":" + string(md.Subclass)
+		seen[key] = struct{}{}
 	}
 	return len(seen)
 }

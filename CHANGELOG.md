@@ -17,6 +17,20 @@ against.
 
 ### Added
 
+- **`external.Metadata.Subclass` for CEX/DEX/FX diversity (L2.6
+  follow-up)**: closes the gap noted in #259 — the existing `Class`
+  enum lumps CEX + DEX both under `ClassExchange`, which under-
+  counted diversity per the ADR-0019 worked example. New `Subclass`
+  field partitions ClassExchange into `cex` / `dex` / `fx`. The
+  orchestrator's `distinctSourceClassCount` now keys on the
+  `Class:Subclass` composite, so:
+  - two CEXes (binance + coinbase) → 1 bucket
+  - CEX + DEX (binance + soroswap) → 2 buckets ✅ matches ADR
+  - CEX + DEX + FX → 3 buckets
+  - DEX + Oracle → 2 buckets (cross-parent-class)
+  Sources outside ClassExchange leave Subclass blank — their
+  parent Class already captures the economic distinction.
+
 - **Source-class registry lookup for confidence diversity factor
   (L2.6 follow-up)**: the orchestrator's `distinctSourceClassCount`
   now consults `external.Lookup(source).Class` instead of using
