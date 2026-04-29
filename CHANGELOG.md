@@ -17,6 +17,16 @@ against.
 
 ### Added
 
+- **Source-class registry lookup for confidence diversity factor
+  (L2.6 follow-up)**: the orchestrator's `distinctSourceClassCount`
+  now consults `external.Lookup(source).Class` instead of using
+  the source name as a proxy. The diversity factor reads "two
+  CEXes = 1 class" (correct) and "CEX + Oracle = 2 classes"
+  (correct) where before it would have read both as equally
+  diverse. CEX-vs-DEX is still collapsed under `ClassExchange` —
+  the existing taxonomy doesn't split them; a follow-up that adds
+  a `Subclass` field to `external.Metadata` would close the gap.
+
 - **Operator-tunable Phase 2 freeze thresholds (L2.7 follow-up)**:
   the ADR-0019 Phase 2 freeze condition's three thresholds —
   `confidence_max_freeze` (0.10), `z_score_min_freeze` (5.0),

@@ -292,6 +292,60 @@ func TestConfidence_DivergenceLowSuccessCountIgnored(t *testing.T) {
 	}
 }
 
+// TestDistinctSourceClassCount — exchange + oracle + aggregator
+// are three distinct classes in the registry. Verifies the
+// registry-backed implementation collapses same-class trades
+// (two CEXes count as 1) and counts cross-class trades correctly.
+func TestDistinctSourceClassCount(t *testing.T) {
+	pair := xlmUSDPair(t)
+	now := time.Now().UTC()
+
+	cases := []struct {
+		name    string
+		sources []string
+		want    int
+	}{
+		{"empty", nil, 0},
+		// Both ClassExchange — collapse to 1 distinct class.
+		{"two CEXes", []string{"binance", "coinbase"}, 1},
+		// CEX + Oracle — distinct classes.
+		{"CEX + Oracle", []string{"binance", "reflector-dex"}, 2},
+		// Three classes: Exchange + Oracle + Aggregator.
+		{"three classes", []string{"binance", "reflector-dex", "coingecko"}, 3},
+		// Unknown source falls into ClassExchange (registry default);
+		// adds nothing if another exchange is already counted.
+		{"unknown + CEX", []string{"unknown_source", "binance"}, 1},
+		// Sovereign anchor is its own class.
+		{"CEX + ECB anchor", []string{"binance", "ecb"}, 2},
+	}
+	for _, tc := range cases {
+		trades := make([]canonical.Trade, 0, len(tc.sources))
+		for _, s := range tc.sources {
+			trades = append(trades, makeXLMUSDTradeWithSource(t, pair, s, now))
+		}
+		got := distinctSourceClassCount(trades)
+		if got != tc.want {
+			t.Errorf("%s: distinctSourceClassCount = %d, want %d", tc.name, got, tc.want)
+		}
+	}
+}
+
+// makeXLMUSDTradeWithSource is mkObservationTrade variant — same
+// shape but with the given pair already resolved.
+func makeXLMUSDTradeWithSource(t *testing.T, pair canonical.Pair, source string, ts time.Time) canonical.Trade {
+	t.Helper()
+	return canonical.Trade{
+		Source:      source,
+		Ledger:      uint32(ts.Unix() % 1_000_000),
+		TxHash:      "0000000000000000000000000000000000000000000000000000000000000001",
+		OpIndex:     0,
+		Timestamp:   ts,
+		Pair:        pair,
+		BaseAmount:  canonical.NewAmount(big.NewInt(1)),
+		QuoteAmount: canonical.NewAmount(big.NewInt(1)),
+	}
+}
+
 // TestPhase2Freeze_BlocksVWAPPublish — when the 3-signal AND
 // fires, the orchestrator BAILS BEFORE the VWAP cache write. The
 // previous bucket's value (or absence) stays in cache.

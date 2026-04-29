@@ -15,6 +15,7 @@ import (
 	"github.com/RatesEngine/rates-engine/internal/canonical"
 	"github.com/RatesEngine/rates-engine/internal/divergence"
 	"github.com/RatesEngine/rates-engine/internal/obs"
+	"github.com/RatesEngine/rates-engine/internal/sources/external"
 )
 
 // divergenceMinSources is the floor on a cached divergence result's
@@ -172,23 +173,31 @@ func (o *Orchestrator) lookupDivergencePct(ctx context.Context, asset canonical.
 }
 
 // distinctSourceClassCount returns the count of distinct
-// source CLASSES (as understood by external.Lookup) in the trade
-// slice. Sources without a class registration count as their
-// own bucket — keeps on-chain DEXes (which have no external
-// registry entry) from being silently dropped.
+// [external.Class] values represented in the trade slice. Used by
+// the confidence diversity factor (ADR-0019): two sources of the
+// SAME class agree less informatively than two sources of
+// DIFFERENT classes (e.g. CEX + Oracle is more diverse than two
+// CEXes).
+//
+// Caveat: the existing Class enum lumps CEX + DEX both under
+// `ClassExchange`. The ADR's worked example treats CEX + DEX as
+// 2 distinct classes; this implementation reads them as 1 because
+// the registry doesn't yet split them. A follow-up that adds a
+// Subclass field to [external.Metadata] would fix this; for now
+// the function is a more meaningful approximation than the
+// previous distinct-source-name proxy.
+//
+// Sources missing from the registry fall into the [external.Lookup]
+// fallback class (also `ClassExchange`), so an unknown source name
+// doesn't get its own bucket.
 func distinctSourceClassCount(trades []canonicalTrade) int {
 	if len(trades) == 0 {
 		return 0
 	}
-	seen := make(map[string]struct{}, len(trades))
+	seen := make(map[external.Class]struct{}, 4)
 	for i := range trades {
-		// The orchestrator already imports external; using its class
-		// registry here would create a cycle through the test path.
-		// Cheap proxy: distinct source name = distinct class for the
-		// confidence-score's purpose (CEX_a + CEX_b read as 2; same
-		// source twice reads as 1). Refines once L2.10's Reference
-		// type gives us a stable class lookup.
-		seen[trades[i].Source] = struct{}{}
+		md := external.Lookup(trades[i].Source)
+		seen[md.Class] = struct{}{}
 	}
 	return len(seen)
 }
