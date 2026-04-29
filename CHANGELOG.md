@@ -17,6 +17,21 @@ against.
 
 ### Added
 
+- **Multi-window baseline safeguard (L2.8 math slice)**: per
+  ADR-0019 §"Multi-window safeguard against frog-boiling" — a
+  coordinated attacker who slowly drifts an asset over weeks would
+  defeat the 1d window (median tracks the drift) but the 30d
+  window (still includes pre-attack data) flags the drifted price
+  as anomalous. New `baseline.MultiBaseline` holds three
+  independent baselines at 1d/7d/30d lookbacks; `MaxZScore`
+  returns the largest z across all valid windows so "any window
+  flags" maps to a single threshold check. `SplitByLookback`
+  helper partitions a time-stamped VWAP series into three sub-
+  windows in one pass. 7 new tests including the headline
+  frog-boiling-defense scenario (sustained 0.5%/day drift over
+  14d → 30d window dominates). Storage + orchestrator wire-up
+  follow as separate slices.
+
 - **Baseline refresh wired into the aggregator binary (L2.5 final
   slice — closes L2.5)**: `cmd/ratesengine-aggregator` now runs a
   hourly baseline refresh loop alongside the orchestrator's
