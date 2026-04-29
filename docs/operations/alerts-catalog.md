@@ -119,6 +119,20 @@ chain-link locally. See [archive-completeness.md](archive-completeness.md).
 | `ratesengine_archive_completeness_critical_stale` | same | > 48 h on R1 (integrity leader) | **P1** | [archive-completeness-stale](runbooks/archive-completeness-stale.md) |
 | `ratesengine_archive_repair_source_degraded` | `archive_completeness_repair_failures_total / archive_completeness_repair_attempts_total` per source | > 0.10 over 1 h | P3 | [archive-repair-source-degraded](runbooks/archive-repair-source-degraded.md) |
 
+## verify-archive timer alerts
+
+Per the ADR-0016 per-region trust model: R1 runs verify-archive Tier A
+(chain-link integrity) nightly via systemd; R2 + R3 trust R1 and run
+their own slower cadence. The timer fires once per night at 03:23 UTC
++ jitter; node_exporter's `--collector.systemd` exports the unit
+state so failures and stale runs trigger the alerts below. See
+[verify-archive-tier-a.timer](https://github.com/RatesEngine/rates-engine/blob/main/deploy/systemd/verify-archive-tier-a.timer).
+
+| Name | Metric | Condition | Severity | Runbook |
+| ---- | ------ | --------- | -------- | ------- |
+| `ratesengine_verify_archive_unit_failed` | `node_systemd_unit_state{name="verify-archive-tier-a.service",state="failed"}` | == 1 for > 5 min | P3 | [verify-archive-unit-failed](runbooks/verify-archive-unit-failed.md) |
+| `ratesengine_verify_archive_run_stale` | `time() - node_systemd_timer_last_trigger_seconds{name="verify-archive-tier-a.timer"}` | > 36 h for > 10 min | **P2** | [verify-archive-run-stale](runbooks/verify-archive-run-stale.md) |
+
 ## Anomaly + freeze alerts
 
 Per [ADR-0019](../adr/0019-anomaly-response-and-confidence-scoring.md).

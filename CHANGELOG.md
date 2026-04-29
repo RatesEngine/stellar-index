@@ -17,6 +17,23 @@ against.
 
 ### Added
 
+- **verify-archive systemd timer (L4.12)**: nightly Tier A
+  chain-link integrity check on R1 per the ADR-0016 per-region
+  trust model + the `archival-node-bringup.md` schedule
+  (`R1: Tier A nightly`). Ships
+  `deploy/systemd/verify-archive-tier-a.{timer,service}` —
+  fires at 03:23 UTC + 10m jitter (placed AFTER the daily
+  archive-completeness verify at 02:17, so missing-file gaps
+  surface there first). 8h max-runtime cap based on the
+  parallel-chunk run profile observed today (5h47m for the full
+  archive on 8 workers). Two new Prometheus alerts:
+  `ratesengine_verify_archive_unit_failed` (P3, ticket — last
+  run failed) and `ratesengine_verify_archive_run_stale` (P2,
+  page — no clean run in 36h+); both source from
+  node_exporter's `--collector.systemd` so no application-side
+  metrics work was needed. Two runbooks shipped. Backlog row
+  L4.12 added.
+
 - **`external.Metadata.Subclass` for CEX/DEX/FX diversity (L2.6
   follow-up)**: closes the gap noted in #259 — the existing `Class`
   enum lumps CEX + DEX both under `ClassExchange`, which under-

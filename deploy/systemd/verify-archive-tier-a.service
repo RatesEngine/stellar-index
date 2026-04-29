@@ -1,0 +1,78 @@
+# systemd unit: nightly verify-archive Tier A run.
+#
+# Per docs/operations/archival-node-bringup.md §"Per-region trust +
+# verification model". Runs once per timer tick; the cadence lives
+# in verify-archive-tier-a.timer.
+#
+# Operator wiring:
+#
+#   sudo cp deploy/systemd/verify-archive-tier-a.{service,timer} /etc/systemd/system/
+#   sudo cp /etc/default/ratesengine-ops.example /etc/default/ratesengine-ops  # if not yet present
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable --now verify-archive-tier-a.timer
+#
+# Configuration via /etc/default/ratesengine-ops:
+#   AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY  Read creds for the
+#                                              galexie-archive S3 bucket.
+#   VERIFY_ARCHIVE_FROM                         Default 2 (genesis).
+#   VERIFY_ARCHIVE_WORKERS                      Default 8 (parallel chunks).
+#   VERIFY_ARCHIVE_MAX_RUNTIME                  Default 8h cap.
+#
+# Run health is observable via systemd unit state — node_exporter's
+# `--collector.systemd` exports the unit's success/failure as
+# `node_systemd_unit_state{name="verify-archive-tier-a.service",state="failed"}`.
+# Alert rule is in `deploy/monitoring/rules/verify-archive.yml`.
+#
+# This timer is intended to run on R1 only — the integrity leader
+# per ADR-0016. R2/R3 trust R1 for chain integrity and run their own
+# Tier A on a slower (weekly) cadence; that lives in a separate
+# verify-archive-tier-a-weekly.{timer,service} when those regions'
+# ansible role ships.
+
+[Unit]
+Description=Rates Engine — verify-archive Tier A (nightly chain-link integrity)
+Documentation=https://github.com/RatesEngine/rates-engine/blob/main/docs/operations/archival-node-bringup.md
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+EnvironmentFile=-/etc/default/ratesengine-ops
+
+# Sensible defaults. Operators override via /etc/default/ratesengine-ops.
+Environment=VERIFY_ARCHIVE_FROM=2
+Environment=VERIFY_ARCHIVE_WORKERS=8
+Environment=VERIFY_ARCHIVE_MAX_RUNTIME=8h
+
+# -to is omitted intentionally — verify-archive resolves the head
+# ledger from the manifest at start time, so we always verify up to
+# whatever the archive contained at run-launch. -tier=chain limits
+# the run to chain-link integrity (Tier A); B/D/E run on a weekly
+# timer (separate service file).
+ExecStart=/usr/local/bin/ratesengine-ops verify-archive \
+  -config /etc/ratesengine.toml \
+  -from ${VERIFY_ARCHIVE_FROM} \
+  -tier chain \
+  -workers ${VERIFY_ARCHIVE_WORKERS} \
+  -max-runtime ${VERIFY_ARCHIVE_MAX_RUNTIME}
+
+User=root
+
+# Hardening. The binary reads /etc/ratesengine.toml; it doesn't
+# need write access to the filesystem (logs go to journald).
+ProtectSystem=full
+PrivateTmp=true
+NoNewPrivileges=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+
+# Hard cap matching the documented MAX_RUNTIME. Even on the slowest
+# parallel-chunk pass (the original 24h serial cap predates the
+# -workers flag), the 8-worker run finishes a full archive verify
+# in ~6h. 8h gives headroom for a slow run without wedging the
+# timer indefinitely.
+TimeoutStartSec=8h
+
+[Install]
+WantedBy=multi-user.target
