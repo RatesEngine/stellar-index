@@ -17,6 +17,17 @@ against.
 
 ### Added
 
+- **`/v1/price/stream` SSE endpoint (L3.9)**: closed-bucket SSE
+  surface per ADR-0015 + ADR-0018. Hub-driven (unlike the per-tick
+  tip/observations streams) — the aggregator publishes one event per
+  closed bucket on the topic `closed:<asset>/<quote>`, and every
+  subscriber on the same pair receives byte-identical payloads.
+  Returns 503 until the deployment wires a `streaming.Hub` into
+  `v1.Options.Hub`; the API handler + topic helper ship now so
+  consumers can integrate against the wire contract before the
+  aggregator's publish path lands. URL discipline: `?granularity=`
+  returns 400 (closed-bucket stream is fixed at 1m).
+
 - **`/v1/observations/stream` SSE endpoint (L3.8)**: streaming
   counterpart to `/v1/observations` per ADR-0018. Same compute,
   pushed on a per-connection tick. Cadence knob is `interval_seconds`

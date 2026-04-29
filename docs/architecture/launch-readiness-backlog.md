@@ -42,7 +42,7 @@ Within each surface, ordered by dependency.
 
 | ID | Item | Phase | Effort | Depends on | Blocks | Owner | Status |
 |---|---|---|---|---|---|---|---|
-| L1.1 | CEX connectors: Binance, Coinbase, Kraken, Bitstamp | Wk 4 | ~5 days | — | L4.1 | `internal/sources/external/<venue>` | 🔴 |
+| L1.1 | CEX connectors: Binance, Coinbase, Kraken, Bitstamp | Wk 4 | ~5 days | — | L4.1 | `internal/sources/external/<venue>` | 🟢 |
 | L1.2 | Chainlink HTTP cross-check connector | Wk 4 | half-day | — | L4.4 | `internal/divergence/chainlink` | 🔴 |
 | L1.3 | Asset enumeration / discovery (auto-detect new SEP-41 tokens) — Sniffer + Recorder + `discovered_assets` table; dispatcher integration deferred to follow-up PR | Wk 4 | full day | — | L4.1 | `internal/canonical/discovery`, `internal/storage/timescale/discovery.go` | 🟢 |
 
@@ -75,8 +75,8 @@ Within each surface, ordered by dependency.
 | L3.6 | SSE streaming infrastructure — heartbeats, Last-Event-ID, multi-pair subscription | Wk 7 | half-day | — | L3.7, L3.8, L3.9, L3.10 | `internal/api/streaming` | 🟢 |
 | L3.7 | `/v1/price/tip/stream` SSE | Wk 7 | half-day | L3.2, L3.6 | — | same | 🟢 |
 | L3.8 | `/v1/observations/stream` SSE | Wk 7 | half-day | L3.3, L3.6 | — | same | 🟢 |
-| L3.9 | `/v1/price/stream` SSE (closed-bucket events) | Wk 7 | half-day | L3.1, L3.6 | — | same | 🟡 |
-| L3.10 | `pkg/client/` Go SDK skeleton | Wk 7 | half-day | — | — | `pkg/client` | 🟡 |
+| L3.9 | `/v1/price/stream` SSE (closed-bucket events) — handler + Hub wiring shipped; aggregator-side Publish lands with L3.1 | Wk 7 | half-day | L3.1, L3.6 | — | same | 🟢 |
+| L3.10 | `pkg/client/` Go SDK skeleton (#201) | Wk 7 | half-day | — | — | `pkg/client` | 🟢 |
 | L3.11 | Generated API reference via Redocly + GitHub Pages workflow + CI drift guard | Wk 7 | half-day | — | — | `scripts/dev/docs-api.sh`, `.github/workflows/api-docs.yml` | 🟢 |
 | L3.12 | SEP-10 protocol implementation (Web Auth) — Validator (Challenge / Verify / VerifyJWT) shipped; HTTP handler wire-up + main.go config-loader follow in a separate PR | Wk 7 | full day | — | — | `internal/auth/sep10/` | 🟢 |
 | L3.13 | Envelope flag retrofit (`flags.frozen`, `flags.single_source`) — handler-side wired via `FrozenLooker`; aggregator populates the marker when L2.7 ships | Wk 7 | half-day | L2.7 | — | `internal/api/v1/{envelope,price,server}.go` | 🟢 |
@@ -93,10 +93,10 @@ Within each surface, ordered by dependency.
 | L4.3 | HAProxy + keepalived ansible role | Wk 8 | half-day | L4.1, L4.2 | launch | `roles/haproxy-keepalived` | 🔴 |
 | L4.4 | Prometheus + Grafana + Alertmanager ansible role | Wk 8 | full day | — | launch | `roles/observability` | 🔴 |
 | L4.5 | Loki log aggregation ansible role | Wk 8 | half-day | L4.4 | — | `roles/loki` | 🔴 |
-| L4.6 | Archive-completeness daemon (PR A: `check`) | Wk 8 | half-day | — | L4.7 | `cmd/ratesengine-ops archive-completeness check` | 🟡 |
-| L4.7 | Archive-completeness daemon (PR B: `fix` with multi-source fallback) | Wk 8 | half-day | L4.6 | L4.8 | `cmd/ratesengine-ops archive-completeness fix` | 🟡 |
-| L4.8 | Archive-completeness daemon (PR C: `verify` mode + systemd timer + Prometheus alerts) | Wk 8 | half-day | L4.7 | L4.9 | systemd + alert rules | 🟡 |
-| L4.9 | Verify-archive `-fail-on-missed` flag (post-bootstrap hardening) | Wk 8 | half-day | L4.8 | launch | `cmd/ratesengine-ops/main.go` | 🟡 |
+| L4.6 | Archive-completeness daemon (PR A: `check`) (#200) | Wk 8 | half-day | — | L4.7 | `cmd/ratesengine-ops archive-completeness check` | 🟢 |
+| L4.7 | Archive-completeness daemon (PR B: `fix` with multi-source fallback) (#202) | Wk 8 | half-day | L4.6 | L4.8 | `cmd/ratesengine-ops archive-completeness fix` | 🟢 |
+| L4.8 | Archive-completeness daemon (PR C: `verify` mode + systemd timer + Prometheus alerts) (#203) | Wk 8 | half-day | L4.7 | L4.9 | systemd + alert rules | 🟢 |
+| L4.9 | Verify-archive `-fail-on-missed` flag (post-bootstrap hardening) | Wk 8 | half-day | L4.8 | launch | `cmd/ratesengine-ops/main.go` | 🟢 |
 | L4.10 | Per-region asymmetric trust model wiring (R1 leader, R2/R3 delegate) | Wk 8 | full day | L4.4 | launch | metrics federation + envelope flag | 🟡 |
 | L4.11 | Public status page at `status.ratesengine.net` (Statuspage / cstate / equivalent) | Wk 9 | half-day | L4.4 | launch | infra config + status worker | 🟡 |
 

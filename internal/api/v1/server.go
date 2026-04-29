@@ -8,6 +8,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/RatesEngine/rates-engine/internal/api/streaming"
 	"github.com/RatesEngine/rates-engine/internal/api/v1/middleware"
 	"github.com/RatesEngine/rates-engine/internal/auth"
 	"github.com/RatesEngine/rates-engine/internal/obs"
@@ -54,6 +55,7 @@ type Server struct {
 	cors       middleware.Middleware
 	auth       middleware.Middleware
 	rateLimit  middleware.Middleware
+	hub        *streaming.Hub
 	mux        *http.ServeMux
 	started    time.Time
 }
@@ -154,6 +156,16 @@ type Options struct {
 	// Typically constructed via middleware.RateLimit(...) with a
 	// ratelimit.Bucket built against the shared Redis client.
 	RateLimit middleware.Middleware
+
+	// Hub, when non-nil, backs the closed-bucket SSE endpoint
+	// (`/v1/price/stream`). Producers (typically the aggregator's
+	// per-window-close pass) call Hub.Publish(); subscribers attach
+	// via [streaming.Stream] inside the handler.
+	//
+	// Leave nil to make `/v1/price/stream` return 503 — the rest
+	// of the v1 API serves cleanly. The tip + observations stream
+	// endpoints do NOT use this Hub; they are per-connection-tick.
+	Hub *streaming.Hub
 }
 
 // New constructs a Server and mounts all v1 routes.
@@ -179,6 +191,7 @@ func New(opts Options) *Server {
 		cors:       opts.CORS,
 		auth:       opts.Auth,
 		rateLimit:  opts.RateLimit,
+		hub:        opts.Hub,
 		mux:        http.NewServeMux(),
 		started:    time.Now().UTC(),
 	}
@@ -277,6 +290,11 @@ func (s *Server) mountRoutes() {
 	// SSE counterpart of /v1/observations — same compute, pushed on
 	// a per-connection tick. interval_seconds tunes cadence.
 	s.mux.HandleFunc("GET /v1/observations/stream", s.handleObservationsStream)
+
+	// Closed-bucket SSE — fed by the aggregator publishing into the
+	// shared Hub on each window close. Carries the strict ADR-0015
+	// closed-bucket consistency contract that /v1/price serves.
+	s.mux.HandleFunc("GET /v1/price/stream", s.handlePriceStream)
 
 	// Batch price lookup, up to 100 assets per request.
 	s.mux.HandleFunc("GET /v1/price/batch", s.handlePriceBatch)

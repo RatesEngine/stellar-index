@@ -447,16 +447,41 @@ paths:
   /price/stream:
     get:
       tags: [price]
-      summary: SSE stream of price updates.
+      summary: SSE stream of closed-bucket price updates (ADR-0015).
+      description: |
+        SSE counterpart of `/v1/price` — carries the strict ADR-0015
+        closed-bucket consistency contract. Unlike `/v1/price/tip/stream`
+        and `/v1/observations/stream` (per-connection tick), this
+        surface is **Hub-driven**: the aggregator publishes one event
+        per closed bucket, and every subscriber on the same
+        (asset, quote) pair receives byte-identical payloads — the
+        same cross-region consistency guarantee `/v1/price` exposes.
+
+        - Heartbeats every 15 s as comment lines.
+        - Resume after disconnect via `Last-Event-ID` (header preferred,
+          `?last_event_id=` fallback).
+        - URL discipline: `?granularity=` returns 400 — the closed-
+          bucket stream is fixed at 1m; use
+          `/v1/history/since-inception` for other granularities.
+        - 503 when the deployment hasn't wired the streaming Hub
+          (typical pre-aggregator state).
       parameters:
         - { $ref: "#/components/parameters/AssetQuery" }
         - { $ref: "#/components/parameters/Quote" }
+        - name: Last-Event-ID
+          in: header
+          required: false
+          schema: { type: string }
+          description: Opaque ID for resuming a previously-broken stream.
       responses:
         "200":
-          description: SSE stream (`text/event-stream`).
+          description: SSE stream of price_update events.
           content:
             text/event-stream:
               schema: { type: string }
+        "400":        { $ref: "#/components/responses/BadRequest" }
+        "429":        { $ref: "#/components/responses/RateLimited" }
+        "503":        { $ref: "#/components/responses/ServiceUnavailable" }
 
   /history:
     get:
