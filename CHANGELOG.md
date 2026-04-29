@@ -873,6 +873,17 @@ against.
   per-LCM scan picks `LedgerEntryChange` of type Created or
   Updated. Also adds the v2-audit template doc.
 
+- **systemd units for `ratesengine-{indexer,aggregator,api}` (L4.13)**:
+  long-running `Type=simple` service files for the three runtime
+  binaries. Hardened (`ProtectSystem=full`, `PrivateTmp`, etc.),
+  restart-on-failure with backoff, after-graph respects the
+  postgres + redis + indexer dependency chain. Doesn't include
+  Postgres/Redis/binary deploy — that's still operator-side. The
+  bringup doc already forward-referenced these by name; this PR
+  ships the actual files. Slot under `deploy/systemd/` alongside
+  the L4.12 verify-archive timer + the existing
+  `archive-completeness.{timer,service}`.
+
 - **verify-archive systemd timer (L4.12)**: nightly Tier A
   chain-link integrity check on R1 per the ADR-0016 per-region
   trust model + the `archival-node-bringup.md` schedule

@@ -1,0 +1,75 @@
+# systemd unit: ratesengine-api (public REST + SSE server).
+#
+# Long-running daemon. Serves /v1/* endpoints by reading the
+# aggregator's Redis cache + Timescale fallback. The L3.* surface
+# work shipped earlier in Wk 7.
+#
+# Operator wiring (after aggregator is running):
+#
+#   sudo cp deploy/systemd/ratesengine-api.service /etc/systemd/system/
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable --now ratesengine-api.service
+#
+# Configuration:
+#   /etc/ratesengine.toml — [api] section + [api.sep10] when auth
+#                            is wired
+#   /etc/default/ratesengine-ops — RATESENGINE_SEP10_SEED + JWT
+#                                  secret env vars when SEP-10 is
+#                                  configured
+#
+# Dependencies (must be running BEFORE the api starts):
+#   - postgresql.service — fallback path when Redis is empty
+#   - redis-server.service — primary read path for VWAP +
+#     confidence
+#
+# Notes:
+#   - The api binary listens on cfg.API.ListenAddr (default
+#     0.0.0.0:3000). Behind a reverse proxy in production; the L4.3
+#     HAProxy role handles TLS termination + per-key rate-limit
+#     forwarding.
+#   - `Type=simple` rather than `Type=notify` because the binary
+#     doesn't currently emit `sd_notify(READY=1)`. A follow-up
+#     could add that for tighter readiness signalling; for now
+#     the /v1/readyz endpoint is the readiness probe.
+
+[Unit]
+Description=Rates Engine — public API (REST + SSE)
+Documentation=https://github.com/RatesEngine/rates-engine/blob/main/docs/reference/api/index.html
+After=network-online.target postgresql.service redis-server.service
+Wants=network-online.target
+Requires=postgresql.service redis-server.service
+
+[Service]
+Type=simple
+User=ratesengine
+Group=ratesengine
+WorkingDirectory=/var/lib/ratesengine
+EnvironmentFile=-/etc/default/ratesengine-ops
+
+ExecStart=/usr/local/bin/ratesengine-api -config /etc/ratesengine.toml
+ExecStop=/bin/kill -TERM $MAINPID
+
+LimitNOFILE=1048576
+LimitNPROC=1048576
+
+# API restart policy is the strictest of the three — if it crashes
+# end users see 502s until restart. Keep the cooldown short.
+Restart=on-failure
+RestartSec=5s
+StartLimitInterval=5min
+StartLimitBurst=10
+
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+ReadWritePaths=/var/lib/ratesengine
+
+# Bind to a privileged port (80/443) only via reverse proxy. For
+# direct binding on 3000 (the default) no AmbientCapabilities are
+# needed.
+
+[Install]
+WantedBy=multi-user.target

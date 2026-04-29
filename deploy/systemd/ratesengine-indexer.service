@@ -1,0 +1,75 @@
+# systemd unit: ratesengine-indexer (Galexie → dispatcher → decoder
+# pipeline that produces canonical.Trade rows in TimescaleDB).
+#
+# Long-running daemon. Reads ledger meta from MinIO via the
+# go-stellar-sdk's ApplyLedgerMetadata path, dispatches each event
+# to its decoder per `internal/dispatcher/`, and inserts the
+# resulting canonical.Trade rows. See
+# `docs/architecture/ingest-pipeline.md` for the full picture.
+#
+# Operator wiring:
+#
+#   sudo cp deploy/systemd/ratesengine-indexer.service /etc/systemd/system/
+#   sudo cp /etc/default/ratesengine-ops.example /etc/default/ratesengine-ops  # AWS creds
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable --now ratesengine-indexer.service
+#
+# Configuration:
+#   /etc/ratesengine.toml — global config (region, sources, storage)
+#   /etc/default/ratesengine-ops — AWS_ACCESS_KEY_ID + secret for MinIO read
+#
+# Dependencies (must be running BEFORE the indexer starts):
+#   - minio.service (the source of ledger meta)
+#   - postgresql.service (the trade-row destination)
+#   - The `ratesengine` DB must exist + be migrated
+#     (`ratesengine-migrate up`)
+#
+# Restart policy: on-failure with a 10s delay. A panic during a
+# decoder bug should bring the binary back so a single bad ledger
+# doesn't wedge the pipeline indefinitely; an actually-broken
+# config (DB unreachable) loops and is observable via systemd
+# state + the `ratesengine_indexer_health` Prometheus metric.
+
+[Unit]
+Description=Rates Engine — indexer (decoder pipeline → canonical trades)
+Documentation=https://github.com/RatesEngine/rates-engine/blob/main/docs/architecture/ingest-pipeline.md
+After=network-online.target minio.service postgresql.service redis-server.service
+Wants=network-online.target
+Requires=postgresql.service
+
+[Service]
+Type=simple
+User=ratesengine
+Group=ratesengine
+WorkingDirectory=/var/lib/ratesengine
+EnvironmentFile=-/etc/default/ratesengine-ops
+
+ExecStart=/usr/local/bin/ratesengine-indexer -config /etc/ratesengine.toml
+ExecStop=/bin/kill -TERM $MAINPID
+
+# File-descriptor limits matter — each enabled source can hold
+# several network connections + DB pool + MinIO read sockets.
+LimitNOFILE=1048576
+LimitNPROC=1048576
+
+# Restart on crash but with backoff to avoid hot-looping on a
+# config-side break (e.g. DB unreachable). systemd marks the unit
+# `failed` after StartLimitBurst restarts in StartLimitInterval —
+# Prometheus alerts pick that up via node_systemd_unit_state.
+Restart=on-failure
+RestartSec=10s
+StartLimitInterval=5min
+StartLimitBurst=10
+
+# Hardening — read-only most of the filesystem, write only to
+# the working dir + the cache dir if any.
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+ReadWritePaths=/var/lib/ratesengine
+
+[Install]
+WantedBy=multi-user.target
