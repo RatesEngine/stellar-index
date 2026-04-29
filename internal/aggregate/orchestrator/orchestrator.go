@@ -64,8 +64,14 @@ type Store interface {
 
 // Cache is the subset of redis.UniversalClient we need. Declared
 // as an interface for test-time replacement.
+//
+// Get is used by the triangulation worker to read freshly-written
+// leg VWAPs. Returns redis.Nil for absent keys (a leg's refresh
+// produced an empty window); the triangulation pass treats absence
+// as "skip this chain this tick" rather than fail.
 type Cache interface {
 	Set(ctx context.Context, key string, value any, expiration time.Duration) *redis.StatusCmd
+	Get(ctx context.Context, key string) *redis.StringCmd
 }
 
 // FreezeMarker is the side-effect interface the orchestrator uses
@@ -164,6 +170,20 @@ type Config struct {
 	// deployments where threshold tuning hasn't happened yet;
 	// production deployments wire this at the binary boundary.
 	Anomaly *anomaly.Checker
+
+	// Triangulations is the operator-configured set of chain pricing
+	// entries. After the per-(pair, window) refresh loop runs in
+	// each Tick, the orchestrator iterates each chain, reads each
+	// leg's freshly-cached VWAP, multiplies via
+	// aggregate.TriangulateChain, and writes the implied target
+	// VWAP to its own cache key. Empty (default) = no triangulation.
+	//
+	// Cardinality: each chain contributes len(Windows) cache keys
+	// per tick. Operators tune the chain set explicitly — eager
+	// triangulation across every fiat × stablecoin combinatorial
+	// would blow out cardinality and bandwidth without proportional
+	// downstream value.
+	Triangulations []TriangulationChain
 
 	// FreezeWriter, when non-nil and Anomaly is also non-nil, writes
 	// a freeze marker to Redis when Anomaly returns ActionFreeze.
@@ -335,6 +355,12 @@ func (o *Orchestrator) Tick(ctx context.Context) error {
 			}
 		}
 	}
+
+	// Triangulation pass — runs AFTER the per-pair refresh so each
+	// chain's legs read from the freshly-cached VWAPs. Per-chain
+	// failures are logged + counted but never abort the tick.
+	o.triangulateAll(ctx)
+
 	outcome := "ok"
 	if tickHadError {
 		outcome = "error"

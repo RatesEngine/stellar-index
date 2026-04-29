@@ -53,6 +53,7 @@ func init() {
 		SupplyCrossCheckTotal,
 
 		AnomalyFreezeEngagedTotal,
+		AggregatorTriangulationsTotal,
 
 		VerifyArchiveLedgersVerified,
 		VerifyArchiveCurrentLedger,
@@ -390,6 +391,20 @@ var AnomalyFreezeEngagedTotal = prometheus.NewCounterVec(
 		Help: "ActionFreeze decisions emitted by the aggregator anomaly checker, labelled by asset class.",
 	},
 	[]string{"class"},
+)
+
+// AggregatorTriangulationsTotal — counter of triangulation
+// computations per outcome. The aggregator runs one row per
+// (chain, window) per tick; steady state is mostly `ok` with
+// periodic `missing_leg` entries when a leg's window was empty
+// this tick. Sustained `parse_error` or `redis_error` rates >
+// baseline indicate upstream regression worth investigating.
+var AggregatorTriangulationsTotal = prometheus.NewCounterVec(
+	prometheus.CounterOpts{
+		Name: "ratesengine_aggregator_triangulations_total",
+		Help: "Aggregator triangulation outcomes per tick × chain × window. Outcome ∈ {ok, missing_leg, parse_error, redis_error}.",
+	},
+	[]string{"outcome"},
 )
 
 // VerifyArchiveLedgersVerified — counter of ledgers successfully

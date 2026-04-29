@@ -400,6 +400,47 @@ func (a AggregateConfig) AggregatorWindows() ([]time.Duration, error) {
 	return out, nil
 }
 
+// ResolvedTriangulationChain is the parsed representation of a
+// TriangulationChainConfig — all pair strings resolved to
+// canonical.Pair. Returned by [AggregatorTriangulations]; callers
+// pass the slice straight into orchestrator.Config.Triangulations
+// after type-converting each row.
+type ResolvedTriangulationChain struct {
+	Target canonical.Pair
+	Legs   []canonical.Pair
+}
+
+// AggregatorTriangulations resolves the operator-supplied
+// TriangulationChainConfig rows into ResolvedTriangulationChain
+// instances. Returns nil when no chains are configured.
+//
+// Each row's Target + Legs are parsed via parsePairString. The
+// per-chain structural validation (legs chainable, endpoints match
+// target) lives in orchestrator.ValidateTriangulationChain — this
+// helper only does the parse step.
+func (a AggregateConfig) AggregatorTriangulations() ([]ResolvedTriangulationChain, error) {
+	if len(a.Triangulations) == 0 {
+		return nil, nil
+	}
+	out := make([]ResolvedTriangulationChain, 0, len(a.Triangulations))
+	for i, row := range a.Triangulations {
+		target, err := parsePairString(row.Target)
+		if err != nil {
+			return nil, fmt.Errorf("aggregate.triangulations[%d].target %q: %w", i, row.Target, err)
+		}
+		legs := make([]canonical.Pair, 0, len(row.Legs))
+		for j, raw := range row.Legs {
+			p, err := parsePairString(raw)
+			if err != nil {
+				return nil, fmt.Errorf("aggregate.triangulations[%d].legs[%d] %q: %w", i, j, raw, err)
+			}
+			legs = append(legs, p)
+		}
+		out = append(out, ResolvedTriangulationChain{Target: target, Legs: legs})
+	}
+	return out, nil
+}
+
 func (a APIConfig) validate() error {
 	if a.ListenAddr == "" {
 		return fmt.Errorf("%w: api.listen_addr required", ErrInvalidConfig)
