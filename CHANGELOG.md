@@ -17,6 +17,21 @@ against.
 
 ### Added
 
+- **`internal/aggregate/baseline/` MAD math (L2.5 slice)**:
+  pure-Go primitives implementing the per-asset volatility baseline
+  per [ADR-0019](docs/adr/0019-anomaly-response-and-confidence-scoring.md)
+  Phase 2. `Median`, `MAD` (1.4826-scaled to σ-equivalent), `Baseline`
+  struct with `ZScore` method (handles zero-MAD edge case: exact-match
+  returns 0, any deviation returns +Inf), and `ReturnsFromVWAPs`
+  helper for bucket-to-bucket percent-change conversion. Skips
+  buckets with `prev == 0` to avoid Inf-poisoning downstream stats.
+  17 tests cover odd/even median, MAD outlier-robustness vs σ,
+  z-score symmetry, zero-MAD edge cases, and a stablecoin-class
+  end-to-end roundtrip. The `volatility_baseline_1m` CAGG migration
+  and the orchestrator wiring (the two larger pieces of L2.5) ship
+  in follow-up PRs — this slice is the math primitive everything
+  else builds on.
+
 - **`/v1/price/stream` SSE endpoint (L3.9)**: closed-bucket SSE
   surface per ADR-0015 + ADR-0018. Hub-driven (unlike the per-tick
   tip/observations streams) — the aggregator publishes one event per
