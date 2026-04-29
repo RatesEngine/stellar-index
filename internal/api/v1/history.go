@@ -53,6 +53,21 @@ type HistoryReader interface {
 	// limit clamps the row count; 0 = unbounded. Empty slice + nil
 	// error when the pair has no closed buckets yet.
 	HistoryPoints(ctx context.Context, pair canonical.Pair, granularity string, limit int) ([]HistoryPoint, error)
+
+	// LatestTradePerSource returns the most-recent trade FROM EACH
+	// source that has ever recorded a trade on `pair`. Empty slice +
+	// nil error when the pair has no trades at all.
+	//
+	// Optional sourceFilter ("" = no filter) restricts the result to
+	// a single source — equivalent to "latest trade for the pair on
+	// venue X", returning a 0- or 1-element slice. The filter is
+	// applied at the SQL layer so a per-source query is cheap.
+	//
+	// This is the storage-side primitive for the ADR-0018 Surface 3
+	// `/v1/observations` endpoint. Production impl is a DISTINCT ON
+	// (source) scan covered by the (base_asset, quote_asset, source,
+	// ts DESC) index — cost is ~O(num_sources) rather than O(rows_in_pair).
+	LatestTradePerSource(ctx context.Context, pair canonical.Pair, sourceFilter string) ([]canonical.Trade, error)
 }
 
 // HistoryPoint is one (timestamp, price, optional usd-volume) row

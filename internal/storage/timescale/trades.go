@@ -108,6 +108,72 @@ func (s *Store) LatestTradesForPair(ctx context.Context, p canonical.Pair, limit
 	return out, nil
 }
 
+// LatestTradePerSource returns the most-recent trade from each source
+// that has ever traded `pair`. Empty slice + nil error when the pair
+// has no trades.
+//
+// sourceFilter "" returns all sources; a non-empty value restricts to
+// that single source (0- or 1-element slice). Filtering at the SQL
+// layer means a single-source query is just an index point lookup.
+//
+// Implementation: DISTINCT ON (source) ordered by ts DESC, ledger DESC
+// — cheap when covered by an index on (base_asset, quote_asset,
+// source, ts DESC). The cost is ~O(num_sources) per pair rather than
+// O(rows_in_pair).
+func (s *Store) LatestTradePerSource(ctx context.Context, p canonical.Pair, sourceFilter string) ([]canonical.Trade, error) {
+	const q = `
+        SELECT DISTINCT ON (source)
+               source, ledger, tx_hash, op_index, ts,
+               base_asset, quote_asset,
+               base_amount, quote_amount,
+               COALESCE(maker, ''), COALESCE(taker, '')
+          FROM trades
+         WHERE base_asset  = $1
+           AND quote_asset = $2
+           AND ($3 = '' OR source = $3)
+         ORDER BY source, ts DESC, ledger DESC
+    `
+	rows, err := s.db.QueryContext(ctx, q,
+		p.Base.String(), p.Quote.String(), sourceFilter,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("timescale: LatestTradePerSource: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+
+	var out []canonical.Trade
+	for rows.Next() {
+		var t canonical.Trade
+		var baseAsset, quoteAsset string
+		if err := rows.Scan(
+			&t.Source, &t.Ledger, &t.TxHash, &t.OpIndex, &t.Timestamp,
+			&baseAsset, &quoteAsset,
+			&t.BaseAmount, &t.QuoteAmount,
+			&t.Maker, &t.Taker,
+		); err != nil {
+			return nil, fmt.Errorf("timescale: LatestTradePerSource scan: %w", err)
+		}
+		base, err := canonical.ParseAsset(baseAsset)
+		if err != nil {
+			return nil, fmt.Errorf("timescale: LatestTradePerSource base %q: %w", baseAsset, err)
+		}
+		quote, err := canonical.ParseAsset(quoteAsset)
+		if err != nil {
+			return nil, fmt.Errorf("timescale: LatestTradePerSource quote %q: %w", quoteAsset, err)
+		}
+		pair, err := canonical.NewPair(base, quote)
+		if err != nil {
+			return nil, fmt.Errorf("timescale: LatestTradePerSource pair: %w", err)
+		}
+		t.Pair = pair
+		out = append(out, t)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("timescale: LatestTradePerSource rows: %w", err)
+	}
+	return out, nil
+}
+
 // TradesInRange returns trades for the given pair whose close-time
 // falls in [from, to). Ordered by (ts ASC, ledger ASC) — chronological,
 // which is what OHLC / VWAP callers want.

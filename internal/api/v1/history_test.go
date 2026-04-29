@@ -16,9 +16,13 @@ import (
 
 // stubHistoryReader implements v1.HistoryReader with a static slice.
 type stubHistoryReader struct {
-	trades   []canonical.Trade
-	points   []v1.HistoryPoint
-	lastCall struct {
+	trades []canonical.Trade
+	// observations is the per-source fixture returned by
+	// LatestTradePerSource. Distinct from `trades` so observations
+	// tests don't have to share state with TradesInRange tests.
+	observations []canonical.Trade
+	points       []v1.HistoryPoint
+	lastCall     struct {
 		from, to     time.Time
 		limit        int
 		afterTs      time.Time
@@ -27,6 +31,7 @@ type stubHistoryReader struct {
 		afterSource  string
 		afterOpIndex uint32
 		granularity  string
+		sourceFilter string
 	}
 	// pointsErr is set by tests that want to drive the
 	// since-inception handler to a specific error code (e.g.
@@ -71,6 +76,27 @@ func (r *stubHistoryReader) HistoryPoints(_ context.Context, _ canonical.Pair, g
 		return nil, r.pointsErr
 	}
 	return r.points, nil
+}
+
+// LatestTradePerSource stub: returns r.observations (per-source
+// fixture distinct from the full r.trades slice) so observations
+// tests can drive the handler without polluting other history-test
+// fixtures. Honors sourceFilter — restricts to the matching entry.
+func (r *stubHistoryReader) LatestTradePerSource(_ context.Context, _ canonical.Pair, sourceFilter string) ([]canonical.Trade, error) {
+	r.lastCall.sourceFilter = sourceFilter
+	if r.err != nil {
+		return nil, r.err
+	}
+	if sourceFilter == "" {
+		return r.observations, nil
+	}
+	out := make([]canonical.Trade, 0, 1)
+	for _, t := range r.observations {
+		if t.Source == sourceFilter {
+			out = append(out, t)
+		}
+	}
+	return out, nil
 }
 
 func mkHistTrade(price int64) canonical.Trade {

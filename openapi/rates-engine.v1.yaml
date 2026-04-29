@@ -279,6 +279,62 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/PriceBatchEnvelope" }
 
+  /observations:
+    get:
+      tags: [price]
+      summary: Raw per-source observations (ADR-0018 Surface 3).
+      description: |
+        Lowest-level surface per ADR-0018: returns the most-recent
+        trade from each source that has ever traded the (asset, quote)
+        pair. No aggregation, no chaining, no smoothing — purely
+        "what each venue last published".
+
+        - `?source=X` narrows to a single source (0- or 1-element array).
+        - `?aggregate=latest` collapses to the single newest trade across
+          sources (preserves the array wire shape; length 1).
+        - `flags.stale` is **always** `false` here — there is no
+          aggregation contract to fall short of.
+        - Cross-region consistency is **NOT** provable on this surface;
+          use `/v1/price` for the closed-bucket guarantee.
+        - Empty pair returns 200 with `data: []`, not 404.
+
+        URL discipline: `?granularity=` and `?window_seconds=` return 400
+        — those are closed-bucket and tip concepts respectively.
+      parameters:
+        - { $ref: "#/components/parameters/AssetQuery" }
+        - { $ref: "#/components/parameters/Quote" }
+        - name: source
+          in: query
+          required: false
+          schema: { type: string }
+          description: Restrict to one source's most-recent trade (0/1 row).
+        - name: aggregate
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [latest]
+          description: |
+            `latest` collapses to the single most-recent trade across
+            all sources. Omit for one row per source.
+      responses:
+        "200":
+          description: Per-source observations array.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - { $ref: "#/components/schemas/EnvelopeMeta" }
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items: { $ref: "#/components/schemas/TradeRow" }
+                    required: [data]
+        "400":        { $ref: "#/components/responses/BadRequest" }
+        "500":        { $ref: "#/components/responses/InternalError" }
+        "503":        { $ref: "#/components/responses/ServiceUnavailable" }
+
   /price/stream:
     get:
       tags: [price]

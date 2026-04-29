@@ -513,6 +513,13 @@ func (r storeHistoryReader) TradesInRangeAfter(ctx context.Context, pair canonic
 	return r.s.TradesInRangeAfter(ctx, pair, from, to, afterTs, afterLedger, afterTxHash, afterSource, afterOpIndex, limit)
 }
 
+// LatestTradePerSource adapts [timescale.Store.LatestTradePerSource]
+// to the v1.HistoryReader interface. Pure passthrough: the store
+// already does the DISTINCT ON (source) work in SQL.
+func (r storeHistoryReader) LatestTradePerSource(ctx context.Context, pair canonical.Pair, sourceFilter string) ([]canonical.Trade, error) {
+	return r.s.LatestTradePerSource(ctx, pair, sourceFilter)
+}
+
 // HistoryPoints adapts [timescale.Store.HistoryPoints] to the
 // v1.HistoryReader interface. Translates the storage-side
 // timescale.HistoryGranularity string-typed enum back to plain
