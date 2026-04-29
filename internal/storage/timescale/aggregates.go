@@ -240,6 +240,56 @@ func (s *Store) LatestClosedVWAP1mForPair(ctx context.Context, p canonical.Pair)
 	return row, nil
 }
 
+// VWAPsForPair1m returns chronologically-ordered (oldest-first) VWAP
+// values from prices_1m where bucket falls in [from, to). Used by
+// the baseline refresher to pull the 30-day training window for a
+// pair. Returns the bare float series (not the full Vwap1mRow) —
+// the caller's downstream consumer (`baseline.ReturnsFromVWAPs`)
+// only needs the prices, not the metadata.
+//
+// Empty slice + nil error when the pair has no closed buckets in
+// the window.
+//
+// VWAP is parsed from the NUMERIC column via the Postgres double-
+// precision cast — the baseline math runs in float64 anyway and
+// the small precision loss on a per-bucket VWAP doesn't matter for
+// statistical aggregates over hundreds of buckets.
+func (s *Store) VWAPsForPair1m(ctx context.Context, p canonical.Pair, from, to time.Time) ([]float64, error) {
+	if !to.After(from) {
+		return nil, fmt.Errorf("timescale: VWAPsForPair1m: to %v <= from %v", to, from)
+	}
+	const q = `
+        SELECT vwap::float8
+          FROM prices_1m
+         WHERE base_asset = $1
+           AND quote_asset = $2
+           AND bucket >= $3
+           AND bucket <  $4
+         ORDER BY bucket ASC
+    `
+	rows, err := s.db.QueryContext(ctx, q,
+		p.Base.String(), p.Quote.String(),
+		from.UTC(), to.UTC(),
+	)
+	if err != nil {
+		return nil, fmt.Errorf("timescale: VWAPsForPair1m: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+
+	out := make([]float64, 0, 256)
+	for rows.Next() {
+		var v float64
+		if err := rows.Scan(&v); err != nil {
+			return nil, fmt.Errorf("timescale: VWAPsForPair1m scan: %w", err)
+		}
+		out = append(out, v)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("timescale: VWAPsForPair1m rows: %w", err)
+	}
+	return out, nil
+}
+
 // stringArray is a [sql.Scanner] for Postgres TEXT[] / VARCHAR[]
 // columns scanning into a Go []string. Used by the `sources` column
 // in prices_1m.

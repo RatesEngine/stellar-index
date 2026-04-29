@@ -17,6 +17,21 @@ against.
 
 ### Added
 
+- **Baseline refresh worker (L2.5 slice)**: `baseline.Refresher`
+  reads bucket-aligned 1m VWAPs over a 30d window via the new
+  `Source.VWAPSource` interface, runs `ReturnsFromVWAPs` →
+  `FromReturns` to compute the baseline, and persists via the
+  `Sink` interface. Storage layer adds `Store.VWAPsForPair1m`.
+  `RefreshPair` returns a structured `RefreshOutcome` (ok,
+  not_enough_samples, read_error, write_error) so callers can
+  emit per-outcome metrics; `RefreshAll` runs across a pair list
+  with bounded concurrency, aggregates a `RefreshSummary`, and
+  honours ctx cancellation cleanly. The bootstrap branch is
+  not_enough_samples — caller skips the upsert and applies
+  ADR-0019 §"Bootstrap policy" instead. The aggregator binary's
+  wire-up (running this on an hourly ticker against the
+  configured pair list) lands in the next L2.5 slice.
+
 - **`volatility_baseline_1m` table + storage layer (L2.5 slice)**:
   per-pair baseline persistence per ADR-0019 Phase 2. Migration 0007
   adds the table — plain Postgres, NOT a CAGG (Median + MAD are only
