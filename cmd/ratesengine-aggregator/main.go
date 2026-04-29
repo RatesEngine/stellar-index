@@ -94,7 +94,7 @@ func main() {
 	}
 }
 
-//nolint:gocognit,funlen // top-level binary lifecycle — splitting reduces readability of dependency-construction order
+//nolint:gocognit,gocyclo,funlen // top-level binary lifecycle — splitting reduces readability of dependency-construction order
 func run(cfgPath string, dryRun bool) error {
 	cfg, err := config.LoadWithEnv(cfgPath)
 	if err != nil {
@@ -191,6 +191,15 @@ func run(cfgPath string, dryRun bool) error {
 		logger.Warn("anomaly enabled but no Redis — freeze markers won't be written; anomaly metric still emits")
 	}
 
+	// ─── Triangulation chains ───────────────────────────────────
+	triangulations, err := buildTriangulations(cfg.Aggregate)
+	if err != nil {
+		return fmt.Errorf("triangulations: %w", err)
+	}
+	if len(triangulations) > 0 {
+		logger.Info("triangulation chains: configured", "count", len(triangulations))
+	}
+
 	orch := orchestrator.New(store, rdb, orchestrator.Config{
 		Pairs:                     pairs,
 		Windows:                   windows, // nil → orchestrator.DefaultWindows
@@ -198,6 +207,7 @@ func run(cfgPath string, dryRun bool) error {
 		MaxTradesPerWindow:        cfg.Aggregate.MaxTradesPerWindow,
 		Anomaly:                   checker,
 		FreezeWriter:              freezeWriter,
+		Triangulations:            triangulations,
 		DisableClassFilter:        cfg.Aggregate.DisableClassFilter,
 		EnableStablecoinFiatProxy: cfg.Aggregate.EnableStablecoinFiatProxy,
 		OutlierSigmaThreshold:     cfg.Aggregate.OutlierSigmaThreshold,
@@ -300,4 +310,25 @@ func buildAnomalyChecker(cfg config.AnomalyConfig) (*anomaly.Checker, error) {
 	classifier := anomaly.NewClassifier(overrides)
 
 	return anomaly.NewChecker(thresholds, classifier)
+}
+
+// buildTriangulations resolves the operator-supplied triangulation
+// rows into orchestrator.TriangulationChain values, validating each
+// chain's structure (chainable legs, endpoints match target). An
+// invalid chain fails-loud at startup rather than silently emitting
+// missing-leg metrics in production.
+func buildTriangulations(cfg config.AggregateConfig) ([]orchestrator.TriangulationChain, error) {
+	resolved, err := cfg.AggregatorTriangulations()
+	if err != nil {
+		return nil, err
+	}
+	out := make([]orchestrator.TriangulationChain, 0, len(resolved))
+	for i, r := range resolved {
+		chain := orchestrator.TriangulationChain{Target: r.Target, Legs: r.Legs}
+		if err := orchestrator.ValidateTriangulationChain(chain); err != nil {
+			return nil, fmt.Errorf("aggregate.triangulations[%d]: %w", i, err)
+		}
+		out = append(out, chain)
+	}
+	return out, nil
 }

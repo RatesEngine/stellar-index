@@ -220,6 +220,19 @@ the gauge — a flat gauge with zero counter increments means the
 orchestrator stopped invoking the cross-check, not that everything's
 healthy.
 
+### `ratesengine_aggregator_triangulations_total`
+
+Counter, label `outcome` (`ok` / `missing_leg` / `parse_error` /
+`redis_error`).
+
+Triangulation outcomes per tick × chain × window. The aggregator
+runs one row per (chain, window) per tick after the per-pair
+refresh; steady state is mostly `ok` with periodic `missing_leg`
+entries when a leg's window was empty this tick. Sustained
+`parse_error` or `redis_error` rates above baseline indicate
+upstream regression worth investigating (Redis blip, malformed
+cached value).
+
 ### `ratesengine_anomaly_freeze_engaged_total`
 
 Counter, label `class` (`stablecoin` / `treasury` / `crypto` /
