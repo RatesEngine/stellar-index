@@ -1,6 +1,6 @@
 ---
 title: Launch readiness backlog
-last_verified: 2026-04-28
+last_verified: 2026-04-29
 status: living document
 ---
 
@@ -53,14 +53,14 @@ Within each surface, ordered by dependency.
 | L2.1 | VWAP/TWAP impl across venues + per-pair USD volume threshold | Wk 5 | ~5 days | L1.1 | L3.* | `internal/aggregate` | 🔴 |
 | L2.2 | `usd_volume` column populated per trade + FX anchor multiplication | Wk 5 | half-day | L2.1 | L3.* | `internal/aggregate/triangulate` | 🔴 |
 | L2.3 | Forex factor snap rule for chained-fiat closed-bucket consistency (ADR-0018) | Wk 5 | half-day | L2.2 | L3.* | `internal/aggregate/triangulate` | 🟡 |
-| L2.4 | Phase 1 anomaly thresholds — per-class TOML defaults (ADR-0019 stop-gap) | Wk 5 | half-day | L2.1 | L3.1 | `internal/aggregate/anomaly` + config | 🟡 |
+| L2.4 | Phase 1 anomaly thresholds — per-class TOML defaults wired into orchestrator Tick + freeze writer (ADR-0019 stop-gap, see #199 / #226 / #235) | Wk 5 | half-day | L2.1 | L3.1 | `internal/aggregate/anomaly` + config | 🟢 |
 | L2.5 | Phase 2 statistical baseline — `volatility_baseline_1m` CAGG + MAD math (ADR-0019) | Wk 6 | ~3 days | L2.4 | L3.1 | `internal/aggregate/baseline` + migration | 🟡 |
 | L2.6 | Multi-factor confidence score on every published price | Wk 6 | ~2 days | L2.5 | L3.1 | `internal/aggregate/confidence` | 🟡 |
 | L2.7 | Freeze policy (3-signal AND on closed-bucket only) | Wk 6 | full day | L2.6 | L3.1 | `internal/aggregate/freeze` | 🟡 |
 | L2.8 | Multi-window safeguard against frog-boiling (1d/7d/30d MAD) | Wk 6 | half-day | L2.5 | — | `internal/aggregate/baseline` | 🟡 |
 | L2.9 | Bootstrap (warmup) policy for new assets | Wk 6 | half-day | L2.6 | — | `internal/aggregate/baseline` | 🟡 |
-| L2.10 | `internal/divergence/` package — cross-reference vs CoinGecko / CMC / Reflector / Band / Redstone | Wk 5–6 | full day | — | L2.11, L3.5 | `internal/divergence` | 🟡 |
-| L2.11 | Wire `flags.divergence_warning` firing logic | Wk 6 | half-day | L2.10 | L3.5 | `internal/api/v1/envelope.go` consumers | 🟡 |
+| L2.10 | `internal/divergence/` package — cross-reference vs CoinGecko / CMC / Reflector / Band / Redstone (#204) | Wk 5–6 | full day | — | L2.11, L3.5 | `internal/divergence` | 🟢 |
+| L2.11 | Wire `flags.divergence_warning` firing logic (#205) | Wk 6 | half-day | L2.10 | L3.5 | `internal/api/v1/envelope.go` consumers | 🟢 |
 | L2.12 | `internal/supply/` package — circulating supply per ADR-0011 (6 PRs landed: skeleton+XLM, classic, SEP-41, hypertable+store, SAC cross-check+alert, SEP-1 overlay) | Wk 6 | ~2 days | — | L3.* (F2 fields) | `internal/supply/`, `internal/storage/timescale/supply.go`, `migrations/0005_*` | 🟢 |
 
 ## API layer
