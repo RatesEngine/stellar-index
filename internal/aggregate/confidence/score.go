@@ -2,6 +2,24 @@ package confidence
 
 import "math"
 
+// BootstrapDays is the age threshold below which the confidence
+// score is hard-capped at [BootstrapConfidenceCap], regardless of
+// other factor values. Per ADR-0019 §"Bootstrap (warmup) policy
+// for new assets":
+//
+//	"For an asset with < 30 days of history: ... cap confidence at
+//	 0.5 regardless of other factors."
+//
+// The cap exists because a freshly-listed asset's per-asset
+// baseline isn't trustworthy yet — even with multi-source
+// agreement and tight liquidity, we lack the historical signal
+// to know what's normal for THIS asset. 0.5 says "we can serve
+// the price, but consumers should treat it as provisional".
+const (
+	BootstrapDays          = 30.0
+	BootstrapConfidenceCap = 0.5
+)
+
 // Inputs are the raw observations a single bucket carries. The
 // orchestrator populates this from the bucket's stats + the per-
 // asset baseline; this package converts to a [Score] without any
@@ -139,8 +157,31 @@ func Compute(in Inputs, w Weights) Score {
 		safeLog(f.CrossOracle)*w.CrossOracle +
 		safeLog(f.BaselineQuality)*w.BaselineQuality
 
-	confidence := math.Exp(logSum / totalWeight)
-	return Score{Confidence: clamp01(confidence), Factors: f}
+	conf := math.Exp(logSum / totalWeight)
+	conf = applyBootstrapCap(conf, in.BaselineAgeDays)
+	return Score{Confidence: clamp01(conf), Factors: f}
+}
+
+// applyBootstrapCap caps the final confidence at
+// [BootstrapConfidenceCap] when the asset is still in bootstrap
+// (BaselineAgeDays known and below [BootstrapDays]).
+//
+// A negative BaselineAgeDays is the "no baseline yet" sentinel —
+// stricter than bootstrap, so we apply the cap there too. Callers
+// who pass an unknown age via NaN get no cap (the BaselineQuality
+// factor already returns 0.5 for NaN, dragging the combiner down
+// without a hard ceiling).
+func applyBootstrapCap(c, ageDays float64) float64 {
+	if math.IsNaN(ageDays) {
+		return c
+	}
+	if ageDays >= BootstrapDays {
+		return c
+	}
+	if c > BootstrapConfidenceCap {
+		return BootstrapConfidenceCap
+	}
+	return c
 }
 
 // safeLog returns log(x) with log(0) → -Inf clamped through Exp;
