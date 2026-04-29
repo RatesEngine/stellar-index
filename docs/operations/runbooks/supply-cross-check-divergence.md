@@ -1,6 +1,6 @@
 ---
 title: Runbook — supply-cross-check-divergence
-last_verified: 2026-04-28
+last_verified: 2026-04-29
 status: draft
 severity: P3
 ---
@@ -60,20 +60,24 @@ Decision tree:
 
 ## Mitigation (≤ 60 min)
 
-- [ ] **Identify which side is wrong** by manually computing the
-      classic-side total against current ledger meta:
+- [ ] **Identify which side is wrong** with the audit subcommand
+      (#233). Pass the classic asset; supply the SAC counterpart
+      via `-cross-check`; optionally include `-history-hours 24`
+      to spot whether divergence is fresh or chronic:
       ```sh
-      ratesengine-ops supply audit --asset CODE:ISSUER --ledger <recent>
+      ratesengine-ops supply audit USDC-GA5Z... \
+          -config /etc/ratesengine.toml \
+          -cross-check CCW6... \
+          -history-hours 24
       ```
-      The output prints both algorithms' running sums alongside the
-      raw ledger-entry counts they were derived from. The side that
-      doesn't match the manual count is the corrupt indexer.
+      Output prints both snapshots + the cross-check delta. Exit
+      code is non-zero on out-of-tolerance; chain
+      `|| operator-escalate` if scripting.
 
-- [ ] **Replay the affected range.** For Algorithm 2 issues:
-      `ratesengine-ops backfill --source classic-supply --from <ledger-N> --to <ledger-N+1000>`
-      For Algorithm 3 issues:
-      `ratesengine-ops backfill --source sep41-events --contract C... --from <ledger-N> --to <ledger-N+1000>`
-      (TODO: these subcommands ship with L2.12 PR 6.)
+- [ ] **Replay the affected range.** Per-algorithm replay
+      subcommands aren't shipped yet — the operator path today is
+      restarting the indexer with a config override that re-reads
+      the ledger window. See `cmd/ratesengine-indexer` flags.
 
 - [ ] **Verify** the divergence gauge drops below 2 within 10 min of
       the replay completing. The gauge updates once per aggregator
