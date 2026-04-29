@@ -38,6 +38,7 @@ import (
 	sdkxdr "github.com/stellar/go-stellar-sdk/xdr"
 
 	"github.com/RatesEngine/rates-engine/internal/canonical"
+	"github.com/RatesEngine/rates-engine/internal/canonical/discovery"
 	"github.com/RatesEngine/rates-engine/internal/config"
 	"github.com/RatesEngine/rates-engine/internal/consumer"
 	"github.com/RatesEngine/rates-engine/internal/dispatcher"
@@ -85,6 +86,7 @@ func main() {
 	}
 }
 
+//nolint:funlen // top-level binary lifecycle; splitting reduces readability of dependency-construction order
 func run(cfgPath string, dryRun bool) error {
 	cfg, err := config.LoadWithEnv(cfgPath)
 	if err != nil {
@@ -120,6 +122,29 @@ func run(cfgPath string, dryRun bool) error {
 	if err != nil {
 		return fmt.Errorf("build dispatcher: %w", err)
 	}
+
+	// ─── SEP-41 auto-discovery sink ──────────────────────────────
+	// Buffers Hits to a channel; a worker goroutine drains them to
+	// timescale.Store.RecordDiscovered. The dispatcher's Push call
+	// is non-blocking — if the buffer fills (Postgres outage,
+	// workload spike beyond BufferSize), Hits drop and increment
+	// DroppedCount. Operators alert on a sustained climb. See
+	// internal/canonical/discovery/sink.go for the contract.
+	discoverySink := discovery.NewAsyncSink(discoveryRecorderAdapter{s: store}, discovery.AsyncSinkOptions{
+		BufferSize:    1024,
+		RecordTimeout: 2 * time.Second,
+		Logger:        logger.With("component", "discovery"),
+	})
+	discoverySink.Start()
+	defer func() {
+		discoverySink.Stop()
+		if dropped := discoverySink.DroppedCount(); dropped > 0 {
+			logger.Warn("discovery: hits dropped on shutdown drain",
+				"dropped", dropped)
+		}
+	}()
+	disp.SetDiscoverySink(discoverySink)
+	logger.Info("discovery sink wired", "buffer_size", 1024)
 
 	// ─── Starting ledger ───────────────────────────────────────
 	from, err := resolveStartLedger(rootCtx, store, cfg.Ingestion.BackfillFromLedger)
@@ -571,3 +596,24 @@ func mkLogger(obs config.ObsConfig) *slog.Logger {
 	}
 	return slog.New(handler).With("binary", "ratesengine-indexer")
 }
+
+// discoveryRecorderAdapter wraps *timescale.Store to satisfy
+// discovery.Recorder. The Store methods are named RecordDiscovered /
+// IsKnownDiscovered (suffixed with the table they touch); the
+// interface uses Record / IsKnown — this thin adapter bridges the
+// two without renaming the storage-layer methods (which would
+// collide with future RecordX / IsKnownX domains added to Store).
+type discoveryRecorderAdapter struct {
+	s *timescale.Store
+}
+
+func (a discoveryRecorderAdapter) Record(ctx context.Context, hit discovery.Hit) error {
+	return a.s.RecordDiscovered(ctx, hit)
+}
+
+func (a discoveryRecorderAdapter) IsKnown(ctx context.Context, contractID string) (bool, error) {
+	return a.s.IsKnownDiscovered(ctx, contractID)
+}
+
+// Compile-time guard.
+var _ discovery.Recorder = discoveryRecorderAdapter{}
