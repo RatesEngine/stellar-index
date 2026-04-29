@@ -203,7 +203,7 @@ Subcommands:
                           print per-venue first-trade/update samples. Exits
                           early once every enabled venue has emitted at
                           least one output. No DB, no Timescale, no cursors.
-  verify-archive -config PATH [-bucket NAME] [-from N] [-to N] [-tier MODE] [-archive-root PATH] [-peers URLs] [-peer-samples N] [-archivist-bin BIN] [-archivist-url URL] [-archivist-timeout DUR] [-fail-on-missed] [-max-runtime DUR] [-workers N] [-resume-from-hash HEX]
+  verify-archive -config PATH [-bucket NAME] [-from N] [-to N] [-tier MODE] [-archive-root PATH] [-peers URLs] [-peer-samples N] [-archivist-bin BIN] [-archivist-url URL] [-archivist-timeout DUR] [-fail-on-missed] [-max-runtime DUR] [-workers N] [-resume-from-hash HEX] [-metrics-listen ADDR]
                           Verify a galexie bucket at one or more tiers:
                             chain      (Tier A) — chain-link hash integrity:
                                        each ledger N's PreviousLedgerHash
@@ -1589,6 +1589,12 @@ func verifyArchive(args []string) error { //nolint:funlen,gocognit,gocyclo // li
 			"passes it here to prove the cross-run boundary explicitly. "+
 			"Empty (default) skips the check — the implicit-overlap "+
 			"proof from re-reading -from itself is usually sufficient.")
+	metricsListen := fs.String("metrics-listen", "",
+		"Bind address for a Prometheus /metrics endpoint scraped during "+
+			"the run (e.g. 127.0.0.1:9479). Per-chunk counters + gauges "+
+			"let operators dashboard the bottleneck during multi-hour "+
+			"sweeps rather than guessing from log tails. Empty (default) "+
+			"disables the endpoint.")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -1625,6 +1631,18 @@ func verifyArchive(args []string) error { //nolint:funlen,gocognit,gocyclo // li
 	fmt.Fprintf(os.Stderr, "verify-archive: bucket=%s range=[%d,%d] tier=%s\n", bucket, *from, *to, *tier)
 	if doCheckpoint {
 		fmt.Fprintf(os.Stderr, "verify-archive: checkpoint anchor against %s\n", *archiveRoot)
+	}
+
+	// Optional /metrics endpoint. Only the chunk walk emits metrics
+	// today (Tiers D + E are bounded-time spot checks, not the
+	// multi-hour grind that motivates live dashboarding).
+	if *metricsListen != "" {
+		stop, err := startVerifyArchiveMetrics(*metricsListen)
+		if err != nil {
+			return fmt.Errorf("metrics endpoint: %w", err)
+		}
+		defer stop()
+		fmt.Fprintf(os.Stderr, "verify-archive: metrics on http://%s/metrics\n", *metricsListen)
 	}
 
 	// Tier A + B (LCM walk via ledgerstream). Skipped when tier=peers.

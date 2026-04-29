@@ -5,7 +5,10 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"net"
+	"net/http"
 	"os"
+	"strconv"
 	"sync"
 	"time"
 
@@ -13,7 +16,45 @@ import (
 	"golang.org/x/sync/errgroup"
 
 	"github.com/RatesEngine/rates-engine/internal/ledgerstream"
+	"github.com/RatesEngine/rates-engine/internal/obs"
 )
+
+// startVerifyArchiveMetrics spins up a tiny http.Server on addr
+// exposing /metrics from the obs Registry. Returns a stop function
+// that gracefully shuts down the server (≤ 5 s for in-flight scrapes
+// to drain). Used when -metrics-listen is supplied.
+//
+// Errors when the bind itself fails (port already in use, perms);
+// scrape failures during the run don't propagate to the caller —
+// the server just logs and continues, so a flaky scraper can't
+// stall verification.
+func startVerifyArchiveMetrics(addr string) (func(), error) {
+	mux := http.NewServeMux()
+	mux.Handle("/metrics", obs.Handler())
+
+	srv := &http.Server{
+		Addr:              addr,
+		Handler:           mux,
+		ReadHeaderTimeout: 5 * time.Second,
+	}
+
+	lc := net.ListenConfig{}
+	listenCtx, cancelListen := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancelListen()
+	ln, err := lc.Listen(listenCtx, "tcp", addr)
+	if err != nil {
+		return nil, fmt.Errorf("listen %s: %w", addr, err)
+	}
+	go func() {
+		_ = srv.Serve(ln)
+	}()
+
+	return func() {
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		_ = srv.Shutdown(shutdownCtx)
+	}, nil
+}
 
 // checkResumeFromHash compares the first chunk's FirstPrevHash
 // against an operator-supplied hex hash. Used to prove cross-run
@@ -134,6 +175,7 @@ func verifyChunk(
 	totalVerified *int64,
 ) (chunkResult, error) {
 	res := chunkResult{Idx: idx, From: chunk.from, To: chunk.to}
+	chunkLabel := strconv.Itoa(idx)
 
 	var (
 		prevSeq      uint32
@@ -160,11 +202,13 @@ func verifyChunk(
 			if chainCheckInternal && hasPrev {
 				if seq != prevSeq+1 {
 					res.Mismatches++
+					obs.VerifyArchiveMismatchesTotal.WithLabelValues(chunkLabel, "sequence").Inc()
 					return fmt.Errorf("chunk[%d] sequence gap: %d → %d (expected %d)",
 						idx, prevSeq, seq, prevSeq+1)
 				}
 				if header.PreviousLedgerHash != prevHash {
 					res.Mismatches++
+					obs.VerifyArchiveMismatchesTotal.WithLabelValues(chunkLabel, "chain").Inc()
 					return fmt.Errorf("chunk[%d] chain break at ledger %d:\n"+
 						"  ledger[%d].Hash              = %s\n"+
 						"  ledger[%d].PreviousLedgerHash = %s",
@@ -178,17 +222,21 @@ func verifyChunk(
 				switch {
 				case cerr != nil:
 					res.Mismatches++
+					obs.VerifyArchiveMismatchesTotal.WithLabelValues(chunkLabel, "checkpoint").Inc()
 					return fmt.Errorf("ledger %d: archive read failed: %w", seq, cerr)
 				case !hit:
 					res.CheckpointsMissed++
+					obs.VerifyArchiveCheckpointsTotal.WithLabelValues(chunkLabel, "missed").Inc()
 				case expected != hash:
 					res.Mismatches++
+					obs.VerifyArchiveMismatchesTotal.WithLabelValues(chunkLabel, "checkpoint").Inc()
 					return fmt.Errorf("checkpoint anchor mismatch at ledger %d:\n"+
 						"  our LCM hash          = %s\n"+
 						"  archive-signed hash   = %s",
 						seq, hashToHex(hash), hashToHex(expected))
 				default:
 					res.CheckpointsOK++
+					obs.VerifyArchiveCheckpointsTotal.WithLabelValues(chunkLabel, "matched").Inc()
 				}
 			}
 
@@ -198,6 +246,8 @@ func verifyChunk(
 			res.Verified++
 			res.LastSeq = seq
 			res.LastHash = hash
+			obs.VerifyArchiveLedgersVerified.WithLabelValues(chunkLabel).Inc()
+			obs.VerifyArchiveCurrentLedger.WithLabelValues(chunkLabel).Set(float64(seq))
 
 			if time.Since(lastProgress) >= progressEvery {
 				progressMu.Lock()

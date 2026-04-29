@@ -51,6 +51,11 @@ func init() {
 
 		SupplyCrossCheckDivergenceStroops,
 		SupplyCrossCheckTotal,
+
+		VerifyArchiveLedgersVerified,
+		VerifyArchiveCurrentLedger,
+		VerifyArchiveCheckpointsTotal,
+		VerifyArchiveMismatchesTotal,
 	)
 }
 
@@ -353,4 +358,64 @@ var SupplyCrossCheckTotal = prometheus.NewCounterVec(
 		Help: "Cross-check evaluations, labelled by outcome (within|over).",
 	},
 	[]string{"outcome"},
+)
+
+// ─── verify-archive metrics ───────────────────────────────────────
+//
+// Emitted by `ratesengine-ops verify-archive` when the operator
+// passes -metrics-listen ADDR. One-shot diagnostic command, but the
+// run can take hours on full pubnet sweeps — live metrics let
+// operators dashboard the bottleneck during the run rather than
+// guessing from log tails.
+//
+// All vectors labelled by chunk_idx (decimal string) so a parallel
+// run with -workers 8 produces per-chunk series. Cardinality bound
+// by the -workers cap (currently [1,16]).
+
+// VerifyArchiveLedgersVerified — counter of ledgers successfully
+// walked + verified. Rate over time gives ledgers/sec per chunk —
+// the primary signal for spotting a stalled chunk vs a slow one.
+var VerifyArchiveLedgersVerified = prometheus.NewCounterVec(
+	prometheus.CounterOpts{
+		Name: "ratesengine_verify_archive_ledgers_verified_total",
+		Help: "Ledgers walked + verified by verify-archive, per chunk_idx.",
+	},
+	[]string{"chunk_idx"},
+)
+
+// VerifyArchiveCurrentLedger — gauge of the most-recent ledger
+// position per chunk. Together with the chunk's [from,to] range
+// (operator-known) gives a percent-complete view; together across
+// chunks gives a ledger-distance-fan picture of which chunks are
+// leading vs trailing.
+var VerifyArchiveCurrentLedger = prometheus.NewGaugeVec(
+	prometheus.GaugeOpts{
+		Name: "ratesengine_verify_archive_current_ledger",
+		Help: "Most-recent ledger sequence verified by each chunk_idx.",
+	},
+	[]string{"chunk_idx"},
+)
+
+// VerifyArchiveCheckpointsTotal — counter of Tier B checkpoint
+// outcomes (matched | missed). missed=archive file absent (warning
+// or hard fail under -fail-on-missed); matched=hash-equal proof.
+var VerifyArchiveCheckpointsTotal = prometheus.NewCounterVec(
+	prometheus.CounterOpts{
+		Name: "ratesengine_verify_archive_checkpoints_total",
+		Help: "Tier B checkpoint outcomes per verify-archive chunk_idx, labelled by outcome (matched|missed).",
+	},
+	[]string{"chunk_idx", "outcome"},
+)
+
+// VerifyArchiveMismatchesTotal — counter of chain-break /
+// checkpoint-mismatch / sequence-gap incidents. Any non-zero
+// reading is a hard failure; the counter exists so dashboards can
+// distinguish "mismatch fired and the run aborted at second X"
+// from "chunk aborted for an unrelated reason (canceled context)".
+var VerifyArchiveMismatchesTotal = prometheus.NewCounterVec(
+	prometheus.CounterOpts{
+		Name: "ratesengine_verify_archive_mismatches_total",
+		Help: "Chain breaks, sequence gaps, and checkpoint mismatches per verify-archive chunk_idx + reason (chain|sequence|checkpoint).",
+	},
+	[]string{"chunk_idx", "reason"},
 )
