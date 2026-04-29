@@ -56,6 +56,7 @@ type Server struct {
 	auth       middleware.Middleware
 	rateLimit  middleware.Middleware
 	hub        *streaming.Hub
+	confidence ConfidenceLooker
 	mux        *http.ServeMux
 	started    time.Time
 }
@@ -166,6 +167,17 @@ type Options struct {
 	// of the v1 API serves cleanly. The tip + observations stream
 	// endpoints do NOT use this Hub; they are per-connection-tick.
 	Hub *streaming.Hub
+
+	// Confidence, when non-nil, populates the confidence + factors
+	// fields on `/v1/price` responses (ADR-0019 §"Multi-factor
+	// confidence score"). Production wiring: a Redis adapter that
+	// reads `confidence:<base>:<quote>:<window>` from the cache
+	// the aggregator's confidence-compute path writes.
+	//
+	// Leave nil to keep the score off the wire — the rest of the
+	// `/v1/price` envelope serves cleanly without it. Cache misses
+	// at lookup time also leave the field unset.
+	Confidence ConfidenceLooker
 }
 
 // New constructs a Server and mounts all v1 routes.
@@ -192,6 +204,7 @@ func New(opts Options) *Server {
 		auth:       opts.Auth,
 		rateLimit:  opts.RateLimit,
 		hub:        opts.Hub,
+		confidence: opts.Confidence,
 		mux:        http.NewServeMux(),
 		started:    time.Now().UTC(),
 	}

@@ -136,6 +136,55 @@ type PriceSnapshot struct {
 	// WindowSeconds is non-zero for VWAP/TWAP — the window size.
 	// Zero for last_trade.
 	WindowSeconds int `json:"window_seconds,omitempty"`
+
+	// Confidence is the multi-factor confidence score per ADR-0019,
+	// in [0, 1]. Populated only on `/v1/price` (the closed-bucket
+	// surface) — tip/observations/oracle surfaces leave it unset
+	// (omitempty hides). Nil pointer = "not available" (typically
+	// pre-launch when the aggregator's confidence-compute path
+	// isn't running yet); a populated value means the bucket has
+	// a fresh score in the cache.
+	Confidence *float64 `json:"confidence,omitempty"`
+
+	// ConfidenceFactors is the per-factor decomposition that
+	// accompanies Confidence. Optional with the same semantics —
+	// nil means "not available".
+	ConfidenceFactors *ConfidenceFactors `json:"confidence_factors,omitempty"`
+}
+
+// ConfidenceFactors mirrors `confidence.Factors` on the wire so
+// the API package doesn't force an aggregate import on SDK
+// consumers. Same field names and JSON tags.
+type ConfidenceFactors struct {
+	ZScore          float64 `json:"z_score"`
+	SourceCount     float64 `json:"source_count"`
+	Diversity       float64 `json:"diversity"`
+	Liquidity       float64 `json:"liquidity"`
+	CrossOracle     float64 `json:"cross_oracle"`
+	BaselineQuality float64 `json:"baseline_quality"`
+}
+
+// ConfidenceLooker is the read-side interface the v1 server uses
+// to fetch the cached confidence score on `/v1/price`. Production
+// wiring: a Redis adapter that GETs `confidence:<base>:<quote>:<window>`
+// and decodes the JSON-encoded `confidence.Score` written by the
+// aggregator.
+//
+// The interface returns `(_, false, nil)` for absent cache entries
+// (typical pre-launch state); read errors propagate via the third
+// return so the handler can log without breaking the response —
+// confidence is enrichment, not a publish-blocking signal.
+type ConfidenceLooker interface {
+	LookupConfidence(ctx context.Context, asset, quote canonical.Asset, window time.Duration) (PriceSnapshotConfidence, bool, error)
+}
+
+// PriceSnapshotConfidence is the read-side wire shape between
+// [ConfidenceLooker] and the handler. Same fields as the
+// orchestrator-side `confidence.Score` but local to this package
+// so the storage adapter does the JSON decode + remap once.
+type PriceSnapshotConfidence struct {
+	Confidence float64
+	Factors    ConfidenceFactors
 }
 
 // ─── Handler ──────────────────────────────────────────────────────
@@ -221,6 +270,14 @@ func (s *Server) handlePrice(w http.ResponseWriter, r *http.Request) {
 	// cardinality warning on the metric declaration). The
 	// aggregator owns this metric when it ships and will restrict
 	// emission to a top-N allow-list.
+
+	// Confidence is enrichment per ADR-0019. Looked up only on
+	// `/v1/price` (the closed-bucket surface) — tip + observations
+	// surfaces don't carry it. Best-effort: cache misses + read
+	// errors leave the snapshot's Confidence/ConfidenceFactors
+	// fields nil, and the response ships cleanly without them.
+	s.attachConfidence(r, &snapshot, asset, quote)
+
 	flags := Flags{Stale: stale}
 	frozen := s.lookupFrozen(r, asset, quote)
 	flags.Frozen = frozen
@@ -247,6 +304,42 @@ func (s *Server) handlePrice(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	writeJSON(w, snapshot, flags, sources...)
+}
+
+// confidenceLookupWindow is the cache window the API consults for
+// `/v1/price`'s confidence lookup. Matches the smallest window in
+// `orchestrator.DefaultWindows` (5m) — the freshest cached score.
+//
+// When the L3.1 closed-bucket-CAGG read path lands, this constant
+// can refine to the API's actual served granularity. For now 5m
+// is the right tradeoff: covered by the aggregator's default
+// window set + hot enough that a stale score TTL's out before
+// being read.
+const confidenceLookupWindow = 5 * time.Minute
+
+// attachConfidence consults the wired ConfidenceLooker (when set)
+// and populates snap.Confidence + snap.ConfidenceFactors. Best-
+// effort: cache misses + read errors leave the fields nil so the
+// response still ships cleanly without confidence enrichment.
+func (s *Server) attachConfidence(r *http.Request, snap *PriceSnapshot, asset, quote canonical.Asset) {
+	if s.confidence == nil {
+		return
+	}
+	got, ok, err := s.confidence.LookupConfidence(r.Context(), asset, quote, confidenceLookupWindow)
+	if err != nil {
+		if !clientAborted(r, err) {
+			s.logger.Warn("confidence lookup failed",
+				"err", err, "asset", asset.String(), "quote", quote.String())
+		}
+		return
+	}
+	if !ok {
+		return // cache miss — leave fields nil
+	}
+	c := got.Confidence
+	snap.Confidence = &c
+	f := got.Factors
+	snap.ConfidenceFactors = &f
 }
 
 // lookupFrozen consults the FrozenLooker (when wired) for the

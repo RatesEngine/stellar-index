@@ -166,6 +166,122 @@ func (s *stubDivergenceLooker) DivergenceFiringFor(_ context.Context, _ canonica
 	return s.firing, s.err
 }
 
+// stubConfidenceLooker is a minimal v1.ConfidenceLooker for tests.
+type stubConfidenceLooker struct {
+	score v1.PriceSnapshotConfidence
+	found bool
+	err   error
+	calls int
+}
+
+func (s *stubConfidenceLooker) LookupConfidence(_ context.Context, _, _ canonical.Asset, _ time.Duration) (v1.PriceSnapshotConfidence, bool, error) {
+	s.calls++
+	return s.score, s.found, s.err
+}
+
+// TestPrice_ConfidenceFlowsToWire — when the looker returns a
+// cached score, the response includes both `confidence` and
+// `confidence_factors` on the data object.
+func TestPrice_ConfidenceFlowsToWire(t *testing.T) {
+	reader := &stubPriceReader{
+		snapshots: map[string]v1.PriceSnapshot{
+			"native/fiat:USD": {Price: "0.07", PriceType: "vwap"},
+		},
+	}
+	conf := &stubConfidenceLooker{
+		score: v1.PriceSnapshotConfidence{
+			Confidence: 0.92,
+			Factors: v1.ConfidenceFactors{
+				ZScore: 0.95, SourceCount: 0.95, Diversity: 1.0,
+				Liquidity: 1.0, CrossOracle: 1.0, BaselineQuality: 1.0,
+			},
+		},
+		found: true,
+	}
+	srv := v1.New(v1.Options{Prices: reader, Confidence: conf})
+	ts := startHTTPTest(t, srv.Handler())
+
+	resp := mustGet(t, ts.URL+"/v1/price?asset=native&quote=fiat:USD")
+	body, _ := readAll(resp)
+	if !strings.Contains(body, `"confidence":0.92`) {
+		t.Errorf("confidence float not set: %s", body)
+	}
+	if !strings.Contains(body, `"confidence_factors"`) {
+		t.Errorf("confidence_factors not present: %s", body)
+	}
+	if !strings.Contains(body, `"baseline_quality":1`) {
+		t.Errorf("factor sub-fields missing: %s", body)
+	}
+	if conf.calls != 1 {
+		t.Errorf("looker calls = %d, want 1", conf.calls)
+	}
+}
+
+// TestPrice_ConfidenceCacheMissOmitsFields — looker returns
+// (zero, false, nil): the snapshot has no confidence-related
+// fields on the wire (omitempty hides them).
+func TestPrice_ConfidenceCacheMissOmitsFields(t *testing.T) {
+	reader := &stubPriceReader{
+		snapshots: map[string]v1.PriceSnapshot{
+			"native/fiat:USD": {Price: "0.07", PriceType: "vwap"},
+		},
+	}
+	conf := &stubConfidenceLooker{found: false}
+	srv := v1.New(v1.Options{Prices: reader, Confidence: conf})
+	ts := startHTTPTest(t, srv.Handler())
+
+	resp := mustGet(t, ts.URL+"/v1/price?asset=native&quote=fiat:USD")
+	body, _ := readAll(resp)
+	if strings.Contains(body, `"confidence"`) {
+		t.Errorf("confidence field shouldn't appear on cache miss: %s", body)
+	}
+	if strings.Contains(body, `"confidence_factors"`) {
+		t.Errorf("confidence_factors shouldn't appear on cache miss: %s", body)
+	}
+}
+
+// TestPrice_ConfidenceLookerErrorIsBestEffort — a looker error
+// must NOT cause the price endpoint to fail. Confidence fields
+// stay unset; the price still flows.
+func TestPrice_ConfidenceLookerErrorIsBestEffort(t *testing.T) {
+	reader := &stubPriceReader{
+		snapshots: map[string]v1.PriceSnapshot{
+			"native/fiat:USD": {Price: "0.07", PriceType: "vwap"},
+		},
+	}
+	conf := &stubConfidenceLooker{err: errors.New("redis exploded")}
+	srv := v1.New(v1.Options{Prices: reader, Confidence: conf})
+	ts := startHTTPTest(t, srv.Handler())
+
+	resp := mustGet(t, ts.URL+"/v1/price?asset=native&quote=fiat:USD")
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d, want 200 — confidence error must NOT fail the price call", resp.StatusCode)
+	}
+	body, _ := readAll(resp)
+	if strings.Contains(body, `"confidence"`) {
+		t.Errorf("confidence shouldn't appear on lookup error: %s", body)
+	}
+}
+
+// TestPrice_NoConfidenceLookerOmitsFields — when the binary
+// hasn't wired a ConfidenceLooker, the field is silently absent.
+// Same shape as a cache miss.
+func TestPrice_NoConfidenceLookerOmitsFields(t *testing.T) {
+	reader := &stubPriceReader{
+		snapshots: map[string]v1.PriceSnapshot{
+			"native/fiat:USD": {Price: "0.07", PriceType: "vwap"},
+		},
+	}
+	srv := v1.New(v1.Options{Prices: reader})
+	ts := startHTTPTest(t, srv.Handler())
+
+	resp := mustGet(t, ts.URL+"/v1/price?asset=native&quote=fiat:USD")
+	body, _ := readAll(resp)
+	if strings.Contains(body, `"confidence"`) {
+		t.Errorf("confidence shouldn't appear without a looker: %s", body)
+	}
+}
+
 // TestPrice_DivergenceFires — when the lookup says the warning is
 // firing for this asset, flags.divergence_warning is true.
 func TestPrice_DivergenceFires(t *testing.T) {

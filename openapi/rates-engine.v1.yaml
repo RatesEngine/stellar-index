@@ -1278,6 +1278,24 @@ components:
         circulating_supply: { type: string, nullable: true, description: "supply derivation" }
         total_supply:      { type: string, nullable: true, description: "supply derivation" }
         max_supply:        { type: string, nullable: true, description: "supply derivation" }
+        # Confidence score per ADR-0019. Populated only on /v1/price
+        # (the closed-bucket surface) when the aggregator's
+        # confidence-compute path has cached a fresh score for the
+        # pair. Omitted when no cached score is available — clients
+        # that gate on confidence MUST treat the absence as "unknown",
+        # not "low".
+        confidence:        { type: number, format: float, nullable: true, minimum: 0, maximum: 1, description: "Multi-factor confidence score in [0, 1] (ADR-0019)." }
+        confidence_factors:
+          nullable: true
+          type: object
+          description: "Per-factor decomposition of confidence (ADR-0019)."
+          properties:
+            z_score:          { type: number, format: float }
+            source_count:     { type: number, format: float }
+            diversity:        { type: number, format: float }
+            liquidity:        { type: number, format: float }
+            cross_oracle:     { type: number, format: float }
+            baseline_quality: { type: number, format: float }
       required: [asset_id, quote, price, price_type, observed_at]
 
     PriceEnvelope:

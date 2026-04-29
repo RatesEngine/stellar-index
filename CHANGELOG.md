@@ -17,6 +17,19 @@ against.
 
 ### Added
 
+- **Confidence score on `/v1/price` envelope (L2.6 closes)**: API
+  reads the cached `confidence:<base>:<quote>:<window>` Redis key
+  written by the aggregator and surfaces both the score
+  (`confidence` ∈ [0, 1]) and its decomposition (`confidence_factors`)
+  on the response data object per ADR-0019. New `ConfidenceLooker`
+  interface; production wiring is `redisConfidenceLooker` in the
+  API binary that JSON-decodes the cached `confidence.Score`.
+  Cache misses + read errors leave the fields off the wire
+  (`omitempty`) — clients that gate on confidence treat absence as
+  "unknown", not "low". Closes L2.6 across 4 PRs: math primitive
+  (#252), orchestrator compute + cache write (#253), cross-oracle
+  divergence wiring (#254), API surface (this PR).
+
 - **Cross-oracle divergence wired into confidence (L2.6 slice 3)**:
   the orchestrator's confidence step now reads `div:<asset>` from
   Redis (the cache the divergence worker writes via

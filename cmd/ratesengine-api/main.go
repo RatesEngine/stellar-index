@@ -20,6 +20,7 @@ package main
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"flag"
 	"fmt"
@@ -33,10 +34,12 @@ import (
 
 	"github.com/redis/go-redis/v9"
 
+	"github.com/RatesEngine/rates-engine/internal/aggregate/confidence"
 	v1 "github.com/RatesEngine/rates-engine/internal/api/v1"
 	"github.com/RatesEngine/rates-engine/internal/api/v1/middleware"
 	"github.com/RatesEngine/rates-engine/internal/auth"
 	"github.com/RatesEngine/rates-engine/internal/auth/sep10"
+	"github.com/RatesEngine/rates-engine/internal/cachekeys"
 	"github.com/RatesEngine/rates-engine/internal/canonical"
 	"github.com/RatesEngine/rates-engine/internal/config"
 	"github.com/RatesEngine/rates-engine/internal/divergence"
@@ -243,6 +246,7 @@ func run(cfgPath string, dryRun bool) error { //nolint:gocognit,funlen,gocyclo /
 		Meta:        sep1Cache,
 		Accounts:    accountStore,
 		Divergence:  divergenceLooker,
+		Confidence:  redisConfidenceLooker{rdb: rdb},
 		SEP10:       sep10Validator,
 		CORS:        cors,
 		Auth:        authMW,
@@ -498,6 +502,45 @@ type storeOracleReader struct{ s *timescale.Store }
 
 func (r storeOracleReader) LatestOracleUpdatesForAsset(ctx context.Context, asset canonical.Asset, sourceFilter string) ([]canonical.OracleUpdate, error) {
 	return r.s.LatestOracleUpdatesForAsset(ctx, asset, sourceFilter)
+}
+
+// redisConfidenceLooker adapts the shared Redis client to
+// v1.ConfidenceLooker by reading the JSON-encoded confidence.Score
+// the aggregator writes at `confidence:<base>:<quote>:<window>`.
+//
+// Cache miss → (zero, false, nil); the v1 handler then leaves the
+// confidence fields off the wire for that response. Read errors
+// propagate so the handler can log; the response still ships
+// without confidence.
+type redisConfidenceLooker struct{ rdb *redis.Client }
+
+func (r redisConfidenceLooker) LookupConfidence(ctx context.Context, asset, quote canonical.Asset, window time.Duration) (v1.PriceSnapshotConfidence, bool, error) {
+	if r.rdb == nil {
+		return v1.PriceSnapshotConfidence{}, false, nil
+	}
+	key := cachekeys.Confidence(asset, quote, window)
+	raw, err := r.rdb.Get(ctx, key).Bytes()
+	if errors.Is(err, redis.Nil) {
+		return v1.PriceSnapshotConfidence{}, false, nil
+	}
+	if err != nil {
+		return v1.PriceSnapshotConfidence{}, false, fmt.Errorf("confidence cache get %s: %w", key, err)
+	}
+	var score confidence.Score
+	if err := json.Unmarshal(raw, &score); err != nil {
+		return v1.PriceSnapshotConfidence{}, false, fmt.Errorf("confidence cache decode %s: %w", key, err)
+	}
+	return v1.PriceSnapshotConfidence{
+		Confidence: score.Confidence,
+		Factors: v1.ConfidenceFactors{
+			ZScore:          score.Factors.ZScore,
+			SourceCount:     score.Factors.SourceCount,
+			Diversity:       score.Factors.Diversity,
+			Liquidity:       score.Factors.Liquidity,
+			CrossOracle:     score.Factors.CrossOracle,
+			BaselineQuality: score.Factors.BaselineQuality,
+		},
+	}, true, nil
 }
 
 // storeHistoryReader adapts *timescale.Store to v1.HistoryReader.
