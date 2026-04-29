@@ -57,7 +57,7 @@ Within each surface, ordered by dependency.
 | L2.5 | Phase 2 statistical baseline — MAD math + `volatility_baseline_1m` table + refresh worker + aggregator wire-up shipped across 4 PRs (ADR-0019). | Wk 6 | ~3 days | L2.4 | L3.1 | `internal/aggregate/baseline` + migration | 🟢 |
 | L2.6 | Multi-factor confidence score on every published price | Wk 6 | ~2 days | L2.5 | L3.1 | `internal/aggregate/confidence` | 🟡 |
 | L2.7 | Freeze policy (3-signal AND on closed-bucket only) | Wk 6 | full day | L2.6 | L3.1 | `internal/aggregate/freeze` | 🟡 |
-| L2.8 | Multi-window safeguard against frog-boiling (1d/7d/30d MAD) | Wk 6 | half-day | L2.5 | — | `internal/aggregate/baseline` | 🟡 |
+| L2.8 | Multi-window safeguard against frog-boiling (1d/7d/30d MAD) — math primitive shipped; storage + orchestrator wire-up follow | Wk 6 | half-day | L2.5 | — | `internal/aggregate/baseline` | 🟠 |
 | L2.9 | Bootstrap (warmup) policy for new assets | Wk 6 | half-day | L2.6 | — | `internal/aggregate/baseline` | 🟡 |
 | L2.10 | `internal/divergence/` package — cross-reference vs CoinGecko / CMC / Reflector / Band / Redstone (#204) | Wk 5–6 | full day | — | L2.11, L3.5 | `internal/divergence` | 🟢 |
 | L2.11 | Wire `flags.divergence_warning` firing logic (#205) | Wk 6 | half-day | L2.10 | L3.5 | `internal/api/v1/envelope.go` consumers | 🟢 |
