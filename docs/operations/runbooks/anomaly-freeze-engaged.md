@@ -1,8 +1,8 @@
 ---
 title: Runbook — anomaly-freeze-engaged
-last_verified: 2026-04-28
+last_verified: 2026-04-29
 status: draft
-severity: P2
+severity: P3
 ---
 
 # Runbook — `ratesengine_anomaly_freeze_engaged`
@@ -11,11 +11,12 @@ severity: P2
 
 | Field | Value |
 | ----- | ----- |
-| Alert | `ratesengine_anomaly_freeze_engaged` (P2) / `_max_extensions` (P1) |
-| Severity | P2 (initial); P1 after 4 extensions |
+| Alerts | `ratesengine_anomaly_freeze_engaged` (P3) / `ratesengine_anomaly_freeze_sustained` (P1) |
+| Severity | P3 on first 5m window; P1 once sustained ≥ 1h |
 | Detected by | Prometheus rule in `deploy/monitoring/rules/anomaly.yml` |
 | Typical MTTR | 5–30 min for confirmed manipulation; up to 2 h for ambiguous market events |
 | Impact | The asset's `/v1/price` returns last-known-good (LKG); customers consuming it see frozen value with `flags.frozen: true`. `/v1/price/tip` and `/v1/observations` continue serving live data. Lending protocols using `/v1/price` for collateral are protected; UI consumers see the manipulation transparently. |
+| Per-pair triage | Counter is class-labelled (cardinality bound). To find the affected pair, inspect Redis: `redis-cli --scan --pattern 'freeze:*'` |
 
 ## What freeze means
 

@@ -1,0 +1,76 @@
+---
+# Anomaly + freeze alerts — driven by the metrics emitted in
+# internal/aggregate/orchestrator (see ADR-0019). The orchestrator
+# writes a freeze marker to Redis when ActionFreeze fires; the API
+# reads the marker on every /v1/price request and surfaces
+# flags.frozen=true. Both ends are tracked via
+# ratesengine_anomaly_freeze_engaged_total — a counter labelled by
+# asset class.
+#
+# Why a counter (not a gauge): the orchestrator doesn't currently
+# track per-(asset, quote) "is this pair frozen RIGHT NOW" state;
+# it ticks every 30s and emits ActionFreeze decisions one-shot. A
+# sustained freeze (the underlying anomaly persists) shows up as a
+# steady stream of counter increments. The alerts use rate() over
+# windowed ranges to differentiate one-tick blips from a real
+# sustained event.
+#
+# Per-asset granularity is not currently a label on the metric (the
+# orchestrator's hot path keeps the label set bounded to AssetClass).
+# Per-pair freeze details live in the freeze:<asset>:<quote> Redis
+# marker JSON; operator runbook reads from there during triage.
+
+groups:
+  - name: ratesengine.anomaly
+    interval: 30s
+    rules:
+
+      - alert: ratesengine_anomaly_freeze_engaged
+        expr: |
+          sum by (class) (rate(ratesengine_anomaly_freeze_engaged_total[5m])) > 0
+        for: 1m
+        labels:
+          severity: ticket
+          team: ratesengine
+          component: aggregator
+          runbook_url: https://github.com/RatesEngine/rates-engine/blob/main/docs/operations/runbooks/anomaly-freeze-engaged.md
+        annotations:
+          summary: "Anomaly freeze engaged on class {{ $labels.class }} (P3)"
+          description: |
+            The aggregator's anomaly checker emitted ActionFreeze
+            for at least one (pair, window) within the last 5
+            minutes, asset class {{ $labels.class }}. The affected
+            pair's /v1/price now serves the previous bucket's
+            last-known-good VWAP with flags.frozen=true.
+            The freeze marker auto-clears 5 minutes after the last
+            ActionFreeze decision (per cachekeys.FreezeTTL); a
+            sustained freeze keeps the counter incrementing.
+            Inspect the freeze:<asset>:<quote> Redis keys to
+            identify the affected pair(s); manual override via
+            policy YAML if confirmed false-positive.
+            Runbook: https://github.com/RatesEngine/rates-engine/blob/main/docs/operations/runbooks/anomaly-freeze-engaged.md
+
+      - alert: ratesengine_anomaly_freeze_sustained
+        expr: |
+          sum by (class) (rate(ratesengine_anomaly_freeze_engaged_total[1h])) > 0
+        for: 1h
+        labels:
+          severity: page
+          team: ratesengine
+          component: aggregator
+          runbook_url: https://github.com/RatesEngine/rates-engine/blob/main/docs/operations/runbooks/anomaly-freeze-engaged.md
+        annotations:
+          summary: "Anomaly freeze sustained for 1h+ on class {{ $labels.class }} (P1)"
+          description: |
+            Freeze decisions for asset class {{ $labels.class }}
+            have been emitted continuously over the last hour. Real
+            market events typically resolve within a few minutes;
+            a 1h+ sustained freeze means either a persistent
+            on-chain anomaly that needs human-in-the-loop review,
+            OR our threshold table is mis-tuned for the affected
+            class and the freeze is firing on legitimate volatility.
+            Either way: customer-facing flags.frozen has been true
+            for 1h+ and the LKG value being served is increasingly
+            stale. Either confirm the manipulation pattern + adjust
+            policy, OR widen the class threshold + reload.
+            Runbook: https://github.com/RatesEngine/rates-engine/blob/main/docs/operations/runbooks/anomaly-freeze-engaged.md

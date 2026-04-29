@@ -129,10 +129,8 @@ override.
 
 | Name | Metric | Condition | Severity | Runbook |
 | ---- | ------ | --------- | -------- | ------- |
-| `ratesengine_anomaly_freeze_engaged` | `ratesengine_anomaly_freeze_engaged` per asset | == 1 (freeze active) | P2 | [anomaly-freeze-engaged](runbooks/anomaly-freeze-engaged.md) |
-| `ratesengine_anomaly_freeze_extended` | `ratesengine_anomaly_freeze_extensions_total` per asset | rate > 0 over 1 h (extension fired) | P2 | [anomaly-freeze-engaged](runbooks/anomaly-freeze-engaged.md) |
-| `ratesengine_anomaly_freeze_max_extensions` | `ratesengine_anomaly_freeze_extensions_total` per asset | == 4 (manual review required) | **P1** | [anomaly-freeze-engaged](runbooks/anomaly-freeze-engaged.md) |
-| `ratesengine_confidence_low_sustained` | `ratesengine_anomaly_confidence` per asset | < 0.30 sustained > 30 min on a previously-stable asset | P3 | [anomaly-freeze-engaged](runbooks/anomaly-freeze-engaged.md) |
+| `ratesengine_anomaly_freeze_engaged` | `ratesengine_anomaly_freeze_engaged_total` per class | rate > 0 over 5m | P3 | [anomaly-freeze-engaged](runbooks/anomaly-freeze-engaged.md) |
+| `ratesengine_anomaly_freeze_sustained` | `ratesengine_anomaly_freeze_engaged_total` per class | rate > 0 sustained 1h+ | **P1** | [anomaly-freeze-engaged](runbooks/anomaly-freeze-engaged.md) |
 
 ## Divergence / quality alerts
 
