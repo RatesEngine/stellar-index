@@ -17,6 +17,18 @@ against.
 
 ### Added
 
+- **Bootstrap confidence cap (L2.9)**: per ADR-0019 §"Bootstrap
+  policy", assets with fewer than 30 days of history have their
+  confidence score hard-capped at 0.5 regardless of how healthy
+  every other factor reads. Implemented as a post-combiner clamp
+  in `confidence.Compute`: when `BaselineAgeDays < 30` (or the
+  `-1` "no baseline yet" sentinel), the cap fires. The cap is a
+  ceiling, not a floor — naturally-low confidence (single-source,
+  low liquidity) still reads through. New constants
+  `BootstrapDays = 30` and `BootstrapConfidenceCap = 0.5` document
+  the threshold. The class-average baseline + auto-classify
+  pieces of L2.9 are deferred to a follow-up.
+
 - **Phase 2 freeze policy — 3-signal AND (L2.7 closes)**: per
   ADR-0019 §"Freeze policy", the orchestrator now runs a second
   freeze layer alongside Phase 1: `confidence < 0.10 AND z_score >

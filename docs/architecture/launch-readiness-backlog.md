@@ -58,7 +58,7 @@ Within each surface, ordered by dependency.
 | L2.6 | Multi-factor confidence score on every published price — math + orchestrator wire-up + cross-oracle wiring + API surface shipped across 4 PRs (closes L2.6) | Wk 6 | ~2 days | L2.5 | L3.1 | `internal/aggregate/confidence` | 🟢 |
 | L2.7 | Freeze policy (3-signal AND on closed-bucket only) — Phase 2 freeze runs alongside Phase 1; computeConfidence + 3-signal AND fire BEFORE VWAP cache write so prevVWAP comparator stays intact | Wk 6 | full day | L2.6 | L3.1 | `internal/aggregate/freeze` | 🟢 |
 | L2.8 | Multi-window safeguard against frog-boiling (1d/7d/30d MAD) — math + storage + refresh integration shipped across 2 PRs (anomaly-evaluator wire-up follows with L2.7) | Wk 6 | half-day | L2.5 | — | `internal/aggregate/baseline` | 🟢 |
-| L2.9 | Bootstrap (warmup) policy for new assets | Wk 6 | half-day | L2.6 | — | `internal/aggregate/baseline` | 🟡 |
+| L2.9 | Bootstrap (warmup) policy for new assets — confidence hard-cap at 0.5 during <30d window. Class-average baseline + auto-classify deferred to follow-up | Wk 6 | half-day | L2.6 | — | `internal/aggregate/baseline` | 🟢 |
 | L2.10 | `internal/divergence/` package — cross-reference vs CoinGecko / CMC / Reflector / Band / Redstone (#204) | Wk 5–6 | full day | — | L2.11, L3.5 | `internal/divergence` | 🟢 |
 | L2.11 | Wire `flags.divergence_warning` firing logic (#205) | Wk 6 | half-day | L2.10 | L3.5 | `internal/api/v1/envelope.go` consumers | 🟢 |
 | L2.12 | `internal/supply/` package — circulating supply per ADR-0011 (6 PRs landed: skeleton+XLM, classic, SEP-41, hypertable+store, SAC cross-check+alert, SEP-1 overlay) | Wk 6 | ~2 days | — | L3.* (F2 fields) | `internal/supply/`, `internal/storage/timescale/supply.go`, `migrations/0005_*` | 🟢 |

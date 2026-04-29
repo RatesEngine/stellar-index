@@ -172,6 +172,80 @@ func TestCompute_NumericalStability(t *testing.T) {
 	}
 }
 
+// ─── Bootstrap cap (ADR-0019 §"Bootstrap policy") ───────────────
+
+// TestCompute_BootstrapCapsConfidence — an asset with <30d of
+// history has confidence hard-capped at 0.5 regardless of how
+// healthy every other factor is.
+func TestCompute_BootstrapCapsConfidence(t *testing.T) {
+	in := healthyInputs()
+	in.BaselineAgeDays = 5 // freshly-listed
+	got := confidence.Compute(in, confidence.DefaultWeights())
+	if got.Confidence > confidence.BootstrapConfidenceCap+1e-9 {
+		t.Errorf("bootstrap confidence = %v, want <= %v",
+			got.Confidence, confidence.BootstrapConfidenceCap)
+	}
+}
+
+// TestCompute_BootstrapCapAtZeroAge — exactly 0 days of history
+// (just-listed asset) is the most-bootstrap state. Cap fires.
+func TestCompute_BootstrapCapAtZeroAge(t *testing.T) {
+	in := healthyInputs()
+	in.BaselineAgeDays = 0
+	got := confidence.Compute(in, confidence.DefaultWeights())
+	if got.Confidence > confidence.BootstrapConfidenceCap {
+		t.Errorf("zero-age confidence = %v, want capped at %v",
+			got.Confidence, confidence.BootstrapConfidenceCap)
+	}
+}
+
+// TestCompute_BootstrapCapNotAppliedAt30Days — exactly at the
+// threshold the cap turns OFF. Healthy bucket reads its full
+// confidence.
+func TestCompute_BootstrapCapNotAppliedAt30Days(t *testing.T) {
+	in := healthyInputs()
+	in.BaselineAgeDays = 30 // boundary — strictly < BootstrapDays required
+	got := confidence.Compute(in, confidence.DefaultWeights())
+	if got.Confidence <= confidence.BootstrapConfidenceCap {
+		t.Errorf("at 30d the cap should not apply; got %v <= %v",
+			got.Confidence, confidence.BootstrapConfidenceCap)
+	}
+}
+
+// TestCompute_BootstrapCapPreservesLowConfidence — when an asset
+// is in bootstrap AND would naturally score below the cap (e.g.
+// single-source low-liquidity), the cap is a CEILING not a floor.
+// The natural-low score must still come through.
+func TestCompute_BootstrapCapPreservesLowConfidence(t *testing.T) {
+	in := healthyInputs()
+	in.BaselineAgeDays = 5 // bootstrap
+	in.SourceCount = 1     // pulls confidence way down
+	in.LiquidityUSD = 100  // below floor → factor 0
+	got := confidence.Compute(in, confidence.DefaultWeights())
+	if got.Confidence > confidence.BootstrapConfidenceCap {
+		t.Errorf("bootstrap with bad signals: confidence = %v, expected <= %v (cap)",
+			got.Confidence, confidence.BootstrapConfidenceCap)
+	}
+	// AND the natural score should be allowed through (not raised
+	// to the cap). Liquidity=0 makes the geomean 0.
+	if got.Confidence != 0 {
+		t.Errorf("natural-low score should pass; got %v, want 0", got.Confidence)
+	}
+}
+
+// TestCompute_BootstrapCapWithNoBaselineSentinel — BaselineAgeDays
+// = -1 (the "no baseline yet" sentinel) is stricter than bootstrap
+// — the cap MUST fire.
+func TestCompute_BootstrapCapWithNoBaselineSentinel(t *testing.T) {
+	in := healthyInputs()
+	in.BaselineAgeDays = -1 // no baseline at all
+	got := confidence.Compute(in, confidence.DefaultWeights())
+	if got.Confidence > confidence.BootstrapConfidenceCap {
+		t.Errorf("no-baseline confidence = %v, want capped at %v",
+			got.Confidence, confidence.BootstrapConfidenceCap)
+	}
+}
+
 // TestDefaultWeights — sanity that the default is unweighted.
 func TestDefaultWeights(t *testing.T) {
 	w := confidence.DefaultWeights()
