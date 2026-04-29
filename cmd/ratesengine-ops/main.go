@@ -193,7 +193,7 @@ Subcommands:
                           print per-venue first-trade/update samples. Exits
                           early once every enabled venue has emitted at
                           least one output. No DB, no Timescale, no cursors.
-  verify-archive -config PATH [-bucket NAME] [-from N] [-to N] [-tier MODE] [-archive-root PATH] [-peers URLs] [-peer-samples N] [-archivist-bin BIN] [-archivist-url URL] [-archivist-timeout DUR] [-fail-on-missed]
+  verify-archive -config PATH [-bucket NAME] [-from N] [-to N] [-tier MODE] [-archive-root PATH] [-peers URLs] [-peer-samples N] [-archivist-bin BIN] [-archivist-url URL] [-archivist-timeout DUR] [-fail-on-missed] [-max-runtime DUR]
                           Verify a galexie bucket at one or more tiers:
                             chain      (Tier A) — chain-link hash integrity:
                                        each ledger N's PreviousLedgerHash
@@ -1527,6 +1527,11 @@ func verifyArchive(args []string) error { //nolint:funlen,gocognit,gocyclo // li
 			"Default off for backward compat with the operator workflow that "+
 			"tolerated scattered missed checkpoints; flip to true after the "+
 			"cross-anchor archive bootstrap completes (PRs #200/#202/#203).")
+	maxRuntime := fs.Duration("max-runtime", 24*time.Hour,
+		"Hard cap on total verification runtime. 0 = no cap (run until "+
+			"completion or operator interrupt). Default 24h matches the "+
+			"backward-compat behaviour but full-archive runs that exceed "+
+			"the cap need 0 to avoid context-deadline-exceeded mid-walk.")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -1564,7 +1569,7 @@ func verifyArchive(args []string) error { //nolint:funlen,gocognit,gocyclo // li
 
 	// Tier A + B (LCM walk via ledgerstream). Skipped when tier=peers.
 	if doChain || doCheckpoint {
-		if err := verifyArchiveLCMWalk(cfg, bucket, uint32(*from), uint32(*to),
+		if err := verifyArchiveLCMWalk(cfg, bucket, uint32(*from), uint32(*to), *maxRuntime,
 			doChain, doCheckpoint, *archiveRoot, *failOnMissed); err != nil {
 			return err
 		}
@@ -1598,7 +1603,7 @@ func verifyArchive(args []string) error { //nolint:funlen,gocognit,gocyclo // li
 // of the walk is treated as a hard failure per ADR-0017 X1.7.
 // When false (default), missed checkpoints are reported but tolerated
 // — matches the pre-bootstrap operator workflow.
-func verifyArchiveLCMWalk(cfg config.Config, bucket string, from, to uint32, doChain, doCheckpoint bool, archiveRoot string, failOnMissed bool) error { //nolint:funlen,gocognit,gocyclo
+func verifyArchiveLCMWalk(cfg config.Config, bucket string, from, to uint32, maxRuntime time.Duration, doChain, doCheckpoint bool, archiveRoot string, failOnMissed bool) error { //nolint:funlen,gocognit,gocyclo
 	lsCfg := ledgerstream.Config{
 		DataStore: datastore.DataStoreConfig{
 			Type: "S3",
@@ -1612,7 +1617,19 @@ func verifyArchiveLCMWalk(cfg config.Config, bucket string, from, to uint32, doC
 		},
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 24*time.Hour)
+	// maxRuntime == 0 → no cap (uncancellable parent). Operators
+	// pass 0 for full-archive runs that exceed any single-day
+	// budget; the binary still honours external SIGTERM via the
+	// SDK's signal hooks.
+	var (
+		ctx    context.Context
+		cancel context.CancelFunc
+	)
+	if maxRuntime > 0 {
+		ctx, cancel = context.WithTimeout(context.Background(), maxRuntime)
+	} else {
+		ctx, cancel = context.WithCancel(context.Background())
+	}
 	defer cancel()
 
 	var (
