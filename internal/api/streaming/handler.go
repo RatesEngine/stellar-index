@@ -27,8 +27,7 @@ type StreamOptions struct {
 // Stream wires an http.ResponseWriter into the Hub for the supplied
 // topics. It:
 //
-//  1. Sets the SSE-mandated response headers and explicitly disables
-//     intermediate proxy buffering with `X-Accel-Buffering: no`.
+//  1. Sets the SSE-mandated response headers and disables proxy buffering.
 //  2. Reads `Last-Event-ID` from the request (header takes
 //     precedence over the `?last_event_id=` query param fallback)
 //     and replays buffered events with greater IDs.
@@ -37,13 +36,26 @@ type StreamOptions struct {
 //  4. Emits comment-only heartbeat frames at HeartbeatInterval to
 //     keep proxies from idling out the connection.
 //
-// Stream returns when the request context is cancelled, the client
-// disconnects, the subscriber queue overflows (slow-consumer drop),
-// or the underlying response writer can't flush.
-//
-// The handler does NOT itself authenticate or rate-limit — those
-// are middleware concerns wired upstream in the v1 server stack.
+// Stream is the convenience constructor for Hub-driven endpoints
+// (the closed-bucket /v1/price/stream). Per-connection-tick
+// endpoints (/v1/price/tip/stream, /v1/observations/stream) bypass
+// the Hub and feed events through [StreamFromChannel] directly.
 func Stream(w http.ResponseWriter, r *http.Request, hub *Hub, topics []string, opts StreamOptions) {
+	ch, cancel := hub.Subscribe(topics, LastEventIDFrom(r))
+	defer cancel()
+	StreamFromChannel(w, r, ch, opts)
+}
+
+// StreamFromChannel is the lower-level SSE writer: given any
+// receive-only event channel, write headers, run the heartbeat-aware
+// event loop, and return when the request context cancels or `ch`
+// closes. Pair this with a per-connection producer goroutine to
+// build endpoints whose events are computed on a tick rather than
+// fanned out from a Hub.
+//
+// The caller is responsible for closing `ch` to signal "no more
+// events"; closing terminates the stream cleanly.
+func StreamFromChannel(w http.ResponseWriter, r *http.Request, ch <-chan Event, opts StreamOptions) {
 	flusher, ok := w.(http.Flusher)
 	if !ok {
 		http.Error(w, "streaming not supported", http.StatusInternalServerError)
@@ -66,19 +78,14 @@ func Stream(w http.ResponseWriter, r *http.Request, hub *Hub, topics []string, o
 		heartbeat = DefaultHeartbeatInterval
 	}
 
-	lastEventID := lastEventIDFrom(r)
-
-	ch, cancel := hub.Subscribe(topics, lastEventID)
-	defer cancel()
-
 	ctx := r.Context()
 	ticker := time.NewTicker(heartbeat)
 	defer ticker.Stop()
 
 	// Initial flush so the client sees the response start
 	// immediately rather than waiting for the first event. Some
-	// clients (curl, EventSource on first connect) deadlock if the
-	// server hasn't written headers + flushed before they time out.
+	// clients deadlock if the server hasn't written headers + flushed
+	// before they time out.
 	if _, err := fmt.Fprint(w, ":connected\n\n"); err != nil {
 		return
 	}
@@ -90,12 +97,12 @@ func Stream(w http.ResponseWriter, r *http.Request, hub *Hub, topics []string, o
 			return
 		case ev, ok := <-ch:
 			if !ok {
-				// Subscription was dropped (overflow or hub shutdown)
-				// — closing the channel here propagates to the
-				// client, which reconnects with Last-Event-ID.
+				// Channel closed → producer signalled done. Return
+				// cleanly; client reconnects with Last-Event-ID for
+				// resume.
 				return
 			}
-			if err := writeEvent(w, ev); err != nil {
+			if err := WriteFrame(w, ev); err != nil {
 				return
 			}
 			flusher.Flush()
@@ -108,20 +115,23 @@ func Stream(w http.ResponseWriter, r *http.Request, hub *Hub, topics []string, o
 	}
 }
 
-// lastEventIDFrom returns the resume cursor from the request:
+// LastEventIDFrom returns the resume cursor from the request:
 // header `Last-Event-ID` per the WHATWG SSE spec, or
 // `?last_event_id=` as a fallback for clients that can't set custom
 // headers (notably the EventSource API in browsers — it auto-sends
 // the header on reconnect, but the *initial* connection may need
 // the query-param form for resume across page reloads).
-func lastEventIDFrom(r *http.Request) string {
+//
+// Exported so non-Hub endpoints can consult it themselves (e.g. to
+// log resumption events or skip stale state on reconnect).
+func LastEventIDFrom(r *http.Request) string {
 	if v := r.Header.Get("Last-Event-ID"); v != "" {
 		return v
 	}
 	return r.URL.Query().Get("last_event_id")
 }
 
-// writeEvent emits one SSE frame:
+// WriteFrame emits one SSE frame to w:
 //
 //	id: <ID>
 //	event: <Type>      (omitted when Type == "")
@@ -129,9 +139,13 @@ func lastEventIDFrom(r *http.Request) string {
 //	data: <line 2>     (one per \n in Data)
 //	\n
 //
-// Each `data:` line is required by the SSE spec to end with \n;
-// the trailing \n separates the frame from the next.
-func writeEvent(w http.ResponseWriter, ev Event) error {
+// Each `data:` line ends with \n per the SSE spec; the trailing \n
+// separates the frame from the next.
+//
+// WriteFrame does NOT flush the underlying writer; Stream and
+// StreamFromChannel call Flush() after each successful WriteFrame.
+// Direct callers (custom event loops) are responsible for flushing.
+func WriteFrame(w http.ResponseWriter, ev Event) error {
 	var b strings.Builder
 	b.Grow(len(ev.Data) + 64)
 	if ev.ID != "" {
@@ -144,9 +158,6 @@ func writeEvent(w http.ResponseWriter, ev Event) error {
 		b.WriteString(ev.Type)
 		b.WriteByte('\n')
 	}
-	// Split on \n so multiline data still produces one logical event
-	// (per the SSE spec). Most callers ship single-line JSON so this
-	// loop runs once.
 	if len(ev.Data) == 0 {
 		b.WriteString("data:\n")
 	} else {

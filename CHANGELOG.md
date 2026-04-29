@@ -17,6 +17,17 @@ against.
 
 ### Added
 
+- **`/v1/price/tip/stream` SSE endpoint (L3.7)**: streaming
+  counterpart to `/v1/price/tip` per ADR-0018. Same compute logic
+  pushed on a per-connection tick (default cadence = window_seconds,
+  clamp 1–60). First event emits synchronously on connect — no
+  waiting a full window for the first datum. Pre-flight 404 when
+  the pair has no observations (SSE can't change status mid-stream).
+  Heartbeats every 15s; Last-Event-ID resume via header or
+  `?last_event_id=` fallback. Refactored the request handler's
+  rolling-window-then-fallback core into a shared `Server.computeTip`
+  used by both endpoints.
+
 - **`internal/api/streaming/` SSE infrastructure (L3.6)**: shared
   pub/sub primitive backing the upcoming streaming endpoints
   (L3.7 `/v1/price/tip/stream`, L3.8 `/v1/observations/stream`,

@@ -237,6 +237,55 @@ paths:
         "500":        { $ref: "#/components/responses/InternalError" }
         "503":        { $ref: "#/components/responses/ServiceUnavailable" }
 
+  /price/tip/stream:
+    get:
+      tags: [price]
+      summary: SSE stream of tip-price updates (ADR-0018).
+      description: |
+        Server-Sent Events counterpart of `/v1/price/tip`. Same
+        compute logic; pushed on a per-connection tick (default
+        every `window_seconds` seconds, clamp 1–60 s).
+
+        - First event fires synchronously on connect (no waiting a
+          full window).
+        - Pre-flight 404 when the pair has no observations: SSE
+          can't change status mid-stream, so emptiness is detected
+          before the response body switches to `text/event-stream`.
+        - Heartbeats every 15 s as comment lines (`:keepalive`) so
+          intermediate proxies don't idle out the connection.
+        - Resume after disconnect by setting `Last-Event-ID` on the
+          reconnect (header preferred, `?last_event_id=` fallback).
+        - Same URL-discipline rule as `/v1/price/tip`:
+          `?granularity=` returns 400.
+      parameters:
+        - { $ref: "#/components/parameters/AssetQuery" }
+        - { $ref: "#/components/parameters/Quote" }
+        - name: window_seconds
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 60
+            default: 5
+          description: Tick cadence (and rolling-VWAP window) in seconds.
+        - name: Last-Event-ID
+          in: header
+          required: false
+          schema: { type: string }
+          description: Opaque ID for resuming a previously-broken stream.
+      responses:
+        "200":
+          description: SSE stream of tip_update events.
+          content:
+            text/event-stream:
+              schema: { type: string }
+        "400":        { $ref: "#/components/responses/BadRequest" }
+        "404":        { $ref: "#/components/responses/NotFound" }
+        "429":        { $ref: "#/components/responses/RateLimited" }
+        "500":        { $ref: "#/components/responses/InternalError" }
+        "503":        { $ref: "#/components/responses/ServiceUnavailable" }
+
   /price/batch:
     get:
       tags: [price]

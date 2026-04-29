@@ -73,7 +73,7 @@ Within each surface, ordered by dependency.
 | L3.4 | F5.3 Batch / bulk-query endpoint | Wk 7 | half-day | L3.1 | — | `internal/api/v1/batch.go` | 🟡 |
 | L3.5 | F2.* Market Cap / FDV / Circulating / Max Supply on asset detail (24h volume + change_24h_pct deferred — aggregator-driven) | Wk 7 | full day | L2.12, L2.10 | launch | `internal/api/v1/{assets,assets_f2}.go` | 🟢 |
 | L3.6 | SSE streaming infrastructure — heartbeats, Last-Event-ID, multi-pair subscription | Wk 7 | half-day | — | L3.7, L3.8, L3.9, L3.10 | `internal/api/streaming` | 🟢 |
-| L3.7 | `/v1/price/tip/stream` SSE | Wk 7 | half-day | L3.2, L3.6 | — | same | 🟡 |
+| L3.7 | `/v1/price/tip/stream` SSE | Wk 7 | half-day | L3.2, L3.6 | — | same | 🟢 |
 | L3.8 | `/v1/observations/stream` SSE | Wk 7 | half-day | L3.3, L3.6 | — | same | 🟡 |
 | L3.9 | `/v1/price/stream` SSE (closed-bucket events) | Wk 7 | half-day | L3.1, L3.6 | — | same | 🟡 |
 | L3.10 | `pkg/client/` Go SDK skeleton | Wk 7 | half-day | — | — | `pkg/client` | 🟡 |

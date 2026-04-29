@@ -31,7 +31,7 @@ const subscriberQueueDepth = 32
 //
 // Hub is goroutine-safe.
 type Hub struct {
-	gen        generator
+	gen        Generator
 	bufferSize int
 
 	mu     sync.RWMutex
@@ -71,7 +71,7 @@ func NewHub(bufferSize int) *Hub {
 // Last-Event-ID for buffered replay.
 func (h *Hub) Publish(topic, eventType string, data []byte) string {
 	ev := Event{
-		ID:        h.gen.next(),
+		ID:        h.gen.Next(),
 		Type:      eventType,
 		Data:      data,
 		Timestamp: time.Now(),

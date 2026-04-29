@@ -40,8 +40,9 @@ type Event struct {
 	Timestamp time.Time
 }
 
-// generator is the per-Hub monotonic ID source. Each event gets a
-// 16-char lowercase hex ID composed of:
+// Generator is a goroutine-safe monotonic event-ID source. Each
+// call to [Generator.Next] returns a fresh 16-char lowercase hex
+// ID composed of:
 //
 //   - 8 bytes (16 hex chars) packed: high 48 bits are unix-millis
 //     (truncated), low 16 bits are a per-millisecond rolling counter
@@ -52,16 +53,20 @@ type Event struct {
 // which this format satisfies for the next ~8900 years (until 2^48
 // ms overflows in 10889 CE). The internal format is private; treat
 // IDs as opaque strings.
-type generator struct {
+//
+// Hubs hold a Generator internally; non-Hub callers (e.g. the
+// /v1/price/tip/stream handler that ticks per-connection without
+// going through a Hub) can construct one directly.
+type Generator struct {
 	// state packs (lastMillis << 16) | counter into a single
 	// uint64 for atomic-CAS update. counter resets implicitly each
 	// time lastMillis advances.
 	state atomic.Uint64
 }
 
-// next returns the next sortable event ID. Goroutine-safe; never
+// Next returns the next sortable event ID. Goroutine-safe; never
 // returns the same ID twice (within the lifetime of the generator).
-func (g *generator) next() string {
+func (g *Generator) Next() string {
 	now := uint64(time.Now().UnixMilli()) //nolint:gosec // wall-clock millis bounded; sentinel-safe past year 2106 because we only use lower 48 bits
 	for {
 		old := g.state.Load()

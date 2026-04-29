@@ -1,6 +1,7 @@
 package v1
 
 import (
+	"context"
 	"errors"
 	"net/http"
 	"strconv"
@@ -83,21 +84,7 @@ func (s *Server) handlePriceTip(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Try the rolling window when HistoryReader is wired. On any error
-	// (including "no trades in window"), fall through to LatestPrice.
-	if snap, sources, ok := s.tryTipWindowVWAP(r, asset, quote, window); ok {
-		flags := Flags{SingleSource: len(sources) == 1}
-		flags.DivergenceWarning = s.lookupDivergenceFlag(r, asset)
-		writeJSON(w, snap, flags, sources...)
-		return
-	}
-
-	// Fallback: most-recent known observation for the pair. PriceReader
-	// returns price_type="last_trade" today (MVP) and "vwap" once the
-	// aggregator wires the closed-bucket cache; both are in-contract
-	// for the tip fallback per ADR-0018 (the customer reads price_type
-	// + observed_at to know what they got).
-	snapshot, sources, _, err := s.prices.LatestPrice(r.Context(), asset, quote)
+	snapshot, sources, err := s.computeTip(r.Context(), asset, quote, window)
 	if errors.Is(err, ErrPriceNotFound) {
 		writeProblem(w, r,
 			"https://api.ratesengine.net/errors/price-not-found",
@@ -109,7 +96,7 @@ func (s *Server) handlePriceTip(w http.ResponseWriter, r *http.Request) {
 		if clientAborted(r, err) {
 			return
 		}
-		s.logger.Error("LatestPrice failed (tip fallback)",
+		s.logger.Error("computeTip failed",
 			"err", err, "asset", asset.String(), "quote", quote.String())
 		writeProblem(w, r,
 			"https://api.ratesengine.net/errors/internal",
@@ -117,13 +104,38 @@ func (s *Server) handlePriceTip(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Per ADR-0018: stale stays FALSE on the last-good-price branch —
-	// the fallback is in-contract on this surface. We deliberately
-	// IGNORE the staleness bit PriceReader sets for /v1/price; tip
-	// has its own envelope contract.
+	// Per ADR-0018: stale stays FALSE on either branch — both are
+	// in-contract on this surface. We deliberately IGNORE the
+	// staleness bit PriceReader sets for /v1/price; tip has its own
+	// envelope contract.
 	flags := Flags{SingleSource: len(sources) == 1}
 	flags.DivergenceWarning = s.lookupDivergenceFlag(r, asset)
 	writeJSON(w, snapshot, flags, sources...)
+}
+
+// computeTip is the shared core of [Server.handlePriceTip] and
+// [Server.handlePriceTipStream]. Tries the rolling-window VWAP first
+// (when HistoryReader is wired and the window has trades), falling
+// back to PriceReader.LatestPrice when the window is empty.
+//
+// Returns ErrPriceNotFound when neither branch can produce a snapshot
+// — caller turns that into 404 on the request endpoint and into
+// "stream cannot start" on the stream endpoint. Any other error is
+// surfaced as-is for caller-side logging + 500 mapping.
+func (s *Server) computeTip(ctx context.Context, asset, quote canonical.Asset, windowSeconds int) (PriceSnapshot, []string, error) {
+	if snap, sources, ok := s.tipWindowVWAP(ctx, asset, quote, windowSeconds); ok {
+		return snap, sources, nil
+	}
+	// Fallback: most-recent known observation for the pair. PriceReader
+	// returns price_type="last_trade" today (MVP) and "vwap" once the
+	// aggregator wires the closed-bucket cache; both are in-contract
+	// for the tip fallback per ADR-0018 (the customer reads price_type
+	// + observed_at to know what they got).
+	snap, sources, _, err := s.prices.LatestPrice(ctx, asset, quote)
+	if err != nil {
+		return PriceSnapshot{}, nil, err
+	}
+	return snap, sources, nil
 }
 
 // parseTipAssetQuote pulls asset (required) + quote (defaulted to
@@ -191,18 +203,19 @@ func parseTipWindowSeconds(w http.ResponseWriter, r *http.Request) (int, bool) {
 	return n, true
 }
 
-// tryTipWindowVWAP runs the rolling-window VWAP path. Returns
+// tipWindowVWAP runs the rolling-window VWAP path. Returns
 // (snapshot, sources, true) when at least one trade landed in the
 // window and VWAP succeeded; (_, _, false) otherwise so the caller
 // drops to the LatestPrice fallback.
 //
-// Errors are intentionally swallowed (logged, not surfaced) — the
-// tip contract guarantees the caller a response if the pair has any
-// observation at all, and the LatestPrice fallback is the
-// authoritative answer when the rolling window can't produce one.
-// Surfacing a 5xx here would make a transient hypertable hiccup turn
-// the entire tip surface red even when the fallback is healthy.
-func (s *Server) tryTipWindowVWAP(r *http.Request, asset, quote canonical.Asset, windowSeconds int) (PriceSnapshot, []string, bool) {
+// Errors are intentionally swallowed (logged when the request
+// context is still alive, not surfaced) — the tip contract
+// guarantees the caller a response if the pair has any observation
+// at all, and the LatestPrice fallback is the authoritative answer
+// when the rolling window can't produce one. Surfacing a 5xx here
+// would make a transient hypertable hiccup turn the entire tip
+// surface red even when the fallback is healthy.
+func (s *Server) tipWindowVWAP(ctx context.Context, asset, quote canonical.Asset, windowSeconds int) (PriceSnapshot, []string, bool) {
 	if s.history == nil {
 		return PriceSnapshot{}, nil, false
 	}
@@ -215,9 +228,12 @@ func (s *Server) tryTipWindowVWAP(r *http.Request, asset, quote canonical.Asset,
 
 	now := time.Now().UTC()
 	from := now.Add(-time.Duration(windowSeconds) * time.Second)
-	trades, err := s.history.TradesInRange(r.Context(), pair, from, now, tipWindowMaxTrades)
+	trades, err := s.history.TradesInRange(ctx, pair, from, now, tipWindowMaxTrades)
 	if err != nil {
-		if !clientAborted(r, err) {
+		// Don't log under a cancelled ctx — that's just the client
+		// disconnecting (or, on the stream path, the per-tick scope
+		// completing).
+		if ctx.Err() == nil {
 			s.logger.Warn("TradesInRange failed (tip window) — falling back to LatestPrice",
 				"err", err, "asset", asset.String(), "quote", quote.String(),
 				"window_seconds", windowSeconds)

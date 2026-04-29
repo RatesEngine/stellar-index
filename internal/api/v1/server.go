@@ -264,6 +264,11 @@ func (s *Server) mountRoutes() {
 	// is empty. NOT cross-region consistent; use /v1/price for that.
 	s.mux.HandleFunc("GET /v1/price/tip", s.handlePriceTip)
 
+	// SSE counterpart of /v1/price/tip — same compute logic, pushed
+	// on a per-connection tick. See ADR-0018 §"SSE wires onto the
+	// tip surface".
+	s.mux.HandleFunc("GET /v1/price/tip/stream", s.handlePriceTipStream)
+
 	// Raw per-source observations (ADR-0018 Surface 3) — array of
 	// most-recent trade per source for the pair. No aggregation; the
 	// rawest of the three consistency surfaces.
