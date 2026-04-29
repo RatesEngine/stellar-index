@@ -220,8 +220,59 @@ the gauge — a flat gauge with zero counter increments means the
 orchestrator stopped invoking the cross-check, not that everything's
 healthy.
 
+## verify-archive (ratesengine-ops one-shot)
+
+Emitted by `ratesengine-ops verify-archive` when the operator
+passes `-metrics-listen ADDR`. One-shot diagnostic command, but the
+run can take hours on full pubnet sweeps — live metrics let
+operators dashboard the bottleneck during the run rather than
+guessing from log tails.
+
+All vectors labelled by `chunk_idx` (decimal string) so a parallel
+run with `-workers 8` produces per-chunk series. Cardinality bound
+by the `-workers` cap (currently `[1, 16]`).
+
+### `ratesengine_verify_archive_ledgers_verified_total`
+
+Counter, label `chunk_idx`.
+
+Ledgers walked + verified per chunk. Rate over time gives ledgers/sec
+per chunk — primary signal for spotting a stalled chunk versus a
+slow one.
+
+### `ratesengine_verify_archive_current_ledger`
+
+Gauge, label `chunk_idx`.
+
+Most-recent ledger sequence verified by each chunk. Together with
+the chunk's `[from, to]` range (operator-known) gives a
+percent-complete view; together across chunks gives a
+ledger-distance-fan picture of leading vs trailing chunks.
+
+### `ratesengine_verify_archive_checkpoints_total`
+
+Counter, labels `chunk_idx` + `outcome` (`matched` / `missed`).
+
+Tier B checkpoint outcomes per chunk. `missed` = archive file
+absent (warning, or hard fail under `-fail-on-missed`); `matched` =
+hash-equal proof.
+
+### `ratesengine_verify_archive_mismatches_total`
+
+Counter, labels `chunk_idx` + `reason` (`chain` / `sequence` /
+`checkpoint`).
+
+Chain breaks, sequence gaps, and checkpoint hash mismatches.
+**Any non-zero reading is a hard failure** — the counter exists so
+dashboards can distinguish "mismatch fired and the run aborted at
+second X" from "chunk aborted for an unrelated reason (canceled
+context)".
+
 ## Changelog
 
+- 2026-04-29 — added verify-archive metrics (`ratesengine_verify_archive_*`)
+  covering per-chunk ledger progress, checkpoint outcomes, and
+  mismatches.
 - 2026-04-28 — added supply cross-check metrics (L2.12 PR 5)
 - 2026-04-25 — added aggregator orchestrator metrics
   (`ratesengine_aggregator_*`) covering tick outcomes, VWAP writes,
