@@ -384,6 +384,66 @@ paths:
         "500":        { $ref: "#/components/responses/InternalError" }
         "503":        { $ref: "#/components/responses/ServiceUnavailable" }
 
+  /observations/stream:
+    get:
+      tags: [price]
+      summary: SSE stream of raw per-source observations (ADR-0018).
+      description: |
+        Streaming counterpart of `/v1/observations`. Same compute
+        logic; pushed on a per-connection tick (default every 5 s,
+        clamp 1–60 s — independent of tip's `window_seconds` because
+        observations does not aggregate).
+
+        - First event fires synchronously on connect; data may be
+          an empty array (the pair has no observations yet — same
+          200/empty contract as the request endpoint, NOT 404).
+        - Recurring events fire unconditionally on each tick (no
+          server-side dedupe) — clients diff against the previous
+          payload if they want change-detection.
+        - Heartbeats every 15 s as comment lines.
+        - URL discipline: `?granularity=` and `?window_seconds=`
+          return 400.
+      parameters:
+        - { $ref: "#/components/parameters/AssetQuery" }
+        - { $ref: "#/components/parameters/Quote" }
+        - name: source
+          in: query
+          required: false
+          schema: { type: string }
+          description: Restrict to one source's most-recent trade.
+        - name: aggregate
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [latest]
+          description: |
+            `latest` collapses to the single most-recent trade across
+            all sources.
+        - name: interval_seconds
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 60
+            default: 5
+          description: Tick cadence in seconds.
+        - name: Last-Event-ID
+          in: header
+          required: false
+          schema: { type: string }
+          description: Opaque ID for resuming a previously-broken stream.
+      responses:
+        "200":
+          description: SSE stream of observations_update events.
+          content:
+            text/event-stream:
+              schema: { type: string }
+        "400":        { $ref: "#/components/responses/BadRequest" }
+        "500":        { $ref: "#/components/responses/InternalError" }
+        "503":        { $ref: "#/components/responses/ServiceUnavailable" }
+
   /price/stream:
     get:
       tags: [price]

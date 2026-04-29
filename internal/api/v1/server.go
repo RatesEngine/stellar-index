@@ -274,6 +274,10 @@ func (s *Server) mountRoutes() {
 	// rawest of the three consistency surfaces.
 	s.mux.HandleFunc("GET /v1/observations", s.handleObservations)
 
+	// SSE counterpart of /v1/observations — same compute, pushed on
+	// a per-connection tick. interval_seconds tunes cadence.
+	s.mux.HandleFunc("GET /v1/observations/stream", s.handleObservationsStream)
+
 	// Batch price lookup, up to 100 assets per request.
 	s.mux.HandleFunc("GET /v1/price/batch", s.handlePriceBatch)
 

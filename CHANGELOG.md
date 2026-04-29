@@ -17,6 +17,18 @@ against.
 
 ### Added
 
+- **`/v1/observations/stream` SSE endpoint (L3.8)**: streaming
+  counterpart to `/v1/observations` per ADR-0018. Same compute,
+  pushed on a per-connection tick. Cadence knob is `interval_seconds`
+  (default 5, clamp 1–60) — deliberately a different name from
+  tip's `window_seconds` because observations doesn't aggregate.
+  First event always emits synchronously (may be empty array;
+  observations returns 200/empty not 404, the stream mirrors that).
+  Same `?source=`, `?aggregate=latest` knobs as the request
+  endpoint. URL discipline: `?granularity=` and `?window_seconds=`
+  return 400. Refactored the request handler's compute path into a
+  shared `Server.computeObservations`.
+
 - **`/v1/price/tip/stream` SSE endpoint (L3.7)**: streaming
   counterpart to `/v1/price/tip` per ADR-0018. Same compute logic
   pushed on a per-connection tick (default cadence = window_seconds,
