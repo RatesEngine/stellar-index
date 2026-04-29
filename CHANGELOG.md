@@ -17,6 +17,23 @@ against.
 
 ### Added
 
+- **Multi-window baseline storage + refresh integration (L2.8
+  closes L2.8)**: migration 0008 adds `median_1d/mad_1d/n_1d` and
+  `median_7d/mad_7d/n_7d` to `volatility_baseline_1m` (the existing
+  median/mad/sample_count columns hold the 30d baseline; the new
+  pairs are nullable for the bootstrap-on-this-scale case).
+  `Store.UpsertBaseline` and `LatestBaseline` now carry a
+  `baseline.MultiBaseline` end-to-end; pre-flight checks include
+  Day30 non-nil. `Store.TimedVWAPsForPair1m` returns time-stamped
+  VWAPs so the refresher can apply `SplitByLookback` to derive the
+  three sub-windows from one read. `baseline.Sink` updated to take
+  a MultiBaseline; aggregator binary's adapters track. The 30d
+  bootstrap (Day30 nil) outcome surfaces as
+  `OutcomeNotEnoughSamples` (no row written); per-window bootstrap
+  (Day1/Day7 nil while Day30 valid) is OK and persists with NULL
+  columns. Closes L2.8 across 2 PRs — the anomaly-evaluator
+  consumer of `MultiBaseline.MaxZScore` lands with L2.7.
+
 - **Multi-window baseline safeguard (L2.8 math slice)**: per
   ADR-0019 §"Multi-window safeguard against frog-boiling" — a
   coordinated attacker who slowly drifts an asset over weeks would

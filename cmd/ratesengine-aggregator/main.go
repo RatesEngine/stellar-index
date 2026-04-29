@@ -310,31 +310,31 @@ func runBaselineRefresh(ctx context.Context, r *baseline.Refresher, pairs []cano
 }
 
 // baselineSourceAdapter wraps *timescale.Store to satisfy
-// baseline.VWAPSource.
+// baseline.TimedVWAPSource.
 type baselineSourceAdapter struct{ store *timescale.Store }
 
-func (a baselineSourceAdapter) VWAPsForPair1m(ctx context.Context, pair canonical.Pair, from, to time.Time) ([]float64, error) {
-	return a.store.VWAPsForPair1m(ctx, pair, from, to)
+func (a baselineSourceAdapter) TimedVWAPsForPair1m(ctx context.Context, pair canonical.Pair, from, to time.Time) ([]baseline.TimedVWAP, error) {
+	return a.store.TimedVWAPsForPair1m(ctx, pair, from, to)
 }
 
 // baselineSinkAdapter wraps *timescale.Store to satisfy
 // baseline.Sink. The adapter builds a timescale.StoredBaseline so
 // the dep direction stays clean — the storage package doesn't need
-// to import the baseline package.
+// to import the baseline package as a Sink consumer.
 type baselineSinkAdapter struct{ store *timescale.Store }
 
 func (a baselineSinkAdapter) UpsertBaseline(
 	ctx context.Context,
 	pair canonical.Pair,
 	computedAt, windowStart, windowEnd time.Time,
-	b baseline.Baseline,
+	m baseline.MultiBaseline,
 ) error {
 	return a.store.UpsertBaseline(ctx, timescale.StoredBaseline{
 		Pair:        pair,
 		ComputedAt:  computedAt,
 		WindowStart: windowStart,
 		WindowEnd:   windowEnd,
-		Baseline:    b,
+		Multi:       m,
 	})
 }
 

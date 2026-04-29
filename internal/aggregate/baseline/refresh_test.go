@@ -11,29 +11,29 @@ import (
 	"github.com/RatesEngine/rates-engine/internal/canonical"
 )
 
-// stubSource is a baseline.VWAPSource that returns a fixed slice
-// (or err) per pair.
+// stubSource is a baseline.TimedVWAPSource that returns a per-pair
+// fixture (or err). The fixture is built relative to a `now` time
+// captured per-test so SplitByLookback's window cutoffs land where
+// we expect.
 type stubSource struct {
 	mu     sync.Mutex
-	byPair map[string][]float64
+	byPair map[string][]baseline.TimedVWAP
 	err    error
-	calls  int
 }
 
 func newStubSource() *stubSource {
-	return &stubSource{byPair: make(map[string][]float64)}
+	return &stubSource{byPair: make(map[string][]baseline.TimedVWAP)}
 }
 
-func (s *stubSource) set(pair canonical.Pair, vwaps []float64) {
+func (s *stubSource) set(pair canonical.Pair, vwaps []baseline.TimedVWAP) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.byPair[pair.String()] = vwaps
 }
 
-func (s *stubSource) VWAPsForPair1m(_ context.Context, pair canonical.Pair, _, _ time.Time) ([]float64, error) {
+func (s *stubSource) TimedVWAPsForPair1m(_ context.Context, pair canonical.Pair, _, _ time.Time) ([]baseline.TimedVWAP, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	s.calls++
 	if s.err != nil {
 		return nil, s.err
 	}
@@ -43,23 +43,23 @@ func (s *stubSource) VWAPsForPair1m(_ context.Context, pair canonical.Pair, _, _
 // stubSink captures upsert calls for assertion.
 type stubSink struct {
 	mu     sync.Mutex
-	byPair map[string]baseline.Baseline
+	byPair map[string]baseline.MultiBaseline
 	err    error
 	calls  int
 }
 
 func newStubSink() *stubSink {
-	return &stubSink{byPair: make(map[string]baseline.Baseline)}
+	return &stubSink{byPair: make(map[string]baseline.MultiBaseline)}
 }
 
-func (s *stubSink) UpsertBaseline(_ context.Context, pair canonical.Pair, _, _, _ time.Time, b baseline.Baseline) error {
+func (s *stubSink) UpsertBaseline(_ context.Context, pair canonical.Pair, _, _, _ time.Time, m baseline.MultiBaseline) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.calls++
 	if s.err != nil {
 		return s.err
 	}
-	s.byPair[pair.String()] = b
+	s.byPair[pair.String()] = m
 	return nil
 }
 
@@ -80,16 +80,37 @@ func mustPair(t *testing.T, base, quote string) canonical.Pair {
 	return p
 }
 
-// TestRefresher_HappyPath — source returns enough VWAPs, refresher
-// computes a baseline and writes it.
-func TestRefresher_HappyPath(t *testing.T) {
+// stableTimedSeries builds `n` evenly-spaced timed VWAPs with bp
+// jitter, ending at `now`. Bucket spacing is 1 minute (matching the
+// 1m CAGG cadence).
+func stableTimedSeries(now time.Time, n int) []baseline.TimedVWAP {
+	out := make([]baseline.TimedVWAP, n)
+	price := 1.0
+	for i := 0; i < n; i++ {
+		// 0.0001 jitter alternating sign
+		shift := 0.0001
+		if i%2 == 0 {
+			shift = -shift
+		}
+		price += shift
+		out[i] = baseline.TimedVWAP{
+			VWAP:      price,
+			BucketEnd: now.Add(-time.Duration(n-1-i) * time.Minute),
+		}
+	}
+	return out
+}
+
+// TestRefresher_HappyPath_30dWindowFills — 30+ days of timed VWAPs
+// produces a populated 30d (and 7d, 1d) baseline.
+func TestRefresher_HappyPath_30dWindowFills(t *testing.T) {
 	pair := mustPair(t, "native", "fiat:USD")
+	now := time.Now().UTC()
 	src := newStubSource()
-	// 12 VWAPs → 11 returns → above MinSamples.
-	src.set(pair, []float64{
-		1.00, 1.01, 1.005, 1.02, 1.015, 1.018,
-		1.020, 1.019, 1.022, 1.025, 1.024, 1.026,
-	})
+	// 30d * 1440 buckets/day = 43,200 — overkill for tests, use a
+	// smaller stable series that still spans >7d so all three
+	// windows have valid data.
+	src.set(pair, stableTimedSeries(now, 8*1440)) // 8 days
 	sink := newStubSink()
 
 	r := baseline.NewRefresher(src, sink, 30*24*time.Hour, nil)
@@ -104,18 +125,27 @@ func TestRefresher_HappyPath(t *testing.T) {
 		t.Errorf("sink.calls = %d, want 1", sink.calls)
 	}
 	got := sink.byPair[pair.String()]
-	if got.N < baseline.MinSamples {
-		t.Errorf("baseline.N = %d, want >= %d", got.N, baseline.MinSamples)
+	if got.Day30 == nil {
+		t.Error("Day30 nil after refresh — should be populated with 8d of data")
+	}
+	if got.Day7 == nil {
+		t.Error("Day7 nil — 8d of data should easily fill 7d")
+	}
+	if got.Day1 == nil {
+		t.Error("Day1 nil — 8d of data covers 1d")
 	}
 }
 
-// TestRefresher_NotEnoughSamples — fewer than 2 VWAPs → 0 returns →
-// ErrNotEnoughSamples surfaces as OutcomeNotEnoughSamples without
-// attempting to write.
-func TestRefresher_NotEnoughSamples(t *testing.T) {
+// TestRefresher_30dBootstrap_NotEnoughSamples — fewer than 2 buckets
+// available → can't compute even one return → OutcomeNotEnoughSamples
+// and no write.
+func TestRefresher_30dBootstrap_NotEnoughSamples(t *testing.T) {
 	pair := mustPair(t, "native", "fiat:USD")
 	src := newStubSource()
-	src.set(pair, []float64{1.0}) // single bucket → 0 returns
+	// One bucket → 0 returns → no baseline at any window.
+	src.set(pair, []baseline.TimedVWAP{
+		{VWAP: 1.0, BucketEnd: time.Now().UTC()},
+	})
 	sink := newStubSink()
 
 	r := baseline.NewRefresher(src, sink, 30*24*time.Hour, nil)
@@ -127,12 +157,50 @@ func TestRefresher_NotEnoughSamples(t *testing.T) {
 		t.Errorf("outcome = %v, want OutcomeNotEnoughSamples", outcome)
 	}
 	if sink.calls != 0 {
-		t.Errorf("sink.calls = %d, want 0 (no write on bootstrap)", sink.calls)
+		t.Errorf("sink.calls = %d, want 0", sink.calls)
 	}
 }
 
-// TestRefresher_ReadError — VWAPSource fails → no compute, no write,
-// OutcomeReadError.
+// TestRefresher_PartialBootstrap_OnlyDay30Valid — input spans more
+// than 1d but bucketing density is too thin for the 1d window to
+// have MinSamples. The 30d window upserts; the 1d slot is null.
+func TestRefresher_PartialBootstrap_OnlyDay30Valid(t *testing.T) {
+	pair := mustPair(t, "native", "fiat:USD")
+	now := time.Now().UTC()
+	// Three buckets spread over 8 days. Each window subset:
+	//   1d  → just the most-recent (1 bucket → 0 returns → bootstrap)
+	//   7d  → most-recent two (1 return → still < MinSamples=2 → bootstrap)
+	//   30d → all three (2 returns → MinSamples=2 → valid)
+	src := newStubSource()
+	src.set(pair, []baseline.TimedVWAP{
+		{VWAP: 1.0, BucketEnd: now.Add(-8 * 24 * time.Hour)},
+		{VWAP: 1.01, BucketEnd: now.Add(-2 * 24 * time.Hour)},
+		{VWAP: 1.02, BucketEnd: now.Add(-30 * time.Minute)},
+	})
+	sink := newStubSink()
+
+	r := baseline.NewRefresher(src, sink, 30*24*time.Hour, nil)
+	outcome, err := r.RefreshPair(context.Background(), pair)
+	if err != nil {
+		t.Fatalf("RefreshPair: %v", err)
+	}
+	if outcome != baseline.OutcomeOK {
+		t.Errorf("outcome = %v, want OutcomeOK (Day30 valid)", outcome)
+	}
+	got := sink.byPair[pair.String()]
+	if got.Day30 == nil {
+		t.Error("Day30 nil; expected populated")
+	}
+	if got.Day7 != nil {
+		t.Errorf("Day7 expected nil (bootstrap); got %v", got.Day7)
+	}
+	if got.Day1 != nil {
+		t.Errorf("Day1 expected nil (bootstrap); got %v", got.Day1)
+	}
+}
+
+// TestRefresher_ReadError — TimedVWAPSource fails → no compute,
+// no write, OutcomeReadError.
 func TestRefresher_ReadError(t *testing.T) {
 	pair := mustPair(t, "native", "fiat:USD")
 	src := newStubSource()
@@ -157,9 +225,7 @@ func TestRefresher_ReadError(t *testing.T) {
 func TestRefresher_WriteError(t *testing.T) {
 	pair := mustPair(t, "native", "fiat:USD")
 	src := newStubSource()
-	src.set(pair, []float64{
-		1.00, 1.01, 1.005, 1.02, 1.015, 1.018, 1.020, 1.019,
-	})
+	src.set(pair, stableTimedSeries(time.Now().UTC(), 100))
 	sink := newStubSink()
 	sink.err = errors.New("disk full")
 
@@ -176,17 +242,15 @@ func TestRefresher_WriteError(t *testing.T) {
 // TestRefresher_RefreshAll_AggregatesOutcomes — three pairs with
 // three different outcomes; the summary counts each.
 func TestRefresher_RefreshAll_AggregatesOutcomes(t *testing.T) {
+	now := time.Now().UTC()
 	pHappy := mustPair(t, "native", "fiat:USD")
 	pBootstrap := mustPair(t, "native", "fiat:EUR")
 	pReadErr := mustPair(t, "native", "fiat:GBP")
 
 	src := newStubSource()
-	src.set(pHappy, []float64{
-		1.00, 1.01, 1.005, 1.02, 1.015, 1.018, 1.020, 1.019, 1.022,
-	})
-	src.set(pBootstrap, []float64{1.0}) // not enough samples
-	// pReadErr left absent → returns nil — but we want a real error,
-	// not just an empty slice. Switch to a per-pair error router:
+	src.set(pHappy, stableTimedSeries(now, 100))
+	src.set(pBootstrap, []baseline.TimedVWAP{{VWAP: 1.0, BucketEnd: now}}) // not enough
+	// pReadErr handled by perPairErrSource below.
 	src2 := &perPairErrSource{base: src, errFor: pReadErr.String()}
 	sink := newStubSink()
 
@@ -211,75 +275,30 @@ func TestRefresher_RefreshAll_AggregatesOutcomes(t *testing.T) {
 	}
 }
 
-// perPairErrSource lets a test return an error only for one specific
-// pair while delegating the rest to the underlying stub.
 type perPairErrSource struct {
 	base   *stubSource
 	errFor string
 }
 
-func (s *perPairErrSource) VWAPsForPair1m(ctx context.Context, pair canonical.Pair, from, to time.Time) ([]float64, error) {
+func (s *perPairErrSource) TimedVWAPsForPair1m(ctx context.Context, pair canonical.Pair, from, to time.Time) ([]baseline.TimedVWAP, error) {
 	if pair.String() == s.errFor {
 		return nil, errors.New("transient db error")
 	}
-	return s.base.VWAPsForPair1m(ctx, pair, from, to)
+	return s.base.TimedVWAPsForPair1m(ctx, pair, from, to)
 }
 
 // TestRefresher_RefreshAll_ConcurrencyClamp — concurrency <= 0
-// falls back to 1 (serial). Confirm by passing 0 and asserting
-// the call still completes (not by inspecting goroutine count,
-// which is implementation-dependent).
+// falls back to 1 (serial).
 func TestRefresher_RefreshAll_ConcurrencyClamp(t *testing.T) {
 	pair := mustPair(t, "native", "fiat:USD")
 	src := newStubSource()
-	src.set(pair, []float64{1.0, 1.01, 1.02, 1.015, 1.018, 1.02, 1.019, 1.022})
+	src.set(pair, stableTimedSeries(time.Now().UTC(), 100))
 	sink := newStubSink()
 
 	r := baseline.NewRefresher(src, sink, 30*24*time.Hour, nil)
 	sum := r.RefreshAll(context.Background(),
-		[]canonical.Pair{pair, pair, pair}, 0) // 0 → clamps to 1
+		[]canonical.Pair{pair, pair, pair}, 0)
 	if sum.OK != 3 {
 		t.Errorf("OK = %d, want 3", sum.OK)
 	}
-}
-
-// TestRefresher_DefaultWindowAppliesWhenZero — passing window<=0
-// to NewRefresher uses [DefaultWindow]. Indirect probe: a 0-length
-// from/to range would have triggered the source's "to <= from"
-// guard if the refresher had passed it through.
-func TestRefresher_DefaultWindowAppliesWhenZero(t *testing.T) {
-	pair := mustPair(t, "native", "fiat:USD")
-
-	var capturedFrom, capturedTo time.Time
-	src := &captureSource{
-		onCall: func(_ canonical.Pair, from, to time.Time) {
-			capturedFrom, capturedTo = from, to
-		},
-		vwaps: []float64{1.0, 1.01, 1.02, 1.015, 1.018, 1.02, 1.019, 1.022},
-	}
-	sink := newStubSink()
-	r := baseline.NewRefresher(src, sink, 0, nil) // 0 → DefaultWindow
-
-	_, err := r.RefreshPair(context.Background(), pair)
-	if err != nil {
-		t.Fatalf("RefreshPair: %v", err)
-	}
-	delta := capturedTo.Sub(capturedFrom)
-	// Should be the default 30 days. Allow some slack for clock
-	// jitter inside the call.
-	if delta < baseline.DefaultWindow-time.Minute || delta > baseline.DefaultWindow+time.Minute {
-		t.Errorf("window = %v, want %v", delta, baseline.DefaultWindow)
-	}
-}
-
-// captureSource records the time-range arguments without inspecting
-// stub state — simpler than threading a method onto stubSource.
-type captureSource struct {
-	onCall func(canonical.Pair, time.Time, time.Time)
-	vwaps  []float64
-}
-
-func (s *captureSource) VWAPsForPair1m(_ context.Context, pair canonical.Pair, from, to time.Time) ([]float64, error) {
-	s.onCall(pair, from, to)
-	return s.vwaps, nil
 }

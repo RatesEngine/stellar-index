@@ -15,22 +15,25 @@ import (
 // ADR-0019: 30 days of 1m bucket VWAPs.
 const DefaultWindow = 30 * 24 * time.Hour
 
-// VWAPSource reads bucket-aligned 1m VWAPs for a pair over a
+// TimedVWAPSource reads time-stamped 1m VWAPs for a pair over a
 // half-open window [from, to). Implementations are expected to
-// return values in chronological order (oldest first) — the
-// downstream [ReturnsFromVWAPs] depends on that ordering for
-// bucket-to-bucket return computation.
+// return values in chronological order (oldest first); the
+// downstream [SplitByLookback] depends on that ordering.
 //
 // Production wiring: a thin adapter around
-// `timescale.Store.VWAPsForPair1m`.
-type VWAPSource interface {
-	VWAPsForPair1m(ctx context.Context, pair canonical.Pair, from, to time.Time) ([]float64, error)
+// `timescale.Store.TimedVWAPsForPair1m`.
+type TimedVWAPSource interface {
+	TimedVWAPsForPair1m(ctx context.Context, pair canonical.Pair, from, to time.Time) ([]TimedVWAP, error)
 }
 
-// Sink persists a freshly-computed baseline. Implementations are
-// expected to be UPSERT — one row per pair, the latest computation
-// wins. Production wiring: an adapter that builds a
-// `timescale.StoredBaseline` and calls `Store.UpsertBaseline`.
+// Sink persists a freshly-computed multi-window baseline.
+// Implementations are expected to be UPSERT — one row per pair,
+// the latest computation wins.
+//
+// The interface takes a [MultiBaseline] so the refresher's three-
+// window output (1d / 7d / 30d) lands atomically in storage —
+// either all three windows update together or the upsert fails as
+// a unit.
 //
 // The interface takes the metadata fields directly rather than a
 // pre-built struct so the refresher doesn't depend on the storage
@@ -41,7 +44,7 @@ type Sink interface {
 		ctx context.Context,
 		pair canonical.Pair,
 		computedAt, windowStart, windowEnd time.Time,
-		b Baseline,
+		m MultiBaseline,
 	) error
 }
 
@@ -50,8 +53,14 @@ type Sink interface {
 // goroutine in the aggregator binary on a slow cadence (e.g.
 // hourly) — baselines are 30-day rolling stats, so refreshing at
 // the 1m bucket cadence would be wasted work.
+//
+// On each per-pair refresh, the Refresher pulls the full 30-day
+// VWAP series and uses [SplitByLookback] to derive the 1d / 7d
+// sub-windows, then computes a [MultiBaseline] and persists it
+// atomically — one read of the hypertable produces all three
+// windows.
 type Refresher struct {
-	src    VWAPSource
+	src    TimedVWAPSource
 	sink   Sink
 	window time.Duration
 	logger *slog.Logger
@@ -60,7 +69,7 @@ type Refresher struct {
 // NewRefresher constructs a Refresher. Pass `window <= 0` to use
 // [DefaultWindow]. Logger is required (use slog.Default() if you
 // don't have one).
-func NewRefresher(src VWAPSource, sink Sink, window time.Duration, logger *slog.Logger) *Refresher {
+func NewRefresher(src TimedVWAPSource, sink Sink, window time.Duration, logger *slog.Logger) *Refresher {
 	if window <= 0 {
 		window = DefaultWindow
 	}
@@ -108,39 +117,40 @@ type RefreshSummary struct {
 }
 
 // RefreshPair recomputes the baseline for one pair and writes it.
+// Reads the pair's full 30-day timed VWAP series, splits into 1d /
+// 7d / 30d sub-windows, computes a [MultiBaseline] (each window
+// independently bootstraps if it doesn't have enough samples), and
+// upserts atomically.
 //
 // Returns:
 //
-//   - (OutcomeOK, nil) on a successful upsert
-//   - (OutcomeNotEnoughSamples, [ErrNotEnoughSamples]) when the
-//     window has fewer than [MinSamples] returns — the caller
-//     applies the bootstrap policy (ADR-0019 §"Bootstrap policy")
-//     rather than treating this as an error
-//   - (OutcomeReadError, err) on a [VWAPSource] failure
+//   - (OutcomeOK, nil) on a successful upsert (Day30 valid; the
+//     1d/7d windows may still be in bootstrap on this scale)
+//   - (OutcomeNotEnoughSamples, [ErrNotEnoughSamples]) when even
+//     the 30d window has fewer than [MinSamples] returns — the
+//     pair is in full bootstrap and nothing is persisted
+//   - (OutcomeReadError, err) on a [TimedVWAPSource] failure
 //   - (OutcomeWriteError, err) on a [Sink] failure
 func (r *Refresher) RefreshPair(ctx context.Context, pair canonical.Pair) (RefreshOutcome, error) {
 	now := time.Now().UTC()
 	windowStart := now.Add(-r.window)
 
-	vwaps, err := r.src.VWAPsForPair1m(ctx, pair, windowStart, now)
+	timed, err := r.src.TimedVWAPsForPair1m(ctx, pair, windowStart, now)
 	if err != nil {
-		return OutcomeReadError, fmt.Errorf("baseline: VWAPsForPair1m %s: %w", pair.String(), err)
+		return OutcomeReadError, fmt.Errorf("baseline: TimedVWAPsForPair1m %s: %w", pair.String(), err)
 	}
 
-	returns := ReturnsFromVWAPs(vwaps)
-	b, err := FromReturns(returns)
-	if err != nil {
-		// ErrNotEnoughSamples is the only error FromReturns produces;
-		// translate it into the OutcomeNotEnoughSamples path so callers
-		// can count "this pair is still in bootstrap" without parsing
-		// the error string.
-		if errors.Is(err, ErrNotEnoughSamples) {
-			return OutcomeNotEnoughSamples, err
-		}
-		return OutcomeReadError, fmt.Errorf("baseline: FromReturns %s: %w", pair.String(), err)
+	d1, d7, d30 := SplitByLookback(timed, now)
+	multi := NewMultiBaseline(d1, d7, d30)
+
+	if multi.Day30 == nil {
+		// Even the long window is in bootstrap; persist nothing.
+		// Caller's confidence-score loop applies ADR-0019 bootstrap
+		// policy.
+		return OutcomeNotEnoughSamples, ErrNotEnoughSamples
 	}
 
-	if err := r.sink.UpsertBaseline(ctx, pair, now, windowStart, now, b); err != nil {
+	if err := r.sink.UpsertBaseline(ctx, pair, now, windowStart, now, multi); err != nil {
 		return OutcomeWriteError, fmt.Errorf("baseline: UpsertBaseline %s: %w", pair.String(), err)
 	}
 	return OutcomeOK, nil

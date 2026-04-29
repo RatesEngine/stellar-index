@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/RatesEngine/rates-engine/internal/aggregate/baseline"
 	"github.com/RatesEngine/rates-engine/internal/canonical"
 )
 
@@ -238,6 +239,51 @@ func (s *Store) LatestClosedVWAP1mForPair(ctx context.Context, p canonical.Pair)
 		return Vwap1mRow{}, fmt.Errorf("timescale: LatestClosedVWAP1mForPair: %w", err)
 	}
 	return row, nil
+}
+
+// TimedVWAPsForPair1m returns chronologically-ordered (oldest-first)
+// (vwap, bucket_end) pairs from prices_1m for the half-open window
+// [from, to). Used by the multi-window baseline refresher (which
+// needs the timestamp to apply [baseline.SplitByLookback] for the
+// 1d / 7d / 30d sub-windows).
+//
+// The bucket-end timestamp is the bucket's start + 1 minute (CAGG
+// stores the start; the API surface uses the end). Empty slice +
+// nil error when the pair has no closed buckets in the window.
+func (s *Store) TimedVWAPsForPair1m(ctx context.Context, p canonical.Pair, from, to time.Time) ([]baseline.TimedVWAP, error) {
+	if !to.After(from) {
+		return nil, fmt.Errorf("timescale: TimedVWAPsForPair1m: to %v <= from %v", to, from)
+	}
+	const q = `
+        SELECT vwap::float8, bucket + INTERVAL '1 minute'
+          FROM prices_1m
+         WHERE base_asset = $1
+           AND quote_asset = $2
+           AND bucket >= $3
+           AND bucket <  $4
+         ORDER BY bucket ASC
+    `
+	rows, err := s.db.QueryContext(ctx, q,
+		p.Base.String(), p.Quote.String(),
+		from.UTC(), to.UTC(),
+	)
+	if err != nil {
+		return nil, fmt.Errorf("timescale: TimedVWAPsForPair1m: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+
+	out := make([]baseline.TimedVWAP, 0, 256)
+	for rows.Next() {
+		var t baseline.TimedVWAP
+		if err := rows.Scan(&t.VWAP, &t.BucketEnd); err != nil {
+			return nil, fmt.Errorf("timescale: TimedVWAPsForPair1m scan: %w", err)
+		}
+		out = append(out, t)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("timescale: TimedVWAPsForPair1m rows: %w", err)
+	}
+	return out, nil
 }
 
 // VWAPsForPair1m returns chronologically-ordered (oldest-first) VWAP
