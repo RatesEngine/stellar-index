@@ -17,6 +17,22 @@ against.
 
 ### Added
 
+- **`internal/api/streaming/` SSE infrastructure (L3.6)**: shared
+  pub/sub primitive backing the upcoming streaming endpoints
+  (L3.7 `/v1/price/tip/stream`, L3.8 `/v1/observations/stream`,
+  L3.9 `/v1/price/stream`). `Hub` is goroutine-safe per-topic
+  fanout with a per-topic ring buffer (default 256 events) for
+  Last-Event-ID resume. `Stream` HTTP handler sets the SSE wire
+  contract: `text/event-stream` headers, `X-Accel-Buffering: no`,
+  comment-only heartbeats every 15 s (configurable), parses
+  `Last-Event-ID` header (with `?last_event_id=` fallback), and
+  forwards live events as SSE frames until the request context
+  cancels. Slow subscribers are dropped (32-deep per-sub queue)
+  rather than blocking the publish path — the dropped client sees
+  the connection close and reconnects with `Last-Event-ID` for
+  buffered replay. ULID-shaped 16-char hex IDs, monotonic and
+  lexicographically sortable. No external dependencies.
+
 - **`/v1/observations` raw per-source surface (L3.3)**: implements
   [ADR-0018](docs/adr/0018-api-consistency-surfaces.md) Surface 3 —
   the lowest-level, no-aggregation surface. Returns the most-recent
