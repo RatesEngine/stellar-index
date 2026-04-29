@@ -99,6 +99,7 @@ Within each surface, ordered by dependency.
 | L4.9 | Verify-archive `-fail-on-missed` flag (post-bootstrap hardening) | Wk 8 | half-day | L4.8 | launch | `cmd/ratesengine-ops/main.go` | 🟢 |
 | L4.10 | Per-region asymmetric trust model wiring (R1 leader, R2/R3 delegate) | Wk 8 | full day | L4.4 | launch | metrics federation + envelope flag | 🟡 |
 | L4.11 | Public status page at `status.ratesengine.net` (Statuspage / cstate / equivalent) | Wk 9 | half-day | L4.4 | launch | infra config + status worker | 🟡 |
+| L4.12 | verify-archive systemd timer — nightly Tier A on R1 per ADR-0016, with Prometheus alerts on unit-failed + run-stale | Wk 8 | half-day | — | launch | `deploy/systemd/verify-archive-tier-a.{timer,service}` | 🟢 |
 
 ## SLA validation
 

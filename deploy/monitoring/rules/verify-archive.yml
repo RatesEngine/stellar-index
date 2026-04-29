@@ -1,0 +1,87 @@
+---
+# verify-archive systemd-timer alerts.
+#
+# Scrape source: node_exporter's `--collector.systemd` exports
+# `node_systemd_unit_state{name=…,state=…}` for each enabled unit.
+# We use that to detect failed runs (verify-archive exits non-zero
+# on chain-mismatch / missing-file / archivist-timeout — any of
+# these is a fail-loud signal that ops needs to investigate).
+#
+# Alert family:
+#
+#   - `ratesengine_verify_archive_unit_failed` — the most-recent
+#     run of the verify-archive-tier-a.service unit ended in the
+#     `failed` state. Severity: ticket (the API still serves
+#     correct data; this is an integrity-confidence signal).
+#
+#   - `ratesengine_verify_archive_run_stale` — the unit hasn't
+#     completed cleanly in over 36h (the timer's 24h cadence plus a
+#     12h cushion). Either the timer is disabled or every recent
+#     run failed. Severity: page at 36h (R1's nightly check is
+#     core to the cross-region trust model per ADR-0016).
+#
+# These two are R1-only — R2/R3 trust R1 for chain-link and don't
+# run this nightly timer. When the weekly Tier A timer for R2/R3
+# ships its alerts will be parameterised by `region` label.
+
+groups:
+  - name: ratesengine.verify_archive
+    interval: 60s
+    rules:
+
+      - alert: ratesengine_verify_archive_unit_failed
+        expr: |
+          node_systemd_unit_state{
+            name="verify-archive-tier-a.service",
+            state="failed"
+          } == 1
+        for: 5m
+        labels:
+          severity: ticket
+          team: ratesengine
+          component: archive
+          runbook_url: https://github.com/RatesEngine/rates-engine/blob/main/docs/operations/runbooks/verify-archive-unit-failed.md
+        annotations:
+          summary: "verify-archive Tier A nightly run failed on {{ $labels.instance }}"
+          description: |
+            The most-recent run of `verify-archive-tier-a.service` exited
+            in the `failed` state. Possible causes:
+              - Chain-link mismatch — a ledger's prev_hash doesn't match the
+                previous ledger's hash. Real corruption signal.
+              - Missing file in the galexie-archive bucket — gap that the
+                archive-completeness daily run should also be alerting on.
+              - 8h max-runtime cap exceeded — investigate the per-chunk
+                progress in journald (`journalctl -u verify-archive-tier-a`).
+            Customer impact: zero immediate; the API serves from existing
+            data. Cross-region trust model degrades after 48h without a
+            clean run (see ratesengine_verify_archive_run_stale).
+
+      # Staleness: when did the timer last finish cleanly? Computed
+      # from the unit's `ActiveEnterTimestamp` on the timer (last
+      # successful Activate event). 36h = 24h cadence + 12h cushion.
+      - alert: ratesengine_verify_archive_run_stale
+        expr: |
+          (
+            time()
+            -
+            (node_systemd_timer_last_trigger_seconds{
+              name="verify-archive-tier-a.timer"
+            } > 0)
+          ) > (36 * 3600)
+        for: 10m
+        labels:
+          severity: page
+          team: ratesengine
+          component: archive
+          runbook_url: https://github.com/RatesEngine/rates-engine/blob/main/docs/operations/runbooks/verify-archive-run-stale.md
+        annotations:
+          summary: "(R1 integrity-leader) verify-archive Tier A hasn't run cleanly in {{ $value | humanizeDuration }}"
+          description: |
+            R1 is the integrity leader per ADR-0016 — its nightly chain-link
+            verification is what R2/R3 trust. 36h without a clean run means
+            either the timer isn't enabled or every recent attempt failed.
+            Escalate immediately; the cross-region trust property degrades
+            with each missed cycle. Diagnosis:
+              - `systemctl status verify-archive-tier-a.timer` — is it active?
+              - `journalctl -u verify-archive-tier-a.service` — what's failing?
+              - check `archive_files_missing` — a gap upstream blocks verify.

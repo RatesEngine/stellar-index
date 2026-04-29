@@ -1,0 +1,32 @@
+# systemd timer: nightly verify-archive Tier A (chain-link integrity).
+#
+# Per docs/operations/archival-node-bringup.md §"Per-region trust +
+# verification model" — R1 (the integrity leader per ADR-0016) runs
+# Tier A nightly. R2 + R3 don't run this timer (they delegate to R1
+# via metric scrape; their own verify schedule lives in
+# verify-archive-tier-ad-weekly.timer when that ships).
+#
+# Schedule: 03:23 UTC + up to 10 min of jitter. Picked to:
+#   - Sit AFTER the daily archive-completeness verify (02:17 UTC) so
+#     a missing-file gap surfaces in the completeness check before
+#     verify-archive trips on it.
+#   - Sit BEFORE the typical European morning operator window so a
+#     fresh failure is investigable on first-coffee not stale.
+#   - Off-minute (:23) avoids cron-aligned thundering herd against
+#     S3 / archive mirrors that other operations use.
+#
+# Persistent=true: if the box was off at 03:23, fire on next boot.
+# A planned reboot doesn't skip a night's verification.
+
+[Unit]
+Description=Nightly verify-archive Tier A (chain-link integrity)
+Documentation=https://github.com/RatesEngine/rates-engine/blob/main/docs/operations/archival-node-bringup.md
+
+[Timer]
+OnCalendar=*-*-* 03:23:00 UTC
+RandomizedDelaySec=600
+Persistent=true
+Unit=verify-archive-tier-a.service
+
+[Install]
+WantedBy=timers.target
