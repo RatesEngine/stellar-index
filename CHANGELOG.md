@@ -17,6 +17,24 @@ against.
 
 ### Added
 
+- **Multi-factor confidence score primitive (L2.6 math slice)**:
+  pure-Go `internal/aggregate/confidence` package implementing the
+  ADR-0019 §"Multi-factor confidence score" combiner. Six factors
+  per the ADR shape: `ZScoreFactor` (sigmoid 1.0 at z=0, ~0.5 at
+  z=5, ~0 at z=10), `SourceCountFactor` (logistic; n=3 → 0.5;
+  n≥6 → ~1.0), `DiversityFactor` (step: 0/0.5/1.0), `LiquidityFactor`
+  (log-saturating; $1K → 0, $100K → 1.0), `CrossOracleFactor`
+  (piecewise: 1.0 within 1%, exponential decay beyond; negative
+  input is the "no cross-oracle data" sentinel returning the ADR's
+  0.7 neutral), `BaselineQualityFactor` (linear 0.5 → 1.0 over
+  30d). Combined via weighted geometric mean with `1/sum(weights)`
+  normalisation so weight magnitude doesn't change scale. Compute
+  is numerically stable (sums log-factors, exp at the end) so
+  near-zero factors don't underflow. 21 tests pin the per-factor
+  shapes, the dominating-factor behaviour, and edge cases (all-
+  zero weights, full bootstrap, extreme inputs). Orchestrator
+  wire-up follows in the next slice.
+
 - **Multi-window baseline storage + refresh integration (L2.8
   closes L2.8)**: migration 0008 adds `median_1d/mad_1d/n_1d` and
   `median_7d/mad_7d/n_7d` to `volatility_baseline_1m` (the existing

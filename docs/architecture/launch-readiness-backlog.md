@@ -55,7 +55,7 @@ Within each surface, ordered by dependency.
 | L2.3 | Forex factor snap rule for chained-fiat closed-bucket consistency (ADR-0018) | Wk 5 | half-day | L2.2 | L3.* | `internal/aggregate/triangulate` | 🟡 |
 | L2.4 | Phase 1 anomaly thresholds — per-class TOML defaults wired into orchestrator Tick + freeze writer (ADR-0019 stop-gap, see #199 / #226 / #235) | Wk 5 | half-day | L2.1 | L3.1 | `internal/aggregate/anomaly` + config | 🟢 |
 | L2.5 | Phase 2 statistical baseline — MAD math + `volatility_baseline_1m` table + refresh worker + aggregator wire-up shipped across 4 PRs (ADR-0019). | Wk 6 | ~3 days | L2.4 | L3.1 | `internal/aggregate/baseline` + migration | 🟢 |
-| L2.6 | Multi-factor confidence score on every published price | Wk 6 | ~2 days | L2.5 | L3.1 | `internal/aggregate/confidence` | 🟡 |
+| L2.6 | Multi-factor confidence score on every published price — math primitive shipped; orchestrator wire-up follows | Wk 6 | ~2 days | L2.5 | L3.1 | `internal/aggregate/confidence` | 🟠 |
 | L2.7 | Freeze policy (3-signal AND on closed-bucket only) | Wk 6 | full day | L2.6 | L3.1 | `internal/aggregate/freeze` | 🟡 |
 | L2.8 | Multi-window safeguard against frog-boiling (1d/7d/30d MAD) — math + storage + refresh integration shipped across 2 PRs (anomaly-evaluator wire-up follows with L2.7) | Wk 6 | half-day | L2.5 | — | `internal/aggregate/baseline` | 🟢 |
 | L2.9 | Bootstrap (warmup) policy for new assets | Wk 6 | half-day | L2.6 | — | `internal/aggregate/baseline` | 🟡 |
