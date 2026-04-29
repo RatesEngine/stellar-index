@@ -17,6 +17,21 @@ against.
 
 ### Added
 
+- **`volatility_baseline_1m` table + storage layer (L2.5 slice)**:
+  per-pair baseline persistence per ADR-0019 Phase 2. Migration 0007
+  adds the table — plain Postgres, NOT a CAGG (Median + MAD are only
+  expressible via percentile_cont, which is non-parallel and
+  non-incremental, so a CAGG would re-scan the whole 30-day window
+  on every refresh anyway with no benefit). Current-state semantics:
+  one row per pair, refreshes UPSERT and overwrite. Storage layer
+  ships `StoredBaseline` wire shape, `Store.UpsertBaseline` (with
+  pre-flight N >= MinSamples + window-validity checks),
+  `Store.LatestBaseline` (returns `ErrBaselineNotFound` for the
+  bootstrap branch), and `Store.CountBaselines` for ops metrics.
+  Integration test rounds the API trip including overwrite semantics
+  and per-pair isolation. The aggregator-side compute + write
+  pipeline lands in the next L2.5 slice.
+
 - **`internal/aggregate/baseline/` MAD math (L2.5 slice)**:
   pure-Go primitives implementing the per-asset volatility baseline
   per [ADR-0019](docs/adr/0019-anomaly-response-and-confidence-scoring.md)
