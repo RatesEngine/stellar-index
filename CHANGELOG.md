@@ -17,6 +17,25 @@ against.
 
 ### Added
 
+- **SEV drill scenarios + framework (#341)**: Coverage matrix
+  Validation #20 ("SEV-1/SEV-2 dry-run") needs scripted scenarios
+  to exercise the playbook. The sev-playbook.md §8 already
+  promised a `docs/operations/drills/` directory holding writeups
+  per drill; that directory didn't exist. New:
+  `docs/operations/drills/README.md` describing the three-tier
+  cadence (monthly tabletop / quarterly chaos / annual DR), the
+  drill protocol, and a writeup template; `scenarios/`
+  subdirectory holding two canonical tabletop scripts —
+  `sev1-timescale-primary-failover.md` (primary disk-full →
+  failover decision; exercises `timescale-primary-down.md`) and
+  `sev2-source-decoder-regression.md` (post-protocol-upgrade
+  soroswap decode errors; exercises `decode-errors.md`). Each
+  scenario carries Initial conditions, Trigger event, Injection
+  timeline (per-minute beats), Expected response per the
+  playbook, Validation criteria (pass/partial/fail per row), and
+  Common gaps surfaced from prior runs. Operator-executable: the
+  next monthly tabletop has scripts to run.
+
 - **Blend WASM audit — Phase 1 + partial Phase 3 (#339)**: Task
   #53 advances substantively without r1 access. Pool Factory's
   9 lifetime `Symbol("deploy")` events fetched via
