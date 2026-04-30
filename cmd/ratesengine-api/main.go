@@ -627,6 +627,26 @@ func (r storeHistoryReader) HistoryPoints(ctx context.Context, pair canonical.Pa
 	if err != nil {
 		return nil, err
 	}
+	return convertHistoryPoints(rows), nil
+}
+
+// HistoryPointsInRange adapts [timescale.Store.HistoryPointsInRange]
+// to the v1.HistoryReader interface. Same translation rules as
+// [storeHistoryReader.HistoryPoints]; passes the from/to window
+// through to the storage layer.
+func (r storeHistoryReader) HistoryPointsInRange(ctx context.Context, pair canonical.Pair, granularity string, from, to time.Time, limit int) ([]v1.HistoryPoint, error) {
+	g := timescale.HistoryGranularity(granularity)
+	if err := g.Validate(); err != nil {
+		return nil, v1.ErrUnknownGranularity
+	}
+	rows, err := r.s.HistoryPointsInRange(ctx, pair, g, from, to, limit)
+	if err != nil {
+		return nil, err
+	}
+	return convertHistoryPoints(rows), nil
+}
+
+func convertHistoryPoints(rows []timescale.HistoryPoint) []v1.HistoryPoint {
 	out := make([]v1.HistoryPoint, len(rows))
 	for i, row := range rows {
 		out[i] = v1.HistoryPoint{
@@ -635,7 +655,7 @@ func (r storeHistoryReader) HistoryPoints(ctx context.Context, pair canonical.Pa
 			VolumeUSD: row.VolumeUSD,
 		}
 	}
-	return out, nil
+	return out
 }
 
 // storePriceReader adapts *timescale.Store to v1.PriceReader.

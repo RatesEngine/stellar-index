@@ -137,6 +137,78 @@ func (s *Store) HistoryPoints(ctx context.Context, p canonical.Pair, granularity
 	return out, nil
 }
 
+// HistoryPointsInRange is [HistoryPoints] with an explicit
+// [from, to) time bound on the bucket column. Used by /v1/chart
+// to serve a rolling-window view (timeframe → from = now-tf, to =
+// now); the same closed-bucket guard from [HistoryPoints] applies.
+//
+// `from` zero disables the lower bound (equivalent to since-
+// inception); `to` zero disables the upper bound. `limit` 0 returns
+// all rows.
+//
+// Empty slice + nil error when the pair has no closed buckets in
+// the requested window.
+func (s *Store) HistoryPointsInRange(
+	ctx context.Context,
+	p canonical.Pair,
+	granularity HistoryGranularity,
+	from, to time.Time,
+	limit int,
+) ([]HistoryPoint, error) {
+	if err := granularity.Validate(); err != nil {
+		return nil, err
+	}
+	table := "prices_" + string(granularity)
+	interval := granularity.closedBucketInterval()
+	// Build args incrementally so the placeholder count matches the
+	// optional from/to/limit clauses.
+	args := []any{p.Base.String(), p.Quote.String()}
+	clauses := "base_asset = $1\n   AND quote_asset = $2\n   AND bucket + INTERVAL '" + interval + "' <= now()"
+	if !from.IsZero() {
+		args = append(args, from.UTC())
+		clauses += fmt.Sprintf("\n   AND bucket >= $%d", len(args))
+	}
+	if !to.IsZero() {
+		args = append(args, to.UTC())
+		clauses += fmt.Sprintf("\n   AND bucket < $%d", len(args))
+	}
+	// #nosec G201 — table + interval are derived from the validated
+	// enum, not user input. See HistoryGranularity.Validate.
+	q := fmt.Sprintf(`
+		SELECT bucket, vwap::text, volume_usd::text
+		  FROM %s
+		 WHERE %s
+		 ORDER BY bucket ASC
+	`, table, clauses)
+	if limit > 0 {
+		args = append(args, limit)
+		q += fmt.Sprintf(" LIMIT $%d", len(args))
+	}
+	rows, err := s.db.QueryContext(ctx, q, args...)
+	if err != nil {
+		return nil, fmt.Errorf("timescale: HistoryPointsInRange[%s]: %w", granularity, err)
+	}
+	defer func() { _ = rows.Close() }()
+
+	out := make([]HistoryPoint, 0, 1024)
+	for rows.Next() {
+		var pt HistoryPoint
+		var vusd sql.NullString
+		if err := rows.Scan(&pt.Bucket, &pt.VWAP, &vusd); err != nil {
+			return nil, fmt.Errorf("timescale: HistoryPointsInRange[%s] scan: %w", granularity, err)
+		}
+		if vusd.Valid {
+			s := vusd.String
+			pt.VolumeUSD = &s
+		}
+		out = append(out, pt)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("timescale: HistoryPointsInRange[%s] rows: %w", granularity, err)
+	}
+	return out, nil
+}
+
 // Vwap1mRow is one row from the prices_1m continuous aggregate.
 // The fields mirror migrations/0002_create_price_aggregates.up.sql
 // — see that file for the SQL semantics. Bucket is the START of the

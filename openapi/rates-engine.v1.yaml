@@ -538,6 +538,47 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/HistoryEnvelope" }
 
+  /chart:
+    get:
+      tags: [history]
+      summary: Rolling-window chart series matching the Freighter RFP shape.
+      description: |
+        Returns CLOSED CAGG buckets within a rolling time window for
+        one asset/quote pair, shaped as `(timeframe, granularity,
+        price_type) → points[]` per the Freighter RFP V1 chart
+        contract.
+
+        Defaults: `quote=fiat:USD`, `timeframe=24h`,
+        `granularity` per the timeframe table below, `price_type=vwap`.
+
+        Default-granularity table (per ADR-0020):
+
+        | Timeframe | Default granularity |
+        | --------- | ------------------- |
+        | `1h`      | `1m`                |
+        | `24h`     | `15m`               |
+        | `1w`      | `1h`                |
+        | `1mo`     | `4h`                |
+        | `1y`      | `1d`                |
+        | `all`     | `1d`                |
+
+        `price_type=twap` is reserved for forward compatibility and
+        currently returns 400 — see ADR-0020.
+      parameters:
+        - { $ref: "#/components/parameters/AssetQuery" }
+        - { $ref: "#/components/parameters/Quote" }
+        - { $ref: "#/components/parameters/Timeframe" }
+        - { $ref: "#/components/parameters/Granularity" }
+        - { $ref: "#/components/parameters/PriceType" }
+      responses:
+        "200":
+          description: Chart series.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ChartEnvelope" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "503": { $ref: "#/components/responses/ServiceUnavailable" }
+
   /ohlc:
     get:
       tags: [ohlc]
@@ -1381,6 +1422,25 @@ components:
                   type: array
                   items: { $ref: "#/components/schemas/HistoryPoint" }
               required: [asset_id, quote, price_type, granularity, points]
+          required: [data]
+
+    ChartEnvelope:
+      allOf:
+        - { $ref: "#/components/schemas/EnvelopeMeta" }
+        - type: object
+          properties:
+            data:
+              type: object
+              properties:
+                asset_id:    { type: string }
+                quote:       { type: string }
+                timeframe:   { type: string, enum: [1h, 24h, 1w, 1mo, 1y, all] }
+                granularity: { type: string, enum: [1m, 15m, 1h, 4h, 1d, 1w, 1mo] }
+                price_type:  { type: string, enum: [vwap, twap] }
+                points:
+                  type: array
+                  items: { $ref: "#/components/schemas/HistoryPoint" }
+              required: [asset_id, quote, timeframe, granularity, price_type, points]
           required: [data]
 
     TradeRow:

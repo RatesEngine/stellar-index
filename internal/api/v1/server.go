@@ -349,6 +349,10 @@ func (s *Server) mountRoutes() {
 	// ADR-0015 only closed buckets returned.
 	s.mux.HandleFunc("GET /v1/history/since-inception", s.handleHistorySinceInception)
 
+	// Rolling-window chart series matching the Freighter RFP shape
+	// (timeframe, granularity, price_type). Per ADR-0020.
+	s.mux.HandleFunc("GET /v1/chart", s.handleChart)
+
 	// Single-bar OHLC over a time window.
 	s.mux.HandleFunc("GET /v1/ohlc", s.handleOHLC)
 

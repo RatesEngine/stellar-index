@@ -78,6 +78,19 @@ func (r *stubHistoryReader) HistoryPoints(_ context.Context, _ canonical.Pair, g
 	return r.points, nil
 }
 
+// HistoryPointsInRange stub mirrors HistoryPoints — same fixture,
+// same error path. Records the from/to so chart tests can assert
+// the timeframe→window mapping.
+func (r *stubHistoryReader) HistoryPointsInRange(_ context.Context, _ canonical.Pair, granularity string, from, to time.Time, _ int) ([]v1.HistoryPoint, error) {
+	r.lastCall.granularity = granularity
+	r.lastCall.from = from
+	r.lastCall.to = to
+	if r.pointsErr != nil {
+		return nil, r.pointsErr
+	}
+	return r.points, nil
+}
+
 // LatestTradePerSource stub: returns r.observations (per-source
 // fixture distinct from the full r.trades slice) so observations
 // tests can drive the handler without polluting other history-test

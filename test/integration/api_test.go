@@ -476,6 +476,22 @@ func (r apiHistoryAdapter) HistoryPoints(ctx context.Context, pair c.Pair, granu
 	return out, nil
 }
 
+func (r apiHistoryAdapter) HistoryPointsInRange(ctx context.Context, pair c.Pair, granularity string, from, to time.Time, limit int) ([]v1.HistoryPoint, error) {
+	g := timescale.HistoryGranularity(granularity)
+	if err := g.Validate(); err != nil {
+		return nil, v1.ErrUnknownGranularity
+	}
+	rows, err := r.s.HistoryPointsInRange(ctx, pair, g, from, to, limit)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]v1.HistoryPoint, len(rows))
+	for i, row := range rows {
+		out[i] = v1.HistoryPoint{Bucket: row.Bucket, VWAP: row.VWAP, VolumeUSD: row.VolumeUSD}
+	}
+	return out, nil
+}
+
 type apiMarketsAdapter struct{ s *timescale.Store }
 
 func (r apiMarketsAdapter) DistinctPairs(ctx context.Context, cursor string, limit int) ([]v1.Market, string, error) {

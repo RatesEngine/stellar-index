@@ -54,6 +54,15 @@ type HistoryReader interface {
 	// error when the pair has no closed buckets yet.
 	HistoryPoints(ctx context.Context, pair canonical.Pair, granularity string, limit int) ([]HistoryPoint, error)
 
+	// HistoryPointsInRange is [HistoryPoints] with an explicit
+	// [from, to) bucket bound. Same closed-bucket guard, same
+	// granularity validation, same limit semantics. `from` zero
+	// disables the lower bound; `to` zero disables the upper bound.
+	//
+	// Used by /v1/chart to serve a rolling-window series (timeframe
+	// → from = now-tf, to = now). Per ADR-0020.
+	HistoryPointsInRange(ctx context.Context, pair canonical.Pair, granularity string, from, to time.Time, limit int) ([]HistoryPoint, error)
+
 	// LatestTradePerSource returns the most-recent trade FROM EACH
 	// source that has ever recorded a trade on `pair`. Empty slice +
 	// nil error when the pair has no trades at all.
