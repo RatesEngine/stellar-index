@@ -17,6 +17,23 @@ against.
 
 ### Added
 
+- **AccountEntry observer + `ProcessLedger` integration (#298 —
+  ADR-0021 / Task #54 PR 2/3)**: lands `internal/sources/accounts/`
+  — the canonical observer implementing the
+  `LedgerEntryChangeDecoder` hook from #297. Operator-watched-set
+  driven (`NewObserver([]string)`); G-strkeys not in the watched
+  list are skipped at `Matches` time before any decode work.
+  Emits one `Observation` per matched change (account_id, ledger,
+  observed_at, balance_stroops, home_domain, flags, seq_num,
+  is_removal). `Dispatcher.ProcessLedger` now walks per-tx
+  LedgerEntryChange rows from `tx.UnsafeMeta` (V3 + V4 supported;
+  V1/V2 skipped — pre-Soroban metadata doesn't carry the same
+  shape) plus the tx-level fee/before/after change blocks.
+  Routing path is symmetric with the existing event/op/contract-
+  call hooks. Storage writer + `account_observations` migration
+  ship in PR 3/3 (Task #60); the readers replacing the static
+  config maps follow that.
+
 - **Dispatcher hook for `LedgerEntryChange` deltas (#297)**: starts
   Task #54 / ADR-0021 implementation. Adds the fourth dispatcher
   hook (`LedgerEntryChangeDecoder`) alongside the existing three —
