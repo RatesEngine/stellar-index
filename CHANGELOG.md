@@ -17,6 +17,29 @@ against.
 
 ### Added
 
+- **Blend WASM audit — Phase 1 + partial Phase 3 (#339)**: Task
+  #53 advances substantively without r1 access. Pool Factory's
+  9 lifetime `Symbol("deploy")` events fetched via
+  stellar.expert API, bodies decoded with `scripts/dev/decode-scval`,
+  yielding the canonical list of all 9 Blend pool addresses with
+  deploy timestamps (2025-04-14 → 2025-11-25). Current WASM hash
+  for every pool fetched via `/explorer/public/contract` API:
+  all nine share `a41fc53d6753b6c04eb15b021c55052366a4c8e0e21bc72700f461264ec1350e`.
+  WASM bytes downloaded with `stellar contract fetch --network
+  mainnet` (57 KiB) and archived as audit evidence at
+  `docs/operations/wasm-audits/evidence/blend/`. Decoder-
+  compatibility verified: `strings` finds all three event topics
+  (`new_auction`, `fill_auction`, `delete_auction`) and all three
+  AuctionData field names (`bid`, `lot`, `block`) the
+  `internal/sources/blend` decoder switches on; `stellar contract
+  info interface` confirms canonical Blend pool surface. **Phase
+  2 (per-pool `wasm-history` walk on r1) still required** before
+  the `BackfillSafe: false → true` flip — current Phase-3 read
+  shows only the *current* WASM, not whether any pool was
+  upgraded mid-life. Audit doc updated with both phases'
+  results; status moves from "Pending" to "Phase 1 complete;
+  Phase 3 partial".
+
 - **CI promtool validation (#319)**: `make monitoring-check`
   (Prometheus rule-file validation via `promtool check rules`)
   is now wired into both `bash scripts/dev/verify.sh` (graceful-

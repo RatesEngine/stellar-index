@@ -1,0 +1,270 @@
+#[soroban_sdk::contractargs(name = "Args")]
+#[soroban_sdk::contractclient(name = "Client")]
+pub trait Contract {
+    fn __constructor(
+        env: soroban_sdk::Env,
+        admin: soroban_sdk::Address,
+        name: soroban_sdk::String,
+        oracle: soroban_sdk::Address,
+        bstop_rate: u32,
+        max_positions: u32,
+        min_collateral: i128,
+        backstop_id: soroban_sdk::Address,
+        blnd_id: soroban_sdk::Address,
+    );
+    fn propose_admin(env: soroban_sdk::Env, new_admin: soroban_sdk::Address);
+    fn accept_admin(env: soroban_sdk::Env);
+    fn update_pool(
+        env: soroban_sdk::Env,
+        backstop_take_rate: u32,
+        max_positions: u32,
+        min_collateral: i128,
+    );
+    fn queue_set_reserve(
+        env: soroban_sdk::Env,
+        asset: soroban_sdk::Address,
+        metadata: ReserveConfig,
+    );
+    fn cancel_set_reserve(env: soroban_sdk::Env, asset: soroban_sdk::Address);
+    fn set_reserve(env: soroban_sdk::Env, asset: soroban_sdk::Address) -> u32;
+    fn get_config(env: soroban_sdk::Env) -> PoolConfig;
+    fn get_admin(env: soroban_sdk::Env) -> soroban_sdk::Address;
+    fn get_reserve_list(env: soroban_sdk::Env) -> soroban_sdk::Vec<soroban_sdk::Address>;
+    fn get_reserve(env: soroban_sdk::Env, asset: soroban_sdk::Address) -> Reserve;
+    fn get_positions(env: soroban_sdk::Env, address: soroban_sdk::Address) -> Positions;
+    fn submit(
+        env: soroban_sdk::Env,
+        from: soroban_sdk::Address,
+        spender: soroban_sdk::Address,
+        to: soroban_sdk::Address,
+        requests: soroban_sdk::Vec<Request>,
+    ) -> Positions;
+    fn submit_with_allowance(
+        env: soroban_sdk::Env,
+        from: soroban_sdk::Address,
+        spender: soroban_sdk::Address,
+        to: soroban_sdk::Address,
+        requests: soroban_sdk::Vec<Request>,
+    ) -> Positions;
+    fn flash_loan(
+        env: soroban_sdk::Env,
+        from: soroban_sdk::Address,
+        flash_loan: FlashLoan,
+        requests: soroban_sdk::Vec<Request>,
+    ) -> Positions;
+    fn update_status(env: soroban_sdk::Env) -> u32;
+    fn set_status(env: soroban_sdk::Env, pool_status: u32);
+    fn gulp(env: soroban_sdk::Env, asset: soroban_sdk::Address) -> i128;
+    fn gulp_emissions(env: soroban_sdk::Env) -> i128;
+    fn set_emissions_config(
+        env: soroban_sdk::Env,
+        res_emission_metadata: soroban_sdk::Vec<ReserveEmissionMetadata>,
+    );
+    fn claim(
+        env: soroban_sdk::Env,
+        from: soroban_sdk::Address,
+        reserve_token_ids: soroban_sdk::Vec<u32>,
+        to: soroban_sdk::Address,
+    ) -> i128;
+    fn get_reserve_emissions(
+        env: soroban_sdk::Env,
+        reserve_token_index: u32,
+    ) -> Option<ReserveEmissionData>;
+    fn get_user_emissions(
+        env: soroban_sdk::Env,
+        user: soroban_sdk::Address,
+        reserve_token_index: u32,
+    ) -> Option<UserEmissionData>;
+    fn new_auction(
+        env: soroban_sdk::Env,
+        auction_type: u32,
+        user: soroban_sdk::Address,
+        bid: soroban_sdk::Vec<soroban_sdk::Address>,
+        lot: soroban_sdk::Vec<soroban_sdk::Address>,
+        percent: u32,
+    ) -> AuctionData;
+    fn get_auction(
+        env: soroban_sdk::Env,
+        auction_type: u32,
+        user: soroban_sdk::Address,
+    ) -> AuctionData;
+    fn del_auction(env: soroban_sdk::Env, auction_type: u32, user: soroban_sdk::Address);
+    fn bad_debt(env: soroban_sdk::Env, user: soroban_sdk::Address);
+}
+#[soroban_sdk::contracttype(export = false)]
+#[derive(Debug, Clone, Eq, PartialEq, Ord, PartialOrd)]
+pub struct AuctionData {
+    pub bid: soroban_sdk::Map<soroban_sdk::Address, i128>,
+    pub block: u32,
+    pub lot: soroban_sdk::Map<soroban_sdk::Address, i128>,
+}
+#[soroban_sdk::contracttype(export = false)]
+#[derive(Debug, Clone, Eq, PartialEq, Ord, PartialOrd)]
+pub struct ReserveEmissionMetadata {
+    pub res_index: u32,
+    pub res_type: u32,
+    pub share: u64,
+}
+#[soroban_sdk::contracttype(export = false)]
+#[derive(Debug, Clone, Eq, PartialEq, Ord, PartialOrd)]
+pub struct Request {
+    pub address: soroban_sdk::Address,
+    pub amount: i128,
+    pub request_type: u32,
+}
+#[soroban_sdk::contracttype(export = false)]
+#[derive(Debug, Clone, Eq, PartialEq, Ord, PartialOrd)]
+pub struct FlashLoan {
+    pub amount: i128,
+    pub asset: soroban_sdk::Address,
+    pub contract: soroban_sdk::Address,
+}
+#[soroban_sdk::contracttype(export = false)]
+#[derive(Debug, Clone, Eq, PartialEq, Ord, PartialOrd)]
+pub struct Reserve {
+    pub asset: soroban_sdk::Address,
+    pub config: ReserveConfig,
+    pub data: ReserveData,
+    pub scalar: i128,
+}
+#[soroban_sdk::contracttype(export = false)]
+#[derive(Debug, Clone, Eq, PartialEq, Ord, PartialOrd)]
+pub struct Positions {
+    pub collateral: soroban_sdk::Map<u32, i128>,
+    pub liabilities: soroban_sdk::Map<u32, i128>,
+    pub supply: soroban_sdk::Map<u32, i128>,
+}
+#[soroban_sdk::contracttype(export = false)]
+#[derive(Debug, Clone, Eq, PartialEq, Ord, PartialOrd)]
+pub struct PoolConfig {
+    pub bstop_rate: u32,
+    pub max_positions: u32,
+    pub min_collateral: i128,
+    pub oracle: soroban_sdk::Address,
+    pub status: u32,
+}
+#[soroban_sdk::contracttype(export = false)]
+#[derive(Debug, Clone, Eq, PartialEq, Ord, PartialOrd)]
+pub struct PoolEmissionConfig {
+    pub config: u128,
+    pub last_time: u64,
+}
+#[soroban_sdk::contracttype(export = false)]
+#[derive(Debug, Clone, Eq, PartialEq, Ord, PartialOrd)]
+pub struct ReserveConfig {
+    pub c_factor: u32,
+    pub decimals: u32,
+    pub enabled: bool,
+    pub index: u32,
+    pub l_factor: u32,
+    pub max_util: u32,
+    pub r_base: u32,
+    pub r_one: u32,
+    pub r_three: u32,
+    pub r_two: u32,
+    pub reactivity: u32,
+    pub supply_cap: i128,
+    pub util: u32,
+}
+#[soroban_sdk::contracttype(export = false)]
+#[derive(Debug, Clone, Eq, PartialEq, Ord, PartialOrd)]
+pub struct QueuedReserveInit {
+    pub new_config: ReserveConfig,
+    pub unlock_time: u64,
+}
+#[soroban_sdk::contracttype(export = false)]
+#[derive(Debug, Clone, Eq, PartialEq, Ord, PartialOrd)]
+pub struct ReserveData {
+    pub b_rate: i128,
+    pub b_supply: i128,
+    pub backstop_credit: i128,
+    pub d_rate: i128,
+    pub d_supply: i128,
+    pub ir_mod: i128,
+    pub last_time: u64,
+}
+#[soroban_sdk::contracttype(export = false)]
+#[derive(Debug, Clone, Eq, PartialEq, Ord, PartialOrd)]
+pub struct ReserveEmissionData {
+    pub eps: u64,
+    pub expiration: u64,
+    pub index: i128,
+    pub last_time: u64,
+}
+#[soroban_sdk::contracttype(export = false)]
+#[derive(Debug, Clone, Eq, PartialEq, Ord, PartialOrd)]
+pub struct UserEmissionData {
+    pub accrued: i128,
+    pub index: i128,
+}
+#[soroban_sdk::contracttype(export = false)]
+#[derive(Debug, Clone, Eq, PartialEq, Ord, PartialOrd)]
+pub struct UserReserveKey {
+    pub reserve_id: u32,
+    pub user: soroban_sdk::Address,
+}
+#[soroban_sdk::contracttype(export = false)]
+#[derive(Debug, Clone, Eq, PartialEq, Ord, PartialOrd)]
+pub struct AuctionKey {
+    pub auct_type: u32,
+    pub user: soroban_sdk::Address,
+}
+#[soroban_sdk::contracttype(export = false)]
+#[derive(Debug, Clone, Eq, PartialEq, Ord, PartialOrd)]
+pub struct PriceData {
+    pub price: i128,
+    pub timestamp: u64,
+}
+#[soroban_sdk::contracttype(export = false)]
+#[derive(Debug, Clone, Eq, PartialEq, Ord, PartialOrd)]
+pub enum PoolDataKey {
+    ResConfig(soroban_sdk::Address),
+    ResInit(soroban_sdk::Address),
+    ResData(soroban_sdk::Address),
+    EmisData(u32),
+    Positions(soroban_sdk::Address),
+    UserEmis(UserReserveKey),
+    Auction(AuctionKey),
+}
+#[soroban_sdk::contracttype(export = false)]
+#[derive(Debug, Clone, Eq, PartialEq, Ord, PartialOrd)]
+pub enum Asset {
+    Stellar(soroban_sdk::Address),
+    Other(soroban_sdk::Symbol),
+}
+#[soroban_sdk::contracterror(export = false)]
+#[derive(Debug, Copy, Clone, Eq, PartialEq, Ord, PartialOrd)]
+pub enum PoolError {
+    InternalError = 1,
+    AlreadyInitializedError = 3,
+    UnauthorizedError = 4,
+    NegativeAmountError = 8,
+    BalanceError = 10,
+    OverflowError = 12,
+    BadRequest = 1200,
+    InvalidPoolConfigArgs = 1201,
+    InvalidReserveMetadata = 1202,
+    InitNotUnlocked = 1203,
+    StatusNotAllowed = 1204,
+    InvalidHf = 1205,
+    InvalidPoolStatus = 1206,
+    InvalidUtilRate = 1207,
+    MaxPositionsExceeded = 1208,
+    InternalReserveNotFound = 1209,
+    InvalidPrice = 1210,
+    InvalidLiquidation = 1211,
+    AuctionInProgress = 1212,
+    InvalidLiqTooLarge = 1213,
+    InvalidLiqTooSmall = 1214,
+    InterestTooSmall = 1215,
+    InvalidBTokenMintAmount = 1216,
+    InvalidBTokenBurnAmount = 1217,
+    InvalidDTokenMintAmount = 1218,
+    InvalidDTokenBurnAmount = 1219,
+    ExceededSupplyCap = 1220,
+    InvalidBid = 1221,
+    InvalidLot = 1222,
+    ReserveDisabled = 1223,
+    MinCollateralNotMet = 1224,
+}
+

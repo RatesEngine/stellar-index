@@ -1,7 +1,7 @@
 ---
 title: Blend WASM-history audit
 last_verified: 2026-04-30
-status: pending — pool enumeration + per-pool walk required before flip
+status: Phase 1 complete; Phase 3 partial (current WASM verified). Phase 2 (per-pool wasm-history walk) needs r1 access.
 source: blend
 backfill_safe: false
 ---
@@ -13,10 +13,17 @@ Audit log for the `blend` source's `BackfillSafe` flag. See
 
 ## Status
 
-**Pending 2026-04-30.** Blend was wired into the dispatcher,
-registry, and indexer in PRs #273-#275. `BackfillSafe` stays
-`false` until this audit completes the per-WASM-hash review of
-every Blend pool's deployed WASM.
+**Phase 1 complete (2026-04-30).** Pool enumeration via
+stellar.expert option 3 (the audit doc's "fastest path") landed
+all nine pool addresses and their deploy timestamps. Current
+pool WASM `a41fc53d6753b6c04eb15b021c55052366a4c8e0e21bc72700f461264ec1350e`
+fetched via `stellar contract fetch --network mainnet` (still
+TTL-alive on public RPC) and verified against the decoder's
+expected event topics + AuctionData field names. `BackfillSafe`
+stays `false` until **Phase 2** (per-pool `wasm-history` walk on
+r1) confirms no pool was upgraded mid-life — each pool's *current*
+WASM matches every other's, but a pool deployed under WASM A
+upgraded to WASM B mid-history would still show only B today.
 
 The audit is structurally similar to soroswap/phoenix/aquarius:
 the dispatch layer matches Blend by topic — every per-pool contract
@@ -49,7 +56,74 @@ ever deployed on mainnet. As of 2026-04-30 the factory has emitted
 only **9 events** (per stellar.expert) — meaning ≤9 pools have
 been deployed, which is a small audit surface.
 
-## Audit plan (this is a TODO, not yet executed)
+## Phase 1 results — pool addresses (executed 2026-04-30)
+
+Enumerated via stellar.expert events API
+(`/explorer/public/contract/<factory>/events`). The factory has
+9 lifetime events, all `Symbol("deploy")`; each event body is an
+`Address` SCVal containing the deployed pool. Decoded with
+`scripts/dev/decode-scval`.
+
+Sorted by deploy timestamp (oldest first):
+
+| # | Pool address | Deploy ts (UTC) | Initiator |
+| --- | --- | --- | --- |
+| 1 | `CAJJZSGMMM3PD7N33TAPHGBUGTB43OC73HVIK2L2G6BNGGGYOSSYBXBD` | 2025-04-14 17:46:46 | `GAX2VVWVHU5YQY5J3NJBXKHI3FFKZN54BE6GRJCWSIKSBZTQWJJNJMPC` |
+| 2 | `CBNR7PYFY775UG7W37B4OJG2OBBUKLFW6VIBHFDKKLR2HECPRMRZMDK3` | 2025-04-15 18:42:52 | `GBCAS7XIGDRZY4BMABJMGGW7J3YTITRRV5BTEMFQE5ZZSSVWHHX2ZSS4` |
+| 3 | `CCCCIQSDILITHMM7PBSLVDT5MISSY7R26MNZXCX4H7J5JQ5FPIYOGYFS` | 2025-04-17 14:35:16 | `GBCAS7XIGDRZY4BMABJMGGW7J3YTITRRV5BTEMFQE5ZZSSVWHHX2ZSS4` |
+| 4 | `CB4OFHAY2TAEYUVPOJS36S657C6NYMSIFUNCCA5AHYT46Y5XUID3O2ED` | 2025-05-01 15:04:09 | `GBIWJGAOSFC4KUPHXM573TKTWHMI7VW7D4GCHYZYH243Q6HVBV7ORBIT` |
+| 5 | `CAE7QVOMBLZ53CDRGK3UNRRHG5EZ5NQA7HHTFASEMYBWHG6MDFZTYHXC` | 2025-05-01 21:54:53 | `GBIWJGAOSFC4KUPHXM573TKTWHMI7VW7D4GCHYZYH243Q6HVBV7ORBIT` |
+| 6 | `CBYOBT7ZCCLQCBUYYIABZLSEGDPEUWXCUXQTZYOG3YBDR7U357D5ZIRF` | 2025-07-13 22:39:10 | `GCCI7K6QU6FVVIXWSLKRPTBKJCFBLEJKPTZMP27A2KL37N4ZL3OCM3GI` |
+| 7 | `CALRF5I2OCJCU577R6MZBCY5IIXNMAAG6PNMN7GUKEYIXBJCJN2FJRVI` | 2025-11-22 02:11:29 | `GDH3FRHOOWXYXEASH43N2VOVFOPJSVJF3EQFSLBLJYFPHOUAF4N4AETH` |
+| 8 | `CADR6Q2UOCDJAGXMAB2E6SRT35STLZ2IGLZUCXJQG7TC2LNKCU5RTQVY` | 2025-11-25 04:49:43 | `GDH3FRHOOWXYXEASH43N2VOVFOPJSVJF3EQFSLBLJYFPHOUAF4N4AETH` |
+| 9 | `CDMAVJPFXPADND3YRL4BSM3AKZWCTFMX27GLLXCML3PD62HEQS5FPVAI` | 2025-11-25 04:53:09 | `GDH3FRHOOWXYXEASH43N2VOVFOPJSVJF3EQFSLBLJYFPHOUAF4N4AETH` |
+
+The factory itself was deployed 2025-04-14 17:42:07 UTC (4 minutes
+before the first pool), confirming the deploy timeline.
+
+## Phase 3 partial — current WASM verification (executed 2026-04-30)
+
+For each of the 9 pools, fetched the current WASM hash via
+`/explorer/public/contract/<pool>` API. **All nine pools share
+the same current WASM hash:**
+
+```
+a41fc53d6753b6c04eb15b021c55052366a4c8e0e21bc72700f461264ec1350e
+```
+
+WASM bytes downloaded via
+`stellar contract fetch --network mainnet --wasm-hash a41fc53d6753b6c04eb15b021c55052366a4c8e0e21bc72700f461264ec1350e`
+(57,328 bytes). Saved as evidence at
+[`evidence/blend/pool-a41fc53d6753b6c0.wasm`](evidence/blend/pool-a41fc53d6753b6c0.wasm)
+in case the public-RPC TTL evicts it before Phase 2 completes;
+`stellar contract info interface` dump archived alongside at
+[`evidence/blend/pool-a41fc53d6753b6c0.interface.txt`](evidence/blend/pool-a41fc53d6753b6c0.interface.txt).
+
+Decoder-compatibility checks (per Phase 3 step 3 of the audit
+plan below):
+
+- ✅ Event topics: `strings` finds `new_auction`, `fill_auction`,
+  `delete_auction` (all three the decoder switches on).
+- ✅ AuctionData field names: `bid`, `lot`, `block` — all three
+  match `internal/sources/blend/auction_data.go`'s constants
+  (`auctionDataKeyBid`, `auctionDataKeyLot`, `auctionDataKeyBlock`).
+- ✅ `stellar contract info interface --wasm` shows the canonical
+  Blend pool surface (`submit`, `flash_loan`, `gulp_emissions`,
+  `set_status`, `get_reserve_list`, etc.).
+- ⚠️  stellar.expert validation status is `unverified` for the
+  pool WASM (it's `verified` against `blend-contracts-v2` for the
+  factory only). Doesn't block the audit — the decoder-expected
+  symbols are all present — but a Phase-3 step 1 source-build
+  diff against `blend-contracts-v2/pool/` would close this last
+  gap.
+
+**Open item: WASM history.** The 9 pools' *current* WASM all
+matches, but Phase 3 alone cannot rule out an upgrade earlier in
+each pool's history (deployed under WASM A, upgraded to WASM B).
+Phase 2 (the `wasm-history` walk on r1) is required to confirm
+no pool was upgraded mid-life.
+
+## Audit plan (the canonical procedure)
 
 ### Phase 1 — Enumerate pool contracts
 
