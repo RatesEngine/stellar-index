@@ -17,6 +17,21 @@ against.
 
 ### Added
 
+- **SEP-41 supply storage integration tests (#316)**: covers the
+  `Insert → SEP41NetMintAtOrBefore → SEP41KindTotalsAtOrBefore`
+  paths through real TimescaleDB via testcontainers-go. The
+  Algorithm 3 running sum's SQL (CASE-WHEN sign-flip for
+  burn/clawback, FILTER (WHERE event_kind=...) per-kind
+  aggregations, contract_id isolation) ships untested at the SQL
+  level until this PR — Go-layer defensive guards in #309 catch
+  invalid inputs but can't detect a SQL regression that silently
+  corrupts the running sum. Two test scenarios: (1) round-trip
+  with mint + burn + clawback at different ledgers, verifying
+  the sign-flip is correct, the at-or-before filter respects the
+  ledger bound, kind-totals split cleanly, and contract_id
+  isolation works; (2) i128/NUMERIC round-trip preserves
+  precision for values exceeding int64.
+
 - **Coverage-matrix re-baseline (#315)**: walks rows that had drifted
   to "designed / pending" but actually shipped this session.
   Concrete row updates:
