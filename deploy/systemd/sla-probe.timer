@@ -1,0 +1,37 @@
+# systemd timer: periodic SLA-probe runs against the production API.
+#
+# Companion to sla-probe.service. Drives the executable SLA-evidence
+# CLI (cmd/ratesengine-sla-probe) on a fixed cadence so the
+# RFP-stated SLA targets are continuously verified rather than
+# spot-checked.
+#
+# Cadence: every 15 minutes (`*:0/15`). Each run drives 30 s of load
+# at concurrency=4, so the probe itself emits ~30/min sustained
+# requests during the active window — well below the public API's
+# anonymous tier rate limit. The textfile-output integration is the
+# follow-up that will dump per-run latency / freshness / availability
+# values into node_exporter so Grafana / alerting trend them over
+# time; today the timer runs the probe and exits.
+#
+# Why 15 minutes: tighter cadence (e.g. 1 min) would dominate the
+# anonymous-tier rate budget; looser (hourly) loses the granularity
+# needed to pinpoint SEV-2 latency-spike windows. 15-min strikes
+# the balance and matches the SEV-2 detection requirement (≤ 30
+# min after incident begins).
+#
+# Persistent=true means: if the box was off at the timer mark, fire
+# on next boot. So a planned reboot doesn't skip a window's
+# evidence sample.
+
+[Unit]
+Description=Periodic Rates Engine SLA probe (every 15 min)
+Documentation=https://github.com/RatesEngine/rates-engine/blob/main/docs/operations/sla-probe.md
+
+[Timer]
+OnCalendar=*:0/15:00 UTC
+RandomizedDelaySec=120
+Persistent=true
+Unit=sla-probe.service
+
+[Install]
+WantedBy=timers.target
