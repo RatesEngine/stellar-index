@@ -15,6 +15,31 @@ against.
 
 ## [Unreleased]
 
+### Fixed
+
+- **Coverage matrix: re-baseline the Open list (#340)**: Task #50
+  re-baselined the upper per-section rows today, but the
+  *Open — implementation pending* summary table at the bottom of
+  `docs/architecture/coverage-matrix.md` still listed twenty-one
+  items as pending that had actually shipped (S4.1-4 VWAP/TWAP,
+  S8.1-2 USD volume + FX, F2.4 circulating-supply, S3.7 CEX
+  connectors, S2.4 Chainlink HTTP, S1.4 asset enumeration, X2.2
+  /v1/price/tip, X2.3 /v1/observations, X2.6 streaming ×4, X3.1-7
+  anomaly + baseline + freeze, F5.3 batch endpoint, #2 SEP-10,
+  #9 pkg/client SDK, #10 docs-api pipeline, #24 internal/divergence,
+  X1.5 archive-completeness daemon, X1.7 verify-archive
+  -fail-on-missed, #21 CHANGELOG + SemVer, #23 release-notes
+  template, #26 envelope flag retrofit). All twenty-one verified
+  against the current `internal/`, `cmd/`, and `pkg/` tree, then
+  moved to *Closed since Phase 1* with the file paths cited as
+  evidence. The Open list now contains the **eight items that
+  are genuinely outstanding before launch** (X2.5 forex snap;
+  Patroni/Redis/HAProxy/Prom/Loki ansible roles; public status
+  page; k6 load tests; chaos suite; SEV dry-run record; p95
+  proof; public-flip checklist) plus the in-flight Task #53
+  Blend Phase 2. Massive accuracy improvement for understanding
+  what's actually left before the 2026-06-30 launch.
+
 ### Added
 
 - **Blend WASM audit — Phase 1 + partial Phase 3 (#339)**: Task

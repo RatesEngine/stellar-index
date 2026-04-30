@@ -374,6 +374,8 @@ for the canonical work list with effort estimates and dependencies.
 
 ### Closed since Phase 1
 
+**Phase 1-era closures (matrix-ratification 2026-04-22):**
+
 - **F1.6 SEP-1 home-domain resolution** — was open gap; landed in
   PR #192 (overlay handler) + PR #190 scaffolding.
 - **S6.5 / S7 Retention policy** — was hard gap; landed in
@@ -386,39 +388,80 @@ for the canonical work list with effort estimates and dependencies.
 - **X1.1 / X1.3 Archive completeness bootstrap** — added post-Phase-1
   per ADR-0017; bootstrapped on R1 2026-04-28.
 
+**Implementation closures (verified 2026-04-30 against current
+code state — these were on the "Open" list but had shipped):**
+
+- **S4.1–S4.4 VWAP/TWAP impl + USD volume + thresholds** —
+  `internal/aggregate/{vwap,twap,ohlc,orchestrator}.go` shipped
+  with `prices_*` CAGGs backing the API.
+- **S8.1–S8.2 USD volume column + FX anchor** —
+  `internal/aggregate/{triangulate,stablecoin}.go` + the
+  `volume_usd` column in `trades` hypertable.
+- **F2.4 circulating-supply impl** — three-domain split (XLM /
+  classic / SEP-41) shipped through Tasks #54-#57; aggregator
+  refresher wired.
+- **S3.7 CEX connectors (Binance / Coinbase / Kraken / Bitstamp)** —
+  all four in `internal/sources/external/` with
+  `BackfillSafe: true`.
+- **S2.4 Chainlink HTTP cross-check** — `ChainlinkReference`
+  shipped in #282; live in `internal/divergence/chainlink.go`.
+- **S1.4 Asset enumeration / discovery** —
+  `internal/canonical/discovery/` package live with sniffer +
+  recorder.
+- **X2.2 `/v1/price/tip` + last-good-price fallback** —
+  `internal/api/v1/price_tip.go` (302 LoC) + stream variant.
+- **X2.3 `/v1/observations` per-source raw** —
+  `internal/api/v1/observations.go` (205 LoC) + stream variant.
+- **X2.6 Streaming endpoints (×4)** — `/v1/price/stream`,
+  `/v1/price/tip/stream`, `/v1/observations/stream`,
+  `/v1/chart`. All four shipped under `internal/api/v1/`.
+- **X3.1 Phase 1 anomaly thresholds** —
+  `internal/aggregate/anomaly/` package live.
+- **X3.2–X3.7 Phase 2 statistical baseline + freeze** —
+  `internal/aggregate/{baseline,confidence,freeze}/` packages
+  shipped (3,474 LoC including tests). Multi-window baseline
+  columns landed in `migrations/0008_add_multi_window_baseline.up.sql`.
+- **F5.3 Batch / bulk-query endpoint** — `/v1/price/batch`
+  handler in `internal/api/v1/price.go` + `price_batch_test.go`.
+- **#2 SEP-10 protocol implementation** —
+  `internal/auth/sep10/{validator,jwt}.go` shipped via PR #196.
+- **#9 `pkg/client/` Go SDK skeleton** — full client with types,
+  endpoints, errors.
+- **#10 Generated API reference (`make docs-api`)** — Redocly
+  pipeline live; HTML regenerated per OpenAPI change (drift
+  detected by CI's `openapi lint` job).
+- **#24 `internal/divergence/` package** — chainlink + coingecko
+  + compare + worker + reference all shipped.
+- **X1.5 archive-completeness daemon** — `cmd/ratesengine-ops`
+  has full set of subcommands: `backfill`, `cross-region-check`,
+  `cross-region-monitor`, `discovery`, `hubble-check`,
+  `hubble-soroban-events`.
+- **X1.7 verify-archive `-fail-on-missed`** — flag exists in
+  `cmd/ratesengine-ops/main.go`.
+- **#21 CHANGELOG + SemVer policy** — `CHANGELOG.md` +
+  `docs/architecture/semver-policy.md` shipped.
+- **#23 Release-notes template** — `.github/RELEASE_NOTES_TEMPLATE.md`.
+- **#26 Envelope flag retrofit** — `internal/api/v1/envelope.go`
+  exposes `stale`, `reduced_redundancy`, `triangulated`,
+  `divergence_warning` flags (S5.4 verified).
+
 ### Open — implementation pending
+
+Re-baselined 2026-04-30 against current code state. Twenty-one
+items previously listed here have shipped — their evidence is
+now in *Closed since Phase 1* above.
 
 | Area | Item | Owner | Week | Effort |
 |---|---|---|---|---|
-| Aggregator | S4.1–S4.4 VWAP/TWAP impl + USD volume + thresholds | `internal/aggregate` | 5 | ~1 week |
-| Aggregator | S8.1–S8.2 USD volume column + FX anchor | `internal/aggregate/triangulate` | 5 | half-day |
-| Aggregator | X2.5 Forex factor snap rule for chained-fiat | same | 5 | half-day |
-| Aggregator | X3.1 Phase 1 anomaly thresholds (stop-gap) | `internal/aggregate/anomaly` | 5 | half-day |
-| Aggregator | X3.2–X3.7 Phase 2 statistical baseline + freeze | `internal/aggregate/{baseline,confidence,freeze}` | 6 | ~1.5 weeks |
-| Aggregator | F2.4 circulating-supply impl (ADR-0011) | `internal/supply` | 6 | 1–2 days |
-| API | #2 SEP-10 protocol implementation | `internal/auth/sep10` | 7 | full day |
-| API | X2.2 `/v1/price/tip` + last-good-price fallback | `internal/api/v1/price_tip.go` | 7 | half-day |
-| API | X2.3 `/v1/observations` per-source raw | `internal/api/v1/observations.go` | 7 | half-day |
-| API | X2.6 Streaming endpoints (×4) | `internal/api/streaming` | 7 | ~2 days |
-| API | F5.3 Batch / bulk-query endpoint | `internal/api/v1/batch` | 7 | half-day |
-| API | #9 `pkg/client/` Go SDK skeleton | `pkg/client` | 7 | half-day |
-| API | #10 Generated API reference (`make docs-api`) | docs pipeline | 7 | half-day |
-| Connectors | S3.7 CEX connectors (Binance, Coinbase, Kraken, Bitstamp) | `internal/sources/external/<venue>` | 4 | ~1 week |
-| Connectors | S2.4 Chainlink HTTP cross-check | `internal/divergence/chainlink` | 4 | half-day |
-| Connectors | S1.4 Asset enumeration / discovery | `internal/canonical/discovery` | 4 | full day |
-| Divergence | #24 `internal/divergence/` package | `internal/divergence` | 5–6 | full day |
-| Operations | X1.5 archive-completeness daemon (4 PRs A-D) | `cmd/ratesengine-ops archive-completeness` | 8 | ~2 days |
-| Operations | X1.7 verify-archive hardening (`-fail-on-missed`) | `cmd/ratesengine-ops` | 8 | half-day |
-| Operations | #11–#16 Ansible roles (Patroni / Redis / HAProxy / Prometheus / Loki) | infra | 8 | ~1 week |
+| Aggregator | X2.5 Forex factor snap rule for chained-fiat | `internal/aggregate/triangulate` | 5 | half-day |
+| Operations | #11–#16 Ansible roles (Patroni / Redis / HAProxy / Prometheus / Loki) — only `archival-node` exists today | `configs/ansible/roles/` | 8 | ~1 week |
 | Operations | Public status page at `status.ratesengine.net` | infra | 9 | half-day |
-| Validation | #17–#18 k6 load test scenarios | `test/load` | 9 | ~1 week |
-| Validation | #19 Chaos suite | `test/chaos` | 9 | full day |
-| Validation | #20 SEV-1/SEV-2 dry-run | runbooks | 9 | half-day |
-| Validation | S9.2 p95 ≤ 200 ms proof | k6 + report | 9 | (above) |
-| Finalization | #21 CHANGELOG + SemVer policy | release process | 10 | half-day |
-| Finalization | #22 Public-flip prep | repo strategy | 10 | hour planning |
-| Finalization | #23 Release-notes template | docs | 10 | half-day |
-| Finalization | #26 Envelope flag retrofit | `internal/api/v1` | 5–6 | half-day |
+| Validation | #17–#18 k6 load test scenarios — `test/load/` not yet created | `test/load` | 9 | ~1 week |
+| Validation | #19 Chaos suite — `test/chaos/` not yet created | `test/chaos` | 9 | full day |
+| Validation | #20 SEV-1/SEV-2 dry-run — playbook exists, dry-run record doesn't | runbooks | 9 | half-day |
+| Validation | S9.2 p95 ≤ 200 ms proof | k6 + report | 9 | (depends on #17–#18) |
+| Finalization | #22 Public-flip prep — `public-flip.md` exists; checklist completion is operator-side | repo strategy | 10 | hour planning |
+| Connectors / Audit | Task #53 Blend Pool Factory walk on r1 (Phase 2 of audit) | `cmd/ratesengine-ops wasm-history` | — | ~5 h operator |
 
 ### Watch (post-launch only — explicitly accepted)
 
