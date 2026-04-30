@@ -17,6 +17,19 @@ against.
 
 ### Added
 
+- **systemd timer + service + runbook for the supply-snapshot writer
+  (#288)**: closes the operator-side gap left by #285. Ships
+  `deploy/systemd/supply-snapshot.{service,timer}` (daily 04:42 UTC
+  + jitter, spaced after the existing archive-completeness 02:17 and
+  verify-archive-tier-a 03:23 timers) plus
+  `docs/operations/supply-snapshot.md` covering the `[supply]` config
+  block, the SDF-reserve-move update procedure, the dry-run
+  pre-flight, and the v1 asset-class scope. Daily cadence is correct
+  for now — values change only when operator config changes (a few
+  times per year). When Task #54's LCM-derived reader ships and the
+  writer becomes goroutine-resident in the aggregator, this systemd
+  unit becomes redundant.
+
 - **XLM supply-snapshot writer via `ratesengine-ops supply snapshot`
   (#285)**: closes the write half of the supply pipeline. Read half
   shipped in #277 left `/v1/assets/{id}` F2 fields null because no
