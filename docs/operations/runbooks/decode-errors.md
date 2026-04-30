@@ -1,6 +1,6 @@
 ---
 title: Runbook — decode-errors
-last_verified: 2026-04-23
+last_verified: 2026-04-30
 status: draft
 severity: P3
 ---
@@ -46,7 +46,10 @@ kubectl logs deploy/ratesengine-indexer --tail=500 | grep -iE "decode|parse|malf
 # A protocol upgrade often changes event shape for a specific
 # contract address — rpc-probe confirms the source contract still
 # emits recent events, and what topic shape they have today.
-ratesengine-ops rpc-probe http://stellar-rpc:8000
+# Note: r1 doesn't run its own stellar-rpc (removed 2026-04-23, see
+# docs/operations/r1-deployment-state.md); point the probe at a
+# public endpoint such as SDF's mainnet RPC.
+ratesengine-ops rpc-probe https://mainnet.sorobanrpc.com
 ```
 
 ## Typical root causes
@@ -81,3 +84,5 @@ This alert is P3 because there's no emergency runtime response — we can't un-d
 ## Changelog
 
 - 2026-04-23 — initial draft alongside the SourceDecodeErrorsTotal wiring + orphan/decode split.
+- 2026-04-30 — rpc-probe URL points at a public stellar-rpc; r1
+  doesn't run its own (removed 2026-04-23).

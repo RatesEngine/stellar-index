@@ -1,11 +1,24 @@
 ---
 title: Runbook — core-peers
-last_verified: 2026-04-23
+last_verified: 2026-04-30
 status: draft
 severity: P2
 ---
 
 # Runbook — `ratesengine_stellar_core_peers_low`
+
+> **Deployment posture (2026-04-30).** stellar-core is **not running
+> on r1** — the daemon was removed 2026-04-23
+> ([r1-deployment-state.md §Services](../r1-deployment-state.md)).
+> The metric `ratesengine_stellar_core_peer_count` has no producer,
+> so this alert is *inert* on r1. Galexie's embedded captive-core
+> connects out for ledger replay but does not expose a `/peers`
+> endpoint to the prometheus exporter.
+>
+> The alert remains in `deploy/monitoring/rules/stellar.yml` for
+> Phase-3 (Tier-1 validator rollout, ADR-0004). Until a validator
+> is brought online, treat any alert that reaches you for this
+> rule as a misconfiguration rather than a real signal.
 
 ## At a glance
 
@@ -91,3 +104,6 @@ kubectl logs ds/stellar-core --tail=200 | grep -iE 'connect|refused|timed out'
 ## Changelog
 
 - 2026-04-23 — initial draft.
+- 2026-04-30 — top-of-file deployment-posture callout: this alert
+  is inert on r1 (stellar-core removed 2026-04-23) and is retained
+  for Phase-3 validator rollout.

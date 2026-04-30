@@ -116,6 +116,18 @@ for incident-time clarity.
 
 ## Stellar / node alerts
 
+> **Inert on r1 (2026-04-30).** The first four alerts in this table
+> reference metrics produced by stellar-core / stellar-rpc / the
+> stellar-core-prometheus-exporter. All three were removed from r1
+> on 2026-04-23 ([r1-deployment-state.md](r1-deployment-state.md)),
+> so these alerts have no producer and cannot fire on the current
+> deployment posture. They remain in the rule file for Phase-3
+> (Tier-1 validator rollout, ADR-0004); each runbook's *Deployment
+> posture* callout explains the revival path. `archive-divergence`
+> is **not** affected — it consumes the cross-region hash-check
+> metric written by `scripts/ops/archive-cross-check.sh` and remains
+> live.
+
 | Name | Metric | Condition | Severity | Runbook |
 | ---- | ------ | --------- | -------- | ------- |
 | `ratesengine_stellar_core_ledger_age` | `time() - ratesengine_stellar_core_last_ledger_time_unix` | > 60 s for > 2 min | **P1** | [core-lag](runbooks/core-lag.md) |

@@ -67,6 +67,17 @@ migration lands.
 | 0002 | [`0002_create_price_aggregates.up.sql`](0002_create_price_aggregates.up.sql) | Continuous aggregates (1m/15m/1h/4h/1d/1w/1mo) + refresh + retention. **CAVEAT**: `twap` column is `avg(quote/base)` — arithmetic mean of trade prices, NOT a time-weighted average. True TWAP needs inter-trade durations the CAGG definitions don't capture; computed in Go via `internal/aggregate/twap.go` instead |
 | 0003 | [`0003_create_oracle_updates_hypertable.up.sql`](0003_create_oracle_updates_hypertable.up.sql) | `oracle_updates` hypertable for Reflector / Redstone / Band observations + compression + retention |
 | 0004 | [`0004_relax_trades_ledger_for_offchain.up.sql`](0004_relax_trades_ledger_for_offchain.up.sql) | Relaxes the `trades.ledger > 0` constraint so off-chain sources (Binance / Kraken / etc) can stamp `ledger = 0` |
+| 0005 | [`0005_create_asset_supply_history.up.sql`](0005_create_asset_supply_history.up.sql) | `asset_supply_history` hypertable per ADR-0011 — append-only per-asset supply snapshots backing the F2 fields on `/v1/assets/{id}` |
+| 0006 | [`0006_create_discovered_assets.up.sql`](0006_create_discovered_assets.up.sql) | `discovered_assets` table for SEP-41 auto-discovery; every contract emitting a transfer / mint / burn / clawback event lands here for operator triage |
+| 0007 | [`0007_create_volatility_baseline.up.sql`](0007_create_volatility_baseline.up.sql) | `volatility_baseline_1m` per-pair statistical baseline per ADR-0019 Phase 2 — robust median + MAD baseline used by the anomaly-freeze policy |
+| 0008 | [`0008_add_multi_window_baseline.up.sql`](0008_add_multi_window_baseline.up.sql) | Adds 1d + 7d baseline columns to `volatility_baseline_1m` per ADR-0019 §"Multi-window safeguard against frog-boiling" |
+| 0009 | [`0009_create_blend_auctions.up.sql`](0009_create_blend_auctions.up.sql) | `blend_auctions` hypertable — one row per observed Blend auction event (new_auction, etc.) |
+| 0010 | [`0010_create_account_observations.up.sql`](0010_create_account_observations.up.sql) | `account_observations` hypertable per ADR-0021 — one row per AccountEntry-delta touching an operator-watched account, backs Algorithm 1 (XLM) reserves |
+| 0011 | [`0011_create_trustline_observations.up.sql`](0011_create_trustline_observations.up.sql) | `trustline_observations` hypertable per ADR-0022 — backs Algorithm 2 classic-credit supply: Σ trustline component |
+| 0012 | [`0012_create_claimable_observations.up.sql`](0012_create_claimable_observations.up.sql) | `claimable_observations` hypertable per ADR-0022 — backs Algorithm 2: Σ claimable-balance component |
+| 0013 | [`0013_create_lp_reserve_observations.up.sql`](0013_create_lp_reserve_observations.up.sql) | `lp_reserve_observations` hypertable per ADR-0022 — backs Algorithm 2: Σ LP-reserve component |
+| 0014 | [`0014_create_sac_balance_observations.up.sql`](0014_create_sac_balance_observations.up.sql) | `sac_balance_observations` hypertable per ADR-0022 — backs Algorithm 2: Σ SAC-wrapped contract balance component |
+| 0015 | [`0015_create_sep41_supply_events.up.sql`](0015_create_sep41_supply_events.up.sql) | `sep41_supply_events` hypertable per ADR-0023 — backs Algorithm 3 SEP-41 supply: Σ mint − Σ burn − Σ clawback per contract |
 
 **Pending future work** (not yet numbered, takes the next free
 slot when it lands): a materialised `asset_catalogue` +

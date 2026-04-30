@@ -1,21 +1,43 @@
 ---
 title: Runbook — api-latency
-last_verified: 2026-04-23
+last_verified: 2026-04-30
 status: draft
-severity: P2
+severity: P2 (direct-threshold) / P1 (SLO burn-rate fast)
 ---
 
-# Runbook — `ratesengine_api_latency_p95_high` / `_p99_high`
+# Runbook — `ratesengine_api_latency_p95_high` / `_p99_high` (+ SLO burn-rate variants)
 
 ## At a glance
 
 | Field | Value |
 | ----- | ----- |
-| Alerts | `ratesengine_api_latency_p95_high` (> 500 ms), `ratesengine_api_latency_p99_high` (> 2 s) |
-| Severity | P2 (ticket) |
-| Detected by | `deploy/monitoring/rules/api.yml` |
+| Direct-threshold alerts | `ratesengine_api_latency_p95_high` (> 500 ms), `ratesengine_api_latency_p99_high` (> 2 s) — `deploy/monitoring/rules/api.yml` |
+| SLO burn-rate alerts | `ratesengine_slo_latency_burn_{fast,medium,slow}` (per ADR-0009 multi-window pattern) — `deploy/monitoring/rules/slo.yml` |
+| Severity | P2 (ticket) for direct-threshold; **P1** for fast/medium burn, P3 for slow burn |
 | Typical MTTR | 15–60 min |
 | Impact | Requests complete but slowly. Freighter's wallet feels sluggish; clients with tight timeouts may give up and retry. Not customer-visible as an outage, but breaches our SLA (p95 ≤ 200 ms, p99 ≤ 500 ms). |
+
+## Burn-rate vs direct-threshold pages
+
+The two alert families (this runbook handles both) signal
+different things:
+
+- **Direct-threshold** (`p95_high` / `p99_high`): "p95 just
+  crossed the line." Useful as an immediate "look, something
+  changed" signal but noisy — a single bad bucket can trip it.
+- **SLO burn-rate** (`slo_latency_burn_{fast,medium,slow}`):
+  "we're consuming SLO error budget too quickly." Per the Google
+  SRE workbook pattern, both a short and a long window must agree
+  before firing — suppresses single-spike noise. The fast tier
+  (5m AND 1h windows, 14.4× budget) means the budget will be
+  exhausted in hours if this rate continues; medium (30m AND 6h,
+  6×) gives days; slow (6h AND 24h, 1×) gives ~weeks.
+
+If a `_burn_fast` page reaches you, the diagnosis flow below is
+the same — but the urgency is "we're burning budget at a
+SEV-1-worthy rate", not "p95 happens to be elevated for a
+moment." The mitigation should target a real fix, not just
+tolerate the symptom until the alert clears.
 
 ## Symptoms
 
@@ -124,3 +146,8 @@ psql -c "SELECT state, count(*), max(now()-query_start) AS oldest
 - 2026-04-23 — initial draft. Alert threshold is 2.5× the SLA
   target (p95) and 4× (p99) so we get lead time, not just
   breach notifications.
+- 2026-04-30 — runbook now also covers the SLO multi-window
+  burn-rate alerts shipped in #313 (per ADR-0009), which route
+  here. Burn-rate-vs-threshold section explains the different
+  semantics so on-call doesn't treat a `_burn_fast` page as a
+  benign spike.

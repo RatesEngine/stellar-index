@@ -37,8 +37,13 @@ make db-migrate-status
 Expected output after `db-migrate-up`:
 
 ```
-migrated to version 8 (dirty=false)
+migrated to version 15 (dirty=false)
 ```
+
+(The number tracks the highest-numbered file under
+[`migrations/`](../../migrations) — it grows with each schema
+change, so verify against `ls migrations/*.up.sql | sort | tail -1`
+rather than memorising it.)
 
 ## Services
 

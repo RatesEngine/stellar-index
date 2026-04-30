@@ -1,6 +1,6 @@
 ---
 title: Runbook — supply-cross-check-divergence
-last_verified: 2026-04-29
+last_verified: 2026-04-30
 status: draft
 severity: P3
 ---
@@ -127,8 +127,17 @@ Capture for the postmortem:
 
 - ADR-0011 §"SAC-wrapped classics — both algorithms must agree" —
   the policy this runbook implements.
-- `aggregator-silent.md` — if the orchestrator is stalled, the
+- [`docs/architecture/supply-pipeline.md`](../../architecture/supply-pipeline.md)
+  — overview of the three-algorithm split, the six observers,
+  and where the cross-check fits.
+- `aggregator-silent.md` — if the aggregator is stalled, the
   cross-check gauge is also stale; investigate that first.
+- `supply-refresh-stalled.md` / `supply-refresh-error-dominant.md`
+  — when the refresher itself isn't producing snapshots; both
+  algorithm readings would be stale rather than divergent.
+- `supply-snapshot-stale.md` — sibling alert on the systemd-timer
+  path; if it's also firing, the alternative-path producer is
+  down too.
 - `internal/supply/crosscheck.go` — the comparison code; any tolerance
   change must update this runbook + ADR-0011.
 
@@ -136,3 +145,8 @@ Capture for the postmortem:
 
 - 2026-04-28 — initial draft alongside the cross-check landing PR
   (L2.12 PR 5).
+- 2026-04-30 — Related section now cross-links the supply-pipeline
+  architecture overview and the four sibling supply alerts
+  (refresh-stalled / refresh-error-dominant / snapshot-stale /
+  aggregator-silent) so an operator triaging a divergence has the
+  surrounding-system map in one click.

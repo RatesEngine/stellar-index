@@ -32,11 +32,25 @@ curl -s http://aggregator:9464/metrics | \
   grep ratesengine_aggregator_supply_refresh_total | \
   sort -t' ' -k2 -rn | head
 
-# 2. Per-asset breakdown? (Logs carry asset key; metric doesn't.)
+# 2. Per-asset breakdown — does the failure track one asset or all of them?
+#    The metric carries an `asset_key` label (added in #314); split by it
+#    in PromQL or directly off /metrics:
+curl -s http://aggregator:9464/metrics | \
+  awk '/^ratesengine_aggregator_supply_refresh_total\{/' | \
+  sort
+# Equivalent PromQL for dashboards:
+#   sum by (asset_key, outcome) (
+#     rate(ratesengine_aggregator_supply_refresh_total[15m])
+#   )
+# If one asset_key dominates the non-ok rate while others are healthy, the
+# fault is per-asset (config drift on watched_classic_assets, missing
+# locked-set member, SAC wrapper map gap) rather than fleet-wide.
+
+# 3. Logs corroborate per-asset failures with the wrapped error text.
 sudo journalctl -u ratesengine-aggregator --since "30 min ago" -n 200 | \
   grep "supply refresh: " | sort | uniq -c | sort -rn | head
 
-# 3. Sanity-check the aggregator config.
+# 4. Sanity-check the aggregator config.
 grep -A 10 "^\[supply" /etc/ratesengine.toml
 ```
 
@@ -130,3 +144,7 @@ overflow on a malformed amount, etc.
 
 - 2026-04-30 — initial draft alongside #313 (supply-refresh
   alerts).
+- 2026-04-30 — quick-diagnosis #2 corrected: the
+  `aggregator_supply_refresh_total` metric DOES carry an
+  `asset_key` label (added in #314), so per-asset splitting is
+  possible from `/metrics` directly without needing journald.

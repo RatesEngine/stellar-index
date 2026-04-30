@@ -1,11 +1,26 @@
 ---
 title: Runbook — archive-publish
-last_verified: 2026-04-23
+last_verified: 2026-04-30
 status: draft
 severity: P3
 ---
 
 # Runbook — `ratesengine_stellar_archive_publish_fail`
+
+> **Deployment posture (2026-04-30).** stellar-core is **not running
+> on r1** — the daemon (and its archive-publishing path) was removed
+> 2026-04-23
+> ([r1-deployment-state.md §Services](../r1-deployment-state.md)).
+> `/srv/history-archive` was filled by `stellar-archivist mirror`
+> (one-shot, completed) and is read-only today via the verify-archive
+> Tier-A integrity check. No process actively *publishes* to it.
+>
+> The metric `ratesengine_stellar_archive_publish_errors_total` has
+> no producer, so this alert is *inert* on r1. It remains in
+> `deploy/monitoring/rules/stellar.yml` for Phase-3 (Tier-1
+> validator rollout, ADR-0004) when stellar-core resumes
+> checkpoint-publish duty. Until then this runbook is *future-
+> tense*.
 
 ## At a glance
 
@@ -90,3 +105,6 @@ mc admin info myminio
 ## Changelog
 
 - 2026-04-23 — initial draft.
+- 2026-04-30 — top-of-file deployment-posture callout: this alert
+  is inert on r1 (stellar-core removed 2026-04-23, no active archive
+  publisher). Retained for Phase-3 validator rollout.

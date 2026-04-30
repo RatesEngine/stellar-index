@@ -17,7 +17,21 @@ severity: P2
 | Typical MTTR | 15–60 min |
 | Impact | `/v1/assets/native` reports `circulating_supply: 0`, which is visibly wrong to anyone glancing at the response. Customer-visible data-quality incident. |
 
-## Symptoms
+## Coverage caveat — timer-path-only alert
+
+`ratesengine_supply_snapshot_circulating_xlm` is emitted by
+`internal/supply/textfile.go`, which only runs from the systemd-
+timer path (`supply-snapshot.timer` →
+`ratesengine-ops supply-snapshot`). The aggregator-resident
+goroutine path (gated by `[supply] aggregator_refresh_enabled =
+true`) writes directly to `asset_supply_history` without going
+through the textfile, so this alert **cannot fire** on a
+goroutine-only deployment — the metric series simply doesn't
+exist. See [supply-pipeline.md](../../architecture/supply-pipeline.md)
+for the two-path overview. If you're on the goroutine-only path
+and want a `circulating ≤ 0` signal, the equivalent check is at
+the API layer (e.g. probe `/v1/assets/native` and assert
+`circulating_supply > 0`); a follow-up alert will be needed.
 
 - `ratesengine_supply_snapshot_circulating_xlm{asset_key="XLM"} <= 0`
   for ≥ 5 min.
@@ -106,3 +120,7 @@ ratesengine-ops supply snapshot -config /etc/ratesengine.toml -dry-run
 ## Changelog
 
 - 2026-04-30 — initial draft alongside #295 (textfile + alerts).
+- 2026-04-30 — coverage caveat added: this alert is timer-path-
+  only and silently doesn't fire on aggregator-resident-only
+  deployments. Cross-references supply-pipeline.md for the
+  two-path overview and notes the equivalent API-layer probe.

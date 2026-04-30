@@ -118,8 +118,8 @@ TODO(#0) once the volatile path is validated in production.
 | `README.md` | this file |
 | `events.go` | 8 field-name constants + their SCVal topic constants + mainnet addresses + errors |
 | `decode.go` | 8-event correlation buffer + single-Trade emission, decoded via `internal/scval` |
-| `consumer.go` | implements `consumer.Source` (the dispatcher seam) |
-| `dispatcher_adapter.go` | topic-match registration with `internal/dispatcher` |
+| `consumer.go` | the in-memory 8-event correlation buffer + `Event` wrapper the dispatcher seam emits. (Historical name; does not implement the legacy `consumer.Source` orchestrator interface — production routing is via `dispatcher.Decoder`.) |
+| `dispatcher_adapter.go` | topic-match + decode registration with `internal/dispatcher` — the production seam |
 | `decode_test.go`, `source_test.go`, `real_fixture_test.go` | unit + happy-path-and-orphan + real-mainnet-fixture tests |
 
 ## Status
