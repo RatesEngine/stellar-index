@@ -32,6 +32,21 @@ type SupplyLooker interface {
 // no error logged, the asset-detail body still serves.
 var ErrSupplyNotFound = errors.New("api: supply snapshot not found")
 
+// VolumeReader is the read-side interface the v1 server uses to
+// populate the volume_24h_usd field on /v1/assets/{id}. Production
+// implementation: a thin adapter around
+// timescale.Store.Volume24hUSDForAsset.
+//
+// Returns the trailing-24h USD-denominated trade volume for the
+// asset (summed across every pair where it appears as base or
+// quote) as a decimal string. "0" is a valid value (asset tracked,
+// no trades). Errors propagate so the handler can log them at
+// WARN — the volume field stays null on any failure, the asset-
+// detail body still serves cleanly.
+type VolumeReader interface {
+	Volume24hUSDForAsset(ctx context.Context, assetKey string) (string, error)
+}
+
 // applyF2Fields populates the F2 supply / market-cap / FDV fields
 // on detail by consulting the [SupplyLooker] (for supply numbers)
 // and the [PriceReader] (for USD price). Best-effort — all fields
@@ -42,12 +57,23 @@ var ErrSupplyNotFound = errors.New("api: supply snapshot not found")
 // price → market_cap_usd + fdv_usd nil; no supply snapshot → all
 // six F2 fields nil.
 func (s *Server) applyF2Fields(ctx context.Context, detail *AssetDetail, asset canonical.Asset) {
+	key, keyErr := supply.AssetKey(asset)
+
+	// Volume path is independent of supply — even an asset without
+	// a supply snapshot has a meaningful 24h volume if it's been
+	// trading. Run it first so a missing snapshot doesn't shadow
+	// the volume field.
+	if keyErr == nil {
+		s.populateVolume24h(ctx, detail, key)
+	}
+
 	if s.supply == nil {
 		return
 	}
-	key, err := supply.AssetKey(asset)
-	if err != nil {
-		// Off-chain assets (fiat / crypto-pure) — silent no-op.
+	if keyErr != nil {
+		// Off-chain assets (fiat / crypto-pure) — supply path is a
+		// silent no-op (matches the existing scope; volume path
+		// above already returned for the same reason).
 		return
 	}
 	snap, ok := s.fetchSupplySnapshot(ctx, key)
@@ -56,6 +82,23 @@ func (s *Server) applyF2Fields(ctx context.Context, detail *AssetDetail, asset c
 	}
 	populateSupplyFields(detail, snap)
 	s.populateMarketCap(ctx, detail, asset, snap, key)
+}
+
+// populateVolume24h fills detail.VolumeUSD24h via the [VolumeReader].
+// Best-effort — failure logs WARN, the field stays null, the rest
+// of the body still serves cleanly.
+func (s *Server) populateVolume24h(ctx context.Context, detail *AssetDetail, assetKey string) {
+	if s.volume == nil {
+		return
+	}
+	v, err := s.volume.Volume24hUSDForAsset(ctx, assetKey)
+	if err != nil {
+		if ctx.Err() == nil && !errors.Is(err, context.Canceled) && !errors.Is(err, context.DeadlineExceeded) {
+			s.logger.Warn("volume_24h_usd lookup failed", "err", err, "asset_key", assetKey)
+		}
+		return
+	}
+	detail.VolumeUSD24h = &v
 }
 
 // fetchSupplySnapshot wraps the SupplyLooker call with the

@@ -108,6 +108,19 @@ type AssetDetail struct {
 	// indicates an operator curated the locked-set or SEP-1
 	// declared a max_supply).
 	SupplyBasis *string `json:"supply_basis,omitempty"`
+
+	// VolumeUSD24h is the trailing-24h USD-denominated trade
+	// volume across every pair this asset participates in (as base
+	// OR quote). Sourced from the prices_1m CAGG. Per Freighter V2
+	// scope ("24h Trading Volume aggregate across indexed
+	// markets").
+	//
+	// String-typed for the same reason as the supply / market-cap
+	// fields: NUMERIC sums don't fit a fixed-width Go type cleanly.
+	// "0" is a valid value (asset tracked, no trades in 24h);
+	// null means "volume reader not wired" or "lookup failed" —
+	// callers presenting the field should distinguish these.
+	VolumeUSD24h *string `json:"volume_24h_usd,omitempty"`
 }
 
 // detailFromAsset populates an AssetDetail from the canonical shape.

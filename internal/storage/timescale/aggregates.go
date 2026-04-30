@@ -402,3 +402,34 @@ func (a *stringArray) Scan(src any) error {
 	*a = out
 	return nil
 }
+
+// Volume24hUSDForAsset returns the trailing 24h USD-denominated
+// trade volume for an asset, summing across every pair the asset
+// participates in (as base OR quote). Reads from the prices_1m
+// CAGG (1440 rolled buckets per 24h) — far cheaper than scanning
+// the trades hypertable directly.
+//
+// Returns "0" when the asset has zero trades in the window;
+// callers presenting the field should treat zero distinctly from
+// null (zero = "asset existed and had no trades", null = "asset
+// not tracked"). The string return matches the rest of the
+// aggregate API — Postgres NUMERIC sums don't fit cleanly into
+// any Go fixed-width type.
+//
+// assetKey is the canonical asset string (e.g.
+// "native", "USDC:GA5...", "soroban:CC..."); matches what the
+// trades hypertable stores in base_asset / quote_asset.
+func (s *Store) Volume24hUSDForAsset(ctx context.Context, assetKey string) (string, error) {
+	const q = `
+        SELECT COALESCE(sum(volume_usd), 0)::text
+          FROM prices_1m
+         WHERE (base_asset = $1 OR quote_asset = $1)
+           AND bucket >= now() - INTERVAL '24 hours'
+           AND bucket  < now()
+    `
+	var out string
+	if err := s.db.QueryRowContext(ctx, q, assetKey).Scan(&out); err != nil {
+		return "", fmt.Errorf("timescale: Volume24hUSDForAsset(%s): %w", assetKey, err)
+	}
+	return out, nil
+}

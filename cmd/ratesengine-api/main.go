@@ -249,6 +249,7 @@ func run(cfgPath string, dryRun bool) error { //nolint:gocognit,funlen,gocyclo /
 		Divergence:  divergenceLooker,
 		Confidence:  redisConfidenceLooker{rdb: rdb},
 		Supply:      storeSupplyLooker{s: store},
+		Volume:      storeVolumeReader{s: store},
 		SEP10:       sep10Validator,
 		CORS:        cors,
 		Auth:        authMW,
@@ -707,6 +708,17 @@ func assetToDetail(a canonical.Asset, homeDomainLookup func(issuer string) (stri
 		d.ContractID = &v
 	}
 	return d
+}
+
+// storeVolumeReader adapts *timescale.Store to v1.VolumeReader.
+// Returns the trailing-24h USD volume across every pair the asset
+// participates in. No error translation needed — the timescale
+// helper returns "0" when the asset is tracked but had no trades,
+// and a real error for genuine SQL failures.
+type storeVolumeReader struct{ s *timescale.Store }
+
+func (r storeVolumeReader) Volume24hUSDForAsset(ctx context.Context, assetKey string) (string, error) {
+	return r.s.Volume24hUSDForAsset(ctx, assetKey)
 }
 
 // storeSupplyLooker adapts *timescale.Store to v1.SupplyLooker for

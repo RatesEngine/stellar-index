@@ -51,6 +51,7 @@ type Server struct {
 	divergence DivergenceLooker
 	freeze     FrozenLooker
 	supply     SupplyLooker
+	volume     VolumeReader
 	sep10      auth.SEP10Validator
 	cors       middleware.Middleware
 	auth       middleware.Middleware
@@ -136,6 +137,15 @@ type Options struct {
 	// snapshot only wires the read path.
 	Supply SupplyLooker
 
+	// Volume, when non-nil, populates the `volume_24h_usd` field on
+	// /v1/assets/{id} (trailing-24h USD-denominated trade volume
+	// across every pair the asset participates in). Per Freighter V2
+	// scope. Production wiring: a thin adapter around
+	// timescale.Store.Volume24hUSDForAsset. Nil leaves the field
+	// null — independent of Supply, so the volume can serve even
+	// when supply isn't yet wired (and vice versa).
+	Volume VolumeReader
+
 	// SEP10, when non-nil, backs GET /v1/auth/sep10/challenge and
 	// POST /v1/auth/sep10/token. Production wiring: an
 	// auth/sep10.Validator constructed from the binary's signing
@@ -201,6 +211,7 @@ func New(opts Options) *Server {
 		divergence: opts.Divergence,
 		freeze:     opts.Freeze,
 		supply:     opts.Supply,
+		volume:     opts.Volume,
 		sep10:      opts.SEP10,
 		cors:       opts.CORS,
 		auth:       opts.Auth,
