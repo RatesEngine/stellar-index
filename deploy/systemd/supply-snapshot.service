@@ -1,0 +1,71 @@
+# systemd unit: supply-snapshot writer.
+#
+# Per ADR-0011 + the supply-snapshot.timer cadence. Runs once on
+# each timer tick (oneshot semantics); the timer file at
+# supply-snapshot.timer schedules the cadence.
+#
+# Operator wiring:
+#
+#   sudo cp deploy/systemd/supply-snapshot.{service,timer} /etc/systemd/system/
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable --now supply-snapshot.timer
+#
+# Configuration (override via /etc/default/supply-snapshot):
+#
+#   CONFIG_PATH    Default /etc/ratesengine.toml
+#   ASSET          Default native (only XLM is supported at v1; the
+#                  classic + SEP-41 computers ship in follow-ups).
+#   EXTRA_FLAGS    Optional flags appended to the command line.
+#                  E.g. EXTRA_FLAGS="-ledger 50000000" pins the
+#                  snapshot to a specific ledger; default attribution
+#                  is the max last_ledger across ingestion_cursors.
+#
+# Reserve balances are operator-managed via the [supply] config
+# block in CONFIG_PATH — `sdf_reserve_accounts` enumerates the
+# accounts whose balances are excluded from circulating, and
+# `reserve_balances_stroops` carries the per-account stroop value.
+# Update that block whenever SDF announces a reserve move
+# (a few times per year); the next timer fire reflects the change.
+
+[Unit]
+Description=Rates Engine — supply-snapshot writer (daily cron per ADR-0011)
+Documentation=https://github.com/RatesEngine/rates-engine/blob/main/docs/operations/supply-snapshot.md
+After=network-online.target postgresql.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+EnvironmentFile=-/etc/default/supply-snapshot
+
+# Sensible defaults. Operators override via /etc/default/supply-snapshot.
+Environment=CONFIG_PATH=/etc/ratesengine.toml
+Environment=ASSET=native
+Environment=EXTRA_FLAGS=
+
+ExecStart=/bin/sh -c '/usr/local/bin/ratesengine-ops supply snapshot \
+  -config ${CONFIG_PATH} \
+  -asset ${ASSET} \
+  ${EXTRA_FLAGS}'
+
+# Runs as the application user — the writer only needs read on the
+# config + read/write on the Postgres asset_supply_history table,
+# both reachable as the unprivileged service account.
+User=ratesengine
+Group=ratesengine
+
+# Hardening — config is read-only, no filesystem writes needed
+# beyond Postgres-driven I/O which goes over the socket / network.
+ProtectSystem=strict
+PrivateTmp=true
+NoNewPrivileges=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+
+# A snapshot run is fast: one ListCursors + one Compute + one
+# InsertSupply. Worst case is a slow Postgres — cap at 5 minutes
+# so a wedged DB can't pin the unit.
+TimeoutStartSec=5min
+
+[Install]
+WantedBy=multi-user.target
