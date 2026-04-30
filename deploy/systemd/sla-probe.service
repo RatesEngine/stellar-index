@@ -1,0 +1,74 @@
+# systemd unit: SLA-probe periodic runner.
+#
+# Drives `ratesengine-sla-probe` against the configured API base URL,
+# producing per-endpoint p50 / p95 / p99 latency, freshness, and
+# availability values, with a pass/fail verdict against the
+# RFP-stated SLA targets. Companion to sla-probe.timer which
+# schedules the cadence.
+#
+# Operator wiring:
+#
+#   sudo cp deploy/systemd/sla-probe.{service,timer} /etc/systemd/system/
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable --now sla-probe.timer
+#
+# Configuration (override via /etc/default/sla-probe):
+#
+#   BASE_URL          API base URL.            (default: https://api.ratesengine.net/v1)
+#   DURATION          Per-run load duration.   (default: 30s)
+#   CONCURRENCY       Concurrent workers.      (default: 4)
+#   PAIRS             One -pair flag per pair. (default: -pair native,fiat:USD)
+#   REPORT_FORMAT     text or json.            (default: json — easy to scrape from journal)
+#   EXTRA_FLAGS       Extra -flag overrides.   (default: empty)
+#
+# Exit code 0 = pass; 1 = at least one SLA violated. The non-zero
+# exit on SLA breach causes systemd to log the unit as failed,
+# which surfaces via the existing
+# `ratesengine_sla_probe_unit_failed` Prometheus alert (planned
+# follow-up that pairs with the textfile-collector integration).
+
+[Unit]
+Description=Rates Engine — SLA probe (periodic per-endpoint p95/p99/freshness check)
+Documentation=https://github.com/RatesEngine/rates-engine/blob/main/docs/operations/sla-probe.md
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+EnvironmentFile=-/etc/default/sla-probe
+
+# Sensible defaults. Operators override via /etc/default/sla-probe.
+Environment=BASE_URL=https://api.ratesengine.net/v1
+Environment=DURATION=30s
+Environment=CONCURRENCY=4
+Environment=PAIRS=-pair native,fiat:USD
+Environment=REPORT_FORMAT=json
+Environment=EXTRA_FLAGS=
+
+ExecStart=/bin/sh -c '/usr/local/bin/ratesengine-sla-probe \
+  -base-url ${BASE_URL} \
+  -duration ${DURATION} \
+  -concurrency ${CONCURRENCY} \
+  -report-format ${REPORT_FORMAT} \
+  ${PAIRS} \
+  ${EXTRA_FLAGS}'
+
+# Network-only — no filesystem writes. Runs as the application user.
+User=ratesengine
+Group=ratesengine
+
+# Hardening — read-only, no privileges.
+ProtectSystem=strict
+PrivateTmp=true
+NoNewPrivileges=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+
+# A run is bounded by DURATION + a small startup tax. Cap at 5x the
+# default duration so a stuck probe can't pin the unit beyond one
+# timer window.
+TimeoutStartSec=2min30s
+
+[Install]
+WantedBy=multi-user.target
