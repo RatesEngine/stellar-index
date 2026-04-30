@@ -299,18 +299,21 @@ func run(cfgPath string, dryRun bool) error {
 }
 
 // buildSupplyRefreshers composes one [supply.Refresher] per
-// watched asset:
+// watched asset across all three algorithms:
 //
 //   - One XLMComputer-backed refresher (Algorithm 1, native XLM).
 //   - One ClassicComputer-backed refresher per entry in
-//     [supply] watched_classic_assets, each bound to its asset
-//     via [supply.NewAssetBoundClassicComputer] so the per-tick
-//     Refresher.Tick path stays single-asset.
+//     [supply] watched_classic_assets (Algorithm 2, classic
+//     credits), each bound via [supply.NewAssetBoundClassicComputer].
+//   - One SEP41Computer-backed refresher per entry in
+//     [supply] watched_sep41_contracts (Algorithm 3, SEP-41
+//     Soroban tokens), each bound via
+//     [supply.NewAssetBoundSEP41Computer].
 //
 // Returns an error on operator-config inconsistencies (per
 // [config.SupplyConfig.Validate] + per-asset parse errors).
 func buildSupplyRefreshers(cfg config.Config, store *timescale.Store, logger *slog.Logger) ([]*supply.Refresher, error) {
-	out := make([]*supply.Refresher, 0, 1+len(cfg.Supply.WatchedClassicAssets))
+	out := make([]*supply.Refresher, 0, 1+len(cfg.Supply.WatchedClassicAssets)+len(cfg.Supply.WatchedSEP41Contracts))
 
 	xlmRefresher, err := buildXLMRefresher(cfg, store, logger)
 	if err != nil {
@@ -318,15 +321,31 @@ func buildSupplyRefreshers(cfg config.Config, store *timescale.Store, logger *sl
 	}
 	out = append(out, xlmRefresher)
 
-	if len(cfg.Supply.WatchedClassicAssets) == 0 {
-		return out, nil
+	classicRefreshers, err := buildClassicRefreshers(cfg, store, logger)
+	if err != nil {
+		return nil, err
 	}
+	out = append(out, classicRefreshers...)
 
+	sep41Refreshers, err := buildSEP41Refreshers(cfg, store, logger)
+	if err != nil {
+		return nil, err
+	}
+	out = append(out, sep41Refreshers...)
+
+	return out, nil
+}
+
+func buildClassicRefreshers(cfg config.Config, store *timescale.Store, logger *slog.Logger) ([]*supply.Refresher, error) {
+	if len(cfg.Supply.WatchedClassicAssets) == 0 {
+		return nil, nil
+	}
 	classicReader := supply.NewStorageClassicSupplyReader(store)
 	classicComputer, err := supply.NewClassicComputer(supply.Policy{}, classicReader)
 	if err != nil {
 		return nil, fmt.Errorf("classic computer: %w", err)
 	}
+	out := make([]*supply.Refresher, 0, len(cfg.Supply.WatchedClassicAssets))
 	for _, raw := range cfg.Supply.WatchedClassicAssets {
 		asset, err := canonical.ParseAsset(raw)
 		if err != nil {
@@ -341,6 +360,35 @@ func buildSupplyRefreshers(cfg config.Config, store *timescale.Store, logger *sl
 			bound,
 			supplyAggregatorInserter{s: store},
 			logger.With("asset", raw),
+		))
+	}
+	return out, nil
+}
+
+func buildSEP41Refreshers(cfg config.Config, store *timescale.Store, logger *slog.Logger) ([]*supply.Refresher, error) {
+	if len(cfg.Supply.WatchedSEP41Contracts) == 0 {
+		return nil, nil
+	}
+	sep41Reader := supply.NewStorageSEP41SupplyReader(supplyAggregatorSEP41Store{s: store})
+	sep41Computer, err := supply.NewSEP41Computer(supply.Policy{}, sep41Reader)
+	if err != nil {
+		return nil, fmt.Errorf("sep41 computer: %w", err)
+	}
+	out := make([]*supply.Refresher, 0, len(cfg.Supply.WatchedSEP41Contracts))
+	for _, contractID := range cfg.Supply.WatchedSEP41Contracts {
+		asset, err := canonical.NewSorobanAsset(contractID)
+		if err != nil {
+			return nil, fmt.Errorf("watched sep41 contract %q: %w", contractID, err)
+		}
+		bound, err := supply.NewAssetBoundSEP41Computer(sep41Computer, asset)
+		if err != nil {
+			return nil, fmt.Errorf("bind sep41 computer to %q: %w", contractID, err)
+		}
+		out = append(out, supply.NewRefresher(
+			supplyAggregatorLedgers{s: store},
+			bound,
+			supplyAggregatorInserter{s: store},
+			logger.With("asset", contractID),
 		))
 	}
 	return out, nil
@@ -465,6 +513,30 @@ type supplyAggregatorInserter struct{ s *timescale.Store }
 
 func (a supplyAggregatorInserter) InsertSupply(ctx context.Context, snap supply.Supply) error {
 	return a.s.InsertSupply(ctx, snap)
+}
+
+// supplyAggregatorSEP41Store adapts *timescale.Store to
+// supply.SEP41SupplyStore by projecting the timescale
+// SEP41KindTotals row into the supply-package's identical-shape
+// type. Required because the supply package defines its own
+// type (avoiding a cyclic import — timescale already imports
+// supply for InsertSupply).
+type supplyAggregatorSEP41Store struct{ s *timescale.Store }
+
+func (a supplyAggregatorSEP41Store) SEP41KindTotalsAtOrBefore(ctx context.Context, contractID string, asOfLedger uint32) (supply.SEP41KindTotals, error) {
+	t, err := a.s.SEP41KindTotalsAtOrBefore(ctx, contractID, asOfLedger)
+	if err != nil {
+		return supply.SEP41KindTotals{}, err
+	}
+	return supply.SEP41KindTotals{
+		Mint:     t.Mint,
+		Burn:     t.Burn,
+		Clawback: t.Clawback,
+	}, nil
+}
+
+func (a supplyAggregatorSEP41Store) SACBalanceForContractAtOrBefore(ctx context.Context, holder, assetKey string, asOfLedger uint32) (*big.Int, error) {
+	return a.s.SACBalanceForContractAtOrBefore(ctx, holder, assetKey, asOfLedger)
 }
 
 // runBaselineRefresh ticks the baseline refresher on

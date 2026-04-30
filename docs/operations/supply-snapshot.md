@@ -152,17 +152,27 @@ delta from `total_supply` should match the announced reserve
 balance sum). If it doesn't, fix the
 `reserve_balances_stroops` block before enabling the cron.
 
-## Asset-class scope at v1
+## Asset-class scope
 
-| Asset class       | Algorithm                               | Status            | Tracked as |
-| ----------------- | --------------------------------------- | ----------------- | ---------- |
-| Native XLM        | 1 — `total − Σ(SDF reserve balances)`   | Shipped (#285)    | —          |
-| Classic credit    | 2 — `Σ trustline+claimable+LP+SAC`      | Pending computer  | Task #55   |
-| SEP-41 Soroban    | 3 — `Σ mint − Σ burn − Σ clawback`      | Pending computer  | Task #56   |
+| Asset class       | Algorithm                               | Status   | Reference |
+| ----------------- | --------------------------------------- | -------- | --------- |
+| Native XLM        | 1 — `total − Σ(SDF reserve balances)`   | Shipped  | ADR-0011  |
+| Classic credit    | 2 — `Σ trustline+claimable+LP+SAC`      | Shipped  | ADR-0022  |
+| SEP-41 Soroban    | 3 — `Σ mint − Σ burn − Σ clawback`      | Shipped  | ADR-0023  |
 
-The writer rejects `-asset CODE-G…` and `-asset C…` with a clear
-"not yet supported at v1" message until the corresponding computer
-ships.
+The aggregator-resident refresher (per `[supply]
+aggregator_refresh_enabled`) iterates all watched assets across
+the three algorithms — XLM (always), classic
+(`watched_classic_assets`), and SEP-41
+(`watched_sep41_contracts`). One `Refresher.Tick` goroutine per
+watched asset; the per-tick outcome counter
+(`ratesengine_aggregator_supply_refresh_total`) labels by
+outcome.
+
+The CLI subcommand (`ratesengine-ops supply snapshot`) supports
+`-asset native` only at present; multi-asset CLI support will
+follow if operators need ad-hoc snapshots for non-XLM assets
+outside the aggregator goroutine cadence.
 
 ## Textfile-collector integration
 
