@@ -74,32 +74,27 @@ func TestBackfill_RejectsMissingFlags(t *testing.T) {
 // confirms the subcommand REFUSES to start when the operator's
 // source list contains an unsafe source — and that the error
 // message names the source so they know which audit to run.
-func TestBackfill_BackfillSafeGate(t *testing.T) {
-	cfg := writeMinimalConfig(t, []string{"comet", "sdex", "soroswap", "phoenix", "aquarius"})
+// TestBackfill_AllSorobanSourcesPass confirms the gate accepts
+// every audited on-chain Soroban source. As of 2026-04-29 all 8
+// sources (soroswap, phoenix, aquarius, comet, reflector-{dex,cex,
+// fx}, redstone, band) have completed their WASM-history audits
+// (see docs/operations/wasm-audits/) and should pass cleanly.
+//
+// The gate-rejects-unsafe path is unit-tested in
+// TestUnsafeBackfillSources_PureFunction below using a synthetic
+// source name (which bypasses config validation) — that's where
+// the regression coverage for "an unaudited source must be refused"
+// lives. This test is the positive-side counterpart.
+func TestBackfill_AllSorobanSourcesPass(t *testing.T) {
+	// Use the DEX subset — oracle sources need oracle.* contract
+	// IDs in config which writeMinimalConfig doesn't populate.
+	// (Oracle sources also flipped 2026-04-29; the gate logic is
+	// the same.)
+	cfg := writeMinimalConfig(t, []string{"soroswap", "phoenix", "aquarius", "comet", "sdex"})
 	args := []string{"-config", cfg, "-from", "21000000", "-to", "21001000", "-dry-run"}
 	_, _, err := parseBackfillFlags(args)
-	if err == nil {
-		t.Fatal("expected refusal — comet is BackfillSafe=false; got nil")
-	}
-	msg := err.Error()
-	if !strings.Contains(msg, "comet") {
-		t.Errorf("error message should name comet (unsafe); got: %s", msg)
-	}
-	if strings.Contains(msg, "sdex") {
-		t.Errorf("sdex is BackfillSafe=true; should NOT be in the unsafe list. got: %s", msg)
-	}
-	if strings.Contains(msg, "soroswap") {
-		t.Errorf("soroswap is BackfillSafe=true (audited 2026-04-29); should NOT be in the unsafe list. got: %s", msg)
-	}
-	if strings.Contains(msg, "phoenix") {
-		t.Errorf("phoenix is BackfillSafe=true (audited 2026-04-29); should NOT be in the unsafe list. got: %s", msg)
-	}
-	if strings.Contains(msg, "aquarius") {
-		t.Errorf("aquarius is BackfillSafe=true (audited 2026-04-29); should NOT be in the unsafe list. got: %s", msg)
-	}
-	// Ops needs to know what to do next — error must point at the audit tool.
-	if !strings.Contains(msg, "wasm-history") {
-		t.Errorf("error should reference the wasm-history subcommand so ops can act; got: %s", msg)
+	if err != nil {
+		t.Fatalf("expected acceptance — every Soroban DEX source has been audited; got: %v", err)
 	}
 }
 
@@ -130,11 +125,14 @@ func TestBackfill_AllSafeSourcesAccepted(t *testing.T) {
 // `[soroswap, aquarius, sdex]` in the config can still backfill a
 // subset (e.g. just sdex while the Soroban audits land).
 func TestBackfill_SourceFlagOverridesConfig(t *testing.T) {
-	cfg := writeMinimalConfig(t, []string{"comet", "sdex"})
+	// Every audited Soroban source is BackfillSafe=true now, so
+	// this test verifies the override mechanism with a config that
+	// has multiple safe sources and the operator narrows to one.
+	cfg := writeMinimalConfig(t, []string{"soroswap", "aquarius", "sdex"})
 	args := []string{"-config", cfg, "-from", "100", "-to", "200", "-source", "sdex", "-dry-run"}
 	opts, _, err := parseBackfillFlags(args)
 	if err != nil {
-		t.Fatalf("override should let sdex-only through despite config having unsafe sources; got: %v", err)
+		t.Fatalf("override should let sdex-only through; got: %v", err)
 	}
 	if len(opts.sources) != 1 || opts.sources[0] != "sdex" {
 		t.Errorf("opts.sources = %v, want [sdex]", opts.sources)
@@ -203,9 +201,12 @@ func TestBackfillCursorSub_DistinctRangesAndSources(t *testing.T) {
 // The error message in the gate test relies on getting the FULL
 // unsafe list back, not just the first one.
 func TestUnsafeBackfillSources_PureFunction(t *testing.T) {
-	// 5 inputs: 1 unsafe Soroban, 1 SDEX (safe), 3 off-chain/audited (safe).
-	got := unsafeBackfillSources([]string{"aquarius", "binance", "comet", "sdex", "kraken"})
-	want := []string{"comet"}
+	// As of 2026-04-29 every on-chain Soroban source has been
+	// audited; use a synthetic typo'd source to exercise the
+	// fail-closed Lookup-fallback path. Same shape as the gate
+	// test above.
+	got := unsafeBackfillSources([]string{"unknown-future-source", "binance", "sdex", "kraken", "comet"})
+	want := []string{"unknown-future-source"}
 	if len(got) != len(want) {
 		t.Fatalf("unsafeBackfillSources returned %d entries, want %d: %v", len(got), len(want), got)
 	}

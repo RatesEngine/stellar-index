@@ -426,6 +426,21 @@ against.
 
 ### Changed
 
+- **`comet` source flipped `BackfillSafe: false → true`** —
+  pool-identification audit landed
+  ([docs/operations/wasm-audits/comet.md](docs/operations/wasm-audits/comet.md)).
+  The only known mainnet Comet deployment is Blend's backstop
+  pool `CAS3FL6T...` (per `docs/discovery/dexes-amms/comet.md`
+  open-item resolution and the L55,261,759 mainnet snapshot in
+  `blend-contracts/test-suites/`). Pool's WASM hash
+  `8abc28913035c074...` fetched via `stellar contract fetch --id`
+  and verified — all 5 SwapEvent body field names (`caller`,
+  `token_in`, `token_out`, `token_amount_in`, `token_amount_out`)
+  preserved in the binary; no upgrade since L51,499,546. The
+  topic-based decoder design is robust to any future canonical
+  Comet pool using the same audited WASM. **All 8 Soroban
+  on-chain sources are now BackfillSafe=true.**
+
 - **`aquarius` source flipped `BackfillSafe: false → true`** —
   pool-enumeration audit landed
   ([docs/operations/wasm-audits/aquarius.md](docs/operations/wasm-audits/aquarius.md)).
