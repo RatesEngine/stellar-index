@@ -17,6 +17,21 @@ against.
 
 ### Added
 
+- **ADR-0021 — AccountEntry observer for live home-domain +
+  reserve-balance tracking (#292)**: bounds the implementation work
+  for Task #54 before code lands. Defines a fourth dispatcher hook
+  (`LedgerEntryChangeDecoder`), a canonical observer in
+  `internal/sources/accounts/` driven by operator-watched-set config,
+  a new `account_observations` hypertable, and two readers
+  (`metadata.LCMHomeDomainResolver` + `supply.LCMReserveBalanceReader`)
+  that replace the operator-static `[metadata.issuer_home_domains]`
+  and `[supply.reserve_balances_stroops]` config blocks once the
+  observer has backfilled. The two operator-static maps stay in tree
+  as fallbacks while the live data catches up. Once shipped, Task
+  #57 (periodic supply-snapshot worker) becomes implementable — the
+  aggregator can refresh snapshots per tick rather than per cron-
+  fire, and the systemd timer (#288) becomes redundant.
+
 - **systemd timer + service + runbook for the SLA probe (#290)**:
   closes the operator-side gap left by #283. Ships
   `deploy/systemd/sla-probe.{service,timer}` (every 15 min + 2 min
