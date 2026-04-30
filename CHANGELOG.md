@@ -17,6 +17,17 @@ against.
 
 ### Fixed
 
+- **`api-docs` workflow disabled until public-flip (#262)**: the
+  `api-docs` workflow's final step `actions/deploy-pages` requires
+  GitHub Pages enabled on the repo, which only happens at
+  public-flip time. Until then every push to `main` ran this
+  workflow, which always failed at the deploy step (verified
+  across 5 consecutive main pushes 2026-04-29 / 2026-04-30) —
+  pure CI waste. Switched the trigger to `workflow_dispatch:`
+  only with an inline comment naming Task #78 as the
+  re-enablement cutover. Re-enable the push trigger as part of
+  the public-flip per `docs/operations/public-flip.md §Post-flip`.
+
 - **Coverage matrix: re-baseline the Open list (#340)**: Task #50
   re-baselined the upper per-section rows today, but the
   *Open — implementation pending* summary table at the bottom of
