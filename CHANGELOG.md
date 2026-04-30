@@ -17,6 +17,21 @@ against.
 
 ### Added
 
+- **`internal/sources/trustlines/` observer (#304 — Task #55 PR 2/5)**:
+  TrustlineEntry observer mirroring the AccountEntry pattern from
+  #298. Operator-watched-asset driven via the existing
+  `[supply] watched_classic_assets` config (PR 5/5 wires the
+  validation in). Match fast-path is type discriminator + asset
+  variant + asset_key map lookup — non-classic-credit Trustline
+  variants (native XLM, pool-share) are skipped before any decode
+  work. Native XLM trustlines route through the AccountEntry
+  observer (Algorithm 1); pool-share trustlines route through the
+  LP observer in PR 4/5. Indexer-side sink type-switches on
+  `trustlines.Observation` and writes to `trustline_observations`
+  via #303's `InsertTrustlineObservation`. The observer plugs
+  into the existing dispatcher hook (#297) — no `ProcessLedger`
+  changes needed.
+
 - **Classic-supply hypertables 0011-0014 + Insert*/Sum* storage
   methods (#303 — Task #55 PR 1/5)**: ships the four migrations
   bounded by ADR-0022 (`trustline_observations`,

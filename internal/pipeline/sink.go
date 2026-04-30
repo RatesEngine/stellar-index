@@ -20,6 +20,7 @@ import (
 	"github.com/RatesEngine/rates-engine/internal/sources/reflector"
 	"github.com/RatesEngine/rates-engine/internal/sources/sdex"
 	"github.com/RatesEngine/rates-engine/internal/sources/soroswap"
+	"github.com/RatesEngine/rates-engine/internal/sources/trustlines"
 	"github.com/RatesEngine/rates-engine/internal/storage/timescale"
 )
 
@@ -98,6 +99,8 @@ func handleOneEvent(ctx context.Context, logger *slog.Logger, store *timescale.S
 		persistBlendDeleteAuction(ctx, logger, store, e)
 	case accounts.Observation:
 		persistAccountObservation(ctx, logger, store, e)
+	case trustlines.Observation:
+		persistTrustlineObservation(ctx, logger, store, e)
 	default:
 		// A source emitted an event type the sink doesn't know how
 		// to persist. Usually means a new source was registered in
@@ -206,4 +209,24 @@ func persistAccountObservation(ctx context.Context, logger *slog.Logger, store *
 		"account_id", o.AccountID, "ledger", o.Ledger,
 		"balance_stroops", o.Balance.String(),
 		"home_domain", o.HomeDomain, "is_removal", o.IsRemoval)
+}
+
+func persistTrustlineObservation(ctx context.Context, logger *slog.Logger, store *timescale.Store, o trustlines.Observation) {
+	if err := store.InsertTrustlineObservation(ctx, timescale.TrustlineObservation{
+		AccountID:  o.AccountID,
+		AssetKey:   o.AssetKey,
+		Ledger:     o.Ledger,
+		ObservedAt: o.ObservedAt,
+		Balance:    o.Balance,
+		IsRemoval:  o.IsRemoval,
+	}); err != nil {
+		obs.SourceInsertErrorsTotal.WithLabelValues(trustlines.SourceName, "trustline_observation").Inc()
+		logger.Error("insert trustline observation failed",
+			"account_id", o.AccountID, "asset_key", o.AssetKey, "ledger", o.Ledger,
+			"is_removal", o.IsRemoval, "err", err)
+		return
+	}
+	logger.Debug("trustline observation ingested",
+		"account_id", o.AccountID, "asset_key", o.AssetKey, "ledger", o.Ledger,
+		"balance_stroops", o.Balance.String(), "is_removal", o.IsRemoval)
 }
