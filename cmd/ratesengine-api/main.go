@@ -237,23 +237,24 @@ func run(cfgPath string, dryRun bool) error { //nolint:gocognit,funlen,gocyclo /
 	}
 
 	apiSrv := v1.New(v1.Options{
-		Logger:      logger.With("component", "api"),
-		ReadyChecks: checks,
-		Assets:      storeAssetReader{s: store, homeDomainLookup: cfg.Metadata.HomeDomainFor},
-		Prices:      storePriceReader{s: store},
-		History:     storeHistoryReader{s: store},
-		Markets:     storeMarketsReader{s: store},
-		Oracle:      storeOracleReader{s: store},
-		Meta:        sep1Cache,
-		Accounts:    accountStore,
-		Divergence:  divergenceLooker,
-		Confidence:  redisConfidenceLooker{rdb: rdb},
-		Supply:      storeSupplyLooker{s: store},
-		Volume:      storeVolumeReader{s: store},
-		SEP10:       sep10Validator,
-		CORS:        cors,
-		Auth:        authMW,
-		RateLimit:   rateLimit,
+		Logger:       logger.With("component", "api"),
+		ReadyChecks:  checks,
+		Assets:       storeAssetReader{s: store, homeDomainLookup: cfg.Metadata.HomeDomainFor},
+		Prices:       storePriceReader{s: store},
+		History:      storeHistoryReader{s: store},
+		Markets:      storeMarketsReader{s: store},
+		Oracle:       storeOracleReader{s: store},
+		Meta:         sep1Cache,
+		Accounts:     accountStore,
+		Divergence:   divergenceLooker,
+		Confidence:   redisConfidenceLooker{rdb: rdb},
+		Triangulated: redisTriangulatedLooker{rdb: rdb},
+		Supply:       storeSupplyLooker{s: store},
+		Volume:       storeVolumeReader{s: store},
+		SEP10:        sep10Validator,
+		CORS:         cors,
+		Auth:         authMW,
+		RateLimit:    rateLimit,
 	})
 
 	if dryRun {
@@ -544,6 +545,51 @@ func (r redisConfidenceLooker) LookupConfidence(ctx context.Context, asset, quot
 			BaselineQuality: score.Factors.BaselineQuality,
 		},
 	}, true, nil
+}
+
+// redisTriangulatedLooker adapts the shared Redis client to
+// v1.TriangulatedPriceLooker. Reads:
+//
+//   - cachekeys.VWAP(base, quote, window) — the value
+//   - cachekeys.VWAPProvenance(...)        — the marker
+//
+// Per the marker contract, "triangulated" means the aggregator's
+// triangulation worker wrote this value (vs. the direct per-pair
+// refresh, which doesn't write the marker). Absence of the marker
+// → isTriangulated=false; the handler then preserves the original
+// 404 rather than serving a direct VWAP from cache (Timescale is
+// the source of truth for direct VWAPs).
+//
+// Cache miss returns (found=false, no error). Read errors
+// propagate so the handler can log; the response 404s.
+type redisTriangulatedLooker struct{ rdb *redis.Client }
+
+func (r redisTriangulatedLooker) LookupTriangulatedVWAP(
+	ctx context.Context, base, quote canonical.Asset, window time.Duration,
+) (string, bool, bool, error) {
+	if r.rdb == nil {
+		return "", false, false, nil
+	}
+	valKey := cachekeys.VWAP(base, quote, window)
+	val, err := r.rdb.Get(ctx, valKey).Result()
+	if errors.Is(err, redis.Nil) {
+		return "", false, false, nil
+	}
+	if err != nil {
+		return "", false, false, fmt.Errorf("vwap cache get %s: %w", valKey, err)
+	}
+	provKey := cachekeys.VWAPProvenance(base, quote, window)
+	prov, err := r.rdb.Get(ctx, provKey).Result()
+	if errors.Is(err, redis.Nil) {
+		// Value exists but no provenance marker → direct VWAP
+		// (per the marker contract). Return found=true but
+		// isTriangulated=false so the handler preserves the 404.
+		return val, false, true, nil
+	}
+	if err != nil {
+		return "", false, false, fmt.Errorf("provenance cache get %s: %w", provKey, err)
+	}
+	return val, prov == cachekeys.VWAPProvenanceTriangulated, true, nil
 }
 
 // storeHistoryReader adapts *timescale.Store to v1.HistoryReader.

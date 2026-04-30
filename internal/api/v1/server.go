@@ -39,27 +39,28 @@ type ReadyChecker interface {
 //
 // Thread-safe.
 type Server struct {
-	logger     *slog.Logger
-	checks     []ReadyChecker
-	assets     AssetReader
-	prices     PriceReader
-	history    HistoryReader
-	markets    MarketsReader
-	oracle     OracleReader
-	meta       MetadataResolver
-	accounts   AccountStore
-	divergence DivergenceLooker
-	freeze     FrozenLooker
-	supply     SupplyLooker
-	volume     VolumeReader
-	sep10      auth.SEP10Validator
-	cors       middleware.Middleware
-	auth       middleware.Middleware
-	rateLimit  middleware.Middleware
-	hub        *streaming.Hub
-	confidence ConfidenceLooker
-	mux        *http.ServeMux
-	started    time.Time
+	logger       *slog.Logger
+	checks       []ReadyChecker
+	assets       AssetReader
+	prices       PriceReader
+	history      HistoryReader
+	markets      MarketsReader
+	oracle       OracleReader
+	meta         MetadataResolver
+	accounts     AccountStore
+	divergence   DivergenceLooker
+	freeze       FrozenLooker
+	supply       SupplyLooker
+	volume       VolumeReader
+	sep10        auth.SEP10Validator
+	cors         middleware.Middleware
+	auth         middleware.Middleware
+	rateLimit    middleware.Middleware
+	hub          *streaming.Hub
+	confidence   ConfidenceLooker
+	triangulated TriangulatedPriceLooker
+	mux          *http.ServeMux
+	started      time.Time
 }
 
 // Options configures a [Server] at construction.
@@ -190,6 +191,16 @@ type Options struct {
 	// `/v1/price` envelope serves cleanly without it. Cache misses
 	// at lookup time also leave the field unset.
 	Confidence ConfidenceLooker
+
+	// Triangulated, when non-nil, is the fallback /v1/price
+	// consults after a Timescale miss. Returns triangulated
+	// implied VWAPs (per the aggregator's triangulation worker)
+	// + the provenance marker that gates `flags.triangulated`.
+	// Production wiring: a Redis adapter reading
+	// `vwap:<base>:<quote>:<window>` + the `:provenance` sibling.
+	// Nil leaves /v1/price 404'ing for triangulated-only pairs
+	// (the historical behaviour).
+	Triangulated TriangulatedPriceLooker
 }
 
 // New constructs a Server and mounts all v1 routes.
@@ -199,27 +210,28 @@ func New(opts Options) *Server {
 		logger = slog.Default()
 	}
 	s := &Server{
-		logger:     logger,
-		checks:     opts.ReadyChecks,
-		assets:     opts.Assets,
-		prices:     opts.Prices,
-		history:    opts.History,
-		markets:    opts.Markets,
-		oracle:     opts.Oracle,
-		meta:       opts.Meta,
-		accounts:   opts.Accounts,
-		divergence: opts.Divergence,
-		freeze:     opts.Freeze,
-		supply:     opts.Supply,
-		volume:     opts.Volume,
-		sep10:      opts.SEP10,
-		cors:       opts.CORS,
-		auth:       opts.Auth,
-		rateLimit:  opts.RateLimit,
-		hub:        opts.Hub,
-		confidence: opts.Confidence,
-		mux:        http.NewServeMux(),
-		started:    time.Now().UTC(),
+		logger:       logger,
+		checks:       opts.ReadyChecks,
+		assets:       opts.Assets,
+		prices:       opts.Prices,
+		history:      opts.History,
+		markets:      opts.Markets,
+		oracle:       opts.Oracle,
+		meta:         opts.Meta,
+		accounts:     opts.Accounts,
+		divergence:   opts.Divergence,
+		freeze:       opts.Freeze,
+		supply:       opts.Supply,
+		volume:       opts.Volume,
+		sep10:        opts.SEP10,
+		cors:         opts.CORS,
+		auth:         opts.Auth,
+		rateLimit:    opts.RateLimit,
+		hub:          opts.Hub,
+		confidence:   opts.Confidence,
+		triangulated: opts.Triangulated,
+		mux:          http.NewServeMux(),
+		started:      time.Now().UTC(),
 	}
 	s.mountRoutes()
 	return s
