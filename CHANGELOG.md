@@ -17,6 +17,16 @@ against.
 
 ### Added
 
+- **`CLAUDE.md` "Add a new supply observer" recipe (#323)**: the
+  six supply observers shipped through Tasks #54–#56 follow a
+  pattern (doc.go + dispatcher_adapter, three possible dispatcher
+  hooks per the LCM/Op/Event split) that has no entry in the
+  task-recipe section of the agent orientation file. A future
+  agent adding a 7th observer would have nowhere to look. Recipe
+  links to `docs/architecture/supply-pipeline.md` for the full
+  shape and names the three hook variants explicitly. Pure
+  documentation change.
+
 - **`docs/architecture/supply-pipeline.md` (#318)**: architecture-
   level overview tying together the three-algorithm supply
   derivation, the six observers, the chained-fallback reader
