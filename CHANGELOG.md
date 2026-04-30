@@ -17,6 +17,16 @@ against.
 
 ### Added
 
+- **`docs/architecture/supply-pipeline.md` (#318)**: architecture-
+  level overview tying together the three-algorithm supply
+  derivation, the six observers, the chained-fallback reader
+  pattern, the two refresh paths (systemd timer + aggregator
+  goroutine), the per-class storage tables, and the failure-mode
+  catalog. Mirrors the existing `ingest-pipeline.md` for the
+  ingest side. ADRs 0011 / 0021 / 0022 / 0023 each cover one
+  slice; the coverage matrix lists rows; this doc is the
+  single-source orientation for someone arriving cold.
+
 - **Classic-supply storage integration tests (#317)**: companion
   to #316 covering the four classic-supply hypertables shipped in
   #303 (`trustline_observations`, `claimable_observations`,
