@@ -58,6 +58,137 @@ against.
   proposal asked for. Remaining rows (HA posture, SEV detection time)
   need a production deployment to measure, not a pre-launch CLI.
 
+- **Chainlink HTTP divergence reference (#282)**: closes Codex
+  high-3 (Chainlink-named-but-not-implemented). Adds a
+  `divergence.Reference` backed by Chainlink Data Feeds via
+  off-chain Ethereum JSON-RPC reads — Stellar joined Chainlink
+  Scale in 2025/2026 but no Soroban Data Feeds contracts are live
+  on mainnet at audit time, so the bytes live on Ethereum + L2s.
+  Reference does `eth_call` against the AggregatorV3 contract's
+  `latestAnswer()` view function (selector `0x50d25bcd`), decodes
+  the int256 (two's-complement aware), applies per-feed decimals,
+  and optionally inverts. Role: divergence cross-check ONLY —
+  Chainlink does NOT contribute to VWAP/TWAP; its values surface
+  as `flags.divergence_warning` on `/v1/price` when our aggregated
+  price diverges beyond threshold. `FeedMap` operator-curated;
+  empty yields `ErrAssetUnsupported` per pair.
+
+- **Coverage-matrix re-baseline (#281)**: closes Codex medium-1 +
+  Task #50. The matrix had drifted in both directions — rows
+  marked "designed / impl pending" had shipped (triangulation, SSE
+  streams, batch price, OHLC CAGGs, SEP-40 endpoints, supply
+  read-path, volume_24h_usd), and rows marked "verified" had
+  quietly become operational gaps (Chainlink, Blend prior to #275,
+  supply writer). Rewrites every materially-stale row to the
+  as-of-2026-04-30 reality. Net 13 row-state corrections.
+
+- **Triangulation API reader, `flags.triangulated` (#280)**: reader
+  half of the F-0014 / Codex medium-3 fix; pairs with #279.
+  When `/v1/price`'s Timescale lookup returns `ErrPriceNotFound`
+  (the steady-state for triangulated-only pairs like XLM/EUR via
+  XLM/USD × USD/EUR), the handler now consults a
+  `TriangulatedPriceLooker` fallback that reads the Redis VWAP
+  value AND the provenance marker that #279 added on the writer
+  side. Marker present → synthesised `PriceSnapshot` with
+  `flags.triangulated=true`; marker absent → falls through to the
+  original 404. Direct-VWAP cache reads are still gated to
+  Timescale; the fallback only activates for the triangulated
+  case so the source-of-truth contract is preserved.
+
+- **Triangulation provenance marker, writer half (#279)**: writes
+  `cachekeys.VWAPProvenance(base, quote, window) = "triangulated"`
+  alongside the value key when the orchestrator's triangulator
+  produces an implied VWAP. Per-pair direct refresh does NOT write
+  the marker — absence == direct (or unknown), which the read side
+  treats as `flags.triangulated=false`. Marker-write failure logs
+  WARN but does not roll back the value write; the implied VWAP is
+  correct either way.
+
+- **`volume_24h_usd` on `/v1/assets/{id}` (#278)**: closes Codex
+  Freighter-V2 high-1 trailing item. Adds the field end-to-end:
+  new `Volume24hUSDForAsset` storage method sums
+  `prices_1m.volume_usd` over pairs where the asset appears as
+  base OR quote in the trailing 24h window (CAGG-served, 1440
+  buckets max — cheap); new `VolumeReader` interface populates
+  `AssetDetail.VolumeUSD24h`. Independent of the Supply path so
+  volume serves even when supply isn't yet wired (and vice versa).
+
+- **Supply snapshot reader wired (#277)**: closes audit F-0020 +
+  Codex Freighter-V2 high-1. The API binary was leaving
+  `v1.Options.Supply` nil, dead-coding the F2-fields path entirely.
+  This change populates `total_supply` / `circulating_supply` /
+  `max_supply` / `market_cap_usd` / `fdv_usd` / `supply_basis` on
+  `/v1/assets/{id}` whenever the asset has a snapshot in
+  `asset_supply_history`. No-snapshot keeps the F2 fields null
+  and the asset-detail body still serves cleanly per ADR-0011
+  ("we don't fabricate"). Read half only — the write half landed
+  separately in #285.
+
+- **Blend WASM-audit doc scaffold (#276)**: sets up the per-source
+  audit log under `docs/operations/wasm-audits/blend.md` with the
+  mainnet contract list (Pool Factory + Backstop) cross-referenced
+  against the blend-contracts-v2 deploy manifest, the decoder-
+  expectations table mirroring `internal/sources/blend/`, the
+  4-phase audit plan (enumerate → walk → review → flip), and the
+  failure-mode checklist (topic[0] rename, AuctionData field
+  rename, i128 type drift, new auction_type discriminant). Status
+  stays `pending`; `BackfillSafe` stays `false`. The follow-up PR
+  completes Phases 1-4 and flips the flag.
+
+- **Blend wired into dispatcher + registry + indexer sink (#275)**:
+  final wiring step for the Blend integration. After this PR an
+  operator who lists `blend` in `ingestion.enabled_sources` gets
+  full live ingest of Blend auction events. Adds a new
+  `ClassLending` taxonomy entry to `internal/sources/external`
+  alongside `ClassExchange` / `ClassAggregator` / `ClassOracle` /
+  `ClassAuthoritySanity` — Blend doesn't fit any existing class
+  (not exchange, not aggregator, not oracle, not authority-sanity).
+  `BackfillSafe: false` until #53 audit completes.
+
+- **Blend auction storage layer (#274)**: migration 0009 creates
+  the `blend_auctions` hypertable (1-day chunks; same shape as
+  trades + oracle_updates) keyed on
+  `(ledger, tx_hash, op_index, ts)`. `auction_type` SMALLINT with
+  `CHECK 0..2`, `event_kind` TEXT with `CHECK ('new','fill','delete')`,
+  per-variant fields nullable per lifecycle event. `bid` / `lot`
+  JSONB arrays of `{asset, amount}` with stringified i128 amounts
+  preserving full precision through the JSON boundary per
+  ADR-0003. Three insert methods on `*timescale.Store` —
+  `InsertAuctionNew` / `InsertAuctionFill` / `InsertAuctionDelete`.
+
+- **Blend auction-event decoder skeleton (#273)**: first step of
+  the Blend integration committed in the Stellar RFP + ctx-
+  proposal price-aggregation scope. Per
+  `docs/discovery/dexes-amms/blend.md` Blend is **not** a spot
+  trading venue — we index for directional / state-change signals,
+  not VWAP. Ships the package skeleton and the auction-event
+  decoder surface (new_auction / fill_auction / delete_auction);
+  follow-up PRs added storage (#274) + dispatcher wiring (#275) +
+  the audit doc (#276).
+
+- **Audit remediation wave for the 2026-04-29 cold adversarial
+  audit (#272)**: closes 20 of the 31 findings raised in the audit
+  workspace (`docs/audit-2026-04-29/`). Mix of correctness fixes,
+  monitoring truth, public-contract repair, and docs-truth
+  alignment. Highlights: F-0008 wired
+  `api.key_rate_limit_per_min` into a subject-aware authenticated
+  bucket (anonymous and authed tiers now use distinct buckets);
+  F-0028 + F-0031 closed via complementary correctness fixes.
+  See `docs/audit-2026-04-29/findings/` for the per-finding ledger.
+
+- **`extract-wasm-from-galexie` ratesengine-ops subcommand (#271)**:
+  extracts raw WASM bytes for one or more contract-code hashes by
+  walking the local galexie LCM archive — the truer source than
+  RPC `getLedgerEntry` because it (1) works for evicted WASMs
+  (TTL-expired bytes are no longer in active ledger state but ARE
+  preserved in galexie LCM), (2) doesn't depend on public-RPC
+  retention, (3) runs offline against r1's full archive. Companion
+  to `wasm-history`: walk first to enumerate every hash that ever
+  ran on each contract, then run extract to pull the bytes for the
+  older (likely-evicted) versions. Parallel range partitioning;
+  per-LCM scan picks `LedgerEntryChange` of type Created or
+  Updated. Also adds the v2-audit template doc.
+
 - **verify-archive systemd timer (L4.12)**: nightly Tier A
   chain-link integrity check on R1 per the ADR-0016 per-region
   trust model + the `archival-node-bringup.md` schedule
