@@ -15,6 +15,26 @@ against.
 
 ## [Unreleased]
 
+### Fixed
+
+- **`configs/example.toml` `[stellar]` section explains the
+  localhost defaults (#337)**: `core_http_endpoint` and
+  `rpc_endpoints` defaulted to `http://127.0.0.1:...` — the right
+  values for a Phase-3 archival host running stellar-core +
+  stellar-rpc locally, but neither daemon runs on r1 since
+  2026-04-23. An r1 operator copying the example would have a
+  config that silently drives every diagnostic
+  (`ratesengine-ops detect-gaps` etc.) into a refused-connection
+  error. New top-of-section comment:
+  - explains production ingest reads Galexie's MinIO output, not
+    these RPC fields;
+  - names the Phase-3 vs r1 posture and what the localhost
+    defaults mean for each;
+  - points r1 operators at `https://mainnet.sorobanrpc.com`
+    (already documented in `docs/operations/runbooks/all-ingestion-down.md`)
+    as the public-RPC alternative.
+  Pure documentation change; defaults unchanged.
+
 ### Added
 
 - **`docs/architecture/supply-pipeline.md` (#318)**: architecture-
