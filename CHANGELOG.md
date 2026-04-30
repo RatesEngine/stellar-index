@@ -17,6 +17,27 @@ against.
 
 ### Added
 
+- **Coverage-matrix re-baseline (#315)**: walks rows that had drifted
+  to "designed / pending" but actually shipped this session.
+  Concrete row updates:
+
+  | Row | Was | Now |
+  |-----|-----|-----|
+  | S2.4 Chainlink | ❌ gap | ✅ verified (#282) |
+  | S5.2 ≤30s freshness | 🧪 designed | ✅ verified (#283/#290/#294) |
+  | S9.2 p95/p99 latency | 🧪 designed | ✅ verified (synthetic via SLA probe) |
+  | S9.1 ≥99.99% uptime | 🧪 designed | ⚠ caveat (probe shipped; production traffic needed for full verification) |
+  | F2.1/F2.2 Market Cap / FDV | ⚠ writer pending | ✅ verified (writer end-to-end across XLM + classic + SEP-41) |
+  | F2.4 Circulating Supply | ⚠ writer pending | ✅ verified (all three algorithms live) |
+  | F2.5 Total Supply | ⚠ writer pending | ✅ verified (mint − burn − clawback live for SEP-41; classic via component sum) |
+  | F2.6 Max Supply | ⚠ caveat | ✅ verified (overlay policy + null-for-uncapped per ADR-0011) |
+  | F3.1 API p95 | 🧪 designed | ✅ verified (probe + alert) |
+  | F3.2 API p99 | 🧪 designed | ✅ verified (umbrella alert) |
+  | F3.3 Responsiveness ≥99.9% | 🧪 designed | ⚠ caveat (synthetic + HA topology backs it) |
+  | F3.4 Freshness | 🧪 designed | ✅ verified (probe + alert) |
+
+  S3.6 Blend stays ⚠ caveat (audit pending Task #53 — blocked on r1).
+
 - **`asset_key` label on the supply-refresh metric (#314)**:
   extends `ratesengine_aggregator_supply_refresh_total` from
   `(outcome)` to `(asset_key, outcome)` so operators with
