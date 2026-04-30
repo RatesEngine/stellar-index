@@ -17,6 +17,20 @@ against.
 
 ### Added
 
+- **Dispatcher hook for `LedgerEntryChange` deltas (#297)**: starts
+  Task #54 / ADR-0021 implementation. Adds the fourth dispatcher
+  hook (`LedgerEntryChangeDecoder`) alongside the existing three —
+  same first-match-wins / non-fatal-error / per-source-decode-error-
+  counted contract. Per ADR-0021 entry changes are high-volume so
+  unmatched changes are silently dropped (no `UnmatchedHits` bump,
+  unlike `Decoder` events). New `RouteEntryChange` test-harness
+  helper symmetric with `Route` / `RouteOp` / `RouteContractCall`.
+  Six unit tests cover routing-by-type, first-match-wins, decode-
+  error accounting, no-decoder-registered, output flow-through.
+  ProcessLedger integration is the next PR (lands alongside the
+  first decoder using the hook — `internal/sources/accounts/`'s
+  AccountEntryObserver).
+
 - **Supply-snapshot textfile-collector + four alerts + three
   runbooks (#295)**: closes the operator-visibility gap on the
   daily supply-snapshot writer (#288). Mirrors the SLA-probe

@@ -172,6 +172,45 @@ type ContractCallContext struct {
 	Args         []string
 }
 
+// LedgerEntryChangeDecoder is the contract for decoders that
+// observe raw [xdr.LedgerEntryChange] rows from each LCM,
+// regardless of which transaction or fee-meta block produced them.
+// Per ADR-0021. Used by sources that derive their state from
+// ledger-entry deltas rather than events / ops / contract calls.
+//
+// The canonical use case is the AccountEntry observer
+// (internal/sources/accounts/) which watches operator-configured
+// G-strkeys for balance + home_domain changes. Same
+// non-fatal-error contract as [Decoder] / [OpDecoder] /
+// [ContractCallDecoder]: returning an error is a "skip + count"
+// signal, not "stop dispatching."
+//
+// Matches is the cheap pre-filter — typically checks the entry's
+// Data discriminant (e.g. AccountEntry vs Trustline vs ContractCode).
+// Decode receives the full context (including tx-level metadata)
+// and emits zero or more canonical outputs.
+type LedgerEntryChangeDecoder interface {
+	Name() string
+	Matches(change xdr.LedgerEntryChange) bool
+	Decode(ctx LedgerEntryChangeContext) ([]consumer.Event, error)
+}
+
+// LedgerEntryChangeContext carries everything a
+// [LedgerEntryChangeDecoder] needs to decode one entry-change
+// delta: identity of the change + the tx-level metadata that
+// produced it. Built by the dispatcher during ProcessLedger.
+//
+// FeeMeta-block changes carry an empty TxHash and OpIndex == -1
+// to distinguish from per-op changes (the fee debit on the source
+// account is technically tx-level, not op-level).
+type LedgerEntryChangeContext struct {
+	Ledger   uint32
+	ClosedAt time.Time
+	TxHash   string
+	OpIndex  int
+	Change   xdr.LedgerEntryChange
+}
+
 // Dispatcher owns the registered decoders. Construct with New(),
 // register exactly once at startup, then call ProcessLedger per
 // xdr.LedgerCloseMeta delivered by internal/ledgerstream.
@@ -183,6 +222,7 @@ type Dispatcher struct {
 	decoders             []Decoder
 	opDecoders           []OpDecoder
 	contractCallDecoders []ContractCallDecoder
+	entryDecoders        []LedgerEntryChangeDecoder
 
 	// discoverySink, when non-nil, receives every SEP-41-shaped event
 	// observed by [dispatchOne]. The dispatcher calls Sniff on each
@@ -224,6 +264,20 @@ func (d *Dispatcher) AddOpDecoder(od OpDecoder) {
 // determines first-match precedence.
 func (d *Dispatcher) AddContractCallDecoder(ccd ContractCallDecoder) {
 	d.contractCallDecoders = append(d.contractCallDecoders, ccd)
+}
+
+// AddEntryDecoder registers a decoder that observes raw
+// LedgerEntryChange rows. Per ADR-0021. Called once at startup;
+// not safe concurrent with ProcessLedger.
+//
+// Registration order determines first-match precedence — same
+// shape as the other three hooks. A change that no decoder
+// matches is silently skipped (entry changes are not counted
+// against `unmatchedHits` because they're high-volume — every
+// successful tx produces several — and the unmatched count would
+// dominate the metric).
+func (d *Dispatcher) AddEntryDecoder(ld LedgerEntryChangeDecoder) {
+	d.entryDecoders = append(d.entryDecoders, ld)
 }
 
 // DiscoverySink is the side-effect interface the dispatcher uses to
@@ -457,6 +511,33 @@ func (d *Dispatcher) dispatchContractCall(ctx ContractCallContext) ([]consumer.E
 // contract-call decoders, symmetric with Route / RouteOp.
 func (d *Dispatcher) RouteContractCall(ctx ContractCallContext) ([]consumer.Event, error) {
 	return d.dispatchContractCall(ctx)
+}
+
+// dispatchEntryChange runs one [xdr.LedgerEntryChange] through the
+// entry-decoder chain. First matching decoder owns it. Mismatches
+// are silently dropped — entry changes are high-volume (every
+// successful tx produces several) so an unmatched-counter would
+// dominate the metric.
+func (d *Dispatcher) dispatchEntryChange(ctx LedgerEntryChangeContext) ([]consumer.Event, error) {
+	for _, ld := range d.entryDecoders {
+		if !ld.Matches(ctx.Change) {
+			continue
+		}
+		outs, err := ld.Decode(ctx)
+		if err != nil {
+			d.decodeErrors[ld.Name()]++
+			return nil, err
+		}
+		return outs, nil
+	}
+	return nil, nil
+}
+
+// RouteEntryChange is the test-harness entry point for
+// LedgerEntryChange decoders, symmetric with Route / RouteOp /
+// RouteContractCall. Per ADR-0021.
+func (d *Dispatcher) RouteEntryChange(ctx LedgerEntryChangeContext) ([]consumer.Event, error) {
+	return d.dispatchEntryChange(ctx)
 }
 
 // dispatchOp runs one operation through the op-decoder chain.
