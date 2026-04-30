@@ -1,0 +1,61 @@
+# systemd unit: ratesengine-aggregator (VWAP + confidence cycle).
+#
+# Long-running daemon. On each tick (default 30s) walks the
+# configured pair × window matrix, computes VWAP from the indexer's
+# trade rows, runs the Phase 1 + Phase 2 anomaly checks, and writes
+# the result + confidence score to Redis. Every hour also runs the
+# baseline-refresh worker that updates `volatility_baseline_1m`.
+#
+# Operator wiring (after indexer is running):
+#
+#   sudo cp deploy/systemd/ratesengine-aggregator.service /etc/systemd/system/
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable --now ratesengine-aggregator.service
+#
+# Configuration:
+#   /etc/ratesengine.toml — [aggregate] + [anomaly] sections
+#
+# Dependencies (must be running BEFORE the aggregator starts):
+#   - postgresql.service — reads trade rows
+#   - redis-server.service — writes VWAP + confidence cache
+#   - ratesengine-indexer.service — supplies the trades the
+#     aggregator reads. Not a strict Requires= because operators
+#     occasionally stop the indexer for maintenance while leaving
+#     the aggregator serving cached values; a soft `After=` is the
+#     right shape.
+
+[Unit]
+Description=Rates Engine — aggregator (VWAP / TWAP / confidence per ADR-0019)
+Documentation=https://github.com/RatesEngine/rates-engine/blob/main/docs/adr/0019-anomaly-response-and-confidence-scoring.md
+After=network-online.target postgresql.service redis-server.service ratesengine-indexer.service
+Wants=network-online.target
+Requires=postgresql.service redis-server.service
+
+[Service]
+Type=simple
+User=ratesengine
+Group=ratesengine
+WorkingDirectory=/var/lib/ratesengine
+EnvironmentFile=-/etc/default/ratesengine-ops
+
+ExecStart=/usr/local/bin/ratesengine-aggregator -config /etc/ratesengine.toml
+ExecStop=/bin/kill -TERM $MAINPID
+
+LimitNOFILE=1048576
+LimitNPROC=1048576
+
+Restart=on-failure
+RestartSec=10s
+StartLimitInterval=5min
+StartLimitBurst=10
+
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+ReadWritePaths=/var/lib/ratesengine
+
+[Install]
+WantedBy=multi-user.target

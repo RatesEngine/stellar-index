@@ -100,6 +100,7 @@ Within each surface, ordered by dependency.
 | L4.10 | Per-region asymmetric trust model wiring (R1 leader, R2/R3 delegate) | Wk 8 | full day | L4.4 | launch | metrics federation + envelope flag | 🟡 |
 | L4.11 | Public status page at `status.ratesengine.net` (Statuspage / cstate / equivalent) | Wk 9 | half-day | L4.4 | launch | infra config + status worker | 🟡 |
 | L4.12 | verify-archive systemd timer — nightly Tier A on R1 per ADR-0016, with Prometheus alerts on unit-failed + run-stale | Wk 8 | half-day | — | launch | `deploy/systemd/verify-archive-tier-a.{timer,service}` | 🟢 |
+| L4.13 | systemd units for `ratesengine-{indexer,aggregator,api}` — long-running service files referenced by the bringup doc and (eventually) the L4.1-4.3 ansible roles | Wk 8 | half-day | — | L4.1, L4.2, L4.3 | `deploy/systemd/ratesengine-{indexer,aggregator,api}.service` | 🟢 |
 
 ## SLA validation
 

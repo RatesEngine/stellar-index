@@ -13,13 +13,12 @@
 name: api-docs
 
 on:
-  push:
-    branches: [main]
-    paths:
-      - "openapi/**"
-      - "docs/reference/api/**"
-      - "scripts/dev/docs-api.sh"
-      - ".github/workflows/api-docs.yml"
+  # GitHub Pages is configured AFTER the public-flip per
+  # docs/operations/public-flip.md §"Post-flip" — until then this
+  # workflow's `actions/deploy-pages` step fails on every run
+  # because Pages isn't enabled on the private repo. Run manually
+  # via workflow_dispatch when needed (and re-enable the push
+  # trigger as part of the public-flip cutover, Task #78).
   workflow_dispatch:
 
 permissions:
