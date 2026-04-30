@@ -17,6 +17,20 @@ against.
 
 ### Fixed
 
+- **Public-flip checklist is 16/16 verified (#342)**: the two
+  rows in `docs/operations/public-flip.md` that required
+  human-in-the-loop review (the `CLAUDE.md` private-archive
+  check and the `docs/discovery/` sensitive-content check) are
+  now ☑ with citations. CLAUDE.md got a pattern scan + manual
+  spot-checks — 0 private references, 2 non-blocking editorial
+  recs noted; `docs/discovery/` got a 9-pattern sensitivity scan
+  across all 48 files — 0 hits in credential/PII categories,
+  6 benign hits across qualitative categories. Task #78 moves
+  from "checklist incomplete" to "execution-ready" — what's
+  left is the operator-side cut-over mechanics in
+  `public-flip.md §"Cut-over mechanics"` (gh repo create, DNS,
+  branch protection, secrets re-create).
+
 - **`api-docs` workflow disabled until public-flip (#262)**: the
   `api-docs` workflow's final step `actions/deploy-pages` requires
   GitHub Pages enabled on the repo, which only happens at

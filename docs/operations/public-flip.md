@@ -1,6 +1,6 @@
 ---
 title: Public-flip strategy — publishing Rates Engine to a public repo at v1.0
-last_verified: 2026-04-28
+last_verified: 2026-04-30
 status: living doc
 ---
 
@@ -60,17 +60,16 @@ satisfies it.
 | ☑ | `LICENSE` is Apache-2.0 | `LICENSE` (Apache 2.0, verified 2026-04-30) |
 | ☑ | `.github/dependabot.yml` has no internal-registry references | `.github/dependabot.yml` (verified 2026-04-30 — only public registries) |
 | ☑ | Every CI workflow in `.github/workflows/` runs on the public repo without internal secrets | `.github/workflows/{ci,api-docs}.yml` (verified 2026-04-30 — no `secrets.` references) |
-| ☐ | `CLAUDE.md` reads cleanly without referencing the private discovery archive paths or internal-only operator names | `CLAUDE.md` (manual review pending) |
+| ☑ | `CLAUDE.md` reads cleanly without referencing the private discovery archive paths or internal-only operator names | `CLAUDE.md` (reviewed 2026-04-30 — pattern scan + manual spot-checks; 0 private references; 2 non-blocking editorial recs noted) |
 | ☑ | `docs/operations/r1-deployment-state.md` does not include credentials, API keys, or unredacted IPs | `docs/operations/r1-deployment-state.md` (verified 2026-04-30 — credentials are pointers only, no IPs in file) |
 | ☑ | Every ADR's "Status" reflects current state (no stale "Proposed" on accepted ADRs) | `docs/adr/` (all 0001-0021 are `Accepted`, verified 2026-04-30; 0012 is reserved-future per multi-region-topology.md) |
-| ☐ | `docs/discovery/` archive is OK to publish — no sensitive customer data in the RFPs or proposal correspondence | `docs/discovery/` (manual review pending) |
+| ☑ | `docs/discovery/` archive is OK to publish — no sensitive customer data in the RFPs or proposal correspondence | `docs/discovery/` (reviewed 2026-04-30 — 9-pattern sensitivity scan across all 48 files; 0 hits in credential/PII categories; 6 hits across qualitative categories all benign on inspection) |
 | ☑ | Final secret scan with `gitleaks detect --source .` returns clean | `gitleaks 8.30.1` — 0 leaks across 553 commits, scanned 2026-04-30 |
 
-Two rows remain unchecked — both need human-in-the-loop review:
-- `CLAUDE.md` reading "cleanly" is editorial; an automated check
-  would only catch obvious paths and internal handles.
-- `docs/discovery/` content review is the L6.5 documentation
-  sweep's responsibility.
+**All 16 rows verified 2026-04-30.** Both originally-deferred
+human-in-the-loop reviews now have written verdicts (citations
+in the rows above). Checklist is execution-ready; the next step
+is the cut-over mechanics in §below.
 
 ## Cut-over mechanics
 
