@@ -15,6 +15,20 @@ against.
 
 ## [Unreleased]
 
+### Fixed
+
+- **`migrations/README.md` lists every migration (#335)**: the
+  Current-migrations table only listed 0001-0004 — eleven
+  migrations (0005 supply-history, 0006 discovered-assets,
+  0007/0008 volatility baselines, 0009 blend-auctions, 0010
+  account-observations, 0011-0014 classic-supply observers, 0015
+  SEP-41 supply events) had shipped without README updates.
+  Contributors discovering the schema through this table would
+  miss the entire supply pipeline + half the analytics layer.
+  Each new row cites its ADR (0011 / 0021 / 0022 / 0023 / 0019)
+  and the role the table plays in the algorithm map. Pure
+  documentation change.
+
 ### Added
 
 - **`docs/architecture/supply-pipeline.md` (#318)**: architecture-
