@@ -426,6 +426,18 @@ against.
 
 ### Changed
 
+- **`reflector-fx` source flipped `BackfillSafe: false → true`** —
+  WASM-history audit landed
+  ([docs/operations/wasm-audits/reflector.md](docs/operations/wasm-audits/reflector.md)).
+  All three Reflector variants share one decoder; the walk shows two
+  unique hashes total: a v2-era `4a64c8c8…` (DEX+CEX only, Feb–Apr
+  2024) and the current production `df88820e…`. FX was deployed
+  fresh on `df88820e…` and has never run any other hash, so the
+  audit covers it deterministically. DEX + CEX stay
+  `BackfillSafe: false` pending v2-era WASM disassembly to confirm
+  the pre-v3 event shape matches the current decoder; that's
+  documented as the next follow-up.
+
 - **`redstone` source flipped `BackfillSafe: false → true`** —
   WASM-history audit landed
   ([docs/operations/wasm-audits/redstone.md](docs/operations/wasm-audits/redstone.md)).
