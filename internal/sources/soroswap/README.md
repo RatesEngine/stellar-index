@@ -91,8 +91,8 @@ See `events.go` for the typed enum.
 | `README.md` | This file. |
 | `events.go` | Event identifier constants + topic-shape predicates + `Event` wrapper for the dispatcher seam. |
 | `decode.go` | `LedgerCloseMeta` event → `canonical.Trade` (swap+sync correlation, real SCVal decoding via `internal/scval`). |
-| `consumer.go` | Implements `consumer.Source` — the in-memory swap+sync correlation buffer. |
-| `dispatcher_adapter.go` | Topic-match registration with `internal/dispatcher`. |
+| `consumer.go` | The in-memory swap+sync correlation buffer + `Event` wrapper exported as the dispatcher seam's emitted type. (Historical name; the package no longer implements the legacy `consumer.Source` orchestrator interface — production routing is via `dispatcher.Decoder`.) |
+| `dispatcher_adapter.go` | Topic-match + decode registration with `internal/dispatcher` — the production seam. |
 | `factory_seed.go` | Boot-time `pair-contract → (token0, token1)` registry sweep via stellar-rpc `simulateTransaction` — covers pairs created before the dispatcher's first ledger. |
 | `decode_test.go`, `source_test.go`, `real_fixture_test.go` | Unit + golden-file + real-mainnet-fixture tests. |
 | `../../../test/fixtures/soroswap/` | Captured mainnet event fixtures. |

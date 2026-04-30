@@ -15,6 +15,23 @@ against.
 
 ## [Unreleased]
 
+### Fixed
+
+- **Source READMEs name the dispatcher seam, not the legacy
+  `consumer.Source` (#336)**: three source READMEs (`soroswap`,
+  `phoenix`, `reflector`) described their `consumer.go` as
+  *"implements `consumer.Source`"* — but production routing has
+  been via `dispatcher.Decoder` for a while; the only remaining
+  consumer of `consumer.Source` is the legacy orchestrator's own
+  test file (`internal/consumer/orchestrator_test.go`). The new
+  text identifies `dispatcher_adapter.go` as the production seam,
+  describes `consumer.go` as the in-memory buffer + `Event`
+  wrapper (historical filename, doesn't claim the
+  `consumer.Source` interface), and updates Reflector's
+  "Relationship to DEX sources" section to say *dispatcher seam*
+  rather than *orchestrator integration*. Pure documentation
+  change; consistent with CLAUDE.md invariant #6.
+
 ### Added
 
 - **`docs/architecture/supply-pipeline.md` (#318)**: architecture-
