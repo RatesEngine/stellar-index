@@ -15,6 +15,19 @@ against.
 
 ## [Unreleased]
 
+### Fixed
+
+- **`host-cpu-high` runbook captive-core context is galexie, not
+  stellar-rpc / stellar-core (#330)**: root cause #2 named
+  "stellar-rpc or stellar-core host" as the captive-core sites,
+  but on r1 today only galexie embeds a captive-core (the
+  stellar-rpc / stellar-core daemons were removed 2026-04-23).
+  Galexie also doesn't expose `/info`, so the end-state signal
+  changes from "stellar-core ledger-age metric" to "fresh objects
+  in `galexie-live`." Related section flags `core-lag` /
+  `rpc-lag` as Phase-3-only and adds `all-ingestion-down` as the
+  current-deployment escalation. Pure documentation change.
+
 ### Added
 
 - **`docs/architecture/supply-pipeline.md` (#318)**: architecture-
