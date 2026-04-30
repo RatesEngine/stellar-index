@@ -1,0 +1,33 @@
+# systemd timer: daily supply-snapshot writer.
+#
+# Companion to supply-snapshot.service. Per ADR-0011 we publish a
+# fresh supply snapshot every day so /v1/assets/{id}'s F2 fields
+# (total / circulating / max / market_cap_usd / fdv_usd / supply_basis)
+# track the current ledger rather than going stale.
+#
+# Why a daily cron rather than a continuous worker: the operator-
+# managed reserve balances (per the [supply] config block) only move
+# a handful of times per year. Re-publishing at high cadence buys
+# nothing — the values change only when operator config changes.
+# When the LCM-AccountEntry observer ships (Task #54), the writer
+# becomes goroutine-resident in the aggregator on a faster cadence.
+#
+# Time slot: 04:42 UTC + up to 5 min jitter. Spaced after the
+# 02:17 archive-completeness verify and the 03:23 verify-archive-
+# tier-a sweep so they don't all land at once.
+#
+# Persistent=true means: if the box was off at 04:42, fire on next
+# boot so a planned reboot doesn't skip a day's snapshot.
+
+[Unit]
+Description=Daily supply-snapshot writer (per ADR-0011)
+Documentation=https://github.com/RatesEngine/rates-engine/blob/main/docs/operations/supply-snapshot.md
+
+[Timer]
+OnCalendar=*-*-* 04:42:00 UTC
+RandomizedDelaySec=300
+Persistent=true
+Unit=supply-snapshot.service
+
+[Install]
+WantedBy=timers.target
