@@ -17,6 +17,24 @@ against.
 
 ### Added
 
+- **`-textfile-output` flag on `ratesengine-sla-probe` (#293)**:
+  follow-up to #283 / #290. Writes the per-run latency / availability
+  / freshness / sample-count / verdict values as a Prometheus
+  textfile (atomic `<path>.tmp`-then-rename) so node_exporter can
+  scrape them via the textfile_collector. Metric set:
+  `ratesengine_sla_probe_latency_ms{endpoint,quantile}`,
+  `ratesengine_sla_probe_availability_pct{endpoint}`,
+  `ratesengine_sla_probe_freshness_sec{endpoint}`,
+  `ratesengine_sla_probe_samples{endpoint}`,
+  `ratesengine_sla_probe_run_duration_seconds`,
+  `ratesengine_sla_probe_unit_failed`,
+  `ratesengine_sla_probe_last_pass_timestamp` (only on pass — the
+  staleness alert keys on previous-scrape value when current run
+  fails). Systemd service updated with optional `TEXTFILE_OUTPUT`
+  env-var; `ReadWritePaths` allows writes to the standard
+  textfile_collector dir. Alert rules tracked as a separate
+  follow-up — the metric set is shipped.
+
 - **ADR-0021 — AccountEntry observer for live home-domain +
   reserve-balance tracking (#292)**: bounds the implementation work
   for Task #54 before code lands. Defines a fourth dispatcher hook

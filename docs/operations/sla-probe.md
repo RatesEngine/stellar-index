@@ -126,27 +126,49 @@ A clean dry-run with `verdict: pass` confirms the endpoint set,
 the rate-limit headroom, and the freshness path all work end-to-
 end before the cron starts hitting them.
 
-## Follow-up: textfile-collector + alerting
+## Textfile-collector integration
 
-Today the probe writes to journald only. The follow-up will:
+`-textfile-output PATH` writes a Prometheus textfile after each
+run so node_exporter can scrape per-endpoint p50/p95/p99 latency,
+availability, freshness, and a pass/fail gauge. Operator wiring:
 
-1. Add a `-textfile-output PATH` flag (mirrors
-   `archive-completeness verify`) that emits the per-endpoint
-   p95 / p99 / freshness / availability values as Prometheus
-   metrics.
-2. Plumb the file into node_exporter's textfile_collector dir.
-3. Add Prometheus alert rules:
-   - `ratesengine_sla_probe_p95_breach` (p95 > target for ≥ 2
-     consecutive runs → P2 page).
-   - `ratesengine_sla_probe_freshness_breach` (freshness > target
-     for ≥ 1 run → P2 page).
-   - `ratesengine_sla_probe_unit_failed` (oneshot unit failed
-     → P3 ticket; node_exporter `--collector.systemd` already
-     surfaces this signal).
-4. Two new runbooks under `docs/operations/runbooks/`.
+```sh
+# /etc/default/sla-probe
+TEXTFILE_OUTPUT=/var/lib/node_exporter/textfile_collector/sla_probe.prom
+```
 
-The alert + runbook work is tracked separately from this PR — the
-unit is shippable today and the textfile path is additive.
+The systemd service writes to that path via the
+`<path>.tmp`-then-rename atomic protocol; node_exporter skips
+files whose name ends in `.tmp` so a partial write never appears
+in a scrape.
+
+### Metric set
+
+```
+ratesengine_sla_probe_latency_ms{endpoint=,quantile=}      gauge   ms
+ratesengine_sla_probe_availability_pct{endpoint=}          gauge   percent
+ratesengine_sla_probe_freshness_sec{endpoint=}             gauge   seconds (only when present)
+ratesengine_sla_probe_samples{endpoint=}                   gauge   count
+ratesengine_sla_probe_run_duration_seconds                 gauge   seconds
+ratesengine_sla_probe_unit_failed                          gauge   1 on fail, 0 on pass
+ratesengine_sla_probe_last_pass_timestamp                  gauge   unix; only on pass
+```
+
+### Alert rules (planned follow-up)
+
+The metric set above is shipped; alert rules live in
+`deploy/monitoring/rules/` and are tracked as a separate follow-up.
+Likely shapes:
+
+- `ratesengine_sla_probe_p95_breach` — p95 latency > target for
+  ≥ 2 consecutive runs → P2 page.
+- `ratesengine_sla_probe_freshness_breach` — freshness > target
+  for ≥ 1 run → P2 page.
+- `ratesengine_sla_probe_unit_failed_alert` — `unit_failed` gauge
+  has been 1 for ≥ 2 consecutive scrapes → P3 ticket.
+- `ratesengine_sla_probe_stale` — `last_pass_timestamp` older than
+  90 minutes (6× the 15-min cadence) → P2 page (the timer hasn't
+  fired or every recent run has failed).
 
 ## SLA targets in code
 
