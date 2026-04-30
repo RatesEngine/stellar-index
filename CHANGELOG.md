@@ -15,6 +15,18 @@ against.
 
 ## [Unreleased]
 
+### Fixed
+
+- **`deploy/docker-compose/README.md` migration version reference
+  (#334)**: README told first-run contributors to expect
+  *"migrated to version 8 (dirty=false)"* but the latest
+  migration is `0015_create_sep41_supply_events` — running
+  `db-migrate-up` today lands at version 15. A contributor doing
+  a fresh setup would see a different number and reasonably worry
+  the migration ran wrong. Updated the example to 15 and added a
+  note pointing readers at `ls migrations/*.up.sql | sort | tail
+  -1` so the doc doesn't immediately decay on the next migration.
+
 ### Added
 
 - **`docs/architecture/supply-pipeline.md` (#318)**: architecture-
