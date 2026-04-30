@@ -12,7 +12,7 @@ func TestRecordWasmTransition_FirstSeen(t *testing.T) {
 	state := map[sdkxdr.Hash]*wasmContractState{}
 	var contract sdkxdr.Hash
 	contract[0] = 0x01
-	recordWasmTransition(state, contract, "abc", 100)
+	recordWasmTransition(state, contract, "abc", 100, nil)
 
 	if got := len(state[contract].ranges); got != 1 {
 		t.Fatalf("ranges len = %d, want 1", got)
@@ -31,9 +31,9 @@ func TestRecordWasmTransition_FirstSeen(t *testing.T) {
 func TestRecordWasmTransition_RepeatSameHash(t *testing.T) {
 	state := map[sdkxdr.Hash]*wasmContractState{}
 	var contract sdkxdr.Hash
-	recordWasmTransition(state, contract, "abc", 100)
-	recordWasmTransition(state, contract, "abc", 101)
-	recordWasmTransition(state, contract, "abc", 200)
+	recordWasmTransition(state, contract, "abc", 100, nil)
+	recordWasmTransition(state, contract, "abc", 101, nil)
+	recordWasmTransition(state, contract, "abc", 200, nil)
 
 	if got := len(state[contract].ranges); got != 1 {
 		t.Fatalf("ranges len = %d, want 1 (idempotent on same hash)", got)
@@ -45,10 +45,10 @@ func TestRecordWasmTransition_RepeatSameHash(t *testing.T) {
 func TestRecordWasmTransition_Upgrade(t *testing.T) {
 	state := map[sdkxdr.Hash]*wasmContractState{}
 	var contract sdkxdr.Hash
-	recordWasmTransition(state, contract, "v1hash", 100)
-	recordWasmTransition(state, contract, "v1hash", 150) // no-op
-	recordWasmTransition(state, contract, "v2hash", 200) // upgrade!
-	recordWasmTransition(state, contract, "v3hash", 300) // upgrade again
+	recordWasmTransition(state, contract, "v1hash", 100, nil)
+	recordWasmTransition(state, contract, "v1hash", 150, nil) // no-op
+	recordWasmTransition(state, contract, "v2hash", 200, nil) // upgrade!
+	recordWasmTransition(state, contract, "v3hash", 300, nil) // upgrade again
 
 	ranges := state[contract].ranges
 	if len(ranges) != 3 {
@@ -78,7 +78,7 @@ func TestScanLedgerEntryChange_IgnoresUnrelatedContract(t *testing.T) {
 	state := map[sdkxdr.Hash]*wasmContractState{}
 
 	change := makeUpdateChange(t, other, [32]byte{1, 2, 3})
-	scanLedgerEntryChange(&change, watch, state, 100)
+	scanLedgerEntryChange(&change, watch, state, 100, nil)
 
 	if len(state) != 0 {
 		t.Errorf("state populated for unwatched contract: %v", state)
@@ -96,7 +96,7 @@ func TestScanLedgerEntryChange_CapturesWatchedUpgrade(t *testing.T) {
 
 	wasmHash := [32]byte{0xDE, 0xAD, 0xBE, 0xEF}
 	change := makeUpdateChange(t, watched, wasmHash)
-	scanLedgerEntryChange(&change, watch, state, 12345)
+	scanLedgerEntryChange(&change, watch, state, 12345, nil)
 
 	if len(state) != 1 {
 		t.Fatalf("state has %d entries, want 1", len(state))
