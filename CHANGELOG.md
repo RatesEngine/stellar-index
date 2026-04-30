@@ -17,6 +17,23 @@ against.
 
 ### Added
 
+- **ADR-0022 — Classic-supply observers (#302)**: bounds the
+  implementation work for Task #55 before code lands. Defines
+  four observer + storage + reader stacks under
+  `internal/sources/{trustlines,claimable_balances,liquidity_pools,sac_balances}/`,
+  each mirroring the AccountEntry pattern from ADR-0021 — the
+  dispatcher hook from #297 already routes per-tx ledger-entry
+  changes through every registered entry decoder, so adding the
+  four packages is purely additive. Operator-watched-set driven
+  via new `[supply] watched_classic_assets` config; switching to
+  "watch every classic asset" is a separate ADR (table-size
+  implications). The sliced 5-PR implementation plan ships each
+  hypertable populated independently of the reader, so operators
+  can audit components via SQL while subsequent PRs land. Once
+  shipped, Task #57's aggregator refresher iterates the watched-
+  asset list naturally — the existing single-asset path becomes
+  the multi-asset case.
+
 - **Periodic supply-snapshot worker in the aggregator — closes
   Task #57 (#301)**: runs the supply-snapshot writer as a
   goroutine inside the aggregator on a configurable cadence,
