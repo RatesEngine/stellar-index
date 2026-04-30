@@ -1,0 +1,112 @@
+---
+# SLA-probe alerts. Pair with cmd/ratesengine-sla-probe + the
+# 15-minute systemd timer in deploy/systemd/sla-probe.timer.
+#
+# Scrape source: node_exporter's textfile_collector reads
+# `/var/lib/node_exporter/textfile_collector/sla_probe.prom`,
+# which the probe writes via -textfile-output (introduced in #293).
+# Metric names + labels defined in cmd/ratesengine-sla-probe/textfile.go.
+#
+# Alert family:
+#
+#   - `ratesengine_sla_probe_p95_breach` — per-endpoint p95 latency
+#     above the RFP-stated 200 ms target for ≥ 2 consecutive runs
+#     (i.e. ≥ 30 min sustained). Page-worthy because this is a
+#     direct customer-visible SLA breach.
+#
+#   - `ratesengine_sla_probe_freshness_breach` — per-endpoint
+#     observed_at freshness > 30 s on the most recent run. The
+#     Freighter RFP V1 § Pricing pins 30 s; sustained breach is a
+#     P2 page.
+#
+#   - `ratesengine_sla_probe_unit_failed_alert` — the verdict
+#     gauge has been 1 for ≥ 2 consecutive scrapes. Catches the
+#     general "any SLA breached" case without naming which one;
+#     useful for a single dashboard tile + escalation.
+#
+#   - `ratesengine_sla_probe_stale` — `last_pass_timestamp` older
+#     than 90 minutes (6× the 15-min cadence). Either the timer
+#     isn't running or every recent run has failed. P2 page.
+
+groups:
+  - name: ratesengine.sla_probe
+    interval: 60s
+    rules:
+
+      - alert: ratesengine_sla_probe_p95_breach
+        expr: ratesengine_sla_probe_latency_ms{quantile="0.95"} > 200
+        for: 30m
+        labels:
+          severity: page
+          team: ratesengine
+          component: api
+          runbook_url: https://github.com/RatesEngine/rates-engine/blob/main/docs/operations/runbooks/sla-probe-p95-breach.md
+        annotations:
+          summary: "{{ $labels.endpoint }} p95 latency {{ $value }}ms exceeds RFP target (200ms) sustained 30m"
+          description: |
+            The SLA probe's per-endpoint p95 has been above the RFP-stated
+            200 ms target for ≥ 30 minutes (2 timer firings). Customer
+            impact: the Freighter detail page shows degraded responsiveness
+            on {{ $labels.endpoint }} for the watched pair. Runbook walks
+            through {{ $labels.endpoint }}-specific diagnostics, then
+            general API-latency triage.
+
+      - alert: ratesengine_sla_probe_freshness_breach
+        expr: ratesengine_sla_probe_freshness_sec > 30
+        for: 30m
+        labels:
+          severity: page
+          team: ratesengine
+          component: api
+          runbook_url: https://github.com/RatesEngine/rates-engine/blob/main/docs/operations/runbooks/sla-probe-freshness-breach.md
+        annotations:
+          summary: "{{ $labels.endpoint }} price freshness {{ $value }}s exceeds RFP target (30s) sustained 30m"
+          description: |
+            The SLA probe's median observed_at freshness for
+            {{ $labels.endpoint }} has been > 30 s for ≥ 30 minutes.
+            Pricing data is going stale — consumers gating on
+            `flags.stale` may be backing off, but the wire contract
+            says the field is < 30 s for healthy operation. Runbook:
+            check aggregator → Redis → API path; bisect by which
+            stage's `observed_at` is lagging.
+
+      - alert: ratesengine_sla_probe_unit_failed_alert
+        expr: ratesengine_sla_probe_unit_failed > 0
+        for: 30m
+        labels:
+          severity: ticket
+          team: ratesengine
+          component: api
+          runbook_url: https://github.com/RatesEngine/rates-engine/blob/main/docs/operations/runbooks/sla-probe-unit-failed.md
+        annotations:
+          summary: "SLA probe verdict has been fail for ≥ 30m — at least one SLA breached"
+          description: |
+            The probe's overall verdict gauge has been 1 (fail) for
+            ≥ 30 minutes. This is the umbrella "something's off"
+            signal — the more-specific p95 / freshness / availability
+            alerts will name the exact breach if they're configured to
+            fire faster. Runbook: pick the most-recent journald entry
+            with the JSON report, read the `failed_reasons` array, and
+            route to the appropriate per-endpoint runbook.
+
+      # Staleness keys on `last_pass_timestamp`. Default cadence is
+      # 15 min so 90 min = 6 missed passes. Either the timer isn't
+      # running or every run since has failed. P2 page either way —
+      # we lose the SLA-evidence trail when the probe is silent.
+      - alert: ratesengine_sla_probe_stale
+        expr: |
+          (time() - ratesengine_sla_probe_last_pass_timestamp) > (90 * 60)
+        for: 5m
+        labels:
+          severity: page
+          team: ratesengine
+          component: api
+          runbook_url: https://github.com/RatesEngine/rates-engine/blob/main/docs/operations/runbooks/sla-probe-stale.md
+        annotations:
+          summary: "SLA probe hasn't passed in {{ $value | humanizeDuration }} (cadence 15m, threshold 90m)"
+          description: |
+            Either the systemd timer isn't running, or every run since
+            the last pass has failed. Without the probe, we lose the
+            SLA-evidence trail required by the Freighter RFP. Runbook:
+            check systemd-unit status first; fall through to the
+            per-breach runbooks if every run is genuinely failing.

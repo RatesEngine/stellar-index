@@ -17,6 +17,17 @@ against.
 
 ### Added
 
+- **SLA-probe alert rules + four runbooks (#294)**: closes the
+  alert-rules-tracked-as-follow-up note in #293. Ships
+  `deploy/monitoring/rules/sla-probe.yml` with four rules —
+  `_p95_breach` (page on > 200 ms sustained 30 min),
+  `_freshness_breach` (page on > 30 s sustained 30 min),
+  `_unit_failed_alert` (umbrella ticket for any breach kind), and
+  `_stale` (page when no successful run in 90 min — 6× the
+  15-min cadence). Each alert has a per-runbook entry under
+  `docs/operations/runbooks/sla-probe-*.md` and a row in
+  `docs/operations/alerts-catalog.md`.
+
 - **`-textfile-output` flag on `ratesengine-sla-probe` (#293)**:
   follow-up to #283 / #290. Writes the per-run latency / availability
   / freshness / sample-count / verdict values as a Prometheus
