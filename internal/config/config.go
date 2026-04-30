@@ -484,7 +484,17 @@ type SupplyConfig struct {
 	// SACs (or aren't tracking them) leave this empty; the
 	// SAC-component sum is then zero, which is correct for those
 	// assets.
-	SACWrappers map[string]string `toml:"sac_wrappers" doc:"SAC wrapper contract C-strkey → supply.AssetKey (CODE:ISSUER) map. Drives the SAC balance observer's watched-contract filter." default:"{}"`
+	SACWrappers map[string]string `toml:"sac_wrappers" doc:"SAC wrapper contract C-strkey → supply.AssetKey (CODE:ISSUER) map. Drives the SAC balance observer's watched-contract filter. Pure SEP-41 contracts reuse this map by mapping contract_id → contract_id." default:"{}"`
+
+	// WatchedSEP41Contracts is the operator-curated list of SEP-41
+	// Soroban contract ids the supply pipeline computes Algorithm 3
+	// for. Per ADR-0023 — drives the SEP-41 supply observer
+	// (`internal/sources/sep41_supply/`) and the aggregator's
+	// SEP-41 supply refresh loop. Each entry is a C-strkey contract
+	// id (e.g. "CAQQR5SWBXKIGZKPBZDH3KM5GQ5GUTPKB7JAFCINLZBC5WXPJKRG3IM7").
+	//
+	// Empty (the default) leaves the SEP-41 supply pipeline off.
+	WatchedSEP41Contracts []string `toml:"watched_sep41_contracts" doc:"Operator-curated SEP-41 Soroban contract C-strkeys to track for Algorithm 3 supply per ADR-0023. Empty leaves the SEP-41 supply pipeline off." default:"[]"`
 }
 
 // Validate reports inconsistencies in the supply block. Currently
@@ -524,6 +534,11 @@ func (sc SupplyConfig) Validate() error {
 		}
 		if ak == "" {
 			return fmt.Errorf("supply: sac_wrappers[%q] has empty asset_key", cid)
+		}
+	}
+	for i, c := range sc.WatchedSEP41Contracts {
+		if c == "" {
+			return fmt.Errorf("supply: watched_sep41_contracts[%d] is empty", i)
 		}
 	}
 	return nil

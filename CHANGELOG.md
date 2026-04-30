@@ -17,6 +17,24 @@ against.
 
 ### Added
 
+- **`StorageSEP41SupplyReader` + `watched_sep41_contracts` config
+  (#311 — Task #56 PR 3/4)**: composes the per-kind running sums
+  (`Store.SEP41KindTotalsAtOrBefore`, new in this PR — single
+  round-trip via SQL `SUM(...) FILTER (WHERE event_kind=...)`)
+  with the SAC-balance per-contract lookups for locked-set
+  subtraction into a single `SEP41SupplyReader` satisfying the
+  existing interface from #199. `AssetBoundSEP41Computer`
+  adapts the contract-parameterised `SEP41Computer` to the
+  per-asset `SnapshotComputer` shape (mirrors
+  `AssetBoundClassicComputer` from #307). New
+  `[supply] watched_sep41_contracts` config (C-strkey list) +
+  validation. AdminBalance is intentionally `0` in the v1
+  reader — operators put admin addresses in `LockedSet.Accounts`
+  alongside other locked addresses; the algorithm subtracts them
+  equivalently. Pure SEP-41 contracts share the SAC-observer
+  storage path by adding their `(contract_id, contract_id)`
+  entry to `[supply.sac_wrappers]`.
+
 - **`internal/sources/sep41_supply/` observer + sink wiring
   (#310 — Task #56 PR 2/4)**: SEP-41 supply event observer per
   ADR-0023, plugging into the existing events-based

@@ -122,3 +122,60 @@ func (s *Store) SEP41NetMintAtOrBefore(ctx context.Context, contractID string, a
 	}
 	return v, nil
 }
+
+// SEP41KindTotals carries the per-kind running sums for one
+// SEP-41 contract. Used by the storage reader to surface the
+// algorithm's three components separately rather than as the
+// pre-netted [SEP41NetMintAtOrBefore]: ADR-0011 Algorithm 3's
+// SEP41SupplyComponents tracks them distinct (operators want to
+// see clawback volume separately from voluntary burns for
+// compliance dashboards).
+type SEP41KindTotals struct {
+	Mint     *big.Int
+	Burn     *big.Int
+	Clawback *big.Int
+}
+
+// SEP41KindTotalsAtOrBefore returns the per-kind sums for
+// `contractID` at-or-before `asOfLedger`. Single round-trip via
+// SQL `SUM(...) FILTER (WHERE ...)` per kind.
+//
+// Each component is non-nil; zero is a valid answer for a
+// contract with no events of that kind observed yet (e.g. a
+// token that's never been clawed back returns Clawback=0).
+func (s *Store) SEP41KindTotalsAtOrBefore(ctx context.Context, contractID string, asOfLedger uint32) (SEP41KindTotals, error) {
+	const q = `
+        SELECT
+            COALESCE(sum(amount) FILTER (WHERE event_kind = 'mint'),     0)::text AS mint_total,
+            COALESCE(sum(amount) FILTER (WHERE event_kind = 'burn'),     0)::text AS burn_total,
+            COALESCE(sum(amount) FILTER (WHERE event_kind = 'clawback'), 0)::text AS clawback_total
+          FROM sep41_supply_events
+         WHERE contract_id = $1
+           AND ledger      <= $2
+    `
+	var mintRaw, burnRaw, clawbackRaw string
+	if err := s.db.QueryRowContext(ctx, q, contractID, int(asOfLedger)).Scan(&mintRaw, &burnRaw, &clawbackRaw); err != nil {
+		return SEP41KindTotals{}, fmt.Errorf("timescale: SEP41KindTotalsAtOrBefore %s@%d: %w", contractID, asOfLedger, err)
+	}
+	mint, err := parseSEP41Numeric(mintRaw, "mint_total")
+	if err != nil {
+		return SEP41KindTotals{}, err
+	}
+	burn, err := parseSEP41Numeric(burnRaw, "burn_total")
+	if err != nil {
+		return SEP41KindTotals{}, err
+	}
+	clawback, err := parseSEP41Numeric(clawbackRaw, "clawback_total")
+	if err != nil {
+		return SEP41KindTotals{}, err
+	}
+	return SEP41KindTotals{Mint: mint, Burn: burn, Clawback: clawback}, nil
+}
+
+func parseSEP41Numeric(raw, label string) (*big.Int, error) {
+	v, ok := new(big.Int).SetString(raw, 10)
+	if !ok {
+		return nil, fmt.Errorf("timescale: parse %s %q", label, raw)
+	}
+	return v, nil
+}
