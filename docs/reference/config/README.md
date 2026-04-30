@@ -111,8 +111,8 @@ the `env:` column.
 | `aggregate.pairs` | `[]string` | `[]` | — | Aggregator coverage set as canonical pair strings ("crypto:XLM/fiat:USD", "native/USDC-G…"). Empty leaves the binary's built-in default (XLM/BTC/ETH × USD/EUR/GBP). Each entry is parsed via canonical.ParseAsset on both sides; an unparseable entry fails Validate. |
 | `aggregate.windows` | `[]string` | `[]` | — | Per-window cadences as Go time.Duration strings ("5m", "1h", "24h"). Empty leaves the orchestrator's built-in default ([5m, 1h, 24h]). |
 | `aggregate.triangulations` | `[]struct` | `[]` | — | Operator-configured chain pricing entries — each row defines a target pair plus an ordered chain of leg pairs. After the per-pair refresh runs, the orchestrator multiplies each leg's freshly-cached VWAP via aggregate.TriangulateChain and writes the implied target VWAP to its own cache key. Empty (default) skips triangulation entirely. |
-| `aggregate.triangulations[].target` | `string` | — | — | Implied target pair in canonical wire form. |
-| `aggregate.triangulations[].legs` | `[]string` | — | — | Ordered chain of leg pairs; must have at least 2 entries and adjacent legs must share their pivot asset. |
+| `aggregate.triangulations[].target` | `string` | _(required)_ | — | Implied target pair (canonical wire form). |
+| `aggregate.triangulations[].legs` | `[]string` | _(required)_ | — | Ordered chain of leg pairs; product yields the target price. Must have at least 2 entries and adjacent legs must share their pivot asset. |
 
 ### `[anomaly]`
 
@@ -151,6 +151,13 @@ the `env:` column.
 | Key | Type | Default | Env override | Description |
 | --- | ---- | ------- | ------------ | ----------- |
 | `metadata.issuer_home_domains` | `map` | `{}` | — | Static curated map of issuer-account G-strkey → home-domain. Populates AssetDetail.HomeDomain so the SEP-1 overlay handler can resolve stellar.toml. Until the on-chain AccountEntry observer ships, this is the only way to enable the overlay for a given issuer. |
+
+### `[supply]`
+
+| Key | Type | Default | Env override | Description |
+| --- | ---- | ------- | ------------ | ----------- |
+| `supply.sdf_reserve_accounts` | `[]string` | `[]` | — | G-strkey list of SDF-controlled reserve accounts whose XLM balances are excluded from circulating supply per ADR-0011 Algorithm 1. |
+| `supply.reserve_balances_stroops` | `map` | `{}` | — | Operator-managed snapshot of each SDF reserve account's XLM balance in stroops (decimal string). Updated manually on SDF reserve-move announcements; LCM-based live tracking is a future ADR. |
 
 ### `[obs]`
 

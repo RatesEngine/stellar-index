@@ -30,66 +30,86 @@ func Describe() []SchemaField {
 func describe(t reflect.Type, prefix string) []SchemaField {
 	var out []SchemaField
 	for i := 0; i < t.NumField(); i++ {
-		f := t.Field(i)
-		tomlName := f.Tag.Get("toml")
-		if tomlName == "" {
-			tomlName = strings.ToLower(f.Name)
-		}
-		path := tomlName
-		if prefix != "" {
-			path = prefix + "." + tomlName
-		}
-
-		// If this is a nested struct (but not time.Time or similar),
-		// recurse and flatten.
-		if f.Type.Kind() == reflect.Struct && f.Type != reflect.TypeOf(time.Time{}) {
-			out = append(out, describe(f.Type, path)...)
-			continue
-		}
-
-		// If this is a map[string]<struct>, also recurse into the
-		// struct value type using a synthetic `<key>` placeholder
-		// path. Operators see one row per nested-struct field with
-		// the same `<key>` literal so they understand the per-entry
-		// shape. The map field itself still emits its own row above.
-		if f.Type.Kind() == reflect.Map &&
-			f.Type.Key().Kind() == reflect.String &&
-			f.Type.Elem().Kind() == reflect.Struct {
-			doc := f.Tag.Get("doc")
-			def := f.Tag.Get("default")
-			env := f.Tag.Get("env")
-			if doc == "" {
-				panic(fmt.Sprintf("config schema: map field %s missing required `doc:` tag", path))
-			}
-			out = append(out, SchemaField{
-				Path:     path,
-				Type:     "map[string]" + f.Type.Elem().Name(),
-				Default:  def,
-				Env:      env,
-				Doc:      doc,
-				Required: def == "",
-			})
-			out = append(out, describe(f.Type.Elem(), path+".<key>")...)
-			continue
-		}
-
-		doc := f.Tag.Get("doc")
-		if doc == "" {
-			panic(fmt.Sprintf("config schema: field %s is missing the required `doc:` tag", path))
-		}
-		def := f.Tag.Get("default")
-		env := f.Tag.Get("env")
-
-		out = append(out, SchemaField{
-			Path:     path,
-			Type:     typeLabel(f.Type),
-			Default:  def,
-			Env:      env,
-			Doc:      doc,
-			Required: def == "",
-		})
+		out = append(out, describeField(t.Field(i), prefix)...)
 	}
 	return out
+}
+
+// describeField returns 1+ rows for one struct field. Containers
+// (struct, map[string]struct, []struct) flatten into per-leaf rows
+// plus one row for the container itself; scalar leaves return a
+// single row.
+func describeField(f reflect.StructField, prefix string) []SchemaField {
+	tomlName := f.Tag.Get("toml")
+	if tomlName == "" {
+		tomlName = strings.ToLower(f.Name)
+	}
+	path := tomlName
+	if prefix != "" {
+		path = prefix + "." + tomlName
+	}
+	if f.Type.Kind() == reflect.Struct && f.Type != reflect.TypeOf(time.Time{}) {
+		return describe(f.Type, path)
+	}
+	if isMapStringStruct(f.Type) {
+		return mapContainerRows(f, path)
+	}
+	if isSliceOfStruct(f.Type) {
+		return sliceContainerRows(f, path)
+	}
+	return []SchemaField{leafRow(f, path)}
+}
+
+func isMapStringStruct(t reflect.Type) bool {
+	return t.Kind() == reflect.Map &&
+		t.Key().Kind() == reflect.String &&
+		t.Elem().Kind() == reflect.Struct
+}
+
+func isSliceOfStruct(t reflect.Type) bool {
+	return t.Kind() == reflect.Slice && t.Elem().Kind() == reflect.Struct
+}
+
+func mapContainerRows(f reflect.StructField, path string) []SchemaField {
+	row := containerRow(f, path, "map[string]"+f.Type.Elem().Name(), "map field")
+	return append([]SchemaField{row}, describe(f.Type.Elem(), path+".<key>")...)
+}
+
+func sliceContainerRows(f reflect.StructField, path string) []SchemaField {
+	row := containerRow(f, path, "[]struct", "slice field")
+	return append([]SchemaField{row}, describe(f.Type.Elem(), path+"[]")...)
+}
+
+func containerRow(f reflect.StructField, path, typeLabel, label string) SchemaField {
+	doc := f.Tag.Get("doc")
+	if doc == "" {
+		panic(fmt.Sprintf("config schema: %s %s missing required `doc:` tag", label, path))
+	}
+	def := f.Tag.Get("default")
+	return SchemaField{
+		Path:     path,
+		Type:     typeLabel,
+		Default:  def,
+		Env:      f.Tag.Get("env"),
+		Doc:      doc,
+		Required: def == "",
+	}
+}
+
+func leafRow(f reflect.StructField, path string) SchemaField {
+	doc := f.Tag.Get("doc")
+	if doc == "" {
+		panic(fmt.Sprintf("config schema: field %s is missing the required `doc:` tag", path))
+	}
+	def := f.Tag.Get("default")
+	return SchemaField{
+		Path:     path,
+		Type:     typeLabel(f.Type),
+		Default:  def,
+		Env:      f.Tag.Get("env"),
+		Doc:      doc,
+		Required: def == "",
+	}
 }
 
 func typeLabel(t reflect.Type) string {

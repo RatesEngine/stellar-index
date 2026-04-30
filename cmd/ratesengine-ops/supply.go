@@ -15,19 +15,134 @@ import (
 	"github.com/RatesEngine/rates-engine/internal/supply"
 )
 
-// supplyCmd dispatches the supply sub-subcommand. v1 ships with one
-// mode (`audit`); future modes (e.g. `recompute`, `policy-validate`)
-// plug in here.
+// supplyCmd dispatches the supply sub-subcommand. v1 ships with two
+// modes — `audit` (read) + `snapshot` (write); future modes
+// (e.g. `recompute`, `policy-validate`) plug in here.
 func supplyCmd(args []string) error {
 	if len(args) == 0 {
-		return errors.New("usage: supply audit <asset> [flags]")
+		return errors.New("usage: supply <audit|snapshot> [flags]")
 	}
 	switch args[0] {
 	case "audit":
 		return supplyAudit(args[1:])
+	case "snapshot":
+		return supplySnapshot(args[1:])
 	default:
-		return fmt.Errorf("unknown supply subcommand %q (expected: audit)", args[0])
+		return fmt.Errorf("unknown supply subcommand %q (expected: audit | snapshot)", args[0])
 	}
+}
+
+// supplySnapshot computes a fresh supply snapshot and writes it to
+// asset_supply_history. Today this only handles native XLM
+// (Algorithm 1); classic + SEP-41 will follow once their respective
+// computers ship.
+//
+// Reserve balances come from operator config
+// (`[supply] reserve_balances_stroops`); see SupplyConfig docs for
+// why this is operator-managed today and what the live-LCM-observer
+// follow-up looks like.
+//
+// Flags:
+//
+//	-config PATH     Required. Operator TOML config.
+//	-asset <id>      Asset to snapshot. native only at v1; classic
+//	                 and SEP-41 reject with a "not yet supported"
+//	                 message.
+//	-ledger N        Ledger sequence to attribute the snapshot to.
+//	                 Default: latest known ledger across all
+//	                 ingestion cursors (so the snapshot is dated
+//	                 against current chain state, not against the
+//	                 wall-clock).
+//	-dry-run         Compute + print but do not write.
+func supplySnapshot(args []string) error {
+	fs := flag.NewFlagSet("supply snapshot", flag.ContinueOnError)
+	cfgPath := fs.String("config", "", "Path to TOML config file (required)")
+	assetRaw := fs.String("asset", "native", "Asset to snapshot (native only at v1)")
+	ledgerArg := fs.Int("ledger", 0, "Ledger sequence to attribute to (default: latest from ingestion_cursors)")
+	dryRun := fs.Bool("dry-run", false, "Compute + print without writing to asset_supply_history")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	if *cfgPath == "" {
+		return errors.New("-config is required")
+	}
+	if *assetRaw != "native" {
+		return fmt.Errorf("supply snapshot: asset %q not yet supported (only `native` at v1; classic + SEP-41 follow once their computers ship)", *assetRaw)
+	}
+
+	cfg, err := config.LoadWithEnv(*cfgPath)
+	if err != nil {
+		return err
+	}
+	if err := cfg.Supply.Validate(); err != nil {
+		return fmt.Errorf("config: %w", err)
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	store, err := timescale.Open(ctx, cfg.Storage.PostgresDSN)
+	if err != nil {
+		return fmt.Errorf("storage: %w", err)
+	}
+	defer func() { _ = store.Close() }()
+
+	ledger, observedAt, err := resolveSnapshotLedger(ctx, store, uint32(*ledgerArg))
+	if err != nil {
+		return err
+	}
+
+	reader, err := supply.NewConfigReserveBalanceReader(cfg.Supply.ReserveBalancesStroops)
+	if err != nil {
+		return fmt.Errorf("reserve reader: %w", err)
+	}
+	computer, err := supply.NewXLMComputer(cfg.Supply.SDFReserveAccounts, reader)
+	if err != nil {
+		return fmt.Errorf("xlm computer: %w", err)
+	}
+
+	snap, err := computer.Compute(ctx, ledger, observedAt)
+	if err != nil {
+		return fmt.Errorf("compute: %w", err)
+	}
+
+	printSupplySnapshot("SNAPSHOT", "native", snap.AssetKey, snap)
+	if *dryRun {
+		fmt.Println("─── DRY RUN ─── snapshot NOT written to asset_supply_history.")
+		return nil
+	}
+	if err := store.InsertSupply(ctx, snap); err != nil {
+		return fmt.Errorf("InsertSupply: %w", err)
+	}
+	fmt.Printf("Wrote snapshot for asset_key=%s ledger=%d basis=%s\n",
+		snap.AssetKey, snap.LedgerSequence, snap.Basis)
+	return nil
+}
+
+// resolveSnapshotLedger picks the ledger to attribute the snapshot
+// to. Operator-supplied -ledger wins; otherwise we use the max
+// last_ledger across all ingestion cursors as the freshest known
+// chain position. observedAt is now() — the cursor doesn't carry
+// its own close time and computing one would mean reading the LCM
+// archive, which is more cost than this attribution buys.
+func resolveSnapshotLedger(ctx context.Context, store *timescale.Store, opLedger uint32) (uint32, time.Time, error) {
+	if opLedger > 0 {
+		return opLedger, time.Now().UTC(), nil
+	}
+	cursors, err := store.ListCursors(ctx)
+	if err != nil {
+		return 0, time.Time{}, fmt.Errorf("ListCursors: %w", err)
+	}
+	var maxLedger uint32
+	for _, c := range cursors {
+		if c.LastLedger > maxLedger {
+			maxLedger = c.LastLedger
+		}
+	}
+	if maxLedger == 0 {
+		return 0, time.Time{}, errors.New("no ingestion cursors yet — pass -ledger explicitly until the indexer has produced a cursor")
+	}
+	return maxLedger, time.Now().UTC(), nil
 }
 
 // supplyAudit prints the latest supply snapshot for an asset, plus

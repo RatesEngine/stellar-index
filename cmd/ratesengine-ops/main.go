@@ -327,6 +327,21 @@ Subcommands:
                           C…). Cross-check pairing is operator-
                           supplied because SAC contract-id
                           derivation isn't wired in canonical yet.
+  supply snapshot -config PATH [-asset <id>] [-ledger N] [-dry-run]
+                          Compute a fresh supply snapshot and write
+                          it to asset_supply_history. v1 ships
+                          native-XLM only (Algorithm 1 per
+                          ADR-0011); classic + SEP-41 follow once
+                          their respective computers ship.
+                          Reserve balances are operator-managed —
+                          set [supply] reserve_balances_stroops in
+                          your TOML config. Default ledger
+                          attribution is the max last_ledger across
+                          all ingestion cursors; pass -ledger to
+                          override. -dry-run prints without writing.
+                          Cron this command to land a periodic
+                          snapshot — until the LCM-observer-backed
+                          live writer ships in a follow-up.
   discovery list -config PATH [-since DUR] [-limit N]
                           List SEP-41 contracts auto-detected from the
                           event stream (the dispatcher's discovery

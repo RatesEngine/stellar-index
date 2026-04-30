@@ -1,6 +1,9 @@
 package config
 
-import "time"
+import (
+	"fmt"
+	"time"
+)
 
 // Config is the root configuration for every Rates Engine binary.
 //
@@ -23,6 +26,7 @@ type Config struct {
 	Anomaly   AnomalyConfig   `toml:"anomaly" doc:"Per-asset-class anomaly detection thresholds (ADR-0019 Phase 1 stop-gap)."`
 	API       APIConfig       `toml:"api" doc:"Public API serving plane — port, auth mode, rate limits, CDN."`
 	Metadata  MetadataConfig  `toml:"metadata" doc:"Asset metadata overlay — SEP-1 issuer→home-domain map, operator overrides."`
+	Supply    SupplyConfig    `toml:"supply" doc:"Supply-snapshot writer config — SDF reserve list + operator-managed reserve balances. Pre-LCM-observer interim per ADR-0011."`
 	Obs       ObsConfig       `toml:"obs" doc:"Metrics, logs, traces — exporters + sampling."`
 }
 
@@ -401,6 +405,59 @@ type SEP10Config struct {
 }
 
 // ObsConfig wires metrics, logs, traces.
+// SupplyConfig configures the supply-snapshot writer (run via
+// `ratesengine-ops supply snapshot`). Per ADR-0011 we don't
+// fabricate values; for native XLM that means the writer needs the
+// configured SDF reserve account list (whose balances are excluded
+// from circulating) plus an authoritative reading of those balances.
+//
+// At audit time we have no live AccountEntry observer (deferred —
+// same plumbing the metadata overlay is waiting on). Until that
+// ships, operators carry the reserve balances in this config block,
+// updated when SDF announces a reserve move (rare — a few times
+// per year). The writer reads from this config and writes to
+// `asset_supply_history`. The follow-up ADR replaces the manual
+// table with an LCM-derived live reader.
+//
+// Empty `SDFReserveAccounts` is valid and yields
+// circulating == total (no reserves excluded). Empty
+// `ReserveBalancesStroops` with non-empty `SDFReserveAccounts` is
+// rejected at writer-start so an operator who configured accounts
+// but forgot balances doesn't silently publish an over-stated
+// circulating supply.
+type SupplyConfig struct {
+	// SDFReserveAccounts is the G-strkey list whose XLM balances
+	// are subtracted from the frozen total to yield circulating.
+	// Per ADR-0011 these are operator-curated; the algorithm itself
+	// is policy-agnostic.
+	SDFReserveAccounts []string `toml:"sdf_reserve_accounts" doc:"G-strkey list of SDF-controlled reserve accounts whose XLM balances are excluded from circulating supply per ADR-0011 Algorithm 1." default:"[]"`
+
+	// ReserveBalancesStroops maps account G-strkey → balance in
+	// stroops as a decimal string (NUMERIC-safe — no float
+	// round-trip per ADR-0003). Operators update these manually
+	// when SDF announces a reserve move. Every account in
+	// SDFReserveAccounts MUST appear here; missing keys are a
+	// configuration error caught at writer-start.
+	ReserveBalancesStroops map[string]string `toml:"reserve_balances_stroops" doc:"Operator-managed snapshot of each SDF reserve account's XLM balance in stroops (decimal string). Updated manually on SDF reserve-move announcements; LCM-based live tracking is a future ADR." default:"{}"`
+}
+
+// Validate reports inconsistencies in the supply block. Currently
+// only checks that every configured reserve account has a balance
+// entry — silently publishing an over-stated circulating supply
+// because an operator forgot a balance is the failure mode worth
+// guarding.
+func (sc SupplyConfig) Validate() error {
+	if len(sc.SDFReserveAccounts) == 0 {
+		return nil
+	}
+	for _, acc := range sc.SDFReserveAccounts {
+		if _, ok := sc.ReserveBalancesStroops[acc]; !ok {
+			return fmt.Errorf("supply: reserve_balances_stroops missing balance for account %q", acc)
+		}
+	}
+	return nil
+}
+
 type ObsConfig struct {
 	MetricsListen string  `toml:"metrics_listen" doc:"Bind address for the /metrics Prometheus endpoint." default:"127.0.0.1:9464"`
 	LogLevel      string  `toml:"log_level" doc:"Minimum log level — debug / info / warn / error." default:"info"`
