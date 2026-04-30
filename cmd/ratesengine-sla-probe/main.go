@@ -148,6 +148,7 @@ func main() {
 		p99Target    = flag.Duration("p99-target", defaultP99Target, "p99 latency SLA target")
 		freshTarget  = flag.Duration("freshness-target", defaultFreshTarget, "Price-freshness SLA target")
 		availTarget  = flag.Float64("availability-target", defaultAvailabilityT, "Per-endpoint availability SLA target (percent)")
+		textfileOut  = flag.String("textfile-output", "", "Path to write Prometheus textfile (node_exporter textfile_collector format). Empty = no metrics emit.")
 	)
 	flag.Var(&pairFlag, "pair", "Asset pair as 'asset,quote' (e.g. 'native,fiat:USD'). Repeatable.")
 	flag.Parse()
@@ -186,6 +187,13 @@ func main() {
 		_ = json.NewEncoder(os.Stdout).Encode(rep)
 	default:
 		printText(os.Stdout, &rep)
+	}
+
+	if *textfileOut != "" {
+		if err := writeTextfileAtomic(*textfileOut, &rep); err != nil {
+			fmt.Fprintf(os.Stderr, "ratesengine-sla-probe: write textfile: %v\n", err)
+			os.Exit(2)
+		}
 	}
 
 	if rep.Verdict != "pass" {
