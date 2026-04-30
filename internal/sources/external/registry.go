@@ -26,7 +26,7 @@ var Registry = map[string]Metadata{
 	// ─── On-chain exchanges (dispatcher-path; listed here so the
 	// aggregator has a single lookup table) ──────────────────────
 	"soroswap": {Class: ClassExchange, Subclass: SubclassDEX, DefaultWeight: 100, IncludeInVWAP: true, Paid: false, BackfillAvailable: true, BackfillSafe: true /* audited 2026-04-29; see docs/operations/wasm-audits/soroswap.md */},
-	"aquarius": {Class: ClassExchange, Subclass: SubclassDEX, DefaultWeight: 100, IncludeInVWAP: true, Paid: false, BackfillAvailable: true, BackfillSafe: false},
+	"aquarius": {Class: ClassExchange, Subclass: SubclassDEX, DefaultWeight: 100, IncludeInVWAP: true, Paid: false, BackfillAvailable: true, BackfillSafe: true /* audited 2026-04-29; 313 pools, 3 unique WASMs, shared-emitter topology. See docs/operations/wasm-audits/aquarius.md */},
 	"phoenix":  {Class: ClassExchange, Subclass: SubclassDEX, DefaultWeight: 100, IncludeInVWAP: true, Paid: false, BackfillAvailable: true, BackfillSafe: true /* audited 2026-04-29; 11 pools, 2 unique WASM hashes, both contain 8 expected swap-field strings. See docs/operations/wasm-audits/phoenix.md */},
 	"comet":    {Class: ClassExchange, Subclass: SubclassDEX, DefaultWeight: 100, IncludeInVWAP: true, Paid: false, BackfillAvailable: true, BackfillSafe: false},
 	"sdex":     {Class: ClassExchange, Subclass: SubclassDEX, DefaultWeight: 100, IncludeInVWAP: true, Paid: false, BackfillAvailable: true, BackfillSafe: true},

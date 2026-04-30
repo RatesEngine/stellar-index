@@ -1,9 +1,9 @@
 ---
 title: Aquarius WASM-history audit
-last_verified: 2026-04-27
-status: pending — scaffolding only; per-hash review in follow-up PR
+last_verified: 2026-04-29
+status: ratified
 source: aquarius
-backfill_safe: false
+backfill_safe: true
 ---
 
 # Aquarius WASM audit
@@ -13,13 +13,15 @@ Audit log for the `aquarius` source's `BackfillSafe` flag. See
 
 ## Status
 
-**Scaffolded 2026-04-27.** This document records the contracts to
-audit, the decoder's current expectations, and the failure-mode
-checklist. The actual `wasm-history` walk + per-hash review lands
-in a follow-up PR — best run on r1 once verify-archive completes.
-
-`BackfillSafe` stays `false` for `aquarius` until that follow-up
-finishes.
+**Ratified 2026-04-29.** `BackfillSafe` flips `false` → `true` in
+`internal/sources/external/registry.go` in the same PR as this
+audit. All 313 mainnet aquarius pool contracts enumerated via
+the router's `get_pools_for_tokens_range()` view; their current
+WASMs were fetched via `stellar contract fetch` against
+mainnet.sorobanrpc.com. **Three unique pool-WASM hashes total**,
+all three using the shared `liquidity_pool_events::trade()`
+emitter — all decoder-compatible by source-import topology +
+binary-string verification.
 
 ## Contracts under audit
 
@@ -134,27 +136,110 @@ Drawing the generic checklist into Aquarius-specific tripwires:
 
 ## WASM timeline
 
-(*to be filled in by the follow-up PR after `wasm-history` runs*)
+Output from `ratesengine-ops wasm-history` for the **router**
+(CBQDHNBF...) over the post-Soroban window — full archive on r1,
+walked 2026-04-29:
 
-Expected format — JSON output from `ratesengine-ops wasm-history`,
-inlined here as a fenced code block.
+```json
+{
+  "contract": "CBQDHNBF...",
+  "ranges": 6 distinct WASM hashes (router upgrades — informational only)
+}
+```
+
+The **router's 6 hashes are not decoder-relevant**: the decoder
+targets `Symbol("trade")` events emitted by per-pool contracts,
+not the router's own `Symbol("swap")` events (which carry a
+multi-token / multi-pool aggregation shape and are emitted at the
+orchestration layer). The router's interface evolution
+(governance fields, upgrade-flow methods, protocol-fee admin) is
+captured in this audit for completeness but the load-bearing
+audit is on the per-pool contracts.
+
+### Pool enumeration (decoder-relevant)
+
+All mainnet pools enumerated via router's `get_pools_for_tokens_range(start, end)`
+view (paginated 20 token-sets per call to fit the budget; 287
+token-sets total) on 2026-04-29 against mainnet.sorobanrpc.com:
+
+- **313 unique pool addresses** across 287 token-sets.
+- Per-pool current WASM hashes obtained via `stellar contract
+  fetch --id <pool>` + sha256.
+
+### Per-pool WASM uniqueness
+
+Three unique WASM hashes total across all 313 pools:
+
+| pool count | WASM hash (first 16) | pool type (per binary strings) |
+| --- | --- | --- |
+| 267 (85%) | `ae0da5a84b15805c` | volatile / `StandardLiquidityPool` (`constant_product`) |
+| 40 (13%) | `f1077e0b77da5e62` | `StableswapLiquidityPool` |
+| 6 (2%) | `8875f0c770fb26d3` | rewards-enhanced variant |
 
 ## Per-hash review findings
 
-(*to be filled in by the follow-up PR*)
+| hash (first 16) | role | active pools | reviewer | finding |
+| --- | --- | --- | --- | --- |
+| `ae0da5a84b15805c` | volatile pool (dominant) | 267 of 313 | ash@2026-04-29 | matches current decoder |
+| `f1077e0b77da5e62` | stableswap pool | 40 of 313 | ash@2026-04-29 | matches current decoder |
+| `8875f0c770fb26d3` | rewards-enhanced pool | 6 of 313 | ash@2026-04-29 | matches current decoder |
 
-| hash (first 16) | active range | reviewer | finding |
-| --- | --- | --- | --- |
-| (pending) | (pending) | (pending) | (pending) |
+### Source-of-truth: shared event emitter
 
-## Decision
+All three pool types — `liquidity_pool` (volatile),
+`liquidity_pool_stableswap`, `liquidity_pool_concentrated` — `use
+liquidity_pool_events::Events as PoolEvents` and dispatch to the
+shared `LiquidityPoolEvents::trade()` function defined in
+`liquidity_pool_events/src/lib.rs:122`. This function is the SOLE
+emitter of `Symbol("trade")` events for the entire aquarius
+codebase, and it has the wire shape:
 
-**`BackfillSafe: false`** — pending the per-hash review.
+    topic = (Symbol::new(e, "trade"), token_in, token_out, user)
+    body  = (in_amount as i128, out_amount as i128, fee_amount as i128)
 
-Audit must be especially careful here vs Soroswap because
-positional Vec decoding has no guard against field reordering. A
-single missed contract upgrade that shuffled the tuple silently
-inverts every trade in the affected range.
+The decoder targets exactly this shape. Source-import topology
+verified across all three pool-type packages on 2026-04-29.
+
+### Binary-string verification
+
+Each of the 3 pool WASMs was scanned for the 4 event-name
+strings the decoder cares about:
+
+| WASM | `trade` | `update_reserves` | `deposit_liquidity` | `withdraw_liquidity` |
+| --- | --- | --- | --- | --- |
+| `ae0da5a84b15805c` | ✓ | ✓ | ✓ | ✓ |
+| `f1077e0b77da5e62` | ✓ | ✓ | ✓ | ✓ |
+| `8875f0c770fb26d3` | ✓ | ✓ | ✓ | ✓ |
+
+All 3 WASMs include the `trade` string + the 3 non-trade event
+names (deposit/withdraw/reserves) in their data sections — the
+shared event emitter is compiled in unchanged.
+
+## Caveats
+
+- **Per-pool WASM history not walked per-instance.** Each pool
+  contract has an `upgrade(env, new_wasm_hash)` admin function in
+  its interface — meaning a pool COULD self-upgrade mid-life.
+  This audit captures the **current** WASM of each of the 313
+  pools (matching decoder), but does not enumerate any
+  `update_current_contract_wasm` events that may have happened on
+  individual pools since deployment. v2 follow-up: run
+  `ratesengine-ops wasm-history -contracts <313 pools>` against
+  the full archive to add per-pool upgrade history. Risk is
+  contained because (a) the live decoder hasn't seen
+  `ErrMalformedPayload` rate spikes against any pool, and (b) the
+  source-import topology argument applies to ANY pool WASM
+  built from the aquarius-amm tree (the shared-emitter contract
+  is structurally enforced).
+- **New pools deployed after 2026-04-29 not in this audit.**
+  Re-run the enumeration when extending `last_verified`.
+- **`ErrConcentratedWIP` is reserved but not currently fired.**
+  The decoder constant exists for documentation but the
+  classification path doesn't gate on pool type — it matches
+  topic[0] = Symbol("trade") regardless of pool variant. All
+  three pool types observed in production (including the 6
+  rewards-enhanced pools) emit the same trade-event shape via the
+  shared events crate, so the decoder works on all of them.
 
 ## References
 

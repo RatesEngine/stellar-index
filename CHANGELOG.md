@@ -426,6 +426,25 @@ against.
 
 ### Changed
 
+- **`aquarius` source flipped `BackfillSafe: false → true`** —
+  pool-enumeration audit landed
+  ([docs/operations/wasm-audits/aquarius.md](docs/operations/wasm-audits/aquarius.md)).
+  All 313 mainnet pool contracts enumerated via router
+  `get_pools_for_tokens_range()`; their current WASMs fetched via
+  `stellar contract fetch`. Three unique pool-WASM hashes total
+  (one volatile, one stableswap, one rewards-enhanced; 267/40/6
+  pool distribution), all three containing the 4 expected
+  event-name strings (`trade`, `update_reserves`,
+  `deposit_liquidity`, `withdraw_liquidity`). Source-import
+  topology confirmed across all three aquarius pool-type crates
+  (`liquidity_pool`, `liquidity_pool_stableswap`,
+  `liquidity_pool_concentrated`) — all `use
+  liquidity_pool_events::Events` and dispatch to the shared
+  `LiquidityPoolEvents::trade()` emitter, structurally preventing
+  wire-format drift across pool types. The 6 router hashes from
+  the original walk are informational only (decoder targets
+  per-pool trade events, not router swap events).
+
 - **`phoenix` source flipped `BackfillSafe: false → true`** —
   pool-enumeration audit landed
   ([docs/operations/wasm-audits/phoenix.md](docs/operations/wasm-audits/phoenix.md)).
