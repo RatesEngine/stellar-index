@@ -15,6 +15,20 @@ against.
 
 ## [Unreleased]
 
+### Fixed
+
+- **`deploy/monitoring/README.md` lists every rule file (#332)**:
+  the layout list named 9 rule files but the directory holds 17.
+  Eight rule files (`anomaly.yml`, `archive-completeness.yml`,
+  `sla-probe.yml`, `slo.yml`, `supply-refresh.yml`,
+  `supply-snapshot.yml`, `supply.yml`, `verify-archive.yml`) had
+  shipped without README updates, so a contributor scanning the
+  README would believe half the alert catalog didn't exist. The
+  `component` label list (used for dashboard grouping) was
+  similarly missing four values (`aggregator`, `archive`,
+  `divergence`, `supply`) that alert rules already use today.
+  Pure documentation change; alert rules untouched.
+
 ### Added
 
 - **`docs/architecture/supply-pipeline.md` (#318)**: architecture-
