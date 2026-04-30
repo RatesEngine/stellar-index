@@ -17,6 +17,24 @@ against.
 
 ### Added
 
+- **SEP-41 aggregator wiring — closes Task #56 (#312)**:
+  extends `buildSupplyRefreshers` in
+  `cmd/ratesengine-aggregator/main.go` with a third per-asset
+  loop alongside XLM (Algorithm 1) + classic
+  (Algorithm 2): one `supply.Refresher` goroutine per entry in
+  `[supply] watched_sep41_contracts` (Algorithm 3). New
+  `supplyAggregatorSEP41Store` adapter projects
+  `timescale.SEP41KindTotals` ↔ `supply.SEP41KindTotals` (the
+  duplication is necessary to avoid a cyclic import — timescale
+  already imports supply for `InsertSupply`). Closes Task #56
+  across PRs #309 → #310 → #311 → #312, completing
+  ADR-0011's three-domain supply coverage end-to-end. The
+  per-tick outcome counter
+  (`ratesengine_aggregator_supply_refresh_total{outcome}`) now
+  labels for all three algorithms identically. Updated
+  `docs/operations/supply-snapshot.md` to reflect shipped
+  status across the three asset classes.
+
 - **`StorageSEP41SupplyReader` + `watched_sep41_contracts` config
   (#311 — Task #56 PR 3/4)**: composes the per-kind running sums
   (`Store.SEP41KindTotalsAtOrBefore`, new in this PR — single
