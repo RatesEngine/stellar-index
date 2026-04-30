@@ -133,6 +133,11 @@ func main() { //nolint:gocyclo,gocognit,funlen // subcommand switch; each case i
 			fmt.Fprintf(os.Stderr, "wasm-history: %v\n", err)
 			os.Exit(1)
 		}
+	case "extract-wasm-from-galexie":
+		if err := extractWasmFromGalexie(args[1:]); err != nil {
+			fmt.Fprintf(os.Stderr, "extract-wasm-from-galexie: %v\n", err)
+			os.Exit(1)
+		}
 	case "cross-region-check":
 		if err := crossRegionCheck(args[1:]); err != nil {
 			fmt.Fprintf(os.Stderr, "cross-region-check: %v\n", err)
@@ -348,6 +353,22 @@ Subcommands:
                               -from 21000000 -to 25000000 \
                               -contracts CDLZ...,CARFAC... \
                               > soroswap-wasm-history.json
+  extract-wasm-from-galexie -config PATH -hashes HEX,HEX,... -output-dir DIR [-from N] [-to N] [-parallel N] [-bucket NAME]
+                          Extract raw WASM bytes for one or more contract-
+                          code hashes by walking the local galexie LCM
+                          archive. Writes <hash>.wasm files into
+                          -output-dir. Companion to wasm-history: walk the
+                          history first to enumerate hashes, then run this
+                          to pull bytes for the (likely-evicted from current
+                          ledger state) older versions. r1's full archive is
+                          the truer source than RPC getLedgerEntry —
+                          works offline, doesn't depend on TTL retention.
+                          Example:
+                            ratesengine-ops extract-wasm-from-galexie \
+                              -config /etc/ratesengine.toml \
+                              -from 50457424 -to 62296694 -parallel 8 \
+                              -hashes 4a64c8c8...,b400f7a8... \
+                              -output-dir /var/wasm-audit
   backfill-external -config PATH -source SRC -pair SYM -from TS -to TS -granularity D
                           Pull historical candles from an external venue
                           (binance / kraken / bitstamp / coinbase) and
