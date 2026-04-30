@@ -60,6 +60,7 @@ func supplySnapshot(args []string) error {
 	assetRaw := fs.String("asset", "native", "Asset to snapshot (native only at v1)")
 	ledgerArg := fs.Int("ledger", 0, "Ledger sequence to attribute to (default: latest from ingestion_cursors)")
 	dryRun := fs.Bool("dry-run", false, "Compute + print without writing to asset_supply_history")
+	textfileOut := fs.String("textfile-output", "", "Path to write Prometheus textfile (node_exporter textfile_collector format). Empty = no metrics emit.")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -81,29 +82,30 @@ func supplySnapshot(args []string) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
+	startedAt := time.Now()
 	store, err := timescale.Open(ctx, cfg.Storage.PostgresDSN)
 	if err != nil {
-		return fmt.Errorf("storage: %w", err)
+		return supplySnapshotMaybeEmitFailure(*textfileOut, *assetRaw, startedAt, err)
 	}
 	defer func() { _ = store.Close() }()
 
 	ledger, observedAt, err := resolveSnapshotLedger(ctx, store, uint32(*ledgerArg))
 	if err != nil {
-		return err
+		return supplySnapshotMaybeEmitFailure(*textfileOut, *assetRaw, startedAt, err)
 	}
 
 	reader, err := supply.NewConfigReserveBalanceReader(cfg.Supply.ReserveBalancesStroops)
 	if err != nil {
-		return fmt.Errorf("reserve reader: %w", err)
+		return supplySnapshotMaybeEmitFailure(*textfileOut, *assetRaw, startedAt, fmt.Errorf("reserve reader: %w", err))
 	}
 	computer, err := supply.NewXLMComputer(cfg.Supply.SDFReserveAccounts, reader)
 	if err != nil {
-		return fmt.Errorf("xlm computer: %w", err)
+		return supplySnapshotMaybeEmitFailure(*textfileOut, *assetRaw, startedAt, fmt.Errorf("xlm computer: %w", err))
 	}
 
 	snap, err := computer.Compute(ctx, ledger, observedAt)
 	if err != nil {
-		return fmt.Errorf("compute: %w", err)
+		return supplySnapshotMaybeEmitFailure(*textfileOut, *assetRaw, startedAt, fmt.Errorf("compute: %w", err))
 	}
 
 	printSupplySnapshot("SNAPSHOT", "native", snap.AssetKey, snap)
@@ -112,11 +114,29 @@ func supplySnapshot(args []string) error {
 		return nil
 	}
 	if err := store.InsertSupply(ctx, snap); err != nil {
-		return fmt.Errorf("InsertSupply: %w", err)
+		return supplySnapshotMaybeEmitFailure(*textfileOut, *assetRaw, startedAt, fmt.Errorf("InsertSupply: %w", err))
 	}
 	fmt.Printf("Wrote snapshot for asset_key=%s ledger=%d basis=%s\n",
 		snap.AssetKey, snap.LedgerSequence, snap.Basis)
+
+	if *textfileOut != "" {
+		if err := supply.WriteSnapshotTextfile(*textfileOut, snap, time.Since(startedAt).Seconds(), true); err != nil {
+			return fmt.Errorf("write textfile: %w", err)
+		}
+	}
 	return nil
+}
+
+// supplySnapshotMaybeEmitFailure writes a fail-marker textfile (so
+// the staleness alert keys on time-since-last-pass) and returns
+// the original error. Empty textfileOut skips the emit but still
+// returns the error.
+func supplySnapshotMaybeEmitFailure(textfileOut, assetRaw string, startedAt time.Time, cause error) error {
+	if textfileOut != "" {
+		// Best-effort fail emit — don't mask the original cause.
+		_ = supply.WriteSnapshotFailureTextfile(textfileOut, assetRaw, time.Since(startedAt).Seconds())
+	}
+	return cause
 }
 
 // resolveSnapshotLedger picks the ledger to attribute the snapshot

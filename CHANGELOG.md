@@ -17,6 +17,22 @@ against.
 
 ### Added
 
+- **Supply-snapshot textfile-collector + four alerts + three
+  runbooks (#295)**: closes the operator-visibility gap on the
+  daily supply-snapshot writer (#288). Mirrors the SLA-probe
+  pattern from #293/#294. New `internal/supply/textfile.go` emits
+  per-asset gauges (`total_xlm`, `circulating_xlm`, `max_xlm`,
+  `ledger`, `observed_at_seconds`) plus a `unit_failed` /
+  `last_success_timestamp` pair the alerts key on. Failure path
+  emits a fail-marker textfile (no `last_success_timestamp`) so the
+  staleness alert keys on the previous-scrape value. Alerts:
+  `_unit_failed_alert` (P3 ticket), `_stale` (P3 at 36 h) /
+  `_critical_stale` (P2 page at 72 h), and
+  `_circulating_zero` (P2 page — ADR-0011 invariant violation
+  signal). Three new runbooks. Operator-toggled via
+  `TEXTFILE_OUTPUT` env-var; empty default behaves exactly like
+  #288.
+
 - **SLA-probe alert rules + four runbooks (#294)**: closes the
   alert-rules-tracked-as-follow-up note in #293. Ships
   `deploy/monitoring/rules/sla-probe.yml` with four rules —

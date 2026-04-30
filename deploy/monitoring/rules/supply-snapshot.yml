@@ -1,0 +1,114 @@
+---
+# Supply-snapshot writer alerts. Pair with cmd/ratesengine-ops
+# `supply snapshot` + the daily systemd timer in
+# deploy/systemd/supply-snapshot.timer.
+#
+# Scrape source: node_exporter's textfile_collector reads
+# `/var/lib/node_exporter/textfile_collector/supply_snapshot.prom`,
+# which the writer renders via -textfile-output. Metric names +
+# labels defined in internal/supply/textfile.go.
+#
+# Alert family:
+#
+#   - `ratesengine_supply_snapshot_unit_failed_alert` — the writer's
+#     most recent run set the unit_failed gauge to 1. Page after 30
+#     min so an early-morning timer firing doesn't ping immediately;
+#     a daily cadence with one failure is recoverable, but two days
+#     in a row is operator-action-required.
+#
+#   - `ratesengine_supply_snapshot_stale` — last_success_timestamp
+#     older than 36 h (24 h cadence + 12 h cushion). Either the
+#     timer isn't running, or every recent run has failed. Ticket at
+#     36 h, page at 72 h.
+#
+#   - `ratesengine_supply_snapshot_circulating_zero` — circulating
+#     supply gauge dropped to 0 (or near-zero). For native XLM this
+#     would mean every reserve account holds the entire frozen
+#     total — a data-corruption or operator-config-error signal.
+#     Per ADR-0011 we don't fabricate, so this should never fire on
+#     a healthy system.
+
+groups:
+  - name: ratesengine.supply_snapshot
+    interval: 60s
+    rules:
+
+      - alert: ratesengine_supply_snapshot_unit_failed_alert
+        expr: ratesengine_supply_snapshot_unit_failed > 0
+        for: 30m
+        labels:
+          severity: ticket
+          team: ratesengine
+          component: supply
+          runbook_url: https://github.com/RatesEngine/rates-engine/blob/main/docs/operations/runbooks/supply-snapshot-unit-failed.md
+        annotations:
+          summary: "supply snapshot writer for {{ $labels.asset_key }} most recent run failed"
+          description: |
+            The supply-snapshot writer's most recent run for
+            {{ $labels.asset_key }} exited non-zero. /v1/assets/{id}'s
+            F2 fields (total / circulating / max / market_cap_usd /
+            fdv_usd) keep serving the previous good value, so customer
+            impact is bounded — but the value goes increasingly stale
+            until the writer recovers. Runbook: check
+            /etc/default/supply-snapshot config first; fall through to
+            general-purpose Postgres + reserve-balances diagnostics.
+
+      - alert: ratesengine_supply_snapshot_stale
+        expr: |
+          (time() - ratesengine_supply_snapshot_last_success_timestamp) > (36 * 3600)
+        for: 5m
+        labels:
+          severity: ticket
+          team: ratesengine
+          component: supply
+          runbook_url: https://github.com/RatesEngine/rates-engine/blob/main/docs/operations/runbooks/supply-snapshot-stale.md
+        annotations:
+          summary: "supply snapshot for {{ $labels.asset_key }} has been stale {{ $value | humanizeDuration }} (cadence 24h, threshold 36h)"
+          description: |
+            Either the daily systemd timer isn't running, or every
+            run since the last clean one has failed. /v1/assets/{id}'s
+            F2 fields are increasingly stale; consumers gating on
+            observed_at age may surface that staleness. Runbook:
+            check timer status first; route to unit_failed runbook if
+            every recent run is genuinely failing.
+
+      - alert: ratesengine_supply_snapshot_critical_stale
+        expr: |
+          (time() - ratesengine_supply_snapshot_last_success_timestamp) > (72 * 3600)
+        for: 5m
+        labels:
+          severity: page
+          team: ratesengine
+          component: supply
+          runbook_url: https://github.com/RatesEngine/rates-engine/blob/main/docs/operations/runbooks/supply-snapshot-stale.md
+        annotations:
+          summary: "supply snapshot for {{ $labels.asset_key }} stale > 72h — escalate"
+          description: |
+            Three days without a successful supply snapshot is enough
+            that the F2 fields on /v1/assets/{id} are visibly old to
+            customers. Escalate per the SEV-3 playbook.
+
+      # Sanity floor — circulating > 0 always for native XLM. If
+      # circulating drops to zero, either the reserve_balances_stroops
+      # config is broken (claiming every reserve holds the total
+      # supply), or the algorithm is producing nonsense. Either way,
+      # immediate operator review.
+      - alert: ratesengine_supply_snapshot_circulating_zero
+        expr: |
+          ratesengine_supply_snapshot_circulating_xlm{asset_key="XLM"} <= 0
+        for: 5m
+        labels:
+          severity: page
+          team: ratesengine
+          component: supply
+          runbook_url: https://github.com/RatesEngine/rates-engine/blob/main/docs/operations/runbooks/supply-snapshot-circulating-zero.md
+        annotations:
+          summary: "XLM circulating supply gauge is {{ $value }} — operator config or computer bug"
+          description: |
+            Per ADR-0011 native XLM circulating = total - Σ(SDF reserves).
+            A zero or negative value means either the operator-managed
+            reserve_balances_stroops sum exceeds the frozen total
+            (config error), or the XLMComputer math is broken (bug).
+            Runbook: dry-run the writer with the live config; check
+            the operator-supplied balances against SDF's latest
+            announcement.

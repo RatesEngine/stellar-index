@@ -15,6 +15,12 @@
 #   CONFIG_PATH    Default /etc/ratesengine.toml
 #   ASSET          Default native (only XLM is supported at v1; the
 #                  classic + SEP-41 computers ship in follow-ups).
+#   TEXTFILE_OUTPUT  Path under node_exporter's textfile_collector
+#                    dir. Empty = no metrics emit (the default —
+#                    operators opt in once they've installed
+#                    node_exporter).
+#                    Example:
+#                      /var/lib/node_exporter/textfile_collector/supply_snapshot.prom
 #   EXTRA_FLAGS    Optional flags appended to the command line.
 #                  E.g. EXTRA_FLAGS="-ledger 50000000" pins the
 #                  snapshot to a specific ledger; default attribution
@@ -40,11 +46,13 @@ EnvironmentFile=-/etc/default/supply-snapshot
 # Sensible defaults. Operators override via /etc/default/supply-snapshot.
 Environment=CONFIG_PATH=/etc/ratesengine.toml
 Environment=ASSET=native
+Environment=TEXTFILE_OUTPUT=
 Environment=EXTRA_FLAGS=
 
 ExecStart=/bin/sh -c '/usr/local/bin/ratesengine-ops supply snapshot \
   -config ${CONFIG_PATH} \
   -asset ${ASSET} \
+  $(if [ -n "${TEXTFILE_OUTPUT}" ]; then echo "-textfile-output ${TEXTFILE_OUTPUT}"; fi) \
   ${EXTRA_FLAGS}'
 
 # Runs as the application user — the writer only needs read on the
@@ -53,14 +61,18 @@ ExecStart=/bin/sh -c '/usr/local/bin/ratesengine-ops supply snapshot \
 User=ratesengine
 Group=ratesengine
 
-# Hardening — config is read-only, no filesystem writes needed
-# beyond Postgres-driven I/O which goes over the socket / network.
+# Hardening — config is read-only; textfile_collector dir is the
+# only writable path. Operators that change TEXTFILE_OUTPUT to a
+# non-default location must update ReadWritePaths to match —
+# otherwise the atomic-write rename fails under
+# ProtectSystem=strict.
 ProtectSystem=strict
 PrivateTmp=true
 NoNewPrivileges=true
 ProtectKernelTunables=true
 ProtectKernelModules=true
 ProtectControlGroups=true
+ReadWritePaths=/var/lib/node_exporter/textfile_collector
 
 # A snapshot run is fast: one ListCursors + one Compute + one
 # InsertSupply. Worst case is a slow Postgres — cap at 5 minutes
