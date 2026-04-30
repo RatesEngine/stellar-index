@@ -1,0 +1,89 @@
+---
+# Supply-refresh alerts. Pair with the aggregator-resident supply
+# refresher in cmd/ratesengine-aggregator (Task #57 + #66 + #70).
+#
+# Scrape source: the aggregator's Prometheus /metrics endpoint
+# emits ratesengine_aggregator_supply_refresh_total{outcome=…},
+# defined in internal/obs/metrics.go and incremented by
+# runSupplyRefresh on every tick.
+#
+# Distinct from the systemd-timer-path alerts in
+# deploy/monitoring/rules/supply-snapshot.yml — those consume the
+# textfile metrics emitted by internal/supply/textfile.go and only
+# fire when operators run the timer-driven path. These alerts fire
+# on the goroutine path operators use when
+# `[supply] aggregator_refresh_enabled = true`.
+#
+# Alert family:
+#
+#   - `ratesengine_aggregator_supply_refresh_stalled` — the
+#     refresher hasn't recorded a successful tick in ≥ 30 min.
+#     With the default 5-min cadence that's 6 missed ticks.
+#     Either the goroutine is wedged (aggregator deadlock) or
+#     every recent tick has failed.
+#
+#   - `ratesengine_aggregator_supply_refresh_error_dominant` —
+#     for ≥ 30 min, the rate of error outcomes (no_ledger /
+#     no_observation / compute_error / write_error) exceeds the
+#     rate of `ok` outcomes. Indicates the refresher is running
+#     but consistently producing wrong results — operator config
+#     drift, observer not backfilled, or storage layer broken.
+
+groups:
+  - name: ratesengine.supply_refresh
+    interval: 60s
+    rules:
+
+      - alert: ratesengine_aggregator_supply_refresh_stalled
+        expr: |
+          (
+            time()
+            - max(timestamp(ratesengine_aggregator_supply_refresh_total{outcome="ok"}))
+          ) > (30 * 60)
+        for: 5m
+        labels:
+          severity: page
+          team: ratesengine
+          component: supply
+          runbook_url: https://github.com/RatesEngine/rates-engine/blob/main/docs/operations/runbooks/supply-refresh-stalled.md
+        annotations:
+          summary: "supply refresher hasn't recorded a successful tick in {{ $value | humanizeDuration }} (cadence 5m, threshold 30m)"
+          description: |
+            The aggregator-resident supply refresher emits
+            ratesengine_aggregator_supply_refresh_total{outcome="ok"}
+            on every successful per-asset tick. No `ok` increments
+            in 30+ minutes means either the goroutine is wedged
+            (aggregator deadlock), the orchestrator hasn't started,
+            or every recent tick across every watched asset has
+            failed. /v1/assets/{id}'s F2 fields go increasingly
+            stale. Runbook: check aggregator process health first;
+            inspect logs for recurring outcome labels; route to the
+            error_dominant runbook if every tick is genuinely
+            failing.
+
+      - alert: ratesengine_aggregator_supply_refresh_error_dominant
+        expr: |
+          (
+            sum(rate(ratesengine_aggregator_supply_refresh_total{outcome!="ok"}[5m]))
+            /
+            (sum(rate(ratesengine_aggregator_supply_refresh_total[5m])) > 0)
+          ) > 0.5
+        for: 30m
+        labels:
+          severity: ticket
+          team: ratesengine
+          component: supply
+          runbook_url: https://github.com/RatesEngine/rates-engine/blob/main/docs/operations/runbooks/supply-refresh-error-dominant.md
+        annotations:
+          summary: "supply refresher: > 50% of ticks have non-ok outcomes for ≥ 30m"
+          description: |
+            More than half of the supply refresher's ticks are
+            failing — outcome ∈ {no_ledger, no_observation,
+            compute_error, write_error}. Steady-state should be
+            mostly `ok`; sustained error dominance indicates
+            operator config drift (watched_classic_assets parse
+            errors, sac_wrappers map missing entries) OR the
+            observer hasn't backfilled to a deep enough range OR
+            the storage layer is rejecting writes. Runbook:
+            split-by outcome label, inspect the dominant kind,
+            route to the corresponding root cause.

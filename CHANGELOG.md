@@ -17,6 +17,21 @@ against.
 
 ### Added
 
+- **Aggregator supply-refresh alert rules + two runbooks
+  (#313)**: closes the operator-visibility gap on the goroutine
+  path of the supply refresher (#301 / #307 / #312). Pairs with
+  the systemd-timer-path alerts in #295. Two rules in
+  `deploy/monitoring/rules/supply-refresh.yml`:
+  `_stalled` (P2 page when no `outcome="ok"` increments in
+  30 min — wedged goroutine or every-tick-failing) and
+  `_error_dominant` (P3 ticket when > 50% of ticks have
+  non-ok outcomes for 30 min — split-by-outcome runbook
+  identifies the root cause). Two new runbooks under
+  `docs/operations/runbooks/` cross-link to the systemd-timer
+  equivalents (`supply-snapshot-stale.md`,
+  `supply-snapshot-unit-failed.md`) so operators on either
+  deployment path land on the right diagnostic flow.
+
 - **SEP-41 aggregator wiring — closes Task #56 (#312)**:
   extends `buildSupplyRefreshers` in
   `cmd/ratesengine-aggregator/main.go` with a third per-asset
