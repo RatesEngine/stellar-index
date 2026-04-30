@@ -17,6 +17,21 @@ against.
 
 ### Added
 
+- **Classic-supply storage integration tests (#317)**: companion
+  to #316 covering the four classic-supply hypertables shipped in
+  #303 (`trustline_observations`, `claimable_observations`,
+  `lp_reserve_observations`, `sac_balance_observations`). Each
+  Sum*AtOrBefore method uses the same `DISTINCT ON (...) ORDER BY
+  ledger DESC` + `WHERE NOT is_removal` pattern; a SQL regression
+  in the DISTINCT ON ordering or the is_removal filter silently
+  mis-reports Algorithm 2 components. Four sub-tests walk a
+  realistic per-component lifecycle (insert → upsert →
+  later-ledger advance → removal) and verify (1) at-or-before
+  ledger filter, (2) last-writer-wins semantics, (3) removed-row
+  exclusion from sums, (4) `asset_key` WHERE-filter isolation
+  across watched assets, (5) per-account / per-contract latest-
+  balance lookups for `LockedSet` / issuer-balance use cases.
+
 - **SEP-41 supply storage integration tests (#316)**: covers the
   `Insert → SEP41NetMintAtOrBefore → SEP41KindTotalsAtOrBefore`
   paths through real TimescaleDB via testcontainers-go. The
