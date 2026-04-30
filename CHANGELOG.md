@@ -17,6 +17,17 @@ against.
 
 ### Added
 
+- **CI promtool validation (#319)**: `make monitoring-check`
+  (Prometheus rule-file validation via `promtool check rules`)
+  is now wired into both `bash scripts/dev/verify.sh` (graceful-
+  skip when promtool isn't installed locally) and a dedicated
+  `monitoring-rules` job in `.github/workflows/ci.yml` (installs
+  promtool from the Prometheus GH release). The alert rules
+  shipped in #294 / #295 / #313 had been validated by visual
+  review only — broken PromQL or undefined recording-rule
+  references would have surfaced at Prometheus reload time on
+  a production node. Closes the gap.
+
 - **`docs/architecture/supply-pipeline.md` (#318)**: architecture-
   level overview tying together the three-algorithm supply
   derivation, the six observers, the chained-fallback reader
