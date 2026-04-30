@@ -1,11 +1,27 @@
 ---
 title: Runbook — archive-divergence
-last_verified: 2026-04-23
+last_verified: 2026-04-30
 status: draft
 severity: P1
 ---
 
 # Runbook — `ratesengine_stellar_archive_divergence`
+
+> **Deployment posture (2026-04-30).** r1's `/srv/history-archive/`
+> is a static mirror filled by a one-shot `stellar-archivist mirror`
+> (completed) — there is no running publisher today
+> ([r1-deployment-state.md](../r1-deployment-state.md)). The alert
+> consumes `ratesengine_archive_divergence_total` written by
+> `scripts/ops/archive-cross-check.sh`, which compares our mirror to
+> reference archives on a schedule; the alert is **live** and can
+> fire on r1 today. But because we are *not* publishing, root causes
+> #2 (core-binary bug producing a different bucket) and the
+> "stop advertising" mitigation step do not apply on the current
+> posture — they are retained for Phase-3 (Tier-1 validator rollout
+> per ADR-0004) when stellar-core resumes producing checkpoints.
+> On r1 today, divergence almost always means **bit rot in the
+> static mirror** (root cause #1) or — much rarer — a reference
+> archive itself changed.
 
 ## At a glance
 
@@ -125,3 +141,8 @@ always real. But:
 - 2026-04-23 — initial draft. Urgency justified: this is a
   correctness guarantee we've explicitly committed to in ADR-0004
   + the CTX proposal.
+- 2026-04-30 — top-of-file deployment-posture callout. r1 doesn't
+  publish today (stellar-core removed 2026-04-23); the alert
+  remains live via the cross-check script, but root causes /
+  mitigation steps tied to a publishing core don't apply on the
+  current posture. Retained for Phase-3 validator rollout.

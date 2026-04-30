@@ -15,6 +15,21 @@ against.
 
 ## [Unreleased]
 
+### Fixed
+
+- **`archive-divergence` runbook deployment-posture callout
+  (#329)**: the runbook treated us as an active archive publisher
+  ("stop advertising the affected checkpoints", "core-binary bug
+  producing a different bucket") — but r1's
+  `/srv/history-archive/` is a one-shot stellar-archivist mirror
+  with no running publisher since 2026-04-23. The alert itself
+  remains live (consumes the cross-check script's metric, not a
+  publish-side metric), but several root causes / mitigation
+  steps don't apply on r1's posture. Top-of-file callout now
+  scopes the runbook to "what r1 can actually do today" with
+  Phase-3 framing for the publishing path. Pure documentation
+  change.
+
 ### Added
 
 - **`docs/architecture/supply-pipeline.md` (#318)**: architecture-
