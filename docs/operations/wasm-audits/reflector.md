@@ -1,9 +1,9 @@
 ---
 title: Reflector WASM-history audit
-last_verified: 2026-04-27
-status: pending — scaffolding only; per-hash review in follow-up PR
+last_verified: 2026-04-29
+status: partial — fx ratified; dex + cex pending v2-era WASM review
 sources: reflector-dex, reflector-cex, reflector-fx
-backfill_safe: false
+backfill_safe: fx=true; dex=false; cex=false
 ---
 
 # Reflector WASM audit
@@ -11,51 +11,49 @@ backfill_safe: false
 Audit log for the three Reflector source variants —
 `reflector-dex`, `reflector-cex`, `reflector-fx`. All three share
 **one decoder** and **one event shape**; they differ only in which
-on-chain contract emits the events. We audit them as a single unit.
+on-chain contract emits the events. We audit them as a single unit
+for the wire format but make per-variant `BackfillSafe` decisions
+because each contract has its own deploy history.
 
 See `README.md` for the full procedure.
 
 ## Status
 
-**Scaffolded 2026-04-27.** This document records the contracts to
-audit, the decoder's current expectations, and the failure-mode
-checklist. The actual `wasm-history` walk + per-hash review lands
-in a follow-up PR — best run on r1 once verify-archive completes.
-
-`BackfillSafe` stays `false` for all three Reflector sources until
-that follow-up finishes.
+**Partial 2026-04-29.** Two unique WASM hashes observed across the
+three contracts; FX has only ever run the current production hash
+and flips to `BackfillSafe: true` in this PR. DEX and CEX both
+upgraded from an earlier v2-era hash to the current production hash
+in late April 2024; flipping them to `true` requires verifying the
+v2-era event shape against the current decoder, which needs the
+v2 WASM bytes (out of scope for this PR — see "Caveats").
 
 ## Contracts under audit
 
 Per CLAUDE.md "Reflector is three separate contracts (DEX / CEX /
 FX), not one." Each variant maps to a distinct mainnet contract:
 
-| variant | source name | mainnet contract (operator config) |
+| variant | source name | mainnet contract |
 | --- | --- | --- |
-| DEX | `reflector-dex` | `cfg.Oracle.Reflector.DEXContract` |
-| CEX | `reflector-cex` | `cfg.Oracle.Reflector.CEXContract` |
-| FX  | `reflector-fx`  | `cfg.Oracle.Reflector.FXContract` |
+| DEX | `reflector-dex` | `CALI2BYU2JE6WVRUFYTS6MSBNEHGJ35P4AVCZYF3B6QOE3QKOB2PLE6M` |
+| CEX | `reflector-cex` | `CAFJZQWSED6YAWZU3GWRTOCNPPCGBN32L7QV43XX5LZLFTK6JLN34DLN` |
+| FX  | `reflector-fx`  | `CBKGPWGKSKZF52CFHMTRR23TBWTPMRDIYZ4O2P5VS65BMHYH4DXMCJZC` |
 
-Concrete addresses live in the operator's TOML config (and Phase-1
-discovery doc); they're not hard-coded in the decoder so the same
-WASM-history audit can run against testnet or mainnet given a
-contract-ID list.
-
-For the actual audit: enumerate the three current mainnet contracts
-from the operator's `ratesengine.toml` and run `wasm-history`
-against all three.
+Three legacy / placeholder contract IDs from `docs/discovery/oracles/reflector.md`
+(`CAVLP5DH…`, `CCYOZJCO…`, `CCSSOHTB…`) were also walked and
+produced **NO_EVENTS** — they are inactive on mainnet and not in
+the live decoder's contract list.
 
 ## Decoder expectations
 
 Captured from `internal/sources/reflector/{events,decode}.go` at
-HEAD as of 2026-04-27. Re-verified 2026-04-23 against the upstream
+HEAD as of 2026-04-29. Re-verified 2026-04-23 against the upstream
 `#[contractevent]` macro expansion.
 
 ### Topic structure
 
     topic[0] = ScvSymbol("REFLECTOR")
     topic[1] = ScvSymbol("update")
-    topic[2] = ScvU64(timestamp)        // unix seconds
+    topic[2] = ScvU64(timestamp)        // unix milliseconds
     body     = ScvVec<(ScVal, ScI128)>  // per-entry tuple
 
 The 3-element topic shape is unusual — `timestamp` is hoisted out
@@ -132,36 +130,145 @@ classifications.
 
 ## WASM timeline
 
-(*to be filled in by the follow-up PR after `wasm-history` runs*)
+Output from `ratesengine-ops wasm-history` over the post-Soroban
+window — full archive on r1, walked 2026-04-29:
 
-Three contracts to scan — DEX/CEX/FX. Audit each timeline
-independently; same decoder reviews against each variant's
-emitted events.
+```json
+[
+  {
+    "contract": "CALI2BYU...",
+    "ranges": [
+      { "wasm_hash": "4a64c8c8502df326f4ce06d98998dc7d8a61575a11d6c0fbd4c60d10dfe28ffa",
+        "from_ledger": 50644229, "to_ledger": 51656691 },
+      { "wasm_hash": "df88820e231ad8f3027871e5dd3cf45491d7b7735e785731466bfc2946008608",
+        "from_ledger": 51656692, "to_ledger": 59301651 }
+    ]
+  },
+  {
+    "contract": "CAFJZQWS...",
+    "ranges": [
+      { "wasm_hash": "4a64c8c8502df326f4ce06d98998dc7d8a61575a11d6c0fbd4c60d10dfe28ffa",
+        "from_ledger": 50644239, "to_ledger": 51656688 },
+      { "wasm_hash": "df88820e231ad8f3027871e5dd3cf45491d7b7735e785731466bfc2946008608",
+        "from_ledger": 51656689, "to_ledger": 59301651 }
+    ]
+  },
+  {
+    "contract": "CBKGPWGK...",
+    "ranges": [
+      { "wasm_hash": "df88820e231ad8f3027871e5dd3cf45491d7b7735e785731466bfc2946008608",
+        "from_ledger": 56733481, "to_ledger": 59301651 }
+    ]
+  }
+]
+```
+
+Two unique hashes total across all three contracts:
+
+- **`4a64c8c8…`** — DEX + CEX only. Active L50,644,229 →
+  L51,656,691 (~1.0M ledgers, roughly 2024-02-19 → 2024-04-26 in
+  wall time). Replaced at L51,656,689 (CEX) / L51,656,692 (DEX) —
+  the 3-second offset between contracts indicates a coordinated
+  upgrade pushed in the same operator session.
+- **`df88820e…`** — current production hash on **all three**
+  variants. DEX + CEX adopted at the v2→v3 upgrade (~2024-04-26);
+  FX deployed fresh on this hash at L56,733,481 (~2025-06) and
+  has never been on any other.
+
+The DEX+CEX upgrade timing aligns with Reflector's documented
+v2→v3 transition (per `docs/discovery/oracles/reflector.md`). The
+v3-era binary is what every fixture in `internal/sources/reflector/`
+was captured against.
+
+Live ingest from walk-end (L59,301,651) through r1's current tip
+(L62,342,614) confirms no further upgrade events for any of the
+three contracts: `df88820e` is still production.
 
 ## Per-hash review findings
 
-(*to be filled in by the follow-up PR*)
-
 | variant | hash (first 16) | active range | reviewer | finding |
 | --- | --- | --- | --- | --- |
-| DEX | (pending) | (pending) | (pending) | (pending) |
-| CEX | (pending) | (pending) | (pending) | (pending) |
-| FX  | (pending) | (pending) | (pending) | (pending) |
+| FX | `df88820e231ad8f3` | L56,733,481 → L59,301,651 (walk-end; current per live ingest) | ash@2026-04-29 | matches current decoder |
+| DEX (post-v3) | `df88820e231ad8f3` | L51,656,692 → L59,301,651 (walk-end) | ash@2026-04-29 | matches current decoder |
+| CEX (post-v3) | `df88820e231ad8f3` | L51,656,689 → L59,301,651 (walk-end) | ash@2026-04-29 | matches current decoder |
+| DEX (pre-v3) | `4a64c8c8502df326` | L50,644,229 → L51,656,691 | (pending) | NOT YET REVIEWED — see Caveats |
+| CEX (pre-v3) | `4a64c8c8502df326` | L50,644,239 → L51,656,688 | (pending) | NOT YET REVIEWED — see Caveats |
+
+### `df88820e231ad8f3` — current production, all three variants
+
+- Live decoder fixtures
+  (`internal/sources/reflector/decode_test.go`,
+  `real_fixture_test.go`) are captured from this WASM's emitted
+  events. Topic shape `("REFLECTOR", "update", <u64 ms>)` and body
+  `Vec<(asset, i128)>` match the by-vec-tuple extraction.
+- All three variants (DEX/CEX/FX) emit the SAME wire format from
+  this WASM (the decoder is variant-agnostic except for the
+  ScvAddress vs ScvSymbol asset slot, which is handled by
+  `ErrUnknownAssetIdentifier` skipping rather than by per-variant
+  classification).
+- 14-decimal price scale matches the constant in the decoder.
+- Live ingest health: 0 `ErrMalformedPayload` /
+  `ErrUnknownAssetIdentifier` rate spikes since FX support landed
+  (PR #161, 2026-03 cutover).
+- No `update_current_contract_wasm` events from
+  L51,656,689 (DEX+CEX) / L56,733,481 (FX) through walk-end +
+  ongoing live ingest = production hash is stable.
+
+### `4a64c8c8502df326` — DEX + CEX pre-v3 hash (NOT YET REVIEWED)
+
+This hash was active on DEX and CEX from L50,644,229 (DEX) /
+L50,644,239 (CEX) — i.e., from each contract's first deploy in
+February 2024 — through the v2→v3 upgrade at ~L51,656,690 in late
+April 2024. ~1M ledgers / ~9 weeks of mainnet history under each
+contract.
+
+Reflector's documented v2→v3 transition involved replacing the
+contract's internal price-storage layout and adding new view
+methods (per Reflector team comms in 2024). Whether the **emitted
+event shape** changed across the upgrade is the open question
+this audit can't answer without the v2 WASM bytes. The decoder's
+own historical-correction comment ("the previous decoder comment
+claimed body was Map{...} — that's WRONG") was discovered
+against post-v3 fixtures — we don't have evidence it applies to
+v2.
+
+## Caveats
+
+- **v2-era (`4a64c8c8…`) WASM bytes not disassembled inline.**
+  This audit's load-bearing safety claim is per-hash decoder
+  compatibility; without the v2 bytes we can't claim the v2 event
+  shape matches what the v3-tuned decoder expects. If a backfill
+  replays L50,644,229 → L51,656,691 with a v3 decoder against v2
+  events, two outcomes are possible:
+  1. The shape was already `Vec<(asset, i128)>` in v2 (likely; the
+     `#[contractevent]` macro is older than the v2 release per
+     upstream Soroban SDK history) → backfill succeeds.
+  2. The shape was different in v2 → decoder produces
+     `ErrMalformedPayload` per event, and the backfill emits zero
+     v2 trades. Not silently wrong, but silently incomplete.
+- **v2 disassembly is the unblocker for DEX/CEX**. The follow-up
+  needs to either: (a) use `stellar-core dump-wasm 4a64c8c8…` from
+  any node that has the v2 bytes cached in its bucket dir, (b) pull
+  via stellar-rpc `getLedgerEntry` against the WASM-storage key
+  for that hash, or (c) hash-compare against
+  `reflector-contract` git tags pre-2024-04-26 to find the matching
+  release.
 
 ## Decision
 
-**`BackfillSafe: false`** — for all three sources, pending the
-per-hash review.
+| source | BackfillSafe | rationale |
+| --- | --- | --- |
+| `reflector-fx` | **`true`** (flipped in this PR) | Single WASM hash since first deploy; matches current decoder; live ingest healthy. |
+| `reflector-dex` | `false` (unchanged) | Pending v2-era `4a64c8c8…` WASM disassembly. Production hash is verified, but the 1.0M-ledger pre-v3 window is not. |
+| `reflector-cex` | `false` (unchanged) | Same as DEX — pre-v3 window unverified. |
 
-The flip needs to verify all three variants independently. The
-shared-decoder property means a single source review covers the
-event shape, but each variant's contract has its own deployment
-history and could have evolved independently.
+A v2-disassembly follow-up PR will flip DEX + CEX once the v2
+event shape is verified against the current decoder.
 
-Per CLAUDE.md, **on-chain `twap` / `x_*` methods do not exist** in
-Reflector v3 — those are computed locally. This audit only covers
-the `update` event flow; if Reflector ever adds on-chain TWAP
-methods, that's an entirely new code path requiring its own audit.
+If the v2 shape diverges, that follow-up ships either: (a) a
+decoder that handles both shapes (gated by the contract's WASM
+hash at decode time), or (b) a contracted backfill cutoff that
+refuses replay of pre-v3 ranges for these sources.
 
 ## References
 
@@ -171,3 +278,5 @@ methods, that's an entirely new code path requiring its own audit.
 - Schema-evolution stance: `docs/architecture/contract-schema-evolution.md`
 - Backfill gate: `internal/sources/external/registry.go` —
   `Registry["reflector-{dex,cex,fx}"].BackfillSafe` (three entries)
+- Upstream contract source: `https://github.com/reflector-network/reflector-contract`
+- WASM-history walk JSON (full): `r1:/var/log/wasm-history-all.json`
