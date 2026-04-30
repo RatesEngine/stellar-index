@@ -1,6 +1,6 @@
 ---
 title: Runbook — insert-errors
-last_verified: 2026-04-23
+last_verified: 2026-04-30
 status: draft
 severity: P2
 ---
@@ -32,7 +32,7 @@ curl -s http://api:9464/metrics |
   grep ratesengine_source_insert_errors_total
 
 # Is it the storage layer itself?
-ratesengine-ops rpc-probe http://stellar-rpc:8000   # rules out upstream
+ratesengine-ops rpc-probe https://mainnet.sorobanrpc.com   # rules out upstream — r1 has no local stellar-rpc, point at a public endpoint
 kubectl exec -it timescale-0 -- psql -c "SELECT now(), pg_is_in_recovery();"
 
 # Actual failure reason is in the indexer's logs:
@@ -81,3 +81,5 @@ For the postmortem, gather:
 ## Changelog
 
 - 2026-04-23 — initial draft after the `SourceInsertErrorsTotal` alert landed.
+- 2026-04-30 — rpc-probe URL points at a public stellar-rpc; r1
+  doesn't run its own (removed 2026-04-23).

@@ -15,6 +15,23 @@ against.
 
 ## [Unreleased]
 
+### Fixed
+
+- **Ingestion runbooks point `rpc-probe` at an external endpoint
+  (#322)**: five runbooks (`all-ingestion-down`, `decode-errors`,
+  `insert-errors`, `oracle-stale`, `source-stopped`) instructed
+  on-call to run `ratesengine-ops rpc-probe http://stellar-rpc:8000`
+  — but stellar-rpc was removed from r1 on 2026-04-23, so the URL
+  no longer resolves to anything on-box and the diagnostic would
+  hang/fail. Each runbook now points the probe at a public
+  stellar-rpc endpoint (`https://mainnet.sorobanrpc.com`) with a
+  one-line note explaining the architectural shift. The
+  `all-ingestion-down` runbook additionally rewrites the
+  quick-diagnosis + Mitigation A around Galexie + MinIO (the
+  actual r1 upstream) and drops the retired
+  `ratesengine_ingestion_lag_high` reference from its symptoms
+  list. Pure documentation change.
+
 ### Added
 
 - **`docs/architecture/supply-pipeline.md` (#318)**: architecture-
