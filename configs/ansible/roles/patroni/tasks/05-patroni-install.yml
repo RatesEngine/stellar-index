@@ -1,0 +1,34 @@
+---
+# Install Patroni from apt (Ubuntu universe). Per the design
+# note, apt is preferred over PyPI for simpler operational story
+# at the cost of lagging by 1-2 minor versions.
+
+- name: ensure apt cache is fresh
+  apt:
+    update_cache: yes
+    cache_valid_time: 3600
+
+- name: install Patroni + Python deps
+  apt:
+    name:
+      - patroni
+      - python3-etcd3            # for etcd v3 API
+      - python3-psycopg2          # Patroni → Postgres bootstrap
+      - python3-prettytable       # patronictl output
+    state: present
+
+- name: ensure Patroni config directory
+  file:
+    path: /etc/patroni
+    state: directory
+    owner: postgres
+    group: postgres
+    mode: '0750'
+
+- name: ensure Patroni log directory
+  file:
+    path: /var/log/patroni
+    state: directory
+    owner: postgres
+    group: postgres
+    mode: '0755'

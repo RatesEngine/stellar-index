@@ -1,0 +1,22 @@
+---
+galaxy_info:
+  role_name: patroni
+  author: ratesengine
+  description: >-
+    Patroni-managed Postgres + TimescaleDB cluster with etcd as
+    the DCS. Implements docs/architecture/ha-plan.md §3.3.
+  license: Apache-2.0
+  min_ansible_version: "2.16"
+  platforms:
+    - name: Ubuntu
+      versions:
+        - jammy
+        - noble
+
+dependencies: []
+
+# Note: this role does NOT depend on `archival-node` directly.
+# An operator running just this role must ensure Postgres apt
+# repos are present (the `archival-node` role's postgres tasks
+# handle that — operators with a bare host should run those
+# tasks first or include them via a wrapper playbook).

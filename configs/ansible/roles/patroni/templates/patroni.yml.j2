@@ -1,0 +1,88 @@
+{# Render-time — managed by ansible (patroni role). #}
+{# After first run, amend via `patronictl edit-config` not by re-rendering. #}
+scope: {{ patroni_cluster_name }}
+namespace: /service/
+name: {{ inventory_hostname }}
+
+restapi:
+  listen: {{ patroni_rest_listen }}
+  connect_address: {{ patroni_rest_connect_address }}
+{% if patroni_rest_basic_auth_user and patroni_rest_basic_auth_password %}
+  authentication:
+    username: {{ patroni_rest_basic_auth_user }}
+    password: {{ patroni_rest_basic_auth_password }}
+{% endif %}
+
+etcd3:
+  hosts:
+{% for host in groups['postgres_cluster'] %}
+    - "{{ hostvars[host].ansible_host }}:{{ etcd_client_port }}"
+{% endfor %}
+
+bootstrap:
+  dcs:
+    ttl: 30
+    loop_wait: 10
+    retry_timeout: 10
+    maximum_lag_on_failover: 1048576
+    synchronous_mode: {{ patroni_synchronous_mode | string | lower }}
+    synchronous_node_count: {{ patroni_synchronous_node_count }}
+
+    postgresql:
+      use_pg_rewind: true
+      parameters:
+        wal_level: replica
+        hot_standby: 'on'
+        synchronous_commit: remote_apply
+        synchronous_standby_names: 'ANY {{ patroni_synchronous_node_count }} ({% for h in groups['postgres_cluster'] if h != groups['postgres_cluster'][0] %}{{ h }}{% if not loop.last %},{% endif %}{% endfor %})'
+        max_connections: {{ patroni_postgres_max_connections }}
+        max_replication_slots: 10
+        max_wal_senders: 10
+        wal_keep_size: '1024MB'
+        archive_mode: 'on'
+        archive_command: '{{ patroni_archive_command }}'
+        # TimescaleDB extension preloading — required for the
+        # extension to install on a fresh primary.
+        shared_preload_libraries: 'timescaledb,pg_stat_statements'
+
+  initdb:
+    - encoding: UTF8
+    - data-checksums
+
+  pg_hba:
+{% for cidr in patroni_internal_cidrs %}
+    - host  replication  replicator  {{ cidr }}  md5
+    - host  all          all         {{ cidr }}  md5
+{% endfor %}
+
+  users:
+    admin:
+      password: {{ patroni_postgres_password }}
+      options:
+        - createrole
+        - createdb
+
+postgresql:
+  listen: "{{ patroni_postgres_listen_addr }}:{{ patroni_postgres_port }}"
+  connect_address: "{{ ansible_host }}:{{ patroni_postgres_port }}"
+  data_dir: {{ patroni_data_dir }}
+  bin_dir: /usr/lib/postgresql/{{ patroni_postgres_version }}/bin
+  pgpass: /tmp/pgpass0
+  authentication:
+    replication:
+      username: replicator
+      password: '{{ patroni_replicator_password }}'
+    superuser:
+      username: postgres
+      password: '{{ patroni_postgres_password }}'
+  parameters:
+    unix_socket_directories: '/var/run/postgresql'
+
+tags:
+  nofailover: false
+  noloadbalance: false
+  clonefrom: false
+
+log:
+  dir: /var/log/patroni
+  level: INFO

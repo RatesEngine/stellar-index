@@ -1,0 +1,20 @@
+---
+- name: restart etcd
+  systemd:
+    name: etcd
+    state: restarted
+    daemon_reload: yes
+  listen: "etcd config changed"
+
+- name: restart patroni
+  systemd:
+    name: patroni
+    state: restarted
+    daemon_reload: yes
+  listen: "patroni config changed"
+
+- name: reload firewall
+  systemd:
+    name: nftables
+    state: reloaded
+  listen: "firewall rules changed"

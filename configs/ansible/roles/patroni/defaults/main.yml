@@ -1,0 +1,63 @@
+---
+# patroni role defaults — override in inventory.
+
+# ── Cluster identity ───────────────────────────────────────────
+# Per-region Patroni scope. Different per region prevents
+# accidental cross-region cluster joins.
+patroni_cluster_name: ratesengine-default
+
+# Per-region etcd cluster token. Same rule as above.
+etcd_cluster_token: ratesengine-etcd-default
+
+# ── Postgres ───────────────────────────────────────────────────
+patroni_postgres_version: 15
+patroni_data_dir: "/var/lib/postgresql/{{ patroni_postgres_version }}/main"
+patroni_postgres_listen_addr: "{{ ansible_host }}"
+patroni_postgres_port: 5432
+patroni_postgres_max_connections: 200
+
+# ── Patroni REST API ───────────────────────────────────────────
+patroni_rest_listen: "0.0.0.0:8008"
+patroni_rest_connect_address: "{{ ansible_host }}:8008"
+# Basic Auth on the REST API. Set patroni_rest_basic_auth_user
+# + patroni_rest_basic_auth_password from vault to enable.
+patroni_rest_basic_auth_user: ""
+patroni_rest_basic_auth_password: ""
+
+# ── Replication ────────────────────────────────────────────────
+patroni_synchronous_mode: true
+patroni_synchronous_node_count: 1   # ANY 1 of 2 replicas
+
+# ── DCS (etcd) ─────────────────────────────────────────────────
+etcd_data_dir: /var/lib/etcd
+etcd_client_port: 2379
+etcd_peer_port: 2380
+# Heartbeat / election timeouts in ms.
+etcd_heartbeat_interval: 100
+etcd_election_timeout: 1000
+
+# ── Bootstrap ──────────────────────────────────────────────────
+# initdb (default) or pgbackrest (restore-from-backup; for DR
+# rebuilds).
+patroni_bootstrap_method: initdb
+# Used when method=pgbackrest:
+patroni_pgbackrest_stanza: ratesengine
+patroni_pgbackrest_restore_target: latest   # "latest" | "time:..."
+
+# ── pgBackRest hooks (called by Patroni's archive_command) ─────
+patroni_archive_command: "pgbackrest --stanza={{ patroni_pgbackrest_stanza }} archive-push %p"
+
+# ── Idempotency knobs ──────────────────────────────────────────
+# When true, the role refuses to overwrite an in-flight cluster's
+# config — it only renders configs on the first run. After the
+# first run, ops re-applies via patronictl edit-config.
+patroni_first_run_only: true
+
+# ── Firewall ───────────────────────────────────────────────────
+patroni_internal_cidrs:
+  - 10.0.0.0/8
+  - 172.16.0.0/12
+  - 192.168.0.0/16
+
+# ── Monitoring ─────────────────────────────────────────────────
+patroni_node_exporter_textfile_dir: /var/lib/node_exporter/textfile_collector

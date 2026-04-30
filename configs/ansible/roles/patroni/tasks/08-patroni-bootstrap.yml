@@ -1,0 +1,78 @@
+---
+# Bootstrap the cluster. Runs ONLY on the first host in the
+# postgres_cluster group (db-01 by convention).
+#
+# Two paths:
+#   - patroni_bootstrap_method=initdb  → fresh DB; Patroni's
+#     own bootstrap section in patroni.yml runs initdb.
+#   - patroni_bootstrap_method=pgbackrest → DR rebuild; we
+#     pre-restore the data dir from pgBackRest, then start
+#     Patroni and it adopts the existing primary.
+
+- name: detect existing data dir
+  stat:
+    path: "{{ patroni_data_dir }}/PG_VERSION"
+  register: _pg_data_present
+
+- block:
+    - name: bootstrap via pgBackRest restore
+      command: >
+        pgbackrest --stanza={{ patroni_pgbackrest_stanza }}
+        --type=immediate
+        --target-action=promote
+        --delta
+        restore
+      become: yes
+      become_user: postgres
+      when:
+        - patroni_bootstrap_method == "pgbackrest"
+        - not _pg_data_present.stat.exists
+
+    - name: ensure restored data dir ownership
+      file:
+        path: "{{ patroni_data_dir }}"
+        owner: postgres
+        group: postgres
+        state: directory
+        recurse: yes
+      when:
+        - patroni_bootstrap_method == "pgbackrest"
+  when:
+    - patroni_bootstrap_method == "pgbackrest"
+
+- name: start Patroni (fresh — initdb path)
+  systemd:
+    name: patroni
+    state: started
+  when:
+    - patroni_bootstrap_method == "initdb"
+    - not _pg_data_present.stat.exists
+
+- name: start Patroni (restore path — adopts the restored primary)
+  systemd:
+    name: patroni
+    state: started
+  when:
+    - patroni_bootstrap_method == "pgbackrest"
+
+- name: start Patroni (idempotent — already-bootstrapped host)
+  systemd:
+    name: patroni
+    state: started
+  when:
+    - _pg_data_present.stat.exists
+
+- name: wait for Patroni REST API
+  uri:
+    url: "http://127.0.0.1:8008/cluster"
+    status_code: 200
+  register: _bootstrap_state
+  retries: 30
+  delay: 2
+  until: _bootstrap_state.status == 200
+
+- name: confirm primary elected
+  command: >
+    patronictl -c /etc/patroni/patroni.yml list
+  register: _primary_check
+  changed_when: false

@@ -1,0 +1,49 @@
+---
+- name: 01 — preflight
+  import_tasks: 01-preflight.yml
+  tags: [patroni, preflight]
+
+- name: 02 — etcd install
+  import_tasks: 02-etcd-install.yml
+  tags: [patroni, etcd, install]
+
+- name: 03 — etcd configure
+  import_tasks: 03-etcd-configure.yml
+  tags: [patroni, etcd, config]
+  notify: "etcd config changed"
+
+- name: 04 — etcd systemd
+  import_tasks: 04-etcd-systemd.yml
+  tags: [patroni, etcd, systemd]
+
+- name: 05 — patroni install
+  import_tasks: 05-patroni-install.yml
+  tags: [patroni, install]
+
+- name: 06 — patroni configure
+  import_tasks: 06-patroni-configure.yml
+  tags: [patroni, config]
+  notify: "patroni config changed"
+
+- name: 07 — patroni systemd
+  import_tasks: 07-patroni-systemd.yml
+  tags: [patroni, systemd]
+
+- name: 08 — bootstrap (db-01 only — initdb or pgbackrest restore)
+  import_tasks: 08-patroni-bootstrap.yml
+  when: inventory_hostname == groups['postgres_cluster'][0]
+  tags: [patroni, bootstrap]
+
+- name: 09 — join (replicas only)
+  import_tasks: 09-patroni-join.yml
+  when: inventory_hostname != groups['postgres_cluster'][0]
+  tags: [patroni, bootstrap]
+
+- name: 10 — firewall
+  import_tasks: 10-firewall.yml
+  tags: [patroni, firewall]
+  notify: "firewall rules changed"
+
+- name: 11 — monitoring (node_exporter textfile)
+  import_tasks: 11-monitoring.yml
+  tags: [patroni, monitoring]

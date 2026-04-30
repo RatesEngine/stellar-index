@@ -1,0 +1,41 @@
+---
+# Open the cluster's internal ports to the internal CIDRs only.
+# Pattern matches the archival-node role's nftables idiom.
+
+- name: ensure nftables installed
+  apt:
+    name: nftables
+    state: present
+
+- name: render Patroni nftables drop-in
+  copy:
+    dest: /etc/nftables.d/40-patroni.conf
+    content: |
+      # Managed by ansible (patroni role).
+      # Postgres + Patroni REST + etcd, internal-only.
+      table inet patroni_filter {
+        chain input {
+          type filter hook input priority 0; policy accept;
+      {% for cidr in patroni_internal_cidrs %}
+          ip saddr {{ cidr }} tcp dport { {{ patroni_postgres_port }}, 8008, {{ etcd_client_port }}, {{ etcd_peer_port }} } accept comment "patroni-{{ cidr }}";
+      {% endfor %}
+          ip saddr 127.0.0.1 tcp dport { {{ patroni_postgres_port }}, 8008, {{ etcd_client_port }} } accept comment "patroni-loopback";
+          # Implicit: anything not from internal CIDRs hits the
+          # main filter chain's defaults.
+        }
+      }
+    mode: '0644'
+  notify: "firewall rules changed"
+
+- name: ensure nftables loads our drop-in
+  lineinfile:
+    path: /etc/nftables.conf
+    line: 'include "/etc/nftables.d/*.conf"'
+    state: present
+  notify: "firewall rules changed"
+
+- name: ensure /etc/nftables.d/ exists
+  file:
+    path: /etc/nftables.d
+    state: directory
+    mode: '0755'

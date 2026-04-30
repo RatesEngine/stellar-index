@@ -1,0 +1,74 @@
+---
+# Wire node_exporter textfile collector for Patroni state.
+# A periodic systemd timer scrapes patronictl + emits Prometheus
+# metrics into the textfile dir; the running node_exporter then
+# exposes them.
+
+- name: ensure node_exporter textfile dir
+  file:
+    path: "{{ patroni_node_exporter_textfile_dir }}"
+    state: directory
+    owner: postgres
+    group: postgres
+    mode: '0755'
+
+- name: install patroni-textfile scraper
+  copy:
+    dest: /usr/local/bin/patroni-textfile-scraper
+    mode: '0755'
+    content: |
+      #!/bin/bash
+      # Managed by ansible (patroni role). Emits Patroni cluster
+      # state as Prometheus textfile-collector format. Run via
+      # the systemd timer below.
+      set -euo pipefail
+      OUT="{{ patroni_node_exporter_textfile_dir }}/patroni.prom"
+      TMP="$(mktemp "${OUT}.XXXXXX")"
+      trap 'rm -f "$TMP"' EXIT
+
+      JSON=$(curl -fsS http://127.0.0.1:8008/cluster || echo '{}')
+      ROLE=$(echo "$JSON" | jq -r '.members[]? | select(.host == "{{ ansible_host }}") | .role // "unknown"')
+      STATE=$(echo "$JSON" | jq -r '.members[]? | select(.host == "{{ ansible_host }}") | .state // "unknown"')
+
+      cat > "$TMP" <<EOF
+      # HELP ratesengine_patroni_role 1 if this node has the named role, 0 otherwise.
+      # TYPE ratesengine_patroni_role gauge
+      ratesengine_patroni_role{role="leader"} $([[ "$ROLE" == "leader" ]] && echo 1 || echo 0)
+      ratesengine_patroni_role{role="replica"} $([[ "$ROLE" == "replica" ]] && echo 1 || echo 0)
+      # HELP ratesengine_patroni_running 1 if Patroni reports state=running for this node.
+      # TYPE ratesengine_patroni_running gauge
+      ratesengine_patroni_running $([[ "$STATE" == "running" ]] && echo 1 || echo 0)
+      EOF
+      mv -f "$TMP" "$OUT"
+
+- name: install patroni-textfile-scraper systemd service
+  copy:
+    dest: /etc/systemd/system/patroni-textfile-scraper.service
+    mode: '0644'
+    content: |
+      [Unit]
+      Description=Patroni → Prometheus textfile scraper
+      [Service]
+      Type=oneshot
+      ExecStart=/usr/local/bin/patroni-textfile-scraper
+
+- name: install patroni-textfile-scraper timer
+  copy:
+    dest: /etc/systemd/system/patroni-textfile-scraper.timer
+    mode: '0644'
+    content: |
+      [Unit]
+      Description=Run Patroni textfile scraper every 30 s
+      [Timer]
+      OnBootSec=30s
+      OnUnitActiveSec=30s
+      AccuracySec=5s
+      [Install]
+      WantedBy=timers.target
+
+- name: enable patroni-textfile-scraper timer
+  systemd:
+    name: patroni-textfile-scraper.timer
+    enabled: yes
+    state: started
+    daemon_reload: yes

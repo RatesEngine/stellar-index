@@ -1,0 +1,18 @@
+---
+# Wire systemd unit. The apt-installed Patroni ships a unit at
+# /lib/systemd/system/patroni.service, but it points at a config
+# we don't use; we override via /etc/systemd/system/patroni.service
+# pointing at our /etc/patroni/patroni.yml.
+
+- name: render Patroni systemd unit override
+  template:
+    src: patroni.service.j2
+    dest: /etc/systemd/system/patroni.service
+    mode: '0644'
+  notify: "patroni config changed"
+
+- name: enable Patroni
+  systemd:
+    name: patroni
+    enabled: yes
+    daemon_reload: yes

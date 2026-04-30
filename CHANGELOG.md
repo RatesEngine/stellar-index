@@ -17,6 +17,27 @@ against.
 
 ### Added
 
+- **Patroni ansible role (#344)**: closes the launch-critical
+  sub-role of Task #72. Implements the topology pinned in
+  `ha-plan.md §3.3` — 1 primary + 2 synchronous replicas across
+  3 hosts, 3-node etcd quorum (DCS), `synchronous_commit=remote_apply`,
+  `synchronous_standby_names='ANY 1 (db-02, db-03)'`. Eleven
+  task files (preflight, etcd install/configure/systemd, Patroni
+  install/configure/systemd, bootstrap, replica join, firewall,
+  monitoring), four templates (etcd.conf, etcd.service,
+  patroni.yml, patroni.service), idempotent re-runs (detects
+  existing cluster via Patroni REST `/cluster` endpoint, refuses
+  to overwrite live config when `patroni_first_run_only=true`),
+  pgBackRest restore-from-backup path for DR rebuilds. Companion
+  design note at `docs/architecture/patroni-ansible-role-design-note.md`.
+  **Effect on the launch-readiness picture:**
+  `timescale-primary-down.md` Mitigation §A ("Automatic Patroni
+  failover — the happy path") is now the actual default rather
+  than aspirational; SEV-1 failover RTO drops from ~15 min
+  (manual) to ~60 s (Patroni-driven). The drill scenario's
+  Validation criterion #6 ("Did anyone reference Patroni hasn't
+  landed?") becomes obsolete.
+
 - **ADR-0024 — Redis HA via Sentinel (#343)**: ratifies the
   Redis HA mode choice. `ha-plan.md §3.4` had a contradictory
   description ("3 masters + 3 replicas, Redis-Cluster mode...

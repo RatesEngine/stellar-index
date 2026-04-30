@@ -1,0 +1,35 @@
+---
+# Replica join — runs on every host EXCEPT the first in
+# postgres_cluster (handled by 08-patroni-bootstrap.yml).
+#
+# Patroni handles the actual replica setup: when started against
+# an existing cluster (visible via etcd), it pg_basebackups from
+# the current primary and joins as a replica.
+
+- name: ensure data dir parent exists
+  file:
+    path: "{{ patroni_data_dir | dirname }}"
+    state: directory
+    owner: postgres
+    group: postgres
+    mode: '0755'
+
+- name: start Patroni (replica — Patroni handles pg_basebackup)
+  systemd:
+    name: patroni
+    state: started
+
+- name: wait for Patroni REST API
+  uri:
+    url: "http://127.0.0.1:8008/cluster"
+    status_code: 200
+  register: _replica_state
+  retries: 60          # base backup can take a while on a real DB
+  delay: 5
+  until: _replica_state.status == 200
+
+- name: confirm we joined as a replica
+  command: >
+    patronictl -c /etc/patroni/patroni.yml list
+  register: _replica_check
+  changed_when: false

@@ -1,0 +1,45 @@
+---
+# Sanity-check the host before any install. Cheap, fail-fast.
+
+- name: assert OS is Ubuntu 22.04 or 24.04
+  assert:
+    that:
+      - ansible_distribution == "Ubuntu"
+      - ansible_distribution_version in ["22.04", "24.04"]
+    fail_msg: >-
+      patroni role supports Ubuntu 22.04 / 24.04 only;
+      detected {{ ansible_distribution }} {{ ansible_distribution_version }}
+
+- name: assert RAM ≥ 32 GB
+  assert:
+    that:
+      - ansible_memtotal_mb >= (32 * 1024 * 0.95)   # 5% slack for kernel reservation
+    fail_msg: >-
+      patroni role expects ≥ 32 GB RAM (per ha-plan §3.3 hardware target);
+      detected {{ ansible_memtotal_mb }} MB
+
+- name: assert host is in the postgres_cluster inventory group
+  assert:
+    that:
+      - inventory_hostname in groups['postgres_cluster']
+    fail_msg: >-
+      this role must be applied against hosts in the
+      postgres_cluster group (see role README inventory model)
+
+- name: assert postgres_cluster has exactly 3 hosts
+  assert:
+    that:
+      - groups['postgres_cluster'] | length == 3
+    fail_msg: >-
+      patroni role assumes a 3-node cluster (per ha-plan §3.3);
+      detected {{ groups['postgres_cluster'] | length }} hosts
+
+- name: assert vault contents present
+  assert:
+    that:
+      - patroni_replicator_password is defined
+      - patroni_postgres_password is defined
+    fail_msg: >-
+      patroni_replicator_password and patroni_postgres_password
+      must be set (typically from inventory/<region>.secrets.yml
+      via ansible-vault). See role README §Prerequisites.

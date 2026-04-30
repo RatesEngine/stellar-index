@@ -1,0 +1,73 @@
+---
+# Install etcd via apt. Ubuntu universe ships etcd 3.4.x; we
+# pin to 3.5.x via the upstream tarball to match the design
+# note's recommendation.
+
+- name: detect etcd already installed
+  stat:
+    path: /usr/local/bin/etcd
+  register: _etcd_bin
+
+- name: detect etcd version (when present)
+  command: /usr/local/bin/etcd --version
+  register: _etcd_version_check
+  changed_when: false
+  when: _etcd_bin.stat.exists
+
+- name: download etcd 3.5.21
+  get_url:
+    url: "https://github.com/etcd-io/etcd/releases/download/v3.5.21/etcd-v3.5.21-linux-{{ etcd_arch | default('amd64') }}.tar.gz"
+    dest: /tmp/etcd.tar.gz
+    checksum: "sha256:{{ etcd_release_sha256 | default('REPLACE_WITH_RELEASE_SHA') }}"
+    mode: '0644'
+  when: not _etcd_bin.stat.exists or 'v3.5.21' not in _etcd_version_check.stdout | default('')
+
+- name: extract etcd
+  unarchive:
+    src: /tmp/etcd.tar.gz
+    dest: /tmp/
+    remote_src: yes
+    creates: /tmp/etcd-v3.5.21-linux-{{ etcd_arch | default('amd64') }}/etcd
+  when: not _etcd_bin.stat.exists or 'v3.5.21' not in _etcd_version_check.stdout | default('')
+
+- name: install etcd binary
+  copy:
+    src: "/tmp/etcd-v3.5.21-linux-{{ etcd_arch | default('amd64') }}/etcd"
+    dest: /usr/local/bin/etcd
+    mode: '0755'
+    remote_src: yes
+  when: not _etcd_bin.stat.exists or 'v3.5.21' not in _etcd_version_check.stdout | default('')
+  notify: "etcd config changed"
+
+- name: install etcdctl binary
+  copy:
+    src: "/tmp/etcd-v3.5.21-linux-{{ etcd_arch | default('amd64') }}/etcdctl"
+    dest: /usr/local/bin/etcdctl
+    mode: '0755'
+    remote_src: yes
+  when: not _etcd_bin.stat.exists or 'v3.5.21' not in _etcd_version_check.stdout | default('')
+
+- name: clean up etcd tarball
+  file:
+    path: "{{ item }}"
+    state: absent
+  loop:
+    - /tmp/etcd.tar.gz
+    - "/tmp/etcd-v3.5.21-linux-{{ etcd_arch | default('amd64') }}"
+  when: not _etcd_bin.stat.exists or 'v3.5.21' not in _etcd_version_check.stdout | default('')
+
+- name: ensure etcd system user
+  user:
+    name: etcd
+    system: yes
+    home: "{{ etcd_data_dir }}"
+    shell: /sbin/nologin
+    state: present
+
+- name: ensure etcd data directory
+  file:
+    path: "{{ etcd_data_dir }}"
+    state: directory
+    owner: etcd
+    group: etcd
+    mode: '0700'

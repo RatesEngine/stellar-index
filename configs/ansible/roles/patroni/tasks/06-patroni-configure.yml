@@ -1,0 +1,36 @@
+---
+# Render /etc/patroni/patroni.yml. The big template.
+# Idempotency: if patroni_first_run_only is true and Patroni is
+# already running, skip overwriting — operators amend live config
+# via `patronictl edit-config`.
+
+- name: detect existing Patroni state
+  uri:
+    url: "http://127.0.0.1:8008/cluster"
+    status_code: [200, 503]
+  register: _patroni_state
+  failed_when: false
+  changed_when: false
+
+- name: render /etc/patroni/patroni.yml (first-run / forced)
+  template:
+    src: patroni.yml.j2
+    dest: /etc/patroni/patroni.yml
+    owner: postgres
+    group: postgres
+    mode: '0640'
+  when:
+    - _patroni_state.status != 200 or not patroni_first_run_only
+  notify: "patroni config changed"
+
+- name: warn when skipping config rewrite (cluster already running)
+  debug:
+    msg: >-
+      Patroni cluster already running on this host; skipping
+      config rewrite. To amend live config, run
+      `patronictl -c /etc/patroni/patroni.yml edit-config`
+      from any cluster member, or set patroni_first_run_only=false
+      to overwrite.
+  when:
+    - _patroni_state.status == 200
+    - patroni_first_run_only

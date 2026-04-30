@@ -1,0 +1,30 @@
+---
+- name: render etcd systemd unit
+  template:
+    src: etcd.service.j2
+    dest: /etc/systemd/system/etcd.service
+    mode: '0644'
+  notify: "etcd config changed"
+
+- name: enable + start etcd
+  systemd:
+    name: etcd
+    enabled: yes
+    state: started
+    daemon_reload: yes
+
+- name: wait for etcd to be ready
+  wait_for:
+    port: "{{ etcd_client_port }}"
+    host: "{{ ansible_host }}"
+    timeout: 30
+
+- name: verify etcd cluster health
+  command: >
+    etcdctl --endpoints=http://{{ ansible_host }}:{{ etcd_client_port }}
+    endpoint health
+  register: _etcd_health
+  retries: 5
+  delay: 2
+  until: _etcd_health.rc == 0
+  changed_when: false
