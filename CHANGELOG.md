@@ -17,6 +17,23 @@ against.
 
 ### Added
 
+- **Classic-supply hypertables 0011-0014 + Insert*/Sum* storage
+  methods (#303 — Task #55 PR 1/5)**: ships the four migrations
+  bounded by ADR-0022 (`trustline_observations`,
+  `claimable_observations`, `lp_reserve_observations`,
+  `sac_balance_observations`) plus 4 `Insert*Observation` writers
+  (last-writer-wins on conflict, mirroring the
+  `account_observations` pattern from #299) and 4 `Sum*AtOrBefore`
+  read-side primitives (DISTINCT-ON the most-recent row per
+  identity-tuple, sum where !is_removal). The Sum* methods are
+  what the future `StorageClassicSupplyReader` (PR 5/5) consumes
+  to satisfy `ClassicSupplyReader`. Defensive guards at every
+  Insert call reject empty PK columns + nil Balance before
+  touching the DB. SAC table denormalises asset_key into the row
+  so the reader sums by asset without joining a side table — the
+  contract → asset mapping is operator-curated and stable
+  post-deploy.
+
 - **ADR-0022 — Classic-supply observers (#302)**: bounds the
   implementation work for Task #55 before code lands. Defines
   four observer + storage + reader stacks under
