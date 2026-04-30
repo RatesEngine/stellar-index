@@ -426,6 +426,20 @@ against.
 
 ### Changed
 
+- **`redstone` source flipped `BackfillSafe: false → true`** —
+  WASM-history audit landed
+  ([docs/operations/wasm-audits/redstone.md](docs/operations/wasm-audits/redstone.md)).
+  Adapter contract `CA526Y2N…` shows two WASM hashes: a 420-ledger
+  (~35 min) first-deploy hotfix `b400f7a8…` (L58,758,722 →
+  L58,759,141) and the current production `5e93d22c…`
+  (L58,759,142 → scan-end, ~36 days stable). Per-hash review
+  confirms the production hash matches the live decoder; the
+  hotfix-window analysis (zero redstone trades in that 420-ledger
+  range, deploy-then-hotfix pattern) supports flipping the flag with
+  a documented caveat that the b400f7a8 bytes were not disassembled
+  inline. Backfill against historical Redstone ranges is now
+  permitted via `ratesengine-ops backfill`.
+
 - **`band` source flipped `BackfillSafe: false → true`** —
   WASM-history audit landed
   ([docs/operations/wasm-audits/band.md](docs/operations/wasm-audits/band.md)).

@@ -173,7 +173,10 @@ The single range is observed only in the first worker's chunk
 2024-03-19). Later workers saw no `update_current_contract_wasm`
 event for the contract, so produced no entries — consistent with
 **one Band StandardReference WASM** active across the full
-post-deploy window through to scan-end (L62,342,614 / 2026-04-29).
+post-deploy window through to walk-end at L59,301,651. Live ingest
+from walk-end through r1's current tip (L62,342,614 as of
+2026-04-29) confirms no further upgrade: 0 `ErrFunctionMismatch`
+or type-extraction failures.
 
 Soroban activated at L50,457,424 (2024-02-20); Band's first deploy
 at L50,842,736 (2024-03-19) is the published mainnet launch.
@@ -183,7 +186,7 @@ Pre-Soroban ledgers can't host the contract.
 
 | hash (first 16) | role | active range | reviewer | finding |
 | --- | --- | --- | --- | --- |
-| `6cdb9a3cdeec01a1` | StandardReference | L50,842,736 → L62,342,614 (full post-launch window) | ash@2026-04-29 | matches current decoder |
+| `6cdb9a3cdeec01a1` | StandardReference | L50,842,736 → L59,301,651 (walk-end; still current per live ingest through r1 tip L62,342,614) | ash@2026-04-29 | matches current decoder |
 
 ### `6cdb9a3cdeec01a1` — StandardReference, single hash, no upgrade
 
