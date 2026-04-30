@@ -453,6 +453,15 @@ func (d *Dispatcher) ProcessLedger(lcm xdr.LedgerCloseMeta, passphrase string) (
 			}
 		}
 
+		// ─── LedgerEntryChange walk (ADR-0021) ───────────────
+		// Walks per-op + tx-level changes from this tx's meta and
+		// routes each to the LedgerEntryChangeDecoder chain.
+		// Skipped cheaply when no entry decoders are registered.
+		if len(d.entryDecoders) > 0 {
+			outputs = append(outputs,
+				d.walkEntryChanges(&tx, ledgerSeq, parsedClosedAt, txHash)...)
+		}
+
 		// ─── Classic operations (SDEX and friends) ───────────
 		if len(d.opDecoders) == 0 {
 			continue // skip op walking if no classic decoders registered
@@ -488,6 +497,82 @@ func (d *Dispatcher) ProcessLedger(lcm xdr.LedgerCloseMeta, passphrase string) (
 		}
 	}
 	return outputs, nil
+}
+
+// walkEntryChanges iterates per-op + tx-level LedgerEntryChange
+// rows from one transaction's meta and dispatches each to the
+// entry-decoder chain. Returns the collected outputs across every
+// matched change.
+//
+// Meta-version handling: V1/V2 don't carry post-Soroban operation
+// metadata so they're skipped (no-op for purposes of entry-change
+// observation; the indexer ran against pre-Soroban ledgers
+// produces no AccountEntry observations for those ranges, which
+// is correct — the AccountEntry observer is a forward-going
+// surface). V3 + V4 share the same Operations / TxChanges shape
+// for AccountEntry purposes; the only difference is the wrapping
+// type.
+func (d *Dispatcher) walkEntryChanges(tx *ingest.LedgerTransaction, ledgerSeq uint32, closedAt time.Time, txHash string) []consumer.Event {
+	dispatch := func(opIdx int, change xdr.LedgerEntryChange) []consumer.Event {
+		ctx := LedgerEntryChangeContext{
+			Ledger:   ledgerSeq,
+			ClosedAt: closedAt,
+			TxHash:   txHash,
+			OpIndex:  opIdx,
+			Change:   change,
+		}
+		outs, err := d.dispatchEntryChange(ctx)
+		if err != nil {
+			return nil
+		}
+		return outs
+	}
+
+	var outputs []consumer.Event
+	// Tx-level fee changes — every successful tx debits a fee.
+	// OpIndex is -1 to distinguish from per-op changes.
+	for i := range tx.FeeChanges {
+		outputs = append(outputs, dispatch(-1, tx.FeeChanges[i])...)
+	}
+	switch tx.UnsafeMeta.V {
+	case 3:
+		v3 := tx.UnsafeMeta.MustV3()
+		outputs = append(outputs, walkChangeSet(v3.TxChangesBefore, -1, dispatch)...)
+		outputs = append(outputs, walkOperations(v3.Operations, dispatch)...)
+		outputs = append(outputs, walkChangeSet(v3.TxChangesAfter, -1, dispatch)...)
+	case 4:
+		v4 := tx.UnsafeMeta.MustV4()
+		outputs = append(outputs, walkChangeSet(v4.TxChangesBefore, -1, dispatch)...)
+		outputs = append(outputs, walkV4Operations(v4.Operations, dispatch)...)
+		outputs = append(outputs, walkChangeSet(v4.TxChangesAfter, -1, dispatch)...)
+	}
+	return outputs
+}
+
+// walkChangeSet dispatches each LedgerEntryChange in the slice
+// at the given opIndex (-1 for tx-level / fee-meta blocks).
+func walkChangeSet(changes []xdr.LedgerEntryChange, opIdx int, dispatch func(int, xdr.LedgerEntryChange) []consumer.Event) []consumer.Event {
+	var outs []consumer.Event
+	for i := range changes {
+		outs = append(outs, dispatch(opIdx, changes[i])...)
+	}
+	return outs
+}
+
+func walkOperations(ops []xdr.OperationMeta, dispatch func(int, xdr.LedgerEntryChange) []consumer.Event) []consumer.Event {
+	var outs []consumer.Event
+	for opIdx := range ops {
+		outs = append(outs, walkChangeSet(ops[opIdx].Changes, opIdx, dispatch)...)
+	}
+	return outs
+}
+
+func walkV4Operations(ops []xdr.OperationMetaV2, dispatch func(int, xdr.LedgerEntryChange) []consumer.Event) []consumer.Event {
+	var outs []consumer.Event
+	for opIdx := range ops {
+		outs = append(outs, walkChangeSet(ops[opIdx].Changes, opIdx, dispatch)...)
+	}
+	return outs
 }
 
 // dispatchContractCall runs one InvokeContract op through the
