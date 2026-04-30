@@ -1,12 +1,22 @@
 ---
 title: RFP × Proposal × Delivery — Coverage Matrix
-last_verified: 2026-04-28
+last_verified: 2026-04-30
 status: ratified
 ---
 
 # RFP × Proposal × Delivery Coverage Matrix
 
 **Ratified:** 2026-04-22.
+**Re-baselined:** 2026-04-30 — every row in this matrix has been
+cross-referenced against the current code. The audit's
+docs/audit-2026-04-29/ workspace flagged drift in both directions
+(rows marked "designed" that had shipped, rows marked "verified"
+that had regressed in production wiring); this re-baseline rewrites
+those rows to the as-of-2026-04-30 reality. A separate Codex pass
+against the RFPs + proposal also surfaced specific contract gaps
+(Blend, Chainlink, Freighter V2 wiring) that are now reflected in
+each row's Status / Conf.
+
 **Purpose:** one authoritative table mapping every contractual requirement
 to the mechanism that satisfies it. Supersedes the narrower
 `docs/discovery/rfp-requirements-matrix.md` (which remains valid as
@@ -47,7 +57,7 @@ Any row with **status ❌** is a blocker for launch. Any row with
 | S1.1 | Classic assets identity (code+issuer) | §Data Ingestion / SDEX | 2 | `internal/sources/sdex` | — | [protocol-versions.md](../discovery/protocol-versions.md), [dexes-amms/sdex.md](../discovery/dexes-amms/sdex.md) | ✅ verified | 5 |
 | S1.2 | SEP-41 Soroban tokens — events ingest | §Data Ingestion / Soroban DEXs | 3 | `internal/sources/soroswap`, `/aquarius`, etc. | — | [notes/sep-41-token-events.md](../discovery/notes/sep-41-token-events.md) | ✅ verified | 5 |
 | S1.3 | SAC-wrapped classic (native XLM SAC = `CAS3J7…OWMA`) | §Data Ingestion / SDEX | 3 | `internal/canonical` + sources | — | [notes/sep-41-token-events.md](../discovery/notes/sep-41-token-events.md), [dexes-amms/aquarius.md](../discovery/dexes-amms/aquarius.md) | ✅ verified | 4 |
-| S1.4 | Asset enumeration / discovery | §Asset Identification | 4 | `internal/canonical/discovery` | — | [data-sources/withobsrvr-stellar-extract.md](../discovery/data-sources/withobsrvr-stellar-extract.md) | 🧪 designed | 3 |
+| S1.4 | Asset enumeration / discovery | §Asset Identification | 4 | `internal/canonical/discovery` | — | [data-sources/withobsrvr-stellar-extract.md](../discovery/data-sources/withobsrvr-stellar-extract.md) | ✅ verified | 4 |
 | S1.5 | i128/u128 amounts never truncate | §Data Processing | 1 | `internal/canonical.Amount` | ADR-0003 | Tested: `amount_test.go` KALIEN regression | ✅ verified | 5 |
 
 ### S2. Oracle coverage — Chainlink, Redstone, Band, Reflector + others
@@ -57,9 +67,9 @@ Any row with **status ❌** is a blocker for launch. Any row with
 | S2.1 | Reflector (3 contracts: DEX/CEX/FX) | §Oracle Networks — Reflector | 4 | `internal/sources/reflector` | — | [oracles/reflector.md](../discovery/oracles/reflector.md) | ✅ verified | 5 |
 | S2.2 | Redstone (Adapter + 19 per-feed proxies) | §Oracle Networks — Redstone | 4 | `internal/sources/redstone` | — | [oracles/redstone.md](../discovery/oracles/redstone.md) | ✅ verified | 5 |
 | S2.3 | Band Protocol (native Soroban StandardReference) | §Oracle Networks — Band | 4 | `internal/sources/band` | — | [oracles/band.md](../discovery/oracles/band.md) | ✅ verified | 5 |
-| S2.4 | Chainlink (HTTP cross-check until Scale ships) | §Oracle Networks — Chainlink | 4 | `internal/divergence/chainlink` | — | [oracles/chainlink.md](../discovery/oracles/chainlink.md) | ⚠ caveat: HTTP-only for now | 3 |
+| S2.4 | Chainlink (HTTP cross-check until Scale ships) | §Oracle Networks — Chainlink | 4 | `internal/divergence/chainlink` (planned) | — | [oracles/chainlink.md](../discovery/oracles/chainlink.md) | ❌ gap — only `internal/divergence/coingecko.go` is wired today; no Chainlink path. Tracked as Task #48. | 1 |
 | S2.5 | "And others" — DIA (if mainnet ships in window) | (not in proposal; adding) | 4–post-launch | `internal/sources/dia` | — | [oracles/dia.md](../discovery/oracles/dia.md) | ⏳ deferred | 2 |
-| S2.6 | SEP-40-compat output (others consume *our* prices) | §API | 7 | `internal/api/sep40` | — | [oracles/reflector.md](../discovery/oracles/reflector.md) §SEP-40 interface | 🧪 designed | 3 |
+| S2.6 | SEP-40-compat output (others consume *our* prices) | §API | 7 | `internal/api/v1/oracle_sep40.go` | — | [oracles/reflector.md](../discovery/oracles/reflector.md) §SEP-40 interface | ✅ verified — `/v1/oracle/{lastprice,prices,x_last_price}` SEP-40-shaped passthrough endpoints shipped | 4 |
 
 ### S3. Price aggregation — Soroswap, Aquarius, SDEX, Comet + others
 
@@ -70,25 +80,25 @@ Any row with **status ❌** is a blocker for launch. Any row with
 | S3.3 | Aquarius 3 pool types | §Soroban DEXs / Aquarius | 3 | `internal/sources/aquarius` | — | [dexes-amms/aquarius.md](../discovery/dexes-amms/aquarius.md) | ✅ verified | 5 |
 | S3.4 | Phoenix DEX (8-events-per-swap) | §Soroban DEXs (added post-discovery) | 3 | `internal/sources/phoenix` | — | [dexes-amms/phoenix.md](../discovery/dexes-amms/phoenix.md) | ✅ verified | 5 |
 | S3.5 | Comet (Balancer-weighted AMM) | §Soroban DEXs (added post-discovery) | 3 | `internal/sources/comet` | — | [dexes-amms/comet.md](../discovery/dexes-amms/comet.md) | ✅ verified | 4 |
-| S3.6 | Blend auctions as directional signal | §Soroban DEXs / Blend | post-launch | — | — | [dexes-amms/blend.md](../discovery/dexes-amms/blend.md) | ⏳ not in repo snapshot | 2 |
+| S3.6 | Blend auctions as directional signal | §Soroban DEXs / Blend | 5 | `internal/sources/blend` | — | [dexes-amms/blend.md](../discovery/dexes-amms/blend.md), [wasm-audits/blend.md](../operations/wasm-audits/blend.md) | ⚠ caveat — auction decoder + storage + dispatcher wiring shipped (#273-#275); WASM audit (Pool Factory + per-pool walks) pending in Task #53. BackfillSafe stays false until that lands. | 3 |
 | S3.7 | CEX trade ingestion (Binance, Coinbase, Kraken, …) | §Centralized Exchanges | 4 | `internal/sources/external/*` | — | [external-refs/cex-feeds.md](../discovery/external-refs/cex-feeds.md) | ✅ verified | 4 |
 
 ### S4. VWAP + configurable USD volume threshold
 
 | # | Requirement | Proposal | Week | Owner | ADR | Verified by | Status | Conf |
 | - | ----------- | -------- | ---- | ----- | --- | ----------- | ------ | ---- |
-| S4.1 | Volume-weighted aggregation across venues | §Aggregation Strategy | 5 | `internal/aggregate` | — | (design; impl pending) | 🧪 designed | 3 |
-| S4.2 | USD-denominated volume on non-USD pairs | §Cross-Pair Derivation | 5 | `internal/aggregate/triangulate` | — | (design; impl pending) | 🧪 designed | 3 |
-| S4.3 | Per-pair configurable min USD volume | §Security — manipulation | 5 | `internal/config` schema + `internal/aggregate` | — | (design; impl pending) | 🧪 designed | 3 |
-| S4.4 | TWAP fallback when volume thresholds not met | §Aggregation Strategy | 5 | `internal/aggregate` | — | (design; impl pending) | 🧪 designed | 3 |
+| S4.1 | Volume-weighted aggregation across venues | §Aggregation Strategy | 5 | `internal/aggregate/orchestrator` + `prices_*` CAGGs | — | `cmd/ratesengine-aggregator` running per-window VWAP refresh; CAGGs back the API price reader. | ✅ verified | 4 |
+| S4.2 | USD-denominated volume on non-USD pairs | §Cross-Pair Derivation | 5 | `internal/aggregate/orchestrator/triangulate.go` + provenance marker | — | Triangulation worker writes implied VWAPs + `:provenance` marker (#279); API serves them with `flags.triangulated=true` (#280). | ✅ verified | 4 |
+| S4.3 | Per-pair configurable min USD volume | §Security — manipulation | 5 | `internal/config` schema + `internal/aggregate/orchestrator` | — | `aggregate.min_usd_volume` config field consumed by orchestrator; backed by `prices_1m.volume_usd`. | ✅ verified | 4 |
+| S4.4 | TWAP fallback when volume thresholds not met | §Aggregation Strategy | 5 | `internal/aggregate/orchestrator` + `internal/api/v1/twap.go` | — | TWAP endpoint `/v1/twap` shipped; aggregator computes via stored bucket VWAPs as a fallback. | ✅ verified | 3 |
 
 ### S5. Real-time price endpoints
 
 | # | Requirement | Proposal | Week | Owner | ADR | Verified by | Status | Conf |
 | - | ----------- | -------- | ---- | ----- | --- | ----------- | ------ | ---- |
 | S5.1 | Live event ingest (Galexie/MinIO + ledgerstream + dispatcher) | §Real-time — Hot path | 3 | `cmd/ratesengine-indexer` + `internal/ledgerstream` + `internal/dispatcher` + `internal/sources/*` | — | [data-sources/archival-nodes.md](../discovery/data-sources/archival-nodes.md), [ingest-pipeline.md](ingest-pipeline.md) | ✅ verified | 5 |
-| S5.2 | ≤ 30s staleness (Freighter SLA) | §Latency Targets | 6 | cross-cutting | — | [data-sources/archival-nodes.md](../discovery/data-sources/archival-nodes.md) + HA plan | 🧪 designed | 3 |
-| S5.3 | SSE streaming for subscribers | §Streaming Support | 7 | `internal/api/stream` | ADR-0006 (planned) | [oracles/reflector.md](../discovery/oracles/reflector.md) | 🧪 designed | 2 |
+| S5.2 | ≤ 30s staleness (Freighter SLA) | §Latency Targets | 6 | cross-cutting | — | [data-sources/archival-nodes.md](../discovery/data-sources/archival-nodes.md) + HA plan | 🧪 designed (no executable proof yet — tracked as Task #52) | 3 |
+| S5.3 | SSE streaming for subscribers | §Streaming Support | 7 | `internal/api/streaming` + `/v1/price/stream`, `/v1/observations/stream`, `/v1/price/tip` | — | Hub + per-topic ring buffer; Last-Event-ID resume. | ✅ verified | 4 |
 | S5.4 | Degradation signals (`stale_flag`, `reduced_redundancy`) | §Error Handling and Degradation | 5 | `internal/api/envelope` | — | `envelope.Flags` shipped (stale, reduced_redundancy, triangulated, divergence_warning) | ✅ verified | 3 |
 
 ### S6. Historical price endpoints + OHLC
@@ -112,17 +122,17 @@ Any row with **status ❌** is a blocker for launch. Any row with
 
 | # | Requirement | Proposal | Week | Owner | ADR | Verified by | Status | Conf |
 | - | ----------- | -------- | ---- | ----- | --- | ----------- | ------ | ---- |
-| S8.1 | `usd_volume` column per trade | §Data Processing | 3 | `internal/canonical.Trade` + writer | — | (design; impl pending) | 🧪 designed | 3 |
-| S8.2 | FX anchor for USD conversion | §Forex Providers | 4 | `internal/sources/fx` | — | [external-refs/fx-feeds.md](../discovery/external-refs/fx-feeds.md) | 🧪 designed | 2 |
+| S8.1 | `usd_volume` column per trade | §Data Processing | 3 | `internal/canonical.Trade` + `migrations/0001_create_trades_hypertable.up.sql` | — | Column shipped in trades hypertable; CAGGs sum it via `volume_usd`. | ✅ verified | 4 |
+| S8.2 | FX anchor for USD conversion | §Forex Providers | 4 | `internal/sources/external/{exchangeratesapi,polygonforex}` + `internal/aggregate/stablecoin.go` | — | Stablecoin proxy at aggregator layer (USDC/USDT→USD); FX vendors wired in registry. | ✅ verified | 4 |
 
 ### S9. Performance SLAs
 
 | # | Requirement | Proposal | Week | Owner | ADR | Verified by | Status | Conf |
 | - | ----------- | -------- | ---- | ----- | --- | ----------- | ------ | ---- |
-| S9.1 | ≥ 99.99 % uptime | §Availability | 8–9 | HA plan | [ADR-0008](../adr/0008-ha-topology.md) | (HA plan) | 🧪 designed | 2 |
-| S9.2 | p95 ≤ 200 ms, p99 ≤ 500 ms | §Latency Targets | 9 | `internal/api` + Redis caching | [ADR-0009](../adr/0009-latency-budget.md) | (API design + HA plan) | 🧪 designed | 2 |
-| S9.3 | 1000 req/min per client | §Rate Limits | 7 | `internal/ratelimit` | — | Bucket + middleware shipped; anonymous tier at 60/min today, apikey tier (1000/min) gated on auth middleware landing. | ⚠ caveat | 3 |
-| S9.4 | Defined degradation when prices unavailable | §Degradation Strategy + divergence | 5 | `internal/divergence` + `/api/envelope` | — | (design; impl pending) | 🧪 designed | 2 |
+| S9.1 | ≥ 99.99 % uptime | §Availability | 8–9 | HA plan | [ADR-0008](../adr/0008-ha-topology.md) | (HA plan) | 🧪 designed (no executable proof yet — Task #52) | 2 |
+| S9.2 | p95 ≤ 200 ms, p99 ≤ 500 ms | §Latency Targets | 9 | `internal/api` + Redis caching | [ADR-0009](../adr/0009-latency-budget.md) | (API design + HA plan) | 🧪 designed (no executable proof yet — Task #52) | 2 |
+| S9.3 | 1000 req/min per client | §Rate Limits | 7 | `internal/ratelimit` + `internal/api/v1/middleware/ratelimit.go` | — | Authenticated tier wired to `api.key_rate_limit_per_min` per F-0008 fix; anon + key buckets are now distinct. | ✅ verified | 4 |
+| S9.4 | Defined degradation when prices unavailable | §Degradation Strategy + divergence | 5 | `internal/divergence/{coingecko,coinmarketcap,cryptocompare}.go` + `internal/api/v1/envelope.go` | — | Divergence service runs against three aggregators; `flags.divergence_warning` surfaces on /v1/price. Chainlink path remains unimplemented (S2.4). | ⚠ caveat | 3 |
 
 ### S10. Open source
 
@@ -137,11 +147,11 @@ Any row with **status ❌** is a blocker for launch. Any row with
 | # | Field | Proposal | Week | Owner | ADR | Verified by | Status | Conf |
 | - | ----- | -------- | ---- | ----- | --- | ----------- | ------ | ---- |
 | F1.1 | Asset/Token Code | §Asset Identification | 4 | `internal/metadata` | — | [dexes-amms/sdex.md](../discovery/dexes-amms/sdex.md), [notes/sep-41-token-events.md](../discovery/notes/sep-41-token-events.md) | ✅ verified | 5 |
-| F1.2 | Current Price (USD) | §Current Price API | 5 | `internal/aggregate` | — | cross-cutting | 🧪 designed | 3 |
+| F1.2 | Current Price (USD) | §Current Price API | 5 | `internal/api/v1/price.go` | — | `/v1/price?asset=…&quote=fiat:USD` shipped; reads from `prices_1m` CAGG (closed-bucket per ADR-0015) with last-trade fallback. Default quote is USD. | ✅ verified | 5 |
 | F1.3 | Asset Type enum (`classic`/`soroban`) | §Asset Identification | 4 | `pkg/types.AssetType` | — | [dexes-amms/sdex.md](../discovery/dexes-amms/sdex.md) | ✅ verified | 5 |
 | F1.4 | Issuer Address (G…) | §Asset Identification | 4 | `pkg/types.ClassicAsset` | — | [protocol-versions.md](../discovery/protocol-versions.md) | ✅ verified | 5 |
 | F1.5 | Contract Address (C…) | §Asset Identification | 4 | `pkg/types.SorobanAsset` | — | [notes/sep-41-token-events.md](../discovery/notes/sep-41-token-events.md) | ✅ verified | 5 |
-| F1.6 | Home Domain (SEP-1) | §Asset Identification (needs proposal amendment) | 5 | `internal/metadata` | [ADR-0007](../adr/0007-redis-cache-schema.md) (SEP-1 cache, 15-min TTL) | [data-sources/sep1-home-domain.md](../discovery/data-sources/sep1-home-domain.md) + [operations/sep1-resolution.md](../operations/sep1-resolution.md) | ✅ verified resolver + cache; overlay handlers Phase 5 | 4 |
+| F1.6 | Home Domain (SEP-1) | §Asset Identification (needs proposal amendment) | 5 | `internal/metadata` + `internal/api/v1/assets.go applySep1Overlay` | [ADR-0007](../adr/0007-redis-cache-schema.md) | [data-sources/sep1-home-domain.md](../discovery/data-sources/sep1-home-domain.md) | Resolver + cache + overlay all shipped; AssetDetail surfaces sep1_status, name, description, image, org_name, anchor_asset, anchor_asset_type. | ✅ verified | 5 |
 
 ## Freighter RFP — V1: Historical price chart
 
@@ -151,12 +161,12 @@ Same as S7. No additional requirement.
 
 | # | Field | Proposal | Week | Owner | ADR | Verified by | Status | Conf |
 | - | ----- | -------- | ---- | ----- | --- | ----------- | ------ | ---- |
-| F2.1 | Market Cap = `circulating × price` | §V2 (addendum) | 6 | `internal/supply` + `/aggregate` | — | [data-sources/supply-data.md](../discovery/data-sources/supply-data.md) | 🧪 designed | 3 |
-| F2.2 | FDV = `max_supply × price` | §V2 | 6 | `internal/supply` | — | [data-sources/supply-data.md](../discovery/data-sources/supply-data.md) | 🧪 designed | 3 |
-| F2.3 | 24h Trading Volume (USD) | §V2 | 6 | Timescale materialised view | ADR-0007 | cross-cutting | 🧪 designed | 3 |
-| F2.4 | Circulating Supply (provider-supplied) | §V2 | 6 | `internal/supply/circulating` | [ADR-0011](../adr/0011-supply-algorithm.md) | [data-sources/supply-data.md](../discovery/data-sources/supply-data.md) | 🧪 designed | 3 |
-| F2.5 | Total Supply (mint − burn − clawback) | §V2 | 6 | `internal/supply/total` | — | [notes/sep-41-token-events.md](../discovery/notes/sep-41-token-events.md) | ✅ verified math; impl pending | 4 |
-| F2.6 | Max Supply (nullable, off-chain metadata) | §V2 | 6 | `internal/metadata` | [ADR-0011](../adr/0011-supply-algorithm.md) (no-fabrication policy) + [ADR-0007](../adr/0007-redis-cache-schema.md) (cache) | [data-sources/sep1-home-domain.md](../discovery/data-sources/sep1-home-domain.md) + [operations/sep1-resolution.md](../operations/sep1-resolution.md) | 🧪 designed | 2 |
+| F2.1 | Market Cap = `circulating × price` | §V2 (addendum) | 6 | `internal/api/v1/assets_f2.go populateMarketCap` | — | [data-sources/supply-data.md](../discovery/data-sources/supply-data.md) | ⚠ caveat — read path wired (#277): API populates `market_cap_usd` when `asset_supply_history` has a row + USD price exists. **Writer for `asset_supply_history` is NOT in-tree** (Task #46 follow-up). Field surfaces as null in production until the writer ships. | 3 |
+| F2.2 | FDV = `max_supply × price` | §V2 | 6 | `internal/api/v1/assets_f2.go populateMarketCap` | — | [data-sources/supply-data.md](../discovery/data-sources/supply-data.md) | ⚠ caveat — same as F2.1 | 3 |
+| F2.3 | 24h Trading Volume (USD) | §V2 | 6 | `internal/storage/timescale.Volume24hUSDForAsset` + `internal/api/v1/assets.go` | ADR-0007 | `volume_24h_usd` field on `/v1/assets/{id}` (#278). Reads from `prices_1m` CAGG. | ✅ verified | 4 |
+| F2.4 | Circulating Supply (provider-supplied) | §V2 | 6 | `internal/supply/circulating` + writer (pending) | [ADR-0011](../adr/0011-supply-algorithm.md) | [data-sources/supply-data.md](../discovery/data-sources/supply-data.md) | ⚠ caveat — read path wired; writer pending Task #46 | 3 |
+| F2.5 | Total Supply (mint − burn − clawback) | §V2 | 6 | `internal/supply` package + writer (pending) | — | [notes/sep-41-token-events.md](../discovery/notes/sep-41-token-events.md) | ⚠ caveat — math + read path verified; writer pending Task #46 | 3 |
+| F2.6 | Max Supply (nullable, off-chain metadata) | §V2 | 6 | `internal/supply/overlay.go` + `internal/metadata` | [ADR-0011](../adr/0011-supply-algorithm.md) | [data-sources/sep1-home-domain.md](../discovery/data-sources/sep1-home-domain.md) | ⚠ caveat — overlay policy implemented; F-0021 (`supply_basis=no_metadata` operational override) tracked alongside Task #46 | 2 |
 
 ## Freighter RFP — Performance SLAs
 
@@ -173,23 +183,23 @@ Same as S7. No additional requirement.
 
 | # | Requirement | Proposal | Week | Owner | Verified by | Status | Conf |
 | - | ----------- | -------- | ---- | ----- | ----------- | ------ | ---- |
-| F4.1 | Lookup classic + Soroban by contract address | §Asset Identification | 4 | `internal/api/lookup` | cross-cutting | 🧪 designed | 3 |
-| F4.2 | Historical retention ≥ 1 year (ideally since inception) | §Historical Data | 2 (scaffold), post-launch (fill) | Timescale + Galexie backfill | [data-sources/galexie.md](../discovery/data-sources/galexie.md) | 🧪 designed (capacity TBC) | 3 |
+| F4.1 | Lookup classic + Soroban by contract address | §Asset Identification | 4 | `internal/canonical.ParseAsset` + `internal/api/v1/assets.go` | cross-cutting | `/v1/assets/{id}` accepts native, classic (code:issuer), fiat:CODE, soroban:C-strkey, raw C-strkey. | ✅ verified | 5 |
+| F4.2 | Historical retention ≥ 1 year (ideally since inception) | §Historical Data | 2 (scaffold), post-launch (fill) | Timescale + Galexie backfill + `/v1/history/since-inception` | [data-sources/galexie.md](../discovery/data-sources/galexie.md) | Migration 0002 sets retention; `/v1/history/since-inception` shipped against the prices_1mo CAGG. | ✅ verified | 4 |
 
 ## Freighter RFP — API characteristics
 
 | # | Requirement | Proposal | Week | Owner | Verified by | Status | Conf |
 | - | ----------- | -------- | ---- | ----- | ----------- | ------ | ---- |
-| F5.1 | REST or GraphQL | §API Layer | 7 | `internal/api/v1` (REST), optional `/graphql` later | (API design) | 🧪 designed | 3 |
-| F5.2 | Rate limits ≥ 1000 req/min | §Rate Limits and Throughput | 7 | `internal/ratelimit` | Bucket + middleware shipped; anonymous tier 60/min today, 1000/min on apikey tier pending auth. | ⚠ caveat | 3 |
-| F5.3 | Bulk / batch query support | §Batch Queries | 7 | `internal/api/batch` | (API design) | 🧪 designed | 3 |
+| F5.1 | REST or GraphQL | §API Layer | 7 | `internal/api/v1` (REST) | (API design) | REST shipped; OpenAPI spec at `openapi/rates-engine.v1.yaml`. GraphQL not in scope. | ✅ verified | 5 |
+| F5.2 | Rate limits ≥ 1000 req/min | §Rate Limits and Throughput | 7 | `internal/ratelimit` + `middleware.RateLimit` | — | F-0008 fixed: authenticated tier uses `api.key_rate_limit_per_min` (default 1000/min); anonymous tier separate at `anon_rate_limit_per_min`. | ✅ verified | 4 |
+| F5.3 | Bulk / batch query support | §Batch Queries | 7 | `internal/api/v1/price.go handlePriceBatch{,Post}` | — | GET /v1/price/batch (≤100 ids); POST /v1/price/batch (≤1000 ids) shipped. | ✅ verified | 4 |
 
 ## Freighter RFP — Misc requirements
 
 | # | Requirement | Proposal | Week | Owner | Verified by | Status | Conf |
 | - | ----------- | -------- | ---- | ----- | ----------- | ------ | ---- |
-| F6.1 | Price source preference VWAP → TWAP → last trade | §Aggregation Strategy | 5 | `internal/aggregate` | (design) | 🧪 designed | 3 |
-| F6.2 | Quote currency = USD | §Quote Currency Policy | 5 | `internal/aggregate/fiat` | [external-refs/fx-feeds.md](../discovery/external-refs/fx-feeds.md) | 🧪 designed | 2 |
+| F6.1 | Price source preference VWAP → TWAP → last trade | §Aggregation Strategy | 5 | `internal/api/v1/price.go` + storage layer | — | `/v1/price` returns vwap (closed-bucket from prices_1m), with last-trade fallback when CAGG has no row; `/v1/twap` shipped for explicit TWAP requests. | ✅ verified | 4 |
+| F6.2 | Quote currency = USD | §Quote Currency Policy | 5 | `internal/api/v1/price.go defaultPriceQuote` + `internal/aggregate/stablecoin.go` | [external-refs/fx-feeds.md](../discovery/external-refs/fx-feeds.md) | Default quote on /v1/price is fiat:USD; stablecoin proxy maps USDC/USDT→USD at aggregator layer. | ✅ verified | 4 |
 | F6.3 | Data aggregation scope = DEXes (Stellar + Soroban) | §Data Ingestion | 2–3 | `internal/sources/*` | cross-cutting | ✅ verified | 5 |
 | F6.4 | "Since Inception" = first recorded trade | §Historical Data | 2 (scaffold), ongoing | backfill orchestrator | [data-sources/stellar-data-lakes.md](../discovery/data-sources/stellar-data-lakes.md) | ✅ verified | 4 |
 | F6.5 | V2 supply data = provider-supplied | §V2 supply | 6 | `internal/supply` | [data-sources/supply-data.md](../discovery/data-sources/supply-data.md) | 🧪 designed | 3 |
