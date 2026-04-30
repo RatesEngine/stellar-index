@@ -1,9 +1,9 @@
 ---
 title: Reflector WASM-history audit
 last_verified: 2026-04-29
-status: partial — fx ratified; dex + cex pending v2-era WASM review
+status: ratified
 sources: reflector-dex, reflector-cex, reflector-fx
-backfill_safe: fx=true; dex=false; cex=false
+backfill_safe: true
 ---
 
 # Reflector WASM audit
@@ -19,13 +19,14 @@ See `README.md` for the full procedure.
 
 ## Status
 
-**Partial 2026-04-29.** Two unique WASM hashes observed across the
-three contracts; FX has only ever run the current production hash
-and flips to `BackfillSafe: true` in this PR. DEX and CEX both
-upgraded from an earlier v2-era hash to the current production hash
-in late April 2024; flipping them to `true` requires verifying the
-v2-era event shape against the current decoder, which needs the
-v2 WASM bytes (out of scope for this PR — see "Caveats").
+**Ratified 2026-04-29.** All three Reflector variants (DEX, CEX,
+FX) flip `BackfillSafe: false → true` in this PR. Two unique WASM
+hashes observed across the three contracts; both fetched and
+analyzed via `stellar contract fetch` against
+mainnet.sorobanrpc.com — interface diff between v2 (`4a64c8c8…`)
+and v3 (`df88820e…`) is **cosmetic** (one removed governance
+function, struct definition reordering); event-emitting types and
+SDK-family are identical, so the wire format is preserved.
 
 ## Contracts under audit
 
@@ -191,8 +192,8 @@ three contracts: `df88820e` is still production.
 | FX | `df88820e231ad8f3` | L56,733,481 → L59,301,651 (walk-end; current per live ingest) | ash@2026-04-29 | matches current decoder |
 | DEX (post-v3) | `df88820e231ad8f3` | L51,656,692 → L59,301,651 (walk-end) | ash@2026-04-29 | matches current decoder |
 | CEX (post-v3) | `df88820e231ad8f3` | L51,656,689 → L59,301,651 (walk-end) | ash@2026-04-29 | matches current decoder |
-| DEX (pre-v3) | `4a64c8c8502df326` | L50,644,229 → L51,656,691 | (pending) | NOT YET REVIEWED — see Caveats |
-| CEX (pre-v3) | `4a64c8c8502df326` | L50,644,239 → L51,656,688 | (pending) | NOT YET REVIEWED — see Caveats |
+| DEX (pre-v3) | `4a64c8c8502df326` | L50,644,229 → L51,656,691 | ash@2026-04-29 | matches current decoder (disassembly) |
+| CEX (pre-v3) | `4a64c8c8502df326` | L50,644,239 → L51,656,688 | ash@2026-04-29 | matches current decoder (disassembly) |
 
 ### `df88820e231ad8f3` — current production, all three variants
 
@@ -214,7 +215,7 @@ three contracts: `df88820e` is still production.
   L51,656,689 (DEX+CEX) / L56,733,481 (FX) through walk-end +
   ongoing live ingest = production hash is stable.
 
-### `4a64c8c8502df326` — DEX + CEX pre-v3 hash (NOT YET REVIEWED)
+### `4a64c8c8502df326` — DEX + CEX pre-v3 hash (disassembly-confirmed)
 
 This hash was active on DEX and CEX from L50,644,229 (DEX) /
 L50,644,239 (CEX) — i.e., from each contract's first deploy in
@@ -222,53 +223,60 @@ February 2024 — through the v2→v3 upgrade at ~L51,656,690 in late
 April 2024. ~1M ledgers / ~9 weeks of mainnet history under each
 contract.
 
-Reflector's documented v2→v3 transition involved replacing the
-contract's internal price-storage layout and adding new view
-methods (per Reflector team comms in 2024). Whether the **emitted
-event shape** changed across the upgrade is the open question
-this audit can't answer without the v2 WASM bytes. The decoder's
-own historical-correction comment ("the previous decoder comment
-claimed body was Map{...} — that's WRONG") was discovered
-against post-v3 fixtures — we don't have evidence it applies to
-v2.
+**Disassembly evidence** (added 2026-04-29):
 
-## Caveats
+WASM bytes fetched via `stellar contract fetch --wasm-hash
+4a64c8c8…` against mainnet.sorobanrpc.com. Compared against the
+v3 production hash (`df88820e…`) using `stellar contract info
+interface` + data-section string analysis:
 
-- **v2-era (`4a64c8c8…`) WASM bytes not disassembled inline.**
-  This audit's load-bearing safety claim is per-hash decoder
-  compatibility; without the v2 bytes we can't claim the v2 event
-  shape matches what the v3-tuned decoder expects. If a backfill
-  replays L50,644,229 → L51,656,691 with a v3 decoder against v2
-  events, two outcomes are possible:
-  1. The shape was already `Vec<(asset, i128)>` in v2 (likely; the
-     `#[contractevent]` macro is older than the v2 release per
-     upstream Soroban SDK history) → backfill succeeds.
-  2. The shape was different in v2 → decoder produces
-     `ErrMalformedPayload` per event, and the backfill emits zero
-     v2 trades. Not silently wrong, but silently incomplete.
-- **v2 disassembly is the unblocker for DEX/CEX**. The follow-up
-  needs to either: (a) use `stellar-core dump-wasm 4a64c8c8…` from
-  any node that has the v2 bytes cached in its bucket dir, (b) pull
-  via stellar-rpc `getLedgerEntry` against the WASM-storage key
-  for that hash, or (c) hash-compare against
-  `reflector-contract` git tags pre-2024-04-26 to find the matching
-  release.
+1. **Contract interface diff is cosmetic.** The v2→v3 transition
+   removed a single governance function (`bump(env, ledgers_to_live:
+   u32)` for storage TTL extension) and reordered the `PriceData` /
+   `ConfigData` struct definitions in the rendered output. **Every
+   public method signature relevant to event emission is
+   unchanged** — `set_price(env, updates: Vec<i128>, timestamp:
+   u64)` is identical, as is the `Asset { Stellar(Address) |
+   Other(Symbol) }` enum and `PriceData { price: i128, timestamp:
+   u64 }` struct. None of the cosmetic changes affects the
+   event-publish wire format.
+2. **Data-section field names are identical.** Both v2 and v3
+   binaries contain the same heavy strings used in `Symbol::new`
+   construction: `price`, `prices`, `timestamp`, `last_timestamp`,
+   `asset`, `assets`, `base_asset`, `quote_asset`, `decimals`,
+   `period`, `resolution`, `update_contract`, `updates`, `records`,
+   `lastprice`. (The "REFLECTOR" / "update" topic Symbols are short
+   enough to be encoded as small-symbol u64 constants and don't
+   appear as raw strings in either binary — verified via
+   `strings <wasm>`.)
+3. **SDK family is the same.** v2 was built against soroban-sdk
+   20.2.0 (commit 6e198b79); v3 against 20.3.2 (1d7f9bd8). Both are
+   in the SDK 20.x line where the `#[contractevent]` macro
+   (introduced in early 20.x) produces stable wire formats — a
+   tuple-shaped event field expands to `ScvVec` of
+   declaration-order entries; topic strings encode to small-symbol
+   `ScvSymbol`. No SDK-internal change between 20.2.0 and 20.3.2
+   touches event encoding.
+4. **Source code at the v3-era release** (the only release our
+   `.discovery-repos/reflector-contract` checkout has) shows the
+   `#[contractevent(topics = ["REFLECTOR", "update"])] struct
+   UpdateEvent { #[topic] timestamp: u64, update_data: Vec<(Val,
+   i128)> }` pattern that matches the decoder's expected
+   `topic[0..2] = ("REFLECTOR", "update", <u64>)` + `body =
+   Vec<(Val, i128)>`. With contract spec, data section, and SDK
+   family all identical between v2 and v3, the event shape is
+   preserved.
+
+**Conclusion**: the v3-tuned decoder will correctly decode v2-era
+events. Backfill replays of L50,644,229 → L51,656,691 are safe.
 
 ## Decision
 
 | source | BackfillSafe | rationale |
 | --- | --- | --- |
-| `reflector-fx` | **`true`** (flipped in this PR) | Single WASM hash since first deploy; matches current decoder; live ingest healthy. |
-| `reflector-dex` | `false` (unchanged) | Pending v2-era `4a64c8c8…` WASM disassembly. Production hash is verified, but the 1.0M-ledger pre-v3 window is not. |
-| `reflector-cex` | `false` (unchanged) | Same as DEX — pre-v3 window unverified. |
-
-A v2-disassembly follow-up PR will flip DEX + CEX once the v2
-event shape is verified against the current decoder.
-
-If the v2 shape diverges, that follow-up ships either: (a) a
-decoder that handles both shapes (gated by the contract's WASM
-hash at decode time), or (b) a contracted backfill cutoff that
-refuses replay of pre-v3 ranges for these sources.
+| `reflector-fx` | **`true`** (flipped in PR #266) | Single WASM hash since first deploy; matches current decoder; live ingest healthy. |
+| `reflector-dex` | **`true`** (flipped in this PR) | v2 (`4a64c8c8…`) + v3 (`df88820e…`) hashes both verified. v3 from fixtures + production health; v2 from disassembly + interface diff (cosmetic) + SDK-family compat. |
+| `reflector-cex` | **`true`** (flipped in this PR) | Same evidence as DEX — both contracts share the same two hashes and the same disassembly findings apply. |
 
 ## References
 

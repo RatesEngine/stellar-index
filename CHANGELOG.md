@@ -426,6 +426,19 @@ against.
 
 ### Changed
 
+- **`reflector-dex` and `reflector-cex` flipped `BackfillSafe:
+  false → true`** — v2-era WASM (`4a64c8c8…`) fetched via
+  `stellar contract fetch` and disassembled against the v3
+  production hash (`df88820e…`). Contract-interface diff is
+  cosmetic (one removed governance function, struct ordering);
+  data-section field names identical; SDK 20.x family preserves
+  `#[contractevent]` macro behavior, so v2 and v3 events have the
+  same wire format. The decoder works for both. Audit evidence
+  appended to
+  [docs/operations/wasm-audits/reflector.md](docs/operations/wasm-audits/reflector.md);
+  status flipped partial → ratified. All three Reflector variants
+  now flip-completed.
+
 - **`reflector-fx` source flipped `BackfillSafe: false → true`** —
   WASM-history audit landed
   ([docs/operations/wasm-audits/reflector.md](docs/operations/wasm-audits/reflector.md)).

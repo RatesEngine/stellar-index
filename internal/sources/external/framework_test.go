@@ -75,10 +75,8 @@ func TestRegistry_BackfillSafePolicy(t *testing.T) {
 		// soroswap audited 2026-04-29 → moved to wantSafe.
 		"aquarius", "phoenix", "comet",
 		// Soroban oracles — same upgradeability concern.
-		// band + redstone audited 2026-04-29 → moved to wantSafe.
-		// reflector-fx audited 2026-04-29 → moved to wantSafe (DEX/CEX
-		// pending v2-era WASM disassembly; see reflector.md).
-		"reflector-dex", "reflector-cex",
+		// band + redstone + reflector-{dex,cex,fx} all audited
+		// 2026-04-29 → moved to wantSafe.
 	}
 	for _, name := range wantUnsafe {
 		if Registry[name].BackfillSafe {
@@ -90,11 +88,13 @@ func TestRegistry_BackfillSafePolicy(t *testing.T) {
 	}
 
 	wantSafe := []string{
-		"sdex",         // classic Stellar, no WASM
-		"soroswap",     // audited 2026-04-29 — see docs/operations/wasm-audits/soroswap.md
-		"band",         // audited 2026-04-29 — see docs/operations/wasm-audits/band.md
-		"redstone",     // audited 2026-04-29 — see docs/operations/wasm-audits/redstone.md
-		"reflector-fx", // audited 2026-04-29 — see docs/operations/wasm-audits/reflector.md (FX only)
+		"sdex",          // classic Stellar, no WASM
+		"soroswap",      // audited 2026-04-29 — see docs/operations/wasm-audits/soroswap.md
+		"band",          // audited 2026-04-29 — see docs/operations/wasm-audits/band.md
+		"redstone",      // audited 2026-04-29 — see docs/operations/wasm-audits/redstone.md
+		"reflector-dex", // audited 2026-04-29 (incl v2 disassembly) — see docs/operations/wasm-audits/reflector.md
+		"reflector-cex", // audited 2026-04-29 (incl v2 disassembly) — see docs/operations/wasm-audits/reflector.md
+		"reflector-fx",  // audited 2026-04-29 — see docs/operations/wasm-audits/reflector.md
 		"binance", "kraken", "bitstamp", "coinbase", "bitfinex",
 		"polygon-forex", "exchangeratesapi",
 		"coingecko", "coinmarketcap", "cryptocompare",

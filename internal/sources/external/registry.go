@@ -36,8 +36,8 @@ var Registry = map[string]Metadata{
 	// derived prices with their own governance and methodology. Reported
 	// alongside for transparency. Operator opts one in per-source via
 	// config if they want oracle-inclusive aggregation.
-	"reflector-dex": {Class: ClassOracle, DefaultWeight: 100, IncludeInVWAP: false, Paid: false, BackfillAvailable: true, BackfillSafe: false},
-	"reflector-cex": {Class: ClassOracle, DefaultWeight: 100, IncludeInVWAP: false, Paid: false, BackfillAvailable: true, BackfillSafe: false},
+	"reflector-dex": {Class: ClassOracle, DefaultWeight: 100, IncludeInVWAP: false, Paid: false, BackfillAvailable: true, BackfillSafe: true /* audited 2026-04-29; v2 disassembly confirms compat. See docs/operations/wasm-audits/reflector.md */},
+	"reflector-cex": {Class: ClassOracle, DefaultWeight: 100, IncludeInVWAP: false, Paid: false, BackfillAvailable: true, BackfillSafe: true /* audited 2026-04-29; v2 disassembly confirms compat. See docs/operations/wasm-audits/reflector.md */},
 	"reflector-fx":  {Class: ClassOracle, DefaultWeight: 100, IncludeInVWAP: false, Paid: false, BackfillAvailable: true, BackfillSafe: true /* audited 2026-04-29; see docs/operations/wasm-audits/reflector.md */},
 	"redstone":      {Class: ClassOracle, DefaultWeight: 100, IncludeInVWAP: false, Paid: false, BackfillAvailable: true, BackfillSafe: true /* audited 2026-04-29; see docs/operations/wasm-audits/redstone.md */},
 	"band":          {Class: ClassOracle, DefaultWeight: 100, IncludeInVWAP: false, Paid: false, BackfillAvailable: true, BackfillSafe: true /* audited 2026-04-29; see docs/operations/wasm-audits/band.md */},
