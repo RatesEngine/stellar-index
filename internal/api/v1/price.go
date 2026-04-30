@@ -187,6 +187,41 @@ type PriceSnapshotConfidence struct {
 	Factors    ConfidenceFactors
 }
 
+// TriangulatedPriceLooker is the fallback path /v1/price consults
+// after a Timescale miss. The aggregator's triangulation worker
+// publishes implied VWAPs (e.g. XLM/EUR via XLM/USD × USD/EUR) into
+// `vwap:<base>:<quote>:<window>` Redis keys with a `:provenance`
+// sibling key set to "triangulated"; this Looker reads both and
+// returns whether a triangulated value exists for the requested
+// pair + the value itself.
+//
+// Production wiring: a Redis-backed adapter that reads
+// [cachekeys.VWAP] and [cachekeys.VWAPProvenance]. Nil leaves
+// /v1/price returning 404 for triangulated-only pairs (the
+// existing behaviour) — wire when the aggregator's triangulation
+// chains are configured + Redis is reachable.
+type TriangulatedPriceLooker interface {
+	// LookupTriangulatedVWAP returns the triangulated VWAP for the
+	// pair + window if one is cached AND the provenance marker
+	// confirms it came from triangulation (vs. a direct per-pair
+	// refresh that happened to write to the same key).
+	//
+	// Return values:
+	//   value           — decimal string when found.
+	//   isTriangulated  — true when the provenance marker says so.
+	//                     false means the cache had a value but it
+	//                     was a direct VWAP, not triangulated; the
+	//                     handler should NOT use this as a Timescale
+	//                     fallback (Timescale already had the
+	//                     direct value and returned ErrPriceNotFound
+	//                     for some other reason).
+	//   found           — true when any value was in the cache.
+	//   err             — propagates Redis errors so the handler
+	//                     can log them; cache misses are NOT errors
+	//                     (found=false, err=nil).
+	LookupTriangulatedVWAP(ctx context.Context, base, quote canonical.Asset, window time.Duration) (value string, isTriangulated, found bool, err error)
+}
+
 // ─── Handler ──────────────────────────────────────────────────────
 
 // handlePrice serves GET /v1/price?asset=<id>&quote=<id>.
@@ -243,12 +278,25 @@ func (s *Server) handlePrice(w http.ResponseWriter, r *http.Request) {
 	}
 
 	snapshot, sources, stale, err := reader.LatestPrice(r.Context(), asset, quote)
+	triangulated := false
 	if errors.Is(err, ErrPriceNotFound) {
-		writeProblem(w, r,
-			"https://api.ratesengine.net/errors/price-not-found",
-			"No price data for pair", http.StatusNotFound,
-			"no trades or oracle observations for "+asset.String()+" / "+quote.String())
-		return
+		// Timescale miss — fall through to the triangulation cache
+		// if a TriangulatedPriceLooker is wired (per F-0014). When
+		// the aggregator's triangulation worker has cached an
+		// implied value for this pair, serve that with
+		// `flags.triangulated=true`. When no looker is wired or no
+		// triangulated value is cached, the original 404 stands.
+		var ok bool
+		snapshot, sources, triangulated, ok = s.tryTriangulatedFallback(r.Context(), asset, quote)
+		stale = false
+		if !ok {
+			writeProblem(w, r,
+				"https://api.ratesengine.net/errors/price-not-found",
+				"No price data for pair", http.StatusNotFound,
+				"no trades or oracle observations for "+asset.String()+" / "+quote.String())
+			return
+		}
+		err = nil
 	}
 	if err != nil {
 		if clientAborted(r, err) {
@@ -278,7 +326,7 @@ func (s *Server) handlePrice(w http.ResponseWriter, r *http.Request) {
 	// fields nil, and the response ships cleanly without them.
 	s.attachConfidence(r, &snapshot, asset, quote)
 
-	flags := Flags{Stale: stale}
+	flags := Flags{Stale: stale, Triangulated: triangulated}
 	frozen := s.lookupFrozen(r, asset, quote)
 	flags.Frozen = frozen
 	// SingleSource is forced true when the snapshot is the LKG
@@ -316,6 +364,68 @@ func (s *Server) handlePrice(w http.ResponseWriter, r *http.Request) {
 // window set + hot enough that a stale score TTL's out before
 // being read.
 const confidenceLookupWindow = 5 * time.Minute
+
+// triangulationLookupWindow is the window the API queries the
+// triangulation cache at. Mirrors the aggregator's default
+// triangulation worker cadence (1 minute). When the worker emits
+// implied VWAPs at multiple windows, the API picks 1m as the
+// freshest available — older windows are inferior.
+const triangulationLookupWindow = 1 * time.Minute
+
+// tryTriangulatedFallback consults the wired
+// [TriangulatedPriceLooker] (if any) after a Timescale miss on
+// /v1/price. Returns ok=true with a synthesised snapshot when the
+// triangulation worker has cached an implied VWAP for this pair
+// AND the provenance marker confirms triangulation. Returns
+// ok=false otherwise so the handler can preserve the original 404.
+//
+// The synthesised snapshot has:
+//   - Price       — the cached value
+//   - PriceType   — "vwap" (triangulated VWAPs ARE VWAPs)
+//   - ObservedAt  — time.Now() rounded down to the window. The
+//     triangulator overwrites the cache key on each
+//     tick at the same cadence, so "now-aligned-to-
+//     window-end" is a faithful approximation
+//     without round-tripping a separate timestamp.
+//   - WindowSec   — [triangulationLookupWindow] in seconds
+//   - Sources     — empty []string{} — triangulation has no direct
+//     sources, only legs (and exposing legs would be
+//     a different shape than the existing per-pair
+//     sources contract)
+//   - Stale       — false; cache TTL is bound to window, so a
+//     non-expired key is by construction within-
+//     window
+func (s *Server) tryTriangulatedFallback(ctx context.Context, asset, quote canonical.Asset) (PriceSnapshot, []string, bool, bool) {
+	// Returns: snapshot, sources, triangulated, ok.
+	// Stale is intentionally NOT returned (always false here) —
+	// the cache TTL is bound to the lookup window so a non-expired
+	// key is by construction within-window.
+	if s.triangulated == nil {
+		return PriceSnapshot{}, nil, false, false
+	}
+	value, isTriangulated, found, err := s.triangulated.LookupTriangulatedVWAP(ctx, asset, quote, triangulationLookupWindow)
+	if err != nil {
+		s.logger.Warn("triangulation cache lookup failed",
+			"err", err, "asset", asset.String(), "quote", quote.String())
+		return PriceSnapshot{}, nil, false, false
+	}
+	if !found || !isTriangulated {
+		return PriceSnapshot{}, nil, false, false
+	}
+	now := time.Now().UTC()
+	// Round-down to the window boundary so observed_at lines up
+	// with the aggregator's tick rather than wall-clock noise.
+	observedAt := now.Truncate(triangulationLookupWindow)
+	snap := PriceSnapshot{
+		AssetID:       asset.String(),
+		Quote:         quote.String(),
+		Price:         value,
+		PriceType:     "vwap",
+		ObservedAt:    observedAt,
+		WindowSeconds: int(triangulationLookupWindow.Seconds()),
+	}
+	return snap, []string{}, true, true
+}
 
 // attachConfidence consults the wired ConfidenceLooker (when set)
 // and populates snap.Confidence + snap.ConfidenceFactors. Best-
