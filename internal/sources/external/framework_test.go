@@ -10,7 +10,7 @@ import "testing"
 func TestRegistry_KnownSourcesClassified(t *testing.T) {
 	// Keep this list aligned with what internal/sources/ exports.
 	want := []string{
-		"soroswap", "aquarius", "phoenix", "comet", "sdex",
+		"soroswap", "aquarius", "phoenix", "comet", "sdex", "blend",
 		"reflector-dex", "reflector-cex", "reflector-fx",
 		"redstone", "band",
 		"binance", "kraken", "bitstamp", "coinbase", "bitfinex",
@@ -72,13 +72,14 @@ func TestRegistry_BackfillSafePolicy(t *testing.T) {
 	wantUnsafe := []string{
 		// Soroban DeFi — `update_contract` can change event schemas
 		// without changing the contract address. See CLAUDE.md.
-		// All 4 Soroban DeFi sources (soroswap, phoenix, aquarius,
-		// comet) audited 2026-04-29 → moved to wantSafe.
-		// (No remaining unsafe sources at this time. Adding a new
-		// Soroban source restores this list.)
+		// All 4 original Soroban DeFi sources (soroswap, phoenix,
+		// aquarius, comet) audited 2026-04-29 → moved to wantSafe.
 		// Soroban oracles — same upgradeability concern.
 		// band + redstone + reflector-{dex,cex,fx} all audited
 		// 2026-04-29 → moved to wantSafe.
+		// blend (lending) — added with the dispatcher wiring; WASM
+		// audit pending in Task #45.
+		"blend",
 	}
 	for _, name := range wantUnsafe {
 		if Registry[name].BackfillSafe {

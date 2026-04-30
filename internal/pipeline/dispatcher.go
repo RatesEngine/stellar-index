@@ -31,6 +31,7 @@ import (
 	"github.com/RatesEngine/rates-engine/internal/dispatcher"
 	"github.com/RatesEngine/rates-engine/internal/sources/aquarius"
 	"github.com/RatesEngine/rates-engine/internal/sources/band"
+	"github.com/RatesEngine/rates-engine/internal/sources/blend"
 	"github.com/RatesEngine/rates-engine/internal/sources/comet"
 	"github.com/RatesEngine/rates-engine/internal/sources/phoenix"
 	"github.com/RatesEngine/rates-engine/internal/sources/redstone"
@@ -110,6 +111,12 @@ func BuildDispatcher(names []string, oracle config.OracleConfig) (*dispatcher.Di
 				band.NewDecoder(oracle.Band.StandardReferenceContract))
 		case sdex.SourceName:
 			opDecoders = append(opDecoders, sdex.NewDecoder())
+		case blend.SourceName:
+			// Blend matches by topic[0] across every Blend pool
+			// contract — the per-pool address is stamped into the
+			// decoded event but no contract-list filter is needed
+			// at dispatch time. See internal/sources/blend/README.md.
+			decoders = append(decoders, blend.NewDecoder())
 		default:
 			return nil, fmt.Errorf("unknown source %q in ingestion.enabled_sources — check internal/sources/", name)
 		}

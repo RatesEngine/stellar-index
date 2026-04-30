@@ -33,6 +33,7 @@ var KnownSources = map[string]struct{}{
 	"phoenix":       {},
 	"comet":         {},
 	"sdex":          {},
+	"blend":         {},
 	"reflector-dex": {},
 	"reflector-cex": {},
 	"reflector-fx":  {},

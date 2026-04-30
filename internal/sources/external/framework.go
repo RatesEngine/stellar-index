@@ -84,6 +84,17 @@ const (
 	// if our live rate drifts more than N bps from the central
 	// bank's public close.
 	ClassAuthoritySanity Class = "authority_sanity"
+
+	// ClassLending — on-chain lending protocols whose events are
+	// directional / state-change signals rather than spot prices
+	// (Blend). Auctions surface stress-prices during liquidation;
+	// supply / borrow events surface position-side metrics; bad
+	// debt flags protocol health. None of these contributes to
+	// VWAP — lending events represent decisions taken on top of
+	// other oracles' prices, not new price observations. Reported
+	// alongside as a secondary validation surface per the proposal
+	// (docs/discovery/dexes-amms/blend.md).
+	ClassLending Class = "lending"
 )
 
 // Subclass is a finer-grained partition within a [Class]. Used by

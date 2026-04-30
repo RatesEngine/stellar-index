@@ -11,6 +11,7 @@ import (
 	"github.com/RatesEngine/rates-engine/internal/obs"
 	"github.com/RatesEngine/rates-engine/internal/sources/aquarius"
 	"github.com/RatesEngine/rates-engine/internal/sources/band"
+	"github.com/RatesEngine/rates-engine/internal/sources/blend"
 	"github.com/RatesEngine/rates-engine/internal/sources/comet"
 	"github.com/RatesEngine/rates-engine/internal/sources/external"
 	"github.com/RatesEngine/rates-engine/internal/sources/phoenix"
@@ -88,6 +89,12 @@ func handleOneEvent(ctx context.Context, logger *slog.Logger, store *timescale.S
 		persistTrade(ctx, logger, store, e.Trade)
 	case external.UpdateEvent:
 		persistOracle(ctx, logger, store, e.Update)
+	case blend.NewAuctionEvent:
+		persistBlendNewAuction(ctx, logger, store, e)
+	case blend.FillAuctionEvent:
+		persistBlendFillAuction(ctx, logger, store, e)
+	case blend.DeleteAuctionEvent:
+		persistBlendDeleteAuction(ctx, logger, store, e)
 	default:
 		// A source emitted an event type the sink doesn't know how
 		// to persist. Usually means a new source was registered in
@@ -143,4 +150,43 @@ func persistOracle(ctx context.Context, logger *slog.Logger, store *timescale.St
 		"price", u.Price.String(),
 		"decimals", u.Decimals,
 	)
+}
+
+func persistBlendNewAuction(ctx context.Context, logger *slog.Logger, store *timescale.Store, e blend.NewAuctionEvent) {
+	if err := store.InsertBlendNewAuction(ctx, e); err != nil {
+		obs.SourceInsertErrorsTotal.WithLabelValues(blend.SourceName, "blend_auction").Inc()
+		logger.Error("insert blend new_auction failed",
+			"pool", e.Pool, "user", e.User, "auction_type", e.AuctionType,
+			"ledger", e.Ledger, "tx_hash", e.TxHash, "err", err)
+		return
+	}
+	logger.Info("blend new_auction ingested",
+		"pool", e.Pool, "user", e.User, "auction_type", e.AuctionType,
+		"percent", e.Percent, "ledger", e.Ledger)
+}
+
+func persistBlendFillAuction(ctx context.Context, logger *slog.Logger, store *timescale.Store, e blend.FillAuctionEvent) {
+	if err := store.InsertBlendFillAuction(ctx, e); err != nil {
+		obs.SourceInsertErrorsTotal.WithLabelValues(blend.SourceName, "blend_auction").Inc()
+		logger.Error("insert blend fill_auction failed",
+			"pool", e.Pool, "user", e.User, "filler", e.Filler,
+			"ledger", e.Ledger, "tx_hash", e.TxHash, "err", err)
+		return
+	}
+	logger.Info("blend fill_auction ingested",
+		"pool", e.Pool, "user", e.User, "filler", e.Filler,
+		"fill_percent", e.FillPercent, "ledger", e.Ledger)
+}
+
+func persistBlendDeleteAuction(ctx context.Context, logger *slog.Logger, store *timescale.Store, e blend.DeleteAuctionEvent) {
+	if err := store.InsertBlendDeleteAuction(ctx, e); err != nil {
+		obs.SourceInsertErrorsTotal.WithLabelValues(blend.SourceName, "blend_auction").Inc()
+		logger.Error("insert blend delete_auction failed",
+			"pool", e.Pool, "user", e.User, "auction_type", e.AuctionType,
+			"ledger", e.Ledger, "err", err)
+		return
+	}
+	logger.Info("blend delete_auction ingested",
+		"pool", e.Pool, "user", e.User, "auction_type", e.AuctionType,
+		"ledger", e.Ledger)
 }
