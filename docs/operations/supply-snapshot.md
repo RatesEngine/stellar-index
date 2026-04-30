@@ -147,6 +147,52 @@ The writer rejects `-asset CODE-G…` and `-asset C…` with a clear
 "not yet supported at v1" message until the corresponding computer
 ships.
 
+## Textfile-collector integration
+
+`-textfile-output PATH` writes a Prometheus textfile after each run
+so node_exporter can scrape per-asset supply values, run duration,
+and a pass/fail gauge. Operator wiring:
+
+```sh
+# /etc/default/supply-snapshot
+TEXTFILE_OUTPUT=/var/lib/node_exporter/textfile_collector/supply_snapshot.prom
+```
+
+The systemd service writes via the `<path>.tmp`-then-rename atomic
+protocol; node_exporter skips files whose name ends in `.tmp` so a
+partial write never appears in a scrape.
+
+### Metric set
+
+```
+ratesengine_supply_snapshot_total_xlm{asset_key=}             gauge   XLM
+ratesengine_supply_snapshot_circulating_xlm{asset_key=}       gauge   XLM
+ratesengine_supply_snapshot_max_xlm{asset_key=}               gauge   XLM (only when set)
+ratesengine_supply_snapshot_ledger{asset_key=}                gauge   ledger seq
+ratesengine_supply_snapshot_observed_at_seconds{asset_key=}   gauge   unix
+ratesengine_supply_snapshot_run_duration_seconds              gauge   seconds
+ratesengine_supply_snapshot_unit_failed{asset_key=}           gauge   1 on fail, 0 on pass
+ratesengine_supply_snapshot_last_success_timestamp{asset_key=} gauge  unix; only on pass
+```
+
+Values are emitted in **XLM** units (not stroops) for human-
+readable Grafana panels. The `asset_supply_history` hypertable
+retains full NUMERIC precision; the textfile loses sub-stroop
+precision in the float64 conversion, which is fine for monitoring.
+
+### Alerts
+
+Four alerts in `deploy/monitoring/rules/supply-snapshot.yml`:
+
+| Alert | Condition | Severity |
+|-------|-----------|----------|
+| `ratesengine_supply_snapshot_unit_failed_alert` | unit_failed=1 sustained 30 min | P3 ticket |
+| `ratesengine_supply_snapshot_stale` | last_success > 36 h | P3 ticket |
+| `ratesengine_supply_snapshot_critical_stale` | last_success > 72 h | **P2** page |
+| `ratesengine_supply_snapshot_circulating_zero` | circulating ≤ 0 (XLM only) | **P2** page |
+
+Each has a runbook under `docs/operations/runbooks/supply-snapshot-*.md`.
+
 ## Verifying it ran
 
 After the first cron fire, check the snapshot landed:
