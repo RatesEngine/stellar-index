@@ -13,6 +13,7 @@ import (
 	"github.com/RatesEngine/rates-engine/internal/sources/aquarius"
 	"github.com/RatesEngine/rates-engine/internal/sources/band"
 	"github.com/RatesEngine/rates-engine/internal/sources/blend"
+	claimable_balances "github.com/RatesEngine/rates-engine/internal/sources/claimable_balances"
 	"github.com/RatesEngine/rates-engine/internal/sources/comet"
 	"github.com/RatesEngine/rates-engine/internal/sources/external"
 	"github.com/RatesEngine/rates-engine/internal/sources/phoenix"
@@ -101,6 +102,8 @@ func handleOneEvent(ctx context.Context, logger *slog.Logger, store *timescale.S
 		persistAccountObservation(ctx, logger, store, e)
 	case trustlines.Observation:
 		persistTrustlineObservation(ctx, logger, store, e)
+	case claimable_balances.Observation:
+		persistClaimableObservation(ctx, logger, store, e)
 	default:
 		// A source emitted an event type the sink doesn't know how
 		// to persist. Usually means a new source was registered in
@@ -229,4 +232,24 @@ func persistTrustlineObservation(ctx context.Context, logger *slog.Logger, store
 	logger.Debug("trustline observation ingested",
 		"account_id", o.AccountID, "asset_key", o.AssetKey, "ledger", o.Ledger,
 		"balance_stroops", o.Balance.String(), "is_removal", o.IsRemoval)
+}
+
+func persistClaimableObservation(ctx context.Context, logger *slog.Logger, store *timescale.Store, o claimable_balances.Observation) {
+	if err := store.InsertClaimableObservation(ctx, timescale.ClaimableObservation{
+		ClaimableID: o.ClaimableID,
+		AssetKey:    o.AssetKey,
+		Ledger:      o.Ledger,
+		ObservedAt:  o.ObservedAt,
+		Balance:     o.Balance,
+		IsRemoval:   o.IsRemoval,
+	}); err != nil {
+		obs.SourceInsertErrorsTotal.WithLabelValues(claimable_balances.SourceName, "claimable_observation").Inc()
+		logger.Error("insert claimable observation failed",
+			"claimable_id", o.ClaimableID, "asset_key", o.AssetKey, "ledger", o.Ledger,
+			"err", err)
+		return
+	}
+	logger.Debug("claimable observation ingested",
+		"claimable_id", o.ClaimableID, "asset_key", o.AssetKey, "ledger", o.Ledger,
+		"balance_stroops", o.Balance.String())
 }

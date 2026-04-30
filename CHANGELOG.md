@@ -17,6 +17,22 @@ against.
 
 ### Added
 
+- **`internal/sources/claimable_balances/` observer (#305 — Task #55
+  PR 3/5)**: ClaimableBalanceEntry observer following the
+  trustlines pattern from #304. Same operator-watched-asset
+  config (`[supply] watched_classic_assets`); same dispatcher
+  hook (#297). Identity is per-claimable-balance-id (hex of
+  `BalanceId.V0`), not per-account, since claimable balances
+  aren't tied to an account post-creation. **Removed-variant
+  changes are filtered out at v1**: the LedgerKey for a removed
+  claimable carries only the BalanceId, not the asset, so we
+  can't determine watched-set membership at the observer level.
+  Sum query overcount is bounded by the cumulative claimed-but-
+  not-recorded volume per watched asset; for circulating-supply
+  derivation this is a CONSERVATIVE error (we under-report
+  circulating). A writer-side lookup follow-up is documented in
+  the package doc if measurable in production.
+
 - **`internal/sources/trustlines/` observer (#304 — Task #55 PR 2/5)**:
   TrustlineEntry observer mirroring the AccountEntry pattern from
   #298. Operator-watched-asset driven via the existing
