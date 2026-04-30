@@ -81,6 +81,21 @@ signal lands.
 | `ratesengine_api_error_rate_critical` | same | > 5 % for > 2 min | **P1** | [api-5xx](runbooks/api-5xx.md) |
 | `ratesengine_api_price_stale` | `ratesengine_price_staleness_seconds` per asset | > 120 s sustained 5 min | P2 | [price-stale](runbooks/price-stale.md) |
 
+## SLA-probe alerts
+
+Source: `cmd/ratesengine-sla-probe` runs every 15 min via the
+systemd timer in `deploy/systemd/sla-probe.timer`; metrics emitted
+to node_exporter's textfile_collector via `-textfile-output`.
+Per the Freighter RFP V1 §SLA targets — these are the synthetic
+counterparts to the API-plane alerts above.
+
+| Name | Metric | Condition | Severity | Runbook |
+| ---- | ------ | --------- | -------- | ------- |
+| `ratesengine_sla_probe_p95_breach` | `ratesengine_sla_probe_latency_ms{quantile="0.95"}` | > 200 ms for ≥ 30 min | **P2** | [sla-probe-p95-breach](runbooks/sla-probe-p95-breach.md) |
+| `ratesengine_sla_probe_freshness_breach` | `ratesengine_sla_probe_freshness_sec` | > 30 s for ≥ 30 min | **P2** | [sla-probe-freshness-breach](runbooks/sla-probe-freshness-breach.md) |
+| `ratesengine_sla_probe_unit_failed_alert` | `ratesengine_sla_probe_unit_failed` | > 0 for ≥ 30 min | P3 | [sla-probe-unit-failed](runbooks/sla-probe-unit-failed.md) |
+| `ratesengine_sla_probe_stale` | `time() - ratesengine_sla_probe_last_pass_timestamp` | > 90 min for ≥ 5 min | **P2** | [sla-probe-stale](runbooks/sla-probe-stale.md) |
+
 ## SLO burn-rate alerts (multi-window)
 
 Per [ADR-0009](../adr/0009-latency-budget.md). Pattern from the
