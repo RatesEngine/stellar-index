@@ -133,6 +133,11 @@ func main() { //nolint:gocyclo,gocognit,funlen // subcommand switch; each case i
 			fmt.Fprintf(os.Stderr, "wasm-history: %v\n", err)
 			os.Exit(1)
 		}
+	case "extract-wasm-from-galexie":
+		if err := extractWasmFromGalexie(args[1:]); err != nil {
+			fmt.Fprintf(os.Stderr, "extract-wasm-from-galexie: %v\n", err)
+			os.Exit(1)
+		}
 	case "cross-region-check":
 		if err := crossRegionCheck(args[1:]); err != nil {
 			fmt.Fprintf(os.Stderr, "cross-region-check: %v\n", err)
@@ -348,6 +353,22 @@ Subcommands:
                               -from 21000000 -to 25000000 \
                               -contracts CDLZ...,CARFAC... \
                               > soroswap-wasm-history.json
+  extract-wasm-from-galexie -config PATH -hashes HEX,HEX,... -output-dir DIR [-from N] [-to N] [-parallel N] [-bucket NAME]
+                          Extract raw WASM bytes for one or more contract-
+                          code hashes by walking the local galexie LCM
+                          archive. Writes <hash>.wasm files into
+                          -output-dir. Companion to wasm-history: walk the
+                          history first to enumerate hashes, then run this
+                          to pull bytes for the (likely-evicted from current
+                          ledger state) older versions. r1's full archive is
+                          the truer source than RPC getLedgerEntry —
+                          works offline, doesn't depend on TTL retention.
+                          Example:
+                            ratesengine-ops extract-wasm-from-galexie \
+                              -config /etc/ratesengine.toml \
+                              -from 50457424 -to 62296694 -parallel 8 \
+                              -hashes 4a64c8c8...,b400f7a8... \
+                              -output-dir /var/wasm-audit
   backfill-external -config PATH -source SRC -pair SYM -from TS -to TS -granularity D
                           Pull historical candles from an external venue
                           (binance / kraken / bitstamp / coinbase) and
@@ -2482,6 +2503,15 @@ func wasmHistory(args []string) error { //nolint:funlen,gocognit,gocyclo // line
 		"Number of concurrent worker ranges. Range [from,to] is split into "+
 			"N contiguous chunks. Each worker has its own ledgerstream + dispatcher; "+
 			"results are merged at the end. Worth setting >1 for ranges of 1M+ ledgers.")
+	checkpointDir := fs.String("checkpoint-dir", "",
+		"Optional directory to write per-worker JSONL transition logs into. "+
+			"Each transition (one wasm-hash change for one watched contract) is "+
+			"appended as one line: {contract, wasm_hash, at_ledger}. Useful for "+
+			"long-running walks where the final JSON output is at risk if any "+
+			"worker dies mid-flight (the JSON is only written at full completion). "+
+			"Files are named <dir>/wasm-history-w<worker>.jsonl. Use "+
+			"`ratesengine-ops wasm-history-merge-jsonl` (planned) or hand-stitch "+
+			"to recover ranges from a partial run.")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -2553,11 +2583,21 @@ func wasmHistory(args []string) error { //nolint:funlen,gocognit,gocyclo // line
 
 	startedAt := time.Now()
 
+	// Validate / prepare the optional checkpoint dir.
+	if *checkpointDir != "" {
+		if st, statErr := os.Stat(*checkpointDir); statErr != nil {
+			return fmt.Errorf("-checkpoint-dir %q: %w", *checkpointDir, statErr)
+		} else if !st.IsDir() {
+			return fmt.Errorf("-checkpoint-dir %q is not a directory", *checkpointDir)
+		}
+		fmt.Fprintf(os.Stderr, "wasm-history: per-worker JSONL transition log → %s/wasm-history-w<i>.jsonl\n", *checkpointDir)
+	}
+
 	// Split the range into N contiguous chunks. Worker i gets
 	// [from + i*size, from + (i+1)*size - 1] except the last
 	// worker absorbs the remainder.
 	workerStates, totalScanned, err := runWasmHistoryWorkers(
-		ctx, lsCfg, watch, uint32(*from), uint32(*to), int(*parallel), uint64(*progressEvery))
+		ctx, lsCfg, watch, uint32(*from), uint32(*to), int(*parallel), uint64(*progressEvery), *checkpointDir)
 	if err != nil {
 		return err
 	}
@@ -2605,6 +2645,13 @@ type workerResult struct {
 // runWasmHistoryWorkers splits [from,to] into `parallel` contiguous
 // chunks and runs each in its own goroutine. Returns per-worker
 // state maps in worker-order plus the total ledgers scanned.
+//
+// When `checkpointDir` is non-empty, each worker also writes one
+// JSONL line per observed transition to
+// `<checkpointDir>/wasm-history-w<i>.jsonl`. This gives crash-
+// resilience for long-running walks: if a worker dies mid-flight,
+// the per-worker JSONL contains every transition it saw before the
+// crash. The final stdout JSON is unchanged.
 func runWasmHistoryWorkers(
 	ctx context.Context,
 	lsCfg ledgerstream.Config,
@@ -2612,6 +2659,7 @@ func runWasmHistoryWorkers(
 	from, to uint32,
 	parallel int,
 	progressEvery uint64,
+	checkpointDir string,
 ) ([]workerResult, uint64, error) {
 	if parallel < 1 {
 		parallel = 1
@@ -2636,28 +2684,8 @@ func runWasmHistoryWorkers(
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			results[i].upperEnd = b.to
-			workerScanned := uint64(0)
-			err := ledgerstream.Stream(ctx, lsCfg, b.from, b.to,
-				func(lcm sdkxdr.LedgerCloseMeta) error {
-					seq := lcm.LedgerSequence()
-					scanLCMForWasmChanges(lcm, watch, results[i].state, seq)
-					workerScanned++
-					if progressEvery > 0 && workerScanned%progressEvery == 0 {
-						total := totalScanned.add(progressEvery)
-						rate := float64(total) / time.Since(startedAt).Seconds()
-						fmt.Fprintf(os.Stderr, "wasm-history: w%d ledger %d, total scanned %d, %.0f ledgers/s\n",
-							i, seq, total, rate)
-					}
-					return nil
-				},
-			)
-			results[i].scanned = workerScanned
-			// Add the un-counted residue (workerScanned mod progressEvery).
-			totalScanned.add(workerScanned % progressEvery)
-			if err != nil && !errors.Is(err, context.Canceled) {
-				errCh <- fmt.Errorf("worker %d [%d,%d]: %w", i, b.from, b.to, err)
-			}
+			runOneWasmHistoryWorker(ctx, lsCfg, watch, &results[i], i, b,
+				progressEvery, checkpointDir, &totalScanned, startedAt, errCh)
 		}()
 	}
 	wg.Wait()
@@ -2666,6 +2694,65 @@ func runWasmHistoryWorkers(
 		return nil, totalScanned.load(), err // first error wins
 	}
 	return results, totalScanned.load(), nil
+}
+
+// runOneWasmHistoryWorker is the per-goroutine body of
+// runWasmHistoryWorkers. Extracted so the parent function's
+// cognitive complexity stays manageable. Owns one worker chunk's
+// scan + optional checkpoint-log lifecycle.
+func runOneWasmHistoryWorker(
+	ctx context.Context,
+	lsCfg ledgerstream.Config,
+	watch map[sdkxdr.Hash]string,
+	result *workerResult,
+	workerIdx int,
+	b rangeChunk,
+	progressEvery uint64,
+	checkpointDir string,
+	totalScanned *atomicUint64,
+	startedAt time.Time,
+	errCh chan<- error,
+) {
+	result.upperEnd = b.to
+	workerScanned := uint64(0)
+
+	// Per-worker transition log (optional). nil → no incremental writes.
+	var tlog *transitionLog
+	if checkpointDir != "" {
+		path := filepath.Join(checkpointDir, fmt.Sprintf("wasm-history-w%d.jsonl", workerIdx))
+		t, terr := newTransitionLog(path, watch)
+		if terr != nil {
+			errCh <- fmt.Errorf("worker %d: open checkpoint %q: %w", workerIdx, path, terr)
+			return
+		}
+		tlog = t
+		defer func() {
+			if cerr := tlog.Close(); cerr != nil {
+				fmt.Fprintf(os.Stderr, "wasm-history: w%d close checkpoint: %v\n", workerIdx, cerr)
+			}
+		}()
+	}
+
+	err := ledgerstream.Stream(ctx, lsCfg, b.from, b.to,
+		func(lcm sdkxdr.LedgerCloseMeta) error {
+			seq := lcm.LedgerSequence()
+			scanLCMForWasmChanges(lcm, watch, result.state, seq, tlog)
+			workerScanned++
+			if progressEvery > 0 && workerScanned%progressEvery == 0 {
+				total := totalScanned.add(progressEvery)
+				rate := float64(total) / time.Since(startedAt).Seconds()
+				fmt.Fprintf(os.Stderr, "wasm-history: w%d ledger %d, total scanned %d, %.0f ledgers/s\n",
+					workerIdx, seq, total, rate)
+			}
+			return nil
+		},
+	)
+	result.scanned = workerScanned
+	// Add the un-counted residue (workerScanned mod progressEvery).
+	totalScanned.add(workerScanned % progressEvery)
+	if err != nil && !errors.Is(err, context.Canceled) {
+		errCh <- fmt.Errorf("worker %d [%d,%d]: %w", workerIdx, b.from, b.to, err)
+	}
 }
 
 // rangeChunk is one worker's slice of the overall [from,to] range.
@@ -2774,6 +2861,7 @@ func scanLCMForWasmChanges(
 	watch map[sdkxdr.Hash]string,
 	state map[sdkxdr.Hash]*wasmContractState,
 	seq uint32,
+	tlog *transitionLog,
 ) {
 	if lcm.V != 1 || lcm.V1 == nil {
 		return // pre-V1 LCM (very old ledgers); no Soroban; nothing to scan
@@ -2786,14 +2874,14 @@ func scanLCMForWasmChanges(
 			for j := range txMeta.V3.Operations {
 				changes := txMeta.V3.Operations[j].Changes
 				for k := range changes {
-					scanLedgerEntryChange(&changes[k], watch, state, seq)
+					scanLedgerEntryChange(&changes[k], watch, state, seq, tlog)
 				}
 			}
 		case txMeta.V4 != nil:
 			for j := range txMeta.V4.Operations {
 				changes := txMeta.V4.Operations[j].Changes
 				for k := range changes {
-					scanLedgerEntryChange(&changes[k], watch, state, seq)
+					scanLedgerEntryChange(&changes[k], watch, state, seq, tlog)
 				}
 			}
 		default:
@@ -2813,6 +2901,7 @@ func scanLedgerEntryChange(
 	watch map[sdkxdr.Hash]string,
 	state map[sdkxdr.Hash]*wasmContractState,
 	seq uint32,
+	tlog *transitionLog,
 ) {
 	var entry *sdkxdr.LedgerEntry
 	switch change.Type {
@@ -2871,24 +2960,30 @@ func scanLedgerEntryChange(
 	if inst.Executable.Type != sdkxdr.ContractExecutableTypeContractExecutableWasm {
 		// Stellar-asset contracts have no WASM; skip them but record
 		// a placeholder hash so the timeline is unambiguous.
-		recordWasmTransition(state, contractHash, "stellar-asset", seq)
+		recordWasmTransition(state, contractHash, "stellar-asset", seq, tlog)
 		return
 	}
 	if inst.Executable.WasmHash == nil {
 		return
 	}
 	hashHex := hex.EncodeToString(inst.Executable.WasmHash[:])
-	recordWasmTransition(state, contractHash, hashHex, seq)
+	recordWasmTransition(state, contractHash, hashHex, seq, tlog)
 }
 
 // recordWasmTransition advances a contract's history when its
 // executable hash differs from the previously seen one. First-seen
 // opens an initial range; same-hash repeats are no-ops.
+//
+// When tlog is non-nil, the transition is also appended to the
+// per-worker JSONL log (one line per transition) — the crash-
+// resilient checkpoint mechanism. Same-hash repeats produce no
+// log line either, since they're not transitions.
 func recordWasmTransition(
 	state map[sdkxdr.Hash]*wasmContractState,
 	contract sdkxdr.Hash,
 	wasmHash string,
 	seq uint32,
+	tlog *transitionLog,
 ) {
 	s, ok := state[contract]
 	if !ok {
@@ -2905,4 +3000,69 @@ func recordWasmTransition(
 	// Open a new range at this ledger.
 	s.ranges = append(s.ranges, wasmRange{WasmHash: wasmHash, FromLedger: seq})
 	s.current = wasmHash
+
+	if tlog != nil {
+		// Best-effort write — don't fail the whole walk on a log error.
+		// The in-memory state remains the source of truth for the final
+		// stdout JSON; the JSONL is purely for crash recovery.
+		if err := tlog.append(contract, wasmHash, seq); err != nil {
+			fmt.Fprintf(os.Stderr, "wasm-history: transitionlog append failed (continuing): %v\n", err)
+		}
+	}
+}
+
+// transitionLog is a per-worker append-only JSONL writer for
+// crash-resilient walks. One line per transition observed:
+//
+//	{"contract": "C...", "wasm_hash": "abc...", "at_ledger": 12345}
+//
+// The writer is buffered (4 KiB default) and flushed every
+// transition (transitions are rare relative to ledgers, so the
+// flush overhead is negligible). The file is opened with O_APPEND
+// so concurrent appends from multiple workers to the SAME file
+// would be safe at the OS level — but each worker writes to its
+// own file by convention to avoid log-line interleaving.
+type transitionLog struct {
+	f     *os.File
+	enc   *json.Encoder
+	watch map[sdkxdr.Hash]string
+}
+
+type transitionRecord struct {
+	Contract string `json:"contract"`
+	WasmHash string `json:"wasm_hash"`
+	AtLedger uint32 `json:"at_ledger"`
+}
+
+func newTransitionLog(path string, watch map[sdkxdr.Hash]string) (*transitionLog, error) {
+	// gosec G304: path comes from operator-controlled -checkpoint-dir
+	// flag; the wasm-history subcommand is itself a privileged ops
+	// tool that needs to write to operator-chosen paths.
+	f, err := os.OpenFile(path, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o600) //nolint:gosec // intentional ops-tool file write
+	if err != nil {
+		return nil, err
+	}
+	enc := json.NewEncoder(f)
+	// Default Encoder writes one line per Encode() with a trailing
+	// newline — that's exactly the JSONL shape we want. No SetIndent.
+	return &transitionLog{f: f, enc: enc, watch: watch}, nil
+}
+
+func (t *transitionLog) append(contract sdkxdr.Hash, wasmHash string, seq uint32) error {
+	cstrkey, ok := t.watch[contract]
+	if !ok {
+		cstrkey = hex.EncodeToString(contract[:]) // fallback: shouldn't happen since recordWasmTransition only fires for watched contracts
+	}
+	return t.enc.Encode(transitionRecord{
+		Contract: cstrkey,
+		WasmHash: wasmHash,
+		AtLedger: seq,
+	})
+}
+
+func (t *transitionLog) Close() error {
+	if t == nil || t.f == nil {
+		return nil
+	}
+	return t.f.Close()
 }
