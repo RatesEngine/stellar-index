@@ -15,6 +15,28 @@ against.
 
 ## [Unreleased]
 
+### Added
+
+- **ADR-0024 — Redis HA via Sentinel (#343)**: ratifies the
+  Redis HA mode choice. `ha-plan.md §3.4` had a contradictory
+  description ("3 masters + 3 replicas, Redis-Cluster mode...
+  3 sentinels for failover vote") — Cluster and Sentinel are
+  different HA modes; the original phrasing combined them. ADR
+  pins **Sentinel** for our scale (small hot-set, simpler ops,
+  uniform `go-redis/v9 FailoverClient` integration without an
+  HAProxy in front of Redis). Notes that ha-plan.md §3.4 should
+  be amended for terminological consistency in the same PR
+  that ships the Redis Sentinel ansible role (Task #72 sub-role).
+
+- **`status-page-hosting-comparison.md` tracked (#343)**:
+  decision-support doc surveying 6 status-page options against
+  `sev-playbook.md §5.1`'s requirements. Recommends **Instatus**
+  (free tier covers launch volume; modern UI; bring-your-own
+  incident-management since we have PagerDuty). Fallback:
+  Cachet self-hosted. Closes the design gap on Task #73 — the
+  remaining work is half-a-day of vendor wiring once a vendor
+  is picked.
+
 ### Fixed
 
 - **Public-flip checklist is 16/16 verified (#342)**: the two
