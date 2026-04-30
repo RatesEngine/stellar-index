@@ -15,6 +15,22 @@ against.
 
 ## [Unreleased]
 
+### Fixed
+
+- **API runbooks now cover SLO burn-rate alerts (#324)**: PR #313
+  shipped six SLO burn-rate alerts (`slo_latency_burn_*`,
+  `slo_availability_burn_*`) per ADR-0009, all routing to
+  `api-latency.md` / `api-5xx.md` — but neither runbook
+  acknowledged the new alerts or explained the burn-rate-vs-
+  direct-threshold distinction. An on-call operator paging from
+  `slo_availability_burn_fast` would land in `api-5xx.md`, see
+  only the direct-threshold alerts in the "At a glance" table, and
+  potentially dismiss the page as "p95 just nudged a line" rather
+  than "we're burning the 99.99 % SLO budget at 14.4× rate." Both
+  runbooks now list the burn-rate variants and explain the
+  multi-window pattern (Google SRE workbook). Pure documentation
+  change.
+
 ### Added
 
 - **`docs/architecture/supply-pipeline.md` (#318)**: architecture-
