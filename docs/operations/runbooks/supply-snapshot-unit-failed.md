@@ -17,7 +17,18 @@ severity: P3
 | Typical MTTR | 15–30 min |
 | Impact | `/v1/assets/{id}` F2 fields (total / circulating / max / market_cap_usd / fdv_usd) keep serving the previous good value, so bounded — but they go stale until the writer recovers. |
 
-## Symptoms
+## Coverage caveat — timer-path-only alert
+
+`ratesengine_supply_snapshot_unit_failed` is emitted by the
+`supply-snapshot.service` systemd unit's wrapper script. The
+aggregator-resident goroutine path (gated by
+`[supply] aggregator_refresh_enabled = true`) doesn't run via
+systemd-unit semantics, so this alert **cannot fire** on a
+goroutine-only deployment. The equivalent failure signal there
+is `supply-refresh-error-dominant.md` (≥ 50 % of refresher ticks
+have a non-`ok` outcome). See
+[supply-pipeline.md](../../architecture/supply-pipeline.md) for
+the two-path overview.
 
 - `ratesengine_supply_snapshot_unit_failed{asset_key=…} > 0` for ≥
   30 min.
@@ -90,3 +101,6 @@ grep -E "sdf_reserve_accounts|reserve_balances_stroops" /etc/ratesengine.toml
 ## Changelog
 
 - 2026-04-30 — initial draft alongside #295 (textfile + alerts).
+- 2026-04-30 — coverage caveat added: this alert is timer-path-
+  only and cannot fire on aggregator-resident-only deployments;
+  goroutine-path equivalent is supply-refresh-error-dominant.md.

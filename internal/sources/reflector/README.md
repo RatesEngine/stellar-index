@@ -99,12 +99,13 @@ helpers, with independent backfill state and metric labels
 | `README.md` | this file |
 | `events.go` | Source-name constants (3 variants), topic-symbol placeholders, decimals defaults, errors |
 | `decode.go` | one-event → []canonical.OracleUpdate (Vec iteration + identity synthesis) |
-| `consumer.go` | implements consumer.Source; emits UpdateEvent |
+| `consumer.go` | exports `UpdateEvent` (the `consumer.Event` payload the dispatcher seam emits per oracle update). Historical name; does not implement the legacy `consumer.Source` orchestrator interface. |
+| `dispatcher_adapter.go` | topic-match + decode registration with `internal/dispatcher` — the production seam |
 | `source_test.go` | unit tests against fake SCVal decoder hooks |
 
 ## Relationship to DEX sources
 
-Same consumer.Source interface, same orchestrator integration.
+Same `dispatcher.Decoder` interface, same dispatcher seam.
 Differences that shape the code:
 
 | Aspect | DEXes | Reflector |
@@ -114,8 +115,8 @@ Differences that shape the code:
 | Asset resolution | Token contract addresses / classic | Includes Asset::Other(Symbol) for off-chain |
 | Contract count | 1 per pool (Soroswap) or 1 router (Aquarius) | 3 independent contracts |
 
-The ingestion side (orchestrator, indexer event-sink) gains a new
-case arm to persist `OracleUpdate` via
+The ingestion side (dispatcher route table, indexer event-sink)
+gains a new case arm to persist `OracleUpdate` via
 `store.InsertOracleUpdate`.
 
 ## Status

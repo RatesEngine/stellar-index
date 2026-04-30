@@ -105,6 +105,24 @@ jobs:
         # baseline to shrink monotonically.
         run: ./scripts/ci/lint-imports.sh
 
+  monitoring-rules:
+    name: prometheus rule validation
+    runs-on: ubuntu-latest
+    # Validates deploy/monitoring/rules/*.yml with promtool. Catches
+    # YAML syntax errors, broken PromQL, and undefined recording-rule
+    # references at PR time rather than at Prometheus reload on a
+    # production node.
+    env:
+      PROM_VERSION: "2.55.1"
+    steps:
+      - uses: actions/checkout@v6
+      - name: install promtool
+        run: |
+          curl -fsSL "https://github.com/prometheus/prometheus/releases/download/v${PROM_VERSION}/prometheus-${PROM_VERSION}.linux-amd64.tar.gz" | tar -xz
+          sudo install -m 0755 "prometheus-${PROM_VERSION}.linux-amd64/promtool" /usr/local/bin/promtool
+      - name: validate rules
+        run: make monitoring-check
+
   # ────────────────────────────────────────────────────────────────
   # Security — fast scans on every PR.
   # Heavier scans (trivy, SBOM) live in security.yml on a schedule.

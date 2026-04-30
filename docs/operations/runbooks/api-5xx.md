@@ -1,21 +1,44 @@
 ---
 title: Runbook — API 5xx rate elevated
-last_verified: 2026-04-23
+last_verified: 2026-04-30
 status: ratified
-severity: P1 at >5% / P2 at >1%
+severity: P1 at >5% / P2 at >1% / P1 at SLO burn-rate fast
 ---
 
-# Runbook — `ratesengine_api_error_rate_{high,critical}`
+# Runbook — `ratesengine_api_error_rate_{high,critical}` (+ SLO availability burn-rate variants)
 
 ## At a glance
 
 | Field | Value |
 | ----- | ----- |
-| Alerts | `ratesengine_api_error_rate_high` (>1 % for 2 min) → P2<br>`ratesengine_api_error_rate_critical` (>5 % for 2 min) → P1 |
-| Severity | **P1 at critical**, **P2 at high** |
+| Direct-threshold alerts | `ratesengine_api_error_rate_high` (>1 % for 2 min) → P2<br>`ratesengine_api_error_rate_critical` (>5 % for 2 min) → P1 |
+| SLO burn-rate alerts | `ratesengine_slo_availability_burn_{fast,medium,slow}` (per ADR-0009 multi-window pattern) — `deploy/monitoring/rules/slo.yml` |
+| Severity | **P1 at critical**, **P2 at high**; **P1** for fast/medium burn, P3 for slow burn |
 | Detected by | Prometheus rule on `http_requests_total{status=~"5.."}` rate |
 | Typical MTTR | 5–15 min for a bad-deploy revert; 30–60 min for a latent-bug forward fix |
 | Impact | Clients seeing request failures. Affects both the V1 Freighter API SLA ("responsiveness ≥ 99.9 %") and the RFP p95/p99 latency targets — every 5xx adds timeout retries that inflate queue time. |
+
+## Burn-rate vs direct-threshold pages
+
+This runbook handles two alert families with different semantics:
+
+- **Direct-threshold** (`api_error_rate_{high,critical}`):
+  "instantaneous 5xx rate just crossed 1 % / 5 %." Trips on
+  any sustained spike, including a brief deploy hiccup.
+- **SLO burn-rate** (`slo_availability_burn_{fast,medium,slow}`):
+  "we're consuming SLO error budget too quickly." The 99.99 %
+  availability target gives a small monthly budget; the
+  multi-window pattern (per Google SRE workbook) requires a short
+  AND a long window to both agree before firing, so brief blips
+  don't trip it. Fast tier (5m AND 1h, 14.4× burn) means budget
+  will be gone in hours; medium (30m AND 6h, 6×) gives days; slow
+  (6h AND 24h, 1×) gives ~weeks.
+
+A `_burn_fast` page is a real availability emergency even if the
+direct-threshold P1 (`error_rate_critical`, > 5 %) hasn't fired:
+the 99.99 % budget is so small that 1.5 % errors sustained for 1h
+is enough. Use the diagnosis below as usual; treat the urgency as
+budget-exhaustion, not transient.
 
 ## Symptoms
 
@@ -228,3 +251,8 @@ Common root-cause patterns:
 ## Changelog
 
 - 2026-04-23 — initial draft. @ash.
+- 2026-04-30 — runbook now also covers the SLO multi-window
+  availability burn-rate alerts shipped in #313 (per ADR-0009),
+  which route here. Burn-rate-vs-threshold section explains the
+  different semantics so on-call doesn't dismiss a `_burn_fast`
+  page that fires before `error_rate_critical` reaches 5 %.

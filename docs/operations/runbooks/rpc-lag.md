@@ -1,11 +1,27 @@
 ---
 title: Runbook — rpc-lag
-last_verified: 2026-04-23
+last_verified: 2026-04-30
 status: draft
 severity: P2
 ---
 
 # Runbook — `ratesengine_stellar_rpc_lag`
+
+> **Deployment posture (2026-04-30).** stellar-rpc is **not running
+> on r1** — the daemon was removed 2026-04-23
+> ([r1-deployment-state.md §Services](../r1-deployment-state.md)).
+> The metric `ratesengine_stellar_rpc_latest_ledger_age_seconds`
+> has no producer, so this alert is *inert* on r1.
+>
+> Production ingest reads Galexie's MinIO output directly via
+> `go-stellar-sdk/ingest.ApplyLedgerMetadata`
+> ([architecture/ingest-pipeline.md](../../architecture/ingest-pipeline.md));
+> stellar-rpc is preserved only for the `rpc-probe` operator
+> diagnostic and for fixture capture in `scripts/dev/`. The alert
+> remains in `deploy/monitoring/rules/stellar.yml` for revival when
+> a customer-facing RPC façade is on the roadmap (none today). If
+> this alert reaches you on r1 it indicates a Prometheus
+> misconfiguration, not an upstream lag.
 
 ## At a glance
 
@@ -74,3 +90,6 @@ Key signals:
 ## Changelog
 
 - 2026-04-23 — initial draft. Pairs with `source-stopped.md`'s "jump here for upstream" branch.
+- 2026-04-30 — top-of-file deployment-posture callout: this alert
+  is inert on r1 (stellar-rpc removed 2026-04-23) and is retained
+  for any future RPC-façade deployment.

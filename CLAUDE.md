@@ -313,6 +313,34 @@ Same five-file convention. Template PR: look at how Soroswap was
 added (`internal/sources/soroswap/`). Differences per DEX usually
 boil down to event topic shape + amount-decoding quirks.
 
+### "Add a new supply observer"
+
+Read [docs/architecture/supply-pipeline.md](docs/architecture/supply-pipeline.md)
+first — it covers the three-domain split (Algorithm 1 XLM /
+Algorithm 2 classic / Algorithm 3 SEP-41), which dispatcher hook
+each observer plugs into, and where the per-class hypertables
+live. New observers ship as a Go package with package-level docs
+in `doc.go` (not `README.md` — supply observers follow Go
+package-doc convention; `events.go`, `decode.go`, `consumer.go`,
+and a `dispatcher_adapter*.go` pair complete the layout). Pick the
+right dispatcher hook based on what the source emits:
+
+- `LedgerEntryChangeDecoder` for `LedgerEntry` mutations (current
+  use: AccountEntry / trustline / claimable / LP-reserve
+  observers).
+- `OpDecoder` for classic operations (e.g. `change_trust_op`).
+- `Decoder` (event-based) for Soroban contract events (current
+  use: SEP-41 mint/burn/clawback observer).
+
+The reader/storage seam is the same across all three: each
+observer writes to a per-class hypertable
+(`migrations/0011-0014_*.sql` etc.), and `StorageClassicSupplyReader`
+/ `StorageSEP41SupplyReader` aggregate the rows at refresh time.
+Wire the new observer into `cmd/ratesengine-indexer/main.go`
+alongside the existing supply observers and add an integration
+test under `test/integration/` if it touches NUMERIC arithmetic
+(see PR #316 / #317 for the testcontainers-go pattern).
+
 ### "Audit a Soroban source's WASM history (flip BackfillSafe)"
 
 Procedure: [docs/operations/wasm-audits/README.md](docs/operations/wasm-audits/README.md).

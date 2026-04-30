@@ -1,6 +1,6 @@
 ---
 title: Runbook — oracle-stale
-last_verified: 2026-04-23
+last_verified: 2026-04-30
 status: draft
 severity: P2
 ---
@@ -33,8 +33,11 @@ curl -s http://api:9464/metrics |
 # Is the CONTRACT itself still emitting? The oracle source
 # subscribes to (ContractIDs=[contract], topics=[REFLECTOR,update]).
 # A Reflector contract goes 5 min between updates in normal ops;
-# > 50 min is real stall.
-ratesengine-ops rpc-probe http://stellar-rpc:8000
+# > 50 min is real stall. r1 doesn't run its own stellar-rpc
+# (removed 2026-04-23, see docs/operations/r1-deployment-state.md);
+# point the probe at a public endpoint to confirm the network is
+# closing ledgers and the oracle contract has been invoked recently.
+ratesengine-ops rpc-probe https://mainnet.sorobanrpc.com
 
 # Check stellar.expert for the contract's recent tx activity:
 #   https://stellar.expert/explorer/public/contract/<contract-id>
@@ -71,3 +74,5 @@ Originally flagged P2 (ticket) because the impact is bounded — the API keeps s
 ## Changelog
 
 - 2026-04-23 — initial draft. Replaces the 404 in the divergence alert rules' runbook_url.
+- 2026-04-30 — rpc-probe URL points at a public stellar-rpc; r1
+  doesn't run its own (removed 2026-04-23).

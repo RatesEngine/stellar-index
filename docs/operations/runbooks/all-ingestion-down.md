@@ -1,6 +1,6 @@
 ---
 title: Runbook — all ingestion sources down
-last_verified: 2026-04-22
+last_verified: 2026-04-30
 status: ratified
 severity: P1
 ---
@@ -21,12 +21,27 @@ severity: P1
 
 - Alert `ratesengine_ingestion_all_sources_stopped` fires.
 - `ratesengine_api_price_stale` follows ~60 s later across every asset.
-- `ratesengine_ingestion_lag_high` for every source.
-- Indexer logs show connection errors to stellar-rpc OR no activity at all.
+- Indexer logs show no activity, repeated MinIO read errors, or
+  Galexie producing no fresh objects in `galexie-live`.
+
+> The legacy `ratesengine_ingestion_lag_high` companion alert was
+> retired with the move off the orchestrator topology
+> ([alerts-catalog.md](../alerts-catalog.md) §Ingestion historical
+> note); don't expect to see it fire today.
 
 ## Quick diagnosis (≤ 5 min)
 
-The "all sources down" shape usually means one of three common roots: the shared upstream (stellar-rpc), the shared storage (Timescale), or the indexer process itself.
+> **Architecture reminder.** Production ingest reads Galexie's MinIO
+> output directly via `go-stellar-sdk/ingest.ApplyLedgerMetadata`
+> ([architecture/ingest-pipeline.md](../../architecture/ingest-pipeline.md));
+> stellar-rpc was removed from r1 on 2026-04-23 and is no longer in
+> the data path. The "shared upstream" is now Galexie + MinIO, not
+> stellar-rpc. Sections C / D of the legacy "stellar-rpc is the
+> problem" branch below are retained as future-tense for any
+> deployment that still routes through RPC; on r1 today, jump to
+> Galexie / MinIO checks first.
+
+The "all sources down" shape usually means one of three common roots: Galexie's MinIO output (the shared upstream), the shared storage (Timescale), or the indexer process itself.
 
 ```sh
 # 1. Is the indexer running?
@@ -37,10 +52,14 @@ kubectl -n ratesengine get pod -l app=ratesengine-indexer
 # 2. What do its logs say?
 journalctl -u ratesengine-indexer -n 200 --no-pager | tail -40
 # Look for: "source stream ended with error", "insert trade failed",
-# "rpc ...: connection refused".
+# "minio: object not found", "ledger metadata read".
 
-# 3. Is stellar-rpc reachable?
-ratesengine-ops rpc-probe http://<our-rpc>:8000
+# 3. Is Galexie producing fresh ledger objects?
+sudo journalctl -u galexie -n 50 --no-pager
+mc ls minio/galexie-live | tail -5      # newest objects within ~1 min
+# OR if you suspect a network-state issue, query upstream directly
+# (r1 has no local stellar-rpc; point at a public endpoint):
+ratesengine-ops rpc-probe https://mainnet.sorobanrpc.com
 # Expect: version info + latest ledger close time within 60s.
 
 # 4. Is Timescale reachable + writable?
@@ -50,18 +69,31 @@ PGCONNECT_TIMEOUT=3 psql -h db-primary.internal -U ratesengine \
 
 Route by the result:
 
-- rpc-probe says "no ledger in >30s" → stellar-rpc itself is lagging/down. Jump to [rpc-lag](rpc-lag.md).
-- rpc-probe fine but indexer has connection errors → networking issue between indexer and RPC. Check firewall, DNS, recent config changes.
+- Galexie isn't producing fresh objects in `galexie-live` → galexie's captive-core stalled or upstream network issue. Check `journalctl -u galexie`; if galexie itself is healthy, fall back to the public-rpc probe to confirm the network is closing ledgers.
+- Galexie healthy + fresh objects in MinIO but indexer not reading → networking issue between indexer and MinIO, or indexer's MinIO credentials / endpoint config wrong. Check firewall, DNS, and `[ledgerstream]` config.
 - psql INSERT fails → Timescale issue. Jump to [timescale-primary-down](timescale-primary-down.md).
-- All three probes pass but indexer produces no events → the indexer is alive but wedged. Likely deadlock or internal bug.
+- All probes pass but indexer produces no events → the indexer is alive but wedged. Likely deadlock or internal bug.
 
 ## Mitigation (≤ 15 min)
 
-### A. stellar-rpc is the problem
+### A. Galexie / MinIO is the upstream problem
 
-- Failover to a secondary RPC endpoint (if one is configured). Edit `ingestion.rpc_endpoints` in config, restart indexer.
-- As interim: point indexer at a public RPC (e.g. SDF's `https://mainnet.sorobanrpc.com`) while ours recovers. Event retention + rate-limits apply on public RPC — not a long-term fix.
-- Proceed to [rpc-lag](rpc-lag.md) for stellar-rpc side.
+- Confirm galexie itself is healthy: `systemctl status galexie`,
+  `journalctl -u galexie --since="10 min ago"`. galexie embeds its
+  own captive-core; recoverable hangs typically clear with a
+  service restart. Check disk pressure on `data/galexie`.
+- Confirm fresh objects are landing in MinIO:
+  `mc ls minio/galexie-live | tail -5`. The newest object should
+  be within ~1 minute. If MinIO itself is unhealthy, follow
+  whichever `redis-master-down`-style runbook applies (no
+  dedicated MinIO runbook today).
+- Wider network problem? `ratesengine-ops rpc-probe https://mainnet.sorobanrpc.com`
+  confirms ledgers are still closing on the network — if the
+  network is fine but galexie has stalled, capture logs and
+  restart galexie.
+- *Future-tense:* if a deployment routes through stellar-rpc
+  rather than direct-MinIO ingest, [rpc-lag](rpc-lag.md) covers
+  that path. r1 does not run stellar-rpc as of 2026-04-23.
 
 ### B. Timescale is the problem
 
@@ -126,3 +158,8 @@ Patterns observed:
 ## Changelog
 
 - 2026-04-22 — initial draft. @ash.
+- 2026-04-30 — quick-diagnosis + Mitigation A rewritten around
+  Galexie + MinIO (the actual r1 upstream); rpc-probe URL points
+  at a public stellar-rpc since r1 doesn't run its own
+  (removed 2026-04-23). Symptoms drop the retired
+  `ratesengine_ingestion_lag_high` reference.

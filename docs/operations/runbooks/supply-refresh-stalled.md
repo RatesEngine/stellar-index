@@ -35,7 +35,12 @@ sudo systemctl status ratesengine-aggregator
 curl -s http://aggregator:9464/metrics | grep ratesengine_aggregator_ticks_total
 
 # 3. What's the most-recent supply refresh outcome label?
-curl -s http://aggregator:9464/metrics | grep ratesengine_aggregator_supply_refresh_total
+#    The metric is keyed by (asset_key, outcome) — if every asset_key
+#    has stopped incrementing the page is fleet-wide; if only one
+#    asset_key has stalled while others tick, the failure is
+#    per-asset and `error_dominant` should ALSO be firing.
+curl -s http://aggregator:9464/metrics | \
+  awk '/^ratesengine_aggregator_supply_refresh_total\{/' | sort
 
 # 4. Recent supply-refresh logs.
 sudo journalctl -u ratesengine-aggregator --since "1 hour ago" -n 200 | \
@@ -104,3 +109,6 @@ sudo journalctl -u ratesengine-aggregator --since "1 hour ago" -n 200 | \
 
 - 2026-04-30 — initial draft alongside #313 (supply-refresh
   alerts).
+- 2026-04-30 — quick-diagnosis #3 now references the
+  `asset_key` label (added in #314) so operators can confirm
+  whether the stall is fleet-wide or scoped to one asset.

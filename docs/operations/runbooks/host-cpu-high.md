@@ -1,6 +1,6 @@
 ---
 title: Runbook — host-cpu-high
-last_verified: 2026-04-23
+last_verified: 2026-04-30
 status: draft
 severity: P3
 ---
@@ -45,9 +45,17 @@ ssh <host> 'mpstat 1 5'
    firing off goroutines, bad SQL plan forcing a full scan
    client-side.
 
-2. **captive-core catchup** on a stellar-rpc or stellar-core host.
-   Replay is CPU-bound; expected during boot + periodic maintenance.
-   See `core-lag.md` / `rpc-lag.md` for the end-state signals.
+2. **captive-core catchup** on a galexie (or, in Phase-3
+   deployments, stellar-rpc / stellar-core) host. Replay is
+   CPU-bound; expected during boot + periodic maintenance.
+   On r1 today, only galexie embeds a captive-core
+   ([r1-deployment-state.md](../r1-deployment-state.md)); the
+   stellar-rpc / stellar-core daemons were removed 2026-04-23
+   and `core-lag.md` / `rpc-lag.md` are inert there. Galexie's
+   own captive-core does not expose a `/info` endpoint, so the
+   end-state signal is "fresh objects in `galexie-live` after
+   catchup completes" rather than the stellar-core ledger-age
+   metric.
 
 3. **Postgres bad plan** — an ANALYZE drifted, now Postgres is
    picking a seq-scan over an index. `pg_stat_statements` shows
@@ -93,8 +101,16 @@ ssh <host> 'mpstat 1 5'
   request handlers.
 - `pg-conns-saturated.md` — a common CPU-saturating scenario for
   Postgres hosts.
-- `core-lag.md`, `rpc-lag.md` — captive-core variants.
+- `all-ingestion-down.md` — when galexie's captive-core stalls
+  hard enough to halt fresh-object production.
+- `core-lag.md`, `rpc-lag.md` — captive-core variants for
+  Phase-3 deployments running stellar-core / stellar-rpc; inert
+  on r1 today.
 
 ## Changelog
 
 - 2026-04-23 — initial draft.
+- 2026-04-30 — captive-core root-cause refers to galexie (the only
+  on-host captive on r1 since 2026-04-23) rather than the removed
+  stellar-rpc / stellar-core daemons. Related section flags those
+  as Phase-3-only.

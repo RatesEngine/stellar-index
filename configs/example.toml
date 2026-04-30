@@ -23,11 +23,26 @@ home_domain = "ratesengine.net"
 
 # ──────────────────────────────────────────────────────────────────
 # Stellar — where does my ledger data come from?
+#
+# Production ingest reads Galexie's MinIO output directly via
+# go-stellar-sdk/ingest.ApplyLedgerMetadata (ADR-0001 / CLAUDE.md
+# invariant #6); the fields below are for the diagnostic + bootstrap
+# paths that still talk to a stellar-rpc node.
+#
+# The localhost defaults assume a Phase-3 archival/validator host
+# running both stellar-core and stellar-rpc locally
+# (run_stellar_core / run_stellar_rpc = true in the ansible role).
+# r1 today does NOT run those daemons (removed 2026-04-23 — see
+# docs/operations/r1-deployment-state.md), so r1 operators should
+# point rpc_endpoints at a public stellar-rpc such as
+# https://mainnet.sorobanrpc.com and leave core_http_endpoint as a
+# best-effort no-op (the daemons that consume it tolerate a
+# refused connection on r1).
 # ──────────────────────────────────────────────────────────────────
 [stellar]
 network             = "pubnet"                                    # pubnet | testnet | futurenet
-core_http_endpoint  = "http://127.0.0.1:11626"                    # stellar-core admin
-rpc_endpoints       = ["http://127.0.0.1:8000"]                   # tried in order on failure
+core_http_endpoint  = "http://127.0.0.1:11626"                    # stellar-core admin (Phase-3 only — refused on r1)
+rpc_endpoints       = ["http://127.0.0.1:8000"]                   # tried in order on failure; on r1 use ["https://mainnet.sorobanrpc.com"] or another public endpoint
 history_archive_url = "https://history.stellar.org/prd/core-live/core_live_001"
 
 # ──────────────────────────────────────────────────────────────────

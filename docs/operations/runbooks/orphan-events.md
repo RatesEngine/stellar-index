@@ -1,6 +1,6 @@
 ---
 title: Runbook — orphan-events
-last_verified: 2026-04-23
+last_verified: 2026-04-30
 status: draft
 severity: P3
 ---
@@ -67,9 +67,12 @@ source is effectively not working, not just dropping a few rows.
 
 This alert is informational; there's no live-fix path. Instead, gather:
 
-- [ ] Sample a few orphan group-keys from the logs. Query stellar-rpc directly for their tx_hash:
+- [ ] Sample a few orphan group-keys from the logs. Query a public
+      stellar-rpc directly for their tx_hash (r1 doesn't run its
+      own stellar-rpc — removed 2026-04-23, see
+      [r1-deployment-state.md](../r1-deployment-state.md)):
   ```sh
-  curl -X POST http://stellar-rpc:8000 \
+  curl -X POST https://mainnet.sorobanrpc.com \
     -H 'Content-Type: application/json' \
     -d '{"jsonrpc":"2.0","id":1,"method":"getTransaction","params":{"hash":"<tx>"}}'
   ```
@@ -92,3 +95,5 @@ This alert is informational; there's no live-fix path. Instead, gather:
 ## Changelog
 
 - 2026-04-23 — initial draft alongside the orphan-events metric wiring.
+- 2026-04-30 — getTransaction probe URL points at a public
+  stellar-rpc; r1 doesn't run its own (removed 2026-04-23).

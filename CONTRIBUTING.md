@@ -49,8 +49,10 @@ CHANGELOG).
 git clone https://github.com/RatesEngine/rates-engine
 cd rates-engine
 make deps      # download Go modules + tools
-make lint      # verify lint passes on a clean tree
-make test      # run unit tests
+make verify    # canonical pre-push gate — fmt, vet, lint, doc-lint,
+               # import-lint, openapi-url-lint, monitoring-rules
+               # (graceful-skip if promtool is missing locally),
+               # unit tests, integration-build smoke
 ```
 
 ### Local full stack
@@ -70,10 +72,18 @@ If `make dev` fails out of the box, that's a bug — file an issue.
 1. **Branch from `main`.** No long-lived feature branches.
 2. **Small PRs.** Soft limit 500 LoC. PRs larger than this need
    pre-agreement from a reviewer.
-3. **Lint + test locally before pushing.**
+3. **Run the canonical pre-push gate.**
    ```sh
-   make lint && make test
+   make verify
    ```
+   This runs `scripts/dev/verify.sh` — fmt, vet, lint, doc-lint,
+   import-lint, openapi-url-lint, monitoring-rule validation
+   (graceful-skip if promtool isn't installed), unit tests, and
+   the integration-build smoke check (compile-only, no Docker).
+   Mirrors the parallel jobs CI runs on every PR; running it
+   locally surfaces failures one at a time before push. Don't
+   substitute `make lint && make test` — it skips the doc /
+   import / openapi / monitoring lints that CI enforces.
 4. **Open a PR**; fill in the template.
 5. **CI must be green.** No merging with red CI.
 6. **A CODEOWNER must review.** See [CODEOWNERS](CODEOWNERS).
@@ -89,8 +99,9 @@ checks are enforced by CI; the judgement checks by your reviewer.
 
 ### Mechanical
 
-- [ ] `make lint` passes.
-- [ ] `make test` passes with `-race`.
+- [ ] `make verify` passes (covers `make lint`, `make test -race`,
+      doc / import / openapi / monitoring lints, and the
+      integration-build smoke check).
 - [ ] Coverage does not decrease on changed packages.
 - [ ] `govulncheck` / `gitleaks` / `gosec` clean.
 - [ ] Every new exported symbol has a Godoc comment.

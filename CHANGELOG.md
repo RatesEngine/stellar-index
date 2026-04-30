@@ -17,6 +17,183 @@ against.
 
 ### Added
 
+- **CI promtool validation (#319)**: `make monitoring-check`
+  (Prometheus rule-file validation via `promtool check rules`)
+  is now wired into both `bash scripts/dev/verify.sh` (graceful-
+  skip when promtool isn't installed locally) and a dedicated
+  `monitoring-rules` job in `.github/workflows/ci.yml` (installs
+  promtool from the Prometheus GH release). The alert rules
+  shipped in #294 / #295 / #313 had been validated by visual
+  review only — broken PromQL or undefined recording-rule
+  references would have surfaced at Prometheus reload time on
+  a production node. Closes the gap.
+
+- **`CLAUDE.md` "Add a new supply observer" recipe (#323)**: the
+  six supply observers shipped through Tasks #54–#56 follow a
+  pattern (`doc.go` + `dispatcher_adapter.go`, three possible
+  dispatcher hooks per the LCM/Op/Event split) that has no entry
+  in the task-recipe section of the agent orientation file. A
+  future agent adding a 7th observer would have nowhere to look.
+  Recipe links to `docs/architecture/supply-pipeline.md` for the
+  full shape and names the three hook variants explicitly.
+
+### Fixed
+
+- **Supply-refresh runbooks acknowledge `asset_key` label (#320)**:
+  PR #314 added the `asset_key` dimension to
+  `ratesengine_aggregator_supply_refresh_total`, but the
+  `supply-refresh-error-dominant.md` runbook still claimed
+  *"Logs carry asset key; metric doesn't"* — operators following
+  the runbook would skip a useful per-asset diagnosis path and go
+  straight to journald. Both supply-refresh runbooks now show how
+  to split by `asset_key` from `/metrics` (and the equivalent
+  PromQL for dashboards).
+
+- **Stellar runbooks acknowledge inert metrics (#321)**: four
+  alerts in `deploy/monitoring/rules/stellar.yml` (`core-lag`,
+  `core-peers`, `rpc-lag`, `archive-publish`) reference metrics
+  produced by stellar-core / stellar-rpc / the
+  stellar-core-prometheus-exporter — all three were removed from
+  r1 on 2026-04-23. Each runbook now opens with a *Deployment
+  posture* callout explaining the alert is inert on r1 today and
+  retained for Phase-3 (Tier-1 validator rollout per ADR-0004).
+  Alerts catalog gets a matching note above the Stellar / node
+  alerts section.
+
+- **Ingestion runbooks point `rpc-probe` at an external endpoint
+  (#322)**: six runbooks (`all-ingestion-down`, `decode-errors`,
+  `insert-errors`, `oracle-stale`, `source-stopped`,
+  `orphan-events`) instructed on-call to run probes against
+  `http://stellar-rpc:8000` — but stellar-rpc was removed from r1
+  on 2026-04-23, so the URL no longer resolves on-box. Each now
+  points the probe at a public stellar-rpc endpoint
+  (`https://mainnet.sorobanrpc.com`) with a one-line note
+  explaining the architectural shift. The `all-ingestion-down`
+  runbook additionally rewrites quick-diagnosis + Mitigation A
+  around Galexie + MinIO (the actual r1 upstream).
+
+- **API runbooks now cover SLO burn-rate alerts (#324)**: PR #313
+  shipped six SLO burn-rate alerts (`slo_latency_burn_*`,
+  `slo_availability_burn_*`) per ADR-0009, all routing to
+  `api-latency.md` / `api-5xx.md` — but neither runbook
+  acknowledged the new alerts or explained the burn-rate-vs-
+  direct-threshold distinction. An on-call operator paging from
+  `slo_availability_burn_fast` would land in `api-5xx.md`, see
+  only the direct-threshold alerts, and potentially dismiss the
+  page as "p95 just nudged a line" rather than "we're burning
+  the 99.99 % SLO budget at 14.4× rate." Both runbooks now list
+  the burn-rate variants and explain the multi-window pattern.
+
+- **`supply-snapshot-stale` runbook acknowledges the
+  aggregator-resident path (#325)**: PR #318 established that
+  `asset_supply_history` has two producers (systemd timer +
+  aggregator-resident goroutine), but the
+  `ratesengine_supply_snapshot_stale` alert tracks only the
+  timer-path's `last_success_timestamp` gauge. Deployments
+  running exclusively the goroutine path would have this alert
+  firing forever despite fresh snapshots landing. New top-of-
+  file callout names both paths and points operators at the
+  silence-vs-investigate decision.
+
+- **Two more supply-snapshot runbooks acknowledge the
+  aggregator-resident path (#326)**: companion to #325. Both
+  `supply-snapshot-circulating-zero.md` and
+  `supply-snapshot-unit-failed.md` track metrics emitted
+  exclusively by the systemd-timer path, so on a goroutine-only
+  deployment these alerts silently never fire — a worse failure
+  mode than the noisy false-positive in #325. Each carries a
+  *Coverage caveat* callout naming the two-path architecture and
+  the goroutine-path equivalent signal.
+
+- **`supply-cross-check-divergence` runbook cross-links sibling
+  supply alerts (#327)**: the runbook only referenced
+  `aggregator-silent.md` and `internal/supply/crosscheck.go`
+  under Related, missing four cross-references that an operator
+  triaging a divergence routinely needs.
+
+- **`cursor-stuck` runbook upstream is Galexie + MinIO, not
+  stellar-rpc (#328)**: the runbook's Mitigation step 1 told
+  on-call to *"fix the upstream (stellar-rpc) first"* — but
+  stellar-rpc was removed from r1 and the indexer reads ledger
+  metadata from Galexie's MinIO output. Mitigation step now
+  points at Galexie / MinIO checks.
+
+- **`archive-divergence` runbook deployment-posture callout
+  (#329)**: the runbook treated us as an active archive publisher
+  ("stop advertising the affected checkpoints", "core-binary bug
+  producing a different bucket") — but r1's
+  `/srv/history-archive/` is a one-shot stellar-archivist mirror
+  with no running publisher since 2026-04-23. Top-of-file callout
+  scopes the runbook to "what r1 can actually do today" with
+  Phase-3 framing for the publishing path.
+
+- **`host-cpu-high` runbook captive-core context is galexie, not
+  stellar-rpc / stellar-core (#330)**: root cause #2 named
+  "stellar-rpc or stellar-core host" as the captive-core sites,
+  but on r1 today only galexie embeds a captive-core. Galexie
+  also doesn't expose `/info`, so the end-state signal changes
+  accordingly.
+
+- **`CONTRIBUTING.md` recommends the canonical pre-push gate
+  (#331)**: contributors were told to run `make lint && make
+  test` before pushing, but the canonical pre-push gate is `make
+  verify` — which additionally runs doc-lint, import-lint,
+  openapi-url-lint, the integration-build smoke check, and the
+  Prometheus rule-file validation wired in #319. First-time
+  setup, the workflow's pre-push step, and the Definition of
+  Done now all reference `make verify`.
+
+- **`deploy/monitoring/README.md` lists every rule file (#332)**:
+  the layout list named 9 rule files but the directory holds 17.
+  The `component` label list (used for dashboard grouping) was
+  similarly missing four values that alert rules already use
+  today. Pure documentation change; alert rules untouched.
+
+- **`configs/ansible/README.md` reflects current default tag set
+  (#333)**: the README opened with *"a fully configured Stellar
+  archival node running stellar-core, Galexie, stellar-rpc, and
+  Postgres 15"* — but `defaults/main.yml` has
+  `run_stellar_core: false` and `run_stellar_rpc: false` since
+  2026-04-23. A fresh-host bring-up gets Galexie + Postgres +
+  MinIO and not the two daemons. Opening summary, first-run-
+  bootstrap tag list, the role-overview section, and the running-
+  a-subset examples all updated.
+
+- **`deploy/docker-compose/README.md` migration version reference
+  (#334)**: README told first-run contributors to expect
+  *"migrated to version 8 (dirty=false)"* but the latest
+  migration is `0015_create_sep41_supply_events`. Updated to 15
+  with a self-correcting hint pointing at
+  `ls migrations/*.up.sql | sort | tail -1`.
+
+- **`migrations/README.md` lists every migration (#335)**: the
+  Current-migrations table only listed 0001-0004 — eleven
+  migrations had shipped without README updates. Each new row
+  cites its ADR (0011 / 0021 / 0022 / 0023 / 0019) and the role
+  the table plays in the algorithm map.
+
+- **Source READMEs name the dispatcher seam, not the legacy
+  `consumer.Source` (#336)**: three source READMEs (`soroswap`,
+  `phoenix`, `reflector`) described their `consumer.go` as
+  *"implements `consumer.Source`"* — but production routing has
+  been via `dispatcher.Decoder` for a while; the only remaining
+  consumer of `consumer.Source` is the legacy orchestrator's own
+  test file. Future agents reading these would be told to follow
+  the legacy pattern that CLAUDE.md invariant #6 explicitly
+  forbids.
+
+- **`configs/example.toml` `[stellar]` section explains the
+  localhost defaults (#337)**: `core_http_endpoint` and
+  `rpc_endpoints` defaulted to `http://127.0.0.1:...` — the right
+  values for a Phase-3 archival host running stellar-core +
+  stellar-rpc locally, but neither daemon runs on r1. An r1
+  operator copying the example would have a config that silently
+  drives every diagnostic into a refused-connection error. New
+  top-of-section comment names the two postures and points r1
+  operators at `https://mainnet.sorobanrpc.com`.
+
+### Added
+
 - **`docs/architecture/supply-pipeline.md` (#318)**: architecture-
   level overview tying together the three-algorithm supply
   derivation, the six observers, the chained-fallback reader

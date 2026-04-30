@@ -11,15 +11,23 @@ Loaded by AlertManager; routed to PagerDuty per
 deploy/monitoring/
 ├── README.md                   (this file)
 ├── rules/
-│   ├── ingestion.yml           Source / orchestrator / cursor alerts
-│   ├── storage.yml             Postgres + TimescaleDB + backup alerts
-│   ├── cache.yml               Redis alerts
-│   ├── api.yml                 HTTP serving-plane alerts
-│   ├── stellar.yml             stellar-core / stellar-rpc / archive alerts
-│   ├── divergence.yml          price-quality / oracle-stale alerts
 │   ├── aggregator.yml          aggregator-silent / outlier-storm / class-drop-spike
+│   ├── anomaly.yml             freeze-engaged / freeze-sustained
+│   ├── api.yml                 HTTP serving-plane alerts
+│   ├── archive-completeness.yml archive-files-missing / completeness-stale
+│   ├── cache.yml               Redis alerts
+│   ├── divergence.yml          price-quality / oracle-stale alerts
 │   ├── infra.yml               host / disk / ZFS / NVMe alerts
-│   └── meta.yml                Prometheus self-health + deadmansswitch
+│   ├── ingestion.yml           Source / cursor / decode / orphan / insert alerts
+│   ├── meta.yml                Prometheus self-health + deadmansswitch
+│   ├── sla-probe.yml           SLA-probe p95 / freshness / unit-failed (Freighter SLA)
+│   ├── slo.yml                 Multi-window SLO burn-rate alerts (ADR-0009)
+│   ├── stellar.yml             stellar-core / stellar-rpc / archive alerts (inert on r1 — see runbooks' deployment-posture callouts)
+│   ├── storage.yml             Postgres + TimescaleDB + backup alerts
+│   ├── supply.yml              SAC cross-check divergence
+│   ├── supply-refresh.yml      Aggregator-resident supply-refresh stalled / error-dominant
+│   ├── supply-snapshot.yml     systemd-timer-path supply-snapshot stale / circulating-zero / unit-failed
+│   └── verify-archive.yml      verify-archive run-stale / unit-failed
 ```
 
 ## Severity labels
@@ -78,7 +86,7 @@ Every rule carries these labels for AlertManager routing:
 | ----- | ------ | ------- |
 | `severity` | `page` / `ticket` / `informational` | routing tier |
 | `team` | `ratesengine` | downstream filtering |
-| `component` | `ingestion` / `storage` / `cache` / `api` / `stellar` / `infra` / `meta` | dashboard grouping |
+| `component` | `ingestion` / `storage` / `cache` / `api` / `stellar` / `infra` / `meta` / `aggregator` / `archive` / `divergence` / `supply` | dashboard grouping |
 | `runbook_url` | `https://github.com/RatesEngine/rates-engine/blob/main/docs/operations/runbooks/<name>.md` | direct link from the page |
 
 Annotations (not labels) carry human-readable metadata:

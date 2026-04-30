@@ -1,6 +1,6 @@
 ---
 title: Runbook — cursor-stuck
-last_verified: 2026-04-23
+last_verified: 2026-04-30
 status: draft
 severity: P2
 ---
@@ -45,7 +45,15 @@ Key signals:
 
 ## Mitigation (≤ 15 min)
 
-- [ ] Step 1 — if Connected=false: fix the upstream (stellar-rpc) first. Cursor will advance once events start flowing again.
+- [ ] Step 1 — if upstream is unhealthy: fix that first. The
+      indexer reads ledger metadata from Galexie's MinIO output
+      (`galexie-live` bucket) — confirm Galexie is producing
+      fresh objects (`mc ls minio/galexie-live | tail`) and that
+      the indexer can reach MinIO. If MinIO/Galexie itself is the
+      problem, jump to [all-ingestion-down](all-ingestion-down.md).
+      The cursor will advance once ledgers start flowing again.
+      *(Pre-2026-04-23 deployments routed via stellar-rpc; that
+      path was removed from r1 and isn't the upstream today.)*
 - [ ] Step 2 — if events are flowing but cursor is flat: restart the indexer pod after capturing recent logs. The current live path updates the cursor inline after successful ledger processing, so a flat cursor usually means repeated ledger failure or DB upsert trouble.
   ```sh
   kubectl rollout restart deploy/ratesengine-indexer
@@ -69,9 +77,17 @@ For the postmortem, gather:
 ## Related
 
 - `source-stopped.md` — adjacent alert when events stop flowing entirely.
-- `rpc-lag.md` — root cause when the upstream is the problem.
+- `all-ingestion-down.md` — where to route when Galexie / MinIO
+  (the actual upstream) is the problem.
+- `rpc-lag.md` — only relevant if your deployment routes through
+  stellar-rpc (r1 doesn't).
 - Current live path: `cmd/ratesengine-indexer/main.go` `processAndPersistCursor`.
 
 ## Changelog
 
 - 2026-04-23 — initial draft after the cursor-advancement fix + detect-gaps tooling landed.
+- 2026-04-30 — Mitigation step 1 rewritten around Galexie + MinIO
+  (the actual upstream); the prior "fix stellar-rpc" instruction
+  pointed at a service r1 stopped running 2026-04-23. Related
+  section now distinguishes the active (`all-ingestion-down`) and
+  legacy (`rpc-lag`) upstream-failure paths.

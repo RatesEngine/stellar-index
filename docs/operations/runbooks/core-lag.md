@@ -1,11 +1,27 @@
 ---
 title: Runbook — core-lag
-last_verified: 2026-04-23
+last_verified: 2026-04-30
 status: draft
 severity: P1
 ---
 
 # Runbook — `ratesengine_stellar_core_ledger_age`
+
+> **Deployment posture (2026-04-30).** stellar-core is **not running
+> on r1** — the daemon was removed 2026-04-23
+> ([r1-deployment-state.md §Services](../r1-deployment-state.md)).
+> The metric `ratesengine_stellar_core_last_ledger_time_unix` has no
+> producer, so this alert is *inert* on r1: there are no series to
+> evaluate against. Galexie's embedded captive-core is intentionally
+> not exposed to the prometheus exporter (the exporter scraped the
+> standalone daemon's `/info`).
+>
+> The alert remains in `deploy/monitoring/rules/stellar.yml` for
+> Phase-3 (Tier-1 validator rollout, ADR-0004); operators bringing
+> a validator online will reactivate this signal by re-enabling
+> `run_stellar_core` in the ansible role and exposing
+> `stellar-core-prometheus-exporter`. Until then this runbook is
+> *future-tense*: keep it discoverable rather than delete it.
 
 ## At a glance
 
@@ -106,3 +122,7 @@ kubectl logs ds/stellar-core --tail=200 | grep -iE 'panic|fatal|deadlock|corrupt
 ## Changelog
 
 - 2026-04-23 — initial draft.
+- 2026-04-30 — top-of-file deployment-posture callout: this alert
+  is inert on r1 (stellar-core removed 2026-04-23) and is retained
+  for Phase-3 validator rollout. Avoids on-call confusion when the
+  runbook is opened from an unrelated incident.

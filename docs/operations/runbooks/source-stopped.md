@@ -1,6 +1,6 @@
 ---
 title: Runbook — source-stopped
-last_verified: 2026-04-23
+last_verified: 2026-04-30
 status: draft
 severity: P2
 ---
@@ -33,8 +33,11 @@ curl -s http://api:9464/metrics | \
 # Health snapshot for every source's connection state:
 ratesengine-ops list-cursors -config /etc/ratesengine/config.toml
 
-# Is upstream the issue?
-ratesengine-ops rpc-probe http://stellar-rpc:8000
+# Is upstream the issue? r1 doesn't run its own stellar-rpc (removed
+# 2026-04-23, see docs/operations/r1-deployment-state.md); point the
+# probe at a public endpoint to confirm the network is closing
+# ledgers and the source contract is still emitting events.
+ratesengine-ops rpc-probe https://mainnet.sorobanrpc.com
 ```
 
 Key signals:
@@ -67,3 +70,5 @@ Key signals:
 ## Changelog
 
 - 2026-04-23 — initial draft.
+- 2026-04-30 — rpc-probe URL points at a public stellar-rpc; r1
+  doesn't run its own (removed 2026-04-23).
