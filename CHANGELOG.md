@@ -17,6 +17,23 @@ against.
 
 ### Added
 
+- **`internal/sources/sep41_supply/` observer + sink wiring
+  (#310 — Task #56 PR 2/4)**: SEP-41 supply event observer per
+  ADR-0023, plugging into the existing events-based
+  `dispatcher.Decoder` hook (NOT `LedgerEntryChangeDecoder` —
+  events are not ledger-entry deltas). Operator-watched-contract
+  driven via `NewDecoder([]string)` (PR 3/4 wires the operator
+  TOML). Match fast-path is `(contract_id ∈ watched_set) AND
+  (topic[0] symbol ∈ {mint, burn, clawback})` — `transfer` is
+  intentionally NOT matched (transfers move ownership, not
+  supply). Decode parses topic-position counterparty (mint/clawback
+  → topic[2]; burn → topic[1]) and the i128 amount via
+  `scval.AsAmountFromI128`. Sink type-switches on
+  `sep41_supply.Event` and routes through
+  `Store.InsertSEP41SupplyEvent` (#309). 9 new unit tests cover
+  match/skip semantics + decode for all three kinds + i128-safe
+  amount handling for values exceeding int64.
+
 - **`sep41_supply_events` hypertable + storage methods (#309 —
   Task #56 PR 1/4)**: migration 0015 creates the
   `sep41_supply_events` hypertable bounded by ADR-0023

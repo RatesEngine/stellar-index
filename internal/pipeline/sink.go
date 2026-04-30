@@ -22,6 +22,7 @@ import (
 	"github.com/RatesEngine/rates-engine/internal/sources/reflector"
 	sac_balances "github.com/RatesEngine/rates-engine/internal/sources/sac_balances"
 	"github.com/RatesEngine/rates-engine/internal/sources/sdex"
+	sep41_supply "github.com/RatesEngine/rates-engine/internal/sources/sep41_supply"
 	"github.com/RatesEngine/rates-engine/internal/sources/soroswap"
 	"github.com/RatesEngine/rates-engine/internal/sources/trustlines"
 	"github.com/RatesEngine/rates-engine/internal/storage/timescale"
@@ -110,6 +111,8 @@ func handleOneEvent(ctx context.Context, logger *slog.Logger, store *timescale.S
 		persistLPReserveObservation(ctx, logger, store, e)
 	case sac_balances.Observation:
 		persistSACBalanceObservation(ctx, logger, store, e)
+	case sep41_supply.Event:
+		persistSEP41SupplyEvent(ctx, logger, store, e)
 	default:
 		// A source emitted an event type the sink doesn't know how
 		// to persist. Usually means a new source was registered in
@@ -300,4 +303,26 @@ func persistSACBalanceObservation(ctx context.Context, logger *slog.Logger, stor
 		"contract_id", o.ContractID, "holder", o.Holder, "asset_key", o.AssetKey,
 		"ledger", o.Ledger, "balance_stroops", o.Balance.String(),
 		"is_removal", o.IsRemoval)
+}
+
+func persistSEP41SupplyEvent(ctx context.Context, logger *slog.Logger, store *timescale.Store, e sep41_supply.Event) {
+	if err := store.InsertSEP41SupplyEvent(ctx, timescale.SEP41SupplyEvent{
+		ContractID:   e.ContractID,
+		Ledger:       e.Ledger,
+		TxHash:       e.TxHash,
+		OpIndex:      e.OpIndex,
+		ObservedAt:   e.ObservedAt,
+		Kind:         timescale.SEP41EventKind(e.Kind),
+		Amount:       e.Amount,
+		Counterparty: e.Counterparty,
+	}); err != nil {
+		obs.SourceInsertErrorsTotal.WithLabelValues(sep41_supply.SourceName, "sep41_supply_event").Inc()
+		logger.Error("insert SEP-41 supply event failed",
+			"contract_id", e.ContractID, "kind", e.Kind, "ledger", e.Ledger,
+			"tx_hash", e.TxHash, "err", err)
+		return
+	}
+	logger.Debug("SEP-41 supply event ingested",
+		"contract_id", e.ContractID, "kind", e.Kind, "ledger", e.Ledger,
+		"amount", e.Amount.String(), "counterparty", e.Counterparty)
 }
