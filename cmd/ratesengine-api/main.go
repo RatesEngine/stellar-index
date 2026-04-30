@@ -1,10 +1,9 @@
 // Binary ratesengine-api is the public REST + SSE API server.
 //
-// Ships the public read surfaces (`/v1/price`, `/v1/history`,
-// `/v1/ohlc`, `/v1/vwap`, `/v1/twap`, `/v1/markets`, `/v1/assets`,
-// `/v1/sources`), infra endpoints (`/v1/healthz`, `/v1/readyz`,
-// `/v1/version`), and the current auth/self-service surfaces
-// (SEP-10 plus `/v1/account/*`).
+// Today: /v1/healthz, /v1/readyz, /v1/version — the infra-facing
+// surface. The full endpoint catalogue (/v1/price, /v1/history,
+// /v1/ohlc, SSE streams, etc.) lands in follow-up PRs per
+// docs/reference/api-design.md §5.
 //
 // Flags:
 //
@@ -47,6 +46,7 @@ import (
 	"github.com/RatesEngine/rates-engine/internal/metadata"
 	"github.com/RatesEngine/rates-engine/internal/ratelimit"
 	"github.com/RatesEngine/rates-engine/internal/storage/timescale"
+	"github.com/RatesEngine/rates-engine/internal/supply"
 	"github.com/RatesEngine/rates-engine/internal/version"
 )
 
@@ -84,9 +84,6 @@ func run(cfgPath string, dryRun bool) error { //nolint:gocognit,funlen,gocyclo /
 		"auth_mode", cfg.API.AuthMode,
 		"dry_run", dryRun,
 	)
-	if err := middleware.SetTrustedProxyCIDRs(cfg.API.TrustedProxyCIDRs); err != nil {
-		return fmt.Errorf("trusted proxy cidrs: %w", err)
-	}
 
 	// SEP-10 validator — wired regardless of auth_mode so the
 	// /v1/auth/sep10/{challenge,token} endpoints serve. When the
@@ -185,22 +182,17 @@ func run(cfgPath string, dryRun bool) error { //nolint:gocognit,funlen,gocyclo /
 		})
 	}
 
-	// Rate limit — separate anonymous and authenticated buckets when
-	// Redis is available. The auth middleware runs outside this layer,
-	// so authenticated requests can be keyed by credential/subject
-	// rather than collapsing onto the anonymous IP bucket.
+	// Rate limit — per-IP anonymous bucket only for now. Per-API-key
+	// buckets arrive with SEP-10 / apikey auth (see docs/reference/
+	// api-design.md §6). When Redis is unavailable, no bucket is
+	// constructed — the middleware is omitted and the stack runs
+	// uncapped. An operator who cares will see this in readyz.
 	var rateLimit middleware.Middleware
-	if rdb != nil && (cfg.API.AnonRateLimitPerMin > 0 || cfg.API.KeyRateLimitPerMin > 0) {
-		var anonBucket, authBucket *ratelimit.Bucket
-		if cfg.API.AnonRateLimitPerMin > 0 {
-			anonBucket = ratelimit.New(rdb, cfg.API.AnonRateLimitPerMin, time.Minute)
-		}
-		if cfg.API.KeyRateLimitPerMin > 0 {
-			authBucket = ratelimit.New(rdb, cfg.API.KeyRateLimitPerMin, time.Minute)
-		}
-		rateLimit = middleware.RateLimitBySubject(
-			anonBucket,
-			authBucket,
+	if rdb != nil && cfg.API.AnonRateLimitPerMin > 0 {
+		bucket := ratelimit.New(rdb, cfg.API.AnonRateLimitPerMin, time.Minute)
+		rateLimit = middleware.RateLimit(
+			bucket,
+			nil, // default KeyFn — resolveRemoteIP from Logger middleware
 			middleware.SkipHealthAndMetrics,
 			logger.With("component", "ratelimit"),
 		)
@@ -256,7 +248,7 @@ func run(cfgPath string, dryRun bool) error { //nolint:gocognit,funlen,gocyclo /
 		Accounts:    accountStore,
 		Divergence:  divergenceLooker,
 		Confidence:  redisConfidenceLooker{rdb: rdb},
-		Supply:      store,
+		Supply:      storeSupplyLooker{s: store},
 		SEP10:       sep10Validator,
 		CORS:        cors,
 		Auth:        authMW,
@@ -715,6 +707,29 @@ func assetToDetail(a canonical.Asset, homeDomainLookup func(issuer string) (stri
 		d.ContractID = &v
 	}
 	return d
+}
+
+// storeSupplyLooker adapts *timescale.Store to v1.SupplyLooker for
+// the F2-fields path on /v1/assets/{id}. Closes audit F-0020 +
+// Codex Freighter-V2 high-1: the API binary previously left
+// Options.Supply nil, dead-coding the F2 read path entirely.
+//
+// Error translation: timescale.ErrNotFound (no recorded snapshot)
+// becomes v1.ErrSupplyNotFound, which the handler treats as
+// "feature unavailable for this asset" and leaves the F2 fields
+// null on the response. Other errors propagate unchanged so the
+// handler can log them at WARN.
+type storeSupplyLooker struct{ s *timescale.Store }
+
+func (r storeSupplyLooker) LatestSupply(ctx context.Context, assetKey string) (supply.Supply, error) {
+	snap, err := r.s.LatestSupply(ctx, assetKey)
+	if err != nil {
+		if errors.Is(err, timescale.ErrNotFound) {
+			return supply.Supply{}, v1.ErrSupplyNotFound
+		}
+		return supply.Supply{}, err
+	}
+	return snap, nil
 }
 
 // mkLogger mirrors the indexer's logger factory. Could extract to
