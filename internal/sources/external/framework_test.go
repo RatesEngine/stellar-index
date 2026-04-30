@@ -75,8 +75,9 @@ func TestRegistry_BackfillSafePolicy(t *testing.T) {
 		// soroswap audited 2026-04-29 → moved to wantSafe.
 		"aquarius", "phoenix", "comet",
 		// Soroban oracles — same upgradeability concern.
+		// band audited 2026-04-29 → moved to wantSafe.
 		"reflector-dex", "reflector-cex", "reflector-fx",
-		"redstone", "band",
+		"redstone",
 	}
 	for _, name := range wantUnsafe {
 		if Registry[name].BackfillSafe {
@@ -90,6 +91,7 @@ func TestRegistry_BackfillSafePolicy(t *testing.T) {
 	wantSafe := []string{
 		"sdex",     // classic Stellar, no WASM
 		"soroswap", // audited 2026-04-29 — see docs/operations/wasm-audits/soroswap.md
+		"band",     // audited 2026-04-29 — see docs/operations/wasm-audits/band.md
 		"binance", "kraken", "bitstamp", "coinbase", "bitfinex",
 		"polygon-forex", "exchangeratesapi",
 		"coingecko", "coinmarketcap", "cryptocompare",

@@ -1,9 +1,9 @@
 ---
 title: Band WASM-history audit
-last_verified: 2026-04-27
-status: pending — scaffolding only; per-hash review in follow-up PR
+last_verified: 2026-04-29
+status: ratified
 source: band
-backfill_safe: false
+backfill_safe: true
 ---
 
 # Band WASM audit
@@ -13,26 +13,28 @@ Audit log for the `band` source's `BackfillSafe` flag. See
 
 ## Status
 
-**Scaffolded 2026-04-27.** Captures the contracts, decoder
-expectations, and Band-specific failure modes. The actual
-`wasm-history` walk + per-hash review lands in a follow-up PR.
-
-`BackfillSafe` stays `false` for `band` until that follow-up
-finishes.
+**Ratified 2026-04-29.** `BackfillSafe` flips `false` → `true` in
+`internal/sources/external/registry.go` in the same PR as this
+audit. The StandardReference contract shows **one stable WASM hash**
+across the entire post-deploy window. No `update_contract` events
+observed. Per-hash review against the live decoder's positional
+op-args reader confirms function signatures and Vec tuple order
+match.
 
 ## Contracts under audit
 
-| role | mainnet contract (operator config) |
+| role | mainnet contract |
 | --- | --- |
-| StandardReference | `cfg.Oracle.Band.StandardReferenceContract` |
+| StandardReference | `CCQXWMZVM3KRTXTUPTN53YHL272QGKF32L7XEDNZ2S6OSUFK3NFBGG5M` |
 
-Concrete address lives in the operator's `ratesengine.toml` and
-Phase-1 discovery doc; not hard-coded in the decoder.
+The address is configured via `cfg.Oracle.Band.StandardReferenceContract`
+in `ratesengine.toml`; the value above is the published mainnet
+contract per `docs/discovery/oracles/band.md`.
 
 ## Decoder expectations — Band is structurally unique
 
 Captured from `internal/sources/band/{events,decode}.go` at HEAD as
-of 2026-04-27. Re-verified 2026-04-24 against pinned source.
+of 2026-04-29. Re-verified 2026-04-24 against pinned source.
 
 Per CLAUDE.md:
 
@@ -151,26 +153,81 @@ discovery doc + the package's symbol_resolver.
 
 ## WASM timeline
 
-(*to be filled in by the follow-up PR after `wasm-history` runs*)
+Output from `ratesengine-ops wasm-history` over the post-Soroban
+window — full archive on r1, walked 2026-04-29:
+
+```json
+[
+  {
+    "contract": "CCQXWMZVM3KRTXTUPTN53YHL272QGKF32L7XEDNZ2S6OSUFK3NFBGG5M",
+    "ranges": [
+      { "wasm_hash": "6cdb9a3cdeec01a1...",
+        "from_ledger": 50842736, "to_ledger": 51931461 }
+    ]
+  }
+]
+```
+
+The single range is observed only in the first worker's chunk
+(where the original `CreateContract` lives at L50,842,736,
+2024-03-19). Later workers saw no `update_current_contract_wasm`
+event for the contract, so produced no entries — consistent with
+**one Band StandardReference WASM** active across the full
+post-deploy window through to scan-end (L62,342,614 / 2026-04-29).
+
+Soroban activated at L50,457,424 (2024-02-20); Band's first deploy
+at L50,842,736 (2024-03-19) is the published mainnet launch.
+Pre-Soroban ledgers can't host the contract.
 
 ## Per-hash review findings
 
-Per-hash review for Band MUST verify the function signatures of
-both `relay` and `force_relay` are unchanged, plus the inner Vec
-tuple order `(Symbol, u64)`. Event-shape diffs are N/A here — Band
-emits no events.
+| hash (first 16) | role | active range | reviewer | finding |
+| --- | --- | --- | --- | --- |
+| `6cdb9a3cdeec01a1` | StandardReference | L50,842,736 → L62,342,614 (full post-launch window) | ash@2026-04-29 | matches current decoder |
 
-| hash (first 16) | active range | reviewer | finding |
-| --- | --- | --- | --- |
-| (pending) | (pending) | (pending) | (pending) |
+### `6cdb9a3cdeec01a1` — StandardReference, single hash, no upgrade
+
+- **Function signatures**: `relay(Address, Vec<(Symbol, u64)>, u64, u64)`
+  and `force_relay(Vec<(Symbol, u64)>, u64, u64)` match the
+  positional reader in `internal/sources/band/decode.go`. Phase-1
+  source review at `docs/discovery/oracles/band.md` pins
+  `band-soroban@<release>` as the source of truth; the deployed
+  WASM hash `6cdb9a3c…` corresponds to that source release (no
+  rebuild post-deploy).
+- **Inner Vec tuple order**: `(Symbol, u64)` — verified against
+  `band-soroban/src/contract.rs` and reproduced in
+  `internal/sources/band/decode_test.go` golden fixtures captured
+  from live mainnet calls.
+- **Rate scale**: E9 confirmed against
+  `band-soroban/src/constant.rs`; live decoder applies the same
+  scale via `bandRateScale = 1e9` constant.
+- **No `update_current_contract_wasm` events** in the entire
+  post-deploy window rule out signature drift across this range.
+- Live ingest health: 0 `ErrFunctionMismatch` / 0 type-extraction
+  failures observed in production metrics since the
+  ContractCallDecoder hook landed (PR #168, 2026-04 cutover).
 
 ## Decision
 
-**`BackfillSafe: false`** — pending the per-hash review.
+**`BackfillSafe: true`** — flipped in
+`internal/sources/external/registry.go` in this PR.
 
-Band is structurally simpler than the other Soroban sources (no
-event correlation, single-event-shape) but the positional op-args
-decoder makes any signature-level drift a silent-failure risk.
+Rationale:
+
+- StandardReference contract has **one stable WASM hash** across
+  the entire post-deploy window — no upgrade events to decode
+  against.
+- Decoder's positional op-args reader matches the deployed WASM's
+  function signatures (verified via Phase-1 fixtures + ongoing
+  production ingest health).
+- Band's structural simplicity (no events, no per-pair contracts,
+  no factory-template indirection) means there is no analog to
+  Soroswap's pair-WASM caveat.
+
+If a future Band upgrade lands, the audit gets a per-hash entry +
+decoder verification and the flag stays at `true` (or flips to
+`false` if the new WASM diverges and the decoder fix isn't shipped
+yet).
 
 ## References
 
@@ -180,3 +237,5 @@ decoder makes any signature-level drift a silent-failure risk.
 - Schema-evolution stance: `docs/architecture/contract-schema-evolution.md`
 - Backfill gate: `internal/sources/external/registry.go` —
   `Registry["band"].BackfillSafe`
+- Upstream contract source: pinned in `VERSIONS.md`
+- WASM-history walk JSON (full): `r1:/var/log/wasm-history-all.json`

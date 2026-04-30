@@ -426,6 +426,17 @@ against.
 
 ### Changed
 
+- **`band` source flipped `BackfillSafe: false → true`** —
+  WASM-history audit landed
+  ([docs/operations/wasm-audits/band.md](docs/operations/wasm-audits/band.md)).
+  StandardReference contract `CCQXWMZV…` shows one stable WASM hash
+  `6cdb9a3c…` since launch (L50,842,736 / 2024-03-19); no
+  `update_contract` events through scan-end. Per-hash review
+  confirms `relay` / `force_relay` function signatures + `(Symbol,
+  u64)` Vec tuple order match the positional op-args reader. Backfill
+  against historical Band ranges is now permitted via
+  `ratesengine-ops backfill`.
+
 - **`soroswap` source flipped `BackfillSafe: false → true`** —
   WASM-history audit landed
   ([docs/operations/wasm-audits/soroswap.md](docs/operations/wasm-audits/soroswap.md)).
