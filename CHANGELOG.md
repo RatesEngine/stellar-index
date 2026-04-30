@@ -15,6 +15,31 @@ against.
 
 ## [Unreleased]
 
+### Fixed
+
+- **`configs/ansible/README.md` reflects current default tag set
+  (#333)**: the Ansible README opened with *"a fully configured
+  Stellar archival node running stellar-core, Galexie,
+  stellar-rpc, and Postgres 15"* — but `defaults/main.yml` has
+  `run_stellar_core: false` and `run_stellar_rpc: false` since
+  2026-04-23, so a fresh-host bring-up gets Galexie + Postgres +
+  MinIO and **not** the two daemons. The first-run command also
+  passed `stellar-core` in its tag list, which would still run
+  the role's stellar-core tasks (gracefully no-op when
+  `run_stellar_core=false`, but redundant). Updated:
+  - Opening summary names the actual default services and
+    explicitly notes the Phase-3 flip path for stellar-core /
+    stellar-rpc.
+  - First-run-bootstrap tag list drops `stellar-core`.
+  - "What the role does, at a glance" reorders to put Galexie
+    first (the active producer) and gathers the Phase-3
+    stellar-core / stellar-rpc / core-prom-exporter into a
+    dedicated subsection.
+  - "Running a subset" example uses `--tags galexie` rather than
+    `--tags stellar-core` for the typical update flow.
+  Pure documentation change; the role's `defaults/main.yml`
+  already reflects the correct defaults.
+
 ### Added
 
 - **`docs/architecture/supply-pipeline.md` (#318)**: architecture-
