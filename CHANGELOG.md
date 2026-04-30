@@ -17,6 +17,47 @@ against.
 
 ### Added
 
+- **XLM supply-snapshot writer via `ratesengine-ops supply snapshot`
+  (#285)**: closes the write half of the supply pipeline. Read half
+  shipped in #277 left `/v1/assets/{id}` F2 fields null because no
+  producer was populating `asset_supply_history`; this PR plugs the
+  gap for native XLM (Algorithm 1 per ADR-0011). New
+  `ConfigReserveBalanceReader` satisfies `supply.ReserveBalanceReader`
+  from operator-supplied balances; new `[supply]` config block carries
+  `sdf_reserve_accounts` + `reserve_balances_stroops`. Writer-start
+  validates every configured account has a balance entry — silently
+  treating an unknown account as zero would publish an over-stated
+  circulating supply, the exact failure mode ADR-0011 prohibits.
+  Reserve balances are operator-managed for now (a few SDF moves per
+  year); the LCM-AccountEntry-observer follow-up replaces the static
+  map with a live reader. Drive-by: extended
+  `internal/config/schema.go` to recurse into `[]struct` fields so
+  `docs-config` emits per-element rows for slices of structs.
+
+- **`/v1/chart` endpoint per Freighter RFP (#284)**: adds
+  `GET /v1/chart` matching the Freighter RFP V1 chart contract
+  exactly: `(timeframe, granularity, price_type) → points[]`. ADR-0020
+  documents the decision. New storage method `HistoryPointsInRange`
+  adds a `[from, to)` bucket bound on top of the existing closed-
+  bucket guard — no CAGG / migration changes. Default-granularity
+  table follows the RFP: 1h→1m, 24h→15m, 1w→1h, 1mo→4h, 1y→1d, all→1d;
+  operators can override granularity explicitly. `price_type=twap` is
+  reserved and returns 400 today — flipping to 200 is gated on
+  shipping a TWAP CAGG. Coverage matrix row F1.3 (Historical Price
+  Chart) moves from partial to served.
+
+- **Executable SLA-evidence CLI `cmd/ratesengine-sla-probe` (#283)**:
+  drives load against a deployed Rates Engine API and reports per-
+  endpoint p50 / p95 / p99 latency, freshness against the price's
+  `observed_at`, and availability — with a pass/fail verdict against
+  the RFP-stated SLA targets (p95 ≤ 200ms, p99 ≤ 500ms, freshness
+  ≤ 30s, availability ≥ 99.9%). JSON or text output; exit code 1 on
+  any SLA violation so it slots into CI / scheduled-job pipelines and
+  trends over time. Closes Codex medium-7 / coverage-matrix rows
+  S5.2, S9.1, S9.2, F3.1-F3.4 — the executable evidence the RFPs /
+  proposal asked for. Remaining rows (HA posture, SEV detection time)
+  need a production deployment to measure, not a pre-launch CLI.
+
 - **verify-archive systemd timer (L4.12)**: nightly Tier A
   chain-link integrity check on R1 per the ADR-0016 per-region
   trust model + the `archival-node-bringup.md` schedule
