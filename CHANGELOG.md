@@ -15,6 +15,20 @@ against.
 
 ## [Unreleased]
 
+### Fixed
+
+- **`CONTRIBUTING.md` recommends the canonical pre-push gate
+  (#331)**: contributors were told to run `make lint && make test`
+  before pushing, but the canonical pre-push gate is `make verify`
+  (`scripts/dev/verify.sh`) — which additionally runs doc-lint,
+  import-lint, openapi-url-lint, the integration-build smoke
+  check, and (when promtool is installed) the Prometheus
+  rule-file validation wired in #319. A contributor following
+  the old text would push and discover those failures only when
+  CI runs them. First-time-setup, the workflow's pre-push step,
+  and the Definition of Done now all reference `make verify`.
+  Pure documentation change.
+
 ### Added
 
 - **`docs/architecture/supply-pipeline.md` (#318)**: architecture-
