@@ -133,5 +133,20 @@ func (o *Orchestrator) triangulateOne(ctx context.Context, chain TriangulationCh
 			"err", err)
 		return "redis_error"
 	}
+
+	// Provenance marker. Lets the API set flags.triangulated=true
+	// when serving this pair via the Redis-fallback path. Per-pair
+	// direct refresh does NOT write this key — absence == direct.
+	// A failure here is logged but does not roll back the value
+	// write: the value is correct either way, and the flag has a
+	// safe default of false.
+	provKey := cachekeys.VWAPProvenance(chain.Target.Base, chain.Target.Quote, window)
+	if err := o.cache.Set(ctx, provKey, cachekeys.VWAPProvenanceTriangulated, ttl).Err(); err != nil {
+		o.logger.Warn("triangulation: provenance marker set failed",
+			"chain", chain.Target.String(),
+			"err", err)
+		// Don't return — value write succeeded; flag would just
+		// stay at default false this cycle.
+	}
 	return "ok"
 }

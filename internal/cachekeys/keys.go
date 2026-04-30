@@ -40,6 +40,36 @@ func VWAP(base, quote canonical.Asset, window time.Duration) string {
 // for zero window (callers should treat as "don't cache").
 func VWAPTTL(window time.Duration) time.Duration { return window }
 
+// ─── VWAP Provenance — was this VWAP triangulated? ──────────────────
+//
+// Wire shape: `vwap:<base>:<quote>:<window-seconds>:provenance`
+// TTL: matches the VWAP value key.
+//
+// Writer: aggregator's triangulation worker writes "triangulated"
+// alongside the value key. Per-pair direct refresh does NOT write
+// this — absence == direct (or unknown). Reader treats empty / nil
+// as "not triangulated".
+//
+// Used by the API's price handler to set `flags.triangulated`
+// (per ADR-0018 + the "triangulation in serving path" remediation
+// for audit F-0014). When the API serves from a Redis-fallback
+// path (because the pair has no direct prices_1m row but has a
+// triangulated implied value), it consults this key to populate
+// the flag.
+
+// VWAPProvenance returns the cache key marker for whether a
+// `vwap:<base>:<quote>:<window>` value came from the triangulation
+// worker (vs. the direct per-pair refresh).
+func VWAPProvenance(base, quote canonical.Asset, window time.Duration) string {
+	return fmt.Sprintf("vwap:%s:%s:%d:provenance",
+		base.String(), quote.String(), int(window.Seconds()))
+}
+
+// VWAPProvenanceTriangulated is the value the triangulation worker
+// stamps into the [VWAPProvenance] key. The API reader matches by
+// byte-equality.
+const VWAPProvenanceTriangulated = "triangulated"
+
 // ─── Confidence — multi-factor score per (pair, window) ───────────
 //
 // Wire shape: `confidence:<base>:<quote>:<window-seconds>`
