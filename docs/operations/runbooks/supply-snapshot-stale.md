@@ -16,6 +16,33 @@ severity: P3
 | Typical MTTR | 15 min |
 | Impact | `/v1/assets/{id}` F2 fields visibly old. After ≥ 36 h the displayed `observed_at` is more than a day behind chain state. |
 
+## Two refresh paths exist — confirm which one your deployment uses
+
+Per [supply-pipeline.md](../../architecture/supply-pipeline.md),
+`asset_supply_history` snapshots can be produced by **either** of:
+
+1. **systemd timer** (`supply-snapshot.timer` →
+   `ratesengine-ops supply-snapshot`, writes `last_success_timestamp`
+   into `/var/lib/node_exporter/textfile_collector/supply_snapshot.prom`).
+   This alert tracks **only** that gauge.
+2. **Aggregator-resident goroutine** (`runSupplyRefresh` in
+   `cmd/ratesengine-aggregator`, gated by
+   `[supply] aggregator_refresh_enabled = true`, emits
+   `ratesengine_aggregator_supply_refresh_total{outcome=…}` —
+   tracked by `supply-refresh-stalled.md` /
+   `-error-dominant.md`).
+
+If your deployment uses path #2 (aggregator-resident) and the
+systemd timer is intentionally **not** running, this alert is a
+false positive and should be silenced — it would otherwise stay
+firing forever despite snapshots being fresh. Verify by checking
+`/v1/assets/native` — if `observed_at` is current, snapshots are
+landing through path #2 and this alert should be silenced or
+the timer re-enabled to satisfy it.
+
+If your deployment intends to run path #1 (the timer path), keep
+this alert and follow the diagnosis below.
+
 ## Symptoms
 
 - `(time() - ratesengine_supply_snapshot_last_success_timestamp{asset_key=…}) > 36*3600`
@@ -79,8 +106,17 @@ sudo systemctl start supply-snapshot.service
 ## Related
 
 - `supply-snapshot-unit-failed.md` — when runs are failing.
+- `supply-refresh-stalled.md` — the aggregator-resident-path counterpart (this alert covers the systemd-timer path; that one covers the goroutine path).
+- `supply-refresh-error-dominant.md` — sibling for the goroutine-path failure mode.
 - `archive-completeness-stale.md` — same shape on the archive side.
+- `docs/architecture/supply-pipeline.md` — the two-path overview both runbooks live under.
 
 ## Changelog
 
 - 2026-04-30 — initial draft alongside #295 (textfile + alerts).
+- 2026-04-30 — added two-refresh-paths callout. PR #318's
+  supply-pipeline architecture documents two producers of
+  `asset_supply_history` (systemd timer + aggregator goroutine);
+  this alert is timer-path-only, so deployments using the
+  goroutine path were silently false-positiving without
+  cross-reference to the alternative path.

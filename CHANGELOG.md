@@ -15,6 +15,24 @@ against.
 
 ## [Unreleased]
 
+### Fixed
+
+- **`supply-snapshot-stale` runbook acknowledges the
+  aggregator-resident path (#325)**: PR #318 established that
+  `asset_supply_history` has two producers (systemd timer +
+  aggregator-resident goroutine, gated by
+  `aggregator_refresh_enabled`), but the
+  `ratesengine_supply_snapshot_stale` alert tracks **only** the
+  timer-path's `last_success_timestamp` gauge. Deployments running
+  exclusively the goroutine path would have this alert firing
+  forever despite fresh snapshots landing — the runbook didn't
+  cross-reference the alternative producer or call out
+  silence-vs-investigate. New top-of-file callout names both
+  paths, points operators at `/v1/assets/native` to verify which
+  is producing snapshots, and lists the goroutine-path runbooks
+  (`supply-refresh-stalled.md` / `-error-dominant.md`) under
+  Related. Pure documentation change.
+
 ### Added
 
 - **`docs/architecture/supply-pipeline.md` (#318)**: architecture-
