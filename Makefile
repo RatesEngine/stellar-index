@@ -83,9 +83,8 @@ fmt: ## Format all Go code with gofumpt + goimports
 	@$(GOBIN)/goimports -w -local $(MODULE) .
 
 .PHONY: lint
-lint: ## Run golangci-lint + archlint
+lint: ## Run golangci-lint
 	@$(GOBIN)/golangci-lint run ./...
-	@$(GOBIN)/go-arch-lint check ./... || true
 
 .PHONY: vet
 vet: ## go vet

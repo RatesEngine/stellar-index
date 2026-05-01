@@ -26,7 +26,7 @@ make help              # list all targets
 make dev               # docker-compose up the full stack locally
 make test              # unit tests (fast; ~2 min)
 make test-integration  # integration tests — spins its own containers via testcontainers-go (requires Docker)
-make lint              # gofumpt + golangci-lint + archlint
+make lint              # golangci-lint (gofumpt runs as a golangci formatter; architectural import boundaries enforced by scripts/ci/lint-imports.sh)
 make build             # all binaries into bin/
 make docs-all          # regenerate docs/reference/ from OpenAPI + struct tags
 ```
