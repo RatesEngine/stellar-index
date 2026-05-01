@@ -1,0 +1,81 @@
+name: k6-weekly
+
+# Weekly canonical mixed-realistic run against staging — the
+# regression alarm for the Freighter SLA p95 ≤ 200 ms claim
+# (Task #74 Wave 4; the artefact this generates is the input to
+# Task #77's monthly proof-of-SLA report).
+#
+# Schedule: Sundays 02:00 UTC. Off-peak for staging traffic so a
+# legitimate latency regression isn't masked by routine load.
+#
+# Secrets required (configured in repo settings → Secrets):
+#   - K6_TARGET_STAGING       — https://api.staging.ratesengine.net/v1
+#   - RATESENGINE_LOAD_API_KEY — load-test API key (vault-minted)
+#   - ALERTMANAGER_URL_STAGING — https://alertmanager.staging…/
+#                                (used by the spike scenario; the
+#                                weekly only runs mixed-realistic
+#                                so this is unused but documented
+#                                here for the manual-dispatch path)
+#
+# Manual dispatch supports running any single scenario via the
+# `scenario` input — useful for re-running a regression-investigation
+# without waiting for next Sunday.
+
+on:
+  schedule:
+    - cron: '0 2 * * 0'   # 02:00 UTC every Sunday
+  workflow_dispatch:
+    inputs:
+      scenario:
+        description: 'Scenario file under test/load/scenarios/ (default: 06-mixed-realistic.js)'
+        required: false
+        default: '06-mixed-realistic.js'
+
+permissions:
+  contents: read
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      K6_TARGET: ${{ secrets.K6_TARGET_STAGING }}
+      RATESENGINE_LOAD_API_KEY: ${{ secrets.RATESENGINE_LOAD_API_KEY }}
+      K6_PROMETHEUS_RW_SERVER_URL: ${{ secrets.K6_PROMETHEUS_RW_SERVER_URL }}
+      SCENARIO: ${{ inputs.scenario || '06-mixed-realistic.js' }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Verify secrets are configured
+        run: |
+          if [ -z "$K6_TARGET" ] || [ -z "$RATESENGINE_LOAD_API_KEY" ]; then
+            echo "::error::K6_TARGET_STAGING and RATESENGINE_LOAD_API_KEY secrets are required."
+            exit 1
+          fi
+
+      - name: Install k6
+        uses: grafana/setup-k6-action@v1
+        with:
+          k6-version: '0.50.0'
+
+      - name: Compile-check all scenarios
+        run: make test-load-check
+
+      - name: Run scenario
+        run: |
+          k6 run \
+            --out experimental-prometheus-rw \
+            --tag run_id=${{ github.run_id }} \
+            --tag run_attempt=${{ github.run_attempt }} \
+            "test/load/scenarios/$SCENARIO"
+
+      - name: Upload k6 console summary
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: k6-summary-${{ github.run_id }}
+          path: |
+            test/load/reports/
+          if-no-files-found: ignore
+          retention-days: 30

@@ -17,6 +17,27 @@ against.
 
 ### Added
 
+- **k6 load test suite — Wave 4 (Task #74; weekly schedule —
+  CLOSES Task #74)**: ships
+  `.github/workflows/k6-weekly.yml` running the canonical
+  `06-mixed-realistic.js` against staging every Sunday 02:00 UTC
+  (off-peak so a legitimate latency regression isn't masked by
+  routine staging traffic). Workflow dispatch supports running any
+  single scenario by name for ad-hoc regression investigation. Run
+  output flows to the existing Prometheus/Grafana stack via
+  `--out experimental-prometheus-rw`; tagged with `run_id` +
+  `run_attempt` so the run window is queryable from Grafana
+  without guessing timestamps. Secrets required (configured in
+  repo settings):
+  - `K6_TARGET_STAGING` — staging API base URL (e.g. `https://api.staging.ratesengine.net/v1`)
+  - `RATESENGINE_LOAD_API_KEY` — vault-minted load-test API key
+  - `K6_PROMETHEUS_RW_SERVER_URL` — Prometheus remote-write endpoint
+  After this PR, **Task #74 is closed** end-to-end (scaffold +
+  every scenario + AlertManager silence + weekly schedule);
+  Task #77 remains the operator action to publish the first
+  monthly `sla-proof-YYYY-MM-DD.md` once the staging environment
+  has the secrets configured.
+
 - **k6 load test suite — Wave 3 (Task #74; spike + AlertManager
   silence)**: closes the scenario surface for Task #74 by adding
   `99-spike.js` — a 10× burst absorption test (100 → 1000 rps for
