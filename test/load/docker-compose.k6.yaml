@@ -1,0 +1,25 @@
+# Local k6 runner for Wave-1 ad-hoc operator runs.
+#
+# Use when the operator wants to run k6 from inside Docker (no
+# brew install needed, ensures the same image version everyone
+# else is running). Production-target guard still applies — see
+# scenarios/lib/env.js.
+#
+#   docker compose -f test/load/docker-compose.k6.yaml \
+#     run --rm k6 run /scripts/01-price-hot-path.js
+#
+# K6_TARGET + RATESENGINE_LOAD_API_KEY must be exported in the
+# host shell; docker-compose passes them through.
+
+services:
+  k6:
+    image: grafana/k6:0.50.0
+    environment:
+      - K6_TARGET
+      - RATESENGINE_LOAD_API_KEY
+      # Wire to the same Prometheus the production stack uses.
+      # Operator overrides via .env if pointing at a local Prom.
+      - K6_PROMETHEUS_RW_SERVER_URL=${K6_PROMETHEUS_RW_SERVER_URL:-}
+    volumes:
+      - ./scenarios:/scripts:ro
+    network_mode: host

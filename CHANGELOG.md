@@ -17,6 +17,26 @@ against.
 
 ### Added
 
+- **k6 load test suite — Wave 1 scaffold (Task #74)**: lays the
+  foundation for the Freighter SLA proof (Task #77). New
+  `test/load/` tree with `scenarios/lib/{env,pairs,thresholds,warmup}.js`
+  shared helpers, the first two scenarios (`01-price-hot-path.js`,
+  `02-vwap-twap.js`), `docker-compose.k6.yaml` runner, package
+  doc.go for `go doc` visibility, and `reports/` (gitignored) for
+  per-run artefacts. Makefile gains `test-load`, `test-load-mixed`,
+  `test-load-price`, `test-load-vwap`, and `test-load-check`
+  (compile-check without running) — every target is gated by a
+  production-target guard that refuses to run if `K6_TARGET`
+  resolves to `api.ratesengine.{net,io}` or `rates.stellar.org`.
+  The same guard fires inside `scenarios/lib/env.js` so a direct
+  `k6 run` cannot bypass it. Companion design note at
+  `docs/architecture/k6-load-tests-design-note.md` (lays out the
+  remaining waves: 03/04/05 scenarios, mixed-realistic proof,
+  spike + AlertManager-silence integration, weekly schedule).
+  Wave 1 unblocks ad-hoc operator runs against staging today;
+  Task #77 closes once Wave 2's `06-mixed-realistic.js` passes
+  end-to-end.
+
 - **Patroni ansible role (#344)**: closes the launch-critical
   sub-role of Task #72. Implements the topology pinned in
   `ha-plan.md §3.3` — 1 primary + 2 synchronous replicas across

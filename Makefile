@@ -109,9 +109,49 @@ test-integration: ## Integration tests (requires Docker; spins its own container
 test-integration-build: ## Compile integration tests without running them (no Docker, fast). Catches build-tag breakage from interface changes.
 	$(GO) test -tags=integration -run nothing -count=0 $(INT_TEST_PKGS)
 
+# k6 load suite (Task #74). Each target sets PROM_OUT for the
+# experimental-prometheus-rw exporter so the run lands in the same
+# Grafana stack on-call uses (design note §How the proof report is
+# generated). Production-target guard is enforced inside
+# scenarios/lib/env.js, so direct `k6 run` cannot bypass it.
+PROM_OUT ?= experimental-prometheus-rw
+
+.PHONY: test-load-guard
+test-load-guard:
+	@if [ -z "$$K6_TARGET" ]; then \
+	  echo "K6_TARGET is required (e.g. https://api.staging.ratesengine.net/v1)"; exit 2; \
+	fi
+	@if [ -z "$$RATESENGINE_LOAD_API_KEY" ]; then \
+	  echo "RATESENGINE_LOAD_API_KEY is required (mint from vault)"; exit 2; \
+	fi
+	@case "$$K6_TARGET" in \
+	  *api.ratesengine.net*|*api.ratesengine.io*|*rates.stellar.org*) \
+	    echo "Refusing to load-test production target $$K6_TARGET"; exit 2;; \
+	esac
+
 .PHONY: test-load
-test-load: ## Run k6 load suite against staging (requires K6_TARGET env)
-	@k6 run test/load/api_steady_state.js
+test-load: test-load-guard ## Run all k6 scenarios against $K6_TARGET (slow; ~30 min)
+	@for s in test/load/scenarios/[0-9]*.js; do \
+	  echo "=== $$s ==="; k6 run --out $(PROM_OUT) $$s || exit $$?; \
+	done
+
+.PHONY: test-load-mixed
+test-load-mixed: test-load-guard ## Run the canonical mixed-realistic SLA proof (Task #77)
+	@k6 run --out $(PROM_OUT) test/load/scenarios/06-mixed-realistic.js
+
+.PHONY: test-load-price
+test-load-price: test-load-guard ## Run only the price hot-path scenario (5 min)
+	@k6 run --out $(PROM_OUT) test/load/scenarios/01-price-hot-path.js
+
+.PHONY: test-load-vwap
+test-load-vwap: test-load-guard ## Run only the VWAP/TWAP scenario (5 min)
+	@k6 run --out $(PROM_OUT) test/load/scenarios/02-vwap-twap.js
+
+.PHONY: test-load-check
+test-load-check: ## Compile-check all k6 scenarios without running them (no target needed)
+	@for s in test/load/scenarios/[0-9]*.js; do \
+	  echo "=== $$s ==="; k6 archive --quiet -O /dev/null $$s || exit $$?; \
+	done
 
 .PHONY: test-all
 test-all: lint vet test test-integration ## Everything short of load + chaos

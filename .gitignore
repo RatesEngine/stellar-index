@@ -72,8 +72,8 @@ service-account*.json
 /docs/reference/metrics/generated/
 
 # Test artefacts
-/test/load/results/*
-!/test/load/results/.gitkeep
+/test/load/reports/*
+!/test/load/reports/README.md
 /test/integration/.testcache/
 
 # Discovery scratch — do NOT port to implementation repo
