@@ -147,6 +147,22 @@ type Config struct {
 	// raw trade feed).
 	EnableStablecoinFiatProxy bool
 
+	// MinUSDVolume, when > 0, requires a window's total USD volume
+	// (post-class, post-outlier) to meet the threshold before its
+	// VWAP publishes. Applied only for fiat:USD-quoted pairs — for
+	// those pairs every contributing trade originates off-chain
+	// (CEX/FX) at the uniform 10^8 quote-decimal convention, so the
+	// sum/1e8 → USD conversion is exact. Non-USD-quoted pairs are
+	// exempt because cross-decimal arithmetic across mixed sources
+	// (Stellar 7-decimal vs Soroban variable vs external 1e8) has no
+	// clean single-USD interpretation; the dominant launch case is
+	// XLM/USD which IS in scope.
+	//
+	// Default 0 = filter off. Production deployments stamp 10_000
+	// (== $10k in window) per the AggregateConfig default, matching
+	// L2.1 in `docs/architecture/launch-readiness-backlog.md`.
+	MinUSDVolume float64
+
 	// OutlierSigmaThreshold, when > 0, drops trades whose
 	// QuoteAmount/BaseAmount price differs from the window's
 	// arithmetic-mean price by more than sigma standard deviations
@@ -455,6 +471,10 @@ func (o *Orchestrator) refreshPairWindow(
 		return nil
 	}
 
+	if o.dropForMinUSDVolume(pair, trades) {
+		return nil
+	}
+
 	vwap, err := aggregate.VWAP(trades)
 	if err != nil {
 		if errors.Is(err, aggregate.ErrNoTrades) {
@@ -651,6 +671,74 @@ func (o *Orchestrator) fetchForTarget(
 		}
 	}
 	return merged, nil
+}
+
+// dropForMinUSDVolume returns true (and bumps the matching counters
+// + emptyWindows stat) when the post-class + post-outlier window
+// fails the per-pair USD-volume threshold. Caller treats the true
+// case the same as a literally-empty window — skip the publish and
+// move on. Extracted from refreshPairWindow to keep its cognitive
+// complexity under the linter cap.
+//
+// See [Config.MinUSDVolume] for the threshold semantics.
+func (o *Orchestrator) dropForMinUSDVolume(pair canonical.Pair, trades []canonical.Trade) bool {
+	if o.cfg.MinUSDVolume <= 0 || !minUSDVolumeApplies(pair) {
+		return false
+	}
+	if windowUSDVolume(trades) >= o.cfg.MinUSDVolume {
+		return false
+	}
+	obs.AggregatorDroppedWindowsTotal.WithLabelValues("min_usd_volume").Inc()
+	o.mu.Lock()
+	o.emptyWindows++
+	o.mu.Unlock()
+	obs.AggregatorEmptyWindowsTotal.Inc()
+	return true
+}
+
+// minUSDVolumeApplies reports whether the per-pair USD-volume
+// threshold should be enforced for `pair`. True iff the quote asset
+// is fiat:USD — the only case where every contributing trade comes
+// from off-chain CEX/FX feeds at the uniform 10^8 quote-decimal
+// convention. Non-USD-quoted pairs are exempt; see
+// [Config.MinUSDVolume] for the rationale.
+func minUSDVolumeApplies(pair canonical.Pair) bool {
+	return pair.Quote.Type == canonical.AssetFiat && pair.Quote.Code == "USD"
+}
+
+// windowUSDVolume sums quote_amount across the supplied trades and
+// converts to USD assuming the uniform 10^8 scale that off-chain
+// (CEX/FX) sources stamp on
+// `internal/sources/external/<venue>::externalAmountDecimals`.
+//
+// CALLER CONTRACT: only invoke when [minUSDVolumeApplies] returned
+// true — that gate guarantees every trade in the slice is off-chain
+// and thus at 1e8 scale. Calling on a mixed-decimal slice yields a
+// numerically-wrong result.
+//
+// Empty input yields 0 (a window with zero contributing trades has
+// zero USD volume by definition).
+func windowUSDVolume(trades []canonical.Trade) float64 {
+	if len(trades) == 0 {
+		return 0
+	}
+	sum := new(big.Int)
+	for i := range trades {
+		amt := trades[i].QuoteAmount.BigInt()
+		if amt == nil {
+			continue
+		}
+		sum.Add(sum, amt)
+	}
+	if sum.Sign() == 0 {
+		return 0
+	}
+	// 1e8 → USD. SetFrac + Float64 produces an IEEE 754 double; the
+	// MinUSDVolume comparison is operator-tunable and not a
+	// precision-sensitive math step, so float64 is acceptable here.
+	rat := new(big.Rat).SetFrac(sum, big.NewInt(100_000_000))
+	f, _ := rat.Float64()
+	return f
 }
 
 // filterForVWAP drops trades whose source is not registered as a

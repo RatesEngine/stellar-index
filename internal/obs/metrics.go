@@ -49,6 +49,7 @@ func init() {
 		AggregatorVWAPWritesTotal,
 		AggregatorEmptyWindowsTotal,
 		AggregatorDroppedTradesTotal,
+		AggregatorDroppedWindowsTotal,
 
 		SupplyCrossCheckDivergenceStroops,
 		SupplyCrossCheckTotal,
@@ -342,6 +343,21 @@ var AggregatorDroppedTradesTotal = prometheus.NewCounterVec(
 	prometheus.CounterOpts{
 		Name: "ratesengine_aggregator_dropped_trades_total",
 		Help: "Trades removed from the VWAP input set, labelled by reason (class|outlier).",
+	},
+	[]string{"reason"},
+)
+
+// AggregatorDroppedWindowsTotal — count of (pair, window) refreshes
+// where the post-class + post-outlier trade set was non-empty but
+// the window was suppressed by a window-level filter. Labelled by
+// reason: "min_usd_volume" = window's total USD-equivalent volume
+// fell below `aggregate.min_usd_volume`. Distinct from
+// AggregatorEmptyWindowsTotal (which means literally zero trades);
+// drives the launch-readiness L2.1 caveat audit.
+var AggregatorDroppedWindowsTotal = prometheus.NewCounterVec(
+	prometheus.CounterOpts{
+		Name: "ratesengine_aggregator_dropped_windows_total",
+		Help: "Windows the orchestrator suppressed at the window-level filter step, labelled by reason (min_usd_volume).",
 	},
 	[]string{"reason"},
 )

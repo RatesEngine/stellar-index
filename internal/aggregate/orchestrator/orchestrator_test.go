@@ -997,3 +997,183 @@ func TestDistinctSourceCount(t *testing.T) {
 		})
 	}
 }
+
+// TestMinUSDVolumeApplies — only fiat:USD-quoted pairs are in scope
+// for the MinUSDVolume threshold; everything else is exempt because
+// the cross-decimal arithmetic across mixed sources doesn't reduce
+// to a clean USD figure for non-USD-quoted pairs.
+func TestMinUSDVolumeApplies(t *testing.T) {
+	xlm, _ := canonical.NewCryptoAsset("XLM")
+	usd, _ := canonical.NewFiatAsset("USD")
+	eur, _ := canonical.NewFiatAsset("EUR")
+	usdt, _ := canonical.NewCryptoAsset("USDT")
+
+	xlmUSD, _ := canonical.NewPair(xlm, usd)
+	xlmEUR, _ := canonical.NewPair(xlm, eur)
+	xlmUSDT, _ := canonical.NewPair(xlm, usdt)
+	if !minUSDVolumeApplies(xlmUSD) {
+		t.Error("minUSDVolumeApplies(XLM/fiat:USD) = false, want true")
+	}
+	if minUSDVolumeApplies(xlmEUR) {
+		t.Error("minUSDVolumeApplies(XLM/fiat:EUR) = true, want false")
+	}
+	if minUSDVolumeApplies(xlmUSDT) {
+		t.Error("minUSDVolumeApplies(XLM/USDT) = true, want false (crypto:USDT, not fiat:USD)")
+	}
+}
+
+// TestWindowUSDVolume — the sum/1e8 conversion gives a clean USD
+// figure when the input slice's quote_amount values are at the
+// uniform 10^8 external-source convention.
+func TestWindowUSDVolume(t *testing.T) {
+	// 100 trades at $0.01 each = $1.00 total. quote_amount in 1e8
+	// scale: $0.01 = 1_000_000.
+	var trades []canonical.Trade
+	for i := 0; i < 100; i++ {
+		trades = append(trades, buildTrade(t,
+			big.NewInt(1_000_000_000), // base (irrelevant to USD-volume)
+			big.NewInt(1_000_000),     // quote at 1e8 scale = $0.01
+			time.Now(),
+		))
+	}
+	got := windowUSDVolume(trades)
+	if got < 0.99 || got > 1.01 {
+		t.Errorf("got %f, want ~1.00", got)
+	}
+
+	// Empty input → 0.
+	if got := windowUSDVolume(nil); got != 0 {
+		t.Errorf("empty input: got %f, want 0", got)
+	}
+}
+
+// TestTick_MinUSDVolumeFilter — the threshold gate rejects a thin
+// fiat:USD-quoted window and lets a fat one through. Verifies the
+// AggregatorDroppedWindowsTotal{reason="min_usd_volume"} counter
+// fires + the EmptyWindows counter increments + no Redis key gets
+// written for the rejected window.
+func TestTick_MinUSDVolumeFilter(t *testing.T) {
+	xlm, _ := canonical.NewCryptoAsset("XLM")
+	usd, _ := canonical.NewFiatAsset("USD")
+	pair, _ := canonical.NewPair(xlm, usd)
+
+	// Trade from polygon-forex (FX class, registered IncludeInVWAP=true).
+	// 1 trade with quote_amount = 100_000 (= $0.001) — way below $10k.
+	mkFXTrade := func(q *big.Int, ts time.Time) canonical.Trade {
+		return canonical.Trade{
+			Source:      "polygon-forex",
+			Ledger:      0,
+			TxHash:      "0000000000000000000000000000000000000000000000000000000000000000",
+			OpIndex:     0,
+			Timestamp:   ts,
+			Pair:        pair,
+			BaseAmount:  canonical.NewAmount(big.NewInt(100_000_000)),
+			QuoteAmount: canonical.NewAmount(q),
+		}
+	}
+
+	t.Run("thin window: rejected", func(t *testing.T) {
+		store := &mockStore{trades: []canonical.Trade{mkFXTrade(big.NewInt(100_000), time.Now())}}
+		rdb, mr := newTestRedis(t)
+		orch := New(store, rdb, Config{
+			Pairs:        []canonical.Pair{pair},
+			Windows:      []time.Duration{5 * time.Minute},
+			MinUSDVolume: 10_000,
+		})
+
+		before := testutil.ToFloat64(obs.AggregatorDroppedWindowsTotal.WithLabelValues("min_usd_volume"))
+		if err := orch.Tick(context.Background()); err != nil {
+			t.Fatalf("Tick: %v", err)
+		}
+		after := testutil.ToFloat64(obs.AggregatorDroppedWindowsTotal.WithLabelValues("min_usd_volume"))
+		if after-before != 1 {
+			t.Errorf("min_usd_volume drop counter delta = %v, want 1", after-before)
+		}
+		if orch.Stats().VWAPWrites != 0 {
+			t.Errorf("VWAPWrites = %d, want 0 (window should be rejected)", orch.Stats().VWAPWrites)
+		}
+		key := "vwap:" + xlm.String() + ":" + usd.String() + ":300"
+		if mr.Exists(key) {
+			t.Errorf("key %q exists after rejection", key)
+		}
+	})
+
+	t.Run("fat window: published", func(t *testing.T) {
+		// Single trade carrying $100k worth of quote_amount.
+		store := &mockStore{trades: []canonical.Trade{
+			mkFXTrade(big.NewInt(10_000_000_000_000), time.Now()),
+		}}
+		rdb, mr := newTestRedis(t)
+		orch := New(store, rdb, Config{
+			Pairs:        []canonical.Pair{pair},
+			Windows:      []time.Duration{5 * time.Minute},
+			MinUSDVolume: 10_000,
+		})
+
+		if err := orch.Tick(context.Background()); err != nil {
+			t.Fatalf("Tick: %v", err)
+		}
+		if orch.Stats().VWAPWrites != 1 {
+			t.Errorf("VWAPWrites = %d, want 1", orch.Stats().VWAPWrites)
+		}
+		key := "vwap:" + xlm.String() + ":" + usd.String() + ":300"
+		if !mr.Exists(key) {
+			t.Errorf("key %q missing — fat window should publish", key)
+		}
+	})
+
+	t.Run("filter off (MinUSDVolume=0): thin window publishes", func(t *testing.T) {
+		store := &mockStore{trades: []canonical.Trade{mkFXTrade(big.NewInt(100_000), time.Now())}}
+		rdb, mr := newTestRedis(t)
+		orch := New(store, rdb, Config{
+			Pairs:        []canonical.Pair{pair},
+			Windows:      []time.Duration{5 * time.Minute},
+			MinUSDVolume: 0, // off
+		})
+
+		if err := orch.Tick(context.Background()); err != nil {
+			t.Fatalf("Tick: %v", err)
+		}
+		if orch.Stats().VWAPWrites != 1 {
+			t.Errorf("VWAPWrites = %d, want 1 (filter off should publish thin window)", orch.Stats().VWAPWrites)
+		}
+		key := "vwap:" + xlm.String() + ":" + usd.String() + ":300"
+		if !mr.Exists(key) {
+			t.Errorf("key %q missing — filter is off, window should publish", key)
+		}
+	})
+
+	t.Run("non-USD pair: filter exempt", func(t *testing.T) {
+		// XLM/EUR — quote is fiat:EUR, NOT fiat:USD. Threshold should
+		// not apply; thin window publishes.
+		eur, _ := canonical.NewFiatAsset("EUR")
+		eurPair, _ := canonical.NewPair(xlm, eur)
+		thinTrade := canonical.Trade{
+			Source:      "polygon-forex",
+			Ledger:      0,
+			TxHash:      "0000000000000000000000000000000000000000000000000000000000000000",
+			Timestamp:   time.Now(),
+			Pair:        eurPair,
+			BaseAmount:  canonical.NewAmount(big.NewInt(100_000_000)),
+			QuoteAmount: canonical.NewAmount(big.NewInt(100_000)),
+		}
+		store := &mockStore{trades: []canonical.Trade{thinTrade}}
+		rdb, mr := newTestRedis(t)
+		orch := New(store, rdb, Config{
+			Pairs:        []canonical.Pair{eurPair},
+			Windows:      []time.Duration{5 * time.Minute},
+			MinUSDVolume: 10_000,
+		})
+
+		if err := orch.Tick(context.Background()); err != nil {
+			t.Fatalf("Tick: %v", err)
+		}
+		if orch.Stats().VWAPWrites != 1 {
+			t.Errorf("VWAPWrites = %d, want 1 (non-USD pair exempt from MinUSDVolume)", orch.Stats().VWAPWrites)
+		}
+		key := "vwap:" + xlm.String() + ":" + eur.String() + ":300"
+		if !mr.Exists(key) {
+			t.Errorf("key %q missing — non-USD pair should publish", key)
+		}
+	})
+}
