@@ -17,6 +17,24 @@ against.
 
 ### Added
 
+- **k6 load test suite — Wave 3 (Task #74; spike + AlertManager
+  silence)**: closes the scenario surface for Task #74 by adding
+  `99-spike.js` — a 10× burst absorption test (100 → 1000 rps for
+  30s, ramp-down, 2 min recovery observation). Pass criteria are
+  intentionally permissive on latency mid-spike (the hand-wave
+  explicit in the design note §Spike) but tight on error rate
+  (< 0.5 %) and recovery (baseline p95 within 2 min of spike end).
+  New `scenarios/lib/alertmanager.js` posts a silence to
+  `${ALERTMANAGER_URL}/api/v2/silences` matching `APIHighLatencyP95`
+  + `APIHighErrorRate` for a 10-min window covering the spike,
+  removed in scenario teardown so a real post-run regression
+  still pages. Helpers are no-ops when `ALERTMANAGER_URL` is
+  unset (Make target prints a 10-second warning so the operator
+  can manually silence). Adds `make test-load-spike`. After this
+  PR, the only remaining Task #74 work is Wave 4 (GitHub Actions
+  weekly schedule) — the actual SLA proof artefact (Task #77) is
+  unblocked and ready for the operator's first staging run.
+
 - **k6 load test suite — Wave 2 (Task #74; unblocks #77)**: lands
   the four scenarios that complete the canonical SLA proof.
   `03-history.js` (windowed + since-inception, 80/20 mix per

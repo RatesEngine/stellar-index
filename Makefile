@@ -159,6 +159,16 @@ test-load-batch: test-load-guard ## Run only the batch scenario (5 min)
 test-load-streaming: test-load-guard ## Run only the SSE streaming scenario (5 min)
 	@k6 run --out $(PROM_OUT) test/load/scenarios/05-streaming.js
 
+.PHONY: test-load-spike
+test-load-spike: test-load-guard ## Run the 10× spike scenario (5 min). Posts AlertManager silence if ALERTMANAGER_URL set
+	@if [ -z "$$ALERTMANAGER_URL" ]; then \
+	  echo "WARN: ALERTMANAGER_URL unset — spike will not silence on-call alerts."; \
+	  echo "      Manually silence APIHighLatencyP95 + APIHighErrorRate before continuing."; \
+	  echo "      Press Ctrl-C to abort, or wait 10s to proceed."; \
+	  sleep 10; \
+	fi
+	@k6 run --out $(PROM_OUT) test/load/scenarios/99-spike.js
+
 .PHONY: test-load-check
 test-load-check: ## Compile-check all k6 scenarios without running them (no target needed)
 	@for s in test/load/scenarios/[0-9]*.js; do \
