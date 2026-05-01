@@ -253,6 +253,25 @@ entries when a leg's window was empty this tick. Sustained
 upstream regression worth investigating (Redis blip, malformed
 cached value).
 
+### `ratesengine_aggregator_fx_snap_fallback_total`
+
+Counter, label `leg` (canonical pair string of the FX leg, e.g.
+`fiat:USD/fiat:EUR`).
+
+Triangulations that fell back to cached VWAP for an FX leg because
+`FXQuoteAtOrBefore` returned no row at-or-before the bucket-end
+timestamp. The X2.5 forex-snap rule (ADR-0018 §"Forex factor handling")
+mandates the FX factor be the most recent FX-source quote at-or-before
+bucket close; on miss, the orchestrator falls back to the leg's
+cached VWAP so the chain still publishes (degraded but functional).
+
+Steady state should be near-zero once FX ingestion is warm. Cardinality
+is bounded by the operator-configured triangulation chain set —
+typically a single-digit number of FX legs across all chains. Sustained
+> 50% of triangulations indicates an FX-source health issue; the alert
+in `deploy/monitoring/rules/aggregator.yml` fires at 30m sustained
+fallback dominance.
+
 ### `ratesengine_aggregator_baseline_refresh_total`
 
 Counter, label `outcome` (`ok` / `not_enough_samples` / `read_error` /

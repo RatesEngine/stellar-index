@@ -57,6 +57,32 @@ groups:
             degraded — a paged divergence alert is likely to follow.
             Runbook: https://github.com/RatesEngine/rates-engine/blob/main/docs/operations/runbooks/aggregator-outlier-storm.md
 
+      - alert: ratesengine_aggregator_fx_snap_fallback_dominant
+        expr: |
+          sum(rate(ratesengine_aggregator_fx_snap_fallback_total[15m]))
+          /
+          clamp_min(
+            sum(rate(ratesengine_aggregator_triangulations_total{outcome="ok"}[15m])),
+            1
+          ) > 0.5
+        for: 30m
+        labels:
+          severity: ticket
+          team: ratesengine
+          component: aggregator
+          runbook_url: https://github.com/RatesEngine/rates-engine/blob/main/docs/operations/runbooks/aggregator-fx-snap-fallback-dominant.md
+        annotations:
+          summary: "FX snap fallback >50% of triangulations for 30m+ (P3)"
+          description: |
+            The X2.5 forex-factor-snap path is failing for more than
+            half of triangulations — most chained-fiat rates are using
+            the degraded cached-VWAP fallback instead of the bucket-end
+            FX-source quote that ADR-0018 mandates for across-region
+            consistency. Investigate FX ingestion: polygon-forex /
+            exchangeratesapi connector health, and the trades hypertable's
+            FX rows.
+            Runbook: https://github.com/RatesEngine/rates-engine/blob/main/docs/operations/runbooks/aggregator-fx-snap-fallback-dominant.md
+
       - alert: ratesengine_aggregator_class_drop_spike
         expr: |
           sum(rate(ratesengine_aggregator_dropped_trades_total{reason="class"}[10m]))

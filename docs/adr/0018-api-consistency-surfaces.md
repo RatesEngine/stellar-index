@@ -119,9 +119,17 @@ For rates that chain via USD pivot (`XLM/EUR = XLM/USD × USD/EUR`,
 where `USD/EUR` comes from a forex source per ADR-0010):
 
 - **`/v1/price`**: forex factor MUST be the most recent FX-source
-  quote published *before the bucket's end timestamp*. Same algorithm
-  in every region → same factor → preserves the closed-bucket
-  consistency property.
+  quote published *at-or-before the bucket's end timestamp*. Same
+  algorithm in every region → same factor → preserves the closed-
+  bucket consistency property. Implemented in
+  `internal/aggregate/orchestrator/triangulate.go` (Task #71): for
+  every fiat-vs-fiat leg in a configured triangulation chain, the
+  orchestrator queries `timescale.Store.FXQuoteAtOrBefore(pair,
+  bucketEnd, FXSources())` instead of reading the leg's cached VWAP.
+  Misses fall back to cached VWAP and increment
+  `ratesengine_aggregator_fx_snap_fallback_total{leg=…}`; the alert
+  in `deploy/monitoring/rules/aggregator.yml` fires at 30 m sustained
+  fallback dominance.
 - **`/v1/price/tip`**: forex factor is the freshest FX quote
   available at request time. Lives within the tip's
   no-cross-region-consistency contract.

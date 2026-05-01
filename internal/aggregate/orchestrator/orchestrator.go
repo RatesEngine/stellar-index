@@ -62,6 +62,19 @@ type Store interface {
 	TradesInRange(ctx context.Context, p canonical.Pair, from, to time.Time, limit int) ([]canonical.Trade, error)
 }
 
+// FXStore is the subset of timescale.Store the X2.5 forex-snap path
+// needs. Optional — wired into [Config.FXStore] only when an operator
+// runs chained-fiat triangulation. Nil keeps the orchestrator on the
+// pre-snap cached-VWAP path for FX legs (the safe default for
+// deployments without FX ingestion).
+//
+// Returns ([timescale.ErrNoFXQuote]) when no FX quote exists at-or-
+// before cutoff — caller falls back to cached VWAP and increments
+// [obs.AggregatorFXSnapFallbackTotal].
+type FXStore interface {
+	FXQuoteAtOrBefore(ctx context.Context, pair canonical.Pair, cutoff time.Time, fxSources []string) (*big.Rat, time.Time, string, error)
+}
+
 // Cache is the subset of redis.UniversalClient we need. Declared
 // as an interface for test-time replacement.
 //
@@ -239,6 +252,22 @@ type Config struct {
 	// VWAP comparator slot (kept internally) — the first tick after
 	// startup always skips because there's no return to score yet.
 	Baselines BaselineSource
+
+	// FXStore, when non-nil, enables the X2.5 forex-factor snap rule
+	// during triangulation. For each FX leg in a chain (a leg whose
+	// Base AND Quote are both AssetFiat), the orchestrator queries the
+	// most recent FX-source quote at-or-before the bucket-end
+	// timestamp, instead of reading the leg's cached VWAP. This is
+	// ADR-0018's across-region consistency primitive: every region
+	// serving the same closed bucket queries the same hypertable and
+	// gets the same FX rate.
+	//
+	// Nil = the snap rule is off; FX legs use the cached VWAP path
+	// (almost-equivalent in steady state but not strictly compliant
+	// with ADR-0018 across multi-region partitions). Wired to
+	// timescale.Store at the binary boundary; the unit-test path
+	// substitutes a mock implementing only [FXStore].
+	FXStore FXStore
 
 	// Logger is the structured logger. If nil, slog.Default() is
 	// used.

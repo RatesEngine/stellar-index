@@ -55,6 +55,7 @@ func init() {
 
 		AnomalyFreezeEngagedTotal,
 		AggregatorTriangulationsTotal,
+		AggregatorFXSnapFallbackTotal,
 		AggregatorBaselineRefreshTotal,
 		AggregatorSupplyRefreshTotal,
 		AggregatorConfidenceComputeTotal,
@@ -420,6 +421,25 @@ var AggregatorTriangulationsTotal = prometheus.NewCounterVec(
 		Help: "Aggregator triangulation outcomes per tick × chain × window. Outcome ∈ {ok, missing_leg, parse_error, redis_error}.",
 	},
 	[]string{"outcome"},
+)
+
+// AggregatorFXSnapFallbackTotal — counter of triangulation legs that
+// fell back from the X2.5 forex-snap rule to the cached-VWAP path
+// because FXQuoteAtOrBefore returned no row at-or-before the bucket
+// end. Steady state should be near-zero once FX ingestion is warm.
+// Sustained > 50% of triangulations indicates an FX-source health
+// issue (polygon-forex / exchangeratesapi) — see the matching alert
+// in deploy/monitoring/rules/aggregator.yml.
+//
+// Label `leg` is the canonical pair string of the FX leg that fell
+// back (e.g. "fiat:USD/fiat:EUR"); cardinality is bounded by the
+// operator-configured triangulation chain set.
+var AggregatorFXSnapFallbackTotal = prometheus.NewCounterVec(
+	prometheus.CounterOpts{
+		Name: "ratesengine_aggregator_fx_snap_fallback_total",
+		Help: "Triangulations that fell back to cached VWAP for an FX leg because FXQuoteAtOrBefore returned no row at-or-before the bucket end.",
+	},
+	[]string{"leg"},
 )
 
 // AggregatorBaselineRefreshTotal — counter of baseline refresh

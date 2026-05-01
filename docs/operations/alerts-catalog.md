@@ -194,6 +194,7 @@ override.
 | `ratesengine_aggregator_silent` | `rate(ratesengine_aggregator_vwap_writes_total[5m])` | == 0 for > 5 min | **P1** | [aggregator-silent](runbooks/aggregator-silent.md) |
 | `ratesengine_aggregator_outlier_storm` | `rate(ratesengine_aggregator_dropped_trades_total{reason="outlier"}[10m])` | > 5× baseline (offset 1h) for > 15 min | P3 | [aggregator-outlier-storm](runbooks/aggregator-outlier-storm.md) |
 | `ratesengine_aggregator_class_drop_spike` | `rate(ratesengine_aggregator_dropped_trades_total{reason="class"}[10m])` | > 10× baseline (offset 1h) for > 15 min | P3 | [aggregator-class-drop-spike](runbooks/aggregator-class-drop-spike.md) |
+| `ratesengine_aggregator_fx_snap_fallback_dominant` | `rate(ratesengine_aggregator_fx_snap_fallback_total[15m]) / rate(ratesengine_aggregator_triangulations_total{outcome="ok"}[15m])` | > 0.5 for > 30 min | P3 | [aggregator-fx-snap-fallback-dominant](runbooks/aggregator-fx-snap-fallback-dominant.md) |
 
 ## Supply alerts
 

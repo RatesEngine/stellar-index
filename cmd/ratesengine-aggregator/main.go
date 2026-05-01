@@ -226,6 +226,7 @@ func run(cfgPath string, dryRun bool) error {
 		Anomaly:            checker,
 		FreezeWriter:       freezeWriter,
 		Triangulations:     triangulations,
+		FXStore:            store, // X2.5: snap fiat-vs-fiat legs to bucket-end FX quote
 		Baselines:          baselineLookupAdapter{store: store},
 		Phase2Thresholds: orchestrator.Phase2Thresholds{
 			ConfidenceMaxFreeze:  cfg.Anomaly.Phase2.ConfidenceMaxFreeze,

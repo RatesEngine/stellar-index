@@ -17,6 +17,39 @@ against.
 
 ### Added
 
+- **X2.5 forex-factor snap rule (Task #71)**: implements
+  ADR-0018 §"Forex factor handling" so chained-fiat triangulation
+  (e.g. XLM/EUR via XLM/USD × USD/EUR) preserves across-region
+  consistency. For every fiat-vs-fiat leg of a configured
+  triangulation chain, the orchestrator queries the most recent
+  FX-source quote at-or-before the bucket-end timestamp instead of
+  reading the leg's cached VWAP — every region serving the same
+  closed bucket queries the same trades hypertable and gets the
+  same row. Pre-snap behaviour was *almost* equivalent to the rule
+  in steady state (region observation timing skew + multi-publish-
+  per-bucket FX sources were the strict-compliance gap); the new
+  path closes that gap and is the path ADR-0018 mandated.
+  Storage primitive: `timescale.Store.FXQuoteAtOrBefore(pair,
+  cutoff, fxSources)`. FX-source enumeration:
+  `external.FXSources()` (deterministic lex order) +
+  `external.IsFXSource(name)`. Orchestrator:
+  `internal/aggregate/orchestrator/triangulate.go::legPrice`
+  routes FX legs (both sides `AssetFiat`) to the snap path when
+  `Config.FXStore` is wired. Snap misses
+  (`timescale.ErrNoFXQuote`) fall back to the cached-VWAP path so
+  chains stay published; new metric
+  `ratesengine_aggregator_fx_snap_fallback_total{leg=…}` counts
+  these. Alert
+  `ratesengine_aggregator_fx_snap_fallback_dominant` fires at >50%
+  fallback rate sustained for 30 m. Hard DB errors from the FX
+  store skip publish for that tick (no chained-fiat output if we
+  can't trust the FX leg). Wired by default in
+  `cmd/ratesengine-aggregator/main.go` (passes the existing
+  `*timescale.Store` as the `FXStore`); deployments without FX
+  ingestion configured see no behavioural change because legs
+  fall back uniformly. Companion runbook:
+  `docs/operations/runbooks/aggregator-fx-snap-fallback-dominant.md`.
+
 - **Loki + Promtail ansible role — CLOSES Task #72**: ships
   the fifth and final sub-role of #72 after Patroni (#344),
   Redis Sentinel (#350), HAProxy (#362), and Prometheus (#363).
