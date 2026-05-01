@@ -10,8 +10,75 @@ import (
 
 	"github.com/lib/pq"
 
+	"github.com/RatesEngine/rates-engine/internal/aggregate"
 	"github.com/RatesEngine/rates-engine/internal/canonical"
+	"github.com/RatesEngine/rates-engine/internal/sources/external"
 )
+
+// usdVolumeScaleDenom is the divisor that converts a scaled-integer
+// quote_amount from an off-chain source to its actual USD value.
+// External sources (CEX/FX) stamp every amount at the uniform 10^8
+// decimal convention per
+// `internal/sources/external/<venue>::externalAmountDecimals`. We
+// only compute usd_volume when the source is in {CEX, FX} (so the
+// 10^8 scale holds) AND the quote is fiat:USD or a USD-pegged
+// stablecoin (so peg ≈ $1). On-chain sources use per-asset decimals
+// (XLM=7, Soroban variable) and need a per-source conversion that
+// lives in a follow-up — see launch-readiness L2.2.
+const usdVolumeScaleDenom = 100_000_000
+
+// tradeUSDVolume returns the per-trade USD-equivalent volume as a
+// NUMERIC-compatible string, or nil when the trade can't be
+// converted cleanly. Returning a *string lets the caller pass the
+// value (or sql NULL) straight into the trades.usd_volume column.
+//
+// Computable when ALL of the following hold:
+//   - source is registered with Subclass = SubclassCEX or SubclassFX
+//     (uniform 10^8 quote-amount scale per externalAmountDecimals)
+//   - quote is fiat:USD OR a USD-pegged stablecoin per
+//     `aggregate.FiatProxy` (USDC/USDT/DAI/PYUSD/USDP — all peg to
+//     USD; we treat the peg as 1.0 at insert time, the divergence /
+//     freeze paths surface depeg events separately)
+//
+// Everything else returns nil and the column stays NULL — the
+// historical default behaviour is preserved for trades where the
+// USD value isn't computable without an FX lookup.
+func tradeUSDVolume(t canonical.Trade) *string {
+	md := external.Lookup(t.Source)
+	if md.Subclass != external.SubclassCEX && md.Subclass != external.SubclassFX {
+		return nil
+	}
+	if !quoteIsUSDOrUSDPegged(t.Pair.Quote) {
+		return nil
+	}
+	q := t.QuoteAmount.BigInt()
+	if q == nil || q.Sign() <= 0 {
+		return nil
+	}
+	// FloatString(8) gives a fixed-precision decimal — Postgres
+	// NUMERIC accepts the form directly with no precision loss for
+	// any value that fit in the original big.Int (NUMERIC is
+	// arbitrary-precision; FloatString just chooses a render).
+	rendered := new(big.Rat).SetFrac(q, big.NewInt(usdVolumeScaleDenom)).FloatString(8)
+	return &rendered
+}
+
+// quoteIsUSDOrUSDPegged is true when the asset is fiat:USD or a
+// stablecoin that aggregate.FiatProxy maps to USD. The peg is
+// trusted at insert time — depeg events are observed separately
+// via the divergence + anomaly paths and do NOT change the inserted
+// usd_volume retroactively (a depegged USDT trade still carries
+// its observed quote_amount, which is the right historical record).
+func quoteIsUSDOrUSDPegged(a canonical.Asset) bool {
+	if a.Type == canonical.AssetFiat && a.Code == "USD" {
+		return true
+	}
+	proxy, ok := aggregate.FiatProxy(a)
+	if !ok {
+		return false
+	}
+	return proxy.Type == canonical.AssetFiat && proxy.Code == "USD"
+}
 
 // ErrNoFXQuote is returned by [Store.FXQuoteAtOrBefore] when no FX
 // observation exists for the requested pair at-or-before the cutoff.
@@ -26,6 +93,11 @@ var ErrNoFXQuote = errors.New("timescale: no FX quote at or before cutoff")
 //
 // The trade is validated via [canonical.Trade.Validate] before
 // touching the DB; a Validate failure returns [canonical.ErrInvalidTrade].
+//
+// `usd_volume` is computed via [tradeUSDVolume] when the source is
+// off-chain (CEX/FX) AND the quote is fiat:USD or a USD-pegged
+// stablecoin; everything else stores NULL. See the helper's docstring
+// for the L2.2 caveat surfaced in launch-readiness re-baseline 2026-05-01.
 func (s *Store) InsertTrade(ctx context.Context, t canonical.Trade) error {
 	if err := t.Validate(); err != nil {
 		return err
@@ -45,10 +117,14 @@ func (s *Store) InsertTrade(ctx context.Context, t canonical.Trade) error {
         )
         ON CONFLICT (source, ledger, tx_hash, op_index, ts) DO NOTHING
     `
+	var usdVolume any // sql NULL when nil; pq accepts the *string form too
+	if v := tradeUSDVolume(t); v != nil {
+		usdVolume = *v
+	}
 	_, err := s.db.ExecContext(ctx, q,
 		t.Source, t.Ledger, t.TxHash, t.OpIndex, t.Timestamp.UTC(),
 		t.Pair.Base.String(), t.Pair.Quote.String(),
-		t.BaseAmount, t.QuoteAmount, nil, // usd_volume filled by aggregator
+		t.BaseAmount, t.QuoteAmount, usdVolume,
 		t.Maker, t.Taker,
 	)
 	if err != nil {

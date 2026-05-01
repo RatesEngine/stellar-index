@@ -17,6 +17,30 @@ against.
 
 ### Added
 
+- **Per-trade `usd_volume` column populated at insert (partially
+  closes launch-readiness L2.2)**: previously `InsertTrade` set
+  `usd_volume = NULL` with a "filled by aggregator" comment that
+  never got actioned, which silently zeroed
+  `/v1/assets/{id}.volume_24h_usd` (the CAGG `prices_1m.volume_usd`
+  is `sum(coalesce(usd_volume, 0))`). New
+  `internal/storage/timescale/trades.go::tradeUSDVolume` populates
+  the column when the source is off-chain (Subclass=CEX or FX, so
+  amount is at the uniform 10⁸ decimal convention) AND the quote is
+  fiat:USD or a USD-pegged stablecoin per `aggregate.FiatProxy`
+  (USDC/USDT/DAI/PYUSD/USDP). For those trades the value is exact:
+  `quote_amount / 1e8`, rendered as a fixed-precision NUMERIC
+  string. Out-of-scope cases (on-chain DEX trades, EUR-quoted pairs,
+  unknown sources, oracle-class sources) keep the column NULL — the
+  CAGG's `coalesce(0)` makes that the right safe default. Tests
+  cover both the populated path (binance + fiat:USD, polygon-forex
+  + fiat:USD, kraken + USDC) and the NULL path (soroswap, EUR
+  quote, unknown source, reflector, coingecko, zero amount). The
+  remaining on-chain coverage (XLM/USDC trades from soroswap /
+  aquarius / phoenix at per-source decimals) is a separate
+  follow-up — same L2.2 row stays ⚠ because the
+  on-chain path needs per-source decimal awareness that's its own
+  design conversation.
+
 - **Per-pair `aggregate.min_usd_volume` filter wired through the
   orchestrator (closes launch-readiness L2.1 caveat)**: the config
   knob existed in `internal/config/config.go` (`MinUSDVolume`,
