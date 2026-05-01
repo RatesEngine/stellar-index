@@ -17,6 +17,27 @@ against.
 
 ### Added
 
+- **k6 load test suite — Wave 2 (Task #74; unblocks #77)**: lands
+  the four scenarios that complete the canonical SLA proof.
+  `03-history.js` (windowed + since-inception, 80/20 mix per
+  customer telemetry), `04-batch.js` (batch-size-100 fan-out at
+  50 rps), `05-streaming.js` (constant 200 SSE clients with
+  first-event latency tracked via `sse_first_event_ms` Trend),
+  and `06-mixed-realistic.js` — the canonical proof scenario
+  running the design-note traffic blend (60% price / 15% batch /
+  10% tip / 6% vwap / 4% history / 3% twap / 1% stream / 1%
+  oracle) at 300 rps over a 10 min soak. Pass criteria align
+  with Freighter SLA (p95 < 200 ms; p99 < 500 ms; 99.9 % success
+  rate).
+  Companion `docs/operations/sla-proof-template.md` is the
+  canonical artefact shape for Task #77 — operator copies to
+  `sla-proof-YYYY-MM-DD.md` after each canonical run, fills in
+  the per-endpoint p95 / p99 / error-rate table from Prometheus,
+  attaches Grafana snapshot links, and commits alongside the
+  release. The most recent passing report is the proof Task #77
+  closes against. Wave 3 (spike + AlertManager-silence) and
+  Wave 4 (weekly schedule) follow as separate PRs.
+
 - **k6 load test suite — Wave 1 scaffold (Task #74)**: lays the
   foundation for the Freighter SLA proof (Task #77). New
   `test/load/` tree with `scenarios/lib/{env,pairs,thresholds,warmup}.js`

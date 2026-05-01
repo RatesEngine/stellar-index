@@ -56,7 +56,11 @@ renders per-endpoint p95 / p99 / error rate for the run window.
 For the SLA proof report (Task #77), the canonical artefact is
 the markdown summary at
 `docs/operations/sla-proof-<YYYY-MM-DD>.md` capturing the
-mixed-realistic run's results + Grafana snapshot link.
+mixed-realistic run's results + Grafana snapshot link. Use
+`docs/operations/sla-proof-template.md` as the starting shape;
+copy → fill in the run window, per-endpoint table, Grafana
+snapshots, and concurrent-ingest activity → commit alongside the
+CHANGELOG entry for the release.
 
 ## Local development
 

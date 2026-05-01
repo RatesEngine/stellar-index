@@ -147,6 +147,18 @@ test-load-price: test-load-guard ## Run only the price hot-path scenario (5 min)
 test-load-vwap: test-load-guard ## Run only the VWAP/TWAP scenario (5 min)
 	@k6 run --out $(PROM_OUT) test/load/scenarios/02-vwap-twap.js
 
+.PHONY: test-load-history
+test-load-history: test-load-guard ## Run only the history scenario (5 min)
+	@k6 run --out $(PROM_OUT) test/load/scenarios/03-history.js
+
+.PHONY: test-load-batch
+test-load-batch: test-load-guard ## Run only the batch scenario (5 min)
+	@k6 run --out $(PROM_OUT) test/load/scenarios/04-batch.js
+
+.PHONY: test-load-streaming
+test-load-streaming: test-load-guard ## Run only the SSE streaming scenario (5 min)
+	@k6 run --out $(PROM_OUT) test/load/scenarios/05-streaming.js
+
 .PHONY: test-load-check
 test-load-check: ## Compile-check all k6 scenarios without running them (no target needed)
 	@for s in test/load/scenarios/[0-9]*.js; do \
