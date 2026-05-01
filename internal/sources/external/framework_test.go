@@ -122,6 +122,57 @@ func TestRegistry_BackfillSafePolicy(t *testing.T) {
 	}
 }
 
+// TestFXSources_DeterministicLexOrder pins the X2.5 forex-snap
+// helper to its documented contract: every FX-classified source in
+// Registry must appear in the result, exactly once, in lexicographic
+// order. Order matters because the storage primitive's tiebreak
+// (`ORDER BY ts DESC, source DESC`) only stays deterministic if every
+// region computes the same source set.
+func TestFXSources_DeterministicLexOrder(t *testing.T) {
+	got := FXSources()
+
+	// Every FX entry in Registry must be present.
+	wantSet := map[string]struct{}{}
+	for name, m := range Registry {
+		if m.Subclass == SubclassFX {
+			wantSet[name] = struct{}{}
+		}
+	}
+	if len(got) != len(wantSet) {
+		t.Fatalf("FXSources() returned %d, want %d (registry FX subclass count)", len(got), len(wantSet))
+	}
+	for _, name := range got {
+		if _, ok := wantSet[name]; !ok {
+			t.Errorf("FXSources() included %q which is not Subclass=FX in Registry", name)
+		}
+	}
+	for i := 1; i < len(got); i++ {
+		if got[i-1] >= got[i] {
+			t.Errorf("FXSources() not in ascending lex order: %v", got)
+			break
+		}
+	}
+}
+
+// TestIsFXSource_RegistryDriven exercises the snap-rule's per-leg
+// classification. A predicate-driven view of the registry — when an
+// operator adds a new SubclassFX vendor, the snap rule picks it up
+// without code changes elsewhere.
+func TestIsFXSource_RegistryDriven(t *testing.T) {
+	if !IsFXSource("polygon-forex") {
+		t.Error("IsFXSource(polygon-forex) = false, want true")
+	}
+	if !IsFXSource("exchangeratesapi") {
+		t.Error("IsFXSource(exchangeratesapi) = false, want true")
+	}
+	if IsFXSource("binance") {
+		t.Error("IsFXSource(binance) = true, want false (CEX, not FX)")
+	}
+	if IsFXSource("definitely-not-real") {
+		t.Error("IsFXSource(unknown) = true, want false (fallback empty subclass)")
+	}
+}
+
 func TestEvents_SourceFieldDelegatesToCanonical(t *testing.T) {
 	// The consumer.Event contract's Source() method labels metrics
 	// by venue. For external sources where one TradeEvent type

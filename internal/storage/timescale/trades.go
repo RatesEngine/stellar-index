@@ -5,10 +5,19 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"math/big"
 	"time"
+
+	"github.com/lib/pq"
 
 	"github.com/RatesEngine/rates-engine/internal/canonical"
 )
+
+// ErrNoFXQuote is returned by [Store.FXQuoteAtOrBefore] when no FX
+// observation exists for the requested pair at-or-before the cutoff.
+// Callers fall back to the cached VWAP path (degraded but functional)
+// and surface the fallback via the AggregatorFXSnapFallbackTotal metric.
+var ErrNoFXQuote = errors.New("timescale: no FX quote at or before cutoff")
 
 // InsertTrade writes one trade. Returns nil for a successful insert
 // OR a duplicate-key clash (idempotent by storage identity — the
@@ -349,6 +358,77 @@ func (s *Store) TradesInRangeAfter(
 		return nil, fmt.Errorf("timescale: TradesInRangeAfter rows: %w", err)
 	}
 	return out, nil
+}
+
+// FXQuoteAtOrBefore returns the most recent FX-source observation
+// for `pair` whose `ts <= cutoff`, restricted to sources passed in
+// `fxSources` (typically the result of external.FXSources()). When
+// multiple FX sources have a quote at-or-before cutoff, the one with
+// the largest ts wins; ties are broken by source-name DESC ordering
+// (deterministic across regions because every region's source registry
+// is identical).
+//
+// Returns (price, observedAt, source, nil) on hit;
+// (nil, time.Time{}, "", [ErrNoFXQuote]) when no FX quote exists at
+// or before cutoff. Other DB errors propagate.
+//
+// `price` is the per-trade ratio QuoteAmount/BaseAmount expressed as a
+// *big.Rat (no precision loss — both sides come from NUMERIC columns).
+// FX-source trades use a uniform 1e8 scale on each side so the ratio
+// is dimensionally clean (the scale cancels). Empty `fxSources`
+// returns ErrNoFXQuote without touching the DB.
+//
+// Implementation notes:
+//   - The hypertable index `(base_asset, quote_asset, ts DESC)` makes
+//     this a constant-cost descending range scan. Pushing the source
+//     filter to SQL keeps the scan bounded to FX rows.
+//   - cutoff is rounded to UTC to match the InsertTrade convention.
+func (s *Store) FXQuoteAtOrBefore(
+	ctx context.Context,
+	pair canonical.Pair,
+	cutoff time.Time,
+	fxSources []string,
+) (price *big.Rat, observedAt time.Time, source string, err error) {
+	if len(fxSources) == 0 {
+		return nil, time.Time{}, "", ErrNoFXQuote
+	}
+
+	const q = `
+        SELECT source, ts, base_amount, quote_amount
+          FROM trades
+         WHERE base_asset  = $1
+           AND quote_asset = $2
+           AND ts         <= $3
+           AND source      = ANY($4)
+         ORDER BY ts DESC, source DESC
+         LIMIT 1
+    `
+	var (
+		gotSource         string
+		gotTS             time.Time
+		baseAmt, quoteAmt string
+	)
+	row := s.db.QueryRowContext(ctx, q,
+		pair.Base.String(), pair.Quote.String(),
+		cutoff.UTC(), pq.Array(fxSources),
+	)
+	if err := row.Scan(&gotSource, &gotTS, &baseAmt, &quoteAmt); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, time.Time{}, "", ErrNoFXQuote
+		}
+		return nil, time.Time{}, "", fmt.Errorf("timescale: FXQuoteAtOrBefore: %w", err)
+	}
+
+	baseInt, ok := new(big.Int).SetString(baseAmt, 10)
+	if !ok || baseInt.Sign() == 0 {
+		return nil, time.Time{}, "", fmt.Errorf("timescale: FXQuoteAtOrBefore: invalid base_amount %q", baseAmt)
+	}
+	quoteInt, ok := new(big.Int).SetString(quoteAmt, 10)
+	if !ok {
+		return nil, time.Time{}, "", fmt.Errorf("timescale: FXQuoteAtOrBefore: invalid quote_amount %q", quoteAmt)
+	}
+	r := new(big.Rat).SetFrac(quoteInt, baseInt)
+	return r, gotTS, gotSource, nil
 }
 
 // CountTrades returns the total number of rows in the trades table.

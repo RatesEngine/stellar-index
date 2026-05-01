@@ -1,5 +1,7 @@
 package external
 
+import "sort"
+
 // Registry is the source-of-truth metadata table for every source the
 // aggregator knows about — both external (this package's responsibility)
 // AND on-chain (internal/sources/*). Centralising here lets the
@@ -101,4 +103,27 @@ func IncludeInVWAP(source string) bool {
 // only decoder. See [Metadata.BackfillSafe] for the policy detail.
 func BackfillSafe(source string) bool {
 	return Lookup(source).BackfillSafe
+}
+
+// FXSources returns the registered source names whose Subclass is
+// SubclassFX, in deterministic lexicographic order. Used by the
+// X2.5 forex-snap rule to query the trades hypertable for the most
+// recent FX-source quote at-or-before a bucket-end timestamp; the
+// stable order makes the across-region tiebreak deterministic when
+// two FX sources publish the same observed_at.
+func FXSources() []string {
+	out := make([]string, 0, 2)
+	for name, m := range Registry {
+		if m.Subclass == SubclassFX {
+			out = append(out, name)
+		}
+	}
+	sort.Strings(out)
+	return out
+}
+
+// IsFXSource reports whether the named source has Subclass=SubclassFX.
+// Convenience wrapper for the snap-rule's per-leg classification.
+func IsFXSource(source string) bool {
+	return Lookup(source).Subclass == SubclassFX
 }
