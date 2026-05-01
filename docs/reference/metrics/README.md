@@ -215,6 +215,20 @@ registered). `outlier` = removed by the σ-threshold filter
 mis-registered in `external.Registry`; a spike in `outlier` is
 usually a market-distress event flooding the window with anomalies.
 
+### `ratesengine_aggregator_dropped_windows_total`
+
+Counter, label `reason` (`min_usd_volume`).
+
+Windows the orchestrator suppressed at the window-level filter step
+— distinct from `dropped_trades_total` (per-trade) and
+`empty_windows_total` (zero trades to begin with). `min_usd_volume`
+fires when a fiat:USD-quoted pair's post-class + post-outlier window
+has less total USD volume than `aggregate.min_usd_volume` (closes
+launch-readiness L2.1). Operators alert on a sustained
+fraction-of-ticks dropping for `min_usd_volume` as a sign that a
+configured pair has thinned out beyond the threshold or the
+threshold is mis-tuned.
+
 ## Supply derivation (aggregator binary)
 
 ### `ratesengine_supply_cross_check_divergence_stroops`

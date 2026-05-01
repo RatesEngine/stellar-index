@@ -50,7 +50,7 @@ Within each surface, ordered by dependency.
 
 | ID | Item | Phase | Effort | Depends on | Blocks | Owner | Status |
 |---|---|---|---|---|---|---|---|
-| L2.1 | VWAP/TWAP impl across venues + per-pair USD volume threshold | Wk 5 | ~5 days | L1.1 | L3.* | `internal/aggregate` | ⚠ |
+| L2.1 | VWAP/TWAP impl across venues + per-pair USD volume threshold | Wk 5 | ~5 days | L1.1 | L3.* | `internal/aggregate` + `Config.MinUSDVolume` filter in `internal/aggregate/orchestrator/orchestrator.go::refreshPairWindow` | ✅ |
 | L2.2 | `usd_volume` column populated per trade + FX anchor multiplication | Wk 5 | half-day | L2.1 | L3.* | `internal/aggregate/triangulate` | ⚠ |
 | L2.3 | Forex factor snap rule for chained-fiat closed-bucket consistency (ADR-0018) | Wk 5 | half-day | L2.2 | L3.* | `internal/aggregate/triangulate` | 🟡 |
 | L2.4 | Phase 1 anomaly thresholds — per-class TOML defaults wired into orchestrator Tick + freeze writer (ADR-0019 stop-gap, see #199 / #226 / #235) | Wk 5 | half-day | L2.1 | L3.1 | `internal/aggregate/anomaly` + config | 🟢 |

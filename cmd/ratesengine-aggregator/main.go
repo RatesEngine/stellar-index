@@ -236,6 +236,7 @@ func run(cfgPath string, dryRun bool) error {
 		DisableClassFilter:        cfg.Aggregate.DisableClassFilter,
 		EnableStablecoinFiatProxy: cfg.Aggregate.EnableStablecoinFiatProxy,
 		OutlierSigmaThreshold:     cfg.Aggregate.OutlierSigmaThreshold,
+		MinUSDVolume:              cfg.Aggregate.MinUSDVolume,
 		Logger:                    logger,
 	})
 

@@ -17,6 +17,30 @@ against.
 
 ### Added
 
+- **Per-pair `aggregate.min_usd_volume` filter wired through the
+  orchestrator (closes launch-readiness L2.1 caveat)**: the config
+  knob existed in `internal/config/config.go` (`MinUSDVolume`,
+  default 10_000) but no production code path consumed it. The
+  re-baseline of `docs/architecture/launch-readiness-backlog.md`
+  surfaced this as the L2.1 ⚠ caveat. This commit threads it through
+  to `Config.MinUSDVolume` and adds a window-level filter step in
+  `refreshPairWindow` between the per-trade outlier filter and the
+  VWAP compute. When set > 0 AND the pair's quote is `fiat:USD`,
+  the orchestrator sums each contributing trade's `quote_amount` /
+  10⁸ (the uniform off-chain CEX/FX scale per
+  `internal/sources/external/<venue>::externalAmountDecimals`) and
+  drops the window if the sum is below threshold. Non-USD-quoted
+  pairs are exempt because cross-decimal arithmetic across mixed
+  on-chain/off-chain sources doesn't reduce to a clean single-USD
+  figure; the dominant launch case (XLM/USD) is in scope. Skip path
+  emits new
+  `ratesengine_aggregator_dropped_windows_total{reason="min_usd_volume"}`
+  + bumps the existing `empty_windows_total` so freshness alerts
+  see consistent state. Filter is OFF when `MinUSDVolume == 0` —
+  preserves pre-filter behaviour for deployments that haven't
+  tuned the threshold yet. Tested: thin window rejected; fat
+  window published; non-USD pair exempt; filter-off bypass.
+
 - **`ratesengine-ops wasm-history-merge-jsonl` — recover from a
   crashed walk**: the existing `wasm-history -checkpoint-dir` flag
   has been writing per-worker JSONL transition logs since #185, but
