@@ -59,14 +59,18 @@ reading the wrong key.
    the `vwap:<base>:<quote>:<window>` cache keys, so `/v1/price`
    falls back to the Postgres read which has the right value but
    slower path; freshness lags as the aggregator's tick gap grows.
-   - Signal: `ratesengine_aggregator_orchestrator_ticks_total`
-     stops incrementing.
+   - Signal: `rate(ratesengine_aggregator_ticks_total[5m]) == 0`
+     (the [aggregator-silent](aggregator-silent.md) alert fires
+     on this directly via `ratesengine_aggregator_vwap_writes_total`).
    - Mitigation: restart the aggregator binary; investigate why
      it stopped.
 
 2. **Indexer lag**. The dispatcher is behind on LCM consumption,
    so even fresh ledger data isn't producing closed buckets.
-   - Signal: `ratesengine_indexer_ledgers_behind > 5`.
+   - Signal: `time() - ratesengine_source_last_event_unix > 30`
+     for the dominant sources (the
+     [source-stopped](source-stopped.md) alert covers the
+     per-source case via `rate(ratesengine_source_events_total[5m]) == 0`).
    - Mitigation: see `core-lag.md`.
 
 3. **CAGG refresh policy is paused or lagging.** The `prices_1m`
