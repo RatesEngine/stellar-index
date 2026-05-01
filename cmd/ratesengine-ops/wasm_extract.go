@@ -281,10 +281,26 @@ func maybeWriteWasmCode(
 	foundMu *sync.Mutex,
 	found map[sdkxdr.Hash]string,
 ) {
+	// Match every change type that carries a [LedgerEntry] body
+	// (everything except LEDGER_ENTRY_REMOVED, which carries a
+	// LedgerKey instead). Earlier versions of this function only
+	// looked at Created + Restored, but the wasm-history walker
+	// finds ContractInstance updates under Updated too — and
+	// audit experience (2026-05-01 r1 walk) showed extract-wasm
+	// returning MISSING for every hash in the same archive the
+	// wasm-history walker reads cleanly. State is the pre-image
+	// of an Updated change in V2/V3 LCMs; if a ContractCode entry
+	// already exists at the target hash and is being TTL-extended
+	// or otherwise touched, the bytes are still in the State /
+	// Updated entry body.
 	var entry *sdkxdr.LedgerEntry
 	switch change.Type {
 	case sdkxdr.LedgerEntryChangeTypeLedgerEntryCreated:
 		entry = change.Created
+	case sdkxdr.LedgerEntryChangeTypeLedgerEntryUpdated:
+		entry = change.Updated
+	case sdkxdr.LedgerEntryChangeTypeLedgerEntryState:
+		entry = change.State
 	case sdkxdr.LedgerEntryChangeTypeLedgerEntryRestored:
 		entry = change.Restored
 	default:
