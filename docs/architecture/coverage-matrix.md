@@ -1,16 +1,34 @@
 ---
 title: RFP × Proposal × Delivery — Coverage Matrix
-last_verified: 2026-05-01
+last_verified: 2026-05-02
 status: ratified
 ---
 
 # RFP × Proposal × Delivery Coverage Matrix
 
 **Ratified:** 2026-04-22.
-**Re-baselined:** 2026-04-30 + **incremental re-baseline 2026-05-01**
-— rows X1.2, X1.4–X1.7, X2.2–X2.4, X2.6–X2.7, X3.1–X3.4, X3.6–X3.7,
-F6.5 flipped from `🧪 designed` to `✅ verified` after walking the
-codebase: `internal/api/v1/{price_tip,observations,price_stream,
+**Re-baselined:** 2026-04-30 + incremental re-baselines 2026-05-01
++ **2026-05-02**.
+
+The 2026-05-02 pass corrected three internally-contradictory ⚠
+caveats:
+- **X2.1** "CAGG population pending" → ✅: CAGGs auto-refresh per
+  the `add_continuous_aggregate_policy` calls in migrations/0002.
+- **S6.4** "OHLC fields … still need aggregator binary" → ✅: the
+  CAGGs' `first/last/min/max(quote/base)` columns ARE the OHLC
+  fields and they auto-populate. Note added re: the misleadingly-
+  named CAGG `twap` column (arithmetic mean, not time-weighted —
+  `/v1/twap` computes the real TW average from raw trades).
+- **S9.4** "three aggregators … Chainlink path remains
+  unimplemented" → ✅: the production wiring in
+  `cmd/ratesengine-api/main.go::buildDivergenceReferences` is
+  CoinGecko + Chainlink (S2.4 itself flipped to ✅ in 2026-04-30
+  re-baseline; S9.4 hadn't picked up the cross-reference).
+
+The 2026-05-01 pass flipped X1.2, X1.4–X1.7, X2.2–X2.4, X2.6–X2.7,
+X3.1–X3.4, X3.6–X3.7, F6.5 from `🧪 designed` to `✅ verified`
+after walking the codebase:
+`internal/api/v1/{price_tip,observations,price_stream,
 price_tip_stream,observations_stream}.go` ship the X2 surfaces;
 `internal/aggregate/{anomaly,baseline,confidence,freeze}` ship
 X3.1–X3.4/.6/.7; `cmd/ratesengine-ops verify-archive -tier
@@ -117,7 +135,7 @@ Any row with **status ❌** is a blocker for launch. Any row with
 | S6.1 | Since-inception backfill (ledger 2 → today) | §Historical Data | 2 (scaffold), 5 (run) | `cmd/ratesengine-ops backfill` | — | [data-sources/galexie.md](../discovery/data-sources/galexie.md) + [data-sources/stellar-data-lakes.md](../discovery/data-sources/stellar-data-lakes.md) | ✅ verified | 4 |
 | S6.2 | Pre-P20 (no-Soroban) coverage via ClaimAtom | §Historical Data | 2 | `internal/sources/sdex` | — | [dexes-amms/sdex.md](../discovery/dexes-amms/sdex.md), [protocol-versions.md](../discovery/protocol-versions.md) | ✅ verified | 5 |
 | S6.3 | Post-P23 unified events handling | §Historical Data | 2 | `internal/sources/sdex` | — | [notes/cap-67-unified-events.md](../discovery/notes/cap-67-unified-events.md) | ✅ verified | 5 |
-| S6.4 | OHLC continuous aggregates | §Historical — storage | 4 | `internal/storage/timescale` + migrations | ADR-0006 | migrations/0002 creates prices_{1m,15m,1h,4h,1d,1w,1mo} CAGGs; covered by test/integration/migrations_test.go. OHLC fields in CAGGs still need aggregator binary to populate at runtime. | ⚠ caveat | 3 |
+| S6.4 | OHLC continuous aggregates | §Historical — storage | 4 | `internal/storage/timescale` + migrations | ADR-0006 | migrations/0002 creates prices_{1m,15m,1h,4h,1d,1w,1mo} CAGGs with `first/last/min/max(quote/base)` columns + `add_continuous_aggregate_policy` auto-refresh; covered by test/integration/migrations_test.go. Note the CAGG `twap` column is `avg(quote/base)` (arithmetic mean, not true time-weighted) — `/v1/twap` computes the real TW average from raw trades and ignores the CAGG column; see `cmd/ratesengine-aggregator/main.go` ⚠ CAGG TWAP CAVEAT. | ✅ verified | 4 |
 | S6.5 | Retention: 1h+ granularity indefinite; <1h capped | §Historical — retention | 4 | Timescale retention policies | ADR-0006 | migrations/0002 wires retention policies per CAGG; covered by TestMigrationsRoundTrip + policy-attachment assertions. | ✅ verified | 4 |
 
 ### S7. Supported timeframes (1h / 24h / 1w / 1mo / 1yr / all-time)
@@ -141,7 +159,7 @@ Any row with **status ❌** is a blocker for launch. Any row with
 | S9.1 | ≥ 99.99 % uptime | §Availability | 8–9 | HA plan + `cmd/ratesengine-sla-probe` | [ADR-0008](../adr/0008-ha-topology.md) | (HA plan) | ⚠ caveat — synthetic 2xx-success-rate gate shipped (#283 + #290 + #294); 99.99% target needs production + multi-region traffic to verify operationally. The probe surfaces the signal; the HA topology is what backs the number. | 3 |
 | S9.2 | p95 ≤ 200 ms, p99 ≤ 500 ms | §Latency Targets | 9 | `internal/api` + Redis caching + `cmd/ratesengine-sla-probe` | [ADR-0009](../adr/0009-latency-budget.md) | (API design + HA plan) | ✅ verified — synthetic measurement shipped via the SLA probe (#283); RFP-stated targets baked into `default*Target` constants; alerts page on sustained breach. | 4 |
 | S9.3 | 1000 req/min per client | §Rate Limits | 7 | `internal/ratelimit` + `internal/api/v1/middleware/ratelimit.go` | — | Authenticated tier wired to `api.key_rate_limit_per_min` per F-0008 fix; anon + key buckets are now distinct. | ✅ verified | 4 |
-| S9.4 | Defined degradation when prices unavailable | §Degradation Strategy + divergence | 5 | `internal/divergence/{coingecko,coinmarketcap,cryptocompare}.go` + `internal/api/v1/envelope.go` | — | Divergence service runs against three aggregators; `flags.divergence_warning` surfaces on /v1/price. Chainlink path remains unimplemented (S2.4). | ⚠ caveat | 3 |
+| S9.4 | Defined degradation when prices unavailable | §Degradation Strategy + divergence | 5 | `internal/divergence/{coingecko,chainlink}.go` + `internal/api/v1/envelope.go` | — | Divergence service wires CoinGecko (free tier, default-on) + Chainlink (Enabled=true + non-empty FeedMap) per `cmd/ratesengine-api/main.go::buildDivergenceReferences`; `flags.divergence_warning` surfaces on /v1/price when any reference's tolerance is exceeded. CoinMarketCap + CryptoCompare remain external-source class registries (price contributors), not divergence references — separate role. | ✅ verified | 4 |
 
 ### S10. Open source
 
@@ -263,7 +281,7 @@ operator decision 2026-04-28.
 
 | # | Requirement | ADR | Week | Owner | Verified by | Status | Conf |
 | - | ----------- | --- | ---- | ----- | ----------- | ------ | ---- |
-| X2.1 | `/v1/price` — closed-bucket VWAP, cross-region consistent | [ADR-0015](../adr/0015-last-closed-bucket-rate-serving.md) + [ADR-0018](../adr/0018-api-consistency-surfaces.md) | 7 | `internal/api/v1/price.go` | shipped (PR #180); CAGG population pending | ⚠ caveat | 3 |
+| X2.1 | `/v1/price` — closed-bucket VWAP, cross-region consistent | [ADR-0015](../adr/0015-last-closed-bucket-rate-serving.md) + [ADR-0018](../adr/0018-api-consistency-surfaces.md) | 7 | `internal/api/v1/price.go` | handler shipped (PR #180); CAGGs auto-refresh per `add_continuous_aggregate_policy` calls in migrations/0002. Closed-bucket guarantee holds end-to-end. | ✅ verified | 4 |
 | X2.2 | `/v1/price/tip` — rolling-window VWAP + last-good-price fallback | [ADR-0018](../adr/0018-api-consistency-surfaces.md) | 7 | `internal/api/v1/price_tip.go` | [ADR-0018](../adr/0018-api-consistency-surfaces.md); handler + tests shipped | ✅ verified | 4 |
 | X2.3 | `/v1/observations` — raw per-source data | [ADR-0018](../adr/0018-api-consistency-surfaces.md) | 7 | `internal/api/v1/observations.go` | [ADR-0018](../adr/0018-api-consistency-surfaces.md); handler + tests shipped, `?source=` + `?aggregate=latest` | ✅ verified | 4 |
 | X2.4 | URL discipline: query params MUST NOT change consistency contract | [ADR-0018](../adr/0018-api-consistency-surfaces.md) | 7 | OpenAPI lint + per-handler `reject*TierParams` (e.g. `internal/api/v1/observations.go::rejectObservationsTierParams`) | [ADR-0018](../adr/0018-api-consistency-surfaces.md) §"URL discipline"; `?granularity=` / `?window_seconds=` 400-rejection tests in each surface's `_test.go` | ✅ verified | 4 |
