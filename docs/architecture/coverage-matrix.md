@@ -444,6 +444,21 @@ code state — these were on the "Open" list but had shipped):**
 - **#26 Envelope flag retrofit** — `internal/api/v1/envelope.go`
   exposes `stale`, `reduced_redundancy`, `triangulated`,
   `divergence_warning` flags (S5.4 verified).
+- **#17–#18 k6 load test suite (Task #74)** — `test/load/`
+  scaffold + 7 scenarios (price/vwap-twap/history/batch/stream/
+  mixed-realistic/spike) + AlertManager-silence integration +
+  weekly GitHub Actions schedule shipped via PRs #345/#346/#347/
+  #348. Companion design note at
+  `docs/architecture/k6-load-tests-design-note.md`. The remaining
+  S9.2 work is the operator-side first end-to-end run against
+  staging and the `sla-proof-2026-MM-DD.md` artefact (Task #77).
+- **Patroni ansible role (Task #72 launch-critical sub-role)** —
+  shipped via PR #344. Implements the topology pinned in
+  `ha-plan §3.3` (1 primary + 2 sync replicas, 3-node etcd
+  quorum). Companion design note at
+  `docs/architecture/patroni-ansible-role-design-note.md`. Other
+  sub-roles (Redis Sentinel, HAProxy, Prometheus, Loki) remain
+  open under Task #72.
 
 ### Open — implementation pending
 
@@ -454,12 +469,11 @@ now in *Closed since Phase 1* above.
 | Area | Item | Owner | Week | Effort |
 |---|---|---|---|---|
 | Aggregator | X2.5 Forex factor snap rule for chained-fiat | `internal/aggregate/triangulate` | 5 | half-day |
-| Operations | #11–#16 Ansible roles (Patroni / Redis / HAProxy / Prometheus / Loki) — only `archival-node` exists today | `configs/ansible/roles/` | 8 | ~1 week |
+| Operations | #11–#16 Ansible roles — Patroni shipped (#344); Redis Sentinel (design draft local) / HAProxy / Prometheus / Loki remaining | `configs/ansible/roles/` | 8 | ~3 days |
 | Operations | Public status page at `status.ratesengine.net` | infra | 9 | half-day |
-| Validation | #17–#18 k6 load test scenarios — `test/load/` not yet created | `test/load` | 9 | ~1 week |
+| Validation | S9.2 p95 ≤ 200 ms proof report — k6 suite shipped (#345/#346/#347/#348); operator-side first run + `sla-proof-2026-MM-DD.md` artefact remaining | `docs/operations/sla-proof-template.md` | 9 | ~half-day operator |
 | Validation | #19 Chaos suite — `test/chaos/` not yet created | `test/chaos` | 9 | full day |
 | Validation | #20 SEV-1/SEV-2 dry-run — playbook exists, dry-run record doesn't | runbooks | 9 | half-day |
-| Validation | S9.2 p95 ≤ 200 ms proof | k6 + report | 9 | (depends on #17–#18) |
 | Finalization | #22 Public-flip prep — `public-flip.md` exists; checklist completion is operator-side | repo strategy | 10 | hour planning |
 | Connectors / Audit | Task #53 Blend Pool Factory walk on r1 (Phase 2 of audit) | `cmd/ratesengine-ops wasm-history` | — | ~5 h operator |
 
