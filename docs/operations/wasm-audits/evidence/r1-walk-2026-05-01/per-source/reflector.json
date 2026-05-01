@@ -1,0 +1,130 @@
+{
+  "source": "reflector",
+  "contract_count": 3,
+  "unique_wasm_hashes": [
+    "4a64c8c8502df326f4ce06d98998dc7d8a61575a11d6c0fbd4c60d10dfe28ffa",
+    "df88820e231ad8f3027871e5dd3cf45491d7b7735e785731466bfc2946008608"
+  ],
+  "unique_wasm_hash_count": 2,
+  "total_range_count": 16,
+  "contracts": [
+    {
+      "contract": "CALI2BYU2JE6WVRUFYTS6MSBNEHGJ35P4AVCZYF3B6QOE3QKOB2PLE6M",
+      "role": "dex",
+      "first_ledger": 50644229,
+      "last_ledger": 59336871,
+      "range_count": 7,
+      "unique_hashes": [
+        "4a64c8c8502df326f4ce06d98998dc7d8a61575a11d6c0fbd4c60d10dfe28ffa",
+        "df88820e231ad8f3027871e5dd3cf45491d7b7735e785731466bfc2946008608"
+      ],
+      "ranges": [
+        {
+          "wasm_hash": "4a64c8c8502df326f4ce06d98998dc7d8a61575a11d6c0fbd4c60d10dfe28ffa",
+          "from_ledger": 50644229,
+          "to_ledger": 51656691
+        },
+        {
+          "wasm_hash": "df88820e231ad8f3027871e5dd3cf45491d7b7735e785731466bfc2946008608",
+          "from_ledger": 51656692,
+          "to_ledger": 51937331
+        },
+        {
+          "wasm_hash": "df88820e231ad8f3027871e5dd3cf45491d7b7735e785731466bfc2946008608",
+          "from_ledger": 51937353,
+          "to_ledger": 53417239
+        },
+        {
+          "wasm_hash": "df88820e231ad8f3027871e5dd3cf45491d7b7735e785731466bfc2946008608",
+          "from_ledger": 53417270,
+          "to_ledger": 54897147
+        },
+        {
+          "wasm_hash": "df88820e231ad8f3027871e5dd3cf45491d7b7735e785731466bfc2946008608",
+          "from_ledger": 54897157,
+          "to_ledger": 56377055
+        },
+        {
+          "wasm_hash": "df88820e231ad8f3027871e5dd3cf45491d7b7735e785731466bfc2946008608",
+          "from_ledger": 56377064,
+          "to_ledger": 57856963
+        },
+        {
+          "wasm_hash": "df88820e231ad8f3027871e5dd3cf45491d7b7735e785731466bfc2946008608",
+          "from_ledger": 57856992,
+          "to_ledger": 59336871
+        }
+      ]
+    },
+    {
+      "contract": "CAFJZQWSED6YAWZU3GWRTOCNPPCGBN32L7QV43XX5LZLFTK6JLN34DLN",
+      "role": "cex",
+      "first_ledger": 50644239,
+      "last_ledger": 59336871,
+      "range_count": 7,
+      "unique_hashes": [
+        "4a64c8c8502df326f4ce06d98998dc7d8a61575a11d6c0fbd4c60d10dfe28ffa",
+        "df88820e231ad8f3027871e5dd3cf45491d7b7735e785731466bfc2946008608"
+      ],
+      "ranges": [
+        {
+          "wasm_hash": "4a64c8c8502df326f4ce06d98998dc7d8a61575a11d6c0fbd4c60d10dfe28ffa",
+          "from_ledger": 50644239,
+          "to_ledger": 51656688
+        },
+        {
+          "wasm_hash": "df88820e231ad8f3027871e5dd3cf45491d7b7735e785731466bfc2946008608",
+          "from_ledger": 51656689,
+          "to_ledger": 51937331
+        },
+        {
+          "wasm_hash": "df88820e231ad8f3027871e5dd3cf45491d7b7735e785731466bfc2946008608",
+          "from_ledger": 51937353,
+          "to_ledger": 53417239
+        },
+        {
+          "wasm_hash": "df88820e231ad8f3027871e5dd3cf45491d7b7735e785731466bfc2946008608",
+          "from_ledger": 53417270,
+          "to_ledger": 54897147
+        },
+        {
+          "wasm_hash": "df88820e231ad8f3027871e5dd3cf45491d7b7735e785731466bfc2946008608",
+          "from_ledger": 54897157,
+          "to_ledger": 56377055
+        },
+        {
+          "wasm_hash": "df88820e231ad8f3027871e5dd3cf45491d7b7735e785731466bfc2946008608",
+          "from_ledger": 56377064,
+          "to_ledger": 57856963
+        },
+        {
+          "wasm_hash": "df88820e231ad8f3027871e5dd3cf45491d7b7735e785731466bfc2946008608",
+          "from_ledger": 57856992,
+          "to_ledger": 59336871
+        }
+      ]
+    },
+    {
+      "contract": "CBKGPWGKSKZF52CFHMTRR23TBWTPMRDIYZ4O2P5VS65BMHYH4DXMCJZC",
+      "role": "fx",
+      "first_ledger": 56733481,
+      "last_ledger": 59336871,
+      "range_count": 2,
+      "unique_hashes": [
+        "df88820e231ad8f3027871e5dd3cf45491d7b7735e785731466bfc2946008608"
+      ],
+      "ranges": [
+        {
+          "wasm_hash": "df88820e231ad8f3027871e5dd3cf45491d7b7735e785731466bfc2946008608",
+          "from_ledger": 56733481,
+          "to_ledger": 57856963
+        },
+        {
+          "wasm_hash": "df88820e231ad8f3027871e5dd3cf45491d7b7735e785731466bfc2946008608",
+          "from_ledger": 57856992,
+          "to_ledger": 59336871
+        }
+      ]
+    }
+  ]
+}

@@ -1,6 +1,6 @@
 ---
 title: Reflector WASM-history audit
-last_verified: 2026-04-29
+last_verified: 2026-05-01
 status: ratified
 sources: reflector-dex, reflector-cex, reflector-fx
 backfill_safe: true
@@ -16,6 +16,12 @@ for the wire format but make per-variant `BackfillSafe` decisions
 because each contract has its own deploy history.
 
 See `README.md` for the full procedure.
+
+> **2026-05-01 update.** Hash citations in this file have been
+> cross-checked against the 2026-04-30 r1 walk; see
+> [r1-walk-2026-05-01.md](r1-walk-2026-05-01.md) for the
+> consolidated cross-source picture and current contract+WASM
+> inventory.
 
 ## Status
 

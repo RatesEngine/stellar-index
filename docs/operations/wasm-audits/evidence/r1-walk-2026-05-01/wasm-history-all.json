@@ -1,0 +1,289 @@
+[
+  {
+    "contract": "CA4HEQTL2WPEUYKYKCDOHCDNIV4QHNJ7EL4J4NQ6VADP7SYHVRYZ7AW2",
+    "ranges": [
+      {
+        "wasm_hash": "5db738b05d9148128a240b0e2c1cb935c2805192bf98a579421aacda364c8dae",
+        "from_ledger": 50746266,
+        "to_ledger": 51931461
+      },
+      {
+        "wasm_hash": "5db738b05d9148128a240b0e2c1cb935c2805192bf98a579421aacda364c8dae",
+        "from_ledger": 52593281,
+        "to_ledger": 53405499
+      },
+      {
+        "wasm_hash": "5db738b05d9148128a240b0e2c1cb935c2805192bf98a579421aacda364c8dae",
+        "from_ledger": 53864174,
+        "to_ledger": 54879537
+      },
+      {
+        "wasm_hash": "5db738b05d9148128a240b0e2c1cb935c2805192bf98a579421aacda364c8dae",
+        "from_ledger": 54905509,
+        "to_ledger": 56353575
+      },
+      {
+        "wasm_hash": "5db738b05d9148128a240b0e2c1cb935c2805192bf98a579421aacda364c8dae",
+        "from_ledger": 57054680,
+        "to_ledger": 57827613
+      },
+      {
+        "wasm_hash": "5db738b05d9148128a240b0e2c1cb935c2805192bf98a579421aacda364c8dae",
+        "from_ledger": 57897153,
+        "to_ledger": 59301651
+      }
+    ]
+  },
+  {
+    "contract": "CA526Y2NQWGWVVQ7RFFPGAZMU66PSYJ3UC2MTVAV4ZU7OM5BOPHDXUSG",
+    "ranges": [
+      {
+        "wasm_hash": "b400f7a8ac121022955be1bd2468fcb99f126d2aa2fcc185a6abba36e83a3ef2",
+        "from_ledger": 58758722,
+        "to_ledger": 58759141
+      },
+      {
+        "wasm_hash": "5e93d22c9e19b254dae5474aebbb65a39f2f53b3b1d4371c58281987e1e29945",
+        "from_ledger": 58759142,
+        "to_ledger": 59301651
+      }
+    ]
+  },
+  {
+    "contract": "CAFJZQWSED6YAWZU3GWRTOCNPPCGBN32L7QV43XX5LZLFTK6JLN34DLN",
+    "ranges": [
+      {
+        "wasm_hash": "4a64c8c8502df326f4ce06d98998dc7d8a61575a11d6c0fbd4c60d10dfe28ffa",
+        "from_ledger": 50644239,
+        "to_ledger": 51656688
+      },
+      {
+        "wasm_hash": "df88820e231ad8f3027871e5dd3cf45491d7b7735e785731466bfc2946008608",
+        "from_ledger": 51656689,
+        "to_ledger": 51931461
+      },
+      {
+        "wasm_hash": "df88820e231ad8f3027871e5dd3cf45491d7b7735e785731466bfc2946008608",
+        "from_ledger": 51931498,
+        "to_ledger": 53405499
+      },
+      {
+        "wasm_hash": "df88820e231ad8f3027871e5dd3cf45491d7b7735e785731466bfc2946008608",
+        "from_ledger": 53405522,
+        "to_ledger": 54879537
+      },
+      {
+        "wasm_hash": "df88820e231ad8f3027871e5dd3cf45491d7b7735e785731466bfc2946008608",
+        "from_ledger": 54879566,
+        "to_ledger": 56353575
+      },
+      {
+        "wasm_hash": "df88820e231ad8f3027871e5dd3cf45491d7b7735e785731466bfc2946008608",
+        "from_ledger": 56353581,
+        "to_ledger": 57827613
+      },
+      {
+        "wasm_hash": "df88820e231ad8f3027871e5dd3cf45491d7b7735e785731466bfc2946008608",
+        "from_ledger": 57827651,
+        "to_ledger": 59301651
+      }
+    ]
+  },
+  {
+    "contract": "CAG5LRYQ5JVEUI5TEID72EYOVX44TTUJT5BQR2J6J77FH65PCCFAJDDH",
+    "ranges": [
+      {
+        "wasm_hash": "4c3db3ebd2d6a2ab23de1f622eaabb39501539b4611b68622ec4e47f76c4ba07",
+        "from_ledger": 50746272,
+        "to_ledger": 51931461
+      }
+    ]
+  },
+  {
+    "contract": "CALI2BYU2JE6WVRUFYTS6MSBNEHGJ35P4AVCZYF3B6QOE3QKOB2PLE6M",
+    "ranges": [
+      {
+        "wasm_hash": "4a64c8c8502df326f4ce06d98998dc7d8a61575a11d6c0fbd4c60d10dfe28ffa",
+        "from_ledger": 50644229,
+        "to_ledger": 51656691
+      },
+      {
+        "wasm_hash": "df88820e231ad8f3027871e5dd3cf45491d7b7735e785731466bfc2946008608",
+        "from_ledger": 51656692,
+        "to_ledger": 51931461
+      },
+      {
+        "wasm_hash": "df88820e231ad8f3027871e5dd3cf45491d7b7735e785731466bfc2946008608",
+        "from_ledger": 51931498,
+        "to_ledger": 53405499
+      },
+      {
+        "wasm_hash": "df88820e231ad8f3027871e5dd3cf45491d7b7735e785731466bfc2946008608",
+        "from_ledger": 53405521,
+        "to_ledger": 54879537
+      },
+      {
+        "wasm_hash": "df88820e231ad8f3027871e5dd3cf45491d7b7735e785731466bfc2946008608",
+        "from_ledger": 54879566,
+        "to_ledger": 56353575
+      },
+      {
+        "wasm_hash": "df88820e231ad8f3027871e5dd3cf45491d7b7735e785731466bfc2946008608",
+        "from_ledger": 56353581,
+        "to_ledger": 57827613
+      },
+      {
+        "wasm_hash": "df88820e231ad8f3027871e5dd3cf45491d7b7735e785731466bfc2946008608",
+        "from_ledger": 57827651,
+        "to_ledger": 59301651
+      }
+    ]
+  },
+  {
+    "contract": "CAVLP5DH2GJPZMVO7IJY4CVOD5MWEFTJFVPD2YY2FQXOQHRGHK4D6HLP",
+    "ranges": null
+  },
+  {
+    "contract": "CB4SVAWJA6TSRNOJZ7W2AWFW46D5VR4ZMFZKDIKXEINZCZEGZCJZCKMI",
+    "ranges": [
+      {
+        "wasm_hash": "e1464afcf0c7c01e4306e3eb9d16f653500fbaa31c3cce0afd675449d58cea14",
+        "from_ledger": 51572016,
+        "to_ledger": 51931461
+      },
+      {
+        "wasm_hash": "96c6a73863de6e331d8103898f421bb7af719b87bbd4ac14d5a16f6b2662546b",
+        "from_ledger": 53134143,
+        "to_ledger": 53405499
+      },
+      {
+        "wasm_hash": "96c6a73863de6e331d8103898f421bb7af719b87bbd4ac14d5a16f6b2662546b",
+        "from_ledger": 53649587,
+        "to_ledger": 54517224
+      },
+      {
+        "wasm_hash": "2bbb91c58cb8432fd40446e80188a25e7c07dc2edc853e885d65cafbbbf19581",
+        "from_ledger": 54517225,
+        "to_ledger": 54517363
+      },
+      {
+        "wasm_hash": "721badb85470a81d9d0a1c72dd0debb37f5f268419d4b94d125e546cc32d350e",
+        "from_ledger": 54517364,
+        "to_ledger": 54879537
+      },
+      {
+        "wasm_hash": "c54ba54bd9e37503a641fa661126cd858faf57738c1e903b84f72ac505016393",
+        "from_ledger": 57406830,
+        "to_ledger": 57827613
+      }
+    ]
+  },
+  {
+    "contract": "CBKGPWGKSKZF52CFHMTRR23TBWTPMRDIYZ4O2P5VS65BMHYH4DXMCJZC",
+    "ranges": [
+      {
+        "wasm_hash": "df88820e231ad8f3027871e5dd3cf45491d7b7735e785731466bfc2946008608",
+        "from_ledger": 56733481,
+        "to_ledger": 57827613
+      },
+      {
+        "wasm_hash": "df88820e231ad8f3027871e5dd3cf45491d7b7735e785731466bfc2946008608",
+        "from_ledger": 57827651,
+        "to_ledger": 59301651
+      }
+    ]
+  },
+  {
+    "contract": "CBQDHNBFBZYE4MKPWBSJOPIYLW4SFSXAXUTSXJN76GNKYVYPCKWC6QUK",
+    "ranges": [
+      {
+        "wasm_hash": "2c2b3c9756f372092f9120393b41b1b6a5aa5546de169d1100daf370e1c880d8",
+        "from_ledger": 52728375,
+        "to_ledger": 53405499
+      },
+      {
+        "wasm_hash": "2c2b3c9756f372092f9120393b41b1b6a5aa5546de169d1100daf370e1c880d8",
+        "from_ledger": 53487930,
+        "to_ledger": 53552354
+      },
+      {
+        "wasm_hash": "a67ad7715ecb3e174a1afe731d9f534e616dac3d5b115781762ec531c2ce1d30",
+        "from_ledger": 53552355,
+        "to_ledger": 54879537
+      },
+      {
+        "wasm_hash": "a67ad7715ecb3e174a1afe731d9f534e616dac3d5b115781762ec531c2ce1d30",
+        "from_ledger": 54886037,
+        "to_ledger": 55363488
+      },
+      {
+        "wasm_hash": "26c495019afb7448f690a82d6e66d8fab1ad3fd3e7b4aec7d554209966c9d19d",
+        "from_ledger": 55363489,
+        "to_ledger": 56353575
+      },
+      {
+        "wasm_hash": "26c495019afb7448f690a82d6e66d8fab1ad3fd3e7b4aec7d554209966c9d19d",
+        "from_ledger": 56359034,
+        "to_ledger": 56505098
+      },
+      {
+        "wasm_hash": "8cf10d1439a9ed1f8d27606cadcdae7555851c40ef0e6e4bb1ffe2f8ebcd7658",
+        "from_ledger": 56505099,
+        "to_ledger": 57711542
+      },
+      {
+        "wasm_hash": "b04880dfbe7630b17cec60403669123987fa0ef6b91e418b30fb68180ac4f93b",
+        "from_ledger": 57711543,
+        "to_ledger": 57827613
+      },
+      {
+        "wasm_hash": "b04880dfbe7630b17cec60403669123987fa0ef6b91e418b30fb68180ac4f93b",
+        "from_ledger": 57918042,
+        "to_ledger": 58357190
+      },
+      {
+        "wasm_hash": "2491b9b663f647bdb5ff358c3bbe6ddd4e9a43bfbe8edebccd26ca71ad2e84b8",
+        "from_ledger": 58357191,
+        "to_ledger": 59301651
+      }
+    ]
+  },
+  {
+    "contract": "CCLZRD4E72T7JCZCN3P7KNPYNXFYKQCL64ECLX7WP5GNVYPYJGU2IO2G",
+    "ranges": [
+      {
+        "wasm_hash": "60332ba12801eda65874e9afdbfdf8d114f56011fe7d1f902103cd7767c547d4",
+        "from_ledger": 51572024,
+        "to_ledger": 51931461
+      },
+      {
+        "wasm_hash": "18336805466bbd05bc388610d36de73994f5b9061bb199c02418a073fcf4b281",
+        "from_ledger": 53134204,
+        "to_ledger": 53405499
+      },
+      {
+        "wasm_hash": "77bdc0a993960faa2b0dac7b43a5160d6ed745ee787573c2f0ad8d00d4806366",
+        "from_ledger": 57406861,
+        "to_ledger": 57827613
+      }
+    ]
+  },
+  {
+    "contract": "CCQXWMZVM3KRTXTUPTN53YHL272QGKF32L7XEDNZ2S6OSUFK3NFBGG5M",
+    "ranges": [
+      {
+        "wasm_hash": "6cdb9a3cdeec01a113c50e311218eeb0991aff8f7b379f556badca2b49b1eb01",
+        "from_ledger": 50842736,
+        "to_ledger": 51931461
+      }
+    ]
+  },
+  {
+    "contract": "CCSSOHTBL3LEWUCBBEB5NJFC2OKFRC74OWEIJIZLRJBGAAU4VMU5NV4W",
+    "ranges": null
+  },
+  {
+    "contract": "CCYOZJCOPG34LLQQ7N24YXBM7LL62R7ONMZ3G6WZAAYPB5OYKOMJRN63",
+    "ranges": null
+  }
+]

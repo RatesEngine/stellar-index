@@ -1,7 +1,7 @@
 ---
 title: Aquarius WASM-history audit
-last_verified: 2026-04-29
-status: ratified
+last_verified: 2026-05-01
+status: ratified — but pool-template hash citations below are STALE; see `r1-walk-2026-05-01.md` for current hashes
 source: aquarius
 backfill_safe: true
 ---
@@ -10,6 +10,22 @@ backfill_safe: true
 
 Audit log for the `aquarius` source's `BackfillSafe` flag. See
 `README.md` for the full procedure.
+
+> **🚨 2026-05-01 doc-rot notice.** The pool-template hashes
+> cited below (`8875f0c770fb26d3…`, `ae0da5a84b15805c…`,
+> `f1077e0b77da5e62…`) **do not match any hash observed in the
+> 2026-04-30 r1 walk**. Aquarius pool WASMs have upgraded
+> through five further versions since this audit was written.
+> The decoder has remained correct because we key off
+> event-topic shape, not per-WASM behaviour.
+>
+> The current pool-template upgrade chain
+> (`b54ba37b… → 2d770946… → 7cecf23b… → a1629dcd… → 4f080d24…`)
+> is documented in
+> [`r1-walk-2026-05-01.md`](r1-walk-2026-05-01.md) §Aquarius.
+> This file retains its original audit-trail context; treat
+> the hash table below as a *historical baseline*, not a
+> current-state claim, until the audit is re-run.
 
 ## Status
 

@@ -1,6 +1,6 @@
 ---
 title: Redstone WASM-history audit
-last_verified: 2026-04-29
+last_verified: 2026-05-01
 status: ratified
 source: redstone
 backfill_safe: true
@@ -10,6 +10,12 @@ backfill_safe: true
 
 Audit log for the `redstone` source's `BackfillSafe` flag. See
 `README.md` for the full procedure.
+
+> **2026-05-01 update.** Hash citations in this file have been
+> cross-checked against the 2026-04-30 r1 walk; see
+> [r1-walk-2026-05-01.md](r1-walk-2026-05-01.md) for the
+> consolidated cross-source picture and current contract+WASM
+> inventory.
 
 ## Status
 

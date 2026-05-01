@@ -1,0 +1,35 @@
+{
+  "source": "redstone",
+  "contract_count": 1,
+  "unique_wasm_hashes": [
+    "5e93d22c9e19b254dae5474aebbb65a39f2f53b3b1d4371c58281987e1e29945",
+    "b400f7a8ac121022955be1bd2468fcb99f126d2aa2fcc185a6abba36e83a3ef2"
+  ],
+  "unique_wasm_hash_count": 2,
+  "total_range_count": 2,
+  "contracts": [
+    {
+      "contract": "CA526Y2NQWGWVVQ7RFFPGAZMU66PSYJ3UC2MTVAV4ZU7OM5BOPHDXUSG",
+      "role": "adapter",
+      "first_ledger": 58758722,
+      "last_ledger": 59336871,
+      "range_count": 2,
+      "unique_hashes": [
+        "5e93d22c9e19b254dae5474aebbb65a39f2f53b3b1d4371c58281987e1e29945",
+        "b400f7a8ac121022955be1bd2468fcb99f126d2aa2fcc185a6abba36e83a3ef2"
+      ],
+      "ranges": [
+        {
+          "wasm_hash": "b400f7a8ac121022955be1bd2468fcb99f126d2aa2fcc185a6abba36e83a3ef2",
+          "from_ledger": 58758722,
+          "to_ledger": 58759141
+        },
+        {
+          "wasm_hash": "5e93d22c9e19b254dae5474aebbb65a39f2f53b3b1d4371c58281987e1e29945",
+          "from_ledger": 58759142,
+          "to_ledger": 59336871
+        }
+      ]
+    }
+  ]
+}

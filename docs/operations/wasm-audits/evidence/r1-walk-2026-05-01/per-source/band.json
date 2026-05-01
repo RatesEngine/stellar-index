@@ -1,0 +1,28 @@
+{
+  "source": "band",
+  "contract_count": 1,
+  "unique_wasm_hashes": [
+    "6cdb9a3cdeec01a113c50e311218eeb0991aff8f7b379f556badca2b49b1eb01"
+  ],
+  "unique_wasm_hash_count": 1,
+  "total_range_count": 1,
+  "contracts": [
+    {
+      "contract": "CCQXWMZVM3KRTXTUPTN53YHL272QGKF32L7XEDNZ2S6OSUFK3NFBGG5M",
+      "role": "standard-reference",
+      "first_ledger": 50842736,
+      "last_ledger": 51937331,
+      "range_count": 1,
+      "unique_hashes": [
+        "6cdb9a3cdeec01a113c50e311218eeb0991aff8f7b379f556badca2b49b1eb01"
+      ],
+      "ranges": [
+        {
+          "wasm_hash": "6cdb9a3cdeec01a113c50e311218eeb0991aff8f7b379f556badca2b49b1eb01",
+          "from_ledger": 50842736,
+          "to_ledger": 51937331
+        }
+      ]
+    }
+  ]
+}
