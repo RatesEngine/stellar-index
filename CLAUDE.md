@@ -81,10 +81,14 @@ development. If one does, it's a bug.
 │   ├── auth/                     API-key + SEP-10 auth primitives
 │   └── divergence/               cross-check against CoinGecko/CMC/Chainlink-HTTP
 │
-├── pkg/                      public surface
-│   ├── client/                   Go client SDK for our API
-│   └── types/                    stable types API consumers depend on
+├── pkg/                      public surface (SemVer-stable)
+│   └── client/                   Go client SDK + wire-shape types
+│                                 (Envelope, Flags, AssetDetail, …)
+│                                 — types live alongside the client
+│                                 in pkg/client/types.go rather than
+│                                 a separate pkg/types directory.
 │
+
 ├── migrations/                TimescaleDB migrations (golang-migrate)
 ├── configs/                   default + example YAML + Ansible roles
 ├── openapi/                   rates-engine.v1.yaml — source of truth for API

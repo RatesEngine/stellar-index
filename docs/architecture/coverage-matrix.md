@@ -175,9 +175,9 @@ Any row with **status ❌** is a blocker for launch. Any row with
 | - | ----- | -------- | ---- | ----- | --- | ----------- | ------ | ---- |
 | F1.1 | Asset/Token Code | §Asset Identification | 4 | `internal/metadata` | — | [dexes-amms/sdex.md](../discovery/dexes-amms/sdex.md), [notes/sep-41-token-events.md](../discovery/notes/sep-41-token-events.md) | ✅ verified | 5 |
 | F1.2 | Current Price (USD) | §Current Price API | 5 | `internal/api/v1/price.go` | — | `/v1/price?asset=…&quote=fiat:USD` shipped; reads from `prices_1m` CAGG (closed-bucket per ADR-0015) with last-trade fallback. Default quote is USD. | ✅ verified | 5 |
-| F1.3 | Asset Type enum (`classic`/`soroban`) | §Asset Identification | 4 | `pkg/types.AssetType` | — | [dexes-amms/sdex.md](../discovery/dexes-amms/sdex.md) | ✅ verified | 5 |
-| F1.4 | Issuer Address (G…) | §Asset Identification | 4 | `pkg/types.ClassicAsset` | — | [protocol-versions.md](../discovery/protocol-versions.md) | ✅ verified | 5 |
-| F1.5 | Contract Address (C…) | §Asset Identification | 4 | `pkg/types.SorobanAsset` | — | [notes/sep-41-token-events.md](../discovery/notes/sep-41-token-events.md) | ✅ verified | 5 |
+| F1.3 | Asset Type enum (`classic`/`soroban`) | §Asset Identification | 4 | `internal/canonical.AssetType` (typed enum: `native`/`classic`/`soroban`/`fiat`/`crypto`); wire shape via `pkg/client.AssetDetail.Type` (string) | — | [dexes-amms/sdex.md](../discovery/dexes-amms/sdex.md) | ✅ verified | 5 |
+| F1.4 | Issuer Address (G…) | §Asset Identification | 4 | `internal/canonical.ClassicAsset` (Code + Issuer); wire via `pkg/client.AssetDetail.Issuer` | — | [protocol-versions.md](../discovery/protocol-versions.md) | ✅ verified | 5 |
+| F1.5 | Contract Address (C…) | §Asset Identification | 4 | `internal/canonical.NewSorobanAsset` (C-strkey); wire via `pkg/client.AssetDetail.ContractID` | — | [notes/sep-41-token-events.md](../discovery/notes/sep-41-token-events.md) | ✅ verified | 5 |
 | F1.6 | Home Domain (SEP-1) | §Asset Identification (needs proposal amendment) | 5 | `internal/metadata` + `internal/api/v1/assets.go applySep1Overlay` | [ADR-0007](../adr/0007-redis-cache-schema.md) | [data-sources/sep1-home-domain.md](../discovery/data-sources/sep1-home-domain.md) | Resolver + cache + overlay all shipped; AssetDetail surfaces sep1_status, name, description, image, org_name, anchor_asset, anchor_asset_type. | ✅ verified | 5 |
 
 ## Freighter RFP — V1: Historical price chart
