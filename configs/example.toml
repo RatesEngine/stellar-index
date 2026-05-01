@@ -56,6 +56,13 @@ postgres_dsn       = "postgres://ratesengine@127.0.0.1:5432/ratesengine?sslmode=
 redis_addr         = "127.0.0.1:6379"
 # redis_password_env = "RATESENGINE_REDIS_PASSWORD"   # uncomment + set env
 
+# Production: enable Sentinel mode per ADR-0024. When
+# redis_sentinel_addrs is non-empty the binary uses
+# go-redis FailoverClient and asks Sentinel for the current
+# primary; redis_addr is ignored. Leave empty for dev / single-node.
+# redis_sentinel_addrs = ["cache-01.internal:26379", "cache-02.internal:26379", "cache-03.internal:26379"]
+# redis_master_name    = "ratesengine-r1-cache"
+
 s3_endpoint        = "http://127.0.0.1:9000"
 s3_region          = "r1"
 s3_bucket_archive  = "galexie-archive"

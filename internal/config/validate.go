@@ -205,6 +205,18 @@ func (s StorageConfig) validate() error { //nolint:gocognit // dispatch-heavy; s
 				ErrInvalidConfig, s.RedisAddr, err)
 		}
 	}
+	if len(s.RedisSentinelAddrs) > 0 {
+		if s.RedisMasterName == "" {
+			return fmt.Errorf("%w: storage.redis_master_name required when redis_sentinel_addrs is set",
+				ErrInvalidConfig)
+		}
+		for i, addr := range s.RedisSentinelAddrs {
+			if _, _, err := net.SplitHostPort(addr); err != nil {
+				return fmt.Errorf("%w: storage.redis_sentinel_addrs[%d] %q must be host:port: %w",
+					ErrInvalidConfig, i, addr, err)
+			}
+		}
+	}
 	// S3 block is all-or-nothing. If an endpoint is set, the
 	// dependent fields must also be set — operators who set only
 	// some of them get a silent failure at archive-publish time.

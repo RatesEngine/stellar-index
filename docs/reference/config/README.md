@@ -43,8 +43,10 @@ the `env:` column.
 | Key | Type | Default | Env override | Description |
 | --- | ---- | ------- | ------------ | ----------- |
 | `storage.postgres_dsn` | `string` | `postgres://ratesengine@127.0.0.1:5432/ratesengine?sslmode=disable` | `RATESENGINE_POSTGRES_DSN` | Postgres DSN; password resolved via env: prefix. |
-| `storage.redis_addr` | `string` | `127.0.0.1:6379` | — | Redis master address host:port. |
-| `storage.redis_password_env` | `string` | _(required)_ | `RATESENGINE_REDIS_PASSWORD` | Env var holding the Redis password (reference, not the password itself). |
+| `storage.redis_addr` | `string` | `127.0.0.1:6379` | — | Redis master address host:port. Used when redis_sentinel_addrs is empty (single-node / direct mode). When sentinel addrs are set, this is ignored. |
+| `storage.redis_sentinel_addrs` | `[]string` | `[]` | — | List of Sentinel host:port addresses. Non-empty enables FailoverClient mode (production HA per ADR-0024); empty falls back to single-node redis_addr. |
+| `storage.redis_master_name` | `string` | _(required)_ | — | Sentinel master name as set in inventory (e.g. ratesengine-r1-cache). Required when redis_sentinel_addrs is non-empty. |
+| `storage.redis_password_env` | `string` | _(required)_ | `RATESENGINE_REDIS_PASSWORD` | Env var holding the Redis password (reference, not the password itself). Used as both requirepass (client auth) and SentinelPassword (sentinel auth) — they're the same secret per the role. |
 | `storage.s3_endpoint` | `string` | `http://127.0.0.1:9000` | — | S3-compatible object-store endpoint (MinIO / AWS S3). |
 | `storage.s3_region` | `string` | `r1` | — | S3 region label (free-form for MinIO; AWS region name otherwise). |
 | `storage.s3_bucket_archive` | `string` | `galexie-archive` | — | Immutable history-archive bucket name. |

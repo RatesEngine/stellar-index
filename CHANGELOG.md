@@ -17,6 +17,44 @@ against.
 
 ### Added
 
+- **Redis Sentinel ansible role + go-redis FailoverClient
+  migration (Task #72 sub-role)**: closes the second
+  launch-critical sub-role of #72 (after Patroni #344).
+  Implements the topology pinned by ADR-0024: 1 primary + 2
+  replicas across 3 cache hosts, 3 co-located Sentinels with
+  quorum=2, AOF every-second + RDB nightly persistence,
+  failover RTO 15–30 s. Seven task files (preflight with
+  THP/overcommit kernel tuning, install, redis-configure,
+  sentinel-configure, systemd hardening drop-ins, firewall
+  internal-only on 6379+26379, monitoring via redis_exporter
+  +  textfile sentinel-state scraper), three Jinja templates
+  (redis.conf, sentinel.conf, systemd-override), idempotent
+  re-runs (consults Sentinel for the current primary; refuses
+  to overwrite post-failover state when
+  `redis_first_run_only=true`).
+  New `internal/storage/redisclient` package centralises
+  client construction: `Build(StorageConfig)` picks
+  `redis.NewFailoverClient` when `redis_sentinel_addrs` is
+  non-empty, falls back to `redis.NewClient` against
+  `redis_addr` for dev / single-node, returns nil when both
+  unset. Both `cmd/ratesengine-api` and
+  `cmd/ratesengine-aggregator` now route through this builder
+  and log `redis configured mode={sentinel|single|disabled}`
+  at startup. New `redis_sentinel_addrs` + `redis_master_name`
+  config fields with validate-time assertion that
+  master_name is set when sentinel_addrs is non-empty.
+  Companion docs: ha-plan §3.4 amended to remove the
+  Cluster-vs-Sentinel contradiction (per the original tension
+  ADR-0024 ratifies); `redis-master-down.md` runbook split
+  into §A automatic-Sentinel-failover (now the default,
+  15–30 s RTO) and §B manual-failover (the
+  `redis-cli SENTINEL failover` escalation path), with
+  Sentinel-aware diagnosis commands. The
+  `ratesengine_redis_sentinel_primary` gauge — emitted every
+  30 s by the role's textfile scraper — sums to 1 across hosts
+  in steady-state and is the durable signal for split-brain
+  detection.
+
 - **k6 load test suite — Wave 4 (Task #74; weekly schedule —
   CLOSES Task #74)**: ships
   `.github/workflows/k6-weekly.yml` running the canonical

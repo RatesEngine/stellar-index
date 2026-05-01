@@ -1,0 +1,37 @@
+---
+# Render /etc/redis/redis.conf. Idempotency-aware: on re-runs
+# against an already-running cluster, ask Sentinel who the
+# current primary is — never overwrite a post-failover replicaof
+# directive when redis_first_run_only=true.
+
+- name: detect current primary via Sentinel (skip on first run)
+  command: >-
+    redis-cli -h {{ ansible_host }} -p {{ redis_sentinel_port }}
+    -a "{{ redis_password }}" --no-auth-warning
+    SENTINEL get-master-addr-by-name {{ redis_sentinel_master_name }}
+  register: redis_sentinel_state
+  failed_when: false
+  changed_when: false
+  no_log: true
+
+- name: derive effective primary host (Sentinel-aware)
+  set_fact:
+    redis_effective_primary_host: >-
+      {%- if redis_sentinel_state.rc == 0 and redis_sentinel_state.stdout_lines | length >= 1 -%}
+      {{ redis_sentinel_state.stdout_lines[0] }}
+      {%- else -%}
+      {{ hostvars[groups['redis_cluster']
+          | map('extract', hostvars)
+          | selectattr('redis_role', 'equalto', 'primary')
+          | map(attribute='inventory_hostname') | first].ansible_host }}
+      {%- endif -%}
+
+- name: render /etc/redis/redis.conf
+  template:
+    src: redis.conf.j2
+    dest: /etc/redis/redis.conf
+    owner: "{{ redis_user }}"
+    group: "{{ redis_group }}"
+    mode: "0640"
+  when: not redis_first_run_only or redis_sentinel_state.rc != 0
+  notify: "redis config changed"

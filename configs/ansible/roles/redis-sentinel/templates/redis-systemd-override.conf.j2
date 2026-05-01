@@ -1,0 +1,24 @@
+{# Render-time — managed by ansible (redis-sentinel role). #}
+{# Hardening drop-in. The distro ships its own redis-server.service #}
+{# and redis-sentinel.service unit files; we don't replace them — #}
+{# we add this drop-in so apt upgrades can update the canonical unit #}
+{# without losing our hardening. #}
+
+[Unit]
+Description={{ unit_description }}
+
+[Service]
+# Hardening (redis user already restricted; minimal extra)
+ProtectSystem=full
+ProtectHome=yes
+PrivateTmp=yes
+NoNewPrivileges=yes
+
+# File-descriptor limit raised for high connection counts
+# (the SSE-driven cache sees up to ~3k concurrent connections
+# at the canonical mixed-realistic load).
+LimitNOFILE=65536
+
+# Restart policy
+Restart=on-failure
+RestartSec=5s

@@ -221,11 +221,30 @@ provisioned; cloud is pay-as-you-use for DR.
   hopeful side-effect of replication latency. See the ADR for
   trade-offs and the ≤30 s freshness contract it implies.
 
-### 3.4 Redis cluster
+### 3.4 Redis Sentinel cluster
 
-- **Topology:** 3 masters + 3 replicas, Redis-Cluster mode (hash
-  slots). Replicas on separate hosts from their masters. 3 sentinels
-  on independent hosts for failover vote.
+> **Amended 2026-05-01** to remove the Cluster-vs-Sentinel
+> contradiction the original draft had. Ratified by
+> [ADR-0024](../adr/0024-redis-ha-via-sentinel.md). The
+> `redis-sentinel` ansible role
+> ([role docs](../../configs/ansible/roles/redis-sentinel/README.md))
+> deploys this exact topology.
+
+- **Topology:** 1 primary + 2 replicas, Redis Sentinel mode (no
+  sharding). 3 Sentinels co-located on the same 3 cache hosts;
+  Sentinel quorum = 2.
+- **Why Sentinel, not Cluster:** our hot-set is small
+  (~few GB across all categories below); sharding adds
+  operational tax without solving capacity. Sentinel is simpler
+  at SEV-1 time and the migration to Cluster, if we ever need
+  it, is a one-time cost rather than an ongoing tax. Full
+  reasoning in ADR-0024.
+- **Client connection model:** clients use `go-redis/v9`'s
+  `NewFailoverClient` and ask any Sentinel for the current
+  primary. There is no VIP or HAProxy in front of Redis — the
+  client SDK does the discovery itself. (This is why the
+  Redis sub-role of Task #72 ships standalone: no companion
+  HAProxy role is required for cache, only for Postgres.)
 - **Data categories:**
   - **Hot prices** — key `price:<asset>` → latest aggregated price
     JSON, TTL 60 s (refreshed by aggregator).

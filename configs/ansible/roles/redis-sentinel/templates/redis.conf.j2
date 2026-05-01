@@ -1,0 +1,40 @@
+{# Render-time — managed by ansible (redis-sentinel role). #}
+{# After first run, Sentinel reconciles replicaof on failover. #}
+{# Don't edit by hand on a live cluster. #}
+
+bind {{ redis_bind_address }} 127.0.0.1
+port {{ redis_port }}
+protected-mode yes
+
+# Auth (vault-supplied)
+requirepass {{ redis_password }}
+masterauth {{ redis_password }}
+
+# Persistence (ha-plan §3.4: AOF every-second + RDB nightly)
+appendonly {{ redis_appendonly }}
+appendfsync {{ redis_aof_appendfsync }}
+{% for rule in redis_save_rules %}
+save {{ rule }}
+{% endfor %}
+
+# Memory + eviction
+maxmemory {{ redis_maxmemory }}
+maxmemory-policy {{ redis_maxmemory_policy }}
+
+# Replica-side: point to whatever Sentinel says is primary right
+# now. On first deploy that's redis_role=primary's host; on
+# re-deploys against a failed-over cluster the
+# 03-redis-configure.yml task short-circuits and never re-renders
+# this file (so the live replicaof set by Sentinel stays
+# authoritative).
+{% if redis_role == 'replica' %}
+replicaof {{ redis_effective_primary_host }} {{ redis_port }}
+replica-serve-stale-data yes
+{% endif %}
+
+# Logging
+loglevel notice
+logfile {{ redis_log_dir }}/redis-server.log
+
+# Working directory for RDB snapshots
+dir {{ redis_data_dir }}

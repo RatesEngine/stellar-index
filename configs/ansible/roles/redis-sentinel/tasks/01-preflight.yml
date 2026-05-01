@@ -1,0 +1,81 @@
+---
+# Sanity-check the host before any install. Cheap, fail-fast.
+
+- name: assert OS is Ubuntu 22.04 or 24.04
+  assert:
+    that:
+      - ansible_distribution == "Ubuntu"
+      - ansible_distribution_version in ["22.04", "24.04"]
+    fail_msg: >-
+      redis-sentinel role supports Ubuntu 22.04 / 24.04 only;
+      detected {{ ansible_distribution }} {{ ansible_distribution_version }}
+
+- name: assert host is in the redis_cluster inventory group
+  assert:
+    that:
+      - inventory_hostname in groups['redis_cluster']
+    fail_msg: >-
+      this role must be applied against hosts in the
+      redis_cluster group (see role README inventory model)
+
+- name: assert redis_cluster has exactly 3 hosts
+  assert:
+    that:
+      - groups['redis_cluster'] | length == 3
+    fail_msg: >-
+      redis-sentinel role assumes a 3-node cluster (per ADR-0024);
+      detected {{ groups['redis_cluster'] | length }} hosts —
+      Sentinel quorum=2 only makes sense with 3 sentinels
+
+- name: assert exactly one host has redis_role=primary
+  assert:
+    that:
+      - >-
+        (groups['redis_cluster']
+          | map('extract', hostvars, 'redis_role')
+          | select('equalto', 'primary')
+          | list | length) == 1
+    fail_msg: >-
+      exactly one host in redis_cluster must have
+      redis_role=primary set in inventory (the bootstrap initial
+      primary; Sentinel will fail over later)
+
+- name: assert vault contents present
+  assert:
+    that:
+      - redis_password is defined
+      - redis_password | length > 0
+    fail_msg: >-
+      redis_password must be set (typically from
+      inventory/<region>.secrets.yml via ansible-vault).
+      See role README §Prerequisites.
+
+- name: tune kernel for redis (overcommit_memory=1)
+  ansible.posix.sysctl:
+    name: vm.overcommit_memory
+    value: "1"
+    sysctl_set: yes
+    state: present
+    reload: yes
+
+- name: disable transparent huge pages (recommended by redis)
+  copy:
+    dest: /etc/systemd/system/disable-thp.service
+    mode: "0644"
+    content: |
+      [Unit]
+      Description=Disable Transparent Huge Pages (THP) for Redis
+
+      [Service]
+      Type=oneshot
+      ExecStart=/bin/sh -c 'echo never > /sys/kernel/mm/transparent_hugepage/enabled'
+
+      [Install]
+      WantedBy=basic.target
+
+- name: enable + start disable-thp
+  systemd:
+    name: disable-thp
+    enabled: yes
+    state: started
+    daemon_reload: yes

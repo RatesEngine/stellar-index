@@ -1,0 +1,31 @@
+---
+- name: 01 — preflight
+  import_tasks: 01-preflight.yml
+  tags: [redis, preflight]
+
+- name: 02 — install redis + sentinel + exporter
+  import_tasks: 02-install.yml
+  tags: [redis, install]
+
+- name: 03 — configure redis (data plane)
+  import_tasks: 03-redis-configure.yml
+  tags: [redis, config]
+  notify: "redis config changed"
+
+- name: 04 — configure sentinel (control plane)
+  import_tasks: 04-sentinel-configure.yml
+  tags: [redis, sentinel, config]
+  notify: "sentinel config changed"
+
+- name: 05 — systemd units (hardening drop-ins)
+  import_tasks: 05-systemd.yml
+  tags: [redis, systemd]
+
+- name: 06 — firewall (allow 6379 + 26379 internal-only)
+  import_tasks: 06-firewall.yml
+  tags: [redis, firewall]
+  notify: "firewall rules changed"
+
+- name: 07 — monitoring (redis_exporter + textfile metrics)
+  import_tasks: 07-monitoring.yml
+  tags: [redis, monitoring]

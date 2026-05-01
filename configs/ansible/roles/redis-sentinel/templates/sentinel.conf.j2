@@ -1,0 +1,29 @@
+{# Render-time — managed by ansible (redis-sentinel role). #}
+{# Sentinel rewrites this file on failover to track the new primary. #}
+{# Don't edit by hand on a live cluster. #}
+
+port {{ redis_sentinel_port }}
+bind {{ redis_bind_address }} 127.0.0.1
+
+# `sentinel monitor` sets the initial primary. Once Sentinel
+# elects a new primary mid-flight, it re-writes this directive
+# in place. The role's idempotency check in
+# 04-sentinel-configure.yml prevents re-renders on a live
+# cluster.
+sentinel monitor {{ redis_sentinel_master_name }} {{ redis_effective_primary_host }} {{ redis_port }} {{ redis_sentinel_quorum }}
+
+sentinel auth-pass {{ redis_sentinel_master_name }} {{ redis_password }}
+sentinel down-after-milliseconds {{ redis_sentinel_master_name }} {{ redis_sentinel_down_after_milliseconds }}
+sentinel failover-timeout {{ redis_sentinel_master_name }} {{ redis_sentinel_failover_timeout }}
+sentinel parallel-syncs {{ redis_sentinel_master_name }} {{ redis_sentinel_parallel_syncs }}
+
+# Sentinel's own state file (membership of other sentinels +
+# last-known primary). Lives under redis_sentinel_data_dir.
+dir {{ redis_sentinel_data_dir }}
+
+logfile {{ redis_log_dir }}/redis-sentinel.log
+
+# Resolve hostnames on startup; without this, hostname-based
+# `sentinel monitor` directives fail in some Ubuntu defaults.
+sentinel resolve-hostnames yes
+sentinel announce-hostnames no

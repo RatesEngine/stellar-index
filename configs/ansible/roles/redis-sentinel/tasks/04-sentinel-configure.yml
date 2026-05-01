@@ -1,0 +1,15 @@
+---
+# Render /etc/redis/sentinel.conf. Same idempotency rule: never
+# rewrite a sentinel.conf that's already tracking a post-failover
+# primary unless redis_first_run_only=false (an explicit
+# re-bootstrap).
+
+- name: render /etc/redis/sentinel.conf
+  template:
+    src: sentinel.conf.j2
+    dest: /etc/redis/sentinel.conf
+    owner: "{{ redis_user }}"
+    group: "{{ redis_group }}"
+    mode: "0640"
+  when: not redis_first_run_only or redis_sentinel_state.rc != 0
+  notify: "sentinel config changed"

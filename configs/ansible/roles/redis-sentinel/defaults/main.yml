@@ -1,0 +1,71 @@
+---
+# redis-sentinel role defaults — override in inventory.
+
+# ── Topology ───────────────────────────────────────────────────
+# Master name as Sentinel will refer to it. Per-region naming
+# (e.g. ratesengine-r1-cache, ratesengine-r2-cache) prevents
+# accidental cross-region quorum confusion if hosts drift onto
+# the same network.
+redis_sentinel_master_name: ratesengine-default-cache
+
+# Quorum required to declare the primary down. With 3 Sentinels
+# the only sane value is 2 (split-brain-safe) — change at your
+# own risk.
+redis_sentinel_quorum: 2
+
+# ── Redis (data plane) ─────────────────────────────────────────
+redis_port: 6379
+redis_bind_address: "{{ ansible_host }}"
+redis_data_dir: /var/lib/redis
+redis_log_dir: /var/log/redis
+redis_user: redis
+redis_group: redis
+
+# Auth — set redis_password from vault. masterauth is set to the
+# same value so replicas authenticate to the primary.
+redis_password: ""
+
+# Memory + eviction. Cache-only deployment, allkeys-lru is the
+# only sane default — keys older than working set get evicted
+# before OOM kills the process.
+redis_maxmemory: "4gb"
+redis_maxmemory_policy: allkeys-lru
+
+# Persistence (ha-plan §3.4: AOF every-second + RDB nightly).
+redis_appendonly: "yes"
+redis_aof_appendfsync: everysec
+redis_save_rules:
+  - "900 1"
+  - "300 10"
+  - "60 10000"
+
+# ── Sentinel (control plane) ───────────────────────────────────
+redis_sentinel_port: 26379
+redis_sentinel_data_dir: /var/lib/redis-sentinel
+redis_sentinel_down_after_milliseconds: 5000
+redis_sentinel_failover_timeout: 60000
+redis_sentinel_parallel_syncs: 1
+
+# ── Idempotency knob ───────────────────────────────────────────
+# When true, on re-runs the role consults Sentinel for the
+# current primary and refuses to overwrite the existing replicaof
+# directive. Only renders fresh configs on first deploy. Set to
+# false ONLY if you are intentionally re-bootstrapping the
+# cluster from scratch (data loss risk).
+redis_first_run_only: true
+
+# ── Firewall ───────────────────────────────────────────────────
+# Internal-only listener. The role refuses to bind 0.0.0.0;
+# clients reach Redis via the same internal CIDR as Postgres.
+redis_internal_cidrs:
+  - 10.0.0.0/8
+  - 172.16.0.0/12
+  - 192.168.0.0/16
+
+# ── Monitoring ─────────────────────────────────────────────────
+# redis_exporter for Prometheus parity with the rest of the
+# stack. Set to "" to skip exporter install (e.g. on hosts that
+# already have it managed elsewhere).
+redis_exporter_version: "v1.66.0"
+redis_exporter_listen_port: 9121
+redis_node_exporter_textfile_dir: /var/lib/node_exporter/textfile_collector

@@ -45,6 +45,7 @@ import (
 	"github.com/RatesEngine/rates-engine/internal/divergence"
 	"github.com/RatesEngine/rates-engine/internal/metadata"
 	"github.com/RatesEngine/rates-engine/internal/ratelimit"
+	"github.com/RatesEngine/rates-engine/internal/storage/redisclient"
 	"github.com/RatesEngine/rates-engine/internal/storage/timescale"
 	"github.com/RatesEngine/rates-engine/internal/supply"
 	"github.com/RatesEngine/rates-engine/internal/version"
@@ -133,28 +134,29 @@ func run(cfgPath string, dryRun bool) error { //nolint:gocognit,funlen,gocyclo /
 	// correct). We don't block startup on Redis — the readiness
 	// probe reflects the truth.
 	//
+	// Production runs Sentinel mode (per ADR-0024); dev / single-
+	// node runs single mode. redisclient.Build picks the branch
+	// based on cfg.Storage.RedisSentinelAddrs.
+	//
 	// Exception: under -dry-run we ping explicitly. Without the
-	// ping dry-run is a liar — redis.NewClient is lazy, so a bad
-	// RedisAddr / wrong password / wrong network never surfaces.
-	// The whole point of dry-run is "does this config actually
-	// work?" so a misconfig that only reveals itself under real
-	// traffic defeats the flag.
-	var rdb *redis.Client
-	if cfg.Storage.RedisAddr != "" {
-		rdb = redis.NewClient(&redis.Options{
-			Addr:     cfg.Storage.RedisAddr,
-			Password: cfg.Storage.RedisPassword,
-		})
+	// ping dry-run is a liar — both NewClient and NewFailoverClient
+	// are lazy, so a bad addr / wrong password / wrong network
+	// never surfaces. The whole point of dry-run is "does this
+	// config actually work?" so a misconfig that only reveals
+	// itself under real traffic defeats the flag.
+	rdb := redisclient.Build(cfg.Storage)
+	if rdb != nil {
 		defer func() { _ = rdb.Close() }()
+		mode := redisclient.Mode(cfg.Storage)
 		if dryRun {
 			pingCtx, cancelPing := context.WithTimeout(rootCtx, 5*time.Second)
 			err := rdb.Ping(pingCtx).Err()
 			cancelPing()
 			if err != nil {
-				return fmt.Errorf("redis: ping: %w", err)
+				return fmt.Errorf("redis: ping (%s mode): %w", mode, err)
 			}
-			logger.Info("redis reachable", "addr", cfg.Storage.RedisAddr)
 		}
+		logger.Info("redis configured", "mode", mode)
 	}
 
 	// Build readiness-check set. Each implements v1.ReadyChecker.
@@ -325,7 +327,7 @@ func run(cfgPath string, dryRun bool) error { //nolint:gocognit,funlen,gocyclo /
 // without Redis. auth_mode=sep10 wires the same validator as the
 // /v1/auth/sep10/* endpoints — the validator parameter is what
 // `buildSEP10Validator` returned at startup (real or Noop).
-func buildAuthMiddleware(mode string, rdb *redis.Client, sep10Validator auth.SEP10Validator, logger *slog.Logger) middleware.Middleware {
+func buildAuthMiddleware(mode string, rdb redis.UniversalClient, sep10Validator auth.SEP10Validator, logger *slog.Logger) middleware.Middleware {
 	switch mode {
 	case "", "none":
 		return nil
@@ -434,9 +436,12 @@ func (c storeChecker) Ping(ctx context.Context) error {
 	return c.s.DB().PingContext(ctx)
 }
 
-// redisChecker adapts *redis.Client to the v1.ReadyChecker interface.
-// Redis is optional at API layer — readyz reports the actual state.
-type redisChecker struct{ rdb *redis.Client }
+// redisChecker adapts redis.UniversalClient to the v1.ReadyChecker
+// interface. Redis is optional at API layer — readyz reports the
+// actual state. UniversalClient (vs typed Client) lets the same
+// adapter work against both the dev single-node and production
+// Sentinel-backed FailoverClient.
+type redisChecker struct{ rdb redis.UniversalClient }
 
 func (c redisChecker) Name() string { return "redis" }
 func (c redisChecker) Ping(ctx context.Context) error {
@@ -529,7 +534,7 @@ func (r storeOracleReader) LatestOracleUpdatesForAsset(ctx context.Context, asse
 // confidence fields off the wire for that response. Read errors
 // propagate so the handler can log; the response still ships
 // without confidence.
-type redisConfidenceLooker struct{ rdb *redis.Client }
+type redisConfidenceLooker struct{ rdb redis.UniversalClient }
 
 func (r redisConfidenceLooker) LookupConfidence(ctx context.Context, asset, quote canonical.Asset, window time.Duration) (v1.PriceSnapshotConfidence, bool, error) {
 	if r.rdb == nil {
@@ -575,7 +580,7 @@ func (r redisConfidenceLooker) LookupConfidence(ctx context.Context, asset, quot
 //
 // Cache miss returns (found=false, no error). Read errors
 // propagate so the handler can log; the response 404s.
-type redisTriangulatedLooker struct{ rdb *redis.Client }
+type redisTriangulatedLooker struct{ rdb redis.UniversalClient }
 
 func (r redisTriangulatedLooker) LookupTriangulatedVWAP(
 	ctx context.Context, base, quote canonical.Asset, window time.Duration,

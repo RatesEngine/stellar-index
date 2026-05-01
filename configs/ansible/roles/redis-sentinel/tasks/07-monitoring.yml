@@ -1,0 +1,130 @@
+---
+# Wire redis_exporter for Prometheus parity with the rest of the
+# stack, plus a Sentinel-state textfile scraper for cluster-level
+# (who-is-primary) metrics that redis_exporter doesn't expose.
+
+- name: ensure node_exporter textfile dir
+  file:
+    path: "{{ redis_node_exporter_textfile_dir }}"
+    state: directory
+    owner: "{{ redis_user }}"
+    group: "{{ redis_group }}"
+    mode: "0755"
+
+# ── redis_exporter ───────────────────────────────────────────────
+- name: download redis_exporter
+  get_url:
+    url: >-
+      https://github.com/oliver006/redis_exporter/releases/download/{{
+      redis_exporter_version }}/redis_exporter-{{ redis_exporter_version
+      }}.linux-amd64.tar.gz
+    dest: /tmp/redis_exporter.tar.gz
+    mode: "0644"
+  when: redis_exporter_version | length > 0
+
+- name: extract redis_exporter
+  unarchive:
+    src: /tmp/redis_exporter.tar.gz
+    dest: /tmp/
+    remote_src: yes
+  when: redis_exporter_version | length > 0
+
+- name: install redis_exporter binary
+  copy:
+    src: "/tmp/redis_exporter-{{ redis_exporter_version }}.linux-amd64/redis_exporter"
+    dest: /usr/local/bin/redis_exporter
+    mode: "0755"
+    remote_src: yes
+  when: redis_exporter_version | length > 0
+
+- name: install redis_exporter systemd unit
+  copy:
+    dest: /etc/systemd/system/redis_exporter.service
+    mode: "0644"
+    content: |
+      [Unit]
+      Description=Redis Exporter (Prometheus)
+      After=network-online.target redis-server.service
+      [Service]
+      Type=simple
+      User={{ redis_user }}
+      Environment=REDIS_PASSWORD={{ redis_password }}
+      ExecStart=/usr/local/bin/redis_exporter \
+        -redis.addr=redis://127.0.0.1:{{ redis_port }} \
+        -web.listen-address=:{{ redis_exporter_listen_port }}
+      Restart=on-failure
+      RestartSec=5s
+      [Install]
+      WantedBy=multi-user.target
+  when: redis_exporter_version | length > 0
+
+- name: enable redis_exporter
+  systemd:
+    name: redis_exporter
+    enabled: yes
+    state: started
+    daemon_reload: yes
+  when: redis_exporter_version | length > 0
+
+# ── Sentinel-state textfile scraper ──────────────────────────────
+# redis_exporter doesn't expose "who Sentinel currently believes
+# the primary is" cleanly. Emit a small per-host gauge that ops
+# dashboards can use to see failover events at a glance.
+- name: install sentinel-state textfile scraper
+  copy:
+    dest: /usr/local/bin/redis-sentinel-textfile-scraper
+    mode: "0755"
+    content: |
+      #!/bin/bash
+      # Managed by ansible (redis-sentinel role). Emits Sentinel
+      # cluster state as Prometheus textfile-collector format.
+      set -euo pipefail
+      OUT="{{ redis_node_exporter_textfile_dir }}/redis_sentinel.prom"
+      TMP="$(mktemp "${OUT}.XXXXXX")"
+      trap 'rm -f "$TMP"' EXIT
+
+      PRIMARY=$(redis-cli -h 127.0.0.1 -p {{ redis_sentinel_port }} \
+        -a "{{ redis_password }}" --no-auth-warning \
+        SENTINEL get-master-addr-by-name {{ redis_sentinel_master_name }} 2>/dev/null \
+        | head -1 || echo "unknown")
+      MY_HOST="{{ ansible_host }}"
+      IS_PRIMARY=$([[ "$PRIMARY" == "$MY_HOST" ]] && echo 1 || echo 0)
+
+      cat > "$TMP" <<EOF
+      # HELP ratesengine_redis_sentinel_primary 1 if this host is the Sentinel-elected primary.
+      # TYPE ratesengine_redis_sentinel_primary gauge
+      ratesengine_redis_sentinel_primary $IS_PRIMARY
+      EOF
+      mv -f "$TMP" "$OUT"
+
+- name: install sentinel-state scraper systemd unit
+  copy:
+    dest: /etc/systemd/system/redis-sentinel-textfile-scraper.service
+    mode: "0644"
+    content: |
+      [Unit]
+      Description=Redis Sentinel → Prometheus textfile scraper
+      [Service]
+      Type=oneshot
+      ExecStart=/usr/local/bin/redis-sentinel-textfile-scraper
+
+- name: install sentinel-state scraper timer
+  copy:
+    dest: /etc/systemd/system/redis-sentinel-textfile-scraper.timer
+    mode: "0644"
+    content: |
+      [Unit]
+      Description=Run Sentinel textfile scraper every 30 s
+      [Timer]
+      OnBootSec=30s
+      OnUnitActiveSec=30s
+      AccuracySec=5s
+      [Install]
+      WantedBy=timers.target
+
+- name: enable sentinel-state scraper timer
+  systemd:
+    name: redis-sentinel-textfile-scraper.timer
+    enabled: yes
+    state: started
+    daemon_reload: yes

@@ -245,15 +245,22 @@ func (s StellarConfig) Passphrase() string {
 // strings NEVER include passwords directly — use the `env:` tag
 // pattern to reference a secret store.
 type StorageConfig struct {
-	PostgresDSN     string `toml:"postgres_dsn" doc:"Postgres DSN; password resolved via env: prefix." env:"RATESENGINE_POSTGRES_DSN" default:"postgres://ratesengine@127.0.0.1:5432/ratesengine?sslmode=disable"`
-	RedisAddr       string `toml:"redis_addr" doc:"Redis master address host:port." default:"127.0.0.1:6379"`
-	RedisPassword   string `toml:"redis_password_env" doc:"Env var holding the Redis password (reference, not the password itself)." env:"RATESENGINE_REDIS_PASSWORD" default:""`
-	S3Endpoint      string `toml:"s3_endpoint" doc:"S3-compatible object-store endpoint (MinIO / AWS S3)." default:"http://127.0.0.1:9000"`
-	S3Region        string `toml:"s3_region" doc:"S3 region label (free-form for MinIO; AWS region name otherwise)." default:"r1"`
-	S3BucketArchive string `toml:"s3_bucket_archive" doc:"Immutable history-archive bucket name." default:"galexie-archive"`
-	S3BucketLive    string `toml:"s3_bucket_live" doc:"Live Galexie export bucket name." default:"galexie-live"`
-	S3AccessKeyEnv  string `toml:"s3_access_key_env" doc:"Env var holding S3 access key ID." env:"RATESENGINE_S3_ACCESS_KEY" default:"RATESENGINE_S3_ACCESS_KEY"`
-	S3SecretKeyEnv  string `toml:"s3_secret_key_env" doc:"Env var holding S3 secret access key." env:"RATESENGINE_S3_SECRET_KEY" default:"RATESENGINE_S3_SECRET_KEY"`
+	PostgresDSN string `toml:"postgres_dsn" doc:"Postgres DSN; password resolved via env: prefix." env:"RATESENGINE_POSTGRES_DSN" default:"postgres://ratesengine@127.0.0.1:5432/ratesengine?sslmode=disable"`
+	RedisAddr   string `toml:"redis_addr" doc:"Redis master address host:port. Used when redis_sentinel_addrs is empty (single-node / direct mode). When sentinel addrs are set, this is ignored." default:"127.0.0.1:6379"`
+	// Sentinel mode: when redis_sentinel_addrs is non-empty, the
+	// client uses go-redis FailoverClient and asks Sentinel for the
+	// current primary. Per ADR-0024 (Redis HA via Sentinel) this is
+	// the production topology; redis_addr is the fallback for
+	// dev/single-node deployments.
+	RedisSentinelAddrs []string `toml:"redis_sentinel_addrs" doc:"List of Sentinel host:port addresses. Non-empty enables FailoverClient mode (production HA per ADR-0024); empty falls back to single-node redis_addr." default:"[]"`
+	RedisMasterName    string   `toml:"redis_master_name" doc:"Sentinel master name as set in inventory (e.g. ratesengine-r1-cache). Required when redis_sentinel_addrs is non-empty." default:""`
+	RedisPassword      string   `toml:"redis_password_env" doc:"Env var holding the Redis password (reference, not the password itself). Used as both requirepass (client auth) and SentinelPassword (sentinel auth) — they're the same secret per the role." env:"RATESENGINE_REDIS_PASSWORD" default:""`
+	S3Endpoint         string   `toml:"s3_endpoint" doc:"S3-compatible object-store endpoint (MinIO / AWS S3)." default:"http://127.0.0.1:9000"`
+	S3Region           string   `toml:"s3_region" doc:"S3 region label (free-form for MinIO; AWS region name otherwise)." default:"r1"`
+	S3BucketArchive    string   `toml:"s3_bucket_archive" doc:"Immutable history-archive bucket name." default:"galexie-archive"`
+	S3BucketLive       string   `toml:"s3_bucket_live" doc:"Live Galexie export bucket name." default:"galexie-live"`
+	S3AccessKeyEnv     string   `toml:"s3_access_key_env" doc:"Env var holding S3 access key ID." env:"RATESENGINE_S3_ACCESS_KEY" default:"RATESENGINE_S3_ACCESS_KEY"`
+	S3SecretKeyEnv     string   `toml:"s3_secret_key_env" doc:"Env var holding S3 secret access key." env:"RATESENGINE_S3_SECRET_KEY" default:"RATESENGINE_S3_SECRET_KEY"`
 }
 
 // IngestionConfig controls the indexer's source fleet.
@@ -569,14 +576,19 @@ func Default() Config {
 			HistoryArchiveURL: "https://history.stellar.org/prd/core-live/core_live_001",
 		},
 		Storage: StorageConfig{
-			PostgresDSN:     "postgres://ratesengine@127.0.0.1:5432/ratesengine?sslmode=disable",
-			RedisAddr:       "127.0.0.1:6379",
-			S3Endpoint:      "http://127.0.0.1:9000",
-			S3Region:        "r1",
-			S3BucketArchive: "galexie-archive",
-			S3BucketLive:    "galexie-live",
-			S3AccessKeyEnv:  "RATESENGINE_S3_ACCESS_KEY",
-			S3SecretKeyEnv:  "RATESENGINE_S3_SECRET_KEY",
+			PostgresDSN: "postgres://ratesengine@127.0.0.1:5432/ratesengine?sslmode=disable",
+			RedisAddr:   "127.0.0.1:6379",
+			// RedisSentinelAddrs / RedisMasterName left empty — Default()
+			// targets dev / single-node. Production inventories override
+			// to enable Sentinel mode (ADR-0024).
+			RedisSentinelAddrs: []string{},
+			RedisMasterName:    "",
+			S3Endpoint:         "http://127.0.0.1:9000",
+			S3Region:           "r1",
+			S3BucketArchive:    "galexie-archive",
+			S3BucketLive:       "galexie-live",
+			S3AccessKeyEnv:     "RATESENGINE_S3_ACCESS_KEY",
+			S3SecretKeyEnv:     "RATESENGINE_S3_SECRET_KEY",
 		},
 		Ingestion: IngestionConfig{
 			EnabledSources:     []string{"soroswap", "aquarius", "phoenix"},

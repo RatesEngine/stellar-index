@@ -1,0 +1,35 @@
+---
+# Add a hardening drop-in to the existing redis-server +
+# redis-sentinel units. Keeps the distro unit canonical so apt
+# upgrades don't regress the unit file.
+
+- name: ensure systemd drop-in dirs exist
+  file:
+    path: "/etc/systemd/system/{{ item }}.service.d"
+    state: directory
+    mode: "0755"
+  loop:
+    - redis-server
+    - redis-sentinel
+
+- name: render redis-server hardening drop-in
+  template:
+    src: redis-systemd-override.conf.j2
+    dest: /etc/systemd/system/redis-server.service.d/override.conf
+    mode: "0644"
+  vars:
+    unit_description: "Redis data plane (managed by ansible)"
+  notify: "redis config changed"
+
+- name: render redis-sentinel hardening drop-in
+  template:
+    src: redis-systemd-override.conf.j2
+    dest: /etc/systemd/system/redis-sentinel.service.d/override.conf
+    mode: "0644"
+  vars:
+    unit_description: "Redis Sentinel control plane (managed by ansible)"
+  notify: "sentinel config changed"
+
+- name: daemon-reload systemd to pick up drop-ins
+  systemd:
+    daemon_reload: yes

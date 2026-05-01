@@ -1,0 +1,18 @@
+---
+galaxy_info:
+  role_name: redis_sentinel
+  author: ratesengine
+  description: >-
+    Redis Sentinel-managed cache cluster. Three nodes, 1 primary
+    + 2 replicas, 3 co-located Sentinels. Implements
+    docs/architecture/ha-plan.md §3.4 + ADR-0024 (Redis HA via
+    Sentinel, ratifying the choice over Redis Cluster mode).
+  license: Apache-2.0
+  min_ansible_version: "2.16"
+  platforms:
+    - name: Ubuntu
+      versions:
+        - jammy
+        - noble
+
+dependencies: []

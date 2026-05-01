@@ -1,7 +1,7 @@
 ---
 title: Runbook — redis-master-down
-last_verified: 2026-04-23
-status: draft
+last_verified: 2026-05-01
+status: ratified (Sentinel-driven failover is the default after `redis-sentinel` ansible role landed)
 severity: P1
 ---
 
@@ -70,21 +70,55 @@ kubectl -n ratesengine describe pod redis-0 | tail -30
 
 ## Mitigation
 
+### A. Automatic Sentinel failover — the happy path
+
+After the `redis-sentinel` ansible role landed, this is the
+**default** path. Sentinel's `down-after-milliseconds=5000` +
+`failover-timeout=60000` mean a primary failure typically
+recovers in 15–30 s without operator intervention. The
+`go-redis/v9` `FailoverClient` clients re-discover the new
+primary automatically — no app restart required.
+
 - [ ] Step 1 — check Sentinel's view first. If failover is in
-      progress, hold — it should complete in seconds.
-- [ ] Step 2 — if Sentinel's stuck: `redis-cli sentinel failover
-      <mastername>` forces a promotion. Do this with a clear head;
-      forcing failover on a transient network blip can split-brain
-      if clients see the old master on recovery.
-- [ ] Step 3 — if the master host is the problem: `kubectl delete
-      pod redis-X` (StatefulSet recreates it as a replica; if it
-      was the primary, Sentinel had already promoted a successor).
+      progress, hold — it should complete in 15–30 s.
+      `redis-cli -h cache-01 -p 26379 -a "$REDIS_PASSWORD" \
+       SENTINEL get-master-addr-by-name ratesengine-r1-cache`
+      returns the current primary; `ratesengine_redis_sentinel_primary`
+      gauge sums to 1 across hosts when steady-state.
+- [ ] Step 2 — verify clients reconnected. API + aggregator logs
+      should show `redis configured mode=sentinel` at startup;
+      after failover, look for "redis: reconnected" or absence
+      of "connection refused". `ratelimit_fail_open_total` rate
+      drops back to zero.
+
+### B. Stuck or split-brain — manual failover
+
+Resort to this **only** if Sentinel's automatic failover hasn't
+completed within 60 s OR `SENTINEL ckquorum` reports < 2 alive
+sentinels.
+
+- [ ] Step 1 — confirm the stuck state:
+      `redis-cli -p 26379 -a "$REDIS_PASSWORD" SENTINEL ckquorum ratesengine-r1-cache`
+      and `SENTINEL master ratesengine-r1-cache` (look for
+      `last-ok-ping-reply` > 10000 ms or `flags` containing
+      `s_down,o_down`).
+- [ ] Step 2 — force a promotion:
+      `redis-cli -p 26379 -a "$REDIS_PASSWORD" SENTINEL failover ratesengine-r1-cache`.
+      Do this with a clear head; forcing failover on a transient
+      network blip can split-brain if Sentinels rejoin and
+      disagree on who's primary.
+- [ ] Step 3 — if the primary host itself is gone: nothing to do
+      from the cache cluster's side (Sentinel already promoted).
+      Hand off to host-bringup runbook to restore the failed node
+      as a fresh replica via `ansible-playbook --tags redis --limit cache-X`.
 - [ ] Step 4 — verify the promoted replica is caught up:
-      `redis-cli info replication` on the new master should show
-      `master_repl_offset` equal across all followers.
-- [ ] Verification: `up{role="master"} == 1`; API logs show
-      `redis: reconnected`; `ratelimit_fail_open_total` rate drops
-      to zero (it's cumulative, so watch the rate).
+      `redis-cli info replication` on the new primary should
+      show every follower's `lag` column at 0–1.
+- [ ] Verification: `redis_up{role="master"} == 1` (single
+      instance), `ratesengine_redis_sentinel_primary` sums to 1
+      across hosts, API logs show "redis: reconnected",
+      `ratelimit_fail_open_total` rate drops to zero (it's
+      cumulative — watch the rate, not the gauge).
 
 ## Data loss considerations
 

@@ -66,8 +66,6 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/redis/go-redis/v9"
-
 	"github.com/RatesEngine/rates-engine/internal/aggregate/anomaly"
 	"github.com/RatesEngine/rates-engine/internal/aggregate/baseline"
 	"github.com/RatesEngine/rates-engine/internal/aggregate/freeze"
@@ -75,6 +73,7 @@ import (
 	"github.com/RatesEngine/rates-engine/internal/canonical"
 	"github.com/RatesEngine/rates-engine/internal/config"
 	"github.com/RatesEngine/rates-engine/internal/obs"
+	"github.com/RatesEngine/rates-engine/internal/storage/redisclient"
 	"github.com/RatesEngine/rates-engine/internal/storage/timescale"
 	"github.com/RatesEngine/rates-engine/internal/supply"
 	"github.com/RatesEngine/rates-engine/internal/version"
@@ -144,25 +143,25 @@ func run(cfgPath string, dryRun bool) error {
 
 	// ─── Redis ───────────────────────────────────────────────────
 	// Required for the aggregator — no useful pre-compute without
-	// a cache to write to. Dry-run pings explicitly so config
+	// a cache to write to. redisclient.Build picks Sentinel mode
+	// (production, ADR-0024) when redis_sentinel_addrs is set,
+	// single-node otherwise. Dry-run pings explicitly so config
 	// drift surfaces at startup rather than at first tick.
-	if cfg.Storage.RedisAddr == "" {
-		return errors.New("storage.redis_addr is required — aggregator writes VWAP to Redis")
+	rdb := redisclient.Build(cfg.Storage)
+	if rdb == nil {
+		return errors.New("storage.redis_addr or storage.redis_sentinel_addrs is required — aggregator writes VWAP to Redis")
 	}
-	rdb := redis.NewClient(&redis.Options{
-		Addr:     cfg.Storage.RedisAddr,
-		Password: cfg.Storage.RedisPassword,
-	})
 	defer func() { _ = rdb.Close() }()
+	mode := redisclient.Mode(cfg.Storage)
 	if dryRun {
 		pingCtx, cancelPing := context.WithTimeout(rootCtx, 5*time.Second)
 		err := rdb.Ping(pingCtx).Err()
 		cancelPing()
 		if err != nil {
-			return fmt.Errorf("redis: ping: %w", err)
+			return fmt.Errorf("redis: ping (%s mode): %w", mode, err)
 		}
-		logger.Info("redis reachable", "addr", cfg.Storage.RedisAddr)
 	}
+	logger.Info("redis configured", "mode", mode)
 
 	// ─── Pair + window resolution ────────────────────────────────
 	// Operator override via [aggregate].pairs / .windows wins; an

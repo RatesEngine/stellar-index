@@ -1,0 +1,48 @@
+---
+# Install redis-server (carries the redis-sentinel binary in
+# Ubuntu's package) and prepare the data + log directories.
+
+- name: install redis-server + redis-sentinel + redis-tools
+  apt:
+    name:
+      - redis-server
+      - redis-sentinel
+      - redis-tools
+    state: present
+    update_cache: yes
+
+- name: ensure redis data dir exists
+  file:
+    path: "{{ redis_data_dir }}"
+    state: directory
+    owner: "{{ redis_user }}"
+    group: "{{ redis_group }}"
+    mode: "0750"
+
+- name: ensure sentinel data dir exists
+  file:
+    path: "{{ redis_sentinel_data_dir }}"
+    state: directory
+    owner: "{{ redis_user }}"
+    group: "{{ redis_group }}"
+    mode: "0750"
+
+- name: ensure log dir exists
+  file:
+    path: "{{ redis_log_dir }}"
+    state: directory
+    owner: "{{ redis_user }}"
+    group: "{{ redis_group }}"
+    mode: "0750"
+
+# Redis ships its own systemd units; the role's 05-systemd.yml
+# adds a hardening drop-in rather than replacing the unit.
+- name: ensure redis-server is enabled
+  systemd:
+    name: redis-server
+    enabled: yes
+
+- name: ensure redis-sentinel is enabled
+  systemd:
+    name: redis-sentinel
+    enabled: yes
