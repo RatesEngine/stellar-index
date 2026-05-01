@@ -272,6 +272,15 @@ audit confirms:
 - The current pair-template hash matches the production decoder's
   fixtures.
 
+> **2026-05-01 update — caveat partially closed by r1 walk.** The
+> 2026-04-30 r1 wasm-history walk now covers **194 deployed pair
+> instances** (full set in `configs/audit/wasm-walk-contracts.yaml`)
+> and confirms every one runs the same `18051456…` pair WASM. No
+> pair has ever transitioned to a different WASM during the walked
+> ledger range. Findings consolidated in
+> [`r1-walk-2026-05-01.md`](r1-walk-2026-05-01.md) §Soroswap. This
+> closes follow-up steps (1) and (2) of the v2 plan below.
+
 What this audit does **not** confirm:
 
 - Whether any individual deployed pair contract self-upgraded via
@@ -280,7 +289,8 @@ What this audit does **not** confirm:
   upgrade entrypoint at the time of Phase-1 review (verified in
   `docs/discovery/dexes-amms/soroswap.md`), making such an upgrade
   practically impossible without a coordinated factory + pair
-  redeploy.
+  redeploy. **Empirically confirmed by the 2026-04-30 walk: zero
+  per-pair upgrades observed across 194 instances.**
 - Whether the factory's stored pair-WASM-hash configuration was
   ever rotated by an admin (the `set_pair_wasm` flow in factory
   storage). This is detectable as a `LedgerEntryChange` to the
@@ -293,17 +303,17 @@ has been ingesting from this exact pair-template hash since
 `ErrUnknownEvent` rates in the metrics, against the same pair
 contracts a full backfill would replay.
 
-The v2 audit follow-up (tracked under L4.x backlog) closes both:
+The v2 audit follow-up (tracked under L4.x backlog):
 
-1. Enumerate all pair contracts ever deployed by walking factory
-   `new_pair` events from L50,746,266 forward (one-shot scan; takes
-   minutes against r1's MinIO).
-2. Run `wasm-history` against that pair list to confirm none
-   self-upgraded.
-3. Walk the factory's `LedgerEntryChange` history for
+1. ✅ ~Enumerate all pair contracts ever deployed by walking factory
+   `new_pair` events~ — done in 2026-04-30 walk (194 instances).
+2. ✅ ~Run `wasm-history` against that pair list to confirm none
+   self-upgraded~ — done; zero per-pair upgrades observed.
+3. ☐ Walk the factory's `LedgerEntryChange` history for
    `set_pair_wasm` storage rotations.
 
-Until that lands, `BackfillSafe: true` is qualified by the above.
+Until step (3) lands, `BackfillSafe: true` is qualified by the
+storage-rotation gap.
 
 ## Decision
 
