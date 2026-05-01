@@ -1,0 +1,133 @@
+{
+  "source": "aquarius",
+  "contract_count": 4,
+  "unique_wasm_hashes": [
+    "18336805466bbd05bc388610d36de73994f5b9061bb199c02418a073fcf4b281",
+    "2491b9b663f647bdb5ff358c3bbe6ddd4e9a43bfbe8edebccd26ca71ad2e84b8",
+    "26c495019afb7448f690a82d6e66d8fab1ad3fd3e7b4aec7d554209966c9d19d",
+    "2c2b3c9756f372092f9120393b41b1b6a5aa5546de169d1100daf370e1c880d8",
+    "60332ba12801eda65874e9afdbfdf8d114f56011fe7d1f902103cd7767c547d4",
+    "77bdc0a993960faa2b0dac7b43a5160d6ed745ee787573c2f0ad8d00d4806366",
+    "8cf10d1439a9ed1f8d27606cadcdae7555851c40ef0e6e4bb1ffe2f8ebcd7658",
+    "a67ad7715ecb3e174a1afe731d9f534e616dac3d5b115781762ec531c2ce1d30",
+    "b04880dfbe7630b17cec60403669123987fa0ef6b91e418b30fb68180ac4f93b"
+  ],
+  "unique_wasm_hash_count": 9,
+  "total_range_count": 13,
+  "contracts": [
+    {
+      "contract": "CCLZRD4E72T7JCZCN3P7KNPYNXFYKQCL64ECLX7WP5GNVYPYJGU2IO2G",
+      "role": "admin-or-related",
+      "first_ledger": 51572024,
+      "last_ledger": 57856963,
+      "range_count": 3,
+      "unique_hashes": [
+        "18336805466bbd05bc388610d36de73994f5b9061bb199c02418a073fcf4b281",
+        "60332ba12801eda65874e9afdbfdf8d114f56011fe7d1f902103cd7767c547d4",
+        "77bdc0a993960faa2b0dac7b43a5160d6ed745ee787573c2f0ad8d00d4806366"
+      ],
+      "ranges": [
+        {
+          "wasm_hash": "60332ba12801eda65874e9afdbfdf8d114f56011fe7d1f902103cd7767c547d4",
+          "from_ledger": 51572024,
+          "to_ledger": 51937331
+        },
+        {
+          "wasm_hash": "18336805466bbd05bc388610d36de73994f5b9061bb199c02418a073fcf4b281",
+          "from_ledger": 53134204,
+          "to_ledger": 53417239
+        },
+        {
+          "wasm_hash": "77bdc0a993960faa2b0dac7b43a5160d6ed745ee787573c2f0ad8d00d4806366",
+          "from_ledger": 57406861,
+          "to_ledger": 57856963
+        }
+      ]
+    },
+    {
+      "contract": "CBQDHNBFBZYE4MKPWBSJOPIYLW4SFSXAXUTSXJN76GNKYVYPCKWC6QUK",
+      "role": "admin-or-related",
+      "first_ledger": 52728375,
+      "last_ledger": 59336871,
+      "range_count": 10,
+      "unique_hashes": [
+        "2491b9b663f647bdb5ff358c3bbe6ddd4e9a43bfbe8edebccd26ca71ad2e84b8",
+        "26c495019afb7448f690a82d6e66d8fab1ad3fd3e7b4aec7d554209966c9d19d",
+        "2c2b3c9756f372092f9120393b41b1b6a5aa5546de169d1100daf370e1c880d8",
+        "8cf10d1439a9ed1f8d27606cadcdae7555851c40ef0e6e4bb1ffe2f8ebcd7658",
+        "a67ad7715ecb3e174a1afe731d9f534e616dac3d5b115781762ec531c2ce1d30",
+        "b04880dfbe7630b17cec60403669123987fa0ef6b91e418b30fb68180ac4f93b"
+      ],
+      "ranges": [
+        {
+          "wasm_hash": "2c2b3c9756f372092f9120393b41b1b6a5aa5546de169d1100daf370e1c880d8",
+          "from_ledger": 52728375,
+          "to_ledger": 53417239
+        },
+        {
+          "wasm_hash": "2c2b3c9756f372092f9120393b41b1b6a5aa5546de169d1100daf370e1c880d8",
+          "from_ledger": 53487930,
+          "to_ledger": 53552354
+        },
+        {
+          "wasm_hash": "a67ad7715ecb3e174a1afe731d9f534e616dac3d5b115781762ec531c2ce1d30",
+          "from_ledger": 53552355,
+          "to_ledger": 54897147
+        },
+        {
+          "wasm_hash": "a67ad7715ecb3e174a1afe731d9f534e616dac3d5b115781762ec531c2ce1d30",
+          "from_ledger": 54900424,
+          "to_ledger": 55363488
+        },
+        {
+          "wasm_hash": "26c495019afb7448f690a82d6e66d8fab1ad3fd3e7b4aec7d554209966c9d19d",
+          "from_ledger": 55363489,
+          "to_ledger": 56377055
+        },
+        {
+          "wasm_hash": "26c495019afb7448f690a82d6e66d8fab1ad3fd3e7b4aec7d554209966c9d19d",
+          "from_ledger": 56381506,
+          "to_ledger": 56505098
+        },
+        {
+          "wasm_hash": "8cf10d1439a9ed1f8d27606cadcdae7555851c40ef0e6e4bb1ffe2f8ebcd7658",
+          "from_ledger": 56505099,
+          "to_ledger": 57711542
+        },
+        {
+          "wasm_hash": "b04880dfbe7630b17cec60403669123987fa0ef6b91e418b30fb68180ac4f93b",
+          "from_ledger": 57711543,
+          "to_ledger": 57856963
+        },
+        {
+          "wasm_hash": "b04880dfbe7630b17cec60403669123987fa0ef6b91e418b30fb68180ac4f93b",
+          "from_ledger": 57918042,
+          "to_ledger": 58357190
+        },
+        {
+          "wasm_hash": "2491b9b663f647bdb5ff358c3bbe6ddd4e9a43bfbe8edebccd26ca71ad2e84b8",
+          "from_ledger": 58357191,
+          "to_ledger": 59336871
+        }
+      ]
+    },
+    {
+      "contract": "CAVLP5DH2GJPZMVO7IJY4CVOD5MWEFTJFVPD2YY2FQXOQHRGHK4D6HLP",
+      "role": "router",
+      "first_ledger": null,
+      "last_ledger": null,
+      "range_count": 0,
+      "unique_hashes": [],
+      "ranges": []
+    },
+    {
+      "contract": "CCYOZJCOPG34LLQQ7N24YXBM7LL62R7ONMZ3G6WZAAYPB5OYKOMJRN63",
+      "role": "admin-or-related",
+      "first_ledger": null,
+      "last_ledger": null,
+      "range_count": 0,
+      "unique_hashes": [],
+      "ranges": []
+    }
+  ]
+}

@@ -1,0 +1,22 @@
+{
+  "source": "band",
+  "contract_count": 1,
+  "unique_wasm_count": 1,
+  "role_breakdown": {
+    "band": 1
+  },
+  "contracts": [
+    {
+      "contract": "CCQXWMZVM3KRTXTUPTN53YHL272QGKF32L7XEDNZ2S6OSUFK3NFBGG5M",
+      "final_role": "band",
+      "wasm_history": [
+        {
+          "kind": "transition",
+          "from_ledger": 50842736,
+          "to_ledger": 51937331,
+          "wasm_hash": "6cdb9a3cdeec01a113c50e311218eeb0991aff8f7b379f556badca2b49b1eb01"
+        }
+      ]
+    }
+  ]
+}

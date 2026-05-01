@@ -1,0 +1,2932 @@
+{
+  "source": "soroswap",
+  "contract_count": 196,
+  "unique_wasm_count": 3,
+  "role_breakdown": {
+    "soroswap-pair": 194,
+    "soroswap-factory": 1,
+    "soroswap-router": 1
+  },
+  "contracts": [
+    {
+      "contract": "CA2GDZI6CSRMKA65WDVN37WESKK4DBU72SGXGQ27S5XWFPAPJLQHLUVM",
+      "final_role": "soroswap-pair",
+      "wasm_history": [
+        {
+          "kind": "current_state",
+          "wasm_hash": "18051456816b66f12e773a56f77c5794fac1b1fb7ab6e22d4fad5a412770f73e"
+        }
+      ]
+    },
+    {
+      "contract": "CA2TZIB56KYKD46F7IFBF6XPO5TDNK6N2U6BRTGZ5AF4WUSBN6BKZMGF",
+      "final_role": "soroswap-pair",
+      "wasm_history": [
+        {
+          "kind": "transition",
+          "from_ledger": 58689392,
+          "to_ledger": 59336871,
+          "wasm_hash": "18051456816b66f12e773a56f77c5794fac1b1fb7ab6e22d4fad5a412770f73e"
+        }
+      ]
+    },
+    {
+      "contract": "CA3UQVOTE46GW4G4Z7VVMMKXMLKGXER6ATX4ZF3OSBI3XFWVFXBDOAU5",
+      "final_role": "soroswap-pair",
+      "wasm_history": [
+        {
+          "kind": "current_state",
+          "wasm_hash": "18051456816b66f12e773a56f77c5794fac1b1fb7ab6e22d4fad5a412770f73e"
+        }
+      ]
+    },
+    {
+      "contract": "CA4HEQTL2WPEUYKYKCDOHCDNIV4QHNJ7EL4J4NQ6VADP7SYHVRYZ7AW2",
+      "final_role": "soroswap-factory",
+      "wasm_history": [
+        {
+          "kind": "transition",
+          "from_ledger": 50746266,
+          "to_ledger": 51937331,
+          "wasm_hash": "5db738b05d9148128a240b0e2c1cb935c2805192bf98a579421aacda364c8dae"
+        },
+        {
+          "kind": "transition",
+          "from_ledger": 52593281,
+          "to_ledger": 53417239,
+          "wasm_hash": "5db738b05d9148128a240b0e2c1cb935c2805192bf98a579421aacda364c8dae"
+        },
+        {
+          "kind": "transition",
+          "from_ledger": 53864174,
+          "to_ledger": 54897147,
+          "wasm_hash": "5db738b05d9148128a240b0e2c1cb935c2805192bf98a579421aacda364c8dae"
+        },
+        {
+          "kind": "transition",
+          "from_ledger": 54905509,
+          "to_ledger": 56377055,
+          "wasm_hash": "5db738b05d9148128a240b0e2c1cb935c2805192bf98a579421aacda364c8dae"
+        },
+        {
+          "kind": "transition",
+          "from_ledger": 57054680,
+          "to_ledger": 57856963,
+          "wasm_hash": "5db738b05d9148128a240b0e2c1cb935c2805192bf98a579421aacda364c8dae"
+        },
+        {
+          "kind": "transition",
+          "from_ledger": 57897153,
+          "to_ledger": 59336871,
+          "wasm_hash": "5db738b05d9148128a240b0e2c1cb935c2805192bf98a579421aacda364c8dae"
+        }
+      ]
+    },
+    {
+      "contract": "CA4QHPBZIRW52JIDTBLVB2TYC76FXZCU5KN5XIDCLHRUNHY2FLRYUNFO",
+      "final_role": "soroswap-pair",
+      "wasm_history": [
+        {
+          "kind": "current_state",
+          "wasm_hash": "18051456816b66f12e773a56f77c5794fac1b1fb7ab6e22d4fad5a412770f73e"
+        }
+      ]
+    },
+    {
+      "contract": "CA4VTJFKCIXVH3G2MEYAGA4U5A7IBWFFDODTSR3KUAQ4KZMI37J75CYX",
+      "final_role": "soroswap-pair",
+      "wasm_history": [
+        {
+          "kind": "transition",
+          "from_ledger": 50746376,
+          "to_ledger": 51937331,
+          "wasm_hash": "18051456816b66f12e773a56f77c5794fac1b1fb7ab6e22d4fad5a412770f73e"
+        }
+      ]
+    },
+    {
+      "contract": "CA4ZLK4UWR52MHELS4AFFW2B3G465CHS33LXJSMGEP5RXXOZPFRT5ATE",
+      "final_role": "soroswap-pair",
+      "wasm_history": [
+        {
+          "kind": "current_state",
+          "wasm_hash": "18051456816b66f12e773a56f77c5794fac1b1fb7ab6e22d4fad5a412770f73e"
+        }
+      ]
+    },
+    {
+      "contract": "CA53URIS7E2LIWASEH7IACBU6FB3EBUYPNW5IRKZBHALRNXLZ3DE7XTP",
+      "final_role": "soroswap-pair",
+      "wasm_history": [
+        {
+          "kind": "current_state",
+          "wasm_hash": "18051456816b66f12e773a56f77c5794fac1b1fb7ab6e22d4fad5a412770f73e"
+        }
+      ]
+    },
+    {
+      "contract": "CA5EANERLJN6H3TXDONNEDGHMPZ4WVVRE7WUEWW2VKVBIEY4GIMHTGYY",
+      "final_role": "soroswap-pair",
+      "wasm_history": [
+        {
+          "kind": "current_state",
+          "wasm_hash": "18051456816b66f12e773a56f77c5794fac1b1fb7ab6e22d4fad5a412770f73e"
+        }
+      ]
+    },
+    {
+      "contract": "CA5JJHF5LKBB6LKFKOVVTOO5QE4ZPFIHULSBC5AB5PZXKX2J543HZQJX",
+      "final_role": "soroswap-pair",
+      "wasm_history": [
+        {
+          "kind": "transition",
+          "from_ledger": 55098214,
+          "to_ledger": 56377055,
+          "wasm_hash": "18051456816b66f12e773a56f77c5794fac1b1fb7ab6e22d4fad5a412770f73e"
+        }
+      ]
+    },
+    {
+      "contract": "CA6YKGT4XT6ISTMJTG5CIVNGY2DGSXZDIQPE7OFQOSWGE7CRSBEHLKWC",
+      "final_role": "soroswap-pair",
+      "wasm_history": [
+        {
+          "kind": "current_state",
+          "wasm_hash": "18051456816b66f12e773a56f77c5794fac1b1fb7ab6e22d4fad5a412770f73e"
+        }
+      ]
+    },
+    {
+      "contract": "CAAPWLKT4TPUOEBADNV5AKJZJLOO7CCTZF2A7CAFD3U45LAGCGULCWG2",
+      "final_role": "soroswap-pair",
+      "wasm_history": [
+        {
+          "kind": "current_state",
+          "wasm_hash": "18051456816b66f12e773a56f77c5794fac1b1fb7ab6e22d4fad5a412770f73e"
+        }
+      ]
+    },
+    {
+      "contract": "CABIXKWFCRM6VYUPNKF5C24O5LRCINE4XGB7SRUK67T6EVYMQSRUROKH",
+      "final_role": "soroswap-pair",
+      "wasm_history": [
+        {
+          "kind": "transition",
+          "from_ledger": 52593298,
+          "to_ledger": 53417239,
+          "wasm_hash": "18051456816b66f12e773a56f77c5794fac1b1fb7ab6e22d4fad5a412770f73e"
+        }
+      ]
+    },
+    {
+      "contract": "CABJYKXLX5PIXGUAHJS7VG7XVMGFEPRGI5KH37F45H37YIJNEHDBVXCN",
+      "final_role": "soroswap-pair",
+      "wasm_history": [
+        {
+          "kind": "transition",
+          "from_ledger": 53316394,
+          "to_ledger": 53417239,
+          "wasm_hash": "18051456816b66f12e773a56f77c5794fac1b1fb7ab6e22d4fad5a412770f73e"
+        },
+        {
+          "kind": "transition",
+          "from_ledger": 54458749,
+          "to_ledger": 54897147,
+          "wasm_hash": "18051456816b66f12e773a56f77c5794fac1b1fb7ab6e22d4fad5a412770f73e"
+        },
+        {
+          "kind": "transition",
+          "from_ledger": 54956423,
+          "to_ledger": 56377055,
+          "wasm_hash": "18051456816b66f12e773a56f77c5794fac1b1fb7ab6e22d4fad5a412770f73e"
+        },
+        {
+          "kind": "transition",
+          "from_ledger": 56544003,
+          "to_ledger": 57856963,
+          "wasm_hash": "18051456816b66f12e773a56f77c5794fac1b1fb7ab6e22d4fad5a412770f73e"
+        },
+        {
+          "kind": "transition",
+          "from_ledger": 58647095,
+          "to_ledger": 59336871,
+          "wasm_hash": "18051456816b66f12e773a56f77c5794fac1b1fb7ab6e22d4fad5a412770f73e"
+        }
+      ]
+    },
+    {
+      "contract": "CAC65OQSJMP5GJC73VS6Q3VRWJLY3EXX66UBMRQVBFWPAUEHSZGBM2LZ",
+      "final_role": "soroswap-pair",
+      "wasm_history": [
+        {
+          "kind": "current_state",
+          "wasm_hash": "18051456816b66f12e773a56f77c5794fac1b1fb7ab6e22d4fad5a412770f73e"
+        }
+      ]
+    },
+    {
+      "contract": "CAC7CX77YKAXS2LES3W54KTY6KDDMDBXRJ5TWK7UX2N4OFBY2OJEUJQW",
+      "final_role": "soroswap-pair",
+      "wasm_history": [
+        {
+          "kind": "transition",
+          "from_ledger": 51452334,
+          "to_ledger": 51937331,
+          "wasm_hash": "18051456816b66f12e773a56f77c5794fac1b1fb7ab6e22d4fad5a412770f73e"
+        },
+        {
+          "kind": "transition",
+          "from_ledger": 58213462,
+          "to_ledger": 59336871,
+          "wasm_hash": "18051456816b66f12e773a56f77c5794fac1b1fb7ab6e22d4fad5a412770f73e"
+        }
+      ]
+    },
+    {
+      "contract": "CACE7ARBSSCQQCHSH4KPQPYJJRW7TQ4RJ7TDQCRJE7S7KVA5IATFBL2I",
+      "final_role": "soroswap-pair",
+      "wasm_history": [
+        {
+          "kind": "current_state",
+          "wasm_hash": "18051456816b66f12e773a56f77c5794fac1b1fb7ab6e22d4fad5a412770f73e"
+        }
+      ]
+    },
+    {
+      "contract": "CACTIOUW5FHYD3Q6ENKAU2IBLO2YFRWST4OGPDB4H32OGFMMJQF6SAJ5",
+      "final_role": "soroswap-pair",
+      "wasm_history": [
+        {
+          "kind": "transition",
+          "from_ledger": 53039526,
+          "to_ledger": 53417239,
+          "wasm_hash": "18051456816b66f12e773a56f77c5794fac1b1fb7ab6e22d4fad5a412770f73e"
+        }
+      ]
+    },
+    {
+      "contract": "CACVG65ZI2AALKJ33MNGOQNH3OGJOXPBFCQ5RPODYLO3SHRIPASUQ3EX",
+      "final_role": "soroswap-pair",
+      "wasm_history": [
+        {
+          "kind": "current_state",
+          "wasm_hash": "18051456816b66f12e773a56f77c5794fac1b1fb7ab6e22d4fad5a412770f73e"
+        }
+      ]
+    },
+    {
+      "contract": "CACXB6KH5DQVQKQGXKHF2M5TEKFY5KIDCKSEXZYJ27Z5465V2SSALCBW",
+      "final_role": "soroswap-pair",
+      "wasm_history": [
+        {
+          "kind": "transition",
+          "from_ledger": 50746370,
+          "to_ledger": 51937331,
+          "wasm_hash": "18051456816b66f12e773a56f77c5794fac1b1fb7ab6e22d4fad5a412770f73e"
+        },
+        {
+          "kind": "transition",
+          "from_ledger": 53362911,
+          "to_ledger": 53417239,
+          "wasm_hash": "18051456816b66f12e773a56f77c5794fac1b1fb7ab6e22d4fad5a412770f73e"
+        }
+      ]
+    },
+    {
+      "contract": "CADMFEOU6YZBJ3RTRBU4SXLHKTTQ32YD2YVABBYERKDWP5TVFGWKFADH",
+      "final_role": "soroswap-pair",
+      "wasm_history": [
+        {
+          "kind": "transition",
+          "from_ledger": 54363677,
+          "to_ledger": 54897147,
+          "wasm_hash": "18051456816b66f12e773a56f77c5794fac1b1fb7ab6e22d4fad5a412770f73e"
+        },
+        {
+          "kind": "transition",
+          "from_ledger": 54898689,
+          "to_ledger": 56377055,
+          "wasm_hash": "18051456816b66f12e773a56f77c5794fac1b1fb7ab6e22d4fad5a412770f73e"
+        },
+        {
+          "kind": "transition",
+          "from_ledger": 56501670,
+          "to_ledger": 57856963,
+          "wasm_hash": "18051456816b66f12e773a56f77c5794fac1b1fb7ab6e22d4fad5a412770f73e"
+        },
+        {
+          "kind": "transition",
+          "from_ledger": 58084101,
+          "to_ledger": 59336871,
+          "wasm_hash": "18051456816b66f12e773a56f77c5794fac1b1fb7ab6e22d4fad5a412770f73e"
+        }
+      ]
+    },
+    {
+      "contract": "CADRWHW2ASLZYF7C4UL4IGGXQGL3ERHBNYYYYTZFRIM36U4CNTS7C3SA",
+      "final_role": "soroswap-pair",
+      "wasm_history": [
+        {
+          "kind": "transition",
+          "from_ledger": 51147472,
+          "to_ledger": 51937331,
+          "wasm_hash": "18051456816b66f12e773a56f77c5794fac1b1fb7ab6e22d4fad5a412770f73e"
+        },
+        {
+          "kind": "transition",
+          "from_ledger": 52474389,
+          "to_ledger": 53417239,
+          "wasm_hash": "18051456816b66f12e773a56f77c5794fac1b1fb7ab6e22d4fad5a412770f73e"
+        }
+      ]
+    },
+    {
+      "contract": "CAEYKKSVC4X2I5VFDX2Y4J7POLCV4CXVVQ6WJDG2CN5HJ5446ODJ2WSP",
+      "final_role": "soroswap-pair",
+      "wasm_history": [
+        {
+          "kind": "current_state",
+          "wasm_hash": "18051456816b66f12e773a56f77c5794fac1b1fb7ab6e22d4fad5a412770f73e"
+        }
+      ]
+    },
+    {
+      "contract": "CAF65BIHBIHC44QPWIFZRL46BDDH4FN3VSRBB2DZJFPWQRAOSRPKRRQZ",
+      "final_role": "soroswap-pair",
+      "wasm_history": [
+        {
+          "kind": "transition",
+          "from_ledger": 54955946,
+          "to_ledger": 56377055,
+          "wasm_hash": "18051456816b66f12e773a56f77c5794fac1b1fb7ab6e22d4fad5a412770f73e"
+        },
+        {
+          "kind": "transition",
+          "from_ledger": 56378684,
+          "to_ledger": 57856963,
+          "wasm_hash": "18051456816b66f12e773a56f77c5794fac1b1fb7ab6e22d4fad5a412770f73e"
+        },
+        {
+          "kind": "transition",
+          "from_ledger": 57859243,
+          "to_ledger": 59336871,
+          "wasm_hash": "18051456816b66f12e773a56f77c5794fac1b1fb7ab6e22d4fad5a412770f73e"
+        }
+      ]
+    },
+    {
+      "contract": "CAFRE2UJJFZ557VWRBU5MFRCW2TWJWXMZLZLEVPIX2MDOV3KRICOL5N2",
+      "final_role": "soroswap-pair",
+      "wasm_history": [
+        {
+          "kind": "transition",
+          "from_ledger": 56091668,
+          "to_ledger": 56377055,
+          "wasm_hash": "18051456816b66f12e773a56f77c5794fac1b1fb7ab6e22d4fad5a412770f73e"
+        }
+      ]
+    },
+    {
+      "contract": "CAG5LRYQ5JVEUI5TEID72EYOVX44TTUJT5BQR2J6J77FH65PCCFAJDDH",
+      "final_role": "soroswap-router",
+      "wasm_history": [
+        {
+          "kind": "transition",
+          "from_ledger": 50746272,
+          "to_ledger": 51937331,
+          "wasm_hash": "4c3db3ebd2d6a2ab23de1f622eaabb39501539b4611b68622ec4e47f76c4ba07"
+        }
+      ]
+    },
+    {
+      "contract": "CAHSKDP66SYCGYQZ3NULGZMEUSN5Z67UFBYADJVCNXVKV3E7PKYR5PQ4",
+      "final_role": "soroswap-pair",
+      "wasm_history": [
+        {
+          "kind": "transition",
+          "from_ledger": 54352527,
+          "to_ledger": 54897147,
+          "wasm_hash": "18051456816b66f12e773a56f77c5794fac1b1fb7ab6e22d4fad5a412770f73e"
+        },
+        {
+          "kind": "transition",
+          "from_ledger": 54897310,
+          "to_ledger": 56377055,
+          "wasm_hash": "18051456816b66f12e773a56f77c5794fac1b1fb7ab6e22d4fad5a412770f73e"
+        },
+        {
+          "kind": "transition",
+          "from_ledger": 56385412,
+          "to_ledger": 57856963,
+          "wasm_hash": "18051456816b66f12e773a56f77c5794fac1b1fb7ab6e22d4fad5a412770f73e"
+        },
+        {
+          "kind": "transition",
+          "from_ledger": 57868957,
+          "to_ledger": 59336871,
+          "wasm_hash": "18051456816b66f12e773a56f77c5794fac1b1fb7ab6e22d4fad5a412770f73e"
+        }
+      ]
+    },
+    {
+      "contract": "CAI7B3M2EPGDA2GMHCHUD5JS7MEJ7HA7U7GP5L2IOJWWAE7VRTMTJPNX",
+      "final_role": "soroswap-pair",
+      "wasm_history": [
+        {
+          "kind": "transition",
+          "from_ledger": 50813399,
+          "to_ledger": 51937331,
+          "wasm_hash": "18051456816b66f12e773a56f77c5794fac1b1fb7ab6e22d4fad5a412770f73e"
+        },
+        {
+          "kind": "transition",
+          "from_ledger": 52614321,
+          "to_ledger": 53417239,
+          "wasm_hash": "18051456816b66f12e773a56f77c5794fac1b1fb7ab6e22d4fad5a412770f73e"
+        },
+        {
+          "kind": "transition",
+          "from_ledger": 54497164,
+          "to_ledger": 54897147,
+          "wasm_hash": "18051456816b66f12e773a56f77c5794fac1b1fb7ab6e22d4fad5a412770f73e"
+        },
+        {
+          "kind": "transition",
+          "from_ledger": 54927120,
+          "to_ledger": 56377055,
+          "wasm_hash": "18051456816b66f12e773a56f77c5794fac1b1fb7ab6e22d4fad5a412770f73e"
+        },
+        {
+          "kind": "transition",
+          "from_ledger": 56583203,
+          "to_ledger": 57856963,
+          "wasm_hash": "18051456816b66f12e773a56f77c5794fac1b1fb7ab6e22d4fad5a412770f73e"
+        },
+        {
+          "kind": "transition",
+          "from_ledger": 57946073,
+          "to_ledger": 59336871,
+          "wasm_hash": "18051456816b66f12e773a56f77c5794fac1b1fb7ab6e22d4fad5a412770f73e"
+        }
+      ]
+    },
+    {
+      "contract": "CAIJ6CRQ75LMO6XTT5REOECNP3SFXFIGWQZYLMIZWSCLJUEJCIGWCNUY",
+      "final_role": "soroswap-pair",
+      "wasm_history": [
+        {
+          "kind": "current_state",
+          "wasm_hash": "18051456816b66f12e773a56f77c5794fac1b1fb7ab6e22d4fad5a412770f73e"
+        }
+      ]
+    },
+    {
+      "contract": "CAIO7I5V7OBZQEHDGACBBBX7NOFUW2CUWDTNCDW5LISWCVLE6GX54GWQ",
+      "final_role": "soroswap-pair",
+      "wasm_history": [
+        {
+          "kind": "current_state",
+          "wasm_hash": "18051456816b66f12e773a56f77c5794fac1b1fb7ab6e22d4fad5a412770f73e"
+        }
+      ]
+    },
+    {
+      "contract": "CAK2S7ZKRDYAD6PPRMLHD2UNFOXISVJV6O6JKHJLJMNG3CMPWZOPEVEQ",
+      "final_role": "soroswap-pair",
+      "wasm_history": [
+        {
+          "kind": "current_state",
+          "wasm_hash": "18051456816b66f12e773a56f77c5794fac1b1fb7ab6e22d4fad5a412770f73e"
+        }
+      ]
+    },
+    {
+      "contract": "CAKST7SVAVUZPYCDJ7QIUFLHHDAZV6HOY74F3PSVN5EKBMAGEZDR5D3I",
+      "final_role": "soroswap-pair",
+      "wasm_history": [
+        {
+          "kind": "transition",
+          "from_ledger": 55150935,
+          "to_ledger": 56377055,
+          "wasm_hash": "18051456816b66f12e773a56f77c5794fac1b1fb7ab6e22d4fad5a412770f73e"
+        },
+        {
+          "kind": "transition",
+          "from_ledger": 56391097,
+          "to_ledger": 57856963,
+          "wasm_hash": "18051456816b66f12e773a56f77c5794fac1b1fb7ab6e22d4fad5a412770f73e"
+        },
+        {
+          "kind": "transition",
+          "from_ledger": 57859431,
+          "to_ledger": 59336871,
+          "wasm_hash": "18051456816b66f12e773a56f77c5794fac1b1fb7ab6e22d4fad5a412770f73e"
+        }
+      ]
+    },
+    {
+      "contract": "CALPKIZXQUYUIQW2OHBAMZL2TFTMBWLJ7ZZZFQNEIF5EXOP4HNERXPYR",
+      "final_role": "soroswap-pair",
+      "wasm_history": [
+        {
+          "kind": "current_state",
+          "wasm_hash": "18051456816b66f12e773a56f77c5794fac1b1fb7ab6e22d4fad5a412770f73e"
+        }
+      ]
+    },
+    {
+      "contract": "CAM7DY53G63XA4AJRS24Z6VFYAFSSF76C3RZ45BE5YU3FQS5255OOABP",
+      "final_role": "soroswap-pair",
+      "wasm_history": [
+        {
+          "kind": "transition",
+          "from_ledger": 50747372,
+          "to_ledger": 51937331,
+          "wasm_hash": "18051456816b66f12e773a56f77c5794fac1b1fb7ab6e22d4fad5a412770f73e"
+        },
+        {
+          "kind": "transition",
+          "from_ledger": 51939684,
+          "to_ledger": 53417239,
+          "wasm_hash": "18051456816b66f12e773a56f77c5794fac1b1fb7ab6e22d4fad5a412770f73e"
+        },
+        {
+          "kind": "transition",
+          "from_ledger": 53417656,
+          "to_ledger": 56377055,
+          "wasm_hash": "18051456816b66f12e773a56f77c5794fac1b1fb7ab6e22d4fad5a412770f73e"
+        },
+        {
+          "kind": "transition",
+          "from_ledger": 56377266,
+          "to_ledger": 57856963,
+          "wasm_hash": "18051456816b66f12e773a56f77c5794fac1b1fb7ab6e22d4fad5a412770f73e"
+        },
+        {
+          "kind": "transition",
+          "from_ledger": 57857685,
+          "to_ledger": 59336871,
+          "wasm_hash": "18051456816b66f12e773a56f77c5794fac1b1fb7ab6e22d4fad5a412770f73e"
+        }
+      ]
+    },
+    {
+      "contract": "CAMHJADKHNVEPATAGWR64WJELSXQHMG7V2XDMZUW4B2NF7L4OSZNAUDZ",
+      "final_role": "soroswap-pair",
+      "wasm_history": [
+        {
+          "kind": "current_state",
+          "wasm_hash": "18051456816b66f12e773a56f77c5794fac1b1fb7ab6e22d4fad5a412770f73e"
+        }
+      ]
+    },
+    {
+      "contract": "CAMNFZDPKCZ4GX44N2QF7F5TJJU5WMW4IKRW3JGMMNYRHAP7JZ35ERRB",
+      "final_role": "soroswap-pair",
+      "wasm_history": [
+        {
+          "kind": "current_state",
+          "wasm_hash": "18051456816b66f12e773a56f77c5794fac1b1fb7ab6e22d4fad5a412770f73e"
+        }
+      ]
+    },
+    {
+      "contract": "CANWE5SKHS37QAOXVF4DEKXOZBWXYUOYJFLKLWTV72BZSSSKEZ44NUMY",
+      "final_role": "soroswap-pair",
+      "wasm_history": [
+        {
+          "kind": "current_state",
+          "wasm_hash": "18051456816b66f12e773a56f77c5794fac1b1fb7ab6e22d4fad5a412770f73e"
+        }
+      ]
+    },
+    {
+      "contract": "CAQJUHO6KIBTEDT53DKDPHFMQ32KDWU5MDCAZE2MXT4ECBMTDQQF5FGB",
+      "final_role": "soroswap-pair",
+      "wasm_history": [
+        {
+          "kind": "transition",
+          "from_ledger": 56136627,
+          "to_ledger": 56377055,
+          "wasm_hash": "18051456816b66f12e773a56f77c5794fac1b1fb7ab6e22d4fad5a412770f73e"
+        },
+        {
+          "kind": "transition",
+          "from_ledger": 56445156,
+          "to_ledger": 57856963,
+          "wasm_hash": "18051456816b66f12e773a56f77c5794fac1b1fb7ab6e22d4fad5a412770f73e"
+        },
+        {
+          "kind": "transition",
+          "from_ledger": 57902765,
+          "to_ledger": 59336871,
+          "wasm_hash": "18051456816b66f12e773a56f77c5794fac1b1fb7ab6e22d4fad5a412770f73e"
+        }
+      ]
+    },
+    {
+      "contract": "CAQL6WQSDOCSZILAQUNG3VHJKZJ3OERBVVNRL5L4NRQBQ25QX34Q7U3C",
+      "final_role": "soroswap-pair",
+      "wasm_history": [
+        {
+          "kind": "current_state",
+          "wasm_hash": "18051456816b66f12e773a56f77c5794fac1b1fb7ab6e22d4fad5a412770f73e"
+        }
+      ]
+    },
+    {
+      "contract": "CARXFUVRVZAFWLARBP4PPUM6PF44G4D74WDOBW5ZQYP4XC2QW7SGPGAL",
+      "final_role": "soroswap-pair",
+      "wasm_history": [
+        {
+          "kind": "transition",
+          "from_ledger": 55734412,
+          "to_ledger": 56377055,
+          "wasm_hash": "18051456816b66f12e773a56f77c5794fac1b1fb7ab6e22d4fad5a412770f73e"
+        }
+      ]
+    },
+    {
+      "contract": "CAS325DAUKPCMVOVIDZVMN6LPNAJPKLF7G2KGV5IMTD7ZWZHUWOJG5Y7",
+      "final_role": "soroswap-pair",
+      "wasm_history": [
+        {
+          "kind": "current_state",
+          "wasm_hash": "18051456816b66f12e773a56f77c5794fac1b1fb7ab6e22d4fad5a412770f73e"
+        }
+      ]
+    },
+    {
+      "contract": "CASDSU3PBSFYJ4ZX7I2HHFDNZBBGKJFFXT6KOALA6DPMJBUTRG7XDLZB",
+      "final_role": "soroswap-pair",
+      "wasm_history": [
+        {
+          "kind": "current_state",
+          "wasm_hash": "18051456816b66f12e773a56f77c5794fac1b1fb7ab6e22d4fad5a412770f73e"
+        }
+      ]
+    },
+    {
+      "contract": "CASGDXH4TNCGJIIKOYSWV32G2TBFN6BJIEDDH5HSRDV4CZZDVKSH3SGR",
+      "final_role": "soroswap-pair",
+      "wasm_history": [
+        {
+          "kind": "current_state",
+          "wasm_hash": "18051456816b66f12e773a56f77c5794fac1b1fb7ab6e22d4fad5a412770f73e"
+        }
+      ]
+    },
+    {
+      "contract": "CASLW2HTWADMAETZTMZY3MW2FFDUPZDDT455LKIFALBNI2WAKPT5CXU4",
+      "final_role": "soroswap-pair",
+      "wasm_history": [
+        {
+          "kind": "current_state",
+          "wasm_hash": "18051456816b66f12e773a56f77c5794fac1b1fb7ab6e22d4fad5a412770f73e"
+        }
+      ]
+    },
+    {
+      "contract": "CATDYBHL27U7VNFCH2WBLMUWICDEZQLI7MDF4QBWS6QQN7CMPY4S62VQ",
+      "final_role": "soroswap-pair",
+      "wasm_history": [
+        {
+          "kind": "current_state",
+          "wasm_hash": "18051456816b66f12e773a56f77c5794fac1b1fb7ab6e22d4fad5a412770f73e"
+        }
+      ]
+    },
+    {
+      "contract": "CATLGF6NNXFSU4TGBKT3GNQHOM63YTRTSX36DWCT2DNEEH5OOOEHKQSO",
+      "final_role": "soroswap-pair",
+      "wasm_history": [
+        {
+          "kind": "current_state",
+          "wasm_hash": "18051456816b66f12e773a56f77c5794fac1b1fb7ab6e22d4fad5a412770f73e"
+        }
+      ]
+    },
+    {
+      "contract": "CATSFUFMFXOXXY6NONWRA24NUWA3J6BPLIK2WGO5ZVOYIN7QJFGHNCAI",
+      "final_role": "soroswap-pair",
+      "wasm_history": [
+        {
+          "kind": "current_state",
+          "wasm_hash": "18051456816b66f12e773a56f77c5794fac1b1fb7ab6e22d4fad5a412770f73e"
+        }
+      ]
+    },
+    {
+      "contract": "CATUJXDUO7SSSTAKSUV5YU6RSTB4B5AVIHQDV26QTCXOB46T6SLMWNMY",
+      "final_role": "soroswap-pair",
+      "wasm_history": [
+        {
+          "kind": "transition",
+          "from_ledger": 52755452,
+          "to_ledger": 53417239,
+          "wasm_hash": "18051456816b66f12e773a56f77c5794fac1b1fb7ab6e22d4fad5a412770f73e"
+        },
+        {
+          "kind": "transition",
+          "from_ledger": 53757575,
+          "to_ledger": 54897147,
+          "wasm_hash": "18051456816b66f12e773a56f77c5794fac1b1fb7ab6e22d4fad5a412770f73e"
+        },
+        {
+          "kind": "transition",
+          "from_ledger": 54899446,
+          "to_ledger": 56377055,
+          "wasm_hash": "18051456816b66f12e773a56f77c5794fac1b1fb7ab6e22d4fad5a412770f73e"
+        },
+        {
+          "kind": "transition",
+          "from_ledger": 56378724,
+          "to_ledger": 57856963,
+          "wasm_hash": "18051456816b66f12e773a56f77c5794fac1b1fb7ab6e22d4fad5a412770f73e"
+        },
+        {
+          "kind": "transition",
+          "from_ledger": 57859417,
+          "to_ledger": 59336871,
+          "wasm_hash": "18051456816b66f12e773a56f77c5794fac1b1fb7ab6e22d4fad5a412770f73e"
+        }
+      ]
+    },
+    {
+      "contract": "CATVK4RAJ7LOFPSNR2X5XYRE5H7IXSXRTA6BW7HYPQNR4P3QSJCRI2GH",
+      "final_role": "soroswap-pair",
+      "wasm_history": [
+        {
+          "kind": "current_state",
+          "wasm_hash": "18051456816b66f12e773a56f77c5794fac1b1fb7ab6e22d4fad5a412770f73e"
+        }
+      ]
+    },
+    {
+      "contract": "CAURS6NIANW7PQEZX35NBZZFGQFTULHREJFP44YWNBR33KGKJLOASZIW",
+      "final_role": "soroswap-pair",
+      "wasm_history": [
+        {
+          "kind": "transition",
+          "from_ledger": 50813957,
+          "to_ledger": 51937331,
+          "wasm_hash": "18051456816b66f12e773a56f77c5794fac1b1fb7ab6e22d4fad5a412770f73e"
+        },
+        {
+          "kind": "transition",
+          "from_ledger": 52880873,
+          "to_ledger": 53417239,
+          "wasm_hash": "18051456816b66f12e773a56f77c5794fac1b1fb7ab6e22d4fad5a412770f73e"
+        },
+        {
+          "kind": "transition",
+          "from_ledger": 56583211,
+          "to_ledger": 57856963,
+          "wasm_hash": "18051456816b66f12e773a56f77c5794fac1b1fb7ab6e22d4fad5a412770f73e"
+        },
+        {
+          "kind": "transition",
+          "from_ledger": 58039284,
+          "to_ledger": 59336871,
+          "wasm_hash": "18051456816b66f12e773a56f77c5794fac1b1fb7ab6e22d4fad5a412770f73e"
+        }
+      ]
+    },
+    {
+      "contract": "CAWGLVXJJRR5ZBUBRPWVB7ISG5BEBEWVHYO57F7MER77GKBZFN5WK5BD",
+      "final_role": "soroswap-pair",
+      "wasm_history": [
+        {
+          "kind": "current_state",
+          "wasm_hash": "18051456816b66f12e773a56f77c5794fac1b1fb7ab6e22d4fad5a412770f73e"
+        }
+      ]
+    },
+    {
+      "contract": "CAWVBJEO4FYYX3BTW5EPI5ZOWCRNLADTNSDESJ24WTA4UOOODPUE352Z",
+      "final_role": "soroswap-pair",
+      "wasm_history": [
+        {
+          "kind": "current_state",
+          "wasm_hash": "18051456816b66f12e773a56f77c5794fac1b1fb7ab6e22d4fad5a412770f73e"
+        }
+      ]
+    },
+    {
+      "contract": "CAX57ZNIZKVBDZ36OFH5IAMBTDDCJ4F54KUKCJRUKG5POIISYWL46P3U",
+      "final_role": "soroswap-pair",
+      "wasm_history": [
+        {
+          "kind": "transition",
+          "from_ledger": 50813367,
+          "to_ledger": 51937331,
+          "wasm_hash": "18051456816b66f12e773a56f77c5794fac1b1fb7ab6e22d4fad5a412770f73e"
+        },
+        {
+          "kind": "transition",
+          "from_ledger": 52643030,
+          "to_ledger": 53417239,
+          "wasm_hash": "18051456816b66f12e773a56f77c5794fac1b1fb7ab6e22d4fad5a412770f73e"
+        },
+        {
+          "kind": "transition",
+          "from_ledger": 54776815,
+          "to_ledger": 54897147,
+          "wasm_hash": "18051456816b66f12e773a56f77c5794fac1b1fb7ab6e22d4fad5a412770f73e"
+        }
+      ]
+    },
+    {
+      "contract": "CAX7KGAVK4YBJJWLNV22DFEWC53LKQG3TNSUORMYEDGRT57PTW5K7BZ2",
+      "final_role": "soroswap-pair",
+      "wasm_history": [
+        {
+          "kind": "transition",
+          "from_ledger": 50813975,
+          "to_ledger": 51937331,
+          "wasm_hash": "18051456816b66f12e773a56f77c5794fac1b1fb7ab6e22d4fad5a412770f73e"
+        },
+        {
+          "kind": "transition",
+          "from_ledger": 52880873,
+          "to_ledger": 53417239,
+          "wasm_hash": "18051456816b66f12e773a56f77c5794fac1b1fb7ab6e22d4fad5a412770f73e"
+        },
+        {
+          "kind": "transition",
+          "from_ledger": 56583217,
+          "to_ledger": 57856963,
+          "wasm_hash": "18051456816b66f12e773a56f77c5794fac1b1fb7ab6e22d4fad5a412770f73e"
+        }
+      ]
+    },
+    {
+      "contract": "CAYBFXTNCRG7FIAXTAAXSGFNMCH3JV7XRNEISWO66KUPE5TKKSE4MN4S",
+      "final_role": "soroswap-pair",
+      "wasm_history": [
+        {
+          "kind": "current_state",
+          "wasm_hash": "18051456816b66f12e773a56f77c5794fac1b1fb7ab6e22d4fad5a412770f73e"
+        }
+      ]
+    },
+    {
+      "contract": "CAYDEWTUBBGTO46VA2BUIMGCLTFR4QIUH3NOW7MV42LJWWLPHTWPSUWI",
+      "final_role": "soroswap-pair",
+      "wasm_history": [
+        {
+          "kind": "current_state",
+          "wasm_hash": "18051456816b66f12e773a56f77c5794fac1b1fb7ab6e22d4fad5a412770f73e"
+        }
+      ]
+    },
+    {
+      "contract": "CAYFEOB7X3O5VVGCQPQ4CDURGNGPBAJ6XNXFVW7G4ETLL4K2KNHYP5QZ",
+      "final_role": "soroswap-pair",
+      "wasm_history": [
+        {
+          "kind": "transition",
+          "from_ledger": 55734402,
+          "to_ledger": 56377055,
+          "wasm_hash": "18051456816b66f12e773a56f77c5794fac1b1fb7ab6e22d4fad5a412770f73e"
+        }
+      ]
+    },
+    {
+      "contract": "CAYHG44QUYSMQOXLZUMAI5VC7YHU7F4RQJ4NVGX4IY7OT77KPRU5RFIP",
+      "final_role": "soroswap-pair",
+      "wasm_history": [
+        {
+          "kind": "current_state",
+          "wasm_hash": "18051456816b66f12e773a56f77c5794fac1b1fb7ab6e22d4fad5a412770f73e"
+        }
+      ]
+    },
+    {
+      "contract": "CAYSBVJOBO34WZHGAG2RNQZ52ZUBZRUHOTSIUIBJ2ZFSAZQPY73FPQNI",
+      "final_role": "soroswap-pair",
+      "wasm_history": [
+        {
+          "kind": "transition",
+          "from_ledger": 53305924,
+          "to_ledger": 53417239,
+          "wasm_hash": "18051456816b66f12e773a56f77c5794fac1b1fb7ab6e22d4fad5a412770f73e"
+        },
+        {
+          "kind": "transition",
+          "from_ledger": 58346075,
+          "to_ledger": 59336871,
+          "wasm_hash": "18051456816b66f12e773a56f77c5794fac1b1fb7ab6e22d4fad5a412770f73e"
+        }
+      ]
+    },
+    {
+      "contract": "CAZPU5HGCUBXFCMSUIYM2TW6KPDALHOVQN4UBTLQU6EH637J3UADSISO",
+      "final_role": "soroswap-pair",
+      "wasm_history": [
+        {
+          "kind": "current_state",
+          "wasm_hash": "18051456816b66f12e773a56f77c5794fac1b1fb7ab6e22d4fad5a412770f73e"
+        }
+      ]
+    },
+    {
+      "contract": "CAZZVDGSV6AJVKRFUABWS6KOGN4O6X25ZRGXLENCKKSB42CBUGHLAG5O",
+      "final_role": "soroswap-pair",
+      "wasm_history": [
+        {
+          "kind": "current_state",
+          "wasm_hash": "18051456816b66f12e773a56f77c5794fac1b1fb7ab6e22d4fad5a412770f73e"
+        }
+      ]
+    },
+    {
+      "contract": "CB273SYEYOJ5FLFNQIWDAERIALPBBSMSP23HUTJVXAK6ZNHPKUO2JGJL",
+      "final_role": "soroswap-pair",
+      "wasm_history": [
+        {
+          "kind": "current_state",
+          "wasm_hash": "18051456816b66f12e773a56f77c5794fac1b1fb7ab6e22d4fad5a412770f73e"
+        }
+      ]
+    },
+    {
+      "contract": "CB277MON3UCAO7IFIXJMY5SH52GE6MHOFJTY4WHP4W4JZRHGUXLQCIEQ",
+      "final_role": "soroswap-pair",
+      "wasm_history": [
+        {
+          "kind": "current_state",
+          "wasm_hash": "18051456816b66f12e773a56f77c5794fac1b1fb7ab6e22d4fad5a412770f73e"
+        }
+      ]
+    },
+    {
+      "contract": "CB2IMINSODLFTKXG6AAS7DZNETFRTJ4ES5WRBO4ROY4ANFQJTKOC6SS6",
+      "final_role": "soroswap-pair",
+      "wasm_history": [
+        {
+          "kind": "transition",
+          "from_ledger": 50746441,
+          "to_ledger": 51937331,
+          "wasm_hash": "18051456816b66f12e773a56f77c5794fac1b1fb7ab6e22d4fad5a412770f73e"
+        },
+        {
+          "kind": "transition",
+          "from_ledger": 53362913,
+          "to_ledger": 53417239,
+          "wasm_hash": "18051456816b66f12e773a56f77c5794fac1b1fb7ab6e22d4fad5a412770f73e"
+        }
+      ]
+    },
+    {
+      "contract": "CB3CBFWCLES4VUFXDYKH3KW6SO2XJEH3SJSPX36FHLV4I544M2CI4L63",
+      "final_role": "soroswap-pair",
+      "wasm_history": [
+        {
+          "kind": "current_state",
+          "wasm_hash": "18051456816b66f12e773a56f77c5794fac1b1fb7ab6e22d4fad5a412770f73e"
+        }
+      ]
+    },
+    {
+      "contract": "CB46LMGJC7SYSH4C7SBNLV635OX5BSNQDGRR32NRXAV7N2AVNZMQUJ3A",
+      "final_role": "soroswap-pair",
+      "wasm_history": [
+        {
+          "kind": "transition",
+          "from_ledger": 50746348,
+          "to_ledger": 51937331,
+          "wasm_hash": "18051456816b66f12e773a56f77c5794fac1b1fb7ab6e22d4fad5a412770f73e"
+        },
+        {
+          "kind": "transition",
+          "from_ledger": 53362906,
+          "to_ledger": 53417239,
+          "wasm_hash": "18051456816b66f12e773a56f77c5794fac1b1fb7ab6e22d4fad5a412770f73e"
+        }
+      ]
+    },
+    {
+      "contract": "CB4LVW7XBXM4YMKREJK7ZLMI6H44FEEFZVRUTOYEZ5DOLS44KDS6J6XV",
+      "final_role": "soroswap-pair",
+      "wasm_history": [
+        {
+          "kind": "transition",
+          "from_ledger": 50746355,
+          "to_ledger": 51937331,
+          "wasm_hash": "18051456816b66f12e773a56f77c5794fac1b1fb7ab6e22d4fad5a412770f73e"
+        },
+        {
+          "kind": "transition",
+          "from_ledger": 53362909,
+          "to_ledger": 53417239,
+          "wasm_hash": "18051456816b66f12e773a56f77c5794fac1b1fb7ab6e22d4fad5a412770f73e"
+        }
+      ]
+    },
+    {
+      "contract": "CB4UVMNV25WS24YN3RCFK2DYQXHAZWAWT7LLB2NLTRXTVTHMJ52YHNGS",
+      "final_role": "soroswap-pair",
+      "wasm_history": [
+        {
+          "kind": "transition",
+          "from_ledger": 51695575,
+          "to_ledger": 51937331,
+          "wasm_hash": "18051456816b66f12e773a56f77c5794fac1b1fb7ab6e22d4fad5a412770f73e"
+        },
+        {
+          "kind": "transition",
+          "from_ledger": 53530155,
+          "to_ledger": 54897147,
+          "wasm_hash": "18051456816b66f12e773a56f77c5794fac1b1fb7ab6e22d4fad5a412770f73e"
+        }
+      ]
+    },
+    {
+      "contract": "CB5N6GDGH6YDHTLH6WBJBF4Z3VAAMMTEKXRWUQTL3JJ6P4UAJA4CUFVY",
+      "final_role": "soroswap-pair",
+      "wasm_history": [
+        {
+          "kind": "current_state",
+          "wasm_hash": "18051456816b66f12e773a56f77c5794fac1b1fb7ab6e22d4fad5a412770f73e"
+        }
+      ]
+    },
+    {
+      "contract": "CB63RYTOXPVHXJAM7BGN7AUKFGHUCT5KVCK4H2BV4CHPEWIV4J3WDY3W",
+      "final_role": "soroswap-pair",
+      "wasm_history": [
+        {
+          "kind": "transition",
+          "from_ledger": 51903191,
+          "to_ledger": 51937331,
+          "wasm_hash": "18051456816b66f12e773a56f77c5794fac1b1fb7ab6e22d4fad5a412770f73e"
+        }
+      ]
+    },
+    {
+      "contract": "CBBLP6FRJHG2N2NKSQ5WCOGVFXRHKM4LB4IS7CI2AFVSVIO2KFM3PGUC",
+      "final_role": "soroswap-pair",
+      "wasm_history": [
+        {
+          "kind": "current_state",
+          "wasm_hash": "18051456816b66f12e773a56f77c5794fac1b1fb7ab6e22d4fad5a412770f73e"
+        }
+      ]
+    },
+    {
+      "contract": "CBC77SIWYS42WTCCH44ZVQHASSIWOCHGVNXEO52AWCBX3QGGB2GG3FUD",
+      "final_role": "soroswap-pair",
+      "wasm_history": [
+        {
+          "kind": "current_state",
+          "wasm_hash": "18051456816b66f12e773a56f77c5794fac1b1fb7ab6e22d4fad5a412770f73e"
+        }
+      ]
+    },
+    {
+      "contract": "CBCH2DDP5WWJG53J3G4MEZM3QLCZZTKXKRUT6XTTFGHYCALVYN2ZF27Y",
+      "final_role": "soroswap-pair",
+      "wasm_history": [
+        {
+          "kind": "current_state",
+          "wasm_hash": "18051456816b66f12e773a56f77c5794fac1b1fb7ab6e22d4fad5a412770f73e"
+        }
+      ]
+    },
+    {
+      "contract": "CBDAIZSNXOEKPJRDD56HFED5LKA2PUDAZANIHRRSMMSCH37P2I4W4CI4",
+      "final_role": "soroswap-pair",
+      "wasm_history": [
+        {
+          "kind": "transition",
+          "from_ledger": 55510969,
+          "to_ledger": 56377055,
+          "wasm_hash": "18051456816b66f12e773a56f77c5794fac1b1fb7ab6e22d4fad5a412770f73e"
+        }
+      ]
+    },
+    {
+      "contract": "CBDWBXGAP5JECCTYBDZXYIGZCWR253Y2DUKXHQRVC24ZWJAXASJZL2DW",
+      "final_role": "soroswap-pair",
+      "wasm_history": [
+        {
+          "kind": "transition",
+          "from_ledger": 55734732,
+          "to_ledger": 56377055,
+          "wasm_hash": "18051456816b66f12e773a56f77c5794fac1b1fb7ab6e22d4fad5a412770f73e"
+        },
+        {
+          "kind": "transition",
+          "from_ledger": 56460490,
+          "to_ledger": 57856963,
+          "wasm_hash": "18051456816b66f12e773a56f77c5794fac1b1fb7ab6e22d4fad5a412770f73e"
+        }
+      ]
+    },
+    {
+      "contract": "CBE7H3ZE4GNR5C62VEWAFWRGJFPP22JTEHKBGSKBT4N3RKHCM2DUFDUM",
+      "final_role": "soroswap-pair",
+      "wasm_history": [
+        {
+          "kind": "current_state",
+          "wasm_hash": "18051456816b66f12e773a56f77c5794fac1b1fb7ab6e22d4fad5a412770f73e"
+        }
+      ]
+    },
+    {
+      "contract": "CBEJ7TD4AELML32JK2Z3MCW6VMZNYWG7F2SNKH5RVH7B3K5EBDQGDPO3",
+      "final_role": "soroswap-pair",
+      "wasm_history": [
+        {
+          "kind": "current_state",
+          "wasm_hash": "18051456816b66f12e773a56f77c5794fac1b1fb7ab6e22d4fad5a412770f73e"
+        }
+      ]
+    },
+    {
+      "contract": "CBEQFPTW5X4DSME3WF4O35JLCCNKZ65UU4NQUQHG3GGDY2GB6KUA6MND",
+      "final_role": "soroswap-pair",
+      "wasm_history": [
+        {
+          "kind": "current_state",
+          "wasm_hash": "18051456816b66f12e773a56f77c5794fac1b1fb7ab6e22d4fad5a412770f73e"
+        }
+      ]
+    },
+    {
+      "contract": "CBFAK6ULL5CRTSXVB6CCDXOZEIP3BB7YQEAIFJWYNWBI5TJBDR3LQCWO",
+      "final_role": "soroswap-pair",
+      "wasm_history": [
+        {
+          "kind": "current_state",
+          "wasm_hash": "18051456816b66f12e773a56f77c5794fac1b1fb7ab6e22d4fad5a412770f73e"
+        }
+      ]
+    },
+    {
+      "contract": "CBFGP42OT2EHAQB55WE6N4JS3U5FAPT3RNFQYYORWT7VE7GQI4PEE7TF",
+      "final_role": "soroswap-pair",
+      "wasm_history": [
+        {
+          "kind": "transition",
+          "from_ledger": 56195054,
+          "to_ledger": 56377055,
+          "wasm_hash": "18051456816b66f12e773a56f77c5794fac1b1fb7ab6e22d4fad5a412770f73e"
+        },
+        {
+          "kind": "transition",
+          "from_ledger": 56452327,
+          "to_ledger": 57856963,
+          "wasm_hash": "18051456816b66f12e773a56f77c5794fac1b1fb7ab6e22d4fad5a412770f73e"
+        },
+        {
+          "kind": "transition",
+          "from_ledger": 57955752,
+          "to_ledger": 59336871,
+          "wasm_hash": "18051456816b66f12e773a56f77c5794fac1b1fb7ab6e22d4fad5a412770f73e"
+        }
+      ]
+    },
+    {
+      "contract": "CBGBTY2GO37ZGZH6HQ3ZXT6YKGJFQOOMKRENTZ6H3R55GM27BFI2U5WJ",
+      "final_role": "soroswap-pair",
+      "wasm_history": [
+        {
+          "kind": "current_state",
+          "wasm_hash": "18051456816b66f12e773a56f77c5794fac1b1fb7ab6e22d4fad5a412770f73e"
+        }
+      ]
+    },
+    {
+      "contract": "CBGZXVK7VMKAYRZFSJX7ZTMKHSCQQ6UWOLCIBXDC5EEEUIOZAC4MEC7M",
+      "final_role": "soroswap-pair",
+      "wasm_history": [
+        {
+          "kind": "current_state",
+          "wasm_hash": "18051456816b66f12e773a56f77c5794fac1b1fb7ab6e22d4fad5a412770f73e"
+        }
+      ]
+    },
+    {
+      "contract": "CBH4R4A7CU3NQGD3FM25LQ2Y2OB7LWEXQ4EKAXQRFMHCW3FQYX6S6T4D",
+      "final_role": "soroswap-pair",
+      "wasm_history": [
+        {
+          "kind": "transition",
+          "from_ledger": 58689871,
+          "to_ledger": 59336871,
+          "wasm_hash": "18051456816b66f12e773a56f77c5794fac1b1fb7ab6e22d4fad5a412770f73e"
+        }
+      ]
+    },
+    {
+      "contract": "CBHKJH4G5N4TUUGE3WIQRBNT4O3C72VSJY3Y7Q4ZAUW2X4GM7YE5CQSX",
+      "final_role": "soroswap-pair",
+      "wasm_history": [
+        {
+          "kind": "current_state",
+          "wasm_hash": "18051456816b66f12e773a56f77c5794fac1b1fb7ab6e22d4fad5a412770f73e"
+        }
+      ]
+    },
+    {
+      "contract": "CBIIYXKM6ORDF4P35THFPH243GFY7UT4A5RKDAU3SN4YODO6JZOYK2NK",
+      "final_role": "soroswap-pair",
+      "wasm_history": [
+        {
+          "kind": "current_state",
+          "wasm_hash": "18051456816b66f12e773a56f77c5794fac1b1fb7ab6e22d4fad5a412770f73e"
+        }
+      ]
+    },
+    {
+      "contract": "CBIQ5MND5I4AXWFSSDPDVN2X3DPR366YMBXUL6TABGUKMKVGOM2IAZJF",
+      "final_role": "soroswap-pair",
+      "wasm_history": [
+        {
+          "kind": "transition",
+          "from_ledger": 54531339,
+          "to_ledger": 54897147,
+          "wasm_hash": "18051456816b66f12e773a56f77c5794fac1b1fb7ab6e22d4fad5a412770f73e"
+        },
+        {
+          "kind": "transition",
+          "from_ledger": 55146249,
+          "to_ledger": 56377055,
+          "wasm_hash": "18051456816b66f12e773a56f77c5794fac1b1fb7ab6e22d4fad5a412770f73e"
+        },
+        {
+          "kind": "transition",
+          "from_ledger": 56390267,
+          "to_ledger": 57856963,
+          "wasm_hash": "18051456816b66f12e773a56f77c5794fac1b1fb7ab6e22d4fad5a412770f73e"
+        },
+        {
+          "kind": "transition",
+          "from_ledger": 57879093,
+          "to_ledger": 59336871,
+          "wasm_hash": "18051456816b66f12e773a56f77c5794fac1b1fb7ab6e22d4fad5a412770f73e"
+        }
+      ]
+    },
+    {
+      "contract": "CBJ3WO7M3H7EI7ATEBYHLZBJCW4OXHU3FRG7LK6ZTRHLKKLFW5NHY4Q6",
+      "final_role": "soroswap-pair",
+      "wasm_history": [
+        {
+          "kind": "transition",
+          "from_ledger": 50746363,
+          "to_ledger": 51937331,
+          "wasm_hash": "18051456816b66f12e773a56f77c5794fac1b1fb7ab6e22d4fad5a412770f73e"
+        }
+      ]
+    },
+    {
+      "contract": "CBJYBRJAAI4NMALSD6S3FNOKKDJR463CXYIGW7A7FCHOZIBAC4HIJEB7",
+      "final_role": "soroswap-pair",
+      "wasm_history": [
+        {
+          "kind": "transition",
+          "from_ledger": 50746384,
+          "to_ledger": 51937331,
+          "wasm_hash": "18051456816b66f12e773a56f77c5794fac1b1fb7ab6e22d4fad5a412770f73e"
+        }
+      ]
+    },
+    {
+      "contract": "CBK3GR5PMPYFJWI7GLZFLMXJCYR6I7YHK4ZXUTH47OHTTE2IXBO4GHUW",
+      "final_role": "soroswap-pair",
+      "wasm_history": [
+        {
+          "kind": "current_state",
+          "wasm_hash": "18051456816b66f12e773a56f77c5794fac1b1fb7ab6e22d4fad5a412770f73e"
+        }
+      ]
+    },
+    {
+      "contract": "CBK5HCWOFNEUHUTK2RMFVBJWNJFYUVMM2TFTZXYJZTBTUQKOZ4WCKMIZ",
+      "final_role": "soroswap-pair",
+      "wasm_history": [
+        {
+          "kind": "current_state",
+          "wasm_hash": "18051456816b66f12e773a56f77c5794fac1b1fb7ab6e22d4fad5a412770f73e"
+        }
+      ]
+    },
+    {
+      "contract": "CBKG7Y3LSLTSK76LCKM52EQP3I7GMGL2VOR6S46ZEJZW62WFPAKP4NIG",
+      "final_role": "soroswap-pair",
+      "wasm_history": [
+        {
+          "kind": "transition",
+          "from_ledger": 54905509,
+          "to_ledger": 56377055,
+          "wasm_hash": "18051456816b66f12e773a56f77c5794fac1b1fb7ab6e22d4fad5a412770f73e"
+        },
+        {
+          "kind": "transition",
+          "from_ledger": 56445251,
+          "to_ledger": 57856963,
+          "wasm_hash": "18051456816b66f12e773a56f77c5794fac1b1fb7ab6e22d4fad5a412770f73e"
+        },
+        {
+          "kind": "transition",
+          "from_ledger": 58334751,
+          "to_ledger": 59336871,
+          "wasm_hash": "18051456816b66f12e773a56f77c5794fac1b1fb7ab6e22d4fad5a412770f73e"
+        }
+      ]
+    },
+    {
+      "contract": "CBKOLOPL2K34UKBEKEW6H3GWBJKCYC77MWR6OZLNWMEIH6DLTUXEG75M",
+      "final_role": "soroswap-pair",
+      "wasm_history": [
+        {
+          "kind": "transition",
+          "from_ledger": 57054680,
+          "to_ledger": 57856963,
+          "wasm_hash": "18051456816b66f12e773a56f77c5794fac1b1fb7ab6e22d4fad5a412770f73e"
+        }
+      ]
+    },
+    {
+      "contract": "CBLMYCEG52NRGDVLNJZB4FM3NGPUCYF7LH6VIV4JVZ6SEDP6FV6F7HVH",
+      "final_role": "soroswap-pair",
+      "wasm_history": [
+        {
+          "kind": "transition",
+          "from_ledger": 55885236,
+          "to_ledger": 56377055,
+          "wasm_hash": "18051456816b66f12e773a56f77c5794fac1b1fb7ab6e22d4fad5a412770f73e"
+        }
+      ]
+    },
+    {
+      "contract": "CBLZPTTPS2KXQBZQ7G3J3GWR46YRFUGAMP37FXJYPA6FDV4FGGEVZZGE",
+      "final_role": "soroswap-pair",
+      "wasm_history": [
+        {
+          "kind": "current_state",
+          "wasm_hash": "18051456816b66f12e773a56f77c5794fac1b1fb7ab6e22d4fad5a412770f73e"
+        }
+      ]
+    },
+    {
+      "contract": "CBM3W4ZWI6L42FP6ORQXLCWR23CF7FNEOHK5KHZPKVTM4JKSFG3667V4",
+      "final_role": "soroswap-pair",
+      "wasm_history": [
+        {
+          "kind": "current_state",
+          "wasm_hash": "18051456816b66f12e773a56f77c5794fac1b1fb7ab6e22d4fad5a412770f73e"
+        }
+      ]
+    },
+    {
+      "contract": "CBMARVBBQEIIRILLIRN67Z6SDHOEYQOOXG3JGV2YDFAIMPUPXUZJCHDJ",
+      "final_role": "soroswap-pair",
+      "wasm_history": [
+        {
+          "kind": "current_state",
+          "wasm_hash": "18051456816b66f12e773a56f77c5794fac1b1fb7ab6e22d4fad5a412770f73e"
+        }
+      ]
+    },
+    {
+      "contract": "CBMOVRGJXOOBT6A5KUAGDJ7NGVDQ3KS33TUP47RSFBNA6MN2VFG3QGH5",
+      "final_role": "soroswap-pair",
+      "wasm_history": [
+        {
+          "kind": "current_state",
+          "wasm_hash": "18051456816b66f12e773a56f77c5794fac1b1fb7ab6e22d4fad5a412770f73e"
+        }
+      ]
+    },
+    {
+      "contract": "CBOGW2GXIAHKYLQEX6DSM7325BNGBZ7W5G6ME4ACADZPWTSIJGU3XOSA",
+      "final_role": "soroswap-pair",
+      "wasm_history": [
+        {
+          "kind": "transition",
+          "from_ledger": 57366076,
+          "to_ledger": 57856963,
+          "wasm_hash": "18051456816b66f12e773a56f77c5794fac1b1fb7ab6e22d4fad5a412770f73e"
+        },
+        {
+          "kind": "transition",
+          "from_ledger": 58084100,
+          "to_ledger": 59336871,
+          "wasm_hash": "18051456816b66f12e773a56f77c5794fac1b1fb7ab6e22d4fad5a412770f73e"
+        }
+      ]
+    },
+    {
+      "contract": "CBORFSKT3HMYM4LNPNR5KYF7WSJDCRPA6TFKWOV2NAZDKBOV27UDLHT2",
+      "final_role": "soroswap-pair",
+      "wasm_history": [
+        {
+          "kind": "current_state",
+          "wasm_hash": "18051456816b66f12e773a56f77c5794fac1b1fb7ab6e22d4fad5a412770f73e"
+        }
+      ]
+    },
+    {
+      "contract": "CBR6VXMQDUR23OPJK2O2KAGH6UIMPXQ4W4GICY4UHEO5MDWD52DQZLBH",
+      "final_role": "soroswap-pair",
+      "wasm_history": [
+        {
+          "kind": "current_state",
+          "wasm_hash": "18051456816b66f12e773a56f77c5794fac1b1fb7ab6e22d4fad5a412770f73e"
+        }
+      ]
+    },
+    {
+      "contract": "CBTTWB36ESA6HVMWG47IA6LKSDU2HVQEOR4SF5YKT5VTZLBGJBECWYTF",
+      "final_role": "soroswap-pair",
+      "wasm_history": [
+        {
+          "kind": "current_state",
+          "wasm_hash": "18051456816b66f12e773a56f77c5794fac1b1fb7ab6e22d4fad5a412770f73e"
+        }
+      ]
+    },
+    {
+      "contract": "CBV3S4KL67WUJNR345NIQP6PVEEZI5V23NWLAUPNNOYVKWB4MQBC2AAT",
+      "final_role": "soroswap-pair",
+      "wasm_history": [
+        {
+          "kind": "transition",
+          "from_ledger": 57746481,
+          "to_ledger": 57856963,
+          "wasm_hash": "18051456816b66f12e773a56f77c5794fac1b1fb7ab6e22d4fad5a412770f73e"
+        },
+        {
+          "kind": "transition",
+          "from_ledger": 58079543,
+          "to_ledger": 59336871,
+          "wasm_hash": "18051456816b66f12e773a56f77c5794fac1b1fb7ab6e22d4fad5a412770f73e"
+        }
+      ]
+    },
+    {
+      "contract": "CBVCMXUCN4TXJAIBB6G3QTUZ2LNEXXJKLCBQVDFH77CBV43NK6XC44TL",
+      "final_role": "soroswap-pair",
+      "wasm_history": [
+        {
+          "kind": "transition",
+          "from_ledger": 54363403,
+          "to_ledger": 54897147,
+          "wasm_hash": "18051456816b66f12e773a56f77c5794fac1b1fb7ab6e22d4fad5a412770f73e"
+        }
+      ]
+    },
+    {
+      "contract": "CBVOZM3YLSK3IEKTL3XB3V7CMRU2JNTC3MISPEDMMU4XEUIXDQT6FP6T",
+      "final_role": "soroswap-pair",
+      "wasm_history": [
+        {
+          "kind": "transition",
+          "from_ledger": 50747349,
+          "to_ledger": 51937331,
+          "wasm_hash": "18051456816b66f12e773a56f77c5794fac1b1fb7ab6e22d4fad5a412770f73e"
+        },
+        {
+          "kind": "transition",
+          "from_ledger": 52060829,
+          "to_ledger": 53417239,
+          "wasm_hash": "18051456816b66f12e773a56f77c5794fac1b1fb7ab6e22d4fad5a412770f73e"
+        },
+        {
+          "kind": "transition",
+          "from_ledger": 53425495,
+          "to_ledger": 54897147,
+          "wasm_hash": "18051456816b66f12e773a56f77c5794fac1b1fb7ab6e22d4fad5a412770f73e"
+        },
+        {
+          "kind": "transition",
+          "from_ledger": 55149780,
+          "to_ledger": 56377055,
+          "wasm_hash": "18051456816b66f12e773a56f77c5794fac1b1fb7ab6e22d4fad5a412770f73e"
+        },
+        {
+          "kind": "transition",
+          "from_ledger": 56403207,
+          "to_ledger": 57856963,
+          "wasm_hash": "18051456816b66f12e773a56f77c5794fac1b1fb7ab6e22d4fad5a412770f73e"
+        },
+        {
+          "kind": "transition",
+          "from_ledger": 57872366,
+          "to_ledger": 59336871,
+          "wasm_hash": "18051456816b66f12e773a56f77c5794fac1b1fb7ab6e22d4fad5a412770f73e"
+        }
+      ]
+    },
+    {
+      "contract": "CBWW2PRDUNNEC36HX4S7DQOQVIURHQRV4RIW5TNZPEQ4FKQ5YFLNQNTH",
+      "final_role": "soroswap-pair",
+      "wasm_history": [
+        {
+          "kind": "current_state",
+          "wasm_hash": "18051456816b66f12e773a56f77c5794fac1b1fb7ab6e22d4fad5a412770f73e"
+        }
+      ]
+    },
+    {
+      "contract": "CBYNLLELRCQNBZH6QPINZUWGCV6KDRM2KP2FU3HYI2YENCBJEQKKBKEZ",
+      "final_role": "soroswap-pair",
+      "wasm_history": [
+        {
+          "kind": "current_state",
+          "wasm_hash": "18051456816b66f12e773a56f77c5794fac1b1fb7ab6e22d4fad5a412770f73e"
+        }
+      ]
+    },
+    {
+      "contract": "CC2MSLNFYG63SKXLUTOJJOJWBORZ7NKH4IC66MG5SITKSN5MMFYH6FPE",
+      "final_role": "soroswap-pair",
+      "wasm_history": [
+        {
+          "kind": "transition",
+          "from_ledger": 50813684,
+          "to_ledger": 51937331,
+          "wasm_hash": "18051456816b66f12e773a56f77c5794fac1b1fb7ab6e22d4fad5a412770f73e"
+        },
+        {
+          "kind": "transition",
+          "from_ledger": 52590220,
+          "to_ledger": 53417239,
+          "wasm_hash": "18051456816b66f12e773a56f77c5794fac1b1fb7ab6e22d4fad5a412770f73e"
+        },
+        {
+          "kind": "transition",
+          "from_ledger": 54648004,
+          "to_ledger": 54897147,
+          "wasm_hash": "18051456816b66f12e773a56f77c5794fac1b1fb7ab6e22d4fad5a412770f73e"
+        },
+        {
+          "kind": "transition",
+          "from_ledger": 54927127,
+          "to_ledger": 56377055,
+          "wasm_hash": "18051456816b66f12e773a56f77c5794fac1b1fb7ab6e22d4fad5a412770f73e"
+        },
+        {
+          "kind": "transition",
+          "from_ledger": 56583209,
+          "to_ledger": 57856963,
+          "wasm_hash": "18051456816b66f12e773a56f77c5794fac1b1fb7ab6e22d4fad5a412770f73e"
+        },
+        {
+          "kind": "transition",
+          "from_ledger": 57980888,
+          "to_ledger": 59336871,
+          "wasm_hash": "18051456816b66f12e773a56f77c5794fac1b1fb7ab6e22d4fad5a412770f73e"
+        }
+      ]
+    },
+    {
+      "contract": "CC3YA62KSG4FJGH3FHW6NMVZBC5KMYPJUBIAX45AYNVOU573YJAC3H4A",
+      "final_role": "soroswap-pair",
+      "wasm_history": [
+        {
+          "kind": "transition",
+          "from_ledger": 57746302,
+          "to_ledger": 57856963,
+          "wasm_hash": "18051456816b66f12e773a56f77c5794fac1b1fb7ab6e22d4fad5a412770f73e"
+        }
+      ]
+    },
+    {
+      "contract": "CC4EEYGYKJ2R6AFCAO2ZWULUJUOWZSY7T7RV37C2IF4RNMJD45GYZBSY",
+      "final_role": "soroswap-pair",
+      "wasm_history": [
+        {
+          "kind": "current_state",
+          "wasm_hash": "18051456816b66f12e773a56f77c5794fac1b1fb7ab6e22d4fad5a412770f73e"
+        }
+      ]
+    },
+    {
+      "contract": "CC4S3VFV4UHIBAKUUBRLSIQTGA33NY4DF36A6ZT7GNJWJFUDZBZNPNUS",
+      "final_role": "soroswap-pair",
+      "wasm_history": [
+        {
+          "kind": "transition",
+          "from_ledger": 55131303,
+          "to_ledger": 56377055,
+          "wasm_hash": "18051456816b66f12e773a56f77c5794fac1b1fb7ab6e22d4fad5a412770f73e"
+        }
+      ]
+    },
+    {
+      "contract": "CC4SWJHU3YZMI2QBYCXUS4E5SVE744AGF4HP3VQMXZ3WKZ5OGYNKL7H6",
+      "final_role": "soroswap-pair",
+      "wasm_history": [
+        {
+          "kind": "current_state",
+          "wasm_hash": "18051456816b66f12e773a56f77c5794fac1b1fb7ab6e22d4fad5a412770f73e"
+        }
+      ]
+    },
+    {
+      "contract": "CC6BBRXFGYSEFMGRB3PYRZTLUJKZKY224ZR54PSV32OJDPJYEQTTEMV3",
+      "final_role": "soroswap-pair",
+      "wasm_history": [
+        {
+          "kind": "current_state",
+          "wasm_hash": "18051456816b66f12e773a56f77c5794fac1b1fb7ab6e22d4fad5a412770f73e"
+        }
+      ]
+    },
+    {
+      "contract": "CC7CDFY2VGDODJ7WPO3JIK2MXLOAXL4LRQCC43UJDBAIJ4SVFO3HNPOC",
+      "final_role": "soroswap-pair",
+      "wasm_history": [
+        {
+          "kind": "transition",
+          "from_ledger": 50802274,
+          "to_ledger": 51937331,
+          "wasm_hash": "18051456816b66f12e773a56f77c5794fac1b1fb7ab6e22d4fad5a412770f73e"
+        },
+        {
+          "kind": "transition",
+          "from_ledger": 52107222,
+          "to_ledger": 53417239,
+          "wasm_hash": "18051456816b66f12e773a56f77c5794fac1b1fb7ab6e22d4fad5a412770f73e"
+        },
+        {
+          "kind": "transition",
+          "from_ledger": 53418449,
+          "to_ledger": 54897147,
+          "wasm_hash": "18051456816b66f12e773a56f77c5794fac1b1fb7ab6e22d4fad5a412770f73e"
+        },
+        {
+          "kind": "transition",
+          "from_ledger": 54897278,
+          "to_ledger": 56377055,
+          "wasm_hash": "18051456816b66f12e773a56f77c5794fac1b1fb7ab6e22d4fad5a412770f73e"
+        },
+        {
+          "kind": "transition",
+          "from_ledger": 56378724,
+          "to_ledger": 57856963,
+          "wasm_hash": "18051456816b66f12e773a56f77c5794fac1b1fb7ab6e22d4fad5a412770f73e"
+        },
+        {
+          "kind": "transition",
+          "from_ledger": 57860502,
+          "to_ledger": 59336871,
+          "wasm_hash": "18051456816b66f12e773a56f77c5794fac1b1fb7ab6e22d4fad5a412770f73e"
+        }
+      ]
+    },
+    {
+      "contract": "CC7K5KU5VQB22TIM57K2BXC4NH2CCIQ6W4E2QRRDREREWXXRDRYIYCAD",
+      "final_role": "soroswap-pair",
+      "wasm_history": [
+        {
+          "kind": "current_state",
+          "wasm_hash": "18051456816b66f12e773a56f77c5794fac1b1fb7ab6e22d4fad5a412770f73e"
+        }
+      ]
+    },
+    {
+      "contract": "CC7WJOJ7KZPHVOOKSL23VTZFOSULTPDMHHUNAW2O4TG753LPQZDWZBQL",
+      "final_role": "soroswap-pair",
+      "wasm_history": [
+        {
+          "kind": "current_state",
+          "wasm_hash": "18051456816b66f12e773a56f77c5794fac1b1fb7ab6e22d4fad5a412770f73e"
+        }
+      ]
+    },
+    {
+      "contract": "CC7Z3FQD2FRBN2QQMN5R335YGSS7QO7YLYTJZV3HGPPS6GI373O5UZDI",
+      "final_role": "soroswap-pair",
+      "wasm_history": [
+        {
+          "kind": "transition",
+          "from_ledger": 51466209,
+          "to_ledger": 51937331,
+          "wasm_hash": "18051456816b66f12e773a56f77c5794fac1b1fb7ab6e22d4fad5a412770f73e"
+        },
+        {
+          "kind": "transition",
+          "from_ledger": 53316382,
+          "to_ledger": 53417239,
+          "wasm_hash": "18051456816b66f12e773a56f77c5794fac1b1fb7ab6e22d4fad5a412770f73e"
+        },
+        {
+          "kind": "transition",
+          "from_ledger": 58213462,
+          "to_ledger": 59336871,
+          "wasm_hash": "18051456816b66f12e773a56f77c5794fac1b1fb7ab6e22d4fad5a412770f73e"
+        }
+      ]
+    },
+    {
+      "contract": "CCB6AP3L24Q7KW3LTMO6D3KLNV6MAFTK2TDTJ3XP7BRI2OP4O6SWQM53",
+      "final_role": "soroswap-pair",
+      "wasm_history": [
+        {
+          "kind": "transition",
+          "from_ledger": 50813673,
+          "to_ledger": 51937331,
+          "wasm_hash": "18051456816b66f12e773a56f77c5794fac1b1fb7ab6e22d4fad5a412770f73e"
+        },
+        {
+          "kind": "transition",
+          "from_ledger": 52614281,
+          "to_ledger": 53417239,
+          "wasm_hash": "18051456816b66f12e773a56f77c5794fac1b1fb7ab6e22d4fad5a412770f73e"
+        },
+        {
+          "kind": "transition",
+          "from_ledger": 54496540,
+          "to_ledger": 54897147,
+          "wasm_hash": "18051456816b66f12e773a56f77c5794fac1b1fb7ab6e22d4fad5a412770f73e"
+        },
+        {
+          "kind": "transition",
+          "from_ledger": 54927120,
+          "to_ledger": 56377055,
+          "wasm_hash": "18051456816b66f12e773a56f77c5794fac1b1fb7ab6e22d4fad5a412770f73e"
+        },
+        {
+          "kind": "transition",
+          "from_ledger": 56583203,
+          "to_ledger": 57856963,
+          "wasm_hash": "18051456816b66f12e773a56f77c5794fac1b1fb7ab6e22d4fad5a412770f73e"
+        },
+        {
+          "kind": "transition",
+          "from_ledger": 57946073,
+          "to_ledger": 59336871,
+          "wasm_hash": "18051456816b66f12e773a56f77c5794fac1b1fb7ab6e22d4fad5a412770f73e"
+        }
+      ]
+    },
+    {
+      "contract": "CCBCJUEVQQP45LSXIXLBYQJR54PJK2AJGWYHMHMLCSBNDYOE5N4J4DY3",
+      "final_role": "soroswap-pair",
+      "wasm_history": [
+        {
+          "kind": "current_state",
+          "wasm_hash": "18051456816b66f12e773a56f77c5794fac1b1fb7ab6e22d4fad5a412770f73e"
+        }
+      ]
+    },
+    {
+      "contract": "CCCDU62TWI744KFK6COAW2PARPVPXKKE3DBVBUZCFWZOGGD7HZ5YEY3X",
+      "final_role": "soroswap-pair",
+      "wasm_history": [
+        {
+          "kind": "transition",
+          "from_ledger": 55467506,
+          "to_ledger": 56377055,
+          "wasm_hash": "18051456816b66f12e773a56f77c5794fac1b1fb7ab6e22d4fad5a412770f73e"
+        },
+        {
+          "kind": "transition",
+          "from_ledger": 57283500,
+          "to_ledger": 57856963,
+          "wasm_hash": "18051456816b66f12e773a56f77c5794fac1b1fb7ab6e22d4fad5a412770f73e"
+        },
+        {
+          "kind": "transition",
+          "from_ledger": 57898365,
+          "to_ledger": 59336871,
+          "wasm_hash": "18051456816b66f12e773a56f77c5794fac1b1fb7ab6e22d4fad5a412770f73e"
+        }
+      ]
+    },
+    {
+      "contract": "CCCPF2EKUDDMYR25YDYF3N4RWKDY7HJUMAEK2L44WU7QESXNSSW6U2E6",
+      "final_role": "soroswap-pair",
+      "wasm_history": [
+        {
+          "kind": "current_state",
+          "wasm_hash": "18051456816b66f12e773a56f77c5794fac1b1fb7ab6e22d4fad5a412770f73e"
+        }
+      ]
+    },
+    {
+      "contract": "CCDDXGQF3AA3N3PZDLJU5SFJBREMOKMQGBGWGYFTNMHB2V34M4TV5RTI",
+      "final_role": "soroswap-pair",
+      "wasm_history": [
+        {
+          "kind": "current_state",
+          "wasm_hash": "18051456816b66f12e773a56f77c5794fac1b1fb7ab6e22d4fad5a412770f73e"
+        }
+      ]
+    },
+    {
+      "contract": "CCEGCD2IVJ4EJLDVA7S2FDVSY2SUETLTETKPOX4VKGY3HVRDPUCJKQ4N",
+      "final_role": "soroswap-pair",
+      "wasm_history": [
+        {
+          "kind": "current_state",
+          "wasm_hash": "18051456816b66f12e773a56f77c5794fac1b1fb7ab6e22d4fad5a412770f73e"
+        }
+      ]
+    },
+    {
+      "contract": "CCEPISHHBWHON4ZP7ZO5QOMWNFNA4M76V6TLCMF3WGRPDLYKVBFZDUO4",
+      "final_role": "soroswap-pair",
+      "wasm_history": [
+        {
+          "kind": "current_state",
+          "wasm_hash": "18051456816b66f12e773a56f77c5794fac1b1fb7ab6e22d4fad5a412770f73e"
+        }
+      ]
+    },
+    {
+      "contract": "CCEYJMU6E4JUPDGJBPZBSNXWINE3O4MFIN22J43QGJB6H7S3QS5K7YEN",
+      "final_role": "soroswap-pair",
+      "wasm_history": [
+        {
+          "kind": "current_state",
+          "wasm_hash": "18051456816b66f12e773a56f77c5794fac1b1fb7ab6e22d4fad5a412770f73e"
+        }
+      ]
+    },
+    {
+      "contract": "CCFX65SFE7AY7XT5FOUQUVROYST5J2VZPA4ZBYFCOWBS6IHLTSI5NDO6",
+      "final_role": "soroswap-pair",
+      "wasm_history": [
+        {
+          "kind": "current_state",
+          "wasm_hash": "18051456816b66f12e773a56f77c5794fac1b1fb7ab6e22d4fad5a412770f73e"
+        }
+      ]
+    },
+    {
+      "contract": "CCH3CJZWG6UMW522ESP3UHL4DCZLNXZLUHKYG5GCGNG5HXRL4A6O4A23",
+      "final_role": "soroswap-pair",
+      "wasm_history": [
+        {
+          "kind": "transition",
+          "from_ledger": 52852804,
+          "to_ledger": 53417239,
+          "wasm_hash": "18051456816b66f12e773a56f77c5794fac1b1fb7ab6e22d4fad5a412770f73e"
+        },
+        {
+          "kind": "transition",
+          "from_ledger": 53432950,
+          "to_ledger": 54897147,
+          "wasm_hash": "18051456816b66f12e773a56f77c5794fac1b1fb7ab6e22d4fad5a412770f73e"
+        },
+        {
+          "kind": "transition",
+          "from_ledger": 54899012,
+          "to_ledger": 56377055,
+          "wasm_hash": "18051456816b66f12e773a56f77c5794fac1b1fb7ab6e22d4fad5a412770f73e"
+        },
+        {
+          "kind": "transition",
+          "from_ledger": 56382911,
+          "to_ledger": 57856963,
+          "wasm_hash": "18051456816b66f12e773a56f77c5794fac1b1fb7ab6e22d4fad5a412770f73e"
+        },
+        {
+          "kind": "transition",
+          "from_ledger": 57871612,
+          "to_ledger": 59336871,
+          "wasm_hash": "18051456816b66f12e773a56f77c5794fac1b1fb7ab6e22d4fad5a412770f73e"
+        }
+      ]
+    },
+    {
+      "contract": "CCHAZKZPWUN7YFY5Y2TABRKJ2REEMW4QSU6HGKWPIKO7KGU3VAW2K5SL",
+      "final_role": "soroswap-pair",
+      "wasm_history": [
+        {
+          "kind": "transition",
+          "from_ledger": 53375607,
+          "to_ledger": 53417239,
+          "wasm_hash": "18051456816b66f12e773a56f77c5794fac1b1fb7ab6e22d4fad5a412770f73e"
+        },
+        {
+          "kind": "transition",
+          "from_ledger": 58345820,
+          "to_ledger": 59336871,
+          "wasm_hash": "18051456816b66f12e773a56f77c5794fac1b1fb7ab6e22d4fad5a412770f73e"
+        }
+      ]
+    },
+    {
+      "contract": "CCJLX3QW5SY3GIQG373HUFZWCWUGNNH6CQXJPN4JRVRMVHVHDLBTBNDG",
+      "final_role": "soroswap-pair",
+      "wasm_history": [
+        {
+          "kind": "current_state",
+          "wasm_hash": "18051456816b66f12e773a56f77c5794fac1b1fb7ab6e22d4fad5a412770f73e"
+        }
+      ]
+    },
+    {
+      "contract": "CCJWM4NAP3WGOSX6SHM6GTEUDYWAK7BQQVOQWL36AXGL5XUF3Z2FOJUJ",
+      "final_role": "soroswap-pair",
+      "wasm_history": [
+        {
+          "kind": "current_state",
+          "wasm_hash": "18051456816b66f12e773a56f77c5794fac1b1fb7ab6e22d4fad5a412770f73e"
+        }
+      ]
+    },
+    {
+      "contract": "CCKA4QW63J3YBNZT6MPQG6AHKE3MHAPNYNNHRQKYAWX63XYYGKG6MSJZ",
+      "final_role": "soroswap-pair",
+      "wasm_history": [
+        {
+          "kind": "current_state",
+          "wasm_hash": "18051456816b66f12e773a56f77c5794fac1b1fb7ab6e22d4fad5a412770f73e"
+        }
+      ]
+    },
+    {
+      "contract": "CCLSNOVRNNNOD752L3PK7FUFY2WFN35O5XRWOEHCQC67BJ4K3KVJTDOW",
+      "final_role": "soroswap-pair",
+      "wasm_history": [
+        {
+          "kind": "current_state",
+          "wasm_hash": "18051456816b66f12e773a56f77c5794fac1b1fb7ab6e22d4fad5a412770f73e"
+        }
+      ]
+    },
+    {
+      "contract": "CCOGGZBP22NP2NPNGU4IA44AUPD7BAOVU42XGLMK4IA4SVSSDC3375PU",
+      "final_role": "soroswap-pair",
+      "wasm_history": [
+        {
+          "kind": "transition",
+          "from_ledger": 50804695,
+          "to_ledger": 51937331,
+          "wasm_hash": "18051456816b66f12e773a56f77c5794fac1b1fb7ab6e22d4fad5a412770f73e"
+        },
+        {
+          "kind": "transition",
+          "from_ledger": 53333278,
+          "to_ledger": 53417239,
+          "wasm_hash": "18051456816b66f12e773a56f77c5794fac1b1fb7ab6e22d4fad5a412770f73e"
+        },
+        {
+          "kind": "transition",
+          "from_ledger": 58647095,
+          "to_ledger": 59336871,
+          "wasm_hash": "18051456816b66f12e773a56f77c5794fac1b1fb7ab6e22d4fad5a412770f73e"
+        }
+      ]
+    },
+    {
+      "contract": "CCPFMEMWFD6BEQYZAE3J2O7H3PZMDQVHYQMTH3YVVCAMQEAVQGI5RP6X",
+      "final_role": "soroswap-pair",
+      "wasm_history": [
+        {
+          "kind": "transition",
+          "from_ledger": 58690091,
+          "to_ledger": 59336871,
+          "wasm_hash": "18051456816b66f12e773a56f77c5794fac1b1fb7ab6e22d4fad5a412770f73e"
+        }
+      ]
+    },
+    {
+      "contract": "CCPZ3DPINLAJZ7RLMVKZY77FZDTN3DXNSLF5TYC5CUYGGJ35OF5KJ47U",
+      "final_role": "soroswap-pair",
+      "wasm_history": [
+        {
+          "kind": "transition",
+          "from_ledger": 54364498,
+          "to_ledger": 54897147,
+          "wasm_hash": "18051456816b66f12e773a56f77c5794fac1b1fb7ab6e22d4fad5a412770f73e"
+        },
+        {
+          "kind": "transition",
+          "from_ledger": 54920619,
+          "to_ledger": 56377055,
+          "wasm_hash": "18051456816b66f12e773a56f77c5794fac1b1fb7ab6e22d4fad5a412770f73e"
+        },
+        {
+          "kind": "transition",
+          "from_ledger": 56501670,
+          "to_ledger": 57856963,
+          "wasm_hash": "18051456816b66f12e773a56f77c5794fac1b1fb7ab6e22d4fad5a412770f73e"
+        },
+        {
+          "kind": "transition",
+          "from_ledger": 57988323,
+          "to_ledger": 59336871,
+          "wasm_hash": "18051456816b66f12e773a56f77c5794fac1b1fb7ab6e22d4fad5a412770f73e"
+        }
+      ]
+    },
+    {
+      "contract": "CCQWSCDRVVF7UMMZ7JO6CDNE4BFL4A2WNNHQWORJ7T46EJFU32UP7H3Q",
+      "final_role": "soroswap-pair",
+      "wasm_history": [
+        {
+          "kind": "current_state",
+          "wasm_hash": "18051456816b66f12e773a56f77c5794fac1b1fb7ab6e22d4fad5a412770f73e"
+        }
+      ]
+    },
+    {
+      "contract": "CCRB7IVG24VFWFZAQ6ZFAPAE4JR5NPQDGKDYVGRXBBU5TPDZXGTTYG7O",
+      "final_role": "soroswap-pair",
+      "wasm_history": [
+        {
+          "kind": "current_state",
+          "wasm_hash": "18051456816b66f12e773a56f77c5794fac1b1fb7ab6e22d4fad5a412770f73e"
+        }
+      ]
+    },
+    {
+      "contract": "CCRCDZFUKKJLFIK22FHG77VEWWY2AWZFACFI5IZY465ZWALZPP765N2G",
+      "final_role": "soroswap-pair",
+      "wasm_history": [
+        {
+          "kind": "transition",
+          "from_ledger": 57362678,
+          "to_ledger": 57856963,
+          "wasm_hash": "18051456816b66f12e773a56f77c5794fac1b1fb7ab6e22d4fad5a412770f73e"
+        },
+        {
+          "kind": "transition",
+          "from_ledger": 58317262,
+          "to_ledger": 59336871,
+          "wasm_hash": "18051456816b66f12e773a56f77c5794fac1b1fb7ab6e22d4fad5a412770f73e"
+        }
+      ]
+    },
+    {
+      "contract": "CCRCZDXJRAT4ECZRR677PZF2S3F2EDSGSVJ2RGCFUDLAVUMWXBXTG5JE",
+      "final_role": "soroswap-pair",
+      "wasm_history": [
+        {
+          "kind": "current_state",
+          "wasm_hash": "18051456816b66f12e773a56f77c5794fac1b1fb7ab6e22d4fad5a412770f73e"
+        }
+      ]
+    },
+    {
+      "contract": "CCRF4YDURHCHURPZDEF32RAIIDXWGQFXYLRX3Z64U6DKC4AJBLISVKWI",
+      "final_role": "soroswap-pair",
+      "wasm_history": [
+        {
+          "kind": "transition",
+          "from_ledger": 55734859,
+          "to_ledger": 56377055,
+          "wasm_hash": "18051456816b66f12e773a56f77c5794fac1b1fb7ab6e22d4fad5a412770f73e"
+        }
+      ]
+    },
+    {
+      "contract": "CCSJOTOGCEBGAXBJKLG3ETD644XI264U54N54W74K4TYUFAKPNBQ6VDI",
+      "final_role": "soroswap-pair",
+      "wasm_history": [
+        {
+          "kind": "transition",
+          "from_ledger": 55808037,
+          "to_ledger": 56377055,
+          "wasm_hash": "18051456816b66f12e773a56f77c5794fac1b1fb7ab6e22d4fad5a412770f73e"
+        }
+      ]
+    },
+    {
+      "contract": "CCT4X2T3FVTV5MM7THK5WAFR6BTQG2JPSWCCQV4WGKSKAR7FHFTE7S5W",
+      "final_role": "soroswap-pair",
+      "wasm_history": [
+        {
+          "kind": "current_state",
+          "wasm_hash": "18051456816b66f12e773a56f77c5794fac1b1fb7ab6e22d4fad5a412770f73e"
+        }
+      ]
+    },
+    {
+      "contract": "CCTOJEUQTPPPTIHCPSDDPOEWRQDM2B5XMTQKZH4GUIV3D27ZCXLKD6XB",
+      "final_role": "soroswap-pair",
+      "wasm_history": [
+        {
+          "kind": "current_state",
+          "wasm_hash": "18051456816b66f12e773a56f77c5794fac1b1fb7ab6e22d4fad5a412770f73e"
+        }
+      ]
+    },
+    {
+      "contract": "CCUDOVVFJGQMHZMXRUNCUJ55MT4LAS5ISVAFU56JXTTXWPR6J5PSIG5L",
+      "final_role": "soroswap-pair",
+      "wasm_history": [
+        {
+          "kind": "current_state",
+          "wasm_hash": "18051456816b66f12e773a56f77c5794fac1b1fb7ab6e22d4fad5a412770f73e"
+        }
+      ]
+    },
+    {
+      "contract": "CCUXNMGJHJCESBYTBK55THNKAJJXSHTIP5Y7C4NA6OS4P7VCZXFYVPKG",
+      "final_role": "soroswap-pair",
+      "wasm_history": [
+        {
+          "kind": "current_state",
+          "wasm_hash": "18051456816b66f12e773a56f77c5794fac1b1fb7ab6e22d4fad5a412770f73e"
+        }
+      ]
+    },
+    {
+      "contract": "CCWHGNBIQ67FQ4Y64UPTRZR3DSZBZ7CZPQ3NK3EIMNR7WWUVBYX4RCAU",
+      "final_role": "soroswap-pair",
+      "wasm_history": [
+        {
+          "kind": "transition",
+          "from_ledger": 57897153,
+          "to_ledger": 59336871,
+          "wasm_hash": "18051456816b66f12e773a56f77c5794fac1b1fb7ab6e22d4fad5a412770f73e"
+        }
+      ]
+    },
+    {
+      "contract": "CCWSFAZM5GRH4TPJKPUZC3KEB757T3QEFP3JUXUDDBJVAHZFPIBNMOG5",
+      "final_role": "soroswap-pair",
+      "wasm_history": [
+        {
+          "kind": "transition",
+          "from_ledger": 53864174,
+          "to_ledger": 54897147,
+          "wasm_hash": "18051456816b66f12e773a56f77c5794fac1b1fb7ab6e22d4fad5a412770f73e"
+        },
+        {
+          "kind": "transition",
+          "from_ledger": 55721345,
+          "to_ledger": 56377055,
+          "wasm_hash": "18051456816b66f12e773a56f77c5794fac1b1fb7ab6e22d4fad5a412770f73e"
+        }
+      ]
+    },
+    {
+      "contract": "CCWX3RMBJIHSUBRZ22TMYHVGMSLUK6OMDYCV35JSQD76HZ2BCD36RSLL",
+      "final_role": "soroswap-pair",
+      "wasm_history": [
+        {
+          "kind": "current_state",
+          "wasm_hash": "18051456816b66f12e773a56f77c5794fac1b1fb7ab6e22d4fad5a412770f73e"
+        }
+      ]
+    },
+    {
+      "contract": "CCXCD5BD576T7DUQ7VMKMZLOQWWDQRDCKCKCN6SJBRYWIQ3Q2OEKXHWQ",
+      "final_role": "soroswap-pair",
+      "wasm_history": [
+        {
+          "kind": "transition",
+          "from_ledger": 51119523,
+          "to_ledger": 51937331,
+          "wasm_hash": "18051456816b66f12e773a56f77c5794fac1b1fb7ab6e22d4fad5a412770f73e"
+        }
+      ]
+    },
+    {
+      "contract": "CCXGYRJO23KBROL6JZGH6WQPHSTQON57CXA64GSL6JYM3LCM3VSCQRCA",
+      "final_role": "soroswap-pair",
+      "wasm_history": [
+        {
+          "kind": "current_state",
+          "wasm_hash": "18051456816b66f12e773a56f77c5794fac1b1fb7ab6e22d4fad5a412770f73e"
+        }
+      ]
+    },
+    {
+      "contract": "CCXOKQBBNRJ7YKY4Y6HTXAU5ZLV7PKENA7ZT74UAAXZ6XUEE22YQGBCS",
+      "final_role": "soroswap-pair",
+      "wasm_history": [
+        {
+          "kind": "transition",
+          "from_ledger": 51923392,
+          "to_ledger": 51937331,
+          "wasm_hash": "18051456816b66f12e773a56f77c5794fac1b1fb7ab6e22d4fad5a412770f73e"
+        },
+        {
+          "kind": "transition",
+          "from_ledger": 51946279,
+          "to_ledger": 53417239,
+          "wasm_hash": "18051456816b66f12e773a56f77c5794fac1b1fb7ab6e22d4fad5a412770f73e"
+        },
+        {
+          "kind": "transition",
+          "from_ledger": 55986809,
+          "to_ledger": 56377055,
+          "wasm_hash": "18051456816b66f12e773a56f77c5794fac1b1fb7ab6e22d4fad5a412770f73e"
+        },
+        {
+          "kind": "transition",
+          "from_ledger": 56398903,
+          "to_ledger": 57856963,
+          "wasm_hash": "18051456816b66f12e773a56f77c5794fac1b1fb7ab6e22d4fad5a412770f73e"
+        },
+        {
+          "kind": "transition",
+          "from_ledger": 57876536,
+          "to_ledger": 59336871,
+          "wasm_hash": "18051456816b66f12e773a56f77c5794fac1b1fb7ab6e22d4fad5a412770f73e"
+        }
+      ]
+    },
+    {
+      "contract": "CCXWTRRFC5CNQIB2RUN6SEMO3ZYKQMEYZ3HBGMCRLS4MWGGIHS3UHBMX",
+      "final_role": "soroswap-pair",
+      "wasm_history": [
+        {
+          "kind": "current_state",
+          "wasm_hash": "18051456816b66f12e773a56f77c5794fac1b1fb7ab6e22d4fad5a412770f73e"
+        }
+      ]
+    },
+    {
+      "contract": "CCY5ZB76HYIYVPKDSUFPCR3QNEXODTC2IRRWGJUIVUV7SLMOSAKG7USW",
+      "final_role": "soroswap-pair",
+      "wasm_history": [
+        {
+          "kind": "current_state",
+          "wasm_hash": "18051456816b66f12e773a56f77c5794fac1b1fb7ab6e22d4fad5a412770f73e"
+        }
+      ]
+    },
+    {
+      "contract": "CCYPLDHUEYWJEOIZJTXUH56NLIQLKYGR5H2BEFQMBYG5IC3G52QF4WVD",
+      "final_role": "soroswap-pair",
+      "wasm_history": [
+        {
+          "kind": "transition",
+          "from_ledger": 54599868,
+          "to_ledger": 54897147,
+          "wasm_hash": "18051456816b66f12e773a56f77c5794fac1b1fb7ab6e22d4fad5a412770f73e"
+        },
+        {
+          "kind": "transition",
+          "from_ledger": 55794103,
+          "to_ledger": 56377055,
+          "wasm_hash": "18051456816b66f12e773a56f77c5794fac1b1fb7ab6e22d4fad5a412770f73e"
+        },
+        {
+          "kind": "transition",
+          "from_ledger": 56392955,
+          "to_ledger": 57856963,
+          "wasm_hash": "18051456816b66f12e773a56f77c5794fac1b1fb7ab6e22d4fad5a412770f73e"
+        },
+        {
+          "kind": "transition",
+          "from_ledger": 57885715,
+          "to_ledger": 59336871,
+          "wasm_hash": "18051456816b66f12e773a56f77c5794fac1b1fb7ab6e22d4fad5a412770f73e"
+        }
+      ]
+    },
+    {
+      "contract": "CCZP6VYUM4ICCI2CUWETLDRVBURRQYEJKJIA43DVXD5HVHGMOS6NMCA6",
+      "final_role": "soroswap-pair",
+      "wasm_history": [
+        {
+          "kind": "current_state",
+          "wasm_hash": "18051456816b66f12e773a56f77c5794fac1b1fb7ab6e22d4fad5a412770f73e"
+        }
+      ]
+    },
+    {
+      "contract": "CCZRHMWWUVLSGC4IIVUQLYBSTNVICPUWSXPM7XBQK5AAEAYLNEXVZXHM",
+      "final_role": "soroswap-pair",
+      "wasm_history": [
+        {
+          "kind": "current_state",
+          "wasm_hash": "18051456816b66f12e773a56f77c5794fac1b1fb7ab6e22d4fad5a412770f73e"
+        }
+      ]
+    },
+    {
+      "contract": "CD23OGI7U4IXNG5X5XDBI3536KL7KRA7P2HVV25DZTN2M4RDSGD26CGZ",
+      "final_role": "soroswap-pair",
+      "wasm_history": [
+        {
+          "kind": "current_state",
+          "wasm_hash": "18051456816b66f12e773a56f77c5794fac1b1fb7ab6e22d4fad5a412770f73e"
+        }
+      ]
+    },
+    {
+      "contract": "CD2A3X2D5ITHYA4DQ5TANYWAUAUP4G5QCMQILCMKXCXSR76OGNIC3C6N",
+      "final_role": "soroswap-pair",
+      "wasm_history": [
+        {
+          "kind": "current_state",
+          "wasm_hash": "18051456816b66f12e773a56f77c5794fac1b1fb7ab6e22d4fad5a412770f73e"
+        }
+      ]
+    },
+    {
+      "contract": "CD2VHT23WGUKG7RWOSFCQLWDLGNPCTTKHO6LVBYYO2CVG3KZKHDIJTAA",
+      "final_role": "soroswap-pair",
+      "wasm_history": [
+        {
+          "kind": "transition",
+          "from_ledger": 55216359,
+          "to_ledger": 56377055,
+          "wasm_hash": "18051456816b66f12e773a56f77c5794fac1b1fb7ab6e22d4fad5a412770f73e"
+        }
+      ]
+    },
+    {
+      "contract": "CD3XW7RGZIQMSVCTLK2NOFAGPTCBKXAVXIXN6QAMEPTJRY45325BZT67",
+      "final_role": "soroswap-pair",
+      "wasm_history": [
+        {
+          "kind": "transition",
+          "from_ledger": 54956009,
+          "to_ledger": 56377055,
+          "wasm_hash": "18051456816b66f12e773a56f77c5794fac1b1fb7ab6e22d4fad5a412770f73e"
+        },
+        {
+          "kind": "transition",
+          "from_ledger": 56378684,
+          "to_ledger": 57856963,
+          "wasm_hash": "18051456816b66f12e773a56f77c5794fac1b1fb7ab6e22d4fad5a412770f73e"
+        },
+        {
+          "kind": "transition",
+          "from_ledger": 57859243,
+          "to_ledger": 59336871,
+          "wasm_hash": "18051456816b66f12e773a56f77c5794fac1b1fb7ab6e22d4fad5a412770f73e"
+        }
+      ]
+    },
+    {
+      "contract": "CD3ZXYEAE5JC6G2VTFEAF4SQ6GOURE5AX7GYSKKO74IR2KSUDPXZNRWS",
+      "final_role": "soroswap-pair",
+      "wasm_history": [
+        {
+          "kind": "current_state",
+          "wasm_hash": "18051456816b66f12e773a56f77c5794fac1b1fb7ab6e22d4fad5a412770f73e"
+        }
+      ]
+    },
+    {
+      "contract": "CD5UIB7YFWFTE4OFWD43QSCM43IHDEP3YQ44FSGJLQO7NAWBVBTTAX2A",
+      "final_role": "soroswap-pair",
+      "wasm_history": [
+        {
+          "kind": "current_state",
+          "wasm_hash": "18051456816b66f12e773a56f77c5794fac1b1fb7ab6e22d4fad5a412770f73e"
+        }
+      ]
+    },
+    {
+      "contract": "CDAVXXLDU62CV6ANWGAJ4SL6FG4X73FQ47X7EIXX5AZSTF5OPFMBQLHC",
+      "final_role": "soroswap-pair",
+      "wasm_history": [
+        {
+          "kind": "current_state",
+          "wasm_hash": "18051456816b66f12e773a56f77c5794fac1b1fb7ab6e22d4fad5a412770f73e"
+        }
+      ]
+    },
+    {
+      "contract": "CDB4Y3T3TALVQ6O7ICAPN6ZPIBAYW3ORYPP3OYFVQMSA3IYI4ZC246XY",
+      "final_role": "soroswap-pair",
+      "wasm_history": [
+        {
+          "kind": "transition",
+          "from_ledger": 58689925,
+          "to_ledger": 59336871,
+          "wasm_hash": "18051456816b66f12e773a56f77c5794fac1b1fb7ab6e22d4fad5a412770f73e"
+        }
+      ]
+    },
+    {
+      "contract": "CDBFES3KWRBCP3TSRFVOGKYM4JQWRB743PSCQUORXF3UT7KSMTDTDEZA",
+      "final_role": "soroswap-pair",
+      "wasm_history": [
+        {
+          "kind": "current_state",
+          "wasm_hash": "18051456816b66f12e773a56f77c5794fac1b1fb7ab6e22d4fad5a412770f73e"
+        }
+      ]
+    },
+    {
+      "contract": "CDBXQ2QEBLPCD5EYQT7KMISI7GBD75NMG5ONVIUI4SPREWYZXDHPHLVA",
+      "final_role": "soroswap-pair",
+      "wasm_history": [
+        {
+          "kind": "current_state",
+          "wasm_hash": "18051456816b66f12e773a56f77c5794fac1b1fb7ab6e22d4fad5a412770f73e"
+        }
+      ]
+    },
+    {
+      "contract": "CDDEKHF7HRD3JSTIK2BQ4IHJQI64V3SO3HPR2DZBP3OBDBQBKOJNNQU7",
+      "final_role": "soroswap-pair",
+      "wasm_history": [
+        {
+          "kind": "transition",
+          "from_ledger": 50804522,
+          "to_ledger": 51937331,
+          "wasm_hash": "18051456816b66f12e773a56f77c5794fac1b1fb7ab6e22d4fad5a412770f73e"
+        },
+        {
+          "kind": "transition",
+          "from_ledger": 52404506,
+          "to_ledger": 53417239,
+          "wasm_hash": "18051456816b66f12e773a56f77c5794fac1b1fb7ab6e22d4fad5a412770f73e"
+        }
+      ]
+    },
+    {
+      "contract": "CDENQLETAFBSGZKPPFGL7ANOXZ2YWVOMHNT27NEBMYKZNY3NQQU52UYR",
+      "final_role": "soroswap-pair",
+      "wasm_history": [
+        {
+          "kind": "current_state",
+          "wasm_hash": "18051456816b66f12e773a56f77c5794fac1b1fb7ab6e22d4fad5a412770f73e"
+        }
+      ]
+    },
+    {
+      "contract": "CDFD72XQSA6AHBRUHCVIMSOUXQCXKLMCFHYS2RIEGZAD64PFTYV22DMH",
+      "final_role": "soroswap-pair",
+      "wasm_history": [
+        {
+          "kind": "transition",
+          "from_ledger": 55798189,
+          "to_ledger": 56377055,
+          "wasm_hash": "18051456816b66f12e773a56f77c5794fac1b1fb7ab6e22d4fad5a412770f73e"
+        },
+        {
+          "kind": "transition",
+          "from_ledger": 56660813,
+          "to_ledger": 57856963,
+          "wasm_hash": "18051456816b66f12e773a56f77c5794fac1b1fb7ab6e22d4fad5a412770f73e"
+        }
+      ]
+    },
+    {
+      "contract": "CDGLVQDF2QUD6P4XJXBATP3HT2MSBEV3NH246ZDQPP6JPNPFAYO44P5E",
+      "final_role": "soroswap-pair",
+      "wasm_history": [
+        {
+          "kind": "transition",
+          "from_ledger": 54956071,
+          "to_ledger": 56377055,
+          "wasm_hash": "18051456816b66f12e773a56f77c5794fac1b1fb7ab6e22d4fad5a412770f73e"
+        },
+        {
+          "kind": "transition",
+          "from_ledger": 56378684,
+          "to_ledger": 57856963,
+          "wasm_hash": "18051456816b66f12e773a56f77c5794fac1b1fb7ab6e22d4fad5a412770f73e"
+        },
+        {
+          "kind": "transition",
+          "from_ledger": 57874644,
+          "to_ledger": 59336871,
+          "wasm_hash": "18051456816b66f12e773a56f77c5794fac1b1fb7ab6e22d4fad5a412770f73e"
+        }
+      ]
+    },
+    {
+      "contract": "CDHZXL7LDTNMEWBDTGN3WD7BG5NNIEXVJO4EXJYKB7GBI5IYUQ4S4JOO",
+      "final_role": "soroswap-pair",
+      "wasm_history": [
+        {
+          "kind": "current_state",
+          "wasm_hash": "18051456816b66f12e773a56f77c5794fac1b1fb7ab6e22d4fad5a412770f73e"
+        }
+      ]
+    },
+    {
+      "contract": "CDIXSYDR7S5OLT56JM7G5Y5LHH6NEFINZOE2YG2TJEXHHYWKLV3FDCCU",
+      "final_role": "soroswap-pair",
+      "wasm_history": [
+        {
+          "kind": "transition",
+          "from_ledger": 56136599,
+          "to_ledger": 56377055,
+          "wasm_hash": "18051456816b66f12e773a56f77c5794fac1b1fb7ab6e22d4fad5a412770f73e"
+        },
+        {
+          "kind": "transition",
+          "from_ledger": 56568345,
+          "to_ledger": 57856963,
+          "wasm_hash": "18051456816b66f12e773a56f77c5794fac1b1fb7ab6e22d4fad5a412770f73e"
+        },
+        {
+          "kind": "transition",
+          "from_ledger": 57910760,
+          "to_ledger": 59336871,
+          "wasm_hash": "18051456816b66f12e773a56f77c5794fac1b1fb7ab6e22d4fad5a412770f73e"
+        }
+      ]
+    },
+    {
+      "contract": "CDJ6T53MZYE5AYD3UMVJIV5EP5B2JJALUDN6TPM5DE5BB23YAS75AE32",
+      "final_role": "soroswap-pair",
+      "wasm_history": [
+        {
+          "kind": "current_state",
+          "wasm_hash": "18051456816b66f12e773a56f77c5794fac1b1fb7ab6e22d4fad5a412770f73e"
+        }
+      ]
+    },
+    {
+      "contract": "CDJDRGUCHANJDXALZVJ5IZVB76HX4MWCON5SHF4DE5HB64CBBR7W2ZCD",
+      "final_role": "soroswap-pair",
+      "wasm_history": [
+        {
+          "kind": "transition",
+          "from_ledger": 53953286,
+          "to_ledger": 54897147,
+          "wasm_hash": "18051456816b66f12e773a56f77c5794fac1b1fb7ab6e22d4fad5a412770f73e"
+        },
+        {
+          "kind": "transition",
+          "from_ledger": 54897169,
+          "to_ledger": 56377055,
+          "wasm_hash": "18051456816b66f12e773a56f77c5794fac1b1fb7ab6e22d4fad5a412770f73e"
+        },
+        {
+          "kind": "transition",
+          "from_ledger": 56377115,
+          "to_ledger": 57856963,
+          "wasm_hash": "18051456816b66f12e773a56f77c5794fac1b1fb7ab6e22d4fad5a412770f73e"
+        },
+        {
+          "kind": "transition",
+          "from_ledger": 57858816,
+          "to_ledger": 59336871,
+          "wasm_hash": "18051456816b66f12e773a56f77c5794fac1b1fb7ab6e22d4fad5a412770f73e"
+        }
+      ]
+    },
+    {
+      "contract": "CDJXIUCWP3BWZWNPPL52YRG7FHG6LWAHN5RTYR4FLY7A3PJKSZ7LGCSC",
+      "final_role": "soroswap-pair",
+      "wasm_history": [
+        {
+          "kind": "transition",
+          "from_ledger": 50813384,
+          "to_ledger": 51937331,
+          "wasm_hash": "18051456816b66f12e773a56f77c5794fac1b1fb7ab6e22d4fad5a412770f73e"
+        },
+        {
+          "kind": "transition",
+          "from_ledger": 52582196,
+          "to_ledger": 53417239,
+          "wasm_hash": "18051456816b66f12e773a56f77c5794fac1b1fb7ab6e22d4fad5a412770f73e"
+        },
+        {
+          "kind": "transition",
+          "from_ledger": 54648004,
+          "to_ledger": 54897147,
+          "wasm_hash": "18051456816b66f12e773a56f77c5794fac1b1fb7ab6e22d4fad5a412770f73e"
+        },
+        {
+          "kind": "transition",
+          "from_ledger": 54927127,
+          "to_ledger": 56377055,
+          "wasm_hash": "18051456816b66f12e773a56f77c5794fac1b1fb7ab6e22d4fad5a412770f73e"
+        },
+        {
+          "kind": "transition",
+          "from_ledger": 56583209,
+          "to_ledger": 57856963,
+          "wasm_hash": "18051456816b66f12e773a56f77c5794fac1b1fb7ab6e22d4fad5a412770f73e"
+        },
+        {
+          "kind": "transition",
+          "from_ledger": 57980888,
+          "to_ledger": 59336871,
+          "wasm_hash": "18051456816b66f12e773a56f77c5794fac1b1fb7ab6e22d4fad5a412770f73e"
+        }
+      ]
+    },
+    {
+      "contract": "CDLJHWJZS3KZDIFLGEFTXUOULRAZ3Z437JTEZLGHMUZEX4DFBFYWXRFR",
+      "final_role": "soroswap-pair",
+      "wasm_history": [
+        {
+          "kind": "transition",
+          "from_ledger": 54956117,
+          "to_ledger": 56377055,
+          "wasm_hash": "18051456816b66f12e773a56f77c5794fac1b1fb7ab6e22d4fad5a412770f73e"
+        },
+        {
+          "kind": "transition",
+          "from_ledger": 56377730,
+          "to_ledger": 57856963,
+          "wasm_hash": "18051456816b66f12e773a56f77c5794fac1b1fb7ab6e22d4fad5a412770f73e"
+        },
+        {
+          "kind": "transition",
+          "from_ledger": 57869913,
+          "to_ledger": 59336871,
+          "wasm_hash": "18051456816b66f12e773a56f77c5794fac1b1fb7ab6e22d4fad5a412770f73e"
+        }
+      ]
+    },
+    {
+      "contract": "CDLMAKG5TSJA6FGP7LLC2FKJRQW6DQYMEPP6FURFVULDEQMP3PRZ4ISI",
+      "final_role": "soroswap-pair",
+      "wasm_history": [
+        {
+          "kind": "transition",
+          "from_ledger": 54363542,
+          "to_ledger": 54897147,
+          "wasm_hash": "18051456816b66f12e773a56f77c5794fac1b1fb7ab6e22d4fad5a412770f73e"
+        },
+        {
+          "kind": "transition",
+          "from_ledger": 54898991,
+          "to_ledger": 56377055,
+          "wasm_hash": "18051456816b66f12e773a56f77c5794fac1b1fb7ab6e22d4fad5a412770f73e"
+        },
+        {
+          "kind": "transition",
+          "from_ledger": 56445625,
+          "to_ledger": 57856963,
+          "wasm_hash": "18051456816b66f12e773a56f77c5794fac1b1fb7ab6e22d4fad5a412770f73e"
+        },
+        {
+          "kind": "transition",
+          "from_ledger": 57877492,
+          "to_ledger": 59336871,
+          "wasm_hash": "18051456816b66f12e773a56f77c5794fac1b1fb7ab6e22d4fad5a412770f73e"
+        }
+      ]
+    },
+    {
+      "contract": "CDN3LLHWKQKSKABVUGRB5TARVRSCM7H34SWUQ4AF53PS3QO66FMZACYB",
+      "final_role": "soroswap-pair",
+      "wasm_history": [
+        {
+          "kind": "current_state",
+          "wasm_hash": "18051456816b66f12e773a56f77c5794fac1b1fb7ab6e22d4fad5a412770f73e"
+        }
+      ]
+    },
+    {
+      "contract": "CDOJ4AKGGZPUXB6BR42IDYQZTJZYUTW745W2775P3OIVNA2E7ECHPQEV",
+      "final_role": "soroswap-pair",
+      "wasm_history": [
+        {
+          "kind": "current_state",
+          "wasm_hash": "18051456816b66f12e773a56f77c5794fac1b1fb7ab6e22d4fad5a412770f73e"
+        }
+      ]
+    },
+    {
+      "contract": "CDOS7DHTHUNENP6X32SFDN76JAWTU7IFSEDBJEJPDWZ4PQCSTJFUSZ56",
+      "final_role": "soroswap-pair",
+      "wasm_history": [
+        {
+          "kind": "transition",
+          "from_ledger": 57283821,
+          "to_ledger": 57856963,
+          "wasm_hash": "18051456816b66f12e773a56f77c5794fac1b1fb7ab6e22d4fad5a412770f73e"
+        },
+        {
+          "kind": "transition",
+          "from_ledger": 57887620,
+          "to_ledger": 59336871,
+          "wasm_hash": "18051456816b66f12e773a56f77c5794fac1b1fb7ab6e22d4fad5a412770f73e"
+        }
+      ]
+    },
+    {
+      "contract": "CDPU5RPPH3457WDRYUYQ6YI7NDEK7NMGCO2EOGUPLFNUXN54U65H4WFX",
+      "final_role": "soroswap-pair",
+      "wasm_history": [
+        {
+          "kind": "current_state",
+          "wasm_hash": "18051456816b66f12e773a56f77c5794fac1b1fb7ab6e22d4fad5a412770f73e"
+        }
+      ]
+    },
+    {
+      "contract": "CDQ4UKVWHJKR465B3NN2YP3IMWBEZ77YYJYTHYZA3BWNTPRHFOJ4OY57",
+      "final_role": "soroswap-pair",
+      "wasm_history": [
+        {
+          "kind": "transition",
+          "from_ledger": 52593281,
+          "to_ledger": 53417239,
+          "wasm_hash": "18051456816b66f12e773a56f77c5794fac1b1fb7ab6e22d4fad5a412770f73e"
+        }
+      ]
+    },
+    {
+      "contract": "CDQE2IR23YR56HCQMCXXTQLE63DZX6ZKBB7OHBHATFTINLMS3PBTD3SR",
+      "final_role": "soroswap-pair",
+      "wasm_history": [
+        {
+          "kind": "transition",
+          "from_ledger": 56211842,
+          "to_ledger": 56377055,
+          "wasm_hash": "18051456816b66f12e773a56f77c5794fac1b1fb7ab6e22d4fad5a412770f73e"
+        },
+        {
+          "kind": "transition",
+          "from_ledger": 56660813,
+          "to_ledger": 57856963,
+          "wasm_hash": "18051456816b66f12e773a56f77c5794fac1b1fb7ab6e22d4fad5a412770f73e"
+        }
+      ]
+    },
+    {
+      "contract": "CDQJRR5OBGDZCCRLKNEJ262FL3UDGRQ3NX3A22YXITOUAM5JUDM4OUBH",
+      "final_role": "soroswap-pair",
+      "wasm_history": [
+        {
+          "kind": "current_state",
+          "wasm_hash": "18051456816b66f12e773a56f77c5794fac1b1fb7ab6e22d4fad5a412770f73e"
+        }
+      ]
+    },
+    {
+      "contract": "CDQZ5GGV5GHWSJXU2HF5SRDQ2R7ITVQCD6JJUBZ5MUOBRN4ZWGITWMHG",
+      "final_role": "soroswap-pair",
+      "wasm_history": [
+        {
+          "kind": "transition",
+          "from_ledger": 58689320,
+          "to_ledger": 59336871,
+          "wasm_hash": "18051456816b66f12e773a56f77c5794fac1b1fb7ab6e22d4fad5a412770f73e"
+        }
+      ]
+    },
+    {
+      "contract": "CDRS7NJPAX2HLYNENMUH3USUV6LP6KYSLZZ4ULY27RQLKIVC5DGLEVKI",
+      "final_role": "soroswap-pair",
+      "wasm_history": [
+        {
+          "kind": "transition",
+          "from_ledger": 50746776,
+          "to_ledger": 51937331,
+          "wasm_hash": "18051456816b66f12e773a56f77c5794fac1b1fb7ab6e22d4fad5a412770f73e"
+        },
+        {
+          "kind": "transition",
+          "from_ledger": 52271687,
+          "to_ledger": 53417239,
+          "wasm_hash": "18051456816b66f12e773a56f77c5794fac1b1fb7ab6e22d4fad5a412770f73e"
+        },
+        {
+          "kind": "transition",
+          "from_ledger": 53423338,
+          "to_ledger": 54897147,
+          "wasm_hash": "18051456816b66f12e773a56f77c5794fac1b1fb7ab6e22d4fad5a412770f73e"
+        },
+        {
+          "kind": "transition",
+          "from_ledger": 54900116,
+          "to_ledger": 56377055,
+          "wasm_hash": "18051456816b66f12e773a56f77c5794fac1b1fb7ab6e22d4fad5a412770f73e"
+        },
+        {
+          "kind": "transition",
+          "from_ledger": 56389488,
+          "to_ledger": 57856963,
+          "wasm_hash": "18051456816b66f12e773a56f77c5794fac1b1fb7ab6e22d4fad5a412770f73e"
+        },
+        {
+          "kind": "transition",
+          "from_ledger": 57919103,
+          "to_ledger": 59336871,
+          "wasm_hash": "18051456816b66f12e773a56f77c5794fac1b1fb7ab6e22d4fad5a412770f73e"
+        }
+      ]
+    },
+    {
+      "contract": "CDS6VE7AG5SRR5AZSHHORSW3JCARULMOAHZEJ7B6PBQICAQYQNBGC7XZ",
+      "final_role": "soroswap-pair",
+      "wasm_history": [
+        {
+          "kind": "current_state",
+          "wasm_hash": "18051456816b66f12e773a56f77c5794fac1b1fb7ab6e22d4fad5a412770f73e"
+        }
+      ]
+    },
+    {
+      "contract": "CDUVR3BIIXKGZ7ABHYGCZUJ2PKZ5G5OJ464GCHDPPOAQ22HVODFLQLTV",
+      "final_role": "soroswap-pair",
+      "wasm_history": [
+        {
+          "kind": "current_state",
+          "wasm_hash": "18051456816b66f12e773a56f77c5794fac1b1fb7ab6e22d4fad5a412770f73e"
+        }
+      ]
+    },
+    {
+      "contract": "CDV25APOZDCBL6FBWRQDJOV5Z6P352FHRGAEYTZZJB5SOK5W67Z7QWKX",
+      "final_role": "soroswap-pair",
+      "wasm_history": [
+        {
+          "kind": "current_state",
+          "wasm_hash": "18051456816b66f12e773a56f77c5794fac1b1fb7ab6e22d4fad5a412770f73e"
+        }
+      ]
+    },
+    {
+      "contract": "CDWUJKZ6OVA5LO3VDWU54WY5DM2XD2O4D2VV7P3ZPK7PLADIYV66GIFC",
+      "final_role": "soroswap-pair",
+      "wasm_history": [
+        {
+          "kind": "transition",
+          "from_ledger": 57080917,
+          "to_ledger": 57856963,
+          "wasm_hash": "18051456816b66f12e773a56f77c5794fac1b1fb7ab6e22d4fad5a412770f73e"
+        }
+      ]
+    },
+    {
+      "contract": "CDX62LEBSX3UI6U6HNBJIIWQRGOCXKYKQ5MA6TRZMM4DSK2U7AECS4NO",
+      "final_role": "soroswap-pair",
+      "wasm_history": [
+        {
+          "kind": "current_state",
+          "wasm_hash": "18051456816b66f12e773a56f77c5794fac1b1fb7ab6e22d4fad5a412770f73e"
+        }
+      ]
+    },
+    {
+      "contract": "CDX7IXAJW3IYBFD456HXMBYTH74SFSWUUTMCGWJGSLIU7N6VLM3V3P5Y",
+      "final_role": "soroswap-pair",
+      "wasm_history": [
+        {
+          "kind": "current_state",
+          "wasm_hash": "18051456816b66f12e773a56f77c5794fac1b1fb7ab6e22d4fad5a412770f73e"
+        }
+      ]
+    },
+    {
+      "contract": "CDXADLBNIQK5STJVEBOK2CMJPCN6EUUZ3MYPUOMXQ5VBNREGFEIF3PT5",
+      "final_role": "soroswap-pair",
+      "wasm_history": [
+        {
+          "kind": "transition",
+          "from_ledger": 57745859,
+          "to_ledger": 57856963,
+          "wasm_hash": "18051456816b66f12e773a56f77c5794fac1b1fb7ab6e22d4fad5a412770f73e"
+        },
+        {
+          "kind": "transition",
+          "from_ledger": 58117296,
+          "to_ledger": 59336871,
+          "wasm_hash": "18051456816b66f12e773a56f77c5794fac1b1fb7ab6e22d4fad5a412770f73e"
+        }
+      ]
+    },
+    {
+      "contract": "CDXTN5K3GD7O5WTWCNM64FVLKBPVTVQ5Q4ATAKSPIJLCGD7AHZ3GJBFX",
+      "final_role": "soroswap-pair",
+      "wasm_history": [
+        {
+          "kind": "current_state",
+          "wasm_hash": "18051456816b66f12e773a56f77c5794fac1b1fb7ab6e22d4fad5a412770f73e"
+        }
+      ]
+    },
+    {
+      "contract": "CDZF6KASJFUZEQDUHWOAK32YAGH3CWCU5RHQABGNAGV66LLOYAE7TNBS",
+      "final_role": "soroswap-pair",
+      "wasm_history": [
+        {
+          "kind": "transition",
+          "from_ledger": 57745889,
+          "to_ledger": 57856963,
+          "wasm_hash": "18051456816b66f12e773a56f77c5794fac1b1fb7ab6e22d4fad5a412770f73e"
+        },
+        {
+          "kind": "transition",
+          "from_ledger": 58104302,
+          "to_ledger": 59336871,
+          "wasm_hash": "18051456816b66f12e773a56f77c5794fac1b1fb7ab6e22d4fad5a412770f73e"
+        }
+      ]
+    },
+    {
+      "contract": "CDZKYLUACJQ4GWZ2LTVCCE4G2NTSU5IDAU3HDNBIAF3JBQFZSM4ZEYPU",
+      "final_role": "soroswap-pair",
+      "wasm_history": [
+        {
+          "kind": "current_state",
+          "wasm_hash": "18051456816b66f12e773a56f77c5794fac1b1fb7ab6e22d4fad5a412770f73e"
+        }
+      ]
+    },
+    {
+      "contract": "CDZYG4RE75T4UFVUPP3V5LPBZ2GRGXZURP6LPUPADYRGWMTJXS2N5JXI",
+      "final_role": "soroswap-pair",
+      "wasm_history": [
+        {
+          "kind": "current_state",
+          "wasm_hash": "18051456816b66f12e773a56f77c5794fac1b1fb7ab6e22d4fad5a412770f73e"
+        }
+      ]
+    }
+  ]
+}

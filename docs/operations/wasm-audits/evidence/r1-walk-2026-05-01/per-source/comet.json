@@ -1,0 +1,28 @@
+{
+  "source": "comet",
+  "contract_count": 1,
+  "unique_wasm_hashes": [
+    "8abc28913035c07411ed5d134e6bfeab4723d97ddd4d1a22a0605d35c94d1a36"
+  ],
+  "unique_wasm_hash_count": 1,
+  "total_range_count": 1,
+  "contracts": [
+    {
+      "contract": "CAS3FL6TLZKDGGSISDBWGGPXT3NRR4DYTZD7YOD3HMYO6LTJUVGRVEAM",
+      "role": "pool-blend-backstop",
+      "first_ledger": 51499545,
+      "last_ledger": 51937331,
+      "range_count": 1,
+      "unique_hashes": [
+        "8abc28913035c07411ed5d134e6bfeab4723d97ddd4d1a22a0605d35c94d1a36"
+      ],
+      "ranges": [
+        {
+          "wasm_hash": "8abc28913035c07411ed5d134e6bfeab4723d97ddd4d1a22a0605d35c94d1a36",
+          "from_ledger": 51499545,
+          "to_ledger": 51937331
+        }
+      ]
+    }
+  ]
+}

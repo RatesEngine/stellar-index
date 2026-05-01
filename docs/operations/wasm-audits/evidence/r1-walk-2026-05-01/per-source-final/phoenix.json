@@ -1,0 +1,504 @@
+{
+  "source": "phoenix",
+  "contract_count": 13,
+  "unique_wasm_count": 22,
+  "role_breakdown": {
+    "phoenix-factory": 1,
+    "phoenix-pool": 11,
+    "phoenix-multihop": 1
+  },
+  "contracts": [
+    {
+      "contract": "CB4SVAWJA6TSRNOJZ7W2AWFW46D5VR4ZMFZKDIKXEINZCZEGZCJZCKMI",
+      "final_role": "phoenix-factory",
+      "wasm_history": [
+        {
+          "kind": "transition",
+          "from_ledger": 51572016,
+          "to_ledger": 51937331,
+          "wasm_hash": "e1464afcf0c7c01e4306e3eb9d16f653500fbaa31c3cce0afd675449d58cea14"
+        },
+        {
+          "kind": "transition",
+          "from_ledger": 53134143,
+          "to_ledger": 53417239,
+          "wasm_hash": "96c6a73863de6e331d8103898f421bb7af719b87bbd4ac14d5a16f6b2662546b"
+        },
+        {
+          "kind": "transition",
+          "from_ledger": 53649587,
+          "to_ledger": 54517224,
+          "wasm_hash": "96c6a73863de6e331d8103898f421bb7af719b87bbd4ac14d5a16f6b2662546b"
+        },
+        {
+          "kind": "transition",
+          "from_ledger": 54517225,
+          "to_ledger": 54517363,
+          "wasm_hash": "2bbb91c58cb8432fd40446e80188a25e7c07dc2edc853e885d65cafbbbf19581"
+        },
+        {
+          "kind": "transition",
+          "from_ledger": 54517364,
+          "to_ledger": 54897147,
+          "wasm_hash": "721badb85470a81d9d0a1c72dd0debb37f5f268419d4b94d125e546cc32d350e"
+        },
+        {
+          "kind": "transition",
+          "from_ledger": 57406830,
+          "to_ledger": 57856963,
+          "wasm_hash": "c54ba54bd9e37503a641fa661126cd858faf57738c1e903b84f72ac505016393"
+        }
+      ]
+    },
+    {
+      "contract": "CB5QUVK5GS3IU23TMFZQ3P5J24YBBZP5PHUQAEJ2SP5K55PFTJRUQG2L",
+      "final_role": "phoenix-pool",
+      "wasm_history": [
+        {
+          "kind": "transition",
+          "from_ledger": 54953245,
+          "to_ledger": 56377055,
+          "wasm_hash": "e747f94bd6d54805390f66f608311628b054e77c5062336aaf38b46492d622b8"
+        },
+        {
+          "kind": "transition",
+          "from_ledger": 57031259,
+          "to_ledger": 57406246,
+          "wasm_hash": "e747f94bd6d54805390f66f608311628b054e77c5062336aaf38b46492d622b8"
+        },
+        {
+          "kind": "transition",
+          "from_ledger": 57406247,
+          "to_ledger": 57856963,
+          "wasm_hash": "167ab414a226427de34c19947ef9c5cf38c6c0ed91ecf9392f7cef3278ff506c"
+        }
+      ]
+    },
+    {
+      "contract": "CBCZGGNOEUZG4CAAE7TGTQQHETZMKUT4OIPFHHPKEUX46U4KXBBZ3GLH",
+      "final_role": "phoenix-pool",
+      "wasm_history": [
+        {
+          "kind": "transition",
+          "from_ledger": 51572030,
+          "to_ledger": 51937331,
+          "wasm_hash": "ac63334c62a48aa3ea5c2187e423ebe89bcf285848e25251aa839667323083c8"
+        },
+        {
+          "kind": "transition",
+          "from_ledger": 53134193,
+          "to_ledger": 53417239,
+          "wasm_hash": "9f10e0527cd180e53ab3da55484eca00c004333309fbff81b5ba8a52d8909f26"
+        },
+        {
+          "kind": "transition",
+          "from_ledger": 53587426,
+          "to_ledger": 53587552,
+          "wasm_hash": "b4e621fbdc990177ef071c439100bc382c58d08e9d9710f82fbb993698e17931"
+        },
+        {
+          "kind": "transition",
+          "from_ledger": 53587553,
+          "to_ledger": 53587587,
+          "wasm_hash": "0293730a1d9bdb23ad2b2d7f6d7ff86dc5fbe620efb29187f8210dc1d5b90bef"
+        },
+        {
+          "kind": "transition",
+          "from_ledger": 53587588,
+          "to_ledger": 53761253,
+          "wasm_hash": "e747f94bd6d54805390f66f608311628b054e77c5062336aaf38b46492d622b8"
+        },
+        {
+          "kind": "transition",
+          "from_ledger": 53761254,
+          "to_ledger": 53761361,
+          "wasm_hash": "24f1456544ebc25a598792c4f64113711ff78ad6d9bda95e057ed2ade7c23800"
+        },
+        {
+          "kind": "transition",
+          "from_ledger": 53761362,
+          "to_ledger": 54897147,
+          "wasm_hash": "e747f94bd6d54805390f66f608311628b054e77c5062336aaf38b46492d622b8"
+        },
+        {
+          "kind": "transition",
+          "from_ledger": 55730506,
+          "to_ledger": 56377055,
+          "wasm_hash": "e747f94bd6d54805390f66f608311628b054e77c5062336aaf38b46492d622b8"
+        },
+        {
+          "kind": "transition",
+          "from_ledger": 57406154,
+          "to_ledger": 57856963,
+          "wasm_hash": "167ab414a226427de34c19947ef9c5cf38c6c0ed91ecf9392f7cef3278ff506c"
+        }
+      ]
+    },
+    {
+      "contract": "CBHCRSVX3ZZ7EGTSYMKPEFGZNWRVCSESQR3UABET4MIW52N4EVU6BIZX",
+      "final_role": "phoenix-pool",
+      "wasm_history": [
+        {
+          "kind": "transition",
+          "from_ledger": 51572026,
+          "to_ledger": 51937331,
+          "wasm_hash": "ac63334c62a48aa3ea5c2187e423ebe89bcf285848e25251aa839667323083c8"
+        },
+        {
+          "kind": "transition",
+          "from_ledger": 53134167,
+          "to_ledger": 53417239,
+          "wasm_hash": "9f10e0527cd180e53ab3da55484eca00c004333309fbff81b5ba8a52d8909f26"
+        },
+        {
+          "kind": "transition",
+          "from_ledger": 53587437,
+          "to_ledger": 53587563,
+          "wasm_hash": "b4e621fbdc990177ef071c439100bc382c58d08e9d9710f82fbb993698e17931"
+        },
+        {
+          "kind": "transition",
+          "from_ledger": 53587564,
+          "to_ledger": 53587589,
+          "wasm_hash": "0293730a1d9bdb23ad2b2d7f6d7ff86dc5fbe620efb29187f8210dc1d5b90bef"
+        },
+        {
+          "kind": "transition",
+          "from_ledger": 53587590,
+          "to_ledger": 53761322,
+          "wasm_hash": "e747f94bd6d54805390f66f608311628b054e77c5062336aaf38b46492d622b8"
+        },
+        {
+          "kind": "transition",
+          "from_ledger": 53761323,
+          "to_ledger": 53761358,
+          "wasm_hash": "916315045be9861c47b22a8b2502ea266e75659d54fdbd0303ba1b9091c9632f"
+        },
+        {
+          "kind": "transition",
+          "from_ledger": 53761359,
+          "to_ledger": 53880976,
+          "wasm_hash": "e747f94bd6d54805390f66f608311628b054e77c5062336aaf38b46492d622b8"
+        },
+        {
+          "kind": "transition",
+          "from_ledger": 53880977,
+          "to_ledger": 53881265,
+          "wasm_hash": "7e834fa193deacd7fdd28104a58c8a2684b6b6a4e8d2485d37195569d8810888"
+        },
+        {
+          "kind": "transition",
+          "from_ledger": 53881266,
+          "to_ledger": 54897147,
+          "wasm_hash": "14ed2bb1a025c22bcc730ffc9da3f5aa9f7c653f4be402812c32f249e20dee01"
+        },
+        {
+          "kind": "transition",
+          "from_ledger": 55730506,
+          "to_ledger": 56377055,
+          "wasm_hash": "14ed2bb1a025c22bcc730ffc9da3f5aa9f7c653f4be402812c32f249e20dee01"
+        },
+        {
+          "kind": "transition",
+          "from_ledger": 57406389,
+          "to_ledger": 57856963,
+          "wasm_hash": "167ab414a226427de34c19947ef9c5cf38c6c0ed91ecf9392f7cef3278ff506c"
+        }
+      ]
+    },
+    {
+      "contract": "CBISULYO5ZGS32WTNCBMEFCNKNSLFXCQ4Z3XHVDP4X4FLPSEALGSY3PS",
+      "final_role": "phoenix-pool",
+      "wasm_history": [
+        {
+          "kind": "transition",
+          "from_ledger": 51927948,
+          "to_ledger": 51937331,
+          "wasm_hash": "ac63334c62a48aa3ea5c2187e423ebe89bcf285848e25251aa839667323083c8"
+        },
+        {
+          "kind": "transition",
+          "from_ledger": 53134215,
+          "to_ledger": 53417239,
+          "wasm_hash": "9f10e0527cd180e53ab3da55484eca00c004333309fbff81b5ba8a52d8909f26"
+        },
+        {
+          "kind": "transition",
+          "from_ledger": 53587347,
+          "to_ledger": 53587534,
+          "wasm_hash": "b4e621fbdc990177ef071c439100bc382c58d08e9d9710f82fbb993698e17931"
+        },
+        {
+          "kind": "transition",
+          "from_ledger": 53587535,
+          "to_ledger": 53587579,
+          "wasm_hash": "0293730a1d9bdb23ad2b2d7f6d7ff86dc5fbe620efb29187f8210dc1d5b90bef"
+        },
+        {
+          "kind": "transition",
+          "from_ledger": 53587580,
+          "to_ledger": 53761214,
+          "wasm_hash": "e747f94bd6d54805390f66f608311628b054e77c5062336aaf38b46492d622b8"
+        },
+        {
+          "kind": "transition",
+          "from_ledger": 53761215,
+          "to_ledger": 53761365,
+          "wasm_hash": "24f1456544ebc25a598792c4f64113711ff78ad6d9bda95e057ed2ade7c23800"
+        },
+        {
+          "kind": "transition",
+          "from_ledger": 53761366,
+          "to_ledger": 54897147,
+          "wasm_hash": "e747f94bd6d54805390f66f608311628b054e77c5062336aaf38b46492d622b8"
+        },
+        {
+          "kind": "transition",
+          "from_ledger": 56086763,
+          "to_ledger": 56377055,
+          "wasm_hash": "e747f94bd6d54805390f66f608311628b054e77c5062336aaf38b46492d622b8"
+        },
+        {
+          "kind": "transition",
+          "from_ledger": 57404640,
+          "to_ledger": 57856963,
+          "wasm_hash": "167ab414a226427de34c19947ef9c5cf38c6c0ed91ecf9392f7cef3278ff506c"
+        }
+      ]
+    },
+    {
+      "contract": "CBW5G5SO5SDYUGQVU7RMZ2KJ34POM3AMODOBIV2RQYG4KJDUUBVC3P2T",
+      "final_role": "phoenix-pool",
+      "wasm_history": [
+        {
+          "kind": "transition",
+          "from_ledger": 53853220,
+          "to_ledger": 53882815,
+          "wasm_hash": "e747f94bd6d54805390f66f608311628b054e77c5062336aaf38b46492d622b8"
+        },
+        {
+          "kind": "transition",
+          "from_ledger": 53882816,
+          "to_ledger": 53882865,
+          "wasm_hash": "27635b9a4439ac911b2a9b431627ad2e2545faded01da27e405003050ec91887"
+        },
+        {
+          "kind": "transition",
+          "from_ledger": 53882866,
+          "to_ledger": 54897147,
+          "wasm_hash": "7e834fa193deacd7fdd28104a58c8a2684b6b6a4e8d2485d37195569d8810888"
+        },
+        {
+          "kind": "transition",
+          "from_ledger": 55937823,
+          "to_ledger": 56377055,
+          "wasm_hash": "7e834fa193deacd7fdd28104a58c8a2684b6b6a4e8d2485d37195569d8810888"
+        },
+        {
+          "kind": "transition",
+          "from_ledger": 57405883,
+          "to_ledger": 57856963,
+          "wasm_hash": "167ab414a226427de34c19947ef9c5cf38c6c0ed91ecf9392f7cef3278ff506c"
+        },
+        {
+          "kind": "transition",
+          "from_ledger": 58012051,
+          "to_ledger": 59336871,
+          "wasm_hash": "167ab414a226427de34c19947ef9c5cf38c6c0ed91ecf9392f7cef3278ff506c"
+        }
+      ]
+    },
+    {
+      "contract": "CC6MJZN3HFOJKXN42ANTSCLRFOMHLFXHWPNAX64DQNUEBDMUYMPHASAV",
+      "final_role": "phoenix-pool",
+      "wasm_history": [
+        {
+          "kind": "transition",
+          "from_ledger": 54953243,
+          "to_ledger": 56377055,
+          "wasm_hash": "e747f94bd6d54805390f66f608311628b054e77c5062336aaf38b46492d622b8"
+        },
+        {
+          "kind": "transition",
+          "from_ledger": 57029983,
+          "to_ledger": 57406005,
+          "wasm_hash": "e747f94bd6d54805390f66f608311628b054e77c5062336aaf38b46492d622b8"
+        },
+        {
+          "kind": "transition",
+          "from_ledger": 57406006,
+          "to_ledger": 57856963,
+          "wasm_hash": "167ab414a226427de34c19947ef9c5cf38c6c0ed91ecf9392f7cef3278ff506c"
+        }
+      ]
+    },
+    {
+      "contract": "CCKOC2LJTPDBKDHTL3M5UO7HFZ2WFIHSOKCELMKQP3TLCIVUBKOQL4HB",
+      "final_role": "phoenix-pool",
+      "wasm_history": [
+        {
+          "kind": "transition",
+          "from_ledger": 54953247,
+          "to_ledger": 56377055,
+          "wasm_hash": "e747f94bd6d54805390f66f608311628b054e77c5062336aaf38b46492d622b8"
+        },
+        {
+          "kind": "transition",
+          "from_ledger": 57031259,
+          "to_ledger": 57406092,
+          "wasm_hash": "e747f94bd6d54805390f66f608311628b054e77c5062336aaf38b46492d622b8"
+        },
+        {
+          "kind": "transition",
+          "from_ledger": 57406093,
+          "to_ledger": 57856963,
+          "wasm_hash": "167ab414a226427de34c19947ef9c5cf38c6c0ed91ecf9392f7cef3278ff506c"
+        }
+      ]
+    },
+    {
+      "contract": "CCLZRD4E72T7JCZCN3P7KNPYNXFYKQCL64ECLX7WP5GNVYPYJGU2IO2G",
+      "final_role": "phoenix-multihop",
+      "wasm_history": [
+        {
+          "kind": "transition",
+          "from_ledger": 51572024,
+          "to_ledger": 51937331,
+          "wasm_hash": "60332ba12801eda65874e9afdbfdf8d114f56011fe7d1f902103cd7767c547d4"
+        },
+        {
+          "kind": "transition",
+          "from_ledger": 53134204,
+          "to_ledger": 53417239,
+          "wasm_hash": "18336805466bbd05bc388610d36de73994f5b9061bb199c02418a073fcf4b281"
+        },
+        {
+          "kind": "transition",
+          "from_ledger": 57406861,
+          "to_ledger": 57856963,
+          "wasm_hash": "77bdc0a993960faa2b0dac7b43a5160d6ed745ee787573c2f0ad8d00d4806366"
+        }
+      ]
+    },
+    {
+      "contract": "CCUCE5H5CKW3S7JBESGCES6ZGDMWLNRY3HOFET3OH33MXZWKXNJTKSM3",
+      "final_role": "phoenix-pool",
+      "wasm_history": [
+        {
+          "kind": "transition",
+          "from_ledger": 54953248,
+          "to_ledger": 56377055,
+          "wasm_hash": "e747f94bd6d54805390f66f608311628b054e77c5062336aaf38b46492d622b8"
+        },
+        {
+          "kind": "transition",
+          "from_ledger": 57031259,
+          "to_ledger": 57405940,
+          "wasm_hash": "e747f94bd6d54805390f66f608311628b054e77c5062336aaf38b46492d622b8"
+        },
+        {
+          "kind": "transition",
+          "from_ledger": 57405941,
+          "to_ledger": 57856963,
+          "wasm_hash": "167ab414a226427de34c19947ef9c5cf38c6c0ed91ecf9392f7cef3278ff506c"
+        }
+      ]
+    },
+    {
+      "contract": "CD5XNKK3B6BEF2N7ULNHHGAMOKZ7P6456BFNIHRF4WNTEDKBRWAE7IAA",
+      "final_role": "phoenix-pool",
+      "wasm_history": [
+        {
+          "kind": "transition",
+          "from_ledger": 54517368,
+          "to_ledger": 54897147,
+          "wasm_hash": "18e40185bbebefa02e358353699302c1c0266a5b3d048981b241eec8d22ffd76"
+        },
+        {
+          "kind": "transition",
+          "from_ledger": 57406699,
+          "to_ledger": 57856963,
+          "wasm_hash": "13b158655e40396957537bf1c528c6542b315930c1c9e0df640f57293c8af2ca"
+        }
+      ]
+    },
+    {
+      "contract": "CDMXKSLG5GITGFYERUW2MRYOBUQCMRT2QE5Y4PU3QZ53EBFWUXAXUTBC",
+      "final_role": "phoenix-pool",
+      "wasm_history": [
+        {
+          "kind": "transition",
+          "from_ledger": 53955603,
+          "to_ledger": 53955786,
+          "wasm_hash": "e747f94bd6d54805390f66f608311628b054e77c5062336aaf38b46492d622b8"
+        },
+        {
+          "kind": "transition",
+          "from_ledger": 53955787,
+          "to_ledger": 53955819,
+          "wasm_hash": "e235ace43d2eaea9a57d5717d6888e32d6bdd0fbf224ea4c83a602e94d3d8f6e"
+        },
+        {
+          "kind": "transition",
+          "from_ledger": 53955820,
+          "to_ledger": 54897147,
+          "wasm_hash": "14ed2bb1a025c22bcc730ffc9da3f5aa9f7c653f4be402812c32f249e20dee01"
+        },
+        {
+          "kind": "transition",
+          "from_ledger": 56030135,
+          "to_ledger": 56377055,
+          "wasm_hash": "14ed2bb1a025c22bcc730ffc9da3f5aa9f7c653f4be402812c32f249e20dee01"
+        },
+        {
+          "kind": "transition",
+          "from_ledger": 57406318,
+          "to_ledger": 57856963,
+          "wasm_hash": "167ab414a226427de34c19947ef9c5cf38c6c0ed91ecf9392f7cef3278ff506c"
+        }
+      ]
+    },
+    {
+      "contract": "CDQLKNH3725BUP4HPKQKMM7OO62FDVXVTO7RCYPID527MZHJG2F3QBJW",
+      "final_role": "phoenix-pool",
+      "wasm_history": [
+        {
+          "kind": "transition",
+          "from_ledger": 53853219,
+          "to_ledger": 53882828,
+          "wasm_hash": "e747f94bd6d54805390f66f608311628b054e77c5062336aaf38b46492d622b8"
+        },
+        {
+          "kind": "transition",
+          "from_ledger": 53882829,
+          "to_ledger": 53882862,
+          "wasm_hash": "27635b9a4439ac911b2a9b431627ad2e2545faded01da27e405003050ec91887"
+        },
+        {
+          "kind": "transition",
+          "from_ledger": 53882863,
+          "to_ledger": 54897147,
+          "wasm_hash": "7e834fa193deacd7fdd28104a58c8a2684b6b6a4e8d2485d37195569d8810888"
+        },
+        {
+          "kind": "transition",
+          "from_ledger": 55937823,
+          "to_ledger": 56377055,
+          "wasm_hash": "7e834fa193deacd7fdd28104a58c8a2684b6b6a4e8d2485d37195569d8810888"
+        },
+        {
+          "kind": "transition",
+          "from_ledger": 57405760,
+          "to_ledger": 57856963,
+          "wasm_hash": "167ab414a226427de34c19947ef9c5cf38c6c0ed91ecf9392f7cef3278ff506c"
+        },
+        {
+          "kind": "transition",
+          "from_ledger": 58012051,
+          "to_ledger": 59336871,
+          "wasm_hash": "167ab414a226427de34c19947ef9c5cf38c6c0ed91ecf9392f7cef3278ff506c"
+        }
+      ]
+    }
+  ]
+}

@@ -1,7 +1,7 @@
 ---
 title: Blend WASM-history audit
-last_verified: 2026-04-30
-status: Phase 1 complete; Phase 3 partial (current WASM verified). Phase 2 (per-pool wasm-history walk) needs r1 access.
+last_verified: 2026-05-01
+status: Phase 1 complete; Phase 3 complete for current state (3 WASMs disassembled + bytes preserved). Phase 2 (per-pool wasm-history walk) still needs r1 access.
 source: blend
 backfill_safe: false
 ---
@@ -10,6 +10,21 @@ backfill_safe: false
 
 Audit log for the `blend` source's `BackfillSafe` flag. See
 [`README.md`](README.md) for the full procedure.
+
+> **2026-05-01 update.** Cross-checked all 11 contracts against
+> Soroban-RPC current-state. The 11-contract list is actually
+> **9 lending pools + 1 backstop module + 1 pool factory** —
+> the audit doc previously referred to all 11 as "pools" but
+> the on-chain reality has the role split. WASM bytes preserved
+> for all three roles, disassembly confirms the API match. See
+> [`r1-walk-2026-05-01.md`](r1-walk-2026-05-01.md) §Blend.
+>
+> Phase 2 (the per-pool wasm-history walk to confirm no
+> decoder-incompatible upgrades happened) is still pending —
+> we kicked it off but it took >1h on r1 without producing
+> output. Need to debug walker performance or run with a
+> narrower ledger range. `BackfillSafe` stays `false` until that
+> lands.
 
 ## Status
 

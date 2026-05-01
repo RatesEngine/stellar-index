@@ -1,0 +1,331 @@
+[
+  {
+    "hash": "0293730a1d9bdb23ad2b2d7f6d7ff86dc5fbe620efb29187f8210dc1d5b90bef",
+    "size": 34682,
+    "export_count": 21,
+    "role": "phoenix-pool",
+    "source": "phoenix"
+  },
+  {
+    "hash": "13b158655e40396957537bf1c528c6542b315930c1c9e0df640f57293c8af2ca",
+    "size": 37047,
+    "export_count": 26,
+    "role": "phoenix-pool",
+    "source": "phoenix"
+  },
+  {
+    "hash": "14ed2bb1a025c22bcc730ffc9da3f5aa9f7c653f4be402812c32f249e20dee01",
+    "size": 36681,
+    "export_count": 20,
+    "role": "phoenix-pool",
+    "source": "phoenix"
+  },
+  {
+    "hash": "167ab414a226427de34c19947ef9c5cf38c6c0ed91ecf9392f7cef3278ff506c",
+    "size": 36810,
+    "export_count": 26,
+    "role": "phoenix-pool",
+    "source": "phoenix"
+  },
+  {
+    "hash": "18051456816b66f12e773a56f77c5794fac1b1fb7ab6e22d4fad5a412770f73e",
+    "size": 27410,
+    "export_count": 26,
+    "role": "soroswap-pair",
+    "source": "soroswap"
+  },
+  {
+    "hash": "18336805466bbd05bc388610d36de73994f5b9061bb199c02418a073fcf4b281",
+    "size": 12814,
+    "export_count": 9,
+    "role": "phoenix-multihop",
+    "source": "phoenix"
+  },
+  {
+    "hash": "18e40185bbebefa02e358353699302c1c0266a5b3d048981b241eec8d22ffd76",
+    "size": 35769,
+    "export_count": 21,
+    "role": "phoenix-pool",
+    "source": "phoenix"
+  },
+  {
+    "hash": "2491b9b663f647bdb5ff358c3bbe6ddd4e9a43bfbe8edebccd26ca71ad2e84b8",
+    "size": 37416,
+    "export_count": 67,
+    "role": "aquarius-router",
+    "source": "aquarius"
+  },
+  {
+    "hash": "24f1456544ebc25a598792c4f64113711ff78ad6d9bda95e057ed2ade7c23800",
+    "size": 34765,
+    "export_count": 20,
+    "role": "phoenix-pool",
+    "source": "phoenix"
+  },
+  {
+    "hash": "26c495019afb7448f690a82d6e66d8fab1ad3fd3e7b4aec7d554209966c9d19d",
+    "size": 38701,
+    "export_count": 63,
+    "role": "aquarius-router",
+    "source": "aquarius"
+  },
+  {
+    "hash": "27635b9a4439ac911b2a9b431627ad2e2545faded01da27e405003050ec91887",
+    "size": 36820,
+    "export_count": 21,
+    "role": "phoenix-pool",
+    "source": "phoenix"
+  },
+  {
+    "hash": "29eb1047312dc244e06128910bf60aa71e4104083c5bf41af006177b65216ca0",
+    "size": 44927,
+    "export_count": 67,
+    "role": "aquarius-pool",
+    "source": "aquarius"
+  },
+  {
+    "hash": "2bbb91c58cb8432fd40446e80188a25e7c07dc2edc853e885d65cafbbbf19581",
+    "size": 20615,
+    "export_count": 18,
+    "role": "phoenix-factory",
+    "source": "phoenix"
+  },
+  {
+    "hash": "2c2b3c9756f372092f9120393b41b1b6a5aa5546de169d1100daf370e1c880d8",
+    "size": 34959,
+    "export_count": 56,
+    "role": "aquarius-router",
+    "source": "aquarius"
+  },
+  {
+    "hash": "2d770946d5429b0988fd33904cf19b5498823f668cb69a0a5028e988023d2040",
+    "size": 39081,
+    "export_count": 54,
+    "role": "aquarius-pool",
+    "source": "aquarius"
+  },
+  {
+    "hash": "2e6f1daed872881ac52bf637328076cd81a3b5a70e46524453a354309c7a3786",
+    "size": 55953,
+    "export_count": 73,
+    "role": "aquarius-pool",
+    "source": "aquarius"
+  },
+  {
+    "hash": "4a64c8c8502df326f4ce06d98998dc7d8a61575a11d6c0fbd4c60d10dfe28ffa",
+    "size": 22613,
+    "export_count": 26,
+    "role": "reflector",
+    "source": "reflector"
+  },
+  {
+    "hash": "4c3db3ebd2d6a2ab23de1f622eaabb39501539b4611b68622ec4e47f76c4ba07",
+    "size": 34253,
+    "export_count": 24,
+    "role": "soroswap-router",
+    "source": "soroswap"
+  },
+  {
+    "hash": "4f080d249700b9a30ca2e1bb828ecb29e47357cd36b122c7744593cef30b7a08",
+    "size": 30211,
+    "export_count": 40,
+    "role": "aquarius-pool",
+    "source": "aquarius"
+  },
+  {
+    "hash": "5db738b05d9148128a240b0e2c1cb935c2805192bf98a579421aacda364c8dae",
+    "size": 9894,
+    "export_count": 16,
+    "role": "soroswap-factory",
+    "source": "soroswap"
+  },
+  {
+    "hash": "5e93d22c9e19b254dae5474aebbb65a39f2f53b3b1d4371c58281987e1e29945",
+    "size": 40708,
+    "export_count": 14,
+    "role": "redstone",
+    "source": "redstone"
+  },
+  {
+    "hash": "60332ba12801eda65874e9afdbfdf8d114f56011fe7d1f902103cd7767c547d4",
+    "size": 8364,
+    "export_count": 9,
+    "role": "phoenix-multihop",
+    "source": "phoenix"
+  },
+  {
+    "hash": "64ef0bc6962f06546c0e00a11877c869d78c08043f79d50ee2c09cb1b837c477",
+    "size": 50285,
+    "export_count": 67,
+    "role": "aquarius-pool",
+    "source": "aquarius"
+  },
+  {
+    "hash": "6cdb9a3cdeec01a113c50e311218eeb0991aff8f7b379f556badca2b49b1eb01",
+    "size": 13616,
+    "export_count": 19,
+    "role": "band",
+    "source": "band"
+  },
+  {
+    "hash": "721badb85470a81d9d0a1c72dd0debb37f5f268419d4b94d125e546cc32d350e",
+    "size": 20627,
+    "export_count": 18,
+    "role": "phoenix-factory",
+    "source": "phoenix"
+  },
+  {
+    "hash": "77bdc0a993960faa2b0dac7b43a5160d6ed745ee787573c2f0ad8d00d4806366",
+    "size": 18492,
+    "export_count": 16,
+    "role": "phoenix-multihop",
+    "source": "phoenix"
+  },
+  {
+    "hash": "7cecf23b7c8cd6f7768d272f89fd59bf71a8eff0eed07f251c5f47d9570ed435",
+    "size": 32785,
+    "export_count": 48,
+    "role": "aquarius-pool",
+    "source": "aquarius"
+  },
+  {
+    "hash": "7e834fa193deacd7fdd28104a58c8a2684b6b6a4e8d2485d37195569d8810888",
+    "size": 36595,
+    "export_count": 20,
+    "role": "phoenix-pool",
+    "source": "phoenix"
+  },
+  {
+    "hash": "8abc28913035c07411ed5d134e6bfeab4723d97ddd4d1a22a0605d35c94d1a36",
+    "size": 29046,
+    "export_count": 34,
+    "role": "comet",
+    "source": "comet"
+  },
+  {
+    "hash": "8cf10d1439a9ed1f8d27606cadcdae7555851c40ef0e6e4bb1ffe2f8ebcd7658",
+    "size": 41974,
+    "export_count": 65,
+    "role": "aquarius-router",
+    "source": "aquarius"
+  },
+  {
+    "hash": "916315045be9861c47b22a8b2502ea266e75659d54fdbd0303ba1b9091c9632f",
+    "size": 34912,
+    "export_count": 20,
+    "role": "phoenix-pool",
+    "source": "phoenix"
+  },
+  {
+    "hash": "96c6a73863de6e331d8103898f421bb7af719b87bbd4ac14d5a16f6b2662546b",
+    "size": 19032,
+    "export_count": 16,
+    "role": "phoenix-factory",
+    "source": "phoenix"
+  },
+  {
+    "hash": "9f10e0527cd180e53ab3da55484eca00c004333309fbff81b5ba8a52d8909f26",
+    "size": 34687,
+    "export_count": 20,
+    "role": "phoenix-pool",
+    "source": "phoenix"
+  },
+  {
+    "hash": "a1629dcdf9192727296124ca4ef0f5cc5829086073b4cf5b4f42e27331b22ce0",
+    "size": 43336,
+    "export_count": 63,
+    "role": "aquarius-pool",
+    "source": "aquarius"
+  },
+  {
+    "hash": "a67ad7715ecb3e174a1afe731d9f534e616dac3d5b115781762ec531c2ce1d30",
+    "size": 34441,
+    "export_count": 55,
+    "role": "aquarius-router",
+    "source": "aquarius"
+  },
+  {
+    "hash": "ac63334c62a48aa3ea5c2187e423ebe89bcf285848e25251aa839667323083c8",
+    "size": 28903,
+    "export_count": 19,
+    "role": "phoenix-pool",
+    "source": "phoenix"
+  },
+  {
+    "hash": "b04880dfbe7630b17cec60403669123987fa0ef6b91e418b30fb68180ac4f93b",
+    "size": 37272,
+    "export_count": 67,
+    "role": "aquarius-router",
+    "source": "aquarius"
+  },
+  {
+    "hash": "b400f7a8ac121022955be1bd2468fcb99f126d2aa2fcc185a6abba36e83a3ef2",
+    "size": 40716,
+    "export_count": 14,
+    "role": "redstone",
+    "source": "redstone"
+  },
+  {
+    "hash": "b4e621fbdc990177ef071c439100bc382c58d08e9d9710f82fbb993698e17931",
+    "size": 34666,
+    "export_count": 20,
+    "role": "phoenix-pool",
+    "source": "phoenix"
+  },
+  {
+    "hash": "b54ba37b7bb7dd69a7759caa9eec70e9e13615ba3b009fc23c4626ae9dffa27f",
+    "size": 45087,
+    "export_count": 59,
+    "role": "aquarius-pool",
+    "source": "aquarius"
+  },
+  {
+    "hash": "bb79374086c981f6937907516ba98af68aadf005bc34f0a18a863e7d02d37b48",
+    "size": 50781,
+    "export_count": 77,
+    "role": "aquarius-pool",
+    "source": "aquarius"
+  },
+  {
+    "hash": "c54ba54bd9e37503a641fa661126cd858faf57738c1e903b84f72ac505016393",
+    "size": 25030,
+    "export_count": 21,
+    "role": "phoenix-factory",
+    "source": "phoenix"
+  },
+  {
+    "hash": "df88820e231ad8f3027871e5dd3cf45491d7b7735e785731466bfc2946008608",
+    "size": 22573,
+    "export_count": 25,
+    "role": "reflector",
+    "source": "reflector"
+  },
+  {
+    "hash": "e1464afcf0c7c01e4306e3eb9d16f653500fbaa31c3cce0afd675449d58cea14",
+    "size": 17834,
+    "export_count": 16,
+    "role": "phoenix-factory",
+    "source": "phoenix"
+  },
+  {
+    "hash": "e235ace43d2eaea9a57d5717d6888e32d6bdd0fbf224ea4c83a602e94d3d8f6e",
+    "size": 36759,
+    "export_count": 21,
+    "role": "phoenix-pool",
+    "source": "phoenix"
+  },
+  {
+    "hash": "e747f94bd6d54805390f66f608311628b054e77c5062336aaf38b46492d622b8",
+    "size": 34535,
+    "export_count": 20,
+    "role": "phoenix-pool",
+    "source": "phoenix"
+  },
+  {
+    "hash": "f5bdd7c4b58401cd3c28bd4ba4162650fe1971f9b22c27b5be7c4d3664596a96",
+    "size": 42801,
+    "export_count": 59,
+    "role": "aquarius-pool",
+    "source": "aquarius"
+  }
+]
