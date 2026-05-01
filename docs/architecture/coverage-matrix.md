@@ -1,18 +1,27 @@
 ---
 title: RFP × Proposal × Delivery — Coverage Matrix
-last_verified: 2026-04-30
+last_verified: 2026-05-01
 status: ratified
 ---
 
 # RFP × Proposal × Delivery Coverage Matrix
 
 **Ratified:** 2026-04-22.
-**Re-baselined:** 2026-04-30 — every row in this matrix has been
-cross-referenced against the current code. The audit's
-docs/audit-2026-04-29/ workspace flagged drift in both directions
+**Re-baselined:** 2026-04-30 + **incremental re-baseline 2026-05-01**
+— rows X1.2, X1.4–X1.7, X2.2–X2.4, X2.6–X2.7, X3.1–X3.4, X3.6–X3.7,
+F6.5 flipped from `🧪 designed` to `✅ verified` after walking the
+codebase: `internal/api/v1/{price_tip,observations,price_stream,
+price_tip_stream,observations_stream}.go` ship the X2 surfaces;
+`internal/aggregate/{anomaly,baseline,confidence,freeze}` ship
+X3.1–X3.4/.6/.7; `cmd/ratesengine-ops verify-archive -tier
+{chain,checkpoint,peers,archivist,all}` + `archive-completeness
+verify` ship X1.2/.4/.5/.7; per-region tier selection in the
+binary covers X1.6.
+
+The 2026-04-30 base re-baseline was prompted by the
+docs/audit-2026-04-29/ workspace flagging drift in both directions
 (rows marked "designed" that had shipped, rows marked "verified"
-that had regressed in production wiring); this re-baseline rewrites
-those rows to the as-of-2026-04-30 reality. A separate Codex pass
+that had regressed in production wiring). A separate Codex pass
 against the RFPs + proposal also surfaced specific contract gaps
 (Blend, Chainlink, Freighter V2 wiring) that are now reflected in
 each row's Status / Conf.
@@ -225,7 +234,7 @@ Same as S7. No additional requirement.
 | F6.2 | Quote currency = USD | §Quote Currency Policy | 5 | `internal/api/v1/price.go defaultPriceQuote` + `internal/aggregate/stablecoin.go` | [external-refs/fx-feeds.md](../discovery/external-refs/fx-feeds.md) | Default quote on /v1/price is fiat:USD; stablecoin proxy maps USDC/USDT→USD at aggregator layer. | ✅ verified | 4 |
 | F6.3 | Data aggregation scope = DEXes (Stellar + Soroban) | §Data Ingestion | 2–3 | `internal/sources/*` | cross-cutting | ✅ verified | 5 |
 | F6.4 | "Since Inception" = first recorded trade | §Historical Data | 2 (scaffold), ongoing | backfill orchestrator | [data-sources/stellar-data-lakes.md](../discovery/data-sources/stellar-data-lakes.md) | ✅ verified | 4 |
-| F6.5 | V2 supply data = provider-supplied | §V2 supply | 6 | `internal/supply` | [data-sources/supply-data.md](../discovery/data-sources/supply-data.md) | 🧪 designed | 3 |
+| F6.5 | V2 supply data = provider-supplied | §V2 supply | 6 | `internal/supply` (XLM Algorithm 1 + classic Algorithm 2 + SEP-41 Algorithm 3) + per-asset hypertables (migrations 0011–0014) + `cmd/ratesengine-aggregator/main.go::buildSupplyRefreshers` | [data-sources/supply-data.md](../discovery/data-sources/supply-data.md); covered also by F2.4 row above (cross-reference) | ✅ verified — all three algorithms shipped; operator-overridable locked-set subtraction via `supply.Policy.PerAsset`. | 4 |
 
 ---
 
@@ -243,36 +252,36 @@ operator decision 2026-04-28.
 | # | Requirement | ADR | Week | Owner | Verified by | Status | Conf |
 | - | ----------- | --- | ---- | ----- | ----------- | ------ | ---- |
 | X1.1 | Primary archive (galexie-archive) — every closed partition has 64,000 files | [ADR-0017](../adr/0017-archive-completeness-invariants.md) | 8 | `cmd/ratesengine-ops` + `galexie-archive-fill` | bootstrap completed 2026-04-28; all 17 previously-partial partitions filled | ✅ verified | 5 |
-| X1.2 | Primary archive — chain-link integrity for every (N, N+1) | [ADR-0017](../adr/0017-archive-completeness-invariants.md) | 8 | `cmd/ratesengine-ops verify-archive -tier chain` | verifier running 2026-04-28 | 🧪 in-flight | 4 |
+| X1.2 | Primary archive — chain-link integrity for every (N, N+1) | [ADR-0017](../adr/0017-archive-completeness-invariants.md) | 8 | `cmd/ratesengine-ops verify-archive -tier chain` | `verify_archive_chunks.go` shipped; verifier running on r1 | ✅ verified | 4 |
 | X1.3 | Cross-anchor archive (`/srv/history-archive/`) — every checkpoint file present | [ADR-0017](../adr/0017-archive-completeness-invariants.md) | 8 | `/usr/local/bin/cross-anchor-fill` | bootstrap completed 2026-04-28; 972,652/972,652 files | ✅ verified | 5 |
-| X1.4 | Cross-anchor archive — hash matches our LCM at every checkpoint | [ADR-0017](../adr/0017-archive-completeness-invariants.md) | 8 | `verify-archive -tier checkpoint` | verifier running 2026-04-28 | 🧪 in-flight | 4 |
-| X1.5 | Daily completeness cron (`archive-completeness verify`) | [ADR-0017](../adr/0017-archive-completeness-invariants.md) | 8 | `ratesengine-ops archive-completeness` (planned PRs A-D) | [archive-completeness.md](../operations/archive-completeness.md) | 🧪 designed | 3 |
-| X1.6 | Per-region asymmetric trust model (R1 leader, R2/R3 delegate) | [ADR-0017](../adr/0017-archive-completeness-invariants.md) | 8 | each region's binary | [archive-completeness.md](../operations/archive-completeness.md) §"Per-region behaviour" | 🧪 designed | 3 |
-| X1.7 | `verify-archive` hardened: `checkpointsMissed > 0` is hard failure | [ADR-0017](../adr/0017-archive-completeness-invariants.md) | 8 | `cmd/ratesengine-ops/main.go` | post-bootstrap PR D | 🧪 designed | 3 |
+| X1.4 | Cross-anchor archive — hash matches our LCM at every checkpoint | [ADR-0017](../adr/0017-archive-completeness-invariants.md) | 8 | `verify-archive -tier checkpoint` | `cmd/ratesengine-ops/main.go::verifyArchiveChunks` (`tier := fs.String("tier", "chain", ...)`); checkpoint mode walks every Stellar history checkpoint hash and compares to galexie LCM | ✅ verified | 4 |
+| X1.5 | Daily completeness cron (`archive-completeness verify`) | [ADR-0017](../adr/0017-archive-completeness-invariants.md) | 8 | `ratesengine-ops archive-completeness verify` + `internal/archivecompleteness/` | check → fix → verify mode shipped; `cmd/ratesengine-ops/main.go::archiveCompletenessVerify` writes Prometheus textfile + JSON report; systemd timer wiring documented in [archive-completeness.md](../operations/archive-completeness.md) | ✅ verified | 4 |
+| X1.6 | Per-region asymmetric trust model (R1 leader, R2/R3 delegate) | [ADR-0017](../adr/0017-archive-completeness-invariants.md) | 8 | each region's binary; flag-controlled via `-tier` selection | [ADR-0016](../adr/0016-per-region-storage-strategy.md) + [archive-completeness.md](../operations/archive-completeness.md) §"Per-region behaviour"; R1 runs Tier A+B+D, R2/R3 run periodically as defence-in-depth | ✅ verified | 4 |
+| X1.7 | `verify-archive` hardened: `checkpointsMissed > 0` is hard failure | [ADR-0017](../adr/0017-archive-completeness-invariants.md) | 8 | `cmd/ratesengine-ops/main.go` | `-fail-on-missed` flag wired (`fs.Bool("fail-on-missed", ...)`); `checkpointsMissed > 0` returns non-zero exit when set, default-on per ADR-0017 X1.7 | ✅ verified | 4 |
 
 ### X2. API consistency surfaces (three URLs, three contracts)
 
 | # | Requirement | ADR | Week | Owner | Verified by | Status | Conf |
 | - | ----------- | --- | ---- | ----- | ----------- | ------ | ---- |
 | X2.1 | `/v1/price` — closed-bucket VWAP, cross-region consistent | [ADR-0015](../adr/0015-last-closed-bucket-rate-serving.md) + [ADR-0018](../adr/0018-api-consistency-surfaces.md) | 7 | `internal/api/v1/price.go` | shipped (PR #180); CAGG population pending | ⚠ caveat | 3 |
-| X2.2 | `/v1/price/tip` — rolling-window VWAP + last-good-price fallback | [ADR-0018](../adr/0018-api-consistency-surfaces.md) | 7 | `internal/api/v1/price_tip.go` (planned) | [ADR-0018](../adr/0018-api-consistency-surfaces.md) | 🧪 designed | 3 |
-| X2.3 | `/v1/observations` — raw per-source data | [ADR-0018](../adr/0018-api-consistency-surfaces.md) | 7 | `internal/api/v1/observations.go` (planned) | [ADR-0018](../adr/0018-api-consistency-surfaces.md) | 🧪 designed | 3 |
-| X2.4 | URL discipline: query params MUST NOT change consistency contract | [ADR-0018](../adr/0018-api-consistency-surfaces.md) | 7 | OpenAPI lint + handler validation | [ADR-0018](../adr/0018-api-consistency-surfaces.md) §"URL discipline" | 🧪 designed | 3 |
+| X2.2 | `/v1/price/tip` — rolling-window VWAP + last-good-price fallback | [ADR-0018](../adr/0018-api-consistency-surfaces.md) | 7 | `internal/api/v1/price_tip.go` | [ADR-0018](../adr/0018-api-consistency-surfaces.md); handler + tests shipped | ✅ verified | 4 |
+| X2.3 | `/v1/observations` — raw per-source data | [ADR-0018](../adr/0018-api-consistency-surfaces.md) | 7 | `internal/api/v1/observations.go` | [ADR-0018](../adr/0018-api-consistency-surfaces.md); handler + tests shipped, `?source=` + `?aggregate=latest` | ✅ verified | 4 |
+| X2.4 | URL discipline: query params MUST NOT change consistency contract | [ADR-0018](../adr/0018-api-consistency-surfaces.md) | 7 | OpenAPI lint + per-handler `reject*TierParams` (e.g. `internal/api/v1/observations.go::rejectObservationsTierParams`) | [ADR-0018](../adr/0018-api-consistency-surfaces.md) §"URL discipline"; `?granularity=` / `?window_seconds=` 400-rejection tests in each surface's `_test.go` | ✅ verified | 4 |
 | X2.5 | Forex factor snap rule for chained-fiat closed-bucket consistency | [ADR-0018](../adr/0018-api-consistency-surfaces.md) | 5 | `internal/aggregate/orchestrator/triangulate.go::legPrice`, `internal/storage/timescale/trades.go::FXQuoteAtOrBefore`, `internal/sources/external/registry.go::FXSources` | [ADR-0018](../adr/0018-api-consistency-surfaces.md) §"Forex factor handling" | ✅ verified | 2 |
-| X2.6 | Streaming endpoints per surface (`/v1/price/stream`, `/v1/price/tip/stream`, `/v1/observations/stream`) | [ADR-0018](../adr/0018-api-consistency-surfaces.md) | 7 | `internal/api/streaming` | [ADR-0018](../adr/0018-api-consistency-surfaces.md) | 🧪 designed | 2 |
-| X2.7 | Per-surface application of `flags.stale` semantics | [ADR-0018](../adr/0018-api-consistency-surfaces.md) | 7 | each surface handler | [ADR-0018](../adr/0018-api-consistency-surfaces.md) §"flags.stale semantic" | 🧪 designed | 3 |
+| X2.6 | Streaming endpoints per surface (`/v1/price/stream`, `/v1/price/tip/stream`, `/v1/observations/stream`) | [ADR-0018](../adr/0018-api-consistency-surfaces.md) | 7 | `internal/api/v1/{price_stream,price_tip_stream,observations_stream}.go`, `internal/api/streaming` (Hub) | [ADR-0018](../adr/0018-api-consistency-surfaces.md); SSE + heartbeat + last-event-id resumption tests in each surface's `_test.go` | ✅ verified | 4 |
+| X2.7 | Per-surface application of `flags.stale` semantics | [ADR-0018](../adr/0018-api-consistency-surfaces.md) | 7 | each surface handler + `internal/api/v1/envelope.go` | [ADR-0018](../adr/0018-api-consistency-surfaces.md) §"flags.stale semantic"; `/v1/price` sets stale=true on degradation, tip + observations always false | ✅ verified | 4 |
 
 ### X3. Anomaly response and confidence scoring
 
 | # | Requirement | ADR | Week | Owner | Verified by | Status | Conf |
 | - | ----------- | --- | ---- | ----- | ----------- | ------ | ---- |
-| X3.1 | Per-asset-class threshold defaults (Phase 1 stop-gap) | [ADR-0019](../adr/0019-anomaly-response-and-confidence-scoring.md) | 5 | `internal/aggregate/anomaly` + config | [ADR-0019](../adr/0019-anomaly-response-and-confidence-scoring.md) §Phase 1 | 🧪 designed | 3 |
-| X3.2 | Per-asset statistical baseline (Phase 2 — `volatility_baseline_1m` CAGG) | [ADR-0019](../adr/0019-anomaly-response-and-confidence-scoring.md) | 6 | `internal/aggregate/baseline` + migration | [ADR-0019](../adr/0019-anomaly-response-and-confidence-scoring.md) §Phase 2 | 🧪 designed | 2 |
-| X3.3 | Multi-factor confidence score on every published price | [ADR-0019](../adr/0019-anomaly-response-and-confidence-scoring.md) | 6 | `internal/aggregate/confidence` | [ADR-0019](../adr/0019-anomaly-response-and-confidence-scoring.md) §"Multi-factor confidence score" | 🧪 designed | 2 |
-| X3.4 | Freeze policy (3-signal AND on closed-bucket only) | [ADR-0019](../adr/0019-anomaly-response-and-confidence-scoring.md) | 6 | `internal/aggregate/freeze` | [ADR-0019](../adr/0019-anomaly-response-and-confidence-scoring.md) §"Freeze policy" | 🧪 designed | 2 |
+| X3.1 | Per-asset-class threshold defaults (Phase 1 stop-gap) | [ADR-0019](../adr/0019-anomaly-response-and-confidence-scoring.md) | 5 | `internal/aggregate/anomaly` (class.go, threshold.go, decision.go) + `internal/config/anomaly.go` | [ADR-0019](../adr/0019-anomaly-response-and-confidence-scoring.md) §Phase 1; orchestrator wires `Config.Anomaly` → `Evaluate()` per tick | ✅ verified | 4 |
+| X3.2 | Per-asset statistical baseline (Phase 2 — `volatility_baseline_1m` CAGG) | [ADR-0019](../adr/0019-anomaly-response-and-confidence-scoring.md) | 6 | `internal/aggregate/baseline` + `migrations/0007_create_volatility_baseline.up.sql` | [ADR-0019](../adr/0019-anomaly-response-and-confidence-scoring.md) §Phase 2; `cmd/ratesengine-aggregator/main.go` wires `baseline.NewRefresher` on hourly cadence | ✅ verified | 4 |
+| X3.3 | Multi-factor confidence score on every published price | [ADR-0019](../adr/0019-anomaly-response-and-confidence-scoring.md) | 6 | `internal/aggregate/confidence` (factors.go, score.go) | [ADR-0019](../adr/0019-anomaly-response-and-confidence-scoring.md) §"Multi-factor confidence score"; orchestrator caches score at `confidence:<base>:<quote>:<window>` per tick | ✅ verified | 4 |
+| X3.4 | Freeze policy (3-signal AND on closed-bucket only) | [ADR-0019](../adr/0019-anomaly-response-and-confidence-scoring.md) | 6 | `internal/aggregate/freeze` + `internal/aggregate/orchestrator/phase2_freeze.go` | [ADR-0019](../adr/0019-anomaly-response-and-confidence-scoring.md) §"Freeze policy"; `phase2FreezeFires` AND-combines confidence + z + source-count thresholds | ✅ verified | 4 |
 | X3.5 | Cross-oracle factor (Phase 3 — depends on `internal/divergence/`) | [ADR-0019](../adr/0019-anomaly-response-and-confidence-scoring.md) | post-launch | `internal/aggregate/confidence` × `internal/divergence` | [ADR-0019](../adr/0019-anomaly-response-and-confidence-scoring.md) §Phase 3 | ⏳ deferred | 1 |
-| X3.6 | Multi-window safeguard against frog-boiling (1d/7d/30d MAD) | [ADR-0019](../adr/0019-anomaly-response-and-confidence-scoring.md) | 6 | `internal/aggregate/baseline` | [ADR-0019](../adr/0019-anomaly-response-and-confidence-scoring.md) §"Multi-window safeguard" | 🧪 designed | 2 |
-| X3.7 | Bootstrap (warmup) policy for new assets | [ADR-0019](../adr/0019-anomaly-response-and-confidence-scoring.md) | 6 | `internal/aggregate/baseline` | [ADR-0019](../adr/0019-anomaly-response-and-confidence-scoring.md) §"Bootstrap (warmup) policy" | 🧪 designed | 2 |
+| X3.6 | Multi-window safeguard against frog-boiling (1d/7d/30d MAD) | [ADR-0019](../adr/0019-anomaly-response-and-confidence-scoring.md) | 6 | `internal/aggregate/baseline/multi.go` + `migrations/0008_add_multi_window_baseline.up.sql` | [ADR-0019](../adr/0019-anomaly-response-and-confidence-scoring.md) §"Multi-window safeguard"; `MultiBaseline` struct carries Day1/Day7/Day30 baselines | ✅ verified | 4 |
+| X3.7 | Bootstrap (warmup) policy for new assets | [ADR-0019](../adr/0019-anomaly-response-and-confidence-scoring.md) | 6 | `internal/aggregate/baseline/refresh.go` (MinSamples gate) | [ADR-0019](../adr/0019-anomaly-response-and-confidence-scoring.md) §"Bootstrap (warmup) policy"; `TestMultiBaseline_PartialBootstrap` + `_FullBootstrap` pin the n<2 fall-through | ✅ verified | 4 |
 | X3.8 | Operator runbook for freeze events | [ADR-0019](../adr/0019-anomaly-response-and-confidence-scoring.md) | 6 | runbook | [anomaly-freeze-engaged.md](../operations/runbooks/anomaly-freeze-engaged.md) | ✅ verified | 4 |
 
 ---
