@@ -131,17 +131,26 @@ fetched 2026-04-23:
    300+ objects landed within 5 min of sync. Ingestion pipeline
    is end-to-end working.
 
-2. **SCVal decoders implemented.** (Updated 2026-04-26.) All 8 source
-   decoders have real bodies — soroswap, aquarius, phoenix, reflector,
-   sdex, comet, band, redstone — landed across PRs #5, #7, #15, #19
-   plus subsequent fix-ups (Reflector OpIndex stride, Aquarius event
-   fan-out, Redstone Bytes unwrap, Band ContractCallDecoder). Per-decoder
-   unit-test coverage in flight (e.g. PR #148 pinning Band reject paths).
-   **Open question** for full historical backfill: each decoder needs a
-   per-WASM-hash audit before being turned loose on the 62 M-ledger
-   replay — current decoders target current-WASM events; replay sees
-   every prior version that ran during the range
-   (see [docs/architecture/contract-schema-evolution.md](../architecture/contract-schema-evolution.md)).
+2. **SCVal decoders implemented + audited for 7 of 8 sources.**
+   (Updated 2026-05-01.) All 8 source decoders have real bodies —
+   soroswap, aquarius, phoenix, reflector, sdex, comet, band,
+   redstone — landed across PRs #5, #7, #15, #19 plus subsequent
+   fix-ups (Reflector OpIndex stride, Aquarius event fan-out,
+   Redstone Bytes unwrap, Band ContractCallDecoder).
+   Per-WASM-hash audits **completed 2026-04-29** for soroswap,
+   aquarius, phoenix, comet, reflector-{dex,cex,fx}, redstone,
+   band → `BackfillSafe=true` flipped in
+   `internal/sources/external/registry.go`; evidence under
+   `docs/operations/wasm-audits/{<source>.md,evidence/}`. The
+   2026-04-30 walk re-verified the picture against r1's full
+   archive (`docs/operations/wasm-audits/r1-walk-2026-05-01.md`).
+   **Blend audit (Task #53) remains:** Phase 1 done via stellar.expert
+   (PR #339, all 9 pool addresses + current WASM bytes); Phase 2
+   (mid-life-upgrade walk on r1) is the wide-net re-launch we
+   kicked off 2026-05-01 22:05 (PID 1447513, `-to 62249727`).
+   `BackfillSafe=false` on `blend` until that finishes + a
+   per-WASM-hash review per
+   [docs/architecture/contract-schema-evolution.md](../architecture/contract-schema-evolution.md).
 
 ### Important but not urgent
 3. **Firewall + SSH hardening (phase 3)** not applied. Intentional —
@@ -176,10 +185,17 @@ fetched 2026-04-23:
    plan's original design ("aws s3 sync post-mirror into
    galexie-archive bucket for durability" — see item 6 below).
 
-4. **Layer-2 monitoring (Prometheus on a separate box)** is still
-   TODO. Layer-1 (Healthchecks.io push) catches total-death but
-   not per-metric alerts — we have 27 runbooks wired to alert
-   rules nobody is evaluating yet.
+4. **Layer-2 monitoring (Prometheus on a separate box) — role
+   exists, deploy still pending on r1.** (Updated 2026-05-01.) The
+   ansible role + AlertManager pair shipped in PR #363 — see
+   `configs/ansible/roles/prometheus/`. Companion design note at
+   `docs/architecture/prometheus-ansible-role-design-note.md`.
+   Loki + Promtail sibling role landed in #364 (`docs/architecture/loki-ansible-role-design-note.md`).
+   Both wait on a staging deploy to actually run; until then,
+   Layer-1 (Healthchecks.io push) catches total-death but the
+   28+ alert rules in `deploy/monitoring/rules/` (including the
+   X2.5 fx-snap-fallback alert added 2026-05-01) have no
+   evaluator wired up.
 
 5. **pgBackRest** not configured. Postgres has no backups.
 
