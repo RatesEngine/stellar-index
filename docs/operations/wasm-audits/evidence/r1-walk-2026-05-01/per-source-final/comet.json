@@ -1,0 +1,22 @@
+{
+  "source": "comet",
+  "contract_count": 1,
+  "unique_wasm_count": 1,
+  "role_breakdown": {
+    "comet": 1
+  },
+  "contracts": [
+    {
+      "contract": "CAS3FL6TLZKDGGSISDBWGGPXT3NRR4DYTZD7YOD3HMYO6LTJUVGRVEAM",
+      "final_role": "comet",
+      "wasm_history": [
+        {
+          "kind": "transition",
+          "from_ledger": 51499545,
+          "to_ledger": 51937331,
+          "wasm_hash": "8abc28913035c07411ed5d134e6bfeab4723d97ddd4d1a22a0605d35c94d1a36"
+        }
+      ]
+    }
+  ]
+}

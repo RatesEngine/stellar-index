@@ -1,7 +1,7 @@
 ---
 title: Aquarius WASM-history audit
 last_verified: 2026-05-01
-status: ratified — but pool-template hash citations below are STALE; see `r1-walk-2026-05-01.md` for current hashes
+status: ratified — incomplete (covers Cohort A; Cohort B documented in r1-walk-2026-05-01.md)
 source: aquarius
 backfill_safe: true
 ---
@@ -11,21 +11,24 @@ backfill_safe: true
 Audit log for the `aquarius` source's `BackfillSafe` flag. See
 `README.md` for the full procedure.
 
-> **🚨 2026-05-01 doc-rot notice.** The pool-template hashes
-> cited below (`8875f0c770fb26d3…`, `ae0da5a84b15805c…`,
-> `f1077e0b77da5e62…`) **do not match any hash observed in the
-> 2026-04-30 r1 walk**. Aquarius pool WASMs have upgraded
-> through five further versions since this audit was written.
-> The decoder has remained correct because we key off
-> event-topic shape, not per-WASM behaviour.
+> **2026-05-01 update.** The three pool-template hashes cited
+> below (`8875f0c770fb26d3…`, `ae0da5a84b15805c…`,
+> `f1077e0b77da5e62…`) are **correct and currently active**:
+> they govern 168 Aquarius pools that have never upgraded since
+> deployment. An earlier draft of `r1-walk-2026-05-01.md`
+> incorrectly flagged them as "stale" because the
+> wasm-history walker only emits *transitions* and these
+> contracts had none — that was a walker artefact, not doc-rot.
 >
-> The current pool-template upgrade chain
+> What this file IS missing: a second cohort of 145 Aquarius
+> pools that DID upgrade, going through a 5-WASM chain
 > (`b54ba37b… → 2d770946… → 7cecf23b… → a1629dcd… → 4f080d24…`)
-> is documented in
-> [`r1-walk-2026-05-01.md`](r1-walk-2026-05-01.md) §Aquarius.
-> This file retains its original audit-trail context; treat
-> the hash table below as a *historical baseline*, not a
-> current-state claim, until the audit is re-run.
+> documented in [`r1-walk-2026-05-01.md`](r1-walk-2026-05-01.md)
+> §Aquarius §Cohort B. Total: 313 pools across both cohorts —
+> matches the count in this file.
+>
+> A future audit refresh should fold Cohort B into the per-hash
+> review table below.
 
 ## Status
 
