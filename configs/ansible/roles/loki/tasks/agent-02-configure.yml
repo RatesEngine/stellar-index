@@ -1,0 +1,9 @@
+---
+- name: render /etc/promtail/promtail-config.yaml
+  template:
+    src: promtail-config.yaml.j2
+    dest: /etc/promtail/promtail-config.yaml
+    owner: root
+    group: "{{ promtail_user }}"
+    mode: "0640"
+  notify: "promtail config changed"

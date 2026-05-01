@@ -1,0 +1,23 @@
+---
+# Single role with two task surfaces: server tasks run on hosts
+# in the `log_aggregator` inventory group; agent tasks on every
+# host in `log_shippers`. A host in both groups gets both (rare
+# but valid).
+
+- name: Loki SERVER tasks
+  block:
+    - import_tasks: server-01-preflight.yml
+    - import_tasks: server-02-install.yml
+    - import_tasks: server-03-configure.yml
+    - import_tasks: server-04-systemd.yml
+    - import_tasks: server-05-firewall.yml
+  when: "'log_aggregator' in group_names"
+  tags: [loki, server]
+
+- name: Promtail AGENT tasks
+  block:
+    - import_tasks: agent-01-install.yml
+    - import_tasks: agent-02-configure.yml
+    - import_tasks: agent-03-systemd.yml
+  when: "'log_shippers' in group_names"
+  tags: [loki, agent, promtail]

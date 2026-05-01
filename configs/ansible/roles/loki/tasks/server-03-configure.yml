@@ -1,0 +1,9 @@
+---
+- name: render /etc/loki/loki-config.yaml
+  template:
+    src: loki-config.yaml.j2
+    dest: /etc/loki/loki-config.yaml
+    owner: root
+    group: loki
+    mode: "0640"
+  notify: "loki config changed"

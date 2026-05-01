@@ -1,0 +1,18 @@
+---
+galaxy_info:
+  role_name: loki
+  author: ratesengine
+  description: >-
+    Loki single-binary log aggregator + Promtail journal-shipping
+    agents per docs/architecture/ha-plan.md §7. Single host runs
+    Loki with MinIO S3 chunks + BoltDB index; every other host
+    runs Promtail to ship systemd journal entries.
+  license: Apache-2.0
+  min_ansible_version: "2.16"
+  platforms:
+    - name: Ubuntu
+      versions:
+        - jammy
+        - noble
+
+dependencies: []

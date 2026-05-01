@@ -1,0 +1,35 @@
+---
+- name: ensure loki dirs exist
+  file:
+    path: "{{ item.path }}"
+    state: directory
+    owner: "{{ item.owner }}"
+    group: "{{ item.group }}"
+    mode: "{{ item.mode }}"
+  loop:
+    - { path: /etc/loki,                  owner: root, group: loki, mode: "0750" }
+    - { path: "{{ loki_data_dir }}",       owner: loki, group: loki, mode: "0750" }
+    - { path: "{{ loki_data_dir }}/index", owner: loki, group: loki, mode: "0750" }
+    - { path: "{{ loki_data_dir }}/index_cache", owner: loki, group: loki, mode: "0750" }
+    - { path: "{{ loki_data_dir }}/compactor",   owner: loki, group: loki, mode: "0750" }
+
+- name: download loki tarball
+  get_url:
+    url: "https://github.com/grafana/loki/releases/download/v{{ loki_version }}/loki-linux-amd64.zip"
+    dest: /tmp/loki.zip
+    mode: "0644"
+
+- name: extract loki binary
+  unarchive:
+    src: /tmp/loki.zip
+    dest: /tmp
+    remote_src: yes
+
+- name: install loki binary
+  copy:
+    src: /tmp/loki-linux-amd64
+    dest: /usr/local/bin/loki
+    owner: root
+    group: root
+    mode: "0755"
+    remote_src: yes

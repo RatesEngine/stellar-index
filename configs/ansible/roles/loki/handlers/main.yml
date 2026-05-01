@@ -1,0 +1,20 @@
+---
+- name: restart loki
+  systemd:
+    name: loki
+    state: restarted
+    daemon_reload: yes
+  listen: "loki config changed"
+
+- name: restart promtail
+  systemd:
+    name: promtail
+    state: restarted
+    daemon_reload: yes
+  listen: "promtail config changed"
+
+- name: reload firewall
+  systemd:
+    name: nftables
+    state: reloaded
+  listen: "firewall rules changed"

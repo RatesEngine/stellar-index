@@ -1,0 +1,68 @@
+{# Render-time — managed by ansible (loki role). Don't edit. #}
+
+# Internal-only deploy; no multi-tenancy.
+auth_enabled: false
+
+server:
+  http_listen_address: {{ loki_listen_address }}
+  http_listen_port: {{ loki_http_port }}
+  grpc_listen_address: 127.0.0.1
+  grpc_listen_port: {{ loki_grpc_port }}
+  log_level: info
+
+common:
+  ring:
+    instance_addr: 127.0.0.1
+    kvstore:
+      store: inmemory
+  replication_factor: {{ loki_replication_factor }}
+  path_prefix: {{ loki_data_dir }}
+
+# MinIO chunks via S3 backend; BoltDB index lives locally.
+storage_config:
+  aws:
+    endpoint: {{ loki_s3_endpoint | regex_replace('^https?://', '') }}
+    bucketnames: {{ loki_s3_bucket }}
+    region: {{ loki_s3_region }}
+    s3forcepathstyle: true
+    insecure: {{ 'true' if loki_s3_endpoint.startswith('http://') else 'false' }}
+    # Credentials supplied via env on the systemd unit:
+    #   AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY (set from the
+    #   {{ loki_s3_access_key_env }} / {{ loki_s3_secret_key_env }} env vars).
+  boltdb_shipper:
+    active_index_directory: {{ loki_data_dir }}/index
+    cache_location: {{ loki_data_dir }}/index_cache
+    shared_store: s3
+
+schema_config:
+  configs:
+    - from: 2025-01-01
+      store: boltdb-shipper
+      object_store: s3
+      schema: v12
+      index:
+        prefix: loki_index_
+        period: 24h
+
+limits_config:
+  retention_period: {{ loki_retention_days }}d
+  ingestion_rate_mb: 10
+  ingestion_burst_size_mb: 20
+  reject_old_samples: true
+  reject_old_samples_max_age: 168h   # 1 week — older entries get rejected
+
+compactor:
+  working_directory: {{ loki_data_dir }}/compactor
+  shared_store: s3
+  compaction_interval: 10m
+  retention_enabled: true
+  retention_delete_delay: 2h
+  retention_delete_worker_count: 4
+
+ruler:
+  storage:
+    type: local
+    local:
+      directory: /etc/loki/rules
+  rule_path: {{ loki_data_dir }}/rules-tmp
+  alertmanager_url: http://{{ hostvars[groups['prometheus_pair'][0] | default(inventory_hostname)].ansible_host | default('127.0.0.1') }}:9093

@@ -1,0 +1,38 @@
+{# Render-time — managed by ansible (loki role). #}
+
+[Unit]
+Description=Grafana Loki — log aggregation
+Documentation=https://grafana.com/docs/loki/
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=loki
+Group=loki
+
+# MinIO credentials from env (same vars as galexie). Loki picks
+# them up via the AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY pair
+# the upstream s3-driver expects.
+Environment=AWS_ACCESS_KEY_ID=${{ '{' }}{{ loki_s3_access_key_env }}{{ '}' }}
+Environment=AWS_SECRET_ACCESS_KEY=${{ '{' }}{{ loki_s3_secret_key_env }}{{ '}' }}
+EnvironmentFile=-/etc/default/loki
+
+ExecStart=/usr/local/bin/loki \
+  -config.file=/etc/loki/loki-config.yaml
+
+KillMode=process
+TimeoutStopSec=30
+LimitNOFILE=65536
+
+# Hardening
+ProtectSystem=full
+ProtectHome=yes
+PrivateTmp=yes
+NoNewPrivileges=yes
+
+Restart=on-failure
+RestartSec=5s
+
+[Install]
+WantedBy=multi-user.target

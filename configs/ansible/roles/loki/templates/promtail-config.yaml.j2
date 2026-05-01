@@ -1,0 +1,42 @@
+{# Render-time — managed by ansible (loki role). Don't edit. #}
+
+server:
+  http_listen_address: 127.0.0.1
+  http_listen_port: {{ promtail_listen_port }}
+  log_level: info
+
+positions:
+  filename: {{ promtail_data_dir }}/positions.yaml
+
+clients:
+  - url: {{ promtail_target_url }}
+    backoff_config:
+      min_period: 500ms
+      max_period: 5m
+      max_retries: 10
+    batchsize: 1048576
+    batchwait: 1s
+    timeout: 10s
+
+scrape_configs:
+  # Systemd journal — every service we run is a systemd unit, so
+  # this catches everything cleanly. Labels by unit + hostname +
+  # severity for downstream filtering.
+  - job_name: systemd_journal
+    journal:
+      max_age: {{ promtail_journal_max_age }}
+      path: /var/log/journal
+      labels:
+        job: systemd
+        instance: {{ inventory_hostname }}
+    relabel_configs:
+      - source_labels: ['__journal__systemd_unit']
+        target_label: unit
+      - source_labels: ['__journal__hostname']
+        target_label: hostname
+      - source_labels: ['__journal_priority_keyword']
+        target_label: severity
+      # Drop journal-internal noise (low signal:noise from these).
+      - source_labels: ['__journal__systemd_unit']
+        regex: '^(systemd-tmpfiles-clean|systemd-logind|cron)\\.service$'
+        action: drop

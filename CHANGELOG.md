@@ -17,6 +17,38 @@ against.
 
 ### Added
 
+- **Loki + Promtail ansible role — CLOSES Task #72**: ships
+  the fifth and final sub-role of #72 after Patroni (#344),
+  Redis Sentinel (#350), HAProxy (#362), and Prometheus (#363).
+  Single-host Loki running in single-binary mode per ha-plan §7
+  ("Logs: Loki + Tempo" — singular, not paired). Chunks land in
+  MinIO via S3 backend (reusing the galexie S3 deployment); index
+  is local BoltDB. Promtail agents ship the systemd journal from
+  every host in `log_shippers` (the union of every other
+  inventory group: prometheus_pair / ratesengine_api / aggregator
+  / indexer / haproxy_lb / redis_cluster / postgres_cluster).
+  Single role file with two task surfaces — server tasks
+  (`server-{01..05}.yml`) run on hosts in `log_aggregator`, agent
+  tasks (`agent-{01..03}.yml`) on `log_shippers`. Versions
+  pinned to upstream `v3.2.0` for both Loki and Promtail.
+  Promtail labels every entry with `job=systemd` + `instance` +
+  `unit` + `hostname` + `severity` for downstream filtering;
+  drops a few low-signal units (`systemd-tmpfiles-clean`,
+  `cron`, `systemd-logind`) as noise. 30d retention via Loki's
+  compactor; reject-old-samples set to 7d to catch broken
+  Promtail position files. Loki query API + Promtail HTTP
+  endpoint both bound to internal addresses, with the firewall
+  drop-in opening 3100 only on the internal CIDR. Companion
+  design note at
+  `docs/architecture/loki-ansible-role-design-note.md` covers
+  the 1-host design choice (logs are forensic, not real-time-
+  decision; HA scale-up path documented), the BoltDB-vs-TSDB
+  index trade-off at this scale, and the failure-mode table
+  (Promtail buffers up to 10k entries during Loki outage; new
+  chunks fail with 429 if MinIO is down; etc.). After this PR,
+  **Task #72 is fully closed** — all five sub-roles landed
+  this session.
+
 - **Prometheus + AlertManager ansible role (Task #72 sub-role)**:
   closes the fourth sub-role of #72 after Patroni (#344), Redis
   Sentinel (#350), and HAProxy (#362). 2-host Prometheus pair per

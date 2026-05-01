@@ -1,0 +1,45 @@
+---
+- name: assert OS is Ubuntu 22.04 or 24.04
+  assert:
+    that:
+      - ansible_distribution == "Ubuntu"
+      - ansible_distribution_version in ["22.04", "24.04"]
+    fail_msg: >-
+      loki role supports Ubuntu 22.04 / 24.04 only;
+      detected {{ ansible_distribution }} {{ ansible_distribution_version }}
+
+- name: assert log_aggregator inventory group has at least 1 host
+  assert:
+    that:
+      - groups['log_aggregator'] | length >= 1
+    fail_msg: >-
+      log_aggregator inventory group must have at least 1 host
+      (this role's server tasks run there).
+
+- name: assert log_shippers inventory group has at least 1 host
+  assert:
+    that:
+      - "'log_shippers' in groups"
+      - groups['log_shippers'] | length >= 1
+    fail_msg: >-
+      log_shippers inventory group must have at least 1 host
+      (otherwise nothing ships logs to Loki — pointless deploy).
+
+- name: assert time sync is active (chronyd or systemd-timesyncd)
+  shell: |
+    set -e
+    systemctl is-active --quiet chrony.service || \
+    systemctl is-active --quiet chronyd.service || \
+    systemctl is-active --quiet systemd-timesyncd.service
+  changed_when: false
+  register: time_sync_check
+  failed_when: time_sync_check.rc != 0
+
+- name: ensure loki system user exists
+  user:
+    name: loki
+    system: yes
+    shell: /usr/sbin/nologin
+    home: "{{ loki_data_dir }}"
+    create_home: yes
+    state: present

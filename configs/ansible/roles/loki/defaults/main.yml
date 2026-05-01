@@ -1,0 +1,55 @@
+---
+# loki role defaults — override in inventory.
+
+# ── Versions ───────────────────────────────────────────────────
+# Pinned to known-good upstream releases. Server + agent ship as
+# the same version pair to avoid wire-protocol skew.
+loki_version: "3.2.0"
+promtail_version: "3.2.0"
+
+# ── Server (log_aggregator host) ───────────────────────────────
+loki_data_dir: /var/lib/loki
+loki_retention_days: 30
+# HTTP API listen address — loopback-only by default; the
+# `agent` task pushes to the log_aggregator host's INTERNAL IP
+# (resolved at template-render time), so loopback isn't enough.
+# Operators who want loopback-only set `loki_listen_internal`
+# to 127.0.0.1 explicitly and add an HAProxy/nginx hop.
+loki_listen_address: "0.0.0.0"
+loki_http_port: 3100
+loki_grpc_port: 9095
+
+# Number of replicas the ingester ring expects. 1 for single-host;
+# bump to 2 when scaling to HA per the design note.
+loki_replication_factor: 1
+
+# ── Storage backend (MinIO via S3) ─────────────────────────────
+# Reuses the existing MinIO deployment from the galexie storage
+# config. Operator creates the loki-chunks bucket as a one-shot;
+# the role asserts it exists at preflight.
+loki_s3_endpoint: "{{ hostvars[groups['log_aggregator'][0]].s3_endpoint | default('http://127.0.0.1:9000') }}"
+loki_s3_bucket: loki-chunks
+loki_s3_region: r1
+loki_s3_access_key_env: RATESENGINE_S3_ACCESS_KEY
+loki_s3_secret_key_env: RATESENGINE_S3_SECRET_KEY
+
+# ── Agent (Promtail on every host) ─────────────────────────────
+promtail_data_dir: /var/lib/promtail
+promtail_listen_port: 9080
+promtail_user: promtail
+# How far back Promtail reads journal on first run. 12h is a
+# reasonable balance — enough to catch a recent incident without
+# replaying weeks of bootlog noise.
+promtail_journal_max_age: "12h"
+
+# Where the agent ships logs. Defaults to the first
+# `log_aggregator` host's ansible_host:port; operators can
+# override to point at a load-balanced front (HAProxy etc.).
+promtail_target_url: "http://{{ hostvars[groups['log_aggregator'][0]].ansible_host }}:{{ loki_http_port }}/loki/api/v1/push"
+
+# ── Firewall ───────────────────────────────────────────────────
+# Loki accepts ingest from any agent on internal CIDR.
+loki_internal_cidrs:
+  - 10.0.0.0/8
+  - 172.16.0.0/12
+  - 192.168.0.0/16

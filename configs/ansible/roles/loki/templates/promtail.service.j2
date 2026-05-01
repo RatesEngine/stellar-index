@@ -1,0 +1,36 @@
+{# Render-time — managed by ansible (loki role). #}
+
+[Unit]
+Description=Grafana Promtail — Loki log shipper
+Documentation=https://grafana.com/docs/loki/latest/clients/promtail/
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User={{ promtail_user }}
+Group={{ promtail_user }}
+
+# Promtail needs read access to the systemd journal. Group
+# membership is set by agent-01-install.yml (adds the promtail
+# user to the systemd-journal group at install time).
+SupplementaryGroups=systemd-journal
+
+ExecStart=/usr/local/bin/promtail \
+  -config.file=/etc/promtail/promtail-config.yaml
+
+KillMode=process
+TimeoutStopSec=30
+
+# Hardening
+ProtectSystem=full
+ProtectHome=yes
+PrivateTmp=yes
+NoNewPrivileges=yes
+ReadWritePaths={{ promtail_data_dir }}
+
+Restart=on-failure
+RestartSec=5s
+
+[Install]
+WantedBy=multi-user.target
