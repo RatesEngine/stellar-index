@@ -13,7 +13,7 @@
 
 aquarius:
   provenance: |
-    Aquarius Router (CAVLP5DH...) `get_pools_for_tokens_range` enumeration; 313 pools across 19 unique WASMs.
+    Aquarius Router (CBQDHNBF...) `get_pools_for_tokens_range` enumeration; 313 pools across 19 unique WASMs. (Earlier draft cited CAVLP5DH... — that's the Reflector testnet "Stellar Mainnet DEX" oracle, not Aquarius.)
   notes: |
     Two cohorts — see r1-walk-2026-05-01.md §Aquarius. Router itself TTL-evicted at RPC query time.
   contracts:  # 314 total
@@ -607,13 +607,13 @@ soroswap:
     - CDZKYLUACJQ4GWZ2LTVCCE4G2NTSU5IDAU3HDNBIAF3JBQFZSM4ZEYPU
     - CDZYG4RE75T4UFVUPP3V5LPBZ2GRGXZURP6LPUPADYRGWMTJXS2N5JXI
 
-# Contracts in the 2026-04-30 walk's input list that we couldn't
-# attribute via either walk transitions or RPC current-state. Their
-# ContractInstance entries are TTL-evicted; the contracts are
-# operationally live (we ingest events through them) but their
-# durable storage was reaped.
-_unattributed:
-  contracts:  # 3 total
-    - CAVLP5DH2GJPZMVO7IJY4CVOD5MWEFTJFVPD2YY2FQXOQHRGHK4D6HLP
-    - CCSSOHTBL3LEWUCBBEB5NJFC2OKFRC74OWEIJIZLRJBGAAU4VMU5NV4W
-    - CCYOZJCOPG34LLQQ7N24YXBM7LL62R7ONMZ3G6WZAAYPB5OYKOMJRN63
+# Removed 2026-05-01: three Reflector TESTNET addresses
+# (CAVLP5DH..., CCSSOHTBL..., CCYOZJCO...) were originally in the
+# input list because the Reflector audit walked legacy/testnet
+# contracts for completeness. They emit ranges:null on a mainnet
+# walk because they don't exist on mainnet, which earlier
+# investigations misinterpreted as "TTL-evicted." Per
+# walker-investigation-2026-05-01.md these should not be in any
+# future mainnet walk. The real mainnet Aquarius router is
+# CBQDHNBFBZYE4MKPWBSJOPIYLW4SFSXAXUTSXJN76GNKYVYPCKWC6QUK
+# (already in the aquarius: block above).
