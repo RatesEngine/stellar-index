@@ -1,0 +1,18 @@
+---
+galaxy_info:
+  role_name: prometheus
+  author: ratesengine
+  description: >-
+    Prometheus + AlertManager 2-host pair per
+    docs/architecture/ha-plan.md §7. Each host independently
+    scrapes all targets; AlertManagers cluster via gossip for
+    dedupe. Rule files synced from deploy/monitoring/rules/.
+  license: Apache-2.0
+  min_ansible_version: "2.16"
+  platforms:
+    - name: Ubuntu
+      versions:
+        - jammy
+        - noble
+
+dependencies: []

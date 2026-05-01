@@ -1,0 +1,31 @@
+---
+- name: 01 — preflight
+  import_tasks: 01-preflight.yml
+  tags: [prometheus, preflight]
+
+- name: 02 — install prometheus + alertmanager
+  import_tasks: 02-install.yml
+  tags: [prometheus, install]
+
+- name: 03 — configure prometheus
+  import_tasks: 03-prometheus-configure.yml
+  tags: [prometheus, config]
+  notify: "prometheus config changed"
+
+- name: 04 — configure alertmanager
+  import_tasks: 04-alertmanager-configure.yml
+  tags: [prometheus, alertmanager, config]
+  notify: "alertmanager config changed"
+
+- name: 05 — systemd units
+  import_tasks: 05-systemd.yml
+  tags: [prometheus, systemd]
+
+- name: 06 — firewall (allow cluster gossip + loopback only)
+  import_tasks: 06-firewall.yml
+  tags: [prometheus, firewall]
+  notify: "firewall rules changed"
+
+- name: 07 — self-scrape monitoring
+  import_tasks: 07-monitoring.yml
+  tags: [prometheus, monitoring]

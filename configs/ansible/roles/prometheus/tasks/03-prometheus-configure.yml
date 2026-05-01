@@ -1,0 +1,59 @@
+---
+# Render prometheus.yml + sync rule files from
+# deploy/monitoring/rules/. Uses promtool to validate the
+# rendered config before reload — a malformed render never lands.
+
+- name: render /etc/prometheus/prometheus.yml
+  template:
+    src: prometheus.yml.j2
+    dest: /etc/prometheus/prometheus.yml
+    owner: root
+    group: "{{ prometheus_user }}"
+    mode: "0640"
+    validate: "promtool check config %s"
+  notify: "prometheus config changed"
+
+# Cleanup pass: remove stale rule files no longer in the repo.
+# `copy:` doesn't handle deletions; without this, deleting a rule
+# from the repo leaves it on the host.
+- name: list current rule files in repo
+  delegate_to: localhost
+  become: no
+  find:
+    paths: "{{ prometheus_rules_source_dir }}"
+    patterns: "*.yml"
+  register: repo_rule_files
+
+- name: list rule files currently on the host
+  find:
+    paths: /etc/prometheus/rules.d
+    patterns: "*.yml"
+  register: host_rule_files
+
+- name: identify stale rule files (on host but not in repo)
+  set_fact:
+    stale_rule_files: >-
+      {{
+        (host_rule_files.files | map(attribute='path') | map('basename') | list)
+        | difference(repo_rule_files.files | map(attribute='path') | map('basename') | list)
+      }}
+
+- name: remove stale rule files
+  file:
+    path: "/etc/prometheus/rules.d/{{ item }}"
+    state: absent
+  loop: "{{ stale_rule_files }}"
+  notify: "prometheus config changed"
+
+- name: sync rule files from deploy/monitoring/rules/
+  copy:
+    src: "{{ item.path }}"
+    dest: "/etc/prometheus/rules.d/{{ item.path | basename }}"
+    owner: root
+    group: "{{ prometheus_user }}"
+    mode: "0640"
+    validate: "promtool check rules %s"
+  loop: "{{ repo_rule_files.files }}"
+  loop_control:
+    label: "{{ item.path | basename }}"
+  notify: "prometheus config changed"

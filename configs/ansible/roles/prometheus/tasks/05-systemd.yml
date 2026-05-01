@@ -1,0 +1,30 @@
+---
+- name: render prometheus systemd unit
+  template:
+    src: prometheus.service.j2
+    dest: /etc/systemd/system/prometheus.service
+    mode: "0644"
+  notify: "prometheus config changed"
+
+- name: render alertmanager systemd unit
+  template:
+    src: alertmanager.service.j2
+    dest: /etc/systemd/system/alertmanager.service
+    mode: "0644"
+  notify: "alertmanager config changed"
+
+- name: daemon-reload systemd
+  systemd:
+    daemon_reload: yes
+
+- name: enable + start prometheus
+  systemd:
+    name: prometheus
+    enabled: yes
+    state: started
+
+- name: enable + start alertmanager
+  systemd:
+    name: alertmanager
+    enabled: yes
+    state: started

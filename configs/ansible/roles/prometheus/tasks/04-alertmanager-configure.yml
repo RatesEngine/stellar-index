@@ -1,0 +1,10 @@
+---
+- name: render /etc/alertmanager/alertmanager.yml
+  template:
+    src: alertmanager.yml.j2
+    dest: /etc/alertmanager/alertmanager.yml
+    owner: root
+    group: "{{ alertmanager_user }}"
+    mode: "0640"
+    validate: "amtool check-config %s"
+  notify: "alertmanager config changed"

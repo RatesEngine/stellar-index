@@ -1,0 +1,21 @@
+---
+# Prometheus reloads via SIGHUP — zero-drop config update.
+- name: reload prometheus
+  systemd:
+    name: prometheus
+    state: reloaded
+    daemon_reload: yes
+  listen: "prometheus config changed"
+
+- name: reload alertmanager
+  systemd:
+    name: alertmanager
+    state: reloaded
+    daemon_reload: yes
+  listen: "alertmanager config changed"
+
+- name: reload firewall
+  systemd:
+    name: nftables
+    state: reloaded
+  listen: "firewall rules changed"

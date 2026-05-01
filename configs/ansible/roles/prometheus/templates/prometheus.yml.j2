@@ -1,0 +1,132 @@
+{# Render-time — managed by ansible (prometheus role). Don't edit. #}
+{# Validated by `promtool check config` before reload. #}
+
+global:
+  scrape_interval:     {{ prometheus_default_scrape_interval }}
+  evaluation_interval: {{ prometheus_default_evaluation_interval }}
+  external_labels:
+{% for k, v in prometheus_external_labels.items() %}
+    {{ k }}: {{ v }}
+{% endfor %}
+    instance: {{ inventory_hostname }}
+
+rule_files:
+  - /etc/prometheus/rules.d/*.yml
+
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets:
+{% for h in groups['prometheus_pair'] %}
+            - "{{ hostvars[h].ansible_host }}:9093"
+{% endfor %}
+
+scrape_configs:
+  # ── Self-scrape: Prometheus + AlertManager ──────────────────
+  - job_name: "prometheus_pair"
+    static_configs:
+      - targets:
+{% for h in groups['prometheus_pair'] %}
+          - "{{ hostvars[h].ansible_host }}:9090"
+{% endfor %}
+        labels:
+          service: prometheus
+
+  - job_name: "alertmanager_pair"
+    static_configs:
+      - targets:
+{% for h in groups['prometheus_pair'] %}
+          - "{{ hostvars[h].ansible_host }}:9093"
+{% endfor %}
+        labels:
+          service: alertmanager
+
+{% if 'ratesengine_api' in groups and groups['ratesengine_api'] %}
+  # ── ratesengine-api ──────────────────────────────────────────
+  - job_name: "ratesengine_api"
+    scrape_interval: {{ prometheus_default_scrape_interval }}
+    static_configs:
+      - targets:
+{% for h in groups['ratesengine_api'] %}
+          - "{{ hostvars[h].ansible_host }}:9464"
+{% endfor %}
+        labels:
+          service: ratesengine-api
+{% endif %}
+
+{% if 'ratesengine_aggregator' in groups and groups['ratesengine_aggregator'] %}
+  # ── ratesengine-aggregator ───────────────────────────────────
+  - job_name: "ratesengine_aggregator"
+    scrape_interval: {{ prometheus_aggregator_scrape_interval }}
+    static_configs:
+      - targets:
+{% for h in groups['ratesengine_aggregator'] %}
+          - "{{ hostvars[h].ansible_host }}:9464"
+{% endfor %}
+        labels:
+          service: ratesengine-aggregator
+{% endif %}
+
+{% if 'ratesengine_indexer' in groups and groups['ratesengine_indexer'] %}
+  # ── ratesengine-indexer ──────────────────────────────────────
+  - job_name: "ratesengine_indexer"
+    scrape_interval: {{ prometheus_indexer_scrape_interval }}
+    static_configs:
+      - targets:
+{% for h in groups['ratesengine_indexer'] %}
+          - "{{ hostvars[h].ansible_host }}:9464"
+{% endfor %}
+        labels:
+          service: ratesengine-indexer
+{% endif %}
+
+{% if 'haproxy_lb' in groups and groups['haproxy_lb'] %}
+  # ── HAProxy (built-in 2.4+ Prometheus exporter on stats endpoint) ─
+  - job_name: "haproxy"
+    scrape_interval: {{ prometheus_default_scrape_interval }}
+    metrics_path: /metrics
+    static_configs:
+      - targets:
+{% for h in groups['haproxy_lb'] %}
+          - "{{ hostvars[h].ansible_host }}:8404"
+{% endfor %}
+        labels:
+          service: haproxy
+{% endif %}
+
+{% if 'redis_cluster' in groups and groups['redis_cluster'] %}
+  # ── redis_exporter (one per cache host) ──────────────────────
+  - job_name: "redis_exporter"
+    scrape_interval: {{ prometheus_default_scrape_interval }}
+    static_configs:
+      - targets:
+{% for h in groups['redis_cluster'] %}
+          - "{{ hostvars[h].ansible_host }}:9121"
+{% endfor %}
+        labels:
+          service: redis
+{% endif %}
+
+  # ── node_exporter on every host in inventory ─────────────────
+  # Picked up via the textfile collector — Patroni's textfile
+  # scraper deposits ratesengine_patroni_role / _running there;
+  # redis-sentinel role's scraper deposits
+  # ratesengine_redis_sentinel_primary; haproxy role's deposits
+  # ratesengine_haproxy_vip_owner / _keepalived_active.
+  - job_name: "node_exporter"
+    scrape_interval: {{ prometheus_node_scrape_interval }}
+    static_configs:
+      - targets:
+{% set ns = namespace(hosts=[]) %}
+{% for group in ['prometheus_pair', 'ratesengine_api', 'ratesengine_aggregator', 'ratesengine_indexer', 'haproxy_lb', 'redis_cluster', 'postgres_cluster'] %}
+{%   if group in groups %}
+{%     for h in groups[group] %}
+{%       if hostvars[h].ansible_host not in ns.hosts %}
+{%         set ns.hosts = ns.hosts + [hostvars[h].ansible_host] %}
+{%       endif %}
+{%     endfor %}
+{%   endif %}
+{% endfor %}
+{% for ip in ns.hosts %}
+          - "{{ ip }}:9100"
+{% endfor %}

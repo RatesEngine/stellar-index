@@ -1,0 +1,38 @@
+{# Render-time — managed by ansible (prometheus role). #}
+
+[Unit]
+Description=Prometheus
+Documentation=https://prometheus.io/docs/
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User={{ prometheus_user }}
+Group={{ prometheus_group }}
+ExecStart=/usr/local/bin/prometheus \
+  --config.file=/etc/prometheus/prometheus.yml \
+  --storage.tsdb.path={{ prometheus_data_dir }} \
+  --storage.tsdb.retention.time={{ prometheus_retention_days }}d \
+{% if prometheus_retention_size and prometheus_retention_size != "0" %}
+  --storage.tsdb.retention.size={{ prometheus_retention_size }} \
+{% endif %}
+  --web.listen-address={{ prometheus_listen }} \
+  --web.external-url=http://{{ inventory_hostname }}:9090/
+
+ExecReload=/bin/kill -HUP $MAINPID
+KillMode=process
+TimeoutStopSec=30
+LimitNOFILE=65536
+
+# Hardening
+ProtectSystem=full
+ProtectHome=yes
+PrivateTmp=yes
+NoNewPrivileges=yes
+
+Restart=on-failure
+RestartSec=5s
+
+[Install]
+WantedBy=multi-user.target

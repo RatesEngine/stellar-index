@@ -1,0 +1,42 @@
+---
+# Prometheus + AlertManager UI bind to loopback only — operators
+# SSH-tunnel; no public ingress rule needed. The one rule we DO
+# need is AlertManager cluster-gossip on 9094 between the two
+# prom hosts.
+
+- name: ensure nftables installed
+  apt:
+    name: nftables
+    state: present
+
+- name: ensure /etc/nftables.d/ exists
+  file:
+    path: /etc/nftables.d
+    state: directory
+    mode: "0755"
+
+- name: render prometheus nftables drop-in
+  copy:
+    dest: /etc/nftables.d/43-prometheus.conf
+    mode: "0644"
+    content: |
+      # Managed by ansible (prometheus role).
+      # AlertManager cluster gossip between prom-pair hosts.
+      # Prometheus + Alertmanager UI loopback-only (no rule needed).
+      table inet prometheus_filter {
+        chain input {
+          type filter hook input priority 0; policy accept;
+      {% for cidr in prometheus_internal_cidrs %}
+          ip saddr {{ cidr }} tcp dport {{ alertmanager_cluster_listen_port }} accept comment "alertmanager-cluster-{{ cidr }}";
+          ip saddr {{ cidr }} udp dport {{ alertmanager_cluster_listen_port }} accept comment "alertmanager-cluster-udp-{{ cidr }}";
+      {% endfor %}
+        }
+      }
+  notify: "firewall rules changed"
+
+- name: ensure nftables loads our drop-in
+  lineinfile:
+    path: /etc/nftables.conf
+    line: 'include "/etc/nftables.d/*.conf"'
+    state: present
+  notify: "firewall rules changed"

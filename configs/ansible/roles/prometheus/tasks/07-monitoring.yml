@@ -1,0 +1,23 @@
+---
+# Prometheus self-scrape is configured in the main scrape config
+# (prometheus.yml.j2 has a `prometheus_pair` job that scrapes both
+# instances on :9090 and both AlertManagers on :9093). This task
+# is a stub that documents the choice — no separate textfile
+# scraper needed since Prometheus + AlertManager already expose
+# native /metrics endpoints.
+#
+# Future: when Thanos / federation lands, add the sidecar here.
+
+- name: confirm self-scrape job present in prometheus.yml
+  shell: "grep -q 'job_name: \"prometheus_pair\"' /etc/prometheus/prometheus.yml"
+  changed_when: false
+  failed_when: false
+  register: self_scrape_check
+
+- name: warn if self-scrape job absent
+  debug:
+    msg: >-
+      WARNING: prometheus_pair self-scrape job not found in
+      /etc/prometheus/prometheus.yml — Prometheus won't see its
+      own + AlertManager's health metrics. Check the template.
+  when: self_scrape_check.rc != 0

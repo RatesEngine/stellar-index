@@ -1,0 +1,38 @@
+{# Render-time — managed by ansible (prometheus role). #}
+
+[Unit]
+Description=Alertmanager
+Documentation=https://prometheus.io/docs/alerting/latest/alertmanager/
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User={{ alertmanager_user }}
+Group={{ alertmanager_group }}
+ExecStart=/usr/local/bin/alertmanager \
+  --config.file=/etc/alertmanager/alertmanager.yml \
+  --storage.path=/var/lib/alertmanager \
+  --web.listen-address={{ alertmanager_listen }} \
+  --cluster.listen-address={{ ansible_host }}:{{ alertmanager_cluster_listen_port }} \
+{% for h in groups['prometheus_pair'] %}
+{%   if h != inventory_hostname %}
+  --cluster.peer={{ hostvars[h].ansible_host }}:{{ alertmanager_cluster_listen_port }} \
+{%   endif %}
+{% endfor %}
+
+ExecReload=/bin/kill -HUP $MAINPID
+KillMode=process
+TimeoutStopSec=30
+
+# Hardening
+ProtectSystem=full
+ProtectHome=yes
+PrivateTmp=yes
+NoNewPrivileges=yes
+
+Restart=on-failure
+RestartSec=5s
+
+[Install]
+WantedBy=multi-user.target

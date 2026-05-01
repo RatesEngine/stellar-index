@@ -1,0 +1,68 @@
+---
+# Download + install Prometheus and AlertManager binaries from
+# upstream tarballs. Apt packages lag versions; pinning to the
+# upstream release lets us roll forward deliberately.
+
+- name: ensure prometheus install dirs exist
+  file:
+    path: "{{ item.path }}"
+    state: directory
+    owner: "{{ item.owner }}"
+    group: "{{ item.group }}"
+    mode: "{{ item.mode }}"
+  loop:
+    - { path: /etc/prometheus,           owner: root, group: "{{ prometheus_user }}",   mode: "0750" }
+    - { path: /etc/prometheus/rules.d,   owner: root, group: "{{ prometheus_user }}",   mode: "0750" }
+    - { path: "{{ prometheus_data_dir }}", owner: "{{ prometheus_user }}", group: "{{ prometheus_group }}", mode: "0750" }
+    - { path: /etc/alertmanager,         owner: root, group: "{{ alertmanager_user }}", mode: "0750" }
+    - { path: /var/lib/alertmanager,     owner: "{{ alertmanager_user }}", group: "{{ alertmanager_group }}", mode: "0750" }
+
+- name: download prometheus tarball
+  get_url:
+    url: "https://github.com/prometheus/prometheus/releases/download/v{{ prometheus_version }}/prometheus-{{ prometheus_version }}.linux-amd64.tar.gz"
+    dest: /tmp/prometheus.tar.gz
+    mode: "0644"
+    checksum: "sha256:{{ prometheus_sha256 | default(omit) }}"
+
+- name: extract prometheus tarball
+  unarchive:
+    src: /tmp/prometheus.tar.gz
+    dest: /tmp
+    remote_src: yes
+
+- name: install prometheus + promtool binaries
+  copy:
+    src: "/tmp/prometheus-{{ prometheus_version }}.linux-amd64/{{ item }}"
+    dest: "/usr/local/bin/{{ item }}"
+    owner: root
+    group: root
+    mode: "0755"
+    remote_src: yes
+  loop:
+    - prometheus
+    - promtool
+
+- name: download alertmanager tarball
+  get_url:
+    url: "https://github.com/prometheus/alertmanager/releases/download/v{{ alertmanager_version }}/alertmanager-{{ alertmanager_version }}.linux-amd64.tar.gz"
+    dest: /tmp/alertmanager.tar.gz
+    mode: "0644"
+    checksum: "sha256:{{ alertmanager_sha256 | default(omit) }}"
+
+- name: extract alertmanager tarball
+  unarchive:
+    src: /tmp/alertmanager.tar.gz
+    dest: /tmp
+    remote_src: yes
+
+- name: install alertmanager + amtool binaries
+  copy:
+    src: "/tmp/alertmanager-{{ alertmanager_version }}.linux-amd64/{{ item }}"
+    dest: "/usr/local/bin/{{ item }}"
+    owner: root
+    group: root
+    mode: "0755"
+    remote_src: yes
+  loop:
+    - alertmanager
+    - amtool

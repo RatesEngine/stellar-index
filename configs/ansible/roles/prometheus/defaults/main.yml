@@ -1,0 +1,66 @@
+---
+# prometheus role defaults — override in inventory.
+
+# ── Versions ───────────────────────────────────────────────────
+# Pinned to known-good upstreams. Bumping is a deliberate change
+# (re-test with the rule-file set + alertmanager config).
+prometheus_version: "2.54.1"
+alertmanager_version: "0.27.0"
+
+# ── Storage + retention ────────────────────────────────────────
+prometheus_data_dir: /var/lib/prometheus
+prometheus_retention_days: 30
+prometheus_retention_size: "0"   # 0 = no size limit; time-based eviction only
+
+# ── Listening addresses ────────────────────────────────────────
+# Loopback-only; operators SSH-tunnel. Change to 127.0.0.1:N if
+# you want to expose, but expose-via-haproxy is the better
+# pattern.
+prometheus_listen: "127.0.0.1:9090"
+alertmanager_listen: "127.0.0.1:9093"
+# Cluster gossip between AlertManager peers. Bound to the host's
+# private IP (must be reachable from the peer).
+alertmanager_cluster_listen_port: 9094
+
+# ── User / group ───────────────────────────────────────────────
+prometheus_user: prometheus
+prometheus_group: prometheus
+alertmanager_user: alertmanager
+alertmanager_group: alertmanager
+
+# ── Rule files ─────────────────────────────────────────────────
+# Local repo path containing the *.yml rule files that get
+# synced to /etc/prometheus/rules.d/ on each prometheus host.
+# Path is relative to the role's task root.
+prometheus_rules_source_dir: "{{ playbook_dir }}/../deploy/monitoring/rules"
+
+# ── External labels ────────────────────────────────────────────
+# Stamped on every series for operator distinguishability when
+# we eventually federate from multiple regions.
+prometheus_external_labels:
+  region: "{{ region_id | default('r1') }}"
+  cluster: "ratesengine"
+
+# ── Scrape intervals ───────────────────────────────────────────
+prometheus_default_scrape_interval: 15s
+prometheus_default_evaluation_interval: 15s
+# Per-target overrides — slow-moving targets like aggregator
+# don't need 15s.
+prometheus_aggregator_scrape_interval: 30s
+prometheus_indexer_scrape_interval: 30s
+prometheus_node_scrape_interval: 30s
+
+# ── AlertManager routing ───────────────────────────────────────
+# Vault-supplied. Empty = preflight WARN; alerts accumulate in
+# the AlertManager UI but don't fan out.
+alertmanager_pagerduty_key: ""
+alertmanager_slack_webhook_url: ""
+alertmanager_slack_channel: "#ratesengine-alerts"
+
+# ── Firewall ───────────────────────────────────────────────────
+# AlertManager cluster gossip needs TCP between the two prom
+# hosts on 9094.
+prometheus_internal_cidrs:
+  - 10.0.0.0/8
+  - 172.16.0.0/12
+  - 192.168.0.0/16

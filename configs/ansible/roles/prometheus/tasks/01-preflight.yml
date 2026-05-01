@@ -1,0 +1,90 @@
+---
+# Sanity-check the host before any install.
+
+- name: assert OS is Ubuntu 22.04 or 24.04
+  assert:
+    that:
+      - ansible_distribution == "Ubuntu"
+      - ansible_distribution_version in ["22.04", "24.04"]
+    fail_msg: >-
+      prometheus role supports Ubuntu 22.04 / 24.04 only;
+      detected {{ ansible_distribution }} {{ ansible_distribution_version }}
+
+- name: assert host is in the prometheus_pair inventory group
+  assert:
+    that:
+      - inventory_hostname in groups['prometheus_pair']
+    fail_msg: >-
+      this role must be applied against hosts in the
+      prometheus_pair group (see role README inventory model)
+
+- name: assert prometheus_pair has exactly 2 hosts
+  assert:
+    that:
+      - groups['prometheus_pair'] | length == 2
+    fail_msg: >-
+      prometheus role assumes a 2-host HA pair (per ha-plan §7);
+      detected {{ groups['prometheus_pair'] | length }} hosts
+
+- name: assert at least one scrape-target inventory group is populated
+  assert:
+    that:
+      - >
+        ('ratesengine_api' in groups and groups['ratesengine_api']) or
+        ('ratesengine_aggregator' in groups and groups['ratesengine_aggregator']) or
+        ('ratesengine_indexer' in groups and groups['ratesengine_indexer'])
+    fail_msg: >-
+      Prometheus needs targets to scrape. Populate at least one
+      of: ratesengine_api / ratesengine_aggregator /
+      ratesengine_indexer.
+
+- name: warn when alertmanager_pagerduty_key is empty
+  debug:
+    msg: >-
+      WARNING: alertmanager_pagerduty_key is empty — alerts will
+      accumulate in the AlertManager UI but won't page on-call.
+      Set the vault entry before production.
+  when: alertmanager_pagerduty_key | default('') | length == 0
+
+- name: warn when alertmanager_slack_webhook_url is empty
+  debug:
+    msg: >-
+      WARNING: alertmanager_slack_webhook_url is empty —
+      warning/info alerts won't fan out to Slack.
+  when: alertmanager_slack_webhook_url | default('') | length == 0
+
+- name: assert disk space at /var (TSDB needs ~15 GB at 30d retention)
+  assert:
+    that:
+      - >
+        ansible_mounts |
+        selectattr('mount', 'equalto', '/var') | first |
+        default({'size_available': 0}) | dict('size_available') |
+        default(0) | int >= (20 * 1024 * 1024 * 1024)
+    fail_msg: >-
+      /var has insufficient free space for the TSDB. Expecting
+      ≥ 20 GB; provision a larger volume or reduce
+      prometheus_retention_days. (Check `df -h /var`.)
+  ignore_errors: yes  # ansible_mounts shape varies; soft-fail rather than block.
+
+- name: assert time sync is active (chronyd or systemd-timesyncd)
+  shell: |
+    set -e
+    systemctl is-active --quiet chrony.service || \
+    systemctl is-active --quiet chronyd.service || \
+    systemctl is-active --quiet systemd-timesyncd.service
+  changed_when: false
+  register: time_sync_check
+  failed_when: time_sync_check.rc != 0
+
+- name: ensure prometheus + alertmanager system users exist
+  user:
+    name: "{{ item }}"
+    system: yes
+    shell: /usr/sbin/nologin
+    home: /var/lib/{{ item }}
+    create_home: yes
+    state: present
+  loop:
+    - "{{ prometheus_user }}"
+    - "{{ alertmanager_user }}"

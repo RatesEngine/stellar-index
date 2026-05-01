@@ -17,6 +17,34 @@ against.
 
 ### Added
 
+- **Prometheus + AlertManager ansible role (Task #72 sub-role)**:
+  closes the fourth sub-role of #72 after Patroni (#344), Redis
+  Sentinel (#350), and HAProxy (#362). 2-host Prometheus pair per
+  `docs/architecture/ha-plan.md §7`; each host independently
+  scrapes all targets (data duplication is the HA mechanism), and
+  AlertManagers cluster via gossip on port 9094 to dedupe alerts
+  before fanout. Seven task files (preflight with disk-space +
+  time-sync + vault-warning checks, install via upstream tarballs
+  pinned to `v2.54.1` / `v0.27.0`, prometheus-configure with
+  inventory-driven scrape config + rule-file sync from
+  `deploy/monitoring/rules/`, alertmanager-configure with
+  PagerDuty/Slack routing, systemd, firewall, self-scrape
+  monitoring), four templates (`prometheus.yml.j2` walks the
+  inventory groups to build scrape configs, `alertmanager.yml.j2`
+  with severity-based routing + inhibit rules, both systemd
+  units). Ships with all 17 existing rule files
+  (`aggregator/anomaly/api/archive-completeness/cache/divergence/
+  infra/ingestion/meta/sla-probe/slo/stellar/storage/supply*/
+  verify-archive`, ~1721 LoC) loaded via the rule-files-sync
+  pass that also handles deletions (drops files no longer in
+  repo). Three validation gates (`promtool check config`,
+  `promtool check rules`, `amtool check-config`) run BEFORE any
+  reload, so a malformed render never lands. Loopback-only
+  bindings (`127.0.0.1:9090` + `:9093`); operators SSH-tunnel.
+  Companion design note at
+  `docs/architecture/prometheus-ansible-role-design-note.md`. After
+  this PR, only Loki remains of Task #72's five sub-roles.
+
 - **HAProxy ansible role + keepalived VRRP (Task #72 sub-role)**:
   closes the third launch-critical sub-role of #72 after Patroni
   (#344) and Redis Sentinel (#350). Two LB hosts share a
