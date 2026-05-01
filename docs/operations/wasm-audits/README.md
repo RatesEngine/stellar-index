@@ -56,9 +56,21 @@ covers the replay range:
 
     ratesengine-ops wasm-history \
       -config /etc/ratesengine.toml \
-      -from 2 -to <r1-tip> \
+      -from 2 -to <r1-archive-tip> \
       -contracts <factory>,<router>,<pair-instance-A>,<pair-instance-B>... \
       > /tmp/<source>-wasm-history.json
+
+> **`-to` upper bound on r1.** Use the verified tip of
+> `galexie-archive`, NOT the network tip. As of 2026-05-01 the
+> archive is frozen at **62,249,727** (the last ledger fully
+> exported during the historical fill); live galexie writes to
+> `galexie-live`, which the walker does not consult. Setting `-to`
+> past that boundary fails partway through with `ledger object
+> containing sequence X is missing` — which looks like data
+> corruption but is actually just the partial trailing partition.
+> Cross-check the current safe boundary against
+> `/var/lib/galexie/detect-gaps.json` on r1 (`scan_to` field) and
+> [docs/operations/r1-deployment-state.md §3a](../r1-deployment-state.md).
 
 The output is a JSON timeline of `(contract_id → [(active_from,
 active_to, wasm_hash)])`. Save this verbatim into the source's

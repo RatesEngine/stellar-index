@@ -1,6 +1,6 @@
 ---
 title: r1 archival node — current state and next-steps
-last_verified: 2026-04-26
+last_verified: 2026-05-01
 status: living doc
 ---
 
@@ -147,6 +147,34 @@ fetched 2026-04-23:
 3. **Firewall + SSH hardening (phase 3)** not applied. Intentional —
    avoiding lockout risk until the box is stable. Keep KVM tab
    ready when we do.
+
+3a. **`galexie-archive` is frozen at the historical-fill tip;
+   `galexie-live` continues writing newer ledgers but to a
+   different bucket.** (Discovered 2026-05-01.) The historical
+   backfill that populated `galexie-archive` stopped on 2026-04-28
+   at a verified tip of **62,249,727**; live galexie writes to
+   `galexie-live` (per `/etc/galexie/galexie.toml`). Anything that
+   reads from `galexie-archive` (eg `ratesengine-ops wasm-history`,
+   `ratesengine-ops backfill`, `ratesengine-ops verify-archive-chunks`)
+   MUST bound `-to` ≤ 62,249,727 OR fail with "ledger object …
+   does not exist" on the partial trailing partition
+   (FC49CDFF--62272000-62335999, currently 24,695/64,000 files).
+   `detect-gaps` from 2026-04-28 02:39 found 242 gaps totalling
+   459,966 missing ledgers, all clustered in the 40M-41M and
+   44M-45M ranges (see `/var/lib/galexie/detect-gaps.json` on r1);
+   the [50,457,424, 62,249,727] range that the wide-net walk
+   targets is gap-free per that report.
+
+   Fix options (operator):
+   - Periodic `mc cp --recursive local/galexie-live/ local/galexie-archive/`
+     after live ingest catches up, OR
+   - Configure live galexie to write to `galexie-archive` directly
+     and decommission `galexie-live`, OR
+   - Make `ratesengine-ops` walkers consult both buckets at
+     read-time (code change in `internal/datastore`).
+   The first option is the simplest and matches the discovery
+   plan's original design ("aws s3 sync post-mirror into
+   galexie-archive bucket for durability" — see item 6 below).
 
 4. **Layer-2 monitoring (Prometheus on a separate box)** is still
    TODO. Layer-1 (Healthchecks.io push) catches total-death but
