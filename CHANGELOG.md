@@ -178,6 +178,28 @@ against.
 
 ### Fixed
 
+- **Divergence service is now wired with references by default**:
+  the API binary (`cmd/ratesengine-api`) was constructing
+  `divergence.NewService` with an empty `References` list, leaving
+  the `divergence_warning` envelope flag inert in production —
+  surfaced by a 2026-05-01 review pointing at S9.4 of the coverage
+  matrix. New `[divergence]` config block in `internal/config/config.go`
+  + `cmd/ratesengine-api/main.go` `buildDivergenceReferences()`
+  helper. CoinGecko reference is on by default (free tier, no
+  auth required) so divergence detection fires out of the box.
+  Chainlink reference is opt-in via
+  `[divergence.chainlink].enabled = true` plus a non-empty
+  `feeds` table mapping pair strings to mainnet AggregatorV3
+  feed addresses. `Threshold`, `MinSourcesForWarning`, and
+  `PerReferenceTimeoutSeconds` are also surfaced for operator
+  control. New tests
+  (`cmd/ratesengine-api/main_test.go::TestBuildDivergenceReferences_*`)
+  cover the four wiring permutations: defaults / both-enabled /
+  Chainlink-enabled-but-empty-FeedMap-skip / all-disabled.
+  Boot log now emits
+  `divergence service wired reference_count=N references=[...] threshold_pct=...`
+  so operators can confirm the active set at startup.
+
 - **Public-flip checklist is 16/16 verified (#342)**: the two
   rows in `docs/operations/public-flip.md` that required
   human-in-the-loop review (the `CLAUDE.md` private-archive

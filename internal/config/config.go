@@ -16,18 +16,105 @@ import (
 //
 // Adding a field without `doc:` fails `make docs-config`.
 type Config struct {
-	Region    RegionConfig    `toml:"region" doc:"Region identity — ID, display name, home domain."`
-	Stellar   StellarConfig   `toml:"stellar" doc:"Endpoints for stellar-core and stellar-rpc."`
-	Storage   StorageConfig   `toml:"storage" doc:"Postgres/TimescaleDB, Redis, MinIO connection details."`
-	Ingestion IngestionConfig `toml:"ingestion" doc:"Source orchestration — which connectors to run, backfill bounds, cursor store."`
-	Oracle    OracleConfig    `toml:"oracle" doc:"On-chain oracle contract addresses (Reflector, Redstone, Band)."`
-	External  ExternalConfig  `toml:"external" doc:"Off-chain connectors — CEX/FX/aggregator sources that run parallel to the on-chain dispatcher."`
-	Aggregate AggregateConfig `toml:"aggregate" doc:"VWAP/TWAP windows + outlier thresholds."`
-	Anomaly   AnomalyConfig   `toml:"anomaly" doc:"Per-asset-class anomaly detection thresholds (ADR-0019 Phase 1 stop-gap)."`
-	API       APIConfig       `toml:"api" doc:"Public API serving plane — port, auth mode, rate limits, CDN."`
-	Metadata  MetadataConfig  `toml:"metadata" doc:"Asset metadata overlay — SEP-1 issuer→home-domain map, operator overrides."`
-	Supply    SupplyConfig    `toml:"supply" doc:"Supply-snapshot writer config — SDF reserve list + operator-managed reserve balances. Pre-LCM-observer interim per ADR-0011."`
-	Obs       ObsConfig       `toml:"obs" doc:"Metrics, logs, traces — exporters + sampling."`
+	Region     RegionConfig     `toml:"region" doc:"Region identity — ID, display name, home domain."`
+	Stellar    StellarConfig    `toml:"stellar" doc:"Endpoints for stellar-core and stellar-rpc."`
+	Storage    StorageConfig    `toml:"storage" doc:"Postgres/TimescaleDB, Redis, MinIO connection details."`
+	Ingestion  IngestionConfig  `toml:"ingestion" doc:"Source orchestration — which connectors to run, backfill bounds, cursor store."`
+	Oracle     OracleConfig     `toml:"oracle" doc:"On-chain oracle contract addresses (Reflector, Redstone, Band)."`
+	External   ExternalConfig   `toml:"external" doc:"Off-chain connectors — CEX/FX/aggregator sources that run parallel to the on-chain dispatcher."`
+	Aggregate  AggregateConfig  `toml:"aggregate" doc:"VWAP/TWAP windows + outlier thresholds."`
+	Anomaly    AnomalyConfig    `toml:"anomaly" doc:"Per-asset-class anomaly detection thresholds (ADR-0019 Phase 1 stop-gap)."`
+	API        APIConfig        `toml:"api" doc:"Public API serving plane — port, auth mode, rate limits, CDN."`
+	Metadata   MetadataConfig   `toml:"metadata" doc:"Asset metadata overlay — SEP-1 issuer→home-domain map, operator overrides."`
+	Supply     SupplyConfig     `toml:"supply" doc:"Supply-snapshot writer config — SDF reserve list + operator-managed reserve balances. Pre-LCM-observer interim per ADR-0011."`
+	Divergence DivergenceConfig `toml:"divergence" doc:"Cross-check references the divergence service consults (CoinGecko + Chainlink). Empty disables; the divergence_warning envelope flag stays unset."`
+	Obs        ObsConfig        `toml:"obs" doc:"Metrics, logs, traces — exporters + sampling."`
+}
+
+// DivergenceConfig wires the cross-check references the divergence
+// service consults. Each enabled reference is constructed in the
+// API binary and passed to divergence.NewService; the worker then
+// runs them every refresh cycle and the result populates the
+// `divergence_warning` envelope flag when the median deviation
+// exceeds [Threshold].
+//
+// Empty config = no references = service runs but writes no
+// entries (handler keeps the flag unset). This matches the
+// pre-2026-05-01 default; the new behaviour ships CoinGecko
+// always-on (no auth required) so divergence detection actually
+// fires out of the box.
+type DivergenceConfig struct {
+	// Threshold is the divergence percentage above which
+	// WarningFired is true on the cached result. Forwarded to
+	// divergence.ServiceOptions.Threshold. Default 5.0 (5%).
+	Threshold float64 `toml:"threshold_pct" doc:"Divergence percentage above which the warning flag fires." default:"5.0"`
+
+	// MinSourcesForWarning is the minimum number of successful
+	// references required before WarningFired can be true.
+	// Default 2 — a single dissenting source isn't enough.
+	MinSourcesForWarning int `toml:"min_sources_for_warning" doc:"Minimum successful references before warning_fired can be true." default:"2"`
+
+	// PerReferenceTimeoutSeconds bounds each reference call.
+	// Default 5s.
+	PerReferenceTimeoutSeconds int `toml:"per_reference_timeout_seconds" doc:"Bound for each reference call. Default 5." default:"5"`
+
+	// CoinGecko config. Always-on by default (free tier, no
+	// auth). Set Enabled=false to skip.
+	CoinGecko DivergenceCoinGeckoConfig `toml:"coingecko" doc:"CoinGecko reference (free tier, no auth required)."`
+
+	// Chainlink config. Off by default (operator must provide
+	// FeedMap with mainnet feed addresses). When enabled, queries
+	// public Ethereum RPC for AggregatorV3 latestAnswer().
+	Chainlink DivergenceChainlinkConfig `toml:"chainlink" doc:"Chainlink reference (HTTP cross-check only; not a VWAP contributor)."`
+}
+
+// DivergenceCoinGeckoConfig configures the CoinGecko reference.
+// IDMap is operator-overridable but defaults to the small built-in
+// set covering XLM + the major stablecoins we curate.
+type DivergenceCoinGeckoConfig struct {
+	Enabled bool              `toml:"enabled" doc:"Whether the CoinGecko reference is wired into the divergence service." default:"true"`
+	BaseURL string            `toml:"base_url" doc:"CoinGecko API base URL. Empty defaults to https://api.coingecko.com/api/v3." default:""`
+	IDMap   map[string]string `toml:"id_map" doc:"Maps canonical asset_id → CoinGecko slug. Operator-curated; empty falls back to the built-in default covering XLM + major stables." default:"{}"`
+}
+
+// DivergenceChainlinkConfig configures the Chainlink reference.
+// Off by default — operator opts in by setting RPCURL + FeedMap
+// to mainnet AggregatorV3 feed addresses for the pairs they want
+// cross-checked.
+type DivergenceChainlinkConfig struct {
+	Enabled bool   `toml:"enabled" doc:"Whether the Chainlink reference is wired into the divergence service." default:"false"`
+	RPCURL  string `toml:"rpc_url" doc:"Ethereum JSON-RPC endpoint. Empty defaults to https://cloudflare-eth.com." default:""`
+	// FeedMap maps canonical pair string → mainnet feed address.
+	// Pair string format: "<base>/<quote>" e.g. "fiat:EUR/fiat:USD".
+	// Decimals defaults to 8 (Chainlink's standard).
+	FeedMap map[string]ChainlinkFeedConfig `toml:"feeds" doc:"Maps pair strings to {address, decimals, invert}. Empty disables Chainlink in practice." default:"{}"`
+}
+
+// ChainlinkFeedConfig is one entry in the [DivergenceChainlinkConfig.FeedMap].
+type ChainlinkFeedConfig struct {
+	Address  string `toml:"address" doc:"0x-prefixed mainnet feed contract address." default:""`
+	Decimals int    `toml:"decimals" doc:"Power-of-10 divisor for the raw int256. Defaults to 8 (Chainlink standard)." default:"8"`
+	Invert   bool   `toml:"invert" doc:"Set true when canonical pair is reciprocal of the feed's natural quote." default:"false"`
+}
+
+// defaultDivergenceConfig returns the Default()-shape divergence
+// settings: CoinGecko on (free tier, no auth required) so
+// divergence_warning fires out of the box; Chainlink off by
+// default (operator opts in via FeedMap).
+func defaultDivergenceConfig() DivergenceConfig {
+	return DivergenceConfig{
+		Threshold:                  5.0,
+		MinSourcesForWarning:       2,
+		PerReferenceTimeoutSeconds: 5,
+		CoinGecko: DivergenceCoinGeckoConfig{
+			Enabled: true,
+			IDMap:   map[string]string{},
+		},
+		Chainlink: DivergenceChainlinkConfig{
+			Enabled: false,
+			FeedMap: map[string]ChainlinkFeedConfig{},
+		},
+	}
 }
 
 // MetadataConfig configures the asset-metadata overlay path. Today
@@ -657,6 +744,7 @@ func Default() Config {
 				JWTTTL:        1 * time.Hour,
 			},
 		},
+		Divergence: defaultDivergenceConfig(),
 		Obs: ObsConfig{
 			MetricsListen: "127.0.0.1:9464",
 			LogLevel:      "info",

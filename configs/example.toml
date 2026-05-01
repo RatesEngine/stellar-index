@@ -141,6 +141,35 @@ allowed_origins          = ["*"]
 trusted_proxy_cidrs      = []                  # empty = ignore X-Forwarded-For; set to immediate proxy CIDRs (for example ["10.0.0.0/8"])
 
 # ──────────────────────────────────────────────────────────────────
+# Divergence — cross-check references for the divergence service.
+# CoinGecko on by default (free tier); Chainlink opt-in via FeedMap.
+# ──────────────────────────────────────────────────────────────────
+[divergence]
+threshold_pct                  = 5.0
+min_sources_for_warning        = 2
+per_reference_timeout_seconds  = 5
+
+[divergence.coingecko]
+enabled  = true
+# id_map maps canonical asset_id → CoinGecko slug. Empty falls back
+# to the built-in default covering XLM + major stables.
+# Example:
+# [divergence.coingecko.id_map]
+# native       = "stellar"
+# CIRCLE-USDC  = "usd-coin"
+
+[divergence.chainlink]
+enabled  = false
+# rpc_url defaults to https://cloudflare-eth.com when empty.
+# rpc_url  = "https://eth.llamarpc.com"
+# Mainnet AggregatorV3 feeds for the pairs you want cross-checked.
+# Pair-string format: "<base>/<quote>" (canonical.Pair.String()).
+# [divergence.chainlink.feeds."fiat:EUR/fiat:USD"]
+# address  = "0xb49f677943BC038e9857d61E7d053CaA2C1734C1"
+# decimals = 8
+# invert   = false
+
+# ──────────────────────────────────────────────────────────────────
 # Obs — metrics, logs, traces.
 # ──────────────────────────────────────────────────────────────────
 [obs]

@@ -220,22 +220,34 @@ func run(cfgPath string, dryRun bool) error { //nolint:gocognit,funlen,gocyclo /
 	}
 
 	// Divergence lookup adapter. Only wired when Redis is reachable
-	// (the worker's cached results live there). Empty References
-	// list means the worker writes no entries — handler treats every
-	// asset as "not yet refreshed" and leaves the flag unset.
+	// (the worker's cached results live there). References are
+	// constructed from cfg.Divergence; CoinGecko is on by default
+	// (free tier, no auth required) so divergence_warning fires
+	// out of the box; Chainlink is opt-in via cfg.Divergence.Chainlink.
 	var divergenceLooker v1.DivergenceLooker
 	if rdb != nil {
+		refs := buildDivergenceReferences(cfg.Divergence, logger)
 		divSvc, err := divergence.NewService(divergence.ServiceOptions{
-			Cache: rdb,
-			// References list is empty by default — operator wires
-			// concrete refs (CoinGecko, CMC, etc.) when ready. The
-			// service still serves LookupCached against entries the
-			// worker wrote; it just doesn't write any of its own.
+			Cache:                rdb,
+			References:           refs,
+			Threshold:            cfg.Divergence.Threshold,
+			MinSourcesForWarning: cfg.Divergence.MinSourcesForWarning,
+			PerReferenceTimeout: time.Duration(
+				cfg.Divergence.PerReferenceTimeoutSeconds) * time.Second,
 		})
 		if err != nil {
 			return fmt.Errorf("divergence service: %w", err)
 		}
 		divergenceLooker = divergenceAdapter{svc: divSvc}
+		names := make([]string, len(refs))
+		for i, r := range refs {
+			names[i] = r.Name()
+		}
+		logger.Info("divergence service wired",
+			"reference_count", len(refs),
+			"references", names,
+			"threshold_pct", cfg.Divergence.Threshold,
+			"min_sources_for_warning", cfg.Divergence.MinSourcesForWarning)
 	}
 
 	// Home-domain lookup chains the live LCM resolver (#298 +
@@ -406,6 +418,51 @@ func buildSEP10Validator(cfg config.SEP10Config) (auth.SEP10Validator, error) {
 // branch on cfg.Stellar.Network without rewriting buildSEP10Validator.
 func stellarNetworkPassphrase() string {
 	return "Public Global Stellar Network ; September 2015"
+}
+
+// buildDivergenceReferences turns DivergenceConfig into the
+// concrete []divergence.Reference list the service consumes.
+//
+// CoinGecko is on by default (free tier, no auth required); when
+// the operator's IDMap is empty, the reference falls back to the
+// built-in defaults inside CoinGeckoReference (covers XLM + major
+// stables).
+//
+// Chainlink is on only when both Enabled=true AND a non-empty
+// FeedMap is set. An empty FeedMap with Enabled=true logs a WARN
+// and skips Chainlink rather than wiring it as a no-op (every
+// LookupPrice call would return ErrAssetUnsupported, which is
+// noisy and a misconfiguration signal).
+func buildDivergenceReferences(cfg config.DivergenceConfig, logger *slog.Logger) []divergence.Reference {
+	var refs []divergence.Reference
+
+	if cfg.CoinGecko.Enabled {
+		refs = append(refs, divergence.NewCoinGeckoReference(divergence.CoinGeckoOptions{
+			BaseURL: cfg.CoinGecko.BaseURL,
+			IDMap:   cfg.CoinGecko.IDMap,
+		}))
+	}
+
+	if cfg.Chainlink.Enabled {
+		if len(cfg.Chainlink.FeedMap) == 0 {
+			logger.Warn("divergence: chainlink enabled but FeedMap is empty — skipping")
+		} else {
+			feedMap := make(map[string]divergence.ChainlinkFeed, len(cfg.Chainlink.FeedMap))
+			for pair, f := range cfg.Chainlink.FeedMap {
+				feedMap[pair] = divergence.ChainlinkFeed{
+					Address:  f.Address,
+					Decimals: f.Decimals,
+					Invert:   f.Invert,
+				}
+			}
+			refs = append(refs, divergence.NewChainlinkReference(divergence.ChainlinkOptions{
+				RPCURL:  cfg.Chainlink.RPCURL,
+				FeedMap: feedMap,
+			}))
+		}
+	}
+
+	return refs
 }
 
 // divergenceAdapter wraps *divergence.Service to satisfy the v1

@@ -166,6 +166,23 @@ the `env:` column.
 | `supply.sac_wrappers` | `map` | `{}` | — | SAC wrapper contract C-strkey → supply.AssetKey (CODE:ISSUER) map. Drives the SAC balance observer's watched-contract filter. Pure SEP-41 contracts reuse this map by mapping contract_id → contract_id. |
 | `supply.watched_sep41_contracts` | `[]string` | `[]` | — | Operator-curated SEP-41 Soroban contract C-strkeys to track for Algorithm 3 supply per ADR-0023. Empty leaves the SEP-41 supply pipeline off. |
 
+### `[divergence]`
+
+| Key | Type | Default | Env override | Description |
+| --- | ---- | ------- | ------------ | ----------- |
+| `divergence.threshold_pct` | `float64` | `5.0` | — | Divergence percentage above which the warning flag fires. |
+| `divergence.min_sources_for_warning` | `int` | `2` | — | Minimum successful references before warning_fired can be true. |
+| `divergence.per_reference_timeout_seconds` | `int` | `5` | — | Bound for each reference call. Default 5. |
+| `divergence.coingecko.enabled` | `bool` | `true` | — | Whether the CoinGecko reference is wired into the divergence service. |
+| `divergence.coingecko.base_url` | `string` | _(required)_ | — | CoinGecko API base URL. Empty defaults to https://api.coingecko.com/api/v3. |
+| `divergence.coingecko.id_map` | `map` | `{}` | — | Maps canonical asset_id → CoinGecko slug. Operator-curated; empty falls back to the built-in default covering XLM + major stables. |
+| `divergence.chainlink.enabled` | `bool` | `false` | — | Whether the Chainlink reference is wired into the divergence service. |
+| `divergence.chainlink.rpc_url` | `string` | _(required)_ | — | Ethereum JSON-RPC endpoint. Empty defaults to https://cloudflare-eth.com. |
+| `divergence.chainlink.feeds` | `map[string]ChainlinkFeedConfig` | `{}` | — | Maps pair strings to {address, decimals, invert}. Empty disables Chainlink in practice. |
+| `divergence.chainlink.feeds.<key>.address` | `string` | _(required)_ | — | 0x-prefixed mainnet feed contract address. |
+| `divergence.chainlink.feeds.<key>.decimals` | `int` | `8` | — | Power-of-10 divisor for the raw int256. Defaults to 8 (Chainlink standard). |
+| `divergence.chainlink.feeds.<key>.invert` | `bool` | `false` | — | Set true when canonical pair is reciprocal of the feed's natural quote. |
+
 ### `[obs]`
 
 | Key | Type | Default | Env override | Description |
