@@ -133,7 +133,7 @@ Grouped by RFP requirement. Numbered IDs (A.1, B.2) map back to the
 
 | Method | Path | Purpose | RFP |
 | ------ | ---- | ------- | --- |
-| GET | `/v1/assets` | List every indexed asset (paginated). `?type=classic,soroban` `?code=USDC` `?issuer=G…` | F1.*, S1.1-3 |
+| GET | `/v1/assets` | List every indexed asset (paginated). The `?type=classic,soroban`, `?code=USDC`, `?issuer=G…` filter params are reserved in the OpenAPI spec but the handler currently ignores them and returns the unfiltered page. | F1.*, S1.1-3 |
 | GET | `/v1/assets/{asset_id}` | Asset detail with metadata: code, type, issuer, contract_id, home_domain, decimals, image (optional). | F1.*, S1.1-3 |
 | GET | `/v1/assets/{asset_id}/metadata` | Same as above + SEP-1 `[CURRENCIES]` fields (description, image, orgName). | F1.6 |
 
