@@ -33,12 +33,16 @@ import (
 	"github.com/RatesEngine/rates-engine/internal/sources/aquarius"
 	"github.com/RatesEngine/rates-engine/internal/sources/band"
 	"github.com/RatesEngine/rates-engine/internal/sources/blend"
+	"github.com/RatesEngine/rates-engine/internal/sources/claimable_balances"
 	"github.com/RatesEngine/rates-engine/internal/sources/comet"
+	"github.com/RatesEngine/rates-engine/internal/sources/liquidity_pools"
 	"github.com/RatesEngine/rates-engine/internal/sources/phoenix"
 	"github.com/RatesEngine/rates-engine/internal/sources/redstone"
 	"github.com/RatesEngine/rates-engine/internal/sources/reflector"
+	"github.com/RatesEngine/rates-engine/internal/sources/sac_balances"
 	"github.com/RatesEngine/rates-engine/internal/sources/sdex"
 	"github.com/RatesEngine/rates-engine/internal/sources/soroswap"
+	"github.com/RatesEngine/rates-engine/internal/sources/trustlines"
 )
 
 // BuildDispatcher constructs a dispatcher with decoders registered
@@ -146,15 +150,27 @@ func BuildDispatcher(names []string, oracle config.OracleConfig) (*dispatcher.Di
 //     Powers Algorithm 1 (XLM circulating supply) by recording
 //     AccountEntry balance changes for the operator-curated reserve
 //     account set into `account_observations`.
+//   - trustlines.Observer — backed by [supply.WatchedClassicAssets].
+//     Records TrustLineEntry balance changes for the watched
+//     classic assets into `classic_supply_trustline_observations`.
+//   - claimable_balances.Observer — same watched-set. Records
+//     ClaimableBalanceEntry create/remove deltas into
+//     `classic_supply_claimable_observations`.
+//   - liquidity_pools.Observer — same watched-set. Records
+//     LiquidityPoolEntry reserve changes into
+//     `classic_supply_lp_reserve_observations`.
+//   - sac_balances.Observer — backed by [supply.SACWrappers] (the
+//     SAC contract C-strkey → asset_key map). Records ContractData
+//     balance changes for SAC-wrapped classics + pure SEP-41
+//     contracts into `classic_supply_sac_balance_observations`.
 //
-// Tracked-but-not-yet-wired (per launch-readiness L2.12a; this PR is
-// the first of the six-observer wiring sweep):
+// Tracked-but-not-yet-wired (per launch-readiness L2.12a; final
+// slice of the six-observer wiring sweep):
 //
-//   - trustlines / claimable_balances / liquidity_pools / sac_balances —
-//     watched-set is [supply.WatchedClassicAssets] / [supply.SACWrappers];
-//     follow-up PRs.
 //   - sep41_supply — watched-set is [supply.WatchedSEP41Contracts];
-//     follow-up PR.
+//     this is an event-stream Decoder (not a LedgerEntryChangeDecoder),
+//     so it needs a separate registration path the dispatcher API
+//     doesn't yet expose. Follow-up PR.
 //
 // The persistence side (internal/pipeline/sink.go) already type-
 // switches on every observer's Observation type and calls the right
@@ -172,6 +188,36 @@ func RegisterSupplyEntryDecoders(disp *dispatcher.Dispatcher, sup config.SupplyC
 		}
 		disp.AddEntryDecoder(obs)
 		registered = append(registered, accounts.SourceName)
+	}
+	if len(sup.WatchedClassicAssets) > 0 {
+		tl, err := trustlines.NewObserver(sup.WatchedClassicAssets)
+		if err != nil {
+			return nil, fmt.Errorf("trustlines observer: %w", err)
+		}
+		disp.AddEntryDecoder(tl)
+		registered = append(registered, trustlines.SourceName)
+
+		cb, err := claimable_balances.NewObserver(sup.WatchedClassicAssets)
+		if err != nil {
+			return nil, fmt.Errorf("claimable_balances observer: %w", err)
+		}
+		disp.AddEntryDecoder(cb)
+		registered = append(registered, claimable_balances.SourceName)
+
+		lp, err := liquidity_pools.NewObserver(sup.WatchedClassicAssets)
+		if err != nil {
+			return nil, fmt.Errorf("liquidity_pools observer: %w", err)
+		}
+		disp.AddEntryDecoder(lp)
+		registered = append(registered, liquidity_pools.SourceName)
+	}
+	if len(sup.SACWrappers) > 0 {
+		sac, err := sac_balances.NewObserver(sup.SACWrappers)
+		if err != nil {
+			return nil, fmt.Errorf("sac_balances observer: %w", err)
+		}
+		disp.AddEntryDecoder(sac)
+		registered = append(registered, sac_balances.SourceName)
 	}
 	return registered, nil
 }

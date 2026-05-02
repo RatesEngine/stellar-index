@@ -442,6 +442,28 @@ against.
 
 ### Added
 
+- **Classic-asset supply observers (trustlines / claimable_balances /
+  liquidity_pools / sac_balances) now register with the indexer
+  dispatcher.** Second slice of the L2.12a six-observer wiring
+  sweep — closes Algorithm 2 (classic credit-asset supply) for
+  every component except the SEP-41 event stream. Builds on
+  `pipeline.RegisterSupplyEntryDecoders` from the previous PR;
+  three new conditional registrations:
+    - `[supply] watched_classic_assets` non-empty → trustlines,
+      claimable_balances, AND liquidity_pools all attach (an
+      operator who watches an asset MUST get every component or
+      Algorithm 2's sum is wrong);
+    - `[supply.sac_wrappers]` non-empty → sac_balances attaches
+      independently (cross-check-only deployments don't need the
+      classic trio).
+  Boot log now reports the three watched-set sizes alongside the
+  registered observer list. Empty per-observer watched-set leaves
+  that observer unregistered — no behaviour change for
+  deployments that haven't opted in. New
+  `internal/pipeline/dispatcher_test.go::TestRegisterSupplyEntryDecoders_*`
+  sub-tests pin the classic-trio attachment, the SAC-only path,
+  and the all-five full-config path.
+
 - **`internal/sources/accounts` (LCM AccountEntry observer) is now
   registered with the indexer dispatcher.** First slice of the
   L2.12a six-observer wiring sweep (the supply observers compiled
