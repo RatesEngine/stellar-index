@@ -15,6 +15,18 @@ against.
 
 ## [Unreleased]
 
+### Added
+
+- **`pkg/client.Client.PriceTip`** — live rolling-window VWAP via
+  the SDK. Sibling to `Client.Price` for "freshest possible
+  signal" use cases per ADR-0018. Same input shape as `PriceQuery`
+  with an additional `WindowSeconds` (server clamps to [1, 60],
+  defaults to 5). Caller distinguishes the two in-contract
+  response branches via `PriceSnapshot.PriceType`: `"vwap"` for
+  the rolling-window VWAP, `"last_trade"` for the empty-window
+  fallback. SDK omits `window_seconds=0` from the URL so the
+  default-of-5 path stays clean.
+
 ### Fixed
 
 - **`/v1/account/me` now returns the credential's `label`** —

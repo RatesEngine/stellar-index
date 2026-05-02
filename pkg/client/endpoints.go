@@ -33,6 +33,55 @@ func (c *Client) Price(ctx context.Context, q PriceQuery) (*Envelope[PriceSnapsh
 	return &env, nil
 }
 
+// PriceTipQuery is the input for [Client.PriceTip]. Asset is
+// required; Quote defaults to "fiat:USD" server-side. WindowSeconds
+// is the rolling-window size; the server clamps to [1, 60] and
+// defaults to 5 when zero.
+type PriceTipQuery struct {
+	Asset         string
+	Quote         string // optional; server defaults to fiat:USD
+	WindowSeconds int    // optional; server clamps to [1, 60], default 5
+}
+
+// PriceTip fetches the live "rolling-window" price per ADR-0018.
+// Two in-contract branches the caller distinguishes via
+// `PriceSnapshot.PriceType`:
+//
+//   - "vwap" with `WindowSeconds=N` — at least one trade in the
+//     last N seconds; rolling-window VWAP.
+//   - "last_trade" — window was empty; the most recent observation
+//     as-is. Caller reads `ObservedAt` to decide if it's fresh
+//     enough for their use case.
+//
+// Unlike `/v1/price` (closed-bucket, ADR-0015), the tip surface has
+// no cross-region consistency contract — two clients in different
+// regions may see different rolling-window VWAPs depending on which
+// trades have replicated. Use Price for "every consumer sees the
+// same number"; use PriceTip for "freshest possible signal."
+//
+// `flags.stale` on the envelope is ALWAYS false here per ADR-0018:
+// both branches are in-contract on this surface. `flags.frozen`
+// also stays unset (freeze is a closed-bucket concept).
+// `flags.divergence_warning` and `flags.single_source` apply.
+func (c *Client) PriceTip(ctx context.Context, q PriceTipQuery) (*Envelope[PriceSnapshot], error) {
+	if q.Asset == "" {
+		return nil, &APIError{Status: 400, Title: "asset required"}
+	}
+	v := url.Values{}
+	v.Set("asset", q.Asset)
+	if q.Quote != "" {
+		v.Set("quote", q.Quote)
+	}
+	if q.WindowSeconds > 0 {
+		v.Set("window_seconds", strconv.Itoa(q.WindowSeconds))
+	}
+	var env Envelope[PriceSnapshot]
+	if err := c.doJSON(ctx, http.MethodGet, "/v1/price/tip", v, nil, &env); err != nil {
+		return nil, err
+	}
+	return &env, nil
+}
+
 // HistoryQuery selects the range for a [Client.HistorySinceInception]
 // call. Asset is required.
 type HistoryQuery struct {

@@ -218,6 +218,105 @@ func TestMe_PathOnly(t *testing.T) {
 	}
 }
 
+// TestPriceTip_HappyPath — round-trip pinning: URL,
+// window_seconds query forwarding, decode of the rolling-window
+// VWAP shape (price_type="vwap").
+func TestPriceTip_HappyPath(t *testing.T) {
+	_, c := newTestServer(t, func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/v1/price/tip" {
+			t.Errorf("path = %q, want /v1/price/tip", r.URL.Path)
+		}
+		q := r.URL.Query()
+		if q.Get("asset") != "native" {
+			t.Errorf("asset = %q", q.Get("asset"))
+		}
+		if q.Get("quote") != "fiat:USD" {
+			t.Errorf("quote = %q", q.Get("quote"))
+		}
+		if q.Get("window_seconds") != "10" {
+			t.Errorf("window_seconds = %q, want 10", q.Get("window_seconds"))
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{
+			"data": {"asset_id":"native","quote":"fiat:USD","price":"0.07127","price_type":"vwap","observed_at":"2026-04-28T10:00:00Z","window_seconds":10},
+			"as_of": "2026-04-28T10:00:00Z",
+			"flags": {"stale": false, "single_source": false, "divergence_warning": false}
+		}`))
+	})
+	got, err := c.PriceTip(context.Background(), client.PriceTipQuery{
+		Asset: "native", Quote: "fiat:USD", WindowSeconds: 10,
+	})
+	if err != nil {
+		t.Fatalf("PriceTip: %v", err)
+	}
+	if got.Data.PriceType != "vwap" {
+		t.Errorf("PriceType = %q, want vwap", got.Data.PriceType)
+	}
+	if got.Data.WindowSeconds != 10 {
+		t.Errorf("WindowSeconds = %d, want 10", got.Data.WindowSeconds)
+	}
+	if got.Flags.Stale {
+		t.Error("Flags.Stale should be false on tip surface (ADR-0018)")
+	}
+}
+
+// TestPriceTip_LastTradeBranch — empty-window branch returns
+// last_trade with no window_seconds. Pinned because customers
+// distinguishing the two branches via PriceType is the surface's
+// main contract.
+func TestPriceTip_LastTradeBranch(t *testing.T) {
+	_, c := newTestServer(t, func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{
+			"data": {"asset_id":"native","quote":"fiat:USD","price":"0.07","price_type":"last_trade","observed_at":"2026-04-28T09:55:30Z"},
+			"as_of": "2026-04-28T10:00:00Z",
+			"flags": {"stale": false}
+		}`))
+	})
+	got, err := c.PriceTip(context.Background(), client.PriceTipQuery{Asset: "native"})
+	if err != nil {
+		t.Fatalf("PriceTip: %v", err)
+	}
+	if got.Data.PriceType != "last_trade" {
+		t.Errorf("PriceType = %q, want last_trade", got.Data.PriceType)
+	}
+	// last_trade branch has no window_seconds — JSON omitempty
+	// elides the field entirely.
+	if got.Data.WindowSeconds != 0 {
+		t.Errorf("WindowSeconds = %d, want 0 on last_trade branch", got.Data.WindowSeconds)
+	}
+}
+
+// TestPriceTip_OmitsZeroWindowSeconds — the SDK MUST NOT send
+// `window_seconds=0` (the server treats 0 as "use default"; sending
+// it explicitly is wasted bandwidth). Pinned because a regression
+// that always sends the field would change the URL signature.
+func TestPriceTip_OmitsZeroWindowSeconds(t *testing.T) {
+	_, c := newTestServer(t, func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Query().Has("window_seconds") {
+			t.Errorf("window_seconds sent on zero: %q", r.URL.Query().Get("window_seconds"))
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"data":{"asset_id":"native","quote":"fiat:USD","price":"0.07","price_type":"vwap","observed_at":"2026-04-28T10:00:00Z"},"as_of":"2026-04-28T10:00:00Z","flags":{}}`))
+	})
+	if _, err := c.PriceTip(context.Background(), client.PriceTipQuery{Asset: "native"}); err != nil {
+		t.Fatalf("PriceTip: %v", err)
+	}
+}
+
+// TestPriceTip_AssetRequired — empty Asset short-circuits.
+func TestPriceTip_AssetRequired(t *testing.T) {
+	c := client.New(client.Options{BaseURL: "http://nope.invalid"})
+	_, err := c.PriceTip(context.Background(), client.PriceTipQuery{})
+	if err == nil {
+		t.Fatal("expected error for empty Asset")
+	}
+	var apiErr *client.APIError
+	if !errors.As(err, &apiErr) || apiErr.Status != 400 {
+		t.Errorf("err = %v, want *APIError Status=400", err)
+	}
+}
+
 // TestUsage_EmptyArrayDecodes — the placeholder usage endpoint
 // returns an empty array today; client should decode that without
 // panicking on a nil slice.
