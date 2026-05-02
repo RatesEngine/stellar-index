@@ -375,6 +375,16 @@ var AggregatorDroppedWindowsTotal = prometheus.NewCounterVec(
 // runbook can identify the offending asset without log dive. Cardinality
 // bound by the curated asset set with deployed SAC contracts (low
 // dozens at launch, hundreds at maturity).
+//
+// NOTE: not yet emitted by any production code path. The cross-check
+// math lives in `internal/supply.CrossCheck` and runs via
+// `ratesengine-ops supply audit <asset> -cross-check <counterpart>`,
+// which prints the divergence to stdout but does NOT update this
+// gauge. Wiring periodic emission (textfile via the existing
+// supply-snapshot systemd service, or in-aggregator gauge updates
+// alongside `Refresher.Tick`) is a post-launch follow-up — see the
+// "post-launch wiring" note in
+// docs/operations/runbooks/supply-cross-check-divergence.md.
 var SupplyCrossCheckDivergenceStroops = prometheus.NewGaugeVec(
 	prometheus.GaugeOpts{
 		Name: "ratesengine_supply_cross_check_divergence_stroops",

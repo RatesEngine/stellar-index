@@ -48,7 +48,9 @@ psql -d ratesengine -c \
     ORDER BY time DESC LIMIT 4;"
 ```
 
-The SAC contract id for a classic asset is deterministic — derive it once and confirm it matches the row in `asset_supply_history` you'd expect. The aggregator orchestrator logs the pairing at INFO when it kicks off the cross-check.
+The SAC contract id for a classic asset is deterministic — derive it once and confirm it matches the row in `asset_supply_history` you'd expect.
+
+> **Today this alert fires only when a periodic cross-check run sets `ratesengine_supply_cross_check_divergence_stroops` for the affected asset.** The math (`internal/supply.CrossCheck`) and the snapshot writer (`internal/supply.Refresher`) are in production, but the periodic emission of the cross-check gauge is a post-launch wiring item — `cmd/ratesengine-ops/supply.go::runSupplyCrossCheck` runs the comparison and prints the divergence, but does NOT yet emit the Prometheus gauge a Prometheus scrape would surface. Operators who want this alert active before the wiring lands should run `ratesengine-ops supply audit <asset> -cross-check <counterpart>` from a periodic cron job and parse the exit code (non-zero = over tolerance) into their alerting stack manually.
 
 Decision tree:
 
