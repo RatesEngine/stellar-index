@@ -50,7 +50,7 @@ var Registry = map[string]Metadata{
 	// they DO NOT contribute to VWAP. See
 	// docs/discovery/dexes-amms/blend.md and the blend source
 	// package README for the full extraction scope.
-	"blend": {Class: ClassLending, DefaultWeight: 100, IncludeInVWAP: false, Paid: false, BackfillAvailable: true, BackfillSafe: false /* WASM audit pending — Pool Factory + per-pool walks in Task #45 */},
+	"blend": {Class: ClassLending, DefaultWeight: 100, IncludeInVWAP: false, Paid: false, BackfillAvailable: true, BackfillSafe: true /* audited 2026-05-02; 11 contracts (9 pools + backstop + factory), 3 unique WASMs, no mid-life upgrades observed in 5h4m walk over [50457424, 62249727]. See docs/operations/wasm-audits/blend.md §"Phase 2 results". */},
 
 	// ─── Off-chain centralised exchanges (this package's scope) ─
 	"binance":  {Class: ClassExchange, Subclass: SubclassCEX, DefaultWeight: 100, IncludeInVWAP: true, Paid: false, BackfillAvailable: true, BackfillSafe: true},

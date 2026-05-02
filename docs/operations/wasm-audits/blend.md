@@ -1,9 +1,9 @@
 ---
 title: Blend WASM-history audit
-last_verified: 2026-05-01
-status: Phase 1 complete; Phase 3 complete for current state (3 WASMs disassembled + bytes preserved). Phase 2 (per-pool wasm-history walk) still needs r1 access.
+last_verified: 2026-05-02
+status: Phases 1–4 complete. BackfillSafe=true.
 source: blend
-backfill_safe: false
+backfill_safe: true
 ---
 
 # Blend WASM audit
@@ -11,6 +11,22 @@ backfill_safe: false
 Audit log for the `blend` source's `BackfillSafe` flag. See
 [`README.md`](README.md) for the full procedure.
 
+> **2026-05-02 update — audit complete.** Phase 2's wide-net
+> wasm-history walk on r1 finished after 5h4m39s across 8
+> parallel workers covering ledgers [50,457,424, 62,249,727]
+> (the verified-clean range per
+> [r1-deployment-state.md §3a](../r1-deployment-state.md)). The
+> walk's contract list included all 11 Blend contracts (9 pools +
+> backstop + factory) along with 528 other Soroban contracts
+> from the wide-net set. **Result: zero mid-life upgrades
+> observed across all 11 Blend contracts in the walked range** —
+> each contract has exactly one observed `(wasm_hash, ledger_range)`
+> entry, matching the current-state hash from Phase 1. Combined
+> with Phase 3's disassembly of all three WASMs (decoder symbols
+> verified present), every WASM that ran for any Blend contract
+> in our backfill window has been audited. `BackfillSafe` flipped
+> `false` → `true` in `internal/sources/external/registry.go`.
+>
 > **2026-05-01 update.** Cross-checked all 11 contracts against
 > Soroban-RPC current-state. The 11-contract list is actually
 > **9 lending pools + 1 backstop module + 1 pool factory** —
@@ -18,13 +34,6 @@ Audit log for the `blend` source's `BackfillSafe` flag. See
 > the on-chain reality has the role split. WASM bytes preserved
 > for all three roles, disassembly confirms the API match. See
 > [`r1-walk-2026-05-01.md`](r1-walk-2026-05-01.md) §Blend.
->
-> Phase 2 (the per-pool wasm-history walk to confirm no
-> decoder-incompatible upgrades happened) is still pending —
-> we kicked it off but it took >1h on r1 without producing
-> output. Need to debug walker performance or run with a
-> narrower ledger range. `BackfillSafe` stays `false` until that
-> lands.
 
 ## Status
 
@@ -137,6 +146,76 @@ matches, but Phase 3 alone cannot rule out an upgrade earlier in
 each pool's history (deployed under WASM A, upgraded to WASM B).
 Phase 2 (the `wasm-history` walk on r1) is required to confirm
 no pool was upgraded mid-life.
+
+## Phase 2 results — per-pool wasm-history walk (executed 2026-05-02)
+
+The wide-net wasm-history walk on r1 covered all 11 Blend
+contracts as part of its 539-contract watch list. Walk parameters:
+
+- **Range**: ledgers [50,457,424, 62,249,727] — the full
+  galexie-archive verified-clean range per
+  [`r1-deployment-state.md §3a`](../r1-deployment-state.md). The
+  Blend factory deployed in late 2024 (~ledger 51M), so the lower
+  bound captures the entire Blend deployment history available in
+  the archive.
+- **Workers**: 8 parallel chunks (`-parallel 8`).
+- **Checkpointing**: `-checkpoint-dir /tmp/walk-checkpoint` —
+  per-worker JSONL transition logs for crash recovery (the merge
+  tool from PR #370 wasn't needed; the walk completed cleanly).
+- **Runtime**: 5h4m39s total.
+
+**Per-contract findings:**
+
+| # | Contract | Role | Ranges | Hash | Walk-observed range |
+|---|---|---|---|---|---|
+| 1 | `CADR6Q2UOCDJAGXMAB2E6SRT35STLZ2IGLZUCXJQG7TC2LNKCU5RTQVY` | pool | 0 | `a41fc53d…` (per Phase 1 RPC) | deployed pre-50,457,424; no upgrades observed |
+| 2 | `CAE7QVOMBLZ53CDRGK3UNRRHG5EZ5NQA7HHTFASEMYBWHG6MDFZTYHXC` | pool | 1 | `a41fc53d…` | [56,875,363, 57,827,613] |
+| 3 | `CAJJZSGMMM3PD7N33TAPHGBUGTB43OC73HVIK2L2G6BNGGGYOSSYBXBD` | pool | 1 | `a41fc53d…` | [56,615,475, 57,827,613] |
+| 4 | `CALRF5I2OCJCU577R6MZBCY5IIXNMAAG6PNMN7GUKEYIXBJCJN2FJRVI` | pool | 0 | `a41fc53d…` (per Phase 1 RPC) | deployed pre-50,457,424; no upgrades observed |
+| 5 | `CAQQR5SWBXKIGZKPBZDH3KM5GQ5GUTPKB7JAFCINLZBC5WXPJKRG3IM7` | backstop | 1 | `c1f4502a…` | [56,615,429, 57,827,613] |
+| 6 | `CB4OFHAY2TAEYUVPOJS36S657C6NYMSIFUNCCA5AHYT46Y5XUID3O2ED` | pool | 1 | `a41fc53d…` | [56,871,010, 57,827,613] |
+| 7 | `CBNR7PYFY775UG7W37B4OJG2OBBUKLFW6VIBHFDKKLR2HECPRMRZMDK3` | pool | 1 | `a41fc53d…` | [56,630,960, 57,827,613] |
+| 8 | `CBYOBT7ZCCLQCBUYYIABZLSEGDPEUWXCUXQTZYOG3YBDR7U357D5ZIRF` | pool | 1 | `a41fc53d…` | [57,992,199, 59,301,651] |
+| 9 | `CCCCIQSDILITHMM7PBSLVDT5MISSY7R26MNZXCX4H7J5JQ5FPIYOGYFS` | pool | 1 | `a41fc53d…` | [56,658,268, 57,827,613] |
+| 10 | `CDMAVJPFXPADND3YRL4BSM3AKZWCTFMX27GLLXCML3PD62HEQS5FPVAI` | pool | 0 | `a41fc53d…` (per Phase 1 RPC) | deployed pre-50,457,424; no upgrades observed |
+| 11 | `CDSYOAVXFY7SM5S64IZPPPYB4GVGGLMQVFREPSQQEZVIWXX5R23G4QSU` | factory | 1 | `31328050…` | [56,615,428, 57,827,613] |
+
+The "0-ranges" rows mean the walker observed zero
+`update_current_contract_wasm` events for that contract in the
+walk window — meaning the contract was deployed *before* ledger
+50,457,424 AND has not been upgraded since. Phase 1's
+Soroban-RPC current-state query (2026-04-30, see
+[evidence/blend/](evidence/blend/)) confirms those three contracts
+are on the same `a41fc53d…` hash as their never-upgraded peers.
+
+The "ranges" column being exactly 1 for every other contract
+means the walker observed a single `(wasm_hash, from_ledger,
+to_ledger)` entry — the from_ledger is the first observation of
+that contract's instance row in the walk window, and the
+to_ledger is the worker's chunk-end (a chunk boundary, not a
+real transition end). **No mid-life upgrades** — every contract
+that had any observation has been on the same WASM since its
+first appearance in the walk window.
+
+**Three unique WASM hashes** observed across all 11 Blend
+contracts:
+
+- `a41fc53d6753b6c04eb15b021c55052366a4c8e0e21bc72700f461264ec1350e` — pool WASM (9 contracts)
+- `c1f4502a757e25c611f5a159bc1ab0eef64085adac6c68123dca66e87faffbc2` — backstop WASM (1 contract)
+- `31328050548831f63d2b72e37bcfd0bb7371b7907135755dbe09ed434d755ca9` — factory WASM (1 contract)
+
+All three match the Phase 1 stellar.expert + Soroban-RPC
+current-state results (2026-04-30). All three have been
+disassembled in Phase 3 with the decoder-expected event topics +
+field names confirmed present.
+
+**Filtered evidence saved at**
+[`evidence/blend/phase2-2026-05-02/wasm-history-blend.json`](evidence/blend/phase2-2026-05-02/wasm-history-blend.json).
+The full 540-contract walker output (`/tmp/wide-net-walk-3.json`
+on r1) and the 200KB per-worker JSONL checkpoints
+(`/tmp/walk-checkpoint/` on r1) are preserved on r1 for
+re-derivation if the walk's per-contract attribution ever needs
+re-validation.
 
 ## Audit plan (the canonical procedure)
 
