@@ -15,6 +15,19 @@ against.
 
 ## [Unreleased]
 
+### Fixed
+
+- **`/v1/account/me` now returns the credential's `label`** —
+  `APIKeyRecord.Label` was set at creation time and the OpenAPI
+  `Account` schema declared the field, but the path
+  `RedisAPIKeyValidator.Lookup` → `auth.Subject` → `handleAccountMe`
+  dropped it on the floor (no `Label` field on `Subject`). Customers
+  who created keys via `POST /v1/account/keys` saw their chosen label
+  recorded, then got an empty string back from `/me`. Subject now
+  carries `Label`, the validator copies it from the record, and the
+  handler surfaces it. Anonymous callers continue to get an empty
+  label (omitempty hides it from the wire).
+
 ### Added
 
 - **`pkg/client` godoc examples** — three `Example*` functions

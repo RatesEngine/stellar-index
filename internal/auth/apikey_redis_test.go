@@ -54,6 +54,7 @@ func TestRedisAPIKey_LookupHappyPath(t *testing.T) {
 	seedKey(t, mr, "rek_test_abc123", APIKeyRecord{
 		Identifier: "owner-42",
 		Tier:       TierAPIKey,
+		Label:      "ci-bot",
 		Scopes:     []string{"price:read", "history:read"},
 	})
 
@@ -66,6 +67,9 @@ func TestRedisAPIKey_LookupHappyPath(t *testing.T) {
 	}
 	if got.Tier != TierAPIKey {
 		t.Errorf("Tier = %q, want apikey", got.Tier)
+	}
+	if got.Label != "ci-bot" {
+		t.Errorf("Label = %q, want ci-bot", got.Label)
 	}
 	if len(got.Scopes) != 2 || got.Scopes[0] != "price:read" {
 		t.Errorf("Scopes = %v, want [price:read, history:read]", got.Scopes)

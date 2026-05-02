@@ -98,6 +98,7 @@ func TestAccountMe_Authenticated(t *testing.T) {
 		Identifier:      "owner-42",
 		Tier:            auth.TierAPIKey,
 		KeyID:           "kid_abc123",
+		Label:           "ci-bot",
 		RateLimitPerMin: 600,
 		CreatedAt:       now,
 	}, nil)
@@ -118,6 +119,9 @@ func TestAccountMe_Authenticated(t *testing.T) {
 	}
 	if env.Data.KeyID != "kid_abc123" {
 		t.Errorf("KeyID = %q", env.Data.KeyID)
+	}
+	if env.Data.Label != "ci-bot" {
+		t.Errorf("Label = %q, want ci-bot", env.Data.Label)
 	}
 	if env.Data.Tier != "apikey" {
 		t.Errorf("Tier = %q", env.Data.Tier)

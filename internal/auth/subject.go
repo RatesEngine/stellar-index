@@ -71,6 +71,13 @@ type Subject struct {
 	// anonymous. Surfaced via /v1/account/me; not load-bearing
 	// elsewhere.
 	CreatedAt time.Time
+
+	// Label — customer-supplied human-readable name for the
+	// credential (set at /v1/account/keys POST time). Surfaced via
+	// /v1/account/me so the UI can show "your key 'ci-bot'"; never
+	// consulted by auth or rate-limit logic. Empty for anonymous
+	// and for records seeded without a label.
+	Label string
 }
 
 // Anonymous returns the subject the middleware attaches when no

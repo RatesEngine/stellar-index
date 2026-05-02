@@ -75,6 +75,7 @@ func (s *Server) handleAccountMe(w http.ResponseWriter, r *http.Request) {
 
 	out := Account{
 		KeyID:           subject.KeyID,
+		Label:           subject.Label,
 		Tier:            string(subject.Tier),
 		RateLimitPerMin: subject.RateLimitPerMin,
 		CreatedAt:       subject.CreatedAt,

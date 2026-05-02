@@ -169,6 +169,7 @@ func (v *RedisAPIKeyValidator) Lookup(ctx context.Context, key string) (Subject,
 		KeyID:           rec.KeyID,
 		RateLimitPerMin: rec.RateLimitPerMin,
 		CreatedAt:       rec.CreatedAt,
+		Label:           rec.Label,
 	}, nil
 }
 
