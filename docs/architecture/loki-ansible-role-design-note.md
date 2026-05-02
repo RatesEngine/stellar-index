@@ -1,7 +1,7 @@
 ---
 title: Loki + Promtail ansible role — design note
-last_verified: 2026-05-01
-status: design ratified (Task #72 — Loki sub-role; closes Task #72)
+last_verified: 2026-05-02
+status: shipped (Task #72 / #84 — configs/ansible/roles/loki; closes Task #72)
 related:
   - docs/architecture/ha-plan.md §7 (observability)
   - docs/architecture/{patroni,redis-sentinel,haproxy,prometheus}-ansible-role-design-note.md (sister roles)

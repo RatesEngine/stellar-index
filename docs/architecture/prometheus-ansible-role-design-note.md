@@ -1,7 +1,7 @@
 ---
 title: Prometheus + AlertManager ansible role — design note
-last_verified: 2026-05-01
-status: design ratified (Task #72 — Prometheus sub-role)
+last_verified: 2026-05-02
+status: shipped (Task #72 / #83 — configs/ansible/roles/prometheus)
 related:
   - docs/architecture/ha-plan.md §7 (observability)
   - docs/architecture/{patroni,redis-sentinel,haproxy}-ansible-role-design-note.md (sister roles)

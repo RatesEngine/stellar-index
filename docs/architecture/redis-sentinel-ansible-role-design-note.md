@@ -1,7 +1,7 @@
 ---
-title: Redis Sentinel ansible role — design note (DRAFT — not pushed)
-last_verified: 2026-04-30
-status: design draft (Task #72 — Redis Sentinel sub-role)
+title: Redis Sentinel ansible role — design note
+last_verified: 2026-05-02
+status: shipped (Task #72 / #79 — configs/ansible/roles/redis-sentinel)
 related:
   - docs/architecture/ha-plan.md §3.4 (Redis cluster topology)
   - docs/operations/runbooks/redis-master-down.md (the runbook this role makes work)

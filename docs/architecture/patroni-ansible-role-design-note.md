@@ -1,7 +1,7 @@
 ---
 title: Patroni ansible role — design note
-last_verified: 2026-04-30
-status: design (Task #72 — Patroni sub-role; ships alongside the role)
+last_verified: 2026-05-02
+status: shipped (Task #72 — configs/ansible/roles/patroni)
 related:
   - docs/architecture/ha-plan.md §3.3 (TimescaleDB cluster topology)
   - docs/operations/runbooks/timescale-primary-down.md (the runbook this role makes work)

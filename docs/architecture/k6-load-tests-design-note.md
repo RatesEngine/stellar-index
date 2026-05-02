@@ -1,7 +1,7 @@
 ---
-title: k6 load test suite (test/load/) — design note (DRAFT — not pushed)
-last_verified: 2026-04-30
-status: design draft (Task #74 — unblocks Task #77 p95 proof)
+title: k6 load test suite (test/load/) — design note
+last_verified: 2026-05-02
+status: shipped (Task #74 — six scenarios in test/load/scenarios/; unblocks Task #77 p95 proof which is operator-bound)
 related:
   - docs/freighter-rfp.md §SLA targets
   - docs/architecture/coverage-matrix.md S9.1 / S9.2

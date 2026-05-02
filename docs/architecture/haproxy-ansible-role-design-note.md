@@ -1,7 +1,7 @@
 ---
 title: HAProxy ansible role — design note
-last_verified: 2026-05-01
-status: design ratified (Task #72 — HAProxy sub-role)
+last_verified: 2026-05-02
+status: shipped (Task #72 / #82 — configs/ansible/roles/haproxy)
 related:
   - docs/architecture/ha-plan.md §3.1 (api-tier topology)
   - docs/architecture/patroni-ansible-role-design-note.md (sister role)
