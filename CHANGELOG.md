@@ -17,6 +17,20 @@ against.
 
 ### Fixed
 
+- **`baseline.MultiBaseline.MaxZScore` no longer silently bypasses
+  freeze on pathological observations** — when called with a NaN
+  observation, the function returned `(z=NaN, valid=true)`, and
+  the orchestrator's Phase 2 freeze check (`z > 5.0`) silently
+  evaluated false because IEEE-754 NaN comparisons return false.
+  Result: a NaN price slipping through (e.g. `(Inf - prev) / prev`
+  from a `big.Rat.Float64()` overflow upstream) would NOT trigger
+  the freeze it should have. Fixed by detecting pathological
+  inputs (NaN / ±Inf) at the function boundary and returning
+  `(+Inf, smallest-available-window, true)` so downstream
+  threshold checks correctly fire on what is, by definition,
+  the most-anomalous possible observation. Four new tests cover
+  NaN, +Inf, -Inf, and the 30d-only attribution edge case.
+
 - **`/v1/account/me` now returns the credential's `label`** —
   `APIKeyRecord.Label` was set at creation time and the OpenAPI
   `Account` schema declared the field, but the path
