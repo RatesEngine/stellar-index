@@ -59,6 +59,7 @@ type Server struct {
 	hub          *streaming.Hub
 	confidence   ConfidenceLooker
 	triangulated TriangulatedPriceLooker
+	cdnEnabled   bool
 	mux          *http.ServeMux
 	started      time.Time
 }
@@ -206,6 +207,15 @@ type Options struct {
 	// Nil leaves /v1/price 404'ing for triangulated-only pairs
 	// (the historical behaviour).
 	Triangulated TriangulatedPriceLooker
+
+	// CDNEnabled controls whether cacheable routes emit `s-maxage`
+	// (CDN-tier) Cache-Control directives in addition to `max-age`
+	// (client tier). Default: true — operators with a CDN in front
+	// of the API leave it on. Set false (via cfg.API.CDNEnabled) for
+	// deployments without a CDN, so a CDN they don't run can't cache
+	// anything that downstream changes might have made auth-tied.
+	// See [middleware.CacheControlWithCDN] for the policy detail.
+	CDNEnabled bool
 }
 
 // New constructs a Server and mounts all v1 routes.
@@ -235,6 +245,7 @@ func New(opts Options) *Server {
 		hub:          opts.Hub,
 		confidence:   opts.Confidence,
 		triangulated: opts.Triangulated,
+		cdnEnabled:   opts.CDNEnabled,
 		mux:          http.NewServeMux(),
 		started:      time.Now().UTC(),
 	}
@@ -274,7 +285,10 @@ func (s *Server) Handler() http.Handler {
 		// run so writeJSON / writeProblem responses inherit the
 		// directive. Handlers may override (Etag flows, immutable
 		// historical buckets) by setting Cache-Control themselves.
-		middleware.CacheControl,
+		// CDN-tier `s-maxage` is gated on s.cdnEnabled so deployments
+		// without a CDN don't emit a directive a CDN they don't run
+		// could later honour.
+		middleware.CacheControlWithCDN(s.cdnEnabled),
 	}
 	if s.cors != nil {
 		stack = append(stack, s.cors)

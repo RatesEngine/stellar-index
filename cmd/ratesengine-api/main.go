@@ -312,6 +312,7 @@ func run(cfgPath string, dryRun bool) error { //nolint:gocognit,funlen,gocyclo /
 		CORS:         cors,
 		Auth:         authMW,
 		RateLimit:    rateLimit,
+		CDNEnabled:   cfg.API.CDNEnabled,
 	})
 
 	if dryRun {

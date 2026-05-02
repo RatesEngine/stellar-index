@@ -442,6 +442,33 @@ against.
 
 ### Fixed
 
+- **`api.cdn_enabled` now actually gates `s-maxage`** — the third
+  half-shipped config field caught by the audit-finding wire-up
+  pattern (after F-0008 `key_rate_limit_per_min` in #384 and F-0009
+  `trusted_proxy_cidrs` review). `internal/config/config.go` has
+  exposed `cfg.API.CDNEnabled` (default `true`) since the early API
+  surface design, but `internal/api/v1/server.go` mounted the
+  middleware as bare `middleware.CacheControl` — the operator-facing
+  knob compiled, defaulted, and was logged, but had no runtime
+  effect. New `middleware.CacheControlWithCDN(cdnEnabled bool)`
+  constructor: when `false`, drops the `s-maxage` half from cacheable
+  routes (`public, max-age=30, s-maxage=60` → `public, max-age=30`
+  for current-price / asset-detail; `public, max-age=60, s-maxage=300`
+  → `public, max-age=60` for closed-bucket historical). Non-cacheable
+  directives (`no-store`, `private, no-cache, must-revalidate`) are
+  unchanged because they were never CDN-cacheable. The legacy
+  `middleware.CacheControl` symbol is kept as a backwards-compat
+  shim that forwards to `CacheControlWithCDN(true)` so test sites
+  and any external caller that imported the function don't break.
+  `v1.Options.CDNEnabled` plumbs the config into the server;
+  `cmd/ratesengine-api/main.go` passes `cfg.API.CDNEnabled` at
+  construction. New tests: `TestPolicyForPath_CDNDisabled` (18-row
+  matrix verifying the s-maxage drop on every cacheable route) and
+  `TestCacheControlWithCDN_FalseDropsSMaxAge` (handler-side
+  end-to-end). Operators without a CDN in front of the API set
+  `cdn_enabled = false` and the API stops emitting a directive a
+  CDN they don't run could later honour.
+
 - **Divergence service is now wired with references by default**:
   the API binary (`cmd/ratesengine-api`) was constructing
   `divergence.NewService` with an empty `References` list, leaving

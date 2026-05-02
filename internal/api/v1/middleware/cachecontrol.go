@@ -42,11 +42,27 @@ import (
 // after the fact — that adds latency for no reliability gain.
 // CDN configs are expected to refuse to cache 5xx responses
 // regardless of header (`origin-error-min-ttl: 0`).
+//
+// Backwards-compat shim: behaves like cdn_enabled=true. Operators
+// who run the API behind no CDN should use [CacheControlWithCDN]
+// to drop the `s-maxage` half of the directive.
 func CacheControl(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Cache-Control", policyForPath(r.URL.Path))
-		next.ServeHTTP(w, r)
-	})
+	return CacheControlWithCDN(true)(next)
+}
+
+// CacheControlWithCDN returns the cache-control middleware with the
+// `s-maxage` (CDN-tier) directive controlled by `cdnEnabled`. When
+// false, only `max-age` (client tier) is emitted on cacheable
+// routes — appropriate for deployments without a CDN in front.
+// `private, no-store` and `private, no-cache, must-revalidate`
+// directives are unaffected (they were never CDN-cacheable).
+func CacheControlWithCDN(cdnEnabled bool) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Cache-Control", policyForPath(r.URL.Path, cdnEnabled))
+			next.ServeHTTP(w, r)
+		})
+	}
 }
 
 // policyForPath classifies a request path into a Cache-Control
@@ -56,7 +72,12 @@ func CacheControl(next http.Handler) http.Handler {
 // Order matters — the more-specific prefix MUST win over the
 // less-specific. `/v1/price/tip` is private; `/v1/price` is public —
 // both share the prefix `/v1/price` so the tip rule must run first.
-func policyForPath(path string) string {
+//
+// `cdnEnabled` controls whether `s-maxage` (CDN-tier) directives
+// are emitted on cacheable routes. When false, only `max-age`
+// (client tier) survives — operators without a CDN in front of
+// the API set this so a CDN they don't have can't cache anything.
+func policyForPath(path string, cdnEnabled bool) string {
 	switch {
 	// ─── Operator endpoints — never cached ──────────────────────
 	case path == "/v1/healthz",
@@ -92,7 +113,10 @@ func policyForPath(path string) string {
 		strings.HasPrefix(path, "/v1/price/batch"),
 		path == "/v1/assets",
 		strings.HasPrefix(path, "/v1/assets/"):
-		return "public, max-age=30, s-maxage=60"
+		if cdnEnabled {
+			return "public, max-age=30, s-maxage=60"
+		}
+		return "public, max-age=30"
 
 	// ─── Historical / closed-bucket / catalogue — longer cache ──
 	// Closed buckets are immutable per ADR-0015 but the
@@ -106,7 +130,10 @@ func policyForPath(path string) string {
 		path == "/v1/pairs",
 		path == "/v1/sources",
 		strings.HasPrefix(path, "/v1/oracle/"):
-		return "public, max-age=60, s-maxage=300"
+		if cdnEnabled {
+			return "public, max-age=60, s-maxage=300"
+		}
+		return "public, max-age=60"
 
 	// ─── Default — be conservative ──────────────────────────────
 	// Unknown path: don't accidentally let the CDN cache something
