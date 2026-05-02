@@ -17,6 +17,32 @@ against.
 
 ### Fixed
 
+- **Six broken markdown links across docs** (L6.5 doc-sweep) —
+  surfaced via a Python sweep across every relative `(./...md)`
+  link in `docs/`. Closed:
+  `docs/adr/0023-sep41-supply-observer.md` `0003-i128-no-truncate.md`
+  → `0003-i128-no-truncation.md`.
+  `docs/architecture/supply-pipeline.md` two links: same ADR-0003
+  fix + `0006-timescale-storage.md` →
+  `0006-timescaledb-for-price-time-series.md`.
+  `docs/operations/r1-deployment-state.md`: extra `..` in
+  `../../discovery/data-sources/archival-nodes.md` → fixed to
+  `../discovery/...`.
+  `docs/operations/wasm-audits/evidence/blend/phase2-2026-05-02/README.md`:
+  off-by-one relative path `../../blend.md` → `../../../blend.md`.
+  `docs/architecture/infrastructure/archival-node-spec.md`: three
+  fictional runbook refs (`archive-publish-fail.md`,
+  `galexie-lag.md`, `rpc-sqlite-growth.md`); first replaced with
+  the real `archive-publish.md`, the other two converted to
+  italicised "_runbook tbd_" notes citing the existing ad-hoc
+  coverage path (no creation of stub runbooks — the alerts they
+  reference are post-launch / Phase-3 anyway).
+  `docs/architecture/ha-plan.md` §3.10 ratesengine-ops: fictional
+  `ops-cli.md` doc replaced with a description of the binary's
+  actual top-level subcommands, citing `--help` and the source
+  at `cmd/ratesengine-ops/main.go`.
+  Verification: re-ran the link sweep; zero broken links remain.
+
 - **`/v1/account/me` now returns the credential's `label`** —
   `APIKeyRecord.Label` was set at creation time and the OpenAPI
   `Account` schema declared the field, but the path
