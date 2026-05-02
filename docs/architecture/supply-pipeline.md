@@ -1,6 +1,6 @@
 ---
 title: Supply pipeline — three-algorithm derivation, per-asset refresh
-last_verified: 2026-04-30
+last_verified: 2026-05-02
 status: binding
 ---
 
@@ -68,9 +68,9 @@ operator-curated via `supply.Policy.PerAsset`.
 otherwise unless the operator supplies an override or a SEP-1
 declaration overlay populates it.
 
-## The five observers
+## The six observers
 
-Every component the algorithms read is sourced from one of five
+Every component the algorithms read is sourced from one of six
 LCM-stream observers. Each plugs into the dispatcher's hooks
 without changing dispatcher source — they're pure additive
 sources per the ingest-pipeline contract:
@@ -88,6 +88,20 @@ The first five are LCM ledger-entry observers (ADR-0021 +
 ADR-0022). The sixth is an event-stream observer (ADR-0023) — it
 classifies topics and accumulates amounts rather than reading
 state.
+
+> **Production wiring gap (tracked as L2.12a):** these six observer
+> packages compile and have unit-test coverage, but **none are
+> registered with the dispatcher in production code today**.
+> `pipeline.BuildDispatcher` only wires the trade/oracle decoders
+> (soroswap, aquarius, …); `disp.AddEntryDecoder` is never called
+> by `cmd/ratesengine-indexer`. Effect: `account_observations`,
+> `classic_supply_*_observations`, and `sep41_supply_events`
+> hypertables stay empty in production, so the supply readers
+> below return no rows and the F2 fields on `/v1/assets/{id}` are
+> null. The persistence side (`internal/pipeline/sink.go` →
+> `store.Insert*`) is already wired correctly — the gap is purely
+> at the dispatcher-registration step. See L2.12a in
+> `launch-readiness-backlog.md` for the closure plan.
 
 ## The chained-fallback reader pattern
 
