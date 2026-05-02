@@ -12,6 +12,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/RatesEngine/rates-engine/internal/events"
 	rpc "github.com/RatesEngine/rates-engine/internal/stellarrpc"
 )
 
@@ -362,7 +363,7 @@ func TestContextCancellation(t *testing.T) {
 
 func TestEventClosedAtParse(t *testing.T) {
 	// Well-formed RFC 3339 round-trips to UTC time.
-	e := &rpc.Event{ID: "ok", LedgerClosedAt: "2026-04-23T12:34:56Z"}
+	e := &events.Event{ID: "ok", LedgerClosedAt: "2026-04-23T12:34:56Z"}
 	got, err := e.EventClosedAt()
 	if err != nil {
 		t.Fatalf("valid timestamp errored: %v", err)
@@ -378,7 +379,7 @@ func TestEventClosedAtEmptyIsError(t *testing.T) {
 	// returning time.Time{} silently is the bug we fixed on
 	// 2026-04-23. Zero-time events were sneaking through into
 	// trades with observed_at = 0.
-	e := &rpc.Event{ID: "bad-1"}
+	e := &events.Event{ID: "bad-1"}
 	if _, err := e.EventClosedAt(); err == nil {
 		t.Fatal("empty LedgerClosedAt must error, got nil")
 	}
@@ -496,7 +497,7 @@ func TestEventClosedAtMalformedIsError(t *testing.T) {
 		"2026-04-23T12:34:56+25:00", // bad offset
 	}
 	for _, ts := range cases {
-		e := &rpc.Event{ID: "bad-2", LedgerClosedAt: ts}
+		e := &events.Event{ID: "bad-2", LedgerClosedAt: ts}
 		if _, err := e.EventClosedAt(); err == nil {
 			t.Errorf("malformed %q did not error", ts)
 		}
