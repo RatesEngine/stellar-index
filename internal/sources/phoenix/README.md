@@ -92,8 +92,9 @@ Phoenix distinguishes:
 
 For our canonical.Trade.QuoteAmount we use
 `actual received amount` — that's what actually changed hands.
-`return_amount - actual_received` is the fee, captured as metadata
-(TODO(#0) — expose as Trade.Fee once we add that field).
+`return_amount - actual_received` is the fee. **Not surfaced
+today** — `canonical.Trade` has no `Fee` field; if we add one,
+the decoder already has the value to populate it.
 
 ### Q4 — Multihop expands to N×8 events
 
@@ -108,8 +109,10 @@ multihop.
 `contracts/pool_stable/src/contract.rs` uses a similar but
 distinct event shape. **Not decoded yet.** The volatile
 (`contracts/pool/`) schema above is the only one we handle in this
-first implementation. Stableswap pool support is an explicit
-TODO(#0) once the volatile path is validated in production.
+first implementation. Stableswap pool support is deferred until
+after the volatile path has soaked in production — the field set
+needs enumeration from a stableswap-pool fixture capture, and we
+don't want to ship a partial decoder.
 
 ## File layout (five-file convention)
 
@@ -129,8 +132,8 @@ correlation buffer, the SCVal decoding via `internal/scval`
 (ADR-0013), and the topic-match dispatch all run against real
 mainnet event fixtures captured under `test/fixtures/phoenix/`.
 
-Stableswap pool support is TODO(#0) — Phoenix's stableswap
-emits a different field set we haven't enumerated yet. The
-volatile path is the dominant traffic and runs cleanly without
-it; stableswap drops to the orphan-events counter rather than
-mis-decoding.
+Stableswap pool support is **not shipped** — Phoenix's stableswap
+emits a different field set we haven't enumerated yet (see Q5
+above). The volatile path is the dominant traffic and runs cleanly
+without it; stableswap drops to the orphan-events counter rather
+than mis-decoding.
