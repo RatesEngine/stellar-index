@@ -70,16 +70,14 @@ func TestRegistry_FailClosedOnUnknown(t *testing.T) {
 // flip a deliberate, reviewed change rather than a quiet flag toggle.
 func TestRegistry_BackfillSafePolicy(t *testing.T) {
 	wantUnsafe := []string{
-		// Soroban DeFi — `update_contract` can change event schemas
-		// without changing the contract address. See CLAUDE.md.
-		// All 4 original Soroban DeFi sources (soroswap, phoenix,
-		// aquarius, comet) audited 2026-04-29 → moved to wantSafe.
-		// Soroban oracles — same upgradeability concern.
-		// band + redstone + reflector-{dex,cex,fx} all audited
-		// 2026-04-29 → moved to wantSafe.
-		// blend (lending) — added with the dispatcher wiring; WASM
-		// audit pending in Task #45.
-		"blend",
+		// All Soroban sources are now audited; the wantUnsafe slot
+		// stays here as the structural place to put a new on-chain
+		// source while its audit is pending.
+		// History:
+		//   soroswap/phoenix/aquarius/comet/band/redstone/
+		//   reflector-{dex,cex,fx} audited 2026-04-29 → wantSafe.
+		//   blend audited 2026-05-02 (wide-net Phase 2 walk +
+		//   Phase 3 disassembly) → wantSafe.
 	}
 	for _, name := range wantUnsafe {
 		if Registry[name].BackfillSafe {
@@ -101,6 +99,7 @@ func TestRegistry_BackfillSafePolicy(t *testing.T) {
 		"phoenix",       // audited 2026-04-29 (11 pools enumerated, 2 unique WASMs verified) — see docs/operations/wasm-audits/phoenix.md
 		"aquarius",      // audited 2026-04-29 (313 pools enumerated, 3 unique WASMs verified) — see docs/operations/wasm-audits/aquarius.md
 		"comet",         // audited 2026-04-29 (Blend backstop pool only known mainnet deployment; WASM verified) — see docs/operations/wasm-audits/comet.md
+		"blend",         // audited 2026-05-02 (11 contracts, 3 unique WASMs, no mid-life upgrades over 11.79M-ledger walk) — see docs/operations/wasm-audits/blend.md §"Phase 2 results"
 		"binance", "kraken", "bitstamp", "coinbase",
 		"polygon-forex", "exchangeratesapi",
 		"coingecko", "coinmarketcap", "cryptocompare",

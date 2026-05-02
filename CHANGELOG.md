@@ -17,6 +17,23 @@ against.
 
 ### Added
 
+- **Blend WASM audit complete; `BackfillSafe` flipped → `true`
+  (Task #53)**: the 5h4m wide-net wasm-history walk on r1
+  finished 2026-05-02 and covered all 11 Blend contracts (9 pools
+  + 1 backstop + 1 pool factory) over the verified-clean ledger
+  range [50,457,424, 62,249,727]. Result: 3 unique WASM hashes
+  observed across all 11 contracts, zero mid-life upgrades. The
+  three hashes (pool `a41fc53d…`, backstop `c1f4502a…`, factory
+  `31328050…`) match Phase 1's Soroban-RPC current-state query
+  and have all been disassembled in Phase 3 with the decoder-
+  expected event topics + AuctionData field names confirmed
+  present. `internal/sources/external/registry.go` flips
+  `blend.BackfillSafe` from `false` to `true`; `framework_test.go`
+  moves `blend` from `wantUnsafe` to `wantSafe`. Audit doc
+  `docs/operations/wasm-audits/blend.md` adopts the canonical
+  per-contract findings table; filtered evidence preserved at
+  `docs/operations/wasm-audits/evidence/blend/phase2-2026-05-02/`.
+
 - **Per-trade `usd_volume` column populated at insert (partially
   closes launch-readiness L2.2)**: previously `InsertTrade` set
   `usd_volume = NULL` with a "filled by aggregator" comment that

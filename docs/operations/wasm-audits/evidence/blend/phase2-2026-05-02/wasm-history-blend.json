@@ -1,0 +1,94 @@
+[
+  {
+    "contract": "CADR6Q2UOCDJAGXMAB2E6SRT35STLZ2IGLZUCXJQG7TC2LNKCU5RTQVY",
+    "ranges": null
+  },
+  {
+    "contract": "CAE7QVOMBLZ53CDRGK3UNRRHG5EZ5NQA7HHTFASEMYBWHG6MDFZTYHXC",
+    "ranges": [
+      {
+        "wasm_hash": "a41fc53d6753b6c04eb15b021c55052366a4c8e0e21bc72700f461264ec1350e",
+        "from_ledger": 56875363,
+        "to_ledger": 57827613
+      }
+    ]
+  },
+  {
+    "contract": "CAJJZSGMMM3PD7N33TAPHGBUGTB43OC73HVIK2L2G6BNGGGYOSSYBXBD",
+    "ranges": [
+      {
+        "wasm_hash": "a41fc53d6753b6c04eb15b021c55052366a4c8e0e21bc72700f461264ec1350e",
+        "from_ledger": 56615475,
+        "to_ledger": 57827613
+      }
+    ]
+  },
+  {
+    "contract": "CALRF5I2OCJCU577R6MZBCY5IIXNMAAG6PNMN7GUKEYIXBJCJN2FJRVI",
+    "ranges": null
+  },
+  {
+    "contract": "CAQQR5SWBXKIGZKPBZDH3KM5GQ5GUTPKB7JAFCINLZBC5WXPJKRG3IM7",
+    "ranges": [
+      {
+        "wasm_hash": "c1f4502a757e25c611f5a159bc1ab0eef64085adac6c68123dca66e87faffbc2",
+        "from_ledger": 56615429,
+        "to_ledger": 57827613
+      }
+    ]
+  },
+  {
+    "contract": "CB4OFHAY2TAEYUVPOJS36S657C6NYMSIFUNCCA5AHYT46Y5XUID3O2ED",
+    "ranges": [
+      {
+        "wasm_hash": "a41fc53d6753b6c04eb15b021c55052366a4c8e0e21bc72700f461264ec1350e",
+        "from_ledger": 56871010,
+        "to_ledger": 57827613
+      }
+    ]
+  },
+  {
+    "contract": "CBNR7PYFY775UG7W37B4OJG2OBBUKLFW6VIBHFDKKLR2HECPRMRZMDK3",
+    "ranges": [
+      {
+        "wasm_hash": "a41fc53d6753b6c04eb15b021c55052366a4c8e0e21bc72700f461264ec1350e",
+        "from_ledger": 56630960,
+        "to_ledger": 57827613
+      }
+    ]
+  },
+  {
+    "contract": "CBYOBT7ZCCLQCBUYYIABZLSEGDPEUWXCUXQTZYOG3YBDR7U357D5ZIRF",
+    "ranges": [
+      {
+        "wasm_hash": "a41fc53d6753b6c04eb15b021c55052366a4c8e0e21bc72700f461264ec1350e",
+        "from_ledger": 57992199,
+        "to_ledger": 59301651
+      }
+    ]
+  },
+  {
+    "contract": "CCCCIQSDILITHMM7PBSLVDT5MISSY7R26MNZXCX4H7J5JQ5FPIYOGYFS",
+    "ranges": [
+      {
+        "wasm_hash": "a41fc53d6753b6c04eb15b021c55052366a4c8e0e21bc72700f461264ec1350e",
+        "from_ledger": 56658268,
+        "to_ledger": 57827613
+      }
+    ]
+  },
+  {
+    "contract": "CDMAVJPFXPADND3YRL4BSM3AKZWCTFMX27GLLXCML3PD62HEQS5FPVAI",
+    "ranges": null
+  },
+  {
+    "contract": "CDSYOAVXFY7SM5S64IZPPPYB4GVGGLMQVFREPSQQEZVIWXX5R23G4QSU",
+    "ranges": [
+      {
+        "wasm_hash": "31328050548831f63d2b72e37bcfd0bb7371b7907135755dbe09ed434d755ca9",
+        "from_ledger": 56615428,
+        "to_ledger": 57827613
+      }
+    ]
+  }
+]

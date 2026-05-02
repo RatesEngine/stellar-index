@@ -107,7 +107,7 @@ Any row with **status ❌** is a blocker for launch. Any row with
 | S3.3 | Aquarius 3 pool types | §Soroban DEXs / Aquarius | 3 | `internal/sources/aquarius` | — | [dexes-amms/aquarius.md](../discovery/dexes-amms/aquarius.md) | ✅ verified | 5 |
 | S3.4 | Phoenix DEX (8-events-per-swap) | §Soroban DEXs (added post-discovery) | 3 | `internal/sources/phoenix` | — | [dexes-amms/phoenix.md](../discovery/dexes-amms/phoenix.md) | ✅ verified | 5 |
 | S3.5 | Comet (Balancer-weighted AMM) | §Soroban DEXs (added post-discovery) | 3 | `internal/sources/comet` | — | [dexes-amms/comet.md](../discovery/dexes-amms/comet.md) | ✅ verified | 4 |
-| S3.6 | Blend auctions as directional signal | §Soroban DEXs / Blend | 5 | `internal/sources/blend` | — | [dexes-amms/blend.md](../discovery/dexes-amms/blend.md), [wasm-audits/blend.md](../operations/wasm-audits/blend.md) | ⚠ caveat — auction decoder + storage + dispatcher wiring shipped (#273-#275); WASM audit (Pool Factory + per-pool walks) pending in Task #53. BackfillSafe stays false until that lands. | 3 |
+| S3.6 | Blend auctions as directional signal | §Soroban DEXs / Blend | 5 | `internal/sources/blend` | — | [dexes-amms/blend.md](../discovery/dexes-amms/blend.md), [wasm-audits/blend.md](../operations/wasm-audits/blend.md) | ✅ verified — auction decoder + storage + dispatcher wiring shipped (#273-#275); WASM audit complete 2026-05-02 (Phases 1-4: 11 contracts / 3 unique WASMs / no mid-life upgrades over 11.79M-ledger walk). `BackfillSafe=true`. | 4 |
 | S3.7 | CEX trade ingestion (Binance, Coinbase, Kraken, …) | §Centralized Exchanges | 4 | `internal/sources/external/*` | — | [external-refs/cex-feeds.md](../discovery/external-refs/cex-feeds.md) | ✅ verified | 4 |
 
 ### S4. VWAP + configurable USD volume threshold
