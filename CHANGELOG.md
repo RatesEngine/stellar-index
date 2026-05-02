@@ -17,6 +17,27 @@ against.
 
 ### Added
 
+- **Supply cross-check gauge wired into the aggregator's
+  refresh loop (closes a half-shipped audit finding)**: the
+  `ratesengine_supply_cross_check_divergence_stroops` gauge and
+  the `ratesengine_supply_cross_check_total{outcome=…}` counter
+  were declared in `internal/obs/metrics.go` and the supply alert
+  in `deploy/monitoring/rules/supply.yml` referenced them, but no
+  production code path emitted either — the alert was inert.
+  Added `internal/supply.CrossCheckRefresher` (loads the latest
+  classic + SAC snapshots per pair, runs `supply.CrossCheck`,
+  emits the gauge + counter via a small `CrossCheckEmitter`
+  interface) and wired it into `ratesengine-aggregator` alongside
+  the per-asset supply refreshers. Pairs are derived from the ∩ of
+  `[supply].sac_wrappers`, `watched_classic_assets`, and
+  `watched_sep41_contracts` — no new config knob. Runbook
+  `docs/operations/runbooks/supply-cross-check-divergence.md`
+  flipped from `draft` to `living` and the manual-cron caveat is
+  gone; metric doc comments lose the "not yet emitted" note. New
+  outcome labels (`missing_snapshot`, `read_error`) surface the
+  bootstrap state and transient-storage failures separately from
+  genuine within/over divergence.
+
 - **Blend WASM audit complete; `BackfillSafe` flipped → `true`
   (Task #53)**: the 5h4m wide-net wasm-history walk on r1
   finished 2026-05-02 and covered all 11 Blend contracts (9 pools

@@ -1,7 +1,7 @@
 ---
 title: Runbook — supply-cross-check-divergence
-last_verified: 2026-04-30
-status: draft
+last_verified: 2026-05-02
+status: living
 severity: P3
 ---
 
@@ -50,7 +50,7 @@ psql -d ratesengine -c \
 
 The SAC contract id for a classic asset is deterministic — derive it once and confirm it matches the row in `asset_supply_history` you'd expect.
 
-> **Today this alert fires only when a periodic cross-check run sets `ratesengine_supply_cross_check_divergence_stroops` for the affected asset.** The math (`internal/supply.CrossCheck`) and the snapshot writer (`internal/supply.Refresher`) are in production, but the periodic emission of the cross-check gauge is a post-launch wiring item — `cmd/ratesengine-ops/supply.go::runSupplyCrossCheck` runs the comparison and prints the divergence, but does NOT yet emit the Prometheus gauge a Prometheus scrape would surface. Operators who want this alert active before the wiring lands should run `ratesengine-ops supply audit <asset> -cross-check <counterpart>` from a periodic cron job and parse the exit code (non-zero = over tolerance) into their alerting stack manually.
+> **Periodic gauge emission is wired into the aggregator's supply-refresh loop** when `[supply].aggregator_refresh_enabled = true`. Every `aggregator_refresh_cadence` tick, `supply.CrossCheckRefresher` (built in `cmd/ratesengine-aggregator/main.go::buildCrossCheckRefresher`) loads the latest classic + SAC snapshots for every classic asset that's both in `watched_classic_assets` AND has its SAC contract id declared in `sac_wrappers` AND that contract id is also in `watched_sep41_contracts`. The intersection is the cross-check pair set — outside it the supply package can't compare, so the refresher silently skips it. The CLI `ratesengine-ops supply audit <asset> -cross-check <counterpart>` path remains available for ad-hoc operator inspection but is no longer the gauge-emission path.
 
 Decision tree:
 
@@ -152,3 +152,9 @@ Capture for the postmortem:
   (refresh-stalled / refresh-error-dominant / snapshot-stale /
   aggregator-silent) so an operator triaging a divergence has the
   surrounding-system map in one click.
+- 2026-05-02 — Cross-check gauge emission shipped: the
+  aggregator's supply-refresh loop now runs
+  `supply.CrossCheckRefresher` per cadence and emits both
+  `ratesengine_supply_cross_check_divergence_stroops` and
+  `ratesengine_supply_cross_check_total{outcome=…}`. Status flipped
+  from `draft` to `living`; removed the manual-cron caveat.

@@ -376,15 +376,12 @@ var AggregatorDroppedWindowsTotal = prometheus.NewCounterVec(
 // bound by the curated asset set with deployed SAC contracts (low
 // dozens at launch, hundreds at maturity).
 //
-// NOTE: not yet emitted by any production code path. The cross-check
-// math lives in `internal/supply.CrossCheck` and runs via
-// `ratesengine-ops supply audit <asset> -cross-check <counterpart>`,
-// which prints the divergence to stdout but does NOT update this
-// gauge. Wiring periodic emission (textfile via the existing
-// supply-snapshot systemd service, or in-aggregator gauge updates
-// alongside `Refresher.Tick`) is a post-launch follow-up — see the
-// "post-launch wiring" note in
-// docs/operations/runbooks/supply-cross-check-divergence.md.
+// Emitted by `cmd/ratesengine-aggregator/main.go::buildCrossCheckRefresher`
+// once per `[supply].aggregator_refresh_cadence` tick when both the
+// classic side and the SAC side of a wrapper are in the watched-sets.
+// The CLI `ratesengine-ops supply audit <asset> -cross-check <counterpart>`
+// path remains for ad-hoc operator inspection but does not update the
+// gauge — only the aggregator's periodic refresher does.
 var SupplyCrossCheckDivergenceStroops = prometheus.NewGaugeVec(
 	prometheus.GaugeOpts{
 		Name: "ratesengine_supply_cross_check_divergence_stroops",
@@ -394,13 +391,19 @@ var SupplyCrossCheckDivergenceStroops = prometheus.NewGaugeVec(
 )
 
 // SupplyCrossCheckTotal — counter of cross-check evaluations per
-// outcome (within | over). Drives the alert's rate-of-failure view
-// and gives operators a "is the cross-checker even running" check
-// orthogonal to the gauge.
+// outcome (within | over | missing_snapshot | read_error). Drives the
+// alert's rate-of-failure view and gives operators a "is the
+// cross-checker even running" check orthogonal to the gauge.
+//
+// `missing_snapshot` is emitted while either side of the pair has no
+// snapshot in `asset_supply_history` yet — the bootstrap state.
+// `read_error` covers transient storage failures so a sustained-rate
+// regression on this label surfaces a different failure mode than
+// genuine divergence.
 var SupplyCrossCheckTotal = prometheus.NewCounterVec(
 	prometheus.CounterOpts{
 		Name: "ratesengine_supply_cross_check_total",
-		Help: "Cross-check evaluations, labelled by outcome (within|over).",
+		Help: "Cross-check evaluations, labelled by outcome (within|over|missing_snapshot|read_error).",
 	},
 	[]string{"outcome"},
 )

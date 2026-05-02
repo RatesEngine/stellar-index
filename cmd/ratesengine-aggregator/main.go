@@ -297,6 +297,25 @@ func run(cfgPath string, dryRun bool) error {
 				runSupplyRefresh(rootCtx, binding.refresher, cfg.Supply.AggregatorRefreshCadence, binding.assetKey)
 			}(b)
 		}
+
+		// Cross-check refresher reads the snapshots the per-asset
+		// refreshers above produce and emits the
+		// supply_cross_check_divergence_stroops gauge so the
+		// supply.yml alert can fire on real divergence per
+		// ADR-0011. No-op when the ∩ of [supply].sac_wrappers and
+		// the watched-sets is empty (operator hasn't declared any
+		// classic ↔ SAC pairs).
+		ccRefresher, err := buildCrossCheckRefresher(cfg, store, logger.With("component", "supply-cross-check"))
+		if err != nil {
+			return fmt.Errorf("supply cross-check refresher init: %w", err)
+		}
+		if ccRefresher != nil {
+			refresherWG.Add(1)
+			go func() {
+				defer refresherWG.Done()
+				runCrossCheckRefresh(rootCtx, ccRefresher, cfg.Supply.AggregatorRefreshCadence)
+			}()
+		}
 	}
 
 	// ─── Run ─────────────────────────────────────────────────────
@@ -816,4 +835,109 @@ func buildTriangulations(cfg config.AggregateConfig) ([]orchestrator.Triangulati
 		return nil, nil
 	}
 	return out, nil
+}
+
+// buildCrossCheckRefresher composes the periodic supply-cross-check
+// emitter from the operator's `[supply]` config:
+//
+//   - For every entry in `sac_wrappers` whose ClassicKey appears in
+//     the watched-classic set AND whose ContractID appears in the
+//     watched-SEP-41 set, derive one [supply.CrossCheckPair].
+//   - Wire the refresher to read snapshots via timescale's
+//     LatestSupply and emit gauges/counters via obs.
+//
+// Returns (nil, nil) when no pair survives the watched-set
+// intersection — silently no-op so operators that haven't yet
+// configured both sides of a wrapper don't see a startup error.
+func buildCrossCheckRefresher(cfg config.Config, store *timescale.Store, logger *slog.Logger) (*supply.CrossCheckRefresher, error) {
+	if len(cfg.Supply.SACWrappers) == 0 {
+		return nil, nil
+	}
+
+	watchedClassic := make(map[string]struct{}, len(cfg.Supply.WatchedClassicAssets))
+	for _, raw := range cfg.Supply.WatchedClassicAssets {
+		asset, err := canonical.ParseAsset(raw)
+		if err != nil {
+			return nil, fmt.Errorf("parse watched classic asset %q: %w", raw, err)
+		}
+		k, err := supply.AssetKey(asset)
+		if err != nil {
+			return nil, fmt.Errorf("derive AssetKey for %q: %w", raw, err)
+		}
+		watchedClassic[k] = struct{}{}
+	}
+	watchedSEP41 := make(map[string]struct{}, len(cfg.Supply.WatchedSEP41Contracts))
+	for _, c := range cfg.Supply.WatchedSEP41Contracts {
+		watchedSEP41[c] = struct{}{}
+	}
+
+	pairs := make([]supply.CrossCheckPair, 0, len(cfg.Supply.SACWrappers))
+	for sacID, classicKey := range cfg.Supply.SACWrappers {
+		if _, ok := watchedClassic[classicKey]; !ok {
+			continue
+		}
+		if _, ok := watchedSEP41[sacID]; !ok {
+			continue
+		}
+		pairs = append(pairs, supply.CrossCheckPair{ClassicKey: classicKey, SACKey: sacID})
+	}
+	if len(pairs) == 0 {
+		return nil, nil
+	}
+
+	logger.Info("cross-check pairs registered", "count", len(pairs))
+	return supply.NewCrossCheckRefresher(
+		pairs,
+		supplyAggregatorSnapshotReader{s: store},
+		obsCrossCheckEmitter{},
+		logger,
+	)
+}
+
+// runCrossCheckRefresh ticks the cross-check refresher on `cadence`,
+// returning on ctx cancellation. Initial cycle runs immediately so a
+// fresh deployment surfaces the per-pair `outcome=missing_snapshot`
+// metric on first scrape (operators see "the cross-checker is
+// running but has nothing to compare yet" rather than silence).
+func runCrossCheckRefresh(ctx context.Context, r *supply.CrossCheckRefresher, cadence time.Duration) {
+	tick := func() { _ = r.Tick(ctx) }
+	tick()
+
+	ticker := time.NewTicker(cadence)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			tick()
+		}
+	}
+}
+
+// supplyAggregatorSnapshotReader adapts *timescale.Store to
+// supply.SnapshotReader. Maps timescale's ErrNotFound onto
+// supply.ErrNoSnapshot so the refresher distinguishes the bootstrap
+// state (no rows yet) from transient read failures.
+type supplyAggregatorSnapshotReader struct{ s *timescale.Store }
+
+func (a supplyAggregatorSnapshotReader) LatestSupply(ctx context.Context, assetKey string) (supply.Supply, error) {
+	snap, err := a.s.LatestSupply(ctx, assetKey)
+	if errors.Is(err, timescale.ErrNotFound) {
+		return supply.Supply{}, fmt.Errorf("LatestSupply %s: %w", assetKey, supply.ErrNoSnapshot)
+	}
+	return snap, err
+}
+
+// obsCrossCheckEmitter wires supply.CrossCheckEmitter onto the
+// package-level obs Prometheus collectors. Kept as a tiny adapter so
+// the supply package stays Prometheus-agnostic and unit-testable.
+type obsCrossCheckEmitter struct{}
+
+func (obsCrossCheckEmitter) Divergence(classicKey string, stroops float64) {
+	obs.SupplyCrossCheckDivergenceStroops.WithLabelValues(classicKey).Set(stroops)
+}
+
+func (obsCrossCheckEmitter) Outcome(kind supply.CrossCheckOutcomeKind) {
+	obs.SupplyCrossCheckTotal.WithLabelValues(string(kind)).Inc()
 }
