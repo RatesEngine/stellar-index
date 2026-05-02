@@ -1,6 +1,6 @@
 ---
 title: Alerts Catalogue
-last_verified: 2026-04-29
+last_verified: 2026-05-02
 status: ratified — incremental growth
 ---
 

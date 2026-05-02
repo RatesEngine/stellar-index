@@ -17,6 +17,14 @@ against.
 
 ### Added
 
+- **`pkg/client` godoc examples** — three `Example*` functions
+  (`ExampleNew`, `ExampleClient_Price`, `ExampleClient_Asset`,
+  `ExampleAPIError`) that show up in pkg.go.dev and verify
+  themselves at build time via `// Output:` assertions.
+  Self-contained against `httptest`-backed servers so they don't
+  need a live API. Walks integrators through the canonical SDK
+  surface: construct + call + handle errors.
+
 - **API binary wires the freeze.Looker so `flags.frozen` is no
   longer permanently false (closes another half-shipped audit
   finding)**: `freeze.Looker` reads the `freeze:<asset>:<quote>`
