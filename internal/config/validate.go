@@ -534,10 +534,18 @@ func (o ObsConfig) validate() error {
 			ErrInvalidConfig, o.LogFormat)
 	}
 	switch o.TraceExporter {
-	case "none", "otlp":
-		// ok
+	case "none":
+		// ok — the only currently-wired value
+	case "otlp":
+		// Reserved for the future tracing rollout. Reject loud now
+		// so an operator who sets this thinks they enabled tracing
+		// when actually nothing in the binary consumes the field.
+		// Re-allow once an OTel TracerProvider + exporter are wired
+		// in cmd/ratesengine-{api,indexer,aggregator}/main.go.
+		return fmt.Errorf("%w: obs.trace_exporter %q is reserved for the future tracing rollout and is not yet wired in this build; set to \"none\"",
+			ErrInvalidConfig, o.TraceExporter)
 	default:
-		return fmt.Errorf("%w: obs.trace_exporter %q must be none/otlp",
+		return fmt.Errorf("%w: obs.trace_exporter %q must be \"none\" (the only currently-wired value)",
 			ErrInvalidConfig, o.TraceExporter)
 	}
 	if o.TraceSample < 0 || o.TraceSample > 1 {

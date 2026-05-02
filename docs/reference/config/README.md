@@ -190,5 +190,5 @@ the `env:` column.
 | `obs.metrics_listen` | `string` | `127.0.0.1:9464` | — | Bind address for the /metrics Prometheus endpoint. |
 | `obs.log_level` | `string` | `info` | — | Minimum log level — debug / info / warn / error. |
 | `obs.log_format` | `string` | `json` | — | Log format — json / console. |
-| `obs.trace_exporter` | `string` | `none` | — | OpenTelemetry trace exporter — none / otlp. |
-| `obs.trace_sample` | `float64` | `0.1` | — | Trace sampling ratio — 0.0 (none) to 1.0 (all). |
+| `obs.trace_exporter` | `string` | `none` | — | OpenTelemetry trace exporter. Currently only 'none' is wired in this build; the 'otlp' value is reserved for the future tracing rollout and is rejected by Validate() until the exporter is implemented (so an operator setting it doesn't think tracing is on when it isn't). |
+| `obs.trace_sample` | `float64` | `0.1` | — | Trace sampling ratio — 0.0 (none) to 1.0 (all). Read by the future tracing rollout; ignored in this build. |

@@ -442,6 +442,29 @@ against.
 
 ### Fixed
 
+- **`obs.trace_exporter = "otlp"` now fails-loud instead of
+  silently no-op'ing** — the fourth half-shipped config field
+  caught by the audit-finding wire-up pattern (after F-0008
+  `key_rate_limit_per_min` in #384, F-0009 `trusted_proxy_cidrs`,
+  and `api.cdn_enabled` in the previous commit). The struct
+  field, default (`"none"`), TOML example (`# none | otlp`), and
+  validation (`switch o.TraceExporter { case "none", "otlp": }`)
+  all advertised OTLP as a working option, but no production code
+  imports the OpenTelemetry SDK or sets up a `TracerProvider` —
+  any operator who set `trace_exporter = "otlp"` got zero traces
+  with no error or warning. Validate() now rejects `"otlp"` with
+  a message pointing operators to the truth ("reserved for the
+  future tracing rollout and is not yet wired in this build; set
+  to \"none\""). When the OTel exporter is wired in
+  `cmd/ratesengine-{api,indexer,aggregator}/main.go`, the
+  validation case is restored. The doc tag on `Obs.TraceExporter`
+  + `Obs.TraceSample` and the `[obs]` block in
+  `configs/example.toml` now state the ship truth so the
+  auto-generated reference at `docs/reference/config/README.md`
+  matches reality. New `validate_test.go` row exercises the
+  reject path. No operator code change required for the default
+  config (`trace_exporter = "none"` is unchanged).
+
 - **`api.cdn_enabled` now actually gates `s-maxage`** — the third
   half-shipped config field caught by the audit-finding wire-up
   pattern (after F-0008 `key_rate_limit_per_min` in #384 and F-0009

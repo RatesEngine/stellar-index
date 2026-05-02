@@ -642,8 +642,8 @@ type ObsConfig struct {
 	MetricsListen string  `toml:"metrics_listen" doc:"Bind address for the /metrics Prometheus endpoint." default:"127.0.0.1:9464"`
 	LogLevel      string  `toml:"log_level" doc:"Minimum log level — debug / info / warn / error." default:"info"`
 	LogFormat     string  `toml:"log_format" doc:"Log format — json / console." default:"json"`
-	TraceExporter string  `toml:"trace_exporter" doc:"OpenTelemetry trace exporter — none / otlp." default:"none"`
-	TraceSample   float64 `toml:"trace_sample" doc:"Trace sampling ratio — 0.0 (none) to 1.0 (all)." default:"0.1"`
+	TraceExporter string  `toml:"trace_exporter" doc:"OpenTelemetry trace exporter. Currently only 'none' is wired in this build; the 'otlp' value is reserved for the future tracing rollout and is rejected by Validate() until the exporter is implemented (so an operator setting it doesn't think tracing is on when it isn't)." default:"none"`
+	TraceSample   float64 `toml:"trace_sample" doc:"Trace sampling ratio — 0.0 (none) to 1.0 (all). Read by the future tracing rollout; ignored in this build." default:"0.1"`
 }
 
 // Default returns a Config pre-populated with every field's default

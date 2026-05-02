@@ -56,6 +56,7 @@ func TestValidate_RejectsBadFields(t *testing.T) {
 		"bad log level":                {func(c *config.Config) { c.Obs.LogLevel = "verbose" }, "log_level"},
 		"bad log format":               {func(c *config.Config) { c.Obs.LogFormat = "xml" }, "log_format"},
 		"bad trace exporter":           {func(c *config.Config) { c.Obs.TraceExporter = "jaeger" }, "trace_exporter"},
+		"otlp not yet wired":           {func(c *config.Config) { c.Obs.TraceExporter = "otlp" }, "trace_exporter"},
 		"trace sample over 1":          {func(c *config.Config) { c.Obs.TraceSample = 1.5 }, "trace_sample"},
 		"trace sample neg":             {func(c *config.Config) { c.Obs.TraceSample = -0.1 }, "trace_sample"},
 		"core http not url":            {func(c *config.Config) { c.Stellar.CoreHTTPEndpoint = "host:11626" }, "core_http_endpoint"},

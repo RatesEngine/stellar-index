@@ -176,5 +176,9 @@ enabled  = false
 metrics_listen  = "127.0.0.1:9464"
 log_level       = "info"          # debug | info | warn | error
 log_format      = "json"          # json | text
-trace_exporter  = "none"          # none | otlp
-trace_sample    = 0.1             # 0.0 – 1.0
+trace_exporter  = "none"          # only "none" is wired in this build;
+                                  # "otlp" is reserved for the future
+                                  # tracing rollout and Validate() rejects
+                                  # it until an exporter is implemented.
+trace_sample    = 0.1             # 0.0 – 1.0; ignored in this build,
+                                  # read by the future tracing rollout.
