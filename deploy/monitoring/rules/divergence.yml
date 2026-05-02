@@ -58,3 +58,38 @@ groups:
             {{ $labels.source }} hasn't published a price for {{ $labels.asset }}
             in > 10× its resolution. May be legitimate (oracle paused) or a
             signal of oracle failure — check the oracle's own status page.
+
+      # Aggregator's divergence-cache refresh loop — `refresh_error`
+      # outcome dominates the success rate. CoinGecko / Chainlink
+      # unreachable, marshal failure, or Redis cache write failing.
+      # Sustained means `flags.divergence_warning` goes stale across
+      # the API surface (the cache TTL is 5 min — we have a few-tick
+      # grace window before consumers see staleness).
+      #
+      # Threshold: `refresh_error` rate exceeds `ok` rate AND total
+      # rate is non-zero (avoids firing during cold start when both
+      # rates are 0). 30-min sustained is the trigger — shorter
+      # windows catch transient blips that recover on their own.
+      - alert: ratesengine_divergence_refresh_error_dominant
+        expr: |
+          sum(rate(ratesengine_divergence_refresh_total{outcome="refresh_error"}[5m]))
+            >
+          sum(rate(ratesengine_divergence_refresh_total{outcome="ok"}[5m]))
+          and
+          sum(rate(ratesengine_divergence_refresh_total{outcome=~"refresh_error|ok"}[5m])) > 0
+        for: 30m
+        labels:
+          severity: ticket
+          team: ratesengine
+          component: divergence
+          runbook_url: https://github.com/RatesEngine/rates-engine/blob/main/docs/operations/runbooks/divergence-refresh-error-dominant.md
+        annotations:
+          summary: "Divergence-cache refresh failing more often than succeeding (P3)"
+          description: |
+            More refresh_error outcomes than ok over the last 5 min for
+            30+ min sustained. CoinGecko / Chainlink RPC reachability is
+            the usual cause; the API's `flags.divergence_warning` stops
+            updating and goes stale once the 5-min cache TTL elapses.
+            Check the upstream reference's status, then the aggregator's
+            `divergence refresher wired` startup log line for which
+            references are configured.

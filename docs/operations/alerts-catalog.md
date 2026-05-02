@@ -186,6 +186,7 @@ override.
 | `ratesengine_price_divergence_warning` | `abs(our_price - ref_price) / ref_price` per pair | > 5 % for > 2 min | P3 | [price-divergence](runbooks/price-divergence.md) |
 | `ratesengine_price_divergence_critical` | same | > 10 % for > 2 min | P2 | [price-divergence](runbooks/price-divergence.md) |
 | `ratesengine_oracle_stale` | `time() - ratesengine_oracle_last_update_unix` per source | > 10× its resolution | P2 | [oracle-stale](runbooks/oracle-stale.md) |
+| `ratesengine_divergence_refresh_error_dominant` | `rate(divergence_refresh_total{outcome="refresh_error"}[5m]) > rate(...{outcome="ok"}[5m])` | sustained 30 min | P3 | [divergence-refresh-error-dominant](runbooks/divergence-refresh-error-dominant.md) |
 
 ## Aggregator alerts
 
