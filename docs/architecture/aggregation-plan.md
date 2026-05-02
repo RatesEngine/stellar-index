@@ -1,6 +1,6 @@
 ---
 title: Aggregation plan — the policy chain from raw trade to served price
-last_verified: 2026-04-25
+last_verified: 2026-05-02
 status: binding
 ---
 
@@ -182,22 +182,32 @@ window.
 
 ---
 
+## Shipped since the original draft (2026-04-25)
+
+These were deferred when this doc was first written; they
+landed during the launch-readiness sweep:
+
+- **Triangulation.** Shipped — `internal/aggregate/orchestrator/triangulate.go`
+  runs after the per-pair refresh, computes implied legs (e.g.
+  XLM/USD × USD/EUR = XLM/EUR), writes to the same VWAP key
+  namespace with a `:provenance` marker, and the `flags.triangulated`
+  envelope field is populated by the API. X2.5 forex-snap rule
+  closes the across-region consistency gap (closes F-0014).
+- **Divergence detection.** Shipped — `divergence.Service` queries
+  CoinGecko + Chainlink HTTP per-pair on every aggregator Tick
+  (per `internal/aggregate/orchestrator/divergence_refresh.go`,
+  PR #429), writes `div:<asset>` to Redis with a 5-min TTL, and
+  the API's `flags.divergence_warning` reads the cache. Per-Tick
+  outcomes labelled by `ok / no_vwap / parse_error / refresh_error`
+  via `ratesengine_divergence_refresh_total`; sustained
+  refresh_error → `ratesengine_divergence_refresh_error_dominant`
+  alert (P3).
+
 ## Deferred — natural follow-ups
 
 Listed here so a future contributor can pick one up without
 re-deriving the design space:
 
-- **Triangulation.** `XLM/USD × USD/EUR = XLM/EUR` for fiat pairs
-  with sparse direct trades. Will live as a separate worker
-  running alongside the direct-pair loop, writing to its own Redis
-  key namespace + flagging `triangulated=true` in the envelope once
-  the public serving path consumes triangulated results. That final
-  API exposure is not wired in this snapshot.
-- **Divergence detection.** Aggregator-class sources (CoinGecko,
-  CoinMarketCap, CryptoCompare) currently visible in `/v1/sources`
-  but excluded from VWAP. A divergence worker compares our VWAP
-  against those references and writes to `div:<pair>` Redis keys
-  + drives the existing `ratesengine_price_divergence_*` alerts.
 - **MAD-based outlier filter.** σ-mean is brittle on small
   windows with fat tails. Switch to median-absolute-deviation
   behind the same `outlier_sigma_threshold` flag once we have
