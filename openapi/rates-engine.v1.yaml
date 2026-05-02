@@ -688,9 +688,9 @@ paths:
       summary: Latest oracle reading per source for an asset.
       description: |
         Returns one OracleReading per source (reflector-dex /
-        reflector-cex / reflector-fx / future redstone / band
-        etc.) that has observed the asset. Optional source
-        filter restricts to a single source.
+        reflector-cex / reflector-fx / redstone / band) that has
+        observed the asset. Optional source filter restricts to a
+        single source.
       parameters:
         - { $ref: "#/components/parameters/AssetQuery" }
         - name: source
@@ -1128,9 +1128,12 @@ components:
         - `reduced_redundancy` — cross-region redundancy is degraded
           (R2/R3 set this when R1's last completeness run is stale
           per ADR-0017).
-        - `triangulated` — reserved for a future triangulated public
-          serving path. The current Timescale-backed API leaves this
-          false in normal operation.
+        - `triangulated` — set when the served price was derived
+          via cross-pair multiplication (e.g. XLM/EUR computed from
+          XLM/USD × USD/EUR) rather than direct trade observation.
+          The aggregator's triangulation pass writes the implied
+          VWAP into the same Redis key with a `:provenance` marker;
+          `/v1/price` reads that marker and forwards the flag.
         - `divergence_warning` — anomaly check or cross-reference
           observed a meaningful divergence; treat with caution.
         - `frozen` — anomaly detection refused to publish the new
@@ -1340,7 +1343,11 @@ components:
         # (for vwap/twap). RFC 3339, UTC.
         observed_at:       { type: string, format: date-time }
         window_seconds:    { type: integer, nullable: true, description: "Window size for vwap/twap; omitted for last_trade." }
-        # Aggregator-populated (not yet live).
+        # F2 fields per ADR-0011 / Freighter V2 — populated when
+        # the aggregator's supply-snapshot writer + volume worker
+        # have run. Null when no snapshot or volume row is available
+        # yet (e.g. fresh deploy before the first cycle, or asset
+        # below the operator's coverage set).
         change_24h_pct:    { type: string, nullable: true, description: "aggregator" }
         volume_24h_usd:    { type: string, nullable: true, description: "aggregator" }
         market_cap_usd:    { type: string, nullable: true, description: "aggregator + supply derivation" }
@@ -1394,9 +1401,10 @@ components:
     # a `bucketed=true` flag — this schema reflects what the handler
     # actually serves.
     #
-    # HistoryPoint + HistoryEnvelope stay in the spec for the
-    # /history/since-inception (planned) endpoint. They are NOT
-    # what /history returns today.
+    # HistoryPoint + HistoryEnvelope are the wire shape for
+    # /history/since-inception (a CAGG-served per-day VWAP series
+    # back to ledger 1 — see PR #195). They are NOT what /history
+    # returns today; /history uses the bucketed CandleEnvelope.
     HistoryPoint:
       type: object
       properties:
@@ -1524,7 +1532,8 @@ components:
     # Implication: rates served by these endpoints are 0–30 s old
     # (default window). This is within the Freighter ≤30 s freshness
     # SLA. Clients needing tick-by-tick live data should subscribe
-    # to /v1/price/stream (planned) rather than polling these.
+    # to /v1/price/stream (closed-bucket SSE) rather than polling
+    # these.
     VWAPResult:
       type: object
       properties:
