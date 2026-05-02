@@ -186,6 +186,43 @@ hypertable's `(asset_key, ledger_sequence)` PK and `ON CONFLICT
 DO NOTHING` dedupe), but operators should disable one when
 flipping to the other to avoid redundant work.
 
+## Cross-check between Algorithm 2 and Algorithm 3
+
+A SAC-wrapped classic asset's supply is observable two ways: as a
+classic credit (Algorithm 2 — sums trustline + claimable + LP-reserve
++ SAC-wrapped contract balances) and as a SEP-41 token (Algorithm 3 —
+sums mint − burn − clawback events on the SAC contract). Per ADR-0011
+the two MUST agree within 1 stroop because both observe the same
+underlying ledger state through different lenses. Disagreement beyond
+the float-rounding tolerance signals indexer corruption upstream.
+
+The aggregator's `supply.CrossCheckRefresher`
+(`internal/supply/crosscheck_refresher.go`, wired in
+`cmd/ratesengine-aggregator/main.go::buildCrossCheckRefresher`) ticks
+on the same `aggregator_refresh_cadence` as the per-asset supply
+refreshers above. Pairs are derived at boot from the ∩ of:
+
+- `[supply].sac_wrappers` (operator-declared classic↔SAC mapping)
+- `[supply].watched_classic_assets` (Algorithm 2 watched-set)
+- `[supply].watched_sep41_contracts` (Algorithm 3 watched-set)
+
+Per tick, for each pair the refresher reads the latest snapshot for
+both the classic and the SAC sides via `Store.LatestSupply`, runs
+`supply.CrossCheck`, and emits:
+
+- `ratesengine_supply_cross_check_divergence_stroops{classic_key}` —
+  gauge holding the absolute stroop divergence on within/over outcomes.
+- `ratesengine_supply_cross_check_total{outcome}` — counter labelled
+  by `within | over | missing_snapshot | read_error`.
+
+The supply.yml alert (`ratesengine_supply_cross_check_divergence`)
+fires when the gauge stays > 1 for ≥ 5 min. Runbook:
+[`supply-cross-check-divergence`](../operations/runbooks/supply-cross-check-divergence.md).
+
+Empty pair-set is a no-op — operators that haven't declared any
+SAC-wrapper pairs (e.g. an SEP-41-only deployment with no classic
+side) get no gauge updates and no alerting noise.
+
 ## Per-class storage tables (live-data side)
 
 | Table | Migration | Identity | Holders columns |
@@ -244,6 +281,21 @@ Sustained non-`ok` for ≥ 30 min triggers
 `ratesengine_aggregator_supply_refresh_error_dominant`; no `ok`
 in ≥ 30 min triggers `_stalled`.
 
+The cross-check refresher emits its own per-outcome counter:
+
+| Outcome | Means | Operator action |
+|---------|-------|-----------------|
+| `within` | Both snapshots loaded; divergence ≤ 1 stroop | none — steady state |
+| `over` | Both snapshots loaded; divergence > 1 stroop | follow `supply-cross-check-divergence` runbook |
+| `missing_snapshot` | One/both sides have no row in `asset_supply_history` yet | bootstrap window — no action unless sustained past first refresh of each side |
+| `read_error` | Transient storage read failure | check `pg-conns-saturated` / `timescale-primary-down` runbooks |
+
+Bootstrap-state (`missing_snapshot`) is intentionally NOT escalated
+— it's the normal state during first-tick warmup and the first
+moments after a new operator-watched asset is added. Sustained
+`read_error` would surface via the same storage-layer alerts the
+per-asset refreshers ride.
+
 ## ADR map
 
 - [ADR-0011](../adr/0011-supply-algorithm.md) — three-algorithm
@@ -272,9 +324,9 @@ internal/pipeline/sink.go        (type-switch routing)
         ↓
 internal/storage/timescale/      (Insert{Supply, AccountObservation, TrustlineObservation, …}, Sum*, Latest*)
         ↓
-internal/supply/                 (XLMComputer, ClassicComputer, SEP41Computer, Refresher, chained readers)
+internal/supply/                 (XLMComputer, ClassicComputer, SEP41Computer, Refresher, CrossCheckRefresher, chained readers)
         ↓
-cmd/ratesengine-aggregator/      (buildSupplyRefreshers, runSupplyRefresh — one goroutine per asset)
+cmd/ratesengine-aggregator/      (buildSupplyRefreshers + buildCrossCheckRefresher; runSupplyRefresh + runCrossCheckRefresh — one goroutine per asset, plus one for cross-check)
         ↓
 internal/api/v1/assets_f2.go     (populateMarketCap, F2 field rendering)
         ↓
