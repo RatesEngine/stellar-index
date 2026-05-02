@@ -121,6 +121,38 @@ type AssetDetail struct {
 	// null means "volume reader not wired" or "lookup failed" —
 	// callers presenting the field should distinguish these.
 	VolumeUSD24h *string `json:"volume_24h_usd,omitempty"`
+
+	// ─── SEP-1 issuance declarations ───────────────────────────
+	//
+	// Drawn directly from the issuer's stellar.toml [[CURRENCIES]]
+	// entry; populated only when Sep1Status == "verified". These
+	// are issuer-declared, not derived from the ledger — distinct
+	// from the F2 fields above which observe live ledger state.
+
+	// Conditions is the issuer's declared terms / conditions for
+	// the asset (SEP-1 `conditions`). Free-form text.
+	Conditions *string `json:"conditions,omitempty"`
+
+	// FixedNumber is the SEP-1-declared fixed total supply, if the
+	// issuer has committed to one. Decimal string (NUMERIC-safe per
+	// ADR-0003); the asset's smallest integer unit. Distinct from
+	// `total_supply` above: that's the live-ledger sum, this is
+	// what the issuer publicly committed to.
+	FixedNumber *string `json:"fixed_number,omitempty"`
+
+	// MaxNumber is the SEP-1-declared maximum supply, if the
+	// issuer has set a cap. Decimal string. Distinct from
+	// `max_supply` above: that's the operator/policy-derived cap
+	// (XLM hard cap, operator override, future-PR overlay), this
+	// is the issuer's own self-declared ceiling.
+	MaxNumber *string `json:"max_number,omitempty"`
+
+	// IsUnlimited is the issuer's SEP-1 declaration that they reserve
+	// the right to issue an unbounded amount. When true, FixedNumber
+	// and MaxNumber are typically both empty. Pointer so the
+	// "issuer didn't say" case is distinguishable from "issuer said
+	// false".
+	IsUnlimited *bool `json:"is_unlimited,omitempty"`
 }
 
 // detailFromAsset populates an AssetDetail from the canonical shape.
@@ -314,6 +346,13 @@ type AssetMetadata struct {
 	OrgName         *string `json:"org_name,omitempty"`
 	AnchorAsset     *string `json:"anchor_asset,omitempty"`
 	AnchorAssetType *string `json:"anchor_asset_type,omitempty"`
+	// SEP-1 issuance declarations — projected from the same overlay
+	// as AssetDetail. Distinct from any live-ledger F2 numbers; this
+	// surface is metadata-only.
+	Conditions  *string `json:"conditions,omitempty"`
+	FixedNumber *string `json:"fixed_number,omitempty"`
+	MaxNumber   *string `json:"max_number,omitempty"`
+	IsUnlimited *bool   `json:"is_unlimited,omitempty"`
 }
 
 // handleAssetMetadata serves GET /v1/assets/{asset_id}/metadata.
@@ -387,6 +426,10 @@ func (s *Server) handleAssetMetadata(w http.ResponseWriter, r *http.Request) {
 		OrgName:         detail.OrgName,
 		AnchorAsset:     detail.AnchorAsset,
 		AnchorAssetType: detail.AnchorAssetType,
+		Conditions:      detail.Conditions,
+		FixedNumber:     detail.FixedNumber,
+		MaxNumber:       detail.MaxNumber,
+		IsUnlimited:     detail.IsUnlimited,
 	}
 	writeJSON(w, out, Flags{})
 }
@@ -438,6 +481,28 @@ func (s *Server) applySep1Overlay(ctx context.Context, detail *AssetDetail, asse
 	if v := strings.TrimSpace(match.AnchorAssetType); v != "" {
 		detail.AnchorAssetType = &v
 	}
+	// SEP-1 issuance declarations (issuer's own stated commitments,
+	// distinct from live-ledger / operator-policy F2 fields above).
+	if v := strings.TrimSpace(match.Conditions); v != "" {
+		detail.Conditions = &v
+	}
+	if v := strings.TrimSpace(match.FixedNumber); v != "" {
+		detail.FixedNumber = &v
+	}
+	if v := strings.TrimSpace(match.MaxNumber); v != "" {
+		detail.MaxNumber = &v
+	}
+	// IsUnlimited: TOML doesn't distinguish "absent" from
+	// "explicitly false" (parser zero-value is false either way),
+	// so stamping `false` whenever the issuer omitted the field
+	// would over-claim. Project the bool only when the issuer
+	// addressed supply at all — i.e. set it to true OR declared
+	// at least one of fixed_number / max_number alongside.
+	if match.IsUnlimited || match.FixedNumber != "" || match.MaxNumber != "" {
+		unlim := match.IsUnlimited
+		detail.IsUnlimited = &unlim
+	}
+
 	// Prefer issuer-declared display_decimals over our canonical
 	// default (7) — it's the value Freighter + wallets will surface
 	// to users. Fall back to decimals if display_decimals is zero.

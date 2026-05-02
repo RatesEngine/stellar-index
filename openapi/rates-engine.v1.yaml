@@ -1234,6 +1234,12 @@ components:
         org_name:          { type: string, nullable: true }
         anchor_asset:      { type: string, nullable: true }
         anchor_asset_type: { type: string, nullable: true }
+        # SEP-1 issuance declarations (issuer's stated commitments,
+        # distinct from the live-ledger F2 fields below).
+        conditions:        { type: string, nullable: true, description: "Issuer's declared terms / conditions text." }
+        fixed_number:      { type: string, nullable: true, description: "SEP-1-declared fixed total supply (decimal string in the asset's smallest integer unit). Distinct from `total_supply` below — that's the live-ledger sum." }
+        max_number:        { type: string, nullable: true, description: "SEP-1-declared maximum supply ceiling (decimal string). Distinct from `max_supply` below which is operator/policy-derived." }
+        is_unlimited:      { type: boolean, nullable: true, description: "Issuer asserts unbounded issuance. Null when the issuer didn't address supply at all; false when they declared a bounded supply." }
         # F2 fields — Market Cap / FDV / Circulating / Total / Max
         # Supply per Freighter RFP V2 (ADR-0011).
         #
@@ -1326,16 +1332,37 @@ components:
 
     AssetMetadata:
       type: object
+      description: |
+        SEP-1 overlay re-projection of /v1/assets/{id}'s metadata
+        slice. Same shape the asset-detail surface returns under
+        the `name`/`description`/etc. keys, here without the
+        ledger-derived F2 fields. Populated when the issuer
+        publishes a stellar.toml whose [[CURRENCIES]] entry
+        matches the asset's `(code, issuer)` — `sep1_status`
+        then reads "verified". `not_applicable` (native, fiat,
+        SAC-only), `not_fetched` (operator hasn't configured the
+        home-domain map for this issuer), `unreachable` (fetch
+        or parse failed), and `no_match` (TOML loaded but no
+        matching currency block) leave the overlay fields null.
       properties:
-        asset_id:    { type: string }
-        name:        { type: string, nullable: true }
-        description: { type: string, nullable: true }
-        image_url:   { type: string, nullable: true }
-        org_name:    { type: string, nullable: true }
-        conditions:  { type: string, nullable: true }
-        fixed_number:   { type: string, nullable: true, description: "Static-issuance (SEP-1 TOKEN `fixed_number`) as string." }
-        max_number:     { type: string, nullable: true }
-        is_unlimited:   { type: boolean, nullable: true }
+        asset_id:        { type: string }
+        home_domain:     { type: string, nullable: true }
+        sep1_status:     { type: string, enum: [not_applicable, not_fetched, verified, no_match, unreachable] }
+        # SEP-1 overlay fields (populated when sep1_status=verified).
+        name:            { type: string, nullable: true }
+        description:     { type: string, nullable: true }
+        image:           { type: string, nullable: true, description: "Issuer-supplied logo URL. http(s) only — non-http schemes are stripped at overlay time." }
+        org_name:        { type: string, nullable: true }
+        anchor_asset:    { type: string, nullable: true }
+        anchor_asset_type: { type: string, nullable: true, description: "fiat / crypto / stock / etc., per SEP-1 §Currencies." }
+        # SEP-1 issuance declarations — the issuer's own commitments,
+        # distinct from F2 supply numbers on /v1/assets/{id} which
+        # observe live ledger state.
+        conditions:      { type: string, nullable: true, description: "Issuer's declared terms / conditions text." }
+        fixed_number:    { type: string, nullable: true, description: "SEP-1-declared fixed total supply (decimal string in the asset's smallest integer unit). Distinct from /v1/assets/{id}'s `total_supply` which is the live-ledger sum." }
+        max_number:      { type: string, nullable: true, description: "SEP-1-declared maximum supply ceiling (decimal string). Distinct from /v1/assets/{id}'s `max_supply` which is operator/policy-derived." }
+        is_unlimited:    { type: boolean, nullable: true, description: "Issuer asserts unbounded issuance. Null when the issuer didn't address supply at all (no fixed_number / max_number / is_unlimited declaration); false when they did and committed to a bounded supply." }
+      required: [asset_id, sep1_status]
 
     AssetMetadataEnvelope:
       allOf:

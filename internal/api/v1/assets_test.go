@@ -299,6 +299,58 @@ func TestAssetMetadata_ReturnsOnlyOverlayFields(t *testing.T) {
 	}
 }
 
+// TestAssetMetadata_ProjectsSEP1IssuanceFields confirms the four
+// SEP-1 issuance declarations (conditions / fixed_number / max_number
+// / is_unlimited) round-trip from AssetDetail through the metadata
+// projection. Pre-overlay state — pretends `applySep1Overlay` has
+// already populated AssetDetail; here we just exercise the
+// projection.
+func TestAssetMetadata_ProjectsSEP1IssuanceFields(t *testing.T) {
+	issuer := testUSDCIssuer
+	domain := "circle.com"
+	yes := false // issuer asserts a bounded supply
+	reader := &stubAssetReader{
+		byID: map[string]v1.AssetDetail{
+			"USDC-" + testUSDCIssuer: {
+				AssetID:     "USDC-" + testUSDCIssuer,
+				Type:        "classic",
+				Code:        "USDC",
+				Issuer:      &issuer,
+				HomeDomain:  &domain,
+				Decimals:    7,
+				Sep1Status:  "verified",
+				Conditions:  ptr("Issuer terms of service: https://centre.io/terms"),
+				FixedNumber: ptr("100000000000000"),
+				MaxNumber:   ptr("100000000000000"),
+				IsUnlimited: &yes,
+			},
+		},
+	}
+	srv := v1.New(v1.Options{Assets: reader})
+	ts := httpTestServer(t, srv)
+
+	resp := mustGet(t, ts.URL+"/v1/assets/USDC-"+testUSDCIssuer+"/metadata")
+	var env struct {
+		Data v1.AssetMetadata `json:"data"`
+	}
+	mustDecode(t, resp, &env)
+
+	if env.Data.Conditions == nil || *env.Data.Conditions == "" {
+		t.Errorf("conditions not projected: %+v", env.Data.Conditions)
+	}
+	if env.Data.FixedNumber == nil || *env.Data.FixedNumber != "100000000000000" {
+		t.Errorf("fixed_number not projected: %+v", env.Data.FixedNumber)
+	}
+	if env.Data.MaxNumber == nil || *env.Data.MaxNumber != "100000000000000" {
+		t.Errorf("max_number not projected: %+v", env.Data.MaxNumber)
+	}
+	if env.Data.IsUnlimited == nil {
+		t.Errorf("is_unlimited not projected (nil)")
+	} else if *env.Data.IsUnlimited != false {
+		t.Errorf("is_unlimited = %v, want false", *env.Data.IsUnlimited)
+	}
+}
+
 // TestAssetMetadata_NotFoundOn404 confirms that an unknown asset
 // surfaces as 404 even on the metadata endpoint — same shape as
 // /v1/assets/{id}, not a 200-with-empty-overlay.

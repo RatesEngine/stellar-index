@@ -17,6 +17,24 @@ against.
 
 ### Added
 
+- **SEP-1 issuance declarations now surfaced on `/v1/assets/{id}` +
+  `/v1/assets/{id}/metadata`**: `conditions`, `fixed_number`,
+  `max_number`, and `is_unlimited` from the issuer's
+  `[[CURRENCIES]]` entry populate when `sep1_status="verified"`.
+  These are issuer-declared (separate from the F2 fields, which
+  observe live ledger state) — useful for asset-detail UIs that
+  want to show "Circle has committed to a fixed total of X
+  tokens" alongside the live `total_supply`. The metadata package
+  already parsed these fields; the gap was in the API projection.
+  OpenAPI spec was already promising them on
+  `/v1/assets/{id}/metadata` (under different field names,
+  including the wrong `image_url` for `image`); this PR realigns
+  the spec to the handler's actual shape AND adds the four
+  issuance fields to the surface for real. SDK
+  `pkg/client.AssetMetadata` updated to match (replaces the
+  invented `sep1`/`fetched_at` fields that didn't exist on the
+  wire).
+
 - **On-chain DEX trades populate `trades.usd_volume` (launch-
   readiness L2.2 phase 1)**: previously only off-chain CEX/FX
   trades populated `usd_volume` at insert time — on-chain trades

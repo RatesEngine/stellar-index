@@ -71,13 +71,31 @@ type AssetDetail struct {
 }
 
 // AssetMetadata is the data shape returned by [Client.AssetMetadata]
-// (the SEP-1 overlay endpoint).
+// (the SEP-1 overlay endpoint, /v1/assets/{id}/metadata). Mirrors
+// the AssetMetadata schema in openapi/rates-engine.v1.yaml.
+//
+// All overlay fields populate only when Sep1Status == "verified".
+// Other states ("not_applicable" / "not_fetched" / "unreachable" /
+// "no_match") leave the overlay fields nil.
 type AssetMetadata struct {
-	AssetID    string                 `json:"asset_id"`
-	HomeDomain string                 `json:"home_domain,omitempty"`
-	SEP1Status string                 `json:"sep1_status"`
-	SEP1       map[string]interface{} `json:"sep1,omitempty"`
-	FetchedAt  *time.Time             `json:"fetched_at,omitempty"`
+	AssetID    string  `json:"asset_id"`
+	HomeDomain *string `json:"home_domain,omitempty"`
+	Sep1Status string  `json:"sep1_status"`
+
+	// SEP-1 [[CURRENCIES]] overlay — populated only on Sep1Status=="verified".
+	Name            *string `json:"name,omitempty"`
+	Description     *string `json:"description,omitempty"`
+	Image           *string `json:"image,omitempty"`
+	OrgName         *string `json:"org_name,omitempty"`
+	AnchorAsset     *string `json:"anchor_asset,omitempty"`
+	AnchorAssetType *string `json:"anchor_asset_type,omitempty"`
+
+	// SEP-1 issuance declarations — issuer-declared, distinct from
+	// the F2 fields on AssetDetail which observe live ledger state.
+	Conditions  *string `json:"conditions,omitempty"`
+	FixedNumber *string `json:"fixed_number,omitempty"`
+	MaxNumber   *string `json:"max_number,omitempty"`
+	IsUnlimited *bool   `json:"is_unlimited,omitempty"`
 }
 
 // Account is the data shape returned by [Client.Me].
