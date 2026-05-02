@@ -143,3 +143,36 @@ func TestRegisterSupplyEntryDecoders_FullConfigRegistersFive(t *testing.T) {
 // Mirrors the supply-package test fixture pattern. Public ledger
 // entry — not a credential.
 const realisticCStrkey = "CCW67TSZV3SSS2HXMBQ5JFGCKJNXKZM7UQUWUOZWS4HG3B5UPHHC2QQA"
+
+// TestRegisterSupplyEventDecoders_NoOpWhenEmpty pins the safe
+// default for the event-stream sister of RegisterSupplyEntryDecoders.
+// Empty WatchedSEP41Contracts → no decoder attached, no behaviour
+// change.
+func TestRegisterSupplyEventDecoders_NoOpWhenEmpty(t *testing.T) {
+	disp := dispatcher.New()
+	registered, err := RegisterSupplyEventDecoders(disp, config.SupplyConfig{})
+	if err != nil {
+		t.Fatalf("RegisterSupplyEventDecoders: %v", err)
+	}
+	if len(registered) != 0 {
+		t.Errorf("registered = %v, want empty", registered)
+	}
+}
+
+// TestRegisterSupplyEventDecoders_RegistersWhenWatched confirms
+// the sep41_supply decoder attaches when WatchedSEP41Contracts is
+// set. Closes the L2.12a final slice — Algorithm 3 mint/burn/clawback
+// event sums start landing in `sep41_supply_events`.
+func TestRegisterSupplyEventDecoders_RegistersWhenWatched(t *testing.T) {
+	disp := dispatcher.New()
+	cfg := config.SupplyConfig{
+		WatchedSEP41Contracts: []string{realisticCStrkey},
+	}
+	registered, err := RegisterSupplyEventDecoders(disp, cfg)
+	if err != nil {
+		t.Fatalf("RegisterSupplyEventDecoders: %v", err)
+	}
+	if len(registered) != 1 || registered[0] != "sep41_supply" {
+		t.Errorf("registered = %v, want [sep41_supply]", registered)
+	}
+}

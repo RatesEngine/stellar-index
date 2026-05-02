@@ -86,7 +86,7 @@ func main() {
 	}
 }
 
-//nolint:funlen // top-level binary lifecycle; splitting reduces readability of dependency-construction order
+//nolint:funlen,gocognit // top-level binary lifecycle; splitting reduces readability of dependency-construction order
 func run(cfgPath string, dryRun bool) error {
 	cfg, err := config.LoadWithEnv(cfgPath)
 	if err != nil {
@@ -123,24 +123,29 @@ func run(cfgPath string, dryRun bool) error {
 		return fmt.Errorf("build dispatcher: %w", err)
 	}
 
-	// ─── Supply LCM observers (opt-in via [supply] watched-sets) ──
-	// L2.12a wire-up — five of the six observers shipped (this PR
-	// + #411): accounts (Algorithm 1, XLM), trustlines / claimable /
-	// liquidity_pools / sac_balances (Algorithm 2). sep41_supply
-	// remains follow-up (event-stream Decoder needs a separate
-	// dispatcher API path). Empty watched-set per observer leaves
-	// it unregistered → no behaviour change for deployments that
-	// haven't opted in.
+	// ─── Supply observers (opt-in via [supply] watched-sets) ──────
+	// L2.12a wire-up complete: accounts (Algorithm 1, XLM),
+	// trustlines / claimable / liquidity_pools / sac_balances
+	// (Algorithm 2 LCM-based components), and sep41_supply
+	// (Algorithm 3 event-stream). Empty watched-set per observer
+	// leaves it unregistered → no behaviour change for deployments
+	// that haven't opted in.
 	supplyObservers, err := pipeline.RegisterSupplyEntryDecoders(disp, cfg.Supply)
 	if err != nil {
-		return fmt.Errorf("supply observers: %w", err)
+		return fmt.Errorf("supply observers (entry): %w", err)
 	}
+	supplyEvents, err := pipeline.RegisterSupplyEventDecoders(disp, cfg.Supply)
+	if err != nil {
+		return fmt.Errorf("supply observers (event): %w", err)
+	}
+	supplyObservers = append(supplyObservers, supplyEvents...)
 	if len(supplyObservers) > 0 {
 		logger.Info("supply observers wired",
 			"observers", supplyObservers,
 			"sdf_reserve_accounts", len(cfg.Supply.SDFReserveAccounts),
 			"watched_classic_assets", len(cfg.Supply.WatchedClassicAssets),
-			"sac_wrappers", len(cfg.Supply.SACWrappers))
+			"sac_wrappers", len(cfg.Supply.SACWrappers),
+			"watched_sep41_contracts", len(cfg.Supply.WatchedSEP41Contracts))
 	}
 
 	// ─── SEP-41 auto-discovery sink ──────────────────────────────

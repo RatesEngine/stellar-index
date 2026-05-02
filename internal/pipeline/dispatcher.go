@@ -41,6 +41,7 @@ import (
 	"github.com/RatesEngine/rates-engine/internal/sources/reflector"
 	"github.com/RatesEngine/rates-engine/internal/sources/sac_balances"
 	"github.com/RatesEngine/rates-engine/internal/sources/sdex"
+	sep41supply "github.com/RatesEngine/rates-engine/internal/sources/sep41_supply"
 	"github.com/RatesEngine/rates-engine/internal/sources/soroswap"
 	"github.com/RatesEngine/rates-engine/internal/sources/trustlines"
 )
@@ -164,14 +165,6 @@ func BuildDispatcher(names []string, oracle config.OracleConfig) (*dispatcher.Di
 //     balance changes for SAC-wrapped classics + pure SEP-41
 //     contracts into `classic_supply_sac_balance_observations`.
 //
-// Tracked-but-not-yet-wired (per launch-readiness L2.12a; final
-// slice of the six-observer wiring sweep):
-//
-//   - sep41_supply — watched-set is [supply.WatchedSEP41Contracts];
-//     this is an event-stream Decoder (not a LedgerEntryChangeDecoder),
-//     so it needs a separate registration path the dispatcher API
-//     doesn't yet expose. Follow-up PR.
-//
 // The persistence side (internal/pipeline/sink.go) already type-
 // switches on every observer's Observation type and calls the right
 // store.Insert*; this function only fills the registration gap.
@@ -179,6 +172,11 @@ func BuildDispatcher(names []string, oracle config.OracleConfig) (*dispatcher.Di
 // Design rule: the watched-set itself is the on/off switch. Empty
 // list → observer skipped. This avoids a separate `[supply] enabled`
 // boolean an operator could forget to flip.
+//
+// The Algorithm 3 sep41_supply observer is event-stream (regular
+// Decoder, not LedgerEntryChangeDecoder); it ships in
+// [RegisterSupplyEventDecoders] alongside the LedgerEntry registration
+// here so an indexer that wants the full supply pipeline calls both.
 func RegisterSupplyEntryDecoders(disp *dispatcher.Dispatcher, sup config.SupplyConfig) ([]string, error) {
 	var registered []string
 	if len(sup.SDFReserveAccounts) > 0 {
@@ -218,6 +216,34 @@ func RegisterSupplyEntryDecoders(disp *dispatcher.Dispatcher, sup config.SupplyC
 		}
 		disp.AddEntryDecoder(sac)
 		registered = append(registered, sac_balances.SourceName)
+	}
+	return registered, nil
+}
+
+// RegisterSupplyEventDecoders attaches event-stream Soroban decoders
+// for the supply pipeline. Currently registers exactly one — the
+// sep41_supply Algorithm 3 mint/burn/clawback decoder — but the
+// shape mirrors [RegisterSupplyEntryDecoders] so a future per-asset
+// event observer slots in cleanly.
+//
+// Closes the L2.12a six-observer wiring sweep alongside
+// [RegisterSupplyEntryDecoders]. Without this call, the
+// `sep41_supply_events` hypertable stays empty and Algorithm 3
+// returns zero for every SEP-41 contract regardless of whether
+// `[supply] watched_sep41_contracts` is set.
+//
+// Design rule: same as the entry-decoder helper — empty watched-set
+// → observer skipped, no behaviour change for non-opted-in
+// deployments.
+func RegisterSupplyEventDecoders(disp *dispatcher.Dispatcher, sup config.SupplyConfig) ([]string, error) {
+	var registered []string
+	if len(sup.WatchedSEP41Contracts) > 0 {
+		dec, err := sep41supply.NewDecoder(sup.WatchedSEP41Contracts)
+		if err != nil {
+			return nil, fmt.Errorf("sep41_supply decoder: %w", err)
+		}
+		disp.AddDecoder(dec)
+		registered = append(registered, sep41supply.SourceName)
 	}
 	return registered, nil
 }

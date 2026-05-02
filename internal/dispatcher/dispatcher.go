@@ -280,6 +280,22 @@ func (d *Dispatcher) AddEntryDecoder(ld LedgerEntryChangeDecoder) {
 	d.entryDecoders = append(d.entryDecoders, ld)
 }
 
+// AddDecoder registers a Soroban event-stream Decoder after
+// construction. Mirrors the behaviour of the variadic [New]
+// constructor — registration order determines first-match
+// precedence. Called once at startup; not safe concurrent with
+// ProcessLedger.
+//
+// Most event-stream decoders register via [New] (the trade /
+// oracle decoders selected by `cfg.Ingestion.EnabledSources`).
+// AddDecoder exists for the supply-side observers that opt in
+// per a separate config block (`[supply] watched_sep41_contracts`)
+// — those don't fit the EnabledSources model because they're
+// per-asset rather than per-source.
+func (d *Dispatcher) AddDecoder(dec Decoder) {
+	d.decoders = append(d.decoders, dec)
+}
+
 // DiscoverySink is the side-effect interface the dispatcher uses to
 // notify the auto-discovery layer about SEP-41-shaped events. Push
 // is called once per event whose topic[0] decodes to one of the

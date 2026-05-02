@@ -442,6 +442,20 @@ against.
 
 ### Added
 
+- **`internal/sources/sep41_supply` (event-stream Algorithm 3
+  decoder) now registers with the indexer dispatcher — closes
+  L2.12a 6/6.** New `dispatcher.AddDecoder` method (mirroring the
+  existing `Add{Op,ContractCall,Entry}Decoder` siblings) and a
+  new `pipeline.RegisterSupplyEventDecoders` helper that attaches
+  the sep41_supply decoder when `[supply] watched_sep41_contracts`
+  is non-empty. The Algorithm 3 mint/burn/clawback running sums
+  start landing in `sep41_supply_events` per ledger close. Indexer
+  main.go calls both supply-registration helpers (entry +  event)
+  and merges the registered observer list for the boot log.
+  Closes the wiring gap flagged in #410: the supply pipeline
+  (Algorithms 1 + 2 + 3) is now fully end-to-end live in
+  production for opted-in deployments.
+
 - **Classic-asset supply observers (trustlines / claimable_balances /
   liquidity_pools / sac_balances) now register with the indexer
   dispatcher.** Second slice of the L2.12a six-observer wiring
