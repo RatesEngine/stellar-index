@@ -26,7 +26,7 @@ type Config struct {
 	Anomaly    AnomalyConfig    `toml:"anomaly" doc:"Per-asset-class anomaly detection thresholds (ADR-0019 Phase 1 stop-gap)."`
 	API        APIConfig        `toml:"api" doc:"Public API serving plane — port, auth mode, rate limits, CDN."`
 	Metadata   MetadataConfig   `toml:"metadata" doc:"Asset metadata overlay — SEP-1 issuer→home-domain map, operator overrides."`
-	Supply     SupplyConfig     `toml:"supply" doc:"Supply-snapshot writer config — SDF reserve list + operator-managed reserve balances. Pre-LCM-observer interim per ADR-0011."`
+	Supply     SupplyConfig     `toml:"supply" doc:"Supply pipeline config — SDF reserve list, operator-managed reserve balances (fallback when the LCM AccountEntry observer hasn't yet covered the watched set), watched classic + SEP-41 asset lists, SAC wrappers, and aggregator-refresh cadence. ADR-0011 (XLM) + ADR-0022 (classic) + ADR-0023 (SEP-41)."`
 	Divergence DivergenceConfig `toml:"divergence" doc:"Cross-check references the divergence service consults (CoinGecko + Chainlink). Empty disables; the divergence_warning envelope flag stays unset."`
 	Obs        ObsConfig        `toml:"obs" doc:"Metrics, logs, traces — exporters + sampling."`
 }
