@@ -15,6 +15,22 @@ against.
 
 ## [Unreleased]
 
+### Added
+
+- **`pkg/client.Client.PriceBatch`** — bulk price lookup via the
+  Go SDK. Closes the most impactful gap from a code-vs-RFP audit
+  of the SDK surface: Freighter RFP §"Bulk query support
+  preferred (batch asset lookups)" was implemented server-side
+  (`GET`/`POST /v1/price/batch`) but the SDK only exposed the
+  single-asset `Client.Price`. SDK now routes ≤100 ids via GET
+  and >100 via POST automatically (the threshold below which the
+  query string fits within typical 8 KiB header limits), validates
+  ≤1000 client-side to match the server cap, and returns the
+  same `Envelope[[]PriceSnapshot]` shape with OR-over-rows flags.
+  Splitting beyond 1000 is deliberately the caller's choice —
+  silently chunking would mask `flags.stale` semantics on
+  subsets the caller wouldn't see.
+
 ### Fixed
 
 - **`/v1/account/me` now returns the credential's `label`** —
