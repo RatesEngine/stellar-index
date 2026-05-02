@@ -124,6 +124,18 @@ live ledgerstream pipeline, updated after each successful cursor
 upsert. `cursor-stuck` alert fires when `increase(...[5m]) == 0` with
 `source_enabled=1`.
 
+### `ratesengine_trade_inserts_total`
+
+Counter, labels `source`, `usd_volume_populated` (`yes` | `no`).
+
+Per-source attempt counter for `Store.InsertTrade`, broken out by
+whether `usd_volume` was populated at insert time (per L2.2 phase 1
+— see `internal/storage/timescale.Store.WouldPopulateUSDVolume`).
+Operators flipping on `[trades].usd_pegged_classic_assets` use this
+to verify their allow-list actually covers what the indexer is
+seeing. Counts attempts; the trades hypertable's `ON CONFLICT DO
+NOTHING` dedupe is invisible to this counter.
+
 ## Oracle layer (indexer binary, reflector + future sources)
 
 ### `ratesengine_oracle_last_update_unix`

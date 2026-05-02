@@ -128,6 +128,12 @@ func handleOneEvent(ctx context.Context, logger *slog.Logger, store *timescale.S
 }
 
 func persistTrade(ctx context.Context, logger *slog.Logger, store *timescale.Store, t canonical.Trade) {
+	// Check populated-ness BEFORE InsertTrade so the metric counts
+	// every attempt — including the ON CONFLICT DO NOTHING dedupe
+	// case, which from this layer's POV is still "we tried, with
+	// this populate state". Pure predicate; no DB hit.
+	populated := store.WouldPopulateUSDVolume(t)
+
 	if err := store.InsertTrade(ctx, t); err != nil {
 		obs.SourceInsertErrorsTotal.WithLabelValues(t.Source, "trade").Inc()
 		logger.Error("insert trade failed",
@@ -139,11 +145,21 @@ func persistTrade(ctx context.Context, logger *slog.Logger, store *timescale.Sto
 		)
 		return
 	}
+	obs.TradeInsertsTotal.WithLabelValues(t.Source, usdPopulatedLabel(populated)).Inc()
 	logger.Debug("trade ingested",
 		"source", t.Source,
 		"ledger", t.Ledger,
 		"pair", t.Pair.String(),
 	)
+}
+
+// usdPopulatedLabel maps the WouldPopulateUSDVolume bool to the
+// stable Prometheus label values the dashboards filter on.
+func usdPopulatedLabel(populated bool) string {
+	if populated {
+		return "yes"
+	}
+	return "no"
 }
 
 func persistOracle(ctx context.Context, logger *slog.Logger, store *timescale.Store, u canonical.OracleUpdate) {

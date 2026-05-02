@@ -34,6 +34,20 @@ against.
   binary already builds, mirroring the helper for now (a shared
   builder is one CHANGELOG fixme away when a third caller appears).
 
+- **`ratesengine_trade_inserts_total{source, usd_volume_populated}`
+  counter for L2.2 phase 1 coverage**: per-source counter labelled
+  by whether the trade's `usd_volume` column was populated at
+  insert time. Operators flipping on
+  `[trades].usd_pegged_classic_assets` use this to verify their
+  allow-list actually covers what the indexer is seeing — a
+  configured deployment with steady-state
+  `usd_volume_populated="no"` on a USDC-quoting venue means the
+  operator's classic asset_key doesn't match the decoder's stamp
+  (typically an issuer mismatch or a missing entry).
+  `Store.WouldPopulateUSDVolume(t)` exposes the predicate as a
+  package-public method so the pipeline sink can label the metric
+  without re-implementing the populated-ness decision.
+
 - **SEP-1 issuance declarations now surfaced on `/v1/assets/{id}` +
   `/v1/assets/{id}/metadata`**: `conditions`, `fixed_number`,
   `max_number`, and `is_unlimited` from the issuer's

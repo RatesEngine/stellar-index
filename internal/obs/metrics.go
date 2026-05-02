@@ -41,6 +41,7 @@ func init() {
 		Sep1CacheOpsTotal,
 		CursorLastLedger,
 		DivergenceRefreshTotal,
+		TradeInsertsTotal,
 
 		PriceStalenessSeconds,
 		OracleLastUpdateUnix,
@@ -275,6 +276,27 @@ var DivergenceRefreshTotal = prometheus.NewCounterVec(
 		Help: "Aggregator divergence-cache refresh outcomes per Tick (ok|no_vwap|parse_error|refresh_error).",
 	},
 	[]string{"outcome"},
+)
+
+// TradeInsertsTotal — per-source counter, broken out by whether the
+// trade's `usd_volume` column was populated at insert time.
+//
+// Operators flipping on `[trades].usd_pegged_classic_assets` (the
+// L2.2 phase 1 surface — see `internal/storage/timescale.Store.WouldPopulateUSDVolume`)
+// use this to verify their allow-list actually covers the trades
+// the indexer is seeing. A configured deployment with steady-state
+// `usd_volume_populated="no"` on a USDC-quoting venue means the
+// operator's classic asset_key doesn't match what the decoder
+// stamps — typically an issuer mismatch or a missing entry.
+//
+// Cardinality: one source × two outcomes per registered source
+// (low-tens of series at maturity).
+var TradeInsertsTotal = prometheus.NewCounterVec(
+	prometheus.CounterOpts{
+		Name: "ratesengine_trade_inserts_total",
+		Help: "Trade-insert attempts, labelled by source and whether usd_volume was populated (yes|no). Counts attempts not unique-row inserts (ON CONFLICT DO NOTHING dedupe is invisible to this counter).",
+	},
+	[]string{"source", "usd_volume_populated"},
 )
 
 // ─── Pricing / oracle metrics ────────────────────────────────────

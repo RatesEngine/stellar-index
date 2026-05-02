@@ -71,6 +71,20 @@ func tradeUSDVolume(t canonical.Trade, quoteSpec *USDVolumeQuoteSpec) *string {
 	return &rendered
 }
 
+// WouldPopulateUSDVolume reports whether [Store.InsertTrade] would
+// stamp a non-null `usd_volume` for this trade given the store's
+// currently-configured [USDVolumeQuoteSpec]. Pure predicate; safe
+// for callers (e.g. the pipeline sink emitting coverage metrics) to
+// invoke before InsertTrade.
+//
+// Returns false when the spec hasn't been installed via
+// [Store.SetUSDVolumeQuoteSpec] AND the trade isn't an off-chain
+// CEX/FX with a USD-pegged quote — i.e. the same conditions
+// tradeUSDVolume rejects on.
+func (s *Store) WouldPopulateUSDVolume(t canonical.Trade) bool {
+	return tradeUSDVolume(t, s.usdVolumeQuoteSpec) != nil
+}
+
 // usdVolumeDecimals picks the correct decimal scale for the trade's
 // quote asset given the source's subclass + the operator's quote
 // spec. Returns (0, false) when the trade isn't a USD-volume

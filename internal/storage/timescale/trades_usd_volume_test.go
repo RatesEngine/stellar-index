@@ -328,3 +328,69 @@ func TestUSDVolumeQuoteSpec_QuoteUSDPegInfo(t *testing.T) {
 		t.Errorf("nil spec should always return ok=false")
 	}
 }
+
+// TestStore_WouldPopulateUSDVolume — predicate the pipeline sink
+// uses to label the trade-inserts coverage metric. Wraps the same
+// decision as tradeUSDVolume but exposed publicly so the sink
+// doesn't need the unexported helper.
+func TestStore_WouldPopulateUSDVolume(t *testing.T) {
+	t.Parallel()
+	usdc, _ := canonical.NewCryptoAsset("USDC")
+	xlm, _ := canonical.NewCryptoAsset("XLM")
+	circleUSDC, _ := canonical.NewClassicAsset("USDC", "GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN")
+
+	mkTrade := func(source string, base, quote canonical.Asset, quoteAmt int64) canonical.Trade {
+		pair, err := canonical.NewPair(base, quote)
+		if err != nil {
+			t.Fatalf("NewPair: %v", err)
+		}
+		return canonical.Trade{
+			Source:      source,
+			Pair:        pair,
+			BaseAmount:  canonical.NewAmount(big.NewInt(100_000_000)),
+			QuoteAmount: canonical.NewAmount(big.NewInt(quoteAmt)),
+		}
+	}
+
+	cases := []struct {
+		name     string
+		store    *Store
+		trade    canonical.Trade
+		wantTrue bool
+	}{
+		{
+			name:     "off-chain CEX + USD-pegged → populated",
+			store:    &Store{},
+			trade:    mkTrade("kraken", xlm, usdc, 4_250_000_000),
+			wantTrue: true,
+		},
+		{
+			name:     "on-chain DEX with no spec → not populated",
+			store:    &Store{},
+			trade:    mkTrade("soroswap", canonical.NativeAsset(), circleUSDC, 1_000_000_000),
+			wantTrue: false,
+		},
+		{
+			name: "on-chain DEX with spec that recognises the quote → populated",
+			store: func() *Store {
+				s := &Store{}
+				spec, _ := NewUSDVolumeQuoteSpec(
+					[]string{"USDC-GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN"},
+					nil,
+				)
+				s.SetUSDVolumeQuoteSpec(spec)
+				return s
+			}(),
+			trade:    mkTrade("soroswap", canonical.NativeAsset(), circleUSDC, 10_000_000),
+			wantTrue: true,
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got := tc.store.WouldPopulateUSDVolume(tc.trade)
+			if got != tc.wantTrue {
+				t.Errorf("got %v, want %v", got, tc.wantTrue)
+			}
+		})
+	}
+}
