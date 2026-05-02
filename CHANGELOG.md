@@ -15,6 +15,20 @@ against.
 
 ## [Unreleased]
 
+### Added
+
+- **AlertManager Discord webhook (parallel fanout with Slack)** —
+  the proposal commits to alerts being "integrated into
+  discord/slack" but the Prometheus ansible role only wired
+  Slack. New `alertmanager_discord_webhook_url` vault var; the
+  warning + info routes now point at a unified `chat-fanout`
+  receiver that emits to BOTH Slack and Discord when their
+  respective webhook URLs are set, either alone, or neither
+  (alerts accumulate in the AM UI in the last case). Preflight
+  warns when both URLs are empty rather than silently letting
+  alerts fall on the floor. Closes G7 in
+  `docs/launch-task-list.md`.
+
 ### Fixed
 
 - **`/v1/account/me` now returns the credential's `label`** —
