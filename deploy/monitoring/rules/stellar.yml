@@ -1,5 +1,33 @@
 ---
 # Stellar node alerts — stellar-core, stellar-rpc, archive publishing.
+#
+# Deployment posture (2026-04-23 onward): r1 does NOT run stellar-core
+# or stellar-rpc — both were removed in the FSN1 trim along with the
+# stellar-core-prometheus-exporter (see
+# `docs/operations/r1-deployment-state.md` §Services). On r1 the
+# core/rpc alerts below are therefore *inert*: their underlying
+# metrics have no producer, so the rules never evaluate to true and
+# no series exists for the `for:` window to start. Each runbook
+# under `docs/operations/runbooks/` carries the same disclaimer.
+#
+# The rules stay in this file because Phase-3 (Tier-1 validator
+# rollout per ADR-0004) brings stellar-core back, at which point
+# `run_stellar_core` flips on in the ansible role and the
+# stellar-core-prometheus-exporter starts producing the metrics
+# below. Removing the rules now would force re-authoring them at
+# Phase-3; keeping them inert costs nothing.
+#
+# Two alerts in this file remain active on r1 today:
+#   - ratesengine_stellar_archive_publish_fail — references
+#     `ratesengine_stellar_archive_publish_errors_total`, which the
+#     stellar-archivist publish loop emits when a checkpoint upload
+#     fails. r1 doesn't currently publish a history archive, so this
+#     stays inert today, but operators wiring publishing back on
+#     don't need a rule edit to start surfacing the signal.
+#   - ratesengine_stellar_archive_divergence — references
+#     `ratesengine_archive_divergence_total`, which the
+#     verify-archive Tier-D job DOES emit on r1 (per
+#     `docs/operations/runbooks/archive-divergence.md`). Active.
 
 groups:
   - name: ratesengine.stellar
