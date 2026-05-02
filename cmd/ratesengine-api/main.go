@@ -175,6 +175,22 @@ func run(cfgPath string, dryRun bool) error { //nolint:gocognit,funlen,gocyclo /
 	})
 	sep1Cache := metadata.NewCache(sep1Resolver, rdb)
 
+	// Trusted-proxy CIDRs — F-0009 remediation. The middleware
+	// package's `requestCameViaTrustedProxy` consults this allow-list
+	// before honouring `X-Forwarded-For`; an empty list means no
+	// proxies are trusted and XFF is ignored entirely. Validation
+	// already happened at config-load via internal/config/validate.go,
+	// so a parse error here would be a programmer bug, not bad
+	// operator input — surface as a hard startup failure.
+	if err := middleware.SetTrustedProxyCIDRs(cfg.API.TrustedProxyCIDRs); err != nil {
+		return fmt.Errorf("middleware.SetTrustedProxyCIDRs: %w", err)
+	}
+	if len(cfg.API.TrustedProxyCIDRs) > 0 {
+		logger.Info("trusted-proxy CIDRs wired",
+			"count", len(cfg.API.TrustedProxyCIDRs),
+			"cidrs", cfg.API.TrustedProxyCIDRs)
+	}
+
 	// CORS — only wired when the operator configured allowed origins.
 	// Empty list means same-origin only (no cross-origin clients).
 	var cors middleware.Middleware
