@@ -89,19 +89,18 @@ ADR-0022). The sixth is an event-stream observer (ADR-0023) — it
 classifies topics and accumulates amounts rather than reading
 state.
 
-> **Production wiring gap (tracked as L2.12a):** these six observer
-> packages compile and have unit-test coverage, but **none are
-> registered with the dispatcher in production code today**.
-> `pipeline.BuildDispatcher` only wires the trade/oracle decoders
-> (soroswap, aquarius, …); `disp.AddEntryDecoder` is never called
-> by `cmd/ratesengine-indexer`. Effect: `account_observations`,
-> `classic_supply_*_observations`, and `sep41_supply_events`
-> hypertables stay empty in production, so the supply readers
-> below return no rows and the F2 fields on `/v1/assets/{id}` are
-> null. The persistence side (`internal/pipeline/sink.go` →
-> `store.Insert*`) is already wired correctly — the gap is purely
-> at the dispatcher-registration step. See L2.12a in
-> `launch-readiness-backlog.md` for the closure plan.
+All six observers are now wired into the indexer's dispatcher
+(L2.12a closed via PRs #411 / #412 / #413). Registration is
+opt-in per the corresponding `[supply]` watched-set —
+`pipeline.RegisterSupplyEntryDecoders` handles the five
+`LedgerEntryChangeDecoder`s (accounts / trustlines /
+claimable_balances / liquidity_pools / sac_balances) keyed off
+`sdf_reserve_accounts` / `watched_classic_assets` /
+`[supply.sac_wrappers]`, and `pipeline.RegisterSupplyEventDecoders`
+attaches sep41_supply when `watched_sep41_contracts` is non-empty.
+Empty watched-set → observer skipped → no behaviour change. With
+any watched-set populated, the corresponding hypertable starts
+filling on every matching ledger close.
 
 ## The chained-fallback reader pattern
 
