@@ -61,13 +61,81 @@ type HistoryPoint struct {
 // AssetDetail is the data shape returned by [Client.Asset] +
 // [Client.Assets].
 type AssetDetail struct {
-	AssetID        string  `json:"asset_id"`
-	Type           string  `json:"type"` // "native" / "classic" / "soroban" / "fiat" / "crypto"
-	Code           string  `json:"code,omitempty"`
-	Issuer         string  `json:"issuer,omitempty"`
-	ContractID     string  `json:"contract_id,omitempty"`
-	HomeDomain     *string `json:"home_domain,omitempty"`
-	IsExperimental bool    `json:"is_experimental,omitempty"`
+	// Identity
+	AssetID    string  `json:"asset_id"`
+	Type       string  `json:"type"` // "native" / "classic" / "soroban" / "fiat" / "crypto"
+	Code       string  `json:"code,omitempty"`
+	Issuer     string  `json:"issuer,omitempty"`
+	ContractID string  `json:"contract_id,omitempty"`
+	HomeDomain *string `json:"home_domain,omitempty"`
+	// Decimals is the asset's smallest-unit-to-display divisor power
+	// (always present on the wire). Stellar classic + native = 7;
+	// SEP-41 contracts publish their own value via `decimals()`.
+	Decimals int `json:"decimals"`
+
+	// Sep1Status is one of "not_applicable" / "not_fetched" /
+	// "verified" / "no_match" / "unreachable" — see the API design
+	// reference for the full state machine.
+	Sep1Status string `json:"sep1_status"`
+
+	// IsExperimental flags assets the operator has marked as
+	// pre-production.
+	IsExperimental bool `json:"is_experimental,omitempty"`
+
+	// ─── SEP-1 overlay (populated when Sep1Status == "verified") ──
+
+	// Name is the human-readable currency name (e.g. "USD Coin")
+	// from the issuer's stellar.toml [[CURRENCIES]] entry.
+	Name *string `json:"name,omitempty"`
+	// Description is the currency's `desc` field.
+	Description *string `json:"description,omitempty"`
+	// Image is an absolute URL to the asset logo.
+	Image *string `json:"image,omitempty"`
+	// OrgName is the issuer organisation's name (DOCUMENTATION.ORG_NAME).
+	OrgName *string `json:"org_name,omitempty"`
+	// AnchorAsset is the off-chain asset this token anchors to
+	// (e.g. "USD"). Empty for non-anchored tokens.
+	AnchorAsset *string `json:"anchor_asset,omitempty"`
+	// AnchorAssetType classifies the anchor (fiat, crypto, stock, …).
+	AnchorAssetType *string `json:"anchor_asset_type,omitempty"`
+
+	// ─── F2 fields (Freighter V2 / ADR-0011 supply derivation) ────
+
+	// CirculatingSupply / TotalSupply / MaxSupply are decimal
+	// strings in the asset's smallest integer unit (stroops for
+	// XLM / classic; contract-defined for SEP-41). Consumers divide
+	// by 10^Decimals for display. Null when no supply snapshot
+	// exists for this asset.
+	CirculatingSupply *string `json:"circulating_supply,omitempty"`
+	TotalSupply       *string `json:"total_supply,omitempty"`
+	MaxSupply         *string `json:"max_supply,omitempty"`
+
+	// MarketCapUSD = circulating × USD price / 10^Decimals,
+	// formatted to two fractional digits. Null when supply or USD
+	// price is unavailable.
+	MarketCapUSD *string `json:"market_cap_usd,omitempty"`
+
+	// FDVUSD = max_supply × USD price / 10^Decimals. Null when
+	// max_supply is null (uncapped issuer + no override + no SEP-1
+	// declaration) or when USD price is unavailable.
+	FDVUSD *string `json:"fdv_usd,omitempty"`
+
+	// SupplyBasis identifies which ADR-0011 policy produced the
+	// supply numbers (e.g. "issuer_exclusion", "admin_exclusion",
+	// "override"); null when no snapshot exists.
+	SupplyBasis *string `json:"supply_basis,omitempty"`
+
+	// VolumeUSD24h is the trailing-24h USD-denominated trade volume
+	// across every pair this asset participates in. "0" is a valid
+	// value (asset tracked, no trades in the window); null means
+	// the volume reader isn't wired or the lookup failed.
+	//
+	// Scope caveat (launch-readiness L2.2): off-chain CEX/FX trades
+	// always populate this; on-chain DEX trades populate it when
+	// the operator has configured `[trades].usd_pegged_classic_assets`
+	// in their server config. See the API description for the full
+	// caveat.
+	VolumeUSD24h *string `json:"volume_24h_usd,omitempty"`
 }
 
 // AssetMetadata is the data shape returned by [Client.AssetMetadata]
