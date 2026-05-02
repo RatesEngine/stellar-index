@@ -29,6 +29,7 @@ import (
 
 	"github.com/RatesEngine/rates-engine/internal/config"
 	"github.com/RatesEngine/rates-engine/internal/dispatcher"
+	"github.com/RatesEngine/rates-engine/internal/obs"
 	"github.com/RatesEngine/rates-engine/internal/sources/accounts"
 	"github.com/RatesEngine/rates-engine/internal/sources/aquarius"
 	"github.com/RatesEngine/rates-engine/internal/sources/band"
@@ -78,6 +79,7 @@ func BuildDispatcher(names []string, oracle config.OracleConfig) (*dispatcher.Di
 			}
 			decoders = append(decoders,
 				reflector.NewDecoder(reflector.VariantDEX, oracle.Reflector.DEXContract))
+			obs.OracleResolutionSeconds.WithLabelValues(reflector.SourceDEX).Set(float64(reflector.DefaultResolutionSeconds))
 		case reflector.SourceCEX:
 			if oracle.Reflector.CEXContract == "" {
 				return nil, fmt.Errorf(
@@ -86,6 +88,7 @@ func BuildDispatcher(names []string, oracle config.OracleConfig) (*dispatcher.Di
 			}
 			decoders = append(decoders,
 				reflector.NewDecoder(reflector.VariantCEX, oracle.Reflector.CEXContract))
+			obs.OracleResolutionSeconds.WithLabelValues(reflector.SourceCEX).Set(float64(reflector.DefaultResolutionSeconds))
 		case reflector.SourceFX:
 			if oracle.Reflector.FXContract == "" {
 				return nil, fmt.Errorf(
@@ -94,6 +97,7 @@ func BuildDispatcher(names []string, oracle config.OracleConfig) (*dispatcher.Di
 			}
 			decoders = append(decoders,
 				reflector.NewDecoder(reflector.VariantFX, oracle.Reflector.FXContract))
+			obs.OracleResolutionSeconds.WithLabelValues(reflector.SourceFX).Set(float64(reflector.DefaultResolutionSeconds))
 		case redstone.SourceName:
 			if oracle.Redstone.AdapterContract == "" {
 				return nil, fmt.Errorf(
@@ -102,6 +106,7 @@ func BuildDispatcher(names []string, oracle config.OracleConfig) (*dispatcher.Di
 			}
 			decoders = append(decoders,
 				redstone.NewDecoder(oracle.Redstone.AdapterContract))
+			obs.OracleResolutionSeconds.WithLabelValues(redstone.SourceName).Set(float64(redstone.DefaultResolutionSeconds))
 		case band.SourceName:
 			if oracle.Band.StandardReferenceContract == "" {
 				return nil, fmt.Errorf(
@@ -110,6 +115,7 @@ func BuildDispatcher(names []string, oracle config.OracleConfig) (*dispatcher.Di
 			}
 			callDecoders = append(callDecoders,
 				band.NewDecoder(oracle.Band.StandardReferenceContract))
+			obs.OracleResolutionSeconds.WithLabelValues(band.SourceName).Set(float64(band.DefaultResolutionSeconds))
 		case sdex.SourceName:
 			opDecoders = append(opDecoders, sdex.NewDecoder())
 		case blend.SourceName:

@@ -472,6 +472,26 @@ against.
 
 ### Fixed
 
+- **`ratesengine_oracle_resolution_seconds` is now actually
+  emitted.** The metric was registered in `internal/obs` and the
+  `ratesengine_oracle_stale` alert
+  (`deploy/monitoring/rules/divergence.yml`) depends on it — the
+  expression is
+  `(time() - oracle_last_update_unix) > 10 * oracle_resolution_seconds`.
+  The denominator was never set in production, so Prometheus's
+  missing-metric semantics meant the alert either evaluated `>0`
+  (always fired once a single update landed) or stayed
+  unevaluatable depending on operator scrape config — neither was
+  the intended behaviour. `pipeline.BuildDispatcher` now sets the
+  gauge per oracle source at registration time, using each
+  source's published `DefaultResolutionSeconds` constant:
+  reflector-{dex,cex,fx} = 300 s (5 min), redstone = 86400 s
+  (24 h), band = 60 s (1 min). The metric label is `source`, so
+  each reflector variant gets its own gauge entry. Same
+  audit-finding shape as the supply cross-check / trace_exporter
+  / cdn_enabled gaps — alert + metric defined but never emitted
+  by production code.
+
 - **CORS default AllowedMethods includes POST** — the default
   was set when v1 was a read-only API and never updated as POST
   endpoints landed (`/v1/account/keys`, `/v1/auth/sep10/token`,
