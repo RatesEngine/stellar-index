@@ -105,7 +105,7 @@ the `env:` column.
 | `aggregate.twap_window_seconds` | `int` | `300` | — | Rolling TWAP window in seconds (fallback when volume below threshold). |
 | `aggregate.min_usd_volume` | `float64` | `10000` | — | Per-pair minimum USD volume within the window for VWAP eligibility. |
 | `aggregate.outlier_sigma_threshold` | `float64` | `4` | — | Reject trades priced > N sigma from the rolling median before VWAP. |
-| `aggregate.triangulation_enabled` | `bool` | `true` | — | Enable cross-pair triangulation through USD/BTC when direct pair below threshold. |
+| `aggregate.triangulation_enabled` | `bool` | `true` | — | Master switch for the post-refresh triangulation pass. When true (default), the aggregator runs each aggregate.triangulations chain × window after the per-pair refresh, multiplying the leg VWAPs and writing the implied target price. When false, the pass is skipped entirely regardless of aggregate.triangulations entries — an operator-side kill-switch for the triangulation feature without having to clear the chain table. |
 | `aggregate.interval_seconds` | `int` | `30` | — | Tick cadence — gap between successive (pair, window) refresh passes. 0 falls back to the library default (30s). |
 | `aggregate.max_trades_per_window` | `int` | `10000` | — | Per-(pair, window) cap on TradesInRange row count to bound a runaway scan. 0 falls back to the library default (10000). |
 | `aggregate.disable_class_filter` | `bool` | `false` | — | Disable the default ClassExchange-only VWAP filter so every fetched trade contributes regardless of source class. Off by default — see internal/sources/external/registry.go for class semantics. |
