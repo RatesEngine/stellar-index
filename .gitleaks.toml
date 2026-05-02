@@ -47,6 +47,12 @@ paths = [
 ]
 
 [[rules.allowlists]]
+description = "Test-only Stellar G-strkey fixture (Circle USDC issuer) embedded in a JSON wire-payload string the pkg/client AssetDetail decoder test feeds to encoding/json. Bare G-address trips the entropy heuristic; not a credential."
+paths = [
+  '''pkg/client/asset_detail_test\.go''',
+]
+
+[[rules.allowlists]]
 description = "Generated Redocly HTML — embeds OpenAPI example values (canonical asset_ids: G-strkeys, C-strkeys, transaction hashes) that look like high-entropy secrets to gitleaks. The file is a build artefact regenerated from openapi/rates-engine.v1.yaml; the spec itself is scanned and any real secret would be caught there."
 paths = [
   '''docs/reference/api/index\.html''',

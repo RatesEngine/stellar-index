@@ -60,6 +60,26 @@ against.
 
 ### Fixed
 
+- **`pkg/client.AssetDetail` was missing 15 documented wire
+  fields**: the SDK consumer using `client.Asset()` deserialized
+  into a struct that omitted `decimals`, `sep1_status`, all six
+  SEP-1 overlay fields (`name`, `description`, `image`,
+  `org_name`, `anchor_asset`, `anchor_asset_type`), all seven F2
+  fields (`circulating_supply`, `total_supply`, `max_supply`,
+  `market_cap_usd`, `fdv_usd`, `supply_basis`,
+  `volume_24h_usd`), and the four SEP-1 issuance declarations
+  (`conditions`, `fixed_number`, `max_number`, `is_unlimited`).
+  Go's `encoding/json` silently ignores unknown fields by
+  default, so consumers got zero-valued structs without warning
+  — the only way to access the missing fields was dropping to
+  raw HTTP. This was a real wallet-integrator gap (the F2 + SEP-1
+  fields are exactly what asset-detail UIs need). Adding the
+  fields is purely additive under SemVer (`pkg/client` is `v0.x`
+  pre-release; the SDK contract pins backwards-compat from
+  `v1.0.0`). Two new tests pin the JSON-decode contract and the
+  `omitempty`-on-nil round-trip shape so a future regression
+  fires before shipping.
+
 - **`ratesengine-aggregator` log-level + log-format now match the
   other binaries**: the aggregator's bespoke logger factory was
   case-sensitive on the `[obs] log_level` value (so `LogLevel =
