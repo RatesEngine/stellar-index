@@ -295,6 +295,10 @@ If all oncall unreachable for > 30 min during a SEV-1:
   only, break something real + observe detection + response.
 - **Annual DR exercise** (4 h window) — simulated total-primary
   failure, flip to cloud DR, serve from there for 1 h, flip back.
+  The technical procedure for the flip is captured in
+  [`runbooks/dr-activation.md`](runbooks/dr-activation.md);
+  the drill walks through it end-to-end on a controlled-loss
+  simulation.
 
 Drills produce a short writeup in `docs/operations/drills/` with
 the same action-item discipline as postmortems.
