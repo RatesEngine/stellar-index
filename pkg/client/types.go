@@ -136,6 +136,35 @@ type AssetDetail struct {
 	// in their server config. See the API description for the full
 	// caveat.
 	VolumeUSD24h *string `json:"volume_24h_usd,omitempty"`
+
+	// ─── SEP-1 issuance declarations ─────────────────────────────
+	//
+	// The issuer's own commitments from their stellar.toml
+	// `[[CURRENCIES]]` entry; populated only when Sep1Status ==
+	// "verified". Distinct from the F2 fields above which observe
+	// live ledger state — these say what the issuer pledged, the F2
+	// fields say what's actually on-chain.
+
+	// Conditions is the issuer's free-form terms / conditions text
+	// (SEP-1 `conditions`).
+	Conditions *string `json:"conditions,omitempty"`
+
+	// FixedNumber is the SEP-1-declared fixed total supply, if the
+	// issuer committed to one. Decimal string in the asset's
+	// smallest integer unit. Distinct from `TotalSupply` which is
+	// the live-ledger sum.
+	FixedNumber *string `json:"fixed_number,omitempty"`
+
+	// MaxNumber is the SEP-1-declared maximum supply ceiling, if the
+	// issuer set a cap. Decimal string. Distinct from `MaxSupply`
+	// which is operator/policy-derived.
+	MaxNumber *string `json:"max_number,omitempty"`
+
+	// IsUnlimited signals the issuer asserts unbounded issuance.
+	// Null when the issuer didn't address supply at all (no
+	// fixed_number / max_number / is_unlimited declaration); false
+	// when they did and committed to a bounded supply.
+	IsUnlimited *bool `json:"is_unlimited,omitempty"`
 }
 
 // AssetMetadata is the data shape returned by [Client.AssetMetadata]

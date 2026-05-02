@@ -36,7 +36,11 @@ func TestAssetDetail_DecodesFullWirePayload(t *testing.T) {
 	  "market_cap_usd": "1234567890.00",
 	  "fdv_usd": null,
 	  "supply_basis": "issuer_exclusion",
-	  "volume_24h_usd": "987654.32"
+	  "volume_24h_usd": "987654.32",
+	  "conditions": "Issuer terms: https://centre.io/terms",
+	  "fixed_number": "100000000000000",
+	  "max_number": "100000000000000",
+	  "is_unlimited": false
 	}`
 
 	var got client.AssetDetail
@@ -80,6 +84,20 @@ func TestAssetDetail_DecodesFullWirePayload(t *testing.T) {
 	if got.VolumeUSD24h == nil || *got.VolumeUSD24h != "987654.32" {
 		t.Errorf("volume_24h_usd not decoded: %+v", got.VolumeUSD24h)
 	}
+	if got.Conditions == nil || *got.Conditions == "" {
+		t.Errorf("conditions not decoded: %+v", got.Conditions)
+	}
+	if got.FixedNumber == nil || *got.FixedNumber != "100000000000000" {
+		t.Errorf("fixed_number not decoded: %+v", got.FixedNumber)
+	}
+	if got.MaxNumber == nil || *got.MaxNumber != "100000000000000" {
+		t.Errorf("max_number not decoded: %+v", got.MaxNumber)
+	}
+	if got.IsUnlimited == nil {
+		t.Errorf("is_unlimited not decoded (nil)")
+	} else if *got.IsUnlimited != false {
+		t.Errorf("is_unlimited = %v, want false", *got.IsUnlimited)
+	}
 }
 
 // TestAssetDetail_OmitsNullsOnReencode verifies the SDK round-trips
@@ -99,7 +117,7 @@ func TestAssetDetail_OmitsNullsOnReencode(t *testing.T) {
 		t.Fatalf("Marshal: %v", err)
 	}
 	got := string(out)
-	for _, missing := range []string{"max_supply", "fdv_usd", "circulating_supply", "volume_24h_usd", "market_cap_usd", "name", "image"} {
+	for _, missing := range []string{"max_supply", "fdv_usd", "circulating_supply", "volume_24h_usd", "market_cap_usd", "name", "image", "conditions", "fixed_number", "max_number", "is_unlimited"} {
 		if containsKey(got, missing) {
 			t.Errorf("encoded form contains %q for nil pointer; want omitted: %s", missing, got)
 		}
