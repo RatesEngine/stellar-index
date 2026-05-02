@@ -15,6 +15,21 @@ against.
 
 ## [Unreleased]
 
+### Added
+
+- **`pkg/client.Client.OHLC`** — single-bar OHLC over a window via
+  the SDK. Closes another gap from the code-vs-RFP audit:
+  Freighter RFP §V1 historical chart requirements explicitly list
+  OHLC as a chart-UX path but the SDK only exposed
+  `HistorySinceInception`. Both `Base` and `Quote` are required
+  on `OHLCQuery` (the server doesn't default Quote to fiat:USD —
+  candlestick charts pin a specific pair). `From`/`To` are
+  optional with the same closed-bucket-clamp semantics the server
+  applies to a defaulted `to` per ADR-0015. Wire shape mirrors
+  the server's `OHLCBar` exactly, including the `Truncated` flag
+  consumers building chart UIs need to detect when a window has
+  more trades than the server's per-request cap.
+
 ### Fixed
 
 - **`/v1/account/me` now returns the credential's `label`** —

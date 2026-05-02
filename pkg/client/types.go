@@ -167,6 +167,29 @@ type AssetDetail struct {
 	IsUnlimited *bool `json:"is_unlimited,omitempty"`
 }
 
+// OHLCBar is the data shape returned by [Client.OHLC] — a single
+// open/high/low/close bar over the requested window. All price
+// fields are decimal strings (ADR-0003); volumes are smallest-unit
+// integers as strings.
+//
+// `Truncated` is true when the window's trade count hit the
+// server's per-request cap. The bar's High / Low may not reflect
+// the actual extreme over the full window — only the
+// chronologically-first N trades. Treat truncated bars as a hint
+// to narrow the range.
+type OHLCBar struct {
+	From        time.Time `json:"from"`
+	To          time.Time `json:"to"`
+	Open        string    `json:"open"`
+	High        string    `json:"high"`
+	Low         string    `json:"low"`
+	Close       string    `json:"close"`
+	BaseVolume  string    `json:"base_volume"`
+	QuoteVolume string    `json:"quote_volume"`
+	TradeCount  int       `json:"trade_count"`
+	Truncated   bool      `json:"truncated"`
+}
+
 // AssetMetadata is the data shape returned by [Client.AssetMetadata]
 // (the SEP-1 overlay endpoint, /v1/assets/{id}/metadata). Mirrors
 // the AssetMetadata schema in openapi/rates-engine.v1.yaml.

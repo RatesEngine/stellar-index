@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"net/url"
 	"strconv"
+	"time"
 )
 
 // PriceQuery selects the asset / quote pair for a [Client.Price]
@@ -59,6 +60,63 @@ func (c *Client) HistorySinceInception(ctx context.Context, q HistoryQuery) (*En
 	}
 	var env Envelope[HistorySeries]
 	if err := c.doJSON(ctx, http.MethodGet, "/v1/history/since-inception", v, nil, &env); err != nil {
+		return nil, err
+	}
+	return &env, nil
+}
+
+// OHLCQuery is the input for [Client.OHLC]. Both Base and Quote
+// are required (unlike [PriceQuery], which defaults Quote to
+// fiat:USD — the OHLC endpoint accepts no implicit USD because
+// candlestick charts pin a specific pair). From + To are
+// optional; defaults match the server's `now-1h .. now` with the
+// closed-bucket clamp applied to a defaulted To per ADR-0015.
+type OHLCQuery struct {
+	Base  string
+	Quote string
+	From  time.Time // optional
+	To    time.Time // optional
+}
+
+// OHLC fetches a single open/high/low/close bar over the
+// [From, To) window. Per the Freighter RFP §V1 historical chart
+// requirements, this is the surface backing candlestick UIs.
+//
+// Window semantics:
+//   - Both From + To zero: server defaults to now-1h .. now,
+//     clamped to a closed-bucket boundary (every region answers
+//     the same window per ADR-0015).
+//   - From zero, To set: server uses To-1h .. To, no clamp
+//     (caller pinned an explicit end).
+//   - From set, To zero: server uses From .. now (clamped).
+//   - Both set: server uses [From, To) verbatim; caller asserts
+//     a specific historical range.
+//
+// Returns ErrNoTrades / 404 (translated to APIError 404) when no
+// trades fell in the window.
+//
+// Truncation: when the window holds more trades than the server's
+// cap (10000 today), the response's `Truncated` flag is true and
+// High / Low may not be the actual extremes. Narrow the range to
+// reach an untruncated bar.
+func (c *Client) OHLC(ctx context.Context, q OHLCQuery) (*Envelope[OHLCBar], error) {
+	if q.Base == "" {
+		return nil, &APIError{Status: 400, Title: "base required"}
+	}
+	if q.Quote == "" {
+		return nil, &APIError{Status: 400, Title: "quote required"}
+	}
+	v := url.Values{}
+	v.Set("base", q.Base)
+	v.Set("quote", q.Quote)
+	if !q.From.IsZero() {
+		v.Set("from", q.From.UTC().Format(time.RFC3339))
+	}
+	if !q.To.IsZero() {
+		v.Set("to", q.To.UTC().Format(time.RFC3339))
+	}
+	var env Envelope[OHLCBar]
+	if err := c.doJSON(ctx, http.MethodGet, "/v1/ohlc", v, nil, &env); err != nil {
 		return nil, err
 	}
 	return &env, nil

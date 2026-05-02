@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/RatesEngine/rates-engine/pkg/client"
 )
@@ -215,6 +216,142 @@ func TestMe_PathOnly(t *testing.T) {
 	}
 	if got.Data.RateLimitPerMin != 1000 {
 		t.Errorf("RateLimitPerMin = %d, want 1000", got.Data.RateLimitPerMin)
+	}
+}
+
+// TestOHLC_HappyPath — happy-path round-trip pinning required
+// query params + decode of OHLCBar shape with all four price
+// fields + the truncated flag.
+func TestOHLC_HappyPath(t *testing.T) {
+	from := time.Date(2026, 4, 28, 9, 0, 0, 0, time.UTC)
+	to := time.Date(2026, 4, 28, 10, 0, 0, 0, time.UTC)
+	_, c := newTestServer(t, func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/v1/ohlc" {
+			t.Errorf("path = %q", r.URL.Path)
+		}
+		q := r.URL.Query()
+		if q.Get("base") != "native" {
+			t.Errorf("base = %q", q.Get("base"))
+		}
+		if q.Get("quote") != "fiat:USD" {
+			t.Errorf("quote = %q", q.Get("quote"))
+		}
+		if q.Get("from") != "2026-04-28T09:00:00Z" {
+			t.Errorf("from = %q, want RFC3339 UTC", q.Get("from"))
+		}
+		if q.Get("to") != "2026-04-28T10:00:00Z" {
+			t.Errorf("to = %q", q.Get("to"))
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{
+			"data": {
+				"from": "2026-04-28T09:00:00Z",
+				"to":   "2026-04-28T10:00:00Z",
+				"open": "0.0708000000",
+				"high": "0.0715000000",
+				"low":  "0.0701000000",
+				"close":"0.0712700000",
+				"base_volume":  "5000000000000",
+				"quote_volume":"35635000000",
+				"trade_count": 4123,
+				"truncated": false
+			},
+			"as_of": "2026-04-28T10:00:01Z",
+			"flags": {}
+		}`))
+	})
+	got, err := c.OHLC(context.Background(), client.OHLCQuery{
+		Base: "native", Quote: "fiat:USD",
+		From: from, To: to,
+	})
+	if err != nil {
+		t.Fatalf("OHLC: %v", err)
+	}
+	if got.Data.Open != "0.0708000000" {
+		t.Errorf("Open = %q", got.Data.Open)
+	}
+	if got.Data.High != "0.0715000000" {
+		t.Errorf("High = %q", got.Data.High)
+	}
+	if got.Data.Close != "0.0712700000" {
+		t.Errorf("Close = %q", got.Data.Close)
+	}
+	if got.Data.TradeCount != 4123 {
+		t.Errorf("TradeCount = %d", got.Data.TradeCount)
+	}
+	if got.Data.Truncated {
+		t.Error("Truncated = true unexpectedly")
+	}
+}
+
+// TestOHLC_OmitsZeroTimes — zero From/To means "use server
+// defaults"; SDK MUST NOT send `from=` / `to=` empty (RFC3339
+// of a zero time renders "0001-01-01T00:00:00Z" which the
+// server would accept as a real 1AD timestamp).
+func TestOHLC_OmitsZeroTimes(t *testing.T) {
+	_, c := newTestServer(t, func(w http.ResponseWriter, r *http.Request) {
+		q := r.URL.Query()
+		if q.Has("from") {
+			t.Errorf("from sent on zero-time: %q", q.Get("from"))
+		}
+		if q.Has("to") {
+			t.Errorf("to sent on zero-time: %q", q.Get("to"))
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"data":{"from":"2026-04-28T09:00:00Z","to":"2026-04-28T10:00:00Z","open":"0","high":"0","low":"0","close":"0","base_volume":"0","quote_volume":"0","trade_count":0,"truncated":false},"as_of":"2026-04-28T10:00:00Z","flags":{}}`))
+	})
+	if _, err := c.OHLC(context.Background(), client.OHLCQuery{
+		Base: "native", Quote: "fiat:USD",
+	}); err != nil {
+		t.Fatalf("OHLC: %v", err)
+	}
+}
+
+// TestOHLC_BaseQuoteRequired — both Base and Quote must be set.
+// /v1/ohlc deliberately doesn't default Quote to fiat:USD (unlike
+// /v1/price) — candlestick charts pin a specific pair so the SDK
+// must as well.
+func TestOHLC_BaseQuoteRequired(t *testing.T) {
+	c := client.New(client.Options{BaseURL: "http://nope.invalid"})
+	for _, tc := range []struct {
+		name string
+		q    client.OHLCQuery
+	}{
+		{"empty Base", client.OHLCQuery{Quote: "fiat:USD"}},
+		{"empty Quote", client.OHLCQuery{Base: "native"}},
+		{"both empty", client.OHLCQuery{}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := c.OHLC(context.Background(), tc.q)
+			if err == nil {
+				t.Fatal("expected error")
+			}
+			var apiErr *client.APIError
+			if !errors.As(err, &apiErr) || apiErr.Status != 400 {
+				t.Errorf("err = %v, want *APIError 400", err)
+			}
+		})
+	}
+}
+
+// TestOHLC_TruncatedDecodes — when a window holds more trades
+// than the server's cap, `truncated: true` is on the wire and
+// the SDK round-trips it. Pinned because consumers building
+// chart UIs need this signal to decide whether to narrow.
+func TestOHLC_TruncatedDecodes(t *testing.T) {
+	_, c := newTestServer(t, func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"data":{"from":"2026-04-28T09:00:00Z","to":"2026-04-28T10:00:00Z","open":"1","high":"2","low":"0.5","close":"1.5","base_volume":"100","quote_volume":"150","trade_count":10000,"truncated":true},"as_of":"2026-04-28T10:00:00Z","flags":{}}`))
+	})
+	got, err := c.OHLC(context.Background(), client.OHLCQuery{Base: "native", Quote: "fiat:USD"})
+	if err != nil {
+		t.Fatalf("OHLC: %v", err)
+	}
+	if !got.Data.Truncated {
+		t.Error("Truncated = false, want true (server-side cap signal must survive round-trip)")
+	}
+	if got.Data.TradeCount != 10000 {
+		t.Errorf("TradeCount = %d, want 10000", got.Data.TradeCount)
 	}
 }
 
