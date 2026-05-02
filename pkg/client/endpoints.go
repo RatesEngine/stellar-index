@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"net/url"
 	"strconv"
+	"time"
 )
 
 // PriceQuery selects the asset / quote pair for a [Client.Price]
@@ -59,6 +60,69 @@ func (c *Client) HistorySinceInception(ctx context.Context, q HistoryQuery) (*En
 	}
 	var env Envelope[HistorySeries]
 	if err := c.doJSON(ctx, http.MethodGet, "/v1/history/since-inception", v, nil, &env); err != nil {
+		return nil, err
+	}
+	return &env, nil
+}
+
+// HistoryRangeQuery is the input for [Client.History]. Both Base
+// and Quote are required. From + To are optional (server defaults
+// to `now-1h .. now`); Limit clamps to [1, 10000] server-side
+// (default 1000). Cursor paginates — pass the previous response's
+// `Pagination.Next` to walk forward.
+//
+// Note: distinct from [HistoryQuery] (which targets the
+// since-inception bucketed series). This surface returns RAW
+// trades within a window — useful for trade-level audits,
+// regulatory exports, custom aggregations.
+type HistoryRangeQuery struct {
+	Base   string
+	Quote  string
+	From   time.Time // optional
+	To     time.Time // optional
+	Limit  int       // optional; server defaults to 1000, max 10000
+	Cursor string    // optional; opaque from prior Pagination.Next
+}
+
+// History fetches raw trades for [Base, Quote] within the
+// [From, To) window. Distinct from
+// [Client.HistorySinceInception] which returns bucketed VWAP/TWAP
+// points; this surface returns the underlying trades themselves
+// — same data the aggregator consumes.
+//
+// Use cases: trade-level audits, regulatory exports, custom
+// aggregations the server doesn't pre-compute. Pagination via
+// `Cursor` (opaque base64); the walker collects pages by
+// re-issuing with `Cursor: prev.Pagination.Next` until the
+// returned cursor is empty.
+//
+// `flags.stale` doesn't apply here (this surface returns raw
+// stored trades, not a VWAP). Other envelope flags propagate
+// per-trade where meaningful.
+func (c *Client) History(ctx context.Context, q HistoryRangeQuery) (*Envelope[[]TradeRow], error) {
+	if q.Base == "" {
+		return nil, &APIError{Status: 400, Title: "base required"}
+	}
+	if q.Quote == "" {
+		return nil, &APIError{Status: 400, Title: "quote required"}
+	}
+	v := url.Values{}
+	v.Set("base", q.Base)
+	v.Set("quote", q.Quote)
+	if !q.From.IsZero() {
+		v.Set("from", q.From.UTC().Format(time.RFC3339))
+	}
+	if !q.To.IsZero() {
+		v.Set("to", q.To.UTC().Format(time.RFC3339))
+	}
+	if q.Limit > 0 {
+		v.Set("limit", strconv.Itoa(q.Limit))
+	}
+	if q.Cursor != "" {
+		v.Set("cursor", q.Cursor)
+	}
+	var env Envelope[[]TradeRow]
+	if err := c.doJSON(ctx, http.MethodGet, "/v1/history", v, nil, &env); err != nil {
 		return nil, err
 	}
 	return &env, nil

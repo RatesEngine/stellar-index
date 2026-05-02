@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/RatesEngine/rates-engine/pkg/client"
 )
@@ -215,6 +216,129 @@ func TestMe_PathOnly(t *testing.T) {
 	}
 	if got.Data.RateLimitPerMin != 1000 {
 		t.Errorf("RateLimitPerMin = %d, want 1000", got.Data.RateLimitPerMin)
+	}
+}
+
+// TestHistory_HappyPath — round-trip pinning required params,
+// optional from/to, decode of TradeRow.
+func TestHistory_HappyPath(t *testing.T) {
+	from := time.Date(2026, 4, 28, 9, 0, 0, 0, time.UTC)
+	to := time.Date(2026, 4, 28, 10, 0, 0, 0, time.UTC)
+	_, c := newTestServer(t, func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/v1/history" {
+			t.Errorf("path = %q, want /v1/history", r.URL.Path)
+		}
+		q := r.URL.Query()
+		if q.Get("base") != "native" {
+			t.Errorf("base = %q", q.Get("base"))
+		}
+		if q.Get("quote") != "fiat:USD" {
+			t.Errorf("quote = %q", q.Get("quote"))
+		}
+		if q.Get("from") != "2026-04-28T09:00:00Z" {
+			t.Errorf("from = %q", q.Get("from"))
+		}
+		if q.Get("limit") != "500" {
+			t.Errorf("limit = %q, want 500", q.Get("limit"))
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{
+			"data": [
+				{"source":"sdex","ledger":50000000,"tx_hash":"abc","op_index":0,"ts":"2026-04-28T09:30:00Z","base_asset":"native","quote_asset":"fiat:USD","base_amount":"10000000","quote_amount":"700000","price":"0.0700000000"},
+				{"source":"soroswap","ledger":50000010,"tx_hash":"def","op_index":1,"ts":"2026-04-28T09:45:00Z","base_asset":"native","quote_asset":"fiat:USD","base_amount":"5000000","quote_amount":"350000","price":"0.0700000000"}
+			],
+			"as_of": "2026-04-28T10:00:00Z",
+			"flags": {},
+			"pagination": {"next":"opaque-cursor"}
+		}`))
+	})
+	got, err := c.History(context.Background(), client.HistoryRangeQuery{
+		Base: "native", Quote: "fiat:USD",
+		From: from, To: to, Limit: 500,
+	})
+	if err != nil {
+		t.Fatalf("History: %v", err)
+	}
+	if len(got.Data) != 2 {
+		t.Fatalf("len(Data) = %d, want 2", len(got.Data))
+	}
+	if got.Data[0].Source != "sdex" {
+		t.Errorf("Data[0].Source = %q", got.Data[0].Source)
+	}
+	if got.Data[1].Ledger != 50000010 {
+		t.Errorf("Data[1].Ledger = %d", got.Data[1].Ledger)
+	}
+	if got.Pagination.Next != "opaque-cursor" {
+		t.Errorf("Pagination.Next = %q", got.Pagination.Next)
+	}
+}
+
+// TestHistory_PaginationCarriesCursor — cursor walks forward.
+// Pinned because the cursor field is the SDK's main value-add
+// over a hand-rolled query string for multi-page exports.
+func TestHistory_PaginationCarriesCursor(t *testing.T) {
+	_, c := newTestServer(t, func(w http.ResponseWriter, r *http.Request) {
+		q := r.URL.Query()
+		if q.Get("cursor") != "page-2" {
+			t.Errorf("cursor = %q, want page-2", q.Get("cursor"))
+		}
+		// from/to should NOT be sent when cursor is set —
+		// well, actually the SDK should still forward them if the
+		// caller set them; the server uses cursor as the lower
+		// bound override. Don't assert absence.
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"data": [], "as_of":"2026-04-28T10:00:00Z","flags":{}}`))
+	})
+	if _, err := c.History(context.Background(), client.HistoryRangeQuery{
+		Base: "native", Quote: "fiat:USD", Cursor: "page-2",
+	}); err != nil {
+		t.Fatalf("History: %v", err)
+	}
+}
+
+// TestHistory_OmitsZeroOptional — zero From/To/Limit/Cursor
+// don't render on the URL. Pinned because a leaky zero would
+// either send "0001-01-01T00:00:00Z" or `limit=0` (which the
+// server treats as invalid).
+func TestHistory_OmitsZeroOptional(t *testing.T) {
+	_, c := newTestServer(t, func(w http.ResponseWriter, r *http.Request) {
+		q := r.URL.Query()
+		for _, k := range []string{"from", "to", "limit", "cursor"} {
+			if q.Has(k) {
+				t.Errorf("%s sent on zero value: %q", k, q.Get(k))
+			}
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"data": [], "as_of":"2026-04-28T10:00:00Z","flags":{}}`))
+	})
+	if _, err := c.History(context.Background(), client.HistoryRangeQuery{
+		Base: "native", Quote: "fiat:USD",
+	}); err != nil {
+		t.Fatalf("History: %v", err)
+	}
+}
+
+// TestHistory_BaseQuoteRequired — both Base and Quote required;
+// short-circuits client-side without a network call.
+func TestHistory_BaseQuoteRequired(t *testing.T) {
+	c := client.New(client.Options{BaseURL: "http://nope.invalid"})
+	for _, tc := range []struct {
+		name string
+		q    client.HistoryRangeQuery
+	}{
+		{"empty Base", client.HistoryRangeQuery{Quote: "fiat:USD"}},
+		{"empty Quote", client.HistoryRangeQuery{Base: "native"}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := c.History(context.Background(), tc.q)
+			if err == nil {
+				t.Fatal("expected error")
+			}
+			var apiErr *client.APIError
+			if !errors.As(err, &apiErr) || apiErr.Status != 400 {
+				t.Errorf("err = %v, want *APIError 400", err)
+			}
+		})
 	}
 }
 

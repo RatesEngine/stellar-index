@@ -15,6 +15,19 @@ against.
 
 ## [Unreleased]
 
+### Added
+
+- **`pkg/client.Client.History`** — bounded-range raw-trade lookup
+  via the SDK. Distinct from the existing
+  `Client.HistorySinceInception` (which returns bucketed VWAP/TWAP
+  points); this surface returns the underlying `TradeRow`
+  records — useful for trade-level audits, regulatory exports,
+  custom aggregations the server doesn't pre-compute. New
+  `HistoryRangeQuery` with optional `From`/`To`/`Limit`/`Cursor`;
+  `Cursor` walks forward by re-issuing with the previous
+  response's `Pagination.Next`. New `TradeRow` type in
+  `pkg/client/types.go` mirrors the server's wire shape exactly.
+
 ### Fixed
 
 - **`/v1/account/me` now returns the credential's `label`** —
