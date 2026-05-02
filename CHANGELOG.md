@@ -15,6 +15,25 @@ against.
 
 ## [Unreleased]
 
+### Added
+
+- **`change_24h_pct` populated on `/v1/assets/{id}`** — the field
+  was declared in OpenAPI (Freighter RFP §"Bulk query support"
+  mentions a 24h % change alongside current price) but no Go code
+  computed it. Closed: `internal/storage/timescale/aggregates.go`
+  gains `ClosedVWAP1mAtOrBefore` to anchor the 24h-ago comparison
+  price; new `Change24hReader` interface + `populateChange24h`
+  helper in `internal/api/v1/assets_f2.go` consult the current
+  USD price + 24h-ago anchor and stamp a signed two-decimal
+  percentage (e.g. `"+1.27"`, `"-0.05"`, `"0.00"`). The leading
+  `+` is suppressed on a sub-cent positive delta that rounds to
+  `"0.00"` so the wire signal stays unambiguous. Null when no
+  current USD price exists for the asset or the 24h-ago bucket
+  is unavailable (asset first traded < 24h ago, or pruned by
+  retention). `pkg/client/types.go::AssetDetail` gains the field;
+  `cmd/ratesengine-api/main.go` constructs `storeChange24hReader`
+  and wires it via `Options.Change24h`.
+
 ### Fixed
 
 - **`/v1/account/me` now returns the credential's `label`** —

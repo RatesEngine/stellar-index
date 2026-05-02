@@ -328,6 +328,7 @@ func run(cfgPath string, dryRun bool) error { //nolint:gocognit,funlen,gocyclo /
 		Freeze:       freezeLooker,
 		Supply:       storeSupplyLooker{s: store},
 		Volume:       storeVolumeReader{s: store},
+		Change24h:    storeChange24hReader{s: store},
 		SEP10:        sep10Validator,
 		CORS:         cors,
 		Auth:         authMW,
@@ -935,6 +936,42 @@ type storeVolumeReader struct{ s *timescale.Store }
 
 func (r storeVolumeReader) Volume24hUSDForAsset(ctx context.Context, assetKey string) (string, error) {
 	return r.s.Volume24hUSDForAsset(ctx, assetKey)
+}
+
+// usdQuoteAsset is the implicit USD quote used to anchor 24h-ago
+// price lookups in [storeChange24hReader]. Same string value as
+// the v1 handler's defaultPriceQuote — keeping them constructed
+// independently here avoids reaching into v1's unexported
+// `mustParseAsset`.
+var usdQuoteAsset = func() canonical.Asset {
+	a, err := canonical.ParseAsset("fiat:USD")
+	if err != nil {
+		panic("ratesengine-api: USD quote asset must parse: " + err.Error())
+	}
+	return a
+}()
+
+// storeChange24hReader adapts *timescale.Store to v1.Change24hReader.
+// Looks up the latest closed prices_1m bucket whose end is at-or-
+// before now-24h for the asset/USD pair. sql.ErrNoRows (asset
+// first traded < 24h ago, or retention pruned the bucket) is
+// translated to v1.ErrChange24hUnavailable so the handler treats
+// it as "feature unavailable for this asset" rather than a real
+// failure. Other errors propagate unchanged.
+type storeChange24hReader struct{ s *timescale.Store }
+
+func (r storeChange24hReader) USDPrice24hAgo(ctx context.Context, asset canonical.Asset) (string, error) {
+	row, err := r.s.ClosedVWAP1mAtOrBefore(ctx,
+		canonical.Pair{Base: asset, Quote: usdQuoteAsset},
+		time.Now().Add(-24*time.Hour),
+	)
+	if errors.Is(err, sql.ErrNoRows) {
+		return "", v1.ErrChange24hUnavailable
+	}
+	if err != nil {
+		return "", err
+	}
+	return row.VWAP, nil
 }
 
 // storeSupplyLooker adapts *timescale.Store to v1.SupplyLooker for

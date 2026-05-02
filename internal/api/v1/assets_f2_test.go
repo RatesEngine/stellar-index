@@ -31,6 +31,26 @@ func (s *stubSupplyLooker) LatestSupply(_ context.Context, _ string) (supply.Sup
 	return s.snap, nil
 }
 
+// stubChange24hReader implements v1.Change24hReader for tests.
+// Returns the per-asset price string from `prices`, or unavailable
+// when the asset key isn't seeded; an explicit `err` short-circuits
+// for the postgres-unavailable test path.
+type stubChange24hReader struct {
+	prices map[string]string
+	err    error
+}
+
+func (s *stubChange24hReader) USDPrice24hAgo(_ context.Context, asset canonical.Asset) (string, error) {
+	if s.err != nil {
+		return "", s.err
+	}
+	p, ok := s.prices[asset.String()]
+	if !ok {
+		return "", v1.ErrChange24hUnavailable
+	}
+	return p, nil
+}
+
 // xlmSupplySnap returns a Supply for native XLM matching the
 // frozen-2019 total + a plausible circulating.
 func xlmSupplySnap() supply.Supply {
@@ -213,6 +233,115 @@ func TestF2_PriceLookupErrorFallsThrough(t *testing.T) {
 	mustContain(t, body, `"total_supply"`)
 	if strings.Contains(body, `"market_cap_usd"`) {
 		t.Errorf("market_cap_usd should be absent on price error: %s", body)
+	}
+}
+
+// TestChange24hPct_HappyPath — current USD price + a 24h-ago
+// reader yield a signed two-decimal percentage on the wire. Pinned
+// to catch sign-format regressions (the leading "+" is part of the
+// wire contract).
+func TestChange24hPct_HappyPath(t *testing.T) {
+	priceStub := &stubPriceReader{
+		snapshots: map[string]v1.PriceSnapshot{
+			"native/fiat:USD": {Price: "0.07127", PriceType: "vwap"},
+		},
+	}
+	change24hStub := &stubChange24hReader{
+		prices: map[string]string{"native": "0.07"},
+	}
+	srv := v1.New(v1.Options{Prices: priceStub, Change24h: change24hStub})
+	ts := startHTTPTest(t, srv.Handler())
+
+	resp := mustGet(t, ts.URL+"/v1/assets/native")
+	body, _ := readAll(resp)
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d", resp.StatusCode)
+	}
+	// (0.07127 - 0.07) / 0.07 * 100 = 1.8142...% → "+1.81"
+	mustContain(t, body, `"change_24h_pct":"+1.81"`)
+}
+
+// TestChange24hPct_NoComparisonBucket — asset has a current price
+// but the 24h-ago window is empty (asset first traded < 24h ago,
+// or pruned). ErrChange24hUnavailable is silent — field absent on
+// the wire, no warning logged.
+func TestChange24hPct_NoComparisonBucket(t *testing.T) {
+	priceStub := &stubPriceReader{
+		snapshots: map[string]v1.PriceSnapshot{
+			"native/fiat:USD": {Price: "0.07", PriceType: "vwap"},
+		},
+	}
+	change24hStub := &stubChange24hReader{prices: nil} // every lookup → unavailable
+	srv := v1.New(v1.Options{Prices: priceStub, Change24h: change24hStub})
+	ts := startHTTPTest(t, srv.Handler())
+
+	resp := mustGet(t, ts.URL+"/v1/assets/native")
+	body, _ := readAll(resp)
+	if strings.Contains(body, `"change_24h_pct"`) {
+		t.Errorf("change_24h_pct should be absent when no 24h-ago bucket; body=%s", body)
+	}
+}
+
+// TestChange24hPct_NoCurrentPrice_FieldAbsent — without a USD
+// price (untracked asset, fiat:USD itself, ErrPriceNotFound), the
+// reader is never called and the field stays null.
+func TestChange24hPct_NoCurrentPrice_FieldAbsent(t *testing.T) {
+	priceStub := &stubPriceReader{} // every LatestPrice → ErrPriceNotFound
+	// Even with a populated 24h-ago reader, no current price means no pct.
+	change24hStub := &stubChange24hReader{prices: map[string]string{"native": "0.07"}}
+	srv := v1.New(v1.Options{Prices: priceStub, Change24h: change24hStub})
+	ts := startHTTPTest(t, srv.Handler())
+
+	resp := mustGet(t, ts.URL+"/v1/assets/native")
+	body, _ := readAll(resp)
+	if strings.Contains(body, `"change_24h_pct"`) {
+		t.Errorf("change_24h_pct should be absent without a current price; body=%s", body)
+	}
+}
+
+// TestChange24hPct_NotWired_FieldAbsent — Options.Change24h nil
+// (early bring-up): field absent on the wire, no panic, asset body
+// still serves cleanly.
+func TestChange24hPct_NotWired_FieldAbsent(t *testing.T) {
+	priceStub := &stubPriceReader{
+		snapshots: map[string]v1.PriceSnapshot{
+			"native/fiat:USD": {Price: "0.07", PriceType: "vwap"},
+		},
+	}
+	srv := v1.New(v1.Options{Prices: priceStub}) // no Change24h
+	ts := startHTTPTest(t, srv.Handler())
+
+	resp := mustGet(t, ts.URL+"/v1/assets/native")
+	body, _ := readAll(resp)
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d", resp.StatusCode)
+	}
+	if strings.Contains(body, `"change_24h_pct"`) {
+		t.Errorf("change_24h_pct should be absent without Change24h reader; body=%s", body)
+	}
+}
+
+// TestChange24hPct_ReaderErrorFallsThrough — a non-Unavailable
+// reader error (postgres down) falls through silently. Best-effort
+// posture matches volume_24h_usd / market_cap_usd: feature
+// unavailable, asset body still serves 200.
+func TestChange24hPct_ReaderErrorFallsThrough(t *testing.T) {
+	priceStub := &stubPriceReader{
+		snapshots: map[string]v1.PriceSnapshot{
+			"native/fiat:USD": {Price: "0.07", PriceType: "vwap"},
+		},
+	}
+	change24hStub := &stubChange24hReader{err: errors.New("postgres unreachable")}
+	srv := v1.New(v1.Options{Prices: priceStub, Change24h: change24hStub})
+	ts := startHTTPTest(t, srv.Handler())
+
+	resp := mustGet(t, ts.URL+"/v1/assets/native")
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d, want 200 — Change24h error must NOT 5xx", resp.StatusCode)
+	}
+	body, _ := readAll(resp)
+	if strings.Contains(body, `"change_24h_pct"`) {
+		t.Errorf("change_24h_pct should be absent on reader error; body=%s", body)
 	}
 }
 
