@@ -1,6 +1,6 @@
 ---
 title: Supply-snapshot writer — daily cron + operator-managed reserve balances
-last_verified: 2026-04-30
+last_verified: 2026-05-02
 status: living procedure
 ---
 
@@ -42,9 +42,16 @@ circulating_supply = total_supply − Σ(SDF reserve balances)
 ```
 
 Total + max are constants. The only moving piece is the SDF reserve
-balance sum. Until the LCM-AccountEntry observer ships (Task #54 +
-the home-domain overlay it pairs with), the writer reads the
-balance sum from operator config:
+balance sum. The writer reads it from the LCM AccountEntry observer
+(Task #54, wired into the indexer dispatcher in PR #411) when
+`account_observations` has rows for every account in the watched
+set; until that backfill completes, the writer falls back to the
+operator-static `[supply].reserve_balances_stroops` map per the
+chained-fallback reader pattern in
+[`docs/architecture/supply-pipeline.md`](../architecture/supply-pipeline.md#the-chained-fallback-reader-pattern).
+Empty `[supply].reserve_balances_stroops` is fine on a deployment
+where the observer has caught up; the static config is just a
+bring-up cushion.
 
 ```toml
 [supply]
