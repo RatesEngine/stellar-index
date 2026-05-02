@@ -737,6 +737,15 @@ func buildAnomalyChecker(cfg config.AnomalyConfig) (*anomaly.Checker, error) {
 // chain's structure (chainable legs, endpoints match target). An
 // invalid chain fails-loud at startup rather than silently emitting
 // missing-leg metrics in production.
+//
+// The aggregate.triangulation_enabled master switch is honoured here:
+// when false, return a nil slice so the orchestrator's
+// `len(cfg.Triangulations) == 0` short-circuit skips the triangulation
+// tick entirely regardless of how many rows the operator left in the
+// aggregate.triangulations table. Validation still runs first (so a
+// malformed row is caught even when the switch is off — operators
+// who fix the typo and flip the switch on shouldn't get a delayed
+// surprise).
 func buildTriangulations(cfg config.AggregateConfig) ([]orchestrator.TriangulationChain, error) {
 	resolved, err := cfg.AggregatorTriangulations()
 	if err != nil {
@@ -749,6 +758,9 @@ func buildTriangulations(cfg config.AggregateConfig) ([]orchestrator.Triangulati
 			return nil, fmt.Errorf("aggregate.triangulations[%d]: %w", i, err)
 		}
 		out = append(out, chain)
+	}
+	if !cfg.TriangulationEnabled {
+		return nil, nil
 	}
 	return out, nil
 }

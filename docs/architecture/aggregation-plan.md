@@ -92,7 +92,7 @@ win; empty falls back to library defaults.
 | `vwap_window_seconds` | 300 | Legacy alias retained for backwards-compat |
 | `twap_window_seconds` | 300 | TWAP-specific cadence (used by api/v1/twap.go) |
 | `min_usd_volume` | 10 000 | Eligibility threshold |
-| `triangulation_enabled` | true | Reserved for a future public-serving triangulation path; current API leaves `flags.triangulated=false` |
+| `triangulation_enabled` | true | Master switch for the post-refresh triangulation pass; false skips the tick regardless of `aggregate.triangulations` rows. Triangulated rows now serve via `/v1/price` (PR for F-0014) — the switch is the operator-side kill-switch when the feature itself needs to be paused. |
 
 The full reference lives at
 [`docs/reference/config/README.md`](../reference/config/README.md);

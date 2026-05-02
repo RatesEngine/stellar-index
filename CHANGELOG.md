@@ -442,6 +442,30 @@ against.
 
 ### Fixed
 
+- **`aggregate.triangulation_enabled` now actually gates the
+  triangulation pass** — fifth half-shipped config field caught
+  by the audit-finding wire-up pattern (after F-0008, F-0009,
+  `api.cdn_enabled` (#389), and `obs.trace_exporter` (#390)).
+  The bool defaulted to `true`, was advertised in the doc tag
+  (`Enable cross-pair triangulation through USD/BTC when direct
+  pair below threshold.`) and in `configs/example.toml`, but no
+  production code path consulted it: the orchestrator's
+  `triangulateAll` only checked `len(o.cfg.Triangulations) == 0`,
+  so an operator setting `triangulation_enabled = false` while
+  having entries in `aggregate.triangulations` got triangulation
+  regardless. `cmd/ratesengine-aggregator/buildTriangulations` now
+  short-circuits to `nil` when `TriangulationEnabled` is false —
+  validation still runs first so a malformed row is caught even
+  when the switch is off (an operator who fixes the typo and
+  flips the switch on shouldn't get a delayed surprise).
+  The doc tag now describes the actual behaviour: master switch
+  for the post-refresh triangulation pass; an operator-side
+  kill-switch without having to clear the chain table. The
+  aggregation-plan row is updated to reflect that triangulation
+  has shipped on the serving path (per F-0014). New
+  `cmd/ratesengine-aggregator/main_test.go::TestBuildTriangulations_RespectsTriangulationEnabled`
+  pins the three transitions (enabled/disabled/disabled-but-still-validates).
+
 - **`obs.trace_exporter = "otlp"` now fails-loud instead of
   silently no-op'ing** — the fourth half-shipped config field
   caught by the audit-finding wire-up pattern (after F-0008
