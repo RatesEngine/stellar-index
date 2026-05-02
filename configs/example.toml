@@ -207,6 +207,22 @@ enabled  = false
 # "C…SAC-CONTRACT" = "USDC:GA…"
 
 # ──────────────────────────────────────────────────────────────────
+# Trades — trade-insert policy. Per launch-readiness L2.2 phase 1,
+# operators declare which classic credits they trust as USD-pegged
+# stablecoins so on-chain DEX trades quoted in those assets populate
+# `trades.usd_volume` at insert time. SAC-wrapped versions are
+# recognised transitively via [supply.sac_wrappers] above.
+#
+# Empty list preserves the off-chain-only default: only CEX/FX
+# trades populate usd_volume; on-chain trades store NULL and the
+# `volume_24h_usd` API field reflects only off-chain volume.
+# ──────────────────────────────────────────────────────────────────
+[trades]
+# usd_pegged_classic_assets = [
+#   "USDC-GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN",  # Circle USDC
+# ]
+
+# ──────────────────────────────────────────────────────────────────
 # Obs — metrics, logs, traces.
 # ──────────────────────────────────────────────────────────────────
 [obs]

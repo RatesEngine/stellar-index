@@ -166,6 +166,12 @@ the `env:` column.
 | `supply.sac_wrappers` | `map` | `{}` | — | SAC wrapper contract C-strkey → supply.AssetKey (CODE:ISSUER) map. Drives the SAC balance observer's watched-contract filter. Pure SEP-41 contracts reuse this map by mapping contract_id → contract_id. |
 | `supply.watched_sep41_contracts` | `[]string` | `[]` | — | Operator-curated SEP-41 Soroban contract C-strkeys to track for Algorithm 3 supply per ADR-0023. Empty leaves the SEP-41 supply pipeline off. |
 
+### `[trades]`
+
+| Key | Type | Default | Env override | Description |
+| --- | ---- | ------- | ------------ | ----------- |
+| `trades.usd_pegged_classic_assets` | `[]string` | `[]` | — | Classic credit asset_keys (CODE-ISSUER) the operator declares as USD-pegged stablecoins. On-chain DEX trades quoted in these (or their SAC wrappers, transitive via [supply.sac_wrappers]) populate trades.usd_volume at insert time. Empty preserves the off-chain-only default. |
+
 ### `[divergence]`
 
 | Key | Type | Default | Env override | Description |

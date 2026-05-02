@@ -15,6 +15,31 @@ against.
 
 ## [Unreleased]
 
+### Added
+
+- **On-chain DEX trades populate `trades.usd_volume` (launch-
+  readiness L2.2 phase 1)**: previously only off-chain CEX/FX
+  trades populated `usd_volume` at insert time — on-chain trades
+  (Stellar SDEX, Soroswap, Aquarius, Phoenix, Comet) stored NULL,
+  biasing the `volume_24h_usd` field on `/v1/assets/{id}` toward
+  off-chain venues. New `[trades].usd_pegged_classic_assets`
+  config — operators list classic credits they trust as
+  USD-pegged stablecoins (e.g. Circle's USDC-GA5...). On-chain
+  trades quoted in any of those classics, OR in their SAC wrapper
+  (transitive via `[supply.sac_wrappers]`), now populate
+  `usd_volume = quote_amount / 10^7` at insert time. Empty
+  allow-list preserves the pre-Phase-1 default. Phase 2 (FX-anchor
+  multiplication for non-USD on-chain quotes — XLM/AQUA, XLM/BTC)
+  is post-launch. The OpenAPI / storage / handler doc caveats
+  on `volume_24h_usd` updated to reflect the operator-opt-in
+  surface; the field stays forward-compatible (Phase 2 lands
+  additively).
+
+  New surface: `internal/storage/timescale.USDVolumeQuoteSpec` +
+  `Store.SetUSDVolumeQuoteSpec`. Wired into both the indexer's
+  live ingest path and the ops-binary backfill path so an
+  operator-driven historical replay matches live behaviour.
+
 ### Fixed
 
 - **`ratesengine-aggregator` log-level + log-format now match the

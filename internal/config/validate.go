@@ -73,6 +73,9 @@ func (c Config) Validate() error {
 	if err := c.API.validate(); err != nil {
 		return err
 	}
+	if err := c.Trades.validate(); err != nil {
+		return err
+	}
 	if err := c.Obs.validate(); err != nil {
 		return err
 	}

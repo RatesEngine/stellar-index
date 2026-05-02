@@ -769,6 +769,8 @@ func shortHex(s string, n int) string {
 // Binance, "XLM/USD" for Kraken, "xlmusd" for Bitstamp, "XLM-USD"
 // for Coinbase. Keeps the CLI surface honest to venue conventions
 // rather than inventing our own cross-venue normalisation.
+//
+//nolint:gocognit,gocyclo,funlen // ops-CLI subcommand: flag parsing + venue dispatch + insert-loop in one function is the most readable shape
 func backfillExternal(args []string) error {
 	fs := flag.NewFlagSet("backfill-external", flag.ContinueOnError)
 	cfgPath := fs.String("config", "", "Path to TOML config file (required)")
@@ -837,6 +839,20 @@ func backfillExternal(args []string) error {
 		return fmt.Errorf("storage: %w", err)
 	}
 	defer func() { _ = store.Close() }()
+
+	// Mirror the indexer's USD-volume wiring (L2.2 phase 1) so an
+	// ops-driven backfill of on-chain trades populates usd_volume
+	// the same way live ingest does.
+	if len(cfg.Trades.USDPeggedClassicAssets) > 0 {
+		spec, err := timescale.NewUSDVolumeQuoteSpec(
+			cfg.Trades.USDPeggedClassicAssets,
+			cfg.Supply.SACWrappers,
+		)
+		if err != nil {
+			return fmt.Errorf("usd-volume quote spec: %w", err)
+		}
+		store.SetUSDVolumeQuoteSpec(spec)
+	}
 
 	inserted, skipped := 0, 0
 	for i, tr := range trades {

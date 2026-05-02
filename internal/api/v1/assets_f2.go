@@ -44,13 +44,13 @@ var ErrSupplyNotFound = errors.New("api: supply snapshot not found")
 // WARN — the volume field stays null on any failure, the asset-
 // detail body still serves cleanly.
 //
-// Scope caveat: per launch-readiness L2.2, the underlying CAGG
-// sums `coalesce(usd_volume, 0)` and on-chain trades currently
-// store `usd_volume = NULL` because the per-trade FX-anchor
-// multiplication for on-chain venues hasn't shipped yet. The
-// returned value reflects only off-chain CEX/FX volume until the
-// on-chain backfill lands; the OpenAPI surface carries the same
-// caveat in its description.
+// Scope caveat: per launch-readiness L2.2 phase 1, on-chain DEX
+// trades populate `usd_volume` when their quote asset is in the
+// operator's `[trades].usd_pegged_classic_assets` allow-list (or
+// its SAC wrapper, transitive via `[supply.sac_wrappers]`). Other
+// on-chain trades — non-USD-pegged quotes, or USD-pegged classics
+// not in the allow-list — store NULL and contribute 0 to this
+// reader's sum. The OpenAPI surface carries the same caveat.
 type VolumeReader interface {
 	Volume24hUSDForAsset(ctx context.Context, assetKey string) (string, error)
 }

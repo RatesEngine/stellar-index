@@ -15,52 +15,95 @@ import (
 	"github.com/RatesEngine/rates-engine/internal/sources/external"
 )
 
-// usdVolumeScaleDenom is the divisor that converts a scaled-integer
-// quote_amount from an off-chain source to its actual USD value.
-// External sources (CEX/FX) stamp every amount at the uniform 10^8
-// decimal convention per
-// `internal/sources/external/<venue>::externalAmountDecimals`. We
-// only compute usd_volume when the source is in {CEX, FX} (so the
-// 10^8 scale holds) AND the quote is fiat:USD or a USD-pegged
-// stablecoin (so peg ≈ $1). On-chain sources use per-asset decimals
-// (XLM=7, Soroban variable) and need a per-source conversion that
-// lives in a follow-up — see launch-readiness L2.2.
-const usdVolumeScaleDenom = 100_000_000
+// externalUSDVolumeDecimals is the off-chain quote-amount scale.
+// Every CEX/FX source stamps amounts at the uniform 10^8 decimal
+// convention per
+// `internal/sources/external/<venue>::externalAmountDecimals`, so a
+// quote amount of 4_250_000_000 means $42.50.
+const externalUSDVolumeDecimals = 8
 
 // tradeUSDVolume returns the per-trade USD-equivalent volume as a
 // NUMERIC-compatible string, or nil when the trade can't be
 // converted cleanly. Returning a *string lets the caller pass the
 // value (or sql NULL) straight into the trades.usd_volume column.
 //
-// Computable when ALL of the following hold:
-//   - source is registered with Subclass = SubclassCEX or SubclassFX
-//     (uniform 10^8 quote-amount scale per externalAmountDecimals)
-//   - quote is fiat:USD OR a USD-pegged stablecoin per
-//     `aggregate.FiatProxy` (USDC/USDT/DAI/PYUSD/USDP — all peg to
-//     USD; we treat the peg as 1.0 at insert time, the divergence /
-//     freeze paths surface depeg events separately)
+// Computable when:
+//   - Off-chain CEX/FX source AND quote is fiat:USD or a USD-pegged
+//     stablecoin per `aggregate.FiatProxy` (USDC/USDT/DAI/PYUSD/USDP).
+//     Decimals: 8 (uniform external scale).
+//   - On-chain DEX source AND `quoteSpec` recognises the quote asset
+//     as USD-pegged (operator-declared classic credits + their SAC
+//     wrappers per [USDVolumeQuoteSpec]). Decimals: 7 (Stellar
+//     classic invariant).
 //
-// Everything else returns nil and the column stays NULL — the
-// historical default behaviour is preserved for trades where the
-// USD value isn't computable without an FX lookup.
-func tradeUSDVolume(t canonical.Trade) *string {
-	md := external.Lookup(t.Source)
-	if md.Subclass != external.SubclassCEX && md.Subclass != external.SubclassFX {
-		return nil
-	}
-	if !quoteIsUSDOrUSDPegged(t.Pair.Quote) {
-		return nil
-	}
+// Stablecoins are treated as a 1.0 peg at insert time. Depeg events
+// are observed separately via the divergence + anomaly paths and do
+// NOT change the inserted usd_volume retroactively (a depegged USDT
+// trade still carries its observed quote_amount, which is the right
+// historical record).
+//
+// Everything else returns nil and the column stays NULL — neither
+// over-claiming USD-equivalence on unknown quotes (would mislead
+// downstream sums) nor silently dropping the trade itself (the row
+// still inserts; only the USD column goes NULL).
+func tradeUSDVolume(t canonical.Trade, quoteSpec *USDVolumeQuoteSpec) *string {
 	q := t.QuoteAmount.BigInt()
 	if q == nil || q.Sign() <= 0 {
 		return nil
 	}
+	md := external.Lookup(t.Source)
+	if md.Class != external.ClassExchange {
+		// Oracles and aggregators don't emit Trades — defensive nil
+		// keeps the function honest if a misregistered source ever
+		// sneaks one in.
+		return nil
+	}
+	decimals, ok := usdVolumeDecimals(t.Pair.Quote, md.Subclass, quoteSpec)
+	if !ok {
+		return nil
+	}
+	denom := scaleDenominator(decimals)
 	// FloatString(8) gives a fixed-precision decimal — Postgres
 	// NUMERIC accepts the form directly with no precision loss for
 	// any value that fit in the original big.Int (NUMERIC is
 	// arbitrary-precision; FloatString just chooses a render).
-	rendered := new(big.Rat).SetFrac(q, big.NewInt(usdVolumeScaleDenom)).FloatString(8)
+	rendered := new(big.Rat).SetFrac(q, denom).FloatString(8)
 	return &rendered
+}
+
+// usdVolumeDecimals picks the correct decimal scale for the trade's
+// quote asset given the source's subclass + the operator's quote
+// spec. Returns (0, false) when the trade isn't a USD-volume
+// candidate.
+func usdVolumeDecimals(quote canonical.Asset, subclass external.Subclass, quoteSpec *USDVolumeQuoteSpec) (int, bool) {
+	switch subclass {
+	case external.SubclassCEX, external.SubclassFX:
+		// Off-chain — uniform externalAmountDecimals, peg via the
+		// crypto-ticker FiatProxy.
+		if !quoteIsUSDOrUSDPegged(quote) {
+			return 0, false
+		}
+		return externalUSDVolumeDecimals, true
+	case external.SubclassDEX:
+		// On-chain (Stellar SDEX, Soroswap, Aquarius, Phoenix,
+		// Comet) — peg + decimals come from the operator's
+		// USDVolumeQuoteSpec. Phase 1 covers classic + SAC; pure
+		// SEP-41 stablecoins are phase 2.
+		return quoteSpec.QuoteUSDPegInfo(quote)
+	default:
+		return 0, false
+	}
+}
+
+// scaleDenominator returns 10^decimals as a *big.Int. Decimals are
+// always small (≤ 18) so the exponent is cheap.
+func scaleDenominator(decimals int) *big.Int {
+	out := big.NewInt(1)
+	ten := big.NewInt(10)
+	for range decimals {
+		out.Mul(out, ten)
+	}
+	return out
 }
 
 // quoteIsUSDOrUSDPegged is true when the asset is fiat:USD or a
@@ -94,10 +137,15 @@ var ErrNoFXQuote = errors.New("timescale: no FX quote at or before cutoff")
 // The trade is validated via [canonical.Trade.Validate] before
 // touching the DB; a Validate failure returns [canonical.ErrInvalidTrade].
 //
-// `usd_volume` is computed via [tradeUSDVolume] when the source is
-// off-chain (CEX/FX) AND the quote is fiat:USD or a USD-pegged
-// stablecoin; everything else stores NULL. See the helper's docstring
-// for the L2.2 caveat surfaced in launch-readiness re-baseline 2026-05-01.
+// `usd_volume` is computed via [tradeUSDVolume] for both off-chain
+// (CEX/FX) and on-chain (DEX) sources whose quote asset is recognised
+// as USD-pegged. Off-chain coverage is built-in via the crypto-ticker
+// `aggregate.FiatProxy` map; on-chain coverage requires the operator
+// to install a [USDVolumeQuoteSpec] via [Store.SetUSDVolumeQuoteSpec]
+// declaring which classic credits (and their SAC wrappers, transitive)
+// they trust as USD-pegged. Everything else stores NULL — see the
+// L2.2 caveat documented on `Volume24hUSDForAsset` and
+// `internal/api/v1.VolumeReader`.
 func (s *Store) InsertTrade(ctx context.Context, t canonical.Trade) error {
 	if err := t.Validate(); err != nil {
 		return err
@@ -118,7 +166,7 @@ func (s *Store) InsertTrade(ctx context.Context, t canonical.Trade) error {
         ON CONFLICT (source, ledger, tx_hash, op_index, ts) DO NOTHING
     `
 	var usdVolume any // sql NULL when nil; pq accepts the *string form too
-	if v := tradeUSDVolume(t); v != nil {
+	if v := tradeUSDVolume(t, s.usdVolumeQuoteSpec); v != nil {
 		usdVolume = *v
 	}
 	_, err := s.db.ExecContext(ctx, q,

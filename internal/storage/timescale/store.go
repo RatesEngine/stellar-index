@@ -14,6 +14,25 @@ import (
 // Safe for concurrent use.
 type Store struct {
 	db *sql.DB
+
+	// usdVolumeQuoteSpec, when non-nil, lets [InsertTrade] populate
+	// `trades.usd_volume` for on-chain trades whose quote asset is
+	// on the operator's USD-pegged list. Set via
+	// [SetUSDVolumeQuoteSpec] after [Open] — keeps the no-config
+	// path (tests, ops binary) on the existing off-chain-only
+	// behaviour.
+	usdVolumeQuoteSpec *USDVolumeQuoteSpec
+}
+
+// SetUSDVolumeQuoteSpec installs the operator-configured quote-asset
+// spec used by [InsertTrade] to populate `trades.usd_volume` for
+// on-chain trades. Safe to call once at startup; not safe to call
+// concurrently with InsertTrade.
+//
+// nil clears the spec — InsertTrade reverts to off-chain-only
+// behaviour (the L2.2 pre-Phase-1 default).
+func (s *Store) SetUSDVolumeQuoteSpec(spec *USDVolumeQuoteSpec) {
+	s.usdVolumeQuoteSpec = spec
 }
 
 // Open initialises a connection pool. Ping'd before returning so a

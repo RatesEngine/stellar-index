@@ -496,14 +496,19 @@ func (a *stringArray) Scan(src any) error {
 //
 // The CAGG sums `coalesce(usd_volume, 0)` per row. Per-trade
 // `usd_volume` is populated at insert time (see `tradeUSDVolume`
-// in trades.go) only for off-chain CEX/FX sources with `fiat:USD`
-// or USD-pegged-stablecoin quotes; on-chain trades (Stellar
-// SDEX, Soroswap, Aquarius, Phoenix, Comet) currently store
-// NULL, so they contribute 0 to this sum. Operators comparing
-// against external aggregators (CoinGecko, CMC) will see
-// systematically lower numbers until the on-chain FX-anchor
-// backfill lands. The OpenAPI surface (`volume_24h_usd`) carries
-// the same caveat in its description.
+// in trades.go) for:
+//   - off-chain CEX/FX sources with `fiat:USD` or
+//     USD-pegged-stablecoin quotes (uniform 10^8 external scale),
+//   - on-chain DEX sources whose quote asset is in the operator's
+//     `[trades].usd_pegged_classic_assets` allow-list or its SAC
+//     wrapper, transitive via `[supply.sac_wrappers]` (L2.2 phase 1).
+//
+// Deployments that haven't configured the trades allow-list see
+// on-chain trades contribute 0 to this sum (the pre-Phase-1
+// default). On-chain trades quoted in non-USD assets (XLM/AQUA,
+// XLM/BTC) still contribute 0; FX-anchor multiplication for
+// non-USD on-chain quotes is L2.2 phase 2 (post-launch). The
+// OpenAPI surface (`volume_24h_usd`) carries the same caveat.
 func (s *Store) Volume24hUSDForAsset(ctx context.Context, assetKey string) (string, error) {
 	const q = `
         SELECT COALESCE(sum(volume_usd), 0)::text

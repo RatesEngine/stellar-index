@@ -27,8 +27,46 @@ type Config struct {
 	API        APIConfig        `toml:"api" doc:"Public API serving plane — port, auth mode, rate limits, CDN."`
 	Metadata   MetadataConfig   `toml:"metadata" doc:"Asset metadata overlay — SEP-1 issuer→home-domain map, operator overrides."`
 	Supply     SupplyConfig     `toml:"supply" doc:"Supply pipeline config — SDF reserve list, operator-managed reserve balances (fallback when the LCM AccountEntry observer hasn't yet covered the watched set), watched classic + SEP-41 asset lists, SAC wrappers, and aggregator-refresh cadence. ADR-0011 (XLM) + ADR-0022 (classic) + ADR-0023 (SEP-41)."`
+	Trades     TradesConfig     `toml:"trades" doc:"Trade-insert policy — operator-declared USD-pegged stablecoins so on-chain DEX trades populate trades.usd_volume at insert time (launch-readiness L2.2 phase 1)."`
 	Divergence DivergenceConfig `toml:"divergence" doc:"Cross-check references the divergence service consults (CoinGecko + Chainlink). Empty disables; the divergence_warning envelope flag stays unset."`
 	Obs        ObsConfig        `toml:"obs" doc:"Metrics, logs, traces — exporters + sampling."`
+}
+
+// TradesConfig configures policy that runs at trade-insert time
+// (`internal/storage/timescale.Store.InsertTrade`). All fields are
+// optional — empty config preserves the off-chain-only `usd_volume`
+// behaviour that pre-dates Phase 1 of launch-readiness L2.2.
+type TradesConfig struct {
+	// USDPeggedClassicAssets is the operator's allow-list of classic
+	// credit assets (canonical "CODE-ISSUER" wire form, e.g.
+	// "USDC-GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN")
+	// they trust as 1.0-USD-pegged. On-chain trades quoted in any
+	// of these assets — or in the SAC contract that wraps any of
+	// them, looked up via [SupplyConfig.SACWrappers] — populate
+	// `trades.usd_volume` at insert time using `quote_amount /
+	// 10^7` (the Stellar classic decimal scale).
+	//
+	// Empty preserves the pre-Phase-1 default: only off-chain CEX/FX
+	// trades populate `usd_volume`, on-chain DEX trades store NULL.
+	// See `docs/operations/runbooks/`-adjacent doc + the L2.2 caveat
+	// on the volume_24h_usd OpenAPI surface.
+	USDPeggedClassicAssets []string `toml:"usd_pegged_classic_assets" doc:"Classic credit asset_keys (CODE-ISSUER) the operator declares as USD-pegged stablecoins. On-chain DEX trades quoted in these (or their SAC wrappers, transitive via [supply.sac_wrappers]) populate trades.usd_volume at insert time. Empty preserves the off-chain-only default." default:"[]"`
+}
+
+// validate is the sub-validator hook the top-level Config.Validate
+// calls. The deeper "is this a parseable classic asset" check lives
+// in `internal/storage/timescale.NewUSDVolumeQuoteSpec` so we don't
+// duplicate the parse logic; the indexer's wiring step fails loud
+// if any asset_key is unparseable. Here we only catch obvious
+// operator-config mistakes (empty strings) so the parse-side error
+// names the offending index cleanly.
+func (tc TradesConfig) validate() error {
+	for i, raw := range tc.USDPeggedClassicAssets {
+		if raw == "" {
+			return fmt.Errorf("trades: usd_pegged_classic_assets[%d] is empty", i)
+		}
+	}
+	return nil
 }
 
 // DivergenceConfig wires the cross-check references the divergence

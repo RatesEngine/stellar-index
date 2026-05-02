@@ -1279,21 +1279,27 @@ components:
             scope ("24h Trading Volume aggregate across indexed
             markets").
 
-            **Scope caveat (launch-readiness L2.2):** the per-trade
-            USD value is populated at insert time only for off-chain
-            CEX/FX trades whose quote is `fiat:USD` or a
-            USD-pegged stablecoin (USDC / USDT / DAI / PYUSD / USDP).
-            On-chain trades (Stellar SDEX, Soroswap, Aquarius,
-            Phoenix, Comet) currently store `usd_volume = NULL`
-            because the per-trade FX-anchor multiplication for
-            on-chain venues hasn't shipped yet — they contribute 0
-            to this sum. Operators using this value to compare
-            against external aggregators (CoinGecko, CMC) will see
-            systematically lower numbers until the on-chain
-            FX-anchor backfill lands. The structural shape is the
-            same whether or not on-chain trades are included; the
-            field will start including them additively in a future
-            release with no schema change.
+            **Scope caveat (launch-readiness L2.2):** off-chain
+            CEX/FX trades populate `usd_volume` automatically when
+            the quote is `fiat:USD` or a USD-pegged stablecoin
+            (USDC / USDT / DAI / PYUSD / USDP).
+
+            On-chain DEX trades (Stellar SDEX, Soroswap, Aquarius,
+            Phoenix, Comet) populate `usd_volume` when their quote
+            asset is in the operator's
+            `[trades].usd_pegged_classic_assets` allow-list, or its
+            SAC contract is wired transitively via
+            `[supply.sac_wrappers]` (L2.2 phase 1). Deployments
+            that haven't configured the allow-list see on-chain
+            trades contribute 0 — comparisons with external
+            aggregators (CoinGecko, CMC) will read systematically
+            lower until the operator opts in.
+
+            On-chain trades quoted in non-USD assets (XLM/AQUA,
+            XLM/BTC, etc.) still contribute 0; the FX-anchor
+            multiplication for non-USD on-chain quotes is L2.2
+            phase 2, post-launch. The schema is forward-compatible:
+            phase 2 lands additively without a wire-shape change.
       required: [asset_id, type, code, decimals, sep1_status]
 
     AssetEnvelope:

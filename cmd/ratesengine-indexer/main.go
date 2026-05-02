@@ -86,7 +86,7 @@ func main() {
 	}
 }
 
-//nolint:funlen,gocognit // top-level binary lifecycle; splitting reduces readability of dependency-construction order
+//nolint:funlen,gocognit,gocyclo // top-level binary lifecycle; splitting reduces readability of dependency-construction order
 func run(cfgPath string, dryRun bool) error {
 	cfg, err := config.LoadWithEnv(cfgPath)
 	if err != nil {
@@ -116,6 +116,27 @@ func run(cfgPath string, dryRun bool) error {
 		}
 	}()
 	logger.Info("storage connected")
+
+	// USD-volume quote spec — wires on-chain DEX trades into
+	// usd_volume population per launch-readiness L2.2 phase 1.
+	// Operator declares which classic credits they trust as
+	// USD-pegged in `[trades].usd_pegged_classic_assets`; SAC
+	// wrappers come transitively via `[supply.sac_wrappers]`. Empty
+	// list → spec stays nil → off-chain-only behaviour preserved.
+	if len(cfg.Trades.USDPeggedClassicAssets) > 0 {
+		spec, err := timescale.NewUSDVolumeQuoteSpec(
+			cfg.Trades.USDPeggedClassicAssets,
+			cfg.Supply.SACWrappers,
+		)
+		if err != nil {
+			return fmt.Errorf("usd-volume quote spec: %w", err)
+		}
+		store.SetUSDVolumeQuoteSpec(spec)
+		logger.Info("on-chain usd_volume enabled",
+			"classic_pegs", len(cfg.Trades.USDPeggedClassicAssets),
+			"sac_wrappers", len(cfg.Supply.SACWrappers),
+		)
+	}
 
 	// ─── Dispatcher + decoders ─────────────────────────────────
 	disp, err := pipeline.BuildDispatcher(cfg.Ingestion.EnabledSources, cfg.Oracle)
