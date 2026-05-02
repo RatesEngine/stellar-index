@@ -159,7 +159,7 @@ the `env:` column.
 | Key | Type | Default | Env override | Description |
 | --- | ---- | ------- | ------------ | ----------- |
 | `supply.sdf_reserve_accounts` | `[]string` | `[]` | — | G-strkey list of SDF-controlled reserve accounts whose XLM balances are excluded from circulating supply per ADR-0011 Algorithm 1. |
-| `supply.reserve_balances_stroops` | `map` | `{}` | — | Operator-managed snapshot of each SDF reserve account's XLM balance in stroops (decimal string). Updated manually on SDF reserve-move announcements; LCM-based live tracking is a future ADR. |
+| `supply.reserve_balances_stroops` | `map` | `{}` | — | Operator-managed snapshot of each SDF reserve account's XLM balance in stroops (decimal string). Updated manually on SDF reserve-move announcements. Used as the fallback source when the LCM AccountEntry observer (Task #54) hasn't yet populated account_observations for the watched reserve set; the live observer takes over once those rows land. |
 | `supply.aggregator_refresh_enabled` | `bool` | `false` | — | Run the supply-snapshot writer as a goroutine in the aggregator instead of via the systemd timer. Requires the LCM AccountEntry observer to be backfilled across the watched accounts (or the static reserve_balances_stroops fallback to be valid). |
 | `supply.aggregator_refresh_cadence` | `int64` | `5m` | — | Per-cycle interval for the in-aggregator supply-snapshot worker (only used when aggregator_refresh_enabled is true). |
 | `supply.watched_classic_assets` | `[]string` | `[]` | — | Operator-curated classic credit assets (CODE-ISSUER form) to track for Algorithm 2 supply per ADR-0022. Empty leaves the classic-supply pipeline off. |
@@ -187,7 +187,7 @@ the `env:` column.
 
 | Key | Type | Default | Env override | Description |
 | --- | ---- | ------- | ------------ | ----------- |
-| `obs.metrics_listen` | `string` | `127.0.0.1:9464` | — | Bind address for the /metrics Prometheus endpoint. |
+| `obs.metrics_listen` | `string` | `127.0.0.1:9464` | — | Bind address for the dedicated /metrics Prometheus endpoint. Read by the indexer + the long-lived ops binaries (cross-region-monitor, verify-archive --metrics). The API binary serves /metrics on its public listener and ignores this field. The aggregator binary does NOT currently expose /metrics — aggregator metrics register into the obs registry but no listener is mounted (known gap; aggregator scrapes go through node_exporter / kube probes instead until a listener is wired). |
 | `obs.log_level` | `string` | `info` | — | Minimum log level — debug / info / warn / error. |
 | `obs.log_format` | `string` | `json` | — | Log format — json / console. |
 | `obs.trace_exporter` | `string` | `none` | — | OpenTelemetry trace exporter. Currently only 'none' is wired in this build; the 'otlp' value is reserved for the future tracing rollout and is rejected by Validate() until the exporter is implemented (so an operator setting it doesn't think tracing is on when it isn't). |

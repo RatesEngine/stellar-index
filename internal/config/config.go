@@ -498,27 +498,32 @@ type SEP10Config struct {
 	JWTTTL        time.Duration `toml:"jwt_ttl" doc:"Lifetime of an issued JWT. Clients refresh by repeating the challenge → verify flow." default:"1h"`
 }
 
-// ObsConfig wires metrics, logs, traces.
 // SupplyConfig configures the supply-snapshot writer (run via
-// `ratesengine-ops supply snapshot`). Per ADR-0011 we don't
-// fabricate values; for native XLM that means the writer needs the
-// configured SDF reserve account list (whose balances are excluded
-// from circulating) plus an authoritative reading of those balances.
+// `ratesengine-ops supply snapshot` or as the in-aggregator
+// goroutine when [SupplyConfig.AggregatorRefreshEnabled] is true).
+// Per ADR-0011 we don't fabricate values; for native XLM that means
+// the writer needs the configured SDF reserve account list (whose
+// balances are excluded from circulating) plus an authoritative
+// reading of those balances.
 //
-// At audit time we have no live AccountEntry observer (deferred —
-// same plumbing the metadata overlay is waiting on). Until that
-// ships, operators carry the reserve balances in this config block,
-// updated when SDF announces a reserve move (rare — a few times
-// per year). The writer reads from this config and writes to
-// `asset_supply_history`. The follow-up ADR replaces the manual
-// table with an LCM-derived live reader.
+// Two reserve-balance sources are supported:
+//
+//  1. The LCM AccountEntry observer (Task #54, shipped) — when the
+//     indexer has the watched reserve accounts in
+//     `account_observations`, the writer reads live balances from
+//     that table and `ReserveBalancesStroops` is unused.
+//  2. The static `ReserveBalancesStroops` map — operators backfill
+//     this from SDF announcements when the LCM observer hasn't yet
+//     covered the reserve account set (e.g. early bring-up before
+//     the AccountEntry hypertable is populated).
 //
 // Empty `SDFReserveAccounts` is valid and yields
 // circulating == total (no reserves excluded). Empty
 // `ReserveBalancesStroops` with non-empty `SDFReserveAccounts` is
-// rejected at writer-start so an operator who configured accounts
-// but forgot balances doesn't silently publish an over-stated
-// circulating supply.
+// only valid when the LCM observer covers every named account; the
+// writer falls back to rejecting at start otherwise so an operator
+// who configured accounts but forgot balances doesn't silently
+// publish an over-stated circulating supply.
 type SupplyConfig struct {
 	// SDFReserveAccounts is the G-strkey list whose XLM balances
 	// are subtracted from the frozen total to yield circulating.
@@ -532,7 +537,7 @@ type SupplyConfig struct {
 	// when SDF announces a reserve move. Every account in
 	// SDFReserveAccounts MUST appear here; missing keys are a
 	// configuration error caught at writer-start.
-	ReserveBalancesStroops map[string]string `toml:"reserve_balances_stroops" doc:"Operator-managed snapshot of each SDF reserve account's XLM balance in stroops (decimal string). Updated manually on SDF reserve-move announcements; LCM-based live tracking is a future ADR." default:"{}"`
+	ReserveBalancesStroops map[string]string `toml:"reserve_balances_stroops" doc:"Operator-managed snapshot of each SDF reserve account's XLM balance in stroops (decimal string). Updated manually on SDF reserve-move announcements. Used as the fallback source when the LCM AccountEntry observer (Task #54) hasn't yet populated account_observations for the watched reserve set; the live observer takes over once those rows land." default:"{}"`
 
 	// AggregatorRefreshEnabled, when true, runs the supply-
 	// snapshot writer as a goroutine inside the aggregator on a
@@ -638,8 +643,18 @@ func (sc SupplyConfig) Validate() error {
 	return nil
 }
 
+// ObsConfig wires metrics, logs, and (eventually) traces. Metrics
+// exposure varies per-binary: the indexer + the long-lived ops
+// commands (e.g. `cross-region-monitor`, `verify-archive --metrics`)
+// bind a dedicated `/metrics` listener at [ObsConfig.MetricsListen];
+// the API binary serves `/metrics` on its public listener (so a
+// CDN-fronted deployment doesn't need a sidecar port). The
+// aggregator binary does NOT currently expose `/metrics` —
+// aggregator counters register into `internal/obs` but no listener
+// is mounted; this is a known gap. Trace fields are reserved for
+// the future tracing rollout — see [ObsConfig.TraceExporter].
 type ObsConfig struct {
-	MetricsListen string  `toml:"metrics_listen" doc:"Bind address for the /metrics Prometheus endpoint." default:"127.0.0.1:9464"`
+	MetricsListen string  `toml:"metrics_listen" doc:"Bind address for the dedicated /metrics Prometheus endpoint. Read by the indexer + the long-lived ops binaries (cross-region-monitor, verify-archive --metrics). The API binary serves /metrics on its public listener and ignores this field. The aggregator binary does NOT currently expose /metrics — aggregator metrics register into the obs registry but no listener is mounted (known gap; aggregator scrapes go through node_exporter / kube probes instead until a listener is wired)." default:"127.0.0.1:9464"`
 	LogLevel      string  `toml:"log_level" doc:"Minimum log level — debug / info / warn / error." default:"info"`
 	LogFormat     string  `toml:"log_format" doc:"Log format — json / console." default:"json"`
 	TraceExporter string  `toml:"trace_exporter" doc:"OpenTelemetry trace exporter. Currently only 'none' is wired in this build; the 'otlp' value is reserved for the future tracing rollout and is rejected by Validate() until the exporter is implemented (so an operator setting it doesn't think tracing is on when it isn't)." default:"none"`
