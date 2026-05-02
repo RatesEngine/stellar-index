@@ -170,6 +170,43 @@ enabled  = false
 # invert   = false
 
 # ──────────────────────────────────────────────────────────────────
+# Supply — circulating-supply pipeline (ADR-0011 / -0021 / -0022 /
+# -0023). Each block opts the indexer into the corresponding
+# observer and the aggregator into per-asset snapshots:
+#
+#   - sdf_reserve_accounts        → enables the accounts observer
+#                                    (Algorithm 1 XLM circulating).
+#   - reserve_balances_stroops    → static fallback when the
+#                                    AccountEntry observer hasn't
+#                                    backfilled yet.
+#   - watched_classic_assets      → enables the trustlines +
+#                                    claimable_balances + liquidity_pools
+#                                    observers (Algorithm 2).
+#   - sac_wrappers (sub-block)    → enables the sac_balances observer
+#                                    (Algorithm 2 SAC component +
+#                                    Algorithm 3 locked-set lookups).
+#   - watched_sep41_contracts     → enables the sep41_supply
+#                                    event-stream decoder (Algorithm 3).
+#   - aggregator_refresh_enabled  → in-aggregator goroutine path;
+#                                    leave false to drive snapshots
+#                                    via deploy/systemd/supply-snapshot.timer.
+#
+# Empty per-knob default → that observer stays unregistered + the
+# aggregator skips that asset class. The example below is the
+# minimum to activate XLM circulating supply only.
+# ──────────────────────────────────────────────────────────────────
+[supply]
+# sdf_reserve_accounts = ["GA…", "GB…"]
+# [supply.reserve_balances_stroops]
+# "GA…" = "12345678901234"
+# watched_classic_assets    = []
+# watched_sep41_contracts   = []
+# aggregator_refresh_enabled = false
+# aggregator_refresh_cadence = "5m"
+# [supply.sac_wrappers]
+# "C…SAC-CONTRACT" = "USDC:GA…"
+
+# ──────────────────────────────────────────────────────────────────
 # Obs — metrics, logs, traces.
 # ──────────────────────────────────────────────────────────────────
 [obs]
