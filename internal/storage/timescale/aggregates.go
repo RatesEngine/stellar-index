@@ -491,6 +491,19 @@ func (a *stringArray) Scan(src any) error {
 // assetKey is the canonical asset string (e.g.
 // "native", "USDC:GA5...", "soroban:CC..."); matches what the
 // trades hypertable stores in base_asset / quote_asset.
+//
+// # Scope caveat (launch-readiness L2.2)
+//
+// The CAGG sums `coalesce(usd_volume, 0)` per row. Per-trade
+// `usd_volume` is populated at insert time (see `tradeUSDVolume`
+// in trades.go) only for off-chain CEX/FX sources with `fiat:USD`
+// or USD-pegged-stablecoin quotes; on-chain trades (Stellar
+// SDEX, Soroswap, Aquarius, Phoenix, Comet) currently store
+// NULL, so they contribute 0 to this sum. Operators comparing
+// against external aggregators (CoinGecko, CMC) will see
+// systematically lower numbers until the on-chain FX-anchor
+// backfill lands. The OpenAPI surface (`volume_24h_usd`) carries
+// the same caveat in its description.
 func (s *Store) Volume24hUSDForAsset(ctx context.Context, assetKey string) (string, error) {
 	const q = `
         SELECT COALESCE(sum(volume_usd), 0)::text

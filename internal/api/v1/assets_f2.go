@@ -43,6 +43,14 @@ var ErrSupplyNotFound = errors.New("api: supply snapshot not found")
 // no trades). Errors propagate so the handler can log them at
 // WARN — the volume field stays null on any failure, the asset-
 // detail body still serves cleanly.
+//
+// Scope caveat: per launch-readiness L2.2, the underlying CAGG
+// sums `coalesce(usd_volume, 0)` and on-chain trades currently
+// store `usd_volume = NULL` because the per-trade FX-anchor
+// multiplication for on-chain venues hasn't shipped yet. The
+// returned value reflects only off-chain CEX/FX volume until the
+// on-chain backfill lands; the OpenAPI surface carries the same
+// caveat in its description.
 type VolumeReader interface {
 	Volume24hUSDForAsset(ctx context.Context, assetKey string) (string, error)
 }
