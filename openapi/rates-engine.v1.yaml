@@ -9,13 +9,11 @@
 #   4. Updates docs/reference/api-design.md if the design intent
 #      changed (as opposed to an additive clarification).
 #
-# Mixed skeleton + live — the /v1/healthz, /readyz, /version, /assets,
-# /assets/{asset_id}, /price, /history, /ohlc, /vwap, /twap,
-# /markets, /oracle/latest, and /sources paths are implemented
-# today. Other paths (price/batch, price/stream, history/since-
-# inception, /pairs, /oracle/lastprice, /oracle/prices, account/*,
-# SEP-40 passthrough) are on the lint's planned_regex allow-list
-# pending their respective feature PRs. See docs/reference/api-design.md.
+# Every documented path is implemented in internal/api/v1/ — the
+# spec and the live handler set are 1:1 (CI's openapi-handler drift
+# check at scripts/ci/lint-docs.sh §11 enforces this). See
+# docs/reference/api-design.md for the design rationale + headers
+# / rate-limit / observability behaviour the middleware emits.
 
 openapi: 3.1.0
 info:
@@ -61,10 +59,11 @@ tags:
     description: Liquidity + venue breakdown per asset.
   - name: oracle
     description: |
-      Per-source oracle observations (reflector-dex / -cex / -fx, future
-      redstone / band / chainlink). The SEP-40-shaped passthrough
-      endpoints (/oracle/lastprice, /oracle/prices, /oracle/x_last_price)
-      are planned, not implemented today.
+      Per-source oracle observations (reflector-dex / -cex / -fx,
+      redstone, band) plus SEP-40-shaped passthroughs
+      (/oracle/lastprice, /oracle/prices, /oracle/x_last_price)
+      that mirror Reflector's contract surface for client SDKs that
+      already speak SEP-40.
   - name: account
     description: Self-service for API-key holders.
   - name: meta
