@@ -15,6 +15,25 @@ against.
 
 ## [Unreleased]
 
+### Added
+
+- **L2.2 Phase 2 plumbing — `USDVolumeFXResolver` interface +
+  `tradeUSDVolume` fallback path** — closes the launch-task-list
+  G3 plumbing half. The current Phase 1 path stamps `usd_volume`
+  for off-chain CEX/FX trades + on-chain DEX trades whose quote
+  is on the operator's USD-pegged classics allow-list, leaving
+  every other on-chain trade NULL. New
+  `USDVolumeFXResolver.USDPriceAt(ctx, asset, t)` lets a
+  deployment supply a USD rate per quote asset; when wired,
+  `tradeUSDVolume` falls through to it after Phase 1 declines
+  and multiplies through `quote_amount × rate / 10^classicDecimals`
+  to land a non-NULL `usd_volume`. `Store.SetUSDVolumeFXResolver`
+  installs it; nil (the default) preserves Phase 1 behaviour
+  exactly. Production resolver — a goroutine that polls
+  `prices_1m` for `<asset>/<USD>` per configured asset and
+  caches the latest closed VWAP — ships in a follow-up PR; this
+  PR is the contract + test surface so the wiring lands cleanly.
+
 ### Fixed
 
 - **`/v1/account/me` now returns the credential's `label`** —
