@@ -17,6 +17,22 @@ against.
 
 ### Added
 
+- **API binary wires the freeze.Looker so `flags.frozen` is no
+  longer permanently false (closes another half-shipped audit
+  finding)**: `freeze.Looker` reads the `freeze:<asset>:<quote>`
+  markers the aggregator's `freeze.Writer` publishes (Phase 1 + 2
+  anomaly response, ADR-0019), but the API binary's
+  `v1.New(Options{...})` never set `Freeze:`. The handler-side
+  `FrozenLooker` interface was declared and `/v1/price`'s
+  `lookupFrozen` consulted it, but with no looker installed the
+  call always returned (false, nil) — operators relying on
+  `flags.frozen` to detect frozen-LKG responses got permanent
+  `false`. Now `cmd/ratesengine-api/main.go` constructs
+  `freeze.NewLooker(rdb)` when Redis is configured (mirrors the
+  existing pattern for confidence + triangulated lookers) and
+  passes it through `Options.Freeze`. L3.13 in the launch-readiness
+  backlog flips from 🟢 to ✅.
+
 - **Aggregator now drives the divergence-cache refresh (closes
   another half-shipped audit finding)**:
   `divergence.Service.RefreshPair` was exposed but had zero

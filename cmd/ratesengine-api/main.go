@@ -34,6 +34,7 @@ import (
 	"github.com/redis/go-redis/v9"
 
 	"github.com/RatesEngine/rates-engine/internal/aggregate/confidence"
+	"github.com/RatesEngine/rates-engine/internal/aggregate/freeze"
 	v1 "github.com/RatesEngine/rates-engine/internal/api/v1"
 	"github.com/RatesEngine/rates-engine/internal/api/v1/middleware"
 	"github.com/RatesEngine/rates-engine/internal/auth"
@@ -293,6 +294,24 @@ func run(cfgPath string, dryRun bool) error { //nolint:gocognit,funlen,gocyclo /
 		},
 	)
 
+	// Freeze looker — reads the freeze:<asset>:<quote> cache
+	// markers the aggregator's freeze.Writer publishes (ADR-0019
+	// Phase 1 + 2 anomaly response). Without this wiring the API's
+	// `flags.frozen` is permanently false regardless of what the
+	// aggregator's anomaly detector decided. Nil rdb leaves the
+	// looker nil, matching the rest of the redis-dependent options
+	// — a deployment without Redis still serves prices, just
+	// without freeze visibility.
+	var freezeLooker v1.FrozenLooker
+	if rdb != nil {
+		fl, err := freeze.NewLooker(rdb)
+		if err != nil {
+			return fmt.Errorf("freeze looker: %w", err)
+		}
+		freezeLooker = fl
+		logger.Info("freeze looker wired")
+	}
+
 	apiSrv := v1.New(v1.Options{
 		Logger:       logger.With("component", "api"),
 		ReadyChecks:  checks,
@@ -306,6 +325,7 @@ func run(cfgPath string, dryRun bool) error { //nolint:gocognit,funlen,gocyclo /
 		Divergence:   divergenceLooker,
 		Confidence:   redisConfidenceLooker{rdb: rdb},
 		Triangulated: redisTriangulatedLooker{rdb: rdb},
+		Freeze:       freezeLooker,
 		Supply:       storeSupplyLooker{s: store},
 		Volume:       storeVolumeReader{s: store},
 		SEP10:        sep10Validator,
