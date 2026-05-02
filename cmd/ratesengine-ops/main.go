@@ -336,19 +336,20 @@ Subcommands:
                           derivation isn't wired in canonical yet.
   supply snapshot -config PATH [-asset <id>] [-ledger N] [-dry-run]
                           Compute a fresh supply snapshot and write
-                          it to asset_supply_history. v1 ships
-                          native-XLM only (Algorithm 1 per
-                          ADR-0011); classic + SEP-41 follow once
-                          their respective computers ship.
-                          Reserve balances are operator-managed —
-                          set [supply] reserve_balances_stroops in
-                          your TOML config. Default ledger
+                          it to asset_supply_history. The CLI is
+                          intentionally native-XLM only — classic
+                          (Algorithm 2) + SEP-41 (Algorithm 3)
+                          computers shipped (Tasks #55, #56) but
+                          their refresh surface is the aggregator
+                          goroutine path ([supply].aggregator_refresh_enabled).
+                          Reserve balances come from the chained-
+                          fallback reader: live LCM AccountEntry
+                          observer (L2.12a) wins when populated;
+                          operator-static [supply].reserve_balances_stroops
+                          is the bring-up fallback. Default ledger
                           attribution is the max last_ledger across
                           all ingestion cursors; pass -ledger to
                           override. -dry-run prints without writing.
-                          Cron this command to land a periodic
-                          snapshot — until the LCM-observer-backed
-                          live writer ships in a follow-up.
   discovery list -config PATH [-since DUR] [-limit N]
                           List SEP-41 contracts auto-detected from the
                           event stream (the dispatcher's discovery
@@ -1603,21 +1604,29 @@ func summariseExternalEvent(ev consumer.Event) string {
 
 // ─── verify-archive ─────────────────────────────────────────────
 
-// verifyArchive walks every LCM in a galexie bucket in sequence and
-// asserts chain-link integrity — for each ledger N, we check that
-// ledger[N].Header.PreviousLedgerHash == ledger[N-1].Hash. Any
-// mismatch is a hard stop with the diverging ledger numbers and
-// hashes printed for diagnosis.
+// verifyArchive runs one or more verification tiers against a
+// galexie bucket. Per `docs/operations/galexie-backfill.md` and
+// ADR-0017, each tier addresses a distinct trust failure mode:
 //
-// This is Tier A from docs/operations/galexie-backfill.md:
+//   - Tier A (chain): chain-link integrity — for each ledger N,
+//     ledger[N].Header.PreviousLedgerHash == ledger[N-1].Hash.
+//     Catches internal corruption, dropped ledgers, replay
+//     divergence regardless of upstream trust.
+//   - Tier B (checkpoint): cross-check our LCM's hash at every
+//     64-ledger checkpoint against the canonical header-hash
+//     in the local history-archive (`ledger-XXXXXXXX.xdr.gz`).
+//     Catches single-source corruption that's still chain-link-
+//     consistent.
+//   - Tier D (peers): sample checkpoints within the range and
+//     cross-compare history-XXXXXXXX.json across N tier-1
+//     validator archives. Consensus-level cryptographic
+//     agreement.
+//   - Tier E (archivist): shell out to stellar-archivist for a
+//     full bucket-by-bucket sha256 audit.
 //
-//	Catches any internal corruption, dropped ledger, or replay
-//	divergence regardless of upstream trust.
-//
-// Tier B (checkpoint anchoring against the local history-archive)
-// needs to parse ledger-XXXXXXXX.xdr.gz files to extract the
-// canonical ledger-hash at each 64-ledger boundary; that lands in
-// a follow-up.
+// `-tier all` runs every tier sequentially. Any tier mismatch is
+// a hard stop with the diverging ledger numbers and hashes
+// printed for diagnosis.
 //
 // Defaults:
 //   - bucket: cfg.Storage.S3BucketArchive, falling back to
