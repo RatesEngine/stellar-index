@@ -200,19 +200,33 @@ func run(cfgPath string, dryRun bool) error { //nolint:gocognit,funlen,gocyclo /
 		})
 	}
 
-	// Rate limit — per-IP anonymous bucket only for now. Per-API-key
-	// buckets arrive with SEP-10 / apikey auth (see docs/reference/
-	// api-design.md §6). When Redis is unavailable, no bucket is
-	// constructed — the middleware is omitted and the stack runs
-	// uncapped. An operator who cares will see this in readyz.
+	// Rate limit — separate buckets per tier (F-0008 remediation).
+	// `anon` is keyed by remote IP (with Subject.Identifier when an
+	// auth middleware has stamped one); `auth` is keyed per-API-key
+	// or per-Subject for authenticated tiers (apikey, SEP-10). When
+	// Redis is unavailable, neither bucket is constructed — the
+	// middleware is omitted and the stack runs uncapped. An operator
+	// who cares will see this in readyz.
 	var rateLimit middleware.Middleware
-	if rdb != nil && cfg.API.AnonRateLimitPerMin > 0 {
-		bucket := ratelimit.New(rdb, cfg.API.AnonRateLimitPerMin, time.Minute)
-		rateLimit = middleware.RateLimit(
-			bucket,
-			nil, // default KeyFn — resolveRemoteIP from Logger middleware
+	if rdb != nil && (cfg.API.AnonRateLimitPerMin > 0 || cfg.API.KeyRateLimitPerMin > 0) {
+		var anonBucket, authBucket *ratelimit.Bucket
+		if cfg.API.AnonRateLimitPerMin > 0 {
+			anonBucket = ratelimit.New(rdb, cfg.API.AnonRateLimitPerMin, time.Minute)
+		}
+		if cfg.API.KeyRateLimitPerMin > 0 {
+			authBucket = ratelimit.New(rdb, cfg.API.KeyRateLimitPerMin, time.Minute)
+		}
+		rateLimit = middleware.RateLimitBySubject(
+			anonBucket,
+			authBucket,
 			middleware.SkipHealthAndMetrics,
 			logger.With("component", "ratelimit"),
+		)
+		logger.Info("rate-limit tiers wired",
+			"anon_per_min", cfg.API.AnonRateLimitPerMin,
+			"key_per_min", cfg.API.KeyRateLimitPerMin,
+			"anon_enabled", anonBucket != nil,
+			"key_enabled", authBucket != nil,
 		)
 	}
 
