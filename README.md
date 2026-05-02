@@ -97,9 +97,21 @@ long-form rationale; each becomes a numbered ADR.
   CEX + FX fleet, TimescaleDB hypertables + continuous
   aggregates, and the `ledgerstream -> dispatcher` indexer binary
   with Prometheus scrape target.
-- ✅ REST API v1 serving `/healthz`, `/readyz`, `/version`,
-  `/assets`, `/price`, `/history`, `/ohlc`, `/vwap`, `/twap`,
-  `/markets`, `/oracle/latest` behind CORS + per-IP rate limit.
+- ✅ REST + SSE API v1 surface (full list at
+  [`docs/reference/api/index.html`](docs/reference/api/index.html)):
+  pricing (`/price`, `/price/batch`, `/price/tip`, `/vwap`, `/twap`,
+  `/observations`), historical (`/history`, `/history/since-inception`,
+  `/ohlc`, `/chart`), catalogue (`/assets`, `/assets/{id}`, `/markets`,
+  `/pairs`, `/sources`), oracle passthrough (`/oracle/latest`,
+  `/oracle/prices`, `/oracle/lastprice`, `/oracle/x_last_price`),
+  account self-service (`/account/me`, `/account/usage`,
+  `/account/keys`), SEP-10 web auth (`/auth/sep10/challenge`,
+  `/auth/sep10/token`), SSE streams (`/price/stream`,
+  `/price/tip/stream`, `/observations/stream`), plus operator
+  endpoints (`/healthz`, `/readyz`, `/version`, `/metrics`).
+  Behind CORS, subject-aware rate limit (anon-IP + key-tier),
+  trusted-proxy CIDR allow-list, and per-route Cache-Control with
+  CDN-tier `s-maxage` gated on `api.cdn_enabled`.
 - ✅ Aggregation engine: VWAP/TWAP orchestrator with closed-bucket
   Redis cache, cross-pair triangulation (X2.5 forex-snap), Phase 1+2
   anomaly response, multi-factor confidence score, freeze policy.
