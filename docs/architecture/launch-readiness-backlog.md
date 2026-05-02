@@ -1,6 +1,6 @@
 ---
 title: Launch readiness backlog
-last_verified: 2026-05-01
+last_verified: 2026-05-02
 status: living document
 ---
 
@@ -52,7 +52,7 @@ Within each surface, ordered by dependency.
 |---|---|---|---|---|---|---|---|
 | L2.1 | VWAP/TWAP impl across venues + per-pair USD volume threshold | Wk 5 | ~5 days | L1.1 | L3.* | `internal/aggregate` + `Config.MinUSDVolume` filter in `internal/aggregate/orchestrator/orchestrator.go::refreshPairWindow` | ✅ |
 | L2.2 | `usd_volume` column populated per trade + FX anchor multiplication | Wk 5 | half-day | L2.1 | L3.* | `internal/storage/timescale/trades.go::tradeUSDVolume` (off-chain CEX/FX + USD-or-USD-pegged quote) + X2.5 forex snap (`internal/aggregate/orchestrator/triangulate.go::legPrice`) | ⚠ |
-| L2.3 | Forex factor snap rule for chained-fiat closed-bucket consistency (ADR-0018) | Wk 5 | half-day | L2.2 | L3.* | `internal/aggregate/triangulate` | 🟡 |
+| L2.3 | Forex factor snap rule for chained-fiat closed-bucket consistency (ADR-0018) | Wk 5 | half-day | L2.2 | L3.* | `internal/aggregate/orchestrator/triangulate.go::isFXLeg` + `legPrice` (X2.5 snap path); FX-source enumeration via `internal/sources/external.FXSources()`; storage primitive `FXSourceTradeAtOrBefore` selects the most recent FX-source quote at-or-before bucket-end with deterministic across-region tiebreak. | ✅ |
 | L2.4 | Phase 1 anomaly thresholds — per-class TOML defaults wired into orchestrator Tick + freeze writer (ADR-0019 stop-gap, see #199 / #226 / #235) | Wk 5 | half-day | L2.1 | L3.1 | `internal/aggregate/anomaly` + config | 🟢 |
 | L2.5 | Phase 2 statistical baseline — MAD math + `volatility_baseline_1m` table + refresh worker + aggregator wire-up shipped across 4 PRs (ADR-0019). | Wk 6 | ~3 days | L2.4 | L3.1 | `internal/aggregate/baseline` + migration | 🟢 |
 | L2.6 | Multi-factor confidence score on every published price — math + orchestrator wire-up + cross-oracle wiring + API surface shipped across 4 PRs (closes L2.6) | Wk 6 | ~2 days | L2.5 | L3.1 | `internal/aggregate/confidence` | 🟢 |
