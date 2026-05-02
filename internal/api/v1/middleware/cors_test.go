@@ -149,3 +149,38 @@ func TestCORS_NoOriginNoHeaders(t *testing.T) {
 		t.Errorf("wildcard should still respond: got %q", got)
 	}
 }
+
+// TestCORS_DefaultAllowedMethodsIncludePOST pins the v1-surface-
+// matching default. Pre-2026-05-02 the default was {GET, HEAD,
+// OPTIONS}; cross-origin POST to /v1/account/keys etc. would fail
+// preflight unless the operator overrode AllowedMethods. Now POST
+// is in the default set so the API binary's
+// `CORS(CORSOptions{AllowedOrigins: ...})` shorthand wires
+// browser-callable POST endpoints out of the box.
+func TestCORS_DefaultAllowedMethodsIncludePOST(t *testing.T) {
+	h := middleware.CORS(middleware.CORSOptions{
+		AllowedOrigins: []string{"https://wallet.example.com"},
+		// AllowedMethods unset → exercise the default
+	})(corsOK())
+
+	r := httptest.NewRequest(http.MethodOptions, "/v1/account/keys", nil)
+	r.Header.Set("Origin", "https://wallet.example.com")
+	r.Header.Set("Access-Control-Request-Method", "POST")
+	w := httptest.NewRecorder()
+	h.ServeHTTP(w, r)
+
+	if w.Code != http.StatusNoContent {
+		t.Fatalf("preflight status = %d, want 204", w.Code)
+	}
+	got := w.Header().Get("Access-Control-Allow-Methods")
+	if !contains(got, "POST") {
+		t.Errorf("Allow-Methods default = %q, want substring POST", got)
+	}
+	// GET, HEAD, OPTIONS still present — POST is additive, not
+	// replacing.
+	for _, m := range []string{"GET", "HEAD", "OPTIONS"} {
+		if !contains(got, m) {
+			t.Errorf("Allow-Methods default = %q, want substring %q", got, m)
+		}
+	}
+}

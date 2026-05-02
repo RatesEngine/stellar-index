@@ -18,9 +18,12 @@ type CORSOptions struct {
 	// Empty slice = no cross-origin access permitted.
 	AllowedOrigins []string
 
-	// AllowedMethods defaults to {GET, HEAD, OPTIONS} when empty.
-	// The v1 API is read-only, so write verbs aren't listed by
-	// default — add them when auth + write endpoints ship.
+	// AllowedMethods defaults to {GET, HEAD, OPTIONS, POST} when
+	// empty — matches the v1 surface (POST /v1/account/keys,
+	// POST /v1/auth/sep10/token, POST /v1/price/batch). Operators
+	// who want a stricter cross-origin posture set the field
+	// explicitly (e.g. drop POST when their browser clients only
+	// read).
 	AllowedMethods []string
 
 	// AllowedHeaders is the list of non-safe-listed headers clients
@@ -56,7 +59,7 @@ func CORS(opts CORSOptions) Middleware {
 	allowed := buildOriginSet(opts.AllowedOrigins)
 	wildcard := allowed["*"]
 	methods := strings.Join(defaultIfEmpty(opts.AllowedMethods,
-		[]string{"GET", "HEAD", "OPTIONS"}), ", ")
+		[]string{"GET", "HEAD", "OPTIONS", "POST"}), ", ")
 	headers := strings.Join(defaultIfEmpty(opts.AllowedHeaders,
 		[]string{"Content-Type", "Authorization", "X-Request-Id"}), ", ")
 	maxAge := opts.MaxAge
