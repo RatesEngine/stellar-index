@@ -17,6 +17,19 @@ against.
 
 ### Fixed
 
+- **Rate-limit middleware now honours `Subject.RateLimitPerMin`** —
+  the field was plumbed end-to-end (storage record → validator →
+  Subject → `/v1/account/me`) but `RateLimitBySubject` only
+  consulted the bucket's static `Max()`, so a paid customer with a
+  per-key override of e.g. 5000/min got throttled at the deployment
+  default (typically 1000). `Bucket.TakeN(ctx, key, max)` accepts
+  a per-call override (≤0 falls back to `b.max`); the middleware
+  passes `subject.RateLimitPerMin` through and surfaces the
+  effective limit in the `X-RateLimit-Limit` response header.
+  Anonymous callers continue to use the bucket default (no per-IP
+  override path). Closes another exposed-but-never-driven gap from
+  the account self-service work.
+
 - **`/v1/account/me` now returns the credential's `label`** —
   `APIKeyRecord.Label` was set at creation time and the OpenAPI
   `Account` schema declared the field, but the path
