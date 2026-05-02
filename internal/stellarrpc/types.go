@@ -7,16 +7,6 @@ import (
 	"github.com/RatesEngine/rates-engine/internal/events"
 )
 
-// Event is now a deprecated alias for [events.Event]. The type
-// moved to internal/events during PR 165b so source decoders
-// could stop depending on the JSON-RPC client package.
-//
-// Deprecated: use events.Event directly. Alias retained so the
-// RPC-based consumer loops in the source packages keep compiling
-// during the 165b → 165d transition; removed in PR 165d when the
-// indexer retires the per-source orchestrator.
-type Event = events.Event
-
 // sanityCheck validates that a getEvents response is internally
 // consistent. Caught conditions:
 //
@@ -136,12 +126,12 @@ type VersionInfo struct {
 
 // EventsResponse is the response from getEvents.
 type EventsResponse struct {
-	Events                []Event `json:"events"`
-	Cursor                string  `json:"cursor,omitempty"`
-	LatestLedger          uint32  `json:"latestLedger"`
-	OldestLedger          uint32  `json:"oldestLedger"`
-	LatestLedgerCloseTime string  `json:"latestLedgerCloseTime,omitempty"`
-	OldestLedgerCloseTime string  `json:"oldestLedgerCloseTime,omitempty"`
+	Events                []events.Event `json:"events"`
+	Cursor                string         `json:"cursor,omitempty"`
+	LatestLedger          uint32         `json:"latestLedger"`
+	OldestLedger          uint32         `json:"oldestLedger"`
+	LatestLedgerCloseTime string         `json:"latestLedgerCloseTime,omitempty"`
+	OldestLedgerCloseTime string         `json:"oldestLedgerCloseTime,omitempty"`
 }
 
 // EventFilter restricts which events getEvents returns.
