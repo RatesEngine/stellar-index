@@ -165,10 +165,15 @@ type Options struct {
 	Auth middleware.Middleware
 
 	// RateLimit, when non-nil, is appended to the middleware stack
-	// as the innermost wrapper — so the Logger middleware has
-	// already populated remote_ip into the request context.
-	// Typically constructed via middleware.RateLimit(...) with a
-	// ratelimit.Bucket built against the shared Redis client.
+	// as the innermost wrapper — so the Logger + Auth middlewares
+	// have already populated remote_ip + Subject into the request
+	// context. Typically constructed via
+	// middleware.RateLimitBySubject(anonBucket, authBucket, ...)
+	// so the per-tier limits (api.anon_rate_limit_per_min vs
+	// api.key_rate_limit_per_min) actually take effect; the older
+	// single-bucket middleware.RateLimit shape is kept for tests
+	// but production wiring uses the by-subject form. See
+	// cmd/ratesengine-api/main.go for the canonical wire-up.
 	RateLimit middleware.Middleware
 
 	// Hub, when non-nil, backs the closed-bucket SSE endpoint
