@@ -51,7 +51,7 @@ Phase-3 validator work.
 | Service | State 2026-04-23 | Notes |
 |---------|------------------|-------|
 | postgresql@15-main | active | |
-| ~~stellar-core~~ | **REMOVED 2026-04-23** | Primary daemon dropped — archive pipeline doesn't need it; see [archival-nodes.md](../../discovery/data-sources/archival-nodes.md) for revival path in Phase 3. |
+| ~~stellar-core~~ | **REMOVED 2026-04-23** | Primary daemon dropped — archive pipeline doesn't need it; see [archival-nodes.md](../discovery/data-sources/archival-nodes.md) for revival path in Phase 3. |
 | ~~stellar-rpc~~ | **REMOVED 2026-04-23** | Redundant for our data path — our own indexer will consume galexie's MinIO output directly via `ingest.ApplyLedgerMetadata`. Public API is `/v1/price` + `/v1/vwap` + `/v1/twap` + `/v1/ohlc` + …, not `/rpc`. See §Architecture below. |
 | galexie | active, exporting | Own captive-core; uploading `FC4A....xdr.zst` objects to MinIO galexie-live at ~1/ledger. ~100 objects/5min at steady state. **The single stellar-core on the box.** |
 | minio | active | Buckets: `galexie-live`, `galexie-archive`, `backups` |

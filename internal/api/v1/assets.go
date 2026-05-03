@@ -122,6 +122,20 @@ type AssetDetail struct {
 	// callers presenting the field should distinguish these.
 	VolumeUSD24h *string `json:"volume_24h_usd,omitempty"`
 
+	// Change24hPct is the trailing-24h price change as a signed
+	// percentage with two fractional digits (e.g. "+1.27", "-0.05",
+	// "0.00"). Computed as `(now_usd - then_usd) / then_usd * 100`
+	// where `then_usd` anchors to the latest closed prices_1m bucket
+	// whose end is at or before now-24h.
+	//
+	// Null when (a) no current USD price exists for the asset (no
+	// indexed pair, or pair is fiat:USD itself), or (b) no closed
+	// bucket exists in the 24h-ago window (asset first traded < 24h
+	// ago, or trade history was retention-pruned). Surfacing the
+	// distinction is intentional — clients render "—" rather than
+	// fabricating "0%".
+	Change24hPct *string `json:"change_24h_pct,omitempty"`
+
 	// ─── SEP-1 issuance declarations ───────────────────────────
 	//
 	// Drawn directly from the issuer's stellar.toml [[CURRENCIES]]
