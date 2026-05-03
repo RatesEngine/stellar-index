@@ -28,7 +28,8 @@ make test              # unit tests (fast; ~2 min)
 make test-integration  # integration tests — spins its own containers via testcontainers-go (requires Docker)
 make lint              # golangci-lint (gofumpt runs as a golangci formatter; architectural import boundaries enforced by scripts/ci/lint-imports.sh)
 make build             # all binaries into bin/
-make docs-all          # regenerate docs/reference/ from OpenAPI + struct tags
+make docs-all          # regenerate docs/reference/ from OpenAPI + struct tags + obs/*.go metric Name: fields
+make verify            # canonical pre-push gate (fmt, vet, lint, docs, test) — run this before every push
 ```
 
 No command should ever require manual network access during
