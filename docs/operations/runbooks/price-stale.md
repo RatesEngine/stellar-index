@@ -1,6 +1,6 @@
 ---
 title: Runbook — price-stale
-last_verified: 2026-04-23
+last_verified: 2026-05-02
 status: draft
 severity: P2
 ---
@@ -43,8 +43,8 @@ psql -c "SELECT source, max(observed_at) AS most_recent
          GROUP BY source ORDER BY most_recent DESC;"
 
 # Is the aggregator binary running and writing CAGGs?
-kubectl -n ratesengine get pods -l app=aggregator
-curl -s http://aggregator:9464/metrics | grep aggregator_writes_total
+ssh root@aggregator-01 "systemctl status ratesengine-aggregator --no-pager | head -10"
+ssh root@aggregator-01 "curl -s http://localhost:9464/metrics | grep aggregator_writes_total"
 ```
 
 ## Typical root causes

@@ -26,8 +26,13 @@ import (
 // The challenge/verify endpoints are mounted by the API server
 // when an SEP10Validator is wired.
 //
-// Production implementation lands in Phase 5; current [NoopSEP10Validator]
-// returns [ErrNotImplemented] from every method.
+// The production implementation lives in
+// [internal/auth/sep10.Validator] (built by `auth/sep10.NewValidator`
+// from `cmd/ratesengine-api/main.go`'s `buildSEP10Validator`).
+// The [NoopSEP10Validator] in this package is the fallback for
+// non-`auth_mode=sep10` deployments: every method returns
+// [ErrNotImplemented] so the SEP-10 endpoints respond 503 without
+// crashing the rest of the API.
 //
 // References:
 //

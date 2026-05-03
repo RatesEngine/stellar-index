@@ -42,10 +42,10 @@ Short form:
 ```sh
 make help              # list every target
 make dev               # docker-compose up the full stack
-make lint              # gofumpt + golangci-lint + archlint
+make lint              # gofumpt + golangci-lint (architectural import boundaries: `make lint-imports`)
 make test              # unit tests with race
-make verify            # everything short of integration + load
-make docs-all          # regenerate reference docs from OpenAPI + struct tags
+make verify            # canonical pre-push gate (fmt, vet, lint, docs, test) — short of integration + load + chaos
+make docs-all          # regenerate reference docs from OpenAPI + struct tags + obs/*.go metric Name: fields
 ```
 
 ## When in doubt

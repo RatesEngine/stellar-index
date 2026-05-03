@@ -1,6 +1,6 @@
 ---
 title: Getting started with Rates Engine
-last_verified: 2026-04-29
+last_verified: 2026-05-03
 status: living doc
 ---
 
@@ -124,19 +124,35 @@ your needs (see [ADR-0018](adr/0018-api-consistency-surfaces.md)).
 | TypeScript | (planned) | — |
 | Python | (planned) | — |
 
-The Go client is a thin generated layer over the v1 REST API:
+The Go client is a thin layer over the v1 REST API:
 
 ```go
 import "github.com/RatesEngine/rates-engine/pkg/client"
 
 c := client.New(client.Options{
     BaseURL: "https://api.ratesengine.net",
-    APIKey:  "rate_xxxxxxxx...",
+    APIKey:  "rek_xxxxxxxx...", // optional; anonymous tier works without
 })
-price, err := c.GetPrice(ctx, "native", "fiat:USD")
+env, err := c.Price(ctx, client.PriceQuery{
+    Asset: "native",
+    Quote: "fiat:USD", // optional; defaults to "fiat:USD" server-side
+})
+if err != nil {
+    // *client.APIError carries Status, Title, Detail, RequestID
+    log.Fatal(err)
+}
+fmt.Printf("%s = %s %s (as of %s)\n",
+    env.Data.AssetID, env.Data.Price, env.Data.Quote, env.AsOf)
 ```
 
-See [`pkg/client/doc.go`](../pkg/client/doc.go) for the full surface.
+The SDK returns the full `Envelope[T]` shape so consumers can read
+`env.Flags.Stale`, `env.Flags.DivergenceWarning`, etc. alongside
+`env.Data`. See [`pkg/client/doc.go`](../pkg/client/doc.go) for the
+full surface — typed methods today: `Price`, `Assets`, `Asset`,
+`AssetMetadata`, `HistorySinceInception`, `Me`, `Usage`,
+`CreateKey`. Bulk + chart + market-discovery surfaces (`PriceBatch`,
+`PriceTip`, `OHLC`, `History`, `Sources`, `Markets`, `Pair`) ship
+in the same package as PR queue lands.
 
 ## Errors
 
