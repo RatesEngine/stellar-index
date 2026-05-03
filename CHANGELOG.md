@@ -17,6 +17,13 @@ against.
 
 ### Fixed
 
+- **`DistinctAssets` performance-note no longer anchored at 0004**
+  — the comment said the planned `asset_catalogue` migration
+  "takes the next free slot" and named 0004 as the most recent.
+  Migrations are at 0015 on main; the parenthetical confused
+  readers about which slot the future migration would take.
+  Trimmed the migration anchor; the future-work statement
+  remains accurate (no catalogue migration on main today).
 - **`/v1/account/me` now returns the credential's `label`** —
   `APIKeyRecord.Label` was set at creation time and the OpenAPI
   `Account` schema declared the field, but the path
