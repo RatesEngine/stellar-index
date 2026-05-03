@@ -1,6 +1,7 @@
 package baseline
 
 import (
+	"math"
 	"time"
 )
 
@@ -86,7 +87,35 @@ func (m MultiBaseline) HasAnyValid() bool {
 // The third return value is `valid` — false when [HasAnyValid]
 // would return false. Callers branch to the bootstrap policy on
 // !valid rather than treating the zero z-score as a real reading.
+//
+// Pathological observations (NaN or ±Inf for `x`) return
+// (+Inf, the smallest available window, true). Reasoning: such
+// inputs indicate an upstream pipeline anomaly — almost certainly
+// a bad price — and the orchestrator's freeze threshold check
+// (`z > ZScoreMinFreeze`, default 5) MUST fire on them. Without
+// this guard a NaN observation would silently bypass the Phase 2
+// freeze (NaN > 5 is false in IEEE 754) and let an obviously-bad
+// price through. We pick "smallest window" so attribution points
+// to the most precise scale the caller has wired.
 func (m MultiBaseline) MaxZScore(x float64) (z float64, window time.Duration, valid bool) {
+	if !m.HasAnyValid() {
+		return 0, 0, false
+	}
+	if math.IsNaN(x) || math.IsInf(x, 0) {
+		// Treat pathological inputs as max-anomalous so downstream
+		// threshold checks fire. Window attribution: pick the
+		// smallest available — operators see "1d" (or fall back to
+		// 7d / 30d) rather than 0, matching the "this window
+		// detected it" doc contract for legitimate anomalies.
+		switch {
+		case m.Day1 != nil:
+			return math.Inf(1), Window1d, true
+		case m.Day7 != nil:
+			return math.Inf(1), Window7d, true
+		default:
+			return math.Inf(1), Window30d, true
+		}
+	}
 	if b := m.Day1; b != nil {
 		zb := b.ZScore(x)
 		if !valid || zb > z {

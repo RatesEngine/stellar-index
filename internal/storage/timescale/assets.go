@@ -20,11 +20,9 @@ import (
 // Performance note: this UNIONs two DISTINCT scans across the
 // trades hypertable — it works but isn't fast once we have
 // millions of trades. The planned optimisation is a materialised
-// `asset_catalogue` table populated incrementally by the indexer.
-// Lands in a future migration (migrations/0004 has already been
-// used for the off-chain trades-ledger relaxation; the catalogue
-// migration takes the next free slot). Until then, this is
-// correct.
+// `asset_catalogue` table populated incrementally by the indexer
+// (a future migration; not on main today). Until that lands,
+// this implementation is correct.
 func (s *Store) DistinctAssets(ctx context.Context, cursor string, limit int) ([]canonical.Asset, string, error) {
 	if limit < 1 {
 		limit = 100

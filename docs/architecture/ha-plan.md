@@ -1,18 +1,19 @@
 ---
 title: High-Availability Infrastructure Plan
-last_verified: 2026-04-27
+last_verified: 2026-05-02
 status: ratified — binding decisions in [ADR-0008](../adr/0008-ha-topology.md); long-form design here
 ---
 
 # High-Availability Infrastructure Plan
 
 **Owner:** @ash (arch) + @alex (ops).
-**Ratification target:** end of Week 2.
-**This doc superseded by:** concrete per-component design docs as they
-land — `docs/architecture/storage-timescaledb.md`,
-`docs/architecture/cache-redis.md`,
-`docs/architecture/storage-minio.md`. This plan is the **umbrella**
-that binds them.
+**Ratification:** binding decisions accepted as
+[ADR-0008](../adr/0008-ha-topology.md) on 2026-04-27. Per-component
+implementation lives in the relevant ansible roles
+(`configs/ansible/roles/{patroni,redis-sentinel,haproxy,prometheus,loki}/`)
+and the per-region storage strategy is captured in
+[ADR-0016](../adr/0016-per-region-storage-strategy.md). This plan
+is the **umbrella** that binds them.
 
 The HA story is constrained by three non-negotiable numbers from the
 RFPs:
@@ -62,8 +63,12 @@ The phased 1 → 3 validator rollout lives in
 [infrastructure/validator-rollout.md](infrastructure/validator-rollout.md).
 Per-node hardware spec is in
 [infrastructure/archival-node-spec.md](infrastructure/archival-node-spec.md).
-At launch we run exactly **one** region (R1/London) with this
-topology; R2 and R3 join over Weeks 6–8 with the same shape.
+At launch we run exactly **one** region (R1, Hetzner FSN1 in
+Falkenstein, DE) with this topology; R2 (AWS us-east-1) and R3
+(Vultr Singapore) join post-launch with the same per-region
+shape, modified per
+[ADR-0016](../adr/0016-per-region-storage-strategy.md) for each
+provider's storage economics.
 
 ### 2.1 Primary (colo)
 
@@ -334,9 +339,17 @@ to prevent two migrators from racing.
 
 ### 3.10 ratesengine-ops
 
-Admin CLI. Runs from an operator's SSH session on `ops-01`.
-Subcommands documented in [docs/operations/ops-cli.md](../operations/ops-cli.md)
-(Week 8).
+Admin CLI. Runs from an operator's SSH session on `ops-01`. Top-level
+subcommands cover backfill, gap-detection, archive-completeness
+verify/check/fix, source decoder verification, RPC probe, archive
+hash-walking, and supply-snapshot generation. The authoritative
+list is the binary's own help output (`ratesengine-ops --help`)
+and the source at
+[`cmd/ratesengine-ops/main.go`](../../cmd/ratesengine-ops/main.go);
+operator runbooks under
+[`docs/operations/runbooks/`](../operations/runbooks/) cite the
+specific subcommand each playbook needs (e.g. `runbooks/all-ingestion-down.md`
+references `ratesengine-ops backfill`).
 
 ---
 
@@ -519,29 +532,37 @@ checklist at its owning week.
 
 ---
 
-## 11. Open questions (to close before Week 2 design review)
+## 11. Open questions — closed
 
-1. **Colo provider + physical locations** — tentatively London Dc1
-   + NYC Dc2; needs confirmation and power/network diagrams.
-2. **Patroni vs Stolon vs native TimescaleDB HA** — Patroni is the
-   default but Stolon has smaller operational surface.
-3. **MinIO EC(6+3) vs EC(4+2)** — 6+3 costs more disks but tolerates
-   3 failures. Decide at rack layout time.
-4. **Cloud DR region** — AWS us-east-1 vs eu-west-1. Probably
-   eu-west-1 to match colo latency profile for European users.
-5. **Secret-manager choice** — Vault (self-hosted, more work) vs
-   AWS Secrets Manager (managed, vendor-dependent).
-6. **Observability stack** — Grafana/Prometheus pair vs Grafana
-   Cloud Free; the free tier has retention caps that matter here.
+The Week-1 plan called for these to land as ADRs or design docs by
+end of Week 2. They have:
 
-Each becomes an ADR or a `docs/architecture/infrastructure/*.md`
-design doc by end of Week 2.
+1. **Colo provider + physical locations** — Hetzner FSN1 (Falkenstein, DE)
+   for R1; AWS for R2; Vultr for R3. See
+   [r1-deployment-state.md](../operations/r1-deployment-state.md) +
+   [ADR-0016](../adr/0016-per-region-storage-strategy.md).
+2. **Patroni vs Stolon vs native TimescaleDB HA** — Patroni; landed
+   as `configs/ansible/roles/patroni/`.
+3. **MinIO EC(6+3) vs EC(4+2)** — EC(6+3); fixed in ADR-0008 §2.
+4. **Cloud DR region** — AWS eu-west-1 (matching the colo latency
+   profile for European users); ADR-0008 §5.
+5. **Secret-manager choice** — Ansible Vault for inventory secrets;
+   `configs/ansible/inventory/r1.secrets.yml` is the source of
+   truth, per the playbook README.
+6. **Observability stack** — self-hosted Prometheus + Grafana +
+   Loki; ansible roles
+   `configs/ansible/roles/{prometheus,loki}/` deploy them.
+
+Anything new that surfaces post-ratification gets a fresh ADR rather
+than an entry here.
 
 ---
 
 ## 12. Cost envelope
 
-Order-of-magnitude; firmed up in `docs/operations/cost-model.md` (Week 2).
+Order-of-magnitude; concrete per-line numbers live in the operator's
+own cost spreadsheet (not checked into the repo). Below is the
+shape used to size hardware in ADR-0008.
 
 | Line | Monthly | Notes |
 | ---- | ------- | ----- |

@@ -16,9 +16,9 @@ import (
 //
 // The flow is two round-trips:
 //
-//  1. Client: GET /v1/auth/challenge?account=G… → server returns Challenge
+//  1. Client: GET /v1/auth/sep10/challenge?account=G… → server returns Challenge
 //  2. Client signs the Challenge.TransactionXDR with its account key
-//  3. Client: POST /v1/auth/verify with the signed XDR → server returns JWT
+//  3. Client: POST /v1/auth/sep10/token with the signed XDR → server returns JWT
 //  4. Client uses `Authorization: Bearer <jwt>` on subsequent requests
 //
 // The middleware (`internal/api/v1/middleware/auth.go`) calls
@@ -26,13 +26,14 @@ import (
 // The challenge/verify endpoints are mounted by the API server
 // when an SEP10Validator is wired.
 //
-// The production implementation lives in [internal/auth/sep10] —
-// `sep10.NewValidator(sep10.Options{…})` is wired by
-// `cmd/ratesengine-api`. [NoopSEP10Validator] is the
-// graceful-degradation fallback used when the deployment hasn't
-// configured the required env vars (signing seed + JWT secret);
-// the API still serves on every other endpoint, but
-// `/v1/auth/sep10/*` returns 503. With `auth_mode=sep10` the
+// The production implementation lives in
+// [internal/auth/sep10.Validator] — `sep10.NewValidator(sep10.Options{…})`
+// is built by `cmd/ratesengine-api/main.go`'s `buildSEP10Validator`.
+// [NoopSEP10Validator] in this package is the graceful-degradation
+// fallback used when the deployment hasn't configured the required
+// env vars (signing seed + JWT secret); every method returns
+// [ErrNotImplemented] so `/v1/auth/sep10/*` responds 503 while the
+// rest of the API still serves. With `auth_mode=sep10` the
 // missing-config path is a hard startup failure instead.
 //
 // References:

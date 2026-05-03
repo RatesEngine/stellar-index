@@ -1,6 +1,6 @@
 ---
 title: Runbook — rpc-lag
-last_verified: 2026-04-30
+last_verified: 2026-05-02
 status: draft
 severity: P2
 ---
@@ -52,8 +52,8 @@ curl -s -XPOST http://stellar-rpc:8000 \
   -d '{"jsonrpc":"2.0","id":1,"method":"getHealth"}' | jq
 
 # Is the RPC's captive-core process alive + caught up?
-# (when running via docker-compose / k8s)
-kubectl logs -f stellar-rpc | tail -50
+# stellar-rpc ships as a systemd unit per the archival-node role.
+ssh root@<host> "journalctl -u stellar-rpc -n 50 --no-pager"
 ```
 
 Key signals:

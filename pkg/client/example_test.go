@@ -138,6 +138,108 @@ func ExampleClient_Asset() {
 	// Output: USDC (USD Coin) — sep1=verified, circulating=12345678900000000, market_cap=$1234567890.00
 }
 
+// ExampleClient_HistorySinceInception demonstrates the historical
+// time-series surface. Granularity is fixed per request; the API
+// returns one bucket per granularity step from inception (or as
+// far back as the trades hypertable goes for the asset) up to
+// the most recent closed bucket.
+func ExampleClient_HistorySinceInception() {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{
+			"data": {
+				"asset_id": "native",
+				"quote": "fiat:USD",
+				"granularity": "1d",
+				"points": [
+					{"t": "2026-04-01T00:00:00Z", "p": "0.13201"},
+					{"t": "2026-04-02T00:00:00Z", "p": "0.13280"},
+					{"t": "2026-04-03T00:00:00Z", "p": "0.13345"}
+				]
+			},
+			"as_of": "2026-05-02T12:00:00Z",
+			"flags": {"stale": false, "reduced_redundancy": false, "triangulated": false, "divergence_warning": false}
+		}`))
+	}))
+	defer srv.Close()
+
+	c := client.New(client.Options{BaseURL: srv.URL})
+	resp, err := c.HistorySinceInception(context.Background(), client.HistoryQuery{
+		Asset:       "native",
+		Quote:       "fiat:USD",
+		Granularity: "1d",
+	})
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
+	fmt.Printf("XLM/USD daily points: %d (first %s)\n",
+		len(resp.Data.Points), resp.Data.Points[0].T.Format("2006-01-02"))
+	// Output: XLM/USD daily points: 3 (first 2026-04-01)
+}
+
+// ExampleClient_Assets demonstrates the paginated asset catalogue.
+// Use Cursor/Limit for cursor-based pagination; the response's
+// Pagination block carries `next_cursor` for the follow-up call.
+func ExampleClient_Assets() {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{
+			"data": [
+				{"asset_id": "native", "type": "native", "decimals": 7},
+				{"asset_id": "USDC-GA5...", "type": "classic", "code": "USDC", "decimals": 7}
+			],
+			"as_of": "2026-05-02T12:00:00Z",
+			"flags": {"stale": false, "reduced_redundancy": false, "triangulated": false, "divergence_warning": false},
+			"pagination": {"next": "eyJsYXN0IjoiVVNEQy1HQTUuLi4ifQ=="}
+		}`))
+	}))
+	defer srv.Close()
+
+	c := client.New(client.Options{BaseURL: srv.URL})
+	resp, err := c.Assets(context.Background(), client.AssetsOptions{Limit: 2})
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
+	fmt.Printf("first page: %d assets, next=%t\n",
+		len(resp.Data), resp.Pagination.Next != "")
+	// Output: first page: 2 assets, next=true
+}
+
+// ExampleClient_Me demonstrates the authenticated-caller identity
+// surface. Returns the API key's tier + remaining rate-limit
+// budget so consumers can self-throttle without parsing
+// `X-RateLimit-*` headers on every call.
+func ExampleClient_Me() {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{
+			"data": {
+				"identifier": "GAVATAR...",
+				"tier": "apikey",
+				"key_id": "ak_demo_abc123",
+				"label": "demo wallet",
+				"rate_limit_per_min": 1000,
+				"created_at": "2026-04-15T10:00:00Z"
+			},
+			"as_of": "2026-05-02T12:00:00Z",
+			"flags": {"stale": false, "reduced_redundancy": false, "triangulated": false, "divergence_warning": false}
+		}`))
+	}))
+	defer srv.Close()
+
+	c := client.New(client.Options{BaseURL: srv.URL, APIKey: "ak_demo_abc123"})
+	resp, err := c.Me(context.Background())
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
+	fmt.Printf("tier=%s, budget=%d rpm, label=%q\n",
+		resp.Data.Tier, resp.Data.RateLimitPerMin, resp.Data.Label)
+	// Output: tier=apikey, budget=1000 rpm, label="demo wallet"
+}
+
 // ExampleAPIError demonstrates the status-typed error helpers the
 // SDK exposes — wallet integrators handle 404 / 429 / 5xx with
 // explicit predicates rather than parsing error strings.

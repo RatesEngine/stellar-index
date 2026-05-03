@@ -1,5 +1,9 @@
-// Package anomaly implements the Phase-1 stop-gap from
-// [ADR-0019] — per-asset-class threshold-based anomaly detection.
+// Package anomaly implements the Phase-1 component of [ADR-0019] —
+// per-asset-class threshold-based anomaly detection. It runs alongside
+// Phase 2 (per-asset MAD baselines + multi-factor confidence) rather
+// than being superseded by it: both layers vote into the orchestrator's
+// freeze decision via the [Phase2FreezeConfig] AND-of-three-signals
+// rule.
 //
 // # Scope
 //
@@ -10,10 +14,14 @@
 //   - Decision is a function of (asset class, prev VWAP, curr VWAP, source count)
 //   - No statistical baseline; no z-score; no confidence score
 //
-// Phase 2 (planned per ADR-0019 §Phase 2) replaces this with
-// per-asset MAD-based statistical baselines + multi-factor confidence
-// scoring. Phase 1 is the safety-net we ship before Phase 2 lands so
-// the API has SOME anomaly protection during the gap.
+// Phase 2, shipped, lives at [internal/aggregate/baseline]
+// (per-asset MAD baselines + z-score) and
+// [internal/aggregate/confidence] (six-factor weighted-geomean
+// confidence). The aggregator orchestrator wires both — Phase 1 here
+// gates "is this movement large for this asset class" while Phase 2
+// gates "is this movement statistically anomalous AND under-confident
+// AND under-corroborated". Both must agree before the orchestrator
+// flips ActionFreeze.
 //
 // # The decision algorithm
 //
@@ -48,16 +56,21 @@
 // classified falls through to [ClassDefault] with conservative
 // thresholds.
 //
-// Phase 2 will auto-classify based on observed volatility profile;
-// Phase 1 is operator-curated.
+// Per-asset behaviour layers on top via Phase 2's
+// [internal/aggregate/baseline] (volatility profile observed from
+// the `volatility_baseline_1m` CAGG); the per-class table here
+// remains operator-curated as a coarse safety net for assets
+// without enough trades to build a baseline.
 //
 // # Why this lives separate from internal/aggregate
 //
 // The aggregate package computes VWAP/TWAP from raw trade slices;
 // it doesn't know about wire policy. The anomaly package consumes
 // that output and decides whether to publish it. Keeping them
-// separate lets Phase 1 ship without changing the math layer, and
-// later lets Phase 2's confidence scoring layer cleanly on top.
+// separate lets Phase 1's class thresholds and Phase 2's
+// per-asset baselines + confidence ([internal/aggregate/baseline],
+// [internal/aggregate/confidence]) layer cleanly on top of an
+// untouched math layer.
 //
 // [ADR-0019]: ../../docs/adr/0019-anomaly-response-and-confidence-scoring.md
 package anomaly
