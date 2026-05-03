@@ -110,6 +110,21 @@ against.
   the most-anomalous possible observation. Four new tests cover
   NaN, +Inf, -Inf, and the 30d-only attribution edge case.
 
+- **SSE event-ID generator no longer wraps to duplicates after
+  65 536 same-millisecond IDs** — `streaming.Generator.Next`'s
+  docstring promised "never returns the same ID twice" but the
+  counter was masked to 16 bits, so 65 536 IDs in a single
+  millisecond wrapped back to 0 and re-issued every prior ID
+  for that millisecond. A reproducer pinned the bug at 4 464
+  duplicates across 70 000 calls in one ms (e.g. publish-burst
+  during a fan-out spike, tight test loop, or hot-loop in
+  operator code). Fix advances the synthetic millis by 1 when
+  the counter saturates instead of wrapping; subsequent
+  wall-clock ms catch back up via the existing `now > oldMillis`
+  branch. Three new tests: NeverDuplicates (70 k same-ms calls),
+  StrictlyIncreasing (lex-sort = chronological invariant),
+  ConcurrentNoDuplicates (50×2 000 goroutines).
+
 - **`divergence.Compare` recovers panics from references** — the
   function's docstring promised "panic recovered, etc. are
   recorded in Failures", but the per-reference goroutine had no
