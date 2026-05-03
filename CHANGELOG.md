@@ -17,6 +17,28 @@ against.
 
 ### Added
 
+- **L3.9 PR 1 of 2: aggregator-side closed-bucket stream
+  publisher**. New `orchestrator.StreamPublisher` interface
+  declared on `orchestrator.Config`; called once per
+  successful (pair, window) VWAP cache write with the freshly-
+  computed value + bucket-end timestamp. Best-effort:
+  publish errors log + increment
+  `ratesengine_aggregator_stream_publish_total{outcome="error"}`
+  but never block the tick (the VWAP cache key is the
+  source of truth; the stream is enrichment for SSE
+  subscribers).
+  - Production implementation: new package
+    `internal/api/streaming/redispub/` with `Publisher`
+    (Redis `PUBLISH` to `ratesengine:closed-bucket:v1`) +
+    `ClosedBucketEvent` JSON wire shape.
+  - Wired in `cmd/ratesengine-aggregator/main.go` —
+    PUBLISH on a no-subscriber channel is a Redis no-op,
+    so wiring is safe ahead of the matching API-side
+    subscriber.
+  - PR 2 of L3.9 will add the API-binary subscriber that
+    republishes each event on the in-process
+    `streaming.Hub` so `/v1/price/stream` SSE clients
+    receive the fan-out.
 - **`change_24h_pct` populated on `/v1/assets/{id}`** — the field
   was declared in OpenAPI (Freighter RFP §"Bulk query support"
   mentions a 24h % change alongside current price) but no Go code

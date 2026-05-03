@@ -230,6 +230,20 @@ coverage gaps without per-pair cardinality cost — a sustained
 all-empty signal usually means the configured pair set has
 out-grown the live data.
 
+### `ratesengine_aggregator_stream_publish_total`
+
+Counter, label `outcome` (`ok` / `error`).
+
+Closed-bucket events handed to the orchestrator's
+[`StreamPublisher`](../../../internal/aggregate/orchestrator/orchestrator.go)
+(L3.9 SSE fan-out). Production wiring is the Redis-pub/sub
+publisher in `internal/api/streaming/redispub`; the API binary's
+matching subscriber republishes each event on the in-process
+`streaming.Hub` so `/v1/price/stream` clients receive the
+fan-out. `outcome="error"` is best-effort failure (publish
+errored; the next tick retries; the VWAP cache write itself
+is unaffected).
+
 ### `ratesengine_aggregator_dropped_trades_total`
 
 Counter, label `reason` (`class` / `outlier`).

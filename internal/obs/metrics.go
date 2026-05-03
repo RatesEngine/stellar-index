@@ -51,6 +51,7 @@ func init() {
 		AggregatorTicksTotal,
 		AggregatorVWAPWritesTotal,
 		AggregatorEmptyWindowsTotal,
+		AggregatorStreamPublishTotal,
 		AggregatorDroppedTradesTotal,
 		AggregatorDroppedWindowsTotal,
 
@@ -402,6 +403,24 @@ var AggregatorEmptyWindowsTotal = prometheus.NewCounter(
 		Name: "ratesengine_aggregator_empty_windows_total",
 		Help: "Aggregator (pair, window) refreshes that produced zero eligible trades.",
 	},
+)
+
+// AggregatorStreamPublishTotal — count of closed-bucket events the
+// orchestrator handed to the configured StreamPublisher (Redis
+// pub/sub fan-out for /v1/price/stream subscribers per L3.9).
+// Labelled by outcome:
+//
+//   - "ok" — Publish returned nil; subscribers (if any) receive the event.
+//   - "error" — Publish returned a non-nil error; the next tick retries
+//     and the VWAP cache write itself is unaffected.
+//
+// Unset when no StreamPublisher is wired (no fan-out path).
+var AggregatorStreamPublishTotal = prometheus.NewCounterVec(
+	prometheus.CounterOpts{
+		Name: "ratesengine_aggregator_stream_publish_total",
+		Help: "Closed-bucket stream publishes attempted by the aggregator, labelled by outcome.",
+	},
+	[]string{"outcome"},
 )
 
 // AggregatorDroppedTradesTotal — count of trades the orchestrator
