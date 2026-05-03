@@ -208,6 +208,45 @@ func TestRateLimitBySubject_AuthenticatedUsesAuthBucket(t *testing.T) {
 	}
 }
 
+func TestRateLimitBySubject_PerKeyOverrideRaisesLimit(t *testing.T) {
+	// Default authBucket caps at 2/min; the subject's APIKey record
+	// carries RateLimitPerMin=5 (paid-tier custom plan). The
+	// middleware must honour the override — both in the wire-side
+	// X-RateLimit-Limit header and the actual allow/deny decision.
+	rdb, _ := newRLRedis(t)
+	anonBucket := ratelimit.New(rdb, 1, time.Minute)
+	authBucket := ratelimit.New(rdb, 2, time.Minute)
+
+	h := middleware.RateLimitBySubject(anonBucket, authBucket, nil, nil)(okHandler())
+	reqWithSubject := func() *http.Request {
+		r := httptest.NewRequest(http.MethodGet, "/", nil)
+		subject := auth.Subject{
+			Identifier:      "owner-paid",
+			Tier:            auth.TierAPIKey,
+			KeyID:           "kid_paid",
+			RateLimitPerMin: 5,
+		}
+		return r.WithContext(auth.WithSubject(r.Context(), subject))
+	}
+
+	for i := 1; i <= 5; i++ {
+		w := httptest.NewRecorder()
+		h.ServeHTTP(w, reqWithSubject())
+		if w.Code != http.StatusOK {
+			t.Fatalf("hit %d: status = %d, want 200 (override should permit 5/min)", i, w.Code)
+		}
+		if got := w.Header().Get("X-RateLimit-Limit"); got != "5" {
+			t.Errorf("hit %d: X-RateLimit-Limit = %q, want 5 (override surfaced on wire)", i, got)
+		}
+	}
+
+	w := httptest.NewRecorder()
+	h.ServeHTTP(w, reqWithSubject())
+	if w.Code != http.StatusTooManyRequests {
+		t.Fatalf("6th hit status = %d, want 429 (override should still cap at 5)", w.Code)
+	}
+}
+
 func TestRateLimitBySubject_AnonymousUsesAnonBucket(t *testing.T) {
 	rdb, _ := newRLRedis(t)
 	anonBucket := ratelimit.New(rdb, 1, time.Minute)

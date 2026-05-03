@@ -131,8 +131,15 @@ func persistTrade(ctx context.Context, logger *slog.Logger, store *timescale.Sto
 	// Check populated-ness BEFORE InsertTrade so the metric counts
 	// every attempt — including the ON CONFLICT DO NOTHING dedupe
 	// case, which from this layer's POV is still "we tried, with
-	// this populate state". Pure predicate; no DB hit.
-	populated := store.WouldPopulateUSDVolume(t)
+	// this populate state".
+	//
+	// Phase 2 fallback (USDVolumeFXResolver, when wired) makes this
+	// predicate consult the resolver synchronously. Production
+	// resolvers are in-memory cache lookups; a slow resolver here
+	// would slow the trade-insert hot path by 2× (predicate +
+	// InsertTrade both call it). Treat resolver latency as a
+	// constraint when wiring one.
+	populated := store.WouldPopulateUSDVolume(ctx, t)
 
 	if err := store.InsertTrade(ctx, t); err != nil {
 		obs.SourceInsertErrorsTotal.WithLabelValues(t.Source, "trade").Inc()

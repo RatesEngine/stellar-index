@@ -1,0 +1,50 @@
+baseURL = "https://status.ratesengine.net/"
+languageCode = "en-gb"
+title = "Rates Engine status"
+theme = "cstate"
+
+# cstate is a static-site generator built on Hugo. Operators
+# update component status + post incident markdown files in
+# `content/`; CI rebuilds the site on every commit and the
+# resulting `public/` directory is what the CDN / static-site
+# host serves. This config is the source-of-truth — the
+# deployment target (Pages, Vercel, Netlify, S3+CloudFront, …)
+# is operator-chosen and lives outside this repo.
+
+# Operator notes: posting an incident
+# ===================================
+# 1. New file under content/issues/<UTC-date>-<slug>.md (see
+#    docs/operations/runbooks/sev-status-page-update.md for the
+#    front-matter template + the SEV-playbook touchpoint).
+# 2. Push to the status-page branch / repo. CI rebuilds, CDN
+#    invalidates, status.ratesengine.net updates within 1–2 min.
+# 3. Resolve by editing the same file's `resolved` front-matter
+#    field to `true`.
+#
+# The Freighter RFP §SLA F3.5 / F3.6 require status updates within
+# the SEV-1 / SEV-2 timelines; runbook above is the prescribed
+# update path.
+
+[params]
+  description = "Public status page for the Rates Engine pricing API. Real-time + historical pricing for the Stellar network."
+  logo = "/logo.svg"
+  # systemStatus controls the top-of-page banner. Possible values:
+  #   "ok"           → All systems operational (green)
+  #   "disrupted"    → Partial outage (yellow)
+  #   "down"         → Major outage (red)
+  #   "notice"       → Scheduled maintenance / advisory (blue)
+  # Unset = derived from the worst component status. Operators
+  # override during major incidents to communicate even when no
+  # component is fully red yet (e.g. during rolling-restart).
+  # systemStatus = "ok"
+
+  # Show the last-incident timestamp on the index page.
+  showSummaryEnd = true
+
+  # Show component history toggles (per-component history view).
+  showCollapseToggles = true
+
+  # Include a public RSS / Atom feed at /index.xml so customers
+  # can subscribe in their feed-reader of choice without
+  # registering for our notification system.
+  rss = true

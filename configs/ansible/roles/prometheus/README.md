@@ -31,11 +31,17 @@ emitted metrics. Design rationale lives in
   - TCP + UDP 9094 between the two prom hosts (AlertManager
     cluster gossip).
 
-- Vault contents (both optional; leaving either empty just
-  means alerts of the corresponding severity won't fan out):
-  - `alertmanager_pagerduty_key` — PagerDuty integration key.
+- Vault contents (all optional; leaving any empty just means
+  the corresponding fanout doesn't happen):
+  - `alertmanager_pagerduty_key` — PagerDuty integration key
+    (used for the critical-severity route).
   - `alertmanager_slack_webhook_url` — Slack incoming-webhook
-    URL.
+    URL (used for the warning + info routes via `chat-fanout`).
+  - `alertmanager_discord_webhook_url` — Discord webhook URL
+    (used for the warning + info routes via `chat-fanout`,
+    parallel to Slack — operators can run either, both, or
+    neither). Per the proposal's commitment to "integrated
+    into discord/slack" alerting.
 
 ## Inventory model
 
@@ -97,19 +103,22 @@ on `prometheus_pair`. No manual scrape-config edits.
 
 ```
 Critical → PagerDuty
-Warning  → Slack
-Info     → Slack
+Warning  → chat-fanout (Slack + Discord, whichever are wired)
+Info     → chat-fanout (Slack + Discord, whichever are wired)
 ```
 
 Inhibit rules:
 - A critical alert for a given `(alertname, service)` mutes
   warning + info alerts for the same pair to avoid stacking.
 
-When `alertmanager_pagerduty_key` or
-`alertmanager_slack_webhook_url` are empty, the corresponding
-notification routes are simply unconfigured — alerts accumulate
-in the AlertManager UI (`http://127.0.0.1:9093/` via SSH-tunnel)
-but don't fan out. Useful for non-prod.
+When `alertmanager_pagerduty_key` is empty the critical route
+is unconfigured. When BOTH `alertmanager_slack_webhook_url` AND
+`alertmanager_discord_webhook_url` are empty the chat-fanout
+receiver has no destinations and alerts accumulate in the
+AlertManager UI (`http://127.0.0.1:9093/` via SSH-tunnel) but
+don't reach a chat channel. Setting one webhook routes warnings
+and info to that channel; setting both produces parallel fanout.
+The preflight task warns when neither is set.
 
 ## Storage + retention
 
