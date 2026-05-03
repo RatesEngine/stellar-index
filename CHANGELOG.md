@@ -291,6 +291,13 @@ against.
 
 ### Fixed
 
+- **`DistinctAssets` performance-note no longer anchored at 0004**
+  — the comment said the planned `asset_catalogue` migration
+  "takes the next free slot" and named 0004 as the most recent.
+  Migrations are at 0015 on main; the parenthetical confused
+  readers about which slot the future migration would take.
+  Trimmed the migration anchor; the future-work statement
+  remains accurate (no catalogue migration on main today).
 - **`internal/storage/timescale/doc.go` reflects shipped reality**
   — fixed two stale claims: (a) the migration manifest listed
   only 0001-0004, but 0001-0015 are applied today (5 supply
