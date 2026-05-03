@@ -1,6 +1,6 @@
 ---
 title: SEV drill framework
-last_verified: 2026-04-30
+last_verified: 2026-05-02
 status: ratified
 ---
 
@@ -28,10 +28,16 @@ playbook + relevant runbooks.
 docs/operations/drills/
 ├── README.md                          (this file)
 ├── scenarios/                          tabletop scripts (canonical)
-│   ├── sev1-timescale-primary-failover.md
-│   └── sev2-source-decoder-regression.md
+│   ├── sev1-timescale-primary-failover.md   (storage tier — disk-full)
+│   ├── sev1-anomaly-freeze-stuck.md         (aggregator — stuck freeze marker)
+│   ├── sev2-source-decoder-regression.md    (ingest — protocol upgrade)
+│   └── sev2-redis-sentinel-failover.md      (cache tier — master swap)
 └── YYYY-MM-<short-name>.md              one writeup per executed drill
 ```
+
+Pick scenarios so a launch readiness drill cycle covers all
+four critical paths: storage HA, cache HA, ingest robustness,
+and aggregator anomaly response.
 
 The scripts under `scenarios/` are the **canonical inputs** —
 re-used across drills. Each drill executed against a script

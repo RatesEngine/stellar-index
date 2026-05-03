@@ -138,6 +138,33 @@ var luaScript = redis.NewScript(lua)
 // Callers should fail open on error — a Redis outage must not take
 // the whole API offline.
 func (b *Bucket) Take(ctx context.Context, key string) (Result, error) {
+	return b.TakeN(ctx, key, 0)
+}
+
+// TakeN is [Bucket.Take] with a per-call limit override. When limit
+// is > 0 it replaces the bucket's configured max for this single
+// increment; when ≤ 0 the bucket's max is used (so `TakeN(ctx, key, 0)`
+// is identical to `Take(ctx, key)`).
+//
+// Use this for per-subject limits that vary at runtime — e.g. a paid
+// customer with a `rate_limit_per_min` override on their API-key
+// record. The Redis key is shared across calls (so concurrent
+// requests still race against the same counter); the bucket itself
+// is stateless w.r.t. limit — the value is only consulted at Take
+// time, passed through to the Lua script as ARGV[2].
+//
+// Callers MUST pass a stable limit for any given Redis key —
+// flipping the limit between calls would race the in-flight counter
+// against an inconsistent threshold and produce undefined allow/deny
+// outcomes for callers near the boundary. In practice this means the
+// per-key override must be sticky for the key's lifetime, which is
+// the design today (RateLimitPerMin lives on the APIKeyRecord, not
+// on the request).
+func (b *Bucket) TakeN(ctx context.Context, key string, limit int) (Result, error) {
+	effectiveMax := b.max
+	if limit > 0 {
+		effectiveMax = limit
+	}
 	minute := b.nowFn().Unix() / int64(b.window.Seconds())
 	// url.QueryEscape the caller-supplied key before concatenating
 	// with ":<minute>". Callers pass things like IPv6 addresses (which
@@ -158,7 +185,7 @@ func (b *Bucket) Take(ctx context.Context, key string) (Result, error) {
 	}
 
 	resRaw, err := luaScript.Run(ctx, b.rdb, []string{rlKey},
-		ttlSeconds, b.max,
+		ttlSeconds, effectiveMax,
 	).Result()
 	if err != nil {
 		return Result{}, fmt.Errorf("ratelimit: eval: %w", err)
@@ -185,8 +212,8 @@ func (b *Bucket) Take(ctx context.Context, key string) (Result, error) {
 	// a deny into an allow. Pair-comparing against max_count is the
 	// same check the Lua makes; keeping them symmetric eliminates
 	// the decoupling bug entirely.
-	allowed := int(count) <= b.max
-	remaining := b.max - int(count)
+	allowed := int(count) <= effectiveMax
+	remaining := effectiveMax - int(count)
 	if remaining < 0 {
 		remaining = 0
 	}
