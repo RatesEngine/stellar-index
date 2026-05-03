@@ -1,6 +1,6 @@
 ---
 title: Incident (SEV) Playbook
-last_verified: 2026-04-22
+last_verified: 2026-05-02
 status: ratified
 ---
 
@@ -175,10 +175,22 @@ Decision tree:
 
 ### 5.1 Status page
 
-Public status page lives at `https://status.ratesengine.net`
-(TBD — provisioning in Week 8).
+Public status page lives at `https://status.ratesengine.net` —
+hosted as a static site separate from the API so it survives
+any outage that takes down our infrastructure (which is exactly
+when customers need it).
 
-Status-page states:
+**Source of truth:**
+[`deploy/status-page/`](../../deploy/status-page/) — site
+config + component list + incident template.
+
+**How to post:**
+[`runbooks/sev-status-page-update.md`](runbooks/sev-status-page-update.md)
+— the binding runbook for every SEV-1 / SEV-2 update. Includes
+the cadence (hourly / daily), the safe-to-publish detail level,
+and the workstation-down fallback path.
+
+Status-page states (per cstate's component model):
 - **Operational** — green; no active incident.
 - **Degraded performance** — SEV-2 or equivalent partial outage.
 - **Partial outage** — major subsystem down but some API surface
