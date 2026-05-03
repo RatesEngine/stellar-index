@@ -32,8 +32,11 @@ type Account struct {
 }
 
 // UsageRow is the wire shape for /v1/account/usage entries. The
-// underlying counter store does not yet exist (Phase 5 follow-up),
-// so the handler currently returns an empty list placeholder.
+// rate-limit middleware records per-key request counts in Redis,
+// but nothing rolls them up into the daily UsageRow shape yet —
+// the handler currently returns an empty list behind the locked
+// wire shape so a future rollup writer (separate PR) can fill in
+// the data without a wire-format change.
 type UsageRow struct {
 	Date      string `json:"date"` // YYYY-MM-DD
 	Requests  int    `json:"requests"`

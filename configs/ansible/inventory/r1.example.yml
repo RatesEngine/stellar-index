@@ -1,5 +1,5 @@
 ---
-# Inventory for R1 (London / Hetzner EX63).
+# Inventory for R1 (Hetzner FSN1 — Falkenstein, Germany).
 # Copy to r1.yml and fill in the Xs.
 #
 # Secrets (DB password, etc.) live in r1.secrets.yml (ansible-vault).
@@ -43,7 +43,7 @@ all:
   vars:
     # ───── Region identity ─────────────────────────────────────────
     region_id:           "r1"
-    region_name:         "London"
+    region_name:         "FSN1"
     home_domain:         "ratesengine.net"
 
     # ───── Stellar network ─────────────────────────────────────────
@@ -77,10 +77,16 @@ all:
     zfs_data_pool_name:  "data"
 
     # ───── Roles colocated on this host ────────────────────────────
+    # stellar-core + stellar-rpc were REMOVED from r1 on 2026-04-23
+    # — galexie carries its own embedded captive-core, the indexer
+    # reads MinIO directly, and the public API is /v1/*, not /rpc.
+    # See docs/operations/r1-deployment-state.md §"Architecture
+    # after 2026-04-23 trim" for the rationale; flip to true only
+    # when validating Phase-3 validator work.
     run_postgres:        true
-    run_stellar_core:    true
+    run_stellar_core:    false
     run_galexie:         true
-    run_stellar_rpc:     true
+    run_stellar_rpc:     false
     run_minio:           true                 # local single-node MinIO
     run_observability:   true
 

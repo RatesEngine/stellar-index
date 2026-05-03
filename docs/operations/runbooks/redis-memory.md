@@ -1,6 +1,6 @@
 ---
 title: Runbook — redis-memory
-last_verified: 2026-04-23
+last_verified: 2026-05-02
 status: draft
 severity: P2
 ---
@@ -50,8 +50,9 @@ redis-cli --memkeys   # requires redis-cli 6.0+
    for.** Symptom: steady climb over days/weeks, eviction rate
    grew alongside.
    - Mitigation: scale up `maxmemory` (if host has headroom) or
-     scale out (shard). `deploy/k8s/redis-*.yaml` sets `maxmemory`
-     explicitly — bump it.
+     scale out (shard). `maxmemory` is set in
+     `configs/ansible/roles/redis-sentinel/templates/redis.conf.j2`
+     — bump and re-apply the role.
 
 2. **Key-explosion bug.** A handler writes per-request cache keys
    without TTL, or with overly long TTLs, and the key-space

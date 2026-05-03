@@ -1,6 +1,6 @@
 ---
 title: Runbook — host-memory-high
-last_verified: 2026-04-23
+last_verified: 2026-05-02
 status: draft
 severity: P3
 ---
@@ -28,9 +28,9 @@ severity: P3
 ## Quick diagnosis (≤ 5 min)
 
 ```sh
-# Top memory users
+# Top memory users (per-process and per-cgroup)
 ssh <host> 'ps auxww --sort=-%mem | head -10'
-kubectl top pods --containers --sort-by=memory | head -10
+ssh <host> 'systemd-cgtop --order=memory --iterations=2 -n 20'
 
 # What's the breakdown? Page cache vs RSS vs slab?
 ssh <host> 'free -h; cat /proc/meminfo | head -30'
