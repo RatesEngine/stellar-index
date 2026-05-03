@@ -1,6 +1,6 @@
 ---
 title: Runbook — source-stopped
-last_verified: 2026-04-30
+last_verified: 2026-05-02
 status: draft
 severity: P2
 ---
@@ -47,9 +47,10 @@ Key signals:
 
 ## Mitigation
 
-- [ ] Step 1 — restart the indexer if this is isolated to one or a few sources and the broader host/process is healthy.
+- [ ] Step 1 — restart the indexer if this is isolated to one or a few sources and the broader host/process is healthy. The indexer runs as `ratesengine-indexer.service` on the indexer hosts (per the `archival-node` ansible role; ADR-0008).
   ```sh
-  kubectl rollout restart deploy/ratesengine-indexer
+  ssh root@indexer-01 "systemctl restart ratesengine-indexer && \
+    systemctl status ratesengine-indexer --no-pager | head -10"
   ```
 - [ ] Step 2 — if events flow for 1-2 min post-restart then stop again: the source is probably legitimately idle, misconfigured, or affected by upstream schema drift. Compare its recent on-chain/off-chain activity to expectations before treating it as a dead connector.
 - [ ] Step 3 — if decode-errors is also firing: the contract's event shape changed. Follow `decode-errors.md` Step 3 (update decoder + backfill).

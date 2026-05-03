@@ -78,6 +78,7 @@ import (
 	"github.com/RatesEngine/rates-engine/internal/aggregate/baseline"
 	"github.com/RatesEngine/rates-engine/internal/aggregate/freeze"
 	"github.com/RatesEngine/rates-engine/internal/aggregate/orchestrator"
+	"github.com/RatesEngine/rates-engine/internal/api/streaming/redispub"
 	"github.com/RatesEngine/rates-engine/internal/canonical"
 	"github.com/RatesEngine/rates-engine/internal/config"
 	"github.com/RatesEngine/rates-engine/internal/divergence"
@@ -259,6 +260,20 @@ func run(cfgPath string, dryRun bool) error {
 			"references", names)
 	}
 
+	// ─── Closed-bucket stream publisher ────────────────────────
+	// L3.9: fan out each successful (pair, window) VWAP cache write
+	// to API-side `/v1/price/stream` subscribers via Redis pub/sub.
+	// Always wired here — there's no operator config gate yet
+	// because the channel is statically named (DefaultChannel) and
+	// PUBLISH on a no-subscriber channel is a Redis no-op. The
+	// matching API-side subscriber lives in PR 2 of L3.9.
+	streamPub, err := redispub.NewPublisher(rdb, redispub.DefaultChannel)
+	if err != nil {
+		return fmt.Errorf("redispub.NewPublisher: %w", err)
+	}
+	logger.Info("closed-bucket stream publisher wired",
+		"channel", streamPub.Channel())
+
 	orch := orchestrator.New(store, rdb, orchestrator.Config{
 		Pairs:              pairs,
 		Windows:            windows, // nil → orchestrator.DefaultWindows
@@ -279,6 +294,7 @@ func run(cfgPath string, dryRun bool) error {
 		OutlierSigmaThreshold:     cfg.Aggregate.OutlierSigmaThreshold,
 		MinUSDVolume:              cfg.Aggregate.MinUSDVolume,
 		DivergenceRefresher:       divRefresher,
+		StreamPublisher:           streamPub,
 		Logger:                    logger,
 	})
 
