@@ -1,6 +1,6 @@
 ---
 title: Runbook — host-down
-last_verified: 2026-04-23
+last_verified: 2026-05-02
 status: draft
 severity: P2
 ---
@@ -75,10 +75,17 @@ journalctl -u node_exporter -n 50
       only validator): pivot immediately to the service's
       runbook (`timescale-primary-down.md` etc.) — that's the
       real fire.
-- [ ] Step 5 — cordon/taint the node in k8s so the scheduler
-      doesn't keep retrying it: `kubectl cordon <node>`.
-- [ ] Verification: `up{job="node",instance=<host>}` returns to 1;
-      any orphaned pods rescheduled or the host's back online.
+- [ ] Step 5 — drain the dead host out of any HAProxy pool
+      fronting it so request retries stop chasing it (e.g. for the
+      API tier:
+      `echo 'disable server api_pool/<host>' | socat stdio
+      /run/haproxy/admin.sock` on each LB). Patroni already
+      promoted the replacement primary if it was the Postgres
+      leader; redis Sentinel already promoted a replica if it was
+      the Redis primary — those don't need an operator step.
+- [ ] Verification: `up{job="node",instance=<host>}` returns to 1
+      once the host is back, OR the host's role has been reassigned
+      and dependent service alerts have cleared.
 
 ## Root cause analysis
 
@@ -94,10 +101,10 @@ journalctl -u node_exporter -n 50
   (see `host-memory-high.md`), node_exporter is often the first to
   get killed. The alert is technically accurate ("we lost visibility")
   but the underlying problem is memory, not host liveness.
-- **Prometheus scrape-path issue** — DNS, Consul/K8s service
-  discovery, firewall rule change. `up == 0` for the whole
-  `job="node"` across multiple instances simultaneously points
-  at the scraper, not the targets.
+- **Prometheus scrape-path issue** — DNS, the prometheus role's
+  static-config inventory, firewall rule change. `up == 0` for
+  the whole `job="node"` across multiple instances simultaneously
+  points at the scraper, not the targets.
 
 ## Related
 
