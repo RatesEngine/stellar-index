@@ -7,174 +7,209 @@ status: operator runbook
 # Public status page setup
 
 Operator runbook for closing **L4.11 / Task #73** in the
-launch-readiness backlog. Decision: **cstate on GitHub Pages**.
-The architectural rationale is in [the prior session
-summary](../architecture/launch-readiness-backlog.md) — short
-version:
+launch-readiness backlog. **Decision: Upptime on GitHub Pages.**
 
-- A status page MUST be hosted independently of the infra it
-  reports on. Same-rack hosting defeats the purpose during an
-  outage.
-- GitHub Pages is independent of our origin (Hetzner FSN1, AWS
-  us-east-1, Vultr Singapore) and free.
-- Incident posting via `git push` matches the project's
-  "everything reviewable" stance and is scriptable for
-  on-call use.
-- We can graduate to Statuspage.io later without changing the
-  customer-facing URL.
+## Why Upptime
+
+The hard rule: a status page MUST be hosted independently of the
+infra it reports on. Same-rack hosting defeats the purpose during
+an outage. GitHub Pages is independent of our origin (Hetzner FSN1,
+AWS us-east-1, Vultr Singapore) — that constraint binds the choice.
+
+Within the GitHub-Pages-hosted set, the choice was between cstate
+(static, manual incident posting) and **Upptime** (GitHub
+Actions-driven, auto-monitored). Upptime wins on:
+
+- **Automatic uptime monitoring.** GitHub Actions probes every 5
+  minutes; failed probes auto-create issues; recovered endpoints
+  auto-close them. The on-call doesn't have to remember "post
+  to the status page" during an incident — the page updates
+  itself.
+- **Same-stance fit.** Incident lifecycle is GitHub issues; the
+  workflow is the project's existing review/escalation tooling.
+- **Same independence guarantee.** Hosted on GitHub Pages,
+  operationally independent of our origin.
+
+We can graduate to a custom solution post-launch if customer
+feedback wants tighter brand integration — the URL stays
+`status.ratesengine.net`, only the backend swaps.
+
+**Tradeoff to know about:** Upptime probes from GitHub's IPs
+only. If our service is reachable from GitHub's runners but
+unreachable from real customers (e.g. EU-only outage), Upptime
+won't catch it. Our own Prometheus alerts on the API path catch
+real outages; Upptime is the *public-facing* signal, not the
+authoritative one.
 
 ## Step-by-step
 
 ```
 0. Pre-reqs
-   - GitHub org (the same one hosting the rates-engine repo).
-   - DNS for ratesengine.net under operator control (Cloudflare
-     per cdn-setup.md).
+   - GitHub org "RatesEngine" (already exists; same org as
+     the rates-engine repo).
+   - DNS for ratesengine.net under operator control
+     (Cloudflare per cdn-setup.md).
+   - A GitHub PAT with repo + workflow scope, stored as
+     repo secret GH_PAT in the new status repo. (Upptime's
+     workflows commit response-time data back to the repo;
+     the default GITHUB_TOKEN can't trigger downstream
+     workflows on its own commits.)
 
-1. Create the status repo
+1. Fork the Upptime template
+   - Go to https://github.com/upptime/upptime
+   - "Use this template" → Create a new repo
+   - Owner: RatesEngine
    - Name: ratesengine-status
-   - Visibility: Public (the page is public; the repo is too)
-   - Initialise: empty (cstate will scaffold)
+   - Visibility: Public
 
-2. Scaffold from cstate
-   - Local clone:
-       git clone git@github.com:RatesEngine/ratesengine-status.git
-       cd ratesengine-status
-   - Initialise with cstate's hugo template:
-       git submodule add https://github.com/cstate/cstate themes/cstate
-       cp -r themes/cstate/exampleSite/* .
-   - Edit config.toml:
-       title = "Rates Engine Status"
-       baseurl = "https://status.ratesengine.net"
-       [params]
-         description = "Live status of the Rates Engine API + ingest layers."
-         brandName = "Rates Engine"
+2. Configure .upptimerc.yml
+   See the canonical example at upptime/upptime#readme.
+   Minimum config for Rates Engine:
 
-3. Define components (= surfaces an outage page would mention)
-   Create one file per component under `content/issues/.gitkeep`
-   alternatives, then list components in config.toml [[params.systems]]:
+       owner: RatesEngine
+       repo: ratesengine-status
 
-       [[params.systems]]
-         name = "API (api.ratesengine.net)"
-         category = "core"
-       [[params.systems]]
-         name = "Ingest pipeline"
-         category = "core"
-       [[params.systems]]
-         name = "Aggregator"
-         category = "core"
-       [[params.systems]]
-         name = "Multi-region replication (R1/R2/R3)"
-         category = "core"
-       [[params.systems]]
-         name = "SSE streams"
-         category = "core"
-       [[params.systems]]
-         name = "Documentation (docs.ratesengine.net)"
-         category = "secondary"
+       sites:
+         - name: API (api.ratesengine.net)
+           url: https://api.ratesengine.net/v1/healthz
+           expectedStatusCodes: [200]
+           assignees: [ash]
+         - name: API readiness
+           url: https://api.ratesengine.net/v1/readyz
+           expectedStatusCodes: [200]
+         - name: SSE (price tip stream)
+           url: https://api.ratesengine.net/v1/price/tip/stream?base=native&quote=fiat:USD
+           expectedStatusCodes: [200]
+           # SSE keeps the connection open; Upptime closes after
+           # status-line + first event. 5s timeout is enough.
+           maxResponseTime: 5000
+         - name: Documentation (docs.ratesengine.net)
+           url: https://docs.ratesengine.net
+           expectedStatusCodes: [200]
+         # r1/r2/r3 health if exposed publicly:
+         - name: API origin r1 (FSN1)
+           url: https://api-r1.ratesengine.net/v1/healthz
+           expectedStatusCodes: [200]
+         - name: API origin r2 (us-east-1)
+           url: https://api-r2.ratesengine.net/v1/healthz
+           expectedStatusCodes: [200]
+         - name: API origin r3 (Singapore)
+           url: https://api-r3.ratesengine.net/v1/healthz
+           expectedStatusCodes: [200]
 
-4. Wire GitHub Pages publishing
-   - Add .github/workflows/deploy.yml:
+       status-website:
+         cname: status.ratesengine.net
+         baseUrl: /
+         name: Rates Engine
+         introTitle: "Live status of the Rates Engine API + ingest layers"
+         introMessage: |
+           Probe results from GitHub-hosted runners every 5
+           minutes. Authoritative incident reporting lives on
+           the GitHub Issues tab of this repo.
+         logoUrl: https://docs.ratesengine.net/logo.png  # if applicable
 
-       name: deploy
-       on:
-         push:
-           branches: [main]
-       jobs:
-         build:
-           runs-on: ubuntu-latest
-           steps:
-             - uses: actions/checkout@v4
-               with: { submodules: true }
-             - uses: peaceiris/actions-hugo@v3
-               with: { hugo-version: latest, extended: true }
-             - run: hugo --minify
-             - uses: peaceiris/actions-gh-pages@v4
-               with:
-                 github_token: ${{ secrets.GITHUB_TOKEN }}
-                 publish_dir: ./public
-                 cname: status.ratesengine.net
+       assignees:
+         - ash
+
+       # Optional: post incident updates to a Slack webhook.
+       # If set, Upptime alerts on every status change. Skip
+       # if Slack notifications come from our own alerting
+       # stack (Alertmanager); double-noise is worse than one
+       # source.
+       #
+       # notifications:
+       #   - type: slack
+       #     url: $SLACK_WEBHOOK   # set as repo secret
+
+3. Configure repo secrets (Settings → Secrets → Actions)
+   - GH_PAT: a fine-grained PAT with `contents: write` +
+     `actions: write` on this repo only. Used by Upptime's
+     workflows to commit response-time history.
+
+4. Trigger first run
+   - Actions tab → "Uptime CI" → Run workflow.
+   - First run takes ~5 min: probes every site, generates
+     history JSON, pushes to gh-pages branch.
 
 5. DNS
    - In Cloudflare, add CNAME:
        Name: status
        Target: ratesengine.github.io   (default GitHub Pages hostname)
-       Proxy status: Proxied (Cloudflare in front gives us TLS + DDoS)
+       Proxy status: Proxied (Cloudflare in front gives us TLS
+                              + DDoS posture)
    - Wait ~5 min for cert provisioning.
+   - Verify https://status.ratesengine.net renders and shows
+     all sites.
 
 6. Smoke test
-   - First commit: a "v1 launch" maintenance entry under
-     content/issues/2026-05-03-launch.md scheduled in advance.
-   - Verify https://status.ratesengine.net renders and the
-     entry is visible.
+   - Force a probe failure: temporarily change one site's URL
+     in `.upptimerc.yml` to a 404 endpoint.
+   - Wait for the next 5-min probe cycle.
+   - Expect: a new GitHub issue auto-opens describing the
+     failure; the status page shows the affected component
+     as "down".
+   - Revert the URL; on the next probe cycle the issue
+     auto-closes and the page returns to "all systems
+     operational".
 ```
 
-## Posting an incident
+## Manual incident posting (when needed)
+
+Auto-monitoring catches downtime that's reachable-from-GitHub.
+For incidents Upptime can't see (correctness bugs, regional
+outages from non-GitHub viewpoints, policy decisions like
+maintenance windows), open a GitHub issue manually with the
+Upptime-recognised labels:
 
 ```sh
-cd ratesengine-status
-DATE=$(date -u +%Y-%m-%d-%H%M)
-cat > content/issues/${DATE}-degraded-api.md <<'EOF'
----
-title: "Degraded API performance"
-date: 2026-05-03T14:23:00Z
-resolved: false
-informational: false
-severity: down            # down | disrupted | notice
-affected: ["API (api.ratesengine.net)"]
----
-
-Investigating: API p95 latency elevated since 14:20 UTC.
-Likely R1 origin under load; failover to R2 in progress.
-EOF
-
-git add content/issues/${DATE}-degraded-api.md
-git commit -m "incident: API degraded $DATE"
-git push
+gh issue create \
+  --repo RatesEngine/ratesengine-status \
+  --title "Investigating: degraded VWAP accuracy on USDC pairs" \
+  --label "incident,API (api.ratesengine.net)" \
+  --body "Investigating reports of a ~0.5% drift on USDC-quoted
+VWAP since 14:20 UTC. Likely a stablecoin depeg signal not yet
+folded into the aggregator's confidence factor. Updates here."
 ```
 
-The Pages deploy runs immediately; subscribers refreshing the
-page see the update within ~30 seconds.
-
-To resolve:
-
-```sh
-# Edit the same file:
-# - Set `resolved: true`
-# - Append a "Resolved: <UTC time>" line + post-mortem summary
-git commit -am "incident: $DATE resolved"
-git push
-```
+The site-name label MUST match a name in `.upptimerc.yml`'s
+`sites:` list — that's how Upptime ties the issue to a
+component. Resolving the issue (closing it) flips the
+component back to "operational" on the page.
 
 ## Subscriptions
 
-cstate has no built-in subscriptions. Pair with one of:
+Upptime ships with:
 
-- **RSS** — cstate emits a feed at `/issues/index.xml`. Customers
-  subscribe via any RSS reader. Zero work on our side.
-- **Email** — point a Mailchimp / Buttondown form at the RSS
-  feed. ~30 min setup, $0–$10/mo.
-- **Slack/Discord webhooks** — post manually as part of the
-  incident-response runbook (we already do this for SEV
-  channels).
+- **RSS feed** at `/feed.xml` — zero config.
+- **History JSON** at `/api/<site>.json` — for any third-party
+  dashboard that wants raw data.
+- **Slack notification** support via the (commented) `notifications:`
+  block above.
 
-For v1 launch, ship with RSS only; add email if the first
-customer asks.
+For v1 launch, ship with RSS only; add Slack if the first
+customer asks. Email subscriptions are not built-in; pair
+with Mailchimp / Buttondown pointing at the RSS feed if needed
+post-launch.
 
 ## Verification (pre-launch checklist)
 
 - [ ] `https://status.ratesengine.net` renders and shows
-      "All systems operational" with the six components
-      listed above.
+      all sites.
 - [ ] TLS cert is valid (Cloudflare-issued).
-- [ ] RSS feed at `/issues/index.xml` validates as well-formed.
-- [ ] Test incident posted + resolved cleanly during a dev-time
-      drill.
-- [ ] On-call runbook (`docs/operations/sev-playbook.md`)
-      includes the "post a status update" step.
+- [ ] First probe cycle completed; status page shows
+      "all systems operational" (or accurate state).
+- [ ] RSS feed at `/feed.xml` validates as well-formed.
+- [ ] Test incident: forced a probe failure, confirmed an
+      issue auto-opened, reverted, confirmed it auto-closed.
+- [ ] Manual incident-posting workflow recorded in
+      [`sev-playbook.md`](sev-playbook.md) (post a status
+      update step).
+- [ ] L4.11 in [`launch-readiness-backlog.md`](../architecture/launch-readiness-backlog.md)
+      flipped 🟡 → ✅.
 
 ## Cross-references
 
 - Backlog row: L4.11 in [launch-readiness-backlog.md](../architecture/launch-readiness-backlog.md)
 - SEV escalation procedure: [sev-playbook.md](sev-playbook.md)
-- cstate upstream: <https://github.com/cstate/cstate>
+- Upptime upstream: <https://github.com/upptime/upptime>
+- Upptime examples gallery: <https://upptime.js.org/>

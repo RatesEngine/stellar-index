@@ -26,11 +26,18 @@ against.
     Cloudflare provisioning, SSE-passthrough config, verification
     `curl` commands, and a one-line rollback path.
   - [`docs/operations/status-page-setup.md`](docs/operations/status-page-setup.md)
-    — closes **L4.11**'s decision + provisioning. Decision: cstate
-    on GitHub Pages (host-independent of our origin; matches the
-    "everything reviewable in git" stance; can graduate to
-    Statuspage.io later without changing the customer URL).
-    Full setup walkthrough plus the incident-posting workflow.
+    — closes **L4.11**'s decision + provisioning. Decision:
+    **Upptime** on GitHub Pages (host-independent of our origin
+    AND auto-monitored — GitHub Actions probes every 5 min,
+    auto-creates incident issues on probe failure, auto-resolves
+    on recovery). Removes the on-call "must remember to post"
+    failure mode that a static page like cstate has. Full setup
+    walkthrough plus manual incident-posting via labelled GitHub
+    issues for incidents Upptime can't see (correctness bugs,
+    regional outages from non-GitHub viewpoints, maintenance
+    windows). We can graduate to a custom solution post-launch
+    if customer feedback wants tighter brand integration — the
+    URL stays `status.ratesengine.net`, only the backend swaps.
   - [`docs/operations/chaos-wave1-runbook.md`](docs/operations/chaos-wave1-runbook.md)
     — closes **L5.5**'s execution gap. The suite code is already
     shipped under `test/chaos/`; the runbook covers the pre-flight,
