@@ -96,6 +96,19 @@ against.
 
 ### Fixed
 
+- **`divergence.Compare` recovers panics from references** — the
+  function's docstring promised "panic recovered, etc. are
+  recorded in Failures", but the per-reference goroutine had no
+  `recover()` deferred. A misbehaving reference (network panic,
+  malformed-JSON parser blow-up, operator-supplied custom
+  reference with a bug) would take the whole comparison run
+  down + crash the worker. Now the goroutine recovers and
+  records the panic with a stable `panicked: <text>` failure
+  label so operators see which reference is broken without
+  reading goroutine traces. New `safeName` helper guards
+  `Reference.Name()` itself in case it's what panics — the
+  failure surfaces under `_unknown` in that path.
+
 - **Rate-limit middleware now honours `Subject.RateLimitPerMin`** —
   the field was plumbed end-to-end (storage record → validator →
   Subject → `/v1/account/me`) but `RateLimitBySubject` only
