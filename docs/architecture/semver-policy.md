@@ -106,10 +106,16 @@ git tag pkg/client/v0.2.0
 git push origin pkg/client/v0.2.0
 ```
 
-The repo's release process runs `make verify-tag <tag>` before
-pushing — confirms the working tree matches the tag, the
-CHANGELOG has an entry, and the package's own version constant
-(if any) matches.
+Pre-tag manual checks (the
+[release runbook](../operations/release-process.md) §"Pre-flight"
+captures the same set for the binary clock):
+
+- Working tree matches `main` and the tagged commit (`git status`
+  is clean; `git log -1` is the commit you intend to tag).
+- `CHANGELOG.md` has an entry under the new version with the PRs
+  it includes.
+- The package's own version constant (if any) matches the tag.
+- `make test` is green at the tagged commit.
 
 ---
 

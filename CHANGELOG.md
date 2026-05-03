@@ -407,6 +407,24 @@ against.
 
 ### Fixed
 
+- **L6.1 / L6.2 / L6.3 finalisation final-pass** — the three
+  finalisation rows were 🟢 with "drafts shipped, need final
+  pass". Walked each artefact (`CHANGELOG.md`,
+  `docs/architecture/semver-policy.md`,
+  `.github/RELEASE_NOTES_TEMPLATE.md`,
+  `docs/operations/release-process.md`,
+  `docs/operations/public-flip.md`) end-to-end. Single concrete
+  drift found + fixed: `semver-policy.md` cited a
+  `make verify-tag <tag>` target that doesn't exist (and that
+  `release-process.md` doesn't actually call); replaced the
+  paragraph with a manual pre-tag checklist that
+  `release-process.md`'s pre-flight already covers. Each row's
+  description in the launch-readiness backlog is now expanded
+  to point at what the artefact actually contains, then flipped
+  to ✅. (Other minor drifts in the same files — phantom
+  `pkg/types`, wrong `internal/anomaly` path in semver-policy,
+  ADR range `0001-0021` in public-flip — are already addressed
+  in open PRs #515 and #497 respectively.)
 - **Launch-readiness backlog: five 🟢 rows flipped to ✅ after
   audit found pure status drift** (no code changes, no
   remediation needed; just walking each row against the
