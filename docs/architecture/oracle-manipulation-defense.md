@@ -501,7 +501,9 @@ realistic manipulation attempts:
    ledgers) representing a 50% price spike. Confirm:
    - Outlier-storm alert fires within 1 bucket
    - VWAP barely moves (other sources dominate)
-   - Divergence monitoring (when shipped) flags it
+   - `flags.divergence_warning` flips on the affected pair (the
+     divergence service writes to `div:<asset>` Redis keys; the
+     `/v1/price` handler surfaces the flag)
 
 2. **Single-source compromise.** Configure a "malicious binance"
    stub that returns price ×2 on all trades. Confirm:
