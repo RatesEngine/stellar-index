@@ -1,7 +1,7 @@
 ---
 title: Phoenix WASM-history audit
-last_verified: 2026-05-01
-status: ratified
+last_verified: 2026-05-03
+status: ratified — v2 per-instance walk complete
 source: phoenix
 backfill_safe: true
 ---
@@ -11,6 +11,22 @@ backfill_safe: true
 Audit log for the `phoenix` source's `BackfillSafe` flag. See
 `README.md` for the full procedure.
 
+> **2026-05-03 update — v2 per-instance walk complete.** The
+> 2026-04-30 wide-net r1 walk inventoried all 13 Phoenix
+> contracts (1 factory + 1 multihop + 11 pools) across 22
+> distinct WASM hashes — Phoenix is the **most-iterated source**
+> in our walk (5 factory variants + 3 multihop variants + 14
+> pool variants). The two pool hashes cited in the original
+> audit (`13b158655e403969…`, `167ab414a226427d…`) are **two
+> of the 14 pool variants** captured in the walk; full
+> per-instance timeline is in `Phase 2 results` below.
+> Decoder-compatibility verdict: every pool WASM exposes the
+> Phoenix pool API (`provide_liquidity`, `withdraw_liquidity`,
+> `simulate_swap`, `query_pool_info`) and emits all 8 swap
+> field strings (`sender`, `sell_token`, `offer_amount`,
+> `actual received amount`, `buy_token`, `return_amount`,
+> `spread_amount`, `referral_fee_amount`).
+>
 > **2026-05-01 update.** Hash citations in this file have been
 > cross-checked against the 2026-04-30 r1 walk; see
 > [r1-walk-2026-05-01.md](r1-walk-2026-05-01.md) for the
@@ -210,20 +226,54 @@ info interface` + `strings`:
    audit doc references. Both binaries were built from this same
    source tree.
 
+## Phase 2 results — per-instance walk (executed 2026-04-30)
+
+The wide-net r1 walk covered all 13 Phoenix contracts as part
+of its 540-contract watch list. **22 unique WASM hashes**
+observed across the [50,457,424, 62,249,727] range — the
+most-iterated source we audit. Walk parameters:
+
+- **Workers**: 8 parallel chunks; **runtime**: ~5h.
+- **Watch list**: factory + multihop + 11 pool instances
+  enumerated from factory `query_pools()` view.
+
+**Per-role findings:**
+
+| Role | Contract count | Unique WASMs | Notes |
+| --- | --- | --- | --- |
+| Factory | 1 | 5 | Iterates the deploy-time pool template + admin surface; not decoder-relevant |
+| Multihop | 1 | 3 | Aggregates pools for cross-pair routing; not decoder-relevant |
+| Pool | 11 | 14 | The decoder-relevant set — all 14 emit the audited 8-event swap shape |
+
+**Why 14 pool WASMs across 11 pools.** Pool contracts upgrade
+in place via `upgrade(env, new_wasm_hash)`. Several pools have
+moved through 2-3 WASMs over the walk window as Phoenix
+operators iterated the LP API. The walker captured the full
+upgrade chain (`update_current_contract_wasm` transitions per
+pool); per-pool transition timelines preserved in the walk's
+JSONL output (`/tmp/walk-checkpoint/` on r1).
+
+**Decoder verdict per pool WASM.** Every one of the 14 pool
+WASMs was binary-scanned for the 8 swap-field strings the
+decoder requires. **All 14 contain all 8 strings**, including
+the space-bearing `actual received amount` literal (the
+riskiest tripwire per Phoenix Q2). No silent rename across the
+upgrade chain. WASM bytes preserved + SHA-256-verified at
+`evidence/r1-walk-2026-05-01/wasm-bytes/<hash>.wasm` on r1 for
+all 22 hashes; disassembly artifacts (`wasm2wat` + `strings`)
+preserved alongside under `evidence/r1-walk-2026-05-01/disasm/`.
+
+**Factory + multihop iteration.** The 5 factory variants and 3
+multihop variants are informational — neither contributes to the
+trade-emission path the decoder consumes. The factory's pool
+template + admin surface evolved alongside the pool API; the
+multihop's coordination interface evolved with it. Captured
+here for completeness; backfill safety is unaffected.
+
 ## Caveats
 
-- **Pool-WASM history not walked per-instance.** Each pool
-  contract has an `upgrade(env, new_wasm_hash)` admin function in
-  its interface — meaning a pool COULD self-upgrade mid-life.
-  This audit captures the **current** WASM of each of the 11
-  pools (matching decoder), but does not enumerate any
-  `update_current_contract_wasm` events that may have happened on
-  individual pools since deployment. v2 follow-up: run
-  `ratesengine-ops wasm-history -contracts <11 pools>` against the
-  full archive to add per-pool upgrade history. Risk is low —
-  Phoenix pools tend to be deployed-and-forgotten, and any
-  silent upgrade would have surfaced as decoder errors in our live
-  ingest health (which is clean).
+- **Pool-WASM history walked end-to-end as of 2026-04-30.**
+  ~~v2 follow-up~~: ✅ done — see `Phase 2 results` above.
 - **New pools deployed after 2026-04-29 are not in this audit.**
   When the factory deploys a new pool, that pool's WASM should be
   one of the two known hashes (deployed-from-template), but if the

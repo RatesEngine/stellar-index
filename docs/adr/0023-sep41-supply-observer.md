@@ -31,7 +31,7 @@ amounts into supply totals.
 
 Algorithm 3's piece is an **event-amount aggregator**: every
 mint event adds to total, every burn/clawback subtracts. Per
-[ADR-0003](0003-i128-no-truncate.md) the amounts are i128 —
+[ADR-0003](0003-i128-no-truncation.md) the amounts are i128 —
 NUMERIC end-to-end.
 
 The data already flows through the dispatcher's `Decoder` hook
