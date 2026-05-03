@@ -17,6 +17,20 @@ against.
 
 ### Fixed
 
+- **R1 ansible inventory + role defaults match the as-deployed
+  state** — `configs/ansible/inventory/r1.example.yml` set
+  `run_stellar_core: true` and `run_stellar_rpc: true`, but
+  both daemons were REMOVED from r1 on 2026-04-23 (galexie's
+  embedded captive-core is the only stellar-core on the box,
+  and the indexer reads MinIO directly so no `/rpc` surface is
+  needed). The role's `defaults/main.yml` already had
+  `run_stellar_core: false` / `run_stellar_rpc: false`, so an
+  operator copying the example would have inadvertently
+  enabled what the architecture explicitly removed. Also
+  corrected region naming: r1 is at Hetzner FSN1 (Falkenstein,
+  Germany), not "London"/"Frankfurt"; updated example
+  inventory header, `region_name`, and the Per-region
+  difference table comment to match.
 - **`/v1/account/me` now returns the credential's `label`** —
   `APIKeyRecord.Label` was set at creation time and the OpenAPI
   `Account` schema declared the field, but the path
