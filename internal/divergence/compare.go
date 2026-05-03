@@ -3,8 +3,10 @@ package divergence
 import (
 	"context"
 	"errors"
+	"fmt"
 	"math"
 	"sort"
+	"strings"
 	"sync"
 	"time"
 
@@ -124,10 +126,33 @@ func Compare(
 		wg.Add(1)
 		go func(r Reference) {
 			defer wg.Done()
+			// Capture the reference's name once up-front so we can
+			// report the failure even if r.Name() itself is what
+			// panics (cheap defence; references are operator-supplied
+			// in some deployments).
+			name := safeName(r)
+
+			// Panic-recover the LookupPrice call. Per Compare's
+			// docstring, "panic recovered" failures are recorded in
+			// Failures the same way as a normal error — operators
+			// see "this reference is broken" without losing the
+			// other references' results. A misbehaving reference
+			// MUST NOT take the whole comparison run down.
+			defer func() {
+				if rv := recover(); rv != nil {
+					// Best-effort send; channel is buffered to len(refs)
+					// so this is a non-blocking write.
+					results <- fetchOutcome{
+						name: name,
+						err:  fmt.Errorf("reference panicked: %v", rv),
+					}
+				}
+			}()
+
 			perCtx, cancel := context.WithTimeout(ctx, opts.PerReferenceTimeout)
 			defer cancel()
 			price, err := r.LookupPrice(perCtx, pair, observedAt)
-			results <- fetchOutcome{name: r.Name(), price: price, err: err}
+			results <- fetchOutcome{name: name, price: price, err: err}
 		}(ref)
 	}
 	wg.Wait()
@@ -162,7 +187,11 @@ func Compare(
 
 // classifyError maps known sentinels to short stable labels so the
 // operator dashboard can distinguish "asset not on this source"
-// from "transport failure". Unknown errors pass through verbatim.
+// from "transport failure". Panics surface as "panicked: <text>"
+// (the safeName-wrapped goroutine recovers + wraps via
+// `fmt.Errorf("reference panicked: %v", rv)`); we strip the
+// "reference " prefix here so the dashboard label stays compact.
+// Unknown errors pass through verbatim.
 func classifyError(err error) string {
 	switch {
 	case errors.Is(err, ErrAssetUnsupported):
@@ -170,8 +199,33 @@ func classifyError(err error) string {
 	case errors.Is(err, ErrPriceUnavailable):
 		return "price_unavailable"
 	default:
-		return err.Error()
+		// Drop the "reference panicked:" prefix when the underlying
+		// goroutine wrapped a panic — operator-facing label reads
+		// "panicked: foo" rather than "reference panicked: foo".
+		msg := err.Error()
+		const prefix = "reference panicked: "
+		if strings.HasPrefix(msg, prefix) {
+			return "panicked: " + msg[len(prefix):]
+		}
+		return msg
 	}
+}
+
+// safeName returns r.Name() with a panic-recover guard so a
+// misbehaving reference can't take down the wrapping goroutine
+// before we even reach LookupPrice. Returns "_unknown" when
+// Name() panics — the operator-facing failure label still
+// surfaces but tied to a synthetic name. Real production
+// references never panic from Name() (the function returns a
+// constant string), but operator-supplied custom references
+// might.
+func safeName(r Reference) (out string) {
+	defer func() {
+		if rv := recover(); rv != nil {
+			out = "_unknown"
+		}
+	}()
+	return r.Name()
 }
 
 // isFinitePositive guards against +/-Inf and NaN making it through

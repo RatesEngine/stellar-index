@@ -113,6 +113,12 @@ func RateLimit(bucket *ratelimit.Bucket, keyFn func(*http.Request) string, skip 
 //   - anonymous with Subject: anonymous Identifier bucket
 //   - no Subject attached: fallback to RemoteIPFrom(r)
 //
+// Per-subject overrides: an authenticated subject with
+// `Subject.RateLimitPerMin > 0` (a paid-tier override sourced from
+// the APIKey record) replaces authBucket's default max for THIS
+// caller's bucket. The override has no effect on anonymous callers —
+// anonRateLimitPerMin is a deployment knob, not a per-IP override.
+//
 // Nil buckets disable rate limiting for that class.
 func RateLimitBySubject(anonBucket, authBucket *ratelimit.Bucket, skip func(*http.Request) bool, logger *slog.Logger) Middleware { //nolint:gocognit // dispatch-heavy; splitting would reduce readability
 	if logger == nil {
@@ -125,7 +131,7 @@ func RateLimitBySubject(anonBucket, authBucket *ratelimit.Bucket, skip func(*htt
 				return
 			}
 
-			bucket, key := bucketAndKeyForRequest(r, anonBucket, authBucket)
+			bucket, key, override := bucketKeyAndOverrideForRequest(r, anonBucket, authBucket)
 			if bucket == nil || key == "" {
 				next.ServeHTTP(w, r)
 				return
@@ -134,7 +140,7 @@ func RateLimitBySubject(anonBucket, authBucket *ratelimit.Bucket, skip func(*htt
 				key = key[:MaxRateLimitKeyLen]
 			}
 
-			res, err := bucket.Take(r.Context(), key)
+			res, err := bucket.TakeN(r.Context(), key, override)
 			if err != nil {
 				logger.Debug("ratelimit redis error — failing open",
 					"err", err, "key", key, "request_id", RequestIDFrom(r))
@@ -143,7 +149,11 @@ func RateLimitBySubject(anonBucket, authBucket *ratelimit.Bucket, skip func(*htt
 				return
 			}
 
-			w.Header().Set("X-RateLimit-Limit", strconv.Itoa(bucket.Max()))
+			effectiveMax := bucket.Max()
+			if override > 0 {
+				effectiveMax = override
+			}
+			w.Header().Set("X-RateLimit-Limit", strconv.Itoa(effectiveMax))
 			w.Header().Set("X-RateLimit-Remaining", strconv.Itoa(res.Remaining))
 
 			if !res.Allowed {
@@ -161,23 +171,32 @@ func RateLimitBySubject(anonBucket, authBucket *ratelimit.Bucket, skip func(*htt
 	}
 }
 
-func bucketAndKeyForRequest(r *http.Request, anonBucket, authBucket *ratelimit.Bucket) (*ratelimit.Bucket, string) {
+// bucketKeyAndOverrideForRequest picks the right bucket + Redis key
+// for the inbound request, plus any per-subject limit override.
+//
+// Override is non-zero ONLY for an authenticated subject whose
+// APIKey record carries an explicit `RateLimitPerMin` (paid-tier
+// custom plan). Anonymous callers always get `0` (the bucket's
+// default applies). Operators can still floor the bucket via
+// `cfg.API.KeyRateLimitPerMin` — the override only raises (or
+// lowers) the per-key budget, never the global default.
+func bucketKeyAndOverrideForRequest(r *http.Request, anonBucket, authBucket *ratelimit.Bucket) (*ratelimit.Bucket, string, int) {
 	if subject, ok := auth.SubjectFrom(r.Context()); ok && subject.Identifier != "" {
 		if subject.Tier != auth.TierAnonymous && subject.Tier != "" {
 			if authBucket == nil {
-				return nil, ""
+				return nil, "", 0
 			}
-			return authBucket, authenticatedRateLimitKey(subject)
+			return authBucket, authenticatedRateLimitKey(subject), subject.RateLimitPerMin
 		}
 		if anonBucket == nil {
-			return nil, ""
+			return nil, "", 0
 		}
-		return anonBucket, "anon:" + subject.Identifier
+		return anonBucket, "anon:" + subject.Identifier, 0
 	}
 	if anonBucket == nil {
-		return nil, ""
+		return nil, "", 0
 	}
-	return anonBucket, RemoteIPFrom(r)
+	return anonBucket, RemoteIPFrom(r), 0
 }
 
 func authenticatedRateLimitKey(subject auth.Subject) string {
