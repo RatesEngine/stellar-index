@@ -1,10 +1,22 @@
-// Binary ratesengine-ops is the admin CLI: backfill, gap-detect,
-// cache-prime, docs-config, and other operational tasks that don't
-// belong in the long-running binaries.
+// Binary ratesengine-ops is the admin CLI for operational tasks
+// that don't belong in the long-running binaries. Subcommands fall
+// into a few rough buckets:
 //
-// Subcommands land alongside the features they support. Today only
-// `docs-config` is wired; the rest land with the corresponding
-// implementation PRs.
+//   - Ingest / backfill: `backfill`, `backfill-external`,
+//     `detect-gaps`, `list-cursors`.
+//   - Archive integrity: `verify-archive`, `archive-completeness`,
+//     `cross-region-check`, `cross-region-monitor`.
+//   - Soroban discovery / WASM tracking: `discovery`, `wasm-history`,
+//     `wasm-history-merge-jsonl`, `extract-wasm-from-galexie`.
+//   - Supply: `supply`.
+//   - Diagnostics: `rpc-probe`, `verify-decoders`, `verify-external`,
+//     `hubble-check`, `hubble-soroban-events`.
+//   - Doc generation: `docs-config` (regenerates the config
+//     reference from struct tags; called by `make docs-config`).
+//
+// Subcommands land alongside the features they support; the canonical
+// list is the `switch args[0]` block in main.go and the
+// `ratesengine-ops --help` output.
 package main
 
 import (
@@ -486,10 +498,6 @@ Subcommands:
                               -source soroswap,aquarius
   version                 Print version + build date.
   help                    This help.
-
-TODO subcommands (land with their feature PRs):
-  cache-prime             Warm the Redis hot-path cache from Timescale.
-  verify-invariants       Cross-check aggregated prices against divergence.
 `
 
 func printUsage() {

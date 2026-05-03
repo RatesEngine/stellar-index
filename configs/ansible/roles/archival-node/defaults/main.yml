@@ -7,7 +7,7 @@
 # Knobs marked `[Per-region: ...]` below differ between regions per
 # the storage strategy in docs/adr/0016-per-region-storage-strategy.md:
 #
-#   R1 Frankfurt (Hetzner)   — full local mirror, all 4 verify tiers
+#   R1 FSN1 (Hetzner)        — full local mirror, all 4 verify tiers
 #   R2 US-East-1 (AWS)       — galexie-archive read from
 #                              s3://aws-public-blockchain (no local
 #                              archive bucket); Tier A + D weekly
@@ -21,9 +21,9 @@
 # region has its own seam where its galexie-live bucket starts).
 
 # ───── Region ────────────────────────────────────────────────────────
-# [Per-region: r1=Frankfurt, r2=US-East-1, r3=Singapore]
+# [Per-region: r1=FSN1 (Hetzner Falkenstein), r2=US-East-1, r3=Singapore]
 region_id:           "r1"
-region_name:         "London"
+region_name:         "FSN1"
 home_domain:         "ratesengine.net"
 
 # ───── Which subsystems to run on this host ──────────────────────────
