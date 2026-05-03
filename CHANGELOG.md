@@ -17,6 +17,17 @@ against.
 
 ### Fixed
 
+- **`sep1-resolution.md` no longer hand-waves a `sep1-trace`
+  subcommand as "Phase 5 deliverable"** — same drift as #481
+  (UsageRow). The doc said `ratesengine-ops sep1-trace -domain
+  <home_domain> (Phase 5 deliverable; not yet implemented)
+  would dump the full resolution path…`. We don't track
+  follow-up work as "Phase 5" anymore; the comment now
+  describes the gap concretely (`not in
+  cmd/ratesengine-ops/main.go's switch today`) and points the
+  operator at the manual playbook. Continuation of the L6.5
+  doc-sweep.
+
 - **`/v1/account/me` now returns the credential's `label`** —
   `APIKeyRecord.Label` was set at creation time and the OpenAPI
   `Account` schema declared the field, but the path
