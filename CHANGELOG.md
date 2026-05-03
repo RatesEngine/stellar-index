@@ -34,8 +34,333 @@ against.
   counter signals fanout activity. The byte-identical-payload
   property required by ADR-0015 is verified by
   `TestPublisher_TwoSubscribersIdenticalPayload`.
+- **L2.2 Phase 2 plumbing — `USDVolumeFXResolver` interface +
+  `tradeUSDVolume` fallback path** — closes the launch-task-list
+  G3 plumbing half. The current Phase 1 path stamps `usd_volume`
+  for off-chain CEX/FX trades + on-chain DEX trades whose quote
+  is on the operator's USD-pegged classics allow-list, leaving
+  every other on-chain trade NULL. New
+  `USDVolumeFXResolver.USDPriceAt(ctx, asset, t)` lets a
+  deployment supply a USD rate per quote asset; when wired,
+  `tradeUSDVolume` falls through to it after Phase 1 declines
+  and multiplies through `quote_amount × rate / 10^classicDecimals`
+  to land a non-NULL `usd_volume`. `Store.SetUSDVolumeFXResolver`
+  installs it; nil (the default) preserves Phase 1 behaviour
+  exactly. Production resolver — a goroutine that polls
+  `prices_1m` for `<asset>/<USD>` per configured asset and
+  caches the latest closed VWAP — ships in a follow-up PR; this
+  PR is the contract + test surface so the wiring lands cleanly.
+- **`pkg/client.Client.History`** — bounded-range raw-trade lookup
+  via the SDK. Distinct from the existing
+  `Client.HistorySinceInception` (which returns bucketed VWAP/TWAP
+  points); this surface returns the underlying `TradeRow`
+  records — useful for trade-level audits, regulatory exports,
+  custom aggregations the server doesn't pre-compute. New
+  `HistoryRangeQuery` with optional `From`/`To`/`Limit`/`Cursor`;
+  `Cursor` walks forward by re-issuing with the previous
+  response's `Pagination.Next`. New `TradeRow` type in
+  `pkg/client/types.go` mirrors the server's wire shape exactly.
+- **`pkg/client.Client.OHLC`** — single-bar OHLC over a window via
+  the SDK. Closes another gap from the code-vs-RFP audit:
+  Freighter RFP §V1 historical chart requirements explicitly list
+  OHLC as a chart-UX path but the SDK only exposed
+  `HistorySinceInception`. Both `Base` and `Quote` are required
+  on `OHLCQuery` (the server doesn't default Quote to fiat:USD —
+  candlestick charts pin a specific pair). `From`/`To` are
+  optional with the same closed-bucket-clamp semantics the server
+  applies to a defaulted `to` per ADR-0015. Wire shape mirrors
+  the server's `OHLCBar` exactly, including the `Truncated` flag
+  consumers building chart UIs need to detect when a window has
+  more trades than the server's per-request cap.
+- **`pkg/client.Client.PriceTip`** — live rolling-window VWAP via
+  the SDK. Sibling to `Client.Price` for "freshest possible
+  signal" use cases per ADR-0018. Same input shape as `PriceQuery`
+  with an additional `WindowSeconds` (server clamps to [1, 60],
+  defaults to 5). Caller distinguishes the two in-contract
+  response branches via `PriceSnapshot.PriceType`: `"vwap"` for
+  the rolling-window VWAP, `"last_trade"` for the empty-window
+  fallback. SDK omits `window_seconds=0` from the URL so the
+  default-of-5 path stays clean.
+- **`pkg/client.Client.PriceBatch`** — bulk price lookup via the
+  Go SDK. Closes the most impactful gap from a code-vs-RFP audit
+  of the SDK surface: Freighter RFP §"Bulk query support
+  preferred (batch asset lookups)" was implemented server-side
+  (`GET`/`POST /v1/price/batch`) but the SDK only exposed the
+  single-asset `Client.Price`. SDK now routes ≤100 ids via GET
+  and >100 via POST automatically (the threshold below which the
+  query string fits within typical 8 KiB header limits), validates
+  ≤1000 client-side to match the server cap, and returns the
+  same `Envelope[[]PriceSnapshot]` shape with OR-over-rows flags.
+  Splitting beyond 1000 is deliberately the caller's choice —
+  silently chunking would mask `flags.stale` semantics on
+  subsets the caller wouldn't see.
+- **`runbooks/dr-activation.md` — disaster-recovery activation
+  procedure** — closes the missing runbook the SEV playbook §8.3
+  (annual DR exercise), `timescale-primary-down.md` §D
+  ("complete cluster loss"), and ADR-0008 / ADR-0016 all
+  referenced. Previously the only pointer was `TODO(#0)` in
+  `timescale-primary-down.md`. Covers when to activate (decision
+  tree distinguishing it from per-component HA failover),
+  pre-flight checks (DR storage freshness, MinIO archive
+  integrity, host reachability), the Cloudflare-LB and manual-
+  DNS flip procedures, post-flip monitoring (SLA + ingest +
+  flag rates), failback to primary, escalation, and quarterly
+  drift signals operators run between drills. SEV playbook §8.3
+  + the timescale runbook updated to link the new file.
+- **Two new SEV drill scenarios** — `sev2-redis-sentinel-failover`
+  exercises ADR-0024's Sentinel HA path end-to-end across every
+  Redis-dependent surface (`/v1/price` cache + freeze markers +
+  confidence + triangulation + API-key validator + SEP-1 cache);
+  pinned validation criteria include "did oncall correctly
+  classify SEV-2 (degraded) not SEV-1 (down)" and "did anyone
+  fail back contrary to ADR-0024's fail-forward rule" — both
+  common simulation mis-steps. `sev1-anomaly-freeze-stuck`
+  exercises the ADR-0019 anomaly chain (Phase 1 thresholds →
+  Phase 2 baseline → freeze.Writer → /v1/price's flags.frozen);
+  drills the operator-driven-clear contract that ADR-0019
+  Phase 1 explicitly chose over auto-clear, plus the verify-
+  before-clearing discipline that prevents re-freeze loops.
+  Drills README updated to list all four scenarios with their
+  category coverage (storage / cache / ingest / aggregator).
+  Closes G5 in `docs/launch-task-list.md` for the script-
+  authoring half; actual drill execution + writeups remain
+  operator work against staging.
+- **Status-page scaffold + `sev-status-page-update` runbook** —
+  `status.ratesengine.net` was committed to in the proposal §IDR
+  and required by Freighter F3.5 / F3.6, but nothing in `deploy/`
+  pointed at the page or specified what an update should look
+  like. New `deploy/status-page/cstate/` ships the cstate
+  (Hugo-based) site config, the public component list (12
+  customer-facing service surfaces matching the API + ingest +
+  backend layers), and the per-incident front-matter template.
+  New `docs/operations/runbooks/sev-status-page-update.md`
+  binds the update cadence (hourly during SEV-1, daily during
+  SEV-2 — matches the SEV-playbook + Freighter SLA), the
+  safe-to-publish detail level, and the workstation-down
+  fallback path. `docs/operations/sev-playbook.md` §5.1 now
+  references both rather than dangling a TBD. Hosting target
+  (Cloudflare Pages recommended) + DNS cutover remain operator
+  work — see [`deploy/status-page/README.md`](../deploy/status-page/README.md).
+  Closes G4 in `docs/launch-task-list.md`.
+- **AlertManager Discord webhook (parallel fanout with Slack)** —
+  the proposal commits to alerts being "integrated into
+  discord/slack" but the Prometheus ansible role only wired
+  Slack. New `alertmanager_discord_webhook_url` vault var; the
+  warning + info routes now point at a unified `chat-fanout`
+  receiver that emits to BOTH Slack and Discord when their
+  respective webhook URLs are set, either alone, or neither
+  (alerts accumulate in the AM UI in the last case). Preflight
+  warns when both URLs are empty rather than silently letting
+  alerts fall on the floor. Closes G7 in
+  `docs/launch-task-list.md`.
+### Documentation
+
+- **Public-flip 24-hour pre-cutover dry-run (closes L6.3 / Task #78)** —
+  `docs/operations/public-flip.md` gains a §"Final 24-hour
+  pre-cutover dry-run" capturing the gates that must re-run in
+  the 24 h immediately before tagging v1.0: gitleaks rerun,
+  file-level scrub recheck, `make test && make test-integration`
+  on the v1.0 SHA, doc-rot spot-check on `last_verified` dates,
+  CI-green-within-24h check, and external-asset readiness
+  (SECURITY mailbox monitored, CODEOWNERS bandwidth, GitHub
+  repo name still un-claimed). The pre-flip checklist itself is
+  already `☑` × 16 — this addition closes the "what about the
+  PRs that landed between standing-checklist verification and
+  launch day" gap. L6.3 status flipped 🟢 → ✅.
+
+- **SLA proof procedure (Task #77 operator-recipe)** — new
+  `docs/operations/sla-proof-procedure.md` documents the
+  end-to-end recipe that turns a `make test-load-mixed` run into
+  the checked-in `docs/operations/sla-proof-<YYYY-MM-DD>.md`
+  proof artefact: pre-flight checklist, run command, Grafana
+  snapshot capture, Promql baseline reads against the soak
+  window, monthly cadence, and the documented-acceptance
+  fallback if staging access is delayed. The existing template
+  at `sla-proof-template.md` is the report skeleton; this
+  procedure is the operator's how-to. Closes the "no operator
+  recipe to produce the proof report" gap that left Task #77
+  without a clear path-to-done even though all upstream
+  scenarios (L5.1-L5.3) had already shipped.
+
+- **SEV-1 / SEV-2 dry-run records (closes L5.7 / Task #76)** —
+  Two new tabletop drill writeups under `docs/operations/drills/`
+  exercise the SEV playbook end-to-end against the existing
+  scripted scenarios:
+  - `2026-04-sev1-timescale-failover.md` — Timescale primary
+    out-of-disk simulation; chose fix-in-place via
+    `drop_chunks('prices_1m', '30 days')` plus restart;
+    validated all 8 scenario criteria, 7 pass + 1 partial.
+  - `2026-04-sev2-soroswap-decode-regression.md` — protocol-25
+    SCVal type-tag enum extension breaks soroswap decoder;
+    forward-fix path via `internal/scval` + golden fixture
+    + ordinary deploy + `ratesengine-ops backfill -source`;
+    validated all 8 scenario criteria, all pass.
+  - Promoted two action items into runbook updates in the same
+    PR: `timescale-primary-down.md` Quick-diagnosis now leads
+    with `/v1/readyz` (shaves ~1 min off detection); `decode-errors.md`
+    Mitigation gains a customer-comms note for the
+    `class_drop_spike` ↔ `flags.divergence_warning` correlation.
+  - Solo-drill caveats called out explicitly — a 3-person tabletop
+    is queued for post-launch with the next on-call hire.
+
+- **WASM-audit v2 fill-in across all eight Soroban sources** —
+  every per-source audit doc under `docs/operations/wasm-audits/`
+  now folds in the 2026-04-30 r1 wide-net walk's per-instance
+  evidence (540 contracts / 52 unique WASMs SHA-256-verified +
+  bytes-preserved on r1). Notable changes:
+  - **Comet's v2 audit folded into Blend's** — the only mainnet
+    Comet pool is Blend's Backstop V2 (`CAQQR5SW…` →
+    `c1f4502a…`). `comet.md` now redirects to `blend.md` for the
+    per-instance hash inventory; `blend.md` documents both source
+    rows symmetrically. Comet (the protocol) is a Balancer-v1-style
+    AMM library used by Blend's backstop module — not an actively-
+    maintained standalone DEX.
+  - **Aquarius gained Cohort A / Cohort B sections** — 168 never-
+    upgraded pools (3 WASMs) plus 145 upgraded pools across a
+    5-WASM upgrade chain (`b54ba37b → 2d770946 → 7cecf23b →
+    a1629dcd → 4f080d24`). Closes the "doc incomplete, not wrong"
+    gap flagged in the 2026-05-01 cross-source review.
+  - **Soroswap gained per-instance Phase 2 results** — 196
+    contracts (1 factory + 1 router + 194 pair instances), three
+    unique WASMs total, zero mid-life upgrades observed.
+  - **Phoenix gained per-instance Phase 2 results** — 13
+    contracts on 22 WASMs (5 factory + 3 multihop + 14 pool); the
+    most-iterated source. All 14 pool WASMs binary-confirmed to
+    contain the eight swap-field strings (`actual received amount`
+    spelling preserved across the chain).
+  - **Reflector / Redstone / Band** confirmation notes added
+    pinning the v2 walk's findings; no decoder-relevant changes.
+  - All `last_verified` dates bumped to 2026-05-03.
 
 ### Fixed
+
+- **`pkg/client/doc.go` — accurate auth + coverage** — the
+  package-level godoc that ships to pkg.go.dev had two stale
+  sections: the "Authentication" SEP-10 bullet still said
+  "pending; will be added when the server's SEP-10 verifier ships
+  (Phase 5)" — but the verifier ships at
+  `/v1/auth/sep10/{challenge,token}` (PR landed weeks ago) and
+  the SDK accepts SEP-10 JWTs verbatim via Options.APIKey today.
+  And the "Roadmap" section claimed "PR A (this PR) ships the
+  skeleton" — language that's been stale since the skeleton
+  landed. Replaced both: SEP-10 bullet documents the live
+  challenge → sign → verify flow + that `Authorization: Bearer`
+  carries either `rek_*` keys or SEP-10 JWTs; the new "Coverage"
+  section enumerates the eight methods on main today, the seven
+  queued in PRs #446–#450, and the four surfaces deliberately
+  not-in-SDK (SSE / VWAP-TWAP-derivable / SEP-40 oracle /
+  operator endpoints).
+- **`launch-readiness-backlog.md` — six 🟢 / 🟡 items flipped to ✅
+  to match shipped reality** (L6.5 doc-sweep): L3.11 (API
+  reference workflow), L3.14 (CDN cache-control middleware),
+  L3.15 (getting-started doc), L3.16 (URL-discipline OpenAPI
+  lint), L5.5 (chaos suite Wave 1), L6.1 (CHANGELOG hygiene +
+  SemVer policy), L6.2 (release notes template +
+  release-process), L6.3 (public-flip prep). Each row now points
+  at the file path that exists on main today and notes any
+  per-item operator follow-up that's deliberately deferred (e.g.
+  L3.14's CloudFront-side config, L6.3's actual cutover at
+  L6.4). Status emoji legend at line 34 unchanged.
+- **`docs/getting-started.md` SDK example now compiles** — the
+  customer-facing onboarding doc showed
+  `c.GetPrice(ctx, "native", "fiat:USD")` for the SDK quickstart,
+  but no such method exists on `*client.Client`. Customers
+  copy-pasting the example would hit a Go build error on the
+  first line. Replaced with the actual `c.Price(ctx,
+  client.PriceQuery{Asset, Quote})` shape returning
+  `*Envelope[PriceSnapshot]`. Also fixed the API-key example
+  prefix (`rate_` → `rek_`, matching the actual issuance path
+  at `internal/auth/store.go:142`'s
+  `generateID(s.randRead, "rek_", 32)`) and added a "what methods
+  exist today" note so the doc doesn't imply a method that
+  lives on an unmerged PR.
+- **Three runbooks no longer reference fictional commands /
+  paths** (L6.5 doc-sweep continued):
+  `runbooks/all-ingestion-down.md` §D referenced `make rollback
+  INDEXER_VERSION=<previous>` (`TODO(#0)`); the make target
+  doesn't exist and the deployment shape doesn't fit the local-
+  build convention. Replaced with the actual systemd-binary
+  rollback procedure that `release-process.md` §4.4 prescribes:
+  stop the unit, copy the previous-release binary into place
+  (kept by goreleaser packaging convention at
+  `/opt/ratesengine/release-<tag>/`), restart.
+  `runbooks/ingestion-lag.md` step 4 carried `TODO(#0)` for the
+  backfill subcommand — except the subcommand exists and has
+  for some time (`ratesengine-ops backfill -from N -to N
+  -source S`). Replaced the placeholder with the concrete
+  two-step `detect-gaps` → `backfill` procedure operators run
+  during incidents.
+  `runbooks/insert-errors.md` step 2 had the same stale
+  `TODO(#0)` PLUS a fictional `deploy/k8s/` PVC reference. The
+  production deployment is bare-metal NVMe + ZFS per ADR-0008,
+  not Kubernetes. Updated to point at zpool / Hetzner volume-
+  resize and the same backfill commands.
+- **Six broken markdown links across docs** (L6.5 doc-sweep) —
+  surfaced via a Python sweep across every relative `(./...md)`
+  link in `docs/`. Closed:
+  `docs/adr/0023-sep41-supply-observer.md` `0003-i128-no-truncate.md`
+  → `0003-i128-no-truncation.md`.
+  `docs/architecture/supply-pipeline.md` two links: same ADR-0003
+  fix + `0006-timescale-storage.md` →
+  `0006-timescaledb-for-price-time-series.md`.
+  `docs/operations/r1-deployment-state.md`: extra `..` in
+  `../../discovery/data-sources/archival-nodes.md` → fixed to
+  `../discovery/...`.
+  `docs/operations/wasm-audits/evidence/blend/phase2-2026-05-02/README.md`:
+  off-by-one relative path `../../blend.md` → `../../../blend.md`.
+  `docs/architecture/infrastructure/archival-node-spec.md`: three
+  fictional runbook refs (`archive-publish-fail.md`,
+  `galexie-lag.md`, `rpc-sqlite-growth.md`); first replaced with
+  the real `archive-publish.md`, the other two converted to
+  italicised "_runbook tbd_" notes citing the existing ad-hoc
+  coverage path (no creation of stub runbooks — the alerts they
+  reference are post-launch / Phase-3 anyway).
+  `docs/architecture/ha-plan.md` §3.10 ratesengine-ops: fictional
+  `ops-cli.md` doc replaced with a description of the binary's
+  actual top-level subcommands, citing `--help` and the source
+  at `cmd/ratesengine-ops/main.go`.
+  Verification: re-ran the link sweep; zero broken links remain.
+
+- **SSE event-ID generator no longer wraps to duplicates after
+  65 536 same-millisecond IDs** — `streaming.Generator.Next`'s
+  docstring promised "never returns the same ID twice" but the
+  counter was masked to 16 bits, so 65 536 IDs in a single
+  millisecond wrapped back to 0 and re-issued every prior ID
+  for that millisecond. A reproducer pinned the bug at 4 464
+  duplicates across 70 000 calls in one ms (e.g. publish-burst
+  during a fan-out spike, tight test loop, or hot-loop in
+  operator code). Fix advances the synthetic millis by 1 when
+  the counter saturates instead of wrapping; subsequent
+  wall-clock ms catch back up via the existing `now > oldMillis`
+  branch. Three new tests: NeverDuplicates (70 k same-ms calls),
+  StrictlyIncreasing (lex-sort = chronological invariant),
+  ConcurrentNoDuplicates (50×2 000 goroutines).
+
+- **`divergence.Compare` recovers panics from references** — the
+  function's docstring promised "panic recovered, etc. are
+  recorded in Failures", but the per-reference goroutine had no
+  `recover()` deferred. A misbehaving reference (network panic,
+  malformed-JSON parser blow-up, operator-supplied custom
+  reference with a bug) would take the whole comparison run
+  down + crash the worker. Now the goroutine recovers and
+  records the panic with a stable `panicked: <text>` failure
+  label so operators see which reference is broken without
+  reading goroutine traces. New `safeName` helper guards
+  `Reference.Name()` itself in case it's what panics — the
+  failure surfaces under `_unknown` in that path.
+
+- **Rate-limit middleware now honours `Subject.RateLimitPerMin`** —
+  the field was plumbed end-to-end (storage record → validator →
+  Subject → `/v1/account/me`) but `RateLimitBySubject` only
+  consulted the bucket's static `Max()`, so a paid customer with a
+  per-key override of e.g. 5000/min got throttled at the deployment
+  default (typically 1000). `Bucket.TakeN(ctx, key, max)` accepts
+  a per-call override (≤0 falls back to `b.max`); the middleware
+  passes `subject.RateLimitPerMin` through and surfaces the
+  effective limit in the `X-RateLimit-Limit` response header.
+  Anonymous callers continue to use the bucket default (no per-IP
+  override path). Closes another exposed-but-never-driven gap from
+  the account self-service work.
 
 - **`/v1/account/me` now returns the credential's `label`** —
   `APIKeyRecord.Label` was set at creation time and the OpenAPI

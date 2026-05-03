@@ -53,9 +53,15 @@ prometheus_node_scrape_interval: 30s
 # ── AlertManager routing ───────────────────────────────────────
 # Vault-supplied. Empty = preflight WARN; alerts accumulate in
 # the AlertManager UI but don't fan out.
+#
+# Slack and Discord both wire onto the warning + info routes.
+# Operators can run either, both, or neither — the template
+# emits whichever receivers have a webhook set, and unset
+# webhooks degrade silently to "alerts visible in AM UI only".
 alertmanager_pagerduty_key: ""
 alertmanager_slack_webhook_url: ""
 alertmanager_slack_channel: "#ratesengine-alerts"
+alertmanager_discord_webhook_url: ""
 
 # ── Firewall ───────────────────────────────────────────────────
 # AlertManager cluster gossip needs TCP between the two prom
