@@ -1,6 +1,6 @@
 ---
 title: Repo Hygiene & Tech-Debt Prevention Plan
-last_verified: 2026-04-22
+last_verified: 2026-05-02
 status: ratified
 ---
 
@@ -125,8 +125,10 @@ superseded_by: null
 
 - ADR filenames match `NNNN-kebab-case-title.md`.
 - Every `Superseded` has a valid `superseded_by`.
-- A new ADR's number = `max(existing) + 1`. No gaps, no collisions
-  (`scripts/ci/check-adr-numbering.sh` — to write in Week 2).
+- A new ADR's number = `max(existing) + 1`. No gaps, no collisions.
+  Status / superseded-by integrity is enforced today by
+  `scripts/ci/lint-docs.sh` §8; the strict numbering-gap check is
+  reviewer-enforced (no dedicated script yet).
 
 **When do we write an ADR?**
 
@@ -323,13 +325,13 @@ Three layers:
 applicable. Fixture regeneration is a one-liner (`make fixtures`).
 Never hand-edit a generated fixture.
 
-**Protocol-boundary fixtures** (per Phase-1 commitment):
-
-- `test/fixtures/protocol-boundary/pre-p20/`
-- `test/fixtures/protocol-boundary/post-p20/`
-- `test/fixtures/protocol-boundary/post-p23/`
-
-Built in Week 2.
+**Protocol-boundary fixtures** (per Phase-1 commitment): organised
+per-source under `test/fixtures/<source>/` rather than in a separate
+`protocol-boundary/` tree, so a decoder's pre-/post-protocol-bump
+fixtures live next to the source they exercise. The unified
+`transfer/mint/burn` (CAP-67 / P23) handling is exercised through
+each source's golden files; CLAUDE.md "Things that will surprise
+you" calls out the post-P23 4th-topic shape.
 
 ---
 
@@ -360,8 +362,10 @@ internal/sources/<name>/
 
 Plus fixtures in `test/fixtures/<name>/`.
 
-Enforced by: reviewer + a CI check (`scripts/ci/lint-layout.sh`, to
-write in Week 2).
+Enforced by: reviewer + the architectural import-boundary check
+in `scripts/ci/lint-imports.sh` (rejects packages that grow
+unowned cross-cutting deps). A dedicated `lint-layout.sh` for the
+five-file convention itself doesn't exist; it's reviewer-policed.
 
 ---
 
@@ -537,7 +541,8 @@ Gates checked weekly by @ash as part of the Friday wrap-up.
 
 - [ ] CI green on main for 7 consecutive days.
 - [ ] No stale-doc warnings on `docs/architecture/` or `docs/operations/`.
-- [ ] No `TODO(#0)` remaining in code (after Week 1 grace).
+- [ ] No `TODO(#0)` remaining in Go code (lint-docs.sh §5
+      enforces this).
 - [ ] Zero open `govulncheck` advisories.
 - [ ] Coverage ≥ 70 % per package, ≥ 80 % for `canonical` /
       `aggregate` / `supply`.
