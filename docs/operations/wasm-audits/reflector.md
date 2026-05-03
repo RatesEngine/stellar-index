@@ -1,7 +1,7 @@
 ---
 title: Reflector WASM-history audit
-last_verified: 2026-05-01
-status: ratified
+last_verified: 2026-05-03
+status: ratified — v2 walk confirms two-hash inventory
 sources: reflector-dex, reflector-cex, reflector-fx
 backfill_safe: true
 ---
@@ -17,6 +17,17 @@ because each contract has its own deploy history.
 
 See `README.md` for the full procedure.
 
+> **2026-05-03 update — v2 walk confirms two-hash inventory.**
+> The 2026-04-30 wide-net r1 walk re-observed the v2 (`4a64c8c8…`)
+> → v3 (`df88820e…`) transition on DEX (`CALI2BYU…`) + CEX
+> (`CAFJZQWS…`) at L51,656,689-91, and confirmed the FX
+> (`CBKGPWGK…`) contract has been on `df88820e…` since first
+> deploy at L56,733,481. **No further upgrades observed** through
+> the walk's upper bound (L62,249,727). All three contracts
+> currently run `df88820e…`. Bytes preserved + SHA-256-verified
+> for both hashes at `evidence/r1-walk-2026-05-01/wasm-bytes/`
+> on r1.
+>
 > **2026-05-01 update.** Hash citations in this file have been
 > cross-checked against the 2026-04-30 r1 walk; see
 > [r1-walk-2026-05-01.md](r1-walk-2026-05-01.md) for the

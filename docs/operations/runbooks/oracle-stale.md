@@ -20,7 +20,7 @@ severity: P2
 ## Symptoms
 
 - `(time() - ratesengine_oracle_last_update_unix) > 10 * ratesengine_oracle_resolution_seconds` sustained 2 min.
-- Alert label `source` names the specific variant (reflector-dex / reflector-cex / reflector-fx / future redstone / band / chainlink-http).
+- Alert label `source` names the specific variant — one of `reflector-dex`, `reflector-cex`, `reflector-fx`, `redstone`, `band`. (Chainlink-HTTP is a divergence reference in `internal/divergence/`, not an oracle source — it doesn't emit `ratesengine_oracle_*` metrics and won't appear here.)
 - `ratesengine_source_events_total{source=reflector-...}` rate drops to zero at the same time (or has been zero throughout).
 
 ## Quick diagnosis (≤ 5 min)

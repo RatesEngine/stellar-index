@@ -32,10 +32,15 @@ var (
 	// at all (bad base64, missing dots, etc.). 400 Bad Request.
 	ErrTokenMalformed = errors.New("auth: token malformed")
 
-	// ErrNotImplemented — the validator's protocol surface is
-	// scaffolded but the body is a stub. Lands as 503 Service
-	// Unavailable in production; fail-loud rather than silently
-	// authorising or silently rejecting. Removed once the body
-	// implementation lands.
+	// ErrNotImplemented — returned by the Noop validator fallbacks
+	// ([NoopAPIKeyValidator], [NoopSEP10Validator]) when an
+	// auth-mode is configured but no real validator is wired (e.g.
+	// auth_mode=apikey selected but Redis unavailable, or
+	// auth_mode=sep10 selected without the SEP-10 signing seed).
+	// The middleware translates it to 503 Service Unavailable —
+	// fail-loud, never silently authorise or silently reject. Stays
+	// in this package as long as the Noop fallbacks do (i.e.
+	// indefinitely; they are the deliberate "no validator wired"
+	// disabled state, not a stub awaiting replacement).
 	ErrNotImplemented = errors.New("auth: validator not implemented in this build")
 )
