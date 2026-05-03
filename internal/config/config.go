@@ -23,7 +23,7 @@ type Config struct {
 	Oracle     OracleConfig     `toml:"oracle" doc:"On-chain oracle contract addresses (Reflector, Redstone, Band)."`
 	External   ExternalConfig   `toml:"external" doc:"Off-chain connectors — CEX/FX/aggregator sources that run parallel to the on-chain dispatcher."`
 	Aggregate  AggregateConfig  `toml:"aggregate" doc:"VWAP/TWAP windows + outlier thresholds."`
-	Anomaly    AnomalyConfig    `toml:"anomaly" doc:"Per-asset-class anomaly detection thresholds (ADR-0019 Phase 1 stop-gap)."`
+	Anomaly    AnomalyConfig    `toml:"anomaly" doc:"Per-asset-class anomaly detection thresholds (Phase 1) + Phase-2 freeze thresholds (per-asset MAD-baseline + multi-factor confidence + source count). Both layers run; the orchestrator AND-of-three-signals rule fires ActionFreeze only when both agree (ADR-0019)."`
 	API        APIConfig        `toml:"api" doc:"Public API serving plane — port, auth mode, rate limits, CDN."`
 	Metadata   MetadataConfig   `toml:"metadata" doc:"Asset metadata overlay — SEP-1 issuer→home-domain map, operator overrides."`
 	Supply     SupplyConfig     `toml:"supply" doc:"Supply pipeline config — SDF reserve list, operator-managed reserve balances (fallback when the LCM AccountEntry observer hasn't yet covered the watched set), watched classic + SEP-41 asset lists, SAC wrappers, and aggregator-refresh cadence. ADR-0011 (XLM) + ADR-0022 (classic) + ADR-0023 (SEP-41)."`
@@ -408,16 +408,21 @@ type IngestionConfig struct {
 	LiveSeamLedger uint32 `toml:"live_seam_ledger" doc:"First ledger in the live bucket. Below this, indexer reads from galexie-archive. 0 disables the archive bucket entirely." default:"0"`
 }
 
-// AnomalyConfig configures the Phase-1 per-asset-class anomaly
-// detection per ADR-0019. The aggregator consults these thresholds
-// at bucket-close time to decide whether to publish, warn, or
-// freeze the new VWAP.
+// AnomalyConfig configures both phases of ADR-0019 anomaly
+// detection. The aggregator consults these thresholds at
+// bucket-close time to decide whether to publish, warn, or freeze
+// the new VWAP.
 //
-// See `internal/aggregate/anomaly/` for the consumer + the
-// algorithm semantics. Phase 2 (statistical baselines) replaces
-// these operator-set numbers with per-asset learned thresholds —
-// at that point the [Thresholds] table becomes a fallback for
-// assets whose baseline isn't yet established.
+// See `internal/aggregate/anomaly/` for Phase 1 (per-class
+// thresholds — coarse safety net for assets without an established
+// baseline) and `internal/aggregate/baseline/` +
+// `internal/aggregate/confidence/` for Phase 2 (per-asset MAD
+// baseline + multi-factor confidence). Both layers run in parallel;
+// the orchestrator's AND-of-three-signals rule (configured below
+// in [Phase2FreezeConfig]) only fires ActionFreeze when Phase 1
+// flags a class-level breach AND Phase 2 confirms the bucket is
+// statistically anomalous AND under-confident AND
+// under-corroborated.
 type AnomalyConfig struct {
 	// Enabled gates whether anomaly checks run at all. When false,
 	// every bucket is published as-is (no warn / no freeze). Off by

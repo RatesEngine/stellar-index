@@ -17,6 +17,23 @@ against.
 
 ### Fixed
 
+- **ADR-0019 Phase 2 godocs no longer claim the phase is
+  unbuilt** — `internal/aggregate/anomaly/doc.go` framed Phase 2
+  as "planned per ADR-0019 §Phase 2" and Phase 1 as "the
+  safety-net we ship before Phase 2 lands so the API has SOME
+  anomaly protection during the gap." Phase 2 has shipped:
+  `internal/aggregate/baseline/` (per-asset MAD baselines +
+  z-score), `internal/aggregate/confidence/` (six-factor
+  weighted-geomean confidence). Both layers run in parallel; the
+  orchestrator's AND-of-three-signals rule
+  ([Phase2FreezeConfig]) only fires ActionFreeze when Phase 1
+  flags a class-level breach **and** Phase 2 confirms statistical
+  anomaly + low confidence + low corroboration.
+  `internal/config/config.go`'s `AnomalyConfig` description and
+  the field-level `Anomaly` doc-tag carried the same "Phase 2
+  will replace this" framing — both rewritten to describe the
+  actual parallel scheme. Continuation of the L6.5 doc-sweep.
+
 - **`/v1/account/me` now returns the credential's `label`** —
   `APIKeyRecord.Label` was set at creation time and the OpenAPI
   `Account` schema declared the field, but the path
