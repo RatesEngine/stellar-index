@@ -17,6 +17,22 @@ against.
 
 ### Fixed
 
+- **`internal/canonical/discovery/doc.go` "Future work" list has
+  shipped** — the package's `# Future work (separate PRs):` block
+  named three items, all of which have landed:
+  - Dispatcher integration → `internal/dispatcher/dispatcher.go`
+    calls `discovery.Sniff` on every event after decoder
+    dispatch.
+  - Postgres-backed Recorder → `internal/storage/timescale/
+    discovery.go` implements `Recorder` against the
+    `discovered_assets` hypertable.
+  - Ops command + alert metric → `ratesengine-ops discovery`
+    subcommand exists; `ratesengine_ingestion_discovery_drops`
+    alert lives in `deploy/monitoring/rules/ingestion.yml`.
+  Section renamed to "Wired today" with concrete file pointers.
+  Same drift family as #477 / #483 / #484. Continuation of the
+  L6.5 doc-sweep.
+
 - **`/v1/account/me` now returns the credential's `label`** —
   `APIKeyRecord.Label` was set at creation time and the OpenAPI
   `Account` schema declared the field, but the path
