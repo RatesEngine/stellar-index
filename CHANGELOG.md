@@ -291,6 +291,18 @@ against.
 
 ### Fixed
 
+- **Two more `Phase 5` framings dropped** —
+  `internal/cachekeys/keys.go` said the writer for `apikey:`
+  records was `\`/v1/account/keys\` self-service handler (Phase
+  5)`, but the handler shipped (#196). `docs/operations/
+  sep1-resolution.md` said `ratesengine_metadata_resolver_error_rate_high`
+  is `"designed but not yet shipping" pending Phase-5 wiring of
+  the metadata overlay into the asset handler` — the overlay IS
+  wired (see the doc's own §"Resolution flow"). What's missing
+  is just the Prometheus rule turning existing counters into a
+  paged signal. Both updated to reflect actual state without
+  the stale phase label. Same family as #481 / #487. L6.5
+  doc-sweep continuation.
 - **`internal/api/v1/middleware/doc.go` matches the actual
   middleware stack** — the package godoc said the order was
   `RequestID → HTTPMetrics → Logger → Recoverer → CORS →
