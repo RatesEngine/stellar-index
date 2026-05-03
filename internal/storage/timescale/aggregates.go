@@ -275,6 +275,48 @@ func (s *Store) RecentClosedVWAP1mForPair(ctx context.Context, p canonical.Pair,
 	return out, nil
 }
 
+// ClosedVWAP1mAtOrBefore returns the most-recent CLOSED 1-minute
+// bucket from the prices_1m CAGG for the given pair whose end
+// timestamp (`bucket + 1 minute`) is at or before t. Used by
+// /v1/assets/{id}'s change_24h_pct path to anchor the
+// 24-hours-ago comparison price.
+//
+// Same closed-bucket guard as [LatestClosedVWAP1mForPair]
+// (ADR-0015) — the open bucket is excluded. Returns
+// [sql.ErrNoRows] when no closed bucket exists at-or-before t
+// (e.g. the pair was first traded < 24h ago, or the prices_1m
+// retention horizon (30 d) elided the row).
+func (s *Store) ClosedVWAP1mAtOrBefore(ctx context.Context, p canonical.Pair, t time.Time) (Vwap1mRow, error) {
+	const q = `
+        SELECT bucket, base_asset, quote_asset, vwap::text, trade_count, sources
+          FROM prices_1m
+         WHERE base_asset = $1
+           AND quote_asset = $2
+           AND bucket + INTERVAL '1 minute' <= $3
+         ORDER BY bucket DESC
+         LIMIT 1
+    `
+	var row Vwap1mRow
+	err := s.db.QueryRowContext(ctx, q,
+		p.Base.String(), p.Quote.String(), t,
+	).Scan(
+		&row.Bucket,
+		&row.BaseAsset,
+		&row.QuoteAsset,
+		&row.VWAP,
+		&row.TradeCount,
+		(*stringArray)(&row.Sources),
+	)
+	if errors.Is(err, sql.ErrNoRows) {
+		return Vwap1mRow{}, sql.ErrNoRows
+	}
+	if err != nil {
+		return Vwap1mRow{}, fmt.Errorf("timescale: ClosedVWAP1mAtOrBefore: %w", err)
+	}
+	normalizeVwapSources(&row)
+	return row, nil
+}
+
 // LatestClosedVWAP1mForPair returns the most-recent CLOSED 1-minute
 // bucket from the prices_1m CAGG for the given pair. Per ADR-0015
 // the API serves only closed buckets — this method explicitly

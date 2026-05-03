@@ -16,9 +16,9 @@ import (
 //
 // The flow is two round-trips:
 //
-//  1. Client: GET /v1/auth/challenge?account=G… → server returns Challenge
+//  1. Client: GET /v1/auth/sep10/challenge?account=G… → server returns Challenge
 //  2. Client signs the Challenge.TransactionXDR with its account key
-//  3. Client: POST /v1/auth/verify with the signed XDR → server returns JWT
+//  3. Client: POST /v1/auth/sep10/token with the signed XDR → server returns JWT
 //  4. Client uses `Authorization: Bearer <jwt>` on subsequent requests
 //
 // The middleware (`internal/api/v1/middleware/auth.go`) calls
@@ -26,8 +26,13 @@ import (
 // The challenge/verify endpoints are mounted by the API server
 // when an SEP10Validator is wired.
 //
-// Production implementation lands in Phase 5; current [NoopSEP10Validator]
-// returns [ErrNotImplemented] from every method.
+// The production implementation lives in
+// [internal/auth/sep10.Validator] (built by `auth/sep10.NewValidator`
+// from `cmd/ratesengine-api/main.go`'s `buildSEP10Validator`).
+// The [NoopSEP10Validator] in this package is the fallback for
+// non-`auth_mode=sep10` deployments: every method returns
+// [ErrNotImplemented] so the SEP-10 endpoints respond 503 without
+// crashing the rest of the API.
 //
 // References:
 //

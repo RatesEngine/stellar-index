@@ -1,0 +1,58 @@
+# systems.yml — the public component list shown on
+# status.ratesengine.net.
+#
+# Each entry is a top-level service surface a customer would
+# notice degrading. Components are deliberately customer-facing,
+# not internal — operators see "Aggregator backlog" via Grafana,
+# but the public status page rolls that up under "Pricing API"
+# because the customer-visible symptom is "/v1/price returns
+# stale or 503".
+#
+# When updating, prefer narrow scopes: "Off-chain CEX ingest"
+# narrows the affected market segment cleanly. A sweeping
+# "Backend" entry would be useless during partial degradation.
+
+- name: Pricing API
+  description: REST endpoints — /v1/price, /v1/price/batch, /v1/price/tip, /v1/history, /v1/ohlc, /v1/chart, /v1/oracle/*
+  category: API
+  ping: https://api.ratesengine.net/v1/healthz
+
+- name: Streaming API
+  description: Server-Sent Events surfaces — /v1/price/stream, /v1/price/tip/stream, /v1/observations/stream
+  category: API
+
+- name: Asset metadata
+  description: /v1/assets, /v1/assets/{id}, /v1/assets/{id}/metadata — SEP-1 overlay + F2 fields (supply, market cap, FDV, 24h volume).
+  category: API
+
+- name: Account self-service
+  description: /v1/account/me, /v1/account/usage, /v1/account/keys — API-key issuance + per-key metadata.
+  category: API
+
+- name: SEP-10 Web Auth
+  description: /v1/auth/sep10/{challenge,token} — SEP-10 challenge / verify flow.
+  category: API
+
+- name: On-chain DEX ingest
+  description: SDEX, Soroswap, Aquarius, Phoenix, Comet, Blend — Stellar mainnet ledger ingestion via Galexie.
+  category: Ingest
+
+- name: Off-chain CEX/FX ingest
+  description: Binance, Coinbase, Kraken, Bitstamp, ECB, Polygon-Forex, ExchangeRatesAPI — REST polling + WebSocket streaming.
+  category: Ingest
+
+- name: Oracle ingest
+  description: Reflector (DEX/CEX/FX), Redstone, Band — on-chain SEP-40-style oracle observations.
+  category: Ingest
+
+- name: Aggregator
+  description: VWAP / TWAP / OHLC computation, anomaly detection, divergence cross-check, supply snapshot writer.
+  category: Backend
+
+- name: Storage
+  description: TimescaleDB (price + supply hypertables), Redis (hot-path cache + freeze markers), MinIO (Galexie archive).
+  category: Backend
+
+- name: Public history archive
+  description: Galexie archive — required for since-inception backfill + cross-region verification.
+  category: Backend

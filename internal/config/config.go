@@ -23,7 +23,7 @@ type Config struct {
 	Oracle     OracleConfig     `toml:"oracle" doc:"On-chain oracle contract addresses (Reflector, Redstone, Band)."`
 	External   ExternalConfig   `toml:"external" doc:"Off-chain connectors — CEX/FX/aggregator sources that run parallel to the on-chain dispatcher."`
 	Aggregate  AggregateConfig  `toml:"aggregate" doc:"VWAP/TWAP windows + outlier thresholds."`
-	Anomaly    AnomalyConfig    `toml:"anomaly" doc:"Per-asset-class anomaly detection thresholds (ADR-0019 Phase 1 stop-gap)."`
+	Anomaly    AnomalyConfig    `toml:"anomaly" doc:"Per-asset-class anomaly detection thresholds (Phase 1) + Phase-2 freeze thresholds (per-asset MAD-baseline + multi-factor confidence + source count). Both layers run; the orchestrator AND-of-three-signals rule fires ActionFreeze only when both agree (ADR-0019)."`
 	API        APIConfig        `toml:"api" doc:"Public API serving plane — port, auth mode, rate limits, CDN."`
 	Metadata   MetadataConfig   `toml:"metadata" doc:"Asset metadata overlay — SEP-1 issuer→home-domain map, operator overrides."`
 	Supply     SupplyConfig     `toml:"supply" doc:"Supply pipeline config — SDF reserve list, operator-managed reserve balances (fallback when the LCM AccountEntry observer hasn't yet covered the watched set), watched classic + SEP-41 asset lists, SAC wrappers, and aggregator-refresh cadence. ADR-0011 (XLM) + ADR-0022 (classic) + ADR-0023 (SEP-41)."`
@@ -157,24 +157,24 @@ func defaultDivergenceConfig() DivergenceConfig {
 
 // MetadataConfig configures the asset-metadata overlay path. Today
 // it carries one knob — the curated issuer-account → home-domain
-// map — which the API uses to populate AssetDetail.HomeDomain
-// before the SEP-1 overlay handler runs.
-//
-// Why an operator-curated map instead of on-chain derivation:
-// AccountEntry.HomeDomain isn't currently indexed in our trades
-// hypertable; deriving it would require either a separate
-// account-entry observer in the indexer (deferred) or a per-request
-// stellar-rpc lookup (latency hit on the hot path). The static map
-// is the pragmatic middle ground until that plumbing lands —
-// curated entries get the overlay; everything else returns
-// sep1_status="not_fetched" cleanly.
+// fallback map — which the API binary chains BEHIND the live
+// LCM-derived resolver in [internal/metadata.ChainedHomeDomainLookup]:
+// the live resolver
+// ([internal/metadata.LCMHomeDomainResolver], reading from the
+// `account_observations` hypertable populated by the
+// `internal/sources/accounts` observer, Task #54) returns the
+// AccountEntry.HomeDomain for any issuer it has seen on-chain;
+// uncovered issuers fall through to the static map. The map's job
+// today is bootstrapping issuers we want overlay coverage for
+// before their AccountEntry has flowed through the indexer (or
+// when the on-chain home_domain field is empty).
 type MetadataConfig struct {
 	// IssuerHomeDomains maps issuer-account G-strkey → home-domain.
 	// E.g. `"GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN" = "centre.io"`.
 	// Empty entries (`""`) are equivalent to the key being absent.
 	// TOML representation: `[metadata.issuer_home_domains]` table with
 	// one entry per issuer.
-	IssuerHomeDomains map[string]string `toml:"issuer_home_domains" doc:"Static curated map of issuer-account G-strkey → home-domain. Populates AssetDetail.HomeDomain so the SEP-1 overlay handler can resolve stellar.toml. Until the on-chain AccountEntry observer ships, this is the only way to enable the overlay for a given issuer." default:"{}"`
+	IssuerHomeDomains map[string]string `toml:"issuer_home_domains" doc:"Static curated map of issuer-account G-strkey → home-domain. Layered behind the live LCM-derived resolver as a fallback for issuers whose AccountEntry hasn't been observed yet (or whose on-chain home_domain field is empty)." default:"{}"`
 }
 
 // HomeDomainFor returns the home-domain registered for the issuer,
@@ -408,16 +408,21 @@ type IngestionConfig struct {
 	LiveSeamLedger uint32 `toml:"live_seam_ledger" doc:"First ledger in the live bucket. Below this, indexer reads from galexie-archive. 0 disables the archive bucket entirely." default:"0"`
 }
 
-// AnomalyConfig configures the Phase-1 per-asset-class anomaly
-// detection per ADR-0019. The aggregator consults these thresholds
-// at bucket-close time to decide whether to publish, warn, or
-// freeze the new VWAP.
+// AnomalyConfig configures both phases of ADR-0019 anomaly
+// detection. The aggregator consults these thresholds at
+// bucket-close time to decide whether to publish, warn, or freeze
+// the new VWAP.
 //
-// See `internal/aggregate/anomaly/` for the consumer + the
-// algorithm semantics. Phase 2 (statistical baselines) replaces
-// these operator-set numbers with per-asset learned thresholds —
-// at that point the [Thresholds] table becomes a fallback for
-// assets whose baseline isn't yet established.
+// See `internal/aggregate/anomaly/` for Phase 1 (per-class
+// thresholds — coarse safety net for assets without an established
+// baseline) and `internal/aggregate/baseline/` +
+// `internal/aggregate/confidence/` for Phase 2 (per-asset MAD
+// baseline + multi-factor confidence). Both layers run in parallel;
+// the orchestrator's AND-of-three-signals rule (configured below
+// in [Phase2FreezeConfig]) only fires ActionFreeze when Phase 1
+// flags a class-level breach AND Phase 2 confirms the bucket is
+// statistically anomalous AND under-confident AND
+// under-corroborated.
 type AnomalyConfig struct {
 	// Enabled gates whether anomaly checks run at all. When false,
 	// every bucket is published as-is (no warn / no freeze). Off by
@@ -510,15 +515,42 @@ type TriangulationChainConfig struct {
 
 // APIConfig controls the public REST+SSE server.
 type APIConfig struct {
-	ListenAddr          string      `toml:"listen_addr" doc:"Bind address for the HTTP server." default:"0.0.0.0:3000"`
-	ExternalBaseURL     string      `toml:"external_base_url" doc:"Public-facing base URL (e.g. https://api.ratesengine.net/v1)." default:"https://api.ratesengine.net/v1"`
-	AuthMode            string      `toml:"auth_mode" doc:"Authentication mode — none / apikey / sep10. The API binary wires real validators when the required backing dependencies and secrets are present; a deployment that opts into auth without satisfying those requirements fails loud rather than silently demoting to anonymous." default:"none"`
-	AnonRateLimitPerMin int         `toml:"anon_rate_limit_per_min" doc:"Per-IP rate limit for anonymous requests." default:"60"`
-	KeyRateLimitPerMin  int         `toml:"key_rate_limit_per_min" doc:"Per-API-key rate limit, default tier." default:"1000"`
-	CDNEnabled          bool        `toml:"cdn_enabled" doc:"Emit CDN-friendly Cache-Control headers on long-immutable endpoints." default:"true"`
-	AllowedOrigins      []string    `toml:"allowed_origins" doc:"CORS allow-list for browser clients." default:"[\"*\"]"`
-	TrustedProxyCIDRs   []string    `toml:"trusted_proxy_cidrs" doc:"Immediate peer CIDR allow-list that is permitted to supply X-Forwarded-For. Empty means the API ignores that header and uses the socket peer address for logging, anonymous identity, and IP-based rate limiting." default:"[]"`
-	SEP10               SEP10Config `toml:"sep10" doc:"SEP-10 Web Auth — server signing seed, JWT secret, TTLs. Active when auth_mode=sep10 OR when /v1/auth/sep10/* endpoints are exposed."`
+	ListenAddr          string          `toml:"listen_addr" doc:"Bind address for the HTTP server." default:"0.0.0.0:3000"`
+	ExternalBaseURL     string          `toml:"external_base_url" doc:"Public-facing base URL (e.g. https://api.ratesengine.net/v1)." default:"https://api.ratesengine.net/v1"`
+	AuthMode            string          `toml:"auth_mode" doc:"Authentication mode — none / apikey / sep10. The API binary wires real validators when the required backing dependencies and secrets are present; a deployment that opts into auth without satisfying those requirements fails loud rather than silently demoting to anonymous." default:"none"`
+	AnonRateLimitPerMin int             `toml:"anon_rate_limit_per_min" doc:"Per-IP rate limit for anonymous requests." default:"60"`
+	KeyRateLimitPerMin  int             `toml:"key_rate_limit_per_min" doc:"Per-API-key rate limit, default tier." default:"1000"`
+	CDNEnabled          bool            `toml:"cdn_enabled" doc:"Emit CDN-friendly Cache-Control headers on long-immutable endpoints." default:"true"`
+	AllowedOrigins      []string        `toml:"allowed_origins" doc:"CORS allow-list for browser clients." default:"[\"*\"]"`
+	TrustedProxyCIDRs   []string        `toml:"trusted_proxy_cidrs" doc:"Immediate peer CIDR allow-list that is permitted to supply X-Forwarded-For. Empty means the API ignores that header and uses the socket peer address for logging, anonymous identity, and IP-based rate limiting." default:"[]"`
+	SEP10               SEP10Config     `toml:"sep10" doc:"SEP-10 Web Auth — server signing seed, JWT secret, TTLs. Active when auth_mode=sep10 OR when /v1/auth/sep10/* endpoints are exposed."`
+	Streaming           StreamingConfig `toml:"streaming" doc:"Closed-bucket SSE fanout — pairs the API binary republishes to the streaming Hub on every new closed prices_1m bucket. Empty Pairs leaves /v1/price/stream returning 503; Hub still constructs so subscribers can connect (and immediately drop) without a panic."`
+}
+
+// StreamingConfig configures the closed-bucket SSE producer
+// driving /v1/price/stream. Per L3.9 / launch-task-list G2: the
+// Hub-driven endpoint depends on a producer; this config tells
+// the API binary which (asset, quote) pairs to broadcast.
+//
+// Static set — adding a pair requires a binary restart. Reasoning:
+// the producer is a per-pair goroutine that polls the existing
+// PriceReader at [PollInterval]; a runtime add/remove path adds
+// reference-counting bookkeeping without a corresponding launch
+// requirement. Operators ship the major pairs (XLM/USD, USDC/USD,
+// AQUA/USD …) at config time.
+type StreamingConfig struct {
+	// Pairs is the operator-declared list of (asset, quote) pairs
+	// to broadcast. Each entry is a two-element [base, quote] array
+	// using canonical asset strings (e.g. ["native","fiat:USD"],
+	// ["sac:CAS3J7…OWMA","fiat:USD"]). Empty disables the producer
+	// while still letting the Hub construct.
+	Pairs [][]string `toml:"pairs" doc:"Operator-declared closed-bucket fanout pair list. Each entry is a two-element [base, quote] array of canonical asset strings (e.g. [[\"native\", \"fiat:USD\"], [\"credit:USDC:GA5Z…\", \"fiat:USD\"]]). Empty disables the producer; clients that connect see SSE open + heartbeats but no price_update events." default:"[]"`
+
+	// PollInterval is the per-pair poll cadence. Sub-second values
+	// are clamped to 1 s by the publisher; zero falls back to 5 s.
+	// 5 s detects a new 1-minute closed bucket within 5 s of its
+	// end — well inside Freighter's 30 s freshness target.
+	PollInterval time.Duration `toml:"poll_interval" doc:"Per-pair poll cadence for the closed-bucket producer. Default 5s; clamped to 1s minimum." default:"5s"`
 }
 
 // SEP10Config configures the SEP-10 Web Auth validator. Both
@@ -793,6 +825,10 @@ func Default() Config {
 				HomeDomain:    "ratesengine.net",
 				ChallengeTTL:  15 * time.Minute,
 				JWTTTL:        1 * time.Hour,
+			},
+			Streaming: StreamingConfig{
+				Pairs:        [][]string{},
+				PollInterval: 5 * time.Second,
 			},
 		},
 		Divergence: defaultDivergenceConfig(),

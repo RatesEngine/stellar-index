@@ -38,7 +38,11 @@ Every alert carries:
 - `severity: ticket` → SEV-2 (P2) — business-hours page, after-hours ticket.
 - `severity: informational` → SEV-3 (P3) — ticketed, weekly review.
 
-AlertManager routes by label (see its config, TBD).
+AlertManager routes by label. The config template lives at
+[`configs/ansible/roles/prometheus/templates/alertmanager.yml.j2`](../../configs/ansible/roles/prometheus/templates/alertmanager.yml.j2)
+— rendered to `/etc/alertmanager/alertmanager.yml` on `mon-01..02`
+by the `prometheus` ansible role. Routes split by `severity:` to
+PagerDuty (page) / Slack + Discord (ticket) / informational digest.
 
 ## Validating locally
 
@@ -56,10 +60,18 @@ promtool check rules deploy/monitoring/rules/*.yml
 # There is currently no checked-in test/monitoring/ tree.
 ```
 
-CI does NOT currently run `promtool check rules` or `promtool test rules`.
-The only enforced control today is the documentation/runbook drift check in
-`scripts/ci/lint-docs.sh`. Run `make monitoring-check` locally before merging
-rule changes.
+CI runs `promtool check rules` on every PR via the `monitoring-rules`
+job in [`.github/workflows/ci.yml`](../../.github/workflows/ci.yml)
+(installs `promtool` from the official Prometheus release, then
+runs `make monitoring-check`). Rule-file syntax errors fail the
+PR; a doc-only drift check on alert/runbook references runs in
+parallel via `scripts/ci/lint-docs.sh`. `promtool test rules`
+(rule-firing unit tests) is not wired — there is no
+`test/monitoring/` tree yet; that's a follow-up if rule logic
+ever grows complex enough to need behavioural tests.
+
+Run `make monitoring-check` locally before pushing to skip a
+round-trip on rule-syntax errors.
 
 ## Adding an alert
 
