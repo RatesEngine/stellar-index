@@ -15,6 +15,37 @@ against.
 
 ## [Unreleased]
 
+### Documentation
+
+- **WASM-audit v2 fill-in across all eight Soroban sources** —
+  every per-source audit doc under `docs/operations/wasm-audits/`
+  now folds in the 2026-04-30 r1 wide-net walk's per-instance
+  evidence (540 contracts / 52 unique WASMs SHA-256-verified +
+  bytes-preserved on r1). Notable changes:
+  - **Comet's v2 audit folded into Blend's** — the only mainnet
+    Comet pool is Blend's Backstop V2 (`CAQQR5SW…` →
+    `c1f4502a…`). `comet.md` now redirects to `blend.md` for the
+    per-instance hash inventory; `blend.md` documents both source
+    rows symmetrically. Comet (the protocol) is a Balancer-v1-style
+    AMM library used by Blend's backstop module — not an actively-
+    maintained standalone DEX.
+  - **Aquarius gained Cohort A / Cohort B sections** — 168 never-
+    upgraded pools (3 WASMs) plus 145 upgraded pools across a
+    5-WASM upgrade chain (`b54ba37b → 2d770946 → 7cecf23b →
+    a1629dcd → 4f080d24`). Closes the "doc incomplete, not wrong"
+    gap flagged in the 2026-05-01 cross-source review.
+  - **Soroswap gained per-instance Phase 2 results** — 196
+    contracts (1 factory + 1 router + 194 pair instances), three
+    unique WASMs total, zero mid-life upgrades observed.
+  - **Phoenix gained per-instance Phase 2 results** — 13
+    contracts on 22 WASMs (5 factory + 3 multihop + 14 pool); the
+    most-iterated source. All 14 pool WASMs binary-confirmed to
+    contain the eight swap-field strings (`actual received amount`
+    spelling preserved across the chain).
+  - **Reflector / Redstone / Band** confirmation notes added
+    pinning the v2 walk's findings; no decoder-relevant changes.
+  - All `last_verified` dates bumped to 2026-05-03.
+
 ### Fixed
 
 - **`/v1/account/me` now returns the credential's `label`** —
