@@ -486,10 +486,6 @@ Subcommands:
                               -source soroswap,aquarius
   version                 Print version + build date.
   help                    This help.
-
-TODO subcommands (land with their feature PRs):
-  cache-prime             Warm the Redis hot-path cache from Timescale.
-  verify-invariants       Cross-check aggregated prices against divergence.
 `
 
 func printUsage() {
