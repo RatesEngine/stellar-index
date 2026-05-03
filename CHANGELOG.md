@@ -291,6 +291,18 @@ against.
 
 ### Fixed
 
+- **`docs/architecture/semver-policy.md` reflects the
+  pkg/client/types.go decision** — said `pkg/types` was a
+  Planned package, "deferred until refactor", with the SDK
+  "deliberately duplicating types to keep the skeleton
+  focused". CLAUDE.md captures the architectural decision
+  ("types live alongside the client in pkg/client/types.go
+  rather than a separate pkg/types directory") and
+  `pkg/client/types.go` is shipped today. Doc rewritten to
+  describe `pkg/client/types.go` as the canonical SDK home and
+  explain the intentional separation between SDK shapes and
+  the server's `internal/api/v1` envelope as a SemVer firewall,
+  not duplication-pending-refactor.
 - **`internal/sources/trustlines/doc.go` describes the shipped
   reader, not a future one** — said the "future
   StorageClassicSupplyReader (Task #66)" consumes
