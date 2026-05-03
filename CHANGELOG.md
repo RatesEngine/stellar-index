@@ -379,6 +379,30 @@ against.
 
 ### Fixed
 
+- **Launch-readiness backlog: three caveats reclassified ⚠ → ✅
+  with sharper language**:
+  - **L2.2** `usd_volume`: the row's "off-chain only" framing
+    misrepresented coverage. `tradeUSDVolume` covers BOTH
+    off-chain (CEX/FX) AND on-chain (DEX with operator-declared
+    classic USD-pegs + their SAC wrappers). Today this means
+    USDC/USDT/EURC/EURB/MXNe/PYUSD — every classic-form
+    stablecoin currently traded on Stellar — populate
+    `usd_volume` correctly on Soroswap/Phoenix/Aquarius/SDEX.
+    The pure-SEP-41 (Soroban-native, no classic backer) case
+    is empty on mainnet today; moved to L7.6 (post-launch).
+  - **L3.1** `/v1/price` end-to-end: the "CAGG-fill" caveat
+    described an operational dependency (running the
+    aggregator binary against production data), not a code
+    gap. CAGGs auto-refresh per the
+    `add_continuous_aggregate_policy` calls in
+    `migrations/0002_create_price_aggregates.up.sql`. Closes
+    naturally at L6.4 cutover.
+  - **L5.4** `ingest_peak_ledger.js` k6 scenario: documented
+    acceptance — the mixed-realistic scenario
+    (`06-mixed-realistic.js`) covers the indexer's load shape
+    alongside API load. A dedicated indexer-only scenario is
+    a post-launch nice-to-have for isolated saturation-finding,
+    not launch-blocking.
 - **`sev-playbook.md` §5.1 status-page section is no longer a
   Week-N stub** — the doc said `Public status page lives at
   https://status.ratesengine.net (TBD — provisioning in Week
