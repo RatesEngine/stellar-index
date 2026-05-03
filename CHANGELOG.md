@@ -291,6 +291,19 @@ against.
 
 ### Fixed
 
+- **`CONTRIBUTING.md` and `repo-hygiene-plan.md` source-connector
+  five-file convention now matches reality** — both docs listed
+  the fourth canonical file as `factory.go (on-chain) or
+  consumer.go (off-chain)`, but no `factory.go` exists anywhere
+  in `internal/sources/` (verified with `find internal/sources
+  -name factory.go`). The on-chain shape uses `consumer.go` plus
+  source-specific extras like `dispatcher_adapter.go` and
+  `factory_seed.go` (Soroswap / Aquarius factory-deploys-pair
+  contracts). The CEX shape sometimes splits `consumer.go` into
+  `streamer.go` + `backfill.go` (binance). Both docs now name
+  `consumer.go` as the canonical fourth file (matching CLAUDE.md
+  §"Add a new CEX connector") and mention the per-shape extras.
+  Continuation of the L6.5 doc-sweep.
 - **`README.md` no longer claims a non-existent Stellar
   protocol** — the `**Tested against:** Stellar protocol 25.x`
   line at the top of the README pointed at a network protocol
