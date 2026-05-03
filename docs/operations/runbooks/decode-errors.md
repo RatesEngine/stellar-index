@@ -1,6 +1,6 @@
 ---
 title: Runbook — decode-errors
-last_verified: 2026-04-30
+last_verified: 2026-05-02
 status: draft
 severity: P3
 ---
@@ -40,7 +40,8 @@ curl -s http://api:9464/metrics | grep ratesengine_source_decode_errors_total
 # Peek the indexer's stderr for the most recent rejection reasons.
 # Source logs at debug when an event is dropped — enable temporarily
 # if the default level is info.
-kubectl logs deploy/ratesengine-indexer --tail=500 | grep -iE "decode|parse|malformed" | tail -30
+ssh root@indexer-01 "journalctl -u ratesengine-indexer -n 500 --no-pager" \
+  | grep -iE "decode|parse|malformed" | tail -30
 
 # Cross-check: is the contract the source points at the right one?
 # A protocol upgrade often changes event shape for a specific
@@ -73,6 +74,20 @@ This alert is P3 because there's no emergency runtime response — we can't un-d
 - [ ] Step 3 — if the cause is a contract upgrade (option 1 or 2): update the decoder in `internal/sources/<source>/decode.go`. Typical iteration is one PR plus a golden-file fixture reproduction. Backfill from the cursor start via the indexer on relaunch.
 - [ ] Step 4 — if the cause is a regression (option 3): `git revert` the suspect commit and deploy. File an incident to retry the regressed change with a proper test.
 - [ ] Verification: `rate(...decode_errors_total[5m])` drops back under the 1/sec threshold within 5 min of mitigation.
+
+### Customer comms note when `class_drop_spike` co-fires
+
+If `ratesengine_aggregator_class_drop_spike` fires alongside this
+alert, the affected source has dropped out of the VWAP for one or
+more pairs. The remaining sources continue to serve prices, but
+the smaller consensus may produce elevated
+`flags.divergence_warning` on the affected pairs. **Surface this
+in customer comms** — it explains why a customer might see a
+warning flag without a corresponding price disruption. Template:
+"Affected pairs may show elevated `flags.divergence_warning`; price
+is still served correctly from remaining sources." See
+[drills/2026-04-sev2-soroswap-decode-regression.md](../drills/2026-04-sev2-soroswap-decode-regression.md)
+for the canonical exercise of this pattern.
 
 ## Related
 

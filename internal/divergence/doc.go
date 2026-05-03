@@ -8,23 +8,29 @@
 //
 // # Scope
 //
-// PR A (this package as initially shipped):
+// Wired today:
 //
-//   - [Reference] interface — every external source plugs in here
+//   - [Reference] interface — every external source plugs in here.
 //   - [Compare] — gather references in parallel, compute the
-//     divergence percentage from the median
+//     divergence percentage from the median.
 //   - [Result] — the wire shape consumed by the aggregator's
-//     bucket-close path to set [api.v1.Flags].DivergenceWarning
-//   - [CoinGecko] — reference implementation against CoinGecko's
-//     /simple/price endpoint, demonstrating the contract
+//     bucket-close path to set [api.v1.Flags].DivergenceWarning.
+//   - [Service] / [CachedResult] — the worker shape the aggregator
+//     binary instantiates; per-pair [RefreshPair] is driven by the
+//     orchestrator's Tick.
+//   - [CoinGeckoReference] — HTTP reference against CoinGecko's
+//     /simple/price endpoint. Always-on by default (free tier,
+//     no auth).
+//   - [ChainlinkReference] — HTTP reference against Chainlink's
+//     EVM AggregatorV3 `latestAnswer()` selector. Off by default;
+//     operator opts in via FeedMap of mainnet feed addresses.
 //
-// Subsequent PRs add more references:
-//
-//   - CoinMarketCap (HTTP)
-//   - Reflector (Stellar contract — DEX/CEX/FX variants)
-//   - Band (Stellar contract)
-//   - Redstone (Stellar contract — WritePrices event subscription)
-//   - Chainlink (HTTP — no live Stellar Data Feed at audit time)
+// On-chain oracles (Reflector, Band, Redstone) are NOT plugged in
+// here — they ingest as on-chain *sources* (`internal/sources/{
+// reflector, band, redstone}`) and contribute to the underlying
+// VWAP itself, not to the divergence cross-check. CoinMarketCap is
+// a candidate future HTTP reference; deferred until an operator
+// asks for a second aggregator behind CoinGecko.
 //
 // # Algorithm
 //
@@ -49,9 +55,11 @@
 // The threshold on "do we trust the median?" is implicit in the
 // caller's logic — if N of M references succeeded and N is too
 // small to constitute a meaningful consensus, the aggregator
-// SHOULD NOT fire divergence_warning purely on its own. PR A
-// exposes the count via [Result.SuccessCount]; PR B/C will add
-// confidence-weighted aggregation.
+// SHOULD NOT fire divergence_warning purely on its own.
+// [Result.SuccessCount] exposes the count for that decision;
+// [ServiceOptions.MinSourcesForWarning] (config:
+// `[divergence].min_sources_for_warning`, default 2) is the
+// operator-tunable floor.
 //
 // # Concurrency
 //

@@ -12,7 +12,7 @@ Operational companion to the executable SLA-evidence CLI shipped in
 - What the probe is + why it runs continuously
 - Daily cron via `deploy/systemd/sla-probe.{service,timer}`
 - The RFP-stated SLA targets the probe verifies against
-- The follow-up plan for textfile-collector + alerting integration
+- Textfile-collector integration + the four shipped alerts
 
 ## Purpose
 
@@ -154,21 +154,17 @@ ratesengine_sla_probe_unit_failed                          gauge   1 on fail, 0 
 ratesengine_sla_probe_last_pass_timestamp                  gauge   unix; only on pass
 ```
 
-### Alert rules (planned follow-up)
+### Alerts
 
-The metric set above is shipped; alert rules live in
-`deploy/monitoring/rules/` and are tracked as a separate follow-up.
-Likely shapes:
+Four alerts in `deploy/monitoring/rules/sla-probe.yml`, each with a
+runbook under `docs/operations/runbooks/sla-probe-*.md`:
 
-- `ratesengine_sla_probe_p95_breach` — p95 latency > target for
-  ≥ 2 consecutive runs → P2 page.
-- `ratesengine_sla_probe_freshness_breach` — freshness > target
-  for ≥ 1 run → P2 page.
-- `ratesengine_sla_probe_unit_failed_alert` — `unit_failed` gauge
-  has been 1 for ≥ 2 consecutive scrapes → P3 ticket.
-- `ratesengine_sla_probe_stale` — `last_pass_timestamp` older than
-  90 minutes (6× the 15-min cadence) → P2 page (the timer hasn't
-  fired or every recent run has failed).
+| Alert | Condition | Severity |
+|-------|-----------|----------|
+| `ratesengine_sla_probe_p95_breach` | per-endpoint p95 > 200 ms sustained 30 min | **P2** page |
+| `ratesengine_sla_probe_freshness_breach` | per-endpoint freshness > 30 s sustained 30 min | **P2** page |
+| `ratesengine_sla_probe_unit_failed_alert` | overall verdict gauge = 1 sustained 30 min | P3 ticket |
+| `ratesengine_sla_probe_stale` | `last_pass_timestamp` older than 90 min (6× 15-min cadence) | **P2** page |
 
 ## SLA targets in code
 

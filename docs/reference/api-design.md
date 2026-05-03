@@ -1,13 +1,12 @@
 ---
 title: API Design — Rates Engine v1
 last_verified: 2026-05-02
-status: draft — ratified at Week 4 design review
+status: ratified — `openapi/rates-engine.v1.yaml` is the binding contract; this doc records design intent
 ---
 
 # API Design — Rates Engine v1
 
 **Owner:** @ash.
-**Ratification target:** end of Week 4.
 **Binds:** `openapi/rates-engine.v1.yaml` (source of truth for the
 wire contract), `internal/api/` (Go implementation),
 `pkg/client/` (Go SDK), `docs/reference/api/` (generated reference).
@@ -489,22 +488,25 @@ All SDKs have:
 
 ---
 
-## 15. Open questions (close by Week 4)
+## 15. Open questions — closed
 
-1. **GraphQL layer?** The RFP allows "REST or GraphQL"; we ship REST
-   V1. If a customer insists on GraphQL we build a thin wrapper
-   (gqlgen or hasura) post-launch.
-2. **WebSockets vs SSE?** SSE is simpler operationally; WebSockets
-   allow client→server. We have nothing client→server in the
-   streaming use case, so SSE wins. Revisit if we add a client-
-   pushed "heartbeat" model.
-3. **Asset image hosting?** Do we proxy `stellar.toml`'s `image` URL
-   or re-host? Probably proxy-then-cache to avoid being a CDN for
-   random issuer images.
-4. **Webhook callbacks?** Not in V1 scope. Customers who want push
+Each was a "close by Week 4 design review" item; all settled:
+
+1. **GraphQL layer?** Out of v1 scope. Tracked as L7.5 in the
+   launch-readiness backlog (`⏳ post-launch`); if a customer
+   insists, a thin wrapper (gqlgen or hasura) ships then.
+2. **WebSockets vs SSE?** SSE. Implemented as `/v1/price/stream`,
+   `/v1/price/tip/stream`, `/v1/observations/stream`. We have
+   nothing client→server in the streaming use case.
+3. **Asset image hosting?** Proxy via `internal/metadata` —
+   `stellar.toml`'s `image` field surfaces as `asset.image_url`
+   on `/v1/assets/{id}` after SEP-1 verification. We don't
+   re-host issuer images.
+4. **Webhook callbacks?** Not in v1. Customers who want push
    use SSE.
-5. **gRPC?** No. The serving footprint is HTTP-native; gRPC adds a
-   binary protocol with no partner asking for it.
+5. **gRPC?** No. The serving footprint is HTTP-native; no
+   partner has asked, and adding a binary protocol earns no
+   measurable win on top of the SSE + REST shape.
 
 ---
 
@@ -516,4 +518,4 @@ is implemented in `internal/api/v1/` (the price/batch,
 price/stream, history/since-inception, account/*, and SEP-40
 passthrough paths that were on the lint's `planned_regex`
 allow-list have all shipped). The 1:1 invariant is enforced by
-`scripts/ci/lint-docs.sh` §11.
+`scripts/ci/lint-docs.sh` §2 (OpenAPI ↔ handler).
