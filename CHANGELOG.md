@@ -17,6 +17,15 @@ against.
 
 ### Fixed
 
+- **Phoenix decoder's `evictedOrphans` godoc reflects the shipped
+  metric path** — comment said "Production wiring in
+  cmd/ratesengine-indexer will export this as
+  obs.SourceOrphanEventsTotal once 165d lands". It already
+  ships: the dispatcher reads `EvictedOrphans()` via an optional
+  interface (`internal/dispatcher/dispatcher.go:339`), and the
+  indexer pipeline adds it to `obs.SourceOrphanEventsTotal` in
+  `internal/pipeline/processor.go:80`. Doc points readers at the
+  real wiring.
 - **`/v1/account/me` now returns the credential's `label`** —
   `APIKeyRecord.Label` was set at creation time and the OpenAPI
   `Account` schema declared the field, but the path
