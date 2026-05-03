@@ -279,6 +279,53 @@ func TestBucket_MaxAndWindowAccessors(t *testing.T) {
 	}
 }
 
+func TestBucket_TakeN_OverrideRaisesEffectiveLimit(t *testing.T) {
+	// Bucket configured with default 2/min. A paid customer with
+	// override 5 should be allowed 5 hits via TakeN before the 6th
+	// is rejected — the override replaces b.max for this caller.
+	rdb, _ := newRedis(t)
+	b := ratelimit.New(rdb, 2, time.Minute)
+	ctx := context.Background()
+
+	for i := 1; i <= 5; i++ {
+		r, err := b.TakeN(ctx, "paid-cust", 5)
+		if err != nil {
+			t.Fatalf("TakeN %d: %v", i, err)
+		}
+		if !r.Allowed {
+			t.Errorf("hit %d should be allowed under override=5, got Count=%d", i, r.Count)
+		}
+		if r.Remaining != 5-i {
+			t.Errorf("hit %d remaining = %d, want %d", i, r.Remaining, 5-i)
+		}
+	}
+	r, _ := b.TakeN(ctx, "paid-cust", 5)
+	if r.Allowed {
+		t.Errorf("6th hit should be denied under override=5, got Count=%d", r.Count)
+	}
+}
+
+func TestBucket_TakeN_ZeroOverrideUsesBucketDefault(t *testing.T) {
+	// TakeN with override <= 0 must behave identically to Take.
+	rdb, _ := newRedis(t)
+	b := ratelimit.New(rdb, 2, time.Minute)
+	ctx := context.Background()
+
+	for i := 1; i <= 2; i++ {
+		r, err := b.TakeN(ctx, "default-cust", 0)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !r.Allowed {
+			t.Errorf("hit %d should be allowed under bucket default 2", i)
+		}
+	}
+	r, _ := b.TakeN(ctx, "default-cust", 0)
+	if r.Allowed {
+		t.Errorf("3rd hit should be denied — override=0 must defer to bucket.max=2")
+	}
+}
+
 func TestBucket_WithKeyPrefixOverridesDefault(t *testing.T) {
 	// Default prefix is "rl:". Override via WithKeyPrefix and verify
 	// the new prefix shows up on the actual Redis key — observable
