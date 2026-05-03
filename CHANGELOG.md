@@ -17,6 +17,21 @@ against.
 
 ### Fixed
 
+- **`ratesengine-ops` package docstring matches the actual
+  subcommand set** — the binary's `// Binary ratesengine-ops`
+  godoc said "admin CLI: backfill, gap-detect, cache-prime,
+  docs-config" with the closing line "Today only `docs-config`
+  is wired; the rest land with the corresponding implementation
+  PRs." Reality (per `cmd/ratesengine-ops/main.go`'s
+  `switch args[0]` block): 18+ subcommands wired across ingest /
+  archive integrity / Soroban discovery / supply / diagnostics /
+  doc generation. The docstring also called the gap-detection
+  subcommand `gap-detect` but the actual name is `detect-gaps`,
+  and `cache-prime` was never built. Rewritten to enumerate the
+  real buckets with the canonical names; closing line now points
+  readers at the switch block + `--help` as the source of truth.
+  Continuation of the L6.5 doc-sweep.
+
 - **`/v1/account/me` now returns the credential's `label`** —
   `APIKeyRecord.Label` was set at creation time and the OpenAPI
   `Account` schema declared the field, but the path
