@@ -12,7 +12,8 @@ Operational companion to [ADR-0011](../adr/0011-supply-algorithm.md)
 - What the snapshot writer is + why it runs
 - The `[supply]` config block + manual reserve-balance updates
 - Daily cron via `deploy/systemd/supply-snapshot.{service,timer}`
-- Asset-class scope at v1 (XLM only) + the follow-up plan
+- Asset-class scope (XLM via the systemd timer; classic + SEP-41
+  via the aggregator-resident refresher)
 
 The implementation lives in `cmd/ratesengine-ops/supply.go` (the
 `supply snapshot` subcommand) and `internal/supply/config_reader.go`
@@ -26,10 +27,14 @@ The implementation lives in `cmd/ratesengine-ops/supply.go` (the
 `asset_supply_history` hypertable. Without a producer, the table
 stays empty and those fields ship as JSON null.
 
-The writer is the producer. Each run computes the current Supply
-per ADR-0011 Algorithm 1 (native XLM at v1; classic + SEP-41 follow
-once their respective computers ship) and inserts a row into
-`asset_supply_history`. The handler reads back the latest row.
+The writer is the producer. Two writers run in production today:
+the systemd-timer-driven CLI snapshot (XLM-only — see "Asset-class
+scope" below) and the aggregator-resident refresher
+(`[supply].aggregator_refresh_enabled`), which iterates every
+watched asset across all three ADR-0011 algorithms (XLM,
+classic-credit per ADR-0022, SEP-41 per ADR-0023). Both insert
+into `asset_supply_history`; the handler reads back the latest
+row per asset.
 
 ## Why operator-managed reserve balances
 

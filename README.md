@@ -6,7 +6,7 @@ multi-factor confidence, freeze policy, supply pipeline);
 production hardening in progress (status page, SEV-1/2 dry-run,
 operational SLA proof).
 **License:** Apache-2.0.
-**Tested against:** Stellar protocol 25.x.
+**Tested against:** Stellar pubnet protocol 23 (post-P23 / CAP-67 unified events).
 
 A publicly-accessible, aggregated, real-time and historical price API
 for every Stellar asset — classic and SEP-41 Soroban token.
@@ -54,13 +54,13 @@ See [docs/discovery/repo-structure-plan.md](docs/discovery/repo-structure-plan.m
 for the rationale. Summary:
 
 ```
-cmd/                   binaries (indexer / aggregator / api / ops / migrate)
+cmd/                   binaries (indexer / aggregator / api / ops / migrate / sla-probe)
 internal/              private packages (Go-enforced non-importable)
 pkg/                   public surface (client SDK + stable types)
 migrations/            TimescaleDB schema migrations
-configs/               default + example configs
+configs/               example.toml + Ansible roles (configs/ansible/)
 openapi/               API spec — source of truth for reference docs
-deploy/                docker-compose / k8s / baremetal deploy kits
+deploy/                docker-compose (dev) / systemd (production) / monitoring (Prometheus rules) / status-page
 test/                  integration + load + chaos + fixtures
 docs/                  architecture / ADR / operations / reference / discovery
 ```

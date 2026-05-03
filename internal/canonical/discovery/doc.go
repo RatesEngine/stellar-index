@@ -30,11 +30,21 @@
 //   - [SEP41EventType] — enum identifying which SEP-41 event was
 //     observed.
 //
-// Future work (separate PRs):
+// Wired today:
 //
-//   - dispatcher integration: wire Sniff into the event-flow's tail
-//     so every event passing through gets sniffed
-//   - Postgres-backed Recorder via internal/storage/timescale
-//   - ops command + alert metric for the rate of new-contract
-//     discoveries
+//   - Dispatcher integration:
+//     [internal/dispatcher/dispatcher.go]'s `dispatchOne` calls
+//     [discovery.Sniff] on every event flowing through, after
+//     decoder dispatch.
+//   - Postgres-backed Recorder:
+//     [internal/storage/timescale/discovery.go] implements
+//     [Recorder] against the `discovered_assets` hypertable;
+//     `cmd/ratesengine-indexer/main.go` adapts the Store to the
+//     interface.
+//   - Ops command: `ratesengine-ops discovery` (see
+//     `cmd/ratesengine-ops/discovery.go`) — list, recent-window,
+//     per-source counts.
+//   - Alert metric: `ratesengine_ingestion_discovery_drops` per
+//     `deploy/monitoring/rules/ingestion.yml` — fires when
+//     discovery writes start failing.
 package discovery
