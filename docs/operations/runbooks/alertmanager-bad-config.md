@@ -1,6 +1,6 @@
 ---
 title: Runbook — alertmanager-bad-config
-last_verified: 2026-04-23
+last_verified: 2026-05-02
 status: draft
 severity: P2
 ---
@@ -26,16 +26,22 @@ severity: P2
 
 ## Quick diagnosis (≤ 5 min)
 
+AlertManager runs as `alertmanager.service` on `mon-01` and
+`mon-02` (per the `prometheus` ansible role; ADR-0008 §3
+monitoring tier). The live config is at
+`/etc/alertmanager/alertmanager.yml`, rendered from the role's
+`alertmanager.yml.j2`.
+
 ```sh
-# Check AlertManager's own logs
-kubectl -n monitoring logs deploy/alertmanager --tail=100 | grep -iE 'reload|error'
+# Check AlertManager's own logs around the failed reload
+ssh root@mon-01 "journalctl -u alertmanager -n 100 --no-pager | grep -iE 'reload|error'"
 
-# Run amtool against the in-repo config
-amtool check-config deploy/monitoring/alertmanager.yml
+# Run amtool against the role-rendered config (must match live)
+ssh root@mon-01 "amtool check-config /etc/alertmanager/alertmanager.yml"
 
-# Diff the live config vs the repo copy
-kubectl -n monitoring get cm alertmanager-config -o jsonpath='{.data.alertmanager\.yml}' \
-  | diff - deploy/monitoring/alertmanager.yml
+# Diff the live config across the AM pair — they must agree
+diff <(ssh root@mon-01 cat /etc/alertmanager/alertmanager.yml) \
+     <(ssh root@mon-02 cat /etc/alertmanager/alertmanager.yml)
 ```
 
 ## Typical root causes
@@ -59,20 +65,29 @@ kubectl -n monitoring get cm alertmanager-config -o jsonpath='{.data.alertmanage
 
 ## Mitigation
 
-- [ ] Step 1 — `amtool check-config` locally on the repo config.
-      Fix syntax.
-- [ ] Step 2 — ensure secrets referenced are present.
-- [ ] Step 3 — push the fix via the normal GitOps flow (don't edit
-      the live ConfigMap — it'll be clobbered on next reconcile).
-- [ ] Step 4 — force a reload: `curl -XPOST http://alertmanager:9093/-/reload`.
+- [ ] Step 1 — `amtool check-config` locally on the role's
+      `alertmanager.yml.j2` rendered to a temp file. Fix syntax.
+- [ ] Step 2 — ensure any vault-backed receiver creds (Slack /
+      Discord webhook URLs, PagerDuty integration keys) referenced
+      by the config are present and reachable.
+- [ ] Step 3 — push via the normal flow: `ansible-playbook` with
+      the prometheus role (don't hand-edit
+      `/etc/alertmanager/alertmanager.yml` — the next role apply
+      will overwrite it).
+- [ ] Step 4 — force a reload (the role does this automatically
+      via handler, but if needed manually):
+      `ssh root@mon-01 "curl -XPOST http://localhost:9093/-/reload"`
+      and the same on `mon-02`.
 - [ ] Verification:
-      `alertmanager_config_last_reload_successful == 1`; the
-      alert clears after one evaluation interval.
+      `alertmanager_config_last_reload_successful == 1` on both
+      `mon-01` and `mon-02`; the alert clears after one evaluation
+      interval.
 
 ## Root cause analysis
 
-- Git log on `deploy/monitoring/alertmanager.yml` showing the
-  breaking commit.
+- Git log on
+  `configs/ansible/roles/prometheus/templates/alertmanager.yml.j2`
+  showing the breaking commit.
 - AlertManager log around the failed reload.
 - Was the change reviewed? (CODEOWNERS routing working?)
 - CI check should catch this — add an `amtool check-config` step
@@ -80,7 +95,7 @@ kubectl -n monitoring get cm alertmanager-config -o jsonpath='{.data.alertmanage
 
 ## Known false-positive patterns
 
-- **Reload during pod startup** — `last_reload_successful` is 0
+- **Reload during unit startup** — `last_reload_successful` is 0
   until the very first load completes. During a cold start this
   can briefly trip; `for: 5m` absorbs normal startup.
 
@@ -95,3 +110,10 @@ kubectl -n monitoring get cm alertmanager-config -o jsonpath='{.data.alertmanage
 ## Changelog
 
 - 2026-04-23 — initial draft.
+- 2026-05-02 — diagnosis converted from kubectl ConfigMap +
+  pod-logs to systemd / journalctl on `mon-01..02` running
+  `alertmanager.service` per the `prometheus` ansible role
+  (ADR-0008). The cited path `deploy/monitoring/alertmanager.yml`
+  was wrong — the source-of-truth template is in the role
+  (`alertmanager.yml.j2`); live config sits at
+  `/etc/alertmanager/alertmanager.yml`.

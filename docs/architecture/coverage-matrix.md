@@ -319,8 +319,11 @@ For each claim below we state the **as-written promise**, what we
   compression were read from `stellar-galexie` source. CDP SDK
   (`github.com/stellar/go-stellar-sdk/ingest`) path confirmed via
   [data-sources/composable-data-platform.md](../discovery/data-sources/composable-data-platform.md).
-- **Open**: MinIO + Galexie smoke test (Week 3). Captive-core +
-  Galexie co-resident memory profile.
+- **Closed**: MinIO + Galexie are live on r1
+  ([r1-deployment-state.md §Services](../operations/r1-deployment-state.md));
+  the captive-core + Galexie co-resident memory profile was
+  measured at deploy time (per the `archival-node` ansible role's
+  pre-flight checks).
 - **Verdict**: ✅ promise keeps.
 
 ### Claim 2 — "Reflector is the primary oracle integration"
@@ -392,8 +395,11 @@ For each claim below we state the **as-written promise**, what we
   standard but our capacity, cache-hit-rate, and cold-cache latency
   are unmeasured.
 - **Closure**: [HA plan](ha-plan.md) + [API design](../reference/api-design.md) +
-  Week 9 load-test.
-- **Verdict**: 🧪 plan-credible; proof deferred to Week 9.
+  the k6 load suite at [test/load/](../../test/load/) (scenarios
+  pinned, reports archived under `test/load/reports/`).
+- **Verdict**: 🧪 plan-credible; the k6 suite produces the
+  proof artifacts; full p95 ≤ 200 ms run is L4.5 in the
+  launch-readiness backlog.
 
 ### Claim 7 — "Since-inception historical coverage"
 
@@ -403,15 +409,22 @@ For each claim below we state the **as-written promise**, what we
   ([data-sources/galexie.md](../discovery/data-sources/galexie.md) +
   [data-sources/stellar-data-lakes.md](../discovery/data-sources/stellar-data-lakes.md)).
   Backfill throughput unmeasured on our hardware.
-- **Closure**: Week 5 runs the full backfill; the Week 9 load test
-  validates query performance on the resulting data set.
+- **Closure**: backfill is operator-driven via `ratesengine-ops
+  backfill` (`cmd/ratesengine-ops/backfill.go`); query performance
+  on the resulting data set is exercised by the
+  [test/load/](../../test/load/) k6 suite.
 - **Verdict**: ✅ promise is feasible; duration unknown.
 
 ### Claim 8 — "Open source, provider-supplied deployment kits"
 
 - **As written** (proposal §Open Source & Deployment Model).
-- **Verified**: Apache-2.0 LICENSE committed; `deploy/docker-compose`
-  + `deploy/k8s` planned (Weeks 8–9).
+- **Verified**: Apache-2.0 LICENSE committed.
+  [`deploy/docker-compose/`](../../deploy/docker-compose/) is the
+  developer / reference deployment;
+  [`deploy/systemd/`](../../deploy/systemd/) +
+  [`configs/ansible/`](../../configs/ansible/) are the production
+  deployment kit (per ADR-0008 — bare-metal + systemd, not
+  Kubernetes).
 - **Verdict**: 🧪 lifecycle on track.
 
 ---
