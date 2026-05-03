@@ -42,6 +42,7 @@ func init() {
 		CursorLastLedger,
 		DivergenceRefreshTotal,
 		TradeInsertsTotal,
+		StreamPublishTotal,
 
 		PriceStalenessSeconds,
 		OracleLastUpdateUnix,
@@ -297,6 +298,27 @@ var TradeInsertsTotal = prometheus.NewCounterVec(
 		Help: "Trade-insert attempts, labelled by source and whether usd_volume was populated (yes|no). Counts attempts not unique-row inserts (ON CONFLICT DO NOTHING dedupe is invisible to this counter).",
 	},
 	[]string{"source", "usd_volume_populated"},
+)
+
+// StreamPublishTotal — per-stream counter of envelopes the API
+// binary's [streampublish.Publisher] fanned out to a streaming Hub.
+// Increments only on a NEW closed bucket (the publisher
+// short-circuits when ObservedAt hasn't advanced).
+//
+// Operators read this alongside per-pair subscriber counts to
+// validate the closed-bucket fanout path: a steady stream of
+// publishes with zero subscribers means clients aren't connecting;
+// zero publishes with active subscribers means the upstream
+// reader isn't seeing new buckets.
+//
+// Cardinality: one series per stream surface — low single-digit at
+// maturity.
+var StreamPublishTotal = prometheus.NewCounterVec(
+	prometheus.CounterOpts{
+		Name: "ratesengine_stream_publish_total",
+		Help: "Closed-bucket envelopes published to the streaming Hub, labelled by stream surface (e.g. price_stream).",
+	},
+	[]string{"stream"},
 )
 
 // ─── Pricing / oracle metrics ────────────────────────────────────
