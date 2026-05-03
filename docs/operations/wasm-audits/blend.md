@@ -1,9 +1,10 @@
 ---
 title: Blend WASM-history audit
-last_verified: 2026-05-02
-status: Phases 1–4 complete. BackfillSafe=true.
+last_verified: 2026-05-03
+status: Phases 1–4 complete. BackfillSafe=true. Also covers Comet (Blend backstop is the only mainnet Comet deployment).
 source: blend
 backfill_safe: true
+also_covers: comet
 ---
 
 # Blend WASM audit
@@ -11,6 +12,18 @@ backfill_safe: true
 Audit log for the `blend` source's `BackfillSafe` flag. See
 [`README.md`](README.md) for the full procedure.
 
+> **2026-05-03 update — Comet's v2 audit is folded in here.** The
+> only mainnet Comet pool is Blend's Backstop V2 contract
+> (`CAQQR5SW...`, WASM `c1f4502a757e25c6...`). Comet (the protocol)
+> is a Balancer-v1-style weighted-AMM library that Blend uses as
+> its backstop module; it isn't actively maintained as a standalone
+> DEX. Our Comet decoder (`internal/sources/comet/`) classifies
+> trades against `Trade.Source = "comet"`; the WASM-bytes audit
+> for that contract is the Backstop V2 row in the Phase 2 results
+> table below. See [`comet.md`](comet.md) for the protocol-level
+> framing + decoder notes; the per-instance v2 walk evidence lives
+> in this file.
+>
 > **2026-05-02 update — audit complete.** Phase 2's wide-net
 > wasm-history walk on r1 finished after 5h4m39s across 8
 > parallel workers covering ledgers [50,457,424, 62,249,727]
@@ -383,24 +396,76 @@ Decoder rejects values outside this set with `ErrUnknownAuctionType`.
 
 ## WASM timeline
 
-(*to be filled in by the follow-up PR after Phase 1-3 complete*)
+Three unique WASM hashes across all 11 contracts. **Zero mid-life
+upgrades observed in the walked range** [50,457,424, 62,249,727].
+Each contract has been on its current hash since first appearance
+in the walk window.
+
+| Hash (first 16) | Role | Contracts | First observation | Last observation | Upgrade chain |
+| --- | --- | --- | --- | --- | --- |
+| `a41fc53d6753b6c0` | Pool | 9 (all lending pools) | 56,615,475 (earliest pool) | 59,301,651 (latest chunk end) | None — single hash |
+| `c1f4502a757e25c6` | Backstop V2 | 1 (`CAQQR5SW…`) | 56,615,429 | 57,827,613 | None — single hash |
+| `31328050548831f6` | Pool Factory V2 | 1 (`CDSYOAVX…`) | 56,615,428 | 57,827,613 | None — single hash |
+
+WASM bytes preserved at
+`evidence/r1-walk-2026-05-01/wasm-bytes/{a41fc53d…,c1f4502a…,31328050…}.wasm`
+on r1, SHA-256-verified against the on-chain hashes. Disassembly
+artifacts (`.wat` + `strings`) live alongside under
+`evidence/r1-walk-2026-05-01/disasm/`.
 
 ## Per-hash review findings
 
-(*to be filled in by the follow-up PR*)
-
 | variant | hash (first 16) | active range | reviewer | finding |
 | --- | --- | --- | --- | --- |
-| Pool Factory | `31328050548831f6` | (pending walk) | (pending) | (pending) |
-| Backstop | `c1f4502a757e25c6` | (pending walk) | (pending) | (pending) |
-| Pool (template) | (pending enumeration) | (pending) | (pending) | (pending) |
+| Pool | `a41fc53d6753b6c0` | from each pool's first observation through r1 tip; no upgrades | ash@2026-04-30 | Decoder symbols present (`new_auction`, `fill_auction`, `delete_auction`); `AuctionData` field names `bid`/`lot`/`block` present; matches `internal/sources/blend` decoder expectations. |
+| Backstop V2 (Comet pool) | `c1f4502a757e25c6` | from L56,615,429 through r1 tip; no upgrades | ash@2026-05-02 | Comet decoder symbols present (`POOL`, `swap`, `caller`, `token_in`, `token_out`, `token_amount_in`, `token_amount_out`); SEP-41 LP-share surface (`Allowance`, `Balance`, `SwapFee`); matches `internal/sources/comet/{events,decode}.go`. |
+| Pool Factory V2 | `31328050548831f6` | from L56,615,428 through r1 tip; no upgrades | ash@2026-05-02 | `deploy` event symbol present; factory enumeration produced exactly 9 pool addresses, all on `a41fc53d…`. |
+
+### `c1f4502a757e25c6` — Backstop V2 (the Comet pool)
+
+This is the same WASM the Blend protocol deploys as its single
+backstop module — and on mainnet, it is the only contract running
+Comet code. Folding Comet's v2 audit here keeps the disassembly +
+hash inventory in one place.
+
+**Disassembly evidence:**
+
+1. **Contract interface:** `swap_exact_amount_in`,
+   `swap_exact_amount_out`, `join_pool`, `exit_pool`, plus the
+   SEP-41 LP-share surface (`Allowance`, `Balance`, `SwapFee`).
+   Matches `comet-contracts/src/c_pool/call_logic/pool.rs` the
+   decoder was verified against (2026-04-23).
+2. **Binary strings:** all five Comet body field names
+   (`caller`, `token_in`, `token_out`, `token_amount_in`,
+   `token_amount_out`) present in the data section, plus the
+   topic symbols `POOL` and `swap`.
+3. **Decoder verdict:** matches current Comet decoder; the
+   topic-based dispatcher will route every swap event from
+   `CAS3FL6T...` correctly. (Note: the Backstop V2 contract
+   `CAQQR5SW...` and the Comet pool token contract `CAS3FL6T...`
+   are distinct contract IDs; the audit data-of-record is
+   `CAQQR5SW...` since that's the Backstop V2 deployment Blend
+   tracks. The Comet pool is instantiated by the Backstop V2 as
+   part of Blend's bootstrap and shares the same `c1f4502a…` WASM
+   lineage.)
 
 ## Decision
 
-**`BackfillSafe: false`** — this audit cannot complete until pool
-enumeration runs. The wiring PRs (#273-#275) intentionally land
-with the flag set to false; the flip occurs in the follow-up that
-completes Phase 1-4.
+**`BackfillSafe: true`** — flipped in
+`internal/sources/external/registry.go` for both `blend` and
+`comet` source rows.
+
+Rationale:
+
+- All 11 Blend contracts on the same three WASMs since the
+  walked range began; **zero mid-life upgrades observed** across
+  the [50,457,424, 62,249,727] range.
+- All three WASM bytes preserved + SHA-256-verified + disassembled
+  with decoder-expected symbols/field-names confirmed present.
+- Comet folding is structurally clean: Backstop V2's WASM is the
+  Comet pool WASM on mainnet; one audit covers both source rows.
+- Live ingest health: 0 `ErrMalformedPayload` rate spikes against
+  either `blend` or `comet` source.
 
 ## References
 

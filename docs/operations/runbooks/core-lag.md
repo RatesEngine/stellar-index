@@ -1,6 +1,6 @@
 ---
 title: Runbook — core-lag
-last_verified: 2026-04-30
+last_verified: 2026-05-02
 status: draft
 severity: P1
 ---
@@ -53,7 +53,8 @@ curl -s http://stellar-core:11626/info | jq
 curl -s http://stellar-core:11626/peers | jq '.peers | length'
 
 # Any catastrophic log lines?
-kubectl logs ds/stellar-core --tail=200 | grep -iE 'panic|fatal|deadlock|corrupt'
+ssh root@<val-host> "journalctl -u stellar-core -n 200 --no-pager" \
+  | grep -iE 'panic|fatal|deadlock|corrupt'
 ```
 
 ## Typical root causes

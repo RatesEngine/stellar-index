@@ -52,6 +52,7 @@ type Server struct {
 	freeze       FrozenLooker
 	supply       SupplyLooker
 	volume       VolumeReader
+	change24h    Change24hReader
 	sep10        auth.SEP10Validator
 	cors         middleware.Middleware
 	auth         middleware.Middleware
@@ -148,6 +149,14 @@ type Options struct {
 	// when supply isn't yet wired (and vice versa).
 	Volume VolumeReader
 
+	// Change24h, when non-nil, populates the `change_24h_pct` field
+	// on /v1/assets/{id} (signed percentage change vs the asset's
+	// USD price ~24h ago). Production wiring: a thin adapter around
+	// timescale.Store.ClosedVWAP1mAtOrBefore at t=now-24h. Nil
+	// leaves the field null. Independent of Supply / Volume — any
+	// combination of (Supply, Volume, Change24h) is legal.
+	Change24h Change24hReader
+
 	// SEP10, when non-nil, backs GET /v1/auth/sep10/challenge and
 	// POST /v1/auth/sep10/token. Production wiring: an
 	// auth/sep10.Validator constructed from the binary's signing
@@ -238,6 +247,7 @@ func New(opts Options) *Server {
 		freeze:       opts.Freeze,
 		supply:       opts.Supply,
 		volume:       opts.Volume,
+		change24h:    opts.Change24h,
 		sep10:        opts.SEP10,
 		cors:         opts.CORS,
 		auth:         opts.Auth,

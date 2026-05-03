@@ -1,7 +1,7 @@
 ---
 title: Band WASM-history audit
-last_verified: 2026-05-01
-status: ratified
+last_verified: 2026-05-03
+status: ratified — v2 walk confirms single stable WASM
 source: band
 backfill_safe: true
 ---
@@ -11,6 +11,17 @@ backfill_safe: true
 Audit log for the `band` source's `BackfillSafe` flag. See
 `README.md` for the full procedure.
 
+> **2026-05-03 update — v2 walk confirms single stable WASM.**
+> The 2026-04-30 wide-net r1 walk re-observed the
+> StandardReference contract on `6cdb9a3cdeec01a1…` and produced
+> **zero transitions** across the [50,457,424, 62,249,727]
+> range. Combined with the contract's first-deploy ledger
+> (L50,842,736, 2024-03-19), the WASM has been stable for the
+> entire mainnet life of the contract. Bytes preserved +
+> SHA-256-verified at
+> `evidence/r1-walk-2026-05-01/wasm-bytes/6cdb9a3cdeec01a1…wasm`
+> on r1.
+>
 > **2026-05-01 update.** Hash citations in this file have been
 > cross-checked against the 2026-04-30 r1 walk; see
 > [r1-walk-2026-05-01.md](r1-walk-2026-05-01.md) for the

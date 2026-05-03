@@ -1,6 +1,6 @@
 ---
 title: Runbook — backup-failed
-last_verified: 2026-04-23
+last_verified: 2026-05-02
 status: draft
 severity: P1
 ---
@@ -32,9 +32,8 @@ pgbackrest --stanza=main info
 #   Look at: backup timeline, last backup status, repository size.
 
 # Why did the last run fail?
-journalctl -u pgbackrest-backup.service --since "2 hours ago"
-#   Or, if running via k8s CronJob:
-kubectl logs jobs/pgbackrest-backup-<ts> --tail=200
+ssh root@<patroni-leader> "journalctl -u pgbackrest-backup.service \
+  --since '2 hours ago' --no-pager"
 
 # Is the backup target (MinIO/S3) reachable?
 mc ls myminio/pgbackrest/
