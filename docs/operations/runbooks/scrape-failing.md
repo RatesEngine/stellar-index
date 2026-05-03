@@ -1,6 +1,6 @@
 ---
 title: Runbook — scrape-failing
-last_verified: 2026-05-02
+last_verified: 2026-05-03
 status: draft
 severity: P3
 ---

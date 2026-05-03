@@ -15,7 +15,7 @@ proof report** that Task #77 in the launch-readiness backlog
 demands. The output of this procedure is a checked-in markdown
 file at `docs/operations/sla-proof-<YYYY-MM-DD>.md` with PASS /
 FAIL against each SLO threshold from
-[ADR-0009 `multi-window SLO`](../adr/0009-multi-window-slo-burn-rate.md).
+[ADR-0009 `multi-window SLO`](../adr/0009-latency-budget.md).
 
 The k6 scenarios themselves are
 [Task #74](../architecture/launch-readiness-backlog.md) and live at
@@ -180,6 +180,6 @@ production-shape infra.
 - Report template:
   [`sla-proof-template.md`](sla-proof-template.md)
 - ADR-0009 multi-window SLO:
-  [`../adr/0009-multi-window-slo-burn-rate.md`](../adr/0009-multi-window-slo-burn-rate.md)
+  [`../adr/0009-latency-budget.md`](../adr/0009-latency-budget.md)
 - Reports directory README:
   [`../../test/load/reports/README.md`](../../test/load/reports/README.md)

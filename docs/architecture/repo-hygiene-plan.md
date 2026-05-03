@@ -1,6 +1,6 @@
 ---
 title: Repo Hygiene & Tech-Debt Prevention Plan
-last_verified: 2026-05-02
+last_verified: 2026-05-03
 status: ratified
 ---
 
@@ -59,7 +59,7 @@ frontmatter date. Warnings at 90 days; hard failure at 180.
 ```markdown
 ---
 title: HA Infrastructure Plan
-last_verified: 2026-04-22
+last_verified: 2026-05-03
 status: ratified | draft | proposed
 ---
 ```

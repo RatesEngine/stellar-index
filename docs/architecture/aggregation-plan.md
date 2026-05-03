@@ -1,6 +1,6 @@
 ---
 title: Aggregation plan — the policy chain from raw trade to served price
-last_verified: 2026-05-02
+last_verified: 2026-05-03
 status: binding
 ---
 

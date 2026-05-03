@@ -1,6 +1,6 @@
 ---
 title: SLA probe — periodic per-endpoint evidence trail
-last_verified: 2026-04-30
+last_verified: 2026-05-03
 status: living procedure
 ---
 

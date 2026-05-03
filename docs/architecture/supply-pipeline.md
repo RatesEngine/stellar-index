@@ -1,6 +1,6 @@
 ---
 title: Supply pipeline — three-algorithm derivation, per-asset refresh
-last_verified: 2026-05-02
+last_verified: 2026-05-03
 status: binding
 ---
 

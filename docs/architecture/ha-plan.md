@@ -1,6 +1,6 @@
 ---
 title: High-Availability Infrastructure Plan
-last_verified: 2026-05-02
+last_verified: 2026-05-03
 status: ratified — binding decisions in [ADR-0008](../adr/0008-ha-topology.md); long-form design here
 ---
 

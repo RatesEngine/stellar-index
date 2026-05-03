@@ -1,6 +1,6 @@
 ---
 title: Bootstrap — Archival node from bare Ubuntu
-last_verified: 2026-04-22
+last_verified: 2026-05-03
 status: draft — ratified after first live run
 ---
 

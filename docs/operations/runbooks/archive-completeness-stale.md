@@ -1,6 +1,6 @@
 ---
 title: Runbook — archive-completeness-stale
-last_verified: 2026-04-27
+last_verified: 2026-05-03
 status: draft
 severity: P2
 ---

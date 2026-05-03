@@ -145,7 +145,7 @@ testdata/trustlines/
 Each directory has golden-file `{start}-{end}-{type}.txt` files
 that are **real pubnet data** captured at fixture time. For our
 fixture set (per
-[adversarial-audit.md §7](adversarial-audit.md)):
+[adversarial-audit.md §7](../adversarial-audit.md)):
 
 - Can use `testdata/trades/` + `testdata/effects/` as regression
   inputs without writing our own capture tooling.

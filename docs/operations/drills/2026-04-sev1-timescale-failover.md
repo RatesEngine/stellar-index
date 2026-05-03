@@ -4,7 +4,7 @@ date: 2026-04-30
 type: tabletop
 scenario: scenarios/sev1-timescale-primary-failover.md
 participants: [ash, ash, ash]
-last_verified: 2026-04-30
+last_verified: 2026-05-03
 ---
 
 # 2026-04 drill writeup — SEV-1 Timescale primary failover

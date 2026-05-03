@@ -1,6 +1,6 @@
 ---
 title: Runbook — DR (disaster-recovery) activation
-last_verified: 2026-05-02
+last_verified: 2026-05-03
 status: ratified
 related:
   - docs/architecture/ha-plan.md
@@ -62,7 +62,7 @@ Activate when ANY of these is true AND no faster recovery exists:
 - Redis cluster lost a master (Sentinel handles; see
   [`scenarios/sev2-redis-sentinel-failover.md`](../drills/scenarios/sev2-redis-sentinel-failover.md)).
 - One of the three regions is degraded but R1 is healthy —
-  R2/R3 are read-replica-style today (per [ADR-0016](../adr/0016-per-region-storage-strategy.md))
+  R2/R3 are read-replica-style today (per [ADR-0016](../../adr/0016-per-region-storage-strategy.md))
   and don't need DR activation; they self-heal once the partition
   clears.
 
@@ -162,7 +162,7 @@ console wires up):
 
 **A. Cloudflare load balancer (preferred):** the LB pool
 already has all three regions' origins configured per
-[ADR-0008](../adr/0008-ha-topology.md) §"DNS / load balancing".
+[ADR-0008](../../adr/0008-ha-topology.md) §"DNS / load balancing".
 Mark the primary-region pool members as down via the
 Cloudflare dashboard:
 
@@ -241,7 +241,7 @@ ratesengine-ops list-cursors --region <dr-region>
 If the indexer's cursors aren't advancing, check Galexie's
 read connectivity to MinIO — the DR region's MinIO bucket
 should be writable + readable per
-[ADR-0016](../adr/0016-per-region-storage-strategy.md).
+[ADR-0016](../../adr/0016-per-region-storage-strategy.md).
 
 ### 4.3 Customer-visible flag rates
 

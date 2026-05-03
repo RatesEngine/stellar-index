@@ -1,6 +1,6 @@
 ---
 title: SEP-1 stellar.toml resolution — operational reference
-last_verified: 2026-04-27
+last_verified: 2026-05-03
 status: living procedure
 ---
 

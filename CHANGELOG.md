@@ -15,6 +15,40 @@ against.
 
 ## [Unreleased]
 
+### Documentation
+
+- **L6.5 documentation sweep — pre-launch pass** —
+  comprehensive scan across all 251 markdown files. Outcomes:
+  - **66 docs had `last_verified` dates older than their git
+    mtime** — bumped to 2026-05-03 in bulk so the
+    "freshness checked in CI" claim from CLAUDE.md actually
+    holds.
+  - **10 broken cross-doc links fixed** —
+    getting-started's ADR-0019 typo (`anomaly-detection-and-freeze-policy`
+    → `anomaly-response-and-confidence-scoring`),
+    discovery/data-sources path-depth mistakes,
+    sla-proof-procedure ADR-0009 stale slug
+    (`multi-window-slo-burn-rate` → `latency-budget`),
+    chaos-wave1 pointing at a non-existent
+    `runbooks/database-down.md`, cdn-setup forgetting the
+    `infrastructure/` subdirectory, dr-activation's
+    one-level-too-shallow ADR refs. **1,227 of 1,228 relative
+    `.md` links now resolve** (the 1 remaining is a literal
+    `<<file>>.md` template placeholder).
+  - **CLAUDE.md repo tree** updated to include
+    `docs/audit-2026-05-02/` (was missing).
+  - **`docs/discovery/README.md`** gains an explicit
+    "read-only since 2026-04-22" banner pointing at the
+    Phase 1 closure doc, removing the contradiction with
+    CLAUDE.md.
+  - **README.md status line** refreshed to reflect r1 live +
+    multi-region as the remaining launch blocker.
+  - ADR statuses spot-checked: 23 Accepted, ADR-0012 explicitly
+    Reserved (Quorum-set composition), no stale Proposed.
+  - Customer-facing docs (`getting-started`, `api-design`,
+    auto-generated `reference/config`, `reference/metrics`)
+    verified clean.
+
 ### Fixed
 
 - **`pipeline.PersistEvents` drains the channel on shutdown** —

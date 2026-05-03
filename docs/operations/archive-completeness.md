@@ -1,6 +1,6 @@
 ---
 title: Archive completeness — invariants, bootstrap, daily cron
-last_verified: 2026-04-27
+last_verified: 2026-05-03
 status: living procedure
 ---
 

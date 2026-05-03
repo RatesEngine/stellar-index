@@ -1,6 +1,6 @@
 ---
 title: Per-contract schema evolution across versions — handling strategy
-last_verified: 2026-05-02
+last_verified: 2026-05-03
 status: living doc
 ---
 

@@ -19,7 +19,7 @@ degradation path actually graceful-degrades. Three scenarios:
 | Scenario | What it kills | Expected behaviour | Runbook the scenario validates |
 | --- | --- | --- | --- |
 | `01-redis-down` | Redis container | API serves `/v1/healthz` 200 + `/v1/price/*` returns 200 or documented 503 (rate-limit middleware fails open; VWAP path falls through to Postgres) | [`runbooks/redis-master-down.md`](runbooks/redis-master-down.md) |
-| `02-timescale-down` | Timescale container | API readiness flips, `/v1/price` returns 503 with structured envelope (no 5xx leak); recovery within 30s of Timescale restart | [`runbooks/database-down.md`](runbooks/database-down.md) — if missing, see decode-errors.md |
+| `02-timescale-down` | Timescale container | API readiness flips, `/v1/price` returns 503 with structured envelope (no 5xx leak); recovery within 30s of Timescale restart | [`runbooks/timescale-primary-down.md`](runbooks/timescale-primary-down.md) |
 | `03-redis-network-partition` | iptables-drops Redis from API host | Same as `01-redis-down` but without Redis fully down — rate-limit fail-open + cache-bypass | Same as 01 |
 
 **Wave 2** (HA-shaped scenarios on staging baremetal — Patroni

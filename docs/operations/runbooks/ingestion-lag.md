@@ -1,6 +1,6 @@
 ---
 title: Runbook — ingestion-lag
-last_verified: 2026-05-02
+last_verified: 2026-05-03
 status: archived
 severity: P2
 ---

@@ -1,6 +1,6 @@
 ---
 title: Runbook — timescale primary down
-last_verified: 2026-04-22
+last_verified: 2026-05-03
 status: ratified
 severity: P1
 ---

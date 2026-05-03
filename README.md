@@ -1,10 +1,13 @@
 # Rates Engine
 
-**Status:** Pre-v1. Ingestion + storage + REST API + aggregator
-shipped (VWAP/TWAP, triangulation, anomaly response,
-multi-factor confidence, freeze policy, supply pipeline);
-production hardening in progress (status page, SEV-1/2 dry-run,
-operational SLA proof).
+**Status:** Pre-v1. Core system shipped end-to-end (ingestion +
+storage + REST API + aggregator: VWAP/TWAP, triangulation,
+anomaly response, multi-factor confidence, freeze policy, supply
+pipeline). r1 (Hetzner) live with all three application services
+running against the historical galexie archive (2026-05-03
+first-bringup). Remaining launch blockers are operational
+(R2/R3 multi-region provisioning, status page, external
+security review, customer demo, production cutover).
 **License:** Apache-2.0.
 **Tested against:** Stellar pubnet protocol 23 (post-P23 / CAP-67 unified events).
 

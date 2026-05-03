@@ -53,7 +53,7 @@ The `flags` block is the operational quality signal:
 | `reduced_redundancy` | Cross-region archive completeness is degraded ([ADR-0017](adr/0017-archive-completeness-invariants.md)) |
 | `triangulated` | Reserved for a future triangulated public-serving path; the current Timescale-backed API leaves this false in normal operation |
 | `divergence_warning` | Anomaly detection or cross-reference observed a meaningful divergence; treat with caution |
-| `frozen` | Anomaly detection refused to publish the new bucket; this response carries the previous bucket's last-known-good value ([ADR-0019](adr/0019-anomaly-detection-and-freeze-policy.md)) |
+| `frozen` | Anomaly detection refused to publish the new bucket; this response carries the previous bucket's last-known-good value ([ADR-0019](adr/0019-anomaly-response-and-confidence-scoring.md)) |
 | `single_source` | Only one source contributed; combined with `frozen` this is the manipulation signature |
 
 ## Authentication

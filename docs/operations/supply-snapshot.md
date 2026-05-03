@@ -1,6 +1,6 @@
 ---
 title: Supply-snapshot writer — daily cron + operator-managed reserve balances
-last_verified: 2026-05-02
+last_verified: 2026-05-03
 status: living procedure
 ---
 

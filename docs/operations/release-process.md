@@ -1,6 +1,6 @@
 ---
 title: Release process — cutting a Rates Engine binary release
-last_verified: 2026-04-28
+last_verified: 2026-05-03
 status: living doc
 ---
 

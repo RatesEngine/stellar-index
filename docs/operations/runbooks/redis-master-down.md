@@ -1,6 +1,6 @@
 ---
 title: Runbook — redis-master-down
-last_verified: 2026-05-02
+last_verified: 2026-05-03
 status: ratified (Sentinel-driven failover is the default after `redis-sentinel` ansible role landed)
 severity: P1
 ---

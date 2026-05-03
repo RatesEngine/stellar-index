@@ -1,6 +1,6 @@
 ---
 title: Runbook — API 5xx rate elevated
-last_verified: 2026-05-02
+last_verified: 2026-05-03
 status: ratified
 severity: P1 at >5% / P2 at >1% / P1 at SLO burn-rate fast
 ---

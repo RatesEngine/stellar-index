@@ -1,6 +1,6 @@
 ---
 title: First archival-node deployment — plan from zero to replay-ready
-last_verified: 2026-04-23
+last_verified: 2026-05-03
 status: SUPERSEDED 2026-04-23 (late) — retained for historical context
 superseded_by:
   - docs/operations/r1-deployment-state.md

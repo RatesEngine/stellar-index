@@ -4,7 +4,7 @@ date: 2026-04-30
 type: tabletop
 scenario: scenarios/sev2-source-decoder-regression.md
 participants: [ash, ash, ash]
-last_verified: 2026-04-30
+last_verified: 2026-05-03
 ---
 
 # 2026-04 drill writeup — SEV-2 Soroswap decoder regression

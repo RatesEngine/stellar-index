@@ -225,5 +225,5 @@ API to block on object-store reads.
   architecture.
 - [stellar-ledger-data-indexer.md](stellar-ledger-data-indexer.md) —
   reference downstream consumer.
-- [cdp-pipeline-workflow.md](cdp-pipeline-workflow.md) — withObsrvr's
+- [withobsrvr-cdp-pipeline-workflow.md](withobsrvr-cdp-pipeline-workflow.md) — withObsrvr's
   multi-source, multi-sink pipeline built on top of Galexie data.

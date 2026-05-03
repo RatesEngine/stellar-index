@@ -1,6 +1,6 @@
 ---
 title: Ecosystem review — Tillman (withObsrvr) and orbitlens (StellarExpert) feedback
-last_verified: 2026-04-23
+last_verified: 2026-05-03
 status: living doc
 ---
 

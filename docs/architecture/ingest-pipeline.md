@@ -1,6 +1,6 @@
 ---
 title: Ingest pipeline — the one canonical data path
-last_verified: 2026-04-23
+last_verified: 2026-05-03
 status: binding
 ---
 

@@ -1,6 +1,6 @@
 ---
 title: SEV status-page update
-last_verified: 2026-05-02
+last_verified: 2026-05-03
 status: living doc
 related:
   - docs/operations/sev-playbook.md

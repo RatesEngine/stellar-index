@@ -1,6 +1,6 @@
 ---
 title: Audit doc update template — v2 full per-instance WASM history
-last_verified: 2026-04-29
+last_verified: 2026-05-03
 status: template — applied to each source as v2 audit lands
 ---
 

@@ -1,6 +1,6 @@
 ---
 title: SEV-2 tabletop — Redis Sentinel master failover under live traffic
-last_verified: 2026-05-02
+last_verified: 2026-05-03
 status: ratified
 severity: P2
 exercises_runbook: ../../runbooks/redis-fanout-broken.md

@@ -1,6 +1,6 @@
 ---
 title: Validator Rollout — 1 → 3 Full Validators as one Tier-1 Organisation
-last_verified: 2026-05-02
+last_verified: 2026-05-03
 status: accepted — phased rollout described here is post-launch (Phase-3); the launch v1 ships archival-only, see [ADR-0004](../../adr/0004-tier1-validator-aspiration.md)
 ---
 

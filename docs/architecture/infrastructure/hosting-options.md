@@ -1,6 +1,6 @@
 ---
 title: Hosting Options — Skipping Colo Without Boxing Ourselves In
-last_verified: 2026-05-02
+last_verified: 2026-05-03
 status: superseded — Hetzner FSN1 chosen for R1 ([r1-deployment-state.md](../../operations/r1-deployment-state.md)); see [ADR-0016](../../adr/0016-per-region-storage-strategy.md) for the per-region strategy
 ---
 

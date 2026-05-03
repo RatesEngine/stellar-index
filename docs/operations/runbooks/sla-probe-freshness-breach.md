@@ -1,6 +1,6 @@
 ---
 title: Runbook — sla-probe-freshness-breach
-last_verified: 2026-04-30
+last_verified: 2026-05-03
 status: ratified
 severity: P2
 ---

@@ -1,6 +1,6 @@
 ---
 title: API Design — Rates Engine v1
-last_verified: 2026-05-02
+last_verified: 2026-05-03
 status: ratified — `openapi/rates-engine.v1.yaml` is the binding contract; this doc records design intent
 ---
 

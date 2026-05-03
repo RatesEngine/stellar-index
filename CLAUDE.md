@@ -109,7 +109,8 @@ development. If one does, it's a bug.
     ├── reference/                auto-generated from OpenAPI + struct tags
     ├── operations/               runbooks (1 per alert), SEV playbook, release-process
     ├── discovery/                Phase-1 audit archive (read-only, closed 2026-04-22)
-    └── audit-2026-04-29/         post-Phase-1 cross-cutting findings register
+    ├── audit-2026-04-29/         post-Phase-1 cross-cutting findings register
+    └── audit-2026-05-02/         second-pass audit working dir (May 2; codex review)
 ```
 
 ---

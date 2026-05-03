@@ -1,6 +1,6 @@
 ---
 title: SEV-1 tabletop — Anomaly freeze stuck-engaged on a major pair
-last_verified: 2026-05-02
+last_verified: 2026-05-03
 status: ratified
 severity: P1
 exercises_runbook: ../../runbooks/anomaly-freeze-engaged.md

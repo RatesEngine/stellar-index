@@ -1,6 +1,6 @@
 ---
 title: Oracle manipulation — attack catalogue and defensive layers
-last_verified: 2026-04-28
+last_verified: 2026-05-03
 status: living document
 ---
 

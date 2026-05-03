@@ -1,6 +1,6 @@
 ---
 title: SemVer + CalVer policy for Rates Engine
-last_verified: 2026-04-28
+last_verified: 2026-05-03
 status: ratified
 ---
 

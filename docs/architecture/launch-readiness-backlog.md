@@ -1,6 +1,6 @@
 ---
 title: Launch readiness backlog
-last_verified: 2026-05-02
+last_verified: 2026-05-03
 status: living document
 ---
 

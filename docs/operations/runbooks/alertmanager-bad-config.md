@@ -1,6 +1,6 @@
 ---
 title: Runbook — alertmanager-bad-config
-last_verified: 2026-05-02
+last_verified: 2026-05-03
 status: draft
 severity: P2
 ---

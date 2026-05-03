@@ -1,6 +1,6 @@
 ---
 title: Launch task list — code-grounded RFP/proposal audit
-last_verified: 2026-05-02
+last_verified: 2026-05-03
 status: ratified backlog
 related:
   - docs/stellar-rfp.md

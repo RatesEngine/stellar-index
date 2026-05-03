@@ -1,6 +1,14 @@
 # Discovery & Data Source Audit
 
-This directory is the living knowledge base for Phase 1 discovery of
+> **Status (2026-05-03):** Phase 1 closed and ratified 2026-04-22
+> per [`phase1-closure.md`](phase1-closure.md). This tree is now
+> read-only reference — historical record of how the architecture
+> was decided. Active design work continues under
+> [`docs/architecture/`](../architecture/) and [`docs/adr/`](../adr/);
+> open operational issues live under
+> [`docs/operations/`](../operations/) + the launch-readiness backlog.
+
+This directory was the living knowledge base for Phase 1 discovery of
 **Rates Engine** — our implementation of the Stellar Prices API RFP,
 aligned with the Freighter asset-detail RFP.
 
