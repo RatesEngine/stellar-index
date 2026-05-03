@@ -15,6 +15,25 @@ against.
 
 ## [Unreleased]
 
+### Fixed
+
+- **`pipeline.PersistEvents` drains the channel on shutdown** —
+  the sink returned immediately on `ctx.Done()`, dropping any
+  events still in the 256-deep buffer. Callers (live indexer +
+  `ratesengine-ops backfill`) advance their cursor AFTER
+  `ProcessLedger` enqueues to the channel, BEFORE the sink
+  writes — so a SIGTERM mid-stream silently lost up to
+  cap(channel) trade rows per pipeline while the cursor's
+  "I processed up to ledger N" claim stayed advanced. On
+  `-resume`, those ledgers got skipped and their trades were
+  permanently missing from the hypertable.
+  Now the sink uses a fresh 30-second shutdown context to drain
+  buffered events past the parent context's cancellation; if
+  the deadline trips (e.g. postgres saturated), remaining
+  events are dropped and the loss is logged with the buffer
+  count. Three new tests (`TestPersistEvents_*`) pin the new
+  behaviour.
+
 ### Added
 
 - **`ratesengine-ops backfill -parallel N`** — backfill subcommand

@@ -29,18 +29,32 @@ import (
 )
 
 // PersistEvents drains `in` and writes each event to its hypertable
-// via the supplied store. Returns when ctx is canceled or the
-// channel is closed.
+// via the supplied store. Returns when ctx is canceled and the
+// channel has been drained, or when the channel is closed.
 //
 // One goroutine drains; per-event work is sequential. Throughput is
 // bounded by InsertTrade / InsertOracleUpdate latency. If that ever
 // becomes the bottleneck, the right fix is per-pair sharding inside
 // the store, not parallel sinks here — sequential ordering keeps the
 // trades hypertable's per-(source, pair, ts) uniqueness sane.
+//
+// Cursor-vs-channel safety: callers (the indexer's pipeline + the
+// backfill subcommand) advance their per-source cursor AFTER
+// ProcessLedger enqueues events to `in`, but BEFORE this sink
+// writes them to postgres. If we returned on ctx cancellation
+// without draining, up to cap(in) buffered events would be silently
+// dropped while the cursor's "I processed up to ledger N" claim
+// stayed advanced — the trades for those ledgers would be missing
+// even though `-resume` would skip them on restart. The drain
+// below uses a fresh context (parent ctx is already canceled, so
+// postgres calls would fail) bounded to 30s so a stuck shutdown
+// can't hang the binary forever; if the deadline trips, the
+// remaining buffered events are dropped and logged.
 func PersistEvents(ctx context.Context, logger *slog.Logger, store *timescale.Store, in <-chan consumer.Event) {
 	for {
 		select {
 		case <-ctx.Done():
+			drainBufferedEvents(in, logger, store)
 			return
 		case ev, ok := <-in:
 			if !ok {
@@ -50,6 +64,41 @@ func PersistEvents(ctx context.Context, logger *slog.Logger, store *timescale.St
 		}
 	}
 }
+
+// drainBufferedEvents writes any remaining buffered events using a
+// fresh shutdown context so postgres calls succeed past the parent
+// context's cancellation. Bounded by [drainTimeout] so a hung
+// shutdown can't keep the binary alive indefinitely; on deadline,
+// remaining buffered events are dropped and the loss is logged.
+//
+// Deliberately does not take a context parameter — the whole reason
+// this exists is to keep writing past the parent's cancellation.
+//
+//nolint:contextcheck // intentional fresh context; see godoc above.
+func drainBufferedEvents(in <-chan consumer.Event, logger *slog.Logger, store *timescale.Store) {
+	drainCtx, cancel := context.WithTimeout(context.Background(), drainTimeout)
+	defer cancel()
+	for {
+		select {
+		case ev, ok := <-in:
+			if !ok {
+				return
+			}
+			handleOneEvent(drainCtx, logger, store, ev)
+		case <-drainCtx.Done():
+			logger.Warn("PersistEvents drain deadline exceeded — buffered events dropped",
+				"buffered", len(in))
+			return
+		}
+	}
+}
+
+// drainTimeout caps how long PersistEvents will spend writing
+// already-buffered events on shutdown. 30s is comfortable headroom:
+// a 256-deep buffer at typical 1ms-per-insert latency drains in
+// ~250 ms; 30s tolerates 100x slowdown (e.g. postgres saturated by
+// a concurrent VACUUM) before giving up.
+const drainTimeout = 30 * time.Second
 
 // handleOneEvent dispatches one event to its hypertable insert.
 // Panic-recovers so a single malformed Amount can't take the whole
