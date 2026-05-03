@@ -7,20 +7,22 @@ import (
 )
 
 // ConfigReserveBalanceReader is a [ReserveBalanceReader] backed by a
-// static operator-supplied balance map. It is the interim
-// implementation used by the supply-snapshot writer until the
-// LCM-based AccountEntry observer ships (see ADR-0011 + the deferred
-// account-entry observer noted in internal/config/config.go's
-// MetadataConfig comment).
+// static operator-supplied balance map. The supply-snapshot writer
+// uses it as the bootstrap fallback in the chained-reader pattern
+// (see docs/architecture/supply-pipeline.md §"The chained-fallback
+// reader pattern"): the live [LCMReserveBalanceReader] takes
+// precedence when every watched account has an observation, and
+// this reader fills the gap when the AccountEntry observer hasn't
+// backfilled yet (or, transiently, on storage error).
 //
 // Operator usage: populate
 // `[supply] reserve_balances_stroops = { "G..." = "12345..." }` in
 // the operator config. The writer constructs one of these from that
-// map and passes it to [XLMComputer]. When SDF announces a reserve
-// move, the operator updates the config entry and re-runs the
-// writer; the next snapshot reflects the new balance.
+// map and passes it into the chained reader; once the observer has
+// covered every account in `sdf_reserve_accounts`, the static map
+// is no longer consulted.
 //
-// Limitations:
+// Limitations (as a fallback):
 //
 //   - Static map — no automatic balance refresh. Stale entries
 //     would yield a stale circulating-supply number rather than a
@@ -29,10 +31,9 @@ import (
 //     operator passes to the CLI, not to "now".
 //   - No per-account ledger versioning. The reader returns whatever
 //     the config says for the requested account regardless of the
-//     `ledger` argument. Acceptable because the writer typically
-//     attributes snapshots to the latest known ledger; future LCM-
-//     observer reader will use the ledger arg to look up the
-//     historical balance.
+//     `ledger` argument. The live [LCMReserveBalanceReader] is the
+//     ledger-aware path; this fallback is intentionally
+//     ledger-agnostic since its purpose is bring-up only.
 type ConfigReserveBalanceReader struct {
 	balances map[string]*big.Int
 }

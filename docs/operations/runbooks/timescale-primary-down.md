@@ -118,7 +118,11 @@ patronictl -c /etc/patroni/patroni.yml failover ratesengine --candidate db-repli
 
 ### D. Complete cluster loss (asteroid scenario)
 
-Refer to `docs/operations/runbooks/dr-activation.md` (TODO(#0)). Out-of-scope for this runbook.
+Refer to [`runbooks/dr-activation.md`](dr-activation.md). Out-of-scope for
+this runbook — DR activation is a SEV-1 cross-cutting flip with
+its own decision tree, pre-flight checks, and post-flip
+validation procedure. This runbook covers single-component
+failure modes (A/B/C above) where the cluster is recoverable.
 
 ## Root cause analysis
 

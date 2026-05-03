@@ -1,6 +1,6 @@
 ---
 title: Runbook — decode-errors
-last_verified: 2026-04-30
+last_verified: 2026-05-02
 status: draft
 severity: P3
 ---
@@ -40,7 +40,8 @@ curl -s http://api:9464/metrics | grep ratesengine_source_decode_errors_total
 # Peek the indexer's stderr for the most recent rejection reasons.
 # Source logs at debug when an event is dropped — enable temporarily
 # if the default level is info.
-kubectl logs deploy/ratesengine-indexer --tail=500 | grep -iE "decode|parse|malformed" | tail -30
+ssh root@indexer-01 "journalctl -u ratesengine-indexer -n 500 --no-pager" \
+  | grep -iE "decode|parse|malformed" | tail -30
 
 # Cross-check: is the contract the source points at the right one?
 # A protocol upgrade often changes event shape for a specific

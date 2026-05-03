@@ -12,10 +12,11 @@
 //
 // Output: [Observation] events flow through the dispatcher →
 // consumer pipeline. The indexer-side sink writes each
-// observation to `trustline_observations` (introduced by the
-// migration in #303). The future StorageClassicSupplyReader
-// (Task #66) consumes Store.SumTrustlineBalancesAtOrBefore for
-// the trustline-component sum in Algorithm 2.
+// observation to `trustline_observations` (migration 0011).
+// `internal/supply.StorageClassicSupplyReader` consumes
+// `Store.SumTrustlineBalancesAtOrBefore` (defined in
+// `internal/storage/timescale/classic_supply_observations.go`)
+// for the trustline-component sum in Algorithm 2.
 //
 // Why classic-only:
 //
