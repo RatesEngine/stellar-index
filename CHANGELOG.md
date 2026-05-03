@@ -17,6 +17,20 @@ against.
 
 ### Documentation
 
+- **SLA proof procedure (Task #77 operator-recipe)** — new
+  `docs/operations/sla-proof-procedure.md` documents the
+  end-to-end recipe that turns a `make test-load-mixed` run into
+  the checked-in `docs/operations/sla-proof-<YYYY-MM-DD>.md`
+  proof artefact: pre-flight checklist, run command, Grafana
+  snapshot capture, Promql baseline reads against the soak
+  window, monthly cadence, and the documented-acceptance
+  fallback if staging access is delayed. The existing template
+  at `sla-proof-template.md` is the report skeleton; this
+  procedure is the operator's how-to. Closes the "no operator
+  recipe to produce the proof report" gap that left Task #77
+  without a clear path-to-done even though all upstream
+  scenarios (L5.1-L5.3) had already shipped.
+
 - **SEV-1 / SEV-2 dry-run records (closes L5.7 / Task #76)** —
   Two new tabletop drill writeups under `docs/operations/drills/`
   exercise the SEV playbook end-to-end against the existing
