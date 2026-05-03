@@ -1,6 +1,6 @@
 ---
 title: Runbook — all ingestion sources down
-last_verified: 2026-04-30
+last_verified: 2026-05-02
 status: ratified
 severity: P1
 ---
@@ -119,7 +119,32 @@ Route by the result:
 ### D. Recent deploy broke the indexer
 
 - Check deploy history: last 4 h.
-- Revert via `make rollback INDEXER_VERSION=<previous>` (TODO(#0) make target).
+  ```sh
+  # Tag history of releases — the CalVer convention is YYYY.MM.DD.N
+  git tag -l '20*' --sort=-v:refname | head -10
+  # Or: r1-deployment-state.md records the running version
+  grep "^Running version" docs/operations/r1-deployment-state.md
+  ```
+- **Revert** to the previous release per
+  [`release-process.md`](../release-process.md) §4.4 ("Rollback
+  path"). The indexer ships as a systemd-managed binary, not a
+  containerised service — so the revert is:
+  ```sh
+  # On each indexer host:
+  PREVIOUS=2026.05.01.1                    # whichever tag was healthy
+  ssh root@indexer-01 \
+      "cd /opt/ratesengine/release-${PREVIOUS} && \
+       systemctl stop ratesengine-indexer && \
+       cp ratesengine-indexer /usr/local/bin/ && \
+       systemctl start ratesengine-indexer && \
+       systemctl status ratesengine-indexer --no-pager"
+  # Repeat for every host in the inventory's ratesengine_indexer
+  # group. The release archive (/opt/ratesengine/release-*) is
+  # kept by goreleaser packaging convention; deploys leave the
+  # previous N=3 releases in place for exactly this rollback.
+  ```
+  Then file a SEV-2 minimum + a postmortem in
+  `docs/operations/postmortems/` per release-process.md §4.4.
 - After revert, re-run diagnostics in step C.
 
 ## Root cause analysis

@@ -1177,3 +1177,127 @@ func TestTick_MinUSDVolumeFilter(t *testing.T) {
 		}
 	})
 }
+
+// recordingStreamPublisher captures PublishClosedBucket calls for
+// L3.9 fan-out tests. Implements [StreamPublisher].
+type recordingStreamPublisher struct {
+	calls []recordedPublish
+	err   error
+}
+
+type recordedPublish struct {
+	pair       canonical.Pair
+	window     time.Duration
+	value      string
+	observedAt time.Time
+}
+
+func (r *recordingStreamPublisher) PublishClosedBucket(
+	_ context.Context,
+	pair canonical.Pair,
+	window time.Duration,
+	valueDecimal string,
+	observedAt time.Time,
+) error {
+	r.calls = append(r.calls, recordedPublish{
+		pair: pair, window: window, value: valueDecimal, observedAt: observedAt,
+	})
+	return r.err
+}
+
+// TestTick_StreamPublisher_FiresOnSuccessfulPublish — when the
+// orchestrator successfully writes a (pair, window) VWAP to cache,
+// it also calls StreamPublisher.PublishClosedBucket once with the
+// same pair + window + decimal value.
+func TestTick_StreamPublisher_FiresOnSuccessfulPublish(t *testing.T) {
+	pair := xlmUsdtPair(t)
+	store := &mockStore{
+		trades: []canonical.Trade{
+			buildTrade(t, big.NewInt(10_000_000_000), big.NewInt(1_758_200_000), time.Now()),
+		},
+	}
+	cache, _ := newTestRedis(t)
+	pub := &recordingStreamPublisher{}
+	o := New(store, cache, Config{
+		Pairs:           []canonical.Pair{pair},
+		Windows:         []time.Duration{5 * time.Minute},
+		StreamPublisher: pub,
+	})
+
+	if err := o.Tick(context.Background()); err != nil {
+		t.Fatalf("Tick: %v", err)
+	}
+	if len(pub.calls) != 1 {
+		t.Fatalf("PublishClosedBucket called %d times, want 1", len(pub.calls))
+	}
+	c := pub.calls[0]
+	if c.pair != pair {
+		t.Errorf("pair = %v, want %v", c.pair, pair)
+	}
+	if c.window != 5*time.Minute {
+		t.Errorf("window = %v, want 5m", c.window)
+	}
+	if c.value == "" {
+		t.Error("value should be a non-empty decimal string")
+	}
+}
+
+// TestTick_StreamPublisher_NotCalledOnFreeze — a freeze decision
+// skips the cache write; the StreamPublisher must NOT fire either,
+// since no closed-bucket event is being published.
+func TestTick_StreamPublisher_NotCalledOnFreeze(t *testing.T) {
+	pair := xlmUsdtPair(t)
+	cache, _ := newTestRedis(t)
+	checker := newAnomalyChecker(t, pair)
+	pub := &recordingStreamPublisher{}
+
+	o := New(nil, cache, Config{
+		Pairs:           []canonical.Pair{pair},
+		Windows:         []time.Duration{5 * time.Minute},
+		Anomaly:         checker,
+		FreezeWriter:    &recordingFreezeMarker{},
+		StreamPublisher: pub,
+	})
+	stateKey := pair.String() + ":" + (5 * time.Minute).String()
+	o.prevVWAPs[stateKey] = big.NewRat(1, 1)
+	o.store = &mockStore{
+		trades: []canonical.Trade{
+			// 110% deviation, single-source → freeze fires.
+			buildTrade(t, big.NewInt(100_000_000), big.NewInt(210_000_000), time.Now()),
+		},
+	}
+
+	if err := o.Tick(context.Background()); err != nil {
+		t.Fatalf("Tick: %v", err)
+	}
+	if len(pub.calls) != 0 {
+		t.Errorf("PublishClosedBucket called %d times during freeze, want 0", len(pub.calls))
+	}
+}
+
+// TestTick_StreamPublisher_ErrorDoesNotPropagate — Publish returning
+// an error logs + metric but never fails the tick (the VWAP cache
+// write is the source of truth; the stream is enrichment).
+func TestTick_StreamPublisher_ErrorDoesNotPropagate(t *testing.T) {
+	pair := xlmUsdtPair(t)
+	store := &mockStore{
+		trades: []canonical.Trade{
+			buildTrade(t, big.NewInt(10_000_000_000), big.NewInt(1_758_200_000), time.Now()),
+		},
+	}
+	cache, mr := newTestRedis(t)
+	pub := &recordingStreamPublisher{err: errors.New("redis down")}
+	o := New(store, cache, Config{
+		Pairs:           []canonical.Pair{pair},
+		Windows:         []time.Duration{5 * time.Minute},
+		StreamPublisher: pub,
+	})
+
+	if err := o.Tick(context.Background()); err != nil {
+		t.Fatalf("Tick should swallow Publish errors: %v", err)
+	}
+	// Cache write still happened — Publish failure is non-blocking.
+	if !mr.Exists("vwap:" + pair.Base.String() + ":" + pair.Quote.String() + ":300") {
+		t.Error("VWAP key should be present even when stream publish fails")
+	}
+}
