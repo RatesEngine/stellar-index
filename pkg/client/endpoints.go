@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"net/url"
 	"strconv"
+	"strings"
 )
 
 // PriceQuery selects the asset / quote pair for a [Client.Price]
@@ -32,6 +33,92 @@ func (c *Client) Price(ctx context.Context, q PriceQuery) (*Envelope[PriceSnapsh
 	}
 	return &env, nil
 }
+
+// PriceBatchQuery is the input for [Client.PriceBatch]. AssetIDs
+// is required and non-empty; Quote defaults to "fiat:USD"
+// server-side when empty.
+//
+// Server-side limits:
+//   - 1..100 ids → routed via GET (`?asset_ids=…`).
+//   - 101..1000 ids → routed via POST with a JSON body.
+//   - >1000 ids → server returns 400; the SDK splits into ≤ 1000
+//     chunks would belong on the caller, not here, because the
+//     batch envelope's `flags.stale` semantic is OR-over-the-batch
+//     and silently chunking would mask staleness in unrelated
+//     subsets.
+//
+// Per the Freighter RFP §"Bulk query support preferred" — batch
+// is the recommended path for portfolio + multi-asset views.
+type PriceBatchQuery struct {
+	AssetIDs []string
+	Quote    string // optional; server defaults to fiat:USD
+}
+
+// PriceBatch fetches the current closed-bucket VWAP for many
+// assets in a single round-trip. Cross-region consistent per
+// ADR-0015 — every returned snapshot is from the same closed
+// bucket window the single-asset `/v1/price` would have served.
+//
+// Routing:
+//   - len(AssetIDs) ≤ 100 → GET /v1/price/batch?asset_ids=...
+//   - len(AssetIDs) > 100 → POST /v1/price/batch with JSON body
+//
+// Missing observations (asset has no indexed data) are silently
+// omitted from the response array — the envelope's `Data` slice
+// can be shorter than `AssetIDs`. Callers that need to detect
+// "asset X had no observation" diff the input + output.
+//
+// `flags.stale` on the envelope is the OR over per-row staleness:
+// any stale row sets the envelope flag.
+func (c *Client) PriceBatch(ctx context.Context, q PriceBatchQuery) (*Envelope[[]PriceSnapshot], error) {
+	if len(q.AssetIDs) == 0 {
+		return nil, &APIError{Status: 400, Title: "asset_ids required"}
+	}
+	if len(q.AssetIDs) > priceBatchPOSTMax {
+		return nil, &APIError{
+			Status: 400,
+			Title:  "too many asset_ids",
+			Detail: "the server caps POST /v1/price/batch at " + strconv.Itoa(priceBatchPOSTMax) + " ids",
+		}
+	}
+
+	var env Envelope[[]PriceSnapshot]
+	if len(q.AssetIDs) <= priceBatchGETMax {
+		v := url.Values{}
+		v.Set("asset_ids", strings.Join(q.AssetIDs, ","))
+		if q.Quote != "" {
+			v.Set("quote", q.Quote)
+		}
+		if err := c.doJSON(ctx, http.MethodGet, "/v1/price/batch", v, nil, &env); err != nil {
+			return nil, err
+		}
+		return &env, nil
+	}
+
+	// >100 ids → POST. Body shape mirrors the server's POST handler.
+	body := struct {
+		AssetIDs []string `json:"asset_ids"`
+		Quote    string   `json:"quote,omitempty"`
+	}{
+		AssetIDs: q.AssetIDs,
+		Quote:    q.Quote,
+	}
+	if err := c.doJSON(ctx, http.MethodPost, "/v1/price/batch", nil, body, &env); err != nil {
+		return nil, err
+	}
+	return &env, nil
+}
+
+// priceBatchGETMax / priceBatchPOSTMax mirror the server's
+// `priceBatchMaxAssets` / `priceBatchMaxAssetsPOST` constants
+// in `internal/api/v1/price.go`. Duplicating them here is
+// deliberate — the SDK ships SemVer-stable per ADR-0005, so
+// importing the unexported server-side constants would couple
+// SDK consumers to internal/.
+const (
+	priceBatchGETMax  = 100
+	priceBatchPOSTMax = 1000
+)
 
 // HistoryQuery selects the range for a [Client.HistorySinceInception]
 // call. Asset is required.
