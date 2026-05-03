@@ -291,6 +291,27 @@ against.
 
 ### Fixed
 
+- **Four more runbooks are bare-metal-native** — same drift as
+  api-down and api-5xx: kubectl-flavoured diagnosis steps that
+  wouldn't run on production. `redis-master-down.md` now talks
+  to `cache-01..03` running `redis-server.service` +
+  `redis-sentinel.service` (per the `redis-sentinel` role) instead
+  of `kubectl get pods -l app=redis` and `redis-0..2` StatefulSet
+  pod names. `scrape-failing.md` swaps `kubectl exec -it
+  prometheus-0` for `ssh root@mon-01` running `prometheus.service`
+  and rewrites the SD-misconfig section from ServiceMonitor /
+  PodMonitor to the prometheus role's static-config drift.
+  `alertmanager-bad-config.md` swaps `kubectl get cm
+  alertmanager-config -o jsonpath` for `cat
+  /etc/alertmanager/alertmanager.yml` on `mon-01..02` (the cited
+  `deploy/monitoring/alertmanager.yml` was a fictional file — the
+  role-rendered template is the source of truth). `core-peers.md`
+  swaps `kubectl describe cm` / `kubectl logs ds/stellar-core`
+  and a fictional `deploy/k8s/network-policy.yaml` for the
+  `archival-node` role's per-validator-host shape (still inert on
+  r1 since stellar-core was removed 2026-04-23, but ready for the
+  Phase-3 Tier-1 rollout). Closes another batch of the L6.5
+  doc-sweep.
 - **`api-5xx` runbook is bare-metal-native** — the runbook still
   walked operators through `kubectl rollout undo`, an Istio
   `VirtualService` JSON-patch (we don't run Istio), and
