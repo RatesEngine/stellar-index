@@ -17,6 +17,27 @@ against.
 
 ### Fixed
 
+- **`CLAUDE.md` repo-tree is now accurate** — the orientation
+  file every AI agent reads cold claimed `cmd/ binary entry
+  points (four in total)` while listing 5 entries; reality is 6
+  (the `ratesengine-sla-probe` binary that ships the SLA-evidence
+  harness was missing). The `internal/` enumeration was missing
+  five packages: `archivecompleteness` (the dual-archive
+  daemon — ADR-0017), `events` (transport-neutral Soroban event
+  types), `hashdb` (drift-detector against upstream LCM
+  rewrites), `pipeline` (shared ingest glue between indexer +
+  `ratesengine-ops backfill`), and `scval` (SCVal primitives
+  wrapper). The `deploy/` description claimed "k8s / baremetal
+  kits" but the actual subdirs are
+  `docker-compose / monitoring / status-page / systemd` (no
+  `deploy/k8s/`, per ADR-0008's bare-metal commitment). `configs/`
+  description tightened to call out the ansible
+  `roles/inventory/playbooks/` shape; `test/` description
+  expanded to mention the `load` (k6) and `chaos` trees;
+  `docs/audit-2026-04-29/` added to the tree (it's the
+  post-Phase-1 cross-cutting findings register that several
+  open PRs reference). Continuation of the L6.5 doc-sweep.
+
 - **`/v1/account/me` now returns the credential's `label`** —
   `APIKeyRecord.Label` was set at creation time and the OpenAPI
   `Account` schema declared the field, but the path
