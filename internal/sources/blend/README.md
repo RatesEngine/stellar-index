@@ -22,27 +22,37 @@ indexer's sink routes Blend events to per-protocol Blend storage
 (auctions table, positions table, admin events) rather than the
 unified trades hypertable.
 
-## Scope of this package (PR 1)
+## Scope of this package
 
-This first PR covers the auction-event surface — the primary signal
-per the proposal:
+The auction-event surface — the primary signal per the proposal:
 
 - `new_auction` — auction announcement
 - `fill_auction` — partial / full fill by an external filler
 - `delete_auction` — auction admin-removed before completion
 
-Additional event surfaces land in follow-ups:
+### Shipped
 
-- **PR 2**: `blend_auctions` storage table + writer (Task #43).
-- **PR 3**: dispatcher + registry wiring + indexer plumbing (Task #44).
-- **PR 4**: WASM audit for the Pool Factory + deployed pools
-  (Task #45).
-- **PR 5+** (later): money-market events (supply / borrow / repay /
-  flash_loan) → positions storage; credit-risk events; admin events.
-- **PR ~**: Reflector cross-validation (per proposal: "monitor
-  Blend's oracle price consumption via Reflector to cross-validate
-  that our aggregated prices are consistent with what the protocol
-  is using").
+- ✅ Auction-event surface (this package).
+- ✅ `blend_auctions` storage table + writer
+  (`migrations/0009_create_blend_auctions.up.sql` plus the
+  inserter in `internal/storage/timescale/`).
+- ✅ Dispatcher + registry wiring (`internal/sources/external/
+  registry.go` flips `blend.BackfillSafe = true` post-audit;
+  the dispatcher routes Blend events through the auction
+  decoder).
+- ✅ WASM audit for the Pool Factory + deployed pools (Task #53,
+  evidence at [`docs/operations/wasm-audits/blend.md`](../../../docs/operations/wasm-audits/blend.md);
+  11 contracts, 3 unique WASMs, no mid-life upgrades observed).
+
+### Still deferred
+
+- Money-market events (supply / borrow / repay / flash_loan) →
+  positions storage; credit-risk events; admin events.
+- Reflector cross-validation (per proposal: "monitor Blend's
+  oracle price consumption via Reflector to cross-validate that
+  our aggregated prices are consistent with what the protocol is
+  using"). Out of scope until a customer asks for the
+  cross-check signal.
 
 The topic constants for every Blend event are defined in
 `events.go` already so the decoder switch + classifier expand

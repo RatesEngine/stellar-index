@@ -41,7 +41,7 @@ a clear signal of "yes this is real" or "false alarm."
 
 ```sh
 # example
-kubectl ... / psql ... / curl ...
+systemctl status <unit> / journalctl -u <unit> / psql ... / curl ...
 ```
 
 ## Mitigation (≤ 15 min)
