@@ -47,7 +47,15 @@
 //
 // # What this package doesn't do
 //
-//   - No auth logic — [middleware.APIKey] (future) handles that.
+//   - No auth logic in the handlers themselves — the
+//     [middleware/auth.go] `Auth` middleware identifies the
+//     subject (apikey or sep10), stamps it on the request
+//     context, and the handlers consume it via
+//     `auth.SubjectFrom(ctx)`. Validators live in
+//     [internal/auth] (the [auth.APIKeyValidator] /
+//     [auth.SEP10Validator] interfaces) with concrete impls in
+//     [internal/auth/sep10.Validator] and the Redis-backed
+//     [auth.RedisAPIKeyValidator].
 //   - No serialisation of canonical types — they handle themselves
 //     via their [encoding/json.Marshaler] implementations.
 //   - No business logic — that lives in [internal/aggregate] and

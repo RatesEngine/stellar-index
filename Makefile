@@ -199,6 +199,14 @@ lint-imports: ## Import-boundary lint (production ingest doesn't import stellar-
 lint-openapi-urls: ## ADR-0018 URL-discipline check on the OpenAPI spec
 	@$(GO) run ./scripts/ci/lint-openapi-urls openapi/rates-engine.v1.yaml
 
+.PHONY: verify-launch-ready
+verify-launch-ready: ## Single-pane status check on the launch-readiness backlog
+	@$(GO) run ./scripts/ci/verify-launch-ready
+
+.PHONY: verify-launch-ready-all
+verify-launch-ready-all: ## verify-launch-ready with full per-row listing
+	@$(GO) run ./scripts/ci/verify-launch-ready -all
+
 .PHONY: monitoring-check
 monitoring-check: ## Validate Prometheus rule files with promtool
 	@if ! command -v promtool >/dev/null 2>&1; then \

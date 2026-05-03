@@ -1,6 +1,6 @@
 ---
 title: Per-contract schema evolution across versions — handling strategy
-last_verified: 2026-04-23
+last_verified: 2026-05-02
 status: living doc
 ---
 
@@ -219,18 +219,39 @@ Concretely:
    claim to support. A decoder PR that doesn't add the fixture it
    targets cannot be reviewed.
 
-## What's NOT yet done
+## Status
 
-- [ ] Per-source audit: enumerate every historical WASM hash for
-      each of the four Soroban sources. Blocked on live mainnet RPC
-      access (r1 stack is up; query hasn't been written).
-- [ ] `ratesengine-ops schema-audit` CLI. Not scoped in Phase 1
-      delivery plan; add to backlog with a pointer back to this
-      doc.
+- [x] Per-source audits: live evidence at
+      [`docs/operations/wasm-audits/`](../operations/wasm-audits/)
+      covers Aquarius, Band, Blend, Comet, Phoenix (5 of 5
+      Soroban-class sources we ship; Reflector is in scope but
+      its evidence lives under
+      [`docs/discovery/oracles/reflector.md`](../discovery/oracles/reflector.md)
+      from the Phase-1 audit). The historical "Blocked on live
+      mainnet RPC access" framing is stale — stellar-rpc was
+      removed from r1 on 2026-04-23 and the `wasm-history`
+      family of `ratesengine-ops` subcommands enumerates from
+      Galexie's MinIO output instead.
+- [x] CLI for the audit: `ratesengine-ops wasm-history`,
+      `wasm-history-merge-jsonl`, and
+      `extract-wasm-from-galexie` (under `cmd/ratesengine-ops/`)
+      replace the originally-scoped `schema-audit` shape with
+      something that walks history end-to-end without an RPC
+      dependency.
 - [ ] Column `contract_wasm_hash` on the `trades` and
-      `oracle_updates` hypertables. No migration written yet.
-- [ ] Extend this doc with Comet, SDEX, Blend, Redstone, Band as
-      those connectors come online. Same concerns apply.
+      `oracle_updates` hypertables. No migration written yet —
+      the per-row decoder-variant selector is `Source` +
+      `(asset, contract_id)` lookup at decode time today, not a
+      stamped column. Adding the column is a future hardening
+      for backfill where we want explicit per-row variant
+      tagging.
+- [ ] Extend this doc with per-connector schema notes for
+      Comet, SDEX (classic, mostly out of scope), Blend,
+      Redstone, Band. Status: the per-source decoders cite
+      their own README + the audit log; this doc captures the
+      generic strategy. Per-connector schema-evolution prose
+      lives in their respective `internal/sources/<venue>/
+      README.md` and the audit-evidence directories.
 
 ## Why this is an architecture doc, not an ADR
 

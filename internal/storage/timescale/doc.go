@@ -1,7 +1,9 @@
 // Package timescale is the data-access layer over our TimescaleDB
-// schema. See migrations/README.md for the manifest of currently
-// applied migrations (0001 trades-hypertable, 0002 price-aggregates,
-// 0003 oracle-updates-hypertable, 0004 relax-trades-ledger-for-offchain).
+// schema. See migrations/README.md for the authoritative manifest;
+// 0001-0015 are applied today (trades + price aggregates + oracle
+// updates + supply tables for XLM/classic/SEP-41 + discovered
+// assets + volatility baseline + blend auctions + account/trustline/
+// claimable/LP/SAC observations).
 //
 // # Scope
 //
@@ -32,8 +34,10 @@
 //
 // # Testing
 //
-// Unit tests use mocks at the [Store] interface (future work —
-// not yet extracted). Integration tests in
-// `test/integration/storage_test.go` exercise the real code against
-// a testcontainers-go Timescale.
+// [Store] is a concrete struct, not an interface — there's no
+// mock layer. Unit tests in this package's `*_test.go` files use
+// a real Timescale via testcontainers-go (started by `make
+// test-integration`); package-level tests cover SQL shape +
+// NUMERIC round-trip. Higher-level integration tests live in
+// `test/integration/`.
 package timescale

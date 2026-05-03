@@ -22,31 +22,66 @@ import (
 // quote amount of 4_250_000_000 means $42.50.
 const externalUSDVolumeDecimals = 8
 
+// USDVolumeFXResolver returns the asset's USD price as of `at` as
+// a decimal string ("0.07127", "1.00", …) for use by
+// [tradeUSDVolume]'s Phase 2 fallback path.
+//
+// Returns ("", false, nil) when no USD anchor is available for
+// the asset (the resolver has no rate, the rate is too stale, the
+// asset isn't on the operator's covered set). Real I/O errors
+// propagate so the caller can surface them in metrics; the trade
+// still inserts, just with `usd_volume` left NULL.
+//
+// Production wiring (deferred to a follow-up PR): a goroutine in
+// the indexer that polls `prices_1m` for `<asset>/<USD>` per
+// configured asset, caches the latest closed VWAP in memory, and
+// expires entries older than a freshness ceiling. The interface
+// stays this narrow so test fakes don't need a live DB.
+//
+// Concurrency: the resolver is invoked from the trade-insert
+// hot path, possibly across many goroutines for high-fanout
+// indexers. Implementations MUST be safe for concurrent
+// USDPriceAt calls.
+type USDVolumeFXResolver interface {
+	USDPriceAt(ctx context.Context, asset canonical.Asset, at time.Time) (string, bool, error)
+}
+
 // tradeUSDVolume returns the per-trade USD-equivalent volume as a
 // NUMERIC-compatible string, or nil when the trade can't be
 // converted cleanly. Returning a *string lets the caller pass the
 // value (or sql NULL) straight into the trades.usd_volume column.
 //
-// Computable when:
-//   - Off-chain CEX/FX source AND quote is fiat:USD or a USD-pegged
-//     stablecoin per `aggregate.FiatProxy` (USDC/USDT/DAI/PYUSD/USDP).
-//     Decimals: 8 (uniform external scale).
-//   - On-chain DEX source AND `quoteSpec` recognises the quote asset
-//     as USD-pegged (operator-declared classic credits + their SAC
-//     wrappers per [USDVolumeQuoteSpec]). Decimals: 7 (Stellar
-//     classic invariant).
+// Three resolution tiers, tried in order:
 //
-// Stablecoins are treated as a 1.0 peg at insert time. Depeg events
-// are observed separately via the divergence + anomaly paths and do
-// NOT change the inserted usd_volume retroactively (a depegged USDT
-// trade still carries its observed quote_amount, which is the right
-// historical record).
+//  1. Off-chain CEX/FX source AND quote is fiat:USD or a
+//     USD-pegged stablecoin per `aggregate.FiatProxy`
+//     (USDC/USDT/DAI/PYUSD/USDP). Decimals: 8 (uniform external
+//     scale).
+//
+//  2. On-chain DEX source AND `quoteSpec` recognises the quote
+//     asset as USD-pegged (operator-declared classic credits +
+//     their SAC wrappers per [USDVolumeQuoteSpec]). Decimals: 7
+//     (Stellar classic invariant).
+//
+//  3. **L2.2 Phase 2** — On-chain DEX source AND `fxResolver !=
+//     nil` returns a USD rate for the quote asset at the trade's
+//     timestamp. quote_amount × USDPrice / 10^classicDecimals
+//     produces a non-NULL `usd_volume` for any operator-watched
+//     quote with a recent VWAP. Off-chain trades that fell
+//     through tier 1 also get a tier-3 attempt — covers a CEX
+//     pair quoted in a non-stablecoin (e.g. binance:XLM/BTC).
+//
+// Tiers 1 + 2 trust their pegs at insert time — depeg events
+// are observed separately via the divergence + anomaly paths and
+// do NOT change the inserted usd_volume retroactively. Tier 3 is
+// time-anchored to the trade's timestamp; the resolver MAY return
+// (false) on stale data, in which case the column stays NULL.
 //
 // Everything else returns nil and the column stays NULL — neither
 // over-claiming USD-equivalence on unknown quotes (would mislead
 // downstream sums) nor silently dropping the trade itself (the row
 // still inserts; only the USD column goes NULL).
-func tradeUSDVolume(t canonical.Trade, quoteSpec *USDVolumeQuoteSpec) *string {
+func tradeUSDVolume(ctx context.Context, t canonical.Trade, quoteSpec *USDVolumeQuoteSpec, fxResolver USDVolumeFXResolver) *string {
 	q := t.QuoteAmount.BigInt()
 	if q == nil || q.Sign() <= 0 {
 		return nil
@@ -58,31 +93,85 @@ func tradeUSDVolume(t canonical.Trade, quoteSpec *USDVolumeQuoteSpec) *string {
 		// sneaks one in.
 		return nil
 	}
-	decimals, ok := usdVolumeDecimals(t.Pair.Quote, md.Subclass, quoteSpec)
-	if !ok {
+	if decimals, ok := usdVolumeDecimals(t.Pair.Quote, md.Subclass, quoteSpec); ok {
+		denom := scaleDenominator(decimals)
+		// FloatString(8) gives a fixed-precision decimal — Postgres
+		// NUMERIC accepts the form directly with no precision loss
+		// for any value that fit in the original big.Int (NUMERIC is
+		// arbitrary-precision; FloatString just chooses a render).
+		rendered := new(big.Rat).SetFrac(q, denom).FloatString(8)
+		return &rendered
+	}
+	// Phase 2 fallback — only when the operator wired an FX
+	// resolver. Skip when nil to keep the no-config path on the
+	// existing Phase 1 behaviour exactly.
+	if fxResolver == nil {
 		return nil
 	}
-	denom := scaleDenominator(decimals)
-	// FloatString(8) gives a fixed-precision decimal — Postgres
-	// NUMERIC accepts the form directly with no precision loss for
-	// any value that fit in the original big.Int (NUMERIC is
-	// arbitrary-precision; FloatString just chooses a render).
-	rendered := new(big.Rat).SetFrac(q, denom).FloatString(8)
+	return tradeUSDVolumeViaFX(ctx, t, md.Subclass, fxResolver)
+}
+
+// tradeUSDVolumeViaFX is the L2.2 Phase 2 multiplication path.
+// Picks the right scale per source class (CEX/FX = 8, DEX = 7),
+// asks the resolver for the quote asset's USD price at the trade
+// time, and renders quote_amount × usdRate / 10^decimals as a
+// fixed-precision NUMERIC string.
+//
+// Errors in the resolver are silent here — the function returns
+// nil so the trade still inserts with NULL `usd_volume`, and the
+// caller (InsertTrade) doesn't fail the row. Operators read the
+// fall-through rate via [TradeInsertsTotal]'s no-label series.
+func tradeUSDVolumeViaFX(ctx context.Context, t canonical.Trade, subclass external.Subclass, r USDVolumeFXResolver) *string {
+	if r == nil {
+		return nil
+	}
+	usdRateStr, ok, err := r.USDPriceAt(ctx, t.Pair.Quote, t.Timestamp)
+	if err != nil || !ok || usdRateStr == "" {
+		return nil
+	}
+	usdRate, ok := new(big.Rat).SetString(usdRateStr)
+	if !ok || usdRate.Sign() <= 0 {
+		return nil
+	}
+	var decimals int
+	switch subclass {
+	case external.SubclassCEX, external.SubclassFX:
+		decimals = externalUSDVolumeDecimals
+	case external.SubclassDEX:
+		decimals = stellarClassicDecimals
+	default:
+		return nil
+	}
+	q := new(big.Rat).SetFrac(t.QuoteAmount.BigInt(), scaleDenominator(decimals))
+	usdAmount := new(big.Rat).Mul(q, usdRate)
+	rendered := usdAmount.FloatString(8)
 	return &rendered
 }
 
+// stellarClassicDecimals is the smallest-unit-to-display divisor
+// power baked into Stellar classic — XLM, native, every classic
+// credit. SEP-41 contracts publish their own value via decimals();
+// the FX-fallback path here only fires for on-chain DEX trades
+// whose Stellar-side quote assets all share this scale.
+const stellarClassicDecimals = 7
+
 // WouldPopulateUSDVolume reports whether [Store.InsertTrade] would
 // stamp a non-null `usd_volume` for this trade given the store's
-// currently-configured [USDVolumeQuoteSpec]. Pure predicate; safe
-// for callers (e.g. the pipeline sink emitting coverage metrics) to
-// invoke before InsertTrade.
+// currently-configured [USDVolumeQuoteSpec] AND
+// [USDVolumeFXResolver]. Safe for callers (e.g. the pipeline sink
+// emitting coverage metrics) to invoke before InsertTrade.
 //
-// Returns false when the spec hasn't been installed via
-// [Store.SetUSDVolumeQuoteSpec] AND the trade isn't an off-chain
-// CEX/FX with a USD-pegged quote — i.e. the same conditions
-// tradeUSDVolume rejects on.
-func (s *Store) WouldPopulateUSDVolume(t canonical.Trade) bool {
-	return tradeUSDVolume(t, s.usdVolumeQuoteSpec) != nil
+// The predicate runs the full three-tier resolution: Phase 1
+// (off-chain CEX/FX with USD-pegged quote → tier 1; on-chain DEX
+// with operator-allow-listed quote → tier 2) and Phase 2 (any
+// remaining trade with an FX-resolver hit → tier 3).
+//
+// Note: a Phase 2 hit makes a synchronous call into the configured
+// resolver. Production resolvers MUST be cheap enough for the
+// trade-insert hot path (typically an in-memory cache lookup —
+// see the package doc).
+func (s *Store) WouldPopulateUSDVolume(ctx context.Context, t canonical.Trade) bool {
+	return tradeUSDVolume(ctx, t, s.usdVolumeQuoteSpec, s.usdVolumeFXResolver) != nil
 }
 
 // usdVolumeDecimals picks the correct decimal scale for the trade's
@@ -180,7 +269,7 @@ func (s *Store) InsertTrade(ctx context.Context, t canonical.Trade) error {
         ON CONFLICT (source, ledger, tx_hash, op_index, ts) DO NOTHING
     `
 	var usdVolume any // sql NULL when nil; pq accepts the *string form too
-	if v := tradeUSDVolume(t, s.usdVolumeQuoteSpec); v != nil {
+	if v := tradeUSDVolume(ctx, t, s.usdVolumeQuoteSpec, s.usdVolumeFXResolver); v != nil {
 		usdVolume = *v
 	}
 	_, err := s.db.ExecContext(ctx, q,

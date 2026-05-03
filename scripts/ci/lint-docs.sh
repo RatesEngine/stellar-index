@@ -72,8 +72,10 @@ if [ -d internal/api/v1 ] && [ -f openapi/rates-engine.v1.yaml ]; then
   # Reverse: spec entries that have no handler (clients 404).
   # The planned_regex below is the explicit allow-list of
   # "documented but not yet shipped" — deliberately adjusted in
-  # a docs PR when endpoints land or get cut.
-  planned_regex='^/(price/stream)$'
+  # a docs PR when endpoints land or get cut. Empty today —
+  # every spec path has a handler. If you add a new doc-but-stub
+  # endpoint, add it here and remove it once the handler lands.
+  planned_regex='^$'
   grep -oE "^  /[^:]+:" openapi/rates-engine.v1.yaml | \
     sed -E 's|^  ||; s|:$||' | sort -u | while IFS= read -r route; do
       [ -z "$route" ] && continue

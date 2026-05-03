@@ -23,10 +23,12 @@ type Decoder struct {
 	buf *buffer
 
 	// evictedOrphans is incremented every time the buffer drops an
-	// incomplete RawSwap (aged past defaultOrphanMaxAge). Production
-	// wiring in cmd/ratesengine-indexer will export this as
-	// obs.SourceOrphanEventsTotal once 165d lands. Exposed for test
-	// assertions meanwhile.
+	// incomplete RawSwap (aged past defaultOrphanMaxAge). The
+	// dispatcher reads this via the optional `EvictedOrphans() int`
+	// interface (see internal/dispatcher/dispatcher.go::Stats) and
+	// the indexer reports the running counts as
+	// obs.SourceOrphanEventsTotal in the per-ledger stats path
+	// (internal/pipeline/processor.go).
 	evictedOrphans int
 }
 
