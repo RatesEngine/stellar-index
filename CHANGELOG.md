@@ -17,6 +17,24 @@ against.
 
 ### Fixed
 
+- **`api-down` runbook + `release-process.md` rollback path are
+  now bare-metal-native** — both still spoke kubectl
+  (`kubectl rollout undo`, `kubectl logs`, `kubectl get pods`,
+  …) from a pre-ADR-0008 cloud-sketch era. ADR-0008 ratifies
+  colocated bare metal as the primary deployment shape; production
+  runs `ratesengine-api.service` on three hosts behind two
+  HAProxy + keepalived load balancers — no Kubernetes anywhere.
+  An operator paged at 3 AM following kubectl commands on this
+  fleet would land on errors, not diagnosis. `api-down.md`
+  rewritten end-to-end against `systemctl` / `journalctl` /
+  HAProxy admin socket; `release-process.md` grew a full
+  "Rollback" section documenting the per-host binary-swap
+  procedure (rolling for the API tier via the
+  `disable server api_pool/api-XX` admin command). The post-flight
+  thin "Rollback path" bullet now points at the new section
+  instead of inlining a stub. Closes a documentation drift
+  surfaced during the L6.5 doc-sweep.
+
 - **`/v1/account/me` now returns the credential's `label`** —
   `APIKeyRecord.Label` was set at creation time and the OpenAPI
   `Account` schema declared the field, but the path
