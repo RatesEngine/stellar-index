@@ -15,6 +15,27 @@ against.
 
 ## [Unreleased]
 
+### Added
+
+- **Launch-day operator helpers** — two pre-baked artefacts that
+  remove decision-load on the day:
+  - [`deploy/status-page/upptimerc.example.yml`](deploy/status-page/upptimerc.example.yml)
+    — drop-in `.upptimerc.yml` for the Upptime fork. Names the
+    surfaces (API + readiness + SSE smoke + docs + r1/r2/r3
+    origins), configures the public-page intro, routes incident
+    assignment. Operator copies to the new `ratesengine-status`
+    repo + tweaks per the inline comments. Companion
+    [`deploy/status-page/README.md`](deploy/status-page/README.md)
+    points back at `docs/operations/status-page-setup.md` for
+    the full procedure.
+  - [`scripts/dev/verify-cdn.sh`](scripts/dev/verify-cdn.sh)
+    — runs the post-CDN-provisioning smoke checks from
+    `docs/operations/cdn-setup.md` against a live host. Six
+    checks: historical-surface s-maxage, hot-surface short
+    max-age, auth-surface no-store + edge-bypass, SSE Content-
+    Type + no-store, health 200, sources catalogue max-age=300.
+    Exit 0 = pass; exit 1 = at least one failure.
+
 ### Fixed
 
 - **`/v1/account/me` now returns the credential's `label`** —

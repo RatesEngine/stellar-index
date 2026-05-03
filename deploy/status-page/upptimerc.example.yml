@@ -1,0 +1,75 @@
+# Upptime configuration for the public status page hosted at
+# status.ratesengine.net. Copy this file into the new
+# `RatesEngine/ratesengine-status` repo (created by templating
+# from upptime/upptime per docs/operations/status-page-setup.md)
+# as `.upptimerc.yml`. Adjust per the comments below.
+#
+# Spec: https://upptime.js.org/docs/configuration
+
+owner: RatesEngine
+repo: ratesengine-status
+
+# ─── Probed surfaces ─────────────────────────────────────────
+# Each entry: name surfaces on the public page; url is what the
+# GitHub Action probes every 5 minutes; expectedStatusCodes
+# qualifies what counts as "up".
+sites:
+  - name: API (api.ratesengine.net)
+    url: https://api.ratesengine.net/v1/healthz
+    expectedStatusCodes: [200]
+    assignees: [ash]
+
+  - name: API readiness
+    url: https://api.ratesengine.net/v1/readyz
+    expectedStatusCodes: [200]
+
+  - name: SSE (price tip stream)
+    url: https://api.ratesengine.net/v1/price/tip/stream?base=native&quote=fiat:USD
+    expectedStatusCodes: [200]
+    # SSE keeps the connection open; Upptime closes after the
+    # status line + first event. 5s timeout is enough.
+    maxResponseTime: 5000
+
+  - name: Documentation (docs.ratesengine.net)
+    url: https://docs.ratesengine.net
+    expectedStatusCodes: [200]
+
+  # Per-region health — exposed publicly only if the operator
+  # has DNS for api-r1/r2/r3 set up. Comment out otherwise.
+  - name: API origin r1 (FSN1)
+    url: https://api-r1.ratesengine.net/v1/healthz
+    expectedStatusCodes: [200]
+
+  - name: API origin r2 (us-east-1)
+    url: https://api-r2.ratesengine.net/v1/healthz
+    expectedStatusCodes: [200]
+
+  - name: API origin r3 (Singapore)
+    url: https://api-r3.ratesengine.net/v1/healthz
+    expectedStatusCodes: [200]
+
+# ─── Public page ─────────────────────────────────────────────
+status-website:
+  cname: status.ratesengine.net
+  baseUrl: /
+  name: Rates Engine
+  introTitle: "Live status of the Rates Engine API + ingest layers"
+  introMessage: |
+    Probe results from GitHub-hosted runners every 5 minutes.
+    Authoritative incident reporting lives on the GitHub
+    Issues tab of this repo.
+  # logoUrl: https://docs.ratesengine.net/logo.png
+
+# ─── Default issue assignees ─────────────────────────────────
+assignees:
+  - ash
+
+# ─── Optional: incident notification webhooks ────────────────
+# Skip if Slack / PagerDuty notifications already come from our
+# own Alertmanager — double-noise is worse than one source.
+#
+# notifications:
+#   - type: slack
+#     url: $SLACK_WEBHOOK    # set as repo secret
+#   - type: discord
+#     url: $DISCORD_WEBHOOK
