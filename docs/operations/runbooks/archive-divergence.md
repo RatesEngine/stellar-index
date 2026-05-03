@@ -1,6 +1,6 @@
 ---
 title: Runbook — archive-divergence
-last_verified: 2026-04-30
+last_verified: 2026-05-02
 status: draft
 severity: P1
 ---
@@ -44,8 +44,8 @@ severity: P1
 
 ```sh
 # Which checkpoint, which bucket, what's the mismatch?
-#   The scanner writes detail logs — retrieve via:
-kubectl logs job/archive-scanner --tail=200
+# The verify-archive timer/service writes detail logs — retrieve via:
+ssh root@r1 "journalctl -u verify-archive-tier-a -n 200 --no-pager"
 
 # Pull the hash from our archive
 mc cat myminio/history-archive/history/*/history-<checkpoint>.json | jq .currentBuckets

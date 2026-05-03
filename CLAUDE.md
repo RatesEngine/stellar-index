@@ -55,12 +55,13 @@ development. If one does, it's a bug.
 ├── .golangci.yml              lint config
 ├── .github/                   workflows + issue/PR templates
 │
-├── cmd/                       binary entry points (four in total)
+├── cmd/                       binary entry points (six in total)
 │   ├── ratesengine-indexer/              ingestion pipeline: Galexie → Timescale
 │   ├── ratesengine-aggregator/           VWAP/TWAP + continuous aggregates
 │   ├── ratesengine-api/                  REST + SSE API server
-│   ├── ratesengine-ops/          admin CLI: backfill, gap-detect, …
-│   └── ratesengine-migrate/      db migration runner
+│   ├── ratesengine-ops/          admin CLI: backfill, detect-gaps, verify-archive, wasm-history, …
+│   ├── ratesengine-migrate/      db migration runner
+│   └── ratesengine-sla-probe/    SLA-evidence harness: p50/p95/p99 latency + freshness pass/fail vs RFP targets
 │
 ├── internal/                  private packages (Go-enforced, not importable externally)
 │   ├── canonical/                core types: Trade, Price, Asset, Pair, Amount
@@ -68,10 +69,15 @@ development. If one does, it's a bug.
 │   ├── consumer/                 legacy orchestration seam; current prod ingest is dispatcher-based
 │   ├── ledgerstream/             archive/live LedgerCloseMeta streaming
 │   ├── dispatcher/               production ledger walker + decoder router
+│   ├── pipeline/                 shared ingest-pipeline glue used by both indexer + `ratesengine-ops backfill`
+│   ├── events/                   transport-neutral Soroban contract-event types (RPC or LCM-extracted)
+│   ├── scval/                    narrow SCVal primitives wrapper around go-stellar-sdk/xdr
 │   ├── stellarrpc/               JSON-RPC client for diagnostics + fixture capture, not prod ingest
 │   ├── sources/                  one package per source (on-chain + CEX + FX)
 │   ├── aggregate/                VWAP/TWAP/outlier/triangulation
 │   ├── storage/                  TimescaleDB + Redis + MinIO adapters
+│   ├── archivecompleteness/      dual-archive completeness daemon (ADR-0017)
+│   ├── hashdb/                   on-disk (ledger_seq → sha256(LCM)) record; drift detector vs upstream rewrites
 │   ├── api/                      REST/SSE handlers (v1)
 │   ├── ratelimit/                Redis-backed token bucket
 │   ├── metadata/                 SEP-1 / stellar.toml resolution
@@ -91,18 +97,19 @@ development. If one does, it's a bug.
 │
 
 ├── migrations/                TimescaleDB migrations (golang-migrate)
-├── configs/                   default + example YAML + Ansible roles
+├── configs/                   example.toml + Ansible roles (configs/ansible/{roles,inventory,playbooks}/)
 ├── openapi/                   rates-engine.v1.yaml — source of truth for API
-├── deploy/                    docker-compose dev stack, k8s / baremetal kits
+├── deploy/                    docker-compose (dev), systemd (production unit files), monitoring (Prometheus rules), status-page (cstate scaffold)
 ├── scripts/                   dev/ops/ci helpers (incl. ci/lint-docs.sh)
-├── test/                      integration / fixtures (build tag: integration)
+├── test/                      integration / fixtures (build tag: integration), load (k6), chaos
 │
 └── docs/
     ├── architecture/             narrative designs (last_verified checked in CI)
     ├── adr/                      Architecture Decision Records (immutable)
     ├── reference/                auto-generated from OpenAPI + struct tags
-    ├── operations/               runbooks (1 per alert), SEV playbook
-    └── discovery/                Phase-1 audit archive (read-only, closed 2026-04-22)
+    ├── operations/               runbooks (1 per alert), SEV playbook, release-process
+    ├── discovery/                Phase-1 audit archive (read-only, closed 2026-04-22)
+    └── audit-2026-04-29/         post-Phase-1 cross-cutting findings register
 ```
 
 ---

@@ -58,6 +58,53 @@ func TestUsdMarketValue_BadInputs(t *testing.T) {
 	}
 }
 
+// TestPctChange covers the trailing-24h percentage helper. The
+// signed-leading-"+" convention is part of the wire contract — a
+// regression here would silently flip the field's interpretation
+// for clients that distinguish "0.00" (no change) from "+0.00".
+func TestPctChange(t *testing.T) {
+	tests := []struct {
+		name      string
+		now, then string
+		want      string
+	}{
+		{"up 1.27%", "0.07127", "0.07", "+1.81"},
+		{"flat", "1.00", "1.00", "0.00"},
+		{"down 5%", "0.95", "1.00", "-5.00"},
+		{"big up", "150.00", "100.00", "+50.00"},
+		{"sub-cent up", "1.0000001", "1.00", "0.00"},
+		// Two-decimal rounding is half-away-from-zero (FloatString
+		// behaviour) — pinned because consumer charts depend on it.
+		{"rounds half up", "1.005", "1.00", "+0.50"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			got, err := pctChange(tc.now, tc.then)
+			if err != nil {
+				t.Fatalf("err = %v", err)
+			}
+			if got != tc.want {
+				t.Errorf("got %q, want %q", got, tc.want)
+			}
+		})
+	}
+}
+
+func TestPctChange_BadInputs(t *testing.T) {
+	if _, err := pctChange("not-a-price", "1"); err == nil {
+		t.Error("expected error for unparseable now")
+	}
+	if _, err := pctChange("1", "not-a-price"); err == nil {
+		t.Error("expected error for unparseable then")
+	}
+	if _, err := pctChange("1", "0"); err == nil {
+		t.Error("expected error for then=0 (would divide by zero)")
+	}
+	if _, err := pctChange("1", "-1"); err == nil {
+		t.Error("expected error for negative then")
+	}
+}
+
 func mustBigIntInternal(s string) *big.Int {
 	v, ok := new(big.Int).SetString(s, 10)
 	if !ok {
