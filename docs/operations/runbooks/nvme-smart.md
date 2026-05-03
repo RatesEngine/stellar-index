@@ -1,6 +1,6 @@
 ---
 title: Runbook — nvme-smart
-last_verified: 2026-04-23
+last_verified: 2026-05-02
 status: draft
 severity: P2
 ---
@@ -67,9 +67,13 @@ ssh <host> 'zpool status -v'
 - [ ] Step 3 — schedule a drive replacement. Bring the replacement
       to the colo, offline the suspect drive (`zpool offline`),
       swap, `zpool replace`, wait for resilver.
-- [ ] Step 4 — if the host is safe to drain: `kubectl cordon` and
-      reboot after swapping; ZFS resilver is online-safe but
-      stressed drives sometimes fail harder during resilver.
+- [ ] Step 4 — if the host is safe to drain: drain it out of any
+      HAProxy pool fronting it (`disable server <pool>/<host>` on
+      each LB), stop the relevant `ratesengine-*` units, then
+      reboot after swapping. ZFS resilver is online-safe but
+      stressed drives sometimes fail harder during resilver, so a
+      clean reboot before the swap is preferable when traffic can
+      be drained.
 - [ ] Verification: new drive resilvered, `zpool status` returns
       to ONLINE, no new IO errors for 24 h.
 

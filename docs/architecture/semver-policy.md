@@ -15,9 +15,9 @@ each governing a different surface:
 | **Binary releases** (`ratesengine-api`, `ratesengine-indexer`, …) | CalVer (`2026.06.30.1`) | Operators care about "when did we ship this build", not numerical compatibility. |
 
 The two clocks tick independently. A binary release `2026.07.15.1`
-may contain `pkg/client v0.4.2` AND `pkg/types v0.7.0`. The
-`CHANGELOG.md` entry for that release lists the new `pkg/*`
-versions it contains.
+may contain `pkg/client v0.4.2` while bundling unchanged versions
+of any other `pkg/*` modules added later. The `CHANGELOG.md` entry
+for that release lists the new `pkg/*` versions it contains.
 
 ## SemVer rules for `pkg/*`
 
@@ -28,10 +28,14 @@ is bound by the rules below. **`internal/*` is NOT** — internal
 packages can be refactored, renamed, or deleted in any PR.
 
 Currently shipped:
-- `pkg/client` — Go SDK for the public API ([#201](https://github.com/RatesEngine/rates-engine/pull/201))
-
-Planned:
-- `pkg/types` — wire types shared between SDK + server (deferred until refactor; today the SDK duplicates types deliberately to keep the skeleton focused)
+- `pkg/client` — Go SDK for the public API
+  ([#201](https://github.com/RatesEngine/rates-engine/pull/201)).
+  Wire-shape types (`Envelope`, `Flags`, `Pagination`,
+  `AssetDetail`, …) live in `pkg/client/types.go` rather than a
+  separate `pkg/types` package — see CLAUDE.md "Repo map" for the
+  rationale. The server's `internal/api/v1` defines its own
+  envelope intentionally; the duplication is the SemVer firewall
+  between the SDK's public surface and internal handler shapes.
 
 ### What constitutes a breaking change
 
@@ -178,7 +182,7 @@ some packages are more refactor-safe than others:
 | `internal/api/v1` | **High** — wire-shape changes break clients | New endpoint instead of field-shape change |
 | `internal/aggregate` | **Medium** — internal consumers only | Standard PR review |
 | `internal/sources/*` | **Low** — per-source decoders churn frequently | Author + CODEOWNER review |
-| `internal/divergence`, `internal/anomaly`, `internal/archivecompleteness` | **Low** — recent additions, expected to grow | Standard PR review |
+| `internal/divergence`, `internal/aggregate/anomaly`, `internal/aggregate/baseline`, `internal/aggregate/confidence`, `internal/aggregate/freeze`, `internal/archivecompleteness` | **Low** — recent additions, expected to grow | Standard PR review |
 
 This isn't a SemVer commitment — it's review-effort guidance. A
 PR touching `internal/canonical.Trade`'s field set should land

@@ -250,3 +250,94 @@ func TestSplitByLookback_BoundaryInclusive(t *testing.T) {
 		t.Errorf("d30 should include all three entries, len = %d", len(d30))
 	}
 }
+
+// TestMaxZScore_NaNObservationFiresFreeze pins the contract:
+// a pathological observation (NaN) MUST surface as max-anomalous
+// so the orchestrator's Phase 2 freeze threshold (z > 5) actually
+// fires. Without this guard, `NaN > 5` evaluates false and the
+// silently-bad price would slip through.
+func TestMaxZScore_NaNObservationFiresFreeze(t *testing.T) {
+	// Build a multi-baseline with all three windows non-nil (so the
+	// bug would be triggered if it were present — the test isn't
+	// just exercising the empty path).
+	d1Returns := []float64{0.001, -0.001, 0.002, -0.002, 0.001}
+	d7Returns := append([]float64{}, d1Returns...)
+	d30Returns := append([]float64{}, d1Returns...)
+	mb := baseline.NewMultiBaseline(d1Returns, d7Returns, d30Returns)
+
+	z, window, valid := mb.MaxZScore(math.NaN())
+	if !valid {
+		t.Fatal("MaxZScore returned valid=false on NaN input — caller would skip threshold check entirely")
+	}
+	if !math.IsInf(z, 1) {
+		t.Errorf("MaxZScore(NaN) returned z=%g, want +Inf so `z > 5.0` fires the freeze", z)
+	}
+	if window != baseline.Window1d {
+		t.Errorf("MaxZScore(NaN) window = %v, want %v (smallest available)", window, baseline.Window1d)
+	}
+	// Spot-check the threshold semantic the orchestrator relies on.
+	if !(z > 5.0) {
+		t.Error("z > 5.0 must be true for the orchestrator's Phase 2 freeze to fire on a NaN observation")
+	}
+}
+
+// TestMaxZScore_PosInfObservationFiresFreeze — same as NaN but
+// for +Inf. Reachable in production via big.Rat.Float64()
+// overflow on a pathologically-large price; the freeze MUST
+// fire.
+func TestMaxZScore_PosInfObservationFiresFreeze(t *testing.T) {
+	d1Returns := []float64{0.001, -0.001, 0.002, -0.002, 0.001}
+	mb := baseline.NewMultiBaseline(d1Returns, d1Returns, d1Returns)
+
+	z, _, valid := mb.MaxZScore(math.Inf(1))
+	if !valid {
+		t.Fatal("MaxZScore returned valid=false on +Inf input")
+	}
+	// +Inf is already "infinitely anomalous" via the natural ZScore
+	// path (|+Inf - median| / mad = +Inf), so this test mostly pins
+	// the docstring's promise that we don't return valid=false.
+	if !math.IsInf(z, 1) {
+		t.Errorf("MaxZScore(+Inf) returned z=%g, want +Inf", z)
+	}
+}
+
+// TestMaxZScore_NegInfObservationFiresFreeze — and -Inf, which
+// would naturally yield +Inf z-score (|-Inf - median| / mad =
+// +Inf), but the explicit guard makes the contract easier to
+// reason about — the result is identical regardless of how
+// IEEE-754 happens to handle the underlying math.
+func TestMaxZScore_NegInfObservationFiresFreeze(t *testing.T) {
+	d1Returns := []float64{0.001, -0.001, 0.002, -0.002, 0.001}
+	mb := baseline.NewMultiBaseline(d1Returns, d1Returns, d1Returns)
+
+	z, _, valid := mb.MaxZScore(math.Inf(-1))
+	if !valid {
+		t.Fatal("MaxZScore returned valid=false on -Inf input")
+	}
+	if !math.IsInf(z, 1) {
+		t.Errorf("MaxZScore(-Inf) returned z=%g, want +Inf", z)
+	}
+}
+
+// TestMaxZScore_PathologicalAttributesToFirstAvailableWindow —
+// when only the 30d window is wired (e.g. the asset is mature
+// but the 1d/7d windows happened to evict during retention),
+// the pathological-input path attributes the result to the 30d
+// window rather than panicking on a nil baseline lookup.
+func TestMaxZScore_PathologicalAttributesToFirstAvailableWindow(t *testing.T) {
+	d30Returns := []float64{0.001, -0.001, 0.002, -0.002, 0.001}
+	// Pass empty slices for d1 + d7 — buildOrNil returns nil for
+	// each via the ErrNotEnoughSamples branch.
+	mb := baseline.NewMultiBaseline(nil, nil, d30Returns)
+
+	z, window, valid := mb.MaxZScore(math.NaN())
+	if !valid {
+		t.Fatal("valid=false")
+	}
+	if !math.IsInf(z, 1) {
+		t.Errorf("z = %g, want +Inf", z)
+	}
+	if window != baseline.Window30d {
+		t.Errorf("window = %v, want %v (only available window)", window, baseline.Window30d)
+	}
+}
