@@ -25,8 +25,9 @@ import (
 // Truncated is true when the window had MORE than the server's
 // max-trades cap (10000 today) — the returned Price is then only
 // over the chronologically-first 10000 trades and is NOT the true
-// window VWAP. Clients should narrow the window and retry, or
-// request the pre-computed rollup from the aggregator once it ships.
+// window VWAP. Clients should narrow the window and retry. For
+// fixed cross-region-consistent VWAPs, `/v1/price` serves the
+// closed-bucket aggregator output instead (per ADR-0015).
 type VWAPResult struct {
 	From             time.Time `json:"from"`
 	To               time.Time `json:"to"`
@@ -89,9 +90,10 @@ func (s *Server) handleVWAP(w http.ResponseWriter, r *http.Request) {
 
 	// maxTrades caps each single-shot aggregation. Hitting the cap
 	// means the computed VWAP is only over the first N trades and
-	// we flag the response truncated=true. Once the aggregator binary
-	// is wired, pre-computed rollups replace this raw scan and the
-	// cap becomes irrelevant.
+	// we flag the response truncated=true. /v1/vwap takes arbitrary
+	// time windows, so it always scans trades on-query — the
+	// aggregator binary's pre-computed rollups feed `/v1/price`'s
+	// closed-bucket surface (ADR-0015), not this endpoint.
 	const maxTrades = 10000
 	trades, err := reader.TradesInRange(r.Context(), pair, from, to, maxTrades)
 	if err != nil {

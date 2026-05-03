@@ -52,9 +52,12 @@ func supplyCmd(args []string) error {
 // Flags:
 //
 //	-config PATH     Required. Operator TOML config.
-//	-asset <id>      Asset to snapshot. native only at v1; classic
-//	                 and SEP-41 reject with a "not yet supported"
-//	                 message.
+//	-asset <id>      Asset to snapshot. `native` only via this CLI;
+//	                 classic and SEP-41 are served by the
+//	                 aggregator-resident goroutine path
+//	                 (`[supply] aggregator_refresh_enabled`).
+//	                 Passing a non-native asset returns an error
+//	                 pointing at that path.
 //	-ledger N        Ledger sequence to attribute the snapshot to.
 //	                 Default: latest known ledger across all
 //	                 ingestion cursors (so the snapshot is dated
@@ -75,7 +78,7 @@ func supplySnapshot(args []string) error {
 		return errors.New("-config is required")
 	}
 	if *assetRaw != "native" {
-		return fmt.Errorf("supply snapshot: asset %q not yet supported (only `native` at v1; classic + SEP-41 follow once their computers ship)", *assetRaw)
+		return fmt.Errorf("supply snapshot: asset %q is not served by this CLI subcommand — classic (Algorithm 2) + SEP-41 (Algorithm 3) computers ship in `internal/supply/{classic,sep41}.go` and run via the aggregator-resident goroutine path (`[supply] aggregator_refresh_enabled`). See docs/operations/supply-snapshot.md §\"Asset-class scope\"", *assetRaw)
 	}
 
 	cfg, err := config.LoadWithEnv(*cfgPath)
