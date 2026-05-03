@@ -15,6 +15,30 @@ against.
 
 ## [Unreleased]
 
+### Added
+
+- **Three operator runbooks for the launch-readiness rows that
+  need infra-side action, not code:**
+  - [`docs/operations/cdn-setup.md`](docs/operations/cdn-setup.md)
+    — closes **L3.14**'s infra side. Covers per-surface
+    `Cache-Control` policy from the origin middleware, provider
+    triage (Cloudflare vs CloudFront vs Bunny), step-by-step
+    Cloudflare provisioning, SSE-passthrough config, verification
+    `curl` commands, and a one-line rollback path.
+  - [`docs/operations/status-page-setup.md`](docs/operations/status-page-setup.md)
+    — closes **L4.11**'s decision + provisioning. Decision: cstate
+    on GitHub Pages (host-independent of our origin; matches the
+    "everything reviewable in git" stance; can graduate to
+    Statuspage.io later without changing the customer URL).
+    Full setup walkthrough plus the incident-posting workflow.
+  - [`docs/operations/chaos-wave1-runbook.md`](docs/operations/chaos-wave1-runbook.md)
+    — closes **L5.5**'s execution gap. The suite code is already
+    shipped under `test/chaos/`; the runbook covers the pre-flight,
+    pass criteria per scenario, what to capture per run (the
+    reports directory + RETRO), and what to do when something
+    breaks. The launch-blocking artefact is "a clean run + a
+    committed reports directory", not more code.
+
 ### Fixed
 
 - **`/v1/account/me` now returns the credential's `label`** —
