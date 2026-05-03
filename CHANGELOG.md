@@ -17,6 +17,20 @@ against.
 
 ### Fixed
 
+- **`supply-snapshot.md` no longer says classic + SEP-41 wait on
+  their computers shipping** — the lead-in said
+  `Each run computes the current Supply per ADR-0011 Algorithm 1
+  (native XLM at v1; classic + SEP-41 follow once their respective
+  computers ship)`. Algorithm 2 + 3 computers shipped (Tasks
+  #55 / #56); the doc's own §"Asset-class scope" table at line
+  164 correctly marks all three `Shipped`. The lead-in is the
+  one-paragraph view that was inconsistent. Rewritten to be
+  honest about the two parallel writers (systemd-timer CLI
+  snapshot — XLM-only, vs aggregator-resident refresher — all
+  three classes) and the bullet at the top of the doc updated to
+  match. Same drift family as #494 (supply package doc.go).
+  Continuation of the L6.5 doc-sweep.
+
 - **`/v1/account/me` now returns the credential's `label`** —
   `APIKeyRecord.Label` was set at creation time and the OpenAPI
   `Account` schema declared the field, but the path
