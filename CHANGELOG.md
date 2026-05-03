@@ -291,6 +291,17 @@ against.
 
 ### Fixed
 
+- **`ratesengine-ops --help` no longer advertises two subcommands
+  that don't exist** — the `usageBody` constant ended with a
+  `TODO subcommands (land with their feature PRs):` block listing
+  `cache-prime` (warm the Redis cache from Timescale — never
+  built; same drift family as #475) and `verify-invariants`
+  (cross-check aggregated prices — superseded by the granular
+  `verify-archive` / `verify-decoders` / `verify-external` /
+  `archive-completeness verify` / `cross-region-check` family
+  that actually shipped). Dropped the block entirely so a fresh
+  operator running `ratesengine-ops --help` doesn't see promises
+  the binary can't keep. Continuation of the L6.5 doc-sweep.
 - **`internal/auth/sep10.go` SEP-10 flow comments cite the
   actual handler paths** — the godoc said `Client: GET
   /v1/auth/challenge?account=G…` and `POST /v1/auth/verify with
