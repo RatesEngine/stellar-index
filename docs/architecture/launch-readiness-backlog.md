@@ -113,7 +113,7 @@ Within each surface, ordered by dependency.
 | L5.4 | k6 `ingest_peak_ledger.js` — 5× normal event rate × 1 h | Wk 9 | half-day | L1.* | — | covered by indexer's existing soak via `test/load/scenarios/06-mixed-realistic.js` ingest-side metrics; dedicated indexer-only k6 is a post-launch nice-to-have | ⚠ |
 | L5.5 | Chaos suite Wave 1 (dev-stack smoke; 3 scenarios). Wave 2 (HA-shaped scenarios on staging baremetal) deferred post-launch. | Wk 9 | full day | L4.* | launch | `test/chaos` | 🟢 |
 | L5.6 | Security review (external or community) on full stack | Wk 9 | (external) | L3.* | launch | external auditor | 🔴 |
-| L5.7 | SEV-1 / SEV-2 dry-run (kill something, time the response) | Wk 9 | half-day | L4.4, L4.11 | launch | runbooks | 🔴 |
+| L5.7 | SEV-1 / SEV-2 dry-run records — solo tabletop dry-runs against `scenarios/sev1-timescale-primary-failover.md` + `scenarios/sev2-source-decoder-regression.md` landed under `docs/operations/drills/2026-04-*.md`; promoted two action items into runbook updates (`timescale-primary-down.md` lead-with-readyz, `decode-errors.md` divergence_warning correlation). 3-person tabletop queued for post-launch. | Wk 9 | half-day | L4.4, L4.11 | launch | runbooks + drill writeups | ✅ |
 
 ## Finalization
 
