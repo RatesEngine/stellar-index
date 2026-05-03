@@ -1,6 +1,6 @@
 ---
 title: Runbook — core-peers
-last_verified: 2026-04-30
+last_verified: 2026-05-02
 status: draft
 severity: P2
 ---
@@ -39,30 +39,44 @@ severity: P2
 
 ## Quick diagnosis (≤ 5 min)
 
+> When this alert un-inerts (Phase-3 Tier-1 validator rollout),
+> stellar-core will run as the `stellar-core.service` systemd
+> unit on each validator host (per the `archival-node` ansible
+> role's `templates/systemd/stellar-core.service.j2` and
+> ADR-0008). The procedure below assumes that bare-metal shape;
+> there is no Kubernetes deployment for stellar-core anywhere
+> in this architecture.
+
 ```sh
-curl -s http://stellar-core:11626/peers | jq
+# Per-validator host — stellar-core's HTTP admin port is 11626 by
+# default; localhost-only.
+ssh root@val-01 "curl -s http://localhost:11626/peers | jq"
 # Look at: total count, which peers we're connected to, any
 #   "attempting" that aren't making it to "authenticated".
 
 # Are we network-reachable? (11625 is the stellar-core P2P port.)
-telnet <a-random-quorum-peer> 11625
-# Should connect and show the handshake, or refuse cleanly.
+ssh root@val-01 "nc -zv <a-random-quorum-peer> 11625"
+# Should report "succeeded", or refuse / timeout cleanly.
 
 # Did we recently change the preferred-peer list?
-kubectl describe cm stellar-core-config | grep -A20 'PREFERRED_PEERS'
+ssh root@val-01 "grep -A20 'PREFERRED_PEERS' /etc/stellar-core/stellar-core.cfg"
 
 # Is a firewall dropping our outbound?
-kubectl logs ds/stellar-core --tail=200 | grep -iE 'connect|refused|timed out'
+ssh root@val-01 "journalctl -u stellar-core -n 200 --no-pager \
+  | grep -iE 'connect|refused|timed out'"
 ```
 
 ## Typical root causes
 
-1. **Firewall / egress change** — a new NetworkPolicy or the
-   colo's firewall dropped our outbound 11625.
+1. **Firewall / egress change** — a new iptables / ufw rule on
+   the validator host or the colo perimeter dropped our outbound
+   11625.
 
 2. **Preferred-peer list drift**. The SDF / LOBSTR / Satoshipay
    peers we explicitly trust changed IPs or retired them.
-   - Mitigation: update `PREFERRED_PEERS` in core config.
+   - Mitigation: update `PREFERRED_PEERS` in
+     `archival-node` role's stellar-core config template +
+     re-apply.
 
 3. **Large-scale network partition.** We can reach a few peers
    but not most. Usually correlates with BGP / upstream issues.
@@ -75,11 +89,13 @@ kubectl logs ds/stellar-core --tail=200 | grep -iE 'connect|refused|timed out'
 ## Mitigation
 
 - [ ] Step 1 — identify whether we can *reach* the wider network
-      (telnet to a known peer's 11625).
-- [ ] Step 2 — if firewall: unblock. Check egress policy in
-      `deploy/k8s/network-policy.yaml`.
-- [ ] Step 3 — if preferred-peer list is stale: update config
-      via GitOps + rolling restart.
+      (`nc -zv <known-peer> 11625` from the validator host).
+- [ ] Step 2 — if firewall: unblock. Check the host's local rules
+      (`iptables -L -n`, `ufw status`) and the colo perimeter
+      egress policy.
+- [ ] Step 3 — if preferred-peer list is stale: update config in
+      the `archival-node` ansible role + apply with
+      `--limit val-XX` rolling across hosts so quorum stays up.
 - [ ] Step 4 — if we're the one getting dropped: check our own
       core logs for invalid-ledger or misbehaviour warnings, then
       reach out to the quorum-set operators.
@@ -107,3 +123,10 @@ kubectl logs ds/stellar-core --tail=200 | grep -iE 'connect|refused|timed out'
 - 2026-04-30 — top-of-file deployment-posture callout: this alert
   is inert on r1 (stellar-core removed 2026-04-23) and is retained
   for Phase-3 validator rollout.
+- 2026-05-02 — diagnosis converted from kubectl ConfigMap +
+  DaemonSet log commands to the bare-metal `val-XX` /
+  `stellar-core.service` shape that the `archival-node` ansible
+  role actually deploys (ADR-0008 + ADR-0004). The cited
+  `deploy/k8s/network-policy.yaml` was a fictional file —
+  iptables / ufw + the colo perimeter are the real egress
+  controls.

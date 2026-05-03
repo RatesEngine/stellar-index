@@ -13,9 +13,13 @@ import "sort"
 // /v1/sources but not contributing to VWAP — fail-closed on
 // misconfiguration.
 //
-// Operators override DefaultWeight and IncludeInVWAP via config
-// (see internal/config/external.go once it lands). Class and Paid
-// are venue facts, not per-deployment — don't expose them as config.
+// Operators toggle individual venues via config
+// (see `ExternalConfig` in internal/config/config.go — each venue
+// has an `enabled` flag that disables it when false). Class and
+// Paid are venue facts, not per-deployment — they aren't exposed
+// as config. Per-venue DefaultWeight / IncludeInVWAP overrides are
+// not wired today; if an operator needs them, that's a future
+// follow-up rather than a missing surface.
 //
 // BackfillSafe is default-false for on-chain Soroban sources: a
 // `update_contract` upgrade can change event body schemas, so a

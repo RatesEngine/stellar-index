@@ -1,6 +1,6 @@
 ---
 title: Runbook — host-cpu-high
-last_verified: 2026-04-30
+last_verified: 2026-05-02
 status: draft
 severity: P3
 ---
@@ -31,8 +31,8 @@ severity: P3
 # Which process is eating CPU?
 ssh <host> 'top -b -n1 -o %CPU | head -20'
 
-# Per-service breakdown (k8s only)
-kubectl top pods --containers --sort-by=cpu | head -20
+# Per-service breakdown (systemd cgroup view)
+ssh <host> 'systemd-cgtop --order=cpu --iterations=2 -n 20'
 
 # Is it user-CPU, system-CPU, iowait, or softirq?
 ssh <host> 'mpstat 1 5'

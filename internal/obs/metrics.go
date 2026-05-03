@@ -42,6 +42,7 @@ func init() {
 		CursorLastLedger,
 		DivergenceRefreshTotal,
 		TradeInsertsTotal,
+		StreamPublishTotal,
 
 		PriceStalenessSeconds,
 		OracleLastUpdateUnix,
@@ -50,6 +51,8 @@ func init() {
 		AggregatorTicksTotal,
 		AggregatorVWAPWritesTotal,
 		AggregatorEmptyWindowsTotal,
+		AggregatorStreamPublishTotal,
+		APIStreamSubscribeTotal,
 		AggregatorDroppedTradesTotal,
 		AggregatorDroppedWindowsTotal,
 
@@ -299,6 +302,27 @@ var TradeInsertsTotal = prometheus.NewCounterVec(
 	[]string{"source", "usd_volume_populated"},
 )
 
+// StreamPublishTotal — per-stream counter of envelopes the API
+// binary's [streampublish.Publisher] fanned out to a streaming Hub.
+// Increments only on a NEW closed bucket (the publisher
+// short-circuits when ObservedAt hasn't advanced).
+//
+// Operators read this alongside per-pair subscriber counts to
+// validate the closed-bucket fanout path: a steady stream of
+// publishes with zero subscribers means clients aren't connecting;
+// zero publishes with active subscribers means the upstream
+// reader isn't seeing new buckets.
+//
+// Cardinality: one series per stream surface — low single-digit at
+// maturity.
+var StreamPublishTotal = prometheus.NewCounterVec(
+	prometheus.CounterOpts{
+		Name: "ratesengine_stream_publish_total",
+		Help: "Closed-bucket envelopes published to the streaming Hub, labelled by stream surface (e.g. price_stream).",
+	},
+	[]string{"stream"},
+)
+
 // ─── Pricing / oracle metrics ────────────────────────────────────
 
 // PriceStalenessSeconds — per-asset gauge showing how old our
@@ -380,6 +404,46 @@ var AggregatorEmptyWindowsTotal = prometheus.NewCounter(
 		Name: "ratesengine_aggregator_empty_windows_total",
 		Help: "Aggregator (pair, window) refreshes that produced zero eligible trades.",
 	},
+)
+
+// AggregatorStreamPublishTotal — count of closed-bucket events the
+// orchestrator handed to the configured StreamPublisher (Redis
+// pub/sub fan-out for /v1/price/stream subscribers per L3.9).
+// Labelled by outcome:
+//
+//   - "ok" — Publish returned nil; subscribers (if any) receive the event.
+//   - "error" — Publish returned a non-nil error; the next tick retries
+//     and the VWAP cache write itself is unaffected.
+//
+// Unset when no StreamPublisher is wired (no fan-out path).
+var AggregatorStreamPublishTotal = prometheus.NewCounterVec(
+	prometheus.CounterOpts{
+		Name: "ratesengine_aggregator_stream_publish_total",
+		Help: "Closed-bucket stream publishes attempted by the aggregator, labelled by outcome.",
+	},
+	[]string{"outcome"},
+)
+
+// APIStreamSubscribeTotal — count of closed-bucket Redis pub/sub
+// messages the API binary's subscriber processed, labelled by
+// outcome:
+//
+//   - "ok" — message decoded and republished on the local Hub for
+//     /v1/price/stream subscribers.
+//   - "decode_error" — JSON unmarshal failed; message dropped, next
+//     message processed normally. Indicates wire-format drift between
+//     aggregator's Publisher and this Subscriber.
+//   - "malformed" — JSON decoded but Asset or Quote was empty;
+//     message dropped without Hub publish (no valid topic to route to).
+//
+// Unset when no Subscriber is wired (the API binary's
+// /v1/price/stream returns 503 instead of fanning out).
+var APIStreamSubscribeTotal = prometheus.NewCounterVec(
+	prometheus.CounterOpts{
+		Name: "ratesengine_api_stream_subscribe_total",
+		Help: "Closed-bucket Redis pub/sub messages processed by the API subscriber, labelled by outcome.",
+	},
+	[]string{"outcome"},
 )
 
 // AggregatorDroppedTradesTotal — count of trades the orchestrator
