@@ -1,6 +1,6 @@
 ---
 title: Runbook — redis-replication
-last_verified: 2026-04-23
+last_verified: 2026-05-02
 status: draft
 severity: P2
 ---
@@ -74,8 +74,10 @@ redis-cli -h redis-sentinel -p 26379 sentinel replicas <mastername>
 ## Mitigation
 
 - [ ] Step 1 — identify which replica is missing and why (above).
-- [ ] Step 2 — if the pod is down: `kubectl delete pod redis-N` to
-      let the StatefulSet respawn it. Sentinel picks it up.
+- [ ] Step 2 — if redis-server on a replica host is down:
+      `ssh root@cache-NN "systemctl restart redis-server"`.
+      Sentinel detects the recovered replica and re-adds it to
+      replication on its next discovery cycle.
 - [ ] Step 3 — if sync is in progress: monitor
       `master_sync_left_bytes`; ETA = leftBytes / network bandwidth.
 - [ ] Step 4 — if auth drift: restart the replica with the correct
