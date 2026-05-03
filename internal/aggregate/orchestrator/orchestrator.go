@@ -4,31 +4,39 @@
 // computes VWAP, and writes the result to Redis so API requests
 // serve from cache rather than recomputing on every query.
 //
-// Scope of this v1:
+// Scope:
 //
-//   - Rolling-window VWAP per pair. Three windows baked in
-//     (5m, 1h, 24h) covering the RFP's "real-time + historical"
-//     shape without committing to per-operator window config yet.
-//   - Passthrough single-source aggregation: every trade in the
-//     window contributes to VWAP regardless of source class. This
-//     matches what the API currently computes on-query; the
-//     orchestrator's job here is to move that computation from
-//     hot-path query-time to cold-path tick-time.
+//   - Rolling-window VWAP per pair. Three windows are the built-in
+//     default (5m, 1h, 24h via [DefaultWindows]); operators
+//     override via `[aggregate].windows` in TOML.
+//   - Class-filtered single-tier aggregation by default
+//     (ClassExchange-only); operators flip
+//     `[aggregate].disable_class_filter` to opt out and pull
+//     aggregator + oracle classes too.
+//   - Stablecoin → fiat proxy mapping (USDT/USDC/PYUSD → USD,
+//     EUROC/EUROB → EUR, MXNe → MXN) when
+//     `[aggregate].enable_stablecoin_fiat_proxy` is set; the
+//     mapping lives in [internal/aggregate/stablecoin] and is
+//     applied as a post-fetch pair rewrite before VWAP computes.
+//   - Cross-pair triangulation (XLM/USD × USD/EUR = XLM/EUR) via
+//     the `Triangulations` field; X2.5 forex-snap rule for
+//     chained-fiat per [internal/aggregate/triangulate].
+//   - Outlier filtering at fetch time via `OutlierSigmaThreshold`;
+//     the math lives in [internal/aggregate/outliers].
+//   - Divergence-cache refresh from each Tick via
+//     `DivergenceRefresher` (the API's
+//     `flags.divergence_warning` reads from the resulting
+//     `div:<asset>` Redis keys).
+//   - Multi-factor confidence scoring + ADR-0019 anomaly response
+//     (Phase 1 + 2 — z-score / confidence / source-count freeze
+//     thresholds via the `Anomaly` + `FreezeWriter` fields; the
+//     API binary's `freeze.Looker` reads the markers this
+//     publishes).
 //
-// Deliberately out of scope for v1 (each is a follow-up PR the
-// orchestrator is shaped to accept cleanly):
-//
-//   - Stablecoin → fiat proxy mapping (USDT→USD, USDC→USD …).
-//     Will live as a post-fetch pair rewrite before VWAP computes.
-//   - Cross-pair triangulation (XLM/USD × USD/EUR = XLM/EUR).
-//     Will live as a separate triangulation loop running alongside
-//     the direct-pair loop.
-//   - Divergence detection (our VWAP vs aggregator-class sources).
-//     Will live as a separate worker that runs after the
-//     orchestrator's tick and writes to `div:` Redis keys.
-//   - Outlier filtering. Will wrap the raw-trade fetch before
-//     VWAP sees it; existing internal/aggregate/outliers.go
-//     already does the math.
+// Out of scope: CAGG refresh stays Timescale-driven (background
+// job in migration 0002's `add_continuous_aggregate_policy`
+// calls); the orchestrator deliberately does not refresh CAGGs
+// itself.
 //
 // Runtime: one goroutine per window × pair pair-list entry in
 // parallel during each tick. Ticks are serialised — if a tick's
@@ -299,6 +307,19 @@ type Config struct {
 	// combination per tick.
 	DivergenceRefresher DivergenceRefresher
 
+	// StreamPublisher, when non-nil, is called once per successful
+	// closed-bucket VWAP write to fan the event out to API-side SSE
+	// subscribers (`/v1/price/stream`). Production wiring is the
+	// Redis-pub/sub publisher in `internal/api/streaming/redispub`;
+	// the matching API-side subscriber republishes on the in-process
+	// streaming.Hub so SSE clients receive the event. Best-effort:
+	// publish errors log + increment a metric but never block the
+	// tick (the VWAP cache write itself is the source of truth).
+	//
+	// Nil = no fan-out. Leaves `/v1/price/stream` with no producer,
+	// matching the pre-launch state where `s.hub == nil` returns 503.
+	StreamPublisher StreamPublisher
+
 	// Logger is the structured logger. If nil, slog.Default() is
 	// used.
 	Logger *slog.Logger
@@ -315,6 +336,27 @@ type Config struct {
 // computing divergence percent, and writing the cache entry.
 type DivergenceRefresher interface {
 	RefreshPair(ctx context.Context, pair canonical.Pair, ourPrice float64, observedAt time.Time) error
+}
+
+// StreamPublisher is the seam the orchestrator uses to fan out
+// closed-bucket events. Production impl is
+// [internal/api/streaming/redispub.Publisher] (Redis PUBLISH); the
+// API binary's matching subscriber (PR 2 of L3.9) republishes the
+// event on its in-process [internal/api/streaming.Hub] so SSE
+// subscribers on `/v1/price/stream` get fed.
+//
+// Called once per (pair, window) on every successful VWAP cache
+// write — same call site as the freeze writer / confidence cache
+// write, just on the publish side. Best-effort: a publish error
+// logs + increments a metric but never blocks the next tick (the
+// closed-bucket row is durable via the VWAP cache; the stream is
+// enrichment, not a source-of-truth).
+//
+// Nil = no fan-out. Acceptable when no API binary is subscribed
+// (e.g. local dev). Tests substitute a fake that records
+// invocations.
+type StreamPublisher interface {
+	PublishClosedBucket(ctx context.Context, pair canonical.Pair, window time.Duration, valueDecimal string, observedAt time.Time) error
 }
 
 // DefaultWindows is the built-in window set — three buckets
@@ -576,7 +618,33 @@ func (o *Orchestrator) refreshPairWindow(
 	o.vwapWrites++
 	o.mu.Unlock()
 	obs.AggregatorVWAPWritesTotal.Inc()
+
+	o.publishToStream(ctx, pair, window, value, now)
 	return nil
+}
+
+// publishToStream fans the closed-bucket event out to the
+// configured StreamPublisher (Redis pub/sub in production). Pure
+// best-effort: never returns an error — failures log + increment
+// the per-outcome counter. The VWAP cache write upstream is the
+// source of truth; the stream is enrichment for SSE subscribers.
+func (o *Orchestrator) publishToStream(
+	ctx context.Context,
+	pair canonical.Pair,
+	window time.Duration,
+	value string,
+	observedAt time.Time,
+) {
+	if o.cfg.StreamPublisher == nil {
+		return
+	}
+	if err := o.cfg.StreamPublisher.PublishClosedBucket(ctx, pair, window, value, observedAt); err != nil {
+		obs.AggregatorStreamPublishTotal.WithLabelValues("error").Inc()
+		o.logger.Warn("stream publish failed",
+			"pair", pair.String(), "window", window, "err", err)
+		return
+	}
+	obs.AggregatorStreamPublishTotal.WithLabelValues("ok").Inc()
 }
 
 // evaluateAndMaybeFreeze runs the anomaly check on a fresh VWAP
