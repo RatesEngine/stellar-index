@@ -291,6 +291,15 @@ against.
 
 ### Fixed
 
+- **`UsageRow` godoc no longer hand-waves "Phase 5 follow-up"** —
+  the wire-shape comment said the `/v1/account/usage` counter
+  store does not yet exist as a "Phase 5 follow-up." More accurate:
+  the rate-limit middleware records per-key request counts in
+  Redis today; the missing piece is a rollup writer that
+  aggregates those into daily UsageRows. Comment now describes
+  what's there and what's missing in concrete terms (rather than
+  pointing at a phase label that's not how follow-up work is
+  tracked anymore). Continuation of the L6.5 doc-sweep.
 - **`aggregation-plan.md` API-surface table is internally
   consistent** — the `GET /v1/twap` row claimed `Backed by:
   Redis cache` while the same row's parenthetical said
