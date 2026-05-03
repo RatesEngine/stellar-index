@@ -17,6 +17,18 @@ against.
 
 ### Fixed
 
+- **`oracle-manipulation-defense.md` red-team-tests no longer
+  hand-waves divergence as `(when shipped)`** — §"Validation
+  exercises" red-team-test 1 said `Divergence monitoring (when
+  shipped) flags it`. Divergence monitoring HAS shipped (per
+  `internal/divergence/{compare,worker,coingecko,chainlink}.go`
+  + the orchestrator's `DivergenceRefresher` Tick wiring).
+  Updated to describe the live behaviour: `flags.divergence_warning`
+  flips on the affected pair via the `div:<asset>` Redis key
+  the divergence service writes, and the `/v1/price` handler
+  surfaces it. Same drift family as #483 / #484. Continuation
+  of the L6.5 doc-sweep.
+
 - **`/v1/account/me` now returns the credential's `label`** —
   `APIKeyRecord.Label` was set at creation time and the OpenAPI
   `Account` schema declared the field, but the path
