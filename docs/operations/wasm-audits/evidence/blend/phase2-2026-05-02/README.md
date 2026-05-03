@@ -41,5 +41,5 @@ ever lost.
   exactly 1 range; the from_ledger is the first observation and
   the to_ledger is the worker's chunk boundary.
 
-See [`../../blend.md`](../../blend.md) §"Phase 2 results" for the
+See [`../../../blend.md`](../../../blend.md) §"Phase 2 results" for the
 full per-contract breakdown.

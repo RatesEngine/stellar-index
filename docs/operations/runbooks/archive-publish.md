@@ -1,6 +1,6 @@
 ---
 title: Runbook — archive-publish
-last_verified: 2026-04-30
+last_verified: 2026-05-02
 status: draft
 severity: P3
 ---
@@ -45,7 +45,8 @@ severity: P3
 
 ```sh
 # stellar-core publisher logs
-kubectl logs ds/stellar-core --tail=500 | grep -iE 'history|publish|upload'
+ssh root@<val-host> "journalctl -u stellar-core -n 500 --no-pager" \
+  | grep -iE 'history|publish|upload'
 
 # Can we write to the archive backend? (S3 / MinIO)
 mc ls myminio/history-archive/live/ | tail   # adjust alias
