@@ -17,6 +17,16 @@ against.
 
 ### Fixed
 
+- **`UsageRow` godoc no longer hand-waves "Phase 5 follow-up"** —
+  the wire-shape comment said the `/v1/account/usage` counter
+  store does not yet exist as a "Phase 5 follow-up." More accurate:
+  the rate-limit middleware records per-key request counts in
+  Redis today; the missing piece is a rollup writer that
+  aggregates those into daily UsageRows. Comment now describes
+  what's there and what's missing in concrete terms (rather than
+  pointing at a phase label that's not how follow-up work is
+  tracked anymore). Continuation of the L6.5 doc-sweep.
+
 - **`/v1/account/me` now returns the credential's `label`** —
   `APIKeyRecord.Label` was set at creation time and the OpenAPI
   `Account` schema declared the field, but the path
