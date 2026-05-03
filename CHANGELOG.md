@@ -17,6 +17,18 @@ against.
 
 ### Fixed
 
+- **`sev-playbook.md` §5.1 status-page section is no longer a
+  Week-N stub** — the doc said `Public status page lives at
+  https://status.ratesengine.net (TBD — provisioning in Week
+  8).` Reality: the cstate scaffold ships at
+  `deploy/status-page/cstate/`; provisioning at the public
+  domain is gated on L4.11 in the launch-readiness backlog.
+  Section now describes what's committed (the scaffold) vs
+  what's gated (the public hostname), and points at the
+  in-flight `sev-status-page-update.md` runbook for the operator
+  edit-surface during incidents. Continuation of the L6.5
+  doc-sweep.
+
 - **`/v1/account/me` now returns the credential's `label`** —
   `APIKeyRecord.Label` was set at creation time and the OpenAPI
   `Account` schema declared the field, but the path

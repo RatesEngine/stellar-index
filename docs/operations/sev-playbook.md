@@ -1,6 +1,6 @@
 ---
 title: Incident (SEV) Playbook
-last_verified: 2026-04-22
+last_verified: 2026-05-02
 status: ratified
 ---
 
@@ -175,8 +175,14 @@ Decision tree:
 
 ### 5.1 Status page
 
-Public status page lives at `https://status.ratesengine.net`
-(TBD — provisioning in Week 8).
+Public status page lives at `https://status.ratesengine.net`.
+The cstate scaffold is committed at
+[`deploy/status-page/cstate/`](../../deploy/status-page/cstate/);
+provisioning at the public domain is gated on L4.11 (launch
+readiness). The companion runbook
+`runbooks/sev-status-page-update.md` (TODO(#0) — runbook
+in flight) covers the operator edit-surface during incidents
+once the page is live.
 
 Status-page states:
 - **Operational** — green; no active incident.
