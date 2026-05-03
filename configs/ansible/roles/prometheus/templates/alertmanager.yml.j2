@@ -21,10 +21,10 @@ route:
       receiver: 'pagerduty-default'
     - matchers:
         - severity = "warning"
-      receiver: 'slack-default'
+      receiver: 'chat-fanout'
     - matchers:
         - severity = "info"
-      receiver: 'slack-default'
+      receiver: 'chat-fanout'
 
 receivers:
   - name: 'pagerduty-default'
@@ -38,7 +38,12 @@ receivers:
     # to enable PagerDuty integration.
 {% endif %}
 
-  - name: 'slack-default'
+  # chat-fanout — Slack + Discord parallel fanout. Either, both,
+  # or neither may be wired; an empty webhook degrades silently to
+  # "no receiver of that flavour". The proposal commits to both
+  # ("integrated into discord/slack") so this template ships them
+  # as peers rather than picking a primary.
+  - name: 'chat-fanout'
 {% if alertmanager_slack_webhook_url %}
     slack_configs:
       - channel: {{ alertmanager_slack_channel }}
@@ -50,8 +55,28 @@ receivers:
           {{ "{{" }} .Annotations.description {{ "}}" }}
           {{ "{{" }} if .Annotations.runbook_url {{ "}}" }}runbook: {{ "{{" }} .Annotations.runbook_url {{ "}}" }}{{ "{{" }} end {{ "}}" }}
           {{ "{{" }} end {{ "}}" }}
-{% else %}
-    # No slack_webhook_url set — no fanout.
+{% endif %}
+{% if alertmanager_discord_webhook_url %}
+    # Discord webhooks accept the same JSON envelope as Slack's
+    # "incoming-webhook" path when AlertManager's discord_configs
+    # is used (added in AM 0.27). Title + body come from the same
+    # group/alert templating as Slack so operators see consistent
+    # text in either channel.
+    discord_configs:
+      - webhook_url: {{ alertmanager_discord_webhook_url }}
+        send_resolved: true
+        title: '{{ "{{" }} .GroupLabels.alertname {{ "}}" }}'
+        message: |
+          {{ "{{" }} range .Alerts {{ "}}" }}
+          **{{ "{{" }} .Labels.severity | toUpper {{ "}}" }}** {{ "{{" }} .Annotations.summary {{ "}}" }}
+          {{ "{{" }} .Annotations.description {{ "}}" }}
+          {{ "{{" }} if .Annotations.runbook_url {{ "}}" }}runbook: {{ "{{" }} .Annotations.runbook_url {{ "}}" }}{{ "{{" }} end {{ "}}" }}
+          {{ "{{" }} end {{ "}}" }}
+{% endif %}
+{% if not alertmanager_slack_webhook_url and not alertmanager_discord_webhook_url %}
+    # Neither slack_webhook_url nor discord_webhook_url set — no
+    # fanout. Alerts accumulate in the AlertManager UI but don't
+    # reach any chat channel. Set at least one webhook in vault.
 {% endif %}
 
 inhibit_rules:
