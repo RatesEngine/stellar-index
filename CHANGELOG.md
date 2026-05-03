@@ -17,6 +17,27 @@ against.
 
 ### Documentation
 
+- **SEV-1 / SEV-2 dry-run records (closes L5.7 / Task #76)** —
+  Two new tabletop drill writeups under `docs/operations/drills/`
+  exercise the SEV playbook end-to-end against the existing
+  scripted scenarios:
+  - `2026-04-sev1-timescale-failover.md` — Timescale primary
+    out-of-disk simulation; chose fix-in-place via
+    `drop_chunks('prices_1m', '30 days')` plus restart;
+    validated all 8 scenario criteria, 7 pass + 1 partial.
+  - `2026-04-sev2-soroswap-decode-regression.md` — protocol-25
+    SCVal type-tag enum extension breaks soroswap decoder;
+    forward-fix path via `internal/scval` + golden fixture
+    + ordinary deploy + `ratesengine-ops backfill -source`;
+    validated all 8 scenario criteria, all pass.
+  - Promoted two action items into runbook updates in the same
+    PR: `timescale-primary-down.md` Quick-diagnosis now leads
+    with `/v1/readyz` (shaves ~1 min off detection); `decode-errors.md`
+    Mitigation gains a customer-comms note for the
+    `class_drop_spike` ↔ `flags.divergence_warning` correlation.
+  - Solo-drill caveats called out explicitly — a 3-person tabletop
+    is queued for post-launch with the next on-call hire.
+
 - **WASM-audit v2 fill-in across all eight Soroban sources** —
   every per-source audit doc under `docs/operations/wasm-audits/`
   now folds in the 2026-04-30 r1 wide-net walk's per-instance
