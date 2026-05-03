@@ -160,8 +160,8 @@ func parseChartParams(w http.ResponseWriter, r *http.Request) (string, chartTime
 	if priceType == "twap" {
 		writeProblem(w, r,
 			"https://api.ratesengine.net/errors/price-type-not-supported",
-			"price_type=twap not yet supported", http.StatusBadRequest,
-			"the chart endpoint accepts price_type=vwap today; twap is reserved per ADR-0020 and will be served once the TWAP CAGG ships")
+			"price_type=twap deferred to post-launch", http.StatusBadRequest,
+			"the chart endpoint accepts price_type=vwap today; multi-bar TWAP charts are deferred to L7.8 in the launch-readiness backlog (single-bar TWAP is available now via /v1/twap). The deferral is documented in ADR-0020 §price_type handling: shipping on-the-fly TWAP from the 1m CAGG today would create a one-time consumer-visible math shift when the proper TWAP CAGG ships later, so we'd rather defer than ship-and-rotate")
 		return "", chartTimeframeSpec{}, "", "", false
 	}
 	if priceType != "vwap" {

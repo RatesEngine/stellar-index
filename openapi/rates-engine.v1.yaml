@@ -561,8 +561,11 @@ paths:
         | `1y`      | `1d`                |
         | `all`     | `1d`                |
 
-        `price_type=twap` is reserved for forward compatibility and
-        currently returns 400 — see ADR-0020.
+        `price_type=twap` returns 400 — multi-bar TWAP charts are
+        deferred to L7.8 (post-launch), see ADR-0020. Single-bar
+        TWAP is available now via `/v1/twap` (true time-weighted
+        compute from raw trades); only the multi-bar chart variant
+        is the deferred surface.
       parameters:
         - { $ref: "#/components/parameters/AssetQuery" }
         - { $ref: "#/components/parameters/Quote" }

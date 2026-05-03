@@ -17,6 +17,20 @@ against.
 
 ### Documentation
 
+- **Multi-bar chart TWAP officially deferred to L7.8** —
+  `/v1/chart?price_type=twap` continues to return 400, but the
+  message + OpenAPI description + ADR-0020 now explicitly point
+  at the post-launch tracker (L7.8 in
+  `docs/architecture/launch-readiness-backlog.md`). Single-bar
+  TWAP via `/v1/twap` remains shipped (true time-weighted compute
+  from raw trades); only the multi-bar chart variant is the
+  deferred surface. Per the Stellar + Freighter RFPs the chart
+  may be backed by "TWAP **or** VWAP" (either acceptable); the
+  proposal's "configurable VWAP and TWAP aggregation engine"
+  commitment is satisfied via `/v1/twap` + the VWAP→TWAP
+  fallback in S4.4. Reopen L7.8 if a customer asks for
+  TWAP-shaped charts.
+
 - **Day-1 contract truth pass on placeholder surfaces** — three
   endpoint godocs sharpened so SDK consumers don't mistake
   reserved fields for shipped behaviour:

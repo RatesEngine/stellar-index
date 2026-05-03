@@ -106,7 +106,11 @@ on-the-fly TWAP from the 1m CAGG (which would compute differently
 from a future TWAP CAGG and create a one-time consumer-visible
 break when we ship the CAGG).
 
-A follow-up will add a TWAP CAGG and flip this 400 to 200.
+Tracked as L7.8 (post-launch) in
+[`launch-readiness-backlog.md`](../architecture/launch-readiness-backlog.md);
+the row carries the implementation sketch (TWAP CAGG migration +
+aggregator tick + handler flip). Reopened when a customer asks
+for TWAP-shaped multi-bar charts.
 
 ### Closed-bucket guard
 
