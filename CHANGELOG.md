@@ -17,6 +17,26 @@ against.
 
 ### Added
 
+- **Launch-day operator toolkit** — three runbooks that
+  collapse cutover-day decision-load:
+  - [`docs/operations/launch-day-checklist.md`](docs/operations/launch-day-checklist.md)
+    — T-7 / T-3 / T-1 / T-0 stages with per-step pass
+    conditions. Orchestrates every other operator runbook
+    (release-process, public-flip, CDN, status-page,
+    chaos-Wave1, SLA probe). On-call follows top-to-bottom
+    on the day.
+  - [`docs/operations/rollback.md`](docs/operations/rollback.md)
+    — failure-mode triage (release-won't-start, broken
+    correctness, single-source failure, public-flip
+    botched, status-page misfiring) with explicit
+    rollback commands per case + post-rollback flow
+    (SEV file, comms, postmortem, freeze-forward).
+  - [`docs/operations/postmortems/_template.md`](docs/operations/postmortems/_template.md)
+    — postmortem template the rollback runbook references.
+    Frontmatter + TL;DR + Impact + Timeline + Root cause
+    + What-went-well/poorly + Lucky-on + Action items +
+    Lessons. Drafted-by-template so future-us doesn't
+    re-derive the structure mid-incident.
 - **Three operator runbooks for the launch-readiness rows that
   need infra-side action, not code:**
   - [`docs/operations/cdn-setup.md`](docs/operations/cdn-setup.md)
