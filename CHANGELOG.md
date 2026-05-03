@@ -17,6 +17,20 @@ against.
 
 ### Fixed
 
+- **`auth.ErrNotImplemented` doc comment no longer claims the
+  sentinel goes away once the validator body lands** — said
+  `Removed once the body implementation lands`, but the SEP-10
+  body has shipped at `internal/auth/sep10/` and the apikey body
+  shipped via `RedisAPIKeyValidator` (#196). The sentinel
+  **stays** because it serves the `NoopAPIKeyValidator` /
+  `NoopSEP10Validator` fallbacks — the deliberate disabled-state
+  the middleware lands on when an auth-mode is configured but
+  no real validator is wired (e.g. `auth_mode=apikey` selected
+  but Redis unavailable). Comment rewritten to describe the
+  actual role: fail-loud 503 from the disabled-state fallback,
+  not a placeholder awaiting replacement. Same drift family as
+  #477 / #481. Continuation of the L6.5 doc-sweep.
+
 - **`/v1/account/me` now returns the credential's `label`** —
   `APIKeyRecord.Label` was set at creation time and the OpenAPI
   `Account` schema declared the field, but the path
