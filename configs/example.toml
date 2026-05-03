@@ -140,6 +140,20 @@ cdn_enabled              = true
 allowed_origins          = ["*"]
 trusted_proxy_cidrs      = []                  # empty = ignore X-Forwarded-For; set to immediate proxy CIDRs (for example ["10.0.0.0/8"])
 
+# Closed-bucket SSE fanout — pairs the API binary republishes to
+# the streaming Hub on every new closed prices_1m bucket. Empty
+# `pairs` leaves the producer disabled (subscribers connect and
+# see heartbeats only); each entry is a [base, quote] two-element
+# array using canonical asset strings.
+[api.streaming]
+poll_interval = "5s"
+pairs = []
+# Example — XLM/USD + USDC/USD broadcast on /v1/price/stream:
+# pairs = [
+#   ["native", "fiat:USD"],
+#   ["credit:USDC:GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN", "fiat:USD"],
+# ]
+
 # ──────────────────────────────────────────────────────────────────
 # Divergence — cross-check references for the divergence service.
 # CoinGecko on by default (free tier); Chainlink opt-in via FeedMap.

@@ -246,8 +246,8 @@ const FreezeTTL = 5 * time.Minute
 //
 // Wire shape: `apikey:<sha256-hex>`
 // Value: JSON record `{identifier, tier, scopes, expires_at?, revoked_at?}`.
-// Writer: `/v1/account/keys` self-service handler (Phase 5) +
-//         operator seeding scripts.
+// Writer: `/v1/account/keys` POST handler (self-service key
+//         issuance) plus operator seeding scripts.
 // Reader: `internal/auth/RedisAPIKeyValidator` on every authenticated
 //         request when auth_mode=apikey.
 //

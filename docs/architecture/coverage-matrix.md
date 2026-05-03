@@ -319,8 +319,11 @@ For each claim below we state the **as-written promise**, what we
   compression were read from `stellar-galexie` source. CDP SDK
   (`github.com/stellar/go-stellar-sdk/ingest`) path confirmed via
   [data-sources/composable-data-platform.md](../discovery/data-sources/composable-data-platform.md).
-- **Open**: MinIO + Galexie smoke test (Week 3). Captive-core +
-  Galexie co-resident memory profile.
+- **Closed**: MinIO + Galexie are live on r1
+  ([r1-deployment-state.md §Services](../operations/r1-deployment-state.md));
+  the captive-core + Galexie co-resident memory profile was
+  measured at deploy time (per the `archival-node` ansible role's
+  pre-flight checks).
 - **Verdict**: ✅ promise keeps.
 
 ### Claim 2 — "Reflector is the primary oracle integration"
@@ -373,16 +376,20 @@ For each claim below we state the **as-written promise**, what we
   Soroswap, Aquarius, Phoenix, Comet, **Blend**). Blend's auction
   decoder + storage + dispatcher wiring is live (`internal/sources/blend/`,
   registered in `internal/pipeline/dispatcher.go:114`,
-  `internal/pipeline/sink.go:98`). What's still
-  pending on Blend is the WASM audit's Phase 2 — per-pool
-  `wasm-history` walk on r1 — which keeps `BackfillSafe=false` in
-  `internal/sources/external/registry.go` until it lands. Live
-  ingest works fine; only retroactive backfill replay is gated.
-  Phoenix's 8-events-per-swap pattern and Soroswap's swap+sync
-  correlation were non-obvious and are both captured explicitly.
+  `internal/pipeline/sink.go:98`). The Blend WASM audit's
+  Phase 2 per-pool `wasm-history` walk on r1 completed
+  2026-05-02 (11 contracts, 3 unique WASMs, no mid-life
+  upgrades over the [50457424, 62249727] range), and
+  `BackfillSafe=true` is set in
+  `internal/sources/external/registry.go` — see
+  `docs/operations/wasm-audits/blend.md §"Phase 2 results"`.
+  Both live ingest and retroactive backfill replay are now
+  enabled. Phoenix's 8-events-per-swap pattern and Soroswap's
+  swap+sync correlation were non-obvious and are both captured
+  explicitly.
 - **Verdict**: ✅ promise exceeded in venue breadth (Phoenix +
   Comet added beyond the proposal's list); Blend live with the
-  documented backfill caveat from the WASM audit.
+  WASM audit closed.
 
 ### Claim 6 — "p95 ≤ 200 ms, p99 ≤ 500 ms, ≥ 99.99% uptime"
 
@@ -392,8 +399,11 @@ For each claim below we state the **as-written promise**, what we
   standard but our capacity, cache-hit-rate, and cold-cache latency
   are unmeasured.
 - **Closure**: [HA plan](ha-plan.md) + [API design](../reference/api-design.md) +
-  Week 9 load-test.
-- **Verdict**: 🧪 plan-credible; proof deferred to Week 9.
+  the k6 load suite at [test/load/](../../test/load/) (scenarios
+  pinned, reports archived under `test/load/reports/`).
+- **Verdict**: 🧪 plan-credible; the k6 suite produces the
+  proof artifacts; full p95 ≤ 200 ms run is L4.5 in the
+  launch-readiness backlog.
 
 ### Claim 7 — "Since-inception historical coverage"
 
@@ -403,15 +413,22 @@ For each claim below we state the **as-written promise**, what we
   ([data-sources/galexie.md](../discovery/data-sources/galexie.md) +
   [data-sources/stellar-data-lakes.md](../discovery/data-sources/stellar-data-lakes.md)).
   Backfill throughput unmeasured on our hardware.
-- **Closure**: Week 5 runs the full backfill; the Week 9 load test
-  validates query performance on the resulting data set.
+- **Closure**: backfill is operator-driven via `ratesengine-ops
+  backfill` (`cmd/ratesengine-ops/backfill.go`); query performance
+  on the resulting data set is exercised by the
+  [test/load/](../../test/load/) k6 suite.
 - **Verdict**: ✅ promise is feasible; duration unknown.
 
 ### Claim 8 — "Open source, provider-supplied deployment kits"
 
 - **As written** (proposal §Open Source & Deployment Model).
-- **Verified**: Apache-2.0 LICENSE committed; `deploy/docker-compose`
-  + `deploy/k8s` planned (Weeks 8–9).
+- **Verified**: Apache-2.0 LICENSE committed.
+  [`deploy/docker-compose/`](../../deploy/docker-compose/) is the
+  developer / reference deployment;
+  [`deploy/systemd/`](../../deploy/systemd/) +
+  [`configs/ansible/`](../../configs/ansible/) are the production
+  deployment kit (per ADR-0008 — bare-metal + systemd, not
+  Kubernetes).
 - **Verdict**: 🧪 lifecycle on track.
 
 ---
