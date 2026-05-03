@@ -1,6 +1,6 @@
 ---
 title: Runbook — discovery-drops
-last_verified: 2026-04-30
+last_verified: 2026-05-02
 status: draft
 severity: P3
 ---
@@ -38,7 +38,8 @@ pressure.
 curl -s http://indexer:9464/metrics | grep ratesengine_discovery_dropped_hits_total
 
 # Check whether Postgres/discovery writes are struggling.
-kubectl logs deploy/ratesengine-indexer --tail=200 | grep "discovery:"
+ssh root@indexer-01 "journalctl -u ratesengine-indexer -n 200 --no-pager" \
+  | grep "discovery:"
 
 # Cross-check for broader storage pressure.
 curl -s http://indexer:9464/metrics | grep ratesengine_source_insert_errors_total
