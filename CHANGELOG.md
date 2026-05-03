@@ -17,6 +17,19 @@ against.
 
 ### Added
 
+- **`runbooks/dr-activation.md` — disaster-recovery activation
+  procedure** — closes the missing runbook the SEV playbook §8.3
+  (annual DR exercise), `timescale-primary-down.md` §D
+  ("complete cluster loss"), and ADR-0008 / ADR-0016 all
+  referenced. Previously the only pointer was `TODO(#0)` in
+  `timescale-primary-down.md`. Covers when to activate (decision
+  tree distinguishing it from per-component HA failover),
+  pre-flight checks (DR storage freshness, MinIO archive
+  integrity, host reachability), the Cloudflare-LB and manual-
+  DNS flip procedures, post-flip monitoring (SLA + ingest +
+  flag rates), failback to primary, escalation, and quarterly
+  drift signals operators run between drills. SEV playbook §8.3
+  + the timescale runbook updated to link the new file.
 - **Two new SEV drill scenarios** — `sev2-redis-sentinel-failover`
   exercises ADR-0024's Sentinel HA path end-to-end across every
   Redis-dependent surface (`/v1/price` cache + freeze markers +
