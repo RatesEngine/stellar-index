@@ -17,6 +17,19 @@ against.
 
 ### Fixed
 
+- **`internal/aggregate/doc.go` no longer claims triangulation
+  is deferred** — the package's "What this package deliberately
+  doesn't do" section listed `No multi-venue weighting /
+  triangulation. Those are deferred items captured in
+  docs/architecture/aggregation-plan.md.` But triangulation
+  ships in this package — `triangulate.go` defines `Triangulate`
+  and `TriangulateChain` (X2.5 forex-snap rule for chained-fiat,
+  per F-0014), and the aggregator orchestrator wires it via the
+  `Triangulations` field. New `# Triangulation` heading
+  documents what's there; the "deliberately doesn't do" list
+  retains the still-deferred multi-venue weighting (per-source
+  weight overrides). Continuation of the L6.5 doc-sweep.
+
 - **`/v1/account/me` now returns the credential's `label`** —
   `APIKeyRecord.Label` was set at creation time and the OpenAPI
   `Account` schema declared the field, but the path
