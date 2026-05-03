@@ -174,36 +174,40 @@ thundering herd.
 
 ## Operator-facing tasks
 
-### Adding a curated home-domain override
+### Adding a curated issuer → home-domain mapping
 
-Some issuers don't publish stellar.toml; we want the asset detail
-to still display useful metadata. The operator config has a
-per-asset override map:
+The on-chain `AccountEntry.HomeDomain` isn't currently indexed in
+our trades hypertable, so when an issuer's home-domain is missing
+or wrong on-chain, the API has nothing to feed to the SEP-1
+resolver. Operators close that gap via a curated map:
 
-```yaml
-# config/asset_metadata_overrides.yaml
-overrides:
-  "USDC:GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN":
-    name: "USD Coin"
-    desc: "USDC issued by Circle on Stellar"
-    image: "https://example.cdn/usdc.png"
-    max_supply: null  # uncapped
+```toml
+# /etc/ratesengine.toml
+[metadata.issuer_home_domains]
+"GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN" = "centre.io"
 ```
 
-Override values stamp `sep1_status: "operator_override"` on the
-asset response so consumers know the source.
+The map's only job is supplying `home_domain` for the SEP-1
+resolver lookup; the resolver then fetches the issuer's
+`.well-known/stellar.toml` and the rest of the asset-detail
+fields (name, description, image, conditions, max_supply…) come
+from there. There is **no** broader "override the SEP-1 fields
+themselves" knob today — fixing per-field metadata requires the
+issuer to publish a corrected stellar.toml at the home-domain.
 
-### Removing a stale override
+### Removing a stale mapping
 
-Same file; delete the entry. Server reloads on SIGHUP (no restart
-needed) — the resolver picks up the new map within one request.
+Edit the same `[metadata.issuer_home_domains]` table; delete the
+issuer's row; re-deploy the binary (the config is parsed at boot
+in `internal/config/load.go`, not hot-reloaded).
 
 ### Tracing a specific asset's resolution
 
-`ratesengine-ops sep1-trace -domain <home_domain>` (Phase 5
-deliverable; not yet implemented) would dump the full resolution
-path: DNS, IP, SSRF check result, HTTP status, parsed fields.
-For now the manual playbook is:
+A future `ratesengine-ops sep1-trace -domain <home_domain>`
+subcommand (not in `cmd/ratesengine-ops/main.go`'s switch today)
+would dump the full resolution path: DNS, IP, SSRF check
+result, HTTP status, parsed fields. Until it lands the manual
+playbook is:
 
 ```sh
 # 1. Confirm what the API sees
@@ -231,10 +235,13 @@ The `internal/metadata` package emits these counters / gauges via
   `ratesengine_metadata_cache_misses_total`.
 - `ratesengine_metadata_resolver_duration_seconds` histogram.
 
-Alert: `ratesengine_metadata_resolver_error_rate_high` (P3 in
-[alerts-catalog.md](alerts-catalog.md) — "designed but not yet
-shipping" pending Phase-5 wiring of the metadata overlay into
-the asset handler).
+Alert: `ratesengine_metadata_resolver_error_rate_high` is
+designed but not yet shipping — no rule in
+`deploy/monitoring/rules/` produces it today. The metadata
+overlay IS wired into `/v1/assets/{id}` already (see §"Resolution
+flow" above) — what's missing is the per-rate Prometheus rule
+that turns the existing counters into a paged signal. Tracked
+as a future hardening item.
 
 ## References
 

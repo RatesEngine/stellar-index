@@ -1,7 +1,7 @@
 ---
 title: Multi-Region Topology — 3-region active/active with primary/replica degradation
-last_verified: 2026-04-22
-status: draft — supersedes HA plan §2.1, ratified at Week 2 design review
+last_verified: 2026-05-02
+status: ratified — per-region storage shapes captured in [ADR-0016](../../adr/0016-per-region-storage-strategy.md); cross-region serving invariant in [ADR-0015](../../adr/0015-last-closed-bucket-rate-serving.md)
 ---
 
 # Multi-Region Topology
@@ -513,19 +513,27 @@ Honestly called out:
 
 ---
 
-## 15. Open questions (close at Week 2 design review)
+## 15. Open questions — closed
 
-1. **Do we run validators in all 3 regions from day 1?** ADR-0004
-   says yes eventually; the conservative path is "archival only in
-   R2/R3, validator in R1" for Tranche I.
-2. **Patroni vs Stolon.** Patroni leaning because of ecosystem.
-3. **etcd 5-node placement.** R1×2, R2×2, R3×1 tolerates 1 region
-   loss. Should it be R1×2, R2×1, R3×2?
-4. **Cloudflare Load Balancer vs self-hosted GSLB** — do we depend
-   on Cloudflare or run our own (nsd3 with health-check integration)?
-5. **Regional failover alerting** — who gets paged during the 30 s
-   Patroni failover window? Probably no one; the system heals. But
-   a P2 notice after the fact goes to #ratesengine-ops.
+The Week-2 plan called for these to land before the design review.
+They have:
+
+1. **Validators in all 3 regions from day 1?** No.
+   [ADR-0004](../../adr/0004-tier1-validator-aspiration.md) ratifies
+   the *post-launch* aspiration; v1 ships archival-only across all
+   regions. See [validator-rollout.md](validator-rollout.md) for the
+   phased path to Tier-1.
+2. **Patroni vs Stolon.** Patroni — landed as
+   `configs/ansible/roles/patroni/`.
+3. **etcd 5-node placement.** Per ADR-0008 §3 the etcd cluster sits
+   inside the patroni role; topology is R1-major (the region hosting
+   the Postgres primary) with R2 + R3 contributing one member each.
+4. **Cloudflare Load Balancer vs self-hosted GSLB.** Cloudflare for
+   the public edge (TLS, WAF, geo-routing); HAProxy + keepalived for
+   per-region L4 (`configs/ansible/roles/haproxy/`).
+5. **Regional failover alerting** — no page during the 30 s Patroni
+   window per design (the system heals). A P2 ticket fires on
+   sustained replica-promotion churn (`replica-lag.md`).
 
 ---
 

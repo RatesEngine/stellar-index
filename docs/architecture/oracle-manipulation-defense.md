@@ -477,16 +477,16 @@ known DEX contract gets caught at audit time, not after exploit.
 
 ## Gap analysis
 
-Defenses architecturally specified but NOT yet shipped, ordered
-by attack-surface coverage. ADR-0019 supersedes the earlier
-"per-asset risk tier" gap with a properly-scoped statistical
-approach.
+Defenses architecturally specified, with current shipped status.
+ADR-0019 supersedes the earlier "per-asset risk tier" gap with a
+properly-scoped statistical approach (Phases 1 + 2 are live;
+Phase 3 cross-oracle factor is the remaining piece).
 
 | Defense | ADR | Phase | Status | Priority |
 |---|---|---|---|---|
-| **Per-asset confidence + freeze policy (Phase 1)** | ADR-0019 | Phase 1 transitional | Not yet shipped | **High** — minimum stop-gap before production oracle anchoring |
-| **Per-asset confidence + freeze policy (Phase 2 statistical baselines)** | ADR-0019 | Phase 2 | Not yet shipped | **High** — replaces operator thresholds with per-asset learned thresholds; the proper protection against USTRY-shape attacks |
-| **`internal/divergence/` cross-reference** | (planned) | — | Planned package per CLAUDE.md | **High** — last line of defense; also Phase 3 of ADR-0019 |
+| **Per-asset confidence + freeze policy (Phase 1)** | ADR-0019 | Phase 1 transitional | **Shipped** — `internal/aggregate/anomaly/` (per-class thresholds + freeze action) | **High** — minimum stop-gap before production oracle anchoring |
+| **Per-asset confidence + freeze policy (Phase 2 statistical baselines)** | ADR-0019 | Phase 2 | **Shipped** — `internal/aggregate/baseline/` (Median/MAD/ZScore + multi-window refresh) + `internal/aggregate/confidence/` (six-factor weighted-geomean score) | **High** — replaces operator thresholds with per-asset learned thresholds; the proper protection against USTRY-shape attacks |
+| **`internal/divergence/` cross-reference** | ADR-0019 | Phase 3 | **Wired** — divergence worker writes `cachekeys.Divergence(asset)`; orchestrator reads it via `lookupDivergencePct` and feeds `confidence.CrossOracleFactor`. Production-quality operational coverage tracked as L7.3 (post-launch). | **High** — last line of defense; the post-launch L7.3 work tunes divergence-source coverage, not the wiring itself |
 | **Liquidity floor per source per bucket** | (planned) | — | Trade-volume weighted, no absolute floor | **Medium** — partially covered by ADR-0019's `liquidity_factor` in confidence; an explicit hard floor is complementary |
 | **Auto-exclude in outlier-storm** | (planned) | — | Alert-only | **Medium** — detect-and-react vs detect-and-prevent |
 | **Stablecoin depeg auto-gating** | (planned) | — | Manual policy via aggregator class system | **Low** — depeg detection works; auto-gating during severe depegs would prevent stablecoin-as-collateral exploits |
@@ -501,7 +501,9 @@ realistic manipulation attempts:
    ledgers) representing a 50% price spike. Confirm:
    - Outlier-storm alert fires within 1 bucket
    - VWAP barely moves (other sources dominate)
-   - Divergence monitoring (when shipped) flags it
+   - `flags.divergence_warning` flips on the affected pair (the
+     divergence service writes to `div:<asset>` Redis keys; the
+     `/v1/price` handler surfaces the flag)
 
 2. **Single-source compromise.** Configure a "malicious binance"
    stub that returns price ×2 on all trades. Confirm:

@@ -44,8 +44,14 @@
 //   - **Anonymous** — no APIKey on the client; rate-limited per IP.
 //   - **API key** — set Options.APIKey; sent as
 //     `Authorization: Bearer <key>` on every request.
-//   - **SEP-10** — pending; will be added when the server's SEP-10
-//     verifier ships (Phase 5).
+//   - **SEP-10** — the server-side verifier ships at
+//     `/v1/auth/sep10/{challenge,token}`. Obtain a JWT via the
+//     SEP-10 challenge → sign → verify flow and pass it as
+//     Options.APIKey (the SDK forwards any token verbatim in the
+//     `Authorization: Bearer` header — the server's auth
+//     middleware accepts both `rek_*` API keys and SEP-10 JWTs at
+//     the same surface). A typed SEP-10 helper wrapping the two-
+//     step flow lands as a follow-up.
 //
 // # Error handling
 //
@@ -65,13 +71,28 @@
 // underlying *http.Client is shared across calls; each request
 // opens a fresh connection from the transport pool.
 //
-// # Roadmap
+// # Coverage
 //
-// PR A (this PR) ships the skeleton: Client, options, errors,
-// shared types, and a minimal endpoint set (Price, History,
-// Assets, Account). Subsequent PRs add /v1/price/tip, /v1/observations,
-// /v1/oracle/*, /v1/markets, and the SSE streaming counterparts —
-// see docs/architecture/launch-readiness-backlog.md L3.10.
+// Typed methods today: Price, Assets, Asset, AssetMetadata,
+// HistorySinceInception, Me, Usage, CreateKey. SDK additions in
+// the queue (PRs #446–#450 from the 2026-05-02 audit pass):
+// PriceBatch, PriceTip, OHLC, History (bounded-range raw
+// trades), Sources, Markets, Pair.
+//
+// Surfaces deliberately not in the SDK:
+//
+//   - SSE streams (`/v1/price/{,tip/}stream`, `/v1/observations/stream`)
+//     — architecturally outside the request/response shape; consumers
+//     use `net/http` with an eventsource-style reader directly.
+//   - VWAP / TWAP — the server pre-computes these but consumers can
+//     also derive them from the raw trades the History method
+//     returns; we don't ship a redundant SDK helper today.
+//   - SEP-40 oracle passthrough (`/v1/oracle/*`) — intended for
+//     SEP-40 oracle-shape consumers specifically; those callers
+//     typically use `internal/sources/reflector` or speak SEP-40
+//     directly rather than going through this generic SDK.
+//   - Operator endpoints (`/v1/healthz`, `/v1/readyz`, `/v1/version`,
+//     `/metrics`) — infra-facing, not customer-facing.
 //
 // [ADR-0005]: https://github.com/RatesEngine/rates-engine/blob/main/docs/adr/0005-monorepo.md
 package client
