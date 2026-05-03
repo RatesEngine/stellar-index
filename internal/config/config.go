@@ -510,15 +510,42 @@ type TriangulationChainConfig struct {
 
 // APIConfig controls the public REST+SSE server.
 type APIConfig struct {
-	ListenAddr          string      `toml:"listen_addr" doc:"Bind address for the HTTP server." default:"0.0.0.0:3000"`
-	ExternalBaseURL     string      `toml:"external_base_url" doc:"Public-facing base URL (e.g. https://api.ratesengine.net/v1)." default:"https://api.ratesengine.net/v1"`
-	AuthMode            string      `toml:"auth_mode" doc:"Authentication mode — none / apikey / sep10. The API binary wires real validators when the required backing dependencies and secrets are present; a deployment that opts into auth without satisfying those requirements fails loud rather than silently demoting to anonymous." default:"none"`
-	AnonRateLimitPerMin int         `toml:"anon_rate_limit_per_min" doc:"Per-IP rate limit for anonymous requests." default:"60"`
-	KeyRateLimitPerMin  int         `toml:"key_rate_limit_per_min" doc:"Per-API-key rate limit, default tier." default:"1000"`
-	CDNEnabled          bool        `toml:"cdn_enabled" doc:"Emit CDN-friendly Cache-Control headers on long-immutable endpoints." default:"true"`
-	AllowedOrigins      []string    `toml:"allowed_origins" doc:"CORS allow-list for browser clients." default:"[\"*\"]"`
-	TrustedProxyCIDRs   []string    `toml:"trusted_proxy_cidrs" doc:"Immediate peer CIDR allow-list that is permitted to supply X-Forwarded-For. Empty means the API ignores that header and uses the socket peer address for logging, anonymous identity, and IP-based rate limiting." default:"[]"`
-	SEP10               SEP10Config `toml:"sep10" doc:"SEP-10 Web Auth — server signing seed, JWT secret, TTLs. Active when auth_mode=sep10 OR when /v1/auth/sep10/* endpoints are exposed."`
+	ListenAddr          string          `toml:"listen_addr" doc:"Bind address for the HTTP server." default:"0.0.0.0:3000"`
+	ExternalBaseURL     string          `toml:"external_base_url" doc:"Public-facing base URL (e.g. https://api.ratesengine.net/v1)." default:"https://api.ratesengine.net/v1"`
+	AuthMode            string          `toml:"auth_mode" doc:"Authentication mode — none / apikey / sep10. The API binary wires real validators when the required backing dependencies and secrets are present; a deployment that opts into auth without satisfying those requirements fails loud rather than silently demoting to anonymous." default:"none"`
+	AnonRateLimitPerMin int             `toml:"anon_rate_limit_per_min" doc:"Per-IP rate limit for anonymous requests." default:"60"`
+	KeyRateLimitPerMin  int             `toml:"key_rate_limit_per_min" doc:"Per-API-key rate limit, default tier." default:"1000"`
+	CDNEnabled          bool            `toml:"cdn_enabled" doc:"Emit CDN-friendly Cache-Control headers on long-immutable endpoints." default:"true"`
+	AllowedOrigins      []string        `toml:"allowed_origins" doc:"CORS allow-list for browser clients." default:"[\"*\"]"`
+	TrustedProxyCIDRs   []string        `toml:"trusted_proxy_cidrs" doc:"Immediate peer CIDR allow-list that is permitted to supply X-Forwarded-For. Empty means the API ignores that header and uses the socket peer address for logging, anonymous identity, and IP-based rate limiting." default:"[]"`
+	SEP10               SEP10Config     `toml:"sep10" doc:"SEP-10 Web Auth — server signing seed, JWT secret, TTLs. Active when auth_mode=sep10 OR when /v1/auth/sep10/* endpoints are exposed."`
+	Streaming           StreamingConfig `toml:"streaming" doc:"Closed-bucket SSE fanout — pairs the API binary republishes to the streaming Hub on every new closed prices_1m bucket. Empty Pairs leaves /v1/price/stream returning 503; Hub still constructs so subscribers can connect (and immediately drop) without a panic."`
+}
+
+// StreamingConfig configures the closed-bucket SSE producer
+// driving /v1/price/stream. Per L3.9 / launch-task-list G2: the
+// Hub-driven endpoint depends on a producer; this config tells
+// the API binary which (asset, quote) pairs to broadcast.
+//
+// Static set — adding a pair requires a binary restart. Reasoning:
+// the producer is a per-pair goroutine that polls the existing
+// PriceReader at [PollInterval]; a runtime add/remove path adds
+// reference-counting bookkeeping without a corresponding launch
+// requirement. Operators ship the major pairs (XLM/USD, USDC/USD,
+// AQUA/USD …) at config time.
+type StreamingConfig struct {
+	// Pairs is the operator-declared list of (asset, quote) pairs
+	// to broadcast. Each entry is a two-element [base, quote] array
+	// using canonical asset strings (e.g. ["native","fiat:USD"],
+	// ["sac:CAS3J7…OWMA","fiat:USD"]). Empty disables the producer
+	// while still letting the Hub construct.
+	Pairs [][]string `toml:"pairs" doc:"Operator-declared closed-bucket fanout pair list. Each entry is a two-element [base, quote] array of canonical asset strings (e.g. [[\"native\", \"fiat:USD\"], [\"credit:USDC:GA5Z…\", \"fiat:USD\"]]). Empty disables the producer; clients that connect see SSE open + heartbeats but no price_update events." default:"[]"`
+
+	// PollInterval is the per-pair poll cadence. Sub-second values
+	// are clamped to 1 s by the publisher; zero falls back to 5 s.
+	// 5 s detects a new 1-minute closed bucket within 5 s of its
+	// end — well inside Freighter's 30 s freshness target.
+	PollInterval time.Duration `toml:"poll_interval" doc:"Per-pair poll cadence for the closed-bucket producer. Default 5s; clamped to 1s minimum." default:"5s"`
 }
 
 // SEP10Config configures the SEP-10 Web Auth validator. Both
@@ -793,6 +820,10 @@ func Default() Config {
 				HomeDomain:    "ratesengine.net",
 				ChallengeTTL:  15 * time.Minute,
 				JWTTTL:        1 * time.Hour,
+			},
+			Streaming: StreamingConfig{
+				Pairs:        [][]string{},
+				PollInterval: 5 * time.Second,
 			},
 		},
 		Divergence: defaultDivergenceConfig(),
