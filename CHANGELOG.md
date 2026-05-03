@@ -17,6 +17,21 @@ against.
 
 ### Fixed
 
+- **`internal/sources/blend/README.md` PR-1/2/3/4 follow-ups
+  flipped to "Shipped"** — the README framed itself as `Scope of
+  this package (PR 1)` with PRs 2, 3, 4 as planned follow-ups
+  (storage table + writer; dispatcher + registry wiring; WASM
+  audit). All three landed: migration `0009_create_blend_auctions`
+  ships the storage; the dispatcher routes Blend events; Task
+  #53 closed the audit at `docs/operations/wasm-audits/blend.md`
+  and flipped `BackfillSafe = true` in the registry. Section
+  rewritten with `### Shipped` (✅ for the four landed surfaces)
+  and `### Still deferred` (the money-market + credit-risk +
+  Reflector cross-validation surfaces that genuinely remain
+  out of scope until customer demand). Same drift family as
+  #483 / #490 / #494 / #498. Continuation of the L6.5
+  doc-sweep.
+
 - **`/v1/account/me` now returns the credential's `label`** —
   `APIKeyRecord.Label` was set at creation time and the OpenAPI
   `Account` schema declared the field, but the path
