@@ -1,6 +1,6 @@
 ---
 title: Runbook — orphan-events
-last_verified: 2026-04-30
+last_verified: 2026-05-02
 status: draft
 severity: P3
 ---
@@ -39,7 +39,8 @@ curl -s http://api:9464/metrics | grep ratesengine_source_orphan_events_total
 
 # Look at the indexer's logs for the affected source — orphans get
 # logged at debug level with the group key.
-kubectl logs deploy/ratesengine-indexer | grep -E "orphan|evicted" | tail -20
+ssh root@indexer-01 "journalctl -u ratesengine-indexer -n 1000 --no-pager" \
+  | grep -E "orphan|evicted" | tail -20
 
 # Is the upstream RPC dropping events? Compare to the decode-error
 # rate and the event-rate over the same window:
