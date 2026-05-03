@@ -17,6 +17,20 @@ against.
 
 ### Fixed
 
+- **Architecture docs no longer claim r1 is in London or that R2/R3
+  live at Equinix** — the design-stage docs (`ha-plan.md`,
+  `multi-region-topology.md`, `validator-rollout.md`,
+  `hosting-options.md`) tentatively listed Equinix Metal across all
+  three regions (LD6 / DC11 / SG3) before the per-region cost
+  analysis settled the per-region provider mix. ADR-0016 ratifies
+  the actual shape: R1 = Hetzner FSN1 (Falkenstein, DE), R2 = AWS
+  us-east-1, R3 = Vultr Singapore — not Equinix anywhere. r1 is
+  live on Hetzner FSN1 per `r1-deployment-state.md`. An operator
+  reading the design docs cold today would look for a "London"
+  region that doesn't exist. Topology table, ASCII diagram, rollout
+  phase headers, and validator phase headers all updated to match
+  the as-deployed assignment. Continuation of the L6.5 doc-sweep.
+
 - **`/v1/account/me` now returns the credential's `label`** —
   `APIKeyRecord.Label` was set at creation time and the OpenAPI
   `Account` schema declared the field, but the path

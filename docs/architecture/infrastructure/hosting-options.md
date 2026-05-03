@@ -1,6 +1,6 @@
 ---
 title: Hosting Options — Skipping Colo Without Boxing Ourselves In
-last_verified: 2026-04-22
+last_verified: 2026-05-02
 status: draft — decision at Week 1 procurement call
 ---
 
@@ -244,7 +244,7 @@ the same regardless of who installed it physically.
 
 - Latitude covers 3 regions on one bill — cleanest multi-region
   story.
-- Or mix Hetzner (R1/London) + Latitude (R2/NYC, R3/Tokyo).
+- Or mix Hetzner (R1/Falkenstein) + Latitude (R2/NYC, R3/Tokyo).
 - Or move to Equinix Metal in all 3 regions for the premium path.
 
 ### 5.4 Post-launch (month 4+): migrate to owned colo

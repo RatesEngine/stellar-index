@@ -1,6 +1,6 @@
 ---
 title: Validator Rollout — 1 → 3 Full Validators as one Tier-1 Organisation
-last_verified: 2026-04-22
+last_verified: 2026-05-02
 status: draft — ratified at Week 2 design review
 ---
 
@@ -79,7 +79,8 @@ it's a quality gate.
 
 - Hardware: 1× node per [archival-node-spec.md](archival-node-spec.md).
 - Role: archival full node. `NODE_IS_VALIDATOR=false`.
-- Region: R1 (London).
+- Region: R1 (Hetzner FSN1, Falkenstein, DE — see
+  [r1-deployment-state.md](../../operations/r1-deployment-state.md)).
 - Quorum set: mirrors SDF's recommended quorum for a non-validating
   node (SDF × 3, LOBSTR, Satoshipay, Franklin Templeton) — we
   **depend on** the existing network, we don't yet contribute to it.
@@ -125,7 +126,7 @@ muscle memory.
 - [ ] Runbook rehearsals complete for: HSM failure, validator-key
       rotation, core upgrade.
 
-### Phase C — Week 6–7: Deploy validator 2 in R2 (Ashburn)
+### Phase C — post-launch: Deploy validator 2 in R2 (AWS us-east-1, Ashburn)
 
 - Hardware: 1× identical node, shipped to R2 colo.
 - Key ceremony: second validator key, fresh on a second YubiHSM.
@@ -144,7 +145,7 @@ muscle memory.
 **Exit criteria (Phase C → Phase D):** same as Phase B, applied to
 validator 2.
 
-### Phase D — Week 8: Deploy validator 3 in R3 (Singapore)
+### Phase D — post-launch: Deploy validator 3 in R3 (Vultr Singapore)
 
 - Same pattern as Phase C.
 - Application-layer: R3 joins Patroni as async replica. etcd grows

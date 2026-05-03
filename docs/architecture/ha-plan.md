@@ -1,6 +1,6 @@
 ---
 title: High-Availability Infrastructure Plan
-last_verified: 2026-04-27
+last_verified: 2026-05-02
 status: ratified — binding decisions in [ADR-0008](../adr/0008-ha-topology.md); long-form design here
 ---
 
@@ -62,8 +62,12 @@ The phased 1 → 3 validator rollout lives in
 [infrastructure/validator-rollout.md](infrastructure/validator-rollout.md).
 Per-node hardware spec is in
 [infrastructure/archival-node-spec.md](infrastructure/archival-node-spec.md).
-At launch we run exactly **one** region (R1/London) with this
-topology; R2 and R3 join over Weeks 6–8 with the same shape.
+At launch we run exactly **one** region (R1, Hetzner FSN1 in
+Falkenstein, DE) with this topology; R2 (AWS us-east-1) and R3
+(Vultr Singapore) join post-launch with the same per-region
+shape, modified per
+[ADR-0016](../adr/0016-per-region-storage-strategy.md) for each
+provider's storage economics.
 
 ### 2.1 Primary (colo)
 
