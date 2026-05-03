@@ -14,7 +14,7 @@ changes need to flow into the audit docs.
 | ---- | --- | ----------- | --- | --------------- |
 | `stellar/stellar-galexie` | `6dec23e20802202e23d60a6505ead19898636e75` | 2026-04-01 | `galexie-v26.0.0` | Runtime binary — we run Galexie alongside our code, not link as a library. |
 | `stellar/rs-stellar-archivist` | `a6a25033dc2dd1783314ff5b009123e6bfc00e7a` | 2026-04-20 | (no tag yet) | Runtime binary — we call it from scripts. Pin SHA since no tag. |
-| `stellar/stellar-rpc` | `99a61f337b66635ba6f9d70d2403ee5faed1d7c1` | 2026-04-07 | (no tag visible locally) | Runtime binary — self-hosted RPC. |
+| `stellar/stellar-rpc` | `99a61f337b66635ba6f9d70d2403ee5faed1d7c1` | 2026-04-07 | (no tag visible locally) | Removed from r1 on 2026-04-23 — kept ONLY for the `ratesengine-ops rpc-probe` operator diagnostic that dials remote public endpoints; not on the data path. |
 | `stellar/go-stellar-sdk` | `9d52d04a911d9ee7451073e8178157a36e66cd42` | 2026-04-22 | (no tag visible locally) | **Go library — direct dep.** `v0.5.0` resolved by `go mod tidy` per the compat test. |
 | `withObsrvr/stellar-extract` | `e3658ced9023bc30f0e19871987dd50270dfe192` | 2026-04-20 | `v0.1.2` | **Reference only — not a dep today.** Phase-1 eyed it for SDEX trade extraction; we ended up implementing that path against the SDK directly (`internal/sources/sdex/decode.go`). Kept as the reference fixture source per CLAUDE.md. |
 | `stellar/stellar-etl` | `427d2e2565c8cc98c7a2fbc65305a314c114aa33` | 2026-04-09 | `v2.8.18` | Reference implementation + test-fixture source. Not a dep. |
