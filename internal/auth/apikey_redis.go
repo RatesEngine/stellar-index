@@ -72,6 +72,14 @@ type APIKeyRecord struct {
 
 	// Scopes — optional capability list. Empty slice and absent are
 	// equivalent ("no special scopes").
+	//
+	// **Day-1 launch posture (2026-05): the scope field is stored
+	// but NOT enforced at any runtime endpoint.** Every authenticated
+	// caller has full read-access to every endpoint regardless of
+	// what's listed here. Setting scopes today is forward-compat
+	// only; relying on them for access control is a footgun. The
+	// enforcement hook lands post-launch (tracked separately from
+	// the launch-readiness backlog).
 	Scopes []string `json:"scopes,omitempty"`
 
 	// RateLimitPerMin — overrides the per-tier default (zero means

@@ -13,8 +13,8 @@ you from zero to your first authenticated request in under five
 minutes.
 
 > **Hosted endpoint:** `https://api.ratesengine.net` (post-launch)
-> **Reference docs:** [`docs.ratesengine.net`](https://docs.ratesengine.net)
-> **Status page:** [`status.ratesengine.net`](https://status.ratesengine.net)
+> **Reference docs:** [`docs.ratesengine.net`](https://docs.ratesengine.net) (post-launch)
+> **Status page:** [`status.ratesengine.net`](https://status.ratesengine.net) (post-launch — provisioning gated on L4.11)
 
 ## Quick start
 

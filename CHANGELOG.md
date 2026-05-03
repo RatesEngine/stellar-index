@@ -15,6 +15,36 @@ against.
 
 ## [Unreleased]
 
+### Documentation
+
+- **Day-1 contract truth pass on placeholder surfaces** — three
+  endpoint godocs sharpened so SDK consumers don't mistake
+  reserved fields for shipped behaviour:
+  - `/v1/account/usage` — handler godoc explicitly notes the
+    endpoint always returns `[]`; `?from=` / `?to=` query params
+    are reserved in OpenAPI but ignored. Wire shape locked,
+    rollup worker post-launch.
+  - `/v1/assets` — handler godoc spells out that
+    `type=`/`code=`/`issuer=` filter params are accepted by the
+    parser but never applied (returns the unfiltered cursor
+    page). Operators needing filtering today walk the cursor
+    and filter client-side.
+  - `APIKeyRecord.Scopes` — field godoc explicitly flags the
+    day-1 launch posture: scopes are stored but **not enforced**
+    at any runtime endpoint. Setting them is forward-compat
+    only; relying on them for access control is a footgun.
+- **`docs/architecture/launch-readiness-backlog.md` deduped** —
+  union-merge artefacts from the May-3 marathon merge left
+  three copies of L6.1/L6.2/L6.3, three of L5.4/L5.5, two of
+  L5.7/L6.4/L3.14/L3.15/L3.16. Kept the longest (most-current)
+  annotation per row; the file is now 71 unique row IDs (down
+  from 86 with duplicates).
+- **`docs/getting-started.md`** — status page line gains the
+  same "(post-launch)" qualifier the API endpoint already had,
+  plus a pointer to L4.11. Brings the doc in line with
+  `sev-playbook.md §5.1` which already noted the page isn't
+  provisioned yet.
+
 ### Added
 
 - **R2 + R3 spinup tracked as launch-blocking** — five new

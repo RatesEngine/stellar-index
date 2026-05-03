@@ -88,14 +88,22 @@ func (s *Server) handleAccountMe(w http.ResponseWriter, r *http.Request) {
 
 // handleAccountUsage serves GET /v1/account/usage.
 //
-// Placeholder per-day usage rollups for the authenticated caller.
-// The counter store doesn't exist yet, so the handler returns an
-// empty list behind the same envelope shape. When the counters
-// land, the only change is the implementation; the wire shape is
-// already locked.
+// **Placeholder for launch.** The endpoint always returns an empty
+// `[]` for authenticated callers — the per-day usage rollup is not
+// yet implemented. The rate-limit middleware records request counts
+// in Redis, but nothing aggregates them into the daily UsageRow
+// shape. The wire contract (envelope shape, UsageRow fields) is
+// locked so SDK consumers can integrate against it, but the data is
+// always empty until the rollup worker ships.
 //
-// Anonymous callers receive 401. Date-range parameters are reserved
-// for the future implementation and are ignored at this point.
+// Day-1 contract: callers SHOULD treat an empty array as "no usage
+// reported," not as "no usage in the queried window." Operators
+// reading their own usage today must inspect Redis counters
+// directly.
+//
+// Anonymous callers receive 401. The `?from=` / `?to=` query params
+// are reserved in the OpenAPI spec but ignored — every successful
+// response is `[]` regardless of range.
 func (s *Server) handleAccountUsage(w http.ResponseWriter, r *http.Request) {
 	subject, ok := auth.SubjectFrom(r.Context())
 	if !ok || subject.Tier == auth.TierAnonymous || subject.Tier == "" {

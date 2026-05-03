@@ -214,13 +214,19 @@ func (s *Server) assetReaderOrNil() AssetReader { return s.assets }
 // Query params:
 //   - cursor (optional): opaque, from a prior response's pagination.next.
 //   - limit  (optional): integer 1-500, default 100.
-//   - type   (optional): "classic" | "soroban" | "fiat" | "any" (default any).
 //
-// This first implementation returns an empty list if no AssetReader
-// is wired (ratesengine-api passes nil until the asset-catalog
-// migration lands). The Envelope shape is otherwise correct + the
-// endpoint is callable so clients can integrate against the wire
-// contract now.
+// Filter params reserved in the OpenAPI spec — `type=classic,soroban`,
+// `code=USDC`, `issuer=G…` — are accepted by the parser without
+// rejection but **the handler does not apply them**: every request
+// returns the unfiltered paginated catalogue. Operators who need
+// filtering today should walk the cursor and filter client-side.
+// Tracked under the day-1 contract in `docs/reference/api-design.md
+// §5.0 Resource catalogue` so SDK consumers don't expect filtering.
+//
+// Returns an empty list when no AssetReader is wired (operator did
+// not configure the asset-catalog reader). The Envelope shape is
+// otherwise correct so clients can integrate against the wire
+// contract regardless of whether the catalogue is populated.
 func (s *Server) handleAssetList(w http.ResponseWriter, r *http.Request) {
 	// Parse + validate query params FIRST — bad input is 400
 	// regardless of whether the backing reader is wired.
