@@ -291,6 +291,20 @@ against.
 
 ### Fixed
 
+- **Eight more runbooks plus the runbook template are
+  bare-metal-native** — final batch of single-mention kubectl /
+  k8s drift in the L6.5 doc-sweep. `redis-replication.md`,
+  `redis-memory.md`, `price-stale.md`, `rpc-lag.md`,
+  `core-lag.md`, `archive-publish.md`, `archive-divergence.md`,
+  `backup-failed.md`, and `_template.md` each had a single
+  kubectl line referencing pods/StatefulSets/Daemonsets/Jobs
+  that don't exist in our deployment. Each line replaced with
+  the systemd / journalctl / ansible-role equivalent that
+  matches what the repo actually deploys. The `_template`
+  example block now nudges new runbook authors toward
+  `systemctl status` / `journalctl -u` rather than `kubectl ...`.
+  All 25+ kubectl-bearing runbooks have now been converted across
+  PRs #460/#461/#462/#463/#464 and this PR.
 - **Four host-level runbooks are bare-metal-native** —
   `host-cpu-high`, `host-memory-high`, `host-down`, `nvme-smart`
   each had a single `kubectl` line that doesn't apply to our
