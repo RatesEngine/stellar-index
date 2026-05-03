@@ -291,6 +291,24 @@ against.
 
 ### Fixed
 
+- **`internal/supply/doc.go` no longer says ClassicComputer +
+  SEP41Computer are "Future PR"** — Algorithm-2 (classic credit
+  asset) and Algorithm-3 (SEP-41 Soroban) computers shipped per
+  Tasks #55 / #56; the file `internal/supply/{classic.go,
+  sep41.go}` exists alongside the per-class observers
+  (`internal/sources/{trustlines,claimable_balances,
+  liquidity_pools,sac_balances,sep41_supply}`). The doc framed
+  both as "Future PR" plus a closing "Future PRs add:
+  ClassicComputer, SEP41Computer, Postgres-backed Store +
+  asset_supply_history hypertable migration, SAC-wrapped
+  cross-check" — every item on that list has shipped. Doc
+  rewrites the algorithm-2/3 paragraphs around the live impls
+  (per ADR-0022 / ADR-0023) and replaces the "Future PRs add"
+  block with the actual package surface (Refresher,
+  StorageClassicSupplyReader, StorageSEP41SupplyReader,
+  CrosscheckRefresher, WriteSnapshotTextfile). Same drift
+  family as #477 / #483 / #490. Continuation of the L6.5
+  doc-sweep.
 - **Two more `Phase 5` framings dropped** —
   `internal/cachekeys/keys.go` said the writer for `apikey:`
   records was `\`/v1/account/keys\` self-service handler (Phase
