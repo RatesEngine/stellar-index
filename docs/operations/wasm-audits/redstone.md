@@ -1,7 +1,7 @@
 ---
 title: Redstone WASM-history audit
-last_verified: 2026-05-01
-status: ratified
+last_verified: 2026-05-03
+status: ratified — v2 walk confirms two-hash inventory
 source: redstone
 backfill_safe: true
 ---
@@ -11,6 +11,18 @@ backfill_safe: true
 Audit log for the `redstone` source's `BackfillSafe` flag. See
 `README.md` for the full procedure.
 
+> **2026-05-03 update — v2 walk confirms two-hash inventory.**
+> The 2026-04-30 wide-net r1 walk re-observed the 35-min
+> first-deploy hotfix (`b400f7a8…` at L58,758,722-L58,759,141)
+> followed by the production hash (`5e93d22c…` from L58,759,142).
+> No further upgrades observed through the walk's upper bound
+> (L62,249,727). Bytes preserved + SHA-256-verified for both
+> hashes at `evidence/r1-walk-2026-05-01/wasm-bytes/`. With both
+> hashes' bytes now archived, the prior caveat about not having
+> bytes for `b400f7a8…` is closed: a future deeper audit can
+> compare its event-publish + write_prices signature against the
+> production hash without re-fetching from a public RPC.
+>
 > **2026-05-01 update.** Hash citations in this file have been
 > cross-checked against the 2026-04-30 r1 walk; see
 > [r1-walk-2026-05-01.md](r1-walk-2026-05-01.md) for the
@@ -259,16 +271,15 @@ posture.
 
 ## Caveats
 
-- **WASM bytes not disassembled inline.** The audit relies on
-  deploy-pattern analysis, fixture coverage of the current hash,
-  and live ingest-health metrics. A v2 audit follow-up should
-  fetch the b400f7a8 bytes (via `stellar-core dump-wasm`,
-  stellar-rpc `getLedgerEntry` for the WASM-storage key, or by
-  hash-comparing against `redstone-public-contracts` git tags) and
-  compare event-publish + write_prices signatures against the
-  decoder. This is tracked as a follow-up; the current audit
-  ships with the deploy-pattern + zero-traffic argument as the
-  load-bearing safety claim.
+- **WASM bytes archived; deeper disassembly deferred.** The
+  2026-04-30 r1 walk preserved bytes for both hashes at
+  `evidence/r1-walk-2026-05-01/wasm-bytes/{b400f7a8…,5e93d22c…}.wasm`
+  with SHA-256 verification. A future deeper audit can compare
+  the b400f7a8 event-publish + write_prices signatures against
+  the current decoder using the archived bytes alone (no public
+  RPC dependency). The current audit's load-bearing safety claim
+  remains the deploy-pattern + zero-traffic argument; the byte
+  archive is defence-in-depth.
 - **Database emptiness check is point-in-time.** If a future
   Redstone backdated correction lands events into the
   L58,758,722 → L58,759,141 range, those would be subject to the
