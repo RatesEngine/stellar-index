@@ -1397,7 +1397,7 @@ components:
         # have run. Null when no snapshot or volume row is available
         # yet (e.g. fresh deploy before the first cycle, or asset
         # below the operator's coverage set).
-        change_24h_pct:    { type: string, nullable: true, description: "aggregator" }
+        change_24h_pct:    { type: string, nullable: true, description: "Trailing-24h price change as a signed decimal percentage with two fractional digits (e.g. \"+1.27\", \"-0.05\", \"0.00\"). Computed as (now - then) / then * 100 against the latest closed prices_1m bucket whose end is at-or-before now-24h. Null when the asset has no current USD price OR no comparison bucket in the 24h-ago window." }
         volume_24h_usd:    { type: string, nullable: true, description: "aggregator" }
         market_cap_usd:    { type: string, nullable: true, description: "aggregator + supply derivation" }
         fdv_usd:           { type: string, nullable: true, description: "aggregator + supply derivation" }
