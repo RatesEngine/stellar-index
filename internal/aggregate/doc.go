@@ -49,10 +49,19 @@
 // rewrite when an operator opts in via
 // orchestrator.Config.EnableStablecoinFiatProxy.
 //
+// # Triangulation
+//
+// Cross-pair chains (XLM/USD × USD/EUR = XLM/EUR) live in
+// [Triangulate] / [TriangulateChain] in this package, with the
+// X2.5 forex-snap rule for chained-fiat pairs (per F-0014). The
+// orchestrator's [Triangulations] field drives a per-tick pass
+// after direct-pair refreshes have populated the leg cache.
+//
 // # What this package deliberately doesn't do
 //
 //   - No time-windowing. Callers pre-filter trades to the window
 //     they want before passing in.
-//   - No multi-venue weighting / triangulation. Those are deferred
-//     items captured in docs/architecture/aggregation-plan.md.
+//   - No multi-venue weighting. Per-source weight overrides are
+//     deferred per docs/architecture/aggregation-plan.md
+//     §Deferred — every contributing source weights at 100 today.
 package aggregate

@@ -90,9 +90,63 @@ mid-release wastes a tag and forces a `.N+1` cut.
    per-pair freshness panel. Any anomaly within the first hour gets
    the same triage as a normal incident — file a SEV before
    considering rollback.
-4. **Rollback path** (if needed): re-tag the previous CalVer release
-   as latest in your deploy automation, redeploy, file a SEV-2
+4. **Rollback path** (if needed): see the next section. File a SEV-2
    minimum and a postmortem in `docs/operations/postmortems/`.
+
+## Rollback
+
+The Rates Engine ships as systemd-managed binaries on bare-metal
+hosts (per [ADR-0008](../adr/0008-ha-topology.md)) — there is no
+container registry to retag and no orchestrator to roll back. A
+rollback is a binary swap on each affected host.
+
+### Pre-rollback
+
+1. **Confirm the previous-known-good tag.** Either from `git tag`
+   history or from `r1-deployment-state.md`'s "Running version"
+   line at the time the current release was cut.
+2. **Confirm the previous binary is still on disk.** The deploy
+   convention keeps the last 5 release directories under
+   `/opt/ratesengine/release-<tag>/`. If it's been pruned,
+   rebuild it from the tag (`git checkout <tag> && make build`)
+   on a build host before continuing.
+3. **Decide the scope.** A bad indexer release does not require
+   rolling back the API. Roll back only the affected binary unless
+   the failure is shared (e.g. a config schema break).
+
+### Procedure (per host, per binary)
+
+For each affected host (`api-01..03` for API, `indexer-01..03`
+for indexer, `aggregator-01..02` for aggregator) and each
+affected binary:
+
+```sh
+PREVIOUS=2026.05.01.1                         # the known-good tag
+BINARY=ratesengine-api                        # or -indexer, -aggregator
+
+ssh root@<host> "
+  systemctl stop ${BINARY} && \
+  cp /opt/ratesengine/release-${PREVIOUS}/${BINARY} /usr/local/bin/${BINARY} && \
+  systemctl start ${BINARY} && \
+  systemctl status ${BINARY} --no-pager | head -20
+"
+```
+
+For the API tier the rollback is **rolling**: drain one host out
+of HAProxy via the stats socket (`disable server api_pool/api-01`),
+swap that host's binary, re-enable, repeat. Avoids a 30-second
+2-of-3-host window during the cutover. Indexer and aggregator are
+single-active and can be swapped one at a time without drain.
+
+### Post-rollback
+
+1. Verify the runtime version: `curl -sf http://<host>:3000/v1/version`
+   reports the previous tag.
+2. The same alert that drove the rollback should clear within 5 min.
+3. Update `docs/operations/r1-deployment-state.md` "Running version"
+   and note the rollback in the postmortem.
+4. The original (broken) tag stays on `main` — DO NOT delete it.
+   Cut a `.N+1` hotfix once the underlying bug has a fix.
 
 ## Hotfix releases
 

@@ -1,6 +1,6 @@
 ---
 title: Runbook — API 5xx rate elevated
-last_verified: 2026-04-30
+last_verified: 2026-05-02
 status: ratified
 severity: P1 at >5% / P2 at >1% / P1 at SLO burn-rate fast
 ---
@@ -51,6 +51,9 @@ budget-exhaustion, not transient.
 
 ## Quick diagnosis (≤ 5 min)
 
+The API tier runs as `ratesengine-api.service` on three hosts
+(`api-01..03`) behind two HAProxy hosts sharing a keepalived VIP
+(per [ADR-0008](../../adr/0008-ha-topology.md) §1, no Kubernetes).
 Three signals in order. The first that flags non-zero wins; skip
 the rest.
 
@@ -64,20 +67,30 @@ promql 'topk(5, sum by (route, status) (rate(http_requests_total{job="api",statu
 
 Expect a single dominant `{route="…", status="500"}` or `"503"`
 pair. If errors spread across every route, the root cause is
-shared infrastructure (DB, Redis, upstream RPC) — skip to §4.
+shared infrastructure (DB, Redis, upstream RPC) — skip to §3.
 
 ### 2. Is it a recent deploy?
 
 ```sh
-# Last 3 deploys + when the error rate lifted
-kubectl -n ratesengine rollout history deployment/ratesengine-api | tail -5
-# or:
-systemctl status ratesengine-api | grep -i "main process"
+# Running version on each api host
+for h in api-01 api-02 api-03; do
+  echo -n "$h: "
+  ssh root@$h "curl -sf http://127.0.0.1:3000/v1/version | jq -r '.data.version'"
+done
+
+# When did each unit last (re)start?
+for h in api-01 api-02 api-03; do
+  echo -n "$h: "
+  ssh root@$h "systemctl show ratesengine-api -p ActiveEnterTimestamp --value"
+done
+
+# Or: `r1-deployment-state.md` records the running tag.
+git log --oneline -1 docs/operations/r1-deployment-state.md
 ```
 
-Correlate the deploy timestamp against the error-rate lift. If a
-deploy within the last ~1 h precedes the rise → revert is the
-mitigation. Jump to §A (Mitigation).
+Correlate the last unit-restart timestamp against the error-rate
+lift. If a release within the last ~1 h precedes the rise →
+revert per §A (Mitigation).
 
 ### 3. Is a dependency the root cause?
 
@@ -97,10 +110,10 @@ curl -sSf https://api.ratesengine.net/v1/readyz | jq '.data'
 ### 4. Is there a visible pattern in the logs?
 
 ```sh
-# Pull the last N 5xx log lines and group by the panic line (if any)
-journalctl -u ratesengine-api --since "15 min ago" \
-  | jq -r 'select(.level=="ERROR") | "\(.method) \(.path) \(.status) \(.err)"' \
-  | sort | uniq -c | sort -rn | head
+# Pull the last N error log lines and group by the panic line (if any)
+ssh root@api-01 "journalctl -u ratesengine-api --since '15 min ago' \
+  | jq -r 'select(.level==\"ERROR\") | \"\(.method) \(.path) \(.status) \(.err)\"' \
+  | sort | uniq -c | sort -rn | head"
 ```
 
 Patterns to look for:
@@ -120,22 +133,19 @@ Pick by diagnosis; don't work through sequentially.
 ### A. Recent deploy is the cause — **revert**
 
 Fastest path. Ship-and-revert is cheaper than production-debug.
-
-```sh
-# Kubernetes
-kubectl -n ratesengine rollout undo deployment/ratesengine-api
-# Watch metrics; error rate should fall within 60s of replica cut-over.
-
-# Baremetal
-systemctl stop ratesengine-api
-# Deploy the previous binary via your usual artifact path:
-/usr/local/bin/ratesengine-api-prev -config /etc/ratesengine/api.toml &
-```
+Follow the rolling rollback procedure in
+[`release-process.md`](../release-process.md) → Rollback: drain
+one host out of HAProxy via the admin socket
+(`disable server api_pool/api-01`), swap that host's binary back
+to the previous tag under `/opt/ratesengine/release-<tag>/`,
+restart the unit, re-enable in HAProxy, repeat for `api-02` and
+`api-03`. The two undrained hosts carry traffic during each swap.
 
 Verification:
 - [ ] `ratesengine_api_error_rate_critical` clears within 3 min.
 - [ ] /v1/healthz returns 200.
 - [ ] /v1/readyz returns `status=ok` on at least 3 consecutive polls.
+- [ ] `/v1/version` reports the previous tag on every backend.
 
 Only after the incident is contained: file a postmortem action
 item to explain why CI + the rolling deploy didn't catch it.
@@ -146,23 +156,30 @@ Panics in a handler usually indicate a nil-dereference on an
 unexpected input shape. Recoverer catches them (returns 500
 problem+json), so we don't crash — but the 5xx rate climbs.
 
-If the bug is **isolated to one endpoint**:
+If the bug is **isolated to one endpoint**, two options:
 
-```sh
-# Temporarily disable the endpoint at the load balancer / Istio
-# VirtualService — let users see 404 rather than 500.
-# Example for the /v1/history endpoint:
-kubectl -n istio-system patch virtualservice ratesengine-public \
-  --type=json \
-  -p='[{"op":"add","path":"/spec/http/0/match","value":[{"uri":{"prefix":"/v1/history"}}]},
-       {"op":"add","path":"/spec/http/0/directResponse","value":{"status":404,"body":{"string":"endpoint temporarily disabled"}}}]'
-```
+1. **HAProxy path block** (fastest, ≤ 2 min):
+   ```haproxy
+   # Add to backend api_pool in haproxy.cfg, then `haproxy -c`
+   # to validate and `systemctl reload haproxy`. Reload is
+   # connection-graceful, no in-flight request loss.
+   http-request return status 503 content-type "application/problem+json" \
+       string "{\"type\":\"about:blank\",\"title\":\"endpoint temporarily disabled\",\"status\":503}" \
+       if { path_beg /v1/history }
+   ```
+   Both `lb-01` and `lb-02` need the change (push via the
+   `haproxy` ansible role, or copy `/etc/haproxy/haproxy.cfg`
+   manually under time pressure).
+
+2. **Feature-flag deny in the binary** (if a flag exists for the
+   endpoint): edit `/etc/ratesengine.toml`, ansible-push, then
+   `systemctl restart ratesengine-api` host-by-host.
 
 Then fix, test, deploy. Remove the block after deploy.
 
-If the bug affects **every handler** (e.g. middleware panic): can't
-gate around it at LB level; deploy a hotfix that disables the
-offending middleware via config, then follow up with a proper fix.
+If the bug affects **every handler** (e.g. middleware panic):
+treat as §A even if the deploy isn't recent — roll back to the
+last-known-good binary. You can't path-gate around middleware.
 
 ### C. Dependency failure — chase the real alert
 
@@ -174,7 +191,7 @@ is the one to follow:
 
 This alert will auto-resolve once the dep recovers.
 
-### D. Load-induced — **scale up**
+### D. Load-induced — **shed + rate-limit at the edge**
 
 Rare but possible (e.g. viral traffic, DDoS), characterised by:
 - Error rate climbs WITHOUT a deploy, a dep failure, or a log
@@ -182,27 +199,40 @@ Rare but possible (e.g. viral traffic, DDoS), characterised by:
 - `ratesengine_api_latency_p99_high` fires in tandem.
 - `http_requests_total` rate is sharply higher than baseline.
 
-Mitigation:
+Bare metal does not auto-scale. The three API hosts are fixed
+capacity (per [ADR-0008](../../adr/0008-ha-topology.md) §4), so
+the answer is **shed load**, not "add hosts":
 
-```sh
-# Scale the api deployment (keep db + redis at current)
-kubectl -n ratesengine scale deployment/ratesengine-api --replicas=6
-# OR baremetal: start another api instance behind HAProxy.
-```
-
-If load doesn't subside + scale-up doesn't clear the alert in
-10 min: rate-limit harder at the edge (Cloudflare WAF → short-TTL
-per-IP rate limit) + declare SEV-1 to conserve DB capacity.
+1. **Tighten edge rate-limits.** Cloudflare WAF → short-TTL
+   per-IP rate-limit rule. Drops the abusive traffic before it
+   hits HAProxy at all.
+2. **Drop the heaviest non-essential paths.** SSE clients
+   (`/v1/price/stream`) and batch reads are higher-cost per
+   request than tip lookups. Temporary HAProxy `http-request
+   return status 503` block on those paths buys headroom for the
+   serving-tier endpoints; same procedure as §B option 1.
+3. **Promote AWS DR if the colo is genuinely capacity-saturated.**
+   This is a SEV-1 escalation — the cloud DR pool exists for
+   exactly this case but flipping DNS to it is heavyweight; only
+   do it if §1 + §2 don't clear within 10 min. The DR-activation
+   procedure is tracked in `dr-activation.md` (TODO(#0) — runbook
+   in flight); meanwhile, follow the AWS-side warm-standby
+   bring-up notes in [`ha-plan.md`](../../architecture/ha-plan.md)
+   §2.2 ("DR — cloud — AWS primary").
 
 ## Root cause analysis
 
 For the postmortem (§6 of sev-playbook.md):
 
-- `kubectl -n ratesengine logs deployment/ratesengine-api --since 1h` → full log dump.
+- `ssh root@api-XX "journalctl -u ratesengine-api --since '1h ago'"`
+  on each of the three hosts → full log dump.
 - Grafana screenshot of the 1 h window around the alert.
 - `git log -n 20 main` — was there a deploy-time trigger?
-- `kubectl -n ratesengine describe pod -l app=ratesengine-api` —
-  any OOMKills, restarts, CrashLoopBackoff?
+- `systemctl status ratesengine-api --no-pager` on each host —
+  recent restarts, OOM-killer activity (also `dmesg | grep -i
+  oom`).
+- HAProxy access log (`/var/log/haproxy.log`) for the same window
+  — backend transitions, retries, 5xx attribution per backend.
 - If Recoverer caught panics: the stack traces + request_ids
   needed to build fixtures.
 - If Timescale was involved: slow-query log around the incident
@@ -228,18 +258,24 @@ Common root-cause patterns:
 
 - **Synthetic monitoring sends 4xx to unknown assets** — not
   5xx, doesn't trigger this alert. Safe to ignore.
-- **Minute-zero after deploy** — rolling restart briefly serves
-  503 from pods that haven't loaded config yet. Alert window is
-  2 min so this usually self-resolves. If it fires during a
-  planned rolling deploy, the deploy runbook should silence this
-  alert for the window.
+- **Minute-zero after release** — rolling restart briefly serves
+  503 from a host that just (re)started before its `/v1/readyz`
+  flips green. The 10s `slowstart` in HAProxy + the readyz check
+  bound this to a few seconds per host; alert window is 2 min
+  so a normal rolling release won't trip it. If you see it
+  during a planned rollout, the deploy script should silence
+  this alert for the window.
 
 ## Related
 
+- [api-down](api-down.md) — every backend Down rather than just
+  errored.
 - [api-latency](api-latency.md) — runs in parallel when the 5xx
   is from timeouts.
 - [timescale-primary-down](timescale-primary-down.md) — likely
   cause when 5xx is global + readyz shows postgres down.
+- [release-process.md](../release-process.md) → Rollback — the
+  binary-swap procedure cited in §A.
 - [sev-playbook](../sev-playbook.md) §3 — detection channels;
   §4 — response flow; §5 — public-comms templates.
 - [alerts-catalog](../alerts-catalog.md) — the rules this
@@ -253,6 +289,9 @@ Common root-cause patterns:
 - 2026-04-23 — initial draft. @ash.
 - 2026-04-30 — runbook now also covers the SLO multi-window
   availability burn-rate alerts shipped in #313 (per ADR-0009),
-  which route here. Burn-rate-vs-threshold section explains the
-  different semantics so on-call doesn't dismiss a `_burn_fast`
-  page that fires before `error_rate_critical` reaches 5 %.
+  which route here.
+- 2026-05-02 — converted from kubectl/Istio commands to
+  systemd / journalctl / HAProxy admin socket, reflecting the
+  bare-metal deployment ratified in ADR-0008. §D scale guidance
+  rewritten — bare metal doesn't autoscale; shed load + edge
+  rate-limit is the real mitigation.

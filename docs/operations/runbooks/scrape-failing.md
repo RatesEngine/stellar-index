@@ -1,6 +1,6 @@
 ---
 title: Runbook — scrape-failing
-last_verified: 2026-04-23
+last_verified: 2026-05-02
 status: draft
 severity: P3
 ---
@@ -25,16 +25,22 @@ severity: P3
 
 ## Quick diagnosis (≤ 5 min)
 
+Prometheus runs as `prometheus.service` on `mon-01` / `mon-02`
+(per the `prometheus` ansible role; ADR-0008 §3 monitoring tier).
+
 ```sh
 # What's Prometheus's view of the failing target?
-curl -s http://prometheus:9090/api/v1/targets?state=active | \
-  jq '.data.activeTargets[] | select(.health != "up") | {job: .labels.job, instance: .labels.instance, lastError: .lastError}'
+ssh root@mon-01 "curl -s http://localhost:9090/api/v1/targets?state=active" | \
+  jq '.data.activeTargets[] | select(.health != "up") |
+        {job: .labels.job, instance: .labels.instance, lastError: .lastError}'
 
-# Is the /metrics endpoint on the target reachable manually?
-kubectl exec -it prometheus-0 -- wget -q -O- http://<service>:<port>/metrics | head
+# Is the /metrics endpoint on the target reachable from the prom host?
+ssh root@mon-01 "curl -s http://<target-host>:<port>/metrics | head"
 
-# Is the exporter process alive (node_exporter, redis_exporter, etc.)?
-kubectl get pods -A | grep exporter
+# Is the exporter unit alive on the target host? (redis_exporter,
+# postgres_exporter, node_exporter all ship as systemd units via
+# their respective ansible roles.)
+ssh root@<target-host> "systemctl status '*_exporter' --no-pager"
 ```
 
 The `lastError` field from the Prometheus API tells you exactly
@@ -43,46 +49,54 @@ path, parse error, etc.
 
 ## Typical root causes
 
-1. **Target pod got rescheduled**. Common during rolling restarts;
-   Prometheus's service-discovery updates on the next
-   discovery-interval (default 30 s). The alert `for: 2m` absorbs
-   this — if it fires, the rollout is unusually slow.
+1. **Target host rebooted or the unit restarted**. Common during
+   ansible-driven upgrades; Prometheus's static-config discovery
+   re-resolves on each scrape so target reappearance is
+   bounded by the scrape interval. The alert `for: 2m` absorbs
+   this — if it fires, the host or unit is staying down.
 
 2. **Exporter crash**. `redis_exporter`, `postgres_exporter`,
    `node_exporter` each have their own failure modes.
-   - Mitigation: restart the exporter.
+   - Mitigation: `ssh root@<host> "systemctl restart <exporter>"`.
 
-3. **Service discovery misconfig**. A new service deployed without
-   the correct Prometheus-scrape annotations / ServiceMonitor /
-   PodMonitor. Target appears then disappears.
+3. **Static-config drift**. A new host added without an
+   accompanying entry in the prometheus role's `prometheus.yml.j2`
+   inventory. Target was added to inventory but role hasn't been
+   re-applied; or the inverse — host removed from inventory but
+   prometheus config still scrapes it.
 
 4. **Auth drift**. Some exporters require a basic-auth or bearer
-   token; if the credentials secret got rotated without updating
-   the scrape config, Prometheus gets 401 on every attempt.
+   token; if the credentials in vault got rotated without
+   re-applying the prometheus role to refresh the scrape config,
+   prometheus gets 401 on every attempt.
 
-5. **Network policy blocking Prometheus.** A new NetworkPolicy
-   was applied that doesn't allow the monitoring namespace in.
+5. **Firewall / iptables rule blocking Prometheus.** A new rule
+   on the target host (or the colo perimeter) doesn't allow
+   `mon-01` / `mon-02` in to the metrics port.
 
 ## Mitigation
 
 - [ ] Step 1 — look at `lastError` — that usually points at the
       exact cause.
 - [ ] Step 2 — fix per cause:
-      - Exporter crash: restart.
-      - SD misconfig: fix annotations / ServiceMonitor.
-      - Auth: sync secret.
-      - NetworkPolicy: allow monitoring namespace.
+      - Exporter crash: `systemctl restart <exporter>` on the host.
+      - Static-config drift: re-apply the `prometheus` ansible
+        role (rolls `/etc/prometheus/prometheus.yml` and SIGHUPs
+        the unit).
+      - Auth: rotate vault entry, re-apply role.
+      - Firewall: open ingress from `mon-01` / `mon-02` to the
+        target metrics port.
 - [ ] Step 3 — if it's genuinely the *target service* down, not
       the scrape, cross-reference with that service's own alerts.
 - [ ] Verification: `up` returns to 1; metrics resume flowing.
 
 ## Known false-positive patterns
 
-- **Prometheus reload during a config change** will drop all
+- **Prometheus reload during a config change** drops all
   targets briefly. `for: 2m` is chosen to avoid paging on this.
-- **Cold pod during scale-out** — the pod is not yet Ready but
-  Prometheus has already discovered it. Expected; resolves when
-  the pod becomes Ready.
+- **Cold-start scrape window after a unit restart** — between
+  `systemctl start` and the first /metrics serve, Prometheus
+  sees `up==0`. Resolves on the next scrape interval.
 
 ## Related
 
@@ -95,3 +109,8 @@ path, parse error, etc.
 ## Changelog
 
 - 2026-04-23 — initial draft.
+- 2026-05-02 — diagnosis converted from kubectl `prometheus-0`
+  pod-exec / pod-list to the `mon-01` / `mon-02` hosts running
+  `prometheus.service` per the `prometheus` ansible role
+  (ADR-0008). Service-discovery section rewritten to talk about
+  static-config drift instead of ServiceMonitor / PodMonitor.

@@ -46,12 +46,18 @@
       Set the vault entry before production.
   when: alertmanager_pagerduty_key | default('') | length == 0
 
-- name: warn when alertmanager_slack_webhook_url is empty
+- name: warn when neither chat-fanout webhook is set
   debug:
     msg: >-
-      WARNING: alertmanager_slack_webhook_url is empty —
-      warning/info alerts won't fan out to Slack.
-  when: alertmanager_slack_webhook_url | default('') | length == 0
+      WARNING: both alertmanager_slack_webhook_url and
+      alertmanager_discord_webhook_url are empty — warning/info
+      alerts have no chat-fanout receiver and will only show in
+      the AlertManager UI. Set at least one webhook in vault, or
+      both for parallel fanout (the route emits to whichever
+      receivers have a non-empty URL).
+  when:
+    - alertmanager_slack_webhook_url | default('') | length == 0
+    - alertmanager_discord_webhook_url | default('') | length == 0
 
 - name: assert disk space at /var (TSDB needs ~15 GB at 30d retention)
   assert:

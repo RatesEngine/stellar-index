@@ -1,7 +1,7 @@
 ---
 title: Public-flip strategy — publishing Rates Engine to a public repo at v1.0
-last_verified: 2026-04-30
-status: living doc
+last_verified: 2026-05-03
+status: living doc — checklist execution-ready, awaiting v1.0 launch signal
 ---
 
 # Public-flip strategy
@@ -62,7 +62,7 @@ satisfies it.
 | ☑ | Every CI workflow in `.github/workflows/` runs on the public repo without internal secrets | `.github/workflows/{ci,api-docs}.yml` (verified 2026-04-30 — no `secrets.` references) |
 | ☑ | `CLAUDE.md` reads cleanly without referencing the private discovery archive paths or internal-only operator names | `CLAUDE.md` (reviewed 2026-04-30 — pattern scan + manual spot-checks; 0 private references; 2 non-blocking editorial recs noted) |
 | ☑ | `docs/operations/r1-deployment-state.md` does not include credentials, API keys, or unredacted IPs | `docs/operations/r1-deployment-state.md` (verified 2026-04-30 — credentials are pointers only, no IPs in file) |
-| ☑ | Every ADR's "Status" reflects current state (no stale "Proposed" on accepted ADRs) | `docs/adr/` (all 0001-0021 are `Accepted`, verified 2026-04-30; 0012 is reserved-future per multi-region-topology.md) |
+| ☑ | Every ADR's "Status" reflects current state (no stale "Proposed" on accepted ADRs) | `docs/adr/` (all 0001-0024 are `Accepted`, verified 2026-05-02; 0012 is reserved-future per multi-region-topology.md). Initial sweep covered 0001-0021 on 2026-04-30; 0022 (classic supply observers, PR #302), 0023 (SEP-41 supply, PR #308), 0024 (Redis HA via Sentinel, PR #343) merged after that and confirmed `Accepted` in this re-verification. |
 | ☑ | `docs/discovery/` archive is OK to publish — no sensitive customer data in the RFPs or proposal correspondence | `docs/discovery/` (reviewed 2026-04-30 — 9-pattern sensitivity scan across all 48 files; 0 hits in credential/PII categories; 6 hits across qualitative categories all benign on inspection) |
 | ☑ | Final secret scan with `gitleaks detect --source .` returns clean | `gitleaks 8.30.1` — 0 leaks across 553 commits, scanned 2026-04-30 |
 
@@ -70,6 +70,45 @@ satisfies it.
 human-in-the-loop reviews now have written verdicts (citations
 in the rows above). Checklist is execution-ready; the next step
 is the cut-over mechanics in §below.
+
+## Final 24-hour pre-cutover dry-run
+
+The pre-flip checklist above is the **standing** state — verified
+2026-04-30 and refreshed periodically. The 24 h immediately
+before the actual cutover should re-run the same gates because
+PRs land between checklist verification and launch day. **Do this
+24 h before tagging v1.0**, in this order:
+
+1. **Re-run `gitleaks detect --source . --redact --exit-code 1`**
+   from a clean checkout. Any new finding is a launch blocker.
+2. **Re-run the file-level scrub check.** A directory listing
+   should show no `*.env`, `*.key`, `*.pem`, `secrets/*`,
+   `inventory/r1.yml`, or any file matching the patterns from
+   the original PR #169 scrub.
+3. **`make test && make test-integration`** — the green build
+   that gets tagged v1.0 must pass both. A flake counts as
+   not-green; rerun after the flake is fixed.
+4. **Spot-check `CLAUDE.md` and `docs/architecture/*.md` for
+   `last_verified` dates.** Anything older than 90 days is a
+   doc-rot candidate; flag for the L6.5 documentation sweep.
+5. **CI baseline freshness.** Check that `.github/workflows/ci.yml`
+   has a green run on `main` from within the last 24 h. If not,
+   run a no-op commit (e.g. CHANGELOG punctuation) to force a
+   green build before tagging.
+6. **External-asset readiness.** Confirm:
+   - `SECURITY.md`'s reporting address (`security@ratesengine.net`)
+     is monitored — send a test email if uncertain.
+   - The `CODEOWNERS` file's only @-handle (`@ash`) has the
+     bandwidth to triage day-1 external PRs (or has a delegate
+     wired up post-flip via branch-protection settings).
+   - The `RatesEngine/rates-engine` GitHub repo creation
+     command in §"Cut-over mechanics" still resolves cleanly
+     (`gh repo view RatesEngine/rates-engine` returns 404 —
+     i.e. nothing exists yet under that name).
+
+A row that fails the dry-run is a launch blocker. The dry-run
+is **destructive only of the no-op commit in step 5**; everything
+else is read-only checks against the working tree + GitHub API.
 
 ## Cut-over mechanics
 
