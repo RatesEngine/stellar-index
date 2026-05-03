@@ -1,9 +1,30 @@
 // Binary ratesengine-api is the public REST + SSE API server.
 //
-// Today: /v1/healthz, /v1/readyz, /v1/version — the infra-facing
-// surface. The full endpoint catalogue (/v1/price, /v1/history,
-// /v1/ohlc, SSE streams, etc.) lands in follow-up PRs per
-// docs/reference/api-design.md §5.
+// Surface (registered in `internal/api/v1/server.go`'s
+// `RegisterRoutes`):
+//
+//   - Pricing: /v1/price, /v1/price/batch (GET + POST),
+//     /v1/price/tip, /v1/vwap, /v1/twap, /v1/observations.
+//   - Historical: /v1/history, /v1/history/since-inception,
+//     /v1/ohlc, /v1/chart.
+//   - Catalogue: /v1/assets, /v1/assets/{id}, /v1/assets/{id}/metadata,
+//     /v1/markets, /v1/pairs, /v1/sources.
+//   - Oracle (SEP-40 passthrough): /v1/oracle/latest,
+//     /v1/oracle/lastprice, /v1/oracle/prices,
+//     /v1/oracle/x_last_price.
+//   - Account self-service: /v1/account/me, /v1/account/usage,
+//     /v1/account/keys (POST).
+//   - SEP-10 web auth: /v1/auth/sep10/challenge,
+//     /v1/auth/sep10/token.
+//   - SSE streams: /v1/price/stream, /v1/price/tip/stream,
+//     /v1/observations/stream.
+//   - Operator-facing: /v1/healthz, /v1/readyz, /v1/version,
+//     /metrics.
+//
+// The canonical list is the `s.mux.HandleFunc(...)` block in
+// `internal/api/v1/server.go` and the OpenAPI spec at
+// `openapi/rates-engine.v1.yaml`. CI (`lint-docs.sh §2`) keeps
+// the two in lock-step.
 //
 // Flags:
 //

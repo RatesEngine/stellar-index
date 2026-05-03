@@ -17,6 +17,23 @@ against.
 
 ### Fixed
 
+- **`ratesengine-api` and `ratesengine-aggregator` package
+  docstrings match what each binary actually wires today** —
+  the api binary's godoc said "Today: /v1/healthz, /v1/readyz,
+  /v1/version — the infra-facing surface. The full endpoint
+  catalogue ... lands in follow-up PRs." Reality: 32+ handlers
+  registered (full pricing, historical, catalogue, oracle, account
+  self-service, SEP-10, SSE streams). The aggregator binary's
+  godoc had a "Deferred to follow-up PRs" list that already
+  shipped: triangulation worker (X2.5 forex-snap, F-0014),
+  divergence detector (Tick-driven RefreshPair), outlier filter
+  (`OutlierSigmaThreshold`), and the multi-factor confidence +
+  ADR-0019 anomaly-response pipeline. Both godocs now describe
+  the actual wired surface and point at the canonical source
+  block (`server.go` HandleFunc list, `orchestrator.Config`
+  fields). Same drift family as #475 (ops binary). Continuation
+  of the L6.5 doc-sweep.
+
 - **`/v1/account/me` now returns the credential's `label`** —
   `APIKeyRecord.Label` was set at creation time and the OpenAPI
   `Account` schema declared the field, but the path

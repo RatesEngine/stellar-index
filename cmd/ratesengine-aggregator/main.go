@@ -3,25 +3,32 @@
 // so API requests serve from cache rather than recomputing on every
 // query.
 //
-// v1 scope (PR 182):
+// Wired today (each driven from one orchestrator.Config field —
+// `internal/aggregate/orchestrator/`):
 //
 //   - Rolling-window VWAP per configured pair, written to Redis
 //     keys `vwap:<base>:<quote>:<window-seconds>` on a 30 s cadence
-//     (configurable).
-//   - Passthrough single-source aggregation: every trade in the
-//     window contributes regardless of source class. The API
-//     already computes VWAP on-query; this binary moves the
-//     computation off the hot path.
+//     (configurable). Class-filtered by default
+//     (ClassExchange-only); aggregator + oracle classes excluded
+//     to avoid double-counting / methodology mixing.
+//   - Triangulation worker (XLM/USD × USD/EUR = XLM/EUR), with
+//     the X2.5 forex-snap rule for chained-fiat pairs.
+//   - Outlier filter on the raw-trade fetch
+//     (`OutlierSigmaThreshold`).
+//   - Multi-factor confidence score + ADR-0019 anomaly response
+//     (Phase 1 + 2 — z-score + confidence + source-count freeze
+//     thresholds; freeze.Writer publishes markers consumed by
+//     the API binary's freeze.Looker).
+//   - Divergence-cache refresh from the Tick (CoinGecko by
+//     default, Chainlink HTTP cross-check via FeedMap), feeding
+//     the API's `flags.divergence_warning`.
+//   - Periodic supply-snapshot worker (XLM via LCM AccountEntry,
+//     classic via trustlines + claimable + LP + SAC observers,
+//     SEP-41 via Soroban event observer).
 //
-// Deferred to follow-up PRs (each drops into orchestrator.Config
-// without shape change):
-//
-//   - CAGG refresh driver (Timescale's background job handles it
-//     today; manual triggering lands when we want tight refresh
-//     guarantees).
-//   - Triangulation worker (XLM/USD × USD/EUR = XLM/EUR).
-//   - Divergence detector (flags aggregator-class drift).
-//   - Outlier filter wrap on the raw-trade fetch.
+// CAGG refresh stays Timescale-driven (background job in
+// migration 0002's `add_continuous_aggregate_policy` calls); the
+// orchestrator does not manually refresh.
 //
 // Already wired through TOML (see [aggregate] in
 // docs/reference/config/README.md):
