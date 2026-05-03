@@ -15,6 +15,133 @@ against.
 
 ## [Unreleased]
 
+### Added
+
+- **Two new SEV drill scenarios** — `sev2-redis-sentinel-failover`
+  exercises ADR-0024's Sentinel HA path end-to-end across every
+  Redis-dependent surface (`/v1/price` cache + freeze markers +
+  confidence + triangulation + API-key validator + SEP-1 cache);
+  pinned validation criteria include "did oncall correctly
+  classify SEV-2 (degraded) not SEV-1 (down)" and "did anyone
+  fail back contrary to ADR-0024's fail-forward rule" — both
+  common simulation mis-steps. `sev1-anomaly-freeze-stuck`
+  exercises the ADR-0019 anomaly chain (Phase 1 thresholds →
+  Phase 2 baseline → freeze.Writer → /v1/price's flags.frozen);
+  drills the operator-driven-clear contract that ADR-0019
+  Phase 1 explicitly chose over auto-clear, plus the verify-
+  before-clearing discipline that prevents re-freeze loops.
+  Drills README updated to list all four scenarios with their
+  category coverage (storage / cache / ingest / aggregator).
+  Closes G5 in `docs/launch-task-list.md` for the script-
+  authoring half; actual drill execution + writeups remain
+  operator work against staging.
+- **Status-page scaffold + `sev-status-page-update` runbook** —
+  `status.ratesengine.net` was committed to in the proposal §IDR
+  and required by Freighter F3.5 / F3.6, but nothing in `deploy/`
+  pointed at the page or specified what an update should look
+  like. New `deploy/status-page/cstate/` ships the cstate
+  (Hugo-based) site config, the public component list (12
+  customer-facing service surfaces matching the API + ingest +
+  backend layers), and the per-incident front-matter template.
+  New `docs/operations/runbooks/sev-status-page-update.md`
+  binds the update cadence (hourly during SEV-1, daily during
+  SEV-2 — matches the SEV-playbook + Freighter SLA), the
+  safe-to-publish detail level, and the workstation-down
+  fallback path. `docs/operations/sev-playbook.md` §5.1 now
+  references both rather than dangling a TBD. Hosting target
+  (Cloudflare Pages recommended) + DNS cutover remain operator
+  work — see [`deploy/status-page/README.md`](../deploy/status-page/README.md).
+  Closes G4 in `docs/launch-task-list.md`.
+- **AlertManager Discord webhook (parallel fanout with Slack)** —
+  the proposal commits to alerts being "integrated into
+  discord/slack" but the Prometheus ansible role only wired
+  Slack. New `alertmanager_discord_webhook_url` vault var; the
+  warning + info routes now point at a unified `chat-fanout`
+  receiver that emits to BOTH Slack and Discord when their
+  respective webhook URLs are set, either alone, or neither
+  (alerts accumulate in the AM UI in the last case). Preflight
+  warns when both URLs are empty rather than silently letting
+  alerts fall on the floor. Closes G7 in
+  `docs/launch-task-list.md`.
+### Documentation
+
+- **Public-flip 24-hour pre-cutover dry-run (closes L6.3 / Task #78)** —
+  `docs/operations/public-flip.md` gains a §"Final 24-hour
+  pre-cutover dry-run" capturing the gates that must re-run in
+  the 24 h immediately before tagging v1.0: gitleaks rerun,
+  file-level scrub recheck, `make test && make test-integration`
+  on the v1.0 SHA, doc-rot spot-check on `last_verified` dates,
+  CI-green-within-24h check, and external-asset readiness
+  (SECURITY mailbox monitored, CODEOWNERS bandwidth, GitHub
+  repo name still un-claimed). The pre-flip checklist itself is
+  already `☑` × 16 — this addition closes the "what about the
+  PRs that landed between standing-checklist verification and
+  launch day" gap. L6.3 status flipped 🟢 → ✅.
+
+- **SLA proof procedure (Task #77 operator-recipe)** — new
+  `docs/operations/sla-proof-procedure.md` documents the
+  end-to-end recipe that turns a `make test-load-mixed` run into
+  the checked-in `docs/operations/sla-proof-<YYYY-MM-DD>.md`
+  proof artefact: pre-flight checklist, run command, Grafana
+  snapshot capture, Promql baseline reads against the soak
+  window, monthly cadence, and the documented-acceptance
+  fallback if staging access is delayed. The existing template
+  at `sla-proof-template.md` is the report skeleton; this
+  procedure is the operator's how-to. Closes the "no operator
+  recipe to produce the proof report" gap that left Task #77
+  without a clear path-to-done even though all upstream
+  scenarios (L5.1-L5.3) had already shipped.
+
+- **SEV-1 / SEV-2 dry-run records (closes L5.7 / Task #76)** —
+  Two new tabletop drill writeups under `docs/operations/drills/`
+  exercise the SEV playbook end-to-end against the existing
+  scripted scenarios:
+  - `2026-04-sev1-timescale-failover.md` — Timescale primary
+    out-of-disk simulation; chose fix-in-place via
+    `drop_chunks('prices_1m', '30 days')` plus restart;
+    validated all 8 scenario criteria, 7 pass + 1 partial.
+  - `2026-04-sev2-soroswap-decode-regression.md` — protocol-25
+    SCVal type-tag enum extension breaks soroswap decoder;
+    forward-fix path via `internal/scval` + golden fixture
+    + ordinary deploy + `ratesengine-ops backfill -source`;
+    validated all 8 scenario criteria, all pass.
+  - Promoted two action items into runbook updates in the same
+    PR: `timescale-primary-down.md` Quick-diagnosis now leads
+    with `/v1/readyz` (shaves ~1 min off detection); `decode-errors.md`
+    Mitigation gains a customer-comms note for the
+    `class_drop_spike` ↔ `flags.divergence_warning` correlation.
+  - Solo-drill caveats called out explicitly — a 3-person tabletop
+    is queued for post-launch with the next on-call hire.
+
+- **WASM-audit v2 fill-in across all eight Soroban sources** —
+  every per-source audit doc under `docs/operations/wasm-audits/`
+  now folds in the 2026-04-30 r1 wide-net walk's per-instance
+  evidence (540 contracts / 52 unique WASMs SHA-256-verified +
+  bytes-preserved on r1). Notable changes:
+  - **Comet's v2 audit folded into Blend's** — the only mainnet
+    Comet pool is Blend's Backstop V2 (`CAQQR5SW…` →
+    `c1f4502a…`). `comet.md` now redirects to `blend.md` for the
+    per-instance hash inventory; `blend.md` documents both source
+    rows symmetrically. Comet (the protocol) is a Balancer-v1-style
+    AMM library used by Blend's backstop module — not an actively-
+    maintained standalone DEX.
+  - **Aquarius gained Cohort A / Cohort B sections** — 168 never-
+    upgraded pools (3 WASMs) plus 145 upgraded pools across a
+    5-WASM upgrade chain (`b54ba37b → 2d770946 → 7cecf23b →
+    a1629dcd → 4f080d24`). Closes the "doc incomplete, not wrong"
+    gap flagged in the 2026-05-01 cross-source review.
+  - **Soroswap gained per-instance Phase 2 results** — 196
+    contracts (1 factory + 1 router + 194 pair instances), three
+    unique WASMs total, zero mid-life upgrades observed.
+  - **Phoenix gained per-instance Phase 2 results** — 13
+    contracts on 22 WASMs (5 factory + 3 multihop + 14 pool); the
+    most-iterated source. All 14 pool WASMs binary-confirmed to
+    contain the eight swap-field strings (`actual received amount`
+    spelling preserved across the chain).
+  - **Reflector / Redstone / Band** confirmation notes added
+    pinning the v2 walk's findings; no decoder-relevant changes.
+  - All `last_verified` dates bumped to 2026-05-03.
+
 ### Fixed
 
 - **Three runbooks no longer reference fictional commands /
@@ -38,6 +165,72 @@ against.
   production deployment is bare-metal NVMe + ZFS per ADR-0008,
   not Kubernetes. Updated to point at zpool / Hetzner volume-
   resize and the same backfill commands.
+- **Six broken markdown links across docs** (L6.5 doc-sweep) —
+  surfaced via a Python sweep across every relative `(./...md)`
+  link in `docs/`. Closed:
+  `docs/adr/0023-sep41-supply-observer.md` `0003-i128-no-truncate.md`
+  → `0003-i128-no-truncation.md`.
+  `docs/architecture/supply-pipeline.md` two links: same ADR-0003
+  fix + `0006-timescale-storage.md` →
+  `0006-timescaledb-for-price-time-series.md`.
+  `docs/operations/r1-deployment-state.md`: extra `..` in
+  `../../discovery/data-sources/archival-nodes.md` → fixed to
+  `../discovery/...`.
+  `docs/operations/wasm-audits/evidence/blend/phase2-2026-05-02/README.md`:
+  off-by-one relative path `../../blend.md` → `../../../blend.md`.
+  `docs/architecture/infrastructure/archival-node-spec.md`: three
+  fictional runbook refs (`archive-publish-fail.md`,
+  `galexie-lag.md`, `rpc-sqlite-growth.md`); first replaced with
+  the real `archive-publish.md`, the other two converted to
+  italicised "_runbook tbd_" notes citing the existing ad-hoc
+  coverage path (no creation of stub runbooks — the alerts they
+  reference are post-launch / Phase-3 anyway).
+  `docs/architecture/ha-plan.md` §3.10 ratesengine-ops: fictional
+  `ops-cli.md` doc replaced with a description of the binary's
+  actual top-level subcommands, citing `--help` and the source
+  at `cmd/ratesengine-ops/main.go`.
+  Verification: re-ran the link sweep; zero broken links remain.
+
+- **SSE event-ID generator no longer wraps to duplicates after
+  65 536 same-millisecond IDs** — `streaming.Generator.Next`'s
+  docstring promised "never returns the same ID twice" but the
+  counter was masked to 16 bits, so 65 536 IDs in a single
+  millisecond wrapped back to 0 and re-issued every prior ID
+  for that millisecond. A reproducer pinned the bug at 4 464
+  duplicates across 70 000 calls in one ms (e.g. publish-burst
+  during a fan-out spike, tight test loop, or hot-loop in
+  operator code). Fix advances the synthetic millis by 1 when
+  the counter saturates instead of wrapping; subsequent
+  wall-clock ms catch back up via the existing `now > oldMillis`
+  branch. Three new tests: NeverDuplicates (70 k same-ms calls),
+  StrictlyIncreasing (lex-sort = chronological invariant),
+  ConcurrentNoDuplicates (50×2 000 goroutines).
+
+- **`divergence.Compare` recovers panics from references** — the
+  function's docstring promised "panic recovered, etc. are
+  recorded in Failures", but the per-reference goroutine had no
+  `recover()` deferred. A misbehaving reference (network panic,
+  malformed-JSON parser blow-up, operator-supplied custom
+  reference with a bug) would take the whole comparison run
+  down + crash the worker. Now the goroutine recovers and
+  records the panic with a stable `panicked: <text>` failure
+  label so operators see which reference is broken without
+  reading goroutine traces. New `safeName` helper guards
+  `Reference.Name()` itself in case it's what panics — the
+  failure surfaces under `_unknown` in that path.
+
+- **Rate-limit middleware now honours `Subject.RateLimitPerMin`** —
+  the field was plumbed end-to-end (storage record → validator →
+  Subject → `/v1/account/me`) but `RateLimitBySubject` only
+  consulted the bucket's static `Max()`, so a paid customer with a
+  per-key override of e.g. 5000/min got throttled at the deployment
+  default (typically 1000). `Bucket.TakeN(ctx, key, max)` accepts
+  a per-call override (≤0 falls back to `b.max`); the middleware
+  passes `subject.RateLimitPerMin` through and surfaces the
+  effective limit in the `X-RateLimit-Limit` response header.
+  Anonymous callers continue to use the bucket default (no per-IP
+  override path). Closes another exposed-but-never-driven gap from
+  the account self-service work.
 
 - **`/v1/account/me` now returns the credential's `label`** —
   `APIKeyRecord.Label` was set at creation time and the OpenAPI

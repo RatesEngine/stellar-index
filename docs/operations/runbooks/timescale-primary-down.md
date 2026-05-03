@@ -26,7 +26,21 @@ severity: P1
 
 ## Quick diagnosis (≤ 5 min)
 
-Confirm the primary is actually gone (not a monitoring blip):
+**Step 1 — start with `/v1/readyz`.** It's the fastest signal
+that distinguishes "API hitting a real DB problem" from
+"Prometheus scrape blip":
+
+```sh
+curl -fsS https://api.ratesengine.net/v1/readyz | jq .checks.postgres
+# Expect: {"status": "ok", ...} when DB is reachable.
+# {"status": "error", "detail": "connection refused" | ...} → real DB outage.
+```
+
+The 2026-04 SEV-1 tabletop drill found this ordering shaved
+~1 min off detection vs the older "metric → readyz" path
+(see [drills/2026-04-sev1-timescale-failover.md](../drills/2026-04-sev1-timescale-failover.md)).
+
+**Step 2 — confirm via Patroni / etcd / direct psql:**
 
 ```sh
 # From ops jump host
