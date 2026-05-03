@@ -291,6 +291,21 @@ against.
 
 ### Fixed
 
+- **`README.md` no longer claims a non-existent Stellar
+  protocol** — the `**Tested against:** Stellar protocol 25.x`
+  line at the top of the README pointed at a network protocol
+  that doesn't exist (the only "protocol 25" in the repo is in a
+  hypothetical SEV-2 drill scenario explicitly marked
+  `(hypothetical)`). Real protocol per CLAUDE.md +
+  contract-schema-evolution.md + semver-policy.md is **23**
+  (Whisk, mainnet 2025-09-03, CAP-67 unified events). README
+  now matches. Also fixed README's repo-layout block: `cmd/`
+  list missing `sla-probe`; `deploy/` description had stale
+  "k8s / baremetal" instead of the actual
+  docker-compose/systemd/monitoring/status-page subdirs;
+  `configs/` description tightened to call out the ansible
+  shape. Same drift family as #470 (CLAUDE.md tree). L6.5
+  doc-sweep continuation.
 - **`lint-docs.sh` no longer exempts `/v1/price/stream` from the
   "spec ↔ handler" check** — the planned_regex allow-list was
   scoped to "documented but not yet shipped" routes; the only
