@@ -231,10 +231,13 @@ The `internal/metadata` package emits these counters / gauges via
   `ratesengine_metadata_cache_misses_total`.
 - `ratesengine_metadata_resolver_duration_seconds` histogram.
 
-Alert: `ratesengine_metadata_resolver_error_rate_high` (P3 in
-[alerts-catalog.md](alerts-catalog.md) — "designed but not yet
-shipping" pending Phase-5 wiring of the metadata overlay into
-the asset handler).
+Alert: `ratesengine_metadata_resolver_error_rate_high` is
+designed but not yet shipping — no rule in
+`deploy/monitoring/rules/` produces it today. The metadata
+overlay IS wired into `/v1/assets/{id}` already (see §"Resolution
+flow" above) — what's missing is the per-rate Prometheus rule
+that turns the existing counters into a paged signal. Tracked
+as a future hardening item.
 
 ## References
 
