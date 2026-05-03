@@ -586,8 +586,6 @@ func TestOHLC_TruncatedDecodes(t *testing.T) {
 	}
 }
 
-
-
 // TestUsage_EmptyArrayDecodes — the placeholder usage endpoint
 // returns an empty array today; client should decode that without
 // panicking on a nil slice.
@@ -713,6 +711,7 @@ func TestHistory_BaseQuoteRequired(t *testing.T) {
 		})
 	}
 }
+
 // TestSources_HappyPath — happy-path round-trip pinning the
 // optional class filter + decode of the registry shape.
 func TestSources_HappyPath(t *testing.T) {
@@ -867,9 +866,6 @@ func TestPair_BaseQuoteRequired(t *testing.T) {
 		})
 	}
 }
-
-
-
 
 func TestUsage_EmptyArrayDecodes(t *testing.T) {
 	_, c := newTestServer(t, func(w http.ResponseWriter, r *http.Request) {
