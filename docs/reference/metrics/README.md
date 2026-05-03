@@ -136,6 +136,21 @@ to verify their allow-list actually covers what the indexer is
 seeing. Counts attempts; the trades hypertable's `ON CONFLICT DO
 NOTHING` dedupe is invisible to this counter.
 
+### `ratesengine_stream_publish_total`
+
+Counter, label `stream` (currently only `price_stream`).
+
+Per-stream counter of envelopes the API binary's
+`internal/api/streampublish.Publisher` fanned out to a
+`streaming.Hub`. Increments only on a NEW closed bucket — the
+publisher short-circuits when `ObservedAt` hasn't advanced, so a
+flat counter against an active subscription means the upstream
+`PriceReader` isn't seeing new buckets (cursor stuck, aggregator
+stalled, etc.). Operators read this alongside per-pair subscriber
+counts to verify the closed-bucket fanout path: steady publishes
+with zero subscribers means clients aren't connecting; zero
+publishes with active subscribers means the producer is starved.
+
 ## Oracle layer (indexer binary, reflector + future sources)
 
 ### `ratesengine_oracle_last_update_unix`
@@ -215,6 +230,34 @@ coverage gaps without per-pair cardinality cost — a sustained
 all-empty signal usually means the configured pair set has
 out-grown the live data.
 
+### `ratesengine_aggregator_stream_publish_total`
+
+Counter, label `outcome` (`ok` / `error`).
+
+Closed-bucket events handed to the orchestrator's
+[`StreamPublisher`](../../../internal/aggregate/orchestrator/orchestrator.go)
+(L3.9 SSE fan-out). Production wiring is the Redis-pub/sub
+publisher in `internal/api/streaming/redispub`; the API binary's
+matching subscriber republishes each event on the in-process
+`streaming.Hub` so `/v1/price/stream` clients receive the
+fan-out. `outcome="error"` is best-effort failure (publish
+errored; the next tick retries; the VWAP cache write itself
+is unaffected).
+
+### `ratesengine_api_stream_subscribe_total`
+
+Counter, label `outcome` (`ok` / `decode_error` / `malformed`).
+
+Closed-bucket Redis pub/sub messages the API binary's
+[`Subscriber`](../../../internal/api/streaming/redispub/subscriber.go)
+processed (L3.9 SSE fan-out, consumer side). `ok` = decoded and
+republished on the local `streaming.Hub` so `/v1/price/stream`
+SSE subscribers receive the event. `decode_error` = JSON
+unmarshal failed (wire-format drift between aggregator's
+Publisher and this Subscriber — investigate if non-zero).
+`malformed` = JSON decoded but Asset or Quote was empty (no
+valid topic to route to; message dropped). All paths log; only
+the `ok` path forwards.
 ### `ratesengine_aggregator_dropped_trades_total`
 
 Counter, label `reason` (`class` / `outlier`).

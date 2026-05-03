@@ -335,9 +335,17 @@ to prevent two migrators from racing.
 
 ### 3.10 ratesengine-ops
 
-Admin CLI. Runs from an operator's SSH session on `ops-01`.
-Subcommands documented in [docs/operations/ops-cli.md](../operations/ops-cli.md)
-(Week 8).
+Admin CLI. Runs from an operator's SSH session on `ops-01`. Top-level
+subcommands cover backfill, gap-detection, archive-completeness
+verify/check/fix, source decoder verification, RPC probe, archive
+hash-walking, and supply-snapshot generation. The authoritative
+list is the binary's own help output (`ratesengine-ops --help`)
+and the source at
+[`cmd/ratesengine-ops/main.go`](../../cmd/ratesengine-ops/main.go);
+operator runbooks under
+[`docs/operations/runbooks/`](../operations/runbooks/) cite the
+specific subcommand each playbook needs (e.g. `runbooks/all-ingestion-down.md`
+references `ratesengine-ops backfill`).
 
 ---
 

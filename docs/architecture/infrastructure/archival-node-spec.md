@@ -447,9 +447,9 @@ Beyond the per-component security in the HA plan §6:
 | `stellar_core_ledger_age_seconds` | > 30 s | P1 | [core-lag](../../operations/runbooks/core-lag.md) |
 | `zfs_pool_degraded` | any | P1 | [zfs-degraded](../../operations/runbooks/zfs-degraded.md) |
 | NVMe temp | > 70 °C | P2 | [nvme-thermal](../../operations/runbooks/nvme-thermal.md) |
-| Archive publish failure | any | P2 | [archive-publish-fail](../../operations/runbooks/archive-publish-fail.md) |
-| `galexie_export_lag_ledgers` | > 500 | P2 | [galexie-lag](../../operations/runbooks/galexie-lag.md) |
-| stellar-rpc SQLite size growth | > 20 %/day | P3 | [rpc-sqlite-growth](../../operations/runbooks/rpc-sqlite-growth.md) |
+| Archive publish failure | any | P2 | [archive-publish](../../operations/runbooks/archive-publish.md) |
+| `galexie_export_lag_ledgers` | > 500 | P2 | _runbook tbd_ — covered ad-hoc by `journalctl -u galexie` + the existing `archive-completeness-stale` runbook until a dedicated one ships post-launch |
+| stellar-rpc SQLite size growth | > 20 %/day | P3 | _runbook tbd_ — stellar-rpc removed from r1 2026-04-23 ([r1-deployment-state.md](../../operations/r1-deployment-state.md)); revisit when Phase-3 validator work brings it back |
 | Host up | any missed scrape × 3 | P1 | [host-down](../../operations/runbooks/host-down.md) |
 
 Runbooks live under `docs/operations/runbooks/` (Week 9).
