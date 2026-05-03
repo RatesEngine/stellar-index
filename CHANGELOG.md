@@ -15,6 +15,22 @@ against.
 
 ## [Unreleased]
 
+### Added
+
+- **`make verify-launch-ready` — single-pane status check on the
+  launch-readiness backlog**. New
+  `scripts/ci/verify-launch-ready/main.go` parses
+  `docs/architecture/launch-readiness-backlog.md` and reports
+  three readiness tiers: **engineering** (L1-L3, must be
+  ✅/⚠), **ops + validation** (L4-L5, must be ✅/⚠/🟡 —
+  operator-runbook-ready acceptable), and **cutover** (L6,
+  operator-action-only on launch day, reported but not gating).
+  L7 post-launch is reported but ignored. Exit 0 if all
+  engineering tiers ready; exit 1 with per-blocker detail if
+  not. `make verify-launch-ready-all` adds a full per-row
+  listing. Tested against the real backlog file + synthetic
+  inputs covering tier-specific readiness rules.
+
 ### Fixed
 
 - **`/v1/account/me` now returns the credential's `label`** —
