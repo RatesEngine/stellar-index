@@ -32,6 +32,32 @@ type SupplyLooker interface {
 // no error logged, the asset-detail body still serves.
 var ErrSupplyNotFound = errors.New("api: supply snapshot not found")
 
+// Change24hReader returns the asset's USD price as of approximately
+// 24 hours ago, used by /v1/assets/{id}.change_24h_pct to compute
+// the trailing percentage change against the current USD price.
+//
+// Production implementation: thin adapter around
+// timescale.Store.ClosedVWAP1mAtOrBefore — picks the latest closed
+// prices_1m bucket whose bucket-end is ≤ now-24h.
+//
+// Returns [ErrChange24hUnavailable] when no closed bucket exists in
+// the lookback window (e.g. the asset was first traded < 24h ago,
+// or trade history was retention-pruned). The handler treats that
+// as "feature unavailable for this asset" — change_24h_pct stays
+// null, no error logged, the asset-detail body still serves.
+//
+// Real errors (Postgres unreachable, parse failures) propagate
+// as-is so the handler can log them at WARN.
+type Change24hReader interface {
+	USDPrice24hAgo(ctx context.Context, asset canonical.Asset) (string, error)
+}
+
+// ErrChange24hUnavailable is what [Change24hReader.USDPrice24hAgo]
+// returns when no comparison price exists in the 24h-ago window.
+// Distinct from a real Postgres / parse error — silent fall-through
+// for the handler.
+var ErrChange24hUnavailable = errors.New("api: change_24h_pct comparison price unavailable")
+
 // VolumeReader is the read-side interface the v1 server uses to
 // populate the volume_24h_usd field on /v1/assets/{id}. Production
 // implementation: a thin adapter around
@@ -74,6 +100,13 @@ func (s *Server) applyF2Fields(ctx context.Context, detail *AssetDetail, asset c
 	if keyErr == nil {
 		s.populateVolume24h(ctx, detail, key)
 	}
+
+	// change_24h_pct is independent of both volume and supply —
+	// it needs the current USD price (which the supply path also
+	// consults for market_cap) and a 24h-ago USD bucket. Run before
+	// the supply early-return so off-chain assets without a supply
+	// snapshot still get the percentage where applicable.
+	s.populateChange24h(ctx, detail, asset)
 
 	if s.supply == nil {
 		return
@@ -196,6 +229,82 @@ func (s *Server) lookupUSDPrice(ctx context.Context, asset canonical.Asset) (str
 		return "", false
 	}
 	return snap.Price, true
+}
+
+// populateChange24h fills detail.Change24hPct via the
+// [Change24hReader] and the existing [PriceReader] used by
+// market_cap. Best-effort: no current USD price OR no 24h-ago
+// comparison bucket leaves the field null. Real Postgres errors
+// log at WARN; all other failure modes are silent.
+//
+// We deliberately ignore the asset==fiat:USD short-circuit that
+// market_cap uses — pricing USD-against-USD over time is
+// meaningless, lookupUSDPrice already returns ("", false) for
+// that case, and the early-return below kicks in without logging.
+func (s *Server) populateChange24h(ctx context.Context, detail *AssetDetail, asset canonical.Asset) {
+	if s.change24h == nil {
+		return
+	}
+	currStr, ok := s.lookupUSDPrice(ctx, asset)
+	if !ok {
+		return
+	}
+	thenStr, err := s.change24h.USDPrice24hAgo(ctx, asset)
+	if errors.Is(err, ErrChange24hUnavailable) {
+		// Asset first traded < 24h ago, or retention pruned the row.
+		// Silent — feature unavailable for this asset.
+		return
+	}
+	if err != nil {
+		if ctx.Err() == nil && !errors.Is(err, context.Canceled) && !errors.Is(err, context.DeadlineExceeded) {
+			s.logger.Warn("change_24h_pct lookup failed", "err", err, "asset", asset.String())
+		}
+		return
+	}
+	pct, err := pctChange(currStr, thenStr)
+	if err != nil {
+		s.logger.Warn("change_24h_pct compute failed",
+			"err", err, "asset", asset.String(), "now", currStr, "then", thenStr)
+		return
+	}
+	detail.Change24hPct = &pct
+}
+
+// pctChange returns `(now - then) / then * 100` as a signed decimal
+// string with two fractional digits — e.g. "+1.27", "-0.05",
+// "0.00". Both inputs must parse as decimals; `then` must be > 0
+// (a zero anchor would divide-by-zero, and a negative price is
+// nonsensical for an asset).
+//
+// Pure big.Rat math — no float — so very large or very small
+// prices stay precise. The leading "+" on positive deltas is
+// emitted explicitly so consumers can distinguish "0.00" (no
+// change) from a missing field.
+func pctChange(nowStr, thenStr string) (string, error) {
+	now, ok := new(big.Rat).SetString(nowStr)
+	if !ok {
+		return "", fmt.Errorf("pctChange: parse now %q", nowStr)
+	}
+	then, ok := new(big.Rat).SetString(thenStr)
+	if !ok {
+		return "", fmt.Errorf("pctChange: parse then %q", thenStr)
+	}
+	if then.Sign() <= 0 {
+		return "", fmt.Errorf("pctChange: then %q must be > 0", thenStr)
+	}
+	delta := new(big.Rat).Sub(now, then)
+	pct := new(big.Rat).Quo(delta, then)
+	pct.Mul(pct, big.NewRat(100, 1))
+	out := pct.FloatString(2)
+	// Lead positives with "+" so the wire format distinguishes
+	// up-moves from down-moves visually. Suppress the prefix when
+	// the rounded output is "0.00" — a sub-cent positive delta
+	// reads as flat at two decimals, and showing "+0.00" misleads
+	// consumers that render the leading sign.
+	if pct.Sign() > 0 && out != "0.00" {
+		out = "+" + out
+	}
+	return out, nil
 }
 
 // usdMarketValue computes amountStroops × usdPriceStr / 10^decimals,

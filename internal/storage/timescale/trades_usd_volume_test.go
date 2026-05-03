@@ -1,8 +1,11 @@
 package timescale
 
 import (
+	"context"
+	"errors"
 	"math/big"
 	"testing"
+	"time"
 
 	"github.com/RatesEngine/rates-engine/internal/canonical"
 )
@@ -92,7 +95,7 @@ func TestTradeUSDVolume_PopulatedForExternalUSDPaths(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			// Off-chain path doesn't consult the spec — pass nil.
-			got := tradeUSDVolume(mkTrade(tc.source, tc.quote, tc.amt), nil)
+			got := tradeUSDVolume(context.Background(), mkTrade(tc.source, tc.quote, tc.amt), nil, nil)
 			if got == nil {
 				t.Fatalf("got nil, want %q", tc.want)
 			}
@@ -178,7 +181,7 @@ func TestTradeUSDVolume_PopulatedForOnChainDEX(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			got := tradeUSDVolume(mkTrade(tc.source, tc.base, tc.quote, tc.amt), spec)
+			got := tradeUSDVolume(context.Background(), mkTrade(tc.source, tc.base, tc.quote, tc.amt), spec, nil)
 			if got == nil {
 				t.Fatalf("got nil, want %q", tc.want)
 			}
@@ -247,12 +250,193 @@ func TestTradeUSDVolume_NilForOutOfScope(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			got := tradeUSDVolume(mkTrade(tc.source, tc.base, tc.quote, tc.amt), tc.spec)
+			got := tradeUSDVolume(context.Background(), mkTrade(tc.source, tc.base, tc.quote, tc.amt), tc.spec, nil)
 			if got != nil {
 				t.Errorf("got %q, want nil", *got)
 			}
 		})
 	}
+}
+
+// mkClassicDEXTrade is a tiny helper for the Phase 2 tests that
+// don't already have a closure-scoped mkTrade. Returns a XLM/quote
+// trade at the soroswap source with the supplied quote-amount.
+func mkClassicDEXTrade(t *testing.T, source string, base, quote canonical.Asset, quoteAmt int64) canonical.Trade {
+	t.Helper()
+	pair, err := canonical.NewPair(base, quote)
+	if err != nil {
+		t.Fatalf("NewPair: %v", err)
+	}
+	return canonical.Trade{
+		Source:      source,
+		Pair:        pair,
+		BaseAmount:  canonical.NewAmount(big.NewInt(10_000_000)),
+		QuoteAmount: canonical.NewAmount(big.NewInt(quoteAmt)),
+	}
+}
+
+// stubFXResolver implements USDVolumeFXResolver for tests. The
+// price map is keyed by canonical asset string and consulted on
+// every USDPriceAt call; stale time-checks are the resolver's
+// concern, not the test's, so we always return ok=true when the
+// asset is present.
+type stubFXResolver struct {
+	prices map[string]string
+	err    error
+}
+
+func (s stubFXResolver) USDPriceAt(_ context.Context, asset canonical.Asset, _ time.Time) (string, bool, error) {
+	if s.err != nil {
+		return "", false, s.err
+	}
+	p, ok := s.prices[asset.String()]
+	if !ok {
+		return "", false, nil
+	}
+	return p, true, nil
+}
+
+// TestTradeUSDVolume_Phase2FXFallback exercises the L2.2 Phase 2
+// path: on-chain DEX trade quoted in a non-USD-pegged asset, FX
+// resolver returns a price, tradeUSDVolume multiplies through.
+//
+// Pinned at scale 7 (Stellar classic) regardless of the quote
+// asset's actual decimals — the L2.2 design treats every classic +
+// SAC quote as a 7-decimal Stellar invariant; pure SEP-41 with
+// non-7 decimals is L7 future-scope.
+func TestTradeUSDVolume_Phase2FXFallback(t *testing.T) {
+	t.Parallel()
+	xlm := canonical.NativeAsset()
+	aqua, err := canonical.NewClassicAsset("AQUA", "GBNZILSTVQZ4R7IKQDGHYGY2QXL5QOFJYQMXPKWRRM5PAV7Y4M67AQUA")
+	if err != nil {
+		t.Fatalf("NewClassicAsset AQUA: %v", err)
+	}
+
+	// XLM/AQUA trade: 100 XLM (1_000_000_000 stroops base) for
+	// 5_000 AQUA (50_000_000_000 stroops quote). Operator's FX
+	// resolver knows AQUA = $0.001 → $5.00 USD volume.
+	resolver := stubFXResolver{prices: map[string]string{
+		aqua.String(): "0.001",
+	}}
+
+	got := tradeUSDVolume(
+		context.Background(),
+		mkClassicDEXTrade(t, "soroswap", xlm, aqua, 50_000_000_000),
+		nil, // no Phase 1 spec
+		resolver,
+	)
+	if got == nil {
+		t.Fatal("Phase 2 fallback returned nil; want non-nil")
+	}
+	// 50_000_000_000 stroops / 10^7 = 5_000 AQUA × $0.001 = $5.00.
+	want := "5.00000000"
+	if *got != want {
+		t.Errorf("got %q, want %q", *got, want)
+	}
+}
+
+// TestTradeUSDVolume_Phase1WinsBeforePhase2 — when Phase 1 matches
+// (USD-pegged classic in spec), the FX resolver MUST NOT be
+// consulted. Pinned because a regression that calls the resolver
+// every trade would double the trade-insert hot-path cost.
+func TestTradeUSDVolume_Phase1WinsBeforePhase2(t *testing.T) {
+	t.Parallel()
+	xlm := canonical.NativeAsset()
+	usdc, err := canonical.NewClassicAsset("USDC", "GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN")
+	if err != nil {
+		t.Fatalf("NewClassicAsset USDC: %v", err)
+	}
+	spec, err := NewUSDVolumeQuoteSpec([]string{"USDC-GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN"}, nil)
+	if err != nil {
+		t.Fatalf("NewUSDVolumeQuoteSpec: %v", err)
+	}
+
+	// Resolver is set up to PANIC if called — proves Phase 1
+	// short-circuits before the resolver runs.
+	resolver := panicFXResolver{}
+
+	got := tradeUSDVolume(
+		context.Background(),
+		mkClassicDEXTrade(t, "soroswap", xlm, usdc, 70_000_000),
+		spec,
+		resolver,
+	)
+	if got == nil {
+		t.Fatal("Phase 1 returned nil; expected USD-pegged classic to populate")
+	}
+	// 70_000_000 stroops / 10^7 = $7.00.
+	if *got != "7.00000000" {
+		t.Errorf("got %q, want 7.00000000", *got)
+	}
+}
+
+// TestTradeUSDVolume_Phase2_NoResolver — when fxResolver is nil
+// (the default for tests + ops binary + every deployment that
+// hasn't enabled Phase 2), the Phase 1 fall-through stays NULL.
+// This is the L2.2 "preserves existing behaviour exactly" guarantee.
+func TestTradeUSDVolume_Phase2_NoResolver(t *testing.T) {
+	t.Parallel()
+	xlm := canonical.NativeAsset()
+	aqua, _ := canonical.NewClassicAsset("AQUA", "GBNZILSTVQZ4R7IKQDGHYGY2QXL5QOFJYQMXPKWRRM5PAV7Y4M67AQUA")
+
+	got := tradeUSDVolume(
+		context.Background(),
+		mkClassicDEXTrade(t, "soroswap", xlm, aqua, 50_000_000_000),
+		nil, // no Phase 1
+		nil, // no Phase 2
+	)
+	if got != nil {
+		t.Errorf("got %q, want nil (no resolver should preserve Phase 1 NULL fall-through)", *got)
+	}
+}
+
+// TestTradeUSDVolume_Phase2_ResolverNoHit — resolver wired but
+// doesn't have a rate for this asset (asset isn't on the
+// operator's covered set, or its cache hasn't warmed up). Stays
+// NULL — never silently fabricates a rate.
+func TestTradeUSDVolume_Phase2_ResolverNoHit(t *testing.T) {
+	t.Parallel()
+	xlm := canonical.NativeAsset()
+	aqua, _ := canonical.NewClassicAsset("AQUA", "GBNZILSTVQZ4R7IKQDGHYGY2QXL5QOFJYQMXPKWRRM5PAV7Y4M67AQUA")
+
+	resolver := stubFXResolver{prices: map[string]string{}} // empty
+
+	got := tradeUSDVolume(
+		context.Background(),
+		mkClassicDEXTrade(t, "soroswap", xlm, aqua, 50_000_000_000),
+		nil, resolver,
+	)
+	if got != nil {
+		t.Errorf("got %q, want nil (resolver miss must not fabricate USD volume)", *got)
+	}
+}
+
+// TestTradeUSDVolume_Phase2_ResolverError — resolver errors fall
+// through to NULL silently. Best-effort posture matches Phase 1's
+// "trade still inserts; just no USD column".
+func TestTradeUSDVolume_Phase2_ResolverError(t *testing.T) {
+	t.Parallel()
+	xlm := canonical.NativeAsset()
+	aqua, _ := canonical.NewClassicAsset("AQUA", "GBNZILSTVQZ4R7IKQDGHYGY2QXL5QOFJYQMXPKWRRM5PAV7Y4M67AQUA")
+
+	resolver := stubFXResolver{err: errors.New("postgres unreachable")}
+
+	got := tradeUSDVolume(
+		context.Background(),
+		mkClassicDEXTrade(t, "soroswap", xlm, aqua, 50_000_000_000),
+		nil, resolver,
+	)
+	if got != nil {
+		t.Errorf("got %q, want nil (resolver error must not fabricate USD volume)", *got)
+	}
+}
+
+// panicFXResolver fails the test loudly if its USDPriceAt is
+// called. Proves Phase 1 short-circuits before Phase 2 runs.
+type panicFXResolver struct{}
+
+func (panicFXResolver) USDPriceAt(_ context.Context, _ canonical.Asset, _ time.Time) (string, bool, error) {
+	panic("Phase 2 resolver should not be consulted when Phase 1 matches")
 }
 
 // TestNewUSDVolumeQuoteSpec_RejectsBadInput — typos in operator
@@ -387,7 +571,7 @@ func TestStore_WouldPopulateUSDVolume(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			got := tc.store.WouldPopulateUSDVolume(tc.trade)
+			got := tc.store.WouldPopulateUSDVolume(context.Background(), tc.trade)
 			if got != tc.wantTrue {
 				t.Errorf("got %v, want %v", got, tc.wantTrue)
 			}

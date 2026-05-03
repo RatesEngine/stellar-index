@@ -337,3 +337,92 @@ func TestCoinGecko_NameStable(t *testing.T) {
 		t.Errorf("Name() = %q, want coingecko", ref.Name())
 	}
 }
+
+// panickingReference panics on every LookupPrice. Used to verify
+// the comparator's panic-recovery contract — a misbehaving
+// reference MUST NOT take the whole Compare run down with it,
+// even though the docstring promises "panic recovered ...
+// recorded in Failures."
+type panickingReference struct {
+	name        string
+	panicValue  any
+	panicOnName bool
+}
+
+func (p *panickingReference) Name() string {
+	if p.panicOnName {
+		panic("Name() panic")
+	}
+	return p.name
+}
+
+func (p *panickingReference) LookupPrice(_ context.Context, _ canonical.Pair, _ time.Time) (float64, error) {
+	panic(p.panicValue)
+}
+
+// TestCompare_PanicInOneReferenceIsolated — one reference panicking
+// MUST NOT take the comparator down. The other references' results
+// still aggregate; the panic-source surfaces in Failures with a
+// "panicked: …" label so operators see which reference is broken
+// without reading goroutine traces.
+func TestCompare_PanicInOneReferenceIsolated(t *testing.T) {
+	refs := []divergence.Reference{
+		&stubReference{name: "good-a", price: 0.10},
+		&panickingReference{name: "bad", panicValue: "kapow"},
+		&stubReference{name: "good-b", price: 0.10},
+	}
+	res := divergence.Compare(context.Background(), refs, xlmUSD(t), 0.10, time.Now(), divergence.CompareOptions{})
+	if res.SuccessCount != 2 {
+		t.Errorf("SuccessCount = %d, want 2 (panicking reference must not cancel the others)", res.SuccessCount)
+	}
+	if res.FailureCount != 1 {
+		t.Errorf("FailureCount = %d, want 1", res.FailureCount)
+	}
+	label, ok := res.Failures["bad"]
+	if !ok {
+		t.Fatalf("Failures missing 'bad' entry: %+v", res.Failures)
+	}
+	if label != "panicked: kapow" {
+		t.Errorf("Failures[bad] = %q, want %q (panic surfaces with stable label prefix)", label, "panicked: kapow")
+	}
+	// The good references still drove the median.
+	if res.Median != 0.10 {
+		t.Errorf("Median = %g, want 0.10", res.Median)
+	}
+}
+
+// TestCompare_PanicWithErrorValue — a panic with an error type
+// (e.g. runtime.Error from a nil-deref) renders via fmt's %v
+// verbose form. Pinned because the label is part of the
+// operator-facing dashboard surface.
+func TestCompare_PanicWithErrorValue(t *testing.T) {
+	refs := []divergence.Reference{
+		&panickingReference{name: "nil-deref", panicValue: errors.New("runtime: invalid memory address")},
+	}
+	res := divergence.Compare(context.Background(), refs, xlmUSD(t), 0.10, time.Now(), divergence.CompareOptions{})
+	if res.SuccessCount != 0 {
+		t.Errorf("SuccessCount = %d, want 0", res.SuccessCount)
+	}
+	label := res.Failures["nil-deref"]
+	if label != "panicked: runtime: invalid memory address" {
+		t.Errorf("Failures[nil-deref] = %q, want panicked: runtime: invalid memory address", label)
+	}
+}
+
+// TestCompare_PanicInName — even Name() panicking shouldn't
+// crash the comparator. The failure surfaces under the synthetic
+// "_unknown" name so operators see "something panicked here"
+// without losing the rest of the run.
+func TestCompare_PanicInName(t *testing.T) {
+	refs := []divergence.Reference{
+		&stubReference{name: "good", price: 0.10},
+		&panickingReference{panicValue: "swap", panicOnName: true},
+	}
+	res := divergence.Compare(context.Background(), refs, xlmUSD(t), 0.10, time.Now(), divergence.CompareOptions{})
+	if res.SuccessCount != 1 {
+		t.Errorf("SuccessCount = %d, want 1 (good ref still works)", res.SuccessCount)
+	}
+	if _, ok := res.Failures["_unknown"]; !ok {
+		t.Errorf("expected _unknown failure entry, got %+v", res.Failures)
+	}
+}
