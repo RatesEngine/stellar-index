@@ -144,6 +144,27 @@ against.
 
 ### Fixed
 
+- **Three runbooks no longer reference fictional commands /
+  paths** (L6.5 doc-sweep continued):
+  `runbooks/all-ingestion-down.md` §D referenced `make rollback
+  INDEXER_VERSION=<previous>` (`TODO(#0)`); the make target
+  doesn't exist and the deployment shape doesn't fit the local-
+  build convention. Replaced with the actual systemd-binary
+  rollback procedure that `release-process.md` §4.4 prescribes:
+  stop the unit, copy the previous-release binary into place
+  (kept by goreleaser packaging convention at
+  `/opt/ratesengine/release-<tag>/`), restart.
+  `runbooks/ingestion-lag.md` step 4 carried `TODO(#0)` for the
+  backfill subcommand — except the subcommand exists and has
+  for some time (`ratesengine-ops backfill -from N -to N
+  -source S`). Replaced the placeholder with the concrete
+  two-step `detect-gaps` → `backfill` procedure operators run
+  during incidents.
+  `runbooks/insert-errors.md` step 2 had the same stale
+  `TODO(#0)` PLUS a fictional `deploy/k8s/` PVC reference. The
+  production deployment is bare-metal NVMe + ZFS per ADR-0008,
+  not Kubernetes. Updated to point at zpool / Hetzner volume-
+  resize and the same backfill commands.
 - **Six broken markdown links across docs** (L6.5 doc-sweep) —
   surfaced via a Python sweep across every relative `(./...md)`
   link in `docs/`. Closed:
