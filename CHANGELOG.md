@@ -17,6 +17,23 @@ against.
 
 ### Fixed
 
+- **`api-5xx` runbook is bare-metal-native** — the runbook still
+  walked operators through `kubectl rollout undo`, an Istio
+  `VirtualService` JSON-patch (we don't run Istio), and
+  `kubectl scale --replicas=6` for "load mitigation." None of
+  those map to production: ADR-0008 ratifies systemd-managed
+  binaries on three fixed `api-01..03` hosts behind two HAProxy
+  load balancers — no autoscaler, no Istio, no kubectl.
+  Diagnosis now uses the per-host `/v1/version` probe +
+  `systemctl show -p ActiveEnterTimestamp` to time-correlate
+  releases against the error-rate lift; §A revert defers to the
+  Rollback procedure in `release-process.md`; §B endpoint-block
+  offers the HAProxy `http-request return 503 if path_beg`
+  rule + the binary feature-flag option; §D rewrites "scale up"
+  guidance — bare metal doesn't autoscale, so the real
+  mitigations are edge rate-limiting + path shedding + (last
+  resort) DR promotion. Closes another L6.5 doc-sweep item.
+
 - **`/v1/account/me` now returns the credential's `label`** —
   `APIKeyRecord.Label` was set at creation time and the OpenAPI
   `Account` schema declared the field, but the path
