@@ -379,6 +379,17 @@ against.
 
 ### Fixed
 
+- **`sev-playbook.md` §5.1 status-page section is no longer a
+  Week-N stub** — the doc said `Public status page lives at
+  https://status.ratesengine.net (TBD — provisioning in Week
+  8).` Reality: the cstate scaffold ships at
+  `deploy/status-page/cstate/`; provisioning at the public
+  domain is gated on L4.11 in the launch-readiness backlog.
+  Section now describes what's committed (the scaffold) vs
+  what's gated (the public hostname), and points at the
+  in-flight `sev-status-page-update.md` runbook for the operator
+  edit-surface during incidents. Continuation of the L6.5
+  doc-sweep.
 - **Architecture docs no longer claim r1 is in London or that R2/R3
   live at Equinix** — the design-stage docs (`ha-plan.md`,
   `multi-region-topology.md`, `validator-rollout.md`,

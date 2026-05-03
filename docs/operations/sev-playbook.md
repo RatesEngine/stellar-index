@@ -178,7 +178,10 @@ Decision tree:
 Public status page lives at `https://status.ratesengine.net` —
 hosted as a static site separate from the API so it survives
 any outage that takes down our infrastructure (which is exactly
-when customers need it).
+when customers need it). The cstate scaffold is committed at
+[`deploy/status-page/cstate/`](../../deploy/status-page/cstate/);
+provisioning at the public domain is gated on L4.11 (launch
+readiness).
 
 **Source of truth:**
 [`deploy/status-page/`](../../deploy/status-page/) — site
