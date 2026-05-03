@@ -306,10 +306,10 @@ per-asset refreshers ride.
   Trustline / Claimable / LP / SAC observers
 - [ADR-0023](../adr/0023-sep41-supply-observer.md) — SEP-41
   supply event observer
-- [ADR-0003](../adr/0003-i128-no-truncate.md) — i128 / NUMERIC
+- [ADR-0003](../adr/0003-i128-no-truncation.md) — i128 / NUMERIC
   end-to-end (every amount in this pipeline)
-- [ADR-0006](../adr/0006-timescale-storage.md) — TimescaleDB
-  storage, the hypertable convention
+- [ADR-0006](../adr/0006-timescaledb-for-price-time-series.md) —
+  TimescaleDB storage, the hypertable convention
 - [ADR-0015](../adr/0015-last-closed-bucket-rate-serving.md) —
   why the API serves CLOSED snapshots only
 

@@ -38,7 +38,11 @@ Every alert carries:
 - `severity: ticket` → SEV-2 (P2) — business-hours page, after-hours ticket.
 - `severity: informational` → SEV-3 (P3) — ticketed, weekly review.
 
-AlertManager routes by label (see its config, TBD).
+AlertManager routes by label. The config template lives at
+[`configs/ansible/roles/prometheus/templates/alertmanager.yml.j2`](../../configs/ansible/roles/prometheus/templates/alertmanager.yml.j2)
+— rendered to `/etc/alertmanager/alertmanager.yml` on `mon-01..02`
+by the `prometheus` ansible role. Routes split by `severity:` to
+PagerDuty (page) / Slack + Discord (ticket) / informational digest.
 
 ## Validating locally
 

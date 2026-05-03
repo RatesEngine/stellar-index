@@ -137,9 +137,17 @@ internal/sources/<name>/
 ├── README.md
 ├── events.go       (event/topic decoding for on-chain; WS message decoding for CEX)
 ├── decode.go       (raw → internal/canonical.Trade)
-├── factory.go      (on-chain) or consumer.go
+├── consumer.go     (consumer.Source impl — wires the source into the registry)
 └── source_test.go
 ```
+
+On-chain sources additionally carry `dispatcher_adapter.go` (the
+seam to `internal/dispatcher`) and a `factory_seed.go` for any
+factory-deployed pair-contract enumeration. External (CEX / FX)
+sources may have `streamer.go` + `backfill.go` instead of one
+`consumer.go` when the venue separates streaming and REST
+backfill (e.g. binance). The five files above are the canonical
+core; review the existing connectors before adding a new one.
 
 Plus fixtures in `test/fixtures/<name>/`.
 
