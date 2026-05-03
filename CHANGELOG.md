@@ -322,6 +322,18 @@ against.
 
 ### Fixed
 
+- **`VERSIONS.md` "Runtime binaries" list reflects the
+  2026-04-23 r1 trim.** The list still claimed `stellar-core`
+  and `stellar-rpc` were runtime binaries on the production
+  host. Both were REMOVED from r1 on 2026-04-23 (per
+  `docs/operations/r1-deployment-state.md` §"Architecture
+  after 2026-04-23 trim"). Updated to:
+  - **Kept**: `stellar-galexie` (now embeds the only
+    captive-core on the box) + `rs-stellar-archivist`.
+  - **Removed**: `stellar-core` standalone daemon (kept
+    inside Galexie as captive); `stellar-rpc` source removed,
+    binary retained only for the `ratesengine-ops rpc-probe`
+    operator diagnostic that dials remote public endpoints.
 - **`ratesengine-ops supply snapshot -asset <non-native>` error
   message no longer claims classic + SEP-41 computers are
   unshipped.** The error said *"classic + SEP-41 follow once
