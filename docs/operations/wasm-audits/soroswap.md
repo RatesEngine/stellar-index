@@ -1,7 +1,7 @@
 ---
 title: Soroswap WASM-history audit
-last_verified: 2026-05-01
-status: ratified
+last_verified: 2026-05-03
+status: ratified — v2 per-instance walk complete
 source: soroswap
 backfill_safe: true
 ---
@@ -11,6 +11,19 @@ backfill_safe: true
 Audit log for the `soroswap` source's `BackfillSafe` flag. See
 `README.md` for the full procedure.
 
+> **2026-05-03 update — v2 per-instance walk complete.** The
+> 2026-04-30 wide-net r1 walk inventoried all **196 Soroswap
+> contracts** on mainnet (1 factory + 1 router + 194 pair
+> instances), each pinned to a single WASM hash with no
+> mid-life upgrades observed in the walk window. Per-instance
+> evidence is itemised in `Phase 2 results` below; full hash
+> bytes + disassembly artifacts live under
+> `evidence/r1-walk-2026-05-01/` on r1. The remaining storage-
+> rotation gap (factory `set_pair_wasm` ledger-entry walk) is
+> tracked as a v3 follow-up — it cannot make backfill unsafe at
+> rest because all 194 deployed pairs already share the audited
+> hash.
+>
 > **2026-05-01 update.** Hash citations in this file have been
 > cross-checked against the 2026-04-30 r1 walk; see
 > [r1-walk-2026-05-01.md](r1-walk-2026-05-01.md) for the
@@ -230,12 +243,40 @@ deploy at L50,746,266 (2024-03-14) is Soroswap's mainnet launch.
 Pre-Soroban ledgers can't host Soroban contracts, so this window is
 the complete history.
 
+## Phase 2 results — per-instance walk (executed 2026-04-30)
+
+The wide-net r1 walk covered all 196 Soroswap contracts as part
+of its 540-contract watch list. Walk parameters:
+
+- **Range**: ledgers [50,457,424, 62,249,727] — full
+  galexie-archive verified-clean range per
+  [`r1-deployment-state.md §3a`](../r1-deployment-state.md).
+- **Workers**: 8 parallel chunks; **runtime**: ~5h.
+- **Watch list**: factory + router + 194 pair instances enumerated
+  from factory `new_pair` events.
+
+**Per-instance findings:**
+
+| Role | Count | Unique WASMs | Hash (first 16) | Upgrades observed |
+| --- | --- | --- | --- | --- |
+| Factory | 1 | 1 | `5db738b05d914812` | 0 |
+| Router | 1 | 1 | `4c3db3ebd2d6a2ab` | 0 |
+| Pair instance | 194 | 1 | `18051456816b66f1` | 0 |
+
+**Three unique WASM hashes** observed across all 196 contracts.
+**Zero mid-life upgrades observed** anywhere in the walked
+range. WASM bytes preserved + SHA-256-verified at
+`evidence/r1-walk-2026-05-01/wasm-bytes/{5db738b0…,4c3db3eb…,18051456…}.wasm`
+on r1; disassembly (`wasm2wat` + `strings`) preserved alongside
+under `evidence/r1-walk-2026-05-01/disasm/`.
+
 ## Per-hash review findings
 
 | hash (first 16) | role | active range | reviewer | finding |
 | --- | --- | --- | --- | --- |
-| `5db738b05d914812` | factory | L50,746,266 → L59,301,651 (full post-launch window) | ash@2026-04-29 | matches current decoder |
-| `4c3db3ebd2d6a2ab` | router | L50,746,272 → L59,301,651 (full post-launch window) | ash@2026-04-29 | irrelevant — router events not decoded |
+| `5db738b05d914812` | factory | L50,746,266 → r1 tip | ash@2026-04-29 | matches current decoder |
+| `4c3db3ebd2d6a2ab` | router | L50,746,272 → r1 tip | ash@2026-04-29 | irrelevant — router events not decoded |
+| `18051456816b66f1` | pair instance (194 contracts) | per-pair first observation → r1 tip | ash@2026-04-30 | matches current decoder; SwapEvent + SyncEvent + NewPairEvent field names verified via `strings` |
 
 ### `5db738b05d914812` — factory, single hash, no upgrade
 
