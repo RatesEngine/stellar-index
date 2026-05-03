@@ -291,6 +291,15 @@ against.
 
 ### Fixed
 
+- **Phoenix decoder's `evictedOrphans` godoc reflects the shipped
+  metric path** — comment said "Production wiring in
+  cmd/ratesengine-indexer will export this as
+  obs.SourceOrphanEventsTotal once 165d lands". It already
+  ships: the dispatcher reads `EvictedOrphans()` via an optional
+  interface (`internal/dispatcher/dispatcher.go:339`), and the
+  indexer pipeline adds it to `obs.SourceOrphanEventsTotal` in
+  `internal/pipeline/processor.go:80`. Doc points readers at the
+  real wiring.
 - **`internal/sources/external/registry.go` points readers at the
   shipped config surface** — the godoc said operators override
   `DefaultWeight` and `IncludeInVWAP` via "internal/config/external.go
