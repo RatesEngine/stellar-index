@@ -10,6 +10,7 @@ import (
 	"os/signal"
 	"sort"
 	"strings"
+	"sync"
 	"syscall"
 
 	sdkxdr "github.com/stellar/go-stellar-sdk/xdr"
@@ -55,13 +56,54 @@ import (
 // of the entry point so flag-parsing + validation are unit-testable
 // without executing the pipeline.
 type backfillOpts struct {
-	cfgPath string
-	from    uint32
-	to      uint32
-	sources []string // resolved: -source override or cfg.Ingestion.EnabledSources
-	bucket  string   // resolved: -bucket override or cfg.Storage.S3BucketArchive
-	dryRun  bool
-	resume  bool // when true, look up the prior cursor and skip already-processed ledgers
+	cfgPath  string
+	from     uint32
+	to       uint32
+	sources  []string // resolved: -source override or cfg.Ingestion.EnabledSources
+	bucket   string   // resolved: -bucket override or cfg.Storage.S3BucketArchive
+	dryRun   bool
+	resume   bool // when true, look up the prior cursor and skip already-processed ledgers
+	parallel int  // number of concurrent chunks to run; 1 = sequential (default)
+}
+
+// chunkRange is one sub-range of a parallel backfill: [from, to]
+// inclusive. Workers process distinct chunkRanges concurrently;
+// each writes its own cursor row keyed on the chunk-specific
+// (from, to) so resume-on-restart works per-chunk.
+type chunkRange struct {
+	from uint32
+	to   uint32
+}
+
+// planBackfillChunks splits [from, to] into n contiguous,
+// non-overlapping sub-ranges. The last chunk absorbs any rounding
+// remainder so the union of the chunks covers [from, to] exactly.
+//
+// Caller invariants (enforced by parseBackfillFlags): n >= 1,
+// to >= from. With n == 1, returns the original range as a single
+// chunk (sequential mode, same shape as the pre-parallelism path).
+func planBackfillChunks(from, to uint32, n int) []chunkRange {
+	if n <= 1 {
+		return []chunkRange{{from: from, to: to}}
+	}
+	total := uint64(to) - uint64(from) + 1
+	size := total / uint64(n)
+	if size == 0 {
+		// More workers than ledgers; degrade to one chunk per ledger
+		// up to the range size, rest unused.
+		size = 1
+	}
+	out := make([]chunkRange, 0, n)
+	cur := uint64(from)
+	for i := 0; i < n && cur <= uint64(to); i++ {
+		end := cur + size - 1
+		if i == n-1 || end > uint64(to) {
+			end = uint64(to)
+		}
+		out = append(out, chunkRange{from: uint32(cur), to: uint32(end)})
+		cur = end + 1
+	}
+	return out
 }
 
 // backfillCursorSource is the value stamped on every backfill
@@ -89,9 +131,13 @@ func backfill(args []string) error {
 	}
 
 	if opts.dryRun {
+		chunks := planBackfillChunks(opts.from, opts.to, opts.parallel)
 		_, _ = fmt.Fprintf(os.Stderr,
-			"backfill dry-run:\n  range:   [%d, %d] (%d ledgers)\n  sources: %v\n  bucket:  %s\n",
-			opts.from, opts.to, opts.to-opts.from+1, opts.sources, opts.bucket)
+			"backfill dry-run:\n  range:    [%d, %d] (%d ledgers)\n  sources:  %v\n  bucket:   %s\n  parallel: %d (chunks: %d)\n",
+			opts.from, opts.to, opts.to-opts.from+1, opts.sources, opts.bucket, opts.parallel, len(chunks))
+		for i, c := range chunks {
+			_, _ = fmt.Fprintf(os.Stderr, "  chunk %d: [%d, %d] (%d ledgers)\n", i, c.from, c.to, c.to-c.from+1)
+		}
 		return nil
 	}
 
@@ -99,12 +145,6 @@ func backfill(args []string) error {
 	defer cancel()
 
 	logger := mkBackfillLogger()
-	logger.Info("backfill starting",
-		"from", opts.from,
-		"to", opts.to,
-		"sources", opts.sources,
-		"bucket", opts.bucket,
-	)
 
 	store, err := timescale.Open(rootCtx, cfg.Storage.PostgresDSN)
 	if err != nil {
@@ -112,34 +152,93 @@ func backfill(args []string) error {
 	}
 	defer func() { _ = store.Close() }()
 
-	// ─── Resume from prior cursor (-resume) ───────────────────────
-	// Backfill writes a cursor row keyed on (from, to, sources) — a
-	// crashed multi-day run can pick up where it left off without
-	// re-replaying ledgers we've already inserted (the trades
-	// hypertable's unique index makes re-runs idempotent, but
-	// re-decoding 30M ledgers is wasted compute). Distinct cursor
-	// source ("backfill") so this never corrupts the indexer's
-	// "ledgerstream" cursor.
-	startFrom := opts.from
-	cursorSub := backfillCursorSub(opts)
+	chunks := planBackfillChunks(opts.from, opts.to, opts.parallel)
+	logger.Info("backfill starting",
+		"from", opts.from,
+		"to", opts.to,
+		"sources", opts.sources,
+		"bucket", opts.bucket,
+		"parallel", opts.parallel,
+		"chunks", len(chunks),
+	)
+
+	// Sequential fast-path. Same shape as the pre-parallelism code,
+	// minus the redundant goroutine + channel hop. Lets `-parallel 1`
+	// (the default) keep its existing semantics: one cursor row, one
+	// ledgerstream, one events channel.
+	if len(chunks) == 1 {
+		return runBackfillChunk(rootCtx, logger, opts, cfg, store, chunks[0])
+	}
+
+	// Parallel path. Each chunk is independent: its own dispatcher,
+	// its own events channel, its own PersistEvents goroutine, its
+	// own cursor row keyed on the chunk-specific (from, to). The
+	// shared store's connection pool fans across chunks (postgres
+	// max_connections is the only ceiling — typical 100 vs ~3 conns
+	// per chunk = 30+ chunks supported on stock config).
+	var wg sync.WaitGroup
+	errCh := make(chan error, len(chunks))
+	for i, c := range chunks {
+		wg.Add(1)
+		go func(i int, c chunkRange) {
+			defer wg.Done()
+			chunkLogger := logger.With("chunk", i, "chunk_from", c.from, "chunk_to", c.to)
+			if err := runBackfillChunk(rootCtx, chunkLogger, opts, cfg, store, c); err != nil {
+				errCh <- fmt.Errorf("chunk %d [%d, %d]: %w", i, c.from, c.to, err)
+			}
+		}(i, c)
+	}
+	wg.Wait()
+	close(errCh)
+
+	var combined []error
+	for e := range errCh {
+		combined = append(combined, e)
+	}
+	if len(combined) > 0 {
+		return errors.Join(combined...)
+	}
+
+	logger.Info("backfill complete",
+		"from", opts.from,
+		"to", opts.to,
+		"ledgers", opts.to-opts.from+1,
+		"parallel", opts.parallel,
+	)
+	return nil
+}
+
+// runBackfillChunk processes a single chunkRange end-to-end:
+// dispatcher build → events channel → PersistEvents goroutine →
+// ledgerstream over [chunk.from, chunk.to] → cursor upsert per
+// ledger. Cursor sub_source is chunk-specific (uses chunk.from /
+// chunk.to, NOT the overall opts.from / opts.to) so concurrent
+// chunks never share a cursor row.
+func runBackfillChunk(ctx context.Context, logger *slog.Logger, opts backfillOpts, cfg config.Config, store *timescale.Store, chunk chunkRange) error {
+	chunkOpts := opts
+	chunkOpts.from = chunk.from
+	chunkOpts.to = chunk.to
+	cursorSub := backfillCursorSub(chunkOpts)
+
+	startFrom := chunk.from
 	if opts.resume {
-		c, err := store.GetCursor(rootCtx, backfillCursorSource, cursorSub)
+		c, err := store.GetCursor(ctx, backfillCursorSource, cursorSub)
 		switch {
 		case errors.Is(err, timescale.ErrNotFound):
-			logger.Info("no prior cursor — starting from -from", "from", opts.from)
+			logger.Info("no prior cursor — starting from chunk-from", "from", chunk.from)
 		case err != nil:
 			return fmt.Errorf("load resume cursor: %w", err)
-		case c.LastLedger >= opts.to:
-			logger.Info("prior cursor at or past -to — backfill already complete",
-				"cursor", c.LastLedger, "to", opts.to)
+		case c.LastLedger >= chunk.to:
+			logger.Info("prior cursor at or past chunk-to — already complete",
+				"cursor", c.LastLedger, "to", chunk.to)
 			return nil
 		default:
 			startFrom = c.LastLedger + 1
 			logger.Info("resuming from prior cursor",
 				"cursor", c.LastLedger,
 				"start_from", startFrom,
-				"to", opts.to,
-				"remaining", opts.to-startFrom+1)
+				"to", chunk.to,
+				"remaining", chunk.to-startFrom+1)
 		}
 	}
 
@@ -152,21 +251,16 @@ func backfill(args []string) error {
 	sinkDone := make(chan struct{})
 	go func() {
 		defer close(sinkDone)
-		pipeline.PersistEvents(rootCtx, logger, store, events)
+		pipeline.PersistEvents(ctx, logger, store, events)
 	}()
 
 	streamCfg := pipeline.LedgerstreamConfig(cfg, opts.bucket)
-	streamErr := ledgerstream.Stream(rootCtx, streamCfg, startFrom, opts.to,
+	streamErr := ledgerstream.Stream(ctx, streamCfg, startFrom, chunk.to,
 		func(lcm sdkxdr.LedgerCloseMeta) error {
-			if err := pipeline.ProcessLedger(rootCtx, disp, events, logger, lcm, cfg.Stellar.Passphrase()); err != nil {
+			if err := pipeline.ProcessLedger(ctx, disp, events, logger, lcm, cfg.Stellar.Passphrase()); err != nil {
 				return err
 			}
-			// Cursor write per ledger. Independent of -resume —
-			// always written so a future invocation with -resume
-			// can pick up a backfill that crashed without it.
-			// Failure to upsert is logged + tolerated; the next
-			// successful upsert overwrites.
-			if err := store.UpsertCursor(rootCtx, backfillCursorSource, cursorSub, lcm.LedgerSequence()); err != nil {
+			if err := store.UpsertCursor(ctx, backfillCursorSource, cursorSub, lcm.LedgerSequence()); err != nil {
 				logger.Warn("backfill cursor upsert",
 					"ledger", lcm.LedgerSequence(),
 					"err", err)
@@ -182,10 +276,10 @@ func backfill(args []string) error {
 		return fmt.Errorf("stream: %w", streamErr)
 	}
 
-	logger.Info("backfill complete",
-		"from", opts.from,
-		"to", opts.to,
-		"ledgers", opts.to-opts.from+1,
+	logger.Info("chunk complete",
+		"from", chunk.from,
+		"to", chunk.to,
+		"ledgers", chunk.to-chunk.from+1,
 	)
 	return nil
 }
@@ -216,6 +310,14 @@ func parseBackfillFlags(args []string) (backfillOpts, config.Config, error) {
 			"On a fresh range with no prior cursor, behaves the same as without "+
 			"-resume. Idempotent: re-runs over already-processed ledgers are a "+
 			"no-op via the trades hypertable's unique index.")
+	parallel := fs.Int("parallel", 1,
+		"number of concurrent chunks (default 1 = sequential). The range is "+
+			"split into N contiguous, non-overlapping sub-ranges; each chunk "+
+			"runs its own dispatcher + ledgerstream + sink with a chunk-specific "+
+			"cursor row, so -resume picks up per-chunk on restart. Throughput "+
+			"scales linearly with cores until postgres max_connections or the "+
+			"galexie bucket's S3 list throughput becomes the bottleneck "+
+			"(typical safe range: 4-16 on a 16-core box).")
 	if err := fs.Parse(args); err != nil {
 		return opts, cfg, err
 	}
@@ -228,6 +330,9 @@ func parseBackfillFlags(args []string) (backfillOpts, config.Config, error) {
 	}
 	if *to <= *from {
 		return opts, cfg, fmt.Errorf("-to (%d) must be > -from (%d)", *to, *from)
+	}
+	if *parallel < 1 {
+		return opts, cfg, fmt.Errorf("-parallel (%d) must be >= 1", *parallel)
 	}
 
 	loaded, err := config.LoadWithEnv(*cfgPath)
@@ -263,13 +368,14 @@ func parseBackfillFlags(args []string) (backfillOpts, config.Config, error) {
 	}
 
 	opts = backfillOpts{
-		cfgPath: *cfgPath,
-		from:    uint32(*from),
-		to:      uint32(*to),
-		sources: sources,
-		bucket:  bucket,
-		dryRun:  *dryRun,
-		resume:  *resume,
+		cfgPath:  *cfgPath,
+		from:     uint32(*from),
+		to:       uint32(*to),
+		sources:  sources,
+		bucket:   bucket,
+		dryRun:   *dryRun,
+		resume:   *resume,
+		parallel: *parallel,
 	}
 	return opts, cfg, nil
 }

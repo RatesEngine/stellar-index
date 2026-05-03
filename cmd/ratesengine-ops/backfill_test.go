@@ -222,3 +222,84 @@ func TestUnsafeBackfillSources_PureFunction(t *testing.T) {
 		t.Errorf("empty input should return empty; got %v", out)
 	}
 }
+
+// planBackfillChunks tests — the parallelism plan must satisfy two
+// invariants: the union of chunks covers [from, to] exactly with no
+// gaps and no overlaps; chunk count equals the requested parallel
+// (clamped to range size when the operator asks for more workers
+// than ledgers).
+func TestPlanBackfillChunks(t *testing.T) {
+	cases := []struct {
+		name     string
+		from     uint32
+		to       uint32
+		n        int
+		wantLen  int
+		wantLast uint32 // last chunk's `to` should equal `to`
+	}{
+		{"sequential n=1", 100, 200, 1, 1, 200},
+		{"even split n=4", 100, 199, 4, 4, 199},
+		{"uneven split n=3 absorbs remainder in last", 100, 200, 3, 3, 200},
+		{"n=0 treated as 1 (defensive)", 100, 200, 0, 1, 200},
+		{"workers > range — degrades", 100, 102, 8, 3, 102},
+		{"single ledger range", 500, 500, 4, 1, 500},
+		{"adjacent to uint32 max", 4_294_967_290, 4_294_967_295, 2, 2, 4_294_967_295},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got := planBackfillChunks(tc.from, tc.to, tc.n)
+			if len(got) != tc.wantLen {
+				t.Fatalf("len = %d, want %d (chunks: %v)", len(got), tc.wantLen, got)
+			}
+			if got[0].from != tc.from {
+				t.Errorf("first chunk.from = %d, want %d", got[0].from, tc.from)
+			}
+			if got[len(got)-1].to != tc.wantLast {
+				t.Errorf("last chunk.to = %d, want %d", got[len(got)-1].to, tc.wantLast)
+			}
+			// Coverage invariant: chunks are contiguous + non-overlapping.
+			for i := 1; i < len(got); i++ {
+				if got[i].from != got[i-1].to+1 {
+					t.Errorf("chunk %d.from = %d, want %d (no gap, no overlap with chunk %d)",
+						i, got[i].from, got[i-1].to+1, i-1)
+				}
+			}
+		})
+	}
+}
+
+// TestParseBackfillFlags_Parallel — exercise the flag's
+// validation without the full integration plumbing.
+func TestParseBackfillFlags_Parallel(t *testing.T) {
+	cfgPath := writeMinimalConfig(t, []string{"sdex"})
+	t.Run("default is 1", func(t *testing.T) {
+		opts, _, err := parseBackfillFlags([]string{"-config", cfgPath, "-from", "100", "-to", "200"})
+		if err != nil {
+			t.Fatalf("parse: %v", err)
+		}
+		if opts.parallel != 1 {
+			t.Errorf("parallel = %d, want 1", opts.parallel)
+		}
+	})
+	t.Run("explicit 8 accepted", func(t *testing.T) {
+		opts, _, err := parseBackfillFlags([]string{"-config", cfgPath, "-from", "100", "-to", "200", "-parallel", "8"})
+		if err != nil {
+			t.Fatalf("parse: %v", err)
+		}
+		if opts.parallel != 8 {
+			t.Errorf("parallel = %d, want 8", opts.parallel)
+		}
+	})
+	t.Run("zero rejected", func(t *testing.T) {
+		_, _, err := parseBackfillFlags([]string{"-config", cfgPath, "-from", "100", "-to", "200", "-parallel", "0"})
+		if err == nil {
+			t.Fatal("expected error for parallel=0")
+		}
+	})
+	t.Run("negative rejected", func(t *testing.T) {
+		_, _, err := parseBackfillFlags([]string{"-config", cfgPath, "-from", "100", "-to", "200", "-parallel", "-3"})
+		if err == nil {
+			t.Fatal("expected error for parallel=-3")
+		}
+	})
+}

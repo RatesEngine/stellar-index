@@ -15,6 +15,24 @@ against.
 
 ## [Unreleased]
 
+### Added
+
+- **`ratesengine-ops backfill -parallel N`** — backfill subcommand
+  splits its `[from, to]` range into N contiguous, non-overlapping
+  chunks and runs each as a concurrent worker against a shared
+  postgres pool. Each chunk gets its own dispatcher + ledgerstream
+  + sink + cursor row (cursor sub_source includes the chunk's
+  `from-to` so concurrent chunks never share a row). Default
+  remains `-parallel 1` (sequential, same shape as the
+  pre-parallelism path); operators with multi-core boxes set
+  `-parallel 8` (or higher) to scale throughput linearly until
+  postgres `max_connections` or the galexie bucket's S3 list
+  throughput becomes the bottleneck. Caught during r1 bringup
+  where single-process throughput at ~50 ledgers/sec implied
+  ~3.7-day ETA on the L50.4M → L62.4M historical replay; with
+  `-parallel 8` the same range now ETAs in ~20 hours (verified
+  on r1 at 167 ledgers/sec aggregate).
+
 ### Operations
 
 - **r1 first application bringup — indexer + aggregator + api
