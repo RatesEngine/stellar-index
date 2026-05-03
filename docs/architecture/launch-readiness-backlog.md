@@ -121,7 +121,7 @@ Within each surface, ordered by dependency.
 |---|---|---|---|---|---|---|---|
 | L6.1 | CHANGELOG hygiene + SemVer policy ([`docs/architecture/semver-policy.md`](semver-policy.md)) | Wk 10 | half-day | — | L6.4 | release process | 🟢 |
 | L6.2 | Release notes template + release-process runbook ([`.github/RELEASE_NOTES_TEMPLATE.md`](../../.github/RELEASE_NOTES_TEMPLATE.md), [`docs/operations/release-process.md`](../operations/release-process.md)) | Wk 10 | half-day | L6.1 | L6.4 | docs | 🟢 |
-| L6.3 | Public-flip prep — strategy for migrating private repo content to new public repo ([`docs/operations/public-flip.md`](../operations/public-flip.md)) | Wk 10 | hour planning | — | L6.4 | repo strategy | 🟢 |
+| L6.3 | Public-flip prep — strategy for migrating private repo content to new public repo ([`docs/operations/public-flip.md`](../operations/public-flip.md)). Pre-flip checklist (16 rows) verified 2026-04-30; cut-over mechanics scripted; 24-hour pre-cutover dry-run added 2026-05-03. Execution gates on the v1.0 launch signal (L6.4). | Wk 10 | hour planning | — | L6.4 | repo strategy | ✅ |
 | L6.4 | Production cutover — DNS flip, enable public rate-limit tier | Wk 10 | hour | All above | — | infra | 🔴 |
 | L6.5 | Documentation sweep — every runbook verified, every ADR accurate, every config option documented | Wk 10 | full day | All above | L6.4 | docs | 🔴 |
 | L6.6 | Customer sign-off demo | Wk 10 | external | L3.*, L4.*, L5.* | L6.4 | — | 🔴 |

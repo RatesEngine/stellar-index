@@ -17,6 +17,19 @@ against.
 
 ### Documentation
 
+- **Public-flip 24-hour pre-cutover dry-run (closes L6.3 / Task #78)** —
+  `docs/operations/public-flip.md` gains a §"Final 24-hour
+  pre-cutover dry-run" capturing the gates that must re-run in
+  the 24 h immediately before tagging v1.0: gitleaks rerun,
+  file-level scrub recheck, `make test && make test-integration`
+  on the v1.0 SHA, doc-rot spot-check on `last_verified` dates,
+  CI-green-within-24h check, and external-asset readiness
+  (SECURITY mailbox monitored, CODEOWNERS bandwidth, GitHub
+  repo name still un-claimed). The pre-flip checklist itself is
+  already `☑` × 16 — this addition closes the "what about the
+  PRs that landed between standing-checklist verification and
+  launch day" gap. L6.3 status flipped 🟢 → ✅.
+
 - **SLA proof procedure (Task #77 operator-recipe)** — new
   `docs/operations/sla-proof-procedure.md` documents the
   end-to-end recipe that turns a `make test-load-mixed` run into
