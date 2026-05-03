@@ -167,6 +167,87 @@ type AssetDetail struct {
 	IsUnlimited *bool `json:"is_unlimited,omitempty"`
 }
 
+// TradeRow is the data shape returned by [Client.History] — one
+// raw trade row from the trades hypertable. All numeric amounts
+// are decimal strings (ADR-0003); `Price` is the pre-computed
+// quote/base ratio at 10 fractional digits for consumer
+// convenience (the storage layer never persists a derived price,
+// so the server computes it at response time).
+type TradeRow struct {
+	Source      string    `json:"source"`
+	Ledger      uint32    `json:"ledger"`
+	TxHash      string    `json:"tx_hash"`
+	OpIndex     uint32    `json:"op_index"`
+	Timestamp   time.Time `json:"ts"`
+	BaseAsset   string    `json:"base_asset"`
+	QuoteAsset  string    `json:"quote_asset"`
+	BaseAmount  string    `json:"base_amount"`
+	QuoteAmount string    `json:"quote_amount"`
+	Price       string    `json:"price"`
+}
+
+// OHLCBar is the data shape returned by [Client.OHLC] — a single
+// open/high/low/close bar over the requested window. All price
+// fields are decimal strings (ADR-0003); volumes are smallest-unit
+// integers as strings.
+//
+// `Truncated` is true when the window's trade count hit the
+// server's per-request cap. The bar's High / Low may not reflect
+// the actual extreme over the full window — only the
+// chronologically-first N trades. Treat truncated bars as a hint
+// to narrow the range.
+type OHLCBar struct {
+	From        time.Time `json:"from"`
+	To          time.Time `json:"to"`
+	Open        string    `json:"open"`
+	High        string    `json:"high"`
+	Low         string    `json:"low"`
+	Close       string    `json:"close"`
+	BaseVolume  string    `json:"base_volume"`
+	QuoteVolume string    `json:"quote_volume"`
+	TradeCount  int       `json:"trade_count"`
+	Truncated   bool      `json:"truncated"`
+}
+
+// Source is the data shape returned by [Client.Sources] — one
+// row from the operator's source registry (the catalogue of
+// venues + oracles + aggregators the deployment can ingest from).
+//
+// Class is one of: `exchange` / `aggregator` / `oracle` /
+// `authority_sanity`. Per the v1 aggregator policy, only
+// `exchange` contributes to VWAP — the others are reported
+// alongside but excluded (mixing them double-counts upstream
+// markets or imposes their methodology on our output).
+//
+// Subclass refines `class=exchange` into `dex` / `cex` / `fx`.
+// Empty for non-exchange classes.
+//
+// BackfillSafe gates `ratesengine-ops backfill` per CLAUDE.md
+// "Soroban DeFi contracts upgrade in place". On-chain Soroban
+// sources start `false` and only flip `true` after a per-WASM-
+// hash audit (`docs/operations/wasm-audits/`). Off-chain CEX/FX
+// sources are always `true`.
+type Source struct {
+	Name              string `json:"name"`
+	Class             string `json:"class"`
+	Subclass          string `json:"subclass,omitempty"`
+	IncludeInVWAP     bool   `json:"include_in_vwap"`
+	Paid              bool   `json:"paid"`
+	BackfillAvailable bool   `json:"backfill_available"`
+	BackfillSafe      bool   `json:"backfill_safe"`
+	DefaultWeight     int    `json:"default_weight"`
+}
+
+// Market is the data shape returned by [Client.Markets] and
+// [Client.Pair] — one (base, quote) pair the deployment has
+// observed at least one trade for, with a 24h activity summary.
+type Market struct {
+	Base          string    `json:"base"`
+	Quote         string    `json:"quote"`
+	LastTradeAt   time.Time `json:"last_trade_at"`
+	TradeCount24h int64     `json:"trade_count_24h"`
+}
+
 // AssetMetadata is the data shape returned by [Client.AssetMetadata]
 // (the SEP-1 overlay endpoint, /v1/assets/{id}/metadata). Mirrors
 // the AssetMetadata schema in openapi/rates-engine.v1.yaml.

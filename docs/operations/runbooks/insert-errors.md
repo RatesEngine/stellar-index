@@ -1,6 +1,6 @@
 ---
 title: Runbook — insert-errors
-last_verified: 2026-04-30
+last_verified: 2026-05-02
 status: draft
 severity: P2
 ---
@@ -50,12 +50,24 @@ If the log line says:
 Events that fail here are LOST (we have no retry queue today — see the alert annotation). Prioritise:
 
 - [ ] Step 1 — stop the bleeding. If Timescale is the root cause, follow `timescale-primary-down.md` first; insert errors are a symptom.
-- [ ] Step 2 — if disk-full: extend the PVC (see `deploy/k8s/` templates) and let the indexer auto-retry. Backfill the gap afterwards:
+- [ ] Step 2 — if disk-full: extend the underlying volume (the
+      production deployment uses bare-metal NVMe + ZFS per
+      [ADR-0008](../../adr/0008-ha-topology.md), not Kubernetes —
+      grow via `zpool` / Hetzner volume-resize console). Let the
+      indexer auto-retry once `df` reports headroom; then backfill
+      the gap:
   ```sh
-  ratesengine-ops detect-gaps -config /etc/ratesengine/config.toml -threshold 50
-  # if any source lags, run backfill for the affected range (TODO(#0) —
-  # backfill subcommand lands later; until then, operator manually
-  # extends ingestion.backfill_from_ledger and restarts the indexer)
+  # 1. Identify the lagging cursor + the (from, to) range
+  ratesengine-ops detect-gaps -config /etc/ratesengine/config.toml \
+      -threshold 50
+  # 2. Backfill the named range — dry-run first to confirm scope.
+  ratesengine-ops backfill -config /etc/ratesengine/config.toml \
+      -from <FIRST_LEDGER> -to <LAST_LEDGER> \
+      -source <SOURCE_NAME> -dry-run
+  # 3. Drop -dry-run to commit.
+  ratesengine-ops backfill -config /etc/ratesengine/config.toml \
+      -from <FIRST_LEDGER> -to <LAST_LEDGER> \
+      -source <SOURCE_NAME> -resume
   ```
 - [ ] Step 3 — if the underlying issue is fixed: watch the rate decline. Alert clears when the 5m rate drops below 0.1/s.
 - [ ] Verification: `ratesengine_source_insert_errors_total` stops incrementing (use `rate()[1m]` to see it go to 0).
