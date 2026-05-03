@@ -51,6 +51,7 @@ func init() {
 		AggregatorVWAPWritesTotal,
 		AggregatorEmptyWindowsTotal,
 		AggregatorStreamPublishTotal,
+		APIStreamSubscribeTotal,
 		AggregatorDroppedTradesTotal,
 		AggregatorDroppedWindowsTotal,
 
@@ -397,6 +398,28 @@ var AggregatorStreamPublishTotal = prometheus.NewCounterVec(
 	prometheus.CounterOpts{
 		Name: "ratesengine_aggregator_stream_publish_total",
 		Help: "Closed-bucket stream publishes attempted by the aggregator, labelled by outcome.",
+	},
+	[]string{"outcome"},
+)
+
+// APIStreamSubscribeTotal — count of closed-bucket Redis pub/sub
+// messages the API binary's subscriber processed, labelled by
+// outcome:
+//
+//   - "ok" — message decoded and republished on the local Hub for
+//     /v1/price/stream subscribers.
+//   - "decode_error" — JSON unmarshal failed; message dropped, next
+//     message processed normally. Indicates wire-format drift between
+//     aggregator's Publisher and this Subscriber.
+//   - "malformed" — JSON decoded but Asset or Quote was empty;
+//     message dropped without Hub publish (no valid topic to route to).
+//
+// Unset when no Subscriber is wired (the API binary's
+// /v1/price/stream returns 503 instead of fanning out).
+var APIStreamSubscribeTotal = prometheus.NewCounterVec(
+	prometheus.CounterOpts{
+		Name: "ratesengine_api_stream_subscribe_total",
+		Help: "Closed-bucket Redis pub/sub messages processed by the API subscriber, labelled by outcome.",
 	},
 	[]string{"outcome"},
 )

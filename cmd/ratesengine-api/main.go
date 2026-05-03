@@ -35,6 +35,8 @@ import (
 
 	"github.com/RatesEngine/rates-engine/internal/aggregate/confidence"
 	"github.com/RatesEngine/rates-engine/internal/aggregate/freeze"
+	"github.com/RatesEngine/rates-engine/internal/api/streaming"
+	"github.com/RatesEngine/rates-engine/internal/api/streaming/redispub"
 	v1 "github.com/RatesEngine/rates-engine/internal/api/v1"
 	"github.com/RatesEngine/rates-engine/internal/api/v1/middleware"
 	"github.com/RatesEngine/rates-engine/internal/auth"
@@ -312,6 +314,18 @@ func run(cfgPath string, dryRun bool) error { //nolint:gocognit,funlen,gocyclo /
 		logger.Info("freeze looker wired")
 	}
 
+	// Streaming hub + closed-bucket subscriber (L3.9). The Hub is
+	// in-process; the subscriber bridges from the aggregator's
+	// Redis pub/sub fan-out (PR 1) onto the Hub so SSE clients on
+	// /v1/price/stream receive each closed bucket. Hub is wired
+	// only when Redis is available — without Redis there's no
+	// publisher to subscribe to; the endpoint returns 503 cleanly.
+	var hub *streaming.Hub
+	if rdb != nil {
+		hub = streaming.NewHub(0)
+		logger.Info("streaming hub wired")
+	}
+
 	apiSrv := v1.New(v1.Options{
 		Logger:       logger.With("component", "api"),
 		ReadyChecks:  checks,
@@ -329,6 +343,7 @@ func run(cfgPath string, dryRun bool) error { //nolint:gocognit,funlen,gocyclo /
 		Supply:       storeSupplyLooker{s: store},
 		Volume:       storeVolumeReader{s: store},
 		SEP10:        sep10Validator,
+		Hub:          hub,
 		CORS:         cors,
 		Auth:         authMW,
 		RateLimit:    rateLimit,
@@ -347,6 +362,25 @@ func run(cfgPath string, dryRun bool) error { //nolint:gocognit,funlen,gocyclo /
 		ReadTimeout:       30 * time.Second,
 		WriteTimeout:      30 * time.Second,
 		IdleTimeout:       120 * time.Second,
+	}
+
+	// Run the closed-bucket subscriber alongside the HTTP server.
+	// Bound to rootCtx — SIGINT/SIGTERM cancels both the server and
+	// the subscriber together. Run errors don't take the API down
+	// (the rest of the surface keeps serving); they log + leave the
+	// stream endpoint serving 503 implicitly via the Hub falling
+	// silent.
+	if hub != nil {
+		sub, err := redispub.NewSubscriber(rdb, redispub.DefaultChannel, hub, logger.With("component", "stream-sub"))
+		if err != nil {
+			return fmt.Errorf("redispub subscriber: %w", err)
+		}
+		go func() {
+			if err := sub.Run(rootCtx); err != nil && !errors.Is(err, context.Canceled) {
+				logger.Error("stream subscriber exited",
+					"channel", sub.Channel(), "err", err)
+			}
+		}()
 	}
 
 	serveErr := make(chan error, 1)

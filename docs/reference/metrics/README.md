@@ -229,6 +229,21 @@ fan-out. `outcome="error"` is best-effort failure (publish
 errored; the next tick retries; the VWAP cache write itself
 is unaffected).
 
+### `ratesengine_api_stream_subscribe_total`
+
+Counter, label `outcome` (`ok` / `decode_error` / `malformed`).
+
+Closed-bucket Redis pub/sub messages the API binary's
+[`Subscriber`](../../../internal/api/streaming/redispub/subscriber.go)
+processed (L3.9 SSE fan-out, consumer side). `ok` = decoded and
+republished on the local `streaming.Hub` so `/v1/price/stream`
+SSE subscribers receive the event. `decode_error` = JSON
+unmarshal failed (wire-format drift between aggregator's
+Publisher and this Subscriber — investigate if non-zero).
+`malformed` = JSON decoded but Asset or Quote was empty (no
+valid topic to route to; message dropped). All paths log; only
+the `ok` path forwards.
+
 ### `ratesengine_aggregator_dropped_trades_total`
 
 Counter, label `reason` (`class` / `outlier`).

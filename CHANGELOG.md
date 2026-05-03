@@ -17,6 +17,25 @@ against.
 
 ### Added
 
+- **L3.9 PR 2 of 2: API-side closed-bucket stream subscriber.**
+  Closes the L3.9 fan-out end-to-end. New
+  `redispub.Subscriber` listens on the same Redis channel the
+  aggregator's Publisher writes to (PR 1 of L3.9), decodes each
+  `ClosedBucketEvent`, and republishes on the API binary's
+  in-process `streaming.Hub` with the canonical
+  `closed:<asset>/<quote>` topic key (matches
+  `internal/api/v1.PriceStreamTopic`). `cmd/ratesengine-api/main.go`
+  constructs a Hub when Redis is available and runs the
+  subscriber as a goroutine bound to the root context.
+  - New metric
+    `ratesengine_api_stream_subscribe_total{outcome="ok"|"decode_error"|"malformed"}`.
+  - New tests: nil-input rejection; round-trip via miniredis
+    that proves Hub.Publish fires with the correct topic and
+    forwarded payload; sentinel test asserts the topic format
+    stays in sync with `v1.PriceStreamTopic`.
+  - L3.9 in launch-readiness-backlog flipped ⚠ → ✅; the
+    documented caveat ("aggregator-side `Hub.Publish` is the
+    missing piece") is closed.
 - **L3.9 PR 1 of 2: aggregator-side closed-bucket stream
   publisher**. New `orchestrator.StreamPublisher` interface
   declared on `orchestrator.Config`; called once per
