@@ -291,6 +291,16 @@ against.
 
 ### Fixed
 
+- **`internal/storage/timescale/doc.go` reflects shipped reality**
+  — fixed two stale claims: (a) the migration manifest listed
+  only 0001-0004, but 0001-0015 are applied today (5 supply
+  tables, discovered_assets, volatility_baseline, multi-window
+  baseline, blend_auctions, four classic-supply observations,
+  sep41_supply_events all landed since the comment was written);
+  (b) the Testing section claimed unit tests "use mocks at the
+  [Store] interface (future work — not yet extracted)", but
+  Store is a concrete struct, no interface exists, and the
+  established pattern is real-DB testing via testcontainers-go.
 - **`/v1/vwap` Truncated-flag godoc points at the right
   alternative** — the `VWAPResult.Truncated` doc said clients
   could "request the pre-computed rollup from the aggregator
