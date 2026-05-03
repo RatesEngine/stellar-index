@@ -17,6 +17,15 @@ against.
 
 ### Fixed
 
+- **`internal/sources/external/registry.go` points readers at the
+  shipped config surface** — the godoc said operators override
+  `DefaultWeight` and `IncludeInVWAP` via "internal/config/external.go
+  once it lands", but no such file exists; the external config
+  shipped as `ExternalConfig` inside `internal/config/config.go`,
+  with a per-venue `enabled` toggle (no per-venue weight/VWAP
+  override is wired). Updated the comment to point at the real
+  surface and to be honest that per-venue weight overrides are a
+  potential follow-up, not a missing surface.
 - **`/v1/account/me` now returns the credential's `label`** —
   `APIKeyRecord.Label` was set at creation time and the OpenAPI
   `Account` schema declared the field, but the path
