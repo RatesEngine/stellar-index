@@ -17,6 +17,17 @@ against.
 
 ### Fixed
 
+- **`public-flip.md` ADR-status verification covers all ADRs
+  through 0024** — the row read `all 0001-0021 are \`Accepted\`,
+  verified 2026-04-30`. Three ADRs landed after that date:
+  ADR-0022 (classic supply observers, #302), ADR-0023 (SEP-41
+  supply, #308), ADR-0024 (Redis HA via Sentinel, #343). All
+  three are `status: Accepted`. Row updated to `0001-0024
+  Accepted` with a parenthetical noting which three landed in
+  the gap, so the public-flip checklist correctly reflects the
+  current ADR set the public repo will inherit. Continuation of
+  the L6.5 doc-sweep.
+
 - **`/v1/account/me` now returns the credential's `label`** —
   `APIKeyRecord.Label` was set at creation time and the OpenAPI
   `Account` schema declared the field, but the path
