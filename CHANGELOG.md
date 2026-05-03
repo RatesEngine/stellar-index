@@ -17,6 +17,16 @@ against.
 
 ### Fixed
 
+- **`internal/auth/sep10.go` SEP-10 flow comments cite the
+  actual handler paths** — the godoc said `Client: GET
+  /v1/auth/challenge?account=G…` and `POST /v1/auth/verify with
+  the signed XDR`. The handlers are registered as
+  `GET /v1/auth/sep10/challenge` and `POST /v1/auth/sep10/token`
+  per `internal/api/v1/server.go`. Comment updated to match the
+  actual wire paths so a client implementer reading the godoc
+  doesn't write requests to non-existent endpoints. Continuation
+  of the L6.5 doc-sweep.
+
 - **`/v1/account/me` now returns the credential's `label`** —
   `APIKeyRecord.Label` was set at creation time and the OpenAPI
   `Account` schema declared the field, but the path
