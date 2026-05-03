@@ -15,6 +15,27 @@ against.
 
 ## [Unreleased]
 
+### Added
+
+- **Customer-comms templates + demo script for the launch
+  sprint.** Pre-baked artefacts so drafting under stress is
+  never the path:
+  - [`deploy/comms/`](deploy/comms/) — five templates with
+    `{{...}}` placeholders covering every customer-facing
+    moment: launch-announcement, first-customer onboarding-
+    email, mid-incident incident-update, pre-cut
+    maintenance-window heads-up, post-rollback rollback-
+    update. README.md indexes them with usage notes (which
+    channel, which placeholders) + a comms-log convention
+    so every send becomes an auditable record.
+  - [`docs/operations/customer-demo-script.md`](docs/operations/customer-demo-script.md)
+    — pre-flight + 9-stage walk-through covering every public
+    surface (closed-bucket pricing → tip → observations →
+    history → SSE → asset detail → SDK) plus expected-Q&A.
+    Customer leaves able to make their first real request
+    unaided. Closes L6.6's pre-launch deliverable side; the
+    🔴 status flips ✅ when the customer signs off.
+
 ### Fixed
 
 - **`/v1/account/me` now returns the credential's `label`** —

@@ -124,7 +124,7 @@ Within each surface, ordered by dependency.
 | L6.3 | Public-flip prep — strategy for migrating private repo content to new public repo ([`docs/operations/public-flip.md`](../operations/public-flip.md)) | Wk 10 | hour planning | — | L6.4 | repo strategy | 🟢 |
 | L6.4 | Production cutover — DNS flip, enable public rate-limit tier | Wk 10 | hour | All above | — | infra | 🔴 |
 | L6.5 | Documentation sweep — every runbook verified, every ADR accurate, every config option documented | Wk 10 | full day | All above | L6.4 | docs | 🔴 |
-| L6.6 | Customer sign-off demo | Wk 10 | external | L3.*, L4.*, L5.* | L6.4 | — | 🔴 |
+| L6.6 | Customer sign-off demo — pre-flight + 9-stage walk-through covering every public surface (closed-bucket pricing → tip → observations → history → SSE → asset detail → SDK) plus expected-Q&A. End-to-end script ready in [`docs/operations/customer-demo-script.md`](../operations/customer-demo-script.md); the customer leaves able to make their first real request unaided. | Wk 10 | external | L3.*, L4.*, L5.* | L6.4 | — | 🔴 |
 | L6.7 | First 24-h post-launch watch | Wk 10 | day | L6.4 | — | rotating shifts | 🔴 |
 
 ## Post-launch (explicitly deferred)
