@@ -17,6 +17,19 @@ against.
 
 ### Fixed
 
+- **`internal/auth/sep10.go` reflects the shipped validator** —
+  the SEP10Validator interface godoc said "Production
+  implementation lands in Phase 5; current [NoopSEP10Validator]
+  returns [ErrNotImplemented] from every method", and
+  NoopSEP10Validator was described as the "placeholder used
+  when auth_mode=sep10 is configured but no validator
+  implementation is wired". Both are stale: the production
+  validator lives in `internal/auth/sep10` (separate package),
+  `cmd/ratesengine-api` wires it via `sep10.NewValidator`, and
+  the binary's actual fallback rule is "swap in Noop iff
+  config is missing AND `auth_mode` is not `sep10`; otherwise
+  hard-fail at startup." Both godocs rewritten to describe the
+  real wiring.
 - **`/v1/account/me` now returns the credential's `label`** —
   `APIKeyRecord.Label` was set at creation time and the OpenAPI
   `Account` schema declared the field, but the path

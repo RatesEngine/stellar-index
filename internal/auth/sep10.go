@@ -26,8 +26,14 @@ import (
 // The challenge/verify endpoints are mounted by the API server
 // when an SEP10Validator is wired.
 //
-// Production implementation lands in Phase 5; current [NoopSEP10Validator]
-// returns [ErrNotImplemented] from every method.
+// The production implementation lives in [internal/auth/sep10] —
+// `sep10.NewValidator(sep10.Options{…})` is wired by
+// `cmd/ratesengine-api`. [NoopSEP10Validator] is the
+// graceful-degradation fallback used when the deployment hasn't
+// configured the required env vars (signing seed + JWT secret);
+// the API still serves on every other endpoint, but
+// `/v1/auth/sep10/*` returns 503. With `auth_mode=sep10` the
+// missing-config path is a hard startup failure instead.
 //
 // References:
 //
@@ -94,10 +100,14 @@ type Token struct {
 	Subject Subject
 }
 
-// NoopSEP10Validator is the placeholder used when auth_mode=sep10
-// is configured but no validator implementation is wired. Every
-// method returns [ErrNotImplemented]; the middleware translates to
-// 503 Service Unavailable.
+// NoopSEP10Validator is the graceful-degradation fallback used when
+// the production [internal/auth/sep10] validator can't be built
+// (missing signing seed or JWT secret) AND `auth_mode` is not
+// `sep10` — the API binary swaps in this Noop so unrelated
+// endpoints keep serving while `/v1/auth/sep10/*` returns 503. With
+// `auth_mode=sep10` the same missing-config path is a hard startup
+// failure instead. Every method returns [ErrNotImplemented]; the
+// challenge/token handlers translate to 503 Service Unavailable.
 type NoopSEP10Validator struct{}
 
 // Challenge implements [SEP10Validator].
