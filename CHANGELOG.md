@@ -17,6 +17,20 @@ against.
 
 ### Fixed
 
+- **`AGENTS.md` and `CLAUDE.md` quick-reference make-targets are
+  accurate** — `AGENTS.md` claimed `make lint` runs "gofumpt +
+  golangci-lint + archlint"; the actual `lint` target only runs
+  golangci-lint (gofumpt is a golangci formatter), and the
+  architectural import-boundary check is the separate
+  `lint-imports` target. `make verify` was missing from
+  `CLAUDE.md`'s build-and-test quick-reference even though
+  `verify.sh` is the canonical pre-push gate (fmt+vet+lint+
+  docs+test); operators reading just the top quick-reference
+  would miss it. Both files now describe `make verify` with the
+  same definition the Makefile uses, and the docs-all line on
+  both files mentions metric Name: regen alongside OpenAPI +
+  struct tags. Continuation of the L6.5 doc-sweep.
+
 - **`/v1/account/me` now returns the credential's `label`** —
   `APIKeyRecord.Label` was set at creation time and the OpenAPI
   `Account` schema declared the field, but the path
