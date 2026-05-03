@@ -90,9 +90,10 @@ func (s *Server) handleVWAP(w http.ResponseWriter, r *http.Request) {
 
 	// maxTrades caps each single-shot aggregation. Hitting the cap
 	// means the computed VWAP is only over the first N trades and
-	// we flag the response truncated=true. Once the aggregator binary
-	// is wired, pre-computed rollups replace this raw scan and the
-	// cap becomes irrelevant.
+	// we flag the response truncated=true. /v1/vwap takes arbitrary
+	// time windows, so it always scans trades on-query — the
+	// aggregator binary's pre-computed rollups feed `/v1/price`'s
+	// closed-bucket surface (ADR-0015), not this endpoint.
 	const maxTrades = 10000
 	trades, err := reader.TradesInRange(r.Context(), pair, from, to, maxTrades)
 	if err != nil {
