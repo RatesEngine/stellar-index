@@ -291,6 +291,19 @@ against.
 
 ### Fixed
 
+- **`auth.ErrNotImplemented` doc comment no longer claims the
+  sentinel goes away once the validator body lands** — said
+  `Removed once the body implementation lands`, but the SEP-10
+  body has shipped at `internal/auth/sep10/` and the apikey body
+  shipped via `RedisAPIKeyValidator` (#196). The sentinel
+  **stays** because it serves the `NoopAPIKeyValidator` /
+  `NoopSEP10Validator` fallbacks — the deliberate disabled-state
+  the middleware lands on when an auth-mode is configured but
+  no real validator is wired (e.g. `auth_mode=apikey` selected
+  but Redis unavailable). Comment rewritten to describe the
+  actual role: fail-loud 503 from the disabled-state fallback,
+  not a placeholder awaiting replacement. Same drift family as
+  #477 / #481. Continuation of the L6.5 doc-sweep.
 - **`UsageRow` godoc no longer hand-waves "Phase 5 follow-up"** —
   the wire-shape comment said the `/v1/account/usage` counter
   store does not yet exist as a "Phase 5 follow-up." More accurate:
