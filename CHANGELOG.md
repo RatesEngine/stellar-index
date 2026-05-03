@@ -291,6 +291,19 @@ against.
 
 ### Fixed
 
+- **`ConfigReserveBalanceReader` godoc reflects fallback role,
+  not interim** — said it was "the interim implementation used
+  by the supply-snapshot writer until the LCM-based
+  AccountEntry observer ships". The observer shipped in PR
+  #298 (Task #54), and the chained-fallback reader pattern
+  documented in `docs/architecture/supply-pipeline.md` makes
+  this reader the bootstrap fallback that fills the gap when
+  the live `LCMReserveBalanceReader` doesn't have an
+  observation for every watched account. Rewrote the godoc to
+  describe its actual role in the chain. Also dropped the
+  pointer to `internal/config/config.go::MetadataConfig`'s
+  "deferred account-entry observer" note (PR #495 cleaned that
+  up — there's no longer such a note to point at).
 - **R1 ansible inventory + role defaults match the as-deployed
   state** — `configs/ansible/inventory/r1.example.yml` set
   `run_stellar_core: true` and `run_stellar_rpc: true`, but
