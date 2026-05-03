@@ -17,6 +17,24 @@ against.
 
 ### Fixed
 
+- **`internal/divergence/doc.go` describes the wired-today
+  scope, not the original `PR A` slice** — the package's `# Scope`
+  section was framed as `PR A (this package as initially shipped)
+  ...` plus a `Subsequent PRs add more references` list naming
+  CoinMarketCap, Reflector, Band, Redstone, Chainlink. Reality:
+  Chainlink shipped (`ChainlinkReference`); the others either
+  (a) don't belong in this package because they ingest as on-
+  chain *sources* not divergence references (Reflector, Band,
+  Redstone — they contribute to the underlying VWAP itself),
+  or (b) are deferred behind operator demand (CoinMarketCap).
+  The "PR B/C will add confidence-weighted aggregation" line
+  also stale — `[ServiceOptions.MinSourcesForWarning]` does the
+  trust-floor job today via the `[divergence].min_sources_for_warning`
+  config knob. Section rewritten around what's wired now (Compare,
+  Service, CoinGecko, Chainlink) and a one-paragraph note on
+  why on-chain oracles aren't here. Continuation of the L6.5
+  doc-sweep.
+
 - **`/v1/account/me` now returns the credential's `label`** —
   `APIKeyRecord.Label` was set at creation time and the OpenAPI
   `Account` schema declared the field, but the path
