@@ -291,6 +291,16 @@ against.
 
 ### Fixed
 
+- **`deploy/monitoring/README.md` no longer says the
+  AlertManager config is TBD** — `AlertManager routes by label
+  (see its config, TBD)` was the line. The config template
+  ships at
+  `configs/ansible/roles/prometheus/templates/alertmanager.yml.j2`
+  (rendered to `/etc/alertmanager/alertmanager.yml` on
+  `mon-01..02` by the prometheus ansible role; see Task #72/#83).
+  Section now points at the template + describes the
+  severity → channel routing actually in place. Continuation of
+  the L6.5 doc-sweep.
 - **`MetadataConfig` doc no longer claims the on-chain
   AccountEntry observer is "deferred"** — the type comment said
   the static `[metadata.issuer_home_domains]` map was the
