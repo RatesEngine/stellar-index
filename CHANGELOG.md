@@ -15,6 +15,18 @@ against.
 
 ## [Unreleased]
 
+### Operations
+
+- **Chaos Wave 1 executed against the dev stack — 3/3 passing
+  (closes L5.5)** — runner walked all three documented
+  scenarios (Redis-down, Timescale-down, Redis network
+  partition); every graceful-degradation contract held on the
+  first run with no code changes motivated. Reports +
+  per-scenario logs + RETRO committed under
+  `test/chaos/reports/2026-05-03-launch-cut/`. L5.5 flipped
+  🟢 → ✅. Wave 2 (HA-shaped scenarios) stays post-launch and
+  feeds into L5.8 once R2/R3 are provisioned.
+
 ### Fixed
 
 - **Migration 0005 unique index now includes the partition column** —
