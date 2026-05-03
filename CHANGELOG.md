@@ -291,6 +291,23 @@ against.
 
 ### Fixed
 
+- **`internal/auth/sep10.go` and `internal/aggregate/orchestrator`
+  godocs match shipped reality** — the SEP-10 interface declared
+  `Production implementation lands in Phase 5; current
+  [NoopSEP10Validator] returns [ErrNotImplemented] from every
+  method`. The real implementation has shipped at
+  `internal/auth/sep10/` (Validator, Challenge, Verify,
+  VerifyJWT) and is wired in `cmd/ratesengine-api/main.go`'s
+  `buildSEP10Validator`; Noop is now correctly described as the
+  fallback for non-`auth_mode=sep10` deployments. The aggregator
+  orchestrator's "Deliberately out of scope for v1" list claimed
+  stablecoin→fiat proxy, triangulation, divergence, and outlier
+  filtering were all still pending — every one has shipped (the
+  ratesengine-aggregator binary wires each one through
+  `orchestrator.Config` fields). Both godocs rewritten to
+  describe what's actually wired today, with pointers at the
+  packages doing the work. Same drift family as #475 / #476.
+  Continuation of the L6.5 doc-sweep.
 - **`ratesengine-api` and `ratesengine-aggregator` package
   docstrings match what each binary actually wires today** —
   the api binary's godoc said "Today: /v1/healthz, /v1/readyz,
