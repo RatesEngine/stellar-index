@@ -22,6 +22,22 @@ type Store struct {
 	// path (tests, ops binary) on the existing off-chain-only
 	// behaviour.
 	usdVolumeQuoteSpec *USDVolumeQuoteSpec
+
+	// usdVolumeFXResolver, when non-nil, is consulted by
+	// [InsertTrade] AFTER [usdVolumeQuoteSpec] has rejected the
+	// trade — i.e. the on-chain quote isn't on the operator's
+	// USD-pegged list, so Phase 1 returns NULL. The resolver returns
+	// a USD rate for the quote asset (typically sourced from the
+	// aggregator's `<asset>/<USD>` VWAP) which [InsertTrade]
+	// multiplies through quote_amount to land a non-NULL
+	// `usd_volume` per L2.2 Phase 2.
+	//
+	// Nil keeps the L2.2 Phase 1 behaviour exactly: only off-chain
+	// CEX/FX + operator-allow-listed on-chain DEX trades get a
+	// non-NULL `usd_volume`. Set via [SetUSDVolumeFXResolver] after
+	// [Open]; safe to leave unset for tests, ops binary, and any
+	// deployment that hasn't enabled Phase 2.
+	usdVolumeFXResolver USDVolumeFXResolver
 }
 
 // SetUSDVolumeQuoteSpec installs the operator-configured quote-asset
@@ -33,6 +49,16 @@ type Store struct {
 // behaviour (the L2.2 pre-Phase-1 default).
 func (s *Store) SetUSDVolumeQuoteSpec(spec *USDVolumeQuoteSpec) {
 	s.usdVolumeQuoteSpec = spec
+}
+
+// SetUSDVolumeFXResolver installs the FX-resolver path for
+// L2.2 Phase 2 on-chain USD-volume coverage. nil clears it.
+//
+// Safe to call once at startup; not safe to call concurrently with
+// InsertTrade. The resolver is consulted only when Phase 1
+// (USDVolumeQuoteSpec) declines the trade — see [tradeUSDVolume].
+func (s *Store) SetUSDVolumeFXResolver(r USDVolumeFXResolver) {
+	s.usdVolumeFXResolver = r
 }
 
 // Open initialises a connection pool. Ping'd before returning so a
