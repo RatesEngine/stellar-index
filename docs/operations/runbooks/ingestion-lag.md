@@ -1,6 +1,6 @@
 ---
 title: Runbook — ingestion-lag
-last_verified: 2026-04-23
+last_verified: 2026-05-02
 status: archived
 severity: P2
 ---
@@ -87,9 +87,24 @@ curl -s http://indexer:9464/metrics | grep insert_errors_total
 - [ ] Step 2 — if catching up: wait, estimate ETA from shrinkage.
 - [ ] Step 3 — if stuck: find the bottleneck (RPC / persistence /
       decoder) and follow the linked runbook.
-- [ ] Step 4 — if the gap is large and we want to skip ahead:
-      `ratesengine-ops detect-gaps` + manual backfill range. Not
-      currently automated (`TODO(#0)`).
+- [ ] Step 4 — if the gap is large and we want to skip ahead,
+      run gap-detection then backfill the affected range:
+      ```sh
+      # 1. Identify the lagging cursor + the (from, to) range
+      ratesengine-ops detect-gaps -config /etc/ratesengine/config.toml \
+          -threshold 50
+      # 2. Backfill the named range. -dry-run first to see scope.
+      ratesengine-ops backfill -config /etc/ratesengine/config.toml \
+          -from <FIRST_LEDGER> -to <LAST_LEDGER> \
+          -source <SOURCE_NAME> -dry-run
+      # 3. Drop -dry-run to commit.
+      ratesengine-ops backfill -config /etc/ratesengine/config.toml \
+          -from <FIRST_LEDGER> -to <LAST_LEDGER> \
+          -source <SOURCE_NAME> -resume
+      ```
+      The two commands stack to a manual replay; an end-to-end
+      "auto-detect-and-backfill" wrapper is post-launch scope —
+      operators run the two-step procedure during incidents.
 - [ ] Verification: lag drops below 100 ledgers sustained 15 min.
 
 ## Root cause analysis

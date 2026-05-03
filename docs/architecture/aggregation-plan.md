@@ -130,7 +130,7 @@ returns zero before there's an hour of history.
 | Endpoint | Backed by | Purpose |
 | --- | --- | --- |
 | `GET /v1/vwap?pair=…` | Redis cache (`vwap:<base>:<quote>:<window-seconds>`) | The aggregator's primary product |
-| `GET /v1/twap?pair=…` | Redis cache | Time-weighted average; same orchestrator (TWAP-via-orchestrator path is TBD — see Deferred) |
+| `GET /v1/twap?pair=…` | Trades hypertable (on-query) | Time-weighted average — `internal/aggregate.TWAP` runs against raw trades for the request's window. The orchestrator does not pre-compute TWAP today (TWAP-via-orchestrator path stays out of scope; see Deferred). |
 | `GET /v1/price?pair=…` | Redis cache → trades fallback | Last-trade or VWAP depending on freshness |
 | `GET /v1/sources` | `external.Registry` (static) | Class + IncludeInVWAP metadata for every known venue |
 | `GET /v1/markets` | Timescale `DistinctPairs` | Trade-table coverage; orthogonal to the registry |
@@ -208,6 +208,12 @@ landed during the launch-readiness sweep:
 Listed here so a future contributor can pick one up without
 re-deriving the design space:
 
+- **TWAP-via-orchestrator pre-compute.** `/v1/twap` reads
+  the trades hypertable on every request today; the orchestrator
+  could pre-compute time-weighted averages alongside VWAP and
+  serve them from Redis. Deferred behind real production traffic
+  data — VWAP is the dominant query shape; pre-computing TWAP
+  too costs Redis without an established demand-side signal.
 - **MAD-based outlier filter.** σ-mean is brittle on small
   windows with fat tails. Switch to median-absolute-deviation
   behind the same `outlier_sigma_threshold` flag once we have

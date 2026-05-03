@@ -12,27 +12,32 @@
 //     to anchor each checkpoint against SDF's signed view.
 //
 // Both must be structurally complete for the API's downstream
-// integrity guarantees to hold. This package implements:
+// integrity guarantees to hold. The package implements all three
+// ADR-0017 modes (check / fix / verify), driven by the
+// `ratesengine-ops archive-completeness <mode>` subcommand and
+// the `archive-completeness.{service,timer}` systemd units.
 //
 //   - [CrossAnchorChecker.Check] — read-only scan of the cross-
 //     anchor archive's `ledger/XX/YY/ZZ/ledger-XXYYZZWW.xdr.gz`
 //     positions, returning a list of missing checkpoints.
 //
 //   - [Report] — the JSON wire shape that bundles results from
-//     both archives. Per ADR-0017 PR A is `check` (read-only); the
-//     `fix` / `verify` modes that follow consume the same Report.
+//     both archives; consumed by `fix` (multi-source fallback
+//     fetcher that downloads missing bytes back into place) and
+//     `verify` (chain-link + checkpoint-anchor integrity check).
 //
-// # Sequencing
+// # Modes (all shipped)
 //
-// PR A (this package as initially shipped) provides:
-//   - Cross-anchor structural scan (native Go filesystem walk)
-//   - Report struct with one section per archive
-//   - Primary structural scan via shell-out to `galexie detect-gaps`
+//  1. `check` — read-only scan (cross-anchor + primary).
+//     Cross-anchor is a native Go filesystem walk; primary is via
+//     shell-out to `galexie detect-gaps`.
+//  2. `fix` — fetches missing files via the multi-source fallback
+//     chain (SDF mainnet → AWS public-blockchain → peers).
+//  3. `verify` — chain-link + checkpoint-anchor verification of
+//     the repaired archive.
 //
-// PR B will add native primary scanning + the `fix` mode (multi-
-// source fallback fetcher that consumes a Report's missing-files
-// list and writes the bytes back). PR C wires the `verify` mode
-// (chain-link + checkpoint-anchor) and the systemd timer.
+// The `archive-completeness.timer` runs the daily steady-state
+// guardrail (see `docs/operations/archive-completeness.md`).
 //
 // # Concurrency
 //
