@@ -291,6 +291,17 @@ against.
 
 ### Fixed
 
+- **`internal/api/v1/doc.go` no longer says auth is "future"** —
+  the package-level "What this package doesn't do" list said
+  `No auth logic — [middleware.APIKey] (future) handles that.`
+  Two stalenesses: (a) the auth middleware ships today at
+  `internal/api/v1/middleware/auth.go` (Auth, not APIKey), and
+  (b) it's a unified middleware that handles both API-key and
+  SEP-10 modes via the validator interfaces in `internal/auth`.
+  Rewritten to point at the live middleware + concrete
+  validators (`auth.RedisAPIKeyValidator`, `sep10.Validator`).
+  Same drift family as #477 / #482. Continuation of the L6.5
+  doc-sweep.
 - **`sep1-resolution.md` operator-override section described a
   fictional schema** — the §"Adding a curated home-domain
   override" subsection showed a `config/asset_metadata_overrides.yaml`
