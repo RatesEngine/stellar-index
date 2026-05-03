@@ -1,6 +1,6 @@
 ---
 title: Runbook — cursor-stuck
-last_verified: 2026-04-30
+last_verified: 2026-05-02
 status: draft
 severity: P2
 ---
@@ -54,9 +54,9 @@ Key signals:
       The cursor will advance once ledgers start flowing again.
       *(Pre-2026-04-23 deployments routed via stellar-rpc; that
       path was removed from r1 and isn't the upstream today.)*
-- [ ] Step 2 — if events are flowing but cursor is flat: restart the indexer pod after capturing recent logs. The current live path updates the cursor inline after successful ledger processing, so a flat cursor usually means repeated ledger failure or DB upsert trouble.
+- [ ] Step 2 — if events are flowing but cursor is flat: capture recent logs (`journalctl -u ratesengine-indexer -n 500 --no-pager > /tmp/indexer.log` on the indexer host) then restart the unit. The current live path updates the cursor inline after successful ledger processing, so a flat cursor usually means repeated ledger failure or DB upsert trouble.
   ```sh
-  kubectl rollout restart deploy/ratesengine-indexer
+  ssh root@indexer-01 "systemctl restart ratesengine-indexer"
   ```
 - [ ] Step 3 — if the cursor has regressed (persisted value < events observed): this should not happen (advance-only guard) and indicates a real bug. Capture the cursor table before restart: `psql -c "SELECT * FROM ingestion_cursors"` and attach to the postmortem.
 - [ ] Verification: `ratesengine_cursor_last_ledger{source=...}` starts climbing again after the indexer resumes successful ledger commits.
