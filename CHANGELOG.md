@@ -15,6 +15,32 @@ against.
 
 ## [Unreleased]
 
+### Fixed
+
+- **Migration 0005 unique index now includes the partition column** —
+  `asset_supply_history`'s `UNIQUE INDEX (asset_key, ledger_sequence)`
+  was rejected by TimescaleDB at apply time with `cannot create a
+  unique index without the column "time" (used in partitioning)`.
+  Adding `time` as a tail key makes the migration apply cleanly;
+  the (asset_key, ledger_sequence) uniqueness invariant stays
+  intact in practice because two writes for the same (asset,
+  ledger) derive the same `time` from the ledger close. Caught
+  during the r1 first-time bringup; the migration set has now
+  been applied end-to-end on r1 (15 of 15).
+
+- **Aggregator metrics endpoint auto-shifts off the indexer's
+  default port on single-host deploys** — both binaries default
+  `obs.metrics_listen` to `127.0.0.1:9464`, so a single-host
+  deploy with both running silently lost the aggregator's
+  `/metrics` endpoint to "address already in use" (the binary
+  stayed up but the aggregator-silent / outlier-storm /
+  class-drop-spike alerts had nothing to scrape). The aggregator
+  now detects the collision and shifts itself to `127.0.0.1:9465`
+  with an INFO log line explaining the shift. Operators on
+  multi-host deploys override `obs.metrics_listen` per-host and
+  never hit the shift; operators on single-host deploys get
+  working metrics out of the box.
+
 ### Documentation
 
 - **Multi-bar chart TWAP officially deferred to L7.8** —

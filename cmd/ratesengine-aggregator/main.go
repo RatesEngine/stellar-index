@@ -783,10 +783,24 @@ func defaultPairs() []canonical.Pair {
 // deploy/monitoring/rules/aggregator.yml expect these counters to
 // be scrapable, so a quiet aggregator with no listener is a
 // configuration mistake worth flagging.
+//
+// Single-host coexistence: the indexer also reads obs.metrics_listen
+// (default "127.0.0.1:9464"). If the operator hasn't overridden this
+// for the aggregator, we shift to ":9465" automatically so a default
+// single-host deploy doesn't have one binary silently lose its
+// metrics listener to "address already in use." Operators on
+// multi-host deploys override obs.metrics_listen per-host and never
+// hit the shift.
 func startMetricsServer(cfg config.ObsConfig, logger *slog.Logger) *http.Server {
 	if cfg.MetricsListen == "" {
 		logger.Warn("obs.metrics_listen is empty — /metrics endpoint disabled; aggregator-silent / outlier-storm / class-drop-spike alerts will not fire")
 		return nil
+	}
+	addr := cfg.MetricsListen
+	if addr == aggregatorMetricsCollidingDefault {
+		addr = aggregatorMetricsShiftedAddr
+		logger.Info("obs.metrics_listen left at indexer default; shifting aggregator to "+aggregatorMetricsShiftedAddr+" to avoid single-host port collision",
+			"original", aggregatorMetricsCollidingDefault, "shifted_to", aggregatorMetricsShiftedAddr)
 	}
 	mux := http.NewServeMux()
 	mux.Handle("GET /metrics", obs.Handler())
@@ -795,18 +809,26 @@ func startMetricsServer(cfg config.ObsConfig, logger *slog.Logger) *http.Server 
 		_, _ = w.Write([]byte("ok\n"))
 	})
 	srv := &http.Server{
-		Addr:              cfg.MetricsListen,
+		Addr:              addr,
 		Handler:           mux,
 		ReadHeaderTimeout: 5 * time.Second,
 	}
 	go func() {
-		logger.Info("metrics endpoint listening", "addr", cfg.MetricsListen)
+		logger.Info("metrics endpoint listening", "addr", addr)
 		if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 			logger.Error("metrics server exited", "err", err)
 		}
 	}()
 	return srv
 }
+
+// aggregatorMetricsCollidingDefault is the indexer's default
+// metrics_listen address; the aggregator auto-shifts when it sees
+// this exact value so single-host deploys don't collide silently.
+const (
+	aggregatorMetricsCollidingDefault = "127.0.0.1:9464"
+	aggregatorMetricsShiftedAddr      = "127.0.0.1:9465"
+)
 
 func mkLogger(cfg config.ObsConfig) *slog.Logger {
 	return obs.NewLogger(cfg, "ratesengine-aggregator")

@@ -52,8 +52,13 @@ SELECT create_hypertable(
 -- Idempotency: re-deriving supply at the same (asset, ledger) is a
 -- no-op via ON CONFLICT DO NOTHING in the writer. Index also serves
 -- "did we already write this snapshot" lookups during backfill.
+-- TimescaleDB requires the partition column (`time`) in any unique
+-- index on a hypertable — including it as a tail key keeps the
+-- (asset_key, ledger_sequence) uniqueness invariant unchanged in
+-- practice (two writes for the same (asset, ledger) would have
+-- the same `time` derived from the ledger close timestamp).
 CREATE UNIQUE INDEX asset_supply_history_asset_ledger_idx
-    ON asset_supply_history (asset_key, ledger_sequence);
+    ON asset_supply_history (asset_key, ledger_sequence, time);
 
 -- "Latest row per asset_key" reads — the API hot-path query shape.
 -- Composite index supports both the WHERE filter and the ORDER BY
