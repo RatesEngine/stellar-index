@@ -291,6 +291,15 @@ against.
 
 ### Fixed
 
+- **`internal/auth/sep10.go` SEP-10 flow comments cite the
+  actual handler paths** — the godoc said `Client: GET
+  /v1/auth/challenge?account=G…` and `POST /v1/auth/verify with
+  the signed XDR`. The handlers are registered as
+  `GET /v1/auth/sep10/challenge` and `POST /v1/auth/sep10/token`
+  per `internal/api/v1/server.go`. Comment updated to match the
+  actual wire paths so a client implementer reading the godoc
+  doesn't write requests to non-existent endpoints. Continuation
+  of the L6.5 doc-sweep.
 - **`internal/sources/blend/README.md` PR-1/2/3/4 follow-ups
   flipped to "Shipped"** — the README framed itself as `Scope of
   this package (PR 1)` with PRs 2, 3, 4 as planned follow-ups

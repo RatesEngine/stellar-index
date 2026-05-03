@@ -16,9 +16,9 @@ import (
 //
 // The flow is two round-trips:
 //
-//  1. Client: GET /v1/auth/challenge?account=G… → server returns Challenge
+//  1. Client: GET /v1/auth/sep10/challenge?account=G… → server returns Challenge
 //  2. Client signs the Challenge.TransactionXDR with its account key
-//  3. Client: POST /v1/auth/verify with the signed XDR → server returns JWT
+//  3. Client: POST /v1/auth/sep10/token with the signed XDR → server returns JWT
 //  4. Client uses `Authorization: Bearer <jwt>` on subsequent requests
 //
 // The middleware (`internal/api/v1/middleware/auth.go`) calls
