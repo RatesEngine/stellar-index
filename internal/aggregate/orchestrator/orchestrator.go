@@ -307,6 +307,19 @@ type Config struct {
 	// combination per tick.
 	DivergenceRefresher DivergenceRefresher
 
+	// StreamPublisher, when non-nil, is called once per successful
+	// closed-bucket VWAP write to fan the event out to API-side SSE
+	// subscribers (`/v1/price/stream`). Production wiring is the
+	// Redis-pub/sub publisher in `internal/api/streaming/redispub`;
+	// the matching API-side subscriber republishes on the in-process
+	// streaming.Hub so SSE clients receive the event. Best-effort:
+	// publish errors log + increment a metric but never block the
+	// tick (the VWAP cache write itself is the source of truth).
+	//
+	// Nil = no fan-out. Leaves `/v1/price/stream` with no producer,
+	// matching the pre-launch state where `s.hub == nil` returns 503.
+	StreamPublisher StreamPublisher
+
 	// Logger is the structured logger. If nil, slog.Default() is
 	// used.
 	Logger *slog.Logger
@@ -323,6 +336,27 @@ type Config struct {
 // computing divergence percent, and writing the cache entry.
 type DivergenceRefresher interface {
 	RefreshPair(ctx context.Context, pair canonical.Pair, ourPrice float64, observedAt time.Time) error
+}
+
+// StreamPublisher is the seam the orchestrator uses to fan out
+// closed-bucket events. Production impl is
+// [internal/api/streaming/redispub.Publisher] (Redis PUBLISH); the
+// API binary's matching subscriber (PR 2 of L3.9) republishes the
+// event on its in-process [internal/api/streaming.Hub] so SSE
+// subscribers on `/v1/price/stream` get fed.
+//
+// Called once per (pair, window) on every successful VWAP cache
+// write — same call site as the freeze writer / confidence cache
+// write, just on the publish side. Best-effort: a publish error
+// logs + increments a metric but never blocks the next tick (the
+// closed-bucket row is durable via the VWAP cache; the stream is
+// enrichment, not a source-of-truth).
+//
+// Nil = no fan-out. Acceptable when no API binary is subscribed
+// (e.g. local dev). Tests substitute a fake that records
+// invocations.
+type StreamPublisher interface {
+	PublishClosedBucket(ctx context.Context, pair canonical.Pair, window time.Duration, valueDecimal string, observedAt time.Time) error
 }
 
 // DefaultWindows is the built-in window set — three buckets
@@ -584,7 +618,33 @@ func (o *Orchestrator) refreshPairWindow(
 	o.vwapWrites++
 	o.mu.Unlock()
 	obs.AggregatorVWAPWritesTotal.Inc()
+
+	o.publishToStream(ctx, pair, window, value, now)
 	return nil
+}
+
+// publishToStream fans the closed-bucket event out to the
+// configured StreamPublisher (Redis pub/sub in production). Pure
+// best-effort: never returns an error — failures log + increment
+// the per-outcome counter. The VWAP cache write upstream is the
+// source of truth; the stream is enrichment for SSE subscribers.
+func (o *Orchestrator) publishToStream(
+	ctx context.Context,
+	pair canonical.Pair,
+	window time.Duration,
+	value string,
+	observedAt time.Time,
+) {
+	if o.cfg.StreamPublisher == nil {
+		return
+	}
+	if err := o.cfg.StreamPublisher.PublishClosedBucket(ctx, pair, window, value, observedAt); err != nil {
+		obs.AggregatorStreamPublishTotal.WithLabelValues("error").Inc()
+		o.logger.Warn("stream publish failed",
+			"pair", pair.String(), "window", window, "err", err)
+		return
+	}
+	obs.AggregatorStreamPublishTotal.WithLabelValues("ok").Inc()
 }
 
 // evaluateAndMaybeFreeze runs the anomaly check on a fresh VWAP
