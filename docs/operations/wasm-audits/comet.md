@@ -1,9 +1,10 @@
 ---
 title: Comet WASM-history audit
-last_verified: 2026-05-01
-status: ratified
+last_verified: 2026-05-03
+status: ratified — v2 folded into Blend audit
 source: comet
 backfill_safe: true
+v2_audit: blend.md
 ---
 
 # Comet WASM audit
@@ -11,6 +12,19 @@ backfill_safe: true
 Audit log for the `comet` source's `BackfillSafe` flag. See
 `README.md` for the full procedure.
 
+> **2026-05-03 update — Comet's v2 audit is folded into Blend's.**
+> On mainnet today, **the only deployed Comet pool is Blend's
+> backstop** (`CAS3FL6TLZKDGGSISDBWGGPXT3NRR4DYTZD7YOD3HMYO6LTJUVGRVEAM`).
+> Comet (the protocol) is a Balancer-v1-style weighted-AMM
+> implementation that Blend uses for its backstop module; it
+> isn't actively maintained as a standalone DEX. The
+> per-instance v2 walk for "every Comet pool" is therefore the
+> v2 walk for "the Blend backstop pool", which is captured in
+> [`blend.md` §"Phase 2 results"](blend.md). This file
+> documents the decoder + the protocol-level relationship; the
+> v2 hash inventory and disassembly evidence live in
+> blend.md.
+>
 > **2026-05-01 update.** Hash citations in this file have been
 > cross-checked against the 2026-04-30 r1 walk; see
 > [r1-walk-2026-05-01.md](r1-walk-2026-05-01.md) for the

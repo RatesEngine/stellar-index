@@ -1,7 +1,7 @@
 ---
 title: Public-flip strategy — publishing Rates Engine to a public repo at v1.0
-last_verified: 2026-04-30
-status: living doc
+last_verified: 2026-05-03
+status: living doc — checklist execution-ready, awaiting v1.0 launch signal
 ---
 
 # Public-flip strategy
@@ -70,6 +70,45 @@ satisfies it.
 human-in-the-loop reviews now have written verdicts (citations
 in the rows above). Checklist is execution-ready; the next step
 is the cut-over mechanics in §below.
+
+## Final 24-hour pre-cutover dry-run
+
+The pre-flip checklist above is the **standing** state — verified
+2026-04-30 and refreshed periodically. The 24 h immediately
+before the actual cutover should re-run the same gates because
+PRs land between checklist verification and launch day. **Do this
+24 h before tagging v1.0**, in this order:
+
+1. **Re-run `gitleaks detect --source . --redact --exit-code 1`**
+   from a clean checkout. Any new finding is a launch blocker.
+2. **Re-run the file-level scrub check.** A directory listing
+   should show no `*.env`, `*.key`, `*.pem`, `secrets/*`,
+   `inventory/r1.yml`, or any file matching the patterns from
+   the original PR #169 scrub.
+3. **`make test && make test-integration`** — the green build
+   that gets tagged v1.0 must pass both. A flake counts as
+   not-green; rerun after the flake is fixed.
+4. **Spot-check `CLAUDE.md` and `docs/architecture/*.md` for
+   `last_verified` dates.** Anything older than 90 days is a
+   doc-rot candidate; flag for the L6.5 documentation sweep.
+5. **CI baseline freshness.** Check that `.github/workflows/ci.yml`
+   has a green run on `main` from within the last 24 h. If not,
+   run a no-op commit (e.g. CHANGELOG punctuation) to force a
+   green build before tagging.
+6. **External-asset readiness.** Confirm:
+   - `SECURITY.md`'s reporting address (`security@ratesengine.net`)
+     is monitored — send a test email if uncertain.
+   - The `CODEOWNERS` file's only @-handle (`@ash`) has the
+     bandwidth to triage day-1 external PRs (or has a delegate
+     wired up post-flip via branch-protection settings).
+   - The `RatesEngine/rates-engine` GitHub repo creation
+     command in §"Cut-over mechanics" still resolves cleanly
+     (`gh repo view RatesEngine/rates-engine` returns 404 —
+     i.e. nothing exists yet under that name).
+
+A row that fails the dry-run is a launch blocker. The dry-run
+is **destructive only of the no-op commit in step 5**; everything
+else is read-only checks against the working tree + GitHub API.
 
 ## Cut-over mechanics
 

@@ -147,6 +147,8 @@ the `env:` column.
 | `api.sep10.home_domain` | `string` | `ratesengine.net` | — | Issuer home_domain. Carried in the JWT iss claim and in the challenge's first manage_data op. Typically same as the project root domain. |
 | `api.sep10.challenge_ttl` | `int64` | `15m` | — | How long a SEP-10 challenge is valid for signing. SDK requires ≥ 1s; SEP-10 spec recommends 15m. |
 | `api.sep10.jwt_ttl` | `int64` | `1h` | — | Lifetime of an issued JWT. Clients refresh by repeating the challenge → verify flow. |
+| `api.streaming.pairs` | `[][]string` | `[]` | — | Operator-declared closed-bucket fanout pair list. Each entry is a two-element [base, quote] array of canonical asset strings (e.g. [["native", "fiat:USD"], ["credit:USDC:GA5Z…", "fiat:USD"]]). Empty disables the producer; clients that connect see SSE open + heartbeats but no price_update events. |
+| `api.streaming.poll_interval` | `int64` | `5s` | — | Per-pair poll cadence for the closed-bucket producer. Default 5s; clamped to 1s minimum. |
 
 ### `[metadata]`
 
