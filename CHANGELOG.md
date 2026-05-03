@@ -17,6 +17,27 @@ against.
 
 ### Fixed
 
+- **Launch-readiness backlog: five 🟢 rows flipped to ✅ after
+  audit found pure status drift** (no code changes, no
+  remediation needed; just walking each row against the
+  shipped state):
+  - **L3.5** F2 asset-detail fields — `applyF2Fields` populates
+    all six F2 fields end-to-end on `/v1/assets/{id}`.
+    `change_24h_pct` moved to **L7.7** post-launch; the row
+    description always called this out as deferred-by-design,
+    just hadn't moved into L7 explicitly.
+  - **L3.11** Redocly + GitHub Pages workflow + drift guard
+    — all three deliverables live (`scripts/dev/docs-api.sh`,
+    `.github/workflows/api-docs.yml`, `ci.yml` drift check).
+  - **L3.14** CDN cache-control middleware — origin-side
+    middleware ships with tests; the remaining work is
+    infra-side (CloudFront/equivalent provisioning), tracked
+    separately in the operator runbook.
+  - **L3.15** getting-started page — `docs/getting-started.md`
+    ships at 205 lines.
+  - **L3.16** OpenAPI URL-discipline lint —
+    `scripts/ci/lint-openapi-urls/` ships with tests, real-spec
+    sentinel, and three CI hooks (verify.sh, ci.yml, Makefile).
 - **`/v1/account/me` now returns the credential's `label`** —
   `APIKeyRecord.Label` was set at creation time and the OpenAPI
   `Account` schema declared the field, but the path
