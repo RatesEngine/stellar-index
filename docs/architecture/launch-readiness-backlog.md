@@ -113,7 +113,7 @@ Within each surface, ordered by dependency.
 | L5.4 | k6 `ingest_peak_ledger.js` — 5× normal event rate × 1 h | Wk 9 | half-day | L1.* | — | covered by indexer's existing soak via `test/load/scenarios/06-mixed-realistic.js` ingest-side metrics; dedicated indexer-only k6 is a post-launch nice-to-have | ⚠ |
 | L5.5 | Chaos suite Wave 1 (dev-stack smoke; 3 scenarios). Wave 2 (HA-shaped scenarios on staging baremetal) deferred post-launch. | Wk 9 | full day | L4.* | launch | `test/chaos` | 🟢 |
 | L5.6 | Security review (external or community) on full stack | Wk 9 | (external) | L3.* | launch | external auditor | 🔴 |
-| L5.7 | SEV-1 / SEV-2 dry-run (kill something, time the response) | Wk 9 | half-day | L4.4, L4.11 | launch | runbooks | 🔴 |
+| L5.7 | SEV-1 / SEV-2 dry-run records — solo tabletop dry-runs against `scenarios/sev1-timescale-primary-failover.md` + `scenarios/sev2-source-decoder-regression.md` landed under `docs/operations/drills/2026-04-*.md`; promoted two action items into runbook updates (`timescale-primary-down.md` lead-with-readyz, `decode-errors.md` divergence_warning correlation). 3-person tabletop queued for post-launch. | Wk 9 | half-day | L4.4, L4.11 | launch | runbooks + drill writeups | ✅ |
 
 ## Finalization
 
@@ -121,7 +121,7 @@ Within each surface, ordered by dependency.
 |---|---|---|---|---|---|---|---|
 | L6.1 | CHANGELOG hygiene + SemVer policy ([`docs/architecture/semver-policy.md`](semver-policy.md)) | Wk 10 | half-day | — | L6.4 | release process | 🟢 |
 | L6.2 | Release notes template + release-process runbook ([`.github/RELEASE_NOTES_TEMPLATE.md`](../../.github/RELEASE_NOTES_TEMPLATE.md), [`docs/operations/release-process.md`](../operations/release-process.md)) | Wk 10 | half-day | L6.1 | L6.4 | docs | 🟢 |
-| L6.3 | Public-flip prep — strategy for migrating private repo content to new public repo ([`docs/operations/public-flip.md`](../operations/public-flip.md)) | Wk 10 | hour planning | — | L6.4 | repo strategy | 🟢 |
+| L6.3 | Public-flip prep — strategy for migrating private repo content to new public repo ([`docs/operations/public-flip.md`](../operations/public-flip.md)). Pre-flip checklist (16 rows) verified 2026-04-30; cut-over mechanics scripted; 24-hour pre-cutover dry-run added 2026-05-03. Execution gates on the v1.0 launch signal (L6.4). | Wk 10 | hour planning | — | L6.4 | repo strategy | ✅ |
 | L6.4 | Production cutover — DNS flip, enable public rate-limit tier | Wk 10 | hour | All above | — | infra | 🔴 |
 | L6.5 | Documentation sweep — every runbook verified, every ADR accurate, every config option documented | Wk 10 | full day | All above | L6.4 | docs | 🔴 |
 | L6.6 | Customer sign-off demo | Wk 10 | external | L3.*, L4.*, L5.* | L6.4 | — | 🔴 |
