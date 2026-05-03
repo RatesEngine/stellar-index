@@ -74,13 +74,25 @@ func (g *Generator) Next() string {
 		oldCounter := old & 0xFFFF
 
 		var next uint64
-		if now > oldMillis {
+		switch {
+		case now > oldMillis:
 			next = (now << 16) // counter resets to 0 when the millisecond advances
-		} else {
-			// Same or earlier millisecond — bump the counter. If the
-			// system clock jumped backwards we still produce a strictly
-			// increasing ID (we keep the older millis but increment).
-			next = (oldMillis << 16) | ((oldCounter + 1) & 0xFFFF)
+		case oldCounter < 0xFFFF:
+			// Same or earlier millisecond, counter has headroom — bump it.
+			// If the system clock jumped backwards we still produce a
+			// strictly increasing ID (we keep the older millis but
+			// increment the counter).
+			next = (oldMillis << 16) | (oldCounter + 1)
+		default:
+			// Same millisecond AND counter saturated at 0xFFFF (65 535
+			// IDs already issued in this ms). Advance the millis by one
+			// instead of wrapping the counter back to 0 — which would
+			// re-issue every prior ID for this millisecond, breaking
+			// the "never returns the same ID twice" contract. The
+			// synthetic-future millis is harmless: subsequent real-time
+			// ms will catch back up via the `now > oldMillis` branch
+			// once wall-clock advances past the synthesised value.
+			next = (oldMillis + 1) << 16
 		}
 		if g.state.CompareAndSwap(old, next) {
 			// 16-char lowercase hex of next; sortable lexicographically
