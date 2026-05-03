@@ -5,6 +5,8 @@ import (
 	"net/http"
 	"net/url"
 	"strconv"
+	"strings"
+	"time"
 )
 
 // PriceQuery selects the asset / quote pair for a [Client.Price]
@@ -33,6 +35,141 @@ func (c *Client) Price(ctx context.Context, q PriceQuery) (*Envelope[PriceSnapsh
 	return &env, nil
 }
 
+// PriceTipQuery is the input for [Client.PriceTip]. Asset is
+// required; Quote defaults to "fiat:USD" server-side. WindowSeconds
+// is the rolling-window size; the server clamps to [1, 60] and
+// defaults to 5 when zero.
+type PriceTipQuery struct {
+	Asset         string
+	Quote         string // optional; server defaults to fiat:USD
+	WindowSeconds int    // optional; server clamps to [1, 60], default 5
+}
+
+// PriceTip fetches the live "rolling-window" price per ADR-0018.
+// Two in-contract branches the caller distinguishes via
+// `PriceSnapshot.PriceType`:
+//
+//   - "vwap" with `WindowSeconds=N` — at least one trade in the
+//     last N seconds; rolling-window VWAP.
+//   - "last_trade" — window was empty; the most recent observation
+//     as-is. Caller reads `ObservedAt` to decide if it's fresh
+//     enough for their use case.
+//
+// Unlike `/v1/price` (closed-bucket, ADR-0015), the tip surface has
+// no cross-region consistency contract — two clients in different
+// regions may see different rolling-window VWAPs depending on which
+// trades have replicated. Use Price for "every consumer sees the
+// same number"; use PriceTip for "freshest possible signal."
+//
+// `flags.stale` on the envelope is ALWAYS false here per ADR-0018:
+// both branches are in-contract on this surface. `flags.frozen`
+// also stays unset (freeze is a closed-bucket concept).
+// `flags.divergence_warning` and `flags.single_source` apply.
+func (c *Client) PriceTip(ctx context.Context, q PriceTipQuery) (*Envelope[PriceSnapshot], error) {
+	if q.Asset == "" {
+		return nil, &APIError{Status: 400, Title: "asset required"}
+	}
+	v := url.Values{}
+	v.Set("asset", q.Asset)
+	if q.Quote != "" {
+		v.Set("quote", q.Quote)
+	}
+	if q.WindowSeconds > 0 {
+		v.Set("window_seconds", strconv.Itoa(q.WindowSeconds))
+	}
+	var env Envelope[PriceSnapshot]
+	if err := c.doJSON(ctx, http.MethodGet, "/v1/price/tip", v, nil, &env); err != nil {
+		return nil, err
+	}
+	return &env, nil
+}
+
+// PriceBatchQuery is the input for [Client.PriceBatch]. AssetIDs
+// is required and non-empty; Quote defaults to "fiat:USD"
+// server-side when empty.
+//
+// Server-side limits:
+//   - 1..100 ids → routed via GET (`?asset_ids=…`).
+//   - 101..1000 ids → routed via POST with a JSON body.
+//   - >1000 ids → server returns 400; the SDK splits into ≤ 1000
+//     chunks would belong on the caller, not here, because the
+//     batch envelope's `flags.stale` semantic is OR-over-the-batch
+//     and silently chunking would mask staleness in unrelated
+//     subsets.
+//
+// Per the Freighter RFP §"Bulk query support preferred" — batch
+// is the recommended path for portfolio + multi-asset views.
+type PriceBatchQuery struct {
+	AssetIDs []string
+	Quote    string // optional; server defaults to fiat:USD
+}
+
+// PriceBatch fetches the current closed-bucket VWAP for many
+// assets in a single round-trip. Cross-region consistent per
+// ADR-0015 — every returned snapshot is from the same closed
+// bucket window the single-asset `/v1/price` would have served.
+//
+// Routing:
+//   - len(AssetIDs) ≤ 100 → GET /v1/price/batch?asset_ids=...
+//   - len(AssetIDs) > 100 → POST /v1/price/batch with JSON body
+//
+// Missing observations (asset has no indexed data) are silently
+// omitted from the response array — the envelope's `Data` slice
+// can be shorter than `AssetIDs`. Callers that need to detect
+// "asset X had no observation" diff the input + output.
+//
+// `flags.stale` on the envelope is the OR over per-row staleness:
+// any stale row sets the envelope flag.
+func (c *Client) PriceBatch(ctx context.Context, q PriceBatchQuery) (*Envelope[[]PriceSnapshot], error) {
+	if len(q.AssetIDs) == 0 {
+		return nil, &APIError{Status: 400, Title: "asset_ids required"}
+	}
+	if len(q.AssetIDs) > priceBatchPOSTMax {
+		return nil, &APIError{
+			Status: 400,
+			Title:  "too many asset_ids",
+			Detail: "the server caps POST /v1/price/batch at " + strconv.Itoa(priceBatchPOSTMax) + " ids",
+		}
+	}
+
+	var env Envelope[[]PriceSnapshot]
+	if len(q.AssetIDs) <= priceBatchGETMax {
+		v := url.Values{}
+		v.Set("asset_ids", strings.Join(q.AssetIDs, ","))
+		if q.Quote != "" {
+			v.Set("quote", q.Quote)
+		}
+		if err := c.doJSON(ctx, http.MethodGet, "/v1/price/batch", v, nil, &env); err != nil {
+			return nil, err
+		}
+		return &env, nil
+	}
+
+	// >100 ids → POST. Body shape mirrors the server's POST handler.
+	body := struct {
+		AssetIDs []string `json:"asset_ids"`
+		Quote    string   `json:"quote,omitempty"`
+	}{
+		AssetIDs: q.AssetIDs,
+		Quote:    q.Quote,
+	}
+	if err := c.doJSON(ctx, http.MethodPost, "/v1/price/batch", nil, body, &env); err != nil {
+		return nil, err
+	}
+	return &env, nil
+}
+
+// priceBatchGETMax / priceBatchPOSTMax mirror the server's
+// `priceBatchMaxAssets` / `priceBatchMaxAssetsPOST` constants
+// in `internal/api/v1/price.go`. Duplicating them here is
+// deliberate — the SDK ships SemVer-stable per ADR-0005, so
+// importing the unexported server-side constants would couple
+// SDK consumers to internal/.
+const (
+	priceBatchGETMax  = 100
+	priceBatchPOSTMax = 1000
+)
+
 // HistoryQuery selects the range for a [Client.HistorySinceInception]
 // call. Asset is required.
 type HistoryQuery struct {
@@ -59,6 +196,126 @@ func (c *Client) HistorySinceInception(ctx context.Context, q HistoryQuery) (*En
 	}
 	var env Envelope[HistorySeries]
 	if err := c.doJSON(ctx, http.MethodGet, "/v1/history/since-inception", v, nil, &env); err != nil {
+		return nil, err
+	}
+	return &env, nil
+}
+
+// HistoryRangeQuery is the input for [Client.History]. Both Base
+// and Quote are required. From + To are optional (server defaults
+// to `now-1h .. now`); Limit clamps to [1, 10000] server-side
+// (default 1000). Cursor paginates — pass the previous response's
+// `Pagination.Next` to walk forward.
+//
+// Note: distinct from [HistoryQuery] (which targets the
+// since-inception bucketed series). This surface returns RAW
+// trades within a window — useful for trade-level audits,
+// regulatory exports, custom aggregations.
+type HistoryRangeQuery struct {
+	Base   string
+	Quote  string
+	From   time.Time // optional
+	To     time.Time // optional
+	Limit  int       // optional; server defaults to 1000, max 10000
+	Cursor string    // optional; opaque from prior Pagination.Next
+}
+
+// History fetches raw trades for [Base, Quote] within the
+// [From, To) window. Distinct from
+// [Client.HistorySinceInception] which returns bucketed VWAP/TWAP
+// points; this surface returns the underlying trades themselves
+// — same data the aggregator consumes.
+//
+// Use cases: trade-level audits, regulatory exports, custom
+// aggregations the server doesn't pre-compute. Pagination via
+// `Cursor` (opaque base64); the walker collects pages by
+// re-issuing with `Cursor: prev.Pagination.Next` until the
+// returned cursor is empty.
+//
+// `flags.stale` doesn't apply here (this surface returns raw
+// stored trades, not a VWAP). Other envelope flags propagate
+// per-trade where meaningful.
+func (c *Client) History(ctx context.Context, q HistoryRangeQuery) (*Envelope[[]TradeRow], error) {
+	if q.Base == "" {
+		return nil, &APIError{Status: 400, Title: "base required"}
+	}
+	if q.Quote == "" {
+		return nil, &APIError{Status: 400, Title: "quote required"}
+	}
+	v := url.Values{}
+	v.Set("base", q.Base)
+	v.Set("quote", q.Quote)
+	if !q.From.IsZero() {
+		v.Set("from", q.From.UTC().Format(time.RFC3339))
+	}
+	if !q.To.IsZero() {
+		v.Set("to", q.To.UTC().Format(time.RFC3339))
+	}
+	if q.Limit > 0 {
+		v.Set("limit", strconv.Itoa(q.Limit))
+	}
+	if q.Cursor != "" {
+		v.Set("cursor", q.Cursor)
+	}
+	var env Envelope[[]TradeRow]
+	if err := c.doJSON(ctx, http.MethodGet, "/v1/history", v, nil, &env); err != nil {
+		return nil, err
+	}
+	return &env, nil
+}
+
+// OHLCQuery is the input for [Client.OHLC]. Both Base and Quote
+// are required (unlike [PriceQuery], which defaults Quote to
+// fiat:USD — the OHLC endpoint accepts no implicit USD because
+// candlestick charts pin a specific pair). From + To are
+// optional; defaults match the server's `now-1h .. now` with the
+// closed-bucket clamp applied to a defaulted To per ADR-0015.
+type OHLCQuery struct {
+	Base  string
+	Quote string
+	From  time.Time // optional
+	To    time.Time // optional
+}
+
+// OHLC fetches a single open/high/low/close bar over the
+// [From, To) window. Per the Freighter RFP §V1 historical chart
+// requirements, this is the surface backing candlestick UIs.
+//
+// Window semantics:
+//   - Both From + To zero: server defaults to now-1h .. now,
+//     clamped to a closed-bucket boundary (every region answers
+//     the same window per ADR-0015).
+//   - From zero, To set: server uses To-1h .. To, no clamp
+//     (caller pinned an explicit end).
+//   - From set, To zero: server uses From .. now (clamped).
+//   - Both set: server uses [From, To) verbatim; caller asserts
+//     a specific historical range.
+//
+// Returns ErrNoTrades / 404 (translated to APIError 404) when no
+// trades fell in the window.
+//
+// Truncation: when the window holds more trades than the server's
+// cap (10000 today), the response's `Truncated` flag is true and
+// High / Low may not be the actual extremes. Narrow the range to
+// reach an untruncated bar.
+func (c *Client) OHLC(ctx context.Context, q OHLCQuery) (*Envelope[OHLCBar], error) {
+	if q.Base == "" {
+		return nil, &APIError{Status: 400, Title: "base required"}
+	}
+	if q.Quote == "" {
+		return nil, &APIError{Status: 400, Title: "quote required"}
+	}
+	v := url.Values{}
+	v.Set("base", q.Base)
+	v.Set("quote", q.Quote)
+	if !q.From.IsZero() {
+		v.Set("from", q.From.UTC().Format(time.RFC3339))
+	}
+	if !q.To.IsZero() {
+		v.Set("to", q.To.UTC().Format(time.RFC3339))
+	}
+	var env Envelope[OHLCBar]
+	if err := c.doJSON(ctx, http.MethodGet, "/v1/ohlc", v, nil, &env); err != nil {
 		return nil, err
 	}
 	return &env, nil
