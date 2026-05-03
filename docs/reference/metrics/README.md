@@ -136,6 +136,21 @@ to verify their allow-list actually covers what the indexer is
 seeing. Counts attempts; the trades hypertable's `ON CONFLICT DO
 NOTHING` dedupe is invisible to this counter.
 
+### `ratesengine_stream_publish_total`
+
+Counter, label `stream` (currently only `price_stream`).
+
+Per-stream counter of envelopes the API binary's
+`internal/api/streampublish.Publisher` fanned out to a
+`streaming.Hub`. Increments only on a NEW closed bucket — the
+publisher short-circuits when `ObservedAt` hasn't advanced, so a
+flat counter against an active subscription means the upstream
+`PriceReader` isn't seeing new buckets (cursor stuck, aggregator
+stalled, etc.). Operators read this alongside per-pair subscriber
+counts to verify the closed-bucket fanout path: steady publishes
+with zero subscribers means clients aren't connecting; zero
+publishes with active subscribers means the producer is starved.
+
 ## Oracle layer (indexer binary, reflector + future sources)
 
 ### `ratesengine_oracle_last_update_unix`

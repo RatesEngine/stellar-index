@@ -35,6 +35,8 @@ import (
 
 	"github.com/RatesEngine/rates-engine/internal/aggregate/confidence"
 	"github.com/RatesEngine/rates-engine/internal/aggregate/freeze"
+	"github.com/RatesEngine/rates-engine/internal/api/streaming"
+	"github.com/RatesEngine/rates-engine/internal/api/streampublish"
 	v1 "github.com/RatesEngine/rates-engine/internal/api/v1"
 	"github.com/RatesEngine/rates-engine/internal/api/v1/middleware"
 	"github.com/RatesEngine/rates-engine/internal/auth"
@@ -312,11 +314,19 @@ func run(cfgPath string, dryRun bool) error { //nolint:gocognit,funlen,gocyclo /
 		logger.Info("freeze looker wired")
 	}
 
+	// Streaming Hub — backs /v1/price/stream's closed-bucket SSE
+	// surface. Constructed unconditionally so the handler stops
+	// returning 503; producer wiring (the per-pair publisher)
+	// activates only when [api.streaming].pairs is non-empty.
+	streamingHub := streaming.NewHub(0)
+
+	priceReader := storePriceReader{s: store}
+
 	apiSrv := v1.New(v1.Options{
 		Logger:       logger.With("component", "api"),
 		ReadyChecks:  checks,
 		Assets:       storeAssetReader{s: store, homeDomainLookup: homeDomainLookup},
-		Prices:       storePriceReader{s: store},
+		Prices:       priceReader,
 		History:      storeHistoryReader{s: store},
 		Markets:      storeMarketsReader{s: store},
 		Oracle:       storeOracleReader{s: store},
@@ -328,12 +338,35 @@ func run(cfgPath string, dryRun bool) error { //nolint:gocognit,funlen,gocyclo /
 		Freeze:       freezeLooker,
 		Supply:       storeSupplyLooker{s: store},
 		Volume:       storeVolumeReader{s: store},
+		Change24h:    storeChange24hReader{s: store},
 		SEP10:        sep10Validator,
 		CORS:         cors,
 		Auth:         authMW,
 		RateLimit:    rateLimit,
 		CDNEnabled:   cfg.API.CDNEnabled,
+		Hub:          streamingHub,
 	})
+
+	// Closed-bucket producer — only spawn when the operator
+	// configured pairs to broadcast. Empty pair list is a valid
+	// deployment (Hub still constructs; subscribers connect and
+	// receive heartbeats with no events). Bad pair strings fail
+	// loud at startup rather than silently dropping a pair.
+	streamPairs, err := parseStreamingPairs(cfg.API.Streaming.Pairs)
+	if err != nil {
+		return fmt.Errorf("api.streaming.pairs: %w", err)
+	}
+	if len(streamPairs) > 0 {
+		pub := streampublish.New(streamingHub, priceReader, cfg.API.Streaming.PollInterval, logger.With("component", "stream-publisher"))
+		go func() {
+			if err := pub.Run(rootCtx, streamPairs); err != nil && !errors.Is(err, context.Canceled) {
+				logger.Error("stream publisher exited", "err", err)
+			}
+		}()
+		logger.Info("stream publisher running", "pairs", len(streamPairs), "interval", cfg.API.Streaming.PollInterval)
+	} else {
+		logger.Info("stream publisher disabled (no pairs configured); /v1/price/stream serves heartbeats only")
+	}
 
 	if dryRun {
 		logger.Info("dry-run complete — exiting")
@@ -937,6 +970,42 @@ func (r storeVolumeReader) Volume24hUSDForAsset(ctx context.Context, assetKey st
 	return r.s.Volume24hUSDForAsset(ctx, assetKey)
 }
 
+// usdQuoteAsset is the implicit USD quote used to anchor 24h-ago
+// price lookups in [storeChange24hReader]. Same string value as
+// the v1 handler's defaultPriceQuote — keeping them constructed
+// independently here avoids reaching into v1's unexported
+// `mustParseAsset`.
+var usdQuoteAsset = func() canonical.Asset {
+	a, err := canonical.ParseAsset("fiat:USD")
+	if err != nil {
+		panic("ratesengine-api: USD quote asset must parse: " + err.Error())
+	}
+	return a
+}()
+
+// storeChange24hReader adapts *timescale.Store to v1.Change24hReader.
+// Looks up the latest closed prices_1m bucket whose end is at-or-
+// before now-24h for the asset/USD pair. sql.ErrNoRows (asset
+// first traded < 24h ago, or retention pruned the bucket) is
+// translated to v1.ErrChange24hUnavailable so the handler treats
+// it as "feature unavailable for this asset" rather than a real
+// failure. Other errors propagate unchanged.
+type storeChange24hReader struct{ s *timescale.Store }
+
+func (r storeChange24hReader) USDPrice24hAgo(ctx context.Context, asset canonical.Asset) (string, error) {
+	row, err := r.s.ClosedVWAP1mAtOrBefore(ctx,
+		canonical.Pair{Base: asset, Quote: usdQuoteAsset},
+		time.Now().Add(-24*time.Hour),
+	)
+	if errors.Is(err, sql.ErrNoRows) {
+		return "", v1.ErrChange24hUnavailable
+	}
+	if err != nil {
+		return "", err
+	}
+	return row.VWAP, nil
+}
+
 // storeSupplyLooker adapts *timescale.Store to v1.SupplyLooker for
 // the F2-fields path on /v1/assets/{id}. Closes audit F-0020 +
 // Codex Freighter-V2 high-1: the API binary previously left
@@ -958,6 +1027,34 @@ func (r storeSupplyLooker) LatestSupply(ctx context.Context, assetKey string) (s
 		return supply.Supply{}, err
 	}
 	return snap, nil
+}
+
+// parseStreamingPairs converts the operator-declared
+// `[api.streaming].pairs` TOML rows (each a [base, quote]
+// two-element string array) into canonical Pairs.
+//
+// Validation is strict: each row must have exactly two non-empty
+// strings, and each string must round-trip through
+// canonical.ParseAsset. Any error returns immediately so the
+// binary fails loud at startup rather than silently dropping
+// pairs the operator expected to be streamed.
+func parseStreamingPairs(rows [][]string) ([]canonical.Pair, error) {
+	out := make([]canonical.Pair, 0, len(rows))
+	for i, row := range rows {
+		if len(row) != 2 {
+			return nil, fmt.Errorf("row %d: expected [base, quote], got %d elements", i, len(row))
+		}
+		base, err := canonical.ParseAsset(row[0])
+		if err != nil {
+			return nil, fmt.Errorf("row %d base %q: %w", i, row[0], err)
+		}
+		quote, err := canonical.ParseAsset(row[1])
+		if err != nil {
+			return nil, fmt.Errorf("row %d quote %q: %w", i, row[1], err)
+		}
+		out = append(out, canonical.Pair{Base: base, Quote: quote})
+	}
+	return out, nil
 }
 
 func mkLogger(cfg config.ObsConfig) *slog.Logger {

@@ -74,6 +74,20 @@ This alert is P3 because there's no emergency runtime response — we can't un-d
 - [ ] Step 4 — if the cause is a regression (option 3): `git revert` the suspect commit and deploy. File an incident to retry the regressed change with a proper test.
 - [ ] Verification: `rate(...decode_errors_total[5m])` drops back under the 1/sec threshold within 5 min of mitigation.
 
+### Customer comms note when `class_drop_spike` co-fires
+
+If `ratesengine_aggregator_class_drop_spike` fires alongside this
+alert, the affected source has dropped out of the VWAP for one or
+more pairs. The remaining sources continue to serve prices, but
+the smaller consensus may produce elevated
+`flags.divergence_warning` on the affected pairs. **Surface this
+in customer comms** — it explains why a customer might see a
+warning flag without a corresponding price disruption. Template:
+"Affected pairs may show elevated `flags.divergence_warning`; price
+is still served correctly from remaining sources." See
+[drills/2026-04-sev2-soroswap-decode-regression.md](../drills/2026-04-sev2-soroswap-decode-regression.md)
+for the canonical exercise of this pattern.
+
 ## Related
 
 - `orphan-events.md` — adjacent failure mode (events well-formed but partnerless).
