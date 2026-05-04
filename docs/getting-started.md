@@ -1,6 +1,6 @@
 ---
 title: Getting started with Rates Engine
-last_verified: 2026-05-03
+last_verified: 2026-05-04
 status: living doc
 ---
 
@@ -13,6 +13,7 @@ you from zero to your first authenticated request in under five
 minutes.
 
 > **Hosted endpoint:** `https://api.ratesengine.net` (post-launch)
+> **Interactive explorer:** [`ratesengine.net`](https://ratesengine.net) (post-launch — browse coins / markets / issuers / sources / diagnostics; every panel reveals the API call that produced it)
 > **Reference docs:** [`docs.ratesengine.net`](https://docs.ratesengine.net) (post-launch)
 > **Status page:** [`status.ratesengine.net`](https://status.ratesengine.net) (post-launch — provisioning gated on L4.11)
 
