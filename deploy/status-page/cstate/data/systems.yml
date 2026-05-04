@@ -22,7 +22,11 @@
   category: API
 
 - name: Asset metadata
-  description: /v1/assets, /v1/assets/{id}, /v1/assets/{id}/metadata — SEP-1 overlay + F2 fields (supply, market cap, FDV, 24h volume).
+  description: /v1/assets, /v1/assets/{id}, /v1/assets/{id}/metadata, /v1/coins, /v1/issuers, /v1/markets — asset + issuer + pair directories with SEP-1 overlay and F2 fields (supply, market cap, FDV, 24h volume).
+  category: API
+
+- name: Diagnostics
+  description: /v1/diagnostics/cursors — operator-facing per-source ingest cursor positions. Powers the public showcase /diagnostics page.
   category: API
 
 - name: Account self-service

@@ -17,6 +17,19 @@ against.
 
 ### Added
 
+- **CI: status-page Hugo build verification.** New
+  `.github/workflows/status-page.yml` runs on every push/PR
+  touching `deploy/status-page/`. Steps: yamllint
+  `systems.yml`, fetch the cstate theme (pinned v3.6.4),
+  `hugo --minify` build, smoke-check the produced
+  `index.html`. Catches broken incident front-matter and
+  bad systems.yml refs at PR time, before operators push them
+  live. Build artifact uploaded with 7-day retention so
+  operators on non-CD hosts can grab it. Also updates
+  `systems.yml` to list `/v1/coins`, `/v1/issuers`,
+  `/v1/markets` under "Asset metadata" and adds a
+  "Diagnostics" component for `/v1/diagnostics/cursors`.
+
 - **`/coins?issuer=G…` URL param now actually filters.** The
   `useCoins` hook accepts an optional `issuer` parameter; the
   `/coins` page reads `?issuer=` from the URL and passes it

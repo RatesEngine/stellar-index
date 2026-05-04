@@ -1,0 +1,91 @@
+# Builds the public status page (cstate / Hugo) on every push or
+# PR that touches deploy/status-page/. Catches broken front-matter
+# in incident postings + bad systems.yml refs at PR time, before
+# operators push them live.
+#
+# This workflow does NOT deploy. The hosting target
+# (status.ratesengine.net) is operator-controlled and lives
+# outside this repo per deploy/status-page/README.md. The build
+# artifact is uploaded so an operator can grab it and ship if
+# they're not yet on a continuous-deploy host.
+
+name: status-page
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "deploy/status-page/**"
+      - ".github/workflows/status-page.yml"
+  pull_request:
+    paths:
+      - "deploy/status-page/**"
+      - ".github/workflows/status-page.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # cstate ships as a theme submodule when the operator
+          # vendors it; we don't ship the theme bytes in this repo
+          # (per README.md), so submodules: false is correct.
+          submodules: false
+
+      - name: Install Hugo
+        uses: peaceiris/actions-hugo@v3
+        with:
+          hugo-version: "0.139.0"
+          extended: true
+
+      - name: Verify cstate theme is available
+        # cstate is the static-site generator on top of Hugo. The
+        # theme is fetched into themes/cstate at build time so
+        # operators don't need to vendor it. Pin to the upstream
+        # release tag so a theme upgrade is an explicit change.
+        run: |
+          set -euo pipefail
+          mkdir -p deploy/status-page/cstate/themes
+          if [ ! -d deploy/status-page/cstate/themes/cstate ]; then
+            git clone --depth 1 --branch v3.6.4 \
+              https://github.com/cstate/cstate.git \
+              deploy/status-page/cstate/themes/cstate
+          fi
+
+      - name: Lint systems.yml
+        # cstate happily renders an empty page if systems.yml is
+        # malformed — yamllint catches typos before they ship.
+        run: |
+          pip install --quiet yamllint
+          yamllint -d "{extends: relaxed, rules: {line-length: disable}}" \
+            deploy/status-page/cstate/data/systems.yml
+
+      - name: Build site
+        working-directory: deploy/status-page/cstate
+        run: hugo --minify --gc
+
+      - name: Verify build output
+        # Smoke-check that the build produced something — Hugo's
+        # exit code is 0 even when content/ is empty, which would
+        # ship a blank status page silently.
+        run: |
+          set -euo pipefail
+          if [ ! -f deploy/status-page/cstate/public/index.html ]; then
+            echo "::error::cstate build produced no index.html"
+            exit 1
+          fi
+          if ! grep -q "Rates Engine" deploy/status-page/cstate/public/index.html; then
+            echo "::error::index.html missing site title — config.toml may be misread"
+            exit 1
+          fi
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: status-page
+          path: deploy/status-page/cstate/public/
+          retention-days: 7
