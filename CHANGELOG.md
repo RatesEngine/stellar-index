@@ -34,6 +34,16 @@ against.
   beyond). Decoder-coverage / archive-completeness / SLO panels
   follow as their underlying endpoints ship.
 
+- **Showcase home page Network + System-health panels go live.**
+  Network panel now shows the live classic-asset count from
+  `/v1/coins` and the highest non-backfill cursor as the current
+  ingest tip. System-health panel derives indexer status from
+  `/v1/diagnostics/cursors` (green ≤60s lag, amber ≤10m, red
+  beyond) so the home page reflects real backfill/ingest motion
+  instead of static traffic-light stubs. "Top movers — 24h"
+  remains stubbed until the change-summary worker has 24h of
+  history.
+
 - **Showcase `/sources` page goes live.** Replaces the v0
   placeholder with a live source directory backed by `/v1/sources`,
   grouped by class (exchange / aggregator / oracle /

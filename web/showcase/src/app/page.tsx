@@ -1,11 +1,10 @@
 import { Panel } from '@/components/reveal';
 import {
-  AccelerationArrow,
   MultiWindowDelta,
   Sparkline,
-  StreakIndicator,
 } from '@/components/primitives';
 import { asExample } from '@/api/client';
+import { NetworkLivePanel, SystemHealthLivePanel } from './HomeLivePanels';
 
 export default function HomePage() {
   return (
@@ -23,20 +22,7 @@ export default function HomePage() {
       </header>
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
-        <Panel
-          title="Network"
-          hint="Stellar pulse"
-          source={asExample('/v1/diagnostics/pulse')}
-        >
-          <div className="space-y-2">
-            <div className="text-2xl font-bold tabular-nums">85,750</div>
-            <div className="text-xs text-slate-500">classic assets indexed</div>
-            <div className="mt-3 flex items-center gap-2">
-              <Sparkline values={[60_000, 65_000, 71_000, 78_000, 82_000, 85_000, 85_750]} />
-              <AccelerationArrow direction="up" acceleration="increasing" />
-            </div>
-          </div>
-        </Panel>
+        <NetworkLivePanel />
 
         <Panel
           title="Top movers — 24h"
@@ -53,17 +39,7 @@ export default function HomePage() {
           </div>
         </Panel>
 
-        <Panel
-          title="System health"
-          source={asExample('/v1/diagnostics/decoders')}
-        >
-          <div className="space-y-1 text-xs">
-            <Health label="indexer" status="ok" />
-            <Health label="aggregator" status="ok" />
-            <Health label="archive completeness" status="ok" />
-            <StreakIndicator kind="streak" direction="up" days={14} />
-          </div>
-        </Panel>
+        <SystemHealthLivePanel />
       </div>
 
       <Panel
@@ -126,26 +102,3 @@ function Row({
   );
 }
 
-function Health({
-  label,
-  status,
-}: {
-  label: string;
-  status: 'ok' | 'degraded' | 'down';
-}) {
-  const tone =
-    status === 'ok'
-      ? 'bg-up-DEFAULT'
-      : status === 'degraded'
-        ? 'bg-amber-500'
-        : 'bg-down-DEFAULT';
-  return (
-    <div className="flex items-center justify-between">
-      <span>{label}</span>
-      <span
-        className={`inline-block h-2 w-2 rounded-full ${tone}`}
-        aria-label={status}
-      />
-    </div>
-  );
-}
