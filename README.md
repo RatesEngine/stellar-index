@@ -32,6 +32,13 @@ See **[CLAUDE.md](CLAUDE.md)**. It's your orientation map.
 
 ## Start here
 
+- **Hosted UI / explorer:** the showcase site (`web/showcase/`) is
+  a static-export Next.js explorer rendered at
+  <https://ratesengine.net> post-launch. Browse coins, markets,
+  issuers, sources, diagnostics; every panel reveals the exact
+  API call that produced it. Build locally via
+  `cd web/showcase && pnpm build` (output: `web/showcase/out/`).
+  Operator runbook: [`docs/operations/showcase-deployment.md`](docs/operations/showcase-deployment.md).
 - **Users of the hosted API:** [`docs/getting-started.md`](docs/getting-started.md)
   walks from zero to your first authenticated request in five
   minutes. Rendered at <https://docs.ratesengine.net> post-launch.
@@ -64,6 +71,7 @@ migrations/            TimescaleDB schema migrations
 configs/               example.toml + Ansible roles (configs/ansible/)
 openapi/               API spec — source of truth for reference docs
 deploy/                docker-compose (dev) / systemd (production) / monitoring (Prometheus rules) / status-page
+web/showcase/          Next.js static-export explorer rendered at ratesengine.net
 test/                  integration + load + chaos + fixtures
 docs/                  architecture / ADR / operations / reference / discovery
 ```
