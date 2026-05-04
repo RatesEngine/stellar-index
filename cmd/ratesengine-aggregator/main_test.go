@@ -4,8 +4,41 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/RatesEngine/rates-engine/internal/canonical"
 	"github.com/RatesEngine/rates-engine/internal/config"
 )
+
+// TestDefaultPairs_IncludesBothXLMForms guards against regression of
+// the on-r1 launch finding: the abstract `crypto:XLM` ticker and the
+// Stellar-protocol `native` form are different cache keys, and the
+// aggregator must publish for both so a customer query under either
+// form lands on a populated key. On-chain DEX/SDEX trades store
+// `native` quote-asset; off-chain CEX trades emit `crypto:XLM`.
+func TestDefaultPairs_IncludesBothXLMForms(t *testing.T) {
+	got := defaultPairs()
+
+	hasNativeUSD := false
+	hasCryptoXLMUSD := false
+	for _, p := range got {
+		if p.Quote.Type != canonical.AssetFiat || p.Quote.Code != "USD" {
+			continue
+		}
+		switch p.Base.Type {
+		case canonical.AssetNative:
+			hasNativeUSD = true
+		case canonical.AssetCrypto:
+			if p.Base.Code == "XLM" {
+				hasCryptoXLMUSD = true
+			}
+		}
+	}
+	if !hasNativeUSD {
+		t.Error("defaultPairs missing native/fiat:USD — on-chain XLM trades will publish to a key the API never queries")
+	}
+	if !hasCryptoXLMUSD {
+		t.Error("defaultPairs missing crypto:XLM/fiat:USD — CEX/FX XLM trades will publish to a key the API never queries")
+	}
+}
 
 // TestBuildTriangulations_RespectsTriangulationEnabled pins down the
 // aggregate.triangulation_enabled master switch — pre-2026-05-02 the

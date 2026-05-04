@@ -836,20 +836,38 @@ func defaultPairs() []canonical.Pair {
 	fiats := []string{"USD", "EUR", "GBP"}
 	var out []canonical.Pair
 	for _, c := range cryptos {
+		bases := make([]canonical.Asset, 0, 2)
 		ca, err := canonical.NewCryptoAsset(c)
-		if err != nil {
-			continue
+		if err == nil {
+			bases = append(bases, ca)
 		}
-		for _, f := range fiats {
-			fa, err := canonical.NewFiatAsset(f)
-			if err != nil {
-				continue
+		// XLM has two on-the-wire identities: the abstract `crypto:XLM`
+		// ticker (off-chain CEX/FX trades report this form) and the
+		// Stellar-protocol `native` form (every on-chain DEX / SDEX
+		// trade is stored as native/<quote>). The aggregator publishes
+		// one VWAP per (base, quote) cache key; the API resolves the
+		// caller's asset literally, so a customer querying
+		// `?asset=native` won't see a `crypto:XLM` VWAP and vice versa.
+		// Including both ensures whichever form the customer uses lands
+		// on a populated cache key as long as ANY source publishes
+		// trades under that form. On r1 today only the native side has
+		// data (no CEX connectors enabled); a future deployment with
+		// Binance/Coinbase running will populate the abstract side too.
+		if c == "XLM" {
+			bases = append(bases, canonical.NativeAsset())
+		}
+		for _, base := range bases {
+			for _, f := range fiats {
+				fa, err := canonical.NewFiatAsset(f)
+				if err != nil {
+					continue
+				}
+				p, err := canonical.NewPair(base, fa)
+				if err != nil {
+					continue
+				}
+				out = append(out, p)
 			}
-			p, err := canonical.NewPair(ca, fa)
-			if err != nil {
-				continue
-			}
-			out = append(out, p)
 		}
 	}
 	return out

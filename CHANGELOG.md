@@ -17,6 +17,22 @@ against.
 
 ### Changed
 
+- **Aggregator default pair set now publishes XLM under both
+  `crypto:XLM/fiat:*` and `native/fiat:*`.** XLM has two on-the-wire
+  identities — the abstract `crypto:XLM` ticker (used by off-chain
+  CEX/FX connectors) and the Stellar-protocol `native` form (used by
+  every on-chain DEX/SDEX trade). The aggregator publishes one VWAP
+  per `(base, quote)` cache key and the API resolves the caller's
+  asset literally, so a customer querying `?asset=native` won't see
+  a `crypto:XLM` VWAP and vice versa. Pre-fix, `defaultPairs()` only
+  emitted `crypto:XLM/fiat:USD`; on r1 (no CEX connectors enabled)
+  every default-pair tick produced an empty window because the
+  source list never matched the `native/...`-quoted on-chain trades.
+  Adding the `native` form alongside `crypto:XLM` lets the
+  aggregator's stablecoin-fiat-proxy expansion (PR #629) reach
+  `native/USDC-GA5Z…` source pairs that match actual on-chain
+  volume.
+
 - **Aggregator stablecoin-fiat-proxy expansion now includes the
   operator-declared classic-asset USD pegs.** On Stellar mainnet the
   dominant XLM/USD volume is quoted in classic credits like Circle's
