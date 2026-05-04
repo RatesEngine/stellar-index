@@ -883,3 +883,130 @@ func TestUsage_EmptyArrayDecodes(t *testing.T) {
 		t.Errorf("len(Data) = %d, want 0", len(got.Data))
 	}
 }
+
+// TestCoins_IssuerFilter — exercises the optional ?issuer= deep-
+// link the showcase /issuers table relies on.
+func TestCoins_IssuerFilter(t *testing.T) {
+	const issuer = "GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN"
+
+	t.Run("with issuer + limit", func(t *testing.T) {
+		_, c := newTestServer(t, func(w http.ResponseWriter, r *http.Request) {
+			if r.URL.Path != "/v1/coins" {
+				t.Errorf("path = %q", r.URL.Path)
+			}
+			q := r.URL.Query()
+			if q.Get("issuer") != issuer {
+				t.Errorf("issuer = %q, want %q", q.Get("issuer"), issuer)
+			}
+			if q.Get("limit") != "50" {
+				t.Errorf("limit = %q", q.Get("limit"))
+			}
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{"data": [{"slug":"USDC","asset_id":"USDC-` + issuer + `","code":"USDC","issuer":"` + issuer + `","first_seen_ledger":50457424,"last_seen_ledger":62413938,"observation_count":41610618}], "as_of": "2026-05-04T15:00:00Z", "flags": {}}`))
+		})
+		got, err := c.Coins(context.Background(), client.CoinsOptions{Issuer: issuer, Limit: 50})
+		if err != nil {
+			t.Fatalf("Coins: %v", err)
+		}
+		if len(got.Data) != 1 || got.Data[0].Code != "USDC" {
+			t.Errorf("Data = %+v", got.Data)
+		}
+	})
+
+	t.Run("zero values omit query params", func(t *testing.T) {
+		_, c := newTestServer(t, func(w http.ResponseWriter, r *http.Request) {
+			q := r.URL.Query()
+			if q.Has("issuer") {
+				t.Errorf("issuer sent unfiltered: %q", q.Get("issuer"))
+			}
+			if q.Has("limit") {
+				t.Errorf("limit sent when 0: %q", q.Get("limit"))
+			}
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{"data": [], "as_of": "2026-05-04T15:00:00Z", "flags": {}}`))
+		})
+		_, err := c.Coins(context.Background(), client.CoinsOptions{})
+		if err != nil {
+			t.Fatalf("Coins: %v", err)
+		}
+	})
+}
+
+// TestIssuers_Limit — issuer directory respects Limit and unwraps
+// the {data:[…]} envelope correctly.
+func TestIssuers_Limit(t *testing.T) {
+	_, c := newTestServer(t, func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/v1/issuers" {
+			t.Errorf("path = %q", r.URL.Path)
+		}
+		if r.URL.Query().Get("limit") != "10" {
+			t.Errorf("limit = %q", r.URL.Query().Get("limit"))
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"data": [{"g_strkey":"GA5Z","home_domain":"centre.io","asset_count":1,"total_observation_count":41610618}], "as_of": "2026-05-04T15:00:00Z", "flags": {}}`))
+	})
+	got, err := c.Issuers(context.Background(), client.IssuersOptions{Limit: 10})
+	if err != nil {
+		t.Fatalf("Issuers: %v", err)
+	}
+	if len(got.Data) != 1 || got.Data[0].HomeDomain != "centre.io" {
+		t.Errorf("Data = %+v", got.Data)
+	}
+}
+
+// TestIssuer_PathEscapes — G-strkeys are 56 chars of base32 so
+// PathEscape isn't strictly load-bearing today, but the test
+// pins the escape path so a future identifier scheme that uses
+// special characters doesn't silently break.
+func TestIssuer_PathEscapes(t *testing.T) {
+	const g = "GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN"
+	_, c := newTestServer(t, func(w http.ResponseWriter, r *http.Request) {
+		want := "/v1/issuers/" + g
+		if r.URL.Path != want {
+			t.Errorf("path = %q, want %q", r.URL.Path, want)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"data": {"g_strkey":"` + g + `","home_domain":"centre.io"}, "as_of": "2026-05-04T15:00:00Z", "flags": {}}`))
+	})
+	got, err := c.Issuer(context.Background(), g)
+	if err != nil {
+		t.Fatalf("Issuer: %v", err)
+	}
+	if got.Data.GStrkey != g {
+		t.Errorf("GStrkey = %q, want %q", got.Data.GStrkey, g)
+	}
+}
+
+// TestIssuer_GStrkeyRequired — the SDK rejects empty G-strkey at
+// the boundary instead of round-tripping a 404 — saves a network
+// hop and surfaces the real bug at the call site.
+func TestIssuer_GStrkeyRequired(t *testing.T) {
+	c := client.New(client.Options{BaseURL: "http://nope.invalid"})
+	_, err := c.Issuer(context.Background(), "")
+	if err == nil {
+		t.Fatal("expected error for empty g_strkey")
+	}
+	var apiErr *client.APIError
+	if !errors.As(err, &apiErr) || apiErr.Status != 400 {
+		t.Errorf("err = %v, want *APIError with Status 400", err)
+	}
+}
+
+// TestCursors_HappyPath — diagnostics endpoint returns
+// non-paginated array; test pins the wire shape.
+func TestCursors_HappyPath(t *testing.T) {
+	_, c := newTestServer(t, func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/v1/diagnostics/cursors" {
+			t.Errorf("path = %q", r.URL.Path)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"data": [{"source":"sdex","sub_source":"","last_ledger":62413938,"last_updated":"2026-05-04T14:35:00Z","lag_seconds":42}], "as_of": "2026-05-04T14:35:42Z", "flags": {}}`))
+	})
+	got, err := c.Cursors(context.Background())
+	if err != nil {
+		t.Fatalf("Cursors: %v", err)
+	}
+	if len(got.Data) != 1 || got.Data[0].Source != "sdex" || got.Data[0].LagSeconds != 42 {
+		t.Errorf("Data = %+v", got.Data)
+	}
+}

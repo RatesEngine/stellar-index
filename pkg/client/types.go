@@ -1,6 +1,9 @@
 package client
 
-import "time"
+import (
+	"encoding/json"
+	"time"
+)
 
 // Envelope is the shape of every 2xx JSON response from the server.
 // Mirrors `internal/api/v1.Envelope` but parameterised on the data
@@ -308,4 +311,77 @@ type KeyCreated struct {
 	KeyID     string `json:"key_id"`
 	Plaintext string `json:"plaintext"`
 	Label     string `json:"label,omitempty"`
+}
+
+// Coin is the data shape returned by [Client.Coins] — one entry
+// in the classic-asset directory backed by `/v1/coins`. The
+// directory ranks by `ObservationCount` desc as a cheap activity
+// proxy until the registry-aware super-table response (which will
+// add price / delta / volume per row) ships.
+type Coin struct {
+	Slug             string `json:"slug"`
+	AssetID          string `json:"asset_id"`
+	Code             string `json:"code"`
+	Issuer           string `json:"issuer"`
+	FirstSeenLedger  uint32 `json:"first_seen_ledger"`
+	LastSeenLedger   uint32 `json:"last_seen_ledger"`
+	ObservationCount int64  `json:"observation_count"`
+}
+
+// IssuerListEntry is the data shape returned by [Client.Issuers] —
+// one row in the issuer directory ranked by total observation
+// count across the issuer's classic assets.
+//
+// HomeDomain is empty until the SEP-1 fetcher worker resolves
+// `stellar.toml` for the issuer's account.
+type IssuerListEntry struct {
+	GStrkey               string `json:"g_strkey"`
+	HomeDomain            string `json:"home_domain,omitempty"`
+	AssetCount            int64  `json:"asset_count"`
+	TotalObservationCount int64  `json:"total_observation_count"`
+}
+
+// IssuedAsset is one entry in [Issuer.Assets] — a classic asset
+// minted by the parent issuer. Mirrors the embedded shape on the
+// issuer-detail wire envelope.
+type IssuedAsset struct {
+	AssetID          string `json:"asset_id"`
+	Code             string `json:"code"`
+	Slug             string `json:"slug"`
+	FirstSeenLedger  uint32 `json:"first_seen_ledger"`
+	LastSeenLedger   uint32 `json:"last_seen_ledger"`
+	ObservationCount int64  `json:"observation_count"`
+}
+
+// Issuer is the data shape returned by [Client.Issuer]
+// (`/v1/issuers/{g_strkey}`). Auth flags + SEP-1 fields populate
+// as the SEP-1 fetcher worker resolves them; pre-resolution they
+// stay nil.
+type Issuer struct {
+	GStrkey        string  `json:"g_strkey"`
+	HomeDomain     string  `json:"home_domain,omitempty"`
+	AuthRequired   *bool   `json:"auth_required,omitempty"`
+	AuthRevocable  *bool   `json:"auth_revocable,omitempty"`
+	AuthImmutable  *bool   `json:"auth_immutable,omitempty"`
+	AuthClawback   *bool   `json:"auth_clawback,omitempty"`
+	SEP1ResolvedAt *string `json:"sep1_resolved_at,omitempty"`
+	// SEP1Payload is opaque JSON — schemas drift over time and many
+	// issuers add custom fields. Callers who need typed access
+	// should unmarshal into their own struct.
+	SEP1Payload    json.RawMessage `json:"sep1_payload,omitempty"`
+	CreationLedger *uint32         `json:"creation_ledger,omitempty"`
+	Assets         []IssuedAsset   `json:"assets,omitempty"`
+}
+
+// Cursor is one entry in the array returned by [Client.Cursors] —
+// the per-source ingest progress marker exposed at
+// `/v1/diagnostics/cursors`. `LagSeconds` is computed server-side
+// (now − last_updated) so callers don't need a clock-sync
+// agreement with the API.
+type Cursor struct {
+	Source      string `json:"source"`
+	SubSource   string `json:"sub_source,omitempty"`
+	LastLedger  uint32 `json:"last_ledger"`
+	LastUpdated string `json:"last_updated"`
+	LagSeconds  int64  `json:"lag_seconds"`
 }

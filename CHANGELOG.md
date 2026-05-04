@@ -15,6 +15,20 @@ against.
 
 ## [Unreleased]
 
+### Added
+
+- **Go SDK methods for the new endpoints.** `pkg/client` now
+  exposes `Coins()`, `Issuers()`, `Issuer(g)`, and `Cursors()`
+  alongside the existing `Markets()` / `Sources()` methods,
+  with corresponding `Coin`, `IssuerListEntry`, `Issuer`,
+  `IssuedAsset`, `Cursor` types in `pkg/client/types`.
+  `CoinsOptions{Issuer: G…}` exposes the new server-side
+  filter; `Issuer(g)` rejects empty G-strkeys at the SDK
+  boundary so callers don't round-trip a network hop for a
+  trivially-broken request. Wire-shape tests pin the envelope
+  + path-escape behaviour. Closes the loop where every showcase-
+  surfaced endpoint had a typed Go SDK method.
+
 ### Documentation
 
 - **`customer-demo-script.md` opens with the showcase URL.**

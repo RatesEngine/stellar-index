@@ -487,3 +487,84 @@ func (c *Client) CreateKey(ctx context.Context, req CreateKeyRequest) (*Envelope
 	}
 	return &env, nil
 }
+
+// CoinsOptions paginates / filters the classic-asset directory.
+// `Limit` is server-side clamped to [1, 500] (default 100).
+// `Issuer`, when non-empty, restricts the listing to assets minted
+// by that G-strkey — used by the showcase to deep-link from the
+// issuer table into "coins by this issuer."
+type CoinsOptions struct {
+	Limit  int
+	Issuer string
+}
+
+// Coins lists the registry-aware coin directory. v0 returns the
+// bare classic-asset rows ranked by observation count; future
+// passes (per data-inventory §10.1) will join change_summary_5m +
+// classic_asset_stats_5m so each row carries pre-computed price +
+// delta + volume.
+func (c *Client) Coins(ctx context.Context, opts CoinsOptions) (*Envelope[[]Coin], error) {
+	v := url.Values{}
+	if opts.Limit > 0 {
+		v.Set("limit", strconv.Itoa(opts.Limit))
+	}
+	if opts.Issuer != "" {
+		v.Set("issuer", opts.Issuer)
+	}
+	var env Envelope[[]Coin]
+	if err := c.doJSON(ctx, http.MethodGet, "/v1/coins", v, nil, &env); err != nil {
+		return nil, err
+	}
+	return &env, nil
+}
+
+// IssuersOptions paginates the issuer directory. Same `Limit`
+// semantics as [CoinsOptions].
+type IssuersOptions struct {
+	Limit int
+}
+
+// Issuers lists every G-account that has minted at least one
+// classic asset, ranked by total observation count across the
+// issuer's assets. `home_domain` populates as the SEP-1 fetcher
+// worker resolves it.
+func (c *Client) Issuers(ctx context.Context, opts IssuersOptions) (*Envelope[[]IssuerListEntry], error) {
+	v := url.Values{}
+	if opts.Limit > 0 {
+		v.Set("limit", strconv.Itoa(opts.Limit))
+	}
+	var env Envelope[[]IssuerListEntry]
+	if err := c.doJSON(ctx, http.MethodGet, "/v1/issuers", v, nil, &env); err != nil {
+		return nil, err
+	}
+	return &env, nil
+}
+
+// Issuer returns the per-issuer detail (auth flags, SEP-1
+// metadata, embedded assets list). Returns 404 (translated to
+// [APIError]) when the G-strkey hasn't been observed as an
+// issuer.
+func (c *Client) Issuer(ctx context.Context, gStrkey string) (*Envelope[Issuer], error) {
+	if gStrkey == "" {
+		return nil, &APIError{Status: 400, Title: "g_strkey required"}
+	}
+	var env Envelope[Issuer]
+	path := "/v1/issuers/" + url.PathEscape(gStrkey)
+	if err := c.doJSON(ctx, http.MethodGet, path, nil, nil, &env); err != nil {
+		return nil, err
+	}
+	return &env, nil
+}
+
+// Cursors returns the per-source ingest cursor table from
+// `/v1/diagnostics/cursors`. Operator-facing diagnostic — every
+// (source, sub_source) tuple the dispatcher persists, with
+// `lag_seconds` precomputed server-side so callers don't need a
+// clock-sync agreement.
+func (c *Client) Cursors(ctx context.Context) (*Envelope[[]Cursor], error) {
+	var env Envelope[[]Cursor]
+	if err := c.doJSON(ctx, http.MethodGet, "/v1/diagnostics/cursors", nil, nil, &env); err != nil {
+		return nil, err
+	}
+	return &env, nil
+}
