@@ -254,6 +254,28 @@ fetched 2026-04-23:
    source-diversity computers (Phase 3) can't run until VWAPs
    populate.
 
+5c. **Discovery sink dropping ~3 k hits/min sustained.**
+   (Discovered 2026-05-04 19:00 UTC.) The async discovery sink
+   (`internal/canonical/discovery/sink.go`,
+   `BufferSize: 1024` hardcoded in
+   `cmd/ratesengine-indexer/main.go:209`) is dropping new
+   SEP-41 contract observations because the buffer fills faster
+   than the postgres recorder can drain. Production rate at
+   2026-05-04 19:06: 845,745 dropped since process start (5h);
+   `discovered_assets` table has only 4,921 rows. Drop rate ≈
+   99.4%. Not catastrophic — drops aren't permanent data loss
+   because the same contract emits more events later, gets
+   re-sniffed, and lands when the buffer has space — but
+   actively-used contracts may take many ledgers before the
+   first record sticks. Two viable fixes for follow-up:
+   (a) in-memory LRU/bloom dedup before push so we only round-
+   trip postgres for contracts we haven't seen recently;
+   (b) make `BufferSize` config-tunable so operators can scale
+   it for their network's SEP-41 churn rate. Both need a code
+   change + binary redeploy. See PR-pending: deferred until the
+   GitHub Actions budget is restored (cannot validate via CI
+   currently).
+
 5b. **`classic_assets` table seeded from trades.**
    (Done 2026-05-04, PR #595 context.) Direct SQL backfill
    from `DISTINCT issuer_g_strkey FROM classic_assets WHERE
