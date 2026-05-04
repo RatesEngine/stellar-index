@@ -36,6 +36,7 @@ func init() {
 		SourceDecodeErrorsTotal,
 		SourceOrphanEventsTotal,
 		DiscoveryDroppedHitsTotal,
+		DiscoverySkippedHitsTotal,
 		SourceInsertErrorsTotal,
 		RateLimitFailOpenTotal,
 		Sep1CacheOpsTotal,
@@ -192,6 +193,20 @@ var DiscoveryDroppedHitsTotal = prometheus.NewCounter(
 	prometheus.CounterOpts{
 		Name: "ratesengine_discovery_dropped_hits_total",
 		Help: "Discovery hits dropped because the async discovery sink buffer was full.",
+	},
+)
+
+// DiscoverySkippedHitsTotal — count of SEP-41 discovery hits whose
+// (contract_id, event_type) had already been enqueued in this
+// process and were therefore deduplicated before reaching the
+// async sink buffer. A high ratio of Skipped to (Skipped + Recorded)
+// is expected and healthy — most events for already-discovered
+// contracts are noise. Tracked for capacity-planning visibility, not
+// alerting.
+var DiscoverySkippedHitsTotal = prometheus.NewCounter(
+	prometheus.CounterOpts{
+		Name: "ratesengine_discovery_skipped_hits_total",
+		Help: "Discovery hits skipped because (contract_id, event_type) was already enqueued in this process.",
 	},
 )
 

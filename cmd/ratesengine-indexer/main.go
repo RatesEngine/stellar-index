@@ -202,10 +202,13 @@ func run(cfgPath string, dryRun bool) error {
 	// ─── SEP-41 auto-discovery sink ──────────────────────────────
 	// Buffers Hits to a channel; a worker goroutine drains them to
 	// timescale.Store.RecordDiscovered. The dispatcher's Push call
-	// is non-blocking — if the buffer fills (Postgres outage,
-	// workload spike beyond BufferSize), Hits drop and increment
-	// DroppedCount. Operators alert on a sustained climb. See
-	// internal/canonical/discovery/sink.go for the contract.
+	// is non-blocking — repeated (contract_id, event_type) pairs are
+	// deduplicated in-process before enqueue (the recorder upserts on
+	// the same key, so re-enqueue is wasted work). If the buffer
+	// still fills (Postgres outage, cold-start burst), Hits drop and
+	// increment DroppedCount; the seen-mark rolls back so a later
+	// Push for the same key retries. Operators alert on a sustained
+	// drop climb. See internal/canonical/discovery/sink.go.
 	discoverySink := discovery.NewAsyncSink(discoveryRecorderAdapter{s: store}, discovery.AsyncSinkOptions{
 		BufferSize:    1024,
 		RecordTimeout: 2 * time.Second,
@@ -558,9 +561,10 @@ func watchDiscoveryDrops(sink *discovery.AsyncSink, logger *slog.Logger) (contex
 		ticker := time.NewTicker(15 * time.Second)
 		defer ticker.Stop()
 
-		var last uint64
+		var lastDropped, lastSkipped uint64
 		flush := func() {
-			last = emitDiscoveryDropMetricDelta(last, sink.DroppedCount(), logger)
+			lastDropped = emitDiscoveryDropMetricDelta(lastDropped, sink.DroppedCount(), logger)
+			lastSkipped = emitDiscoverySkipMetricDelta(lastSkipped, sink.SkippedCount())
 		}
 
 		for {
@@ -588,6 +592,17 @@ func emitDiscoveryDropMetricDelta(prev, current uint64, logger *slog.Logger) uin
 			"total", current,
 		)
 	}
+	return current
+}
+
+// emitDiscoverySkipMetricDelta updates the skip counter without
+// logging — skips are the healthy steady-state under in-process
+// dedup and would dominate logs unhelpfully.
+func emitDiscoverySkipMetricDelta(prev, current uint64) uint64 {
+	if current <= prev {
+		return current
+	}
+	obs.DiscoverySkippedHitsTotal.Add(float64(current - prev))
 	return current
 }
 

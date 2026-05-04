@@ -99,7 +99,23 @@ sampling, not only at shutdown, so operators can alert on sustained
 loss while the process is still running. Any non-zero increase means
 discovery coverage is degrading under recorder pressure; this is
 best-effort data loss, not a backpressure signal on the main ingest
-path.
+path. With in-process dedup (per `ratesengine_discovery_skipped_hits_total`)
+healthy steady-state should never drop — a non-zero rate typically
+means a Postgres outage or cold-start burst.
+
+### `ratesengine_discovery_skipped_hits_total`
+
+Counter, no labels.
+
+Discovery hits skipped because their `(contract_id, event_type)` had
+already been enqueued in this process and the recorder upserts on the
+same key — re-enqueue is wasted work. Emitted by the live indexer from
+periodic `SkippedCount` sampling. A high ratio of Skipped to
+(Skipped + Recorded) is expected and healthy: most contract events are
+duplicates from already-discovered contracts. Tracked for
+capacity-planning visibility, not for alerting. A process restart
+resets the dedup set; the first push for any key after restart still
+records (no-op upsert if already in DB).
 
 ### `ratesengine_source_insert_errors_total`
 

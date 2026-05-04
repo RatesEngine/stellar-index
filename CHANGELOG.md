@@ -15,6 +15,23 @@ against.
 
 ## [Unreleased]
 
+### Changed
+
+- **`internal/canonical/discovery`: in-process dedup before sink
+  enqueue.** The async discovery sink now keeps a process-local set
+  of `(contract_id, event_type)` keys it has already enqueued and
+  silently skips repeats — most SEP-41 events are duplicates of
+  already-discovered contracts and the recorder upserts on the same
+  key, so re-enqueue is wasted work. Addresses the 99.4 % drop rate
+  documented for r1 in #620 (845 k drops vs 4 921 recorded rows): in
+  steady state the sink should now never drop. A new
+  `ratesengine_discovery_skipped_hits_total` counter exposes the
+  dedup hit rate. Drop semantics are unchanged for genuine buffer
+  saturation; the seen-mark is rolled back on drop so a later push
+  for the same key can retry. Behaviour change: tests that pushed
+  the same `(contract_id, event_type)` repeatedly now record once,
+  not N times.
+
 ### Documentation
 
 - **`r1-deployment-state.md` documents discovery-sink drop rate.**
@@ -25,10 +42,9 @@ against.
   faster than new events arrive. Not catastrophic — same
   contracts re-sniff and eventually land — but new SEP-41
   contracts may take many ledgers before their first record
-  sticks. Captured in §5c with two viable follow-up fixes
-  (in-memory LRU dedup before push, or making BufferSize
-  config-tunable). Deferred until the GitHub Actions budget is
-  restored — both fixes need CI validation.
+  sticks. Captured in §5c. Code fix landed in the in-process dedup
+  change above; once deployed to r1 the drop counter should
+  flatline.
 
 ### Dependencies
 
