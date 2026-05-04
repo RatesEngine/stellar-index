@@ -15,6 +15,16 @@ against.
 
 ## [Unreleased]
 
+### Added
+
+- **`GET /v1/coins?issuer=G…` filter.** New optional query
+  parameter on the existing coins endpoint that restricts the
+  listing to classic assets minted by a single G-strkey. Powers
+  the `/issuers → /coins?issuer=…` deep-link the showcase issuer
+  table cross-references; uses the existing
+  `(issuer_g_strkey)` index on `classic_assets` so the filtered
+  scan is O(matching) rather than full-table.
+
 ### Changed
 
 - **`/v1/markets` and `/v1/pairs` recency-bound their underlying

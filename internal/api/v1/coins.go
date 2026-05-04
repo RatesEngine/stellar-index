@@ -11,7 +11,7 @@ import (
 // CoinsReader is the seam the /v1/coins handler reads through.
 // timescale.Store satisfies it via ListCoins.
 type CoinsReader interface {
-	ListCoins(ctx context.Context, limit int) ([]timescale.CoinRow, error)
+	ListCoins(ctx context.Context, limit int, issuer string) ([]timescale.CoinRow, error)
 }
 
 // Coin is the wire shape of one entry in the /v1/coins response.
@@ -61,7 +61,11 @@ func (s *Server) handleCoins(w http.ResponseWriter, r *http.Request) {
 		limit = n
 	}
 
-	rows, err := s.coins.ListCoins(r.Context(), limit)
+	// Optional ?issuer=G… filter — passed straight through to
+	// storage. Empty string means "no filter, return all."
+	issuer := r.URL.Query().Get("issuer")
+
+	rows, err := s.coins.ListCoins(r.Context(), limit, issuer)
 	if err != nil {
 		s.logger.Warn("coins list", "err", err)
 		writeProblem(w, r,

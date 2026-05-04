@@ -865,6 +865,15 @@ paths:
             minimum: 1
             maximum: 500
             default: 100
+        - name: issuer
+          in: query
+          required: false
+          description: |
+            Restrict the listing to assets minted by this G-strkey.
+            Used by the showcase to deep-link from `/issuers` into
+            "coins by this issuer."
+          schema:
+            type: string
       responses:
         "200":
           description: Array of coin entries.

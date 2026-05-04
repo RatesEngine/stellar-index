@@ -1431,6 +1431,12 @@ export interface paths {
                 query?: {
                     /** @description Max rows to return; 1-500, default 100. */
                     limit?: number;
+                    /**
+                     * @description Restrict the listing to assets minted by this G-strkey.
+                     *     Used by the showcase to deep-link from `/issuers` into
+                     *     "coins by this issuer."
+                     */
+                    issuer?: string;
                 };
                 header?: never;
                 path?: never;

@@ -2,6 +2,7 @@ package timescale
 
 import (
 	"context"
+	"database/sql"
 	"fmt"
 )
 
@@ -25,15 +26,23 @@ type CoinRow struct {
 // (observation_count, slug) tuple of the last row of the previous
 // page.
 //
+// issuer, when non-empty, filters to assets minted by that
+// G-strkey — used by the showcase to deep-link from /issuers into
+// "coins by this issuer."
+//
 // The endpoint is read-only and joins no other tables today; future
 // passes (Phase 5.1 super-table) will join in change_summary_5m +
 // classic_asset_stats_5m so the wire response carries pre-computed
 // price + delta + volume per row.
-func (s *Store) ListCoins(ctx context.Context, limit int) ([]CoinRow, error) {
+func (s *Store) ListCoins(ctx context.Context, limit int, issuer string) ([]CoinRow, error) {
 	if limit <= 0 || limit > 500 {
 		limit = 100
 	}
-	const q = `
+	// Two query forms — empty-issuer takes the primary observation-
+	// count index; non-empty filters by issuer first (the
+	// `classic_assets_issuer_idx` btree on issuer_g_strkey makes the
+	// filtered scan O(matching-rows)).
+	const qAll = `
 		SELECT
 		    COALESCE(slug, code)             AS slug,
 		    asset_id,
@@ -46,7 +55,29 @@ func (s *Store) ListCoins(ctx context.Context, limit int) ([]CoinRow, error) {
 		 ORDER BY observation_count DESC, asset_id ASC
 		 LIMIT $1
 	`
-	rows, err := s.db.QueryContext(ctx, q, limit)
+	const qByIssuer = `
+		SELECT
+		    COALESCE(slug, code)             AS slug,
+		    asset_id,
+		    code,
+		    issuer_g_strkey,
+		    first_seen_ledger,
+		    last_seen_ledger,
+		    observation_count
+		  FROM classic_assets
+		 WHERE issuer_g_strkey = $1
+		 ORDER BY observation_count DESC, asset_id ASC
+		 LIMIT $2
+	`
+	var (
+		rows *sql.Rows
+		err  error
+	)
+	if issuer == "" {
+		rows, err = s.db.QueryContext(ctx, qAll, limit)
+	} else {
+		rows, err = s.db.QueryContext(ctx, qByIssuer, issuer, limit)
+	}
 	if err != nil {
 		return nil, fmt.Errorf("timescale: ListCoins: %w", err)
 	}
