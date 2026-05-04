@@ -17,11 +17,13 @@ Phase 7.
 - [TanStack Query v5](https://tanstack.com/query)
 - [openapi-typescript](https://github.com/openapi-ts/openapi-typescript) — types generated from `../../openapi/rates-engine.v1.yaml`
 - [Zod](https://zod.dev) — runtime validation at the API boundary
-- [@vercel/og](https://vercel.com/docs/functions/og-image-generation) — Open Graph cards
+- [satori](https://github.com/vercel/satori) + [@resvg/resvg-js](https://github.com/yisibl/resvg-js) — Open Graph card generation (build-time + Cloudflare Worker for long-tail)
 - [lucide-react](https://lucide.dev) — icons
 - MDX via `@next/mdx` (Phase 12 — research blog)
 
-Hosted on Vercel at v1; self-hosted on r1 is the fallback.
+**Static export only** (`output: 'export'` in `next.config.mjs`).
+Deployed to Cloudflare Pages at v1; rsync → r1 nginx behind Cloudflare
+CDN as the fallback. Same vendor story as `api.ratesengine.net`.
 
 ## Run locally
 
@@ -91,10 +93,28 @@ fails if the regen would produce a diff. **Never hand-edit
 
 ## Deployment
 
-Vercel via `app.ratesengine.net` — DNS-only at Cloudflare so we
-don't double-CDN. Vercel handles ISR + edge functions + OG
-images.
+Static export only — `next build` produces an `out/` directory of
+HTML + JS + CSS, no Node runtime needed at the edge.
 
-Self-hosted fallback: `next build && next start` behind HAProxy on
-r1 (the same TLS termination as the API). Phase 13 launch will
-pick the path; v1 ships on Vercel.
+**v1 target: Cloudflare Pages.** Connect the repo, set the build
+output dir to `web/showcase/out`, set the build command to
+`pnpm --filter @ratesengine/showcase build`. Cloudflare auto-deploys
+on every push to `main` + creates per-PR previews. Free tier covers
+unmetered requests on Pages-served static assets.
+
+**v1 fallback: rsync → r1.** `make web-build` produces `out/`; rsync
+that to `/var/www/showcase/` on r1; Cloudflare proxies `app.ratesengine.net`
+→ r1 nginx → static files. Same TLS termination + CDN as the API.
+
+Dynamic routes (`/coins/{slug}`, `/contracts/{id}`, `/tx/{hash}`,
+`/accounts/{G}`) use **client-side rendering**: the build emits a
+shell, the page hydrates and fetches data from `api.ratesengine.net`
+via TanStack Query. High-traffic routes (top-N coins, all protocols,
+all sources) get pre-rendered via `generateStaticParams` for SEO;
+the long-tail is JS-rendered (Google handles it fine in 2026).
+
+Why not Vercel: brand fit + vendor consolidation. Static export to
+our existing Cloudflare CDN is one vendor; Vercel is two. Reliability
+difference is invisible at our traffic volume — the showcase is a
+thin shell over `api.ratesengine.net`, which is the actual reliability
+question.

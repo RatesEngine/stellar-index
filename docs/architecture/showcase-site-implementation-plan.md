@@ -24,7 +24,7 @@ status: planning
 | API types | **`openapi-typescript`** | Generates `web/showcase/src/api/types.ts` from `openapi/rates-engine.v1.yaml`. Single source of truth. CI check fails if regen drifts. |
 | Validation | **Zod** | Runtime validation at the API boundary (defends against contract drift) |
 | MDX | **`@next/mdx`** + **`next-mdx-remote`** | Research articles authored as `.mdx` files |
-| OG images | **`@vercel/og`** | Edge-runtime React-flavored OG generation |
+| OG images | **`satori` + `@resvg/resvg-js`** (build-time) for known routes; small Cloudflare Worker for dynamic. | Pure SVG → PNG; no Vercel-specific dep. Build-time covers most routes; the Worker is ~50 lines for the long-tail. |
 | Icons | **lucide-react** | Tree-shakeable SVG icons |
 | Toasts / notifications | **sonner** | Lightweight, good a11y |
 | Date formatting | **date-fns** + native Intl | Tree-shakeable, locale-aware |
@@ -50,12 +50,16 @@ No language change. Extensions to the existing stack:
 
 | Concern | Choice | Notes |
 |---|---|---|
-| **v1 hosting** | **Vercel** | Zero-config CDN + ISR + edge OG generation. ~$0/mo for our traffic volume on free tier; ~$20/mo on Pro if we exceed limits. |
-| **v2 alternative** | Self-hosted Next.js on r1 | Behind HAProxy, same TLS termination as the API. Switch if we want full control or if Vercel costs grow. |
+| **Build target** | **`output: 'export'`** in `next.config.mjs` | Static HTML + JS bundle; ~5 MB total. No SSR, no edge runtime, no vendor lock-in. |
+| **v1 hosting** | **Cloudflare Pages** | Same vendor as the API CDN; git-push deploys with per-PR previews; free tier covers v1 traffic. Same operational story as `cdn-setup.md`. |
+| **v1 fallback** | rsync → r1 nginx → Cloudflare CDN | If we want full self-hosted: `next build` produces `out/`, rsync to r1, nginx serves under Cloudflare. Same TLS termination as the API. |
 | **API origin** | `api.ratesengine.net` (existing, behind Cloudflare per `cdn-setup.md`) | No change |
-| **Showcase domain** | `app.ratesengine.net` | Vercel CNAME + SSL via Cloudflare proxy (DNS-only mode at Cloudflare to avoid double-CDN) |
-| **Build env** | Node 20 LTS, pnpm 9 | Faster + smaller node_modules than npm |
-| **CI** | GitHub Actions — same workflow as the Go monorepo, new job for `web/showcase/` | `pnpm install --frozen-lockfile`, `pnpm typecheck`, `pnpm lint`, `pnpm build` |
+| **Showcase domain** | `app.ratesengine.net` | CNAME → Cloudflare Pages OR A → r1; Cloudflare proxied (orange cloud) either way. Single-vendor CDN story. |
+| **Dynamic routes** | Client-side rendering (CSR) for long-tail (`/contracts/{id}`, `/tx/{hash}`, `/accounts/{G}`); pre-rendered via `generateStaticParams` for high-traffic (top-N coins, all protocols, all sources) | TanStack Query handles client-side fetch + cache; SEO targets the pre-rendered set; long-tail is JS-rendered (Google handles it) |
+| **OG images** | Build-time generation via `satori` + `@resvg/resvg-js` for pre-rendered routes; small Cloudflare Worker (~50 lines) for dynamic | `@vercel/og` is a Vercel runtime; Satori is the underlying library and runs anywhere. |
+| **Build env** | Node 20 LTS, pnpm 10 | Faster + smaller node_modules than npm |
+| **CI** | GitHub Actions — same workflow as the Go monorepo, new job for `web/showcase/` | `pnpm install --frozen-lockfile`, `pnpm typecheck`, `pnpm lint`, `pnpm build`. Cloudflare Pages auto-deploys on push to main. |
+| **Why not Vercel** | Brand fit + vendor consolidation | The "we run our own everything" pitch is the differentiator. Vercel adds a vendor; static export to our existing Cloudflare CDN doesn't. Reliability difference is invisible at our request volume. |
 
 ### 1.4 Repo layout
 
@@ -279,7 +283,7 @@ The 10ish endpoints that need real compute or a new dependency.
 | 6.7 | Time-pin helper + every endpoint accepts `as_of_ledger` | All Phase 5 endpoints retro-fitted | M |
 | 6.8 | Wildcard observations stream: `/v1/observations/stream?asset=*` | Hub-driven firehose; load-tested at 100 trades/sec | M |
 | 6.9 | Last-Event-ID replay on tip + observations streams | Per-connection ring buffer | M |
-| 6.10 | OG image embed routes: `/embed/og/coin/{slug}.png` etc. | `@vercel/og` on the showcase side calling backend for data | M |
+| 6.10 | OG image generation: build-time (Satori → resvg PNG) for pre-rendered routes; Cloudflare Worker for the long-tail | Worker code shipped alongside the showcase repo; deploys to Cloudflare via `wrangler` | M |
 
 **Phase 6 deliverable**: every endpoint listed in the planning doc § 10 lives. Backend complete.
 
@@ -437,7 +441,7 @@ Parallelization opportunities:
 | R4 | **SEP-1 fetch outbound HTTPS** is the only egress dependency | Per-domain rate limit + weekly stale acceptance. Background worker with retries. Cache hit ≥ 90%. |
 | R5 | **Time-machine discipline** (every endpoint must accept `as_of_ledger`) | Code-review enforcement + lint rule that fails CI if a new handler doesn't import the timepin helper. |
 | R6 | **SDEX offer lifecycle** is the largest single ingest extension | Spike + design note before starting Phase 4.6. Estimate may grow. |
-| R7 | **Vercel cost** if traffic exceeds free tier | Self-host fallback ready (Phase 1.5 alt-path). Static-export + CDN minimizes function invocations. |
+| R7 | **Cloudflare Pages limits** (build minutes, request count) if traffic spikes | Cloudflare Pages free tier is generous (500 builds/mo, unmetered requests on Pages-served static assets). Worst case: switch to rsync → r1 nginx → Cloudflare proxied — zero code change, same `out/` artefact. |
 | R8 | **Schema drift** between `web/showcase/src/api/types.ts` and OpenAPI spec | CI check: regen and `git diff --exit-code`. |
 | R9 | **Frontend bundle creep** as we add panels | `next-bundle-analyzer` in CI; per-route budget (100 KB) enforced. |
 | R10 | **Time-machine UX confusion** ("am I looking at live or historical?") | Off-tone background + persistent "as of" badge + disable live-tape panels in pinned mode. |
@@ -448,7 +452,7 @@ Parallelization opportunities:
 
 From the data-inventory doc §20, here's where each lands:
 
-1. **Hosting:** Vercel for v1 (1.3 above).
+1. **Hosting:** Cloudflare Pages (static export) for v1 — same vendor as our API CDN; rsync-to-r1 as fallback (1.3 above).
 2. **Wallet UX:** Freighter only at v1; Albedo + Lobstr in Phase 12.9 follow-up.
 3. **Repo layout:** monorepo (1.4 above).
 4. **MDX content repo:** in-tree at `web/showcase/src/posts/` (1.4 above).
@@ -456,7 +460,7 @@ From the data-inventory doc §20, here's where each lands:
 6. **Embeds:** allow arbitrary domains at v1 (Phase 12.7); whitelist if abused.
 7. **Slug ownership:** volume-weighted dominant (already in §9.7 of data-inventory doc).
 8. **MEV detection thresholds:** algorithmic with visible confidence score; tuned per pattern.
-9. **OG generator:** `@vercel/og` (1.1 above).
+9. **OG generator:** Satori + resvg at build time for pre-rendered routes; tiny Cloudflare Worker for the long-tail (1.1 above).
 10. **`as_of_ledger` UX:** off-tone styling + disable live panels.
 
 ---
