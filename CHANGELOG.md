@@ -17,6 +17,17 @@ against.
 
 ### Fixed
 
+- **SLA probe covers the catalogue endpoints.** The probe
+  (`cmd/ratesengine-sla-probe`) only sampled `/v1/price`,
+  `/v1/oracle/latest`, and the health/version surfaces. The
+  showcase site fans out across `/v1/coins`, `/v1/issuers`,
+  `/v1/markets`, and `/v1/diagnostics/cursors` on every page
+  load — a latency regression on those would only surface as
+  "the showcase is slow", well after the SLA probe gate would
+  have caught it. Added all four to `staticEndpoints()`. The
+  T-0 launch-day smoke probe in `launch-day-checklist.md` now
+  exercises every showcase hot-path before the cut.
+
 - **CDN cache headers for new endpoints.** Real launch-perf miss
   caught: every endpoint added in the last 30 PRs
   (`/v1/coins`, `/v1/issuers`, `/v1/issuers/{g}`,
