@@ -53,6 +53,7 @@ type Server struct {
 	supply       SupplyLooker
 	volume       VolumeReader
 	change24h    Change24hReader
+	changesum    ChangeSummaryReader
 	sep10        auth.SEP10Validator
 	cors         middleware.Middleware
 	auth         middleware.Middleware
@@ -157,6 +158,14 @@ type Options struct {
 	// combination of (Supply, Volume, Change24h) is legal.
 	Change24h Change24hReader
 
+	// ChangeSummary, when non-nil, backs GET /v1/changes/{entity_type}/{id}.
+	// Production wiring: a thin adapter around
+	// timescale.Store.GetChangeSummary, which reads the
+	// change_summary_5m hypertable populated by the changesummary
+	// worker (Phase 3). Powers every multi-window delta strip on
+	// the showcase. Nil makes the endpoint return 503.
+	ChangeSummary ChangeSummaryReader
+
 	// SEP10, when non-nil, backs GET /v1/auth/sep10/challenge and
 	// POST /v1/auth/sep10/token. Production wiring: an
 	// auth/sep10.Validator constructed from the binary's signing
@@ -248,6 +257,7 @@ func New(opts Options) *Server {
 		supply:       opts.Supply,
 		volume:       opts.Volume,
 		change24h:    opts.Change24h,
+		changesum:    opts.ChangeSummary,
 		sep10:        opts.SEP10,
 		cors:         opts.CORS,
 		auth:         opts.Auth,
@@ -322,6 +332,7 @@ func (s *Server) Uptime() time.Duration { return time.Since(s.started) }
 func (s *Server) mountRoutes() {
 	// Health / meta endpoints. Deliberately NOT behind rate-limit
 	// middleware — infra (k8s probes, load balancers) hits these.
+	s.mux.HandleFunc("GET /v1/changes/{entity_type}/{id}", s.handleChangeSummary)
 	s.mux.HandleFunc("GET /v1/healthz", s.handleHealthz)
 	s.mux.HandleFunc("GET /v1/readyz", s.handleReadyz)
 	s.mux.HandleFunc("GET /v1/version", s.handleVersion)
