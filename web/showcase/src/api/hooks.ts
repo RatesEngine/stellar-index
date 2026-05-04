@@ -109,3 +109,29 @@ export function useCoins(limit = 100) {
     },
   });
 }
+
+export type Cursor = {
+  source: string;
+  sub_source?: string;
+  last_ledger: number;
+  last_updated: string;
+  lag_seconds: number;
+};
+
+type CursorsEnvelope = { data: Cursor[] };
+
+/**
+ * useCursors — fetches the per-source ingest cursor table from
+ * `/v1/diagnostics/cursors`. Refetched every 15s so the showcase
+ * /diagnostics page reflects backfill progress without manual reload.
+ */
+export function useCursors() {
+  return useQuery<Cursor[]>({
+    queryKey: ['/v1/diagnostics/cursors'],
+    queryFn: async () => {
+      const env = await apiGet<CursorsEnvelope | Cursor[]>('/v1/diagnostics/cursors');
+      return Array.isArray(env) ? env : env.data;
+    },
+    refetchInterval: 15_000,
+  });
+}
