@@ -51,6 +51,21 @@ against.
   beyond). Decoder-coverage / archive-completeness / SLO panels
   follow as their underlying endpoints ship.
 
+- **Home page hero + Try-the-API panel.** Replaces the generic
+  "Stellar pricing explorer" intro with a clearer hero (independent
+  / open / public-tier free), three CTAs (Browse coins / Browse
+  markets / API docs), and a tabbed `HomeTryAPI` panel with four
+  copy-pasteable curl examples (latest XLM/USDC, top-100 coins,
+  active markets, ingest cursors). Drops the unused fake "Top
+  movers" + "Sample composite" stub blocks. Makes "what is this
+  for and how do I use it" answerable in 10 seconds on the home
+  page.
+
+- **Custom 404 page.** Static-export-compatible `not-found.tsx`
+  with a recovery list (Home / Coins / Markets / Sources /
+  Diagnostics / API docs) so visitors hitting a stale or mistyped
+  URL aren't dumped on Next's default 404.
+
 - **Showcase SEO foundations.** Adds `app/robots.ts` and
   `app/sitemap.ts` so static export emits both at build time:
   robots.txt allows all crawlers (carve-out for `/dev/`), sitemap
