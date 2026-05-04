@@ -215,10 +215,58 @@ func TestUnknownRouteReturns404(t *testing.T) {
 	if resp.StatusCode != http.StatusNotFound {
 		t.Errorf("status = %d, want 404", resp.StatusCode)
 	}
+	if ct := resp.Header.Get("Content-Type"); ct != "application/problem+json" {
+		t.Errorf("content-type = %q, want application/problem+json", ct)
+	}
+	var p struct {
+		Type, Title, Detail, Instance string
+		Status                        int
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&p); err != nil {
+		t.Fatalf("body not problem+json: %v", err)
+	}
+	if p.Status != 404 {
+		t.Errorf("status field = %d, want 404", p.Status)
+	}
+	if p.Title != "Not found" {
+		t.Errorf("title = %q, want %q", p.Title, "Not found")
+	}
+	if p.Instance != "/v1/nonsense" {
+		t.Errorf("instance = %q, want /v1/nonsense", p.Instance)
+	}
+}
+
+func TestRootReturnsWelcomeEnvelope(t *testing.T) {
+	ts := newTestServer(t)
+	resp, err := http.Get(ts.URL + "/")
+	if err != nil {
+		t.Fatalf("GET /: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Errorf("status = %d, want 200", resp.StatusCode)
+	}
+	if ct := resp.Header.Get("Content-Type"); ct != "application/json" {
+		t.Errorf("content-type = %q, want application/json", ct)
+	}
+	var env struct {
+		Data map[string]string `json:"data"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&env); err != nil {
+		t.Fatalf("body not envelope JSON: %v", err)
+	}
+	if env.Data["name"] != "rates-engine" {
+		t.Errorf("name = %q, want rates-engine", env.Data["name"])
+	}
+	if env.Data["docs"] == "" {
+		t.Error("docs should be non-empty")
+	}
 }
 
 func TestMethodMismatch(t *testing.T) {
-	// /v1/healthz is GET-only; POST should be 405.
+	// /v1/healthz is GET-only; POST should be 405 with problem+json
+	// (the envelope404Middleware translates the mux's text/plain
+	// default into the same wire shape as our other error responses).
 	ts := newTestServer(t)
 	req, _ := http.NewRequest(http.MethodPost, ts.URL+"/v1/healthz", nil)
 	resp, err := http.DefaultClient.Do(req)
@@ -228,6 +276,22 @@ func TestMethodMismatch(t *testing.T) {
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusMethodNotAllowed {
 		t.Errorf("status = %d, want 405 for POST /healthz", resp.StatusCode)
+	}
+	if ct := resp.Header.Get("Content-Type"); ct != "application/problem+json" {
+		t.Errorf("content-type = %q, want application/problem+json", ct)
+	}
+	var p struct {
+		Title  string
+		Status int
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&p); err != nil {
+		t.Fatalf("body not problem+json: %v", err)
+	}
+	if p.Title != "Method not allowed" {
+		t.Errorf("title = %q, want %q", p.Title, "Method not allowed")
+	}
+	if p.Status != 405 {
+		t.Errorf("status field = %d, want 405", p.Status)
 	}
 }
 

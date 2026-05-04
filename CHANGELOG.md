@@ -17,6 +17,18 @@ against.
 
 ### Changed
 
+- **Unknown paths + method mismatches return RFC 9457 problem+json
+  instead of Go's default text/plain "404 page not found" /
+  "Method Not Allowed".** New `Envelope404` middleware sits in the
+  v1 server's standard chain and rewrites the mux's text/plain
+  defaults at WriteHeader time so the wire shape matches every other
+  v1 error response. SSE handlers and large-body responses are
+  unaffected (the wrapper passes Write through verbatim outside the
+  rewrite case). Bare-root `GET /` now returns a friendly welcome
+  envelope (`{name, version, docs, openapi}`) — accidental visitors
+  hitting `api.ratesengine.net` get a useful response instead of a
+  bare 404.
+
 - **API request-logger middleware skips 429 responses entirely.** A
   single misconfigured client (or an unauthenticated load generator)
   can produce thousands of 429s per second on a public origin —

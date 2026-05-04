@@ -331,6 +331,12 @@ func (s *Server) Handler() http.Handler {
 		// without a CDN don't emit a directive a CDN they don't run
 		// could later honour.
 		middleware.CacheControlWithCDN(s.cdnEnabled),
+		// Convert Go's default text/plain 404 / 405 from the mux into
+		// problem+json so unknown paths and method mismatches use the
+		// same wire shape as the rest of our error surface. Sits AFTER
+		// CacheControl so the override gets the same Cache-Control
+		// directive a regular handler-side response would.
+		middleware.Envelope404,
 	}
 	if s.cors != nil {
 		stack = append(stack, s.cors)
@@ -464,6 +470,16 @@ func (s *Server) mountRoutes() {
 	// the server-signing seed + JWT secret configured.
 	s.mux.HandleFunc("GET /v1/auth/sep10/challenge", s.handleSEP10Challenge)
 	s.mux.HandleFunc("POST /v1/auth/sep10/token", s.handleSEP10Token)
+
+	// Bare-root welcome. GET / lands accidental visitors on a
+	// friendly envelope pointing at the docs. The `{$}` anchor means
+	// this pattern matches ONLY the literal "/" — it does not catch
+	// `/anything-else`, so ServeMux's 405 method-mismatch detection
+	// for known paths stays intact. Unknown paths fall through to
+	// envelope404Middleware (see Handler()) which converts Go's
+	// default text/plain 404 / 405 responses into RFC 9457
+	// problem+json.
+	s.mux.HandleFunc("GET /{$}", s.handleRoot)
 }
 
 // ─── Handlers ─────────────────────────────────────────────────────
@@ -568,5 +584,18 @@ func (s *Server) handleVersion(w http.ResponseWriter, _ *http.Request) {
 		"commit":     version.Commit,
 		"dirty":      version.Dirty,
 		"go_version": version.GoVersion,
+	}, Flags{})
+}
+
+// handleRoot welcomes accidental visitors at GET /. Returns a small
+// envelope with the binary version + a pointer at the docs; not part
+// of the public API surface (no OpenAPI entry), strictly a "you've
+// reached the API hostname" affordance.
+func (s *Server) handleRoot(w http.ResponseWriter, _ *http.Request) {
+	writeJSON(w, map[string]string{
+		"name":    "rates-engine",
+		"version": version.Version,
+		"docs":    "https://docs.ratesengine.net",
+		"openapi": "https://docs.ratesengine.net/openapi.yaml",
 	}, Flags{})
 }
