@@ -1,5 +1,12 @@
+import type { Metadata } from 'next';
 import { Suspense } from 'react';
 import { CoinsTable } from './CoinsTable';
+
+export const metadata: Metadata = {
+  title: 'Coins — every asset on Stellar',
+  description:
+    'Browse every classic and Soroban asset that has been observed on Stellar, ranked by activity. Click through to live charts, markets, issuer detail.',
+};
 
 /**
  * /coins server-component shell. Wraps the table in Suspense so

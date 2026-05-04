@@ -1,4 +1,11 @@
+import type { Metadata } from 'next';
 import { Panel } from '@/components/reveal';
+
+export const metadata: Metadata = {
+  title: 'API docs',
+  description:
+    'Full reference for the Rates Engine v1 API — every endpoint, every parameter, auto-generated from the OpenAPI spec.',
+};
 
 export default function DocsPage() {
   return (

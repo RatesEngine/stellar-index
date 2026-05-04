@@ -51,6 +51,18 @@ against.
   beyond). Decoder-coverage / archive-completeness / SLO panels
   follow as their underlying endpoints ship.
 
+- **Showcase SEO foundations.** Adds `app/robots.ts` and
+  `app/sitemap.ts` so static export emits both at build time:
+  robots.txt allows all crawlers (carve-out for `/dev/`), sitemap
+  enumerates every static route plus the live top-100 coin
+  detail pages (119 entries on a current build). Root layout now
+  carries OpenGraph + Twitter card metadata + a comprehensive
+  keyword list; `/coins/[slug]` adds per-page `generateMetadata`
+  so each coin gets its own title + description; `/coins`,
+  `/markets`, `/sources`, `/diagnostics`, and `/docs` ship
+  page-level metadata too. Required for clean public flip /
+  search-engine indexing.
+
 - **Markets tab on `/coins/[slug]` goes live.** Replaces the
   disabled placeholder with a live markets panel that joins
   `/v1/coins` (slug → asset_id) and `/v1/markets` (recently-active

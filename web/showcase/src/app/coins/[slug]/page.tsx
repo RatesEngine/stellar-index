@@ -1,3 +1,4 @@
+import type { Metadata } from 'next';
 import Link from 'next/link';
 import { Suspense } from 'react';
 
@@ -50,6 +51,31 @@ export async function generateStaticParams() {
 }
 
 type Params = Promise<{ slug: string }>;
+
+export async function generateMetadata({
+  params,
+}: {
+  params: Params;
+}): Promise<Metadata> {
+  const { slug } = await params;
+  const coin = findCoin(slug);
+  const title = coin
+    ? `${coin.ticker} (${coin.name}) — price, markets, issuer`
+    : `${slug} — Stellar asset`;
+  const description = coin?.description
+    ? coin.description
+    : `Live price, markets, and issuer detail for ${slug} on Stellar — VWAP'd across on-chain DEXes, classic SDEX, and major exchanges.`;
+  return {
+    title,
+    description,
+    openGraph: {
+      title,
+      description,
+      url: `/coins/${slug}`,
+      type: 'website',
+    },
+  };
+}
 
 export default async function CoinDetailPage({ params }: { params: Params }) {
   const { slug } = await params;
