@@ -1,5 +1,4 @@
 import Link from 'next/link';
-import { notFound } from 'next/navigation';
 import { Suspense } from 'react';
 
 import { Panel } from '@/components/reveal';
@@ -10,9 +9,9 @@ import {
   StreakIndicator,
 } from '@/components/primitives';
 import { SourceContributionDonut } from '@/components/panels/SourceContributionDonut';
-import { asExample } from '@/api/client';
+import { asExample, API_BASE_URL } from '@/api/client';
 import { formatCompact, formatPrice } from '@/lib/format';
-import { SEED_COINS, findCoin } from '@/lib/coins-seed';
+import { SEED_COINS, findCoin, synthesizeCoin } from '@/lib/coins-seed';
 import { CoinTabs, ActiveTabSlot } from './CoinTabs';
 import { ChartPanel } from './ChartPanel';
 import { IssuerPanel } from './IssuerPanel';
@@ -22,20 +21,45 @@ import { IssuerPanel } from './IssuerPanel';
  *
  * Server component pre-renders the chrome + both Overview and
  * Chart bodies. A small client-component slot reads `?tab=` and
- * shows the active body. The Markets / History / Supply / Issuer /
- * Liquidity tabs are disabled placeholders until their content
- * lands in subsequent PRs.
+ * shows the active body. The Markets / History / Supply / Liquidity
+ * tabs are disabled placeholders until their content lands in
+ * subsequent PRs.
  */
-export function generateStaticParams() {
-  return SEED_COINS.map((c) => ({ slug: c.slug }));
+export async function generateStaticParams() {
+  // Build-time fetch from the live API so every coin in the top-100
+  // gets a pre-rendered route. Falls back to SEED_COINS if the API
+  // is unreachable (e.g. air-gapped CI). The dev seed slugs are
+  // unioned in so old links don't break.
+  const seedSlugs = SEED_COINS.map((c) => c.slug);
+  try {
+    const res = await fetch(`${API_BASE_URL}/v1/coins?limit=100`, {
+      // Static export can't use ISR, so we always hit the network at
+      // build time. 5s feels generous for what should be a sub-second
+      // call; missing it just falls through to seed-only.
+      signal: AbortSignal.timeout(5_000),
+    });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const env = (await res.json()) as { data: { slug: string }[] };
+    const liveSlugs = (env.data ?? []).map((c) => c.slug);
+    const all = new Set<string>([...seedSlugs, ...liveSlugs]);
+    return [...all].map((slug) => ({ slug }));
+  } catch {
+    return seedSlugs.map((slug) => ({ slug }));
+  }
 }
 
 type Params = Promise<{ slug: string }>;
 
 export default async function CoinDetailPage({ params }: { params: Params }) {
   const { slug } = await params;
-  const coin = findCoin(slug);
-  if (!coin) notFound();
+  // Seed lookup falls back to a slug-derived placeholder so newly-
+  // observed Stellar assets still render a usable detail page —
+  // chart / issuer / change-summary panels fetch live data from the
+  // slug, so the only thing the seed provides is design metadata
+  // (description, sources weighting, sparkline). For unknown slugs
+  // those panels render neutral placeholders.
+  const coin = findCoin(slug) ?? synthesizeCoin(slug);
+  const isSynthetic = !findCoin(slug);
 
   return (
     <div className="mx-auto max-w-6xl space-y-6 p-6">
@@ -74,8 +98,14 @@ export default async function CoinDetailPage({ params }: { params: Params }) {
 
       <Suspense fallback={null}>
         <ActiveTabSlot
-          overview={<OverviewBody coin={coin} />}
-          chart={<ChartPanel slug={coin.slug} startPrice={coin.price} />}
+          overview={
+            isSynthetic ? (
+              <SyntheticOverview slug={coin.slug} />
+            ) : (
+              <OverviewBody coin={coin} />
+            )
+          }
+          chart={<ChartPanel slug={coin.slug} startPrice={coin.price || 0.01} />}
           issuer={
             coin.issuer ? <IssuerPanel gStrkey={coin.issuer} /> : undefined
           }
@@ -83,9 +113,33 @@ export default async function CoinDetailPage({ params }: { params: Params }) {
       </Suspense>
 
       <p className="text-xs text-slate-500">
-        v0 of this page renders a static seed.
-        Real data plumbs through once <code className="font-mono">/v1/coins/{'{slug}'}</code> ships.
+        {isSynthetic
+          ? 'Overview metadata is sparse for newly-observed assets. The Chart tab uses live data.'
+          : 'Static seed metadata; price + chart panels pull from the live API.'}
       </p>
+    </div>
+  );
+}
+
+function SyntheticOverview({ slug }: { slug: string }) {
+  return (
+    <div className="space-y-4">
+      <Panel
+        title={`${slug} — minimal metadata`}
+        hint="Auto-generated from the slug — no curated description yet"
+        source={asExample('/v1/coins')}
+        bodyClassName="text-sm text-slate-600 dark:text-slate-400"
+      >
+        <p>
+          This asset has been observed by the indexer (it appears in{' '}
+          <code className="font-mono">/v1/coins</code>) but doesn&apos;t yet
+          have curated metadata in the showcase. The{' '}
+          <strong>Chart</strong> tab pulls live data from{' '}
+          <code className="font-mono">/v1/chart</code> regardless. If this is
+          a real Stellar asset and you&apos;d like a richer detail page,
+          open an issue on the repo with the asset id.
+        </p>
+      </Panel>
     </div>
   );
 }

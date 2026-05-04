@@ -51,6 +51,16 @@ against.
   beyond). Decoder-coverage / archive-completeness / SLO panels
   follow as their underlying endpoints ship.
 
+- **`/coins/[slug]` pre-renders the live top-100.** `generateStaticParams`
+  now fetches `/v1/coins?limit=100` at build time and unions the
+  result with the design seed, so every coin in the directory has a
+  pre-rendered route. Newly-observed assets that aren't in the seed
+  render through `synthesizeCoin()` — Chart + Issuer tabs still
+  work because they fetch live data from the slug; Overview shows a
+  "minimal metadata" panel instead of zeroed seed fields. `findCoin`
+  is now case-insensitive so live API slugs (`USDC`, `yXLM`) and
+  the dev seed slugs (`usdc`, `yxlm`) both resolve.
+
 - **Cmd-K search ranks against the live coin directory.** The
   global `SearchModal` now reads coins from `useCoins(100)` —
   same cache key as the `/coins` page, so opening search and

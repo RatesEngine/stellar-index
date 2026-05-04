@@ -149,6 +149,48 @@ export const SEED_COINS: SeedCoin[] = [
   },
 ];
 
+/**
+ * synthesizeCoin returns a minimal seeded shape for a slug that
+ * isn't in `SEED_COINS`. Used by `/coins/[slug]` so newly-observed
+ * Stellar assets render a usable detail page even though the design-
+ * iteration seed only covered a handful. Live panels (chart,
+ * issuer, change-summary) all fetch their own data based on slug,
+ * so they don't need anything else from the seed.
+ *
+ * The price / volume / marketCap fields are zeroed; the page guards
+ * against zero-price rendering by hiding those panels when the
+ * canonical metadata is the slug-derived placeholder.
+ */
+export function synthesizeCoin(slug: string): SeedCoin {
+  return {
+    rank: 0,
+    rankDelta: 0,
+    type: 'classic',
+    slug,
+    ticker: slug,
+    name: slug,
+    description: undefined,
+    issuer: undefined,
+    homeDomain: undefined,
+    price: 0,
+    h1: 0,
+    h24: 0,
+    d7: 0,
+    d30: 0,
+    volume24h: 0,
+    marketCap: 0,
+    circulatingSupply: 0,
+    totalSupply: 0,
+    spark: [],
+    confidence: 0,
+    sources: [],
+  };
+}
+
 export function findCoin(slug: string): SeedCoin | undefined {
-  return SEED_COINS.find((c) => c.slug === slug);
+  // Case-insensitive — live API slugs are mixed-case (USDC, yXLM)
+  // while the seed slugs were authored lowercase. Either form
+  // resolves to the same SeedCoin row.
+  const lower = slug.toLowerCase();
+  return SEED_COINS.find((c) => c.slug.toLowerCase() === lower);
 }
