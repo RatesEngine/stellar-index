@@ -22,10 +22,24 @@ type Market struct {
 // not "every pair ever observed". The window is exposed as a var so
 // tests can override it without changing the public function signature.
 //
-// Empirical sizing on r1 (441M trades, 1100+ chunks):
-//   - 14 days: ~540 ms cold, ~50 ms warm — the chosen default
-//   - 30 days: ~9 s with JIT, ~3 s without — too slow for a hot path
-//   - 90 days: ~16-19 s — exceeded the 30s client deadline
+// Empirical sizing on r1 at the 14-day default:
+//   - 2026-04 baseline (441M trades, 1100+ chunks, no concurrent
+//     backfill): ~540 ms cold, ~50 ms warm.
+//   - 2026-05-04 measurement (539M trades, 787 chunks, 16-way
+//     parallel backfill running across 50M-62M ledger range):
+//     ~7 s cold first call, ~400 ms warm steady-state.
+//
+// The cold-call regression is dominated by buffer-cache eviction
+// from the concurrent backfill — recent chunks are pushed out and
+// the GROUP BY across the 14-day window has to re-fault them in.
+// Steady-state warm at 400 ms is also ~8x the original 50 ms because
+// the trades hypertable has grown ~22 % and the chunks at the window
+// boundary are still being column-store-compressed asynchronously.
+// Once the backfill completes and the columnstore policy catches up
+// the warm baseline should approach the original 50 ms again.
+//
+// 30-day: ~9 s with JIT, ~3 s without — too slow for a hot path.
+// 90-day: ~16-19 s — exceeded the 30s client deadline.
 //
 // 14 days passes the "active markets" intuition (a market that
 // hasn't traded in two weeks isn't really active) and the

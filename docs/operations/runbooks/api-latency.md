@@ -135,13 +135,19 @@ psql -c "SELECT state, count(*), max(now()-query_start) AS oldest
   with cold Timescale buffers. Warms up within a minute.
 - **`/v1/markets` baseline above 200 ms.** This route does
   `GROUP BY base_asset, quote_asset` across the 14-day chunk
-  window of the trades hypertable; ~540 ms cold / ~50 ms warm
-  is normal (per benchmarks recorded in PR #583). Its
-  per-route SLA carve-out is p95 ≤ 300 ms / p99 ≤ 1 s — the
-  alert's global p95 ≤ 500 ms threshold absorbs this, but a
-  `route="/v1/markets"` breakdown in Grafana will show steady
-  300-ish ms numbers that look like an alert about to fire. Not
-  a regression; just the route's natural baseline.
+  window of the trades hypertable. PR #583 baseline was ~540 ms
+  cold / ~50 ms warm. While a backfill is concurrent (e.g. the
+  ongoing 16-way historical fill of 50M-62M ledgers as of
+  2026-05-04) the cold call balloons to ~7 s and warm settles
+  ~400 ms — backfill writes evict the recent chunks from
+  shared buffers and the columnstore-compress policy lags. Its
+  per-route SLA carve-out is p95 ≤ 300 ms / p99 ≤ 1 s. During
+  backfill the per-route p95 will exceed that carve-out; the
+  global p95 ≤ 500 ms alert may fire on the first request after
+  any deploy or buffer churn. Once the backfill completes and the
+  columnstore policy catches up, warm should drop back to ~50 ms.
+  Not a regression in the route logic; a transient backfill-load
+  artefact.
 
 ## Related
 
