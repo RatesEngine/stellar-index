@@ -107,11 +107,14 @@ export type Coin = {
  */
 type CoinsEnvelope = { data: Coin[] };
 
-export function useCoins(limit = 100) {
+export function useCoins(limit = 100, issuer?: string) {
   return useQuery<Coin[]>({
-    queryKey: ['/v1/coins', limit],
+    queryKey: ['/v1/coins', limit, issuer ?? null],
     queryFn: async () => {
-      const env = await apiGet<CoinsEnvelope | Coin[]>('/v1/coins', { limit });
+      const env = await apiGet<CoinsEnvelope | Coin[]>('/v1/coins', {
+        limit,
+        ...(issuer ? { issuer } : {}),
+      });
       return Array.isArray(env) ? env : env.data;
     },
   });
