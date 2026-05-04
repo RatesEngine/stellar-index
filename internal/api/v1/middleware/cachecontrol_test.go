@@ -57,6 +57,16 @@ func TestPolicyForPath_PinsDirectives(t *testing.T) {
 		{"/v1/oracle/lastprice", "public, max-age=60, s-maxage=300"},
 		{"/v1/oracle/prices", "public, max-age=60, s-maxage=300"},
 
+		// Registry catalogues + change-summary
+		{"/v1/coins", "public, max-age=60, s-maxage=300"},
+		{"/v1/issuers", "public, max-age=60, s-maxage=300"},
+		{"/v1/issuers/GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN", "public, max-age=60, s-maxage=300"},
+		{"/v1/changes/coin/stellar", "public, max-age=60, s-maxage=300"},
+		{"/v1/changes/pair/native:USDC", "public, max-age=60, s-maxage=300"},
+
+		// Diagnostics — operator-facing live data, never CDN-cached
+		{"/v1/diagnostics/cursors", "private, no-cache, must-revalidate"},
+
 		// Unknown — conservative default
 		{"/v1/something-new", "private, no-store"},
 		{"/", "private, no-store"},

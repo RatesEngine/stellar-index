@@ -17,16 +17,19 @@ import (
 //     change every probe; caching them would mask outages).
 //   - **Account endpoints** → `private, no-store` (auth-tied; never
 //     caches across users; CDN MUST NOT see them).
-//   - **Tip / observations** → `private, no-cache, must-revalidate`
-//     (tip surface intentionally has no cross-region consistency
-//     contract per ADR-0018; caching shifts the contract).
-//   - **Closed-bucket historical** (`/v1/history*`, `/v1/ohlc`,
-//     `/v1/vwap`, `/v1/twap`, `/v1/markets`, `/v1/pairs`,
-//     `/v1/oracle/*`, `/v1/sources`) → `public, max-age=60,
-//     s-maxage=300` (1 min client / 5 min CDN). Closed buckets are
-//     immutable per ADR-0015, but the trailing-edge boundary
-//     advances as time passes — the s-maxage caps how long a CDN
-//     entry stays before the boundary moves.
+//   - **Tip / observations / diagnostics** → `private, no-cache,
+//     must-revalidate` (tip surface intentionally has no cross-region
+//     consistency contract per ADR-0018; caching shifts the contract.
+//     `/v1/diagnostics/*` is operator-facing live data — the
+//     showcase polls it every 15 s, so caching defeats the UX).
+//   - **Closed-bucket historical + catalogues** (`/v1/history*`,
+//     `/v1/ohlc`, `/v1/vwap`, `/v1/twap`, `/v1/markets`, `/v1/pairs`,
+//     `/v1/oracle/*`, `/v1/sources`, `/v1/coins`, `/v1/issuers*`,
+//     `/v1/changes/*`) → `public, max-age=60, s-maxage=300` (1 min
+//     client / 5 min CDN). Closed buckets are immutable per
+//     ADR-0015, but the trailing-edge boundary advances as time
+//     passes — the s-maxage caps how long a CDN entry stays
+//     before the boundary moves.
 //   - **Current price + asset detail** → `public, max-age=30,
 //     s-maxage=60` (more aggressive refresh; these update on every
 //     bucket close).
@@ -106,6 +109,14 @@ func policyForPath(path string, cdnEnabled bool) string {
 		strings.HasPrefix(path, "/v1/observations/"):
 		return "private, no-cache, must-revalidate"
 
+	// ─── Diagnostics — operator-facing live data ────────────────
+	// /v1/diagnostics/cursors is polled every 15s by the showcase
+	// /diagnostics page; caching would defeat the "watch the
+	// indexer tick" UX. Same shape as tip/observations: tight
+	// freshness, never CDN-cached.
+	case strings.HasPrefix(path, "/v1/diagnostics/"):
+		return "private, no-cache, must-revalidate"
+
 	// ─── Current price + asset detail — short cache ─────────────
 	// Updates on every bucket close; CDN entry should turn over
 	// inside one bucket so consumers see fresh closed-bucket data.
@@ -129,7 +140,17 @@ func policyForPath(path string, cdnEnabled bool) string {
 		path == "/v1/markets",
 		path == "/v1/pairs",
 		path == "/v1/sources",
-		strings.HasPrefix(path, "/v1/oracle/"):
+		strings.HasPrefix(path, "/v1/oracle/"),
+		// Registry catalogues — coin / issuer directories. Same
+		// shape as /v1/markets: large enumerable lists that change
+		// gradually as new assets/issuers are observed.
+		path == "/v1/coins",
+		path == "/v1/issuers",
+		strings.HasPrefix(path, "/v1/issuers/"),
+		// Multi-window delta strip. Refreshed every 5 min by the
+		// change-summary worker; 60s edge cache stays well inside
+		// that boundary, and 5 min s-maxage matches.
+		strings.HasPrefix(path, "/v1/changes/"):
 		if cdnEnabled {
 			return "public, max-age=60, s-maxage=300"
 		}

@@ -15,6 +15,29 @@ against.
 
 ## [Unreleased]
 
+### Fixed
+
+- **CDN cache headers for new endpoints.** Real launch-perf miss
+  caught: every endpoint added in the last 30 PRs
+  (`/v1/coins`, `/v1/issuers`, `/v1/issuers/{g}`,
+  `/v1/changes/{entity_type}/{id}`, `/v1/diagnostics/cursors`)
+  was falling through `policyForPath`'s default → `private,
+  no-store`. CDN was being told never to cache them; every page
+  load hit origin. Classified now:
+  - `/v1/coins`, `/v1/issuers`, `/v1/issuers/{g}` →
+    `public, max-age=60, s-maxage=300` (catalogue surface, same
+    bucket as `/v1/markets`).
+  - `/v1/changes/{entity_type}/{id}` →
+    `public, max-age=60, s-maxage=300` (refreshed every 5 min
+    by the worker; 60 s edge cache stays well inside that
+    boundary).
+  - `/v1/diagnostics/*` → `private, no-cache, must-revalidate`
+    (showcase polls every 15 s; caching would defeat the
+    "watch the indexer tick" UX).
+  Test table + `cdn-setup.md` updated to match. Without this,
+  launch-day CDN traffic on the showcase's hot pages would have
+  hammered origin pointlessly.
+
 ### Developer experience
 
 - **`scripts/dev/verify.sh` runs the showcase gate.** The local
