@@ -15,6 +15,20 @@ against.
 
 ## [Unreleased]
 
+### Added
+
+- **Migration 0027 + storage methods for `prices_1m_proxy`.** ADR-0025
+  phase 1 — additive, no behavior change. New hypertable mirrors
+  `prices_1m`'s shape (minus OHLC, which is undefined for merged
+  multi-source rewrites) to hold the aggregator's stablecoin-fiat-
+  proxy rewritten 1-minute VWAPs. Storage methods `UpsertProxyVWAP`,
+  `LatestClosedVWAP1mForPairProxy`, and
+  `TimedVWAPs1mForChangeSummaryProxy` ship alongside but no caller
+  yet — phase 2 (aggregator-side wiring) and phase 3 (API reader
+  fallback) await operator review of the schema. Closed-bucket
+  guard mirrors `prices_1m`'s; integration tests cover round-trip,
+  open-bucket exclusion, and oldest-first ordering.
+
 ### Fixed
 
 - **`/v1/assets` listing latency cut from ~4.9 minutes to under 1
