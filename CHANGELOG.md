@@ -15,6 +15,18 @@ against.
 
 ## [Unreleased]
 
+### Tests
+
+- **Integration test for `ListIssuers`, `ListCoins (?issuer=)`,
+  `GetIssuer`, `ListIssuerAssets`.** New
+  `test/integration/issuers_coins_storage_test.go` exercises the
+  read paths backing `/v1/issuers`, `/v1/issuers/{g}`, and
+  `/v1/coins?issuer=…` — the endpoints that landed in #595 / #596
+  / #597. Covers ranking by total observation count across an
+  issuer's assets, limit clamping, the per-issuer filter, the
+  no-match path, and `sql.ErrNoRows` for unknown G-strkeys (the
+  contract `handleIssuer` relies on for its 404 path).
+
 ### Documentation
 
 - **README + CLAUDE.md mention `web/showcase/`.** Adds a "Hosted
