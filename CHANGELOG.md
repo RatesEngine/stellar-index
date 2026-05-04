@@ -17,6 +17,15 @@ against.
 
 ### Changed
 
+- **`/v1/price/batch` falls through to the Redis VWAP cache** for
+  aggregator-rewritten pairs whose literal form isn't in
+  `prices_1m`. Same fix as #631 (single-asset `/v1/price`) and
+  #634 (`/v1/price/tip`); without it the batch endpoint silently
+  omitted the headline `?asset_ids=native&quote=fiat:USD` row even
+  though the single-asset path served it. Refactored
+  `lookupPriceBatch`'s per-id loop into a `fetchBatchRow` helper
+  to keep cognitive complexity under the lint cap.
+
 - **`/v1/price/tip` falls through to the Redis VWAP cache** for
   aggregator-rewritten pairs whose literal form isn't in
   `prices_1m`. Mirrors the same fallback that landed on `/v1/price`

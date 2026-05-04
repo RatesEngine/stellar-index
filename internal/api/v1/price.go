@@ -639,66 +639,105 @@ func (s *Server) parsePriceBatchQuote(w http.ResponseWriter, r *http.Request, ra
 	return q, true
 }
 
+// batchRowOutcome is the per-id result of [Server.fetchBatchRow].
+// One of the three branches is always set; the others zero-valued.
+type batchRowOutcome struct {
+	snap    PriceSnapshot
+	sources []string
+	stale   bool
+	asset   canonical.Asset
+
+	skip    bool // Per-asset miss; omit from response, do not 404 the batch
+	aborted bool // Caller wrote a problem+json; lookupPriceBatch must return
+}
+
+// fetchBatchRow resolves one (raw_id, quote) pair for the batch
+// endpoint. Three outcomes:
+//   - Success: returns a populated row (skip/aborted both false).
+//   - Per-asset miss: skip=true (caller continues to the next id).
+//   - Validation/internal failure: aborted=true after writing a
+//     problem+json (caller must return immediately).
+//
+// Extracted from [Server.lookupPriceBatch] to keep that loop's
+// cognitive complexity under the linter cap; also where the
+// Redis-VWAP fallback for aggregator-rewritten pairs lives.
+func (s *Server) fetchBatchRow(w http.ResponseWriter, r *http.Request, raw string, quote canonical.Asset) batchRowOutcome {
+	asset, err := canonical.ParseAsset(raw)
+	if err != nil {
+		writeProblem(w, r,
+			"https://api.ratesengine.net/errors/invalid-asset-id",
+			"Invalid asset identifier", http.StatusBadRequest,
+			raw+": "+err.Error())
+		return batchRowOutcome{aborted: true}
+	}
+	if asset.Equal(quote) {
+		writeProblem(w, r,
+			"https://api.ratesengine.net/errors/identity-price",
+			"Asset and quote are the same", http.StatusBadRequest,
+			"price of an asset in itself is always 1; "+raw+" matches the quote")
+		return batchRowOutcome{aborted: true}
+	}
+	snap, sources, stale, err := s.prices.LatestPrice(r.Context(), asset, quote)
+	if errors.Is(err, ErrPriceNotFound) {
+		// Same Redis VWAP fallback as /v1/price, for aggregator-
+		// rewritten pairs (XLM/fiat:USD synthesised from
+		// XLM/USDC-GA5Z…) whose literal form isn't in prices_1m.
+		// Without this the batch call's headline pair silently omits
+		// even though the single-asset /v1/price serves it.
+		if cs, csrc, _, ok := s.tryRedisVWAPFallback(r.Context(), asset, quote); ok {
+			return batchRowOutcome{snap: cs, sources: csrc, asset: asset}
+		}
+		return batchRowOutcome{skip: true} // omit, do not 404 the batch
+	}
+	if err != nil {
+		if clientAborted(r, err) {
+			return batchRowOutcome{aborted: true}
+		}
+		s.logger.Error("LatestPrice (batch) failed",
+			"err", err, "asset", asset.String(), "quote", quote.String())
+		writeProblem(w, r,
+			"https://api.ratesengine.net/errors/internal",
+			"Internal error", http.StatusInternalServerError, "")
+		return batchRowOutcome{aborted: true}
+	}
+	return batchRowOutcome{snap: snap, sources: sources, stale: stale, asset: asset}
+}
+
 // lookupPriceBatch fetches the latest price for each id and writes
 // the envelope. Missing observations (ErrPriceNotFound) are omitted
 // from the response, not 404'd. Any other reader error aborts the
 // whole batch with a 500.
 func (s *Server) lookupPriceBatch(w http.ResponseWriter, r *http.Request, ids []string, quote canonical.Asset) {
-	reader := s.prices
 	out := make([]PriceSnapshot, 0, len(ids))
 	allSources := map[string]struct{}{}
 	anyStale := false
 	anyFrozen := false
 	anySingleSource := false
 	for _, raw := range ids {
-		asset, err := canonical.ParseAsset(raw)
-		if err != nil {
-			writeProblem(w, r,
-				"https://api.ratesengine.net/errors/invalid-asset-id",
-				"Invalid asset identifier", http.StatusBadRequest,
-				raw+": "+err.Error())
+		row := s.fetchBatchRow(w, r, raw, quote)
+		if row.aborted {
 			return
 		}
-		if asset.Equal(quote) {
-			writeProblem(w, r,
-				"https://api.ratesengine.net/errors/identity-price",
-				"Asset and quote are the same", http.StatusBadRequest,
-				"price of an asset in itself is always 1; "+raw+" matches the quote")
-			return
-		}
-		snapshot, sources, stale, err := reader.LatestPrice(r.Context(), asset, quote)
-		if errors.Is(err, ErrPriceNotFound) {
-			// Per the docstring: omit, do not 404 the whole batch.
+		if row.skip {
 			continue
 		}
-		if err != nil {
-			if clientAborted(r, err) {
-				return
-			}
-			s.logger.Error("LatestPrice (batch) failed",
-				"err", err, "asset", asset.String(), "quote", quote.String())
-			writeProblem(w, r,
-				"https://api.ratesengine.net/errors/internal",
-				"Internal error", http.StatusInternalServerError, "")
-			return
-		}
-		if stale {
+		if row.stale {
 			anyStale = true
 		}
-		for _, src := range sources {
+		for _, src := range row.sources {
 			allSources[src] = struct{}{}
 		}
 		// Per-row freeze lookup → OR into envelope flag. Same
 		// best-effort posture as the single-asset path; an absent
 		// freeze marker means "not frozen" and a Redis blip just
 		// leaves the flag at its previous value.
-		if s.lookupFrozen(r, asset, quote) {
+		if s.lookupFrozen(r, row.asset, quote) {
 			anyFrozen = true
 			anySingleSource = true // freeze implies single-source
-		} else if len(sources) == 1 {
+		} else if len(row.sources) == 1 {
 			anySingleSource = true
 		}
-		out = append(out, snapshot)
+		out = append(out, row.snap)
 	}
 	srcs := make([]string, 0, len(allSources))
 	for src := range allSources {

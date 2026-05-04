@@ -139,6 +139,38 @@ func TestPriceBatch_OmitsMissingAssets(t *testing.T) {
 	}
 }
 
+// TestPriceBatch_RedisFallbackForRewrittenPair — when the
+// PriceReader returns ErrPriceNotFound (typical for an aggregator-
+// rewritten pair like XLM/fiat:USD whose literal form isn't in
+// prices_1m), the batch path falls through to the Redis VWAP cache.
+// Without this fix the batch endpoint silently omitted the headline
+// pair even though /v1/price served it just fine.
+func TestPriceBatch_RedisFallbackForRewrittenPair(t *testing.T) {
+	reader := &stubPriceReader{err: v1.ErrPriceNotFound}
+	looker := &stubTriangulatedPriceLooker{
+		value:          "0.157384502084",
+		isTriangulated: false,
+		found:          true,
+	}
+	srv := v1.New(v1.Options{Prices: reader, Triangulated: looker})
+	ts := startHTTPTest(t, srv.Handler())
+
+	resp := mustGet(t, ts.URL+"/v1/price/batch?asset_ids=native&quote=fiat:USD")
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d", resp.StatusCode)
+	}
+	var env struct {
+		Data []v1.PriceSnapshot `json:"data"`
+	}
+	mustDecode(t, resp, &env)
+	if len(env.Data) != 1 {
+		t.Fatalf("got %d entries, want 1 (Redis fallback should populate)", len(env.Data))
+	}
+	if env.Data[0].Price != "0.157384502084" {
+		t.Errorf("data[0].price = %q, want 0.157384502084", env.Data[0].Price)
+	}
+}
+
 func TestPriceBatch_DeduplicatesIds(t *testing.T) {
 	t0 := time.Unix(1_770_000_000, 0).UTC()
 	reader := &stubPriceReader{
