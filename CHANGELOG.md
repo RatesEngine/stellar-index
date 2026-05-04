@@ -51,6 +51,16 @@ against.
   beyond). Decoder-coverage / archive-completeness / SLO panels
   follow as their underlying endpoints ship.
 
+- **Markets tab on `/coins/[slug]` goes live.** Replaces the
+  disabled placeholder with a live markets panel that joins
+  `/v1/coins` (slug → asset_id) and `/v1/markets` (recently-active
+  pairs), then filters to markets where `base == asset_id` or
+  `quote == asset_id`. Each row shows whether the coin is the
+  base or quote, the counterparty asset, 24h trade count, and
+  last-trade-relative timestamp. Cache keys match the `/coins`
+  and `/markets` pages so navigating between them costs zero
+  extra network.
+
 - **`/coins/[slug]` pre-renders the live top-100.** `generateStaticParams`
   now fetches `/v1/coins?limit=100` at build time and unions the
   result with the design seed, so every coin in the directory has a
