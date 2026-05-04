@@ -15,6 +15,21 @@ against.
 
 ## [Unreleased]
 
+### Changed
+
+- **`/v1/markets` and `/v1/pairs` recency-bound their underlying
+  scan.** `Store.DistinctPairs` and `Store.PairMarket` now restrict
+  the trades-hypertable scan to the last 90 days
+  (`MarketsRecencyWindow`) so chunk pruning bounds I/O. With 441M+
+  trades on r1 the prior unbounded `GROUP BY base_asset,
+  quote_asset` was timing out at 30s — every `/v1/markets` call
+  exceeded the client deadline and returned 0 bytes. Behaviour
+  change: pairs that haven't traded in 90 days no longer appear in
+  the listing. This matches the public contract — `/v1/markets`
+  documents "active markets", not "every pair ever observed". A
+  future materialised market_catalogue would let us drop the
+  recency bound; for now the bound keeps the endpoint usable.
+
 ### Added
 
 - **`GET /v1/diagnostics/cursors` — per-source ingest cursor
