@@ -236,6 +236,39 @@ func TestUnknownRouteReturns404(t *testing.T) {
 	}
 }
 
+func TestUnknownRoute_CacheControlIsNoStore(t *testing.T) {
+	// /v1/coins is tagged `public, max-age=60, s-maxage=300` by the
+	// cache-control middleware. /v1/coins/X-malformed-id falls
+	// through to the catch-all 404 — the response MUST NOT inherit
+	// that catalogue directive (a CDN would otherwise cache the
+	// transient 404 and replay it on the same key).
+	ts := newTestServer(t)
+	resp, err := http.Get(ts.URL + "/v1/coins/X-malformed-id")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	if got := resp.Header.Get("Cache-Control"); got != "no-store" {
+		t.Errorf("Cache-Control = %q, want no-store on a 404", got)
+	}
+}
+
+func TestMethodMismatch_CacheControlIsNoStore(t *testing.T) {
+	ts := newTestServer(t)
+	req, _ := http.NewRequest(http.MethodPost, ts.URL+"/v1/coins", nil)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusMethodNotAllowed {
+		t.Fatalf("status = %d, want 405", resp.StatusCode)
+	}
+	if got := resp.Header.Get("Cache-Control"); got != "no-store" {
+		t.Errorf("Cache-Control = %q, want no-store on a 405", got)
+	}
+}
+
 func TestRootReturnsWelcomeEnvelope(t *testing.T) {
 	ts := newTestServer(t)
 	resp, err := http.Get(ts.URL + "/")

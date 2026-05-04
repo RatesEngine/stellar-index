@@ -321,6 +321,12 @@ func TestRecoverer_CatchesPanic(t *testing.T) {
 	if ct := rec.Header().Get("Content-Type"); ct != "application/problem+json" {
 		t.Errorf("content-type = %q, want problem+json", ct)
 	}
+	// Recovered-panic 500s must override any per-route Cache-Control
+	// directive — a transient panic re-cached for 5 min would replay
+	// the failure to every client sharing the cache key.
+	if cc := rec.Header().Get("Cache-Control"); cc != "no-store" {
+		t.Errorf("Cache-Control = %q, want no-store on a recovered-panic 500", cc)
+	}
 
 	// Body must NOT contain "boom" (attack-surface rule).
 	body := rec.Body.String()

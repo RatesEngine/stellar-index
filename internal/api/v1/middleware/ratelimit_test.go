@@ -100,6 +100,13 @@ func TestRateLimit_Rejects429AfterLimit(t *testing.T) {
 	if p.Instance != "/some-path" {
 		t.Errorf("problem.instance = %q, want /some-path", p.Instance)
 	}
+	// 429s must override any per-route Cache-Control directive
+	// (e.g. /v1/coins is `public, max-age=60, s-maxage=300`); a CDN
+	// would otherwise replay the denial to other clients on the same
+	// cache key.
+	if cc := w.Header().Get("Cache-Control"); cc != "no-store" {
+		t.Errorf("Cache-Control = %q, want no-store on a 429", cc)
+	}
 }
 
 func TestRateLimit_EmptyKeyBypasses(t *testing.T) {

@@ -47,6 +47,13 @@ func (e *envelope404Recorder) WriteHeader(status int) {
 		// Length depends on the body we're about to write — let Go
 		// recompute it. The default handler may have set a stale value.
 		e.Header().Del("Content-Length")
+		// Errors override the cache-control middleware's per-route
+		// directive: never cache an unknown-path 404 or method-mismatch
+		// 405. A CDN serving /v1/coins (tagged `public, max-age=60,
+		// s-maxage=300` by the middleware) would otherwise cache a
+		// transient 405 from a misconfigured client and replay it to
+		// other anonymous clients on the same key.
+		e.Header().Set("Cache-Control", "no-store")
 		e.ResponseWriter.WriteHeader(status)
 		e.writeProblem(status)
 		return

@@ -236,6 +236,11 @@ func writeRateLimitProblem(w http.ResponseWriter, r *http.Request, retryAfter in
 		Instance: r.URL.RequestURI(),
 	}
 	w.Header().Set("Content-Type", "application/problem+json")
+	// Override the cache-control middleware's per-route directive:
+	// never cache a 429. A 429 says "this caller is over budget right
+	// now" — caching it would replay the denial to other anonymous
+	// clients on the same CDN key well past their own budget reset.
+	w.Header().Set("Cache-Control", "no-store")
 	w.WriteHeader(http.StatusTooManyRequests)
 	_ = json.NewEncoder(w).Encode(p)
 }

@@ -40,11 +40,15 @@ import (
 // Override is the exception, not the rule — the middleware's
 // directive is the right answer for >99% of requests.
 //
-// Errors (4xx / 5xx) inherit the route's cache directive. The
-// middleware doesn't post-process responses to change directives
-// after the fact — that adds latency for no reliability gain.
-// CDN configs are expected to refuse to cache 5xx responses
-// regardless of header (`origin-error-min-ttl: 0`).
+// Errors override the route's directive at the writer side. All
+// problem+json paths (writeProblem in v1/envelope.go, the rate
+// limiter's writeRateLimitProblem, the recoverer's panic body, and
+// the envelope404 middleware that rewrites the mux's text/plain
+// 404/405) explicitly set `Cache-Control: no-store` before
+// WriteHeader. Without that override an error response would inherit
+// (e.g.) `public, max-age=60, s-maxage=300` from the catalogue
+// surface and a CDN would happily cache the transient failure for
+// 5 minutes against the same key as the success response.
 //
 // Backwards-compat shim: behaves like cdn_enabled=true. Operators
 // who run the API behind no CDN should use [CacheControlWithCDN]

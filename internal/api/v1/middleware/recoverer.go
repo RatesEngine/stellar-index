@@ -65,6 +65,11 @@ func Recoverer(logger *slog.Logger) Middleware {
 // don't pay that cost on every request for a rare failure mode.
 func writeProblem(w http.ResponseWriter, r *http.Request, _ any) {
 	w.Header().Set("Content-Type", "application/problem+json")
+	// Override the cache-control middleware's per-route directive:
+	// never cache a 500. Recovered panics are likely transient and
+	// caching the response would replay the failure on the same
+	// CDN key for the directive's lifetime.
+	w.Header().Set("Cache-Control", "no-store")
 	w.WriteHeader(http.StatusInternalServerError)
 	body := map[string]any{
 		"type":     "https://api.ratesengine.net/errors/internal",

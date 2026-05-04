@@ -123,6 +123,13 @@ func writeProblem(w http.ResponseWriter, r *http.Request, typeURL, title string,
 		RequestID: middleware.RequestIDFrom(r),
 	}
 	w.Header().Set("Content-Type", "application/problem+json")
+	// Errors override the cache-control middleware's per-route
+	// directive: never cache an error. Otherwise a CDN serving
+	// /v1/coins (which the middleware tags `public, max-age=60,
+	// s-maxage=300`) would cache a transient 400/404/500 for the
+	// next 5 minutes and replay it to other anonymous clients on
+	// the same cache key.
+	w.Header().Set("Cache-Control", "no-store")
 	w.WriteHeader(status)
 	_ = json.NewEncoder(w).Encode(p)
 }

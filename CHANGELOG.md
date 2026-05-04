@@ -17,6 +17,19 @@ against.
 
 ### Changed
 
+- **Error responses (4xx / 5xx) now override the per-route
+  `Cache-Control` directive with `no-store`.** Previously the
+  cache-control middleware set the route's directive once at the
+  start of the chain (e.g. `/v1/coins` → `public, max-age=60,
+  s-maxage=300`) and errors inherited it — so a transient 400 / 404 /
+  405 / 429 / 500 on a cacheable route would have been cached by a
+  CDN against the same key as the success response and replayed for
+  the directive's lifetime. The four problem+json writers
+  (`v1.writeProblem`, `middleware.writeRateLimitProblem`, the
+  recoverer's panic body, and the `Envelope404` middleware that
+  rewrites the mux's text/plain 404/405 defaults) all now set
+  `Cache-Control: no-store` immediately before `WriteHeader`.
+
 - **Unknown paths + method mismatches return RFC 9457 problem+json
   instead of Go's default text/plain "404 page not found" /
   "Method Not Allowed".** New `Envelope404` middleware sits in the
