@@ -89,9 +89,6 @@ export function CandleChart({ data, height = 360, className }: CandleChartProps)
     });
     seriesRef.current = series;
 
-    series.setData(toSeries(data));
-    chart.timeScale().fitContent();
-
     const ro = new ResizeObserver((entries) => {
       for (const e of entries) {
         chart.applyOptions({ width: e.contentRect.width });
@@ -105,9 +102,16 @@ export function CandleChart({ data, height = 360, className }: CandleChartProps)
       chartRef.current = null;
       seriesRef.current = null;
     };
+    // `data` is intentionally NOT a dep here — the second effect
+    // below handles data updates without tearing down the chart.
+    // React's effect ordering guarantees the data effect fires after
+    // this one on the initial render, so first-paint data still
+    // lands; we don't need to seed setData from here.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [height]);
 
-  // Push new data on prop changes without destroying the chart.
+  // Push new data on prop changes (and on initial mount, after the
+  // setup effect has created seriesRef) without destroying the chart.
   useEffect(() => {
     seriesRef.current?.setData(toSeries(data));
     chartRef.current?.timeScale().fitContent();
