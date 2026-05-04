@@ -51,6 +51,19 @@ against.
   beyond). Decoder-coverage / archive-completeness / SLO panels
   follow as their underlying endpoints ship.
 
+- **`/network`, `/divergences`, `/anomalies`, `/mev` pages get
+  real content.** Final placeholder cleanup. `/network` covers
+  the three-region active-active architecture (ADR-0008) +
+  closed-bucket consistency (ADR-0015); `/divergences` explains
+  the cross-reference monitor methodology with cards for every
+  reference (CoinGecko, Chainlink HTTP, Reflector, Redstone,
+  Band); `/anomalies` lists the four freeze trigger conditions
+  per ADR-0019; `/mev` documents the four detector patterns
+  (sandwich, oracle-update sandwich, liquidation cascade, wash
+  trading) with concrete Stellar-specific examples. Each page
+  flags the live data path that lights it up once the underlying
+  endpoint ships.
+
 - **`/docs` page gets a real endpoint catalogue.** Replaces the
   "go elsewhere" placeholder with eight grouped endpoint tables
   (Pricing, History & charts, Asset & coin catalogue, Markets &
