@@ -31,6 +31,14 @@ against.
 
 ### CI
 
+- **Bump actions in `api-docs.yml` and `k6-weekly.yml` to current
+  majors.** `actions/configure-pages@v5` → `@v6`,
+  `actions/upload-pages-artifact@v3` → `@v5`,
+  `actions/deploy-pages@v4` → `@v5` in api-docs;
+  `actions/checkout@v4` → `@v6`, `actions/upload-artifact@v4` →
+  `@v7` in k6-weekly. Reconciles every workflow's action majors;
+  supersedes dependabot PRs #549, #550, #551, #552, #553.
+
 - **Bump actions in `status-page.yml` to match `ci.yml`.**
   `actions/checkout@v4` → `@v6` and `actions/upload-artifact@v4`
   → `@v7`. ci.yml landed on these versions earlier (via separate
