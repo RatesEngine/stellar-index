@@ -17,6 +17,20 @@ against.
 
 ### Added
 
+- **Change-summary rollup worker.** New
+  `internal/aggregate/changesummary` package + aggregator-side
+  worker that, every 5 minutes, walks every configured (coin,
+  pair) entity and computes the multi-window delta strip
+  (h1/h24/d7/d30 % change), ATH/ATL with timestamps, streak
+  (direction + days), and acceleration. Writes one row per
+  entity to `change_summary_5m` (migration 0022). Storage
+  exposes `Store.UpsertChangeSummary` + `Store.GetChangeSummary`.
+  Powers every multi-window delta strip on the showcase — every
+  list view + price card reads from this in O(1) instead of
+  re-scanning prices_1m. Sink/source adapters live in the
+  aggregator binary to avoid a worker→storage import cycle (same
+  pattern as the per-source contribution sink).
+
 - **Freeze-event durable mirror.** `internal/aggregate/freeze` now
   takes an optional `EventSink` via the new `WithEventSink` option;
   production wires `internal/storage/timescale.FreezeEventSink`
