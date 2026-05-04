@@ -97,9 +97,15 @@ func (s *Server) applyF2Fields(ctx context.Context, detail *AssetDetail, asset c
 	// a supply snapshot has a meaningful 24h volume if it's been
 	// trading. Run it first so a missing snapshot doesn't shadow
 	// the volume field.
-	if keyErr == nil {
-		s.populateVolume24h(ctx, detail, key)
-	}
+	//
+	// IMPORTANT: pass asset.String() (the canonical wire form,
+	// matching what the trades hypertable stores) — NOT
+	// supply.AssetKey(asset). The two diverge for native: AssetKey
+	// returns "XLM" (the supply-package convention per ADR-0011),
+	// trades.base_asset stores "native". A pre-2026-05-04 bug passed
+	// the supply key here and the volume lookup never matched the
+	// trade rows, returning "0" for native indefinitely.
+	s.populateVolume24h(ctx, detail, asset.String())
 
 	// change_24h_pct is independent of both volume and supply —
 	// it needs the current USD price (which the supply path also
