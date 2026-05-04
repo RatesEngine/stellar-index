@@ -86,6 +86,60 @@ func (s *Store) GetIssuer(ctx context.Context, gStrkey string) (IssuerRow, error
 	return row, nil
 }
 
+// IssuerSummary is one entry in the issuer-directory listing —
+// the (g_strkey, optional home_domain, total observation count
+// across all issued assets, asset count) tuple. Returned by
+// [Store.ListIssuers].
+type IssuerSummary struct {
+	GStrkey               string
+	HomeDomain            string
+	AssetCount            int64
+	TotalObservationCount int64
+}
+
+// ListIssuers returns the issuer directory ordered by total
+// observation count desc — the proxy-for-activity ranking the
+// /v1/issuers endpoint exposes. limit clamps to [1, 500].
+//
+// Joins issuers with classic_assets and aggregates so the
+// home_domain (when populated by the SEP-1 fetcher) flows through
+// without a per-row lookup. issuers without any classic_assets row
+// are excluded — without an asset, an issuer entry is just an
+// orphan G-strkey we have no activity for.
+func (s *Store) ListIssuers(ctx context.Context, limit int) ([]IssuerSummary, error) {
+	if limit <= 0 || limit > 500 {
+		limit = 100
+	}
+	const q = `
+        SELECT i.g_strkey,
+               COALESCE(i.home_domain, ''),
+               count(c.asset_id)::bigint           AS asset_count,
+               COALESCE(sum(c.observation_count), 0)::bigint AS total_obs
+          FROM issuers i
+          JOIN classic_assets c ON c.issuer_g_strkey = i.g_strkey
+         GROUP BY i.g_strkey, i.home_domain
+         ORDER BY total_obs DESC, i.g_strkey ASC
+         LIMIT $1
+    `
+	rows, err := s.db.QueryContext(ctx, q, limit)
+	if err != nil {
+		return nil, fmt.Errorf("timescale: ListIssuers: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+	out := make([]IssuerSummary, 0, limit)
+	for rows.Next() {
+		var r IssuerSummary
+		if err := rows.Scan(&r.GStrkey, &r.HomeDomain, &r.AssetCount, &r.TotalObservationCount); err != nil {
+			return nil, fmt.Errorf("timescale: ListIssuers scan: %w", err)
+		}
+		out = append(out, r)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("timescale: ListIssuers rows: %w", err)
+	}
+	return out, nil
+}
+
 // IssuerAsset is one entry in the issuer's asset list.
 type IssuerAsset struct {
 	AssetID          string

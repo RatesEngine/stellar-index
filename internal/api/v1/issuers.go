@@ -6,15 +6,27 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
+	"strconv"
 
 	"github.com/RatesEngine/rates-engine/internal/storage/timescale"
 )
 
-// IssuersReader is the seam the issuer handler reads through.
-// timescale.Store satisfies it via GetIssuer + ListIssuerAssets.
+// IssuersReader is the seam the issuer handlers read through.
+// timescale.Store satisfies it via GetIssuer + ListIssuerAssets +
+// ListIssuers.
 type IssuersReader interface {
 	GetIssuer(ctx context.Context, gStrkey string) (timescale.IssuerRow, error)
 	ListIssuerAssets(ctx context.Context, gStrkey string) ([]timescale.IssuerAsset, error)
+	ListIssuers(ctx context.Context, limit int) ([]timescale.IssuerSummary, error)
+}
+
+// IssuerListEntry is the wire shape of one row in /v1/issuers.
+// Compact summary suitable for the issuer-directory page.
+type IssuerListEntry struct {
+	GStrkey               string `json:"g_strkey"`
+	HomeDomain            string `json:"home_domain,omitempty"`
+	AssetCount            int64  `json:"asset_count"`
+	TotalObservationCount int64  `json:"total_observation_count"`
 }
 
 // Issuer is the wire shape returned by /v1/issuers/{g_strkey}.
@@ -39,6 +51,53 @@ type IssuedAsset struct {
 	FirstSeenLedger  uint32 `json:"first_seen_ledger"`
 	LastSeenLedger   uint32 `json:"last_seen_ledger"`
 	ObservationCount int64  `json:"observation_count"`
+}
+
+// handleIssuersList serves GET /v1/issuers.
+//
+// Returns the issuer directory ordered by total observation count
+// across the issuer's classic assets — the proxy-for-activity
+// ranking the showcase /issuers page exposes. Returns 503 when
+// no IssuersReader is wired and 400 on out-of-range limit.
+func (s *Server) handleIssuersList(w http.ResponseWriter, r *http.Request) {
+	if s.issuers == nil {
+		writeProblem(w, r,
+			"https://api.ratesengine.net/errors/issuers-unavailable",
+			"Issuers unavailable", http.StatusServiceUnavailable,
+			"This deployment hasn't wired the issuer reader yet.")
+		return
+	}
+	limit := 100
+	if v := r.URL.Query().Get("limit"); v != "" {
+		n, err := strconv.Atoi(v)
+		if err != nil || n < 1 || n > 500 {
+			writeProblem(w, r,
+				"https://api.ratesengine.net/errors/invalid-limit",
+				"Invalid limit", http.StatusBadRequest,
+				"limit must be 1-500")
+			return
+		}
+		limit = n
+	}
+	rows, err := s.issuers.ListIssuers(r.Context(), limit)
+	if err != nil {
+		s.logger.Warn("issuers list", "err", err)
+		writeProblem(w, r,
+			"https://api.ratesengine.net/errors/issuers-error",
+			"Issuers list failed", http.StatusInternalServerError,
+			"Storage layer returned an error.")
+		return
+	}
+	out := make([]IssuerListEntry, len(rows))
+	for i, r := range rows {
+		out[i] = IssuerListEntry{
+			GStrkey:               r.GStrkey,
+			HomeDomain:            r.HomeDomain,
+			AssetCount:            r.AssetCount,
+			TotalObservationCount: r.TotalObservationCount,
+		}
+	}
+	writeJSON(w, out, Flags{})
 }
 
 // handleIssuer serves GET /v1/issuers/{g_strkey}.

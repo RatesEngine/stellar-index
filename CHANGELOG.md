@@ -51,6 +51,16 @@ against.
   beyond). Decoder-coverage / archive-completeness / SLO panels
   follow as their underlying endpoints ship.
 
+- **`GET /v1/issuers` — issuer directory.** New endpoint that
+  lists every G-account having minted at least one classic asset
+  on Stellar, ranked by total observation count across their
+  issued assets. `Store.ListIssuers` joins `issuers` ⨝
+  `classic_assets` and aggregates so home_domain (when populated
+  by the SEP-1 fetcher) flows through without a per-row lookup.
+  Powers the future showcase `/issuers` directory page; today the
+  endpoint serves real data — top-of-list is the USDC issuer with
+  41M observations.
+
 - **`/network`, `/divergences`, `/anomalies`, `/mev` pages get
   real content.** Final placeholder cleanup. `/network` covers
   the three-region active-active architecture (ADR-0008) +

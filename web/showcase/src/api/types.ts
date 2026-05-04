@@ -1274,6 +1274,64 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/issuers": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Issuer directory ranked by total observation count.
+         * @description Lists every issuer (G-account that has minted at least one
+         *     classic asset) ordered by total observation count across
+         *     their issued assets. The home_domain column is empty until
+         *     the SEP-1 fetcher worker resolves it (Phase 4).
+         *
+         *     Powers the showcase `/issuers` directory page.
+         */
+        get: {
+            parameters: {
+                query?: {
+                    /** @description Max rows to return; 1-500, default 100. */
+                    limit?: number;
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Array of issuer summaries. */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            g_strkey: string;
+                            home_domain?: string;
+                            /** Format: int64 */
+                            asset_count: number;
+                            /** Format: int64 */
+                            total_observation_count: number;
+                        }[];
+                    };
+                };
+                400: components["responses"]["BadRequest"];
+                429: components["responses"]["RateLimited"];
+                500: components["responses"]["InternalError"];
+                503: components["responses"]["ServiceUnavailable"];
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/issuers/{g_strkey}": {
         parameters: {
             query?: never;

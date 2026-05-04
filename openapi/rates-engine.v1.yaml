@@ -743,6 +743,50 @@ paths:
         "500": { $ref: "#/components/responses/InternalError" }
         "503": { $ref: "#/components/responses/ServiceUnavailable" }
 
+  /issuers:
+    get:
+      tags: [meta]
+      summary: Issuer directory ranked by total observation count.
+      description: |
+        Lists every issuer (G-account that has minted at least one
+        classic asset) ordered by total observation count across
+        their issued assets. The home_domain column is empty until
+        the SEP-1 fetcher worker resolves it (Phase 4).
+
+        Powers the showcase `/issuers` directory page.
+      parameters:
+        - name: limit
+          in: query
+          required: false
+          description: Max rows to return; 1-500, default 100.
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 500
+            default: 100
+      responses:
+        "200":
+          description: Array of issuer summaries.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  required:
+                    - g_strkey
+                    - asset_count
+                    - total_observation_count
+                  properties:
+                    g_strkey: { type: string }
+                    home_domain: { type: string }
+                    asset_count: { type: integer, format: int64 }
+                    total_observation_count: { type: integer, format: int64 }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+        "500": { $ref: "#/components/responses/InternalError" }
+        "503": { $ref: "#/components/responses/ServiceUnavailable" }
+
   /issuers/{g_strkey}:
     get:
       tags: [meta]
