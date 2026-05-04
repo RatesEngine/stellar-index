@@ -16,19 +16,32 @@ type Market struct {
 	TradeCount24h int64
 }
 
-// DistinctPairs returns one page of (base, quote) pairs present in
-// the trades hypertable, each with its last-trade timestamp and a
-// 24h trade count. Cursor-based pagination keyed on the pair's
-// canonical "<base>|<quote>" string; empty cursor starts from the
-// beginning.
+// MarketsRecencyWindow bounds the trades scanned by DistinctPairs.
+// Pairs that haven't traded inside the window are excluded from the
+// `/v1/markets` listing — the public contract is "active markets",
+// not "every pair ever observed". The window is exposed as a var so
+// tests can override it without changing the public function signature.
+var MarketsRecencyWindow = 90 * 24 * time.Hour
+
+// DistinctPairs returns one page of recently-active (base, quote)
+// pairs from the trades hypertable, each with its most-recent trade
+// timestamp and a 24h trade count. Cursor-based pagination keyed on
+// the pair's canonical "<base>|<quote>" string; empty cursor starts
+// from the beginning.
 //
 // limit clamps to [1, 500] — matching DistinctAssets for consistency.
 //
-// Performance: scans the trades hypertable with GROUP BY over two
-// string columns. Correct but not cheap at scale. Planned
-// optimisation: materialised market_catalogue populated by the
-// indexer alongside the asset catalogue (see DistinctAssets's
-// performance note — both rides on the same future migration).
+// Recency window: the query scans only chunks within the last
+// MarketsRecencyWindow (default 90d) so chunk pruning bounds I/O on
+// a hypertable with hundreds of millions of trades. Pairs that
+// haven't traded in that window do not appear. This matches the
+// public contract — "/v1/markets" lists active markets, not every
+// pair ever observed; an asset that hasn't traded in 90 days isn't
+// usefully described as having a market.
+//
+// Future direction: a materialised market_catalogue populated by the
+// indexer would let us drop the recency bound entirely (see the
+// long-standing DistinctAssets perf note — same future migration).
 func (s *Store) DistinctPairs(ctx context.Context, cursor string, limit int) ([]Market, string, error) {
 	if limit < 1 {
 		limit = 100
@@ -37,28 +50,28 @@ func (s *Store) DistinctPairs(ctx context.Context, cursor string, limit int) ([]
 		limit = 500
 	}
 
-	// The cursor is the concatenation "<base>|<quote>". We filter in
-	// WHERE (not HAVING) so pairs before the cursor are excluded
-	// BEFORE the per-group aggregation runs — the 24h-count CASE/SUM
-	// is the expensive part of this query, and with HAVING the
-	// planner can't skip any trade rows for filtered-out pairs. Also
-	// opens the door for an index-only scan on (base_asset,
-	// quote_asset) if one ever lands.
+	// `since` is computed Go-side instead of `NOW() - INTERVAL` so
+	// the planner sees a constant timestamp parameter and can prune
+	// chunks at plan time rather than relying on stable-function
+	// evaluation. count_24h uses FILTER (more readable than the
+	// SUM/CASE form, identical plan).
 	//
-	// Overfetch by one (LIMIT $2 = limit+1) to detect "more pages
+	// Overfetch by one (LIMIT $3 = limit+1) to detect "more pages
 	// exist". The extra row isn't returned to the caller; its only
 	// purpose is to toggle whether we emit a nextCursor.
+	since := time.Now().UTC().Add(-MarketsRecencyWindow)
 	const q = `
         SELECT base_asset, quote_asset,
                MAX(ts) AS last_trade_at,
-               SUM(CASE WHEN ts > NOW() - INTERVAL '24 hours' THEN 1 ELSE 0 END) AS count_24h
+               count(*) FILTER (WHERE ts > NOW() - INTERVAL '24 hours') AS count_24h
           FROM trades
-         WHERE $1 = '' OR (base_asset || '|' || quote_asset) > $1
+         WHERE ts >= $1
+           AND ($2 = '' OR (base_asset || '|' || quote_asset) > $2)
          GROUP BY base_asset, quote_asset
          ORDER BY (base_asset || '|' || quote_asset) ASC
-         LIMIT $2
+         LIMIT $3
     `
-	rows, err := s.db.QueryContext(ctx, q, cursor, limit+1)
+	rows, err := s.db.QueryContext(ctx, q, since, cursor, limit+1)
 	if err != nil {
 		return nil, "", fmt.Errorf("timescale: DistinctPairs: %w", err)
 	}
@@ -114,26 +127,29 @@ func (s *Store) DistinctPairs(ctx context.Context, cursor string, limit int) ([]
 }
 
 // PairMarket returns the activity summary for a single (base, quote)
-// pair. The bool result is false when the pair has no trades in the
-// hypertable; callers translate that to an empty list (200 OK) per
-// the /v1/pairs envelope contract — not a 404 — to match the
-// "array of MarketRow" spec shape.
+// pair. The bool result is false when the pair hasn't traded inside
+// MarketsRecencyWindow; callers translate that to an empty list
+// (200 OK) per the /v1/pairs envelope contract — not a 404 — to
+// match the "array of MarketRow" spec shape.
 //
-// Performance: bounded scan over the trades hypertable for one
-// (base, quote) tuple. The same future market_catalogue
-// materialised view that benefits DistinctPairs benefits this too.
+// Recency window: scoped to the last MarketsRecencyWindow so chunk
+// pruning bounds I/O on a hypertable with hundreds of millions of
+// trades, and so the result is consistent with DistinctPairs (a
+// pair that DistinctPairs hides should also be hidden here).
 func (s *Store) PairMarket(ctx context.Context, base, quote canonical.Asset) (Market, bool, error) {
+	since := time.Now().UTC().Add(-MarketsRecencyWindow)
 	const q = `
         SELECT MAX(ts) AS last_trade_at,
-               SUM(CASE WHEN ts > NOW() - INTERVAL '24 hours' THEN 1 ELSE 0 END) AS count_24h
+               count(*) FILTER (WHERE ts > NOW() - INTERVAL '24 hours') AS count_24h
           FROM trades
-         WHERE base_asset = $1 AND quote_asset = $2
+         WHERE ts >= $1
+           AND base_asset = $2 AND quote_asset = $3
     `
 	var (
 		lastAt   *time.Time
 		count24h *int64
 	)
-	if err := s.db.QueryRowContext(ctx, q, base.String(), quote.String()).Scan(&lastAt, &count24h); err != nil {
+	if err := s.db.QueryRowContext(ctx, q, since, base.String(), quote.String()).Scan(&lastAt, &count24h); err != nil {
 		return Market{}, false, fmt.Errorf("timescale: PairMarket: %w", err)
 	}
 	if lastAt == nil {
