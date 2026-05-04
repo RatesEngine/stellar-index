@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import { useMemo } from 'react';
+import { X } from 'lucide-react';
 
 import { Panel } from '@/components/reveal';
 import { Sparkline } from '@/components/primitives';
@@ -26,19 +27,27 @@ import { formatCompact } from '@/lib/format';
 export function CoinsTable() {
   const params = useSearchParams();
   const sortParam = params.get('sort') ?? 'observation_count:desc';
+  const issuerFilter = params.get('issuer') ?? undefined;
 
-  const { data, isLoading, isError, error } = useCoins(100);
+  const { data, isLoading, isError, error } = useCoins(100, issuerFilter);
 
   const rows = useMemo(() => {
     if (!data) return [];
     return sortRows(data, sortParam);
   }, [data, sortParam]);
 
+  // The example URL in the `<>` reveal tracks the actual call —
+  // including the issuer param when one is in the URL — so what the
+  // panel says it called matches what it called.
+  const exampleParams: Record<string, string | number> = { limit: 100 };
+  if (issuerFilter) exampleParams.issuer = issuerFilter;
+  const exampleUrl = asExample('/v1/coins', exampleParams);
+
   if (isError) {
     return (
       <Panel
         title="Coin directory"
-        source={asExample('/v1/coins', { limit: 100 })}
+        source={exampleUrl}
         bodyClassName="text-sm text-down-strong"
       >
         Failed to load coins: {error instanceof Error ? error.message : 'unknown error'}
@@ -49,7 +58,7 @@ export function CoinsTable() {
     return (
       <Panel
         title="Coin directory"
-        source={asExample('/v1/coins', { limit: 100 })}
+        source={exampleUrl}
         bodyClassName="text-sm text-slate-500"
       >
         Loading…
@@ -59,9 +68,26 @@ export function CoinsTable() {
 
   return (
     <Panel
-      source={asExample('/v1/coins', { limit: 100 })}
+      title={issuerFilter ? `Coins by ${shortIssuer(issuerFilter)}` : undefined}
+      hint={issuerFilter ? `${rows.length} match` : undefined}
+      source={exampleUrl}
       bodyClassName="-mx-4"
     >
+      {issuerFilter && (
+        <div className="mb-3 flex items-center gap-2 px-4 text-xs">
+          <span className="text-slate-500">Filtered by issuer:</span>
+          <span className="rounded bg-brand-100 px-1.5 py-0.5 font-mono text-[10px] text-brand-700 dark:bg-brand-900 dark:text-brand-200">
+            {issuerFilter.slice(0, 8)}…{issuerFilter.slice(-4)}
+          </span>
+          <Link
+            href="/coins"
+            className="inline-flex items-center gap-0.5 text-slate-500 hover:text-brand-600"
+          >
+            <X className="h-3 w-3" />
+            clear
+          </Link>
+        </div>
+      )}
       <div className="overflow-x-auto">
         <table className="min-w-full divide-y divide-slate-200 text-sm dark:divide-slate-800">
           <thead>
@@ -161,6 +187,10 @@ function Td({
       {children}
     </td>
   );
+}
+
+function shortIssuer(g: string): string {
+  return `${g.slice(0, 6)}…${g.slice(-4)}`;
 }
 
 function sortRows(rows: Coin[], sortParam: string): Coin[] {

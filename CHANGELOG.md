@@ -17,6 +17,15 @@ against.
 
 ### Added
 
+- **`/coins?issuer=G…` URL param now actually filters.** The
+  `useCoins` hook accepts an optional `issuer` parameter; the
+  `/coins` page reads `?issuer=` from the URL and passes it
+  through to the API call. A small filter chip with a "clear"
+  link appears above the table when the param is set, and the
+  panel header switches to "Coins by G-stub…" so the filtered
+  context is obvious. Closes the loop on the
+  `/issuers → /coins?issuer=…` cross-link added in #596.
+
 - **`GET /v1/coins?issuer=G…` filter.** New optional query
   parameter on the existing coins endpoint that restricts the
   listing to classic assets minted by a single G-strkey. Powers
