@@ -55,6 +55,7 @@ type Server struct {
 	change24h    Change24hReader
 	changesum    ChangeSummaryReader
 	coins        CoinsReader
+	issuers      IssuersReader
 	sep10        auth.SEP10Validator
 	cors         middleware.Middleware
 	auth         middleware.Middleware
@@ -172,6 +173,11 @@ type Options struct {
 	// makes the endpoint return 503.
 	Coins CoinsReader
 
+	// Issuers, when non-nil, backs GET /v1/issuers/{g_strkey}.
+	// Production wiring is timescale.Store directly. Nil makes
+	// the endpoint return 503.
+	Issuers IssuersReader
+
 	// SEP10, when non-nil, backs GET /v1/auth/sep10/challenge and
 	// POST /v1/auth/sep10/token. Production wiring: an
 	// auth/sep10.Validator constructed from the binary's signing
@@ -265,6 +271,7 @@ func New(opts Options) *Server {
 		change24h:    opts.Change24h,
 		changesum:    opts.ChangeSummary,
 		coins:        opts.Coins,
+		issuers:      opts.Issuers,
 		sep10:        opts.SEP10,
 		cors:         opts.CORS,
 		auth:         opts.Auth,
@@ -340,6 +347,7 @@ func (s *Server) mountRoutes() {
 	// Health / meta endpoints. Deliberately NOT behind rate-limit
 	// middleware — infra (k8s probes, load balancers) hits these.
 	s.mux.HandleFunc("GET /v1/coins", s.handleCoins)
+	s.mux.HandleFunc("GET /v1/issuers/{g_strkey}", s.handleIssuer)
 	s.mux.HandleFunc("GET /v1/changes/{entity_type}/{id}", s.handleChangeSummary)
 	s.mux.HandleFunc("GET /v1/healthz", s.handleHealthz)
 	s.mux.HandleFunc("GET /v1/readyz", s.handleReadyz)

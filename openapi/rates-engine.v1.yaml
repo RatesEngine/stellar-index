@@ -736,6 +736,60 @@ paths:
         "500": { $ref: "#/components/responses/InternalError" }
         "503": { $ref: "#/components/responses/ServiceUnavailable" }
 
+  /issuers/{g_strkey}:
+    get:
+      tags: [meta]
+      summary: Issuer detail — auth flags, SEP-1 metadata, issued assets.
+      description: |
+        Returns the row from the `issuers` table joined with the
+        list of every classic asset this G-account has ever issued.
+        Auth flags + SEP-1 payload land per-issuer as the SEP-1
+        fetcher worker resolves them (Phase 4); fields stay null
+        until then.
+
+        Powers the showcase `/coins/{slug}` issuer card and
+        `/issuers/{G-strkey}` detail page.
+      parameters:
+        - name: g_strkey
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: One issuer row plus issued-asset list.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [g_strkey]
+                properties:
+                  g_strkey: { type: string }
+                  home_domain: { type: string }
+                  auth_required: { type: boolean, nullable: true }
+                  auth_revocable: { type: boolean, nullable: true }
+                  auth_immutable: { type: boolean, nullable: true }
+                  auth_clawback: { type: boolean, nullable: true }
+                  sep1_resolved_at: { type: string, format: date-time, nullable: true }
+                  sep1_payload: { type: object, additionalProperties: true, nullable: true }
+                  creation_ledger: { type: integer, nullable: true }
+                  assets:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        asset_id: { type: string }
+                        code: { type: string }
+                        slug: { type: string }
+                        first_seen_ledger: { type: integer }
+                        last_seen_ledger: { type: integer }
+                        observation_count: { type: integer, format: int64 }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+        "500": { $ref: "#/components/responses/InternalError" }
+        "503": { $ref: "#/components/responses/ServiceUnavailable" }
+
   /coins:
     get:
       tags: [meta]
