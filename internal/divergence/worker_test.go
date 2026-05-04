@@ -236,3 +236,71 @@ func TestRefreshPair_DefaultsApplied(t *testing.T) {
 		t.Errorf("6%% deviation should fire under default 5%% threshold")
 	}
 }
+
+// recordingObservationSink captures every RecordObservation call so
+// tests can pin the worker fires per-reference rows.
+type recordingObservationSink struct {
+	records []divergence.ObservationRecord
+}
+
+func (r *recordingObservationSink) RecordObservation(_ context.Context, obs divergence.ObservationRecord) error {
+	r.records = append(r.records, obs)
+	return nil
+}
+
+// TestRefreshPair_FiresObservationSink — when a sink is wired, the
+// worker must call it once per (pair, reference) tuple per refresh
+// with the right deltas + firing flag.
+func TestRefreshPair_FiresObservationSink(t *testing.T) {
+	refs := []divergence.Reference{
+		&stubReference{name: "chainlink", price: 1.00},
+		&stubReference{name: "coingecko", price: 1.00},
+	}
+	sink := &recordingObservationSink{}
+	svc, _, _ := newTestService(t, refs, divergence.ServiceOptions{
+		Threshold:            5.0,
+		MinSourcesForWarning: 1,
+		ObservationSink:      sink,
+	})
+
+	// Our price is 10% above both refs — both observations should
+	// be recorded with status=firing.
+	if err := svc.RefreshPair(context.Background(), xlmUSD(t), 1.10, time.Now()); err != nil {
+		t.Fatalf("RefreshPair: %v", err)
+	}
+
+	if len(sink.records) != 2 {
+		t.Fatalf("sink got %d records, want 2 (one per reference)", len(sink.records))
+	}
+	for _, r := range sink.records {
+		if !r.Firing {
+			t.Errorf("ref %s: Firing=false, want true (10%% delta exceeds 5%% threshold)", r.Reference)
+		}
+		if r.OurPrice != 1.10 {
+			t.Errorf("ref %s: OurPrice = %g, want 1.10", r.Reference, r.OurPrice)
+		}
+		if r.RefPrice != 1.00 {
+			t.Errorf("ref %s: RefPrice = %g, want 1.00", r.Reference, r.RefPrice)
+		}
+		// (1.10 - 1.00) / 1.00 * 100 = 10
+		if r.DeltaPct < 9.99 || r.DeltaPct > 10.01 {
+			t.Errorf("ref %s: DeltaPct = %g, want ~10", r.Reference, r.DeltaPct)
+		}
+	}
+}
+
+// TestRefreshPair_NoSinkIsLegacyBehaviour — the pre-Phase-2 default
+// (no sink) keeps the legacy Redis-only path working unchanged.
+func TestRefreshPair_NoSinkIsLegacyBehaviour(t *testing.T) {
+	refs := []divergence.Reference{
+		&stubReference{name: "a", price: 1.00},
+	}
+	svc, _, _ := newTestService(t, refs, divergence.ServiceOptions{
+		// ObservationSink: nil (default)
+	})
+	if err := svc.RefreshPair(context.Background(), xlmUSD(t), 1.00, time.Now()); err != nil {
+		t.Fatalf("RefreshPair: %v", err)
+	}
+	// No sink, no records — but no panic, no error. Legacy
+	// behaviour preserved.
+}

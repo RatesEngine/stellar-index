@@ -52,6 +52,43 @@ type CachedResult struct {
 	ComputedAt time.Time `json:"computed_at"`
 }
 
+// ObservationSink is the optional durable-mirror seam for
+// divergence observations. The Service calls RecordObservation
+// once per (pair, reference) tuple every refresh tick, capturing
+// the our_price / ref_price / delta_pct triple plus a firing/clear
+// status.
+//
+// Today the worker writes only the aggregate result + a boolean
+// firing flag to Redis with a TTL. The historical per-reference
+// deltas are lost. The durable mirror persists them so the
+// showcase /divergences page (showcase-site-data-inventory.md
+// §7.19) can plot the actual divergence over time and so incident
+// post-mortems can verify "Reflector drifted N% from us at ledger
+// X" against ground truth.
+//
+// Implementations must NOT block the worker's hot path on network
+// failures. Production wires
+// `internal/storage/timescale.DivergenceSink`.
+type ObservationSink interface {
+	// RecordObservation persists one (pair, reference) comparison.
+	// firing = true when |delta_pct| exceeded the per-reference
+	// threshold at observation time.
+	RecordObservation(ctx context.Context, obs ObservationRecord) error
+}
+
+// ObservationRecord is the per-(pair, reference) observation passed
+// to ObservationSink. Decoupled from the internal CachedResult shape
+// so the sink can evolve without the Service changing.
+type ObservationRecord struct {
+	Pair       canonical.Pair
+	Reference  string
+	OurPrice   float64
+	RefPrice   float64
+	DeltaPct   float64
+	Firing     bool
+	ObservedAt time.Time
+}
+
 // ServiceOptions configures a [Service].
 type ServiceOptions struct {
 	// References is the list of external sources to compare against.
@@ -76,6 +113,12 @@ type ServiceOptions struct {
 	// PerReferenceTimeout is forwarded to [Compare] via
 	// [CompareOptions]. Default 5s.
 	PerReferenceTimeout time.Duration
+
+	// ObservationSink, when non-nil, receives one record per (pair,
+	// reference) tuple every refresh. Persists the per-reference
+	// delta history that the Redis cache discards. Optional — nil
+	// keeps legacy Redis-only behaviour.
+	ObservationSink ObservationSink
 }
 
 // Service wraps a set of References + a cache writer, exposing a
@@ -92,6 +135,7 @@ type Service struct {
 	threshold  float64
 	minSources int
 	timeout    time.Duration
+	sink       ObservationSink
 }
 
 // NewService constructs a divergence service. Returns an error when
@@ -118,6 +162,7 @@ func NewService(opts ServiceOptions) (*Service, error) {
 		threshold:  threshold,
 		minSources: minSources,
 		timeout:    timeout,
+		sink:       opts.ObservationSink,
 	}, nil
 }
 
@@ -166,7 +211,60 @@ func (s *Service) RefreshPair(ctx context.Context, pair canonical.Pair, ourPrice
 	if err := s.cache.Set(ctx, key, body, cachekeys.DivergenceTTL).Err(); err != nil {
 		return fmt.Errorf("divergence: cache set %s: %w", key, err)
 	}
+
+	// Durable per-reference mirror. Best-effort: a sink failure must
+	// not surface to the caller because the Redis cache write — the
+	// load-bearing operation that drives flags.divergence_warning
+	// on the API response — has already succeeded.
+	if s.sink != nil {
+		s.flushObservations(ctx, pair, ourPrice, res, cached.ComputedAt)
+	}
 	return nil
+}
+
+// flushObservations persists one durable row per (pair, reference)
+// for the current refresh. Each successful reference contributes
+// its observed price + delta + firing flag.
+//
+// Failures (references that errored out) are deliberately skipped
+// — there's no observation to record, and the failure is already
+// surfaced via the Redis cache's Failures map for operator
+// dashboards.
+func (s *Service) flushObservations(
+	ctx context.Context,
+	pair canonical.Pair,
+	ourPrice float64,
+	res Result,
+	observedAt time.Time,
+) {
+	for refName, refPrice := range res.Sources {
+		if refPrice == 0 {
+			// Defensive: a reference reporting zero would produce a
+			// divide-by-zero on delta. Skip with no log; this is
+			// the comparator's job to surface.
+			continue
+		}
+		deltaPct := (ourPrice - refPrice) / refPrice * 100.0
+		firing := absFloat(deltaPct) > s.threshold
+		_ = s.sink.RecordObservation(ctx, ObservationRecord{
+			Pair:       pair,
+			Reference:  refName,
+			OurPrice:   ourPrice,
+			RefPrice:   refPrice,
+			DeltaPct:   deltaPct,
+			Firing:     firing,
+			ObservedAt: observedAt,
+		})
+	}
+}
+
+// absFloat is a tiny helper kept here (math.Abs imports the heavier
+// math package the rest of this file doesn't need).
+func absFloat(f float64) float64 {
+	if f < 0 {
+		return -f
+	}
+	return f
 }
 
 // LookupCached reads the most-recent cached divergence result for

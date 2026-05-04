@@ -250,6 +250,12 @@ func run(cfgPath string, dryRun bool) error {
 	var divRefresher orchestrator.DivergenceRefresher
 	divRefs := buildDivergenceReferences(cfg.Divergence, logger)
 	if len(divRefs) > 0 {
+		// Durable per-reference mirror — every (pair, reference) tick
+		// lands in the divergence_observations hypertable so the
+		// showcase /divergences page can plot deltas over time and
+		// post-mortems can verify against ground truth. See
+		// migrations/0019 + Phase 2 of the showcase implementation
+		// plan.
 		divSvc, err := divergence.NewService(divergence.ServiceOptions{
 			Cache:                rdb,
 			References:           divRefs,
@@ -257,6 +263,7 @@ func run(cfgPath string, dryRun bool) error {
 			MinSourcesForWarning: cfg.Divergence.MinSourcesForWarning,
 			PerReferenceTimeout: time.Duration(
 				cfg.Divergence.PerReferenceTimeoutSeconds) * time.Second,
+			ObservationSink: timescale.NewDivergenceSink(store),
 		})
 		if err != nil {
 			return fmt.Errorf("divergence service: %w", err)

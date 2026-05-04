@@ -28,6 +28,18 @@ against.
   `/anomalies` timeline (Phase 2 of the showcase implementation
   plan). Sink failures are swallowed — the load-bearing Redis write
   must not be blocked by a postgres blip.
+- **Divergence-observation durable mirror.** `internal/divergence`
+  Service now takes an optional `ObservationSink`; production wires
+  `internal/storage/timescale.DivergenceSink` which writes one row
+  per (pair, reference) tuple per refresh tick to the
+  `divergence_observations` hypertable (migration 0019). Today only
+  the boolean `flags.divergence_warning` flag survives across ticks
+  — the actual deltas are recomputed each tick and dropped. With
+  the sink, the showcase `/divergences` page can plot per-reference
+  deltas over time and post-mortems can verify cross-oracle
+  disagreements against ground truth. Sink failures are swallowed
+  — the Redis cache write is the load-bearing operation and must
+  not be blocked by a postgres blip.
 
 ### Fixed
 
