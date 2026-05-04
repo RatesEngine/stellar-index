@@ -15,6 +15,21 @@ against.
 
 ## [Unreleased]
 
+### Documentation
+
+- **`r1-deployment-state.md` documents discovery-sink drop rate.**
+  Sustained ~3 k SEP-41 discovery hits dropped per minute on r1
+  (845 k since process start, vs 4 921 rows in
+  `discovered_assets` — 99.4 % drop rate). Buffer is hardcoded at
+  1024 in the indexer and the postgres recorder can't drain
+  faster than new events arrive. Not catastrophic — same
+  contracts re-sniff and eventually land — but new SEP-41
+  contracts may take many ledgers before their first record
+  sticks. Captured in §5c with two viable follow-up fixes
+  (in-memory LRU dedup before push, or making BufferSize
+  config-tunable). Deferred until the GitHub Actions budget is
+  restored — both fixes need CI validation.
+
 ### Dependencies
 
 - **`redis/go-redis/v9` v9.18.0 → v9.19.0.** Patch-minor bump
