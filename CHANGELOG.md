@@ -51,6 +51,15 @@ against.
   beyond). Decoder-coverage / archive-completeness / SLO panels
   follow as their underlying endpoints ship.
 
+- **`/research` page gets real content.** Replaces the v0
+  placeholder with a curated index of the public-repo writeups —
+  six featured items (ADRs 0003 / 0015 / 0019, plus the Soroswap
+  pair-registry / CAP-67 unified events / Reflector missing
+  methods discoveries) and a topics index linking to ADRs,
+  discovery audits, runbooks, and architecture narratives. Sets
+  the "every choice is in the repo" expectation that the site's
+  positioning depends on.
+
 - **`/lending` and `/aggregators` pages get real content.**
   Replaces the v0 placeholders. `/lending` covers Blend in detail
   (isolated pools, Reflector-priced collateral, Comet auction
