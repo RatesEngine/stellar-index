@@ -34,6 +34,17 @@ against.
   beyond). Decoder-coverage / archive-completeness / SLO panels
   follow as their underlying endpoints ship.
 
+- **Showcase `/sources` page goes live.** Replaces the v0
+  placeholder with a live source directory backed by `/v1/sources`,
+  grouped by class (exchange / aggregator / oracle /
+  authority_sanity) so the "only Class=exchange contributes to
+  VWAP by default" boundary is visible at a glance. Per-source
+  flags surface as pills (in VWAP, paid, backfill safe, live-only).
+  `useSources()` hook now unwraps the standard `{data:[…]}`
+  envelope so consumers get a plain array. Per-source health and
+  WASM-history panes follow once `/v1/sources/{name}/health` and
+  the wasm_versions join ship.
+
 - **Change-summary rollup worker.** New
   `internal/aggregate/changesummary` package + aggregator-side
   worker that, every 5 minutes, walks every configured (coin,
