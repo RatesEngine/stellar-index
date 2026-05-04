@@ -15,6 +15,15 @@ against.
 
 ## [Unreleased]
 
+### CI
+
+- **Bump actions in `status-page.yml` to match `ci.yml`.**
+  `actions/checkout@v4` → `@v6` and `actions/upload-artifact@v4`
+  → `@v7`. ci.yml landed on these versions earlier (via separate
+  dependabot PRs); the status-page workflow added in #600 was
+  on the older versions. Reconciles them so all CI jobs use the
+  same major across the repo.
+
 ### Documentation
 
 - **`r1-deployment-state.md` reflects current operational state.**
