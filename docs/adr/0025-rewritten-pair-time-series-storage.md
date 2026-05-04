@@ -234,22 +234,90 @@ review point — it ratifies the schema; phases 2-3 are mechanical.
 
 ## Open questions for the operator
 
-1. **Naming.** `prices_1m_proxy` reads as "the proxy variant of
-   prices_1m"; `prices_1m_synth` or `prices_1m_rewritten` are
-   alternatives. No semantic difference; pick one before phase 1
-   migration.
-2. **Multi-window mirror.** Same pattern at 5m/1h/24h
-   granularities? Or just 1m and let downstream callers re-aggregate?
-   The Redis side publishes all three; mirroring matches that.
-   Implementer suggestion: mirror all three.
-3. **Phase ordering vs the launch.** The phases above are
-   independently safe. The operator can defer phases 2-3 to
-   post-launch if launch is gated on the SLA-proof artefact (L77)
-   and the headline `/v1/price` already works (it does, via the
-   Redis fallback). The "launch with caveat" path is viable; this
-   ADR documents the cleanup target either way.
+1. **Bucketed vs snapshot data model — important; flagged after
+   PR #638 was opened, drafting #639 surfaced the gap.** The
+   migration sketched in "Schema sketch" assumes a
+   `prices_1m_proxy` storing **minute-aligned bucket VWAPs**
+   keyed on `(bucket, base, quote)`, mirroring what `prices_1m`
+   does for literal pairs. The aggregator orchestrator does NOT
+   today produce minute-aligned bucket VWAPs for ANY pair — it
+   produces rolling-window VWAPs at every tick (default
+   `Interval=30s`), parameterised by lookback window
+   (`Windows=[5m, 1h, 24h]`). Each tick writes one Redis key per
+   (pair, window). Two ways to bridge:
+
+   **Option A — minute-bucket computer (matches the schema in
+   #639).** Add a new orchestrator path that runs at every minute
+   boundary, fetches trades from `[T-1m, T)` for the rewritten
+   pair (via the same `fetchForTarget` expansion), computes the
+   minute-bucket VWAP, and UPSERTs into `prices_1m_proxy` with
+   `bucket=T-1m`. Read shape exactly matches `prices_1m`'s.
+   Cost: a new code path in the aggregator's tight loop;
+   ~half-day of careful work to avoid drift between the rolling
+   path and the bucketed path. Schema in #639 stands.
+
+   **Option B — rolling-window snapshot table.** Replace
+   `prices_1m_proxy` with `rewritten_vwap_snapshots`:
+
+   ```sql
+   CREATE TABLE rewritten_vwap_snapshots (
+       observed_at    timestamptz NOT NULL,
+       base_asset     text NOT NULL,
+       quote_asset    text NOT NULL,
+       window_seconds integer NOT NULL,  -- 300 / 3600 / 86400
+       vwap           numeric NOT NULL,
+       trade_count    integer NOT NULL,
+       sources        text[] NOT NULL,
+       PRIMARY KEY (base_asset, quote_asset, window_seconds, observed_at)
+   );
+   ```
+
+   Mirror Redis: every aggregator tick that publishes a
+   `vwap:base:quote:N` key ALSO inserts a row here. Append-only,
+   bounded by retention. Phase 2 wiring is genuinely 1-line per
+   write (alongside the existing Redis SET). API readers answer
+   "current price" by reading the latest snapshot for the
+   requested window; "history" by walking the time series for the
+   chosen window; "/v1/changes" deltas by comparing snapshots at
+   chosen lookback offsets.
+   Cost: ~77 k rows/day at launch scale (9 pairs × 3 windows ×
+   1 tick/30s × 86400 s/day); 30-day retention ≈ 2.3 M rows
+   total, trivial.
+
+   **Recommendation if asked:** Option B. The aggregator's actual
+   output is rolling-window VWAPs; storing what it produces (vs
+   forcing it into a bucket model) is simpler, cheaper, and
+   lower-risk for launch. The bucketed model is strictly more
+   "TimescaleDB-idiomatic" (CAGG-shaped) but requires a new
+   computation path that doesn't exist today and risks drift
+   against the existing rolling path.
+
+   Pick A or B before merging #639. If B, the migration in #639
+   needs the rewrite above; the storage methods change shape too
+   (insert by `observed_at`, read by `(pair, window, observed_at
+   DESC LIMIT 1)`).
+
+2. **Naming.** Within Option A: `prices_1m_proxy` vs `_synth` vs
+   `_rewritten`. Within Option B: `rewritten_vwap_snapshots` vs
+   `proxy_vwap_snapshots` etc. No semantic difference within each
+   model; pick one.
+3. **Multi-window mirror.** Same pattern at 5m/1h/24h granularities,
+   or just one window with downstream callers re-aggregating? The
+   Redis side publishes all three; mirroring matches that. Mostly
+   relevant for Option B (Option A would reuse the per-minute
+   bucket and let read-side aggregation handle the windowing).
+4. **Phase ordering vs the launch.** The phases are independently
+   safe. The operator can defer phases 2-3 to post-launch if launch
+   is gated on the SLA-proof artefact (L77) and the headline
+   `/v1/price` already works (it does, via the Redis fallback). The
+   "launch with caveat" path is viable; this ADR documents the
+   cleanup target either way.
 
 ## Status
 
-**Proposed** — awaiting operator decision on phase ordering and
-naming. Implementation drafts not yet written.
+**Proposed** — awaiting operator decision on the four open questions
+above. Implementation: PR #639 ships a phase-1 migration + storage
+methods consistent with **Option A** (the original "Schema sketch"
+section). If the operator picks **Option B** instead, #639 needs
+the migration rewrite shown above; the storage method bodies change
+shape but the call-site interfaces stay similar.
