@@ -1,19 +1,30 @@
-import { PlaceholderPage } from '@/components/panels/PlaceholderPage';
-import { asExample } from '@/api/client';
+import { SourcesTable } from './SourcesTable';
 
+/**
+ * /sources — directory of every venue we ingest.
+ *
+ * Live-data pass: groups by class (exchange / aggregator / oracle /
+ * authority_sanity) so the "only Class=exchange contributes to VWAP
+ * by default" boundary is visible at a glance. Per-source health
+ * metrics (events seen 24h, decode errors, orphan rate, last
+ * decoded ledger) plumb in once `/v1/sources/{name}/health` ships;
+ * the WASM-history pane lands once decoder_stats + wasm_versions
+ * are joined into the response.
+ */
 export default function SourcesPage() {
   return (
-    <PlaceholderPage
-      title="Sources"
-      blurb="Where the prices come from. Every exchange, AMM, oracle, and FX feed we ingest."
-      phase="Phase 8.x — sources directory"
-      source={asExample('/v1/sources', { include: 'health' })}
-      features={[
-        'Per-source health: events seen 24h, decode errors, orphan rate, last decoded ledger',
-        'Reliability scoreboard — rolling 30d uptime, mean lag, error rate',
-        'VWAP-weight history per pair × source over time',
-        'WASM history (Soroban sources) with side-by-side WAT diff between versions',
-      ]}
-    />
+    <div className="mx-auto max-w-6xl space-y-6 p-6">
+      <header className="space-y-2">
+        <h1 className="text-3xl font-semibold tracking-tight">Sources</h1>
+        <p className="max-w-3xl text-sm text-slate-600 dark:text-slate-400">
+          Every venue we ingest, grouped by class. Only Class=exchange sources
+          contribute to VWAP by default — aggregators and oracles are reported
+          alongside but excluded so we don&apos;t double-count upstream markets
+          or import their methodology.
+        </p>
+      </header>
+
+      <SourcesTable />
+    </div>
   );
 }

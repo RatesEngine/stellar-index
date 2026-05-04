@@ -70,12 +70,19 @@ export type Source = {
   default_weight: number;
 };
 
+type SourcesEnvelope = { data: Source[] };
+
 /** useSources — fetches the source registry. */
 export function useSources(classFilter?: Source['class']) {
   return useQuery<Source[]>({
     queryKey: ['/v1/sources', classFilter ?? 'all'],
-    queryFn: () =>
-      apiGet<Source[]>('/v1/sources', classFilter ? { class: classFilter } : undefined),
+    queryFn: async () => {
+      const env = await apiGet<SourcesEnvelope | Source[]>(
+        '/v1/sources',
+        classFilter ? { class: classFilter } : undefined,
+      );
+      return Array.isArray(env) ? env : env.data;
+    },
   });
 }
 
