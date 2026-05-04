@@ -76,6 +76,7 @@ import (
 
 	"github.com/RatesEngine/rates-engine/internal/aggregate/anomaly"
 	"github.com/RatesEngine/rates-engine/internal/aggregate/baseline"
+	"github.com/RatesEngine/rates-engine/internal/aggregate/changesummary"
 	"github.com/RatesEngine/rates-engine/internal/aggregate/freeze"
 	"github.com/RatesEngine/rates-engine/internal/aggregate/orchestrator"
 	"github.com/RatesEngine/rates-engine/internal/api/streaming/redispub"
@@ -356,6 +357,27 @@ func run(cfgPath string, dryRun bool) error {
 	go func() {
 		defer refresherWG.Done()
 		runBaselineRefresh(rootCtx, refresher, pairs, logger.With("component", "baseline-refresh"))
+	}()
+
+	// ─── Change-summary rollup worker ───────────────────────────
+	// Refreshes the change_summary_5m table every 5 min so every
+	// list view + delta strip on the showcase reads in O(1) rather
+	// than re-scanning prices_1m per request. See
+	// migrations/0022 + Phase 3 of the showcase implementation plan.
+	changeSummaryWorker, err := changesummary.New(
+		changeSummaryPriceSource{store: store},
+		changeSummarySink{store: store},
+		buildChangeSummaryEntities(pairs),
+		logger.With("component", "change-summary"),
+		changesummary.Options{Interval: 5 * time.Minute},
+	)
+	if err != nil {
+		return fmt.Errorf("change-summary worker init: %w", err)
+	}
+	refresherWG.Add(1)
+	go func() {
+		defer refresherWG.Done()
+		_ = changeSummaryWorker.Run(rootCtx)
 	}()
 
 	// ─── Supply-snapshot refresh worker (ADR-0011 / Task #57) ────
