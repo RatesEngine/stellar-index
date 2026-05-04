@@ -254,27 +254,20 @@ fetched 2026-04-23:
    source-diversity computers (Phase 3) can't run until VWAPs
    populate.
 
-5c. **Discovery sink dropping ~3 k hits/min sustained.**
-   (Discovered 2026-05-04 19:00 UTC.) The async discovery sink
-   (`internal/canonical/discovery/sink.go`,
-   `BufferSize: 1024` hardcoded in
-   `cmd/ratesengine-indexer/main.go:209`) is dropping new
-   SEP-41 contract observations because the buffer fills faster
-   than the postgres recorder can drain. Production rate at
-   2026-05-04 19:06: 845,745 dropped since process start (5h);
-   `discovered_assets` table has only 4,921 rows. Drop rate ≈
-   99.4%. Not catastrophic — drops aren't permanent data loss
-   because the same contract emits more events later, gets
-   re-sniffed, and lands when the buffer has space — but
-   actively-used contracts may take many ledgers before the
-   first record sticks. Two viable fixes for follow-up:
-   (a) in-memory LRU/bloom dedup before push so we only round-
-   trip postgres for contracts we haven't seen recently;
-   (b) make `BufferSize` config-tunable so operators can scale
-   it for their network's SEP-41 churn rate. Both need a code
-   change + binary redeploy. See PR-pending: deferred until the
-   GitHub Actions budget is restored (cannot validate via CI
-   currently).
+5c. ~~**Discovery sink dropping ~3 k hits/min sustained.**~~
+   **RESOLVED 2026-05-04 18:40 UTC, PR #621.** The async discovery
+   sink now keeps a process-local `(contract_id, event_type)`
+   seen-set and silently skips repeats before they hit the buffered
+   channel — the recorder upserts on the same key, so re-enqueue
+   was wasted work. Pre-fix snapshot for the record: 1,080,366
+   dropped since process start; `discovered_assets` had 4,968 rows;
+   drop rate ≈ 99.5%. Post-deploy snapshot at T+90s: dropped = 0,
+   skipped = 6,353, `discovered_assets` = 4,975 (7 new rows in
+   90s). Drop counter has flatlined; skipped counter exposes the
+   dedup volume for capacity-planning visibility. The seen-mark is
+   rolled back on genuine buffer-saturation drops so a later push
+   for the same key can retry; restart resets the set and the
+   first push for any key after restart still records.
 
 5b. **`classic_assets` table seeded from trades.**
    (Done 2026-05-04, PR #595 context.) Direct SQL backfill
