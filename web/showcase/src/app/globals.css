@@ -1,0 +1,29 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --font-sans: 'Inter', system-ui, sans-serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, monospace;
+}
+
+html,
+body {
+  @apply bg-white text-slate-900 antialiased;
+}
+
+@media (prefers-color-scheme: dark) {
+  html,
+  body {
+    @apply bg-slate-950 text-slate-100;
+  }
+}
+
+/* Time-machine pinned-mode overlay tint */
+[data-as-of] {
+  background-image: linear-gradient(
+    180deg,
+    rgba(254, 243, 199, 0.12) 0%,
+    transparent 100px
+  );
+}

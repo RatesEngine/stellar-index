@@ -299,6 +299,38 @@ release-dryrun: ## Validate whether in-repo goreleaser packaging exists for this
 	fi
 	@goreleaser release --snapshot --clean
 
+##@ Showcase site (web/showcase/) — see docs/architecture/showcase-site-implementation-plan.md
+
+WEB_SHOWCASE_DIR := web/showcase
+
+.PHONY: web-install
+web-install: ## Install showcase-site dependencies (pnpm)
+	cd $(WEB_SHOWCASE_DIR) && pnpm install --frozen-lockfile
+
+.PHONY: web-dev
+web-dev: ## Run the showcase site locally with HMR (http://localhost:3000)
+	cd $(WEB_SHOWCASE_DIR) && pnpm dev
+
+.PHONY: web-build
+web-build: ## Build the showcase site for production
+	cd $(WEB_SHOWCASE_DIR) && pnpm build
+
+.PHONY: web-typecheck
+web-typecheck: ## Typecheck the showcase site
+	cd $(WEB_SHOWCASE_DIR) && pnpm typecheck
+
+.PHONY: web-lint
+web-lint: ## Lint the showcase site
+	cd $(WEB_SHOWCASE_DIR) && pnpm lint
+
+.PHONY: web-format
+web-format: ## Format the showcase site (prettier)
+	cd $(WEB_SHOWCASE_DIR) && pnpm format
+
+.PHONY: web-generate-api
+web-generate-api: ## Regenerate web/showcase/src/api/types.ts from OpenAPI
+	cd $(WEB_SHOWCASE_DIR) && pnpm generate:api
+
 ##@ Housekeeping
 
 .PHONY: clean
