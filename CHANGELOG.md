@@ -17,6 +17,18 @@ against.
 
 ### Tests
 
+- **API-level integration test for `/v1/coins`, `/v1/issuers`,
+  `/v1/issuers/{g}`, `/v1/coins?issuer=…`, and
+  `/v1/diagnostics/cursors`.** New
+  `test/integration/api_registry_cursors_test.go` wires
+  `timescale.Store` straight through `v1.Options` (the store
+  satisfies all four reader interfaces directly, no adapter
+  glue) and asserts the wire shapes the showcase consumes:
+  ranking by observation count, issuer-filter behaviour, embedded
+  asset list on the issuer detail envelope, cursor ordering by
+  (source, sub_source), and that the computed `lag_seconds` field
+  is non-negative.
+
 - **Integration test for `ListIssuers`, `ListCoins (?issuer=)`,
   `GetIssuer`, `ListIssuerAssets`.** New
   `test/integration/issuers_coins_storage_test.go` exercises the
