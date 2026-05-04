@@ -105,13 +105,36 @@ PR merge into main
 Rolling back is a single click in the CF dashboard — Pages keeps
 every previous build available as a preview URL.
 
+## Security headers + CSP
+
+`web/showcase/public/_headers` ships a Cloudflare-Pages /
+Netlify-format header file that's copied verbatim to the build
+output. It applies on every response:
+
+- `X-Content-Type-Options: nosniff`
+- `X-Frame-Options: DENY` + `frame-ancestors 'none'` CSP
+- `Referrer-Policy: strict-origin-when-cross-origin`
+- `Permissions-Policy` denying camera / mic / geolocation / payment / USB / accelerometer
+- `Content-Security-Policy` restricting `connect-src` to `self` +
+  `https://api.ratesengine.net` (so fetch only reaches the API
+  origin), with `'unsafe-inline'` allowed on `script-src` /
+  `style-src` because Next.js static export emits inline
+  bootstrap and Tailwind utility styles
+- 1-year `Cache-Control: immutable` on `/_next/static/*` (CF Pages
+  defaults to this; the explicit header doubles as documentation
+  and is required for Netlify)
+
+If you switch to Vercel, translate `_headers` into a
+`vercel.json` headers block — same directives, different syntax.
+
 ## Alternative: Vercel / Netlify
 
 Both work identically — same build command, same output directory,
-same env var. We picked Cloudflare for vendor consolidation with
-the API CDN; Vercel would be marginally faster on first-paint
-metrics in their case-study tests, but the difference disappears
-with the API on Cloudflare.
+same env var. Netlify reads `_headers` natively; Vercel needs
+`vercel.json` per the note above. We picked Cloudflare for vendor
+consolidation with the API CDN; Vercel would be marginally faster
+on first-paint metrics in their case-study tests, but the
+difference disappears with the API on Cloudflare.
 
 ## Alternative: rsync to the API host
 

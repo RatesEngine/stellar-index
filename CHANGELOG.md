@@ -15,6 +15,23 @@ against.
 
 ## [Unreleased]
 
+### Security
+
+- **Showcase ships `_headers` with CSP + security headers.** New
+  `web/showcase/public/_headers` (CF Pages / Netlify format,
+  copied verbatim into the build output) sets a restrictive
+  Content-Security-Policy that limits `connect-src` to `self` +
+  `https://api.ratesengine.net` so a compromised script can't
+  exfiltrate to a third party, plus `X-Content-Type-Options`,
+  `X-Frame-Options: DENY` (with `frame-ancestors 'none'` mirroring
+  it in CSP), `Referrer-Policy: strict-origin-when-cross-origin`,
+  and a `Permissions-Policy` denying camera / mic / geolocation /
+  payment / USB. The 1-year `immutable` Cache-Control on
+  `/_next/static/*` is documented explicitly so Netlify operators
+  don't need to know about CF's default. `showcase-deployment.md`
+  has a new section explaining the directives + how to translate
+  to `vercel.json` if you switch hosts.
+
 ### Fixed
 
 - **SLA probe covers the catalogue endpoints.** The probe
