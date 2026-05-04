@@ -23,6 +23,7 @@ thresholds) live under `scenarios/lib/`.
 | `scenarios/04-batch.js` | bulk fan-out cap | p95 < 500 ms @ batch-size 100, 50 rps |
 | `scenarios/05-streaming.js` | SSE connection ramp + sustain | 99 % of clients receive their first event < 1 s after subscribe |
 | `scenarios/06-mixed-realistic.js` | the canonical proof scenario | p95 < 200 ms across the weighted mix; error rate < 0.1 %; sustained 10 min |
+| `scenarios/07-catalogue-browse.js` | showcase hot path (`/v1/coins`, `/v1/issuers`, `/v1/markets`, `/v1/diagnostics/cursors`) | p95 < 200 ms on lookups, p95 < 300 ms on `/v1/markets` (GROUP BY); error rate < 0.1 %; 5 min |
 | `scenarios/99-spike.js` | brief 10× burst absorption | recovery to baseline p95 within 2 min of spike end |
 
 ## Running

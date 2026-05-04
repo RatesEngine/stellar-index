@@ -15,6 +15,20 @@ against.
 
 ## [Unreleased]
 
+### Tests
+
+- **k6 scenario 07-catalogue-browse.** New load-test scenario
+  exercising the showcase hot path (`/v1/coins`, `/v1/issuers`,
+  `/v1/issuers/{g}`, `/v1/markets`, `/v1/diagnostics/cursors`)
+  with traffic-shape weights modelled on browsing behaviour
+  (30/25/20/15/10). Pass criteria: p95 < 200 ms on lookups,
+  p95 < 300 ms on `/v1/markets` (GROUP BY across the 14-day
+  chunk window), error rate < 0.1 %, 5-minute soak. Companion
+  to #610 — the SLA probe samples one of each; this scenario
+  drives them under load. Deliberately separate from
+  `06-mixed-realistic.js` so the official Freighter-RFP SLA
+  proof keeps its canonical traffic shape.
+
 ### Security
 
 - **Showcase ships `_headers` with CSP + security headers.** New

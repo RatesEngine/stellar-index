@@ -42,6 +42,19 @@ export const sla = {
     // recovery asserted out-of-band by the runbook.
     'http_req_failed': ['rate<0.005'],
   },
+  catalogue: {
+    // Showcase catalogue endpoints — same SLA bar as other read
+    // surfaces. /v1/markets does a GROUP BY across the 14-day
+    // chunk window so we allow a slightly looser p99 than
+    // single-key lookups; everything else stays under the
+    // standard 200 ms / 500 ms gate.
+    'http_req_duration{endpoint:coins}':              ['p(95)<200', 'p(99)<500'],
+    'http_req_duration{endpoint:issuers}':            ['p(95)<200', 'p(99)<500'],
+    'http_req_duration{endpoint:issuer-detail}':      ['p(95)<200', 'p(99)<500'],
+    'http_req_duration{endpoint:markets}':            ['p(95)<300', 'p(99)<1000'],
+    'http_req_duration{endpoint:cursors}':            ['p(95)<200', 'p(99)<500'],
+    'http_req_failed':                                ['rate<0.001'],
+  },
 };
 
 // Common executor shape — RPS-controlled per the design note Q4.
