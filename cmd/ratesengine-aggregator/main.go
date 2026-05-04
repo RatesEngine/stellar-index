@@ -318,8 +318,9 @@ func run(cfgPath string, dryRun bool) error {
 		// Per-source contribution mirror — feeds the showcase
 		// source-donut on every price card. See migrations/0026 +
 		// Phase 2 of the showcase implementation plan.
-		ContributionSink: newContributionSink(store),
-		Logger:           logger,
+		ContributionSink:      newContributionSink(store),
+		RewrittenSnapshotSink: rewrittenSnapshotSink{store: store},
+		Logger:                logger,
 	})
 
 	if dryRun {

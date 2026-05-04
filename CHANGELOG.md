@@ -15,6 +15,22 @@ against.
 
 ## [Unreleased]
 
+### Added
+
+- **Migration 0027 (Option B) + aggregator-side wiring for
+  rewritten-pair VWAP snapshots.** ADR-0025 phases 1 + 2 (Option B
+  variant). New hypertable `rewritten_vwap_snapshots` mirrors the
+  aggregator's Redis `vwap:` keys 1:1 — one row per (base, quote,
+  window_seconds) per orchestrator tick — so historical surfaces
+  (`/v1/vwap`, `/v1/twap`, `/v1/changes`, `/v1/history`) can answer
+  fiat-target queries on rewritten pairs. Phase 2 wires
+  `Config.RewrittenSnapshotSink` into the orchestrator's
+  `cacheClosedBucket` path; sink failures log + count via the new
+  `ratesengine_aggregator_rewritten_snapshot_total` counter (best-
+  effort, never breaks the Redis write upstream). Non-fiat targets
+  and unwired sinks are no-ops. Phase 3 (API reader fallback)
+  remains pending operator decision on Option A vs B.
+
 ### Fixed
 
 - **`/v1/assets` listing latency cut from ~4.9 minutes to under 1

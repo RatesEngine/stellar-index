@@ -260,6 +260,22 @@ fan-out. `outcome="error"` is best-effort failure (publish
 errored; the next tick retries; the VWAP cache write itself
 is unaffected).
 
+### `ratesengine_aggregator_rewritten_snapshot_total`
+
+Counter, label `outcome` (`ok` / `error`).
+
+Rewritten-pair VWAP snapshots persisted by the orchestrator (per
+ADR-0025 phase 2). Fires once per (fiat-target pair, window) per
+tick when the configured `RewrittenSnapshotSink` is wired and the
+target's quote is fiat-typed. Production wiring INSERTs into the
+`rewritten_vwap_snapshots` hypertable so historical surfaces
+(`/v1/vwap`, `/v1/twap`, `/v1/changes`, `/v1/history`) can answer
+fiat-target queries on rewritten pairs. `outcome="error"` is
+best-effort failure (sink errored; the next tick retries; the
+Redis VWAP write upstream is the source of truth for live values
+and is unaffected). Unset when no sink is wired (the literal-pair
+path is independent of this counter).
+
 ### `ratesengine_api_stream_subscribe_total`
 
 Counter, label `outcome` (`ok` / `decode_error` / `malformed`).

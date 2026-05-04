@@ -51,6 +51,7 @@ func init() {
 
 		AggregatorTicksTotal,
 		AggregatorVWAPWritesTotal,
+		AggregatorRewrittenSnapshotTotal,
 		AggregatorEmptyWindowsTotal,
 		AggregatorStreamPublishTotal,
 		APIStreamSubscribeTotal,
@@ -435,6 +436,26 @@ var AggregatorStreamPublishTotal = prometheus.NewCounterVec(
 	prometheus.CounterOpts{
 		Name: "ratesengine_aggregator_stream_publish_total",
 		Help: "Closed-bucket stream publishes attempted by the aggregator, labelled by outcome.",
+	},
+	[]string{"outcome"},
+)
+
+// AggregatorRewrittenSnapshotTotal — count of rewritten-pair VWAP
+// snapshots the orchestrator handed to the configured
+// RewrittenSnapshotSink (postgres mirror per ADR-0025 phase 2).
+// Labelled by outcome:
+//
+//   - "ok" — snapshot persisted; phase-3 readers can serve it.
+//   - "error" — sink returned a non-nil error; the next tick re-fires.
+//     The Redis VWAP write upstream is unaffected — the cache stays
+//     the source of truth for live values, this counter just signals
+//     the historical-mirror health.
+//
+// Unset when no sink is wired (the literal-pair path is unaffected).
+var AggregatorRewrittenSnapshotTotal = prometheus.NewCounterVec(
+	prometheus.CounterOpts{
+		Name: "ratesengine_aggregator_rewritten_snapshot_total",
+		Help: "Rewritten-pair VWAP snapshots persisted by the aggregator, labelled by outcome (per ADR-0025).",
 	},
 	[]string{"outcome"},
 )

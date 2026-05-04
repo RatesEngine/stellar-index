@@ -354,6 +354,19 @@ type Config struct {
 	// docs/architecture/showcase-site-implementation-plan.md.
 	ContributionSink ContributionSink
 
+	// RewrittenSnapshotSink, when non-nil, receives one snapshot per
+	// successful VWAP compute whose target is fiat-quoted (the
+	// stablecoin-fiat-proxy expansion case). Production wires the
+	// timescale-Store adapter that INSERTs into
+	// `rewritten_vwap_snapshots`; nil disables the historical mirror
+	// (Redis remains the live cache either way). Best-effort —
+	// sink failures log + continue.
+	//
+	// See ADR-0025 for the gap this closes (`/v1/vwap`, `/v1/twap`,
+	// `/v1/changes`, `/v1/history` previously returned empty data
+	// for `?quote=fiat:USD`) and migration 0027 for the schema.
+	RewrittenSnapshotSink RewrittenSnapshotSink
+
 	// Logger is the structured logger. If nil, slog.Default() is
 	// used.
 	Logger *slog.Logger
@@ -653,6 +666,13 @@ func (o *Orchestrator) refreshPairWindow(
 	if err := o.cache.Set(ctx, key, value, ttl).Err(); err != nil {
 		return fmt.Errorf("redis set %s: %w", key, err)
 	}
+
+	// ADR-0025 phase 2: mirror the rewritten-pair VWAP to the
+	// historical-store sink so /v1/vwap, /v1/twap, /v1/changes,
+	// /v1/history can answer fiat-target queries. Best-effort —
+	// failures log + count, never break the Redis write upstream.
+	// No-op when the sink isn't wired or the target isn't fiat-quoted.
+	o.publishRewrittenSnapshot(ctx, pair, window, value, trades, now)
 
 	// Cache write confidence (only on successful publish — frozen
 	// buckets must NOT carry a stale score forward). Best-effort:
