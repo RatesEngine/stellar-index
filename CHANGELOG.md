@@ -17,6 +17,12 @@ against.
 
 ### Documentation
 
+- **README + CLAUDE.md mention `web/showcase/`.** Adds a "Hosted
+  UI / explorer" entry to the README's Start-here list and a
+  one-line entry in the CLAUDE.md repo map. Both files knew
+  about the API + reference docs but not the showcase site that
+  visitors actually land on first.
+
 - **`launch-day-checklist.md` includes the showcase site.** Adds
   T-7 prep step (CF Pages project staged, custom domain bound,
   preview deploy succeeded), T-0 step 5 (force a fresh build

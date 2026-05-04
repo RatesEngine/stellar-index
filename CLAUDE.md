@@ -100,6 +100,7 @@ development. If one does, it's a bug.
 ├── configs/                   example.toml + Ansible roles (configs/ansible/{roles,inventory,playbooks}/)
 ├── openapi/                   rates-engine.v1.yaml — source of truth for API
 ├── deploy/                    docker-compose (dev), systemd (production unit files), monitoring (Prometheus rules), status-page (cstate scaffold)
+├── web/showcase/              Next.js 15 static-export explorer rendered at ratesengine.net (Cloudflare Pages)
 ├── scripts/                   dev/ops/ci helpers (incl. ci/lint-docs.sh)
 ├── test/                      integration / fixtures (build tag: integration), load (k6), chaos
 │
