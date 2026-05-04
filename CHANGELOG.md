@@ -15,6 +15,15 @@ against.
 
 ## [Unreleased]
 
+### Documentation
+
+- **`getting-started.md` lists the interactive explorer.** The
+  URL block at the top of the doc previously listed the API
+  endpoint, reference docs, and status page but not the showcase
+  site itself. Added a `ratesengine.net` line so newcomers learn
+  about the explorer alongside the curl examples. Also bumps
+  `last_verified` to 2026-05-04.
+
 ### CI
 
 - **`web/showcase` job runs `pnpm build`.** Adds the static-export
