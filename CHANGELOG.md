@@ -17,6 +17,20 @@ against.
 
 ### Changed
 
+- **`/v1/price` Redis-VWAP fallback now serves direct rewrites, not
+  just triangulated values.** Pre-fix, when `prices_1m` had no row
+  for the requested pair, the handler consulted Redis but rejected
+  cache hits whose provenance marker was absent — preserving the
+  documented "Timescale is the source of truth for direct VWAPs"
+  invariant. That invariant only applies to LITERAL trade pairs;
+  for aggregator-rewritten pairs (XLM/fiat:USD synthesised from
+  XLM/USDC-GA5Z…) Timescale's CAGG fundamentally can't be the source
+  of truth because the rewrite happens at app layer post-CAGG. The
+  handler now serves any cache hit and routes the marker into
+  `flags.triangulated` (true/false) so callers can still tell the
+  difference. `tryTriangulatedFallback` renamed to
+  `tryRedisVWAPFallback` to reflect the broader role.
+
 - **Aggregator default pair set now publishes XLM under both
   `crypto:XLM/fiat:*` and `native/fiat:*`.** XLM has two on-the-wire
   identities — the abstract `crypto:XLM` ticker (used by off-chain

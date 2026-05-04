@@ -287,7 +287,7 @@ func (s *Server) handlePrice(w http.ResponseWriter, r *http.Request) {
 		// `flags.triangulated=true`. When no looker is wired or no
 		// triangulated value is cached, the original 404 stands.
 		var ok bool
-		snapshot, sources, triangulated, ok = s.tryTriangulatedFallback(r.Context(), asset, quote)
+		snapshot, sources, triangulated, ok = s.tryRedisVWAPFallback(r.Context(), asset, quote)
 		stale = false
 		if !ok {
 			writeProblem(w, r,
@@ -372,30 +372,40 @@ const confidenceLookupWindow = 5 * time.Minute
 // freshest available — older windows are inferior.
 const triangulationLookupWindow = 1 * time.Minute
 
-// tryTriangulatedFallback consults the wired
-// [TriangulatedPriceLooker] (if any) after a Timescale miss on
-// /v1/price. Returns ok=true with a synthesised snapshot when the
-// triangulation worker has cached an implied VWAP for this pair
-// AND the provenance marker confirms triangulation. Returns
-// ok=false otherwise so the handler can preserve the original 404.
+// tryRedisVWAPFallback consults the wired [TriangulatedPriceLooker]
+// (if any) after a Timescale miss on /v1/price. Returns ok=true with
+// a synthesised snapshot when the aggregator has cached a VWAP for
+// this pair under [cachekeys.VWAP] — covering BOTH the triangulation
+// worker's implied values AND direct stablecoin-fiat-proxy rewrites
+// that don't appear in `prices_1m` (because the CAGG groups by
+// literal trade pair, not the aggregator's rewritten target).
+//
+// The provenance marker, when present, controls the `triangulated`
+// flag on the returned snapshot — direct rewrites have no marker and
+// surface as `flags.triangulated=false`; triangulated implied values
+// surface as `flags.triangulated=true`. Pre-2026-05-04 the handler
+// rejected marker-absent cache hits to honour a "Timescale is the
+// source of truth for direct VWAPs" invariant, but that invariant
+// only applies to LITERAL trade pairs — for aggregator-rewritten
+// pairs (XLM/fiat:USD synthesised from XLM/USDC-GA5Z…) Timescale's
+// CAGG fundamentally can't be the source of truth, since the rewrite
+// happens at app layer post-CAGG.
 //
 // The synthesised snapshot has:
 //   - Price       — the cached value
-//   - PriceType   — "vwap" (triangulated VWAPs ARE VWAPs)
+//   - PriceType   — "vwap" (rewritten + triangulated values are both VWAPs)
 //   - ObservedAt  — time.Now() rounded down to the window. The
-//     triangulator overwrites the cache key on each
+//     aggregator overwrites the cache key on each
 //     tick at the same cadence, so "now-aligned-to-
 //     window-end" is a faithful approximation
 //     without round-tripping a separate timestamp.
 //   - WindowSec   — [triangulationLookupWindow] in seconds
-//   - Sources     — empty []string{} — triangulation has no direct
-//     sources, only legs (and exposing legs would be
-//     a different shape than the existing per-pair
-//     sources contract)
+//   - Sources     — empty []string{} — Redis VWAP keys carry the
+//     value alone; per-source provenance is only available via the
+//     prices_1m CAGG path, which is preferred when populated
 //   - Stale       — false; cache TTL is bound to window, so a
-//     non-expired key is by construction within-
-//     window
-func (s *Server) tryTriangulatedFallback(ctx context.Context, asset, quote canonical.Asset) (PriceSnapshot, []string, bool, bool) {
+//     non-expired key is by construction within-window
+func (s *Server) tryRedisVWAPFallback(ctx context.Context, asset, quote canonical.Asset) (PriceSnapshot, []string, bool, bool) {
 	// Returns: snapshot, sources, triangulated, ok.
 	// Stale is intentionally NOT returned (always false here) —
 	// the cache TTL is bound to the lookup window so a non-expired
@@ -405,11 +415,11 @@ func (s *Server) tryTriangulatedFallback(ctx context.Context, asset, quote canon
 	}
 	value, isTriangulated, found, err := s.triangulated.LookupTriangulatedVWAP(ctx, asset, quote, triangulationLookupWindow)
 	if err != nil {
-		s.logger.Warn("triangulation cache lookup failed",
+		s.logger.Warn("vwap cache lookup failed",
 			"err", err, "asset", asset.String(), "quote", quote.String())
 		return PriceSnapshot{}, nil, false, false
 	}
-	if !found || !isTriangulated {
+	if !found {
 		return PriceSnapshot{}, nil, false, false
 	}
 	now := time.Now().UTC()
@@ -424,7 +434,7 @@ func (s *Server) tryTriangulatedFallback(ctx context.Context, asset, quote canon
 		ObservedAt:    observedAt,
 		WindowSeconds: int(triangulationLookupWindow.Seconds()),
 	}
-	return snap, []string{}, true, true
+	return snap, []string{}, isTriangulated, true
 }
 
 // attachConfidence consults the wired ConfidenceLooker (when set)

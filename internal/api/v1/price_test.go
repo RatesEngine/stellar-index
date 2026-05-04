@@ -152,6 +152,101 @@ func TestPrice_StaleFlagSet(t *testing.T) {
 	}
 }
 
+// stubTriangulatedPriceLooker implements v1.TriangulatedPriceLooker.
+// It exists primarily to test the Redis-VWAP-fallback path: when
+// Timescale has no row for the requested pair, the handler should
+// honour cache hits regardless of whether the provenance marker is
+// present (direct stablecoin-fiat-proxy rewrites have no marker but
+// must still surface so the headline pair serves real data).
+type stubTriangulatedPriceLooker struct {
+	value          string
+	isTriangulated bool
+	found          bool
+	err            error
+}
+
+func (s *stubTriangulatedPriceLooker) LookupTriangulatedVWAP(
+	_ context.Context, _, _ canonical.Asset, _ time.Duration,
+) (string, bool, bool, error) {
+	return s.value, s.isTriangulated, s.found, s.err
+}
+
+// TestPrice_RedisVWAPFallback_DirectRewriteServes — when prices_1m
+// has no row for the requested pair (typical for a stablecoin-fiat-
+// proxy rewrite like XLM/fiat:USD synthesised from XLM/USDC-GA5Z…),
+// the handler falls through to the Redis VWAP cache. With found=true
+// AND isTriangulated=false the response is 200 with
+// `flags.triangulated=false` — direct rewrites are NOT triangulated.
+//
+// Pre-2026-05-04 this returned 404 because the handler insisted on
+// the provenance marker; the rewrite case has no marker by design.
+func TestPrice_RedisVWAPFallback_DirectRewriteServes(t *testing.T) {
+	reader := &stubPriceReader{
+		err: v1.ErrPriceNotFound, // Timescale miss
+	}
+	looker := &stubTriangulatedPriceLooker{
+		value:          "0.1242",
+		isTriangulated: false, // direct (rewritten) VWAP — no marker
+		found:          true,
+	}
+	srv := v1.New(v1.Options{Prices: reader, Triangulated: looker})
+	ts := startHTTPTest(t, srv.Handler())
+
+	resp := mustGet(t, ts.URL+"/v1/price?asset=native&quote=fiat:USD")
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d, want 200 (Redis fallback should serve direct rewrites)", resp.StatusCode)
+	}
+	body, _ := readAll(resp)
+	for _, s := range []string{
+		`"price":"0.1242"`,
+		`"price_type":"vwap"`,
+		`"triangulated":false`,
+	} {
+		if !strings.Contains(body, s) {
+			t.Errorf("body missing %q: %s", s, body)
+		}
+	}
+}
+
+// TestPrice_RedisVWAPFallback_TriangulatedSetsFlag — when the
+// provenance marker IS present the response sets
+// `flags.triangulated=true` so the customer can tell the value came
+// from the triangulation worker (vs. a direct rewrite).
+func TestPrice_RedisVWAPFallback_TriangulatedSetsFlag(t *testing.T) {
+	reader := &stubPriceReader{err: v1.ErrPriceNotFound}
+	looker := &stubTriangulatedPriceLooker{
+		value:          "0.5500",
+		isTriangulated: true,
+		found:          true,
+	}
+	srv := v1.New(v1.Options{Prices: reader, Triangulated: looker})
+	ts := startHTTPTest(t, srv.Handler())
+
+	resp := mustGet(t, ts.URL+"/v1/price?asset=crypto:XLM&quote=fiat:EUR")
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d, want 200", resp.StatusCode)
+	}
+	body, _ := readAll(resp)
+	if !strings.Contains(body, `"triangulated":true`) {
+		t.Errorf("triangulated flag not set: %s", body)
+	}
+}
+
+// TestPrice_RedisVWAPFallback_NotFoundPreserves404 — when the cache
+// has no value for the requested pair, the handler still returns
+// 404 just as if the looker weren't wired at all.
+func TestPrice_RedisVWAPFallback_NotFoundPreserves404(t *testing.T) {
+	reader := &stubPriceReader{err: v1.ErrPriceNotFound}
+	looker := &stubTriangulatedPriceLooker{found: false}
+	srv := v1.New(v1.Options{Prices: reader, Triangulated: looker})
+	ts := startHTTPTest(t, srv.Handler())
+
+	resp := mustGet(t, ts.URL+"/v1/price?asset=native&quote=fiat:USD")
+	if resp.StatusCode != http.StatusNotFound {
+		t.Errorf("status = %d, want 404", resp.StatusCode)
+	}
+}
+
 // stubDivergenceLooker is a minimal v1.DivergenceLooker for tests.
 // firing controls what DivergenceFiringFor returns; err is the
 // surfaced error (nil = clean response).
