@@ -34,6 +34,12 @@ against.
 
 ### Added
 
+- **Footer adds Issuers, GitHub, and Changelog links.** Browse
+  column now lists `/issuers`. Bottom strip exposes GitHub
+  (RatesEngine/rates-engine) and a direct Changelog link
+  alongside the API URL — the latter two were missing despite
+  the project being open-source from day one.
+
 - **`GET /v1/diagnostics/cursors` — per-source ingest cursor
   positions.** Operator-facing diagnostic that returns every row of
   the `ingestion_cursors` table (one entry per (source, sub_source)

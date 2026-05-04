@@ -17,6 +17,7 @@ export function Footer() {
             links={[
               { label: 'Coins', href: '/coins' },
               { label: 'Markets', href: '/markets' },
+              { label: 'Issuers', href: '/issuers' },
               { label: 'Sources', href: '/sources' },
             ]}
           />
@@ -52,16 +53,34 @@ export function Footer() {
             ]}
           />
         </div>
-        <div className="mt-8 flex items-center justify-between border-t border-slate-200 pt-4 dark:border-slate-800">
-          <span>
-            API:{' '}
+        <div className="mt-8 flex flex-wrap items-center justify-between gap-3 border-t border-slate-200 pt-4 dark:border-slate-800">
+          <div className="flex flex-wrap items-center gap-4">
+            <span>
+              API:{' '}
+              <a
+                href="https://api.ratesengine.net"
+                className="font-mono hover:text-slate-700 dark:hover:text-slate-300"
+              >
+                api.ratesengine.net
+              </a>
+            </span>
             <a
-              href="https://api.ratesengine.net"
-              className="font-mono hover:text-slate-700 dark:hover:text-slate-300"
+              href="https://github.com/RatesEngine/rates-engine"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="hover:text-slate-700 dark:hover:text-slate-300"
             >
-              api.ratesengine.net
+              GitHub
             </a>
-          </span>
+            <a
+              href="https://github.com/RatesEngine/rates-engine/blob/main/CHANGELOG.md"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="hover:text-slate-700 dark:hover:text-slate-300"
+            >
+              Changelog
+            </a>
+          </div>
           <span>Apache-2.0</span>
         </div>
       </div>
