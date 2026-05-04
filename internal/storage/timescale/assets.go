@@ -5,24 +5,31 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/RatesEngine/rates-engine/internal/canonical"
 )
 
 // DistinctAssets returns one page of assets that have appeared in
-// the trades hypertable (as base OR quote). Cursor-based pagination
-// keyed on the asset-id string. Empty cursor starts from the
-// beginning. limit is clamped to [1, 500].
+// the trades hypertable (as base OR quote) within the last
+// [MarketsRecencyWindow] (14 days by default). Cursor-based
+// pagination keyed on the asset-id string. Empty cursor starts
+// from the beginning. limit is clamped to [1, 500].
 //
 // Returns (assets, nextCursor, err). nextCursor is empty when the
 // page is the last one.
 //
-// Performance note: this UNIONs two DISTINCT scans across the
-// trades hypertable — it works but isn't fast once we have
-// millions of trades. The planned optimisation is a materialised
-// `asset_catalogue` table populated incrementally by the indexer
-// (a future migration; not on main today). Until that lands,
-// this implementation is correct.
+// Recency window: matches /v1/markets's "active assets" semantic.
+// Without the window the UNIONed DISTINCT scans run across every
+// chunk in the trades hypertable (539M+ rows on r1) — measured at
+// 4-5 minutes per call, far past any client deadline. With the
+// 14-day cap the scan touches ~1.5M rows and finishes inside the
+// 30s API budget. Pre-2026-05-04 the unbounded query ran every
+// /v1/assets call; the recency cap brings the endpoint into the
+// SLA range without a new materialised table. The planned
+// optimisation is a materialised `asset_catalogue` populated
+// incrementally by the indexer (future migration; not on main
+// today) — that would let us drop the recency bound entirely.
 func (s *Store) DistinctAssets(ctx context.Context, cursor string, limit int) ([]canonical.Asset, string, error) {
 	if limit < 1 {
 		limit = 100
@@ -31,11 +38,15 @@ func (s *Store) DistinctAssets(ctx context.Context, cursor string, limit int) ([
 		limit = 500
 	}
 
+	// `since` is computed Go-side rather than `NOW() - INTERVAL`
+	// so the planner sees a constant timestamp parameter and prunes
+	// chunks at plan time. Same trick the markets query uses.
+	since := time.Now().UTC().Add(-MarketsRecencyWindow)
 	const q = `
         SELECT asset FROM (
-            SELECT DISTINCT base_asset  AS asset FROM trades
+            SELECT DISTINCT base_asset  AS asset FROM trades WHERE ts >= $3
             UNION
-            SELECT DISTINCT quote_asset AS asset FROM trades
+            SELECT DISTINCT quote_asset AS asset FROM trades WHERE ts >= $3
         ) s
         WHERE ($1 = '' OR asset > $1)
         ORDER BY asset
@@ -44,7 +55,7 @@ func (s *Store) DistinctAssets(ctx context.Context, cursor string, limit int) ([
 	// We ask for one extra row to detect whether another page
 	// exists — if we get (limit + 1) rows, the first `limit` are
 	// the page and the last row's asset-id is the next cursor.
-	rows, err := s.db.QueryContext(ctx, q, cursor, limit+1)
+	rows, err := s.db.QueryContext(ctx, q, cursor, limit+1, since)
 	if err != nil {
 		return nil, "", fmt.Errorf("timescale: DistinctAssets: %w", err)
 	}

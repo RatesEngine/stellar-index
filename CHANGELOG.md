@@ -17,6 +17,18 @@ against.
 
 ### Fixed
 
+- **`/v1/assets` listing latency cut from ~4.9 minutes to under 1
+  second.** `DistinctAssets` UNIONed two DISTINCT scans across the
+  full trades hypertable (539M rows on r1) with no time filter —
+  every call rescanned every chunk. Added the same 14-day recency
+  window `/v1/markets` already uses (`MarketsRecencyWindow`); the
+  semantic shift is "active assets" rather than "every asset ever
+  observed," matching the markets endpoint's contract. Future
+  optimisation is a materialised `asset_catalogue` populated
+  incrementally by the indexer (would let us drop the recency bound
+  entirely); until that ships, this brings the endpoint into the
+  30s API budget.
+
 - **LCM home-domain resolver overflowed postgres int4 on every
   call.** `HomeDomainFor` used `^uint32(0)` (= 4,294,967,295 =
   MaxUint32) as the "no upper bound" sentinel for the
