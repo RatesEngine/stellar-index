@@ -1,5 +1,6 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
+import { Suspense } from 'react';
 
 import { Panel } from '@/components/reveal';
 import {
@@ -12,15 +13,17 @@ import { SourceContributionDonut } from '@/components/panels/SourceContributionD
 import { asExample } from '@/api/client';
 import { formatCompact, formatPrice } from '@/lib/format';
 import { SEED_COINS, findCoin } from '@/lib/coins-seed';
+import { CoinTabs, ActiveTabSlot } from './CoinTabs';
+import { ChartPanel } from './ChartPanel';
 
 /**
- * /coins/[slug] — single coin detail page. Overview tab today;
- * chart / markets / history / supply / issuer / liquidity tabs
- * land in subsequent PRs.
+ * /coins/[slug] — single coin detail page.
  *
- * `generateStaticParams` enumerates the seed slugs at build time.
- * Production must extend this to top-N by volume + a client-side
- * fallback for the long tail (per data-inventory §4 URL routing).
+ * Server component pre-renders the chrome + both Overview and
+ * Chart bodies. A small client-component slot reads `?tab=` and
+ * shows the active body. The Markets / History / Supply / Issuer /
+ * Liquidity tabs are disabled placeholders until their content
+ * lands in subsequent PRs.
  */
 export function generateStaticParams() {
   return SEED_COINS.map((c) => ({ slug: c.slug }));
@@ -64,8 +67,29 @@ export default async function CoinDetailPage({ params }: { params: Params }) {
         )}
       </header>
 
-      <Tabs slug={coin.slug} active="overview" />
+      <Suspense fallback={null}>
+        <CoinTabs slug={coin.slug} hasIssuer={!!coin.issuer} />
+      </Suspense>
 
+      <Suspense fallback={null}>
+        <ActiveTabSlot
+          overview={<OverviewBody coin={coin} />}
+          chart={<ChartPanel slug={coin.slug} startPrice={coin.price} />}
+        />
+      </Suspense>
+
+      <p className="text-xs text-slate-500">
+        v0 of this page renders a static seed.
+        Real data plumbs through once <code className="font-mono">/v1/coins/{'{slug}'}</code> ships.
+      </p>
+    </div>
+  );
+}
+
+function OverviewBody({ coin }: { coin: ReturnType<typeof findCoin> & {} }) {
+  if (!coin) return null;
+  return (
+    <div className="space-y-4">
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
         <Panel
           title="Price"
@@ -156,58 +180,7 @@ export default async function CoinDetailPage({ params }: { params: Params }) {
           </dl>
         </Panel>
       )}
-
-      <p className="text-xs text-slate-500">
-        v0 of this page renders a static seed.
-        Real data plumbs through once <code className="font-mono">/v1/coins/{'{slug}'}</code> ships.
-      </p>
     </div>
-  );
-}
-
-function Tabs({
-  slug,
-  active,
-}: {
-  slug: string;
-  active: 'overview' | 'chart' | 'markets' | 'history' | 'supply' | 'issuer' | 'liquidity';
-}) {
-  type Tab = { key: string; label: string; href: string; disabled?: boolean };
-  const tabs: Tab[] = [
-    { key: 'overview', label: 'Overview', href: `/coins/${slug}` },
-    { key: 'chart', label: 'Chart', href: `/coins/${slug}?tab=chart`, disabled: true },
-    { key: 'markets', label: 'Markets', href: `/coins/${slug}?tab=markets`, disabled: true },
-    { key: 'history', label: 'History', href: `/coins/${slug}?tab=history`, disabled: true },
-    { key: 'supply', label: 'Supply', href: `/coins/${slug}?tab=supply`, disabled: true },
-    { key: 'issuer', label: 'Issuer', href: `/coins/${slug}?tab=issuer`, disabled: true },
-    { key: 'liquidity', label: 'Liquidity', href: `/coins/${slug}?tab=liquidity`, disabled: true },
-  ];
-  return (
-    <nav className="flex gap-1 overflow-x-auto border-b border-slate-200 text-sm dark:border-slate-800">
-      {tabs.map((t) =>
-        t.disabled ? (
-          <span
-            key={t.key}
-            className="cursor-not-allowed border-b-2 border-transparent px-3 py-2 text-slate-400 dark:text-slate-600"
-            title="Coming soon"
-          >
-            {t.label}
-          </span>
-        ) : (
-          <Link
-            key={t.key}
-            href={t.href}
-            className={`border-b-2 px-3 py-2 ${
-              t.key === active
-                ? 'border-brand-500 font-medium text-brand-600 dark:text-brand-400'
-                : 'border-transparent text-slate-600 hover:text-brand-600 dark:text-slate-300'
-            }`}
-          >
-            {t.label}
-          </Link>
-        ),
-      )}
-    </nav>
   );
 }
 
