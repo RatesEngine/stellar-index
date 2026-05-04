@@ -144,11 +144,39 @@ func FiatBackers(fiat string) []string {
 //     crypto/classic, etc.), the result is just the target itself
 //     — there is no stablecoin-proxy expansion to do.
 //
+// Equivalent to [ExpandTargetPairWithClassicPegs] with an empty
+// classic-pegs slice — kept as a thin wrapper so the existing
+// (target-only) call sites and tests stay short.
+//
 // An error is returned only if the target is malformed (pair
 // validation already happens upstream, so this mostly short-
 // circuits) — callers can safely treat err != nil as a
 // configuration bug.
 func ExpandTargetPair(target canonical.Pair) ([]canonical.Pair, error) {
+	return ExpandTargetPairWithClassicPegs(target, nil)
+}
+
+// ExpandTargetPairWithClassicPegs is [ExpandTargetPair] augmented
+// with operator-declared classic-asset stablecoins. On Stellar
+// mainnet today the dominant USD-denominated DEX pairs aren't quoted
+// in the abstract `crypto:USDC` ticker but in classic credits like
+// `USDC-GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN`
+// (Circle's Stellar-classic USDC). Those quotes carry full issuer
+// identity at the canonical layer and aren't in the abstract
+// stablecoin map; the operator's allow-list (configured under
+// `[trades].usd_pegged_classic_assets` and reused here) names which
+// classic credits they trust as fiat-equivalent.
+//
+// classicUSDPegs is the operator's USD-pegged classic asset list —
+// each entry must be `Type=AssetClassic`. Non-classic entries are
+// silently skipped (defensive — the parser at config load already
+// rejects malformed shapes). Entries are appended to the source
+// list when the target's fiat is "USD"; for non-USD fiat targets
+// they're ignored. The orchestrator's existing
+// `Pair=target`-rewrite step in `fetchForTarget` lifts the fetched
+// trades onto the target pair without needing a per-classic
+// `ProxyPair` rule.
+func ExpandTargetPairWithClassicPegs(target canonical.Pair, classicUSDPegs []canonical.Asset) ([]canonical.Pair, error) {
 	if err := target.Validate(); err != nil {
 		return nil, err
 	}
@@ -157,7 +185,7 @@ func ExpandTargetPair(target canonical.Pair) ([]canonical.Pair, error) {
 		return []canonical.Pair{target}, nil
 	}
 	backers := FiatBackers(target.Quote.Code)
-	out := make([]canonical.Pair, 0, 1+len(backers))
+	out := make([]canonical.Pair, 0, 1+len(backers)+len(classicUSDPegs))
 	out = append(out, target)
 	for _, ticker := range backers {
 		stable, err := canonical.NewCryptoAsset(ticker)
@@ -176,6 +204,20 @@ func ExpandTargetPair(target canonical.Pair) ([]canonical.Pair, error) {
 			continue
 		}
 		out = append(out, src)
+	}
+	if target.Quote.Code == "USD" {
+		for _, classic := range classicUSDPegs {
+			if classic.Type != canonical.AssetClassic {
+				continue
+			}
+			src, err := canonical.NewPair(target.Base, classic)
+			if err != nil {
+				// Same defensive-skip rationale as above — never
+				// abort the tick loop on a single malformed entry.
+				continue
+			}
+			out = append(out, src)
+		}
 	}
 	return out, nil
 }

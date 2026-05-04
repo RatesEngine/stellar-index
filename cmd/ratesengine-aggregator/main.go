@@ -310,6 +310,7 @@ func run(cfgPath string, dryRun bool) error {
 		},
 		DisableClassFilter:        cfg.Aggregate.DisableClassFilter,
 		EnableStablecoinFiatProxy: cfg.Aggregate.EnableStablecoinFiatProxy,
+		USDPeggedClassicAssets:    parseUSDPeggedClassicAssets(cfg.Trades.USDPeggedClassicAssets, logger),
 		OutlierSigmaThreshold:     cfg.Aggregate.OutlierSigmaThreshold,
 		MinUSDVolume:              cfg.Aggregate.MinUSDVolume,
 		DivergenceRefresher:       divRefresher,
@@ -794,6 +795,42 @@ func (a baselineSinkAdapter) UpsertBaseline(
 // operator tuning. Parallel to cmd/ratesengine-indexer's
 // defaultAggregatorPairs (kept per-binary so each can evolve
 // independently).
+// parseUSDPeggedClassicAssets resolves the operator-declared
+// `[trades].usd_pegged_classic_assets` strings (e.g.
+// `"USDC-GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN"`)
+// into canonical assets so the orchestrator's stablecoin-fiat-proxy
+// expansion can also pull XLM/USDC-GA5Z…-style classic-quoted trades
+// when the target is `XLM/fiat:USD`.
+//
+// Soft-fails: a single malformed entry is logged and skipped rather
+// than aborting startup. Validate() at config load already
+// roundtrips each entry through canonical.NewClassicAsset; reaching
+// a parse error here would mean the validator regressed, in which
+// case the safe behaviour is "skip and keep serving" — a missing
+// classic peg is a smaller failure than the binary refusing to
+// start.
+func parseUSDPeggedClassicAssets(raws []string, logger *slog.Logger) []canonical.Asset {
+	if len(raws) == 0 {
+		return nil
+	}
+	out := make([]canonical.Asset, 0, len(raws))
+	for _, raw := range raws {
+		asset, err := canonical.ParseAsset(raw)
+		if err != nil {
+			logger.Warn("usd_pegged_classic_assets: skipping malformed entry",
+				"raw", raw, "err", err)
+			continue
+		}
+		if asset.Type != canonical.AssetClassic {
+			logger.Warn("usd_pegged_classic_assets: ignoring non-classic asset",
+				"raw", raw, "type", asset.Type)
+			continue
+		}
+		out = append(out, asset)
+	}
+	return out
+}
+
 func defaultPairs() []canonical.Pair {
 	cryptos := []string{"XLM", "BTC", "ETH"}
 	fiats := []string{"USD", "EUR", "GBP"}

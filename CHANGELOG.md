@@ -17,6 +17,27 @@ against.
 
 ### Changed
 
+- **Aggregator stablecoin-fiat-proxy expansion now includes the
+  operator-declared classic-asset USD pegs.** On Stellar mainnet the
+  dominant XLM/USD volume is quoted in classic credits like Circle's
+  `USDC-GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN`,
+  not the abstract `crypto:USDC` ticker the aggregator's stablecoin
+  map keys on. Without this fix r1 sat at
+  `ratesengine_aggregator_vwap_writes_total = 0` for hours despite
+  62k+ XLM trades per hour landing in the trades table — the
+  expansion produced a source-pair list (`XLM/crypto:USDT`,
+  `XLM/crypto:USDC`, …) that didn't match anything actually in the
+  hypertable, and the headline `/v1/price?asset=native&quote=fiat:USD`
+  endpoint 404'd. The aggregator orchestrator now reads
+  `cfg.Trades.USDPeggedClassicAssets` (already declared by the
+  operator for `trades.usd_volume` population) and appends those
+  classic-quoted source pairs to USD-target expansions; the existing
+  `Pair=target`-rewrite step lifts the fetched trades onto the
+  target pair without needing a per-classic ProxyPair rule.
+  `ExpandTargetPair` is now a thin wrapper around
+  `ExpandTargetPairWithClassicPegs` so existing call sites stay
+  short.
+
 - **Error responses (4xx / 5xx) now override the per-route
   `Cache-Control` directive with `no-store`.** Previously the
   cache-control middleware set the route's directive once at the

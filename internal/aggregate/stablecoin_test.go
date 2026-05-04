@@ -269,6 +269,79 @@ func TestExpandTargetPair_NonFiatTargetReturnsOnlyItself(t *testing.T) {
 	}
 }
 
+func TestExpandTargetPairWithClassicPegs_USDFiatAddsClassicSources(t *testing.T) {
+	// On Stellar mainnet most XLM/USD volume is quoted in classic
+	// `USDC-GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN`,
+	// not the abstract `crypto:USDC` ticker. Without classic-peg
+	// expansion the aggregator's XLM/fiat:USD VWAP would be empty
+	// even with EnableStablecoinFiatProxy on — the bug observed in
+	// production on r1 (vwap_writes_total stuck at 0 across 3h).
+	xlm, _ := canonical.NewCryptoAsset("XLM")
+	usd, _ := canonical.NewFiatAsset("USD")
+	target, _ := canonical.NewPair(xlm, usd)
+
+	circleUSDC, err := canonical.NewClassicAsset("USDC", "GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN")
+	if err != nil {
+		t.Fatalf("setup classic USDC: %v", err)
+	}
+
+	got, err := ExpandTargetPairWithClassicPegs(target, []canonical.Asset{circleUSDC})
+	if err != nil {
+		t.Fatalf("ExpandTargetPairWithClassicPegs: %v", err)
+	}
+	// 1 direct + 5 abstract backers (USDT/USDC/DAI/PYUSD/USDP) + 1 classic.
+	if len(got) != 7 {
+		t.Fatalf("len(got)=%d want 7: %v", len(got), got)
+	}
+	foundClassic := false
+	for _, p := range got {
+		if p.Quote.Type == canonical.AssetClassic && p.Quote.Code == "USDC" {
+			foundClassic = true
+		}
+	}
+	if !foundClassic {
+		t.Errorf("ExpandTargetPairWithClassicPegs did not include the classic USDC source pair")
+	}
+}
+
+func TestExpandTargetPairWithClassicPegs_NonUSDFiatIgnoresClassicPegs(t *testing.T) {
+	// Operator's classic-peg list is implicitly USD; an EUR target
+	// should NOT pull XLM/<classic-USDC> as a source.
+	xlm, _ := canonical.NewCryptoAsset("XLM")
+	eur, _ := canonical.NewFiatAsset("EUR")
+	target, _ := canonical.NewPair(xlm, eur)
+	circleUSDC, _ := canonical.NewClassicAsset("USDC", "GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN")
+
+	got, err := ExpandTargetPairWithClassicPegs(target, []canonical.Asset{circleUSDC})
+	if err != nil {
+		t.Fatalf("ExpandTargetPairWithClassicPegs: %v", err)
+	}
+	for _, p := range got {
+		if p.Quote.Type == canonical.AssetClassic {
+			t.Errorf("EUR target leaked classic USD peg into source list: %s", p)
+		}
+	}
+}
+
+func TestExpandTargetPairWithClassicPegs_NonClassicEntriesSkipped(t *testing.T) {
+	// Defensive: a fiat or crypto entry on the USD pegs list is
+	// silently dropped rather than crashing the tick loop.
+	xlm, _ := canonical.NewCryptoAsset("XLM")
+	usd, _ := canonical.NewFiatAsset("USD")
+	target, _ := canonical.NewPair(xlm, usd)
+	usdtAbstract, _ := canonical.NewCryptoAsset("USDT") // crypto, not classic
+	bareUSD, _ := canonical.NewFiatAsset("USD")         // fiat, not classic
+
+	got, err := ExpandTargetPairWithClassicPegs(target, []canonical.Asset{usdtAbstract, bareUSD})
+	if err != nil {
+		t.Fatalf("ExpandTargetPairWithClassicPegs: %v", err)
+	}
+	// Same shape as ExpandTargetPair (no classic entries appended).
+	if len(got) != 6 {
+		t.Errorf("len(got)=%d want 6 (non-classic entries on the list must be skipped)", len(got))
+	}
+}
+
 func TestExpandTargetPair_BaseCollisionWithBackerIsSkipped(t *testing.T) {
 	// target USDC/fiat:USD — `base=crypto:USDC` collides with the
 	// USDC backer pair (NewPair would build crypto:USDC/crypto:USDC

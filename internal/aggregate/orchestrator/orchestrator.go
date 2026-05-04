@@ -155,6 +155,29 @@ type Config struct {
 	// raw trade feed).
 	EnableStablecoinFiatProxy bool
 
+	// USDPeggedClassicAssets is the operator's parsed list of
+	// classic credit assets (e.g. Circle's
+	// `USDC-GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN`)
+	// they declare as USD-pegged. Exists alongside the abstract-
+	// stablecoin map in internal/aggregate/stablecoin.go: that map
+	// keys on `crypto:CODE` (USDT/USDC/…) which is the layer most
+	// CEX feeds report; classic credits carry full issuer identity
+	// and are intentionally NOT in the abstract map. On Stellar
+	// mainnet today the dominant USD-denominated DEX pairs are
+	// quoted in classic credits, so without this list every
+	// XLM/fiat:USD VWAP would be empty even with
+	// EnableStablecoinFiatProxy on.
+	//
+	// Wired by the binary from cfg.Trades.USDPeggedClassicAssets so
+	// the operator declares the allow-list in one place and both the
+	// indexer (for trades.usd_volume population) and the aggregator
+	// (for VWAP source expansion) pick it up. Empty = no classic
+	// expansion, abstract-stablecoin map only.
+	//
+	// Only consulted when EnableStablecoinFiatProxy is true and the
+	// target pair's quote is fiat:USD.
+	USDPeggedClassicAssets []canonical.Asset
+
 	// MinUSDVolume, when > 0, requires a window's total USD volume
 	// (post-class, post-outlier) to meet the threshold before its
 	// VWAP publishes. Applied only for fiat:USD-quoted pairs — for
@@ -772,7 +795,7 @@ func (o *Orchestrator) fetchForTarget(
 		return o.store.TradesInRange(ctx, target, from, to, o.cfg.MaxTradesPerWindow)
 	}
 
-	sources, err := aggregate.ExpandTargetPair(target)
+	sources, err := aggregate.ExpandTargetPairWithClassicPegs(target, o.cfg.USDPeggedClassicAssets)
 	if err != nil {
 		return nil, fmt.Errorf("expand target %s: %w", target.String(), err)
 	}

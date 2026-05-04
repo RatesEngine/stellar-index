@@ -227,6 +227,14 @@ enabled  = false
 # `trades.usd_volume` at insert time. SAC-wrapped versions are
 # recognised transitively via [supply.sac_wrappers] above.
 #
+# **Reused by the aggregator's stablecoin-fiat proxy expansion**
+# (`[aggregate].enable_stablecoin_fiat_proxy = true`): each entry is
+# treated as a classic-form USD peg, so XLM/fiat:USD VWAPs pull
+# trades quoted in classic USDC alongside the abstract `crypto:USDC`
+# ticker. Without this list the aggregator queries only the abstract
+# stablecoin map; on Stellar mainnet (where the dominant DEX volume
+# is in classic USDC-GA5Z…) that produces an empty XLM/USD VWAP.
+#
 # Empty list preserves the off-chain-only default: only CEX/FX
 # trades populate usd_volume; on-chain trades store NULL and the
 # `volume_24h_usd` API field reflects only off-chain volume.
