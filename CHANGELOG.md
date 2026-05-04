@@ -26,6 +26,14 @@ against.
   satisfies it via `ListCursors`). Powers the showcase
   `/diagnostics` page.
 
+- **Showcase `/diagnostics` page goes live.** Replaces the v0
+  placeholder with a live ingest-cursor table backed by
+  `/v1/diagnostics/cursors`. New `useCursors()` TanStack hook
+  refetches every 15s so backfills tick visibly; rows group by
+  source, lag is colour-pilled (green ≤60s, amber ≤10m, red
+  beyond). Decoder-coverage / archive-completeness / SLO panels
+  follow as their underlying endpoints ship.
+
 - **Change-summary rollup worker.** New
   `internal/aggregate/changesummary` package + aggregator-side
   worker that, every 5 minutes, walks every configured (coin,
