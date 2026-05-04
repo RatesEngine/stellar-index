@@ -51,6 +51,16 @@ against.
   beyond). Decoder-coverage / archive-completeness / SLO panels
   follow as their underlying endpoints ship.
 
+- **`/docs` page gets a real endpoint catalogue.** Replaces the
+  "go elsewhere" placeholder with eight grouped endpoint tables
+  (Pricing, History & charts, Asset & coin catalogue, Markets &
+  change summary, Oracles SEP-40, Sources & diagnostics, Account
+  & SEP-10, Health & version) — every endpoint with its path,
+  method, and one-line summary. Top of page shows the live base
+  URL and envelope shape; bottom calls out the three SSE
+  consistency surfaces. CTAs point at the full Redocly reference
+  and the OpenAPI source on GitHub.
+
 - **`/research` page gets real content.** Replaces the v0
   placeholder with a curated index of the public-repo writeups —
   six featured items (ADRs 0003 / 0015 / 0019, plus the Soroswap
