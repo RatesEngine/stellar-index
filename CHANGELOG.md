@@ -15,6 +15,19 @@ against.
 
 ## [Unreleased]
 
+### CI
+
+- **`web/showcase` job runs `pnpm build`.** Adds the static-export
+  build to the existing CI job that previously only ran typecheck
+  + lint. Catches Next.js `output: 'export'` constraints (e.g.
+  the `dynamic = 'force-static'` requirement on `sitemap.xml` and
+  `robots.txt` routes), `generateStaticParams` issues, and any
+  runtime-vs-build divergence that typecheck doesn't see. The
+  build runs against `http://api.ci-stub.invalid` so the
+  build-time API fetch in `generateStaticParams` falls through to
+  the seed-only path; verified locally that the fallback still
+  produces a valid static export.
+
 ### Tests
 
 - **API-level integration test for `/v1/coins`, `/v1/issuers`,

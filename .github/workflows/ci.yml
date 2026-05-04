@@ -240,4 +240,18 @@ jobs:
           fi
       - run: pnpm typecheck
       - run: pnpm lint
+      # Build covers what typecheck/lint don't: Next.js static-export
+      # constraints (e.g. `dynamic = 'force-static'` requirement on
+      # sitemap/robots routes), generateStaticParams behaviour at
+      # build time, and any runtime-vs-build divergence in the
+      # output: 'export' pipeline. The build-time API fetch falls
+      # through to the seed-only path when CI can't reach the
+      # production API — that's expected and not a CI failure.
+      - run: pnpm build
+        env:
+          # Force a deterministic api-base URL so the build doesn't
+          # try to contact production from CI. The fallback in
+          # generateStaticParams kicks in when the fetch fails, so
+          # the build still succeeds with seed-only slugs.
+          NEXT_PUBLIC_API_BASE_URL: http://api.ci-stub.invalid
       - run: pnpm build
