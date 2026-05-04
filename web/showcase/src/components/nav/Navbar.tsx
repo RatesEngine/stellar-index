@@ -1,6 +1,8 @@
 import Link from 'next/link';
 import { TrendingUp } from 'lucide-react';
 
+import { SearchModal } from './SearchModal';
+
 /**
  * Top navigation. Section-grouped per data-inventory §4 + the
  * "split protocols by kind" decision: DEXes / Lending / Aggregators
@@ -32,6 +34,7 @@ export function Navbar() {
               {s.label}
             </Link>
           ))}
+          <SearchModal />
         </div>
       </div>
     </nav>
