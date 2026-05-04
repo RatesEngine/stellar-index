@@ -23,6 +23,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     '',
     '/coins',
     '/markets',
+    '/issuers',
     '/sources',
     '/diagnostics',
     '/dexes',

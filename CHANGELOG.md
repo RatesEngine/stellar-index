@@ -51,6 +51,12 @@ against.
   beyond). Decoder-coverage / archive-completeness / SLO panels
   follow as their underlying endpoints ship.
 
+- **Showcase `/issuers` page goes live.** New page at the new
+  route, backed by the live `/v1/issuers` endpoint. Each row links
+  through to a filtered `/coins?issuer=…` view; home_domain
+  becomes a clickable external link as the SEP-1 fetcher resolves
+  it. Page is added to the sitemap and Cmd-K search.
+
 - **`GET /v1/issuers` — issuer directory.** New endpoint that
   lists every G-account having minted at least one classic asset
   on Stellar, ranked by total observation count across their

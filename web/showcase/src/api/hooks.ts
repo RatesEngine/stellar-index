@@ -117,6 +117,33 @@ export function useCoins(limit = 100) {
   });
 }
 
+export type IssuerListEntry = {
+  g_strkey: string;
+  home_domain?: string;
+  asset_count: number;
+  total_observation_count: number;
+};
+
+type IssuersListEnvelope = { data: IssuerListEntry[] };
+
+/**
+ * useIssuers — fetches `/v1/issuers`, the issuer directory ranked
+ * by total observation count across each issuer's classic assets.
+ * v0 of this hook just returns the first page (default 100).
+ */
+export function useIssuers(limit = 100) {
+  return useQuery<IssuerListEntry[]>({
+    queryKey: ['/v1/issuers', limit],
+    queryFn: async () => {
+      const env = await apiGet<IssuersListEnvelope | IssuerListEntry[]>(
+        '/v1/issuers',
+        { limit },
+      );
+      return Array.isArray(env) ? env : env.data;
+    },
+  });
+}
+
 export type IssuedAsset = {
   asset_id: string;
   code: string;
