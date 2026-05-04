@@ -51,6 +51,15 @@ against.
   beyond). Decoder-coverage / archive-completeness / SLO panels
   follow as their underlying endpoints ship.
 
+- **`/lending` and `/aggregators` pages get real content.**
+  Replaces the v0 placeholders. `/lending` covers Blend in detail
+  (isolated pools, Reflector-priced collateral, Comet auction
+  backstop, MEV exposure) with deep links to `/oracles` and
+  `/dexes`. `/aggregators` covers Soroswap Router and DeFindex,
+  and explains up front why aggregators are excluded from the
+  canonical VWAP (avoids double-counting the upstream
+  price-discovery event).
+
 - **`/dexes` and `/oracles` pages get real content.** Replace the
   v0 placeholders with curated cards for every venue — Soroswap,
   Phoenix, Aquarius, SDEX, Comet on `/dexes`; Reflector trio
