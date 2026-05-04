@@ -4,7 +4,7 @@ import { Search, X } from 'lucide-react';
 import Link from 'next/link';
 import { useEffect, useMemo, useState } from 'react';
 
-import { SEED_COINS } from '@/lib/coins-seed';
+import { useCoins, type Coin } from '@/api/hooks';
 
 type Result = {
   type: 'coin' | 'pair' | 'protocol' | 'oracle' | 'page';
@@ -49,15 +49,17 @@ const PROTOCOLS: Result[] = [
  * Cmd-K search modal. Mounts globally via the Navbar; opens on
  * Cmd-K / Ctrl-K and on the Navbar's search-icon button.
  *
- * v0 ranks against a static seed (coins + protocols + pages).
- * Replaced by `/v1/search?q=...` once that endpoint ships per
- * data-inventory §10.13. The shape is the same — a flat result
- * list grouped by type — so the UI stays unchanged when the
- * source swaps.
+ * Coins come from the live `/v1/coins` endpoint (top-500 by
+ * observation count); protocols + static pages stay seeded since
+ * neither is in the API yet. Replaced by `/v1/search?q=...` once
+ * that endpoint ships per data-inventory §10.13.
  */
 export function SearchModal() {
   const [open, setOpen] = useState(false);
   const [q, setQ] = useState('');
+  // Reuses the same cache key as `/coins` (limit=100) so navigating
+  // there afterwards is instant — no separate fetch for search.
+  const { data: coins } = useCoins(100);
 
   // Cmd-K / Ctrl-K toggles.
   useEffect(() => {
@@ -79,7 +81,7 @@ export function SearchModal() {
     if (open) setQ('');
   }, [open]);
 
-  const results = useMemo(() => search(q), [q]);
+  const results = useMemo(() => search(q, coins ?? []), [q, coins]);
 
   return (
     <>
@@ -127,8 +129,9 @@ export function SearchModal() {
             <ul className="max-h-96 overflow-y-auto p-2 text-sm">
               {results.length === 0 && (
                 <li className="px-3 py-2 text-xs text-slate-500">
-                  No matches — search hits the seed list today; the live
-                  endpoint <code className="font-mono">/v1/search</code>{' '}
+                  No matches. Search ranks against the live coin
+                  directory plus seeded protocols/pages; the unified{' '}
+                  <code className="font-mono">/v1/search</code> endpoint
                   lands in Phase 6.6.
                 </li>
               )}
@@ -165,27 +168,23 @@ export function SearchModal() {
   );
 }
 
-function search(q: string): Result[] {
+function search(q: string, coins: Coin[]): Result[] {
   const norm = q.trim().toLowerCase();
+  const coinResults = coins.map(coinResult);
   if (!norm) {
-    // Empty query → show the most popular coins as a starter list.
-    return SEED_COINS.slice(0, 5).map(coinResult);
+    // Empty query → top 5 coins as a starter list (already sorted
+    // by observation_count desc by the API).
+    return coinResults.slice(0, 5);
   }
-  const all: Result[] = [
-    ...SEED_COINS.map(coinResult),
-    ...PROTOCOLS,
-    ...STATIC_PAGES,
-  ];
-  return all
-    .filter((r) => match(norm, r))
-    .slice(0, 12);
+  const all: Result[] = [...coinResults, ...PROTOCOLS, ...STATIC_PAGES];
+  return all.filter((r) => match(norm, r)).slice(0, 12);
 }
 
-function coinResult(c: (typeof SEED_COINS)[number]): Result {
+function coinResult(c: Coin): Result {
   return {
     type: 'coin',
-    label: `${c.ticker} — ${c.name}`,
-    hint: c.type,
+    label: c.code,
+    hint: c.slug,
     href: `/coins/${c.slug}`,
   };
 }

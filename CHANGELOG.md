@@ -51,6 +51,14 @@ against.
   beyond). Decoder-coverage / archive-completeness / SLO panels
   follow as their underlying endpoints ship.
 
+- **Cmd-K search ranks against the live coin directory.** The
+  global `SearchModal` now reads coins from `useCoins(100)` —
+  same cache key as the `/coins` page, so opening search and
+  navigating after costs zero extra network. Empty-query
+  starter list shows the top 5 coins by observation count
+  (already API-sorted). Protocols + static pages remain seeded
+  until the unified `/v1/search` endpoint ships.
+
 - **Showcase `/markets` page goes live.** Replaces the v0
   placeholder with a live markets directory backed by `/v1/markets`,
   client-sorted by 24h trade count desc. New `useMarkets()` hook
