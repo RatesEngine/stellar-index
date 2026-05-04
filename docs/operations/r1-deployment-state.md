@@ -1,6 +1,6 @@
 ---
 title: r1 archival node — current state and next-steps
-last_verified: 2026-05-03
+last_verified: 2026-05-04
 status: living doc
 ---
 
@@ -230,6 +230,38 @@ fetched 2026-04-23:
    evaluator wired up.
 
 5. **pgBackRest** not configured. Postgres has no backups.
+
+5a. **Aggregator emitting zero VWAP rows on-chain pairs.**
+   (Discovered 2026-05-04.) The aggregator binary is current
+   (latest main, redeployed 2026-05-04 17:52 — includes the
+   change-summary worker shipped in #557 and the markets perf
+   fix in #582/#583). The orchestrator runs ticks every 5 min;
+   the change-summary worker runs every 5 min on top. Status:
+   `TicksTotal: 1739, VWAPWrites: 0, EmptyWindows: 46953` on
+   the previous instance, all zeros on the current one too.
+   Root cause: the aggregator's `defaultPairs()` set is
+   {XLM, BTC, ETH} × {USD, EUR, GBP} — none of those have
+   matching trades on-chain. `prices_1m` has 264k+ rows for
+   pairs the indexer DID write (XLM/USDC, XLM/AQUA, etc.) but
+   none of the configured aggregator pairs match. **Operator
+   fix**: tune `[aggregate].pairs` in the aggregator's TOML
+   to include the actually-traded pairs (XLM/USDC,
+   XLM/USDC.fake, XLM/AQUA…) OR enable CEX/FX connectors so
+   the {XLM, BTC, ETH} × {USD, EUR, GBP} matrix gets real
+   off-chain trades. Side effects of leaving as-is:
+   `change_summary_5m` empty → `/v1/changes/coin/stellar`
+   returns 404 (worker hasn't computed a row); peg-health and
+   source-diversity computers (Phase 3) can't run until VWAPs
+   populate.
+
+5b. **`classic_assets` table seeded from trades.**
+   (Done 2026-05-04, PR #595 context.) Direct SQL backfill
+   from `DISTINCT issuer_g_strkey FROM classic_assets WHERE
+   issuer_g_strkey IS NOT NULL` populated `issuers` with
+   25,256 rows so `/v1/issuers/{g_strkey}` returns real data
+   instead of 404. The accounts decoder will overwrite these
+   rows with auth flags + home_domain as it observes account
+   state on-chain.
 
 6. **stellar-archivist mirror → MinIO sync.** Our mirror lands on
    ZFS (`/srv/history-archive/`), not in MinIO. Phase-1 plan

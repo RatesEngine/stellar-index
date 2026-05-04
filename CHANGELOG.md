@@ -15,6 +15,26 @@ against.
 
 ## [Unreleased]
 
+### Documentation
+
+- **`r1-deployment-state.md` reflects current operational state.**
+  Adds two findings under "Important but not urgent": the
+  aggregator is on latest main (change-summary worker shipped) but
+  emits zero VWAPs because `defaultPairs()` is `{XLM,BTC,ETH} ×
+  {USD,EUR,GBP}` and none have on-chain trades — operator fix is
+  to tune `[aggregate].pairs` to actually-traded pairs OR enable
+  CEX/FX connectors. And: `issuers` table seeded with 25,256 rows
+  via SQL backfill from `classic_assets` so
+  `/v1/issuers/{g_strkey}` serves real data. `last_verified`
+  bumped.
+
+- **`release-process.md` pre-flight runs `make web-build`.** Item
+  5 ("Build dry-run is clean") now also requires the showcase
+  build for releases that ship `web/showcase/` alongside the
+  binaries. CI gates on this already, but local verification
+  before tagging catches the rare case where a merge-conflict
+  fix on `main` slipped past the per-PR gate.
+
 ### Added
 
 - **Go SDK methods for the new endpoints.** `pkg/client` now

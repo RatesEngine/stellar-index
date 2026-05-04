@@ -1,6 +1,6 @@
 ---
 title: Release process — cutting a Rates Engine binary release
-last_verified: 2026-05-03
+last_verified: 2026-05-04
 status: living doc
 ---
 
@@ -33,7 +33,14 @@ mid-release wastes a tag and forces a `.N+1` cut.
    already exists on `main` from an earlier landed PR — **do not**
    bump `pkg/*` versions in the same commit as a CalVer release.
 5. **Build dry-run is clean.** `make build` completes for every
-   checked-in binary without errors.
+   checked-in binary without errors. If the release will deploy
+   the showcase site (`web/showcase/`) alongside the binaries —
+   which is the launch-week default — also run
+   `NEXT_PUBLIC_API_BASE_URL=http://api.local-stub.invalid make
+   web-build` and confirm it produces `web/showcase/out/`. CI
+   already gates on this per the `web/showcase` job, but local
+   verification before tagging catches the rare case where a
+   merge-conflict fix on `main` slipped past the per-PR gate.
 6. **Stellar protocol is documented.** The protocol version the
    release was tested against is known (e.g. `23` for post-Whisk).
    Pulled from `stellar-core --version` on a test node, or from the
