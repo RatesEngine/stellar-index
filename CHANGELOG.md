@@ -15,6 +15,20 @@ against.
 
 ## [Unreleased]
 
+### Added
+
+- **`ratesengine-sla-probe -api-key` flag + `RATESENGINE_PROBE_API_KEY`
+  env-var.** Without authentication the probe hits the anonymous-tier
+  rate limit (60 req/min) and reads availability < 0.1 % on every
+  non-`/healthz` endpoint — verified against r1 today (66 k samples
+  per endpoint over 60 s, 0.03 % availability across the
+  authenticated surfaces). The flag attaches `Authorization: Bearer
+  <key>` to every probe request so the verdict actually reflects
+  SLA compliance. Default reads from the env var so the systemd
+  unit can pass the key via `EnvironmentFile=` without leaking it
+  onto the `ExecStart` command line. Probe systemd unit, sla-probe
+  runbook, and launch-day checklist updated to require the key.
+
 ### Changed
 
 - **`internal/canonical/discovery`: in-process dedup before sink

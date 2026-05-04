@@ -148,6 +148,11 @@ type slaTargets struct {
 }
 
 func main() {
+	// API key default falls through to RATESENGINE_PROBE_API_KEY so
+	// the systemd unit can pass it via Environment= without leaking
+	// it onto the command line (visible in ps).
+	defaultAPIKey := os.Getenv("RATESENGINE_PROBE_API_KEY")
+
 	var (
 		baseURL      = flag.String("base-url", "http://localhost:3000/v1", "API base URL (required)")
 		duration     = flag.Duration("duration", 30*time.Second, "Test duration")
@@ -159,6 +164,7 @@ func main() {
 		freshTarget  = flag.Duration("freshness-target", defaultFreshTarget, "Price-freshness SLA target")
 		availTarget  = flag.Float64("availability-target", defaultAvailabilityT, "Per-endpoint availability SLA target (percent)")
 		textfileOut  = flag.String("textfile-output", "", "Path to write Prometheus textfile (node_exporter textfile_collector format). Empty = no metrics emit.")
+		apiKey       = flag.String("api-key", defaultAPIKey, "API key for Authorization: Bearer header. Defaults to $RATESENGINE_PROBE_API_KEY. Without one the probe hits the anonymous-tier rate limit (60 req/min) and reads as a fail.")
 	)
 	flag.Var(&pairFlag, "pair", "Asset pair as 'asset,quote' (e.g. 'native,fiat:USD'). Repeatable.")
 	flag.Parse()
@@ -185,7 +191,7 @@ func main() {
 		endpoints = append(endpoints, pairEndpoints(parts[0], parts[1])...)
 	}
 
-	rep := runProbe(*baseURL, endpoints, *duration, *concurrency, slaTargets{
+	rep := runProbe(*baseURL, *apiKey, endpoints, *duration, *concurrency, slaTargets{
 		P95MS:           durationMS(*p95Target),
 		P99MS:           durationMS(*p99Target),
 		FreshnessSec:    freshTarget.Seconds(),
@@ -221,13 +227,16 @@ type probeSample struct {
 
 // runProbe drives `concurrency` workers against `endpoints` for
 // `duration`, then aggregates per-endpoint stats and produces a
-// pass/fail report.
-func runProbe(baseURL string, endpoints []endpoint, duration time.Duration, concurrency int, sla slaTargets) report {
+// pass/fail report. apiKey, when non-empty, is sent as
+// `Authorization: Bearer <key>` on every request — without one the
+// probe hits the anonymous-tier rate limit and the verdict reads as
+// fail for reasons unrelated to actual SLA compliance.
+func runProbe(baseURL, apiKey string, endpoints []endpoint, duration time.Duration, concurrency int, sla slaTargets) report {
 	started := time.Now().UTC()
 	ctx, cancel := context.WithTimeout(context.Background(), duration)
 	defer cancel()
 
-	samples := collectSamples(ctx, baseURL, endpoints, concurrency)
+	samples := collectSamples(ctx, baseURL, apiKey, endpoints, concurrency)
 
 	rep := report{
 		BaseURL:     baseURL,
@@ -246,7 +255,7 @@ func runProbe(baseURL string, endpoints []endpoint, duration time.Duration, conc
 // collectSamples spawns `concurrency` workers that round-robin
 // across `endpoints` until ctx expires. Returns a per-endpoint-name
 // sample slice.
-func collectSamples(ctx context.Context, baseURL string, endpoints []endpoint, concurrency int) map[string][]probeSample {
+func collectSamples(ctx context.Context, baseURL, apiKey string, endpoints []endpoint, concurrency int) map[string][]probeSample {
 	var mu sync.Mutex
 	samples := make(map[string][]probeSample)
 	httpClient := &http.Client{Timeout: 30 * time.Second}
@@ -265,7 +274,7 @@ func collectSamples(ctx context.Context, baseURL string, endpoints []endpoint, c
 				}
 				ep := endpoints[i]
 				i = (i + 1) % len(endpoints)
-				lat, ok, observedAt := hit(ctx, httpClient, baseURL, ep)
+				lat, ok, observedAt := hit(ctx, httpClient, baseURL, apiKey, ep)
 				mu.Lock()
 				samples[ep.Name] = append(samples[ep.Name], probeSample{lat, ok, observedAt})
 				mu.Unlock()
@@ -352,8 +361,9 @@ func endpointFailures(st stats, sla slaTargets) []string {
 
 // hit issues one GET to `<baseURL><path>?<query>` and returns the
 // wall-clock latency, success boolean (2xx), and the parsed
-// observed_at timestamp from the response body when present.
-func hit(ctx context.Context, c *http.Client, baseURL string, ep endpoint) (time.Duration, bool, time.Time) {
+// observed_at timestamp from the response body when present. apiKey,
+// when non-empty, is sent as `Authorization: Bearer <key>`.
+func hit(ctx context.Context, c *http.Client, baseURL, apiKey string, ep endpoint) (time.Duration, bool, time.Time) {
 	u := baseURL + ep.Path
 	if len(ep.Query) > 0 {
 		var parts []string
@@ -366,6 +376,9 @@ func hit(ctx context.Context, c *http.Client, baseURL string, ep endpoint) (time
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u, http.NoBody)
 	if err != nil {
 		return 0, false, time.Time{}
+	}
+	if apiKey != "" {
+		req.Header.Set("Authorization", "Bearer "+apiKey)
 	}
 	start := time.Now()
 	resp, err := c.Do(req)

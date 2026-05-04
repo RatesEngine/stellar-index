@@ -54,8 +54,22 @@ DURATION=30s                                 # default
 CONCURRENCY=4                                # default
 PAIRS="-pair native,fiat:USD -pair USDC-G…,fiat:USD"
 REPORT_FORMAT=json                           # default; text also valid
+RATESENGINE_PROBE_API_KEY=rek_…              # vault-minted key; required (see below)
 EXTRA_FLAGS=""                               # default
 ```
+
+### Why an API key is required
+
+Without `RATESENGINE_PROBE_API_KEY` set, the probe hits the
+anonymous-tier rate limit (60 req/min per IP). At the documented 4
+workers × 30 s window that's ~1000 requests/sec/worker — every
+non-`/healthz` endpoint reads as `availability < 0.1 %` and the
+verdict comes back `fail` for reasons unrelated to actual SLA
+compliance. Mint a load-test API key from the operator vault (same
+class as `RATESENGINE_LOAD_API_KEY` for the k6 weekly) and set it
+in `/etc/default/sla-probe` before enabling the timer. The probe
+sends it as `Authorization: Bearer <key>` on every request — the
+key never appears on the systemd unit's command line.
 
 The defaults exercise XLM/USD as the smoke-test pair. Add `-pair`
 entries to track additional asset/quote combinations the operator

@@ -14,17 +14,24 @@
 #
 # Configuration (override via /etc/default/sla-probe):
 #
-#   BASE_URL          API base URL.            (default: https://api.ratesengine.net/v1)
-#   DURATION          Per-run load duration.   (default: 30s)
-#   CONCURRENCY       Concurrent workers.      (default: 4)
-#   PAIRS             One -pair flag per pair. (default: -pair native,fiat:USD)
-#   REPORT_FORMAT     text or json.            (default: json — easy to scrape from journal)
-#   TEXTFILE_OUTPUT   Path under node_exporter's textfile_collector dir.
-#                     Empty = no metrics emit (the default — operators
-#                     opt in once they've installed node_exporter).
-#                     Example:
-#                       /var/lib/node_exporter/textfile_collector/sla_probe.prom
-#   EXTRA_FLAGS       Extra -flag overrides.   (default: empty)
+#   BASE_URL                    API base URL.       (default: https://api.ratesengine.net/v1)
+#   DURATION                    Per-run load duration.   (default: 30s)
+#   CONCURRENCY                 Concurrent workers.      (default: 4)
+#   PAIRS                       One -pair flag per pair. (default: -pair native,fiat:USD)
+#   REPORT_FORMAT               text or json.            (default: json — easy to scrape from journal)
+#   RATESENGINE_PROBE_API_KEY   Vault-minted load-test API key. REQUIRED — without
+#                               it the probe hits the anonymous-tier rate limit
+#                               (60 req/min) and reads availability < 0.1% on every
+#                               non-/healthz endpoint. Mint same class as the k6
+#                               weekly's RATESENGINE_LOAD_API_KEY. Picked up by the
+#                               binary from this env var directly so the key never
+#                               appears on the ExecStart command line.
+#   TEXTFILE_OUTPUT             Path under node_exporter's textfile_collector dir.
+#                               Empty = no metrics emit (the default — operators
+#                               opt in once they've installed node_exporter).
+#                               Example:
+#                                 /var/lib/node_exporter/textfile_collector/sla_probe.prom
+#   EXTRA_FLAGS                 Extra -flag overrides.   (default: empty)
 #
 # Exit code 0 = pass; 1 = at least one SLA violated. The non-zero
 # exit on SLA breach causes systemd to log the unit as failed,

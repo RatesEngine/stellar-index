@@ -46,7 +46,7 @@ func TestRunProbe_PassPath(t *testing.T) {
 		{Name: "healthz", Path: "/healthz"},
 		{Name: "price", Path: "/price", Query: map[string]string{"asset": "native", "quote": "fiat:USD"}},
 	}
-	rep := runProbe(srv.URL, endpoints, 200*time.Millisecond, 2, slaTargets{
+	rep := runProbe(srv.URL, "", endpoints, 200*time.Millisecond, 2, slaTargets{
 		P95MS:           500, // very generous so the test isn't flaky
 		P99MS:           1000,
 		FreshnessSec:    30,
@@ -77,7 +77,7 @@ func TestRunProbe_FailsOnSlowEndpoint(t *testing.T) {
 	defer srv.Close()
 
 	endpoints := []endpoint{{Name: "healthz", Path: "/healthz"}}
-	rep := runProbe(srv.URL, endpoints, 200*time.Millisecond, 2, slaTargets{
+	rep := runProbe(srv.URL, "", endpoints, 200*time.Millisecond, 2, slaTargets{
 		P95MS:           1, // 1ms target — we'll definitely exceed
 		P99MS:           1,
 		FreshnessSec:    30,
@@ -98,7 +98,7 @@ func TestRunProbe_FailsOn5xx(t *testing.T) {
 	defer srv.Close()
 
 	endpoints := []endpoint{{Name: "healthz", Path: "/healthz"}}
-	rep := runProbe(srv.URL, endpoints, 100*time.Millisecond, 1, slaTargets{
+	rep := runProbe(srv.URL, "", endpoints, 100*time.Millisecond, 1, slaTargets{
 		P95MS:           1000,
 		P99MS:           5000,
 		FreshnessSec:    300,
@@ -119,7 +119,7 @@ func TestHit_ParsesObservedAt(t *testing.T) {
 	}))
 	defer srv.Close()
 	c := &http.Client{Timeout: time.Second}
-	_, ok, observed := hit(context.Background(), c, srv.URL, endpoint{Path: "/x"})
+	_, ok, observed := hit(context.Background(), c, srv.URL, "", endpoint{Path: "/x"})
 	if !ok {
 		t.Fatal("hit returned not-ok")
 	}
@@ -134,12 +134,43 @@ func TestHit_NoObservedAt(t *testing.T) {
 	}))
 	defer srv.Close()
 	c := &http.Client{Timeout: time.Second}
-	_, ok, observed := hit(context.Background(), c, srv.URL, endpoint{Path: "/x"})
+	_, ok, observed := hit(context.Background(), c, srv.URL, "", endpoint{Path: "/x"})
 	if !ok {
 		t.Fatal("hit returned not-ok on 200")
 	}
 	if !observed.IsZero() {
 		t.Errorf("observed=%v want zero", observed)
+	}
+}
+
+func TestHit_AttachesAuthorizationWhenAPIKeySet(t *testing.T) {
+	var sawAuth string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		sawAuth = r.Header.Get("Authorization")
+		_, _ = w.Write([]byte(`{}`))
+	}))
+	defer srv.Close()
+	c := &http.Client{Timeout: time.Second}
+	_, ok, _ := hit(context.Background(), c, srv.URL, "rek_test_xyz", endpoint{Path: "/x"})
+	if !ok {
+		t.Fatal("hit returned not-ok")
+	}
+	if sawAuth != "Bearer rek_test_xyz" {
+		t.Errorf("Authorization = %q, want %q", sawAuth, "Bearer rek_test_xyz")
+	}
+}
+
+func TestHit_OmitsAuthorizationWhenAPIKeyEmpty(t *testing.T) {
+	var sawAuth string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		sawAuth = r.Header.Get("Authorization")
+		_, _ = w.Write([]byte(`{}`))
+	}))
+	defer srv.Close()
+	c := &http.Client{Timeout: time.Second}
+	_, _, _ = hit(context.Background(), c, srv.URL, "", endpoint{Path: "/x"})
+	if sawAuth != "" {
+		t.Errorf("Authorization = %q, want empty (no key passed)", sawAuth)
 	}
 }
 

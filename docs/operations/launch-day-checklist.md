@@ -126,14 +126,19 @@ Order matters. Don't skip.
 
 4. **Smoke test the public surface.**
    ```sh
+   RATESENGINE_PROBE_API_KEY=rek_… \
    ratesengine-sla-probe \
      -base-url https://api.ratesengine.net/v1 \
      -duration 30s \
      -concurrency 4 \
      -report-format text
    ```
-   Pass condition: `verdict: pass`. Any `failed_reasons` halts
-   the cut → trigger rollback.
+   The API key is required — without one the probe trips the
+   anonymous-tier rate limit (60 req/min) and the verdict reads
+   `fail` on availability for reasons unrelated to actual SLA
+   compliance. Mint a fresh load-test key from the operator
+   vault. Pass condition: `verdict: pass`. Any `failed_reasons`
+   halts the cut → trigger rollback.
 
 5. **Showcase site goes live (`ratesengine.net`).** Per
    [`showcase-deployment.md`](showcase-deployment.md), the
