@@ -205,3 +205,39 @@ jobs:
             echo "::error::Generated API reference is stale. Run 'make docs-api' locally and commit the result."
             exit 1
           fi
+
+  # ────────────────────────────────────────────────────────────────
+  # Showcase site — typecheck, lint, build the Next.js app at
+  # web/showcase/. Static-export build is fast (~30s).
+  # Also verifies the OpenAPI → TypeScript codegen is in sync; if
+  # the OpenAPI spec changed and someone forgot to regen the types,
+  # this fails with a clear error.
+  # ────────────────────────────────────────────────────────────────
+
+  web-showcase:
+    name: web/showcase
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: web/showcase
+    steps:
+      - uses: actions/checkout@v6
+      - uses: pnpm/action-setup@v4
+        with:
+          version: "10"
+      - uses: actions/setup-node@v6
+        with:
+          node-version: "20"
+          cache: "pnpm"
+          cache-dependency-path: web/showcase/pnpm-lock.yaml
+      - run: pnpm install --frozen-lockfile
+      - name: Generated API types are in sync
+        run: |
+          pnpm generate:api
+          if ! git diff --exit-code -- src/api/types.ts; then
+            echo "::error::Generated TS API types are stale. Run 'make web-generate-api' locally and commit src/api/types.ts."
+            exit 1
+          fi
+      - run: pnpm typecheck
+      - run: pnpm lint
+      - run: pnpm build
