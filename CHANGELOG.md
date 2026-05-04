@@ -51,6 +51,17 @@ against.
   beyond). Decoder-coverage / archive-completeness / SLO panels
   follow as their underlying endpoints ship.
 
+- **`/dexes` and `/oracles` pages get real content.** Replace the
+  v0 placeholders with curated cards for every venue — Soroswap,
+  Phoenix, Aquarius, SDEX, Comet on `/dexes`; Reflector trio
+  (DEX/CEX/FX), Redstone, Band on `/oracles`. Each card lists the
+  integration quirk discovered during decoder development (e.g.
+  Soroswap SwapEvent has no post-state reserves, Band's contract
+  emits zero events, Phoenix swaps fan out across 8 events) and
+  links to the full audit notes in `docs/discovery/`. `/oracles`
+  also explains the SEP-40 compatibility surface and divergence
+  monitoring up front.
+
 - **Home page hero + Try-the-API panel.** Replaces the generic
   "Stellar pricing explorer" intro with a clearer hero (independent
   / open / public-tier free), three CTAs (Browse coins / Browse
