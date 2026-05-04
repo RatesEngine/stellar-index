@@ -6,9 +6,11 @@ import (
 	"time"
 )
 
-// Logger emits one structured log entry per request. The log is
-// always at INFO level; 5xx responses are additionally logged at
-// ERROR level with the same fields so dashboards can split.
+// Logger emits one structured log entry per request:
+//   - 5xx → ERROR
+//   - 4xx (except 429) → WARN
+//   - 429 → skipped (see below)
+//   - everything else → INFO
 //
 // Fields (minimum):
 //   - method, path, status, bytes, latency_ms
@@ -16,6 +18,18 @@ import (
 //   - remote_ip (X-Forwarded-For first hop if present, else
 //     r.RemoteAddr stripped of the port)
 //   - user_agent
+//
+// 429 special case: a single misconfigured client (or a load
+// generator without an API key) can produce thousands of 429s per
+// second on a public origin. r1 evidence on 2026-05-04 — a 60-second
+// 4-worker probe run produced 343 k suppressed `systemd-journald`
+// entries before journald's own rate limiter kicked in, dropping
+// other-service messages that operators would actually want.
+// Visibility is preserved by the
+// `ratesengine_http_requests_total{status="429"}` counter (see
+// `internal/obs/http_middleware.go`); the per-line log adds journal
+// pressure without diagnostic value the metric doesn't already
+// carry.
 //
 // Does NOT log query parameters or request bodies — they may
 // carry API keys or PII. Add named fields in specific handlers
@@ -36,6 +50,10 @@ func Logger(logger *slog.Logger) Middleware {
 			// breaking http.ResponseController.
 			rec := &statusRecorder{ResponseWriter: w, status: http.StatusOK}
 			next.ServeHTTP(rec, r)
+
+			if rec.status == http.StatusTooManyRequests {
+				return
+			}
 
 			latency := time.Since(start)
 			attrs := []any{

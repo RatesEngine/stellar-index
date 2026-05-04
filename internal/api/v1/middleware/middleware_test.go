@@ -250,6 +250,53 @@ func TestLogger_ServerErrorLogsAtErrorLevel(t *testing.T) {
 	}
 }
 
+// TestLogger_Skips429 — 429 responses must not produce a per-line
+// log entry. A misconfigured client (or an unauthenticated load
+// generator) can produce thousands of 429s per second and flood the
+// systemd journal — r1 evidence on 2026-05-04 saw 343 k suppressed
+// messages in a single 60 s window. Visibility is preserved by the
+// `ratesengine_http_requests_total{status="429"}` counter.
+func TestLogger_Skips429(t *testing.T) {
+	var buf bytes.Buffer
+	logger := slog.New(slog.NewJSONHandler(&buf, nil))
+
+	h := mw.Logger(logger)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusTooManyRequests)
+	}))
+
+	h.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest(http.MethodGet, "/v1/price", nil))
+
+	if got := strings.TrimSpace(buf.String()); got != "" {
+		t.Errorf("expected zero log lines for 429, got: %q", got)
+	}
+}
+
+// TestLogger_NonRateLimit4xxStillLogged — other 4xx responses
+// (400 Bad Request, 401 Unauthorized, 404 Not Found) must still
+// produce a WARN-level log line. The 429 carve-out is narrow.
+func TestLogger_NonRateLimit4xxStillLogged(t *testing.T) {
+	for _, status := range []int{http.StatusBadRequest, http.StatusUnauthorized, http.StatusNotFound, http.StatusForbidden} {
+		t.Run(http.StatusText(status), func(t *testing.T) {
+			var buf bytes.Buffer
+			logger := slog.New(slog.NewJSONHandler(&buf, nil))
+
+			h := mw.Logger(logger)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				w.WriteHeader(status)
+			}))
+
+			h.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest(http.MethodGet, "/v1/whatever", nil))
+
+			var entry map[string]any
+			if err := json.Unmarshal(bytes.TrimSpace(buf.Bytes()), &entry); err != nil {
+				t.Fatalf("expected one log line for %d; got %q", status, buf.String())
+			}
+			if entry["level"] != "WARN" {
+				t.Errorf("level = %v, want WARN for %d", entry["level"], status)
+			}
+		})
+	}
+}
+
 // ─── Recoverer ────────────────────────────────────────────────────
 
 func TestRecoverer_CatchesPanic(t *testing.T) {

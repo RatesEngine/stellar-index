@@ -15,6 +15,20 @@ against.
 
 ## [Unreleased]
 
+### Changed
+
+- **API request-logger middleware skips 429 responses entirely.** A
+  single misconfigured client (or an unauthenticated load generator)
+  can produce thousands of 429s per second on a public origin —
+  r1 evidence on 2026-05-04 saw 343 k suppressed `systemd-journald`
+  messages in a single 60 s probe-vs-rate-limiter window, dropping
+  unrelated service messages operators would have wanted. 429
+  visibility is preserved by the
+  `ratesengine_http_requests_total{status="429"}` counter; the
+  per-line WARN log carries no diagnostic value the metric doesn't
+  already cover. Other 4xx responses (400, 401, 403, 404) still
+  log at WARN.
+
 ### Added
 
 - **`ratesengine-sla-probe -api-key` flag + `RATESENGINE_PROBE_API_KEY`
