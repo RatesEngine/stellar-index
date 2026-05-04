@@ -1,6 +1,6 @@
 ---
 title: Post-launch on-call query bundle (L6.7)
-last_verified: 2026-05-03
+last_verified: 2026-05-04
 status: operator runbook
 ---
 
@@ -27,12 +27,15 @@ the API binaries).
 sum by (route) (rate(http_requests_total[$range]))
 ```
 
-**What healthy looks like**: every public surface
-(`/v1/price`, `/v1/price/tip`, `/v1/observations`,
+**What healthy looks like**: every public surface emits non-zero
+once the showcase site starts driving traffic — `/v1/price`,
+`/v1/price/tip`, `/v1/observations`,
 `/v1/history/since-inception`, `/v1/assets`, `/v1/oracle/*`,
-`/v1/sources`) emits non-zero. `route="unmatched"` is a 404 —
-acceptable at low rate (clients exploring), suspicious if
-sustained.
+`/v1/sources`, plus the showcase-fan-out surfaces `/v1/coins`,
+`/v1/issuers`, `/v1/issuers/{g_strkey}`, `/v1/markets`,
+`/v1/changes/{entity_type}/{id}`, `/v1/diagnostics/cursors`.
+`route="unmatched"` is a 404 — acceptable at low rate (clients
+exploring), suspicious if sustained.
 
 ## 2. Error rate per surface
 
@@ -57,6 +60,14 @@ histogram_quantile(0.99,
 **Bar**: p95 ≤ 200ms, p99 ≤ 500ms (Freighter RFP §SLA). The SLA
 probe (`cmd/ratesengine-sla-probe`) is the formal evidence trail;
 this query is the on-call's continuous view.
+
+> **Carve-out**: `/v1/markets` does a `GROUP BY base_asset,
+> quote_asset` across the 14-day chunk window of the trades
+> hypertable; expect p95 ≤ 300 ms / p99 ≤ 1 s on this route
+> (matches the k6 `07-catalogue-browse` thresholds). Other
+> catalogue surfaces (`/v1/coins`, `/v1/issuers`,
+> `/v1/diagnostics/cursors`) hold the standard 200 ms / 500 ms
+> bar.
 
 ## 4. Oracle freshness — every source, every asset
 

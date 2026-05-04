@@ -15,6 +15,18 @@ against.
 
 ## [Unreleased]
 
+### Documentation
+
+- **`post-launch-queries.md` lists the showcase routes.** The
+  on-call's "what healthy looks like" enumeration in §1
+  (request rate per surface) was missing `/v1/coins`,
+  `/v1/issuers`, `/v1/issuers/{g}`, `/v1/markets`,
+  `/v1/changes/{type}/{id}`, `/v1/diagnostics/cursors` — so on
+  launch day, a missing route wouldn't have rung a bell. Added
+  the full list. §3 (latency per surface) gets a carve-out
+  noting `/v1/markets`'s 300 ms / 1 s bar (matches the new k6
+  `07-catalogue-browse` thresholds). Bumps `last_verified`.
+
 ### Tests
 
 - **k6 scenario 07-catalogue-browse.** New load-test scenario
