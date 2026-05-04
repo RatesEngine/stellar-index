@@ -916,6 +916,48 @@ paths:
         "500": { $ref: "#/components/responses/InternalError" }
         "503": { $ref: "#/components/responses/ServiceUnavailable" }
 
+  /diagnostics/cursors:
+    get:
+      tags: [meta]
+      summary: Per-source ingest cursor positions.
+      description: |
+        Returns every row of the `ingestion_cursors` table — the
+        per-source markers the dispatcher persists after each ledger
+        is processed. Used for operator-facing diagnostics and the
+        showcase /diagnostics page (so you can see at a glance which
+        sources are caught up, which are lagging, and how stale the
+        last update is).
+
+        Sources that track multiple positions independently (e.g.
+        Soroswap tracks the factory cursor + one cursor per pair)
+        return one row per (source, sub_source) tuple.
+
+        Returns 503 when the deployment hasn't wired the cursors
+        reader.
+      responses:
+        "200":
+          description: Array of cursor entries, one per (source, sub_source).
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  required:
+                    - source
+                    - last_ledger
+                    - last_updated
+                    - lag_seconds
+                  properties:
+                    source: { type: string }
+                    sub_source: { type: string }
+                    last_ledger: { type: integer }
+                    last_updated: { type: string, format: date-time }
+                    lag_seconds: { type: integer, format: int64 }
+        "429": { $ref: "#/components/responses/RateLimited" }
+        "500": { $ref: "#/components/responses/InternalError" }
+        "503": { $ref: "#/components/responses/ServiceUnavailable" }
+
   /sources:
     get:
       tags: [meta]

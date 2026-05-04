@@ -17,6 +17,15 @@ against.
 
 ### Added
 
+- **`GET /v1/diagnostics/cursors` — per-source ingest cursor
+  positions.** Operator-facing diagnostic that returns every row of
+  the `ingestion_cursors` table (one entry per (source, sub_source)
+  tuple) with last_ledger, last_updated, and a precomputed
+  `lag_seconds` so stuck sources are obvious without wall-clock
+  math. Reads through the `CursorsReader` seam (timescale.Store
+  satisfies it via `ListCursors`). Powers the showcase
+  `/diagnostics` page.
+
 - **Change-summary rollup worker.** New
   `internal/aggregate/changesummary` package + aggregator-side
   worker that, every 5 minutes, walks every configured (coin,

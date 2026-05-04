@@ -366,6 +366,7 @@ func run(cfgPath string, dryRun bool) error { //nolint:gocognit,funlen,gocyclo /
 		ChangeSummary: store,
 		Coins:         store,
 		Issuers:       store,
+		Cursors:       store,
 		SEP10:         sep10Validator,
 		Hub:           hub,
 		CORS:          cors,
