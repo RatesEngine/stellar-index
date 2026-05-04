@@ -717,12 +717,12 @@ paths:
       summary: Distinct trading pairs with activity summary.
       description: |
         One entry per (base, quote) pair that has traded in the
-        recency window (default 90 days). Cursor-paginated (opaque
+        recency window (default 14 days). Cursor-paginated (opaque
         cursor keyed on `<base>|<quote>`). Each entry reports the
         pair's most recent trade timestamp + a 24h trade count.
 
         The recency window keeps the listing scoped to "active
-        markets" — pairs that haven't traded in 90 days don't
+        markets" — pairs that haven't traded in 14 days don't
         appear. This also bounds the underlying scan against the
         trades hypertable so chunk pruning keeps response times
         sub-second on a hypertable with hundreds of millions of

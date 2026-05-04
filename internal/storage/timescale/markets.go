@@ -21,7 +21,18 @@ type Market struct {
 // `/v1/markets` listing — the public contract is "active markets",
 // not "every pair ever observed". The window is exposed as a var so
 // tests can override it without changing the public function signature.
-var MarketsRecencyWindow = 90 * 24 * time.Hour
+//
+// Empirical sizing on r1 (441M trades, 1100+ chunks):
+//   - 14 days: ~540 ms cold, ~50 ms warm — the chosen default
+//   - 30 days: ~9 s with JIT, ~3 s without — too slow for a hot path
+//   - 90 days: ~16-19 s — exceeded the 30s client deadline
+//
+// 14 days passes the "active markets" intuition (a market that
+// hasn't traded in two weeks isn't really active) and the
+// COMPRESSED chunks at the boundary fit in postgres's shared
+// buffers. A future materialised market_catalogue would let us
+// drop the recency bound entirely.
+var MarketsRecencyWindow = 14 * 24 * time.Hour
 
 // DistinctPairs returns one page of recently-active (base, quote)
 // pairs from the trades hypertable, each with its most-recent trade

@@ -18,13 +18,15 @@ against.
 ### Changed
 
 - **`/v1/markets` and `/v1/pairs` recency-bound their underlying
-  scan.** `Store.DistinctPairs` and `Store.PairMarket` now restrict
-  the trades-hypertable scan to the last 90 days
-  (`MarketsRecencyWindow`) so chunk pruning bounds I/O. With 441M+
-  trades on r1 the prior unbounded `GROUP BY base_asset,
-  quote_asset` was timing out at 30s — every `/v1/markets` call
-  exceeded the client deadline and returned 0 bytes. Behaviour
-  change: pairs that haven't traded in 90 days no longer appear in
+  scan to 14 days.** `Store.DistinctPairs` and `Store.PairMarket`
+  now restrict the trades-hypertable scan via
+  `MarketsRecencyWindow` so TimescaleDB chunk pruning bounds I/O.
+  With 441M+ trades on r1, the prior unbounded `GROUP BY` was
+  timing out at 30 s — every `/v1/markets` call exceeded the
+  client deadline and returned 0 bytes. The 14-day bound runs cold
+  in ~540 ms / warm in ~50 ms. (Wider windows were measured: 30 d
+  ~9 s, 90 d ~16-19 s — both unusable for a hot path.) Behaviour
+  change: pairs that haven't traded in 14 days no longer appear in
   the listing. This matches the public contract — `/v1/markets`
   documents "active markets", not "every pair ever observed". A
   future materialised market_catalogue would let us drop the
