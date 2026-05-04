@@ -366,11 +366,18 @@ func (s *Server) handlePrice(w http.ResponseWriter, r *http.Request) {
 const confidenceLookupWindow = 5 * time.Minute
 
 // triangulationLookupWindow is the window the API queries the
-// triangulation cache at. Mirrors the aggregator's default
-// triangulation worker cadence (1 minute). When the worker emits
-// implied VWAPs at multiple windows, the API picks 1m as the
-// freshest available — older windows are inferior.
-const triangulationLookupWindow = 1 * time.Minute
+// Redis VWAP cache at. Set to 5 minutes because that is the
+// aggregator orchestrator's smallest default window
+// ([orchestrator.DefaultWindows] = [5m, 1h, 24h]); both the
+// per-pair direct refresh AND the triangulator emit a
+// `vwap:<base>:<quote>:300` key on every tick, so the API has a
+// fresh value to serve. A 1-minute lookup (the previous value)
+// missed every read because no upstream writer emits at 1m.
+//
+// The aggregator's tick cadence (default 30s, [Config.Interval])
+// overwrites the 5m key well inside its TTL, so the served
+// `observed_at` is at most ~30s stale relative to bucket-end.
+const triangulationLookupWindow = 5 * time.Minute
 
 // tryRedisVWAPFallback consults the wired [TriangulatedPriceLooker]
 // (if any) after a Timescale miss on /v1/price. Returns ok=true with

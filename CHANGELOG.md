@@ -17,6 +17,15 @@ against.
 
 ### Changed
 
+- **`/v1/price` Redis-VWAP fallback now queries 5m, not 1m.** The
+  aggregator orchestrator's default windows are `[5m, 1h, 24h]` —
+  both per-pair direct refresh and the triangulator write
+  `vwap:<base>:<quote>:300` on every tick. The handler's prior
+  `1m` lookup missed every read because no writer emits at 1m.
+  Aggregator's 30s tick cadence overwrites the 5m key well inside
+  its TTL, so served `observed_at` is at most ~30s stale relative
+  to bucket-end.
+
 - **`/v1/price` Redis-VWAP fallback now serves direct rewrites, not
   just triangulated values.** Pre-fix, when `prices_1m` had no row
   for the requested pair, the handler consulted Redis but rejected
