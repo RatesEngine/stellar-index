@@ -736,6 +736,78 @@ paths:
         "500": { $ref: "#/components/responses/InternalError" }
         "503": { $ref: "#/components/responses/ServiceUnavailable" }
 
+  /changes/{entity_type}/{id}:
+    get:
+      tags: [meta]
+      summary: Multi-window delta strip for one entity.
+      description: |
+        Returns the pre-computed multi-window delta strip + ATH/ATL +
+        streak + acceleration for one (entity_type, id) tuple. Powers
+        every list view + price card on the showcase site
+        (data-inventory §6.1). Refreshed every 5 minutes by the
+        change-summary worker; stale rows (>10 min) indicate the
+        worker is lagging.
+
+        Returns 404 when the worker hasn't computed a row yet (fresh
+        deployment, newly-added entity, or bounded history). Returns
+        503 when this deployment hasn't wired the change-summary
+        reader.
+      parameters:
+        - name: entity_type
+          in: path
+          required: true
+          schema:
+            type: string
+            enum: [coin, protocol, pair, source]
+        - name: id
+          in: path
+          required: true
+          description: |
+            Canonical id for the entity. For `coin`, the asset slug
+            (e.g. `stellar`). For `pair`, `base/quote` form. For
+            `protocol`, the protocol slug. For `source`, the source
+            name.
+          schema:
+            type: string
+      responses:
+        "200":
+          description: One row from change_summary_5m.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  entity_type: { type: string }
+                  entity_id: { type: string }
+                  refreshed_at: { type: string, format: date-time }
+                  current_value: { type: number }
+                  h1_value: { type: number, nullable: true }
+                  h1_delta_pct: { type: number, nullable: true }
+                  h24_value: { type: number, nullable: true }
+                  h24_delta_pct: { type: number, nullable: true }
+                  d7_value: { type: number, nullable: true }
+                  d7_delta_pct: { type: number, nullable: true }
+                  d30_value: { type: number, nullable: true }
+                  d30_delta_pct: { type: number, nullable: true }
+                  ath_value: { type: number, nullable: true }
+                  ath_at: { type: string, format: date-time, nullable: true }
+                  atl_value: { type: number, nullable: true }
+                  atl_at: { type: string, format: date-time, nullable: true }
+                  streak_direction:
+                    type: string
+                    enum: [up, down, flat]
+                    nullable: true
+                  streak_days: { type: integer, nullable: true }
+                  acceleration:
+                    type: string
+                    enum: [increasing, flat, decreasing]
+                    nullable: true
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+        "500": { $ref: "#/components/responses/InternalError" }
+        "503": { $ref: "#/components/responses/ServiceUnavailable" }
+
   /sources:
     get:
       tags: [meta]
