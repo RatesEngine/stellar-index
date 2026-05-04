@@ -15,6 +15,19 @@ against.
 
 ## [Unreleased]
 
+### Fixed
+
+- **`/v1/assets/{id}` `volume_24h_usd` always returned "0" for native
+  XLM.** The call site passed `supply.AssetKey(asset)` to
+  `Volume24hUSDForAsset`, which returns `"XLM"` for native (the
+  supply-package convention per ADR-0011) — but `trades.base_asset`
+  stores the canonical wire form `"native"`. The query
+  `WHERE base_asset='XLM' OR quote_asset='XLM'` matched zero rows,
+  so r1's headline asset reported zero 24h volume despite real
+  XLM/USDC trade activity. Pass `asset.String()` (the trade-table
+  shape) instead. New `TestF2_VolumeReaderReceivesTradeTableKey`
+  pins the contract for both native and classic assets.
+
 ### Changed
 
 - **`/v1/price/batch` falls through to the Redis VWAP cache** for

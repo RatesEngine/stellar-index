@@ -31,6 +31,66 @@ func (s *stubSupplyLooker) LatestSupply(_ context.Context, _ string) (supply.Sup
 	return s.snap, nil
 }
 
+// stubVolumeReader implements v1.VolumeReader for tests. Records the
+// assetKey passed in so tests can assert the API call site supplies
+// the trade-table representation (canonical.Asset.String()) rather
+// than the supply-table representation (supply.AssetKey()).
+type stubVolumeReader struct {
+	gotKey string
+	volume string
+	err    error
+	calls  int
+}
+
+func (s *stubVolumeReader) Volume24hUSDForAsset(_ context.Context, assetKey string) (string, error) {
+	s.calls++
+	s.gotKey = assetKey
+	if s.err != nil {
+		return "", s.err
+	}
+	return s.volume, nil
+}
+
+// TestF2_VolumeReaderReceivesTradeTableKey — the VolumeReader contract
+// pins assetKey to the trades.base_asset/quote_asset shape (canonical
+// `asset.String()`). For native XLM that's "native", NOT "XLM" — the
+// supply-package convention. Pre-2026-05-04 the call site passed
+// supply.AssetKey() and the lookup never matched any trade row,
+// returning "0" for native indefinitely.
+func TestF2_VolumeReaderReceivesTradeTableKey(t *testing.T) {
+	cases := []struct {
+		name      string
+		assetPath string
+		wantKey   string
+	}{
+		{"native", "native", "native"},
+		{"classic-USDC", "USDC-GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN", "USDC-GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			vol := &stubVolumeReader{volume: "12345.67"}
+			srv := v1.New(v1.Options{Volume: vol})
+			ts := startHTTPTest(t, srv.Handler())
+
+			resp := mustGet(t, ts.URL+"/v1/assets/"+tc.assetPath)
+			if resp.StatusCode != http.StatusOK {
+				body, _ := readAll(resp)
+				t.Fatalf("status = %d, body = %s", resp.StatusCode, body)
+			}
+			if vol.calls != 1 {
+				t.Fatalf("VolumeReader called %d times, want 1", vol.calls)
+			}
+			if vol.gotKey != tc.wantKey {
+				t.Errorf("Volume24hUSDForAsset received key = %q, want %q (trade-table shape, not supply-key shape)", vol.gotKey, tc.wantKey)
+			}
+			body, _ := readAll(resp)
+			if !strings.Contains(body, `"volume_24h_usd":"12345.67"`) {
+				t.Errorf("response missing volume: %s", body)
+			}
+		})
+	}
+}
+
 // stubChange24hReader implements v1.Change24hReader for tests.
 // Returns the per-asset price string from `prices`, or unavailable
 // when the asset key isn't seeded; an explicit `err` short-circuits
