@@ -68,12 +68,22 @@ type endpoint struct {
 }
 
 // staticEndpoints are probed regardless of -pair flags — they
-// have no per-pair variant.
+// have no per-pair variant. Health + version probes verify the
+// process is responsive; the catalogue probes (/coins, /issuers,
+// /markets, /diagnostics/cursors) verify that the read-heavy
+// surfaces the showcase site fans out across hold latency under
+// load. Without these, a regression on /v1/coins would only
+// surface as "the showcase is slow" — well after the SLA probe
+// gate would have caught it.
 func staticEndpoints() []endpoint {
 	return []endpoint{
 		{Name: "healthz", Path: "/healthz", Critical: true},
 		{Name: "readyz", Path: "/readyz", Critical: true},
 		{Name: "version", Path: "/version"},
+		{Name: "coins", Path: "/coins", Query: map[string]string{"limit": "100"}},
+		{Name: "issuers", Path: "/issuers", Query: map[string]string{"limit": "100"}},
+		{Name: "markets", Path: "/markets", Query: map[string]string{"limit": "100"}},
+		{Name: "diagnostics-cursors", Path: "/diagnostics/cursors"},
 	}
 }
 
