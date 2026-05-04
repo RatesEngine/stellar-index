@@ -231,28 +231,69 @@ fetched 2026-04-23:
 
 5. **pgBackRest** not configured. Postgres has no backups.
 
-5a. **Aggregator emitting zero VWAP rows on-chain pairs.**
-   (Discovered 2026-05-04.) The aggregator binary is current
-   (latest main, redeployed 2026-05-04 17:52 — includes the
-   change-summary worker shipped in #557 and the markets perf
-   fix in #582/#583). The orchestrator runs ticks every 5 min;
-   the change-summary worker runs every 5 min on top. Status:
-   `TicksTotal: 1739, VWAPWrites: 0, EmptyWindows: 46953` on
-   the previous instance, all zeros on the current one too.
-   Root cause: the aggregator's `defaultPairs()` set is
-   {XLM, BTC, ETH} × {USD, EUR, GBP} — none of those have
-   matching trades on-chain. `prices_1m` has 264k+ rows for
-   pairs the indexer DID write (XLM/USDC, XLM/AQUA, etc.) but
-   none of the configured aggregator pairs match. **Operator
-   fix**: tune `[aggregate].pairs` in the aggregator's TOML
-   to include the actually-traded pairs (XLM/USDC,
-   XLM/USDC.fake, XLM/AQUA…) OR enable CEX/FX connectors so
-   the {XLM, BTC, ETH} × {USD, EUR, GBP} matrix gets real
-   off-chain trades. Side effects of leaving as-is:
-   `change_summary_5m` empty → `/v1/changes/coin/stellar`
-   returns 404 (worker hasn't computed a row); peg-health and
-   source-diversity computers (Phase 3) can't run until VWAPs
-   populate.
+5a. ~~**Aggregator emitting zero VWAP rows on-chain pairs.**~~
+   **RESOLVED 2026-05-04 20:09 UTC.** Headline product
+   `/v1/price?asset=native&quote=fiat:USD` now serves real XLM/USD
+   prices from on-chain Stellar SDEX/Soroswap data:
+
+   ```
+   {"data":{"asset_id":"native","quote":"fiat:USD",
+            "price":"0.157384502084","price_type":"vwap",
+            "observed_at":"2026-05-04T20:05:00Z","window_seconds":300},
+    "flags":{"stale":false,"triangulated":false,"divergence_warning":false}}
+   ```
+
+   The fix required four PRs and a config edit:
+
+   - **PR #629** — aggregator stablecoin-fiat-proxy expansion now
+     reads `[trades].usd_pegged_classic_assets`, so a target
+     `native/fiat:USD` expands to include source `native/USDC-GA5Z…`
+     (matches actual on-chain Circle-USDC trades).
+   - **PR #630** — `defaultPairs()` emits BOTH `crypto:XLM/fiat:*`
+     and `native/fiat:*`. The API resolves the caller's asset
+     literally; on-chain trades store the `native` form, so without
+     this every default-pair tick produced an empty window.
+   - **PR #631** — `/v1/price` Redis-VWAP fallback serves direct
+     rewrites, not just triangulated values. The "Timescale is the
+     source of truth for direct VWAPs" invariant only applies to
+     LITERAL trade pairs; for aggregator-rewritten pairs the Redis
+     `vwap:` key IS the source of truth.
+   - **PR #632** — fallback lookup window 1m → 5m. The aggregator's
+     default windows are `[5m, 1h, 24h]` — a 1m lookup missed every
+     read.
+
+   Operator config on r1 (added to `/etc/ratesengine.toml`):
+
+   ```toml
+   [aggregate]
+   enable_stablecoin_fiat_proxy = true
+   min_usd_volume = 0  # default 10000; r1 is on-chain-only until CEX
+                       # connectors land — micro-volume XLM/USDC trades
+                       # are the data we have
+
+   [trades]
+   usd_pegged_classic_assets = [
+     "USDC-GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN",
+   ]
+   ```
+
+   Indexer was restarted to pick up the new `[trades]` config; new
+   on-chain trades populate `usd_volume` correctly. Aggregator now
+   reports `vwap_writes_total` climbing steadily (75 writes / 25
+   ticks at the time of resolution).
+
+   **Remaining gaps** (operator-tracked, not blocking):
+   - `/v1/price/tip?asset=native&quote=fiat:USD` still 404s — uses
+     a different reader path that doesn't share the Redis fallback.
+     Fix is parallel to #631 + #632 but lives in a different
+     handler; track separately if launch needs it.
+   - `/v1/price?asset=crypto:XLM&quote=fiat:USD` (abstract form)
+     still 404s — would require enabled CEX connectors emitting
+     `crypto:XLM/<quote>` trades. Until then the `native` form is
+     the only XLM serving key on r1.
+   - `change_summary_5m`, peg-health, source-diversity, baseline
+     refresh outputs all begin populating now that VWAPs land —
+     give them ~1 baseline cycle to catch up.
 
 5c. ~~**Discovery sink dropping ~3 k hits/min sustained.**~~
    **RESOLVED 2026-05-04 18:40 UTC, PR #621.** The async discovery
