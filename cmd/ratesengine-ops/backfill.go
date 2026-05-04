@@ -242,7 +242,15 @@ func runBackfillChunk(ctx context.Context, logger *slog.Logger, opts backfillOpt
 		}
 	}
 
-	disp, err := pipeline.BuildDispatcher(opts.sources, cfg.Oracle)
+	// Soroswap pair registry — load and arm live-upsert. Each chunk
+	// runs its own dispatcher so each calls this independently; the
+	// store is shared so chunks see each other's upserted pairs on
+	// next load. See internal/pipeline/soroswap_registry.go.
+	soroswapOpts, err := pipeline.SoroswapPersistenceOptions(ctx, store, logger, ctx)
+	if err != nil {
+		return fmt.Errorf("soroswap registry: %w", err)
+	}
+	disp, err := pipeline.BuildDispatcher(opts.sources, cfg.Oracle, soroswapOpts...)
 	if err != nil {
 		return fmt.Errorf("build dispatcher: %w", err)
 	}

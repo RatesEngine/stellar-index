@@ -139,7 +139,16 @@ func run(cfgPath string, dryRun bool) error {
 	}
 
 	// ─── Dispatcher + decoders ─────────────────────────────────
-	disp, err := pipeline.BuildDispatcher(cfg.Ingestion.EnabledSources, cfg.Oracle)
+	// Soroswap pair registry: load from postgres so the decoder
+	// boots with every previously-seen pair, and arm a live-upsert
+	// hook so factory new_pair events persist as they stream. Empty
+	// registry on a fresh deployment is fine — operators run
+	// `ratesengine-ops seed-soroswap-pairs` once to bootstrap.
+	soroswapOpts, err := pipeline.SoroswapPersistenceOptions(rootCtx, store, logger, rootCtx)
+	if err != nil {
+		return fmt.Errorf("soroswap registry: %w", err)
+	}
+	disp, err := pipeline.BuildDispatcher(cfg.Ingestion.EnabledSources, cfg.Oracle, soroswapOpts...)
 	if err != nil {
 		return fmt.Errorf("build dispatcher: %w", err)
 	}

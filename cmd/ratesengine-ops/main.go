@@ -170,6 +170,11 @@ func main() { //nolint:gocyclo,gocognit,funlen // subcommand switch; each case i
 			fmt.Fprintf(os.Stderr, "backfill: %v\n", err)
 			os.Exit(1)
 		}
+	case "seed-soroswap-pairs":
+		if err := seedSoroswapPairs(args[1:]); err != nil {
+			fmt.Fprintf(os.Stderr, "seed-soroswap-pairs: %v\n", err)
+			os.Exit(1)
+		}
 	case "hubble-check":
 		if err := hubbleCheck(args[1:]); err != nil {
 			fmt.Fprintf(os.Stderr, "hubble-check: %v\n", err)
@@ -496,6 +501,17 @@ Subcommands:
                               -config /etc/ratesengine.toml \
                               -from 21000000 -to 25000000 \
                               -source soroswap,aquarius
+  seed-soroswap-pairs -config PATH [-rpc URL] [-timeout DUR]
+                          Bootstrap the soroswap_pairs registry table
+                          via stellar-rpc simulateTransaction. Walks the
+                          factory's all_pairs() / token_0() / token_1()
+                          view functions and upserts each (pair, token0,
+                          token1) tuple. Run once on first deployment;
+                          live new_pair events keep the table fresh
+                          afterwards (see migrations/0016_create_soroswap_pairs.up.sql).
+                          ~3N+1 RPC calls at 300ms throttle, so wall-time
+                          scales linearly with pair count (~3 min for 200
+                          pairs). Idempotent — re-running is safe.
   version                 Print version + build date.
   help                    This help.
 `

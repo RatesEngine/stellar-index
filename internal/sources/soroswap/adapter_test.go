@@ -167,7 +167,7 @@ func TestDecoder_Decode_swapSyncWithRegistryEmitsTradeEvent(t *testing.T) {
 	t0Asset, _ := canonical.NewSorobanAsset(token0)
 	t1Asset, _ := canonical.NewSorobanAsset(token1)
 
-	d := NewDecoder(WithSeededPairTokensDecoder(map[string]pairTokens{
+	d := NewDecoder(WithSeededPairTokensDecoder(map[string]PairTokens{
 		pair: {Token0: t0Asset, Token1: t1Asset},
 	}))
 
@@ -255,5 +255,50 @@ func TestDecoder_EvictedOrphans_initiallyZero(t *testing.T) {
 	d := NewDecoder()
 	if got := d.EvictedOrphans(); got != 0 {
 		t.Errorf("EvictedOrphans() = %d on fresh Decoder, want 0", got)
+	}
+}
+
+func TestDecoder_WithPairUpsertHook_firesOnSeedPair(t *testing.T) {
+	t0, _ := canonical.NewSorobanAsset(makeContractStrkey(t, 0x10))
+	t1, _ := canonical.NewSorobanAsset(makeContractStrkey(t, 0x11))
+	pair := makeContractStrkey(t, 0x20)
+
+	type call struct{ pair, t0, t1 string }
+	var got []call
+	d := NewDecoder(WithPairUpsertHook(func(p, a, b string) {
+		got = append(got, call{p, a, b})
+	}))
+
+	d.SeedPair(pair, t0, t1)
+
+	if len(got) != 1 {
+		t.Fatalf("hook fired %d times, want 1", len(got))
+	}
+	if got[0].pair != pair || got[0].t0 != t0.ContractID || got[0].t1 != t1.ContractID {
+		t.Errorf("hook saw %+v, want pair=%s t0=%s t1=%s",
+			got[0], pair, t0.ContractID, t1.ContractID)
+	}
+}
+
+func TestDecoder_WithPairUpsertHook_firesOnFactoryNewPairDecode(t *testing.T) {
+	token0 := makeContractStrkey(t, 0x10)
+	token1 := makeContractStrkey(t, 0x11)
+	pair := makeContractStrkey(t, 0x20)
+
+	var fired int
+	d := NewDecoder(WithPairUpsertHook(func(p, a, b string) {
+		if p != pair || a != token0 || b != token1 {
+			t.Errorf("hook saw (%s, %s, %s), want (%s, %s, %s)",
+				p, a, b, pair, token0, token1)
+		}
+		fired++
+	}))
+
+	if _, err := d.Decode(makeNewPairEvent(t, token0, token1, pair)); err != nil {
+		t.Fatalf("Decode new_pair: %v", err)
+	}
+
+	if fired != 1 {
+		t.Errorf("hook fired %d times, want 1", fired)
 	}
 }

@@ -62,14 +62,30 @@ import (
 //     Soroban contract emits zero events")
 //   - sdex                                  — OpDecoder (classic
 //     pre-Soroban; we read ManageOffer ops, not events)
-func BuildDispatcher(names []string, oracle config.OracleConfig) (*dispatcher.Dispatcher, error) { //nolint:gocognit,gocyclo // linear case-table, splitting hurts readability
+//
+// soroswapOpts is forwarded to soroswap.NewDecoder when soroswap is
+// in `names`. The indexer + backfill chunks pass:
+//
+//   - WithSeededPairTokensDecoder seeded from
+//     timescale.LoadSoroswapPairRegistry, so the decoder boots with
+//     every previously-seen pair already in its registry — no more
+//     "skipped_unknown_pair" noise on a parallel chunk that doesn't
+//     happen to cover the original new_pair event.
+//   - WithPairUpsertHook bound to timescale.UpsertSoroswapPair, so
+//     newly-discovered pairs are persisted as live new_pair events
+//     stream in.
+//
+// Empty soroswapOpts is fine for tests / contexts that don't need
+// persistence (the verify-decoders subcommand uses SeedFromFactoryRPC
+// instead and ignores postgres entirely).
+func BuildDispatcher(names []string, oracle config.OracleConfig, soroswapOpts ...soroswap.DecoderOption) (*dispatcher.Dispatcher, error) { //nolint:gocognit,gocyclo // linear case-table, splitting hurts readability
 	var decoders []dispatcher.Decoder
 	var opDecoders []dispatcher.OpDecoder
 	var callDecoders []dispatcher.ContractCallDecoder
 	for _, name := range names {
 		switch strings.ToLower(name) {
 		case soroswap.SourceName:
-			decoders = append(decoders, soroswap.NewDecoder())
+			decoders = append(decoders, soroswap.NewDecoder(soroswapOpts...))
 		case aquarius.SourceName:
 			decoders = append(decoders, aquarius.NewDecoder())
 		case phoenix.SourceName:

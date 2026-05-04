@@ -15,6 +15,29 @@ against.
 
 ## [Unreleased]
 
+### Fixed
+
+- **Soroswap zero-trades bug — postgres-persisted pair registry.**
+  The Soroswap decoder needs a `pair_contract → (token0, token1)`
+  map to label swap-event amounts as base vs quote. Until this
+  PR the registry was an in-memory dict populated only by live
+  factory `new_pair` events, which broke two real cases:
+  - **Cold start.** Pairs created before the indexer's first
+    ledger were invisible — every swap on those pairs was
+    silently dropped via the `skipped_unknown_pair` counter.
+  - **Parallel backfill.** `ratesengine-ops backfill -parallel N`
+    runs N independent dispatchers; chunk 7 had no idea what
+    tokens chunk 2's `new_pair` event introduced.
+  Fix: new `soroswap_pairs` registry table (migration 0016),
+  `Store.UpsertSoroswapPair` + `LoadSoroswapPairRegistry`, a
+  decoder `WithPairUpsertHook` option, and a one-shot
+  `ratesengine-ops seed-soroswap-pairs` subcommand that walks
+  the factory via `simulateTransaction` and bootstraps the
+  table. Indexer + every backfill chunk loads the table at boot
+  and writes through on every live `new_pair` event. Existing
+  Soroswap data in the trades hypertable from before this fix
+  needs a re-backfill — operator action, not automatic.
+
 ### Documentation
 
 - **L6.5 documentation sweep — pre-launch pass** —

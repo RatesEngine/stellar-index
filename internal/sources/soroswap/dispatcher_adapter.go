@@ -8,10 +8,14 @@ import (
 	"github.com/RatesEngine/rates-engine/internal/events"
 )
 
-// pairTokens captures the (token0, token1) identities of a
+// PairTokens captures the (token0, token1) identities of a
 // Soroswap pair contract. Populated from factory new_pair events;
 // consumed by decodeSwap via the Decoder's registry.
-type pairTokens struct {
+//
+// Exported so callers outside the package can construct a seed map
+// for [WithSeededPairTokensDecoder]. The indexer and backfill chunks
+// build one of these from `timescale.LoadSoroswapPairRegistry` rows.
+type PairTokens struct {
 	Token0 canonical.Asset
 	Token1 canonical.Asset
 }
@@ -44,7 +48,16 @@ type Decoder struct {
 	// pairTokens maps pair-contract C-strkey → (token0, token1).
 	// Populated from factory new_pair events live, and seedable
 	// from Timescale at startup via SeedPair.
-	pairTokens map[string]pairTokens
+	pairTokens map[string]PairTokens
+
+	// onNewPair, when non-nil, is invoked for every factory
+	// new_pair event after the in-memory registry is updated. The
+	// indexer + backfill main wire this to a postgres-backed
+	// upsert so the mapping survives process restarts and is
+	// visible to other parallel backfill chunks. Hook is called
+	// with the decoder's mutex held — keep it cheap; the storage
+	// implementation should ExecContext non-blockingly or buffer.
+	onNewPair func(pairStrkey, token0Strkey, token1Strkey string)
 
 	// Counters surfaced for test assertions. Production wiring
 	// maps them to obs.SourceOrphanEventsTotal /
@@ -57,7 +70,7 @@ type Decoder struct {
 func NewDecoder(opts ...DecoderOption) *Decoder {
 	d := &Decoder{
 		buf:        newBuffer(),
-		pairTokens: map[string]pairTokens{},
+		pairTokens: map[string]PairTokens{},
 	}
 	for _, opt := range opts {
 		opt(d)
@@ -73,7 +86,7 @@ type DecoderOption func(*Decoder)
 // factory events from genesis every boot (we can seed from the
 // distinct (source, pair_contract) tuples already persisted in
 // the trades hypertable).
-func WithSeededPairTokensDecoder(seed map[string]pairTokens) DecoderOption {
+func WithSeededPairTokensDecoder(seed map[string]PairTokens) DecoderOption {
 	return func(d *Decoder) {
 		for k, v := range seed {
 			d.pairTokens[k] = v
@@ -81,12 +94,33 @@ func WithSeededPairTokensDecoder(seed map[string]pairTokens) DecoderOption {
 	}
 }
 
+// WithPairUpsertHook installs a callback fired whenever the decoder
+// observes a factory new_pair event. The callback receives the C-strkey
+// of the pair contract and the C-strkeys of token_0 / token_1.
+//
+// Lets the indexer + backfill chunks persist the (pair, tokens)
+// mapping to durable storage so future restarts and other parallel
+// chunks inherit the registry. The hook is fired with the decoder's
+// mutex held — keep it cheap (a queued ExecContext is fine; a
+// blocking network call is not).
+func WithPairUpsertHook(hook func(pairStrkey, token0Strkey, token1Strkey string)) DecoderOption {
+	return func(d *Decoder) {
+		d.onNewPair = hook
+	}
+}
+
 // SeedPair adds a pair→tokens mapping live. Safe to call at any
-// time from any goroutine.
+// time from any goroutine. Fires the registered onNewPair hook (if
+// any) so callers using SeedFromFactoryRPC also get the persistence
+// side-effect for free.
 func (d *Decoder) SeedPair(pair string, token0, token1 canonical.Asset) {
 	d.mu.Lock()
-	defer d.mu.Unlock()
-	d.pairTokens[pair] = pairTokens{Token0: token0, Token1: token1}
+	d.pairTokens[pair] = PairTokens{Token0: token0, Token1: token1}
+	hook := d.onNewPair
+	d.mu.Unlock()
+	if hook != nil {
+		hook(pair, token0.ContractID, token1.ContractID)
+	}
 }
 
 // Name implements [dispatcher.Decoder].
@@ -107,7 +141,8 @@ func (d *Decoder) Decode(ev events.Event) ([]consumer.Event, error) {
 		return nil, nil
 	}
 
-	// Factory new_pair: populate the registry, emit nothing.
+	// Factory new_pair: populate the registry (which fires the
+	// onNewPair hook for persistence), emit nothing.
 	if kind == EventNewPair {
 		fields, err := decodeNewPair(ev.Value)
 		if err != nil {
