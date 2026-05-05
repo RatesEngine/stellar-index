@@ -15,6 +15,21 @@ against.
 
 ## [Unreleased]
 
+### Added
+- `docs/operations/pre-launch-hardening.md` — operator runbook
+  for the config edits that should land before flipping public
+  DNS at `api.ratesengine.net`. Covers loopback bind, CORS
+  narrowing, Cloudflare proxy mode + trusted-proxy CIDR
+  expansion, Stripe / Healthchecks.io / FX-key wiring, smoke
+  from the open internet, and a backup baseline. Each step is
+  a config edit + restart, not a code change.
+- API binary now logs `SECURITY:` warnings at boot when
+  `[api].listen_addr` is non-loopback without `trusted_proxy_cidrs`,
+  or when `[api].allowed_origins = ["*"]` paired with an auth
+  mode that accepts credentials. Doesn't block startup —
+  serves anyway — but the warning lands in journalctl and Loki
+  so the missed-checklist case is visible.
+
 ### Fixed
 - HTTP metrics middleware now skips requests whose User-Agent
   identifies a synthetic-monitoring probe (`ratesengine-smoke/`,

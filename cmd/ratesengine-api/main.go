@@ -49,6 +49,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
@@ -116,6 +117,13 @@ func run(cfgPath string, dryRun bool) error { //nolint:gocognit,funlen,gocyclo /
 		"auth_mode", cfg.API.AuthMode,
 		"dry_run", dryRun,
 	)
+
+	// Pre-launch hardening warnings. These don't block startup —
+	// the binary still serves — but operators get loud signals at
+	// boot for risky default configurations. See
+	// docs/operations/pre-launch-hardening.md.
+	warnUnsafeBind(logger, cfg.API.ListenAddr, cfg.API.TrustedProxyCIDRs)
+	warnOpenCORS(logger, cfg.API.AllowedOrigins, cfg.API.AuthMode)
 
 	// SEP-10 validator — wired regardless of auth_mode so the
 	// /v1/auth/sep10/{challenge,token} endpoints serve. When the
@@ -1375,4 +1383,65 @@ func parseStreamingPairs(rows [][]string) ([]canonical.Pair, error) {
 
 func mkLogger(cfg config.ObsConfig) *slog.Logger {
 	return obs.NewLogger(cfg, "ratesengine-api")
+}
+
+// warnUnsafeBind logs a security warning at startup when the API
+// is configured to listen on a non-loopback address WITHOUT a
+// reverse-proxy CIDR allow-list. The combination is the classic
+// "raw HTTP exposed to the public internet" footgun:
+//
+//   - 0.0.0.0:3000 binds to every interface
+//   - empty TrustedProxyCIDRs means we trust X-Forwarded-For from
+//     the immediate peer, OR (if empty list) we don't honour it at
+//     all and everyone looks like the socket peer
+//
+// Operators running behind Caddy / Cloudflare / similar should
+// either (a) bind to 127.0.0.1 + let the proxy share the host or
+// (b) populate TrustedProxyCIDRs with the proxy's source range.
+//
+// Doesn't block startup — the binary still serves — but the
+// warning is loud enough to surface in journalctl + log aggregation.
+func warnUnsafeBind(logger *slog.Logger, listenAddr string, trustedProxyCIDRs []string) {
+	host, _, found := strings.Cut(listenAddr, ":")
+	if !found {
+		return
+	}
+	loopback := host == "127.0.0.1" || host == "::1" || host == "localhost"
+	if loopback {
+		return
+	}
+	if host == "0.0.0.0" || host == "::" || host == "" {
+		if len(trustedProxyCIDRs) == 0 {
+			logger.Warn("SECURITY: API is listening on a public interface with no trusted proxy CIDRs configured — direct :PORT requests bypass any TLS/WAF you have in front. Bind to 127.0.0.1 OR populate trusted_proxy_cidrs with your reverse proxy's source range.",
+				"listen", listenAddr,
+				"docs", "https://github.com/RatesEngine/rates-engine/blob/main/docs/operations/pre-launch-hardening.md")
+			return
+		}
+		logger.Warn("API listening on a public interface; trusting forwarded headers from configured proxies. Confirm your reverse proxy strips client-supplied X-Forwarded-* headers before forwarding.",
+			"listen", listenAddr,
+			"trusted_proxy_cidrs", trustedProxyCIDRs)
+	}
+}
+
+// warnOpenCORS logs a warning at startup when CORS is set to
+// allow every origin AND auth_mode permits authenticated calls.
+// The combination lets any third-party site issue authenticated
+// requests against the API on behalf of a logged-in browser
+// user — a classic CSRF amplifier when paired with cookie-based
+// auth (we use bearer tokens, which mitigates the worst of it,
+// but the wide-open posture is still a smell).
+//
+// Default config ships AllowedOrigins=["*"] for the dev path; the
+// operator must explicitly narrow before exposing the API.
+func warnOpenCORS(logger *slog.Logger, allowedOrigins []string, authMode string) {
+	wildcardOnly := len(allowedOrigins) == 1 && allowedOrigins[0] == "*"
+	if !wildcardOnly {
+		return
+	}
+	switch authMode {
+	case "apikey", "apikey_optional", "sep10":
+		logger.Warn("SECURITY: CORS allows every origin (\"*\") and auth_mode permits credentials — narrow [api].allowed_origins to your showcase / explorer hostnames before exposing the API publicly.",
+			"auth_mode", authMode,
+			"docs", "https://github.com/RatesEngine/rates-engine/blob/main/docs/operations/pre-launch-hardening.md")
+	}
 }
