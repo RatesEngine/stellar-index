@@ -15,6 +15,29 @@ against.
 
 ## [Unreleased]
 
+## [v0.0.0-rc.1] — 2026-05-05 — Pre-release smoke test
+
+**Operator action required: no.**
+
+First exercise of the release pipeline (release.yml + Dockerfiles +
+deploy.yml). Pre-release tag — not for production deploy. Validates
+that:
+
+- Cross-compile produces a runnable binary for every cmd/ target
+- SHA256SUMS verifies on download
+- Container images build + push to ghcr.io for every binary
+- CHANGELOG-section auto-extraction lands a non-empty Release page
+
+This release is intentionally a snapshot of main at the time of
+tagging — no behavioural change vs the preceding commits. The
+pipeline itself is what's being tested.
+
+### Tested against
+- Stellar pubnet protocol 23 (post-Whisk).
+
+### `pkg/*` versions included
+- `pkg/client v0.1.0` (unchanged from prior tag).
+
 ### Changed
 
 - **Versioning policy switched from CalVer to SemVer for binary
