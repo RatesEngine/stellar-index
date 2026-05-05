@@ -442,12 +442,14 @@ type StatusIncidents struct {
 }
 
 // ActiveIncident is one entry in [StatusIncidents.Active] — the
-// customer-facing summary of a currently-firing alert. Internal
-// labels (component, runbook_url, instance) are intentionally
-// excluded so the surface stays anonymous-friendly.
+// customer-facing summary of a currently-firing alert. RunbookURL
+// links to the public GitHub markdown when the alert rule has it
+// set; other internal labels (component, instance) are
+// intentionally excluded so the surface stays anonymous-friendly.
 type ActiveIncident struct {
-	Name     string `json:"name"`
-	Severity string `json:"severity"`
+	Name       string `json:"name"`
+	Severity   string `json:"severity"`
+	RunbookURL string `json:"runbook_url,omitempty"`
 }
 
 // Health is the data shape returned by [Client.Healthz] and

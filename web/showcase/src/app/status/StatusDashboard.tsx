@@ -96,7 +96,11 @@ type StatusEnvelope = {
       page_count: number;
       ticket_count: number;
       informational_count: number;
-      active?: { name: string; severity: 'page' | 'ticket' | 'informational' }[];
+      active?: {
+        name: string;
+        severity: 'page' | 'ticket' | 'informational';
+        runbook_url?: string;
+      }[];
     };
   };
   flags: { stale: boolean };
@@ -620,6 +624,16 @@ function SLAMetricsPanel({ env }: { env: StatusEnvelope }) {
                   }`} />
                   <span>{a.name}</span>
                   <span className="text-amber-700 dark:text-amber-300">[{a.severity}]</span>
+                  {a.runbook_url && (
+                    <a
+                      href={a.runbook_url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="ml-auto text-amber-700 underline-offset-2 hover:underline dark:text-amber-300"
+                    >
+                      runbook →
+                    </a>
+                  )}
                 </li>
               ))}
             </ul>

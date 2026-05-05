@@ -15,6 +15,15 @@ against.
 
 ## [Unreleased]
 
+### Added
+- `/v1/status` `incidents.active[].runbook_url` — each firing alert
+  now carries the GitHub URL of its runbook (when the rule has the
+  label set; ~all of ours do). Showcase /status renders it as a
+  "runbook →" link inline with each incident, so operators
+  clicking through during an incident don't need a separate hop.
+  The runbooks are public GitHub markdown so this doesn't leak
+  any operator-only signal.
+
 ### Performance
 - `/v1/assets` and `/v1/markets` Redis read-through caches.
   Same shape as the oracle cache from #696: `cachedAssetReader`

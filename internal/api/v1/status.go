@@ -94,11 +94,16 @@ type StatusIncidents struct {
 
 // ActiveIncident is one entry in [StatusIncidents.Active] — the
 // fields a public status page wants to render. Internal labels
-// (component, team, runbook_url) are deliberately excluded so this
-// surface stays anonymous-friendly.
+// (component, team, instance) are deliberately excluded so this
+// surface stays anonymous-friendly. RunbookURL is included
+// because the runbooks themselves are public GitHub markdown —
+// operators clicking through from the status page during an
+// incident benefit from the direct link, and surfacing it doesn't
+// leak any operator-only signal that wasn't already public.
 type ActiveIncident struct {
-	Name     string `json:"name"`
-	Severity string `json:"severity"`
+	Name       string `json:"name"`
+	Severity   string `json:"severity"`
+	RunbookURL string `json:"runbook_url,omitempty"`
 }
 
 // StatusBackend pulls signals from a metrics + alerting stack.
@@ -257,9 +262,11 @@ func (p *PrometheusStatusBackend) Incidents(ctx context.Context) (StatusIncident
 		}
 
 		if len(out.Active) < maxActive {
+			runbookURL, _ := sample.Labels["runbook_url"].(string)
 			out.Active = append(out.Active, ActiveIncident{
-				Name:     name,
-				Severity: severity,
+				Name:       name,
+				Severity:   severity,
+				RunbookURL: runbookURL,
 			})
 		}
 	}

@@ -1791,6 +1791,13 @@ components:
           type: string
           enum: [page, ticket, informational]
           description: Severity bucket per the Rates Engine alerting taxonomy.
+        runbook_url:
+          type: string
+          format: uri
+          description: |
+            Public GitHub URL for the alert's runbook (when the alert
+            rule has the `runbook_url` label set). Empty when no
+            runbook is registered.
       required: [name, severity]
 
     StatusService:
