@@ -73,6 +73,7 @@ import (
 	"github.com/RatesEngine/rates-engine/internal/metadata"
 	"github.com/RatesEngine/rates-engine/internal/notify"
 	"github.com/RatesEngine/rates-engine/internal/obs"
+	"github.com/RatesEngine/rates-engine/internal/platform"
 	"github.com/RatesEngine/rates-engine/internal/platform/postgresstore"
 	"github.com/RatesEngine/rates-engine/internal/ratelimit"
 	"github.com/RatesEngine/rates-engine/internal/storage/redisclient"
@@ -273,14 +274,11 @@ func run(cfgPath string, dryRun bool) error { //nolint:gocognit,funlen,gocyclo /
 		)
 	}
 
-	// Auth — translate the configured auth_mode into the middleware.
-	// auth_mode=none yields a nil middleware (server stack omits it
-	// and downstream code treats absence-of-Subject as anonymous).
-	// auth_mode=apikey wires the Redis-backed validator when Redis
-	// is reachable; if Redis is unavailable the middleware still
-	// runs but the validator returns ErrNotImplemented → 503, which
-	// is the correct fail-loud behaviour for an opted-into mode.
-	authMW := buildAuthMiddleware(cfg.API.AuthMode, rdb, sep10Validator, logger)
+	// authMW is built later (after the dashboard bundle) so the
+	// Postgres backend can borrow the same platform stores. Forward-
+	// declared as nil here so the linter sees the read in v1.Options
+	// before the assignment below.
+	var authMW middleware.Middleware
 
 	// Account store backs POST /v1/account/keys. Only wired when
 	// Redis is reachable — without Redis there's nowhere to persist
@@ -447,10 +445,22 @@ func run(cfgPath string, dryRun bool) error { //nolint:gocognit,funlen,gocyclo /
 	// routes simply aren't mounted. This is the expected pre-launch
 	// shape: dashboard SPA ships standalone-preview with mocked
 	// auth until operator configures Resend + app.ratesengine.net.
-	dashboardBundle, err := buildDashboardBundle(cfg.API.Dashboard, store.DB(), logger)
+	dashboardBundle, err := buildDashboardBundle(cfg.API.Dashboard, store.DB(), rdb, logger)
 	if err != nil {
 		return fmt.Errorf("dashboard: %w", err)
 	}
+
+	// Auth — translate the configured auth_mode + auth_backend into
+	// the middleware. auth_mode=none yields nil (server stack omits
+	// it; downstream code treats absence-of-Subject as anonymous).
+	// Postgres backend opt-in requires the dashboard bundle (which
+	// owns the platform store handles).
+	authMW = buildAuthMiddleware(cfg.API.AuthMode, authValidatorOptions{
+		Backend:           cfg.API.AuthBackend,
+		Rdb:               rdb,
+		PostgresValidator: dashboardBundle.pgValidator,
+		SEP10:             sep10Validator,
+	}, logger)
 
 	apiSrv := v1.New(v1.Options{
 		Logger:           logger.With("component", "api"),
@@ -573,64 +583,81 @@ func run(cfgPath string, dryRun bool) error { //nolint:gocognit,funlen,gocyclo /
 	return nil
 }
 
+// authValidatorOptions carries the wiring buildAuthMiddleware
+// needs beyond the mode string — the backend choice + the
+// already-built Postgres validator (when backend=postgres).
+type authValidatorOptions struct {
+	Backend           string // "redis" (default) or "postgres"
+	Rdb               redis.UniversalClient
+	PostgresValidator *auth.PostgresAPIKeyValidator // non-nil when dashboard wired
+	SEP10             auth.SEP10Validator
+}
+
 // buildAuthMiddleware translates the configured auth_mode into a
 // concrete middleware. Returns nil for mode=none — the server stack
 // omits absent middleware entirely so anonymous traffic doesn't
 // pay a per-request closure cost.
 //
-// auth_mode=apikey requires Redis: when rdb is nil the middleware
-// still wires up but with a Noop validator, so every request 503s
-// — the correct fail-loud behaviour for a deployment that opted in
-// without Redis. auth_mode=sep10 wires the same validator as the
-// /v1/auth/sep10/* endpoints — the validator parameter is what
-// `buildSEP10Validator` returned at startup (real or Noop).
-func buildAuthMiddleware(mode string, rdb redis.UniversalClient, sep10Validator auth.SEP10Validator, logger *slog.Logger) middleware.Middleware {
+// auth_mode=apikey requires a working API-key validator (Redis or
+// Postgres). auth_mode=sep10 wires the same validator as the
+// /v1/auth/sep10/* endpoints. The Postgres backend additionally
+// requires the platform stores; missing them falls back to Noop
+// (every request 503s — the correct fail-loud behaviour for a
+// deployment that opted in to the postgres backend without the
+// platform tables wired).
+func buildAuthMiddleware(mode string, opts authValidatorOptions, logger *slog.Logger) middleware.Middleware {
 	switch mode {
 	case "", "none":
 		return nil
-
-	case "apikey":
-		var validator auth.APIKeyValidator = auth.NoopAPIKeyValidator{}
-		if rdb != nil {
-			validator = auth.NewRedisAPIKeyValidator(rdb)
-			logger.Info("auth: apikey validator wired", "backend", "redis")
-		} else {
-			logger.Error("auth_mode=apikey but Redis is not configured — every request will 503",
-				"reason", "RedisAPIKeyValidator requires a Redis client")
-		}
-		return middleware.Auth(middleware.AuthOptions{
-			Mode:   middleware.AuthModeAPIKey,
-			APIKey: validator,
-		})
-
-	case "apikey_optional":
-		var validator auth.APIKeyValidator = auth.NoopAPIKeyValidator{}
-		if rdb != nil {
-			validator = auth.NewRedisAPIKeyValidator(rdb)
-			logger.Info("auth: apikey_optional validator wired",
-				"backend", "redis",
-				"behaviour", "anonymous floor + per-key upgrade")
-		} else {
-			logger.Warn("auth_mode=apikey_optional but Redis is not configured — every request stays anonymous",
-				"reason", "RedisAPIKeyValidator requires a Redis client; without it, key validation can't happen")
-		}
-		return middleware.Auth(middleware.AuthOptions{
-			Mode:   middleware.AuthModeAPIKeyOptional,
-			APIKey: validator,
-		})
-
 	case "sep10":
 		return middleware.Auth(middleware.AuthOptions{
 			Mode:  middleware.AuthModeSEP10,
-			SEP10: sep10Validator,
+			SEP10: opts.SEP10,
+		})
+	case "apikey":
+		return middleware.Auth(middleware.AuthOptions{
+			Mode:   middleware.AuthModeAPIKey,
+			APIKey: buildAPIKeyValidator(opts, logger, "apikey"),
+		})
+	case "apikey_optional":
+		return middleware.Auth(middleware.AuthOptions{
+			Mode:   middleware.AuthModeAPIKeyOptional,
+			APIKey: buildAPIKeyValidator(opts, logger, "apikey_optional"),
 		})
 	}
-	// Unknown mode reaches here only if config validation regressed.
-	// Returning nil silently demotes to anonymous, which is the wrong
-	// default; log loudly and rely on the validate.go gate to keep
-	// this branch unreachable.
 	logger.Error("unknown auth_mode — server falling through to no-auth", "mode", mode)
 	return nil
+}
+
+// buildAPIKeyValidator picks Redis vs Postgres backend based on
+// auth_backend config. Postgres falls back to Noop (every request
+// 503s) when the dashboard bundle wasn't wired — fail loud rather
+// than silently demote.
+func buildAPIKeyValidator(opts authValidatorOptions, logger *slog.Logger, modeName string) auth.APIKeyValidator {
+	switch opts.Backend {
+	case "postgres":
+		if opts.PostgresValidator == nil {
+			logger.Error("auth_backend=postgres but the dashboard bundle is not wired — every request will 503",
+				"mode", modeName,
+				"reason", "set api.dashboard.base_url to enable the Postgres backend (the bundle owns the platform store handles the validator borrows)")
+			return auth.NoopAPIKeyValidator{}
+		}
+		logger.Info("auth: apikey validator wired",
+			"mode", modeName, "backend", "postgres",
+			"cache", opts.Rdb != nil)
+		return opts.PostgresValidator
+	default:
+		// "redis" or unset — default to the legacy backend.
+		if opts.Rdb == nil {
+			logger.Error("auth_backend=redis but Redis is not configured — every request will 503",
+				"mode", modeName,
+				"reason", "RedisAPIKeyValidator requires a Redis client")
+			return auth.NoopAPIKeyValidator{}
+		}
+		logger.Info("auth: apikey validator wired",
+			"mode", modeName, "backend", "redis")
+		return auth.NewRedisAPIKeyValidator(opts.Rdb)
+	}
 }
 
 // buildSEP10Validator constructs an [auth.SEP10Validator] from the
@@ -649,10 +676,17 @@ func buildAuthMiddleware(mode string, rdb redis.UniversalClient, sep10Validator 
 // the session-resolving middleware that runs in the global
 // request stack so dashboardkeys.HandleList et al can read the
 // session context.
+//
+// The platform stores ride along too so the Postgres-backed auth
+// validator (cfg.API.AuthBackend == "postgres") can borrow the
+// same handles instead of opening a second connection pool.
 type dashboardBundle struct {
-	auth       *dashboardauth.Handlers
-	keys       *dashboardkeys.Handlers
-	middleware middleware.Middleware
+	auth        *dashboardauth.Handlers
+	keys        *dashboardkeys.Handlers
+	middleware  middleware.Middleware
+	keysStore   platform.APIKeyStore
+	accounts    platform.AccountStore
+	pgValidator *auth.PostgresAPIKeyValidator
 }
 
 // buildDashboardBundle wires the customer-dashboard magic-link
@@ -668,7 +702,7 @@ type dashboardBundle struct {
 // look up the plaintext from the API's structured logs to test
 // the callback path. This is the expected dev/local default;
 // production sets the env var.
-func buildDashboardBundle(cfg config.DashboardConfig, db *sql.DB, logger *slog.Logger) (dashboardBundle, error) {
+func buildDashboardBundle(cfg config.DashboardConfig, db *sql.DB, rdb redis.UniversalClient, logger *slog.Logger) (dashboardBundle, error) {
 	if cfg.BaseURL == "" {
 		logger.Warn("dashboard not wired (api.dashboard.base_url is empty); /v1/auth/* + /v1/dashboard/* will 404")
 		return dashboardBundle{}, nil
@@ -715,9 +749,23 @@ func buildDashboardBundle(cfg config.DashboardConfig, db *sql.DB, logger *slog.L
 	if err != nil {
 		return dashboardBundle{}, fmt.Errorf("dashboard auth handlers: %w", err)
 	}
+	// Optional Postgres-backed runtime auth validator. Constructed
+	// here so the dashboard's Revoke handler can call its
+	// InvalidateCachedKey after a successful soft-delete; main.go
+	// also re-uses it when cfg.API.AuthBackend == "postgres".
+	pgValidator, err := auth.NewPostgresAPIKeyValidator(auth.PostgresValidatorOptions{
+		Keys:     keysStore,
+		Accounts: accounts,
+		Cache:    rdb,
+	})
+	if err != nil {
+		return dashboardBundle{}, fmt.Errorf("postgres auth validator: %w", err)
+	}
+
 	keysH, err := dashboardkeys.NewHandlers(dashboardkeys.Config{
-		Keys:   keysStore,
-		Logger: logger.With("component", "dashboard-keys"),
+		Keys:             keysStore,
+		CacheInvalidator: pgValidator,
+		Logger:           logger.With("component", "dashboard-keys"),
 	})
 	if err != nil {
 		return dashboardBundle{}, fmt.Errorf("dashboard keys handlers: %w", err)
@@ -732,9 +780,12 @@ func buildDashboardBundle(cfg config.DashboardConfig, db *sql.DB, logger *slog.L
 	// middleware — the latter needs the same Accounts / Users /
 	// Tokens stores to resolve the cookie on every request.
 	return dashboardBundle{
-		auth:       authH,
-		keys:       keysH,
-		middleware: middleware.Middleware(dashboardauth.Middleware(&authCfg)),
+		auth:        authH,
+		keys:        keysH,
+		middleware:  middleware.Middleware(dashboardauth.Middleware(&authCfg)),
+		keysStore:   keysStore,
+		accounts:    accounts,
+		pgValidator: pgValidator,
 	}, nil
 }
 

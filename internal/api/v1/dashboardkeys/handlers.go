@@ -1,6 +1,7 @@
 package dashboardkeys
 
 import (
+	"context"
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/hex"
@@ -40,9 +41,26 @@ const MaxKeysPerAccount = 25
 type Config struct {
 	// Keys is the Postgres-backed APIKeyStore — the new source
 	// of truth for the dashboard's key management surface.
-	Keys   platform.APIKeyStore
-	Logger *slog.Logger
-	Now    func() time.Time
+	Keys platform.APIKeyStore
+	// CacheInvalidator, when non-nil, is called by HandleRevoke
+	// after a successful Postgres revoke so the runtime auth
+	// validator's Redis cache stops authenticating the just-
+	// revoked key. Production wires
+	// auth.PostgresAPIKeyValidator.InvalidateCachedKey here.
+	// Nil leaves the cache TTL to roll the row off naturally —
+	// workable but means a revoked key keeps authenticating
+	// until the TTL expires.
+	CacheInvalidator CacheInvalidator
+	Logger           *slog.Logger
+	Now              func() time.Time
+}
+
+// CacheInvalidator is the subset of
+// auth.PostgresAPIKeyValidator the dashboard needs for cache
+// eviction on revoke. Defined here as an interface so
+// dashboardkeys doesn't import internal/auth.
+type CacheInvalidator interface {
+	InvalidateCachedKey(ctx context.Context, hexHash string) error
 }
 
 func (c *Config) validate() error {
@@ -310,6 +328,17 @@ func (h *Handlers) HandleRevoke(w http.ResponseWriter, r *http.Request) {
 		h.cfg.Logger.Error("revoke key in postgres", "err", err, "key_id", id)
 		writeProblem(w, http.StatusInternalServerError, "internal error", r.URL.Path)
 		return
+	}
+	// Best-effort cache invalidation. A failure here means the
+	// runtime auth cache keeps authenticating the revoked key
+	// until the TTL rolls it off; we log + 204 anyway so the
+	// dashboard UI updates and the operator notices via the log.
+	if h.cfg.CacheInvalidator != nil && len(existing.KeyHash) > 0 {
+		hexHash := hex.EncodeToString(existing.KeyHash)
+		if err := h.cfg.CacheInvalidator.InvalidateCachedKey(r.Context(), hexHash); err != nil {
+			h.cfg.Logger.Warn("invalidate auth cache after revoke",
+				"err", err, "key_id", id)
+		}
 	}
 	w.WriteHeader(http.StatusNoContent)
 }
