@@ -780,6 +780,10 @@ func (r storeOracleReader) LatestOracleUpdatesForAsset(ctx context.Context, asse
 	return r.s.LatestOracleUpdatesForAsset(ctx, asset, sourceFilter)
 }
 
+func (r storeOracleReader) LatestOracleUpdatesForAssets(ctx context.Context, assets []canonical.Asset, sourceFilter string) ([]canonical.OracleUpdate, error) {
+	return r.s.LatestOracleUpdatesForAssets(ctx, assets, sourceFilter)
+}
+
 // redisConfidenceLooker adapts the shared Redis client to
 // v1.ConfidenceLooker by reading the JSON-encoded confidence.Score
 // the aggregator writes at `confidence:<base>:<quote>:<window>`.

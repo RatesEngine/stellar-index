@@ -441,6 +441,10 @@ func (a oracleAdapter) LatestOracleUpdatesForAsset(ctx context.Context, asset c.
 	return a.s.LatestOracleUpdatesForAsset(ctx, asset, sourceFilter)
 }
 
+func (a oracleAdapter) LatestOracleUpdatesForAssets(ctx context.Context, assets []c.Asset, sourceFilter string) ([]c.OracleUpdate, error) {
+	return a.s.LatestOracleUpdatesForAssets(ctx, assets, sourceFilter)
+}
+
 // ─── Adapters + helpers ───────────────────────────────────────────
 
 // apiHistoryAdapter mirrors cmd/ratesengine-api/main.go's

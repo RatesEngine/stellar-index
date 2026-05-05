@@ -16,6 +16,19 @@ against.
 ## [Unreleased]
 
 ### Fixed
+- `/v1/oracle/latest?asset=native` now returns 4 oracle
+  observations (Band / CoinGecko / RedStone / Reflector-CEX)
+  instead of an empty array. Reflector and friends key
+  observations by the global crypto ticker (`crypto:XLM`,
+  `crypto:USDC`, …) rather than by the per-network canonical
+  asset_id, so the previous lookup against `asset='native'`
+  found nothing while paying a 285 ms hypertable scan to prove
+  it. The handler now expands the user-facing identifier into a
+  small candidate list — `native` → `[native, crypto:XLM]`,
+  classic credit asset → `[<canonical>, crypto:<CODE>]` — and
+  the storage layer's new `LatestOracleUpdatesForAssets` runs a
+  single `WHERE asset = ANY($1)` query against the union. Same
+  `DISTINCT ON (source)` semantics. Verified live.
 - `/v1/price` for fiat-quoted pairs (`native + fiat:USD`) was
   ~215 ms p95 — over the RFP 200 ms target. The `LatestPrice`
   reader's no-rows-from-prices_1m fallback unconditionally
