@@ -5,17 +5,19 @@ import (
 	"encoding/json"
 	"io"
 	"net/http"
+	"sort"
 	"time"
 
 	"github.com/RatesEngine/rates-engine/internal/auth"
 )
 
-// AccountStore is the v1 boundary against [auth.APIKeyStore]. Its
-// only consumer is [Server.handleAccountKeysCreate]; the interface
-// stays narrow so the handler test can substitute a fake without
-// pulling in miniredis.
+// AccountStore is the v1 boundary against [auth.APIKeyStore].
+// Two consumers today: [Server.handleAccountKeysCreate] (POST)
+// and [Server.handleAccountKeysList] (GET). Production wiring is
+// [auth.RedisAPIKeyStore] which provides both methods.
 type AccountStore interface {
 	Create(ctx context.Context, req auth.CreateAPIKeyRequest) (auth.APIKeyRecord, string, error)
+	ListKeysForIdentifier(ctx context.Context, identifier string) ([]auth.APIKeyRecord, error)
 }
 
 // Account is the wire shape for /v1/account/me responses. Mirrors
@@ -208,4 +210,64 @@ func (s *Server) handleAccountKeysCreate(w http.ResponseWriter, r *http.Request)
 		AsOf:  rec.CreatedAt,
 		Flags: Flags{},
 	})
+}
+
+// handleAccountKeysList serves GET /v1/account/keys.
+//
+// Returns every API key whose Identifier matches the authenticated
+// caller's. Mirrors the /v1/account/me wire shape but as a list —
+// each entry is a public-safe APIKeyRecord projection (no plaintext
+// — that's only retrievable at Create time, by design).
+//
+// Anonymous → 401. Store unavailable → 503. Authenticated callers
+// always get a list (possibly empty if all their keys were
+// previously revoked, though revocation isn't shipped today).
+//
+// Sorted by CreatedAt ascending so customers see their original
+// signup key first and rotated keys later.
+func (s *Server) handleAccountKeysList(w http.ResponseWriter, r *http.Request) {
+	subject, ok := auth.SubjectFrom(r.Context())
+	if !ok || subject.Tier == auth.TierAnonymous || subject.Tier == "" {
+		writeProblem(w, r,
+			"https://api.ratesengine.net/errors/unauthorised",
+			"Authentication required", http.StatusUnauthorized,
+			"/v1/account/keys requires an API key or SEP-10 token")
+		return
+	}
+	if s.accounts == nil {
+		writeProblem(w, r,
+			"https://api.ratesengine.net/errors/account-store-unavailable",
+			"Account store not configured", http.StatusServiceUnavailable,
+			"this deployment has no AccountStore wired — typically because Redis is unavailable")
+		return
+	}
+
+	keys, err := s.accounts.ListKeysForIdentifier(r.Context(), subject.Identifier)
+	if err != nil {
+		s.logger.Error("account keys list failed", "err", err,
+			"identifier", subject.Identifier)
+		writeProblem(w, r,
+			"https://api.ratesengine.net/errors/account-list-failed",
+			"Could not list keys", http.StatusInternalServerError,
+			"see X-Request-ID in server logs")
+		return
+	}
+
+	// Sort by CreatedAt ascending — oldest first, so a customer sees
+	// their original signup key before any rotations.
+	sort.Slice(keys, func(i, j int) bool {
+		return keys[i].CreatedAt.Before(keys[j].CreatedAt)
+	})
+
+	out := make([]Account, 0, len(keys))
+	for _, k := range keys {
+		out = append(out, Account{
+			KeyID:           k.KeyID,
+			Label:           k.Label,
+			Tier:            string(k.Tier),
+			RateLimitPerMin: k.RateLimitPerMin,
+			CreatedAt:       k.CreatedAt,
+		})
+	}
+	writeJSON(w, out, Flags{})
 }

@@ -480,6 +480,7 @@ func (s *Server) mountRoutes() {
 	// three return 401 for anonymous callers.
 	s.mux.HandleFunc("GET /v1/account/me", s.handleAccountMe)
 	s.mux.HandleFunc("GET /v1/account/usage", s.handleAccountUsage)
+	s.mux.HandleFunc("GET /v1/account/keys", s.handleAccountKeysList)
 	s.mux.HandleFunc("POST /v1/account/keys", s.handleAccountKeysCreate)
 	s.mux.HandleFunc("POST /v1/signup", s.handleSignup)
 	s.mux.HandleFunc("POST /v1/webhooks/stripe", s.handleStripeWebhook)

@@ -20,11 +20,14 @@ import (
 // the handler test exercises the wire shape without pulling in
 // miniredis.
 type fakeAccountStore struct {
-	gotReq auth.CreateAPIKeyRequest
-	rec    auth.APIKeyRecord
-	plain  string
-	err    error
-	calls  int
+	gotReq    auth.CreateAPIKeyRequest
+	rec       auth.APIKeyRecord
+	plain     string
+	err       error
+	calls     int
+	listed    map[string][]auth.APIKeyRecord // identifier → keys
+	listErr   error
+	listCalls int
 }
 
 func (f *fakeAccountStore) Create(_ context.Context, req auth.CreateAPIKeyRequest) (auth.APIKeyRecord, string, error) {
@@ -34,6 +37,17 @@ func (f *fakeAccountStore) Create(_ context.Context, req auth.CreateAPIKeyReques
 		return auth.APIKeyRecord{}, "", f.err
 	}
 	return f.rec, f.plain, nil
+}
+
+func (f *fakeAccountStore) ListKeysForIdentifier(_ context.Context, identifier string) ([]auth.APIKeyRecord, error) {
+	f.listCalls++
+	if f.listErr != nil {
+		return nil, f.listErr
+	}
+	if f.listed == nil {
+		return nil, nil
+	}
+	return f.listed[identifier], nil
 }
 
 // fakeAuthMiddleware returns a middleware that stamps the supplied
@@ -372,5 +386,121 @@ func TestAccountKeysCreate_StoreFailure(t *testing.T) {
 	n, _ := resp.Body.Read(body)
 	if strings.Contains(string(body[:n]), "rek_") {
 		t.Error("response body should not contain plaintext-shaped strings on failure")
+	}
+}
+
+// TestAccountKeysList_Unauthenticated covers the 401 path.
+func TestAccountKeysList_Unauthenticated(t *testing.T) {
+	ts := newAccountTestServer(t, auth.Subject{}, nil)
+	resp, err := http.Get(ts.URL + "/v1/account/keys")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusUnauthorized {
+		t.Errorf("status = %d, want 401", resp.StatusCode)
+	}
+}
+
+// TestAccountKeysList_NoStore — endpoint returns 503 if Accounts
+// wasn't wired (typical Redis-down scenario).
+func TestAccountKeysList_NoStore(t *testing.T) {
+	subj := auth.Subject{Identifier: "signup-acme", Tier: auth.TierAPIKey}
+	ts := newAccountTestServer(t, subj, nil)
+	resp, err := http.Get(ts.URL + "/v1/account/keys")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusServiceUnavailable {
+		t.Errorf("status = %d, want 503", resp.StatusCode)
+	}
+}
+
+// TestAccountKeysList_HappyPath — authenticated caller gets back
+// every key whose Identifier matches their Subject.
+func TestAccountKeysList_HappyPath(t *testing.T) {
+	subj := auth.Subject{Identifier: "signup-acme", Tier: auth.TierAPIKey}
+	store := &fakeAccountStore{
+		listed: map[string][]auth.APIKeyRecord{
+			"signup-acme": {
+				{KeyID: "kid_first", Identifier: "signup-acme", Tier: auth.TierAPIKey, RateLimitPerMin: 1000, Label: "first", CreatedAt: time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)},
+				{KeyID: "kid_second", Identifier: "signup-acme", Tier: auth.TierAPIKey, RateLimitPerMin: 10000, Label: "rotated", CreatedAt: time.Date(2026, 6, 1, 0, 0, 0, 0, time.UTC)},
+			},
+		},
+	}
+	ts := newAccountTestServer(t, subj, store)
+
+	resp, err := http.Get(ts.URL + "/v1/account/keys")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d, want 200", resp.StatusCode)
+	}
+	var body struct {
+		Data []v1.Account `json:"data"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if len(body.Data) != 2 {
+		t.Fatalf("data len = %d, want 2", len(body.Data))
+	}
+	// Sorted oldest-first.
+	if body.Data[0].KeyID != "kid_first" {
+		t.Errorf("keys[0] = %q, want kid_first (oldest)", body.Data[0].KeyID)
+	}
+	if body.Data[1].KeyID != "kid_second" {
+		t.Errorf("keys[1] = %q, want kid_second (newest)", body.Data[1].KeyID)
+	}
+	if body.Data[1].RateLimitPerMin != 10000 {
+		t.Errorf("rotated key RateLimitPerMin = %d, want 10000", body.Data[1].RateLimitPerMin)
+	}
+	if store.listCalls != 1 {
+		t.Errorf("store called %d times, want 1", store.listCalls)
+	}
+}
+
+// TestAccountKeysList_StoreError — list-side Redis blip surfaces
+// as 500.
+func TestAccountKeysList_StoreError(t *testing.T) {
+	subj := auth.Subject{Identifier: "signup-x", Tier: auth.TierAPIKey}
+	store := &fakeAccountStore{listErr: errors.New("redis blip")}
+	ts := newAccountTestServer(t, subj, store)
+	resp, err := http.Get(ts.URL + "/v1/account/keys")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusInternalServerError {
+		t.Errorf("status = %d, want 500", resp.StatusCode)
+	}
+}
+
+// TestAccountKeysList_Empty — authenticated caller with no keys
+// (somehow — typically can't happen since they have to authenticate
+// to reach the endpoint) gets an empty list.
+func TestAccountKeysList_Empty(t *testing.T) {
+	subj := auth.Subject{Identifier: "signup-empty", Tier: auth.TierAPIKey}
+	store := &fakeAccountStore{listed: map[string][]auth.APIKeyRecord{}}
+	ts := newAccountTestServer(t, subj, store)
+	resp, err := http.Get(ts.URL + "/v1/account/keys")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d, want 200", resp.StatusCode)
+	}
+	var body struct {
+		Data []v1.Account `json:"data"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if len(body.Data) != 0 {
+		t.Errorf("data len = %d, want 0", len(body.Data))
 	}
 }

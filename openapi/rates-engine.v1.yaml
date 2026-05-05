@@ -1162,6 +1162,44 @@ paths:
               schema: { $ref: "#/components/schemas/UsageEnvelope" }
 
   /account/keys:
+    get:
+      tags: [account]
+      summary: List all API keys for the authenticated caller.
+      description: |
+        Returns every key whose Identifier matches the caller's
+        authenticated Subject, sorted oldest-first. Each entry is
+        the public-safe projection — `key_id`, `label`, `tier`,
+        `rate_limit_per_min`, `created_at`. **Plaintext is never
+        returned**; it's only retrievable at POST-time.
+
+        Use this to render an account dashboard ("here are your
+        keys"), verify rotation worked, or confirm a Stripe-paid
+        upgrade lifted the right keys.
+      security:
+        - APIKeyAuth: []
+      responses:
+        "200":
+          description: Account keys (possibly empty list).
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - { $ref: "#/components/schemas/EnvelopeMeta" }
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items: { $ref: "#/components/schemas/Account" }
+        "401":
+          description: Unauthenticated.
+          content:
+            application/problem+json:
+              schema: { $ref: "#/components/schemas/Problem" }
+        "503":
+          description: AccountStore not configured.
+          content:
+            application/problem+json:
+              schema: { $ref: "#/components/schemas/Problem" }
     post:
       tags: [account]
       summary: Create a new API key.
