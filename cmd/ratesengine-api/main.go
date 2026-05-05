@@ -379,6 +379,23 @@ func run(cfgPath string, dryRun bool) error { //nolint:gocognit,funlen,gocyclo /
 
 	priceReader := storePriceReader{s: store}
 
+	// Oracle reader — Redis-cached read-through wrapper around the
+	// store reader. /v1/oracle/latest's DISTINCT ON (source) sort
+	// is expensive (~580 ms p95 on R1's oracle_updates volume); a
+	// 30 s cache stays inside the oracle push interval and absorbs
+	// polling fan-out. Falls back to direct-store reads when Redis
+	// is missing.
+	var oracleReader v1.OracleReader = storeOracleReader{s: store}
+	if rdb != nil {
+		oracleReader = cachedOracleReader{
+			inner: oracleReader,
+			rdb:   rdb,
+			log:   logger.With("component", "oracle-cache"),
+		}
+		logger.Info("oracle reader wrapped with Redis cache",
+			"ttl", cachekeys.OracleLatestTTL.String())
+	}
+
 	// Status backend — points /v1/status at a local Prometheus when
 	// configured. Empty URL leaves the endpoint serving an
 	// in-process surface (region label + uptime only).
@@ -398,7 +415,7 @@ func run(cfgPath string, dryRun bool) error { //nolint:gocognit,funlen,gocyclo /
 		Prices:           priceReader,
 		History:          storeHistoryReader{s: store},
 		Markets:          storeMarketsReader{s: store},
-		Oracle:           storeOracleReader{s: store},
+		Oracle:           oracleReader,
 		Meta:             sep1Cache,
 		Accounts:         accountStore,
 		Signups:          signupTracker,
@@ -782,6 +799,68 @@ func (r storeOracleReader) LatestOracleUpdatesForAsset(ctx context.Context, asse
 
 func (r storeOracleReader) LatestOracleUpdatesForAssets(ctx context.Context, assets []canonical.Asset, sourceFilter string) ([]canonical.OracleUpdate, error) {
 	return r.s.LatestOracleUpdatesForAssets(ctx, assets, sourceFilter)
+}
+
+// cachedOracleReader wraps an inner OracleReader with a Redis
+// read-through cache. The inner DISTINCT ON (source) sort is
+// expensive (~580 ms p95 on R1's oracle_updates volume); the
+// reading only refreshes every 1–5 minutes, so a 30 s Redis
+// entry absorbs the polling fan-out without delaying customer-
+// facing freshness in any meaningful way.
+//
+// Cache miss: hit the inner reader, then SET. Cache hit: deserialise
+// and skip the DB. Errors on either side fall through to the inner
+// reader — never fail open.
+type cachedOracleReader struct {
+	inner v1.OracleReader
+	rdb   redis.UniversalClient
+	log   *slog.Logger
+}
+
+func (r cachedOracleReader) LatestOracleUpdatesForAsset(ctx context.Context, asset canonical.Asset, sourceFilter string) ([]canonical.OracleUpdate, error) {
+	return r.LatestOracleUpdatesForAssets(ctx, []canonical.Asset{asset}, sourceFilter)
+}
+
+func (r cachedOracleReader) LatestOracleUpdatesForAssets(ctx context.Context, assets []canonical.Asset, sourceFilter string) ([]canonical.OracleUpdate, error) {
+	if r.rdb == nil {
+		return r.inner.LatestOracleUpdatesForAssets(ctx, assets, sourceFilter)
+	}
+
+	keys := make([]string, len(assets))
+	for i, a := range assets {
+		keys[i] = a.String()
+	}
+	cacheKey := cachekeys.OracleLatest(keys, sourceFilter)
+
+	raw, err := r.rdb.Get(ctx, cacheKey).Bytes()
+	switch {
+	case err == nil:
+		var out []canonical.OracleUpdate
+		if jerr := json.Unmarshal(raw, &out); jerr == nil {
+			return out, nil
+		} else {
+			// Bad payload — log and re-read; don't fail the request
+			// on a cache deserialisation glitch.
+			r.log.Warn("oracle cache decode failed; falling through to DB",
+				"key", cacheKey, "err", jerr)
+		}
+	case errors.Is(err, redis.Nil):
+		// miss — proceed to DB
+	default:
+		r.log.Warn("oracle cache read failed; falling through to DB",
+			"key", cacheKey, "err", err)
+	}
+
+	updates, err := r.inner.LatestOracleUpdatesForAssets(ctx, assets, sourceFilter)
+	if err != nil {
+		return nil, err
+	}
+	if buf, jerr := json.Marshal(updates); jerr == nil {
+		if serr := r.rdb.Set(ctx, cacheKey, buf, cachekeys.OracleLatestTTL).Err(); serr != nil {
+			r.log.Warn("oracle cache write failed", "key", cacheKey, "err", serr)
+		}
+	}
+	return updates, nil
 }
 
 // redisConfidenceLooker adapts the shared Redis client to

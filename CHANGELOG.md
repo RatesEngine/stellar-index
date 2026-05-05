@@ -15,6 +15,17 @@ against.
 
 ## [Unreleased]
 
+### Performance
+- `/v1/oracle/latest` Redis read-through cache: cold reads stay
+  ~600 ms (DISTINCT ON (source) sort over the oracle_updates
+  hypertable union), warm reads drop to ~0.5 ms — three orders
+  of magnitude. 30 s TTL stays inside Reflector's push interval
+  (Reflector pushes every 1–5 minutes), so customers see no
+  meaningful freshness regression. Cache key sorted +
+  pipe-joined so the same logical query hits the same key
+  regardless of the asset-translation order. Falls through to
+  the inner reader when Redis is missing or errors.
+
 ### Fixed
 - `/v1/oracle/latest?asset=native` now returns 4 oracle
   observations (Band / CoinGecko / RedStone / Reflector-CEX)
