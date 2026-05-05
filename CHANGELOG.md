@@ -16,6 +16,21 @@ against.
 ## [Unreleased]
 
 ### Added
+- **Postgres-backed runtime auth validator with Redis
+  read-through cache (Phase 1, Week 4 cutover).** New
+  `auth.PostgresAPIKeyValidator` makes `platform.api_keys`
+  canonical for runtime auth; Redis becomes a read-through
+  cache (existing `apikey:<hash>` JSON shape preserved so
+  legacy `/v1/signup`-minted keys keep working transparently).
+  Cache hit short-circuits Postgres; cache miss hits Postgres
+  + writes back. Degrades-not-fails on Redis I/O errors. New
+  `[api].auth_backend` config (default `redis`; opt-in
+  `postgres`) toggles the validator. Dashboard's revoke
+  handler now calls `InvalidateCachedKey` so a revoked key
+  stops authenticating immediately rather than waiting for
+  the cache TTL to roll it off. With this, keys minted from
+  the dashboard authenticate against the runtime API as soon
+  as `auth_backend=postgres` is set.
 - **Dashboard key-management endpoints + UI (Phase 1, Week 4
   part 2).** New `internal/api/v1/dashboardkeys` package wires
   three session-gated routes:
