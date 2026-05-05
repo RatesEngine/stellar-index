@@ -1,6 +1,6 @@
 ---
 title: Release process — cutting a Rates Engine binary release
-last_verified: 2026-05-04
+last_verified: 2026-05-05
 status: living doc
 ---
 
@@ -11,7 +11,22 @@ is the runbook the on-rotation release engineer follows; it
 implements the policy ratified in
 [`docs/architecture/semver-policy.md`](../architecture/semver-policy.md).
 
-CalVer tag format: `YYYY.MM.DD.N` (UTC date + same-day counter).
+SemVer tag format: `vX.Y.Z` (root tag, no prefix). Pre-v1, breaking
+changes bump the minor; minor + patch follow the standard rules.
+
+The pipeline is:
+
+```
+git tag vX.Y.Z      → release.yml fires
+                    → cross-compiles linux/amd64 + linux/arm64
+                    → uploads binaries + SHA256SUMS to GitHub Releases
+                    → builds + pushes container images to ghcr.io
+                    → operator runs deploy.yml (or manual scp)
+```
+
+Run the `release.yml` and `deploy.yml` workflows in
+`.github/workflows/`; this doc captures the human-side decisions
+they don't automate.
 
 ## Pre-flight
 
@@ -48,43 +63,50 @@ mid-release wastes a tag and forces a `.N+1` cut.
 
 ## Cut
 
-1. **Decide the tag.** Today's UTC date with the next available
-   `.N`. Example: `2026.07.15.1` for the first release on 2026-07-15;
-   `2026.07.15.2` if `.1` already exists (e.g. a quick rollback fix).
+1. **Decide the tag.** Apply the bump rules from
+   [`semver-policy.md` §"What constitutes a breaking change for
+   binaries"](../architecture/semver-policy.md). Examples:
+   - Adds a new SSE endpoint, no schema change → minor bump (`v0.2.0 → v0.3.0`)
+   - Bug fix only, no operator-visible change → patch bump (`v0.3.0 → v0.3.1`)
+   - Removes a `[external]` config key → minor bump pre-v1.0 (`v0.3.1 → v0.4.0`); major bump post-v1.0
 2. **Promote the CHANGELOG `[Unreleased]` block.** In a one-commit
    PR:
-   - Replace `## [Unreleased]` with `## [YYYY.MM.DD.N] — YYYY-MM-DD`
+   - Replace `## [Unreleased]` with `## [vX.Y.Z] — YYYY-MM-DD`
    - Add a fresh empty `## [Unreleased]` block above it
    - At the bottom of the file, update the version-comparison links
      to point at the new tag
-   - Title the PR `release: YYYY.MM.DD.N`
+   - Title the PR `release: vX.Y.Z`
 3. **Merge the release PR.** Squash-merge once CI is green. **Do
    not** tag before this PR has landed on `main` — the tag must
    point at the commit that contains the promoted CHANGELOG block.
-4. **Create the tag.**
+4. **Create + push the tag.**
    ```sh
    git checkout main && git pull --ff-only origin main
-   git tag YYYY.MM.DD.N
-   git push origin YYYY.MM.DD.N
+   git tag vX.Y.Z
+   git push origin vX.Y.Z
    ```
-5. **Draft the GitHub Release.**
+   The tag push triggers `.github/workflows/release.yml` which:
+   - Cross-compiles every binary in `cmd/` for `linux/amd64` (and
+     `linux/arm64` if the matrix is enabled)
+   - Computes SHA256 sums
+   - Uploads the binaries + `SHA256SUMS` + the CHANGELOG section as
+     release notes to GitHub Releases
+   - Builds container images via `docker/<binary>.Dockerfile` and
+     pushes to `ghcr.io/RatesEngine/<binary>:vX.Y.Z` plus
+     `:latest` (only on non-pre-release tags)
+5. **Verify the release.**
    ```sh
-   cp .github/RELEASE_NOTES_TEMPLATE.md /tmp/release-notes.md
-   # edit /tmp/release-notes.md — fill in every section
-   gh release create YYYY.MM.DD.N \
-     --title "Rates Engine YYYY.MM.DD.N" \
-     --notes-file /tmp/release-notes.md \
-     --verify-tag
+   gh release view vX.Y.Z
+   gh release download vX.Y.Z -p ratesengine-indexer-linux-amd64 -O /tmp/v.bin
+   /tmp/v.bin --version 2>&1 | head -3   # version line should show vX.Y.Z
+   sha256sum /tmp/v.bin                  # cross-check against SHA256SUMS
    ```
-   The release-notes content should be a near-verbatim copy of the
-   CHANGELOG section for this version, expanded with the
-   "Tested against" / "`pkg/*` versions" / "Migration notes" blocks
-   from the template.
-6. **Confirm the artefact set manually.** This repo snapshot does
-   not ship an in-tree `release.yml`, `.goreleaser.yaml`, or per-binary
-   Docker packaging flow. If you publish release artefacts for a tag,
-   do so via the currently approved external packaging process and
-   verify the uploaded binaries before announcing.
+6. **Optional manual edits to the Release page.** The auto-generated
+   notes pull from the CHANGELOG block. Add the "Tested against
+   protocol XX" line manually if the workflow couldn't infer it
+   (it tries `stellar-core --version` from the build runner). The
+   `.github/RELEASE_NOTES_TEMPLATE.md` mirrors the structure if you
+   need to expand sections.
 
 ## Post-flight
 
@@ -123,12 +145,23 @@ rollback is a binary swap on each affected host.
 
 ### Procedure (per host, per binary)
 
-For each affected host (`api-01..03` for API, `indexer-01..03`
-for indexer, `aggregator-01..02` for aggregator) and each
-affected binary:
+Preferred: trigger the deploy workflow with the previous tag:
 
 ```sh
-PREVIOUS=2026.05.01.1                         # the known-good tag
+gh workflow run deploy.yml \
+  -f region=r1 \
+  -f version=v0.2.0 \
+  -f binaries=ratesengine-api,ratesengine-indexer
+```
+
+The workflow does the host-side backup→swap→restart→health-probe
+sequence with automatic rollback on probe failure. Use this path
+unless the deploy workflow itself is the thing that broke.
+
+Fallback (manual, per host, per binary):
+
+```sh
+PREVIOUS=v0.2.0                               # the known-good tag
 BINARY=ratesengine-api                        # or -indexer, -aggregator
 
 ssh root@<host> "

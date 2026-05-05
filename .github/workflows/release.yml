@@ -1,0 +1,295 @@
+name: release
+
+# Triggered by pushing a v*.*.* tag to the repo. Cuts a GitHub
+# Release containing cross-compiled Linux binaries (+ SHA256SUMS)
+# and pushes container images to ghcr.io for each binary.
+#
+# Tag conventions per docs/architecture/semver-policy.md:
+#   v0.1.0          — release; updates :latest container tag
+#   v0.1.0-rc.1     — pre-release; does NOT update :latest
+#   v0.1.0+build.1  — build metadata; treated like the bare version
+#
+# Operator deploy is a separate workflow (deploy.yml) — this one only
+# produces and publishes artifacts.
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Existing tag to (re)build a release for'
+        required: true
+        type: string
+
+# Concurrency: at most one release run per tag in flight. A second
+# push to the same tag (rare; only via force) cancels the first.
+concurrency:
+  group: release-${{ github.ref_name }}
+  cancel-in-progress: false
+
+permissions:
+  contents: write          # gh release create + upload assets
+  packages: write          # ghcr.io push
+  id-token: write          # future: keyless signing via cosign
+
+jobs:
+  # Pin the tag once so every downstream job sees the same value
+  # whether triggered by tag push or manual dispatch.
+  resolve-tag:
+    name: Resolve release tag
+    runs-on: ubuntu-24.04
+    outputs:
+      tag: ${{ steps.out.outputs.tag }}
+      is_prerelease: ${{ steps.out.outputs.is_prerelease }}
+    steps:
+      - id: out
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            tag="${{ inputs.tag }}"
+          else
+            tag="${{ github.ref_name }}"
+          fi
+          # Sanity-check tag shape; abort early on garbage so we don't
+          # publish a v-prefix-typo release.
+          if ! echo "$tag" | grep -Eq '^v[0-9]+\.[0-9]+\.[0-9]+(-[A-Za-z0-9.-]+)?(\+[A-Za-z0-9.-]+)?$'; then
+            echo "::error::Tag '$tag' does not match SemVer vX.Y.Z[-prerelease][+build]"
+            exit 1
+          fi
+          # Pre-release detection: '-' between version core and any
+          # identifier (per semver.org §9). Build metadata ('+...')
+          # alone does NOT make it a pre-release.
+          if echo "$tag" | grep -Eq '^v[0-9]+\.[0-9]+\.[0-9]+-'; then
+            echo "is_prerelease=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "is_prerelease=false" >> "$GITHUB_OUTPUT"
+          fi
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          echo "Resolved tag: $tag"
+
+  # Build every binary for every (os, arch) combo we ship. Matrix
+  # keeps each combo independent — a single arch failure doesn't
+  # block the others; the release job aggregates whatever succeeded.
+  build:
+    name: Build ${{ matrix.binary }} (${{ matrix.goos }}/${{ matrix.goarch }})
+    needs: resolve-tag
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        binary:
+          - ratesengine-indexer
+          - ratesengine-aggregator
+          - ratesengine-api
+          - ratesengine-ops
+          - ratesengine-migrate
+          - ratesengine-sla-probe
+        goos: [linux]
+        goarch: [amd64, arm64]
+    steps:
+      - name: Checkout at tag
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.resolve-tag.outputs.tag }}
+          fetch-depth: 0   # need tag + history for `git describe`
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      # The Makefile already uses git describe + ldflags. Build the
+      # binary via direct go build so we can target a specific
+      # GOOS/GOARCH per matrix entry without forking the Makefile.
+      - name: Build
+        env:
+          CGO_ENABLED: '0'
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
+        run: |
+          set -euo pipefail
+          MODULE=$(go list -m)
+          VERSION="${{ needs.resolve-tag.outputs.tag }}"
+          BUILD_DATE=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+          OUT="${{ matrix.binary }}-${{ matrix.goos }}-${{ matrix.goarch }}"
+          mkdir -p dist
+          go build -trimpath -buildvcs=true \
+            -ldflags="-s -w \
+              -X ${MODULE}/internal/version.Version=${VERSION} \
+              -X ${MODULE}/internal/version.BuildDate=${BUILD_DATE}" \
+            -o "dist/${OUT}" \
+            "./cmd/${{ matrix.binary }}"
+          ls -la "dist/${OUT}"
+          file "dist/${OUT}"
+
+      - name: Upload binary artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.binary }}-${{ matrix.goos }}-${{ matrix.goarch }}
+          path: dist/${{ matrix.binary }}-${{ matrix.goos }}-${{ matrix.goarch }}
+          retention-days: 7
+          if-no-files-found: error
+
+  # Pull all matrix artifacts into one job, compute SHA256SUMS,
+  # extract the CHANGELOG section for the tag, and create the
+  # GitHub Release.
+  release:
+    name: Publish GitHub Release
+    needs: [resolve-tag, build]
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout at tag
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.resolve-tag.outputs.tag }}
+          fetch-depth: 1
+
+      - name: Download all binaries
+        uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+
+      - name: List downloaded artifacts
+        run: ls -la dist/
+
+      - name: Compute SHA256SUMS
+        working-directory: dist
+        run: |
+          sha256sum * > SHA256SUMS
+          cat SHA256SUMS
+
+      # Pull just this version's CHANGELOG block. The release-notes
+      # workflow assumes the CHANGELOG section header matches
+      # `## [vX.Y.Z]` exactly (per docs/operations/release-process.md
+      # step 2), and that the section ends at the next `## [` line.
+      - name: Extract release notes from CHANGELOG
+        id: notes
+        run: |
+          set -euo pipefail
+          TAG="${{ needs.resolve-tag.outputs.tag }}"
+          NOTES=/tmp/release-notes.md
+          awk -v ver="[$TAG]" '
+            $0 ~ "^## \\[" ver "\\]" { capture = 1; print; next }
+            capture && /^## \[/ { exit }
+            capture { print }
+          ' CHANGELOG.md > "$NOTES"
+          if [ ! -s "$NOTES" ]; then
+            echo "::warning::No CHANGELOG section found for ${TAG}; falling back to commit summary"
+            echo "# Rates Engine ${TAG}" > "$NOTES"
+            echo "" >> "$NOTES"
+            echo "_Auto-generated notes — no CHANGELOG entry found for this tag._" >> "$NOTES"
+            echo "" >> "$NOTES"
+            echo "## Commits since previous release" >> "$NOTES"
+            PREV=$(git tag --sort=-v:refname | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | grep -v "^${TAG}$" | head -1 || true)
+            if [ -n "$PREV" ]; then
+              git log --oneline "${PREV}..${TAG}" >> "$NOTES"
+            else
+              git log --oneline -20 >> "$NOTES"
+            fi
+          fi
+          echo "notes_file=$NOTES" >> "$GITHUB_OUTPUT"
+          echo "----- release notes preview -----"
+          head -40 "$NOTES"
+
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          TAG="${{ needs.resolve-tag.outputs.tag }}"
+          PRE=""
+          if [ "${{ needs.resolve-tag.outputs.is_prerelease }}" = "true" ]; then
+            PRE="--prerelease"
+          fi
+          # If a release already exists for this tag (manual re-run),
+          # delete it first so we can re-upload assets cleanly.
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            echo "Release $TAG exists — deleting before re-creating"
+            gh release delete "$TAG" --yes
+          fi
+          gh release create "$TAG" \
+            --title "Rates Engine $TAG" \
+            --notes-file "${{ steps.notes.outputs.notes_file }}" \
+            --verify-tag $PRE \
+            dist/*
+
+  # Build container images per binary. One Dockerfile per binary
+  # under docker/<binary>.Dockerfile (added in the same PR as this
+  # workflow). Uses Docker buildx for multi-arch.
+  containers:
+    name: Build + push container ${{ matrix.binary }}
+    needs: [resolve-tag, build]
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        binary:
+          - ratesengine-indexer
+          - ratesengine-aggregator
+          - ratesengine-api
+          - ratesengine-ops
+          - ratesengine-migrate
+          - ratesengine-sla-probe
+    steps:
+      - name: Checkout at tag
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.resolve-tag.outputs.tag }}
+          fetch-depth: 1
+
+      - name: Set up QEMU (for cross-arch)
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to ghcr.io
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # Owner segment of ghcr.io must be lowercase. github.repository_owner
+      # is already lowercase for org-owned repos but defensive lc'ing
+      # avoids surprises if a fork is in mixed case.
+      - name: Compute image name
+        id: img
+        run: |
+          OWNER=$(echo '${{ github.repository_owner }}' | tr '[:upper:]' '[:lower:]')
+          echo "name=ghcr.io/${OWNER}/${{ matrix.binary }}" >> "$GITHUB_OUTPUT"
+
+      # Tags: always tag with the explicit version. Also tag :latest
+      # ONLY when this is not a pre-release (consumers pinning to
+      # :latest expect stable releases).
+      - name: Compute image tags
+        id: tags
+        run: |
+          TAGS="${{ steps.img.outputs.name }}:${{ needs.resolve-tag.outputs.tag }}"
+          if [ "${{ needs.resolve-tag.outputs.is_prerelease }}" = "false" ]; then
+            TAGS="${TAGS},${{ steps.img.outputs.name }}:latest"
+          fi
+          echo "tags=${TAGS}" >> "$GITHUB_OUTPUT"
+          echo "Image tags: ${TAGS}"
+
+      - name: Build + push image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: docker/${{ matrix.binary }}.Dockerfile
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.tags.outputs.tags }}
+          build-args: |
+            VERSION=${{ needs.resolve-tag.outputs.tag }}
+          labels: |
+            org.opencontainers.image.source=https://github.com/${{ github.repository }}
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.version=${{ needs.resolve-tag.outputs.tag }}
+            org.opencontainers.image.title=${{ matrix.binary }}
+            org.opencontainers.image.licenses=Apache-2.0
+          cache-from: type=gha,scope=${{ matrix.binary }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.binary }}

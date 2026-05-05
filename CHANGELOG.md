@@ -15,6 +15,19 @@ against.
 
 ## [Unreleased]
 
+### Changed
+
+- **Versioning policy switched from CalVer to SemVer for binary
+  releases.** Binaries now tag at `vX.Y.Z` instead of `YYYY.MM.DD.N`.
+  Pre-v1.0 follows the same convention as `pkg/*`: breaking changes
+  bump the minor version (`v0.1 → v0.2`), not the major. The
+  release runbook, release-notes template, and CHANGELOG release
+  section header all updated. The pre-launch placeholder
+  `[2026.06.30.1]` is now `[v0.1.0]`. See
+  `docs/architecture/semver-policy.md` and
+  `docs/operations/release-process.md` for the bump rules and the
+  end-to-end runbook.
+
 ### Fixed
 
 - **`/v1/assets` listing latency cut from ~4.9 minutes to under 1
@@ -6256,7 +6269,9 @@ under the new version header on tag push.
 
 Example of a future release entry:
 
-## [2026.06.30.1] — 2026-06-30 — Initial public release
+## [v0.1.0] — 2026-06-30 — Initial public release
+
+**Operator action required: yes** (first install).
 
 ### Added
 - Full SDEX / Soroswap / Aquarius / Phoenix / Comet / Blend indexing.
@@ -6267,4 +6282,7 @@ Example of a future release entry:
 ### Tested against
 - Stellar protocol 25.x.
 - stellar-core v26.0.1, stellar-rpc v26.0.0.
+
+### `pkg/*` versions included
+- `pkg/client v0.1.0`
 -->
