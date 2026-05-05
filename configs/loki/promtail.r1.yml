@@ -1,0 +1,37 @@
+# Rates Engine — Promtail config for r1 single-host.
+# Ships systemd-journald entries for ratesengine-* + galexie +
+# caddy + minio + postgres into local Loki on :3100.
+#
+# Promtail user is root (default systemd unit) so it can read
+# /run/log/journal/*. If we ever drop privs, switch to the
+# systemd-journal group.
+
+server:
+  http_listen_port: 9080
+  grpc_listen_port: 0
+
+positions:
+  filename: /var/lib/promtail/positions.yaml
+
+clients:
+  - url: http://localhost:3100/loki/api/v1/push
+
+scrape_configs:
+  # Journald for the application services + storage plumbing.
+  # Each unit gets its own job label so Grafana can filter
+  # "show me ratesengine-aggregator only" without parsing.
+  - job_name: journal
+    journal:
+      max_age: 12h
+      labels:
+        host: r1
+    relabel_configs:
+      - source_labels: ["__journal__systemd_unit"]
+        target_label: unit
+      - source_labels: ["__journal__systemd_unit"]
+        regex: ".+"
+        action: keep
+      - source_labels: ["__journal__systemd_unit"]
+        target_label: job
+        regex: "(.*)\\.service"
+        replacement: "$1"
