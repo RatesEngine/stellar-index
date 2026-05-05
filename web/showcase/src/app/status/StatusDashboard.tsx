@@ -529,13 +529,25 @@ function SubsystemCard({
 function SLAMetricsPanel({ env }: { env: StatusEnvelope }) {
   const { latency, freshness, incidents } = env.data;
 
-  // RFP commitment: p95 ≤ 200 ms. Show how much margin we have.
+  // Freighter RFP § Performance SLAs:
+  //   - p95 ≤ 200 ms (page on > 500)
+  //   - p99 ≤ 500 ms (page on > 2000)
+  // Match the per-window thresholds in deploy/monitoring/rules/api.yml.
   const p95Health: Health =
     latency.p95_ms === 0
       ? 'unknown'
       : latency.p95_ms <= 200
         ? 'up'
         : latency.p95_ms <= 500
+          ? 'degraded'
+          : 'down';
+
+  const p99Health: Health =
+    latency.p99_ms === 0
+      ? 'unknown'
+      : latency.p99_ms <= 500
+        ? 'up'
+        : latency.p99_ms <= 2000
           ? 'degraded'
           : 'down';
 
@@ -563,14 +575,14 @@ function SLAMetricsPanel({ env }: { env: StatusEnvelope }) {
         <MetricCard
           label="API p95 latency"
           value={`${latency.p95_ms.toFixed(1)} ms`}
-          sublabel={`RFP target ≤ 200 ms`}
+          sublabel="RFP target ≤ 200 ms"
           health={p95Health}
         />
         <MetricCard
           label="API p99 latency"
           value={`${latency.p99_ms.toFixed(1)} ms`}
-          sublabel="last 5 min"
-          health="up"
+          sublabel="RFP target ≤ 500 ms"
+          health={p99Health}
         />
         <MetricCard
           label="Active ingest sources"
