@@ -81,6 +81,26 @@ type DashboardData = {
   sourcesErr: string | null;
 };
 
+// /v1/status — comprehensive system-health rollup. Backed by local
+// Prometheus when configured; the showcase reads it for the SLA
+// panel. Wire shape mirrors internal/api/v1/status.go.
+type StatusEnvelope = {
+  data: {
+    overall: 'ok' | 'degraded' | 'down';
+    region: { name: string; deployment: string };
+    services: { name: string; status: 'ok' | 'down' | 'unknown'; last_seen?: string }[];
+    latency: { p50_ms: number; p95_ms: number; p99_ms: number; window_secs: number };
+    freshness: { last_aggregator_tick?: string; active_sources: number; total_sources: number };
+    incidents: {
+      active_count: number;
+      page_count: number;
+      ticket_count: number;
+      informational_count: number;
+    };
+  };
+  flags: { stale: boolean };
+};
+
 async function fetchAll(): Promise<DashboardData> {
   const fetchedAt = new Date();
 
@@ -219,17 +239,22 @@ function HealthChip({ health, large = false }: { health: Health; large?: boolean
 
 export function StatusDashboard() {
   const [data, setData] = useState<DashboardData | null>(null);
+  const [statusEnv, setStatusEnv] = useState<StatusEnvelope | null>(null);
 
   useEffect(() => {
     let cancelled = false;
-    void (async () => {
+    const tick = async () => {
       const d = await fetchAll();
       if (!cancelled) setData(d);
-    })();
-    const timer = setInterval(async () => {
-      const d = await fetchAll();
-      if (!cancelled) setData(d);
-    }, REFRESH_INTERVAL_MS);
+      try {
+        const s = await apiGet<StatusEnvelope>('/v1/status');
+        if (!cancelled) setStatusEnv(s);
+      } catch {
+        if (!cancelled) setStatusEnv(null);
+      }
+    };
+    void tick();
+    const timer = setInterval(tick, REFRESH_INTERVAL_MS);
     return () => {
       cancelled = true;
       clearInterval(timer);
@@ -295,6 +320,12 @@ export function StatusDashboard() {
           />
         </div>
       </section>
+
+      {/* SLA + live metrics from /v1/status. Hidden when the
+          backend isn't wired (returns flags.stale=true). */}
+      {statusEnv && !statusEnv.flags.stale && (
+        <SLAMetricsPanel env={statusEnv} />
+      )}
 
       {/* Subsystem panels */}
       <section>
@@ -491,6 +522,103 @@ function SubsystemCard({
           {extra}
         </p>
       )}
+    </div>
+  );
+}
+
+function SLAMetricsPanel({ env }: { env: StatusEnvelope }) {
+  const { latency, freshness, incidents } = env.data;
+
+  // RFP commitment: p95 ≤ 200 ms. Show how much margin we have.
+  const p95Health: Health =
+    latency.p95_ms === 0
+      ? 'unknown'
+      : latency.p95_ms <= 200
+        ? 'up'
+        : latency.p95_ms <= 500
+          ? 'degraded'
+          : 'down';
+
+  const sourcesHealth: Health =
+    freshness.total_sources === 0
+      ? 'unknown'
+      : freshness.active_sources >= freshness.total_sources
+        ? 'up'
+        : freshness.active_sources >= freshness.total_sources - 2
+          ? 'degraded'
+          : 'down';
+
+  return (
+    <section>
+      <h2 className="mb-3 text-sm font-semibold uppercase tracking-wider text-slate-500">
+        SLA &amp; live metrics
+      </h2>
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        <MetricCard
+          label="API p50 latency"
+          value={`${latency.p50_ms.toFixed(1)} ms`}
+          sublabel="last 5 min"
+          health="up"
+        />
+        <MetricCard
+          label="API p95 latency"
+          value={`${latency.p95_ms.toFixed(1)} ms`}
+          sublabel={`RFP target ≤ 200 ms`}
+          health={p95Health}
+        />
+        <MetricCard
+          label="API p99 latency"
+          value={`${latency.p99_ms.toFixed(1)} ms`}
+          sublabel="last 5 min"
+          health="up"
+        />
+        <MetricCard
+          label="Active ingest sources"
+          value={`${freshness.active_sources} / ${freshness.total_sources}`}
+          sublabel="emitting events in last 10 min"
+          health={sourcesHealth}
+        />
+      </div>
+
+      {incidents.active_count > 0 && (
+        <div className="mt-3 rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900 dark:border-amber-900/40 dark:bg-amber-950/40 dark:text-amber-200">
+          <strong>{incidents.active_count} active incident{incidents.active_count > 1 ? 's' : ''}</strong>
+          {' — '}
+          {incidents.page_count > 0 && `${incidents.page_count} page-severity, `}
+          {incidents.ticket_count > 0 && `${incidents.ticket_count} ticket-severity, `}
+          {incidents.informational_count > 0 && `${incidents.informational_count} informational, `}
+          {' from local Alertmanager.'}
+        </div>
+      )}
+    </section>
+  );
+}
+
+function MetricCard({
+  label,
+  value,
+  sublabel,
+  health,
+}: {
+  label: string;
+  value: string;
+  sublabel: string;
+  health: Health;
+}) {
+  return (
+    <div className="rounded-lg border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900">
+      <div className="mb-2 flex items-center justify-between gap-2">
+        <span className="text-xs uppercase tracking-wider text-slate-500">
+          {label}
+        </span>
+        <HealthChip health={health} />
+      </div>
+      <div className="font-mono text-2xl font-semibold text-slate-900 dark:text-slate-100">
+        {value}
+      </div>
+      <div className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+        {sublabel}
+      </div>
     </div>
   );
 }

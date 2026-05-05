@@ -16,6 +16,13 @@ against.
 ## [Unreleased]
 
 ### Added
+- Showcase /status page renders the new `/v1/status` rollup as an
+  "SLA & live metrics" panel: p50 / p95 / p99 latency cards (with
+  the RFP-mandated p95 ≤ 200 ms target shown as a sublabel),
+  active-source count, and an active-incident banner when
+  Alertmanager has alerts firing. The panel hides itself when the
+  backend isn't wired (`flags.stale=true`), so the page degrades
+  cleanly on deployments without Prometheus.
 - `GET /v1/status` — comprehensive system-health rollup powering the
   showcase status page. Returns per-binary heartbeats (api / indexer
   / aggregator), API histogram-derived p50/p95/p99 over the last
