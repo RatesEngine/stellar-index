@@ -16,6 +16,17 @@ against.
 ## [Unreleased]
 
 ### Fixed
+- `/v1/price` for fiat-quoted pairs (`native + fiat:USD`) was
+  ~215 ms p95 — over the RFP 200 ms target. The `LatestPrice`
+  reader's no-rows-from-prices_1m fallback unconditionally
+  queried `LatestTradesForPair`, which scanned hundreds of trades
+  hypertable chunks looking for an `(asset, fiat:USD)` pair that
+  by definition can never exist (fiat-quoted prices are always
+  synthesised by the aggregator's triangulation worker, never
+  observed on-chain). Short-circuit the fallback when
+  `quote.Type == AssetFiat || AssetCrypto` so the handler falls
+  straight to `tryRedisVWAPFallback`. Verified live on R1:
+  `/v1/price?asset=native` went from 215 ms to ~0.5–1.5 ms.
 - SLO latency recording rules in `deploy/monitoring/rules/slo.yml`
   (and the R1 overlay in `configs/prometheus/rules.r1/`) now scope
   to the RFP-mandated pricing surface — `/v1/price`, `/v1/price/batch`,

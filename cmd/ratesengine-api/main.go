@@ -960,6 +960,18 @@ func (r storePriceReader) LatestPrice(ctx context.Context, asset, quote canonica
 		return v1.PriceSnapshot{}, nil, false, err
 	}
 
+	// Fast-path the synthetic-fiat case: no on-chain trades ever
+	// exist for fiat: / crypto: quotes (those pairs are synthesised
+	// by the aggregator's triangulation worker from the underlying
+	// stablecoin pairs). Skipping LatestTradesForPair here saves a
+	// full hypertable chunk-walk against an index condition that's
+	// known to return zero rows; the handler's tryRedisVWAPFallback
+	// picks up the synthesised value via Redis on the back of
+	// ErrPriceNotFound.
+	if quote.Type == canonical.AssetFiat || quote.Type == canonical.AssetCrypto {
+		return v1.PriceSnapshot{}, nil, false, v1.ErrPriceNotFound
+	}
+
 	// Fallback: latest-trade. Hit when no closed 1m bucket exists for
 	// the pair — typical for a brand-new listing that just got its
 	// first trade in the in-progress bucket. Marks the response
