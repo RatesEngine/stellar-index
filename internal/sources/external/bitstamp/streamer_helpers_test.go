@@ -47,21 +47,22 @@ func TestSymbolsFor_unknownPairRejected(t *testing.T) {
 	}
 	s := NewStreamer(pm)
 
-	ada, err := canonical.NewCryptoAsset("ADA")
+	// MATIC: in allow-list, intentionally not in DefaultPairs.
+	matic, err := canonical.NewCryptoAsset("MATIC")
 	if err != nil {
-		t.Fatalf("NewCryptoAsset(ADA): %v", err)
+		t.Fatalf("NewCryptoAsset(MATIC): %v", err)
 	}
 	usd, err := canonical.NewFiatAsset("USD")
 	if err != nil {
 		t.Fatalf("NewFiatAsset(USD): %v", err)
 	}
-	missing, err := canonical.NewPair(ada, usd)
+	missing, err := canonical.NewPair(matic, usd)
 	if err != nil {
 		t.Fatalf("NewPair: %v", err)
 	}
 
 	if _, err := s.symbolsFor([]canonical.Pair{missing}); err == nil {
-		t.Fatal("expected error for ADA/USD (not in DefaultPairs), got nil")
+		t.Fatal("expected error for MATIC/USD (not in DefaultPairs), got nil")
 	}
 }
 

@@ -607,14 +607,18 @@ func emitDiscoverySkipMetricDelta(prev, current uint64) uint64 {
 }
 
 // defaultAggregatorPairs is the pair set aggregators (CoinGecko /
-// CMC / CryptoCompare) query for cross-check. Intentionally broad
-// — covers XLM against the common fiats + BTC/USD + ETH/USD as
-// reference anchors. Operators can narrow via a future per-poller
-// Symbols override; for v1 this fixed set matches what the
-// divergence detector will want to compare against the aggregator's
-// output.
+// CMC / CryptoCompare) query for cross-check. Mirrors the cross-
+// venue VWAP coverage so the divergence detector has an apples-to-
+// apples reference for every pair we publish a price for. Operators
+// can narrow via a future per-poller Symbols override.
 func defaultAggregatorPairs() []canonical.Pair {
-	cryptos := []string{"XLM", "BTC", "ETH"}
+	// Anchors + top-cap globals. XLM first per its product-special
+	// status; the rest in alphabetical order to keep diffs minimal.
+	cryptos := []string{
+		"XLM", "BTC", "ETH",
+		"ADA", "ATOM", "AVAX", "BCH", "BNB", "DASH", "DOGE", "DOT",
+		"LINK", "LTC", "NEAR", "SHIB", "SOL", "TON", "TRX", "UNI", "XRP",
+	}
 	fiats := []string{"USD", "EUR", "GBP"}
 	out := make([]canonical.Pair, 0, len(cryptos)*len(fiats))
 	for _, c := range cryptos {

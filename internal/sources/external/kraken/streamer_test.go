@@ -149,10 +149,11 @@ func TestStreamer_RejectsEmptyPairs(t *testing.T) {
 
 func TestStreamer_RejectsUnconfiguredPair(t *testing.T) {
 	s := NewStreamer(mustPairMap(t))
-	// LINK/USD isn't in DefaultPairs.
-	link, _ := canonical.NewCryptoAsset("LINK")
+	// MATIC/USD isn't in DefaultPairs (see allow-list comment in
+	// binance/start_errors_test.go for the placeholder rationale).
+	matic, _ := canonical.NewCryptoAsset("MATIC")
 	usd, _ := canonical.NewFiatAsset("USD")
-	p, _ := canonical.NewPair(link, usd)
+	p, _ := canonical.NewPair(matic, usd)
 	_, err := s.Start(context.Background(), []canonical.Pair{p})
 	if err == nil {
 		t.Error("expected error for pair not in PairMap")

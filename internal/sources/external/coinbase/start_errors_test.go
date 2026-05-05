@@ -30,18 +30,19 @@ func TestStreamer_Start_unknownPairRejected(t *testing.T) {
 	}
 	s := NewStreamer(pm)
 
-	ada, _ := canonical.NewCryptoAsset("ADA")
+	// MATIC: in allow-list, intentionally not in DefaultPairs.
+	matic, _ := canonical.NewCryptoAsset("MATIC")
 	usd, _ := canonical.NewFiatAsset("USD")
-	missing, err := canonical.NewPair(ada, usd)
+	missing, err := canonical.NewPair(matic, usd)
 	if err != nil {
 		t.Fatalf("NewPair: %v", err)
 	}
 
 	_, err = s.Start(context.Background(), []canonical.Pair{missing})
 	if err == nil {
-		t.Fatal("expected error for unknown ADA/USD pair, got nil")
+		t.Fatal("expected error for unknown MATIC/USD pair, got nil")
 	}
-	if !strings.Contains(err.Error(), "ADA") {
+	if !strings.Contains(err.Error(), "MATIC") {
 		t.Errorf("error %q should cite the offending asset", err.Error())
 	}
 }

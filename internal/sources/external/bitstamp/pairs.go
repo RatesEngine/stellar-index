@@ -2,6 +2,7 @@ package bitstamp
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/RatesEngine/rates-engine/internal/canonical"
 )
@@ -21,6 +22,10 @@ import (
 //   - XLM/BTC — deep European-retail BTC-pair XLM liquidity.
 //   - BTC/USD, ETH/USD — reference anchors.
 //   - BTC/EUR — European fiat BTC depth, used for triangulation.
+//   - {ADA,ATOM,AVAX,BCH,BNB,DASH,DOGE,DOT,LINK,LTC,NEAR,SHIB,SOL,
+//     TON,TRX,UNI,XRP}/USD — top-cap globals against USD for
+//     cross-venue VWAP coverage. All verified live via /api/v2/ticker
+//     on 2026-05-05.
 func DefaultPairs() (map[string]canonical.Pair, error) {
 	xlm, err := canonical.NewCryptoAsset("XLM")
 	if err != nil {
@@ -44,6 +49,19 @@ func DefaultPairs() (map[string]canonical.Pair, error) {
 		fiats[code] = a
 	}
 
+	majors := []string{
+		"ADA", "ATOM", "AVAX", "BCH", "BNB", "DASH", "DOGE", "DOT",
+		"LINK", "LTC", "NEAR", "SHIB", "SOL", "TON", "TRX", "UNI", "XRP",
+	}
+	majorAssets := make(map[string]canonical.Asset, len(majors))
+	for _, code := range majors {
+		a, err := canonical.NewCryptoAsset(code)
+		if err != nil {
+			return nil, fmt.Errorf("%s: %w", code, err)
+		}
+		majorAssets[code] = a
+	}
+
 	spec := []struct {
 		symbol string
 		base   canonical.Asset
@@ -56,6 +74,15 @@ func DefaultPairs() (map[string]canonical.Pair, error) {
 		{"btcusd", btc, fiats["USD"]},
 		{"btceur", btc, fiats["EUR"]},
 		{"ethusd", eth, fiats["USD"]},
+	}
+	for _, code := range majors {
+		// Bitstamp uses lowercase concatenated symbols.
+		sym := strings.ToLower(code) + "usd"
+		spec = append(spec, struct {
+			symbol string
+			base   canonical.Asset
+			quote  canonical.Asset
+		}{sym, majorAssets[code], fiats["USD"]})
 	}
 
 	out := make(map[string]canonical.Pair, len(spec))

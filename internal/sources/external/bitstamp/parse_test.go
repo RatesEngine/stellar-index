@@ -113,11 +113,13 @@ func TestParseFrame_UnknownEventIgnored(t *testing.T) {
 }
 
 func TestParseFrame_TradeOnUnknownChannel(t *testing.T) {
-	// A trade arrived on a channel not in our PairMap — e.g. ADA
-	// which we haven't configured. Parser surfaces ErrUnknownChannel.
+	// A trade arrived on a channel not in our PairMap — MATIC is in
+	// the ADR-0014 allow-list but intentionally not in DefaultPairs
+	// (skipped pending MATIC→POL migration), making it the stable
+	// "known unknown" placeholder. Parser surfaces ErrUnknownChannel.
 	raw := []byte(`{
       "event":"trade",
-      "channel":"live_trades_adausd",
+      "channel":"live_trades_maticusd",
       "data":{"id":1,"amount_str":"1","price_str":"1","microtimestamp":"1745000000000000","type":0}
     }`)
 	_, _, err := parseFrame(raw, mustPairs(t))

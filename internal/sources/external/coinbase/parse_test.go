@@ -99,11 +99,13 @@ func TestParseFrame_ErrorFrameSurfacesRejection(t *testing.T) {
 }
 
 func TestParseFrame_UnknownProduct(t *testing.T) {
-	// A match on a product not in PairMap — e.g. SOL-USD if we
-	// haven't enabled it. Surfaces ErrUnknownProduct.
+	// A match on a product not in PairMap — MATIC-USD is in the
+	// ADR-0014 allow-list but intentionally not in DefaultPairs
+	// (skipped pending MATIC→POL migration), the stable "known
+	// unknown" placeholder. Surfaces ErrUnknownProduct.
 	raw := []byte(`{
-      "type":"match","trade_id":1,"side":"buy","size":"1","price":"150",
-      "product_id":"SOL-USD","sequence":1,"time":"2026-04-24T00:00:00Z"
+      "type":"match","trade_id":1,"side":"buy","size":"1","price":"0.5",
+      "product_id":"MATIC-USD","sequence":1,"time":"2026-04-24T00:00:00Z"
     }`)
 	_, _, err := parseFrame(raw, mustPairs(t))
 	if !errors.Is(err, ErrUnknownProduct) {

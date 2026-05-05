@@ -132,13 +132,15 @@ func TestParseFrame_SubscribeAckIgnored(t *testing.T) {
 }
 
 func TestParseFrame_UnknownSymbolSkipped(t *testing.T) {
-	// A trade on DOT/USD (not in default pair map) mixed with one
-	// on XLM/USD: unknown entry is dropped, known one lands.
+	// A trade on MATIC/USD (in the ADR-0014 allow-list, but not in
+	// DefaultPairs — see binance/start_errors_test.go for rationale)
+	// mixed with one on XLM/USD: unknown entry is dropped, known
+	// one lands.
 	raw := []byte(`{
       "channel": "trade",
       "type": "update",
       "data": [
-        {"symbol":"DOT/USD","side":"buy","qty":5,"price":7.5,"ord_type":"market","trade_id":100,"timestamp":"2026-04-24T00:00:00Z"},
+        {"symbol":"MATIC/USD","side":"buy","qty":5,"price":0.5,"ord_type":"market","trade_id":100,"timestamp":"2026-04-24T00:00:00Z"},
         {"symbol":"XLM/USD","side":"buy","qty":10,"price":0.175,"ord_type":"market","trade_id":101,"timestamp":"2026-04-24T00:00:01Z"}
       ]
     }`)

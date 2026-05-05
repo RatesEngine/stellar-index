@@ -202,6 +202,26 @@ against.
   recording DASH-denominated quotes from any future source — no
   connector or aggregator change in this PR.
 
+- **Top-cap globals added to every CEX connector's DefaultPairs.**
+  Coverage expansion against USD/USDT for ADA, ATOM, AVAX, BCH,
+  BNB, DASH, DOGE, DOT, LINK, LTC, NEAR, SHIB, SOL, TON, TRX,
+  UNI, XRP — the major non-Stellar cryptos every portfolio /
+  CoinGecko-class consumer expects. Per-venue listing reality
+  (verified live 2026-05-05 against each venue's public symbol
+  endpoint):
+  - Binance: 17 pairs added (all USDT-quoted)
+  - Kraken: 17 pairs added (all USD-quoted)
+  - Bitstamp: 17 pairs added (all USD-quoted)
+  - Coinbase: 15 pairs added (all USD-quoted; DASH and TRX are
+    not listed there — Kraken/Bitstamp/Binance triple covers
+    cross-venue VWAP for those two)
+  Aggregator pollers (CoinGecko / CoinMarketCap / CryptoCompare)
+  now poll the full crypto × {USD,EUR,GBP} matrix so divergence
+  detection mirrors the cross-venue VWAP coverage. MATIC was
+  intentionally skipped pending POL-migration cleanup. Test
+  files swapped from "ADA-as-known-unknown" to MATIC-as-known-
+  unknown to keep negative-path coverage.
+
 - **`ratesengine-sla-probe -api-key` flag + `RATESENGINE_PROBE_API_KEY`
   env-var.** Without authentication the probe hits the anonymous-tier
   rate limit (60 req/min) and reads availability < 0.1 % on every

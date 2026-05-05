@@ -8,8 +8,9 @@ import (
 
 // DefaultPairs returns the built-in pair map for Binance — the
 // common set we stream when the operator enables Binance in config
-// without specifying a pair list. Covers the largest XLM markets +
-// the two reference crypto pairs every deployment wants.
+// without specifying a pair list. Covers the largest XLM markets,
+// the two reference crypto anchors, and the top-cap globals that
+// every CoinGecko-class consumer expects.
 //
 // Returned map is Binance-symbol (uppercase, no separator) →
 // canonical.Pair. Passed into NewStreamer. Extending the set is a
@@ -25,6 +26,10 @@ import (
 //     graph.
 //   - ETHUSDT — second crypto anchor; needed for any ETH-quoted Soroban
 //     DEX pair.
+//   - {ADA,ATOM,AVAX,BCH,BNB,DASH,DOGE,DOT,LINK,LTC,NEAR,SHIB,SOL,
+//     TON,TRX,UNI,XRP}USDT — top-cap globals for cross-venue VWAP
+//     coverage. All verified TRADING on Binance via /exchangeInfo
+//     2026-05-05.
 func DefaultPairs() (map[string]canonical.Pair, error) {
 	xlm, err := canonical.NewCryptoAsset("XLM")
 	if err != nil {
@@ -43,6 +48,19 @@ func DefaultPairs() (map[string]canonical.Pair, error) {
 		return nil, fmt.Errorf("USDT: %w", err)
 	}
 
+	majors := []string{
+		"ADA", "ATOM", "AVAX", "BCH", "BNB", "DASH", "DOGE", "DOT",
+		"LINK", "LTC", "NEAR", "SHIB", "SOL", "TON", "TRX", "UNI", "XRP",
+	}
+	majorAssets := make(map[string]canonical.Asset, len(majors))
+	for _, code := range majors {
+		a, err := canonical.NewCryptoAsset(code)
+		if err != nil {
+			return nil, fmt.Errorf("%s: %w", code, err)
+		}
+		majorAssets[code] = a
+	}
+
 	pairs := []struct {
 		symbol string
 		base   canonical.Asset
@@ -52,6 +70,13 @@ func DefaultPairs() (map[string]canonical.Pair, error) {
 		{"XLMBTC", xlm, btc},
 		{"BTCUSDT", btc, usdt},
 		{"ETHUSDT", eth, usdt},
+	}
+	for _, code := range majors {
+		pairs = append(pairs, struct {
+			symbol string
+			base   canonical.Asset
+			quote  canonical.Asset
+		}{code + "USDT", majorAssets[code], usdt})
 	}
 
 	out := make(map[string]canonical.Pair, len(pairs))

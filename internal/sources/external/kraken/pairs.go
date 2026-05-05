@@ -7,9 +7,10 @@ import (
 )
 
 // DefaultPairs returns the built-in Kraken symbol → canonical.Pair
-// map — XLM across six fiat currencies plus two crypto anchors.
-// Kraken is the widest XLM-fiat source we integrate; the default
-// set captures that value without per-operator tuning.
+// map — XLM across six fiat currencies, two crypto anchors, plus
+// the top-cap globals against USD. Kraken is the widest XLM-fiat
+// source we integrate AND lists every major we want for cross-
+// venue VWAP coverage.
 //
 // XLM is represented as crypto:XLM so it aligns with Binance's
 // XLMUSDT and with Reflector CEX outputs. Fiats use the fiat:
@@ -17,6 +18,10 @@ import (
 //
 // Kraken wire-format symbols use "/" separators — "XLM/USD", not
 // "XLMUSD".
+//
+// Top-cap globals all verified live via /0/public/Ticker on
+// 2026-05-05 (full set: ADA, ATOM, AVAX, BCH, BNB, DASH, DOGE,
+// DOT, LINK, LTC, NEAR, SHIB, SOL, TON, TRX, UNI, XRP).
 func DefaultPairs() (map[string]canonical.Pair, error) {
 	xlm, err := canonical.NewCryptoAsset("XLM")
 	if err != nil {
@@ -43,6 +48,19 @@ func DefaultPairs() (map[string]canonical.Pair, error) {
 		fiatAssets[code] = a
 	}
 
+	majors := []string{
+		"ADA", "ATOM", "AVAX", "BCH", "BNB", "DASH", "DOGE", "DOT",
+		"LINK", "LTC", "NEAR", "SHIB", "SOL", "TON", "TRX", "UNI", "XRP",
+	}
+	majorAssets := make(map[string]canonical.Asset, len(majors))
+	for _, code := range majors {
+		a, err := canonical.NewCryptoAsset(code)
+		if err != nil {
+			return nil, fmt.Errorf("%s: %w", code, err)
+		}
+		majorAssets[code] = a
+	}
+
 	spec := []struct {
 		symbol string
 		base   canonical.Asset
@@ -56,6 +74,13 @@ func DefaultPairs() (map[string]canonical.Pair, error) {
 		{"XLM/CHF", xlm, fiatAssets["CHF"]},
 		{"BTC/USD", btc, fiatAssets["USD"]},
 		{"ETH/USD", eth, fiatAssets["USD"]},
+	}
+	for _, code := range majors {
+		spec = append(spec, struct {
+			symbol string
+			base   canonical.Asset
+			quote  canonical.Asset
+		}{code + "/USD", majorAssets[code], fiatAssets["USD"]})
 	}
 
 	out := make(map[string]canonical.Pair, len(spec))

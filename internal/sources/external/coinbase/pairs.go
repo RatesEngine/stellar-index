@@ -8,8 +8,8 @@ import (
 
 // DefaultPairs returns the Coinbase Exchange product → canonical.Pair
 // map for the default set. US-listed XLM-USD is the flagship pair
-// for this venue in our fleet; the reference anchors round out the
-// triangulation graph.
+// for this venue in our fleet; the reference anchors plus top-cap
+// globals round out the triangulation + cross-venue VWAP graph.
 //
 // Coinbase product IDs use "-" separators: "XLM-USD", "BTC-USD".
 //
@@ -17,6 +17,13 @@ import (
 //   - XLM-USD — US price discovery for XLM; Coinbase is the
 //     regulated-venue XLM reference.
 //   - BTC-USD, ETH-USD — anchors.
+//   - {ADA,ATOM,AVAX,BCH,BNB,DOGE,DOT,LINK,LTC,NEAR,SHIB,SOL,TON,
+//     UNI,XRP}-USD — top-cap globals against USD. All verified live
+//     via /products/<symbol> on 2026-05-05.
+//
+// Notable absences: DASH (Coinbase delisted, US AML pressure) and
+// TRX (never listed). The Kraken/Bitstamp/Binance triple covers
+// both for cross-venue VWAP.
 func DefaultPairs() (map[string]canonical.Pair, error) {
 	xlm, err := canonical.NewCryptoAsset("XLM")
 	if err != nil {
@@ -35,6 +42,19 @@ func DefaultPairs() (map[string]canonical.Pair, error) {
 		return nil, fmt.Errorf("USD: %w", err)
 	}
 
+	majors := []string{
+		"ADA", "ATOM", "AVAX", "BCH", "BNB", "DOGE", "DOT", "LINK",
+		"LTC", "NEAR", "SHIB", "SOL", "TON", "UNI", "XRP",
+	}
+	majorAssets := make(map[string]canonical.Asset, len(majors))
+	for _, code := range majors {
+		a, err := canonical.NewCryptoAsset(code)
+		if err != nil {
+			return nil, fmt.Errorf("%s: %w", code, err)
+		}
+		majorAssets[code] = a
+	}
+
 	spec := []struct {
 		symbol string
 		base   canonical.Asset
@@ -43,6 +63,13 @@ func DefaultPairs() (map[string]canonical.Pair, error) {
 		{"XLM-USD", xlm, usd},
 		{"BTC-USD", btc, usd},
 		{"ETH-USD", eth, usd},
+	}
+	for _, code := range majors {
+		spec = append(spec, struct {
+			symbol string
+			base   canonical.Asset
+			quote  canonical.Asset
+		}{code + "-USD", majorAssets[code], usd})
 	}
 	out := make(map[string]canonical.Pair, len(spec))
 	for _, s := range spec {
