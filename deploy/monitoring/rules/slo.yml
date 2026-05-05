@@ -42,44 +42,52 @@ groups:
       # The fraction is slow_count / total_count over each window.
       # Pre-computed so the burn-rate alerts read scalars, not
       # joins of histograms.
+      #
+      # Route filter: the RFP commits us to ≤ 200 ms for the
+      # CUSTOMER-FACING PRICING surface only — /v1/price (+ batch)
+      # and the SEP-40 oracle endpoints. Catalogue lookups
+      # (/v1/assets, /v1/markets) and historical scans (/v1/history,
+      # /v1/ohlc) have legitimately longer p95 because they walk
+      # large hypertables; folding them into this SLO would burn
+      # the 99.9% budget on shapes the RFP doesn't target.
 
       - record: ratesengine:api_slow_request_ratio:5m
         expr: |
-          sum(rate(http_request_duration_seconds_bucket{job="api",route!="/metrics",route!~"/(healthz|readyz|version)",le="0.2"}[5m]))
+          sum(rate(http_request_duration_seconds_bucket{job="api",route=~"/v1/price|/v1/price/batch|/v1/oracle/latest|/v1/oracle/lastprice|/v1/oracle/prices|/v1/oracle/x_last_price",le="0.2"}[5m]))
           /
-          sum(rate(http_request_duration_seconds_count{job="api",route!="/metrics",route!~"/(healthz|readyz|version)"}[5m]))
+          sum(rate(http_request_duration_seconds_count{job="api",route=~"/v1/price|/v1/price/batch|/v1/oracle/latest|/v1/oracle/lastprice|/v1/oracle/prices|/v1/oracle/x_last_price"}[5m]))
         labels:
           slo: api_latency_p95_under_200ms
 
       - record: ratesengine:api_slow_request_ratio:30m
         expr: |
-          sum(rate(http_request_duration_seconds_bucket{job="api",route!="/metrics",route!~"/(healthz|readyz|version)",le="0.2"}[30m]))
+          sum(rate(http_request_duration_seconds_bucket{job="api",route=~"/v1/price|/v1/price/batch|/v1/oracle/latest|/v1/oracle/lastprice|/v1/oracle/prices|/v1/oracle/x_last_price",le="0.2"}[30m]))
           /
-          sum(rate(http_request_duration_seconds_count{job="api",route!="/metrics",route!~"/(healthz|readyz|version)"}[30m]))
+          sum(rate(http_request_duration_seconds_count{job="api",route=~"/v1/price|/v1/price/batch|/v1/oracle/latest|/v1/oracle/lastprice|/v1/oracle/prices|/v1/oracle/x_last_price"}[30m]))
         labels:
           slo: api_latency_p95_under_200ms
 
       - record: ratesengine:api_slow_request_ratio:1h
         expr: |
-          sum(rate(http_request_duration_seconds_bucket{job="api",route!="/metrics",route!~"/(healthz|readyz|version)",le="0.2"}[1h]))
+          sum(rate(http_request_duration_seconds_bucket{job="api",route=~"/v1/price|/v1/price/batch|/v1/oracle/latest|/v1/oracle/lastprice|/v1/oracle/prices|/v1/oracle/x_last_price",le="0.2"}[1h]))
           /
-          sum(rate(http_request_duration_seconds_count{job="api",route!="/metrics",route!~"/(healthz|readyz|version)"}[1h]))
+          sum(rate(http_request_duration_seconds_count{job="api",route=~"/v1/price|/v1/price/batch|/v1/oracle/latest|/v1/oracle/lastprice|/v1/oracle/prices|/v1/oracle/x_last_price"}[1h]))
         labels:
           slo: api_latency_p95_under_200ms
 
       - record: ratesengine:api_slow_request_ratio:6h
         expr: |
-          sum(rate(http_request_duration_seconds_bucket{job="api",route!="/metrics",route!~"/(healthz|readyz|version)",le="0.2"}[6h]))
+          sum(rate(http_request_duration_seconds_bucket{job="api",route=~"/v1/price|/v1/price/batch|/v1/oracle/latest|/v1/oracle/lastprice|/v1/oracle/prices|/v1/oracle/x_last_price",le="0.2"}[6h]))
           /
-          sum(rate(http_request_duration_seconds_count{job="api",route!="/metrics",route!~"/(healthz|readyz|version)"}[6h]))
+          sum(rate(http_request_duration_seconds_count{job="api",route=~"/v1/price|/v1/price/batch|/v1/oracle/latest|/v1/oracle/lastprice|/v1/oracle/prices|/v1/oracle/x_last_price"}[6h]))
         labels:
           slo: api_latency_p95_under_200ms
 
       - record: ratesengine:api_slow_request_ratio:24h
         expr: |
-          sum(rate(http_request_duration_seconds_bucket{job="api",route!="/metrics",route!~"/(healthz|readyz|version)",le="0.2"}[24h]))
+          sum(rate(http_request_duration_seconds_bucket{job="api",route=~"/v1/price|/v1/price/batch|/v1/oracle/latest|/v1/oracle/lastprice|/v1/oracle/prices|/v1/oracle/x_last_price",le="0.2"}[24h]))
           /
-          sum(rate(http_request_duration_seconds_count{job="api",route!="/metrics",route!~"/(healthz|readyz|version)"}[24h]))
+          sum(rate(http_request_duration_seconds_count{job="api",route=~"/v1/price|/v1/price/batch|/v1/oracle/latest|/v1/oracle/lastprice|/v1/oracle/prices|/v1/oracle/x_last_price"}[24h]))
         labels:
           slo: api_latency_p95_under_200ms
 

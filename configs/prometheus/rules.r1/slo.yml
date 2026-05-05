@@ -45,41 +45,41 @@ groups:
 
       - record: ratesengine:api_slow_request_ratio:5m
         expr: |
-          sum(rate(http_request_duration_seconds_bucket{job="ratesengine-api",route!="/metrics",route!~"/(healthz|readyz|version)",le="0.2"}[5m]))
+          sum(rate(http_request_duration_seconds_bucket{job="ratesengine-api",route=~"/v1/price|/v1/price/batch|/v1/oracle/latest|/v1/oracle/lastprice|/v1/oracle/prices|/v1/oracle/x_last_price",le="0.2"}[5m]))
           /
-          sum(rate(http_request_duration_seconds_count{job="ratesengine-api",route!="/metrics",route!~"/(healthz|readyz|version)"}[5m]))
+          sum(rate(http_request_duration_seconds_count{job="ratesengine-api",route=~"/v1/price|/v1/price/batch|/v1/oracle/latest|/v1/oracle/lastprice|/v1/oracle/prices|/v1/oracle/x_last_price"}[5m]))
         labels:
           slo: api_latency_p95_under_200ms
 
       - record: ratesengine:api_slow_request_ratio:30m
         expr: |
-          sum(rate(http_request_duration_seconds_bucket{job="ratesengine-api",route!="/metrics",route!~"/(healthz|readyz|version)",le="0.2"}[30m]))
+          sum(rate(http_request_duration_seconds_bucket{job="ratesengine-api",route=~"/v1/price|/v1/price/batch|/v1/oracle/latest|/v1/oracle/lastprice|/v1/oracle/prices|/v1/oracle/x_last_price",le="0.2"}[30m]))
           /
-          sum(rate(http_request_duration_seconds_count{job="ratesengine-api",route!="/metrics",route!~"/(healthz|readyz|version)"}[30m]))
+          sum(rate(http_request_duration_seconds_count{job="ratesengine-api",route=~"/v1/price|/v1/price/batch|/v1/oracle/latest|/v1/oracle/lastprice|/v1/oracle/prices|/v1/oracle/x_last_price"}[30m]))
         labels:
           slo: api_latency_p95_under_200ms
 
       - record: ratesengine:api_slow_request_ratio:1h
         expr: |
-          sum(rate(http_request_duration_seconds_bucket{job="ratesengine-api",route!="/metrics",route!~"/(healthz|readyz|version)",le="0.2"}[1h]))
+          sum(rate(http_request_duration_seconds_bucket{job="ratesengine-api",route=~"/v1/price|/v1/price/batch|/v1/oracle/latest|/v1/oracle/lastprice|/v1/oracle/prices|/v1/oracle/x_last_price",le="0.2"}[1h]))
           /
-          sum(rate(http_request_duration_seconds_count{job="ratesengine-api",route!="/metrics",route!~"/(healthz|readyz|version)"}[1h]))
+          sum(rate(http_request_duration_seconds_count{job="ratesengine-api",route=~"/v1/price|/v1/price/batch|/v1/oracle/latest|/v1/oracle/lastprice|/v1/oracle/prices|/v1/oracle/x_last_price"}[1h]))
         labels:
           slo: api_latency_p95_under_200ms
 
       - record: ratesengine:api_slow_request_ratio:6h
         expr: |
-          sum(rate(http_request_duration_seconds_bucket{job="ratesengine-api",route!="/metrics",route!~"/(healthz|readyz|version)",le="0.2"}[6h]))
+          sum(rate(http_request_duration_seconds_bucket{job="ratesengine-api",route=~"/v1/price|/v1/price/batch|/v1/oracle/latest|/v1/oracle/lastprice|/v1/oracle/prices|/v1/oracle/x_last_price",le="0.2"}[6h]))
           /
-          sum(rate(http_request_duration_seconds_count{job="ratesengine-api",route!="/metrics",route!~"/(healthz|readyz|version)"}[6h]))
+          sum(rate(http_request_duration_seconds_count{job="ratesengine-api",route=~"/v1/price|/v1/price/batch|/v1/oracle/latest|/v1/oracle/lastprice|/v1/oracle/prices|/v1/oracle/x_last_price"}[6h]))
         labels:
           slo: api_latency_p95_under_200ms
 
       - record: ratesengine:api_slow_request_ratio:24h
         expr: |
-          sum(rate(http_request_duration_seconds_bucket{job="ratesengine-api",route!="/metrics",route!~"/(healthz|readyz|version)",le="0.2"}[24h]))
+          sum(rate(http_request_duration_seconds_bucket{job="ratesengine-api",route=~"/v1/price|/v1/price/batch|/v1/oracle/latest|/v1/oracle/lastprice|/v1/oracle/prices|/v1/oracle/x_last_price",le="0.2"}[24h]))
           /
-          sum(rate(http_request_duration_seconds_count{job="ratesengine-api",route!="/metrics",route!~"/(healthz|readyz|version)"}[24h]))
+          sum(rate(http_request_duration_seconds_count{job="ratesengine-api",route=~"/v1/price|/v1/price/batch|/v1/oracle/latest|/v1/oracle/lastprice|/v1/oracle/prices|/v1/oracle/x_last_price"}[24h]))
         labels:
           slo: api_latency_p95_under_200ms
 
