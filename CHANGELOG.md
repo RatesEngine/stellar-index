@@ -16,6 +16,10 @@ against.
 ## [Unreleased]
 
 ### Added
+- OpenAPI `example:` blocks on `/v1/price`, `POST /v1/signup`, and
+  `/v1/status` — auto-generated reference docs and the Postman
+  collection now show realistic request/response samples instead of
+  empty placeholders. Postman collection regenerated.
 - Showcase /status page renders the new `/v1/status` rollup as an
   "SLA & live metrics" panel: p50 / p95 / p99 latency cards (with
   the RFP-mandated p95 ≤ 200 ms target shown as a sublabel),

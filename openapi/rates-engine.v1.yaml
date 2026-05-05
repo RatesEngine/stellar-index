@@ -141,6 +141,30 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/StatusEnvelope" }
+              example:
+                data:
+                  overall: ok
+                  region: { name: r1, deployment: production }
+                  services:
+                    - { name: api,        status: ok, last_seen: "2026-05-05T15:09:00.116Z" }
+                    - { name: indexer,    status: ok, last_seen: "2026-05-05T15:08:46Z" }
+                    - { name: aggregator, status: ok, last_seen: "2026-05-05T15:08:47Z" }
+                  latency:
+                    p50_ms: 0.6
+                    p95_ms: 3.85
+                    p99_ms: 4.77
+                    window_secs: 300
+                  freshness:
+                    last_aggregator_tick: "2026-05-05T15:08:57Z"
+                    active_sources: 13
+                    total_sources: 17
+                  incidents:
+                    active_count: 0
+                    page_count: 0
+                    ticket_count: 0
+                    informational_count: 0
+                as_of: "2026-05-05T15:09:00.119Z"
+                flags: { stale: false, reduced_redundancy: false, triangulated: false, divergence_warning: false }
 
   /assets:
     get:
@@ -212,6 +236,20 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/PriceEnvelope" }
+              example:
+                data:
+                  asset_id: native
+                  quote: fiat:USD
+                  price: "0.159608357106"
+                  price_type: vwap
+                  observed_at: "2026-05-05T14:35:00Z"
+                  window_seconds: 300
+                as_of: "2026-05-05T14:35:42.881Z"
+                flags:
+                  stale: false
+                  reduced_redundancy: false
+                  triangulated: false
+                  divergence_warning: false
         "400":        { $ref: "#/components/responses/BadRequest" }
         "404":        { $ref: "#/components/responses/NotFound" }
         "429":        { $ref: "#/components/responses/RateLimited" }
@@ -1336,6 +1374,9 @@ paths:
                 email: { type: string, format: email }
                 label: { type: string, maxLength: 128 }
               required: [email]
+            example:
+              email: "alice@example.com"
+              label: "production-api-1"
       responses:
         "200":
           description: Account created — plaintext key shown **once**.
@@ -1356,6 +1397,15 @@ paths:
                           tier:              { type: string, enum: [apikey] }
                           rate_limit_per_min: { type: integer }
                         required: [plaintext, key_id, identifier, tier, rate_limit_per_min]
+              example:
+                data:
+                  plaintext: "re_live_4f9c1d8b3a7e2f1c9d4b8a6e3f2c1d9b8a7e6f5d4c3b2a1f"
+                  key_id: "k_8f3a2c1b9e7d4f6a"
+                  identifier: "signup-3d4f9a2c1e8b7f6d"
+                  label: "production-api-1"
+                  tier: "apikey"
+                  rate_limit_per_min: 1000
+                as_of: "2026-05-05T14:35:42.881Z"
         "400":
           description: Missing or invalid email, body too large, or already authenticated.
           content:
