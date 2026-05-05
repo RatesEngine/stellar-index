@@ -15,6 +15,15 @@ against.
 
 ## [Unreleased]
 
+### Changed
+- `/v1/status` now serves `Cache-Control: public, max-age=10,
+  s-maxage=15` (previously fell through to the default
+  `private, no-store`). Absorbs the polling fan-out from public
+  status pages and dashboards without delaying alert-state
+  propagation enough to matter — Prometheus scrape granularity
+  is 15 s, so a CDN entry that's at most 15 s stale is no worse
+  than asking Prometheus directly. Verified live on R1.
+
 ### Added
 - Showcase /coins page gets a search input. Typing filters the
   100 directory rows by code, slug, or issuer (case-insensitive
