@@ -16,6 +16,20 @@ against.
 ## [Unreleased]
 
 ### Added
+- **APIKey Postgres store (Phase 1, Week 4 part 1).** New
+  `postgresstore.APIKeyStore` against migration 0027's
+  `api_keys` table — concrete impl of `platform.APIKeyStore` with
+  Create / Get / GetByHash / ListForAccount / Update / Revoke /
+  TouchUsage. Round-trips JSONB permissions, `cidr[]` IP
+  allowlist (custom driver.Value array marshaller), and `text[]`
+  referer allowlist. Sentinel-error mapping mirrors the existing
+  Postgres stores: hash collision → `ErrConflict`,
+  absent → `ErrNotFound`, idempotent revoke. Exercised by
+  `test/integration/platform_postgres_stores_test.go`'s new
+  `APIKey/CRUD+revoke+touch` subtest. Runtime auth path stays on
+  the existing Redis store — the cutover (`/v1/account/keys`
+  reading from this store via a Redis-cached read-through) is the
+  next slice.
 - **Customer dashboard SPA scaffold (Phase 1, Week 3).** New
   Next.js 15 static-export app at `web/dashboard/` deployed to
   `app.ratesengine.net` (Cloudflare Pages git-integration is the

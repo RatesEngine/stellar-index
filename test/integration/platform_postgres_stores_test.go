@@ -8,6 +8,7 @@ import (
 	"database/sql"
 	"errors"
 	"net"
+	"net/netip"
 	"strings"
 	"testing"
 	"time"
@@ -371,6 +372,150 @@ func TestPlatformPostgresStores(t *testing.T) {
 		// Accepting a revoked invite → ErrNotFound.
 		if _, err := tokens.AcceptInvite(ctx, hash2[:]); !errors.Is(err, platform.ErrNotFound) {
 			t.Errorf("accept-after-revoke: expected ErrNotFound, got %v", err)
+		}
+	})
+
+	t.Run("APIKey/CRUD+revoke+touch", func(t *testing.T) {
+		keys := postgresstore.NewAPIKeyStore(store)
+
+		acct, err := accounts.Create(ctx, platform.Account{
+			Name: "Keyed Co", Slug: "keyed-" + strings.ToLower(uuid.New().String()[:8]),
+			BillingEmail: "k@k.example",
+			Tier:         platform.TierStarter, Status: platform.AccountActive,
+		})
+		if err != nil {
+			t.Fatalf("create account: %v", err)
+		}
+		owner, err := users.CreateUser(ctx, platform.User{
+			AccountID: acct.ID,
+			Email:     "owner-" + uuid.New().String() + "@k.example",
+			Role:      platform.RoleOwner,
+		})
+		if err != nil {
+			t.Fatalf("create owner: %v", err)
+		}
+
+		hash := sha256.Sum256([]byte("rek_plaintext_xyz"))
+		key := platform.APIKey{
+			ID:                     "kid_" + uuid.New().String()[:12],
+			AccountID:              acct.ID,
+			CreatedByUserID:        owner.ID,
+			Name:                   "primary",
+			Description:            "production traffic",
+			KeyHash:                hash[:],
+			KeyPrefix:              "rek_4f9c1d8b",
+			Tier:                   platform.APIKeyTierAPIKey,
+			RateLimitPerMin:        1000,
+			MonthlyQuota:           500000,
+			Permissions:            platform.KeyPermissions{All: true},
+			RefererAllowlist:       []string{"https://example.com"},
+			UsageAlertThresholdPct: 80,
+		}
+		// Add an IP allowlist entry to exercise cidr[] path.
+		prefix, perr := netip.ParsePrefix("203.0.113.0/24")
+		if perr != nil {
+			t.Fatalf("parse prefix: %v", perr)
+		}
+		key.IPAllowlist = []netip.Prefix{prefix}
+
+		out, err := keys.Create(ctx, key)
+		if err != nil {
+			t.Fatalf("create key: %v", err)
+		}
+		if out.CreatedAt.IsZero() {
+			t.Error("CreatedAt not populated")
+		}
+		if out.AccountID != acct.ID {
+			t.Errorf("AccountID round-trip: got %v want %v", out.AccountID, acct.ID)
+		}
+		if !out.Permissions.All {
+			t.Errorf("Permissions.All didn't round-trip")
+		}
+		if len(out.IPAllowlist) != 1 || out.IPAllowlist[0].String() != "203.0.113.0/24" {
+			t.Errorf("IPAllowlist round-trip: %+v", out.IPAllowlist)
+		}
+		if len(out.RefererAllowlist) != 1 || out.RefererAllowlist[0] != "https://example.com" {
+			t.Errorf("RefererAllowlist round-trip: %+v", out.RefererAllowlist)
+		}
+
+		// Get by id, by hash.
+		byID, err := keys.Get(ctx, key.ID)
+		if err != nil {
+			t.Fatalf("get by id: %v", err)
+		}
+		if byID.Name != "primary" {
+			t.Errorf("Name = %q", byID.Name)
+		}
+		byHash, err := keys.GetByHash(ctx, hash[:])
+		if err != nil {
+			t.Fatalf("get by hash: %v", err)
+		}
+		if byHash.ID != key.ID {
+			t.Errorf("hash lookup got different key")
+		}
+
+		// List for account.
+		list, err := keys.ListForAccount(ctx, acct.ID)
+		if err != nil {
+			t.Fatalf("list: %v", err)
+		}
+		if len(list) != 1 {
+			t.Errorf("list len = %d, want 1", len(list))
+		}
+
+		// Update: bump rate limit + add description.
+		byID.RateLimitPerMin = 5000
+		byID.Description = "production traffic — bumped"
+		if err := keys.Update(ctx, byID); err != nil {
+			t.Fatalf("update: %v", err)
+		}
+		got, _ := keys.Get(ctx, byID.ID)
+		if got.RateLimitPerMin != 5000 {
+			t.Errorf("RateLimitPerMin = %d", got.RateLimitPerMin)
+		}
+		if !strings.Contains(got.Description, "bumped") {
+			t.Errorf("Description didn't persist")
+		}
+
+		// Touch usage.
+		ip := net.ParseIP("198.51.100.7")
+		if err := keys.TouchUsage(ctx, byID.ID, ip, "curl/8"); err != nil {
+			t.Fatalf("touch: %v", err)
+		}
+		got, _ = keys.Get(ctx, byID.ID)
+		if got.LastUsedAt.IsZero() {
+			t.Errorf("LastUsedAt not stamped")
+		}
+		if !got.LastUsedIP.Equal(ip) {
+			t.Errorf("LastUsedIP = %v", got.LastUsedIP)
+		}
+
+		// Revoke + idempotency.
+		if err := keys.Revoke(ctx, byID.ID, owner.ID, "rotated"); err != nil {
+			t.Fatalf("revoke: %v", err)
+		}
+		got, _ = keys.Get(ctx, byID.ID)
+		if got.RevokedAt.IsZero() {
+			t.Errorf("RevokedAt not stamped")
+		}
+		if got.IsActive(time.Now()) {
+			t.Errorf("IsActive returned true on revoked key")
+		}
+		if err := keys.Revoke(ctx, byID.ID, owner.ID, "still rotated"); err != nil {
+			t.Errorf("re-revoke: %v", err)
+		}
+
+		// Hash-collision (re-Create same hash) → ErrConflict.
+		dup := key
+		dup.ID = "kid_" + uuid.New().String()[:12]
+		_, err = keys.Create(ctx, dup)
+		if !errors.Is(err, platform.ErrConflict) {
+			t.Errorf("expected ErrConflict on duplicate hash, got %v", err)
+		}
+
+		// ErrNotFound on absent.
+		if _, err := keys.Get(ctx, "kid_nonexistent00"); !errors.Is(err, platform.ErrNotFound) {
+			t.Errorf("expected ErrNotFound, got %v", err)
 		}
 	})
 }
