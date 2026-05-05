@@ -385,3 +385,74 @@ type Cursor struct {
 	LastUpdated string `json:"last_updated"`
 	LagSeconds  int64  `json:"lag_seconds"`
 }
+
+// Status is the data shape returned by [Client.Status]. Mirrors
+// the wire shape of /v1/status — a customer-facing system-health
+// rollup.
+type Status struct {
+	Overall   string          `json:"overall"`
+	Region    StatusRegion    `json:"region"`
+	Services  []StatusService `json:"services"`
+	Latency   StatusLatency   `json:"latency"`
+	Freshness StatusFreshness `json:"freshness"`
+	Incidents StatusIncidents `json:"incidents"`
+}
+
+// StatusRegion identifies which region produced the response.
+type StatusRegion struct {
+	Name       string `json:"name"`
+	Deployment string `json:"deployment"`
+}
+
+// StatusService is one entry in [Status.Services] — a per-binary
+// heartbeat. Status is "ok" when the last scrape was within 60 s,
+// "down" when stale, "unknown" when no Prometheus backend is wired.
+type StatusService struct {
+	Name     string    `json:"name"`
+	Status   string    `json:"status"`
+	LastSeen time.Time `json:"last_seen,omitempty"`
+}
+
+// StatusLatency reports API histogram-derived percentiles over
+// the last [WindowSecs] seconds. Zero values mean no Prometheus
+// backend is wired or no samples in the window.
+type StatusLatency struct {
+	P50Ms      float64 `json:"p50_ms"`
+	P95Ms      float64 `json:"p95_ms"`
+	P99Ms      float64 `json:"p99_ms"`
+	WindowSecs int     `json:"window_secs"`
+}
+
+// StatusFreshness summarises the ingest layer.
+type StatusFreshness struct {
+	LastAggregatorTick time.Time `json:"last_aggregator_tick,omitempty"`
+	ActiveSources      int       `json:"active_sources"`
+	TotalSources       int       `json:"total_sources"`
+}
+
+// StatusIncidents counts currently-firing alerts grouped by
+// severity. Zero values indicate no Alertmanager backend wired or
+// no alerts firing.
+type StatusIncidents struct {
+	ActiveCount        int `json:"active_count"`
+	PageCount          int `json:"page_count"`
+	TicketCount        int `json:"ticket_count"`
+	InformationalCount int `json:"informational_count"`
+}
+
+// Health is the data shape returned by [Client.Healthz] and
+// [Client.Readyz].
+type Health struct {
+	Status string `json:"status"`
+	Uptime string `json:"uptime,omitempty"`
+}
+
+// Version is the data shape returned by [Client.Version] — build
+// metadata for the API binary.
+type Version struct {
+	Version   string `json:"version"`
+	BuildDate string `json:"build_date"`
+	Commit    string `json:"commit"`
+	Dirty     string `json:"dirty"`
+	GoVersion string `json:"go_version"`
+}

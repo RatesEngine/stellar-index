@@ -275,3 +275,44 @@ func ExampleAPIError() {
 
 	// Output: asset is not indexed
 }
+
+// ExampleClient_Status shows how to consume the customer-facing
+// system-health rollup. /v1/status always returns 200; degraded
+// state lives in the body's Overall field, so dashboards can poll
+// it without alerting on 503s.
+func ExampleClient_Status() {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{
+			"data": {
+				"overall": "ok",
+				"region": {"name": "r1", "deployment": "production"},
+				"services": [
+					{"name":"api","status":"ok"},
+					{"name":"indexer","status":"ok"},
+					{"name":"aggregator","status":"ok"}
+				],
+				"latency": {"p50_ms": 0.6, "p95_ms": 3.85, "p99_ms": 4.77, "window_secs": 300},
+				"freshness": {"active_sources": 13, "total_sources": 17},
+				"incidents": {"active_count": 0}
+			},
+			"as_of": "2026-05-05T15:00:00Z",
+			"flags": {"stale": false}
+		}`))
+	}))
+	defer srv.Close()
+
+	c := client.New(client.Options{BaseURL: srv.URL})
+	got, err := c.Status(context.Background())
+	if err != nil {
+		fmt.Println("error:", err)
+		return
+	}
+	fmt.Printf("%s — p95=%.2fms, %d/%d sources active\n",
+		got.Data.Overall,
+		got.Data.Latency.P95Ms,
+		got.Data.Freshness.ActiveSources,
+		got.Data.Freshness.TotalSources)
+
+	// Output: ok — p95=3.85ms, 13/17 sources active
+}
