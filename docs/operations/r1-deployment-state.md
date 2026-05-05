@@ -184,6 +184,25 @@ fetched 2026-04-23:
    per-WASM-hash review per
    [docs/architecture/contract-schema-evolution.md](../architecture/contract-schema-evolution.md).
 
+5e. **Tagged-release deploy workflow available.**
+   (Done 2026-05-05, PRs #645/#647/#648/#650/#651.) `gh workflow run
+   deploy.yml -f region=r1 -f version=vX.Y.Z` is now the supported
+   path for getting a tagged binary release onto r1. Workflow
+   downloads SHA256-verified binaries from the GitHub Release,
+   ships them to r1 via SSH, runs the Ansible playbook
+   `configs/ansible/playbooks/deploy-binary.yml` which does
+   stage → backup → atomic install → restart → /v1/healthz probe →
+   automatic rollback on failure. Backups land at
+   `/usr/local/bin/<binary>.prev-<previous-tag>` (5 retained).
+   Sidecar version files at `/var/lib/ratesengine/deployed-versions/<binary>`
+   track the running tag. **One-time setup needed:** 4 GitHub
+   secrets per region (`R1_HOST`, `R1_USER`, `DEPLOY_SSH_PRIVATE_KEY`,
+   `R1_SSH_KNOWN_HOSTS`). Operator runbook in
+   [`docs/operations/deploy-workflow.md`](deploy-workflow.md).
+   Until secrets are configured + a release is cut, manual
+   `scp + systemctl restart` (the path used through 2026-05-05) is
+   still the fallback.
+
 ### Important but not urgent
 3. **Firewall + SSH hardening (phase 3)** not applied. Intentional —
    avoiding lockout risk until the box is stable. Keep KVM tab

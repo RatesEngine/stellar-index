@@ -388,6 +388,65 @@ If it doesn't, that's a CI failure.
    if breaking.
 5. CHANGELOG entry under `[Unreleased]`.
 
+### "Cut a release"
+
+We use SemVer (`vX.Y.Z`) for binary releases — see
+[docs/architecture/semver-policy.md](docs/architecture/semver-policy.md)
+for what bumps the major / minor / patch.
+
+End-to-end (operator side):
+
+1. **Curate `CHANGELOG.md` `[Unreleased]`** — make sure every entry
+   cites a PR, every empty section is deleted.
+2. **Promote the section** in a one-commit PR: replace `## [Unreleased]`
+   with `## [vX.Y.Z] — YYYY-MM-DD` and add a fresh empty `[Unreleased]`
+   block above it. Title the PR `release: vX.Y.Z`. Squash-merge once
+   CI is green.
+3. **Cut the tag** via the guard-rail script:
+   ```sh
+   git checkout main && git pull --ff-only origin main
+   bash scripts/dev/cut-release.sh vX.Y.Z
+   ```
+   The script verifies branch + clean tree + sync + non-empty CHANGELOG
+   section + green `verify.sh` before tagging and pushing. Pass
+   `--dry-run` first to see the plan.
+4. **`release.yml` fires automatically** on the tag push:
+   - Cross-compiles every binary in `cmd/` for `linux/{amd64,arm64}`
+   - Computes SHA256SUMS
+   - Auto-extracts the matching CHANGELOG section as release notes
+   - Creates the GitHub Release (marked `--prerelease` if the tag
+     contains a `-suffix`)
+   - Builds + pushes container images to
+     `ghcr.io/RatesEngine/<binary>:<tag>` plus `:latest` (only on
+     non-prerelease tags)
+
+Full runbook + manual fallback in
+[docs/operations/release-process.md](docs/operations/release-process.md).
+
+### "Deploy a release to R1"
+
+Deploys are operator-triggered, never automatic on tag.
+
+```sh
+gh workflow run deploy.yml \
+  -f region=r1 \
+  -f version=vX.Y.Z \
+  -f binaries=ratesengine-indexer,ratesengine-aggregator,ratesengine-api
+```
+
+The workflow downloads the binaries from the GitHub Release,
+verifies SHA256SUMS, and runs an Ansible playbook over SSH that
+does **stage → backup → atomic install → restart → health probe →
+automatic rollback on failure**. Backups land at
+`/usr/local/bin/<binary>.prev-<previous-tag>` with the most-recent
+5 retained.
+
+One-time setup: 4 GitHub secrets per region. Full operator runbook
+including the rollback path: [docs/operations/deploy-workflow.md](docs/operations/deploy-workflow.md).
+
+R2 / R3 are deferred — adding them is mechanical (4 secrets +
+~4 lines of workflow YAML), no playbook changes needed.
+
 ---
 
 ## Where to find design rationale
