@@ -203,6 +203,44 @@ fetched 2026-04-23:
    `scp + systemctl restart` (the path used through 2026-05-05) is
    still the fallback.
 
+5f. **Self-service signup + apikey_optional auth wired.**
+   (Done 2026-05-05, PRs #662 #663 + r1 deploy.) A customer can now
+   `POST /v1/signup {"email": "..."}` and get back a freshly-minted
+   API key (Starter tier, 1000 req/min). The key authenticates on
+   every subsequent request via `Authorization: Bearer <key>`.
+   Operator change on r1: `[api].auth_mode = "apikey_optional"` in
+   `/etc/ratesengine.toml`. Public surface (price queries,
+   /v1/healthz, showcase) keeps serving anonymously at the
+   60/min anon-tier rate-limit; authenticated requests get the
+   per-key budget. Invalid keys → 401.
+
+   Also installs Caddy + Prometheus + Loki + healthcheck-coverage
+   for the application services (this session) and the full release
+   pipeline (cut-release.sh + release.yml + deploy.yml + Dockerfiles
+   from the prior session). v0.0.0-rc.1 cut as the first pipeline
+   smoke test; release page at github.com/RatesEngine/rates-engine/
+   releases/tag/v0.0.0-rc.1 with all 12 binaries + SHA256SUMS.
+
+   Verified end-to-end on r1:
+   - signup → key returned ✓
+   - /v1/healthz anonymous → 200 ✓
+   - /v1/account/me anonymous → 401 ✓
+   - /v1/account/me with the issued key → 200 + matching key_id ✓
+   - /v1/price anonymous → 200 (public surface preserved) ✓
+   - /v1/account/me with garbage key → 401 ✓
+
+   **Follow-up gaps** (operator-tracked, not blocking):
+   - The mint-key CLI (`ratesengine-ops mint-key`) is operator-side
+     bootstrap; signup is the public counterpart. Both produce
+     keys via the same `RedisAPIKeyStore.Create` path.
+   - Stripe webhook handler that lifts the per-key
+     `RateLimitPerMin` on payment is not yet built — Pro / Business
+     tier upgrades require operator-side `mint-key` with the
+     `-rate-limit-per-min` flag for now.
+   - Email verification is not yet enforced — anyone can sign up
+     for any email address. The follow-up Stripe-paid flow will
+     require a verified email before lifting beyond Starter.
+
 ### Important but not urgent
 3. **Firewall + SSH hardening (phase 3)** not applied. Intentional —
    avoiding lockout risk until the box is stable. Keep KVM tab
