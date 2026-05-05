@@ -16,6 +16,17 @@ against.
 ## [Unreleased]
 
 ### Fixed
+- SLO latency recording rules in `deploy/monitoring/rules/slo.yml`
+  (and the R1 overlay in `configs/prometheus/rules.r1/`) now scope
+  to the RFP-mandated pricing surface — `/v1/price`, `/v1/price/batch`,
+  and the four SEP-40 oracle endpoints (`/v1/oracle/latest`,
+  `/v1/oracle/lastprice`, `/v1/oracle/prices`,
+  `/v1/oracle/x_last_price`). The previous deny-list filter
+  (everything except `/metrics` / `/healthz` / `/readyz` / `/version`)
+  folded catalogue and history endpoints (`/v1/assets`, `/v1/markets`,
+  `/v1/history`, `/v1/ohlc`) into the same 99.9% budget, even though
+  the RFP only commits the pricing surface to ≤ 200 ms p95. Promtool
+  validates the new rules; applied to R1 Prometheus.
 - `http_request_duration_seconds` and `http_requests_total` now
   carry the actual route pattern instead of a constant
   `route="unmatched"` label. Logger middleware between HTTPMetrics
