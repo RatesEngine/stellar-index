@@ -992,6 +992,106 @@ func TestIssuer_GStrkeyRequired(t *testing.T) {
 	}
 }
 
+// TestKeys_HappyPath — list keys for the authenticated caller;
+// pins the wire shape (Account[]) and that order is preserved.
+func TestKeys_HappyPath(t *testing.T) {
+	_, c := newTestServer(t, func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/v1/account/keys" {
+			t.Errorf("path = %q", r.URL.Path)
+		}
+		if r.Method != http.MethodGet {
+			t.Errorf("method = %q, want GET", r.Method)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"data": [
+			{"key_id":"k_old","label":"signup","tier":"apikey","rate_limit_per_min":1000,"created_at":"2026-01-01T00:00:00Z"},
+			{"key_id":"k_new","label":"rotation","tier":"apikey","rate_limit_per_min":1000,"created_at":"2026-04-01T00:00:00Z"}
+		], "as_of": "2026-05-04T14:35:42Z", "flags": {}}`))
+	})
+	got, err := c.Keys(context.Background())
+	if err != nil {
+		t.Fatalf("Keys: %v", err)
+	}
+	if len(got.Data) != 2 {
+		t.Fatalf("len = %d, want 2", len(got.Data))
+	}
+	if got.Data[0].KeyID != "k_old" || got.Data[1].KeyID != "k_new" {
+		t.Errorf("ordering broken: %+v", got.Data)
+	}
+}
+
+// TestStatus_HappyPath — pins the wire contract for /v1/status,
+// including the nested Region / Latency / Freshness / Incidents
+// shapes.
+func TestStatus_HappyPath(t *testing.T) {
+	_, c := newTestServer(t, func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/v1/status" {
+			t.Errorf("path = %q", r.URL.Path)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{
+			"data": {
+				"overall": "ok",
+				"region": {"name": "r1", "deployment": "production"},
+				"services": [{"name":"api","status":"ok","last_seen":"2026-05-05T15:00:00Z"}],
+				"latency": {"p50_ms": 5.2, "p95_ms": 89.1, "p99_ms": 240.0, "window_secs": 300},
+				"freshness": {"active_sources": 13, "total_sources": 17},
+				"incidents": {"active_count": 0, "page_count": 0, "ticket_count": 0, "informational_count": 0}
+			},
+			"as_of": "2026-05-05T15:00:00.001Z",
+			"flags": {"stale": false}
+		}`))
+	})
+	got, err := c.Status(context.Background())
+	if err != nil {
+		t.Fatalf("Status: %v", err)
+	}
+	if got.Data.Overall != "ok" {
+		t.Errorf("Overall = %q", got.Data.Overall)
+	}
+	if got.Data.Region.Name != "r1" {
+		t.Errorf("Region.Name = %q", got.Data.Region.Name)
+	}
+	if got.Data.Latency.P95Ms != 89.1 {
+		t.Errorf("P95Ms = %v", got.Data.Latency.P95Ms)
+	}
+	if got.Data.Freshness.ActiveSources != 13 {
+		t.Errorf("ActiveSources = %d", got.Data.Freshness.ActiveSources)
+	}
+}
+
+// TestHealthz / TestReadyz / TestVersion — operational helpers.
+func TestHealthz_HappyPath(t *testing.T) {
+	_, c := newTestServer(t, func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/v1/healthz" {
+			t.Errorf("path = %q", r.URL.Path)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"data":{"status":"ok","uptime":"22m"},"as_of":"2026-05-05T15:00:00Z","flags":{}}`))
+	})
+	got, err := c.Healthz(context.Background())
+	if err != nil || got.Data.Status != "ok" {
+		t.Fatalf("Healthz = %v, err = %v", got, err)
+	}
+}
+
+func TestVersion_HappyPath(t *testing.T) {
+	_, c := newTestServer(t, func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/v1/version" {
+			t.Errorf("path = %q", r.URL.Path)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"data":{"version":"v0.0.0-rc.1","build_date":"2026-05-05","commit":"abc123","dirty":"false","go_version":"go1.25"},"as_of":"2026-05-05T15:00:00Z","flags":{}}`))
+	})
+	got, err := c.Version(context.Background())
+	if err != nil {
+		t.Fatalf("Version: %v", err)
+	}
+	if got.Data.Version != "v0.0.0-rc.1" || got.Data.GoVersion != "go1.25" {
+		t.Errorf("Data = %+v", got.Data)
+	}
+}
+
 // TestCursors_HappyPath — diagnostics endpoint returns
 // non-paginated array; test pins the wire shape.
 func TestCursors_HappyPath(t *testing.T) {

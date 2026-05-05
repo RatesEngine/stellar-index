@@ -568,3 +568,73 @@ func (c *Client) Cursors(ctx context.Context) (*Envelope[[]Cursor], error) {
 	}
 	return &env, nil
 }
+
+// Keys lists every API key whose identifier matches the
+// authenticated caller's. Sorted by CreatedAt ascending — the
+// caller's original signup key first, rotated keys later.
+//
+// Anonymous calls receive 401. The plaintext is NEVER returned —
+// it's only available at create time, by design. To rotate, call
+// [Client.CreateKey] for a new key and revoke the old one out-of-band.
+func (c *Client) Keys(ctx context.Context) (*Envelope[[]Account], error) {
+	var env Envelope[[]Account]
+	if err := c.doJSON(ctx, http.MethodGet, "/v1/account/keys", nil, nil, &env); err != nil {
+		return nil, err
+	}
+	return &env, nil
+}
+
+// Status returns the comprehensive customer-facing health rollup
+// from `/v1/status` — per-service heartbeats, p50/p95/p99 latency,
+// ingest freshness, and Alertmanager incident counts. Anonymous-
+// friendly. Always returns 200; degraded state is reported via the
+// body's [Status.Overall] field rather than an HTTP error so
+// monitoring dashboards can poll a single endpoint.
+//
+// Deployments without a Prometheus backend wired return only the
+// in-process surface (region label + uptime); [Envelope.Flags.Stale]
+// is true in that case.
+func (c *Client) Status(ctx context.Context) (*Envelope[Status], error) {
+	var env Envelope[Status]
+	if err := c.doJSON(ctx, http.MethodGet, "/v1/status", nil, nil, &env); err != nil {
+		return nil, err
+	}
+	return &env, nil
+}
+
+// Healthz is the shallow liveness probe — returns 200 as long as
+// the API process is up. Doesn't touch dependencies. Use for
+// load-balancer health checks; use [Client.Readyz] when you need
+// to verify the dependency stack is responsive.
+func (c *Client) Healthz(ctx context.Context) (*Envelope[Health], error) {
+	var env Envelope[Health]
+	if err := c.doJSON(ctx, http.MethodGet, "/v1/healthz", nil, nil, &env); err != nil {
+		return nil, err
+	}
+	return &env, nil
+}
+
+// Readyz is the deep readiness probe. Returns 200 only if every
+// registered dependency check (Postgres, Redis, etc.) is responsive
+// within a 2 s server-side budget. Returns 503 + the same envelope
+// shape with [Envelope.Flags.Stale] = true otherwise; the wrapped
+// error in that case is an [APIError] with Status=503.
+func (c *Client) Readyz(ctx context.Context) (*Envelope[Health], error) {
+	var env Envelope[Health]
+	if err := c.doJSON(ctx, http.MethodGet, "/v1/readyz", nil, nil, &env); err != nil {
+		return nil, err
+	}
+	return &env, nil
+}
+
+// Version reports the build metadata of the API binary serving
+// the request — git SHA, build date, Go runtime version. Useful
+// for fleet-wide "what's running" checks over the API rather than
+// SSH-ing into every host.
+func (c *Client) Version(ctx context.Context) (*Envelope[Version], error) {
+	var env Envelope[Version]
+	if err := c.doJSON(ctx, http.MethodGet, "/v1/version", nil, nil, &env); err != nil {
+		return nil, err
+	}
+	return &env, nil
+}

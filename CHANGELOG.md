@@ -16,6 +16,12 @@ against.
 ## [Unreleased]
 
 ### Added
+- `pkg/client`: new SDK methods covering the recently-shipped
+  endpoints — `Client.Status` (system-health rollup),
+  `Client.Keys` (list account keys), plus `Client.Healthz` /
+  `Client.Readyz` / `Client.Version` operational helpers. Each
+  ships with wire-shape tests and a runnable Example so the
+  pkg.go.dev page renders complete coverage on first publish.
 - OpenAPI `example:` blocks on `/v1/price`, `POST /v1/signup`, and
   `/v1/status` — auto-generated reference docs and the Postman
   collection now show realistic request/response samples instead of
