@@ -268,3 +268,50 @@ func TestHTTPMetrics_RouteSurvivesWithContextChain(t *testing.T) {
 		t.Errorf("expected %q, body:\n%s", want, text)
 	}
 }
+
+// TestHTTPMetrics_SyntheticUASkipsHistogram pins the SLO-noise
+// fix: requests with `User-Agent: ratesengine-smoke/N` (the smoke
+// timer) MUST NOT contribute to the http_requests_total counter
+// or http_request_duration_seconds histogram. Otherwise every
+// smoke fire pollutes the SLO recording rule with cold-cache
+// samples customers never see.
+func TestHTTPMetrics_SyntheticUASkipsHistogram(t *testing.T) {
+	mux := http.NewServeMux()
+	mux.HandleFunc("GET /v1/synthetic-probe", func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	})
+	h := obs.HTTPMetrics(mux)
+
+	// Real customer request — should land in the histogram.
+	rr := httptest.NewRecorder()
+	customerReq := httptest.NewRequest(http.MethodGet, "/v1/synthetic-probe", nil)
+	customerReq.Header.Set("User-Agent", "Mozilla/5.0")
+	h.ServeHTTP(rr, customerReq)
+
+	// Synthetic probe — should be skipped.
+	rr2 := httptest.NewRecorder()
+	smokeReq := httptest.NewRequest(http.MethodGet, "/v1/synthetic-probe", nil)
+	smokeReq.Header.Set("User-Agent", "ratesengine-smoke/1")
+	h.ServeHTTP(rr2, smokeReq)
+
+	ts := httptest.NewServer(obs.Handler())
+	defer ts.Close()
+	resp, err := http.Get(ts.URL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	body, _ := io.ReadAll(resp.Body)
+
+	// Exactly 1 sample for /v1/synthetic-probe — the customer
+	// request. The smoke request should be invisible.
+	want := `http_requests_total{method="GET",route="/v1/synthetic-probe",status="200"} 1`
+	if !strings.Contains(string(body), want) {
+		t.Errorf("expected %q, body:\n%s", want, string(body))
+	}
+	// Defensive: if the smoke request had been counted, the value
+	// would be 2. Pin the negative.
+	if strings.Contains(string(body), `http_requests_total{method="GET",route="/v1/synthetic-probe",status="200"} 2`) {
+		t.Errorf("regression: smoke traffic counted in customer histogram")
+	}
+}

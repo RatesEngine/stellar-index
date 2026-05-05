@@ -46,7 +46,11 @@ check() {
   fi
 
   local body status
-  body="$(curl -sS -m "$TIMEOUT" -w "\n%{http_code}" "${API_BASE_URL}${path}" 2>&1)" || {
+  # User-Agent: ratesengine-smoke/N — the API's obs.HTTPMetrics
+  # middleware excludes synthetic traffic from histograms so the
+  # SLO recording rule isn't polluted by the smoke timer's cold-
+  # cache fan-out (every 5 min × 13 endpoints).
+  body="$(curl -sS -m "$TIMEOUT" -A "ratesengine-smoke/1" -w "\n%{http_code}" "${API_BASE_URL}${path}" 2>&1)" || {
     printf "  %sFAIL%s %-32s %s%s%s\n" "$RED" "$OFF" "$name" "$DIM" "curl error" "$OFF"
     FAILS=$((FAILS + 1))
     return

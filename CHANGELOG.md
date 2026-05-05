@@ -15,6 +15,22 @@ against.
 
 ## [Unreleased]
 
+### Fixed
+- HTTP metrics middleware now skips requests whose User-Agent
+  identifies a synthetic-monitoring probe (`ratesengine-smoke/`,
+  `ratesengine-probe/`). Previously the smoke timer's 5-minute
+  cold-cache fan-out (13 endpoints, 4 of which are aggregator-
+  derived ~600 ms cold) landed straight in the
+  `http_request_duration_seconds` histogram and dominated the
+  SLO recording rule's slow-request ratio — `ratesengine_slo_latency_burn_*`
+  alerts kept firing even though customer-facing latency was
+  sub-millisecond on warm cache. The smoke script now sends
+  `User-Agent: ratesengine-smoke/1`; the API drops the
+  measurement for those requests so the SLO measures real
+  customer experience. Verified live: smoke 13/13 still green;
+  histogram empty of smoke entries; customer requests still
+  count.
+
 ### Added
 - `/v1/status` `incidents.active[].runbook_url` — each firing alert
   now carries the GitHub URL of its runbook (when the rule has the

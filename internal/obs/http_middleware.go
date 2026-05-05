@@ -79,9 +79,52 @@ func HTTPMetrics(next http.Handler) http.Handler {
 			status = 499
 		}
 
+		// Skip metrics emission for synthetic monitoring traffic.
+		// The smoke timer (configs/healthchecks/r1-smoke.sh) and
+		// other operator-side probes set
+		// `User-Agent: ratesengine-smoke/<n>` so we can identify
+		// them. Letting their requests into the histogram pollutes
+		// the SLO recording rule — at every smoke fire we cold-hit
+		// /v1/oracle/latest etc., adding 13 slow-request samples
+		// every 5 minutes that customers never experience. The
+		// alerts then fire on a synthetic-monitoring artifact
+		// rather than real customer-facing latency.
+		//
+		// Smoke traffic still exits the process and the response
+		// is real — we just don't surface it in the customer-facing
+		// observability stream. Failures are caught by the smoke
+		// script's exit code + Healthchecks.io ping (see
+		// configs/healthchecks/smoke.sh).
+		if isSyntheticUA(r.UserAgent()) {
+			return
+		}
+
 		HTTPRequestDuration.WithLabelValues(method, route).Observe(elapsed)
 		HTTPRequestsTotal.WithLabelValues(method, route, strconv.Itoa(status)).Inc()
 	})
+}
+
+// isSyntheticUA reports whether the User-Agent identifies a
+// known synthetic-monitoring probe. Currently matches
+// `ratesengine-smoke/...` (the r1-smoke.sh wrapper) and the
+// Prometheus blackbox-style `Healthchecks.io` UA when our own
+// timers ping themselves. The match is prefix-only so version
+// suffixes don't affect the decision.
+func isSyntheticUA(ua string) bool {
+	if ua == "" {
+		return false
+	}
+	for _, prefix := range syntheticUAPrefixes {
+		if strings.HasPrefix(ua, prefix) {
+			return true
+		}
+	}
+	return false
+}
+
+var syntheticUAPrefixes = []string{
+	"ratesengine-smoke/",
+	"ratesengine-probe/",
 }
 
 // CaptureRoute writes the mux-matched route pattern into the
