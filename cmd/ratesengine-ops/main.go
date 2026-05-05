@@ -190,6 +190,11 @@ func main() { //nolint:gocyclo,gocognit,funlen // subcommand switch; each case i
 			fmt.Fprintf(os.Stderr, "mint-key: %v\n", err)
 			os.Exit(1)
 		}
+	case "upgrade-key":
+		if err := upgradeKey(args[1:]); err != nil {
+			fmt.Fprintf(os.Stderr, "upgrade-key: %v\n", err)
+			os.Exit(1)
+		}
 	case "version", "--version", "-v":
 		fmt.Println(version.String())
 	case "help", "--help", "-h":
@@ -543,6 +548,25 @@ Subcommands:
                               -label 'ACME Corp - production' \
                               -tier apikey \
                               -rate-limit-per-min 1000
+  upgrade-key -config PATH -key-id KID -rate-limit-per-min N
+                          Lift (or lower) an existing API key's
+                          per-minute rate-limit budget. Operator-
+                          side path for manual paid-tier upgrades
+                          before the Stripe webhook ships; same
+                          internal/auth.RedisAPIKeyStore.UpdateRateLimit
+                          path the future webhook will call.
+                          The customer's existing plaintext key
+                          keeps working — they don't need to
+                          rotate to pick up the new budget;
+                          effective on the next request.
+                          Tier reference (matches the /signup page):
+                              1000 = Starter,  10000 = Pro,
+                             50000 = Business, custom = Enterprise.
+                          Example:
+                            ratesengine-ops upgrade-key \
+                              -config /etc/ratesengine.toml \
+                              -key-id kid_515c8d94191f4e93 \
+                              -rate-limit-per-min 10000
   version                 Print version + build date.
   help                    This help.
 `
