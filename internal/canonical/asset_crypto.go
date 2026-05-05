@@ -24,10 +24,10 @@ package canonical
 // are likely to appear.
 var knownCryptoCodes = map[string]struct{}{
 	"ADA": {}, "ATOM": {}, "AVAX": {}, "BCH": {}, "BNB": {},
-	"BTC": {}, "DOGE": {}, "DOT": {}, "ETH": {}, "LINK": {},
-	"LTC": {}, "MATIC": {}, "NEAR": {}, "SHIB": {}, "SOL": {},
-	"TON": {}, "TRX": {}, "UNI": {}, "USDC": {}, "USDT": {},
-	"XLM": {}, "XRP": {},
+	"BTC": {}, "DASH": {}, "DOGE": {}, "DOT": {}, "ETH": {},
+	"LINK": {}, "LTC": {}, "MATIC": {}, "NEAR": {}, "SHIB": {},
+	"SOL": {}, "TON": {}, "TRX": {}, "UNI": {}, "USDC": {},
+	"USDT": {}, "XLM": {}, "XRP": {},
 	// Stablecoins + fiat-pegged crypto tokens published by RedStone's
 	// Stellar adapter (2026-04-24). Kept here as crypto (not fiat) so
 	// the decoder stays fiat-proxy-agnostic — the aggregator converts

@@ -176,6 +176,12 @@ against.
 
 ### Added
 
+- **`crypto:DASH` added to ADR-0014 allow-list.** One-line extension
+  per the in-file amendment policy ("Extension is a one-line
+  amendment to ADR-0014, never a superseding ADR"). Unblocks
+  recording DASH-denominated quotes from any future source — no
+  connector or aggregator change in this PR.
+
 - **`ratesengine-sla-probe -api-key` flag + `RATESENGINE_PROBE_API_KEY`
   env-var.** Without authentication the probe hits the anonymous-tier
   rate limit (60 req/min) and reads availability < 0.1 % on every
