@@ -45,6 +45,18 @@ against.
   documented in `docs/operations/deploy-workflow.md`. R1 only for
   v1; adding R2 / R3 is a 4-line workflow extension once those
   regions exist.
+### Added
+
+- **`-version` flag on `ratesengine-{indexer,aggregator,api,sla-probe}`.**
+  All four long-running binaries now accept `-version` (and
+  `--version`) and print the embedded version string then exit
+  successfully. Output format is `<tag> (<build-date>, <go-version>)`,
+  e.g. `v0.2.0 (2026-07-15T11:02:20Z, go1.25.9)`. Matches the
+  `version` subcommand the `ratesengine-{ops,migrate}` CLIs already
+  shipped — every binary now has a non-invasive way to report what
+  version it was built from. Resolves the deploy-workflow follow-up
+  that previously required parsing journal output or sidecar files
+  to know what was running on a host.
 
 ### Fixed
 

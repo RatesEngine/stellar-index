@@ -78,10 +78,16 @@ import (
 
 func main() {
 	var (
-		cfgPath = flag.String("config", "", "Path to TOML config file (required)")
-		dryRun  = flag.Bool("dry-run", false, "Load config + open connections + exit without serving")
+		cfgPath     = flag.String("config", "", "Path to TOML config file (required)")
+		dryRun      = flag.Bool("dry-run", false, "Load config + open connections + exit without serving")
+		showVersion = flag.Bool("version", false, "Print version and exit")
 	)
 	flag.Parse()
+
+	if *showVersion {
+		fmt.Println(version.String())
+		return
+	}
 
 	if *cfgPath == "" {
 		fmt.Fprintln(os.Stderr, "ratesengine-api: -config is required")

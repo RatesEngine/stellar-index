@@ -70,10 +70,16 @@ const cursorSource = "ledgerstream"
 
 func main() {
 	var (
-		cfgPath = flag.String("config", "", "Path to TOML config file (required)")
-		dryRun  = flag.Bool("dry-run", false, "Load config + open connections + exit without ingesting")
+		cfgPath     = flag.String("config", "", "Path to TOML config file (required)")
+		dryRun      = flag.Bool("dry-run", false, "Load config + open connections + exit without ingesting")
+		showVersion = flag.Bool("version", false, "Print version and exit")
 	)
 	flag.Parse()
+
+	if *showVersion {
+		fmt.Println(version.String())
+		return
+	}
 
 	if *cfgPath == "" {
 		fmt.Fprintln(os.Stderr, "ratesengine-indexer: -config is required")
