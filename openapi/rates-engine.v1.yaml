@@ -1677,11 +1677,25 @@ components:
       content:
         application/problem+json:
           schema: { $ref: "#/components/schemas/Problem" }
+          example:
+            type: "https://api.ratesengine.net/errors/asset-not-found"
+            title: "Asset not found"
+            status: 404
+            detail: "No trades observed for asset_id=XYZ-G..."
+            instance: "/v1/assets/XYZ-GA5Z"
+            request_id: "9be8c8cc17163dc7e40b07a55beee744"
     BadRequest:
       description: Client-supplied parameters didn't validate.
       content:
         application/problem+json:
           schema: { $ref: "#/components/schemas/Problem" }
+          example:
+            type: "https://api.ratesengine.net/errors/missing-asset"
+            title: "Missing asset parameter"
+            status: 400
+            detail: "asset query parameter is required"
+            instance: "/v1/price"
+            request_id: "499673a2b4d5f84bdbfa18bcfdc65bbe"
     RateLimited:
       description: Rate-limit quota exhausted. See `Retry-After` header.
       headers:
@@ -1695,16 +1709,37 @@ components:
       content:
         application/problem+json:
           schema: { $ref: "#/components/schemas/Problem" }
+          example:
+            type: "https://api.ratesengine.net/errors/rate-limited"
+            title: "Rate limit exceeded"
+            status: 429
+            detail: "anonymous tier limited to 60 requests per minute; retry in 23 seconds"
+            instance: "/v1/coins"
+            request_id: "feb6615b1a38211b4835c0fefcd94ede"
     InternalError:
       description: Internal error. Body includes the request_id for correlation.
       content:
         application/problem+json:
           schema: { $ref: "#/components/schemas/Problem" }
+          example:
+            type: "https://api.ratesengine.net/errors/internal"
+            title: "Internal error"
+            status: 500
+            detail: "see X-Request-ID in server logs"
+            instance: "/v1/oracle/latest"
+            request_id: "e0fca799b0b6d066ed6c928b5cb0d5e6"
     ServiceUnavailable:
       description: Server is degraded (dependency outage, startup, shutdown).
       content:
         application/problem+json:
           schema: { $ref: "#/components/schemas/Problem" }
+          example:
+            type: "https://api.ratesengine.net/errors/account-store-unavailable"
+            title: "Account store not configured"
+            status: 503
+            detail: "this deployment has no AccountStore wired — typically because Redis is unavailable"
+            instance: "/v1/account/keys"
+            request_id: "70c8017d79651070fd16c2c9f065d846"
 
   schemas:
     # Base envelope pieces
