@@ -16,6 +16,13 @@ against.
 ## [Unreleased]
 
 ### Added
+- `scripts/ops/pre-launch-check.sh` — read-only verifier for R1's
+  pre-launch state. Walks through every step in the hardening
+  doc and prints `pass / warn / fail` for each (binding,
+  CORS, Healthchecks.io URLs, Alertmanager secrets, timer +
+  service health, Caddy on :443, loopback smoke, recent
+  SECURITY warnings). Exit code = number of failures so it can
+  cron into a post-deploy gate. Surfaced as `make pre-launch-check`.
 - `docs/operations/pre-launch-hardening.md` — operator runbook
   for the config edits that should land before flipping public
   DNS at `api.ratesengine.net`. Covers loopback bind, CORS

@@ -253,6 +253,10 @@ smoke-docker: ## Smoke-test all per-binary Docker images (requires `make build-d
 smoke: ## Smoke-test the launch-critical API surface against $$API_BASE_URL (default localhost:3000). Exit code = number of failed checks.
 	@bash scripts/dev/r1-smoke.sh
 
+.PHONY: pre-launch-check
+pre-launch-check: ## Verify R1 is in production-ready shape before DNS cutover. Run on R1 (e.g. via ssh + heredoc).
+	@bash scripts/ops/pre-launch-check.sh
+
 ##@ Database migrations
 
 .PHONY: db-migrate-up

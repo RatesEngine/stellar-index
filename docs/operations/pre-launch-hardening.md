@@ -200,6 +200,21 @@ Copy off-host. Document where.
 
 ## Verification at the end
 
+The full-checklist verifier lives at `scripts/ops/pre-launch-check.sh`.
+It's read-only — performs no state changes — and prints
+`pass / warn / fail` for each step. Exit code = number of fails.
+
+```sh
+# Run end-to-end on R1:
+ssh root@r1 'bash -s' < scripts/ops/pre-launch-check.sh
+
+# Or interactively after a one-time copy:
+scp scripts/ops/pre-launch-check.sh root@r1:/opt/ratesengine/
+ssh root@r1 'bash /opt/ratesengine/pre-launch-check.sh'
+```
+
+Spot checks if you'd rather verify by hand:
+
 ```sh
 # No SECURITY warnings in last boot:
 journalctl -u ratesengine-api -b -p warning | grep SECURITY    # empty == good
