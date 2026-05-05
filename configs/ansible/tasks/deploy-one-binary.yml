@@ -173,7 +173,7 @@
   ansible.builtin.shell: |
     set -e
     # Keep the most-recent 5 .prev-* backups; delete the rest. Sort
-    # by mtime so reverts to older versions don't lose their backup.
+    # by mtime so reverts to older versions retain their backup.
     find {{ install_dir }} -maxdepth 1 -name '{{ binary }}.prev-*' \
       -printf '%T@ %p\n' \
       | sort -nr \
