@@ -43,6 +43,7 @@ export function Footer() {
             title="System"
             links={[
               { label: 'Sign up', href: '/signup' },
+              { label: 'Account', href: '/account' },
               { label: 'Status', href: '/status' },
               { label: 'Diagnostics', href: '/diagnostics' },
               { label: 'API docs', href: '/docs' },
