@@ -506,6 +506,22 @@ func buildAuthMiddleware(mode string, rdb redis.UniversalClient, sep10Validator 
 			APIKey: validator,
 		})
 
+	case "apikey_optional":
+		var validator auth.APIKeyValidator = auth.NoopAPIKeyValidator{}
+		if rdb != nil {
+			validator = auth.NewRedisAPIKeyValidator(rdb)
+			logger.Info("auth: apikey_optional validator wired",
+				"backend", "redis",
+				"behaviour", "anonymous floor + per-key upgrade")
+		} else {
+			logger.Warn("auth_mode=apikey_optional but Redis is not configured — every request stays anonymous",
+				"reason", "RedisAPIKeyValidator requires a Redis client; without it, key validation can't happen")
+		}
+		return middleware.Auth(middleware.AuthOptions{
+			Mode:   middleware.AuthModeAPIKeyOptional,
+			APIKey: validator,
+		})
+
 	case "sep10":
 		return middleware.Auth(middleware.AuthOptions{
 			Mode:  middleware.AuthModeSEP10,

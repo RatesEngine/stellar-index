@@ -517,7 +517,7 @@ type TriangulationChainConfig struct {
 type APIConfig struct {
 	ListenAddr          string          `toml:"listen_addr" doc:"Bind address for the HTTP server." default:"0.0.0.0:3000"`
 	ExternalBaseURL     string          `toml:"external_base_url" doc:"Public-facing base URL (e.g. https://api.ratesengine.net/v1)." default:"https://api.ratesengine.net/v1"`
-	AuthMode            string          `toml:"auth_mode" doc:"Authentication mode — none / apikey / sep10. The API binary wires real validators when the required backing dependencies and secrets are present; a deployment that opts into auth without satisfying those requirements fails loud rather than silently demoting to anonymous." default:"none"`
+	AuthMode            string          `toml:"auth_mode" doc:"Authentication mode — none / apikey / apikey_optional / sep10. 'none' attaches anonymous Subject to every request. 'apikey' requires Authorization: Bearer <key> on every request; missing → 401. 'apikey_optional' is the freemium shape — anonymous floor (60/min) without a key, per-key tier (1000/min default) with a valid key, invalid key → 401. 'sep10' requires a SEP-10 JWT. The API binary wires real validators when the required dependencies are present; deployments that opt into auth without satisfying those fail loud rather than silently demoting to anonymous." default:"none"`
 	AnonRateLimitPerMin int             `toml:"anon_rate_limit_per_min" doc:"Per-IP rate limit for anonymous requests." default:"60"`
 	KeyRateLimitPerMin  int             `toml:"key_rate_limit_per_min" doc:"Per-API-key rate limit, default tier." default:"1000"`
 	CDNEnabled          bool            `toml:"cdn_enabled" doc:"Emit CDN-friendly Cache-Control headers on long-immutable endpoints." default:"true"`

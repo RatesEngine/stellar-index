@@ -498,10 +498,10 @@ func (a APIConfig) validate() error {
 			ErrInvalidConfig, a.ListenAddr, err)
 	}
 	switch a.AuthMode {
-	case "none", "apikey", "sep10":
+	case "none", "apikey", "apikey_optional", "sep10":
 		// ok
 	default:
-		return fmt.Errorf("%w: api.auth_mode %q must be none/apikey/sep10",
+		return fmt.Errorf("%w: api.auth_mode %q must be none/apikey/apikey_optional/sep10",
 			ErrInvalidConfig, a.AuthMode)
 	}
 	if a.AnonRateLimitPerMin < 0 {

@@ -25,6 +25,20 @@ const (
 	// <key>` or `X-API-Key: <key>`. Missing/invalid → 401.
 	AuthModeAPIKey AuthMode = "apikey"
 
+	// AuthModeAPIKeyOptional — caller MAY present a key. Without
+	// one, the request is treated as anonymous (same as
+	// AuthModeNone — anonymous Subject, anonymous-tier rate-limit).
+	// With a valid key, the request is upgraded to apikey-tier
+	// (validated Subject, per-key rate-limit). Invalid key → 401.
+	//
+	// This is the freemium-API shape: low rate-limit floor for
+	// anyone hitting the public surface, higher ceiling for
+	// signed-up customers. Endpoints that REQUIRE auth (e.g.
+	// /v1/account/me) still 401 anonymous callers via their own
+	// Tier check; this mode just doesn't make anonymous BLOCKED
+	// at the middleware layer.
+	AuthModeAPIKeyOptional AuthMode = "apikey_optional"
+
 	// AuthModeSEP10 — caller MUST present `Authorization: Bearer
 	// <jwt>` issued by the SEP-10 verify exchange. Missing/invalid → 401.
 	AuthModeSEP10 AuthMode = "sep10"
@@ -107,6 +121,21 @@ func authenticate(r *http.Request, mode AuthMode, opts AuthOptions) (auth.Subjec
 			// deployment that intentionally enabled apikey).
 			return auth.Subject{}, auth.ErrNotImplemented
 		}
+		return opts.APIKey.Lookup(r.Context(), key)
+
+	case AuthModeAPIKeyOptional:
+		key := bearerOrXKey(r)
+		if key == "" {
+			// No key → anonymous. Endpoints that require auth still
+			// gate via subject.Tier check inside the handler.
+			return auth.Anonymous(anonymousIdentifier(r)), nil
+		}
+		if opts.APIKey == nil {
+			return auth.Subject{}, auth.ErrNotImplemented
+		}
+		// Key supplied → must be valid. Wrong-key 401 is
+		// preferable to silent anonymous-downgrade because the
+		// caller is asserting they have credentials.
 		return opts.APIKey.Lookup(r.Context(), key)
 
 	case AuthModeSEP10:
