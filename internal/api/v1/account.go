@@ -28,6 +28,7 @@ type AccountStore interface {
 type Account struct {
 	KeyID           string    `json:"key_id"`
 	Label           string    `json:"label,omitempty"`
+	KeyPrefix       string    `json:"key_prefix,omitempty"`
 	Tier            string    `json:"tier"`
 	RateLimitPerMin int       `json:"rate_limit_per_min,omitempty"`
 	CreatedAt       time.Time `json:"created_at"`
@@ -52,6 +53,7 @@ type UsageRow struct {
 type KeyCreated struct {
 	KeyID     string `json:"key_id"`
 	Plaintext string `json:"plaintext"`
+	KeyPrefix string `json:"key_prefix,omitempty"`
 	Label     string `json:"label,omitempty"`
 }
 
@@ -81,6 +83,7 @@ func (s *Server) handleAccountMe(w http.ResponseWriter, r *http.Request) {
 	out := Account{
 		KeyID:           subject.KeyID,
 		Label:           subject.Label,
+		KeyPrefix:       subject.KeyPrefix,
 		Tier:            string(subject.Tier),
 		RateLimitPerMin: subject.RateLimitPerMin,
 		CreatedAt:       subject.CreatedAt,
@@ -205,6 +208,7 @@ func (s *Server) handleAccountKeysCreate(w http.ResponseWriter, r *http.Request)
 		Data: KeyCreated{
 			KeyID:     rec.KeyID,
 			Plaintext: plaintext,
+			KeyPrefix: rec.KeyPrefix,
 			Label:     rec.Label,
 		},
 		AsOf:  rec.CreatedAt,
@@ -264,6 +268,7 @@ func (s *Server) handleAccountKeysList(w http.ResponseWriter, r *http.Request) {
 		out = append(out, Account{
 			KeyID:           k.KeyID,
 			Label:           k.Label,
+			KeyPrefix:       k.KeyPrefix,
 			Tier:            string(k.Tier),
 			RateLimitPerMin: k.RateLimitPerMin,
 			CreatedAt:       k.CreatedAt,

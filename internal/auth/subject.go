@@ -78,6 +78,13 @@ type Subject struct {
 	// consulted by auth or rate-limit logic. Empty for anonymous
 	// and for records seeded without a label.
 	Label string
+
+	// KeyPrefix — first 12 chars of the plaintext key (e.g.
+	// `rek_4f9c1d8b`). Set on records minted after the key-prefix
+	// feature shipped; empty on legacy records and on anonymous
+	// subjects. Customers see this in dashboard listings to
+	// identify which key matches a row in their secret manager.
+	KeyPrefix string
 }
 
 // Anonymous returns the subject the middleware attaches when no

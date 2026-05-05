@@ -91,6 +91,24 @@ func TestRedisAPIKeyStore_CreateRoundTrip(t *testing.T) {
 	if !subject.CreatedAt.Equal(rec.CreatedAt) {
 		t.Errorf("Lookup CreatedAt = %v, want %v", subject.CreatedAt, rec.CreatedAt)
 	}
+
+	// KeyPrefix is the first 12 chars of the plaintext — covering
+	// `rek_` plus 8 hex chars. Customers see this in dashboard
+	// listings to identify which key matches a row in their secret
+	// manager. Same prefix appears on the record AND on the
+	// Subject the validator constructs from it.
+	if rec.KeyPrefix == "" {
+		t.Error("KeyPrefix not set on Create()")
+	}
+	if rec.KeyPrefix != plaintext[:12] {
+		t.Errorf("KeyPrefix = %q, want first 12 of plaintext %q", rec.KeyPrefix, plaintext[:12])
+	}
+	if !strings.HasPrefix(rec.KeyPrefix, "rek_") || len(rec.KeyPrefix) != 12 {
+		t.Errorf("KeyPrefix shape unexpected: %q", rec.KeyPrefix)
+	}
+	if subject.KeyPrefix != rec.KeyPrefix {
+		t.Errorf("Subject KeyPrefix = %q, want %q", subject.KeyPrefix, rec.KeyPrefix)
+	}
 }
 
 // TestRedisAPIKeyStore_CreateDefaultsToAPIKeyTier confirms a request

@@ -2482,6 +2482,14 @@ components:
       properties:
         key_id:           { type: string }
         label:            { type: string }
+        key_prefix:
+          type: string
+          description: |
+            First 12 characters of the plaintext key (e.g.
+            `rek_4f9c1d8b`). Safe to log; customers use it to
+            match dashboard rows to entries in their secret
+            manager. Empty on legacy keys minted before the
+            prefix feature shipped.
         tier:             { type: string, enum: [anonymous, apikey, partner] }
         rate_limit_per_min: { type: integer }
         created_at:       { type: string, format: date-time }
@@ -2520,9 +2528,18 @@ components:
             data:
               type: object
               properties:
-                key_id:    { type: string }
-                plaintext: { type: string, description: "Shown once. Store it now." }
-                label:     { type: string }
+                key_id:     { type: string }
+                plaintext:  { type: string, description: "Shown once. Store it now." }
+                key_prefix:
+                  type: string
+                  description: |
+                    First 12 characters of the plaintext (e.g.
+                    `rek_4f9c1d8b`). Safe to display in logs and
+                    dashboards; customers use it to identify
+                    which key matches a row in their secret
+                    manager. Same value also returned by GET
+                    `/v1/account/keys`.
+                label:      { type: string }
               required: [key_id, plaintext, label]
           required: [data]
 

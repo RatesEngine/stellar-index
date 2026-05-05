@@ -65,6 +65,17 @@ type APIKeyRecord struct {
 	// surfaced via /v1/account/me. Optional.
 	Label string `json:"label,omitempty"`
 
+	// KeyPrefix — first N characters of the plaintext key (e.g.
+	// `rek_4f9c1d8b`). Stored at creation time; safe to log
+	// because it's not enough to authenticate (the secret tail is
+	// what makes the key). Customers see this in dashboard
+	// listings to identify which row corresponds to which key in
+	// their secret manager.
+	//
+	// Empty for keys minted before this field shipped — the
+	// dashboard renders "—" in that case. New keys always have it.
+	KeyPrefix string `json:"key_prefix,omitempty"`
+
 	// Tier — the [Tier] this key authenticates as. Production
 	// records carry [TierAPIKey]; an operator key may use
 	// [TierOperator] to unlock admin endpoints.
@@ -178,6 +189,7 @@ func (v *RedisAPIKeyValidator) Lookup(ctx context.Context, key string) (Subject,
 		RateLimitPerMin: rec.RateLimitPerMin,
 		CreatedAt:       rec.CreatedAt,
 		Label:           rec.Label,
+		KeyPrefix:       rec.KeyPrefix,
 	}, nil
 }
 

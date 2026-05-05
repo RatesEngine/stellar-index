@@ -47,6 +47,7 @@ type signupRequest struct {
 type SignupResult struct {
 	Plaintext       string `json:"plaintext"`
 	KeyID           string `json:"key_id"`
+	KeyPrefix       string `json:"key_prefix,omitempty"`
 	Identifier      string `json:"identifier"`
 	Label           string `json:"label,omitempty"`
 	Tier            string `json:"tier"`
@@ -163,6 +164,7 @@ func (s *Server) handleSignup(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, SignupResult{
 		Plaintext:       plaintext,
 		KeyID:           rec.KeyID,
+		KeyPrefix:       rec.KeyPrefix,
 		Identifier:      rec.Identifier,
 		Label:           rec.Label,
 		Tier:            string(rec.Tier),

@@ -17,6 +17,7 @@ import { API_BASE_URL } from '@/api/client';
 type Key = {
   key_id: string;
   label?: string;
+  key_prefix?: string;
   tier: string;
   rate_limit_per_min?: number;
   created_at: string;
@@ -24,7 +25,7 @@ type Key = {
 
 type ListEnvelope = { data: Key[] };
 type CreateEnvelope = {
-  data: { key_id: string; plaintext: string; label?: string };
+  data: { key_id: string; plaintext: string; key_prefix?: string; label?: string };
 };
 
 type State =
@@ -348,10 +349,13 @@ export function AccountDashboard() {
             <thead className="bg-slate-50 dark:bg-slate-800/50">
               <tr>
                 <th className="px-3 py-2 text-left text-xs font-semibold uppercase tracking-wider text-slate-600 dark:text-slate-400">
-                  Key
+                  Prefix
                 </th>
                 <th className="px-3 py-2 text-left text-xs font-semibold uppercase tracking-wider text-slate-600 dark:text-slate-400">
                   Label
+                </th>
+                <th className="px-3 py-2 text-left text-xs font-semibold uppercase tracking-wider text-slate-600 dark:text-slate-400">
+                  Key ID
                 </th>
                 <th className="px-3 py-2 text-left text-xs font-semibold uppercase tracking-wider text-slate-600 dark:text-slate-400">
                   Rate limit
@@ -365,7 +369,14 @@ export function AccountDashboard() {
               {state.keys.map((k) => (
                 <tr key={k.key_id} className={k.key_id === state.me.key_id ? 'bg-brand-50/50 dark:bg-brand-900/10' : ''}>
                   <td className="whitespace-nowrap px-3 py-2 font-mono text-xs text-slate-900 dark:text-slate-100">
-                    {k.key_id}
+                    {k.key_prefix ? (
+                      <>
+                        {k.key_prefix}
+                        <span className="text-slate-400">…</span>
+                      </>
+                    ) : (
+                      <span className="text-slate-400">—</span>
+                    )}
                     {k.key_id === state.me.key_id && (
                       <span className="ml-2 inline-flex items-center rounded-full bg-brand-600 px-1.5 py-0.5 text-[10px] font-medium text-white">
                         active
@@ -374,6 +385,9 @@ export function AccountDashboard() {
                   </td>
                   <td className="whitespace-nowrap px-3 py-2 text-sm text-slate-700 dark:text-slate-300">
                     {k.label ?? '—'}
+                  </td>
+                  <td className="whitespace-nowrap px-3 py-2 font-mono text-[11px] text-slate-500 dark:text-slate-400">
+                    {k.key_id}
                   </td>
                   <td className="whitespace-nowrap px-3 py-2 text-sm text-slate-700 dark:text-slate-300">
                     {(k.rate_limit_per_min ?? 0).toLocaleString()} req/min

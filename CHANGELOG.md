@@ -16,6 +16,18 @@ against.
 ## [Unreleased]
 
 ### Added
+- `key_prefix` field on `auth.APIKeyRecord` (and the
+  `auth.Subject` it derives) — first 12 characters of the
+  plaintext key (e.g. `rek_4f9c1d8b`). Surfaced on three wire
+  shapes: `POST /v1/signup` (`SignupResult`), `POST /v1/account/keys`
+  (`KeyCreated`), `GET /v1/account/keys` + `GET /v1/account/me`
+  (`Account`). Showcase /account dashboard renders it as the
+  primary "Prefix" column with the full key_id moved to a
+  smaller monospaced sub-column. Empty for keys minted before
+  this field shipped (legacy keys grandfather in with `—` in
+  the dashboard); always populated for new keys. Foundation
+  piece from the platform spec — Phase 1, key-listing UX.
+  Verified live on R1.
 - `.github/workflows/showcase-deploy.yml` — manual-trigger CF Pages
   deploy via Wrangler CLI for hotfix / break-glass cases. Fires
   only on `workflow_dispatch`; the recommended publish path
