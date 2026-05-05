@@ -121,6 +121,19 @@ func policyForPath(path string, cdnEnabled bool) string {
 	case strings.HasPrefix(path, "/v1/diagnostics/"):
 		return "private, no-cache, must-revalidate"
 
+	// ─── Status — customer-facing health rollup ─────────────────
+	// /v1/status is what the showcase /status page polls every 10 s
+	// and what monitoring dashboards (and the smoke timer) poll on a
+	// longer interval. A 10 s cache absorbs the polling fan-out
+	// without delaying alert-state propagation enough to matter —
+	// the underlying signals (Prometheus heartbeats, incident counts)
+	// already have 15 s scrape granularity.
+	case path == "/v1/status":
+		if cdnEnabled {
+			return "public, max-age=10, s-maxage=15"
+		}
+		return "public, max-age=10"
+
 	// ─── Current price + asset detail — short cache ─────────────
 	// Updates on every bucket close; CDN entry should turn over
 	// inside one bucket so consumers see fresh closed-bucket data.
