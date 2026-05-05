@@ -15,6 +15,29 @@ against.
 
 ## [Unreleased]
 
+## [v0.5.0-rc.2] — 2026-05-06
+
+### Fixed
+- **`/v1/auth/login` returned 500 with no dashboard config.**
+  When the operator hadn't set `[api.dashboard].base_url`,
+  `buildDashboardBundle` was wrapping nil concrete `*Handlers`
+  pointers in non-nil `DashboardAuthMounter` interfaces, so
+  the routes mounted but their handlers panicked on first
+  request. New `nilOrMounter` helper in `cmd/ratesengine-api`
+  returns true nil interfaces for empty bundles. Surface
+  effect: dashboard routes now correctly 404 when not
+  configured (instead of 500/401-ing on a half-mounted
+  surface).
+- **`scripts/dev/cut-release.sh` rejected SemVer pre-release
+  tags.** The CHANGELOG section regex collapsed dots and
+  dashes in the tag (e.g. `v0.5.0-rc.1`) into a one-char
+  awk character class, so the lookup never matched. Replaced
+  with a literal-substring `index()` match.
+- **`deploy.yml` Ansible task tripped on apostrophe in a
+  shell-block comment.** Ansible's shlex-based argument
+  splitter rejected `don't` inside the multi-line shell
+  string. One-char rewording.
+
 ## [v0.5.0-rc.1] — 2026-05-05
 
 First release candidate carrying the Phase 1 platform stack
