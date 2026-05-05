@@ -46,24 +46,64 @@ FAILS=()
 add_fail() { FAILS+=("$1"); }
 
 # --- Check 1: systemd service liveness -------------------------
-# r1's Phase 1 shape after trimming: just postgres, galexie (with
-# its captive-core producing to MinIO), minio, and node_exporter.
-# Removed 2026-04-23: primary stellar-core (see r1-deployment-state
-# pitfall #1/#7), stellar-core-prometheus-exporter (scraped primary),
-# and stellar-rpc (redundant — our indexer consumes galexie's MinIO
-# output directly via Ingest SDK).
+# Storage + ingestion plumbing first, then the three application
+# services. Removed 2026-04-23: primary stellar-core (see
+# r1-deployment-state pitfall #1/#7), stellar-core-prometheus-
+# exporter (scraped primary), and stellar-rpc (redundant — our
+# indexer consumes galexie's MinIO output directly via Ingest SDK).
+# Application services added 2026-05-05 (was: silently unwatched —
+# a crashed indexer wouldn't have pinged failure here).
+#
+# Some services may be absent on a non-application-tier node
+# (a future read-only mirror, for example). Skip with a notice
+# rather than fail when systemctl reports `inactive` for a unit
+# that doesn't exist; only `failed` is a real fault.
 SERVICES=(
   postgresql@15-main
+  redis-server
   galexie
   minio
   node_exporter
+  ratesengine-indexer
+  ratesengine-aggregator
+  ratesengine-api
 )
 for s in "${SERVICES[@]}"; do
   state=$(systemctl is-active "$s" 2>&1)
-  if [ "$state" != "active" ]; then
-    add_fail "service $s is $state (expected active)"
-  fi
+  case "$state" in
+    active)
+      ;;
+    inactive)
+      # Only fault for inactive when the unit file actually exists.
+      # `systemctl is-active` returns 'inactive' for both
+      # 'definitely-stopped' and 'unit not loaded' — disambiguate
+      # via list-unit-files so a node that doesn't run a particular
+      # service doesn't false-positive.
+      if systemctl cat "$s" >/dev/null 2>&1; then
+        add_fail "service $s is inactive (expected active)"
+      fi
+      ;;
+    *)
+      add_fail "service $s is $state (expected active)"
+      ;;
+  esac
 done
+
+# --- Check 1b: API /v1/healthz returning 200 -------------------
+# A running ratesengine-api process means systemd thinks it's alive,
+# but the HTTP listener may be wedged behind a deadlock or a
+# blocked goroutine. /v1/healthz is the canonical liveness signal
+# for the API; its absence is a real fault, its 200 is the only
+# wire-honest "API is serving" signal.
+#
+# Skip if the api unit isn't installed on this node (mirrors the
+# Check 1 logic above).
+if systemctl cat ratesengine-api >/dev/null 2>&1; then
+  api_status=$(curl -sS -o /dev/null -w '%{http_code}' -m 5 http://127.0.0.1:3000/v1/healthz 2>&1 || echo CURL_FAILED)
+  if [ "$api_status" != "200" ]; then
+    add_fail "ratesengine-api /v1/healthz returned $api_status (expected 200)"
+  fi
+fi
 
 # Primary stellar-core /info probe and stellar-rpc getHealth probe
 # were both removed when we trimmed the stack on 2026-04-23. The
