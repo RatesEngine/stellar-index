@@ -39,36 +39,39 @@ type ReadyChecker interface {
 //
 // Thread-safe.
 type Server struct {
-	logger       *slog.Logger
-	checks       []ReadyChecker
-	assets       AssetReader
-	prices       PriceReader
-	history      HistoryReader
-	markets      MarketsReader
-	oracle       OracleReader
-	meta         MetadataResolver
-	accounts     AccountStore
-	signups      SignupTracker
-	stripe       *StripeWebhookConfig
-	divergence   DivergenceLooker
-	freeze       FrozenLooker
-	supply       SupplyLooker
-	volume       VolumeReader
-	change24h    Change24hReader
-	changesum    ChangeSummaryReader
-	coins        CoinsReader
-	issuers      IssuersReader
-	cursors      CursorsReader
-	sep10        auth.SEP10Validator
-	cors         middleware.Middleware
-	auth         middleware.Middleware
-	rateLimit    middleware.Middleware
-	hub          *streaming.Hub
-	confidence   ConfidenceLooker
-	triangulated TriangulatedPriceLooker
-	cdnEnabled   bool
-	mux          *http.ServeMux
-	started      time.Time
+	logger           *slog.Logger
+	checks           []ReadyChecker
+	assets           AssetReader
+	prices           PriceReader
+	history          HistoryReader
+	markets          MarketsReader
+	oracle           OracleReader
+	meta             MetadataResolver
+	accounts         AccountStore
+	signups          SignupTracker
+	stripe           *StripeWebhookConfig
+	divergence       DivergenceLooker
+	freeze           FrozenLooker
+	supply           SupplyLooker
+	volume           VolumeReader
+	change24h        Change24hReader
+	changesum        ChangeSummaryReader
+	coins            CoinsReader
+	issuers          IssuersReader
+	cursors          CursorsReader
+	sep10            auth.SEP10Validator
+	cors             middleware.Middleware
+	auth             middleware.Middleware
+	rateLimit        middleware.Middleware
+	hub              *streaming.Hub
+	confidence       ConfidenceLooker
+	triangulated     TriangulatedPriceLooker
+	cdnEnabled       bool
+	statusBackend    StatusBackend
+	regionName       string
+	regionDeployment string
+	mux              *http.ServeMux
+	started          time.Time
 }
 
 // Options configures a [Server] at construction.
@@ -270,6 +273,19 @@ type Options struct {
 	// anything that downstream changes might have made auth-tied.
 	// See [middleware.CacheControlWithCDN] for the policy detail.
 	CDNEnabled bool
+
+	// StatusBackend, when non-nil, backs /v1/status with
+	// Prometheus-derived service heartbeats, latency percentiles,
+	// freshness signals, and Alertmanager incident counts. Nil
+	// keeps /v1/status serving an in-process surface (uptime +
+	// region label only) — useful for deployments without a local
+	// Prometheus.
+	StatusBackend StatusBackend
+
+	// RegionName + RegionDeployment label /v1/status responses.
+	// Default to "unknown" / "production" when unset.
+	RegionName       string
+	RegionDeployment string
 }
 
 // New constructs a Server and mounts all v1 routes.
@@ -279,38 +295,48 @@ func New(opts Options) *Server {
 		logger = slog.Default()
 	}
 	s := &Server{
-		logger:       logger,
-		checks:       opts.ReadyChecks,
-		assets:       opts.Assets,
-		prices:       opts.Prices,
-		history:      opts.History,
-		markets:      opts.Markets,
-		oracle:       opts.Oracle,
-		meta:         opts.Meta,
-		accounts:     opts.Accounts,
-		signups:      opts.Signups,
-		stripe:       opts.Stripe,
-		divergence:   opts.Divergence,
-		freeze:       opts.Freeze,
-		supply:       opts.Supply,
-		volume:       opts.Volume,
-		change24h:    opts.Change24h,
-		changesum:    opts.ChangeSummary,
-		coins:        opts.Coins,
-		issuers:      opts.Issuers,
-		cursors:      opts.Cursors,
-		sep10:        opts.SEP10,
-		cors:         opts.CORS,
-		auth:         opts.Auth,
-		rateLimit:    opts.RateLimit,
-		hub:          opts.Hub,
-		confidence:   opts.Confidence,
-		triangulated: opts.Triangulated,
-		cdnEnabled:   opts.CDNEnabled,
-		mux:          http.NewServeMux(),
-		started:      time.Now().UTC(),
+		logger:           logger,
+		checks:           opts.ReadyChecks,
+		assets:           opts.Assets,
+		prices:           opts.Prices,
+		history:          opts.History,
+		markets:          opts.Markets,
+		oracle:           opts.Oracle,
+		meta:             opts.Meta,
+		accounts:         opts.Accounts,
+		signups:          opts.Signups,
+		stripe:           opts.Stripe,
+		divergence:       opts.Divergence,
+		freeze:           opts.Freeze,
+		supply:           opts.Supply,
+		volume:           opts.Volume,
+		change24h:        opts.Change24h,
+		changesum:        opts.ChangeSummary,
+		coins:            opts.Coins,
+		issuers:          opts.Issuers,
+		cursors:          opts.Cursors,
+		sep10:            opts.SEP10,
+		cors:             opts.CORS,
+		auth:             opts.Auth,
+		rateLimit:        opts.RateLimit,
+		hub:              opts.Hub,
+		confidence:       opts.Confidence,
+		triangulated:     opts.Triangulated,
+		cdnEnabled:       opts.CDNEnabled,
+		statusBackend:    opts.StatusBackend,
+		regionName:       valueOr(opts.RegionName, "unknown"),
+		regionDeployment: valueOr(opts.RegionDeployment, "production"),
+		mux:              http.NewServeMux(),
+		started:          time.Now().UTC(),
 	}
 	s.mountRoutes()
+	return s
+}
+
+func valueOr(s, fallback string) string {
+	if s == "" {
+		return fallback
+	}
 	return s
 }
 
@@ -387,6 +413,7 @@ func (s *Server) mountRoutes() {
 	s.mux.HandleFunc("GET /v1/healthz", s.handleHealthz)
 	s.mux.HandleFunc("GET /v1/readyz", s.handleReadyz)
 	s.mux.HandleFunc("GET /v1/version", s.handleVersion)
+	s.mux.HandleFunc("GET /v1/status", s.handleStatus)
 
 	// Prometheus scrape endpoint. Deliberately unversioned — it's
 	// operator-facing, not part of the public API contract.

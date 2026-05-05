@@ -150,6 +150,7 @@ the `env:` column.
 | `api.streaming.pairs` | `[][]string` | `[]` | — | Operator-declared closed-bucket fanout pair list. Each entry is a two-element [base, quote] array of canonical asset strings (e.g. [["native", "fiat:USD"], ["credit:USDC:GA5Z…", "fiat:USD"]]). Empty disables the producer; clients that connect see SSE open + heartbeats but no price_update events. |
 | `api.streaming.poll_interval` | `int64` | `5s` | — | Per-pair poll cadence for the closed-bucket producer. Default 5s; clamped to 1s minimum. |
 | `api.stripe.signing_secret` | `string` | _(required)_ | `RATESENGINE_STRIPE_WEBHOOK_SECRET` | Stripe webhook signing secret (whsec_…). Empty disables the endpoint. |
+| `api.prometheus_url` | `string` | _(required)_ | — | Prometheus HTTP API root (e.g. http://localhost:9090) backing /v1/status. Empty leaves /v1/status serving an in-process surface (uptime + region only). |
 
 ### `[metadata]`
 

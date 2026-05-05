@@ -16,6 +16,16 @@ against.
 ## [Unreleased]
 
 ### Added
+- `GET /v1/status` — comprehensive system-health rollup powering the
+  showcase status page. Returns per-binary heartbeats (api / indexer
+  / aggregator), API histogram-derived p50/p95/p99 over the last
+  5 min, ingest freshness signals, and a count of currently-firing
+  Alertmanager incidents grouped by severity. Backed by an optional
+  `[api] prometheus_url` config pointing at the local Prometheus;
+  unwired deployments serve an in-process surface (region label
+  + uptime) with `flags.stale=true`. Always returns 200 — degraded
+  state is signalled via the body's `overall` field so monitoring
+  dashboards can poll a single endpoint without alerting on 503s.
 - `configs/alertmanager/` — single-host Alertmanager config for R1.
   Routes our `page` / `ticket` / `informational` severity vocabulary
   (the multi-host Ansible template at

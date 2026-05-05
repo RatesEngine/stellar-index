@@ -526,6 +526,7 @@ type APIConfig struct {
 	SEP10               SEP10Config     `toml:"sep10" doc:"SEP-10 Web Auth — server signing seed, JWT secret, TTLs. Active when auth_mode=sep10 OR when /v1/auth/sep10/* endpoints are exposed."`
 	Streaming           StreamingConfig `toml:"streaming" doc:"Closed-bucket SSE fanout — pairs the API binary republishes to the streaming Hub on every new closed prices_1m bucket. Empty Pairs leaves /v1/price/stream returning 503; Hub still constructs so subscribers can connect (and immediately drop) without a panic."`
 	Stripe              StripeConfig    `toml:"stripe" doc:"Stripe webhook handler — paid-tier upgrades wired to POST /v1/webhooks/stripe. Empty signing_secret leaves the endpoint 503."`
+	PrometheusURL       string          `toml:"prometheus_url" doc:"Prometheus HTTP API root (e.g. http://localhost:9090) backing /v1/status. Empty leaves /v1/status serving an in-process surface (uptime + region only)." default:""`
 }
 
 // StripeConfig wires the /v1/webhooks/stripe handler. Stripe

@@ -117,6 +117,31 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/VersionResponse" }
 
+  /status:
+    get:
+      tags: [health]
+      summary: Comprehensive system health rollup for the public status page.
+      description: |
+        Customer-facing surface — what the showcase status page renders.
+        Returns per-service heartbeats (api / indexer / aggregator),
+        API histogram-derived p50/p95/p99 latency over the last 5
+        minutes, ingest freshness signals, and a count of currently-
+        firing Alertmanager incidents grouped by severity.
+
+        Always returns 200; the body's `overall` field reports
+        degraded state rather than an HTTP error so monitoring
+        dashboards can poll a single endpoint without alerting on
+        503s. When the API isn't wired against a Prometheus backend,
+        only the in-process surface (region label + uptime) is
+        populated and `flags.stale=true`.
+      security: []
+      responses:
+        "200":
+          description: Status rollup envelope.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/StatusEnvelope" }
+
   /assets:
     get:
       tags: [assets]
@@ -1650,6 +1675,70 @@ components:
                 go_version: { type: string, description: "Runtime Go version (e.g. `go1.22.3`)." }
               required: [version, build_date, commit, dirty, go_version]
           required: [data]
+
+    StatusEnvelope:
+      allOf:
+        - { $ref: "#/components/schemas/EnvelopeMeta" }
+        - type: object
+          properties:
+            data: { $ref: "#/components/schemas/StatusResponse" }
+          required: [data]
+
+    StatusResponse:
+      type: object
+      properties:
+        overall:
+          type: string
+          enum: [ok, degraded, down]
+          description: |
+            "ok" when every signal is healthy; "degraded" when at
+            least one heartbeat is stale or a page-severity alert
+            is firing; "down" when no live signal is available.
+        region:
+          type: object
+          properties:
+            name:       { type: string, description: "Region identifier (e.g. r1, r2, r3)." }
+            deployment: { type: string, description: "Deployment label (e.g. production, staging)." }
+          required: [name, deployment]
+        services:
+          type: array
+          items: { $ref: "#/components/schemas/StatusService" }
+        latency:
+          type: object
+          description: API histogram-derived percentiles over the last 5 minutes. Zero when no Prometheus backend is wired.
+          properties:
+            p50_ms:      { type: number }
+            p95_ms:      { type: number }
+            p99_ms:      { type: number }
+            window_secs: { type: integer }
+        freshness:
+          type: object
+          properties:
+            last_aggregator_tick: { type: string, format: date-time }
+            active_sources:       { type: integer }
+            total_sources:        { type: integer }
+        incidents:
+          type: object
+          properties:
+            active_count:        { type: integer }
+            page_count:          { type: integer }
+            ticket_count:        { type: integer }
+            informational_count: { type: integer }
+      required: [overall, region, services]
+
+    StatusService:
+      type: object
+      properties:
+        name:      { type: string, description: "Service identifier (api / indexer / aggregator)." }
+        status:
+          type: string
+          enum: [ok, down, unknown]
+          description: |
+            "ok" when the last scrape was within 60 s. "down" when
+            the heartbeat is stale. "unknown" when no Prometheus
+            backend is wired or no scrape has succeeded yet.
+        last_seen: { type: string, format: date-time, description: "Optional. Timestamp of the most recent successful scrape." }
+      required: [name, status]
 
     # Asset catalogue
     Asset:

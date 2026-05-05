@@ -379,35 +379,50 @@ func run(cfgPath string, dryRun bool) error { //nolint:gocognit,funlen,gocyclo /
 
 	priceReader := storePriceReader{s: store}
 
+	// Status backend — points /v1/status at a local Prometheus when
+	// configured. Empty URL leaves the endpoint serving an
+	// in-process surface (region label + uptime only).
+	var statusBackend v1.StatusBackend
+	if cfg.API.PrometheusURL != "" {
+		statusBackend = &v1.PrometheusStatusBackend{
+			URL:    cfg.API.PrometheusURL,
+			Client: &http.Client{Timeout: 2 * time.Second},
+		}
+		logger.Info("status backend wired", "prometheus_url", cfg.API.PrometheusURL)
+	}
+
 	apiSrv := v1.New(v1.Options{
-		Logger:        logger.With("component", "api"),
-		ReadyChecks:   checks,
-		Assets:        storeAssetReader{s: store, homeDomainLookup: homeDomainLookup},
-		Prices:        priceReader,
-		History:       storeHistoryReader{s: store},
-		Markets:       storeMarketsReader{s: store},
-		Oracle:        storeOracleReader{s: store},
-		Meta:          sep1Cache,
-		Accounts:      accountStore,
-		Signups:       signupTracker,
-		Stripe:        stripeCfg,
-		Divergence:    divergenceLooker,
-		Confidence:    redisConfidenceLooker{rdb: rdb},
-		Triangulated:  redisTriangulatedLooker{rdb: rdb},
-		Freeze:        freezeLooker,
-		Supply:        storeSupplyLooker{s: store},
-		Volume:        storeVolumeReader{s: store},
-		Change24h:     storeChange24hReader{s: store},
-		ChangeSummary: store,
-		Coins:         store,
-		Issuers:       store,
-		Cursors:       store,
-		SEP10:         sep10Validator,
-		Hub:           hub,
-		CORS:          cors,
-		Auth:          authMW,
-		RateLimit:     rateLimit,
-		CDNEnabled:    cfg.API.CDNEnabled,
+		Logger:           logger.With("component", "api"),
+		ReadyChecks:      checks,
+		Assets:           storeAssetReader{s: store, homeDomainLookup: homeDomainLookup},
+		Prices:           priceReader,
+		History:          storeHistoryReader{s: store},
+		Markets:          storeMarketsReader{s: store},
+		Oracle:           storeOracleReader{s: store},
+		Meta:             sep1Cache,
+		Accounts:         accountStore,
+		Signups:          signupTracker,
+		Stripe:           stripeCfg,
+		Divergence:       divergenceLooker,
+		Confidence:       redisConfidenceLooker{rdb: rdb},
+		Triangulated:     redisTriangulatedLooker{rdb: rdb},
+		Freeze:           freezeLooker,
+		Supply:           storeSupplyLooker{s: store},
+		Volume:           storeVolumeReader{s: store},
+		Change24h:        storeChange24hReader{s: store},
+		ChangeSummary:    store,
+		Coins:            store,
+		Issuers:          store,
+		Cursors:          store,
+		SEP10:            sep10Validator,
+		Hub:              hub,
+		CORS:             cors,
+		Auth:             authMW,
+		RateLimit:        rateLimit,
+		CDNEnabled:       cfg.API.CDNEnabled,
+		StatusBackend:    statusBackend,
+		RegionName:       cfg.Region.ID,
+		RegionDeployment: "production",
 	})
 
 	// Closed-bucket producer — only spawn when the operator
