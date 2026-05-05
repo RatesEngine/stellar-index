@@ -16,6 +16,12 @@ against.
 ## [Unreleased]
 
 ### Added
+- `scripts/dev/r1-smoke.sh` — exercise the launch-critical API
+  surface (health / catalogue / pricing / diagnostics — 13
+  endpoints) against a deployment. Each check runs independently
+  with a 5 s timeout; exit code is the number of failures so
+  cron / Healthchecks.io can consume it. Anonymous-tier only —
+  safe to run from any host. Verified live on R1: 13/13 green.
 - Showcase /coins/[slug] gets two new tabs:
   - **History** — table of recent on-chain trades (`/v1/history`)
     against XLM, with relative timestamps, source chip, ledger,
