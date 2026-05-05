@@ -280,6 +280,16 @@ func run(cfgPath string, dryRun bool) error { //nolint:gocognit,funlen,gocyclo /
 		accountStore = auth.NewRedisAPIKeyStore(rdb)
 	}
 
+	// Signup tracker — keyed off email-hash → key-id so a
+	// duplicate POST /v1/signup with the same email returns 409
+	// instead of minting a second key. Redis-backed; nil leaves
+	// duplicate detection disabled (signup still works, just isn't
+	// idempotent on the email).
+	var signupTracker v1.SignupTracker
+	if rdb != nil {
+		signupTracker = auth.NewRedisSignupTracker(rdb)
+	}
+
 	// Divergence lookup adapter. Only wired when Redis is reachable
 	// (the worker's cached results live there). References are
 	// constructed from cfg.Divergence; CoinGecko is on by default
@@ -362,6 +372,7 @@ func run(cfgPath string, dryRun bool) error { //nolint:gocognit,funlen,gocyclo /
 		Oracle:        storeOracleReader{s: store},
 		Meta:          sep1Cache,
 		Accounts:      accountStore,
+		Signups:       signupTracker,
 		Divergence:    divergenceLooker,
 		Confidence:    redisConfidenceLooker{rdb: rdb},
 		Triangulated:  redisTriangulatedLooker{rdb: rdb},
