@@ -15,6 +15,15 @@ against.
 
 ## [Unreleased]
 
+## [v0.5.0-rc.1] — 2026-05-05
+
+First release candidate carrying the Phase 1 platform stack
+(magic-link auth, dashboard SPA, key management, Postgres-backed
+runtime auth) plus operational coverage extensions
+(SLA-probe Healthchecks).
+
+Tested against Stellar protocol 23 (Whisk).
+
 ### Added
 - **SLA-probe Healthchecks.io coverage.** New
   `ratesengine-sla-probe.timer` (15-min cadence) wraps the
