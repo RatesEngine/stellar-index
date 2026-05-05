@@ -16,6 +16,17 @@ against.
 ## [Unreleased]
 
 ### Added
+- **SLA-probe Healthchecks.io coverage.** New
+  `ratesengine-sla-probe.timer` (15-min cadence) wraps the
+  existing `ratesengine-sla-probe` binary and reports pass/fail
+  against the RFP SLAs (p95 ≤ 200 ms, p99 ≤ 500 ms, freshness
+  ≤ 30 s) to a Healthchecks.io URL. Closes the four-binary
+  coverage gap from the launch backlog (the indexer, aggregator,
+  api heartbeats already shipped; this completes the set with
+  the SLA-evidence harness on the same Healthchecks pipeline).
+  Configured via `HEALTHCHECKS_URL_SLA_PROBE` in
+  `/etc/default/ratesengine-healthchecks`; tuning knobs for
+  duration / concurrency / pair via the same env file.
 - **Postgres-backed runtime auth validator with Redis
   read-through cache (Phase 1, Week 4 cutover).** New
   `auth.PostgresAPIKeyValidator` makes `platform.api_keys`

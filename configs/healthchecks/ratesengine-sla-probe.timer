@@ -1,0 +1,18 @@
+[Unit]
+Description=Rates Engine SLA probe schedule
+Documentation=https://github.com/RatesEngine/rates-engine/blob/main/configs/healthchecks/README.md
+
+[Timer]
+# 15-minute cadence. Each run drives ~30 s of load against the
+# API (`SLA_PROBE_DURATION`); spacing the timer at 15 m gives the
+# system 14m30s of recovery between probes so the SLA assertion
+# observes baseline load rather than self-induced contention.
+# RandomizedDelaySec spreads against the smoke + heartbeat timers.
+OnBootSec=3min
+OnUnitActiveSec=15min
+RandomizedDelaySec=60s
+AccuracySec=15s
+Unit=ratesengine-sla-probe.service
+
+[Install]
+WantedBy=timers.target
