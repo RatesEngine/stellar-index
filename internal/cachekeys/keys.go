@@ -290,3 +290,44 @@ func Health(source string) string {
 // HealthTTL is the expiry for health: keys. 60 s gives us one
 // missed update before the gauge disappears.
 const HealthTTL = 60 * time.Second
+
+// ─── Oracle latest readings — read-through cache ─────────────────
+//
+// Wire shape: `oracle:latest:<asset-keys-joined>:<source-filter>`
+// Writer: api (read-through; populated on cache miss)
+// Reader: api
+// TTL: 30 s — Reflector / Band / RedStone push every 1–5 minutes;
+// a 30 s cached entry stays inside one push interval, so customers
+// see fresh readings without paying the 285–580 ms full DISTINCT ON
+// (source) sort on every poll.
+//
+// Asset list is sorted before joining so the same logical query
+// hits the same cache key regardless of input order — the v1
+// handler always passes [user-asset, translated-asset] but the
+// hash is order-independent.
+
+// OracleLatest returns the cache key for the multi-source latest
+// reading of a deduped, sorted list of asset keys with optional
+// source filter (empty = "every source").
+func OracleLatest(assetKeys []string, sourceFilter string) string {
+	// Defensive copy + sort so the cache key is stable regardless
+	// of the caller's argument order. The `|` separator can't
+	// appear in a canonical asset_id (G-strkey + base32 alphabet,
+	// `:` for class prefixes, contract `C…`).
+	sorted := append([]string(nil), assetKeys...)
+	sortStrings(sorted)
+	return "oracle:latest:" + strings.Join(sorted, "|") + ":" + sourceFilter
+}
+
+// OracleLatestTTL is the TTL for `oracle:latest:*` cache entries.
+const OracleLatestTTL = 30 * time.Second
+
+// sortStrings is a tiny inline sort to avoid pulling sort into
+// every cachekeys consumer.
+func sortStrings(ss []string) {
+	for i := 1; i < len(ss); i++ {
+		for j := i; j > 0 && ss[j-1] > ss[j]; j-- {
+			ss[j-1], ss[j] = ss[j], ss[j-1]
+		}
+	}
+}
