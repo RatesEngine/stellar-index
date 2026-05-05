@@ -16,6 +16,21 @@ against.
 ## [Unreleased]
 
 ### Added
+- **Customer dashboard SPA scaffold (Phase 1, Week 3).** New
+  Next.js 15 static-export app at `web/dashboard/` deployed to
+  `app.ratesengine.net` (Cloudflare Pages git-integration is the
+  recommended publish path; CLI fallback covered by the existing
+  showcase-deploy workflow shape). Cookie-based auth: every
+  request to `api.ratesengine.net` uses `credentials: 'include'`
+  so the parent-domain session cookie set by
+  `GET /v1/auth/callback` rides along cross-subdomain. Routes:
+  `/` bounces by auth state; `/signin/` (magic-link request);
+  `/keys/`, `/usage/`, `/settings/`, `/admin/` (staff-gated)
+  share a sidebar AppShell. Placeholder bodies for
+  `/keys` + `/usage` — the data wiring lands in Weeks 4 + 5.
+  Companion `Makefile` targets (`dashboard-{install,dev,build,
+  typecheck,lint}`), `verify.sh` extension, and a CI job mirror
+  the web/showcase pattern.
 - **Magic-link auth flow (Phase 1, Week 2 part 2).** Customers can
   sign in to the dashboard at `app.ratesengine.net` via a
   6-digit-code-or-link email — the same flow handles first-time

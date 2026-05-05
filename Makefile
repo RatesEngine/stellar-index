@@ -347,6 +347,30 @@ web-format: ## Format the showcase site (prettier)
 web-generate-api: ## Regenerate web/showcase/src/api/types.ts from OpenAPI
 	cd $(WEB_SHOWCASE_DIR) && pnpm generate:api
 
+##@ Dashboard SPA (web/dashboard/) — customer-facing app.ratesengine.net
+
+WEB_DASHBOARD_DIR := web/dashboard
+
+.PHONY: dashboard-install
+dashboard-install: ## Install dashboard dependencies (pnpm)
+	cd $(WEB_DASHBOARD_DIR) && pnpm install --frozen-lockfile
+
+.PHONY: dashboard-dev
+dashboard-dev: ## Run the dashboard locally with HMR (http://localhost:3001)
+	cd $(WEB_DASHBOARD_DIR) && pnpm dev
+
+.PHONY: dashboard-build
+dashboard-build: ## Build the dashboard for production
+	cd $(WEB_DASHBOARD_DIR) && pnpm build
+
+.PHONY: dashboard-typecheck
+dashboard-typecheck: ## Typecheck the dashboard
+	cd $(WEB_DASHBOARD_DIR) && pnpm typecheck
+
+.PHONY: dashboard-lint
+dashboard-lint: ## Lint the dashboard
+	cd $(WEB_DASHBOARD_DIR) && pnpm lint
+
 ##@ Housekeeping
 
 .PHONY: clean

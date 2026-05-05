@@ -45,5 +45,13 @@ if command -v pnpm >/dev/null 2>&1 && [ -f web/showcase/pnpm-lock.yaml ]; then
 else
     echo "=== Showcase (skipped — pnpm not installed; install via 'brew install pnpm' or 'corepack enable') ==="
 fi
+# Dashboard SPA — same pnpm gate. Skipped silently when the
+# lockfile is missing (e.g. fresh checkouts that haven't installed).
+if command -v pnpm >/dev/null 2>&1 && [ -f web/dashboard/pnpm-lock.yaml ]; then
+    echo "=== Dashboard typecheck ===" && make dashboard-typecheck
+    echo "=== Dashboard lint ==="      && make dashboard-lint
+    echo "=== Dashboard build ==="     && \
+        NEXT_PUBLIC_API_BASE_URL=http://api.local-stub.invalid make dashboard-build >/dev/null
+fi
 echo ""
 echo "✅ ALL CHECKS PASSED"
