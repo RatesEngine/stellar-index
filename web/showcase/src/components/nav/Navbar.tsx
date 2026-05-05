@@ -35,6 +35,19 @@ export function Navbar() {
             </Link>
           ))}
           <SearchModal />
+          <Link
+            href="/status"
+            className="ml-2 inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-slate-600 hover:bg-slate-100 hover:text-brand-600 dark:text-slate-300 dark:hover:bg-slate-800"
+          >
+            <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" aria-hidden />
+            Status
+          </Link>
+          <Link
+            href="/signup"
+            className="ml-2 rounded-md bg-brand-600 px-3 py-1.5 font-medium text-white hover:bg-brand-700"
+          >
+            Sign up
+          </Link>
         </div>
       </div>
     </nav>

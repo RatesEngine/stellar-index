@@ -42,14 +42,11 @@ export function Footer() {
           <FooterColumn
             title="System"
             links={[
+              { label: 'Sign up', href: '/signup' },
+              { label: 'Status', href: '/status' },
               { label: 'Diagnostics', href: '/diagnostics' },
               { label: 'API docs', href: '/docs' },
               { label: 'Research', href: '/research' },
-              {
-                label: 'Status',
-                href: 'https://status.ratesengine.net',
-                external: true,
-              },
             ]}
           />
         </div>
