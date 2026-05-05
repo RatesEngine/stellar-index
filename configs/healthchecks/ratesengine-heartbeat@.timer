@@ -1,0 +1,18 @@
+[Unit]
+Description=Rates Engine Healthchecks.io heartbeat schedule — %i
+Documentation=https://github.com/RatesEngine/rates-engine/blob/main/configs/healthchecks/README.md
+
+[Timer]
+# 60 s cadence matches Healthchecks.io's free-tier 2-minute grace
+# window (one missed ping is tolerable, two consecutive turn the
+# check red). RandomizedDelaySec spreads the three template
+# instances so they don't all hammer the metrics endpoints at the
+# same instant.
+OnBootSec=30s
+OnUnitActiveSec=60s
+RandomizedDelaySec=10s
+AccuracySec=5s
+Unit=ratesengine-heartbeat@%i.service
+
+[Install]
+WantedBy=timers.target

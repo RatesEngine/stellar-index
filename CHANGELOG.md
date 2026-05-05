@@ -16,6 +16,16 @@ against.
 ## [Unreleased]
 
 ### Added
+- `configs/healthchecks/` — per-binary Healthchecks.io heartbeats.
+  Three systemd `.timer` instantiations of a single template
+  service each ping a separate Healthchecks.io URL on a 60 s
+  cadence after verifying the corresponding metrics endpoint
+  responds. Closes the launch-readiness backlog item: the existing
+  Healthchecks.io coverage was galexie/minio/postgres only —
+  indexer/aggregator/api were unwatched. URLs come from
+  `/etc/default/ratesengine-healthchecks` (off-disk in git);
+  empty values silently skip the ping so the timers can install
+  before the dashboard URLs are wired. Installed live on R1.
 - `/v1/status` now surfaces the *names* of currently-firing alerts
   (`incidents.active`), not just counts. Deduplicated by alertname,
   page-severity first, capped at 16 entries — internal labels
