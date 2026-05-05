@@ -1,0 +1,69 @@
+---
+# Deploy one or more ratesengine-* binaries to a single host.
+#
+# Triggered by .github/workflows/deploy.yml; not normally run by
+# hand. The workflow has already:
+#   - Downloaded each binary from the GitHub Release artefacts
+#   - Verified SHA256 against the release's SHA256SUMS
+#   - Set up SSH key + known_hosts
+#
+# Required vars (passed via -e from the workflow):
+#   version              — SemVer tag being deployed (e.g. v0.2.0)
+#   binaries_csv         — comma-separated list (e.g. "ratesengine-api,ratesengine-indexer")
+#   local_dist_dir       — path on the controller (Action runner) holding
+#                          the binaries; each is named "<binary>-linux-amd64"
+#   health_grace_seconds — sleep before /v1/healthz probe (api only)
+#
+# Per-binary sequence:
+#   1. Resolve the running version (from --help output or version pkg)
+#      so we can stamp the backup filename meaningfully.
+#   2. Copy the new binary to /usr/local/bin/<binary>.new (atomic stage).
+#   3. Move current binary to /usr/local/bin/<binary>.prev-<running-version>.
+#   4. Atomic rename .new → live path (a single rename(2) is atomic
+#      across the same filesystem; mv is just a wrapper around it).
+#   5. systemctl restart <binary>.
+#   6. Health probe:
+#         api → curl http://127.0.0.1:3000/v1/healthz expects 200
+#         indexer / aggregator / other → systemctl is-active expects "active"
+#      after `health_grace_seconds` to give the service a moment to
+#      open its listening sockets.
+#   7. On any failure in steps 5-6, rollback: move .prev back to live
+#      path, restart, leave host in known-good state. Playbook exits
+#      non-zero so the workflow surfaces the failure.
+
+- name: Deploy ratesengine binaries
+  hosts: all
+  gather_facts: false
+  become: false                         # workflow already runs as root
+  vars:
+    binary_list: "{{ binaries_csv.split(',') | map('trim') | list }}"
+    install_dir: /usr/local/bin
+    api_port: 3000
+    api_health_path: /v1/healthz
+
+  pre_tasks:
+    - name: Verify required vars are set
+      ansible.builtin.assert:
+        that:
+          - version is defined and version | length > 0
+          - binaries_csv is defined and binaries_csv | length > 0
+          - local_dist_dir is defined and local_dist_dir | length > 0
+          - binary_list | length > 0
+        fail_msg: "Missing required deploy vars (version, binaries_csv, local_dist_dir)"
+
+    - name: Confirm SSH connectivity
+      ansible.builtin.ping:
+
+  tasks:
+    - name: Per-binary deploy
+      include_tasks: ../tasks/deploy-one-binary.yml
+      loop: "{{ binary_list }}"
+      loop_control:
+        loop_var: binary
+
+  post_tasks:
+    - name: Deploy summary
+      ansible.builtin.debug:
+        msg: >-
+          Deployed version={{ version }} binaries={{ binary_list | join(',') }}
+          to {{ inventory_hostname }}.

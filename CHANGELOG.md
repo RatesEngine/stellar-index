@@ -27,6 +27,24 @@ against.
   `docs/architecture/semver-policy.md` and
   `docs/operations/release-process.md` for the bump rules and the
   end-to-end runbook.
+### Added
+
+- **`deploy.yml` workflow + `deploy-binary` Ansible playbook.**
+  `gh workflow run deploy.yml -f region=r1 -f version=vX.Y.Z` is
+  now the supported deploy path. Stacks on the SemVer / release.yml
+  / Dockerfiles foundation. Per-binary sequence: stage → backup →
+  atomic rename → restart → /v1/healthz probe (api) or
+  systemctl-is-active probe (others) → automatic rollback on probe
+  failure with the bad binary preserved at `<binary>.failed-<v>`
+  for forensics. Backups land at
+  `/usr/local/bin/<binary>.prev-<previous-tag>` with the most-recent
+  5 retained. Uses sidecar files at
+  `/var/lib/ratesengine/deployed-versions/<binary>` to track the
+  current version (the binaries don't expose `--version` yet —
+  separate launch-readiness item). Required GitHub secrets
+  documented in `docs/operations/deploy-workflow.md`. R1 only for
+  v1; adding R2 / R3 is a 4-line workflow extension once those
+  regions exist.
 
 ### Fixed
 

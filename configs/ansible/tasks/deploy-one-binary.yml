@@ -1,0 +1,183 @@
+---
+# Deploy one binary atomically with rollback-on-failure.
+# Included from playbooks/deploy-binary.yml; expects:
+#   binary               — name of the binary (e.g. "ratesengine-api")
+#   version              — SemVer tag being deployed
+#   local_dist_dir       — controller-side path holding "<binary>-linux-amd64"
+#   install_dir          — usually /usr/local/bin
+#   api_port             — only consulted for ratesengine-api
+#   api_health_path      — only consulted for ratesengine-api
+#   health_grace_seconds — sleep before health probe
+#
+# Per-binary sequence:
+#   1. Resolve the previously-deployed version from the sidecar file
+#      /var/lib/ratesengine/deployed-versions/<binary>; if missing,
+#      fall back to a timestamp (this is fine on the first ever
+#      deploy via this workflow — older manual installs don't have
+#      sidecar files).
+#   2. Stage new binary as <binary>.new alongside live path.
+#   3. Move current binary to <binary>.prev-<previous-tag>.
+#   4. Atomic rename .new → live.
+#   5. Write the new sidecar file.
+#   6. systemctl restart <binary>.
+#   7. Health probe (api: /v1/healthz; others: systemctl is-active)
+#      after `health_grace_seconds`.
+#   8. On failure in steps 6-7: rollback (mv .prev back, restart,
+#      restore old sidecar). Playbook exits non-zero.
+#   9. Prune backups beyond the latest 5 to bound disk use.
+
+- name: "[{{ binary }}] Confirm new artefact exists on controller"
+  ansible.builtin.stat:
+    path: "{{ local_dist_dir }}/{{ binary }}-linux-amd64"
+  delegate_to: localhost
+  register: src_stat
+
+- name: "[{{ binary }}] Fail fast if controller-side artefact missing"
+  ansible.builtin.assert:
+    that: src_stat.stat.exists
+    fail_msg: "{{ local_dist_dir }}/{{ binary }}-linux-amd64 not found on the runner"
+
+- name: "[{{ binary }}] Ensure deployed-versions directory exists"
+  ansible.builtin.file:
+    path: /var/lib/ratesengine/deployed-versions
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: "[{{ binary }}] Read previous deployed version from sidecar"
+  ansible.builtin.slurp:
+    src: "/var/lib/ratesengine/deployed-versions/{{ binary }}"
+  register: sidecar
+  ignore_errors: true
+
+- name: "[{{ binary }}] Compute backup tag"
+  ansible.builtin.set_fact:
+    # Prefer the sidecar; fall back to a UTC timestamp so first-ever
+    # deploys via this workflow still produce a unique backup name.
+    backup_tag: >-
+      {{ (sidecar.content | b64decode | trim) if sidecar is succeeded and sidecar.content is defined
+         else 'untracked-' + ansible_date_time.iso8601_basic_short | default(lookup('pipe', 'date -u +%Y%m%dT%H%M%SZ')) }}
+
+- name: "[{{ binary }}] Stage new binary as .new alongside live path"
+  ansible.builtin.copy:
+    src: "{{ local_dist_dir }}/{{ binary }}-linux-amd64"
+    dest: "{{ install_dir }}/{{ binary }}.new"
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: "[{{ binary }}] Block: backup → install → restart → probe → rollback-on-failure"
+  block:
+    - name: "[{{ binary }}] Check whether a current binary exists"
+      ansible.builtin.stat:
+        path: "{{ install_dir }}/{{ binary }}"
+      register: current_stat
+
+    - name: "[{{ binary }}] Backup current binary"
+      ansible.builtin.command:
+        cmd: "mv {{ install_dir }}/{{ binary }} {{ install_dir }}/{{ binary }}.prev-{{ backup_tag }}"
+      when: current_stat.stat.exists
+
+    - name: "[{{ binary }}] Atomic rename .new → live"
+      ansible.builtin.command:
+        cmd: "mv {{ install_dir }}/{{ binary }}.new {{ install_dir }}/{{ binary }}"
+        creates: "{{ install_dir }}/{{ binary }}"
+
+    - name: "[{{ binary }}] Write sidecar version marker"
+      ansible.builtin.copy:
+        content: "{{ version }}"
+        dest: "/var/lib/ratesengine/deployed-versions/{{ binary }}"
+        owner: root
+        group: root
+        mode: "0644"
+
+    - name: "[{{ binary }}] Restart service"
+      ansible.builtin.systemd:
+        name: "{{ binary }}.service"
+        state: restarted
+        daemon_reload: false
+
+    - name: "[{{ binary }}] Grace period before health probe"
+      ansible.builtin.pause:
+        seconds: "{{ health_grace_seconds | int }}"
+
+    - name: "[{{ binary }}] Health probe — API endpoint"
+      when: binary == 'ratesengine-api'
+      ansible.builtin.uri:
+        url: "http://127.0.0.1:{{ api_port }}{{ api_health_path }}"
+        status_code: 200
+        timeout: 5
+      register: probe
+      retries: 5
+      delay: 3
+      until: probe.status is defined and probe.status == 200
+
+    - name: "[{{ binary }}] Health probe — systemd active"
+      when: binary != 'ratesengine-api'
+      ansible.builtin.command:
+        cmd: "systemctl is-active {{ binary }}.service"
+      changed_when: false
+      register: svc_state
+      retries: 5
+      delay: 3
+      until: svc_state.rc == 0 and (svc_state.stdout | trim) == 'active'
+
+  rescue:
+    - name: "[{{ binary }}] FAILURE — rolling back"
+      ansible.builtin.debug:
+        msg: "Health probe failed; rolling back {{ binary }} to {{ backup_tag }}"
+
+    - name: "[{{ binary }}] Stop failing service"
+      ansible.builtin.systemd:
+        name: "{{ binary }}.service"
+        state: stopped
+      ignore_errors: true
+
+    - name: "[{{ binary }}] Move bad binary out of the way"
+      ansible.builtin.command:
+        cmd: "mv {{ install_dir }}/{{ binary }} {{ install_dir }}/{{ binary }}.failed-{{ version }}"
+      ignore_errors: true
+
+    - name: "[{{ binary }}] Restore backup binary"
+      ansible.builtin.command:
+        cmd: "mv {{ install_dir }}/{{ binary }}.prev-{{ backup_tag }} {{ install_dir }}/{{ binary }}"
+      ignore_errors: true
+
+    - name: "[{{ binary }}] Restore sidecar version marker"
+      ansible.builtin.copy:
+        content: "{{ backup_tag }}"
+        dest: "/var/lib/ratesengine/deployed-versions/{{ binary }}"
+        owner: root
+        group: root
+        mode: "0644"
+      ignore_errors: true
+
+    - name: "[{{ binary }}] Restart with old binary"
+      ansible.builtin.systemd:
+        name: "{{ binary }}.service"
+        state: restarted
+      ignore_errors: true
+
+    - name: "[{{ binary }}] FAIL the play"
+      ansible.builtin.fail:
+        msg: "{{ binary }} health probe failed; rolled back to {{ backup_tag }}. Bad binary preserved at {{ install_dir }}/{{ binary }}.failed-{{ version }} for forensics."
+
+  always:
+    - name: "[{{ binary }}] Clean up stale .new"
+      ansible.builtin.file:
+        path: "{{ install_dir }}/{{ binary }}.new"
+        state: absent
+
+- name: "[{{ binary }}] Prune backups beyond the latest 5"
+  ansible.builtin.shell: |
+    set -e
+    # Keep the most-recent 5 .prev-* backups; delete the rest. Sort
+    # by mtime so reverts to older versions don't lose their backup.
+    find {{ install_dir }} -maxdepth 1 -name '{{ binary }}.prev-*' \
+      -printf '%T@ %p\n' \
+      | sort -nr \
+      | tail -n +6 \
+      | awk '{print $2}' \
+      | xargs -r rm -f
+  changed_when: false
