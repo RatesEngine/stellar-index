@@ -1,13 +1,17 @@
-# Per-binary Healthchecks.io heartbeats
+# Healthchecks.io heartbeats + API smoke
 
 Closes the gap noted in the launch-readiness backlog:
 
 > Healthchecks.io covers galexie/minio/postgres only;
 > indexer/aggregator/api not watched.
 
+Two complementary timer flavours:
+
+### 1. Per-binary heartbeats — 60 s cadence
+
 Three systemd `.timer` instantiations of a single template service
-each ping a separate Healthchecks.io URL on a 60 s cadence after
-verifying the corresponding metrics endpoint responds:
+each ping a Healthchecks.io URL after verifying the corresponding
+metrics endpoint responds:
 
 | Binary | Probe target | Failure semantics |
 |--------|--------------|-------------------|
@@ -15,9 +19,17 @@ verifying the corresponding metrics endpoint responds:
 | aggregator | `localhost:9465/metrics` | curl exit ≠ 0 → `${URL}/fail` |
 | api        | `localhost:3000/metrics` | curl exit ≠ 0 → `${URL}/fail` |
 
-A successful probe POSTs `ratesengine-<svc> ok :<port>` to the
-ping URL so the dashboard's "last ping" entry is useful at a
-glance.
+A successful probe POSTs `ratesengine-<svc> ok :<port>`.
+
+### 2. API surface smoke test — 5 min cadence
+
+`ratesengine-smoke.timer` runs `scripts/dev/r1-smoke.sh` —
+13 GETs covering health / catalogue / pricing / diagnostics —
+and pings `HEALTHCHECKS_URL_SMOKE` with the full smoke output as
+the ping body. Catches schema regressions that the metrics-port
+probes can't see (e.g. `/v1/price` returning 200 with malformed
+JSON, an OpenAPI-spec change that breaks downstream clients).
+A failed run pings `${URL}/fail` instead.
 
 ## Architecture
 
@@ -41,17 +53,21 @@ scp -r configs/healthchecks/ root@136.243.90.96:/tmp/
 ssh root@136.243.90.96 'bash /tmp/healthchecks/install.sh'
 ```
 
-Then on healthchecks.io, create three Checks (one per binary) and
-paste their ping URLs into `/etc/default/ratesengine-healthchecks`:
+Then on healthchecks.io, create four Checks and paste their ping
+URLs into `/etc/default/ratesengine-healthchecks`:
 
 ```sh
 HEALTHCHECKS_URL_INDEXER='https://hc-ping.com/<uuid-indexer>'
 HEALTHCHECKS_URL_AGGREGATOR='https://hc-ping.com/<uuid-aggregator>'
 HEALTHCHECKS_URL_API='https://hc-ping.com/<uuid-api>'
+HEALTHCHECKS_URL_SMOKE='https://hc-ping.com/<uuid-smoke>'
 ```
 
-Then `systemctl restart ratesengine-heartbeat@*.timer`. Suggested
-dashboard-side schedule: period 60 s, grace 120 s.
+Then `systemctl restart ratesengine-heartbeat@*.timer ratesengine-smoke.timer`.
+
+Suggested dashboard schedules:
+- per-binary heartbeats: period 60 s, grace 120 s
+- API smoke: period 5 min, grace 10 min
 
 ## Verify
 
