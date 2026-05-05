@@ -1,0 +1,77 @@
+# Rates Engine — single-node Prometheus on r1.
+# Scrapes the local exporters; sends alerts to local Alertmanager.
+# When R2/R3 land, switch to the configs/ansible/roles/prometheus
+# 2-host HA topology (paired with R2 prometheus, AlertManager
+# cluster on :9094).
+
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+  external_labels:
+    region: r1
+    deployment: production
+
+# Alerts go to local Alertmanager. No clustering today (single node);
+# AlertManager fans out to webhook receivers per its own config.
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets:
+            - localhost:9093
+
+# Rule files — start empty; operator opts in by symlinking files
+# from /etc/prometheus/rules.d/. The repo's deploy/monitoring/rules/
+# files were written for a multi-host shape and may need adjustment
+# before applying single-node.
+rule_files:
+  - /etc/prometheus/rules.d/*.yml
+
+scrape_configs:
+  - job_name: prometheus
+    static_configs:
+      - targets: [localhost:9090]
+
+  - job_name: node_exporter
+    static_configs:
+      - targets: [localhost:9100]
+        labels:
+          host: r1
+
+  - job_name: ratesengine-indexer
+    static_configs:
+      - targets: [localhost:9464]
+        labels:
+          binary: ratesengine-indexer
+          host: r1
+
+  - job_name: ratesengine-api
+    static_configs:
+      - targets: [localhost:3000]
+        labels:
+          binary: ratesengine-api
+          host: r1
+
+  - job_name: ratesengine-aggregator
+    static_configs:
+      - targets: [localhost:9465]
+        labels:
+          binary: ratesengine-aggregator
+          host: r1
+
+  - job_name: caddy
+    static_configs:
+      - targets: [localhost:2019]
+        labels:
+          host: r1
+    metrics_path: /metrics
+
+  # MinIO exposes metrics on :9000/minio/v2/metrics/cluster
+  # (auth required; future).
+  # Galexie exposes metrics on :6061/metrics (best-effort —
+  # endpoint may hang per node-healthcheck.sh comment).
+  - job_name: galexie
+    static_configs:
+      - targets: [localhost:6061]
+        labels:
+          host: r1
+    scrape_timeout: 5s
