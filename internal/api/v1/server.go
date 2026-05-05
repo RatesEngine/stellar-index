@@ -48,6 +48,7 @@ type Server struct {
 	oracle       OracleReader
 	meta         MetadataResolver
 	accounts     AccountStore
+	signups      SignupTracker
 	divergence   DivergenceLooker
 	freeze       FrozenLooker
 	supply       SupplyLooker
@@ -115,6 +116,14 @@ type Options struct {
 	// Subject and don't need the store. Wire only when Redis is
 	// reachable; the binary's auth.NewRedisAPIKeyStore enforces that.
 	Accounts AccountStore
+
+	// Signups, when non-nil, backs POST /v1/signup's per-email
+	// duplicate check. Without it, signup still works but isn't
+	// idempotent on the email — a second signup for the same address
+	// just mints another key. Production wires a Redis-backed
+	// implementation that persists email-hash → key-id; nil makes
+	// the duplicate check a no-op (key always mints).
+	Signups SignupTracker
 
 	// Divergence, when non-nil, is consulted by /v1/price after a
 	// successful LatestPrice lookup. When the lookup says
@@ -271,6 +280,7 @@ func New(opts Options) *Server {
 		oracle:       opts.Oracle,
 		meta:         opts.Meta,
 		accounts:     opts.Accounts,
+		signups:      opts.Signups,
 		divergence:   opts.Divergence,
 		freeze:       opts.Freeze,
 		supply:       opts.Supply,
@@ -462,6 +472,7 @@ func (s *Server) mountRoutes() {
 	s.mux.HandleFunc("GET /v1/account/me", s.handleAccountMe)
 	s.mux.HandleFunc("GET /v1/account/usage", s.handleAccountUsage)
 	s.mux.HandleFunc("POST /v1/account/keys", s.handleAccountKeysCreate)
+	s.mux.HandleFunc("POST /v1/signup", s.handleSignup)
 
 	// SEP-10 Web Auth. Both endpoints are unauthenticated by design
 	// — challenge bootstraps auth from a public Stellar G-strkey;

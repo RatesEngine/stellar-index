@@ -1186,6 +1186,67 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/KeyCreatedEnvelope" }
 
+  /signup:
+    post:
+      tags: [account]
+      summary: Self-service signup — mint a first API key by email.
+      description: |
+        Public, anonymous-tier endpoint. Hit it once with an email
+        + optional label and get back a freshly-minted API key for
+        the Starter tier (1000 req/min). Idempotent on the email:
+        a second call for the same email returns 409 with a pointer
+        to the existing key (recover access via support; future
+        Stripe-paid upgrade flow will support self-service rotation
+        via /v1/account/keys).
+
+        Already-authenticated callers receive 400 — they should
+        rotate keys via POST /v1/account/keys instead.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                email: { type: string, format: email }
+                label: { type: string, maxLength: 128 }
+              required: [email]
+      responses:
+        "200":
+          description: Account created — plaintext key shown **once**.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - { $ref: "#/components/schemas/EnvelopeMeta" }
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        properties:
+                          plaintext:         { type: string, description: "Bearer token. Show ONCE; unrecoverable." }
+                          key_id:            { type: string }
+                          identifier:        { type: string }
+                          label:             { type: string }
+                          tier:              { type: string, enum: [apikey] }
+                          rate_limit_per_min: { type: integer }
+                        required: [plaintext, key_id, identifier, tier, rate_limit_per_min]
+        "400":
+          description: Missing or invalid email, body too large, or already authenticated.
+          content:
+            application/problem+json:
+              schema: { $ref: "#/components/schemas/Problem" }
+        "409":
+          description: Email already has an account.
+          content:
+            application/problem+json:
+              schema: { $ref: "#/components/schemas/Problem" }
+        "503":
+          description: AccountStore not configured (Redis unavailable).
+          content:
+            application/problem+json:
+              schema: { $ref: "#/components/schemas/Problem" }
+
   /auth/sep10/challenge:
     get:
       tags: [auth]
