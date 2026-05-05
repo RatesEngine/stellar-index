@@ -1,0 +1,196 @@
+name: release-validate
+
+# Pre-merge validation of the release pipeline. Catches the
+# "release.yml works locally; release.yml fails on tag push" class
+# of regressions BEFORE a tag is cut.
+#
+# Triggered when a PR touches anything that release.yml or deploy.yml
+# consume:
+#   .github/workflows/release.yml | deploy.yml | release-validate.yml
+#   docker/**
+#   cmd/**          (new binary or build-tag change)
+#   Makefile        (LD_FLAGS / BINARIES change)
+#   go.mod | go.sum (toolchain / dep change)
+#   scripts/dev/cut-release.sh
+#
+# Validates:
+#   1. Every cmd/<binary>/ cross-compiles for linux/amd64 with the
+#      release ldflags (-trimpath -buildvcs -X version.Version=...)
+#   2. The built binaries actually run: -version (or `version`
+#      subcommand) returns 0 and prints something
+#   3. cut-release.sh is shell-syntactically valid
+#   4. Every docker/<binary>.Dockerfile builds (if docker/ exists)
+#
+# Path-filtered so docs-only PRs don't pay the build cost.
+
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/release.yml'
+      - '.github/workflows/deploy.yml'
+      - '.github/workflows/release-validate.yml'
+      - 'docker/**'
+      - 'cmd/**'
+      - 'Makefile'
+      - 'go.mod'
+      - 'go.sum'
+      - 'scripts/dev/cut-release.sh'
+  workflow_dispatch:
+
+# Cancel in-flight runs on the same PR ref when a new commit lands.
+concurrency:
+  group: release-validate-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  cross-compile:
+    name: Cross-compile + smoke-test all binaries
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0    # for git describe
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Discover binaries from cmd/
+        id: discover
+        run: |
+          set -euo pipefail
+          # Each cmd/<name>/ directory containing a main.go is a binary.
+          binaries=$(find cmd -maxdepth 2 -name 'main.go' -printf '%h\n' \
+            | xargs -n1 basename \
+            | sort -u)
+          if [ -z "$binaries" ]; then
+            echo "::error::No binaries discovered under cmd/"
+            exit 1
+          fi
+          echo "Discovered:"
+          echo "$binaries" | sed 's/^/  /'
+          {
+            echo 'binaries<<EOF'
+            echo "$binaries"
+            echo 'EOF'
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Cross-compile each binary (linux/amd64) with release ldflags
+        env:
+          CGO_ENABLED: '0'
+          GOOS: linux
+          GOARCH: amd64
+        run: |
+          set -euo pipefail
+          MODULE=$(go list -m)
+          # Mimic release.yml's ldflags. Use a synthetic test version so
+          # we can assert the binary actually picks it up via -version.
+          VERSION="v0.0.0-pr${{ github.event.pull_request.number || 'manual' }}"
+          BUILD_DATE=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+          mkdir -p dist
+          while read -r b; do
+            [ -z "$b" ] && continue
+            echo "== build $b =="
+            go build -trimpath -buildvcs=true \
+              -ldflags="-s -w \
+                -X ${MODULE}/internal/version.Version=${VERSION} \
+                -X ${MODULE}/internal/version.BuildDate=${BUILD_DATE}" \
+              -o "dist/${b}" \
+              "./cmd/${b}"
+            ls -la "dist/${b}"
+          done <<< "${{ steps.discover.outputs.binaries }}"
+
+      - name: Smoke-test version reporting
+        env:
+          PR_NUMBER: ${{ github.event.pull_request.number || 'manual' }}
+        run: |
+          set -euo pipefail
+          EXPECT="v0.0.0-pr${PR_NUMBER}"
+          # Each binary supports either:
+          #   <bin> -version   → prints version.String() and exits
+          #   <bin> version    → subcommand variant (ops, migrate)
+          # Try -version first, fall back to the subcommand. Either
+          # path must:
+          #   - exit 0
+          #   - print a line containing the EXPECT version string
+          while read -r path; do
+            b=$(basename "$path")
+            echo "== smoke-test $b =="
+            out=""
+            if "$path" -version 2>/dev/null; then
+              out=$("$path" -version 2>&1)
+            elif "$path" version 2>/dev/null; then
+              out=$("$path" version 2>&1)
+            else
+              echo "::error::$b does not respond to -version flag or 'version' subcommand"
+              exit 1
+            fi
+            if ! echo "$out" | grep -q "$EXPECT"; then
+              echo "::error::$b -version output does not contain expected '$EXPECT' (got: '$out')"
+              exit 1
+            fi
+            echo "  OK: $out"
+          done < <(find dist -maxdepth 1 -type f -executable | sort)
+
+      - name: Lint cut-release.sh syntax
+        if: hashFiles('scripts/dev/cut-release.sh') != ''
+        run: |
+          bash -n scripts/dev/cut-release.sh
+          echo "cut-release.sh is shell-syntactically valid"
+
+  docker-build:
+    name: Build all Dockerfiles
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    # Skip when docker/ doesn't exist yet (e.g. on PRs that pre-date
+    # the docker packaging work). Once docker/ lands the conditional
+    # auto-trips and the job runs.
+    if: hashFiles('docker/*.Dockerfile') != ''
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Docker buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build every Dockerfile (linux/amd64)
+        run: |
+          set -euo pipefail
+          for df in docker/*.Dockerfile; do
+            b=$(basename "$df" .Dockerfile)
+            echo "== build $b =="
+            docker buildx build \
+              --platform linux/amd64 \
+              --build-arg VERSION=v0.0.0-pr${{ github.event.pull_request.number || 'manual' }} \
+              --tag "ratesengine/${b}:pr-test" \
+              --load \
+              --file "$df" \
+              .
+            echo "  OK"
+          done
+
+      - name: Smoke-test --help on every image
+        run: |
+          set -euo pipefail
+          for df in docker/*.Dockerfile; do
+            b=$(basename "$df" .Dockerfile)
+            echo "== smoke-test ratesengine/${b}:pr-test --help =="
+            # --help may exit 0 (most binaries) or non-zero with a usage
+            # message (some). Either is fine — the assertion is that the
+            # container starts and prints something. Container that fails
+            # to start (missing libc, broken ENTRYPOINT) returns no
+            # output from a quick run.
+            out=$(docker run --rm "ratesengine/${b}:pr-test" --help 2>&1 | head -5 || true)
+            if [ -z "$out" ]; then
+              echo "::error::Image ratesengine/${b}:pr-test produced no --help output"
+              exit 1
+            fi
+            echo "  OK: $(echo "$out" | head -1)"
+          done
