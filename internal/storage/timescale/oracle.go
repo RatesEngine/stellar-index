@@ -6,6 +6,8 @@ import (
 	"errors"
 	"fmt"
 
+	"github.com/lib/pq"
+
 	"github.com/RatesEngine/rates-engine/internal/canonical"
 )
 
@@ -107,7 +109,32 @@ func (s *Store) LatestOracleUpdateForAsset(ctx context.Context, source string, a
 //
 // Implementation: DISTINCT ON (source) per Postgres idiom, which
 // pairs with (source, asset, ts DESC, ledger DESC) for a cheap scan.
+//
+// Single-key wrapper around [LatestOracleUpdatesForAssets] —
+// preserved for callers that haven't switched to the multi-key
+// shape yet.
 func (s *Store) LatestOracleUpdatesForAsset(ctx context.Context, asset canonical.Asset, sourceFilter string) ([]canonical.OracleUpdate, error) {
+	return s.LatestOracleUpdatesForAssets(ctx, []canonical.Asset{asset}, sourceFilter)
+}
+
+// LatestOracleUpdatesForAssets is the multi-key variant — returns
+// the most-recent observation per source across the union of the
+// supplied asset keys. The DISTINCT ON (source) pick keeps the
+// observation with the highest (ts, ledger) per source, regardless
+// of which input key it matched.
+//
+// Use case: the v1 handler calls this with a translation list —
+// e.g. user-facing `native` expands to `[native, crypto:XLM]`
+// because Reflector publishes XLM under the global crypto ticker
+// rather than the per-network "native" form.
+func (s *Store) LatestOracleUpdatesForAssets(ctx context.Context, assets []canonical.Asset, sourceFilter string) ([]canonical.OracleUpdate, error) {
+	if len(assets) == 0 {
+		return nil, nil
+	}
+	keys := make([]string, len(assets))
+	for i, a := range assets {
+		keys[i] = a.String()
+	}
 	const q = `
         SELECT DISTINCT ON (source)
                source, COALESCE(contract_id, ''),
@@ -117,13 +144,13 @@ func (s *Store) LatestOracleUpdatesForAsset(ctx context.Context, asset canonical
                COALESCE(confidence, 0),
                COALESCE(observer, '')
           FROM oracle_updates
-         WHERE asset = $1
+         WHERE asset = ANY($1)
            AND ($2 = '' OR source = $2)
          ORDER BY source, ts DESC, ledger DESC
     `
-	rows, err := s.db.QueryContext(ctx, q, asset.String(), sourceFilter)
+	rows, err := s.db.QueryContext(ctx, q, pq.StringArray(keys), sourceFilter)
 	if err != nil {
-		return nil, fmt.Errorf("timescale: LatestOracleUpdatesForAsset: %w", err)
+		return nil, fmt.Errorf("timescale: LatestOracleUpdatesForAssets: %w", err)
 	}
 	defer func() { _ = rows.Close() }()
 

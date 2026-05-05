@@ -19,6 +19,52 @@ type OracleReader interface {
 	// Empty slice + nil error means "no observations" — that's
 	// distinct from an error.
 	LatestOracleUpdatesForAsset(ctx context.Context, asset canonical.Asset, sourceFilter string) ([]canonical.OracleUpdate, error)
+
+	// LatestOracleUpdatesForAssets is the multi-key variant —
+	// returns the most-recent observation per source across the
+	// union of the supplied asset keys. Used by the handler to
+	// expand user-facing asset identifiers (e.g. `native`) into
+	// the per-oracle internal forms (e.g. `crypto:XLM`).
+	LatestOracleUpdatesForAssets(ctx context.Context, assets []canonical.Asset, sourceFilter string) ([]canonical.OracleUpdate, error)
+}
+
+// oracleAssetCandidates expands the user-facing asset identifier
+// into every key form the oracle layer might have stored under.
+//
+// Reflector — the only on-chain oracle that publishes per-asset
+// readings — keys observations by the global crypto ticker
+// (`crypto:XLM`, `crypto:USDC`, …) rather than by the per-network
+// canonical asset_id. Without this expansion,
+// `/v1/oracle/latest?asset=native` returns empty even though
+// Reflector publishes XLM under crypto:XLM, and an empty 285 ms
+// hypertable scan was the wall-clock cost of proving it.
+//
+// Returned slice always includes the original asset; subsequent
+// entries are best-effort translations the storage layer's
+// `WHERE asset = ANY($1)` filter unions over.
+func oracleAssetCandidates(a canonical.Asset) []canonical.Asset {
+	candidates := []canonical.Asset{a}
+
+	// `native` → also try `crypto:XLM`.
+	if a.Type == canonical.AssetNative {
+		if x, err := canonical.ParseAsset("crypto:XLM"); err == nil {
+			candidates = append(candidates, x)
+		}
+		return candidates
+	}
+
+	// Classic credit asset → also try `crypto:<CODE>` so global
+	// stablecoin tickers (USDC, USDT, EURC) match Reflector's
+	// per-ticker rows. Harmless on assets Reflector doesn't track
+	// (the ANY($1) filter just yields zero rows for that key).
+	if a.Type == canonical.AssetClassic && a.Code != "" {
+		if x, err := canonical.ParseAsset("crypto:" + a.Code); err == nil {
+			candidates = append(candidates, x)
+		}
+		return candidates
+	}
+
+	return candidates
 }
 
 // OracleReading is the wire shape for /v1/oracle/latest entries.
@@ -90,7 +136,8 @@ func (s *Server) handleOracleLatest(w http.ResponseWriter, r *http.Request) {
 
 	source := r.URL.Query().Get("source") // optional
 
-	updates, err := reader.LatestOracleUpdatesForAsset(r.Context(), asset, source)
+	updates, err := reader.LatestOracleUpdatesForAssets(
+		r.Context(), oracleAssetCandidates(asset), source)
 	if err != nil {
 		if clientAborted(r, err) {
 			return

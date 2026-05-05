@@ -15,12 +15,28 @@ import (
 type stubOracleReader struct {
 	updates    []canonical.OracleUpdate
 	lastAsset  string
+	lastAssets []string
 	lastSource string
 	err        error
 }
 
 func (r *stubOracleReader) LatestOracleUpdatesForAsset(_ context.Context, asset canonical.Asset, src string) ([]canonical.OracleUpdate, error) {
 	r.lastAsset = asset.String()
+	r.lastSource = src
+	if r.err != nil {
+		return nil, r.err
+	}
+	return r.updates, nil
+}
+
+func (r *stubOracleReader) LatestOracleUpdatesForAssets(_ context.Context, assets []canonical.Asset, src string) ([]canonical.OracleUpdate, error) {
+	r.lastAssets = make([]string, len(assets))
+	for i, a := range assets {
+		r.lastAssets[i] = a.String()
+	}
+	if len(assets) > 0 {
+		r.lastAsset = assets[0].String()
+	}
 	r.lastSource = src
 	if r.err != nil {
 		return nil, r.err
@@ -190,5 +206,58 @@ func TestOracleLatest_negativePricePreservesSign(t *testing.T) {
 	}
 	if env.Data[0].Decimals != 14 {
 		t.Errorf("Decimals = %d, want 14", env.Data[0].Decimals)
+	}
+}
+
+// TestOracleLatest_NativeExpandsToCryptoXLM pins the user-facing
+// → oracle-internal asset translation. /v1/oracle/latest?asset=native
+// should also query against `crypto:XLM` because Reflector keys
+// observations by the global crypto ticker, not by the per-network
+// `native` form. Without this the endpoint returns an empty array
+// even though Reflector publishes XLM continuously.
+func TestOracleLatest_NativeExpandsToCryptoXLM(t *testing.T) {
+	reader := &stubOracleReader{}
+	srv := v1.New(v1.Options{Oracle: reader})
+	tsrv := httpTestServer(t, srv)
+
+	resp := mustGet(t, tsrv.URL+"/v1/oracle/latest?asset=native")
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d", resp.StatusCode)
+	}
+	wantKeys := []string{"native", "crypto:XLM"}
+	if len(reader.lastAssets) != len(wantKeys) {
+		t.Fatalf("lastAssets = %+v, want %+v", reader.lastAssets, wantKeys)
+	}
+	for i, k := range wantKeys {
+		if reader.lastAssets[i] != k {
+			t.Errorf("lastAssets[%d] = %q, want %q", i, reader.lastAssets[i], k)
+		}
+	}
+}
+
+// TestOracleLatest_ClassicExpandsToCryptoTicker pins the same
+// translation for stablecoin classic credit assets — Reflector
+// publishes USDC under the global `crypto:USDC` ticker rather
+// than per-issuer.
+func TestOracleLatest_ClassicExpandsToCryptoTicker(t *testing.T) {
+	reader := &stubOracleReader{}
+	srv := v1.New(v1.Options{Oracle: reader})
+	tsrv := httpTestServer(t, srv)
+
+	resp := mustGet(t, tsrv.URL+"/v1/oracle/latest?asset=USDC-GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN")
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d", resp.StatusCode)
+	}
+	wantKeys := []string{
+		"USDC-GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN",
+		"crypto:USDC",
+	}
+	if len(reader.lastAssets) != len(wantKeys) {
+		t.Fatalf("lastAssets = %+v, want %+v", reader.lastAssets, wantKeys)
+	}
+	for i, k := range wantKeys {
+		if reader.lastAssets[i] != k {
+			t.Errorf("lastAssets[%d] = %q, want %q", i, reader.lastAssets[i], k)
+		}
 	}
 }
