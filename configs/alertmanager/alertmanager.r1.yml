@@ -1,0 +1,107 @@
+# Single-host Alertmanager config for R1.
+#
+# Companion to configs/prometheus/prometheus.r1.yml +
+# configs/prometheus/rules.r1/. This config maps OUR severity
+# vocabulary (page / ticket / informational) — distinct from the
+# multi-host Ansible template at
+# configs/ansible/roles/prometheus/templates/alertmanager.yml.j2,
+# which uses critical / warning / info.
+#
+# Apply via configs/alertmanager/apply.sh — it env-substitutes the
+# four placeholder URLs from a sourced env file (kept off-disk in
+# git per the deadmansswitch runbook).
+
+global:
+  resolve_timeout: 5m
+
+# ─── Templating ──────────────────────────────────────────────────
+# Inline templating only — no separate templates dir on R1.
+
+# ─── Routing tree ────────────────────────────────────────────────
+route:
+  receiver: chat-default
+  group_by: [alertname, severity]
+  group_wait: 30s
+  group_interval: 5m
+  repeat_interval: 12h
+
+  routes:
+    # Deadmansswitch — fires constantly. Routed to healthchecks.io.
+    # When the heartbeat stops (Prometheus or Alertmanager itself
+    # is broken), healthchecks.io pages us via a separate channel.
+    # See docs/operations/runbooks/deadmansswitch.md.
+    - matchers: [alertname = "ratesengine_deadmansswitch"]
+      receiver: deadmansswitch
+      group_interval: 60s
+      repeat_interval: 60s
+      continue: false
+
+    # SEV-1 — page operators. Currently routes to chat-page; wire
+    # PagerDuty in chat-page receiver below when integration_key is
+    # provisioned.
+    - matchers: [severity = "page"]
+      receiver: chat-page
+      continue: false
+
+    # Ticket — actionable but not urgent. Same chat fanout, lower
+    # repeat cadence.
+    - matchers: [severity = "ticket"]
+      receiver: chat-default
+      repeat_interval: 24h
+      continue: false
+
+    # Informational — accumulates in Alertmanager UI. Doesn't fan
+    # out to chat (would create noise).
+    - matchers: [severity = "informational"]
+      receiver: silent
+      continue: false
+
+# ─── Inhibit rules ───────────────────────────────────────────────
+inhibit_rules:
+  # If a page-severity alert fires for the same component, mute the
+  # ticket + informational variants to avoid stacking.
+  - source_matchers: [severity = "page"]
+    target_matchers: [severity =~ "ticket|informational"]
+    equal: [alertname, component]
+
+# ─── Receivers ───────────────────────────────────────────────────
+receivers:
+  # Deadmansswitch heartbeat URL — env-substituted at apply time.
+  - name: deadmansswitch
+    webhook_configs:
+      - url: ${HEALTHCHECKS_DEADMANSSWITCH_URL}
+        send_resolved: false
+
+  # Page-severity fanout. Sends to whichever Slack + PagerDuty
+  # endpoints are wired; degrades silently if neither is set.
+  - name: chat-page
+    slack_configs:
+      - api_url: ${SLACK_WEBHOOK_URL}
+        channel: '#ratesengine-pages'
+        send_resolved: true
+        title: '🚨 PAGE — {{ .GroupLabels.alertname }}'
+        text: |
+          {{ range .Alerts }}
+          *{{ .Annotations.summary }}*
+          {{ .Annotations.description }}
+          {{ if .Annotations.runbook_url }}Runbook: {{ .Annotations.runbook_url }}{{ end }}
+          {{ end }}
+
+  # Ticket-severity + default. Same Slack channel, less urgent text.
+  - name: chat-default
+    slack_configs:
+      - api_url: ${SLACK_WEBHOOK_URL}
+        channel: '#ratesengine-alerts'
+        send_resolved: true
+        title: '{{ .GroupLabels.alertname }}'
+        text: |
+          {{ range .Alerts }}
+          *[{{ .Labels.severity | toUpper }}]* {{ .Annotations.summary }}
+          {{ .Annotations.description }}
+          {{ if .Annotations.runbook_url }}Runbook: {{ .Annotations.runbook_url }}{{ end }}
+          {{ end }}
+
+  # Silent — informational alerts accumulate in the Alertmanager
+  # UI without fanout. No webhook config means literally no
+  # delivery; Alertmanager still tracks state.
+  - name: silent

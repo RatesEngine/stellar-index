@@ -16,6 +16,15 @@ against.
 ## [Unreleased]
 
 ### Added
+- `configs/alertmanager/` — single-host Alertmanager config for R1.
+  Routes our `page` / `ticket` / `informational` severity vocabulary
+  (the multi-host Ansible template at
+  `configs/ansible/roles/prometheus/templates/alertmanager.yml.j2`
+  uses `critical` / `warning` / `info`). The deadmansswitch is
+  routed to a Healthchecks.io URL on a 60 s cadence; page +
+  ticket alerts fan out to Slack via env-substituted webhooks
+  with no-op stub receivers when URLs are absent. Verified on R1:
+  amtool check-config passes, real alerts route correctly.
 - `examples/` — first-class API usage examples for customers.
   Ten `curl` scripts cover the launch endpoints (healthz, signup,
   account/me, coins, price, price/stream, ohlc, history,
