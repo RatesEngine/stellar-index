@@ -1,0 +1,17 @@
+[Unit]
+Description=Rates Engine API smoke test schedule
+Documentation=https://github.com/RatesEngine/rates-engine/blob/main/configs/healthchecks/README.md
+
+[Timer]
+# 5-minute cadence. Each run does 13 GETs against localhost — well
+# under the cost of the per-binary heartbeats running every 60 s.
+# RandomizedDelaySec spreads against the heartbeat timers so they
+# don't all hit the API at the same instant.
+OnBootSec=2min
+OnUnitActiveSec=5min
+RandomizedDelaySec=30s
+AccuracySec=10s
+Unit=ratesengine-smoke.service
+
+[Install]
+WantedBy=timers.target

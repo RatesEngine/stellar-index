@@ -9,6 +9,7 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" &>/dev/null && pwd)"
+REPO_ROOT="$(cd -- "$SCRIPT_DIR/../.." &>/dev/null && pwd)"
 
 INSTALL_DIR="/opt/ratesengine/healthchecks"
 SYSTEMD_DIR="/etc/systemd/system"
@@ -16,25 +17,33 @@ ENV_FILE="/etc/default/ratesengine-healthchecks"
 
 mkdir -p "$INSTALL_DIR"
 install -m 0755 "$SCRIPT_DIR/heartbeat.sh" "$INSTALL_DIR/heartbeat.sh"
+install -m 0755 "$SCRIPT_DIR/smoke.sh" "$INSTALL_DIR/smoke.sh"
+# Smoke wrapper runs r1-smoke.sh — copy it alongside so the unit
+# doesn't depend on a checkout being present on R1.
+install -m 0755 "$REPO_ROOT/scripts/dev/r1-smoke.sh" "$INSTALL_DIR/r1-smoke.sh"
 install -m 0644 "$SCRIPT_DIR/ratesengine-heartbeat@.service" "$SYSTEMD_DIR/"
 install -m 0644 "$SCRIPT_DIR/ratesengine-heartbeat@.timer" "$SYSTEMD_DIR/"
+install -m 0644 "$SCRIPT_DIR/ratesengine-smoke.service" "$SYSTEMD_DIR/"
+install -m 0644 "$SCRIPT_DIR/ratesengine-smoke.timer" "$SYSTEMD_DIR/"
 
 # Provision the env file with placeholders if missing. Operator
-# pastes the three Healthchecks.io check URLs they create on the
-# dashboard, then runs `systemctl restart ratesengine-heartbeat@*.timer`.
+# pastes the four Healthchecks.io URLs (3 heartbeats + 1 smoke)
+# they create on the dashboard, then runs
+# `systemctl restart ratesengine-heartbeat@*.timer ratesengine-smoke.timer`.
 if [ ! -f "$ENV_FILE" ]; then
   cat > "$ENV_FILE" <<'EOF'
-# Per-binary Healthchecks.io heartbeat URLs.
+# Healthchecks.io URLs.
 #
 # Each is a separate "Check" on healthchecks.io. Empty URL silently
-# skips the ping (the metrics-endpoint probe still runs and logs
-# failures via journalctl, so the timer is useful even before the
-# URLs are wired).
+# skips the ping (the underlying probe still runs and logs failures
+# via journalctl, so the timer is useful even before URLs are wired).
 #
-# Suggested cadence on the dashboard side: schedule 60 s, grace 120 s.
+# Per-binary heartbeats (60 s cadence, suggested grace 120 s):
 HEALTHCHECKS_URL_INDEXER=
 HEALTHCHECKS_URL_AGGREGATOR=
 HEALTHCHECKS_URL_API=
+# API surface smoke test (5 min cadence, suggested grace 10 min):
+HEALTHCHECKS_URL_SMOKE=
 EOF
   chmod 0600 "$ENV_FILE"
   chown root:root "$ENV_FILE"
@@ -45,8 +54,9 @@ systemctl daemon-reload
 systemctl enable --now ratesengine-heartbeat@indexer.timer
 systemctl enable --now ratesengine-heartbeat@aggregator.timer
 systemctl enable --now ratesengine-heartbeat@api.timer
+systemctl enable --now ratesengine-smoke.timer
 
 echo "install: done"
 echo
 echo "Next: populate $ENV_FILE with real URLs from healthchecks.io,"
-echo "then 'systemctl restart ratesengine-heartbeat@*.timer'"
+echo "then 'systemctl restart ratesengine-heartbeat@*.timer ratesengine-smoke.timer'"

@@ -1,0 +1,15 @@
+[Unit]
+Description=Rates Engine API smoke test (schema + data integrity)
+Documentation=https://github.com/RatesEngine/rates-engine/blob/main/configs/healthchecks/README.md
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/opt/ratesengine/healthchecks/smoke.sh
+EnvironmentFile=-/etc/default/ratesengine-healthchecks
+DynamicUser=true
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true

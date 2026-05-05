@@ -16,6 +16,14 @@ against.
 ## [Unreleased]
 
 ### Added
+- `ratesengine-smoke.timer` — wraps `r1-smoke.sh` in a 5 min
+  systemd timer that pings a Healthchecks.io URL with the full
+  smoke output as the ping body. Catches schema regressions the
+  metrics-port heartbeats can't see — e.g. `/v1/price` returning
+  200 with malformed JSON, or an OpenAPI-spec change that breaks
+  downstream clients. Wired through the same secrets file as the
+  per-binary heartbeats; new `HEALTHCHECKS_URL_SMOKE` env. Verified
+  live on R1.
 - `scripts/dev/r1-smoke.sh` — exercise the launch-critical API
   surface (health / catalogue / pricing / diagnostics — 13
   endpoints) against a deployment. Each check runs independently
