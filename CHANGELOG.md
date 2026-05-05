@@ -16,6 +16,17 @@ against.
 ## [Unreleased]
 
 ### Added
+- **Platform v1 Postgres stores (Phase 1, Week 2 part 1).** New
+  `internal/platform/postgresstore` package with concrete
+  implementations of `AccountStore`, `UserStore` (incl. session
+  CRUD), and `TokenStore` (magic-link tokens + invites) against
+  the schema from migration 0027. Each interface has a
+  compile-time `var _ X = (*Y)(nil)` check; testcontainers
+  integration test exercises every method including
+  conflict / not-found / expired classifications + concurrency-
+  safe atomic UPDATE...RETURNING for token consumption.
+  Runtime auth path still untouched — these stores are dormant
+  until the magic-link flow lands in Week 2 part 2.
 - **Platform v1 schema (Phase 1, Week 1).** New
   `migrations/0027_platform_v1_schema.up.sql` lands 12 tables
   for the customer + staff dashboard work specified in
