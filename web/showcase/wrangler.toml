@@ -1,0 +1,14 @@
+# Cloudflare Pages config for the Rates Engine showcase.
+#
+# Recommended deploy path is the dashboard's git integration —
+# every push to main rebuilds + deploys without hitting our GitHub
+# Actions budget. See docs/operations/showcase-deployment.md.
+#
+# This file exists for the manual-deploy fallback path
+# (.github/workflows/showcase-deploy.yml + Wrangler CLI). When the
+# git integration is the sole publisher this file is harmless
+# scaffolding.
+
+name = "ratesengine-showcase"
+pages_build_output_dir = "./out"
+compatibility_date = "2026-05-05"

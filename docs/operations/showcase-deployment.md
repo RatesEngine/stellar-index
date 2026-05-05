@@ -127,6 +127,31 @@ output. It applies on every response:
 If you switch to Vercel, translate `_headers` into a
 `vercel.json` headers block — same directives, different syntax.
 
+## Alternative: Wrangler CLI (manual deploy)
+
+For hotfixes or when the git integration is paused (e.g. mid-rotation
+of the CF GitHub app token), `.github/workflows/showcase-deploy.yml`
+is a manual-trigger workflow that publishes via the Wrangler CLI.
+
+```sh
+# Production deploy from main:
+gh workflow run showcase-deploy.yml --ref main \
+    -f environment=production
+
+# Preview deploy from a branch:
+gh workflow run showcase-deploy.yml --ref my-branch \
+    -f environment=preview \
+    -f api_base_url=https://api.staging.ratesengine.net
+```
+
+One-time setup: add two repo secrets (`CLOUDFLARE_API_TOKEN` with
+`Pages:Edit` scoped to the `ratesengine-showcase` project, and
+`CLOUDFLARE_ACCOUNT_ID`).
+
+The workflow intentionally doesn't fire on push — that path is
+owned by the CF git integration above. This workflow is the
+break-glass deploy when the integration isn't doing the job.
+
 ## Alternative: Vercel / Netlify
 
 Both work identically — same build command, same output directory,

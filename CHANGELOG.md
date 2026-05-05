@@ -16,6 +16,12 @@ against.
 ## [Unreleased]
 
 ### Added
+- `.github/workflows/showcase-deploy.yml` — manual-trigger CF Pages
+  deploy via Wrangler CLI for hotfix / break-glass cases. Fires
+  only on `workflow_dispatch`; the recommended publish path
+  remains the CF dashboard's git integration (no Actions minutes
+  consumed). Companion `web/showcase/wrangler.toml` pins the
+  project name + output dir.
 - `scripts/ops/pre-launch-check.sh` — read-only verifier for R1's
   pre-launch state. Walks through every step in the hardening
   doc and prints `pass / warn / fail` for each (binding,
