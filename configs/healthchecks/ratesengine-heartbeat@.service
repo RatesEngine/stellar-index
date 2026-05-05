@@ -1,0 +1,18 @@
+[Unit]
+Description=Rates Engine Healthchecks.io heartbeat — %i
+Documentation=https://github.com/RatesEngine/rates-engine/blob/main/configs/healthchecks/README.md
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/opt/ratesengine/healthchecks/heartbeat.sh %i
+# systemd reads this as root before dropping to DynamicUser, so a
+# 0600 secret stays unreadable to the unprivileged service user
+# while still being passed through as environment variables.
+EnvironmentFile=-/etc/default/ratesengine-healthchecks
+DynamicUser=true
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
