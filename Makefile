@@ -249,6 +249,10 @@ smoke-docker: ## Smoke-test all per-binary Docker images (requires `make build-d
 	  docker run --rm ratesengine/$$b:local --help 2>&1 | head -5 || exit 1; \
 	done
 
+.PHONY: smoke
+smoke: ## Smoke-test the launch-critical API surface against $$API_BASE_URL (default localhost:3000). Exit code = number of failed checks.
+	@bash scripts/dev/r1-smoke.sh
+
 ##@ Database migrations
 
 .PHONY: db-migrate-up
