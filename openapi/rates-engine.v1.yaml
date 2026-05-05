@@ -754,9 +754,17 @@ paths:
       summary: Latest oracle reading per source for an asset.
       description: |
         Returns one OracleReading per source (reflector-dex /
-        reflector-cex / reflector-fx / redstone / band) that has
-        observed the asset. Optional source filter restricts to a
-        single source.
+        reflector-cex / reflector-fx / redstone / band /
+        coingecko) that has observed the asset. Optional source
+        filter restricts to a single source.
+
+        Asset translation: classic Stellar identifiers map to the
+        global crypto ticker the oracles publish under — so
+        `asset=native` returns XLM observations (Reflector keys
+        them as `crypto:XLM`), `asset=USDC-GA5Z…` returns the
+        USDC global-ticker observations, etc. Already-canonical
+        forms (`crypto:XLM`, `fiat:USD`, contract addresses) pass
+        through unchanged.
       parameters:
         - { $ref: "#/components/parameters/AssetQuery" }
         - name: source
@@ -769,6 +777,41 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/OracleLatestEnvelope" }
+              example:
+                data:
+                  - source: reflector-cex
+                    contract_id: CAFJZQWSED6YAWZU3GWRTOCNPPCGBN32L7QV43XX5LZLFTK6JLN34DLN
+                    asset: crypto:XLM
+                    quote: fiat:USD
+                    ts: "2026-05-05T16:25:00Z"
+                    price: "0.15912"
+                    price_raw: "15912000000000"
+                    decimals: 14
+                    confidence: 0.96
+                    observer: GRELAYER0000000000000000000000000000000000000000000000000000
+                  - source: band
+                    asset: crypto:XLM
+                    quote: fiat:USD
+                    ts: "2026-05-05T16:25:30Z"
+                    price: "0.15908"
+                    price_raw: "159080000000000000"
+                    decimals: 18
+                  - source: redstone
+                    asset: crypto:XLM
+                    quote: fiat:USD
+                    ts: "2026-05-05T16:24:00Z"
+                    price: "0.15920"
+                    price_raw: "159200000"
+                    decimals: 9
+                  - source: coingecko
+                    asset: crypto:XLM
+                    quote: fiat:USD
+                    ts: "2026-05-05T16:25:00Z"
+                    price: "0.15915"
+                    price_raw: "15915"
+                    decimals: 5
+                as_of: "2026-05-05T16:25:42.881Z"
+                flags: { stale: false, reduced_redundancy: false, triangulated: false, divergence_warning: false }
         "400": { $ref: "#/components/responses/BadRequest" }
         "429": { $ref: "#/components/responses/RateLimited" }
         "500": { $ref: "#/components/responses/InternalError" }
@@ -962,6 +1005,24 @@ paths:
                     first_seen_ledger: { type: integer }
                     last_seen_ledger: { type: integer }
                     observation_count: { type: integer, format: int64 }
+              example:
+                data:
+                  - slug: USDC
+                    asset_id: USDC-GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN
+                    code: USDC
+                    issuer: GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN
+                    first_seen_ledger: 50457424
+                    last_seen_ledger: 62413938
+                    observation_count: 41610618
+                  - slug: yXLM
+                    asset_id: yXLM-GARDNV3Q7YGT4AKSDF25LT32YSCCW4EV22Y2TV3I2PU2MMXJTEDL5T55
+                    code: yXLM
+                    issuer: GARDNV3Q7YGT4AKSDF25LT32YSCCW4EV22Y2TV3I2PU2MMXJTEDL5T55
+                    first_seen_ledger: 50457424
+                    last_seen_ledger: 62413938
+                    observation_count: 32406192
+                as_of: "2026-05-05T16:03:05.111Z"
+                flags: { stale: false, reduced_redundancy: false, triangulated: false, divergence_warning: false }
         "400": { $ref: "#/components/responses/BadRequest" }
         "429": { $ref: "#/components/responses/RateLimited" }
         "500": { $ref: "#/components/responses/InternalError" }
@@ -1202,6 +1263,15 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/AccountEnvelope" }
+              example:
+                data:
+                  key_id: kid_8f3a2c1b9e7d4f6a
+                  label: production-api-1
+                  tier: apikey
+                  rate_limit_per_min: 1000
+                  created_at: "2026-04-12T09:32:18Z"
+                as_of: "2026-05-05T16:25:42.881Z"
+                flags: { stale: false, reduced_redundancy: false, triangulated: false, divergence_warning: false }
 
   /account/usage:
     get:
