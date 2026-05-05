@@ -17,6 +17,8 @@ import { CoinTabs, ActiveTabSlot } from './CoinTabs';
 import { ChartPanel } from './ChartPanel';
 import { IssuerPanel } from './IssuerPanel';
 import { MarketsTabPanel } from './MarketsTabPanel';
+import { HistoryTabPanel } from './HistoryTabPanel';
+import { SupplyTabPanel } from './SupplyTabPanel';
 
 /**
  * /coins/[slug] — single coin detail page.
@@ -134,6 +136,8 @@ export default async function CoinDetailPage({ params }: { params: Params }) {
           }
           chart={<ChartPanel slug={coin.slug} startPrice={coin.price || 0.01} />}
           markets={<MarketsTabPanel slug={coin.slug} />}
+          history={<HistoryTabPanel slug={coin.slug} />}
+          supply={<SupplyTabPanel slug={coin.slug} />}
           issuer={
             coin.issuer ? <IssuerPanel gStrkey={coin.issuer} /> : undefined
           }

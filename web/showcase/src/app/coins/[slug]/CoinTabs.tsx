@@ -29,8 +29,8 @@ export function CoinTabs({ slug, hasIssuer }: { slug: string; hasIssuer: boolean
     { key: 'overview', label: 'Overview' },
     { key: 'chart', label: 'Chart' },
     { key: 'markets', label: 'Markets' },
-    { key: 'history', label: 'History', disabled: true },
-    { key: 'supply', label: 'Supply', disabled: true },
+    { key: 'history', label: 'History' },
+    { key: 'supply', label: 'Supply' },
     ...(hasIssuer ? ([{ key: 'issuer', label: 'Issuer' }] as const) : []),
     { key: 'liquidity', label: 'Liquidity', disabled: true },
   ];
@@ -70,11 +70,15 @@ export function ActiveTabSlot({
   overview,
   chart,
   markets,
+  history,
+  supply,
   issuer,
 }: {
   overview: React.ReactNode;
   chart: React.ReactNode;
   markets?: React.ReactNode;
+  history?: React.ReactNode;
+  supply?: React.ReactNode;
   issuer?: React.ReactNode;
 }) {
   return (
@@ -82,6 +86,8 @@ export function ActiveTabSlot({
       overview={overview}
       chart={chart}
       markets={markets}
+      history={history}
+      supply={supply}
       issuer={issuer}
     />
   );
@@ -91,17 +97,23 @@ function ActiveBody({
   overview,
   chart,
   markets,
+  history,
+  supply,
   issuer,
 }: {
   overview: React.ReactNode;
   chart: React.ReactNode;
   markets?: React.ReactNode;
+  history?: React.ReactNode;
+  supply?: React.ReactNode;
   issuer?: React.ReactNode;
 }) {
   const params = useSearchParams();
   const tab = (params.get('tab') as CoinTab) || 'overview';
   if (tab === 'chart') return <>{chart}</>;
   if (tab === 'markets' && markets) return <>{markets}</>;
+  if (tab === 'history' && history) return <>{history}</>;
+  if (tab === 'supply' && supply) return <>{supply}</>;
   if (tab === 'issuer' && issuer) return <>{issuer}</>;
   return <>{overview}</>;
 }

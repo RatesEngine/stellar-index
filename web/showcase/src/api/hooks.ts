@@ -245,3 +245,87 @@ export function useCursors() {
     refetchInterval: 15_000,
   });
 }
+
+export type TradeRow = {
+  source: string;
+  ledger: number;
+  tx_hash: string;
+  op_index: number;
+  ts: string;
+  base_asset: string;
+  quote_asset: string;
+  base_amount: string;
+  quote_amount: string;
+  price?: string;
+};
+
+type TradeHistoryEnvelope = {
+  data: TradeRow[];
+  pagination?: { next?: string };
+};
+
+/**
+ * useHistory — fetches recent trades for a (base, quote) pair from
+ * `/v1/history`. Limit caps at 1000 server-side; the showcase
+ * History tab requests 100 by default. Pagination cursor is left
+ * on the envelope but not consumed yet.
+ */
+export function useHistory(base: string | undefined, quote: string, limit = 100) {
+  return useQuery<TradeRow[]>({
+    queryKey: ['/v1/history', base, quote, limit],
+    enabled: !!base,
+    queryFn: async () => {
+      const env = await apiGet<TradeHistoryEnvelope>('/v1/history', {
+        base: base ?? '',
+        quote,
+        limit,
+      });
+      return env.data ?? [];
+    },
+  });
+}
+
+export type AssetDetail = {
+  asset_id: string;
+  type: string;
+  code?: string;
+  issuer?: string;
+  decimals: number;
+  name?: string;
+  description?: string;
+  image?: string;
+  org_name?: string;
+  anchor_asset?: string;
+  // F2 supply fields (ADR-0011) — decimal strings in the asset's
+  // smallest integer unit. Null when the supply reader isn't wired
+  // or the asset has no snapshot.
+  circulating_supply?: string | null;
+  total_supply?: string | null;
+  max_supply?: string | null;
+  market_cap_usd?: string | null;
+  fdv_usd?: string | null;
+  supply_basis?: string | null;
+  volume_24h_usd?: string | null;
+  change_24h_pct?: string | null;
+  is_unlimited?: boolean | null;
+  fixed_number?: string | null;
+  max_number?: string | null;
+};
+
+/**
+ * useAsset — fetches the rich asset-detail surface from
+ * `/v1/assets/{id}`. Backs the Supply tab's F2 fields and any
+ * panel that needs SEP-1 metadata for an asset.
+ */
+export function useAsset(assetID: string | undefined) {
+  return useQuery<AssetDetail>({
+    queryKey: ['/v1/assets/{id}', assetID],
+    enabled: !!assetID,
+    queryFn: async () => {
+      const env = await apiGet<{ data: AssetDetail }>(
+        `/v1/assets/${encodeURIComponent(assetID ?? '')}`,
+      );
+      return env.data;
+    },
+  });
+}
