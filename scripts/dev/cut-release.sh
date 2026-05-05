@@ -51,10 +51,22 @@ if [[ -n "$(git status --porcelain)" ]]; then
   exit 1
 fi
 
-# Step 3 — up to date with origin
-git fetch --quiet origin main
+# Step 3 — up to date with origin. Use the gh API to read the
+# remote tip rather than `git fetch` so the script works against
+# both SSH-keyed and HTTPS-credential-via-gh setups (some envs
+# carry gh creds but no SSH key, and vice versa).
 local_sha=$(git rev-parse main)
-remote_sha=$(git rev-parse origin/main)
+if command -v gh >/dev/null 2>&1; then
+  remote_sha=$(gh api repos/{owner}/{repo}/commits/main --jq '.sha' 2>/dev/null || true)
+  if [[ -z "$remote_sha" ]]; then
+    echo "WARN: could not read origin/main via gh; falling back to git fetch" >&2
+    git fetch --quiet origin main 2>/dev/null || true
+    remote_sha=$(git rev-parse origin/main 2>/dev/null || echo unknown)
+  fi
+else
+  git fetch --quiet origin main
+  remote_sha=$(git rev-parse origin/main)
+fi
 if [[ "$local_sha" != "$remote_sha" ]]; then
   echo "ERR: main is not in sync with origin/main:" >&2
   echo "  local:  $local_sha" >&2
@@ -68,7 +80,14 @@ if git rev-parse "$TAG" >/dev/null 2>&1; then
   echo "ERR: tag '$TAG' already exists locally" >&2
   exit 1
 fi
-if git ls-remote --exit-code --tags origin "refs/tags/$TAG" >/dev/null 2>&1; then
+# Use the gh API for the remote-tag-exists check too, for the
+# same SSH-vs-HTTPS reason as step 3.
+if command -v gh >/dev/null 2>&1; then
+  if gh api "repos/{owner}/{repo}/git/ref/tags/$TAG" >/dev/null 2>&1; then
+    echo "ERR: tag '$TAG' already exists on origin" >&2
+    exit 1
+  fi
+elif git ls-remote --exit-code --tags origin "refs/tags/$TAG" >/dev/null 2>&1; then
   echo "ERR: tag '$TAG' already exists on origin" >&2
   exit 1
 fi
@@ -123,7 +142,23 @@ if [[ "$ans" != "y" && "$ans" != "Y" ]]; then
 fi
 
 git tag "$TAG"
-git push origin "$TAG"
+# Resolve origin's URL so the push works whether origin is SSH-keyed,
+# HTTPS-via-gh-credentials, or some mix. `git push origin $TAG`
+# would also work in most setups, but using the explicit URL skips
+# the ambient SSH-key requirement on hosts that only have gh creds.
+origin_url=$(git remote get-url origin 2>/dev/null || echo "")
+case "$origin_url" in
+  git@github.com:*)
+    https_url="https://github.com/${origin_url#git@github.com:}"
+    git push "$https_url" "$TAG"
+    ;;
+  https://*)
+    git push "$origin_url" "$TAG"
+    ;;
+  *)
+    git push origin "$TAG"
+    ;;
+esac
 
 echo ""
 echo "Tag $TAG pushed. release.yml will fire shortly."
