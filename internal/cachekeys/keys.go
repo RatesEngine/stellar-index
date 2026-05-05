@@ -322,6 +322,39 @@ func OracleLatest(assetKeys []string, sourceFilter string) string {
 // OracleLatestTTL is the TTL for `oracle:latest:*` cache entries.
 const OracleLatestTTL = 30 * time.Second
 
+// ─── Assets list / Markets list — read-through cache ──────────────
+//
+// Wire shape:
+//   `assets:list:<cursor>:<limit>`
+//   `markets:list:<cursor>:<limit>`
+//
+// Writer: api (read-through; populated on cache miss)
+// Reader: api
+// TTL: 60 s — both endpoints derive from a 14-day rolling
+// window over the trades hypertable; new assets/pairs appear on
+// the human timescale of new listings (minutes-to-hours), so a
+// 60 s entry stays well inside the human freshness expectation.
+//
+// Invalidation: TTL only — no explicit invalidation on insert.
+// 60 s of staleness on a "new asset just got its first trade"
+// is acceptable; a fresh listing isn't expected to surface
+// instantly.
+
+// AssetsList returns the cache key for one page of /v1/assets.
+func AssetsList(cursor string, limit int) string {
+	return fmt.Sprintf("assets:list:%s:%d", cursor, limit)
+}
+
+// MarketsList returns the cache key for one page of /v1/markets.
+func MarketsList(cursor string, limit int) string {
+	return fmt.Sprintf("markets:list:%s:%d", cursor, limit)
+}
+
+// CatalogueListTTL is the shared TTL for both `assets:list:*` and
+// `markets:list:*`. Tighter than the underlying 14-day window but
+// loose enough to absorb polling fan-out.
+const CatalogueListTTL = 60 * time.Second
+
 // sortStrings is a tiny inline sort to avoid pulling sort into
 // every cachekeys consumer.
 func sortStrings(ss []string) {

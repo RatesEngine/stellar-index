@@ -16,6 +16,15 @@ against.
 ## [Unreleased]
 
 ### Performance
+- `/v1/assets` and `/v1/markets` Redis read-through caches.
+  Same shape as the oracle cache from #696: `cachedAssetReader`
+  and `cachedMarketsReader` wrap the store implementations,
+  serving paginated reads from Redis with a 60 s TTL. New
+  listings surface within one cache cycle (acceptable on the
+  human timescale of "asset just got its first trade"). Single-
+  asset and single-pair lookups pass through unchanged. Verified
+  live on R1: `/v1/assets` cold 634 ms → warm 0.36 ms;
+  `/v1/markets` cold 567 ms → warm 0.27 ms (~2000× both).
 - `/v1/oracle/latest` Redis read-through cache: cold reads stay
   ~600 ms (DISTINCT ON (source) sort over the oracle_updates
   hypertable union), warm reads drop to ~0.5 ms — three orders

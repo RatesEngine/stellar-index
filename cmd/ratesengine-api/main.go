@@ -396,6 +396,28 @@ func run(cfgPath string, dryRun bool) error { //nolint:gocognit,funlen,gocyclo /
 			"ttl", cachekeys.OracleLatestTTL.String())
 	}
 
+	// Catalogue readers — same Redis read-through pattern for the
+	// /v1/assets and /v1/markets list endpoints. Both derive from
+	// 14-day-window aggregations over the trades hypertable
+	// (~450-500 ms cold), so a 60 s cache absorbs polling fan-out
+	// without delaying new-listing surfacing more than once-a-minute.
+	var assetReader v1.AssetReader = storeAssetReader{s: store, homeDomainLookup: homeDomainLookup}
+	var marketsReader v1.MarketsReader = storeMarketsReader{s: store}
+	if rdb != nil {
+		assetReader = cachedAssetReader{
+			inner: assetReader,
+			rdb:   rdb,
+			log:   logger.With("component", "assets-cache"),
+		}
+		marketsReader = cachedMarketsReader{
+			inner: marketsReader,
+			rdb:   rdb,
+			log:   logger.With("component", "markets-cache"),
+		}
+		logger.Info("catalogue readers wrapped with Redis cache",
+			"ttl", cachekeys.CatalogueListTTL.String())
+	}
+
 	// Status backend — points /v1/status at a local Prometheus when
 	// configured. Empty URL leaves the endpoint serving an
 	// in-process surface (region label + uptime only).
@@ -411,10 +433,10 @@ func run(cfgPath string, dryRun bool) error { //nolint:gocognit,funlen,gocyclo /
 	apiSrv := v1.New(v1.Options{
 		Logger:           logger.With("component", "api"),
 		ReadyChecks:      checks,
-		Assets:           storeAssetReader{s: store, homeDomainLookup: homeDomainLookup},
+		Assets:           assetReader,
 		Prices:           priceReader,
 		History:          storeHistoryReader{s: store},
-		Markets:          storeMarketsReader{s: store},
+		Markets:          marketsReader,
 		Oracle:           oracleReader,
 		Meta:             sep1Cache,
 		Accounts:         accountStore,
@@ -861,6 +883,92 @@ func (r cachedOracleReader) LatestOracleUpdatesForAssets(ctx context.Context, as
 		}
 	}
 	return updates, nil
+}
+
+// cachedAssetReader / cachedMarketsReader — Redis read-through
+// caches for the catalogue list endpoints. Same shape as
+// cachedOracleReader: deserialise on hit, hit-the-DB-then-SET on
+// miss, fall through on error. Single-asset / single-pair lookups
+// pass through unchanged — they're already fast and benefit less
+// from caching.
+
+type listCachePayload[T any] struct {
+	Items      []T    `json:"items"`
+	NextCursor string `json:"next"`
+}
+
+type cachedAssetReader struct {
+	inner v1.AssetReader
+	rdb   redis.UniversalClient
+	log   *slog.Logger
+}
+
+func (r cachedAssetReader) GetAsset(ctx context.Context, a canonical.Asset) (v1.AssetDetail, error) {
+	return r.inner.GetAsset(ctx, a)
+}
+
+func (r cachedAssetReader) ListAssets(ctx context.Context, cursor string, limit int) ([]v1.AssetDetail, string, error) {
+	if r.rdb == nil {
+		return r.inner.ListAssets(ctx, cursor, limit)
+	}
+	cacheKey := cachekeys.AssetsList(cursor, limit)
+	if raw, err := r.rdb.Get(ctx, cacheKey).Bytes(); err == nil {
+		var p listCachePayload[v1.AssetDetail]
+		if jerr := json.Unmarshal(raw, &p); jerr == nil {
+			return p.Items, p.NextCursor, nil
+		}
+		r.log.Warn("assets cache decode failed", "key", cacheKey)
+	} else if !errors.Is(err, redis.Nil) {
+		r.log.Warn("assets cache read failed", "key", cacheKey, "err", err)
+	}
+
+	items, next, err := r.inner.ListAssets(ctx, cursor, limit)
+	if err != nil {
+		return nil, "", err
+	}
+	if buf, jerr := json.Marshal(listCachePayload[v1.AssetDetail]{Items: items, NextCursor: next}); jerr == nil {
+		if serr := r.rdb.Set(ctx, cacheKey, buf, cachekeys.CatalogueListTTL).Err(); serr != nil {
+			r.log.Warn("assets cache write failed", "key", cacheKey, "err", serr)
+		}
+	}
+	return items, next, nil
+}
+
+type cachedMarketsReader struct {
+	inner v1.MarketsReader
+	rdb   redis.UniversalClient
+	log   *slog.Logger
+}
+
+func (r cachedMarketsReader) PairMarket(ctx context.Context, base, quote canonical.Asset) (v1.Market, bool, error) {
+	return r.inner.PairMarket(ctx, base, quote)
+}
+
+func (r cachedMarketsReader) DistinctPairs(ctx context.Context, cursor string, limit int) ([]v1.Market, string, error) {
+	if r.rdb == nil {
+		return r.inner.DistinctPairs(ctx, cursor, limit)
+	}
+	cacheKey := cachekeys.MarketsList(cursor, limit)
+	if raw, err := r.rdb.Get(ctx, cacheKey).Bytes(); err == nil {
+		var p listCachePayload[v1.Market]
+		if jerr := json.Unmarshal(raw, &p); jerr == nil {
+			return p.Items, p.NextCursor, nil
+		}
+		r.log.Warn("markets cache decode failed", "key", cacheKey)
+	} else if !errors.Is(err, redis.Nil) {
+		r.log.Warn("markets cache read failed", "key", cacheKey, "err", err)
+	}
+
+	items, next, err := r.inner.DistinctPairs(ctx, cursor, limit)
+	if err != nil {
+		return nil, "", err
+	}
+	if buf, jerr := json.Marshal(listCachePayload[v1.Market]{Items: items, NextCursor: next}); jerr == nil {
+		if serr := r.rdb.Set(ctx, cacheKey, buf, cachekeys.CatalogueListTTL).Err(); serr != nil {
+			r.log.Warn("markets cache write failed", "key", cacheKey, "err", serr)
+		}
+	}
+	return items, next, nil
 }
 
 // redisConfidenceLooker adapts the shared Redis client to
