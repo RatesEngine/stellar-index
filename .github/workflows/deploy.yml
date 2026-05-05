@@ -1,0 +1,202 @@
+name: deploy
+
+# Manual deploy of a tagged binary release to a region.
+#
+# Required GitHub Actions secrets:
+#   DEPLOY_SSH_PRIVATE_KEY  — SSH key with root access to the
+#                              region's host (`ssh-keygen -t ed25519`,
+#                              public key authorised on the host)
+#   R1_HOST                  — IP/hostname of the r1 box (e.g. 136.243.90.96)
+#   R1_USER                  — SSH user; defaults to "root" if unset
+#   R1_SSH_KNOWN_HOSTS       — `ssh-keyscan -t ed25519 <host>` output,
+#                              base64-encoded (avoid newline-in-secret
+#                              quirks). Pinning known_hosts prevents
+#                              MITM during deploy.
+#
+# Triggered exclusively via workflow_dispatch. There's no auto-deploy
+# on tag push — the release workflow produces the artefacts; a human
+# decides when each region picks them up.
+#
+# Stack: depends on PRs #645 (release.yml + Dockerfiles + SemVer
+# policy) which produces the v* tagged release artefacts this
+# workflow downloads.
+
+on:
+  workflow_dispatch:
+    inputs:
+      region:
+        description: 'Target region'
+        required: true
+        type: choice
+        options:
+          - r1
+      version:
+        description: 'Version tag to deploy (e.g. v0.2.0). Must exist as a GitHub Release.'
+        required: true
+        type: string
+      binaries:
+        description: 'Comma-separated binaries to deploy (default: indexer + aggregator + api)'
+        required: false
+        type: string
+        default: 'ratesengine-indexer,ratesengine-aggregator,ratesengine-api'
+      health_grace_seconds:
+        description: 'Seconds to wait between restart and /v1/healthz probe'
+        required: false
+        type: string
+        default: '15'
+
+# Concurrency: at most one deploy per region in flight. Prevents two
+# operators racing each other and producing inconsistent state.
+concurrency:
+  group: deploy-${{ inputs.region }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read           # download release artefacts
+  id-token: write          # future: keyless attestation
+
+jobs:
+  deploy:
+    name: Deploy ${{ inputs.version }} → ${{ inputs.region }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    environment:
+      name: ${{ inputs.region }}
+      # Set this in the repo's Environments → r1 → Reviewers list to
+      # require manual approval before this job runs in r1. Leave
+      # empty for unattended.
+
+    steps:
+      - name: Checkout (for Ansible playbook)
+        uses: actions/checkout@v4
+
+      - name: Validate inputs
+        run: |
+          set -euo pipefail
+          if ! echo "${{ inputs.version }}" | grep -Eq '^v[0-9]+\.[0-9]+\.[0-9]+(-[A-Za-z0-9.-]+)?(\+[A-Za-z0-9.-]+)?$'; then
+            echo "::error::Version '${{ inputs.version }}' must match SemVer vX.Y.Z[-prerelease][+build]"
+            exit 1
+          fi
+          # Reject empty / whitespace-only binary list early
+          BINS="$(echo '${{ inputs.binaries }}' | tr -d '[:space:]')"
+          if [ -z "$BINS" ]; then
+            echo "::error::binaries input is empty"
+            exit 1
+          fi
+          # Each binary must be a known cmd/<name> directory
+          IFS=',' read -ra LIST <<< "$BINS"
+          for b in "${LIST[@]}"; do
+            if [ ! -d "cmd/$b" ]; then
+              echo "::error::Unknown binary '$b' (no cmd/$b/ directory)"
+              exit 1
+            fi
+          done
+          echo "Validated ${#LIST[@]} binaries: ${LIST[*]}"
+
+      - name: Resolve region inventory
+        id: region
+        env:
+          R1_HOST: ${{ secrets.R1_HOST }}
+          R1_USER: ${{ secrets.R1_USER }}
+        run: |
+          set -euo pipefail
+          case "${{ inputs.region }}" in
+            r1)
+              host="${R1_HOST}"
+              user="${R1_USER:-root}"
+              ;;
+            *)
+              echo "::error::Region '${{ inputs.region }}' has no inventory mapping"
+              exit 1
+              ;;
+          esac
+          if [ -z "$host" ]; then
+            echo "::error::Region ${{ inputs.region }} host secret is unset"
+            exit 1
+          fi
+          echo "host=$host" >> "$GITHUB_OUTPUT"
+          echo "user=$user" >> "$GITHUB_OUTPUT"
+          echo "Target: $user@$host"
+
+      - name: Download release binaries
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          mkdir -p dist
+          IFS=',' read -ra LIST <<< "$(echo '${{ inputs.binaries }}' | tr -d '[:space:]')"
+          for b in "${LIST[@]}"; do
+            artifact="${b}-linux-amd64"
+            echo "Downloading $artifact from release ${{ inputs.version }}"
+            gh release download "${{ inputs.version }}" \
+              -p "$artifact" -O "dist/$artifact" \
+              -R "${{ github.repository }}"
+            chmod +x "dist/$artifact"
+          done
+          echo "---"
+          ls -la dist/
+
+      - name: Verify SHA256SUMS
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          gh release download "${{ inputs.version }}" -p SHA256SUMS -O dist/SHA256SUMS -R "${{ github.repository }}"
+          cd dist
+          # SHA256SUMS contains every artefact's sum. Filter to the
+          # binaries we downloaded and verify just those.
+          IFS=',' read -ra LIST <<< "$(echo '${{ inputs.binaries }}' | tr -d '[:space:]')"
+          for b in "${LIST[@]}"; do
+            grep -E "  ${b}-linux-amd64$" SHA256SUMS | sha256sum -c -
+          done
+          echo "Checksums OK"
+
+      - name: Set up SSH
+        env:
+          SSH_KEY: ${{ secrets.DEPLOY_SSH_PRIVATE_KEY }}
+          KNOWN_HOSTS_B64: ${{ secrets.R1_SSH_KNOWN_HOSTS }}
+          HOST: ${{ steps.region.outputs.host }}
+        run: |
+          set -euo pipefail
+          mkdir -p ~/.ssh
+          chmod 700 ~/.ssh
+          printf '%s\n' "$SSH_KEY" > ~/.ssh/id_deploy
+          chmod 600 ~/.ssh/id_deploy
+          if [ -n "${KNOWN_HOSTS_B64:-}" ]; then
+            echo "$KNOWN_HOSTS_B64" | base64 -d > ~/.ssh/known_hosts
+          else
+            echo "::warning::R1_SSH_KNOWN_HOSTS unset — falling back to ssh-keyscan (less safe)"
+            ssh-keyscan -T 5 -t ed25519,rsa "$HOST" > ~/.ssh/known_hosts 2>/dev/null
+          fi
+          chmod 644 ~/.ssh/known_hosts
+
+      - name: Install Ansible
+        run: |
+          python3 -m pip install --upgrade pip
+          python3 -m pip install 'ansible-core==2.18.*'
+
+      - name: Run deploy playbook
+        env:
+          ANSIBLE_HOST_KEY_CHECKING: 'True'
+          ANSIBLE_FORCE_COLOR: '1'
+        run: |
+          set -euo pipefail
+          ansible-playbook \
+            -i "${{ steps.region.outputs.host }}," \
+            -u "${{ steps.region.outputs.user }}" \
+            --private-key ~/.ssh/id_deploy \
+            -e "version=${{ inputs.version }}" \
+            -e "binaries_csv=${{ inputs.binaries }}" \
+            -e "local_dist_dir=$GITHUB_WORKSPACE/dist" \
+            -e "health_grace_seconds=${{ inputs.health_grace_seconds }}" \
+            configs/ansible/playbooks/deploy-binary.yml
+
+      - name: Summary
+        if: always()
+        run: |
+          echo "## Deploy summary" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Region: \`${{ inputs.region }}\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Version: \`${{ inputs.version }}\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Binaries: \`${{ inputs.binaries }}\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Outcome: \`${{ job.status }}\`" >> "$GITHUB_STEP_SUMMARY"
