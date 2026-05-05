@@ -16,6 +16,17 @@ against.
 ## [Unreleased]
 
 ### Added
+- Showcase /coins/[slug] gets two new tabs:
+  - **History** — table of recent on-chain trades (`/v1/history`)
+    against XLM, with relative timestamps, source chip, ledger,
+    base/quote amounts, and derived price per row.
+  - **Supply** — F2 fields per ADR-0011: circulating/total/max
+    (with smallest-unit decimal strings shown for audit), market
+    cap, fully-diluted valuation, supply_basis tag, and SEP-1
+    issuance declarations (fixed_number / max_number /
+    is_unlimited) when the issuer published them.
+  Both tabs were placeholder-disabled in CoinTabs; now wired
+  through ActiveTabSlot. Liquidity tab remains disabled.
 - `configs/healthchecks/` — per-binary Healthchecks.io heartbeats.
   Three systemd `.timer` instantiations of a single template
   service each ping a separate Healthchecks.io URL on a 60 s
