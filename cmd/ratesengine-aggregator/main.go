@@ -106,10 +106,16 @@ const (
 
 func main() {
 	var (
-		cfgPath = flag.String("config", "", "Path to TOML config file (required)")
-		dryRun  = flag.Bool("dry-run", false, "Load config + open connections + exit without running the ticker")
+		cfgPath     = flag.String("config", "", "Path to TOML config file (required)")
+		dryRun      = flag.Bool("dry-run", false, "Load config + open connections + exit without running the ticker")
+		showVersion = flag.Bool("version", false, "Print version and exit")
 	)
 	flag.Parse()
+
+	if *showVersion {
+		fmt.Println(version.String())
+		return
+	}
 
 	if *cfgPath == "" {
 		fmt.Fprintln(os.Stderr, "ratesengine-aggregator: -config is required")

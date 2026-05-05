@@ -45,6 +45,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/RatesEngine/rates-engine/internal/version"
 )
 
 // SLA targets — match the RFP-stated thresholds. Configurable via
@@ -165,9 +167,15 @@ func main() {
 		availTarget  = flag.Float64("availability-target", defaultAvailabilityT, "Per-endpoint availability SLA target (percent)")
 		textfileOut  = flag.String("textfile-output", "", "Path to write Prometheus textfile (node_exporter textfile_collector format). Empty = no metrics emit.")
 		apiKey       = flag.String("api-key", defaultAPIKey, "API key for Authorization: Bearer header. Defaults to $RATESENGINE_PROBE_API_KEY. Without one the probe hits the anonymous-tier rate limit (60 req/min) and reads as a fail.")
+		showVersion  = flag.Bool("version", false, "Print version and exit")
 	)
 	flag.Var(&pairFlag, "pair", "Asset pair as 'asset,quote' (e.g. 'native,fiat:USD'). Repeatable.")
 	flag.Parse()
+
+	if *showVersion {
+		fmt.Println(version.String())
+		return
+	}
 
 	if *baseURL == "" {
 		fmt.Fprintln(os.Stderr, "ratesengine-sla-probe: -base-url is required")
