@@ -446,9 +446,12 @@ CREATE TABLE stripe_event_log (
 
 ### 5.1 Email (transactional)
 
-Use **Postmark** (best deliverability for transactional mail) or
-self-host via Mailgun if cost matters. Either way, abstracted
-behind an `internal/notify` package.
+Use **Resend** (operator-locked decision 2026-05-05). Modern
+React-Email-friendly templating, generous free tier (100 / day,
+3k / month), and a clean Go SDK. Abstracted behind an
+`internal/notify` package so the provider can swap if Resend
+ever falls over (Postmark + Mailgun are interface-compatible
+fallbacks).
 
 Templates:
 - `welcome` — sent on first signup

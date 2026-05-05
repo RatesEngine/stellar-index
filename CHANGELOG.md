@@ -16,6 +16,24 @@ against.
 ## [Unreleased]
 
 ### Added
+- **Platform v1 schema (Phase 1, Week 1).** New
+  `migrations/0027_platform_v1_schema.up.sql` lands 12 tables
+  for the customer + staff dashboard work specified in
+  `docs/architecture/platform-spec.md`: `accounts`, `users`,
+  `sessions`, `magic_link_tokens`, `api_keys` (extended with
+  name/description/IP-allowlist/expiry/scoped-permissions/usage-
+  alert-threshold + last-used tracking), `api_usage_events`
+  (TimescaleDB hypertable, 12mo retention), `subscriptions`,
+  `stripe_event_log`, `invites`, `audit_log`,
+  `customer_webhooks`, `webhook_deliveries`. Reversible via the
+  matching `.down.sql`. Companion `internal/platform` package
+  ships the Go types + repository interfaces (account / user /
+  session / token / apikey / usage / billing / audit / webhook)
+  plus the sentinel errors (`ErrNotFound`, `ErrTokenExpired`,
+  `ErrConflict`, `ErrAlreadyProcessed`, `ErrLastOwner`).
+  Runtime auth path is unchanged in this PR — Redis stays
+  canonical until the Week 4 cutover wires Postgres-backed
+  reads. Email-provider decision locked to Resend; spec updated.
 - `key_prefix` field on `auth.APIKeyRecord` (and the
   `auth.Subject` it derives) — first 12 characters of the
   plaintext key (e.g. `rek_4f9c1d8b`). Surfaced on three wire
