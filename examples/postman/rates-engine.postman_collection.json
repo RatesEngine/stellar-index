@@ -5,7 +5,7 @@
             "description": "",
             "item": [
                 {
-                    "id": "e1a96aee-f6b9-476d-864a-cb7412066e49",
+                    "id": "c38f0e60-53fb-4ac5-895f-6df30f7f4a70",
                     "name": "Liveness — process is up.",
                     "request": {
                         "name": "Liveness — process is up.",
@@ -32,7 +32,7 @@
                     },
                     "response": [
                         {
-                            "id": "87e4158d-4cb6-4a66-a67d-2a9247bbc552",
+                            "id": "d9e1f253-56f3-4150-8c2a-d1576bbfa7ee",
                             "name": "Alive.",
                             "originalRequest": {
                                 "url": {
@@ -62,7 +62,7 @@
                                     "value": "application/json"
                                 }
                             ],
-                            "body": "{\n  \"status\": \"ok\"\n}",
+                            "body": "{\n  \"status\": \"degraded\"\n}",
                             "cookie": [],
                             "_postman_previewlanguage": "json"
                         }
@@ -79,7 +79,7 @@
             "description": "",
             "item": [
                 {
-                    "id": "2c80edcf-a180-4b71-a832-e6acfff79078",
+                    "id": "a835bdf9-1488-46ee-a6bd-d674ca81c87f",
                     "name": "Readiness — all dependencies reachable.",
                     "request": {
                         "name": "Readiness — all dependencies reachable.",
@@ -106,7 +106,7 @@
                     },
                     "response": [
                         {
-                            "id": "ae6b8180-11a5-4250-916b-7a31038135c6",
+                            "id": "16b31f7f-d8dc-4c5d-b2e9-8729c406b17d",
                             "name": "Ready to serve.",
                             "originalRequest": {
                                 "url": {
@@ -136,12 +136,12 @@
                                     "value": "application/json"
                                 }
                             ],
-                            "body": "{\n  \"status\": \"ok\"\n}",
+                            "body": "{\n  \"status\": \"degraded\"\n}",
                             "cookie": [],
                             "_postman_previewlanguage": "json"
                         },
                         {
-                            "id": "796bce5e-b650-422d-9f5e-b39053de894e",
+                            "id": "bfc243c9-842f-4d86-a421-ee58c60ee67b",
                             "name": "Dependencies unreachable.",
                             "originalRequest": {
                                 "url": {
@@ -188,7 +188,7 @@
             "description": "",
             "item": [
                 {
-                    "id": "90cfdd8f-b37d-4829-be23-6611be90bac7",
+                    "id": "5706f492-289c-418f-813a-dd3c60789177",
                     "name": "Build metadata.",
                     "request": {
                         "name": "Build metadata.",
@@ -215,7 +215,7 @@
                     },
                     "response": [
                         {
-                            "id": "fdd46053-2c69-4a07-98d2-18b3c840eeb0",
+                            "id": "90268ff7-dff6-4f76-9979-e48579561ea1",
                             "name": "Version string, build date, git SHA.",
                             "originalRequest": {
                                 "url": {
@@ -258,11 +258,88 @@
             ]
         },
         {
+            "name": "status",
+            "description": "",
+            "item": [
+                {
+                    "id": "4d50c776-c2f3-4cde-9554-685557e64f34",
+                    "name": "Comprehensive system health rollup for the public status page.",
+                    "request": {
+                        "name": "Comprehensive system health rollup for the public status page.",
+                        "description": {
+                            "content": "Customer-facing surface — what the showcase status page renders.\nReturns per-service heartbeats (api / indexer / aggregator),\nAPI histogram-derived p50/p95/p99 latency over the last 5\nminutes, ingest freshness signals, and a count of currently-\nfiring Alertmanager incidents grouped by severity.\n\nAlways returns 200; the body's `overall` field reports\ndegraded state rather than an HTTP error so monitoring\ndashboards can poll a single endpoint without alerting on\n503s. When the API isn't wired against a Prometheus backend,\nonly the in-process surface (region label + uptime) is\npopulated and `flags.stale=true`.\n",
+                            "type": "text/plain"
+                        },
+                        "url": {
+                            "path": [
+                                "status"
+                            ],
+                            "host": [
+                                "{{baseUrl}}"
+                            ],
+                            "query": [],
+                            "variable": []
+                        },
+                        "header": [
+                            {
+                                "key": "Accept",
+                                "value": "application/json"
+                            }
+                        ],
+                        "method": "GET",
+                        "body": {},
+                        "auth": null
+                    },
+                    "response": [
+                        {
+                            "id": "e6dc0ee3-a355-4cac-830b-1c235fbe2eee",
+                            "name": "Status rollup envelope.",
+                            "originalRequest": {
+                                "url": {
+                                    "path": [
+                                        "status"
+                                    ],
+                                    "host": [
+                                        "{{baseUrl}}"
+                                    ],
+                                    "query": [],
+                                    "variable": []
+                                },
+                                "header": [
+                                    {
+                                        "key": "Accept",
+                                        "value": "application/json"
+                                    }
+                                ],
+                                "method": "GET",
+                                "body": {}
+                            },
+                            "status": "OK",
+                            "code": 200,
+                            "header": [
+                                {
+                                    "key": "Content-Type",
+                                    "value": "application/json"
+                                }
+                            ],
+                            "body": "{\n  \"as_of\": \"<dateTime>\",\n  \"data\": {\n    \"overall\": \"down\",\n    \"region\": {\n      \"name\": \"<string>\",\n      \"deployment\": \"<string>\"\n    },\n    \"services\": [\n      {\n        \"name\": \"<string>\",\n        \"status\": \"ok\",\n        \"last_seen\": \"<dateTime>\"\n      },\n      {\n        \"name\": \"<string>\",\n        \"status\": \"unknown\",\n        \"last_seen\": \"<dateTime>\"\n      }\n    ],\n    \"latency\": {\n      \"p50_ms\": \"<number>\",\n      \"p95_ms\": \"<number>\",\n      \"p99_ms\": \"<number>\",\n      \"window_secs\": \"<integer>\"\n    },\n    \"freshness\": {\n      \"last_aggregator_tick\": \"<dateTime>\",\n      \"active_sources\": \"<integer>\",\n      \"total_sources\": \"<integer>\"\n    },\n    \"incidents\": {\n      \"active_count\": \"<integer>\",\n      \"page_count\": \"<integer>\",\n      \"ticket_count\": \"<integer>\",\n      \"informational_count\": \"<integer>\"\n    }\n  },\n  \"flags\": {\n    \"stale\": false,\n    \"reduced_redundancy\": false,\n    \"triangulated\": false,\n    \"divergence_warning\": false,\n    \"frozen\": false,\n    \"single_source\": false\n  },\n  \"sources\": [\n    \"<string>\",\n    \"<string>\"\n  ]\n}",
+                            "cookie": [],
+                            "_postman_previewlanguage": "json"
+                        }
+                    ],
+                    "event": [],
+                    "protocolProfileBehavior": {
+                        "disableBodyPruning": true
+                    }
+                }
+            ]
+        },
+        {
             "name": "assets",
             "description": "",
             "item": [
                 {
-                    "id": "4294a012-e743-4cf7-97f3-dbe3499a4e89",
+                    "id": "9548fb2d-a22a-46f3-8c76-c5ffa3b3f582",
                     "name": "List indexed assets.",
                     "request": {
                         "name": "List indexed assets.",
@@ -311,7 +388,7 @@
                     },
                     "response": [
                         {
-                            "id": "153eb12e-bac4-4e60-9898-f61b0d45339b",
+                            "id": "aadd17f9-96d6-4b21-b469-e1d01bf9fa60",
                             "name": "Page of assets.",
                             "originalRequest": {
                                 "url": {
@@ -360,12 +437,12 @@
                                     "value": "application/json"
                                 }
                             ],
-                            "body": "{\n  \"as_of\": \"<dateTime>\",\n  \"data\": [\n    {\n      \"asset_id\": \"<string>\",\n      \"type\": \"fiat\",\n      \"code\": \"<string>\",\n      \"decimals\": \"<integer>\",\n      \"sep1_status\": \"no_match\",\n      \"issuer\": \"<string>\",\n      \"contract_id\": \"<string>\",\n      \"home_domain\": \"<string>\",\n      \"name\": \"<string>\",\n      \"description\": \"<string>\",\n      \"image\": \"<string>\",\n      \"org_name\": \"<string>\",\n      \"anchor_asset\": \"<string>\",\n      \"anchor_asset_type\": \"<string>\",\n      \"conditions\": \"<string>\",\n      \"fixed_number\": \"<string>\",\n      \"max_number\": \"<string>\",\n      \"is_unlimited\": \"<boolean>\",\n      \"circulating_supply\": \"<string>\",\n      \"total_supply\": \"<string>\",\n      \"max_supply\": \"<string>\",\n      \"market_cap_usd\": \"<string>\",\n      \"fdv_usd\": \"<string>\",\n      \"supply_basis\": \"xlm_sdf_reserve_exclusion\",\n      \"volume_24h_usd\": \"<string>\"\n    },\n    {\n      \"asset_id\": \"<string>\",\n      \"type\": \"fiat\",\n      \"code\": \"<string>\",\n      \"decimals\": \"<integer>\",\n      \"sep1_status\": \"no_match\",\n      \"issuer\": \"<string>\",\n      \"contract_id\": \"<string>\",\n      \"home_domain\": \"<string>\",\n      \"name\": \"<string>\",\n      \"description\": \"<string>\",\n      \"image\": \"<string>\",\n      \"org_name\": \"<string>\",\n      \"anchor_asset\": \"<string>\",\n      \"anchor_asset_type\": \"<string>\",\n      \"conditions\": \"<string>\",\n      \"fixed_number\": \"<string>\",\n      \"max_number\": \"<string>\",\n      \"is_unlimited\": \"<boolean>\",\n      \"circulating_supply\": \"<string>\",\n      \"total_supply\": \"<string>\",\n      \"max_supply\": \"<string>\",\n      \"market_cap_usd\": \"<string>\",\n      \"fdv_usd\": \"<string>\",\n      \"supply_basis\": \"xlm_sdf_reserve_exclusion\",\n      \"volume_24h_usd\": \"<string>\"\n    }\n  ],\n  \"flags\": {\n    \"stale\": false,\n    \"reduced_redundancy\": false,\n    \"triangulated\": false,\n    \"divergence_warning\": false,\n    \"frozen\": false,\n    \"single_source\": false\n  },\n  \"sources\": [\n    \"<string>\",\n    \"<string>\"\n  ],\n  \"pagination\": {\n    \"next\": \"<string>\"\n  }\n}",
+                            "body": "{\n  \"as_of\": \"<dateTime>\",\n  \"data\": [\n    {\n      \"asset_id\": \"<string>\",\n      \"type\": \"soroban\",\n      \"code\": \"<string>\",\n      \"decimals\": \"<integer>\",\n      \"sep1_status\": \"not_applicable\",\n      \"issuer\": \"<string>\",\n      \"contract_id\": \"<string>\",\n      \"home_domain\": \"<string>\",\n      \"name\": \"<string>\",\n      \"description\": \"<string>\",\n      \"image\": \"<string>\",\n      \"org_name\": \"<string>\",\n      \"anchor_asset\": \"<string>\",\n      \"anchor_asset_type\": \"<string>\",\n      \"conditions\": \"<string>\",\n      \"fixed_number\": \"<string>\",\n      \"max_number\": \"<string>\",\n      \"is_unlimited\": \"<boolean>\",\n      \"circulating_supply\": \"<string>\",\n      \"total_supply\": \"<string>\",\n      \"max_supply\": \"<string>\",\n      \"market_cap_usd\": \"<string>\",\n      \"fdv_usd\": \"<string>\",\n      \"supply_basis\": \"issuer_exclusion\",\n      \"volume_24h_usd\": \"<string>\"\n    },\n    {\n      \"asset_id\": \"<string>\",\n      \"type\": \"native\",\n      \"code\": \"<string>\",\n      \"decimals\": \"<integer>\",\n      \"sep1_status\": \"not_applicable\",\n      \"issuer\": \"<string>\",\n      \"contract_id\": \"<string>\",\n      \"home_domain\": \"<string>\",\n      \"name\": \"<string>\",\n      \"description\": \"<string>\",\n      \"image\": \"<string>\",\n      \"org_name\": \"<string>\",\n      \"anchor_asset\": \"<string>\",\n      \"anchor_asset_type\": \"<string>\",\n      \"conditions\": \"<string>\",\n      \"fixed_number\": \"<string>\",\n      \"max_number\": \"<string>\",\n      \"is_unlimited\": \"<boolean>\",\n      \"circulating_supply\": \"<string>\",\n      \"total_supply\": \"<string>\",\n      \"max_supply\": \"<string>\",\n      \"market_cap_usd\": \"<string>\",\n      \"fdv_usd\": \"<string>\",\n      \"supply_basis\": \"admin_exclusion\",\n      \"volume_24h_usd\": \"<string>\"\n    }\n  ],\n  \"flags\": {\n    \"stale\": false,\n    \"reduced_redundancy\": false,\n    \"triangulated\": false,\n    \"divergence_warning\": false,\n    \"frozen\": false,\n    \"single_source\": false\n  },\n  \"sources\": [\n    \"<string>\",\n    \"<string>\"\n  ],\n  \"pagination\": {\n    \"next\": \"<string>\"\n  }\n}",
                             "cookie": [],
                             "_postman_previewlanguage": "json"
                         },
                         {
-                            "id": "40f0c831-ee57-4e0c-a4b2-ffca07cda578",
+                            "id": "3890d7dc-6e3f-47aa-a019-90690312971d",
                             "name": "Client-supplied parameters didn't validate.",
                             "originalRequest": {
                                 "url": {
@@ -419,7 +496,7 @@
                             "_postman_previewlanguage": "json"
                         },
                         {
-                            "id": "e796ee11-5409-464b-9b91-83ffd05240de",
+                            "id": "fd42de01-ed9f-4c33-b289-a9a1c3c32af3",
                             "name": "Rate-limit quota exhausted. See `Retry-After` header.",
                             "originalRequest": {
                                 "url": {
@@ -500,7 +577,7 @@
                             "_postman_previewlanguage": "json"
                         },
                         {
-                            "id": "e353de23-2c04-4be5-b358-d74a49d0872c",
+                            "id": "28472408-f52c-4880-9322-c004b1a7fe1f",
                             "name": "Internal error. Body includes the request_id for correlation.",
                             "originalRequest": {
                                 "url": {
@@ -554,7 +631,7 @@
                             "_postman_previewlanguage": "json"
                         },
                         {
-                            "id": "11da838e-7d42-4e7d-a1c5-d0bf2a4b1320",
+                            "id": "a90fb695-d543-433d-8182-44f96219261c",
                             "name": "Server is degraded (dependency outage, startup, shutdown).",
                             "originalRequest": {
                                 "url": {
@@ -618,7 +695,7 @@
                     "description": "",
                     "item": [
                         {
-                            "id": "f07c28b0-8eff-495b-9bb2-d4d36752a3a4",
+                            "id": "a931a11e-e44b-43ab-9a8e-d09854cb30cd",
                             "name": "Asset detail.",
                             "request": {
                                 "name": "Asset detail.",
@@ -657,7 +734,7 @@
                             },
                             "response": [
                                 {
-                                    "id": "5eb3c22e-d3d9-48dd-9c5e-bd3dff75a8a6",
+                                    "id": "ab629b40-c318-47ac-8b6a-6954af08893d",
                                     "name": "Asset + metadata.",
                                     "originalRequest": {
                                         "url": {
@@ -699,12 +776,12 @@
                                             "value": "application/json"
                                         }
                                     ],
-                                    "body": "{\n  \"as_of\": \"<dateTime>\",\n  \"data\": {\n    \"asset_id\": \"<string>\",\n    \"type\": \"fiat\",\n    \"code\": \"<string>\",\n    \"decimals\": \"<integer>\",\n    \"sep1_status\": \"no_match\",\n    \"issuer\": \"<string>\",\n    \"contract_id\": \"<string>\",\n    \"home_domain\": \"<string>\",\n    \"name\": \"<string>\",\n    \"description\": \"<string>\",\n    \"image\": \"<string>\",\n    \"org_name\": \"<string>\",\n    \"anchor_asset\": \"<string>\",\n    \"anchor_asset_type\": \"<string>\",\n    \"conditions\": \"<string>\",\n    \"fixed_number\": \"<string>\",\n    \"max_number\": \"<string>\",\n    \"is_unlimited\": \"<boolean>\",\n    \"circulating_supply\": \"<string>\",\n    \"total_supply\": \"<string>\",\n    \"max_supply\": \"<string>\",\n    \"market_cap_usd\": \"<string>\",\n    \"fdv_usd\": \"<string>\",\n    \"supply_basis\": \"admin_exclusion\",\n    \"volume_24h_usd\": \"<string>\"\n  },\n  \"flags\": {\n    \"stale\": false,\n    \"reduced_redundancy\": false,\n    \"triangulated\": false,\n    \"divergence_warning\": false,\n    \"frozen\": false,\n    \"single_source\": false\n  },\n  \"sources\": [\n    \"<string>\",\n    \"<string>\"\n  ]\n}",
+                                    "body": "{\n  \"as_of\": \"<dateTime>\",\n  \"data\": {\n    \"asset_id\": \"<string>\",\n    \"type\": \"fiat\",\n    \"code\": \"<string>\",\n    \"decimals\": \"<integer>\",\n    \"sep1_status\": \"verified\",\n    \"issuer\": \"<string>\",\n    \"contract_id\": \"<string>\",\n    \"home_domain\": \"<string>\",\n    \"name\": \"<string>\",\n    \"description\": \"<string>\",\n    \"image\": \"<string>\",\n    \"org_name\": \"<string>\",\n    \"anchor_asset\": \"<string>\",\n    \"anchor_asset_type\": \"<string>\",\n    \"conditions\": \"<string>\",\n    \"fixed_number\": \"<string>\",\n    \"max_number\": \"<string>\",\n    \"is_unlimited\": \"<boolean>\",\n    \"circulating_supply\": \"<string>\",\n    \"total_supply\": \"<string>\",\n    \"max_supply\": \"<string>\",\n    \"market_cap_usd\": \"<string>\",\n    \"fdv_usd\": \"<string>\",\n    \"supply_basis\": \"xlm_sdf_reserve_exclusion\",\n    \"volume_24h_usd\": \"<string>\"\n  },\n  \"flags\": {\n    \"stale\": false,\n    \"reduced_redundancy\": false,\n    \"triangulated\": false,\n    \"divergence_warning\": false,\n    \"frozen\": false,\n    \"single_source\": false\n  },\n  \"sources\": [\n    \"<string>\",\n    \"<string>\"\n  ]\n}",
                                     "cookie": [],
                                     "_postman_previewlanguage": "json"
                                 },
                                 {
-                                    "id": "34ce2aa7-7074-488b-928e-358f7b8033e3",
+                                    "id": "8face29b-b2db-4449-a770-ffd9dd93aa40",
                                     "name": "Not found.",
                                     "originalRequest": {
                                         "url": {
@@ -761,7 +838,7 @@
                             "description": "",
                             "item": [
                                 {
-                                    "id": "099bbe7a-bf28-4cdd-abc6-15517503b421",
+                                    "id": "24ad3db2-2f0e-42bf-abfb-13fa975e2daa",
                                     "name": "Extended metadata (SEP-1 CURRENCIES block).",
                                     "request": {
                                         "name": "Extended metadata (SEP-1 CURRENCIES block).",
@@ -801,7 +878,7 @@
                                     },
                                     "response": [
                                         {
-                                            "id": "9a3dc772-1371-4e6e-ab8f-35a37e46fc28",
+                                            "id": "fab23895-ed52-4dec-a355-664bc20a9fc7",
                                             "name": "Extended metadata.",
                                             "originalRequest": {
                                                 "url": {
@@ -844,12 +921,12 @@
                                                     "value": "application/json"
                                                 }
                                             ],
-                                            "body": "{\n  \"as_of\": \"<dateTime>\",\n  \"data\": {\n    \"asset_id\": \"<string>\",\n    \"sep1_status\": \"unreachable\",\n    \"home_domain\": \"<string>\",\n    \"name\": \"<string>\",\n    \"description\": \"<string>\",\n    \"image\": \"<string>\",\n    \"org_name\": \"<string>\",\n    \"anchor_asset\": \"<string>\",\n    \"anchor_asset_type\": \"<string>\",\n    \"conditions\": \"<string>\",\n    \"fixed_number\": \"<string>\",\n    \"max_number\": \"<string>\",\n    \"is_unlimited\": \"<boolean>\"\n  },\n  \"flags\": {\n    \"stale\": false,\n    \"reduced_redundancy\": false,\n    \"triangulated\": false,\n    \"divergence_warning\": false,\n    \"frozen\": false,\n    \"single_source\": false\n  },\n  \"sources\": [\n    \"<string>\",\n    \"<string>\"\n  ]\n}",
+                                            "body": "{\n  \"as_of\": \"<dateTime>\",\n  \"data\": {\n    \"asset_id\": \"<string>\",\n    \"sep1_status\": \"not_fetched\",\n    \"home_domain\": \"<string>\",\n    \"name\": \"<string>\",\n    \"description\": \"<string>\",\n    \"image\": \"<string>\",\n    \"org_name\": \"<string>\",\n    \"anchor_asset\": \"<string>\",\n    \"anchor_asset_type\": \"<string>\",\n    \"conditions\": \"<string>\",\n    \"fixed_number\": \"<string>\",\n    \"max_number\": \"<string>\",\n    \"is_unlimited\": \"<boolean>\"\n  },\n  \"flags\": {\n    \"stale\": false,\n    \"reduced_redundancy\": false,\n    \"triangulated\": false,\n    \"divergence_warning\": false,\n    \"frozen\": false,\n    \"single_source\": false\n  },\n  \"sources\": [\n    \"<string>\",\n    \"<string>\"\n  ]\n}",
                                             "cookie": [],
                                             "_postman_previewlanguage": "json"
                                         },
                                         {
-                                            "id": "972cf13a-48b7-4d06-a492-d314d8218069",
+                                            "id": "8d7c8170-96de-476e-8d7b-24028e4f5192",
                                             "name": "Not found.",
                                             "originalRequest": {
                                                 "url": {
@@ -913,7 +990,7 @@
             "description": "",
             "item": [
                 {
-                    "id": "77c4dbf6-709a-4ae4-986b-d414f5856bd1",
+                    "id": "b6563665-f24b-4b9c-a840-af3ed346fff6",
                     "name": "Current aggregated price for one asset.",
                     "request": {
                         "name": "Current aggregated price for one asset.",
@@ -959,7 +1036,7 @@
                     },
                     "response": [
                         {
-                            "id": "b4a1dfcf-b94e-4376-9a02-3496fd6423ed",
+                            "id": "4165add2-a8f4-4917-88bc-d13a51551e7a",
                             "name": "Current price with freshness flags.",
                             "originalRequest": {
                                 "url": {
@@ -1013,7 +1090,7 @@
                             "_postman_previewlanguage": "json"
                         },
                         {
-                            "id": "7fe6ecbb-b20a-493d-9b38-9f62d32298ed",
+                            "id": "f81df627-ea30-4f94-a089-f24b8daf9f56",
                             "name": "Client-supplied parameters didn't validate.",
                             "originalRequest": {
                                 "url": {
@@ -1067,7 +1144,7 @@
                             "_postman_previewlanguage": "json"
                         },
                         {
-                            "id": "eaec3427-0f34-43ff-b522-71538bff71ab",
+                            "id": "b57d31d9-c88b-449f-a6f3-1eb45af5b688",
                             "name": "Not found.",
                             "originalRequest": {
                                 "url": {
@@ -1121,7 +1198,7 @@
                             "_postman_previewlanguage": "json"
                         },
                         {
-                            "id": "edf58409-c9f0-4840-a20d-434c2ea645b0",
+                            "id": "3d176bbc-c46a-40f6-ba0f-5ef91fdf4953",
                             "name": "Rate-limit quota exhausted. See `Retry-After` header.",
                             "originalRequest": {
                                 "url": {
@@ -1202,7 +1279,7 @@
                             "_postman_previewlanguage": "json"
                         },
                         {
-                            "id": "fb40a515-04e2-4cf3-8e44-4213d2ce9f17",
+                            "id": "ceaacccb-a2af-4fd8-86d5-33c04826b68f",
                             "name": "Internal error. Body includes the request_id for correlation.",
                             "originalRequest": {
                                 "url": {
@@ -1256,7 +1333,7 @@
                             "_postman_previewlanguage": "json"
                         },
                         {
-                            "id": "df5e8582-d2b7-4dc9-aad5-2307b22464fe",
+                            "id": "67ce49b1-7f1a-4187-8f6b-2dd52e38c63f",
                             "name": "Server is degraded (dependency outage, startup, shutdown).",
                             "originalRequest": {
                                 "url": {
@@ -1320,7 +1397,7 @@
                     "description": "",
                     "item": [
                         {
-                            "id": "5f82c83e-b4f4-41f9-8099-2ebb3e556096",
+                            "id": "e351c3c0-75df-44a9-9b6e-49a1d616f1d4",
                             "name": "Rolling-window tip price (ADR-0018 tip surface).",
                             "request": {
                                 "name": "Rolling-window tip price (ADR-0018 tip surface).",
@@ -1379,7 +1456,7 @@
                             },
                             "response": [
                                 {
-                                    "id": "3ec37006-fb4b-4f11-bf47-ed4adda672b5",
+                                    "id": "0882ad21-393d-4742-8139-2047c5801e4d",
                                     "name": "Tip price (VWAP or last-good fallback).",
                                     "originalRequest": {
                                         "url": {
@@ -1443,7 +1520,7 @@
                                     "_postman_previewlanguage": "json"
                                 },
                                 {
-                                    "id": "be4ab9a2-9582-41c1-a9df-a625959f8ff3",
+                                    "id": "14263929-5193-47ab-a44b-c21eeb930d8c",
                                     "name": "Client-supplied parameters didn't validate.",
                                     "originalRequest": {
                                         "url": {
@@ -1507,7 +1584,7 @@
                                     "_postman_previewlanguage": "json"
                                 },
                                 {
-                                    "id": "f785d07a-f740-4cbc-b3e8-69b121068bc8",
+                                    "id": "0a0366a6-9b7f-4ff9-8134-afe0045aa76e",
                                     "name": "Not found.",
                                     "originalRequest": {
                                         "url": {
@@ -1571,7 +1648,7 @@
                                     "_postman_previewlanguage": "json"
                                 },
                                 {
-                                    "id": "ebc080b9-58e7-433e-8a5a-07abc69df235",
+                                    "id": "8384fadb-ca3c-44c8-9d80-21b09edc2c2d",
                                     "name": "Rate-limit quota exhausted. See `Retry-After` header.",
                                     "originalRequest": {
                                         "url": {
@@ -1662,7 +1739,7 @@
                                     "_postman_previewlanguage": "json"
                                 },
                                 {
-                                    "id": "90248bc2-752d-41e1-907b-72efe85e89dc",
+                                    "id": "aeae2983-7c87-4b07-a765-e46d997ec372",
                                     "name": "Internal error. Body includes the request_id for correlation.",
                                     "originalRequest": {
                                         "url": {
@@ -1726,7 +1803,7 @@
                                     "_postman_previewlanguage": "json"
                                 },
                                 {
-                                    "id": "c115706d-9762-4d51-8d9e-bc0e456a88b4",
+                                    "id": "420632de-9e8c-46a6-8131-618505f428cc",
                                     "name": "Server is degraded (dependency outage, startup, shutdown).",
                                     "originalRequest": {
                                         "url": {
@@ -1800,7 +1877,7 @@
                             "description": "",
                             "item": [
                                 {
-                                    "id": "4d820562-a61f-4b2d-8b66-b6056c03b71c",
+                                    "id": "2cc87d31-fda4-4824-a828-465c4a18ea99",
                                     "name": "SSE stream of tip-price updates (ADR-0018).",
                                     "request": {
                                         "name": "SSE stream of tip-price updates (ADR-0018).",
@@ -1869,7 +1946,7 @@
                                     },
                                     "response": [
                                         {
-                                            "id": "00493393-048c-41b0-ba51-d85416f43484",
+                                            "id": "259bfbf0-d698-4c94-a179-7141d99c7011",
                                             "name": "SSE stream of tip_update events.",
                                             "originalRequest": {
                                                 "url": {
@@ -1943,7 +2020,7 @@
                                             "_postman_previewlanguage": "text"
                                         },
                                         {
-                                            "id": "7b5e0b19-f0b1-4f48-9d0d-52b561704ca7",
+                                            "id": "6135c5f2-f307-4e13-b345-01288169f973",
                                             "name": "Client-supplied parameters didn't validate.",
                                             "originalRequest": {
                                                 "url": {
@@ -2017,7 +2094,7 @@
                                             "_postman_previewlanguage": "json"
                                         },
                                         {
-                                            "id": "c8b4394b-f81b-4602-9248-2e0af88b2c26",
+                                            "id": "95ccde31-e07c-42bc-9091-0c6fc5553d7a",
                                             "name": "Not found.",
                                             "originalRequest": {
                                                 "url": {
@@ -2091,7 +2168,7 @@
                                             "_postman_previewlanguage": "json"
                                         },
                                         {
-                                            "id": "b47b83d6-487f-4a6e-a167-60d8ef17cfc2",
+                                            "id": "cab5bf3d-50e0-4a5f-8215-80d7146ffeb3",
                                             "name": "Rate-limit quota exhausted. See `Retry-After` header.",
                                             "originalRequest": {
                                                 "url": {
@@ -2192,7 +2269,7 @@
                                             "_postman_previewlanguage": "json"
                                         },
                                         {
-                                            "id": "82ce18c7-0a8b-4d2a-820c-848894120843",
+                                            "id": "21dfd014-b23a-4a97-a0b7-41ccadebf051",
                                             "name": "Internal error. Body includes the request_id for correlation.",
                                             "originalRequest": {
                                                 "url": {
@@ -2266,7 +2343,7 @@
                                             "_postman_previewlanguage": "json"
                                         },
                                         {
-                                            "id": "cd5087e2-1917-4267-ba5c-e9311866d490",
+                                            "id": "8294c948-549c-43e8-b270-4e3fc6dcab3d",
                                             "name": "Server is degraded (dependency outage, startup, shutdown).",
                                             "originalRequest": {
                                                 "url": {
@@ -2354,7 +2431,7 @@
                     "description": "",
                     "item": [
                         {
-                            "id": "b1d49804-c623-4e4d-80af-8c3e5baaf78f",
+                            "id": "36eb0f8a-3937-4bee-97cc-96a340c309ca",
                             "name": "Current prices for up to 100 assets.",
                             "request": {
                                 "name": "Current prices for up to 100 assets.",
@@ -2401,7 +2478,7 @@
                             },
                             "response": [
                                 {
-                                    "id": "3c6ae53f-6d7d-45c7-9339-3222c33d0332",
+                                    "id": "74d1f6eb-52b9-4f7d-9f02-84b4c322046c",
                                     "name": "Batch prices.",
                                     "originalRequest": {
                                         "url": {
@@ -2451,7 +2528,7 @@
                                             "value": "application/json"
                                         }
                                     ],
-                                    "body": "{\n  \"as_of\": \"<dateTime>\",\n  \"data\": [\n    {\n      \"asset_id\": \"<string>\",\n      \"quote\": \"<string>\",\n      \"price\": \"<string>\",\n      \"price_type\": \"twap\",\n      \"observed_at\": \"<dateTime>\",\n      \"window_seconds\": \"<integer>\",\n      \"change_24h_pct\": \"<string>\",\n      \"volume_24h_usd\": \"<string>\",\n      \"market_cap_usd\": \"<string>\",\n      \"fdv_usd\": \"<string>\",\n      \"circulating_supply\": \"<string>\",\n      \"total_supply\": \"<string>\",\n      \"max_supply\": \"<string>\",\n      \"confidence\": \"<float>\",\n      \"confidence_factors\": {\n        \"z_score\": \"<float>\",\n        \"source_count\": \"<float>\",\n        \"diversity\": \"<float>\",\n        \"liquidity\": \"<float>\",\n        \"cross_oracle\": \"<float>\",\n        \"baseline_quality\": \"<float>\"\n      }\n    },\n    {\n      \"asset_id\": \"<string>\",\n      \"quote\": \"<string>\",\n      \"price\": \"<string>\",\n      \"price_type\": \"twap\",\n      \"observed_at\": \"<dateTime>\",\n      \"window_seconds\": \"<integer>\",\n      \"change_24h_pct\": \"<string>\",\n      \"volume_24h_usd\": \"<string>\",\n      \"market_cap_usd\": \"<string>\",\n      \"fdv_usd\": \"<string>\",\n      \"circulating_supply\": \"<string>\",\n      \"total_supply\": \"<string>\",\n      \"max_supply\": \"<string>\",\n      \"confidence\": \"<float>\",\n      \"confidence_factors\": {\n        \"z_score\": \"<float>\",\n        \"source_count\": \"<float>\",\n        \"diversity\": \"<float>\",\n        \"liquidity\": \"<float>\",\n        \"cross_oracle\": \"<float>\",\n        \"baseline_quality\": \"<float>\"\n      }\n    }\n  ],\n  \"flags\": {\n    \"stale\": false,\n    \"reduced_redundancy\": false,\n    \"triangulated\": false,\n    \"divergence_warning\": false,\n    \"frozen\": false,\n    \"single_source\": false\n  },\n  \"sources\": [\n    \"<string>\",\n    \"<string>\"\n  ]\n}",
+                                    "body": "{\n  \"as_of\": \"<dateTime>\",\n  \"data\": [\n    {\n      \"asset_id\": \"<string>\",\n      \"quote\": \"<string>\",\n      \"price\": \"<string>\",\n      \"price_type\": \"twap\",\n      \"observed_at\": \"<dateTime>\",\n      \"window_seconds\": \"<integer>\",\n      \"change_24h_pct\": \"<string>\",\n      \"volume_24h_usd\": \"<string>\",\n      \"market_cap_usd\": \"<string>\",\n      \"fdv_usd\": \"<string>\",\n      \"circulating_supply\": \"<string>\",\n      \"total_supply\": \"<string>\",\n      \"max_supply\": \"<string>\",\n      \"confidence\": \"<float>\",\n      \"confidence_factors\": {\n        \"z_score\": \"<float>\",\n        \"source_count\": \"<float>\",\n        \"diversity\": \"<float>\",\n        \"liquidity\": \"<float>\",\n        \"cross_oracle\": \"<float>\",\n        \"baseline_quality\": \"<float>\"\n      }\n    },\n    {\n      \"asset_id\": \"<string>\",\n      \"quote\": \"<string>\",\n      \"price\": \"<string>\",\n      \"price_type\": \"last_trade\",\n      \"observed_at\": \"<dateTime>\",\n      \"window_seconds\": \"<integer>\",\n      \"change_24h_pct\": \"<string>\",\n      \"volume_24h_usd\": \"<string>\",\n      \"market_cap_usd\": \"<string>\",\n      \"fdv_usd\": \"<string>\",\n      \"circulating_supply\": \"<string>\",\n      \"total_supply\": \"<string>\",\n      \"max_supply\": \"<string>\",\n      \"confidence\": \"<float>\",\n      \"confidence_factors\": {\n        \"z_score\": \"<float>\",\n        \"source_count\": \"<float>\",\n        \"diversity\": \"<float>\",\n        \"liquidity\": \"<float>\",\n        \"cross_oracle\": \"<float>\",\n        \"baseline_quality\": \"<float>\"\n      }\n    }\n  ],\n  \"flags\": {\n    \"stale\": false,\n    \"reduced_redundancy\": false,\n    \"triangulated\": false,\n    \"divergence_warning\": false,\n    \"frozen\": false,\n    \"single_source\": false\n  },\n  \"sources\": [\n    \"<string>\",\n    \"<string>\"\n  ]\n}",
                                     "cookie": [],
                                     "_postman_previewlanguage": "json"
                                 }
@@ -2462,7 +2539,7 @@
                             }
                         },
                         {
-                            "id": "03c81e70-d40c-4619-bef2-a223950756b5",
+                            "id": "2bd9846f-a07d-46f3-92ae-b15b14644dad",
                             "name": "Current prices for up to 1000 assets.",
                             "request": {
                                 "name": "Current prices for up to 1000 assets.",
@@ -2503,7 +2580,7 @@
                             },
                             "response": [
                                 {
-                                    "id": "980a366b-7c0e-4c94-8f12-77bba4ed4cc6",
+                                    "id": "0f44042b-d248-4300-8ef2-3d9c187ed2cb",
                                     "name": "Batch prices.",
                                     "originalRequest": {
                                         "url": {
@@ -2547,7 +2624,7 @@
                                             "value": "application/json"
                                         }
                                     ],
-                                    "body": "{\n  \"as_of\": \"<dateTime>\",\n  \"data\": [\n    {\n      \"asset_id\": \"<string>\",\n      \"quote\": \"<string>\",\n      \"price\": \"<string>\",\n      \"price_type\": \"twap\",\n      \"observed_at\": \"<dateTime>\",\n      \"window_seconds\": \"<integer>\",\n      \"change_24h_pct\": \"<string>\",\n      \"volume_24h_usd\": \"<string>\",\n      \"market_cap_usd\": \"<string>\",\n      \"fdv_usd\": \"<string>\",\n      \"circulating_supply\": \"<string>\",\n      \"total_supply\": \"<string>\",\n      \"max_supply\": \"<string>\",\n      \"confidence\": \"<float>\",\n      \"confidence_factors\": {\n        \"z_score\": \"<float>\",\n        \"source_count\": \"<float>\",\n        \"diversity\": \"<float>\",\n        \"liquidity\": \"<float>\",\n        \"cross_oracle\": \"<float>\",\n        \"baseline_quality\": \"<float>\"\n      }\n    },\n    {\n      \"asset_id\": \"<string>\",\n      \"quote\": \"<string>\",\n      \"price\": \"<string>\",\n      \"price_type\": \"twap\",\n      \"observed_at\": \"<dateTime>\",\n      \"window_seconds\": \"<integer>\",\n      \"change_24h_pct\": \"<string>\",\n      \"volume_24h_usd\": \"<string>\",\n      \"market_cap_usd\": \"<string>\",\n      \"fdv_usd\": \"<string>\",\n      \"circulating_supply\": \"<string>\",\n      \"total_supply\": \"<string>\",\n      \"max_supply\": \"<string>\",\n      \"confidence\": \"<float>\",\n      \"confidence_factors\": {\n        \"z_score\": \"<float>\",\n        \"source_count\": \"<float>\",\n        \"diversity\": \"<float>\",\n        \"liquidity\": \"<float>\",\n        \"cross_oracle\": \"<float>\",\n        \"baseline_quality\": \"<float>\"\n      }\n    }\n  ],\n  \"flags\": {\n    \"stale\": false,\n    \"reduced_redundancy\": false,\n    \"triangulated\": false,\n    \"divergence_warning\": false,\n    \"frozen\": false,\n    \"single_source\": false\n  },\n  \"sources\": [\n    \"<string>\",\n    \"<string>\"\n  ]\n}",
+                                    "body": "{\n  \"as_of\": \"<dateTime>\",\n  \"data\": [\n    {\n      \"asset_id\": \"<string>\",\n      \"quote\": \"<string>\",\n      \"price\": \"<string>\",\n      \"price_type\": \"twap\",\n      \"observed_at\": \"<dateTime>\",\n      \"window_seconds\": \"<integer>\",\n      \"change_24h_pct\": \"<string>\",\n      \"volume_24h_usd\": \"<string>\",\n      \"market_cap_usd\": \"<string>\",\n      \"fdv_usd\": \"<string>\",\n      \"circulating_supply\": \"<string>\",\n      \"total_supply\": \"<string>\",\n      \"max_supply\": \"<string>\",\n      \"confidence\": \"<float>\",\n      \"confidence_factors\": {\n        \"z_score\": \"<float>\",\n        \"source_count\": \"<float>\",\n        \"diversity\": \"<float>\",\n        \"liquidity\": \"<float>\",\n        \"cross_oracle\": \"<float>\",\n        \"baseline_quality\": \"<float>\"\n      }\n    },\n    {\n      \"asset_id\": \"<string>\",\n      \"quote\": \"<string>\",\n      \"price\": \"<string>\",\n      \"price_type\": \"last_trade\",\n      \"observed_at\": \"<dateTime>\",\n      \"window_seconds\": \"<integer>\",\n      \"change_24h_pct\": \"<string>\",\n      \"volume_24h_usd\": \"<string>\",\n      \"market_cap_usd\": \"<string>\",\n      \"fdv_usd\": \"<string>\",\n      \"circulating_supply\": \"<string>\",\n      \"total_supply\": \"<string>\",\n      \"max_supply\": \"<string>\",\n      \"confidence\": \"<float>\",\n      \"confidence_factors\": {\n        \"z_score\": \"<float>\",\n        \"source_count\": \"<float>\",\n        \"diversity\": \"<float>\",\n        \"liquidity\": \"<float>\",\n        \"cross_oracle\": \"<float>\",\n        \"baseline_quality\": \"<float>\"\n      }\n    }\n  ],\n  \"flags\": {\n    \"stale\": false,\n    \"reduced_redundancy\": false,\n    \"triangulated\": false,\n    \"divergence_warning\": false,\n    \"frozen\": false,\n    \"single_source\": false\n  },\n  \"sources\": [\n    \"<string>\",\n    \"<string>\"\n  ]\n}",
                                     "cookie": [],
                                     "_postman_previewlanguage": "json"
                                 }
@@ -2564,7 +2641,7 @@
                     "description": "",
                     "item": [
                         {
-                            "id": "9bd12049-67bb-49fa-8c26-558fa8ae7a29",
+                            "id": "a262ea3c-2e10-486f-adf6-bdf726037d1d",
                             "name": "SSE stream of closed-bucket price updates (ADR-0015).",
                             "request": {
                                 "name": "SSE stream of closed-bucket price updates (ADR-0015).",
@@ -2623,7 +2700,7 @@
                             },
                             "response": [
                                 {
-                                    "id": "388fd8ad-3376-4a7e-ae5e-a651db3b510b",
+                                    "id": "d68be3ab-50b5-40a0-a136-4efad7327b41",
                                     "name": "SSE stream of price_update events.",
                                     "originalRequest": {
                                         "url": {
@@ -2687,7 +2764,7 @@
                                     "_postman_previewlanguage": "text"
                                 },
                                 {
-                                    "id": "07ee9714-988a-41b8-a0d2-25e3336cb6cd",
+                                    "id": "0ad65d52-be76-44b7-bca0-523d5a7a3865",
                                     "name": "Client-supplied parameters didn't validate.",
                                     "originalRequest": {
                                         "url": {
@@ -2751,7 +2828,7 @@
                                     "_postman_previewlanguage": "json"
                                 },
                                 {
-                                    "id": "4099342d-6890-49c1-ac85-c7963e434f58",
+                                    "id": "cdbdca04-70ec-4a86-8bda-6013b090acf0",
                                     "name": "Rate-limit quota exhausted. See `Retry-After` header.",
                                     "originalRequest": {
                                         "url": {
@@ -2842,7 +2919,7 @@
                                     "_postman_previewlanguage": "json"
                                 },
                                 {
-                                    "id": "79a6ab12-dcb9-47c4-b5dd-83d202ba6fc0",
+                                    "id": "7ff9cc14-2cf0-4e5d-8367-b2c3284d89eb",
                                     "name": "Server is degraded (dependency outage, startup, shutdown).",
                                     "originalRequest": {
                                         "url": {
@@ -2920,7 +2997,7 @@
             "description": "",
             "item": [
                 {
-                    "id": "33a79ea5-c27d-40c2-a715-828a067754dc",
+                    "id": "2771a66c-0b59-4c79-8649-613b27cbc924",
                     "name": "Raw per-source observations (ADR-0018 Surface 3).",
                     "request": {
                         "name": "Raw per-source observations (ADR-0018 Surface 3).",
@@ -2987,7 +3064,7 @@
                     },
                     "response": [
                         {
-                            "id": "3ae9618a-f5d8-4b3f-bf9e-7a16396c4a3b",
+                            "id": "03cf152e-0653-48ec-b9be-564b6085c203",
                             "name": "Per-source observations array.",
                             "originalRequest": {
                                 "url": {
@@ -3059,7 +3136,7 @@
                             "_postman_previewlanguage": "json"
                         },
                         {
-                            "id": "62031acd-adf7-4285-a28c-47777a4ea63a",
+                            "id": "032981af-abb7-4754-a334-7bd71edceb9a",
                             "name": "Client-supplied parameters didn't validate.",
                             "originalRequest": {
                                 "url": {
@@ -3131,7 +3208,7 @@
                             "_postman_previewlanguage": "json"
                         },
                         {
-                            "id": "9016263a-7cc4-4afd-bdec-d9934e2cde6e",
+                            "id": "87194892-c803-4d0d-a642-c807fb939c65",
                             "name": "Internal error. Body includes the request_id for correlation.",
                             "originalRequest": {
                                 "url": {
@@ -3203,7 +3280,7 @@
                             "_postman_previewlanguage": "json"
                         },
                         {
-                            "id": "2a874eaa-9234-4480-8ac5-8352d0b7374a",
+                            "id": "305bc12d-0d6f-4a8e-a711-79dcde72248d",
                             "name": "Server is degraded (dependency outage, startup, shutdown).",
                             "originalRequest": {
                                 "url": {
@@ -3285,7 +3362,7 @@
                     "description": "",
                     "item": [
                         {
-                            "id": "3d56e980-736e-4ee1-98af-81a009d4208e",
+                            "id": "19e93766-d4b3-4993-939c-1e915c98a50c",
                             "name": "SSE stream of raw per-source observations (ADR-0018).",
                             "request": {
                                 "name": "SSE stream of raw per-source observations (ADR-0018).",
@@ -3371,7 +3448,7 @@
                             },
                             "response": [
                                 {
-                                    "id": "89eebf45-3d41-4b88-bfb8-9ac764a19772",
+                                    "id": "79e8cc68-e65f-4330-9015-3e44a197adfc",
                                     "name": "SSE stream of observations_update events.",
                                     "originalRequest": {
                                         "url": {
@@ -3462,7 +3539,7 @@
                                     "_postman_previewlanguage": "text"
                                 },
                                 {
-                                    "id": "727d7b62-2c44-4b35-9b4a-c005514e0869",
+                                    "id": "38c612a8-009f-4579-a3b5-f3887a846a71",
                                     "name": "Client-supplied parameters didn't validate.",
                                     "originalRequest": {
                                         "url": {
@@ -3553,7 +3630,7 @@
                                     "_postman_previewlanguage": "json"
                                 },
                                 {
-                                    "id": "34731881-31cc-4173-9196-a2dc024f97af",
+                                    "id": "abbe747a-dfdc-41b3-a900-c763bc3b9ec1",
                                     "name": "Internal error. Body includes the request_id for correlation.",
                                     "originalRequest": {
                                         "url": {
@@ -3644,7 +3721,7 @@
                                     "_postman_previewlanguage": "json"
                                 },
                                 {
-                                    "id": "cdc80bbb-76e6-44d0-8bf9-63fa9ebaf32b",
+                                    "id": "3568e081-d53a-48a0-8f2e-709b2cd92a96",
                                     "name": "Server is degraded (dependency outage, startup, shutdown).",
                                     "originalRequest": {
                                         "url": {
@@ -3749,7 +3826,7 @@
             "description": "",
             "item": [
                 {
-                    "id": "4d3dce1b-0446-4d5b-9d32-a1494fad3d01",
+                    "id": "decc3fb3-b8b6-4f6d-8c43-866063b78397",
                     "name": "Raw trade history for a pair in a time window.",
                     "request": {
                         "name": "Raw trade history for a pair in a time window.",
@@ -3834,7 +3911,7 @@
                     },
                     "response": [
                         {
-                            "id": "97fc0d7d-8c09-42c7-8811-9f31f2b370de",
+                            "id": "05eb9535-2553-44d4-99f0-2aa326c502f1",
                             "name": "Per-trade records.",
                             "originalRequest": {
                                 "url": {
@@ -3924,7 +4001,7 @@
                             "_postman_previewlanguage": "json"
                         },
                         {
-                            "id": "09370ded-60c8-4027-b1d9-8f61f4fdc54a",
+                            "id": "aa0bf7d4-7e1d-41f0-a609-2ca8368f8d70",
                             "name": "Client-supplied parameters didn't validate.",
                             "originalRequest": {
                                 "url": {
@@ -4014,7 +4091,7 @@
                             "_postman_previewlanguage": "json"
                         },
                         {
-                            "id": "526cde1e-490d-4328-befa-fecdf993273d",
+                            "id": "b212670b-3b6d-41be-abd4-265497818c6f",
                             "name": "Rate-limit quota exhausted. See `Retry-After` header.",
                             "originalRequest": {
                                 "url": {
@@ -4131,7 +4208,7 @@
                             "_postman_previewlanguage": "json"
                         },
                         {
-                            "id": "6a8fa25a-0930-467a-9895-84746d4f96f4",
+                            "id": "022f1d1d-c3f9-4e89-b821-146934eb426e",
                             "name": "Internal error. Body includes the request_id for correlation.",
                             "originalRequest": {
                                 "url": {
@@ -4221,7 +4298,7 @@
                             "_postman_previewlanguage": "json"
                         },
                         {
-                            "id": "bfc8f275-211b-4efb-b3b8-fb55c9e05d8f",
+                            "id": "b37ba51f-989a-4d33-8003-cdaccf8eee27",
                             "name": "Server is degraded (dependency outage, startup, shutdown).",
                             "originalRequest": {
                                 "url": {
@@ -4321,7 +4398,7 @@
                     "description": "",
                     "item": [
                         {
-                            "id": "f8766726-31de-4633-93f7-ab7f06a6df9c",
+                            "id": "1b805700-5a0f-46ac-bb35-11d40005c5b1",
                             "name": "Closed-bucket historical VWAP series for one asset/quote pair.",
                             "request": {
                                 "name": "Closed-bucket historical VWAP series for one asset/quote pair.",
@@ -4363,7 +4440,7 @@
                                                 "type": "text/plain"
                                             },
                                             "key": "granularity",
-                                            "value": "15m"
+                                            "value": "1mo"
                                         }
                                     ],
                                     "variable": []
@@ -4380,7 +4457,7 @@
                             },
                             "response": [
                                 {
-                                    "id": "7af515ad-639d-4f8b-9897-3723611f8f22",
+                                    "id": "fc1d83a3-64b5-413f-ac2c-3615482158ee",
                                     "name": "Since-inception series.",
                                     "originalRequest": {
                                         "url": {
@@ -4417,7 +4494,7 @@
                                                         "type": "text/plain"
                                                     },
                                                     "key": "granularity",
-                                                    "value": "15m"
+                                                    "value": "1mo"
                                                 }
                                             ],
                                             "variable": []
@@ -4439,7 +4516,7 @@
                                             "value": "application/json"
                                         }
                                     ],
-                                    "body": "{\n  \"as_of\": \"<dateTime>\",\n  \"data\": {\n    \"asset_id\": \"<string>\",\n    \"quote\": \"<string>\",\n    \"price_type\": \"vwap\",\n    \"granularity\": \"<string>\",\n    \"points\": [\n      {\n        \"t\": \"<dateTime>\",\n        \"p\": \"<string>\",\n        \"v_usd\": \"<string>\"\n      },\n      {\n        \"t\": \"<dateTime>\",\n        \"p\": \"<string>\",\n        \"v_usd\": \"<string>\"\n      }\n    ]\n  },\n  \"flags\": {\n    \"stale\": false,\n    \"reduced_redundancy\": false,\n    \"triangulated\": false,\n    \"divergence_warning\": false,\n    \"frozen\": false,\n    \"single_source\": false\n  },\n  \"sources\": [\n    \"<string>\",\n    \"<string>\"\n  ]\n}",
+                                    "body": "{\n  \"as_of\": \"<dateTime>\",\n  \"data\": {\n    \"asset_id\": \"<string>\",\n    \"quote\": \"<string>\",\n    \"price_type\": \"twap\",\n    \"granularity\": \"<string>\",\n    \"points\": [\n      {\n        \"t\": \"<dateTime>\",\n        \"p\": \"<string>\",\n        \"v_usd\": \"<string>\"\n      },\n      {\n        \"t\": \"<dateTime>\",\n        \"p\": \"<string>\",\n        \"v_usd\": \"<string>\"\n      }\n    ]\n  },\n  \"flags\": {\n    \"stale\": false,\n    \"reduced_redundancy\": false,\n    \"triangulated\": false,\n    \"divergence_warning\": false,\n    \"frozen\": false,\n    \"single_source\": false\n  },\n  \"sources\": [\n    \"<string>\",\n    \"<string>\"\n  ]\n}",
                                     "cookie": [],
                                     "_postman_previewlanguage": "json"
                                 }
@@ -4458,7 +4535,7 @@
             "description": "",
             "item": [
                 {
-                    "id": "a8c19cf1-9d40-4849-83a1-5276e3310938",
+                    "id": "1c6ce968-2123-4b63-af70-ca60fe7dab52",
                     "name": "Rolling-window chart series matching the Freighter RFP shape.",
                     "request": {
                         "name": "Rolling-window chart series matching the Freighter RFP shape.",
@@ -4508,7 +4585,7 @@
                                         "type": "text/plain"
                                     },
                                     "key": "granularity",
-                                    "value": "15m"
+                                    "value": "1mo"
                                 },
                                 {
                                     "disabled": false,
@@ -4534,7 +4611,7 @@
                     },
                     "response": [
                         {
-                            "id": "2d89989b-748b-42ae-acd0-59302d2038d9",
+                            "id": "bbc2da75-55fe-47c1-8ae4-0ab02d929f31",
                             "name": "Chart series.",
                             "originalRequest": {
                                 "url": {
@@ -4579,7 +4656,7 @@
                                                 "type": "text/plain"
                                             },
                                             "key": "granularity",
-                                            "value": "15m"
+                                            "value": "1mo"
                                         },
                                         {
                                             "disabled": false,
@@ -4610,12 +4687,12 @@
                                     "value": "application/json"
                                 }
                             ],
-                            "body": "{\n  \"as_of\": \"<dateTime>\",\n  \"data\": {\n    \"asset_id\": \"<string>\",\n    \"quote\": \"<string>\",\n    \"timeframe\": \"1mo\",\n    \"granularity\": \"15m\",\n    \"price_type\": \"vwap\",\n    \"points\": [\n      {\n        \"t\": \"<dateTime>\",\n        \"p\": \"<string>\",\n        \"v_usd\": \"<string>\"\n      },\n      {\n        \"t\": \"<dateTime>\",\n        \"p\": \"<string>\",\n        \"v_usd\": \"<string>\"\n      }\n    ]\n  },\n  \"flags\": {\n    \"stale\": false,\n    \"reduced_redundancy\": false,\n    \"triangulated\": false,\n    \"divergence_warning\": false,\n    \"frozen\": false,\n    \"single_source\": false\n  },\n  \"sources\": [\n    \"<string>\",\n    \"<string>\"\n  ]\n}",
+                            "body": "{\n  \"as_of\": \"<dateTime>\",\n  \"data\": {\n    \"asset_id\": \"<string>\",\n    \"quote\": \"<string>\",\n    \"timeframe\": \"1w\",\n    \"granularity\": \"4h\",\n    \"price_type\": \"vwap\",\n    \"points\": [\n      {\n        \"t\": \"<dateTime>\",\n        \"p\": \"<string>\",\n        \"v_usd\": \"<string>\"\n      },\n      {\n        \"t\": \"<dateTime>\",\n        \"p\": \"<string>\",\n        \"v_usd\": \"<string>\"\n      }\n    ]\n  },\n  \"flags\": {\n    \"stale\": false,\n    \"reduced_redundancy\": false,\n    \"triangulated\": false,\n    \"divergence_warning\": false,\n    \"frozen\": false,\n    \"single_source\": false\n  },\n  \"sources\": [\n    \"<string>\",\n    \"<string>\"\n  ]\n}",
                             "cookie": [],
                             "_postman_previewlanguage": "json"
                         },
                         {
-                            "id": "8376eb2c-f43f-4fb2-a9bf-85ba0067fecc",
+                            "id": "f207313e-3c58-4b26-ad45-74b90eba1d42",
                             "name": "Client-supplied parameters didn't validate.",
                             "originalRequest": {
                                 "url": {
@@ -4660,7 +4737,7 @@
                                                 "type": "text/plain"
                                             },
                                             "key": "granularity",
-                                            "value": "15m"
+                                            "value": "1mo"
                                         },
                                         {
                                             "disabled": false,
@@ -4696,7 +4773,7 @@
                             "_postman_previewlanguage": "json"
                         },
                         {
-                            "id": "0fcb4249-6e6c-4cd0-a085-539896cf82e2",
+                            "id": "9de90fd6-1d8f-4a7b-a0b9-9e2f202ad9a9",
                             "name": "Server is degraded (dependency outage, startup, shutdown).",
                             "originalRequest": {
                                 "url": {
@@ -4741,7 +4818,7 @@
                                                 "type": "text/plain"
                                             },
                                             "key": "granularity",
-                                            "value": "15m"
+                                            "value": "1mo"
                                         },
                                         {
                                             "disabled": false,
@@ -4789,7 +4866,7 @@
             "description": "",
             "item": [
                 {
-                    "id": "e60f3e33-d877-4468-a834-4cf0938dd9af",
+                    "id": "76caa7ee-1564-42b5-9a69-18425ac8e836",
                     "name": "Single OHLC bar for a pair over a window.",
                     "request": {
                         "name": "Single OHLC bar for a pair over a window.",
@@ -4856,7 +4933,7 @@
                     },
                     "response": [
                         {
-                            "id": "0977ba9e-a794-42a1-ad5f-f05e4079da59",
+                            "id": "f1bc0006-ac3b-4ca7-8d25-68ca7585e300",
                             "name": "Single OHLC bar.",
                             "originalRequest": {
                                 "url": {
@@ -4928,7 +5005,7 @@
                             "_postman_previewlanguage": "json"
                         },
                         {
-                            "id": "5d3c0072-5b08-4b09-a7be-a9334a578ff1",
+                            "id": "2a2b495a-07f2-425d-af36-f8535f4325ee",
                             "name": "Client-supplied parameters didn't validate.",
                             "originalRequest": {
                                 "url": {
@@ -5000,7 +5077,7 @@
                             "_postman_previewlanguage": "json"
                         },
                         {
-                            "id": "84a6380e-3328-49b7-b78f-e4b944347e72",
+                            "id": "93d9d116-4809-4b59-a320-5a22edb72998",
                             "name": "Not found.",
                             "originalRequest": {
                                 "url": {
@@ -5072,7 +5149,7 @@
                             "_postman_previewlanguage": "json"
                         },
                         {
-                            "id": "ebad6975-4f9d-4c01-8800-542c7ec18b08",
+                            "id": "8c4b91c2-492b-4d68-b1c0-f652506c3dc1",
                             "name": "Rate-limit quota exhausted. See `Retry-After` header.",
                             "originalRequest": {
                                 "url": {
@@ -5171,7 +5248,7 @@
                             "_postman_previewlanguage": "json"
                         },
                         {
-                            "id": "767753e4-a836-4685-b4d5-903f1f976672",
+                            "id": "fc4c2aab-09fb-4c9f-a2d5-42cc45c9f43a",
                             "name": "Internal error. Body includes the request_id for correlation.",
                             "originalRequest": {
                                 "url": {
@@ -5243,7 +5320,7 @@
                             "_postman_previewlanguage": "json"
                         },
                         {
-                            "id": "efe6895f-68f2-416a-9308-6bbdc631e00e",
+                            "id": "489cfea5-c8eb-4053-9368-396baf2b9a3f",
                             "name": "Server is degraded (dependency outage, startup, shutdown).",
                             "originalRequest": {
                                 "url": {
@@ -5327,7 +5404,7 @@
             "description": "",
             "item": [
                 {
-                    "id": "3eb0a1e1-4f4c-4e6d-b562-ad46c31fc06d",
+                    "id": "0802070c-0ce9-40ed-999e-172c9ee84c18",
                     "name": "Volume-weighted average price over a window.",
                     "request": {
                         "name": "Volume-weighted average price over a window.",
@@ -5403,7 +5480,7 @@
                     },
                     "response": [
                         {
-                            "id": "0d093420-47d7-4296-b0d4-967a584cc5d8",
+                            "id": "0a32d63d-a853-4726-9d5f-e459a4ebdc89",
                             "name": "Volume-weighted price + volumes + trade count.",
                             "originalRequest": {
                                 "url": {
@@ -5484,7 +5561,7 @@
                             "_postman_previewlanguage": "json"
                         },
                         {
-                            "id": "941175cb-fd55-4047-b9f7-4a1102ab2ece",
+                            "id": "9901af5a-c57a-410d-8c3d-4188299b74eb",
                             "name": "Client-supplied parameters didn't validate.",
                             "originalRequest": {
                                 "url": {
@@ -5565,7 +5642,7 @@
                             "_postman_previewlanguage": "json"
                         },
                         {
-                            "id": "ee5a7138-0db5-4351-9e8a-b18f624ac94a",
+                            "id": "fa28d42f-1f3e-4dc9-8bdd-7667a6668cc5",
                             "name": "No trades in window.",
                             "originalRequest": {
                                 "url": {
@@ -5646,7 +5723,7 @@
                             "_postman_previewlanguage": "json"
                         },
                         {
-                            "id": "0a08a5d8-1699-4229-8f37-9653986de00f",
+                            "id": "7b1a2402-a7bc-45ce-b112-e068e20be94d",
                             "name": "All trades filtered as outliers.",
                             "originalRequest": {
                                 "url": {
@@ -5727,7 +5804,7 @@
                             "_postman_previewlanguage": "json"
                         },
                         {
-                            "id": "aaa1e893-acd6-4370-9f25-ce86cf6c51ad",
+                            "id": "22996161-96a9-4441-b7b7-97b41efe1368",
                             "name": "Rate-limit quota exhausted. See `Retry-After` header.",
                             "originalRequest": {
                                 "url": {
@@ -5835,7 +5912,7 @@
                             "_postman_previewlanguage": "json"
                         },
                         {
-                            "id": "081f0bc2-1366-4f1f-9b34-2da3a4374084",
+                            "id": "8acc7e67-2306-4729-8b40-989ec0bb283a",
                             "name": "Internal error. Body includes the request_id for correlation.",
                             "originalRequest": {
                                 "url": {
@@ -5916,7 +5993,7 @@
                             "_postman_previewlanguage": "json"
                         },
                         {
-                            "id": "231685f0-98da-4ed6-87f5-345619eced00",
+                            "id": "74eb107c-ffd6-46bd-a550-e73cb1ef640f",
                             "name": "Server is degraded (dependency outage, startup, shutdown).",
                             "originalRequest": {
                                 "url": {
@@ -6009,7 +6086,7 @@
             "description": "",
             "item": [
                 {
-                    "id": "963d6a81-b091-491d-be42-0f3d56626c93",
+                    "id": "e1586635-0ae7-4bc2-9855-c924291a84a9",
                     "name": "Time-weighted average price over a window.",
                     "request": {
                         "name": "Time-weighted average price over a window.",
@@ -6076,7 +6153,7 @@
                     },
                     "response": [
                         {
-                            "id": "72fa7b9d-1588-4222-91e0-4acbddac2a48",
+                            "id": "d32b9120-0176-4bbe-842c-8aa7127478cd",
                             "name": "Time-weighted price + trade count.",
                             "originalRequest": {
                                 "url": {
@@ -6148,7 +6225,7 @@
                             "_postman_previewlanguage": "json"
                         },
                         {
-                            "id": "e0915701-3045-461c-b304-fdcedc3116a0",
+                            "id": "e53b0803-7a0c-422b-a951-06059a875ba1",
                             "name": "Client-supplied parameters didn't validate.",
                             "originalRequest": {
                                 "url": {
@@ -6220,7 +6297,7 @@
                             "_postman_previewlanguage": "json"
                         },
                         {
-                            "id": "9ecfd7a4-1186-4e5d-b840-d05faf431715",
+                            "id": "4d19b036-e21c-4726-a620-33072c5e4817",
                             "name": "No trades in window.",
                             "originalRequest": {
                                 "url": {
@@ -6292,7 +6369,7 @@
                             "_postman_previewlanguage": "json"
                         },
                         {
-                            "id": "3aaef9d3-f6db-4929-994d-6e5eb52da923",
+                            "id": "e62a6880-b44f-4054-8094-d1a5ca83a90b",
                             "name": "Rate-limit quota exhausted. See `Retry-After` header.",
                             "originalRequest": {
                                 "url": {
@@ -6391,7 +6468,7 @@
                             "_postman_previewlanguage": "json"
                         },
                         {
-                            "id": "20dda8e1-daf8-4c8f-8843-67e81f03647b",
+                            "id": "40656ce5-93f0-4db8-a5d6-92b2571919a3",
                             "name": "Internal error. Body includes the request_id for correlation.",
                             "originalRequest": {
                                 "url": {
@@ -6463,7 +6540,7 @@
                             "_postman_previewlanguage": "json"
                         },
                         {
-                            "id": "e02530ab-aadf-4fea-b496-6f32e5ad5c9f",
+                            "id": "5eec760e-0188-4962-805c-00279583b22d",
                             "name": "Server is degraded (dependency outage, startup, shutdown).",
                             "originalRequest": {
                                 "url": {
@@ -6551,7 +6628,7 @@
                     "description": "",
                     "item": [
                         {
-                            "id": "db82874c-a30c-45be-8192-552f20e14a72",
+                            "id": "c3a0eb09-f8f6-47f0-9458-7ebe324e7fff",
                             "name": "Latest oracle reading per source for an asset.",
                             "request": {
                                 "name": "Latest oracle reading per source for an asset.",
@@ -6601,7 +6678,7 @@
                             },
                             "response": [
                                 {
-                                    "id": "6790007d-4fef-4eb2-b860-d765bb381547",
+                                    "id": "9732f4c4-2765-4110-933b-032eea2340cf",
                                     "name": "Array of OracleReading (empty when no observations).",
                                     "originalRequest": {
                                         "url": {
@@ -6656,7 +6733,7 @@
                                     "_postman_previewlanguage": "json"
                                 },
                                 {
-                                    "id": "257c704a-c87e-41ac-8a8c-4d1777f63970",
+                                    "id": "957ed7fc-2282-4ce8-8cb2-771a2587d0b2",
                                     "name": "Client-supplied parameters didn't validate.",
                                     "originalRequest": {
                                         "url": {
@@ -6711,7 +6788,7 @@
                                     "_postman_previewlanguage": "json"
                                 },
                                 {
-                                    "id": "1910d8fd-8149-48f2-ab7a-0f283451f477",
+                                    "id": "c664a27b-f25b-4bdc-bfae-d20f44cc4550",
                                     "name": "Rate-limit quota exhausted. See `Retry-After` header.",
                                     "originalRequest": {
                                         "url": {
@@ -6793,7 +6870,7 @@
                                     "_postman_previewlanguage": "json"
                                 },
                                 {
-                                    "id": "d062d28a-a580-45ba-8d8f-71e380fbb66f",
+                                    "id": "c86a2c92-4ce0-4089-8e10-d1e7f01a23fd",
                                     "name": "Internal error. Body includes the request_id for correlation.",
                                     "originalRequest": {
                                         "url": {
@@ -6848,7 +6925,7 @@
                                     "_postman_previewlanguage": "json"
                                 },
                                 {
-                                    "id": "db949b4c-c1bf-42ee-a7a9-d229c3234e6b",
+                                    "id": "bbd02ad9-eea5-4122-94c7-2e9e891ef5bc",
                                     "name": "Server is degraded (dependency outage, startup, shutdown).",
                                     "originalRequest": {
                                         "url": {
@@ -6915,7 +6992,7 @@
                     "description": "",
                     "item": [
                         {
-                            "id": "08f35342-bdfc-4c20-b0df-eac5fe77d518",
+                            "id": "05e0e8b7-5eb0-4ff4-b186-1eb90a7e6de3",
                             "name": "SEP-40 lastprice-equivalent passthrough.",
                             "request": {
                                 "name": "SEP-40 lastprice-equivalent passthrough.",
@@ -6953,7 +7030,7 @@
                             },
                             "response": [
                                 {
-                                    "id": "6575c701-c158-4942-90b3-21453a3129a9",
+                                    "id": "3573f468-10e6-4fd0-abd0-8f85a15a31a1",
                                     "name": "Price record.",
                                     "originalRequest": {
                                         "url": {
@@ -7011,7 +7088,7 @@
                     "description": "",
                     "item": [
                         {
-                            "id": "241af2f3-18f8-4a0c-83e9-46e232771f05",
+                            "id": "c06a32f5-f708-4817-a302-03a0421bbc32",
                             "name": "SEP-40 prices-equivalent passthrough (N historical).",
                             "request": {
                                 "name": "SEP-40 prices-equivalent passthrough (N historical).",
@@ -7058,7 +7135,7 @@
                             },
                             "response": [
                                 {
-                                    "id": "ac55851e-fba2-44fd-ae95-b798b21d19d5",
+                                    "id": "be8bec8c-36b5-430b-b2e5-365310fd4fa0",
                                     "name": "Historical records.",
                                     "originalRequest": {
                                         "url": {
@@ -7125,7 +7202,7 @@
                     "description": "",
                     "item": [
                         {
-                            "id": "69300a25-5162-46c4-86fc-e69d7e8b828c",
+                            "id": "d31a26a4-e61a-49eb-9071-f0e30ed06fdb",
                             "name": "SEP-40 x_last_price-equivalent (cross-pair).",
                             "request": {
                                 "name": "SEP-40 x_last_price-equivalent (cross-pair).",
@@ -7172,7 +7249,7 @@
                             },
                             "response": [
                                 {
-                                    "id": "df8c7949-9afa-4c24-b038-e6e1b960b61b",
+                                    "id": "530d2de5-14fd-4736-9610-25ddeb7af3e5",
                                     "name": "Cross-pair last price.",
                                     "originalRequest": {
                                         "url": {
@@ -7241,7 +7318,7 @@
             "description": "",
             "item": [
                 {
-                    "id": "444a9620-9029-4694-a075-e3c04b35bef8",
+                    "id": "82e1cd55-6b16-4052-99c2-e5a933a82981",
                     "name": "Distinct trading pairs with activity summary.",
                     "request": {
                         "name": "Distinct trading pairs with activity summary.",
@@ -7290,7 +7367,7 @@
                     },
                     "response": [
                         {
-                            "id": "d747bacd-776b-4158-bdb2-45dacaa81069",
+                            "id": "3ffb7e46-5cfe-4ecd-a20a-13f1112c8755",
                             "name": "Array of markets + optional next cursor.",
                             "originalRequest": {
                                 "url": {
@@ -7344,7 +7421,7 @@
                             "_postman_previewlanguage": "json"
                         },
                         {
-                            "id": "14a4be45-145a-441e-89a1-9b9707cd68d4",
+                            "id": "4325fdea-e00b-4675-a596-665ecf2abfc2",
                             "name": "Client-supplied parameters didn't validate.",
                             "originalRequest": {
                                 "url": {
@@ -7398,7 +7475,7 @@
                             "_postman_previewlanguage": "json"
                         },
                         {
-                            "id": "8726122a-40c8-493a-87d7-c51f32cc44b5",
+                            "id": "2128cda4-e9d0-4312-9910-b564514af907",
                             "name": "Rate-limit quota exhausted. See `Retry-After` header.",
                             "originalRequest": {
                                 "url": {
@@ -7479,7 +7556,7 @@
                             "_postman_previewlanguage": "json"
                         },
                         {
-                            "id": "99cd463f-0cbc-44ae-943a-953f84dd13cd",
+                            "id": "74b429e0-e25d-4cc0-88e9-4ddd18add226",
                             "name": "Internal error. Body includes the request_id for correlation.",
                             "originalRequest": {
                                 "url": {
@@ -7533,7 +7610,7 @@
                             "_postman_previewlanguage": "json"
                         },
                         {
-                            "id": "b4c46334-ce8c-4a0a-81c3-ba30b24a344d",
+                            "id": "f61cb679-a934-432b-94d2-995585df91f4",
                             "name": "Server is degraded (dependency outage, startup, shutdown).",
                             "originalRequest": {
                                 "url": {
@@ -7599,7 +7676,7 @@
             "description": "",
             "item": [
                 {
-                    "id": "5c4ede2e-b429-4305-ae38-244de13d00d2",
+                    "id": "bfd9d832-77cf-4542-a4df-9e06c99d5bdc",
                     "name": "Issuer directory ranked by total observation count.",
                     "request": {
                         "name": "Issuer directory ranked by total observation count.",
@@ -7639,7 +7716,7 @@
                     },
                     "response": [
                         {
-                            "id": "df981669-b2cc-4b85-8eb6-9e526404adf6",
+                            "id": "3665bca0-1b9f-46d2-b610-a03bc0349645",
                             "name": "Array of issuer summaries.",
                             "originalRequest": {
                                 "url": {
@@ -7684,7 +7761,7 @@
                             "_postman_previewlanguage": "json"
                         },
                         {
-                            "id": "12c03fd9-8c04-4316-8c82-e5b13899f60a",
+                            "id": "75a23660-2e56-4f02-9b01-31be06335c48",
                             "name": "Client-supplied parameters didn't validate.",
                             "originalRequest": {
                                 "url": {
@@ -7729,7 +7806,7 @@
                             "_postman_previewlanguage": "json"
                         },
                         {
-                            "id": "ec50cef6-b11a-42e2-be61-3b8eb28ebfa0",
+                            "id": "f60a637c-1791-4725-aabb-8b4015add566",
                             "name": "Rate-limit quota exhausted. See `Retry-After` header.",
                             "originalRequest": {
                                 "url": {
@@ -7801,7 +7878,7 @@
                             "_postman_previewlanguage": "json"
                         },
                         {
-                            "id": "03e5f131-2095-45f9-ab74-320944e5c91d",
+                            "id": "dc5efc73-997c-4067-91ad-f033c5c5d56c",
                             "name": "Internal error. Body includes the request_id for correlation.",
                             "originalRequest": {
                                 "url": {
@@ -7846,7 +7923,7 @@
                             "_postman_previewlanguage": "json"
                         },
                         {
-                            "id": "6be8a169-64fe-4297-b938-4c9613098224",
+                            "id": "b53c323c-22a6-4817-a4ac-c5b0d0edc793",
                             "name": "Server is degraded (dependency outage, startup, shutdown).",
                             "originalRequest": {
                                 "url": {
@@ -7901,7 +7978,7 @@
                     "description": "",
                     "item": [
                         {
-                            "id": "f1cf7d13-1f1d-47f8-a5aa-2ec57dc0e8a8",
+                            "id": "2c0f17cc-f026-464d-b1da-e93ffd9b13cd",
                             "name": "Issuer detail — auth flags, SEP-1 metadata, issued assets.",
                             "request": {
                                 "name": "Issuer detail — auth flags, SEP-1 metadata, issued assets.",
@@ -7943,7 +8020,7 @@
                             },
                             "response": [
                                 {
-                                    "id": "bf674100-0a4c-4238-ae13-942574a8baf1",
+                                    "id": "240e9d02-f1e6-4b52-8716-675eb6d5aea8",
                                     "name": "One issuer row plus issued-asset list.",
                                     "originalRequest": {
                                         "url": {
@@ -7985,12 +8062,12 @@
                                             "value": "application/json"
                                         }
                                     ],
-                                    "body": "{\n  \"g_strkey\": \"<string>\",\n  \"home_domain\": \"<string>\",\n  \"auth_required\": \"<boolean>\",\n  \"auth_revocable\": \"<boolean>\",\n  \"auth_immutable\": \"<boolean>\",\n  \"auth_clawback\": \"<boolean>\",\n  \"sep1_resolved_at\": \"<dateTime>\",\n  \"sep1_payload\": {\n    \"key_0\": 5206\n  },\n  \"creation_ledger\": \"<integer>\",\n  \"assets\": [\n    {\n      \"asset_id\": \"<string>\",\n      \"code\": \"<string>\",\n      \"slug\": \"<string>\",\n      \"first_seen_ledger\": \"<integer>\",\n      \"last_seen_ledger\": \"<integer>\",\n      \"observation_count\": \"<long>\"\n    },\n    {\n      \"asset_id\": \"<string>\",\n      \"code\": \"<string>\",\n      \"slug\": \"<string>\",\n      \"first_seen_ledger\": \"<integer>\",\n      \"last_seen_ledger\": \"<integer>\",\n      \"observation_count\": \"<long>\"\n    }\n  ]\n}",
+                                    "body": "{\n  \"g_strkey\": \"<string>\",\n  \"home_domain\": \"<string>\",\n  \"auth_required\": \"<boolean>\",\n  \"auth_revocable\": \"<boolean>\",\n  \"auth_immutable\": \"<boolean>\",\n  \"auth_clawback\": \"<boolean>\",\n  \"sep1_resolved_at\": \"<dateTime>\",\n  \"sep1_payload\": {\n    \"key_0\": false\n  },\n  \"creation_ledger\": \"<integer>\",\n  \"assets\": [\n    {\n      \"asset_id\": \"<string>\",\n      \"code\": \"<string>\",\n      \"slug\": \"<string>\",\n      \"first_seen_ledger\": \"<integer>\",\n      \"last_seen_ledger\": \"<integer>\",\n      \"observation_count\": \"<long>\"\n    },\n    {\n      \"asset_id\": \"<string>\",\n      \"code\": \"<string>\",\n      \"slug\": \"<string>\",\n      \"first_seen_ledger\": \"<integer>\",\n      \"last_seen_ledger\": \"<integer>\",\n      \"observation_count\": \"<long>\"\n    }\n  ]\n}",
                                     "cookie": [],
                                     "_postman_previewlanguage": "json"
                                 },
                                 {
-                                    "id": "d5f183fe-8eaf-4ae6-bc92-07f31af7758a",
+                                    "id": "a1e5eff1-3954-4812-8d43-385112d81b80",
                                     "name": "Client-supplied parameters didn't validate.",
                                     "originalRequest": {
                                         "url": {
@@ -8037,7 +8114,7 @@
                                     "_postman_previewlanguage": "json"
                                 },
                                 {
-                                    "id": "35411365-f30d-4890-a154-d6ef3b26a824",
+                                    "id": "cf0b5b8b-6115-4928-9a6b-1587a39f5cac",
                                     "name": "Not found.",
                                     "originalRequest": {
                                         "url": {
@@ -8084,7 +8161,7 @@
                                     "_postman_previewlanguage": "json"
                                 },
                                 {
-                                    "id": "d2dfa088-b425-4b1f-a0e8-3ea2aaf0caa1",
+                                    "id": "2653e86c-9e9f-47bc-b16a-464d0a7eb903",
                                     "name": "Rate-limit quota exhausted. See `Retry-After` header.",
                                     "originalRequest": {
                                         "url": {
@@ -8158,7 +8235,7 @@
                                     "_postman_previewlanguage": "json"
                                 },
                                 {
-                                    "id": "1714875a-784d-49d1-8776-65e9ee4c79c8",
+                                    "id": "102ee879-ea1f-4e5c-9ed5-44405adce1e2",
                                     "name": "Internal error. Body includes the request_id for correlation.",
                                     "originalRequest": {
                                         "url": {
@@ -8205,7 +8282,7 @@
                                     "_postman_previewlanguage": "json"
                                 },
                                 {
-                                    "id": "065b4526-31e4-4781-8379-a4be9342b9f3",
+                                    "id": "9d82b964-4efc-49d1-89aa-c62977f67baa",
                                     "name": "Server is degraded (dependency outage, startup, shutdown).",
                                     "originalRequest": {
                                         "url": {
@@ -8266,7 +8343,7 @@
             "description": "",
             "item": [
                 {
-                    "id": "0f103ec9-f53a-420d-8bea-0b5f0996777d",
+                    "id": "75ba4d98-a4ca-4994-963f-151ea9bba165",
                     "name": "Coin directory — every classic asset observed on Stellar.",
                     "request": {
                         "name": "Coin directory — every classic asset observed on Stellar.",
@@ -8315,7 +8392,7 @@
                     },
                     "response": [
                         {
-                            "id": "b5c57d22-cc0c-4908-8878-f4ce1f9197a0",
+                            "id": "9d7e9653-3dcb-4517-af93-1c2eaff2a812",
                             "name": "Array of coin entries.",
                             "originalRequest": {
                                 "url": {
@@ -8369,7 +8446,7 @@
                             "_postman_previewlanguage": "json"
                         },
                         {
-                            "id": "b9bbb465-e74e-4414-b69f-8fa3e2c3fff3",
+                            "id": "d4c6dbdd-41a1-4b98-93dc-b09254648239",
                             "name": "Client-supplied parameters didn't validate.",
                             "originalRequest": {
                                 "url": {
@@ -8423,7 +8500,7 @@
                             "_postman_previewlanguage": "json"
                         },
                         {
-                            "id": "24fdc9e7-aa04-4442-9d2d-d45388c7e16c",
+                            "id": "cd3ecedd-9894-4180-8700-f801afdc69ab",
                             "name": "Rate-limit quota exhausted. See `Retry-After` header.",
                             "originalRequest": {
                                 "url": {
@@ -8504,7 +8581,7 @@
                             "_postman_previewlanguage": "json"
                         },
                         {
-                            "id": "e494c2c0-e184-4ffe-908a-a41769aff27f",
+                            "id": "dd5589db-90b5-4268-aa4c-300d154fe093",
                             "name": "Internal error. Body includes the request_id for correlation.",
                             "originalRequest": {
                                 "url": {
@@ -8558,7 +8635,7 @@
                             "_postman_previewlanguage": "json"
                         },
                         {
-                            "id": "9a81e60b-9c1b-4f8f-af74-07f1a430145a",
+                            "id": "3a0fba5e-a8b3-43e7-a615-745a06b62a66",
                             "name": "Server is degraded (dependency outage, startup, shutdown).",
                             "originalRequest": {
                                 "url": {
@@ -8632,7 +8709,7 @@
                             "description": "",
                             "item": [
                                 {
-                                    "id": "ff8a967c-eab0-49b3-9894-a8ebcc03511b",
+                                    "id": "869f2524-a80a-4b5b-b118-b90f10e0dcea",
                                     "name": "Multi-window delta strip for one entity.",
                                     "request": {
                                         "name": "Multi-window delta strip for one entity.",
@@ -8653,7 +8730,7 @@
                                             "variable": [
                                                 {
                                                     "type": "any",
-                                                    "value": "pair",
+                                                    "value": "protocol",
                                                     "key": "entity_type",
                                                     "disabled": false,
                                                     "description": {
@@ -8685,7 +8762,7 @@
                                     },
                                     "response": [
                                         {
-                                            "id": "db6c66b9-5872-4518-848c-cfe120eb28a4",
+                                            "id": "6c0ae776-c63d-4591-aa0b-7d409f78a570",
                                             "name": "One row from change_summary_5m.",
                                             "originalRequest": {
                                                 "url": {
@@ -8706,7 +8783,7 @@
                                                                 "type": "text/plain"
                                                             },
                                                             "type": "any",
-                                                            "value": "pair",
+                                                            "value": "protocol",
                                                             "key": "entity_type"
                                                         },
                                                         {
@@ -8743,7 +8820,7 @@
                                             "_postman_previewlanguage": "json"
                                         },
                                         {
-                                            "id": "da47d769-3729-4473-9e98-0e0e8ec0d945",
+                                            "id": "2d1aa911-b085-4ba3-964b-e36a260eb5f3",
                                             "name": "Client-supplied parameters didn't validate.",
                                             "originalRequest": {
                                                 "url": {
@@ -8764,7 +8841,7 @@
                                                                 "type": "text/plain"
                                                             },
                                                             "type": "any",
-                                                            "value": "pair",
+                                                            "value": "protocol",
                                                             "key": "entity_type"
                                                         },
                                                         {
@@ -8801,7 +8878,7 @@
                                             "_postman_previewlanguage": "json"
                                         },
                                         {
-                                            "id": "47a9dc76-a364-4fa9-a909-dc2d8194bc7f",
+                                            "id": "eec86499-9683-422b-b60c-51cb1a932062",
                                             "name": "Not found.",
                                             "originalRequest": {
                                                 "url": {
@@ -8822,7 +8899,7 @@
                                                                 "type": "text/plain"
                                                             },
                                                             "type": "any",
-                                                            "value": "pair",
+                                                            "value": "protocol",
                                                             "key": "entity_type"
                                                         },
                                                         {
@@ -8859,7 +8936,7 @@
                                             "_postman_previewlanguage": "json"
                                         },
                                         {
-                                            "id": "5cf69e6d-4016-45c5-8107-1929a300100a",
+                                            "id": "ce304b43-03b6-48a8-ad35-245ca7f45ea2",
                                             "name": "Rate-limit quota exhausted. See `Retry-After` header.",
                                             "originalRequest": {
                                                 "url": {
@@ -8880,7 +8957,7 @@
                                                                 "type": "text/plain"
                                                             },
                                                             "type": "any",
-                                                            "value": "pair",
+                                                            "value": "protocol",
                                                             "key": "entity_type"
                                                         },
                                                         {
@@ -8944,7 +9021,7 @@
                                             "_postman_previewlanguage": "json"
                                         },
                                         {
-                                            "id": "7b799881-1673-4b31-8ec8-90d95a90ba46",
+                                            "id": "a312d6c1-37c8-4df5-b54c-19bd0c2b523f",
                                             "name": "Internal error. Body includes the request_id for correlation.",
                                             "originalRequest": {
                                                 "url": {
@@ -8965,7 +9042,7 @@
                                                                 "type": "text/plain"
                                                             },
                                                             "type": "any",
-                                                            "value": "pair",
+                                                            "value": "protocol",
                                                             "key": "entity_type"
                                                         },
                                                         {
@@ -9002,7 +9079,7 @@
                                             "_postman_previewlanguage": "json"
                                         },
                                         {
-                                            "id": "30877cfd-75eb-4abc-a151-bf8374e21a50",
+                                            "id": "ba748f41-98f7-4518-9a28-f1d1b9310ee7",
                                             "name": "Server is degraded (dependency outage, startup, shutdown).",
                                             "originalRequest": {
                                                 "url": {
@@ -9023,7 +9100,7 @@
                                                                 "type": "text/plain"
                                                             },
                                                             "type": "any",
-                                                            "value": "pair",
+                                                            "value": "protocol",
                                                             "key": "entity_type"
                                                         },
                                                         {
@@ -9080,7 +9157,7 @@
                     "description": "",
                     "item": [
                         {
-                            "id": "742b835a-92f7-4419-b554-3a10dd3c49dd",
+                            "id": "18f75e70-ae55-4571-9003-2d90c8ee31df",
                             "name": "Per-source ingest cursor positions.",
                             "request": {
                                 "name": "Per-source ingest cursor positions.",
@@ -9111,7 +9188,7 @@
                             },
                             "response": [
                                 {
-                                    "id": "7ae08d78-bc1d-462f-875a-394035fbe6e2",
+                                    "id": "ad9a1b9d-5813-40e8-a222-627465f082e3",
                                     "name": "Array of cursor entries, one per (source, sub_source).",
                                     "originalRequest": {
                                         "url": {
@@ -9147,7 +9224,7 @@
                                     "_postman_previewlanguage": "json"
                                 },
                                 {
-                                    "id": "ae400057-e012-4e24-a2c5-b6902b662dc8",
+                                    "id": "2df82cc6-74b5-43af-a53e-bf60201ff694",
                                     "name": "Rate-limit quota exhausted. See `Retry-After` header.",
                                     "originalRequest": {
                                         "url": {
@@ -9210,7 +9287,7 @@
                                     "_postman_previewlanguage": "json"
                                 },
                                 {
-                                    "id": "9bda4225-f981-4af6-a9fb-e2f032129248",
+                                    "id": "1dedb45a-5cd6-4cd2-8319-4b39dfb0bfa4",
                                     "name": "Internal error. Body includes the request_id for correlation.",
                                     "originalRequest": {
                                         "url": {
@@ -9246,7 +9323,7 @@
                                     "_postman_previewlanguage": "json"
                                 },
                                 {
-                                    "id": "86d62554-d9ab-459e-a38f-3b10a59a463c",
+                                    "id": "70b45005-6653-4ded-8513-30b4de41626f",
                                     "name": "Server is degraded (dependency outage, startup, shutdown).",
                                     "originalRequest": {
                                         "url": {
@@ -9296,7 +9373,7 @@
             "description": "",
             "item": [
                 {
-                    "id": "b6a22671-2f36-4cf3-82a7-4066f3853403",
+                    "id": "87df0697-dfa3-4128-b2af-507f246a676e",
                     "name": "Source catalogue with class + IncludeInVWAP metadata.",
                     "request": {
                         "name": "Source catalogue with class + IncludeInVWAP metadata.",
@@ -9319,7 +9396,7 @@
                                         "type": "text/plain"
                                     },
                                     "key": "class",
-                                    "value": "authority_sanity"
+                                    "value": "aggregator"
                                 }
                             ],
                             "variable": []
@@ -9336,7 +9413,7 @@
                     },
                     "response": [
                         {
-                            "id": "f8ff4567-a69d-4a72-8dac-5dd5dd043ab2",
+                            "id": "fd696719-fae5-4800-9459-e57be470d3f1",
                             "name": "Array of sources, sorted by name.",
                             "originalRequest": {
                                 "url": {
@@ -9354,7 +9431,7 @@
                                                 "type": "text/plain"
                                             },
                                             "key": "class",
-                                            "value": "authority_sanity"
+                                            "value": "aggregator"
                                         }
                                     ],
                                     "variable": []
@@ -9376,12 +9453,12 @@
                                     "value": "application/json"
                                 }
                             ],
-                            "body": "{\n  \"as_of\": \"<dateTime>\",\n  \"data\": [\n    {\n      \"name\": \"<string>\",\n      \"class\": \"exchange\",\n      \"include_in_vwap\": \"<boolean>\",\n      \"paid\": \"<boolean>\",\n      \"backfill_available\": \"<boolean>\",\n      \"backfill_safe\": \"<boolean>\",\n      \"default_weight\": \"<integer>\",\n      \"subclass\": \"cex\"\n    },\n    {\n      \"name\": \"<string>\",\n      \"class\": \"exchange\",\n      \"include_in_vwap\": \"<boolean>\",\n      \"paid\": \"<boolean>\",\n      \"backfill_available\": \"<boolean>\",\n      \"backfill_safe\": \"<boolean>\",\n      \"default_weight\": \"<integer>\",\n      \"subclass\": \"fx\"\n    }\n  ],\n  \"flags\": {\n    \"stale\": false,\n    \"reduced_redundancy\": false,\n    \"triangulated\": false,\n    \"divergence_warning\": false,\n    \"frozen\": false,\n    \"single_source\": false\n  },\n  \"sources\": [\n    \"<string>\",\n    \"<string>\"\n  ]\n}",
+                            "body": "{\n  \"as_of\": \"<dateTime>\",\n  \"data\": [\n    {\n      \"name\": \"<string>\",\n      \"class\": \"aggregator\",\n      \"include_in_vwap\": \"<boolean>\",\n      \"paid\": \"<boolean>\",\n      \"backfill_available\": \"<boolean>\",\n      \"backfill_safe\": \"<boolean>\",\n      \"default_weight\": \"<integer>\",\n      \"subclass\": \"cex\"\n    },\n    {\n      \"name\": \"<string>\",\n      \"class\": \"oracle\",\n      \"include_in_vwap\": \"<boolean>\",\n      \"paid\": \"<boolean>\",\n      \"backfill_available\": \"<boolean>\",\n      \"backfill_safe\": \"<boolean>\",\n      \"default_weight\": \"<integer>\",\n      \"subclass\": \"fx\"\n    }\n  ],\n  \"flags\": {\n    \"stale\": false,\n    \"reduced_redundancy\": false,\n    \"triangulated\": false,\n    \"divergence_warning\": false,\n    \"frozen\": false,\n    \"single_source\": false\n  },\n  \"sources\": [\n    \"<string>\",\n    \"<string>\"\n  ]\n}",
                             "cookie": [],
                             "_postman_previewlanguage": "json"
                         },
                         {
-                            "id": "ad089dd3-2d4e-412c-a3c0-a104e29672e2",
+                            "id": "c8f92bf9-7253-4513-a6ac-e595176d6a02",
                             "name": "Client-supplied parameters didn't validate.",
                             "originalRequest": {
                                 "url": {
@@ -9399,7 +9476,7 @@
                                                 "type": "text/plain"
                                             },
                                             "key": "class",
-                                            "value": "authority_sanity"
+                                            "value": "aggregator"
                                         }
                                     ],
                                     "variable": []
@@ -9426,7 +9503,7 @@
                             "_postman_previewlanguage": "json"
                         },
                         {
-                            "id": "e29b0555-59c7-4576-a9b7-401e20e10d93",
+                            "id": "8170b1f0-ca7c-4365-b746-2be701a44a6b",
                             "name": "Rate-limit quota exhausted. See `Retry-After` header.",
                             "originalRequest": {
                                 "url": {
@@ -9444,7 +9521,7 @@
                                                 "type": "text/plain"
                                             },
                                             "key": "class",
-                                            "value": "authority_sanity"
+                                            "value": "aggregator"
                                         }
                                     ],
                                     "variable": []
@@ -9498,7 +9575,7 @@
                             "_postman_previewlanguage": "json"
                         },
                         {
-                            "id": "d510771c-cd53-4ef7-affb-4c86996b3176",
+                            "id": "b9aeeac5-0dbb-4781-8084-e5975e360e9e",
                             "name": "Internal error. Body includes the request_id for correlation.",
                             "originalRequest": {
                                 "url": {
@@ -9516,7 +9593,7 @@
                                                 "type": "text/plain"
                                             },
                                             "key": "class",
-                                            "value": "authority_sanity"
+                                            "value": "aggregator"
                                         }
                                     ],
                                     "variable": []
@@ -9555,7 +9632,7 @@
             "description": "",
             "item": [
                 {
-                    "id": "0955b827-b8a9-44b6-a640-0317b696d491",
+                    "id": "cbd4da53-b04d-4ad1-8e8d-fdd319faedb9",
                     "name": "Direct markets for a pair.",
                     "request": {
                         "name": "Direct markets for a pair.",
@@ -9601,7 +9678,7 @@
                     },
                     "response": [
                         {
-                            "id": "b7dc3fb8-b85a-447d-8185-dc36fb4ee595",
+                            "id": "54237adb-c557-4643-a0e0-2e1cd7ee79c9",
                             "name": "Pairs.",
                             "originalRequest": {
                                 "url": {
@@ -9671,7 +9748,7 @@
                     "description": "",
                     "item": [
                         {
-                            "id": "f33eed70-c029-4bdb-b612-c367e1d27d7a",
+                            "id": "4ef09877-acb9-4afd-9a85-52260ef78088",
                             "name": "API-key holder info + quota status.",
                             "request": {
                                 "name": "API-key holder info + quota status.",
@@ -9707,7 +9784,7 @@
                             },
                             "response": [
                                 {
-                                    "id": "64f99cd0-6cb3-472d-8f1d-dd3d23a33d57",
+                                    "id": "fadb3b34-1a17-477b-90c8-97066063ad2a",
                                     "name": "Account.",
                                     "originalRequest": {
                                         "url": {
@@ -9746,7 +9823,7 @@
                                             "value": "application/json"
                                         }
                                     ],
-                                    "body": "{\n  \"as_of\": \"<dateTime>\",\n  \"data\": {\n    \"key_id\": \"<string>\",\n    \"label\": \"<string>\",\n    \"tier\": \"apikey\",\n    \"rate_limit_per_min\": \"<integer>\",\n    \"created_at\": \"<dateTime>\"\n  },\n  \"flags\": {\n    \"stale\": false,\n    \"reduced_redundancy\": false,\n    \"triangulated\": false,\n    \"divergence_warning\": false,\n    \"frozen\": false,\n    \"single_source\": false\n  },\n  \"sources\": [\n    \"<string>\",\n    \"<string>\"\n  ]\n}",
+                                    "body": "{\n  \"as_of\": \"<dateTime>\",\n  \"data\": {\n    \"key_id\": \"<string>\",\n    \"label\": \"<string>\",\n    \"tier\": \"anonymous\",\n    \"rate_limit_per_min\": \"<integer>\",\n    \"created_at\": \"<dateTime>\"\n  },\n  \"flags\": {\n    \"stale\": false,\n    \"reduced_redundancy\": false,\n    \"triangulated\": false,\n    \"divergence_warning\": false,\n    \"frozen\": false,\n    \"single_source\": false\n  },\n  \"sources\": [\n    \"<string>\",\n    \"<string>\"\n  ]\n}",
                                     "cookie": [],
                                     "_postman_previewlanguage": "json"
                                 }
@@ -9763,7 +9840,7 @@
                     "description": "",
                     "item": [
                         {
-                            "id": "577637a9-9cf4-4e56-a31e-fac0006c2b2b",
+                            "id": "cbd4afd5-45f7-4395-b667-e3ce91b9288e",
                             "name": "Usage-summary placeholder (currently empty).",
                             "request": {
                                 "name": "Usage-summary placeholder (currently empty).",
@@ -9821,7 +9898,7 @@
                             },
                             "response": [
                                 {
-                                    "id": "711f9922-703a-46e7-9eca-2bcd36400eb9",
+                                    "id": "2860ef7e-0652-4d8b-960a-2916c40c9c93",
                                     "name": "Usage records.",
                                     "originalRequest": {
                                         "url": {
@@ -9896,7 +9973,7 @@
                     "description": "",
                     "item": [
                         {
-                            "id": "273e7913-5ce6-480a-984e-6b70999fc2d8",
+                            "id": "40a88110-7b7e-4a1b-bbf6-1a6dd27ee839",
                             "name": "List all API keys for the authenticated caller.",
                             "request": {
                                 "name": "List all API keys for the authenticated caller.",
@@ -9935,7 +10012,7 @@
                             },
                             "response": [
                                 {
-                                    "id": "7fb78f13-18e7-4148-9920-266a3526a376",
+                                    "id": "b497cc39-fa1d-4aac-b62c-3ebecb32d676",
                                     "name": "Account keys (possibly empty list).",
                                     "originalRequest": {
                                         "url": {
@@ -9974,12 +10051,12 @@
                                             "value": "application/json"
                                         }
                                     ],
-                                    "body": "{\n  \"as_of\": \"<dateTime>\",\n  \"flags\": {\n    \"stale\": false,\n    \"reduced_redundancy\": false,\n    \"triangulated\": false,\n    \"divergence_warning\": false,\n    \"frozen\": false,\n    \"single_source\": false\n  },\n  \"sources\": [\n    \"<string>\",\n    \"<string>\"\n  ],\n  \"data\": [\n    {\n      \"key_id\": \"<string>\",\n      \"label\": \"<string>\",\n      \"tier\": \"anonymous\",\n      \"rate_limit_per_min\": \"<integer>\",\n      \"created_at\": \"<dateTime>\"\n    },\n    {\n      \"key_id\": \"<string>\",\n      \"label\": \"<string>\",\n      \"tier\": \"partner\",\n      \"rate_limit_per_min\": \"<integer>\",\n      \"created_at\": \"<dateTime>\"\n    }\n  ]\n}",
+                                    "body": "{\n  \"as_of\": \"<dateTime>\",\n  \"flags\": {\n    \"stale\": false,\n    \"reduced_redundancy\": false,\n    \"triangulated\": false,\n    \"divergence_warning\": false,\n    \"frozen\": false,\n    \"single_source\": false\n  },\n  \"sources\": [\n    \"<string>\",\n    \"<string>\"\n  ],\n  \"data\": [\n    {\n      \"key_id\": \"<string>\",\n      \"label\": \"<string>\",\n      \"tier\": \"apikey\",\n      \"rate_limit_per_min\": \"<integer>\",\n      \"created_at\": \"<dateTime>\"\n    },\n    {\n      \"key_id\": \"<string>\",\n      \"label\": \"<string>\",\n      \"tier\": \"anonymous\",\n      \"rate_limit_per_min\": \"<integer>\",\n      \"created_at\": \"<dateTime>\"\n    }\n  ]\n}",
                                     "cookie": [],
                                     "_postman_previewlanguage": "json"
                                 },
                                 {
-                                    "id": "d301ae04-2aa1-4b1a-ab73-3fc1c82c1e2d",
+                                    "id": "e0fc22b2-e7e7-4571-a2d9-7db15b16da15",
                                     "name": "Unauthenticated.",
                                     "originalRequest": {
                                         "url": {
@@ -10023,7 +10100,7 @@
                                     "_postman_previewlanguage": "json"
                                 },
                                 {
-                                    "id": "d90c9f5b-577a-4390-b54a-a1fa05d7bead",
+                                    "id": "0fbed18e-e664-4ea6-b0c2-ea7976f09991",
                                     "name": "AccountStore not configured.",
                                     "originalRequest": {
                                         "url": {
@@ -10073,7 +10150,7 @@
                             }
                         },
                         {
-                            "id": "94f2c876-423c-4a25-b329-22c436015978",
+                            "id": "c2ac4e71-8ff0-48bb-a693-52898f5bbb65",
                             "name": "Create a new API key.",
                             "request": {
                                 "name": "Create a new API key.",
@@ -10125,7 +10202,7 @@
                             },
                             "response": [
                                 {
-                                    "id": "96251fde-09fa-4481-b6c1-0a60256cd5f6",
+                                    "id": "8d905d32-c8d2-47c1-a52b-051ed099ac87",
                                     "name": "New key — plaintext shown **once**.",
                                     "originalRequest": {
                                         "url": {
@@ -10200,7 +10277,7 @@
                     "description": "",
                     "item": [
                         {
-                            "id": "94040e30-0a80-47d1-8972-1a4e5d2fe2d1",
+                            "id": "463202b2-0790-40ec-b970-b9e4b4e5a9ff",
                             "name": "Stripe webhook — paid-tier upgrade.",
                             "request": {
                                 "name": "Stripe webhook — paid-tier upgrade.",
@@ -10253,7 +10330,7 @@
                             },
                             "response": [
                                 {
-                                    "id": "d49c6ce1-88d6-447d-952a-4235a9d43c9b",
+                                    "id": "12f05e87-357c-47a5-a5ac-bcc77e9ffd62",
                                     "name": "Event acknowledged (regardless of whether keys were upgraded — non-2xx triggers Stripe retries).",
                                     "originalRequest": {
                                         "url": {
@@ -10311,7 +10388,7 @@
                                     "_postman_previewlanguage": "json"
                                 },
                                 {
-                                    "id": "ec05439c-a438-42bd-b5ed-f91f9702e1c5",
+                                    "id": "c76b25e1-dba4-49c8-863a-d38babe1f391",
                                     "name": "Missing signature header / bad body / bad metadata.",
                                     "originalRequest": {
                                         "url": {
@@ -10369,7 +10446,7 @@
                                     "_postman_previewlanguage": "json"
                                 },
                                 {
-                                    "id": "bcd0e51d-7d40-4837-b4d7-598db34d748c",
+                                    "id": "343506c8-f8ce-4a68-ac3e-003e2ea4ca5d",
                                     "name": "Stripe-Signature verification failed.",
                                     "originalRequest": {
                                         "url": {
@@ -10427,7 +10504,7 @@
                                     "_postman_previewlanguage": "json"
                                 },
                                 {
-                                    "id": "f3d8b489-2be5-4b7b-98de-b4488af727f0",
+                                    "id": "5a851ca7-0cf9-4997-8278-4bec13b5aa84",
                                     "name": "Webhook signing secret not configured.",
                                     "originalRequest": {
                                         "url": {
@@ -10499,7 +10576,7 @@
             "description": "",
             "item": [
                 {
-                    "id": "57201348-ac30-4ac3-a06a-155bdfb7405b",
+                    "id": "480cd546-00c6-4801-8718-bc7a442e04fc",
                     "name": "Self-service signup — mint a first API key by email.",
                     "request": {
                         "name": "Self-service signup — mint a first API key by email.",
@@ -10542,7 +10619,7 @@
                     },
                     "response": [
                         {
-                            "id": "49e0a56e-5d53-4760-a635-f6c84c63dfc2",
+                            "id": "ce150ce9-48fa-4967-92b6-af022986a116",
                             "name": "Account created — plaintext key shown **once**.",
                             "originalRequest": {
                                 "url": {
@@ -10590,7 +10667,7 @@
                             "_postman_previewlanguage": "json"
                         },
                         {
-                            "id": "e2078df7-d349-4e39-b2ed-c67d78c48403",
+                            "id": "f0e63320-d3af-4e7d-a64e-dcb495b479e7",
                             "name": "Missing or invalid email, body too large, or already authenticated.",
                             "originalRequest": {
                                 "url": {
@@ -10638,7 +10715,7 @@
                             "_postman_previewlanguage": "json"
                         },
                         {
-                            "id": "89c7be84-aae5-4ed1-bf14-a89f7907bfbe",
+                            "id": "8b6fc7a5-5285-4697-9123-76eb93795700",
                             "name": "Email already has an account.",
                             "originalRequest": {
                                 "url": {
@@ -10686,7 +10763,7 @@
                             "_postman_previewlanguage": "json"
                         },
                         {
-                            "id": "3dd7415a-3e0e-40f5-94e2-660a15f78c5d",
+                            "id": "68a7c5db-8b9a-402a-9774-43fb0257c78b",
                             "name": "AccountStore not configured (Redis unavailable).",
                             "originalRequest": {
                                 "url": {
@@ -10754,7 +10831,7 @@
                             "description": "",
                             "item": [
                                 {
-                                    "id": "3a0de0dd-693e-4dc1-abb8-f65aba07591d",
+                                    "id": "ef720fc1-3202-4ac6-8925-5860345e3e98",
                                     "name": "SEP-10 Web Auth — issue a challenge transaction.",
                                     "request": {
                                         "name": "SEP-10 Web Auth — issue a challenge transaction.",
@@ -10796,7 +10873,7 @@
                                     },
                                     "response": [
                                         {
-                                            "id": "35d46e18-534f-49ba-a707-24c8f1a572ca",
+                                            "id": "21f3d85f-609d-417e-a524-69e2ff1c4409",
                                             "name": "Unsigned challenge transaction.",
                                             "originalRequest": {
                                                 "url": {
@@ -10843,7 +10920,7 @@
                                             "_postman_previewlanguage": "json"
                                         },
                                         {
-                                            "id": "5812268c-18ef-4956-9752-73a7ee0bca95",
+                                            "id": "e99bd798-01e2-433f-9c89-1d67cb9a148d",
                                             "name": "Client-supplied parameters didn't validate.",
                                             "originalRequest": {
                                                 "url": {
@@ -10890,7 +10967,7 @@
                                             "_postman_previewlanguage": "json"
                                         },
                                         {
-                                            "id": "a46254ad-d17d-4023-8855-03f978d6e73f",
+                                            "id": "0ba559be-939e-41f0-b9e5-b6023abeb455",
                                             "name": "Server is degraded (dependency outage, startup, shutdown).",
                                             "originalRequest": {
                                                 "url": {
@@ -10949,7 +11026,7 @@
                             "description": "",
                             "item": [
                                 {
-                                    "id": "7a25ba86-dac3-465d-869e-37974253c2c7",
+                                    "id": "4d37620f-a01d-4f52-a6e7-f05f076d5803",
                                     "name": "SEP-10 Web Auth — exchange a signed challenge for a JWT.",
                                     "request": {
                                         "name": "SEP-10 Web Auth — exchange a signed challenge for a JWT.",
@@ -10994,7 +11071,7 @@
                                     },
                                     "response": [
                                         {
-                                            "id": "851016d1-13f5-4f29-9474-8a11aef92040",
+                                            "id": "915a73a2-e3b6-4f94-a138-13188fe8f0ff",
                                             "name": "Authenticated; JWT issued.",
                                             "originalRequest": {
                                                 "url": {
@@ -11044,7 +11121,7 @@
                                             "_postman_previewlanguage": "json"
                                         },
                                         {
-                                            "id": "efef3e20-f684-425f-acc6-4be4ba66844a",
+                                            "id": "b0111f34-3e9d-48d2-9989-0a556c77821c",
                                             "name": "Client-supplied parameters didn't validate.",
                                             "originalRequest": {
                                                 "url": {
@@ -11094,7 +11171,7 @@
                                             "_postman_previewlanguage": "json"
                                         },
                                         {
-                                            "id": "8c0ef91c-b69e-4d3d-bcdb-d8748f8c0f5f",
+                                            "id": "d66d09cd-851b-4356-af0e-9350dc6becc6",
                                             "name": "Signature verification failed.",
                                             "originalRequest": {
                                                 "url": {
@@ -11144,7 +11221,7 @@
                                             "_postman_previewlanguage": "json"
                                         },
                                         {
-                                            "id": "7e6894f8-d5d6-4e92-84c7-79e017bc5bae",
+                                            "id": "691df1b8-5090-4120-a65a-fc693992b784",
                                             "name": "Challenge time-bounds expired; request a fresh challenge.",
                                             "originalRequest": {
                                                 "url": {
@@ -11194,7 +11271,7 @@
                                             "_postman_previewlanguage": "json"
                                         },
                                         {
-                                            "id": "10a8e919-e71b-481e-b22b-8dbe68510c39",
+                                            "id": "694bcf14-933b-44e5-bd30-d6b2d3451d13",
                                             "name": "Server is degraded (dependency outage, startup, shutdown).",
                                             "originalRequest": {
                                                 "url": {
@@ -11268,7 +11345,7 @@
         }
     ],
     "info": {
-        "_postman_id": "9afe39d0-0958-4375-b714-f153ba69d7c0",
+        "_postman_id": "5f4091cc-bc06-4896-bf90-b26e78a52688",
         "name": "Rates Engine API",
         "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
         "description": {
