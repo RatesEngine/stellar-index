@@ -185,6 +185,11 @@ func main() { //nolint:gocyclo,gocognit,funlen // subcommand switch; each case i
 			fmt.Fprintf(os.Stderr, "hubble-soroban-events: %v\n", err)
 			os.Exit(1)
 		}
+	case "mint-key":
+		if err := mintKey(args[1:]); err != nil {
+			fmt.Fprintf(os.Stderr, "mint-key: %v\n", err)
+			os.Exit(1)
+		}
 	case "version", "--version", "-v":
 		fmt.Println(version.String())
 	case "help", "--help", "-h":
@@ -512,6 +517,32 @@ Subcommands:
                           ~3N+1 RPC calls at 300ms throttle, so wall-time
                           scales linearly with pair count (~3 min for 200
                           pairs). Idempotent — re-running is safe.
+  mint-key -config PATH -identifier ID -label LABEL [-tier T] [-rate-limit-per-min N] [-expires-in DUR]
+                          Issue a fresh API key directly via the
+                          Redis API-key store. Operator-only path
+                          to bootstrap a customer's first key —
+                          /v1/account/keys self-service can't be
+                          hit until a pre-existing authenticated
+                          subject already exists (chicken + egg).
+                          Plaintext goes to stdout; audit metadata
+                          (KeyID, Tier, CreatedAt) goes to stderr,
+                          so a >key.txt redirect captures only
+                          the secret. Plaintext is shown ONCE —
+                          unrecoverable. Pipe stdout to an
+                          encrypted transport (Bitwarden, vault,
+                          encrypted email) immediately. Tiers:
+                          apikey | sep10 | operator. Stripe webhook
+                          integration (future) calls the same
+                          internal/auth.RedisAPIKeyStore.Create
+                          path from a small HTTP handler instead
+                          of from the CLI.
+                          Example:
+                            ratesengine-ops mint-key \
+                              -config /etc/ratesengine.toml \
+                              -identifier customer-acme-corp \
+                              -label 'ACME Corp - production' \
+                              -tier apikey \
+                              -rate-limit-per-min 1000
   version                 Print version + build date.
   help                    This help.
 `
