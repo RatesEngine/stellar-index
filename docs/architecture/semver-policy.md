@@ -1,23 +1,24 @@
 ---
-title: SemVer + CalVer policy for Rates Engine
-last_verified: 2026-05-03
+title: SemVer policy for Rates Engine
+last_verified: 2026-05-05
 status: ratified
 ---
 
-# SemVer + CalVer policy
+# SemVer policy
 
-The Rates Engine ships **two version dimensions** simultaneously,
-each governing a different surface:
+The Rates Engine ships **two version dimensions**, each governed by
+SemVer (`vX.Y.Z`) but with independent tag namespaces and
+independent semantics.
 
-| Surface | Versioning | Why |
+| Surface | Tag form | Bump rules |
 |---|---|---|
-| **`pkg/*` Go modules** (e.g. `pkg/client`) | SemVer (`v1.2.3`) | These imports are consumed by external Go programs. Compat promise per [ADR-0005](../adr/0005-monorepo.md). |
-| **Binary releases** (`ratesengine-api`, `ratesengine-indexer`, …) | CalVer (`2026.06.30.1`) | Operators care about "when did we ship this build", not numerical compatibility. |
+| **`pkg/*` Go modules** (e.g. `pkg/client`) | `pkg/<name>/vX.Y.Z` | Standard Go-module SemVer (API surface) |
+| **Binary releases** (`ratesengine-api`, `ratesengine-indexer`, …) | `vX.Y.Z` (root tag) | Operator-impact SemVer (config / wire / behaviour) |
 
-The two clocks tick independently. A binary release `2026.07.15.1`
-may contain `pkg/client v0.4.2` while bundling unchanged versions
-of any other `pkg/*` modules added later. The `CHANGELOG.md` entry
-for that release lists the new `pkg/*` versions it contains.
+The two clocks tick independently. A binary release `v0.4.0` may
+contain `pkg/client v0.2.1` while bundling unchanged versions of
+any other `pkg/*` modules. The `CHANGELOG.md` entry for that
+release lists the new `pkg/*` versions it contains.
 
 ## SemVer rules for `pkg/*`
 
@@ -119,55 +120,99 @@ captures the same set for the binary clock):
 
 ---
 
-## CalVer rules for binary releases
+## SemVer rules for binary releases
 
 ### Format
 
-`YYYY.MM.DD.N`:
+`vX.Y.Z`:
 
-- `YYYY.MM.DD` — UTC date the release was cut
-- `.N` — incrementing counter for releases on the same day (`.1`, `.2`, …)
+- **`X` (major)** — bumped when an operator MUST take action beyond the standard restart to upgrade (config schema break, removed endpoint, removed CLI flag, manual data backfill required, breaking wire-shape change)
+- **`Y` (minor)** — bumped on additive changes that need no operator action (new endpoint, new optional config field, new source connector, new aggregation behaviour with safe defaults)
+- **`Z` (patch)** — bumped on operator-invisible changes (bug fixes, performance, internal refactoring, doc-only)
 
 Examples:
-- `2026.06.30.1` — initial public release
-- `2026.07.02.1` — second release, two days later
-- `2026.07.02.2` — same day, second cut (e.g. quick rollback fix)
+- `v0.1.0` — initial public release
+- `v0.2.0` — adds new SSE endpoint (additive)
+- `v0.2.1` — patch fix for an aggregator off-by-one
+- `v1.0.0` — first stable cut, contract becomes binding
+
+### Pre-v1.0 (`v0.x`) policy
+
+Until we tag `v1.0.0`:
+
+- Breaking changes bump the **minor** version (`v0.1.x → v0.2.0`), matching the `pkg/*` pre-v1 convention. Major bump is reserved for the v1.0 cut.
+- The CHANGELOG entry under the breaking version MUST call out the operator action explicitly (config edit, migration, etc.).
+- Release notes lead with the breaking change in the summary paragraph.
+
+### What constitutes a breaking change for binaries
+
+Any of the following bumps minor (pre-v1) or major (post-v1):
+
+1. **Config schema break** — a field in `/etc/ratesengine.toml` is removed, renamed, or its default semantics change in a way that affects existing operator configs
+2. **API wire-shape change** — JSON response shape changes for an existing endpoint (field removed, field renamed, type changed)
+3. **API endpoint removal or rename** — operators with hardcoded URLs break
+4. **CLI flag removal** — operators with hardcoded systemd unit `ExecStart=` lines break
+5. **DB migration that requires manual backfill** — `ratesengine-migrate up` is not sufficient; operator must run a separate one-off SQL/script
+6. **Source-connector removal** — an enabled source goes away; operators relying on its data must reconfigure
+7. **Behaviour change in fallback semantics** — VWAP→TWAP→last-trade fallback chain behaves differently in a way operators must learn
+
+Any of the following bumps the **minor** version (additive):
+
+1. New API endpoint
+2. New CLI flag (with safe default if omitted)
+3. New `/etc/ratesengine.toml` field (with safe default if omitted)
+4. New source connector (`enabled = false` by default — see `[external]` block convention)
+5. New aggregation feature behind an opt-in flag
+6. New migration that runs forward-only via `ratesengine-migrate up`
+7. New observability metric
+
+Any of the following is **patch**-only:
+
+1. Bug fixes that preserve documented behaviour
+2. Performance improvements with no operator-visible change
+3. Internal refactoring (`internal/*` churn)
+4. Documentation-only changes
+5. Test-only changes
+6. Dependency bumps that don't change behaviour
+7. Re-deploy of identical functionality (e.g. rebuild from same code with newer Go toolchain)
 
 ### Tagging
 
-Single repo-level tag:
+Single repo-level tag at the commit you want to release:
 
 ```sh
-git tag 2026.07.15.1
-git push origin 2026.07.15.1
+git tag v0.2.0
+git push origin v0.2.0
 ```
 
 The release builds every binary at this commit. `ratesengine-api
 --version` and `ratesengine-indexer --version` both report
-`2026.07.15.1` for that release.
+`v0.2.0` for that release. The Makefile's `git describe --tags
+--always --dirty` populates `internal/version.Version` at build
+time via `-ldflags`.
 
-### What goes in a CalVer release note
+### What goes in a binary release note
 
 Every release note (under `## [<version>]` in CHANGELOG.md) MUST
 include:
 
 1. **Stellar protocol version** the release was tested against (e.g. `Tested against pubnet protocol 23`)
 2. **`pkg/*` versions** included (e.g. `Includes pkg/client v0.4.2`)
-3. **Migration notes** for any `internal/*` refactor that affects operators (config schema changes, DB migrations, runbook changes)
+3. **Migration notes** for any change that affects operators (config schema additions, DB migrations, runbook changes). If none, write "None."
 4. **The standard Added/Changed/Deprecated/Removed/Fixed/Security sections**
+5. **Operator action required: yes/no** on the first line — operators reading at-a-glance need to know whether the upgrade is "restart and done" or "edit config first"
 
-### Why CalVer for binaries
+### Why SemVer (not CalVer) for binaries
 
-Operators answer "should I upgrade?" with "is it newer than what
-I'm running?" — calendar dates make that comparison trivial.
-SemVer for binaries would force us to debate whether each release
-is "breaking enough" for a major bump, which doesn't help anyone
-who just wants to know "is the deploy I'm running 6 weeks old?"
+We considered CalVer (`YYYY.MM.DD.N`) and switched to SemVer for the
+binary clock to match the `pkg/*` clock and to give operators a
+single mental model: **"is this a `vX.0.0` cut? must I edit my
+config?"** is more useful than "is this newer than what I'm running?"
+when releases land 2-3× per week.
 
-CalVer also avoids the trap of the SemVer treadmill where every
-backwards-compatible behaviour change has to be reasoned about as
-"is this minor or patch?". For binaries we don't care; for `pkg/*`
-we do, and that's exactly where SemVer lives.
+The release-process runbook still records every cut's UTC date in
+the CHANGELOG section header so the calendar dimension is preserved
+in human-readable form (`## [v0.2.0] — 2026-07-15`).
 
 ---
 
@@ -194,7 +239,7 @@ new source in `internal/sources/<venue>/` is the normal flow.
 ## Cross-references
 
 - [ADR-0005](../adr/0005-monorepo.md) — monorepo / one-Go-module decision; the SemVer commitment on `pkg/*` lives here
-- [`docs/discovery/repo-structure-plan.md`](../discovery/repo-structure-plan.md) §10 — original rationale for the dual-versioning split
+- [`docs/discovery/repo-structure-plan.md`](../discovery/repo-structure-plan.md) §10 — original rationale for the dual-versioning split (then CalVer; superseded by this doc 2026-05-05)
 - [`docs/operations/release-process.md`](../operations/release-process.md) — runbook the release engineer follows; implements this policy
 - [`.github/RELEASE_NOTES_TEMPLATE.md`](../../.github/RELEASE_NOTES_TEMPLATE.md) — fill-in template for GitHub Release notes
 - [`CHANGELOG.md`](../../CHANGELOG.md) — every release's entry follows the rules above

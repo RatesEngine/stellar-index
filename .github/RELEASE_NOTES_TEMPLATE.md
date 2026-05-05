@@ -1,18 +1,23 @@
 <!--
 Release notes template for a Rates Engine binary release.
 
-Copy this file, replace placeholders, and pass it to
-`gh release create <tag> --notes-file <copy>` (see
-docs/operations/release-process.md). The same content is duplicated
-into CHANGELOG.md under `## [<tag>] — YYYY-MM-DD` per
-docs/architecture/semver-policy.md §"What goes in a CalVer release note".
+The release.yml workflow auto-builds release notes by extracting
+the matching CHANGELOG section. This template is the SHAPE that
+CHANGELOG sections should follow — keep your CHANGELOG entry
+matching this layout and the workflow output is publication-ready.
+
+If you need to edit the notes after publication (e.g. add a
+"Tested against protocol XX" line the workflow couldn't infer),
+the auto-generated content already has the right scaffolding.
 
 Every section is mandatory. If a section has no entries, write
 "None." rather than deleting the heading — readers learn from the
 absence of a Migration block as much as from its presence.
 -->
 
-# Rates Engine YYYY.MM.DD.N
+# Rates Engine vX.Y.Z
+
+**Operator action required: yes / no**
 
 <!-- One-paragraph release summary. The 30-second pitch an operator
 needs to decide whether to upgrade. Lead with the most operationally
@@ -27,7 +32,7 @@ relevant change. -->
 
 ## `pkg/*` versions included
 
-<!-- One line per public Go module shipped at this CalVer tag. Bump
+<!-- One line per public Go module shipped at this binary tag. Bump
 each independently per the SemVer rules in
 docs/architecture/semver-policy.md. -->
 
@@ -84,4 +89,4 @@ None.
 
 ## Full changelog
 
-See [`CHANGELOG.md`](../CHANGELOG.md#YYYYMMDDN).
+See [`CHANGELOG.md`](../CHANGELOG.md#vXYZ).
