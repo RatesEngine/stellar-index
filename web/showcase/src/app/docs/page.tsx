@@ -88,25 +88,36 @@ const GROUPS: Group[] = [
     ],
   },
   {
-    name: 'Account & SEP-10',
+    name: 'Account & signup',
     description:
-      'Authenticated self-service. SEP-10 web-auth bootstraps a JWT from a public Stellar G-strkey.',
+      'Self-service signup, authenticated identity, key listing + rotation, paid-tier upgrades.',
     endpoints: [
+      { method: 'POST', path: '/v1/signup', summary: 'Mint a first API key by email (Starter tier)' },
       { method: 'GET', path: '/v1/account/me', summary: 'Authenticated subject details' },
       { method: 'GET', path: '/v1/account/usage', summary: 'Rate-limit usage for the current key' },
-      { method: 'POST', path: '/v1/account/keys', summary: 'Issue a new API key' },
+      { method: 'GET', path: '/v1/account/keys', summary: 'List every key your identifier owns' },
+      { method: 'POST', path: '/v1/account/keys', summary: 'Issue a new API key (rotation)' },
+      { method: 'POST', path: '/v1/webhooks/stripe', summary: 'Stripe webhook — paid-tier rate-limit upgrade' },
+    ],
+  },
+  {
+    name: 'SEP-10 web auth',
+    description:
+      'Stellar SEP-10 challenge/response — bootstraps a JWT from a public Stellar G-strkey.',
+    endpoints: [
       { method: 'GET', path: '/v1/auth/sep10/challenge', summary: 'SEP-10 challenge transaction' },
       { method: 'POST', path: '/v1/auth/sep10/token', summary: 'Exchange signed challenge for JWT' },
     ],
   },
   {
-    name: 'Health & version',
+    name: 'Health & status',
     description:
-      'Probes for liveness, readiness, and binary version. /metrics is the unversioned Prometheus scrape.',
+      'Probes for liveness, readiness, and the customer-facing system-health rollup. /metrics is the unversioned Prometheus scrape.',
     endpoints: [
       { method: 'GET', path: '/v1/healthz', summary: 'Shallow liveness probe' },
       { method: 'GET', path: '/v1/readyz', summary: 'Deep readiness — pings every dependency' },
       { method: 'GET', path: '/v1/version', summary: 'Binary version, build date, VCS info' },
+      { method: 'GET', path: '/v1/status', summary: 'System-health rollup (heartbeats / latency / freshness / incidents)' },
     ],
   },
 ];
