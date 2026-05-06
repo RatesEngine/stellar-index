@@ -16,6 +16,14 @@ against.
 ## [Unreleased]
 
 ### Added
+- **`/markets/{base~quote}` per-pair detail page on the explorer.**
+  Static-export route enumerating the top 100 pairs by 24h USD
+  volume at build time. Renders pair header (base/quote labels +
+  current VWAP + 24h change derived from the chart), 24h hourly
+  chart sparkline, last-50 trades feed (time / source / price /
+  amounts), and a per-source breakdown bar chart showing which
+  venue contributed how many of those trades. Markets table rows
+  on `/markets` are now clickable links into the new detail page.
 - **Stablecoin "PEG USD/EUR/MXN/…" badge on `/assets/{slug}`.**
   Recognises the well-known Stellar stablecoins by code (USDC,
   USDT, PYUSD, DAI, EURC, MXNe, BRZ, GBPC, etc.) and replaces
