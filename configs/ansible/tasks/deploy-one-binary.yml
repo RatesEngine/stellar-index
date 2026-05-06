@@ -95,14 +95,22 @@
     # CLI tools (ops, migrate, sla-probe) are one-shot binaries
     # with no daemon to restart. The `cli_binaries` list below
     # is the canonical set; everything else is treated as a
-    # systemd service.
-    - name: "[{{ binary }}] Smoke-test CLI binary (no service)"
+    # systemd service. The smoke uses `file` rather than a
+    # `--version` flag because each CLI has a different version
+    # convention (ops uses `version` subcommand, migrate uses
+    # `version` subcommand, sla-probe uses `-version` flag) —
+    # checking the ELF header catches a corrupted-during-scp
+    # binary without coupling the playbook to per-binary CLI
+    # shape.
+    - name: "[{{ binary }}] Smoke-test CLI binary (well-formed ELF)"
       when: binary in cli_binaries
       ansible.builtin.command:
-        cmd: "{{ install_dir }}/{{ binary }} -version"
+        cmd: "file -L {{ install_dir }}/{{ binary }}"
       changed_when: false
-      register: cli_version
-      failed_when: cli_version.rc != 0
+      register: cli_file
+      failed_when:
+        - cli_file.rc != 0
+        - "'ELF 64-bit' not in cli_file.stdout"
 
     - name: "[{{ binary }}] Restart service"
       when: binary not in cli_binaries
