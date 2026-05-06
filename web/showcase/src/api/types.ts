@@ -121,6 +121,108 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/status": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Comprehensive system health rollup for the public status page.
+         * @description Customer-facing surface — what the showcase status page renders.
+         *     Returns per-service heartbeats (api / indexer / aggregator),
+         *     API histogram-derived p50/p95/p99 latency over the last 5
+         *     minutes, ingest freshness signals, and a count of currently-
+         *     firing Alertmanager incidents grouped by severity.
+         *
+         *     Always returns 200; the body's `overall` field reports
+         *     degraded state rather than an HTTP error so monitoring
+         *     dashboards can poll a single endpoint without alerting on
+         *     503s. When the API isn't wired against a Prometheus backend,
+         *     only the in-process surface (region label + uptime) is
+         *     populated and `flags.stale=true`.
+         */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Status rollup envelope. */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        /**
+                         * @example {
+                         *       "data": {
+                         *         "overall": "ok",
+                         *         "region": {
+                         *           "name": "r1",
+                         *           "deployment": "production"
+                         *         },
+                         *         "services": [
+                         *           {
+                         *             "name": "api",
+                         *             "status": "ok",
+                         *             "last_seen": "2026-05-05T15:09:00.116Z"
+                         *           },
+                         *           {
+                         *             "name": "indexer",
+                         *             "status": "ok",
+                         *             "last_seen": "2026-05-05T15:08:46Z"
+                         *           },
+                         *           {
+                         *             "name": "aggregator",
+                         *             "status": "ok",
+                         *             "last_seen": "2026-05-05T15:08:47Z"
+                         *           }
+                         *         ],
+                         *         "latency": {
+                         *           "p50_ms": 0.6,
+                         *           "p95_ms": 3.85,
+                         *           "p99_ms": 4.77,
+                         *           "window_secs": 300
+                         *         },
+                         *         "freshness": {
+                         *           "last_aggregator_tick": "2026-05-05T15:08:57Z",
+                         *           "active_sources": 13,
+                         *           "total_sources": 17
+                         *         },
+                         *         "incidents": {
+                         *           "active_count": 0,
+                         *           "page_count": 0,
+                         *           "ticket_count": 0,
+                         *           "informational_count": 0
+                         *         }
+                         *       },
+                         *       "as_of": "2026-05-05T15:09:00.119Z",
+                         *       "flags": {
+                         *         "stale": false,
+                         *         "reduced_redundancy": false,
+                         *         "triangulated": false,
+                         *         "divergence_warning": false
+                         *       }
+                         *     }
+                         */
+                        "application/json": components["schemas"]["StatusEnvelope"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/assets": {
         parameters: {
             query?: never;
@@ -307,6 +409,25 @@ export interface paths {
                         [name: string]: unknown;
                     };
                     content: {
+                        /**
+                         * @example {
+                         *       "data": {
+                         *         "asset_id": "native",
+                         *         "quote": "fiat:USD",
+                         *         "price": "0.159608357106",
+                         *         "price_type": "vwap",
+                         *         "observed_at": "2026-05-05T14:35:00Z",
+                         *         "window_seconds": 300
+                         *       },
+                         *       "as_of": "2026-05-05T14:35:42.881Z",
+                         *       "flags": {
+                         *         "stale": false,
+                         *         "reduced_redundancy": false,
+                         *         "triangulated": false,
+                         *         "divergence_warning": false
+                         *       }
+                         *     }
+                         */
                         "application/json": components["schemas"]["PriceEnvelope"];
                     };
                 };
@@ -1162,9 +1283,17 @@ export interface paths {
         /**
          * Latest oracle reading per source for an asset.
          * @description Returns one OracleReading per source (reflector-dex /
-         *     reflector-cex / reflector-fx / redstone / band) that has
-         *     observed the asset. Optional source filter restricts to a
-         *     single source.
+         *     reflector-cex / reflector-fx / redstone / band /
+         *     coingecko) that has observed the asset. Optional source
+         *     filter restricts to a single source.
+         *
+         *     Asset translation: classic Stellar identifiers map to the
+         *     global crypto ticker the oracles publish under — so
+         *     `asset=native` returns XLM observations (Reflector keys
+         *     them as `crypto:XLM`), `asset=USDC-GA5Z…` returns the
+         *     USDC global-ticker observations, etc. Already-canonical
+         *     forms (`crypto:XLM`, `fiat:USD`, contract addresses) pass
+         *     through unchanged.
          */
         get: {
             parameters: {
@@ -1190,6 +1319,58 @@ export interface paths {
                         [name: string]: unknown;
                     };
                     content: {
+                        /**
+                         * @example {
+                         *       "data": [
+                         *         {
+                         *           "source": "reflector-cex",
+                         *           "contract_id": "CAFJZQWSED6YAWZU3GWRTOCNPPCGBN32L7QV43XX5LZLFTK6JLN34DLN",
+                         *           "asset": "crypto:XLM",
+                         *           "quote": "fiat:USD",
+                         *           "ts": "2026-05-05T16:25:00Z",
+                         *           "price": "0.15912",
+                         *           "price_raw": "15912000000000",
+                         *           "decimals": 14,
+                         *           "confidence": 0.96,
+                         *           "observer": "GRELAYER0000000000000000000000000000000000000000000000000000"
+                         *         },
+                         *         {
+                         *           "source": "band",
+                         *           "asset": "crypto:XLM",
+                         *           "quote": "fiat:USD",
+                         *           "ts": "2026-05-05T16:25:30Z",
+                         *           "price": "0.15908",
+                         *           "price_raw": "159080000000000000",
+                         *           "decimals": 18
+                         *         },
+                         *         {
+                         *           "source": "redstone",
+                         *           "asset": "crypto:XLM",
+                         *           "quote": "fiat:USD",
+                         *           "ts": "2026-05-05T16:24:00Z",
+                         *           "price": "0.15920",
+                         *           "price_raw": "159200000",
+                         *           "decimals": 9
+                         *         },
+                         *         {
+                         *           "source": "coingecko",
+                         *           "asset": "crypto:XLM",
+                         *           "quote": "fiat:USD",
+                         *           "ts": "2026-05-05T16:25:00Z",
+                         *           "price": "0.15915",
+                         *           "price_raw": "15915",
+                         *           "decimals": 5
+                         *         }
+                         *       ],
+                         *       "as_of": "2026-05-05T16:25:42.881Z",
+                         *       "flags": {
+                         *         "stale": false,
+                         *         "reduced_redundancy": false,
+                         *         "triangulated": false,
+                         *         "divergence_warning": false
+                         *       }
+                         *     }
+                         */
                         "application/json": components["schemas"]["OracleLatestEnvelope"];
                     };
                 };
@@ -1450,6 +1631,37 @@ export interface paths {
                         [name: string]: unknown;
                     };
                     content: {
+                        /**
+                         * @example {
+                         *       "data": [
+                         *         {
+                         *           "slug": "USDC",
+                         *           "asset_id": "USDC-GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN",
+                         *           "code": "USDC",
+                         *           "issuer": "GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN",
+                         *           "first_seen_ledger": 50457424,
+                         *           "last_seen_ledger": 62413938,
+                         *           "observation_count": 41610618
+                         *         },
+                         *         {
+                         *           "slug": "yXLM",
+                         *           "asset_id": "yXLM-GARDNV3Q7YGT4AKSDF25LT32YSCCW4EV22Y2TV3I2PU2MMXJTEDL5T55",
+                         *           "code": "yXLM",
+                         *           "issuer": "GARDNV3Q7YGT4AKSDF25LT32YSCCW4EV22Y2TV3I2PU2MMXJTEDL5T55",
+                         *           "first_seen_ledger": 50457424,
+                         *           "last_seen_ledger": 62413938,
+                         *           "observation_count": 32406192
+                         *         }
+                         *       ],
+                         *       "as_of": "2026-05-05T16:03:05.111Z",
+                         *       "flags": {
+                         *         "stale": false,
+                         *         "reduced_redundancy": false,
+                         *         "triangulated": false,
+                         *         "divergence_warning": false
+                         *       }
+                         *     }
+                         */
                         "application/json": {
                             slug: string;
                             asset_id: string;
@@ -1860,6 +2072,24 @@ export interface paths {
                         [name: string]: unknown;
                     };
                     content: {
+                        /**
+                         * @example {
+                         *       "data": {
+                         *         "key_id": "kid_8f3a2c1b9e7d4f6a",
+                         *         "label": "production-api-1",
+                         *         "tier": "apikey",
+                         *         "rate_limit_per_min": 1000,
+                         *         "created_at": "2026-04-12T09:32:18Z"
+                         *       },
+                         *       "as_of": "2026-05-05T16:25:42.881Z",
+                         *       "flags": {
+                         *         "stale": false,
+                         *         "reduced_redundancy": false,
+                         *         "triangulated": false,
+                         *         "divergence_warning": false
+                         *       }
+                         *     }
+                         */
                         "application/json": components["schemas"]["AccountEnvelope"];
                     };
                 };
@@ -1925,7 +2155,58 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        get?: never;
+        /**
+         * List all API keys for the authenticated caller.
+         * @description Returns every key whose Identifier matches the caller's
+         *     authenticated Subject, sorted oldest-first. Each entry is
+         *     the public-safe projection — `key_id`, `label`, `tier`,
+         *     `rate_limit_per_min`, `created_at`. **Plaintext is never
+         *     returned**; it's only retrievable at POST-time.
+         *
+         *     Use this to render an account dashboard ("here are your
+         *     keys"), verify rotation worked, or confirm a Stripe-paid
+         *     upgrade lifted the right keys.
+         */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Account keys (possibly empty list). */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["EnvelopeMeta"] & {
+                            data?: components["schemas"]["Account"][];
+                        };
+                    };
+                };
+                /** @description Unauthenticated. */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["Problem"];
+                    };
+                };
+                /** @description AccountStore not configured. */
+                503: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["Problem"];
+                    };
+                };
+            };
+        };
         put?: never;
         /**
          * Create a new API key.
@@ -1956,6 +2237,575 @@ export interface paths {
                         "application/json": components["schemas"]["KeyCreatedEnvelope"];
                     };
                 };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/webhooks/stripe": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Stripe webhook — paid-tier upgrade.
+         * @description Receives Stripe webhook events. On `checkout.session.completed`
+         *     with `payment_status=paid`, looks up every API key whose
+         *     identifier matches `client_reference_id` and lifts their
+         *     `rate_limit_per_min` to the value implied by `metadata.tier`
+         *     (pro / business) or the explicit `metadata.rate_limit_per_min`
+         *     override.
+         *
+         *     Idempotent — Stripe at-least-once delivery means the same
+         *     event may arrive multiple times; the handler always sets the
+         *     same target rate-limit. Customer keeps their existing
+         *     plaintext key; effective on the next request (validator reads
+         *     the per-key budget on every Lookup).
+         *
+         *     Stripe-Signature header verified via HMAC-SHA256 with
+         *     timestamp drift bounded to 5 minutes. Endpoint returns 503
+         *     when the signing secret is unset (deployments without
+         *     Stripe).
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header: {
+                    "Stripe-Signature": string;
+                };
+                path?: never;
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": Record<string, never>;
+                };
+            };
+            responses: {
+                /** @description Event acknowledged (regardless of whether keys were upgraded — non-2xx triggers Stripe retries). */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            ok?: boolean;
+                            /** @description Keys upgraded to the new rate limit. */
+                            upgraded?: number;
+                            /** @description Total keys belonging to the identifier. */
+                            keys_total?: number;
+                            rate_limit_per_min?: number;
+                            /** @description Set when an event was acknowledged but not acted on (wrong type, unpaid). */
+                            ignored?: string;
+                        };
+                    };
+                };
+                /** @description Missing signature header / bad body / bad metadata. */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["Problem"];
+                    };
+                };
+                /** @description Stripe-Signature verification failed. */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["Problem"];
+                    };
+                };
+                /** @description Webhook signing secret not configured. */
+                503: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["Problem"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/signup": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Self-service signup — mint a first API key by email.
+         * @description Public, anonymous-tier endpoint. Hit it once with an email
+         *     + optional label and get back a freshly-minted API key for
+         *     the Starter tier (1000 req/min). Idempotent on the email:
+         *     a second call for the same email returns 409 with a pointer
+         *     to the existing key (recover access via support; future
+         *     Stripe-paid upgrade flow will support self-service rotation
+         *     via /v1/account/keys).
+         *
+         *     Already-authenticated callers receive 400 — they should
+         *     rotate keys via POST /v1/account/keys instead.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    /**
+                     * @example {
+                     *       "email": "alice@example.com",
+                     *       "label": "production-api-1"
+                     *     }
+                     */
+                    "application/json": {
+                        /** Format: email */
+                        email: string;
+                        label?: string;
+                    };
+                };
+            };
+            responses: {
+                /** @description Account created — plaintext key shown **once**. */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        /**
+                         * @example {
+                         *       "data": {
+                         *         "plaintext": "re_live_4f9c1d8b3a7e2f1c9d4b8a6e3f2c1d9b8a7e6f5d4c3b2a1f",
+                         *         "key_id": "k_8f3a2c1b9e7d4f6a",
+                         *         "identifier": "signup-3d4f9a2c1e8b7f6d",
+                         *         "label": "production-api-1",
+                         *         "tier": "apikey",
+                         *         "rate_limit_per_min": 1000
+                         *       },
+                         *       "as_of": "2026-05-05T14:35:42.881Z"
+                         *     }
+                         */
+                        "application/json": components["schemas"]["EnvelopeMeta"] & {
+                            data?: {
+                                /** @description Bearer token. Show ONCE; unrecoverable. */
+                                plaintext: string;
+                                key_id: string;
+                                identifier: string;
+                                label?: string;
+                                /** @enum {string} */
+                                tier: "apikey";
+                                rate_limit_per_min: number;
+                            };
+                        };
+                    };
+                };
+                /** @description Missing or invalid email, body too large, or already authenticated. */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["Problem"];
+                    };
+                };
+                /** @description Email already has an account. */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["Problem"];
+                    };
+                };
+                /** @description AccountStore not configured (Redis unavailable). */
+                503: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["Problem"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/dashboard/keys": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Customer dashboard — list this account's API keys.
+         * @description Session-gated. Returns every key (active + revoked) for
+         *     the authenticated user's account, ordered oldest-first.
+         *     Plaintext is never returned by this endpoint — only
+         *     the prefix (`rek_4f9c1d8b…`).
+         */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Key list. */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            keys: components["schemas"]["DashboardKey"][];
+                        };
+                    };
+                };
+                /** @description No valid session cookie. */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["Problem"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        /**
+         * Customer dashboard — mint a new API key.
+         * @description Session-gated. Mints a new key, returns the plaintext
+         *     ONCE. The dashboard surfaces it in a "save this now"
+         *     banner; subsequent reads only see the prefix. Owner /
+         *     admin / member roles can mint; viewer + billing 403.
+         *     Rate-limited to MaxKeysPerAccount=25 active keys.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["CreateKeyRequest"];
+                };
+            };
+            responses: {
+                /** @description Key minted. */
+                201: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["CreateKeyResponse"];
+                    };
+                };
+                400: components["responses"]["BadRequest"];
+                /** @description No valid session cookie. */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["Problem"];
+                    };
+                };
+                /** @description Role can't mint keys. */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["Problem"];
+                    };
+                };
+                /** @description Account already at the active-key quota. */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["Problem"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/dashboard/keys/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Customer dashboard — revoke a key.
+         * @description Session-gated. Soft-delete by setting revoked_at;
+         *     idempotent. 404 when the key doesn't exist OR belongs
+         *     to a different account (same shape so attackers can't
+         *     enumerate cross-account key_ids).
+         */
+        delete: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Revoked. */
+                204: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description No valid session cookie. */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["Problem"];
+                    };
+                };
+                /** @description Role can't revoke keys. */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["Problem"];
+                    };
+                };
+                /** @description Key not found. */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["Problem"];
+                    };
+                };
+            };
+        };
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/auth/login": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Customer dashboard — request a magic-link sign-in email.
+         * @description Mints a single-use magic-link token (valid 15 minutes) and
+         *     emails it to the address. Always returns `{status: "sent"}`
+         *     regardless of whether the email matches an existing account
+         *     — leaking that information would let attackers enumerate
+         *     valid users. First-time users have their account + owner-
+         *     user provisioned on the callback (not here), so the same
+         *     flow handles login + signup.
+         *
+         *     Distinct from `/auth/sep10/*` (programmatic API auth via a
+         *     signed Stellar challenge). This endpoint is the entry point
+         *     for the cookie-based dashboard SPA at app.ratesengine.net.
+         *
+         *     Returns 503 when the deployment hasn't configured the
+         *     dashboard auth flow (api.dashboard.base_url empty).
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": {
+                        /**
+                         * Format: email
+                         * @description The address to email the magic link to.
+                         */
+                        email: string;
+                    };
+                };
+            };
+            responses: {
+                /** @description Email accepted for delivery (or silently dropped if address doesn't match an account). */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            /** @enum {string} */
+                            status: "sent";
+                        };
+                    };
+                };
+                400: components["responses"]["BadRequest"];
+                503: components["responses"]["ServiceUnavailable"];
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/auth/callback": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Customer dashboard — consume a magic-link token + mint a session cookie.
+         * @description Reads the `token` query parameter, atomically marks it
+         *     consumed in `magic_link_tokens`, and on success sets an
+         *     HttpOnly + Secure session cookie (`ratesengine_session`)
+         *     and redirects (303) into the dashboard.
+         *
+         *     First-time emails get a free-tier account + owner-role
+         *     user provisioned at this step. Returning users skip
+         *     provisioning and just get a fresh session.
+         *
+         *     Returns 410 on expired tokens so the dashboard can render
+         *     a "request a fresh link" prompt distinct from the generic
+         *     "invalid token" 400.
+         */
+        get: {
+            parameters: {
+                query: {
+                    /** @description Hex-encoded magic-link plaintext from the email. */
+                    token: string;
+                    /**
+                     * @description Path-only redirect target after sign-in (e.g. `/keys`).
+                     *     Absolute URLs and protocol-relative paths (`//evil.com`)
+                     *     are rejected; the user lands at `/` instead.
+                     */
+                    next?: string;
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Authenticated; session cookie set; redirect to dashboard. */
+                303: {
+                    headers: {
+                        /** @description HttpOnly + Secure session cookie. */
+                        "Set-Cookie"?: string;
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                400: components["responses"]["BadRequest"];
+                /** @description Magic-link token expired; request a fresh one. */
+                410: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["Problem"];
+                    };
+                };
+                503: components["responses"]["ServiceUnavailable"];
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/auth/logout": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Customer dashboard — revoke the current session + clear the cookie.
+         * @description Idempotent. Calling without a session cookie is still a 200
+         *     — the goal is just to leave the browser in a known
+         *     signed-out state. Sets a Max-Age=-1 cookie so the browser
+         *     drops it on the next response.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Session revoked (if any) and cookie cleared. */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                503: components["responses"]["ServiceUnavailable"];
             };
         };
         delete?: never;
@@ -2089,6 +2939,65 @@ export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
         /**
+         * @description Dashboard view of an API key. Plaintext is NEVER on this
+         *     shape — that's only on `CreateKeyResponse.plaintext`,
+         *     returned exactly once at creation time.
+         */
+        DashboardKey: {
+            id: string;
+            name: string;
+            description?: string;
+            /** @description First 12 chars of the plaintext (`rek_<8hex>`). */
+            key_prefix: string;
+            /** @enum {string} */
+            tier: "apikey" | "partner" | "operator";
+            rate_limit_per_min: number;
+            /** Format: int64 */
+            monthly_quota?: number;
+            usage_alert_threshold_pct?: number;
+            ip_allowlist?: string[];
+            referer_allowlist?: string[];
+            /** Format: date-time */
+            expires_at?: string;
+            /** Format: date-time */
+            revoked_at?: string;
+            revoked_reason?: string;
+            /** Format: date-time */
+            last_used_at?: string;
+            /** Format: date-time */
+            created_at: string;
+        };
+        CreateKeyRequest: {
+            /** @description Customer-facing label. */
+            name: string;
+            description?: string;
+            /** @description Default 1000. */
+            rate_limit_per_min?: number;
+            /** Format: int64 */
+            monthly_quota?: number;
+            /**
+             * @description CIDR (`203.0.113.0/24`) or bare IP (auto-promoted to
+             *     /32 v4 or /128 v6).
+             */
+            ip_allowlist?: string[];
+            referer_allowlist?: string[];
+            /**
+             * Format: date-time
+             * @description RFC 3339; must be in the future.
+             */
+            expires_at?: string;
+            usage_alert_threshold_pct?: number;
+        };
+        CreateKeyResponse: {
+            /**
+             * @description The full plaintext key. Returned exactly once; never
+             *     re-displayed. Customers store this in their secret
+             *     manager.
+             */
+            plaintext: string;
+            key: components["schemas"]["DashboardKey"];
+        };
+        /**
          * @description Advisory quality markers. See docs/architecture/ha-plan.md §9
          *     and ADR-0019 (anomaly detection / freeze policy).
          *
@@ -2168,6 +3077,82 @@ export interface components {
                 /** @description Runtime Go version (e.g. `go1.22.3`). */
                 go_version: string;
             };
+        };
+        StatusEnvelope: components["schemas"]["EnvelopeMeta"] & {
+            data: components["schemas"]["StatusResponse"];
+        };
+        StatusResponse: {
+            /**
+             * @description "ok" when every signal is healthy; "degraded" when at
+             *     least one heartbeat is stale or a page-severity alert
+             *     is firing; "down" when no live signal is available.
+             * @enum {string}
+             */
+            overall: "ok" | "degraded" | "down";
+            region: {
+                /** @description Region identifier (e.g. r1, r2, r3). */
+                name: string;
+                /** @description Deployment label (e.g. production, staging). */
+                deployment: string;
+            };
+            services: components["schemas"]["StatusService"][];
+            /** @description API histogram-derived percentiles over the last 5 minutes. Zero when no Prometheus backend is wired. */
+            latency?: {
+                p50_ms?: number;
+                p95_ms?: number;
+                p99_ms?: number;
+                window_secs?: number;
+            };
+            freshness?: {
+                /** Format: date-time */
+                last_aggregator_tick?: string;
+                active_sources?: number;
+                total_sources?: number;
+            };
+            incidents?: {
+                active_count?: number;
+                page_count?: number;
+                ticket_count?: number;
+                informational_count?: number;
+                /**
+                 * @description Currently-firing alerts (deduplicated by alertname,
+                 *     page-severity first, capped at 16 entries). Empty when
+                 *     no alerts are firing OR no Prometheus backend is wired.
+                 */
+                active?: components["schemas"]["ActiveIncident"][];
+            };
+        };
+        ActiveIncident: {
+            /** @description Alertmanager `alertname` label. */
+            name: string;
+            /**
+             * @description Severity bucket per the Rates Engine alerting taxonomy.
+             * @enum {string}
+             */
+            severity: "page" | "ticket" | "informational";
+            /**
+             * Format: uri
+             * @description Public GitHub URL for the alert's runbook (when the alert
+             *     rule has the `runbook_url` label set). Empty when no
+             *     runbook is registered.
+             */
+            runbook_url?: string;
+        };
+        StatusService: {
+            /** @description Service identifier (api / indexer / aggregator). */
+            name: string;
+            /**
+             * @description "ok" when the last scrape was within 60 s. "down" when
+             *     the heartbeat is stale. "unknown" when no Prometheus
+             *     backend is wired or no scrape has succeeded yet.
+             * @enum {string}
+             */
+            status: "ok" | "down" | "unknown";
+            /**
+             * Format: date-time
+             * @description Optional. Timestamp of the most recent successful scrape.
+             */
+            last_seen?: string;
         };
         Asset: {
             asset_id: string;
@@ -2564,6 +3549,14 @@ export interface components {
         Account: {
             key_id?: string;
             label?: string;
+            /**
+             * @description First 12 characters of the plaintext key (e.g.
+             *     `rek_4f9c1d8b`). Safe to log; customers use it to
+             *     match dashboard rows to entries in their secret
+             *     manager. Empty on legacy keys minted before the
+             *     prefix feature shipped.
+             */
+            key_prefix?: string;
             /** @enum {string} */
             tier?: "anonymous" | "apikey" | "partner";
             rate_limit_per_min?: number;
@@ -2588,6 +3581,15 @@ export interface components {
                 key_id: string;
                 /** @description Shown once. Store it now. */
                 plaintext: string;
+                /**
+                 * @description First 12 characters of the plaintext (e.g.
+                 *     `rek_4f9c1d8b`). Safe to display in logs and
+                 *     dashboards; customers use it to identify
+                 *     which key matches a row in their secret
+                 *     manager. Same value also returned by GET
+                 *     `/v1/account/keys`.
+                 */
+                key_prefix?: string;
                 label: string;
             };
         };
@@ -2633,6 +3635,16 @@ export interface components {
                 [name: string]: unknown;
             };
             content: {
+                /**
+                 * @example {
+                 *       "type": "https://api.ratesengine.net/errors/asset-not-found",
+                 *       "title": "Asset not found",
+                 *       "status": 404,
+                 *       "detail": "No trades observed for asset_id=XYZ-G...",
+                 *       "instance": "/v1/assets/XYZ-GA5Z",
+                 *       "request_id": "9be8c8cc17163dc7e40b07a55beee744"
+                 *     }
+                 */
                 "application/problem+json": components["schemas"]["Problem"];
             };
         };
@@ -2642,6 +3654,16 @@ export interface components {
                 [name: string]: unknown;
             };
             content: {
+                /**
+                 * @example {
+                 *       "type": "https://api.ratesengine.net/errors/missing-asset",
+                 *       "title": "Missing asset parameter",
+                 *       "status": 400,
+                 *       "detail": "asset query parameter is required",
+                 *       "instance": "/v1/price",
+                 *       "request_id": "499673a2b4d5f84bdbfa18bcfdc65bbe"
+                 *     }
+                 */
                 "application/problem+json": components["schemas"]["Problem"];
             };
         };
@@ -2655,6 +3677,16 @@ export interface components {
                 [name: string]: unknown;
             };
             content: {
+                /**
+                 * @example {
+                 *       "type": "https://api.ratesengine.net/errors/rate-limited",
+                 *       "title": "Rate limit exceeded",
+                 *       "status": 429,
+                 *       "detail": "anonymous tier limited to 60 requests per minute; retry in 23 seconds",
+                 *       "instance": "/v1/coins",
+                 *       "request_id": "feb6615b1a38211b4835c0fefcd94ede"
+                 *     }
+                 */
                 "application/problem+json": components["schemas"]["Problem"];
             };
         };
@@ -2664,6 +3696,16 @@ export interface components {
                 [name: string]: unknown;
             };
             content: {
+                /**
+                 * @example {
+                 *       "type": "https://api.ratesengine.net/errors/internal",
+                 *       "title": "Internal error",
+                 *       "status": 500,
+                 *       "detail": "see X-Request-ID in server logs",
+                 *       "instance": "/v1/oracle/latest",
+                 *       "request_id": "e0fca799b0b6d066ed6c928b5cb0d5e6"
+                 *     }
+                 */
                 "application/problem+json": components["schemas"]["Problem"];
             };
         };
@@ -2673,6 +3715,16 @@ export interface components {
                 [name: string]: unknown;
             };
             content: {
+                /**
+                 * @example {
+                 *       "type": "https://api.ratesengine.net/errors/account-store-unavailable",
+                 *       "title": "Account store not configured",
+                 *       "status": 503,
+                 *       "detail": "this deployment has no AccountStore wired — typically because Redis is unavailable",
+                 *       "instance": "/v1/account/keys",
+                 *       "request_id": "70c8017d79651070fd16c2c9f065d846"
+                 *     }
+                 */
                 "application/problem+json": components["schemas"]["Problem"];
             };
         };

@@ -63,3 +63,9 @@ description = "Generated Redocly HTML — embeds OpenAPI example values (canonic
 paths = [
   '''docs/reference/api/index\.html''',
 ]
+
+[[rules.allowlists]]
+description = "OpenAPI spec example values for /v1/signup + /v1/dashboard/keys: synthetic key_id (`k_...`) + plaintext (`re_live_...`) are fabricated illustrations of what the response shape looks like — not real credentials. Real secrets in production never get committed; the response examples MUST be high-entropy-looking to be useful to API consumers."
+paths = [
+  '''openapi/rates-engine\.v1\.yaml''',
+]
