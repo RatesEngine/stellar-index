@@ -143,6 +143,7 @@ export function useCoins(
 export type IssuerListEntry = {
   g_strkey: string;
   home_domain?: string;
+  org_name?: string;
   asset_count: number;
   total_observation_count: number;
 };

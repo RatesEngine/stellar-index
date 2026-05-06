@@ -356,8 +356,12 @@ type CoinsPage struct {
 // HomeDomain is empty until the SEP-1 fetcher worker resolves
 // `stellar.toml` for the issuer's account.
 type IssuerListEntry struct {
-	GStrkey               string `json:"g_strkey"`
-	HomeDomain            string `json:"home_domain,omitempty"`
+	GStrkey    string `json:"g_strkey"`
+	HomeDomain string `json:"home_domain,omitempty"`
+	// OrgName is the issuer's organisation name from SEP-1
+	// (`[DOCUMENTATION].ORG_NAME`). Empty until the SEP-1
+	// fetcher (`ratesengine-ops sep1-refresh`) resolves it.
+	OrgName               string `json:"org_name,omitempty"`
 	AssetCount            int64  `json:"asset_count"`
 	TotalObservationCount int64  `json:"total_observation_count"`
 }

@@ -902,6 +902,14 @@ paths:
                   properties:
                     g_strkey: { type: string }
                     home_domain: { type: string }
+                    org_name:
+                      type: string
+                      description: |
+                        Issuer's organisation name from SEP-1
+                        `[DOCUMENTATION].ORG_NAME`. Populated by
+                        the `ratesengine-ops sep1-refresh` job;
+                        empty until the issuer's stellar.toml
+                        has been resolved.
                     asset_count: { type: integer, format: int64 }
                     total_observation_count: { type: integer, format: int64 }
         "400": { $ref: "#/components/responses/BadRequest" }

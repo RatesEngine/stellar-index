@@ -66,6 +66,7 @@ export function IssuersTable() {
           <thead>
             <tr className="text-left text-[11px] uppercase tracking-wider text-slate-500">
               <Th>#</Th>
+              <Th>Organisation</Th>
               <Th>G-strkey</Th>
               <Th>Home domain</Th>
               <Th align="right">Assets</Th>
@@ -80,6 +81,18 @@ export function IssuersTable() {
               >
                 <Td>
                   <span className="text-slate-400">{i + 1}</span>
+                </Td>
+                <Td>
+                  {row.org_name ? (
+                    <Link
+                      href={`/issuers/${row.g_strkey}`}
+                      className="font-medium hover:text-brand-600"
+                    >
+                      {row.org_name}
+                    </Link>
+                  ) : (
+                    <span className="text-xs text-slate-400">—</span>
+                  )}
                 </Td>
                 <Td>
                   <Link

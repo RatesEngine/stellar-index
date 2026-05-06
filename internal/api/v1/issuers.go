@@ -22,9 +22,15 @@ type IssuersReader interface {
 
 // IssuerListEntry is the wire shape of one row in /v1/issuers.
 // Compact summary suitable for the issuer-directory page.
+//
+// OrgName is the issuer's organisation name from SEP-1
+// (`[DOCUMENTATION].ORG_NAME` in stellar.toml). Populated by
+// the `ratesengine-ops sep1-refresh` job; empty when never
+// resolved or when the issuer has no documentation block.
 type IssuerListEntry struct {
 	GStrkey               string `json:"g_strkey"`
 	HomeDomain            string `json:"home_domain,omitempty"`
+	OrgName               string `json:"org_name,omitempty"`
 	AssetCount            int64  `json:"asset_count"`
 	TotalObservationCount int64  `json:"total_observation_count"`
 }
@@ -93,6 +99,7 @@ func (s *Server) handleIssuersList(w http.ResponseWriter, r *http.Request) {
 		out[i] = IssuerListEntry{
 			GStrkey:               r.GStrkey,
 			HomeDomain:            r.HomeDomain,
+			OrgName:               r.OrgName,
 			AssetCount:            r.AssetCount,
 			TotalObservationCount: r.TotalObservationCount,
 		}
