@@ -51,6 +51,12 @@ interface CoinSummary {
   observation_count: number;
   first_seen_ledger: number;
   last_seen_ledger: number;
+  // Optional per-row metrics from /v1/coins/{slug} — null when
+  // the asset has no off-chain peg / supply snapshot yet.
+  price_usd?: string | null;
+  volume_24h_usd?: string | null;
+  market_cap_usd?: string | null;
+  circulating_supply?: string | null;
 }
 
 interface AssetDetail {
@@ -61,6 +67,7 @@ interface AssetDetail {
   home_domain?: string;
   total_supply?: string;
   circulating_supply?: string;
+  max_supply?: string;
   market_cap_usd?: string;
   fdv_usd?: string;
   volume_24h_usd?: string;
@@ -292,6 +299,12 @@ function OverviewBody({
   price: PriceResp | null;
 }) {
   const priceNum = parsePrice(price?.price);
+  const hasSupply =
+    detail?.circulating_supply != null ||
+    detail?.total_supply != null ||
+    detail?.max_supply != null ||
+    detail?.market_cap_usd != null ||
+    detail?.fdv_usd != null;
   return (
     <div className="space-y-4">
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
@@ -313,15 +326,24 @@ function OverviewBody({
             )}
             {price?.flags?.triangulated && (
               <span className="rounded bg-sky-100 px-2 py-0.5 text-[11px] uppercase tracking-wider text-sky-800 dark:bg-sky-900/40 dark:text-sky-200">
-                Triangulated
+                Triangulated via XLM
               </span>
             )}
           </div>
-          <p className="text-xs text-slate-500">
-            % change windows pending — the aggregator emits closed-bucket VWAPs
-            but the per-window deltas aren&apos;t served by{' '}
-            <code className="font-mono">/v1/price</code> yet.
-          </p>
+          <dl className="grid grid-cols-2 gap-3 border-t border-slate-200 pt-3 text-sm dark:border-slate-800 sm:grid-cols-3">
+            <Stat
+              label="Volume 24h"
+              value={fmtUsd(detail?.volume_24h_usd ?? coin.volume_24h_usd)}
+            />
+            <Stat
+              label="Market cap"
+              value={fmtUsd(detail?.market_cap_usd ?? coin.market_cap_usd)}
+            />
+            <Stat
+              label="Circulating"
+              value={fmtNum(detail?.circulating_supply ?? coin.circulating_supply)}
+            />
+          </dl>
         </Panel>
 
         <Panel title="Observations" panelId="obs-card">
@@ -344,38 +366,34 @@ function OverviewBody({
         </Panel>
       </div>
 
-      <Panel
-        title="Supply + market cap"
-        source={asExample('/v1/assets/{asset_id}', { asset_id: coin.asset_id })}
-      >
-        <dl className="grid grid-cols-2 gap-3 text-sm sm:grid-cols-4">
-          <Stat
-            label="Volume 24h"
-            value={fmtUsd(detail?.volume_24h_usd)}
-          />
-          <Stat
-            label="Market cap"
-            value={fmtUsd(detail?.market_cap_usd)}
-          />
-          <Stat
-            label="Circulating"
-            value={fmtNum(detail?.circulating_supply)}
-          />
-          <Stat label="Total" value={fmtNum(detail?.total_supply)} />
-          <Stat label="FDV" value={fmtUsd(detail?.fdv_usd)} />
-          <Stat
-            label="Supply basis"
-            value={detail?.supply_basis ?? '—'}
-          />
-        </dl>
-        {!detail && (
-          <p className="mt-3 text-xs text-slate-500">
-            Asset detail endpoint returned no data — newly observed asset, or
-            the F2 fields haven&apos;t been computed for this issuer yet.
-          </p>
-        )}
-      </Panel>
-
+      {hasSupply && (
+        <Panel
+          title="Supply"
+          hint="From /v1/assets — circulating / total / max where the supply pipeline has computed them."
+          source={asExample('/v1/assets/{asset_id}', { asset_id: coin.asset_id })}
+        >
+          <dl className="grid grid-cols-2 gap-3 text-sm sm:grid-cols-4">
+            {detail?.circulating_supply != null && (
+              <Stat
+                label="Circulating"
+                value={fmtNum(detail.circulating_supply)}
+              />
+            )}
+            {detail?.total_supply != null && (
+              <Stat label="Total" value={fmtNum(detail.total_supply)} />
+            )}
+            {detail?.max_supply != null && (
+              <Stat label="Max" value={fmtNum(detail.max_supply)} />
+            )}
+            {detail?.fdv_usd != null && (
+              <Stat label="FDV" value={fmtUsd(detail.fdv_usd)} />
+            )}
+            {detail?.supply_basis && (
+              <Stat label="Supply basis" value={detail.supply_basis} />
+            )}
+          </dl>
+        </Panel>
+      )}
       {coin.issuer && (
         <Panel
           title="Issuer"
@@ -412,14 +430,14 @@ function parsePrice(raw: string | undefined): number | null {
   return Number.isFinite(n) ? n : null;
 }
 
-function fmtUsd(raw: string | undefined): string {
+function fmtUsd(raw: string | null | undefined): string {
   if (!raw) return '—';
   const n = Number(raw);
   if (!Number.isFinite(n)) return '—';
   return `$${formatCompact(n)}`;
 }
 
-function fmtNum(raw: string | undefined): string {
+function fmtNum(raw: string | null | undefined): string {
   if (!raw) return '—';
   const n = Number(raw);
   if (!Number.isFinite(n)) return '—';
