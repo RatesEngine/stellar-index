@@ -15,6 +15,8 @@ against.
 
 ## [Unreleased]
 
+## [v0.5.0-rc.18] — 2026-05-07
+
 ### Fixed
 - **Coinbase / Binance dust trades no longer ERROR-log.** Tiny
   off-chain lots (e.g. 1e-8 XLM at $0.16) compute `base × price /
