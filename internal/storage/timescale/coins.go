@@ -424,7 +424,7 @@ func (s *Store) GetCoinPriceHistory24h(ctx context.Context, assetID string) ([]C
 		  ) AS bucket
 		),
 		direct_per_hour AS (
-		  SELECT date_trunc('hour', bucket) AS h, AVG(vwap)::numeric AS vwap
+		  SELECT date_trunc('hour', bucket) AS h, last(vwap, bucket)::numeric AS vwap
 		    FROM prices_1m
 		   WHERE base_asset = $1
 		     AND quote_asset = 'fiat:USD'
@@ -433,7 +433,7 @@ func (s *Store) GetCoinPriceHistory24h(ctx context.Context, assetID string) ([]C
 		   GROUP BY h
 		),
 		asset_xlm_per_hour AS (
-		  SELECT date_trunc('hour', bucket) AS h, AVG(vwap)::numeric AS vwap
+		  SELECT date_trunc('hour', bucket) AS h, last(vwap, bucket)::numeric AS vwap
 		    FROM prices_1m
 		   WHERE base_asset = $1
 		     AND quote_asset = 'native'
@@ -444,7 +444,7 @@ func (s *Store) GetCoinPriceHistory24h(ctx context.Context, assetID string) ([]C
 		xlm_usd_per_hour AS (
 		  -- Same stablecoin-proxy fallback as the listing query —
 		  -- prices_1m doesn't carry (native, fiat:USD) rows.
-		  SELECT date_trunc('hour', bucket) AS h, AVG(vwap)::numeric AS vwap
+		  SELECT date_trunc('hour', bucket) AS h, last(vwap, bucket)::numeric AS vwap
 		    FROM prices_1m
 		   WHERE base_asset = 'native'
 		     AND quote_asset IN (
