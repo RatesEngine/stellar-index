@@ -16,6 +16,12 @@ against.
 ## [Unreleased]
 
 ### Added
+- **Home page: Top markets table.** Sits between Top assets and
+  Top movers — top 10 trading pairs by trailing-24h USD volume,
+  each row deep-linking to the per-pair detail page at
+  `/markets/{base~quote}`. Pulls `/v1/markets?order_by=
+  volume_24h_usd_desc`. Complements the asset-centric Top assets
+  / Top movers panels with a pair-centric view.
 - **Home page: 5-card network stats strip.** Sits above the
   existing 3-column NetworkLivePanel grid showing the
   scale-of-the-network at a glance — total 24h USD volume,

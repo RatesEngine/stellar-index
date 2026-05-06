@@ -4,6 +4,7 @@ import { ArrowRight } from 'lucide-react';
 import { NetworkLivePanel, SystemHealthLivePanel } from './HomeLivePanels';
 import { HomeNetworkStrip } from './HomeNetworkStrip';
 import { HomeTopAssets } from './HomeTopAssets';
+import { HomeTopMarkets } from './HomeTopMarkets';
 import { HomeTopMovers } from './HomeTopMovers';
 import { HomeTryAPI } from './HomeTryAPI';
 
@@ -74,6 +75,8 @@ export default function HomePage() {
       </section>
 
       <HomeTopAssets />
+
+      <HomeTopMarkets />
 
       <HomeTopMovers />
 
