@@ -230,6 +230,9 @@ func (s *Store) GetCoinBySlug(ctx context.Context, slug string) (CoinRow, error)
 		  FROM classic_assets ca
 		  LEFT JOIN per_asset_24h_vol vol ON vol.asset_id = ca.asset_id
 		 WHERE COALESCE(ca.slug, ca.code) = $1
+		 ORDER BY (ca.slug = $1) DESC NULLS LAST,
+		          ca.observation_count DESC,
+		          ca.asset_id ASC
 		 LIMIT 1
 	`
 	var (
