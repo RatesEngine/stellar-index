@@ -367,15 +367,25 @@ function OverviewBody({
             <span className="font-mono text-3xl tabular-nums">
               {priceNum != null ? `$${formatPrice(priceNum)}` : '—'}
             </span>
-            {coin.change_1h_pct != null && (
-              <ChangePctLabel raw={coin.change_1h_pct} window="1h" />
-            )}
-            {coin.change_24h_pct != null && (
-              <ChangePctLabel raw={coin.change_24h_pct} window="24h" />
-            )}
-            {coin.change_7d_pct != null && (
-              <ChangePctLabel raw={coin.change_7d_pct} window="7d" />
-            )}
+            {(() => {
+              const peg = peggedTo(coin.code);
+              if (peg) {
+                return <PeggedBadge currency={peg} />;
+              }
+              return (
+                <>
+                  {coin.change_1h_pct != null && (
+                    <ChangePctLabel raw={coin.change_1h_pct} window="1h" />
+                  )}
+                  {coin.change_24h_pct != null && (
+                    <ChangePctLabel raw={coin.change_24h_pct} window="24h" />
+                  )}
+                  {coin.change_7d_pct != null && (
+                    <ChangePctLabel raw={coin.change_7d_pct} window="7d" />
+                  )}
+                </>
+              );
+            })()}
             {price?.flags?.stale && (
               <span className="rounded bg-amber-100 px-2 py-0.5 text-[11px] uppercase tracking-wider text-amber-800 dark:bg-amber-900/40 dark:text-amber-200">
                 Stale
@@ -566,6 +576,51 @@ function fmtNum(raw: string | null | undefined): string {
 // ChangePctLabel renders a signed percentage with emerald-up /
 // rose-down / slate-zero colour. Accepts the wire-format string
 // (e.g. "+1.27", "-0.05", "0.00") and the window label.
+// peggedTo recognises the well-known stablecoins on Stellar by
+// asset code and returns the fiat they're soft-pegged to. Used to
+// suppress the meaningless change pills (a 0.00% / 0.05% pill on
+// USDC tells the reader nothing — "Pegged to USD" is honest).
+//
+// Codes are case-sensitive on Stellar (alphanum4 / alphanum12);
+// pegs not on this list still show change pills as before.
+function peggedTo(code: string): string | null {
+  switch (code) {
+    case 'USDC':
+    case 'USDT':
+    case 'PYUSD':
+    case 'DAI':
+    case 'BUSD':
+    case 'TUSD':
+    case 'USDP':
+      return 'USD';
+    case 'EURC':
+    case 'EUROC':
+    case 'EUROB':
+      return 'EUR';
+    case 'MXNe':
+      return 'MXN';
+    case 'BRZ':
+      return 'BRL';
+    case 'GBPC':
+      return 'GBP';
+    case 'AUDD':
+      return 'AUD';
+    case 'NGNT':
+      return 'NGN';
+    default:
+      return null;
+  }
+}
+
+function PeggedBadge({ currency }: { currency: string }) {
+  return (
+    <span className="inline-flex items-center gap-1 rounded bg-sky-50 px-2 py-0.5 font-mono text-xs uppercase tracking-wider text-sky-700 dark:bg-sky-950/40 dark:text-sky-300">
+      <span className="text-[10px] opacity-70">PEG</span>
+      {currency}
+    </span>
+  );
+}
+
 function ChangePctLabel({
   raw,
   window,
