@@ -37,6 +37,17 @@ against.
   takes precedence when those buckets exist.
 
 ### Added
+- **`/v1/coins` listing prepends native XLM on the first
+  unfiltered page.** Native is the most-active asset on the
+  network but has no `classic_assets` row, so the listing
+  silently omits it — meaning the explorer's home Top assets
+  / Top movers panels never include XLM. The handler now fires
+  `GetNativeCoinRow` alongside the listing query when
+  `(cursor, issuer, q)` are all empty and `limit ≥ 2`, prepends
+  the synthetic row, and trims the listing to `limit-1` so the
+  page size stays exactly `limit`. Cursor for page 2 is
+  computed from the last listing row, never from native — so
+  pagination resumes correctly past the synthetic injection.
 - **Status page: real per-endpoint probes.** The Endpoints
   matrix on status.ratesengine.net now fires a parallel probe
   against every public endpoint on each 30-second poll (with

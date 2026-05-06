@@ -165,8 +165,21 @@ func (s *Server) handleCoins(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Native XLM has no classic_assets row but is the most-active
+	// asset on the network — prepend it at the top of the first
+	// unfiltered page so /v1/coins (and the explorer's home page
+	// that consumes it) never silently omits XLM. We fetch
+	// `limit-1` rows from the listing in this mode so the page
+	// size stays exactly `limit`. When any filter is active the
+	// user has narrowed the listing on purpose, so don't inject.
+	prependNative := cursor == "" && issuer == "" && q == "" && limit >= 2
+	listingLimit := limit
+	if prependNative {
+		listingLimit = limit - 1
+	}
+
 	rows, err := s.coins.ListCoinsExt(r.Context(), timescale.ListCoinsOptions{
-		Limit: limit, Issuer: issuer, Cursor: cursor, Q: q, Order: order,
+		Limit: listingLimit, Issuer: issuer, Cursor: cursor, Q: q, Order: order,
 	})
 	if err != nil {
 		s.logger.Warn("coins list", "err", err)
@@ -177,27 +190,22 @@ func (s *Server) handleCoins(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	out := make([]Coin, len(rows))
-	for i, row := range rows {
-		out[i] = coinFromRow(row)
-	}
+	// Compute next-cursor from the listing's last real row BEFORE
+	// we prepend native — page 2 must resume past the listing
+	// tail, never past the synthetic XLM row.
+	nextCursor := nextCoinCursor(rows, listingLimit, order)
 
-	// Compute next-cursor only when the page came back full —
-	// any short page means "no more rows". Cursor format depends
-	// on the active ordering.
-	var nextCursor string
-	if len(rows) == limit && len(rows) > 0 {
-		last := rows[len(rows)-1]
-		switch order {
-		case timescale.CoinsOrderVolume24hUSDDesc:
-			vol := ""
-			if last.Volume24hUSD != nil {
-				vol = *last.Volume24hUSD
-			}
-			nextCursor = vol + ":" + last.AssetID
-		default:
-			nextCursor = timescale.EncodeCoinCursor(last.ObservationCount, last.AssetID)
+	out := make([]Coin, 0, limit)
+	if prependNative {
+		if nativeRow, nErr := s.coins.GetNativeCoinRow(r.Context()); nErr != nil {
+			s.logger.Warn("coins list: native row lookup failed; emitting without it",
+				"err", nErr)
+		} else if nativeRow.AssetID != "" {
+			out = append(out, coinFromRow(nativeRow))
 		}
+	}
+	for _, row := range rows {
+		out = append(out, coinFromRow(row))
 	}
 
 	writeJSON(w, CoinsPage{
@@ -300,6 +308,25 @@ func (s *Server) handleCoin(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeJSON(w, out, Flags{})
+}
+
+// nextCoinCursor builds the opaque keyset cursor for the next
+// page or returns "" when the just-emitted page is the last one.
+// Pulled out of the handler so handleCoins stays under the
+// gocognit threshold; the cursor format itself is unchanged.
+func nextCoinCursor(rows []timescale.CoinRow, pageSize int, order timescale.CoinsOrder) string {
+	if len(rows) != pageSize || len(rows) == 0 {
+		return ""
+	}
+	last := rows[len(rows)-1]
+	if order == timescale.CoinsOrderVolume24hUSDDesc {
+		vol := ""
+		if last.Volume24hUSD != nil {
+			vol = *last.Volume24hUSD
+		}
+		return vol + ":" + last.AssetID
+	}
+	return timescale.EncodeCoinCursor(last.ObservationCount, last.AssetID)
 }
 
 // coinFromRow projects a timescale.CoinRow onto the wire Coin
