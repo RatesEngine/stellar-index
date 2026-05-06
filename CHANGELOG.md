@@ -15,6 +15,25 @@ against.
 
 ## [Unreleased]
 
+## [v0.5.0-rc.10] — 2026-05-06
+
+### Added
+- **`/v1/coins.price_usd` computed server-side via direct VWAP or
+  XLM triangulation.** The column was previously hardcoded
+  `NULL::numeric` because most active classic Stellar assets only
+  trade against XLM on SDEX — the direct asset/fiat:USD VWAP
+  doesn't exist for them. Three CTEs now resolve a price:
+  `direct_usd` (latest `prices_1m` where `(base, quote) =
+  (asset, fiat:USD)`), `asset_vs_xlm` (latest `prices_1m`
+  asset/native), `xlm_usd` (latest `prices_1m` native/fiat:USD).
+  `COALESCE(direct, asset_vs_xlm × xlm_usd)` picks direct when
+  available; falls back to triangulation. `DISTINCT ON
+  (base_asset)` gives one "latest per asset" row without a
+  window function. Same logic applies to `/v1/coins/{slug}`.
+  Result: every active classic asset now shows a real USD price
+  on the explorer's `/assets` table and detail page instead of
+  an em-dash.
+
 ## [v0.5.0-rc.9] — 2026-05-06
 
 ### Added
