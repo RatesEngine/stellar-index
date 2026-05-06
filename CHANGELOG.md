@@ -16,6 +16,15 @@ against.
 ## [Unreleased]
 
 ### Added
+- **`/network` page rebuilt around live data.** Drops the
+  "Coming next" placeholder and renders the same network stats
+  strip as the home page (24h volume, active markets, asset
+  count, sources online, XLM price), plus the live network panel
+  + Top markets + Top assets tables. Architecture context now
+  describes what's currently observable on R1 instead of what's
+  conceptually planned for R2/R3. Footnote section honestly
+  enumerates what's still TBD (TVL, peg health, fee market) so
+  the page can grow without surprising the reader.
 - **`/sources/{name}` per-venue detail page on the explorer.**
   Static-export route enumerating every registered source from
   `/v1/sources`. Renders the source's registry profile (class /
