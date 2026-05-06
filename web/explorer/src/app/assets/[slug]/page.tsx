@@ -111,11 +111,14 @@ async function fetchAssetDetail(assetId: string): Promise<AssetDetail | null> {
   }
 }
 
-async function fetchPrice(assetId: string): Promise<PriceResp | null> {
+async function fetchPriceDirect(
+  asset: string,
+  quote: string,
+): Promise<PriceResp | null> {
   if (isCIStub) return null;
   try {
     const res = await fetch(
-      `${API_BASE_URL}/v1/price?asset=${encodeURIComponent(assetId)}&quote=fiat:USD`,
+      `${API_BASE_URL}/v1/price?asset=${encodeURIComponent(asset)}&quote=${encodeURIComponent(quote)}`,
       { signal: AbortSignal.timeout(2_000) },
     );
     if (!res.ok) return null;
@@ -124,6 +127,44 @@ async function fetchPrice(assetId: string): Promise<PriceResp | null> {
   } catch {
     return null;
   }
+}
+
+// fetchPrice tries direct asset→USD first; on 404 it triangulates
+// via XLM. Many active classic Stellar assets only trade against
+// XLM (or stablecoins) on SDEX, so the aggregator's per-pair USD
+// VWAP doesn't exist. The client-side compose lets the page show
+// a real USD price anyway (asset/XLM × XLM/USD), tagged as
+// triangulated so the user can see the provenance.
+//
+// XLM (asset_id "native") short-circuits — its direct USD VWAP
+// is the canonical answer.
+async function fetchPrice(assetId: string): Promise<PriceResp | null> {
+  if (assetId === 'native') {
+    return fetchPriceDirect('native', 'fiat:USD');
+  }
+  const direct = await fetchPriceDirect(assetId, 'fiat:USD');
+  if (direct?.price) return direct;
+  // Triangulate via XLM.
+  const [vsXlm, xlmUsd] = await Promise.all([
+    fetchPriceDirect(assetId, 'native'),
+    fetchPriceDirect('native', 'fiat:USD'),
+  ]);
+  if (!vsXlm?.price || !xlmUsd?.price) return null;
+  const a = Number(vsXlm.price);
+  const b = Number(xlmUsd.price);
+  if (!Number.isFinite(a) || !Number.isFinite(b) || a <= 0 || b <= 0) {
+    return null;
+  }
+  const triangulated = (a * b).toFixed(12);
+  return {
+    price: triangulated,
+    quote: 'fiat:USD',
+    age_seconds: Math.max(
+      vsXlm.age_seconds ?? 0,
+      xlmUsd.age_seconds ?? 0,
+    ),
+    flags: { triangulated: true },
+  };
 }
 
 export async function generateMetadata({
