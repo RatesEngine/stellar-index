@@ -29,7 +29,7 @@ const STATIC_PAGES: Result[] = [
   { type: 'page', label: 'Anomalies', href: '/anomalies' },
   { type: 'page', label: 'Divergences', href: '/divergences' },
   { type: 'page', label: 'MEV', href: '/mev' },
-  { type: 'page', label: 'API docs', href: '/docs' },
+  { type: 'page', label: 'API docs', href: 'https://docs.ratesengine.net' },
 ];
 
 const PROTOCOLS: Result[] = [
@@ -50,17 +50,30 @@ const PROTOCOLS: Result[] = [
  * Cmd-K search modal. Mounts globally via the Navbar; opens on
  * Cmd-K / Ctrl-K and on the Navbar's search-icon button.
  *
- * Coins come from the live `/v1/coins` endpoint (top-500 by
- * observation count); protocols + static pages stay seeded since
- * neither is in the API yet. Replaced by `/v1/search?q=...` once
- * that endpoint ships per data-inventory §10.13.
+ * Empty query: shows top-5 coins (by observation count) +
+ * protocols/pages.
+ *
+ * Non-empty query: hits `/v1/coins?q=…` server-side (debounced
+ * 200ms) so any of the ~440K classic assets matches, not just
+ * the top-100 default page. Falls back to client-side filter
+ * across protocols + static pages.
  */
 export function SearchModal() {
   const [open, setOpen] = useState(false);
   const [q, setQ] = useState('');
-  // Reuses the same cache key as `/coins` (limit=100) so navigating
-  // there afterwards is instant — no separate fetch for search.
-  const { data: coins } = useCoins(100);
+  // Debounced query for the server-side /v1/coins?q=… call so a
+  // burst of keystrokes doesn't fan out a request per character.
+  const [debouncedQ, setDebouncedQ] = useState('');
+
+  const topCoins = useCoins(100);
+  // Server-side search — only fires when the user has typed at
+  // least 2 chars; below that the top-100 list covers it.
+  const searchedCoins = useCoins(
+    25,
+    undefined,
+    undefined,
+    debouncedQ.length >= 2 ? debouncedQ : undefined,
+  );
 
   // Cmd-K / Ctrl-K toggles.
   useEffect(() => {
@@ -79,10 +92,27 @@ export function SearchModal() {
   // should always start fresh, and stale state on re-open is
   // surprising.
   useEffect(() => {
-    if (open) setQ('');
+    if (open) {
+      setQ('');
+      setDebouncedQ('');
+    }
   }, [open]);
 
-  const results = useMemo(() => search(q, coins?.coins ?? []), [q, coins]);
+  // Debounce the live input into debouncedQ — 200ms balances
+  // "feels live" with "doesn't fan out a request per keystroke".
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedQ(q.trim()), 200);
+    return () => clearTimeout(t);
+  }, [q]);
+
+  const isServerSearched = debouncedQ.length >= 2;
+  const sourceCoins = isServerSearched
+    ? (searchedCoins.data?.coins ?? [])
+    : (topCoins.data?.coins ?? []);
+  const results = useMemo(
+    () => search(q, sourceCoins, isServerSearched),
+    [q, sourceCoins, isServerSearched],
+  );
 
   return (
     <>
@@ -130,10 +160,8 @@ export function SearchModal() {
             <ul className="max-h-96 overflow-y-auto p-2 text-sm">
               {results.length === 0 && (
                 <li className="px-3 py-2 text-xs text-slate-500">
-                  No matches. Search ranks against the live coin
-                  directory plus seeded protocols/pages; the unified{' '}
-                  <code className="font-mono">/v1/search</code> endpoint
-                  lands in Phase 6.6.
+                  No matches across the asset directory, protocols,
+                  or pages.
                 </li>
               )}
               {results.map((r) => (
@@ -169,7 +197,11 @@ export function SearchModal() {
   );
 }
 
-function search(q: string, coins: Coin[]): Result[] {
+function search(
+  q: string,
+  coins: Coin[],
+  isServerSearched: boolean,
+): Result[] {
   const norm = q.trim().toLowerCase();
   const coinResults = coins.map(coinResult);
   if (!norm) {
@@ -177,8 +209,16 @@ function search(q: string, coins: Coin[]): Result[] {
     // by observation_count desc by the API).
     return coinResults.slice(0, 5);
   }
-  const all: Result[] = [...coinResults, ...PROTOCOLS, ...STATIC_PAGES];
-  return all.filter((r) => match(norm, r)).slice(0, 12);
+  // When coins came from /v1/coins?q=…, they're already filtered;
+  // skip the redundant client pass on them. Protocols + pages
+  // still need a client filter (they're seeded constants).
+  const matchedCoins = isServerSearched
+    ? coinResults
+    : coinResults.filter((r) => match(norm, r));
+  const matchedOther = [...PROTOCOLS, ...STATIC_PAGES].filter((r) =>
+    match(norm, r),
+  );
+  return [...matchedCoins, ...matchedOther].slice(0, 12);
 }
 
 function coinResult(c: Coin): Result {
