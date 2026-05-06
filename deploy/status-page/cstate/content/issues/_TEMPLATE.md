@@ -24,7 +24,10 @@
 # section     — keep "issue" so cstate routes the page correctly.
 
 title: "<short customer-facing headline>"
-date: 2026-MM-DDTHH:MMZ
+# Replace with the RFC 3339 UTC timestamp of the incident-start;
+# the placeholder below is a valid Hugo zero-time so this template
+# parses cleanly without being treated as a real incident.
+date: 0001-01-01T00:00:00Z
 resolved: false
 severity: disrupted
 affected:
