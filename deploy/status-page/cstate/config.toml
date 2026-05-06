@@ -3,6 +3,13 @@ languageCode = "en-gb"
 title = "Rates Engine status"
 theme = "cstate"
 
+# Hugo 0.128+ requires explicit pagination config; cstate v5 's
+# templates call .Paginate which errors with "pager size must
+# be a positive integer" if neither is set. The pagerSize value
+# below restores Hugo's pre-0.128 default.
+[pagination]
+  pagerSize = 10
+
 # cstate is vendored under themes/cstate (pinned to v5.6.1 +
 # commit 0705cd1b7501). The v6 line introduced breaking
 # config-shape changes (categories/systems moved into
