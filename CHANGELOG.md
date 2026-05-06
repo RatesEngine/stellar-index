@@ -15,6 +15,16 @@ against.
 
 ## [Unreleased]
 
+### Added
+- **`/sources/{name}` per-venue detail page on the explorer.**
+  Static-export route enumerating every registered source from
+  `/v1/sources`. Renders the source's registry profile (class /
+  subclass / contributes_to_vwap / default_weight / paid /
+  backfill_safe) plus per-(source, sub_source) ingest cursors
+  pulled from `/v1/diagnostics/cursors` with green/amber/red lag
+  pills. Sources table rows on `/sources` are now clickable Links
+  into the new detail page.
+
 ## [v0.5.0-rc.19] — 2026-05-07
 
 ### Added

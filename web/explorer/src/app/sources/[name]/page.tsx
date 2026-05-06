@@ -1,0 +1,335 @@
+import type { Metadata } from 'next';
+import Link from 'next/link';
+
+const API_BASE_URL =
+  process.env.NEXT_PUBLIC_API_BASE_URL ?? 'https://api.ratesengine.net';
+
+const isCIStub =
+  API_BASE_URL.includes('.invalid') || API_BASE_URL.includes('local-stub');
+
+const BUILD_FETCH_TIMEOUT_MS = 8_000;
+
+type Params = Promise<{ name: string }>;
+
+interface Source {
+  name: string;
+  class: 'exchange' | 'aggregator' | 'oracle' | 'authority_sanity';
+  subclass?: string;
+  include_in_vwap: boolean;
+  paid: boolean;
+  backfill_available: boolean;
+  backfill_safe: boolean;
+  default_weight?: number;
+}
+
+interface CursorRow {
+  source: string;
+  sub_source?: string;
+  last_ledger: number;
+  last_updated: string;
+  lag_seconds: number;
+}
+
+export async function generateStaticParams() {
+  // Pre-render every registered source so deep links resolve at
+  // build time. CI stub falls back to `sdex` (the highest-volume
+  // on-chain venue) so static export anchors on something
+  // recognisable.
+  const fallback = [{ name: 'sdex' }];
+  if (isCIStub) return fallback;
+  try {
+    const res = await fetch(`${API_BASE_URL}/v1/sources`, {
+      signal: AbortSignal.timeout(BUILD_FETCH_TIMEOUT_MS),
+    });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const env = (await res.json()) as { data: Source[] };
+    const names = env.data?.map((s) => s.name).filter(Boolean) ?? [];
+    return names.length > 0 ? names.map((name) => ({ name })) : fallback;
+  } catch {
+    return fallback;
+  }
+}
+
+export async function generateMetadata({
+  params,
+}: {
+  params: Params;
+}): Promise<Metadata> {
+  const { name } = await params;
+  return {
+    title: `${name} — source detail · Rates Engine`,
+    description: `Per-venue source metadata, ingest cursor, and contribution profile for ${name}.`,
+  };
+}
+
+async function fetchSource(name: string): Promise<Source | null> {
+  if (isCIStub) return null;
+  try {
+    const res = await fetch(`${API_BASE_URL}/v1/sources`, {
+      signal: AbortSignal.timeout(BUILD_FETCH_TIMEOUT_MS),
+    });
+    if (!res.ok) return null;
+    const env = (await res.json()) as { data: Source[] };
+    return env.data?.find((s) => s.name === name) ?? null;
+  } catch {
+    return null;
+  }
+}
+
+async function fetchCursors(): Promise<CursorRow[]> {
+  if (isCIStub) return [];
+  try {
+    const res = await fetch(`${API_BASE_URL}/v1/diagnostics/cursors`, {
+      signal: AbortSignal.timeout(BUILD_FETCH_TIMEOUT_MS),
+    });
+    if (!res.ok) return [];
+    const env = (await res.json()) as { data: CursorRow[] };
+    return env.data ?? [];
+  } catch {
+    return [];
+  }
+}
+
+export default async function SourceDetailPage({
+  params,
+}: {
+  params: Params;
+}) {
+  const { name } = await params;
+  const [source, allCursors] = await Promise.all([
+    fetchSource(name),
+    fetchCursors(),
+  ]);
+
+  if (!source) {
+    return (
+      <div className="mx-auto max-w-3xl px-6 py-16 text-center">
+        <h1 className="text-2xl font-semibold">Source not found</h1>
+        <p className="mt-2 text-sm text-slate-500">
+          No registered source named <code className="font-mono">{name}</code>.
+        </p>
+        <Link
+          href="/sources"
+          className="mt-6 inline-flex items-center gap-1 text-sm text-brand-600 hover:underline"
+        >
+          All sources →
+        </Link>
+      </div>
+    );
+  }
+
+  const cursors = allCursors.filter((c) => c.source === name);
+
+  return (
+    <div className="mx-auto max-w-7xl space-y-6 px-6 py-8">
+      <header className="space-y-3">
+        <Link
+          href="/sources"
+          className="inline-flex items-center gap-1 text-xs text-slate-500 hover:text-brand-600"
+        >
+          ← All sources
+        </Link>
+        <div className="flex flex-wrap items-baseline gap-3">
+          <h1 className="text-3xl font-semibold tracking-tight">{name}</h1>
+          <ClassBadge cls={source.class} />
+          {source.subclass && (
+            <span className="rounded bg-slate-100 px-2 py-0.5 font-mono text-xs uppercase tracking-wider text-slate-600 dark:bg-slate-800 dark:text-slate-300">
+              {source.subclass}
+            </span>
+          )}
+          {source.paid && (
+            <span className="rounded bg-amber-100 px-2 py-0.5 text-[11px] uppercase tracking-wider text-amber-800 dark:bg-amber-900/40 dark:text-amber-200">
+              paid
+            </span>
+          )}
+        </div>
+      </header>
+
+      <Panel title="Registry profile">
+        <dl className="grid grid-cols-2 gap-3 text-sm sm:grid-cols-4">
+          <Stat
+            label="Class"
+            value={source.class}
+            mono
+          />
+          <Stat
+            label="Subclass"
+            value={source.subclass ?? '—'}
+            mono
+          />
+          <Stat
+            label="Contributes to VWAP"
+            value={source.include_in_vwap ? 'yes' : 'no'}
+            tone={source.include_in_vwap ? 'ok' : undefined}
+          />
+          <Stat
+            label="Default weight"
+            value={
+              source.default_weight != null
+                ? source.default_weight.toString()
+                : '—'
+            }
+            mono
+          />
+          <Stat
+            label="Backfill available"
+            value={source.backfill_available ? 'yes' : 'no'}
+          />
+          <Stat
+            label="Backfill safe (audited)"
+            value={source.backfill_safe ? 'yes' : 'no'}
+            tone={source.backfill_safe ? 'ok' : 'warn'}
+          />
+          <Stat
+            label="Paid tier"
+            value={source.paid ? 'yes' : 'no'}
+            tone={source.paid ? 'warn' : undefined}
+          />
+        </dl>
+      </Panel>
+
+      <Panel
+        title="Ingest cursors"
+        subtitle={`${cursors.length} entries from /v1/diagnostics/cursors`}
+        bodyClassName="-mx-4"
+      >
+        {cursors.length === 0 ? (
+          <p className="px-4 py-3 text-sm text-slate-500">
+            No cursor recorded for this source. Likely either the source has
+            never been started in this deployment, or it doesn&apos;t persist
+            cursors (e.g. WebSocket-only venues that backfill via REST).
+          </p>
+        ) : (
+          <table className="min-w-full divide-y divide-slate-200 text-sm dark:divide-slate-800">
+            <thead>
+              <tr className="text-left text-[10px] uppercase tracking-wider text-slate-500">
+                <th className="px-4 py-2 font-medium">Sub-source</th>
+                <th className="px-4 py-2 text-right font-medium">
+                  Last ledger
+                </th>
+                <th className="px-4 py-2 text-right font-medium">Updated</th>
+                <th className="px-4 py-2 text-right font-medium">Lag</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+              {cursors.map((c, i) => (
+                <tr
+                  key={`${c.sub_source ?? ''}|${i}`}
+                  className="hover:bg-slate-50 dark:hover:bg-slate-900/40"
+                >
+                  <td className="px-4 py-2 font-mono text-xs">
+                    {c.sub_source || '—'}
+                  </td>
+                  <td className="px-4 py-2 text-right font-mono tabular-nums">
+                    #{c.last_ledger.toLocaleString()}
+                  </td>
+                  <td className="px-4 py-2 text-right font-mono text-xs text-slate-500">
+                    {c.last_updated.replace('T', ' ').slice(0, 19)} UTC
+                  </td>
+                  <td className="px-4 py-2 text-right">
+                    <LagBadge seconds={c.lag_seconds} />
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </Panel>
+    </div>
+  );
+}
+
+function Panel({
+  title,
+  subtitle,
+  bodyClassName,
+  children,
+}: {
+  title: string;
+  subtitle?: string;
+  bodyClassName?: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <section className="rounded-lg border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900">
+      <header className="mb-3 flex items-baseline justify-between">
+        <h2 className="text-sm font-semibold uppercase tracking-wider text-slate-600 dark:text-slate-300">
+          {title}
+        </h2>
+        {subtitle && <span className="text-xs text-slate-400">{subtitle}</span>}
+      </header>
+      <div className={bodyClassName ?? ''}>{children}</div>
+    </section>
+  );
+}
+
+function Stat({
+  label,
+  value,
+  tone,
+  mono,
+}: {
+  label: string;
+  value: string;
+  tone?: 'ok' | 'warn';
+  mono?: boolean;
+}) {
+  const valueClass =
+    tone === 'ok'
+      ? 'text-emerald-700 dark:text-emerald-400'
+      : tone === 'warn'
+        ? 'text-amber-700 dark:text-amber-400'
+        : '';
+  return (
+    <div>
+      <dt className="text-[10px] uppercase tracking-wider text-slate-500">
+        {label}
+      </dt>
+      <dd
+        className={`mt-1 ${mono ? 'font-mono' : 'font-medium'} text-sm tabular-nums ${valueClass}`}
+      >
+        {value}
+      </dd>
+    </div>
+  );
+}
+
+function ClassBadge({ cls }: { cls: Source['class'] }) {
+  const tone =
+    cls === 'exchange'
+      ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-200'
+      : cls === 'oracle'
+        ? 'bg-sky-100 text-sky-800 dark:bg-sky-900/40 dark:text-sky-200'
+        : cls === 'aggregator'
+          ? 'bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-200'
+          : 'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-200';
+  return (
+    <span
+      className={`rounded px-2 py-0.5 font-mono text-xs uppercase tracking-wider ${tone}`}
+    >
+      {cls}
+    </span>
+  );
+}
+
+function LagBadge({ seconds }: { seconds: number }) {
+  const tone =
+    seconds <= 60
+      ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300'
+      : seconds <= 600
+        ? 'bg-amber-50 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300'
+        : 'bg-rose-50 text-rose-700 dark:bg-rose-950/40 dark:text-rose-300';
+  const label =
+    seconds < 60
+      ? `${seconds.toFixed(0)}s`
+      : seconds < 3600
+        ? `${(seconds / 60).toFixed(1)}m`
+        : `${(seconds / 3600).toFixed(1)}h`;
+  return (
+    <span
+      className={`inline-flex items-center rounded px-2 py-0.5 font-mono text-xs tabular-nums ${tone}`}
+    >
+      {label}
+    </span>
+  );
+}
