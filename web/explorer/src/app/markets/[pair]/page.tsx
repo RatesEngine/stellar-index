@@ -491,22 +491,58 @@ function ChartSparkline({ points }: { points: ChartPoint[] }) {
   const last = prices[prices.length - 1]!;
   const first = prices[0]!;
   const trendUp = last >= first;
+
+  // Volume bars under the chart, sharing the X axis. Auto-scale to
+  // the max v_usd in the series; bars that overlap missing-price
+  // gaps (no v_usd) render as transparent so the eye can still
+  // count buckets.
+  const vols = points
+    .map((p) => (p.v_usd ? Number(p.v_usd) : 0))
+    .map((v) => (Number.isFinite(v) && v > 0 ? v : 0));
+  const maxVol = Math.max(...vols, 0);
+  const volH = 24;
+  const barW = points.length > 1 ? w / points.length : w;
+
   return (
-    <svg
-      viewBox={`0 0 ${w} ${h}`}
-      preserveAspectRatio="none"
-      className="h-20 w-full"
-      aria-label="24-hour price chart"
-    >
-      <path
-        d={path}
-        fill="none"
-        strokeWidth="2"
-        className={
-          trendUp ? 'stroke-emerald-500' : 'stroke-rose-500'
-        }
-      />
-    </svg>
+    <div className="space-y-1">
+      <svg
+        viewBox={`0 0 ${w} ${h}`}
+        preserveAspectRatio="none"
+        className="h-20 w-full"
+        aria-label="price chart"
+      >
+        <path
+          d={path}
+          fill="none"
+          strokeWidth="2"
+          className={trendUp ? 'stroke-emerald-500' : 'stroke-rose-500'}
+        />
+      </svg>
+      {maxVol > 0 && (
+        <svg
+          viewBox={`0 0 ${w} ${volH}`}
+          preserveAspectRatio="none"
+          className="h-6 w-full"
+          aria-label="hourly volume bars"
+        >
+          {vols.map((v, i) => {
+            if (v <= 0) return null;
+            const barH = (v / maxVol) * volH;
+            const x = i * barW;
+            return (
+              <rect
+                key={i}
+                x={x.toFixed(1)}
+                y={(volH - barH).toFixed(1)}
+                width={Math.max(barW - 1, 0.5).toFixed(1)}
+                height={barH.toFixed(1)}
+                className="fill-slate-300 dark:fill-slate-700"
+              />
+            );
+          })}
+        </svg>
+      )}
+    </div>
   );
 }
 
