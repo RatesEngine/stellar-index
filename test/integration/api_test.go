@@ -498,8 +498,8 @@ func (r apiHistoryAdapter) HistoryPointsInRange(ctx context.Context, pair c.Pair
 
 type apiMarketsAdapter struct{ s *timescale.Store }
 
-func (r apiMarketsAdapter) DistinctPairs(ctx context.Context, cursor string, limit int) ([]v1.Market, string, error) {
-	rows, next, err := r.s.DistinctPairs(ctx, cursor, limit)
+func (r apiMarketsAdapter) DistinctPairsExt(ctx context.Context, cursor string, limit int, order timescale.MarketsOrder) ([]v1.Market, string, error) {
+	rows, next, err := r.s.DistinctPairsExt(ctx, cursor, limit, order)
 	if err != nil {
 		return nil, "", err
 	}
@@ -510,6 +510,7 @@ func (r apiMarketsAdapter) DistinctPairs(ctx context.Context, cursor string, lim
 			Quote:         m.Pair.Quote.String(),
 			LastTradeAt:   m.LastTradeAt,
 			TradeCount24h: m.TradeCount24h,
+			Volume24hUSD:  m.Volume24hUSD,
 		}
 	}
 	return out, next, nil
@@ -525,6 +526,7 @@ func (r apiMarketsAdapter) PairMarket(ctx context.Context, base, quote c.Asset) 
 		Quote:         m.Pair.Quote.String(),
 		LastTradeAt:   m.LastTradeAt,
 		TradeCount24h: m.TradeCount24h,
+		Volume24hUSD:  m.Volume24hUSD,
 	}, true, nil
 }
 

@@ -1,7 +1,5 @@
 'use client';
 
-import { useMemo } from 'react';
-
 import { Panel } from '@/components/reveal';
 import { asExample } from '@/api/client';
 import { useMarkets } from '@/api/hooks';
@@ -17,28 +15,15 @@ import { formatCompact } from '@/lib/format';
  * lands once we add virtual scrolling.
  */
 export function MarketsTable() {
-  // Server-side pagination is keyed on (base|quote) string order,
-  // so the first 100 rows are alphabetic and miss the
-  // top-volume pairs entirely. Fetch 500 (server-side max) and
-  // sort client-side by volume_24h_usd until /v1/markets gains
-  // a server-side `?order_by=volume_24h_usd` mode. 500 covers
-  // every market with non-negligible USD volume on Stellar
-  // today (~tens of pairs have measurable volume; the rest are
-  // long-tail dust).
-  const { data, isLoading, isError, error } = useMarkets(500);
+  // Server-side ordering by volume_24h_usd desc (with NULLS LAST)
+  // gives us the high-activity pairs in the first page directly,
+  // no client sort needed for relevance.
+  const { data, isLoading, isError, error } = useMarkets(
+    100,
+    'volume_24h_usd_desc',
+  );
 
-  const sorted = useMemo(() => {
-    if (!data) return [];
-    // Sort by USD volume desc when available; fall back to trade
-    // count for pairs with no USD-equivalent trades. Pairs with
-    // null volume sort below pairs with any volume.
-    return [...data.markets].sort((a, b) => {
-      const av = a.volume_24h_usd ? Number(a.volume_24h_usd) : -Infinity;
-      const bv = b.volume_24h_usd ? Number(b.volume_24h_usd) : -Infinity;
-      if (av !== bv) return bv - av;
-      return b.trade_count_24h - a.trade_count_24h;
-    });
-  }, [data]);
+  const sorted = data?.markets ?? [];
 
   if (isError) {
     return (

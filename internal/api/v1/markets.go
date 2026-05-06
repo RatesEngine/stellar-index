@@ -7,16 +7,17 @@ import (
 	"time"
 
 	"github.com/RatesEngine/rates-engine/internal/canonical"
+	"github.com/RatesEngine/rates-engine/internal/storage/timescale"
 )
 
 // MarketsReader is the storage-side interface for /v1/markets
 // and /v1/pairs lookups. Implementations: *timescale.Store
-// (DistinctPairs + PairMarket), in-memory stubs for tests.
+// (DistinctPairsExt + PairMarket), in-memory stubs for tests.
 type MarketsReader interface {
-	// DistinctPairs returns one page of (base, quote) pairs present
-	// in the trades store, each annotated with a recency + activity
-	// stat. Cursor opaque; empty starts at page 1.
-	DistinctPairs(ctx context.Context, cursor string, limit int) ([]Market, string, error)
+	// DistinctPairsExt returns one page of (base, quote) pairs
+	// present in the trades store under the requested ordering.
+	// Cursor opaque; empty starts at page 1.
+	DistinctPairsExt(ctx context.Context, cursor string, limit int, order timescale.MarketsOrder) ([]Market, string, error)
 
 	// PairMarket returns the activity summary for a single (base,
 	// quote) pair. The bool is false when the pair has no trades —
@@ -49,8 +50,12 @@ type Market struct {
 // handleMarkets serves GET /v1/markets.
 //
 // Query params:
-//   - cursor (optional): opaque, from a prior response's pagination.next.
-//   - limit  (optional): integer 1-500, default 100.
+//   - cursor   (optional): opaque, from a prior response's pagination.next.
+//   - limit    (optional): integer 1-500, default 100.
+//   - order_by (optional): "pair" (default) or "volume_24h_usd_desc".
+//     The latter surfaces high-USD-volume pairs first so clients
+//     don't paginate alphabetically through ~5K dust pairs to find
+//     the ones with real activity.
 func (s *Server) handleMarkets(w http.ResponseWriter, r *http.Request) {
 	cursor := r.URL.Query().Get("cursor")
 	limit := 100
@@ -65,6 +70,19 @@ func (s *Server) handleMarkets(w http.ResponseWriter, r *http.Request) {
 		}
 		limit = parsed
 	}
+	var order timescale.MarketsOrder
+	switch r.URL.Query().Get("order_by") {
+	case "", "pair":
+		order = timescale.MarketsOrderPair
+	case "volume_24h_usd_desc":
+		order = timescale.MarketsOrderVolume24hDesc
+	default:
+		writeProblem(w, r,
+			"https://api.ratesengine.net/errors/invalid-order",
+			"Invalid order_by", http.StatusBadRequest,
+			"order_by must be 'pair' or 'volume_24h_usd_desc'")
+		return
+	}
 
 	reader := s.markets
 	if reader == nil {
@@ -75,7 +93,7 @@ func (s *Server) handleMarkets(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	rows, next, err := reader.DistinctPairs(r.Context(), cursor, limit)
+	rows, next, err := reader.DistinctPairsExt(r.Context(), cursor, limit, order)
 	if err != nil {
 		if clientAborted(r, err) {
 			return

@@ -10,6 +10,7 @@ import (
 
 	v1 "github.com/RatesEngine/rates-engine/internal/api/v1"
 	"github.com/RatesEngine/rates-engine/internal/canonical"
+	"github.com/RatesEngine/rates-engine/internal/storage/timescale"
 )
 
 type stubMarketsReader struct {
@@ -23,7 +24,7 @@ type stubMarketsReader struct {
 	pairErr   error
 }
 
-func (r *stubMarketsReader) DistinctPairs(_ context.Context, cursor string, limit int) ([]v1.Market, string, error) {
+func (r *stubMarketsReader) DistinctPairsExt(_ context.Context, cursor string, limit int, _ timescale.MarketsOrder) ([]v1.Market, string, error) {
 	if r.err != nil {
 		return nil, "", r.err
 	}

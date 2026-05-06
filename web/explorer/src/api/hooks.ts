@@ -230,11 +230,14 @@ type MarketsEnvelope = {
  * we add a "Load more" button or virtual scrolling, switch to
  * useInfiniteQuery and surface the cursor from the envelope.
  */
-export function useMarkets(limit = 100) {
+export function useMarkets(limit = 100, orderBy?: 'pair' | 'volume_24h_usd_desc') {
   return useQuery<{ markets: Market[]; nextCursor?: string }>({
-    queryKey: ['/v1/markets', limit],
+    queryKey: ['/v1/markets', limit, orderBy ?? 'pair'],
     queryFn: async () => {
-      const env = await apiGet<MarketsEnvelope | Market[]>('/v1/markets', { limit });
+      const env = await apiGet<MarketsEnvelope | Market[]>('/v1/markets', {
+        limit,
+        ...(orderBy ? { order_by: orderBy } : {}),
+      });
       if (Array.isArray(env)) return { markets: env };
       return { markets: env.data, nextCursor: env.pagination?.next };
     },
