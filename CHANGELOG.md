@@ -15,6 +15,40 @@ against.
 
 ## [Unreleased]
 
+## [v0.5.0-rc.7] — 2026-05-06
+
+### Added
+- **`/v1/coins?q=…` server-side search** — case-insensitive
+  substring filter across `code`, `slug`, and `issuer_g_strkey`,
+  capped at 64 chars. Lets the explorer's `/assets` search find
+  any of the ~440K classic assets instead of filtering only
+  the current page. SDK gains `CoinsOptions.Q`. Explorer
+  debounces input 250ms into the URL so each keystroke
+  doesn't refire the request.
+- **`/issuers/[g_strkey]` detail page on the explorer** —
+  identity, auth flags (required / revocable / immutable /
+  clawback), SEP-1 resolution age, and a table of every
+  classic asset minted by the G-strkey deep-linking each row
+  to `/assets/<slug>`. Sitemap now enumerates the top 100
+  issuer pages alongside asset pages.
+
+### Fixed
+- **`/v1/coins/{slug}` volume agreed with chosen row.** rc.6
+  picked the canonical issuer in the outer SELECT but the
+  CTE's inner `... = (SELECT asset_id FROM classic_assets
+  WHERE COALESCE(slug, code) = $1 LIMIT 1)` was arbitrary-
+  ordered, so it summed a different same-code issuer's
+  prices_1m rows than the outer query returned —
+  `volume_24h_usd` came back null even when the canonical
+  asset had real volume. The chosen asset_id is now hoisted
+  into its own CTE so both branches share one row.
+
+### Changed
+- **`buildCoinsQuery` switched from switch-case to a slice-
+  based composer** now that the (issuer × cursor × q)
+  combinatorial form outgrew the four hand-written branches.
+  No SQL surface change.
+
 ## [v0.5.0-rc.6] — 2026-05-06
 
 ### Fixed
