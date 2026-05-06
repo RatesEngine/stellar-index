@@ -15,6 +15,8 @@ against.
 
 ## [Unreleased]
 
+## [v0.5.0-rc.19] — 2026-05-07
+
 ### Added
 - **`/v1/incidents` API + status-page consumer.** Customer-facing
   incident posts moved from `docs/operations/incidents/` to
