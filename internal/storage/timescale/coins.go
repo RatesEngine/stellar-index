@@ -649,6 +649,29 @@ type CoinTopMarket struct {
 	TradeCount24h int64
 }
 
+// GetCoinMarketsCount returns the count of distinct (base, quote)
+// pairs the asset participated in over the trailing 24h with a
+// non-null prices_1m bucket. Cheaper than GetCoinTopMarkets — no
+// volume aggregation, no limit, no ordering. Powers the asset
+// detail page's "Markets: 12" header chip.
+//
+// Returns 0 cleanly when the asset has no rows in the window.
+func (s *Store) GetCoinMarketsCount(ctx context.Context, assetID string) (int64, error) {
+	const q = `
+		SELECT COUNT(*) FROM (
+		  SELECT DISTINCT base_asset, quote_asset
+		    FROM prices_1m
+		   WHERE bucket >= now() - INTERVAL '24 hours'
+		     AND (base_asset = $1 OR quote_asset = $1)
+		) t
+	`
+	var n int64
+	if err := s.db.QueryRowContext(ctx, q, assetID).Scan(&n); err != nil {
+		return 0, fmt.Errorf("timescale: GetCoinMarketsCount: %w", err)
+	}
+	return n, nil
+}
+
 // GetCoinTopMarkets returns up to `limit` markets the given asset
 // participates in (as base OR quote), ordered by trailing-24h USD
 // volume desc. Used by the explorer asset-detail page to show a
