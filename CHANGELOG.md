@@ -15,6 +15,26 @@ against.
 
 ## [Unreleased]
 
+## [v0.5.0-rc.14] — 2026-05-06
+
+### Added
+- **`/v1/coins?order_by=volume_24h_usd_desc`** — opt-in
+  ranking by trailing-24h USD volume. Mirrors #765 for markets.
+  Cursor format adapts to the active ordering. Default
+  remains `observation_count_desc` (preserves the historical
+  contract).
+- **`/v1/coins/{slug}.top_markets`** — top 5 markets the
+  asset participates in (as base or quote), ordered by 24h USD
+  volume desc. Lets the explorer asset detail page render a
+  Markets preview without a separate /v1/markets call. Each
+  entry carries `counterparty`, `side` ("base" | "quote"),
+  `volume_24h_usd`, `trade_count_24h`.
+- **`/v1/issuers/{g_strkey}.org_name`** — parity with the
+  listing endpoint. The listing extracts
+  `sep1_payload->>OrgName` already; the single-issuer endpoint
+  now does too. Explorer issuer detail page renders the org
+  name as the `<h1>` when SEP-1 has been resolved.
+
 ## [v0.5.0-rc.13] — 2026-05-06
 
 ### Fixed
