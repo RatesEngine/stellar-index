@@ -444,6 +444,46 @@ function OverviewBody({
         </Panel>
       </div>
 
+      <Panel
+        title="External views"
+        hint="Cross-reference this asset on other Stellar explorers"
+        bodyClassName="text-sm text-slate-600 dark:text-slate-400"
+      >
+        <ul className="space-y-2">
+          <li>
+            <a
+              href={
+                coin.asset_id === 'native'
+                  ? 'https://stellar.expert/explorer/public/asset/XLM'
+                  : `https://stellar.expert/explorer/public/asset/${coin.asset_id.replace('-', '-')}`
+              }
+              target="_blank"
+              rel="noreferrer noopener"
+              className="inline-flex items-center gap-1.5 hover:text-brand-600 hover:underline"
+            >
+              stellar.expert
+              <span className="text-[10px] uppercase tracking-wider text-slate-400">↗</span>
+            </a>
+            <span className="ml-2 text-xs text-slate-400">
+              holders, supply, on-chain history
+            </span>
+          </li>
+          {coin.issuer && (
+            <li>
+              <Link
+                href={`/issuers/${coin.issuer}`}
+                className="inline-flex items-center gap-1.5 hover:text-brand-600 hover:underline"
+              >
+                Issuer detail
+              </Link>
+              <span className="ml-2 font-mono text-xs text-slate-400">
+                {coin.issuer.slice(0, 8)}…{coin.issuer.slice(-4)}
+              </span>
+            </li>
+          )}
+        </ul>
+      </Panel>
+
       {coin.top_markets && coin.top_markets.length > 0 && (
         <Panel
           title="Top markets"
