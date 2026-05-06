@@ -180,6 +180,68 @@ func buildCoinsQuery(limit int, issuer, cursor string) (string, []any) {
 	}
 }
 
+// LatestAssetStats returns the same per-row stats as ListCoins
+// — price, 24h volume, market cap, circulating supply — for a
+// single asset. Used by /v1/assets/{id} to populate F2 fields
+// on the detail page when the formal supply pipeline doesn't
+// have a snapshot for the asset (which today is most of them).
+//
+// All four output fields are nullable. Always returns nil error
+// for a row that simply has no stats (the LEFT JOINs evaluate
+// to NULL); the SQL itself never fails on missing data.
+func (s *Store) LatestAssetStats(ctx context.Context, assetID string) (CoinRow, error) {
+	const q = `
+		SELECT
+		    price.vwap                      AS price_usd,
+		    stats.volume_24h_usd            AS volume_24h_usd,
+		    CASE
+		      WHEN price.vwap IS NOT NULL AND stats.outstanding_supply IS NOT NULL
+		      THEN price.vwap * stats.outstanding_supply
+		      ELSE NULL
+		    END                             AS market_cap_usd,
+		    stats.outstanding_supply        AS circulating_supply
+		  FROM (SELECT $1::text AS asset_id) ca
+		  LEFT JOIN LATERAL (
+		    SELECT volume_24h_usd, outstanding_supply
+		      FROM classic_asset_stats_5m
+		     WHERE asset_id = ca.asset_id
+		     ORDER BY bucket DESC
+		     LIMIT 1
+		  ) stats ON TRUE
+		  LEFT JOIN LATERAL (
+		    SELECT vwap
+		      FROM prices_1m
+		     WHERE base_asset = ca.asset_id
+		       AND quote_asset = 'fiat:USD'
+		     ORDER BY bucket DESC
+		     LIMIT 1
+		  ) price ON TRUE
+	`
+	var (
+		priceUSD, volume24hUSD   sql.NullString
+		marketCapUSD, circSupply sql.NullString
+	)
+	if err := s.db.QueryRowContext(ctx, q, assetID).Scan(
+		&priceUSD, &volume24hUSD, &marketCapUSD, &circSupply,
+	); err != nil {
+		return CoinRow{}, fmt.Errorf("timescale: LatestAssetStats: %w", err)
+	}
+	out := CoinRow{AssetID: assetID}
+	if priceUSD.Valid {
+		out.PriceUSD = &priceUSD.String
+	}
+	if volume24hUSD.Valid {
+		out.Volume24hUSD = &volume24hUSD.String
+	}
+	if marketCapUSD.Valid {
+		out.MarketCapUSD = &marketCapUSD.String
+	}
+	if circSupply.Valid {
+		out.CirculatingSupply = &circSupply.String
+	}
+	return out, nil
+}
+
 // parseCoinCursor decodes a `<obs_count>:<asset_id>` cursor.
 // Empty cursor → (0, "") which means "no cursor". Malformed
 // cursors fall through to the same (the handler validates the

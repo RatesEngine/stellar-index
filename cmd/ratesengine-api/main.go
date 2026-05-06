@@ -963,7 +963,27 @@ func (r storeAssetReader) GetAsset(ctx context.Context, a canonical.Asset) (v1.A
 	if !has {
 		return v1.AssetDetail{}, v1.ErrAssetNotFound
 	}
-	return assetToDetail(a, r.homeDomainLookup), nil
+	detail := assetToDetail(a, r.homeDomainLookup)
+
+	// Best-effort F2 enrichment from the per-asset stats lookup
+	// — same data the /v1/coins listing carries. Failures here
+	// don't break the detail response; the field stays null and
+	// the rest of the body still serves cleanly. The proper
+	// supply pipeline (asset_supply_history) will overwrite
+	// these when it has a snapshot — populateF2Fields runs
+	// AFTER us in the handler stack.
+	if stats, err := r.s.LatestAssetStats(ctx, a.String()); err == nil {
+		if detail.VolumeUSD24h == nil && stats.Volume24hUSD != nil {
+			detail.VolumeUSD24h = stats.Volume24hUSD
+		}
+		if detail.CirculatingSupply == nil && stats.CirculatingSupply != nil {
+			detail.CirculatingSupply = stats.CirculatingSupply
+		}
+		if detail.MarketCapUSD == nil && stats.MarketCapUSD != nil {
+			detail.MarketCapUSD = stats.MarketCapUSD
+		}
+	}
+	return detail, nil
 }
 
 // storeMarketsReader adapts *timescale.Store to v1.MarketsReader.
