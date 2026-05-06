@@ -60,7 +60,9 @@ interface CoinSummary {
   volume_24h_usd?: string | null;
   market_cap_usd?: string | null;
   circulating_supply?: string | null;
+  change_1h_pct?: string | null;
   change_24h_pct?: string | null;
+  change_7d_pct?: string | null;
   // Top 5 markets the asset participates in (as base or
   // quote), ordered by 24h USD volume desc. Empty array
   // when the asset has no recent trades.
@@ -347,8 +349,14 @@ function OverviewBody({
             <span className="font-mono text-3xl tabular-nums">
               {priceNum != null ? `$${formatPrice(priceNum)}` : '—'}
             </span>
+            {coin.change_1h_pct != null && (
+              <ChangePctLabel raw={coin.change_1h_pct} window="1h" />
+            )}
             {coin.change_24h_pct != null && (
-              <ChangePctLabel raw={coin.change_24h_pct} />
+              <ChangePctLabel raw={coin.change_24h_pct} window="24h" />
+            )}
+            {coin.change_7d_pct != null && (
+              <ChangePctLabel raw={coin.change_7d_pct} window="7d" />
             )}
             {price?.flags?.stale && (
               <span className="rounded bg-amber-100 px-2 py-0.5 text-[11px] uppercase tracking-wider text-amber-800 dark:bg-amber-900/40 dark:text-amber-200">
@@ -531,8 +539,14 @@ function fmtNum(raw: string | null | undefined): string {
 
 // ChangePctLabel renders a signed percentage with emerald-up /
 // rose-down / slate-zero colour. Accepts the wire-format string
-// (e.g. "+1.27", "-0.05", "0.00") or a parsed number.
-function ChangePctLabel({ raw }: { raw: string | null | undefined }) {
+// (e.g. "+1.27", "-0.05", "0.00") and the window label.
+function ChangePctLabel({
+  raw,
+  window,
+}: {
+  raw: string | null | undefined;
+  window: '1h' | '24h' | '7d';
+}) {
   if (raw == null) return null;
   const n = Number(raw);
   if (!Number.isFinite(n)) return null;
@@ -550,7 +564,7 @@ function ChangePctLabel({ raw }: { raw: string | null | undefined }) {
       {sign}
       {n.toFixed(2)}%
       <span className="ml-1 text-[10px] uppercase tracking-wider opacity-70">
-        24h
+        {window}
       </span>
     </span>
   );

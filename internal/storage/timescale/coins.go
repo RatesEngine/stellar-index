@@ -40,12 +40,15 @@ type CoinRow struct {
 	// scale matches asset decimals). Nil for assets the supply
 	// pipeline doesn't yet cover.
 	CirculatingSupply *string
-	// Trailing-24h price change as a signed percentage with two
-	// fractional digits (e.g. "+1.27", "-0.05", "0.00"). Nil
-	// when the asset has no current price, or when no
-	// 24h-ago bucket exists in prices_1m within a ±30min
-	// tolerance.
+	// Trailing-1h / 24h / 7d price change as a signed percentage
+	// with two fractional digits (e.g. "+1.27", "-0.05", "0.00").
+	// Nil when the asset has no current price, or when no
+	// matching past-bucket exists in prices_1m within the
+	// window-specific tolerance (±5min for 1h, ±30min for 24h,
+	// ±2h for 7d).
+	Change1hPct  *string
 	Change24hPct *string
+	Change7dPct  *string
 }
 
 // CoinsOrder controls the sort + cursor scheme used by ListCoins.
@@ -115,39 +118,9 @@ func (s *Store) ListCoinsExt(ctx context.Context, opts ListCoinsOptions) ([]Coin
 
 	out := make([]CoinRow, 0, limit)
 	for rows.Next() {
-		var r CoinRow
-		var (
-			firstLedger, lastLedger int64
-			priceUSD                sql.NullString
-			volume24hUSD            sql.NullString
-			marketCapUSD            sql.NullString
-			circulatingSupply       sql.NullString
-			change24hPct            sql.NullString
-		)
-		if err := rows.Scan(
-			&r.Slug, &r.AssetID, &r.Code, &r.IssuerGStrkey,
-			&firstLedger, &lastLedger, &r.ObservationCount,
-			&priceUSD, &volume24hUSD, &marketCapUSD, &circulatingSupply,
-			&change24hPct,
-		); err != nil {
-			return nil, fmt.Errorf("timescale: ListCoins scan: %w", err)
-		}
-		r.FirstSeenLedger = uint32(firstLedger) //nolint:gosec
-		r.LastSeenLedger = uint32(lastLedger)   //nolint:gosec
-		if priceUSD.Valid {
-			r.PriceUSD = &priceUSD.String
-		}
-		if volume24hUSD.Valid {
-			r.Volume24hUSD = &volume24hUSD.String
-		}
-		if marketCapUSD.Valid {
-			r.MarketCapUSD = &marketCapUSD.String
-		}
-		if circulatingSupply.Valid {
-			r.CirculatingSupply = &circulatingSupply.String
-		}
-		if change24hPct.Valid {
-			r.Change24hPct = &change24hPct.String
+		r, err := scanCoinRow(rows)
+		if err != nil {
+			return nil, err
 		}
 		out = append(out, r)
 	}
@@ -155,6 +128,54 @@ func (s *Store) ListCoinsExt(ctx context.Context, opts ListCoinsOptions) ([]Coin
 		return nil, fmt.Errorf("timescale: ListCoins rows: %w", err)
 	}
 	return out, nil
+}
+
+// scanCoinRow is the row-projection shared by ListCoinsExt and
+// GetCoinBySlug. The two queries return the same column shape, so
+// the scan + nullable-string unpack lives in one place. Pulled
+// out of the listing loop so ListCoinsExt stays under the gocognit
+// threshold as the wire shape grows.
+func scanCoinRow(scanner interface {
+	Scan(dest ...any) error
+},
+) (CoinRow, error) {
+	var r CoinRow
+	var (
+		firstLedger, lastLedger int64
+		priceUSD                sql.NullString
+		volume24hUSD            sql.NullString
+		marketCapUSD            sql.NullString
+		circulatingSupply       sql.NullString
+		change1hPct             sql.NullString
+		change24hPct            sql.NullString
+		change7dPct             sql.NullString
+	)
+	if err := scanner.Scan(
+		&r.Slug, &r.AssetID, &r.Code, &r.IssuerGStrkey,
+		&firstLedger, &lastLedger, &r.ObservationCount,
+		&priceUSD, &volume24hUSD, &marketCapUSD, &circulatingSupply,
+		&change1hPct, &change24hPct, &change7dPct,
+	); err != nil {
+		return CoinRow{}, fmt.Errorf("timescale: scan coin: %w", err)
+	}
+	r.FirstSeenLedger = uint32(firstLedger) //nolint:gosec
+	r.LastSeenLedger = uint32(lastLedger)   //nolint:gosec
+	r.PriceUSD = nullStringPtr(priceUSD)
+	r.Volume24hUSD = nullStringPtr(volume24hUSD)
+	r.MarketCapUSD = nullStringPtr(marketCapUSD)
+	r.CirculatingSupply = nullStringPtr(circulatingSupply)
+	r.Change1hPct = nullStringPtr(change1hPct)
+	r.Change24hPct = nullStringPtr(change24hPct)
+	r.Change7dPct = nullStringPtr(change7dPct)
+	return r, nil
+}
+
+func nullStringPtr(ns sql.NullString) *string {
+	if !ns.Valid {
+		return nil
+	}
+	s := ns.String
+	return &s
 }
 
 // listCoinsBaseSelect is the CTE-laden SELECT shared by every
@@ -206,12 +227,30 @@ const listCoinsBaseSelect = `
 		     AND vwap IS NOT NULL
 		   ORDER BY base_asset, bucket DESC
 		),
+		direct_usd_1h AS (
+		  SELECT DISTINCT ON (base_asset) base_asset AS asset_id, vwap
+		    FROM prices_1m
+		   WHERE quote_asset = 'fiat:USD'
+		     AND bucket BETWEEN now() - INTERVAL '1 hour 5 minutes'
+		                   AND now() - INTERVAL '55 minutes'
+		     AND vwap IS NOT NULL
+		   ORDER BY base_asset, bucket DESC
+		),
 		direct_usd_24h AS (
 		  SELECT DISTINCT ON (base_asset) base_asset AS asset_id, vwap
 		    FROM prices_1m
 		   WHERE quote_asset = 'fiat:USD'
 		     AND bucket BETWEEN now() - INTERVAL '24 hours 30 minutes'
 		                   AND now() - INTERVAL '23 hours 30 minutes'
+		     AND vwap IS NOT NULL
+		   ORDER BY base_asset, bucket DESC
+		),
+		direct_usd_7d AS (
+		  SELECT DISTINCT ON (base_asset) base_asset AS asset_id, vwap
+		    FROM prices_1m
+		   WHERE quote_asset = 'fiat:USD'
+		     AND bucket BETWEEN now() - INTERVAL '7 days 2 hours'
+		                   AND now() - INTERVAL '6 days 22 hours'
 		     AND vwap IS NOT NULL
 		   ORDER BY base_asset, bucket DESC
 		),
@@ -223,12 +262,30 @@ const listCoinsBaseSelect = `
 		     AND vwap IS NOT NULL
 		   ORDER BY base_asset, bucket DESC
 		),
+		asset_vs_xlm_1h AS (
+		  SELECT DISTINCT ON (base_asset) base_asset AS asset_id, vwap
+		    FROM prices_1m
+		   WHERE quote_asset = 'native'
+		     AND bucket BETWEEN now() - INTERVAL '1 hour 5 minutes'
+		                   AND now() - INTERVAL '55 minutes'
+		     AND vwap IS NOT NULL
+		   ORDER BY base_asset, bucket DESC
+		),
 		asset_vs_xlm_24h AS (
 		  SELECT DISTINCT ON (base_asset) base_asset AS asset_id, vwap
 		    FROM prices_1m
 		   WHERE quote_asset = 'native'
 		     AND bucket BETWEEN now() - INTERVAL '24 hours 30 minutes'
 		                   AND now() - INTERVAL '23 hours 30 minutes'
+		     AND vwap IS NOT NULL
+		   ORDER BY base_asset, bucket DESC
+		),
+		asset_vs_xlm_7d AS (
+		  SELECT DISTINCT ON (base_asset) base_asset AS asset_id, vwap
+		    FROM prices_1m
+		   WHERE quote_asset = 'native'
+		     AND bucket BETWEEN now() - INTERVAL '7 days 2 hours'
+		                   AND now() - INTERVAL '6 days 22 hours'
 		     AND vwap IS NOT NULL
 		   ORDER BY base_asset, bucket DESC
 		),
@@ -254,6 +311,22 @@ const listCoinsBaseSelect = `
 		   ORDER BY bucket DESC
 		   LIMIT 1
 		),
+		xlm_usd_1h AS (
+		  -- 1h-ago XLM/USD via the same stablecoin-proxy policy.
+		  SELECT vwap
+		    FROM prices_1m
+		   WHERE base_asset = 'native'
+		     AND quote_asset IN (
+		       'USDC-GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN',
+		       'USDT-GCQTGZQQ5G4PTM2GL7CDIFKUBIPEC52BROAQIAPW53XBRJVN6ZJVTG6V',
+		       'fiat:USD'
+		     )
+		     AND bucket BETWEEN now() - INTERVAL '1 hour 5 minutes'
+		                   AND now() - INTERVAL '55 minutes'
+		     AND vwap IS NOT NULL
+		   ORDER BY bucket DESC
+		   LIMIT 1
+		),
 		xlm_usd_24h AS (
 		  -- 24h-ago XLM/USD via the same stablecoin-proxy policy
 		  -- as xlm_usd above.
@@ -267,6 +340,22 @@ const listCoinsBaseSelect = `
 		     )
 		     AND bucket BETWEEN now() - INTERVAL '24 hours 30 minutes'
 		                   AND now() - INTERVAL '23 hours 30 minutes'
+		     AND vwap IS NOT NULL
+		   ORDER BY bucket DESC
+		   LIMIT 1
+		),
+		xlm_usd_7d AS (
+		  -- 7d-ago XLM/USD via the same stablecoin-proxy policy.
+		  SELECT vwap
+		    FROM prices_1m
+		   WHERE base_asset = 'native'
+		     AND quote_asset IN (
+		       'USDC-GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN',
+		       'USDT-GCQTGZQQ5G4PTM2GL7CDIFKUBIPEC52BROAQIAPW53XBRJVN6ZJVTG6V',
+		       'fiat:USD'
+		     )
+		     AND bucket BETWEEN now() - INTERVAL '7 days 2 hours'
+		                   AND now() - INTERVAL '6 days 22 hours'
 		     AND vwap IS NOT NULL
 		   ORDER BY bucket DESC
 		   LIMIT 1
@@ -292,6 +381,15 @@ const listCoinsBaseSelect = `
 		    NULL::numeric                         AS market_cap_usd,
 		    NULL::numeric                         AS circulating_supply,
 		    CASE
+		      WHEN direct.vwap IS NOT NULL AND direct_1h.vwap IS NOT NULL
+		           AND direct_1h.vwap > 0
+		      THEN to_char((direct.vwap / direct_1h.vwap - 1) * 100, 'FM999999990.00')
+		      WHEN vs_xlm.vwap IS NOT NULL AND vs_xlm_1h.vwap IS NOT NULL
+		           AND vs_xlm_1h.vwap > 0
+		      THEN to_char((vs_xlm.vwap / vs_xlm_1h.vwap - 1) * 100, 'FM999999990.00')
+		      ELSE NULL
+		    END                                   AS change_1h_pct,
+		    CASE
 		      WHEN direct.vwap IS NOT NULL AND direct_24h.vwap IS NOT NULL
 		           AND direct_24h.vwap > 0
 		      THEN to_char((direct.vwap / direct_24h.vwap - 1) * 100, 'FM999999990.00')
@@ -299,13 +397,26 @@ const listCoinsBaseSelect = `
 		           AND vs_xlm_24h.vwap > 0
 		      THEN to_char((vs_xlm.vwap / vs_xlm_24h.vwap - 1) * 100, 'FM999999990.00')
 		      ELSE NULL
-		    END                                   AS change_24h_pct
+		    END                                   AS change_24h_pct,
+		    CASE
+		      WHEN direct.vwap IS NOT NULL AND direct_7d.vwap IS NOT NULL
+		           AND direct_7d.vwap > 0
+		      THEN to_char((direct.vwap / direct_7d.vwap - 1) * 100, 'FM999999990.00')
+		      WHEN vs_xlm.vwap IS NOT NULL AND vs_xlm_7d.vwap IS NOT NULL
+		           AND vs_xlm_7d.vwap > 0
+		      THEN to_char((vs_xlm.vwap / vs_xlm_7d.vwap - 1) * 100, 'FM999999990.00')
+		      ELSE NULL
+		    END                                   AS change_7d_pct
 		  FROM classic_assets ca
 		  LEFT JOIN per_asset_24h_vol vol         ON vol.asset_id        = ca.asset_id
 		  LEFT JOIN direct_usd        direct      ON direct.asset_id     = ca.asset_id
+		  LEFT JOIN direct_usd_1h     direct_1h   ON direct_1h.asset_id  = ca.asset_id
 		  LEFT JOIN direct_usd_24h    direct_24h  ON direct_24h.asset_id = ca.asset_id
+		  LEFT JOIN direct_usd_7d     direct_7d   ON direct_7d.asset_id  = ca.asset_id
 		  LEFT JOIN asset_vs_xlm      vs_xlm      ON vs_xlm.asset_id     = ca.asset_id
+		  LEFT JOIN asset_vs_xlm_1h   vs_xlm_1h   ON vs_xlm_1h.asset_id  = ca.asset_id
 		  LEFT JOIN asset_vs_xlm_24h  vs_xlm_24h  ON vs_xlm_24h.asset_id = ca.asset_id
+		  LEFT JOIN asset_vs_xlm_7d   vs_xlm_7d   ON vs_xlm_7d.asset_id  = ca.asset_id
 `
 
 // buildCoinsQuery composes the WHERE + ORDER + LIMIT around
@@ -610,12 +721,30 @@ const getCoinBySlugSQL = `
 		     AND vwap IS NOT NULL
 		   ORDER BY bucket DESC LIMIT 1
 		),
+		direct_usd_1h AS (
+		  SELECT vwap FROM prices_1m
+		   WHERE base_asset  = (SELECT asset_id FROM chosen)
+		     AND quote_asset = 'fiat:USD'
+		     AND bucket BETWEEN now() - INTERVAL '1 hour 5 minutes'
+		                   AND now() - INTERVAL '55 minutes'
+		     AND vwap IS NOT NULL
+		   ORDER BY bucket DESC LIMIT 1
+		),
 		direct_usd_24h AS (
 		  SELECT vwap FROM prices_1m
 		   WHERE base_asset  = (SELECT asset_id FROM chosen)
 		     AND quote_asset = 'fiat:USD'
 		     AND bucket BETWEEN now() - INTERVAL '24 hours 30 minutes'
 		                   AND now() - INTERVAL '23 hours 30 minutes'
+		     AND vwap IS NOT NULL
+		   ORDER BY bucket DESC LIMIT 1
+		),
+		direct_usd_7d AS (
+		  SELECT vwap FROM prices_1m
+		   WHERE base_asset  = (SELECT asset_id FROM chosen)
+		     AND quote_asset = 'fiat:USD'
+		     AND bucket BETWEEN now() - INTERVAL '7 days 2 hours'
+		                   AND now() - INTERVAL '6 days 22 hours'
 		     AND vwap IS NOT NULL
 		   ORDER BY bucket DESC LIMIT 1
 		),
@@ -627,12 +756,30 @@ const getCoinBySlugSQL = `
 		     AND vwap IS NOT NULL
 		   ORDER BY bucket DESC LIMIT 1
 		),
+		asset_vs_xlm_1h AS (
+		  SELECT vwap FROM prices_1m
+		   WHERE base_asset  = (SELECT asset_id FROM chosen)
+		     AND quote_asset = 'native'
+		     AND bucket BETWEEN now() - INTERVAL '1 hour 5 minutes'
+		                   AND now() - INTERVAL '55 minutes'
+		     AND vwap IS NOT NULL
+		   ORDER BY bucket DESC LIMIT 1
+		),
 		asset_vs_xlm_24h AS (
 		  SELECT vwap FROM prices_1m
 		   WHERE base_asset  = (SELECT asset_id FROM chosen)
 		     AND quote_asset = 'native'
 		     AND bucket BETWEEN now() - INTERVAL '24 hours 30 minutes'
 		                   AND now() - INTERVAL '23 hours 30 minutes'
+		     AND vwap IS NOT NULL
+		   ORDER BY bucket DESC LIMIT 1
+		),
+		asset_vs_xlm_7d AS (
+		  SELECT vwap FROM prices_1m
+		   WHERE base_asset  = (SELECT asset_id FROM chosen)
+		     AND quote_asset = 'native'
+		     AND bucket BETWEEN now() - INTERVAL '7 days 2 hours'
+		                   AND now() - INTERVAL '6 days 22 hours'
 		     AND vwap IS NOT NULL
 		   ORDER BY bucket DESC LIMIT 1
 		),
@@ -663,6 +810,21 @@ const getCoinBySlugSQL = `
 		    NULL::numeric                         AS circulating_supply,
 		    CASE
 		      WHEN (SELECT vwap FROM direct_usd) IS NOT NULL
+		           AND (SELECT vwap FROM direct_usd_1h) IS NOT NULL
+		           AND (SELECT vwap FROM direct_usd_1h) > 0
+		      THEN to_char(((SELECT vwap FROM direct_usd)
+		                  / (SELECT vwap FROM direct_usd_1h) - 1) * 100,
+		                  'FM999999990.00')
+		      WHEN (SELECT vwap FROM asset_vs_xlm) IS NOT NULL
+		           AND (SELECT vwap FROM asset_vs_xlm_1h) IS NOT NULL
+		           AND (SELECT vwap FROM asset_vs_xlm_1h) > 0
+		      THEN to_char(((SELECT vwap FROM asset_vs_xlm)
+		                  / (SELECT vwap FROM asset_vs_xlm_1h) - 1) * 100,
+		                  'FM999999990.00')
+		      ELSE NULL
+		    END                                   AS change_1h_pct,
+		    CASE
+		      WHEN (SELECT vwap FROM direct_usd) IS NOT NULL
 		           AND (SELECT vwap FROM direct_usd_24h) IS NOT NULL
 		           AND (SELECT vwap FROM direct_usd_24h) > 0
 		      THEN to_char(((SELECT vwap FROM direct_usd)
@@ -675,45 +837,33 @@ const getCoinBySlugSQL = `
 		                  / (SELECT vwap FROM asset_vs_xlm_24h) - 1) * 100,
 		                  'FM999999990.00')
 		      ELSE NULL
-		    END                                   AS change_24h_pct
+		    END                                   AS change_24h_pct,
+		    CASE
+		      WHEN (SELECT vwap FROM direct_usd) IS NOT NULL
+		           AND (SELECT vwap FROM direct_usd_7d) IS NOT NULL
+		           AND (SELECT vwap FROM direct_usd_7d) > 0
+		      THEN to_char(((SELECT vwap FROM direct_usd)
+		                  / (SELECT vwap FROM direct_usd_7d) - 1) * 100,
+		                  'FM999999990.00')
+		      WHEN (SELECT vwap FROM asset_vs_xlm) IS NOT NULL
+		           AND (SELECT vwap FROM asset_vs_xlm_7d) IS NOT NULL
+		           AND (SELECT vwap FROM asset_vs_xlm_7d) > 0
+		      THEN to_char(((SELECT vwap FROM asset_vs_xlm)
+		                  / (SELECT vwap FROM asset_vs_xlm_7d) - 1) * 100,
+		                  'FM999999990.00')
+		      ELSE NULL
+		    END                                   AS change_7d_pct
 		  FROM chosen
 		  JOIN classic_assets ca ON ca.asset_id = chosen.asset_id
 		  LEFT JOIN per_asset_24h_vol vol ON true
 `
 
 func (s *Store) GetCoinBySlug(ctx context.Context, slug string) (CoinRow, error) {
-	var (
-		r                        CoinRow
-		firstLedger, lastLedger  int64
-		priceUSD, volume24hUSD   sql.NullString
-		marketCapUSD, circSupply sql.NullString
-		change24hPct             sql.NullString
-	)
-	err := s.db.QueryRowContext(ctx, getCoinBySlugSQL, slug).Scan(
-		&r.Slug, &r.AssetID, &r.Code, &r.IssuerGStrkey,
-		&firstLedger, &lastLedger, &r.ObservationCount,
-		&priceUSD, &volume24hUSD, &marketCapUSD, &circSupply,
-		&change24hPct,
-	)
+	r, err := scanCoinRow(s.db.QueryRowContext(ctx, getCoinBySlugSQL, slug))
 	if err != nil {
+		// Surface sql.ErrNoRows unwrapped so handler errors.Is checks
+		// keep matching; scanCoinRow wraps with %w which preserves it.
 		return CoinRow{}, err
-	}
-	r.FirstSeenLedger = uint32(firstLedger) //nolint:gosec
-	r.LastSeenLedger = uint32(lastLedger)   //nolint:gosec
-	if priceUSD.Valid {
-		r.PriceUSD = &priceUSD.String
-	}
-	if volume24hUSD.Valid {
-		r.Volume24hUSD = &volume24hUSD.String
-	}
-	if marketCapUSD.Valid {
-		r.MarketCapUSD = &marketCapUSD.String
-	}
-	if circSupply.Valid {
-		r.CirculatingSupply = &circSupply.String
-	}
-	if change24hPct.Valid {
-		r.Change24hPct = &change24hPct.String
 	}
 	return r, nil
 }
