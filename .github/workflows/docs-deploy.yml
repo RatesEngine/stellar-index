@@ -1,0 +1,80 @@
+---
+# Manual-trigger Cloudflare Pages deploy for docs.ratesengine.net.
+#
+# **The recommended publish path is Cloudflare's git integration**
+# — it auto-deploys on every push to main without consuming GitHub
+# Actions minutes. This workflow exists for two cases:
+#
+#   1. **Hotfix** — push a fixed version of an arbitrary commit
+#      (workflow_dispatch supports `ref:` selection).
+#   2. **CF git integration paused / stale** — fall back to publishing
+#      from CI when the Pages project's git connection isn't firing
+#      (e.g. mid-rotation of the CF GitHub app token, or after a
+#      project was created without git integration).
+#
+# Mirrors explorer-deploy.yml but for the `ratesengine-docs` project.
+# The docs site is a small static directory (Scalar's index.html +
+# the OpenAPI YAML); no build step needed.
+#
+# Required secrets (set once in repo settings):
+#   - CLOUDFLARE_API_TOKEN  — token with Pages:Edit on
+#                             ratesengine-docs
+#   - CLOUDFLARE_ACCOUNT_ID — the CF account UUID
+
+name: docs-deploy
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: "production or preview"
+        required: true
+        default: "production"
+        type: choice
+        options:
+          - production
+          - preview
+
+permissions:
+  contents: read
+  deployments: write
+
+# One deploy at a time. Mid-deploy cancellation is fine — the
+# new run takes over before traffic shifts.
+concurrency:
+  group: docs-deploy-${{ github.event.inputs.environment }}
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: docs-${{ github.event.inputs.environment }}
+    steps:
+      - uses: actions/checkout@v6
+
+      # No build step — `docs/reference/api/` already contains
+      # the rendered Scalar index.html + the colocated OpenAPI
+      # YAML, both committed by `make docs-api`. The CI drift
+      # check guards correctness on every merge.
+      - name: Verify staged artefact
+        run: |
+          test -f docs/reference/api/index.html || {
+            echo "::error::docs/reference/api/index.html missing"
+            exit 1
+          }
+          test -f docs/reference/api/rates-engine.v1.yaml || {
+            echo "::error::docs/reference/api/rates-engine.v1.yaml missing"
+            exit 1
+          }
+          ls -la docs/reference/api/
+
+      - name: Deploy to Cloudflare Pages
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          command: >-
+            pages deploy docs/reference/api
+            --project-name ratesengine-docs
+            --branch ${{ github.event.inputs.environment == 'production' && 'main' || github.ref_name }}
