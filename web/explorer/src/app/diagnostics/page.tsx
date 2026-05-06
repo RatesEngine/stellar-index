@@ -1,5 +1,6 @@
 import type { Metadata } from 'next';
 import { CursorsTable } from './CursorsTable';
+import { HealthSummary } from './HealthSummary';
 
 export const metadata: Metadata = {
   title: 'Diagnostics — public system-health view',
@@ -27,6 +28,8 @@ export default function DiagnosticsPage() {
           SLO burn rates plumb in as their endpoints ship.
         </p>
       </header>
+
+      <HealthSummary />
 
       <CursorsTable />
     </div>
