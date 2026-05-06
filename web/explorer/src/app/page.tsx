@@ -3,6 +3,7 @@ import { ArrowRight } from 'lucide-react';
 
 import { NetworkLivePanel, SystemHealthLivePanel } from './HomeLivePanels';
 import { HomeTopAssets } from './HomeTopAssets';
+import { HomeTopMovers } from './HomeTopMovers';
 import { HomeTryAPI } from './HomeTryAPI';
 
 export default function HomePage() {
@@ -70,6 +71,8 @@ export default function HomePage() {
       </section>
 
       <HomeTopAssets />
+
+      <HomeTopMovers />
 
       <section className="space-y-3">
         <div className="space-y-1">
