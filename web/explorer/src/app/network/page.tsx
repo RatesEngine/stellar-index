@@ -3,25 +3,30 @@ import Link from 'next/link';
 
 import { Panel } from '@/components/reveal';
 import { NetworkLivePanel } from '../HomeLivePanels';
+import { HomeNetworkStrip } from '../HomeNetworkStrip';
+import { HomeTopMarkets } from '../HomeTopMarkets';
+import { HomeTopAssets } from '../HomeTopAssets';
 
 export const metadata: Metadata = {
   title: 'Network — Stellar macro pulse',
   description:
-    'Stellar network state: ledger tip, classic-asset count, ingest motion. Macro-level metrics for the Stellar pricing surface.',
+    'Stellar network state: total assets, active markets, 24h USD volume, source contributors, ingest tip. Macro-level metrics for the Stellar pricing surface.',
 };
 
 export default function NetworkPage() {
   return (
-    <div className="mx-auto max-w-7xl space-y-6 px-6 py-8">
+    <div className="mx-auto max-w-7xl space-y-8 px-6 py-8">
       <header className="space-y-2">
         <h1 className="text-3xl font-semibold tracking-tight">Network</h1>
         <p className="max-w-3xl text-sm text-slate-600 dark:text-slate-400">
-          Stellar-network macro state. Today: ledger tip and indexed
-          asset count. The full macro pulse — total TVL, total volume,
-          Soroban activity, peg health, fee market — lights up as the
-          underlying writers ship (Phase 3).
+          Live macro pulse for the Stellar network. Every figure below comes
+          straight from the public API — no synthesised data, no estimates.
+          Cross-region active-active per ADR-0008; you&apos;re seeing R1
+          (Hetzner) right now.
         </p>
       </header>
+
+      <HomeNetworkStrip />
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
         <NetworkLivePanel />
@@ -43,28 +48,42 @@ export default function NetworkPage() {
             the API only ever serves CLOSED buckets. The in-progress
             bucket is invisible until the next minute boundary.
           </p>
+          <p>
+            R2 + R3 are deferred — see{' '}
+            <Link href="/diagnostics" className="underline decoration-dotted">
+              /diagnostics
+            </Link>{' '}
+            for live ingest cursors on the running R1 region.
+          </p>
         </Panel>
       </div>
 
+      <HomeTopMarkets />
+
+      <HomeTopAssets />
+
       <Panel
-        title="Coming next"
+        title="What's not on this page (yet)"
         bodyClassName="text-sm text-slate-600 dark:text-slate-400 space-y-2"
       >
         <p>
-          Total TVL + multi-window deltas, total network volume, Soroban
-          activity index, stablecoin peg-health strip, ops-per-ledger
-          throughput, and fee-market history all plumb in once the
-          underlying Phase 3 writers ship — the schema is in place
-          (migrations 0021 + 0022 cover TVL + change_summary; peg-
-          health and source-diversity computers land next).
+          The full enterprise macro pulse — total network TVL, multi-window
+          deltas, Soroban activity index, peg-health strip, ops-per-ledger
+          throughput, and fee-market history — plumbs in as the underlying
+          Phase 3 writers ship. Schema is in place (migrations 0021 + 0022
+          cover TVL + change_summary; peg-health and source-diversity
+          computers land next).
         </p>
         <p>
-          For ingest-side liveness today, see{' '}
+          For per-source ingest health, see{' '}
           <Link href="/diagnostics" className="underline decoration-dotted">
             /diagnostics
-          </Link>{' '}
-          (per-source cursors), and for the indexed asset directory
-          see{' '}
+          </Link>
+          . For per-pair detail, browse{' '}
+          <Link href="/markets" className="underline decoration-dotted">
+            /markets
+          </Link>
+          . For asset coverage, see{' '}
           <Link href="/assets" className="underline decoration-dotted">
             /assets
           </Link>
