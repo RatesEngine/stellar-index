@@ -1,6 +1,7 @@
 'use client';
 
 import { useMemo } from 'react';
+import Link from 'next/link';
 
 import { Panel } from '@/components/reveal';
 import { asExample } from '@/api/client';
@@ -105,7 +106,12 @@ export function SourcesTable() {
                       className="hover:bg-slate-50 dark:hover:bg-slate-900/40"
                     >
                       <Td>
-                        <span className="font-mono">{s.name}</span>
+                        <Link
+                          href={`/sources/${encodeURIComponent(s.name)}`}
+                          className="font-mono hover:text-brand-600 hover:underline"
+                        >
+                          {s.name}
+                        </Link>
                       </Td>
                       <Td>
                         <span className="text-xs text-slate-500">
