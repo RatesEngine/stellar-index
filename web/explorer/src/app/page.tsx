@@ -6,7 +6,7 @@ import { HomeTryAPI } from './HomeTryAPI';
 
 export default function HomePage() {
   return (
-    <div className="mx-auto max-w-6xl space-y-12 p-8">
+    <div className="mx-auto max-w-7xl space-y-12 px-6 py-10">
       <header className="space-y-4 pb-2 pt-4">
         <p className="font-mono text-xs uppercase tracking-widest text-brand-600 dark:text-brand-400">
           Independent · open · public-tier free
@@ -25,7 +25,7 @@ export default function HomePage() {
             href="/assets"
             className="inline-flex items-center gap-1.5 rounded-md bg-brand-600 px-3.5 py-2 text-sm font-medium text-white hover:bg-brand-700"
           >
-            Browse coins
+            Browse assets
             <ArrowRight className="h-3.5 w-3.5" />
           </Link>
           <Link

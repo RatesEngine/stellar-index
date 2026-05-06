@@ -17,7 +17,7 @@ export const metadata: Metadata = {
  */
 export default function AssetsPage() {
   return (
-    <div className="mx-auto max-w-7xl space-y-6 p-6">
+    <div className="mx-auto max-w-7xl space-y-6 px-6 py-8">
       <header className="space-y-2">
         <h1 className="text-2xl font-semibold tracking-tight text-ink dark:text-slate-100">
           Assets

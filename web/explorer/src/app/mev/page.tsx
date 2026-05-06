@@ -42,7 +42,7 @@ const PATTERNS: { name: string; description: string; example: string }[] = [
 
 export default function MevPage() {
   return (
-    <div className="mx-auto max-w-6xl space-y-6 p-6">
+    <div className="mx-auto max-w-7xl space-y-6 px-6 py-8">
       <header className="space-y-2">
         <h1 className="text-3xl font-semibold tracking-tight">MEV</h1>
         <p className="max-w-3xl text-sm text-slate-600 dark:text-slate-400">

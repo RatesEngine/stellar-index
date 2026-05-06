@@ -85,7 +85,7 @@ export function IssuersTable() {
                 </Td>
                 <Td>
                   <Link
-                    href={`/coins?issuer=${row.g_strkey}`}
+                    href={`/assets?issuer=${row.g_strkey}`}
                     className="font-mono text-xs hover:text-brand-600"
                     title={row.g_strkey}
                   >

@@ -151,7 +151,7 @@ export default async function CoinDetailPage({ params }: { params: Params }) {
 
   if (!coin) {
     return (
-      <div className="mx-auto max-w-6xl space-y-6 p-6">
+      <div className="mx-auto max-w-7xl space-y-6 px-6 py-8">
         <header className="space-y-3">
           <nav className="text-xs text-slate-500">
             <Link href="/assets" className="hover:text-brand-600">
@@ -186,7 +186,7 @@ export default async function CoinDetailPage({ params }: { params: Params }) {
   ]);
 
   return (
-    <div className="mx-auto max-w-6xl space-y-6 p-6">
+    <div className="mx-auto max-w-7xl space-y-6 px-6 py-8">
       <header className="space-y-3">
         <nav className="text-xs text-slate-500">
           <Link href="/assets" className="hover:text-brand-600">
