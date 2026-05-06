@@ -2,6 +2,7 @@ import Link from 'next/link';
 import { ArrowRight } from 'lucide-react';
 
 import { NetworkLivePanel, SystemHealthLivePanel } from './HomeLivePanels';
+import { HomeNetworkStrip } from './HomeNetworkStrip';
 import { HomeTopAssets } from './HomeTopAssets';
 import { HomeTopMovers } from './HomeTopMovers';
 import { HomeTryAPI } from './HomeTryAPI';
@@ -44,6 +45,8 @@ export default function HomePage() {
           </a>
         </div>
       </header>
+
+      <HomeNetworkStrip />
 
       <section className="grid grid-cols-1 gap-4 lg:grid-cols-3">
         <NetworkLivePanel />

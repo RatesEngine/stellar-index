@@ -16,6 +16,14 @@ against.
 ## [Unreleased]
 
 ### Added
+- **Home page: 5-card network stats strip.** Sits above the
+  existing 3-column NetworkLivePanel grid showing the
+  scale-of-the-network at a glance — total 24h USD volume,
+  active markets count, asset directory size, exchange-class
+  sources online, and live XLM price + 24h change. All cells
+  fed by existing API endpoints (`/v1/markets`, `/v1/coins`,
+  `/v1/sources`, `/v1/diagnostics/cursors`); no synthesised
+  data, `—` rendered while loading.
 - **Cmd-K search: G-strkey + pair shortcut detection.** Typing
   a 56-char Stellar G-strkey now surfaces a "→ Issuer detail"
   result that deep-links to `/issuers/{g_strkey}`. Typing a pair
