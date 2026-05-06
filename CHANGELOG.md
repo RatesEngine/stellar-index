@@ -15,6 +15,20 @@ against.
 
 ## [Unreleased]
 
+### Added
+- **`/v1/coins[*].change_1h_pct` + `change_7d_pct`** — trailing
+  1-hour and 7-day price change windows alongside the existing
+  `change_24h_pct`. Same direct-or-XLM-triangulated formula;
+  null when no current price or no past-bucket snapshot exists
+  in `prices_1m` within the window-specific tolerance (±5min for
+  1h, ±30min for 24h, ±2h for 7d). Asset-detail page renders all
+  three side-by-side as colour-coded pills.
+
+### Changed
+- `internal/storage/timescale.scanCoinRow` extracted as the shared
+  row-projection between `ListCoinsExt` and `GetCoinBySlug`. Same
+  external behaviour; reduces duplication as the wire shape grows.
+
 ## [v0.5.0-rc.15] — 2026-05-06
 
 ### Added

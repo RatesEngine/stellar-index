@@ -338,10 +338,14 @@ type Coin struct {
 	Volume24hUSD      *string `json:"volume_24h_usd,omitempty"`
 	MarketCapUSD      *string `json:"market_cap_usd,omitempty"`
 	CirculatingSupply *string `json:"circulating_supply,omitempty"`
-	// Change24hPct is the trailing-24h price change as a signed
-	// percentage with two fractional digits (e.g. "+1.27").
-	// Nil when no current price or 24h-ago bucket exists.
+	// Change1hPct / Change24hPct / Change7dPct are the trailing
+	// price changes for those windows as signed percentages with
+	// two fractional digits (e.g. "+1.27"). Nil when the asset
+	// has no current price or no past-bucket snapshot exists in
+	// prices_1m within the window-specific tolerance.
+	Change1hPct  *string `json:"change_1h_pct,omitempty"`
 	Change24hPct *string `json:"change_24h_pct,omitempty"`
+	Change7dPct  *string `json:"change_7d_pct,omitempty"`
 }
 
 // CoinsPage wraps the paginated /v1/coins response. Iterate
