@@ -1,17 +1,17 @@
 'use client';
 
 import { Panel } from '@/components/reveal';
-import { Sparkline, AccelerationArrow } from '@/components/primitives';
 import { asExample } from '@/api/client';
 import { useCoins, useCursors } from '@/api/hooks';
 import { formatCompact } from '@/lib/format';
 
 /**
- * NetworkLivePanel — replaces the static "85,750 classic assets"
- * stub with the live count from /v1/coins (limit=500 — enough to
- * show the entire registry as it grows). Also surfaces the highest
- * last_ledger seen across non-backfill cursors as the "current
- * network tip" reading.
+ * NetworkLivePanel — live count of classic assets indexed +
+ * highest live-cursor ledger. Both come straight from the API;
+ * no synthesised history line (the previous sparkline used
+ * fabricated month-over-month values to imply growth, which
+ * isn't a number we can prove. When the multi-window delta
+ * pipeline lands we'll plumb a real series here).
  */
 export function NetworkLivePanel() {
   const coins = useCoins(500);
@@ -22,27 +22,19 @@ export function NetworkLivePanel() {
 
   return (
     <Panel title="Network" hint="Stellar pulse" source={asExample('/v1/coins', { limit: 500 })}>
-      <div className="space-y-2">
-        <div className="text-2xl font-bold tabular-nums">
-          {assetsCount !== null ? formatCompact(assetsCount) : '—'}
+      <div className="space-y-3">
+        <div>
+          <div className="text-2xl font-bold tabular-nums">
+            {assetsCount !== null ? formatCompact(assetsCount) : '—'}
+          </div>
+          <div className="text-xs text-slate-500">classic assets indexed</div>
         </div>
-        <div className="text-xs text-slate-500">classic assets indexed</div>
 
-        <div className="pt-3">
+        <div>
           <div className="font-mono text-sm tabular-nums">
             {tipLedger !== null ? `#${tipLedger.toLocaleString()}` : '—'}
           </div>
           <div className="text-[11px] text-slate-500">current ingest tip</div>
-        </div>
-
-        <div className="mt-3 flex items-center gap-2">
-          <Sparkline
-            values={[
-              60_000, 65_000, 71_000, 78_000, 82_000, 85_000,
-              assetsCount ?? 85_750,
-            ]}
-          />
-          <AccelerationArrow direction="up" acceleration="increasing" />
         </div>
       </div>
     </Panel>

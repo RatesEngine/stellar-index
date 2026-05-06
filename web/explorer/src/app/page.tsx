@@ -2,6 +2,7 @@ import Link from 'next/link';
 import { ArrowRight } from 'lucide-react';
 
 import { NetworkLivePanel, SystemHealthLivePanel } from './HomeLivePanels';
+import { HomeTopAssets } from './HomeTopAssets';
 import { HomeTryAPI } from './HomeTryAPI';
 
 export default function HomePage() {
@@ -67,6 +68,8 @@ export default function HomePage() {
           </p>
         </Link>
       </section>
+
+      <HomeTopAssets />
 
       <section className="space-y-3">
         <div className="space-y-1">
