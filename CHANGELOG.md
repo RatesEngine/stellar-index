@@ -15,6 +15,35 @@ against.
 
 ## [Unreleased]
 
+## [v0.5.0-rc.8] — 2026-05-06
+
+### Added
+- **`/v1/markets` surfaces `volume_24h_usd` per pair.** Trailing-
+  24h USD volume joined from the prices_1m hypertable's
+  per-bucket `volume_usd`. Pointer + omitempty so a pair with no
+  USD-equivalent trades emits null instead of "0" — clients can
+  distinguish unknown from definitely-zero. Explorer Markets
+  table renders a 24h volume column and reorders to volume-desc
+  (then trade-count-desc), matching Etherscan / Oklink convention.
+
+### Changed
+- **docs.ratesengine.net migrated from Redocly to Scalar.** 788KB
+  inlined Redocly bundle replaced by a 1KB index.html that loads
+  `@scalar/api-reference@1.34.10` from a pinned jsdelivr CDN URL
+  and points it at a colocated YAML spec. CI drift check + Pages
+  artefact both extended to track the YAML.
+- **Explorer navbar Status + API Docs links route to subdomains**
+  (`status.ratesengine.net`, `docs.ratesengine.net`) instead of
+  404'ing on local `/status` + `/docs`. Footer + home + signup +
+  not-found pages all updated.
+- **Cmd-K SearchModal** hits `/v1/coins?q=…` server-side
+  (200ms debounce) so it finds any of the ~440K classic assets
+  instead of just the top-100 default.
+- **Asset detail Overview tab** folds volume / market cap /
+  circulating into the Price card; hides the Supply panel
+  entirely when no supply data exists. No more wall-of-em-dashes
+  for active classic assets.
+
 ## [v0.5.0-rc.7] — 2026-05-06
 
 ### Added
