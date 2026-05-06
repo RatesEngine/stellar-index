@@ -1,5 +1,7 @@
 'use client';
 
+import Link from 'next/link';
+
 import { Panel } from '@/components/reveal';
 import { asExample } from '@/api/client';
 import { useMarkets } from '@/api/hooks';
@@ -80,19 +82,36 @@ export function MarketsTable() {
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-            {sorted.map((m, i) => (
+            {sorted.map((m, i) => {
+              const slug = `${m.base}~${m.quote}`;
+              return (
               <tr
                 key={`${m.base}|${m.quote}`}
                 className="hover:bg-slate-50 dark:hover:bg-slate-900/40"
               >
                 <Td>
-                  <span className="text-slate-400">{i + 1}</span>
+                  <Link
+                    href={`/markets/${encodeURIComponent(slug)}`}
+                    className="text-slate-400 hover:text-brand-600"
+                  >
+                    {i + 1}
+                  </Link>
                 </Td>
                 <Td>
-                  <AssetLabel canonical={m.base} />
+                  <Link
+                    href={`/markets/${encodeURIComponent(slug)}`}
+                    className="hover:text-brand-600"
+                  >
+                    <AssetLabel canonical={m.base} />
+                  </Link>
                 </Td>
                 <Td>
-                  <AssetLabel canonical={m.quote} />
+                  <Link
+                    href={`/markets/${encodeURIComponent(slug)}`}
+                    className="hover:text-brand-600"
+                  >
+                    <AssetLabel canonical={m.quote} />
+                  </Link>
                 </Td>
                 <Td align="right">
                   {m.volume_24h_usd ? (
@@ -114,7 +133,8 @@ export function MarketsTable() {
                   </span>
                 </Td>
               </tr>
-            ))}
+              );
+            })}
           </tbody>
         </table>
       </div>
