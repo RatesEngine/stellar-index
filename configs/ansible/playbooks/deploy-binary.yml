@@ -40,6 +40,14 @@
     install_dir: /usr/local/bin
     api_port: 3000
     api_health_path: /v1/healthz
+    # CLI tools — no systemd service to restart, no health probe.
+    # The deploy steps short-circuit to a `<binary> -version`
+    # smoke test for these. Adding a new daemon binary? Don't
+    # touch this; it's the deny-list.
+    cli_binaries:
+      - ratesengine-ops
+      - ratesengine-migrate
+      - ratesengine-sla-probe
 
   pre_tasks:
     - name: Verify required vars are set
