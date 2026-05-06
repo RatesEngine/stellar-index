@@ -838,6 +838,22 @@ paths:
         - name: limit
           in: query
           schema: { type: integer, minimum: 1, maximum: 500, default: 100 }
+        - name: order_by
+          in: query
+          required: false
+          description: |
+            Sort order. `pair` (default) returns markets in lex
+            order of `<base>|<quote>` — stable for paginating the
+            full set. `volume_24h_usd_desc` orders by 24h USD
+            volume desc (NULLS LAST), then by `<base>|<quote>`
+            for ties — surfaces the high-activity pairs first
+            without paginating through ~5K alphabetic dust pairs.
+            Cursor format differs per ordering; keep using the
+            cursor returned by the previous response.
+          schema:
+            type: string
+            enum: [pair, volume_24h_usd_desc]
+            default: pair
       responses:
         "200":
           description: Array of markets + optional next cursor.
@@ -886,6 +902,14 @@ paths:
                   properties:
                     g_strkey: { type: string }
                     home_domain: { type: string }
+                    org_name:
+                      type: string
+                      description: |
+                        Issuer's organisation name from SEP-1
+                        `[DOCUMENTATION].ORG_NAME`. Populated by
+                        the `ratesengine-ops sep1-refresh` job;
+                        empty until the issuer's stellar.toml
+                        has been resolved.
                     asset_count: { type: integer, format: int64 }
                     total_observation_count: { type: integer, format: int64 }
         "400": { $ref: "#/components/responses/BadRequest" }
@@ -923,6 +947,12 @@ paths:
                 properties:
                   g_strkey: { type: string }
                   home_domain: { type: string }
+                  org_name:
+                    type: string
+                    description: |
+                      Issuer's organisation name from SEP-1
+                      `[DOCUMENTATION].ORG_NAME`. Same value the
+                      listing endpoint surfaces.
                   auth_required: { type: boolean, nullable: true }
                   auth_revocable: { type: boolean, nullable: true }
                   auth_immutable: { type: boolean, nullable: true }
@@ -1008,6 +1038,18 @@ paths:
           schema:
             type: string
             maxLength: 64
+        - name: order_by
+          in: query
+          required: false
+          description: |
+            Sort order. `observation_count_desc` (default) ranks
+            by all-time activity. `volume_24h_usd_desc` surfaces
+            highest-volume assets first (NULLS LAST). Cursor
+            format adapts to the active ordering.
+          schema:
+            type: string
+            enum: [observation_count_desc, volume_24h_usd_desc]
+            default: observation_count_desc
       responses:
         "200":
           description: Page of asset entries + next-cursor.
@@ -1052,6 +1094,31 @@ paths:
                           type: string
                           nullable: true
                           description: Outstanding supply (canonical units).
+                        change_1h_pct:
+                          type: string
+                          nullable: true
+                          description: |
+                            Trailing-1h price change as a signed
+                            percentage with two fractional digits.
+                            Null when no current price or no
+                            1h-ago prices_1m bucket within ±5min.
+                        change_24h_pct:
+                          type: string
+                          nullable: true
+                          description: |
+                            Trailing-24h price change as a signed
+                            percentage with two fractional digits
+                            (e.g. "+1.27", "-0.05", "0.00"). Null
+                            when no current price or no
+                            24h-ago prices_1m bucket within ±30min.
+                        change_7d_pct:
+                          type: string
+                          nullable: true
+                          description: |
+                            Trailing-7d price change as a signed
+                            percentage with two fractional digits.
+                            Null when no current price or no
+                            7d-ago prices_1m bucket within ±2h.
                   next_cursor:
                     type: string
                     description: Empty when no more pages.
@@ -1132,6 +1199,32 @@ paths:
                   circulating_supply:
                     type: string
                     nullable: true
+                  change_1h_pct:
+                    type: string
+                    nullable: true
+                    description: |
+                      Trailing-1h price change as a signed
+                      percentage with two fractional digits.
+                  change_24h_pct:
+                    type: string
+                    nullable: true
+                    description: |
+                      Trailing-24h price change as a signed
+                      percentage with two fractional digits.
+                  change_7d_pct:
+                    type: string
+                    nullable: true
+                    description: |
+                      Trailing-7d price change as a signed
+                      percentage with two fractional digits.
+                  markets_count:
+                    type: integer
+                    nullable: true
+                    description: |
+                      Count of distinct (base_asset, quote_asset)
+                      pairs the asset participated in over the
+                      trailing 24h. 0 when the asset went silent
+                      in that window. Null only on lookup error.
         "400": { $ref: "#/components/responses/BadRequest" }
         "404": { $ref: "#/components/responses/NotFound" }
         "429": { $ref: "#/components/responses/RateLimited" }
@@ -2783,9 +2876,10 @@ components:
     # Markets / Pairs
     #
     # MarketRow is one (base, quote) pair present in the trades
-    # store. `last_price` / `volume_24h_usd` land with the aggregator;
-    # the current handler returns the (base, quote, recency, 24h-count)
-    # shape below.
+    # store. `last_price` is still pending (lands with the aggregator);
+    # `volume_24h_usd` is summed from prices_1m's per-bucket
+    # volume_usd (nullable when the pair has no USD-equivalent
+    # trades).
     MarketRow:
       type: object
       properties:
@@ -2793,6 +2887,10 @@ components:
         quote:           { type: string }
         last_trade_at:   { type: string, format: date-time }
         trade_count_24h: { type: integer, description: "Activity count in the trailing 24h window." }
+        volume_24h_usd:
+          type: string
+          nullable: true
+          description: "Trailing-24h USD volume summed from prices_1m. Decimal string. Null when no USD-equivalent trades."
       required: [base, quote, last_trade_at, trade_count_24h]
 
     MarketsEnvelope:
