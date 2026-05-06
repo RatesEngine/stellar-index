@@ -15,6 +15,22 @@ against.
 
 ## [Unreleased]
 
+## [v0.5.0-rc.13] — 2026-05-06
+
+### Fixed
+- **`/v1/coins/{slug}.price_usd` applies the USDC stablecoin
+  proxy.** rc.12 fixed the listing query but missed the
+  single-asset SQL because GetCoinBySlug's xlm_usd CTE had
+  different formatting; `/v1/coins/USDC` returned price_usd:
+  null even though `/v1/coins?limit=5` returned $1.00. Same
+  stablecoin-proxy now in both paths.
+
+### Changed
+- **Wire `price_usd` rounded to 10 dp.** Postgres NUMERIC ×
+  NUMERIC preserves 36+ digits which is pure noise on a
+  display value. `ROUND(..., 10)` covers sub-millicent
+  precision; trims the JSON payload.
+
 ## [v0.5.0-rc.12] — 2026-05-06
 
 ### Fixed
