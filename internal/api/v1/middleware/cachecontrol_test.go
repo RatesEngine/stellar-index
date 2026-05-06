@@ -22,7 +22,7 @@ func TestPolicyForPath_PinsDirectives(t *testing.T) {
 		{"/v1/version", "no-store"},
 		{"/metrics", "no-store"},
 
-		// Status rollup — short public cache so the showcase polling
+		// Status rollup — short public cache so the explorer polling
 		// fan-out doesn't multiply against the API
 		{"/v1/status", "public, max-age=10, s-maxage=15"},
 

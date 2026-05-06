@@ -71,7 +71,7 @@ func TotalQuoteVolume(trades []canonical.Trade) canonical.Amount {
 }
 
 // SourceContribution captures one source's share of a windowed VWAP
-// — the building block the showcase source-contribution donut renders.
+// — the building block the explorer source-contribution donut renders.
 //
 // Weight is a fraction in [0, 1]; sums to 1.0 across all
 // contributions for the same trade slice (modulo float rounding).

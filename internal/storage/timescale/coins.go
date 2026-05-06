@@ -27,7 +27,7 @@ type CoinRow struct {
 // page.
 //
 // issuer, when non-empty, filters to assets minted by that
-// G-strkey — used by the showcase to deep-link from /issuers into
+// G-strkey — used by the explorer to deep-link from /issuers into
 // "coins by this issuer."
 //
 // The endpoint is read-only and joins no other tables today; future

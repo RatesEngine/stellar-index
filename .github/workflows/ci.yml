@@ -208,18 +208,18 @@ jobs:
 
   # ────────────────────────────────────────────────────────────────
   # Showcase site — typecheck, lint, build the Next.js app at
-  # web/showcase/. Static-export build is fast (~30s).
+  # web/explorer/. Static-export build is fast (~30s).
   # Also verifies the OpenAPI → TypeScript codegen is in sync; if
   # the OpenAPI spec changed and someone forgot to regen the types,
   # this fails with a clear error.
   # ────────────────────────────────────────────────────────────────
 
-  web-showcase:
-    name: web/showcase
+  web-explorer:
+    name: web/explorer
     runs-on: ubuntu-latest
     defaults:
       run:
-        working-directory: web/showcase
+        working-directory: web/explorer
     steps:
       - uses: actions/checkout@v6
       - uses: pnpm/action-setup@v4
@@ -229,7 +229,7 @@ jobs:
         with:
           node-version: "20"
           cache: "pnpm"
-          cache-dependency-path: web/showcase/pnpm-lock.yaml
+          cache-dependency-path: web/explorer/pnpm-lock.yaml
       - run: pnpm install --frozen-lockfile
       - name: Generated API types are in sync
         run: |
@@ -257,7 +257,7 @@ jobs:
       - run: pnpm build
 
   # ────────────────────────────────────────────────────────────────
-  # Customer dashboard — same shape as web-showcase. Static-export
+  # Customer dashboard — same shape as web-explorer. Static-export
   # Next.js app at web/dashboard/ deployed to app.ratesengine.net.
   # ────────────────────────────────────────────────────────────────
   web-dashboard:

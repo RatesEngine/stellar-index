@@ -25,7 +25,7 @@ type ChangeSummaryReader interface {
 // timestamps are RFC 3339, and the entity-keying tuple is echoed
 // in the response so a single payload is self-describing.
 //
-// Powers every multi-window delta strip on the showcase per
+// Powers every multi-window delta strip on the explorer per
 // data-inventory §6.1.
 type ChangeSummaryResponse struct {
 	EntityType   string  `json:"entity_type"`

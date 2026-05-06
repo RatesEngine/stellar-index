@@ -57,7 +57,7 @@ type IssuedAsset struct {
 //
 // Returns the issuer directory ordered by total observation count
 // across the issuer's classic assets — the proxy-for-activity
-// ranking the showcase /issuers page exposes. Returns 503 when
+// ranking the explorer /issuers page exposes. Returns 503 when
 // no IssuersReader is wired and 400 on out-of-range limit.
 func (s *Server) handleIssuersList(w http.ResponseWriter, r *http.Request) {
 	if s.issuers == nil {
@@ -103,7 +103,7 @@ func (s *Server) handleIssuersList(w http.ResponseWriter, r *http.Request) {
 // handleIssuer serves GET /v1/issuers/{g_strkey}.
 //
 // Returns 404 (problem+json) when the issuer has never been observed.
-// Always includes the assets array so the showcase issuer card has
+// Always includes the assets array so the explorer issuer card has
 // the per-issuer drill-down data without a second request.
 func (s *Server) handleIssuer(w http.ResponseWriter, r *http.Request) {
 	if s.issuers == nil {

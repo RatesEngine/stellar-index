@@ -19,7 +19,7 @@ import (
 // Today the worker writes the aggregate (median + boolean firing
 // flag) to Redis with a TTL; the per-reference deltas are lost
 // after the next tick. This sink keeps a queryable history so
-// the showcase /divergences page can plot deltas over time and
+// the explorer /divergences page can plot deltas over time and
 // post-mortems can verify "Reflector drifted N% from us at
 // ledger X" against ground truth.
 type DivergenceSink struct {

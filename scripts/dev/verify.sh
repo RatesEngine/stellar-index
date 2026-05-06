@@ -33,11 +33,11 @@ echo "=== Test ==="          && make test
 echo "=== Integration build ===" && make test-integration-build
 # Showcase typecheck + lint + build. Graceful-skip when pnpm
 # isn't installed locally — CI runs the same gate via the
-# `web/showcase` job, so a local skip just defers the check.
+# `web/explorer` job, so a local skip just defers the check.
 # The build catches Next.js output: 'export' constraints
 # (e.g. dynamic = 'force-static' on sitemap/robots) that
 # typecheck alone misses.
-if command -v pnpm >/dev/null 2>&1 && [ -f web/showcase/pnpm-lock.yaml ]; then
+if command -v pnpm >/dev/null 2>&1 && [ -f web/explorer/pnpm-lock.yaml ]; then
     echo "=== Showcase typecheck ===" && make web-typecheck
     echo "=== Showcase lint ==="      && make web-lint
     echo "=== Showcase build ==="     && \

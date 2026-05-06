@@ -217,11 +217,11 @@ func run(cfgPath string, dryRun bool) error {
 	var freezeWriter orchestrator.FreezeMarker
 	if checker != nil && rdb != nil {
 		// Optional durable mirror: every freeze decision lands in the
-		// freeze_events hypertable so the showcase /anomalies timeline
+		// freeze_events hypertable so the explorer /anomalies timeline
 		// has queryable history. Idempotent on the currently-firing
 		// row, so refreshing the Redis TTL doesn't create duplicates.
 		// See migrations/0018_create_freeze_events.up.sql + Phase 2
-		// of docs/architecture/showcase-site-implementation-plan.md.
+		// of docs/architecture/explorer-implementation-plan.md.
 		opts := []freeze.WriterOption{
 			freeze.WithEventSink(timescale.NewFreezeEventSink(store)),
 		}
@@ -259,9 +259,9 @@ func run(cfgPath string, dryRun bool) error {
 	if len(divRefs) > 0 {
 		// Durable per-reference mirror — every (pair, reference) tick
 		// lands in the divergence_observations hypertable so the
-		// showcase /divergences page can plot deltas over time and
+		// explorer /divergences page can plot deltas over time and
 		// post-mortems can verify against ground truth. See
-		// migrations/0019 + Phase 2 of the showcase implementation
+		// migrations/0019 + Phase 2 of the explorer implementation
 		// plan.
 		divSvc, err := divergence.NewService(divergence.ServiceOptions{
 			Cache:                rdb,
@@ -321,9 +321,9 @@ func run(cfgPath string, dryRun bool) error {
 		MinUSDVolume:              cfg.Aggregate.MinUSDVolume,
 		DivergenceRefresher:       divRefresher,
 		StreamPublisher:           streamPub,
-		// Per-source contribution mirror — feeds the showcase
+		// Per-source contribution mirror — feeds the explorer
 		// source-donut on every price card. See migrations/0026 +
-		// Phase 2 of the showcase implementation plan.
+		// Phase 2 of the explorer implementation plan.
 		ContributionSink: newContributionSink(store),
 		Logger:           logger,
 	})
@@ -368,9 +368,9 @@ func run(cfgPath string, dryRun bool) error {
 
 	// ─── Change-summary rollup worker ───────────────────────────
 	// Refreshes the change_summary_5m table every 5 min so every
-	// list view + delta strip on the showcase reads in O(1) rather
+	// list view + delta strip on the explorer reads in O(1) rather
 	// than re-scanning prices_1m per request. See
-	// migrations/0022 + Phase 3 of the showcase implementation plan.
+	// migrations/0022 + Phase 3 of the explorer implementation plan.
 	changeSummaryWorker, err := changesummary.New(
 		changeSummaryPriceSource{store: store},
 		changeSummarySink{store: store},

@@ -27,7 +27,7 @@ type Cursor struct {
 }
 
 // handleCursors serves GET /v1/diagnostics/cursors — every row of
-// `ingestion_cursors` so operators (and the showcase /diagnostics
+// `ingestion_cursors` so operators (and the explorer /diagnostics
 // page) can see per-source ingest progress at a glance. Not a hot
 // path; the table is small (one row per (source, sub_source)).
 func (s *Server) handleCursors(w http.ResponseWriter, r *http.Request) {

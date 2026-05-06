@@ -61,7 +61,7 @@ type CachedResult struct {
 // Today the worker writes only the aggregate result + a boolean
 // firing flag to Redis with a TTL. The historical per-reference
 // deltas are lost. The durable mirror persists them so the
-// showcase /divergences page (showcase-site-data-inventory.md
+// explorer /divergences page (explorer-data-inventory.md
 // §7.19) can plot the actual divergence over time and so incident
 // post-mortems can verify "Reflector drifted N% from us at ledger
 // X" against ground truth.

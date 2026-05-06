@@ -107,7 +107,7 @@ Two operator steps remain to make the dashboard fully live:
 - **Per-project Wrangler CLI deploy** — when CF git integration
   is paused (e.g. mid-rotation of the GitHub-app token):
   ```sh
-  cd web/showcase && pnpm build && \
+  cd web/explorer && pnpm build && \
     wrangler pages deploy out --project-name ratesengine-showcase
   ```
 - **GitHub Actions workflow** — `showcase-deploy.yml` exists for
@@ -129,3 +129,13 @@ Two operator steps remain to make the dashboard fully live:
   custom-domain attachment can take ~30 s after project create
   for CF to issue the cert. Check
   `https://dash.cloudflare.com/<account>/pages/view/<project>/domains`.
+
+## Known discrepancy: CF project still named `ratesengine-showcase`
+
+The repo + every code path now refers to "explorer", but the
+Cloudflare Pages project itself is still `ratesengine-showcase`.
+CF doesn't support project rename. The cutover (create new
+`ratesengine-explorer` project → reassign `ratesengine.net` +
+`www.ratesengine.net` custom domains → delete old project) is
+tracked separately. User-facing UX is unaffected; the CF-side
+label is the only mismatch.

@@ -73,9 +73,9 @@ type endpoint struct {
 // have no per-pair variant. Health + version probes verify the
 // process is responsive; the catalogue probes (/coins, /issuers,
 // /markets, /diagnostics/cursors) verify that the read-heavy
-// surfaces the showcase site fans out across hold latency under
+// surfaces the explorer site fans out across hold latency under
 // load. Without these, a regression on /v1/coins would only
-// surface as "the showcase is slow" — well after the SLA probe
+// surface as "the explorer is slow" — well after the SLA probe
 // gate would have caught it.
 func staticEndpoints() []endpoint {
 	return []endpoint{

@@ -32,13 +32,13 @@ See **[CLAUDE.md](CLAUDE.md)**. It's your orientation map.
 
 ## Start here
 
-- **Hosted UI / explorer:** the showcase site (`web/showcase/`) is
+- **Hosted UI / explorer:** the showcase site (`web/explorer/`) is
   a static-export Next.js explorer rendered at
   <https://ratesengine.net> post-launch. Browse coins, markets,
   issuers, sources, diagnostics; every panel reveals the exact
   API call that produced it. Build locally via
-  `cd web/showcase && pnpm build` (output: `web/showcase/out/`).
-  Operator runbook: [`docs/operations/showcase-deployment.md`](docs/operations/showcase-deployment.md).
+  `cd web/explorer && pnpm build` (output: `web/explorer/out/`).
+  Operator runbook: [`docs/operations/explorer-deployment.md`](docs/operations/explorer-deployment.md).
 - **Users of the hosted API:** [`docs/getting-started.md`](docs/getting-started.md)
   walks from zero to your first authenticated request in five
   minutes. Rendered at <https://docs.ratesengine.net> post-launch.
@@ -78,7 +78,7 @@ configs/               example.toml + Ansible roles (configs/ansible/)
 openapi/               API spec — source of truth for reference docs
 examples/              curl scripts + Postman collection for the public API
 deploy/                docker-compose (dev) / systemd (production) / monitoring (Prometheus rules) / status-page
-web/showcase/          Next.js static-export explorer rendered at ratesengine.net
+web/explorer/          Next.js static-export explorer rendered at ratesengine.net
 test/                  integration + load + chaos + fixtures
 docs/                  architecture / ADR / operations / reference / discovery
 ```

@@ -12,8 +12,8 @@
 // would race with concurrent decoder writes. Computing deltas
 // owner-side keeps the dispatcher untouched.
 //
-// Powers /v1/diagnostics/decoders + the showcase /diagnostics
-// decoder-coverage table per docs/architecture/showcase-site-data-
+// Powers /v1/diagnostics/decoders + the explorer /diagnostics
+// decoder-coverage table per docs/architecture/explorer-data-
 // inventory.md §7.22.
 package statsflush
 

@@ -315,37 +315,37 @@ release-dryrun: ## Validate whether in-repo goreleaser packaging exists for this
 	fi
 	@goreleaser release --snapshot --clean
 
-##@ Showcase site (web/showcase/) — see docs/architecture/showcase-site-implementation-plan.md
+##@ Showcase site (web/explorer/) — see docs/architecture/showcase-site-implementation-plan.md
 
-WEB_SHOWCASE_DIR := web/showcase
+WEB_EXPLORER_DIR := web/explorer
 
 .PHONY: web-install
 web-install: ## Install showcase-site dependencies (pnpm)
-	cd $(WEB_SHOWCASE_DIR) && pnpm install --frozen-lockfile
+	cd $(WEB_EXPLORER_DIR) && pnpm install --frozen-lockfile
 
 .PHONY: web-dev
 web-dev: ## Run the showcase site locally with HMR (http://localhost:3000)
-	cd $(WEB_SHOWCASE_DIR) && pnpm dev
+	cd $(WEB_EXPLORER_DIR) && pnpm dev
 
 .PHONY: web-build
 web-build: ## Build the showcase site for production
-	cd $(WEB_SHOWCASE_DIR) && pnpm build
+	cd $(WEB_EXPLORER_DIR) && pnpm build
 
 .PHONY: web-typecheck
 web-typecheck: ## Typecheck the showcase site
-	cd $(WEB_SHOWCASE_DIR) && pnpm typecheck
+	cd $(WEB_EXPLORER_DIR) && pnpm typecheck
 
 .PHONY: web-lint
 web-lint: ## Lint the showcase site
-	cd $(WEB_SHOWCASE_DIR) && pnpm lint
+	cd $(WEB_EXPLORER_DIR) && pnpm lint
 
 .PHONY: web-format
 web-format: ## Format the showcase site (prettier)
-	cd $(WEB_SHOWCASE_DIR) && pnpm format
+	cd $(WEB_EXPLORER_DIR) && pnpm format
 
 .PHONY: web-generate-api
-web-generate-api: ## Regenerate web/showcase/src/api/types.ts from OpenAPI
-	cd $(WEB_SHOWCASE_DIR) && pnpm generate:api
+web-generate-api: ## Regenerate web/explorer/src/api/types.ts from OpenAPI
+	cd $(WEB_EXPLORER_DIR) && pnpm generate:api
 
 ##@ Dashboard SPA (web/dashboard/) — customer-facing app.ratesengine.net
 

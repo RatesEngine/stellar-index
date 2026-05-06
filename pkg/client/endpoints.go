@@ -491,7 +491,7 @@ func (c *Client) CreateKey(ctx context.Context, req CreateKeyRequest) (*Envelope
 // CoinsOptions paginates / filters the classic-asset directory.
 // `Limit` is server-side clamped to [1, 500] (default 100).
 // `Issuer`, when non-empty, restricts the listing to assets minted
-// by that G-strkey — used by the showcase to deep-link from the
+// by that G-strkey — used by the explorer to deep-link from the
 // issuer table into "coins by this issuer."
 type CoinsOptions struct {
 	Limit  int

@@ -20,7 +20,7 @@ type CoinsReader interface {
 // aware super-table per data-inventory §10.1 will ship with — those
 // arrive once we join `change_summary_5m` + `classic_asset_stats_5m`.
 // Today's response is the bare-minimum identity tuple plus activity
-// counters, enough for the showcase /coins directory to render real
+// counters, enough for the explorer /coins directory to render real
 // rows instead of a static seed.
 type Coin struct {
 	Slug             string `json:"slug"`
@@ -38,7 +38,7 @@ type Coin struct {
 // connected to a postgres with the classic_assets registry).
 // Returns 400 on out-of-range `limit`. Always returns a JSON array
 // even when empty so the wire shape stays predictable for the
-// showcase frontend.
+// explorer frontend.
 func (s *Server) handleCoins(w http.ResponseWriter, r *http.Request) {
 	if s.coins == nil {
 		writeProblem(w, r,

@@ -1621,7 +1621,7 @@ func warnOpenCORS(logger *slog.Logger, allowedOrigins []string, authMode string)
 	}
 	switch authMode {
 	case "apikey", "apikey_optional", "sep10":
-		logger.Warn("SECURITY: CORS allows every origin (\"*\") and auth_mode permits credentials — narrow [api].allowed_origins to your showcase / explorer hostnames before exposing the API publicly.",
+		logger.Warn("SECURITY: CORS allows every origin (\"*\") and auth_mode permits credentials — narrow [api].allowed_origins to your explorer / explorer hostnames before exposing the API publicly.",
 			"auth_mode", authMode,
 			"docs", "https://github.com/RatesEngine/rates-engine/blob/main/docs/operations/pre-launch-hardening.md")
 	}

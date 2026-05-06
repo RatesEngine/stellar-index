@@ -21,7 +21,7 @@ import (
 //     must-revalidate` (tip surface intentionally has no cross-region
 //     consistency contract per ADR-0018; caching shifts the contract.
 //     `/v1/diagnostics/*` is operator-facing live data — the
-//     showcase polls it every 15 s, so caching defeats the UX).
+//     explorer polls it every 15 s, so caching defeats the UX).
 //   - **Closed-bucket historical + catalogues** (`/v1/history*`,
 //     `/v1/ohlc`, `/v1/vwap`, `/v1/twap`, `/v1/markets`, `/v1/pairs`,
 //     `/v1/oracle/*`, `/v1/sources`, `/v1/coins`, `/v1/issuers*`,
@@ -114,7 +114,7 @@ func policyForPath(path string, cdnEnabled bool) string {
 		return "private, no-cache, must-revalidate"
 
 	// ─── Diagnostics — operator-facing live data ────────────────
-	// /v1/diagnostics/cursors is polled every 15s by the showcase
+	// /v1/diagnostics/cursors is polled every 15s by the explorer
 	// /diagnostics page; caching would defeat the "watch the
 	// indexer tick" UX. Same shape as tip/observations: tight
 	// freshness, never CDN-cached.
@@ -122,7 +122,7 @@ func policyForPath(path string, cdnEnabled bool) string {
 		return "private, no-cache, must-revalidate"
 
 	// ─── Status — customer-facing health rollup ─────────────────
-	// /v1/status is what the showcase /status page polls every 10 s
+	// /v1/status is what the explorer /status page polls every 10 s
 	// and what monitoring dashboards (and the smoke timer) poll on a
 	// longer interval. A 10 s cache absorbs the polling fan-out
 	// without delaying alert-state propagation enough to matter —

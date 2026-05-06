@@ -137,7 +137,7 @@ Tested against Stellar protocol 23 (Whisk).
   `/keys` + `/usage` — the data wiring lands in Weeks 4 + 5.
   Companion `Makefile` targets (`dashboard-{install,dev,build,
   typecheck,lint}`), `verify.sh` extension, and a CI job mirror
-  the web/showcase pattern.
+  the web/explorer pattern.
 - **Magic-link auth flow (Phase 1, Week 2 part 2).** Customers can
   sign in to the dashboard at `app.ratesengine.net` via a
   6-digit-code-or-link email — the same flow handles first-time
@@ -206,7 +206,7 @@ Tested against Stellar protocol 23 (Whisk).
   deploy via Wrangler CLI for hotfix / break-glass cases. Fires
   only on `workflow_dispatch`; the recommended publish path
   remains the CF dashboard's git integration (no Actions minutes
-  consumed). Companion `web/showcase/wrangler.toml` pins the
+  consumed). Companion `web/explorer/wrangler.toml` pins the
   project name + output dir.
 - `scripts/ops/pre-launch-check.sh` — read-only verifier for R1's
   pre-launch state. Walks through every step in the hardening
@@ -824,7 +824,7 @@ pipeline itself is what's being tested.
 
 - **`release-process.md` pre-flight runs `make web-build`.** Item
   5 ("Build dry-run is clean") now also requires the showcase
-  build for releases that ship `web/showcase/` alongside the
+  build for releases that ship `web/explorer/` alongside the
   binaries. CI gates on this already, but local verification
   before tagging catches the rare case where a merge-conflict
   fix on `main` slipped past the per-PR gate.
@@ -888,7 +888,7 @@ pipeline itself is what's being tested.
 ### Security
 
 - **Showcase ships `_headers` with CSP + security headers.** New
-  `web/showcase/public/_headers` (CF Pages / Netlify format,
+  `web/explorer/public/_headers` (CF Pages / Netlify format,
   copied verbatim into the build output) sets a restrictive
   Content-Security-Policy that limits `connect-src` to `self` +
   `https://api.ratesengine.net` so a compromised script can't
@@ -898,7 +898,7 @@ pipeline itself is what's being tested.
   and a `Permissions-Policy` denying camera / mic / geolocation /
   payment / USB. The 1-year `immutable` Cache-Control on
   `/_next/static/*` is documented explicitly so Netlify operators
-  don't need to know about CF's default. `showcase-deployment.md`
+  don't need to know about CF's default. `explorer-deployment.md`
   has a new section explaining the directives + how to translate
   to `vercel.json` if you switch hosts.
 
@@ -957,7 +957,7 @@ pipeline itself is what's being tested.
 
 ### CI
 
-- **`web/showcase` job runs `pnpm build`.** Adds the static-export
+- **`web/explorer` job runs `pnpm build`.** Adds the static-export
   build to the existing CI job that previously only ran typecheck
   + lint. Catches Next.js `output: 'export'` constraints (e.g.
   the `dynamic = 'force-static'` requirement on `sitemap.xml` and
@@ -994,7 +994,7 @@ pipeline itself is what's being tested.
 
 ### Documentation
 
-- **README + CLAUDE.md mention `web/showcase/`.** Adds a "Hosted
+- **README + CLAUDE.md mention `web/explorer/`.** Adds a "Hosted
   UI / explorer" entry to the README's Start-here list and a
   one-line entry in the CLAUDE.md repo map. Both files knew
   about the API + reference docs but not the showcase site that
@@ -1006,16 +1006,16 @@ pipeline itself is what's being tested.
   after API auth-mode flip so build-time `generateStaticParams`
   picks up production data), pass-condition entry for
   `https://ratesengine.net`, and a Cross-references link to
-  `showcase-deployment.md`. Closes the gap where the runbook
+  `explorer-deployment.md`. Closes the gap where the runbook
   knew about API + status page but not the showcase.
 
-- **`docs/operations/showcase-deployment.md`.** New runbook for
-  shipping `web/showcase` to production. Covers the
+- **`docs/operations/explorer-deployment.md`.** New runbook for
+  shipping `web/explorer` to production. Covers the
   Cloudflare Pages path (build command, env vars, custom-domain
   bind, preview-deploy flow), Vercel/Netlify alternatives, the
   rsync-to-r1 fallback, and post-deploy verification checks.
   Closes the documentation gap between "the showcase code
-  exists in `web/showcase/`" and "ratesengine.net is live."
+  exists in `web/explorer/`" and "ratesengine.net is live."
 
 ### Added
 

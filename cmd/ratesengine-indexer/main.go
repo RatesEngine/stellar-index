@@ -188,8 +188,8 @@ func run(cfgPath string, dryRun bool) error {
 	// ─── Decoder-stats periodic flush ────────────────────────────
 	// Snapshots dispatcher.Stats() every 5 min and writes per-source
 	// deltas to the decoder_stats_5m hypertable. Powers
-	// /v1/diagnostics/decoders + the showcase /diagnostics page.
-	// See migrations/0020 + Phase 2 of the showcase implementation
+	// /v1/diagnostics/decoders + the explorer /diagnostics page.
+	// See migrations/0020 + Phase 2 of the explorer implementation
 	// plan.
 	decoderStatsFlusher := statsflush.New(disp, store,
 		logger.With("component", "decoder-stats-flush"),

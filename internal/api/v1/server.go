@@ -199,7 +199,7 @@ type Options struct {
 	// timescale.Store.GetChangeSummary, which reads the
 	// change_summary_5m hypertable populated by the changesummary
 	// worker (Phase 3). Powers every multi-window delta strip on
-	// the showcase. Nil makes the endpoint return 503.
+	// the explorer. Nil makes the endpoint return 503.
 	ChangeSummary ChangeSummaryReader
 
 	// Coins, when non-nil, backs GET /v1/coins. Production wiring
@@ -215,7 +215,7 @@ type Options struct {
 	// Cursors, when non-nil, backs GET /v1/diagnostics/cursors.
 	// Production wiring is timescale.Store directly (it implements
 	// ListCursors). Nil makes the endpoint return 503. Operator-
-	// facing diagnostic; powers the showcase /diagnostics page.
+	// facing diagnostic; powers the explorer /diagnostics page.
 	Cursors CursorsReader
 
 	// SEP10, when non-nil, backs GET /v1/auth/sep10/challenge and

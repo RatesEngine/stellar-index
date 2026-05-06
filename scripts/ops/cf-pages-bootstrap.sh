@@ -229,7 +229,7 @@ dns_upsert() {
 
 project_create_or_update \
   "ratesengine-showcase" \
-  "web/showcase" \
+  "web/explorer" \
   "pnpm install --frozen-lockfile && pnpm build" \
   "out" \
   "NEXT_PUBLIC_API_BASE_URL=https://api.$APEX_DOMAIN" \

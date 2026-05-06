@@ -885,7 +885,7 @@ func TestUsage_EmptyArrayDecodes(t *testing.T) {
 }
 
 // TestCoins_IssuerFilter — exercises the optional ?issuer= deep-
-// link the showcase /issuers table relies on.
+// link the explorer /issuers table relies on.
 func TestCoins_IssuerFilter(t *testing.T) {
 	const issuer = "GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN"
 
