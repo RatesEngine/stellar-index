@@ -1,14 +1,14 @@
 baseURL = "https://status.ratesengine.net/"
 languageCode = "en-gb"
 title = "Rates Engine status"
+theme = "cstate"
 
-# Pull cstate from GitHub via Hugo modules. The module import
-# IS the theme — no separate `theme = "cstate"` directive
-# needed (and including one tells Hugo to look in themes/cstate
-# on disk, which fails when the theme is module-sourced).
-[module]
-  [[module.imports]]
-    path = "github.com/cstate/cstate"
+# cstate is vendored under themes/cstate (pinned to v5.6.1 +
+# commit 0705cd1b7501). The v6 line introduced breaking
+# config-shape changes (categories/systems moved into
+# params.*) that we'd need a config rewrite for; staying on
+# v5 keeps the data/systems.yml + content/issues structure
+# intact.
 
 # cstate is a static-site generator built on Hugo. Operators
 # update component status + post incident markdown files in
