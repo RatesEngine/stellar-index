@@ -215,6 +215,7 @@ export type Market = {
   quote: string;
   last_trade_at: string;
   trade_count_24h: number;
+  volume_24h_usd?: string | null;
 };
 
 type MarketsEnvelope = {

@@ -1003,6 +1003,7 @@ func (r storeMarketsReader) DistinctPairs(ctx context.Context, cursor string, li
 			Quote:         m.Pair.Quote.String(),
 			LastTradeAt:   m.LastTradeAt,
 			TradeCount24h: m.TradeCount24h,
+			Volume24hUSD:  m.Volume24hUSD,
 		}
 	}
 	return out, next, nil
@@ -1018,6 +1019,7 @@ func (r storeMarketsReader) PairMarket(ctx context.Context, base, quote canonica
 		Quote:         m.Pair.Quote.String(),
 		LastTradeAt:   m.LastTradeAt,
 		TradeCount24h: m.TradeCount24h,
+		Volume24hUSD:  m.Volume24hUSD,
 	}, true, nil
 }
 

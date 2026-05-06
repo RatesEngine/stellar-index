@@ -257,6 +257,10 @@ type Market struct {
 	Quote         string    `json:"quote"`
 	LastTradeAt   time.Time `json:"last_trade_at"`
 	TradeCount24h int64     `json:"trade_count_24h"`
+	// Volume24hUSD is the trailing-24h USD volume summed from
+	// prices_1m's per-bucket volume_usd. Decimal string per
+	// ADR-0003. Nil when the pair has no USD-equivalent trades.
+	Volume24hUSD *string `json:"volume_24h_usd,omitempty"`
 }
 
 // AssetMetadata is the data shape returned by [Client.AssetMetadata]

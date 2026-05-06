@@ -2783,9 +2783,10 @@ components:
     # Markets / Pairs
     #
     # MarketRow is one (base, quote) pair present in the trades
-    # store. `last_price` / `volume_24h_usd` land with the aggregator;
-    # the current handler returns the (base, quote, recency, 24h-count)
-    # shape below.
+    # store. `last_price` is still pending (lands with the aggregator);
+    # `volume_24h_usd` is summed from prices_1m's per-bucket
+    # volume_usd (nullable when the pair has no USD-equivalent
+    # trades).
     MarketRow:
       type: object
       properties:
@@ -2793,6 +2794,10 @@ components:
         quote:           { type: string }
         last_trade_at:   { type: string, format: date-time }
         trade_count_24h: { type: integer, description: "Activity count in the trailing 24h window." }
+        volume_24h_usd:
+          type: string
+          nullable: true
+          description: "Trailing-24h USD volume summed from prices_1m. Decimal string. Null when no USD-equivalent trades."
       required: [base, quote, last_trade_at, trade_count_24h]
 
     MarketsEnvelope:

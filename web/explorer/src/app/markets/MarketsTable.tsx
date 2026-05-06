@@ -21,9 +21,15 @@ export function MarketsTable() {
 
   const sorted = useMemo(() => {
     if (!data) return [];
-    return [...data.markets].sort(
-      (a, b) => b.trade_count_24h - a.trade_count_24h,
-    );
+    // Sort by USD volume desc when available; fall back to trade
+    // count for pairs with no USD-equivalent trades. Pairs with
+    // null volume sort below pairs with any volume.
+    return [...data.markets].sort((a, b) => {
+      const av = a.volume_24h_usd ? Number(a.volume_24h_usd) : -Infinity;
+      const bv = b.volume_24h_usd ? Number(b.volume_24h_usd) : -Infinity;
+      if (av !== bv) return bv - av;
+      return b.trade_count_24h - a.trade_count_24h;
+    });
   }, [data]);
 
   if (isError) {
@@ -64,7 +70,7 @@ export function MarketsTable() {
   return (
     <Panel
       title={`${sorted.length} active markets`}
-      hint="Pairs that traded in the last 14 days, ordered by 24h trade count"
+      hint="Pairs that traded in the last 14 days, ordered by 24h USD volume"
       source={asExample('/v1/markets', { limit: 100 })}
       bodyClassName="-mx-4"
     >
@@ -75,6 +81,7 @@ export function MarketsTable() {
               <Th>#</Th>
               <Th>Base</Th>
               <Th>Quote</Th>
+              <Th align="right">24h volume</Th>
               <Th align="right">24h trades</Th>
               <Th align="right">Last trade</Th>
             </tr>
@@ -95,7 +102,16 @@ export function MarketsTable() {
                   <AssetLabel canonical={m.quote} />
                 </Td>
                 <Td align="right">
-                  <span className="font-mono tabular-nums">
+                  {m.volume_24h_usd ? (
+                    <span className="font-mono tabular-nums">
+                      ${formatCompact(Number(m.volume_24h_usd))}
+                    </span>
+                  ) : (
+                    <span className="text-slate-300 dark:text-slate-700">—</span>
+                  )}
+                </Td>
+                <Td align="right">
+                  <span className="font-mono tabular-nums text-slate-600 dark:text-slate-400">
                     {formatCompact(m.trade_count_24h)}
                   </span>
                 </Td>
