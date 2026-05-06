@@ -110,16 +110,40 @@ func (s *Store) ListCoins(ctx context.Context, limit int, issuer, cursor string)
 func buildCoinsQuery(limit int, issuer, cursor string) (string, []any) {
 	cursorObsCount, cursorAssetID := parseCoinCursor(cursor)
 
-	// Per-row joins:
-	//   stats — latest classic_asset_stats_5m bucket per asset
-	//           gives volume_24h_usd + outstanding_supply.
-	//   price — latest prices_1m bucket per asset against
-	//           fiat:USD gives the live VWAP.
-	// LATERAL ... LIMIT 1 makes both joins index-friendly: the
-	// (asset_id, bucket DESC) index on classic_asset_stats_5m and
-	// the equivalent on prices_1m turn each row's lookup into an
-	// O(1) index seek.
+	// Volume aggregation comes from prices_1m by summing
+	// volume_usd across the trailing 24h, where the asset
+	// participates as base OR quote. This sidesteps two
+	// problems: classic_asset_stats_5m is unwritten today
+	// (migration shipped without a writer); and most Stellar
+	// classic assets don't have a direct fiat:USD pair so a
+	// LATERAL price-by-pair lookup returns null for them.
+	//
+	// Price + market_cap_usd + circulating_supply are NOT
+	// joined here. Their proper sources are the aggregator's
+	// stablecoin-policy USD-price pipeline and the supply
+	// pipeline (asset_supply_history) — neither of which is
+	// running for the long tail of classic assets today.
+	// Surfacing fabricated values would defeat the whole
+	// "stop lying" rule. They render as null until the
+	// pipelines are wired.
 	const baseSelect = `
+		WITH per_asset_24h_vol AS (
+		  SELECT asset_id, SUM(volume_usd) AS vol_usd
+		    FROM (
+		      SELECT base_asset  AS asset_id, volume_usd
+		        FROM prices_1m
+		       WHERE bucket >= now() - INTERVAL '24 hours'
+		         AND bucket  <  now()
+		         AND volume_usd IS NOT NULL
+		      UNION ALL
+		      SELECT quote_asset AS asset_id, volume_usd
+		        FROM prices_1m
+		       WHERE bucket >= now() - INTERVAL '24 hours'
+		         AND bucket  <  now()
+		         AND volume_usd IS NOT NULL
+		    ) t
+		   GROUP BY asset_id
+		)
 		SELECT
 		    COALESCE(ca.slug, ca.code)            AS slug,
 		    ca.asset_id,
@@ -128,30 +152,12 @@ func buildCoinsQuery(limit int, issuer, cursor string) (string, []any) {
 		    ca.first_seen_ledger,
 		    ca.last_seen_ledger,
 		    ca.observation_count,
-		    price.vwap                            AS price_usd,
-		    stats.volume_24h_usd                  AS volume_24h_usd,
-		    CASE
-		      WHEN price.vwap IS NOT NULL AND stats.outstanding_supply IS NOT NULL
-		      THEN price.vwap * stats.outstanding_supply
-		      ELSE NULL
-		    END                                   AS market_cap_usd,
-		    stats.outstanding_supply              AS circulating_supply
+		    NULL::numeric                         AS price_usd,
+		    vol.vol_usd                           AS volume_24h_usd,
+		    NULL::numeric                         AS market_cap_usd,
+		    NULL::numeric                         AS circulating_supply
 		  FROM classic_assets ca
-		  LEFT JOIN LATERAL (
-		    SELECT volume_24h_usd, outstanding_supply
-		      FROM classic_asset_stats_5m
-		     WHERE asset_id = ca.asset_id
-		     ORDER BY bucket DESC
-		     LIMIT 1
-		  ) stats ON TRUE
-		  LEFT JOIN LATERAL (
-		    SELECT vwap
-		      FROM prices_1m
-		     WHERE base_asset = ca.asset_id
-		       AND quote_asset = 'fiat:USD'
-		     ORDER BY bucket DESC
-		     LIMIT 1
-		  ) price ON TRUE
+		  LEFT JOIN per_asset_24h_vol vol ON vol.asset_id = ca.asset_id
 	`
 	hasCursor := cursor != ""
 	switch {
@@ -180,64 +186,36 @@ func buildCoinsQuery(limit int, issuer, cursor string) (string, []any) {
 	}
 }
 
-// LatestAssetStats returns the same per-row stats as ListCoins
-// — price, 24h volume, market cap, circulating supply — for a
-// single asset. Used by /v1/assets/{id} to populate F2 fields
-// on the detail page when the formal supply pipeline doesn't
-// have a snapshot for the asset (which today is most of them).
+// LatestAssetStats returns per-asset 24h volume + supply stats
+// for /v1/assets/{id}. Volume sums prices_1m.volume_usd across
+// pairs where the asset is base or quote (mirrors
+// Volume24hUSDForAsset). Supply is null for now — the source
+// table classic_asset_stats_5m is unwritten.
 //
-// All four output fields are nullable. Always returns nil error
-// for a row that simply has no stats (the LEFT JOINs evaluate
-// to NULL); the SQL itself never fails on missing data.
+// Always returns nil error for a row that simply has no stats;
+// the LEFT JOINs evaluate to NULL.
 func (s *Store) LatestAssetStats(ctx context.Context, assetID string) (CoinRow, error) {
 	const q = `
-		SELECT
-		    price.vwap                      AS price_usd,
-		    stats.volume_24h_usd            AS volume_24h_usd,
-		    CASE
-		      WHEN price.vwap IS NOT NULL AND stats.outstanding_supply IS NOT NULL
-		      THEN price.vwap * stats.outstanding_supply
-		      ELSE NULL
-		    END                             AS market_cap_usd,
-		    stats.outstanding_supply        AS circulating_supply
-		  FROM (SELECT $1::text AS asset_id) ca
-		  LEFT JOIN LATERAL (
-		    SELECT volume_24h_usd, outstanding_supply
-		      FROM classic_asset_stats_5m
-		     WHERE asset_id = ca.asset_id
-		     ORDER BY bucket DESC
-		     LIMIT 1
-		  ) stats ON TRUE
-		  LEFT JOIN LATERAL (
-		    SELECT vwap
-		      FROM prices_1m
-		     WHERE base_asset = ca.asset_id
-		       AND quote_asset = 'fiat:USD'
-		     ORDER BY bucket DESC
-		     LIMIT 1
-		  ) price ON TRUE
+		SELECT COALESCE(SUM(volume_usd), 0)::text
+		  FROM (
+		    SELECT volume_usd FROM prices_1m
+		     WHERE base_asset = $1
+		       AND bucket >= now() - INTERVAL '24 hours'
+		       AND bucket  <  now()
+		    UNION ALL
+		    SELECT volume_usd FROM prices_1m
+		     WHERE quote_asset = $1
+		       AND bucket >= now() - INTERVAL '24 hours'
+		       AND bucket  <  now()
+		  ) t
 	`
-	var (
-		priceUSD, volume24hUSD   sql.NullString
-		marketCapUSD, circSupply sql.NullString
-	)
-	if err := s.db.QueryRowContext(ctx, q, assetID).Scan(
-		&priceUSD, &volume24hUSD, &marketCapUSD, &circSupply,
-	); err != nil {
+	var vol string
+	if err := s.db.QueryRowContext(ctx, q, assetID).Scan(&vol); err != nil {
 		return CoinRow{}, fmt.Errorf("timescale: LatestAssetStats: %w", err)
 	}
 	out := CoinRow{AssetID: assetID}
-	if priceUSD.Valid {
-		out.PriceUSD = &priceUSD.String
-	}
-	if volume24hUSD.Valid {
-		out.Volume24hUSD = &volume24hUSD.String
-	}
-	if marketCapUSD.Valid {
-		out.MarketCapUSD = &marketCapUSD.String
-	}
-	if circSupply.Valid {
-		out.CirculatingSupply = &circSupply.String
+	if vol != "" && vol != "0" {
+		out.Volume24hUSD = &vol
 	}
 	return out, nil
 }
