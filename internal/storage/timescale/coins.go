@@ -258,10 +258,15 @@ const listCoinsBaseSelect = `
 		    ca.first_seen_ledger,
 		    ca.last_seen_ledger,
 		    ca.observation_count,
-		    COALESCE(
+		    -- Round to 10 dp on the wire — NUMERIC * NUMERIC
+		    -- preserves full precision (36+ digits) which is just
+		    -- noise for a display value. 10 dp covers sub-millicent
+		    -- precision (1e-10) which is finer than any asset's
+		    -- meaningful tick size.
+		    ROUND(COALESCE(
 		      direct.vwap,
 		      vs_xlm.vwap * (SELECT vwap FROM xlm_usd)
-		    )::text                               AS price_usd,
+		    ), 10)::text                          AS price_usd,
 		    vol.vol_usd                           AS volume_24h_usd,
 		    NULL::numeric                         AS market_cap_usd,
 		    NULL::numeric                         AS circulating_supply,
@@ -401,10 +406,10 @@ const getCoinBySlugSQL = `
 		    COALESCE(ca.slug, ca.code)            AS slug,
 		    ca.asset_id, ca.code, ca.issuer_g_strkey,
 		    ca.first_seen_ledger, ca.last_seen_ledger, ca.observation_count,
-		    COALESCE(
+		    ROUND(COALESCE(
 		      (SELECT vwap FROM direct_usd),
 		      (SELECT vwap FROM asset_vs_xlm) * (SELECT vwap FROM xlm_usd)
-		    )::text                               AS price_usd,
+		    ), 10)::text                          AS price_usd,
 		    vol.vol_usd                           AS volume_24h_usd,
 		    NULL::numeric                         AS market_cap_usd,
 		    NULL::numeric                         AS circulating_supply,
