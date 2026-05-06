@@ -71,6 +71,10 @@ interface CoinSummary {
   // trailing 24h. Each entry: { t: RFC3339, p: rounded-to-10dp
   // USD price or null }.
   price_history_24h?: { t: string; p?: string | null }[];
+  // Count of distinct (base, quote) pairs the asset
+  // participated in over the trailing 24h. 0 when the asset
+  // went silent in that window.
+  markets_count?: number | null;
 }
 
 interface TopMarket {
@@ -372,10 +376,18 @@ function OverviewBody({
           {coin.price_history_24h && coin.price_history_24h.length > 0 && (
             <Sparkline24h points={coin.price_history_24h} />
           )}
-          <dl className="grid grid-cols-2 gap-3 border-t border-slate-200 pt-3 text-sm dark:border-slate-800 sm:grid-cols-3">
+          <dl className="grid grid-cols-2 gap-3 border-t border-slate-200 pt-3 text-sm dark:border-slate-800 sm:grid-cols-4">
             <Stat
               label="Volume 24h"
               value={fmtUsd(detail?.volume_24h_usd ?? coin.volume_24h_usd)}
+            />
+            <Stat
+              label="Markets 24h"
+              value={
+                coin.markets_count != null
+                  ? coin.markets_count.toLocaleString()
+                  : '—'
+              }
             />
             <Stat
               label="Market cap"

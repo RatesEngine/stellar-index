@@ -28,6 +28,11 @@ against.
   takes precedence when those buckets exist.
 
 ### Added
+- **`/v1/coins/{slug}.markets_count`** — count of distinct
+  `(base_asset, quote_asset)` pairs the asset participated in
+  over the trailing 24h. Listing endpoint omits it (count-distinct
+  per row would dominate the query cost for 100 rows). Asset
+  detail page renders it as a fourth stat in the price card.
 - **`/v1/coins[*].change_1h_pct` + `change_7d_pct`** — trailing
   1-hour and 7-day price change windows alongside the existing
   `change_24h_pct`. Same direct-or-XLM-triangulated formula;

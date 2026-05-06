@@ -1217,6 +1217,14 @@ paths:
                     description: |
                       Trailing-7d price change as a signed
                       percentage with two fractional digits.
+                  markets_count:
+                    type: integer
+                    nullable: true
+                    description: |
+                      Count of distinct (base_asset, quote_asset)
+                      pairs the asset participated in over the
+                      trailing 24h. 0 when the asset went silent
+                      in that window. Null only on lookup error.
         "400": { $ref: "#/components/responses/BadRequest" }
         "404": { $ref: "#/components/responses/NotFound" }
         "429": { $ref: "#/components/responses/RateLimited" }

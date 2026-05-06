@@ -12,12 +12,13 @@ import (
 
 // CoinsReader is the seam the /v1/coins handlers read through.
 // timescale.Store satisfies it via ListCoinsExt + GetCoinBySlug
-// + GetCoinTopMarkets + GetCoinPriceHistory24h.
+// + GetCoinTopMarkets + GetCoinPriceHistory24h + GetCoinMarketsCount.
 type CoinsReader interface {
 	ListCoinsExt(ctx context.Context, opts timescale.ListCoinsOptions) ([]timescale.CoinRow, error)
 	GetCoinBySlug(ctx context.Context, slug string) (timescale.CoinRow, error)
 	GetCoinTopMarkets(ctx context.Context, assetID string, limit int) ([]timescale.CoinTopMarket, error)
 	GetCoinPriceHistory24h(ctx context.Context, assetID string) ([]timescale.CoinPricePoint, error)
+	GetCoinMarketsCount(ctx context.Context, assetID string) (int64, error)
 }
 
 // Coin is the wire shape of one entry in the /v1/coins response.
@@ -58,6 +59,13 @@ type Coin struct {
 	// p: rounded-to-10dp USD price or null when no trades that
 	// hour}. Powers asset detail sparkline + chart preview.
 	PriceHistory24h []CoinPricePoint `json:"price_history_24h,omitempty"`
+	// MarketsCount is the count of distinct (base, quote) pairs
+	// the asset participated in over the trailing 24h. Populated
+	// only on /v1/coins/{slug}. Pointer so 0 (asset went silent
+	// in the last 24h) is distinguishable from "not computed"
+	// (lookup error) — both render as "—" in the UI but behave
+	// differently in alerting.
+	MarketsCount *int64 `json:"markets_count,omitempty"`
 }
 
 // CoinTopMarket is one entry in the per-asset top-markets preview.
@@ -268,6 +276,11 @@ func (s *Server) handleCoin(w http.ResponseWriter, r *http.Request) {
 		for i, p := range history {
 			out.PriceHistory24h[i] = CoinPricePoint{T: p.T, P: p.P}
 		}
+	}
+	if n, cErr := s.coins.GetCoinMarketsCount(r.Context(), row.AssetID); cErr != nil {
+		s.logger.Warn("coin markets count", "asset_id", row.AssetID, "err", cErr)
+	} else {
+		out.MarketsCount = &n
 	}
 
 	writeJSON(w, out, Flags{})

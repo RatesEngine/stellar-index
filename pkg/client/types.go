@@ -346,6 +346,12 @@ type Coin struct {
 	Change1hPct  *string `json:"change_1h_pct,omitempty"`
 	Change24hPct *string `json:"change_24h_pct,omitempty"`
 	Change7dPct  *string `json:"change_7d_pct,omitempty"`
+
+	// MarketsCount is the count of distinct (base, quote) pairs
+	// the asset participated in over the trailing 24h. Populated
+	// only on /v1/coins/{slug}. Pointer so 0 (silent asset) is
+	// distinguishable from "not computed" (lookup error).
+	MarketsCount *int64 `json:"markets_count,omitempty"`
 }
 
 // CoinsPage wraps the paginated /v1/coins response. Iterate

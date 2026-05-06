@@ -1835,6 +1835,13 @@ export interface paths {
                              *     percentage with two fractional digits.
                              */
                             change_7d_pct?: string | null;
+                            /**
+                             * @description Count of distinct (base_asset, quote_asset)
+                             *     pairs the asset participated in over the
+                             *     trailing 24h. 0 when the asset went silent
+                             *     in that window. Null only on lookup error.
+                             */
+                            markets_count?: number | null;
                         };
                     };
                 };
