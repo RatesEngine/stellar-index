@@ -15,6 +15,17 @@ against.
 
 ## [Unreleased]
 
+## [v0.5.0-rc.9] — 2026-05-06
+
+### Added
+- **`/v1/markets ?order_by=volume_24h_usd_desc`** — server-side
+  ordering by trailing-24h USD volume so the most active pairs
+  surface in the first page directly, instead of paginating
+  alphabetically through ~5K dust pairs to find the ~16 with
+  measurable volume. Cursor format adapts to the active ordering.
+  SDK + OpenAPI + explorer all flip to use it; the explorer drops
+  its previous `limit=500`-and-client-sort fallback.
+
 ## [v0.5.0-rc.8] — 2026-05-06
 
 ### Added
