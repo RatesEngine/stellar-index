@@ -316,16 +316,33 @@ type KeyCreated struct {
 // Coin is the data shape returned by [Client.Coins] — one entry
 // in the classic-asset directory backed by `/v1/coins`. The
 // directory ranks by `ObservationCount` desc as a cheap activity
-// proxy until the registry-aware super-table response (which will
-// add price / delta / volume per row) ships.
+// proxy.
+//
+// Numeric fields are pointer-strings so they can be nil for
+// assets the aggregator hasn't yet computed values for (newly
+// observed, no off-chain peg, etc.). Strings preserve precision
+// per ADR-0003.
 type Coin struct {
-	Slug             string `json:"slug"`
-	AssetID          string `json:"asset_id"`
-	Code             string `json:"code"`
-	Issuer           string `json:"issuer"`
-	FirstSeenLedger  uint32 `json:"first_seen_ledger"`
-	LastSeenLedger   uint32 `json:"last_seen_ledger"`
-	ObservationCount int64  `json:"observation_count"`
+	Slug              string  `json:"slug"`
+	AssetID           string  `json:"asset_id"`
+	Code              string  `json:"code"`
+	Issuer            string  `json:"issuer"`
+	FirstSeenLedger   uint32  `json:"first_seen_ledger"`
+	LastSeenLedger    uint32  `json:"last_seen_ledger"`
+	ObservationCount  int64   `json:"observation_count"`
+	PriceUSD          *string `json:"price_usd,omitempty"`
+	Volume24hUSD      *string `json:"volume_24h_usd,omitempty"`
+	MarketCapUSD      *string `json:"market_cap_usd,omitempty"`
+	CirculatingSupply *string `json:"circulating_supply,omitempty"`
+}
+
+// CoinsPage wraps the paginated /v1/coins response. Iterate
+// while NextCursor is non-empty by passing it back as
+// CoinsOptions.Cursor.
+type CoinsPage struct {
+	Coins      []Coin `json:"coins"`
+	NextCursor string `json:"next_cursor,omitempty"`
+	Limit      int    `json:"limit"`
 }
 
 // IssuerListEntry is the data shape returned by [Client.Issuers] —

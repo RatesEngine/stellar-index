@@ -23,7 +23,7 @@ export function MarketsTabPanel({ slug }: { slug: string }) {
   const markets = useMarkets(100);
 
   const assetID = useMemo(
-    () => coins.data?.find((c) => c.slug === slug)?.asset_id,
+    () => coins.data?.coins?.find((c: { slug: string; asset_id: string }) => c.slug === slug)?.asset_id,
     [coins.data, slug],
   );
 

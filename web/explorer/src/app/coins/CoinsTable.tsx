@@ -30,11 +30,12 @@ export function CoinsTable() {
   const queryParam = params.get('q') ?? '';
 
   const { data, isLoading, isError, error } = useCoins(100, issuerFilter);
+  const coins = data?.coins ?? [];
 
   const sorted = useMemo(() => {
-    if (!data) return [];
-    return sortRows(data, sortParam);
-  }, [data, sortParam]);
+    if (!coins.length) return [];
+    return sortRows(coins, sortParam);
+  }, [coins, sortParam]);
 
   const rows = useMemo(() => {
     const q = queryParam.trim().toLowerCase();
@@ -64,7 +65,7 @@ export function CoinsTable() {
       </Panel>
     );
   }
-  if (isLoading || !data) {
+  if (isLoading || !data || !data.coins) {
     return (
       <Panel
         title="Coin directory"

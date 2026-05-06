@@ -94,28 +94,42 @@ export type Coin = {
   first_seen_ledger: number;
   last_seen_ledger: number;
   observation_count: number;
+  price_usd?: string | null;
+  volume_24h_usd?: string | null;
+  market_cap_usd?: string | null;
+  circulating_supply?: string | null;
+};
+
+export type CoinsPage = {
+  coins: Coin[];
+  next_cursor: string;
+  limit: number;
 };
 
 /**
- * useCoins — fetches the registry-aware coin directory. v0 returns
- * bare classic-asset rows; future passes will join change_summary_5m
- * + classic_asset_stats_5m so each row carries pre-computed price +
- * delta + volume.
+ * useCoins — fetches the registry-aware asset directory.
  *
- * The API wraps the array in `{ data: [...] }` per the standard
- * envelope; the hook unwraps it so consumers get a plain array.
+ * The /v1/coins response is paginated via keyset cursor. This
+ * hook fetches a single page; consumers that want the full set
+ * iterate by passing the previous response's `next_cursor` as
+ * the next call's `cursor`.
+ *
+ * Each row carries optional price_usd / volume_24h_usd /
+ * market_cap_usd / circulating_supply when the aggregator has
+ * computed them.
  */
-type CoinsEnvelope = { data: Coin[] };
+type CoinsEnvelope = { data: CoinsPage };
 
-export function useCoins(limit = 100, issuer?: string) {
-  return useQuery<Coin[]>({
-    queryKey: ['/v1/coins', limit, issuer ?? null],
+export function useCoins(limit = 100, issuer?: string, cursor?: string) {
+  return useQuery<CoinsPage>({
+    queryKey: ['/v1/coins', limit, issuer ?? null, cursor ?? ''],
     queryFn: async () => {
-      const env = await apiGet<CoinsEnvelope | Coin[]>('/v1/coins', {
+      const env = await apiGet<CoinsEnvelope>('/v1/coins', {
         limit,
         ...(issuer ? { issuer } : {}),
+        ...(cursor ? { cursor } : {}),
       });
-      return Array.isArray(env) ? env : env.data;
+      return env.data;
     },
   });
 }

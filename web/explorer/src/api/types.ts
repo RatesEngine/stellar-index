@@ -1596,16 +1596,23 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * Coin directory — every classic asset observed on Stellar.
+         * Asset directory — every classic asset observed on Stellar.
          * @description Auto-populated registry of every classic asset observed in
-         *     any trade or ChangeTrust op. v0 of this endpoint returns the
-         *     bare-minimum identity tuple plus activity counters, ordered
-         *     by observation count desc. Future passes (per
-         *     data-inventory §10.1) will join `change_summary_5m` +
-         *     `classic_asset_stats_5m` so each row carries pre-computed
-         *     price + delta + volume.
+         *     any trade or ChangeTrust op. Each row joins the latest
+         *     5-minute stats (`classic_asset_stats_5m`) for volume +
+         *     outstanding supply and the latest 1-minute price
+         *     (`prices_1m` against `fiat:USD`) for VWAP — `price_usd`,
+         *     `volume_24h_usd`, `market_cap_usd`, and
+         *     `circulating_supply` are emitted as JSON nulls when the
+         *     aggregator hasn't yet produced a value (newly-observed
+         *     asset, no off-chain peg, etc.).
          *
-         *     Powers the showcase /coins directory.
+         *     The response is paginated via keyset cursor: the previous
+         *     response's `next_cursor` is passed back as `?cursor=…` to
+         *     fetch the next page. Empty `next_cursor` means no more
+         *     pages.
+         *
+         *     Powers the explorer's `/assets` directory.
          */
         get: {
             parameters: {
@@ -1613,9 +1620,15 @@ export interface paths {
                     /** @description Max rows to return; 1-500, default 100. */
                     limit?: number;
                     /**
+                     * @description Keyset cursor returned by a previous response's
+                     *     `next_cursor`. Empty for the first page; iterate while
+                     *     non-empty.
+                     */
+                    cursor?: string;
+                    /**
                      * @description Restrict the listing to assets minted by this G-strkey.
-                     *     Used by the showcase to deep-link from `/issuers` into
-                     *     "coins by this issuer."
+                     *     Used by the explorer to deep-link from `/issuers` into
+                     *     "assets by this issuer."
                      */
                     issuer?: string;
                 };
@@ -1625,7 +1638,7 @@ export interface paths {
             };
             requestBody?: never;
             responses: {
-                /** @description Array of coin entries. */
+                /** @description Page of asset entries + next-cursor. */
                 200: {
                     headers: {
                         [name: string]: unknown;
@@ -1633,26 +1646,25 @@ export interface paths {
                     content: {
                         /**
                          * @example {
-                         *       "data": [
-                         *         {
-                         *           "slug": "USDC",
-                         *           "asset_id": "USDC-GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN",
-                         *           "code": "USDC",
-                         *           "issuer": "GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN",
-                         *           "first_seen_ledger": 50457424,
-                         *           "last_seen_ledger": 62413938,
-                         *           "observation_count": 41610618
-                         *         },
-                         *         {
-                         *           "slug": "yXLM",
-                         *           "asset_id": "yXLM-GARDNV3Q7YGT4AKSDF25LT32YSCCW4EV22Y2TV3I2PU2MMXJTEDL5T55",
-                         *           "code": "yXLM",
-                         *           "issuer": "GARDNV3Q7YGT4AKSDF25LT32YSCCW4EV22Y2TV3I2PU2MMXJTEDL5T55",
-                         *           "first_seen_ledger": 50457424,
-                         *           "last_seen_ledger": 62413938,
-                         *           "observation_count": 32406192
-                         *         }
-                         *       ],
+                         *       "data": {
+                         *         "coins": [
+                         *           {
+                         *             "slug": "USDC",
+                         *             "asset_id": "USDC-GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN",
+                         *             "code": "USDC",
+                         *             "issuer": "GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN",
+                         *             "first_seen_ledger": 50457424,
+                         *             "last_seen_ledger": 62413938,
+                         *             "observation_count": 41610618,
+                         *             "price_usd": "1.00012",
+                         *             "volume_24h_usd": "573830.99",
+                         *             "market_cap_usd": "812345678.45",
+                         *             "circulating_supply": "812245567.21"
+                         *           }
+                         *         ],
+                         *         "next_cursor": "32406192:yXLM-GARDNV3Q7YGT4AKSDF25LT32YSCCW4EV22Y2TV3I2PU2MMXJTEDL5T55",
+                         *         "limit": 100
+                         *       },
                          *       "as_of": "2026-05-05T16:03:05.111Z",
                          *       "flags": {
                          *         "stale": false,
@@ -1663,15 +1675,27 @@ export interface paths {
                          *     }
                          */
                         "application/json": {
-                            slug: string;
-                            asset_id: string;
-                            code: string;
-                            issuer: string;
-                            first_seen_ledger: number;
-                            last_seen_ledger: number;
-                            /** Format: int64 */
-                            observation_count: number;
-                        }[];
+                            coins: {
+                                slug: string;
+                                asset_id: string;
+                                code: string;
+                                issuer: string;
+                                first_seen_ledger: number;
+                                last_seen_ledger: number;
+                                /** Format: int64 */
+                                observation_count: number;
+                                /** @description Decimal string; null when no peg. */
+                                price_usd?: string | null;
+                                volume_24h_usd?: string | null;
+                                /** @description price_usd × circulating_supply when both present. */
+                                market_cap_usd?: string | null;
+                                /** @description Outstanding supply (canonical units). */
+                                circulating_supply?: string | null;
+                            }[];
+                            /** @description Empty when no more pages. */
+                            next_cursor?: string;
+                            limit: number;
+                        };
                     };
                 };
                 400: components["responses"]["BadRequest"];

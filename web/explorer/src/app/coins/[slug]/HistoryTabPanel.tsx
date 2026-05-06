@@ -25,7 +25,7 @@ export function HistoryTabPanel({ slug }: { slug: string }) {
   const coins = useCoins(100);
 
   const assetID = useMemo(
-    () => coins.data?.find((c) => c.slug === slug)?.asset_id,
+    () => coins.data?.coins?.find((c: { slug: string; asset_id: string }) => c.slug === slug)?.asset_id,
     [coins.data, slug],
   );
 

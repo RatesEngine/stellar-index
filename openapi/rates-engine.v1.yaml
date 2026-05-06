@@ -950,17 +950,24 @@ paths:
   /coins:
     get:
       tags: [meta]
-      summary: Coin directory — every classic asset observed on Stellar.
+      summary: Asset directory — every classic asset observed on Stellar.
       description: |
         Auto-populated registry of every classic asset observed in
-        any trade or ChangeTrust op. v0 of this endpoint returns the
-        bare-minimum identity tuple plus activity counters, ordered
-        by observation count desc. Future passes (per
-        data-inventory §10.1) will join `change_summary_5m` +
-        `classic_asset_stats_5m` so each row carries pre-computed
-        price + delta + volume.
+        any trade or ChangeTrust op. Each row joins the latest
+        5-minute stats (`classic_asset_stats_5m`) for volume +
+        outstanding supply and the latest 1-minute price
+        (`prices_1m` against `fiat:USD`) for VWAP — `price_usd`,
+        `volume_24h_usd`, `market_cap_usd`, and
+        `circulating_supply` are emitted as JSON nulls when the
+        aggregator hasn't yet produced a value (newly-observed
+        asset, no off-chain peg, etc.).
 
-        Powers the showcase /coins directory.
+        The response is paginated via keyset cursor: the previous
+        response's `next_cursor` is passed back as `?cursor=…` to
+        fetch the next page. Empty `next_cursor` means no more
+        pages.
+
+        Powers the explorer's `/assets` directory.
       parameters:
         - name: limit
           in: query
@@ -971,56 +978,89 @@ paths:
             minimum: 1
             maximum: 500
             default: 100
+        - name: cursor
+          in: query
+          required: false
+          description: |
+            Keyset cursor returned by a previous response's
+            `next_cursor`. Empty for the first page; iterate while
+            non-empty.
+          schema:
+            type: string
         - name: issuer
           in: query
           required: false
           description: |
             Restrict the listing to assets minted by this G-strkey.
-            Used by the showcase to deep-link from `/issuers` into
-            "coins by this issuer."
+            Used by the explorer to deep-link from `/issuers` into
+            "assets by this issuer."
           schema:
             type: string
       responses:
         "200":
-          description: Array of coin entries.
+          description: Page of asset entries + next-cursor.
           content:
             application/json:
               schema:
-                type: array
-                items:
-                  type: object
-                  required:
-                    - slug
-                    - asset_id
-                    - code
-                    - issuer
-                    - first_seen_ledger
-                    - last_seen_ledger
-                    - observation_count
-                  properties:
-                    slug: { type: string }
-                    asset_id: { type: string }
-                    code: { type: string }
-                    issuer: { type: string }
-                    first_seen_ledger: { type: integer }
-                    last_seen_ledger: { type: integer }
-                    observation_count: { type: integer, format: int64 }
+                type: object
+                required: [coins, limit]
+                properties:
+                  coins:
+                    type: array
+                    items:
+                      type: object
+                      required:
+                        - slug
+                        - asset_id
+                        - code
+                        - issuer
+                        - first_seen_ledger
+                        - last_seen_ledger
+                        - observation_count
+                      properties:
+                        slug: { type: string }
+                        asset_id: { type: string }
+                        code: { type: string }
+                        issuer: { type: string }
+                        first_seen_ledger: { type: integer }
+                        last_seen_ledger: { type: integer }
+                        observation_count: { type: integer, format: int64 }
+                        price_usd:
+                          type: string
+                          nullable: true
+                          description: Decimal string; null when no peg.
+                        volume_24h_usd:
+                          type: string
+                          nullable: true
+                        market_cap_usd:
+                          type: string
+                          nullable: true
+                          description: price_usd × circulating_supply when both present.
+                        circulating_supply:
+                          type: string
+                          nullable: true
+                          description: Outstanding supply (canonical units).
+                  next_cursor:
+                    type: string
+                    description: Empty when no more pages.
+                  limit:
+                    type: integer
               example:
                 data:
-                  - slug: USDC
-                    asset_id: USDC-GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN
-                    code: USDC
-                    issuer: GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN
-                    first_seen_ledger: 50457424
-                    last_seen_ledger: 62413938
-                    observation_count: 41610618
-                  - slug: yXLM
-                    asset_id: yXLM-GARDNV3Q7YGT4AKSDF25LT32YSCCW4EV22Y2TV3I2PU2MMXJTEDL5T55
-                    code: yXLM
-                    issuer: GARDNV3Q7YGT4AKSDF25LT32YSCCW4EV22Y2TV3I2PU2MMXJTEDL5T55
-                    first_seen_ledger: 50457424
-                    last_seen_ledger: 62413938
-                    observation_count: 32406192
+                  coins:
+                    - slug: USDC
+                      asset_id: USDC-GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN
+                      code: USDC
+                      issuer: GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN
+                      first_seen_ledger: 50457424
+                      last_seen_ledger: 62413938
+                      observation_count: 41610618
+                      price_usd: "1.00012"
+                      volume_24h_usd: "573830.99"
+                      market_cap_usd: "812345678.45"
+                      circulating_supply: "812245567.21"
+                  next_cursor: "32406192:yXLM-GARDNV3Q7YGT4AKSDF25LT32YSCCW4EV22Y2TV3I2PU2MMXJTEDL5T55"
+                  limit: 100
                 as_of: "2026-05-05T16:03:05.111Z"
                 flags: { stale: false, reduced_redundancy: false, triangulated: false, divergence_warning: false }
         "400": { $ref: "#/components/responses/BadRequest" }

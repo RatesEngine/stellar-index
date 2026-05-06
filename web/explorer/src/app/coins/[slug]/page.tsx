@@ -33,8 +33,8 @@ export async function generateStaticParams() {
       signal: AbortSignal.timeout(2_000),
     });
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    const env = (await res.json()) as { data: { slug: string }[] };
-    const slugs = (env.data ?? []).map((c) => c.slug);
+    const env = (await res.json()) as { data: { coins: { slug: string }[] } };
+    const slugs = (env.data?.coins ?? []).map((c) => c.slug);
     return slugs.length > 0 ? slugs.map((slug) => ({ slug })) : fallback;
   } catch {
     return fallback;
@@ -84,12 +84,12 @@ const isCIStub =
 async function fetchCoin(slug: string): Promise<CoinSummary | null> {
   if (isCIStub) return null;
   try {
-    const res = await fetch(`${API_BASE_URL}/v1/coins?limit=1000`, {
+    const res = await fetch(`${API_BASE_URL}/v1/coins?limit=500`, {
       signal: AbortSignal.timeout(2_000),
     });
     if (!res.ok) return null;
-    const env = (await res.json()) as { data: CoinSummary[] };
-    return env.data?.find((c) => c.slug === slug) ?? null;
+    const env = (await res.json()) as { data: { coins: CoinSummary[] } };
+    return env.data?.coins?.find((c) => c.slug === slug) ?? null;
   } catch {
     return null;
   }

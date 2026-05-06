@@ -82,7 +82,7 @@ export function SearchModal() {
     if (open) setQ('');
   }, [open]);
 
-  const results = useMemo(() => search(q, coins ?? []), [q, coins]);
+  const results = useMemo(() => search(q, coins?.coins ?? []), [q, coins]);
 
   return (
     <>

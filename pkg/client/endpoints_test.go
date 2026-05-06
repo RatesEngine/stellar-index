@@ -902,14 +902,14 @@ func TestCoins_IssuerFilter(t *testing.T) {
 				t.Errorf("limit = %q", q.Get("limit"))
 			}
 			w.Header().Set("Content-Type", "application/json")
-			_, _ = w.Write([]byte(`{"data": [{"slug":"USDC","asset_id":"USDC-` + issuer + `","code":"USDC","issuer":"` + issuer + `","first_seen_ledger":50457424,"last_seen_ledger":62413938,"observation_count":41610618}], "as_of": "2026-05-04T15:00:00Z", "flags": {}}`))
+			_, _ = w.Write([]byte(`{"data": {"coins": [{"slug":"USDC","asset_id":"USDC-` + issuer + `","code":"USDC","issuer":"` + issuer + `","first_seen_ledger":50457424,"last_seen_ledger":62413938,"observation_count":41610618}], "next_cursor": "", "limit": 50}, "as_of": "2026-05-04T15:00:00Z", "flags": {}}`))
 		})
 		got, err := c.Coins(context.Background(), client.CoinsOptions{Issuer: issuer, Limit: 50})
 		if err != nil {
 			t.Fatalf("Coins: %v", err)
 		}
-		if len(got.Data) != 1 || got.Data[0].Code != "USDC" {
-			t.Errorf("Data = %+v", got.Data)
+		if len(got.Data.Coins) != 1 || got.Data.Coins[0].Code != "USDC" {
+			t.Errorf("Data.Coins = %+v", got.Data.Coins)
 		}
 	})
 
@@ -923,7 +923,7 @@ func TestCoins_IssuerFilter(t *testing.T) {
 				t.Errorf("limit sent when 0: %q", q.Get("limit"))
 			}
 			w.Header().Set("Content-Type", "application/json")
-			_, _ = w.Write([]byte(`{"data": [], "as_of": "2026-05-04T15:00:00Z", "flags": {}}`))
+			_, _ = w.Write([]byte(`{"data": {"coins": [], "next_cursor": "", "limit": 100}, "as_of": "2026-05-04T15:00:00Z", "flags": {}}`))
 		})
 		_, err := c.Coins(context.Background(), client.CoinsOptions{})
 		if err != nil {

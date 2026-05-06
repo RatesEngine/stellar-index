@@ -61,8 +61,8 @@ async function fetchCoinSlugs(): Promise<string[]> {
       signal: AbortSignal.timeout(5_000),
     });
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    const env = (await res.json()) as { data: { slug: string }[] };
-    return (env.data ?? []).map((c) => c.slug);
+    const env = (await res.json()) as { data: { coins: { slug: string }[] } };
+    return (env.data?.coins ?? []).map((c) => c.slug);
   } catch {
     return [];
   }

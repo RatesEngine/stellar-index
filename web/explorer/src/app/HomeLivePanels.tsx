@@ -17,7 +17,7 @@ export function NetworkLivePanel() {
   const coins = useCoins(500);
   const cursors = useCursors();
 
-  const assetsCount = coins.data?.length ?? null;
+  const assetsCount = coins.data?.coins?.length ?? null;
   const tipLedger = cursors.data ? maxLiveLedger(cursors.data) : null;
 
   return (

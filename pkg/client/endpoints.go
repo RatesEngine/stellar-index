@@ -491,19 +491,31 @@ func (c *Client) CreateKey(ctx context.Context, req CreateKeyRequest) (*Envelope
 // CoinsOptions paginates / filters the classic-asset directory.
 // `Limit` is server-side clamped to [1, 500] (default 100).
 // `Issuer`, when non-empty, restricts the listing to assets minted
-// by that G-strkey — used by the explorer to deep-link from the
-// issuer table into "coins by this issuer."
+// by that G-strkey. `Cursor` is the keyset cursor returned by a
+// previous response's `next_cursor` field — empty for the first
+// page; iterate while non-empty.
 type CoinsOptions struct {
 	Limit  int
 	Issuer string
+	Cursor string
 }
 
-// Coins lists the registry-aware coin directory. v0 returns the
-// bare classic-asset rows ranked by observation count; future
-// passes (per data-inventory §10.1) will join change_summary_5m +
-// classic_asset_stats_5m so each row carries pre-computed price +
-// delta + volume.
-func (c *Client) Coins(ctx context.Context, opts CoinsOptions) (*Envelope[[]Coin], error) {
+// Coins lists the registry-aware coin directory ranked by
+// observation count desc, joined to the latest 5-minute stats
+// + 1-minute VWAP. Each row carries optional price_usd,
+// volume_24h_usd, market_cap_usd, and circulating_supply.
+//
+// Iterate paginated:
+//
+//	cursor := ""
+//	for {
+//	    page, err := c.Coins(ctx, CoinsOptions{Limit: 500, Cursor: cursor})
+//	    if err != nil { return err }
+//	    process(page.Data.Coins)
+//	    if page.Data.NextCursor == "" { break }
+//	    cursor = page.Data.NextCursor
+//	}
+func (c *Client) Coins(ctx context.Context, opts CoinsOptions) (*Envelope[CoinsPage], error) {
 	v := url.Values{}
 	if opts.Limit > 0 {
 		v.Set("limit", strconv.Itoa(opts.Limit))
@@ -511,7 +523,10 @@ func (c *Client) Coins(ctx context.Context, opts CoinsOptions) (*Envelope[[]Coin
 	if opts.Issuer != "" {
 		v.Set("issuer", opts.Issuer)
 	}
-	var env Envelope[[]Coin]
+	if opts.Cursor != "" {
+		v.Set("cursor", opts.Cursor)
+	}
+	var env Envelope[CoinsPage]
 	if err := c.doJSON(ctx, http.MethodGet, "/v1/coins", v, nil, &env); err != nil {
 		return nil, err
 	}
