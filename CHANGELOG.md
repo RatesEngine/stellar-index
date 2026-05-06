@@ -15,6 +15,20 @@ against.
 
 ## [Unreleased]
 
+## [v0.5.0-rc.12] — 2026-05-06
+
+### Fixed
+- **`/v1/coins.price_usd` triangulation now finds an XLM/USD
+  price.** rc.10's SQL looked up `prices_1m` for `(native,
+  fiat:USD)` but that row never exists in the materialised
+  view — the aggregator's triangulation worker writes the
+  off-chain Reflector-derived price to Redis. Mirror the
+  aggregator's stablecoin-proxy policy in SQL: pick the latest
+  `prices_1m` row where the quote is one of {USDC-GA5Z…Circle,
+  USDT-GCQT…Tether, fiat:USD}. On-chain XLM/USDC trades are
+  continuous on SDEX, so the CTE always finds a row. Same fix
+  applies to `xlm_usd_24h` for the change_24h_pct path.
+
 ## [v0.5.0-rc.11] — 2026-05-06
 
 ### Added
