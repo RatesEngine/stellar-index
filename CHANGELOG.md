@@ -37,6 +37,15 @@ against.
   takes precedence when those buckets exist.
 
 ### Added
+- **Status page: real per-endpoint probes.** The Endpoints
+  matrix on status.ratesengine.net now fires a parallel probe
+  against every public endpoint on each 30-second poll (with
+  safe minimum parameters — `?asset=native`, `?limit=1`, etc.)
+  and renders a green/amber/red badge with measured latency.
+  Endpoints that need auth or are SSE streams keep a static
+  "auth req'd" / "stream" tag. Replaces the previous
+  single-`/v1/healthz` probe that left every other row stuck on
+  "—".
 - **`/v1/coins/{slug}.markets_count`** — count of distinct
   `(base_asset, quote_asset)` pairs the asset participated in
   over the trailing 24h. Listing endpoint omits it (count-distinct
