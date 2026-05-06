@@ -29,8 +29,11 @@ export async function generateStaticParams() {
   // route under output:'export' with zero params.
   const fallback = [{ slug: 'native' }];
   try {
+    // 10s here — generateStaticParams is a one-shot at build
+    // time; the 500-asset listing query is heavier than a single
+    // /v1/coins/{slug} hit so allow more headroom.
     const res = await fetch(`${API_BASE_URL}/v1/coins?limit=500`, {
-      signal: AbortSignal.timeout(2_000),
+      signal: AbortSignal.timeout(10_000),
     });
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const env = (await res.json()) as { data: { coins: { slug: string }[] } };
@@ -88,12 +91,21 @@ interface PriceResp {
 const isCIStub =
   API_BASE_URL.includes('.invalid') || API_BASE_URL.includes('local-stub');
 
+// 8s per fetch. The previous 2s was too aggressive — every detail
+// page was rendering "Asset not found" because the build's first
+// /v1/coins/{slug} hit (cold connection pool) timed out, fetchCoin
+// returned null, and the page render branched into the not-found
+// state. With ~500 pages × 4 fetches × 8s worst case = ~30 min,
+// well within CF Pages's 20-min build window per page (parallelised),
+// and in practice the API responds in <300ms steady-state.
+const BUILD_FETCH_TIMEOUT_MS = 8_000;
+
 async function fetchCoin(slug: string): Promise<CoinSummary | null> {
   if (isCIStub) return null;
   try {
     const res = await fetch(
       `${API_BASE_URL}/v1/coins/${encodeURIComponent(slug)}`,
-      { signal: AbortSignal.timeout(2_000) },
+      { signal: AbortSignal.timeout(BUILD_FETCH_TIMEOUT_MS) },
     );
     if (!res.ok) return null;
     const env = (await res.json()) as { data: CoinSummary };
@@ -108,7 +120,7 @@ async function fetchAssetDetail(assetId: string): Promise<AssetDetail | null> {
   try {
     const res = await fetch(
       `${API_BASE_URL}/v1/assets/${encodeURIComponent(assetId)}`,
-      { signal: AbortSignal.timeout(2_000) },
+      { signal: AbortSignal.timeout(BUILD_FETCH_TIMEOUT_MS) },
     );
     if (!res.ok) return null;
     const env = (await res.json()) as { data: AssetDetail };
@@ -126,7 +138,7 @@ async function fetchPriceDirect(
   try {
     const res = await fetch(
       `${API_BASE_URL}/v1/price?asset=${encodeURIComponent(asset)}&quote=${encodeURIComponent(quote)}`,
-      { signal: AbortSignal.timeout(2_000) },
+      { signal: AbortSignal.timeout(BUILD_FETCH_TIMEOUT_MS) },
     );
     if (!res.ok) return null;
     const env = (await res.json()) as { data: PriceResp };
