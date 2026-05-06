@@ -42,6 +42,11 @@ theme = "cstate"
 [params]
   description = "Public status page for the Rates Engine pricing API. Real-time + historical pricing for the Stellar network."
   logo = "/logo.svg"
+  # cstate's incident-list templates call `.Paginate $incidents
+  # .Site.Params.incidentPostsPerPage`. When unset, the second
+  # argument is nil and Hugo errors with "pager size must be a
+  # positive integer". 10 mirrors Hugo's pre-0.128 default.
+  incidentPostsPerPage = 10
   # systemStatus controls the top-of-page banner. Possible values:
   #   "ok"           → All systems operational (green)
   #   "disrupted"    → Partial outage (yellow)
