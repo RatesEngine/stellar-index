@@ -46,6 +46,8 @@ export function HomeTopAssets() {
             <tr className="border-b border-slate-200 bg-slate-50 text-left text-[11px] uppercase tracking-wider text-slate-500 dark:border-slate-800 dark:bg-slate-950">
               <th className="px-4 py-2.5 font-medium">#</th>
               <th className="px-4 py-2.5 font-medium">Asset</th>
+              <th className="px-4 py-2.5 text-right font-medium">Price</th>
+              <th className="px-4 py-2.5 text-right font-medium">24h %</th>
               <th className="px-4 py-2.5 text-right font-medium">
                 24h volume
               </th>
@@ -58,7 +60,7 @@ export function HomeTopAssets() {
             {isError && (
               <tr>
                 <td
-                  colSpan={4}
+                  colSpan={6}
                   className="py-8 text-center text-sm text-down-strong"
                 >
                   Failed to load top assets.
@@ -68,7 +70,7 @@ export function HomeTopAssets() {
             {isLoading && !data && (
               <tr>
                 <td
-                  colSpan={4}
+                  colSpan={6}
                   className="py-8 text-center text-sm text-slate-500"
                 >
                   Loading…
@@ -86,6 +88,7 @@ export function HomeTopAssets() {
 }
 
 function Row({ coin, rank }: { coin: Coin; rank: number }) {
+  const price = parseDec(coin.price_usd);
   const volume = parseDec(coin.volume_24h_usd);
   return (
     <tr className="hover:bg-slate-50 dark:hover:bg-slate-800/40">
@@ -102,12 +105,24 @@ function Row({ coin, rank }: { coin: Coin; rank: number }) {
         </Link>
       </td>
       <td className="px-4 py-3 text-right">
+        {price != null ? (
+          <span className="font-mono tabular-nums text-ink dark:text-slate-100">
+            ${formatPrice(price)}
+          </span>
+        ) : (
+          <Dash />
+        )}
+      </td>
+      <td className="px-4 py-3 text-right">
+        <ChangePct raw={coin.change_24h_pct} />
+      </td>
+      <td className="px-4 py-3 text-right">
         {volume != null ? (
           <span className="font-mono tabular-nums text-slate-700 dark:text-slate-300">
             ${formatCompact(volume)}
           </span>
         ) : (
-          <span className="text-slate-300 dark:text-slate-700">—</span>
+          <Dash />
         )}
       </td>
       <td className="px-4 py-3 text-right">
@@ -123,4 +138,34 @@ function parseDec(s: string | null | undefined): number | null {
   if (!s) return null;
   const n = Number(s);
   return Number.isFinite(n) ? n : null;
+}
+
+function formatPrice(n: number): string {
+  if (n >= 1) return n.toFixed(n >= 100 ? 2 : 4);
+  if (n >= 0.001) return n.toFixed(6);
+  if (n > 0) return n.toExponential(3);
+  return '0';
+}
+
+function Dash() {
+  return <span className="text-slate-300 dark:text-slate-700">—</span>;
+}
+
+function ChangePct({ raw }: { raw: string | null | undefined }) {
+  if (raw == null) return <Dash />;
+  const n = Number(raw);
+  if (!Number.isFinite(n)) return <Dash />;
+  const tone =
+    n > 0
+      ? 'text-emerald-600 dark:text-emerald-400'
+      : n < 0
+        ? 'text-rose-600 dark:text-rose-400'
+        : 'text-slate-500';
+  const sign = n > 0 ? '+' : '';
+  return (
+    <span className={`font-mono tabular-nums ${tone}`}>
+      {sign}
+      {n.toFixed(2)}%
+    </span>
+  );
 }
