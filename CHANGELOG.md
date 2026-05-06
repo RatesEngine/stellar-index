@@ -15,6 +15,41 @@ against.
 
 ## [Unreleased]
 
+## [v0.5.0-rc.4] — 2026-05-06
+
+### Added
+- **`/v1/assets/{id}` F2 fields fall back to per-asset stats.**
+  When the formal supply pipeline doesn't have a snapshot for an
+  asset (most classic assets today), the asset detail endpoint
+  now overlays `volume_24h_usd` from the new union-CTE query so
+  the explorer asset page surfaces real numbers instead of `—`.
+
+### Changed
+- **`/v1/coins` volume rebuilt on a `prices_1m` UNION CTE.** The
+  previous LATERAL joins targeted `classic_asset_stats_5m` (an
+  unwritten table — the migration shipped without a writer) and
+  direct `fiat:USD` price pairs (which classic Stellar assets
+  don't have; only off-chain crypto:* sources do), so every row's
+  `volume_24h_usd` came back null. The new query sums real
+  `volume_usd` from `prices_1m` over the trailing 24h, where the
+  asset participates as base OR quote — same pattern
+  `Volume24hUSDForAsset` already uses for the single-asset
+  endpoint. `price_usd` / `market_cap_usd` / `circulating_supply`
+  explicitly stay null until the proper sources are wired.
+- **`/coins/[slug]` → `/assets/[slug]` migration.** Asset detail
+  routes move off the legacy `/coins/` prefix to match the
+  renamed listing. `_redirects` adds `/coins/* →
+  /assets/:splat 301` so existing inbound links 301 at the CF
+  edge before any HTML loads.
+- **Container width unified to `max-w-7xl`** across every
+  top-level explorer page (was a mix of `max-w-6xl` and
+  `max-w-7xl`). Navbar + Footer already used `max-w-7xl`, so
+  page content rails now align with the chrome around them —
+  fixes the "container in a container" feel.
+- **Stale `/coins` labels mopped up.** Home CTA "Browse coins" →
+  "Browse assets"; `/issuers` G-strkey link href; `/network`
+  body link display text; sitemap doc-comment.
+
 ## [v0.5.0-rc.3] — 2026-05-06
 
 ### Added
