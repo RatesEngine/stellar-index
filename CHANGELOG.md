@@ -16,6 +16,13 @@ against.
 ## [Unreleased]
 
 ### Added
+- **Issuer detail page: external explorer links.** Adds a
+  cross-reference panel under the auth flags pointing at
+  stellar.expert and stellarchain.io for the issuer's account,
+  plus a direct link to the issuer's `stellar.toml` when the
+  home domain is known. Useful for verifying SEP-1 metadata
+  out-of-band, or pulling the issuer's full operations history
+  from a dedicated explorer.
 - **Home page: Top markets table.** Sits between Top assets and
   Top movers — top 10 trading pairs by trailing-24h USD volume,
   each row deep-linking to the per-pair detail page at

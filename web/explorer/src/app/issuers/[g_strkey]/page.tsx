@@ -209,6 +209,65 @@ export default async function IssuerDetailPage({ params }: { params: Params }) {
       </div>
 
       <Panel
+        title="External views"
+        hint="Cross-reference this issuer on other Stellar explorers"
+        bodyClassName="text-sm text-slate-600 dark:text-slate-400"
+      >
+        <ul className="space-y-2">
+          <li>
+            <a
+              href={`https://stellar.expert/explorer/public/account/${g_strkey}`}
+              target="_blank"
+              rel="noreferrer noopener"
+              className="inline-flex items-center gap-1.5 hover:text-brand-600 hover:underline"
+            >
+              stellar.expert
+              <span className="text-[10px] uppercase tracking-wider text-slate-400">
+                ↗
+              </span>
+            </a>
+            <span className="ml-2 text-xs text-slate-400">
+              account history, balance, signers
+            </span>
+          </li>
+          <li>
+            <a
+              href={`https://stellarchain.io/accounts/${g_strkey}`}
+              target="_blank"
+              rel="noreferrer noopener"
+              className="inline-flex items-center gap-1.5 hover:text-brand-600 hover:underline"
+            >
+              stellarchain.io
+              <span className="text-[10px] uppercase tracking-wider text-slate-400">
+                ↗
+              </span>
+            </a>
+            <span className="ml-2 text-xs text-slate-400">
+              ledger entries, operations log
+            </span>
+          </li>
+          {detail.home_domain && (
+            <li>
+              <a
+                href={`https://${detail.home_domain}/.well-known/stellar.toml`}
+                target="_blank"
+                rel="noreferrer noopener"
+                className="inline-flex items-center gap-1.5 hover:text-brand-600 hover:underline"
+              >
+                stellar.toml
+                <span className="text-[10px] uppercase tracking-wider text-slate-400">
+                  ↗
+                </span>
+              </a>
+              <span className="ml-2 text-xs text-slate-400">
+                SEP-1 source on {detail.home_domain}
+              </span>
+            </li>
+          )}
+        </ul>
+      </Panel>
+
+      <Panel
         title={`Issued assets (${detail.assets?.length ?? 0})`}
         hint="All classic assets we've observed minted by this G-strkey"
         source={asExample('/v1/issuers/{g_strkey}', { g_strkey })}
