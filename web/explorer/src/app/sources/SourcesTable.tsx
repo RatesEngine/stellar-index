@@ -4,7 +4,7 @@ import { useMemo } from 'react';
 
 import { Panel } from '@/components/reveal';
 import { asExample } from '@/api/client';
-import { useSources, type Source } from '@/api/hooks';
+import { useSources, useCursors, type Source } from '@/api/hooks';
 
 /**
  * Live sources directory backed by `/v1/sources`.
@@ -18,7 +18,27 @@ import { useSources, type Source } from '@/api/hooks';
  */
 export function SourcesTable() {
   const { data, isLoading, isError, error } = useSources();
+  const cursors = useCursors();
   const grouped = useMemo(() => groupByClass(data ?? []), [data]);
+
+  // Aggregate the cursors slice by source — one source can have
+  // many cursors (live + per-range backfills). We surface the most
+  // recently updated row's last_ledger + lag as the "latest tip"
+  // per source.
+  const latestBySource = useMemo(() => {
+    const m = new Map<string, { last_ledger: number; lag_seconds: number; last_updated: string }>();
+    for (const c of cursors.data ?? []) {
+      const prev = m.get(c.source);
+      if (!prev || prev.last_ledger < c.last_ledger) {
+        m.set(c.source, {
+          last_ledger: c.last_ledger,
+          lag_seconds: c.lag_seconds,
+          last_updated: c.last_updated,
+        });
+      }
+    }
+    return m;
+  }, [cursors.data]);
 
   if (isError) {
     return (
@@ -72,47 +92,54 @@ export function SourcesTable() {
                   <Th>Source</Th>
                   <Th>Subclass</Th>
                   <Th align="right">Default weight</Th>
+                  <Th align="right">Last ingest</Th>
                   <Th align="right">Flags</Th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-                {rows.map((s) => (
-                  <tr
-                    key={s.name}
-                    className="hover:bg-slate-50 dark:hover:bg-slate-900/40"
-                  >
-                    <Td>
-                      <span className="font-mono">{s.name}</span>
-                    </Td>
-                    <Td>
-                      <span className="text-xs text-slate-500">
-                        {s.subclass ?? '—'}
-                      </span>
-                    </Td>
-                    <Td align="right">
-                      <span className="font-mono tabular-nums">
-                        {s.default_weight}
-                      </span>
-                    </Td>
-                    <Td align="right">
-                      <div className="flex flex-wrap justify-end gap-1">
-                        {s.include_in_vwap && (
-                          <Pill tone="up">in VWAP</Pill>
-                        )}
-                        {s.paid && <Pill tone="amber">paid</Pill>}
-                        {s.backfill_available && !s.backfill_safe && (
-                          <Pill tone="amber">backfill unaudited</Pill>
-                        )}
-                        {s.backfill_safe && (
-                          <Pill tone="up">backfill safe</Pill>
-                        )}
-                        {!s.backfill_available && (
-                          <Pill tone="slate">live-only</Pill>
-                        )}
-                      </div>
-                    </Td>
-                  </tr>
-                ))}
+                {rows.map((s) => {
+                  const cursor = latestBySource.get(s.name);
+                  return (
+                    <tr
+                      key={s.name}
+                      className="hover:bg-slate-50 dark:hover:bg-slate-900/40"
+                    >
+                      <Td>
+                        <span className="font-mono">{s.name}</span>
+                      </Td>
+                      <Td>
+                        <span className="text-xs text-slate-500">
+                          {s.subclass ?? '—'}
+                        </span>
+                      </Td>
+                      <Td align="right">
+                        <span className="font-mono tabular-nums">
+                          {s.default_weight}
+                        </span>
+                      </Td>
+                      <Td align="right">
+                        <CursorAgo cursor={cursor} />
+                      </Td>
+                      <Td align="right">
+                        <div className="flex flex-wrap justify-end gap-1">
+                          {s.include_in_vwap && (
+                            <Pill tone="up">in VWAP</Pill>
+                          )}
+                          {s.paid && <Pill tone="amber">paid</Pill>}
+                          {s.backfill_available && !s.backfill_safe && (
+                            <Pill tone="amber">backfill unaudited</Pill>
+                          )}
+                          {s.backfill_safe && (
+                            <Pill tone="up">backfill safe</Pill>
+                          )}
+                          {!s.backfill_available && (
+                            <Pill tone="slate">live-only</Pill>
+                          )}
+                        </div>
+                      </Td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
@@ -120,6 +147,42 @@ export function SourcesTable() {
       ))}
     </div>
   );
+}
+
+function CursorAgo({
+  cursor,
+}: {
+  cursor: { last_ledger: number; lag_seconds: number; last_updated: string } | undefined;
+}) {
+  if (!cursor) {
+    return <span className="text-[11px] text-slate-400">—</span>;
+  }
+  // Tone bucket: <60s green, <10min amber, else red. Matches the
+  // home System health panel's threshold so the two views agree
+  // on what "live" means.
+  const tone =
+    cursor.lag_seconds < 60
+      ? 'text-emerald-600 dark:text-emerald-400'
+      : cursor.lag_seconds < 600
+        ? 'text-amber-600 dark:text-amber-400'
+        : 'text-rose-600 dark:text-rose-400';
+  return (
+    <div className="text-right">
+      <div className={`font-mono text-[11px] ${tone}`}>
+        {formatLag(cursor.lag_seconds)} ago
+      </div>
+      <div className="font-mono text-[10px] text-slate-400">
+        #{cursor.last_ledger.toLocaleString()}
+      </div>
+    </div>
+  );
+}
+
+function formatLag(s: number): string {
+  if (s < 60) return `${s}s`;
+  if (s < 3600) return `${Math.round(s / 60)}m`;
+  if (s < 86400) return `${Math.round(s / 3600)}h`;
+  return `${Math.round(s / 86400)}d`;
 }
 
 function Pill({
