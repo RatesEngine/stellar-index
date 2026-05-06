@@ -17,7 +17,15 @@ import { formatCompact } from '@/lib/format';
  * lands once we add virtual scrolling.
  */
 export function MarketsTable() {
-  const { data, isLoading, isError, error } = useMarkets(100);
+  // Server-side pagination is keyed on (base|quote) string order,
+  // so the first 100 rows are alphabetic and miss the
+  // top-volume pairs entirely. Fetch 500 (server-side max) and
+  // sort client-side by volume_24h_usd until /v1/markets gains
+  // a server-side `?order_by=volume_24h_usd` mode. 500 covers
+  // every market with non-negligible USD volume on Stellar
+  // today (~tens of pairs have measurable volume; the rest are
+  // long-tail dust).
+  const { data, isLoading, isError, error } = useMarkets(500);
 
   const sorted = useMemo(() => {
     if (!data) return [];
@@ -36,7 +44,7 @@ export function MarketsTable() {
     return (
       <Panel
         title="Markets"
-        source={asExample('/v1/markets', { limit: 100 })}
+        source={asExample('/v1/markets', { limit: 500 })}
         bodyClassName="text-sm text-down-strong"
       >
         Failed to load markets:{' '}
@@ -48,7 +56,7 @@ export function MarketsTable() {
     return (
       <Panel
         title="Markets"
-        source={asExample('/v1/markets', { limit: 100 })}
+        source={asExample('/v1/markets', { limit: 500 })}
         bodyClassName="text-sm text-slate-500"
       >
         Loading…
@@ -59,7 +67,7 @@ export function MarketsTable() {
     return (
       <Panel
         title="Markets"
-        source={asExample('/v1/markets', { limit: 100 })}
+        source={asExample('/v1/markets', { limit: 500 })}
         bodyClassName="text-sm text-slate-500"
       >
         No active markets in the last 14 days.
@@ -71,7 +79,7 @@ export function MarketsTable() {
     <Panel
       title={`${sorted.length} active markets`}
       hint="Pairs that traded in the last 14 days, ordered by 24h USD volume"
-      source={asExample('/v1/markets', { limit: 100 })}
+      source={asExample('/v1/markets', { limit: 500 })}
       bodyClassName="-mx-4"
     >
       <div className="overflow-x-auto">

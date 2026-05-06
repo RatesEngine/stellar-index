@@ -16,7 +16,10 @@ import { formatCompact } from '@/lib/format';
  * `/v1/coins/{slug}` lookup.
  */
 export function MarketsTabPanel({ assetID }: { assetID: string }) {
-  const markets = useMarkets(100);
+  // Same alphabetic-pagination problem as /markets — fetch 500 so
+  // we don't miss markets where this asset participates that
+  // happen to sort beyond the first 100 base|quote keys.
+  const markets = useMarkets(500);
 
   const matched = useMemo(() => {
     if (!markets.data) return [];
