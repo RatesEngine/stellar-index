@@ -2,6 +2,7 @@ package timescale
 
 import (
 	"context"
+	"database/sql"
 	"fmt"
 	"time"
 
@@ -10,10 +11,17 @@ import (
 
 // Market is one distinct (base, quote) pair summary with activity
 // statistics. Returned by [Store.DistinctPairs].
+//
+// Volume24hUSD is the trailing-24h USD volume summed from the
+// prices_1m hypertable (which has per-bucket volume_usd
+// computed by the aggregator). Pointer + nil-when-zero so a
+// pair with no USD-equivalent trades emits JSON null rather
+// than "0" — important for downstream filtering.
 type Market struct {
 	Pair          canonical.Pair
 	LastTradeAt   time.Time
 	TradeCount24h int64
+	Volume24hUSD  *string
 }
 
 // MarketsRecencyWindow bounds the trades scanned by DistinctPairs.
@@ -85,15 +93,33 @@ func (s *Store) DistinctPairs(ctx context.Context, cursor string, limit int) ([]
 	// exist". The extra row isn't returned to the caller; its only
 	// purpose is to toggle whether we emit a nextCursor.
 	since := time.Now().UTC().Add(-MarketsRecencyWindow)
+	// LEFT JOIN to a per-pair 24h volume_usd CTE rather than
+	// folding SUM into the main GROUP BY — the trades table has
+	// no volume_usd column (it's computed at aggregation time),
+	// and joining a small (one-row-per-active-pair) CTE keeps
+	// the trades scan unchanged. prices_1m's PRIMARY KEY is
+	// (base_asset, quote_asset, bucket) so the GROUP BY there
+	// is index-driven.
 	const q = `
-        SELECT base_asset, quote_asset,
-               MAX(ts) AS last_trade_at,
-               count(*) FILTER (WHERE ts > NOW() - INTERVAL '24 hours') AS count_24h
-          FROM trades
-         WHERE ts >= $1
-           AND ($2 = '' OR (base_asset || '|' || quote_asset) > $2)
-         GROUP BY base_asset, quote_asset
-         ORDER BY (base_asset || '|' || quote_asset) ASC
+        WITH vol_24h AS (
+          SELECT base_asset, quote_asset,
+                 SUM(volume_usd)::text AS vol_usd
+            FROM prices_1m
+           WHERE bucket >= NOW() - INTERVAL '24 hours'
+             AND volume_usd IS NOT NULL
+           GROUP BY base_asset, quote_asset
+        )
+        SELECT t.base_asset, t.quote_asset,
+               MAX(t.ts) AS last_trade_at,
+               count(*) FILTER (WHERE t.ts > NOW() - INTERVAL '24 hours') AS count_24h,
+               (SELECT vol_usd FROM vol_24h v
+                 WHERE v.base_asset = t.base_asset
+                   AND v.quote_asset = t.quote_asset) AS vol_24h_usd
+          FROM trades t
+         WHERE t.ts >= $1
+           AND ($2 = '' OR (t.base_asset || '|' || t.quote_asset) > $2)
+         GROUP BY t.base_asset, t.quote_asset
+         ORDER BY (t.base_asset || '|' || t.quote_asset) ASC
          LIMIT $3
     `
 	rows, err := s.db.QueryContext(ctx, q, since, cursor, limit+1)
@@ -110,8 +136,9 @@ func (s *Store) DistinctPairs(ctx context.Context, cursor string, limit int) ([]
 			baseRaw, quoteRaw string
 			lastAt            time.Time
 			count24h          int64
+			vol24hUSD         sql.NullString
 		)
-		if err := rows.Scan(&baseRaw, &quoteRaw, &lastAt, &count24h); err != nil {
+		if err := rows.Scan(&baseRaw, &quoteRaw, &lastAt, &count24h, &vol24hUSD); err != nil {
 			return nil, "", fmt.Errorf("timescale: DistinctPairs scan: %w", err)
 		}
 		n++
@@ -131,11 +158,16 @@ func (s *Store) DistinctPairs(ctx context.Context, cursor string, limit int) ([]
 		if err != nil {
 			return nil, "", fmt.Errorf("timescale: DistinctPairs pair: %w", err)
 		}
-		out = append(out, Market{
+		m := Market{
 			Pair:          pair,
 			LastTradeAt:   lastAt.UTC(),
 			TradeCount24h: count24h,
-		})
+		}
+		if vol24hUSD.Valid && vol24hUSD.String != "" && vol24hUSD.String != "0" {
+			v := vol24hUSD.String
+			m.Volume24hUSD = &v
+		}
+		out = append(out, m)
 	}
 	if err := rows.Err(); err != nil {
 		return nil, "", fmt.Errorf("timescale: DistinctPairs rows: %w", err)
@@ -164,17 +196,22 @@ func (s *Store) DistinctPairs(ctx context.Context, cursor string, limit int) ([]
 func (s *Store) PairMarket(ctx context.Context, base, quote canonical.Asset) (Market, bool, error) {
 	since := time.Now().UTC().Add(-MarketsRecencyWindow)
 	const q = `
-        SELECT MAX(ts) AS last_trade_at,
-               count(*) FILTER (WHERE ts > NOW() - INTERVAL '24 hours') AS count_24h
-          FROM trades
-         WHERE ts >= $1
-           AND base_asset = $2 AND quote_asset = $3
+        SELECT MAX(t.ts) AS last_trade_at,
+               count(*) FILTER (WHERE t.ts > NOW() - INTERVAL '24 hours') AS count_24h,
+               (SELECT SUM(volume_usd)::text FROM prices_1m
+                 WHERE base_asset = $2 AND quote_asset = $3
+                   AND bucket >= NOW() - INTERVAL '24 hours'
+                   AND volume_usd IS NOT NULL) AS vol_24h_usd
+          FROM trades t
+         WHERE t.ts >= $1
+           AND t.base_asset = $2 AND t.quote_asset = $3
     `
 	var (
-		lastAt   *time.Time
-		count24h *int64
+		lastAt    *time.Time
+		count24h  *int64
+		vol24hUSD sql.NullString
 	)
-	if err := s.db.QueryRowContext(ctx, q, since, base.String(), quote.String()).Scan(&lastAt, &count24h); err != nil {
+	if err := s.db.QueryRowContext(ctx, q, since, base.String(), quote.String()).Scan(&lastAt, &count24h, &vol24hUSD); err != nil {
 		return Market{}, false, fmt.Errorf("timescale: PairMarket: %w", err)
 	}
 	if lastAt == nil {
@@ -188,9 +225,14 @@ func (s *Store) PairMarket(ctx context.Context, base, quote canonical.Asset) (Ma
 	if count24h != nil {
 		n = *count24h
 	}
-	return Market{
+	m := Market{
 		Pair:          pair,
 		LastTradeAt:   lastAt.UTC(),
 		TradeCount24h: n,
-	}, true, nil
+	}
+	if vol24hUSD.Valid && vol24hUSD.String != "" && vol24hUSD.String != "0" {
+		v := vol24hUSD.String
+		m.Volume24hUSD = &v
+	}
+	return m, true, nil
 }

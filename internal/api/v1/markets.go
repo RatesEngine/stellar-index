@@ -32,11 +32,18 @@ type MarketsReader interface {
 // measure different windows (activity vs most-recent event). The
 // fields are designed to let clients sort markets by "current"
 // activity vs total history.
+//
+// Volume24hUSD is the trailing-24h USD volume summed from
+// prices_1m's per-bucket volume_usd. Pointer + omitempty so a
+// pair with no USD-equivalent trades emits null instead of "0"
+// — important for client-side sorting (treat null as "unknown",
+// 0 as "definitely zero").
 type Market struct {
 	Base          string    `json:"base"`
 	Quote         string    `json:"quote"`
 	LastTradeAt   time.Time `json:"last_trade_at"`
 	TradeCount24h int64     `json:"trade_count_24h"`
+	Volume24hUSD  *string   `json:"volume_24h_usd,omitempty"`
 }
 
 // handleMarkets serves GET /v1/markets.
