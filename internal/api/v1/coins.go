@@ -12,10 +12,12 @@ import (
 
 // CoinsReader is the seam the /v1/coins handlers read through.
 // timescale.Store satisfies it via ListCoinsExt + GetCoinBySlug
-// + GetCoinTopMarkets + GetCoinPriceHistory24h + GetCoinMarketsCount.
+// + GetNativeCoinRow + GetCoinTopMarkets + GetCoinPriceHistory24h
+// + GetCoinMarketsCount.
 type CoinsReader interface {
 	ListCoinsExt(ctx context.Context, opts timescale.ListCoinsOptions) ([]timescale.CoinRow, error)
 	GetCoinBySlug(ctx context.Context, slug string) (timescale.CoinRow, error)
+	GetNativeCoinRow(ctx context.Context) (timescale.CoinRow, error)
 	GetCoinTopMarkets(ctx context.Context, assetID string, limit int) ([]timescale.CoinTopMarket, error)
 	GetCoinPriceHistory24h(ctx context.Context, assetID string) ([]timescale.CoinPricePoint, error)
 	GetCoinMarketsCount(ctx context.Context, assetID string) (int64, error)
@@ -232,7 +234,21 @@ func (s *Server) handleCoin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	row, err := s.coins.GetCoinBySlug(r.Context(), slug)
+	// Native XLM has no classic_assets row (that table only tracks
+	// issued classic assets). Without this intercept the slug "XLM"
+	// matches whichever issued token's code happens to be "XLM"
+	// wins the disambiguation tiebreak, and "native" 404s outright.
+	// The synthetic row is built from the same xlm_usd CTEs that
+	// drive triangulated pricing for every other asset.
+	var (
+		row timescale.CoinRow
+		err error
+	)
+	if slug == "XLM" || slug == "native" {
+		row, err = s.coins.GetNativeCoinRow(r.Context())
+	} else {
+		row, err = s.coins.GetCoinBySlug(r.Context(), slug)
+	}
 	if errors.Is(err, sql.ErrNoRows) {
 		writeProblem(w, r,
 			"https://api.ratesengine.net/errors/coin-not-found",

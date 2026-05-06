@@ -27,7 +27,13 @@ export async function generateStaticParams() {
   // fall back to a single canonical slug so static export has
   // something to anchor on — Next.js refuses to build a dynamic
   // route under output:'export' with zero params.
-  const fallback = [{ slug: 'native' }];
+  //
+  // Native XLM is always force-included: it has no row in
+  // classic_assets so `/v1/coins?limit=500` never returns it,
+  // but the API has a special-case path for slug "XLM" / "native"
+  // (see handleCoin → GetNativeCoinRow). Without this, the most
+  // important asset on the network would 404 on the explorer.
+  const fallback = [{ slug: 'XLM' }, { slug: 'native' }];
   try {
     // 10s here — generateStaticParams is a one-shot at build
     // time; the 500-asset listing query is heavier than a single
@@ -38,7 +44,15 @@ export async function generateStaticParams() {
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const env = (await res.json()) as { data: { coins: { slug: string }[] } };
     const slugs = (env.data?.coins ?? []).map((c) => c.slug);
-    return slugs.length > 0 ? slugs.map((slug) => ({ slug })) : fallback;
+    const seen = new Set<string>();
+    const out: { slug: string }[] = [];
+    for (const slug of [...fallback.map((f) => f.slug), ...slugs]) {
+      if (!seen.has(slug)) {
+        seen.add(slug);
+        out.push({ slug });
+      }
+    }
+    return out.length > 0 ? out : fallback;
   } catch {
     return fallback;
   }
