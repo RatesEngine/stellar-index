@@ -955,6 +955,164 @@ func (s *Store) GetCoinBySlug(ctx context.Context, slug string) (CoinRow, error)
 	return r, nil
 }
 
+// GetNativeCoinRow returns the synthetic CoinRow for native XLM.
+//
+// Native XLM has no row in classic_assets — that table only tracks
+// issued classic assets, by definition. Without a special-case path
+// the public lookup `/v1/coins/XLM` either 404s (no slug match) or
+// returns whichever issued token's code happens to be "XLM" wins
+// the disambiguation tiebreak (today: a scam token issued by
+// GAE5PQNUIP5E…).
+//
+// Population:
+//   - Slug / Code: hardcoded "XLM"
+//   - AssetID: "native" (the canonical pair-side identifier)
+//   - IssuerGStrkey: "" (native has no issuer)
+//   - First/Last seen ledger: the trades hypertable's min/max for
+//     base_asset='native' OR quote_asset='native'
+//   - ObservationCount: total trades touching native in the
+//     hypertable, capped at int64
+//   - PriceUSD + Change*Pct: same xlm_usd / xlm_usd_{1h,24h,7d}
+//     stablecoin-proxy chain used by GetCoinBySlug + the listing
+//     query for non-native assets
+//   - Volume24hUSD: SUM(volume_usd) where the asset is base or quote
+//     in the trailing 24h
+//   - MarketCapUSD / CirculatingSupply: NULL — supply pipeline
+//     doesn't yet emit a row for native (algorithm 1 work)
+//
+// Always returns a populated row (no sql.ErrNoRows path) — the
+// underlying CTEs LEFT JOIN out to NULL when there's no data.
+func (s *Store) GetNativeCoinRow(ctx context.Context) (CoinRow, error) {
+	return scanCoinRow(s.db.QueryRowContext(ctx, getNativeCoinSQL))
+}
+
+// getNativeCoinSQL is GetNativeCoinRow's query, hoisted to a
+// package constant so the function body stays under the funlen
+// threshold. Returns the same column shape as listCoinsBaseSelect
+// + getCoinBySlugSQL — the shared scanCoinRow projector handles
+// it identically.
+const getNativeCoinSQL = `
+		WITH per_asset_24h_vol AS (
+		  SELECT SUM(volume_usd) AS vol_usd
+		    FROM (
+		      SELECT volume_usd FROM prices_1m
+		       WHERE base_asset = 'native'
+		         AND bucket >= now() - INTERVAL '24 hours'
+		         AND bucket  <  now()
+		         AND volume_usd IS NOT NULL
+		      UNION ALL
+		      SELECT volume_usd FROM prices_1m
+		       WHERE quote_asset = 'native'
+		         AND bucket >= now() - INTERVAL '24 hours'
+		         AND bucket  <  now()
+		         AND volume_usd IS NOT NULL
+		    ) t
+		),
+		xlm_usd AS (
+		  SELECT vwap FROM prices_1m
+		   WHERE base_asset = 'native'
+		     AND quote_asset IN (
+		       'USDC-GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN',
+		       'USDT-GCQTGZQQ5G4PTM2GL7CDIFKUBIPEC52BROAQIAPW53XBRJVN6ZJVTG6V',
+		       'fiat:USD'
+		     )
+		     AND vwap IS NOT NULL
+		   ORDER BY bucket DESC LIMIT 1
+		),
+		xlm_usd_1h AS (
+		  SELECT vwap FROM prices_1m
+		   WHERE base_asset = 'native'
+		     AND quote_asset IN (
+		       'USDC-GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN',
+		       'USDT-GCQTGZQQ5G4PTM2GL7CDIFKUBIPEC52BROAQIAPW53XBRJVN6ZJVTG6V',
+		       'fiat:USD'
+		     )
+		     AND bucket BETWEEN now() - INTERVAL '1 hour 5 minutes'
+		                   AND now() - INTERVAL '55 minutes'
+		     AND vwap IS NOT NULL
+		   ORDER BY bucket DESC LIMIT 1
+		),
+		xlm_usd_24h AS (
+		  SELECT vwap FROM prices_1m
+		   WHERE base_asset = 'native'
+		     AND quote_asset IN (
+		       'USDC-GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN',
+		       'USDT-GCQTGZQQ5G4PTM2GL7CDIFKUBIPEC52BROAQIAPW53XBRJVN6ZJVTG6V',
+		       'fiat:USD'
+		     )
+		     AND bucket BETWEEN now() - INTERVAL '24 hours 30 minutes'
+		                   AND now() - INTERVAL '23 hours 30 minutes'
+		     AND vwap IS NOT NULL
+		   ORDER BY bucket DESC LIMIT 1
+		),
+		xlm_usd_7d AS (
+		  SELECT vwap FROM prices_1m
+		   WHERE base_asset = 'native'
+		     AND quote_asset IN (
+		       'USDC-GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN',
+		       'USDT-GCQTGZQQ5G4PTM2GL7CDIFKUBIPEC52BROAQIAPW53XBRJVN6ZJVTG6V',
+		       'fiat:USD'
+		     )
+		     AND bucket BETWEEN now() - INTERVAL '7 days 2 hours'
+		                   AND now() - INTERVAL '6 days 22 hours'
+		     AND vwap IS NOT NULL
+		   ORDER BY bucket DESC LIMIT 1
+		),
+		ledger_bounds AS (
+		  -- min/max ledger across trades that touch native. Capped
+		  -- to a 7-day window so this stays cheap; native trades
+		  -- happen every ledger so 7 days is plenty for the bounds.
+		  SELECT
+		    COALESCE(MIN(ledger_seq), 0)::bigint AS first_ledger,
+		    COALESCE(MAX(ledger_seq), 0)::bigint AS last_ledger,
+		    COUNT(*)::bigint                     AS obs_count
+		  FROM trades
+		  WHERE ts >= now() - INTERVAL '7 days'
+		    AND (base_asset = 'native' OR quote_asset = 'native')
+		)
+		SELECT
+		    'XLM'                                  AS slug,
+		    'native'                               AS asset_id,
+		    'XLM'                                  AS code,
+		    ''                                     AS issuer_g_strkey,
+		    lb.first_ledger                        AS first_seen_ledger,
+		    lb.last_ledger                         AS last_seen_ledger,
+		    lb.obs_count                           AS observation_count,
+		    ROUND((SELECT vwap FROM xlm_usd), 10)::text AS price_usd,
+		    vol.vol_usd                            AS volume_24h_usd,
+		    NULL::numeric                          AS market_cap_usd,
+		    NULL::numeric                          AS circulating_supply,
+		    CASE
+		      WHEN (SELECT vwap FROM xlm_usd) IS NOT NULL
+		           AND (SELECT vwap FROM xlm_usd_1h) IS NOT NULL
+		           AND (SELECT vwap FROM xlm_usd_1h) > 0
+		      THEN to_char(((SELECT vwap FROM xlm_usd)
+		                  / (SELECT vwap FROM xlm_usd_1h) - 1) * 100,
+		                  'FM999999990.00')
+		      ELSE NULL
+		    END                                    AS change_1h_pct,
+		    CASE
+		      WHEN (SELECT vwap FROM xlm_usd) IS NOT NULL
+		           AND (SELECT vwap FROM xlm_usd_24h) IS NOT NULL
+		           AND (SELECT vwap FROM xlm_usd_24h) > 0
+		      THEN to_char(((SELECT vwap FROM xlm_usd)
+		                  / (SELECT vwap FROM xlm_usd_24h) - 1) * 100,
+		                  'FM999999990.00')
+		      ELSE NULL
+		    END                                    AS change_24h_pct,
+		    CASE
+		      WHEN (SELECT vwap FROM xlm_usd) IS NOT NULL
+		           AND (SELECT vwap FROM xlm_usd_7d) IS NOT NULL
+		           AND (SELECT vwap FROM xlm_usd_7d) > 0
+		      THEN to_char(((SELECT vwap FROM xlm_usd)
+		                  / (SELECT vwap FROM xlm_usd_7d) - 1) * 100,
+		                  'FM999999990.00')
+		      ELSE NULL
+		    END                                    AS change_7d_pct
+		  FROM ledger_bounds lb
+		  LEFT JOIN per_asset_24h_vol vol ON true
+`
+
 // LatestAssetStats returns per-asset 24h volume + supply stats
 // for /v1/assets/{id}. Volume sums prices_1m.volume_usd across
 // pairs where the asset is base or quote (mirrors

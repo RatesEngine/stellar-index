@@ -16,6 +16,15 @@ against.
 ## [Unreleased]
 
 ### Fixed
+- **`/v1/coins/XLM` now returns native XLM, not the scam token.**
+  Previously `XLM` matched whichever issued token's code happened
+  to be "XLM" wins the disambiguation tiebreak (today: a token
+  issued by `GAE5PQNUIP5E…`). Native XLM has no row in
+  `classic_assets` by definition, so a special-case
+  `GetNativeCoinRow` builds a synthetic row from the same
+  `xlm_usd*` CTEs that drive triangulated pricing for every
+  other asset. Slug "XLM" and "native" both route here.
+  Explorer now pre-renders `/assets/XLM` unconditionally.
 - **XLM (asset_id `native`) now returns a non-null `price_usd`,
   `change_1h_pct`, `change_24h_pct`, `change_7d_pct`, and
   `price_history_24h` on `/v1/coins`.** Previously all five were
