@@ -65,6 +65,10 @@ interface CoinSummary {
   // quote), ordered by 24h USD volume desc. Empty array
   // when the asset has no recent trades.
   top_markets?: TopMarket[];
+  // 24 hourly USD-price samples (oldest first) covering the
+  // trailing 24h. Each entry: { t: RFC3339, p: rounded-to-10dp
+  // USD price or null }.
+  price_history_24h?: { t: string; p?: string | null }[];
 }
 
 interface TopMarket {
@@ -343,6 +347,9 @@ function OverviewBody({
             <span className="font-mono text-3xl tabular-nums">
               {priceNum != null ? `$${formatPrice(priceNum)}` : '—'}
             </span>
+            {coin.change_24h_pct != null && (
+              <ChangePctLabel raw={coin.change_24h_pct} />
+            )}
             {price?.flags?.stale && (
               <span className="rounded bg-amber-100 px-2 py-0.5 text-[11px] uppercase tracking-wider text-amber-800 dark:bg-amber-900/40 dark:text-amber-200">
                 Stale
@@ -354,6 +361,9 @@ function OverviewBody({
               </span>
             )}
           </div>
+          {coin.price_history_24h && coin.price_history_24h.length > 0 && (
+            <Sparkline24h points={coin.price_history_24h} />
+          )}
           <dl className="grid grid-cols-2 gap-3 border-t border-slate-200 pt-3 text-sm dark:border-slate-800 sm:grid-cols-3">
             <Stat
               label="Volume 24h"
@@ -517,6 +527,97 @@ function fmtNum(raw: string | null | undefined): string {
   const n = Number(raw);
   if (!Number.isFinite(n)) return '—';
   return formatCompact(n);
+}
+
+// ChangePctLabel renders a signed percentage with emerald-up /
+// rose-down / slate-zero colour. Accepts the wire-format string
+// (e.g. "+1.27", "-0.05", "0.00") or a parsed number.
+function ChangePctLabel({ raw }: { raw: string | null | undefined }) {
+  if (raw == null) return null;
+  const n = Number(raw);
+  if (!Number.isFinite(n)) return null;
+  const tone =
+    n > 0
+      ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300'
+      : n < 0
+        ? 'bg-rose-50 text-rose-700 dark:bg-rose-950/40 dark:text-rose-300'
+        : 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400';
+  const sign = n > 0 ? '+' : '';
+  return (
+    <span
+      className={`rounded px-2 py-0.5 font-mono text-xs tabular-nums ${tone}`}
+    >
+      {sign}
+      {n.toFixed(2)}%
+      <span className="ml-1 text-[10px] uppercase tracking-wider opacity-70">
+        24h
+      </span>
+    </span>
+  );
+}
+
+// Sparkline24h renders 24 hourly USD-price samples as a small
+// inline SVG. Null buckets break the path so the line shows
+// gaps where there were no trades. Auto-scales Y to the
+// observed [min, max] range.
+function Sparkline24h({
+  points,
+}: {
+  points: { t: string; p?: string | null }[];
+}) {
+  const values = points.map((pt) => {
+    const n = pt.p ? Number(pt.p) : null;
+    return n != null && Number.isFinite(n) ? n : null;
+  });
+  const finite = values.filter((v): v is number => v != null);
+  if (finite.length < 2) {
+    // Not enough non-null points to draw a meaningful sparkline.
+    return null;
+  }
+  const min = Math.min(...finite);
+  const max = Math.max(...finite);
+  const range = max - min || 1;
+  const W = 600;
+  const H = 60;
+  const segments: string[] = [];
+  let pen = false;
+  values.forEach((v, i) => {
+    const x = (i / (values.length - 1)) * W;
+    if (v == null) {
+      pen = false;
+      return;
+    }
+    const y = H - ((v - min) / range) * H;
+    segments.push(`${pen ? 'L' : 'M'} ${x.toFixed(1)} ${y.toFixed(1)}`);
+    pen = true;
+  });
+  const last = finite[finite.length - 1];
+  const first = finite[0];
+  const tone =
+    last >= first
+      ? 'stroke-emerald-500 dark:stroke-emerald-400'
+      : 'stroke-rose-500 dark:stroke-rose-400';
+  return (
+    <div className="border-t border-slate-200 pt-3 dark:border-slate-800">
+      <p className="mb-1 text-[10px] uppercase tracking-wider text-slate-500">
+        24h
+      </p>
+      <svg
+        viewBox={`0 0 ${W} ${H}`}
+        preserveAspectRatio="none"
+        className="h-12 w-full"
+        role="img"
+        aria-label="24-hour price sparkline"
+      >
+        <path
+          d={segments.join(' ')}
+          fill="none"
+          strokeWidth="1.5"
+          className={tone}
+        />
+      </svg>
+    </div>
+  );
 }
 
 // fmtCompact wraps formatCompact for inline use in table cells —

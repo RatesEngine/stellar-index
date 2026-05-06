@@ -12,11 +12,12 @@ import (
 
 // CoinsReader is the seam the /v1/coins handlers read through.
 // timescale.Store satisfies it via ListCoinsExt + GetCoinBySlug
-// + GetCoinTopMarkets.
+// + GetCoinTopMarkets + GetCoinPriceHistory24h.
 type CoinsReader interface {
 	ListCoinsExt(ctx context.Context, opts timescale.ListCoinsOptions) ([]timescale.CoinRow, error)
 	GetCoinBySlug(ctx context.Context, slug string) (timescale.CoinRow, error)
 	GetCoinTopMarkets(ctx context.Context, assetID string, limit int) ([]timescale.CoinTopMarket, error)
+	GetCoinPriceHistory24h(ctx context.Context, assetID string) ([]timescale.CoinPricePoint, error)
 }
 
 // Coin is the wire shape of one entry in the /v1/coins response.
@@ -47,6 +48,12 @@ type Coin struct {
 	// USD volume. Populated only on /v1/coins/{slug} (the
 	// listing endpoint omits it to keep payload sizes manageable).
 	TopMarkets []CoinTopMarket `json:"top_markets,omitempty"`
+	// PriceHistory24h is 24 hourly USD-price samples (oldest
+	// first) covering the trailing 24h. Populated only on
+	// /v1/coins/{slug}. Each entry: {t: RFC3339 bucket end,
+	// p: rounded-to-10dp USD price or null when no trades that
+	// hour}. Powers asset detail sparkline + chart preview.
+	PriceHistory24h []CoinPricePoint `json:"price_history_24h,omitempty"`
 }
 
 // CoinTopMarket is one entry in the per-asset top-markets preview.
@@ -58,6 +65,15 @@ type CoinTopMarket struct {
 	Side          string  `json:"side"`
 	Volume24hUSD  *string `json:"volume_24h_usd,omitempty"`
 	TradeCount24h int64   `json:"trade_count_24h"`
+}
+
+// CoinPricePoint is one hourly USD-price sample in
+// `Coin.PriceHistory24h`. `T` is the bucket end as an RFC3339
+// timestamp; `P` is the rounded-to-10dp USD price or nil when no
+// trades that hour produced a VWAP.
+type CoinPricePoint struct {
+	T string  `json:"t"`
+	P *string `json:"p,omitempty"`
 }
 
 // CoinsPage wraps the rows + cursor pagination metadata. The
@@ -223,12 +239,12 @@ func (s *Server) handleCoin(w http.ResponseWriter, r *http.Request) {
 
 	out := coinFromRow(row)
 
-	// Populate top_markets — soft-fail; the asset detail card
-	// still renders without the markets preview if the lookup
-	// errors. A failure here usually means the prices_1m chunk
-	// the query needs is being column-store-compressed.
-	topMarkets, mErr := s.coins.GetCoinTopMarkets(r.Context(), row.AssetID, 5)
-	if mErr != nil {
+	// Populate top_markets + price_history_24h — both soft-fail;
+	// the asset detail card still renders without the previews if
+	// either lookup errors. A failure here usually means the
+	// prices_1m chunk the query needs is being column-store-
+	// compressed.
+	if topMarkets, mErr := s.coins.GetCoinTopMarkets(r.Context(), row.AssetID, 5); mErr != nil {
 		s.logger.Warn("coin top markets", "asset_id", row.AssetID, "err", mErr)
 	} else {
 		out.TopMarkets = make([]CoinTopMarket, len(topMarkets))
@@ -239,6 +255,14 @@ func (s *Server) handleCoin(w http.ResponseWriter, r *http.Request) {
 				Volume24hUSD:  m.Volume24hUSD,
 				TradeCount24h: m.TradeCount24h,
 			}
+		}
+	}
+	if history, hErr := s.coins.GetCoinPriceHistory24h(r.Context(), row.AssetID); hErr != nil {
+		s.logger.Warn("coin price history", "asset_id", row.AssetID, "err", hErr)
+	} else {
+		out.PriceHistory24h = make([]CoinPricePoint, len(history))
+		for i, p := range history {
+			out.PriceHistory24h[i] = CoinPricePoint{T: p.T, P: p.P}
 		}
 	}
 

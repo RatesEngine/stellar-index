@@ -396,6 +396,102 @@ func parseVolumeCursor(cursor string) (vol, assetID string) {
 	return "0", ""
 }
 
+// CoinPricePoint is one hourly USD-price sample in a price-history
+// series. `T` is the bucket end (RFC 3339); `P` is the USD price
+// rounded to 10 dp via the same direct-or-XLM-triangulated path
+// as price_usd. Pointer P so an hour with no trades comes back
+// as null rather than zero.
+type CoinPricePoint struct {
+	T string
+	P *string
+}
+
+// GetCoinPriceHistory24h returns up to 24 hourly USD price samples
+// for the asset, ordered by bucket ASC (oldest first). Each
+// sample uses the same direct-then-XLM-triangulated path as
+// price_usd, but bucketed to the 1-hour grain. Powers a sparkline
+// column on /assets and a price chart preview on the detail page.
+//
+// Buckets with no underlying trades produce a null P. Callers can
+// either render a gap or interpolate; we leave that to the UI.
+func (s *Store) GetCoinPriceHistory24h(ctx context.Context, assetID string) ([]CoinPricePoint, error) {
+	const q = `
+		WITH hours AS (
+		  SELECT generate_series(
+		    date_trunc('hour', now() - INTERVAL '23 hours'),
+		    date_trunc('hour', now()),
+		    INTERVAL '1 hour'
+		  ) AS bucket
+		),
+		direct_per_hour AS (
+		  SELECT date_trunc('hour', bucket) AS h, AVG(vwap)::numeric AS vwap
+		    FROM prices_1m
+		   WHERE base_asset = $1
+		     AND quote_asset = 'fiat:USD'
+		     AND bucket >= date_trunc('hour', now() - INTERVAL '23 hours')
+		     AND vwap IS NOT NULL
+		   GROUP BY h
+		),
+		asset_xlm_per_hour AS (
+		  SELECT date_trunc('hour', bucket) AS h, AVG(vwap)::numeric AS vwap
+		    FROM prices_1m
+		   WHERE base_asset = $1
+		     AND quote_asset = 'native'
+		     AND bucket >= date_trunc('hour', now() - INTERVAL '23 hours')
+		     AND vwap IS NOT NULL
+		   GROUP BY h
+		),
+		xlm_usd_per_hour AS (
+		  -- Same stablecoin-proxy fallback as the listing query —
+		  -- prices_1m doesn't carry (native, fiat:USD) rows.
+		  SELECT date_trunc('hour', bucket) AS h, AVG(vwap)::numeric AS vwap
+		    FROM prices_1m
+		   WHERE base_asset = 'native'
+		     AND quote_asset IN (
+		       'USDC-GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN',
+		       'USDT-GCQTGZQQ5G4PTM2GL7CDIFKUBIPEC52BROAQIAPW53XBRJVN6ZJVTG6V',
+		       'fiat:USD'
+		     )
+		     AND bucket >= date_trunc('hour', now() - INTERVAL '23 hours')
+		     AND vwap IS NOT NULL
+		   GROUP BY h
+		)
+		SELECT
+		    to_char(hours.bucket, 'YYYY-MM-DD"T"HH24:MI:SS"Z"') AS t,
+		    ROUND(COALESCE(
+		      d.vwap,
+		      x.vwap * xu.vwap
+		    ), 10)::text AS p
+		  FROM hours
+		  LEFT JOIN direct_per_hour     d  ON d.h  = hours.bucket
+		  LEFT JOIN asset_xlm_per_hour  x  ON x.h  = hours.bucket
+		  LEFT JOIN xlm_usd_per_hour    xu ON xu.h = hours.bucket
+		 ORDER BY hours.bucket ASC
+	`
+	rows, err := s.db.QueryContext(ctx, q, assetID)
+	if err != nil {
+		return nil, fmt.Errorf("timescale: GetCoinPriceHistory24h: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+	out := make([]CoinPricePoint, 0, 24)
+	for rows.Next() {
+		var pt CoinPricePoint
+		var p sql.NullString
+		if err := rows.Scan(&pt.T, &p); err != nil {
+			return nil, fmt.Errorf("timescale: GetCoinPriceHistory24h scan: %w", err)
+		}
+		if p.Valid && p.String != "" {
+			s := p.String
+			pt.P = &s
+		}
+		out = append(out, pt)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("timescale: GetCoinPriceHistory24h rows: %w", err)
+	}
+	return out, nil
+}
+
 // CoinTopMarket is one entry in the top-markets preview returned
 // alongside a single coin lookup. Compact summary suitable for an
 // asset detail page header — the full markets list lives on
