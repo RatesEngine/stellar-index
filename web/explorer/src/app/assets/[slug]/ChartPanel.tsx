@@ -8,6 +8,7 @@ import { asExample, API_BASE_URL } from '@/api/client';
 
 type Timeframe = '24h' | '7d' | '30d' | '1y';
 type Granularity = '1m' | '15m' | '1h' | '4h' | '1d';
+type Quote = 'native' | 'fiat:USD';
 
 const TIMEFRAMES: { key: Timeframe; label: string }[] = [
   { key: '24h', label: '24h' },
@@ -22,6 +23,11 @@ const GRANULARITIES: { key: Granularity; label: string }[] = [
   { key: '1h', label: '1h' },
   { key: '4h', label: '4h' },
   { key: '1d', label: '1d' },
+];
+
+const QUOTES: { key: Quote; label: string }[] = [
+  { key: 'native', label: 'XLM' },
+  { key: 'fiat:USD', label: 'USD' },
 ];
 
 interface ChartPoint {
@@ -42,16 +48,21 @@ interface ChartPoint {
  * the OHLC bar reshape lands. When the API switches to bar
  * shape this component reads the new fields without further
  * change.
+ *
+ * Quote defaults to `native` (XLM). Most active classic Stellar
+ * assets only have asset/native trades on SDEX; fiat:USD direct
+ * VWAP rarely exists. Users can toggle to fiat:USD when the
+ * asset is an off-chain crypto:* feed (Binance / Bitstamp /
+ * etc.) that does have direct USD pairs.
  */
 export function ChartPanel({
-  slug,
-  startPrice: _startPrice,
+  assetID,
 }: {
-  slug: string;
-  startPrice: number;
+  assetID: string;
 }) {
   const [timeframe, setTimeframe] = useState<Timeframe>('24h');
   const [granularity, setGranularity] = useState<Granularity>('1h');
+  const [quote, setQuote] = useState<Quote>('native');
   const [data, setData] = useState<
     { time: number; open: number; high: number; low: number; close: number }[]
   >([]);
@@ -62,21 +73,33 @@ export function ChartPanel({
     const controller = new AbortController();
     setLoading(true);
     setError(null);
-    const url = `${API_BASE_URL}/v1/chart?asset=${encodeURIComponent(slug)}&quote=fiat:USD&timeframe=${timeframe}&granularity=${granularity}&price_type=vwap`;
+    const url = `${API_BASE_URL}/v1/chart?asset=${encodeURIComponent(assetID)}&quote=${encodeURIComponent(quote)}&timeframe=${timeframe}&granularity=${granularity}&price_type=vwap`;
     fetch(url, { signal: controller.signal })
       .then((r) => {
         if (!r.ok) throw new Error(`HTTP ${r.status}`);
-        return r.json() as Promise<{ data: ChartPoint[] }>;
+        return r.json() as Promise<{
+          data: ChartPoint[] | { points?: ChartPoint[] };
+        }>;
       })
       .then((env) => {
-        const bars = (env.data ?? []).map((p) => {
-          const v = Number(p.vwap ?? p.close ?? '0');
+        // /v1/chart returns { data: { points: [{ t, p, v_usd }] } }.
+        // Each point maps to a flat candle until the OHLC bar
+        // reshape lands. Defensive: tolerate the old top-level-
+        // array shape too.
+        const points = Array.isArray(env.data)
+          ? (env.data as ChartPoint[])
+          : (env.data?.points ?? []);
+        const bars = points.map((p) => {
+          const t = (p as unknown as { t?: string; ts?: string }).t ?? p.ts ?? '';
+          const v = Number(
+            (p as unknown as { p?: string }).p ?? p.vwap ?? p.close ?? '0',
+          );
           const open = Number(p.open ?? v);
           const high = Number(p.high ?? Math.max(open, v));
           const low = Number(p.low ?? Math.min(open, v));
           const close = Number(p.close ?? v);
           return {
-            time: Math.floor(new Date(p.ts).getTime() / 1000),
+            time: Math.floor(new Date(t).getTime() / 1000),
             open,
             high,
             low,
@@ -92,22 +115,28 @@ export function ChartPanel({
         setLoading(false);
       });
     return () => controller.abort();
-  }, [slug, timeframe, granularity]);
+  }, [assetID, quote, timeframe, granularity]);
 
   return (
     <div className="space-y-4">
       <Panel
         title="Price chart"
-        hint={`${timeframe} · ${granularity}`}
+        hint={`${timeframe} · ${granularity} · vs ${quote === 'native' ? 'XLM' : 'USD'}`}
         source={asExample('/v1/chart', {
-          asset: slug,
-          quote: 'fiat:USD',
+          asset: assetID,
+          quote,
           timeframe,
           granularity,
           price_type: 'vwap',
         })}
       >
         <div className="mb-3 flex flex-wrap items-center gap-2">
+          <Picker
+            label="Quote"
+            options={QUOTES}
+            value={quote}
+            onChange={(v) => setQuote(v as Quote)}
+          />
           <Picker
             label="Timeframe"
             options={TIMEFRAMES}

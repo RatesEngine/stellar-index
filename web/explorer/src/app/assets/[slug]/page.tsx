@@ -276,7 +276,7 @@ export default async function AssetDetailPage({ params }: { params: Params }) {
           overview={
             <OverviewBody coin={coin} detail={detail} price={price} />
           }
-          chart={<ChartPanel slug={coin.slug} startPrice={parsePrice(price?.price) ?? 0.01} />}
+          chart={<ChartPanel assetID={coin.asset_id} />}
           markets={<MarketsTabPanel assetID={coin.asset_id} />}
           history={<HistoryTabPanel assetID={coin.asset_id} />}
           supply={<SupplyTabPanel assetID={coin.asset_id} />}
