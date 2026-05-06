@@ -1,7 +1,6 @@
 'use client';
 
 import { AlertCircle, Check, Copy, KeyRound, Loader2 } from 'lucide-react';
-import Link from 'next/link';
 import { useState } from 'react';
 
 import { API_BASE_URL } from '@/api/client';
@@ -274,9 +273,9 @@ export function SignupForm() {
 
       <p className="text-xs text-slate-500 dark:text-slate-400">
         By signing up you agree to use the API in accordance with our
-        <Link href="/docs" className="underline ml-1">
+        <a href="https://docs.ratesengine.net" className="underline ml-1">
           terms
-        </Link>
+        </a>
         . No credit card required.
       </p>
     </form>

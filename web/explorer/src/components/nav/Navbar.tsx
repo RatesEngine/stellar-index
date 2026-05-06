@@ -25,23 +25,33 @@ export function Navbar() {
           <span>Rates Engine</span>
         </Link>
         <div className="hidden items-center gap-1 text-sm sm:flex">
-          {SECTIONS.map((s) => (
-            <Link
-              key={s.href}
-              href={s.href}
-              className="rounded-md px-3 py-1.5 text-slate-600 hover:bg-slate-100 hover:text-brand-600 dark:text-slate-300 dark:hover:bg-slate-800"
-            >
-              {s.label}
-            </Link>
-          ))}
+          {SECTIONS.map((s) =>
+            s.external ? (
+              <a
+                key={s.href}
+                href={s.href}
+                className="rounded-md px-3 py-1.5 text-slate-600 hover:bg-slate-100 hover:text-brand-600 dark:text-slate-300 dark:hover:bg-slate-800"
+              >
+                {s.label}
+              </a>
+            ) : (
+              <Link
+                key={s.href}
+                href={s.href}
+                className="rounded-md px-3 py-1.5 text-slate-600 hover:bg-slate-100 hover:text-brand-600 dark:text-slate-300 dark:hover:bg-slate-800"
+              >
+                {s.label}
+              </Link>
+            ),
+          )}
           <SearchModal />
-          <Link
-            href="/status"
+          <a
+            href="https://status.ratesengine.net"
             className="ml-2 inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-slate-600 hover:bg-slate-100 hover:text-brand-600 dark:text-slate-300 dark:hover:bg-slate-800"
           >
             <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" aria-hidden />
             Status
-          </Link>
+          </a>
           <Link
             href="/signup"
             className="ml-2 rounded-md bg-brand-600 px-3 py-1.5 font-medium text-white hover:bg-brand-700"
@@ -54,7 +64,9 @@ export function Navbar() {
   );
 }
 
-const SECTIONS = [
+type Section = { label: string; href: string; external?: boolean };
+
+const SECTIONS: Section[] = [
   { label: 'Assets', href: '/assets' },
   { label: 'Markets', href: '/markets' },
   { label: 'DEXes', href: '/dexes' },
@@ -63,5 +75,5 @@ const SECTIONS = [
   { label: 'Oracles', href: '/oracles' },
   { label: 'Network', href: '/network' },
   { label: 'Research', href: '/research' },
-  { label: 'Docs', href: '/docs' },
+  { label: 'Docs', href: 'https://docs.ratesengine.net', external: true },
 ];

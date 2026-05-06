@@ -35,12 +35,12 @@ export default function HomePage() {
           >
             Browse markets
           </Link>
-          <Link
-            href="/docs"
+          <a
+            href="https://docs.ratesengine.net"
             className="inline-flex items-center gap-1.5 rounded-md border border-slate-300 px-3.5 py-2 text-sm font-medium text-slate-700 hover:border-brand-500 hover:text-brand-600 dark:border-slate-700 dark:text-slate-300"
           >
             API docs
-          </Link>
+          </a>
         </div>
       </header>
 

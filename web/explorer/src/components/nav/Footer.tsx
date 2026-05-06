@@ -44,9 +44,9 @@ export function Footer() {
             links={[
               { label: 'Sign up', href: '/signup' },
               { label: 'Account', href: '/account' },
-              { label: 'Status', href: '/status' },
+              { label: 'Status', href: 'https://status.ratesengine.net', external: true },
               { label: 'Diagnostics', href: '/diagnostics' },
-              { label: 'API docs', href: '/docs' },
+              { label: 'API docs', href: 'https://docs.ratesengine.net', external: true },
               { label: 'Research', href: '/research' },
             ]}
           />

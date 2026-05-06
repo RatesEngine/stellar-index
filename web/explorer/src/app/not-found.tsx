@@ -55,9 +55,9 @@ export default function NotFound() {
           </Link>
         </li>
         <li>
-          <Link href="/docs" className="hover:text-brand-600">
+          <a href="https://docs.ratesengine.net" className="hover:text-brand-600">
             API docs
-          </Link>
+          </a>
         </li>
       </ul>
     </div>

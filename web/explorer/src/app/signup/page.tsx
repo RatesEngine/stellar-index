@@ -1,5 +1,4 @@
 import type { Metadata } from 'next';
-import Link from 'next/link';
 
 import { API_BASE_URL } from '@/api/client';
 
@@ -157,9 +156,9 @@ export default function SignupPage() {
       <section className="rounded-xl border border-amber-200 bg-amber-50 p-5 text-sm text-amber-900 dark:border-amber-900/50 dark:bg-amber-900/20 dark:text-amber-200">
         <strong>Free tier already gets you most of what you need.</strong>{' '}
         If you&rsquo;re prototyping, just hit{' '}
-        <Link href="/docs" className="underline">
+        <a href="https://docs.ratesengine.net" className="underline">
           the public endpoints
-        </Link>{' '}
+        </a>{' '}
         directly — no signup required. The 60 req/min anonymous floor
         works for an exploratory script or a low-traffic embed. Sign
         up when you want the higher per-key rate-limit + usage
