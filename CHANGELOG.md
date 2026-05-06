@@ -15,6 +15,8 @@ against.
 
 ## [Unreleased]
 
+## [v0.5.0-rc.16] — 2026-05-06
+
 ### Fixed
 - **`/v1/coins/XLM` now returns native XLM, not the scam token.**
   Previously `XLM` matched whichever issued token's code happened
