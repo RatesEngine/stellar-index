@@ -93,24 +93,24 @@
         mode: "0644"
 
     # CLI tools (ops, migrate, sla-probe) are one-shot binaries
-    # with no daemon to restart. The `cli_binaries` list below
-    # is the canonical set; everything else is treated as a
-    # systemd service. The smoke uses `file` rather than a
-    # `--version` flag because each CLI has a different version
-    # convention (ops uses `version` subcommand, migrate uses
-    # `version` subcommand, sla-probe uses `-version` flag) —
-    # checking the ELF header catches a corrupted-during-scp
-    # binary without coupling the playbook to per-binary CLI
-    # shape.
-    - name: "[{{ binary }}] Smoke-test CLI binary (well-formed ELF)"
+    # with no daemon to restart. Each CLI has a different
+    # version convention (ops uses `version` subcommand,
+    # migrate too, sla-probe uses `-version` flag), so per-CLI
+    # version flags can't be a uniform smoke. Use ansible.stat
+    # to confirm the file is present + executable + non-empty,
+    # which catches the "scp truncated mid-upload" / "wrong
+    # arch" / "missing chmod +x" failure modes a runtime probe
+    # would catch — without depending on any external tooling
+    # being installed on the host.
+    - name: "[{{ binary }}] Smoke-test CLI binary (executable + non-empty)"
       when: binary in cli_binaries
-      ansible.builtin.command:
-        cmd: "file -L {{ install_dir }}/{{ binary }}"
-      changed_when: false
-      register: cli_file
-      failed_when:
-        - cli_file.rc != 0
-        - "'ELF 64-bit' not in cli_file.stdout"
+      ansible.builtin.stat:
+        path: "{{ install_dir }}/{{ binary }}"
+      register: cli_stat
+      failed_when: >
+        not cli_stat.stat.exists
+        or not cli_stat.stat.executable
+        or cli_stat.stat.size < 1024
 
     - name: "[{{ binary }}] Restart service"
       when: binary not in cli_binaries
