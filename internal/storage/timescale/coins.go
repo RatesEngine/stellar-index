@@ -396,9 +396,16 @@ const getCoinBySlugSQL = `
 		   ORDER BY bucket DESC LIMIT 1
 		),
 		xlm_usd AS (
+		  -- Same stablecoin-proxy policy as the listing query:
+		  -- prices_1m doesn't carry (native, fiat:USD) rows; use
+		  -- on-chain XLM/USDC (or USDT) as the USD-equivalent.
 		  SELECT vwap FROM prices_1m
-		   WHERE base_asset  = 'native'
-		     AND quote_asset = 'fiat:USD'
+		   WHERE base_asset = 'native'
+		     AND quote_asset IN (
+		       'USDC-GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN',
+		       'USDT-GCQTGZQQ5G4PTM2GL7CDIFKUBIPEC52BROAQIAPW53XBRJVN6ZJVTG6V',
+		       'fiat:USD'
+		     )
 		     AND vwap IS NOT NULL
 		   ORDER BY bucket DESC LIMIT 1
 		)
