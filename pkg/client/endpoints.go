@@ -397,17 +397,33 @@ func (c *Client) Sources(ctx context.Context, opts SourcesOptions) (*Envelope[[]
 	return &env, nil
 }
 
+// MarketsOrderBy controls server-side sort + cursor scheme.
+type MarketsOrderBy string
+
+const (
+	// MarketsOrderByPair sorts by `<base>|<quote>` lex order
+	// ascending. Stable for paginating the full set. Default.
+	MarketsOrderByPair MarketsOrderBy = "pair"
+	// MarketsOrderByVolume24hUSDDesc sorts by 24h USD volume
+	// descending (NULLS LAST), with `<base>|<quote>` as the
+	// tie-breaker. Surfaces high-activity pairs first.
+	MarketsOrderByVolume24hUSDDesc MarketsOrderBy = "volume_24h_usd_desc"
+)
+
 // MarketsOptions paginates through the active-pair catalogue.
 // Same Cursor + Limit semantics as [AssetsOptions].
 type MarketsOptions struct {
 	Cursor string
 	Limit  int // 0 → server default (typically 100); max 500
+	// OrderBy controls sort + cursor scheme. Empty → server default
+	// (alphabetic by `<base>|<quote>`).
+	OrderBy MarketsOrderBy
 }
 
 // Markets lists the (base, quote) pairs the deployment has
 // observed at least one trade for, paginated. Each Market entry
 // includes a 24h activity summary (last-trade timestamp + 24h
-// trade count).
+// trade count + 24h USD volume).
 func (c *Client) Markets(ctx context.Context, opts MarketsOptions) (*Envelope[[]Market], error) {
 	v := url.Values{}
 	if opts.Cursor != "" {
@@ -415,6 +431,9 @@ func (c *Client) Markets(ctx context.Context, opts MarketsOptions) (*Envelope[[]
 	}
 	if opts.Limit > 0 {
 		v.Set("limit", strconv.Itoa(opts.Limit))
+	}
+	if opts.OrderBy != "" {
+		v.Set("order_by", string(opts.OrderBy))
 	}
 	var env Envelope[[]Market]
 	if err := c.doJSON(ctx, http.MethodGet, "/v1/markets", v, nil, &env); err != nil {

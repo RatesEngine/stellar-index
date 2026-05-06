@@ -991,8 +991,8 @@ func (r storeAssetReader) GetAsset(ctx context.Context, a canonical.Asset) (v1.A
 // wire shape) so the API layer owns its own schema.
 type storeMarketsReader struct{ s *timescale.Store }
 
-func (r storeMarketsReader) DistinctPairs(ctx context.Context, cursor string, limit int) ([]v1.Market, string, error) {
-	rows, next, err := r.s.DistinctPairs(ctx, cursor, limit)
+func (r storeMarketsReader) DistinctPairsExt(ctx context.Context, cursor string, limit int, order timescale.MarketsOrder) ([]v1.Market, string, error) {
+	rows, next, err := r.s.DistinctPairsExt(ctx, cursor, limit, order)
 	if err != nil {
 		return nil, "", err
 	}
@@ -1155,11 +1155,11 @@ func (r cachedMarketsReader) PairMarket(ctx context.Context, base, quote canonic
 	return r.inner.PairMarket(ctx, base, quote)
 }
 
-func (r cachedMarketsReader) DistinctPairs(ctx context.Context, cursor string, limit int) ([]v1.Market, string, error) {
+func (r cachedMarketsReader) DistinctPairsExt(ctx context.Context, cursor string, limit int, order timescale.MarketsOrder) ([]v1.Market, string, error) {
 	if r.rdb == nil {
-		return r.inner.DistinctPairs(ctx, cursor, limit)
+		return r.inner.DistinctPairsExt(ctx, cursor, limit, order)
 	}
-	cacheKey := cachekeys.MarketsList(cursor, limit)
+	cacheKey := cachekeys.MarketsList(cursor, limit) + ":order=" + marketsOrderKey(order)
 	if raw, err := r.rdb.Get(ctx, cacheKey).Bytes(); err == nil {
 		var p listCachePayload[v1.Market]
 		if jerr := json.Unmarshal(raw, &p); jerr == nil {
@@ -1170,7 +1170,7 @@ func (r cachedMarketsReader) DistinctPairs(ctx context.Context, cursor string, l
 		r.log.Warn("markets cache read failed", "key", cacheKey, "err", err)
 	}
 
-	items, next, err := r.inner.DistinctPairs(ctx, cursor, limit)
+	items, next, err := r.inner.DistinctPairsExt(ctx, cursor, limit, order)
 	if err != nil {
 		return nil, "", err
 	}
@@ -1180,6 +1180,15 @@ func (r cachedMarketsReader) DistinctPairs(ctx context.Context, cursor string, l
 		}
 	}
 	return items, next, nil
+}
+
+func marketsOrderKey(o timescale.MarketsOrder) string {
+	switch o {
+	case timescale.MarketsOrderVolume24hDesc:
+		return "vol_desc"
+	default:
+		return "pair"
+	}
 }
 
 // redisConfidenceLooker adapts the shared Redis client to
