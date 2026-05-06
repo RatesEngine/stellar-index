@@ -20,7 +20,10 @@
 #
 # Required secrets (set once in repo settings):
 #   - CLOUDFLARE_API_TOKEN  — token with Pages:Edit on the
-#                             ratesengine-explorer project
+#                             ratesengine-showcase project (the
+#                             rename to ratesengine-explorer is
+#                             pending — task #23; the existing
+#                             project still serves the apex domain)
 #   - CLOUDFLARE_ACCOUNT_ID — the CF account UUID
 
 name: explorer-deploy
@@ -97,5 +100,5 @@ jobs:
           workingDirectory: web/explorer
           command: >-
             pages deploy out
-            --project-name ratesengine-explorer
+            --project-name ratesengine-showcase
             --branch ${{ github.event.inputs.environment == 'production' && 'main' || github.ref_name }}
