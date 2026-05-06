@@ -16,6 +16,12 @@ against.
 ## [Unreleased]
 
 ### Added
+- **Cmd-K search: G-strkey + pair shortcut detection.** Typing
+  a 56-char Stellar G-strkey now surfaces a "→ Issuer detail"
+  result that deep-links to `/issuers/{g_strkey}`. Typing a pair
+  shortcut like `XLM/USDC`, `XLM USDC`, or `XLM-USDC` resolves
+  the codes against the loaded coins set and surfaces a "→ Pair
+  detail" result deep-linking to `/markets/{base~quote}`.
 - **`/markets/{base~quote}` per-pair detail page on the explorer.**
   Static-export route enumerating the top 100 pairs by 24h USD
   volume at build time. Renders pair header (base/quote labels +

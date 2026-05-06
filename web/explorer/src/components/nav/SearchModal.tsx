@@ -208,6 +208,42 @@ function search(
     // by observation_count desc by the API).
     return coinResults.slice(0, 5);
   }
+
+  // Direct-jump detectors run first — when the user has typed a
+  // recognisable identifier shape, surface the deep-link as the
+  // top result so they can hit Enter and go.
+  const direct: Result[] = [];
+
+  // Stellar G-strkey — 56 chars, uppercase base32 starting with 'G'.
+  const gMatch = q.trim().match(/^G[A-Z2-7]{55}$/);
+  if (gMatch) {
+    direct.push({
+      type: 'page',
+      label: `Issuer ${gMatch[0].slice(0, 8)}…${gMatch[0].slice(-4)}`,
+      hint: 'open issuer detail',
+      href: `/issuers/${gMatch[0]}`,
+    });
+  }
+
+  // Pair shortcut: "XLM/USDC", "XLM USDC", "xlm-usdc" → enumerate
+  // possible (base, quote) pairs from the loaded coins set and pick
+  // the first one. Falls back to /markets if no exact pair match.
+  const pairMatch = q.trim().match(/^([A-Za-z0-9]+)[\s/\\-]+([A-Za-z0-9]+)$/);
+  if (pairMatch) {
+    const baseCode = pairMatch[1].toUpperCase();
+    const quoteCode = pairMatch[2].toUpperCase();
+    const baseAssetID = lookupAssetID(coins, baseCode);
+    const quoteAssetID = lookupAssetID(coins, quoteCode);
+    if (baseAssetID && quoteAssetID) {
+      direct.push({
+        type: 'pair',
+        label: `${baseCode} / ${quoteCode}`,
+        hint: 'open pair detail',
+        href: `/markets/${encodeURIComponent(`${baseAssetID}~${quoteAssetID}`)}`,
+      });
+    }
+  }
+
   // When coins came from /v1/coins?q=…, they're already filtered;
   // skip the redundant client pass on them. Protocols + pages
   // still need a client filter (they're seeded constants).
@@ -217,7 +253,19 @@ function search(
   const matchedOther = [...PROTOCOLS, ...STATIC_PAGES].filter((r) =>
     match(norm, r),
   );
-  return [...matchedCoins, ...matchedOther].slice(0, 12);
+  return [...direct, ...matchedCoins, ...matchedOther].slice(0, 12);
+}
+
+// lookupAssetID resolves a code (e.g. "USDC") to its canonical
+// asset_id (e.g. "USDC-GA5Z…") using the loaded coins set. "XLM"
+// special-cases to "native". Returns null when no match — caller
+// falls back to /markets.
+function lookupAssetID(coins: Coin[], code: string): string | null {
+  if (code === 'XLM') return 'native';
+  for (const c of coins) {
+    if (c.code === code) return c.asset_id;
+  }
+  return null;
 }
 
 function coinResult(c: Coin): Result {
