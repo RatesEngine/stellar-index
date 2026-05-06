@@ -66,99 +66,170 @@ interface Envelope {
 // Not auto-derived from the OpenAPI spec because not every
 // endpoint deserves a status row — operator surfaces (`/metrics`,
 // `/v1/diagnostics/*`) clutter without adding signal.
-const PUBLIC_ENDPOINTS: { path: string; group: string; description: string }[] =
-  [
-    {
-      path: '/v1/healthz',
-      group: 'Health',
-      description: 'Liveness probe',
-    },
-    { path: '/v1/readyz', group: 'Health', description: 'Readiness probe' },
-    {
-      path: '/v1/price',
-      group: 'Pricing',
-      description: 'Current VWAP price for one asset',
-    },
-    {
-      path: '/v1/price/batch',
-      group: 'Pricing',
-      description: 'Batch lookup, up to 1000 assets',
-    },
-    {
-      path: '/v1/price/tip',
-      group: 'Pricing',
-      description: 'Rolling-window tip price',
-    },
-    {
-      path: '/v1/price/stream',
-      group: 'Pricing',
-      description: 'Closed-bucket SSE stream',
-    },
-    { path: '/v1/vwap', group: 'Pricing', description: 'VWAP over a window' },
-    { path: '/v1/twap', group: 'Pricing', description: 'TWAP over a window' },
-    { path: '/v1/ohlc', group: 'Pricing', description: 'OHLC bar' },
-    {
-      path: '/v1/chart',
-      group: 'Pricing',
-      description: 'Multi-bar chart series',
-    },
-    {
-      path: '/v1/history',
-      group: 'Historical',
-      description: 'Trade history within a window',
-    },
-    {
-      path: '/v1/observations',
-      group: 'Historical',
-      description: 'Per-source latest trade',
-    },
-    {
-      path: '/v1/coins',
-      group: 'Catalogue',
-      description: 'Asset directory (440K+ classic assets)',
-    },
-    {
-      path: '/v1/assets/{id}',
-      group: 'Catalogue',
-      description: 'Asset detail + supply + market cap',
-    },
-    { path: '/v1/markets', group: 'Catalogue', description: 'Trading pairs' },
-    {
-      path: '/v1/issuers',
-      group: 'Catalogue',
-      description: 'Issuer directory',
-    },
-    {
-      path: '/v1/sources',
-      group: 'Catalogue',
-      description: 'Per-venue source metadata',
-    },
-    {
-      path: '/v1/oracle/latest',
-      group: 'Oracle',
-      description: 'Latest oracle readings',
-    },
-    {
-      path: '/v1/oracle/lastprice',
-      group: 'Oracle',
-      description: 'SEP-40 lastprice',
-    },
-    {
-      path: '/v1/auth/login',
-      group: 'Dashboard auth',
-      description: 'Magic-link request',
-    },
-    {
-      path: '/v1/auth/callback',
-      group: 'Dashboard auth',
-      description: 'Magic-link consume',
-    },
-    {
-      path: '/v1/auth/sep10/challenge',
-      group: 'API auth',
-      description: 'SEP-10 challenge',
-    },
-  ];
+//
+// `probe` shapes how we hit the endpoint to render a real green/
+// amber/red badge:
+//   { kind: 'get', path: '…' }   — fetch the path verbatim
+//   { kind: 'requires-auth' }    — show "auth req'd", no probe
+//   { kind: 'streaming' }        — show "stream", no probe (SSE
+//                                  open is heavy + blocks the
+//                                  probe pool)
+//
+// Probe paths use minimal safe parameters where required (e.g.
+// `?asset=native`, `?limit=1`) so each fetch returns a small
+// payload and 200 means "the codepath is alive end-to-end".
+type EndpointProbe =
+  | { kind: 'get'; path: string }
+  | { kind: 'requires-auth' }
+  | { kind: 'streaming' };
+
+interface PublicEndpoint {
+  path: string;
+  group: string;
+  description: string;
+  probe: EndpointProbe;
+}
+
+const PUBLIC_ENDPOINTS: PublicEndpoint[] = [
+  {
+    path: '/v1/healthz',
+    group: 'Health',
+    description: 'Liveness probe',
+    probe: { kind: 'get', path: '/v1/healthz' },
+  },
+  {
+    path: '/v1/readyz',
+    group: 'Health',
+    description: 'Readiness probe',
+    probe: { kind: 'get', path: '/v1/readyz' },
+  },
+  {
+    path: '/v1/price',
+    group: 'Pricing',
+    description: 'Current VWAP price for one asset',
+    probe: { kind: 'get', path: '/v1/price?asset=native&quote=fiat:USD' },
+  },
+  {
+    path: '/v1/price/batch',
+    group: 'Pricing',
+    description: 'Batch lookup, up to 1000 assets',
+    probe: { kind: 'get', path: '/v1/price/batch?assets=native&quote=fiat:USD' },
+  },
+  {
+    path: '/v1/price/tip',
+    group: 'Pricing',
+    description: 'Rolling-window tip price',
+    probe: { kind: 'get', path: '/v1/price/tip?asset=native&quote=fiat:USD' },
+  },
+  {
+    path: '/v1/price/stream',
+    group: 'Pricing',
+    description: 'Closed-bucket SSE stream',
+    probe: { kind: 'streaming' },
+  },
+  {
+    path: '/v1/vwap',
+    group: 'Pricing',
+    description: 'VWAP over a window',
+    probe: { kind: 'get', path: '/v1/vwap?asset=native&quote=fiat:USD&window=1m' },
+  },
+  {
+    path: '/v1/twap',
+    group: 'Pricing',
+    description: 'TWAP over a window',
+    probe: { kind: 'get', path: '/v1/twap?asset=native&quote=fiat:USD&window=1m' },
+  },
+  {
+    path: '/v1/ohlc',
+    group: 'Pricing',
+    description: 'OHLC bar',
+    probe: { kind: 'get', path: '/v1/ohlc?asset=native&quote=fiat:USD&interval=1m' },
+  },
+  {
+    path: '/v1/chart',
+    group: 'Pricing',
+    description: 'Multi-bar chart series',
+    probe: { kind: 'get', path: '/v1/chart?asset=native&quote=fiat:USD&interval=1m&limit=1' },
+  },
+  {
+    path: '/v1/history',
+    group: 'Historical',
+    description: 'Trade history within a window',
+    probe: { kind: 'get', path: '/v1/history?asset=native&quote=fiat:USD&limit=1' },
+  },
+  {
+    path: '/v1/observations',
+    group: 'Historical',
+    description: 'Per-source latest trade',
+    probe: { kind: 'get', path: '/v1/observations?asset=native&quote=fiat:USD' },
+  },
+  {
+    path: '/v1/coins',
+    group: 'Catalogue',
+    description: 'Asset directory (440K+ classic assets)',
+    probe: { kind: 'get', path: '/v1/coins?limit=1' },
+  },
+  {
+    path: '/v1/assets/{id}',
+    group: 'Catalogue',
+    description: 'Asset detail + supply + market cap',
+    probe: { kind: 'get', path: '/v1/assets/native' },
+  },
+  {
+    path: '/v1/markets',
+    group: 'Catalogue',
+    description: 'Trading pairs',
+    probe: { kind: 'get', path: '/v1/markets?limit=1' },
+  },
+  {
+    path: '/v1/issuers',
+    group: 'Catalogue',
+    description: 'Issuer directory',
+    probe: { kind: 'get', path: '/v1/issuers?limit=1' },
+  },
+  {
+    path: '/v1/sources',
+    group: 'Catalogue',
+    description: 'Per-venue source metadata',
+    probe: { kind: 'get', path: '/v1/sources' },
+  },
+  {
+    path: '/v1/oracle/latest',
+    group: 'Oracle',
+    description: 'Latest oracle readings',
+    probe: { kind: 'get', path: '/v1/oracle/latest' },
+  },
+  {
+    path: '/v1/oracle/lastprice',
+    group: 'Oracle',
+    description: 'SEP-40 lastprice',
+    probe: { kind: 'get', path: '/v1/oracle/lastprice?asset=native' },
+  },
+  {
+    path: '/v1/auth/login',
+    group: 'Dashboard auth',
+    description: 'Magic-link request',
+    probe: { kind: 'requires-auth' },
+  },
+  {
+    path: '/v1/auth/callback',
+    group: 'Dashboard auth',
+    description: 'Magic-link consume',
+    probe: { kind: 'requires-auth' },
+  },
+  {
+    path: '/v1/auth/sep10/challenge',
+    group: 'API auth',
+    description: 'SEP-10 challenge',
+    probe: { kind: 'requires-auth' },
+  },
+];
+
+// 5s probe budget — well under the 30s polling interval. Every
+// public endpoint should serve a 200 response within this budget;
+// crossing it gets the "slow" tone even on 200.
+const PROBE_TIMEOUT_MS = 5_000;
+const PROBE_SLOW_MS = 800;
 
 const INCIDENT_HISTORY: {
   date: string;
@@ -174,7 +245,7 @@ export default function StatusPage() {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [endpointHealth, setEndpointHealth] = useState<
-    Record<string, { ok: boolean; latencyMs: number }>
+    Record<string, EndpointProbeResult>
   >({});
 
   useEffect(() => {
@@ -205,22 +276,41 @@ export default function StatusPage() {
     };
   }, []);
 
-  // Endpoint-level health probe — pings /v1/healthz once at
-  // mount as a stand-in. The real per-endpoint status lives in
-  // Prometheus; surfacing each endpoint's individual liveness
-  // would require a richer /v1/status payload.
+  // Per-endpoint live probe. Fires every endpoint with a `get`
+  // probe in parallel on mount and on each /v1/status poll, so
+  // the matrix stays current with the rest of the page. Endpoints
+  // marked `requires-auth` or `streaming` keep their static label
+  // and never get a fetch fired against them.
   useEffect(() => {
-    const start = performance.now();
-    fetch(`${API_BASE_URL}/v1/healthz`)
-      .then((r) => {
-        const ms = performance.now() - start;
-        setEndpointHealth({ '/v1/healthz': { ok: r.ok, latencyMs: ms } });
-      })
-      .catch(() => {
-        setEndpointHealth({
-          '/v1/healthz': { ok: false, latencyMs: -1 },
-        });
+    let cancelled = false;
+    const probes = PUBLIC_ENDPOINTS.filter((e) => e.probe.kind === 'get').map(
+      (e) => probeEndpoint(e),
+    );
+    function runOnce() {
+      Promise.allSettled(probes.map((p) => p())).then((results) => {
+        if (cancelled) return;
+        const next: Record<string, EndpointProbeResult> = {};
+        let i = 0;
+        for (const ep of PUBLIC_ENDPOINTS) {
+          if (ep.probe.kind === 'get') {
+            const r = results[i++];
+            next[ep.path] =
+              r.status === 'fulfilled'
+                ? r.value
+                : { kind: 'error', latencyMs: -1 };
+          } else {
+            next[ep.path] = { kind: 'static', label: ep.probe.kind };
+          }
+        }
+        setEndpointHealth(next);
       });
+    }
+    runOnce();
+    const id = setInterval(runOnce, POLL_INTERVAL_MS);
+    return () => {
+      cancelled = true;
+      clearInterval(id);
+    };
   }, []);
 
   const overallTone = useMemo(() => toneFor(status?.overall), [status]);
@@ -515,7 +605,7 @@ function EndpointMatrix({
   health,
 }: {
   endpoints: typeof PUBLIC_ENDPOINTS;
-  health: Record<string, { ok: boolean; latencyMs: number }>;
+  health: Record<string, EndpointProbeResult>;
 }) {
   const grouped = useMemo(() => {
     const out: Record<string, typeof endpoints> = {};
@@ -564,11 +654,53 @@ function EndpointMatrix({
   );
 }
 
-function EndpointBadge({
-  probe,
-}: {
-  probe?: { ok: boolean; latencyMs: number };
-}) {
+// EndpointProbeResult is the union of states the matrix renders.
+//   - 'fast' / 'slow' / 'down' come from a real fetch
+//   - 'error' is a fetch that threw (network, abort, TLS)
+//   - 'static' is a non-probed endpoint (auth-gated, streaming);
+//     `label` is what to show in the badge ("auth req'd",
+//     "stream"). These never animate or change colour because
+//     the page can't observe them without escalating to a paid
+//     synthetic-monitor.
+type EndpointProbeResult =
+  | { kind: 'fast'; latencyMs: number }
+  | { kind: 'slow'; latencyMs: number }
+  | { kind: 'down'; latencyMs: number; status: number }
+  | { kind: 'error'; latencyMs: number }
+  | { kind: 'static'; label: 'requires-auth' | 'streaming' };
+
+// probeEndpoint returns a closure so the same-shape probe runs
+// every poll without re-allocating the URL.
+function probeEndpoint(
+  ep: PublicEndpoint,
+): () => Promise<EndpointProbeResult> {
+  if (ep.probe.kind === 'requires-auth' || ep.probe.kind === 'streaming') {
+    const label = ep.probe.kind;
+    return () => Promise.resolve({ kind: 'static', label });
+  }
+  const url = `${API_BASE_URL}${ep.probe.path}`;
+  return async () => {
+    const start = performance.now();
+    try {
+      const res = await fetch(url, {
+        signal: AbortSignal.timeout(PROBE_TIMEOUT_MS),
+        cache: 'no-store',
+      });
+      const latencyMs = performance.now() - start;
+      if (!res.ok) {
+        return { kind: 'down', latencyMs, status: res.status };
+      }
+      return latencyMs < PROBE_SLOW_MS
+        ? { kind: 'fast', latencyMs }
+        : { kind: 'slow', latencyMs };
+    } catch {
+      const latencyMs = performance.now() - start;
+      return { kind: 'error', latencyMs };
+    }
+  };
+}
+
+function EndpointBadge({ probe }: { probe?: EndpointProbeResult }) {
   if (!probe) {
     return (
       <span className="inline-flex items-center gap-1 rounded-full bg-surface-subtle px-2 py-0.5 text-[10px] uppercase tracking-wider text-ink-faint">
@@ -576,15 +708,41 @@ function EndpointBadge({
       </span>
     );
   }
-  return probe.ok ? (
-    <span className="inline-flex items-center gap-1 rounded-full bg-ok-50 px-2 py-0.5 text-[10px] uppercase tracking-wider text-ok-700">
-      <CheckCircle2 className="h-3 w-3" />
-      OK
-    </span>
-  ) : (
+  if (probe.kind === 'static') {
+    return (
+      <span className="inline-flex items-center gap-1 rounded-full bg-surface-subtle px-2 py-0.5 text-[10px] uppercase tracking-wider text-ink-faint">
+        {probe.label === 'requires-auth' ? "auth req'd" : 'stream'}
+      </span>
+    );
+  }
+  if (probe.kind === 'fast') {
+    return (
+      <span className="inline-flex items-center gap-1 rounded-full bg-ok-50 px-2 py-0.5 text-[10px] uppercase tracking-wider text-ok-700">
+        <CheckCircle2 className="h-3 w-3" />
+        {Math.round(probe.latencyMs)}ms
+      </span>
+    );
+  }
+  if (probe.kind === 'slow') {
+    return (
+      <span className="inline-flex items-center gap-1 rounded-full bg-warn-50 px-2 py-0.5 text-[10px] uppercase tracking-wider text-warn-700">
+        <AlertTriangle className="h-3 w-3" />
+        {Math.round(probe.latencyMs)}ms
+      </span>
+    );
+  }
+  if (probe.kind === 'down') {
+    return (
+      <span className="inline-flex items-center gap-1 rounded-full bg-bad-50 px-2 py-0.5 text-[10px] uppercase tracking-wider text-bad-700">
+        <XCircle className="h-3 w-3" />
+        {probe.status}
+      </span>
+    );
+  }
+  return (
     <span className="inline-flex items-center gap-1 rounded-full bg-bad-50 px-2 py-0.5 text-[10px] uppercase tracking-wider text-bad-700">
       <XCircle className="h-3 w-3" />
-      DOWN
+      err
     </span>
   );
 }
