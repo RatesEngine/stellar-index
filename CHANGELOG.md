@@ -15,6 +15,38 @@ against.
 
 ## [Unreleased]
 
+## [v0.5.0-rc.6] — 2026-05-06
+
+### Fixed
+- **`/v1/coins/{slug}` returned the wrong issuer for shared codes.**
+  Many classic asset codes (e.g. USDC) are issued by multiple
+  G-accounts; `classic_assets.slug` is auto-disambiguated only
+  for the canonical row, with same-code later issuances getting
+  `slug=null`. The previous `WHERE COALESCE(slug, code) = $1
+  LIMIT 1` matched both kinds and arbitrary row order picked
+  the wrong one (production was returning a 5,931-observation
+  USDC instead of Circle's 41M-observation row). New ordering
+  `(slug = $1) DESC NULLS LAST, observation_count DESC` picks
+  the exact slug-column match first, then breaks ties by
+  activity.
+
+### Changed
+- **Explorer triangulates USD via XLM** on the asset detail page
+  when the direct `asset/fiat:USD` VWAP is missing. Most active
+  classic Stellar assets only trade against XLM (or stablecoins)
+  on SDEX, so the aggregator's per-pair USD VWAP doesn't exist;
+  composing `(asset/XLM) × (XLM/USD)` client-side gives every
+  active asset a real USD price tagged with the existing
+  `triangulated` flag.
+- **Home page Top assets table** added below the hero. Top-10
+  by observation count with real 24h volume USD per row, deep-
+  linking into `/assets/<slug>`.
+- **Dropped synthetic sparkline values** from the Network home
+  panel — the `[60_000, 65_000, 71_000, …, assetsCount]` series
+  was hardcoded month-over-month inserts implying growth that
+  the project couldn't prove. Real series plumbs in once the
+  multi-window delta pipeline lands.
+
 ## [v0.5.0-rc.5] — 2026-05-06
 
 ### Added
