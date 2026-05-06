@@ -37,8 +37,13 @@ type IssuerListEntry struct {
 
 // Issuer is the wire shape returned by /v1/issuers/{g_strkey}.
 type Issuer struct {
-	GStrkey        string          `json:"g_strkey"`
-	HomeDomain     string          `json:"home_domain,omitempty"`
+	GStrkey    string `json:"g_strkey"`
+	HomeDomain string `json:"home_domain,omitempty"`
+	// OrgName is the issuer's organisation name extracted from
+	// SEP-1 (`[DOCUMENTATION].ORG_NAME`). Same field as the
+	// listing endpoint surfaces; populated by the
+	// `ratesengine-ops sep1-refresh` job.
+	OrgName        string          `json:"org_name,omitempty"`
 	AuthRequired   *bool           `json:"auth_required,omitempty"`
 	AuthRevocable  *bool           `json:"auth_revocable,omitempty"`
 	AuthImmutable  *bool           `json:"auth_immutable,omitempty"`
@@ -158,6 +163,7 @@ func (s *Server) handleIssuer(w http.ResponseWriter, r *http.Request) {
 	out := Issuer{
 		GStrkey:        row.GStrkey,
 		HomeDomain:     row.HomeDomain,
+		OrgName:        row.OrgName,
 		AuthRequired:   row.AuthRequired,
 		AuthRevocable:  row.AuthRevocable,
 		AuthImmutable:  row.AuthImmutable,

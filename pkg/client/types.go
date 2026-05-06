@@ -387,8 +387,12 @@ type IssuedAsset struct {
 // as the SEP-1 fetcher worker resolves them; pre-resolution they
 // stay nil.
 type Issuer struct {
-	GStrkey        string  `json:"g_strkey"`
-	HomeDomain     string  `json:"home_domain,omitempty"`
+	GStrkey    string `json:"g_strkey"`
+	HomeDomain string `json:"home_domain,omitempty"`
+	// OrgName is the issuer's organisation name from
+	// `[DOCUMENTATION].ORG_NAME` in stellar.toml. Populated by
+	// the SEP-1 fetcher; empty until resolved.
+	OrgName        string  `json:"org_name,omitempty"`
 	AuthRequired   *bool   `json:"auth_required,omitempty"`
 	AuthRevocable  *bool   `json:"auth_revocable,omitempty"`
 	AuthImmutable  *bool   `json:"auth_immutable,omitempty"`

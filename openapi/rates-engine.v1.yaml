@@ -947,6 +947,12 @@ paths:
                 properties:
                   g_strkey: { type: string }
                   home_domain: { type: string }
+                  org_name:
+                    type: string
+                    description: |
+                      Issuer's organisation name from SEP-1
+                      `[DOCUMENTATION].ORG_NAME`. Same value the
+                      listing endpoint surfaces.
                   auth_required: { type: boolean, nullable: true }
                   auth_revocable: { type: boolean, nullable: true }
                   auth_immutable: { type: boolean, nullable: true }

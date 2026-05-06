@@ -14,6 +14,7 @@ import (
 type IssuerRow struct {
 	GStrkey        string
 	HomeDomain     string
+	OrgName        string // sep1_payload->>'OrgName' — empty when SEP-1 not fetched
 	AuthRequired   *bool
 	AuthRevocable  *bool
 	AuthImmutable  *bool
@@ -30,6 +31,7 @@ func (s *Store) GetIssuer(ctx context.Context, gStrkey string) (IssuerRow, error
 		SELECT
 		    g_strkey,
 		    COALESCE(home_domain, ''),
+		    COALESCE(sep1_payload->>'OrgName', '') AS org_name,
 		    auth_required,
 		    auth_revocable,
 		    auth_immutable,
@@ -51,6 +53,7 @@ func (s *Store) GetIssuer(ctx context.Context, gStrkey string) (IssuerRow, error
 	err := s.db.QueryRowContext(ctx, q, gStrkey).Scan(
 		&row.GStrkey,
 		&row.HomeDomain,
+		&row.OrgName,
 		&authReq, &authRev, &authImm, &authClb,
 		&resolvedAt, &payload, &creation,
 	)

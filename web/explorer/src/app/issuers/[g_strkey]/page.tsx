@@ -31,6 +31,7 @@ interface IssuedAsset {
 interface IssuerDetail {
   g_strkey: string;
   home_domain?: string;
+  org_name?: string;
   auth_required?: boolean;
   auth_revocable?: boolean;
   auth_immutable?: boolean;
@@ -133,12 +134,23 @@ export default async function IssuerDetailPage({ params }: { params: Params }) {
           </Link>{' '}
           /{' '}
           <span className="font-mono text-slate-700 dark:text-slate-300">
-            {shortKey(g_strkey)}
+            {detail.org_name || shortKey(g_strkey)}
           </span>
         </nav>
-        <h1 className="font-mono text-2xl font-semibold tracking-tight break-all">
-          {g_strkey}
-        </h1>
+        {detail.org_name ? (
+          <>
+            <h1 className="text-2xl font-semibold tracking-tight">
+              {detail.org_name}
+            </h1>
+            <p className="font-mono text-xs text-slate-500 break-all">
+              {g_strkey}
+            </p>
+          </>
+        ) : (
+          <h1 className="font-mono text-2xl font-semibold tracking-tight break-all">
+            {g_strkey}
+          </h1>
+        )}
         {detail.home_domain && (
           <p className="text-sm text-slate-600 dark:text-slate-400">
             <a
