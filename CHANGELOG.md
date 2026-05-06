@@ -15,6 +15,22 @@ against.
 
 ## [Unreleased]
 
+## [v0.5.0-rc.11] — 2026-05-06
+
+### Added
+- **`/v1/coins.change_24h_pct`** — trailing-24h price change as a
+  signed percentage with two fractional digits. Same direct-then-
+  triangulated price source as `price_usd`; the explorer's
+  `/assets` table renders the column with green-up / red-down /
+  slate-zero colour. Replaces the placeholder em-dash that's been
+  in the listing since the rebuild started.
+
+### Changed
+- **`buildCoinsQuery` + `GetCoinBySlug` SQL hoisted** to package
+  consts — the new CTEs pushed both functions over funlen.
+  `coinFromRow()` helper centralises the `timescale.CoinRow →
+  v1.Coin` projection so adding a column lands in one spot.
+
 ## [v0.5.0-rc.10] — 2026-05-06
 
 ### Added
