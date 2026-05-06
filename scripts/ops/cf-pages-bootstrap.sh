@@ -107,9 +107,13 @@ project_create_or_update() {
              | jq -r '.result.name // empty' || true)
 
   # Build the env-vars JSON object: { "KEY": { "value": "VAL", "type": "plain_text" }, ... }
-  local env_json='{}'
-  for kv in "${env_vars[@]}"; do
-    local k="${kv%%=*}" v="${kv#*=}"
+  # Iterate via numeric index to avoid `set -u` tripping on an
+  # empty array — `${env_vars[@]}` errors when the array has
+  # zero elements; `${#env_vars[@]}` is always defined.
+  local env_json='{}' i k v
+  for (( i = 0; i < ${#env_vars[@]}; i++ )); do
+    k="${env_vars[i]%%=*}"
+    v="${env_vars[i]#*=}"
     env_json=$(jq --arg k "$k" --arg v "$v" \
                   '. + { ($k): { value: $v, type: "plain_text" } }' \
                   <<<"$env_json")
@@ -248,12 +252,22 @@ project_create_or_update \
   "public" \
   "HUGO_VERSION=0.121.0"
 
+# Static OpenAPI reference (Redocly-generated, committed to the
+# repo). No build step — CF Pages just serves the directory.
+# `make docs-api` regenerates the source HTML; CI checks the diff.
+project_create_or_update \
+  "ratesengine-docs" \
+  "docs/reference/api" \
+  "true" \
+  "."
+
 # ─── custom domains ──────────────────────────────────────────────
 
 project_attach_domain "ratesengine-showcase"  "$APEX_DOMAIN"
 project_attach_domain "ratesengine-showcase"  "www.$APEX_DOMAIN"
 project_attach_domain "ratesengine-dashboard" "app.$APEX_DOMAIN"
 project_attach_domain "ratesengine-status"    "status.$APEX_DOMAIN"
+project_attach_domain "ratesengine-docs"      "docs.$APEX_DOMAIN"
 
 # ─── DNS records (only if the zone is on Cloudflare) ─────────────
 
@@ -261,6 +275,7 @@ dns_upsert CNAME "$APEX_DOMAIN"        "ratesengine-showcase.pages.dev"
 dns_upsert CNAME "www.$APEX_DOMAIN"    "ratesengine-showcase.pages.dev"
 dns_upsert CNAME "app.$APEX_DOMAIN"    "ratesengine-dashboard.pages.dev"
 dns_upsert CNAME "status.$APEX_DOMAIN" "ratesengine-status.pages.dev"
+dns_upsert CNAME "docs.$APEX_DOMAIN"   "ratesengine-docs.pages.dev"
 dns_upsert A     "api.$APEX_DOMAIN"    "$API_HOST"
 
 # ─── done ─────────────────────────────────────────────────────────
