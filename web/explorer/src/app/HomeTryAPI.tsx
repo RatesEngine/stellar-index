@@ -1,40 +1,96 @@
 'use client';
 
-import { Check, Copy } from 'lucide-react';
+import { Check, Copy, Play } from 'lucide-react';
 import { useState } from 'react';
 
 import { API_BASE_URL } from '@/api/client';
 
-const EXAMPLES = [
+interface Example {
+  label: string;
+  // path is the relative URL (with query string). The cmd renders
+  // a curl invocation; the live runner just fetches the same URL.
+  path: string;
+}
+
+const EXAMPLES: Example[] = [
   {
     label: 'Latest XLM/USDC price (VWAP)',
-    cmd: (base: string) =>
-      `curl ${base}/v1/price?asset=native\\&quote=USDC-GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN`,
+    path: '/v1/price?asset=native&quote=USDC-GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN',
   },
   {
-    label: 'Top-100 coins',
-    cmd: (base: string) => `curl ${base}/v1/coins?limit=100`,
+    label: 'XLM coin detail',
+    path: '/v1/coins/XLM',
   },
   {
-    label: 'Active markets (last 14d)',
-    cmd: (base: string) => `curl ${base}/v1/markets?limit=20`,
+    label: 'Top-10 coins',
+    path: '/v1/coins?limit=10',
+  },
+  {
+    label: 'Top-10 markets by 24h volume',
+    path: '/v1/markets?limit=10&order_by=volume_24h_usd_desc',
+  },
+  {
+    label: 'Recent XLM/USDC trades',
+    path: '/v1/history?base=native&quote=USDC-GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN&limit=5',
   },
   {
     label: 'Per-source ingest cursors',
-    cmd: (base: string) => `curl ${base}/v1/diagnostics/cursors`,
+    path: '/v1/diagnostics/cursors',
+  },
+  {
+    label: 'Customer incident history',
+    path: '/v1/incidents',
   },
 ];
 
 /**
  * Inline "Try the API" panel for the home page. Tabs through a few
  * canonical examples — copy-button on each so a visitor can paste
- * straight into a terminal. The base URL adapts to whatever the
- * site is configured against (production, r1 dev, local).
+ * straight into a terminal, AND a Run-it button that fetches the
+ * same URL inline and renders the JSON response.
+ *
+ * The `path` is shared between the curl command + the live fetch
+ * so what you read in the box is exactly what you get when you
+ * Run it.
  */
 export function HomeTryAPI() {
   const [activeIx, setActiveIx] = useState(0);
   const [copied, setCopied] = useState(false);
-  const cmd = EXAMPLES[activeIx]!.cmd(API_BASE_URL);
+  const [running, setRunning] = useState(false);
+  const [response, setResponse] = useState<string | null>(null);
+  const [responseTone, setResponseTone] = useState<'ok' | 'err' | null>(null);
+
+  const example = EXAMPLES[activeIx]!;
+  const cmd = `curl '${API_BASE_URL}${example.path}'`;
+
+  function runLive() {
+    setRunning(true);
+    setResponse(null);
+    setResponseTone(null);
+    fetch(`${API_BASE_URL}${example.path}`, { cache: 'no-store' })
+      .then(async (r) => {
+        const body = await r.text();
+        let pretty = body;
+        try {
+          pretty = JSON.stringify(JSON.parse(body), null, 2);
+        } catch {
+          // Non-JSON; show raw.
+        }
+        setResponse(pretty.slice(0, 4000));
+        setResponseTone(r.ok ? 'ok' : 'err');
+      })
+      .catch((e) => {
+        setResponse(e instanceof Error ? e.message : 'Network error');
+        setResponseTone('err');
+      })
+      .finally(() => setRunning(false));
+  }
+
+  function pickExample(i: number) {
+    setActiveIx(i);
+    setResponse(null);
+    setResponseTone(null);
+  }
 
   return (
     <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900">
@@ -43,7 +99,7 @@ export function HomeTryAPI() {
           <button
             key={ex.label}
             type="button"
-            onClick={() => setActiveIx(i)}
+            onClick={() => pickExample(i)}
             className={`rounded-md px-2.5 py-1 text-xs ${
               i === activeIx
                 ? 'bg-brand-600 text-white'
@@ -55,33 +111,65 @@ export function HomeTryAPI() {
         ))}
       </div>
       <div className="relative rounded-lg bg-slate-950 px-3 py-2.5 font-mono text-[11px] text-slate-100">
-        <pre className="overflow-x-auto whitespace-pre-wrap break-all pr-10">
+        <pre className="overflow-x-auto whitespace-pre-wrap break-all pr-20">
           <code>$ {cmd}</code>
         </pre>
-        <button
-          type="button"
-          aria-label="Copy command"
-          onClick={() => {
-            navigator.clipboard
-              .writeText(cmd)
-              .then(() => {
-                setCopied(true);
-                setTimeout(() => setCopied(false), 1500);
-              })
-              .catch(() => {});
-          }}
-          className="absolute right-2 top-2 rounded p-1 text-slate-400 hover:bg-slate-800 hover:text-slate-100"
-        >
-          {copied ? (
-            <Check className="h-3.5 w-3.5 text-up-DEFAULT" />
-          ) : (
-            <Copy className="h-3.5 w-3.5" />
-          )}
-        </button>
+        <div className="absolute right-2 top-2 flex gap-1">
+          <button
+            type="button"
+            aria-label="Run live"
+            onClick={runLive}
+            disabled={running}
+            className="rounded p-1 text-slate-400 hover:bg-slate-800 hover:text-emerald-400 disabled:opacity-50"
+          >
+            <Play className="h-3.5 w-3.5" />
+          </button>
+          <button
+            type="button"
+            aria-label="Copy command"
+            onClick={() => {
+              navigator.clipboard
+                .writeText(cmd)
+                .then(() => {
+                  setCopied(true);
+                  setTimeout(() => setCopied(false), 1500);
+                })
+                .catch(() => {});
+            }}
+            className="rounded p-1 text-slate-400 hover:bg-slate-800 hover:text-slate-100"
+          >
+            {copied ? (
+              <Check className="h-3.5 w-3.5 text-up-DEFAULT" />
+            ) : (
+              <Copy className="h-3.5 w-3.5" />
+            )}
+          </button>
+        </div>
       </div>
+      {response != null && (
+        <div className="mt-2 overflow-hidden rounded-lg border border-slate-200 bg-slate-50 dark:border-slate-800 dark:bg-slate-950">
+          <div
+            className={`flex items-center justify-between px-3 py-1 text-[10px] uppercase tracking-wider ${
+              responseTone === 'ok'
+                ? 'bg-emerald-100/40 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300'
+                : 'bg-rose-100/40 text-rose-700 dark:bg-rose-950/40 dark:text-rose-300'
+            }`}
+          >
+            <span>response</span>
+            <span>
+              {responseTone === 'ok' ? 'OK' : 'error'} · {response.length}b
+              {response.length === 4000 && ' (truncated)'}
+            </span>
+          </div>
+          <pre className="max-h-72 overflow-auto px-3 py-2 font-mono text-[11px] text-slate-700 dark:text-slate-300">
+            {response}
+          </pre>
+        </div>
+      )}
       <p className="mt-2 text-[11px] text-slate-500">
         No auth needed for the public tier — every endpoint here
-        responds in milliseconds.
+        responds in milliseconds. Hit ▶ to run live; click any
+        example tab above to see the curl.
       </p>
     </div>
   );

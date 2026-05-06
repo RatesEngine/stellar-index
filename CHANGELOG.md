@@ -16,6 +16,14 @@ against.
 ## [Unreleased]
 
 ### Added
+- **Home Try-the-API panel: Run-it live + 7 examples.** The
+  panel now ships with 7 canonical curls (price, coin detail,
+  coins listing, top markets, history, cursors, incidents) and
+  a ▶ button next to the Copy button — click to fetch the same
+  URL inline and render the JSON response (4 KB cap, syntax-
+  pretty when JSON, raw otherwise). Closes the loop between
+  "what should I try?" → "what does it actually return?" without
+  the visitor leaving the page.
 - **`/network` page rebuilt around live data.** Drops the
   "Coming next" placeholder and renders the same network stats
   strip as the home page (24h volume, active markets, asset
