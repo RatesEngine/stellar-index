@@ -15,6 +15,8 @@ against.
 
 ## [Unreleased]
 
+## [v0.5.0-rc.17] — 2026-05-06
+
 ### Fixed
 - **`/v1/coins/XLM` 500 regression on rc.16.** The synthetic
   native-row builder (`GetNativeCoinRow`, PR #798) scanned
