@@ -15,17 +15,60 @@ against.
 
 ## [Unreleased]
 
+## [v0.5.0-rc.3] — 2026-05-06
+
 ### Added
-- **Cloudflare Pages bootstrap script.** New
-  `scripts/ops/cf-pages-bootstrap.sh` provisions all three
+- **`/v1/coins` keyset pagination + per-row metrics.** Each row
+  now joins the latest `classic_asset_stats_5m` bucket
+  (`volume_24h_usd`, `outstanding_supply`) and the latest
+  `prices_1m` bucket against `fiat:USD` (`vwap`). Optional
+  fields per row: `price_usd`, `volume_24h_usd`,
+  `market_cap_usd` (= price × supply when both known),
+  `circulating_supply`. Cursor pagination via
+  `?cursor=<obs_count>:<asset_id>` lets clients iterate the
+  full ~440K-asset population. Wire shape changed to
+  `{coins, next_cursor, limit}`. `pkg/client` SDK + OpenAPI
+  spec updated.
+- **Custom Next.js status page.** `status.ratesengine.net`
+  flips from cstate (Hugo) to a Next.js static-export at
+  `web/status/`. Polls `/v1/status` every 30 s; renders
+  overall banner + per-service heartbeats + p50/p95/p99
+  latency strip + ingest-freshness + active incidents from
+  Alertmanager + curated public-endpoint matrix.
+- **`/assets` explorer route.** Replaces the previous
+  `/coins` directory with a dense, paginated, etherscan-grade
+  table of every Stellar asset — real price, market cap,
+  volume, supply via the new `/v1/coins` join. Per-page
+  selector (50/100/200/500). Cursor pagination round-trips
+  through the URL.
+
+### Changed
+- **`web/showcase/` → `web/explorer/`** repositioning. The
+  site is the canonical Stellar asset explorer (powered by
+  our data); the directory name + Makefile targets + workflow
+  names + CF Pages job labels are renamed to match. CF Pages
+  project itself stays `ratesengine-showcase` for now (CF
+  doesn't support project rename).
+- **`/coins/` → `/assets/`** edge redirect (301) via
+  `public/_redirects`. Asset detail pages remain at
+  `/coins/<slug>/` for now; that migration is a follow-up.
+- **Removed every fake / seed data path** from the explorer:
+  `lib/coins-seed.ts`, `lib/chart-seed.ts`, `fakeActivity()`
+  sparkline column. Fields the API doesn't yet expose render
+  as `—` rather than fabricated values.
+- **Removed every link to internal markdown files** from the
+  explorer (24 GitHub-blob links across 9 pages).
+- **Cloudflare Pages bootstrap script.**
+  `scripts/ops/cf-pages-bootstrap.sh` provisions all four
   customer-facing surfaces (`ratesengine-showcase`,
-  `ratesengine-dashboard`, `ratesengine-status`) plus DNS +
-  custom domains via the Cloudflare API. Idempotent — re-runs
-  patch drift instead of failing. Operator runbook at
-  `docs/operations/cf-pages-setup.md`. With CF's GitHub app
-  authorised against the org once (existing state), every push
-  to `main` auto-deploys each project without consuming GitHub
-  Actions minutes.
+  `ratesengine-dashboard`, `ratesengine-status`,
+  `ratesengine-docs`) plus DNS + custom domains via the
+  Cloudflare API. Idempotent.
+
+### Removed
+- **cstate status page** (~13K lines of vendored Hugo theme).
+- **Duplicate `/status` and `/docs` explorer routes** — those
+  are dedicated subdomains now.
 
 ## [v0.5.0-rc.2] — 2026-05-06
 
