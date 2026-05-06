@@ -40,6 +40,12 @@ type CoinRow struct {
 	// scale matches asset decimals). Nil for assets the supply
 	// pipeline doesn't yet cover.
 	CirculatingSupply *string
+	// Trailing-24h price change as a signed percentage with two
+	// fractional digits (e.g. "+1.27", "-0.05", "0.00"). Nil
+	// when the asset has no current price, or when no
+	// 24h-ago bucket exists in prices_1m within a ±30min
+	// tolerance.
+	Change24hPct *string
 }
 
 // ListCoinsOptions bundles the optional filters / paging
@@ -95,11 +101,13 @@ func (s *Store) ListCoinsExt(ctx context.Context, opts ListCoinsOptions) ([]Coin
 			volume24hUSD            sql.NullString
 			marketCapUSD            sql.NullString
 			circulatingSupply       sql.NullString
+			change24hPct            sql.NullString
 		)
 		if err := rows.Scan(
 			&r.Slug, &r.AssetID, &r.Code, &r.IssuerGStrkey,
 			&firstLedger, &lastLedger, &r.ObservationCount,
 			&priceUSD, &volume24hUSD, &marketCapUSD, &circulatingSupply,
+			&change24hPct,
 		); err != nil {
 			return nil, fmt.Errorf("timescale: ListCoins scan: %w", err)
 		}
@@ -117,6 +125,9 @@ func (s *Store) ListCoinsExt(ctx context.Context, opts ListCoinsOptions) ([]Coin
 		if circulatingSupply.Valid {
 			r.CirculatingSupply = &circulatingSupply.String
 		}
+		if change24hPct.Valid {
+			r.Change24hPct = &change24hPct.String
+		}
 		out = append(out, r)
 	}
 	if err := rows.Err(); err != nil {
@@ -125,47 +136,30 @@ func (s *Store) ListCoinsExt(ctx context.Context, opts ListCoinsOptions) ([]Coin
 	return out, nil
 }
 
-// buildCoinsQuery composes the SELECT + WHERE + ORDER + LIMIT
-// for ListCoins, given the limit / issuer-filter / keyset
-// cursor / search query. Pulled out of ListCoins so the latter
-// stays under the gocognit threshold; same SQL surface area,
-// just cleanly separated from the row-scanning logic.
-func buildCoinsQuery(limit int, issuer, cursor, q string) (string, []any) {
-	cursorObsCount, cursorAssetID := parseCoinCursor(cursor)
-
-	// Volume aggregation comes from prices_1m by summing
-	// volume_usd across the trailing 24h, where the asset
-	// participates as base OR quote. This sidesteps two
-	// problems: classic_asset_stats_5m is unwritten today
-	// (migration shipped without a writer); and most Stellar
-	// classic assets don't have a direct fiat:USD pair so a
-	// LATERAL price-by-pair lookup returns null for them.
-	//
-	// Price + market_cap_usd + circulating_supply are NOT
-	// joined here. Their proper sources are the aggregator's
-	// stablecoin-policy USD-price pipeline and the supply
-	// pipeline (asset_supply_history) — neither of which is
-	// running for the long tail of classic assets today.
-	// Surfacing fabricated values would defeat the whole
-	// "stop lying" rule. They render as null until the
-	// pipelines are wired.
-	// Per-asset USD price comes from one of two sources:
-	//   1. direct: latest prices_1m row where (base, quote) =
-	//      (asset, fiat:USD). Most off-chain crypto:* sources hit
-	//      this directly.
-	//   2. triangulated: (latest asset/native VWAP) × (latest
-	//      native/fiat:USD VWAP). Most active classic Stellar
-	//      assets only trade against XLM on SDEX so the direct
-	//      VWAP doesn't exist; triangulation gives them a real
-	//      USD price (matches what the explorer asset detail
-	//      page already does client-side).
-	//
-	// COALESCE picks direct over triangulated when both exist.
-	// Both subqueries use DISTINCT ON for "latest per asset"
-	// without a window-function or correlated subquery — the
-	// (base_asset, quote_asset, bucket DESC) order makes the
-	// implicit prices_1m index efficient.
-	const baseSelect = `
+// listCoinsBaseSelect is the CTE-laden SELECT shared by every
+// permutation of WHERE-clause buildCoinsQuery composes. Pulled
+// out of the function body so buildCoinsQuery stays under the
+// funlen threshold and the SQL is editable as a single block.
+//
+// Volume aggregation: prices_1m.volume_usd summed across the
+// trailing 24h, where the asset participates as base OR quote.
+// classic_asset_stats_5m is unwritten today (migration shipped
+// without a writer); most classic assets have no direct
+// fiat:USD pair either. The CTE-with-UNION sidesteps both.
+//
+// Price + 24h change: latest + 24h-ago snapshots, with XLM
+// triangulation when the direct asset/fiat:USD pair doesn't
+// exist. DISTINCT ON gives one "latest per asset" row without a
+// window function. ±30min tolerance on 24h-ago so sparse-trade
+// assets still produce a change %. Change is computed as
+// (latest / ago - 1) * 100 to two fractional digits; NULL when
+// either side is missing.
+//
+// market_cap_usd + circulating_supply remain NULL — their proper
+// sources (asset_supply_history) aren't running for the long
+// tail of classic assets today, and fabricating values would
+// defeat the "stop lying" rule.
+const listCoinsBaseSelect = `
 		WITH per_asset_24h_vol AS (
 		  SELECT asset_id, SUM(volume_usd) AS vol_usd
 		    FROM (
@@ -191,6 +185,15 @@ func buildCoinsQuery(limit int, issuer, cursor, q string) (string, []any) {
 		     AND vwap IS NOT NULL
 		   ORDER BY base_asset, bucket DESC
 		),
+		direct_usd_24h AS (
+		  SELECT DISTINCT ON (base_asset) base_asset AS asset_id, vwap
+		    FROM prices_1m
+		   WHERE quote_asset = 'fiat:USD'
+		     AND bucket BETWEEN now() - INTERVAL '24 hours 30 minutes'
+		                   AND now() - INTERVAL '23 hours 30 minutes'
+		     AND vwap IS NOT NULL
+		   ORDER BY base_asset, bucket DESC
+		),
 		asset_vs_xlm AS (
 		  SELECT DISTINCT ON (base_asset) base_asset AS asset_id, vwap
 		    FROM prices_1m
@@ -199,11 +202,31 @@ func buildCoinsQuery(limit int, issuer, cursor, q string) (string, []any) {
 		     AND vwap IS NOT NULL
 		   ORDER BY base_asset, bucket DESC
 		),
+		asset_vs_xlm_24h AS (
+		  SELECT DISTINCT ON (base_asset) base_asset AS asset_id, vwap
+		    FROM prices_1m
+		   WHERE quote_asset = 'native'
+		     AND bucket BETWEEN now() - INTERVAL '24 hours 30 minutes'
+		                   AND now() - INTERVAL '23 hours 30 minutes'
+		     AND vwap IS NOT NULL
+		   ORDER BY base_asset, bucket DESC
+		),
 		xlm_usd AS (
 		  SELECT vwap
 		    FROM prices_1m
 		   WHERE base_asset  = 'native'
 		     AND quote_asset = 'fiat:USD'
+		     AND vwap IS NOT NULL
+		   ORDER BY bucket DESC
+		   LIMIT 1
+		),
+		xlm_usd_24h AS (
+		  SELECT vwap
+		    FROM prices_1m
+		   WHERE base_asset  = 'native'
+		     AND quote_asset = 'fiat:USD'
+		     AND bucket BETWEEN now() - INTERVAL '24 hours 30 minutes'
+		                   AND now() - INTERVAL '23 hours 30 minutes'
 		     AND vwap IS NOT NULL
 		   ORDER BY bucket DESC
 		   LIMIT 1
@@ -222,15 +245,31 @@ func buildCoinsQuery(limit int, issuer, cursor, q string) (string, []any) {
 		    )::text                               AS price_usd,
 		    vol.vol_usd                           AS volume_24h_usd,
 		    NULL::numeric                         AS market_cap_usd,
-		    NULL::numeric                         AS circulating_supply
+		    NULL::numeric                         AS circulating_supply,
+		    CASE
+		      WHEN direct.vwap IS NOT NULL AND direct_24h.vwap IS NOT NULL
+		           AND direct_24h.vwap > 0
+		      THEN to_char((direct.vwap / direct_24h.vwap - 1) * 100, 'FM999999990.00')
+		      WHEN vs_xlm.vwap IS NOT NULL AND vs_xlm_24h.vwap IS NOT NULL
+		           AND vs_xlm_24h.vwap > 0
+		      THEN to_char((vs_xlm.vwap / vs_xlm_24h.vwap - 1) * 100, 'FM999999990.00')
+		      ELSE NULL
+		    END                                   AS change_24h_pct
 		  FROM classic_assets ca
-		  LEFT JOIN per_asset_24h_vol vol    ON vol.asset_id    = ca.asset_id
-		  LEFT JOIN direct_usd       direct  ON direct.asset_id = ca.asset_id
-		  LEFT JOIN asset_vs_xlm     vs_xlm  ON vs_xlm.asset_id = ca.asset_id
-	`
-	// Compose WHERE clauses dynamically. The combinatorial
-	// explosion of (issuer × cursor × q) is too painful as a
-	// switch; use a slice + numbered placeholders.
+		  LEFT JOIN per_asset_24h_vol vol         ON vol.asset_id        = ca.asset_id
+		  LEFT JOIN direct_usd        direct      ON direct.asset_id     = ca.asset_id
+		  LEFT JOIN direct_usd_24h    direct_24h  ON direct_24h.asset_id = ca.asset_id
+		  LEFT JOIN asset_vs_xlm      vs_xlm      ON vs_xlm.asset_id     = ca.asset_id
+		  LEFT JOIN asset_vs_xlm_24h  vs_xlm_24h  ON vs_xlm_24h.asset_id = ca.asset_id
+`
+
+// buildCoinsQuery composes the WHERE + ORDER + LIMIT around
+// listCoinsBaseSelect, given the limit / issuer-filter / keyset
+// cursor / search query. The combinatorial explosion of
+// (issuer × cursor × q) is too painful as a switch; use a
+// slice + numbered placeholders.
+func buildCoinsQuery(limit int, issuer, cursor, q string) (string, []any) {
+	cursorObsCount, cursorAssetID := parseCoinCursor(cursor)
 	var (
 		conds []string
 		args  []any
@@ -258,7 +297,7 @@ func buildCoinsQuery(limit int, issuer, cursor, q string) (string, []any) {
 	if len(conds) > 0 {
 		where = " WHERE " + strings.Join(conds, " AND ")
 	}
-	return baseSelect + where +
+	return listCoinsBaseSelect + where +
 		" ORDER BY ca.observation_count DESC, ca.asset_id ASC LIMIT " + limitPlaceholder, args
 }
 
@@ -268,18 +307,12 @@ func buildCoinsQuery(limit int, issuer, cursor, q string) (string, []any) {
 // Mirrors ListCoins's per-row metric shape (price/volume/market cap/
 // supply) so the explorer can render an asset detail page from a
 // single endpoint without scanning the top-N listing first.
-func (s *Store) GetCoinBySlug(ctx context.Context, slug string) (CoinRow, error) {
-	// Resolve the canonical row first (slug-column match preferred,
-	// then activity), then compute volume against THAT asset_id.
-	// Previously the CTE filtered prices_1m using its own
-	// `... = (SELECT asset_id FROM classic_assets WHERE
-	// COALESCE(slug, code) = $1 LIMIT 1)` subquery, which arbitrary-
-	// ordered same-code issuers and could pick a different
-	// asset_id than the outer SELECT's ORDER BY chose. Result:
-	// /v1/coins/USDC returned the Circle row but volume_24h_usd
-	// was always null because the CTE summed the wrong issuer's
-	// trades. The chosen-CTE puts both queries on the same row.
-	const q = `
+// getCoinBySlugSQL is the SQL behind GetCoinBySlug. Hoisted out
+// of the function body to keep GetCoinBySlug under the funlen
+// threshold; the helpers above already document the chosen-CTE
+// pattern that keeps the volume sum and price triangulation on
+// the same canonical row.
+const getCoinBySlugSQL = `
 		WITH chosen AS (
 		  SELECT asset_id
 		    FROM classic_assets
@@ -312,11 +345,29 @@ func (s *Store) GetCoinBySlug(ctx context.Context, slug string) (CoinRow, error)
 		     AND vwap IS NOT NULL
 		   ORDER BY bucket DESC LIMIT 1
 		),
+		direct_usd_24h AS (
+		  SELECT vwap FROM prices_1m
+		   WHERE base_asset  = (SELECT asset_id FROM chosen)
+		     AND quote_asset = 'fiat:USD'
+		     AND bucket BETWEEN now() - INTERVAL '24 hours 30 minutes'
+		                   AND now() - INTERVAL '23 hours 30 minutes'
+		     AND vwap IS NOT NULL
+		   ORDER BY bucket DESC LIMIT 1
+		),
 		asset_vs_xlm AS (
 		  SELECT vwap FROM prices_1m
 		   WHERE base_asset  = (SELECT asset_id FROM chosen)
 		     AND quote_asset = 'native'
 		     AND bucket >= now() - INTERVAL '7 days'
+		     AND vwap IS NOT NULL
+		   ORDER BY bucket DESC LIMIT 1
+		),
+		asset_vs_xlm_24h AS (
+		  SELECT vwap FROM prices_1m
+		   WHERE base_asset  = (SELECT asset_id FROM chosen)
+		     AND quote_asset = 'native'
+		     AND bucket BETWEEN now() - INTERVAL '24 hours 30 minutes'
+		                   AND now() - INTERVAL '23 hours 30 minutes'
 		     AND vwap IS NOT NULL
 		   ORDER BY bucket DESC LIMIT 1
 		),
@@ -337,21 +388,40 @@ func (s *Store) GetCoinBySlug(ctx context.Context, slug string) (CoinRow, error)
 		    )::text                               AS price_usd,
 		    vol.vol_usd                           AS volume_24h_usd,
 		    NULL::numeric                         AS market_cap_usd,
-		    NULL::numeric                         AS circulating_supply
+		    NULL::numeric                         AS circulating_supply,
+		    CASE
+		      WHEN (SELECT vwap FROM direct_usd) IS NOT NULL
+		           AND (SELECT vwap FROM direct_usd_24h) IS NOT NULL
+		           AND (SELECT vwap FROM direct_usd_24h) > 0
+		      THEN to_char(((SELECT vwap FROM direct_usd)
+		                  / (SELECT vwap FROM direct_usd_24h) - 1) * 100,
+		                  'FM999999990.00')
+		      WHEN (SELECT vwap FROM asset_vs_xlm) IS NOT NULL
+		           AND (SELECT vwap FROM asset_vs_xlm_24h) IS NOT NULL
+		           AND (SELECT vwap FROM asset_vs_xlm_24h) > 0
+		      THEN to_char(((SELECT vwap FROM asset_vs_xlm)
+		                  / (SELECT vwap FROM asset_vs_xlm_24h) - 1) * 100,
+		                  'FM999999990.00')
+		      ELSE NULL
+		    END                                   AS change_24h_pct
 		  FROM chosen
 		  JOIN classic_assets ca ON ca.asset_id = chosen.asset_id
 		  LEFT JOIN per_asset_24h_vol vol ON true
-	`
+`
+
+func (s *Store) GetCoinBySlug(ctx context.Context, slug string) (CoinRow, error) {
 	var (
 		r                        CoinRow
 		firstLedger, lastLedger  int64
 		priceUSD, volume24hUSD   sql.NullString
 		marketCapUSD, circSupply sql.NullString
+		change24hPct             sql.NullString
 	)
-	err := s.db.QueryRowContext(ctx, q, slug).Scan(
+	err := s.db.QueryRowContext(ctx, getCoinBySlugSQL, slug).Scan(
 		&r.Slug, &r.AssetID, &r.Code, &r.IssuerGStrkey,
 		&firstLedger, &lastLedger, &r.ObservationCount,
 		&priceUSD, &volume24hUSD, &marketCapUSD, &circSupply,
+		&change24hPct,
 	)
 	if err != nil {
 		return CoinRow{}, err
@@ -369,6 +439,9 @@ func (s *Store) GetCoinBySlug(ctx context.Context, slug string) (CoinRow, error)
 	}
 	if circSupply.Valid {
 		r.CirculatingSupply = &circSupply.String
+	}
+	if change24hPct.Valid {
+		r.Change24hPct = &change24hPct.String
 	}
 	return r, nil
 }

@@ -98,6 +98,7 @@ export type Coin = {
   volume_24h_usd?: string | null;
   market_cap_usd?: string | null;
   circulating_supply?: string | null;
+  change_24h_pct?: string | null;
 };
 
 export type CoinsPage = {

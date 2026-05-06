@@ -1076,6 +1076,15 @@ paths:
                           type: string
                           nullable: true
                           description: Outstanding supply (canonical units).
+                        change_24h_pct:
+                          type: string
+                          nullable: true
+                          description: |
+                            Trailing-24h price change as a signed
+                            percentage with two fractional digits
+                            (e.g. "+1.27", "-0.05", "0.00"). Null
+                            when no current price or no
+                            24h-ago prices_1m bucket within ±30min.
                   next_cursor:
                     type: string
                     description: Empty when no more pages.
@@ -1156,6 +1165,12 @@ paths:
                   circulating_supply:
                     type: string
                     nullable: true
+                  change_24h_pct:
+                    type: string
+                    nullable: true
+                    description: |
+                      Trailing-24h price change as a signed
+                      percentage with two fractional digits.
         "400": { $ref: "#/components/responses/BadRequest" }
         "404": { $ref: "#/components/responses/NotFound" }
         "429": { $ref: "#/components/responses/RateLimited" }

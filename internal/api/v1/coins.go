@@ -36,6 +36,11 @@ type Coin struct {
 	Volume24hUSD      *string `json:"volume_24h_usd,omitempty"`
 	MarketCapUSD      *string `json:"market_cap_usd,omitempty"`
 	CirculatingSupply *string `json:"circulating_supply,omitempty"`
+	// Change24hPct is the trailing-24h price change as a signed
+	// percentage with two fractional digits (e.g. "+1.27",
+	// "-0.05", "0.00"). Null when no current price exists or
+	// when the 24h-ago bucket is missing in prices_1m.
+	Change24hPct *string `json:"change_24h_pct,omitempty"`
 }
 
 // CoinsPage wraps the rows + cursor pagination metadata. The
@@ -114,19 +119,7 @@ func (s *Server) handleCoins(w http.ResponseWriter, r *http.Request) {
 
 	out := make([]Coin, len(rows))
 	for i, row := range rows {
-		out[i] = Coin{
-			Slug:              row.Slug,
-			AssetID:           row.AssetID,
-			Code:              row.Code,
-			Issuer:            row.IssuerGStrkey,
-			FirstSeenLedger:   row.FirstSeenLedger,
-			LastSeenLedger:    row.LastSeenLedger,
-			ObservationCount:  row.ObservationCount,
-			PriceUSD:          row.PriceUSD,
-			Volume24hUSD:      row.Volume24hUSD,
-			MarketCapUSD:      row.MarketCapUSD,
-			CirculatingSupply: row.CirculatingSupply,
-		}
+		out[i] = coinFromRow(row)
 	}
 
 	// Compute next-cursor only when the page came back full —
@@ -189,7 +182,14 @@ func (s *Server) handleCoin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	writeJSON(w, Coin{
+	writeJSON(w, coinFromRow(row), Flags{})
+}
+
+// coinFromRow projects a timescale.CoinRow onto the wire Coin
+// struct. Pulled out of the two handlers so they stay under the
+// funlen threshold and any future field is added in one spot.
+func coinFromRow(row timescale.CoinRow) Coin {
+	return Coin{
 		Slug:              row.Slug,
 		AssetID:           row.AssetID,
 		Code:              row.Code,
@@ -201,5 +201,6 @@ func (s *Server) handleCoin(w http.ResponseWriter, r *http.Request) {
 		Volume24hUSD:      row.Volume24hUSD,
 		MarketCapUSD:      row.MarketCapUSD,
 		CirculatingSupply: row.CirculatingSupply,
-	}, Flags{})
+		Change24hPct:      row.Change24hPct,
+	}
 }

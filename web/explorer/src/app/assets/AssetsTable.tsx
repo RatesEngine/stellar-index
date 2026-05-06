@@ -144,10 +144,9 @@ export function AssetsTable() {
         <code className="rounded bg-slate-100 px-1 font-mono text-[11px] dark:bg-slate-800">
           /v1/coins
         </code>
-        . Price + market cap + volume populate from the latest 1-min
-        VWAP and 5-min stats. % change windows are pending — the
-        aggregator emits closed-bucket VWAPs but the per-window
-        deltas aren&apos;t served by the listing API yet.
+        . Price + 24h change + market cap + volume populate from the
+        latest 1-min VWAP, with USD triangulated via XLM when no
+        direct fiat:USD pair exists.
       </p>
     </div>
   );
@@ -256,7 +255,7 @@ function AssetRow({ coin, rank }: { coin: Coin; rank: number }) {
         )}
       </Td>
       <Td align="right">
-        <Dash />
+        <ChangePct raw={coin.change_24h_pct} />
       </Td>
       <Td align="right">
         {marketCap != null ? (
@@ -369,6 +368,25 @@ function Td({
 
 function Dash() {
   return <span className="text-slate-300 dark:text-slate-700">—</span>;
+}
+
+function ChangePct({ raw }: { raw: string | null | undefined }) {
+  if (raw == null) return <Dash />;
+  const n = Number(raw);
+  if (!Number.isFinite(n)) return <Dash />;
+  const tone =
+    n > 0
+      ? 'text-emerald-600 dark:text-emerald-400'
+      : n < 0
+        ? 'text-rose-600 dark:text-rose-400'
+        : 'text-slate-500 dark:text-slate-500';
+  const sign = n > 0 ? '+' : '';
+  return (
+    <span className={`font-mono tabular-nums ${tone}`}>
+      {sign}
+      {n.toFixed(2)}%
+    </span>
+  );
 }
 
 function parseDec(s: string | null | undefined): number | null {
