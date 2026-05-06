@@ -521,6 +521,10 @@ type CoinsOptions struct {
 	// `slug`, and `issuer_g_strkey`. Server-side limited to 64
 	// chars. Empty means "no search filter."
 	Q string
+	// OrderBy controls sort + cursor scheme. Empty defaults to
+	// "observation_count_desc". "volume_24h_usd_desc" surfaces
+	// the highest-volume assets first (NULLS LAST).
+	OrderBy string
 }
 
 // Coins lists the registry-aware coin directory ranked by
@@ -551,6 +555,9 @@ func (c *Client) Coins(ctx context.Context, opts CoinsOptions) (*Envelope[CoinsP
 	}
 	if opts.Q != "" {
 		v.Set("q", opts.Q)
+	}
+	if opts.OrderBy != "" {
+		v.Set("order_by", opts.OrderBy)
 	}
 	var env Envelope[CoinsPage]
 	if err := c.doJSON(ctx, http.MethodGet, "/v1/coins", v, nil, &env); err != nil {

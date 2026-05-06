@@ -48,6 +48,24 @@ type CoinRow struct {
 	Change24hPct *string
 }
 
+// CoinsOrder controls the sort + cursor scheme used by ListCoins.
+// Default ObservationCountDesc preserves the original "rank by
+// activity" semantics; Volume24hUSDDesc is the volume-first view
+// the explorer's /assets table can opt into for live-volume
+// rankings.
+type CoinsOrder int
+
+const (
+	// CoinsOrderObservationCountDesc orders by all-time observation
+	// count desc (a cheap activity proxy). Cursor is
+	// `<obs_count>:<asset_id>`.
+	CoinsOrderObservationCountDesc CoinsOrder = iota
+	// CoinsOrderVolume24hUSDDesc orders by trailing-24h USD volume
+	// desc (NULLS LAST), with `<asset_id>` as the tie-breaker.
+	// Cursor is `<vol_or_blank>:<asset_id>`.
+	CoinsOrderVolume24hUSDDesc
+)
+
 // ListCoinsOptions bundles the optional filters / paging
 // parameters for ListCoins. Zero values are the API defaults.
 type ListCoinsOptions struct {
@@ -63,6 +81,9 @@ type ListCoinsOptions struct {
 	// Useful for the explorer's `/assets?q=…` search box —
 	// otherwise a 440K-asset directory is unsearchable.
 	Q string
+	// Order controls the sort + cursor scheme. Zero value is
+	// observation_count desc (preserves the historical contract).
+	Order CoinsOrder
 }
 
 // ListCoins returns coin-directory rows ordered by observation
@@ -85,7 +106,7 @@ func (s *Store) ListCoinsExt(ctx context.Context, opts ListCoinsOptions) ([]Coin
 	if limit <= 0 || limit > 500 {
 		limit = 100
 	}
-	query, args := buildCoinsQuery(limit, opts.Issuer, opts.Cursor, opts.Q)
+	query, args := buildCoinsQuery(limit, opts.Issuer, opts.Cursor, opts.Q, opts.Order)
 	rows, err := s.db.QueryContext(ctx, query, args...)
 	if err != nil {
 		return nil, fmt.Errorf("timescale: ListCoins: %w", err)
@@ -292,8 +313,7 @@ const listCoinsBaseSelect = `
 // cursor / search query. The combinatorial explosion of
 // (issuer × cursor × q) is too painful as a switch; use a
 // slice + numbered placeholders.
-func buildCoinsQuery(limit int, issuer, cursor, q string) (string, []any) {
-	cursorObsCount, cursorAssetID := parseCoinCursor(cursor)
+func buildCoinsQuery(limit int, issuer, cursor, q string, order CoinsOrder) (string, []any) {
 	var (
 		conds []string
 		args  []any
@@ -308,11 +328,9 @@ func buildCoinsQuery(limit int, issuer, cursor, q string) (string, []any) {
 			"(LOWER(ca.code) LIKE LOWER($%d) OR LOWER(COALESCE(ca.slug, ca.code)) LIKE LOWER($%d) OR LOWER(ca.issuer_g_strkey) LIKE LOWER($%d))",
 			len(args), len(args), len(args)))
 	}
+	args = append(args, coinsCursorArgs(cursor, order)...)
 	if cursor != "" {
-		args = append(args, cursorObsCount, cursorAssetID)
-		conds = append(conds, fmt.Sprintf(
-			"(ca.observation_count, ca.asset_id) < ($%d, $%d)",
-			len(args)-1, len(args)))
+		conds = append(conds, coinsCursorPredicate(order, len(args)))
 	}
 	args = append(args, limit)
 	limitPlaceholder := fmt.Sprintf("$%d", len(args))
@@ -321,8 +339,61 @@ func buildCoinsQuery(limit int, issuer, cursor, q string) (string, []any) {
 	if len(conds) > 0 {
 		where = " WHERE " + strings.Join(conds, " AND ")
 	}
-	return listCoinsBaseSelect + where +
-		" ORDER BY ca.observation_count DESC, ca.asset_id ASC LIMIT " + limitPlaceholder, args
+	return listCoinsBaseSelect + where + coinsOrderBy(order) + " LIMIT " + limitPlaceholder, args
+}
+
+// coinsCursorArgs returns the positional args appended for the
+// active cursor format. Empty cursor → no args.
+func coinsCursorArgs(cursor string, order CoinsOrder) []any {
+	if cursor == "" {
+		return nil
+	}
+	if order == CoinsOrderVolume24hUSDDesc {
+		vol, assetID := parseVolumeCursor(cursor)
+		return []any{vol, assetID}
+	}
+	obsCount, assetID := parseCoinCursor(cursor)
+	return []any{obsCount, assetID}
+}
+
+// coinsCursorPredicate returns the WHERE clause that resumes
+// pagination strictly past the supplied cursor under the active
+// ordering. `argEnd` is the index of the last cursor placeholder.
+func coinsCursorPredicate(order CoinsOrder, argEnd int) string {
+	if order == CoinsOrderVolume24hUSDDesc {
+		// Mixed-direction tuple compare: volume DESC, asset_id ASC.
+		// Encode as `(v < cv) OR (v = cv AND asset_id > cid)`.
+		// COALESCE-to-zero so NULL volumes compare as 0 (sorts last).
+		return fmt.Sprintf(
+			"(COALESCE(vol.vol_usd, 0) < $%d::numeric "+
+				"OR (COALESCE(vol.vol_usd, 0) = $%d::numeric AND ca.asset_id > $%d))",
+			argEnd-1, argEnd-1, argEnd)
+	}
+	return fmt.Sprintf(
+		"(ca.observation_count, ca.asset_id) < ($%d, $%d)",
+		argEnd-1, argEnd)
+}
+
+func coinsOrderBy(order CoinsOrder) string {
+	if order == CoinsOrderVolume24hUSDDesc {
+		return " ORDER BY COALESCE(vol.vol_usd, 0) DESC, ca.asset_id ASC"
+	}
+	return " ORDER BY ca.observation_count DESC, ca.asset_id ASC"
+}
+
+// parseVolumeCursor decodes a `<vol_or_blank>:<asset_id>` cursor.
+// Empty volume sorts as 0 (joins the null-volume tail).
+func parseVolumeCursor(cursor string) (vol, assetID string) {
+	for i := 0; i < len(cursor); i++ {
+		if cursor[i] == ':' {
+			v := cursor[:i]
+			if v == "" {
+				v = "0"
+			}
+			return v, cursor[i+1:]
+		}
+	}
+	return "0", ""
 }
 
 // GetCoinBySlug returns one row matching the given slug. Returns

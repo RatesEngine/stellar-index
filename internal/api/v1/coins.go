@@ -104,9 +104,22 @@ func (s *Server) handleCoins(w http.ResponseWriter, r *http.Request) {
 			"q must be 64 chars or fewer")
 		return
 	}
+	var order timescale.CoinsOrder
+	switch r.URL.Query().Get("order_by") {
+	case "", "observation_count_desc":
+		order = timescale.CoinsOrderObservationCountDesc
+	case "volume_24h_usd_desc":
+		order = timescale.CoinsOrderVolume24hUSDDesc
+	default:
+		writeProblem(w, r,
+			"https://api.ratesengine.net/errors/invalid-order",
+			"Invalid order_by", http.StatusBadRequest,
+			"order_by must be 'observation_count_desc' or 'volume_24h_usd_desc'")
+		return
+	}
 
 	rows, err := s.coins.ListCoinsExt(r.Context(), timescale.ListCoinsOptions{
-		Limit: limit, Issuer: issuer, Cursor: cursor, Q: q,
+		Limit: limit, Issuer: issuer, Cursor: cursor, Q: q, Order: order,
 	})
 	if err != nil {
 		s.logger.Warn("coins list", "err", err)
@@ -123,12 +136,21 @@ func (s *Server) handleCoins(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Compute next-cursor only when the page came back full —
-	// any short page means "no more rows". Encodes the last
-	// row's (observation_count, asset_id) tuple.
+	// any short page means "no more rows". Cursor format depends
+	// on the active ordering.
 	var nextCursor string
 	if len(rows) == limit && len(rows) > 0 {
 		last := rows[len(rows)-1]
-		nextCursor = timescale.EncodeCoinCursor(last.ObservationCount, last.AssetID)
+		switch order {
+		case timescale.CoinsOrderVolume24hUSDDesc:
+			vol := ""
+			if last.Volume24hUSD != nil {
+				vol = *last.Volume24hUSD
+			}
+			nextCursor = vol + ":" + last.AssetID
+		default:
+			nextCursor = timescale.EncodeCoinCursor(last.ObservationCount, last.AssetID)
+		}
 	}
 
 	writeJSON(w, CoinsPage{

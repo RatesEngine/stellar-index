@@ -1038,6 +1038,18 @@ paths:
           schema:
             type: string
             maxLength: 64
+        - name: order_by
+          in: query
+          required: false
+          description: |
+            Sort order. `observation_count_desc` (default) ranks
+            by all-time activity. `volume_24h_usd_desc` surfaces
+            highest-volume assets first (NULLS LAST). Cursor
+            format adapts to the active ordering.
+          schema:
+            type: string
+            enum: [observation_count_desc, volume_24h_usd_desc]
+            default: observation_count_desc
       responses:
         "200":
           description: Page of asset entries + next-cursor.
