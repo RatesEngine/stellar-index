@@ -382,11 +382,20 @@ function OverviewBody({
           source={asExample(`/v1/issuers/${coin.issuer}`)}
         >
           <dl className="grid grid-cols-1 gap-2 text-sm sm:grid-cols-2">
-            <Stat
-              label="G-strkey"
-              mono
-              value={`${coin.issuer.slice(0, 12)}…${coin.issuer.slice(-6)}`}
-            />
+            <div>
+              <dt className="text-[11px] uppercase tracking-wider text-slate-500">
+                G-strkey
+              </dt>
+              <dd className="font-mono text-xs">
+                <Link
+                  href={`/issuers/${coin.issuer}`}
+                  className="hover:text-brand-600"
+                  title={coin.issuer}
+                >
+                  {`${coin.issuer.slice(0, 12)}…${coin.issuer.slice(-6)}`}
+                </Link>
+              </dd>
+            </div>
             {detail?.home_domain && (
               <Stat label="Home domain" mono value={detail.home_domain} />
             )}

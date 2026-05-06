@@ -12,10 +12,9 @@ import { formatCompact } from '@/lib/format';
  * observation count across the issuer's classic assets — the
  * proxy-for-activity ordering the API serves.
  *
- * G-strkey column deep-links into /assets?issuer=... — the
- * filtered listing is the issuer view today. A standalone
- * /issuers/[g_strkey] page can land later; the data is already
- * at /v1/issuers/{g_strkey}.
+ * G-strkey column deep-links to /issuers/[g_strkey] — the
+ * dedicated detail view. /assets?issuer=... is also reachable
+ * via "View assets" from there.
  */
 export function IssuersTable() {
   const { data, isLoading, isError, error } = useIssuers(100);
@@ -84,7 +83,7 @@ export function IssuersTable() {
                 </Td>
                 <Td>
                   <Link
-                    href={`/assets?issuer=${row.g_strkey}`}
+                    href={`/issuers/${row.g_strkey}`}
                     className="font-mono text-xs hover:text-brand-600"
                     title={row.g_strkey}
                   >

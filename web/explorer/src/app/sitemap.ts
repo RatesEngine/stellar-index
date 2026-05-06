@@ -44,15 +44,37 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     priority: path === '' ? 1 : 0.7,
   }));
 
-  const assetSlugs = await fetchCoinSlugs();
+  const [assetSlugs, issuerKeys] = await Promise.all([
+    fetchCoinSlugs(),
+    fetchIssuerKeys(),
+  ]);
   const assetPages: MetadataRoute.Sitemap = assetSlugs.map((slug) => ({
     url: `${SITE_URL}/assets/${slug}`,
     lastModified: now,
     changeFrequency: 'daily',
     priority: 0.6,
   }));
+  const issuerPages: MetadataRoute.Sitemap = issuerKeys.map((g) => ({
+    url: `${SITE_URL}/issuers/${g}`,
+    lastModified: now,
+    changeFrequency: 'weekly',
+    priority: 0.5,
+  }));
 
-  return [...staticPages, ...assetPages];
+  return [...staticPages, ...assetPages, ...issuerPages];
+}
+
+async function fetchIssuerKeys(): Promise<string[]> {
+  try {
+    const res = await fetch(`${API_BASE_URL}/v1/issuers?limit=100`, {
+      signal: AbortSignal.timeout(5_000),
+    });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const env = (await res.json()) as { data: { g_strkey: string }[] };
+    return (env.data ?? []).map((i) => i.g_strkey);
+  } catch {
+    return [];
+  }
 }
 
 async function fetchCoinSlugs(): Promise<string[]> {
