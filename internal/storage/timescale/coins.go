@@ -223,31 +223,40 @@ func buildCoinsQuery(limit int, issuer, cursor, q string) (string, []any) {
 // supply) so the explorer can render an asset detail page from a
 // single endpoint without scanning the top-N listing first.
 func (s *Store) GetCoinBySlug(ctx context.Context, slug string) (CoinRow, error) {
+	// Resolve the canonical row first (slug-column match preferred,
+	// then activity), then compute volume against THAT asset_id.
+	// Previously the CTE filtered prices_1m using its own
+	// `... = (SELECT asset_id FROM classic_assets WHERE
+	// COALESCE(slug, code) = $1 LIMIT 1)` subquery, which arbitrary-
+	// ordered same-code issuers and could pick a different
+	// asset_id than the outer SELECT's ORDER BY chose. Result:
+	// /v1/coins/USDC returned the Circle row but volume_24h_usd
+	// was always null because the CTE summed the wrong issuer's
+	// trades. The chosen-CTE puts both queries on the same row.
 	const q = `
-		WITH per_asset_24h_vol AS (
-		  SELECT asset_id, SUM(volume_usd) AS vol_usd
+		WITH chosen AS (
+		  SELECT asset_id
+		    FROM classic_assets
+		   WHERE COALESCE(slug, code) = $1
+		   ORDER BY (slug = $1) DESC NULLS LAST,
+		            observation_count DESC, asset_id ASC
+		   LIMIT 1
+		),
+		per_asset_24h_vol AS (
+		  SELECT SUM(volume_usd) AS vol_usd
 		    FROM (
-		      SELECT base_asset  AS asset_id, volume_usd
-		        FROM prices_1m
-		       WHERE bucket >= now() - INTERVAL '24 hours'
+		      SELECT volume_usd FROM prices_1m
+		       WHERE base_asset = (SELECT asset_id FROM chosen)
+		         AND bucket >= now() - INTERVAL '24 hours'
 		         AND bucket  <  now()
 		         AND volume_usd IS NOT NULL
-		         AND base_asset = (
-		           SELECT asset_id FROM classic_assets
-		            WHERE COALESCE(slug, code) = $1 LIMIT 1
-		         )
 		      UNION ALL
-		      SELECT quote_asset AS asset_id, volume_usd
-		        FROM prices_1m
-		       WHERE bucket >= now() - INTERVAL '24 hours'
+		      SELECT volume_usd FROM prices_1m
+		       WHERE quote_asset = (SELECT asset_id FROM chosen)
+		         AND bucket >= now() - INTERVAL '24 hours'
 		         AND bucket  <  now()
 		         AND volume_usd IS NOT NULL
-		         AND quote_asset = (
-		           SELECT asset_id FROM classic_assets
-		            WHERE COALESCE(slug, code) = $1 LIMIT 1
-		         )
 		    ) t
-		   GROUP BY asset_id
 		)
 		SELECT
 		    COALESCE(ca.slug, ca.code)            AS slug,
@@ -257,13 +266,9 @@ func (s *Store) GetCoinBySlug(ctx context.Context, slug string) (CoinRow, error)
 		    vol.vol_usd                           AS volume_24h_usd,
 		    NULL::numeric                         AS market_cap_usd,
 		    NULL::numeric                         AS circulating_supply
-		  FROM classic_assets ca
-		  LEFT JOIN per_asset_24h_vol vol ON vol.asset_id = ca.asset_id
-		 WHERE COALESCE(ca.slug, ca.code) = $1
-		 ORDER BY (ca.slug = $1) DESC NULLS LAST,
-		          ca.observation_count DESC,
-		          ca.asset_id ASC
-		 LIMIT 1
+		  FROM chosen
+		  JOIN classic_assets ca ON ca.asset_id = chosen.asset_id
+		  LEFT JOIN per_asset_24h_vol vol ON true
 	`
 	var (
 		r                        CoinRow
