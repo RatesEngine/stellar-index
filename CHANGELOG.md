@@ -15,6 +15,18 @@ against.
 
 ## [Unreleased]
 
+### Fixed
+- **XLM (asset_id `native`) now returns a non-null `price_usd`,
+  `change_1h_pct`, `change_24h_pct`, `change_7d_pct`, and
+  `price_history_24h` on `/v1/coins`.** Previously all five were
+  null because the SQL CTEs filter on `(base_asset, quote_asset)
+  = ('native', 'fiat:USD')` for direct USD and `('native',
+  'native')` for XLM-relative — neither has rows in `prices_1m`.
+  XLM is now special-cased to use the `xlm_usd*` CTEs (Circle
+  USDC / Tether USDT proxy) directly. Other assets are
+  unaffected; the existing direct-then-triangulate chain still
+  takes precedence when those buckets exist.
+
 ### Added
 - **`/v1/coins[*].change_1h_pct` + `change_7d_pct`** — trailing
   1-hour and 7-day price change windows alongside the existing

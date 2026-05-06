@@ -373,7 +373,15 @@ const listCoinsBaseSelect = `
 		    -- noise for a display value. 10 dp covers sub-millicent
 		    -- precision (1e-10) which is finer than any asset's
 		    -- meaningful tick size.
+		    -- XLM itself (asset_id='native') has no rows in
+		    -- direct_usd or asset_vs_xlm — its base_asset is 'native'
+		    -- but neither (native, fiat:USD) nor (native, native)
+		    -- exists in prices_1m. Use the xlm_usd CTE directly.
 		    ROUND(COALESCE(
+		      CASE WHEN ca.asset_id = 'native'
+		           THEN (SELECT vwap FROM xlm_usd)
+		           ELSE NULL
+		      END,
 		      direct.vwap,
 		      vs_xlm.vwap * (SELECT vwap FROM xlm_usd)
 		    ), 10)::text                          AS price_usd,
@@ -381,6 +389,13 @@ const listCoinsBaseSelect = `
 		    NULL::numeric                         AS market_cap_usd,
 		    NULL::numeric                         AS circulating_supply,
 		    CASE
+		      WHEN ca.asset_id = 'native'
+		           AND (SELECT vwap FROM xlm_usd) IS NOT NULL
+		           AND (SELECT vwap FROM xlm_usd_1h) IS NOT NULL
+		           AND (SELECT vwap FROM xlm_usd_1h) > 0
+		      THEN to_char(((SELECT vwap FROM xlm_usd)
+		                  / (SELECT vwap FROM xlm_usd_1h) - 1) * 100,
+		                  'FM999999990.00')
 		      WHEN direct.vwap IS NOT NULL AND direct_1h.vwap IS NOT NULL
 		           AND direct_1h.vwap > 0
 		      THEN to_char((direct.vwap / direct_1h.vwap - 1) * 100, 'FM999999990.00')
@@ -390,6 +405,13 @@ const listCoinsBaseSelect = `
 		      ELSE NULL
 		    END                                   AS change_1h_pct,
 		    CASE
+		      WHEN ca.asset_id = 'native'
+		           AND (SELECT vwap FROM xlm_usd) IS NOT NULL
+		           AND (SELECT vwap FROM xlm_usd_24h) IS NOT NULL
+		           AND (SELECT vwap FROM xlm_usd_24h) > 0
+		      THEN to_char(((SELECT vwap FROM xlm_usd)
+		                  / (SELECT vwap FROM xlm_usd_24h) - 1) * 100,
+		                  'FM999999990.00')
 		      WHEN direct.vwap IS NOT NULL AND direct_24h.vwap IS NOT NULL
 		           AND direct_24h.vwap > 0
 		      THEN to_char((direct.vwap / direct_24h.vwap - 1) * 100, 'FM999999990.00')
@@ -399,6 +421,13 @@ const listCoinsBaseSelect = `
 		      ELSE NULL
 		    END                                   AS change_24h_pct,
 		    CASE
+		      WHEN ca.asset_id = 'native'
+		           AND (SELECT vwap FROM xlm_usd) IS NOT NULL
+		           AND (SELECT vwap FROM xlm_usd_7d) IS NOT NULL
+		           AND (SELECT vwap FROM xlm_usd_7d) > 0
+		      THEN to_char(((SELECT vwap FROM xlm_usd)
+		                  / (SELECT vwap FROM xlm_usd_7d) - 1) * 100,
+		                  'FM999999990.00')
 		      WHEN direct.vwap IS NOT NULL AND direct_7d.vwap IS NOT NULL
 		           AND direct_7d.vwap > 0
 		      THEN to_char((direct.vwap / direct_7d.vwap - 1) * 100, 'FM999999990.00')
@@ -570,6 +599,12 @@ func (s *Store) GetCoinPriceHistory24h(ctx context.Context, assetID string) ([]C
 		SELECT
 		    to_char(hours.bucket, 'YYYY-MM-DD"T"HH24:MI:SS"Z"') AS t,
 		    ROUND(COALESCE(
+		      -- XLM itself: use the xlm_usd_per_hour CTE directly.
+		      -- Without this, XLM's sparkline is all nulls because
+		      -- direct_per_hour and asset_xlm_per_hour both filter
+		      -- on base_asset=$1 (= 'native') with quote_asset
+		      -- 'fiat:USD' / 'native' — neither has rows.
+		      CASE WHEN $1 = 'native' THEN xu.vwap ELSE NULL END,
 		      d.vwap,
 		      x.vwap * xu.vwap
 		    ), 10)::text AS p
@@ -801,7 +836,15 @@ const getCoinBySlugSQL = `
 		    COALESCE(ca.slug, ca.code)            AS slug,
 		    ca.asset_id, ca.code, ca.issuer_g_strkey,
 		    ca.first_seen_ledger, ca.last_seen_ledger, ca.observation_count,
+		    -- XLM (asset_id='native') has no rows in direct_usd or
+		    -- asset_vs_xlm — its base_asset is 'native' but neither
+		    -- (native, fiat:USD) nor (native, native) exists in
+		    -- prices_1m. Use the xlm_usd CTE directly.
 		    ROUND(COALESCE(
+		      CASE WHEN ca.asset_id = 'native'
+		           THEN (SELECT vwap FROM xlm_usd)
+		           ELSE NULL
+		      END,
 		      (SELECT vwap FROM direct_usd),
 		      (SELECT vwap FROM asset_vs_xlm) * (SELECT vwap FROM xlm_usd)
 		    ), 10)::text                          AS price_usd,
@@ -809,6 +852,13 @@ const getCoinBySlugSQL = `
 		    NULL::numeric                         AS market_cap_usd,
 		    NULL::numeric                         AS circulating_supply,
 		    CASE
+		      WHEN ca.asset_id = 'native'
+		           AND (SELECT vwap FROM xlm_usd) IS NOT NULL
+		           AND (SELECT vwap FROM xlm_usd_1h) IS NOT NULL
+		           AND (SELECT vwap FROM xlm_usd_1h) > 0
+		      THEN to_char(((SELECT vwap FROM xlm_usd)
+		                  / (SELECT vwap FROM xlm_usd_1h) - 1) * 100,
+		                  'FM999999990.00')
 		      WHEN (SELECT vwap FROM direct_usd) IS NOT NULL
 		           AND (SELECT vwap FROM direct_usd_1h) IS NOT NULL
 		           AND (SELECT vwap FROM direct_usd_1h) > 0
@@ -824,6 +874,13 @@ const getCoinBySlugSQL = `
 		      ELSE NULL
 		    END                                   AS change_1h_pct,
 		    CASE
+		      WHEN ca.asset_id = 'native'
+		           AND (SELECT vwap FROM xlm_usd) IS NOT NULL
+		           AND (SELECT vwap FROM xlm_usd_24h) IS NOT NULL
+		           AND (SELECT vwap FROM xlm_usd_24h) > 0
+		      THEN to_char(((SELECT vwap FROM xlm_usd)
+		                  / (SELECT vwap FROM xlm_usd_24h) - 1) * 100,
+		                  'FM999999990.00')
 		      WHEN (SELECT vwap FROM direct_usd) IS NOT NULL
 		           AND (SELECT vwap FROM direct_usd_24h) IS NOT NULL
 		           AND (SELECT vwap FROM direct_usd_24h) > 0
@@ -839,6 +896,13 @@ const getCoinBySlugSQL = `
 		      ELSE NULL
 		    END                                   AS change_24h_pct,
 		    CASE
+		      WHEN ca.asset_id = 'native'
+		           AND (SELECT vwap FROM xlm_usd) IS NOT NULL
+		           AND (SELECT vwap FROM xlm_usd_7d) IS NOT NULL
+		           AND (SELECT vwap FROM xlm_usd_7d) > 0
+		      THEN to_char(((SELECT vwap FROM xlm_usd)
+		                  / (SELECT vwap FROM xlm_usd_7d) - 1) * 100,
+		                  'FM999999990.00')
 		      WHEN (SELECT vwap FROM direct_usd) IS NOT NULL
 		           AND (SELECT vwap FROM direct_usd_7d) IS NOT NULL
 		           AND (SELECT vwap FROM direct_usd_7d) > 0
