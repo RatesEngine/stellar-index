@@ -1425,6 +1425,17 @@ export interface paths {
                      */
                     cursor?: components["parameters"]["Cursor"];
                     limit?: number;
+                    /**
+                     * @description Sort order. `pair` (default) returns markets in lex
+                     *     order of `<base>|<quote>` — stable for paginating the
+                     *     full set. `volume_24h_usd_desc` orders by 24h USD
+                     *     volume desc (NULLS LAST), then by `<base>|<quote>`
+                     *     for ties — surfaces the high-activity pairs first
+                     *     without paginating through ~5K alphabetic dust pairs.
+                     *     Cursor format differs per ordering; keep using the
+                     *     cursor returned by the previous response.
+                     */
+                    order_by?: "pair" | "volume_24h_usd_desc";
                 };
                 header?: never;
                 path?: never;
@@ -1492,6 +1503,14 @@ export interface paths {
                         "application/json": {
                             g_strkey: string;
                             home_domain?: string;
+                            /**
+                             * @description Issuer's organisation name from SEP-1
+                             *     `[DOCUMENTATION].ORG_NAME`. Populated by
+                             *     the `ratesengine-ops sep1-refresh` job;
+                             *     empty until the issuer's stellar.toml
+                             *     has been resolved.
+                             */
+                            org_name?: string;
                             /** Format: int64 */
                             asset_count: number;
                             /** Format: int64 */
@@ -1551,6 +1570,12 @@ export interface paths {
                         "application/json": {
                             g_strkey: string;
                             home_domain?: string;
+                            /**
+                             * @description Issuer's organisation name from SEP-1
+                             *     `[DOCUMENTATION].ORG_NAME`. Same value the
+                             *     listing endpoint surfaces.
+                             */
+                            org_name?: string;
                             auth_required?: boolean | null;
                             auth_revocable?: boolean | null;
                             auth_immutable?: boolean | null;
@@ -1631,6 +1656,21 @@ export interface paths {
                      *     "assets by this issuer."
                      */
                     issuer?: string;
+                    /**
+                     * @description Case-insensitive substring filter against `code`, `slug`,
+                     *     and `issuer_g_strkey`. Used by the explorer's `/assets`
+                     *     search box so a 440K-asset directory is searchable
+                     *     without paging through every cursor. Limited to 64
+                     *     characters.
+                     */
+                    q?: string;
+                    /**
+                     * @description Sort order. `observation_count_desc` (default) ranks
+                     *     by all-time activity. `volume_24h_usd_desc` surfaces
+                     *     highest-volume assets first (NULLS LAST). Cursor
+                     *     format adapts to the active ordering.
+                     */
+                    order_by?: "observation_count_desc" | "volume_24h_usd_desc";
                 };
                 header?: never;
                 path?: never;
@@ -1691,6 +1731,28 @@ export interface paths {
                                 market_cap_usd?: string | null;
                                 /** @description Outstanding supply (canonical units). */
                                 circulating_supply?: string | null;
+                                /**
+                                 * @description Trailing-1h price change as a signed
+                                 *     percentage with two fractional digits.
+                                 *     Null when no current price or no
+                                 *     1h-ago prices_1m bucket within ±5min.
+                                 */
+                                change_1h_pct?: string | null;
+                                /**
+                                 * @description Trailing-24h price change as a signed
+                                 *     percentage with two fractional digits
+                                 *     (e.g. "+1.27", "-0.05", "0.00"). Null
+                                 *     when no current price or no
+                                 *     24h-ago prices_1m bucket within ±30min.
+                                 */
+                                change_24h_pct?: string | null;
+                                /**
+                                 * @description Trailing-7d price change as a signed
+                                 *     percentage with two fractional digits.
+                                 *     Null when no current price or no
+                                 *     7d-ago prices_1m bucket within ±2h.
+                                 */
+                                change_7d_pct?: string | null;
                             }[];
                             /** @description Empty when no more pages. */
                             next_cursor?: string;
@@ -1699,6 +1761,85 @@ export interface paths {
                     };
                 };
                 400: components["responses"]["BadRequest"];
+                429: components["responses"]["RateLimited"];
+                500: components["responses"]["InternalError"];
+                503: components["responses"]["ServiceUnavailable"];
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/coins/{slug}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Single asset by slug.
+         * @description Returns one row of `/coins` shape, looked up by URL-safe
+         *     `slug` (the slug column from `classic_assets`, falling
+         *     back to `code` when slug is null). Used by the explorer
+         *     asset-detail page so a deep link doesn't need to scan
+         *     the top-N listing first.
+         */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    /** @description URL-safe asset slug (e.g. `USDC`, `native`). */
+                    slug: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description One asset row. */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            slug: string;
+                            asset_id: string;
+                            code: string;
+                            issuer: string;
+                            first_seen_ledger: number;
+                            last_seen_ledger: number;
+                            /** Format: int64 */
+                            observation_count: number;
+                            price_usd?: string | null;
+                            volume_24h_usd?: string | null;
+                            market_cap_usd?: string | null;
+                            circulating_supply?: string | null;
+                            /**
+                             * @description Trailing-1h price change as a signed
+                             *     percentage with two fractional digits.
+                             */
+                            change_1h_pct?: string | null;
+                            /**
+                             * @description Trailing-24h price change as a signed
+                             *     percentage with two fractional digits.
+                             */
+                            change_24h_pct?: string | null;
+                            /**
+                             * @description Trailing-7d price change as a signed
+                             *     percentage with two fractional digits.
+                             */
+                            change_7d_pct?: string | null;
+                        };
+                    };
+                };
+                400: components["responses"]["BadRequest"];
+                404: components["responses"]["NotFound"];
                 429: components["responses"]["RateLimited"];
                 500: components["responses"]["InternalError"];
                 503: components["responses"]["ServiceUnavailable"];
@@ -3520,6 +3661,8 @@ export interface components {
             last_trade_at: string;
             /** @description Activity count in the trailing 24h window. */
             trade_count_24h: number;
+            /** @description Trailing-24h USD volume summed from prices_1m. Decimal string. Null when no USD-equivalent trades. */
+            volume_24h_usd?: string | null;
         };
         MarketsEnvelope: components["schemas"]["EnvelopeMeta"] & {
             data: components["schemas"]["MarketRow"][];
