@@ -15,6 +15,18 @@ against.
 
 ## [Unreleased]
 
+### Added
+- **Cloudflare Pages bootstrap script.** New
+  `scripts/ops/cf-pages-bootstrap.sh` provisions all three
+  customer-facing surfaces (`ratesengine-showcase`,
+  `ratesengine-dashboard`, `ratesengine-status`) plus DNS +
+  custom domains via the Cloudflare API. Idempotent — re-runs
+  patch drift instead of failing. Operator runbook at
+  `docs/operations/cf-pages-setup.md`. With CF's GitHub app
+  authorised against the org once (existing state), every push
+  to `main` auto-deploys each project without consuming GitHub
+  Actions minutes.
+
 ## [v0.5.0-rc.2] — 2026-05-06
 
 ### Fixed
