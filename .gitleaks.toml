@@ -65,7 +65,8 @@ paths = [
 ]
 
 [[rules.allowlists]]
-description = "OpenAPI spec example values for /v1/signup + /v1/dashboard/keys: synthetic key_id (`k_...`) + plaintext (`re_live_...`) are fabricated illustrations of what the response shape looks like — not real credentials. Real secrets in production never get committed; the response examples MUST be high-entropy-looking to be useful to API consumers."
+description = "OpenAPI spec example values for /v1/signup + /v1/dashboard/keys: synthetic key_id (`k_...`) + plaintext (`re_live_...`) are fabricated illustrations of what the response shape looks like — not real credentials. Real secrets in production never get committed; the response examples MUST be high-entropy-looking to be useful to API consumers. Generated TS types (web/showcase/src/api/types.ts) inherit the same examples in JSDoc; same allowlist rationale applies."
 paths = [
   '''openapi/rates-engine\.v1\.yaml''',
+  '''web/showcase/src/api/types\.ts''',
 ]
