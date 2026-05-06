@@ -47,6 +47,13 @@ theme = "cstate"
   # argument is nil and Hugo errors with "pager size must be a
   # positive integer". 10 mirrors Hugo's pre-0.128 default.
   incidentPostsPerPage = 10
+
+  # cstate templates format issue/incident timestamps via these
+  # — Hugo errors "invalid value; expected string" when unset.
+  # Values mirror cstate's exampleSite/config.yml.
+  dateFormat            = "January 2, 2006 at 3:04 PM UTC"
+  shortDateFormat       = "15:04 UTC — Jan 2"
+  incidentHistoryFormat = "yearly"
   # systemStatus controls the top-of-page banner. Possible values:
   #   "ok"           → All systems operational (green)
   #   "disrupted"    → Partial outage (yellow)

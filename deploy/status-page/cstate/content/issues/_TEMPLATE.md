@@ -30,6 +30,15 @@ severity: disrupted
 affected:
   - "Pricing API"
 section: issue
+
+# Skip rendering this placeholder file — it's only here as a
+# copy-paste source. Hugo's leading-underscore filename
+# convention doesn't exclude content from .Site.RegularPages
+# (which is what cstate's incidents listing iterates), so we
+# use the explicit _build directive.
+_build:
+  render: never
+  list: never
 ---
 
 <!--
