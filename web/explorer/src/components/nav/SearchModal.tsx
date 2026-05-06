@@ -15,7 +15,7 @@ type Result = {
 
 const STATIC_PAGES: Result[] = [
   { type: 'page', label: 'Home', href: '/' },
-  { type: 'page', label: 'Coins', href: '/coins' },
+  { type: 'page', label: 'Assets', href: '/assets' },
   { type: 'page', label: 'Markets', href: '/markets' },
   { type: 'page', label: 'Issuers', href: '/issuers' },
   { type: 'page', label: 'DEXes', href: '/dexes' },

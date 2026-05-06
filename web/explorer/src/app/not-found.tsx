@@ -35,7 +35,7 @@ export default function NotFound() {
           </Link>
         </li>
         <li>
-          <Link href="/coins" className="hover:text-brand-600">
+          <Link href="/assets" className="hover:text-brand-600">
             Browse all coins
           </Link>
         </li>

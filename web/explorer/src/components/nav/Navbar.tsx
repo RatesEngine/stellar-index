@@ -55,7 +55,7 @@ export function Navbar() {
 }
 
 const SECTIONS = [
-  { label: 'Coins', href: '/coins' },
+  { label: 'Assets', href: '/assets' },
   { label: 'Markets', href: '/markets' },
   { label: 'DEXes', href: '/dexes' },
   { label: 'Lending', href: '/lending' },

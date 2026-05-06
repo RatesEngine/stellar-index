@@ -15,7 +15,7 @@ export function Footer() {
           <FooterColumn
             title="Browse"
             links={[
-              { label: 'Coins', href: '/coins' },
+              { label: 'Assets', href: '/assets' },
               { label: 'Markets', href: '/markets' },
               { label: 'Issuers', href: '/issuers' },
               { label: 'Sources', href: '/sources' },

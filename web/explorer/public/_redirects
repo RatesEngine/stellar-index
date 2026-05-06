@@ -1,0 +1,11 @@
+# Cloudflare Pages redirect rules. Same syntax as Netlify's
+# _redirects. CF Pages applies these before falling back to the
+# static export, so server-level 301s land before any HTML loads
+# (which is what we want for SEO + back-button correctness).
+
+# /coins/ → /assets/ (and trailing-slash variants).
+# Asset detail pages are still under /coins/<slug>/ for now;
+# only the listing index moves. A follow-up PR migrates the
+# detail route too.
+/coins/         /assets/         301
+/coins          /assets          301

@@ -65,7 +65,7 @@ export default function NetworkPage() {
           </Link>{' '}
           (per-source cursors), and for the indexed asset directory
           see{' '}
-          <Link href="/coins" className="underline decoration-dotted">
+          <Link href="/assets" className="underline decoration-dotted">
             /coins
           </Link>
           .

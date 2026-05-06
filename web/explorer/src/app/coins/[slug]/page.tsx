@@ -154,7 +154,7 @@ export default async function CoinDetailPage({ params }: { params: Params }) {
       <div className="mx-auto max-w-6xl space-y-6 p-6">
         <header className="space-y-3">
           <nav className="text-xs text-slate-500">
-            <Link href="/coins" className="hover:text-brand-600">
+            <Link href="/assets" className="hover:text-brand-600">
               Assets
             </Link>{' '}
             / <span>{slug}</span>
@@ -189,7 +189,7 @@ export default async function CoinDetailPage({ params }: { params: Params }) {
     <div className="mx-auto max-w-6xl space-y-6 p-6">
       <header className="space-y-3">
         <nav className="text-xs text-slate-500">
-          <Link href="/coins" className="hover:text-brand-600">
+          <Link href="/assets" className="hover:text-brand-600">
             Assets
           </Link>{' '}
           /{' '}

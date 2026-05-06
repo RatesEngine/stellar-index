@@ -140,7 +140,7 @@ export default function OraclesPage() {
           <code className="font-mono text-xs">flags.divergence_warning</code>{' '}
           on the canonical{' '}
           <Link
-            href="/coins"
+            href="/assets"
             className="underline decoration-dotted hover:text-brand-600"
           >
             coin pages

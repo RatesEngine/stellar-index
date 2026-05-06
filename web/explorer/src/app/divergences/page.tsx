@@ -53,7 +53,7 @@ export default function DivergencesPage() {
           against external references. A persistent gap flips{' '}
           <code className="font-mono text-xs">flags.divergence_warning</code>{' '}
           on the canonical{' '}
-          <Link href="/coins" className="underline decoration-dotted">
+          <Link href="/assets" className="underline decoration-dotted">
             coin pages
           </Link>{' '}
           and writes a row to the{' '}

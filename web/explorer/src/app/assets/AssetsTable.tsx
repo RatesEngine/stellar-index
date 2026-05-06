@@ -1,0 +1,389 @@
+'use client';
+
+import Link from 'next/link';
+import { useRouter, useSearchParams } from 'next/navigation';
+import { useMemo, useState } from 'react';
+import { ChevronLeft, ChevronRight, Search, X } from 'lucide-react';
+
+import { useCoins, type Coin } from '@/api/hooks';
+import { formatCompact } from '@/lib/format';
+
+/**
+ * /assets directory table — the canonical Stellar asset list.
+ *
+ * Cursor-paginated against `/v1/coins`. Server emits keyset
+ * cursors; we round-trip the active cursor through the URL
+ * (`?cursor=…`) so deep links + back-button navigation work
+ * without local state drift.
+ *
+ * Columns are deliberately data-dense and right-aligned for
+ * numerics — etherscan / oklink style. Fields the API doesn't
+ * yet expose render as `—` rather than placeholder values.
+ */
+export function AssetsTable() {
+  const router = useRouter();
+  const params = useSearchParams();
+  const cursor = params.get('cursor') ?? '';
+  const limitParam = params.get('limit');
+  const issuerFilter = params.get('issuer') ?? undefined;
+  const queryParam = params.get('q') ?? '';
+
+  const limit = parseLimit(limitParam);
+
+  const { data, isLoading, isError, error } = useCoins(
+    limit,
+    issuerFilter,
+    cursor,
+  );
+
+  const [q, setQ] = useState(queryParam);
+
+  const filteredCoins = useMemo(() => {
+    if (!data) return [];
+    const trimmed = q.trim().toLowerCase();
+    if (!trimmed) return data.coins;
+    return data.coins.filter(
+      (c) =>
+        c.code.toLowerCase().includes(trimmed) ||
+        c.slug.toLowerCase().includes(trimmed) ||
+        (c.issuer ?? '').toLowerCase().includes(trimmed),
+    );
+  }, [data, q]);
+
+  function setQuery(updates: Partial<{ cursor: string; limit: string; issuer: string }>) {
+    const next = new URLSearchParams(params.toString());
+    for (const [k, v] of Object.entries(updates)) {
+      if (v === '' || v === undefined) next.delete(k);
+      else next.set(k, v);
+    }
+    router.push(`/assets?${next.toString()}`);
+  }
+
+  if (isError) {
+    return (
+      <div className="rounded-md border border-red-200 bg-red-50 p-4 text-sm text-red-800 dark:border-red-900/40 dark:bg-red-950/40 dark:text-red-200">
+        Failed to load assets: {error instanceof Error ? error.message : 'unknown error'}
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-4">
+      <FilterBar
+        q={q}
+        onQChange={setQ}
+        issuerFilter={issuerFilter}
+        onIssuerClear={() => setQuery({ issuer: '', cursor: '' })}
+        limit={limit}
+        onLimitChange={(v) => setQuery({ limit: String(v), cursor: '' })}
+      />
+
+      <div className="overflow-x-auto rounded-md border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
+        <table className="min-w-full text-sm">
+          <thead>
+            <tr className="border-b border-slate-200 bg-slate-50 text-left text-[11px] uppercase tracking-wider text-slate-500 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-500">
+              <Th>#</Th>
+              <Th>Asset</Th>
+              <Th>Issuer</Th>
+              <Th align="right">Price</Th>
+              <Th align="right">24h %</Th>
+              <Th align="right">Market cap</Th>
+              <Th align="right">Volume 24h</Th>
+              <Th align="right">Circulating</Th>
+              <Th align="right">First seen</Th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+            {isLoading && (
+              <tr>
+                <td
+                  colSpan={9}
+                  className="py-12 text-center text-sm text-slate-500"
+                >
+                  Loading…
+                </td>
+              </tr>
+            )}
+            {!isLoading && filteredCoins.length === 0 && (
+              <tr>
+                <td
+                  colSpan={9}
+                  className="py-12 text-center text-sm text-slate-500"
+                >
+                  No assets match this filter.
+                </td>
+              </tr>
+            )}
+            {!isLoading &&
+              filteredCoins.map((coin, idx) => (
+                <AssetRow
+                  key={coin.asset_id}
+                  coin={coin}
+                  rank={(coin.observation_count > 0 ? idx : 0) + 1}
+                />
+              ))}
+          </tbody>
+        </table>
+      </div>
+
+      <Pagination
+        cursor={cursor}
+        nextCursor={data?.next_cursor ?? ''}
+        onPrev={() => router.back()}
+        onNext={() =>
+          data?.next_cursor && setQuery({ cursor: data.next_cursor })
+        }
+      />
+
+      <p className="text-xs text-slate-500 dark:text-slate-400">
+        Live data from{' '}
+        <code className="rounded bg-slate-100 px-1 font-mono text-[11px] dark:bg-slate-800">
+          /v1/coins
+        </code>
+        . Price + market cap + volume populate from the latest 1-min
+        VWAP and 5-min stats. % change windows are pending — the
+        aggregator emits closed-bucket VWAPs but the per-window
+        deltas aren&apos;t served by the listing API yet.
+      </p>
+    </div>
+  );
+}
+
+function FilterBar({
+  q,
+  onQChange,
+  issuerFilter,
+  onIssuerClear,
+  limit,
+  onLimitChange,
+}: {
+  q: string;
+  onQChange: (v: string) => void;
+  issuerFilter?: string;
+  onIssuerClear: () => void;
+  limit: number;
+  onLimitChange: (v: number) => void;
+}) {
+  return (
+    <div className="flex flex-wrap items-center justify-between gap-3">
+      <div className="flex flex-wrap items-center gap-2">
+        <div className="relative">
+          <Search className="absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+          <input
+            type="search"
+            value={q}
+            onChange={(e) => onQChange(e.target.value)}
+            placeholder="Search by code, slug, or issuer…"
+            className="w-72 rounded-md border border-slate-200 bg-white py-1.5 pl-8 pr-3 text-sm placeholder:text-slate-400 focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500 dark:border-slate-700 dark:bg-slate-900 dark:placeholder:text-slate-500"
+          />
+        </div>
+        {issuerFilter && (
+          <span className="inline-flex items-center gap-1 rounded-md bg-slate-100 py-1 pl-2.5 pr-1 text-xs text-slate-700 dark:bg-slate-800 dark:text-slate-300">
+            issuer: <code className="font-mono">{issuerFilter.slice(0, 8)}…{issuerFilter.slice(-4)}</code>
+            <button
+              type="button"
+              onClick={onIssuerClear}
+              className="ml-1 rounded p-0.5 text-slate-500 hover:bg-slate-200 hover:text-slate-700 dark:hover:bg-slate-700"
+              aria-label="Clear issuer filter"
+            >
+              <X className="h-3 w-3" />
+            </button>
+          </span>
+        )}
+      </div>
+      <label className="flex items-center gap-2 text-xs text-slate-500">
+        <span>Per page</span>
+        <select
+          value={limit}
+          onChange={(e) => onLimitChange(parseInt(e.target.value, 10))}
+          className="rounded-md border border-slate-200 bg-white px-2 py-1 text-xs focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500 dark:border-slate-700 dark:bg-slate-900"
+        >
+          <option value={50}>50</option>
+          <option value={100}>100</option>
+          <option value={200}>200</option>
+          <option value={500}>500</option>
+        </select>
+      </label>
+    </div>
+  );
+}
+
+function AssetRow({ coin, rank }: { coin: Coin; rank: number }) {
+  const price = parseDec(coin.price_usd);
+  const marketCap = parseDec(coin.market_cap_usd);
+  const volume = parseDec(coin.volume_24h_usd);
+  const supply = parseDec(coin.circulating_supply);
+  return (
+    <tr className="hover:bg-slate-50 dark:hover:bg-slate-800/40">
+      <Td>
+        <span className="text-slate-400">{rank}</span>
+      </Td>
+      <Td>
+        <Link
+          href={`/coins/${coin.slug}`}
+          className="group flex items-baseline gap-2"
+        >
+          <span className="font-medium text-ink group-hover:text-brand-600 dark:text-slate-100">
+            {coin.code}
+          </span>
+          <span className="text-[11px] text-slate-500">{coin.slug}</span>
+        </Link>
+      </Td>
+      <Td>
+        {coin.issuer ? (
+          <Link
+            href={`/issuers/${coin.issuer}`}
+            className="font-mono text-[11px] text-slate-500 hover:text-brand-600 dark:text-slate-400"
+            title={coin.issuer}
+          >
+            {coin.issuer.slice(0, 8)}…{coin.issuer.slice(-4)}
+          </Link>
+        ) : (
+          <span className="text-xs text-slate-400">native</span>
+        )}
+      </Td>
+      <Td align="right">
+        {price != null ? (
+          <span className="font-mono tabular-nums text-ink dark:text-slate-100">
+            ${formatPriceSmart(price)}
+          </span>
+        ) : (
+          <Dash />
+        )}
+      </Td>
+      <Td align="right">
+        <Dash />
+      </Td>
+      <Td align="right">
+        {marketCap != null ? (
+          <span className="font-mono tabular-nums text-slate-700 dark:text-slate-300">
+            ${formatCompact(marketCap)}
+          </span>
+        ) : (
+          <Dash />
+        )}
+      </Td>
+      <Td align="right">
+        {volume != null ? (
+          <span className="font-mono tabular-nums text-slate-700 dark:text-slate-300">
+            ${formatCompact(volume)}
+          </span>
+        ) : (
+          <Dash />
+        )}
+      </Td>
+      <Td align="right">
+        {supply != null ? (
+          <span className="font-mono tabular-nums text-slate-600 dark:text-slate-400">
+            {formatCompact(supply)}
+          </span>
+        ) : (
+          <Dash />
+        )}
+      </Td>
+      <Td align="right">
+        <span className="font-mono text-[11px] text-slate-500">
+          #{coin.first_seen_ledger.toLocaleString()}
+        </span>
+      </Td>
+    </tr>
+  );
+}
+
+function Pagination({
+  cursor,
+  nextCursor,
+  onPrev,
+  onNext,
+}: {
+  cursor: string;
+  nextCursor: string;
+  onPrev: () => void;
+  onNext: () => void;
+}) {
+  const hasPrev = cursor !== '';
+  const hasNext = nextCursor !== '';
+  return (
+    <div className="flex items-center justify-between gap-2 px-1">
+      <button
+        type="button"
+        disabled={!hasPrev}
+        onClick={onPrev}
+        className="inline-flex items-center gap-1 rounded-md border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-600 hover:border-brand-500 hover:text-brand-600 disabled:opacity-40 disabled:hover:border-slate-200 disabled:hover:text-slate-600 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300"
+      >
+        <ChevronLeft className="h-3.5 w-3.5" />
+        Previous
+      </button>
+      <span className="text-xs text-slate-400">
+        {hasPrev || hasNext ? 'Cursor-paginated' : ' '}
+      </span>
+      <button
+        type="button"
+        disabled={!hasNext}
+        onClick={onNext}
+        className="inline-flex items-center gap-1 rounded-md border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-600 hover:border-brand-500 hover:text-brand-600 disabled:opacity-40 disabled:hover:border-slate-200 disabled:hover:text-slate-600 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300"
+      >
+        Next
+        <ChevronRight className="h-3.5 w-3.5" />
+      </button>
+    </div>
+  );
+}
+
+function Th({
+  children,
+  align,
+}: {
+  children: React.ReactNode;
+  align?: 'left' | 'right';
+}) {
+  return (
+    <th
+      className={`px-4 py-2.5 font-medium ${align === 'right' ? 'text-right' : 'text-left'}`}
+      scope="col"
+    >
+      {children}
+    </th>
+  );
+}
+
+function Td({
+  children,
+  align,
+}: {
+  children: React.ReactNode;
+  align?: 'left' | 'right';
+}) {
+  return (
+    <td
+      className={`px-4 py-3 ${align === 'right' ? 'text-right' : 'text-left'}`}
+    >
+      {children}
+    </td>
+  );
+}
+
+function Dash() {
+  return <span className="text-slate-300 dark:text-slate-700">—</span>;
+}
+
+function parseDec(s: string | null | undefined): number | null {
+  if (!s) return null;
+  const n = Number(s);
+  return Number.isFinite(n) ? n : null;
+}
+
+function formatPriceSmart(n: number): string {
+  if (n >= 1) return n.toFixed(n >= 100 ? 2 : 4);
+  if (n >= 0.001) return n.toFixed(6);
+  // sub-millicent — show in scientific so a 1e-9 doesn't dominate
+  if (n > 0) return n.toExponential(3);
+  return '0';
+}
+
+function parseLimit(raw: string | null): number {
+  const valid = [50, 100, 200, 500];
+  if (!raw) return 100;
+  const n = parseInt(raw, 10);
+  return valid.includes(n) ? n : 100;
+}
