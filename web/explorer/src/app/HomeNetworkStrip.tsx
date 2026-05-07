@@ -1,6 +1,6 @@
 'use client';
 
-import { useCoins, useMarkets, useSources, useCursors } from '@/api/hooks';
+import { useCoins, useNetworkStats } from '@/api/hooks';
 import { formatCompact } from '@/lib/format';
 
 /**
@@ -16,25 +16,28 @@ import { formatCompact } from '@/lib/format';
  *   - Sources online (Class=exchange contributors to VWAP)
  *   - XLM price (with 24h change pill)
  *
- * Every cell is fed by an existing API endpoint — no synthesised
- * data, no estimates. Cells render `—` while loading or when the
- * underlying call fails.
+ * Volume / markets / assets / sources / ledger come from
+ * /v1/network/stats — server-aggregated across the full corpus,
+ * NOT capped at any pagination limit. Earlier versions of this
+ * strip summed `useMarkets(500, ...)` + counted `useCoins(50)`
+ * and so silently undercounted; the rewrite uses the dedicated
+ * aggregate endpoint shipped in PR #840.
+ *
+ * XLM price is the only field that still piggybacks on /v1/coins
+ * — `useCoins(1)` is enough since native XLM is always the first
+ * row.
  */
 export function HomeNetworkStrip() {
-  const markets = useMarkets(500, 'volume_24h_usd_desc');
-  const coins = useCoins(50);
-  const sources = useSources();
-  const cursors = useCursors();
+  const stats = useNetworkStats();
+  const coins = useCoins(1);
 
-  const totalVolume = (markets.data?.markets ?? []).reduce(
-    (sum, m) => sum + (m.volume_24h_usd ? Number(m.volume_24h_usd) : 0),
-    0,
-  );
-  const activeMarketsCount = markets.data?.markets?.length ?? null;
-  const assetsCount = coins.data?.coins?.length ?? null;
-  const exchangeSourcesCount =
-    (sources.data ?? []).filter((s) => s.class === 'exchange').length || null;
-  const tipLedger = cursors.data ? maxLiveLedger(cursors.data) : null;
+  const volume = stats.data?.volume_24h_usd
+    ? Number(stats.data.volume_24h_usd)
+    : null;
+  const activeMarkets = stats.data?.markets_count_24h ?? null;
+  const assetsIndexed = stats.data?.assets_indexed ?? null;
+  const exchangeSources = stats.data?.exchange_sources ?? null;
+  const tipLedger = stats.data?.latest_ledger ?? null;
 
   const xlm = (coins.data?.coins ?? []).find(
     (c) => c.code === 'XLM' || c.asset_id === 'native',
@@ -47,25 +50,31 @@ export function HomeNetworkStrip() {
       <Cell
         label="24h volume"
         value={
-          markets.isError || totalVolume === 0
-            ? '—'
-            : `$${formatCompact(totalVolume)}`
+          volume != null && Number.isFinite(volume) && volume > 0
+            ? `$${formatCompact(volume)}`
+            : '—'
         }
         sub="across all markets"
       />
       <Cell
         label="Active markets"
-        value={activeMarketsCount != null ? activeMarketsCount.toLocaleString() : '—'}
-        sub="trading in last 14d"
+        value={
+          activeMarkets != null ? activeMarkets.toLocaleString() : '—'
+        }
+        sub="trading in last 24h"
       />
       <Cell
         label="Assets indexed"
-        value={assetsCount != null ? formatCompact(assetsCount) : '—'}
+        value={
+          assetsIndexed != null ? formatCompact(assetsIndexed) : '—'
+        }
         sub="classic + native"
       />
       <Cell
         label="Sources online"
-        value={exchangeSourcesCount != null ? `${exchangeSourcesCount}` : '—'}
+        value={
+          exchangeSources != null ? `${exchangeSources}` : '—'
+        }
         sub="Class = exchange"
       />
       {xlmPrice != null ? (
@@ -134,17 +143,4 @@ function Cell({
       )}
     </div>
   );
-}
-
-function maxLiveLedger(
-  cursors: { source: string; last_ledger: number }[],
-): number | null {
-  let max = -1;
-  for (const c of cursors) {
-    if (c.source === 'backfill') continue;
-    if (Number.isFinite(c.last_ledger) && c.last_ledger > max) {
-      max = c.last_ledger;
-    }
-  }
-  return max >= 0 ? max : null;
 }

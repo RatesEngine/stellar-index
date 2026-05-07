@@ -15,6 +15,16 @@ against.
 
 ## [Unreleased]
 
+### Fixed
+- **Home network strip: undercounted 24h volume + market + asset
+  totals.** Previously the strip summed `useMarkets(500, ...)` and
+  counted `useCoins(50)` client-side, capping the displayed
+  numbers at the first page of each list. Now consumes
+  `/v1/network/stats` (rc.21) directly — server-aggregated across
+  the full corpus. Real numbers visible on the home page: 24h
+  volume jumps from a partial sum to the actual ~$5.8B aggregate,
+  and "Active markets" jumps from 500 to ~23,400.
+
 ## [v0.5.0-rc.21] — 2026-05-07
 
 ### Added

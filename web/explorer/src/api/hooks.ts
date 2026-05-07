@@ -20,6 +20,37 @@
 import { useQuery } from '@tanstack/react-query';
 import { apiGet } from './client';
 
+export type NetworkStats = {
+  volume_24h_usd: string;
+  markets_count_24h: number;
+  assets_indexed: number;
+  latest_ledger: number;
+  exchange_sources: number;
+  total_sources: number;
+};
+
+/**
+ * useNetworkStats — fetches the consolidated network-level aggregate
+ * the home strip uses for its 24h-volume / active-markets /
+ * assets-indexed / sources-online numbers. Server-aggregated against
+ * the full corpus (not capped at any pagination limit), so this is
+ * the authoritative source for those numbers.
+ *
+ * Refetched every 60 s — the underlying continuous aggregate the
+ * API reads from refreshes once a minute, so polling faster is
+ * wasted load.
+ */
+export function useNetworkStats() {
+  return useQuery<NetworkStats>({
+    queryKey: ['/v1/network/stats'],
+    queryFn: async () => {
+      const env = await apiGet<{ data: NetworkStats }>('/v1/network/stats');
+      return env.data;
+    },
+    refetchInterval: 60_000,
+  });
+}
+
 export type ChangeSummary = {
   entity_type: 'coin' | 'protocol' | 'pair' | 'source';
   entity_id: string;
