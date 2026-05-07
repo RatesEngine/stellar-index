@@ -30,11 +30,43 @@ type SourceStats struct {
 //
 // Sources with no trades in 24h are absent from the result —
 // callers join against the static external.Registry to fill in.
+//
+// Volume derivation mirrors buildPoolsQuery (markets.go): for
+// trades with non-null usd_volume we use it as-is (Phase 1
+// USD-pegged-quote path); for trades with native or XLM SAC on
+// either side we derive from base/quote_amount × XLM/USD via the
+// same on-chain XLM/USDC vwap that powers /v1/coins. Pure
+// SEP-41/SEP-41 swaps still contribute zero to the per-source
+// total — separate piece of work to wire per-token oracles.
 func (s *Store) GetSourceStats(ctx context.Context) ([]SourceStats, error) {
 	const q = `
+		WITH xlm_usd AS (
+		  SELECT vwap
+		    FROM prices_1m
+		   WHERE base_asset = 'native'
+		     AND quote_asset IN (
+		       'USDC-GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN',
+		       'USDT-GCQTGZQQ5G4PTM2GL7CDIFKUBIPEC52BROAQIAPW53XBRJVN6ZJVTG6V',
+		       'fiat:USD'
+		     )
+		     AND vwap IS NOT NULL
+		     AND bucket >= NOW() - INTERVAL '24 hours'
+		   ORDER BY bucket DESC
+		   LIMIT 1
+		)
 		SELECT source,
-		       COUNT(*)::bigint                                AS trades_24h,
-		       SUM(usd_volume)::text                           AS volume_usd_24h,
+		       COUNT(*)::bigint AS trades_24h,
+		       SUM(
+		         CASE
+		           WHEN usd_volume IS NOT NULL
+		             THEN usd_volume::numeric
+		           WHEN base_asset IN ('native', 'CAS3J7GYLGXMF6TDJBBYYSE3HQ6BBSMLNUQ34T6TZMYMW2EVH34XOWMA')
+		             THEN (base_amount / 1e7) * (SELECT vwap FROM xlm_usd)
+		           WHEN quote_asset IN ('native', 'CAS3J7GYLGXMF6TDJBBYYSE3HQ6BBSMLNUQ34T6TZMYMW2EVH34XOWMA')
+		             THEN (quote_amount / 1e7) * (SELECT vwap FROM xlm_usd)
+		           ELSE NULL
+		         END
+		       )::text AS volume_usd_24h,
 		       COUNT(DISTINCT (base_asset, quote_asset))::bigint AS markets_24h
 		  FROM trades
 		 WHERE ts >= now() - INTERVAL '24 hours'

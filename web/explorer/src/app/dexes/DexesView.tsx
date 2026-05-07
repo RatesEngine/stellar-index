@@ -8,6 +8,8 @@ import { Panel } from '@/components/reveal';
 import { apiGet, asExample } from '@/api/client';
 import { formatCompact } from '@/lib/format';
 
+import { DexProtocolsTable } from './DexProtocolsTable';
+
 interface Pool {
   source: string;
   base: string;
@@ -106,18 +108,22 @@ export function DexesView() {
   return (
     <div className="mx-auto max-w-7xl space-y-6 px-6 py-8">
       <header className="space-y-2">
-        <h1 className="text-3xl font-semibold tracking-tight">DEX pools</h1>
+        <h1 className="text-3xl font-semibold tracking-tight">DEXes</h1>
         <p className="max-w-3xl text-sm text-slate-600 dark:text-slate-400">
-          Every (DEX, base, quote) liquidity pool we&apos;ve observed
-          in the last 14 days. Soroswap, Phoenix, Aquarius, Comet,
-          and the Stellar-native order book SDEX. CEX trading pairs
-          (Binance, Coinbase, Kraken, Bitstamp) live at{' '}
-          <Link href="/markets" className="text-brand-600 hover:underline">
-            /markets
+          Every Stellar DEX we ingest — Soroswap, Phoenix, Aquarius,
+          Comet, and the Stellar-native order book SDEX. The first
+          table summarises each protocol; the second lists every
+          (DEX, base, quote) pool we&apos;ve observed in the last 14
+          days. CEX trading pairs (Binance, Coinbase, Kraken,
+          Bitstamp) live at{' '}
+          <Link href="/exchanges" className="text-brand-600 hover:underline">
+            /exchanges
           </Link>
           ; &ldquo;pool&rdquo; is AMM/DEX terminology.
         </p>
       </header>
+
+      <DexProtocolsTable />
 
       <Panel
         title={`${pools.length} pools on this page${sourceFilter ? ` (${sourceFilter} only)` : ''}`}

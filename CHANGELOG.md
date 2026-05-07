@@ -16,6 +16,15 @@ against.
 ## [Unreleased]
 
 ### Changed
+- **/dexes adds the DEX-protocols overview table** above the
+  all-pools table — per the user spec ("2 tables, at the top
+  lists all our connected dexes with basic overview info about
+  them"). Per-row: protocol name, 24h USD volume, 24h trade count,
+  active pool count (markets_count_24h), and a details link to the
+  per-protocol /sources/<name> drilldown. Backed by
+  /v1/sources?include=stats filtered to Subclass=DEX and sorted by
+  volume desc. Updates the page header to clarify CEX pairs live
+  at /exchanges (not /markets).
 - **Top nav restructured to grouped IA.** Navbar collapses from a
   flat 11-item bar to: Currencies / Blockchain (dropdown) /
   API Docs / About (dropdown) / Sign in / Create account. Blockchain
@@ -44,6 +53,13 @@ against.
   pools, since page 1 by USD-volume-desc is dominated by SDEX).
 
 ### Fixed
+- **/v1/sources surfaces 24h USD volume on Soroban DEX sources** —
+  same root cause as the /v1/pools fix below: SUM(usd_volume) on
+  Phoenix/Aquarius/Comet trades was NULL because their trades had
+  null usd_volume. GetSourceStats now applies the same XLM/USD
+  CTE so per-protocol totals on /v1/sources?include=stats are
+  populated. Backs the new "DEX protocols" overview table at the
+  top of /dexes.
 - **/v1/pools surfaces 24h USD volume on Soroban DEX pools** —
   Phoenix / Aquarius / Comet trades against the XLM SAC wrapper
   (CAS3J7GY…) had NULL `usd_volume` because the operator's USD-pegged
