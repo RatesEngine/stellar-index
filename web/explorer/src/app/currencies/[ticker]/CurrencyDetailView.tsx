@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import Link from 'next/link';
 import { ArrowLeft } from 'lucide-react';
@@ -254,17 +254,11 @@ function Converter({ detail }: { detail: CurrencyDetail }) {
             <span className="w-full text-2xl font-mono tabular-nums text-slate-900 dark:text-slate-100">
               {result != null ? formatRate(result) : '—'}
             </span>
-            <select
+            <CurrencyCombobox
+              tickers={allTargets}
               value={target}
-              onChange={(e) => setTarget(e.target.value)}
-              className="rounded bg-slate-100 px-1.5 py-0.5 font-mono text-xs uppercase tracking-wider text-slate-700 focus:outline-none dark:bg-slate-800 dark:text-slate-300"
-            >
-              {allTargets.map((t) => (
-                <option key={t} value={t}>
-                  {t}
-                </option>
-              ))}
-            </select>
+              onChange={setTarget}
+            />
           </div>
         </label>
       </div>
@@ -397,4 +391,122 @@ function formatDate(iso: string): string {
   } catch {
     return iso;
   }
+}
+
+// CurrencyCombobox — searchable picker over the full ticker list.
+// Replaces a plain <select> for converters where the user has 100+
+// currencies to pick from. Keyboard-friendly: arrow keys navigate
+// the filtered list, Enter selects, Escape closes. Click-outside
+// also closes. No external dependencies.
+function CurrencyCombobox({
+  tickers,
+  value,
+  onChange,
+}: {
+  tickers: string[];
+  value: string;
+  onChange: (v: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState('');
+  const [highlight, setHighlight] = useState(0);
+  const wrapRef = useRef<HTMLDivElement | null>(null);
+  const inputRef = useRef<HTMLInputElement | null>(null);
+
+  const filtered = useMemo(() => {
+    const q = query.trim().toUpperCase();
+    if (!q) return tickers;
+    return tickers.filter((t) => t.includes(q));
+  }, [tickers, query]);
+
+  useEffect(() => {
+    setHighlight(0);
+  }, [query, open]);
+
+  useEffect(() => {
+    if (!open) return;
+    function onClickOutside(e: MouseEvent) {
+      if (wrapRef.current && !wrapRef.current.contains(e.target as Node)) {
+        setOpen(false);
+        setQuery('');
+      }
+    }
+    document.addEventListener('mousedown', onClickOutside);
+    return () => document.removeEventListener('mousedown', onClickOutside);
+  }, [open]);
+
+  useEffect(() => {
+    if (open) inputRef.current?.focus();
+  }, [open]);
+
+  function commit(t: string) {
+    onChange(t);
+    setOpen(false);
+    setQuery('');
+  }
+
+  return (
+    <div ref={wrapRef} className="relative">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        className="rounded bg-slate-100 px-1.5 py-0.5 font-mono text-xs uppercase tracking-wider text-slate-700 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700"
+      >
+        {value} ▾
+      </button>
+      {open && (
+        <div className="absolute right-0 top-full z-20 mt-1 w-56 overflow-hidden rounded-md border border-slate-200 bg-white shadow-lg dark:border-slate-700 dark:bg-slate-900">
+          <input
+            ref={inputRef}
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'ArrowDown') {
+                e.preventDefault();
+                setHighlight((h) => Math.min(h + 1, filtered.length - 1));
+              } else if (e.key === 'ArrowUp') {
+                e.preventDefault();
+                setHighlight((h) => Math.max(h - 1, 0));
+              } else if (e.key === 'Enter') {
+                e.preventDefault();
+                if (filtered[highlight]) commit(filtered[highlight]);
+              } else if (e.key === 'Escape') {
+                e.preventDefault();
+                setOpen(false);
+                setQuery('');
+              }
+            }}
+            placeholder="Search currency…"
+            className="w-full border-b border-slate-200 bg-white px-3 py-2 text-sm focus:outline-none dark:border-slate-700 dark:bg-slate-900"
+          />
+          <ul className="max-h-64 overflow-y-auto py-1 text-sm">
+            {filtered.length === 0 && (
+              <li className="px-3 py-2 text-xs text-slate-500">
+                No matches
+              </li>
+            )}
+            {filtered.map((t, i) => (
+              <li key={t}>
+                <button
+                  type="button"
+                  onClick={() => commit(t)}
+                  onMouseEnter={() => setHighlight(i)}
+                  className={`flex w-full items-center justify-between px-3 py-1.5 font-mono text-xs uppercase tracking-wider ${
+                    i === highlight
+                      ? 'bg-brand-50 text-brand-900 dark:bg-brand-900/30 dark:text-brand-100'
+                      : 'text-slate-700 dark:text-slate-300'
+                  }`}
+                >
+                  <span>{t}</span>
+                  {t === value && (
+                    <span className="text-[10px] text-slate-400">current</span>
+                  )}
+                </button>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+    </div>
+  );
 }

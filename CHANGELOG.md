@@ -15,6 +15,13 @@ against.
 
 ## [Unreleased]
 
+### Changed
+- **Currency converter dropdown is now a searchable combobox**
+  on `/currencies/[ticker]`. The plain `<select>` over 100+
+  currencies was unusable; the new picker filters by typed
+  prefix, navigates with arrow keys, and selects with Enter.
+  Pure React, no extra dependencies.
+
 ### Fixed
 - **`/research/architecture`, `/research/discovery`,
   `/research/operations` 404** — only `[slug]` subroutes existed;
