@@ -1418,6 +1418,35 @@ paths:
                 flags: {}
         "500": { $ref: "#/components/responses/InternalError" }
 
+  /incidents.atom:
+    get:
+      tags: [meta]
+      summary: Atom feed of customer-facing incidents.
+      description: |
+        RFC-4287 Atom 1.0 syndication of every customer-facing
+        incident post (`internal/incidents/data/*.md`). Designed
+        for Feedly, Slack's RSS bot, and similar feed consumers
+        who want push-style notifications when a new incident
+        ships without polling JSON.
+
+        Same corpus as `/v1/incidents`; entry `<id>` is a stable
+        URN so feed readers dedupe correctly across crawls.
+        Cache-Control: public, max-age=300 (5 min) — the corpus
+        only changes on redeploy so longer caching is fine.
+      responses:
+        "200":
+          description: Atom 1.0 XML feed.
+          content:
+            application/atom+xml:
+              schema:
+                type: string
+                description: |
+                  RFC-4287 Atom feed — one `<entry>` per past
+                  incident, sorted newest first, with `<title>`,
+                  `<link>` to the status page anchor, `<summary>`
+                  (first paragraph of the markdown body), and
+                  full `<content>` (the markdown body).
+
   /network/stats:
     get:
       tags: [meta]
@@ -1505,6 +1534,18 @@ paths:
           schema:
             type: string
             enum: [exchange, aggregator, oracle, authority_sanity]
+        - name: include
+          in: query
+          required: false
+          description: |
+            Opt-in extras. `stats` populates each row's
+            `trade_count_24h` from a single GROUP BY on the trades
+            hypertable — cheap, but a DB hit so opt-in. Absent the
+            param the response stays the all-static-registry
+            projection.
+          schema:
+            type: string
+            enum: [stats]
       responses:
         "200":
           description: Array of sources, sorted by name.
@@ -3051,6 +3092,7 @@ components:
         backfill_available: { type: boolean, description: "Whether the source supports historical backfill via its native API." }
         backfill_safe:      { type: boolean, description: "Whether `ratesengine-ops backfill` will run on this source. On-chain Soroban sources start `false` and only flip `true` after a per-WASM-hash audit (`docs/operations/wasm-audits/`); off-chain CEX/FX sources are always `true`." }
         default_weight:     { type: integer, description: "Default per-source weight for weighted-aggregation paths (when those land)." }
+        trade_count_24h:    { type: integer, description: "Trailing-24h trade count for this source. Populated only when the request used `?include=stats`; absent (omitted) otherwise." }
       required: [name, class, include_in_vwap, paid, backfill_available, backfill_safe, default_weight]
 
     SourcesEnvelope:

@@ -16,6 +16,11 @@ against.
 ## [Unreleased]
 
 ### Changed
+- **docs.ratesengine.net topbar: 3 new links.** Adds Methodology,
+  Go SDK, and Changelog to the docs site's topbar between Explorer
+  and Status. Visitors landing on the API reference can now jump
+  to the explainer, the typed SDK page, or the release feed
+  without having to bounce back to the explorer first.
 - **HomeTryAPI: nudge to /sdk when Go tab is selected.** The Go
   example renders stdlib `http.Get` (matches the curl/JS/Python
   shape — same one-liner). When the visitor picks the Go tab,
