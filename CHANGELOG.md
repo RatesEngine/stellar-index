@@ -16,6 +16,15 @@ against.
 ## [Unreleased]
 
 ### Added
+- **Docs site polish: header bar + favicon + OG card.**
+  docs.ratesengine.net now has a slim header above the Scalar
+  reference with brand mark + "Explorer" / "Status" / "GitHub"
+  navigation links so visitors can hop between the three sites
+  without typing URLs. Adds favicon (`/icon.svg`) and 1200×630
+  OG image (`/og.svg`) so shared docs links render as proper
+  preview cards. Both files served from the same CF Pages
+  project; refreshed when `make docs-api` rebuilds the
+  index.html.
 - **`/embed/pair/{base~quote}` iframe pair widget.** Mirror of
   the asset embed shipped earlier — same chrome-less layout,
   shows the BASE / QUOTE label + live VWAP + 24h change pill +
