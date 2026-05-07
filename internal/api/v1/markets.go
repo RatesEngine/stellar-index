@@ -19,6 +19,12 @@ type MarketsReader interface {
 	// Cursor opaque; empty starts at page 1.
 	DistinctPairsExt(ctx context.Context, cursor string, limit int, order timescale.MarketsOrder) ([]Market, string, error)
 
+	// SourceMarkets is DistinctPairsExt narrowed to a single
+	// source — the per-DEX pool list backing
+	// /v1/markets?source=<name>. Same shape as DistinctPairsExt
+	// for paginated drill-down.
+	SourceMarkets(ctx context.Context, source, cursor string, limit int, order timescale.MarketsOrder) ([]Market, string, error)
+
 	// PairMarket returns the activity summary for a single (base,
 	// quote) pair. The bool is false when the pair has no trades —
 	// the /v1/pairs handler translates that to an empty 200 OK array,
@@ -84,6 +90,8 @@ func (s *Server) handleMarkets(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	source := r.URL.Query().Get("source")
+
 	reader := s.markets
 	if reader == nil {
 		// Feature not wired — empty list is consistent with the
@@ -93,7 +101,16 @@ func (s *Server) handleMarkets(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	rows, next, err := reader.DistinctPairsExt(r.Context(), cursor, limit, order)
+	var (
+		rows []Market
+		next string
+		err  error
+	)
+	if source != "" {
+		rows, next, err = reader.SourceMarkets(r.Context(), source, cursor, limit, order)
+	} else {
+		rows, next, err = reader.DistinctPairsExt(r.Context(), cursor, limit, order)
+	}
 	if err != nil {
 		if clientAborted(r, err) {
 			return

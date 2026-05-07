@@ -31,6 +31,13 @@ func (r *stubMarketsReader) DistinctPairsExt(_ context.Context, cursor string, l
 	return r.pairs, r.nextCur, nil
 }
 
+func (r *stubMarketsReader) SourceMarkets(_ context.Context, _, _ string, _ int, _ timescale.MarketsOrder) ([]v1.Market, string, error) {
+	if r.err != nil {
+		return nil, "", r.err
+	}
+	return r.pairs, r.nextCur, nil
+}
+
 func (r *stubMarketsReader) PairMarket(_ context.Context, _ canonical.Asset, _ canonical.Asset) (v1.Market, bool, error) {
 	if r.pairErr != nil {
 		return v1.Market{}, false, r.pairErr

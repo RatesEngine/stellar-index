@@ -228,10 +228,16 @@ function DexCard({
           Read integration audit →
         </Link>
         <Link
+          href={`/dexes/${entry.source}`}
+          className="inline-flex items-center gap-1 font-medium text-brand-600 hover:underline"
+        >
+          View all pools →
+        </Link>
+        <Link
           href={`/sources/${entry.source}`}
           className="inline-flex items-center gap-1 text-slate-500 hover:text-brand-600"
         >
-          Source detail →
+          Source registry →
         </Link>
         {entry.contractsUrl && (
           <a
