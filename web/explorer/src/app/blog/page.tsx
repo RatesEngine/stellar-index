@@ -15,9 +15,17 @@ export default function BlogIndexPage() {
   return (
     <div className="mx-auto max-w-3xl space-y-8 px-6 py-12">
       <header className="space-y-2">
-        <p className="font-mono text-xs uppercase tracking-widest text-brand-600 dark:text-brand-400">
-          Blog
-        </p>
+        <div className="flex items-center justify-between">
+          <p className="font-mono text-xs uppercase tracking-widest text-brand-600 dark:text-brand-400">
+            Blog
+          </p>
+          <Link
+            href="/blog.atom"
+            className="font-mono text-[11px] text-slate-500 hover:text-brand-600"
+          >
+            atom feed →
+          </Link>
+        </div>
         <h1 className="text-4xl font-semibold tracking-tight">
           Engineering notes
         </h1>
