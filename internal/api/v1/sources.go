@@ -102,7 +102,7 @@ var validSourceClasses = map[string]bool{
 // with `include_in_vwap=false` is intentional policy
 // (aggregator/oracle/authority-sanity classes), not a missing
 // connector.
-func (s *Server) handleSources(w http.ResponseWriter, r *http.Request) {
+func (s *Server) handleSources(w http.ResponseWriter, r *http.Request) { //nolint:gocognit,gocyclo // include parsing + per-source stat-fill + sparkline backfill are linear; splitting would scatter the request lifecycle
 	classFilter := r.URL.Query().Get("class")
 	if classFilter != "" && !validSourceClasses[classFilter] {
 		writeProblem(w, r,

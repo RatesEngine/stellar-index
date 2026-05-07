@@ -817,6 +817,147 @@ paths:
         "500": { $ref: "#/components/responses/InternalError" }
         "503": { $ref: "#/components/responses/ServiceUnavailable" }
 
+  /pools:
+    get:
+      tags: [markets]
+      summary: DEX/AMM liquidity pools (one row per (source, base, quote)).
+      description: |
+        Like /v1/markets but DEX-only and with a `source` dimension —
+        the same pair traded on two DEXes appears as two rows. Backed
+        by the dispatch path through Soroswap / Phoenix / Aquarius /
+        SDEX / Comet (Class=Exchange + Subclass=DEX in the source
+        registry). CEX trading pairs go through /v1/markets;
+        "pool" is AMM/DEX terminology and applying it to centralised
+        venues misnames the data.
+      parameters:
+        - { $ref: "#/components/parameters/Cursor" }
+        - name: limit
+          in: query
+          schema: { type: integer, minimum: 1, maximum: 500, default: 100 }
+        - name: order_by
+          in: query
+          schema: { type: string, enum: [volume_24h_usd_desc, pair], default: volume_24h_usd_desc }
+        - name: source
+          in: query
+          schema: { type: string }
+          description: |
+            Optional. Restrict to a single DEX name (soroswap /
+            phoenix / aquarius / sdex / comet). Non-DEX names return
+            an empty list rather than 400.
+      responses:
+        "200":
+          description: Array of pool rows.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items: { type: object }
+                  pagination:
+                    type: object
+
+  /lending/pools:
+    get:
+      tags: [protocols]
+      summary: Lending pools (Blend) observed in the auction stream.
+      description: |
+        One row per distinct Blend pool contract observed in the
+        auction stream, with 24h / all-time auction counts + 30d
+        unique users + last-seen timestamp. Per-pool TVL /
+        utilisation / supply-borrow APYs land via additional
+        fields once the pool-storage reader worker ships.
+      responses:
+        "200":
+          description: Array of LendingPool rows.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items: { type: object }
+
+  /oracle/streams:
+    get:
+      tags: [oracle]
+      summary: Latest observation per (oracle, asset, quote) — 7d window.
+      description: |
+        Returns one row per distinct (source, asset, quote) triple
+        in the trailing 7 days. Backs the explorer's /oracles
+        price-streams table. Sources with no observation in the
+        window are absent from the result.
+      responses:
+        "200":
+          description: Array of OracleReading.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/OracleLatestEnvelope" }
+
+  /currencies:
+    get:
+      tags: [markets]
+      summary: World fiat currencies — USD-base rates.
+      description: |
+        Returns the latest USD-base rates for every supported
+        ISO-4217 currency. Backed by an in-memory cache the
+        forex worker refreshes hourly from the upstream
+        currency-api feed. Each row carries
+        `change_7d_pct` computed server-side; `?include=sparkline`
+        attaches the per-day inverse-USD series to every row for
+        listing-side mini charts.
+      parameters:
+        - name: limit
+          in: query
+          schema: { type: integer, minimum: 1 }
+          description: "Optional. Cap the returned currencies."
+        - name: include
+          in: query
+          schema: { type: string }
+          description: "Comma-separated. `sparkline` attaches `history_7d_rates`."
+      responses:
+        "200":
+          description: CurrenciesPayload — currencies + published_at + fetched_at + source.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+
+  /currencies/{ticker}:
+    get:
+      tags: [markets]
+      summary: Per-currency detail with cross-rates + 7d history.
+      description: |
+        Returns the requested currency's USD-base rate, inverse,
+        full cross-rates map (1 unit of ticker → every other
+        supported currency, derived from the cached USD-base
+        snapshot), and the 7d daily history series.
+      parameters:
+        - name: ticker
+          in: path
+          required: true
+          schema: { type: string }
+          description: "ISO-4217 ticker (case-insensitive); e.g. EUR, JPY."
+      responses:
+        "200":
+          description: CurrencyDetail.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+        "404":
+          description: Ticker not in the current snapshot.
+        "503":
+          description: Cache warming up (no snapshot yet).
+
   /markets:
     get:
       tags: [markets]

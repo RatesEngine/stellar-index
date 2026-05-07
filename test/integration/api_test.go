@@ -445,6 +445,10 @@ func (a oracleAdapter) LatestOracleUpdatesForAssets(ctx context.Context, assets 
 	return a.s.LatestOracleUpdatesForAssets(ctx, assets, sourceFilter)
 }
 
+func (a oracleAdapter) LatestOracleStreams(ctx context.Context) ([]c.OracleUpdate, error) {
+	return a.s.LatestOracleStreams(ctx)
+}
+
 // ─── Adapters + helpers ───────────────────────────────────────────
 
 // apiHistoryAdapter mirrors cmd/ratesengine-api/main.go's
@@ -528,6 +532,43 @@ func (r apiMarketsAdapter) PairMarket(ctx context.Context, base, quote c.Asset) 
 		TradeCount24h: m.TradeCount24h,
 		Volume24hUSD:  m.Volume24hUSD,
 	}, true, nil
+}
+
+func (r apiMarketsAdapter) SourceMarkets(ctx context.Context, source, cursor string, limit int, order timescale.MarketsOrder) ([]v1.Market, string, error) {
+	rows, next, err := r.s.SourceMarkets(ctx, source, cursor, limit, order)
+	if err != nil {
+		return nil, "", err
+	}
+	out := make([]v1.Market, len(rows))
+	for i, m := range rows {
+		out[i] = v1.Market{
+			Base:          m.Pair.Base.String(),
+			Quote:         m.Pair.Quote.String(),
+			LastTradeAt:   m.LastTradeAt,
+			TradeCount24h: m.TradeCount24h,
+			Volume24hUSD:  m.Volume24hUSD,
+		}
+	}
+	return out, next, nil
+}
+
+func (r apiMarketsAdapter) AllPools(ctx context.Context, sources []string, cursor string, limit int, order timescale.MarketsOrder) ([]v1.Pool, string, error) {
+	rows, next, err := r.s.AllPools(ctx, sources, cursor, limit, order)
+	if err != nil {
+		return nil, "", err
+	}
+	out := make([]v1.Pool, len(rows))
+	for i, p := range rows {
+		out[i] = v1.Pool{
+			Source:        p.Source,
+			Base:          p.Pair.Base.String(),
+			Quote:         p.Pair.Quote.String(),
+			LastTradeAt:   p.LastTradeAt,
+			TradeCount24h: p.TradeCount24h,
+			Volume24hUSD:  p.Volume24hUSD,
+		}
+	}
+	return out, next, nil
 }
 
 // mkAPITrade builds a Trade with a unique TxHash per (ledger, nonce).
