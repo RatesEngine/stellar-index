@@ -844,6 +844,19 @@ paths:
             Optional. Restrict to a single DEX name (soroswap /
             phoenix / aquarius / sdex / comet). Non-DEX names return
             an empty list rather than 400.
+        - name: base
+          in: query
+          schema: { type: string }
+          description: |
+            Optional. Canonical base asset_id (`native`, `USDC-G…`,
+            etc.). Combined with `quote` gives the per-source
+            breakdown for one pair — used by the pair detail page
+            to render "which venues moved this pair in the last 24h".
+        - name: quote
+          in: query
+          schema: { type: string }
+          description: |
+            Optional. Canonical quote asset_id. See `base`.
       responses:
         "200":
           description: Array of pool rows.

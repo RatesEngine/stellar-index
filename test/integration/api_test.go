@@ -556,8 +556,8 @@ func (r apiMarketsAdapter) GetPairsVolumeHistory24hBatch(ctx context.Context, pa
 	return r.s.GetPairsVolumeHistory24hBatch(ctx, pairs)
 }
 
-func (r apiMarketsAdapter) AllPools(ctx context.Context, sources []string, cursor string, limit int, order timescale.MarketsOrder) ([]v1.Pool, string, error) {
-	rows, next, err := r.s.AllPools(ctx, sources, cursor, limit, order)
+func (r apiMarketsAdapter) AllPools(ctx context.Context, filter timescale.PoolsFilter, cursor string, limit int, order timescale.MarketsOrder) ([]v1.Pool, string, error) {
+	rows, next, err := r.s.AllPools(ctx, filter, cursor, limit, order)
 	if err != nil {
 		return nil, "", err
 	}

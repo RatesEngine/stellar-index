@@ -38,7 +38,7 @@ func (r *stubMarketsReader) SourceMarkets(_ context.Context, _, _ string, _ int,
 	return r.pairs, r.nextCur, nil
 }
 
-func (r *stubMarketsReader) AllPools(_ context.Context, _ []string, _ string, _ int, _ timescale.MarketsOrder) ([]v1.Pool, string, error) {
+func (r *stubMarketsReader) AllPools(_ context.Context, _ timescale.PoolsFilter, _ string, _ int, _ timescale.MarketsOrder) ([]v1.Pool, string, error) {
 	if r.err != nil {
 		return nil, "", r.err
 	}

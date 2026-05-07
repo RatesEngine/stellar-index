@@ -48,7 +48,7 @@ type MarketsReader interface {
 	// non-empty, restricts the result to rows whose source name
 	// appears in the slice. Backs /v1/pools (DEX-only) where the
 	// handler resolves the DEX subset of the source registry.
-	AllPools(ctx context.Context, sources []string, cursor string, limit int, order timescale.MarketsOrder) ([]Pool, string, error)
+	AllPools(ctx context.Context, filter timescale.PoolsFilter, cursor string, limit int, order timescale.MarketsOrder) ([]Pool, string, error)
 
 	// PairMarket returns the activity summary for a single (base,
 	// quote) pair. The bool is false when the pair has no trades —
@@ -153,7 +153,12 @@ func (s *Server) handlePools(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, []Pool{}, Flags{})
 		return
 	}
-	rows, next, err := reader.AllPools(r.Context(), dexSources, cursor, limit, order)
+	filter := timescale.PoolsFilter{
+		Sources: dexSources,
+		Base:    r.URL.Query().Get("base"),
+		Quote:   r.URL.Query().Get("quote"),
+	}
+	rows, next, err := reader.AllPools(r.Context(), filter, cursor, limit, order)
 	if err != nil {
 		if clientAborted(r, err) {
 			return

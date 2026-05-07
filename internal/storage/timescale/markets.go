@@ -130,20 +130,36 @@ func (s *Store) SourceMarkets(ctx context.Context, source, cursor string, limit 
 	return s.distinctPairsCommon(ctx, source, cursor, limit, order)
 }
 
+// PoolsFilter narrows AllPools by venue and/or pair. Zero-value
+// fields mean "no filter on this dimension"; an unfiltered call
+// uses PoolsFilter{}.
+//
+// Pair filter (Base + Quote both non-empty) is the canonical
+// per-pair source-contribution query — used by the pair detail
+// page to render "which venues moved this pair in the last 24h".
+// Single-side filters (Base only / Quote only) are accepted but
+// uncommon.
+type PoolsFilter struct {
+	Sources []string
+	Base    string
+	Quote   string
+}
+
 // AllPools returns every (source, base, quote) tuple observed in
 // the trailing MarketsRecencyWindow. Distinct from DistinctPairsExt
 // which collapses across sources — same physical pair traded on
 // soroswap + sdex returns ONE row from DistinctPairsExt and TWO
 // rows from AllPools. Backs /v1/pools.
 //
-// `sources`, when non-empty, restricts the result to rows where
-// t.source = ANY(sources). Empty means "all sources".
+// `filter.Sources` constrains to a venue allowlist; `filter.Base` /
+// `filter.Quote` constrain by canonical asset_id. Empty fields
+// mean no filter.
 //
 // Cursor format: "<vol_or_blank>:<source>|<base>|<quote>" for
 // volume-desc; "<source>|<base>|<quote>" for pair-asc. Same
 // keyset-pagination shape as DistinctPairsExt with the source
 // dimension prepended.
-func (s *Store) AllPools(ctx context.Context, sources []string, cursor string, limit int, order MarketsOrder) ([]Pool, string, error) { //nolint:gocognit // limit clamp + order branch + scan loop are linear; splitting would scatter the request lifecycle
+func (s *Store) AllPools(ctx context.Context, filter PoolsFilter, cursor string, limit int, order MarketsOrder) ([]Pool, string, error) { //nolint:gocognit // limit clamp + order branch + scan loop are linear; splitting would scatter the request lifecycle
 	if limit < 1 {
 		limit = 100
 	}
@@ -151,7 +167,7 @@ func (s *Store) AllPools(ctx context.Context, sources []string, cursor string, l
 		limit = 500
 	}
 	since := time.Now().UTC().Add(-MarketsRecencyWindow)
-	q, args := buildPoolsQuery(since, sources, cursor, limit, order)
+	q, args := buildPoolsQuery(since, filter, cursor, limit, order)
 	rows, err := s.db.QueryContext(ctx, q, args...)
 	if err != nil {
 		return nil, "", fmt.Errorf("timescale: AllPools: %w", err)
@@ -226,7 +242,7 @@ func (s *Store) AllPools(ctx context.Context, sources []string, cursor string, l
 	return out, nextCursor, nil
 }
 
-func buildPoolsQuery(since time.Time, sources []string, cursor string, limit int, order MarketsOrder) (string, []any) { //nolint:funlen // CTE + select + 2 ordering branches form one query template; splitting would scatter the SQL across helpers
+func buildPoolsQuery(since time.Time, filter PoolsFilter, cursor string, limit int, order MarketsOrder) (string, []any) { //nolint:funlen // CTE + select + 2 ordering branches form one query template; splitting would scatter the SQL across helpers
 	// vol_24h derives per-(source, base, quote) USD volume directly
 	// from the trades hypertable rather than reading prices_1m's
 	// per-(base, quote) totals. Two reasons:
@@ -322,12 +338,15 @@ func buildPoolsQuery(since time.Time, sources []string, cursor string, limit int
            AND lp.quote_asset = t.quote_asset
          WHERE t.ts >= $1
     `
-	if len(sources) > 0 {
-		// `t.source = ANY($4)` constrains the trades scan before
-		// the GROUP BY. Backed by trades_source_ledger_idx for
-		// efficient chunk pruning when the source list is small.
-		cte += ` AND t.source = ANY($4) `
-	}
+	// $4 sources, $5 base, $6 quote are always bound; empty values
+	// short-circuit each predicate so the planner skips it. Keeps
+	// the positional-arg layout stable across filter combinations
+	// (extending the slice would require renumbering downstream).
+	cte += `
+           AND (cardinality($4::text[]) = 0 OR t.source = ANY($4))
+           AND ($5 = '' OR t.base_asset = $5)
+           AND ($6 = '' OR t.quote_asset = $6)
+    `
 	if order == MarketsOrderVolume24hDesc {
 		const tail = `
 		 GROUP BY t.source, t.base_asset, t.quote_asset, v.vol_usd, lp.last_px
@@ -344,22 +363,16 @@ func buildPoolsQuery(since time.Time, sources []string, cursor string, limit int
 		          (t.source || '|' || t.base_asset || '|' || t.quote_asset) ASC
 		 LIMIT $3
 		`
-		args := []any{since, cursor, limit + 1}
-		if len(sources) > 0 {
-			args = append(args, pq.Array(sources))
-		}
+		args := []any{since, cursor, limit + 1, pq.Array(filter.Sources), filter.Base, filter.Quote}
 		return cte + tail, args
 	}
 	const tail = `
 	   AND ($2 = '' OR (t.source || '|' || t.base_asset || '|' || t.quote_asset) > $2)
-	 GROUP BY t.source, t.base_asset, t.quote_asset, v.vol_usd
+	 GROUP BY t.source, t.base_asset, t.quote_asset, v.vol_usd, lp.last_px
 	 ORDER BY (t.source || '|' || t.base_asset || '|' || t.quote_asset) ASC
 	 LIMIT $3
 	`
-	args := []any{since, cursor, limit + 1}
-	if len(sources) > 0 {
-		args = append(args, pq.Array(sources))
-	}
+	args := []any{since, cursor, limit + 1, pq.Array(filter.Sources), filter.Base, filter.Quote}
 	return cte + tail, args
 }
 

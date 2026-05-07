@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
 
+import { formatCompact } from '@/lib/format';
 import { PairChart } from './PairChart';
 
 const API_BASE_URL =
@@ -228,6 +229,32 @@ async function fetchHistory(
   }
 }
 
+interface PoolRow {
+  source: string;
+  trade_count_24h: number;
+  volume_24h_usd?: string | null;
+  last_price?: string | null;
+  last_trade_at: string;
+}
+
+async function fetchSourceBreakdown(base: string, quote: string): Promise<PoolRow[]> {
+  if (isCIStub) return [];
+  try {
+    // /v1/pools?base=&quote= returns one row per source contributing
+    // to this exact pair. Naturally sorted by 24h USD volume (the
+    // endpoint default), which is the right order for the panel.
+    const res = await fetch(
+      `${API_BASE_URL}/v1/pools?base=${encodeURIComponent(base)}&quote=${encodeURIComponent(quote)}&limit=50`,
+      { signal: AbortSignal.timeout(BUILD_FETCH_TIMEOUT_MS) },
+    );
+    if (!res.ok) return [];
+    const env = (await res.json()) as { data: PoolRow[] };
+    return env.data ?? [];
+  } catch {
+    return [];
+  }
+}
+
 export default async function PairPage({ params }: { params: Params }) {
   const { pair } = await params;
   const decoded = decodePairSlug(pair);
@@ -236,11 +263,12 @@ export default async function PairPage({ params }: { params: Params }) {
   }
   const { base, quote } = decoded;
 
-  const [price, chart, ohlc, history] = await Promise.all([
+  const [price, chart, ohlc, history, sourceBreakdown] = await Promise.all([
     fetchPrice(base, quote),
     fetchChart(base, quote),
     fetchOhlc(base, quote),
     fetchHistory(base, quote),
+    fetchSourceBreakdown(base, quote),
   ]);
 
   const baseLabel = shortAsset(base);
@@ -248,12 +276,13 @@ export default async function PairPage({ params }: { params: Params }) {
   const priceNum = price?.price ? Number(price.price) : null;
 
   // Per-source breakdown: count trades by source in the history sample.
+  // (The full 24h source distribution is rendered by SourceBreakdownPanel
+  // below, which pulls real volume from /v1/pools?base=&quote=. perSource
+  // here remains for the Activity panel's "Sources: N" stat.)
   const perSource = new Map<string, number>();
   for (const t of history) {
     perSource.set(t.source, (perSource.get(t.source) ?? 0) + 1);
   }
-  const sourcesSorted = [...perSource.entries()].sort((a, b) => b[1] - a[1]);
-  const totalTrades = history.length;
 
   // Compute change from the chart points: last vs 24h-ago.
   const points = chart?.points ?? [];
@@ -320,7 +349,7 @@ export default async function PairPage({ params }: { params: Params }) {
 
         <Panel title="Activity" subtitle="last 24h">
           <dl className="grid grid-cols-2 gap-2 text-sm">
-            <Stat label="Trades sampled" value={totalTrades.toLocaleString()} />
+            <Stat label="Trades sampled" value={history.length.toLocaleString()} />
             <Stat
               label="Sources"
               value={perSource.size.toString()}
@@ -357,34 +386,8 @@ export default async function PairPage({ params }: { params: Params }) {
         </Panel>
       )}
 
-      {sourcesSorted.length > 0 && (
-        <Panel
-          title="Per-source breakdown"
-          subtitle="Distribution of the last 50 trades by venue"
-        >
-          <ul className="space-y-2">
-            {sourcesSorted.map(([source, count]) => (
-              <li key={source} className="flex items-center gap-3 text-sm">
-                <span className="w-32 font-mono text-xs uppercase tracking-wider text-slate-600 dark:text-slate-300">
-                  {source}
-                </span>
-                <div className="flex-1">
-                  <div className="h-2 overflow-hidden rounded bg-slate-100 dark:bg-slate-800">
-                    <div
-                      className="h-full bg-brand-500"
-                      style={{
-                        width: `${(count / totalTrades) * 100}%`,
-                      }}
-                    />
-                  </div>
-                </div>
-                <span className="w-16 text-right font-mono tabular-nums text-xs">
-                  {count} ({Math.round((count / totalTrades) * 100)}%)
-                </span>
-              </li>
-            ))}
-          </ul>
-        </Panel>
+      {sourceBreakdown.length > 0 && (
+        <SourceBreakdownPanel rows={sourceBreakdown} />
       )}
 
       {history.length > 0 ? (
@@ -439,6 +442,71 @@ export default async function PairPage({ params }: { params: Params }) {
         </Panel>
       )}
     </div>
+  );
+}
+
+function SourceBreakdownPanel({ rows }: { rows: PoolRow[] }) {
+  // Total 24h USD volume across all sources contributing to this
+  // pair. The `volume_24h_usd` field is null on sources that
+  // contributed trades but the aggregator hasn't priced (Phase 1
+  // USD-pegged-quote rule). Those rows show "—" and don't count
+  // toward the bar denominator.
+  const totalUSD = rows.reduce((acc, r) => {
+    const v = Number(r.volume_24h_usd ?? '0');
+    return Number.isFinite(v) ? acc + v : acc;
+  }, 0);
+  return (
+    <Panel
+      title="Sources contributing"
+      subtitle={`${rows.length} venue${rows.length === 1 ? '' : 's'} · ranked by 24h USD volume · /v1/pools?base=&quote=`}
+    >
+      <ul className="space-y-2">
+        {rows.map((r) => {
+          const v = r.volume_24h_usd ? Number(r.volume_24h_usd) : null;
+          const pct = totalUSD > 0 && v != null && Number.isFinite(v) ? (v / totalUSD) * 100 : null;
+          const lp = r.last_price ? Number(r.last_price) : null;
+          const lpFixed =
+            lp == null
+              ? null
+              : lp >= 1000
+                ? lp.toFixed(2)
+                : lp >= 1
+                  ? lp.toFixed(4)
+                  : lp >= 0.0001
+                    ? lp.toFixed(6)
+                    : lp.toExponential(3);
+          return (
+            <li key={r.source} className="flex items-center gap-3 text-sm">
+              <Link
+                href={`/sources/${r.source}`}
+                className="w-32 font-mono text-xs uppercase tracking-wider text-slate-600 hover:text-brand-600 dark:text-slate-300"
+              >
+                {r.source}
+              </Link>
+              <div className="flex-1">
+                <div className="h-2 overflow-hidden rounded bg-slate-100 dark:bg-slate-800">
+                  <div
+                    className="h-full bg-brand-500"
+                    style={{ width: `${pct ?? 0}%` }}
+                  />
+                </div>
+              </div>
+              <span className="w-24 text-right font-mono tabular-nums text-xs text-slate-500">
+                {lpFixed ?? '—'}
+              </span>
+              <span className="w-28 text-right font-mono tabular-nums text-xs text-slate-700 dark:text-slate-300">
+                {v != null && Number.isFinite(v) && v > 0
+                  ? `$${formatCompact(v)}`
+                  : '—'}
+              </span>
+              <span className="w-12 text-right font-mono tabular-nums text-xs text-slate-500">
+                {pct != null ? `${pct.toFixed(0)}%` : '—'}
+              </span>
+            </li>
+          );
+        })}
+      </ul>
+    </Panel>
   );
 }
 
