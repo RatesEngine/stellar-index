@@ -15,6 +15,18 @@ against.
 
 ## [Unreleased]
 
+### Added
+- **Home Try-the-API: rc.21 endpoints surfaced.** Adds two
+  example tabs covering features shipped in rc.21 — `Network
+  stats — 24h volume + market count` (`/v1/network/stats`)
+  and `Sources with 24h trade counts`
+  (`/v1/sources?include=stats`). Ten canonical examples now,
+  up from seven.
+- **Home "Recently shipped" widget: Subscribe (Atom) ↗ link.**
+  Surfaces `/changelog.atom` directly from the home widget so
+  visitors can subscribe to release feeds without first
+  scrolling to the dedicated changelog page.
+
 ### Changed
 - **Home network strip cells are now clickable.** Each of the
   five cards on the home strip deep-links to its corresponding

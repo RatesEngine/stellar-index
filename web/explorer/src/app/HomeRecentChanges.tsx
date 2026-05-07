@@ -39,12 +39,20 @@ export function HomeRecentChanges() {
             .
           </p>
         </div>
-        <Link
-          href="/changelog"
-          className="text-xs text-brand-600 hover:underline"
-        >
-          Full changelog →
-        </Link>
+        <div className="flex items-center gap-3 text-xs">
+          <a
+            href="/changelog.atom"
+            target="_blank"
+            rel="noreferrer noopener"
+            className="text-slate-500 hover:text-brand-600"
+            title="Atom feed — subscribe in Feedly, Slack RSS bot, etc."
+          >
+            Subscribe (Atom) ↗
+          </a>
+          <Link href="/changelog" className="text-brand-600 hover:underline">
+            Full changelog →
+          </Link>
+        </div>
       </div>
       <ul className="space-y-2">
         {items.map((it, i) => (
