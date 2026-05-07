@@ -80,6 +80,9 @@ type Pool struct {
 //   - cursor   (optional): opaque, from a prior pagination.next.
 //   - limit    (optional): integer 1-500, default 100.
 //   - order_by (optional): "volume_24h_usd_desc" (default) or "pair".
+//   - source   (optional): single DEX name. Restricts the result to
+//                          that one DEX's pools. Unknown / non-DEX
+//                          source names return an empty list.
 func (s *Server) handlePools(w http.ResponseWriter, r *http.Request) {
 	cursor := r.URL.Query().Get("cursor")
 	limit := 100
@@ -112,9 +115,30 @@ func (s *Server) handlePools(w http.ResponseWriter, r *http.Request) {
 	// Subclass=DEX so the endpoint is unambiguously "pools" — no
 	// CEX rows ever.
 	dexSources := dexSourceNames()
+	if reqSource := r.URL.Query().Get("source"); reqSource != "" {
+		// Filter to the requested DEX. Non-DEX names get rejected
+		// here (empty intersection → empty result list, not a 400)
+		// so callers can pass through user input without separately
+		// validating against the registry.
+		filtered := make([]string, 0, 1)
+		for _, s := range dexSources {
+			if s == reqSource {
+				filtered = append(filtered, s)
+				break
+			}
+		}
+		dexSources = filtered
+	}
 
 	reader := s.markets
 	if reader == nil {
+		writeJSON(w, []Pool{}, Flags{})
+		return
+	}
+	if len(dexSources) == 0 {
+		// Either the registry has no DEX sources (impossible) or
+		// the source= filter didn't match a DEX. Return an empty
+		// list rather than scan the trades hypertable for nothing.
 		writeJSON(w, []Pool{}, Flags{})
 		return
 	}

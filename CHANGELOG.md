@@ -15,6 +15,16 @@ against.
 
 ## [Unreleased]
 
+### Added
+- **/v1/pools `?source=<name>` filter.** Restricts the result to
+  one DEX's pools. Non-DEX names (binance, coinbase, …) return an
+  empty list rather than 400 — callers can pass through user input
+  without separately validating against the registry. Backs the
+  /dexes venue-chip row, which now triggers a server-side re-fetch
+  per chip rather than client-side filtering the current page (the
+  prior behaviour broke for users who wanted to see Soroban-only
+  pools, since page 1 by USD-volume-desc is dominated by SDEX).
+
 ### Fixed
 - **/v1/pools is DEX-only, never CEX rows.** "Pool" is AMM/DEX
   terminology — applying it to CEX trading pairs (binance,

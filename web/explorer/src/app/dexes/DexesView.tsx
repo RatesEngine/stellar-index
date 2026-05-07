@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import Link from 'next/link';
 
@@ -20,6 +20,12 @@ interface Pool {
 type Order = 'volume_24h_usd_desc' | 'pair';
 
 const PAGE_LIMIT = 100;
+
+// Hard-coded to mirror internal/sources/external/registry.go's
+// Subclass=DEX entries. Frontend doesn't have an /v1/sources?role=
+// filter yet, so the pill row is static — keeps the chips visible
+// before the first /v1/pools response lands.
+const ALL_DEXES = ['aquarius', 'comet', 'phoenix', 'sdex', 'soroswap'];
 
 // Source name → category styling. Anything outside this list still
 // renders, just without a coloured chip — keeps the table working
@@ -46,13 +52,11 @@ export function DexesView() {
   const [order, setOrder] = useState<Order>('volume_24h_usd_desc');
   const [cursor, setCursor] = useState<string>('');
   const [cursorStack, setCursorStack] = useState<string[]>([]);
-  // Source-side filter applies AFTER the API responds — keeps
-  // the cursor pagination simple. Power users wanting a single-
-  // source paginated list use /dexes/<source> directly.
+  // Source filter is server-side. Empty string = all DEXes.
   const [sourceFilter, setSourceFilter] = useState<string>('');
 
   const q = useQuery<{ pools: Pool[]; nextCursor?: string }>({
-    queryKey: ['/v1/pools', order, cursor],
+    queryKey: ['/v1/pools', order, cursor, sourceFilter],
     queryFn: async () => {
       const env = await apiGet<{
         data: Pool[];
@@ -61,6 +65,7 @@ export function DexesView() {
         order_by: order,
         limit: PAGE_LIMIT,
         ...(cursor ? { cursor } : {}),
+        ...(sourceFilter ? { source: sourceFilter } : {}),
       });
       return {
         pools: env.data ?? [],
@@ -69,14 +74,7 @@ export function DexesView() {
     },
   });
 
-  const pools = useMemo(() => q.data?.pools ?? [], [q.data]);
-  const sourcesOnPage = useMemo(
-    () => Array.from(new Set(pools.map((p) => p.source))).sort(),
-    [pools],
-  );
-  const filtered = sourceFilter
-    ? pools.filter((p) => p.source === sourceFilter)
-    : pools;
+  const pools = q.data?.pools ?? [];
 
   function nextPage() {
     const next = q.data?.nextCursor;
@@ -93,6 +91,11 @@ export function DexesView() {
   }
   function changeOrder(next: Order) {
     setOrder(next);
+    setCursor('');
+    setCursorStack([]);
+  }
+  function changeSource(next: string) {
+    setSourceFilter(next);
     setCursor('');
     setCursorStack([]);
   }
@@ -117,12 +120,32 @@ export function DexesView() {
       </header>
 
       <Panel
-        title={`${pools.length} pools on this page${sourceFilter ? ` (${filtered.length} after filter)` : ''}`}
+        title={`${pools.length} pools on this page${sourceFilter ? ` (${sourceFilter} only)` : ''}`}
         hint="Source: /v1/pools"
-        source={asExample('/v1/pools', { limit: PAGE_LIMIT, order_by: order })}
+        source={asExample('/v1/pools', {
+          limit: PAGE_LIMIT,
+          order_by: order,
+          ...(sourceFilter ? { source: sourceFilter } : {}),
+        })}
         bodyClassName="-mx-4"
       >
         <div className="space-y-3 px-4 pb-3 pt-1">
+          <div className="flex flex-wrap items-center gap-2 text-xs">
+            <span className="text-slate-500">Venue:</span>
+            <SourceChip
+              active={sourceFilter === ''}
+              onClick={() => changeSource('')}
+              label="All DEXes"
+            />
+            {ALL_DEXES.map((s) => (
+              <SourceChip
+                key={s}
+                active={sourceFilter === s}
+                onClick={() => changeSource(s)}
+                label={s}
+              />
+            ))}
+          </div>
           <div className="flex flex-wrap items-center gap-2 text-xs">
             <span className="text-slate-500">Sort:</span>
             <SortPill
@@ -138,24 +161,6 @@ export function DexesView() {
               Source / pair (A→Z)
             </SortPill>
           </div>
-          {sourcesOnPage.length > 1 && (
-            <div className="flex flex-wrap items-center gap-2 text-xs">
-              <span className="text-slate-500">Filter venue:</span>
-              <SourceChip
-                active={sourceFilter === ''}
-                onClick={() => setSourceFilter('')}
-                label="All"
-              />
-              {sourcesOnPage.map((s) => (
-                <SourceChip
-                  key={s}
-                  active={sourceFilter === s}
-                  onClick={() => setSourceFilter(s)}
-                  label={s}
-                />
-              ))}
-            </div>
-          )}
         </div>
 
         <div className="overflow-x-auto">
@@ -179,14 +184,14 @@ export function DexesView() {
                   </td>
                 </tr>
               )}
-              {!q.isLoading && filtered.length === 0 && (
+              {!q.isLoading && pools.length === 0 && (
                 <tr>
                   <td colSpan={7} className="px-4 py-8 text-center text-sm text-slate-500">
                     No pools matched.
                   </td>
                 </tr>
               )}
-              {filtered.map((p, i) => {
+              {pools.map((p, i) => {
                 const slug = `${p.base}~${p.quote}`;
                 const offset = cursorStack.length * PAGE_LIMIT + i + 1;
                 const vol = p.volume_24h_usd ? Number(p.volume_24h_usd) : null;
