@@ -96,6 +96,9 @@ cat > "$OUT_DIR/index.html" <<EOF
       </a>
       <nav class="re-links">
         <a href="https://ratesengine.net">Explorer</a>
+        <a href="https://ratesengine.net/methodology">Methodology</a>
+        <a href="https://ratesengine.net/sdk">Go SDK</a>
+        <a href="https://ratesengine.net/changelog">Changelog</a>
         <a href="https://status.ratesengine.net"><span class="re-pulse" aria-hidden></span> Status</a>
         <a href="https://github.com/RatesEngine/rates-engine" target="_blank" rel="noopener">GitHub ↗</a>
       </nav>
