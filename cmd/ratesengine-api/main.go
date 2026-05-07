@@ -459,12 +459,23 @@ func run(cfgPath string, dryRun bool) error { //nolint:gocognit,funlen,gocyclo /
 		return fmt.Errorf("dashboard: %w", err)
 	}
 
-	// Forex shim — periodic fetch of fiat rates from the free
-	// currency-api. Cache is in-memory; worker installs a snapshot
-	// once per hour. Backs /v1/currencies. Worker survives upstream
-	// failures (logs at warn) — the cache holds the prior snapshot.
+	// Forex shim — periodic fetch of fiat rates from massive.com.
+	// Cache is in-memory; worker installs a snapshot once per hour.
+	// Backs /v1/currencies. Worker survives upstream failures
+	// (logs at warn) — the cache holds the prior snapshot.
+	//
+	// API key comes from MASSIVE_API_KEY env var (passed through
+	// systemd EnvironmentFile=/etc/default/ratesengine on r1). When
+	// empty, the worker still constructs but every fetch returns
+	// 401; a stale cache stays in place and /v1/currencies serves
+	// "warming up" until the key is provided.
 	forexCache := forex.NewCache()
-	forexWorker := forex.NewWorker(forex.NewClient(), forexCache, logger.With("component", "forex"), time.Hour)
+	forexWorker := forex.NewWorker(
+		forex.NewClient(os.Getenv("MASSIVE_API_KEY")),
+		forexCache,
+		logger.With("component", "forex"),
+		time.Hour,
+	)
 	go func() {
 		if err := forexWorker.Run(rootCtx); err != nil && !errors.Is(err, context.Canceled) {
 			logger.Error("forex worker exited", "err", err)
