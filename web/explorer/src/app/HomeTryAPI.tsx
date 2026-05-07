@@ -57,8 +57,28 @@ const EXAMPLES: Example[] = [
     path: '/v1/markets?limit=10&order_by=volume_24h_usd_desc',
   },
   {
+    label: 'Per-source breakdown for XLM/USDC',
+    path: '/v1/pools?base=native&quote=USDC-GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN',
+  },
+  {
     label: 'Sources with 24h trade counts',
     path: '/v1/sources?include=stats',
+  },
+  {
+    label: 'World currency rates (USD-base)',
+    path: '/v1/currencies',
+  },
+  {
+    label: 'EUR currency detail with cross-rates',
+    path: '/v1/currencies/EUR',
+  },
+  {
+    label: 'Latest oracle streams (Reflector / Redstone / Band)',
+    path: '/v1/oracle/streams',
+  },
+  {
+    label: 'Lending pools (Blend)',
+    path: '/v1/lending/pools',
   },
   {
     label: 'Recent XLM/USDC trades',
