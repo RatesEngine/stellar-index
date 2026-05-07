@@ -247,6 +247,9 @@ export type Coin = {
   // 24 hourly USD-price samples (oldest first). Populated only
   // when the request includes `?include=sparkline`.
   price_history_24h?: { t: string; p?: string | null }[];
+  // 7 daily USD-price samples (oldest first). Populated only
+  // when the request includes `?include=sparkline7d`.
+  price_history_7d?: { t: string; p?: string | null }[];
   // All-time-high USD price + day it was set. Populated only
   // when the request includes `?include=ath`.
   ath?: { usd: string; at: string } | null;
@@ -278,10 +281,11 @@ export function useCoins(
   cursor?: string,
   q?: string,
   orderBy?: 'observation_count_desc' | 'volume_24h_usd_desc',
-  options?: { sparkline?: boolean; ath?: boolean },
+  options?: { sparkline?: boolean; sparkline7d?: boolean; ath?: boolean },
 ) {
   const includeParts: string[] = [];
   if (options?.sparkline) includeParts.push('sparkline');
+  if (options?.sparkline7d) includeParts.push('sparkline7d');
   if (options?.ath) includeParts.push('ath');
   const include = includeParts.length > 0 ? includeParts.join(',') : undefined;
   return useQuery<CoinsPage>({

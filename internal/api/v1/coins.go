@@ -23,6 +23,7 @@ type CoinsReader interface {
 	GetCoinPriceHistory24h(ctx context.Context, assetID string) ([]timescale.CoinPricePoint, error)
 	GetCoinPriceHistory7d(ctx context.Context, assetID string) ([]timescale.CoinPricePoint, error)
 	GetCoinsPriceHistory24hBatch(ctx context.Context, assetIDs []string) (map[string][]timescale.CoinPricePoint, error)
+	GetCoinsPriceHistory7dBatch(ctx context.Context, assetIDs []string) (map[string][]timescale.CoinPricePoint, error)
 	GetCoinMarketsCount(ctx context.Context, assetID string) (int64, error)
 	GetCoinATH(ctx context.Context, assetID string) (*timescale.CoinATH, error)
 	GetCoinsATHBatch(ctx context.Context, assetIDs []string) (map[string]timescale.CoinATH, error)
@@ -243,14 +244,18 @@ func (s *Server) handleCoins(w http.ResponseWriter, r *http.Request) { //nolint:
 	// Optional opt-ins via ?include=. Default off — payload bloat on
 	// the typical /v1/coins call would be wasted bytes for SDK
 	// consumers that don't render charts or ATH context.
-	//   sparkline → attach 24h hourly price history per row
-	//   ath       → attach all-time-high USD price + day per row
+	//   sparkline   → attach 24h hourly price history per row
+	//   sparkline7d → attach 7d daily price history per row
+	//   ath         → attach all-time-high USD price + day per row
 	includeSparkline := false
+	includeSparkline7d := false
 	includeATH := false
 	for _, f := range strings.Split(r.URL.Query().Get("include"), ",") {
 		switch strings.TrimSpace(f) {
 		case "sparkline":
 			includeSparkline = true
+		case "sparkline7d":
+			includeSparkline7d = true
 		case "ath":
 			includeATH = true
 		}
@@ -273,6 +278,27 @@ func (s *Server) handleCoins(w http.ResponseWriter, r *http.Request) { //nolint:
 					converted[j] = CoinPricePoint{T: p.T, P: p.P}
 				}
 				out[i].PriceHistory24h = converted
+			}
+		}
+	}
+	if includeSparkline7d && len(out) > 0 {
+		ids := make([]string, len(out))
+		for i, c := range out {
+			ids[i] = c.AssetID
+		}
+		if hist, hErr := s.coins.GetCoinsPriceHistory7dBatch(r.Context(), ids); hErr != nil {
+			s.logger.Warn("coins list: sparkline7d batch failed", "err", hErr)
+		} else {
+			for i, c := range out {
+				series := hist[c.AssetID]
+				if len(series) == 0 {
+					continue
+				}
+				converted := make([]CoinPricePoint, len(series))
+				for j, p := range series {
+					converted[j] = CoinPricePoint{T: p.T, P: p.P}
+				}
+				out[i].PriceHistory7d = converted
 			}
 		}
 	}

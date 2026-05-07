@@ -1535,3 +1535,97 @@ func (s *Store) GetCoinsPriceHistory24hBatch(ctx context.Context, assetIDs []str
 	}
 	return out, nil
 }
+
+// GetCoinsPriceHistory7dBatch returns 7d daily USD-price series for
+// many assets in one query. 7-bucket-deep daily grain, mirroring
+// the per-asset GetCoinPriceHistory7d. Same direct-then-XLM-
+// triangulated path; one query for many asset_ids.
+func (s *Store) GetCoinsPriceHistory7dBatch(ctx context.Context, assetIDs []string) (map[string][]CoinPricePoint, error) {
+	if len(assetIDs) == 0 {
+		return map[string][]CoinPricePoint{}, nil
+	}
+	const q = `
+		WITH days AS (
+		  SELECT generate_series(
+		    date_trunc('day', now() - INTERVAL '6 days'),
+		    date_trunc('day', now()),
+		    INTERVAL '1 day'
+		  ) AS bucket
+		),
+		direct_per_day AS (
+		  SELECT base_asset AS asset_id,
+		         date_trunc('day', bucket) AS d,
+		         last(vwap, bucket)::numeric AS vwap
+		    FROM prices_1m
+		   WHERE base_asset = ANY($1)
+		     AND quote_asset = 'fiat:USD'
+		     AND bucket >= date_trunc('day', now() - INTERVAL '6 days')
+		     AND vwap IS NOT NULL
+		   GROUP BY base_asset, d
+		),
+		asset_xlm_per_day AS (
+		  SELECT base_asset AS asset_id,
+		         date_trunc('day', bucket) AS d,
+		         last(vwap, bucket)::numeric AS vwap
+		    FROM prices_1m
+		   WHERE base_asset = ANY($1)
+		     AND quote_asset = 'native'
+		     AND bucket >= date_trunc('day', now() - INTERVAL '6 days')
+		     AND vwap IS NOT NULL
+		   GROUP BY base_asset, d
+		),
+		xlm_usd_per_day AS (
+		  SELECT date_trunc('day', bucket) AS d, last(vwap, bucket)::numeric AS vwap
+		    FROM prices_1m
+		   WHERE base_asset = 'native'
+		     AND quote_asset IN (
+		       'USDC-GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN',
+		       'USDT-GCQTGZQQ5G4PTM2GL7CDIFKUBIPEC52BROAQIAPW53XBRJVN6ZJVTG6V',
+		       'fiat:USD'
+		     )
+		     AND bucket >= date_trunc('day', now() - INTERVAL '6 days')
+		     AND vwap IS NOT NULL
+		   GROUP BY d
+		),
+		want AS (
+		  SELECT unnest($1::text[]) AS asset_id
+		)
+		SELECT
+		    w.asset_id,
+		    to_char(days.bucket, 'YYYY-MM-DD"T"HH24:MI:SS"Z"') AS t,
+		    ROUND(COALESCE(
+		      CASE WHEN w.asset_id = 'native' THEN xu.vwap ELSE NULL END,
+		      d.vwap,
+		      x.vwap * xu.vwap
+		    ), 10)::text AS p
+		  FROM want w
+		  CROSS JOIN days
+		  LEFT JOIN direct_per_day     d  ON d.d  = days.bucket AND d.asset_id  = w.asset_id
+		  LEFT JOIN asset_xlm_per_day  x  ON x.d  = days.bucket AND x.asset_id  = w.asset_id
+		  LEFT JOIN xlm_usd_per_day    xu ON xu.d = days.bucket
+		 ORDER BY w.asset_id, days.bucket ASC
+	`
+	rows, err := s.db.QueryContext(ctx, q, pq.Array(assetIDs))
+	if err != nil {
+		return nil, fmt.Errorf("timescale: GetCoinsPriceHistory7dBatch: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+	out := make(map[string][]CoinPricePoint, len(assetIDs))
+	for rows.Next() {
+		var assetID string
+		var pt CoinPricePoint
+		var p sql.NullString
+		if err := rows.Scan(&assetID, &pt.T, &p); err != nil {
+			return nil, fmt.Errorf("timescale: GetCoinsPriceHistory7dBatch scan: %w", err)
+		}
+		if p.Valid && p.String != "" {
+			s := p.String
+			pt.P = &s
+		}
+		out[assetID] = append(out[assetID], pt)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("timescale: GetCoinsPriceHistory7dBatch rows: %w", err)
+	}
+	return out, nil
+}
