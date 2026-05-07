@@ -3,6 +3,7 @@ import Link from 'next/link';
 import { ExternalLink } from 'lucide-react';
 
 import { Panel } from '@/components/reveal';
+import { ReferencePriceAggregators } from './ReferencePriceAggregators';
 
 export const metadata: Metadata = {
   title: 'Aggregators — routers and yield wrappers on Stellar',
@@ -88,6 +89,8 @@ export default function AggregatorsPage() {
           <Card key={e.name} entry={e} />
         ))}
       </div>
+
+      <ReferencePriceAggregators />
 
       <Panel
         title="Coming next"
