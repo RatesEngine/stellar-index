@@ -41,6 +41,10 @@ const EXAMPLES: Example[] = [
     path: '/v1/price?asset=native&quote=USDC-GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN',
   },
   {
+    label: 'Network stats — 24h volume + market count',
+    path: '/v1/network/stats',
+  },
+  {
     label: 'XLM coin detail',
     path: '/v1/coins/XLM',
   },
@@ -51,6 +55,10 @@ const EXAMPLES: Example[] = [
   {
     label: 'Top-10 markets by 24h volume',
     path: '/v1/markets?limit=10&order_by=volume_24h_usd_desc',
+  },
+  {
+    label: 'Sources with 24h trade counts',
+    path: '/v1/sources?include=stats',
   },
   {
     label: 'Recent XLM/USDC trades',
