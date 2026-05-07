@@ -1,6 +1,8 @@
 import type { MetadataRoute } from 'next';
 
 import { API_BASE_URL } from '@/api/client';
+import { loadADRs } from '@/lib/adr';
+import { loadArchitectureDocs } from '@/lib/architecture';
 
 // Required for `output: 'export'` — sitemap is generated at build
 // time and emitted as a static file. Same applies to robots.ts.
@@ -32,6 +34,9 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     '/oracles',
     '/network',
     '/research',
+    '/methodology',
+    '/changelog',
+    '/compare',
     '/anomalies',
     '/divergences',
     '/mev',
@@ -42,6 +47,23 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     lastModified: now,
     changeFrequency: path === '' ? 'daily' : 'weekly',
     priority: path === '' ? 1 : 0.7,
+  }));
+
+  // Research pages: ADRs + curated architecture narratives. Both
+  // surfaces are static-export pre-rendered and stable enough to
+  // be worth indexing — they are cited from /methodology and from
+  // every PR description.
+  const adrPages: MetadataRoute.Sitemap = loadADRs().map((adr) => ({
+    url: `${SITE_URL}/research/adr/${adr.id}`,
+    lastModified: now,
+    changeFrequency: 'monthly',
+    priority: 0.5,
+  }));
+  const archPages: MetadataRoute.Sitemap = loadArchitectureDocs().map((d) => ({
+    url: `${SITE_URL}/research/architecture/${d.slug}`,
+    lastModified: now,
+    changeFrequency: 'monthly',
+    priority: 0.6,
   }));
 
   const [assetSlugs, issuerKeys] = await Promise.all([
@@ -61,7 +83,13 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     priority: 0.5,
   }));
 
-  return [...staticPages, ...assetPages, ...issuerPages];
+  return [
+    ...staticPages,
+    ...adrPages,
+    ...archPages,
+    ...assetPages,
+    ...issuerPages,
+  ];
 }
 
 async function fetchIssuerKeys(): Promise<string[]> {
