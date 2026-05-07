@@ -15,6 +15,12 @@ against.
 
 ## [Unreleased]
 
+### Changed
+- **/network + /divergences: ADR mentions deep-link.** Plain-text
+  ADR-0004 / ADR-0008 / ADR-0015 callouts on /network and the
+  ADR-0019 mention on /divergences now jump straight to the
+  rendered ADR pages instead of being inert text.
+
 ### Performance
 - **status site: tier probe cadence.** The status page used to
   hammer every public endpoint every 30 s — including expensive

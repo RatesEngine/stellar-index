@@ -21,8 +21,11 @@ export default function NetworkPage() {
         <p className="max-w-3xl text-sm text-slate-600 dark:text-slate-400">
           Live macro pulse for the Stellar network. Every figure below comes
           straight from the public API — no synthesised data, no estimates.
-          Cross-region active-active per ADR-0008; you&apos;re seeing R1
-          (Hetzner) right now.
+          Cross-region active-active per{' '}
+          <Link href="/research/adr/0008" className="underline decoration-dotted">
+            ADR-0008
+          </Link>
+          ; you&apos;re seeing R1 (Hetzner) right now.
         </p>
       </header>
 
@@ -38,15 +41,28 @@ export default function NetworkPage() {
         >
           <p>
             Three full validators in geographically separate regions
-            (R1 Hetzner, R2 AWS, R3 Vultr) per ADR-0004, each with an
-            independent history archive. Each region runs its own
-            indexer + aggregator + API.
+            (R1 Hetzner, R2 AWS, R3 Vultr) per{' '}
+            <Link
+              href="/research/adr/0004"
+              className="underline decoration-dotted"
+            >
+              ADR-0004
+            </Link>
+            , each with an independent history archive. Each region runs
+            its own indexer + aggregator + API.
           </p>
           <p>
-            Per ADR-0015, every region serves the same rate at the same
-            wall-clock time even though each ingests independently —
-            the API only ever serves CLOSED buckets. The in-progress
-            bucket is invisible until the next minute boundary.
+            Per{' '}
+            <Link
+              href="/research/adr/0015"
+              className="underline decoration-dotted"
+            >
+              ADR-0015
+            </Link>
+            , every region serves the same rate at the same wall-clock
+            time even though each ingests independently — the API only
+            ever serves CLOSED buckets. The in-progress bucket is
+            invisible until the next minute boundary.
           </p>
           <p>
             R2 + R3 are deferred — see{' '}

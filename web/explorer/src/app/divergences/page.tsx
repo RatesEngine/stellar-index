@@ -76,9 +76,15 @@ export default function DivergencesPage() {
         <p>
           The divergence worker reconciles. For every (pair,
           reference) tuple, every refresh tick, it compares our VWAP
-          to what the reference reports, persists the row, and (per
-          ADR-0019) drives the multi-factor confidence score that
-          gates the freeze decision.
+          to what the reference reports, persists the row, and (per{' '}
+          <Link
+            href="/research/adr/0019"
+            className="underline decoration-dotted"
+          >
+            ADR-0019
+          </Link>
+          ) drives the multi-factor confidence score that gates the
+          freeze decision.
         </p>
       </Panel>
 
