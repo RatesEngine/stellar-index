@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import Link from 'next/link';
 
 import { Panel } from '@/components/reveal';
@@ -25,7 +25,18 @@ export function SourcesTable() {
   // using /v1/sources directly sees the same shape.
   const { data, isLoading, isError, error } = useSources(undefined, true, { sparkline: true });
   const cursors = useCursors();
-  const grouped = useMemo(() => groupByClass(data ?? []), [data]);
+  const [filter, setFilter] = useState('');
+
+  const filteredData = useMemo(() => {
+    const q = filter.trim().toLowerCase();
+    if (!q) return data ?? [];
+    return (data ?? []).filter((s) => {
+      const hay = `${s.name} ${s.class} ${s.subclass ?? ''}`.toLowerCase();
+      return hay.includes(q);
+    });
+  }, [data, filter]);
+
+  const grouped = useMemo(() => groupByClass(filteredData), [filteredData]);
 
   // Aggregate the cursors slice by source — one source can have
   // many cursors (live + per-range backfills). We surface the most
@@ -83,6 +94,36 @@ export function SourcesTable() {
 
   return (
     <div className="space-y-4">
+      <div className="flex flex-wrap items-center gap-3 text-xs">
+        <input
+          type="search"
+          placeholder="Filter by source name, class, or subclass…"
+          value={filter}
+          onChange={(e) => setFilter(e.target.value)}
+          className="w-72 rounded-md border border-slate-200 bg-white px-2.5 py-1 text-xs placeholder:text-slate-400 focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500 dark:border-slate-700 dark:bg-slate-900"
+        />
+        <span className="font-mono text-[11px] text-slate-500">
+          {filteredData.length} of {data.length} sources
+          {filter && (
+            <button
+              type="button"
+              onClick={() => setFilter('')}
+              className="ml-2 text-brand-600 hover:underline"
+            >
+              clear
+            </button>
+          )}
+        </span>
+      </div>
+      {filter && grouped.length === 0 && (
+        <Panel
+          title="Sources"
+          source={asExample('/v1/sources')}
+          bodyClassName="text-sm text-slate-500"
+        >
+          No sources match &quot;{filter}&quot;.
+        </Panel>
+      )}
       {grouped.map(({ klass, rows }) => (
         <Panel
           key={klass}
