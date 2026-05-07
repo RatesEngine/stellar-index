@@ -25,6 +25,16 @@ against.
   applied to OraclesView's /v1/oracle/streams call.
 
 ### Added
+- **/assets/[slug] converter goes cross-currency.** AssetConverter
+  now offers any currency from the /v1/currencies snapshot as the
+  fiat side of the conversion (USD / EUR / GBP / JPY / CHF / CAD /
+  AUD / CNY / INR / BRL / MXN by default; "All currencies…" option
+  unlocks the full ~200-ticker list). Computes via the asset's
+  USD price + the FX leg from the cached forex snapshot. Footer
+  shows both the cross-rate and the FX leg explicitly so users can
+  see how the conversion was assembled. Same swap-direction button
+  as before — direction state controls which side gets the
+  currency selector.
 - **/v1/currencies/{ticker} returns 7-day historical series + sparkline
   on /currencies/[ticker].** Forex worker now backfills the trailing
   7 daily snapshots from currency-api on first run + once per day,

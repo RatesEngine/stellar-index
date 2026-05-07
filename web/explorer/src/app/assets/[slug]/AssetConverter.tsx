@@ -1,9 +1,21 @@
 'use client';
 
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
 
 import { Panel } from '@/components/reveal';
-import { asExample } from '@/api/client';
+import { apiGet, asExample } from '@/api/client';
+
+interface CurrencyRow {
+  ticker: string;
+  name: string;
+  rate_usd: number;
+}
+
+// FEATURED — kept short so the dropdown isn't overwhelming. Users
+// can switch to "All currencies" to see every ticker the forex
+// snapshot returns.
+const FEATURED = ['USD', 'EUR', 'GBP', 'JPY', 'CHF', 'CAD', 'AUD', 'CNY', 'INR', 'BRL', 'MXN'];
 
 /**
  * AssetConverter — bidirectional USD ↔ asset converter.
@@ -21,26 +33,67 @@ export function AssetConverter({
   symbol: string;
   priceUSD: number | null;
 }) {
-  const [direction, setDirection] = useState<'usd-to-asset' | 'asset-to-usd'>(
-    'usd-to-asset',
+  const [direction, setDirection] = useState<'fiat-to-asset' | 'asset-to-fiat'>(
+    'fiat-to-asset',
   );
   const [amount, setAmount] = useState('1');
+  const [target, setTarget] = useState('USD');
+  const [showAll, setShowAll] = useState(false);
 
+  // Pull the forex snapshot to power non-USD targets. Stale data is
+  // fine — the snapshot refreshes hourly, and a stale FX leg on a
+  // crypto-asset converter is dominated by the crypto's own
+  // volatility anyway.
+  const fx = useQuery<CurrencyRow[]>({
+    queryKey: ['/v1/currencies', 'forAssetConverter'],
+    queryFn: async () => {
+      const env = await apiGet<{ data: { currencies?: CurrencyRow[] } }>('/v1/currencies', {});
+      return env.data?.currencies ?? [];
+    },
+    refetchInterval: 5 * 60_000,
+  });
+
+  const fxByTicker = useMemo(() => {
+    const m: Record<string, number> = { USD: 1 };
+    for (const c of fx.data ?? []) m[c.ticker] = c.rate_usd;
+    return m;
+  }, [fx.data]);
+
+  // rate_usd here means "1 USD = N target" so 1 asset = N * priceUSD target.
+  const targetRate = fxByTicker[target] ?? null;
   const numeric = Number(amount);
   const validInput = Number.isFinite(numeric) && numeric >= 0;
 
   let result: number | null = null;
-  if (priceUSD != null && priceUSD > 0 && validInput) {
-    result = direction === 'usd-to-asset' ? numeric / priceUSD : numeric * priceUSD;
+  if (priceUSD != null && priceUSD > 0 && targetRate != null && validInput) {
+    if (direction === 'fiat-to-asset') {
+      // amount target → asset: convert target → USD (÷ targetRate),
+      // then USD → asset (÷ priceUSD).
+      result = numeric / targetRate / priceUSD;
+    } else {
+      // asset → target: convert asset → USD (× priceUSD), then
+      // USD → target (× targetRate).
+      result = numeric * priceUSD * targetRate;
+    }
   }
 
-  const fromUnit = direction === 'usd-to-asset' ? 'USD' : symbol;
-  const toUnit = direction === 'usd-to-asset' ? symbol : 'USD';
+  const fromUnit = direction === 'fiat-to-asset' ? target : symbol;
+  const toUnit = direction === 'fiat-to-asset' ? symbol : target;
+
+  // Available targets — featured first, then the rest if "show all"
+  // is toggled. Filter against the forex snapshot so we don't list
+  // tickers we can't actually convert.
+  const allTickers = (fx.data ?? []).map((c) => c.ticker).sort();
+  const tickerSet = new Set(allTickers);
+  tickerSet.add('USD');
+  const visibleTickers = showAll
+    ? Array.from(tickerSet).sort()
+    : FEATURED.filter((t) => tickerSet.has(t));
 
   return (
     <Panel
       title="Converter"
-      hint={priceUSD != null ? `Live ${symbol}/USD price` : 'Awaiting live price'}
+      hint={priceUSD != null ? `Live ${symbol}/USD price + forex snapshot` : 'Awaiting live price'}
       source={asExample('/v1/price', { asset: symbol, quote: 'fiat:USD' })}
     >
       <div className="grid grid-cols-1 items-end gap-3 sm:grid-cols-[1fr_auto_1fr]">
@@ -56,9 +109,19 @@ export function AssetConverter({
               inputMode="decimal"
               className="w-full bg-transparent text-2xl font-mono tabular-nums focus:outline-none"
             />
-            <span className="rounded bg-slate-100 px-1.5 py-0.5 font-mono text-xs uppercase tracking-wider text-slate-700 dark:bg-slate-800 dark:text-slate-300">
-              {fromUnit}
-            </span>
+            {direction === 'fiat-to-asset' ? (
+              <CurrencySelect
+                value={target}
+                onChange={setTarget}
+                tickers={visibleTickers}
+                onShowAll={() => setShowAll(true)}
+                showAll={showAll}
+              />
+            ) : (
+              <span className="rounded bg-slate-100 px-1.5 py-0.5 font-mono text-xs uppercase tracking-wider text-slate-700 dark:bg-slate-800 dark:text-slate-300">
+                {fromUnit}
+              </span>
+            )}
           </div>
         </label>
 
@@ -66,7 +129,7 @@ export function AssetConverter({
           type="button"
           aria-label="Swap direction"
           onClick={() =>
-            setDirection((d) => (d === 'usd-to-asset' ? 'asset-to-usd' : 'usd-to-asset'))
+            setDirection((d) => (d === 'fiat-to-asset' ? 'asset-to-fiat' : 'fiat-to-asset'))
           }
           className="self-center rounded-md border border-slate-200 px-2 py-1 text-xs text-slate-500 hover:border-brand-500 hover:text-brand-600 dark:border-slate-700 dark:text-slate-400 sm:mb-1"
         >
@@ -79,19 +142,70 @@ export function AssetConverter({
             <span className="w-full text-2xl font-mono tabular-nums text-slate-900 dark:text-slate-100">
               {result != null ? formatResult(result) : '—'}
             </span>
-            <span className="rounded bg-slate-100 px-1.5 py-0.5 font-mono text-xs uppercase tracking-wider text-slate-700 dark:bg-slate-800 dark:text-slate-300">
-              {toUnit}
-            </span>
+            {direction === 'asset-to-fiat' ? (
+              <CurrencySelect
+                value={target}
+                onChange={setTarget}
+                tickers={visibleTickers}
+                onShowAll={() => setShowAll(true)}
+                showAll={showAll}
+              />
+            ) : (
+              <span className="rounded bg-slate-100 px-1.5 py-0.5 font-mono text-xs uppercase tracking-wider text-slate-700 dark:bg-slate-800 dark:text-slate-300">
+                {toUnit}
+              </span>
+            )}
           </div>
         </label>
       </div>
-      {priceUSD != null && priceUSD > 0 && (
+      {priceUSD != null && priceUSD > 0 && targetRate != null && targetRate > 0 && (
         <p className="mt-3 text-xs text-slate-500">
-          1 {symbol} = ${formatResult(priceUSD)} · 1 USD ={' '}
-          {formatResult(1 / priceUSD)} {symbol}
+          1 {symbol} = {formatResult(priceUSD * targetRate)} {target} · 1 {target} ={' '}
+          {formatResult(1 / (priceUSD * targetRate))} {symbol}
+          {target !== 'USD' && (
+            <>
+              <span className="mx-2 text-slate-400">·</span>
+              <span>FX leg: 1 USD = {formatResult(targetRate)} {target}</span>
+            </>
+          )}
         </p>
       )}
     </Panel>
+  );
+}
+
+function CurrencySelect({
+  value,
+  onChange,
+  tickers,
+  onShowAll,
+  showAll,
+}: {
+  value: string;
+  onChange: (v: string) => void;
+  tickers: string[];
+  onShowAll: () => void;
+  showAll: boolean;
+}) {
+  return (
+    <select
+      value={value}
+      onChange={(e) => {
+        if (e.target.value === '__all') {
+          onShowAll();
+          return;
+        }
+        onChange(e.target.value);
+      }}
+      className="rounded bg-slate-100 px-1.5 py-0.5 font-mono text-xs uppercase tracking-wider text-slate-700 focus:outline-none dark:bg-slate-800 dark:text-slate-300"
+    >
+      {tickers.map((t) => (
+        <option key={t} value={t}>
+          {t}
+        </option>
+      ))}
+      {!showAll && <option value="__all">All currencies…</option>}
+    </select>
   );
 }
 
