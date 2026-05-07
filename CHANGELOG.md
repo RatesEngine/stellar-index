@@ -15,6 +15,8 @@ against.
 
 ## [Unreleased]
 
+## [v0.5.0-rc.21] — 2026-05-07
+
 ### Added
 - **`/sources` table: 24h trade count column.** Wires the
   `?include=stats` opt-in (shipped in #845) into the explorer's
