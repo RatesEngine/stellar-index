@@ -16,6 +16,12 @@ against.
 ## [Unreleased]
 
 ### Changed
+- **Home live-panels: explicit "Open" CTAs.** NetworkLivePanel
+  and SystemHealthLivePanel on the home 3-up grid now end with
+  small "Open network →" / "Open diagnostics →" links matching
+  the Diagnostics teaser's pattern. Wrapping the whole Panel in
+  a Link would conflict with the source-reveal button, so the
+  CTA sits at the bottom of the panel content instead.
 - **docs.ratesengine.net topbar: 3 new links.** Adds Methodology,
   Go SDK, and Changelog to the docs site's topbar between Explorer
   and Status. Visitors landing on the API reference can now jump

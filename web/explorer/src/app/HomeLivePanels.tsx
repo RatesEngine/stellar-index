@@ -1,5 +1,8 @@
 'use client';
 
+import Link from 'next/link';
+import { ArrowRight } from 'lucide-react';
+
 import { Panel } from '@/components/reveal';
 import { asExample } from '@/api/client';
 import { useCursors, useNetworkStats } from '@/api/hooks';
@@ -41,6 +44,13 @@ export function NetworkLivePanel() {
           </div>
           <div className="text-[11px] text-slate-500">current ingest tip</div>
         </div>
+
+        <Link
+          href="/network"
+          className="inline-flex items-center gap-1 text-xs text-brand-600 hover:underline"
+        >
+          Open network <ArrowRight className="h-3 w-3" />
+        </Link>
       </div>
     </Panel>
   );
@@ -98,6 +108,12 @@ export function SystemHealthLivePanel() {
         <div className="pt-1 text-[11px] text-slate-500">
           {liveRows.length} live cursor{liveRows.length === 1 ? '' : 's'}, {data.length - liveRows.length} backfill task{data.length - liveRows.length === 1 ? '' : 's'}
         </div>
+        <Link
+          href="/diagnostics"
+          className="inline-flex items-center gap-1 pt-1 text-[11px] text-brand-600 hover:underline"
+        >
+          Open diagnostics <ArrowRight className="h-3 w-3" />
+        </Link>
       </div>
     </Panel>
   );
