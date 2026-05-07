@@ -1837,9 +1837,18 @@ func (a *forexAdapter) Latest() *v1.CurrenciesSnapshot {
 			UpdatedAt: c.UpdateAt,
 		}
 	}
+	history := make(map[string][]v1.CurrencyHistoryRaw, len(snap.History7d))
+	for ticker, points := range snap.History7d {
+		out := make([]v1.CurrencyHistoryRaw, len(points))
+		for i, p := range points {
+			out[i] = v1.CurrencyHistoryRaw{Date: p.Date, RateUSD: p.RateUSD}
+		}
+		history[ticker] = out
+	}
 	return &v1.CurrenciesSnapshot{
 		Currencies:  rows,
 		PublishedAt: snap.PublishedAt,
 		FetchedAt:   snap.FetchedAt,
+		History7d:   history,
 	}
 }

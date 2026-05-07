@@ -20,10 +20,24 @@ type Currency struct {
 // Snapshot is the immutable rates+metadata bundle the Cache holds.
 // Replaced atomically by the worker; readers always see a
 // consistent view (no torn reads).
+//
+// History7d is the per-ticker daily series: 7 entries (oldest →
+// newest) showing the price of 1 USD in that currency on each day.
+// Empty when the worker hasn't completed its history backfill yet
+// (or when the upstream rejected the historical fetches —
+// currency-api occasionally 404s for weekends / holidays for
+// less-tracked tickers).
 type Snapshot struct {
 	Currencies  []Currency
 	PublishedAt time.Time
 	FetchedAt   time.Time
+	History7d   map[string][]HistoryPoint
+}
+
+// HistoryPoint is one daily rate datum for the 7d series.
+type HistoryPoint struct {
+	Date    time.Time // YYYY-MM-DD UTC
+	RateUSD float64   // 1 USD = N units on that date
 }
 
 // Cache holds the latest forex snapshot. Safe for concurrent use;
@@ -56,7 +70,11 @@ func (c *Cache) Set(s *Snapshot) {
 // Currency slice. Excludes USD itself from the per-currency rate
 // list (rate=1.0 is implied), excludes any code without a name,
 // and sorts alphabetically by ticker for deterministic output.
-func buildSnapshot(rates map[string]float64, names map[string]string, publishedAt, fetchedAt time.Time) *Snapshot {
+//
+// `history` is the per-ticker 7d series the worker assembled — pass
+// nil if no historical backfill has run; the snapshot still
+// installs cleanly with an empty History7d map.
+func buildSnapshot(rates map[string]float64, names map[string]string, publishedAt, fetchedAt time.Time, history map[string][]HistoryPoint) *Snapshot {
 	out := make([]Currency, 0, len(rates)+1)
 	// Always-include USD as the base. Rate is 1.0 by definition;
 	// the name comes from the names map (fallback to "US Dollar").
@@ -90,10 +108,14 @@ func buildSnapshot(rates map[string]float64, names map[string]string, publishedA
 		})
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].Ticker < out[j].Ticker })
+	if history == nil {
+		history = map[string][]HistoryPoint{}
+	}
 	return &Snapshot{
 		Currencies:  out,
 		PublishedAt: publishedAt,
 		FetchedAt:   fetchedAt,
+		History7d:   history,
 	}
 }
 

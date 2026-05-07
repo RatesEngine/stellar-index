@@ -25,6 +25,15 @@ against.
   applied to OraclesView's /v1/oracle/streams call.
 
 ### Added
+- **/v1/currencies/{ticker} returns 7-day historical series + sparkline
+  on /currencies/[ticker].** Forex worker now backfills the trailing
+  7 daily snapshots from currency-api on first run + once per day,
+  cached in-memory alongside the latest snapshot. Per-ticker series
+  surfaces in the wire shape as `history_7d: [{date, rate_usd,
+  inverse_usd}]`. Frontend renders a 7-day USD-value sparkline + 7d
+  change percentage above the converter. Days where the upstream
+  has no published file (rare) are silently skipped — the series
+  may have ≤ 7 points.
 - **/aggregators surfaces the reference-price aggregators we
   cross-check against.** New "Reference price aggregators" table
   below the Soroswap-Router / DeFindex cards, backed by

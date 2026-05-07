@@ -8,12 +8,19 @@ import { ArrowLeft } from 'lucide-react';
 import { Panel } from '@/components/reveal';
 import { apiGet, asExample } from '@/api/client';
 
+interface HistoryPoint {
+  date: string;
+  rate_usd: number;
+  inverse_usd: number;
+}
+
 interface CurrencyDetail {
   ticker: string;
   name: string;
   rate_usd: number;
   inverse_usd: number;
   cross_rates: Record<string, number>;
+  history_7d?: HistoryPoint[];
   published_at?: string;
   fetched_at?: string;
   source?: string;
@@ -75,11 +82,70 @@ export function CurrencyDetailView({ ticker }: { ticker: string }) {
 
       {detail && (
         <>
+          <HistoryPanel detail={detail} />
           <Converter detail={detail} />
           <CrossRatesTable detail={detail} />
         </>
       )}
     </div>
+  );
+}
+
+function HistoryPanel({ detail }: { detail: CurrencyDetail }) {
+  const series = detail.history_7d ?? [];
+  if (series.length < 2) return null;
+
+  // Compute change vs first point + percent.
+  const first = series[0].inverse_usd;
+  const last = series[series.length - 1].inverse_usd;
+  const changePct = first > 0 ? ((last - first) / first) * 100 : 0;
+  const positive = changePct >= 0;
+
+  return (
+    <Panel
+      title="7-day USD value"
+      hint={`1 ${detail.ticker} expressed in USD over the last week`}
+      source={asExample(`/v1/currencies/${detail.ticker}`, {})}
+    >
+      <div className="flex flex-wrap items-end justify-between gap-2">
+        <div>
+          <div className="text-xs uppercase tracking-wider text-slate-500">
+            7d change
+          </div>
+          <div
+            className={`mt-1 text-2xl font-mono tabular-nums ${
+              positive ? 'text-emerald-700 dark:text-emerald-400' : 'text-rose-700 dark:text-rose-400'
+            }`}
+          >
+            {positive ? '+' : ''}
+            {changePct.toFixed(2)}%
+          </div>
+        </div>
+        <Sparkline points={series.map((p) => p.inverse_usd)} positive={positive} />
+      </div>
+    </Panel>
+  );
+}
+
+function Sparkline({ points, positive }: { points: number[]; positive: boolean }) {
+  const w = 200;
+  const h = 48;
+  const min = Math.min(...points);
+  const max = Math.max(...points);
+  const range = max - min || 1;
+  const stepX = w / (points.length - 1);
+  const path = points
+    .map((p, i) => {
+      const x = i * stepX;
+      const y = h - ((p - min) / range) * h;
+      return `${i === 0 ? 'M' : 'L'}${x.toFixed(2)},${y.toFixed(2)}`;
+    })
+    .join(' ');
+  const stroke = positive ? '#059669' : '#e11d48';
+  return (
+    <svg width={w} height={h} viewBox={`0 0 ${w} ${h}`} className="overflow-visible">
+      <path d={path} fill="none" stroke={stroke} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
   );
 }
 
