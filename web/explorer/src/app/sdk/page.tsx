@@ -221,9 +221,13 @@ export default function SDKPage() {
                 <code className="rounded bg-slate-100 px-1 py-0.5 font-mono text-[11px] dark:bg-slate-800">
                   Authorization: Bearer
                 </code>{' '}
-                on every request. Mint at{' '}
-                <Link href="/signup" className="text-brand-600 hover:underline">
-                  /signup
+                on every request. Sign in at{' '}
+                <Link href="/signin" className="text-brand-600 hover:underline">
+                  /signin
+                </Link>{' '}
+                (magic-link, no password) and mint a key from{' '}
+                <Link href="/account" className="text-brand-600 hover:underline">
+                  /account
                 </Link>
                 .
               </>

@@ -137,16 +137,16 @@ export default function ContactPage() {
 
       <section className="mt-12 rounded-xl border border-slate-200 bg-white p-5 text-sm text-slate-600 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-400">
         <p>
-          Looking for a free API key? Self-service at{' '}
-          <Link href="/signup" className="text-brand-600 hover:underline">
-            /signup
+          Want an API key? Sign in with magic-link at{' '}
+          <Link href="/signin" className="text-brand-600 hover:underline">
+            /signin
           </Link>
-          . Already have a key?{' '}
+          {' '}(no password) and mint one from{' '}
           <Link href="/account" className="text-brand-600 hover:underline">
             /account
-          </Link>{' '}
-          shows your tier, current rate-limit budget, and a key rotation
-          form.
+          </Link>
+          . The same page shows your tier, 30d usage history, and per-key
+          revoke buttons for rotation.
         </p>
       </section>
     </div>
