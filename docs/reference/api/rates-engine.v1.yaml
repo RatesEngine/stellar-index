@@ -1345,6 +1345,79 @@ paths:
         "500": { $ref: "#/components/responses/InternalError" }
         "503": { $ref: "#/components/responses/ServiceUnavailable" }
 
+  /incidents:
+    get:
+      tags: [meta]
+      summary: Customer-facing incident posts.
+      description: |
+        Returns every customer-facing incident post the binary has
+        embedded (`internal/incidents/data/*.md`), parsed at startup
+        from YAML frontmatter + markdown body. Sorted by
+        `started_at` descending (most recent first).
+
+        Posts are added to the binary at build time — there is no
+        runtime write path. Files starting with `_` (templates) are
+        skipped at parse time. New incidents ship with a redeploy.
+
+        Powers the "Incident history" section on
+        status.ratesengine.net. Distinct from `/v1/status` which
+        reports the *currently active* incidents from Alertmanager.
+      responses:
+        "200":
+          description: List of past incidents, newest first.
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - incidents
+                  - count
+                properties:
+                  incidents:
+                    type: array
+                    items:
+                      type: object
+                      required: [slug, title, severity, status, started_at, body_markdown]
+                      properties:
+                        slug: { type: string, example: "2026-05-06-postgres-lock-table-full" }
+                        title: { type: string }
+                        severity:
+                          type: string
+                          enum: [SEV-1, SEV-2, SEV-3]
+                        status:
+                          type: string
+                          enum: [investigating, identified, monitoring, resolved]
+                        started_at: { type: string, format: date-time }
+                        resolved_at:
+                          type: string
+                          format: date-time
+                          nullable: true
+                        affected_components:
+                          type: array
+                          items: { type: string }
+                        postmortem:
+                          type: string
+                          description: Optional reference to the internal post-mortem.
+                        body_markdown:
+                          type: string
+                          description: Markdown body — render with the renderer of your choice.
+                  count: { type: integer }
+              example:
+                data:
+                  count: 1
+                  incidents:
+                    - slug: "2026-05-06-postgres-lock-table-full"
+                      title: "[SEV-3] Indexer dropping ~1% of trades — Postgres lock-table-full"
+                      severity: "SEV-3"
+                      status: "resolved"
+                      started_at: "2026-05-06T15:00:00Z"
+                      resolved_at: "2026-05-06T22:39:00Z"
+                      affected_components: ["indexer", "storage"]
+                      body_markdown: "## Identification\n\nSome trades arriving on coinbase, binance…"
+                as_of: "2026-05-07T00:45:00Z"
+                flags: {}
+        "500": { $ref: "#/components/responses/InternalError" }
+
   /sources:
     get:
       tags: [meta]
