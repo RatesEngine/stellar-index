@@ -1,5 +1,6 @@
 'use client';
 
+import { useMemo, useState } from 'react';
 import Link from 'next/link';
 
 import { Panel } from '@/components/reveal';
@@ -18,6 +19,16 @@ import { formatCompact } from '@/lib/format';
  */
 export function IssuersTable() {
   const { data, isLoading, isError, error } = useIssuers(100);
+  const [filter, setFilter] = useState('');
+
+  const filtered = useMemo(() => {
+    const q = filter.trim().toLowerCase();
+    if (!q) return data ?? [];
+    return (data ?? []).filter((row) => {
+      const hay = `${row.org_name ?? ''} ${row.home_domain ?? ''} ${row.g_strkey}`.toLowerCase();
+      return hay.includes(q);
+    });
+  }, [data, filter]);
 
   if (isError) {
     return (
@@ -61,6 +72,29 @@ export function IssuersTable() {
       source={asExample('/v1/issuers', { limit: 100 })}
       bodyClassName="-mx-4"
     >
+      <div className="px-4 pb-3 pt-1">
+        <div className="flex flex-wrap items-center gap-3 text-xs">
+          <input
+            type="search"
+            placeholder="Filter by name, domain, or G-strkey…"
+            value={filter}
+            onChange={(e) => setFilter(e.target.value)}
+            className="w-72 rounded-md border border-slate-200 bg-white px-2.5 py-1 text-xs placeholder:text-slate-400 focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500 dark:border-slate-700 dark:bg-slate-900"
+          />
+          <span className="font-mono text-[11px] text-slate-500">
+            {filtered.length} of {data.length} rows
+            {filter && (
+              <button
+                type="button"
+                onClick={() => setFilter('')}
+                className="ml-2 text-brand-600 hover:underline"
+              >
+                clear
+              </button>
+            )}
+          </span>
+        </div>
+      </div>
       <div className="overflow-x-auto">
         <table className="min-w-full divide-y divide-slate-200 text-sm dark:divide-slate-800">
           <thead>
@@ -74,7 +108,14 @@ export function IssuersTable() {
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-            {data.map((row, i) => (
+            {filtered.length === 0 && filter && (
+              <tr>
+                <td colSpan={6} className="px-4 py-8 text-center text-sm text-slate-500">
+                  No issuers match &quot;{filter}&quot;.
+                </td>
+              </tr>
+            )}
+            {filtered.map((row, i) => (
               <tr
                 key={row.g_strkey}
                 className="hover:bg-slate-50 dark:hover:bg-slate-900/40"
