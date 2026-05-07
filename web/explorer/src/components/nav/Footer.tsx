@@ -23,6 +23,7 @@ export function Footer() {
           <FooterColumn
             title="Browse"
             links={[
+              { label: 'Currencies', href: '/currencies' },
               { label: 'Assets', href: '/assets' },
               { label: 'Markets', href: '/markets' },
               { label: 'Issuers', href: '/issuers' },
@@ -30,37 +31,40 @@ export function Footer() {
             ]}
           />
           <FooterColumn
-            title="Protocols"
+            title="Blockchain"
             links={[
+              { label: 'Exchanges', href: '/exchanges' },
               { label: 'DEXes', href: '/dexes' },
               { label: 'Lending', href: '/lending' },
               { label: 'Aggregators', href: '/aggregators' },
               { label: 'Oracles', href: '/oracles' },
-            ]}
-          />
-          <FooterColumn
-            title="Forensics"
-            links={[
-              { label: 'Anomalies', href: '/anomalies' },
-              { label: 'Divergences', href: '/divergences' },
-              { label: 'MEV', href: '/mev' },
               { label: 'Networks', href: '/networks' },
             ]}
           />
           <FooterColumn
-            title="System"
+            title="About"
             links={[
-              { label: 'Sign up', href: '/signup' },
-              { label: 'Account', href: '/account' },
+              { label: 'Pricing', href: '/pricing' },
+              { label: 'Blog', href: '/blog' },
+              { label: 'Company', href: '/company' },
+              { label: 'Careers', href: '/careers' },
               { label: 'Contact', href: '/contact' },
-              { label: 'Widgets', href: '/widgets' },
-              { label: 'Go SDK', href: '/sdk' },
-              { label: 'Status', href: 'https://status.ratesengine.net', external: true },
-              { label: 'Diagnostics', href: '/diagnostics' },
+              { label: 'API status', href: 'https://status.ratesengine.net', external: true },
+            ]}
+          />
+          <FooterColumn
+            title="Account"
+            links={[
+              { label: 'Sign in', href: '/signin' },
+              { label: 'Create account', href: '/signup' },
+              { label: 'Your account', href: '/account' },
               { label: 'API docs', href: 'https://docs.ratesengine.net', external: true },
-              { label: 'Changelog', href: '/changelog' },
+              { label: 'Go SDK', href: '/sdk' },
+              { label: 'Widgets', href: '/widgets' },
               { label: 'Methodology', href: '/methodology' },
               { label: 'Research', href: '/research' },
+              { label: 'Changelog', href: '/changelog' },
+              { label: 'Diagnostics', href: '/diagnostics' },
             ]}
           />
         </div>
