@@ -15,6 +15,23 @@ against.
 
 ## [Unreleased]
 
+### Added
+- **Auto-register `classic_assets` + `issuers` from observed
+  trades** — the Phase 4 observer migration 0023 planned for
+  but never built. `Store.InsertTrade` now upserts a
+  `classic_assets` row (and a matching `issuers` row) for both
+  classic-asset legs of every trade, with `last_seen_*` and
+  `observation_count` bumped on conflict. A process-lifetime
+  `sync.Map` dedupes so we hit the DB once per unique asset
+  per process. Errors soft-fail so a registry-side problem
+  can't sink the trade-insert hot path. Net effect on prod:
+  `/v1/issuers` populates with every G-strkey ever seen as an
+  issuer of a traded classic asset, and `/v1/coins` stops
+  surfacing only the hand-curated subset. Slug stays NULL on
+  insert (the existing `COALESCE(slug, code)` lookup makes
+  that safe + avoids unique-constraint conflicts when two
+  issuers share the same code).
+
 ### Changed
 - **Classic-asset labels show the issuer's organisation** when
   known. AssetLabel renders `USDC / by Circle` instead of the
