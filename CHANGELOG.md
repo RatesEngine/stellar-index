@@ -16,6 +16,15 @@ against.
 ## [Unreleased]
 
 ### Added
+- **`/v1/network/stats` consolidated aggregate endpoint.** Single
+  call returning trailing-24h USD volume, distinct markets count,
+  total classic-assets row count, latest live ledger, plus the
+  exchange-class + total source counts. Single SQL query over
+  `prices_1m` + `classic_assets` + `ingestion_cursors`; source
+  counts come from the in-memory `external.Registry`. Replaces
+  the home network-strip's previous fan-out across four separate
+  endpoint calls. Useful for embed widgets / dashboards that just
+  need a snapshot.
 - **Docs site polish: header bar + favicon + OG card.**
   docs.ratesengine.net now has a slim header above the Scalar
   reference with brand mark + "Explorer" / "Status" / "GitHub"

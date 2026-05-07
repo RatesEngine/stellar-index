@@ -60,6 +60,7 @@ type Server struct {
 	coins            CoinsReader
 	issuers          IssuersReader
 	cursors          CursorsReader
+	networkStats     NetworkStatsReader
 	incidents        []incidents.Incident
 	sep10            auth.SEP10Validator
 	cors             middleware.Middleware
@@ -220,6 +221,12 @@ type Options struct {
 	// facing diagnostic; powers the explorer /diagnostics page.
 	Cursors CursorsReader
 
+	// NetworkStats, when non-nil, backs GET /v1/network/stats —
+	// the consolidated home-page aggregate (24h volume, markets,
+	// assets indexed, latest ledger). Production wiring is
+	// timescale.Store directly. Nil makes the endpoint 503.
+	NetworkStats NetworkStatsReader
+
 	// SEP10, when non-nil, backs GET /v1/auth/sep10/challenge and
 	// POST /v1/auth/sep10/token. Production wiring: an
 	// auth/sep10.Validator constructed from the binary's signing
@@ -355,6 +362,7 @@ func New(opts Options) *Server {
 		coins:            opts.Coins,
 		issuers:          opts.Issuers,
 		cursors:          opts.Cursors,
+		networkStats:     opts.NetworkStats,
 		sep10:            opts.SEP10,
 		cors:             opts.CORS,
 		auth:             opts.Auth,
@@ -482,6 +490,7 @@ func (s *Server) mountRoutes() {
 	s.mux.HandleFunc("GET /v1/changes/{entity_type}/{id}", s.handleChangeSummary)
 	s.mux.HandleFunc("GET /v1/diagnostics/cursors", s.handleCursors)
 	s.mux.HandleFunc("GET /v1/incidents", s.handleIncidents)
+	s.mux.HandleFunc("GET /v1/network/stats", s.handleNetworkStats)
 	s.mux.HandleFunc("GET /v1/healthz", s.handleHealthz)
 	s.mux.HandleFunc("GET /v1/readyz", s.handleReadyz)
 	s.mux.HandleFunc("GET /v1/version", s.handleVersion)

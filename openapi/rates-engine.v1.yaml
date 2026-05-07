@@ -1418,6 +1418,69 @@ paths:
                 flags: {}
         "500": { $ref: "#/components/responses/InternalError" }
 
+  /network/stats:
+    get:
+      tags: [meta]
+      summary: Consolidated home-page aggregate stats.
+      description: |
+        Single-call replacement for the home network-strip's
+        previous fan-out across `/v1/markets`, `/v1/coins`,
+        `/v1/sources`, and `/v1/diagnostics/cursors`. Returns
+        total trailing-24h USD volume, count of pairs that
+        recorded volume in 24h, total `classic_assets` row count,
+        latest live ledger across all non-backfill sources, and
+        the count of registered exchange-class sources.
+
+        Computed from a single SQL query over `prices_1m`,
+        `classic_assets`, and `ingestion_cursors`. The source
+        counts are derived from the in-memory `external.Registry`,
+        not the DB.
+
+        Useful for dashboards / status displays / embed widgets
+        that just want a quick health-of-the-network number.
+      responses:
+        "200":
+          description: Aggregate stats.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [markets_count_24h, assets_indexed, latest_ledger, exchange_sources, total_sources]
+                properties:
+                  volume_24h_usd:
+                    type: string
+                    nullable: true
+                    description: |
+                      SUM(prices_1m.volume_usd) over the trailing
+                      24h. Decimal string per ADR-0003.
+                  markets_count_24h:
+                    type: integer
+                    description: Distinct (base, quote) pairs with non-null volume in 24h.
+                  assets_indexed:
+                    type: integer
+                    description: Total rows in classic_assets.
+                  latest_ledger:
+                    type: integer
+                    description: Max last_ledger across non-backfill sources.
+                  exchange_sources:
+                    type: integer
+                    description: Count of `class=exchange` sources in the registry.
+                  total_sources:
+                    type: integer
+                    description: Count of all registered sources.
+              example:
+                data:
+                  volume_24h_usd: "5941104763.13358600"
+                  markets_count_24h: 4934
+                  assets_indexed: 442190
+                  latest_ledger: 62450017
+                  exchange_sources: 11
+                  total_sources: 21
+                as_of: "2026-05-07T01:55:00Z"
+                flags: {}
+        "500": { $ref: "#/components/responses/InternalError" }
+        "503": { $ref: "#/components/responses/ServiceUnavailable" }
+
   /sources:
     get:
       tags: [meta]

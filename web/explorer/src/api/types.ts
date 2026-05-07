@@ -2105,6 +2105,91 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/network/stats": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Consolidated home-page aggregate stats.
+         * @description Single-call replacement for the home network-strip's
+         *     previous fan-out across `/v1/markets`, `/v1/coins`,
+         *     `/v1/sources`, and `/v1/diagnostics/cursors`. Returns
+         *     total trailing-24h USD volume, count of pairs that
+         *     recorded volume in 24h, total `classic_assets` row count,
+         *     latest live ledger across all non-backfill sources, and
+         *     the count of registered exchange-class sources.
+         *
+         *     Computed from a single SQL query over `prices_1m`,
+         *     `classic_assets`, and `ingestion_cursors`. The source
+         *     counts are derived from the in-memory `external.Registry`,
+         *     not the DB.
+         *
+         *     Useful for dashboards / status displays / embed widgets
+         *     that just want a quick health-of-the-network number.
+         */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Aggregate stats. */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        /**
+                         * @example {
+                         *       "data": {
+                         *         "volume_24h_usd": "5941104763.13358600",
+                         *         "markets_count_24h": 4934,
+                         *         "assets_indexed": 442190,
+                         *         "latest_ledger": 62450017,
+                         *         "exchange_sources": 11,
+                         *         "total_sources": 21
+                         *       },
+                         *       "as_of": "2026-05-07T01:55:00Z",
+                         *       "flags": {}
+                         *     }
+                         */
+                        "application/json": {
+                            /**
+                             * @description SUM(prices_1m.volume_usd) over the trailing
+                             *     24h. Decimal string per ADR-0003.
+                             */
+                            volume_24h_usd?: string | null;
+                            /** @description Distinct (base, quote) pairs with non-null volume in 24h. */
+                            markets_count_24h: number;
+                            /** @description Total rows in classic_assets. */
+                            assets_indexed: number;
+                            /** @description Max last_ledger across non-backfill sources. */
+                            latest_ledger: number;
+                            /** @description Count of `class=exchange` sources in the registry. */
+                            exchange_sources: number;
+                            /** @description Count of all registered sources. */
+                            total_sources: number;
+                        };
+                    };
+                };
+                500: components["responses"]["InternalError"];
+                503: components["responses"]["ServiceUnavailable"];
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/sources": {
         parameters: {
             query?: never;
