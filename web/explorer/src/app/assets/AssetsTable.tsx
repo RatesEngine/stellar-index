@@ -5,7 +5,7 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import { ChevronLeft, ChevronRight, Search, X } from 'lucide-react';
 
-import { useCoins, type Coin } from '@/api/hooks';
+import { useCoins, useIssuerLookup, type Coin } from '@/api/hooks';
 import { formatCompact } from '@/lib/format';
 
 /**
@@ -285,6 +285,8 @@ function AssetRow({ coin, rank }: { coin: Coin; rank: number }) {
   const marketCapRaw = parseDec(coin.market_cap_usd);
   const volume = parseDec(coin.volume_24h_usd);
   const supply = parseDec(coin.circulating_supply);
+  const { data: issuerMap } = useIssuerLookup();
+  const knownIssuer = coin.issuer ? issuerMap?.[coin.issuer] : undefined;
   // Suppress market cap when 24h volume is below the confidence
   // threshold — without enough recent trade volume the price
   // underlying the cap is too thin to publish a believable number.
@@ -313,10 +315,16 @@ function AssetRow({ coin, rank }: { coin: Coin; rank: number }) {
         {coin.issuer ? (
           <Link
             href={`/issuers/${coin.issuer}`}
-            className="font-mono text-[11px] text-slate-500 hover:text-brand-600 dark:text-slate-400"
+            className="text-[11px] text-slate-500 hover:text-brand-600 dark:text-slate-400"
             title={coin.issuer}
           >
-            {coin.issuer.slice(0, 8)}…{coin.issuer.slice(-4)}
+            {knownIssuer?.org_name ? (
+              <span>{knownIssuer.org_name}</span>
+            ) : (
+              <span className="font-mono">
+                {coin.issuer.slice(0, 8)}…{coin.issuer.slice(-4)}
+              </span>
+            )}
           </Link>
         ) : (
           <span className="text-xs text-slate-400">native</span>
