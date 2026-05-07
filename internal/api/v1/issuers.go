@@ -101,10 +101,11 @@ func (s *Server) handleIssuersList(w http.ResponseWriter, r *http.Request) {
 	}
 	out := make([]IssuerListEntry, len(rows))
 	for i, r := range rows {
+		homeDomain, orgName := enrichIssuer(r.GStrkey, r.HomeDomain, r.OrgName)
 		out[i] = IssuerListEntry{
 			GStrkey:               r.GStrkey,
-			HomeDomain:            r.HomeDomain,
-			OrgName:               r.OrgName,
+			HomeDomain:            homeDomain,
+			OrgName:               orgName,
 			AssetCount:            r.AssetCount,
 			TotalObservationCount: r.TotalObservationCount,
 		}
@@ -160,10 +161,11 @@ func (s *Server) handleIssuer(w http.ResponseWriter, r *http.Request) {
 		assets = nil
 	}
 
+	homeDomain, orgName := enrichIssuer(row.GStrkey, row.HomeDomain, row.OrgName)
 	out := Issuer{
 		GStrkey:        row.GStrkey,
-		HomeDomain:     row.HomeDomain,
-		OrgName:        row.OrgName,
+		HomeDomain:     homeDomain,
+		OrgName:        orgName,
 		AuthRequired:   row.AuthRequired,
 		AuthRevocable:  row.AuthRevocable,
 		AuthImmutable:  row.AuthImmutable,
