@@ -81,8 +81,8 @@ type Pool struct {
 //   - limit    (optional): integer 1-500, default 100.
 //   - order_by (optional): "volume_24h_usd_desc" (default) or "pair".
 //   - source   (optional): single DEX name. Restricts the result to
-//                          that one DEX's pools. Unknown / non-DEX
-//                          source names return an empty list.
+//     that one DEX's pools. Unknown / non-DEX
+//     source names return an empty list.
 func (s *Server) handlePools(w http.ResponseWriter, r *http.Request) {
 	cursor := r.URL.Query().Get("cursor")
 	limit := 100

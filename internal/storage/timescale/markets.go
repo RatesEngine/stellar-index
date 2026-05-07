@@ -134,7 +134,7 @@ func (s *Store) SourceMarkets(ctx context.Context, source, cursor string, limit 
 // volume-desc; "<source>|<base>|<quote>" for pair-asc. Same
 // keyset-pagination shape as DistinctPairsExt with the source
 // dimension prepended.
-func (s *Store) AllPools(ctx context.Context, sources []string, cursor string, limit int, order MarketsOrder) ([]Pool, string, error) {
+func (s *Store) AllPools(ctx context.Context, sources []string, cursor string, limit int, order MarketsOrder) ([]Pool, string, error) { //nolint:gocognit // limit clamp + order branch + scan loop are linear; splitting would scatter the request lifecycle
 	if limit < 1 {
 		limit = 100
 	}

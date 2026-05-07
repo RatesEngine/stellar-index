@@ -86,7 +86,7 @@ type CurrenciesPayload struct {
 //   - include (optional): comma-separated; `sparkline` attaches the
 //     per-ticker 7d series of inverse-USD rates so listings can
 //     render mini charts without a follow-up per-ticker fetch.
-func (s *Server) handleCurrencies(w http.ResponseWriter, r *http.Request) {
+func (s *Server) handleCurrencies(w http.ResponseWriter, r *http.Request) { //nolint:gocognit // include parsing + per-row enrich + limit clamp are linear; splitting would scatter the request lifecycle
 	reader := s.currencies
 	if reader == nil {
 		writeJSON(w, CurrenciesPayload{Source: "currency-api"}, Flags{})
@@ -175,9 +175,9 @@ type CurrencyDetail struct {
 
 // CurrencyHistoryPoint is one daily rate datum.
 type CurrencyHistoryPoint struct {
-	Date     time.Time `json:"date"`
-	RateUSD  float64   `json:"rate_usd"`  // 1 USD = N units of ticker
-	InverseUSD float64 `json:"inverse_usd"` // 1 unit of ticker = $X
+	Date       time.Time `json:"date"`
+	RateUSD    float64   `json:"rate_usd"`    // 1 USD = N units of ticker
+	InverseUSD float64   `json:"inverse_usd"` // 1 unit of ticker = $X
 }
 
 // handleCurrencyDetail serves GET /v1/currencies/{ticker}.

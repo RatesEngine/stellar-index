@@ -9,8 +9,8 @@ import (
 
 // SourceStats is the per-source 24h activity row.
 type SourceStats struct {
-	Source         string
-	TradeCount24h  int64
+	Source        string
+	TradeCount24h int64
 	// VolumeUSD24h is SUM(usd_volume) over trades in the trailing
 	// 24h. Numeric stringified so we don't lose precision crossing
 	// the wire (and to match the rest of the Volume24hUSD shape).

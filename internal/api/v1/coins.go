@@ -127,7 +127,7 @@ type CoinsPage struct {
 //	  },
 //	  ...envelope...
 //	}
-func (s *Server) handleCoins(w http.ResponseWriter, r *http.Request) {
+func (s *Server) handleCoins(w http.ResponseWriter, r *http.Request) { //nolint:gocognit,gocyclo,funlen // option parsing + native-prepend + sparkline opt-in are linear & cohesive; splitting would just spread the request lifecycle across helpers
 	if s.coins == nil {
 		writeProblem(w, r,
 			"https://api.ratesengine.net/errors/coins-unavailable",

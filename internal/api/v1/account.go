@@ -34,14 +34,14 @@ type AccountStore interface {
 // populated. Both shapes coexist forever — bumping a major version
 // for an additive field would be silly.
 type Account struct {
-	KeyID           string         `json:"key_id,omitempty"`
-	Label           string         `json:"label,omitempty"`
-	KeyPrefix       string         `json:"key_prefix,omitempty"`
-	Tier            string         `json:"tier,omitempty"`
-	RateLimitPerMin int            `json:"rate_limit_per_min,omitempty"`
-	CreatedAt       time.Time      `json:"created_at,omitempty"`
-	User            *AccountUser   `json:"user,omitempty"`
-	AccountInfo     *AccountInfo   `json:"account,omitempty"`
+	KeyID           string       `json:"key_id,omitempty"`
+	Label           string       `json:"label,omitempty"`
+	KeyPrefix       string       `json:"key_prefix,omitempty"`
+	Tier            string       `json:"tier,omitempty"`
+	RateLimitPerMin int          `json:"rate_limit_per_min,omitempty"`
+	CreatedAt       time.Time    `json:"created_at,omitempty"`
+	User            *AccountUser `json:"user,omitempty"`
+	AccountInfo     *AccountInfo `json:"account,omitempty"`
 }
 
 // AccountUser is the magic-link-session caller's user info.
