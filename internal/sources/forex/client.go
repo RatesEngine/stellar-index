@@ -127,24 +127,30 @@ func (c *Client) usdRatesAtDate(ctx context.Context, date string) (map[string]fl
 		return nil, fmt.Errorf("fetch %s: %w", url, err)
 	}
 	var raw struct {
-		ResultsCount int `json:"resultsCount"`
-		Results      []struct {
-			T string  `json:"T"` // ticker, e.g. "C:USDEUR"
-			C float64 `json:"c"` // close
-		} `json:"results"`
-		Status string `json:"status"`
+		ResultsCount int               `json:"resultsCount"`
+		Results      []json.RawMessage `json:"results"`
+		Status       string            `json:"status"`
 	}
 	if err := json.Unmarshal(body, &raw); err != nil {
 		return nil, fmt.Errorf("decode %s: %w", url, err)
 	}
+	// Decode rows one at a time. Massive occasionally emits a row
+	// with a numeric/null T or non-float c for half-listed pairs;
+	// a strict batch unmarshal would discard the whole 1200-row
+	// snapshot for one bad entry.
 	out := make(map[string]float64, len(raw.Results))
 	const usdPrefix = "C:USD"
-	for _, r := range raw.Results {
+	for _, rowRaw := range raw.Results {
+		var r struct {
+			T string  `json:"T"`
+			C float64 `json:"c"`
+		}
+		if err := json.Unmarshal(rowRaw, &r); err != nil {
+			continue
+		}
 		if !strings.HasPrefix(r.T, usdPrefix) || r.C <= 0 {
 			continue
 		}
-		// "C:USDEUR" → "eur" (lowercase to match the public wire shape
-		// /v1/currencies has used since the currency-api shim).
 		ticker := strings.ToLower(strings.TrimPrefix(r.T, usdPrefix))
 		out[ticker] = r.C
 	}

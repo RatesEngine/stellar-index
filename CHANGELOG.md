@@ -15,6 +15,14 @@ against.
 
 ## [Unreleased]
 
+### Fixed
+- **`/v1/currencies` empty after rc.24** — the Massive grouped-FX
+  decoder failed the entire snapshot when a single row arrived
+  with a non-string `T` field (Massive occasionally emits numeric
+  / null tickers for half-listed pairs). Decode rows individually
+  now; one bad row is skipped and the remaining ~1200 install
+  cleanly.
+
 ## [v0.5.0-rc.24] — 2026-05-07
 
 ### Added
