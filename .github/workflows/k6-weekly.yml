@@ -22,8 +22,12 @@ name: k6-weekly
 # without waiting for next Sunday.
 
 on:
-  schedule:
-    - cron: '0 2 * * 0'   # 02:00 UTC every Sunday
+  # Cron disabled while the GitHub Actions spending cap is tight
+  # (Task #50). Manual dispatch is still available for the SLA-evidence
+  # workflow when needed; restore the schedule once the budget is
+  # comfortable:
+  #   schedule:
+  #     - cron: '0 2 * * 0'   # 02:00 UTC every Sunday
   workflow_dispatch:
     inputs:
       scenario:

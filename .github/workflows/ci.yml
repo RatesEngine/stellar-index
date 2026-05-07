@@ -2,8 +2,23 @@ name: ci
 
 on:
   pull_request:
-  push:
-    branches: [main]
+    # Skip docs-only PRs — a CHANGELOG bump or markdown edit
+    # doesn't need to spin up 11 runners. Code-touching PRs
+    # still hit the full matrix via the doc-code consistency job.
+    paths-ignore:
+      - 'CHANGELOG.md'
+      - '**.md'
+      - 'docs/**'
+      - 'LICENSE'
+      - '.github/ISSUE_TEMPLATE/**'
+      - '.github/PULL_REQUEST_TEMPLATE.md'
+  # Push-to-main no longer fires CI: PRs are squash-merged so
+  # the merge commit is byte-identical to what the PR run already
+  # validated. Pre-cost-cut this doubled CI burn for zero added
+  # safety. If post-merge regression detection becomes needed
+  # later (e.g. main-only integration smoke), restore the trigger:
+  #   push:
+  #     branches: [main]
 
 env:
   GOFUMPT_VERSION: v0.8.0
