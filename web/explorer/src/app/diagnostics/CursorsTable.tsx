@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 
 import { Panel } from '@/components/reveal';
 import { asExample } from '@/api/client';
@@ -16,8 +16,18 @@ import { useCursors, type Cursor } from '@/api/hooks';
  */
 export function CursorsTable() {
   const { data, isLoading, isError, error } = useCursors();
+  const [filter, setFilter] = useState('');
 
-  const grouped = useMemo(() => groupBySource(data ?? []), [data]);
+  const filtered = useMemo(() => {
+    const q = filter.trim().toLowerCase();
+    if (!q) return data ?? [];
+    return (data ?? []).filter((c) => {
+      const hay = `${c.source} ${c.sub_source ?? ''}`.toLowerCase();
+      return hay.includes(q);
+    });
+  }, [data, filter]);
+
+  const grouped = useMemo(() => groupBySource(filtered), [filtered]);
 
   if (isError) {
     return (
@@ -61,6 +71,29 @@ export function CursorsTable() {
       source={asExample('/v1/diagnostics/cursors')}
       bodyClassName="-mx-4"
     >
+      <div className="px-4 pb-3 pt-1">
+        <div className="flex flex-wrap items-center gap-3 text-xs">
+          <input
+            type="search"
+            placeholder="Filter sources or sub-sources…"
+            value={filter}
+            onChange={(e) => setFilter(e.target.value)}
+            className="w-64 rounded-md border border-slate-200 bg-white px-2.5 py-1 font-mono text-[11px] placeholder:text-slate-400 focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500 dark:border-slate-700 dark:bg-slate-900"
+          />
+          <span className="font-mono text-[11px] text-slate-500">
+            {filtered.length} of {(data ?? []).length} rows
+            {filter && (
+              <button
+                type="button"
+                onClick={() => setFilter('')}
+                className="ml-2 text-brand-600 hover:underline"
+              >
+                clear
+              </button>
+            )}
+          </span>
+        </div>
+      </div>
       <div className="overflow-x-auto">
         <table className="min-w-full divide-y divide-slate-200 text-sm dark:divide-slate-800">
           <thead>
