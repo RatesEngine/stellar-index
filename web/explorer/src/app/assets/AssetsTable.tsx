@@ -55,7 +55,7 @@ export function AssetsTable() {
     cursor,
     queryParam || undefined,
     orderParam,
-    { sparkline: true },
+    { sparkline: true, ath: true },
   );
 
   // Local input state, debounced into the URL so the server-side
@@ -133,6 +133,9 @@ export function AssetsTable() {
                 />
               </Th>
               <Th align="right">Circulating</Th>
+              <Th align="right" hint="Drawdown from all-time-high USD price (USD-quoted day-buckets in prices_1d).">
+                From ATH
+              </Th>
               <Th align="right">24h chart</Th>
               <Th align="right">First seen</Th>
             </tr>
@@ -141,7 +144,7 @@ export function AssetsTable() {
             {isLoading && (
               <tr>
                 <td
-                  colSpan={9}
+                  colSpan={10}
                   className="py-12 text-center text-sm text-slate-500"
                 >
                   Loading…
@@ -151,7 +154,7 @@ export function AssetsTable() {
             {!isLoading && coins.length === 0 && (
               <tr>
                 <td
-                  colSpan={9}
+                  colSpan={10}
                   className="py-12 text-center text-sm text-slate-500"
                 >
                   No assets match this filter.
@@ -361,6 +364,9 @@ function AssetRow({ coin, rank }: { coin: Coin; rank: number }) {
         )}
       </Td>
       <Td align="right">
+        <FromATH price={price} ath={coin.ath} />
+      </Td>
+      <Td align="right">
         <RowSparkline points={coin.price_history_24h} />
       </Td>
       <Td align="right">
@@ -480,17 +486,59 @@ function SortHeader({
 function Th({
   children,
   align,
+  hint,
 }: {
   children: React.ReactNode;
   align?: 'left' | 'right';
+  hint?: string;
 }) {
   return (
     <th
       className={`px-4 py-2.5 font-medium ${align === 'right' ? 'text-right' : 'text-left'}`}
       scope="col"
+      title={hint}
     >
       {children}
     </th>
+  );
+}
+
+// FromATH renders the drawdown from all-time-high USD price as
+// a percentage. "0.0%" when at-or-above the ATH (current >= ath
+// implies the new high, but our ath data is daily-grain so the
+// 0% case is the live-price trailing the most-recent close
+// fractionally; we still render so the column never goes blank
+// for assets at peak). Tooltip shows the raw ATH usd + date so
+// the column doesn't lose context.
+function FromATH({
+  price,
+  ath,
+}: {
+  price: number | null;
+  ath?: { usd: string; at: string } | null;
+}) {
+  if (price == null || !ath) return <Dash />;
+  const athNum = Number(ath.usd);
+  if (!Number.isFinite(athNum) || athNum <= 0) return <Dash />;
+  const pct = ((price - athNum) / athNum) * 100;
+  // pct is typically <= 0 (below ATH); positive only on the day
+  // the high was set, before the daily aggregate caught up.
+  const display = pct > 0 ? '0.0%' : `${pct.toFixed(1)}%`;
+  const color =
+    pct > -1
+      ? 'text-emerald-600 dark:text-emerald-400'
+      : pct > -25
+        ? 'text-slate-600 dark:text-slate-400'
+        : pct > -75
+          ? 'text-amber-600 dark:text-amber-400'
+          : 'text-rose-600 dark:text-rose-400';
+  return (
+    <span
+      className={`font-mono tabular-nums ${color}`}
+      title={`ATH: $${ath.usd} on ${ath.at.slice(0, 10)}`}
+    >
+      {display}
+    </span>
   );
 }
 

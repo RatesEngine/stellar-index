@@ -772,6 +772,55 @@ func (s *Store) GetCoinATH(ctx context.Context, assetID string) (*CoinATH, error
 	return &ath, nil
 }
 
+// GetCoinsATHBatch returns ATH USD price + day for each asset_id
+// in a single round trip. DISTINCT ON picks the (high_price-max,
+// bucket) tuple per base_asset; the same USD-quote allowlist as
+// the per-asset GetCoinATH.
+//
+// Empty input returns an empty map cleanly. Asset_ids with no
+// USD-quoted history are simply absent from the result map.
+//
+// Powers `?include=ath` on /v1/coins so /assets can show "% from
+// ATH" without N+1 round trips.
+func (s *Store) GetCoinsATHBatch(ctx context.Context, assetIDs []string) (map[string]CoinATH, error) {
+	out := make(map[string]CoinATH, len(assetIDs))
+	if len(assetIDs) == 0 {
+		return out, nil
+	}
+	const q = `
+		SELECT DISTINCT ON (base_asset)
+		    base_asset,
+		    high_price::text,
+		    to_char(bucket, 'YYYY-MM-DD"T"00:00:00"Z"')
+		  FROM prices_1d
+		 WHERE base_asset = ANY($1)
+		   AND quote_asset IN (
+		     'USDC-GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN',
+		     'USDT-GCQTGZQQ5G4PTM2GL7CDIFKUBIPEC52BROAQIAPW53XBRJVN6ZJVTG6V',
+		     'fiat:USD'
+		   )
+		   AND high_price IS NOT NULL
+		 ORDER BY base_asset, high_price DESC
+	`
+	rows, err := s.db.QueryContext(ctx, q, pq.Array(assetIDs))
+	if err != nil {
+		return nil, fmt.Errorf("timescale: GetCoinsATHBatch: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+	for rows.Next() {
+		var assetID string
+		var ath CoinATH
+		if err := rows.Scan(&assetID, &ath.USD, &ath.At); err != nil {
+			return nil, fmt.Errorf("timescale: GetCoinsATHBatch scan: %w", err)
+		}
+		out[assetID] = ath
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("timescale: GetCoinsATHBatch rows: %w", err)
+	}
+	return out, nil
+}
+
 // CoinTopMarket is one entry in the top-markets preview returned
 // alongside a single coin lookup. Compact summary suitable for an
 // asset detail page header — the full markets list lives on

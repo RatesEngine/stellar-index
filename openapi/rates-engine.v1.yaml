@@ -1191,6 +1191,18 @@ paths:
             type: string
             enum: [observation_count_desc, volume_24h_usd_desc]
             default: observation_count_desc
+        - name: include
+          in: query
+          required: false
+          description: |
+            Comma-separated opt-ins.
+            `sparkline` attaches `price_history_24h` (24 hourly
+            samples) per row. `ath` attaches `ath: { usd, at }`
+            per row, batched in a single round trip. Default
+            (no `include`) keeps the listing payload compact.
+          schema:
+            type: string
+            example: "sparkline,ath"
       responses:
         "200":
           description: Page of asset entries + next-cursor.

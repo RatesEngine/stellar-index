@@ -25,6 +25,7 @@ type CoinsReader interface {
 	GetCoinsPriceHistory24hBatch(ctx context.Context, assetIDs []string) (map[string][]timescale.CoinPricePoint, error)
 	GetCoinMarketsCount(ctx context.Context, assetID string) (int64, error)
 	GetCoinATH(ctx context.Context, assetID string) (*timescale.CoinATH, error)
+	GetCoinsATHBatch(ctx context.Context, assetIDs []string) (map[string]timescale.CoinATH, error)
 	GetCoinTradeCount24h(ctx context.Context, assetID string) (int64, error)
 }
 
@@ -239,14 +240,19 @@ func (s *Server) handleCoins(w http.ResponseWriter, r *http.Request) { //nolint:
 		out = append(out, coinFromRow(row))
 	}
 
-	// Optional opt-in: attach 24h hourly price history to every row
-	// for sparkline columns on listings. Default off — payload bloat
-	// on the typical /v1/coins call would be wasted bytes for SDK
-	// consumers that don't render charts.
+	// Optional opt-ins via ?include=. Default off — payload bloat on
+	// the typical /v1/coins call would be wasted bytes for SDK
+	// consumers that don't render charts or ATH context.
+	//   sparkline → attach 24h hourly price history per row
+	//   ath       → attach all-time-high USD price + day per row
 	includeSparkline := false
+	includeATH := false
 	for _, f := range strings.Split(r.URL.Query().Get("include"), ",") {
-		if strings.TrimSpace(f) == "sparkline" {
+		switch strings.TrimSpace(f) {
+		case "sparkline":
 			includeSparkline = true
+		case "ath":
+			includeATH = true
 		}
 	}
 	if includeSparkline && len(out) > 0 {
@@ -267,6 +273,21 @@ func (s *Server) handleCoins(w http.ResponseWriter, r *http.Request) { //nolint:
 					converted[j] = CoinPricePoint{T: p.T, P: p.P}
 				}
 				out[i].PriceHistory24h = converted
+			}
+		}
+	}
+	if includeATH && len(out) > 0 {
+		ids := make([]string, len(out))
+		for i, c := range out {
+			ids[i] = c.AssetID
+		}
+		if aths, aErr := s.coins.GetCoinsATHBatch(r.Context(), ids); aErr != nil {
+			s.logger.Warn("coins list: ath batch failed", "err", aErr)
+		} else {
+			for i, c := range out {
+				if a, ok := aths[c.AssetID]; ok {
+					out[i].ATH = &CoinATH{USD: a.USD, At: a.At}
+				}
 			}
 		}
 	}
