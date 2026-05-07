@@ -536,6 +536,7 @@ func run(cfgPath string, dryRun bool) error { //nolint:gocognit,funlen,gocyclo /
 		DashboardKeys:    nilOrMounter(dashboardBundle.keys),
 		SessionAuth:      dashboardBundle.middleware,
 		SessionPeeker:    sessionPeekerAdapter{},
+		SACWrappers:      cfg.Supply.SACWrappers,
 	})
 
 	// Closed-bucket producer — only spawn when the operator
