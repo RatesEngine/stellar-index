@@ -82,8 +82,16 @@ type Server struct {
 	dashboardAuth    DashboardAuthMounter
 	dashboardKeys    DashboardAuthMounter
 	sessionAuth      middleware.Middleware
-	mux              *http.ServeMux
-	started          time.Time
+	// sacWrappers is the operator-config map of Stellar-Asset-Contract
+	// C-strkey → "CODE-ISSUER" canonical asset key. Surfaced on
+	// /v1/sac-wrappers so the explorer can resolve raw Soroban
+	// contract addresses (which Soroswap/Phoenix/Aquarius/Comet
+	// emit as base/quote in their swap events) back to readable
+	// asset symbols. Nil means "operator hasn't configured the map"
+	// — the endpoint serves an empty object.
+	sacWrappers map[string]string
+	mux         *http.ServeMux
+	started     time.Time
 }
 
 // DashboardAuthMounter is the interface main.go's
@@ -367,6 +375,15 @@ type Options struct {
 	// reachable.
 	DashboardKeys DashboardAuthMounter
 
+	// SACWrappers is the operator-config map of SAC C-strkey →
+	// "CODE-ISSUER" classic asset key. Backs /v1/sac-wrappers,
+	// the read-only resolution endpoint the explorer's AssetLabel
+	// joins client-side to render readable symbols for Soroban DEX
+	// pools (which use SAC contracts as base/quote at the wire). Nil
+	// or empty makes the endpoint return an empty map — the explorer
+	// degrades to showing the raw C-strkey.
+	SACWrappers map[string]string
+
 	// SessionAuth, when non-nil, wraps every handler so a present
 	// dashboard session cookie populates a SessionContext on the
 	// request context. Anonymous + bearer-token requests pass
@@ -424,6 +441,7 @@ func New(opts Options) *Server {
 		dashboardAuth:    opts.DashboardAuth,
 		dashboardKeys:    opts.DashboardKeys,
 		sessionAuth:      opts.SessionAuth,
+		sacWrappers:      opts.SACWrappers,
 		mux:              http.NewServeMux(),
 		started:          time.Now().UTC(),
 	}
@@ -652,6 +670,13 @@ func (s *Server) mountRoutes() {
 	// Source catalogue — every venue the aggregator knows about,
 	// with class + IncludeInVWAP metadata.
 	s.mux.HandleFunc("GET /v1/sources", s.handleSources)
+
+	// SAC wrapper resolution — operator-config map of
+	// Stellar-Asset-Contract C-strkey → "CODE-ISSUER" classic asset.
+	// Used by the explorer to render Soroban DEX pools (Soroswap /
+	// Phoenix / Aquarius / Comet) with readable asset symbols
+	// instead of raw C-strkeys.
+	s.mux.HandleFunc("GET /v1/sac-wrappers", s.handleSACWrappers)
 
 	// Account self-service. /me and /usage require an authenticated
 	// Subject; /keys (POST) additionally requires the AccountStore

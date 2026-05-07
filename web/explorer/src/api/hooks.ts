@@ -27,6 +27,29 @@ export type StatusResponse = {
 };
 
 /**
+ * useSACWrappers — fetches the operator-config Stellar-Asset-Contract
+ * wrapper map: SAC C-strkey → "CODE-ISSUER" classic asset key. Used
+ * by AssetLabel-style components to render Soroban DEX pool rows
+ * (Soroswap / Phoenix / Aquarius / Comet emit base/quote as raw SAC
+ * contract addresses) with readable asset symbols. The map is
+ * operator-static — only changes on API restart with new config —
+ * so we cache aggressively (1 hour stale, infinite gc).
+ */
+export function useSACWrappers() {
+  return useQuery<Record<string, string>>({
+    queryKey: ['/v1/sac-wrappers'],
+    queryFn: async () => {
+      const env = await apiGet<{ data: Record<string, string> }>(
+        '/v1/sac-wrappers',
+      );
+      return env.data ?? {};
+    },
+    staleTime: 60 * 60 * 1000,
+    gcTime: 24 * 60 * 60 * 1000,
+  });
+}
+
+/**
  * useStatus — fetches the API's live system-status aggregate.
  * Powers the navbar Status pill (green/amber/red) so the
  * indicator actually reflects state rather than always rendering

@@ -15,6 +15,16 @@ against.
 
 ## [Unreleased]
 
+### Added
+- **`GET /v1/sac-wrappers`** — read-only endpoint exposing the
+  operator-config Stellar-Asset-Contract wrapper map (SAC C-strkey
+  → "CODE-ISSUER" classic asset). The explorer's pool-row
+  AssetLabel now resolves SAC contracts to readable symbols
+  (e.g. `USDC` with `SAC` subtitle) instead of `CAS3J7…OWMA`.
+  Soroswap / Phoenix / Aquarius / Comet emit base/quote as the
+  SAC contract address in their swap events at the wire — this
+  surfaces the underlying classic asset client-side.
+
 ## [v0.5.0-rc.26] — 2026-05-07
 
 ### Fixed

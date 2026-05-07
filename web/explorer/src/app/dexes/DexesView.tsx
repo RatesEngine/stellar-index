@@ -6,6 +6,7 @@ import Link from 'next/link';
 
 import { Panel } from '@/components/reveal';
 import { apiGet, asExample } from '@/api/client';
+import { useSACWrappers } from '@/api/hooks';
 import { formatCompact } from '@/lib/format';
 
 import { DexProtocolsTable } from './DexProtocolsTable';
@@ -414,6 +415,7 @@ function LastPriceCell({ raw }: { raw?: string | null }) {
 }
 
 function AssetLabel({ canonical }: { canonical: string | undefined | null }) {
+  const { data: sacMap } = useSACWrappers();
   if (!canonical) return <span className="text-xs text-slate-400">—</span>;
   if (canonical === 'native') return <span className="font-medium">XLM</span>;
   if (canonical.startsWith('fiat:')) {
@@ -423,6 +425,34 @@ function AssetLabel({ canonical }: { canonical: string | undefined | null }) {
     return <span className="font-medium">{canonical.replace('crypto:', '')}</span>;
   }
   if (/^C[A-Z0-9]{55}$/.test(canonical)) {
+    // SAC contract resolution. The map is keyed by C-strkey →
+    // "CODE-ISSUER" or "native". When found, render the underlying
+    // classic asset's code with a small "(SAC)" subscript so it's
+    // clear this row trades the wrapped form, not the classic SDEX
+    // asset directly.
+    const resolved = sacMap?.[canonical];
+    if (resolved === 'native') {
+      return (
+        <div>
+          <div className="font-medium">XLM</div>
+          <div className="text-[10px] uppercase tracking-wide text-slate-500">
+            SAC
+          </div>
+        </div>
+      );
+    }
+    if (resolved) {
+      const dashIx = resolved.indexOf('-');
+      const code = dashIx === -1 ? resolved : resolved.slice(0, dashIx);
+      return (
+        <div>
+          <div className="font-medium">{code}</div>
+          <div className="text-[10px] uppercase tracking-wide text-slate-500">
+            SAC
+          </div>
+        </div>
+      );
+    }
     return (
       <span className="font-mono text-[11px]" title={canonical}>
         {canonical.slice(0, 6)}…{canonical.slice(-4)}

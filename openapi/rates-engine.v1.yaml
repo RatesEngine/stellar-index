@@ -1754,6 +1754,38 @@ paths:
         "429": { $ref: "#/components/responses/RateLimited" }
         "500": { $ref: "#/components/responses/InternalError" }
 
+  /sac-wrappers:
+    get:
+      tags: [meta]
+      summary: Stellar-Asset-Contract wrapper resolution map.
+      description: |
+        Returns the operator-configured map of Stellar-Asset-Contract
+        (SAC) C-strkey contract IDs to their underlying classic asset
+        keys ("CODE-ISSUER", or `"native"` for XLM). Soroban DEX
+        sources (Soroswap, Phoenix, Aquarius, Comet) emit base/quote
+        as the SAC contract address in their swap events, not the
+        underlying classic asset key — clients use this map to
+        resolve raw `C…` contract addresses to readable asset
+        symbols. The map only changes on API restart with new
+        config; cache aggressively client-side.
+
+        Empty object when the operator hasn't configured any
+        wrappers (deployment without the `[supply.sac_wrappers]`
+        block) — clients then degrade to showing the raw C-strkey.
+      responses:
+        "200":
+          description: Map of SAC C-strkey to canonical asset key.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    additionalProperties: { type: string }
+                    description: SAC C-strkey → "CODE-ISSUER" or "native".
+        "500": { $ref: "#/components/responses/InternalError" }
+
   /pairs:
     get:
       tags: [markets]
