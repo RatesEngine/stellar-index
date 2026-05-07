@@ -5,6 +5,29 @@ import { useState } from 'react';
 
 import { API_BASE_URL } from '@/api/client';
 
+type Lang = 'curl' | 'js' | 'python' | 'go';
+
+const LANGS: { key: Lang; label: string }[] = [
+  { key: 'curl', label: 'curl' },
+  { key: 'js', label: 'JS' },
+  { key: 'python', label: 'Python' },
+  { key: 'go', label: 'Go' },
+];
+
+function renderSnippet(lang: Lang, base: string, path: string): string {
+  const url = `${base}${path}`;
+  switch (lang) {
+    case 'curl':
+      return `curl '${url}'`;
+    case 'js':
+      return `const res = await fetch('${url}');\nconst data = await res.json();\nconsole.log(data);`;
+    case 'python':
+      return `import requests\n\nr = requests.get('${url}')\nprint(r.json())`;
+    case 'go':
+      return `import (\n  "encoding/json"\n  "net/http"\n)\n\nresp, _ := http.Get("${url}")\nvar data map[string]any\njson.NewDecoder(resp.Body).Decode(&data)`;
+  }
+}
+
 interface Example {
   label: string;
   // path is the relative URL (with query string). The cmd renders
@@ -55,13 +78,14 @@ const EXAMPLES: Example[] = [
  */
 export function HomeTryAPI() {
   const [activeIx, setActiveIx] = useState(0);
+  const [lang, setLang] = useState<Lang>('curl');
   const [copied, setCopied] = useState(false);
   const [running, setRunning] = useState(false);
   const [response, setResponse] = useState<string | null>(null);
   const [responseTone, setResponseTone] = useState<'ok' | 'err' | null>(null);
 
   const example = EXAMPLES[activeIx]!;
-  const cmd = `curl '${API_BASE_URL}${example.path}'`;
+  const cmd = renderSnippet(lang, API_BASE_URL, example.path);
 
   function runLive() {
     setRunning(true);
@@ -110,9 +134,25 @@ export function HomeTryAPI() {
           </button>
         ))}
       </div>
+      <div className="mb-2 flex items-center gap-1 border-b border-slate-200 pb-2 dark:border-slate-800">
+        {LANGS.map((l) => (
+          <button
+            key={l.key}
+            type="button"
+            onClick={() => setLang(l.key)}
+            className={`rounded px-2 py-0.5 font-mono text-[10px] uppercase tracking-wider ${
+              lang === l.key
+                ? 'bg-slate-200 text-slate-900 dark:bg-slate-700 dark:text-slate-100'
+                : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'
+            }`}
+          >
+            {l.label}
+          </button>
+        ))}
+      </div>
       <div className="relative rounded-lg bg-slate-950 px-3 py-2.5 font-mono text-[11px] text-slate-100">
         <pre className="overflow-x-auto whitespace-pre-wrap break-all pr-20">
-          <code>$ {cmd}</code>
+          <code>{lang === 'curl' ? '$ ' : ''}{cmd}</code>
         </pre>
         <div className="absolute right-2 top-2 flex gap-1">
           <button

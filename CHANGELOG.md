@@ -16,6 +16,11 @@ against.
 ## [Unreleased]
 
 ### Added
+- **Home Try-the-API: language tabs (curl / JS / Python / Go).**
+  Each example renders as a snippet in the chosen language; the
+  ▶ Run-it button still fires the same URL inline regardless of
+  language. Closes the loop for someone evaluating which SDK
+  shape feels right without leaving the page.
 - **`/embed/asset/{slug}` iframe-friendly price widget.**
   Chrome-less route (no navbar, no footer, no max-width) designed
   to be dropped into a customer site at any width. Renders the
