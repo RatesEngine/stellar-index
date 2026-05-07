@@ -1366,6 +1366,16 @@ paths:
                       pairs the asset participated in over the
                       trailing 24h. 0 when the asset went silent
                       in that window. Null only on lookup error.
+                  trade_count_24h:
+                    type: integer
+                    nullable: true
+                    description: |
+                      Count of trades the asset participated in
+                      (as base OR quote) over the trailing 24h.
+                      Read from the `trades` hypertable directly —
+                      complements the all-time `observation_count`
+                      with a "right now" activity figure. Null
+                      only on lookup error.
                   ath:
                     type: object
                     nullable: true

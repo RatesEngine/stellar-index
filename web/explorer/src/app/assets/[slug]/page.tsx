@@ -99,6 +99,10 @@ interface CoinSummary {
   // filtered to USD-denominated quotes only — triangulated
   // paths excluded.
   ath?: { usd: string; at: string } | null;
+  // Trade count over the trailing 24h (asset on either side).
+  // Read from the trades hypertable directly. Companion to the
+  // all-time `observation_count`.
+  trade_count_24h?: number | null;
 }
 
 interface TopMarket {
@@ -480,6 +484,14 @@ function OverviewBody({
             <Stat
               label="Total"
               value={formatCompact(coin.observation_count)}
+            />
+            <Stat
+              label="Trades 24h"
+              value={
+                coin.trade_count_24h != null
+                  ? formatCompact(coin.trade_count_24h)
+                  : '—'
+              }
             />
             <Stat
               label="First seen"
