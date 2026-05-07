@@ -15,7 +15,25 @@ against.
 
 ## [Unreleased]
 
+### Changed
+- **Top nav restructured to grouped IA.** Navbar collapses from a
+  flat 11-item bar to: Currencies / Blockchain (dropdown) /
+  API Docs / About (dropdown) / Sign in / Create account. Blockchain
+  contains Assets, Exchanges, Dexes, Lending, Aggregators, Oracles,
+  Networks. About contains Pricing, Blog, API status (external),
+  Company, Careers, Contact. Status pill stays as a compact dot
+  beside the search/theme controls. The route formerly at /network
+  is now /networks (singular → plural to match the dropdown label
+  and reflect that the page is per-network even though only Stellar
+  is wired today).
+
 ### Added
+- **New route shells.** /currencies, /exchanges, /pricing, /blog,
+  /company, /careers, /signin land as honest placeholders explaining
+  what's in flight rather than mock data — the live build wires the
+  full table once the underlying ingest / agg / page work merges
+  (forex feed for /currencies, per-CEX aggregations for /exchanges,
+  magic-link auth for /signin).
 - **/v1/pools `?source=<name>` filter.** Restricts the result to
   one DEX's pools. Non-DEX names (binance, coinbase, …) return an
   empty list rather than 400 — callers can pass through user input

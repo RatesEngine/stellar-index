@@ -44,7 +44,7 @@ export function Footer() {
               { label: 'Anomalies', href: '/anomalies' },
               { label: 'Divergences', href: '/divergences' },
               { label: 'MEV', href: '/mev' },
-              { label: 'Network', href: '/network' },
+              { label: 'Networks', href: '/networks' },
             ]}
           />
           <FooterColumn

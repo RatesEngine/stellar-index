@@ -23,7 +23,7 @@ const STATIC_PAGES: Result[] = [
   { type: 'page', label: 'Aggregators', href: '/aggregators' },
   { type: 'page', label: 'Oracles', href: '/oracles' },
   { type: 'page', label: 'Sources', href: '/sources' },
-  { type: 'page', label: 'Network', href: '/network' },
+  { type: 'page', label: 'Networks', href: '/networks' },
   { type: 'page', label: 'Methodology', hint: 'how rates are computed', href: '/methodology' },
   { type: 'page', label: 'Research', hint: 'ADRs + architecture docs', href: '/research' },
   { type: 'page', label: 'Changelog', href: '/changelog' },

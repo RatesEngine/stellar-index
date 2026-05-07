@@ -8,20 +8,21 @@ import { HomeTopMarkets } from '../HomeTopMarkets';
 import { HomeTopAssets } from '../HomeTopAssets';
 
 export const metadata: Metadata = {
-  title: 'Network — Stellar macro pulse',
+  title: 'Networks — connected blockchains',
   description:
-    'Stellar network state: total assets, active markets, 24h USD volume, source contributors, ingest tip. Macro-level metrics for the Stellar pricing surface.',
+    'Per-network macro pulse: total assets, active markets, 24h USD volume, source contributors, ingest tip. Stellar today; more networks as we connect them.',
 };
 
 export default function NetworkPage() {
   return (
     <div className="mx-auto max-w-7xl space-y-8 px-6 py-8">
       <header className="space-y-2">
-        <h1 className="text-3xl font-semibold tracking-tight">Network</h1>
+        <h1 className="text-3xl font-semibold tracking-tight">Networks</h1>
         <p className="max-w-3xl text-sm text-slate-600 dark:text-slate-400">
-          Live macro pulse for the Stellar network. Every figure below comes
-          straight from the public API — no synthesised data, no estimates.
-          Cross-region active-active per{' '}
+          Live macro pulse for every connected network. Stellar is the only
+          one wired today; more land as we extend ingest. Every figure below
+          comes straight from the public API — no synthesised data, no
+          estimates. Cross-region active-active per{' '}
           <Link href="/research/adr/0008" className="underline decoration-dotted">
             ADR-0008
           </Link>
