@@ -92,17 +92,31 @@ type SessionPeeker interface {
 	SessionFromContext(ctx context.Context) (SessionInfo, bool)
 }
 
-// UsageRow is the wire shape for /v1/account/usage entries. The
-// rate-limit middleware records per-key request counts in Redis,
-// but nothing rolls them up into the daily UsageRow shape yet —
-// the handler currently returns an empty list behind the locked
-// wire shape so a future rollup writer (separate PR) can fill in
-// the data without a wire-format change.
+// UsageRow is the wire shape for /v1/account/usage entries. Backed
+// by the per-day Redis counters the UsageTracker middleware writes.
+// Errors / throttled stay zero today — they're reserved fields for
+// a follow-up that wires the rate-limit fail-open + non-2xx
+// response counters into this shape.
 type UsageRow struct {
 	Date      string `json:"date"` // YYYY-MM-DD
 	Requests  int    `json:"requests"`
 	Errors    int    `json:"errors"`
 	Throttled int    `json:"throttled"`
+}
+
+// UsageReader is the storage seam for /v1/account/usage. The
+// internal/usage package's *Counter implements via its Read method;
+// main.go's adapter bridges so this package stays free of the
+// usage package import.
+type UsageReader interface {
+	Read(ctx context.Context, subject string, days int) ([]UsageDay, error)
+}
+
+// UsageDay mirrors usage.Day on the v1 boundary. Date is
+// YYYY-MM-DD UTC; Requests is the daily INCR count.
+type UsageDay struct {
+	Date     string
+	Requests int64
 }
 
 // KeyCreated is the wire shape for /v1/account/keys (POST) replies.
@@ -209,10 +223,45 @@ func (s *Server) handleAccountUsage(w http.ResponseWriter, r *http.Request) {
 			"/v1/account/usage requires an API key or SEP-10 token")
 		return
 	}
-	// Empty list is correct today — the rate-limit middleware
-	// records counts in Redis but nothing rolls them up into the
-	// daily UsageRow shape yet.
-	writeJSON(w, []UsageRow{}, Flags{})
+	if s.usageReader == nil {
+		// Reader not wired (older deployment / test) — preserve
+		// the locked wire shape with an empty list rather than
+		// 503; clients integrate against the contract regardless.
+		writeJSON(w, []UsageRow{}, Flags{})
+		return
+	}
+	// Mirror UsageTracker's subject derivation (key:<KeyID> or
+	// id:<Identifier>). MUST stay in sync — if the writer and
+	// reader pick different keys, /v1/account/usage returns []
+	// despite incoming requests being recorded.
+	key := ""
+	switch {
+	case subject.KeyID != "":
+		key = "key:" + subject.KeyID
+	case subject.Identifier != "":
+		key = "id:" + subject.Identifier
+	}
+	if key == "" {
+		writeJSON(w, []UsageRow{}, Flags{})
+		return
+	}
+	// Default 30-day window; cap to the reader's retention. The
+	// `?from=` / `?to=` params are reserved in OpenAPI but
+	// unused for now — clients always get the trailing window.
+	days, err := s.usageReader.Read(r.Context(), key, 30)
+	if err != nil {
+		s.logger.Warn("usage read", "err", err, "subject", key)
+		writeJSON(w, []UsageRow{}, Flags{})
+		return
+	}
+	out := make([]UsageRow, len(days))
+	for i, d := range days {
+		out[i] = UsageRow{
+			Date:     d.Date,
+			Requests: int(d.Requests),
+		}
+	}
+	writeJSON(w, out, Flags{})
 }
 
 // handleAccountKeysCreate serves POST /v1/account/keys.

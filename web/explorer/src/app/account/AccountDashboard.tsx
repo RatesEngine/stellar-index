@@ -48,11 +48,16 @@ interface APIKey {
   created_at: string;
 }
 
+interface UsageRow {
+  date: string;
+  requests: number;
+}
+
 type State =
   | { kind: 'loading' }
   | { kind: 'unauthed' }
   | { kind: 'error'; message: string }
-  | { kind: 'authed'; me: AccountMe; keys: APIKey[] };
+  | { kind: 'authed'; me: AccountMe; keys: APIKey[]; usage: UsageRow[] };
 
 async function apiFetch<T>(path: string, opts: RequestInit = {}): Promise<T> {
   const res = await fetch(`${API_BASE_URL}${path}`, {
@@ -108,7 +113,14 @@ export function AccountDashboard() {
       } catch (err) {
         if (!(err instanceof ApiError) || err.status !== 401) throw err;
       }
-      setState({ kind: 'authed', me: me.data, keys });
+      let usage: UsageRow[] = [];
+      try {
+        const u = await apiFetch<{ data: UsageRow[] }>('/v1/account/usage');
+        usage = u.data ?? [];
+      } catch {
+        // Usage is best-effort; don't block the rest of the page.
+      }
+      setState({ kind: 'authed', me: me.data, keys, usage });
     } catch (err) {
       if (err instanceof ApiError && err.status === 401) {
         setState({ kind: 'unauthed' });
@@ -219,7 +231,7 @@ export function AccountDashboard() {
     );
   }
 
-  const { me, keys } = state;
+  const { me, keys, usage } = state;
   const userEmail = me.user?.email;
   const accountName = me.account?.name;
   const accountTier = me.account?.tier ?? me.tier ?? 'starter';
@@ -276,6 +288,8 @@ export function AccountDashboard() {
           </div>
         </div>
       )}
+
+      <UsagePanel usage={usage} />
 
       <div className="rounded-xl border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900">
         <div className="flex items-center justify-between border-b border-slate-200 px-5 py-3 dark:border-slate-800">
@@ -356,6 +370,52 @@ export function AccountDashboard() {
           )}
         </div>
       </div>
+    </div>
+  );
+}
+
+function UsagePanel({ usage }: { usage: UsageRow[] }) {
+  const total = usage.reduce((s, r) => s + (r.requests || 0), 0);
+  return (
+    <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+      <div className="flex items-baseline justify-between">
+        <h2 className="text-sm font-semibold">Usage (last 30 days)</h2>
+        <span className="font-mono text-xs text-slate-500">
+          {total.toLocaleString()} requests
+        </span>
+      </div>
+      {usage.length === 0 ? (
+        <p className="mt-3 text-xs text-slate-500">
+          No tracked requests yet for this account in the last 30 days.
+          Requests count against the per-account daily window the
+          UsageTracker middleware records.
+        </p>
+      ) : (
+        <UsageBars rows={usage} />
+      )}
+    </div>
+  );
+}
+
+function UsageBars({ rows }: { rows: UsageRow[] }) {
+  const max = Math.max(...rows.map((r) => r.requests || 0), 1);
+  return (
+    <div className="mt-3 grid grid-cols-7 gap-0.5 sm:grid-cols-15 lg:grid-cols-30">
+      {rows.map((r) => {
+        const h = Math.max(2, (r.requests / max) * 36);
+        return (
+          <div
+            key={r.date}
+            title={`${r.date}: ${r.requests.toLocaleString()} requests`}
+            className="flex h-10 items-end justify-center"
+          >
+            <div
+              className="w-full rounded-sm bg-brand-500/70 dark:bg-brand-400/70"
+              style={{ height: `${h}px` }}
+            />
+          </div>
+        );
+      })}
     </div>
   );
 }

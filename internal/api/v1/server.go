@@ -70,6 +70,8 @@ type Server struct {
 	cors             middleware.Middleware
 	auth             middleware.Middleware
 	rateLimit        middleware.Middleware
+	usageTracker     middleware.Middleware
+	usageReader      UsageReader
 	hub              *streaming.Hub
 	confidence       ConfidenceLooker
 	triangulated     TriangulatedPriceLooker
@@ -284,6 +286,17 @@ type Options struct {
 	// cmd/ratesengine-api/main.go for the canonical wire-up.
 	RateLimit middleware.Middleware
 
+	// UsageTracker, when non-nil, is inserted at the end of the
+	// middleware chain; fires per-request to record per-day
+	// counters that feed /v1/account/usage. Best-effort — never
+	// blocks a request. Pair with UsageReader to expose the data.
+	UsageTracker middleware.Middleware
+
+	// UsageReader, when non-nil, backs /v1/account/usage with
+	// real per-day counts. Without it the endpoint stays on its
+	// "empty list with locked wire shape" default.
+	UsageReader UsageReader
+
 	// Hub, when non-nil, backs the closed-bucket SSE endpoint
 	// (`/v1/price/stream`). Producers (typically the aggregator's
 	// per-window-close pass) call Hub.Publish(); subscribers attach
@@ -399,6 +412,8 @@ func New(opts Options) *Server {
 		cors:             opts.CORS,
 		auth:             opts.Auth,
 		rateLimit:        opts.RateLimit,
+		usageTracker:     opts.UsageTracker,
+		usageReader:      opts.UsageReader,
 		hub:              opts.Hub,
 		confidence:       opts.Confidence,
 		triangulated:     opts.Triangulated,
@@ -487,6 +502,13 @@ func (s *Server) Handler() http.Handler {
 	}
 	if s.rateLimit != nil {
 		stack = append(stack, s.rateLimit)
+	}
+	// Usage tracker runs INSIDE rate-limit so denied (429) requests
+	// don't pollute per-day counters — only allowed traffic counts
+	// against the user's billing window. Best-effort; failures
+	// log at debug and never block.
+	if s.usageTracker != nil {
+		stack = append(stack, s.usageTracker)
 	}
 	// Session resolver runs INSIDE rate-limit so the per-account
 	// rate limit could observe the dashboard subject in the future

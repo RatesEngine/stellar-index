@@ -80,6 +80,7 @@ import (
 	"github.com/RatesEngine/rates-engine/internal/storage/redisclient"
 	"github.com/RatesEngine/rates-engine/internal/storage/timescale"
 	"github.com/RatesEngine/rates-engine/internal/supply"
+	"github.com/RatesEngine/rates-engine/internal/usage"
 	"github.com/RatesEngine/rates-engine/internal/version"
 )
 
@@ -274,6 +275,13 @@ func run(cfgPath string, dryRun bool) error { //nolint:gocognit,funlen,gocyclo /
 			"key_enabled", authBucket != nil,
 		)
 	}
+
+	// Per-account usage counter — daily INCRs alongside rate-limit
+	// for /v1/account/usage. Shares the same Redis client; uses a
+	// distinct "usage:" key prefix so it never collides with the
+	// rate-limit bucket. Always wired when Redis is available; the
+	// middleware degrades to no-op if rdb is nil.
+	usageCounter := usage.New(rdb)
 
 	// authMW is built later (after the dashboard bundle) so the
 	// Postgres backend can borrow the same platform stores. Forward-
@@ -507,6 +515,8 @@ func run(cfgPath string, dryRun bool) error { //nolint:gocognit,funlen,gocyclo /
 		CORS:             cors,
 		Auth:             authMW,
 		RateLimit:        rateLimit,
+		UsageTracker:     middleware.UsageTracker(usageCounter, logger.With("component", "usage")),
+		UsageReader:      usageReaderAdapter{c: usageCounter},
 		CDNEnabled:       cfg.API.CDNEnabled,
 		StatusBackend:    statusBackend,
 		RegionName:       cfg.Region.ID,
@@ -1784,6 +1794,22 @@ func warnOpenCORS(logger *slog.Logger, allowedOrigins []string, authMode string)
 			"auth_mode", authMode,
 			"docs", "https://github.com/RatesEngine/rates-engine/blob/main/docs/operations/pre-launch-hardening.md")
 	}
+}
+
+// usageReaderAdapter bridges *usage.Counter to v1.UsageReader so
+// the v1 package stays free of the internal/usage import.
+type usageReaderAdapter struct{ c *usage.Counter }
+
+func (a usageReaderAdapter) Read(ctx context.Context, subject string, days int) ([]v1.UsageDay, error) {
+	rows, err := a.c.Read(ctx, subject, days)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]v1.UsageDay, len(rows))
+	for i, d := range rows {
+		out[i] = v1.UsageDay{Date: d.Date, Requests: d.Requests}
+	}
+	return out, nil
 }
 
 // sessionPeekerAdapter bridges dashboardauth.SessionFromContext
