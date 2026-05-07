@@ -817,6 +817,160 @@ paths:
         "500": { $ref: "#/components/responses/InternalError" }
         "503": { $ref: "#/components/responses/ServiceUnavailable" }
 
+  /pools:
+    get:
+      tags: [markets]
+      summary: DEX/AMM liquidity pools (one row per (source, base, quote)).
+      description: |
+        Like /v1/markets but DEX-only and with a `source` dimension —
+        the same pair traded on two DEXes appears as two rows. Backed
+        by the dispatch path through Soroswap / Phoenix / Aquarius /
+        SDEX / Comet (Class=Exchange + Subclass=DEX in the source
+        registry). CEX trading pairs go through /v1/markets;
+        "pool" is AMM/DEX terminology and applying it to centralised
+        venues misnames the data.
+      parameters:
+        - { $ref: "#/components/parameters/Cursor" }
+        - name: limit
+          in: query
+          schema: { type: integer, minimum: 1, maximum: 500, default: 100 }
+        - name: order_by
+          in: query
+          schema: { type: string, enum: [volume_24h_usd_desc, pair], default: volume_24h_usd_desc }
+        - name: source
+          in: query
+          schema: { type: string }
+          description: |
+            Optional. Restrict to a single DEX name (soroswap /
+            phoenix / aquarius / sdex / comet). Non-DEX names return
+            an empty list rather than 400.
+        - name: base
+          in: query
+          schema: { type: string }
+          description: |
+            Optional. Canonical base asset_id (`native`, `USDC-G…`,
+            etc.). Combined with `quote` gives the per-source
+            breakdown for one pair — used by the pair detail page
+            to render "which venues moved this pair in the last 24h".
+        - name: quote
+          in: query
+          schema: { type: string }
+          description: |
+            Optional. Canonical quote asset_id. See `base`.
+      responses:
+        "200":
+          description: Array of pool rows.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items: { type: object }
+                  pagination:
+                    type: object
+
+  /lending/pools:
+    get:
+      tags: [protocols]
+      summary: Lending pools (Blend) observed in the auction stream.
+      description: |
+        One row per distinct Blend pool contract observed in the
+        auction stream, with 24h / all-time auction counts + 30d
+        unique users + last-seen timestamp. Per-pool TVL /
+        utilisation / supply-borrow APYs land via additional
+        fields once the pool-storage reader worker ships.
+      responses:
+        "200":
+          description: Array of LendingPool rows.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items: { type: object }
+
+  /oracle/streams:
+    get:
+      tags: [oracle]
+      summary: Latest observation per (oracle, asset, quote) — 7d window.
+      description: |
+        Returns one row per distinct (source, asset, quote) triple
+        in the trailing 7 days. Backs the explorer's /oracles
+        price-streams table. Sources with no observation in the
+        window are absent from the result.
+      responses:
+        "200":
+          description: Array of OracleReading.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/OracleLatestEnvelope" }
+
+  /currencies:
+    get:
+      tags: [markets]
+      summary: World fiat currencies — USD-base rates.
+      description: |
+        Returns the latest USD-base rates for every supported
+        ISO-4217 currency. Backed by an in-memory cache the
+        forex worker refreshes hourly from the upstream
+        currency-api feed. Each row carries
+        `change_7d_pct` computed server-side; `?include=sparkline`
+        attaches the per-day inverse-USD series to every row for
+        listing-side mini charts.
+      parameters:
+        - name: limit
+          in: query
+          schema: { type: integer, minimum: 1 }
+          description: "Optional. Cap the returned currencies."
+        - name: include
+          in: query
+          schema: { type: string }
+          description: "Comma-separated. `sparkline` attaches `history_7d_rates`."
+      responses:
+        "200":
+          description: CurrenciesPayload — currencies + published_at + fetched_at + source.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+
+  /currencies/{ticker}:
+    get:
+      tags: [markets]
+      summary: Per-currency detail with cross-rates + 7d history.
+      description: |
+        Returns the requested currency's USD-base rate, inverse,
+        full cross-rates map (1 unit of ticker → every other
+        supported currency, derived from the cached USD-base
+        snapshot), and the 7d daily history series.
+      parameters:
+        - name: ticker
+          in: path
+          required: true
+          schema: { type: string }
+          description: "ISO-4217 ticker (case-insensitive); e.g. EUR, JPY."
+      responses:
+        "200":
+          description: CurrencyDetail.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+        "404":
+          description: Ticker not in the current snapshot.
+        "503":
+          description: Cache warming up (no snapshot yet).
+
   /markets:
     get:
       tags: [markets]
@@ -1050,6 +1204,18 @@ paths:
             type: string
             enum: [observation_count_desc, volume_24h_usd_desc]
             default: observation_count_desc
+        - name: include
+          in: query
+          required: false
+          description: |
+            Comma-separated opt-ins.
+            `sparkline` attaches `price_history_24h` (24 hourly
+            samples) per row. `ath` attaches `ath: { usd, at }`
+            per row, batched in a single round trip. Default
+            (no `include`) keeps the listing payload compact.
+          schema:
+            type: string
+            example: "sparkline,ath"
       responses:
         "200":
           description: Page of asset entries + next-cursor.
@@ -1225,6 +1391,38 @@ paths:
                       pairs the asset participated in over the
                       trailing 24h. 0 when the asset went silent
                       in that window. Null only on lookup error.
+                  trade_count_24h:
+                    type: integer
+                    nullable: true
+                    description: |
+                      Count of trades the asset participated in
+                      (as base OR quote) over the trailing 24h.
+                      Read from the `trades` hypertable directly —
+                      complements the all-time `observation_count`
+                      with a "right now" activity figure. Null
+                      only on lookup error.
+                  ath:
+                    type: object
+                    nullable: true
+                    description: |
+                      All-time-high USD price + day it was set.
+                      Sourced from `prices_1d` filtered to
+                      USD-denominated quotes (USDC, USDT,
+                      `fiat:USD`). Triangulated paths are excluded —
+                      a single bad XLM/USD reading on a thin day
+                      could fabricate an ATH. Null when the asset
+                      has no USD-quoted history.
+                    required: [usd, at]
+                    properties:
+                      usd:
+                        type: string
+                        description: ATH price as a fixed-point string.
+                      at:
+                        type: string
+                        format: date-time
+                        description: |
+                          RFC-3339 day-bucket the high was set
+                          (00:00:00Z snapped — daily granularity).
         "400": { $ref: "#/components/responses/BadRequest" }
         "404": { $ref: "#/components/responses/NotFound" }
         "429": { $ref: "#/components/responses/RateLimited" }
@@ -1556,6 +1754,38 @@ paths:
         "429": { $ref: "#/components/responses/RateLimited" }
         "500": { $ref: "#/components/responses/InternalError" }
 
+  /sac-wrappers:
+    get:
+      tags: [meta]
+      summary: Stellar-Asset-Contract wrapper resolution map.
+      description: |
+        Returns the operator-configured map of Stellar-Asset-Contract
+        (SAC) C-strkey contract IDs to their underlying classic asset
+        keys ("CODE-ISSUER", or `"native"` for XLM). Soroban DEX
+        sources (Soroswap, Phoenix, Aquarius, Comet) emit base/quote
+        as the SAC contract address in their swap events, not the
+        underlying classic asset key — clients use this map to
+        resolve raw `C…` contract addresses to readable asset
+        symbols. The map only changes on API restart with new
+        config; cache aggressively client-side.
+
+        Empty object when the operator hasn't configured any
+        wrappers (deployment without the `[supply.sac_wrappers]`
+        block) — clients then degrade to showing the raw C-strkey.
+      responses:
+        "200":
+          description: Map of SAC C-strkey to canonical asset key.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    additionalProperties: { type: string }
+                    description: SAC C-strkey → "CODE-ISSUER" or "native".
+        "500": { $ref: "#/components/responses/InternalError" }
+
   /pairs:
     get:
       tags: [markets]
@@ -1736,6 +1966,39 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/KeyCreatedEnvelope" }
+
+  /account/keys/{keyID}:
+    delete:
+      tags: [account]
+      summary: Revoke an API key by KeyID.
+      description: |
+        Revokes the API key whose KeyID matches the path parameter,
+        scoped to the authenticated caller's Identifier so accounts
+        can only revoke their own keys. "Not found" and "not yours"
+        collapse to 204 to prevent cross-account enumeration probes.
+
+        The caller cannot revoke the key they're authenticated with —
+        that would orphan the connection mid-request. 409 in that
+        case so the UI can prompt for an alternate credential.
+      security:
+        - APIKeyAuth: []
+      parameters:
+        - name: keyID
+          in: path
+          required: true
+          schema: { type: string }
+          description: "Public-safe `kid_<hex>` identifier from /v1/account/keys."
+      responses:
+        "204":
+          description: Revoked (or no-op when the key didn't belong to the caller).
+        "400":
+          description: Missing keyID.
+        "401":
+          description: Unauthenticated.
+        "409":
+          description: Caller tried to revoke the key they're using.
+        "503":
+          description: Account store not configured.
 
   /webhooks/stripe:
     post:
@@ -3068,6 +3331,10 @@ components:
           type: string
           nullable: true
           description: "Trailing-24h USD volume summed from prices_1m. Decimal string. Null when no USD-equivalent trades."
+        last_price:
+          type: string
+          nullable: true
+          description: "Most recent quote-per-base price observed for this pair (cross-source) within the trailing 24h. Decimal string. Null when no recent prices_1m bucket has a non-null last_price."
       required: [base, quote, last_trade_at, trade_count_24h]
 
     MarketsEnvelope:
