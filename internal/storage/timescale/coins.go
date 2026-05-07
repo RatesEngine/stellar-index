@@ -638,6 +638,89 @@ func (s *Store) GetCoinPriceHistory24h(ctx context.Context, assetID string) ([]C
 	return out, nil
 }
 
+// GetCoinPriceHistory7d returns up to 7 daily USD price samples
+// for the asset, ordered by bucket ASC (oldest first). Same
+// direct-then-XLM-triangulated path as GetCoinPriceHistory24h, but
+// bucketed to the 1-day grain over the last 7 days.
+//
+// Buckets with no underlying trades produce a null P.
+func (s *Store) GetCoinPriceHistory7d(ctx context.Context, assetID string) ([]CoinPricePoint, error) {
+	const q = `
+		WITH days AS (
+		  SELECT generate_series(
+		    date_trunc('day', now() - INTERVAL '6 days'),
+		    date_trunc('day', now()),
+		    INTERVAL '1 day'
+		  ) AS bucket
+		),
+		direct_per_day AS (
+		  SELECT date_trunc('day', bucket) AS d, last(vwap, bucket)::numeric AS vwap
+		    FROM prices_1m
+		   WHERE base_asset = $1
+		     AND quote_asset = 'fiat:USD'
+		     AND bucket >= date_trunc('day', now() - INTERVAL '6 days')
+		     AND vwap IS NOT NULL
+		   GROUP BY d
+		),
+		asset_xlm_per_day AS (
+		  SELECT date_trunc('day', bucket) AS d, last(vwap, bucket)::numeric AS vwap
+		    FROM prices_1m
+		   WHERE base_asset = $1
+		     AND quote_asset = 'native'
+		     AND bucket >= date_trunc('day', now() - INTERVAL '6 days')
+		     AND vwap IS NOT NULL
+		   GROUP BY d
+		),
+		xlm_usd_per_day AS (
+		  SELECT date_trunc('day', bucket) AS d, last(vwap, bucket)::numeric AS vwap
+		    FROM prices_1m
+		   WHERE base_asset = 'native'
+		     AND quote_asset IN (
+		       'USDC-GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN',
+		       'USDT-GCQTGZQQ5G4PTM2GL7CDIFKUBIPEC52BROAQIAPW53XBRJVN6ZJVTG6V',
+		       'fiat:USD'
+		     )
+		     AND bucket >= date_trunc('day', now() - INTERVAL '6 days')
+		     AND vwap IS NOT NULL
+		   GROUP BY d
+		)
+		SELECT
+		    to_char(days.bucket, 'YYYY-MM-DD"T"HH24:MI:SS"Z"') AS t,
+		    ROUND(COALESCE(
+		      CASE WHEN $1 = 'native' THEN xu.vwap ELSE NULL END,
+		      d.vwap,
+		      x.vwap * xu.vwap
+		    ), 10)::text AS p
+		  FROM days
+		  LEFT JOIN direct_per_day      d  ON d.d  = days.bucket
+		  LEFT JOIN asset_xlm_per_day   x  ON x.d  = days.bucket
+		  LEFT JOIN xlm_usd_per_day     xu ON xu.d = days.bucket
+		 ORDER BY days.bucket ASC
+	`
+	rows, err := s.db.QueryContext(ctx, q, assetID)
+	if err != nil {
+		return nil, fmt.Errorf("timescale: GetCoinPriceHistory7d: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+	out := make([]CoinPricePoint, 0, 7)
+	for rows.Next() {
+		var pt CoinPricePoint
+		var p sql.NullString
+		if err := rows.Scan(&pt.T, &p); err != nil {
+			return nil, fmt.Errorf("timescale: GetCoinPriceHistory7d scan: %w", err)
+		}
+		if p.Valid && p.String != "" {
+			s := p.String
+			pt.P = &s
+		}
+		out = append(out, pt)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("timescale: GetCoinPriceHistory7d rows: %w", err)
+	}
+	return out, nil
+}
+
 // CoinTopMarket is one entry in the top-markets preview returned
 // alongside a single coin lookup. Compact summary suitable for an
 // asset detail page header — the full markets list lives on

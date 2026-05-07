@@ -8,6 +8,7 @@ import { formatCompact, formatPrice } from '@/lib/format';
 import { AssetTabs, ActiveTabSlot } from './AssetTabs';
 import { AssetConverter } from './AssetConverter';
 import { ChartPanel } from './ChartPanel';
+import { PriceSparklines } from './PriceSparklines';
 import { IssuerPanel } from './IssuerPanel';
 import { MarketsTabPanel } from './MarketsTabPanel';
 import { HistoryTabPanel } from './HistoryTabPanel';
@@ -86,6 +87,9 @@ interface CoinSummary {
   // trailing 24h. Each entry: { t: RFC3339, p: rounded-to-10dp
   // USD price or null }.
   price_history_24h?: { t: string; p?: string | null }[];
+  // 7 daily USD-price samples (oldest first) covering the
+  // trailing 7 days. Same shape as price_history_24h.
+  price_history_7d?: { t: string; p?: string | null }[];
   // Count of distinct (base, quote) pairs the asset
   // participated in over the trailing 24h. 0 when the asset
   // went silent in that window.
@@ -430,9 +434,10 @@ function OverviewBody({
               </span>
             )}
           </div>
-          {coin.price_history_24h && coin.price_history_24h.length > 0 && (
-            <Sparkline24h points={coin.price_history_24h} />
-          )}
+          <PriceSparklines
+            points24h={coin.price_history_24h ?? []}
+            points7d={coin.price_history_7d ?? []}
+          />
           <dl className="grid grid-cols-2 gap-3 border-t border-slate-200 pt-3 text-sm dark:border-slate-800 sm:grid-cols-4">
             <Stat
               label="Volume 24h"
@@ -723,70 +728,6 @@ function ChangePctLabel({
         {window}
       </span>
     </span>
-  );
-}
-
-// Sparkline24h renders 24 hourly USD-price samples as a small
-// inline SVG. Null buckets break the path so the line shows
-// gaps where there were no trades. Auto-scales Y to the
-// observed [min, max] range.
-function Sparkline24h({
-  points,
-}: {
-  points: { t: string; p?: string | null }[];
-}) {
-  const values = points.map((pt) => {
-    const n = pt.p ? Number(pt.p) : null;
-    return n != null && Number.isFinite(n) ? n : null;
-  });
-  const finite = values.filter((v): v is number => v != null);
-  if (finite.length < 2) {
-    // Not enough non-null points to draw a meaningful sparkline.
-    return null;
-  }
-  const min = Math.min(...finite);
-  const max = Math.max(...finite);
-  const range = max - min || 1;
-  const W = 600;
-  const H = 60;
-  const segments: string[] = [];
-  let pen = false;
-  values.forEach((v, i) => {
-    const x = (i / (values.length - 1)) * W;
-    if (v == null) {
-      pen = false;
-      return;
-    }
-    const y = H - ((v - min) / range) * H;
-    segments.push(`${pen ? 'L' : 'M'} ${x.toFixed(1)} ${y.toFixed(1)}`);
-    pen = true;
-  });
-  const last = finite[finite.length - 1];
-  const first = finite[0];
-  const tone =
-    last >= first
-      ? 'stroke-emerald-500 dark:stroke-emerald-400'
-      : 'stroke-rose-500 dark:stroke-rose-400';
-  return (
-    <div className="border-t border-slate-200 pt-3 dark:border-slate-800">
-      <p className="mb-1 text-[10px] uppercase tracking-wider text-slate-500">
-        24h
-      </p>
-      <svg
-        viewBox={`0 0 ${W} ${H}`}
-        preserveAspectRatio="none"
-        className="h-12 w-full"
-        role="img"
-        aria-label="24-hour price sparkline"
-      >
-        <path
-          d={segments.join(' ')}
-          fill="none"
-          strokeWidth="1.5"
-          className={tone}
-        />
-      </svg>
-    </div>
   );
 }
 

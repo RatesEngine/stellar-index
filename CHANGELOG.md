@@ -25,6 +25,14 @@ against.
   applied to OraclesView's /v1/oracle/streams call.
 
 ### Added
+- **/v1/coins/{slug} returns 7-day daily price history + sparkline
+  toggle on /assets/[slug].** New `Store.GetCoinPriceHistory7d`
+  emits 7 daily USD-price samples (oldest first), reusing the same
+  direct-then-XLM-triangulated path as the 24h series. Coin wire
+  shape gains optional `price_history_7d`. The asset-detail Price
+  panel's sparkline now toggles between 24h and 7d windows; falls
+  back to whichever series is populated when one is empty (newly-
+  observed assets only have hours of history at first).
 - **/v1/currencies returns per-row 7d change% + optional sparkline.**
   Each `CurrencyEntry` now carries `change_7d_pct` (computed
   server-side from the cached history series so every consumer

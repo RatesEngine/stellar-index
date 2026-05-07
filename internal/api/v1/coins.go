@@ -20,6 +20,7 @@ type CoinsReader interface {
 	GetNativeCoinRow(ctx context.Context) (timescale.CoinRow, error)
 	GetCoinTopMarkets(ctx context.Context, assetID string, limit int) ([]timescale.CoinTopMarket, error)
 	GetCoinPriceHistory24h(ctx context.Context, assetID string) ([]timescale.CoinPricePoint, error)
+	GetCoinPriceHistory7d(ctx context.Context, assetID string) ([]timescale.CoinPricePoint, error)
 	GetCoinMarketsCount(ctx context.Context, assetID string) (int64, error)
 }
 
@@ -61,6 +62,11 @@ type Coin struct {
 	// p: rounded-to-10dp USD price or null when no trades that
 	// hour}. Powers asset detail sparkline + chart preview.
 	PriceHistory24h []CoinPricePoint `json:"price_history_24h,omitempty"`
+	// PriceHistory7d is 7 daily USD-price samples (oldest first)
+	// covering the trailing 7 days. Populated only on
+	// /v1/coins/{slug}. Same shape as PriceHistory24h; powers a
+	// 7-day mini chart on the asset detail page.
+	PriceHistory7d []CoinPricePoint `json:"price_history_7d,omitempty"`
 	// MarketsCount is the count of distinct (base, quote) pairs
 	// the asset participated in over the trailing 24h. Populated
 	// only on /v1/coins/{slug}. Pointer so 0 (asset went silent
@@ -294,11 +300,19 @@ func (s *Server) handleCoin(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	if history, hErr := s.coins.GetCoinPriceHistory24h(r.Context(), row.AssetID); hErr != nil {
-		s.logger.Warn("coin price history", "asset_id", row.AssetID, "err", hErr)
+		s.logger.Warn("coin price history 24h", "asset_id", row.AssetID, "err", hErr)
 	} else {
 		out.PriceHistory24h = make([]CoinPricePoint, len(history))
 		for i, p := range history {
 			out.PriceHistory24h[i] = CoinPricePoint{T: p.T, P: p.P}
+		}
+	}
+	if history7d, hErr := s.coins.GetCoinPriceHistory7d(r.Context(), row.AssetID); hErr != nil {
+		s.logger.Warn("coin price history 7d", "asset_id", row.AssetID, "err", hErr)
+	} else {
+		out.PriceHistory7d = make([]CoinPricePoint, len(history7d))
+		for i, p := range history7d {
+			out.PriceHistory7d[i] = CoinPricePoint{T: p.T, P: p.P}
 		}
 	}
 	if n, cErr := s.coins.GetCoinMarketsCount(r.Context(), row.AssetID); cErr != nil {
