@@ -1,10 +1,11 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
-import { BookOpen, FileText, ShieldCheck } from 'lucide-react';
+import { BookOpen, FileText, ShieldCheck, Wrench } from 'lucide-react';
 
 import { loadADRs } from '@/lib/adr';
 import { loadArchitectureDocs } from '@/lib/architecture';
 import { loadDiscoveryDocs } from '@/lib/discovery';
+import { loadOperationsDocs } from '@/lib/operations';
 import { StatusBadge } from './StatusBadge';
 
 export const metadata: Metadata = {
@@ -13,19 +14,17 @@ export const metadata: Metadata = {
     'Every architectural decision behind Rates Engine, with rationale, alternatives considered, and consequences. Browse the ADR archive, integration audits, and operations runbooks.',
 };
 
-const TOPICS: { name: string; description: string; href?: string }[] = [
-  {
-    name: 'Operations runbooks',
-    description:
-      'Per-alert runbooks, archival-node bringup, disaster-recovery triage, SEV playbook, release process.',
-    href: 'https://github.com/RatesEngine/rates-engine/tree/main/docs/operations',
-  },
-];
+// TOPICS held the GitHub-only catch-all topic cards. As each
+// topic earns a curated on-site browser, its card is removed.
+// Today there is none — operations got curated in #868-ish; the
+// per-alert runbooks remain GitHub-only.
+const TOPICS: { name: string; description: string; href?: string }[] = [];
 
 export default function ResearchPage() {
   const adrs = loadADRs();
   const archDocs = loadArchitectureDocs();
   const discoveryDocs = loadDiscoveryDocs();
+  const opsDocs = loadOperationsDocs();
 
   // Sort newest first within each status group; status order
   // surfaces Accepted ADRs above Proposed/Superseded so visitors
@@ -149,6 +148,58 @@ export default function ResearchPage() {
       <section className="space-y-4">
         <div className="flex items-baseline justify-between">
           <h2 className="text-xl font-semibold tracking-tight">
+            Operations runbooks
+          </h2>
+          <span className="text-xs text-slate-500">
+            {opsDocs.length} guides ·{' '}
+            <a
+              href="https://github.com/RatesEngine/rates-engine/tree/main/docs/operations"
+              target="_blank"
+              rel="noreferrer noopener"
+              className="hover:text-brand-600"
+            >
+              source on GitHub
+            </a>
+          </span>
+        </div>
+        <p className="max-w-3xl text-sm text-slate-600 dark:text-slate-400">
+          The recipes any new operator (or auditor) would want to
+          read before standing up their own copy. Per-alert on-call
+          runbooks stay private; these four are the cross-cutting
+          procedures.
+        </p>
+        <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+          {opsDocs.map((d) => (
+            <Link
+              key={d.slug}
+              href={`/research/operations/${d.slug}`}
+              className="group flex flex-col gap-2 rounded-xl border border-slate-200 bg-white p-4 transition hover:border-brand-300 hover:shadow-sm dark:border-slate-800 dark:bg-slate-900 dark:hover:border-brand-700"
+            >
+              <div className="flex items-center gap-2">
+                <Wrench className="h-3.5 w-3.5 text-slate-400 group-hover:text-brand-500" />
+                <span className="text-[10px] font-medium uppercase tracking-wider text-slate-500">
+                  Operations
+                </span>
+                {d.last_verified && (
+                  <span className="ml-auto text-[10px] text-slate-400">
+                    Verified {d.last_verified}
+                  </span>
+                )}
+              </div>
+              <h4 className="text-sm font-semibold leading-snug text-slate-900 group-hover:text-brand-600 dark:text-slate-100">
+                {d.title}
+              </h4>
+              <p className="text-xs text-slate-600 dark:text-slate-400">
+                {d.description}
+              </p>
+            </Link>
+          ))}
+        </div>
+      </section>
+
+      <section className="space-y-4">
+        <div className="flex items-baseline justify-between">
+          <h2 className="text-xl font-semibold tracking-tight">
             Architecture decision records
           </h2>
           <span className="text-xs text-slate-500">
@@ -201,37 +252,39 @@ export default function ResearchPage() {
         )}
       </section>
 
-      <section className="space-y-3">
-        <h2 className="text-xl font-semibold tracking-tight">Browse by topic</h2>
-        <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-          {TOPICS.map((t) =>
-            t.href ? (
-              <a
-                key={t.name}
-                href={t.href}
-                target="_blank"
-                rel="noreferrer noopener"
-                className="flex flex-col gap-1 rounded-xl border border-slate-200 bg-white p-4 transition hover:border-brand-300 dark:border-slate-800 dark:bg-slate-900 dark:hover:border-brand-700"
-              >
-                <h3 className="text-sm font-semibold">{t.name}</h3>
-                <p className="text-xs text-slate-600 dark:text-slate-400">
-                  {t.description}
-                </p>
-              </a>
-            ) : (
-              <div
-                key={t.name}
-                className="flex flex-col gap-1 rounded-xl border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900"
-              >
-                <h3 className="text-sm font-semibold">{t.name}</h3>
-                <p className="text-xs text-slate-600 dark:text-slate-400">
-                  {t.description}
-                </p>
-              </div>
-            ),
-          )}
-        </div>
-      </section>
+      {TOPICS.length > 0 && (
+        <section className="space-y-3">
+          <h2 className="text-xl font-semibold tracking-tight">Browse by topic</h2>
+          <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+            {TOPICS.map((t) =>
+              t.href ? (
+                <a
+                  key={t.name}
+                  href={t.href}
+                  target="_blank"
+                  rel="noreferrer noopener"
+                  className="flex flex-col gap-1 rounded-xl border border-slate-200 bg-white p-4 transition hover:border-brand-300 dark:border-slate-800 dark:bg-slate-900 dark:hover:border-brand-700"
+                >
+                  <h3 className="text-sm font-semibold">{t.name}</h3>
+                  <p className="text-xs text-slate-600 dark:text-slate-400">
+                    {t.description}
+                  </p>
+                </a>
+              ) : (
+                <div
+                  key={t.name}
+                  className="flex flex-col gap-1 rounded-xl border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900"
+                >
+                  <h3 className="text-sm font-semibold">{t.name}</h3>
+                  <p className="text-xs text-slate-600 dark:text-slate-400">
+                    {t.description}
+                  </p>
+                </div>
+              ),
+            )}
+          </div>
+        </section>
+      )}
 
       <section className="rounded-xl border border-slate-200 bg-white p-5 text-sm dark:border-slate-800 dark:bg-slate-900">
         <h2 className="text-base font-semibold">Why we publish all of this</h2>

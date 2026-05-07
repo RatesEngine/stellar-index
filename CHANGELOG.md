@@ -15,6 +15,18 @@ against.
 
 ## [Unreleased]
 
+### Added
+- **`/research/operations` runbook browser.** Curated set of four
+  cross-cutting operator docs — archival-node-bringup,
+  release-process, deploy-workflow, sev-playbook — rendered as
+  static pages on `/research/operations/<slug>`. Per-alert on-call
+  runbooks (60+ files in `docs/operations/runbooks/`) stay
+  GitHub-only; these four are the canonical "stand up your own
+  copy" + incident-response procedures any auditor or prospective
+  operator would want to read. Removes the GitHub-link-only
+  catch-all "Browse by topic" section since every topic now has a
+  curated on-site browser.
+
 ### Changed
 - **/network + /divergences: ADR mentions deep-link.** Plain-text
   ADR-0004 / ADR-0008 / ADR-0015 callouts on /network and the
