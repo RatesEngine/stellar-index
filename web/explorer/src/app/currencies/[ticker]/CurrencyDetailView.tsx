@@ -131,30 +131,80 @@ function HistoryPanel({ detail }: { detail: CurrencyDetail }) {
             {changePct.toFixed(2)}%
           </div>
         </div>
-        <Sparkline points={series.map((p) => p.inverse_usd)} positive={positive} />
+        <Sparkline
+          points={series.map((p) => p.inverse_usd)}
+          dates={series.map((p) => p.date)}
+          positive={positive}
+        />
       </div>
     </Panel>
   );
 }
 
-function Sparkline({ points, positive }: { points: number[]; positive: boolean }) {
-  const w = 200;
-  const h = 48;
+function Sparkline({
+  points,
+  positive,
+  dates,
+}: {
+  points: number[];
+  positive: boolean;
+  dates?: string[];
+}) {
+  const w = 320;
+  const h = 96;
+  const padX = 28; // leave room for the right-side y-axis labels
+  const padY = 6;
+  const innerW = w - padX;
+  const innerH = h - padY * 2;
   const min = Math.min(...points);
   const max = Math.max(...points);
   const range = max - min || 1;
-  const stepX = w / (points.length - 1);
-  const path = points
-    .map((p, i) => {
-      const x = i * stepX;
-      const y = h - ((p - min) / range) * h;
-      return `${i === 0 ? 'M' : 'L'}${x.toFixed(2)},${y.toFixed(2)}`;
-    })
+  const stepX = innerW / (points.length - 1);
+  const xy = points.map((p, i) => {
+    const x = i * stepX;
+    const y = padY + innerH - ((p - min) / range) * innerH;
+    return { x, y, p };
+  });
+  const path = xy
+    .map((pt, i) => `${i === 0 ? 'M' : 'L'}${pt.x.toFixed(2)},${pt.y.toFixed(2)}`)
     .join(' ');
+  // Area fill: same path closed back to the baseline so the SVG
+  // renders a tinted region under the line.
+  const area =
+    `${path} L${xy[xy.length - 1].x.toFixed(2)},${(padY + innerH).toFixed(2)} ` +
+    `L${xy[0].x.toFixed(2)},${(padY + innerH).toFixed(2)} Z`;
   const stroke = positive ? '#059669' : '#e11d48';
+  const fill = positive ? 'rgba(16,185,129,0.12)' : 'rgba(244,63,94,0.12)';
   return (
     <svg width={w} height={h} viewBox={`0 0 ${w} ${h}`} className="overflow-visible">
+      {/* min / max labels at the right edge — horizontal so the chart
+          reads naturally. */}
+      <text x={innerW + 4} y={padY + 4} className="fill-slate-500 text-[9px]" fontFamily="ui-monospace,monospace">
+        {formatRate(max)}
+      </text>
+      <text x={innerW + 4} y={padY + innerH} className="fill-slate-500 text-[9px]" fontFamily="ui-monospace,monospace">
+        {formatRate(min)}
+      </text>
+      <path d={area} fill={fill} stroke="none" />
       <path d={path} fill="none" stroke={stroke} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+      {/* Data points with hover titles for context — native SVG <title>
+          renders as the OS tooltip when the user pauses over a dot. */}
+      {xy.map((pt, i) => (
+        <circle
+          key={i}
+          cx={pt.x}
+          cy={pt.y}
+          r={2.5}
+          fill={stroke}
+          stroke="white"
+          strokeWidth={0.75}
+        >
+          <title>
+            {dates?.[i] ? `${dates[i].slice(0, 10)} · ` : ''}
+            {formatRate(pt.p)}
+          </title>
+        </circle>
+      ))}
     </svg>
   );
 }
