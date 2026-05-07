@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import { ArrowRight } from 'lucide-react';
 
+import { HomeCurrencies } from './HomeCurrencies';
 import { NetworkLivePanel, SystemHealthLivePanel } from './HomeLivePanels';
 import { HomeNetworkStrip } from './HomeNetworkStrip';
 import { HomeRecentChanges } from './HomeRecentChanges';
@@ -95,6 +96,8 @@ export default function HomePage() {
       </section>
 
       <HomeTopAssets />
+
+      <HomeCurrencies />
 
       <HomeTopMarkets />
 
