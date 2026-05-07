@@ -25,6 +25,15 @@ against.
   applied to OraclesView's /v1/oracle/streams call.
 
 ### Added
+- **Per-source 24h volume sparkline column** on the /dexes
+  protocol-overview table and the /exchanges CEX table — fulfils
+  the user IA spec ("chart showing volume over time"). Backed by
+  a new opt-in `?include=stats,sparkline` flag on /v1/sources
+  that joins per-(source, hour) USD-volume buckets via new
+  `Store.GetSourceVolumeHistory24h`. Same XLM/USD CTE as the
+  rest of the volume-derivation surfaces. Holes are zero-filled
+  server-side so the wire array always has 24 entries (oldest →
+  newest); frontend renders mini SVG bars sized by max bucket.
 - **/assets/[slug] converter goes cross-currency.** AssetConverter
   now offers any currency from the /v1/currencies snapshot as the
   fiat side of the conversion (USD / EUR / GBP / JPY / CHF / CAD /

@@ -6,6 +6,12 @@ import { useQuery } from '@tanstack/react-query';
 import { Panel } from '@/components/reveal';
 import { apiGet, asExample } from '@/api/client';
 import { formatCompact } from '@/lib/format';
+import { SourceSparkline } from '@/components/SourceSparkline';
+
+interface VolumeBucket {
+  hour: string;
+  volume_usd: string;
+}
 
 interface SourceRow {
   name: string;
@@ -14,6 +20,7 @@ interface SourceRow {
   trade_count_24h?: number;
   markets_count_24h?: number;
   volume_24h_usd?: string | null;
+  volume_history_24h?: VolumeBucket[];
 }
 
 const TONE: Record<string, string> = {
@@ -31,9 +38,9 @@ const TONE: Record<string, string> = {
  */
 export function DexProtocolsTable() {
   const q = useQuery<SourceRow[]>({
-    queryKey: ['/v1/sources', 'stats', 'dex'],
+    queryKey: ['/v1/sources', 'stats,sparkline', 'dex'],
     queryFn: async () => {
-      const env = await apiGet<{ data: SourceRow[] }>('/v1/sources', { include: 'stats' });
+      const env = await apiGet<{ data: SourceRow[] }>('/v1/sources', { include: 'stats,sparkline' });
       const arr = env.data ?? [];
       return arr
         .filter((s) => s.class === 'exchange' && s.subclass === 'dex')
@@ -61,6 +68,7 @@ export function DexProtocolsTable() {
             <tr className="text-left text-[10px] uppercase tracking-wider text-slate-500">
               <Th>Protocol</Th>
               <Th align="right">24h volume</Th>
+              <Th>24h chart</Th>
               <Th align="right">24h trades</Th>
               <Th align="right">Active pools</Th>
               <Th align="right">VWAP weight</Th>
@@ -69,14 +77,14 @@ export function DexProtocolsTable() {
           <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
             {q.isLoading && (
               <tr>
-                <td colSpan={5} className="px-4 py-6 text-center text-sm text-slate-500">
+                <td colSpan={6} className="px-4 py-6 text-center text-sm text-slate-500">
                   Loading protocols…
                 </td>
               </tr>
             )}
             {!q.isLoading && rows.length === 0 && (
               <tr>
-                <td colSpan={5} className="px-4 py-6 text-center text-sm text-slate-500">
+                <td colSpan={6} className="px-4 py-6 text-center text-sm text-slate-500">
                   No DEX protocols reporting 24h activity.
                 </td>
               </tr>
@@ -100,6 +108,9 @@ export function DexProtocolsTable() {
                     ) : (
                       <span className="text-slate-300 dark:text-slate-700">—</span>
                     )}
+                  </Td>
+                  <Td>
+                    <SourceSparkline buckets={r.volume_history_24h} />
                   </Td>
                   <Td align="right">
                     <span className="font-mono tabular-nums text-slate-700 dark:text-slate-300">

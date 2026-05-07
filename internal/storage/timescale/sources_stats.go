@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"time"
 )
 
 // SourceStats is the per-source 24h activity row.
@@ -93,6 +94,79 @@ func (s *Store) GetSourceStats(ctx context.Context) ([]SourceStats, error) {
 	}
 	if err := rows.Err(); err != nil {
 		return nil, fmt.Errorf("timescale: GetSourceStats rows: %w", err)
+	}
+	return out, nil
+}
+
+// SourceVolumeBucket is one hour-resolution USD-volume datapoint
+// for a single source. Hour is the bucket start (UTC); VolumeUSD
+// is the same XLM/USD-derived sum that GetSourceStats's column
+// uses, just narrowed to the bucket.
+type SourceVolumeBucket struct {
+	Source     string
+	Hour       time.Time
+	VolumeUSD  string // numeric stringified for precision parity
+	TradeCount int64
+}
+
+// GetSourceVolumeHistory24h returns one row per (source, hour) for
+// the trailing 24h, suitable for per-source sparklines on the
+// /dexes + /exchanges overview tables. Sources with no trades in
+// any given hour are absent — callers fill missing hours with a
+// zero datapoint client-side.
+//
+// Same volume-derivation CTE as GetSourceStats; the only
+// difference is the per-hour grouping.
+func (s *Store) GetSourceVolumeHistory24h(ctx context.Context) ([]SourceVolumeBucket, error) {
+	const q = `
+		WITH xlm_usd AS (
+		  SELECT vwap
+		    FROM prices_1m
+		   WHERE base_asset = 'native'
+		     AND quote_asset IN (
+		       'USDC-GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN',
+		       'USDT-GCQTGZQQ5G4PTM2GL7CDIFKUBIPEC52BROAQIAPW53XBRJVN6ZJVTG6V',
+		       'fiat:USD'
+		     )
+		     AND vwap IS NOT NULL
+		     AND bucket >= NOW() - INTERVAL '24 hours'
+		   ORDER BY bucket DESC
+		   LIMIT 1
+		)
+		SELECT source,
+		       date_trunc('hour', ts) AS hour,
+		       COALESCE(SUM(
+		         CASE
+		           WHEN usd_volume IS NOT NULL
+		             THEN usd_volume::numeric
+		           WHEN base_asset IN ('native', 'CAS3J7GYLGXMF6TDJBBYYSE3HQ6BBSMLNUQ34T6TZMYMW2EVH34XOWMA')
+		             THEN (base_amount / 1e7) * (SELECT vwap FROM xlm_usd)
+		           WHEN quote_asset IN ('native', 'CAS3J7GYLGXMF6TDJBBYYSE3HQ6BBSMLNUQ34T6TZMYMW2EVH34XOWMA')
+		             THEN (quote_amount / 1e7) * (SELECT vwap FROM xlm_usd)
+		           ELSE NULL
+		         END
+		       ), 0)::text AS volume_usd,
+		       COUNT(*)::bigint AS trade_count
+		  FROM trades
+		 WHERE ts >= date_trunc('hour', NOW() - INTERVAL '24 hours')
+		 GROUP BY source, hour
+		 ORDER BY source, hour
+	`
+	rows, err := s.db.QueryContext(ctx, q)
+	if err != nil {
+		return nil, fmt.Errorf("timescale: GetSourceVolumeHistory24h: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+	var out []SourceVolumeBucket
+	for rows.Next() {
+		var b SourceVolumeBucket
+		if err := rows.Scan(&b.Source, &b.Hour, &b.VolumeUSD, &b.TradeCount); err != nil {
+			return nil, fmt.Errorf("timescale: GetSourceVolumeHistory24h scan: %w", err)
+		}
+		out = append(out, b)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("timescale: GetSourceVolumeHistory24h rows: %w", err)
 	}
 	return out, nil
 }

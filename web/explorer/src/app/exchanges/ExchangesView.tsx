@@ -6,6 +6,12 @@ import { useQuery } from '@tanstack/react-query';
 import { Panel } from '@/components/reveal';
 import { apiGet, asExample } from '@/api/client';
 import { formatCompact } from '@/lib/format';
+import { SourceSparkline } from '@/components/SourceSparkline';
+
+interface VolumeBucket {
+  hour: string;
+  volume_usd: string;
+}
 
 interface SourceRow {
   name: string;
@@ -14,6 +20,7 @@ interface SourceRow {
   trade_count_24h?: number;
   markets_count_24h?: number;
   volume_24h_usd?: string | null;
+  volume_history_24h?: VolumeBucket[];
 }
 
 const TONE: Record<string, string> = {
@@ -32,9 +39,9 @@ const LABEL: Record<string, string> = {
 
 export function ExchangesView() {
   const q = useQuery<SourceRow[]>({
-    queryKey: ['/v1/sources', 'stats', 'cex'],
+    queryKey: ['/v1/sources', 'stats,sparkline', 'cex'],
     queryFn: async () => {
-      const env = await apiGet<{ data: SourceRow[] }>('/v1/sources', { include: 'stats' });
+      const env = await apiGet<{ data: SourceRow[] }>('/v1/sources', { include: 'stats,sparkline' });
       const arr = env.data ?? [];
       return arr
         .filter((s) => s.class === 'exchange' && s.subclass === 'cex')
@@ -84,6 +91,7 @@ export function ExchangesView() {
                 <Th>#</Th>
                 <Th>Exchange</Th>
                 <Th align="right">24h volume</Th>
+                <Th>24h chart</Th>
                 <Th align="right">24h trades</Th>
                 <Th align="right">Pairs</Th>
                 <Th align="right">Share of CEX vol</Th>
@@ -92,14 +100,14 @@ export function ExchangesView() {
             <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
               {q.isLoading && (
                 <tr>
-                  <td colSpan={6} className="px-4 py-6 text-center text-sm text-slate-500">
+                  <td colSpan={7} className="px-4 py-6 text-center text-sm text-slate-500">
                     Loading exchanges…
                   </td>
                 </tr>
               )}
               {!q.isLoading && rows.length === 0 && (
                 <tr>
-                  <td colSpan={6} className="px-4 py-6 text-center text-sm text-slate-500">
+                  <td colSpan={7} className="px-4 py-6 text-center text-sm text-slate-500">
                     No CEX sources reporting.
                   </td>
                 </tr>
@@ -128,6 +136,9 @@ export function ExchangesView() {
                       ) : (
                         <span className="text-slate-300 dark:text-slate-700">—</span>
                       )}
+                    </Td>
+                    <Td>
+                      <SourceSparkline buckets={r.volume_history_24h} />
                     </Td>
                     <Td align="right">
                       <span className="font-mono tabular-nums text-slate-700 dark:text-slate-300">
