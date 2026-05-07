@@ -616,6 +616,7 @@ func (s *Server) mountRoutes() {
 
 	// Currencies — world fiat rates vs USD (currency-api shim).
 	s.mux.HandleFunc("GET /v1/currencies", s.handleCurrencies)
+	s.mux.HandleFunc("GET /v1/currencies/{ticker}", s.handleCurrencyDetail)
 
 	// Source catalogue — every venue the aggregator knows about,
 	// with class + IncludeInVWAP metadata.

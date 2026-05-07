@@ -3,6 +3,7 @@ package v1
 import (
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 )
 
@@ -78,6 +79,102 @@ func (s *Server) handleCurrencies(w http.ResponseWriter, r *http.Request) {
 	}
 	writeJSON(w, CurrenciesPayload{
 		Currencies:  rows,
+		PublishedAt: snap.PublishedAt,
+		FetchedAt:   snap.FetchedAt,
+		Source:      "currency-api",
+	}, Flags{})
+}
+
+// CurrencyDetail is the wire shape for /v1/currencies/{ticker}.
+//
+// CrossRates is the per-target-currency rate (1 unit of `ticker`
+// in the target currency). Derived from the USD-base snapshot:
+// rate(A→B) = rate(USD→B) / rate(USD→A). Useful for the
+// converter widget on the explorer's per-currency page (no need
+// to call the API for every pair the user might compare against).
+type CurrencyDetail struct {
+	Ticker      string             `json:"ticker"`
+	Name        string             `json:"name"`
+	RateUSD     float64            `json:"rate_usd"`
+	InverseUSD  float64            `json:"inverse_usd"` // 1 unit of ticker = $X
+	CrossRates  map[string]float64 `json:"cross_rates"`
+	PublishedAt time.Time          `json:"published_at,omitempty"`
+	FetchedAt   time.Time          `json:"fetched_at,omitempty"`
+	Source      string             `json:"source"`
+}
+
+// handleCurrencyDetail serves GET /v1/currencies/{ticker}.
+//
+// 404 if the ticker isn't in the snapshot (typo / not covered by
+// the upstream feed). 200 + warming-up payload if the cache is
+// empty.
+func (s *Server) handleCurrencyDetail(w http.ResponseWriter, r *http.Request) {
+	ticker := strings.ToUpper(strings.TrimSpace(r.PathValue("ticker")))
+	if ticker == "" {
+		writeProblem(w, r,
+			"https://api.ratesengine.net/errors/missing-ticker",
+			"Missing ticker", http.StatusBadRequest,
+			"path must be /v1/currencies/{ticker} (e.g. /v1/currencies/EUR)")
+		return
+	}
+	reader := s.currencies
+	if reader == nil {
+		writeProblem(w, r,
+			"https://api.ratesengine.net/errors/currencies-unavailable",
+			"Currencies feature not configured", http.StatusServiceUnavailable, "")
+		return
+	}
+	snap := reader.Latest()
+	if snap == nil {
+		writeProblem(w, r,
+			"https://api.ratesengine.net/errors/currencies-warming",
+			"Currencies cache is warming up", http.StatusServiceUnavailable,
+			"the forex worker hasn't completed its first fetch yet — retry in a few seconds")
+		return
+	}
+
+	// Find the requested currency. Linear scan over ~200 entries
+	// is microseconds; not worth indexing.
+	var target *CurrencyEntry
+	for i := range snap.Currencies {
+		if snap.Currencies[i].Ticker == ticker {
+			target = &snap.Currencies[i]
+			break
+		}
+	}
+	if target == nil {
+		writeProblem(w, r,
+			"https://api.ratesengine.net/errors/currency-not-found",
+			"Currency not found", http.StatusNotFound,
+			"ticker "+ticker+" is not in the current rates snapshot — check /v1/currencies for the supported list")
+		return
+	}
+
+	// Build cross-rates: rate(target→other) = rate(USD→other) / rate(USD→target).
+	// Skip the self-rate (always 1.0) for compactness; clients can
+	// trivially synthesise it.
+	cross := make(map[string]float64, len(snap.Currencies)-1)
+	for _, c := range snap.Currencies {
+		if c.Ticker == target.Ticker {
+			continue
+		}
+		if target.RateUSD <= 0 {
+			continue
+		}
+		cross[c.Ticker] = c.RateUSD / target.RateUSD
+	}
+
+	inverse := 0.0
+	if target.RateUSD > 0 {
+		inverse = 1.0 / target.RateUSD
+	}
+
+	writeJSON(w, CurrencyDetail{
+		Ticker:      target.Ticker,
+		Name:        target.Name,
+		RateUSD:     target.RateUSD,
+		InverseUSD:  inverse,
+		CrossRates:  cross,
 		PublishedAt: snap.PublishedAt,
 		FetchedAt:   snap.FetchedAt,
 		Source:      "currency-api",

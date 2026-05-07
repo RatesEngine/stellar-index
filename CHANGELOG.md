@@ -36,6 +36,17 @@ against.
   the cap is too thin for the cap to be a confident number.
 
 ### Added
+- **`GET /v1/currencies/{ticker}` + /currencies/[ticker] detail page.**
+  Returns the requested currency's USD-base rate, inverse rate, and
+  full cross-rates map (1 unit of ticker → every other supported
+  currency, derived from the cached USD-base snapshot). New per-
+  currency page surfaces this with: a converter widget (input
+  amount + target dropdown, derived live), and a cross-rates table
+  showing the most common targets up front with a "show all" expander.
+  Statically pre-rendered for every ticker the upstream covers
+  (build-time fetch, falls back to the majors list if upstream is
+  unavailable). 404 with problem+json shape when the ticker isn't
+  in the snapshot; 503 while the cache warms up.
 - **`GET /v1/currencies` + /currencies real table.** Replaces the
   forex placeholder shipped in #888 with live fiat coverage. New
   `internal/sources/forex` package wraps the free, MIT-licensed
