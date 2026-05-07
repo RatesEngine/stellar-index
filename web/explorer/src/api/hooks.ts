@@ -47,6 +47,56 @@ export function useStatus() {
   });
 }
 
+export type MeResponse = {
+  user?: {
+    id: string;
+    email: string;
+    display_name?: string;
+    role?: string;
+    is_staff?: boolean;
+  };
+  account?: {
+    id: string;
+    name?: string;
+    slug?: string;
+    tier?: string;
+    status?: string;
+  };
+  // API-key callers populate the top-level fields.
+  key_id?: string;
+  tier?: string;
+};
+
+// useMe — null when signed-out (401), MeResponse when authed.
+// Kept short: cookie sessions are stable across requests.
+export function useMe() {
+  return useQuery<MeResponse | null>({
+    queryKey: ['/v1/account/me', 'cookie'],
+    queryFn: async () => {
+      const url = `${API_BASE_URL_FOR_ME}/v1/account/me`;
+      const res = await fetch(url, {
+        credentials: 'include',
+        headers: { Accept: 'application/json' },
+      });
+      if (res.status === 401) return null;
+      if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
+      const env = (await res.json()) as { data: MeResponse };
+      return env.data;
+    },
+    refetchInterval: 5 * 60_000,
+    staleTime: 60_000,
+    retry: false,
+  });
+}
+
+const API_BASE_URL_FOR_ME =
+  // Inline the resolved base URL so this hook doesn't require the
+  // apiGet helper (which doesn't pass `credentials: 'include'`).
+  // Mirrors src/api/client.ts's resolution.
+  typeof process !== 'undefined' && process.env.NEXT_PUBLIC_API_BASE_URL
+    ? process.env.NEXT_PUBLIC_API_BASE_URL
+    : 'https://api.ratesengine.net';
+
 export type NetworkStats = {
   volume_24h_usd: string;
   markets_count_24h: number;

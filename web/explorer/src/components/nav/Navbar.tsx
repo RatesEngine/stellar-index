@@ -3,9 +3,9 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useEffect, useRef, useState } from 'react';
-import { ChevronDown, TrendingUp } from 'lucide-react';
+import { ChevronDown, LogOut, TrendingUp, User } from 'lucide-react';
 
-import { useStatus } from '@/api/hooks';
+import { useMe, useStatus } from '@/api/hooks';
 import { SearchModal } from './SearchModal';
 import { ThemeToggle } from './ThemeToggle';
 
@@ -30,21 +30,132 @@ export function Navbar() {
           <SearchModal />
           <ThemeToggle />
           <StatusPill />
-          <Link
-            href="/signin"
-            className="ml-2 rounded-md px-3 py-1.5 text-slate-700 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800"
-          >
-            Sign in
-          </Link>
-          <Link
-            href="/signup"
-            className="ml-1 rounded-md bg-brand-600 px-3 py-1.5 font-medium text-white hover:bg-brand-700"
-          >
-            Create account
-          </Link>
+          <SessionWidget />
         </div>
       </div>
     </nav>
+  );
+}
+
+function SessionWidget() {
+  const me = useMe();
+  // Loading state — render a stable placeholder so the bar doesn't
+  // jump when auth resolves. We show the signed-out CTAs by default;
+  // a logged-in user sees the email widget within a second.
+  if (me.isLoading || (me.data === undefined && !me.isError)) {
+    return <SignedOutCTAs />;
+  }
+  if (me.data && (me.data.user?.email || me.data.key_id)) {
+    return <SignedInWidget email={me.data.user?.email} />;
+  }
+  return <SignedOutCTAs />;
+}
+
+function SignedOutCTAs() {
+  return (
+    <>
+      <Link
+        href="/signin"
+        className="ml-2 rounded-md px-3 py-1.5 text-slate-700 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800"
+      >
+        Sign in
+      </Link>
+      <Link
+        href="/signup"
+        className="ml-1 rounded-md bg-brand-600 px-3 py-1.5 font-medium text-white hover:bg-brand-700"
+      >
+        Create account
+      </Link>
+    </>
+  );
+}
+
+function SignedInWidget({ email }: { email?: string }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!open) return;
+    function onDocClick(e: MouseEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    }
+    function onEsc(e: KeyboardEvent) {
+      if (e.key === 'Escape') setOpen(false);
+    }
+    document.addEventListener('mousedown', onDocClick);
+    document.addEventListener('keydown', onEsc);
+    return () => {
+      document.removeEventListener('mousedown', onDocClick);
+      document.removeEventListener('keydown', onEsc);
+    };
+  }, [open]);
+
+  async function handleSignOut() {
+    try {
+      const base =
+        process.env.NEXT_PUBLIC_API_BASE_URL ?? 'https://api.ratesengine.net';
+      await fetch(`${base}/v1/auth/logout`, {
+        method: 'POST',
+        credentials: 'include',
+      });
+    } catch {
+      // best-effort
+    }
+    // Hard reload — drops the cached useQuery cache + reflects the
+    // signed-out state immediately.
+    window.location.href = '/';
+  }
+
+  const display = email || 'Account';
+
+  return (
+    <div ref={ref} className="relative ml-2">
+      <button
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        aria-expanded={open}
+        aria-haspopup="menu"
+        className="inline-flex items-center gap-1.5 rounded-md border border-slate-200 px-2.5 py-1.5 text-xs font-medium text-slate-700 hover:border-brand-500 hover:text-brand-600 dark:border-slate-700 dark:text-slate-200"
+      >
+        <User className="h-3.5 w-3.5" />
+        <span className="max-w-[12ch] truncate">{display}</span>
+        <ChevronDown
+          className={`h-3.5 w-3.5 transition-transform ${open ? 'rotate-180' : ''}`}
+          aria-hidden
+        />
+      </button>
+      {open && (
+        <div
+          role="menu"
+          className="absolute right-0 top-full z-50 mt-1 w-56 rounded-lg border border-slate-200 bg-white p-2 shadow-lg dark:border-slate-700 dark:bg-slate-900"
+        >
+          {email && (
+            <div className="border-b border-slate-100 px-3 py-2 text-xs text-slate-500 dark:border-slate-800">
+              Signed in as
+              <div className="font-mono text-[11px] text-slate-700 dark:text-slate-300">
+                {email}
+              </div>
+            </div>
+          )}
+          <Link
+            href="/account"
+            role="menuitem"
+            onClick={() => setOpen(false)}
+            className="block rounded-md px-3 py-2 text-sm hover:bg-slate-100 dark:hover:bg-slate-800"
+          >
+            Your account
+          </Link>
+          <button
+            type="button"
+            onClick={handleSignOut}
+            role="menuitem"
+            className="flex w-full items-center gap-1.5 rounded-md px-3 py-2 text-left text-sm text-slate-700 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800"
+          >
+            <LogOut className="h-3.5 w-3.5" />
+            Sign out
+          </button>
+        </div>
+      )}
+    </div>
   );
 }
 

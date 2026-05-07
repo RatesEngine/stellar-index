@@ -25,6 +25,14 @@ against.
   applied to OraclesView's /v1/oracle/streams call.
 
 ### Changed
+- **Navbar shows session state.** Replaces the static "Sign in /
+  Create account" CTAs with a session-aware widget: signed-out
+  users still see the CTAs; signed-in users see their email
+  in a chip with a dropdown for Account + Sign out. Backed by a
+  new `useMe()` React Query hook that polls /v1/account/me with
+  `credentials: 'include'` (5-min refetch, single shared cache).
+  401 responses surface as null without throwing — the navbar
+  treats that as "anonymous" rather than an error state.
 - **/account uses magic-link cookie auth, surfaces user/account info.**
   Replaces the API-key-paste flow with cookie-credential fetches
   (`credentials: 'include'`). Anonymous visitors see a "sign in"
