@@ -723,6 +723,55 @@ func (s *Store) GetCoinPriceHistory7d(ctx context.Context, assetID string) ([]Co
 	return out, nil
 }
 
+// CoinATH is the asset's all-time high USD price plus the day
+// it was observed. Computed across every USD-quoted day-bucket
+// in `prices_1d` (direct USD-stablecoin pairs and `fiat:USD`).
+// Triangulated paths (asset/XLM × XLM/USD) are intentionally
+// excluded — they introduce two layers of price-discovery
+// noise and a single bad XLM/USD reading on a thin day could
+// fabricate an ATH.
+type CoinATH struct {
+	USD string // numeric, fixed-point string (preserves precision)
+	At  string // RFC-3339 day-bucket the high was set
+}
+
+// GetCoinATH returns the asset's all-time-high USD price.
+//
+// Sources `prices_1d` filtered to USD-denominated quotes — i.e.
+// the canonical USDC/USDT issuers, plus the synthetic `fiat:USD`
+// quote used by off-chain CEX feeds. Returns the (high_price,
+// bucket_day) tuple where high_price is maximal.
+//
+// For native XLM the asset is on the BASE side of every USD pair,
+// so the same query works without a special case. Returns
+// (nil, nil) cleanly when the asset has never had a USD-quoted
+// day with non-null high_price (very thin assets).
+func (s *Store) GetCoinATH(ctx context.Context, assetID string) (*CoinATH, error) {
+	const q = `
+		SELECT
+		    high_price::text,
+		    to_char(bucket, 'YYYY-MM-DD"T"00:00:00"Z"')
+		  FROM prices_1d
+		 WHERE base_asset = $1
+		   AND quote_asset IN (
+		     'USDC-GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN',
+		     'USDT-GCQTGZQQ5G4PTM2GL7CDIFKUBIPEC52BROAQIAPW53XBRJVN6ZJVTG6V',
+		     'fiat:USD'
+		   )
+		   AND high_price IS NOT NULL
+		 ORDER BY high_price DESC
+		 LIMIT 1
+	`
+	var ath CoinATH
+	switch err := s.db.QueryRowContext(ctx, q, assetID).Scan(&ath.USD, &ath.At); {
+	case err == sql.ErrNoRows:
+		return nil, nil
+	case err != nil:
+		return nil, fmt.Errorf("timescale: GetCoinATH: %w", err)
+	}
+	return &ath, nil
+}
+
 // CoinTopMarket is one entry in the top-markets preview returned
 // alongside a single coin lookup. Compact summary suitable for an
 // asset detail page header — the full markets list lives on

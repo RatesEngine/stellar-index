@@ -1366,6 +1366,28 @@ paths:
                       pairs the asset participated in over the
                       trailing 24h. 0 when the asset went silent
                       in that window. Null only on lookup error.
+                  ath:
+                    type: object
+                    nullable: true
+                    description: |
+                      All-time-high USD price + day it was set.
+                      Sourced from `prices_1d` filtered to
+                      USD-denominated quotes (USDC, USDT,
+                      `fiat:USD`). Triangulated paths are excluded —
+                      a single bad XLM/USD reading on a thin day
+                      could fabricate an ATH. Null when the asset
+                      has no USD-quoted history.
+                    required: [usd, at]
+                    properties:
+                      usd:
+                        type: string
+                        description: ATH price as a fixed-point string.
+                      at:
+                        type: string
+                        format: date-time
+                        description: |
+                          RFC-3339 day-bucket the high was set
+                          (00:00:00Z snapped — daily granularity).
         "400": { $ref: "#/components/responses/BadRequest" }
         "404": { $ref: "#/components/responses/NotFound" }
         "429": { $ref: "#/components/responses/RateLimited" }

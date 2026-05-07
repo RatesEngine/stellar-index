@@ -24,6 +24,7 @@ type CoinsReader interface {
 	GetCoinPriceHistory7d(ctx context.Context, assetID string) ([]timescale.CoinPricePoint, error)
 	GetCoinsPriceHistory24hBatch(ctx context.Context, assetIDs []string) (map[string][]timescale.CoinPricePoint, error)
 	GetCoinMarketsCount(ctx context.Context, assetID string) (int64, error)
+	GetCoinATH(ctx context.Context, assetID string) (*timescale.CoinATH, error)
 }
 
 // Coin is the wire shape of one entry in the /v1/coins response.
@@ -76,6 +77,20 @@ type Coin struct {
 	// (lookup error) — both render as "—" in the UI but behave
 	// differently in alerting.
 	MarketsCount *int64 `json:"markets_count,omitempty"`
+	// ATH is the asset's all-time-high USD price plus the day it
+	// was set. Populated only on /v1/coins/{slug}. Sourced from
+	// `prices_1d` filtered to USD-denominated quotes — triangulated
+	// paths excluded (a single bad XLM/USD reading on a thin day
+	// could fabricate an ATH). Null when the asset has no
+	// USD-quoted history.
+	ATH *CoinATH `json:"ath,omitempty"`
+}
+
+// CoinATH is the all-time-high USD price + bucket-day pair on
+// the /v1/coins/{slug} response.
+type CoinATH struct {
+	USD string `json:"usd"`
+	At  string `json:"at"`
 }
 
 // CoinTopMarket is one entry in the per-asset top-markets preview.
@@ -353,6 +368,11 @@ func (s *Server) handleCoin(w http.ResponseWriter, r *http.Request) {
 		s.logger.Warn("coin markets count", "asset_id", row.AssetID, "err", cErr)
 	} else {
 		out.MarketsCount = &n
+	}
+	if ath, aErr := s.coins.GetCoinATH(r.Context(), row.AssetID); aErr != nil {
+		s.logger.Warn("coin ath", "asset_id", row.AssetID, "err", aErr)
+	} else if ath != nil {
+		out.ATH = &CoinATH{USD: ath.USD, At: ath.At}
 	}
 
 	writeJSON(w, out, Flags{})

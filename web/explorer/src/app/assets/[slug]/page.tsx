@@ -94,6 +94,11 @@ interface CoinSummary {
   // participated in over the trailing 24h. 0 when the asset
   // went silent in that window.
   markets_count?: number | null;
+  // All-time-high USD price + day it was set. Null when the
+  // asset has no USD-quoted history. Sourced from prices_1d
+  // filtered to USD-denominated quotes only — triangulated
+  // paths excluded.
+  ath?: { usd: string; at: string } | null;
 }
 
 interface TopMarket {
@@ -438,7 +443,7 @@ function OverviewBody({
             points24h={coin.price_history_24h ?? []}
             points7d={coin.price_history_7d ?? []}
           />
-          <dl className="grid grid-cols-2 gap-3 border-t border-slate-200 pt-3 text-sm dark:border-slate-800 sm:grid-cols-4">
+          <dl className="grid grid-cols-2 gap-3 border-t border-slate-200 pt-3 text-sm dark:border-slate-800 sm:grid-cols-3 lg:grid-cols-5">
             <Stat
               label="Volume 24h"
               value={fmtUsd(detail?.volume_24h_usd ?? coin.volume_24h_usd)}
@@ -458,6 +463,14 @@ function OverviewBody({
             <Stat
               label="Circulating"
               value={fmtNum(detail?.circulating_supply ?? coin.circulating_supply)}
+            />
+            <Stat
+              label={
+                coin.ath?.at
+                  ? `ATH · ${coin.ath.at.slice(0, 10)}`
+                  : 'ATH'
+              }
+              value={fmtUsd(coin.ath?.usd ?? null)}
             />
           </dl>
         </Panel>
