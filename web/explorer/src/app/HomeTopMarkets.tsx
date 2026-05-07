@@ -58,6 +58,9 @@ export function HomeTopMarkets() {
                 <th className="px-4 py-2 font-medium">#</th>
                 <th className="px-4 py-2 font-medium">Pair</th>
                 <th className="px-4 py-2 text-right font-medium">
+                  Last price
+                </th>
+                <th className="px-4 py-2 text-right font-medium">
                   24h volume
                 </th>
                 <th className="px-4 py-2 text-right font-medium">
@@ -96,6 +99,17 @@ export function HomeTopMarkets() {
                       </Link>
                     </td>
                     <td className="px-4 py-2.5 text-right">
+                      {m.last_price ? (
+                        <span className="font-mono tabular-nums text-slate-700 dark:text-slate-300">
+                          {formatLastPrice(m.last_price)}
+                        </span>
+                      ) : (
+                        <span className="text-slate-300 dark:text-slate-700">
+                          —
+                        </span>
+                      )}
+                    </td>
+                    <td className="px-4 py-2.5 text-right">
                       {m.volume_24h_usd ? (
                         <span className="font-mono tabular-nums">
                           ${formatCompact(Number(m.volume_24h_usd))}
@@ -120,6 +134,12 @@ export function HomeTopMarkets() {
       </div>
     </section>
   );
+}
+
+function formatLastPrice(raw: string): string {
+  const n = Number(raw);
+  if (!Number.isFinite(n)) return '—';
+  return n >= 1000 ? n.toFixed(2) : n >= 1 ? n.toFixed(4) : n >= 0.0001 ? n.toFixed(6) : n.toExponential(3);
 }
 
 function shortAsset(canonical: string | undefined | null): string {
