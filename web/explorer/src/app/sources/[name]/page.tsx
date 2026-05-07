@@ -106,15 +106,42 @@ async function fetchCursors(): Promise<CursorRow[]> {
   }
 }
 
+interface MarketRow {
+  base: string;
+  quote: string;
+  last_trade_at: string;
+  trade_count_24h: number;
+  volume_24h_usd?: string | null;
+}
+
+async function fetchSourceMarkets(name: string): Promise<MarketRow[]> {
+  if (isCIStub) return [];
+  try {
+    // /v1/markets accepts ?source=<name> filter (DistinctPairs scoped
+    // to one venue). Sort by volume desc and cap at 25 — the page
+    // wants a "top markets" preview, not the full enumeration.
+    const res = await fetch(
+      `${API_BASE_URL}/v1/markets?source=${encodeURIComponent(name)}&order_by=volume_24h_usd_desc&limit=25`,
+      { signal: AbortSignal.timeout(BUILD_FETCH_TIMEOUT_MS) },
+    );
+    if (!res.ok) return [];
+    const env = (await res.json()) as { data: MarketRow[] };
+    return env.data ?? [];
+  } catch {
+    return [];
+  }
+}
+
 export default async function SourceDetailPage({
   params,
 }: {
   params: Params;
 }) {
   const { name } = await params;
-  const [source, allCursors] = await Promise.all([
+  const [source, allCursors, topMarkets] = await Promise.all([
     fetchSource(name),
     fetchCursors(),
+    fetchSourceMarkets(name),
   ]);
 
   if (!source) {
@@ -296,8 +323,83 @@ export default async function SourceDetailPage({
           </table>
         )}
       </Panel>
+
+      <Panel
+        title="Top markets via this source"
+        subtitle={`${topMarkets.length} pairs · ranked by 24h USD volume · /v1/markets?source=${name}`}
+        bodyClassName="-mx-4"
+      >
+        {topMarkets.length === 0 ? (
+          <p className="px-4 py-3 text-sm text-slate-500">
+            No markets observed for this source in the trailing 14 days. Either
+            the venue isn&apos;t actively producing trades the indexer can decode,
+            or the cursor hasn&apos;t advanced past the recency window yet.
+          </p>
+        ) : (
+          <table className="min-w-full divide-y divide-slate-200 text-sm dark:divide-slate-800">
+            <thead>
+              <tr className="text-left text-[10px] uppercase tracking-wider text-slate-500">
+                <th className="px-4 py-2 font-medium">Base</th>
+                <th className="px-4 py-2 font-medium">Quote</th>
+                <th className="px-4 py-2 text-right font-medium">24h volume</th>
+                <th className="px-4 py-2 text-right font-medium">24h trades</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+              {topMarkets.map((m) => {
+                const slug = encodeURIComponent(`${m.base}~${m.quote}`);
+                return (
+                  <tr
+                    key={`${m.base}|${m.quote}`}
+                    className="hover:bg-slate-50 dark:hover:bg-slate-900/40"
+                  >
+                    <td className="px-4 py-2">
+                      <Link
+                        href={`/markets/${slug}`}
+                        className="font-mono text-xs hover:text-brand-600"
+                      >
+                        {shortAsset(m.base)}
+                      </Link>
+                    </td>
+                    <td className="px-4 py-2">
+                      <Link
+                        href={`/markets/${slug}`}
+                        className="font-mono text-xs hover:text-brand-600"
+                      >
+                        {shortAsset(m.quote)}
+                      </Link>
+                    </td>
+                    <td className="px-4 py-2 text-right">
+                      {m.volume_24h_usd ? (
+                        <span className="font-mono tabular-nums">
+                          ${formatCompact(Number(m.volume_24h_usd))}
+                        </span>
+                      ) : (
+                        <span className="text-slate-300 dark:text-slate-700">—</span>
+                      )}
+                    </td>
+                    <td className="px-4 py-2 text-right font-mono tabular-nums text-slate-500">
+                      {formatCompact(m.trade_count_24h)}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        )}
+      </Panel>
     </div>
   );
+}
+
+function shortAsset(canonical: string): string {
+  if (canonical === 'native') return 'XLM';
+  if (canonical.startsWith('fiat:')) return canonical.replace('fiat:', '');
+  if (canonical.startsWith('crypto:')) return canonical;
+  if (/^\d+$/.test(canonical)) return 'XLM';
+  const dashIx = canonical.indexOf('-');
+  if (dashIx === -1) return canonical;
+  return canonical.slice(0, dashIx);
 }
 
 function Panel({
