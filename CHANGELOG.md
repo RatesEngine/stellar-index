@@ -15,6 +15,13 @@ against.
 
 ## [Unreleased]
 
+### Changed
+- **HomeTryAPI: nudge to /sdk when Go tab is selected.** The Go
+  example renders stdlib `http.Get` (matches the curl/JS/Python
+  shape — same one-liner). When the visitor picks the Go tab,
+  the footnote now adds "For idiomatic Go using the official SDK,
+  see /sdk" so they can switch to the typed client.
+
 ### Added
 - **`/sdk` showcase page.** Surfaces the official Go SDK at
   `pkg/client`. Install command, quick-start example, five

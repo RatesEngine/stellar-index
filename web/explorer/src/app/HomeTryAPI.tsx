@@ -218,6 +218,19 @@ export function HomeTryAPI() {
         No auth needed for the public tier — every endpoint here
         responds in milliseconds. Hit ▶ to run live; click any
         example tab above to see the curl.
+        {lang === 'go' && (
+          <>
+            {' '}
+            For idiomatic Go using the official SDK, see{' '}
+            <a
+              href="/sdk"
+              className="text-brand-600 hover:underline"
+            >
+              /sdk
+            </a>
+            .
+          </>
+        )}
       </p>
     </div>
   );
