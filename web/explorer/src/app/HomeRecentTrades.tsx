@@ -14,6 +14,7 @@ interface Trade {
   price: string;
   base_amount?: string;
   quote_amount?: string;
+  tx_hash?: string;
 }
 
 const REFRESH_INTERVAL_MS = 30_000;
@@ -146,7 +147,19 @@ export function HomeRecentTrades() {
                       className="hover:bg-slate-50 dark:hover:bg-slate-900/40"
                     >
                       <td className="px-4 py-2 tabular-nums text-slate-500">
-                        {timeAgo(t.ts)}
+                        {t.tx_hash ? (
+                          <a
+                            href={`https://stellar.expert/explorer/public/tx/${t.tx_hash}`}
+                            target="_blank"
+                            rel="noreferrer noopener"
+                            className="hover:text-brand-600 hover:underline"
+                            title={`View tx ${t.tx_hash} on stellar.expert`}
+                          >
+                            {timeAgo(t.ts)}
+                          </a>
+                        ) : (
+                          timeAgo(t.ts)
+                        )}
                       </td>
                       <td className="px-4 py-2">
                         {linkable ? (
@@ -161,7 +174,12 @@ export function HomeRecentTrades() {
                         )}
                       </td>
                       <td className="px-4 py-2 uppercase tracking-wider text-slate-600 dark:text-slate-400">
-                        {t.source}
+                        <Link
+                          href={`/sources/${t.source}`}
+                          className="hover:text-brand-600"
+                        >
+                          {t.source}
+                        </Link>
                       </td>
                       <td className="px-4 py-2 text-right tabular-nums">
                         {t.price}
