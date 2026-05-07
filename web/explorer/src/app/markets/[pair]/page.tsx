@@ -443,10 +443,27 @@ export default async function PairPage({ params }: { params: Params }) {
                     className="hover:bg-slate-50 dark:hover:bg-slate-900/40"
                   >
                     <td className="px-3 py-2 tabular-nums text-slate-500">
-                      {formatTimestamp(t.ts)}
+                      {t.tx_hash ? (
+                        <a
+                          href={`https://stellar.expert/explorer/public/tx/${t.tx_hash}`}
+                          target="_blank"
+                          rel="noreferrer noopener"
+                          className="hover:text-brand-600 hover:underline"
+                          title={`View tx ${t.tx_hash} on stellar.expert`}
+                        >
+                          {formatTimestamp(t.ts)}
+                        </a>
+                      ) : (
+                        formatTimestamp(t.ts)
+                      )}
                     </td>
                     <td className="px-3 py-2 uppercase tracking-wider">
-                      {t.source}
+                      <Link
+                        href={`/sources/${t.source}`}
+                        className="hover:text-brand-600 hover:underline"
+                      >
+                        {t.source}
+                      </Link>
                     </td>
                     <td className="px-3 py-2 text-right tabular-nums">
                       {t.price}
