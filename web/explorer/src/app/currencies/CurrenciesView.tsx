@@ -24,7 +24,7 @@ interface CurrenciesPayload {
   source?: string;
 }
 
-type SortKey = 'ticker' | 'rate' | 'change_7d';
+type SortKey = 'ticker' | 'rate' | 'change_24h' | 'change_7d';
 type SortDir = 'asc' | 'desc';
 
 export function CurrenciesView() {
@@ -124,9 +124,9 @@ export function CurrenciesView() {
                   1 USD =
                 </SortableTh>
                 <Th align="right">1 unit = USD</Th>
-                <Th align="right" hint="Yesterday-to-today % change. Daily-grain feed; resolution is per-publish, not rolling 24h.">
+                <SortableTh sortKey="change_24h" current={sortKey} dir={sortDir} onToggle={toggleSort} align="right">
                   24h %
-                </Th>
+                </SortableTh>
                 <SortableTh sortKey="change_7d" current={sortKey} dir={sortDir} onToggle={toggleSort} align="right">
                   7d %
                 </SortableTh>
@@ -242,13 +242,14 @@ function compareCurrencies(
     case 'rate':
       cmp = (a.rate_usd ?? 0) - (b.rate_usd ?? 0);
       break;
+    case 'change_24h':
     case 'change_7d': {
       // null change → push to end of either direction so unknowns
       // stay together rather than pretending they're zero.
-      const av = a.change_7d_pct ?? null;
-      const bv = b.change_7d_pct ?? null;
+      const av = (key === 'change_24h' ? a.change_24h_pct : a.change_7d_pct) ?? null;
+      const bv = (key === 'change_24h' ? b.change_24h_pct : b.change_7d_pct) ?? null;
       if (av == null && bv == null) cmp = 0;
-      else if (av == null) cmp = 1; // a wins-loses to push a after b
+      else if (av == null) cmp = 1;
       else if (bv == null) cmp = -1;
       else cmp = av - bv;
       break;
