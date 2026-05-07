@@ -854,6 +854,48 @@ const getCoinBySlugSQL = `
 		     )
 		     AND vwap IS NOT NULL
 		   ORDER BY bucket DESC LIMIT 1
+		),
+		xlm_usd_1h AS (
+		  -- 1h-ago XLM/USD for change_1h_pct via stablecoin proxy.
+		  SELECT vwap FROM prices_1m
+		   WHERE base_asset = 'native'
+		     AND quote_asset IN (
+		       'USDC-GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN',
+		       'USDT-GCQTGZQQ5G4PTM2GL7CDIFKUBIPEC52BROAQIAPW53XBRJVN6ZJVTG6V',
+		       'fiat:USD'
+		     )
+		     AND bucket BETWEEN now() - INTERVAL '1 hour 5 minutes'
+		                   AND now() - INTERVAL '55 minutes'
+		     AND vwap IS NOT NULL
+		   ORDER BY bucket DESC LIMIT 1
+		),
+		xlm_usd_24h AS (
+		  -- 24h-ago XLM/USD for change_24h_pct via stablecoin proxy.
+		  SELECT vwap FROM prices_1m
+		   WHERE base_asset = 'native'
+		     AND quote_asset IN (
+		       'USDC-GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN',
+		       'USDT-GCQTGZQQ5G4PTM2GL7CDIFKUBIPEC52BROAQIAPW53XBRJVN6ZJVTG6V',
+		       'fiat:USD'
+		     )
+		     AND bucket BETWEEN now() - INTERVAL '24 hours 30 minutes'
+		                   AND now() - INTERVAL '23 hours 30 minutes'
+		     AND vwap IS NOT NULL
+		   ORDER BY bucket DESC LIMIT 1
+		),
+		xlm_usd_7d AS (
+		  -- 7d-ago XLM/USD for change_7d_pct via stablecoin proxy.
+		  SELECT vwap FROM prices_1m
+		   WHERE base_asset = 'native'
+		     AND quote_asset IN (
+		       'USDC-GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN',
+		       'USDT-GCQTGZQQ5G4PTM2GL7CDIFKUBIPEC52BROAQIAPW53XBRJVN6ZJVTG6V',
+		       'fiat:USD'
+		     )
+		     AND bucket BETWEEN now() - INTERVAL '7 days 2 hours'
+		                   AND now() - INTERVAL '6 days 22 hours'
+		     AND vwap IS NOT NULL
+		   ORDER BY bucket DESC LIMIT 1
 		)
 		SELECT
 		    COALESCE(ca.slug, ca.code)            AS slug,

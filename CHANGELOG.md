@@ -15,6 +15,17 @@ against.
 
 ## [Unreleased]
 
+### Fixed
+- **`/v1/coins/{slug}` 500 regression on rc.18.** PR #794 added
+  `change_1h_pct`, `change_24h_pct`, `change_7d_pct` references
+  to `getCoinBySlugSQL` but missed adding the corresponding
+  `xlm_usd_1h` / `xlm_usd_24h` / `xlm_usd_7d` CTE definitions
+  (they were added to `listCoinsBaseSelect` correctly).
+  Postgres rejected every non-native slug lookup with
+  `relation "xlm_usd_1h" does not exist (42P01)`. Caught by
+  watching r1 API logs — explorer build was hammering the API
+  with ~150 errors/min on slugs like ARS, PEPE, GAZPROM, KOGAS.
+
 ### Added
 - **Open Graph + Twitter cards for explorer + status sites.**
   Both subsites now ship a 1200×630 SVG OG image plus full
