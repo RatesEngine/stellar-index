@@ -1,6 +1,5 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
-import { ExternalLink } from 'lucide-react';
 
 import { Panel } from '@/components/reveal';
 
@@ -114,15 +113,12 @@ export default function DivergencesPage() {
             research index
           </Link>
           . Methodology rationale lives in{' '}
-          <a
-            href="/research"
-            target="_blank"
-            rel="noreferrer"
-            className="inline-flex items-center gap-1 underline decoration-dotted"
+          <Link
+            href="/research/adr/0019"
+            className="underline decoration-dotted"
           >
             ADR-0019
-            <ExternalLink className="h-3 w-3" />
-          </a>
+          </Link>
           .
         </p>
       </Panel>

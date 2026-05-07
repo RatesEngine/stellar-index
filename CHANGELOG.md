@@ -15,6 +15,14 @@ against.
 
 ## [Unreleased]
 
+### Changed
+- **/anomalies, /divergences, /lending: deep-link to specific
+  research pages.** ADR-0019 mentions on /anomalies + /divergences
+  now link directly to `/research/adr/0019` instead of the generic
+  `/research` index. /lending's "Discovery notes (Blend)" + "(Comet
+  backstop)" CTAs now jump to `/research/discovery/blend` and
+  `/research/discovery/comet`.
+
 ### Fixed
 - **NetworkLivePanel: assets-indexed count capped at 500.** The
   side panel on home was reading `useCoins(500).coins.length`

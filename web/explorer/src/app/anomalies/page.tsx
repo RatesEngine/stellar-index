@@ -1,6 +1,5 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
-import { ExternalLink } from 'lucide-react';
 
 import { Panel } from '@/components/reveal';
 
@@ -59,15 +58,12 @@ export default function AnomaliesPage() {
       >
         <p className="text-sm text-slate-600 dark:text-slate-400">
           Per{' '}
-          <a
-            href="/research"
-            target="_blank"
-            rel="noreferrer"
-            className="inline-flex items-center gap-1 underline decoration-dotted"
+          <Link
+            href="/research/adr/0019"
+            className="underline decoration-dotted"
           >
             ADR-0019
-            <ExternalLink className="h-3 w-3" />
-          </a>
+          </Link>
           , a freeze fires when one of these conditions holds. While
           frozen, the API still serves the last good value — but with{' '}
           <code className="font-mono text-xs">flags.frozen=true</code>
