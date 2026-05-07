@@ -3,6 +3,7 @@ import type { MetadataRoute } from 'next';
 import { API_BASE_URL } from '@/api/client';
 import { loadADRs } from '@/lib/adr';
 import { loadArchitectureDocs } from '@/lib/architecture';
+import { loadBlogPosts } from '@/lib/blog';
 import { loadDiscoveryDocs } from '@/lib/discovery';
 import { loadOperationsDocs } from '@/lib/operations';
 
@@ -88,6 +89,12 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     changeFrequency: 'monthly',
     priority: 0.5,
   }));
+  const blogPages: MetadataRoute.Sitemap = loadBlogPosts().map((p) => ({
+    url: `${SITE_URL}/blog/${p.slug}`,
+    lastModified: now,
+    changeFrequency: 'monthly',
+    priority: 0.6,
+  }));
 
   const [assetSlugs, issuerKeys] = await Promise.all([
     fetchCoinSlugs(),
@@ -108,6 +115,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
 
   return [
     ...staticPages,
+    ...blogPages,
     ...adrPages,
     ...archPages,
     ...discoveryPages,
