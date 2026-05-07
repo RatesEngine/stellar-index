@@ -15,6 +15,13 @@ against.
 
 ## [Unreleased]
 
+### Fixed
+- **`/research/architecture`, `/research/discovery`,
+  `/research/operations` 404** — only `[slug]` subroutes existed;
+  the category index 404'd. Add a small index page at each that
+  lists the curated docs for that category, with a back link to
+  `/research`.
+
 ## [v0.5.0-rc.27] — 2026-05-07
 
 ### Fixed
