@@ -1,4 +1,5 @@
 import type { Metadata } from 'next';
+import Link from 'next/link';
 
 import { API_BASE_URL } from '@/api/client';
 
@@ -104,7 +105,16 @@ export default function SignupPage() {
                     {tier.rateLimit}
                   </td>
                   <td className="whitespace-nowrap px-4 py-3 text-sm text-slate-700 dark:text-slate-300">
-                    {tier.cost}
+                    {tier.cost === 'Contact sales' || tier.cost === 'Custom' ? (
+                      <Link
+                        href="/contact"
+                        className="text-brand-600 hover:underline"
+                      >
+                        {tier.cost} →
+                      </Link>
+                    ) : (
+                      tier.cost
+                    )}
                   </td>
                   <td className="px-4 py-3 text-sm text-slate-700 dark:text-slate-300">
                     {tier.auth}

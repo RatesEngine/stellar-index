@@ -36,6 +36,7 @@ const STATIC_PAGES: Result[] = [
   { type: 'page', label: 'API docs', href: 'https://docs.ratesengine.net' },
   { type: 'page', label: 'Sign up', hint: 'free API key', href: '/signup' },
   { type: 'page', label: 'Widgets', hint: 'embeddable price cards', href: '/widgets' },
+  { type: 'page', label: 'Contact', hint: 'sales / security / GitHub', href: '/contact' },
 ];
 
 const PROTOCOLS: Result[] = [

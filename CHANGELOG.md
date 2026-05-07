@@ -15,6 +15,15 @@ against.
 
 ## [Unreleased]
 
+### Added
+- **`/contact` page.** Single destination for the previously-orphaned
+  "Contact sales" callouts on `/signup`. Five channel cards covering
+  security disclosures (security@), sales (sales@), GitHub issues,
+  status feed subscription, and architecture/methodology research
+  links. Plus a four-question FAQ. Pro/Business/Enterprise tier
+  cells on `/signup` now deep-link here. Linked from footer + Cmd-K
+  search + sitemap.
+
 ### Changed
 - **`/markets/<pair>`: full CandleChart with timeframe + granularity
   controls.** Replaces the static 24h sparkline with the same chart
