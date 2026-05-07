@@ -16,6 +16,18 @@ against.
 ## [Unreleased]
 
 ### Added
+- **`/research/discovery` integration audit browser.** Curated
+  set of ten per-DEX/per-oracle Phase-1 audits — sdex, soroswap,
+  phoenix, aquarius, comet, blend, reflector, band, redstone,
+  chainlink — rendered as static pages on
+  `/research/discovery/<slug>`. Each audit names the contract
+  repo + commit checked, the upstream-source quirks we found,
+  and how the decoder handles them. Allow-listed via a `CURATED`
+  array; the rest of `docs/discovery/` stays private.
+- **SearchModal: missing pages.** Cmd-K search now lists the new
+  `/methodology`, `/research`, `/changelog`, `/compare`,
+  `/signup`, and external `status.ratesengine.net` alongside the
+  existing pages.
 - **`/markets` table: sortable Base + 24h volume columns.** Click
   the Base header to flip to alphabetical-by-pair (the API's
   `pair` order_by); click 24h volume to flip back to volume-desc.
