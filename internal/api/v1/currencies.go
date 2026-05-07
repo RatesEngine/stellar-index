@@ -95,12 +95,12 @@ type CurrenciesPayload struct {
 func (s *Server) handleCurrencies(w http.ResponseWriter, r *http.Request) { //nolint:gocognit,gocyclo // include parsing + per-row enrich + limit clamp are linear; splitting would scatter the request lifecycle
 	reader := s.currencies
 	if reader == nil {
-		writeJSON(w, CurrenciesPayload{Source: "currency-api"}, Flags{})
+		writeJSON(w, CurrenciesPayload{Source: "massive"}, Flags{})
 		return
 	}
 	snap := reader.Latest()
 	if snap == nil {
-		writeJSON(w, CurrenciesPayload{Source: "currency-api"}, Flags{})
+		writeJSON(w, CurrenciesPayload{Source: "massive"}, Flags{})
 		return
 	}
 
@@ -166,7 +166,7 @@ func (s *Server) handleCurrencies(w http.ResponseWriter, r *http.Request) { //no
 		Currencies:  enriched,
 		PublishedAt: snap.PublishedAt,
 		FetchedAt:   snap.FetchedAt,
-		Source:      "currency-api",
+		Source:      "massive",
 	}, Flags{})
 }
 
@@ -329,6 +329,6 @@ func (s *Server) handleCurrencyDetail(w http.ResponseWriter, r *http.Request) { 
 		History7d:    history,
 		PublishedAt:  snap.PublishedAt,
 		FetchedAt:    snap.FetchedAt,
-		Source:       "currency-api",
+		Source:       "massive",
 	}, Flags{})
 }
