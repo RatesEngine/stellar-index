@@ -16,6 +16,16 @@ against.
 ## [Unreleased]
 
 ### Added
+- **`/research/architecture` doc browser.** Curated set of seven
+  long-form architecture narratives — ingest pipeline, aggregation
+  plan, supply pipeline, contract schema evolution, oracle
+  manipulation defense, HA plan, SemVer policy — rendered as
+  static pages on `/research/architecture/<slug>` from
+  `docs/architecture/*.md`. Allow-listed via a `CURATED` array
+  in the loader so the launch-readiness backlog and other
+  internal-only docs stay private. Each card on `/research`
+  shows the title, one-line description, and last-verified
+  date; the detail page links the GitHub source.
 - **`/methodology` page — how rates are computed.** New
   enterprise-grade explainer covering source classes (what
   contributes to VWAP and what doesn't), VWAP weighting policy,

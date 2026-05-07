@@ -1,8 +1,9 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
-import { FileText } from 'lucide-react';
+import { BookOpen, FileText } from 'lucide-react';
 
 import { loadADRs } from '@/lib/adr';
+import { loadArchitectureDocs } from '@/lib/architecture';
 import { StatusBadge } from './StatusBadge';
 
 export const metadata: Metadata = {
@@ -12,11 +13,6 @@ export const metadata: Metadata = {
 };
 
 const TOPICS: { name: string; description: string; href?: string }[] = [
-  {
-    name: 'Architecture decisions',
-    description:
-      'Numbered, immutable decisions with the rationale behind each — ingest pipeline, storage, latency, freeze policy, validator topology.',
-  },
   {
     name: 'Discovery audits',
     description:
@@ -29,16 +25,11 @@ const TOPICS: { name: string; description: string; href?: string }[] = [
       'Per-alert runbooks, archival-node bringup, disaster-recovery triage, SEV playbook, release process.',
     href: 'https://github.com/RatesEngine/rates-engine/tree/main/docs/operations',
   },
-  {
-    name: 'Architecture narratives',
-    description:
-      'Long-form designs for ingest pipeline, aggregation policy, supply pipeline, contract-schema evolution.',
-    href: 'https://github.com/RatesEngine/rates-engine/tree/main/docs/architecture',
-  },
 ];
 
 export default function ResearchPage() {
   const adrs = loadADRs();
+  const archDocs = loadArchitectureDocs();
 
   // Sort newest first within each status group; status order
   // surfaces Accepted ADRs above Proposed/Superseded so visitors
@@ -65,6 +56,52 @@ export default function ResearchPage() {
           narratives live alongside the source on GitHub.
         </p>
       </header>
+
+      <section className="space-y-4">
+        <div className="flex items-baseline justify-between">
+          <h2 className="text-xl font-semibold tracking-tight">
+            Architecture narratives
+          </h2>
+          <span className="text-xs text-slate-500">
+            {archDocs.length} docs ·{' '}
+            <a
+              href="https://github.com/RatesEngine/rates-engine/tree/main/docs/architecture"
+              target="_blank"
+              rel="noreferrer noopener"
+              className="hover:text-brand-600"
+            >
+              source on GitHub
+            </a>
+          </span>
+        </div>
+        <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+          {archDocs.map((d) => (
+            <Link
+              key={d.slug}
+              href={`/research/architecture/${d.slug}`}
+              className="group flex flex-col gap-2 rounded-xl border border-slate-200 bg-white p-4 transition hover:border-brand-300 hover:shadow-sm dark:border-slate-800 dark:bg-slate-900 dark:hover:border-brand-700"
+            >
+              <div className="flex items-center gap-2">
+                <BookOpen className="h-3.5 w-3.5 text-slate-400 group-hover:text-brand-500" />
+                <span className="text-[10px] font-medium uppercase tracking-wider text-slate-500">
+                  Architecture
+                </span>
+                {d.last_verified && (
+                  <span className="ml-auto text-[10px] text-slate-400">
+                    Verified {d.last_verified}
+                  </span>
+                )}
+              </div>
+              <h4 className="text-sm font-semibold leading-snug text-slate-900 group-hover:text-brand-600 dark:text-slate-100">
+                {d.title}
+              </h4>
+              <p className="text-xs text-slate-600 dark:text-slate-400">
+                {d.description}
+              </p>
+            </Link>
+          ))}
+        </div>
+      </section>
 
       <section className="space-y-4">
         <div className="flex items-baseline justify-between">
