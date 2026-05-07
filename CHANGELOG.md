@@ -24,6 +24,15 @@ against.
   `apiGet<{ data: SourceRow[] }>` and unwraps `env.data`. Same fix
   applied to OraclesView's /v1/oracle/streams call.
 
+### Added
+- **/assets/[slug] gains a USD ↔ asset converter widget** per the
+  user IA spec ("currency converter widget" on the per-asset page).
+  Bidirectional input with a swap button — type a USD amount to see
+  asset units, or vice versa. Pure client-side maths against the
+  live `priceUSD` already on the page; refreshes when the parent
+  re-fetches /v1/price. Cross-currency conversion (asset → EUR/JPY/…)
+  is a follow-up — needs the forex snapshot threaded into the page.
+
 ### Changed
 - **Navbar shows session state.** Replaces the static "Sign in /
   Create account" CTAs with a session-aware widget: signed-out
