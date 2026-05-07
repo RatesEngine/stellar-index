@@ -35,6 +35,7 @@ const STATIC_PAGES: Result[] = [
   { type: 'page', label: 'Status', hint: 'live system status', href: 'https://status.ratesengine.net' },
   { type: 'page', label: 'API docs', href: 'https://docs.ratesengine.net' },
   { type: 'page', label: 'Sign up', hint: 'free API key', href: '/signup' },
+  { type: 'page', label: 'Widgets', hint: 'embeddable price cards', href: '/widgets' },
 ];
 
 const PROTOCOLS: Result[] = [

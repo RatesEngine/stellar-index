@@ -15,6 +15,15 @@ against.
 
 ## [Unreleased]
 
+### Added
+- **`/widgets` showcase page.** Public docs + live preview for the
+  embeddable iframe widgets (`/embed/asset/<slug>`,
+  `/embed/pair/<base~quote>`). Three asset cards (XLM, USDC, AQUA)
+  + two pair cards (XLM/USDC, XLM/USD) render live with
+  paste-ready iframe HTML next to each. Linked from footer +
+  Cmd-K search. The widgets themselves were always there but had
+  no surface explaining how to use them; this closes the loop.
+
 ### Changed
 - **/dexes + /oracles: deep-link directly to per-protocol audits.**
   Each card's "Read integration audit" CTA now jumps straight to
