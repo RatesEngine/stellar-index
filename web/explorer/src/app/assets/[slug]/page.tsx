@@ -10,6 +10,7 @@ import { AssetConverter } from './AssetConverter';
 import { ChartPanel } from './ChartPanel';
 import { PriceSparklines } from './PriceSparklines';
 import { IssuerPanel } from './IssuerPanel';
+import { LiquidityTabPanel } from './LiquidityTabPanel';
 import { MarketsTabPanel } from './MarketsTabPanel';
 import { HistoryTabPanel } from './HistoryTabPanel';
 import { SupplyTabPanel } from './SupplyTabPanel';
@@ -407,6 +408,9 @@ export default async function AssetDetailPage({ params }: { params: Params }) {
           supply={<SupplyTabPanel assetID={coin.asset_id} />}
           issuer={
             coin.issuer ? <IssuerPanel gStrkey={coin.issuer} /> : undefined
+          }
+          liquidity={
+            <LiquidityTabPanel assetID={coin.asset_id} code={coin.code} />
           }
         />
       </Suspense>

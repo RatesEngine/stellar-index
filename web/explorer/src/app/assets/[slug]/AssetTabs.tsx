@@ -32,7 +32,7 @@ export function AssetTabs({ slug, hasIssuer }: { slug: string; hasIssuer: boolea
     { key: 'history', label: 'History' },
     { key: 'supply', label: 'Supply' },
     ...(hasIssuer ? ([{ key: 'issuer', label: 'Issuer' }] as const) : []),
-    { key: 'liquidity', label: 'Liquidity', disabled: true },
+    { key: 'liquidity', label: 'Liquidity' },
   ];
 
   return (
@@ -73,6 +73,7 @@ export function ActiveTabSlot({
   history,
   supply,
   issuer,
+  liquidity,
 }: {
   overview: React.ReactNode;
   chart: React.ReactNode;
@@ -80,6 +81,7 @@ export function ActiveTabSlot({
   history?: React.ReactNode;
   supply?: React.ReactNode;
   issuer?: React.ReactNode;
+  liquidity?: React.ReactNode;
 }) {
   return (
     <ActiveBody
@@ -89,6 +91,7 @@ export function ActiveTabSlot({
       history={history}
       supply={supply}
       issuer={issuer}
+      liquidity={liquidity}
     />
   );
 }
@@ -100,6 +103,7 @@ function ActiveBody({
   history,
   supply,
   issuer,
+  liquidity,
 }: {
   overview: React.ReactNode;
   chart: React.ReactNode;
@@ -107,6 +111,7 @@ function ActiveBody({
   history?: React.ReactNode;
   supply?: React.ReactNode;
   issuer?: React.ReactNode;
+  liquidity?: React.ReactNode;
 }) {
   const params = useSearchParams();
   const tab = (params.get('tab') as AssetTab) || 'overview';
@@ -115,5 +120,6 @@ function ActiveBody({
   if (tab === 'history' && history) return <>{history}</>;
   if (tab === 'supply' && supply) return <>{supply}</>;
   if (tab === 'issuer' && issuer) return <>{issuer}</>;
+  if (tab === 'liquidity' && liquidity) return <>{liquidity}</>;
   return <>{overview}</>;
 }
