@@ -20,7 +20,7 @@ set -euo pipefail
 # this constant and re-running `make docs-api` so the committed
 # index.html records the new version. The standalone bundle is
 # self-contained: HTML, CSS, and JS in one URL.
-SCALAR_VERSION="1.34.10"
+SCALAR_VERSION="1.55.3"
 
 REPO_ROOT=$(cd "$(dirname "$0")/../.." && pwd)
 cd "$REPO_ROOT"
