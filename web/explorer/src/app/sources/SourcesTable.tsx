@@ -18,7 +18,11 @@ import { useSources, useCursors, type Source } from '@/api/hooks';
  * surface as small pills next to the source name.
  */
 export function SourcesTable() {
-  const { data, isLoading, isError, error } = useSources();
+  // includeStats=true joins per-source 24h trade counts so the
+  // table can show the most-active venues at the top of each
+  // class group. The opt-in matches the public docs so any caller
+  // using /v1/sources directly sees the same shape.
+  const { data, isLoading, isError, error } = useSources(undefined, true);
   const cursors = useCursors();
   const grouped = useMemo(() => groupByClass(data ?? []), [data]);
 
@@ -93,6 +97,7 @@ export function SourcesTable() {
                   <Th>Source</Th>
                   <Th>Subclass</Th>
                   <Th align="right">Default weight</Th>
+                  <Th align="right">24h trades</Th>
                   <Th align="right">Last ingest</Th>
                   <Th align="right">Flags</Th>
                 </tr>
@@ -122,6 +127,18 @@ export function SourcesTable() {
                         <span className="font-mono tabular-nums">
                           {s.default_weight}
                         </span>
+                      </Td>
+                      <Td align="right">
+                        {typeof s.trade_count_24h === 'number' &&
+                        s.trade_count_24h > 0 ? (
+                          <span className="font-mono tabular-nums text-slate-700 dark:text-slate-300">
+                            {s.trade_count_24h.toLocaleString()}
+                          </span>
+                        ) : (
+                          <span className="text-[11px] text-slate-300 dark:text-slate-700">
+                            —
+                          </span>
+                        )}
                       </Td>
                       <Td align="right">
                         <CursorAgo cursor={cursor} />
@@ -263,7 +280,16 @@ function groupByClass(rows: Source[]): { klass: Source['class']; rows: Source[] 
   for (const k of order) {
     const rs = map.get(k);
     if (rs && rs.length > 0) {
-      rs.sort((a, b) => a.name.localeCompare(b.name));
+      // 24h trade count desc (most-active venues first), with
+      // alpha-by-name as the tiebreaker for venues that have no
+      // recent activity. Falls back to alpha-only when the caller
+      // didn't request stats.
+      rs.sort((a, b) => {
+        const ta = a.trade_count_24h ?? 0;
+        const tb = b.trade_count_24h ?? 0;
+        if (ta !== tb) return tb - ta;
+        return a.name.localeCompare(b.name);
+      });
       out.push({ klass: k, rows: rs });
     }
   }

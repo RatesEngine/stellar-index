@@ -16,6 +16,14 @@ against.
 ## [Unreleased]
 
 ### Added
+- **`/sources` table: 24h trade count column.** Wires the
+  `?include=stats` opt-in (shipped in #845) into the explorer's
+  source-registry view. Each class group is now sorted by 24h
+  trade count desc — most-active venues at the top, alphabetical
+  fallback for venues that haven't traded in the last 24h.
+  Renders `—` for any source the API hasn't populated yet,
+  including `0` (which means "stats requested, no trades
+  observed" per #845's design).
 - **`/research/architecture` doc browser.** Curated set of seven
   long-form architecture narratives — ingest pipeline, aggregation
   plan, supply pipeline, contract schema evolution, oracle

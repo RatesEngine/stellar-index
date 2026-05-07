@@ -68,18 +68,41 @@ export type Source = {
   backfill_available: boolean;
   backfill_safe: boolean;
   default_weight: number;
+  // Populated only when the caller passes `includeStats`. 0 means
+  // "no trades observed in 24h" — the API doesn't distinguish that
+  // from "stats not requested" because both end up zero on the
+  // wire (omitempty on a numeric field).
+  trade_count_24h?: number;
 };
 
 type SourcesEnvelope = { data: Source[] };
 
-/** useSources — fetches the source registry. */
-export function useSources(classFilter?: Source['class']) {
+/**
+ * useSources — fetches the source registry.
+ *
+ * `includeStats` opts into per-source 24h trade counts via the
+ * `?include=stats` flag the backend added in #845. Cheap (one
+ * GROUP BY against the trades hypertable) but not free, so the
+ * static-only callers (e.g. the home page's source list) leave it
+ * off.
+ */
+export function useSources(
+  classFilter?: Source['class'],
+  includeStats?: boolean,
+) {
   return useQuery<Source[]>({
-    queryKey: ['/v1/sources', classFilter ?? 'all'],
+    queryKey: [
+      '/v1/sources',
+      classFilter ?? 'all',
+      includeStats ? 'stats' : 'no-stats',
+    ],
     queryFn: async () => {
       const env = await apiGet<SourcesEnvelope | Source[]>(
         '/v1/sources',
-        classFilter ? { class: classFilter } : undefined,
+        {
+          ...(classFilter ? { class: classFilter } : {}),
+          ...(includeStats ? { include: 'stats' } : {}),
+        },
       );
       return Array.isArray(env) ? env : env.data;
     },
