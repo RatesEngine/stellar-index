@@ -379,6 +379,7 @@ export type Market = {
   last_trade_at: string;
   trade_count_24h: number;
   volume_24h_usd?: string | null;
+  volume_history_24h?: { hour: string; volume_usd: string }[];
 };
 
 type MarketsEnvelope = {
@@ -393,13 +394,19 @@ type MarketsEnvelope = {
  * we add a "Load more" button or virtual scrolling, switch to
  * useInfiniteQuery and surface the cursor from the envelope.
  */
-export function useMarkets(limit = 100, orderBy?: 'pair' | 'volume_24h_usd_desc') {
+export function useMarkets(
+  limit = 100,
+  orderBy?: 'pair' | 'volume_24h_usd_desc',
+  options?: { sparkline?: boolean },
+) {
+  const include = options?.sparkline ? 'sparkline' : undefined;
   return useQuery<{ markets: Market[]; nextCursor?: string }>({
-    queryKey: ['/v1/markets', limit, orderBy ?? 'pair'],
+    queryKey: ['/v1/markets', limit, orderBy ?? 'pair', include ?? ''],
     queryFn: async () => {
       const env = await apiGet<MarketsEnvelope | Market[]>('/v1/markets', {
         limit,
         ...(orderBy ? { order_by: orderBy } : {}),
+        ...(include ? { include } : {}),
       });
       if (Array.isArray(env)) return { markets: env };
       return { markets: env.data, nextCursor: env.pagination?.next };
