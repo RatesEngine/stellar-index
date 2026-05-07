@@ -77,6 +77,30 @@ async function fetchIssuer(gStrkey: string): Promise<IssuerDetail | null> {
   }
 }
 
+interface CoinPriceRow {
+  asset_id: string;
+  price_usd?: string | null;
+  volume_24h_usd?: string | null;
+  change_24h_pct?: string | null;
+}
+
+async function fetchIssuerCoins(gStrkey: string): Promise<Map<string, CoinPriceRow>> {
+  const out = new Map<string, CoinPriceRow>();
+  if (isCIStub) return out;
+  try {
+    const res = await fetch(
+      `${API_BASE_URL}/v1/coins?issuer=${encodeURIComponent(gStrkey)}&limit=500`,
+      { signal: AbortSignal.timeout(2_000) },
+    );
+    if (!res.ok) return out;
+    const env = (await res.json()) as { data: { coins?: CoinPriceRow[] } };
+    for (const c of env.data?.coins ?? []) out.set(c.asset_id, c);
+    return out;
+  } catch {
+    return out;
+  }
+}
+
 export async function generateMetadata({
   params,
 }: {
@@ -92,7 +116,13 @@ export async function generateMetadata({
 
 export default async function IssuerDetailPage({ params }: { params: Params }) {
   const { g_strkey } = await params;
-  const detail = await fetchIssuer(g_strkey);
+  // Fan out the issuer detail + per-asset price/volume calls in
+  // parallel — they share zero data, so we pay 1× round trip
+  // instead of 2×.
+  const [detail, coinPrices] = await Promise.all([
+    fetchIssuer(g_strkey),
+    fetchIssuerCoins(g_strkey),
+  ]);
 
   if (!detail) {
     return (
@@ -283,48 +313,54 @@ export default async function IssuerDetailPage({ params }: { params: Params }) {
               <thead>
                 <tr className="text-left text-[11px] uppercase tracking-wider text-slate-500">
                   <Th>Code</Th>
-                  <Th>Slug</Th>
-                  <Th align="right">First ledger</Th>
-                  <Th align="right">Last ledger</Th>
+                  <Th align="right">Price</Th>
+                  <Th align="right">24h %</Th>
+                  <Th align="right">24h volume</Th>
                   <Th align="right">Observations</Th>
+                  <Th align="right">First seen</Th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-                {detail.assets.map((a) => (
-                  <tr
-                    key={a.asset_id}
-                    className="hover:bg-slate-50 dark:hover:bg-slate-900/40"
-                  >
-                    <Td>
-                      <Link
-                        href={`/assets/${a.slug}`}
-                        className="font-medium hover:text-brand-600"
-                      >
-                        {a.code}
-                      </Link>
-                    </Td>
-                    <Td>
-                      <span className="font-mono text-xs text-slate-500">
-                        {a.slug}
-                      </span>
-                    </Td>
-                    <Td align="right">
-                      <span className="font-mono text-xs">
-                        #{a.first_seen_ledger.toLocaleString()}
-                      </span>
-                    </Td>
-                    <Td align="right">
-                      <span className="font-mono text-xs">
-                        #{a.last_seen_ledger.toLocaleString()}
-                      </span>
-                    </Td>
-                    <Td align="right">
-                      <span className="font-mono tabular-nums">
-                        {formatCompact(a.observation_count)}
-                      </span>
-                    </Td>
-                  </tr>
-                ))}
+                {detail.assets.map((a) => {
+                  const coin = coinPrices.get(a.asset_id);
+                  return (
+                    <tr
+                      key={a.asset_id}
+                      className="hover:bg-slate-50 dark:hover:bg-slate-900/40"
+                    >
+                      <Td>
+                        <Link
+                          href={`/assets/${a.slug}`}
+                          className="font-medium hover:text-brand-600"
+                        >
+                          {a.code}
+                        </Link>
+                        <span className="ml-2 font-mono text-[11px] text-slate-500">
+                          {a.slug}
+                        </span>
+                      </Td>
+                      <Td align="right">
+                        <PriceCell raw={coin?.price_usd} />
+                      </Td>
+                      <Td align="right">
+                        <ChangeCell raw={coin?.change_24h_pct} />
+                      </Td>
+                      <Td align="right">
+                        <UsdVolumeCell raw={coin?.volume_24h_usd} />
+                      </Td>
+                      <Td align="right">
+                        <span className="font-mono tabular-nums">
+                          {formatCompact(a.observation_count)}
+                        </span>
+                      </Td>
+                      <Td align="right">
+                        <span className="font-mono text-xs">
+                          #{a.first_seen_ledger.toLocaleString()}
+                        </span>
+                      </Td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
@@ -423,5 +459,48 @@ function Td({
     >
       {children}
     </td>
+  );
+}
+
+function PriceCell({ raw }: { raw?: string | null }) {
+  if (!raw) return <span className="text-slate-300 dark:text-slate-700">—</span>;
+  const n = Number(raw);
+  if (!Number.isFinite(n)) return <span className="text-slate-300 dark:text-slate-700">—</span>;
+  // 6 dp for sub-dollar (USDC/scam tokens), 4 dp otherwise.
+  const fixed = n < 1 ? n.toFixed(6) : n.toFixed(4);
+  return (
+    <span className="font-mono tabular-nums text-slate-700 dark:text-slate-300">
+      ${fixed}
+    </span>
+  );
+}
+
+function ChangeCell({ raw }: { raw?: string | null }) {
+  if (!raw) return <span className="text-slate-300 dark:text-slate-700">—</span>;
+  const n = Number(raw);
+  if (!Number.isFinite(n)) return <span className="text-slate-300 dark:text-slate-700">—</span>;
+  const tone =
+    n > 0
+      ? 'text-emerald-600 dark:text-emerald-400'
+      : n < 0
+        ? 'text-rose-600 dark:text-rose-400'
+        : 'text-slate-500';
+  const sign = n > 0 ? '+' : '';
+  return (
+    <span className={`font-mono tabular-nums ${tone}`}>
+      {sign}
+      {n.toFixed(2)}%
+    </span>
+  );
+}
+
+function UsdVolumeCell({ raw }: { raw?: string | null }) {
+  if (!raw) return <span className="text-slate-300 dark:text-slate-700">—</span>;
+  const n = Number(raw);
+  if (!Number.isFinite(n)) return <span className="text-slate-300 dark:text-slate-700">—</span>;
+  return (
+    <span className="font-mono tabular-nums text-slate-700 dark:text-slate-300">
+      ${formatCompact(n)}
+    </span>
   );
 }
