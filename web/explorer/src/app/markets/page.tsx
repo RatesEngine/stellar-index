@@ -1,3 +1,4 @@
+import { Suspense } from 'react';
 import type { Metadata } from 'next';
 import { MarketsTable } from './MarketsTable';
 
@@ -27,7 +28,9 @@ export default function MarketsPage() {
         </p>
       </header>
 
-      <MarketsTable />
+      <Suspense fallback={null}>
+        <MarketsTable />
+      </Suspense>
     </div>
   );
 }

@@ -16,6 +16,11 @@ against.
 ## [Unreleased]
 
 ### Added
+- **`/markets` table: sortable Base + 24h volume columns.** Click
+  the Base header to flip to alphabetical-by-pair (the API's
+  `pair` order_by); click 24h volume to flip back to volume-desc.
+  Active sort is mirrored in the URL as `?order=...` for
+  bookmark + back-button parity with `/assets`.
 - **Live navbar status pill.** Replaces the hard-coded green dot
   next to the navbar's Status link with a real-time poll of
   `/v1/status.overall`. Green pulses when ok, amber on degraded,

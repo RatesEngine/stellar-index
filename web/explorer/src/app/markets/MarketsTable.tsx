@@ -1,6 +1,7 @@
 'use client';
 
 import Link from 'next/link';
+import { useRouter, useSearchParams } from 'next/navigation';
 
 import { Panel } from '@/components/reveal';
 import { asExample } from '@/api/client';
@@ -10,22 +11,36 @@ import { formatCompact } from '@/lib/format';
 /**
  * Live-data markets table backed by `/v1/markets`.
  *
- * Sorts client-side by `trade_count_24h` desc — most active first.
+ * Default sort is `volume_24h_usd_desc` so the high-activity pairs
+ * land in the first page. Click the 24h volume header to toggle
+ * back to the alphabetical-by-pair sort (the API's `pair` order_by);
+ * URL ?order= preserves the choice across navigation.
+ *
  * Per ADR-0015 the API returns "active markets" only (pairs that
  * traded in the last 14 days). Cursor pagination is plumbed through
  * the hook but the v0 page only shows the first 100; "Load more"
  * lands once we add virtual scrolling.
  */
 export function MarketsTable() {
-  // Server-side ordering by volume_24h_usd desc (with NULLS LAST)
-  // gives us the high-activity pairs in the first page directly,
-  // no client sort needed for relevance.
-  const { data, isLoading, isError, error } = useMarkets(
-    100,
-    'volume_24h_usd_desc',
-  );
+  const router = useRouter();
+  const params = useSearchParams();
+  const orderParam = params.get('order') ?? '';
+  // Default to volume desc (high-activity first); ?order=pair flips
+  // to the API's alphabetical-by-pair order. Anything else falls
+  // back to the default.
+  const orderBy: 'volume_24h_usd_desc' | 'pair' =
+    orderParam === 'pair' ? 'pair' : 'volume_24h_usd_desc';
+
+  const { data, isLoading, isError, error } = useMarkets(100, orderBy);
 
   const sorted = data?.markets ?? [];
+
+  function setOrder(next: 'volume_24h_usd_desc' | 'pair') {
+    const sp = new URLSearchParams(params.toString());
+    if (next === 'volume_24h_usd_desc') sp.delete('order');
+    else sp.set('order', next);
+    router.replace(`/markets${sp.toString() ? `?${sp.toString()}` : ''}`);
+  }
 
   if (isError) {
     return (
@@ -74,9 +89,35 @@ export function MarketsTable() {
           <thead>
             <tr className="text-left text-[11px] uppercase tracking-wider text-slate-500">
               <Th>#</Th>
-              <Th>Base</Th>
+              <Th>
+                <SortHeader
+                  active={orderBy === 'pair'}
+                  label="Base"
+                  hint={
+                    orderBy === 'pair'
+                      ? 'Sorted alphabetically. Click to sort by 24h volume.'
+                      : 'Sort alphabetically by base asset.'
+                  }
+                  onClick={() =>
+                    setOrder(
+                      orderBy === 'pair' ? 'volume_24h_usd_desc' : 'pair',
+                    )
+                  }
+                />
+              </Th>
               <Th>Quote</Th>
-              <Th align="right">24h volume</Th>
+              <Th align="right">
+                <SortHeader
+                  active={orderBy === 'volume_24h_usd_desc'}
+                  label="24h volume"
+                  hint={
+                    orderBy === 'volume_24h_usd_desc'
+                      ? 'Sorted by 24h USD volume (desc). Click to sort alphabetically.'
+                      : 'Sort by 24h USD volume (desc).'
+                  }
+                  onClick={() => setOrder('volume_24h_usd_desc')}
+                />
+              </Th>
               <Th align="right">24h trades</Th>
               <Th align="right">Last trade</Th>
             </tr>
@@ -168,6 +209,38 @@ function AssetLabel({ canonical }: { canonical: string }) {
         {issuer.length > 12 ? `${issuer.slice(0, 8)}…${issuer.slice(-4)}` : issuer}
       </div>
     </div>
+  );
+}
+
+// SortHeader is a clickable th-content with a small marker that
+// animates on/off when the column is the active sort. Two columns
+// here are sortable (Base alphabetically and 24h volume desc); the
+// rest are fixed because the API doesn't support sorting on them.
+function SortHeader({
+  active,
+  label,
+  hint,
+  onClick,
+}: {
+  active: boolean;
+  label: string;
+  hint: string;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      title={hint}
+      className={`inline-flex items-center gap-1 hover:text-brand-600 ${
+        active ? 'text-brand-600' : ''
+      }`}
+    >
+      {label}
+      <span aria-hidden className="text-[10px]">
+        {active ? '↓' : '↕'}
+      </span>
+    </button>
   );
 }
 
