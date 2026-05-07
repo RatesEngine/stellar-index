@@ -47,6 +47,7 @@ export function Footer() {
               { label: 'Status', href: 'https://status.ratesengine.net', external: true },
               { label: 'Diagnostics', href: '/diagnostics' },
               { label: 'API docs', href: 'https://docs.ratesengine.net', external: true },
+              { label: 'Changelog', href: '/changelog' },
               { label: 'Research', href: '/research' },
             ]}
           />

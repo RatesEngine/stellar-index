@@ -15,6 +15,13 @@ against.
 
 ## [Unreleased]
 
+### Added
+- **`/changelog` page on the explorer.** Renders this file at
+  build time — every release block surfaces with proper markdown
+  (bold, code, links), grouped by Added / Fixed / Changed with
+  matching tone colours. Each version pill links out to the
+  GitHub release page. Listed in the footer under System.
+
 ## [v0.5.0-rc.20] — 2026-05-07
 
 ### Fixed
