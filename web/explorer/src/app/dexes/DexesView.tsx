@@ -17,6 +17,7 @@ interface Pool {
   last_trade_at: string;
   trade_count_24h: number;
   volume_24h_usd?: string | null;
+  last_price?: string | null;
 }
 
 type Order = 'volume_24h_usd_desc' | 'pair';
@@ -177,6 +178,7 @@ export function DexesView() {
                 <Th>Venue</Th>
                 <Th>Base</Th>
                 <Th>Quote</Th>
+                <Th align="right">Last price</Th>
                 <Th align="right">24h volume</Th>
                 <Th align="right">24h trades</Th>
                 <Th align="right">Last trade</Th>
@@ -185,14 +187,14 @@ export function DexesView() {
             <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
               {q.isLoading && !q.data && (
                 <tr>
-                  <td colSpan={7} className="px-4 py-8 text-center text-sm text-slate-500">
+                  <td colSpan={8} className="px-4 py-8 text-center text-sm text-slate-500">
                     Loading pools…
                   </td>
                 </tr>
               )}
               {!q.isLoading && pools.length === 0 && (
                 <tr>
-                  <td colSpan={7} className="px-4 py-8 text-center text-sm text-slate-500">
+                  <td colSpan={8} className="px-4 py-8 text-center text-sm text-slate-500">
                     No pools matched.
                   </td>
                 </tr>
@@ -235,6 +237,9 @@ export function DexesView() {
                       >
                         <AssetLabel canonical={p.quote} />
                       </Link>
+                    </Td>
+                    <Td align="right">
+                      <LastPriceCell raw={p.last_price} />
                     </Td>
                     <Td align="right">
                       {vol != null && Number.isFinite(vol) && vol > 0 ? (
@@ -392,6 +397,19 @@ function Td({
     >
       {children}
     </td>
+  );
+}
+
+function LastPriceCell({ raw }: { raw?: string | null }) {
+  if (!raw) return <span className="text-slate-300 dark:text-slate-700">—</span>;
+  const n = Number(raw);
+  if (!Number.isFinite(n)) return <span className="text-slate-300 dark:text-slate-700">—</span>;
+  const fixed =
+    n >= 1000 ? n.toFixed(2) : n >= 1 ? n.toFixed(4) : n >= 0.0001 ? n.toFixed(6) : n.toExponential(3);
+  return (
+    <span className="font-mono tabular-nums text-slate-700 dark:text-slate-300">
+      {fixed}
+    </span>
   );
 }
 
