@@ -16,6 +16,16 @@ against.
 ## [Unreleased]
 
 ### Added
+- **`/methodology` page — how rates are computed.** New
+  enterprise-grade explainer covering source classes (what
+  contributes to VWAP and what doesn't), VWAP weighting policy,
+  stablecoin → fiat proxy at the aggregator layer (not at
+  ingest, so depegs stay visible), freeze policy, the
+  closed-bucket-only API contract that gives cross-region
+  consistency, latency targets, and the i128/string-on-the-wire
+  precision invariant. Each section cross-links to the
+  underlying ADR for the full rationale. Linked from the
+  navbar.
 - **status site: per-incident postmortem pages.** Every incident
   in `internal/incidents/data/*.md` now renders as its own page
   on `status.ratesengine.net/incident/<slug>`, generated from the

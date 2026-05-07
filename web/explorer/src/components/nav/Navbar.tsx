@@ -84,6 +84,7 @@ const SECTIONS: Section[] = [
   { label: 'Aggregators', href: '/aggregators' },
   { label: 'Oracles', href: '/oracles' },
   { label: 'Network', href: '/network' },
+  { label: 'Methodology', href: '/methodology' },
   { label: 'Research', href: '/research' },
   { label: 'Docs', href: 'https://docs.ratesengine.net', external: true },
 ];
