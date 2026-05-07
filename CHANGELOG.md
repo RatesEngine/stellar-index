@@ -15,6 +15,8 @@ against.
 
 ## [Unreleased]
 
+## [v0.5.0-rc.28] — 2026-05-07
+
 ### Added
 - **Curated known-issuer metadata fallback** on `/v1/issuers` and
   `/v1/issuers/{g_strkey}`. Top issuers (Circle/USDC, Aquarius/AQUA,
