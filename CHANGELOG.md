@@ -25,6 +25,15 @@ against.
   applied to OraclesView's /v1/oracle/streams call.
 
 ### Added
+- **/v1/coins listing gains opt-in `?include=sparkline`** with
+  per-row 24h hourly history. Backed by new
+  `Store.GetCoinsPriceHistory24hBatch` — single CTE pass over all
+  requested asset_ids (rather than N+1 per-asset queries),
+  returning a `map[asset_id][]CoinPricePoint`. Wire shape:
+  `Coin.price_history_24h` (already present from /v1/coins/{slug};
+  now also populated on the listing when opted-in). /assets table
+  renders the result as a tiny inline SVG sparkline column —
+  client-side draw, signed colour by direction.
 - **/v1/coins/{slug} returns 7-day daily price history + sparkline
   toggle on /assets/[slug].** New `Store.GetCoinPriceHistory7d`
   emits 7 daily USD-price samples (oldest first), reusing the same
