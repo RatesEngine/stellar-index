@@ -63,7 +63,28 @@ func (c *Client) WithBase(base string) *Client {
 // values are the price of 1 USD denominated in that currency
 // (e.g. usd→eur ≈ 0.92 means 1 USD buys 0.92 EUR).
 func (c *Client) LatestUSDRates(ctx context.Context) (map[string]float64, time.Time, error) {
-	url := c.base + "/currencies/usd.min.json"
+	return c.usdRatesAt(ctx, "latest")
+}
+
+// HistoricalUSDRates returns the USD-base rate map as of a specific
+// date. `date` should be in YYYY-MM-DD form — currency-api pins
+// historical snapshots to git tags of the same date string.
+//
+// Returns the same shape as [LatestUSDRates]. Errors propagate as
+// fetch failures (e.g. weekend / holiday with no published file).
+func (c *Client) HistoricalUSDRates(ctx context.Context, date string) (map[string]float64, time.Time, error) {
+	if date == "" {
+		return nil, time.Time{}, fmt.Errorf("date is required")
+	}
+	return c.usdRatesAt(ctx, date)
+}
+
+func (c *Client) usdRatesAt(ctx context.Context, tag string) (map[string]float64, time.Time, error) {
+	// currency-api pins historical snapshots via the package version
+	// rather than a query param — `@2024-03-06` instead of `@latest`.
+	// Build the URL by string-replacing the tag in the base.
+	historicalBase := strings.Replace(c.base, "@latest", "@"+tag, 1)
+	url := historicalBase + "/currencies/usd.min.json"
 	body, err := c.get(ctx, url)
 	if err != nil {
 		return nil, time.Time{}, fmt.Errorf("fetch %s: %w", url, err)
@@ -80,8 +101,6 @@ func (c *Client) LatestUSDRates(ctx context.Context) (map[string]float64, time.T
 	}
 	publishedAt, err := time.Parse("2006-01-02", raw.Date)
 	if err != nil {
-		// Tolerate undated snapshots — surface "unknown" via zero
-		// time rather than fail the whole fetch.
 		publishedAt = time.Time{}
 	}
 	return raw.USD, publishedAt, nil

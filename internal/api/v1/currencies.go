@@ -25,6 +25,16 @@ type CurrenciesSnapshot struct {
 	Currencies  []CurrencyEntry
 	PublishedAt time.Time
 	FetchedAt   time.Time
+	History7d   map[string][]CurrencyHistoryRaw
+}
+
+// CurrencyHistoryRaw is the per-ticker daily series the adapter
+// passes through. Date is UTC; RateUSD is "1 USD = N units of
+// ticker". Inverse is computed in the handler so the wire shape
+// stays minimal.
+type CurrencyHistoryRaw struct {
+	Date    time.Time
+	RateUSD float64
 }
 
 // CurrencyEntry is one wire-shape currency row.
@@ -92,15 +102,27 @@ func (s *Server) handleCurrencies(w http.ResponseWriter, r *http.Request) {
 // rate(A→B) = rate(USD→B) / rate(USD→A). Useful for the
 // converter widget on the explorer's per-currency page (no need
 // to call the API for every pair the user might compare against).
+//
+// History7d is the last 7 daily snapshots — empty when the worker
+// hasn't completed its history backfill yet (or upstream rejected
+// the fetches for less-tracked tickers).
 type CurrencyDetail struct {
-	Ticker      string             `json:"ticker"`
-	Name        string             `json:"name"`
-	RateUSD     float64            `json:"rate_usd"`
-	InverseUSD  float64            `json:"inverse_usd"` // 1 unit of ticker = $X
-	CrossRates  map[string]float64 `json:"cross_rates"`
-	PublishedAt time.Time          `json:"published_at,omitempty"`
-	FetchedAt   time.Time          `json:"fetched_at,omitempty"`
-	Source      string             `json:"source"`
+	Ticker      string                 `json:"ticker"`
+	Name        string                 `json:"name"`
+	RateUSD     float64                `json:"rate_usd"`
+	InverseUSD  float64                `json:"inverse_usd"` // 1 unit of ticker = $X
+	CrossRates  map[string]float64     `json:"cross_rates"`
+	History7d   []CurrencyHistoryPoint `json:"history_7d,omitempty"`
+	PublishedAt time.Time              `json:"published_at,omitempty"`
+	FetchedAt   time.Time              `json:"fetched_at,omitempty"`
+	Source      string                 `json:"source"`
+}
+
+// CurrencyHistoryPoint is one daily rate datum.
+type CurrencyHistoryPoint struct {
+	Date     time.Time `json:"date"`
+	RateUSD  float64   `json:"rate_usd"`  // 1 USD = N units of ticker
+	InverseUSD float64 `json:"inverse_usd"` // 1 unit of ticker = $X
 }
 
 // handleCurrencyDetail serves GET /v1/currencies/{ticker}.
@@ -169,12 +191,32 @@ func (s *Server) handleCurrencyDetail(w http.ResponseWriter, r *http.Request) {
 		inverse = 1.0 / target.RateUSD
 	}
 
+	// Project the per-ticker historical series, computing the
+	// inverse alongside so the frontend can render either axis
+	// without re-doing the maths per row.
+	var history []CurrencyHistoryPoint
+	if raw, ok := snap.History7d[target.Ticker]; ok {
+		history = make([]CurrencyHistoryPoint, 0, len(raw))
+		for _, p := range raw {
+			inv := 0.0
+			if p.RateUSD > 0 {
+				inv = 1.0 / p.RateUSD
+			}
+			history = append(history, CurrencyHistoryPoint{
+				Date:       p.Date,
+				RateUSD:    p.RateUSD,
+				InverseUSD: inv,
+			})
+		}
+	}
+
 	writeJSON(w, CurrencyDetail{
 		Ticker:      target.Ticker,
 		Name:        target.Name,
 		RateUSD:     target.RateUSD,
 		InverseUSD:  inverse,
 		CrossRates:  cross,
+		History7d:   history,
 		PublishedAt: snap.PublishedAt,
 		FetchedAt:   snap.FetchedAt,
 		Source:      "currency-api",
