@@ -72,23 +72,53 @@ function Sparkline({ points, ariaLabel }: { points: Point[]; ariaLabel: string }
   const W = 600;
   const H = 60;
   const segments: string[] = [];
+  // Track each contiguous run so the area fill can close back to
+  // the baseline at gap boundaries — null buckets break the shape.
+  type Run = { start: number; end: number };
+  const runs: Run[] = [];
   let pen = false;
+  let runStart = -1;
+  let lastIdx = -1;
   values.forEach((v, i) => {
     const x = (i / (values.length - 1)) * W;
     if (v == null) {
+      if (pen && runStart >= 0) runs.push({ start: runStart, end: lastIdx });
       pen = false;
+      runStart = -1;
       return;
     }
     const y = H - ((v - min) / range) * H;
     segments.push(`${pen ? 'L' : 'M'} ${x.toFixed(1)} ${y.toFixed(1)}`);
+    if (!pen) runStart = i;
     pen = true;
+    lastIdx = i;
   });
+  if (pen && runStart >= 0) runs.push({ start: runStart, end: lastIdx });
   const last = finite[finite.length - 1];
   const first = finite[0];
-  const tone =
-    last >= first
-      ? 'stroke-emerald-500 dark:stroke-emerald-400'
-      : 'stroke-rose-500 dark:stroke-rose-400';
+  const positive = last >= first;
+  const tone = positive
+    ? 'stroke-emerald-500 dark:stroke-emerald-400'
+    : 'stroke-rose-500 dark:stroke-rose-400';
+  const fill = positive
+    ? 'fill-emerald-500/15 dark:fill-emerald-400/15'
+    : 'fill-rose-500/15 dark:fill-rose-400/15';
+  // Area path: emit one closed sub-region per contiguous run.
+  const areaSegs: string[] = [];
+  for (const run of runs) {
+    let started = false;
+    for (let i = run.start; i <= run.end; i++) {
+      const v = values[i];
+      if (v == null) continue;
+      const x = (i / (values.length - 1)) * W;
+      const y = H - ((v - min) / range) * H;
+      areaSegs.push(`${started ? 'L' : 'M'} ${x.toFixed(1)} ${y.toFixed(1)}`);
+      started = true;
+    }
+    const xStart = (run.start / (values.length - 1)) * W;
+    const xEnd = (run.end / (values.length - 1)) * W;
+    areaSegs.push(`L ${xEnd.toFixed(1)} ${H} L ${xStart.toFixed(1)} ${H} Z`);
+  }
   return (
     <svg
       viewBox={`0 0 ${W} ${H}`}
@@ -97,6 +127,7 @@ function Sparkline({ points, ariaLabel }: { points: Point[]; ariaLabel: string }
       role="img"
       aria-label={ariaLabel}
     >
+      <path d={areaSegs.join(' ')} stroke="none" className={fill} />
       <path d={segments.join(' ')} fill="none" strokeWidth="1.5" className={tone} />
     </svg>
   );
