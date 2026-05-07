@@ -25,6 +25,14 @@ against.
   applied to OraclesView's /v1/oracle/streams call.
 
 ### Added
+- **/v1/currencies returns per-row 7d change% + optional sparkline.**
+  Each `CurrencyEntry` now carries `change_7d_pct` (computed
+  server-side from the cached history series so every consumer
+  agrees on the math). Adding `?include=sparkline` attaches
+  `history_7d_rates` (the per-day inverse-USD series) to every
+  row — opt-in to keep the default list payload lean. /currencies
+  table now has 7d % + 7d chart columns; signed colour follows the
+  change direction.
 - **Per-source 24h volume sparkline column** on the /dexes
   protocol-overview table and the /exchanges CEX table — fulfils
   the user IA spec ("chart showing volume over time"). Backed by

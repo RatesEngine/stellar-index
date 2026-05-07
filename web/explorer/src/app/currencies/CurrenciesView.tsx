@@ -11,6 +11,8 @@ interface CurrencyRow {
   ticker: string;
   name: string;
   rate_usd: number;
+  change_7d_pct?: number;
+  history_7d_rates?: number[];
   updated_at?: string;
 }
 
@@ -25,9 +27,11 @@ export function CurrenciesView() {
   const [q, setQ] = useState('');
 
   const query = useQuery<CurrenciesPayload>({
-    queryKey: ['/v1/currencies'],
+    queryKey: ['/v1/currencies', 'sparkline'],
     queryFn: async () => {
-      const env = await apiGet<{ data: CurrenciesPayload }>('/v1/currencies', {});
+      const env = await apiGet<{ data: CurrenciesPayload }>('/v1/currencies', {
+        include: 'sparkline',
+      });
       return env.data ?? {};
     },
     refetchInterval: 60_000,
@@ -94,19 +98,21 @@ export function CurrenciesView() {
                 <Th>Name</Th>
                 <Th align="right">1 USD =</Th>
                 <Th align="right">1 unit = USD</Th>
+                <Th align="right">7d %</Th>
+                <Th align="right">7d chart</Th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
               {query.isLoading && (
                 <tr>
-                  <td colSpan={4} className="px-4 py-8 text-center text-sm text-slate-500">
+                  <td colSpan={6} className="px-4 py-8 text-center text-sm text-slate-500">
                     Loading currencies…
                   </td>
                 </tr>
               )}
               {!query.isLoading && filtered.length === 0 && (
                 <tr>
-                  <td colSpan={4} className="px-4 py-8 text-center text-sm text-slate-500">
+                  <td colSpan={6} className="px-4 py-8 text-center text-sm text-slate-500">
                     {q ? `No currencies matched "${q}".` : 'No currencies — the rates worker is still warming up.'}
                   </td>
                 </tr>
@@ -130,6 +136,12 @@ export function CurrenciesView() {
                     <span className="font-mono tabular-nums text-slate-700 dark:text-slate-300">
                       {c.rate_usd > 0 ? `$${formatRate(1 / c.rate_usd)}` : '—'}
                     </span>
+                  </Td>
+                  <Td align="right">
+                    <ChangePct value={c.change_7d_pct} />
+                  </Td>
+                  <Td align="right">
+                    <RateSparkline points={c.history_7d_rates} positive={(c.change_7d_pct ?? 0) >= 0} />
                   </Td>
                 </tr>
               ))}
@@ -180,4 +192,46 @@ function formatDate(iso: string): string {
   } catch {
     return iso;
   }
+}
+
+function ChangePct({ value }: { value?: number }) {
+  if (value == null || !Number.isFinite(value)) {
+    return <span className="font-mono text-xs text-slate-300 dark:text-slate-700">—</span>;
+  }
+  const positive = value >= 0;
+  return (
+    <span
+      className={`font-mono tabular-nums text-xs ${
+        positive ? 'text-emerald-700 dark:text-emerald-400' : 'text-rose-700 dark:text-rose-400'
+      }`}
+    >
+      {positive ? '+' : ''}
+      {value.toFixed(2)}%
+    </span>
+  );
+}
+
+function RateSparkline({ points, positive }: { points?: number[]; positive: boolean }) {
+  if (!points || points.length < 2) {
+    return <span className="font-mono text-[10px] text-slate-300 dark:text-slate-700">—</span>;
+  }
+  const width = 80;
+  const height = 24;
+  const min = Math.min(...points);
+  const max = Math.max(...points);
+  const range = max - min || 1;
+  const stepX = width / (points.length - 1);
+  const path = points
+    .map((p, i) => {
+      const x = i * stepX;
+      const y = height - ((p - min) / range) * height;
+      return `${i === 0 ? 'M' : 'L'}${x.toFixed(2)},${y.toFixed(2)}`;
+    })
+    .join(' ');
+  const stroke = positive ? '#059669' : '#e11d48';
+  return (
+    <svg width={width} height={height} viewBox={`0 0 ${width} ${height}`} className="inline-block">
+      <path d={path} fill="none" stroke={stroke} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
 }

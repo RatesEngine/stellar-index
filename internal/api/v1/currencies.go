@@ -38,11 +38,24 @@ type CurrencyHistoryRaw struct {
 }
 
 // CurrencyEntry is one wire-shape currency row.
+//
+// Change7dPct is the percent change in 1-USD-in-this-currency over
+// the 7d window: ((today - 7d-ago) / 7d-ago) × 100. Pointer +
+// omitempty so callers can distinguish "we don't have history yet"
+// (cold cache) from "rate hasn't moved" (0.0). Computed server-side
+// so every consumer agrees on the math.
+//
+// History7dRates is the per-day inverse-rate series (1 unit of
+// ticker in USD). Populated only when the request includes
+// `sparkline` (e.g. `?include=sparkline`); otherwise omitted to
+// keep the default list payload lean.
 type CurrencyEntry struct {
-	Ticker      string    `json:"ticker"`
-	Name        string    `json:"name"`
-	RateUSD     float64   `json:"rate_usd"`
-	UpdatedAt   time.Time `json:"updated_at,omitempty"`
+	Ticker         string    `json:"ticker"`
+	Name           string    `json:"name"`
+	RateUSD        float64   `json:"rate_usd"`
+	Change7dPct    *float64  `json:"change_7d_pct,omitempty"`
+	History7dRates []float64 `json:"history_7d_rates,omitempty"`
+	UpdatedAt      time.Time `json:"updated_at,omitempty"`
 }
 
 // CurrenciesPayload is the wire envelope for /v1/currencies.
@@ -70,6 +83,9 @@ type CurrenciesPayload struct {
 // Query params:
 //   - limit (optional): cap the returned currencies. Useful for
 //     home-page strips. Default = no cap (~200 rows).
+//   - include (optional): comma-separated; `sparkline` attaches the
+//     per-ticker 7d series of inverse-USD rates so listings can
+//     render mini charts without a follow-up per-ticker fetch.
 func (s *Server) handleCurrencies(w http.ResponseWriter, r *http.Request) {
 	reader := s.currencies
 	if reader == nil {
@@ -81,14 +97,53 @@ func (s *Server) handleCurrencies(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, CurrenciesPayload{Source: "currency-api"}, Flags{})
 		return
 	}
-	rows := snap.Currencies
+
+	includeSparkline := false
+	for _, f := range strings.Split(r.URL.Query().Get("include"), ",") {
+		if strings.TrimSpace(f) == "sparkline" {
+			includeSparkline = true
+		}
+	}
+
+	// Enrich every entry with its 7d change + optional sparkline.
+	// Both are derived from the History7d map the worker populates.
+	enriched := make([]CurrencyEntry, len(snap.Currencies))
+	for i, c := range snap.Currencies {
+		enriched[i] = c
+		hist := snap.History7d[c.Ticker]
+		if len(hist) >= 2 {
+			first := hist[0].RateUSD
+			last := hist[len(hist)-1].RateUSD
+			// change_7d_pct is in inverse-USD terms (the "1 unit of
+			// ticker = $X" axis users care about). RateUSD is "1 USD
+			// = N units"; flip both ends before dividing.
+			if first > 0 && last > 0 {
+				firstInv := 1.0 / first
+				lastInv := 1.0 / last
+				if firstInv > 0 {
+					change := ((lastInv - firstInv) / firstInv) * 100
+					enriched[i].Change7dPct = &change
+				}
+			}
+		}
+		if includeSparkline && len(hist) > 0 {
+			out := make([]float64, len(hist))
+			for j, p := range hist {
+				if p.RateUSD > 0 {
+					out[j] = 1.0 / p.RateUSD
+				}
+			}
+			enriched[i].History7dRates = out
+		}
+	}
+
 	if raw := r.URL.Query().Get("limit"); raw != "" {
-		if n, err := strconv.Atoi(raw); err == nil && n > 0 && n < len(rows) {
-			rows = rows[:n]
+		if n, err := strconv.Atoi(raw); err == nil && n > 0 && n < len(enriched) {
+			enriched = enriched[:n]
 		}
 	}
 	writeJSON(w, CurrenciesPayload{
-		Currencies:  rows,
+		Currencies:  enriched,
 		PublishedAt: snap.PublishedAt,
 		FetchedAt:   snap.FetchedAt,
 		Source:      "currency-api",
