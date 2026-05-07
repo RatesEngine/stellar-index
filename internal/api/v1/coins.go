@@ -25,6 +25,7 @@ type CoinsReader interface {
 	GetCoinsPriceHistory24hBatch(ctx context.Context, assetIDs []string) (map[string][]timescale.CoinPricePoint, error)
 	GetCoinMarketsCount(ctx context.Context, assetID string) (int64, error)
 	GetCoinATH(ctx context.Context, assetID string) (*timescale.CoinATH, error)
+	GetCoinTradeCount24h(ctx context.Context, assetID string) (int64, error)
 }
 
 // Coin is the wire shape of one entry in the /v1/coins response.
@@ -77,6 +78,13 @@ type Coin struct {
 	// (lookup error) — both render as "—" in the UI but behave
 	// differently in alerting.
 	MarketsCount *int64 `json:"markets_count,omitempty"`
+	// TradeCount24h is the count of trades the asset participated
+	// in (as base OR quote) over the trailing 24h. Populated only
+	// on /v1/coins/{slug}. Read from the trades hypertable directly
+	// — accurate down to the individual trade rather than
+	// MarketsCount's distinct-pair aggregation. Companion to the
+	// all-time `observation_count`.
+	TradeCount24h *int64 `json:"trade_count_24h,omitempty"`
 	// ATH is the asset's all-time-high USD price plus the day it
 	// was set. Populated only on /v1/coins/{slug}. Sourced from
 	// `prices_1d` filtered to USD-denominated quotes — triangulated
@@ -279,7 +287,7 @@ func (s *Server) handleCoins(w http.ResponseWriter, r *http.Request) { //nolint:
 // top-N listing first.
 //
 // Returns 404 when the slug doesn't match any classic asset.
-func (s *Server) handleCoin(w http.ResponseWriter, r *http.Request) {
+func (s *Server) handleCoin(w http.ResponseWriter, r *http.Request) { //nolint:gocognit // dispatch fans across optional reader calls; collapsing would lose call-site context
 	if s.coins == nil {
 		writeProblem(w, r,
 			"https://api.ratesengine.net/errors/coins-unavailable",
@@ -373,6 +381,11 @@ func (s *Server) handleCoin(w http.ResponseWriter, r *http.Request) {
 		s.logger.Warn("coin ath", "asset_id", row.AssetID, "err", aErr)
 	} else if ath != nil {
 		out.ATH = &CoinATH{USD: ath.USD, At: ath.At}
+	}
+	if tc, tErr := s.coins.GetCoinTradeCount24h(r.Context(), row.AssetID); tErr != nil {
+		s.logger.Warn("coin trade count 24h", "asset_id", row.AssetID, "err", tErr)
+	} else {
+		out.TradeCount24h = &tc
 	}
 
 	writeJSON(w, out, Flags{})

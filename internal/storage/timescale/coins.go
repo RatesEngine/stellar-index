@@ -806,6 +806,32 @@ func (s *Store) GetCoinMarketsCount(ctx context.Context, assetID string) (int64,
 	return n, nil
 }
 
+// GetCoinTradeCount24h returns the count of trades the given asset
+// participated in (as base OR quote) over the trailing 24 hours.
+// Reads the `trades` hypertable directly — accurate down to the
+// individual trade rather than the prices_1m bucket aggregation
+// used by GetCoinMarketsCount.
+//
+// Powers the asset detail page header — `observation_count` shows
+// the all-time figure, this gives the "what's happening right now"
+// counterpart so a user can tell at a glance whether the asset is
+// active or a long tail entry.
+//
+// Returns 0 cleanly when the asset has no trades in the window.
+func (s *Store) GetCoinTradeCount24h(ctx context.Context, assetID string) (int64, error) {
+	const q = `
+		SELECT COUNT(*)
+		  FROM trades
+		 WHERE ts >= now() - INTERVAL '24 hours'
+		   AND (base_asset = $1 OR quote_asset = $1)
+	`
+	var n int64
+	if err := s.db.QueryRowContext(ctx, q, assetID).Scan(&n); err != nil {
+		return 0, fmt.Errorf("timescale: GetCoinTradeCount24h: %w", err)
+	}
+	return n, nil
+}
+
 // GetCoinTopMarkets returns up to `limit` markets the given asset
 // participates in (as base OR quote), ordered by trailing-24h USD
 // volume desc. Used by the explorer asset-detail page to show a
