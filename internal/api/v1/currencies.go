@@ -182,15 +182,23 @@ func (s *Server) handleCurrencies(w http.ResponseWriter, r *http.Request) { //no
 // hasn't completed its history backfill yet (or upstream rejected
 // the fetches for less-tracked tickers).
 type CurrencyDetail struct {
-	Ticker      string                 `json:"ticker"`
-	Name        string                 `json:"name"`
-	RateUSD     float64                `json:"rate_usd"`
-	InverseUSD  float64                `json:"inverse_usd"` // 1 unit of ticker = $X
-	CrossRates  map[string]float64     `json:"cross_rates"`
-	History7d   []CurrencyHistoryPoint `json:"history_7d,omitempty"`
-	PublishedAt time.Time              `json:"published_at,omitempty"`
-	FetchedAt   time.Time              `json:"fetched_at,omitempty"`
-	Source      string                 `json:"source"`
+	Ticker     string             `json:"ticker"`
+	Name       string             `json:"name"`
+	RateUSD    float64            `json:"rate_usd"`
+	InverseUSD float64            `json:"inverse_usd"` // 1 unit of ticker = $X
+	CrossRates map[string]float64 `json:"cross_rates"`
+	// Change24hPct / Change7dPct are inverse-USD percent moves
+	// (positive = ticker strengthened against USD), same basis as
+	// the listing endpoint. Pointer + omitempty so callers can
+	// distinguish "no prior history" (cold cache) from "rate
+	// hasn't moved" (0.0). Resolution is daily-grain via the
+	// currency-api shim.
+	Change24hPct *float64               `json:"change_24h_pct,omitempty"`
+	Change7dPct  *float64               `json:"change_7d_pct,omitempty"`
+	History7d    []CurrencyHistoryPoint `json:"history_7d,omitempty"`
+	PublishedAt  time.Time              `json:"published_at,omitempty"`
+	FetchedAt    time.Time              `json:"fetched_at,omitempty"`
+	Source       string                 `json:"source"`
 }
 
 // CurrencyHistoryPoint is one daily rate datum.
@@ -205,7 +213,7 @@ type CurrencyHistoryPoint struct {
 // 404 if the ticker isn't in the snapshot (typo / not covered by
 // the upstream feed). 200 + warming-up payload if the cache is
 // empty.
-func (s *Server) handleCurrencyDetail(w http.ResponseWriter, r *http.Request) {
+func (s *Server) handleCurrencyDetail(w http.ResponseWriter, r *http.Request) { //nolint:gocognit,gocyclo,funlen // input validation + history projection + change derivation are linear; splitting would scatter the request lifecycle
 	ticker := strings.ToUpper(strings.TrimSpace(r.PathValue("ticker")))
 	if ticker == "" {
 		writeProblem(w, r,
@@ -270,9 +278,10 @@ func (s *Server) handleCurrencyDetail(w http.ResponseWriter, r *http.Request) {
 	// inverse alongside so the frontend can render either axis
 	// without re-doing the maths per row.
 	var history []CurrencyHistoryPoint
-	if raw, ok := snap.History7d[target.Ticker]; ok {
-		history = make([]CurrencyHistoryPoint, 0, len(raw))
-		for _, p := range raw {
+	rawHist, hasHist := snap.History7d[target.Ticker]
+	if hasHist {
+		history = make([]CurrencyHistoryPoint, 0, len(rawHist))
+		for _, p := range rawHist {
 			inv := 0.0
 			if p.RateUSD > 0 {
 				inv = 1.0 / p.RateUSD
@@ -285,15 +294,41 @@ func (s *Server) handleCurrencyDetail(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	// Compute change_24h_pct and change_7d_pct from the same
+	// inverse-USD basis the listing handler uses. Both pointers
+	// stay nil when there's not enough history to derive them.
+	var change24, change7 *float64
+	if len(rawHist) >= 2 {
+		first := rawHist[0].RateUSD
+		last := rawHist[len(rawHist)-1].RateUSD
+		yest := rawHist[len(rawHist)-2].RateUSD
+		if first > 0 && last > 0 {
+			firstInv, lastInv := 1.0/first, 1.0/last
+			if firstInv > 0 {
+				v := ((lastInv - firstInv) / firstInv) * 100
+				change7 = &v
+			}
+		}
+		if yest > 0 && last > 0 {
+			yestInv, lastInv := 1.0/yest, 1.0/last
+			if yestInv > 0 {
+				v := ((lastInv - yestInv) / yestInv) * 100
+				change24 = &v
+			}
+		}
+	}
+
 	writeJSON(w, CurrencyDetail{
-		Ticker:      target.Ticker,
-		Name:        target.Name,
-		RateUSD:     target.RateUSD,
-		InverseUSD:  inverse,
-		CrossRates:  cross,
-		History7d:   history,
-		PublishedAt: snap.PublishedAt,
-		FetchedAt:   snap.FetchedAt,
-		Source:      "currency-api",
+		Ticker:       target.Ticker,
+		Name:         target.Name,
+		RateUSD:      target.RateUSD,
+		InverseUSD:   inverse,
+		CrossRates:   cross,
+		Change24hPct: change24,
+		Change7dPct:  change7,
+		History7d:    history,
+		PublishedAt:  snap.PublishedAt,
+		FetchedAt:    snap.FetchedAt,
+		Source:       "currency-api",
 	}, Flags{})
 }

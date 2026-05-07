@@ -20,6 +20,8 @@ interface CurrencyDetail {
   rate_usd: number;
   inverse_usd: number;
   cross_rates: Record<string, number>;
+  change_24h_pct?: number | null;
+  change_7d_pct?: number | null;
   history_7d?: HistoryPoint[];
   published_at?: string;
   fetched_at?: string;
@@ -64,6 +66,14 @@ export function CurrencyDetailView({ ticker }: { ticker: string }) {
             <span className="font-mono tabular-nums">1 USD = {formatRate(detail.rate_usd)} {upper}</span>
             <span className="mx-2 text-slate-400">·</span>
             <span className="font-mono tabular-nums">1 {upper} = ${formatRate(detail.inverse_usd)}</span>
+            {(detail.change_24h_pct != null || detail.change_7d_pct != null) && (
+              <>
+                <span className="mx-2 text-slate-400">·</span>
+                <ChangeChip label="24h" value={detail.change_24h_pct} />
+                <span className="mx-1.5 text-slate-400">·</span>
+                <ChangeChip label="7d" value={detail.change_7d_pct} />
+              </>
+            )}
             {detail.published_at && (
               <>
                 <span className="mx-2 text-slate-400">·</span>
@@ -293,6 +303,29 @@ function Th({ children, align }: { children: React.ReactNode; align?: 'left' | '
 function Td({ children, align }: { children: React.ReactNode; align?: 'left' | 'right' }) {
   return (
     <td className={`px-4 py-2 ${align === 'right' ? 'text-right' : 'text-left'}`}>{children}</td>
+  );
+}
+
+function ChangeChip({ label, value }: { label: string; value?: number | null }) {
+  if (value == null || !Number.isFinite(value)) {
+    return (
+      <span className="font-mono text-xs text-slate-400">
+        {label} —
+      </span>
+    );
+  }
+  const tone =
+    value > 0
+      ? 'text-emerald-600 dark:text-emerald-400'
+      : value < 0
+        ? 'text-rose-600 dark:text-rose-400'
+        : 'text-slate-500';
+  const sign = value > 0 ? '+' : '';
+  return (
+    <span className={`font-mono text-xs tabular-nums ${tone}`}>
+      {label} {sign}
+      {value.toFixed(2)}%
+    </span>
   );
 }
 
