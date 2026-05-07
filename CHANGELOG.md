@@ -15,6 +15,24 @@ against.
 
 ## [Unreleased]
 
+### Fixed
+- **`/v1/currencies` still empty after rc.25** — root cause was
+  Go's `encoding/json` case-insensitive key matching: Massive's
+  grouped-FX rows have BOTH `"T"` (string ticker) AND `"t"`
+  (numeric bar timestamp). With only `T string \`json:"T"\``
+  declared, the lowercase `t` *also* tried to bind to that field
+  and failed every row with "cannot unmarshal number into Go
+  struct field .T of type string". rc.25's per-row decode
+  isolated the failure — but kept failing all 1208 rows. Add an
+  explicit `Tm int64 \`json:"t"\`` field to claim the lowercase
+  key. Now parses 120 USD-base pairs cleanly. Confirmed local
+  repro returns `eur=0.85272`.
+- **CoinGecko + ECB no longer surface as oracles**
+  on `/v1/oracle/streams`. Both write into `oracle_updates` for
+  divergence-comparison purposes but they're aggregator /
+  authority-sanity sources, not oracles. Filter the API
+  response by `external.Lookup(source).Class == ClassOracle`.
+
 ## [v0.5.0-rc.25] — 2026-05-07
 
 ### Fixed

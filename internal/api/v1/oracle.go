@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/RatesEngine/rates-engine/internal/canonical"
+	"github.com/RatesEngine/rates-engine/internal/sources/external"
 )
 
 // OracleReader is the storage-side interface for /v1/oracle/latest
@@ -190,9 +191,18 @@ func (s *Server) handleOracleStreams(w http.ResponseWriter, r *http.Request) {
 			"Internal error", http.StatusInternalServerError, "")
 		return
 	}
-	rows := make([]OracleReading, len(updates))
-	for i, u := range updates {
-		rows[i] = oracleReadingFrom(u)
+	// Filter to only sources classed as ClassOracle. CoinGecko (an
+	// aggregator) and ECB (an authority-sanity feed) write into the
+	// same oracle_updates hypertable for divergence-comparison
+	// purposes, but they're not oracles and shouldn't appear on the
+	// /oracles page. The class is a registry fact, not a per-row
+	// flag in the table — filter at the wire boundary.
+	rows := make([]OracleReading, 0, len(updates))
+	for _, u := range updates {
+		if external.Lookup(u.Source).Class != external.ClassOracle {
+			continue
+		}
+		rows = append(rows, oracleReadingFrom(u))
 	}
 	writeJSON(w, rows, Flags{})
 }

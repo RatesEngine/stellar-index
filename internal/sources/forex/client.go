@@ -134,16 +134,21 @@ func (c *Client) usdRatesAtDate(ctx context.Context, date string) (map[string]fl
 	if err := json.Unmarshal(body, &raw); err != nil {
 		return nil, fmt.Errorf("decode %s: %w", url, err)
 	}
-	// Decode rows one at a time. Massive occasionally emits a row
-	// with a numeric/null T or non-float c for half-listed pairs;
-	// a strict batch unmarshal would discard the whole 1200-row
-	// snapshot for one bad entry.
+	// Decode rows one at a time so a single anomalous row doesn't
+	// kill the whole snapshot. Note the explicit `t` field below:
+	// encoding/json matches keys case-insensitively, so an unguarded
+	// struct field tagged `json:"T"` *also* receives JSON key `t`
+	// (the unix-millis bar timestamp) — and "cannot unmarshal number
+	// into Go struct field .T of type string" trashes every row.
+	// Declaring `Tm int64 \`json:"t"\`` claims the lowercase key
+	// explicitly so the uppercase ticker lands cleanly.
 	out := make(map[string]float64, len(raw.Results))
 	const usdPrefix = "C:USD"
 	for _, rowRaw := range raw.Results {
 		var r struct {
-			T string  `json:"T"`
-			C float64 `json:"c"`
+			T  string  `json:"T"` // ticker, e.g. "C:USDEUR"
+			Tm int64   `json:"t"` // bar timestamp ms — unused, claimed for case-insensitivity
+			C  float64 `json:"c"` // close price
 		}
 		if err := json.Unmarshal(rowRaw, &r); err != nil {
 			continue
