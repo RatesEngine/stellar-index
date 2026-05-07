@@ -15,6 +15,8 @@ against.
 
 ## [Unreleased]
 
+## [v0.5.0-rc.29] — 2026-05-08
+
 ### Added
 - **Auto-register `classic_assets` + `issuers` from observed
   trades** — the Phase 4 observer migration 0023 planned for
