@@ -103,11 +103,16 @@ export function DexesView() {
   return (
     <div className="mx-auto max-w-7xl space-y-6 px-6 py-8">
       <header className="space-y-2">
-        <h1 className="text-3xl font-semibold tracking-tight">Pools</h1>
+        <h1 className="text-3xl font-semibold tracking-tight">DEX pools</h1>
         <p className="max-w-3xl text-sm text-slate-600 dark:text-slate-400">
-          Every (venue, base, quote) tuple we&apos;ve observed in the
-          last 14 days. The same physical pair traded on multiple
-          DEXes shows as multiple rows — one per venue.
+          Every (DEX, base, quote) liquidity pool we&apos;ve observed
+          in the last 14 days. Soroswap, Phoenix, Aquarius, Comet,
+          and the Stellar-native order book SDEX. CEX trading pairs
+          (Binance, Coinbase, Kraken, Bitstamp) live at{' '}
+          <Link href="/markets" className="text-brand-600 hover:underline">
+            /markets
+          </Link>
+          ; &ldquo;pool&rdquo; is AMM/DEX terminology.
         </p>
       </header>
 

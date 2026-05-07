@@ -1029,8 +1029,8 @@ func (r storeMarketsReader) SourceMarkets(ctx context.Context, source, cursor st
 	return out, next, nil
 }
 
-func (r storeMarketsReader) AllPools(ctx context.Context, cursor string, limit int, order timescale.MarketsOrder) ([]v1.Pool, string, error) {
-	rows, next, err := r.s.AllPools(ctx, cursor, limit, order)
+func (r storeMarketsReader) AllPools(ctx context.Context, sources []string, cursor string, limit int, order timescale.MarketsOrder) ([]v1.Pool, string, error) {
+	rows, next, err := r.s.AllPools(ctx, sources, cursor, limit, order)
 	if err != nil {
 		return nil, "", err
 	}
@@ -1194,13 +1194,16 @@ func (r cachedMarketsReader) PairMarket(ctx context.Context, base, quote canonic
 	return r.inner.PairMarket(ctx, base, quote)
 }
 
-func (r cachedMarketsReader) AllPools(ctx context.Context, cursor string, limit int, order timescale.MarketsOrder) ([]v1.Pool, string, error) {
+func (r cachedMarketsReader) AllPools(ctx context.Context, sources []string, cursor string, limit int, order timescale.MarketsOrder) ([]v1.Pool, string, error) {
 	// Pools queries are heavy (group by source × pair); cache
-	// follows the same TTL as the markets list.
+	// follows the same TTL as the markets list. Cache key
+	// includes the sources slice so pools-with-DEX-filter and
+	// pools-unfiltered don't collide.
 	if r.rdb == nil {
-		return r.inner.AllPools(ctx, cursor, limit, order)
+		return r.inner.AllPools(ctx, sources, cursor, limit, order)
 	}
-	cacheKey := cachekeys.MarketsList(cursor, limit) + ":order=" + marketsOrderKey(order) + ":pools=1"
+	srcKey := strings.Join(sources, ",")
+	cacheKey := cachekeys.MarketsList(cursor, limit) + ":order=" + marketsOrderKey(order) + ":pools=1:src=" + srcKey
 	if raw, err := r.rdb.Get(ctx, cacheKey).Bytes(); err == nil {
 		var p listCachePayload[v1.Pool]
 		if jerr := json.Unmarshal(raw, &p); jerr == nil {
@@ -1210,7 +1213,7 @@ func (r cachedMarketsReader) AllPools(ctx context.Context, cursor string, limit 
 	} else if !errors.Is(err, redis.Nil) {
 		r.log.Warn("pools cache read failed", "key", cacheKey, "err", err)
 	}
-	items, next, err := r.inner.AllPools(ctx, cursor, limit, order)
+	items, next, err := r.inner.AllPools(ctx, sources, cursor, limit, order)
 	if err != nil {
 		return nil, "", err
 	}

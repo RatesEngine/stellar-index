@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/lib/pq"
+
 	"github.com/RatesEngine/rates-engine/internal/canonical"
 )
 
@@ -125,11 +127,14 @@ func (s *Store) SourceMarkets(ctx context.Context, source, cursor string, limit 
 // soroswap + sdex returns ONE row from DistinctPairsExt and TWO
 // rows from AllPools. Backs /v1/pools.
 //
+// `sources`, when non-empty, restricts the result to rows where
+// t.source = ANY(sources). Empty means "all sources".
+//
 // Cursor format: "<vol_or_blank>:<source>|<base>|<quote>" for
 // volume-desc; "<source>|<base>|<quote>" for pair-asc. Same
 // keyset-pagination shape as DistinctPairsExt with the source
 // dimension prepended.
-func (s *Store) AllPools(ctx context.Context, cursor string, limit int, order MarketsOrder) ([]Pool, string, error) {
+func (s *Store) AllPools(ctx context.Context, sources []string, cursor string, limit int, order MarketsOrder) ([]Pool, string, error) {
 	if limit < 1 {
 		limit = 100
 	}
@@ -137,7 +142,7 @@ func (s *Store) AllPools(ctx context.Context, cursor string, limit int, order Ma
 		limit = 500
 	}
 	since := time.Now().UTC().Add(-MarketsRecencyWindow)
-	q, args := buildPoolsQuery(since, cursor, limit, order)
+	q, args := buildPoolsQuery(since, sources, cursor, limit, order)
 	rows, err := s.db.QueryContext(ctx, q, args...)
 	if err != nil {
 		return nil, "", fmt.Errorf("timescale: AllPools: %w", err)
@@ -207,12 +212,12 @@ func (s *Store) AllPools(ctx context.Context, cursor string, limit int, order Ma
 	return out, nextCursor, nil
 }
 
-func buildPoolsQuery(since time.Time, cursor string, limit int, order MarketsOrder) (string, []any) {
+func buildPoolsQuery(since time.Time, sources []string, cursor string, limit int, order MarketsOrder) (string, []any) {
 	// Same vol_24h CTE as DistinctPairsExt (per (base, quote) USD
 	// volume from prices_1m); LEFT JOINed once. Outer GROUP BY
 	// adds source so the same (base, quote) pair on two venues
 	// emits two rows.
-	const cte = `
+	cte := `
         WITH vol_24h AS (
           SELECT base_asset, quote_asset,
                  SUM(volume_usd)::text AS vol_usd
@@ -231,6 +236,12 @@ func buildPoolsQuery(since time.Time, cursor string, limit int, order MarketsOrd
            AND v.quote_asset = t.quote_asset
          WHERE t.ts >= $1
     `
+	if len(sources) > 0 {
+		// `t.source = ANY($4)` constrains the trades scan before
+		// the GROUP BY. Backed by trades_source_ledger_idx for
+		// efficient chunk pruning when the source list is small.
+		cte += ` AND t.source = ANY($4) `
+	}
 	if order == MarketsOrderVolume24hDesc {
 		const tail = `
 		 GROUP BY t.source, t.base_asset, t.quote_asset, v.vol_usd
@@ -247,7 +258,11 @@ func buildPoolsQuery(since time.Time, cursor string, limit int, order MarketsOrd
 		          (t.source || '|' || t.base_asset || '|' || t.quote_asset) ASC
 		 LIMIT $3
 		`
-		return cte + tail, []any{since, cursor, limit + 1}
+		args := []any{since, cursor, limit + 1}
+		if len(sources) > 0 {
+			args = append(args, pq.Array(sources))
+		}
+		return cte + tail, args
 	}
 	const tail = `
 	   AND ($2 = '' OR (t.source || '|' || t.base_asset || '|' || t.quote_asset) > $2)
@@ -255,7 +270,11 @@ func buildPoolsQuery(since time.Time, cursor string, limit int, order MarketsOrd
 	 ORDER BY (t.source || '|' || t.base_asset || '|' || t.quote_asset) ASC
 	 LIMIT $3
 	`
-	return cte + tail, []any{since, cursor, limit + 1}
+	args := []any{since, cursor, limit + 1}
+	if len(sources) > 0 {
+		args = append(args, sources)
+	}
+	return cte + tail, args
 }
 
 func (s *Store) distinctPairsCommon(ctx context.Context, source, cursor string, limit int, order MarketsOrder) ([]Market, string, error) {

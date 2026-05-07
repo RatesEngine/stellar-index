@@ -15,6 +15,18 @@ against.
 
 ## [Unreleased]
 
+### Fixed
+- **/v1/pools is DEX-only, never CEX rows.** "Pool" is AMM/DEX
+  terminology — applying it to CEX trading pairs (binance,
+  coinbase, kraken, bitstamp) misnames the data. Handler now
+  resolves the DEX subset of the source registry
+  (Class=Exchange + Subclass=DEX → soroswap, phoenix, aquarius,
+  sdex, comet) and constrains the trades scan with
+  `t.source = ANY($N)`. CEX trading pairs are at /v1/markets,
+  which has always been the cross-venue collapsed view. Frontend
+  copy on /dexes updated to "DEX pools" with a link to /markets
+  for CEX pairs.
+
 ### Changed
 - **/dexes is now the all-pools table** — same shape as /assets,
   one row per (venue, base, quote) tuple. Replaces the 5

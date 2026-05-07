@@ -3,12 +3,29 @@ package v1
 import (
 	"context"
 	"net/http"
+	"sort"
 	"strconv"
 	"time"
 
 	"github.com/RatesEngine/rates-engine/internal/canonical"
+	"github.com/RatesEngine/rates-engine/internal/sources/external"
 	"github.com/RatesEngine/rates-engine/internal/storage/timescale"
 )
+
+// dexSourceNames returns every source registered with
+// Class=Exchange + Subclass=DEX, sorted for stable order. Cached
+// implicitly because external.Registry is a package-level
+// constant — no need to memoise.
+func dexSourceNames() []string {
+	out := make([]string, 0, len(external.Registry))
+	for name, md := range external.Registry {
+		if md.Class == external.ClassExchange && md.Subclass == external.SubclassDEX {
+			out = append(out, name)
+		}
+	}
+	sort.Strings(out)
+	return out
+}
 
 // MarketsReader is the storage-side interface for /v1/markets
 // and /v1/pairs lookups. Implementations: *timescale.Store
@@ -26,9 +43,11 @@ type MarketsReader interface {
 	SourceMarkets(ctx context.Context, source, cursor string, limit int, order timescale.MarketsOrder) ([]Market, string, error)
 
 	// AllPools returns every (source, base, quote) tuple — same
-	// pair on two venues becomes two rows. Backs /v1/pools where
-	// the source dimension matters (the all-pools explorer table).
-	AllPools(ctx context.Context, cursor string, limit int, order timescale.MarketsOrder) ([]Pool, string, error)
+	// pair on two venues becomes two rows. When `sources` is
+	// non-empty, restricts the result to rows whose source name
+	// appears in the slice. Backs /v1/pools (DEX-only) where the
+	// handler resolves the DEX subset of the source registry.
+	AllPools(ctx context.Context, sources []string, cursor string, limit int, order timescale.MarketsOrder) ([]Pool, string, error)
 
 	// PairMarket returns the activity summary for a single (base,
 	// quote) pair. The bool is false when the pair has no trades —
@@ -50,10 +69,17 @@ type Pool struct {
 	Volume24hUSD  *string   `json:"volume_24h_usd,omitempty"`
 }
 
-// handlePools serves GET /v1/pools — every (source, base, quote)
-// tuple observed in the recency window. Same query params as
-// /v1/markets (cursor, limit, order_by); no `source=` filter
-// since the result already carries source on each row.
+// handlePools serves GET /v1/pools — DEX/AMM liquidity pools only.
+// One row per (source, base, quote) where source is a DEX
+// (Subclass=DEX in the source registry: soroswap, phoenix,
+// aquarius, sdex, comet). CEX pairs go through /v1/markets;
+// "pool" is AMM/DEX terminology and applying it to centralised
+// venues misnames the data.
+//
+// Query params:
+//   - cursor   (optional): opaque, from a prior pagination.next.
+//   - limit    (optional): integer 1-500, default 100.
+//   - order_by (optional): "volume_24h_usd_desc" (default) or "pair".
 func (s *Server) handlePools(w http.ResponseWriter, r *http.Request) {
 	cursor := r.URL.Query().Get("cursor")
 	limit := 100
@@ -82,12 +108,17 @@ func (s *Server) handlePools(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Resolve DEX source list from the registry. Hard-coded to
+	// Subclass=DEX so the endpoint is unambiguously "pools" — no
+	// CEX rows ever.
+	dexSources := dexSourceNames()
+
 	reader := s.markets
 	if reader == nil {
 		writeJSON(w, []Pool{}, Flags{})
 		return
 	}
-	rows, next, err := reader.AllPools(r.Context(), cursor, limit, order)
+	rows, next, err := reader.AllPools(r.Context(), dexSources, cursor, limit, order)
 	if err != nil {
 		if clientAborted(r, err) {
 			return
