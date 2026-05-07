@@ -12,11 +12,16 @@ body {
   @apply bg-white text-slate-900 antialiased;
 }
 
-@media (prefers-color-scheme: dark) {
-  html,
-  body {
-    @apply bg-slate-950 text-slate-100;
-  }
+/* Dark mode is class-based now (Tailwind darkMode: 'class'). The
+   inline init script in layout.tsx applies the class from
+   localStorage on first paint; absent a stored preference, it
+   falls back to the OS prefers-color-scheme so the default
+   behaviour matches what shipped before the toggle.
+   The matching CSS for html.dark's background + text colour is
+   below — Tailwind's dark: variants handle everything else. */
+html.dark,
+html.dark body {
+  @apply bg-slate-950 text-slate-100;
 }
 
 /* Time-machine pinned-mode overlay tint */

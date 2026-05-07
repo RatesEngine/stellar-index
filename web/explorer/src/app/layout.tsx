@@ -73,8 +73,26 @@ export default function RootLayout({
 }: {
   children: React.ReactNode;
 }) {
+  // Inline theme-init script — sets html.dark BEFORE first paint
+  // based on localStorage (`re.theme` ∈ {light,dark,system}) or
+  // OS prefers-color-scheme as fallback. Without this users would
+  // see a flash of the wrong theme on page load.
+  const themeInit = `
+(function () {
+  try {
+    var v = localStorage.getItem('re.theme');
+    var prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+    var dark = v === 'dark' || ((v === null || v === 'system') && prefersDark);
+    if (dark) document.documentElement.classList.add('dark');
+  } catch (_) {}
+})();
+`.trim();
   return (
     <html lang="en">
+      <head>
+        {/* Set html.dark before first paint to avoid theme flash */}
+        <script dangerouslySetInnerHTML={{ __html: themeInit }} />
+      </head>
       <body className="flex min-h-screen flex-col">
         <QueryProvider>
           <Navbar />

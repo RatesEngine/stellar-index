@@ -2,6 +2,7 @@ import Link from 'next/link';
 import { TrendingUp } from 'lucide-react';
 
 import { SearchModal } from './SearchModal';
+import { ThemeToggle } from './ThemeToggle';
 
 /**
  * Top navigation. Section-grouped per data-inventory §4 + the
@@ -45,6 +46,7 @@ export function Navbar() {
             ),
           )}
           <SearchModal />
+          <ThemeToggle />
           <a
             href="https://status.ratesengine.net"
             className="ml-2 inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-slate-600 hover:bg-slate-100 hover:text-brand-600 dark:text-slate-300 dark:hover:bg-slate-800"

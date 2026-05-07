@@ -16,6 +16,12 @@ against.
 ## [Unreleased]
 
 ### Added
+- **Theme toggle in the navbar** (light / dark / system, cycling
+  via a single icon button). Choice persists in localStorage
+  under `re.theme`. Inline init script in `<head>` applies the
+  class before first paint so there's no flash of wrong theme on
+  load. Default is still OS preference (`prefers-color-scheme`)
+  when no choice is stored — matches what shipped before.
 - **`/changelog` page on the explorer.** Renders this file at
   build time — every release block surfaces with proper markdown
   (bold, code, links), grouped by Added / Fixed / Changed with

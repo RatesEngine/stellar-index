@@ -1,6 +1,12 @@
 import type { Config } from 'tailwindcss';
 
 const config: Config = {
+  // Manual toggle via `class="dark"` on <html>. The inline init
+  // script in layout.tsx hydrates the class from localStorage
+  // before the first paint; absent that, it falls back to the
+  // OS prefers-color-scheme media query so the default behaviour
+  // matches what shipped before the toggle.
+  darkMode: 'class',
   content: ['./src/**/*.{js,ts,jsx,tsx,mdx}'],
   theme: {
     extend: {
