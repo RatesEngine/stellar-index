@@ -60,9 +60,16 @@ export function ChartPanel({
 }: {
   assetID: string;
 }) {
+  // When the asset itself is native XLM, "vs XLM" is the identity
+  // pair (the API rightly returns 400). Default to USD and drop
+  // the XLM option from the picker for that case.
+  const isNative = assetID === 'native';
+  const quoteOptions = isNative
+    ? QUOTES.filter((q) => q.key !== 'native')
+    : QUOTES;
   const [timeframe, setTimeframe] = useState<Timeframe>('24h');
   const [granularity, setGranularity] = useState<Granularity>('1h');
-  const [quote, setQuote] = useState<Quote>('native');
+  const [quote, setQuote] = useState<Quote>(isNative ? 'fiat:USD' : 'native');
   const [data, setData] = useState<
     { time: number; open: number; high: number; low: number; close: number }[]
   >([]);
@@ -133,7 +140,7 @@ export function ChartPanel({
         <div className="mb-3 flex flex-wrap items-center gap-2">
           <Picker
             label="Quote"
-            options={QUOTES}
+            options={quoteOptions}
             value={quote}
             onChange={(v) => setQuote(v as Quote)}
           />

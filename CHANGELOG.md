@@ -16,6 +16,12 @@ against.
 ## [Unreleased]
 
 ### Fixed
+- **XLM chart 400 on `/assets/XLM/?tab=chart`** — the chart panel
+  defaulted `quote=native` for every asset, including the native
+  asset itself. `/v1/chart?asset=native&quote=native` rightly
+  rejects the identity pair. Detect `assetID === 'native'`,
+  default the quote to `fiat:USD`, and hide the XLM picker
+  option in that case.
 - **`/v1/currencies` still empty after rc.25** — root cause was
   Go's `encoding/json` case-insensitive key matching: Massive's
   grouped-FX rows have BOTH `"T"` (string ticker) AND `"t"`
