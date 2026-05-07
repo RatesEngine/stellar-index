@@ -1883,12 +1883,26 @@ func (a *forexAdapter) Latest() *v1.CurrenciesSnapshot {
 	}
 	rows := make([]v1.CurrencyEntry, len(snap.Currencies))
 	for i, c := range snap.Currencies {
-		rows[i] = v1.CurrencyEntry{
+		row := v1.CurrencyEntry{
 			Ticker:    c.Ticker,
 			Name:      c.Name,
 			RateUSD:   c.RateUSD,
 			UpdatedAt: c.UpdateAt,
 		}
+		// Join curated monetary-base CSV (lower-case keyed). Market
+		// cap is computed in USD-equivalent: the local-units M2
+		// divided by "1 USD = N units" rate gives "M2 in USD".
+		if entry, ok := snap.Circulation[strings.ToLower(c.Ticker)]; ok && entry.AggregateLocalUnits > 0 {
+			supply := entry.AggregateLocalUnits
+			row.CirculatingSupply = &supply
+			if c.RateUSD > 0 {
+				mcap := supply / c.RateUSD
+				row.MarketCapUSD = &mcap
+			}
+			row.CirculationAsOf = entry.AsOf.Format("2006-01-02")
+			row.CirculationSource = entry.Source
+		}
+		rows[i] = row
 	}
 	history := make(map[string][]v1.CurrencyHistoryRaw, len(snap.History7d))
 	for ticker, points := range snap.History7d {

@@ -62,6 +62,23 @@ type CurrencyEntry struct {
 	Change7dPct    *float64  `json:"change_7d_pct,omitempty"`
 	History7dRates []float64 `json:"history_7d_rates,omitempty"`
 	UpdatedAt      time.Time `json:"updated_at,omitempty"`
+	// CirculatingSupply is the central-bank monetary aggregate
+	// (typically M2) in the currency's natural local unit.
+	// Sourced from the curated CSV in
+	// internal/sources/forex/circulation_data.csv. Null for
+	// currencies not present in the table.
+	CirculatingSupply *float64 `json:"circulating_supply,omitempty"`
+	// MarketCapUSD is CirculatingSupply / RateUSD — the
+	// USD-denominated value of the monetary aggregate. Same
+	// nullability semantics as CirculatingSupply.
+	MarketCapUSD *float64 `json:"market_cap_usd,omitempty"`
+	// CirculationAsOf is the date the central bank stamped on
+	// the underlying release (RFC-3339 date). Drives "as of YYYY-MM"
+	// provenance on the UI.
+	CirculationAsOf string `json:"circulation_as_of,omitempty"`
+	// CirculationSource is the central-bank series identifier
+	// (e.g. "FRED:M2SL", "ECB:BSI.M2") that produced the row.
+	CirculationSource string `json:"circulation_source,omitempty"`
 }
 
 // CurrenciesPayload is the wire envelope for /v1/currencies.
@@ -196,9 +213,17 @@ type CurrencyDetail struct {
 	Change24hPct *float64               `json:"change_24h_pct,omitempty"`
 	Change7dPct  *float64               `json:"change_7d_pct,omitempty"`
 	History7d    []CurrencyHistoryPoint `json:"history_7d,omitempty"`
-	PublishedAt  time.Time              `json:"published_at,omitempty"`
-	FetchedAt    time.Time              `json:"fetched_at,omitempty"`
-	Source       string                 `json:"source"`
+	// Same circulation fields as the listing's CurrencyEntry.
+	// Sourced from the curated CSV at
+	// internal/sources/forex/circulation_data.csv (joined into the
+	// snapshot by the forex worker).
+	CirculatingSupply *float64  `json:"circulating_supply,omitempty"`
+	MarketCapUSD      *float64  `json:"market_cap_usd,omitempty"`
+	CirculationAsOf   string    `json:"circulation_as_of,omitempty"`
+	CirculationSource string    `json:"circulation_source,omitempty"`
+	PublishedAt       time.Time `json:"published_at,omitempty"`
+	FetchedAt         time.Time `json:"fetched_at,omitempty"`
+	Source            string    `json:"source"`
 }
 
 // CurrencyHistoryPoint is one daily rate datum.
@@ -319,16 +344,20 @@ func (s *Server) handleCurrencyDetail(w http.ResponseWriter, r *http.Request) { 
 	}
 
 	writeJSON(w, CurrencyDetail{
-		Ticker:       target.Ticker,
-		Name:         target.Name,
-		RateUSD:      target.RateUSD,
-		InverseUSD:   inverse,
-		CrossRates:   cross,
-		Change24hPct: change24,
-		Change7dPct:  change7,
-		History7d:    history,
-		PublishedAt:  snap.PublishedAt,
-		FetchedAt:    snap.FetchedAt,
-		Source:       "massive",
+		Ticker:            target.Ticker,
+		Name:              target.Name,
+		RateUSD:           target.RateUSD,
+		InverseUSD:        inverse,
+		CrossRates:        cross,
+		Change24hPct:      change24,
+		Change7dPct:       change7,
+		History7d:         history,
+		CirculatingSupply: target.CirculatingSupply,
+		MarketCapUSD:      target.MarketCapUSD,
+		CirculationAsOf:   target.CirculationAsOf,
+		CirculationSource: target.CirculationSource,
+		PublishedAt:       snap.PublishedAt,
+		FetchedAt:         snap.FetchedAt,
+		Source:            "massive",
 	}, Flags{})
 }

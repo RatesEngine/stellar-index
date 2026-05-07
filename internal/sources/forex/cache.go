@@ -32,6 +32,11 @@ type Snapshot struct {
 	PublishedAt time.Time
 	FetchedAt   time.Time
 	History7d   map[string][]HistoryPoint
+	// Circulation is the curated monetary-base table loaded once
+	// at worker startup from the embedded CSV. Indexed by lower-case
+	// ticker. Stays nil until the worker installs the first
+	// snapshot — readers MUST nil-check before lookup.
+	Circulation map[string]CirculationEntry
 }
 
 // HistoryPoint is one daily rate datum for the 7d series.
@@ -74,7 +79,7 @@ func (c *Cache) Set(s *Snapshot) {
 // `history` is the per-ticker 7d series the worker assembled — pass
 // nil if no historical backfill has run; the snapshot still
 // installs cleanly with an empty History7d map.
-func buildSnapshot(rates map[string]float64, names map[string]string, publishedAt, fetchedAt time.Time, history map[string][]HistoryPoint) *Snapshot {
+func buildSnapshot(rates map[string]float64, names map[string]string, publishedAt, fetchedAt time.Time, history map[string][]HistoryPoint, circulation map[string]CirculationEntry) *Snapshot {
 	out := make([]Currency, 0, len(rates)+1)
 	// Always-include USD as the base. Rate is 1.0 by definition;
 	// the name comes from the names map (fallback to "US Dollar").
@@ -116,6 +121,7 @@ func buildSnapshot(rates map[string]float64, names map[string]string, publishedA
 		PublishedAt: publishedAt,
 		FetchedAt:   fetchedAt,
 		History7d:   history,
+		Circulation: circulation,
 	}
 }
 

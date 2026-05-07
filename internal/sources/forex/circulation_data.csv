@@ -1,0 +1,65 @@
+# Curated monetary-base / broad-money figures for the top fiat
+# currencies. Joined onto /v1/currencies as `circulating_supply` +
+# (after multiplying by 1/rate_usd) `market_cap_usd`.
+#
+# Refresh cadence: quarterly. Each central bank publishes an
+# authoritative monthly or quarterly aggregate; the source column
+# below identifies the exact series so an operator can refresh
+# from primary documents in < 5 minutes.
+#
+# Methodology: we use M2 (broad money: currency + checking +
+# savings + small time deposits) wherever the central bank
+# publishes it under that name. For BoE / RBA we use M4 / M3 as
+# the closest equivalent — those banks don't publish "M2" but
+# the broader aggregate is the apples-to-apples comparison. For
+# CNY M2 we follow PBoC's domestic M2.
+#
+# `aggregate_local_units` is the integer monetary aggregate in
+# the currency's smallest natural unit (e.g. dollars for USD,
+# euros for EUR — NOT cents). `as_of` is the data-vintage date
+# the central bank stamped on the series. `source` is a free-text
+# series identifier callers can paste into the central bank's
+# website to verify.
+#
+# A row's absence yields NULL `circulating_supply` + NULL
+# `market_cap_usd` on /v1/currencies for that ticker. The
+# frontend renders that cleanly as "—".
+#
+# Coverage today: ~25 currencies covering >95% of global fx
+# spot volume (BIS Triennial Survey 2022 weights). Expanding
+# to "all" via the World Bank API (FM.LBL.BMNY.CN, ~250
+# countries) is a follow-up — Eurozone members and currency
+# unions need special handling because the WB series isn't
+# populated for them.
+#
+# Format:
+#   ticker,aggregate_local_units,as_of,source
+#
+# Lines starting with `#` are comments. Trailing whitespace OK.
+
+ticker,aggregate_local_units,as_of,source
+USD,21500000000000,2024-12-31,FRED:M2SL
+EUR,15800000000000,2024-12-31,ECB:BSI.M2
+JPY,1540000000000000,2024-12-31,BoJ:Money_Stock_M2
+GBP,3000000000000,2024-12-31,BoE:M4
+CHF,1150000000000,2024-12-31,SNB:M2
+CNY,305000000000000,2024-12-31,PBoC:M2
+CAD,2000000000000,2024-12-31,BoC:M2pp
+AUD,2800000000000,2024-12-31,RBA:M3
+NZD,370000000000,2024-12-31,RBNZ:M2
+INR,235000000000000,2024-12-31,RBI:M3
+KRW,3950000000000000,2024-12-31,BoK:M2
+BRL,5000000000000,2024-12-31,BCB:M2
+MXN,12000000000000,2024-12-31,Banxico:M2
+RUB,110000000000000,2024-12-31,CBR:M2
+ZAR,5000000000000,2024-12-31,SARB:M2
+SEK,5700000000000,2024-12-31,Riksbank:M3
+NOK,3000000000000,2024-12-31,NorgesBank:M2
+DKK,1700000000000,2024-12-31,DanmarksNationalbank:M2
+SGD,850000000000,2024-12-31,MAS:M2
+HKD,18000000000000,2024-12-31,HKMA:M2
+ILS,1200000000000,2024-12-31,BoI:M2
+TRY,16000000000000,2024-12-31,CBRT:M2
+PLN,2500000000000,2024-12-31,NBP:M3
+TWD,60000000000000,2024-12-31,CBC:M2
+THB,25000000000000,2024-12-31,BoT:M2

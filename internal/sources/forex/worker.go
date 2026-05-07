@@ -11,25 +11,38 @@ import (
 // installs the result into a [Cache]. Designed to run as a
 // goroutine for the lifetime of the API process.
 type Worker struct {
-	client   *Client
-	cache    *Cache
-	logger   *slog.Logger
-	interval time.Duration
+	client      *Client
+	cache       *Cache
+	logger      *slog.Logger
+	interval    time.Duration
+	circulation map[string]CirculationEntry // loaded once at startup
 }
 
 // NewWorker constructs the worker. interval is the refresh
-// cadence — currency-api updates daily so anything < 1h is wasted
-// fetches; 1h is a reasonable default that keeps the cache fresh
-// across operator restarts.
+// cadence — Massive's hourly grain means anything < 15 min is
+// wasted fetches; 1h is a reasonable default that keeps the
+// cache fresh across operator restarts.
+//
+// The curated monetary-base CSV is loaded once at construction
+// (lives in internal/sources/forex/circulation_data.csv). Parse
+// errors per row are non-fatal: rows that parse install, the
+// rest are logged as a warning. The map is then attached to
+// every snapshot built by refreshOnce.
 func NewWorker(client *Client, cache *Cache, logger *slog.Logger, interval time.Duration) *Worker {
 	if interval <= 0 {
 		interval = time.Hour
 	}
+	circulation, err := loadCirculationTable()
+	if err != nil {
+		logger.Warn("forex: circulation csv parsed with skipped rows", "err", err)
+	}
+	logger.Info("forex: circulation table loaded", "entries", len(circulation))
 	return &Worker{
-		client:   client,
-		cache:    cache,
-		logger:   logger,
-		interval: interval,
+		client:      client,
+		cache:       cache,
+		logger:      logger,
+		interval:    interval,
+		circulation: circulation,
 	}
 }
 
@@ -87,7 +100,7 @@ func (w *Worker) refreshOnce(ctx context.Context) {
 		history = w.fetchHistory(ctx, names, publishedAt)
 	}
 
-	snap := buildSnapshot(rates, names, publishedAt, time.Now().UTC(), history)
+	snap := buildSnapshot(rates, names, publishedAt, time.Now().UTC(), history, w.circulation)
 	w.cache.Set(snap)
 	w.logger.Info("forex: snapshot installed",
 		"currencies", len(snap.Currencies),
