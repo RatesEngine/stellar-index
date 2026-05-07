@@ -115,7 +115,9 @@ export function AssetsTable() {
               <Th>Asset</Th>
               <Th>Issuer</Th>
               <Th align="right">Price</Th>
+              <Th align="right">1h %</Th>
               <Th align="right">24h %</Th>
+              <Th align="right">7d %</Th>
               <Th align="right">Market cap</Th>
               <Th align="right">
                 <SortHeader
@@ -144,7 +146,7 @@ export function AssetsTable() {
             {isLoading && (
               <tr>
                 <td
-                  colSpan={10}
+                  colSpan={12}
                   className="py-12 text-center text-sm text-slate-500"
                 >
                   Loading…
@@ -154,7 +156,7 @@ export function AssetsTable() {
             {!isLoading && coins.length === 0 && (
               <tr>
                 <td
-                  colSpan={10}
+                  colSpan={12}
                   className="py-12 text-center text-sm text-slate-500"
                 >
                   No assets match this filter.
@@ -334,7 +336,13 @@ function AssetRow({ coin, rank }: { coin: Coin; rank: number }) {
         )}
       </Td>
       <Td align="right">
+        <ChangePct raw={coin.change_1h_pct} />
+      </Td>
+      <Td align="right">
         <ChangePct raw={coin.change_24h_pct} />
+      </Td>
+      <Td align="right">
+        <ChangePct raw={coin.change_7d_pct} />
       </Td>
       <Td align="right">
         {marketCap != null ? (
