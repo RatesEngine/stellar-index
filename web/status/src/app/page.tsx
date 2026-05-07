@@ -830,7 +830,20 @@ function IncidentHistory({
 }) {
   return (
     <section>
-      <SectionHeader>Incident history</SectionHeader>
+      <div className="mb-3 flex items-baseline justify-between">
+        <h2 className="text-sm font-semibold uppercase tracking-wider text-ink-muted">
+          Incident history
+        </h2>
+        <a
+          href={`${API_BASE_URL}/v1/incidents.atom`}
+          target="_blank"
+          rel="noreferrer noopener"
+          className="text-xs text-ink-faint hover:text-brand-600"
+          title="Atom feed — subscribe in Feedly, Slack RSS bot, etc."
+        >
+          Subscribe (Atom) ↗
+        </a>
+      </div>
       {entries.length === 0 ? (
         <div className="rounded-md border border-surface-line bg-surface px-4 py-6 text-center text-sm text-ink-faint">
           No past incidents recorded yet. Resolved incidents will appear

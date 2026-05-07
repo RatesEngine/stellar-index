@@ -1418,6 +1418,35 @@ paths:
                 flags: {}
         "500": { $ref: "#/components/responses/InternalError" }
 
+  /incidents.atom:
+    get:
+      tags: [meta]
+      summary: Atom feed of customer-facing incidents.
+      description: |
+        RFC-4287 Atom 1.0 syndication of every customer-facing
+        incident post (`internal/incidents/data/*.md`). Designed
+        for Feedly, Slack's RSS bot, and similar feed consumers
+        who want push-style notifications when a new incident
+        ships without polling JSON.
+
+        Same corpus as `/v1/incidents`; entry `<id>` is a stable
+        URN so feed readers dedupe correctly across crawls.
+        Cache-Control: public, max-age=300 (5 min) — the corpus
+        only changes on redeploy so longer caching is fine.
+      responses:
+        "200":
+          description: Atom 1.0 XML feed.
+          content:
+            application/atom+xml:
+              schema:
+                type: string
+                description: |
+                  RFC-4287 Atom feed — one `<entry>` per past
+                  incident, sorted newest first, with `<title>`,
+                  `<link>` to the status page anchor, `<summary>`
+                  (first paragraph of the markdown body), and
+                  full `<content>` (the markdown body).
+
   /network/stats:
     get:
       tags: [meta]

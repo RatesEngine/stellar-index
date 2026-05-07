@@ -1,7 +1,11 @@
 package v1
 
 import (
+	"encoding/xml"
+	"fmt"
 	"net/http"
+	"strings"
+	"time"
 
 	"github.com/RatesEngine/rates-engine/internal/incidents"
 )
@@ -28,4 +32,128 @@ func (s *Server) handleIncidents(w http.ResponseWriter, r *http.Request) {
 		Incidents: s.incidents,
 		Count:     len(s.incidents),
 	}, Flags{})
+}
+
+// atomFeed mirrors the RFC-4287 Atom syndication shape we emit.
+// Hand-rolled rather than pulling in a feed-generator dep —
+// Atom has only a handful of required fields and the writer
+// stays under a screen of code.
+type atomFeed struct {
+	XMLName xml.Name    `xml:"feed"`
+	Xmlns   string      `xml:"xmlns,attr"`
+	ID      string      `xml:"id"`
+	Title   string      `xml:"title"`
+	Link    []atomLink  `xml:"link"`
+	Updated string      `xml:"updated"`
+	Author  *atomAuthor `xml:"author,omitempty"`
+	Entries []atomEntry `xml:"entry"`
+}
+
+type atomLink struct {
+	Rel  string `xml:"rel,attr,omitempty"`
+	Href string `xml:"href,attr"`
+	Type string `xml:"type,attr,omitempty"`
+}
+
+type atomAuthor struct {
+	Name string `xml:"name"`
+	URI  string `xml:"uri,omitempty"`
+}
+
+type atomEntry struct {
+	ID      string     `xml:"id"`
+	Title   string     `xml:"title"`
+	Link    []atomLink `xml:"link"`
+	Updated string     `xml:"updated"`
+	Summary string     `xml:"summary,omitempty"`
+	Content struct {
+		Type     string `xml:"type,attr"`
+		CharData string `xml:",chardata"`
+	} `xml:"content"`
+}
+
+// handleIncidentsAtom serves GET /v1/incidents.atom.
+//
+// Atom 1.0 feed of every customer-facing incident — same data
+// as /v1/incidents but in the syndication format that Feedly,
+// Slack's RSS bot, etc. consume out of the box. URLs in
+// <link> point at the status page so subscribers click straight
+// through to the human-readable post.
+//
+// Per RFC 4287 the feed's `<updated>` is the most recent
+// `<entry>`'s `<updated>`. Each entry's `<id>` is a stable URN
+// derived from the slug so feed readers dedupe correctly across
+// crawls.
+func (s *Server) handleIncidentsAtom(w http.ResponseWriter, r *http.Request) {
+	const baseURL = "https://status.ratesengine.net"
+	feed := atomFeed{
+		Xmlns:   "http://www.w3.org/2005/Atom",
+		ID:      baseURL + "/feed",
+		Title:   "Rates Engine — incident history",
+		Updated: time.Now().UTC().Format(time.RFC3339),
+		Link: []atomLink{
+			{Rel: "self", Href: "https://api.ratesengine.net/v1/incidents.atom", Type: "application/atom+xml"},
+			{Rel: "alternate", Href: baseURL + "/", Type: "text/html"},
+		},
+		Author: &atomAuthor{Name: "Rates Engine", URI: "https://ratesengine.net"},
+	}
+
+	for _, inc := range s.incidents {
+		updated := inc.StartedAt
+		if inc.ResolvedAt != nil && inc.ResolvedAt.After(updated) {
+			updated = *inc.ResolvedAt
+		}
+		entry := atomEntry{
+			ID:      fmt.Sprintf("urn:ratesengine:incident:%s", inc.Slug),
+			Title:   inc.Title,
+			Updated: updated.UTC().Format(time.RFC3339),
+			Link: []atomLink{
+				{Rel: "alternate", Href: baseURL + "/#" + inc.Slug, Type: "text/html"},
+			},
+			Summary: summaryFromMarkdown(inc.BodyMarkdown),
+		}
+		entry.Content.Type = "text"
+		entry.Content.CharData = inc.BodyMarkdown
+		feed.Entries = append(feed.Entries, entry)
+	}
+
+	w.Header().Set("Content-Type", "application/atom+xml; charset=utf-8")
+	w.Header().Set("Cache-Control", "public, max-age=300")
+	if _, err := w.Write([]byte(xml.Header)); err != nil {
+		s.logger.Warn("incidents atom write header", "err", err)
+		return
+	}
+	enc := xml.NewEncoder(w)
+	enc.Indent("", "  ")
+	if err := enc.Encode(feed); err != nil {
+		s.logger.Warn("incidents atom encode", "err", err)
+	}
+}
+
+// summaryFromMarkdown extracts the first paragraph from a markdown
+// post — same heuristic the status page's `normaliseIncident` uses,
+// kept simple so it stays readable in a feed reader.
+func summaryFromMarkdown(body string) string {
+	body = strings.TrimSpace(body)
+	if body == "" {
+		return ""
+	}
+	// Split on blank line (paragraph break) — take the first
+	// non-frontmatter paragraph.
+	parts := strings.Split(body, "\n\n")
+	for _, p := range parts {
+		p = strings.TrimSpace(p)
+		if p == "" {
+			continue
+		}
+		// Skip headings and HTML comments.
+		if strings.HasPrefix(p, "#") || strings.HasPrefix(p, "<!--") {
+			continue
+		}
+		if len(p) > 400 {
+			p = p[:397] + "..."
+		}
+		return p
+	}
+	return ""
 }
