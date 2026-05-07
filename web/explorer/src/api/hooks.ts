@@ -416,6 +416,7 @@ export type IssuedAsset = {
 export type Issuer = {
   g_strkey: string;
   home_domain?: string;
+  org_name?: string;
   auth_required?: boolean;
   auth_revocable?: boolean;
   auth_immutable?: boolean;
