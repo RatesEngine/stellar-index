@@ -328,8 +328,39 @@ export default async function AssetDetailPage({ params }: { params: Params }) {
     fetchPrice(coin.asset_id),
   ]);
 
+  // Schema.org BreadcrumbList — gives Google a structured
+  // hierarchy (Home → Assets → XLM) so search results can
+  // render the breadcrumb path under the title.
+  const breadcrumbLD = {
+    '@context': 'https://schema.org',
+    '@type': 'BreadcrumbList',
+    itemListElement: [
+      {
+        '@type': 'ListItem',
+        position: 1,
+        name: 'Home',
+        item: 'https://ratesengine.net',
+      },
+      {
+        '@type': 'ListItem',
+        position: 2,
+        name: 'Assets',
+        item: 'https://ratesengine.net/assets',
+      },
+      {
+        '@type': 'ListItem',
+        position: 3,
+        name: coin.code,
+        item: `https://ratesengine.net/assets/${coin.slug}`,
+      },
+    ],
+  };
   return (
     <div className="mx-auto max-w-7xl space-y-6 px-6 py-8">
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(breadcrumbLD) }}
+      />
       <header className="space-y-3">
         <nav className="text-xs text-slate-500">
           <Link href="/assets" className="hover:text-brand-600">

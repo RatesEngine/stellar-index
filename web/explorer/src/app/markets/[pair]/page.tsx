@@ -291,8 +291,37 @@ export default async function PairPage({ params }: { params: Params }) {
       ? ((Number(points[points.length - 1].p) / Number(points[0].p) - 1) * 100)
       : null;
 
+  // Schema.org BreadcrumbList — Home → Markets → BASE/QUOTE.
+  const breadcrumbLD = {
+    '@context': 'https://schema.org',
+    '@type': 'BreadcrumbList',
+    itemListElement: [
+      {
+        '@type': 'ListItem',
+        position: 1,
+        name: 'Home',
+        item: 'https://ratesengine.net',
+      },
+      {
+        '@type': 'ListItem',
+        position: 2,
+        name: 'Markets',
+        item: 'https://ratesengine.net/markets',
+      },
+      {
+        '@type': 'ListItem',
+        position: 3,
+        name: `${baseLabel} / ${quoteLabel}`,
+        item: `https://ratesengine.net/markets/${encodeURIComponent(`${base}~${quote}`)}`,
+      },
+    ],
+  };
   return (
     <div className="mx-auto max-w-7xl space-y-6 px-6 py-8">
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(breadcrumbLD) }}
+      />
       <header className="space-y-3">
         <Link
           href="/markets"
