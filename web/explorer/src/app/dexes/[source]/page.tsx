@@ -3,18 +3,8 @@ import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { ArrowLeft, ExternalLink } from 'lucide-react';
 
-import { Panel } from '@/components/reveal';
-import { asExample } from '@/api/client';
-import { SourceSparkline } from '@/components/SourceSparkline';
 import { PoolsTable } from './PoolsTable';
-
-const API_BASE_URL =
-  process.env.NEXT_PUBLIC_API_BASE_URL ?? 'https://api.ratesengine.net';
-
-const isCIStub =
-  API_BASE_URL.includes('.invalid') || API_BASE_URL.includes('local-stub');
-
-const BUILD_FETCH_TIMEOUT_MS = 8_000;
+import { SourceStatsPanel } from './SourceStatsPanel';
 
 // Curated list of DEX sources with friendly names + audit links.
 // Mirrors the 5 cards on /dexes; per-DEX detail pages are
@@ -87,33 +77,6 @@ export async function generateMetadata({
   };
 }
 
-interface VolumeBucket {
-  hour: string;
-  volume_usd: string;
-}
-
-interface SourceStats {
-  trade_count_24h?: number;
-  volume_24h_usd?: string;
-  markets_count_24h?: number;
-  volume_history_24h?: VolumeBucket[];
-}
-
-async function fetchSourceStats(source: string): Promise<SourceStats | null> {
-  if (isCIStub) return null;
-  try {
-    const res = await fetch(`${API_BASE_URL}/v1/sources?include=stats,sparkline`, {
-      signal: AbortSignal.timeout(BUILD_FETCH_TIMEOUT_MS),
-    });
-    if (!res.ok) return null;
-    const env = (await res.json()) as { data: Array<{ name: string } & SourceStats> };
-    const row = env.data?.find((r) => r.name === source);
-    return row ?? null;
-  } catch {
-    return null;
-  }
-}
-
 export default async function SourceDetailPage({
   params,
 }: {
@@ -122,11 +85,6 @@ export default async function SourceDetailPage({
   const { source } = await params;
   const info = DEX_INFO[source];
   if (!info) notFound();
-
-  const stats = await fetchSourceStats(source);
-  const trades = stats?.trade_count_24h ?? 0;
-  const volume = stats?.volume_24h_usd ? Number(stats.volume_24h_usd) : 0;
-  const markets = stats?.markets_count_24h ?? 0;
 
   return (
     <div className="mx-auto max-w-7xl space-y-6 px-6 py-8">
@@ -152,36 +110,7 @@ export default async function SourceDetailPage({
         </p>
       </header>
 
-      <Panel
-        title="24h activity"
-        hint={`Live from /v1/sources?include=stats,sparkline (source=${source})`}
-        source={asExample('/v1/sources', { include: 'stats,sparkline' })}
-      >
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-          <Stat
-            label="24h volume"
-            value={volume > 0 ? `$${formatCompact(volume)}` : '—'}
-          />
-          <Stat
-            label="24h trades"
-            value={trades > 0 ? formatCompact(trades) : '—'}
-          />
-          <Stat
-            label="24h pools"
-            value={markets > 0 ? markets.toLocaleString() : '—'}
-          />
-        </div>
-        {stats?.volume_history_24h && stats.volume_history_24h.length > 0 && (
-          <div className="mt-4 border-t border-slate-200 pt-3 dark:border-slate-800">
-            <div className="text-[10px] uppercase tracking-wider text-slate-500">
-              Volume by hour
-            </div>
-            <div className="mt-2">
-              <SourceSparkline buckets={stats.volume_history_24h} width={400} height={48} />
-            </div>
-          </div>
-        )}
-      </Panel>
+      <SourceStatsPanel source={source} />
 
       <PoolsTable source={source} sourceName={info.name} />
 
@@ -214,20 +143,3 @@ export default async function SourceDetailPage({
   );
 }
 
-function Stat({ label, value }: { label: string; value: string }) {
-  return (
-    <div>
-      <div className="text-[10px] uppercase tracking-wider text-slate-500">
-        {label}
-      </div>
-      <div className="mt-1 text-2xl font-semibold tabular-nums">{value}</div>
-    </div>
-  );
-}
-
-function formatCompact(n: number): string {
-  if (n >= 1e9) return `${(n / 1e9).toFixed(2)}B`;
-  if (n >= 1e6) return `${(n / 1e6).toFixed(2)}M`;
-  if (n >= 1e3) return `${(n / 1e3).toFixed(1)}K`;
-  return n.toLocaleString();
-}
