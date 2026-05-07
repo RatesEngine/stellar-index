@@ -1088,6 +1088,10 @@ func (r storeMarketsReader) PairMarket(ctx context.Context, base, quote canonica
 	}, true, nil
 }
 
+func (r storeMarketsReader) GetPairsVolumeHistory24hBatch(ctx context.Context, pairs [][2]string) (map[string][]timescale.PairVolumePoint, error) {
+	return r.s.GetPairsVolumeHistory24hBatch(ctx, pairs)
+}
+
 // storeOracleReader adapts *timescale.Store to v1.OracleReader.
 type storeOracleReader struct{ s *timescale.Store }
 
@@ -1230,6 +1234,14 @@ type cachedMarketsReader struct {
 
 func (r cachedMarketsReader) PairMarket(ctx context.Context, base, quote canonical.Asset) (v1.Market, bool, error) {
 	return r.inner.PairMarket(ctx, base, quote)
+}
+
+// GetPairsVolumeHistory24hBatch — pass-through. The query runs at
+// page granularity (max 500 pairs) and the result depends on the
+// 24h time window; not worth caching since invalidation tracks
+// every minute boundary.
+func (r cachedMarketsReader) GetPairsVolumeHistory24hBatch(ctx context.Context, pairs [][2]string) (map[string][]timescale.PairVolumePoint, error) {
+	return r.inner.GetPairsVolumeHistory24hBatch(ctx, pairs)
 }
 
 func (r cachedMarketsReader) AllPools(ctx context.Context, sources []string, cursor string, limit int, order timescale.MarketsOrder) ([]v1.Pool, string, error) {

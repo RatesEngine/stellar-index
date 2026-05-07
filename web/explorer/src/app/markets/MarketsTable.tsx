@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from 'next/navigation';
 
 import { Panel } from '@/components/reveal';
 import { asExample } from '@/api/client';
+import { SourceSparkline } from '@/components/SourceSparkline';
 import { useMarkets } from '@/api/hooks';
 import { formatCompact } from '@/lib/format';
 
@@ -31,7 +32,7 @@ export function MarketsTable() {
   const orderBy: 'volume_24h_usd_desc' | 'pair' =
     orderParam === 'pair' ? 'pair' : 'volume_24h_usd_desc';
 
-  const { data, isLoading, isError, error } = useMarkets(100, orderBy);
+  const { data, isLoading, isError, error } = useMarkets(100, orderBy, { sparkline: true });
 
   const sorted = data?.markets ?? [];
 
@@ -119,6 +120,7 @@ export function MarketsTable() {
                 />
               </Th>
               <Th align="right">24h trades</Th>
+              <Th>24h chart</Th>
               <Th align="right">Last trade</Th>
             </tr>
           </thead>
@@ -167,6 +169,9 @@ export function MarketsTable() {
                   <span className="font-mono tabular-nums text-slate-600 dark:text-slate-400">
                     {formatCompact(m.trade_count_24h)}
                   </span>
+                </Td>
+                <Td>
+                  <SourceSparkline buckets={m.volume_history_24h} />
                 </Td>
                 <Td align="right">
                   <span className="font-mono tabular-nums text-xs text-slate-500">

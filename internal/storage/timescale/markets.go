@@ -595,3 +595,90 @@ func (s *Store) PairMarket(ctx context.Context, base, quote canonical.Asset) (Ma
 	}
 	return m, true, nil
 }
+
+// PairVolumePoint is one hourly USD-volume sample for a single
+// (base, quote) pair, used by the per-pair sparkline endpoint.
+// Hour is the bucket start (UTC); VolumeUSD is numeric-stringified
+// for full precision through the JSON boundary.
+type PairVolumePoint struct {
+	Hour      time.Time
+	VolumeUSD string
+}
+
+// pairKey is the lookup key for the batched per-pair volume map.
+// Wire shape stays string-based (`<base>|<quote>`) so the v1 API
+// adapter doesn't have to import canonical.Pair.
+type pairKey = string
+
+// GetPairsVolumeHistory24hBatch returns per-(base, quote) hourly
+// USD-volume buckets for the trailing 24h, suitable for the
+// /markets / /v1/markets sparkline column. Single CTE pass keyed
+// by ANY($1) on the pair tuple text.
+//
+// Unlike the per-source variant, this query reads volume_usd
+// directly from prices_1m — pairs aggregated across all sources
+// match the wire shape /v1/markets already returns. Holes are
+// zero-filled so each per-pair series always has 24 entries
+// oldest → newest.
+func (s *Store) GetPairsVolumeHistory24hBatch(ctx context.Context, pairs [][2]string) (map[pairKey][]PairVolumePoint, error) {
+	if len(pairs) == 0 {
+		return map[pairKey][]PairVolumePoint{}, nil
+	}
+	keys := make([]string, len(pairs))
+	for i, p := range pairs {
+		keys[i] = p[0] + "|" + p[1]
+	}
+	const q = `
+		WITH hours AS (
+		  SELECT generate_series(
+		    date_trunc('hour', now() - INTERVAL '23 hours'),
+		    date_trunc('hour', now()),
+		    INTERVAL '1 hour'
+		  ) AS bucket
+		),
+		want AS (
+		  SELECT split_part(k, '|', 1) AS base_asset,
+		         split_part(k, '|', 2) AS quote_asset,
+		         k                       AS pair_key
+		    FROM unnest($1::text[]) k
+		),
+		per_hour AS (
+		  SELECT base_asset || '|' || quote_asset AS pair_key,
+		         date_trunc('hour', bucket)        AS h,
+		         SUM(volume_usd)::text             AS vol
+		    FROM prices_1m
+		   WHERE bucket >= date_trunc('hour', now() - INTERVAL '23 hours')
+		     AND volume_usd IS NOT NULL
+		     AND (base_asset || '|' || quote_asset) = ANY($1)
+		   GROUP BY pair_key, h
+		)
+		SELECT w.pair_key,
+		       to_char(hours.bucket, 'YYYY-MM-DD"T"HH24:MI:SS"Z"') AS t,
+		       COALESCE(p.vol, '0') AS v
+		  FROM want w
+		  CROSS JOIN hours
+		  LEFT JOIN per_hour p ON p.pair_key = w.pair_key AND p.h = hours.bucket
+		 ORDER BY w.pair_key, hours.bucket ASC
+	`
+	rows, err := s.db.QueryContext(ctx, q, pq.Array(keys))
+	if err != nil {
+		return nil, fmt.Errorf("timescale: GetPairsVolumeHistory24hBatch: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+	out := make(map[pairKey][]PairVolumePoint, len(pairs))
+	for rows.Next() {
+		var key, ts, vol string
+		if err := rows.Scan(&key, &ts, &vol); err != nil {
+			return nil, fmt.Errorf("timescale: GetPairsVolumeHistory24hBatch scan: %w", err)
+		}
+		hour, err := time.Parse(time.RFC3339, ts)
+		if err != nil {
+			continue
+		}
+		out[key] = append(out[key], PairVolumePoint{Hour: hour, VolumeUSD: vol})
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("timescale: GetPairsVolumeHistory24hBatch rows: %w", err)
+	}
+	return out, nil
+}

@@ -56,6 +56,10 @@ func (r *stubMarketsReader) AllPools(_ context.Context, _ []string, _ string, _ 
 	return out, r.nextCur, nil
 }
 
+func (r *stubMarketsReader) GetPairsVolumeHistory24hBatch(_ context.Context, _ [][2]string) (map[string][]timescale.PairVolumePoint, error) {
+	return map[string][]timescale.PairVolumePoint{}, nil
+}
+
 func (r *stubMarketsReader) PairMarket(_ context.Context, _ canonical.Asset, _ canonical.Asset) (v1.Market, bool, error) {
 	if r.pairErr != nil {
 		return v1.Market{}, false, r.pairErr

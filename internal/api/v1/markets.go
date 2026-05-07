@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"sort"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/RatesEngine/rates-engine/internal/canonical"
@@ -55,6 +56,11 @@ type MarketsReader interface {
 	// not a 404, so the wire shape stays consistent with the
 	// PairsEnvelope contract.
 	PairMarket(ctx context.Context, base, quote canonical.Asset) (Market, bool, error)
+
+	// GetPairsVolumeHistory24hBatch returns per-pair hourly USD-volume
+	// buckets for the trailing 24h. Backs the /v1/markets sparkline
+	// column when the caller passes ?include=sparkline.
+	GetPairsVolumeHistory24hBatch(ctx context.Context, pairs [][2]string) (map[string][]timescale.PairVolumePoint, error)
 }
 
 // Pool is the wire shape for /v1/pools entries. Same fields as
@@ -181,6 +187,19 @@ type Market struct {
 	LastTradeAt   time.Time `json:"last_trade_at"`
 	TradeCount24h int64     `json:"trade_count_24h"`
 	Volume24hUSD  *string   `json:"volume_24h_usd,omitempty"`
+	// VolumeHistory24h — per-hour USD-volume buckets for the
+	// trailing 24h. Populated only when the request sets
+	// `?include=sparkline`. 24 entries oldest → newest, zero-
+	// filled server-side so the wire array length is stable.
+	VolumeHistory24h []MarketVolumeBucket `json:"volume_history_24h,omitempty"`
+}
+
+// MarketVolumeBucket — one hourly USD-volume datapoint for the
+// /v1/markets sparkline. Hour is RFC 3339; volume_usd is
+// numeric-stringified for precision parity.
+type MarketVolumeBucket struct {
+	Hour      time.Time `json:"hour"`
+	VolumeUSD string    `json:"volume_usd"`
 }
 
 // handleMarkets serves GET /v1/markets.
@@ -192,7 +211,7 @@ type Market struct {
 //     The latter surfaces high-USD-volume pairs first so clients
 //     don't paginate alphabetically through ~5K dust pairs to find
 //     the ones with real activity.
-func (s *Server) handleMarkets(w http.ResponseWriter, r *http.Request) {
+func (s *Server) handleMarkets(w http.ResponseWriter, r *http.Request) { //nolint:gocognit,gocyclo // option parsing + source/no-source dispatch + sparkline backfill are linear; splitting would scatter the request lifecycle
 	cursor := r.URL.Query().Get("cursor")
 	limit := 100
 	if raw := r.URL.Query().Get("limit"); raw != "" {
@@ -256,6 +275,38 @@ func (s *Server) handleMarkets(w http.ResponseWriter, r *http.Request) {
 	// Mirrors the handleAssetList guard.
 	if rows == nil {
 		rows = []Market{}
+	}
+
+	// Optional opt-in: attach 24h hourly volume history per row
+	// for sparkline columns. Default off (avoids ~50KB per page
+	// of bloat for SDK consumers that don't render charts).
+	includeSparkline := false
+	for _, f := range strings.Split(r.URL.Query().Get("include"), ",") {
+		if strings.TrimSpace(f) == "sparkline" {
+			includeSparkline = true
+		}
+	}
+	if includeSparkline && len(rows) > 0 {
+		pairs := make([][2]string, len(rows))
+		for i, m := range rows {
+			pairs[i] = [2]string{m.Base, m.Quote}
+		}
+		if hist, hErr := reader.GetPairsVolumeHistory24hBatch(r.Context(), pairs); hErr != nil {
+			s.logger.Warn("markets sparkline batch failed", "err", hErr)
+		} else {
+			for i, m := range rows {
+				key := m.Base + "|" + m.Quote
+				series := hist[key]
+				if len(series) == 0 {
+					continue
+				}
+				out := make([]MarketVolumeBucket, len(series))
+				for j, p := range series {
+					out[j] = MarketVolumeBucket{Hour: p.Hour, VolumeUSD: p.VolumeUSD}
+				}
+				rows[i].VolumeHistory24h = out
+			}
+		}
 	}
 
 	env := Envelope{

@@ -552,6 +552,10 @@ func (r apiMarketsAdapter) SourceMarkets(ctx context.Context, source, cursor str
 	return out, next, nil
 }
 
+func (r apiMarketsAdapter) GetPairsVolumeHistory24hBatch(ctx context.Context, pairs [][2]string) (map[string][]timescale.PairVolumePoint, error) {
+	return r.s.GetPairsVolumeHistory24hBatch(ctx, pairs)
+}
+
 func (r apiMarketsAdapter) AllPools(ctx context.Context, sources []string, cursor string, limit int, order timescale.MarketsOrder) ([]v1.Pool, string, error) {
 	rows, next, err := r.s.AllPools(ctx, sources, cursor, limit, order)
 	if err != nil {
