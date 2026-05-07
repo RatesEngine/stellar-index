@@ -100,6 +100,58 @@ export default function RootLayout({
       <head>
         {/* Set html.dark before first paint to avoid theme flash */}
         <script dangerouslySetInnerHTML={{ __html: themeInit }} />
+        {/* Schema.org JSON-LD — Organization + WebSite. Lets Google
+            render the brand panel and a sitelinks search box at
+            ratesengine.net pointing at /assets?q=…. */}
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{
+            __html: JSON.stringify({
+              '@context': 'https://schema.org',
+              '@graph': [
+                {
+                  '@type': 'Organization',
+                  '@id': `${SITE_URL}#org`,
+                  name: SITE_NAME,
+                  url: SITE_URL,
+                  logo: `${SITE_URL}/icon.svg`,
+                  description: SITE_DESCRIPTION,
+                  sameAs: [
+                    'https://github.com/RatesEngine/rates-engine',
+                  ],
+                  contactPoint: [
+                    {
+                      '@type': 'ContactPoint',
+                      contactType: 'security',
+                      email: 'security@ratesengine.net',
+                    },
+                    {
+                      '@type': 'ContactPoint',
+                      contactType: 'sales',
+                      email: 'sales@ratesengine.net',
+                    },
+                  ],
+                },
+                {
+                  '@type': 'WebSite',
+                  '@id': `${SITE_URL}#site`,
+                  url: SITE_URL,
+                  name: SITE_NAME,
+                  description: SITE_DESCRIPTION,
+                  publisher: { '@id': `${SITE_URL}#org` },
+                  potentialAction: {
+                    '@type': 'SearchAction',
+                    target: {
+                      '@type': 'EntryPoint',
+                      urlTemplate: `${SITE_URL}/assets?q={search_term_string}`,
+                    },
+                    'query-input': 'required name=search_term_string',
+                  },
+                },
+              ],
+            }),
+          }}
+        />
       </head>
       <body className="flex min-h-screen flex-col">
         <QueryProvider>
