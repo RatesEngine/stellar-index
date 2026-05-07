@@ -25,6 +25,14 @@ against.
   applied to OraclesView's /v1/oracle/streams call.
 
 ### Added
+- **/aggregators surfaces the reference-price aggregators we
+  cross-check against.** New "Reference price aggregators" table
+  below the Soroswap-Router / DeFindex cards, backed by
+  /v1/sources?class=aggregator&include=stats. Lists CoinGecko,
+  CoinMarketCap, CryptoCompare with their cost (free/paid),
+  backfill availability, and role. Footer note explains the
+  exclusion-from-VWAP policy (they aggregate the same upstream
+  venues we already index — including them would double-count).
 - **/assets/[slug] gains a USD ↔ asset converter widget** per the
   user IA spec ("currency converter widget" on the per-asset page).
   Bidirectional input with a swap button — type a USD amount to see
