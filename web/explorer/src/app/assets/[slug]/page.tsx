@@ -6,6 +6,7 @@ import { Panel } from '@/components/reveal';
 import { asExample, API_BASE_URL } from '@/api/client';
 import { formatCompact, formatPrice } from '@/lib/format';
 import { AssetTabs, ActiveTabSlot } from './AssetTabs';
+import { AssetConverter } from './AssetConverter';
 import { ChartPanel } from './ChartPanel';
 import { IssuerPanel } from './IssuerPanel';
 import { MarketsTabPanel } from './MarketsTabPanel';
@@ -515,6 +516,8 @@ function OverviewBody({
           )}
         </ul>
       </Panel>
+
+      <AssetConverter symbol={coin.code} priceUSD={priceNum} />
 
       {coin.top_markets && coin.top_markets.length > 0 && (
         <Panel
