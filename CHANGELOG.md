@@ -16,6 +16,13 @@ against.
 ## [Unreleased]
 
 ### Added
+- **`/changelog.atom` syndication feed.** RFC-4287 Atom feed of
+  every release entry on the explorer side, generated at build
+  time from `CHANGELOG.md`. Designed for Feedly, Slack RSS bot,
+  and any other feed reader that wants push-style notifications
+  when a release ships — no polling. The /changelog page header
+  now surfaces a "Subscribe (Atom) ↗" link. Same pattern the
+  status site uses for `/v1/incidents.atom`.
 - **`/sources/<name>`: integration audit link.** When the source
   has a corresponding `/research/discovery/<slug>` audit, the
   detail header now shows a "Read integration audit →" CTA.

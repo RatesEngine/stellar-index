@@ -1,7 +1,7 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
-import { readFileSync } from 'node:fs';
-import { join } from 'node:path';
+
+import { loadReleases, type Release } from '@/lib/changelog';
 
 export const metadata: Metadata = {
   title: 'Changelog',
@@ -9,68 +9,25 @@ export const metadata: Metadata = {
     'Every release of Rates Engine — features added, bugs fixed, and the architectural changes behind them. Source: CHANGELOG.md.',
 };
 
-interface Release {
-  version: string;
-  date?: string;
-  blocks: { kind: string; lines: string[] }[];
-  raw: string;
-}
-
-function parseChangelog(): Release[] {
-  // CHANGELOG.md lives at the repo root. The static-export build
-  // runs from web/explorer, so we walk up two levels to find it.
-  // Failures (file missing, parse error) return an empty list so
-  // the page still builds in CI's network-isolated stub mode.
-  let text = '';
-  try {
-    text = readFileSync(join(process.cwd(), '../../CHANGELOG.md'), 'utf8');
-  } catch {
-    return [];
-  }
-  const lines = text.split('\n');
-  const releases: Release[] = [];
-  let cur: Release | null = null;
-  let curBlock: { kind: string; lines: string[] } | null = null;
-
-  for (const line of lines) {
-    const releaseMatch = line.match(/^##\s+\[([^\]]+)\](?:\s+—\s+(\S+))?/);
-    if (releaseMatch) {
-      if (cur) {
-        if (curBlock) cur.blocks.push(curBlock);
-        releases.push(cur);
-      }
-      cur = { version: releaseMatch[1]!, date: releaseMatch[2], blocks: [], raw: line + '\n' };
-      curBlock = null;
-      continue;
-    }
-    const blockMatch = line.match(/^###\s+(.+)$/);
-    if (blockMatch && cur) {
-      if (curBlock) cur.blocks.push(curBlock);
-      curBlock = { kind: blockMatch[1]!.trim(), lines: [] };
-      cur.raw += line + '\n';
-      continue;
-    }
-    if (cur) {
-      cur.raw += line + '\n';
-      if (curBlock) curBlock.lines.push(line);
-    }
-  }
-  if (cur) {
-    if (curBlock) cur.blocks.push(curBlock);
-    releases.push(cur);
-  }
-  // Drop the [Unreleased] section if it's empty (no blocks).
-  return releases.filter((r) => r.version.toLowerCase() !== 'unreleased' || r.blocks.length > 0);
-}
-
 export default function ChangelogPage() {
-  const releases = parseChangelog();
+  const releases: Release[] = loadReleases();
   return (
     <div className="mx-auto max-w-4xl space-y-8 px-6 py-10">
       <header className="space-y-3">
-        <p className="font-mono text-xs uppercase tracking-widest text-brand-600 dark:text-brand-400">
-          Changelog
-        </p>
+        <div className="flex items-baseline justify-between">
+          <p className="font-mono text-xs uppercase tracking-widest text-brand-600 dark:text-brand-400">
+            Changelog
+          </p>
+          <a
+            href="/changelog.atom"
+            target="_blank"
+            rel="noreferrer noopener"
+            className="text-xs text-slate-500 hover:text-brand-600"
+            title="Atom feed — subscribe in Feedly, Slack RSS bot, etc."
+          >
+            Subscribe (Atom) ↗
+          </a>
+        </div>
         <h1 className="text-4xl font-semibold tracking-tight">
           Every release, every change.
         </h1>
