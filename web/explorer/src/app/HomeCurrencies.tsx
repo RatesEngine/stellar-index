@@ -10,6 +10,7 @@ interface CurrencyRow {
   ticker: string;
   name: string;
   rate_usd: number;
+  change_24h_pct?: number;
 }
 
 const FEATURED = ['EUR', 'GBP', 'JPY', 'CHF', 'CAD', 'AUD'];
@@ -76,8 +77,25 @@ export function HomeCurrencies() {
                 {row && row.rate_usd > 0 ? formatRate(row.rate_usd) : '—'}
               </div>
               {row && (
-                <div className="text-[11px] text-slate-500 line-clamp-1" title={row.name}>
-                  {row.name}
+                <div className="flex items-baseline justify-between gap-2">
+                  <span className="text-[11px] text-slate-500 line-clamp-1" title={row.name}>
+                    {row.name}
+                  </span>
+                  {row.change_24h_pct != null && Number.isFinite(row.change_24h_pct) && (
+                    <span
+                      className={`font-mono text-[11px] tabular-nums ${
+                        row.change_24h_pct > 0
+                          ? 'text-emerald-600 dark:text-emerald-400'
+                          : row.change_24h_pct < 0
+                            ? 'text-rose-600 dark:text-rose-400'
+                            : 'text-slate-500'
+                      }`}
+                      title="24h % change in USD value (daily-grain feed)"
+                    >
+                      {row.change_24h_pct > 0 ? '+' : ''}
+                      {row.change_24h_pct.toFixed(2)}%
+                    </span>
+                  )}
                 </div>
               )}
             </Link>
