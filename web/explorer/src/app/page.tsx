@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import { ArrowRight } from 'lucide-react';
 
+import { HomeBlogStrip } from './HomeBlogStrip';
 import { HomeCurrencies } from './HomeCurrencies';
 import { NetworkLivePanel, SystemHealthLivePanel } from './HomeLivePanels';
 import { HomeNetworkStrip } from './HomeNetworkStrip';
@@ -106,6 +107,8 @@ export default function HomePage() {
       <HomeRecentTrades />
 
       <HomeRecentChanges />
+
+      <HomeBlogStrip />
 
       <section className="space-y-3">
         <div className="space-y-1">
