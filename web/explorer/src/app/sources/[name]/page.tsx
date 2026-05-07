@@ -148,6 +148,14 @@ export default async function SourceDetailPage({
             </span>
           )}
         </div>
+        {auditSlug(name) && (
+          <Link
+            href={`/research/discovery/${auditSlug(name)}`}
+            className="inline-flex items-center gap-1 text-xs text-brand-600 hover:underline"
+          >
+            Read integration audit →
+          </Link>
+        )}
       </header>
 
       <Panel title="Registry profile">
@@ -306,6 +314,31 @@ function Stat({
       </dd>
     </div>
   );
+}
+
+// auditSlug maps a source name to its /research/discovery/<slug>
+// page when one exists. Returns "" for sources without a published
+// audit. The reflector triplet (cex/dex/fx) shares a single audit
+// since the three contracts have the same on-chain interface.
+function auditSlug(source: string): string {
+  switch (source) {
+    case 'sdex':
+    case 'soroswap':
+    case 'phoenix':
+    case 'aquarius':
+    case 'comet':
+    case 'blend':
+    case 'band':
+    case 'redstone':
+    case 'chainlink':
+      return source;
+    case 'reflector-cex':
+    case 'reflector-dex':
+    case 'reflector-fx':
+      return 'reflector';
+    default:
+      return '';
+  }
 }
 
 function ClassBadge({ cls }: { cls: Source['class'] }) {
