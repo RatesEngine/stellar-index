@@ -52,6 +52,12 @@ export default function HomePage() {
           >
             Read methodology
           </Link>
+          <Link
+            href="/signup"
+            className="inline-flex items-center gap-1.5 rounded-md border border-slate-300 px-3.5 py-2 text-sm font-medium text-slate-700 hover:border-brand-500 hover:text-brand-600 dark:border-slate-700 dark:text-slate-300"
+          >
+            Get a free key
+          </Link>
         </div>
       </header>
 

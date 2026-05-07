@@ -16,6 +16,12 @@ against.
 ## [Unreleased]
 
 ### Changed
+- **Home hero: "Get a free key" CTA.** Adds a fifth pill linking
+  to `/signup` next to Browse assets / Browse markets / API docs
+  / Read methodology. The conversion path was previously hidden
+  in the navbar's Sign-up button only; surfacing it as a hero
+  CTA matches what every other enterprise data API does on its
+  landing page.
 - **Home live-panels: explicit "Open" CTAs.** NetworkLivePanel
   and SystemHealthLivePanel on the home 3-up grid now end with
   small "Open network →" / "Open diagnostics →" links matching
