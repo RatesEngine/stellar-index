@@ -15,6 +15,8 @@ against.
 
 ## [Unreleased]
 
+## [v0.5.0-rc.20] — 2026-05-07
+
 ### Fixed
 - **`/v1/coins/{slug}` 500 regression on rc.18.** PR #794 added
   `change_1h_pct`, `change_24h_pct`, `change_7d_pct` references
