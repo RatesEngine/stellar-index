@@ -16,6 +16,13 @@ against.
 ## [Unreleased]
 
 ### Added
+- **`/diagnostics` BackfillSummary card.** Surfaces backfill
+  worker state (active workers / slowest active lag / furthest
+  ledger reached / distinct shards) as a sibling card to the
+  existing live-ingest HealthSummary. Same `/v1/diagnostics/cursors`
+  call powers both — no extra round trip. Page now reads
+  "Live ingest" + "Backfill workers" as two clearly-labeled
+  health surfaces rather than mixing them.
 - **Home Try-the-API: rc.21 endpoints surfaced.** Adds two
   example tabs covering features shipped in rc.21 — `Network
   stats — 24h volume + market count` (`/v1/network/stats`)

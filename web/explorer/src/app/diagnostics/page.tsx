@@ -1,4 +1,5 @@
 import type { Metadata } from 'next';
+import { BackfillSummary } from './BackfillSummary';
 import { CursorsTable } from './CursorsTable';
 import { HealthSummary } from './HealthSummary';
 
@@ -29,7 +30,19 @@ export default function DiagnosticsPage() {
         </p>
       </header>
 
-      <HealthSummary />
+      <section className="space-y-2">
+        <h2 className="text-sm font-semibold uppercase tracking-wider text-slate-500">
+          Live ingest
+        </h2>
+        <HealthSummary />
+      </section>
+
+      <section className="space-y-2">
+        <h2 className="text-sm font-semibold uppercase tracking-wider text-slate-500">
+          Backfill workers
+        </h2>
+        <BackfillSummary />
+      </section>
 
       <CursorsTable />
     </div>
