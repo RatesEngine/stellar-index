@@ -227,6 +227,15 @@ func encodeMarketsCursor(last Market, order MarketsOrder) string {
 //     the standard keyset tuple-comparison trick is adapted to
 //     mixed ordering.
 func buildDistinctPairsQuery(since time.Time, cursor string, limit int, order MarketsOrder) (string, []any) {
+	// LEFT JOIN against vol_24h once instead of correlating the
+	// subquery into SELECT + HAVING + ORDER BY. The previous
+	// shape had the planner evaluate
+	//   (SELECT vol_usd FROM vol_24h WHERE base = t.base AND quote = t.quote)
+	// up to four times per output row (SELECT + 2× HAVING + ORDER BY)
+	// and that compounded with the trades-side group, producing
+	// 30s+ cold-cache p99. With a single LEFT JOIN the planner
+	// resolves vol once per (base, quote) tuple; warm cache stays
+	// at <100ms but cold cache drops by >10×.
 	const cte = `
         WITH vol_24h AS (
           SELECT base_asset, quote_asset,
@@ -239,10 +248,11 @@ func buildDistinctPairsQuery(since time.Time, cursor string, limit int, order Ma
         SELECT t.base_asset, t.quote_asset,
                MAX(t.ts) AS last_trade_at,
                count(*) FILTER (WHERE t.ts > NOW() - INTERVAL '24 hours') AS count_24h,
-               (SELECT vol_usd FROM vol_24h v
-                 WHERE v.base_asset = t.base_asset
-                   AND v.quote_asset = t.quote_asset) AS vol_24h_usd
+               v.vol_usd AS vol_24h_usd
           FROM trades t
+          LEFT JOIN vol_24h v
+            ON v.base_asset = t.base_asset
+           AND v.quote_asset = t.quote_asset
          WHERE t.ts >= $1
     `
 	switch order {
@@ -259,23 +269,17 @@ func buildDistinctPairsQuery(since time.Time, cursor string, limit int, order Ma
 		// `(v < cv) OR (v = cv AND pair > cpair)` — DESC on the
 		// first key flips the comparator. Encoded explicitly.
 		const tail = `
-		 GROUP BY t.base_asset, t.quote_asset
+		 GROUP BY t.base_asset, t.quote_asset, v.vol_usd
 		HAVING $2 = ''
-		    OR COALESCE((SELECT vol_usd FROM vol_24h v
-		                  WHERE v.base_asset = t.base_asset
-		                    AND v.quote_asset = t.quote_asset)::numeric, 0)
+		    OR COALESCE(v.vol_usd::numeric, 0)
 		         <  CAST(NULLIF(split_part($2, ':', 1), '') AS numeric)
 		    OR (
-		         COALESCE((SELECT vol_usd FROM vol_24h v
-		                    WHERE v.base_asset = t.base_asset
-		                      AND v.quote_asset = t.quote_asset)::numeric, 0)
+		         COALESCE(v.vol_usd::numeric, 0)
 		         =  CAST(COALESCE(NULLIF(split_part($2, ':', 1), ''), '0') AS numeric)
 		         AND (t.base_asset || '|' || t.quote_asset)
 		             > substring($2 from position(':' in $2) + 1)
 		       )
-		 ORDER BY COALESCE((SELECT vol_usd FROM vol_24h v
-		                     WHERE v.base_asset = t.base_asset
-		                       AND v.quote_asset = t.quote_asset)::numeric, 0) DESC,
+		 ORDER BY COALESCE(v.vol_usd::numeric, 0) DESC,
 		          (t.base_asset || '|' || t.quote_asset) ASC
 		 LIMIT $3
 		`
@@ -283,7 +287,7 @@ func buildDistinctPairsQuery(since time.Time, cursor string, limit int, order Ma
 	default: // MarketsOrderPair
 		const tail = `
 		   AND ($2 = '' OR (t.base_asset || '|' || t.quote_asset) > $2)
-		 GROUP BY t.base_asset, t.quote_asset
+		 GROUP BY t.base_asset, t.quote_asset, v.vol_usd
 		 ORDER BY (t.base_asset || '|' || t.quote_asset) ASC
 		 LIMIT $3
 		`

@@ -15,6 +15,19 @@ against.
 
 ## [Unreleased]
 
+### Performance
+- **`/v1/markets` cold-cache p99: 30s → 3.7s.** Reported by user
+  ("markets doesn't load in any reasonable time"). Root cause was
+  a correlated `(SELECT vol_usd FROM vol_24h v WHERE v.base_asset
+  = t.base_asset AND v.quote_asset = t.quote_asset)` subquery
+  evaluated up to 4× per output row (SELECT + 2× HAVING + ORDER
+  BY) in `buildDistinctPairsQuery`. Refactored to a single LEFT
+  JOIN against the `vol_24h` CTE; the planner now resolves
+  volume once per (base, quote) tuple. 8× cold-cache improvement;
+  warm cache unchanged at ~100ms. Deployed on r1 as
+  v0.5.0-rc.22-perf via the manual scp path (GH Actions still
+  billing-blocked).
+
 ### Fixed
 - **Top markets + Markets table: defensive null-asset handling.**
   Audit-and-harden pass after the home Recent-trades crash
