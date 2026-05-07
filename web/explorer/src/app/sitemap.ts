@@ -3,6 +3,7 @@ import type { MetadataRoute } from 'next';
 import { API_BASE_URL } from '@/api/client';
 import { loadADRs } from '@/lib/adr';
 import { loadArchitectureDocs } from '@/lib/architecture';
+import { loadDiscoveryDocs } from '@/lib/discovery';
 
 // Required for `output: 'export'` — sitemap is generated at build
 // time and emitted as a static file. Same applies to robots.ts.
@@ -65,6 +66,12 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     changeFrequency: 'monthly',
     priority: 0.6,
   }));
+  const discoveryPages: MetadataRoute.Sitemap = loadDiscoveryDocs().map((d) => ({
+    url: `${SITE_URL}/research/discovery/${d.slug}`,
+    lastModified: now,
+    changeFrequency: 'monthly',
+    priority: 0.5,
+  }));
 
   const [assetSlugs, issuerKeys] = await Promise.all([
     fetchCoinSlugs(),
@@ -87,6 +94,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     ...staticPages,
     ...adrPages,
     ...archPages,
+    ...discoveryPages,
     ...assetPages,
     ...issuerPages,
   ];
