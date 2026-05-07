@@ -1,11 +1,19 @@
 package v1
 
 import (
+	"context"
 	"net/http"
 	"sort"
 
 	"github.com/RatesEngine/rates-engine/internal/sources/external"
+	"github.com/RatesEngine/rates-engine/internal/storage/timescale"
 )
+
+// SourcesStatsReader is the seam for /v1/sources?include=stats.
+// timescale.Store implements via GetSourceStats.
+type SourcesStatsReader interface {
+	GetSourceStats(ctx context.Context) ([]timescale.SourceStats, error)
+}
 
 // Source is the wire shape for /v1/sources entries.
 //
@@ -40,6 +48,11 @@ type Source struct {
 	// are always `true` — no on-chain WASM dependency.
 	BackfillSafe  bool `json:"backfill_safe"`
 	DefaultWeight int  `json:"default_weight"`
+	// TradeCount24h is populated only when `?include=stats` is set.
+	// 0 (rather than null) when the source had no trades in 24h —
+	// distinguishing "no data fetched" from "no trades observed"
+	// would require a third state and isn't worth the wire bloat.
+	TradeCount24h int64 `json:"trade_count_24h,omitempty"`
 }
 
 // validSourceClasses is the allow-list of values accepted for the
@@ -82,6 +95,25 @@ func (s *Server) handleSources(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// `include=stats` opt-in joins per-source 24h trade counts.
+	// Absent the param the response stays the static-registry
+	// projection it always was; opt-in lets callers that want the
+	// extra column pay the (cheap) DB hit, while everyone else
+	// keeps the all-static fast path.
+	includeStats := r.URL.Query().Get("include") == "stats"
+	statsBySource := map[string]int64{}
+	if includeStats && s.sourcesStats != nil {
+		got, err := s.sourcesStats.GetSourceStats(r.Context())
+		if err != nil {
+			s.logger.Warn("source stats", "err", err)
+			// Soft-fail: serve the registry without stats.
+		} else {
+			for _, ss := range got {
+				statsBySource[ss.Source] = ss.TradeCount24h
+			}
+		}
+	}
+
 	out := make([]Source, 0, len(external.Registry))
 	for name, md := range external.Registry {
 		if classFilter != "" && string(md.Class) != classFilter {
@@ -96,6 +128,7 @@ func (s *Server) handleSources(w http.ResponseWriter, r *http.Request) {
 			BackfillAvailable: md.BackfillAvailable,
 			BackfillSafe:      md.BackfillSafe,
 			DefaultWeight:     md.DefaultWeight,
+			TradeCount24h:     statsBySource[name],
 		})
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].Name < out[j].Name })

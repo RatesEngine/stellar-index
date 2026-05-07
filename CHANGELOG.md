@@ -16,6 +16,13 @@ against.
 ## [Unreleased]
 
 ### Added
+- **`/v1/sources?include=stats` per-source 24h trade count.**
+  Opt-in flag joins each Source row with a `trade_count_24h`
+  column derived from a single GROUP BY on the trades hypertable.
+  Cheap aggregation (the `(ts, source)` ingest pattern keeps the
+  index hot); soft-fails to the all-static-registry projection
+  if the DB hit errors. Lets the explorer's `/sources` page
+  surface contribution percentages without separate fetches.
 - **Home "Recently shipped" widget.** New section between Recent
   trades and Try the API surfacing the top 3 changelog entries
   with proper Added/Fixed/Changed tone pills + release pill +

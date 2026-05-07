@@ -2265,6 +2265,14 @@ export interface paths {
                      *     split the catalogue by role.
                      */
                     class?: "exchange" | "aggregator" | "oracle" | "authority_sanity";
+                    /**
+                     * @description Opt-in extras. `stats` populates each row's
+                     *     `trade_count_24h` from a single GROUP BY on the trades
+                     *     hypertable — cheap, but a DB hit so opt-in. Absent the
+                     *     param the response stays the all-static-registry
+                     *     projection.
+                     */
+                    include?: "stats";
                 };
                 header?: never;
                 path?: never;
@@ -3926,6 +3934,8 @@ export interface components {
             backfill_safe: boolean;
             /** @description Default per-source weight for weighted-aggregation paths (when those land). */
             default_weight: number;
+            /** @description Trailing-24h trade count for this source. Populated only when the request used `?include=stats`; absent (omitted) otherwise. */
+            trade_count_24h?: number;
         };
         SourcesEnvelope: components["schemas"]["EnvelopeMeta"] & {
             data: components["schemas"]["Source"][];

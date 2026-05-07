@@ -61,6 +61,7 @@ type Server struct {
 	issuers          IssuersReader
 	cursors          CursorsReader
 	networkStats     NetworkStatsReader
+	sourcesStats     SourcesStatsReader
 	incidents        []incidents.Incident
 	sep10            auth.SEP10Validator
 	cors             middleware.Middleware
@@ -227,6 +228,12 @@ type Options struct {
 	// timescale.Store directly. Nil makes the endpoint 503.
 	NetworkStats NetworkStatsReader
 
+	// SourcesStats, when non-nil, populates the per-source
+	// trade_count_24h field on /v1/sources?include=stats. Without
+	// it, the include flag is silently ignored and the response
+	// stays the all-static-registry projection.
+	SourcesStats SourcesStatsReader
+
 	// SEP10, when non-nil, backs GET /v1/auth/sep10/challenge and
 	// POST /v1/auth/sep10/token. Production wiring: an
 	// auth/sep10.Validator constructed from the binary's signing
@@ -363,6 +370,7 @@ func New(opts Options) *Server {
 		issuers:          opts.Issuers,
 		cursors:          opts.Cursors,
 		networkStats:     opts.NetworkStats,
+		sourcesStats:     opts.SourcesStats,
 		sep10:            opts.SEP10,
 		cors:             opts.CORS,
 		auth:             opts.Auth,

@@ -1534,6 +1534,18 @@ paths:
           schema:
             type: string
             enum: [exchange, aggregator, oracle, authority_sanity]
+        - name: include
+          in: query
+          required: false
+          description: |
+            Opt-in extras. `stats` populates each row's
+            `trade_count_24h` from a single GROUP BY on the trades
+            hypertable — cheap, but a DB hit so opt-in. Absent the
+            param the response stays the all-static-registry
+            projection.
+          schema:
+            type: string
+            enum: [stats]
       responses:
         "200":
           description: Array of sources, sorted by name.
@@ -3080,6 +3092,7 @@ components:
         backfill_available: { type: boolean, description: "Whether the source supports historical backfill via its native API." }
         backfill_safe:      { type: boolean, description: "Whether `ratesengine-ops backfill` will run on this source. On-chain Soroban sources start `false` and only flip `true` after a per-WASM-hash audit (`docs/operations/wasm-audits/`); off-chain CEX/FX sources are always `true`." }
         default_weight:     { type: integer, description: "Default per-source weight for weighted-aggregation paths (when those land)." }
+        trade_count_24h:    { type: integer, description: "Trailing-24h trade count for this source. Populated only when the request used `?include=stats`; absent (omitted) otherwise." }
       required: [name, class, include_in_vwap, paid, backfill_available, backfill_safe, default_weight]
 
     SourcesEnvelope:
