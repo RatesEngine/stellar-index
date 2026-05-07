@@ -15,7 +15,9 @@ interface Coin {
   code: string;
   slug: string;
   price_usd?: string | null;
+  change_1h_pct?: string | null;
   change_24h_pct?: string | null;
+  change_7d_pct?: string | null;
   price_history_24h?: { t: string; p?: string | null }[];
   volume_24h_usd?: string | null;
 }
@@ -103,7 +105,9 @@ export default async function EmbedAssetPage({ params }: { params: Params }) {
   }
 
   const priceNum = coin.price_usd ? Number(coin.price_usd) : null;
-  const changeNum = coin.change_24h_pct ? Number(coin.change_24h_pct) : null;
+  const change1h = coin.change_1h_pct ? Number(coin.change_1h_pct) : null;
+  const change24h = coin.change_24h_pct ? Number(coin.change_24h_pct) : null;
+  const change7d = coin.change_7d_pct ? Number(coin.change_7d_pct) : null;
   const points = coin.price_history_24h ?? [];
 
   return (
@@ -126,24 +130,13 @@ export default async function EmbedAssetPage({ params }: { params: Params }) {
           rates&shy;engine.net ↗
         </a>
       </div>
-      <div className="flex items-baseline gap-3">
+      <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
         <span className="font-mono text-2xl tabular-nums">
           {priceNum != null ? formatPrice(priceNum) : '—'}
         </span>
-        {changeNum != null && Number.isFinite(changeNum) && (
-          <span
-            className={`rounded px-1.5 py-0.5 font-mono text-xs tabular-nums ${
-              changeNum > 0
-                ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300'
-                : changeNum < 0
-                  ? 'bg-rose-50 text-rose-700 dark:bg-rose-950/40 dark:text-rose-300'
-                  : 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400'
-            }`}
-          >
-            {changeNum > 0 ? '+' : ''}
-            {changeNum.toFixed(2)}% 24h
-          </span>
-        )}
+        <ChangeChip pct={change1h} label="1h" />
+        <ChangeChip pct={change24h} label="24h" />
+        <ChangeChip pct={change7d} label="7d" />
       </div>
       {points.length > 0 && <Sparkline points={points} />}
       <div className="mt-auto flex items-center justify-between text-[10px] text-slate-400">
@@ -158,28 +151,76 @@ export default async function EmbedAssetPage({ params }: { params: Params }) {
   );
 }
 
+function ChangeChip({ pct, label }: { pct: number | null | undefined; label: string }) {
+  if (pct == null || !Number.isFinite(pct)) return null;
+  const cls =
+    pct > 0
+      ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300'
+      : pct < 0
+        ? 'bg-rose-50 text-rose-700 dark:bg-rose-950/40 dark:text-rose-300'
+        : 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400';
+  return (
+    <span className={`rounded px-1.5 py-0.5 font-mono text-[11px] tabular-nums ${cls}`}>
+      {pct > 0 ? '+' : ''}
+      {pct.toFixed(2)}% {label}
+    </span>
+  );
+}
+
 function Sparkline({ points }: { points: { p?: string | null }[] }) {
-  const prices = points
-    .map((p) => Number(p.p))
-    .filter((n) => Number.isFinite(n) && n > 0);
-  if (prices.length === 0) return null;
-  const min = Math.min(...prices);
-  const max = Math.max(...prices);
-  const range = max - min || max * 0.01;
   const w = 280;
   const h = 32;
+  // Resolve indexed (x, y) honouring nulls so contiguous segments
+  // can close back to the baseline at gap boundaries (the area
+  // shouldn't bridge across hours with no trade).
+  const valid = points
+    .map((pt, i) => ({ i, n: pt.p ? Number(pt.p) : null }))
+    .filter((p) => p.n != null && Number.isFinite(p.n) && p.n > 0);
+  if (valid.length < 2) return null;
+  const min = Math.min(...valid.map((p) => p.n!));
+  const max = Math.max(...valid.map((p) => p.n!));
+  const range = max - min || max * 0.01;
   const xStep = points.length > 1 ? w / (points.length - 1) : 0;
-  const path = points
-    .map((p, i) => {
-      const n = Number(p.p);
-      if (!Number.isFinite(n)) return null;
+  const segs: string[] = [];
+  let pen = false;
+  type Run = { start: number; end: number };
+  const runs: Run[] = [];
+  let runStart = -1;
+  let lastIdx = -1;
+  points.forEach((pt, i) => {
+    const n = pt.p ? Number(pt.p) : null;
+    if (n == null || !Number.isFinite(n) || n <= 0) {
+      if (pen && runStart >= 0) runs.push({ start: runStart, end: lastIdx });
+      pen = false;
+      runStart = -1;
+      return;
+    }
+    const x = i * xStep;
+    const y = h - ((n - min) / range) * h;
+    segs.push(`${pen ? 'L' : 'M'} ${x.toFixed(1)} ${y.toFixed(1)}`);
+    if (!pen) runStart = i;
+    pen = true;
+    lastIdx = i;
+  });
+  if (pen && runStart >= 0) runs.push({ start: runStart, end: lastIdx });
+  const trendUp = valid[valid.length - 1].n! >= valid[0].n!;
+  const fill = trendUp ? 'rgba(16,185,129,0.14)' : 'rgba(244,63,94,0.14)';
+  // Area path: one closed sub-region per contiguous run.
+  const areaSegs: string[] = [];
+  for (const run of runs) {
+    let started = false;
+    for (let i = run.start; i <= run.end; i++) {
+      const n = points[i]?.p ? Number(points[i].p) : null;
+      if (n == null || !Number.isFinite(n) || n <= 0) continue;
       const x = i * xStep;
       const y = h - ((n - min) / range) * h;
-      return `${i === 0 ? 'M' : 'L'} ${x.toFixed(1)} ${y.toFixed(1)}`;
-    })
-    .filter(Boolean)
-    .join(' ');
-  const trendUp = prices[prices.length - 1]! >= prices[0]!;
+      areaSegs.push(`${started ? 'L' : 'M'} ${x.toFixed(1)} ${y.toFixed(1)}`);
+      started = true;
+    }
+    const xStart = run.start * xStep;
+    const xEnd = run.end * xStep;
+    areaSegs.push(`L ${xEnd.toFixed(1)} ${h} L ${xStart.toFixed(1)} ${h} Z`);
+  }
   return (
     <svg
       viewBox={`0 0 ${w} ${h}`}
@@ -187,8 +228,9 @@ function Sparkline({ points }: { points: { p?: string | null }[] }) {
       className="h-8 w-full"
       aria-label="24-hour price sparkline"
     >
+      <path d={areaSegs.join(' ')} stroke="none" fill={fill} />
       <path
-        d={path}
+        d={segs.join(' ')}
         fill="none"
         strokeWidth="1.5"
         className={trendUp ? 'stroke-emerald-500' : 'stroke-rose-500'}
