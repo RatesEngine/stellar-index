@@ -16,6 +16,14 @@ against.
 ## [Unreleased]
 
 ### Fixed
+- **Top markets + Markets table: defensive null-asset handling.**
+  Audit-and-harden pass after the home Recent-trades crash
+  (#879). Same `.startsWith()` pattern in `HomeTopMarkets`
+  and `markets/MarketsTable` would have crashed on the same
+  rare /v1/markets row with one side null. Both renderers now
+  return "—" for null/undefined input. Embed and pair-detail
+  call sites take their input from a URL split on `~` so
+  both sides are always defined; no change needed there.
 - **Home Recent trades: crash on null base/quote asset.**
   HomeRecentTrades's `short()` helper called `.startsWith()` on
   the canonical asset string, but rare /v1/history rows arrive

@@ -190,7 +190,8 @@ export function MarketsTable() {
  * on the first dash to get code + issuer, and render code prominent
  * with a truncated issuer beneath.
  */
-function AssetLabel({ canonical }: { canonical: string }) {
+function AssetLabel({ canonical }: { canonical: string | undefined | null }) {
+  if (!canonical) return <span className="text-xs text-slate-400">—</span>;
   if (canonical.startsWith('fiat:')) {
     return <span className="font-medium">{canonical.replace('fiat:', '')}</span>;
   }

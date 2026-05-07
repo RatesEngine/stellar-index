@@ -122,7 +122,8 @@ export function HomeTopMarkets() {
   );
 }
 
-function shortAsset(canonical: string): string {
+function shortAsset(canonical: string | undefined | null): string {
+  if (!canonical) return '—';
   if (canonical === 'native') return 'XLM';
   if (canonical.startsWith('fiat:')) return canonical.replace('fiat:', '');
   if (canonical.startsWith('crypto:')) return canonical.replace('crypto:', '');
