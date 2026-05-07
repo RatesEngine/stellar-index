@@ -86,8 +86,16 @@ export function HomeRecentTrades() {
     <section className="space-y-3">
       <div className="flex items-baseline justify-between">
         <div className="space-y-1">
-          <h2 className="text-2xl font-semibold tracking-tight">
+          <h2 className="flex items-center gap-2 text-2xl font-semibold tracking-tight">
             Recent trades
+            <span
+              className="relative inline-flex h-2 w-2"
+              aria-label="live feed"
+              title="live feed"
+            >
+              <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75"></span>
+              <span className="relative inline-flex h-2 w-2 rounded-full bg-emerald-500"></span>
+            </span>
           </h2>
           <p className="text-sm text-slate-600 dark:text-slate-400">
             Live feed merging the latest trades across the top {TOP_PAIRS}{' '}
