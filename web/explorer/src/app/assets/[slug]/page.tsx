@@ -475,6 +475,8 @@ function OverviewBody({
                   : 'ATH'
               }
               value={fmtUsd(coin.ath?.usd ?? null)}
+              accent={athDrawdown(coin.price_usd, coin.ath?.usd)?.label}
+              accentTone={athDrawdown(coin.price_usd, coin.ath?.usd)?.tone}
             />
           </dl>
         </Panel>
@@ -678,6 +680,27 @@ function fmtNum(raw: string | null | undefined): string {
   return formatCompact(n);
 }
 
+// athDrawdown computes the % drop from ATH given the current
+// price + ATH price (both as wire-format strings). Returns null
+// when either side is missing or invalid; otherwise returns a
+// formatted label + colour tone matching the AssetsTable
+// FromATH column so the same signal looks the same wherever
+// it appears.
+function athDrawdown(
+  priceRaw: string | null | undefined,
+  athRaw: string | null | undefined,
+): { label: string; tone: 'emerald' | 'amber' | 'rose' | 'slate' } | null {
+  if (!priceRaw || !athRaw) return null;
+  const p = Number(priceRaw);
+  const a = Number(athRaw);
+  if (!Number.isFinite(p) || !Number.isFinite(a) || a <= 0) return null;
+  const pct = ((p - a) / a) * 100;
+  const label = pct > 0 ? '0.0%' : `${pct.toFixed(1)}%`;
+  const tone =
+    pct > -1 ? 'emerald' : pct > -25 ? 'slate' : pct > -75 ? 'amber' : 'rose';
+  return { label, tone };
+}
+
 // ChangePctLabel renders a signed percentage with emerald-up /
 // rose-down / slate-zero colour. Accepts the wire-format string
 // (e.g. "+1.27", "-0.05", "0.00") and the window label.
@@ -782,17 +805,39 @@ function Stat({
   label,
   value,
   mono,
+  accent,
+  accentTone,
 }: {
   label: string;
   value: string;
   mono?: boolean;
+  // Optional secondary signal rendered as a small coloured chip
+  // after the value. Used by the ATH stat to surface the drawdown
+  // alongside the raw all-time-high price.
+  accent?: string;
+  accentTone?: 'emerald' | 'slate' | 'amber' | 'rose';
 }) {
+  const accentColor =
+    accentTone === 'emerald'
+      ? 'text-emerald-600 dark:text-emerald-400'
+      : accentTone === 'amber'
+        ? 'text-amber-600 dark:text-amber-400'
+        : accentTone === 'rose'
+          ? 'text-rose-600 dark:text-rose-400'
+          : 'text-slate-500 dark:text-slate-400';
   return (
     <div>
       <dt className="text-[11px] uppercase tracking-wider text-slate-500">
         {label}
       </dt>
-      <dd className={mono ? 'font-mono text-xs' : 'tabular-nums'}>{value}</dd>
+      <dd className={mono ? 'font-mono text-xs' : 'tabular-nums'}>
+        {value}
+        {accent && (
+          <span className={`ml-1.5 text-[11px] font-mono ${accentColor}`}>
+            {accent}
+          </span>
+        )}
+      </dd>
     </div>
   );
 }
