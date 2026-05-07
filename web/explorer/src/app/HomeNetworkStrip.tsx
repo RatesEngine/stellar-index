@@ -1,5 +1,7 @@
 'use client';
 
+import Link from 'next/link';
+
 import { useCoins, useNetworkStats } from '@/api/hooks';
 import { formatCompact } from '@/lib/format';
 
@@ -55,6 +57,7 @@ export function HomeNetworkStrip() {
             : '—'
         }
         sub="across all markets"
+        href="/markets"
       />
       <Cell
         label="Active markets"
@@ -62,6 +65,7 @@ export function HomeNetworkStrip() {
           activeMarkets != null ? activeMarkets.toLocaleString() : '—'
         }
         sub="trading in last 24h"
+        href="/markets"
       />
       <Cell
         label="Assets indexed"
@@ -69,6 +73,7 @@ export function HomeNetworkStrip() {
           assetsIndexed != null ? formatCompact(assetsIndexed) : '—'
         }
         sub="classic + native"
+        href="/assets"
       />
       <Cell
         label="Sources online"
@@ -76,6 +81,7 @@ export function HomeNetworkStrip() {
           exchangeSources != null ? `${exchangeSources}` : '—'
         }
         sub="Class = exchange"
+        href="/sources"
       />
       {xlmPrice != null ? (
         <Cell
@@ -95,6 +101,7 @@ export function HomeNetworkStrip() {
                   : undefined
               : undefined
           }
+          href="/assets/XLM"
         />
       ) : (
         <Cell
@@ -102,6 +109,7 @@ export function HomeNetworkStrip() {
           value={tipLedger != null ? `#${tipLedger.toLocaleString()}` : '—'}
           sub="ingest cursor"
           mono
+          href="/diagnostics"
         />
       )}
     </section>
@@ -114,12 +122,14 @@ function Cell({
   sub,
   tone,
   mono,
+  href,
 }: {
   label: string;
   value: string;
   sub?: string;
   tone?: 'up' | 'down';
   mono?: boolean;
+  href?: string;
 }) {
   const subTone =
     tone === 'up'
@@ -127,8 +137,8 @@ function Cell({
       : tone === 'down'
         ? 'text-rose-600 dark:text-rose-400'
         : 'text-slate-500';
-  return (
-    <div className="rounded-md border border-slate-200 bg-white p-3 dark:border-slate-800 dark:bg-slate-900">
+  const inner = (
+    <>
       <div className="text-[10px] uppercase tracking-wider text-slate-500">
         {label}
       </div>
@@ -141,6 +151,19 @@ function Cell({
       {sub && (
         <div className={`mt-0.5 text-[11px] ${subTone}`}>{sub}</div>
       )}
-    </div>
+    </>
   );
+  const baseClass =
+    'block rounded-md border border-slate-200 bg-white p-3 dark:border-slate-800 dark:bg-slate-900';
+  if (href) {
+    return (
+      <Link
+        href={href}
+        className={`${baseClass} transition hover:border-brand-300 hover:shadow-sm dark:hover:border-brand-700`}
+      >
+        {inner}
+      </Link>
+    );
+  }
+  return <div className={baseClass}>{inner}</div>;
 }
