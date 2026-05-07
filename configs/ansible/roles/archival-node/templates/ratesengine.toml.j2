@@ -36,3 +36,19 @@ backfill_from_ledger = {{ ratesengine_backfill_from_ledger | int }}
 # passed as --start when the live tail first started.
 # 0 = no archive bucket; live-only.
 live_seam_ledger     = {{ ratesengine_live_seam_ledger | int }}
+
+[api]
+listen_addr = "127.0.0.1:3000"
+# Browser origins allowed to make CORS requests against the API.
+# Adding a new ratesengine.* subdomain here is the only step
+# required to surface its fetch() calls without a CORS error —
+# Caddy passes Origin through unmodified.
+allowed_origins = [
+  "https://ratesengine.net",
+  "https://www.ratesengine.net",
+  "https://api.ratesengine.net",
+  "https://status.ratesengine.net",
+  "https://docs.ratesengine.net",
+  "https://dashboard.ratesengine.net",
+]
+auth_mode = "apikey_optional"

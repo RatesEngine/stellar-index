@@ -15,6 +15,18 @@ against.
 
 ## [Unreleased]
 
+### Fixed
+- **status.ratesengine.net stuck on "Status unknown"** — the
+  status site fetches `/v1/status` cross-origin from
+  `status.ratesengine.net` but only `ratesengine.net` and
+  `api.ratesengine.net` were in the API's `allowed_origins`. Add
+  `status.`, `docs.`, `dashboard.`, and `www.` subdomains to the
+  ansible template so future re-renders preserve the fix.
+  Production `/etc/ratesengine.toml` was hand-patched on r1
+  immediately and the API was restarted; verified
+  `Access-Control-Allow-Origin: https://status.ratesengine.net`
+  on responses.
+
 ### Added
 - **`GET /v1/sac-wrappers`** — read-only endpoint exposing the
   operator-config Stellar-Asset-Contract wrapper map (SAC C-strkey
