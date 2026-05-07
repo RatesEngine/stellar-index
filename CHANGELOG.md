@@ -16,6 +16,10 @@ against.
 ## [Unreleased]
 
 ### Changed
+- **Navbar surfaces SDK link.** Adds `SDK` between Research and
+  Docs in the navbar so Go integrators can find the typed
+  `pkg/client` examples without having to drill into the footer
+  or Cmd-K search first.
 - **Home hero: "Get a free key" CTA.** Adds a fifth pill linking
   to `/signup` next to Browse assets / Browse markets / API docs
   / Read methodology. The conversion path was previously hidden

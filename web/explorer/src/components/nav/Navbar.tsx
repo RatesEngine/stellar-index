@@ -120,5 +120,6 @@ const SECTIONS: Section[] = [
   { label: 'Network', href: '/network' },
   { label: 'Methodology', href: '/methodology' },
   { label: 'Research', href: '/research' },
+  { label: 'SDK', href: '/sdk' },
   { label: 'Docs', href: 'https://docs.ratesengine.net', external: true },
 ];
