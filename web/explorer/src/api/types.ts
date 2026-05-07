@@ -2105,6 +2105,54 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/incidents.atom": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Atom feed of customer-facing incidents.
+         * @description RFC-4287 Atom 1.0 syndication of every customer-facing
+         *     incident post (`internal/incidents/data/*.md`). Designed
+         *     for Feedly, Slack's RSS bot, and similar feed consumers
+         *     who want push-style notifications when a new incident
+         *     ships without polling JSON.
+         *
+         *     Same corpus as `/v1/incidents`; entry `<id>` is a stable
+         *     URN so feed readers dedupe correctly across crawls.
+         *     Cache-Control: public, max-age=300 (5 min) — the corpus
+         *     only changes on redeploy so longer caching is fine.
+         */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Atom 1.0 XML feed. */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/atom+xml": string;
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/network/stats": {
         parameters: {
             query?: never;

@@ -490,6 +490,7 @@ func (s *Server) mountRoutes() {
 	s.mux.HandleFunc("GET /v1/changes/{entity_type}/{id}", s.handleChangeSummary)
 	s.mux.HandleFunc("GET /v1/diagnostics/cursors", s.handleCursors)
 	s.mux.HandleFunc("GET /v1/incidents", s.handleIncidents)
+	s.mux.HandleFunc("GET /v1/incidents.atom", s.handleIncidentsAtom)
 	s.mux.HandleFunc("GET /v1/network/stats", s.handleNetworkStats)
 	s.mux.HandleFunc("GET /v1/healthz", s.handleHealthz)
 	s.mux.HandleFunc("GET /v1/readyz", s.handleReadyz)

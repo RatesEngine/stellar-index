@@ -16,6 +16,13 @@ against.
 ## [Unreleased]
 
 ### Added
+- **`/v1/incidents.atom` Atom feed.** RFC-4287 syndication of
+  the customer-facing incident corpus — designed for Feedly,
+  Slack RSS bot, and other feed consumers who want push-style
+  notifications when an incident ships without polling JSON.
+  Status page now surfaces a "Subscribe (Atom) ↗" link in the
+  Incident history section header. Cache-Control max-age=300 (5
+  min) — corpus only changes on redeploy.
 - **`/compare` page** for side-by-side asset comparison (2&ndash;6
   assets via `?assets=USDC,XLM,USDT`). Renders a metric × asset
   table covering price, 1h/24h/7d change with green/red tones,
