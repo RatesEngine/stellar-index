@@ -126,7 +126,20 @@ export function HomeRecentTrades() {
               </thead>
               <tbody className="divide-y divide-slate-100 font-mono text-xs dark:divide-slate-800">
                 {trades.map((t, i) => {
-                  const slug = `${t.base_asset}~${t.quote_asset}`;
+                  // Both sides need to be defined to construct a
+                  // valid /markets/<base~quote> route. If either
+                  // is null (rare — see comment in `short()`), we
+                  // render the row but don't link it; sending the
+                  // user to /markets/native~undefined would 404.
+                  const linkable = !!t.base_asset && !!t.quote_asset;
+                  const slug = linkable
+                    ? `${t.base_asset}~${t.quote_asset}`
+                    : '';
+                  const pairLabel = (
+                    <>
+                      {short(t.base_asset)} / {short(t.quote_asset)}
+                    </>
+                  );
                   return (
                     <tr
                       key={`${t.ts}-${t.source}-${i}`}
@@ -136,12 +149,16 @@ export function HomeRecentTrades() {
                         {timeAgo(t.ts)}
                       </td>
                       <td className="px-4 py-2">
-                        <Link
-                          href={`/markets/${encodeURIComponent(slug)}`}
-                          className="hover:text-brand-600"
-                        >
-                          {short(t.base_asset)} / {short(t.quote_asset)}
-                        </Link>
+                        {linkable ? (
+                          <Link
+                            href={`/markets/${encodeURIComponent(slug)}`}
+                            className="hover:text-brand-600"
+                          >
+                            {pairLabel}
+                          </Link>
+                        ) : (
+                          <span>{pairLabel}</span>
+                        )}
                       </td>
                       <td className="px-4 py-2 uppercase tracking-wider text-slate-600 dark:text-slate-400">
                         {t.source}
@@ -161,7 +178,13 @@ export function HomeRecentTrades() {
   );
 }
 
-function short(canonical: string): string {
+function short(canonical: string | undefined | null): string {
+  // /v1/history rows occasionally arrive with one side null (e.g.
+  // a trade whose decoder couldn't resolve the counterparty asset
+  // — the row still surfaces with the price + timestamp because
+  // those came from elsewhere). Guard so an undefined doesn't
+  // crash the whole feed render.
+  if (!canonical) return '—';
   if (canonical === 'native') return 'XLM';
   if (canonical.startsWith('fiat:')) return canonical.replace('fiat:', '');
   if (canonical.startsWith('crypto:')) return canonical.replace('crypto:', '');

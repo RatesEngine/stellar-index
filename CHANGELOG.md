@@ -15,6 +15,16 @@ against.
 
 ## [Unreleased]
 
+### Fixed
+- **Home Recent trades: crash on null base/quote asset.**
+  HomeRecentTrades's `short()` helper called `.startsWith()` on
+  the canonical asset string, but rare /v1/history rows arrive
+  with one side null. The crash bubbled up the React tree and
+  blanked the home page. Now `short()` returns "—" for null
+  inputs; the row still renders the price + timestamp + source,
+  and the pair label displays without a link (since
+  /markets/native~undefined would 404).
+
 ### Changed
 - **Navbar surfaces SDK link.** Adds `SDK` between Research and
   Docs in the navbar so Go integrators can find the typed
