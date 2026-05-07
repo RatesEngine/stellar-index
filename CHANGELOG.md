@@ -15,6 +15,16 @@ against.
 
 ## [Unreleased]
 
+### Changed
+- **Home network strip cells are now clickable.** Each of the
+  five cards on the home strip deep-links to its corresponding
+  page: 24h volume + Active markets → `/markets`, Assets indexed
+  → `/assets`, Sources online → `/sources`, XLM → `/assets/XLM`.
+  Hover state matches the rest of the explorer's link chrome
+  (border + shadow lift on hover). Visitors can drill from the
+  scale-of-the-network number straight into the underlying
+  catalogue.
+
 ### Added
 - **`/research/operations` runbook browser.** Curated set of four
   cross-cutting operator docs — archival-node-bringup,
