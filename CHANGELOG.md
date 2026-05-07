@@ -36,6 +36,19 @@ against.
   the cap is too thin for the cap to be a confident number.
 
 ### Added
+- **`GET /v1/currencies` + /currencies real table.** Replaces the
+  forex placeholder shipped in #888 with live fiat coverage. New
+  `internal/sources/forex` package wraps the free, MIT-licensed
+  currency-api (ECB / FRBNY-aggregated, daily-updated, 200+
+  currencies, no API key, hosted on jsDelivr). The API binary
+  starts a background worker that refreshes the in-memory snapshot
+  hourly; `GET /v1/currencies` reads from the snapshot and returns
+  ticker / name / USD-denominated rate per currency, with the
+  upstream's published-at date so clients can render staleness.
+  Frontend table is sortable + searchable; per-currency drill-down
+  with 1h / 24h / 7d change windows + market cap + volume + supply
+  lands once we wire a paid forex feed (currency-api is daily-
+  granularity only).
 - **`GET /v1/lending/pools`** — returns one row per Blend pool
   observed in the auction stream, with 24h / all-time auction
   counts + 30d unique users + last-seen timestamp. Backed by new

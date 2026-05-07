@@ -63,6 +63,7 @@ type Server struct {
 	networkStats     NetworkStatsReader
 	sourcesStats     SourcesStatsReader
 	lending          LendingReader
+	currencies       CurrenciesReader
 	incidents        []incidents.Incident
 	sep10            auth.SEP10Validator
 	cors             middleware.Middleware
@@ -240,6 +241,12 @@ type Options struct {
 	// empty array — same degradation pattern as Markets.
 	Lending LendingReader
 
+	// Currencies, when non-nil, backs /v1/currencies — the world
+	// fiat-currency rates listing. Leave nil and the handler serves
+	// an empty currencies list ("warming up") with the source label
+	// still populated.
+	Currencies CurrenciesReader
+
 	// SEP10, when non-nil, backs GET /v1/auth/sep10/challenge and
 	// POST /v1/auth/sep10/token. Production wiring: an
 	// auth/sep10.Validator constructed from the binary's signing
@@ -378,6 +385,7 @@ func New(opts Options) *Server {
 		networkStats:     opts.NetworkStats,
 		sourcesStats:     opts.SourcesStats,
 		lending:          opts.Lending,
+		currencies:       opts.Currencies,
 		sep10:            opts.SEP10,
 		cors:             opts.CORS,
 		auth:             opts.Auth,
@@ -605,6 +613,9 @@ func (s *Server) mountRoutes() {
 
 	// Lending — Blend pools observed in the auction stream.
 	s.mux.HandleFunc("GET /v1/lending/pools", s.handleLendingPools)
+
+	// Currencies — world fiat rates vs USD (currency-api shim).
+	s.mux.HandleFunc("GET /v1/currencies", s.handleCurrencies)
 
 	// Source catalogue — every venue the aggregator knows about,
 	// with class + IncludeInVWAP metadata.

@@ -76,6 +76,7 @@ import (
 	"github.com/RatesEngine/rates-engine/internal/platform"
 	"github.com/RatesEngine/rates-engine/internal/platform/postgresstore"
 	"github.com/RatesEngine/rates-engine/internal/ratelimit"
+	"github.com/RatesEngine/rates-engine/internal/sources/forex"
 	"github.com/RatesEngine/rates-engine/internal/storage/redisclient"
 	"github.com/RatesEngine/rates-engine/internal/storage/timescale"
 	"github.com/RatesEngine/rates-engine/internal/supply"
@@ -450,6 +451,18 @@ func run(cfgPath string, dryRun bool) error { //nolint:gocognit,funlen,gocyclo /
 		return fmt.Errorf("dashboard: %w", err)
 	}
 
+	// Forex shim — periodic fetch of fiat rates from the free
+	// currency-api. Cache is in-memory; worker installs a snapshot
+	// once per hour. Backs /v1/currencies. Worker survives upstream
+	// failures (logs at warn) — the cache holds the prior snapshot.
+	forexCache := forex.NewCache()
+	forexWorker := forex.NewWorker(forex.NewClient(), forexCache, logger.With("component", "forex"), time.Hour)
+	go func() {
+		if err := forexWorker.Run(rootCtx); err != nil && !errors.Is(err, context.Canceled) {
+			logger.Error("forex worker exited", "err", err)
+		}
+	}()
+
 	// Auth — translate the configured auth_mode + auth_backend into
 	// the middleware. auth_mode=none yields nil (server stack omits
 	// it; downstream code treats absence-of-Subject as anonymous).
@@ -488,6 +501,7 @@ func run(cfgPath string, dryRun bool) error { //nolint:gocognit,funlen,gocyclo /
 		NetworkStats:     store,
 		SourcesStats:     store,
 		Lending:          store,
+		Currencies:       newForexAdapter(forexCache),
 		SEP10:            sep10Validator,
 		Hub:              hub,
 		CORS:             cors,
@@ -1768,5 +1782,35 @@ func warnOpenCORS(logger *slog.Logger, allowedOrigins []string, authMode string)
 		logger.Warn("SECURITY: CORS allows every origin (\"*\") and auth_mode permits credentials — narrow [api].allowed_origins to your explorer / explorer hostnames before exposing the API publicly.",
 			"auth_mode", authMode,
 			"docs", "https://github.com/RatesEngine/rates-engine/blob/main/docs/operations/pre-launch-hardening.md")
+	}
+}
+
+// forexAdapter bridges the forex.Cache (raw snapshot type) to
+// v1.CurrenciesReader (wire-shape projection). The v1 package
+// can't import internal/sources/forex without inverting the
+// dependency direction; the adapter lives here so main.go owns
+// the conversion.
+type forexAdapter struct{ cache *forex.Cache }
+
+func newForexAdapter(c *forex.Cache) *forexAdapter { return &forexAdapter{cache: c} }
+
+func (a *forexAdapter) Latest() *v1.CurrenciesSnapshot {
+	snap := a.cache.Latest()
+	if snap == nil {
+		return nil
+	}
+	rows := make([]v1.CurrencyEntry, len(snap.Currencies))
+	for i, c := range snap.Currencies {
+		rows[i] = v1.CurrencyEntry{
+			Ticker:    c.Ticker,
+			Name:      c.Name,
+			RateUSD:   c.RateUSD,
+			UpdatedAt: c.UpdateAt,
+		}
+	}
+	return &v1.CurrenciesSnapshot{
+		Currencies:  rows,
+		PublishedAt: snap.PublishedAt,
+		FetchedAt:   snap.FetchedAt,
 	}
 }
