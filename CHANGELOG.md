@@ -15,6 +15,17 @@ against.
 
 ## [Unreleased]
 
+### Added
+- **Curated known-issuer metadata fallback** on `/v1/issuers` and
+  `/v1/issuers/{g_strkey}`. Top issuers (Circle/USDC, Aquarius/AQUA,
+  Ultra Capital/yXLM, Stronghold/SHX, MoneyGram, AnchorUSD) now
+  render with `home_domain` + `org_name` populated. Until the
+  account-observer-to-issuers upsert path lands (see investigation
+  task), the production `issuers.home_domain` column stays empty
+  for every issuer; the fallback fills the gap at the wire boundary
+  for the most-asked-about anchors. DB-populated values still take
+  precedence.
+
 ### Changed
 - **AssetLabel extracted to shared component** at
   `web/explorer/src/components/AssetLabel.tsx`. Was previously
