@@ -4,9 +4,13 @@ export const dynamic = 'force-static';
 
 /**
  * robots.txt — emits the manifest at build time. The site is
- * fully public so we allow everything; the only carve-out is
- * the dev/ path which exists for design-iteration only and
- * shouldn't be indexed.
+ * fully public, but a few paths have no SEO value and shouldn't
+ * eat crawler budget:
+ *   /dev/   — design-iteration scaffolding
+ *   /embed/ — iframe widget targets, not standalone content
+ *   /auth/  — magic-link callback, expires after one click
+ *   /account — authenticated dashboard, irrelevant to crawlers
+ *   /signin, /signup — auth gateways, not content
  */
 export default function robots(): MetadataRoute.Robots {
   return {
@@ -14,9 +18,10 @@ export default function robots(): MetadataRoute.Robots {
       {
         userAgent: '*',
         allow: '/',
-        disallow: ['/dev/'],
+        disallow: ['/dev/', '/embed/', '/auth/', '/account', '/signin', '/signup'],
       },
     ],
     sitemap: 'https://ratesengine.net/sitemap.xml',
+    host: 'https://ratesengine.net',
   };
 }
