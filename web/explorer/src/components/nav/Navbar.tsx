@@ -78,6 +78,7 @@ type Section = { label: string; href: string; external?: boolean };
 const SECTIONS: Section[] = [
   { label: 'Assets', href: '/assets' },
   { label: 'Markets', href: '/markets' },
+  { label: 'Compare', href: '/compare?assets=USDC,XLM,USDT,AQUA' },
   { label: 'DEXes', href: '/dexes' },
   { label: 'Lending', href: '/lending' },
   { label: 'Aggregators', href: '/aggregators' },

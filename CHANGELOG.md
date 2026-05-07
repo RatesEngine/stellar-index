@@ -16,6 +16,13 @@ against.
 ## [Unreleased]
 
 ### Added
+- **`/compare` page** for side-by-side asset comparison (2&ndash;6
+  assets via `?assets=USDC,XLM,USDT`). Renders a metric × asset
+  table covering price, 1h/24h/7d change with green/red tones,
+  24h volume, markets count, observations, and a per-asset
+  sparkline. Each cell pulls `/v1/coins/{slug}` via React Query
+  so the comparison stays current. Compare link added to the
+  primary nav with USDC/XLM/USDT/AQUA pre-loaded.
 - **`/v1/network/stats` consolidated aggregate endpoint.** Single
   call returning trailing-24h USD volume, distinct markets count,
   total classic-assets row count, latest live ledger, plus the
