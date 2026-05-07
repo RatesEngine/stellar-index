@@ -36,8 +36,7 @@ const DEXES: DexEntry[] = [
       'Pair registry persisted in postgres so live ingest + parallel backfill chunks share one source of truth.',
     ],
     contractsUrl: 'https://github.com/soroswap/core',
-    discoveryDoc:
-      '/research',
+    discoveryDoc: '/research/discovery/soroswap',
   },
   {
     name: 'Phoenix',
@@ -50,8 +49,7 @@ const DEXES: DexEntry[] = [
       'Every swap fans out across 8 events, one per field of the swap state. Decoder must group them before emitting a single canonical Trade.',
       'Topic shape is a 2-tuple ("swap", "<field>") — different from the protocol-namespaced shapes Soroswap and Aquarius use.',
     ],
-    discoveryDoc:
-      '/research',
+    discoveryDoc: '/research/discovery/phoenix',
   },
   {
     name: 'Aquarius',
@@ -63,8 +61,7 @@ const DEXES: DexEntry[] = [
     notes: [
       'Decoder treats stableswap and constant-product pools uniformly — VWAP is a function of in/out amounts, not the bonding curve.',
     ],
-    discoveryDoc:
-      '/research',
+    discoveryDoc: '/research/discovery/aquarius',
   },
   {
     name: 'SDEX',
@@ -77,8 +74,7 @@ const DEXES: DexEntry[] = [
       'Post-Protocol 23 (Whisk, mainnet 2025-09-03) every classic asset movement emits a unified transfer/mint/burn event with a 4th sep0011_asset topic.',
       'Pre-P23 path parses operations + effects directly. Decoder handles both code paths transparently.',
     ],
-    discoveryDoc:
-      '/research',
+    discoveryDoc: '/research/discovery/sdex',
   },
   {
     name: 'Comet',
@@ -90,8 +86,7 @@ const DEXES: DexEntry[] = [
     notes: [
       'Topic match alone identifies any pubnet contract that deployed Balancer-V1 Comet code — operators wanting only Blend backstop pools filter at aggregator time, not dispatch time.',
     ],
-    discoveryDoc:
-      '/research',
+    discoveryDoc: '/research/discovery/comet',
   },
 ];
 
@@ -155,15 +150,12 @@ function DexCard({ entry }: { entry: DexEntry }) {
         ))}
       </ul>
       <div className="mt-4 flex flex-wrap gap-3 text-xs">
-        <a
+        <Link
           href={entry.discoveryDoc}
           className="inline-flex items-center gap-1 text-brand-600 hover:underline"
-          target="_blank"
-          rel="noreferrer"
         >
-          Discovery notes
-          <ExternalLink className="h-3 w-3" />
-        </a>
+          Read integration audit →
+        </Link>
         {entry.contractsUrl && (
           <a
             href={entry.contractsUrl}

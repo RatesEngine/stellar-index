@@ -15,6 +15,14 @@ against.
 
 ## [Unreleased]
 
+### Changed
+- **/dexes + /oracles: deep-link directly to per-protocol audits.**
+  Each card's "Read integration audit" CTA now jumps straight to
+  `/research/discovery/<slug>` (Soroswap → soroswap, Phoenix →
+  phoenix, etc.) instead of dumping the visitor on the generic
+  `/research` index. Visual change: external-link icon dropped
+  for the internal arrow style.
+
 ### Added
 - **`/research/discovery` integration audit browser.** Curated
   set of ten per-DEX/per-oracle Phase-1 audits — sdex, soroswap,

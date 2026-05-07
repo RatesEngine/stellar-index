@@ -1,6 +1,5 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
-import { ExternalLink } from 'lucide-react';
 
 import { Panel } from '@/components/reveal';
 import { asExample } from '@/api/client';
@@ -31,8 +30,7 @@ const ORACLES: OracleEntry[] = [
       'No on-chain twap() or x_*() methods despite the proposal claim — we compute TWAP and cross-pair locally.',
       'Three separate contracts, not one. Each has its own price set.',
     ],
-    discoveryDoc:
-      '/research',
+    discoveryDoc: '/research/discovery/reflector',
   },
   {
     name: 'Reflector — CEX',
@@ -43,8 +41,7 @@ const ORACLES: OracleEntry[] = [
     notes: [
       'Reported alongside our prices but never priced in — the divergence worker uses it as a sanity reference, not an input.',
     ],
-    discoveryDoc:
-      '/research',
+    discoveryDoc: '/research/discovery/reflector',
   },
   {
     name: 'Reflector — FX',
@@ -55,8 +52,7 @@ const ORACLES: OracleEntry[] = [
     notes: [
       'Used during X2.5 forex-factor snap (chained-fiat aggregation) when no direct fiat market exists for the asset.',
     ],
-    discoveryDoc:
-      '/research',
+    discoveryDoc: '/research/discovery/reflector',
   },
   {
     name: 'Redstone',
@@ -68,8 +64,7 @@ const ORACLES: OracleEntry[] = [
       'WritePrices body has prices + timestamps but NOT feed_ids. Feed IDs live in the InvokeContract op args (write_prices(updater, feed_ids, payload)).',
       'Adapter zip-merges feed_ids and updated_feeds when their lengths match; otherwise the whole event is skipped (ErrFeedIDCountMismatch).',
     ],
-    discoveryDoc:
-      '/research',
+    discoveryDoc: '/research/discovery/redstone',
   },
   {
     name: 'Band',
@@ -81,8 +76,7 @@ const ORACLES: OracleEntry[] = [
       'Band stores pair rates at E18 scale; relayed single-asset rates at E9. Decoder normalises to canonical fixed-point.',
       "Topic-match alone never fires Band — match by (contract_id, function_name) using the dispatcher's ContractCallDecoder interface.",
     ],
-    discoveryDoc:
-      '/research',
+    discoveryDoc: '/research/discovery/band',
   },
 ];
 
@@ -175,15 +169,12 @@ function OracleCard({ entry }: { entry: OracleEntry }) {
         ))}
       </ul>
       <div className="mt-4 flex flex-wrap gap-3 text-xs">
-        <a
+        <Link
           href={entry.discoveryDoc}
           className="inline-flex items-center gap-1 text-brand-600 hover:underline"
-          target="_blank"
-          rel="noreferrer"
         >
-          Discovery notes
-          <ExternalLink className="h-3 w-3" />
-        </a>
+          Read integration audit →
+        </Link>
       </div>
     </div>
   );
