@@ -1,4 +1,7 @@
+'use client';
+
 import Link from 'next/link';
+import { usePathname } from 'next/navigation';
 import { TrendingUp } from 'lucide-react';
 
 import { SearchModal } from './SearchModal';
@@ -15,6 +18,10 @@ import { ThemeToggle } from './ThemeToggle';
  * the static-export build we keep it pure SSR.
  */
 export function Navbar() {
+  // /embed/* routes render chrome-less so the widget fills the
+  // iframe edge to edge without showing the explorer chrome.
+  const pathname = usePathname();
+  if (pathname?.startsWith('/embed/')) return null;
   return (
     <nav className="border-b border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-950">
       <div className="mx-auto flex max-w-7xl items-center justify-between px-6 py-3">

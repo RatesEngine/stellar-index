@@ -1,4 +1,7 @@
+'use client';
+
 import Link from 'next/link';
+import { usePathname } from 'next/navigation';
 
 /**
  * Footer with the operator/researcher views the navbar doesn't
@@ -6,8 +9,13 @@ import Link from 'next/link';
  * status. Per impl plan §17 these are useful but not load-bearing
  * for typical browse traffic; tucking them in the footer keeps the
  * navbar focused on "browse Stellar's market."
+ *
+ * /embed/* routes render chrome-less; this returns null there
+ * so iframe widgets aren't wrapped in the explorer footer.
  */
 export function Footer() {
+  const pathname = usePathname();
+  if (pathname?.startsWith('/embed/')) return null;
   return (
     <footer className="mt-16 border-t border-slate-200 bg-white py-8 dark:border-slate-800 dark:bg-slate-950">
       <div className="mx-auto max-w-7xl px-6 text-xs text-slate-500">

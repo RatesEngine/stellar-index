@@ -16,6 +16,18 @@ against.
 ## [Unreleased]
 
 ### Added
+- **`/embed/asset/{slug}` iframe-friendly price widget.**
+  Chrome-less route (no navbar, no footer, no max-width) designed
+  to be dropped into a customer site at any width. Renders the
+  asset's code, USD price, 24h % change pill, sparkline, and 24h
+  USD volume — plus a "Powered by Rates Engine" attribution +
+  link back. Pre-rendered for every slug returned by `/v1/coins`.
+  Recommended embed:
+  ```html
+  <iframe src="https://ratesengine.net/embed/asset/USDC"
+          width="320" height="160"
+          frameborder="0" sandbox="allow-scripts"></iframe>
+  ```
 - **Theme toggle in the navbar** (light / dark / system, cycling
   via a single icon button). Choice persists in localStorage
   under `re.theme`. Inline init script in `<head>` applies the
