@@ -16,6 +16,13 @@ against.
 ## [Unreleased]
 
 ### Added
+- **Live navbar status pill.** Replaces the hard-coded green dot
+  next to the navbar's Status link with a real-time poll of
+  `/v1/status.overall`. Green pulses when ok, amber on degraded,
+  red on down, slate when the fetch fails. Tooltip surfaces the
+  current state in plain English. Polls every 60 s with 30 s
+  shared cache so navigating between pages doesn't burst the
+  API.
 - **Source detail page: 24h trade count.** `/sources/<name>`
   now shows that venue's 24h trade contribution baked at build
   time alongside the rest of the registry profile (e.g. binance

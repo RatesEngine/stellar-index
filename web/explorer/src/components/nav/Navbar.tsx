@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { TrendingUp } from 'lucide-react';
 
+import { useStatus } from '@/api/hooks';
 import { SearchModal } from './SearchModal';
 import { ThemeToggle } from './ThemeToggle';
 
@@ -54,13 +55,7 @@ export function Navbar() {
           )}
           <SearchModal />
           <ThemeToggle />
-          <a
-            href="https://status.ratesengine.net"
-            className="ml-2 inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-slate-600 hover:bg-slate-100 hover:text-brand-600 dark:text-slate-300 dark:hover:bg-slate-800"
-          >
-            <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" aria-hidden />
-            Status
-          </a>
+          <StatusLink />
           <Link
             href="/signup"
             className="ml-2 rounded-md bg-brand-600 px-3 py-1.5 font-medium text-white hover:bg-brand-700"
@@ -70,6 +65,45 @@ export function Navbar() {
         </div>
       </div>
     </nav>
+  );
+}
+
+// StatusLink renders the navbar's Status entry with a live dot
+// reflecting `/v1/status.overall`. Green = ok, amber = degraded,
+// red = down, slate = unknown / fetch failed. The hook polls
+// every 60 s and shares its cache across components, so this is
+// effectively free even when many pages mount the navbar.
+function StatusLink() {
+  const status = useStatus();
+  const overall = status.data?.overall ?? 'unknown';
+  const tone =
+    overall === 'ok'
+      ? 'bg-emerald-500'
+      : overall === 'degraded'
+        ? 'bg-amber-500'
+        : overall === 'down'
+          ? 'bg-rose-500'
+          : 'bg-slate-400';
+  const title =
+    overall === 'ok'
+      ? 'All systems operational'
+      : overall === 'degraded'
+        ? 'Degraded performance — see status.ratesengine.net'
+        : overall === 'down'
+          ? 'Major outage — see status.ratesengine.net'
+          : 'Status unknown';
+  return (
+    <a
+      href="https://status.ratesengine.net"
+      title={title}
+      className="ml-2 inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-slate-600 hover:bg-slate-100 hover:text-brand-600 dark:text-slate-300 dark:hover:bg-slate-800"
+    >
+      <span
+        className={`h-1.5 w-1.5 rounded-full ${tone} ${overall === 'ok' ? 'animate-pulse' : ''}`}
+        aria-hidden
+      />
+      Status
+    </a>
   );
 }
 

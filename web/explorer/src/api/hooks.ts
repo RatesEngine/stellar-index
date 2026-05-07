@@ -20,6 +20,33 @@
 import { useQuery } from '@tanstack/react-query';
 import { apiGet } from './client';
 
+export type StatusResponse = {
+  overall: 'ok' | 'degraded' | 'down' | 'unknown';
+  latency: { p50_ms: number; p95_ms: number; p99_ms: number };
+  freshness?: { last_aggregator_tick: string };
+};
+
+/**
+ * useStatus — fetches the API's live system-status aggregate.
+ * Powers the navbar Status pill (green/amber/red) so the
+ * indicator actually reflects state rather than always rendering
+ * green. Polls every 60 s — any faster wastes load and the
+ * status doc itself is cached for 30 s downstream.
+ */
+export function useStatus() {
+  return useQuery<StatusResponse>({
+    queryKey: ['/v1/status'],
+    queryFn: async () => {
+      const env = await apiGet<{ data: StatusResponse }>('/v1/status');
+      return env.data;
+    },
+    refetchInterval: 60_000,
+    // Don't burst the API on every page navigation — share the
+    // cached result across components for 30 s.
+    staleTime: 30_000,
+  });
+}
+
 export type NetworkStats = {
   volume_24h_usd: string;
   markets_count_24h: number;
