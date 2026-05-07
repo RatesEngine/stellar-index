@@ -18,13 +18,13 @@ export default function HomePage() {
           Independent · open · public-tier free
         </p>
         <h1 className="text-4xl font-semibold tracking-tight md:text-5xl">
-          Pricing for every asset on Stellar.
+          Pricing for every currency, asset, and market.
         </h1>
         <p className="max-w-2xl text-base text-slate-600 dark:text-slate-400 md:text-lg">
-          Rates Engine ingests every trade on the Stellar network — on-chain
-          DEXes, classic SDEX, and major exchanges — and serves a single
-          VWAP through a public REST API. Every panel below shows the exact
-          API call that produced it.
+          Rates Engine ingests every trade across CEXes, on-chain DEXes,
+          and lending protocols, and serves a single VWAP through a public
+          REST API — alongside live world fiat rates. Every panel below
+          shows the exact API call that produced it.
         </p>
         <div className="flex flex-wrap gap-3 pt-2">
           <Link
@@ -35,10 +35,16 @@ export default function HomePage() {
             <ArrowRight className="h-3.5 w-3.5" />
           </Link>
           <Link
-            href="/markets"
+            href="/currencies"
             className="inline-flex items-center gap-1.5 rounded-md border border-slate-300 px-3.5 py-2 text-sm font-medium text-slate-700 hover:border-brand-500 hover:text-brand-600 dark:border-slate-700 dark:text-slate-300"
           >
-            Browse markets
+            World currencies
+          </Link>
+          <Link
+            href="/exchanges"
+            className="inline-flex items-center gap-1.5 rounded-md border border-slate-300 px-3.5 py-2 text-sm font-medium text-slate-700 hover:border-brand-500 hover:text-brand-600 dark:border-slate-700 dark:text-slate-300"
+          >
+            Connected exchanges
           </Link>
           <a
             href="https://docs.ratesengine.net"
@@ -56,7 +62,7 @@ export default function HomePage() {
             href="/signup"
             className="inline-flex items-center gap-1.5 rounded-md border border-slate-300 px-3.5 py-2 text-sm font-medium text-slate-700 hover:border-brand-500 hover:text-brand-600 dark:border-slate-700 dark:text-slate-300"
           >
-            Get a free key
+            Create account
           </Link>
         </div>
       </header>
