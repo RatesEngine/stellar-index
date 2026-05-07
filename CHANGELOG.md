@@ -15,6 +15,8 @@ against.
 
 ## [Unreleased]
 
+## [v0.5.0-rc.26] — 2026-05-07
+
 ### Fixed
 - **XLM chart 400 on `/assets/XLM/?tab=chart`** — the chart panel
   defaulted `quote=native` for every asset, including the native
