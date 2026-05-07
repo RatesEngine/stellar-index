@@ -236,6 +236,7 @@ const PROBE_SLOW_MS = 800;
 // a richer shape (severity codes, structured timestamps, etc.)
 // which IncidentHistory normalises before render.
 interface IncidentHistoryEntry {
+  slug: string;
   date: string;
   title: string;
   resolved: string;
@@ -815,6 +816,7 @@ function normaliseIncident(
     ? `${raw.resolved_at.slice(0, 10)} ${raw.resolved_at.slice(11, 16)} UTC`
     : raw.status;
   return {
+    slug: raw.slug,
     date,
     title: raw.title || raw.slug,
     resolved,
@@ -853,17 +855,34 @@ function IncidentHistory({
         <ul className="space-y-3">
           {entries.map((e) => (
             <li
-              key={e.date + e.title}
-              className="rounded-md border border-surface-line bg-surface p-4"
+              key={e.slug || e.date + e.title}
+              className="rounded-md border border-surface-line bg-surface p-4 transition hover:border-brand-300"
             >
               <div className="flex items-center justify-between">
-                <span className="font-medium">{e.title}</span>
+                {e.slug ? (
+                  <a
+                    href={`/incident/${e.slug}/`}
+                    className="font-medium text-ink hover:text-brand-600"
+                  >
+                    {e.title}
+                  </a>
+                ) : (
+                  <span className="font-medium">{e.title}</span>
+                )}
                 <span className="text-xs text-ink-faint">{e.date}</span>
               </div>
               <p className="mt-2 text-sm text-ink-muted">{e.summary}</p>
               <p className="mt-1 text-xs text-ink-faint">
                 Resolved: {e.resolved}
               </p>
+              {e.slug && (
+                <a
+                  href={`/incident/${e.slug}/`}
+                  className="mt-2 inline-block text-xs text-brand-600 hover:underline"
+                >
+                  Read full postmortem →
+                </a>
+              )}
             </li>
           ))}
         </ul>

@@ -16,6 +16,15 @@ against.
 ## [Unreleased]
 
 ### Added
+- **status site: per-incident postmortem pages.** Every incident
+  in `internal/incidents/data/*.md` now renders as its own page
+  on `status.ratesengine.net/incident/<slug>`, generated from the
+  same markdown corpus the `/v1/incidents` API serves. The
+  Incident history section on the status home links each title
+  to its full postmortem; the page surfaces severity / status /
+  affected components, a Started / Resolved / Duration timeline,
+  and a GitHub source link. Static-export pre-rendered — no
+  runtime fetch.
 - **`/research` ADR browser.** Every architecture decision record
   (currently 23) renders as a dedicated, shareable page on
   `/research/adr/<id>`, generated from `docs/adr/*.md` at build
