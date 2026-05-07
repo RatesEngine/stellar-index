@@ -1,6 +1,8 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
 
+import { PairChart } from './PairChart';
+
 const API_BASE_URL =
   process.env.NEXT_PUBLIC_API_BASE_URL ?? 'https://api.ratesengine.net';
 
@@ -306,11 +308,14 @@ export default async function PairPage({ params }: { params: Params }) {
               </span>
             )}
           </div>
-          {points.length > 0 && (
-            <div className="mt-4">
-              <ChartSparkline points={points} />
-            </div>
-          )}
+          <div className="mt-4">
+            <PairChart
+              base={base}
+              quote={quote}
+              baseLabel={baseLabel}
+              quoteLabel={quoteLabel}
+            />
+          </div>
         </Panel>
 
         <Panel title="Activity" subtitle="last 24h">
@@ -539,89 +544,6 @@ function ChangeBadge({ pct, window }: { pct: number; window: string }) {
   );
 }
 
-function ChartSparkline({ points }: { points: ChartPoint[] }) {
-  // Compute Y bounds for auto-scaling
-  const prices = points
-    .map((p) => Number(p.p))
-    .filter((n) => Number.isFinite(n) && n > 0);
-  if (prices.length === 0) {
-    return (
-      <div className="text-xs text-slate-400">No price points in window.</div>
-    );
-  }
-  const min = Math.min(...prices);
-  const max = Math.max(...prices);
-  const range = max - min || max * 0.01;
-  const w = 600;
-  const h = 80;
-  const xStep = points.length > 1 ? w / (points.length - 1) : 0;
-  const path = points
-    .map((p, i) => {
-      const n = Number(p.p);
-      if (!Number.isFinite(n)) return null;
-      const x = i * xStep;
-      const y = h - ((n - min) / range) * h;
-      return `${i === 0 ? 'M' : 'L'} ${x.toFixed(1)} ${y.toFixed(1)}`;
-    })
-    .filter(Boolean)
-    .join(' ');
-  const last = prices[prices.length - 1]!;
-  const first = prices[0]!;
-  const trendUp = last >= first;
-
-  // Volume bars under the chart, sharing the X axis. Auto-scale to
-  // the max v_usd in the series; bars that overlap missing-price
-  // gaps (no v_usd) render as transparent so the eye can still
-  // count buckets.
-  const vols = points
-    .map((p) => (p.v_usd ? Number(p.v_usd) : 0))
-    .map((v) => (Number.isFinite(v) && v > 0 ? v : 0));
-  const maxVol = Math.max(...vols, 0);
-  const volH = 24;
-  const barW = points.length > 1 ? w / points.length : w;
-
-  return (
-    <div className="space-y-1">
-      <svg
-        viewBox={`0 0 ${w} ${h}`}
-        preserveAspectRatio="none"
-        className="h-20 w-full"
-        aria-label="price chart"
-      >
-        <path
-          d={path}
-          fill="none"
-          strokeWidth="2"
-          className={trendUp ? 'stroke-emerald-500' : 'stroke-rose-500'}
-        />
-      </svg>
-      {maxVol > 0 && (
-        <svg
-          viewBox={`0 0 ${w} ${volH}`}
-          preserveAspectRatio="none"
-          className="h-6 w-full"
-          aria-label="hourly volume bars"
-        >
-          {vols.map((v, i) => {
-            if (v <= 0) return null;
-            const barH = (v / maxVol) * volH;
-            const x = i * barW;
-            return (
-              <rect
-                key={i}
-                x={x.toFixed(1)}
-                y={(volH - barH).toFixed(1)}
-                width={Math.max(barW - 1, 0.5).toFixed(1)}
-                height={barH.toFixed(1)}
-                className="fill-slate-300 dark:fill-slate-700"
-              />
-            );
-          })}
-        </svg>
-      )}
-    </div>
-  );
-}
 
 function formatPriceCompact(n: number): string {
   if (n >= 1) return `$${n.toFixed(n >= 100 ? 2 : 4)}`;

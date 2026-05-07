@@ -15,6 +15,15 @@ against.
 
 ## [Unreleased]
 
+### Changed
+- **`/markets/<pair>`: full CandleChart with timeframe + granularity
+  controls.** Replaces the static 24h sparkline with the same chart
+  surface `/assets/<slug>` ships — 24h / 7d / 30d / 1y timeframes,
+  1m / 15m / 1h / 4h / 1d granularities. Pair-specific (no quote
+  toggle since the URL already pins the pair). 24h change % and
+  last-hour USD volume keep the original build-time fetch so
+  metadata + headline numbers stay server-rendered.
+
 ### Added
 - **`/widgets` showcase page.** Public docs + live preview for the
   embeddable iframe widgets (`/embed/asset/<slug>`,
