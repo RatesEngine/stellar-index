@@ -1,117 +1,155 @@
 import type { Metadata } from 'next';
+import Link from 'next/link';
 import { FileText } from 'lucide-react';
 
+import { loadADRs } from '@/lib/adr';
+import { StatusBadge } from './StatusBadge';
+
 export const metadata: Metadata = {
-  title: 'Research — methodology and engineering writeups',
+  title: 'Research — architecture decisions and methodology',
   description:
-    'Architecture decisions, integration audits, and methodology notes. The thinking behind every Rates Engine choice.',
+    'Every architectural decision behind Rates Engine, with rationale, alternatives considered, and consequences. Browse the ADR archive, integration audits, and operations runbooks.',
 };
 
-type Item = {
-  title: string;
-  blurb: string;
-  category: 'ADR' | 'Discovery' | 'Doc';
-};
-
-const FEATURED: Item[] = [
-  {
-    category: 'ADR',
-    title: 'ADR-0003: i128 / u128 never truncates to int64',
-    blurb:
-      "Token amounts and reserves on Soroban are i128. Parsing them as int64 silently corrupts every value above 2^63. The full chain — big.Int in Go, NUMERIC in postgres, strings on the wire — is the only way that doesn't introduce silent bugs.",
-  },
-  {
-    category: 'ADR',
-    title: 'ADR-0015: Closed-bucket-only API contract',
-    blurb:
-      'Every region serves the same rate at the same wall-clock time, even though they ingest independently. Achieved by only ever serving CLOSED buckets — the in-progress bucket is invisible until the next minute boundary.',
-  },
-  {
-    category: 'ADR',
-    title: 'ADR-0019: Multi-factor confidence + freeze',
-    blurb:
-      'A single-source price is reported, but flagged. Outlier storms, source dropouts, and divergence vs other oracles drive the confidence score; severe-enough events trigger a freeze that halts price serving for the affected pair.',
-  },
-  {
-    category: 'Discovery',
-    title: 'Soroswap pair registry — why it\'s persisted in postgres',
-    blurb:
-      'SwapEvent carries token amounts but not which (token_0, token_1) the pair holds. We need the registry to resolve. Without persistence, every restart and parallel backfill chunk had to rebuild it from scratch — losing trades along the way.',
-  },
-  {
-    category: 'Discovery',
-    title: 'CAP-67 unified events — Protocol 23\'s "every transfer is one event"',
-    blurb:
-      "Post-Whisk (mainnet 2025-09-03), every classic-asset movement emits a unified transfer/mint/burn event with a 4th sep0011_asset topic. Pre-P23 we still parse operations + effects. Decoder switches based on topic shape.",
-  },
-  {
-    category: 'Discovery',
-    title: 'Reflector\'s missing methods — twap() and x_*() do not exist',
-    blurb:
-      "The proposal claimed Reflector exposes on-chain TWAP and cross-pair methods. They don't exist on any of the three Reflector contracts (DEX/CEX/FX). We compute TWAP and cross-pair locally.",
-  },
-];
-
-const TOPICS: { name: string; description: string }[] = [
+const TOPICS: { name: string; description: string; href?: string }[] = [
   {
     name: 'Architecture decisions',
     description:
-      '25+ ADRs covering ingest pipeline, storage choices, latency budget, validator topology, freeze semantics, and more.',
+      'Numbered, immutable decisions with the rationale behind each — ingest pipeline, storage, latency, freeze policy, validator topology.',
   },
   {
     name: 'Discovery audits',
     description:
       'Per-DEX, per-oracle audit notes verifying event schemas and decoder correctness against upstream Rust source.',
+    href: 'https://github.com/RatesEngine/rates-engine/tree/main/docs/discovery',
   },
   {
     name: 'Operations runbooks',
     description:
       'Per-alert runbooks, archival-node bringup, disaster-recovery triage, SEV playbook, release process.',
+    href: 'https://github.com/RatesEngine/rates-engine/tree/main/docs/operations',
   },
   {
     name: 'Architecture narratives',
     description:
       'Long-form designs for ingest pipeline, aggregation policy, supply pipeline, contract-schema evolution.',
+    href: 'https://github.com/RatesEngine/rates-engine/tree/main/docs/architecture',
   },
 ];
 
 export default function ResearchPage() {
+  const adrs = loadADRs();
+
+  // Sort newest first within each status group; status order
+  // surfaces Accepted ADRs above Proposed/Superseded so visitors
+  // see the load-bearing decisions immediately.
+  const grouped = {
+    Accepted: adrs.filter((a) => a.status === 'Accepted'),
+    Proposed: adrs.filter((a) => a.status === 'Proposed'),
+    Superseded: adrs.filter((a) => a.status === 'Superseded'),
+    Rejected: adrs.filter((a) => a.status === 'Rejected'),
+  };
+  for (const k of Object.keys(grouped) as (keyof typeof grouped)[]) {
+    grouped[k].sort((a, b) => Number(b.id) - Number(a.id));
+  }
+
   return (
-    <div className="mx-auto max-w-7xl space-y-8 px-6 py-8">
+    <div className="mx-auto max-w-7xl space-y-10 px-6 py-8">
       <header className="space-y-3">
         <h1 className="text-3xl font-semibold tracking-tight">Research</h1>
         <p className="max-w-3xl text-base text-slate-600 dark:text-slate-400">
-          The thinking behind every Rates Engine choice — architecture
-          decisions, integration audits, methodology notes. The
-          curated highlights are below; the canonical archive lives
-          alongside the source code and surfaces here once the repo
-          opens.
+          The thinking behind every Rates Engine choice. Architecture
+          decision records (ADRs) below capture every load-bearing
+          design call with its alternatives + consequences. The
+          discovery audits, operations runbooks, and architecture
+          narratives live alongside the source on GitHub.
         </p>
       </header>
 
-      <section className="space-y-3">
-        <h2 className="text-xl font-semibold tracking-tight">Featured</h2>
-        <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-          {FEATURED.map((f) => (
-            <FeaturedCard key={f.title} item={f} />
-          ))}
+      <section className="space-y-4">
+        <div className="flex items-baseline justify-between">
+          <h2 className="text-xl font-semibold tracking-tight">
+            Architecture decision records
+          </h2>
+          <span className="text-xs text-slate-500">
+            {adrs.length} records ·{' '}
+            <a
+              href="https://github.com/RatesEngine/rates-engine/tree/main/docs/adr"
+              target="_blank"
+              rel="noreferrer noopener"
+              className="hover:text-brand-600"
+            >
+              source on GitHub
+            </a>
+          </span>
         </div>
+
+        {(['Accepted', 'Proposed', 'Superseded', 'Rejected'] as const).map(
+          (status) =>
+            grouped[status].length === 0 ? null : (
+              <div key={status} className="space-y-2">
+                {status !== 'Accepted' && (
+                  <h3 className="text-xs font-semibold uppercase tracking-wider text-slate-500">
+                    {status}
+                  </h3>
+                )}
+                <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+                  {grouped[status].map((adr) => (
+                    <Link
+                      key={adr.id}
+                      href={`/research/adr/${adr.id}`}
+                      className="group flex flex-col gap-2 rounded-xl border border-slate-200 bg-white p-4 transition hover:border-brand-300 hover:shadow-sm dark:border-slate-800 dark:bg-slate-900 dark:hover:border-brand-700"
+                    >
+                      <div className="flex items-center gap-2">
+                        <FileText className="h-3.5 w-3.5 text-slate-400 group-hover:text-brand-500" />
+                        <span className="text-[10px] font-medium uppercase tracking-wider text-slate-500">
+                          ADR-{adr.id}
+                        </span>
+                        <StatusBadge status={adr.status} />
+                        <span className="ml-auto text-[10px] text-slate-400">
+                          {adr.date}
+                        </span>
+                      </div>
+                      <h4 className="text-sm font-semibold leading-snug text-slate-900 group-hover:text-brand-600 dark:text-slate-100">
+                        {adr.title}
+                      </h4>
+                    </Link>
+                  ))}
+                </div>
+              </div>
+            ),
+        )}
       </section>
 
       <section className="space-y-3">
         <h2 className="text-xl font-semibold tracking-tight">Browse by topic</h2>
         <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-          {TOPICS.map((t) => (
-            <div
-              key={t.name}
-              className="flex flex-col gap-1 rounded-xl border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900"
-            >
-              <h3 className="text-sm font-semibold">{t.name}</h3>
-              <p className="text-xs text-slate-600 dark:text-slate-400">
-                {t.description}
-              </p>
-            </div>
-          ))}
+          {TOPICS.map((t) =>
+            t.href ? (
+              <a
+                key={t.name}
+                href={t.href}
+                target="_blank"
+                rel="noreferrer noopener"
+                className="flex flex-col gap-1 rounded-xl border border-slate-200 bg-white p-4 transition hover:border-brand-300 dark:border-slate-800 dark:bg-slate-900 dark:hover:border-brand-700"
+              >
+                <h3 className="text-sm font-semibold">{t.name}</h3>
+                <p className="text-xs text-slate-600 dark:text-slate-400">
+                  {t.description}
+                </p>
+              </a>
+            ) : (
+              <div
+                key={t.name}
+                className="flex flex-col gap-1 rounded-xl border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900"
+              >
+                <h3 className="text-sm font-semibold">{t.name}</h3>
+                <p className="text-xs text-slate-600 dark:text-slate-400">
+                  {t.description}
+                </p>
+              </div>
+            ),
+          )}
         </div>
       </section>
 
@@ -128,23 +166,6 @@ export default function ResearchPage() {
           discovery notes; every alert has a runbook.
         </p>
       </section>
-    </div>
-  );
-}
-
-function FeaturedCard({ item }: { item: Item }) {
-  return (
-    <div className="flex flex-col gap-2 rounded-xl border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900">
-      <div className="flex items-center gap-2">
-        <FileText className="h-3.5 w-3.5 text-slate-400" />
-        <span className="text-[10px] font-medium uppercase tracking-wider text-slate-500">
-          {item.category}
-        </span>
-      </div>
-      <h3 className="text-sm font-semibold">{item.title}</h3>
-      <p className="text-xs text-slate-600 dark:text-slate-400">
-        {item.blurb}
-      </p>
     </div>
   );
 }

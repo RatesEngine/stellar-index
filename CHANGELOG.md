@@ -16,6 +16,16 @@ against.
 ## [Unreleased]
 
 ### Added
+- **`/research` ADR browser.** Every architecture decision record
+  (currently 23) renders as a dedicated, shareable page on
+  `/research/adr/<id>`, generated from `docs/adr/*.md` at build
+  time — no client-side fetch, full SEO. The `/research` index
+  groups ADRs by status (Accepted / Proposed / Superseded /
+  Rejected), sorts newest first within each group, and links the
+  source markdown on GitHub from each detail page. Adds a small
+  `lib/markdown.tsx` block renderer (h1–h4, paragraphs, lists,
+  fenced code, blockquotes) so we don't pull a 30 kB markdown
+  parser into the static bundle for our authored doc shapes.
 - **`/assets` table: sortable Volume 24h column.** Click the
   Volume 24h header to flip the listing's `order_by` between
   `observation_count_desc` (default) and `volume_24h_usd_desc`.
