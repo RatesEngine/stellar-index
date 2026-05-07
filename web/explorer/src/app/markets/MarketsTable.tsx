@@ -1,5 +1,6 @@
 'use client';
 
+import { useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 
@@ -33,8 +34,14 @@ export function MarketsTable() {
     orderParam === 'pair' ? 'pair' : 'volume_24h_usd_desc';
 
   const { data, isLoading, isError, error } = useMarkets(100, orderBy, { sparkline: true });
+  const [filter, setFilter] = useState('');
 
-  const sorted = data?.markets ?? [];
+  const sorted = useMemo(() => {
+    const rows = data?.markets ?? [];
+    const q = filter.trim().toLowerCase();
+    if (!q) return rows;
+    return rows.filter((m) => `${m.base ?? ''} ${m.quote ?? ''}`.toLowerCase().includes(q));
+  }, [data, filter]);
 
   function setOrder(next: 'volume_24h_usd_desc' | 'pair') {
     const sp = new URLSearchParams(params.toString());
@@ -80,11 +87,34 @@ export function MarketsTable() {
 
   return (
     <Panel
-      title={`${sorted.length} active markets`}
+      title={`${data.markets.length} active markets`}
       hint="Pairs that traded in the last 14 days, ordered by 24h USD volume"
       source={asExample('/v1/markets', { limit: 500 })}
       bodyClassName="-mx-4"
     >
+      <div className="px-4 pb-3 pt-1">
+        <div className="flex flex-wrap items-center gap-3 text-xs">
+          <input
+            type="search"
+            placeholder="Filter by base or quote asset…"
+            value={filter}
+            onChange={(e) => setFilter(e.target.value)}
+            className="w-72 rounded-md border border-slate-200 bg-white px-2.5 py-1 font-mono text-[11px] placeholder:text-slate-400 focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500 dark:border-slate-700 dark:bg-slate-900"
+          />
+          <span className="font-mono text-[11px] text-slate-500">
+            {sorted.length} of {data.markets.length} rows
+            {filter && (
+              <button
+                type="button"
+                onClick={() => setFilter('')}
+                className="ml-2 text-brand-600 hover:underline"
+              >
+                clear
+              </button>
+            )}
+          </span>
+        </div>
+      </div>
       <div className="overflow-x-auto">
         <table className="min-w-full divide-y divide-slate-200 text-sm dark:divide-slate-800">
           <thead>
