@@ -5,6 +5,8 @@ import (
 	"database/sql"
 	"fmt"
 	"strings"
+
+	"github.com/lib/pq"
 )
 
 // CoinRow is the read-side projection of one row from the
@@ -1309,4 +1311,103 @@ func parseCoinCursor(cursor string) (obsCount int64, assetID string) {
 // meta. Exported so v1/coins.go can call it without duplicating.
 func EncodeCoinCursor(obsCount int64, assetID string) string {
 	return fmt.Sprintf("%d:%s", obsCount, assetID)
+}
+
+// GetCoinsPriceHistory24hBatch returns 24h hourly USD-price series
+// for many assets in one query. Result is keyed by asset_id; the
+// per-asset slice has up to 24 ordered points (oldest → newest).
+// Assets with no trade history in the window get an empty slice
+// (callers can render that as "no chart").
+//
+// Same direct-then-XLM-triangulated path as the single-asset
+// GetCoinPriceHistory24h; just a single CTE pass over all
+// requested assets at once.
+func (s *Store) GetCoinsPriceHistory24hBatch(ctx context.Context, assetIDs []string) (map[string][]CoinPricePoint, error) {
+	if len(assetIDs) == 0 {
+		return map[string][]CoinPricePoint{}, nil
+	}
+	const q = `
+		WITH hours AS (
+		  SELECT generate_series(
+		    date_trunc('hour', now() - INTERVAL '23 hours'),
+		    date_trunc('hour', now()),
+		    INTERVAL '1 hour'
+		  ) AS bucket
+		),
+		direct_per_hour AS (
+		  SELECT base_asset AS asset_id,
+		         date_trunc('hour', bucket) AS h,
+		         last(vwap, bucket)::numeric AS vwap
+		    FROM prices_1m
+		   WHERE base_asset = ANY($1)
+		     AND quote_asset = 'fiat:USD'
+		     AND bucket >= date_trunc('hour', now() - INTERVAL '23 hours')
+		     AND vwap IS NOT NULL
+		   GROUP BY base_asset, h
+		),
+		asset_xlm_per_hour AS (
+		  SELECT base_asset AS asset_id,
+		         date_trunc('hour', bucket) AS h,
+		         last(vwap, bucket)::numeric AS vwap
+		    FROM prices_1m
+		   WHERE base_asset = ANY($1)
+		     AND quote_asset = 'native'
+		     AND bucket >= date_trunc('hour', now() - INTERVAL '23 hours')
+		     AND vwap IS NOT NULL
+		   GROUP BY base_asset, h
+		),
+		xlm_usd_per_hour AS (
+		  SELECT date_trunc('hour', bucket) AS h, last(vwap, bucket)::numeric AS vwap
+		    FROM prices_1m
+		   WHERE base_asset = 'native'
+		     AND quote_asset IN (
+		       'USDC-GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN',
+		       'USDT-GCQTGZQQ5G4PTM2GL7CDIFKUBIPEC52BROAQIAPW53XBRJVN6ZJVTG6V',
+		       'fiat:USD'
+		     )
+		     AND bucket >= date_trunc('hour', now() - INTERVAL '23 hours')
+		     AND vwap IS NOT NULL
+		   GROUP BY h
+		),
+		want AS (
+		  SELECT unnest($1::text[]) AS asset_id
+		)
+		SELECT
+		    w.asset_id,
+		    to_char(hours.bucket, 'YYYY-MM-DD"T"HH24:MI:SS"Z"') AS t,
+		    ROUND(COALESCE(
+		      CASE WHEN w.asset_id = 'native' THEN xu.vwap ELSE NULL END,
+		      d.vwap,
+		      x.vwap * xu.vwap
+		    ), 10)::text AS p
+		  FROM want w
+		  CROSS JOIN hours
+		  LEFT JOIN direct_per_hour     d  ON d.h  = hours.bucket AND d.asset_id  = w.asset_id
+		  LEFT JOIN asset_xlm_per_hour  x  ON x.h  = hours.bucket AND x.asset_id  = w.asset_id
+		  LEFT JOIN xlm_usd_per_hour    xu ON xu.h = hours.bucket
+		 ORDER BY w.asset_id, hours.bucket ASC
+	`
+	rows, err := s.db.QueryContext(ctx, q, pq.Array(assetIDs))
+	if err != nil {
+		return nil, fmt.Errorf("timescale: GetCoinsPriceHistory24hBatch: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+	out := make(map[string][]CoinPricePoint, len(assetIDs))
+	for rows.Next() {
+		var assetID string
+		var pt CoinPricePoint
+		var p sql.NullString
+		if err := rows.Scan(&assetID, &pt.T, &p); err != nil {
+			return nil, fmt.Errorf("timescale: GetCoinsPriceHistory24hBatch scan: %w", err)
+		}
+		if p.Valid && p.String != "" {
+			s := p.String
+			pt.P = &s
+		}
+		out[assetID] = append(out[assetID], pt)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("timescale: GetCoinsPriceHistory24hBatch rows: %w", err)
+	}
+	return out, nil
 }

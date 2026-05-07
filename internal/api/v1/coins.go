@@ -6,6 +6,7 @@ import (
 	"errors"
 	"net/http"
 	"strconv"
+	"strings"
 
 	"github.com/RatesEngine/rates-engine/internal/storage/timescale"
 )
@@ -21,6 +22,7 @@ type CoinsReader interface {
 	GetCoinTopMarkets(ctx context.Context, assetID string, limit int) ([]timescale.CoinTopMarket, error)
 	GetCoinPriceHistory24h(ctx context.Context, assetID string) ([]timescale.CoinPricePoint, error)
 	GetCoinPriceHistory7d(ctx context.Context, assetID string) ([]timescale.CoinPricePoint, error)
+	GetCoinsPriceHistory24hBatch(ctx context.Context, assetIDs []string) (map[string][]timescale.CoinPricePoint, error)
 	GetCoinMarketsCount(ctx context.Context, assetID string) (int64, error)
 }
 
@@ -212,6 +214,38 @@ func (s *Server) handleCoins(w http.ResponseWriter, r *http.Request) {
 	}
 	for _, row := range rows {
 		out = append(out, coinFromRow(row))
+	}
+
+	// Optional opt-in: attach 24h hourly price history to every row
+	// for sparkline columns on listings. Default off — payload bloat
+	// on the typical /v1/coins call would be wasted bytes for SDK
+	// consumers that don't render charts.
+	includeSparkline := false
+	for _, f := range strings.Split(r.URL.Query().Get("include"), ",") {
+		if strings.TrimSpace(f) == "sparkline" {
+			includeSparkline = true
+		}
+	}
+	if includeSparkline && len(out) > 0 {
+		ids := make([]string, len(out))
+		for i, c := range out {
+			ids[i] = c.AssetID
+		}
+		if hist, hErr := s.coins.GetCoinsPriceHistory24hBatch(r.Context(), ids); hErr != nil {
+			s.logger.Warn("coins list: sparkline batch failed", "err", hErr)
+		} else {
+			for i, c := range out {
+				series := hist[c.AssetID]
+				if len(series) == 0 {
+					continue
+				}
+				converted := make([]CoinPricePoint, len(series))
+				for j, p := range series {
+					converted[j] = CoinPricePoint{T: p.T, P: p.P}
+				}
+				out[i].PriceHistory24h = converted
+			}
+		}
 	}
 
 	writeJSON(w, CoinsPage{

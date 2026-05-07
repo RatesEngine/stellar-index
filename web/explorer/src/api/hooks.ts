@@ -234,6 +234,9 @@ export type Coin = {
   change_1h_pct?: string | null;
   change_24h_pct?: string | null;
   change_7d_pct?: string | null;
+  // 24 hourly USD-price samples (oldest first). Populated only
+  // when the request includes `?include=sparkline`.
+  price_history_24h?: { t: string; p?: string | null }[];
 };
 
 export type CoinsPage = {
@@ -262,7 +265,9 @@ export function useCoins(
   cursor?: string,
   q?: string,
   orderBy?: 'observation_count_desc' | 'volume_24h_usd_desc',
+  options?: { sparkline?: boolean },
 ) {
+  const include = options?.sparkline ? 'sparkline' : undefined;
   return useQuery<CoinsPage>({
     queryKey: [
       '/v1/coins',
@@ -271,6 +276,7 @@ export function useCoins(
       cursor ?? '',
       q ?? '',
       orderBy ?? 'observation_count_desc',
+      include ?? '',
     ],
     queryFn: async () => {
       const env = await apiGet<CoinsEnvelope>('/v1/coins', {
@@ -279,6 +285,7 @@ export function useCoins(
         ...(cursor ? { cursor } : {}),
         ...(q ? { q } : {}),
         ...(orderBy ? { order_by: orderBy } : {}),
+        ...(include ? { include } : {}),
       });
       return env.data;
     },

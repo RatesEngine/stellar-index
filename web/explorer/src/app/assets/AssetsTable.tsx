@@ -55,6 +55,7 @@ export function AssetsTable() {
     cursor,
     queryParam || undefined,
     orderParam,
+    { sparkline: true },
   );
 
   // Local input state, debounced into the URL so the server-side
@@ -132,6 +133,7 @@ export function AssetsTable() {
                 />
               </Th>
               <Th align="right">Circulating</Th>
+              <Th align="right">24h chart</Th>
               <Th align="right">First seen</Th>
             </tr>
           </thead>
@@ -359,11 +361,43 @@ function AssetRow({ coin, rank }: { coin: Coin; rank: number }) {
         )}
       </Td>
       <Td align="right">
+        <RowSparkline points={coin.price_history_24h} />
+      </Td>
+      <Td align="right">
         <span className="font-mono text-[11px] text-slate-500">
           #{coin.first_seen_ledger.toLocaleString()}
         </span>
       </Td>
     </tr>
+  );
+}
+
+function RowSparkline({ points }: { points?: { t: string; p?: string | null }[] }) {
+  const values = (points ?? [])
+    .map((pt) => (pt.p ? Number(pt.p) : null))
+    .filter((v): v is number => v != null && Number.isFinite(v));
+  if (values.length < 2) {
+    return <span className="font-mono text-[10px] text-slate-300 dark:text-slate-700">—</span>;
+  }
+  const W = 80;
+  const H = 24;
+  const min = Math.min(...values);
+  const max = Math.max(...values);
+  const range = max - min || 1;
+  const stepX = W / (values.length - 1);
+  const path = values
+    .map((v, i) => {
+      const x = i * stepX;
+      const y = H - ((v - min) / range) * H;
+      return `${i === 0 ? 'M' : 'L'}${x.toFixed(2)},${y.toFixed(2)}`;
+    })
+    .join(' ');
+  const positive = values[values.length - 1] >= values[0];
+  const stroke = positive ? '#059669' : '#e11d48';
+  return (
+    <svg width={W} height={H} viewBox={`0 0 ${W} ${H}`} className="inline-block">
+      <path d={path} fill="none" stroke={stroke} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
   );
 }
 
