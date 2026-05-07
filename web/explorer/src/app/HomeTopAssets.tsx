@@ -18,7 +18,14 @@ import { formatCompact } from '@/lib/format';
  * the same TanStack cadence as the rest of the home page.
  */
 export function HomeTopAssets() {
-  const { data, isLoading, isError } = useCoins(10);
+  const { data, isLoading, isError } = useCoins(
+    10,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    { sparkline: true },
+  );
 
   return (
     <section className="space-y-3">
@@ -52,6 +59,9 @@ export function HomeTopAssets() {
                 24h volume
               </th>
               <th className="px-4 py-2.5 text-right font-medium">
+                24h chart
+              </th>
+              <th className="px-4 py-2.5 text-right font-medium">
                 Observations
               </th>
             </tr>
@@ -60,7 +70,7 @@ export function HomeTopAssets() {
             {isError && (
               <tr>
                 <td
-                  colSpan={6}
+                  colSpan={7}
                   className="py-8 text-center text-sm text-down-strong"
                 >
                   Failed to load top assets.
@@ -70,7 +80,7 @@ export function HomeTopAssets() {
             {isLoading && !data && (
               <tr>
                 <td
-                  colSpan={6}
+                  colSpan={7}
                   className="py-8 text-center text-sm text-slate-500"
                 >
                   Loading…
@@ -126,6 +136,9 @@ function Row({ coin, rank }: { coin: Coin; rank: number }) {
         )}
       </td>
       <td className="px-4 py-3 text-right">
+        <RowSparkline points={coin.price_history_24h} />
+      </td>
+      <td className="px-4 py-3 text-right">
         <span className="font-mono tabular-nums text-slate-600 dark:text-slate-400">
           {formatCompact(coin.observation_count)}
         </span>
@@ -149,6 +162,39 @@ function formatPrice(n: number): string {
 
 function Dash() {
   return <span className="text-slate-300 dark:text-slate-700">—</span>;
+}
+
+function RowSparkline({
+  points,
+}: {
+  points?: { t: string; p?: string | null }[];
+}) {
+  const values = (points ?? [])
+    .map((pt) => (pt.p ? Number(pt.p) : null))
+    .filter((v): v is number => v != null && Number.isFinite(v));
+  if (values.length < 2) {
+    return <span className="font-mono text-[10px] text-slate-300 dark:text-slate-700">—</span>;
+  }
+  const W = 80;
+  const H = 22;
+  const min = Math.min(...values);
+  const max = Math.max(...values);
+  const range = max - min || 1;
+  const stepX = W / (values.length - 1);
+  const path = values
+    .map((v, i) => {
+      const x = i * stepX;
+      const y = H - ((v - min) / range) * H;
+      return `${i === 0 ? 'M' : 'L'}${x.toFixed(2)},${y.toFixed(2)}`;
+    })
+    .join(' ');
+  const positive = values[values.length - 1] >= values[0];
+  const stroke = positive ? '#10b981' : '#f43f5e';
+  return (
+    <svg width={W} height={H} className="inline-block" viewBox={`0 0 ${W} ${H}`} role="img" aria-label="24h price chart">
+      <path d={path} fill="none" stroke={stroke} strokeWidth={1.25} strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
 }
 
 function ChangePct({ raw }: { raw: string | null | undefined }) {
