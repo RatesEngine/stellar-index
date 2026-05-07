@@ -17,6 +17,12 @@ const API_BASE_URL =
 // heartbeat budget so a real degradation lands within one poll.
 const POLL_INTERVAL_MS = 30_000;
 
+// Hot-tier endpoint probes also run at POLL_INTERVAL_MS. Warm-tier
+// probes (catalogue listings, history queries) run at WARM_PROBE_MS
+// — 2 minutes — because hammering them every 30 s measurably drives
+// the API's SLO burn rate without adding incident-detection signal.
+const WARM_PROBE_MS = 120_000;
+
 type ServiceStatus = 'ok' | 'degraded' | 'down' | 'unknown';
 
 interface ServiceEntry {
@@ -83,11 +89,22 @@ type EndpointProbe =
   | { kind: 'requires-auth' }
   | { kind: 'streaming' };
 
+// tier controls poll cadence:
+//   - 'hot'  → 30 s. Health checks, network stats, anything cheap
+//             enough that 30 s polling doesn't push tail latency.
+//   - 'warm' → 2 min. Catalogue listings, history queries, oracle
+//             lookups — endpoints whose backing queries are
+//             expensive enough that a 30 s probe loop measurably
+//             drives the SLO burn rate. Falls back to 2 min default
+//             when omitted.
+type ProbeTier = 'hot' | 'warm';
+
 interface PublicEndpoint {
   path: string;
   group: string;
   description: string;
   probe: EndpointProbe;
+  tier?: ProbeTier;
 }
 
 const PUBLIC_ENDPOINTS: PublicEndpoint[] = [
@@ -96,30 +113,35 @@ const PUBLIC_ENDPOINTS: PublicEndpoint[] = [
     group: 'Health',
     description: 'Liveness probe',
     probe: { kind: 'get', path: '/v1/healthz' },
+    tier: 'hot',
   },
   {
     path: '/v1/readyz',
     group: 'Health',
     description: 'Readiness probe',
     probe: { kind: 'get', path: '/v1/readyz' },
+    tier: 'hot',
   },
   {
     path: '/v1/price',
     group: 'Pricing',
     description: 'Current VWAP price for one asset',
     probe: { kind: 'get', path: '/v1/price?asset=native&quote=fiat:USD' },
+    tier: 'hot',
   },
   {
     path: '/v1/price/batch',
     group: 'Pricing',
     description: 'Batch lookup, up to 1000 assets',
     probe: { kind: 'get', path: '/v1/price/batch?assets=native&quote=fiat:USD' },
+    tier: 'hot',
   },
   {
     path: '/v1/price/tip',
     group: 'Pricing',
     description: 'Rolling-window tip price',
     probe: { kind: 'get', path: '/v1/price/tip?asset=native&quote=fiat:USD' },
+    tier: 'hot',
   },
   {
     path: '/v1/price/stream',
@@ -164,6 +186,13 @@ const PUBLIC_ENDPOINTS: PublicEndpoint[] = [
     probe: { kind: 'get', path: '/v1/observations?asset=native&quote=fiat:USD' },
   },
   {
+    path: '/v1/network/stats',
+    group: 'Catalogue',
+    description: 'Consolidated network aggregate (volume, markets, assets)',
+    probe: { kind: 'get', path: '/v1/network/stats' },
+    tier: 'hot',
+  },
+  {
     path: '/v1/coins',
     group: 'Catalogue',
     description: 'Asset directory (440K+ classic assets)',
@@ -192,6 +221,7 @@ const PUBLIC_ENDPOINTS: PublicEndpoint[] = [
     group: 'Catalogue',
     description: 'Per-venue source metadata',
     probe: { kind: 'get', path: '/v1/sources' },
+    tier: 'hot',
   },
   {
     path: '/v1/oracle/latest',
@@ -300,40 +330,56 @@ export default function StatusPage() {
     };
   }, []);
 
-  // Per-endpoint live probe. Fires every endpoint with a `get`
-  // probe in parallel on mount and on each /v1/status poll, so
-  // the matrix stays current with the rest of the page. Endpoints
-  // marked `requires-auth` or `streaming` keep their static label
-  // and never get a fetch fired against them.
+  // Per-endpoint live probe. Endpoints split by tier:
+  //   - hot  → POLL_INTERVAL_MS (30 s)
+  //   - warm → WARM_PROBE_MS    (2 min)
+  // Endpoints marked `requires-auth` or `streaming` keep their
+  // static label and never get a fetch fired against them — they
+  // populate once at mount.
   useEffect(() => {
     let cancelled = false;
-    const probes = PUBLIC_ENDPOINTS.filter((e) => e.probe.kind === 'get').map(
-      (e) => probeEndpoint(e),
-    );
-    function runOnce() {
+
+    function runTier(tier: ProbeTier) {
+      const tierEps = PUBLIC_ENDPOINTS.filter(
+        (e) => e.probe.kind === 'get' && (e.tier ?? 'warm') === tier,
+      );
+      const probes = tierEps.map((e) => probeEndpoint(e));
       Promise.allSettled(probes.map((p) => p())).then((results) => {
         if (cancelled) return;
-        const next: Record<string, EndpointProbeResult> = {};
-        let i = 0;
-        for (const ep of PUBLIC_ENDPOINTS) {
-          if (ep.probe.kind === 'get') {
-            const r = results[i++];
+        setEndpointHealth((prev) => {
+          const next = { ...prev };
+          tierEps.forEach((ep, i) => {
+            const r = results[i];
             next[ep.path] =
-              r.status === 'fulfilled'
+              r && r.status === 'fulfilled'
                 ? r.value
                 : { kind: 'error', latencyMs: -1 };
-          } else {
-            next[ep.path] = { kind: 'static', label: ep.probe.kind };
-          }
-        }
-        setEndpointHealth(next);
+          });
+          return next;
+        });
       });
     }
-    runOnce();
-    const id = setInterval(runOnce, POLL_INTERVAL_MS);
+
+    // Static labels (auth / streaming) — paint once at mount.
+    setEndpointHealth((prev) => {
+      const next = { ...prev };
+      for (const ep of PUBLIC_ENDPOINTS) {
+        if (ep.probe.kind !== 'get') {
+          next[ep.path] = { kind: 'static', label: ep.probe.kind };
+        }
+      }
+      return next;
+    });
+
+    runTier('hot');
+    runTier('warm');
+    const hotId = setInterval(() => runTier('hot'), POLL_INTERVAL_MS);
+    const warmId = setInterval(() => runTier('warm'), WARM_PROBE_MS);
+
     return () => {
       cancelled = true;
-      clearInterval(id);
+      clearInterval(hotId);
+      clearInterval(warmId);
     };
   }, []);
 

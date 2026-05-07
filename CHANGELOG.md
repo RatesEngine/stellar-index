@@ -15,6 +15,19 @@ against.
 
 ## [Unreleased]
 
+### Performance
+- **status site: tier probe cadence.** The status page used to
+  hammer every public endpoint every 30 s — including expensive
+  catalogue/history queries that drive the API's SLO burn rate.
+  Endpoints now carry a `tier`: `hot` (30 s — healthz, readyz,
+  price, price/batch, price/tip, sources, network/stats) keep
+  the original cadence; `warm` (2 min — coins, markets, issuers,
+  history, observations, oracle/lastprice, vwap/twap/ohlc/chart)
+  drop their poll rate by 4×. Should clear the recurring
+  `slo_latency_burn_medium` page-level alert without sacrificing
+  outage-detection latency on the cheap probes that actually
+  need it.
+
 ### Added
 - **`/changelog.atom` syndication feed.** RFC-4287 Atom feed of
   every release entry on the explorer side, generated at build
