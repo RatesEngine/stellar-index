@@ -15,6 +15,27 @@ against.
 
 ## [Unreleased]
 
+## [v0.5.0-rc.23] — 2026-05-07
+
+### Added
+- **Massive.com forex provider replaces the currency-api jsDelivr
+  shim** (#971). `/v1/currencies` now sources rates from
+  `api.massive.com` (Polygon-shape REST). Hourly grain instead of
+  daily, so `change_1h_pct` / `change_24h_pct` / `change_7d_pct`
+  are honest rolling-window percentages. Operator must export
+  `MASSIVE_API_KEY` in `/etc/default/ratesengine` for the forex
+  worker to populate the cache; without it `/v1/currencies` serves
+  the "warming up" empty state.
+- **`?include=sparkline7d` on `/v1/coins`** (#970). Attaches
+  `price_history_7d` (7 daily samples) per row, batched in a
+  single `GetCoinsPriceHistory7dBatch` storage call. Same
+  direct-or-XLM-triangulated path as the existing 24h sparkline.
+
+### Changed
+- **`/assets` table** drops the From-ATH and First-seen columns;
+  the chart column is now 7-day daily, not 24-hour hourly. Brings
+  the listing in line with the original spec (#970).
+
 ## [v0.5.0-rc.22] — 2026-05-07
 
 ### Added
