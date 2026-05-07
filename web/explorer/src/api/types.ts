@@ -2047,6 +2047,30 @@ export interface paths {
                         [name: string]: unknown;
                     };
                     content: {
+                        /**
+                         * @example {
+                         *       "data": {
+                         *         "count": 1,
+                         *         "incidents": [
+                         *           {
+                         *             "slug": "2026-05-06-postgres-lock-table-full",
+                         *             "title": "[SEV-3] Indexer dropping ~1% of trades — Postgres lock-table-full",
+                         *             "severity": "SEV-3",
+                         *             "status": "resolved",
+                         *             "started_at": "2026-05-06T15:00:00Z",
+                         *             "resolved_at": "2026-05-06T22:39:00Z",
+                         *             "affected_components": [
+                         *               "indexer",
+                         *               "storage"
+                         *             ],
+                         *             "body_markdown": "## Identification\n\nSome trades arriving on coinbase, binance…"
+                         *           }
+                         *         ]
+                         *       },
+                         *       "as_of": "2026-05-07T00:45:00Z",
+                         *       "flags": {}
+                         *     }
+                         */
                         "application/json": {
                             incidents: {
                                 /** @example 2026-05-06-postgres-lock-table-full */
