@@ -50,9 +50,15 @@ type CurrencyHistoryRaw struct {
 // `sparkline` (e.g. `?include=sparkline`); otherwise omitted to
 // keep the default list payload lean.
 type CurrencyEntry struct {
-	Ticker         string    `json:"ticker"`
-	Name           string    `json:"name"`
-	RateUSD        float64   `json:"rate_usd"`
+	Ticker  string  `json:"ticker"`
+	Name    string  `json:"name"`
+	RateUSD float64 `json:"rate_usd"`
+	// Change24hPct is yesterday-to-today % change in
+	// 1-unit-in-USD terms — daily-grain feed so the resolution is
+	// "previous publish" vs "latest publish". Pointer +
+	// omitempty so callers distinguish "no prior day" (cold cache)
+	// from "rate hasn't moved" (0.0).
+	Change24hPct   *float64  `json:"change_24h_pct,omitempty"`
 	Change7dPct    *float64  `json:"change_7d_pct,omitempty"`
 	History7dRates []float64 `json:"history_7d_rates,omitempty"`
 	UpdatedAt      time.Time `json:"updated_at,omitempty"`
@@ -86,7 +92,7 @@ type CurrenciesPayload struct {
 //   - include (optional): comma-separated; `sparkline` attaches the
 //     per-ticker 7d series of inverse-USD rates so listings can
 //     render mini charts without a follow-up per-ticker fetch.
-func (s *Server) handleCurrencies(w http.ResponseWriter, r *http.Request) { //nolint:gocognit // include parsing + per-row enrich + limit clamp are linear; splitting would scatter the request lifecycle
+func (s *Server) handleCurrencies(w http.ResponseWriter, r *http.Request) { //nolint:gocognit,gocyclo // include parsing + per-row enrich + limit clamp are linear; splitting would scatter the request lifecycle
 	reader := s.currencies
 	if reader == nil {
 		writeJSON(w, CurrenciesPayload{Source: "currency-api"}, Flags{})
@@ -123,6 +129,20 @@ func (s *Server) handleCurrencies(w http.ResponseWriter, r *http.Request) { //no
 				if firstInv > 0 {
 					change := ((lastInv - firstInv) / firstInv) * 100
 					enriched[i].Change7dPct = &change
+				}
+			}
+			// change_24h_pct uses the most-recent two daily samples.
+			// Same inverse-USD basis as change_7d_pct so the two
+			// percentages share a sign convention (positive = ticker
+			// strengthened against USD).
+			yest := hist[len(hist)-2].RateUSD
+			today := last
+			if yest > 0 && today > 0 {
+				yestInv := 1.0 / yest
+				todayInv := 1.0 / today
+				if yestInv > 0 {
+					change24 := ((todayInv - yestInv) / yestInv) * 100
+					enriched[i].Change24hPct = &change24
 				}
 			}
 		}

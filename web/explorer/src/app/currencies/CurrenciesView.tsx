@@ -11,6 +11,7 @@ interface CurrencyRow {
   ticker: string;
   name: string;
   rate_usd: number;
+  change_24h_pct?: number;
   change_7d_pct?: number;
   history_7d_rates?: number[];
   updated_at?: string;
@@ -123,6 +124,9 @@ export function CurrenciesView() {
                   1 USD =
                 </SortableTh>
                 <Th align="right">1 unit = USD</Th>
+                <Th align="right" hint="Yesterday-to-today % change. Daily-grain feed; resolution is per-publish, not rolling 24h.">
+                  24h %
+                </Th>
                 <SortableTh sortKey="change_7d" current={sortKey} dir={sortDir} onToggle={toggleSort} align="right">
                   7d %
                 </SortableTh>
@@ -132,14 +136,14 @@ export function CurrenciesView() {
             <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
               {query.isLoading && (
                 <tr>
-                  <td colSpan={6} className="px-4 py-8 text-center text-sm text-slate-500">
+                  <td colSpan={7} className="px-4 py-8 text-center text-sm text-slate-500">
                     Loading currencies…
                   </td>
                 </tr>
               )}
               {!query.isLoading && filtered.length === 0 && (
                 <tr>
-                  <td colSpan={6} className="px-4 py-8 text-center text-sm text-slate-500">
+                  <td colSpan={7} className="px-4 py-8 text-center text-sm text-slate-500">
                     {q ? `No currencies matched "${q}".` : 'No currencies — the rates worker is still warming up.'}
                   </td>
                 </tr>
@@ -165,6 +169,9 @@ export function CurrenciesView() {
                     </span>
                   </Td>
                   <Td align="right">
+                    <ChangePct value={c.change_24h_pct} />
+                  </Td>
+                  <Td align="right">
                     <ChangePct value={c.change_7d_pct} />
                   </Td>
                   <Td align="right">
@@ -187,9 +194,9 @@ export function CurrenciesView() {
   );
 }
 
-function Th({ children, align }: { children: React.ReactNode; align?: 'left' | 'right' }) {
+function Th({ children, align, hint }: { children: React.ReactNode; align?: 'left' | 'right'; hint?: string }) {
   return (
-    <th scope="col" className={`px-4 py-2 ${align === 'right' ? 'text-right' : 'text-left'}`}>
+    <th scope="col" className={`px-4 py-2 ${align === 'right' ? 'text-right' : 'text-left'}`} title={hint}>
       {children}
     </th>
   );
