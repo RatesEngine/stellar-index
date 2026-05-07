@@ -1011,6 +1011,24 @@ func (r storeMarketsReader) DistinctPairsExt(ctx context.Context, cursor string,
 	return out, next, nil
 }
 
+func (r storeMarketsReader) SourceMarkets(ctx context.Context, source, cursor string, limit int, order timescale.MarketsOrder) ([]v1.Market, string, error) {
+	rows, next, err := r.s.SourceMarkets(ctx, source, cursor, limit, order)
+	if err != nil {
+		return nil, "", err
+	}
+	out := make([]v1.Market, len(rows))
+	for i, m := range rows {
+		out[i] = v1.Market{
+			Base:          m.Pair.Base.String(),
+			Quote:         m.Pair.Quote.String(),
+			LastTradeAt:   m.LastTradeAt,
+			TradeCount24h: m.TradeCount24h,
+			Volume24hUSD:  m.Volume24hUSD,
+		}
+	}
+	return out, next, nil
+}
+
 func (r storeMarketsReader) PairMarket(ctx context.Context, base, quote canonical.Asset) (v1.Market, bool, error) {
 	m, ok, err := r.s.PairMarket(ctx, base, quote)
 	if err != nil || !ok {
@@ -1155,6 +1173,36 @@ type cachedMarketsReader struct {
 
 func (r cachedMarketsReader) PairMarket(ctx context.Context, base, quote canonical.Asset) (v1.Market, bool, error) {
 	return r.inner.PairMarket(ctx, base, quote)
+}
+
+func (r cachedMarketsReader) SourceMarkets(ctx context.Context, source, cursor string, limit int, order timescale.MarketsOrder) ([]v1.Market, string, error) {
+	// Per-source markets share the same cache shape as
+	// DistinctPairsExt but partition by source so a source's pool
+	// list isn't aliased with the global one.
+	if r.rdb == nil {
+		return r.inner.SourceMarkets(ctx, source, cursor, limit, order)
+	}
+	cacheKey := cachekeys.MarketsList(cursor, limit) + ":order=" + marketsOrderKey(order) + ":source=" + source
+	if raw, err := r.rdb.Get(ctx, cacheKey).Bytes(); err == nil {
+		var p listCachePayload[v1.Market]
+		if jerr := json.Unmarshal(raw, &p); jerr == nil {
+			return p.Items, p.NextCursor, nil
+		}
+		r.log.Warn("source-markets cache decode failed", "key", cacheKey)
+	} else if !errors.Is(err, redis.Nil) {
+		r.log.Warn("source-markets cache read failed", "key", cacheKey, "err", err)
+	}
+
+	items, next, err := r.inner.SourceMarkets(ctx, source, cursor, limit, order)
+	if err != nil {
+		return nil, "", err
+	}
+	if buf, jerr := json.Marshal(listCachePayload[v1.Market]{Items: items, NextCursor: next}); jerr == nil {
+		if serr := r.rdb.Set(ctx, cacheKey, buf, cachekeys.CatalogueListTTL).Err(); serr != nil {
+			r.log.Warn("source-markets cache write failed", "key", cacheKey, "err", serr)
+		}
+	}
+	return items, next, nil
 }
 
 func (r cachedMarketsReader) DistinctPairsExt(ctx context.Context, cursor string, limit int, order timescale.MarketsOrder) ([]v1.Market, string, error) {

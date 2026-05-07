@@ -16,6 +16,17 @@ against.
 ## [Unreleased]
 
 ### Added
+- **/dexes/<source>: full pool table per DEX.** Click any DEX
+  card on `/dexes` to drill into a paginated table of every
+  (base, quote) pool the source observed in the last 14 days,
+  with per-pool 24h volume, 24h trade count, and last-trade
+  relative timestamp. Sortable by 24h volume desc (default) or
+  pair alphabetical. Each row deep-links to /markets/<pair>
+  for the standard chart + OHLC + trade history view.
+  Backend: extended `MarketsReader` with a `SourceMarkets`
+  method that filters trades by source before grouping; new
+  query parameter `/v1/markets?source=<name>`. Cache-keyed
+  separately from the global markets list.
 - **/dexes shows real per-DEX volume + trades + pool count.**
   Was: 5 cards of static prose. Now: each card has live 24h
   USD volume, trade count, and pool count (unique base/quote

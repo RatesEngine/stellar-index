@@ -95,6 +95,19 @@ func (s *Store) DistinctPairs(ctx context.Context, cursor string, limit int) ([]
 // DistinctPairs is preserved as the legacy 3-arg form so existing
 // callers compile unchanged.
 func (s *Store) DistinctPairsExt(ctx context.Context, cursor string, limit int, order MarketsOrder) ([]Market, string, error) {
+	return s.distinctPairsCommon(ctx, "", cursor, limit, order)
+}
+
+// SourceMarkets returns one page of (base, quote) pairs the given
+// source observed in the trailing MarketsRecencyWindow. Same shape
+// as DistinctPairsExt but with `t.source = $source` filter applied
+// before the GROUP BY — gives a per-DEX pool list with per-pool
+// 24h volume + trade count + last-trade timestamp.
+func (s *Store) SourceMarkets(ctx context.Context, source, cursor string, limit int, order MarketsOrder) ([]Market, string, error) {
+	return s.distinctPairsCommon(ctx, source, cursor, limit, order)
+}
+
+func (s *Store) distinctPairsCommon(ctx context.Context, source, cursor string, limit int, order MarketsOrder) ([]Market, string, error) {
 	if limit < 1 {
 		limit = 100
 	}
@@ -108,18 +121,11 @@ func (s *Store) DistinctPairsExt(ctx context.Context, cursor string, limit int, 
 	// evaluation. count_24h uses FILTER (more readable than the
 	// SUM/CASE form, identical plan).
 	//
-	// Overfetch by one (LIMIT $3 = limit+1) to detect "more pages
+	// Overfetch by one (LIMIT $N = limit+1) to detect "more pages
 	// exist". The extra row isn't returned to the caller; its only
 	// purpose is to toggle whether we emit a nextCursor.
 	since := time.Now().UTC().Add(-MarketsRecencyWindow)
-	// LEFT JOIN to a per-pair 24h volume_usd CTE rather than
-	// folding SUM into the main GROUP BY — the trades table has
-	// no volume_usd column (it's computed at aggregation time),
-	// and joining a small (one-row-per-active-pair) CTE keeps
-	// the trades scan unchanged. prices_1m's PRIMARY KEY is
-	// (base_asset, quote_asset, bucket) so the GROUP BY there
-	// is index-driven.
-	q, args := buildDistinctPairsQuery(since, cursor, limit, order)
+	q, args := buildDistinctPairsQuery(since, source, cursor, limit, order)
 	rows, err := s.db.QueryContext(ctx, q, args...)
 	if err != nil {
 		return nil, "", fmt.Errorf("timescale: DistinctPairs: %w", err)
@@ -226,7 +232,7 @@ func encodeMarketsCursor(last Market, order MarketsOrder) string {
 //     strict-less for vol DESC, strict-greater for pair ASC —
 //     the standard keyset tuple-comparison trick is adapted to
 //     mixed ordering.
-func buildDistinctPairsQuery(since time.Time, cursor string, limit int, order MarketsOrder) (string, []any) {
+func buildDistinctPairsQuery(since time.Time, source, cursor string, limit int, order MarketsOrder) (string, []any) {
 	// LEFT JOIN against vol_24h once instead of correlating the
 	// subquery into SELECT + HAVING + ORDER BY. The previous
 	// shape had the planner evaluate
@@ -236,7 +242,12 @@ func buildDistinctPairsQuery(since time.Time, cursor string, limit int, order Ma
 	// 30s+ cold-cache p99. With a single LEFT JOIN the planner
 	// resolves vol once per (base, quote) tuple; warm cache stays
 	// at <100ms but cold cache drops by >10×.
-	const cte = `
+	//
+	// When source != "" the inner trades scan is also filtered to
+	// `t.source = $source` and the vol_24h CTE narrows to the same
+	// source's prices_1m rows so per-source volume is comparable
+	// to the per-source trade count.
+	cte := `
         WITH vol_24h AS (
           SELECT base_asset, quote_asset,
                  SUM(volume_usd)::text AS vol_usd
@@ -255,6 +266,13 @@ func buildDistinctPairsQuery(since time.Time, cursor string, limit int, order Ma
            AND v.quote_asset = t.quote_asset
          WHERE t.ts >= $1
     `
+	if source != "" {
+		// Source filter binds to a fixed argument index (always $4)
+		// regardless of which order branch we take below — the cursor
+		// branches use $1/$2/$3 for since/cursor/limit; appending
+		// source as $4 keeps the existing predicates unchanged.
+		cte += ` AND t.source = $4 `
+	}
 	switch order {
 	case MarketsOrderVolume24hDesc:
 		// Cursor: "<vol_or_blank>:<base>|<quote>". Two-tuple keyset
@@ -283,7 +301,11 @@ func buildDistinctPairsQuery(since time.Time, cursor string, limit int, order Ma
 		          (t.base_asset || '|' || t.quote_asset) ASC
 		 LIMIT $3
 		`
-		return cte + tail, []any{since, cursor, limit + 1}
+		args := []any{since, cursor, limit + 1}
+		if source != "" {
+			args = append(args, source)
+		}
+		return cte + tail, args
 	default: // MarketsOrderPair
 		const tail = `
 		   AND ($2 = '' OR (t.base_asset || '|' || t.quote_asset) > $2)
@@ -291,7 +313,11 @@ func buildDistinctPairsQuery(since time.Time, cursor string, limit int, order Ma
 		 ORDER BY (t.base_asset || '|' || t.quote_asset) ASC
 		 LIMIT $3
 		`
-		return cte + tail, []any{since, cursor, limit + 1}
+		args := []any{since, cursor, limit + 1}
+		if source != "" {
+			args = append(args, source)
+		}
+		return cte + tail, args
 	}
 }
 
