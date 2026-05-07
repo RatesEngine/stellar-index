@@ -18,6 +18,7 @@ import (
 type AccountStore interface {
 	Create(ctx context.Context, req auth.CreateAPIKeyRequest) (auth.APIKeyRecord, string, error)
 	ListKeysForIdentifier(ctx context.Context, identifier string) ([]auth.APIKeyRecord, error)
+	RevokeKeyByID(ctx context.Context, identifier, keyID string) error
 }
 
 // Account is the wire shape for /v1/account/me responses. Mirrors
@@ -415,4 +416,58 @@ func (s *Server) handleAccountKeysList(w http.ResponseWriter, r *http.Request) {
 		})
 	}
 	writeJSON(w, out, Flags{})
+}
+
+// handleAccountKeysRevoke serves DELETE /v1/account/keys/{keyID}.
+//
+// Revokes the API key whose KeyID matches the path parameter,
+// scoped to the authenticated caller's Identifier. Anonymous → 401;
+// missing keyID → 400; store unwired → 503; everything else → 204
+// (including "key not found" — we don't leak whether a keyID
+// exists for a different account).
+//
+// Caller cannot revoke the key they're authenticated with — that
+// would orphan the connection mid-request. We return 409 in that
+// case so the UI can prompt for an alternate key + retry.
+func (s *Server) handleAccountKeysRevoke(w http.ResponseWriter, r *http.Request) {
+	subject, ok := auth.SubjectFrom(r.Context())
+	if !ok || subject.Tier == auth.TierAnonymous || subject.Tier == "" {
+		writeProblem(w, r,
+			"https://api.ratesengine.net/errors/unauthorised",
+			"Authentication required", http.StatusUnauthorized,
+			"/v1/account/keys requires an API key or SEP-10 token")
+		return
+	}
+	keyID := r.PathValue("keyID")
+	if keyID == "" {
+		writeProblem(w, r,
+			"https://api.ratesengine.net/errors/missing-key-id",
+			"Missing key id", http.StatusBadRequest,
+			"path must be /v1/account/keys/{keyID}")
+		return
+	}
+	if subject.KeyID == keyID {
+		writeProblem(w, r,
+			"https://api.ratesengine.net/errors/cannot-revoke-self",
+			"Can't revoke the key you're using", http.StatusConflict,
+			"authenticate with a different key (or SEP-10 token) and retry")
+		return
+	}
+	if s.accounts == nil {
+		writeProblem(w, r,
+			"https://api.ratesengine.net/errors/account-store-unavailable",
+			"Account store not configured", http.StatusServiceUnavailable,
+			"this deployment has no AccountStore wired — typically because Redis is unavailable")
+		return
+	}
+	if err := s.accounts.RevokeKeyByID(r.Context(), subject.Identifier, keyID); err != nil {
+		s.logger.Error("account keys revoke failed", "err", err,
+			"identifier", subject.Identifier, "key_id", keyID)
+		writeProblem(w, r,
+			"https://api.ratesengine.net/errors/account-revoke-failed",
+			"Could not revoke key", http.StatusInternalServerError,
+			"see X-Request-ID in server logs")
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
 }

@@ -357,13 +357,16 @@ export function AccountDashboard() {
                     {k.key_prefix ? `${k.key_prefix}…` : k.key_id}
                   </div>
                 </div>
-                <div className="text-right text-xs">
-                  <div className="text-slate-700 dark:text-slate-300">
-                    {k.tier ?? '—'} · {k.rate_limit_per_min?.toLocaleString() ?? '—'}/min
+                <div className="flex items-center gap-3">
+                  <div className="text-right text-xs">
+                    <div className="text-slate-700 dark:text-slate-300">
+                      {k.tier ?? '—'} · {k.rate_limit_per_min?.toLocaleString() ?? '—'}/min
+                    </div>
+                    <div className="text-slate-500">
+                      {new Date(k.created_at).toLocaleDateString()}
+                    </div>
                   </div>
-                  <div className="text-slate-500">
-                    {new Date(k.created_at).toLocaleDateString()}
-                  </div>
+                  <RevokeButton keyID={k.key_id} onRevoked={() => void refresh()} />
                 </div>
               </div>
             ))
@@ -371,6 +374,83 @@ export function AccountDashboard() {
         </div>
       </div>
     </div>
+  );
+}
+
+function RevokeButton({ keyID, onRevoked }: { keyID: string; onRevoked: () => void }) {
+  const [confirming, setConfirming] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function handleRevoke() {
+    setBusy(true);
+    setError(null);
+    try {
+      const res = await fetch(`${API_BASE_URL}/v1/account/keys/${encodeURIComponent(keyID)}`, {
+        method: 'DELETE',
+        credentials: 'include',
+      });
+      if (res.status === 409) {
+        setError("Can't revoke the key you're using — sign in with a different one.");
+        return;
+      }
+      if (!res.ok && res.status !== 204) {
+        setError(`Revoke failed (${res.status} ${res.statusText})`);
+        return;
+      }
+      onRevoked();
+    } catch {
+      setError('Network error — please try again.');
+    } finally {
+      setBusy(false);
+      setConfirming(false);
+    }
+  }
+
+  if (error) {
+    return (
+      <span className="text-[11px] text-red-600">
+        {error}
+        <button
+          type="button"
+          onClick={() => setError(null)}
+          className="ml-2 underline"
+        >
+          dismiss
+        </button>
+      </span>
+    );
+  }
+  if (!confirming) {
+    return (
+      <button
+        type="button"
+        onClick={() => setConfirming(true)}
+        className="rounded-md border border-slate-200 px-2 py-1 text-[11px] text-slate-600 hover:border-rose-400 hover:text-rose-600 dark:border-slate-700 dark:text-slate-400"
+      >
+        Revoke
+      </button>
+    );
+  }
+  return (
+    <span className="inline-flex items-center gap-1 text-[11px]">
+      <span className="text-slate-500">Sure?</span>
+      <button
+        type="button"
+        onClick={handleRevoke}
+        disabled={busy}
+        className="rounded-md bg-rose-600 px-2 py-1 font-medium text-white hover:bg-rose-700 disabled:opacity-50"
+      >
+        {busy ? 'Revoking…' : 'Yes, revoke'}
+      </button>
+      <button
+        type="button"
+        onClick={() => setConfirming(false)}
+        className="rounded-md border border-slate-200 px-2 py-1 text-slate-600 dark:border-slate-700 dark:text-slate-400"
+      >
+        Cancel
+      </button>
+    </span>
   );
 }
 

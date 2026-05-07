@@ -1878,6 +1878,39 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/KeyCreatedEnvelope" }
 
+  /account/keys/{keyID}:
+    delete:
+      tags: [account]
+      summary: Revoke an API key by KeyID.
+      description: |
+        Revokes the API key whose KeyID matches the path parameter,
+        scoped to the authenticated caller's Identifier so accounts
+        can only revoke their own keys. "Not found" and "not yours"
+        collapse to 204 to prevent cross-account enumeration probes.
+
+        The caller cannot revoke the key they're authenticated with —
+        that would orphan the connection mid-request. 409 in that
+        case so the UI can prompt for an alternate credential.
+      security:
+        - APIKeyAuth: []
+      parameters:
+        - name: keyID
+          in: path
+          required: true
+          schema: { type: string }
+          description: "Public-safe `kid_<hex>` identifier from /v1/account/keys."
+      responses:
+        "204":
+          description: Revoked (or no-op when the key didn't belong to the caller).
+        "400":
+          description: Missing keyID.
+        "401":
+          description: Unauthenticated.
+        "409":
+          description: Caller tried to revoke the key they're using.
+        "503":
+          description: Account store not configured.
+
   /webhooks/stripe:
     post:
       tags: [account]

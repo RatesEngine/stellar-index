@@ -661,6 +661,7 @@ func (s *Server) mountRoutes() {
 	s.mux.HandleFunc("GET /v1/account/usage", s.handleAccountUsage)
 	s.mux.HandleFunc("GET /v1/account/keys", s.handleAccountKeysList)
 	s.mux.HandleFunc("POST /v1/account/keys", s.handleAccountKeysCreate)
+	s.mux.HandleFunc("DELETE /v1/account/keys/{keyID}", s.handleAccountKeysRevoke)
 	s.mux.HandleFunc("POST /v1/signup", s.handleSignup)
 	s.mux.HandleFunc("POST /v1/webhooks/stripe", s.handleStripeWebhook)
 

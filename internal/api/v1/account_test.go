@@ -28,6 +28,7 @@ type fakeAccountStore struct {
 	listed    map[string][]auth.APIKeyRecord // identifier → keys
 	listErr   error
 	listCalls int
+	revokeErr error
 }
 
 func (f *fakeAccountStore) Create(_ context.Context, req auth.CreateAPIKeyRequest) (auth.APIKeyRecord, string, error) {
@@ -48,6 +49,13 @@ func (f *fakeAccountStore) ListKeysForIdentifier(_ context.Context, identifier s
 		return nil, nil
 	}
 	return f.listed[identifier], nil
+}
+
+func (f *fakeAccountStore) RevokeKeyByID(_ context.Context, _ string, _ string) error {
+	if f.revokeErr != nil {
+		return f.revokeErr
+	}
+	return nil
 }
 
 // fakeAuthMiddleware returns a middleware that stamps the supplied
