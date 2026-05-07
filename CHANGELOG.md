@@ -15,6 +15,15 @@ against.
 
 ## [Unreleased]
 
+### Added
+- **`/sources/<name>`: integration audit link.** When the source
+  has a corresponding `/research/discovery/<slug>` audit, the
+  detail header now shows a "Read integration audit →" CTA.
+  Reflector's three contracts (cex/dex/fx) collapse to a single
+  audit page since they share the on-chain interface. CEX/aggregator
+  sources without published audits (binance, coinbase, kraken,
+  etc.) render no link.
+
 ### Changed
 - **/anomalies, /divergences, /lending: deep-link to specific
   research pages.** ADR-0019 mentions on /anomalies + /divergences
