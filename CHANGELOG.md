@@ -24,6 +24,17 @@ against.
   `apiGet<{ data: SourceRow[] }>` and unwraps `env.data`. Same fix
   applied to OraclesView's /v1/oracle/streams call.
 
+### Changed
+- **/assets adds a network-filter chip row + suppresses market cap
+  on low-volume rows.** Per the user spec: "we need a filter at the
+  top to choose the network ... we probably just wont show a market
+  cap for low volume assets because we wont have the data confidence
+  in doing so." Network is currently `all` / `stellar` (Stellar is
+  the only ingested network today; the chip writes `?network=` for
+  forward-compat). Market cap is hidden as `—` whenever the row's
+  24h USD volume is < $1,000 — below that the price feed underlying
+  the cap is too thin for the cap to be a confident number.
+
 ### Added
 - **`GET /v1/lending/pools`** — returns one row per Blend pool
   observed in the auction stream, with 24h / all-time auction

@@ -20,6 +20,21 @@ import { formatCompact } from '@/lib/format';
  * numerics — etherscan / oklink style. Fields the API doesn't
  * yet expose render as `—` rather than placeholder values.
  */
+// MARKET_CAP_VOLUME_THRESHOLD_USD — below this 24h USD volume, the
+// market-cap column shows "—" because the price feed underlying it
+// is too thin for the cap to be a confident number. Per user spec:
+// "we probably just wont show a market cap for low volume assets
+// because we wont have the data confidence in doing so".
+const MARKET_CAP_VOLUME_THRESHOLD_USD = 1_000;
+
+// NETWORK_OPTIONS — Stellar is the only ingested network today.
+// Future networks plug in here once their indexer wires up; the
+// `?network=` param is honoured but server-side filtering on the
+// /v1/coins endpoint is a follow-up (until then the chip is
+// effectively a UX promise + sets the URL state).
+const NETWORK_OPTIONS = ['all', 'stellar'] as const;
+type NetworkOption = typeof NETWORK_OPTIONS[number];
+
 export function AssetsTable() {
   const router = useRouter();
   const params = useSearchParams();
@@ -30,6 +45,7 @@ export function AssetsTable() {
   const orderParam = params.get('order') === 'volume_24h_usd_desc'
     ? 'volume_24h_usd_desc'
     : 'observation_count_desc';
+  const networkParam = (params.get('network') as NetworkOption | null) ?? 'all';
 
   const limit = parseLimit(limitParam);
 
@@ -58,7 +74,7 @@ export function AssetsTable() {
 
   const coins = data?.coins ?? [];
 
-  function setQuery(updates: Partial<{ cursor: string; limit: string; issuer: string; q: string; order: string }>) {
+  function setQuery(updates: Partial<{ cursor: string; limit: string; issuer: string; q: string; order: string; network: string }>) {
     const next = new URLSearchParams(params.toString());
     for (const [k, v] of Object.entries(updates)) {
       if (v === '' || v === undefined) next.delete(k);
@@ -84,6 +100,10 @@ export function AssetsTable() {
         onIssuerClear={() => setQuery({ issuer: '', cursor: '' })}
         limit={limit}
         onLimitChange={(v) => setQuery({ limit: String(v), cursor: '' })}
+        network={networkParam}
+        onNetworkChange={(v) =>
+          setQuery({ network: v === 'all' ? '' : v, cursor: '' })
+        }
       />
 
       <div className="overflow-x-auto rounded-md border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
@@ -177,6 +197,8 @@ function FilterBar({
   onIssuerClear,
   limit,
   onLimitChange,
+  network,
+  onNetworkChange,
 }: {
   q: string;
   onQChange: (v: string) => void;
@@ -184,8 +206,33 @@ function FilterBar({
   onIssuerClear: () => void;
   limit: number;
   onLimitChange: (v: number) => void;
+  network: NetworkOption;
+  onNetworkChange: (v: NetworkOption) => void;
 }) {
   return (
+    <div className="space-y-3">
+      <div className="flex flex-wrap items-center gap-2 text-xs">
+        <span className="text-slate-500">Network:</span>
+        {NETWORK_OPTIONS.map((n) => (
+          <button
+            key={n}
+            type="button"
+            onClick={() => onNetworkChange(n)}
+            className={`rounded-full px-2.5 py-0.5 font-mono text-[10px] uppercase tracking-wider ${
+              network === n
+                ? 'bg-brand-600 text-white'
+                : 'bg-slate-100 text-slate-600 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-400 dark:hover:bg-slate-700'
+            }`}
+          >
+            {n === 'all' ? 'All networks' : n}
+          </button>
+        ))}
+        <span className="text-slate-400">·</span>
+        <span className="text-slate-400">
+          Stellar is the only network ingested today; more land as we wire them.
+        </span>
+      </div>
+
     <div className="flex flex-wrap items-center justify-between gap-3">
       <div className="flex flex-wrap items-center gap-2">
         <div className="relative">
@@ -226,14 +273,23 @@ function FilterBar({
         </select>
       </label>
     </div>
+    </div>
   );
 }
 
 function AssetRow({ coin, rank }: { coin: Coin; rank: number }) {
   const price = parseDec(coin.price_usd);
-  const marketCap = parseDec(coin.market_cap_usd);
+  const marketCapRaw = parseDec(coin.market_cap_usd);
   const volume = parseDec(coin.volume_24h_usd);
   const supply = parseDec(coin.circulating_supply);
+  // Suppress market cap when 24h volume is below the confidence
+  // threshold — without enough recent trade volume the price
+  // underlying the cap is too thin to publish a believable number.
+  // Applies uniformly regardless of how supply was sourced.
+  const marketCap =
+    marketCapRaw != null && volume != null && volume >= MARKET_CAP_VOLUME_THRESHOLD_USD
+      ? marketCapRaw
+      : null;
   return (
     <tr className="hover:bg-slate-50 dark:hover:bg-slate-800/40">
       <Td>
