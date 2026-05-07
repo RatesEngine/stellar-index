@@ -15,7 +15,32 @@ against.
 
 ## [Unreleased]
 
+## [v0.5.0-rc.22] — 2026-05-07
+
+### Added
+- **/embed/currency/[ticker] iframe widget.** Third widget category
+  alongside the existing asset + pair cards: ticker / name header,
+  inverse-USD rate as headline, 7d % change badge, 7d sparkline,
+  attribution + cross-rate footer. SEO opt-out via robots noindex.
+  Pre-renders for every ticker /v1/currencies returns at build;
+  falls back to eight majors when upstream is unreachable. /widgets
+  page gets a "Currency card" section with EUR / GBP / JPY iframe
+  snippets.
+- **/auth/callback handler on the explorer.** Magic-link emails
+  point to `{DashboardBaseURL}/auth/callback?token=…`; this page
+  is the missing landing handler for when DashboardBaseURL is
+  ratesengine.net. Reads the token, full-page-redirects to the
+  API's /v1/auth/callback so Set-Cookie applies and the 303 lands
+  the browser on /account logged in. Closes the magic-link loop on
+  the explorer side.
+
 ### Fixed
+- **Navbar mobile menu.** The IA-restructure (#888) wrapped the
+  desktop nav in `hidden md:flex` without a mobile fallback —
+  < 768px screens saw only the logo. New hamburger drawer mirrors
+  the desktop dropdowns: Currencies link, Blockchain group
+  (collapsible), API Docs, About group (collapsible), Sign in /
+  Create account at the bottom. Auto-closes on route change.
 - **/v1/sources response unwrapping in DexProtocolsTable + OraclesView.**
   Both client components used `Array.isArray(env) ? env : []` against
   `apiGet<SourceRow[]>` — but /v1/sources returns the standard
