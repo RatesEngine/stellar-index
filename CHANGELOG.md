@@ -25,6 +25,15 @@ against.
   applied to OraclesView's /v1/oracle/streams call.
 
 ### Changed
+- **/account uses magic-link cookie auth, surfaces user/account info.**
+  Replaces the API-key-paste flow with cookie-credential fetches
+  (`credentials: 'include'`). Anonymous visitors see a "sign in"
+  prompt linking to /signin instead of an API-key input. Authenticated
+  view shows user email + account name + tier + sign-out button +
+  the existing key-list/mint flow. /v1/account/me extended to return
+  `{user, account}` nested objects when called via the magic-link
+  session — the API-key fields stay populated for bearer-token
+  callers, so both flows coexist on the same wire shape.
 - **/signin and /signup now use magic-link auth, not API keys.**
   Replaces /signup's "POST /v1/signup → here is your plaintext key"
   flow with a magic-link form posting to /v1/auth/login (which

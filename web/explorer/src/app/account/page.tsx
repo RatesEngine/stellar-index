@@ -5,25 +5,18 @@ import { AccountDashboard } from './AccountDashboard';
 export const metadata: Metadata = {
   title: 'Account — Rates Engine',
   description:
-    'View your API keys, current tier, and rate-limit budget. Paste your key to log in client-side.',
+    'Manage your Rates Engine account, API keys, and rate-limit budget. Magic-link sign-in — no passwords.',
 };
 
 /**
- * /account — customer-facing dashboard. Paste the API key once
- * (kept in localStorage for the session, never POSTed back to
- * a server we control), see every key on the account, the active
- * tier, and the rate-limit budget. Mint additional keys (rotation)
- * + delete keys (when revocation lands) live here too.
+ * /account — customer dashboard. Reads the magic-link session
+ * cookie set by /v1/auth/callback. Anonymous visitors see a
+ * "sign in" prompt linking to /signin (which kicks off the
+ * magic-link email).
  *
- * Distinct from /signup (one-shot mint) and /status (system health).
- * /account is "I'm an existing customer who wants to manage my
- * credentials."
- *
- * Pure client-side wiring against the public API — no Next.js
- * server-side rendering of customer keys (the static-export build
- * couldn't keep them secret anyway). The page is a static shell;
- * the AccountDashboard component does all the fetching from the
- * caller's browser.
+ * Pure client-side wiring against the public API. The static
+ * shell is pre-rendered; AccountDashboard handles auth state +
+ * data fetching with `credentials: 'include'`.
  */
 export default function AccountPage() {
   return (
@@ -33,13 +26,8 @@ export default function AccountPage() {
           Your account
         </h1>
         <p className="mt-3 max-w-2xl text-base text-slate-600 dark:text-slate-400">
-          Paste your API key to see every key on the account, your
-          active tier, and your rate-limit budget. The key is kept in{' '}
-          <code className="rounded bg-slate-100 px-1.5 py-0.5 font-mono text-xs dark:bg-slate-800">
-            localStorage
-          </code>{' '}
-          for this browser session — we never persist it on a server
-          we control.
+          See your tier, manage API keys, watch usage. Magic-link
+          sign-in — no passwords.
         </p>
       </header>
 

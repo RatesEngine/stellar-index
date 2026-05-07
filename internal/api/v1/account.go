@@ -25,13 +25,71 @@ type AccountStore interface {
 // projection of [auth.APIKeyRecord] (no expires_at / scopes
 // surfaced — those are implementation detail until /v1/account/keys
 // list returns them).
+//
+// The shape is a union: API-key callers populate the top-level
+// key_* / tier / rate_limit_per_min / created_at fields and leave
+// `user` + `account` null. Magic-link session callers populate the
+// nested `user` + `account` objects (and leave the API-key fields
+// empty). Clients can detect which mode by checking which slice is
+// populated. Both shapes coexist forever — bumping a major version
+// for an additive field would be silly.
 type Account struct {
-	KeyID           string    `json:"key_id"`
-	Label           string    `json:"label,omitempty"`
-	KeyPrefix       string    `json:"key_prefix,omitempty"`
-	Tier            string    `json:"tier"`
-	RateLimitPerMin int       `json:"rate_limit_per_min,omitempty"`
-	CreatedAt       time.Time `json:"created_at"`
+	KeyID           string         `json:"key_id,omitempty"`
+	Label           string         `json:"label,omitempty"`
+	KeyPrefix       string         `json:"key_prefix,omitempty"`
+	Tier            string         `json:"tier,omitempty"`
+	RateLimitPerMin int            `json:"rate_limit_per_min,omitempty"`
+	CreatedAt       time.Time      `json:"created_at,omitempty"`
+	User            *AccountUser   `json:"user,omitempty"`
+	AccountInfo     *AccountInfo   `json:"account,omitempty"`
+}
+
+// AccountUser is the magic-link-session caller's user info.
+type AccountUser struct {
+	ID              string    `json:"id"`
+	Email           string    `json:"email"`
+	DisplayName     string    `json:"display_name,omitempty"`
+	Role            string    `json:"role,omitempty"`
+	IsStaff         bool      `json:"is_staff"`
+	EmailVerifiedAt time.Time `json:"email_verified_at,omitempty"`
+	LastLoginAt     time.Time `json:"last_login_at,omitempty"`
+}
+
+// AccountInfo is the magic-link-session caller's parent account.
+type AccountInfo struct {
+	ID     string `json:"id"`
+	Name   string `json:"name,omitempty"`
+	Slug   string `json:"slug,omitempty"`
+	Tier   string `json:"tier,omitempty"`
+	Status string `json:"status,omitempty"`
+}
+
+// SessionInfo is the wire-shape projection of a magic-link
+// session. Defined in v1 so this package doesn't import
+// dashboardauth directly; the binary's wiring (main.go) converts
+// dashboardauth's SessionContext into this shape.
+type SessionInfo struct {
+	UserID          string
+	Email           string
+	DisplayName     string
+	Role            string
+	IsStaff         bool
+	EmailVerifiedAt time.Time
+	LastLoginAt     time.Time
+
+	AccountID     string
+	AccountName   string
+	AccountSlug   string
+	AccountTier   string
+	AccountStatus string
+}
+
+// SessionPeeker reads the magic-link session bound to the request
+// context. Implementations come from the dashboardauth bundle via
+// main.go's wiring; v1 holds the interface so the dependency
+// flows the right way.
+type SessionPeeker interface {
+	SessionFromContext(ctx context.Context) (SessionInfo, bool)
 }
 
 // UsageRow is the wire shape for /v1/account/usage entries. The
@@ -68,15 +126,48 @@ type createKeyRequest struct {
 
 // handleAccountMe serves GET /v1/account/me.
 //
-// Returns the authenticated caller's account info. Anonymous
-// callers receive 401 — /me is meaningless without a credential.
+// Returns the authenticated caller's account info. Magic-link
+// session callers populate the nested user/account objects;
+// API-key callers populate the top-level key_* fields. Both
+// flows can coexist on a request — session takes precedence
+// because it identifies a real user, while a key only
+// identifies a credential.
+//
+// Anonymous callers receive 401 — /me is meaningless without
+// any credential.
 func (s *Server) handleAccountMe(w http.ResponseWriter, r *http.Request) {
+	// Magic-link session takes precedence when both are present.
+	if s.sessionPeeker != nil {
+		if sess, ok := s.sessionPeeker.SessionFromContext(r.Context()); ok {
+			out := Account{
+				User: &AccountUser{
+					ID:              sess.UserID,
+					Email:           sess.Email,
+					DisplayName:     sess.DisplayName,
+					Role:            sess.Role,
+					IsStaff:         sess.IsStaff,
+					EmailVerifiedAt: sess.EmailVerifiedAt,
+					LastLoginAt:     sess.LastLoginAt,
+				},
+				AccountInfo: &AccountInfo{
+					ID:     sess.AccountID,
+					Name:   sess.AccountName,
+					Slug:   sess.AccountSlug,
+					Tier:   sess.AccountTier,
+					Status: sess.AccountStatus,
+				},
+			}
+			writeJSON(w, out, Flags{})
+			return
+		}
+	}
+
 	subject, ok := auth.SubjectFrom(r.Context())
 	if !ok || subject.Tier == auth.TierAnonymous || subject.Tier == "" {
 		writeProblem(w, r,
 			"https://api.ratesengine.net/errors/unauthorised",
 			"Authentication required", http.StatusUnauthorized,
-			"/v1/account/me requires an API key or SEP-10 token")
+			"/v1/account/me requires a magic-link session, API key, or SEP-10 token")
 		return
 	}
 

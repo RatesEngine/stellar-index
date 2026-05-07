@@ -64,6 +64,7 @@ type Server struct {
 	sourcesStats     SourcesStatsReader
 	lending          LendingReader
 	currencies       CurrenciesReader
+	sessionPeeker    SessionPeeker
 	incidents        []incidents.Incident
 	sep10            auth.SEP10Validator
 	cors             middleware.Middleware
@@ -247,6 +248,13 @@ type Options struct {
 	// still populated.
 	Currencies CurrenciesReader
 
+	// SessionPeeker, when non-nil, lets handlers read the
+	// magic-link session bound to the request context. Used by
+	// /v1/account/me to surface user/account info for cookie-auth
+	// callers (the API-key path uses Subject; both can coexist on a
+	// request, in which case session takes precedence).
+	SessionPeeker SessionPeeker
+
 	// SEP10, when non-nil, backs GET /v1/auth/sep10/challenge and
 	// POST /v1/auth/sep10/token. Production wiring: an
 	// auth/sep10.Validator constructed from the binary's signing
@@ -386,6 +394,7 @@ func New(opts Options) *Server {
 		sourcesStats:     opts.SourcesStats,
 		lending:          opts.Lending,
 		currencies:       opts.Currencies,
+		sessionPeeker:    opts.SessionPeeker,
 		sep10:            opts.SEP10,
 		cors:             opts.CORS,
 		auth:             opts.Auth,

@@ -514,6 +514,7 @@ func run(cfgPath string, dryRun bool) error { //nolint:gocognit,funlen,gocyclo /
 		DashboardAuth:    nilOrMounter(dashboardBundle.auth),
 		DashboardKeys:    nilOrMounter(dashboardBundle.keys),
 		SessionAuth:      dashboardBundle.middleware,
+		SessionPeeker:    sessionPeekerAdapter{},
 	})
 
 	// Closed-bucket producer — only spawn when the operator
@@ -1783,6 +1784,34 @@ func warnOpenCORS(logger *slog.Logger, allowedOrigins []string, authMode string)
 			"auth_mode", authMode,
 			"docs", "https://github.com/RatesEngine/rates-engine/blob/main/docs/operations/pre-launch-hardening.md")
 	}
+}
+
+// sessionPeekerAdapter bridges dashboardauth.SessionFromContext
+// to v1.SessionPeeker so v1's /v1/account/me handler can read
+// the magic-link session without importing dashboardauth.
+//
+// Stateless — the lookup is a context.Value read.
+type sessionPeekerAdapter struct{}
+
+func (sessionPeekerAdapter) SessionFromContext(ctx context.Context) (v1.SessionInfo, bool) {
+	sc, ok := dashboardauth.SessionFromContext(ctx)
+	if !ok {
+		return v1.SessionInfo{}, false
+	}
+	return v1.SessionInfo{
+		UserID:          sc.User.ID.String(),
+		Email:           sc.User.Email,
+		DisplayName:     sc.User.DisplayName,
+		Role:            string(sc.User.Role),
+		IsStaff:         sc.User.IsStaff,
+		EmailVerifiedAt: sc.User.EmailVerifiedAt,
+		LastLoginAt:     sc.User.LastLoginAt,
+		AccountID:       sc.Account.ID.String(),
+		AccountName:     sc.Account.Name,
+		AccountSlug:     sc.Account.Slug,
+		AccountTier:     string(sc.Account.Tier),
+		AccountStatus:   string(sc.Account.Status),
+	}, true
 }
 
 // forexAdapter bridges the forex.Cache (raw snapshot type) to

@@ -5,113 +5,115 @@ import {
   CheckCircle2,
   Copy,
   KeyRound,
+  Loader2,
   LogOut,
   Plus,
-  RefreshCw,
 } from 'lucide-react';
 import Link from 'next/link';
 import { useCallback, useEffect, useState } from 'react';
 
 import { API_BASE_URL } from '@/api/client';
 
-type Key = {
+interface AccountMe {
+  // Magic-link session callers populate `user` + `account`.
+  user?: {
+    id: string;
+    email: string;
+    display_name?: string;
+    role?: string;
+    is_staff?: boolean;
+  };
+  account?: {
+    id: string;
+    name?: string;
+    slug?: string;
+    tier?: string;
+    status?: string;
+  };
+  // API-key callers populate the top-level fields.
+  key_id?: string;
+  key_prefix?: string;
+  label?: string;
+  tier?: string;
+  rate_limit_per_min?: number;
+  created_at?: string;
+}
+
+interface APIKey {
   key_id: string;
   label?: string;
   key_prefix?: string;
-  tier: string;
+  tier?: string;
   rate_limit_per_min?: number;
   created_at: string;
-};
-
-type ListEnvelope = { data: Key[] };
-type CreateEnvelope = {
-  data: { key_id: string; plaintext: string; key_prefix?: string; label?: string };
-};
+}
 
 type State =
-  | { kind: 'unauthed' }
   | { kind: 'loading' }
+  | { kind: 'unauthed' }
   | { kind: 'error'; message: string }
-  | { kind: 'authed'; me: Key; keys: Key[] };
+  | { kind: 'authed'; me: AccountMe; keys: APIKey[] };
 
-const STORAGE_KEY = 'ratesengine.api_key';
-
-async function authedGet<T>(path: string, key: string): Promise<T> {
+async function apiFetch<T>(path: string, opts: RequestInit = {}): Promise<T> {
   const res = await fetch(`${API_BASE_URL}${path}`, {
-    headers: { Authorization: `Bearer ${key}`, Accept: 'application/json' },
-    cache: 'no-store',
+    credentials: 'include',
+    headers: {
+      Accept: 'application/json',
+      ...(opts.body ? { 'Content-Type': 'application/json' } : {}),
+      ...opts.headers,
+    },
+    ...opts,
   });
+  if (res.status === 401) {
+    throw new ApiError(401, 'unauthorised');
+  }
   if (!res.ok) {
     let detail = `${res.status} ${res.statusText}`;
     try {
       const body = (await res.json()) as { detail?: string };
-      detail = body.detail ?? detail;
-    } catch {
-      // not problem+json
-    }
-    throw new Error(detail);
-  }
-  return (await res.json()) as T;
-}
-
-async function authedPost<T>(path: string, key: string, body: object): Promise<T> {
-  const res = await fetch(`${API_BASE_URL}${path}`, {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${key}`,
-      'Content-Type': 'application/json',
-      Accept: 'application/json',
-    },
-    body: JSON.stringify(body),
-  });
-  if (!res.ok) {
-    let detail = `${res.status} ${res.statusText}`;
-    try {
-      const b = (await res.json()) as { detail?: string };
-      detail = b.detail ?? detail;
+      if (body.detail) detail = body.detail;
     } catch {
       // ignore
     }
-    throw new Error(detail);
+    throw new ApiError(res.status, detail);
   }
+  if (res.status === 204) return undefined as unknown as T;
   return (await res.json()) as T;
 }
 
-function formatTier(tier: string, rateLimit?: number): { label: string; classes: string } {
-  // Map rate-limit → tier name (matches the /signup page table).
-  let label = tier;
-  if (rateLimit !== undefined) {
-    if (rateLimit >= 50000) label = 'Business';
-    else if (rateLimit >= 10000) label = 'Pro';
-    else if (rateLimit >= 1000) label = 'Starter';
+class ApiError extends Error {
+  status: number;
+  constructor(status: number, message: string) {
+    super(message);
+    this.status = status;
   }
-  const classes =
-    label === 'Business'
-      ? 'bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-200'
-      : label === 'Pro'
-        ? 'bg-brand-100 text-brand-800 dark:bg-brand-900/30 dark:text-brand-200'
-        : 'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300';
-  return { label, classes };
 }
 
 export function AccountDashboard() {
-  const [state, setState] = useState<State>({ kind: 'unauthed' });
-  const [keyInput, setKeyInput] = useState('');
+  const [state, setState] = useState<State>({ kind: 'loading' });
   const [showMintForm, setShowMintForm] = useState(false);
   const [mintLabel, setMintLabel] = useState('');
   const [mintError, setMintError] = useState<string | null>(null);
   const [mintedKey, setMintedKey] = useState<{ key_id: string; plaintext: string } | null>(null);
-  const [copiedKey, setCopiedKey] = useState<string | null>(null);
+  const [copied, setCopied] = useState<string | null>(null);
 
-  const refresh = useCallback(async (key: string) => {
+  const refresh = useCallback(async () => {
     setState({ kind: 'loading' });
     try {
-      const [me, list] = await Promise.all([
-        authedGet<{ data: Key }>('/v1/account/me', key),
-        authedGet<ListEnvelope>('/v1/account/keys', key),
-      ]);
-      setState({ kind: 'authed', me: me.data, keys: list.data });
+      const me = await apiFetch<{ data: AccountMe }>('/v1/account/me');
+      let keys: APIKey[] = [];
+      try {
+        const list = await apiFetch<{ data: APIKey[] }>('/v1/account/keys');
+        keys = list.data ?? [];
+      } catch (err) {
+        if (!(err instanceof ApiError) || err.status !== 401) throw err;
+      }
+      setState({ kind: 'authed', me: me.data, keys });
     } catch (err) {
+      if (err instanceof ApiError && err.status === 401) {
+        setState({ kind: 'unauthed' });
+        return;
+      }
       setState({
         kind: 'error',
         message: err instanceof Error ? err.message : 'unknown error',
@@ -119,29 +121,19 @@ export function AccountDashboard() {
     }
   }, []);
 
-  // On first load, reuse the stored key if present.
   useEffect(() => {
-    if (typeof window === 'undefined') return;
-    const stored = window.localStorage.getItem(STORAGE_KEY);
-    if (stored) {
-      setKeyInput(stored);
-      void refresh(stored);
-    }
+    void refresh();
   }, [refresh]);
 
-  function handleLogin(e: React.FormEvent) {
-    e.preventDefault();
-    if (!keyInput.trim()) return;
-    window.localStorage.setItem(STORAGE_KEY, keyInput.trim());
-    void refresh(keyInput.trim());
-  }
-
-  function handleLogout() {
-    window.localStorage.removeItem(STORAGE_KEY);
-    setKeyInput('');
-    setState({ kind: 'unauthed' });
+  async function handleLogout() {
+    try {
+      await apiFetch('/v1/auth/logout', { method: 'POST' });
+    } catch {
+      // Logout is best-effort — clear UI state regardless.
+    }
     setMintedKey(null);
     setShowMintForm(false);
+    setState({ kind: 'unauthed' });
   }
 
   async function handleMint(e: React.FormEvent) {
@@ -149,15 +141,17 @@ export function AccountDashboard() {
     if (!mintLabel.trim()) return;
     setMintError(null);
     try {
-      const stored = window.localStorage.getItem(STORAGE_KEY);
-      if (!stored) throw new Error('not logged in');
-      const res = await authedPost<CreateEnvelope>('/v1/account/keys', stored, {
-        label: mintLabel.trim(),
-      });
+      const res = await apiFetch<{ data: { key_id: string; plaintext: string } }>(
+        '/v1/account/keys',
+        {
+          method: 'POST',
+          body: JSON.stringify({ label: mintLabel.trim() }),
+        },
+      );
       setMintedKey({ key_id: res.data.key_id, plaintext: res.data.plaintext });
       setShowMintForm(false);
       setMintLabel('');
-      void refresh(stored);
+      void refresh();
     } catch (err) {
       setMintError(err instanceof Error ? err.message : 'unknown error');
     }
@@ -165,264 +159,203 @@ export function AccountDashboard() {
 
   function copy(value: string, kind: string) {
     void navigator.clipboard.writeText(value);
-    setCopiedKey(kind);
-    setTimeout(() => setCopiedKey(null), 1800);
-  }
-
-  // ─── Unauthenticated form ────────────────────────────────────
-  if (state.kind === 'unauthed' || state.kind === 'error') {
-    return (
-      <div className="space-y-6">
-        <form onSubmit={handleLogin} className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-800 dark:bg-slate-900">
-          <label htmlFor="key" className="mb-2 block text-sm font-medium text-slate-700 dark:text-slate-300">
-            API key
-          </label>
-          <div className="flex flex-col gap-2 sm:flex-row">
-            <input
-              id="key"
-              type="password"
-              autoComplete="off"
-              spellCheck={false}
-              value={keyInput}
-              onChange={(e) => setKeyInput(e.target.value)}
-              placeholder="rek_…"
-              className="flex-1 rounded-md border border-slate-300 bg-white px-3 py-2 font-mono text-sm text-slate-900 placeholder:text-slate-400 focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/20 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
-            />
-            <button
-              type="submit"
-              disabled={!keyInput.trim()}
-              className="inline-flex items-center justify-center gap-1.5 rounded-md bg-brand-600 px-4 py-2 text-sm font-semibold text-white hover:bg-brand-700 disabled:cursor-not-allowed disabled:opacity-60"
-            >
-              <KeyRound className="h-4 w-4" />
-              View account
-            </button>
-          </div>
-          {state.kind === 'error' && (
-            <div className="mt-3 flex items-start gap-2 rounded-lg border border-rose-200 bg-rose-50 p-3 dark:border-rose-900/50 dark:bg-rose-900/20">
-              <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-rose-600 dark:text-rose-400" />
-              <p className="text-sm text-rose-800 dark:text-rose-300">{state.message}</p>
-            </div>
-          )}
-          <p className="mt-3 text-xs text-slate-500 dark:text-slate-400">
-            No key yet?{' '}
-            <Link href="/signup" className="text-brand-600 underline">
-              Sign up
-            </Link>{' '}
-            to get one — Starter is free.
-          </p>
-        </form>
-      </div>
-    );
+    setCopied(kind);
+    setTimeout(() => setCopied(null), 1800);
   }
 
   if (state.kind === 'loading') {
     return (
-      <div className="rounded-xl border border-slate-200 bg-white p-8 text-center text-sm text-slate-500 dark:border-slate-800 dark:bg-slate-900">
-        <RefreshCw className="mx-auto mb-2 h-5 w-5 animate-spin text-slate-400" />
-        Loading account…
+      <div className="flex items-center justify-center py-16 text-sm text-slate-500">
+        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+        Loading your account…
       </div>
     );
   }
 
-  // ─── Authed dashboard ────────────────────────────────────────
-  const tier = formatTier(state.me.tier, state.me.rate_limit_per_min);
+  if (state.kind === 'unauthed') {
+    return (
+      <div className="space-y-4 rounded-xl border border-slate-200 bg-white p-8 text-center shadow-sm dark:border-slate-800 dark:bg-slate-900">
+        <KeyRound className="mx-auto h-10 w-10 text-slate-400" />
+        <div>
+          <h2 className="text-lg font-semibold">Sign in to see your account</h2>
+          <p className="mt-1 text-sm text-slate-600 dark:text-slate-400">
+            Magic-link auth — we email you a one-click sign-in. No passwords.
+          </p>
+        </div>
+        <div className="flex justify-center gap-3">
+          <Link
+            href="/signin"
+            className="inline-flex items-center gap-2 rounded-md bg-brand-600 px-4 py-2 text-sm font-medium text-white hover:bg-brand-700"
+          >
+            Sign in
+          </Link>
+          <Link
+            href="/signup"
+            className="inline-flex items-center gap-2 rounded-md border border-slate-200 px-4 py-2 text-sm font-medium text-slate-700 hover:border-brand-500 hover:text-brand-600 dark:border-slate-700 dark:text-slate-300"
+          >
+            Create account
+          </Link>
+        </div>
+      </div>
+    );
+  }
+
+  if (state.kind === 'error') {
+    return (
+      <div className="space-y-3 rounded-md border border-red-200 bg-red-50 p-4 text-sm text-red-800 dark:border-red-900/40 dark:bg-red-950/40 dark:text-red-200">
+        <div className="flex items-center gap-2 font-medium">
+          <AlertCircle className="h-4 w-4" />
+          Couldn&apos;t load your account
+        </div>
+        <p>{state.message}</p>
+        <button
+          type="button"
+          onClick={() => void refresh()}
+          className="rounded-md border border-red-300 px-3 py-1 text-xs hover:bg-red-100 dark:border-red-800 dark:hover:bg-red-900/40"
+        >
+          Retry
+        </button>
+      </div>
+    );
+  }
+
+  const { me, keys } = state;
+  const userEmail = me.user?.email;
+  const accountName = me.account?.name;
+  const accountTier = me.account?.tier ?? me.tier ?? 'starter';
+
   return (
     <div className="space-y-6">
-      <section className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-800 dark:bg-slate-900">
-        <div className="mb-4 flex items-center justify-between">
-          <h2 className="text-lg font-semibold text-slate-900 dark:text-slate-100">
-            Logged in as
-          </h2>
-          <button
-            type="button"
-            onClick={handleLogout}
-            className="inline-flex items-center gap-1.5 rounded-md px-2.5 py-1 text-xs text-slate-600 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800"
-          >
-            <LogOut className="h-3.5 w-3.5" />
-            Forget key
-          </button>
-        </div>
-        <dl className="grid grid-cols-2 gap-4 text-sm sm:grid-cols-4">
-          <div>
-            <dt className="text-xs uppercase tracking-wider text-slate-500">Tier</dt>
-            <dd className="mt-0.5">
-              <span className={`inline-flex rounded-full px-2 py-0.5 text-xs font-semibold ${tier.classes}`}>
-                {tier.label}
+      <div className="flex items-start justify-between gap-4 rounded-xl border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+        <div className="space-y-1">
+          {userEmail && (
+            <div className="flex items-center gap-2 text-sm">
+              <span className="text-slate-500">Signed in as</span>
+              <span className="font-mono font-medium text-slate-900 dark:text-slate-100">
+                {userEmail}
               </span>
-            </dd>
+            </div>
+          )}
+          {accountName && (
+            <div className="text-xs text-slate-500">Account: {accountName}</div>
+          )}
+          <div className="mt-2 inline-flex items-center gap-1.5 rounded-full bg-brand-100 px-2 py-0.5 text-xs font-medium uppercase tracking-wider text-brand-800 dark:bg-brand-900/40 dark:text-brand-200">
+            {accountTier}
           </div>
-          <div>
-            <dt className="text-xs uppercase tracking-wider text-slate-500">Rate limit</dt>
-            <dd className="mt-0.5 text-slate-900 dark:text-slate-100">
-              {(state.me.rate_limit_per_min ?? 60).toLocaleString()} req/min
-            </dd>
-          </div>
-          <div>
-            <dt className="text-xs uppercase tracking-wider text-slate-500">Active key</dt>
-            <dd className="mt-0.5 font-mono text-xs text-slate-900 dark:text-slate-100">
-              {state.me.key_id}
-            </dd>
-          </div>
-          <div>
-            <dt className="text-xs uppercase tracking-wider text-slate-500">Member since</dt>
-            <dd className="mt-0.5 text-slate-900 dark:text-slate-100">
-              {new Date(state.me.created_at).toLocaleDateString()}
-            </dd>
-          </div>
-        </dl>
-      </section>
+        </div>
+        <button
+          type="button"
+          onClick={handleLogout}
+          className="inline-flex items-center gap-1.5 rounded-md border border-slate-200 px-3 py-1.5 text-xs text-slate-600 hover:border-slate-400 hover:text-slate-900 dark:border-slate-700 dark:text-slate-400 dark:hover:text-slate-100"
+        >
+          <LogOut className="h-3.5 w-3.5" />
+          Sign out
+        </button>
+      </div>
 
-      <section className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-800 dark:bg-slate-900">
-        <div className="mb-4 flex items-center justify-between">
-          <h2 className="text-lg font-semibold text-slate-900 dark:text-slate-100">
-            All keys ({state.keys.length})
-          </h2>
-          <button
-            type="button"
-            onClick={() => setShowMintForm((v) => !v)}
-            className="inline-flex items-center gap-1.5 rounded-md bg-brand-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-brand-700"
-          >
-            <Plus className="h-3.5 w-3.5" />
-            Mint another key
-          </button>
+      {mintedKey && (
+        <div className="space-y-3 rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-sm dark:border-emerald-900/40 dark:bg-emerald-950/40">
+          <div className="flex items-center gap-2 font-medium text-emerald-900 dark:text-emerald-200">
+            <CheckCircle2 className="h-4 w-4" />
+            New API key minted — copy it now, you won&apos;t see it again.
+          </div>
+          <div className="flex items-center gap-2 rounded-md bg-white p-2 font-mono text-xs dark:bg-slate-900">
+            <code className="flex-1 select-all break-all">{mintedKey.plaintext}</code>
+            <button
+              type="button"
+              onClick={() => copy(mintedKey.plaintext, 'minted')}
+              className="rounded border border-slate-200 p-1 hover:bg-slate-100 dark:border-slate-700 dark:hover:bg-slate-800"
+              aria-label="Copy"
+            >
+              {copied === 'minted' ? (
+                <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600" />
+              ) : (
+                <Copy className="h-3.5 w-3.5" />
+              )}
+            </button>
+          </div>
+        </div>
+      )}
+
+      <div className="rounded-xl border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900">
+        <div className="flex items-center justify-between border-b border-slate-200 px-5 py-3 dark:border-slate-800">
+          <h2 className="text-sm font-semibold">API keys</h2>
+          {!showMintForm ? (
+            <button
+              type="button"
+              onClick={() => setShowMintForm(true)}
+              className="inline-flex items-center gap-1 rounded-md bg-brand-600 px-2.5 py-1 text-xs font-medium text-white hover:bg-brand-700"
+            >
+              <Plus className="h-3.5 w-3.5" />
+              Mint key
+            </button>
+          ) : null}
         </div>
 
         {showMintForm && (
-          <form onSubmit={handleMint} className="mb-4 rounded-lg border border-slate-200 bg-slate-50 p-4 dark:border-slate-800 dark:bg-slate-800/50">
-            <label htmlFor="mint-label" className="mb-1.5 block text-xs font-medium text-slate-700 dark:text-slate-300">
-              Label
-            </label>
-            <div className="flex flex-col gap-2 sm:flex-row">
+          <form onSubmit={handleMint} className="space-y-2 border-b border-slate-200 p-4 dark:border-slate-800">
+            <label className="block text-xs text-slate-500">Label</label>
+            <div className="flex gap-2">
               <input
-                id="mint-label"
                 type="text"
                 value={mintLabel}
                 onChange={(e) => setMintLabel(e.target.value)}
-                placeholder="ci-bot, dev-laptop, …"
-                maxLength={128}
-                className="flex-1 rounded-md border border-slate-300 bg-white px-3 py-1.5 text-sm text-slate-900 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
+                placeholder="e.g. production-server"
+                required
+                className="flex-1 rounded-md border border-slate-200 bg-white px-2 py-1 text-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500 dark:border-slate-700 dark:bg-slate-900"
               />
               <button
                 type="submit"
                 disabled={!mintLabel.trim()}
-                className="inline-flex items-center justify-center rounded-md bg-brand-600 px-3 py-1.5 text-sm font-semibold text-white hover:bg-brand-700 disabled:opacity-60"
+                className="rounded-md bg-brand-600 px-3 py-1 text-xs font-medium text-white hover:bg-brand-700 disabled:opacity-50"
               >
-                Create
+                Mint
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setShowMintForm(false);
+                  setMintError(null);
+                  setMintLabel('');
+                }}
+                className="rounded-md border border-slate-200 px-2 py-1 text-xs text-slate-600 hover:border-slate-400 dark:border-slate-700 dark:text-slate-400"
+              >
+                Cancel
               </button>
             </div>
-            {mintError && (
-              <p className="mt-2 text-sm text-rose-700 dark:text-rose-300">{mintError}</p>
-            )}
+            {mintError && <div className="text-xs text-red-600">{mintError}</div>}
           </form>
         )}
 
-        {mintedKey && (
-          <div className="mb-4 rounded-lg border border-emerald-200 bg-emerald-50 p-4 dark:border-emerald-800 dark:bg-emerald-900/20">
-            <div className="mb-2 flex items-center gap-2 text-sm font-semibold text-emerald-900 dark:text-emerald-200">
-              <CheckCircle2 className="h-4 w-4" />
-              Key minted — {mintedKey.key_id}
+        <div className="divide-y divide-slate-100 dark:divide-slate-800">
+          {keys.length === 0 ? (
+            <div className="px-5 py-6 text-center text-sm text-slate-500">
+              No keys yet — mint one above to start authenticating requests.
             </div>
-            <p className="mb-2 text-xs text-emerald-800 dark:text-emerald-300">
-              Copy now — plaintext is shown once and unrecoverable.
-            </p>
-            <div className="flex items-stretch gap-2">
-              <input
-                readOnly
-                value={mintedKey.plaintext}
-                onFocus={(e) => e.currentTarget.select()}
-                className="flex-1 rounded-md border border-emerald-300 bg-white px-2.5 py-1.5 font-mono text-xs text-slate-900 dark:border-emerald-800 dark:bg-slate-900 dark:text-slate-100"
-              />
-              <button
-                type="button"
-                onClick={() => copy(mintedKey.plaintext, mintedKey.key_id)}
-                className="inline-flex items-center gap-1 rounded-md bg-emerald-700 px-2.5 py-1.5 text-xs font-semibold text-white hover:bg-emerald-800"
-              >
-                <Copy className="h-3 w-3" />
-                {copiedKey === mintedKey.key_id ? 'Copied' : 'Copy'}
-              </button>
-            </div>
-          </div>
-        )}
-
-        <div className="overflow-hidden rounded-lg border border-slate-200 dark:border-slate-800">
-          <table className="min-w-full divide-y divide-slate-200 dark:divide-slate-800">
-            <thead className="bg-slate-50 dark:bg-slate-800/50">
-              <tr>
-                <th className="px-3 py-2 text-left text-xs font-semibold uppercase tracking-wider text-slate-600 dark:text-slate-400">
-                  Prefix
-                </th>
-                <th className="px-3 py-2 text-left text-xs font-semibold uppercase tracking-wider text-slate-600 dark:text-slate-400">
-                  Label
-                </th>
-                <th className="px-3 py-2 text-left text-xs font-semibold uppercase tracking-wider text-slate-600 dark:text-slate-400">
-                  Key ID
-                </th>
-                <th className="px-3 py-2 text-left text-xs font-semibold uppercase tracking-wider text-slate-600 dark:text-slate-400">
-                  Rate limit
-                </th>
-                <th className="px-3 py-2 text-left text-xs font-semibold uppercase tracking-wider text-slate-600 dark:text-slate-400">
-                  Created
-                </th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-200 bg-white dark:divide-slate-800 dark:bg-slate-900">
-              {state.keys.map((k) => (
-                <tr key={k.key_id} className={k.key_id === state.me.key_id ? 'bg-brand-50/50 dark:bg-brand-900/10' : ''}>
-                  <td className="whitespace-nowrap px-3 py-2 font-mono text-xs text-slate-900 dark:text-slate-100">
-                    {k.key_prefix ? (
-                      <>
-                        {k.key_prefix}
-                        <span className="text-slate-400">…</span>
-                      </>
-                    ) : (
-                      <span className="text-slate-400">—</span>
-                    )}
-                    {k.key_id === state.me.key_id && (
-                      <span className="ml-2 inline-flex items-center rounded-full bg-brand-600 px-1.5 py-0.5 text-[10px] font-medium text-white">
-                        active
-                      </span>
-                    )}
-                  </td>
-                  <td className="whitespace-nowrap px-3 py-2 text-sm text-slate-700 dark:text-slate-300">
-                    {k.label ?? '—'}
-                  </td>
-                  <td className="whitespace-nowrap px-3 py-2 font-mono text-[11px] text-slate-500 dark:text-slate-400">
-                    {k.key_id}
-                  </td>
-                  <td className="whitespace-nowrap px-3 py-2 text-sm text-slate-700 dark:text-slate-300">
-                    {(k.rate_limit_per_min ?? 0).toLocaleString()} req/min
-                  </td>
-                  <td className="whitespace-nowrap px-3 py-2 text-sm text-slate-700 dark:text-slate-300">
+          ) : (
+            keys.map((k) => (
+              <div key={k.key_id} className="flex items-center justify-between px-5 py-3">
+                <div>
+                  <div className="text-sm font-medium">
+                    {k.label || <span className="text-slate-400 italic">unlabelled</span>}
+                  </div>
+                  <div className="font-mono text-[11px] text-slate-500">
+                    {k.key_prefix ? `${k.key_prefix}…` : k.key_id}
+                  </div>
+                </div>
+                <div className="text-right text-xs">
+                  <div className="text-slate-700 dark:text-slate-300">
+                    {k.tier ?? '—'} · {k.rate_limit_per_min?.toLocaleString() ?? '—'}/min
+                  </div>
+                  <div className="text-slate-500">
                     {new Date(k.created_at).toLocaleDateString()}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+                  </div>
+                </div>
+              </div>
+            ))
+          )}
         </div>
-
-        <p className="mt-3 text-xs text-slate-500 dark:text-slate-400">
-          Key revocation is on the post-launch backlog; if you need
-          to deactivate a key today, contact support with the{' '}
-          <code className="font-mono">key_id</code>.
-        </p>
-      </section>
-
-      <section className="rounded-xl border border-slate-200 bg-slate-50 p-5 text-sm text-slate-700 dark:border-slate-800 dark:bg-slate-800/50 dark:text-slate-300">
-        <h3 className="mb-2 font-semibold text-slate-900 dark:text-slate-100">
-          Want a higher rate-limit?
-        </h3>
-        <p>
-          Pro (10,000 req/min) and Business (50,000 req/min) tiers are available
-          via Stripe. Your existing keys keep working — the tier upgrade lifts
-          the rate-limit on the same key, no rotation needed. Contact sales or
-          use the upgrade flow on the{' '}
-          <Link href="/signup" className="underline">
-            signup page
-          </Link>
-          .
-        </p>
-      </section>
+      </div>
     </div>
   );
 }
