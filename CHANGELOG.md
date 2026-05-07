@@ -16,6 +16,11 @@ against.
 ## [Unreleased]
 
 ### Added
+- **`/embed/pair/{base~quote}` iframe pair widget.** Mirror of
+  the asset embed shipped earlier — same chrome-less layout,
+  shows the BASE / QUOTE label + live VWAP + 24h change pill +
+  sparkline + "Powered by Rates Engine" attribution. Pre-rendered
+  for the top 100 pairs by 24h USD volume.
 - **Home Try-the-API: language tabs (curl / JS / Python / Go).**
   Each example renders as a snippet in the chosen language; the
   ▶ Run-it button still fires the same URL inline regardless of
