@@ -16,6 +16,11 @@ against.
 ## [Unreleased]
 
 ### Added
+- **Home "Recently shipped" widget.** New section between Recent
+  trades and Try the API surfacing the top 3 changelog entries
+  with proper Added/Fixed/Changed tone pills + release pill +
+  bold/code/link rendering. Reads CHANGELOG.md at build time;
+  links out to /changelog for the full history.
 - **`/v1/incidents.atom` Atom feed.** RFC-4287 syndication of
   the customer-facing incident corpus — designed for Feedly,
   Slack RSS bot, and other feed consumers who want push-style
