@@ -297,6 +297,31 @@ against.
   no extra Redis trip. Pinned by
   `TestRateLimit_EmitsXRateLimitResetHeader`.
 
+- **Cold-path 8-second response ceiling on every aggregation
+  endpoint** (#1082, #1099-#1106). Each handler now wraps its
+  reader call in `context.WithTimeout(r.Context(), 8*time.Second)`;
+  on deadline the response is `503 application/problem+json` with a
+  per-endpoint `type=...-timeout` URL pointing at the runbook
+  hierarchy. Previously a cold-cache hypertable scan could hold the
+  request open until the upstream LB cut it off (no body, no error
+  shape), which falsely flagged the smoke timer and surprised
+  Healthchecks.io. Endpoints covered: `/v1/pools`, `/v1/markets`,
+  `/v1/sources?include=stats`, `/v1/coins`, `/v1/chart`,
+  `/v1/history` (+ `/since-inception`), `/v1/oracle/latest`,
+  `/v1/oracle/streams`, `/v1/lending/pools`, `/v1/issuers`,
+  `/v1/issuers/{g_strkey}`. Steady-state behavior unchanged.
+- **`scripts/dev/r1-smoke.sh` per-request budget: 5s → 10s** (#1108).
+  Sits one second above the 8s server-side ceiling — a request that
+  crosses 10s wall-clock is genuinely hung (504-class), not just
+  scanning a cold partition for the first time today. The previous
+  5s default false-positived on cold-cache `/v1/markets?limit=5`
+  responses (typical 6-8s) and was filling Healthchecks.io with
+  spurious failures.
+- **`perf(api)`: prewarm `/v1/pools` + `/v1/markets` at 5/25/100/200
+  limits** (#1083). The API binary, after Postgres connectivity is
+  proven, fires four warm-up requests at server start so the first
+  user request after a deploy or pool-size shift doesn't pay the
+  cold-cache penalty. No behavior change for ongoing requests.
 - **`/v1/price` fiat-vs-fiat cross-rate fallback**: when both
   `asset` and `quote` are fiat (e.g. `asset=fiat:EUR&quote=fiat:USD`)
   and the Timescale + Redis VWAP paths both miss, the handler
