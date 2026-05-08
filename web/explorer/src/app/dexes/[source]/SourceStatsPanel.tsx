@@ -29,7 +29,13 @@ interface SourceStats {
  * is free of API dependence; users see "Loading…" briefly on
  * first paint, then the real numbers fill in.
  */
-export function SourceStatsPanel({ source }: { source: string }) {
+export function SourceStatsPanel({
+  source,
+  unitsLabel = 'pools',
+}: {
+  source: string;
+  unitsLabel?: string;
+}) {
   const { data } = useQuery<SourceStats | null>({
     queryKey: ['/v1/sources', 'stats+sparkline', source],
     queryFn: async () => {
@@ -61,7 +67,7 @@ export function SourceStatsPanel({ source }: { source: string }) {
           value={trades > 0 ? formatCompact(trades) : '—'}
         />
         <Stat
-          label="24h pools"
+          label={`24h ${unitsLabel}`}
           value={markets > 0 ? markets.toLocaleString() : '—'}
         />
       </div>
