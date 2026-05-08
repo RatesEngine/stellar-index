@@ -15,6 +15,16 @@ against.
 
 ## [Unreleased]
 
+### Added
+
+- **Divergence: Chainlink reference enabled by default on r1.** The
+  `[divergence.chainlink]` block is now baked into the
+  `archival-node` Ansible template with EUR/USD, GBP/USD, JPY/USD
+  AggregatorV3 mainnet feeds. Off-chain HTTP cross-check via
+  `eth.llamarpc.com` — does not contribute to VWAP. The divergence
+  refresher now reports `reference_count: 2` (coingecko +
+  chainlink) at start-up.
+
 ## [v0.5.0-rc.30] — 2026-05-08
 
 ### Added

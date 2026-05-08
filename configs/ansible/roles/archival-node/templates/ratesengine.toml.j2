@@ -113,3 +113,37 @@ allowed_origins = [
   "https://dashboard.ratesengine.net",
 ]
 auth_mode = "apikey_optional"
+
+# ──────────────────────────────────────────────────────────────────
+# Divergence cross-checks. These are reference-only sources — they
+# do NOT contribute to VWAP. Each tick the aggregator queries every
+# enabled reference and emits a `rates_divergence_*` metric. A
+# transient outage on any reference is treated as "unavailable this
+# run", not as a divergence signal.
+# ──────────────────────────────────────────────────────────────────
+
+[divergence.chainlink]
+# Chainlink mainnet AggregatorV3 feeds via HTTP-RPC. Public free
+# tier is fine — divergence runs at minute-scale, well under any
+# free-tier ratelimit. LlamaRPC is the default; Cloudflare and
+# Ankr are equivalent fallbacks.
+enabled = true
+rpc_url = "https://eth.llamarpc.com"
+
+  [divergence.chainlink.feeds]
+  # Pair string format mirrors canonical.Pair.String():
+  # "<base>/<quote>". Addresses sourced from Chainlink's mainnet
+  # registry — keep in sync with docs/discovery/oracles/chainlink.md
+  # if/when that doc is added. decimals defaults to 8.
+
+    [divergence.chainlink.feeds."fiat:EUR/fiat:USD"]
+    address = "0xb49f677943BC038e9857d61E7d053CaA2C1734C1"
+    decimals = 8
+
+    [divergence.chainlink.feeds."fiat:GBP/fiat:USD"]
+    address = "0x5c0Ab2d9b5a7ed9f470386e82BB36A3613cDd4b5"
+    decimals = 8
+
+    [divergence.chainlink.feeds."fiat:JPY/fiat:USD"]
+    address = "0xBcE206caE7f0ec07b545EddE332A47C2F75bbeb3"
+    decimals = 8
