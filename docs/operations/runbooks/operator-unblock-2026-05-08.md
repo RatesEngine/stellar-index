@@ -20,8 +20,16 @@
   trigger on `explorer-deploy.yml` is also Actions-runner-backed and
   hits the same cap.
 
-**Fix.** GitHub → Org Settings → Billing & plans → Actions usage →
-raise the spending limit (or wait for the next billing cycle).
+**Fix.** Direct URL:
+<https://github.com/organizations/RatesEngine/settings/billing/spending_limit>
+→ "GitHub Actions" → set new monthly limit. Or wait for the next
+billing cycle (usage resets on the org's billing date).
+
+The session that diagnosed this on 2026-05-08 was running ~30 PRs/h
+and consumed monthly minutes across release.yml + ci.yml. A
+spending limit increase of $10–20 typically restores immediate
+usage; if the org plan is a paid tier with included minutes, only
+that plan's overage limit needs the bump.
 
 **Verify.** `gh workflow run deploy.yml -f region=r1 -f version=v0.5.0-rc.34
 -f binaries=ratesengine-api` should now queue + succeed.
