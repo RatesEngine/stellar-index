@@ -1,9 +1,10 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 
 import { Panel } from '@/components/reveal';
+import { CurrencyCombobox } from '@/components/CurrencyCombobox';
 import { apiGet, asExample } from '@/api/client';
 
 interface CurrencyRow {
@@ -83,12 +84,24 @@ export function AssetConverter({
   // Available targets — featured first, then the rest if "show all"
   // is toggled. Filter against the forex snapshot so we don't list
   // tickers we can't actually convert.
-  const allTickers = (fx.data ?? []).map((c) => c.ticker).sort();
-  const tickerSet = new Set(allTickers);
-  tickerSet.add('USD');
-  const visibleTickers = showAll
-    ? Array.from(tickerSet).sort()
-    : FEATURED.filter((t) => tickerSet.has(t));
+  // Memoise the ticker set so its identity is stable across renders
+  // (otherwise the useEffect dependency tracker reruns on every render).
+  const tickerSet = useMemo(() => {
+    const s = new Set((fx.data ?? []).map((c) => c.ticker));
+    s.add('USD');
+    return s;
+  }, [fx.data]);
+
+  const allTickers = useMemo(() => Array.from(tickerSet).sort(), [tickerSet]);
+
+  // Once any currency outside the FEATURED set is picked
+  // (e.g. via the searchable combobox typing "ZAR"), promote to
+  // showAll mode so the combobox keeps the long-tail list visible.
+  useEffect(() => {
+    if (!showAll && tickerSet.has(target) && !FEATURED.includes(target)) {
+      setShowAll(true);
+    }
+  }, [target, showAll, tickerSet]);
 
   return (
     <Panel
@@ -110,12 +123,13 @@ export function AssetConverter({
               className="w-full bg-transparent text-2xl font-mono tabular-nums focus:outline-none"
             />
             {direction === 'fiat-to-asset' ? (
-              <CurrencySelect
+              <CurrencyCombobox
                 value={target}
-                onChange={setTarget}
-                tickers={visibleTickers}
-                onShowAll={() => setShowAll(true)}
-                showAll={showAll}
+                onChange={(v) => {
+                  setTarget(v);
+                  setShowAll(true);
+                }}
+                tickers={allTickers}
               />
             ) : (
               <span className="rounded bg-slate-100 px-1.5 py-0.5 font-mono text-xs uppercase tracking-wider text-slate-700 dark:bg-slate-800 dark:text-slate-300">
@@ -143,12 +157,13 @@ export function AssetConverter({
               {result != null ? formatResult(result) : '—'}
             </span>
             {direction === 'asset-to-fiat' ? (
-              <CurrencySelect
+              <CurrencyCombobox
                 value={target}
-                onChange={setTarget}
-                tickers={visibleTickers}
-                onShowAll={() => setShowAll(true)}
-                showAll={showAll}
+                onChange={(v) => {
+                  setTarget(v);
+                  setShowAll(true);
+                }}
+                tickers={allTickers}
               />
             ) : (
               <span className="rounded bg-slate-100 px-1.5 py-0.5 font-mono text-xs uppercase tracking-wider text-slate-700 dark:bg-slate-800 dark:text-slate-300">
@@ -174,40 +189,7 @@ export function AssetConverter({
   );
 }
 
-function CurrencySelect({
-  value,
-  onChange,
-  tickers,
-  onShowAll,
-  showAll,
-}: {
-  value: string;
-  onChange: (v: string) => void;
-  tickers: string[];
-  onShowAll: () => void;
-  showAll: boolean;
-}) {
-  return (
-    <select
-      value={value}
-      onChange={(e) => {
-        if (e.target.value === '__all') {
-          onShowAll();
-          return;
-        }
-        onChange(e.target.value);
-      }}
-      className="rounded bg-slate-100 px-1.5 py-0.5 font-mono text-xs uppercase tracking-wider text-slate-700 focus:outline-none dark:bg-slate-800 dark:text-slate-300"
-    >
-      {tickers.map((t) => (
-        <option key={t} value={t}>
-          {t}
-        </option>
-      ))}
-      {!showAll && <option value="__all">All currencies…</option>}
-    </select>
-  );
-}
+// (CurrencySelect replaced by the searchable @/components/CurrencyCombobox.)
 
 function formatResult(n: number): string {
   if (!Number.isFinite(n)) return '—';

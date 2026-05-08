@@ -15,6 +15,15 @@ against.
 
 ## [Unreleased]
 
+### Changed
+
+- **/assets/[slug] converter: searchable currency picker.**
+  Replaced the plain `<select>` with the same keyboard-friendly
+  combobox that backs /currencies/[ticker]'s converter — typing
+  a few letters narrows ~110 entries down to a manageable list.
+  Lifted the `CurrencyCombobox` into `@/components/CurrencyCombobox`
+  so both pages share one implementation.
+
 ### Performance
 
 - **Background prewarm goroutine** for the heaviest API caches.
