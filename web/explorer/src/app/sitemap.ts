@@ -97,10 +97,11 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     priority: 0.6,
   }));
 
-  const [assetSlugs, issuerKeys, currencyTickers] = await Promise.all([
+  const [assetSlugs, issuerKeys, currencyTickers, marketPairs] = await Promise.all([
     fetchCoinSlugs(),
     fetchIssuerKeys(),
     fetchCurrencyTickers(),
+    fetchMarketPairs(),
   ]);
   const assetPages: MetadataRoute.Sitemap = assetSlugs.map((slug) => ({
     url: `${SITE_URL}/assets/${slug}`,
@@ -144,6 +145,19 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     }
   }
 
+  // Per-pair detail pages. The route is /markets/{base}~{quote},
+  // URL-encoded once. We pre-render the top 100 by 24h volume at
+  // build time (see markets/[pair]/page.tsx); listing them in the
+  // sitemap surfaces the highest-traffic pairs to crawlers without
+  // exploding the file (every Stellar pair × 100s of issuers would
+  // be tens of thousands of URLs of mostly-empty content).
+  const marketPages: MetadataRoute.Sitemap = marketPairs.map((slug) => ({
+    url: `${SITE_URL}/markets/${encodeURIComponent(slug)}`,
+    lastModified: now,
+    changeFrequency: 'daily',
+    priority: 0.6,
+  }));
+
   return [
     ...staticPages,
     ...blogPages,
@@ -154,7 +168,24 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     ...assetPages,
     ...issuerPages,
     ...currencyPages,
+    ...marketPages,
   ];
+}
+
+async function fetchMarketPairs(): Promise<string[]> {
+  try {
+    const res = await fetch(
+      `${API_BASE_URL}/v1/markets?limit=100&order_by=volume_24h_usd_desc`,
+      { signal: AbortSignal.timeout(5_000) },
+    );
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const env = (await res.json()) as {
+      data: { base: string; quote: string }[];
+    };
+    return (env.data ?? []).map((m) => `${m.base}~${m.quote}`);
+  } catch {
+    return [];
+  }
 }
 
 async function fetchCurrencyTickers(): Promise<string[]> {
