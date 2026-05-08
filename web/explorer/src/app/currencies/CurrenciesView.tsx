@@ -227,7 +227,7 @@ export function CurrenciesView() {
               {filtered.map((r, i) => (
                 <tr
                   key={`${r.kind}-${r.slug}`}
-                  onClick={() => router.push(`/currencies/${r.slug}`)}
+                  onClick={() => router.push(detailHref(r))}
                   className="cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-900/40"
                 >
                   <Td>
@@ -360,6 +360,19 @@ function toFiatUnified(c: FiatRow): UnifiedRow {
 function nameFor(c: CryptoCoin): string {
   if (c.code === 'XLM' && (!c.issuer || c.issuer === '')) return 'Stellar Lumens';
   return c.code;
+}
+
+// detailHref routes a unified row to its kind-appropriate detail
+// page. Crypto rows go to /assets/{slug} (the existing crypto
+// detail page with chart, supply, issuer panel, markets); fiat
+// rows go to /currencies/{ticker} (the fiat detail with cross-rates
+// + converter + range-selectable history). The unified
+// /currencies/{slug} route that handles both is part of the phase 2
+// redesign — until then this prevents the 404 a unified-listing
+// click would otherwise produce on a crypto row.
+function detailHref(r: UnifiedRow): string {
+  if (r.kind === 'crypto') return `/assets/${encodeURIComponent(r.slug)}`;
+  return `/currencies/${encodeURIComponent(r.slug)}`;
 }
 
 function compareRows(a: UnifiedRow, b: UnifiedRow, key: SortKey, dir: 'asc' | 'desc'): number {
