@@ -27,9 +27,14 @@ export async function generateMetadata({
   const { slug } = await params;
   const doc = loadOperationsDoc(slug);
   if (!doc) return { title: 'Operations doc not found' };
+  const canonical = `https://ratesengine.net/research/operations/${slug}`;
+  const title = `${doc.title} — Rates Engine operations`;
   return {
-    title: `${doc.title} — Rates Engine operations`,
+    title,
     description: doc.description,
+    alternates: { canonical },
+    openGraph: { title, description: doc.description, url: canonical, type: 'article' },
+    twitter: { card: 'summary_large_image', title, description: doc.description },
   };
 }
 

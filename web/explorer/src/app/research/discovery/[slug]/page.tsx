@@ -25,9 +25,14 @@ export async function generateMetadata({
   const { slug } = await params;
   const doc = loadDiscoveryDoc(slug);
   if (!doc) return { title: 'Discovery doc not found' };
+  const canonical = `https://ratesengine.net/research/discovery/${slug}`;
+  const title = `${doc.title} — Rates Engine integration audit`;
   return {
-    title: `${doc.title} — Rates Engine integration audit`,
+    title,
     description: doc.description,
+    alternates: { canonical },
+    openGraph: { title, description: doc.description, url: canonical, type: 'article' },
+    twitter: { card: 'summary_large_image', title, description: doc.description },
   };
 }
 

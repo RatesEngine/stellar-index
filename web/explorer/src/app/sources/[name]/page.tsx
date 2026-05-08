@@ -69,10 +69,14 @@ export async function generateMetadata({
 }): Promise<Metadata> {
   const { name } = await params;
   const canonical = `https://ratesengine.net/sources/${encodeURIComponent(name)}`;
+  const title = `${name} — source detail · Rates Engine`;
+  const description = `Per-venue source metadata, ingest cursor, and contribution profile for ${name}.`;
   return {
-    title: `${name} — source detail · Rates Engine`,
-    description: `Per-venue source metadata, ingest cursor, and contribution profile for ${name}.`,
+    title,
+    description,
     alternates: { canonical },
+    openGraph: { title, description, url: canonical, type: 'website' },
+    twitter: { card: 'summary_large_image', title, description },
   };
 }
 

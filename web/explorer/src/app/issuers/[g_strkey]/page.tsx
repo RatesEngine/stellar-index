@@ -110,10 +110,14 @@ export async function generateMetadata({
   const { g_strkey } = await params;
   const short = `${g_strkey.slice(0, 8)}…${g_strkey.slice(-4)}`;
   const canonical = `https://ratesengine.net/issuers/${g_strkey}`;
+  const title = `Issuer ${short} — Stellar`;
+  const description = `Identity, auth flags, and issued assets for Stellar issuer ${short}.`;
   return {
-    title: `Issuer ${short} — Stellar`,
-    description: `Identity, auth flags, and issued assets for Stellar issuer ${short}.`,
+    title,
+    description,
     alternates: { canonical },
+    openGraph: { title, description, url: canonical, type: 'website' },
+    twitter: { card: 'summary_large_image', title, description },
   };
 }
 

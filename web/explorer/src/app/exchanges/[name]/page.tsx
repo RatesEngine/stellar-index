@@ -60,10 +60,14 @@ export async function generateMetadata({
   const info = CEX_INFO[name];
   if (!info) return { title: 'Exchange not found' };
   const canonical = `https://ratesengine.net/exchanges/${encodeURIComponent(name)}`;
+  const title = `${info.name} — every pair, live`;
+  const description = `All ${info.name} pairs observed in the last 14 days, with per-pair 24h trade count + last trade. Source: /v1/markets?source=${name}.`;
   return {
-    title: `${info.name} — every pair, live`,
-    description: `All ${info.name} pairs observed in the last 14 days, with per-pair 24h trade count + last trade. Source: /v1/markets?source=${name}.`,
+    title,
+    description,
     alternates: { canonical },
+    openGraph: { title, description, url: canonical, type: 'website' },
+    twitter: { card: 'summary_large_image', title, description },
   };
 }
 

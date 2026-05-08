@@ -127,10 +127,14 @@ export async function generateMetadata({
   const { pool } = await params;
   const label = BLEND_POOL_LABELS[pool]?.name ?? `${pool.slice(0, 6)}…${pool.slice(-6)}`;
   const canonical = `https://ratesengine.net/lending/${pool}`;
+  const title = `${label} — Blend lending pool`;
+  const description = `Auction activity, user count, and contract metadata for the Blend pool at ${pool}.`;
   return {
-    title: `${label} — Blend lending pool`,
-    description: `Auction activity, user count, and contract metadata for the Blend pool at ${pool}.`,
+    title,
+    description,
     alternates: { canonical },
+    openGraph: { title, description, url: canonical, type: 'website' },
+    twitter: { card: 'summary_large_image', title, description },
   };
 }
 

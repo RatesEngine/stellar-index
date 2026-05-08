@@ -27,9 +27,15 @@ export async function generateMetadata({
   const { id } = await params;
   const adr = loadADR(id);
   if (!adr) return { title: 'ADR not found' };
+  const canonical = `https://ratesengine.net/research/adr/${adr.id}`;
+  const title = `ADR-${adr.id}: ${adr.title} — Rates Engine research`;
+  const description = `Architecture decision record ${adr.id} (${adr.status}, ${adr.date}).`;
   return {
-    title: `ADR-${adr.id}: ${adr.title} — Rates Engine research`,
-    description: `Architecture decision record ${adr.id} (${adr.status}, ${adr.date}).`,
+    title,
+    description,
+    alternates: { canonical },
+    openGraph: { title, description, url: canonical, type: 'article' },
+    twitter: { card: 'summary_large_image', title, description },
   };
 }
 

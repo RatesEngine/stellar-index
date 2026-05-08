@@ -72,10 +72,14 @@ export async function generateMetadata({
   const info = DEX_INFO[source];
   if (!info) return { title: 'DEX not found' };
   const canonical = `https://ratesengine.net/dexes/${encodeURIComponent(source)}`;
+  const title = `${info.name} — every pool, live`;
+  const description = `All ${info.name} pools observed in the last 14 days, with per-pool 24h trade count + last trade. Source: /v1/markets?source=${source}.`;
   return {
-    title: `${info.name} — every pool, live`,
-    description: `All ${info.name} pools observed in the last 14 days, with per-pool 24h trade count + last trade. Source: /v1/markets?source=${source}.`,
+    title,
+    description,
     alternates: { canonical },
+    openGraph: { title, description, url: canonical, type: 'website' },
+    twitter: { card: 'summary_large_image', title, description },
   };
 }
 

@@ -29,9 +29,14 @@ export async function generateMetadata({
   const { slug } = await params;
   const doc = loadArchitectureDoc(slug);
   if (!doc) return { title: 'Architecture doc not found' };
+  const canonical = `https://ratesengine.net/research/architecture/${slug}`;
+  const title = `${doc.title} — Rates Engine architecture`;
   return {
-    title: `${doc.title} — Rates Engine architecture`,
+    title,
     description: doc.description,
+    alternates: { canonical },
+    openGraph: { title, description: doc.description, url: canonical, type: 'article' },
+    twitter: { card: 'summary_large_image', title, description: doc.description },
   };
 }
 
