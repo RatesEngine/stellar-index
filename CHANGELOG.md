@@ -17,6 +17,13 @@ against.
 
 ### Added
 
+- **Explorer**: FAQPage + BreadcrumbList JSON-LD structured data
+  on `/currencies/{ticker}` static pages — same FAQ copy that
+  renders in the visible panel (now shared via
+  `currencies/[ticker]/faq.ts`) is also emitted as
+  `<script type="application/ld+json">` in the build-time HTML so
+  Google can pick up rich snippets for currency-pair queries.
+  No new route; the FAQ stays embedded on the detail page.
 - **Explorer**: Range-stats grid on `/currencies/{ticker}` history
   panel — surfaces range high/low (with date), pct from high
   (`days ago`), pct from low, and average absolute daily move %

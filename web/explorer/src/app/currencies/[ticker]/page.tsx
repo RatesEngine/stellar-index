@@ -2,7 +2,8 @@ import type { Metadata } from 'next';
 import { notFound } from 'next/navigation';
 
 import { CurrencyDetailView } from './CurrencyDetailView';
-import { allFriendlySlugs, resolveFiatSlug } from './slugs';
+import { faqFor, nameFor } from './faq';
+import { allFriendlySlugs, friendlySlugFor, resolveFiatSlug } from './slugs';
 
 // Fallback list when the build-time fetch fails. Covers the
 // majors so /currencies/EUR etc. always pre-renders even on a
@@ -72,5 +73,49 @@ export default async function CurrencyDetailPage({ params }: { params: Params })
   const { ticker } = await params;
   const resolved = resolveFiatSlug(ticker);
   if (!resolved) notFound();
-  return <CurrencyDetailView ticker={resolved} />;
+  const name = nameFor(resolved);
+  const canonical = `https://ratesengine.net/currencies/${friendlySlugFor(resolved)}`;
+  const faqLd = {
+    '@context': 'https://schema.org',
+    '@type': 'FAQPage',
+    mainEntity: faqFor(resolved, name).map((entry) => ({
+      '@type': 'Question',
+      name: entry.q,
+      acceptedAnswer: {
+        '@type': 'Answer',
+        text: entry.a,
+      },
+    })),
+  };
+  const breadcrumbLd = {
+    '@context': 'https://schema.org',
+    '@type': 'BreadcrumbList',
+    itemListElement: [
+      {
+        '@type': 'ListItem',
+        position: 1,
+        name: 'Currencies',
+        item: 'https://ratesengine.net/currencies',
+      },
+      {
+        '@type': 'ListItem',
+        position: 2,
+        name: `${resolved} — ${name}`,
+        item: canonical,
+      },
+    ],
+  };
+  return (
+    <>
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(faqLd) }}
+      />
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(breadcrumbLd) }}
+      />
+      <CurrencyDetailView ticker={resolved} />
+    </>
+  );
 }
