@@ -31,6 +31,12 @@ against.
   the same four findings.
 ### Added
 
+- **Explorer**: cross-rates table on `/currencies/{ticker}`
+  becomes sortable + filterable when "Show all" is expanded.
+  Click a column header to sort by ticker / direct rate /
+  inverse rate (with `▲▼` indicator + `aria-sort`); a small
+  filter input above the table narrows down to a substring
+  match. Featured-only view (default) keeps its terse render.
 - **Test infrastructure**: `TestOpenAPIExamplesParseAsCanonicalAssets`
   in `internal/api/v1/openapi_examples_test.go` walks the OpenAPI
   spec and asserts every documented `asset` / `asset_id` /
