@@ -44,7 +44,10 @@ export function AssetLabel({
     return <span className="font-medium">XLM-native</span>;
   }
   // SAC contract — try to resolve via the operator-config map.
-  if (/^C[A-Z0-9]{55}$/.test(canonical)) {
+  // Stellar contract IDs are 56 chars (C + 55 alphanumerics);
+  // accept upper- or lower-case to be defensive in case a decoder
+  // emits a non-canonical-cased fingerprint.
+  if (/^C[A-Za-z0-9]{55}$/.test(canonical)) {
     // The native XLM SAC is intentionally absent from the operator
     // wrapper map (configs/ansible/.../ratesengine.toml.j2 — it isn't
     // a wrapper of a classic asset and the on-chain usd_volume
@@ -94,6 +97,16 @@ export function AssetLabel({
   // Classic credit asset: <CODE>-<G-issuer>.
   const dashIx = canonical.indexOf('-');
   if (dashIx === -1) {
+    // Unstructured fallback — anything longer than a sensible asset
+    // code gets truncated with the full string in the tooltip so
+    // table rows stay readable. Shorter strings render verbatim.
+    if (canonical.length > 16) {
+      return (
+        <span className="font-mono text-[11px]" title={canonical}>
+          {canonical.slice(0, 8)}…{canonical.slice(-4)}
+        </span>
+      );
+    }
     return <span className="font-mono text-xs">{canonical}</span>;
   }
   const code = canonical.slice(0, dashIx);

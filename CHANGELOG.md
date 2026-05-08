@@ -15,6 +15,19 @@ against.
 
 ## [Unreleased]
 
+### Fixed
+
+- **/dexes detail link now points at /dexes/{source}** instead of
+  /sources/{source}; the latter route exists but rendered the
+  source-registry view, not the per-DEX detail page.
+- **AssetLabel: case-insensitive C-strkey match** + truncates any
+  unstructured asset string longer than 16 chars with the full
+  value in the tooltip. Stops the long contract IDs that were
+  bleeding through on /dexes pool rows when the SAC wrapper map
+  didn't resolve them.
+- **View Code button**: drop the literal `</>` text next to the
+  Code2 SVG icon — was rendering both side-by-side site-wide.
+
 ## [v0.5.0-rc.36] — 2026-05-08
 
 ### Performance
