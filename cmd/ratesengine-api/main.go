@@ -505,7 +505,8 @@ func run(cfgPath string, dryRun bool) error { //nolint:gocognit,funlen,gocyclo /
 	// restart now hits a warm cache.
 	cachedSourcesStats := v1.NewCachedSourcesStatsReader(store, 60*time.Second)
 	cachedMarketsReader := v1.NewCachedMarketsReader(marketsReader, 30*time.Second)
-	go prewarmCaches(rootCtx, logger.With("component", "prewarm"), cachedSourcesStats, cachedMarketsReader)
+	cachedCoinsReader := v1.NewCachedCoinsReader(store, 30*time.Second)
+	go prewarmCaches(rootCtx, logger.With("component", "prewarm"), cachedSourcesStats, cachedMarketsReader, cachedCoinsReader)
 
 	apiSrv := v1.New(v1.Options{
 		Logger:      logger.With("component", "api"),
@@ -531,7 +532,7 @@ func run(cfgPath string, dryRun bool) error { //nolint:gocognit,funlen,gocyclo /
 		Volume:        storeVolumeReader{s: store},
 		Change24h:     storeChange24hReader{s: store},
 		ChangeSummary: store,
-		Coins:         store,
+		Coins:         cachedCoinsReader,
 		Issuers:       store,
 		Cursors:       store,
 		NetworkStats:  store,
@@ -1988,9 +1989,10 @@ func prewarmCaches(
 	logger *slog.Logger,
 	stats *v1.CachedSourcesStatsReader,
 	markets *v1.CachedMarketsReader,
+	coins *v1.CachedCoinsReader,
 ) {
 	const cadence = 25 * time.Second
-	prewarmOnce(ctx, logger, stats, markets)
+	prewarmOnce(ctx, logger, stats, markets, coins)
 	tick := time.NewTicker(cadence)
 	defer tick.Stop()
 	for {
@@ -1998,7 +2000,7 @@ func prewarmCaches(
 		case <-ctx.Done():
 			return
 		case <-tick.C:
-			prewarmOnce(ctx, logger, stats, markets)
+			prewarmOnce(ctx, logger, stats, markets, coins)
 		}
 	}
 }
@@ -2008,6 +2010,7 @@ func prewarmOnce(
 	logger *slog.Logger,
 	stats *v1.CachedSourcesStatsReader,
 	markets *v1.CachedMarketsReader,
+	coins *v1.CachedCoinsReader,
 ) {
 	// Per-call deadlines stop a slow query from stalling the whole
 	// cycle (a missed cycle is fine — the user's request can still
@@ -2031,6 +2034,14 @@ func prewarmOnce(
 	}
 	if _, _, err := markets.AllPools(mkCtx, timescale.PoolsFilter{}, "", 25, 0); err != nil {
 		logger.Debug("prewarm pools failed", "err", err)
+	}
+
+	// /v1/coins?limit=200&include=sparkline backs the unified
+	// currencies listing — single most-trafficked coins read.
+	coinsCtx, coinsCancel := context.WithTimeout(ctx, 20*time.Second)
+	defer coinsCancel()
+	if _, err := coins.ListCoinsExt(coinsCtx, timescale.ListCoinsOptions{Limit: 200}); err != nil {
+		logger.Debug("prewarm coins listing failed", "err", err)
 	}
 }
 
