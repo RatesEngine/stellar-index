@@ -25,12 +25,28 @@ type scamFlag struct {
 
 // scamIssuers is the curated set. Keep alphabetised by G-strkey.
 var scamIssuers = map[string]scamFlag{
+	// stellar.expert directory: name="Serial Minter / Deceptive
+	// Assets", tags=["malicious","unsafe"]. Verified 2026-05-08.
+	"GBLLDENR2WOOI5VV2EY2WIN6P3H2DJBDB6G45QM5PAPROQ4TFGHFBLCK": {
+		Reason: "Serial Minter / Deceptive Assets (stellar.expert)",
+	},
+	// stellar.expert directory: name="Deprecated",
+	// tags=["unsafe"]. Verified 2026-05-08.
+	"GBNLJIYH34UWO5YZFA3A3HD3N76R6DOI33N4JONUOHEEYZYCAYTEJ5AK": {
+		Reason: "Deprecated issuer (stellar.expert)",
+	},
 	// stellar.expert directory: name="SCAM Counterfeiter",
 	// tags=["malicious","unsafe"]. ~4.8M observations on prod;
 	// the trailing "GUARD" vanity suggests intentional brand-
 	// confusion with Hashguard. Verified 2026-05-08.
 	"GBYBVWOOVC4EJVRIF4HMWG5B7POLCS7JRPY5KYR3BCLEK24IJQOGUARD": {
 		Reason: "SCAM Counterfeiter (stellar.expert)",
+	},
+	// stellar.expert directory: name="serial Scam Counterfeiter",
+	// tags=["malicious"]. 472 issued asset codes, all spam-style
+	// counterfeits. Verified 2026-05-08.
+	"GDEUQ2MX3YXMITFOTC3CO3GW5V3XE3IVG7JKLZZAOZ7WFYIN256INDUS": {
+		Reason: "Serial Scam Counterfeiter (stellar.expert)",
 	},
 }
 

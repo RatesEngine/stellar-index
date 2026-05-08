@@ -15,6 +15,16 @@ against.
 
 ## [Unreleased]
 
+### Added
+
+- **Expanded `known_scams.go` from 1 to 4 entries.** Sweep against
+  the top observation-count uncurated issuers via stellar.expert's
+  directory yielded three more flagged G-strkeys: a 472-asset
+  serial counterfeiter (`GDEUQ2…INDUS`), "Serial Minter / Deceptive
+  Assets" (`GBLLDE…FBLCK`), and a deprecated issuer (`GBNLJI…J5AK`).
+  All four now render the red SCAM badge on /issuers and the full
+  warning banner on /issuers/[g_strkey].
+
 ## [v0.5.0-rc.32] — 2026-05-08
 
 ### Added
