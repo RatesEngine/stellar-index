@@ -15,6 +15,25 @@ against.
 
 ## [Unreleased]
 
+## [v0.5.0-rc.36] — 2026-05-08
+
+### Performance
+
+- **Cache /v1/markets and /v1/pools** — same TTL+single-flight
+  pattern as the rc.35 SourcesStatsReader cache. Drops
+  /v1/markets from ~6.2s to <1ms post-warmup; /v1/pools from
+  ~10.6s to <1ms. With this, the four user-page endpoints that
+  blew the <1s budget (sources stats, sources sparkline, markets
+  list, pools list) all return instantly from cache.
+
+### Fixed
+
+- **Explorer /convert pages**: scaled back from full N×N
+  (~12k pages) to top-20 × all-110 hub-and-spoke (~4,360 pages).
+  N×N busted CF Pages' 20,000-file/deploy ceiling so the
+  explorer-deploy was failing on rc.34. The hub-and-spoke
+  captures >99% of organic forex search volume.
+
 ## [v0.5.0-rc.35] — 2026-05-08
 
 ### Added
