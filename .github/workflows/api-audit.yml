@@ -1,0 +1,50 @@
+name: api-audit
+
+# Smoke-audits every documented public /v1/* endpoint against
+# api.ratesengine.net using the same example values published in
+# the OpenAPI spec. Catches the documentation-vs-implementation
+# drift class reported 2026-05-08 (Scalar default test requests
+# returning 400 because the published examples used short asset
+# symbols against handlers that strict-validate canonical IDs).
+#
+# Triggers:
+#   - push to main: makes drift visible the moment a regressing
+#     openapi change lands. Cheap (single bash + curl invocation,
+#     completes in <30 s).
+#   - manual workflow_dispatch with optional API_BASE_URL override
+#     so an operator can audit a specific deployment (R1 internal
+#     IP, staging, a PR preview, etc.).
+#
+# Schedule deliberately omitted to stay cheap on the GH Actions
+# budget (Task #50); the script is also published as
+# scripts/dev/audit-public-api.sh for cron / Healthchecks.io use.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'openapi/**'
+      - 'internal/api/**'
+      - 'scripts/dev/audit-public-api.sh'
+      - '.github/workflows/api-audit.yml'
+  workflow_dispatch:
+    inputs:
+      api_base_url:
+        description: 'Override target (default https://api.ratesengine.net)'
+        required: false
+        default: 'https://api.ratesengine.net'
+
+permissions:
+  contents: read
+
+jobs:
+  audit:
+    name: audit public /v1/* endpoints
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v6
+      - name: Run audit script
+        env:
+          API_BASE_URL: ${{ github.event.inputs.api_base_url || 'https://api.ratesengine.net' }}
+        run: bash scripts/dev/audit-public-api.sh
