@@ -477,13 +477,17 @@ func startExternalConnectors( //nolint:gocognit,gocyclo,funlen // dispatch-heavy
 
 	if cfg.CoinGecko.Enabled {
 		p := externalcoingecko.NewPoller()
+		if cfg.CoinGecko.PollInterval > 0 {
+			p.Interval = cfg.CoinGecko.PollInterval
+		}
 		pollers = append(pollers, external.PollerSpec{
 			Poller: p,
 			Pairs:  aggregatorPairs,
 		})
 		logger.Info("external poller enabled",
 			"source", externalcoingecko.SourceName,
-			"pairs", len(aggregatorPairs))
+			"pairs", len(aggregatorPairs),
+			"poll_interval", p.PollInterval())
 		enabled = append(enabled, externalcoingecko.SourceName)
 	}
 

@@ -17,6 +17,13 @@ against.
 
 ### Added
 
+- **Configurable per-venue `poll_interval` for external connectors.**
+  `ExternalVenueConfig` gains a `poll_interval` field (Duration, empty
+  defaults to the connector's built-in cadence). Bake
+  `[external.coingecko] poll_interval = "120s"` into the archival-
+  node Ansible template to silence the minute-cadence "http 429:
+  Throttled" loop seen in indexer logs against CoinGecko's free tier.
+
 - **/aggregators page now lists mainnet contract addresses** for
   Soroswap (router + pair factory) and DeFindex (factory + USDC /
   EURC / XLM autocompound vaults). Each row deep-links to

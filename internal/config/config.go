@@ -219,6 +219,12 @@ type ExternalConfig struct {
 // [ExchangeRatesApiVenueConfig]) that embeds the same Enabled field.
 type ExternalVenueConfig struct {
 	Enabled bool `toml:"enabled" doc:"Whether this connector runs. Off by default — no network egress until operator opts in." default:"false"`
+	// PollInterval overrides the connector's built-in default poll
+	// cadence. Empty/zero falls back to whatever the connector
+	// itself defines (e.g. coingecko's 60s, binance's 5s). Useful
+	// when a free-tier connector hits 429s — bump to 120s+ to
+	// halve the request rate.
+	PollInterval time.Duration `toml:"poll_interval" doc:"Override the connector's built-in default poll cadence (e.g. \"120s\"). Empty/zero uses the connector default." default:""`
 }
 
 // ExchangeRatesApiVenueConfig extends the common toggle with the
