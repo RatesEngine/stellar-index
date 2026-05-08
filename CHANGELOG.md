@@ -15,6 +15,20 @@ against.
 
 ## [Unreleased]
 
+### Fixed
+
+- **Explorer: render the native XLM SAC as "XLM" on Soroban DEX pool
+  rows.** The Aquarius / Soroswap / Phoenix / Comet pools that emit
+  `CAS3J7GYLGXMF6TDJBBYYSE3HQ6BBSMLNUQ34T6TZMYMW2EVH34XOWMA` (native
+  XLM's SAC) as base/quote previously rendered as a truncated SAC
+  fingerprint because that contract is intentionally absent from the
+  operator wrapper map (it isn't a *wrapper* of a classic asset — it
+  is the SAC for native XLM itself, which the on-chain usd_volume
+  validator rejects mapping to "native"). `AssetLabel` now hardcodes
+  the well-known C-strkey to render "XLM / SAC" directly, ahead of
+  the wrapper-map lookup. Same display as the resolved-classic SAC
+  rows.
+
 ## [v0.5.0-rc.31] — 2026-05-08
 
 ### Fixed

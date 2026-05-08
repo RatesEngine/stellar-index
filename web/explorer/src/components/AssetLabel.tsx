@@ -45,6 +45,22 @@ export function AssetLabel({
   }
   // SAC contract — try to resolve via the operator-config map.
   if (/^C[A-Z0-9]{55}$/.test(canonical)) {
+    // The native XLM SAC is intentionally absent from the operator
+    // wrapper map (configs/ansible/.../ratesengine.toml.j2 — it isn't
+    // a wrapper of a classic asset and the on-chain usd_volume
+    // validator rejects mapping it). Hardcode the well-known C-strkey
+    // here so Soroban DEX rows that emit XLM as base/quote render
+    // "XLM" instead of a truncated SAC fingerprint.
+    if (canonical === 'CAS3J7GYLGXMF6TDJBBYYSE3HQ6BBSMLNUQ34T6TZMYMW2EVH34XOWMA') {
+      return (
+        <div>
+          <div className="font-medium">XLM</div>
+          <div className="text-[10px] uppercase tracking-wide text-slate-500">
+            SAC
+          </div>
+        </div>
+      );
+    }
     const resolved = sacMap?.[canonical];
     if (resolved === 'native') {
       return (
