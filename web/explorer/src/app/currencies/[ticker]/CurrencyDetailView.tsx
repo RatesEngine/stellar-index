@@ -9,6 +9,7 @@ import { ArrowLeft } from 'lucide-react';
 import { Panel } from '@/components/reveal';
 import { CurrencyCombobox } from '@/components/CurrencyCombobox';
 import { apiGet, asExample } from '@/api/client';
+import { faqFor } from './faq';
 
 // Lightweight-charts (~155 KB) is only needed once the user is on a
 // per-currency page — lazy-load so the listing → detail nav still
@@ -686,27 +687,9 @@ XLM has a fixed maximum supply of ~50B; the Stellar Development Foundation perio
 
 // CURATED_FAQ — common questions surfaced per page. Generic
 // fallback covers tickers without curated entries.
-function faqFor(ticker: string, name: string): { q: string; a: string }[] {
-  const generic = [
-    {
-      q: `What is ${ticker}?`,
-      a: `${ticker} is the ISO 4217 currency code for ${name}. Rates Engine quotes its rate against USD via the Massive (Polygon.io) forex feed, refreshed hourly with daily-grain data sourced from major reference series.`,
-    },
-    {
-      q: `How is the rate calculated?`,
-      a: `We pull the upstream's grouped-daily snapshot once an hour and surface its USD-base rate verbatim. The "1 USD = N units" form is canonical; the "1 unit = $X" inverse is computed at display time. No internal smoothing or aggregation is applied to the fiat feed — the value you see is what the upstream published.`,
-    },
-    {
-      q: `What is circulating supply for a fiat currency?`,
-      a: `For fiat we use the central bank's broadest commonly-published monetary aggregate (typically M2). Where that's unavailable we fall back to monetary base or the issuer's own circulation declaration. Sourced from the curated CSV in internal/sources/forex/circulation_data.csv; not every currency has a recent series.`,
-    },
-    {
-      q: `How often does the rate update?`,
-      a: `Hourly. The forex worker refreshes from the upstream every 60 minutes; persistent fx_quotes hypertable rows are upserted on the same cadence. The detail page's "Source published" timestamp shows the upstream's own publish date.`,
-    },
-  ];
-  return generic;
-}
+// faqFor is now sourced from ./faq so the page-level server
+// component can emit FAQPage JSON-LD structured data alongside
+// the visible panel using identical copy.
 
 function AboutPanel({ detail }: { detail: CurrencyDetail }) {
   const text = CURATED_ABOUT[detail.ticker];
