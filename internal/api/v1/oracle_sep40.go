@@ -70,11 +70,24 @@ func (s *Server) handleOracleLastPrice(w http.ResponseWriter, r *http.Request) {
 
 	snapshot, sources, stale, err := reader.LatestPrice(r.Context(), asset, defaultPriceQuote)
 	if errors.Is(err, ErrPriceNotFound) {
-		writeProblem(w, r,
-			"https://api.ratesengine.net/errors/price-not-found",
-			"No price data for asset", http.StatusNotFound,
-			"no observation for "+asset.String())
-		return
+		// Same Redis VWAP fallback as /v1/price (price.go) — covers
+		// stablecoin-proxy rewrites (XLM/fiat:USD synthesised from
+		// XLM/USDC-G…) + triangulated chains. Without this, SEP-40
+		// `lastprice(native)` 404s in steady state because
+		// prices_1m has no literal native/fiat:USD bucket, while
+		// /v1/price?asset=native&quote=fiat:USD succeeds via the
+		// same fallback. Caught by the 2026-05-08 prod audit.
+		var ok bool
+		snapshot, sources, _, ok = s.tryRedisVWAPFallback(r.Context(), asset, defaultPriceQuote)
+		stale = false
+		if !ok {
+			writeProblem(w, r,
+				"https://api.ratesengine.net/errors/price-not-found",
+				"No price data for asset", http.StatusNotFound,
+				"no observation for "+asset.String())
+			return
+		}
+		err = nil
 	}
 	if err != nil {
 		if clientAborted(r, err) {

@@ -29,9 +29,27 @@ against.
   `govulncheck + gitleaks` job goes green for every subsequent
   PR; previously every PR today (#1066–#1073) failed it with
   the same four findings.
+### Added
+
+- **Explorer**: "Download CSV" button on the
+  `/currencies/{ticker}` history panel. Builds an RFC 4180 CSV
+  from the already-loaded series (no extra fetch) and triggers
+  a browser download via a Blob URL. Filename is
+  `ratesengine-{TICKER}-USD-{range}.csv`; columns are
+  `date, 1_USD_in_TICKER, 1_TICKER_in_USD`.
 
 ### Fixed
 
+- **`/v1/oracle/lastprice`**: now consults the same
+  TriangulatedPriceLooker fallback as `/v1/price` when prices_1m
+  has no row for the requested pair. Pre-fix, SEP-40
+  `lastprice(native)` 404'd in steady state because XLM trades
+  against USDC (not direct USD), and the aggregator's
+  stablecoin-proxy rewrite lives only in the Redis VWAP cache —
+  while `/v1/price?asset=native&quote=fiat:USD` returned a value
+  via that same cache. Caught by the 2026-05-08 prod audit; new
+  unit test `TestOracleLastPrice_RedisVWAPFallback` covers the
+  fallback path so the asymmetry can't regress.
 - **Docs (OpenAPI)**: every public-tier `/v1/*` endpoint's
   documented default test request now resolves to a live 200 in
   the Scalar docs UI. Previously many examples used short

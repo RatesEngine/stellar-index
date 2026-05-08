@@ -76,3 +76,21 @@ description = "Explorer issuer-detail page — embeds Circle USDC issuer's publi
 paths = [
   '''web/explorer/src/app/issuers/\[g_strkey\]/page\.tsx''',
 ]
+
+[[rules.allowlists]]
+description = "Explorer aggregators page — hardcoded contract IDs for Soroswap/Phoenix/Aquarius/Comet/DefIndex routers, factories, and autocompound vaults. These are deterministic public on-chain entries — Soroban contract IDs are derived from the hash of the deployer + WASM, NOT credentials. Used to label rows in the aggregators listing without a per-network registry roundtrip."
+paths = [
+  '''web/explorer/src/app/aggregators/page\.tsx''',
+]
+
+[[rules.allowlists]]
+description = "Generated Redocly-format spec mirror — `make docs-api` regenerates this from openapi/rates-engine.v1.yaml verbatim, so any allowlist on the source yaml must also cover the mirror. Contains the same OpenAPI example values (canonical asset_ids, signup/dashboard key shapes) the source already declares."
+paths = [
+  '''docs/reference/api/rates-engine\.v1\.yaml''',
+]
+
+[[rules.allowlists]]
+description = "Historical web/showcase tree — gitleaks scans full repo history. The web/showcase directory was renamed to web/explorer (task #19); past commits contain the old path with the same OpenAPI-derived TS bindings that web/explorer/src/api/types.ts has today (already allowlisted). Allowlist by path so historical scans pass."
+paths = [
+  '''web/showcase/src/api/types\.ts''',
+]
