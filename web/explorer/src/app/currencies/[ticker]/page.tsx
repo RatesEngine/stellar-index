@@ -65,8 +65,16 @@ export async function generateMetadata({ params }: { params: Params }): Promise<
   }
   const name = nameFor(resolved);
   const canonical = `https://ratesengine.net/currencies/${friendlySlugFor(resolved)}`;
-  const title = `${resolved} (${name}) — live USD rate + cross-rates`;
-  const description = `Live ${name} (${resolved}) forex rate against USD, currency converter, and cross-rates against every other currency we track. Sourced from Massive (Polygon.io); refreshed hourly. Includes 7d / 30d / 90d / 1y / 5y / 10y history and CSV export.`;
+  // USD vs USD is always 1.0 by definition — frame the page as a
+  // cross-rates hub for the base currency rather than as a USD
+  // exchange-rate page (which would read as "USD rate against USD").
+  const isUSD = resolved === 'USD';
+  const title = isUSD
+    ? `${resolved} (${name}) — cross-rates against every currency`
+    : `${resolved} (${name}) — live USD rate + cross-rates`;
+  const description = isUSD
+    ? `Live cross-rates from US Dollar (USD) into every other currency we track, currency converter, and 7d / 30d / 90d / 1y / 5y / 10y history. Sourced from Massive (Polygon.io); refreshed hourly. CSV export available.`
+    : `Live ${name} (${resolved}) forex rate against USD, currency converter, and cross-rates against every other currency we track. Sourced from Massive (Polygon.io); refreshed hourly. Includes 7d / 30d / 90d / 1y / 5y / 10y history and CSV export.`;
   return {
     title,
     description,
