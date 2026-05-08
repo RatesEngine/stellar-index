@@ -107,9 +107,11 @@ export function CurrencyDetailView({ ticker }: { ticker: string }) {
 
       {detail && (
         <>
-          <HistoryPanel detail={detail} />
           <Converter detail={detail} />
+          <HistoryPanel detail={detail} />
           <CrossRatesTable detail={detail} />
+          <AboutPanel detail={detail} />
+          <FAQPanel detail={detail} />
         </>
       )}
     </div>
@@ -567,3 +569,121 @@ function formatDate(iso: string): string {
 }
 
 // (Local CurrencyCombobox extracted to @/components/CurrencyCombobox.)
+
+// CURATED_ABOUT — short descriptions for the major fiat currencies.
+// Sourced from the issuing central bank's own positioning + ISO 4217
+// metadata. Currencies not in this map render a generic "About"
+// section that calls out the ISO code + last-published rate;
+// expanding the curated set is a one-line addition here. Multiple
+// paragraphs separated by blank lines render as separate <p>'s.
+const CURATED_ABOUT: Record<string, string> = {
+  USD: `The United States dollar is the official currency of the United States and the world's primary reserve currency. Issued by the Federal Reserve System, it underpins the largest share of international trade, foreign-exchange reserves, and most major commodity benchmarks. The "$" symbol predates the country itself and was inherited from the Spanish colonial peso.
+
+Most fiat currencies on Rates Engine are quoted via their USD cross-rate. When a stablecoin says "USD-pegged," it almost always means USDC, USDT, or another token redeemable 1:1 against this currency.`,
+  EUR: `The euro is the official currency of 20 European Union member states (the eurozone) and the second-most-held reserve currency globally. Managed by the European Central Bank, it replaced 12 national currencies on January 1, 1999 (cash circulation began January 1, 2002).
+
+EUR-pegged stablecoins like EURC and EUROC track this rate; on the Stellar network EURC is issued by Circle and is one of the largest non-USD stablecoins by volume.`,
+  GBP: `The pound sterling is the world's oldest currency in continuous use, dating to ~775 AD. Issued by the Bank of England, it remains a major reserve currency despite the UK's smaller economic share than USD or EUR. The "£" glyph derives from the Latin "libra" (a pound weight).`,
+  JPY: `The Japanese yen is the third-most-traded currency on FX markets and a traditional safe-haven asset during global risk-off episodes. Issued by the Bank of Japan, it has the unusual property among major currencies of being quoted without subdivisions in everyday use — there is no Japanese equivalent of "cents." Sub-yen units (sen, rin) exist on paper but were withdrawn from circulation in 1953.`,
+  CHF: `The Swiss franc is widely regarded as a safe-haven currency, partly because of Switzerland's neutrality and historically prudent monetary policy. Issued by the Swiss National Bank, it carried a 1.20-per-EUR floor between 2011 and January 2015, when the SNB abruptly removed the cap and the franc appreciated ~15% in a single day.`,
+  CNY: `The Chinese yuan (renminbi) is the official currency of the People's Republic of China, issued by the People's Bank of China. It is partially convertible — the offshore yuan (CNH) trades freely while the onshore yuan (CNY) is managed within a daily band against a basket of currencies.`,
+  INR: `The Indian rupee is the official currency of India, issued by the Reserve Bank of India. The "₹" symbol was adopted in 2010, replacing the "Rs." abbreviation. India's economy is one of the largest emerging markets and a major remittance corridor — the Stellar network sees significant ZAR/USD/EUR/INR-via-stablecoin flows.`,
+  XLM: `Stellar Lumens (XLM) is the native asset of the Stellar network — the blockchain that Rates Engine indexes natively. Lumens pay transaction fees, fund minimum account reserves (currently 1 XLM per base reserve unit + 0.5 per ledger entry), and serve as a convenient bridge asset for path-payments between any two issued tokens.
+
+XLM has a fixed maximum supply of ~50B; the Stellar Development Foundation periodically retires from its inflation pool. Unlike Bitcoin's purely-mined supply curve, lumen supply changes are governed by SDF allocation policy.`,
+};
+
+// CURATED_FAQ — common questions surfaced per page. Generic
+// fallback covers tickers without curated entries.
+function faqFor(ticker: string, name: string): { q: string; a: string }[] {
+  const generic = [
+    {
+      q: `What is ${ticker}?`,
+      a: `${ticker} is the ISO 4217 currency code for ${name}. Rates Engine quotes its rate against USD via the Massive (Polygon.io) forex feed, refreshed hourly with daily-grain data sourced from major reference series.`,
+    },
+    {
+      q: `How is the rate calculated?`,
+      a: `We pull the upstream's grouped-daily snapshot once an hour and surface its USD-base rate verbatim. The "1 USD = N units" form is canonical; the "1 unit = $X" inverse is computed at display time. No internal smoothing or aggregation is applied to the fiat feed — the value you see is what the upstream published.`,
+    },
+    {
+      q: `What is circulating supply for a fiat currency?`,
+      a: `For fiat we use the central bank's broadest commonly-published monetary aggregate (typically M2). Where that's unavailable we fall back to monetary base or the issuer's own circulation declaration. Sourced from the curated CSV in internal/sources/forex/circulation_data.csv; not every currency has a recent series.`,
+    },
+    {
+      q: `How often does the rate update?`,
+      a: `Hourly. The forex worker refreshes from the upstream every 60 minutes; persistent fx_quotes hypertable rows are upserted on the same cadence. The detail page's "Source published" timestamp shows the upstream's own publish date.`,
+    },
+  ];
+  return generic;
+}
+
+function AboutPanel({ detail }: { detail: CurrencyDetail }) {
+  const text = CURATED_ABOUT[detail.ticker];
+  if (!text) {
+    return null; // suppress for tickers without a curated entry
+  }
+  return <ExpandableText title={`About ${detail.name}`} body={text} />;
+}
+
+function ExpandableText({ title, body }: { title: string; body: string }) {
+  const [expanded, setExpanded] = useState(false);
+  const paragraphs = body.split(/\n\s*\n/).filter(Boolean);
+  const teaser = paragraphs[0];
+  const more = paragraphs.slice(1);
+  const hasMore = more.length > 0;
+  return (
+    <Panel
+      title={title}
+      bodyClassName="text-sm text-slate-700 dark:text-slate-300 space-y-3 leading-relaxed"
+    >
+      <p>{teaser}</p>
+      {expanded && more.map((p, i) => <p key={i}>{p}</p>)}
+      {hasMore && (
+        <button
+          type="button"
+          onClick={() => setExpanded((v) => !v)}
+          className="text-xs text-brand-600 hover:underline"
+        >
+          {expanded ? 'Show less' : 'Read more →'}
+        </button>
+      )}
+    </Panel>
+  );
+}
+
+function FAQPanel({ detail }: { detail: CurrencyDetail }) {
+  const items = faqFor(detail.ticker, detail.name);
+  return (
+    <Panel
+      title="FAQ"
+      hint="Common questions about this currency"
+      bodyClassName="space-y-2 text-sm"
+    >
+      {items.map((it, i) => (
+        <FAQItem key={i} q={it.q} a={it.a} />
+      ))}
+    </Panel>
+  );
+}
+
+function FAQItem({ q, a }: { q: string; a: string }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <div className="rounded-lg border border-slate-200 dark:border-slate-800">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        aria-expanded={open}
+        className="flex w-full items-center justify-between px-3 py-2 text-left font-medium text-slate-900 hover:bg-slate-50 dark:text-slate-100 dark:hover:bg-slate-900/40"
+      >
+        <span>{q}</span>
+        <span aria-hidden className="text-xs text-slate-400">{open ? '−' : '+'}</span>
+      </button>
+      {open && (
+        <p className="border-t border-slate-200 px-3 py-2 text-sm leading-relaxed text-slate-700 dark:border-slate-800 dark:text-slate-300">
+          {a}
+        </p>
+      )}
+    </div>
+  );
+}
