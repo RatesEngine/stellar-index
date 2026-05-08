@@ -7,12 +7,33 @@ import (
 	"time"
 )
 
+// FXQuoteWriter is the write seam between the worker and persistent
+// storage. nil-able — when nil the worker still functions (cache-only
+// mode, useful in tests or pre-migration deploys).
+type FXQuoteWriter interface {
+	InsertFXQuoteBatch(ctx context.Context, quotes []FXQuote) error
+}
+
+// FXQuote is the storage-layer record the worker writes per refresh.
+// Mirrors the timescale.FXQuote shape but lives in this package so
+// the forex worker doesn't import internal/storage/timescale (which
+// imports forex types via the v1 API package; the dependency would
+// cycle).
+type FXQuote struct {
+	Bucket     time.Time
+	Ticker     string
+	RateUSD    float64
+	InverseUSD float64
+	Source     string
+}
+
 // Worker periodically fetches the upstream rates + names and
 // installs the result into a [Cache]. Designed to run as a
 // goroutine for the lifetime of the API process.
 type Worker struct {
 	client      *Client
 	cache       *Cache
+	writer      FXQuoteWriter
 	logger      *slog.Logger
 	interval    time.Duration
 	circulation map[string]CirculationEntry // loaded once at startup
@@ -44,6 +65,15 @@ func NewWorker(client *Client, cache *Cache, logger *slog.Logger, interval time.
 		interval:    interval,
 		circulation: circulation,
 	}
+}
+
+// WithWriter attaches a persistent quote writer. When set, every
+// successful refreshOnce also persists the latest rates + history
+// to the fx_quotes hypertable. nil writer keeps the worker in
+// cache-only mode (the pre-fx_quotes behaviour).
+func (w *Worker) WithWriter(writer FXQuoteWriter) *Worker {
+	w.writer = writer
+	return w
 }
 
 // Run blocks until ctx is cancelled. Fetches once immediately so
@@ -107,6 +137,68 @@ func (w *Worker) refreshOnce(ctx context.Context) {
 		"history_currencies", len(snap.History7d),
 		"published_at", publishedAt,
 	)
+
+	w.persistSnapshot(ctx, snap)
+}
+
+// persistSnapshot writes the latest rates + history to fx_quotes if
+// a writer is attached. Safe to call with a nil writer (no-op).
+//
+// Two writes happen:
+//  1. Today's row per ticker, from `snap.Currencies` — the canonical
+//     "current" rate. Re-running upserts on the (ticker, today) PK so
+//     repeated refreshes within the same day idempotently update the
+//     row.
+//  2. Trailing-7d rows from `snap.History7d` — these only differ on
+//     the first install of each day (the worker's gap-detector
+//     short-circuits unchanged history).
+//
+// Errors get logged at warn level; persistence is best-effort
+// alongside the in-memory cache, never a crash condition.
+func (w *Worker) persistSnapshot(ctx context.Context, snap *Snapshot) {
+	if w.writer == nil || snap == nil {
+		return
+	}
+	const sourceTag = "massive"
+	today := snap.PublishedAt.UTC().Truncate(24 * time.Hour)
+
+	batch := make([]FXQuote, 0, len(snap.Currencies)+len(snap.History7d)*7)
+	for _, c := range snap.Currencies {
+		if c.RateUSD <= 0 {
+			continue
+		}
+		batch = append(batch, FXQuote{
+			Bucket:     today,
+			Ticker:     c.Ticker,
+			RateUSD:    c.RateUSD,
+			InverseUSD: 1.0 / c.RateUSD,
+			Source:     sourceTag,
+		})
+	}
+	for ticker, points := range snap.History7d {
+		for _, p := range points {
+			if p.RateUSD <= 0 {
+				continue
+			}
+			batch = append(batch, FXQuote{
+				Bucket:     p.Date.UTC().Truncate(24 * time.Hour),
+				Ticker:     ticker,
+				RateUSD:    p.RateUSD,
+				InverseUSD: 1.0 / p.RateUSD,
+				Source:     sourceTag,
+			})
+		}
+	}
+
+	if err := w.writer.InsertFXQuoteBatch(ctx, batch); err != nil {
+		if errors.Is(err, context.Canceled) {
+			return
+		}
+		w.logger.Warn("forex: fx_quotes persist failed",
+			"rows", len(batch), "err", err)
+		return
+	}
+	w.logger.Info("forex: fx_quotes persisted", "rows", len(batch))
 }
 
 // shouldRefreshHistory returns true when the worker should re-pull

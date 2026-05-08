@@ -65,6 +65,7 @@ type Server struct {
 	sourcesStats     SourcesStatsReader
 	lending          LendingReader
 	currencies       CurrenciesReader
+	fxHistory        FXHistoryReader
 	sessionPeeker    SessionPeeker
 	incidents        []incidents.Incident
 	sep10            auth.SEP10Validator
@@ -269,6 +270,12 @@ type Options struct {
 	// still populated.
 	Currencies CurrenciesReader
 
+	// FXHistory, when non-nil, lets /v1/currencies/{ticker} surface
+	// long-form persisted history (fx_quotes hypertable) when the
+	// request carries `?range=1y` etc. Leave nil to keep the handler
+	// in 7d-only mode.
+	FXHistory FXHistoryReader
+
 	// SessionPeeker, when non-nil, lets handlers read the
 	// magic-link session bound to the request context. Used by
 	// /v1/account/me to surface user/account info for cookie-auth
@@ -446,6 +453,7 @@ func New(opts Options) *Server {
 		sourcesStats:      opts.SourcesStats,
 		lending:           opts.Lending,
 		currencies:        opts.Currencies,
+		fxHistory:         opts.FXHistory,
 		sessionPeeker:     opts.SessionPeeker,
 		sep10:             opts.SEP10,
 		cors:              opts.CORS,
