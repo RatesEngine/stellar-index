@@ -32,6 +32,7 @@ interface IssuerDetail {
   g_strkey: string;
   home_domain?: string;
   org_name?: string;
+  scam_reason?: string;
   auth_required?: boolean;
   auth_revocable?: boolean;
   auth_immutable?: boolean;
@@ -169,6 +170,23 @@ export default async function IssuerDetailPage({ params }: { params: Params }) {
 
   return (
     <div className="mx-auto max-w-7xl space-y-6 px-6 py-8">
+      {detail.scam_reason && (
+        <div className="rounded-lg border-2 border-rose-400 bg-rose-50 px-4 py-3 dark:border-rose-700 dark:bg-rose-950/40">
+          <div className="flex items-baseline gap-2">
+            <span className="rounded bg-rose-600 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-white">
+              Warning
+            </span>
+            <span className="text-sm font-medium text-rose-900 dark:text-rose-200">
+              This issuer is flagged as malicious or unsafe.
+            </span>
+          </div>
+          <p className="mt-1.5 text-xs text-rose-800 dark:text-rose-300">
+            {detail.scam_reason}. Do not trust assets issued from this account.
+            Source: stellar.expert directory.
+          </p>
+        </div>
+      )}
+
       <header className="space-y-3">
         <nav className="text-xs text-slate-500">
           <Link href="/issuers" className="hover:text-brand-600">

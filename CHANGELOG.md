@@ -15,6 +15,19 @@ against.
 
 ## [Unreleased]
 
+### Added
+
+- **Scam-issuer warnings on `/v1/issuers` and the explorer.** New
+  curated `internal/api/v1/known_scams.go` map seeded from
+  stellar.expert's directory; entries flag G-strkeys tagged
+  `malicious` or `unsafe`. `/v1/issuers` and `/v1/issuers/{g}` now
+  carry a `scam_reason` field (omitempty) when the issuer is
+  flagged. The `/issuers` table renders a red "SCAM" badge next to
+  the org name; `/issuers/[g_strkey]` shows a full-width warning
+  banner above the header. Bootstrap entry: `GBYBVW…GUARD` (5M
+  observations on prod, flagged "SCAM Counterfeiter" by
+  stellar.expert).
+
 ### Fixed
 
 - **Explorer: render the native XLM SAC as "XLM" on Soroban DEX pool

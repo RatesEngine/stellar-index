@@ -384,6 +384,10 @@ export type IssuerListEntry = {
   org_name?: string;
   asset_count: number;
   total_observation_count: number;
+  // Non-empty when the issuer is on the curated scam list (sourced
+  // from stellar.expert's directory). Render a warning badge on
+  // any UI that surfaces this issuer's row.
+  scam_reason?: string;
 };
 
 type IssuersListEnvelope = { data: IssuerListEntry[] };
@@ -420,6 +424,7 @@ export type Issuer = {
   g_strkey: string;
   home_domain?: string;
   org_name?: string;
+  scam_reason?: string;
   auth_required?: boolean;
   auth_revocable?: boolean;
   auth_immutable?: boolean;

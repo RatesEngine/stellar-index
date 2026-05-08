@@ -124,16 +124,26 @@ export function IssuersTable() {
                   <span className="text-slate-400">{i + 1}</span>
                 </Td>
                 <Td>
-                  {row.org_name ? (
-                    <Link
-                      href={`/issuers/${row.g_strkey}`}
-                      className="font-medium hover:text-brand-600"
-                    >
-                      {row.org_name}
-                    </Link>
-                  ) : (
-                    <span className="text-xs text-slate-400">—</span>
-                  )}
+                  <div className="flex items-center gap-1.5">
+                    {row.org_name ? (
+                      <Link
+                        href={`/issuers/${row.g_strkey}`}
+                        className="font-medium hover:text-brand-600"
+                      >
+                        {row.org_name}
+                      </Link>
+                    ) : (
+                      <span className="text-xs text-slate-400">—</span>
+                    )}
+                    {row.scam_reason && (
+                      <span
+                        title={row.scam_reason}
+                        className="rounded bg-rose-100 px-1.5 py-0.5 text-[9px] font-medium uppercase tracking-wider text-rose-700 dark:bg-rose-900/40 dark:text-rose-200"
+                      >
+                        SCAM
+                      </span>
+                    )}
+                  </div>
                 </Td>
                 <Td>
                   <Link

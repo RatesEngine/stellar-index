@@ -33,6 +33,11 @@ type IssuerListEntry struct {
 	OrgName               string `json:"org_name,omitempty"`
 	AssetCount            int64  `json:"asset_count"`
 	TotalObservationCount int64  `json:"total_observation_count"`
+	// ScamReason is non-empty when the issuer is flagged as scam /
+	// malicious by the curated `known_scams.go` map (sourced from
+	// stellar.expert's directory). Clients should render a warning
+	// badge — this issuer's assets shouldn't be trusted.
+	ScamReason string `json:"scam_reason,omitempty"`
 }
 
 // Issuer is the wire shape returned by /v1/issuers/{g_strkey}.
@@ -43,7 +48,11 @@ type Issuer struct {
 	// SEP-1 (`[DOCUMENTATION].ORG_NAME`). Same field as the
 	// listing endpoint surfaces; populated by the
 	// `ratesengine-ops sep1-refresh` job.
-	OrgName        string          `json:"org_name,omitempty"`
+	OrgName string `json:"org_name,omitempty"`
+	// ScamReason is non-empty when the issuer is flagged as scam /
+	// malicious by the curated `known_scams.go` map (sourced from
+	// stellar.expert's directory).
+	ScamReason     string          `json:"scam_reason,omitempty"`
 	AuthRequired   *bool           `json:"auth_required,omitempty"`
 	AuthRevocable  *bool           `json:"auth_revocable,omitempty"`
 	AuthImmutable  *bool           `json:"auth_immutable,omitempty"`
@@ -108,6 +117,7 @@ func (s *Server) handleIssuersList(w http.ResponseWriter, r *http.Request) {
 			OrgName:               orgName,
 			AssetCount:            r.AssetCount,
 			TotalObservationCount: r.TotalObservationCount,
+			ScamReason:            scamReason(r.GStrkey),
 		}
 	}
 	writeJSON(w, out, Flags{})
@@ -166,6 +176,7 @@ func (s *Server) handleIssuer(w http.ResponseWriter, r *http.Request) {
 		GStrkey:        row.GStrkey,
 		HomeDomain:     homeDomain,
 		OrgName:        orgName,
+		ScamReason:     scamReason(row.GStrkey),
 		AuthRequired:   row.AuthRequired,
 		AuthRevocable:  row.AuthRevocable,
 		AuthImmutable:  row.AuthImmutable,
