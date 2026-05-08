@@ -15,6 +15,22 @@ against.
 
 ## [Unreleased]
 
+### Fixed
+
+- **`/v1/changes/coin/{id}` accepts friendly slugs alongside the
+  canonical asset_id**. The change-summary worker writes rows under
+  the canonical form (`native`, `crypto:XLM`, `USDC-GA5Z…`); a
+  caller passing the friendly slug "XLM" or just "USDC" without
+  the issuer suffix was silently 404'ing against the strict-
+  equality lookup even when the underlying data existed. Caught
+  during the 2026-05-08 prod audit (`/v1/changes/coin/XLM` and
+  `/v1/changes/coin/native` both 404'd despite the worker having
+  written rows). Handler now expands the input into the same
+  candidate set `oracleAssetCandidates` uses for /v1/oracle/latest
+  (`XLM` → `[XLM, native, crypto:XLM]`) and tries each in order.
+  First hit wins; storage errors short-circuit. Pinned by 9 unit
+  tests in `changes_test.go`.
+
 ### Added
 
 - **`/v1/price` fiat-vs-fiat cross-rate fallback**: when both
