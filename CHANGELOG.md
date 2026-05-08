@@ -15,86 +15,83 @@ against.
 
 ## [Unreleased]
 
-### Changed
+## [v0.5.0-rc.37] — 2026-05-08
 
-- **/assets/[slug] converter: searchable currency picker.**
-  Replaced the plain `<select>` with the same keyboard-friendly
-  combobox that backs /currencies/[ticker]'s converter — typing
-  a few letters narrows ~110 entries down to a manageable list.
-  Lifted the `CurrencyCombobox` into `@/components/CurrencyCombobox`
-  so both pages share one implementation.
+### Added
+
+- **Persistent fx_quotes hypertable** (PR #1041). Daily forex
+  rate snapshots now backfill into a TimescaleDB hypertable
+  (migration 0028) so the per-currency page can render charts
+  beyond the 7-day in-memory window. The forex worker upserts on
+  every refresh tick; a one-shot `scripts/ops/fx-history-backfill`
+  walks Massive's grouped-daily endpoint to seed up to 10 years
+  of history.
+- **`/v1/currencies/{ticker}?range=`** (PR #1041) — handler now
+  accepts `30d`, `90d`, `1y`, `5y`, `10y`, `all`. Reads from the
+  new fx_quotes hypertable and surfaces the series as `history` +
+  `history_range`. Default behaviour (no `range` param) is
+  unchanged: the in-memory 7d series in `history_7d`.
+- **/currencies/[ticker]: range-selectable USD-value chart**
+  (PR #1041) replaces the 7d-only sparkline. Chart uses a
+  720×200 SVG optimised for hundreds of points.
+- **Asset detail: market-cap timeline empty-state** (PR #1041)
+  on the Supply tab — placeholder until the supply-history
+  hypertable joins up with per-asset USD prices.
+- **/exchanges all-CEX markets table** (PR #1042) sorted by 24h
+  USD volume across every venue, merged client-side.
+- **/exchanges/{venue} candle chart** (PR #1042) — TradingView-
+  style lightweight-charts panel with selectable pair, timeframe
+  (24h/7d/30d/1y/all) and granularity (1m/15m/1h/4h/1d).
+- **/exchanges/{venue} subscription disclaimer** (PR #1042) —
+  explicit callout that the curated pair set is by-design, not
+  a data bug.
+- **/lending pool list + detail: deploy timestamp + initiator**
+  (PR #1042) for every Blend pool we know about, sourced from the
+  Phase-4 wasm-history audit.
 
 ### Performance
 
-- **Background prewarm goroutine** for the heaviest API caches.
-  /v1/sources?include=stats and /v1/markets / /v1/pools each scan
-  ~24h of the trades hypertable on cold paths (5–10s); the
-  rc.35/rc.36 caches drop them to <1ms but TTL expiry meant the
-  first user request after a cache miss still paid the full
+- **Background prewarm goroutine** (PR #1042) for the heaviest
+  API caches. /v1/sources?include=stats and /v1/markets / /v1/pools
+  each scan ~24h of the trades hypertable on cold paths (5–10s);
+  the rc.35/rc.36 caches drop them to <1ms but TTL expiry meant
+  the first user request after a cache miss still paid the full
   query cost. A 25s-cadence goroutine in cmd/ratesengine-api now
   re-runs the queries just inside the 30/60s TTLs so user
   requests always land on a warm cache.
 
-### Added
+### Changed
 
-- **/exchanges all-CEX markets table** — sorted by 24h USD
-  volume across every venue, merged client-side from four
-  /v1/markets?source=… requests. Visible on the index without
-  having to drill into each venue.
-- **/exchanges/{venue} subscription disclaimer** — explicit
-  amber-tinted callout explaining the curated pair set is
-  by-design, not a data bug.
-- **/exchanges/{venue} candle chart** — TradingView-style
-  lightweight-charts panel with selectable pair (defaults to
-  the venue's top-volume pair), timeframe (24h/7d/30d/1y/all)
-  and granularity (1m/15m/1h/4h/1d). Reuses the same chart
-  component that powers /assets/[slug]?tab=chart and
-  /markets/[pair].
+- **/assets/[slug] converter: searchable CurrencyCombobox**
+  (PR #1043). Replaced the plain `<select>` with the same
+  keyboard-friendly combobox that backs /currencies/[ticker]'s
+  converter — typing narrows ~110 entries down inline. Component
+  lifted to `@/components/CurrencyCombobox`.
+- **/currencies header copy** (PR #1042) updated to credit
+  Massive (Polygon.io); points users at the new range-selectable
+  chart on /currencies/[ticker].
 
 ### Fixed
 
-- **Wider lookback windows for /v1/coins change_1h_pct,
-  change_24h_pct, change_7d_pct.** Previous windows were
-  10-minute (1h), 1-hour (24h), 4-hour (7d) — too tight to
-  catch low-volume pairs reliably. Widened to 35-minute,
-  2.5-hour, 14-hour respectively. The DISTINCT ON ... ORDER
-  BY bucket DESC selector still picks the latest available
-  row inside the window so the anchor stays close to the
-  target timestamp; widening only kicks in when the target
-  bucket itself is empty.
-- **/dexes detail link now points at /dexes/{source}** instead of
-  /sources/{source}; the latter route exists but rendered the
-  source-registry view, not the per-DEX detail page.
-- **AssetLabel: case-insensitive C-strkey match** + truncates any
-  unstructured asset string longer than 16 chars with the full
-  value in the tooltip. Stops the long contract IDs that were
-  bleeding through on /dexes pool rows when the SAC wrapper map
-  didn't resolve them.
-- **View Code button**: drop the literal `</>` text next to the
-  Code2 SVG icon — was rendering both side-by-side site-wide.
-### Added
-
-- **Persistent fx_quotes hypertable** (PR #TBD) — daily forex
-  rate snapshots now backfill into a TimescaleDB hypertable
-  (migration 0028) so the per-currency page can render charts
-  beyond the 7-day in-memory window. The forex worker
-  upserts on every refresh tick; a one-shot
-  `scripts/ops/fx-history-backfill` walks Massive's
-  grouped-daily endpoint to seed up to 10 years of history.
-- **/v1/currencies/{ticker}?range=** — handler now accepts
-  `30d`, `90d`, `1y`, `5y`, `10y`, `all`. Reads from the new
-  fx_quotes hypertable and surfaces the series as
-  `history` + `history_range` in the response. Default behavior
-  (no `range` param) is unchanged: the in-memory 7d series in
-  `history_7d`.
-- **/currencies/[ticker]: range-selectable USD-value chart**
-  replaces the 7d-only sparkline. 30d through "all" tabs query
-  fx_quotes server-side; the wider chart uses a 720×200 SVG
-  optimised for hundreds of points (no per-point dots).
-- **Asset detail: market-cap timeline empty-state** on the
-  Supply tab — placeholder explaining the chart will land once
-  the supply-history hypertable joins up with per-asset USD
-  prices (no data fabrication; surfaces what's coming).
+- **Wider lookback windows for /v1/coins change_1h/24h/7d** (PR
+  #1042). Old windows (10 min / 1 h / 4 h around target) often
+  missed low-volume pairs; widened to 35 min / 2 h 30 min / 14 h.
+  The DISTINCT ON ... ORDER BY bucket DESC selector still picks
+  the latest available row inside the window so the anchor stays
+  close to the target.
+- **/dexes detail link** (PR #1042) now points at `/dexes/{source}`
+  instead of `/sources/{source}`; the latter route exists but
+  rendered the operator-metadata view, not the per-DEX detail.
+- **AssetLabel: case-insensitive C-strkey match** (PR #1042) plus
+  a length-16 truncation fallback for any unstructured asset
+  string. Stops the long contract IDs that bled through on
+  /dexes pool rows when the SAC wrapper map didn't resolve them.
+- **View Code button** (PR #1042) drops the literal `</>` text
+  next to the Code2 SVG — was rendering both side-by-side
+  site-wide.
+- **/assets empty-state cells** (PR #1042) now have explanatory
+  tooltips on the Dash so users see why a row is missing 7d %,
+  market cap, or supply rather than just `—`.
 
 ## [v0.5.0-rc.36] — 2026-05-08
 
