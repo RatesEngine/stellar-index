@@ -242,6 +242,7 @@ export function CurrenciesView() {
               </button>
             ))}
           </div>
+          <ShareLinkButton />
           <button
             type="button"
             onClick={() => exportRowsToCsv(filtered)}
@@ -757,6 +758,36 @@ function SortableTh({
 // file. Pure browser-side; uses a Blob URL so no server roundtrip.
 // Header order mirrors the visible table so the export and the
 // page tell the same story.
+// ShareLinkButton copies the current URL (which carries the
+// listing's filter+sort state from PR #1062) to the clipboard so
+// users can DM a link to a specific view. Briefly shows "Copied!"
+// after a successful copy, falling back to a graceful "Copy
+// failed" if the clipboard API is denied (e.g. insecure origins
+// or some Safari sandbox edge cases).
+function ShareLinkButton() {
+  const [state, setState] = useState<'idle' | 'copied' | 'error'>('idle');
+  async function copy() {
+    if (typeof window === 'undefined') return;
+    try {
+      await navigator.clipboard.writeText(window.location.href);
+      setState('copied');
+    } catch {
+      setState('error');
+    }
+    setTimeout(() => setState('idle'), 1500);
+  }
+  return (
+    <button
+      type="button"
+      onClick={copy}
+      className="rounded-md border border-slate-200 bg-white px-2.5 py-1 text-xs font-medium text-slate-600 hover:border-brand-500 hover:text-brand-600 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300"
+      title="Copy a link to this filtered + sorted view"
+    >
+      {state === 'copied' ? 'Copied!' : state === 'error' ? 'Copy failed' : 'Share link'}
+    </button>
+  );
+}
+
 // SearchInput wraps the listing's search box with a `/` keyboard
 // shortcut (matching the GitHub / Linear convention) and a
 // dismissive `Esc` clear. Click + focus behavior unchanged.
