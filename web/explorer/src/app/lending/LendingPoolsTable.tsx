@@ -14,6 +14,17 @@ interface LendingPool {
   last_seen: string;
 }
 
+// Curated annotations for the well-known Blend mainnet contracts.
+// Sourced from docs/operations/wasm-audits/blend.md (Phase 4 walk
+// of the on-chain Blend deployment, last verified 2026-05-03).
+// Other pool addresses fall through to "Lending pool" — the
+// reserve-asset breakdown per pool needs a Blend-pool-storage
+// reader that doesn't exist yet (#84).
+const BLEND_POOL_LABELS: Record<string, string> = {
+  CAQQR5SWBXKIGZKPBZDH3KM5GQ5GUTPKB7JAFCINLZBC5WXPJKRG3IM7: 'Backstop V2',
+  CDSYOAVXFY7SM5S64IZPPPYB4GVGGLMQVFREPSQQEZVIWXX5R23G4QSU: 'Pool Factory V2',
+};
+
 export function LendingPoolsTable() {
   const q = useQuery<LendingPool[]>({
     queryKey: ['/v1/lending/pools'],
@@ -67,15 +78,22 @@ export function LendingPoolsTable() {
                   </span>
                 </Td>
                 <Td>
-                  <a
-                    href={`https://stellar.expert/explorer/public/contract/${p.pool}`}
-                    target="_blank"
-                    rel="noreferrer noopener"
-                    className="font-mono text-[11px] hover:text-brand-600"
-                    title={p.pool}
-                  >
-                    {p.pool.slice(0, 6)}…{p.pool.slice(-6)}
-                  </a>
+                  <div className="space-y-0.5">
+                    <a
+                      href={`https://stellar.expert/explorer/public/contract/${p.pool}`}
+                      target="_blank"
+                      rel="noreferrer noopener"
+                      className="block font-mono text-[11px] hover:text-brand-600"
+                      title={p.pool}
+                    >
+                      {p.pool.slice(0, 6)}…{p.pool.slice(-6)}
+                    </a>
+                    {BLEND_POOL_LABELS[p.pool] && (
+                      <div className="text-[9px] uppercase tracking-wide text-slate-500">
+                        {BLEND_POOL_LABELS[p.pool]}
+                      </div>
+                    )}
+                  </div>
                 </Td>
                 <Td align="right">
                   <span className="font-mono tabular-nums text-slate-700 dark:text-slate-300">
