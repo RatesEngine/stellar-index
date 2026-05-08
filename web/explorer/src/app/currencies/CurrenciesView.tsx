@@ -365,14 +365,49 @@ function nameFor(c: CryptoCoin): string {
 // detailHref routes a unified row to its kind-appropriate detail
 // page. Crypto rows go to /assets/{slug} (the existing crypto
 // detail page with chart, supply, issuer panel, markets); fiat
-// rows go to /currencies/{ticker} (the fiat detail with cross-rates
-// + converter + range-selectable history). The unified
-// /currencies/{slug} route that handles both is part of the phase 2
-// redesign — until then this prevents the 404 a unified-listing
-// click would otherwise produce on a crypto row.
+// rows go to /currencies/{friendly-slug-or-ticker} where the
+// friendly slug (e.g. "us-dollar") is preferred for SEO over the
+// bare ISO code. Both forms route to the same detail view via
+// the slug-resolver in @/app/currencies/[ticker]/slugs.
 function detailHref(r: UnifiedRow): string {
   if (r.kind === 'crypto') return `/assets/${encodeURIComponent(r.slug)}`;
-  return `/currencies/${encodeURIComponent(r.slug)}`;
+  return `/currencies/${encodeURIComponent(friendlyFiatSlug(r.ticker))}`;
+}
+
+// FRIENDLY_FIAT_SLUGS — kept in lock-step with TICKER_TO_FRIENDLY_SLUG
+// in @/app/currencies/[ticker]/slugs. Duplicated here so the
+// listing component (a 'use client' bundle) doesn't pull the
+// resolver's full reverse map. One-line addition extends both maps.
+const FRIENDLY_FIAT_SLUGS: Record<string, string> = {
+  USD: 'us-dollar',
+  EUR: 'euro',
+  GBP: 'british-pound',
+  JPY: 'japanese-yen',
+  CHF: 'swiss-franc',
+  CAD: 'canadian-dollar',
+  AUD: 'australian-dollar',
+  NZD: 'new-zealand-dollar',
+  CNY: 'chinese-yuan',
+  INR: 'indian-rupee',
+  BRL: 'brazilian-real',
+  MXN: 'mexican-peso',
+  ZAR: 'south-african-rand',
+  SGD: 'singapore-dollar',
+  HKD: 'hong-kong-dollar',
+  SEK: 'swedish-krona',
+  NOK: 'norwegian-krone',
+  DKK: 'danish-krone',
+  KRW: 'south-korean-won',
+  TRY: 'turkish-lira',
+  PLN: 'polish-zloty',
+  RUB: 'russian-ruble',
+  THB: 'thai-baht',
+  PHP: 'philippine-peso',
+  NGN: 'nigerian-naira',
+};
+
+function friendlyFiatSlug(ticker: string): string {
+  return FRIENDLY_FIAT_SLUGS[ticker.toUpperCase()] ?? ticker;
 }
 
 function compareRows(a: UnifiedRow, b: UnifiedRow, key: SortKey, dir: 'asc' | 'desc'): number {

@@ -1,6 +1,8 @@
 import type { Metadata } from 'next';
+import { notFound } from 'next/navigation';
 
 import { CurrencyDetailView } from './CurrencyDetailView';
+import { allFriendlySlugs, resolveFiatSlug } from './slugs';
 
 // Fallback list when the build-time fetch fails. Covers the
 // majors so /currencies/EUR etc. always pre-renders even on a
@@ -22,11 +24,16 @@ const BUILD_FETCH_TIMEOUT_MS = 8_000;
 type Params = Promise<{ ticker: string }>;
 
 // Fetch the full currency list at build so every supported
-// ticker has a static page. Falls back to the majors list when
-// the upstream is unavailable (CI stub / cold cache).
+// ticker has a static page, plus pre-render every curated friendly
+// slug (`us-dollar`, `euro`, …) so the SEO-friendly URLs route
+// without a build-time round trip.
 export async function generateStaticParams() {
+  const friendly = allFriendlySlugs().map((ticker) => ({ ticker }));
   if (isCIStub) {
-    return FALLBACK_TICKERS.map((ticker) => ({ ticker }));
+    return [
+      ...FALLBACK_TICKERS.map((ticker) => ({ ticker })),
+      ...friendly,
+    ];
   }
   try {
     const res = await fetch(`${API_BASE_URL}/v1/currencies`, {
@@ -37,23 +44,33 @@ export async function generateStaticParams() {
       data: { currencies?: { ticker: string }[] };
     };
     const tickers = env.data?.currencies?.map((c) => c.ticker) ?? [];
-    if (tickers.length === 0) return FALLBACK_TICKERS.map((ticker) => ({ ticker }));
-    return tickers.map((ticker) => ({ ticker }));
+    const merged = (tickers.length === 0 ? FALLBACK_TICKERS : tickers).map(
+      (ticker) => ({ ticker }),
+    );
+    return [...merged, ...friendly];
   } catch {
-    return FALLBACK_TICKERS.map((ticker) => ({ ticker }));
+    return [
+      ...FALLBACK_TICKERS.map((ticker) => ({ ticker })),
+      ...friendly,
+    ];
   }
 }
 
 export async function generateMetadata({ params }: { params: Params }): Promise<Metadata> {
   const { ticker } = await params;
-  const upper = ticker.toUpperCase();
+  const resolved = resolveFiatSlug(ticker);
+  if (!resolved) {
+    return { title: `Currency not found` };
+  }
   return {
-    title: `${upper} — currency converter + cross-rates`,
-    description: `Live ${upper} forex rate against USD, currency converter widget, and cross-rates against every other ${upper}-denominated pair we track. Source: /v1/currencies/${upper}.`,
+    title: `${resolved} — currency converter + cross-rates`,
+    description: `Live ${resolved} forex rate against USD, currency converter widget, and cross-rates against every other ${resolved}-denominated pair we track. Source: /v1/currencies/${resolved}.`,
   };
 }
 
 export default async function CurrencyDetailPage({ params }: { params: Params }) {
   const { ticker } = await params;
-  return <CurrencyDetailView ticker={ticker} />;
+  const resolved = resolveFiatSlug(ticker);
+  if (!resolved) notFound();
+  return <CurrencyDetailView ticker={resolved} />;
 }
