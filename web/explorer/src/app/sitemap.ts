@@ -6,6 +6,7 @@ import { loadArchitectureDocs } from '@/lib/architecture';
 import { loadBlogPosts } from '@/lib/blog';
 import { loadDiscoveryDocs } from '@/lib/discovery';
 import { loadOperationsDocs } from '@/lib/operations';
+import { friendlySlugFor } from '@/app/currencies/[ticker]/slugs';
 
 // Required for `output: 'export'` — sitemap is generated at build
 // time and emitted as a static file. Same applies to robots.ts.
@@ -96,9 +97,10 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     priority: 0.6,
   }));
 
-  const [assetSlugs, issuerKeys] = await Promise.all([
+  const [assetSlugs, issuerKeys, currencyTickers] = await Promise.all([
     fetchCoinSlugs(),
     fetchIssuerKeys(),
+    fetchCurrencyTickers(),
   ]);
   const assetPages: MetadataRoute.Sitemap = assetSlugs.map((slug) => ({
     url: `${SITE_URL}/assets/${slug}`,
@@ -112,6 +114,35 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     changeFrequency: 'weekly',
     priority: 0.5,
   }));
+  // Per-currency detail pages. Both forms are pre-rendered:
+  //   /currencies/{ticker}        — bare ISO 4217 code (USD, EUR…)
+  //   /currencies/{friendly-slug} — curated SEO-friendly form
+  //                                 (us-dollar, japanese-yen…)
+  // The friendly-slug form is the canonical share URL when a
+  // curated entry exists; the ISO form is preserved so a typed
+  // /currencies/USD doesn't 404. Sitemap lists both with the
+  // friendly form at slightly higher priority so search indexers
+  // pick that as canonical.
+  const currencyPages: MetadataRoute.Sitemap = [];
+  for (const ticker of currencyTickers) {
+    currencyPages.push({
+      url: `${SITE_URL}/currencies/${ticker}`,
+      lastModified: now,
+      changeFrequency: 'daily',
+      priority: 0.6,
+    });
+    const friendly = friendlySlugFor(ticker);
+    if (friendly !== ticker.toLowerCase()) {
+      // Curated friendly slug exists and differs from the bare
+      // ISO code → also list it as the canonical share URL.
+      currencyPages.push({
+        url: `${SITE_URL}/currencies/${friendly}`,
+        lastModified: now,
+        changeFrequency: 'daily',
+        priority: 0.7,
+      });
+    }
+  }
 
   return [
     ...staticPages,
@@ -122,7 +153,23 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     ...opsPages,
     ...assetPages,
     ...issuerPages,
+    ...currencyPages,
   ];
+}
+
+async function fetchCurrencyTickers(): Promise<string[]> {
+  try {
+    const res = await fetch(`${API_BASE_URL}/v1/currencies`, {
+      signal: AbortSignal.timeout(5_000),
+    });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const env = (await res.json()) as {
+      data: { currencies?: { ticker: string }[] };
+    };
+    return (env.data?.currencies ?? []).map((c) => c.ticker);
+  } catch {
+    return [];
+  }
 }
 
 async function fetchIssuerKeys(): Promise<string[]> {
