@@ -17,6 +17,15 @@ against.
 
 ### Added
 
+- **Explorer: `/lending/[pool]` detail pages.** Every Blend pool
+  observed in the auction stream now has its own static-prerendered
+  detail route — auction counts, last-seen timestamp, curated
+  annotation (Backstop V2, Pool Factory V2 where known), and a
+  stellar.expert deep link. Rows on `/lending` are now clickable.
+  Per-reserve composition (which assets the pool accepts, current
+  supply/borrow APYs) remains pending the Blend pool-storage
+  reader (#84).
+
 - **Divergence: Chainlink reference enabled by default on r1.** The
   `[divergence.chainlink]` block is now baked into the
   `archival-node` Ansible template with EUR/USD, GBP/USD, JPY/USD

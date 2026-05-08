@@ -1,5 +1,6 @@
 'use client';
 
+import Link from 'next/link';
 import { useQuery } from '@tanstack/react-query';
 
 import { Panel } from '@/components/reveal';
@@ -79,15 +80,13 @@ export function LendingPoolsTable() {
                 </Td>
                 <Td>
                   <div className="space-y-0.5">
-                    <a
-                      href={`https://stellar.expert/explorer/public/contract/${p.pool}`}
-                      target="_blank"
-                      rel="noreferrer noopener"
+                    <Link
+                      href={`/lending/${p.pool}`}
                       className="block font-mono text-[11px] hover:text-brand-600"
                       title={p.pool}
                     >
                       {p.pool.slice(0, 6)}…{p.pool.slice(-6)}
-                    </a>
+                    </Link>
                     {BLEND_POOL_LABELS[p.pool] && (
                       <div className="text-[9px] uppercase tracking-wide text-slate-500">
                         {BLEND_POOL_LABELS[p.pool]}
