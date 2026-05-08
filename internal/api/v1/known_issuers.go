@@ -58,6 +58,48 @@ var knownIssuers = map[string]knownIssuer{
 		HomeDomain: "anchorusd.com",
 		OrgName:    "AnchorUSD",
 	},
+	// Round 2 (2026-05-08): issuers identified via the SAC wrapper
+	// rounds — every entry verified by cross-referencing the
+	// G-strkey against the issuer's stellar.toml ACCOUNTS list.
+	// Blend Capital — BLND governance token.
+	"GDJEHTBE6ZHUXSWFI642DCGLUOECLHPF3KSXHPXTSTJ7E3JF6MQ5EZYY": {
+		HomeDomain: "blend.capital",
+		OrgName:    "Blend Capital",
+	},
+	// Velo Labs — VELO.
+	"GDM4RQUQQUVSKQA7S6EM7XBZP3FCGH4Q7CL6TABQ7B2BEJ5ERARM2M5M": {
+		HomeDomain: "velo.org",
+		OrgName:    "Velo Labs",
+	},
+	// Phoenix DEX — PHO governance token.
+	"GAX5TXB5RYJNLBUR477PEXM4X75APK2PGMTN6KEFQSESGWFXEAKFSXJO": {
+		HomeDomain: "phoenix-hub.io",
+		OrgName:    "Phoenix",
+	},
+	// Mykobo — issues USDx, EURx, GBPx (multi-currency stablecoins).
+	"GAVH5ZWACAY2PHPUG4FL3LHHJIYIHOFPSIUGM2KHK25CJWXHAV6QKDMN": {
+		HomeDomain: "mykobo.co",
+		OrgName:    "Mykobo",
+	},
+	// Apay — issues wrapped BTC/ETH on Stellar.
+	"GDPJALI4AZKUU2W426U5WKMAT6CN3AJRPIIRYR2YM54TL2GDWO5O2MZM": {
+		HomeDomain: "apay.io",
+		OrgName:    "Apay",
+	},
+	"GBFXOHVAS43OIWNIO7XLRJAHT3BICFEIKOJLZVXNT572MISM4CMGSOCC": {
+		HomeDomain: "apay.io",
+		OrgName:    "Apay",
+	},
+	// LIBRE — Libre Capital.
+	"GAYCCWKECNGDRHYU3UTREBD2XLC3CUQN6FV22TKM4WCQER3IWR7TF5CY": {
+		HomeDomain: "libre.cx",
+		OrgName:    "Libre",
+	},
+	// Circle EUR-pegged stablecoin (EURC).
+	"GDHU6WRG4IEQXM5NZ4BMPKOXHW76MZM4Y2IEMFDVXBSDP6SJY4ITNPP2": {
+		HomeDomain: "centre.io",
+		OrgName:    "Circle (EURC)",
+	},
 }
 
 // enrichIssuer fills empty home_domain / org_name fields on the
