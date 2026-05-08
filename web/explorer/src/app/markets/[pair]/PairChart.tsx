@@ -1,9 +1,17 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import dynamic from 'next/dynamic';
 
-import { CandleChart } from '@/components/charts/CandleChart';
 import { API_BASE_URL } from '@/api/client';
+
+// CandleChart pulls in lightweight-charts (~155 KB). Lazy-load it
+// so the rest of the pair page (pricing, history, sources) renders
+// without paying the bundle tax up-front.
+const CandleChart = dynamic(
+  () => import('@/components/charts/CandleChart').then((m) => m.CandleChart),
+  { ssr: false, loading: () => <div className="h-[360px]" /> },
+);
 
 // API-canonical timeframes per ADR-0020. The earlier '7d' / '30d'
 // labels were rejected with 400 — the chart was silently empty for

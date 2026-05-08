@@ -15,6 +15,21 @@ against.
 
 ## [Unreleased]
 
+### Performance
+
+- **Explorer: lazy-load `lightweight-charts` (~155 KB).** The candle
+  chart on `/markets/[pair]` and `/assets/[slug]?tab=chart` is now
+  fetched on-demand via `next/dynamic`. First-load JS for those
+  routes drops by roughly the same amount; other tabs on the asset
+  page (overview / supply / history) no longer pay the bundle tax.
+- **Explorer: stable `staleTime` on read-mostly queries.**
+  `/v1/sources`, `/v1/issuers`, `/v1/issuers/{g}`, `/v1/markets`,
+  `/v1/history`, `/v1/assets/{id}`, and `/v1/changes/...` all gained
+  cache windows (60s–5min) so route-revisit nav re-uses recently
+  fetched data instead of re-hitting the network. `/v1/markets`
+  also got `placeholderData: prev` to keep the table populated
+  while pagination/filters fan out.
+
 ### Added
 
 - **Divergence: Chainlink reference enabled by default on r1.** The

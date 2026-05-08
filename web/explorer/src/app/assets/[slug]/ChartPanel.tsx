@@ -1,10 +1,18 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import dynamic from 'next/dynamic';
 
 import { Panel } from '@/components/reveal';
-import { CandleChart } from '@/components/charts/CandleChart';
 import { asExample, API_BASE_URL } from '@/api/client';
+
+// Lazy-load lightweight-charts (~155 KB) — only fetched when the
+// asset page lands on the chart tab. Other tabs (overview / supply
+// / history) don't pay the bundle cost.
+const CandleChart = dynamic(
+  () => import('@/components/charts/CandleChart').then((m) => m.CandleChart),
+  { ssr: false, loading: () => <div className="h-[360px]" /> },
+);
 
 // API-canonical timeframes per ADR-0020. The earlier '7d' / '30d'
 // labels were the obvious shorthand but the API rejects them as 400 —
