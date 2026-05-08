@@ -703,7 +703,109 @@ function OverviewBody({
           </dl>
         </Panel>
       )}
+
+      <AssetAbout symbol={coin.code} />
+      <AssetFAQ symbol={coin.code} hasIssuer={!!coin.issuer} />
     </div>
+  );
+}
+
+// CURATED_ASSET_ABOUT — short descriptions for the major Stellar
+// classic + Soroban assets. Currencies not in this map render no
+// panel (clean fail; the listing already gives users the data they
+// need). Multi-paragraph text rendered as separate <p>'s.
+const CURATED_ASSET_ABOUT: Record<string, string> = {
+  XLM: `Stellar Lumens (XLM) is the native asset of the Stellar network — the public blockchain that Rates Engine indexes natively. Lumens pay transaction fees, fund minimum account reserves (currently 1 XLM per base reserve unit + 0.5 per ledger entry), and serve as a convenient bridge asset for path-payments between any two issued tokens.
+
+XLM has a fixed maximum supply of ~50B; the Stellar Development Foundation periodically retires from its inflation pool. Unlike Bitcoin's purely-mined supply curve, lumen supply changes are governed by SDF allocation policy and the on-chain governance hooks the SCP consensus protocol exposes.`,
+  USDC: `USD Coin (USDC) on Stellar is issued by Circle Internet Financial — the same regulated issuer that runs the Ethereum-native USDC. Each USDC is backed 1:1 by USD-denominated reserves (cash + short-duration U.S. treasuries) held in segregated accounts and attested to monthly by Deloitte.
+
+USDC is the dominant USD-pegged stablecoin on Stellar by volume, the canonical USD proxy for the aggregator's stablecoin-fiat policy, and the quote leg of most active on-chain DEX pairs.`,
+  EURC: `EURC is Circle's euro-denominated stablecoin. Like USDC it carries 1:1 fiat backing, monthly attestations, and Circle's regulated-issuer status. On Stellar EURC is the canonical EUR proxy and the largest non-USD stablecoin by 24h volume — most EUR cross-rates on the explorer flow through it.`,
+  AQUA: `AQUA is the governance + reward token for the Aquarius DEX, a Stellar-native AMM that issues liquidity-incentive emissions to selected pools. Holders vote on emission allocations; LPs in voted-up pools earn AQUA on top of their swap fees. AQUA is one of the most-held classic credit assets on Stellar by trustline count.`,
+  yXLM: `yXLM is a yield-bearing wrapper for XLM issued by Ultra Stellar (yieldblox.com). Holders earn variable APY funded by lending the underlying XLM into Blend pools and similar credit markets. The peg to underlying XLM is maintained by the issuer's redemption mechanism, not by an on-chain CDP.`,
+  SHX: `SHX is the native token of StellarX, an early Stellar-native trading frontend. The asset has a long history on the network and remains in the top tier by trustline count, though active trade volume is concentrated against XLM and USDC.`,
+  BLND: `BLND is the governance token for Blend Capital's Stellar lending protocol. Holders participate in protocol-level decisions; the token is not redeemable for collateral. BLND issuance is controlled by the BLND-USDC backstop pool that secures the protocol's bad-debt insurance fund.`,
+  XRP: `XRP on Stellar is issued by Bitstamp's wallet-bridge token, NOT the native XRP Ledger asset. Trustlines hold an IOU that the issuer redeems via the bridge. Liquidity is materially lower than the native asset on the XRP Ledger; for the canonical XRP price reference the explorer's XRP rate triangulates via Binance/Coinbase XRP/USD.`,
+};
+
+// CURATED_FAQ — generic answers parameterised by the asset's
+// own code so the same five-question set renders sensibly for
+// every asset.
+function assetFaqFor(symbol: string, hasIssuer: boolean): { q: string; a: string }[] {
+  const issuerNote = hasIssuer
+    ? `As a classic credit asset, ${symbol} has a designated issuer account holding the canonical issuance authority — see the Issuer panel above for SEP-1 metadata, auth flags, and the home domain that pinned the issuer's identity.`
+    : `As a Soroban-native or smart-contract token, ${symbol} doesn't have a classic Stellar issuer account. Its issuance is governed by the contract's own logic; on-chain mint/burn events drive its supply.`;
+  return [
+    {
+      q: `What is ${symbol}?`,
+      a: `${symbol} is one of the assets we index on the Stellar network. Rates Engine pulls live trades for it from the Soroban DEX corpus (Soroswap, Phoenix, Aquarius, Comet) plus the classic SDEX order book, plus CEX feeds (Binance, Coinbase, Kraken, Bitstamp) where the symbol exists. The price you see is a 24h-trailing VWAP across every active venue.`,
+    },
+    {
+      q: `Where does the price come from?`,
+      a: `We compute a volume-weighted average across every connected exchange that's actively trading ${symbol} in the trailing 24 hours. Source-class exchanges (CEX + on-chain DEX) contribute by default; aggregators and oracles are reported alongside but excluded from the VWAP itself to avoid double-counting upstream markets.`,
+    },
+    {
+      q: `What is circulating supply for a Stellar asset?`,
+      a: `For classic credit assets we use the issuer's current balance held by non-issuer accounts (the on-chain definition of "in circulation"); for Soroban tokens we track mint/burn events on the contract. SEP-1 fixed_number / max_number declarations from the issuer's stellar.toml override the on-chain count when the issuer pledges a hard cap.`,
+    },
+    {
+      q: `${symbol} issuer details`,
+      a: issuerNote,
+    },
+    {
+      q: `How fresh is this data?`,
+      a: `On-chain trades land in the indexer within ~6 seconds of the ledger close (the Stellar consensus cadence). CEX feeds stream live via WebSocket; the 24h VWAP recomputes continuously. The chart's last-trade timestamp shows the most recent observation we ingested for this asset.`,
+    },
+  ];
+}
+
+function AssetAbout({ symbol }: { symbol: string }) {
+  const text = CURATED_ASSET_ABOUT[symbol];
+  if (!text) return null;
+  return <AssetExpandableText title={`About ${symbol}`} body={text} />;
+}
+
+function AssetExpandableText({ title, body }: { title: string; body: string }) {
+  const paragraphs = body.split(/\n\s*\n/).filter(Boolean);
+  return (
+    <Panel
+      title={title}
+      bodyClassName="text-sm text-slate-700 dark:text-slate-300 space-y-3 leading-relaxed"
+    >
+      {paragraphs.map((p, i) => (
+        <p key={i}>{p}</p>
+      ))}
+    </Panel>
+  );
+}
+
+function AssetFAQ({ symbol, hasIssuer }: { symbol: string; hasIssuer: boolean }) {
+  const items = assetFaqFor(symbol, hasIssuer);
+  return (
+    <Panel
+      title="FAQ"
+      hint="Common questions about this asset"
+      bodyClassName="space-y-2 text-sm"
+    >
+      {items.map((it, i) => (
+        <AssetFAQItem key={i} q={it.q} a={it.a} />
+      ))}
+    </Panel>
+  );
+}
+
+function AssetFAQItem({ q, a }: { q: string; a: string }) {
+  return (
+    <details className="group rounded-lg border border-slate-200 dark:border-slate-800">
+      <summary className="flex cursor-pointer items-center justify-between px-3 py-2 font-medium text-slate-900 hover:bg-slate-50 dark:text-slate-100 dark:hover:bg-slate-900/40">
+        <span>{q}</span>
+        <span aria-hidden className="text-xs text-slate-400 group-open:rotate-45 transition-transform">+</span>
+      </summary>
+      <p className="border-t border-slate-200 px-3 py-2 text-sm leading-relaxed text-slate-700 dark:border-slate-800 dark:text-slate-300">
+        {a}
+      </p>
+    </details>
   );
 }
 
