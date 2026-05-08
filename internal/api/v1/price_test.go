@@ -786,3 +786,81 @@ func mustClassicTest(code, issuer string) canonical.Asset {
 	}
 	return a
 }
+
+// stubCurrenciesReader is the test seam for the fiat-cross-rate
+// fallback on /v1/price. Returns whatever Snapshot it was
+// configured with; nil → "warming up" branch.
+type stubCurrenciesReader struct {
+	snap *v1.CurrenciesSnapshot
+}
+
+func (s *stubCurrenciesReader) Latest() *v1.CurrenciesSnapshot { return s.snap }
+
+// TestPrice_FiatCrossRate_EURUSD — when the asset and quote are
+// both fiat and direct trade data is absent (the steady state for
+// fiat conversions on Stellar), the handler synthesises a cross
+// rate from the forex snapshot. EUR rate_usd=0.92 means
+// 1 USD = 0.92 EUR, so 1 EUR = 1/0.92 = ~1.0869565 USD.
+//
+// flags.triangulated=true documents the synthesis to the caller —
+// this isn't a direct on-chain trade.
+func TestPrice_FiatCrossRate_EURUSD(t *testing.T) {
+	reader := &stubPriceReader{err: v1.ErrPriceNotFound}
+	currencies := &stubCurrenciesReader{
+		snap: &v1.CurrenciesSnapshot{
+			Currencies: []v1.CurrencyEntry{
+				{Ticker: "EUR", Name: "Euro", RateUSD: 0.92},
+			},
+			PublishedAt: time.Unix(1_770_000_000, 0).UTC(),
+		},
+	}
+	srv := v1.New(v1.Options{Prices: reader, Currencies: currencies})
+	ts := startHTTPTest(t, srv.Handler())
+
+	resp := mustGet(t, ts.URL+"/v1/price?asset=fiat:EUR&quote=fiat:USD")
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d, want 200 (fiat cross-rate fallback)", resp.StatusCode)
+	}
+	body, _ := readAll(resp)
+	for _, s := range []string{
+		`"asset_id":"fiat:EUR"`,
+		`"quote":"fiat:USD"`,
+		`"price_type":"vwap"`,
+		`"triangulated":true`,
+	} {
+		if !strings.Contains(body, s) {
+			t.Errorf("body missing %q: %s", s, body)
+		}
+	}
+	// 1/0.92 ≈ 1.0869565… — assert the price is in the right range
+	// without pinning every digit. The exact serialisation depends
+	// on Go's strconv.FormatFloat shortest-round-trip output.
+	if !strings.Contains(body, `"price":"1.086`) {
+		t.Errorf("price not ~1.086…: %s", body)
+	}
+}
+
+// TestPrice_FiatCrossRate_NotFiatBothSides — the cross-rate fallback
+// only fires when BOTH asset and quote are fiat. native/fiat:USD
+// stays on the Redis/Triangulated path so this branch doesn't
+// silently shadow the stablecoin proxy.
+func TestPrice_FiatCrossRate_NotFiatBothSides(t *testing.T) {
+	reader := &stubPriceReader{err: v1.ErrPriceNotFound}
+	currencies := &stubCurrenciesReader{
+		snap: &v1.CurrenciesSnapshot{
+			Currencies: []v1.CurrencyEntry{
+				{Ticker: "EUR", RateUSD: 0.92},
+			},
+		},
+	}
+	srv := v1.New(v1.Options{Prices: reader, Currencies: currencies})
+	ts := startHTTPTest(t, srv.Handler())
+
+	// native is AssetType=Native, not fiat — fiat cross fallback
+	// must not fire here. Without a Triangulated looker either,
+	// the original 404 stands.
+	resp := mustGet(t, ts.URL+"/v1/price?asset=native&quote=fiat:USD")
+	if resp.StatusCode != http.StatusNotFound {
+		t.Errorf("status = %d, want 404 (fiat fallback shouldn't fire for native/fiat:USD)", resp.StatusCode)
+	}
+}

@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"math/big"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
@@ -290,6 +291,18 @@ func (s *Server) handlePrice(w http.ResponseWriter, r *http.Request) {
 		snapshot, sources, triangulated, ok = s.tryRedisVWAPFallback(r.Context(), asset, quote)
 		stale = false
 		if !ok {
+			// Fiat-vs-fiat last resort: cross-rate via the forex
+			// snapshot. /v1/currencies has rates for ~110 fiats
+			// already; computing fiat:EUR/fiat:USD as
+			// 1/rate_usd[EUR] is exact, and the same machinery
+			// supports any fiat pair. Without this branch,
+			// /v1/price?asset=fiat:EUR&quote=fiat:USD 404s in
+			// steady state because there's no on-chain trade
+			// pair for fiat-vs-fiat.
+			snapshot, sources, ok = s.tryFiatCrossRate(asset, quote)
+			triangulated = ok || triangulated
+		}
+		if !ok {
 			writeProblem(w, r,
 				"https://api.ratesengine.net/errors/price-not-found",
 				"No price data for pair", http.StatusNotFound,
@@ -442,6 +455,87 @@ func (s *Server) tryRedisVWAPFallback(ctx context.Context, asset, quote canonica
 		WindowSeconds: int(triangulationLookupWindow.Seconds()),
 	}
 	return snap, []string{}, isTriangulated, true
+}
+
+// tryFiatCrossRate synthesises a fiat-vs-fiat price by cross-rating
+// through the wired CurrenciesReader's USD-base snapshot. Used as a
+// last-resort fallback on /v1/price after both the Timescale read
+// and the Redis VWAP cache miss — neither has fiat-vs-fiat trade
+// data because fiat conversions don't have on-chain trade pairs.
+//
+// Algebra:
+//
+//	rate_usd[X] = "1 USD = N units of X" (forex worker convention)
+//	1 X in Y    = (1/rate_usd[X]) × rate_usd[Y]
+//	            = rate_usd[Y] / rate_usd[X]
+//
+// Special-cases the common (asset=fiat:X, quote=fiat:USD) form so
+// /v1/price?asset=fiat:EUR&quote=fiat:USD returns
+// 1/rate_usd[EUR] without spuriously looking up rate_usd[USD] (=1
+// by definition).
+//
+// Returns ok=false when:
+//   - Either side isn't a fiat asset.
+//   - The currencies reader isn't wired or the cache hasn't warmed.
+//   - One ticker isn't in the snapshot (rate_usd unknown).
+//   - rate_usd[X] is zero (would divide by zero).
+//
+// PriceType is "vwap" because the upstream forex feed is itself a
+// volume-weighted average across the upstream's source set; sources
+// is `["massive"]` to credit the upstream feed.
+func (s *Server) tryFiatCrossRate(asset, quote canonical.Asset) (PriceSnapshot, []string, bool) {
+	if asset.Type != canonical.AssetFiat || quote.Type != canonical.AssetFiat {
+		return PriceSnapshot{}, nil, false
+	}
+	if s.currencies == nil {
+		return PriceSnapshot{}, nil, false
+	}
+	snap := s.currencies.Latest()
+	if snap == nil {
+		return PriceSnapshot{}, nil, false
+	}
+
+	// Build a lookup from ticker → rate_usd. The slice is small
+	// (~110 entries) and called rarely (last-resort fallback), so
+	// linear scan is fine; the alternative — a per-request map
+	// allocation — would not pay off.
+	var rateAsset, rateQuote float64
+	var foundAsset, foundQuote bool
+	for _, c := range snap.Currencies {
+		if c.Ticker == asset.Code {
+			rateAsset = c.RateUSD
+			foundAsset = true
+		}
+		if c.Ticker == quote.Code {
+			rateQuote = c.RateUSD
+			foundQuote = true
+		}
+		if foundAsset && foundQuote {
+			break
+		}
+	}
+	if !foundAsset || rateAsset <= 0 {
+		return PriceSnapshot{}, nil, false
+	}
+	// rate_usd[USD] is implicitly 1 — handle that without requiring
+	// the snapshot to carry an explicit USD entry.
+	if !foundQuote {
+		if quote.Code == "USD" {
+			rateQuote = 1
+			foundQuote = true
+		} else {
+			return PriceSnapshot{}, nil, false
+		}
+	}
+	cross := rateQuote / rateAsset
+	priceStr := strconv.FormatFloat(cross, 'f', -1, 64)
+	return PriceSnapshot{
+		AssetID:    asset.String(),
+		Quote:      quote.String(),
+		Price:      priceStr,
+		PriceType:  "vwap",
+		ObservedAt: snap.PublishedAt,
+	}, []string{"massive"}, true
 }
 
 // attachConfidence consults the wired ConfidenceLooker (when set)
