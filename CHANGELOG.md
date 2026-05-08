@@ -15,6 +15,8 @@ against.
 
 ## [Unreleased]
 
+## [v0.5.0-rc.34] — 2026-05-08
+
 ### Added
 
 - **`known_issuers.go` expanded from 14 to 27 entries** (Round 5)
