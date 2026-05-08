@@ -5,6 +5,7 @@ import { Suspense } from 'react';
 import { Panel } from '@/components/reveal';
 import { asExample, API_BASE_URL } from '@/api/client';
 import { formatCompact, formatPrice } from '@/lib/format';
+import { AssetClientFallback } from './AssetClientFallback';
 import { AssetTabs, ActiveTabSlot } from './AssetTabs';
 import { AssetAbout } from './AssetAbout';
 import { AssetConverter } from './AssetConverter';
@@ -152,19 +153,39 @@ const isCIStub =
 // and in practice the API responds in <300ms steady-state.
 const BUILD_FETCH_TIMEOUT_MS = 8_000;
 
+// fetchCoin retries up to 3x with a 500ms backoff on network /
+// 5xx errors. Build-time fetch failures previously baked
+// "Asset not found" into the static HTML for every slug rendered
+// during a bad CF Pages build window — the retry plus the client
+// fallback in the !coin branch make that scenario survivable.
+// 4xx (404 included) returns null on the first try, no retry.
 async function fetchCoin(slug: string): Promise<CoinSummary | null> {
   if (isCIStub) return null;
-  try {
-    const res = await fetch(
-      `${API_BASE_URL}/v1/coins/${encodeURIComponent(slug)}`,
-      { signal: AbortSignal.timeout(BUILD_FETCH_TIMEOUT_MS) },
-    );
-    if (!res.ok) return null;
-    const env = (await res.json()) as { data: CoinSummary };
-    return env.data ?? null;
-  } catch {
-    return null;
+  for (let attempt = 0; attempt < 3; attempt++) {
+    try {
+      const res = await fetch(
+        `${API_BASE_URL}/v1/coins/${encodeURIComponent(slug)}`,
+        { signal: AbortSignal.timeout(BUILD_FETCH_TIMEOUT_MS) },
+      );
+      if (res.status >= 400 && res.status < 500) return null;
+      if (!res.ok) {
+        if (attempt < 2) {
+          await new Promise((resolve) => setTimeout(resolve, 500));
+          continue;
+        }
+        return null;
+      }
+      const env = (await res.json()) as { data: CoinSummary };
+      return env.data ?? null;
+    } catch {
+      if (attempt < 2) {
+        await new Promise((resolve) => setTimeout(resolve, 500));
+        continue;
+      }
+      return null;
+    }
   }
+  return null;
 }
 
 async function fetchAssetDetail(assetId: string): Promise<AssetDetail | null> {
@@ -295,6 +316,13 @@ export default async function AssetDetailPage({ params }: { params: Params }) {
   const coin = await fetchCoin(slug);
 
   if (!coin) {
+    // Build-time /v1/coins/{slug} fetch returned null. Two
+    // possibilities: (a) the slug really doesn't exist, or (b)
+    // the CF Pages build host couldn't reach api.ratesengine.net
+    // during this build (cold connection pool / API restart). We
+    // can't distinguish at build time, so we hand off to a client
+    // fallback that retries from the user's browser and renders
+    // the right state (real not-found vs. transient build issue).
     return (
       <div className="mx-auto max-w-7xl space-y-6 px-6 py-8">
         <header className="space-y-3">
@@ -304,23 +332,9 @@ export default async function AssetDetailPage({ params }: { params: Params }) {
             </Link>{' '}
             / <span>{slug}</span>
           </nav>
-          <h1 className="text-3xl font-semibold tracking-tight">
-            {slug}
-          </h1>
+          <h1 className="text-3xl font-semibold tracking-tight">{slug}</h1>
         </header>
-        <Panel title="Asset not found" bodyClassName="text-sm text-slate-600 dark:text-slate-400">
-          <p>
-            The slug{' '}
-            <code className="rounded bg-slate-100 px-1 font-mono text-xs dark:bg-slate-800">
-              {slug}
-            </code>{' '}
-            doesn&apos;t match any asset the indexer has observed yet. Asset
-            slugs are derived from canonical asset IDs (e.g.{' '}
-            <code className="font-mono">native</code>,{' '}
-            <code className="font-mono">USDC-GA5Z…</code>); a typo or a
-            never-traded asset both end up here.
-          </p>
-        </Panel>
+        <AssetClientFallback slug={slug} />
       </div>
     );
   }

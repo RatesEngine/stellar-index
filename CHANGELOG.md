@@ -15,6 +15,21 @@ against.
 
 ## [Unreleased]
 
+### Fixed
+
+- **Explorer**: `/assets/{slug}` no longer bakes "Asset not found"
+  into the static HTML when the build-time `/v1/coins/{slug}`
+  fetch fails. The build-time fetch now retries up to 3× with a
+  500 ms backoff on network/5xx errors; if every retry still
+  fails, the page hands off to a new client-side fallback
+  (`AssetClientFallback`) that re-attempts the fetch from the
+  user's browser and distinguishes a real 404 from a transient
+  build-host connectivity issue. Previously a single CF Pages
+  build window with an API blip rendered every asset detail
+  page as not-found until the next build landed. Reported
+  2026-05-08 — every asset page on production showed the
+  not-found state simultaneously.
+
 ### Added
 
 - **Explorer**: FAQPage + BreadcrumbList JSON-LD structured data
