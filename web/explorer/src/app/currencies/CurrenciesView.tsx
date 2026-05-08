@@ -73,19 +73,20 @@ export function CurrenciesView() {
       <header className="space-y-2">
         <h1 className="text-3xl font-semibold tracking-tight">Currencies</h1>
         <p className="max-w-3xl text-sm text-slate-600 dark:text-slate-400">
-          World fiat currencies with live rates against USD. Free
-          coverage from{' '}
+          World fiat currencies with live rates against USD. Daily
+          spot rates sourced from{' '}
           <a
-            href="https://github.com/fawazahmed0/exchange-api"
+            href="https://polygon.io"
             target="_blank"
             rel="noreferrer noopener"
             className="text-brand-600 hover:underline"
           >
-            currency-api
-          </a>{' '}
-          (ECB / FRBNY-aggregated, daily-updated). Higher-frequency,
-          deeper coverage (1h / 24h / 7d change, market cap, volume,
-          circulating supply) lands once we wire a paid forex feed.
+            Massive (Polygon.io)
+          </a>
+          {' '}— ~110 currencies, 24h + 7d rolling change. Hover any
+          row to see the trailing-week sparkline; click into a
+          ticker for the converter and full chart down to 30d / 1y
+          / 5y / 10y persistent history.
         </p>
       </header>
 
