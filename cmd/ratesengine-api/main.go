@@ -495,12 +495,16 @@ func run(cfgPath string, dryRun bool) error { //nolint:gocognit,funlen,gocyclo /
 	}, logger)
 
 	apiSrv := v1.New(v1.Options{
-		Logger:        logger.With("component", "api"),
-		ReadyChecks:   checks,
-		Assets:        assetReader,
-		Prices:        priceReader,
-		History:       storeHistoryReader{s: store},
-		Markets:       marketsReader,
+		Logger:      logger.With("component", "api"),
+		ReadyChecks: checks,
+		Assets:      assetReader,
+		Prices:      priceReader,
+		History:     storeHistoryReader{s: store},
+		// Wrap with a 30s TTL cache. /v1/markets and /v1/pools both
+		// scan ~24h of the trades hypertable on every hit (5-10s
+		// each); the explorer hits them on every page load. 30s
+		// freshness is plenty for trade-volume aggregates.
+		Markets:       v1.NewCachedMarketsReader(marketsReader, 30*time.Second),
 		Oracle:        oracleReader,
 		Meta:          sep1Cache,
 		Accounts:      accountStore,
