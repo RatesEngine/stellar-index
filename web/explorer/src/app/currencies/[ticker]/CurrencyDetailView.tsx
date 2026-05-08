@@ -2,12 +2,22 @@
 
 import { useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
+import dynamic from 'next/dynamic';
 import Link from 'next/link';
 import { ArrowLeft } from 'lucide-react';
 
 import { Panel } from '@/components/reveal';
 import { CurrencyCombobox } from '@/components/CurrencyCombobox';
 import { apiGet, asExample } from '@/api/client';
+
+// Lightweight-charts (~155 KB) is only needed once the user is on a
+// per-currency page — lazy-load so the listing → detail nav still
+// hits TTI quickly. ssr:false because lightweight-charts touches
+// the canvas API on construction.
+const LineChart = dynamic(
+  () => import('@/components/charts/LineChart').then((m) => m.LineChart),
+  { ssr: false, loading: () => <div className="h-[320px]" /> },
+);
 
 interface HistoryPoint {
   date: string;
@@ -172,7 +182,7 @@ function HistoryPanel({ detail }: { detail: CurrencyDetail }) {
             : `No persistent ${rangeLabel} history yet — backfill is in progress.`}
         </p>
       ) : (
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+        <div className="space-y-3">
           <div>
             <div className="text-xs uppercase tracking-wider text-slate-500">
               {rangeLabel} change
@@ -185,11 +195,13 @@ function HistoryPanel({ detail }: { detail: CurrencyDetail }) {
               {hasData ? `${positive ? '+' : ''}${changePct.toFixed(2)}%` : '—'}
             </div>
           </div>
-          <Sparkline
-            points={series.map((p) => p.inverse_usd)}
-            dates={series.map((p) => p.date)}
+          <LineChart
+            data={series.map((p) => ({
+              time: Math.floor(new Date(p.date).getTime() / 1000),
+              value: p.inverse_usd,
+            }))}
             positive={positive}
-            wide={range !== '7d'}
+            height={range === '7d' ? 220 : 320}
           />
         </div>
       )}
@@ -224,77 +236,8 @@ function RangeSelector({
   );
 }
 
-function Sparkline({
-  points,
-  positive,
-  dates,
-  wide,
-}: {
-  points: number[];
-  positive: boolean;
-  dates?: string[];
-  wide?: boolean;
-}) {
-  const w = wide ? 720 : 320;
-  const h = wide ? 200 : 96;
-  const padX = 28; // leave room for the right-side y-axis labels
-  const padY = 6;
-  const innerW = w - padX;
-  const innerH = h - padY * 2;
-  const min = Math.min(...points);
-  const max = Math.max(...points);
-  const range = max - min || 1;
-  const stepX = innerW / (points.length - 1);
-  const xy = points.map((p, i) => {
-    const x = i * stepX;
-    const y = padY + innerH - ((p - min) / range) * innerH;
-    return { x, y, p };
-  });
-  const path = xy
-    .map((pt, i) => `${i === 0 ? 'M' : 'L'}${pt.x.toFixed(2)},${pt.y.toFixed(2)}`)
-    .join(' ');
-  // Area fill: same path closed back to the baseline so the SVG
-  // renders a tinted region under the line.
-  const area =
-    `${path} L${xy[xy.length - 1].x.toFixed(2)},${(padY + innerH).toFixed(2)} ` +
-    `L${xy[0].x.toFixed(2)},${(padY + innerH).toFixed(2)} Z`;
-  const stroke = positive ? '#059669' : '#e11d48';
-  const fill = positive ? 'rgba(16,185,129,0.12)' : 'rgba(244,63,94,0.12)';
-  return (
-    <svg width={w} height={h} viewBox={`0 0 ${w} ${h}`} className="overflow-visible">
-      {/* min / max labels at the right edge — horizontal so the chart
-          reads naturally. */}
-      <text x={innerW + 4} y={padY + 4} className="fill-slate-500 text-[9px]" fontFamily="ui-monospace,monospace">
-        {formatRate(max)}
-      </text>
-      <text x={innerW + 4} y={padY + innerH} className="fill-slate-500 text-[9px]" fontFamily="ui-monospace,monospace">
-        {formatRate(min)}
-      </text>
-      <path d={area} fill={fill} stroke="none" />
-      <path d={path} fill="none" stroke={stroke} strokeWidth={wide ? 1.25 : 1.5} strokeLinecap="round" strokeLinejoin="round" />
-      {/* Data points with hover titles only on the compact variant —
-          a 5y daily series has ~1,800 points, drawing each as a
-          circle would be slow and visually noisy. */}
-      {!wide &&
-        xy.map((pt, i) => (
-          <circle
-            key={i}
-            cx={pt.x}
-            cy={pt.y}
-            r={2.5}
-            fill={stroke}
-            stroke="white"
-            strokeWidth={0.75}
-          >
-            <title>
-              {dates?.[i] ? `${dates[i].slice(0, 10)} · ` : ''}
-              {formatRate(pt.p)}
-            </title>
-          </circle>
-        ))}
-    </svg>
-  );
-}
+// (Local SVG Sparkline replaced by lightweight-charts LineChart for
+// hover crosshair, panning, zooming. See @/components/charts/LineChart.)
 
 function Converter({ detail }: { detail: CurrencyDetail }) {
   // Bidirectional swap widget: both sides have a searchable
