@@ -15,6 +15,31 @@ against.
 
 ## [Unreleased]
 
+## [v0.5.0-rc.30] — 2026-05-08
+
+### Added
+- **`known_issuers` curated fallback expanded to 14 entries**
+  (#1004). Adds Blend Capital (BLND), Velo Labs, Phoenix,
+  Mykobo (USDx/EURx/GBPx — single G-strkey), Apay (BTC + ETH
+  wrapped), Libre, and Circle EURC. Sourced by cross-referencing
+  the SAC wrapper rounds 2-4 against each issuer's stellar.toml
+  ACCOUNTS list. /v1/issuers and the /assets table now surface
+  org names for ~14 anchors covering most non-XLM trade volume.
+- **`[supply.sac_wrappers]` expanded to 38 entries** (#990,
+  #1001, #1002, #1003). The operator-config map now resolves
+  every SAC contract on the top Aquarius / Soroswap / Phoenix
+  pools to its underlying classic asset. Drives both the
+  explorer's pool-row labels (USDC, BLND, etc. instead of
+  truncated C-strkeys) and the indexer's `usd_volume` path
+  for trades quoted in USDC SAC.
+
+### Operations
+- **`scripts/ops/recompute-usd-volume-soroban.sql`** (#1000) —
+  one-shot psql script that retroactively prices ~124k historical
+  Soroban DEX trades (Aquarius 104k, Phoenix 8k, Soroswap 8k,
+  Comet 3k) that landed before the SAC wrapper config was added.
+  Operator runs it once to fix the "trades but no volume" gap.
+
 ## [v0.5.0-rc.29] — 2026-05-08
 
 ### Added
