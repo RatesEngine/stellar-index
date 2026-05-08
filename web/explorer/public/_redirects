@@ -62,3 +62,25 @@
 /currencies/yxlm/              /assets/yXLM/  301
 /currencies/yusdc              /assets/yUSDC  301
 /currencies/yusdc/             /assets/yUSDC/ 301
+
+# Bare category-with-no-id URLs that 404'd because the category is
+# only a route prefix (`/research/adr/[id]/page.tsx`,
+# `/lending/[pool]/page.tsx`) without an index page of its own.
+# Bounce them up one level to the canonical entry that DOES list
+# everything in the category. The 404 audit on 2026-05-08 caught
+# these as the only remaining bare-category dead-ends.
+/research/adr            /research/  301
+/research/adr/           /research/  301
+/research/architecture   /research/  301
+/research/architecture/  /research/  301
+/research/discovery      /research/  301
+/research/discovery/     /research/  301
+/research/operations     /research/  301
+/research/operations/    /research/  301
+
+# Same problem for lending: pools are keyed by contract address
+# (G-strkey), so the protocol name "blend" — even though it's
+# the only lending protocol we cover today — wasn't routable.
+# Bounce to the lending listing.
+/lending/blend           /lending/   301
+/lending/blend/          /lending/   301
