@@ -305,7 +305,10 @@ export interface paths {
                     /**
                      * @description Canonical asset identifier. One of `native`, `<code>-<issuer>`,
                      *     `<code>:<issuer>` (alias), or `<contract_id>`. Strkeys
-                     *     validated per SEP-23.
+                     *     validated per SEP-23. The handler is strict — short symbols
+                     *     like `XLM` or `USDC` are NOT accepted here; use `native` or
+                     *     the full `<code>-<G…>` form.
+                     * @example native
                      */
                     asset_id: components["parameters"]["AssetIdPath"];
                 };
@@ -349,7 +352,10 @@ export interface paths {
                     /**
                      * @description Canonical asset identifier. One of `native`, `<code>-<issuer>`,
                      *     `<code>:<issuer>` (alias), or `<contract_id>`. Strkeys
-                     *     validated per SEP-23.
+                     *     validated per SEP-23. The handler is strict — short symbols
+                     *     like `XLM` or `USDC` are NOT accepted here; use `native` or
+                     *     the full `<code>-<G…>` form.
+                     * @example native
                      */
                     asset_id: components["parameters"]["AssetIdPath"];
                 };
@@ -392,9 +398,19 @@ export interface paths {
                      * @description Canonical asset identifier — matches the `asset_id` on
                      *     response bodies. Query-parameter form is the shorter `asset`
                      *     per the handler implementations (/v1/price, /v1/oracle/latest).
+                     *     Strict canonical form only — `XLM` / `USDC` are rejected;
+                     *     use `native` for XLM and the full `<code>-<G…>` strkey for
+                     *     credit assets.
+                     * @example native
                      */
                     asset: components["parameters"]["AssetQuery"];
-                    /** @description ISO-4217 fiat or crypto asset_id. Default `USD`. */
+                    /**
+                     * @description Quote-side asset. Either a canonical asset identifier (`native`,
+                     *     `<code>-<issuer>`, contract ID) for crypto-quoted pairs, or
+                     *     the `fiat:<ISO-4217>` form for fiat quotes (e.g. `fiat:USD`,
+                     *     `fiat:EUR`). Default `fiat:USD`.
+                     * @example fiat:USD
+                     */
                     quote?: components["parameters"]["Quote"];
                 };
                 header?: never;
@@ -477,9 +493,19 @@ export interface paths {
                      * @description Canonical asset identifier — matches the `asset_id` on
                      *     response bodies. Query-parameter form is the shorter `asset`
                      *     per the handler implementations (/v1/price, /v1/oracle/latest).
+                     *     Strict canonical form only — `XLM` / `USDC` are rejected;
+                     *     use `native` for XLM and the full `<code>-<G…>` strkey for
+                     *     credit assets.
+                     * @example native
                      */
                     asset: components["parameters"]["AssetQuery"];
-                    /** @description ISO-4217 fiat or crypto asset_id. Default `USD`. */
+                    /**
+                     * @description Quote-side asset. Either a canonical asset identifier (`native`,
+                     *     `<code>-<issuer>`, contract ID) for crypto-quoted pairs, or
+                     *     the `fiat:<ISO-4217>` form for fiat quotes (e.g. `fiat:USD`,
+                     *     `fiat:EUR`). Default `fiat:USD`.
+                     * @example fiat:USD
+                     */
                     quote?: components["parameters"]["Quote"];
                     /** @description Rolling-window size in seconds for the VWAP. */
                     window_seconds?: number;
@@ -546,9 +572,19 @@ export interface paths {
                      * @description Canonical asset identifier — matches the `asset_id` on
                      *     response bodies. Query-parameter form is the shorter `asset`
                      *     per the handler implementations (/v1/price, /v1/oracle/latest).
+                     *     Strict canonical form only — `XLM` / `USDC` are rejected;
+                     *     use `native` for XLM and the full `<code>-<G…>` strkey for
+                     *     credit assets.
+                     * @example native
                      */
                     asset: components["parameters"]["AssetQuery"];
-                    /** @description ISO-4217 fiat or crypto asset_id. Default `USD`. */
+                    /**
+                     * @description Quote-side asset. Either a canonical asset identifier (`native`,
+                     *     `<code>-<issuer>`, contract ID) for crypto-quoted pairs, or
+                     *     the `fiat:<ISO-4217>` form for fiat quotes (e.g. `fiat:USD`,
+                     *     `fiat:EUR`). Default `fiat:USD`.
+                     * @example fiat:USD
+                     */
                     quote?: components["parameters"]["Quote"];
                     /** @description Tick cadence (and rolling-VWAP window) in seconds. */
                     window_seconds?: number;
@@ -597,9 +633,19 @@ export interface paths {
         get: {
             parameters: {
                 query: {
-                    /** @description Comma-separated, max 100. */
+                    /**
+                     * @description Comma-separated canonical asset ids, max 100. Same strict
+                     *     form as `/v1/price?asset=` — short symbols are rejected.
+                     * @example native,USDC-GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN
+                     */
                     asset_ids: string;
-                    /** @description ISO-4217 fiat or crypto asset_id. Default `USD`. */
+                    /**
+                     * @description Quote-side asset. Either a canonical asset identifier (`native`,
+                     *     `<code>-<issuer>`, contract ID) for crypto-quoted pairs, or
+                     *     the `fiat:<ISO-4217>` form for fiat quotes (e.g. `fiat:USD`,
+                     *     `fiat:EUR`). Default `fiat:USD`.
+                     * @example fiat:USD
+                     */
                     quote?: components["parameters"]["Quote"];
                 };
                 header?: never;
@@ -688,9 +734,19 @@ export interface paths {
                      * @description Canonical asset identifier — matches the `asset_id` on
                      *     response bodies. Query-parameter form is the shorter `asset`
                      *     per the handler implementations (/v1/price, /v1/oracle/latest).
+                     *     Strict canonical form only — `XLM` / `USDC` are rejected;
+                     *     use `native` for XLM and the full `<code>-<G…>` strkey for
+                     *     credit assets.
+                     * @example native
                      */
                     asset: components["parameters"]["AssetQuery"];
-                    /** @description ISO-4217 fiat or crypto asset_id. Default `USD`. */
+                    /**
+                     * @description Quote-side asset. Either a canonical asset identifier (`native`,
+                     *     `<code>-<issuer>`, contract ID) for crypto-quoted pairs, or
+                     *     the `fiat:<ISO-4217>` form for fiat quotes (e.g. `fiat:USD`,
+                     *     `fiat:EUR`). Default `fiat:USD`.
+                     * @example fiat:USD
+                     */
                     quote?: components["parameters"]["Quote"];
                     /** @description Restrict to one source's most-recent trade (0/1 row). */
                     source?: string;
@@ -761,9 +817,19 @@ export interface paths {
                      * @description Canonical asset identifier — matches the `asset_id` on
                      *     response bodies. Query-parameter form is the shorter `asset`
                      *     per the handler implementations (/v1/price, /v1/oracle/latest).
+                     *     Strict canonical form only — `XLM` / `USDC` are rejected;
+                     *     use `native` for XLM and the full `<code>-<G…>` strkey for
+                     *     credit assets.
+                     * @example native
                      */
                     asset: components["parameters"]["AssetQuery"];
-                    /** @description ISO-4217 fiat or crypto asset_id. Default `USD`. */
+                    /**
+                     * @description Quote-side asset. Either a canonical asset identifier (`native`,
+                     *     `<code>-<issuer>`, contract ID) for crypto-quoted pairs, or
+                     *     the `fiat:<ISO-4217>` form for fiat quotes (e.g. `fiat:USD`,
+                     *     `fiat:EUR`). Default `fiat:USD`.
+                     * @example fiat:USD
+                     */
                     quote?: components["parameters"]["Quote"];
                     /** @description Restrict to one source's most-recent trade. */
                     source?: string;
@@ -839,9 +905,19 @@ export interface paths {
                      * @description Canonical asset identifier — matches the `asset_id` on
                      *     response bodies. Query-parameter form is the shorter `asset`
                      *     per the handler implementations (/v1/price, /v1/oracle/latest).
+                     *     Strict canonical form only — `XLM` / `USDC` are rejected;
+                     *     use `native` for XLM and the full `<code>-<G…>` strkey for
+                     *     credit assets.
+                     * @example native
                      */
                     asset: components["parameters"]["AssetQuery"];
-                    /** @description ISO-4217 fiat or crypto asset_id. Default `USD`. */
+                    /**
+                     * @description Quote-side asset. Either a canonical asset identifier (`native`,
+                     *     `<code>-<issuer>`, contract ID) for crypto-quoted pairs, or
+                     *     the `fiat:<ISO-4217>` form for fiat quotes (e.g. `fiat:USD`,
+                     *     `fiat:EUR`). Default `fiat:USD`.
+                     * @example fiat:USD
+                     */
                     quote?: components["parameters"]["Quote"];
                 };
                 header?: {
@@ -897,9 +973,22 @@ export interface paths {
         get: {
             parameters: {
                 query: {
-                    /** @description Canonical asset identifier for the base side of a pair. */
+                    /**
+                     * @description Canonical asset identifier for the base side of a pair.
+                     *     Strict canonical form only — `USDC` / `XLM` are rejected;
+                     *     the full `<code>-<G…>` strkey is required, or `native` for
+                     *     XLM. The default example resolves to Centre's USDC issuance,
+                     *     which is the most-traded base on Stellar.
+                     * @example USDC-GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN
+                     */
                     base: components["parameters"]["Base"];
-                    /** @description ISO-4217 fiat or crypto asset_id. Default `USD`. */
+                    /**
+                     * @description Quote-side asset. Either a canonical asset identifier (`native`,
+                     *     `<code>-<issuer>`, contract ID) for crypto-quoted pairs, or
+                     *     the `fiat:<ISO-4217>` form for fiat quotes (e.g. `fiat:USD`,
+                     *     `fiat:EUR`). Default `fiat:USD`.
+                     * @example fiat:USD
+                     */
                     quote?: components["parameters"]["Quote"];
                     from?: components["parameters"]["From"];
                     to?: components["parameters"]["To"];
@@ -968,9 +1057,19 @@ export interface paths {
                      * @description Canonical asset identifier — matches the `asset_id` on
                      *     response bodies. Query-parameter form is the shorter `asset`
                      *     per the handler implementations (/v1/price, /v1/oracle/latest).
+                     *     Strict canonical form only — `XLM` / `USDC` are rejected;
+                     *     use `native` for XLM and the full `<code>-<G…>` strkey for
+                     *     credit assets.
+                     * @example native
                      */
                     asset: components["parameters"]["AssetQuery"];
-                    /** @description ISO-4217 fiat or crypto asset_id. Default `USD`. */
+                    /**
+                     * @description Quote-side asset. Either a canonical asset identifier (`native`,
+                     *     `<code>-<issuer>`, contract ID) for crypto-quoted pairs, or
+                     *     the `fiat:<ISO-4217>` form for fiat quotes (e.g. `fiat:USD`,
+                     *     `fiat:EUR`). Default `fiat:USD`.
+                     * @example fiat:USD
+                     */
                     quote?: components["parameters"]["Quote"];
                     granularity?: components["parameters"]["Granularity"];
                 };
@@ -1040,9 +1139,19 @@ export interface paths {
                      * @description Canonical asset identifier — matches the `asset_id` on
                      *     response bodies. Query-parameter form is the shorter `asset`
                      *     per the handler implementations (/v1/price, /v1/oracle/latest).
+                     *     Strict canonical form only — `XLM` / `USDC` are rejected;
+                     *     use `native` for XLM and the full `<code>-<G…>` strkey for
+                     *     credit assets.
+                     * @example native
                      */
                     asset: components["parameters"]["AssetQuery"];
-                    /** @description ISO-4217 fiat or crypto asset_id. Default `USD`. */
+                    /**
+                     * @description Quote-side asset. Either a canonical asset identifier (`native`,
+                     *     `<code>-<issuer>`, contract ID) for crypto-quoted pairs, or
+                     *     the `fiat:<ISO-4217>` form for fiat quotes (e.g. `fiat:USD`,
+                     *     `fiat:EUR`). Default `fiat:USD`.
+                     * @example fiat:USD
+                     */
                     quote?: components["parameters"]["Quote"];
                     timeframe?: components["parameters"]["Timeframe"];
                     granularity?: components["parameters"]["Granularity"];
@@ -1097,9 +1206,22 @@ export interface paths {
         get: {
             parameters: {
                 query: {
-                    /** @description Canonical asset identifier for the base side of a pair. */
+                    /**
+                     * @description Canonical asset identifier for the base side of a pair.
+                     *     Strict canonical form only — `USDC` / `XLM` are rejected;
+                     *     the full `<code>-<G…>` strkey is required, or `native` for
+                     *     XLM. The default example resolves to Centre's USDC issuance,
+                     *     which is the most-traded base on Stellar.
+                     * @example USDC-GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN
+                     */
                     base: components["parameters"]["Base"];
-                    /** @description ISO-4217 fiat or crypto asset_id. Default `USD`. */
+                    /**
+                     * @description Quote-side asset. Either a canonical asset identifier (`native`,
+                     *     `<code>-<issuer>`, contract ID) for crypto-quoted pairs, or
+                     *     the `fiat:<ISO-4217>` form for fiat quotes (e.g. `fiat:USD`,
+                     *     `fiat:EUR`). Default `fiat:USD`.
+                     * @example fiat:USD
+                     */
                     quote?: components["parameters"]["Quote"];
                     from?: components["parameters"]["From"];
                     to?: components["parameters"]["To"];
@@ -1154,9 +1276,22 @@ export interface paths {
         get: {
             parameters: {
                 query: {
-                    /** @description Canonical asset identifier for the base side of a pair. */
+                    /**
+                     * @description Canonical asset identifier for the base side of a pair.
+                     *     Strict canonical form only — `USDC` / `XLM` are rejected;
+                     *     the full `<code>-<G…>` strkey is required, or `native` for
+                     *     XLM. The default example resolves to Centre's USDC issuance,
+                     *     which is the most-traded base on Stellar.
+                     * @example USDC-GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN
+                     */
                     base: components["parameters"]["Base"];
-                    /** @description ISO-4217 fiat or crypto asset_id. Default `USD`. */
+                    /**
+                     * @description Quote-side asset. Either a canonical asset identifier (`native`,
+                     *     `<code>-<issuer>`, contract ID) for crypto-quoted pairs, or
+                     *     the `fiat:<ISO-4217>` form for fiat quotes (e.g. `fiat:USD`,
+                     *     `fiat:EUR`). Default `fiat:USD`.
+                     * @example fiat:USD
+                     */
                     quote?: components["parameters"]["Quote"];
                     from?: components["parameters"]["From"];
                     to?: components["parameters"]["To"];
@@ -1228,9 +1363,22 @@ export interface paths {
         get: {
             parameters: {
                 query: {
-                    /** @description Canonical asset identifier for the base side of a pair. */
+                    /**
+                     * @description Canonical asset identifier for the base side of a pair.
+                     *     Strict canonical form only — `USDC` / `XLM` are rejected;
+                     *     the full `<code>-<G…>` strkey is required, or `native` for
+                     *     XLM. The default example resolves to Centre's USDC issuance,
+                     *     which is the most-traded base on Stellar.
+                     * @example USDC-GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN
+                     */
                     base: components["parameters"]["Base"];
-                    /** @description ISO-4217 fiat or crypto asset_id. Default `USD`. */
+                    /**
+                     * @description Quote-side asset. Either a canonical asset identifier (`native`,
+                     *     `<code>-<issuer>`, contract ID) for crypto-quoted pairs, or
+                     *     the `fiat:<ISO-4217>` form for fiat quotes (e.g. `fiat:USD`,
+                     *     `fiat:EUR`). Default `fiat:USD`.
+                     * @example fiat:USD
+                     */
                     quote?: components["parameters"]["Quote"];
                     from?: components["parameters"]["From"];
                     to?: components["parameters"]["To"];
@@ -1302,6 +1450,10 @@ export interface paths {
                      * @description Canonical asset identifier — matches the `asset_id` on
                      *     response bodies. Query-parameter form is the shorter `asset`
                      *     per the handler implementations (/v1/price, /v1/oracle/latest).
+                     *     Strict canonical form only — `XLM` / `USDC` are rejected;
+                     *     use `native` for XLM and the full `<code>-<G…>` strkey for
+                     *     credit assets.
+                     * @example native
                      */
                     asset: components["parameters"]["AssetQuery"];
                     /** @description Optional. Restrict to a single source name. */
@@ -1624,7 +1776,10 @@ export interface paths {
                 query?: never;
                 header?: never;
                 path: {
-                    /** @description ISO-4217 ticker (case-insensitive); e.g. EUR, JPY. */
+                    /**
+                     * @description ISO-4217 ticker (case-insensitive); e.g. EUR, JPY.
+                     * @example EUR
+                     */
                     ticker: string;
                 };
                 cookie?: never;
@@ -1833,6 +1988,7 @@ export interface paths {
                 query?: never;
                 header?: never;
                 path: {
+                    /** @example GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN */
                     g_strkey: string;
                 };
                 cookie?: never;
@@ -2080,7 +2236,14 @@ export interface paths {
                 query?: never;
                 header?: never;
                 path: {
-                    /** @description URL-safe asset slug (e.g. `USDC`, `native`). */
+                    /**
+                     * @description URL-safe asset slug. Unlike the `/v1/price` and `/v1/ohlc`
+                     *     endpoints which require strict canonical IDs, the slug
+                     *     handler accepts the short symbol forms (`USDC`, `XLM`,
+                     *     `AQUA`) and special-cases `XLM` to native. Defaults to
+                     *     `XLM` for the Scalar default-test request.
+                     * @example XLM
+                     */
                     slug: string;
                 };
                 cookie?: never;
@@ -2200,12 +2363,14 @@ export interface paths {
                 query?: never;
                 header?: never;
                 path: {
+                    /** @example source */
                     entity_type: "coin" | "protocol" | "pair" | "source";
                     /**
                      * @description Canonical id for the entity. For `coin`, the asset slug
                      *     (e.g. `stellar`). For `pair`, `base/quote` form. For
                      *     `protocol`, the protocol slug. For `source`, the source
-                     *     name.
+                     *     name (e.g. `binance`, `coinbase`).
+                     * @example binance
                      */
                     id: string;
                 };
@@ -2684,7 +2849,15 @@ export interface paths {
         get: {
             parameters: {
                 query: {
+                    /**
+                     * @description Canonical asset id (e.g. `native`, `USDC-G…`).
+                     * @example native
+                     */
                     base: string;
+                    /**
+                     * @description Canonical asset id of the quote side.
+                     * @example USDC-GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN
+                     */
                     quote: string;
                 };
                 header?: never;
@@ -2723,6 +2896,15 @@ export interface paths {
         get: {
             parameters: {
                 query: {
+                    /**
+                     * @description SEP-40 oracle key. Reflector contracts publish under
+                     *     `crypto:<symbol>` (`crypto:XLM`, `crypto:BTC`,
+                     *     `crypto:USDC`, `crypto:ETH`, `crypto:EUROB`); the bare
+                     *     `native` / `<code>-<G…>` forms are NOT keys in the
+                     *     oracle namespace and return 404 here. Use
+                     *     `/v1/price?asset=…` for canonical-asset prices.
+                     * @example crypto:XLM
+                     */
                     asset: string;
                 };
                 header?: never;
@@ -2761,6 +2943,7 @@ export interface paths {
         get: {
             parameters: {
                 query: {
+                    /** @example crypto:XLM */
                     asset: string;
                     records?: number;
                 };
@@ -2800,7 +2983,9 @@ export interface paths {
         get: {
             parameters: {
                 query: {
+                    /** @example native */
                     base: string;
+                    /** @example USDC-GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN */
                     quote: string;
                 };
                 header?: never;
@@ -4593,20 +4778,40 @@ export interface components {
         /**
          * @description Canonical asset identifier. One of `native`, `<code>-<issuer>`,
          *     `<code>:<issuer>` (alias), or `<contract_id>`. Strkeys
-         *     validated per SEP-23.
+         *     validated per SEP-23. The handler is strict — short symbols
+         *     like `XLM` or `USDC` are NOT accepted here; use `native` or
+         *     the full `<code>-<G…>` form.
+         * @example native
          */
         AssetIdPath: string;
         /**
          * @description Canonical asset identifier — matches the `asset_id` on
          *     response bodies. Query-parameter form is the shorter `asset`
          *     per the handler implementations (/v1/price, /v1/oracle/latest).
+         *     Strict canonical form only — `XLM` / `USDC` are rejected;
+         *     use `native` for XLM and the full `<code>-<G…>` strkey for
+         *     credit assets.
+         * @example native
          */
         AssetQuery: string;
-        /** @description ISO-4217 fiat or crypto asset_id. Default `USD`. */
+        /**
+         * @description Quote-side asset. Either a canonical asset identifier (`native`,
+         *     `<code>-<issuer>`, contract ID) for crypto-quoted pairs, or
+         *     the `fiat:<ISO-4217>` form for fiat quotes (e.g. `fiat:USD`,
+         *     `fiat:EUR`). Default `fiat:USD`.
+         * @example fiat:USD
+         */
         Quote: string;
         Timeframe: "1h" | "24h" | "1w" | "1mo" | "1y" | "all";
         Granularity: "1m" | "15m" | "1h" | "4h" | "1d" | "1w" | "1mo";
-        /** @description Canonical asset identifier for the base side of a pair. */
+        /**
+         * @description Canonical asset identifier for the base side of a pair.
+         *     Strict canonical form only — `USDC` / `XLM` are rejected;
+         *     the full `<code>-<G…>` strkey is required, or `native` for
+         *     XLM. The default example resolves to Centre's USDC issuance,
+         *     which is the most-traded base on Stellar.
+         * @example USDC-GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN
+         */
         Base: string;
         From: string;
         To: string;

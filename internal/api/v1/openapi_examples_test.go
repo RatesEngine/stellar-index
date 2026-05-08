@@ -6,8 +6,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/RatesEngine/rates-engine/internal/canonical"
 	"gopkg.in/yaml.v3"
+
+	"github.com/RatesEngine/rates-engine/internal/canonical"
 )
 
 // TestOpenAPIExamplesParseAsCanonicalAssets walks the OpenAPI spec
