@@ -63,9 +63,26 @@ export async function generateMetadata({ params }: { params: Params }): Promise<
   if (!resolved) {
     return { title: `Currency not found` };
   }
+  const name = nameFor(resolved);
+  const canonical = `https://ratesengine.net/currencies/${friendlySlugFor(resolved)}`;
+  const title = `${resolved} (${name}) — live USD rate + cross-rates`;
+  const description = `Live ${name} (${resolved}) forex rate against USD, currency converter, and cross-rates against every other currency we track. Sourced from Massive (Polygon.io); refreshed hourly. Includes 7d / 30d / 90d / 1y / 5y / 10y history and CSV export.`;
   return {
-    title: `${resolved} — currency converter + cross-rates`,
-    description: `Live ${resolved} forex rate against USD, currency converter widget, and cross-rates against every other ${resolved}-denominated pair we track. Source: /v1/currencies/${resolved}.`,
+    title,
+    description,
+    alternates: { canonical },
+    openGraph: {
+      title,
+      description,
+      url: canonical,
+      type: 'website',
+      siteName: 'Rates Engine',
+    },
+    twitter: {
+      card: 'summary_large_image',
+      title,
+      description,
+    },
   };
 }
 
