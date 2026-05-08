@@ -15,6 +15,8 @@ against.
 
 ## [Unreleased]
 
+## [v0.5.0-rc.33] — 2026-05-08
+
 ### Added
 
 - **`known_scams.go` expanded to 19 entries** via a wider sweep of
