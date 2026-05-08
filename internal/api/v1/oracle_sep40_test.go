@@ -64,6 +64,36 @@ func TestOracleLastPrice_NotFound404(t *testing.T) {
 	}
 }
 
+// TestOracleLastPrice_RedisVWAPFallback — when prices_1m has no
+// row for native/fiat:USD (typical when XLM trades against USDC
+// not direct USD, and the aggregator's stablecoin-proxy rewrite
+// lives only in the Redis cache), the SEP-40 lastprice handler
+// falls through to the same TriangulatedPriceLooker /v1/price
+// uses. Pre-2026-05-08 the SEP-40 path skipped the fallback and
+// 404'd in steady state — caught by the prod audit.
+func TestOracleLastPrice_RedisVWAPFallback(t *testing.T) {
+	reader := &stubPriceReader{err: v1.ErrPriceNotFound}
+	looker := &stubTriangulatedPriceLooker{
+		value:          "0.155",
+		isTriangulated: false, // direct rewrite, no marker
+		found:          true,
+	}
+	srv := v1.New(v1.Options{Prices: reader, Triangulated: looker})
+	ts := startHTTPTest(t, srv.Handler())
+
+	resp := mustGet(t, ts.URL+"/v1/oracle/lastprice?asset=native")
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d, want 200 via fallback", resp.StatusCode)
+	}
+	var env struct {
+		Data v1.SEP40Price `json:"data"`
+	}
+	mustDecode(t, resp, &env)
+	if env.Data.Price != "0.155" {
+		t.Errorf("price = %q, want \"0.155\"", env.Data.Price)
+	}
+}
+
 func TestOracleLastPrice_HappyPath(t *testing.T) {
 	t0 := time.Unix(1_770_000_000, 0).UTC()
 	reader := &stubPriceReader{

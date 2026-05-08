@@ -17,6 +17,16 @@ against.
 
 ### Fixed
 
+- **`/v1/oracle/lastprice`**: now consults the same
+  TriangulatedPriceLooker fallback as `/v1/price` when prices_1m
+  has no row for the requested pair. Pre-fix, SEP-40
+  `lastprice(native)` 404'd in steady state because XLM trades
+  against USDC (not direct USD), and the aggregator's
+  stablecoin-proxy rewrite lives only in the Redis VWAP cache —
+  while `/v1/price?asset=native&quote=fiat:USD` returned a value
+  via that same cache. Caught by the 2026-05-08 prod audit; new
+  unit test `TestOracleLastPrice_RedisVWAPFallback` covers the
+  fallback path so the asymmetry can't regress.
 - **Docs (OpenAPI)**: every public-tier `/v1/*` endpoint's
   documented default test request now resolves to a live 200 in
   the Scalar docs UI. Previously many examples used short
