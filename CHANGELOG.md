@@ -15,8 +15,38 @@ against.
 
 ## [Unreleased]
 
+### Security
+
+- **Go runtime → 1.25.10**, **golang.org/x/net → v0.53.0**.
+  Closes the four govulncheck findings every PR was carrying:
+  - GO-2026-4986 — `mail.ParseAddress` (stdlib, used by signup
+    handler); fixed in go1.25.10
+  - GO-2026-4982, GO-2026-4980 — `template.Template.Execute`
+    (stdlib, used by magic-link template + cross-region monitor
+    HTTP server); fixed in go1.25.10
+  - GO-2026-4918 — `golang.org/x/net@v0.52.0`; fixed in v0.53.0
+  Local `govulncheck ./...` clean post-bump. CI's
+  `govulncheck + gitleaks` job goes green for every subsequent
+  PR; previously every PR today (#1066–#1073) failed it with
+  the same four findings.
 ### Added
 
+- **Test infrastructure**: `TestOpenAPIExamplesParseAsCanonicalAssets`
+  in `internal/api/v1/openapi_examples_test.go` walks the OpenAPI
+  spec and asserts every documented `asset` / `asset_id` /
+  `asset_ids` / `base` / `quote` parameter example parses
+  successfully via `canonical.ParseAsset`. Catches the
+  symbol-vs-canonical drift class at PR-time (no network
+  required) so a future PR setting `example: BTC` on
+  `/v1/price?asset=` fails CI immediately rather than waiting to
+  reach prod and break the Scalar Send button.
+- **CI**: `.github/workflows/api-audit.yml` — runs
+  `scripts/dev/audit-public-api.sh` against
+  `https://api.ratesengine.net` on every push to `main` that
+  touches `openapi/**`, `internal/api/**`, or the audit script
+  itself, plus on manual workflow_dispatch with an optional
+  `api_base_url` input. No schedule; the existing audit script
+  is published for cron / Healthchecks.io use.
 - **Explorer**: "Download CSV" button on the
   `/currencies/{ticker}` history panel. Builds an RFC 4180 CSV
   from the already-loaded series (no extra fetch) and triggers
