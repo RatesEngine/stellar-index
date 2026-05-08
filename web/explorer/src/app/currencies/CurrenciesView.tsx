@@ -95,12 +95,21 @@ export function CurrenciesView() {
     let scoped = rows;
     if (filter !== 'all') scoped = scoped.filter((r) => r.kind === filter);
     if (term) {
-      scoped = scoped.filter(
-        (r) =>
+      // Match against ticker, name, slug, AND the friendly slug map
+      // so typing "us-dollar" or "japanese-yen" finds the right row
+      // even though the upstream payload only carries the bare ISO
+      // code. Spaces in the search term are normalised to dashes so
+      // "us dollar" matches "us-dollar".
+      const dashed = term.replace(/\s+/g, '-');
+      scoped = scoped.filter((r) => {
+        const friendly = FRIENDLY_FIAT_SLUGS[r.ticker.toUpperCase()] ?? '';
+        return (
           r.ticker.toLowerCase().includes(term) ||
           r.name.toLowerCase().includes(term) ||
-          r.slug.toLowerCase().includes(term),
-      );
+          r.slug.toLowerCase().includes(term) ||
+          friendly.includes(dashed)
+        );
+      });
     }
     return [...scoped].sort((a, b) => compareRows(a, b, sortKey, sortDir));
   }, [rows, filter, q, sortKey, sortDir]);
