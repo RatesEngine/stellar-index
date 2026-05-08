@@ -177,6 +177,16 @@ function HistoryPanel({ detail }: { detail: CurrencyDetail }) {
         {range !== '7d' && longQ.isFetching && (
           <span className="text-xs text-slate-500">Loading…</span>
         )}
+        {hasData && (
+          <button
+            type="button"
+            onClick={() => downloadHistoryCsv(detail.ticker, range, series)}
+            className="ml-auto rounded-md border border-slate-200 px-2 py-1 text-[11px] uppercase tracking-wider text-slate-600 hover:border-brand-500 hover:text-brand-600 dark:border-slate-700 dark:text-slate-300"
+            title={`Download ${range} ${detail.ticker}/USD history as CSV`}
+          >
+            Download CSV
+          </button>
+        )}
       </div>
       {!hasData && !longQ.isFetching ? (
         <p className="text-sm text-slate-500">
@@ -658,6 +668,38 @@ function formatDate(iso: string): string {
   } catch {
     return iso;
   }
+}
+
+// downloadHistoryCsv builds an RFC 4180 CSV from the in-memory
+// history series and triggers a browser download via a Blob URL.
+// No new fetch — the data is already on the page.
+//
+// Columns: date, rate_usd_to_ticker, ticker_inverse_usd. The
+// header row spells out the ticker (e.g. EUR) so a downloaded
+// file is self-describing without the URL context.
+function downloadHistoryCsv(
+  ticker: string,
+  range: string,
+  series: HistoryPoint[],
+) {
+  if (typeof window === 'undefined') return;
+  const ticUpper = ticker.toUpperCase();
+  const header = `date,1_USD_in_${ticUpper},1_${ticUpper}_in_USD`;
+  const rows = series.map((p) => {
+    const date = (p.date || '').slice(0, 10);
+    return `${date},${p.rate_usd},${p.inverse_usd}`;
+  });
+  const csv = [header, ...rows].join('\n');
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `ratesengine-${ticUpper}-USD-${range}.csv`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  // Defer revoke so Safari has time to start the download.
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
 // (Local CurrencyCombobox extracted to @/components/CurrencyCombobox.)
