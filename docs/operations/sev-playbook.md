@@ -324,6 +324,9 @@ the same action-item discipline as postmortems.
 
 - [alerts-catalog.md](alerts-catalog.md) — every alert + its runbook.
 - [runbooks/](runbooks/) — per-alert playbooks.
+- [runbooks/operator-unblock-2026-05-08.md](runbooks/operator-unblock-2026-05-08.md)
+  — operator-unblock procedure for the GH Actions cap incident on
+  2026-05-08 (cap-bump URL + queued-deploy walk-through).
 - [HA plan](../architecture/ha-plan.md) — topology this playbook
   assumes.
 - [ADR-0006 TimescaleDB](../adr/0006-timescaledb-for-price-time-series.md)
