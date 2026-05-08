@@ -171,13 +171,151 @@ export function ExchangesView() {
         </div>
       </Panel>
 
+      <AllCEXMarkets />
+
       <p className="text-xs text-slate-500">
         Sources are pulled from the static venue registry; per-venue
         24h activity is aggregated from <code className="font-mono text-[11px]">trades</code>{' '}
-        in TimescaleDB. Reach the per-pair candlestick view via
-        the venue&apos;s pair table.
+        in TimescaleDB. We deliberately subscribe to a curated set of
+        pairs per venue (the top-liquidity XLM markets and the
+        crypto anchors that triangulate into them); see the per-venue
+        page for the full list. Reach the per-pair candlestick view
+        via any pair link below.
       </p>
     </div>
+  );
+}
+
+interface CEXMarket {
+  base: string;
+  quote: string;
+  source?: string;
+  last_trade_at: string;
+  trade_count_24h: number;
+  volume_24h_usd?: string | null;
+  last_price?: string | null;
+}
+
+// AllCEXMarkets surfaces every CEX pair we observed in the last
+// 14 days, sorted by 24h USD volume. The four venue-scoped fetches
+// run concurrently and merge client-side — no new API endpoint
+// required, and matches the volume-sort across venues.
+function AllCEXMarkets() {
+  const venues = ['binance', 'coinbase', 'kraken', 'bitstamp'];
+  const queries = useQuery<CEXMarket[]>({
+    queryKey: ['/v1/markets', 'all-cex'],
+    queryFn: async () => {
+      const all = await Promise.all(
+        venues.map(async (v) => {
+          const env = await apiGet<{ data: CEXMarket[] }>('/v1/markets', {
+            source: v,
+            limit: 200,
+            order_by: 'volume_24h_usd_desc',
+          });
+          return (env.data ?? []).map((m) => ({ ...m, source: v }));
+        }),
+      );
+      const merged = all.flat();
+      return merged.sort((a, b) => {
+        const av = a.volume_24h_usd ? Number(a.volume_24h_usd) : 0;
+        const bv = b.volume_24h_usd ? Number(b.volume_24h_usd) : 0;
+        return bv - av;
+      });
+    },
+  });
+
+  const markets = queries.data ?? [];
+
+  return (
+    <Panel
+      title={`${markets.length} CEX pairs · sorted by 24h volume`}
+      hint="One row per (venue, base, quote) tuple — every pair we observed across all four CEXes in the last 14 days"
+      source={asExample('/v1/markets', { source: 'binance', limit: 200 })}
+      bodyClassName="-mx-4"
+    >
+      <div className="overflow-x-auto">
+        <table className="min-w-full divide-y divide-slate-200 text-sm dark:divide-slate-800">
+          <thead>
+            <tr className="text-left text-[10px] uppercase tracking-wider text-slate-500">
+              <Th>#</Th>
+              <Th>Venue</Th>
+              <Th>Pair</Th>
+              <Th align="right">Last price</Th>
+              <Th align="right">24h volume</Th>
+              <Th align="right">24h trades</Th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+            {queries.isLoading && (
+              <tr>
+                <td colSpan={6} className="px-4 py-6 text-center text-sm text-slate-500">
+                  Loading pairs…
+                </td>
+              </tr>
+            )}
+            {!queries.isLoading && markets.length === 0 && (
+              <tr>
+                <td colSpan={6} className="px-4 py-6 text-center text-sm text-slate-500">
+                  No CEX pairs reporting.
+                </td>
+              </tr>
+            )}
+            {markets.map((m, i) => {
+              const slug = `${m.base}~${m.quote}`;
+              const vol = m.volume_24h_usd ? Number(m.volume_24h_usd) : null;
+              const tone = TONE[m.source ?? ''] ?? 'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300';
+              return (
+                <tr
+                  key={`${m.source}|${m.base}|${m.quote}`}
+                  className="hover:bg-slate-50 dark:hover:bg-slate-900/40"
+                >
+                  <Td>
+                    <span className="font-mono text-[11px] text-slate-400">{i + 1}</span>
+                  </Td>
+                  <Td>
+                    <Link
+                      href={`/exchanges/${m.source}`}
+                      className={`inline-block rounded px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wider hover:underline ${tone}`}
+                    >
+                      {LABEL[m.source ?? ''] ?? m.source}
+                    </Link>
+                  </Td>
+                  <Td>
+                    <Link
+                      href={`/markets/${encodeURIComponent(slug)}`}
+                      className="font-mono text-xs hover:text-brand-600"
+                    >
+                      {m.base.replace('crypto:', '')} / {m.quote.replace('crypto:', '').replace('fiat:', '')}
+                    </Link>
+                  </Td>
+                  <Td align="right">
+                    {m.last_price ? (
+                      <span className="font-mono tabular-nums text-slate-700 dark:text-slate-300">
+                        {Number(m.last_price).toFixed(4)}
+                      </span>
+                    ) : (
+                      <span className="text-slate-300 dark:text-slate-700">—</span>
+                    )}
+                  </Td>
+                  <Td align="right">
+                    {vol != null && Number.isFinite(vol) && vol > 0 ? (
+                      <span className="font-mono tabular-nums">${formatCompact(vol)}</span>
+                    ) : (
+                      <span className="text-slate-300 dark:text-slate-700">—</span>
+                    )}
+                  </Td>
+                  <Td align="right">
+                    <span className="font-mono tabular-nums text-slate-600 dark:text-slate-400">
+                      {m.trade_count_24h > 0 ? formatCompact(m.trade_count_24h) : '0'}
+                    </span>
+                  </Td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+    </Panel>
   );
 }
 

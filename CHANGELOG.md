@@ -15,6 +15,54 @@ against.
 
 ## [Unreleased]
 
+### Performance
+
+- **Background prewarm goroutine** for the heaviest API caches.
+  /v1/sources?include=stats and /v1/markets / /v1/pools each scan
+  ~24h of the trades hypertable on cold paths (5–10s); the
+  rc.35/rc.36 caches drop them to <1ms but TTL expiry meant the
+  first user request after a cache miss still paid the full
+  query cost. A 25s-cadence goroutine in cmd/ratesengine-api now
+  re-runs the queries just inside the 30/60s TTLs so user
+  requests always land on a warm cache.
+
+### Added
+
+- **/exchanges all-CEX markets table** — sorted by 24h USD
+  volume across every venue, merged client-side from four
+  /v1/markets?source=… requests. Visible on the index without
+  having to drill into each venue.
+- **/exchanges/{venue} subscription disclaimer** — explicit
+  amber-tinted callout explaining the curated pair set is
+  by-design, not a data bug.
+- **/exchanges/{venue} candle chart** — TradingView-style
+  lightweight-charts panel with selectable pair (defaults to
+  the venue's top-volume pair), timeframe (24h/7d/30d/1y/all)
+  and granularity (1m/15m/1h/4h/1d). Reuses the same chart
+  component that powers /assets/[slug]?tab=chart and
+  /markets/[pair].
+
+### Fixed
+
+- **Wider lookback windows for /v1/coins change_1h_pct,
+  change_24h_pct, change_7d_pct.** Previous windows were
+  10-minute (1h), 1-hour (24h), 4-hour (7d) — too tight to
+  catch low-volume pairs reliably. Widened to 35-minute,
+  2.5-hour, 14-hour respectively. The DISTINCT ON ... ORDER
+  BY bucket DESC selector still picks the latest available
+  row inside the window so the anchor stays close to the
+  target timestamp; widening only kicks in when the target
+  bucket itself is empty.
+- **/dexes detail link now points at /dexes/{source}** instead of
+  /sources/{source}; the latter route exists but rendered the
+  source-registry view, not the per-DEX detail page.
+- **AssetLabel: case-insensitive C-strkey match** + truncates any
+  unstructured asset string longer than 16 chars with the full
+  value in the tooltip. Stops the long contract IDs that were
+  bleeding through on /dexes pool rows when the SAC wrapper map
+  didn't resolve them.
+- **View Code button**: drop the literal `</>` text next to the
+  Code2 SVG icon — was rendering both side-by-side site-wide.
 ### Added
 
 - **Persistent fx_quotes hypertable** (PR #TBD) — daily forex

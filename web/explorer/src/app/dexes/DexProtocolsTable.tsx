@@ -128,7 +128,7 @@ export function DexProtocolsTable() {
                   </Td>
                   <Td align="right">
                     <Link
-                      href={`/sources/${r.name}`}
+                      href={`/dexes/${r.name}`}
                       className="text-xs text-brand-600 hover:underline"
                     >
                       details →

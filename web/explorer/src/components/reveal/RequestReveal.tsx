@@ -53,7 +53,6 @@ export function RequestReveal({
       title="Show API request"
     >
       <Code2 className="h-3 w-3" aria-hidden />
-      &lt;/&gt;
     </button>
   );
 

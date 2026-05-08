@@ -233,7 +233,7 @@ const listCoinsBaseSelect = `
 		  SELECT DISTINCT ON (base_asset) base_asset AS asset_id, vwap
 		    FROM prices_1m
 		   WHERE quote_asset = 'fiat:USD'
-		     AND bucket BETWEEN now() - INTERVAL '1 hour 5 minutes'
+		     AND bucket BETWEEN now() - INTERVAL '90 minutes'
 		                   AND now() - INTERVAL '55 minutes'
 		     AND vwap IS NOT NULL
 		   ORDER BY base_asset, bucket DESC
@@ -242,7 +242,7 @@ const listCoinsBaseSelect = `
 		  SELECT DISTINCT ON (base_asset) base_asset AS asset_id, vwap
 		    FROM prices_1m
 		   WHERE quote_asset = 'fiat:USD'
-		     AND bucket BETWEEN now() - INTERVAL '24 hours 30 minutes'
+		     AND bucket BETWEEN now() - INTERVAL '26 hours'
 		                   AND now() - INTERVAL '23 hours 30 minutes'
 		     AND vwap IS NOT NULL
 		   ORDER BY base_asset, bucket DESC
@@ -251,7 +251,7 @@ const listCoinsBaseSelect = `
 		  SELECT DISTINCT ON (base_asset) base_asset AS asset_id, vwap
 		    FROM prices_1m
 		   WHERE quote_asset = 'fiat:USD'
-		     AND bucket BETWEEN now() - INTERVAL '7 days 2 hours'
+		     AND bucket BETWEEN now() - INTERVAL '7 days 12 hours'
 		                   AND now() - INTERVAL '6 days 22 hours'
 		     AND vwap IS NOT NULL
 		   ORDER BY base_asset, bucket DESC
@@ -268,7 +268,7 @@ const listCoinsBaseSelect = `
 		  SELECT DISTINCT ON (base_asset) base_asset AS asset_id, vwap
 		    FROM prices_1m
 		   WHERE quote_asset = 'native'
-		     AND bucket BETWEEN now() - INTERVAL '1 hour 5 minutes'
+		     AND bucket BETWEEN now() - INTERVAL '90 minutes'
 		                   AND now() - INTERVAL '55 minutes'
 		     AND vwap IS NOT NULL
 		   ORDER BY base_asset, bucket DESC
@@ -277,7 +277,7 @@ const listCoinsBaseSelect = `
 		  SELECT DISTINCT ON (base_asset) base_asset AS asset_id, vwap
 		    FROM prices_1m
 		   WHERE quote_asset = 'native'
-		     AND bucket BETWEEN now() - INTERVAL '24 hours 30 minutes'
+		     AND bucket BETWEEN now() - INTERVAL '26 hours'
 		                   AND now() - INTERVAL '23 hours 30 minutes'
 		     AND vwap IS NOT NULL
 		   ORDER BY base_asset, bucket DESC
@@ -286,7 +286,7 @@ const listCoinsBaseSelect = `
 		  SELECT DISTINCT ON (base_asset) base_asset AS asset_id, vwap
 		    FROM prices_1m
 		   WHERE quote_asset = 'native'
-		     AND bucket BETWEEN now() - INTERVAL '7 days 2 hours'
+		     AND bucket BETWEEN now() - INTERVAL '7 days 12 hours'
 		                   AND now() - INTERVAL '6 days 22 hours'
 		     AND vwap IS NOT NULL
 		   ORDER BY base_asset, bucket DESC
@@ -323,7 +323,7 @@ const listCoinsBaseSelect = `
 		       'USDT-GCQTGZQQ5G4PTM2GL7CDIFKUBIPEC52BROAQIAPW53XBRJVN6ZJVTG6V',
 		       'fiat:USD'
 		     )
-		     AND bucket BETWEEN now() - INTERVAL '1 hour 5 minutes'
+		     AND bucket BETWEEN now() - INTERVAL '90 minutes'
 		                   AND now() - INTERVAL '55 minutes'
 		     AND vwap IS NOT NULL
 		   ORDER BY bucket DESC
@@ -340,7 +340,7 @@ const listCoinsBaseSelect = `
 		       'USDT-GCQTGZQQ5G4PTM2GL7CDIFKUBIPEC52BROAQIAPW53XBRJVN6ZJVTG6V',
 		       'fiat:USD'
 		     )
-		     AND bucket BETWEEN now() - INTERVAL '24 hours 30 minutes'
+		     AND bucket BETWEEN now() - INTERVAL '26 hours'
 		                   AND now() - INTERVAL '23 hours 30 minutes'
 		     AND vwap IS NOT NULL
 		   ORDER BY bucket DESC
@@ -356,7 +356,7 @@ const listCoinsBaseSelect = `
 		       'USDT-GCQTGZQQ5G4PTM2GL7CDIFKUBIPEC52BROAQIAPW53XBRJVN6ZJVTG6V',
 		       'fiat:USD'
 		     )
-		     AND bucket BETWEEN now() - INTERVAL '7 days 2 hours'
+		     AND bucket BETWEEN now() - INTERVAL '7 days 12 hours'
 		                   AND now() - INTERVAL '6 days 22 hours'
 		     AND vwap IS NOT NULL
 		   ORDER BY bucket DESC
@@ -992,7 +992,7 @@ const getCoinBySlugSQL = `
 		  SELECT vwap FROM prices_1m
 		   WHERE base_asset  = (SELECT asset_id FROM chosen)
 		     AND quote_asset = 'fiat:USD'
-		     AND bucket BETWEEN now() - INTERVAL '1 hour 5 minutes'
+		     AND bucket BETWEEN now() - INTERVAL '90 minutes'
 		                   AND now() - INTERVAL '55 minutes'
 		     AND vwap IS NOT NULL
 		   ORDER BY bucket DESC LIMIT 1
@@ -1001,7 +1001,7 @@ const getCoinBySlugSQL = `
 		  SELECT vwap FROM prices_1m
 		   WHERE base_asset  = (SELECT asset_id FROM chosen)
 		     AND quote_asset = 'fiat:USD'
-		     AND bucket BETWEEN now() - INTERVAL '24 hours 30 minutes'
+		     AND bucket BETWEEN now() - INTERVAL '26 hours'
 		                   AND now() - INTERVAL '23 hours 30 minutes'
 		     AND vwap IS NOT NULL
 		   ORDER BY bucket DESC LIMIT 1
@@ -1010,7 +1010,7 @@ const getCoinBySlugSQL = `
 		  SELECT vwap FROM prices_1m
 		   WHERE base_asset  = (SELECT asset_id FROM chosen)
 		     AND quote_asset = 'fiat:USD'
-		     AND bucket BETWEEN now() - INTERVAL '7 days 2 hours'
+		     AND bucket BETWEEN now() - INTERVAL '7 days 12 hours'
 		                   AND now() - INTERVAL '6 days 22 hours'
 		     AND vwap IS NOT NULL
 		   ORDER BY bucket DESC LIMIT 1
@@ -1027,7 +1027,7 @@ const getCoinBySlugSQL = `
 		  SELECT vwap FROM prices_1m
 		   WHERE base_asset  = (SELECT asset_id FROM chosen)
 		     AND quote_asset = 'native'
-		     AND bucket BETWEEN now() - INTERVAL '1 hour 5 minutes'
+		     AND bucket BETWEEN now() - INTERVAL '90 minutes'
 		                   AND now() - INTERVAL '55 minutes'
 		     AND vwap IS NOT NULL
 		   ORDER BY bucket DESC LIMIT 1
@@ -1036,7 +1036,7 @@ const getCoinBySlugSQL = `
 		  SELECT vwap FROM prices_1m
 		   WHERE base_asset  = (SELECT asset_id FROM chosen)
 		     AND quote_asset = 'native'
-		     AND bucket BETWEEN now() - INTERVAL '24 hours 30 minutes'
+		     AND bucket BETWEEN now() - INTERVAL '26 hours'
 		                   AND now() - INTERVAL '23 hours 30 minutes'
 		     AND vwap IS NOT NULL
 		   ORDER BY bucket DESC LIMIT 1
@@ -1045,7 +1045,7 @@ const getCoinBySlugSQL = `
 		  SELECT vwap FROM prices_1m
 		   WHERE base_asset  = (SELECT asset_id FROM chosen)
 		     AND quote_asset = 'native'
-		     AND bucket BETWEEN now() - INTERVAL '7 days 2 hours'
+		     AND bucket BETWEEN now() - INTERVAL '7 days 12 hours'
 		                   AND now() - INTERVAL '6 days 22 hours'
 		     AND vwap IS NOT NULL
 		   ORDER BY bucket DESC LIMIT 1
@@ -1073,7 +1073,7 @@ const getCoinBySlugSQL = `
 		       'USDT-GCQTGZQQ5G4PTM2GL7CDIFKUBIPEC52BROAQIAPW53XBRJVN6ZJVTG6V',
 		       'fiat:USD'
 		     )
-		     AND bucket BETWEEN now() - INTERVAL '1 hour 5 minutes'
+		     AND bucket BETWEEN now() - INTERVAL '90 minutes'
 		                   AND now() - INTERVAL '55 minutes'
 		     AND vwap IS NOT NULL
 		   ORDER BY bucket DESC LIMIT 1
@@ -1087,7 +1087,7 @@ const getCoinBySlugSQL = `
 		       'USDT-GCQTGZQQ5G4PTM2GL7CDIFKUBIPEC52BROAQIAPW53XBRJVN6ZJVTG6V',
 		       'fiat:USD'
 		     )
-		     AND bucket BETWEEN now() - INTERVAL '24 hours 30 minutes'
+		     AND bucket BETWEEN now() - INTERVAL '26 hours'
 		                   AND now() - INTERVAL '23 hours 30 minutes'
 		     AND vwap IS NOT NULL
 		   ORDER BY bucket DESC LIMIT 1
@@ -1101,7 +1101,7 @@ const getCoinBySlugSQL = `
 		       'USDT-GCQTGZQQ5G4PTM2GL7CDIFKUBIPEC52BROAQIAPW53XBRJVN6ZJVTG6V',
 		       'fiat:USD'
 		     )
-		     AND bucket BETWEEN now() - INTERVAL '7 days 2 hours'
+		     AND bucket BETWEEN now() - INTERVAL '7 days 12 hours'
 		                   AND now() - INTERVAL '6 days 22 hours'
 		     AND vwap IS NOT NULL
 		   ORDER BY bucket DESC LIMIT 1
@@ -1278,7 +1278,7 @@ const getNativeCoinSQL = `
 		       'USDT-GCQTGZQQ5G4PTM2GL7CDIFKUBIPEC52BROAQIAPW53XBRJVN6ZJVTG6V',
 		       'fiat:USD'
 		     )
-		     AND bucket BETWEEN now() - INTERVAL '1 hour 5 minutes'
+		     AND bucket BETWEEN now() - INTERVAL '90 minutes'
 		                   AND now() - INTERVAL '55 minutes'
 		     AND vwap IS NOT NULL
 		   ORDER BY bucket DESC LIMIT 1
@@ -1291,7 +1291,7 @@ const getNativeCoinSQL = `
 		       'USDT-GCQTGZQQ5G4PTM2GL7CDIFKUBIPEC52BROAQIAPW53XBRJVN6ZJVTG6V',
 		       'fiat:USD'
 		     )
-		     AND bucket BETWEEN now() - INTERVAL '24 hours 30 minutes'
+		     AND bucket BETWEEN now() - INTERVAL '26 hours'
 		                   AND now() - INTERVAL '23 hours 30 minutes'
 		     AND vwap IS NOT NULL
 		   ORDER BY bucket DESC LIMIT 1
@@ -1304,7 +1304,7 @@ const getNativeCoinSQL = `
 		       'USDT-GCQTGZQQ5G4PTM2GL7CDIFKUBIPEC52BROAQIAPW53XBRJVN6ZJVTG6V',
 		       'fiat:USD'
 		     )
-		     AND bucket BETWEEN now() - INTERVAL '7 days 2 hours'
+		     AND bucket BETWEEN now() - INTERVAL '7 days 12 hours'
 		                   AND now() - INTERVAL '6 days 22 hours'
 		     AND vwap IS NOT NULL
 		   ORDER BY bucket DESC LIMIT 1

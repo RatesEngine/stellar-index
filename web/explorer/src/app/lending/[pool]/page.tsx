@@ -23,18 +23,72 @@ interface LendingPool {
   last_seen: string;
 }
 
-// Curated annotations for well-known Blend mainnet contracts.
-// Same map as LendingPoolsTable — kept here too so the detail
-// route can render the label even when arrived-at via deep link.
-// Sourced from docs/operations/wasm-audits/blend.md.
-const BLEND_POOL_LABELS: Record<string, { name: string; note?: string }> = {
+// Curated annotations for every Blend mainnet contract we track.
+// Mirrors the BLEND_POOL_META map in LendingPoolsTable; kept in
+// sync so the detail route renders identical context whether the
+// user arrived via the listing or a deep link.
+// Sourced from docs/operations/wasm-audits/blend.md (Phase 4 walk).
+const BLEND_POOL_LABELS: Record<
+  string,
+  { name: string; note?: string; deployedAt?: string; initiator?: string }
+> = {
   CAQQR5SWBXKIGZKPBZDH3KM5GQ5GUTPKB7JAFCINLZBC5WXPJKRG3IM7: {
     name: 'Backstop V2',
     note: 'Holds the protocol-wide BLND-USDC LP shares that backstop pool insolvency. Receives auction proceeds when borrower positions liquidate at a loss.',
+    deployedAt: '2025-04-14',
+    initiator: 'GAX2VVWVHU5YQY5J3NJBXKHI3FFKZN54BE6GRJCWSIKSBZTQWJJNJMPC',
   },
   CDSYOAVXFY7SM5S64IZPPPYB4GVGGLMQVFREPSQQEZVIWXX5R23G4QSU: {
     name: 'Pool Factory V2',
     note: 'Spawns new isolated lending-pool contracts. Each user-facing pool (with its own reserves and risk parameters) is a child of this factory.',
+    deployedAt: '2025-04-14',
+    initiator: 'GAX2VVWVHU5YQY5J3NJBXKHI3FFKZN54BE6GRJCWSIKSBZTQWJJNJMPC',
+  },
+  CAJJZSGMMM3PD7N33TAPHGBUGTB43OC73HVIK2L2G6BNGGGYOSSYBXBD: {
+    name: 'Pool #1 (genesis)',
+    note: 'First pool deployed by the Pool Factory V2, ~4 minutes after the factory itself. Initiator overlaps with the protocol team — likely a reference/genesis pool.',
+    deployedAt: '2025-04-14',
+    initiator: 'GAX2VVWVHU5YQY5J3NJBXKHI3FFKZN54BE6GRJCWSIKSBZTQWJJNJMPC',
+  },
+  CBNR7PYFY775UG7W37B4OJG2OBBUKLFW6VIBHFDKKLR2HECPRMRZMDK3: {
+    name: 'Pool #2',
+    deployedAt: '2025-04-15',
+    initiator: 'GBCAS7XIGDRZY4BMABJMGGW7J3YTITRRV5BTEMFQE5ZZSSVWHHX2ZSS4',
+  },
+  CCCCIQSDILITHMM7PBSLVDT5MISSY7R26MNZXCX4H7J5JQ5FPIYOGYFS: {
+    name: 'Pool #3',
+    deployedAt: '2025-04-17',
+    initiator: 'GBCAS7XIGDRZY4BMABJMGGW7J3YTITRRV5BTEMFQE5ZZSSVWHHX2ZSS4',
+  },
+  CB4OFHAY2TAEYUVPOJS36S657C6NYMSIFUNCCA5AHYT46Y5XUID3O2ED: {
+    name: 'Pool #4',
+    deployedAt: '2025-05-01',
+    initiator: 'GBIWJGAOSFC4KUPHXM573TKTWHMI7VW7D4GCHYZYH243Q6HVBV7ORBIT',
+  },
+  CAE7QVOMBLZ53CDRGK3UNRRHG5EZ5NQA7HHTFASEMYBWHG6MDFZTYHXC: {
+    name: 'Pool #5',
+    deployedAt: '2025-05-01',
+    initiator: 'GBIWJGAOSFC4KUPHXM573TKTWHMI7VW7D4GCHYZYH243Q6HVBV7ORBIT',
+  },
+  CBYOBT7ZCCLQCBUYYIABZLSEGDPEUWXCUXQTZYOG3YBDR7U357D5ZIRF: {
+    name: 'Pool #6',
+    deployedAt: '2025-07-13',
+    initiator: 'GCCI7K6QU6FVVIXWSLKRPTBKJCFBLEJKPTZMP27A2KL37N4ZL3OCM3GI',
+  },
+  CALRF5I2OCJCU577R6MZBCY5IIXNMAAG6PNMN7GUKEYIXBJCJN2FJRVI: {
+    name: 'Pool #7',
+    deployedAt: '2025-11-22',
+    initiator: 'GDH3FRHOOWXYXEASH43N2VOVFOPJSVJF3EQFSLBLJYFPHOUAF4N4AETH',
+  },
+  CADR6Q2UOCDJAGXMAB2E6SRT35STLZ2IGLZUCXJQG7TC2LNKCU5RTQVY: {
+    name: 'Pool #8',
+    deployedAt: '2025-11-25',
+    initiator: 'GDH3FRHOOWXYXEASH43N2VOVFOPJSVJF3EQFSLBLJYFPHOUAF4N4AETH',
+  },
+  CDMAVJPFXPADND3YRL4BSM3AKZWCTFMX27GLLXCML3PD62HEQS5FPVAI: {
+    name: 'Pool #9',
+    deployedAt: '2025-11-25',
+    initiator: 'GDH3FRHOOWXYXEASH43N2VOVFOPJSVJF3EQFSLBLJYFPHOUAF4N4AETH',
   },
 };
 
@@ -108,7 +162,7 @@ export default async function LendingPoolPage({ params }: { params: Params }) {
       </Link>
 
       <header className="space-y-2">
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <span className="rounded bg-emerald-100 px-1.5 py-0.5 text-[11px] font-medium uppercase tracking-wider text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-200">
             Blend
           </span>
@@ -117,11 +171,30 @@ export default async function LendingPoolPage({ params }: { params: Params }) {
               {label.name}
             </span>
           )}
+          {label?.deployedAt && (
+            <span className="rounded bg-slate-100 px-1.5 py-0.5 text-[11px] font-mono text-slate-700 dark:bg-slate-800 dark:text-slate-300">
+              deployed {label.deployedAt}
+            </span>
+          )}
         </div>
         <h1 className="break-all font-mono text-2xl tracking-tight">
           {pool.slice(0, 8)}…{pool.slice(-8)}
         </h1>
         <p className="break-all font-mono text-xs text-slate-500">{pool}</p>
+        {label?.initiator && (
+          <p className="font-mono text-[11px] text-slate-500">
+            Deployed by{' '}
+            <a
+              href={`https://stellar.expert/explorer/public/account/${label.initiator}`}
+              target="_blank"
+              rel="noreferrer noopener"
+              className="text-brand-600 hover:underline"
+              title={label.initiator}
+            >
+              {label.initiator.slice(0, 6)}…{label.initiator.slice(-4)}
+            </a>
+          </p>
+        )}
         <div className="flex flex-wrap gap-3 pt-1 text-xs">
           <a
             href={`https://stellar.expert/explorer/public/contract/${pool}`}

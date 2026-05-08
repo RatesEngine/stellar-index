@@ -498,6 +498,15 @@ func run(cfgPath string, dryRun bool) error { //nolint:gocognit,funlen,gocyclo /
 		SEP10:             sep10Validator,
 	}, logger)
 
+	// Hoist cache instances out of the Options literal so a prewarm
+	// goroutine can hammer them on startup + every 25s (just inside
+	// the 30s/60s TTLs) — keeps every cold-cache miss off the user's
+	// path. The first /exchanges or /dexes pageload after a binary
+	// restart now hits a warm cache.
+	cachedSourcesStats := v1.NewCachedSourcesStatsReader(store, 60*time.Second)
+	cachedMarketsReader := v1.NewCachedMarketsReader(marketsReader, 30*time.Second)
+	go prewarmCaches(rootCtx, logger.With("component", "prewarm"), cachedSourcesStats, cachedMarketsReader)
+
 	apiSrv := v1.New(v1.Options{
 		Logger:      logger.With("component", "api"),
 		ReadyChecks: checks,
@@ -508,7 +517,7 @@ func run(cfgPath string, dryRun bool) error { //nolint:gocognit,funlen,gocyclo /
 		// scan ~24h of the trades hypertable on every hit (5-10s
 		// each); the explorer hits them on every page load. 30s
 		// freshness is plenty for trade-volume aggregates.
-		Markets:       v1.NewCachedMarketsReader(marketsReader, 30*time.Second),
+		Markets:       cachedMarketsReader,
 		Oracle:        oracleReader,
 		Meta:          sep1Cache,
 		Accounts:      accountStore,
@@ -530,7 +539,7 @@ func run(cfgPath string, dryRun bool) error { //nolint:gocognit,funlen,gocyclo /
 		// (24h trades-hypertable scan grouped by source) take 5-10s;
 		// the explorer hits these on every /dexes + /exchanges page
 		// load. 60s freshness is plenty for a 24h-trailing aggregate.
-		SourcesStats:      v1.NewCachedSourcesStatsReader(store, 60*time.Second),
+		SourcesStats:      cachedSourcesStats,
 		Lending:           store,
 		Currencies:        newForexAdapter(forexCache),
 		FXHistory:         &fxHistoryReader{store: store},
@@ -1961,6 +1970,67 @@ func (a *forexAdapter) Latest() *v1.CurrenciesSnapshot {
 		PublishedAt: snap.PublishedAt,
 		FetchedAt:   snap.FetchedAt,
 		History7d:   history,
+	}
+}
+
+// prewarmCaches keeps the heaviest read caches hot. The
+// /v1/sources?include=stats and /v1/markets / /v1/pools queries
+// run aggregations over the trades hypertable that take 5–10s on
+// a cold path; cache TTLs of 30–60s mean a single user-pageload
+// with no recent neighbours always pays the full cost. Calling
+// the cached readers from this goroutine on a 25s cadence keeps
+// the entry alive continuously.
+//
+// Errors get logged at debug level — a transient warmup failure
+// is rare and the next cycle retries. Stops on ctx cancel.
+func prewarmCaches(
+	ctx context.Context,
+	logger *slog.Logger,
+	stats *v1.CachedSourcesStatsReader,
+	markets *v1.CachedMarketsReader,
+) {
+	const cadence = 25 * time.Second
+	prewarmOnce(ctx, logger, stats, markets)
+	tick := time.NewTicker(cadence)
+	defer tick.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-tick.C:
+			prewarmOnce(ctx, logger, stats, markets)
+		}
+	}
+}
+
+func prewarmOnce(
+	ctx context.Context,
+	logger *slog.Logger,
+	stats *v1.CachedSourcesStatsReader,
+	markets *v1.CachedMarketsReader,
+) {
+	// Per-call deadlines stop a slow query from stalling the whole
+	// cycle (a missed cycle is fine — the user's request can still
+	// hit the cached entry).
+	statsCtx, cancel := context.WithTimeout(ctx, 20*time.Second)
+	defer cancel()
+	if _, err := stats.GetSourceStats(statsCtx); err != nil {
+		logger.Debug("prewarm sources stats failed", "err", err)
+	}
+	if _, err := stats.GetSourceVolumeHistory24h(statsCtx); err != nil {
+		logger.Debug("prewarm sources volume history failed", "err", err)
+	}
+
+	mkCtx, mkCancel := context.WithTimeout(ctx, 20*time.Second)
+	defer mkCancel()
+	// Mirrors the most-trafficked /v1/markets, /v1/pools requests
+	// the explorer fires (default order, default limit, no source
+	// filter). Long-tail variants pay their own cost on first hit.
+	if _, _, err := markets.DistinctPairsExt(mkCtx, "", 25, 0); err != nil {
+		logger.Debug("prewarm markets failed", "err", err)
+	}
+	if _, _, err := markets.AllPools(mkCtx, timescale.PoolsFilter{}, "", 25, 0); err != nil {
+		logger.Debug("prewarm pools failed", "err", err)
 	}
 }
 

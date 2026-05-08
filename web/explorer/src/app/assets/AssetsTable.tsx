@@ -354,7 +354,7 @@ function AssetRow({ coin, rank }: { coin: Coin; rank: number }) {
             ${formatCompact(marketCap)}
           </span>
         ) : (
-          <Dash />
+          <Dash title="Awaiting circulating supply via SEP-1 / on-chain observer" />
         )}
       </Td>
       <Td align="right">
@@ -372,7 +372,7 @@ function AssetRow({ coin, rank }: { coin: Coin; rank: number }) {
             {formatCompact(supply)}
           </span>
         ) : (
-          <Dash />
+          <Dash title="Awaiting issuer SEP-1 fixed_number / on-chain mint observer" />
         )}
       </Td>
       <Td align="right">
@@ -523,12 +523,20 @@ function Td({
   );
 }
 
-function Dash() {
-  return <span className="text-slate-300 dark:text-slate-700">—</span>;
+function Dash({ title }: { title?: string }) {
+  return (
+    <span
+      className="text-slate-300 dark:text-slate-700"
+      title={title ?? 'No data yet'}
+    >
+      —
+    </span>
+  );
 }
 
 function ChangePct({ raw }: { raw: string | null | undefined }) {
-  if (raw == null) return <Dash />;
+  if (raw == null)
+    return <Dash title="Not enough trade history to compute this window" />;
   const n = Number(raw);
   if (!Number.isFinite(n)) return <Dash />;
   const tone =
