@@ -95,6 +95,14 @@ type Coin struct {
 	// could fabricate an ATH). Null when the asset has no
 	// USD-quoted history.
 	ATH *CoinATH `json:"ath,omitempty"`
+	// IssuerScamReason is non-empty when this asset's `issuer`
+	// G-strkey appears in the curated `known_scams.go` map sourced
+	// from stellar.expert's directory. Mirrors the same field
+	// served on /v1/issuers and /v1/issuers/{g_strkey}; clients
+	// should render a prominent warning ("known scam asset — do
+	// not trust") when present. Always omitted for native XLM
+	// (issuer is empty) and for issuers we have no scam record on.
+	IssuerScamReason string `json:"issuer_scam_reason,omitempty"`
 }
 
 // CoinATH is the all-time-high USD price + bucket-day pair on
@@ -495,5 +503,6 @@ func coinFromRow(row timescale.CoinRow) Coin {
 		Change1hPct:       row.Change1hPct,
 		Change24hPct:      row.Change24hPct,
 		Change7dPct:       row.Change7dPct,
+		IssuerScamReason:  scamReason(row.IssuerGStrkey),
 	}
 }

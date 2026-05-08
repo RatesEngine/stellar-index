@@ -1320,6 +1320,18 @@ paths:
                             percentage with two fractional digits.
                             Null when no current price or no
                             7d-ago prices_1m bucket within ±2h.
+                        issuer_scam_reason:
+                          type: string
+                          description: |
+                            Non-empty when the asset's `issuer`
+                            G-strkey appears in the curated scam
+                            directory (sourced from
+                            stellar.expert). Mirrors the same
+                            field on /v1/issuers; clients should
+                            render a prominent warning when
+                            present. Always omitted for native
+                            XLM (issuer is empty) and for issuers
+                            we have no scam record on.
                   next_cursor:
                     type: string
                     description: Empty when no more pages.

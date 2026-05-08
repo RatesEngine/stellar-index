@@ -390,7 +390,33 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Current aggregated price for one asset. */
+        /**
+         * Current aggregated price for one asset.
+         * @description Returns the most-recent VWAP (or last-trade fallback) for the
+         *     `asset` / `quote` pair from the closed-bucket cache.
+         *
+         *     Resolution order (handler tries each in turn, takes the first
+         *     non-empty result):
+         *
+         *     1. Closed-bucket VWAP from `prices_1m` (the canonical
+         *        aggregated value).
+         *     2. Triangulated value from the Redis VWAP cache. Covers two
+         *        sub-cases: (a) implied chains computed by the
+         *        triangulation worker, surfaced with `flags.triangulated=true`;
+         *        (b) stablecoin-proxy rewrites the aggregator emits at
+         *        tick-time (e.g. `XLM/fiat:USD` synthesised from
+         *        `XLM/USDC-G…`) without a triangulation marker.
+         *     3. Fiat-vs-fiat cross-rate from the forex snapshot when both
+         *        sides are `fiat:` typed (e.g.
+         *        `?asset=fiat:EUR&quote=fiat:USD`). Computed as
+         *        `rate_usd[Y] / rate_usd[X]`. Returned with
+         *        `flags.triangulated=true` since the value is derived
+         *        rather than a direct trade. Same fallback fires on
+         *        `/v1/price/tip`, `/v1/price/batch`,
+         *        `/v1/oracle/lastprice`, and `/v1/oracle/x_last_price`.
+         *
+         *     Returns 404 only when every path above misses.
+         */
         get: {
             parameters: {
                 query: {
@@ -2195,6 +2221,18 @@ export interface paths {
                                  *     7d-ago prices_1m bucket within ±2h.
                                  */
                                 change_7d_pct?: string | null;
+                                /**
+                                 * @description Non-empty when the asset's `issuer`
+                                 *     G-strkey appears in the curated scam
+                                 *     directory (sourced from
+                                 *     stellar.expert). Mirrors the same
+                                 *     field on /v1/issuers; clients should
+                                 *     render a prominent warning when
+                                 *     present. Always omitted for native
+                                 *     XLM (issuer is empty) and for issuers
+                                 *     we have no scam record on.
+                                 */
+                                issuer_scam_reason?: string;
                             }[];
                             /** @description Empty when no more pages. */
                             next_cursor?: string;

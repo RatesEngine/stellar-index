@@ -313,6 +313,10 @@ export type Coin = {
   // All-time-high USD price + day it was set. Populated only
   // when the request includes `?include=ath`.
   ath?: { usd: string; at: string } | null;
+  // Non-empty when the asset's `issuer` G-strkey appears in the
+  // curated scam directory. Mirrors the `scam_reason` field on
+  // /v1/issuers; clients render a prominent warning when present.
+  issuer_scam_reason?: string | null;
 };
 
 export type CoinsPage = {

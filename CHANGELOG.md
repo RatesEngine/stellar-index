@@ -17,6 +17,16 @@ against.
 
 ### Added
 
+- **`/v1/coins` and `/v1/coins/{slug}`: `issuer_scam_reason` field**.
+  When an asset's issuer G-strkey appears on the curated scam
+  directory (sourced from stellar.expert, same data the
+  `/v1/issuers` family already exposes), the field is non-empty.
+  Closes a security UX gap: previously a user landing on
+  `/assets/{slug}` for a known-scam asset saw no warning until the
+  IssuerPanel completed its async fetch — now the field comes back
+  on the build-time response and the explorer renders a red banner
+  above the price block at first paint. Always omitted for native
+  XLM (no issuer) and for issuers we have no scam record on.
 - **`/v1/price` fiat-vs-fiat cross-rate fallback**: when both
   `asset` and `quote` are fiat (e.g. `asset=fiat:EUR&quote=fiat:USD`)
   and the Timescale + Redis VWAP paths both miss, the handler
