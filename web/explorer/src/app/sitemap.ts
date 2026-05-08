@@ -97,11 +97,20 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     priority: 0.6,
   }));
 
-  const [assetSlugs, issuerKeys, currencyTickers, marketPairs] = await Promise.all([
+  const [
+    assetSlugs,
+    issuerKeys,
+    currencyTickers,
+    marketPairs,
+    sourceNames,
+    lendingPools,
+  ] = await Promise.all([
     fetchCoinSlugs(),
     fetchIssuerKeys(),
     fetchCurrencyTickers(),
     fetchMarketPairs(),
+    fetchSourceNames(),
+    fetchLendingPools(),
   ]);
   const assetPages: MetadataRoute.Sitemap = assetSlugs.map((slug) => ({
     url: `${SITE_URL}/assets/${slug}`,
@@ -157,6 +166,52 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     changeFrequency: 'daily',
     priority: 0.6,
   }));
+  // Per-source / per-exchange / per-dex detail pages. Source
+  // names cover both the operator-facing /sources/{name} surface
+  // and the user-facing /exchanges/{name} + /dexes/{source}
+  // surfaces, which all share the underlying source-registry
+  // identifier. We list each surface explicitly because the
+  // routes are real prerendered pages — the same name might
+  // appear once per surface (e.g. binance has /sources/binance
+  // AND /exchanges/binance).
+  const sourcePages: MetadataRoute.Sitemap = [];
+  for (const name of sourceNames) {
+    sourcePages.push({
+      url: `${SITE_URL}/sources/${name}`,
+      lastModified: now,
+      changeFrequency: 'weekly',
+      priority: 0.5,
+    });
+  }
+  // Exchange + DEX surfaces filter the source list by class. The
+  // sitemap doesn't try to recover that classification; instead
+  // we list every name under both prefixes and let the build's
+  // generateStaticParams omit unsupported routes (a 404 from a
+  // non-existent prefix is fine — the listing pages still serve
+  // the filtered subset). Future: tighten by parsing the source
+  // registry response if classification becomes load-bearing.
+  for (const name of sourceNames) {
+    sourcePages.push({
+      url: `${SITE_URL}/exchanges/${name}`,
+      lastModified: now,
+      changeFrequency: 'weekly',
+      priority: 0.5,
+    });
+    sourcePages.push({
+      url: `${SITE_URL}/dexes/${name}`,
+      lastModified: now,
+      changeFrequency: 'weekly',
+      priority: 0.5,
+    });
+  }
+  // Lending pools — Blend pool detail pages. Small set today
+  // (~9 pools), so list every one at priority 0.5.
+  const lendingPages: MetadataRoute.Sitemap = lendingPools.map((id) => ({
+    url: `${SITE_URL}/lending/${id}`,
+    lastModified: now,
+    changeFrequency: 'weekly',
+    priority: 0.5,
+  }));
 
   return [
     ...staticPages,
@@ -169,7 +224,37 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     ...issuerPages,
     ...currencyPages,
     ...marketPages,
+    ...sourcePages,
+    ...lendingPages,
   ];
+}
+
+async function fetchSourceNames(): Promise<string[]> {
+  try {
+    const res = await fetch(`${API_BASE_URL}/v1/sources`, {
+      signal: AbortSignal.timeout(5_000),
+    });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const env = (await res.json()) as { data: { name: string }[] };
+    return (env.data ?? []).map((s) => s.name);
+  } catch {
+    return [];
+  }
+}
+
+async function fetchLendingPools(): Promise<string[]> {
+  try {
+    const res = await fetch(`${API_BASE_URL}/v1/lending/pools`, {
+      signal: AbortSignal.timeout(5_000),
+    });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const env = (await res.json()) as {
+      data: { contract_id: string }[];
+    };
+    return (env.data ?? []).map((p) => p.contract_id);
+  } catch {
+    return [];
+  }
 }
 
 async function fetchMarketPairs(): Promise<string[]> {
