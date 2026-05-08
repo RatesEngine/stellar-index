@@ -2027,13 +2027,20 @@ func prewarmOnce(
 	mkCtx, mkCancel := context.WithTimeout(ctx, 20*time.Second)
 	defer mkCancel()
 	// Mirrors the most-trafficked /v1/markets, /v1/pools requests
-	// the explorer fires (default order, default limit, no source
-	// filter). Long-tail variants pay their own cost on first hit.
-	if _, _, err := markets.DistinctPairsExt(mkCtx, "", 25, 0); err != nil {
-		logger.Debug("prewarm markets failed", "err", err)
-	}
-	if _, _, err := markets.AllPools(mkCtx, timescale.PoolsFilter{}, "", 25, 0); err != nil {
-		logger.Debug("prewarm pools failed", "err", err)
+	// the explorer fires (default order, no source filter). The
+	// limit set covers the four common values we see in practice:
+	// 5 (audit script), 25 (Scalar default test), 100 (OpenAPI
+	// default), 200 (currencies listing). Each limit is its own
+	// cache key under [v1.CachedMarketsReader.AllPools]; without
+	// per-limit prewarm, anything off the warmed key 503s under
+	// the new pools-server-timeout (#1082).
+	for _, lim := range []int{5, 25, 100, 200} {
+		if _, _, err := markets.DistinctPairsExt(mkCtx, "", lim, 0); err != nil {
+			logger.Debug("prewarm markets failed", "limit", lim, "err", err)
+		}
+		if _, _, err := markets.AllPools(mkCtx, timescale.PoolsFilter{}, "", lim, 0); err != nil {
+			logger.Debug("prewarm pools failed", "limit", lim, "err", err)
+		}
 	}
 
 	// /v1/coins?limit=200&include=sparkline backs the unified
