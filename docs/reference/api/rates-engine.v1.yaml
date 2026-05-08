@@ -356,8 +356,13 @@ paths:
         - name: asset_ids
           in: query
           required: true
-          schema: { type: string }
-          description: Comma-separated, max 100.
+          schema:
+            type: string
+            example: "native,USDC-GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN"
+          example: "native,USDC-GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN"
+          description: |
+            Comma-separated canonical asset ids, max 100. Same strict
+            form as `/v1/price?asset=` — short symbols are rejected.
         - { $ref: "#/components/parameters/Quote" }
       responses:
         "200":
@@ -954,7 +959,10 @@ paths:
         - name: ticker
           in: path
           required: true
-          schema: { type: string }
+          schema:
+            type: string
+            example: EUR
+          example: EUR
           description: "ISO-4217 ticker (case-insensitive); e.g. EUR, JPY."
       responses:
         "200":
@@ -1090,6 +1098,8 @@ paths:
           required: true
           schema:
             type: string
+            example: GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN
+          example: GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN
       responses:
         "200":
           description: One issuer row plus issued-asset list.
@@ -1327,9 +1337,16 @@ paths:
         - name: slug
           in: path
           required: true
-          description: URL-safe asset slug (e.g. `USDC`, `native`).
+          description: |
+            URL-safe asset slug. Unlike the `/v1/price` and `/v1/ohlc`
+            endpoints which require strict canonical IDs, the slug
+            handler accepts the short symbol forms (`USDC`, `XLM`,
+            `AQUA`) and special-cases `XLM` to native. Defaults to
+            `XLM` for the Scalar default-test request.
           schema:
             type: string
+            example: XLM
+          example: XLM
       responses:
         "200":
           description: One asset row.
@@ -1452,6 +1469,8 @@ paths:
           schema:
             type: string
             enum: [coin, protocol, pair, source]
+            example: source
+          example: source
         - name: id
           in: path
           required: true
@@ -1459,9 +1478,11 @@ paths:
             Canonical id for the entity. For `coin`, the asset slug
             (e.g. `stellar`). For `pair`, `base/quote` form. For
             `protocol`, the protocol slug. For `source`, the source
-            name.
+            name (e.g. `binance`, `coinbase`).
           schema:
             type: string
+            example: binance
+          example: binance
       responses:
         "200":
           description: One row from change_summary_5m.
@@ -1794,11 +1815,19 @@ paths:
         - name: base
           in: query
           required: true
-          schema: { type: string }
+          schema:
+            type: string
+            example: native
+          example: native
+          description: Canonical asset id (e.g. `native`, `USDC-G…`).
         - name: quote
           in: query
           required: true
-          schema: { type: string }
+          schema:
+            type: string
+            example: "USDC-GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN"
+          example: "USDC-GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN"
+          description: Canonical asset id of the quote side.
       responses:
         "200":
           description: Pairs.
@@ -1814,7 +1843,17 @@ paths:
         - name: asset
           in: query
           required: true
-          schema: { type: string }
+          schema:
+            type: string
+            example: "crypto:XLM"
+          example: "crypto:XLM"
+          description: |
+            SEP-40 oracle key. Reflector contracts publish under
+            `crypto:<symbol>` (`crypto:XLM`, `crypto:BTC`,
+            `crypto:USDC`, `crypto:ETH`, `crypto:EUROB`); the bare
+            `native` / `<code>-<G…>` forms are NOT keys in the
+            oracle namespace and return 404 here. Use
+            `/v1/price?asset=…` for canonical-asset prices.
       responses:
         "200":
           description: Price record.
@@ -1830,7 +1869,10 @@ paths:
         - name: asset
           in: query
           required: true
-          schema: { type: string }
+          schema:
+            type: string
+            example: "crypto:XLM"
+          example: "crypto:XLM"
         - name: records
           in: query
           schema: { type: integer, minimum: 1, maximum: 200, default: 60 }
@@ -1849,11 +1891,17 @@ paths:
         - name: base
           in: query
           required: true
-          schema: { type: string }
+          schema:
+            type: string
+            example: native
+          example: native
         - name: quote
           in: query
           required: true
-          schema: { type: string }
+          schema:
+            type: string
+            example: "USDC-GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN"
+          example: "USDC-GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN"
       responses:
         "200":
           description: Cross-pair last price.
@@ -2424,25 +2472,37 @@ components:
       name: asset_id
       in: path
       required: true
-      schema: { type: string }
+      schema: { type: string, example: native }
+      example: native
       description: |
         Canonical asset identifier. One of `native`, `<code>-<issuer>`,
         `<code>:<issuer>` (alias), or `<contract_id>`. Strkeys
-        validated per SEP-23.
+        validated per SEP-23. The handler is strict — short symbols
+        like `XLM` or `USDC` are NOT accepted here; use `native` or
+        the full `<code>-<G…>` form.
     AssetQuery:
       name: asset
       in: query
       required: true
-      schema: { type: string }
+      schema: { type: string, example: native }
+      example: native
       description: |
         Canonical asset identifier — matches the `asset_id` on
         response bodies. Query-parameter form is the shorter `asset`
         per the handler implementations (/v1/price, /v1/oracle/latest).
+        Strict canonical form only — `XLM` / `USDC` are rejected;
+        use `native` for XLM and the full `<code>-<G…>` strkey for
+        credit assets.
     Quote:
       name: quote
       in: query
-      schema: { type: string, default: USD }
-      description: ISO-4217 fiat or crypto asset_id. Default `USD`.
+      schema: { type: string, default: "fiat:USD", example: "fiat:USD" }
+      example: "fiat:USD"
+      description: |
+        Quote-side asset. Either a canonical asset identifier (`native`,
+        `<code>-<issuer>`, contract ID) for crypto-quoted pairs, or
+        the `fiat:<ISO-4217>` form for fiat quotes (e.g. `fiat:USD`,
+        `fiat:EUR`). Default `fiat:USD`.
     Timeframe:
       name: timeframe
       in: query
@@ -2460,8 +2520,16 @@ components:
       name: base
       in: query
       required: true
-      schema: { type: string }
-      description: Canonical asset identifier for the base side of a pair.
+      schema:
+        type: string
+        example: "USDC-GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN"
+      example: "USDC-GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN"
+      description: |
+        Canonical asset identifier for the base side of a pair.
+        Strict canonical form only — `USDC` / `XLM` are rejected;
+        the full `<code>-<G…>` strkey is required, or `native` for
+        XLM. The default example resolves to Centre's USDC issuance,
+        which is the most-traded base on Stellar.
     From:
       name: from
       in: query

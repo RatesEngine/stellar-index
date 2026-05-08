@@ -15,8 +15,33 @@ against.
 
 ## [Unreleased]
 
+### Fixed
+
+- **Docs (OpenAPI)**: every public-tier `/v1/*` endpoint's
+  documented default test request now resolves to a live 200 in
+  the Scalar docs UI. Previously many examples used short
+  symbols like `base=USDC` / `asset=XLM` which the canonical-
+  asset validator rejects (handlers want `native` or the full
+  `<code>-<G…>` strkey). Reported 2026-05-08 with a
+  `/v1/ohlc?base=USDC&quote=USD` 400 screenshot. Touched: the
+  shared `components.parameters.{AssetIdPath,AssetQuery,Quote,Base}`
+  blocks plus inline params on `/v1/markets`,
+  `/v1/oracle/lastprice`, `/v1/oracle/prices`,
+  `/v1/oracle/x_last_price`, `/v1/price/batch`,
+  `/v1/coins/{slug}`, `/v1/currencies/{ticker}`,
+  `/v1/issuers/{g_strkey}`, `/v1/changes/{entity_type}/{id}`.
+  SEP-40 oracle endpoints now document the `crypto:<symbol>`
+  keying explicitly so the default `crypto:XLM` example works.
+
 ### Added
 
+- **scripts/dev/audit-public-api.sh** — exercises every public
+  GET endpoint with the same example values published in the
+  OpenAPI spec. Exit code is the failure count; bodies of failed
+  responses are printed. Run against prod (default), R1, or
+  local. Catches the documentation-vs-implementation drift class
+  that produced the 2026-05-08 Scalar regression. Currently
+  green at 37/37 against `https://api.ratesengine.net`.
 - **Explorer**: FAQPage JSON-LD on `/assets/{slug}` static pages —
   the same Q/A pairs the visible AssetFAQ panel renders are now
   also emitted as `<script type="application/ld+json">`
