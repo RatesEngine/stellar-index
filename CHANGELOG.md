@@ -15,6 +15,20 @@ against.
 
 ## [Unreleased]
 
+### Changed
+
+- **GH Actions cost: drop arm64 from release.yml + narrow
+  release-validate path filter.** Every release.yml run was
+  cross-compiling 6 binaries × 2 archs and pushing 6 multi-arch
+  container images; arm64 had no consumers (every region is amd64)
+  so it was dead-weight compute. release-validate.yml's `cmd/**`
+  path filter was firing on every config-wiring PR (~60 runs/day);
+  narrowed to only files release.yml actually consumes (workflows,
+  Dockerfiles, Makefile, go.mod/sum, cut-release.sh) — the "did
+  the binary cross-compile?" question is already answered by
+  ci.yml's `go build ./...`. Re-add arm64 when an arm64 host is
+  provisioned.
+
 ### Added
 
 - **Configurable per-venue `poll_interval` for external connectors.**

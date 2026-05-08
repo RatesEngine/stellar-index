@@ -86,7 +86,10 @@ jobs:
           - ratesengine-migrate
           - ratesengine-sla-probe
         goos: [linux]
-        goarch: [amd64, arm64]
+        # arm64 dropped 2026-05-08 — every region (R1/R2/R3 plan) is
+        # amd64. Re-add when an arm64 host is provisioned. See memory:
+        # feedback_release_cadence.md.
+        goarch: [amd64]
     steps:
       - name: Checkout at tag
         uses: actions/checkout@v4
@@ -286,7 +289,10 @@ jobs:
         with:
           context: .
           file: docker/${{ matrix.binary }}.Dockerfile
-          platforms: linux/amd64,linux/arm64
+          # arm64 dropped 2026-05-08 to halve container build cost.
+          # Re-add when an arm64 host is provisioned. See memory:
+          # feedback_release_cadence.md.
+          platforms: linux/amd64
           push: true
           tags: ${{ steps.tags.outputs.tags }}
           build-args: |

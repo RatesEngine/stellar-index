@@ -26,11 +26,16 @@ name: release-validate
 on:
   pull_request:
     paths:
+      # Narrowed 2026-05-08 — `cmd/**` was triggering release-validate
+      # on every routine config-wiring PR, burning ~60 runs/day. The
+      # "does the new binary cross-compile?" question is already
+      # answered by ci.yml's `go build ./...`. release-validate is
+      # specifically for regressions in the *release pipeline*, so
+      # only fire on files release.yml + deploy.yml actually consume:
       - '.github/workflows/release.yml'
       - '.github/workflows/deploy.yml'
       - '.github/workflows/release-validate.yml'
       - 'docker/**'
-      - 'cmd/**'
       - 'Makefile'
       - 'go.mod'
       - 'go.sum'
