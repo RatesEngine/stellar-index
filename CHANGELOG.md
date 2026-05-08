@@ -15,6 +15,21 @@ against.
 
 ## [Unreleased]
 
+### Added
+
+- **`/v1/price` fiat-vs-fiat cross-rate fallback**: when both
+  `asset` and `quote` are fiat (e.g. `asset=fiat:EUR&quote=fiat:USD`)
+  and the Timescale + Redis VWAP paths both miss, the handler
+  synthesises the cross rate from the wired CurrenciesReader's
+  USD-base snapshot. Returns the result with
+  `flags.triangulated=true` so callers can see the value is
+  derived rather than a direct trade. Pre-fix every
+  fiat-vs-fiat query 404'd because there are no on-chain
+  trades for fiat conversions. Tested by new
+  `TestPrice_FiatCrossRate_EURUSD` (asserts EUR → ~1.086 USD)
+  and `TestPrice_FiatCrossRate_NotFiatBothSides` (guards
+  `native/fiat:USD` from accidentally taking this branch).
+
 ### Security
 
 - **Go runtime → 1.25.10**, **golang.org/x/net → v0.53.0**.
