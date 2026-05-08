@@ -511,3 +511,55 @@ type Version struct {
 	Dirty     string `json:"dirty"`
 	GoVersion string `json:"go_version"`
 }
+
+// NetworkStats is the data shape returned by [Client.NetworkStats]
+// — the home-page consolidated aggregate. Numeric fields are
+// stringified per ADR-0003 since `volume_24h_usd` can exceed int64
+// in raw cents on a high-volume day.
+type NetworkStats struct {
+	// Volume24hUSD is the trailing-24h sum of `usd_volume` across
+	// every trade with non-NULL USD volume. Nullable: emitted as
+	// JSON null when the aggregate hasn't computed (cold cache).
+	Volume24hUSD *string `json:"volume_24h_usd,omitempty"`
+	// MarketsCount24h is the distinct-(base,quote) count over the
+	// trailing 24h.
+	MarketsCount24h int64 `json:"markets_count_24h"`
+	// AssetsIndexed is the count of distinct asset_ids the indexer
+	// has ever observed (all-time, not just 24h).
+	AssetsIndexed int64 `json:"assets_indexed"`
+	// LatestLedger is the highest ledger sequence the indexer has
+	// committed to storage.
+	LatestLedger int64 `json:"latest_ledger"`
+	// ExchangeSources is the count of registered sources with
+	// `class=exchange`. Static — derived from the in-memory
+	// registry, not the database.
+	ExchangeSources int `json:"exchange_sources"`
+	// TotalSources is the count of every registered source
+	// regardless of class. Same in-memory derivation as
+	// ExchangeSources.
+	TotalSources int `json:"total_sources"`
+}
+
+// LendingPool is one entry in the [Client.LendingPools] response.
+// Today every row is a Blend pool contract observed in the
+// trailing-7d auction stream; the `Protocol` field is in place for
+// when other lending protocols ship.
+type LendingPool struct {
+	// Protocol is the lending-protocol identifier — currently
+	// always "blend".
+	Protocol string `json:"protocol"`
+	// Pool is the on-chain contract address (G-strkey) of the
+	// pool.
+	Pool string `json:"pool"`
+	// Auctions24h is the count of auction events observed in the
+	// trailing 24h on this pool.
+	Auctions24h int64 `json:"auctions_24h"`
+	// AuctionsTotal is the all-time auction count on this pool.
+	AuctionsTotal int64 `json:"auctions_total"`
+	// UniqueUsers30d is the count of distinct user addresses that
+	// participated in any auction on this pool in the trailing 30d.
+	UniqueUsers30d int64 `json:"unique_users_30d"`
+	// LastSeen is the timestamp of the most-recent auction event
+	// on this pool. RFC 3339.
+	LastSeen time.Time `json:"last_seen"`
+}

@@ -1092,6 +1092,94 @@ func TestVersion_HappyPath(t *testing.T) {
 	}
 }
 
+// TestNetworkStats_HappyPath — pins the consolidated home-strip
+// payload, including the nullable `volume_24h_usd` and the
+// in-memory-derived source counts.
+func TestNetworkStats_HappyPath(t *testing.T) {
+	_, c := newTestServer(t, func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/v1/network/stats" {
+			t.Errorf("path = %q", r.URL.Path)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"data":{"volume_24h_usd":"3971867088.51","markets_count_24h":22147,"assets_indexed":86108,"latest_ledger":62480804,"exchange_sources":11,"total_sources":21},"as_of":"2026-05-08T23:00:00Z","flags":{}}`))
+	})
+	got, err := c.NetworkStats(context.Background())
+	if err != nil {
+		t.Fatalf("NetworkStats: %v", err)
+	}
+	if got.Data.MarketsCount24h != 22147 {
+		t.Errorf("MarketsCount24h = %d, want 22147", got.Data.MarketsCount24h)
+	}
+	if got.Data.Volume24hUSD == nil || *got.Data.Volume24hUSD != "3971867088.51" {
+		t.Errorf("Volume24hUSD = %v, want pointer to '3971867088.51'", got.Data.Volume24hUSD)
+	}
+	if got.Data.ExchangeSources != 11 || got.Data.TotalSources != 21 {
+		t.Errorf("source counts = %d/%d, want 11/21", got.Data.ExchangeSources, got.Data.TotalSources)
+	}
+}
+
+// TestNetworkStats_VolumeNull — cold-cache case where the
+// aggregator hasn't computed volume yet; the field comes back as
+// JSON null and the SDK surfaces it as a nil pointer.
+func TestNetworkStats_VolumeNull(t *testing.T) {
+	_, c := newTestServer(t, func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"data":{"volume_24h_usd":null,"markets_count_24h":0,"assets_indexed":0,"latest_ledger":0,"exchange_sources":0,"total_sources":0},"as_of":"2026-05-08T23:00:00Z","flags":{}}`))
+	})
+	got, err := c.NetworkStats(context.Background())
+	if err != nil {
+		t.Fatalf("NetworkStats: %v", err)
+	}
+	if got.Data.Volume24hUSD != nil {
+		t.Errorf("Volume24hUSD = %q, want nil pointer", *got.Data.Volume24hUSD)
+	}
+}
+
+// TestLendingPools_HappyPath — pins the per-pool wire shape and
+// confirms the Blend-only Protocol field surfaces.
+func TestLendingPools_HappyPath(t *testing.T) {
+	_, c := newTestServer(t, func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/v1/lending/pools" {
+			t.Errorf("path = %q", r.URL.Path)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"data":[{"protocol":"blend","pool":"CAJJZSGMMM3PD7N33TAPHGBUGTB43OC73HVIK2L2G6BNGGGYOSSYBXBD","auctions_24h":29,"auctions_total":5672,"unique_users_30d":4,"last_seen":"2026-05-08T22:20:05Z"}],"as_of":"2026-05-08T23:00:00Z","flags":{}}`))
+	})
+	got, err := c.LendingPools(context.Background())
+	if err != nil {
+		t.Fatalf("LendingPools: %v", err)
+	}
+	if len(got.Data) != 1 {
+		t.Fatalf("len(Data) = %d, want 1", len(got.Data))
+	}
+	p := got.Data[0]
+	if p.Protocol != "blend" {
+		t.Errorf("Protocol = %q, want blend", p.Protocol)
+	}
+	if p.Auctions24h != 29 || p.AuctionsTotal != 5672 {
+		t.Errorf("auction counts = %d/%d, want 29/5672", p.Auctions24h, p.AuctionsTotal)
+	}
+	if p.UniqueUsers30d != 4 {
+		t.Errorf("UniqueUsers30d = %d, want 4", p.UniqueUsers30d)
+	}
+}
+
+// TestLendingPools_EmptyArray — a fresh deployment with no Blend
+// auctions yet returns an empty array, not 404.
+func TestLendingPools_EmptyArray(t *testing.T) {
+	_, c := newTestServer(t, func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"data":[],"as_of":"2026-05-08T23:00:00Z","flags":{}}`))
+	})
+	got, err := c.LendingPools(context.Background())
+	if err != nil {
+		t.Fatalf("LendingPools: %v", err)
+	}
+	if len(got.Data) != 0 {
+		t.Errorf("len(Data) = %d, want 0", len(got.Data))
+	}
+}
+
 // TestCursors_HappyPath — diagnostics endpoint returns
 // non-paginated array; test pins the wire shape.
 func TestCursors_HappyPath(t *testing.T) {

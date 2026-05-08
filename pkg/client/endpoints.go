@@ -698,3 +698,34 @@ func (c *Client) Version(ctx context.Context) (*Envelope[Version], error) {
 	}
 	return &env, nil
 }
+
+// NetworkStats returns the consolidated network-wide aggregate the
+// explorer's home strip renders in one round-trip: trailing 24h USD
+// volume, distinct markets count, total assets indexed, latest
+// indexed ledger, source count by class. The whole payload is
+// computed off a single SQL query server-side; clients building
+// their own dashboards should prefer this over fanning out to
+// /v1/coins + /v1/markets + /v1/sources separately.
+func (c *Client) NetworkStats(ctx context.Context) (*Envelope[NetworkStats], error) {
+	var env Envelope[NetworkStats]
+	if err := c.doJSON(ctx, http.MethodGet, "/v1/network/stats", nil, nil, &env); err != nil {
+		return nil, err
+	}
+	return &env, nil
+}
+
+// LendingPools returns the per-Blend-pool activity row from the
+// trailing-7d auction stream — pool contract address, 24h auction
+// count, all-time auction count, unique users in 30d, last-seen
+// timestamp. The list is currently Blend-only; the wire shape
+// `Protocol` field is in place for when other lending protocols
+// land. No pagination — the population is small enough (single-
+// digit pool counts) that returning everything in one call is
+// simpler than building a cursor.
+func (c *Client) LendingPools(ctx context.Context) (*Envelope[[]LendingPool], error) {
+	var env Envelope[[]LendingPool]
+	if err := c.doJSON(ctx, http.MethodGet, "/v1/lending/pools", nil, nil, &env); err != nil {
+		return nil, err
+	}
+	return &env, nil
+}

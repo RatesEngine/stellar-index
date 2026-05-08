@@ -17,6 +17,18 @@ against.
 
 ### Added
 
+- **`pkg/client`: `NetworkStats()` and `LendingPools()` SDK
+  methods**. Two of the most user-facing API endpoints had no Go-
+  client wrapper — consumers building dashboards in Go had to
+  hand-roll HTTP calls + JSON decoding for the consolidated home
+  aggregate and the Blend pool list. Both follow the established
+  `Envelope[T]` pattern and ship with full wire-type definitions
+  (`NetworkStats`, `LendingPool`) plus 4 unit tests covering happy
+  paths, the cold-cache nil-pointer case for `Volume24hUSD`, and
+  the empty-array case for `LendingPools`. More SDK gaps remain
+  (`/v1/currencies`, `/v1/oracle/*`, `/v1/twap`, `/v1/vwap`,
+  `/v1/chart`, `/v1/observations`, `/v1/changes`, …) — bundling
+  the rest in subsequent PRs.
 - **`/v1/price` fiat-vs-fiat cross-rate fallback**: when both
   `asset` and `quote` are fiat (e.g. `asset=fiat:EUR&quote=fiat:USD`)
   and the Timescale + Redis VWAP paths both miss, the handler
