@@ -203,27 +203,36 @@ func TestWriteProblem_RFC9457Shape(t *testing.T) {
 // TestClientAborted classifies cancellation states a handler may
 // observe while reading from the request body or upstream calls.
 // The clientAborted predicate gates the "skip writeProblem, let
-// HTTPMetrics label this 499" path — false negatives turn into
-// misleading 500s in metrics.
+// HTTPMetrics label this 499" path. The decision rule is
+// req-context-done → true; everything else (including bare ctx
+// errors when r.Context() is alive) is false so that server-side
+// context.WithTimeout deadlines (#1082, #1099-#1105) flow into
+// each handler's 503 timeout-response branch instead of being
+// silently swallowed.
 func TestClientAborted(t *testing.T) {
-	t.Run("ctx canceled error", func(t *testing.T) {
+	t.Run("ctx canceled error with live request ctx", func(t *testing.T) {
+		// Bare context.Canceled with the request still alive is a
+		// server-internal cancel — not a client abort.
 		req := httptest.NewRequest(http.MethodGet, "/", nil)
-		if !clientAborted(req, context.Canceled) {
-			t.Error("clientAborted(ctx.Canceled) = false, want true")
+		if clientAborted(req, context.Canceled) {
+			t.Error("clientAborted(ctx.Canceled, alive req ctx) = true, want false")
 		}
 	})
-	t.Run("deadline exceeded error", func(t *testing.T) {
+	t.Run("deadline exceeded error with live request ctx", func(t *testing.T) {
+		// THE bug fix: server-side context.WithTimeout(8s) deadlines
+		// must flow through to the handler's 503 path, not get
+		// swallowed as a client abort.
 		req := httptest.NewRequest(http.MethodGet, "/", nil)
-		if !clientAborted(req, context.DeadlineExceeded) {
-			t.Error("clientAborted(DeadlineExceeded) = false, want true")
+		if clientAborted(req, context.DeadlineExceeded) {
+			t.Error("clientAborted(DeadlineExceeded, alive req ctx) = true, want false (must flow to 503)")
 		}
 	})
 	t.Run("wrapped ctx canceled via request context", func(t *testing.T) {
 		ctx, cancel := context.WithCancel(context.Background())
 		cancel()
 		req := httptest.NewRequest(http.MethodGet, "/", nil).WithContext(ctx)
-		// Even with an unrelated err arg, request-context-done is
-		// the second branch.
+		// Even with an unrelated err arg, a done request context is
+		// the authoritative "client gone" signal.
 		if !clientAborted(req, errors.New("downstream wrapped error")) {
 			t.Error("clientAborted with done request context = false, want true")
 		}

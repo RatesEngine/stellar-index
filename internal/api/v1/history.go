@@ -141,7 +141,7 @@ func tradeRowFrom(t canonical.Trade, decimals int) TradeRow {
 //   - from: to - 1h (1-hour window rolling back from `to`)
 //   - to:   now
 //   - limit: 1000 (server clamps to ≤ 10000)
-func (s *Server) handleHistory(w http.ResponseWriter, r *http.Request) {
+func (s *Server) handleHistory(w http.ResponseWriter, r *http.Request) { //nolint:funlen // option parsing + 8s-timeout guard + range/limit defaults are linear; splitting fragments the request lifecycle
 	reader := s.history
 	if reader == nil {
 		writeProblem(w, r,
@@ -433,7 +433,7 @@ const (
 // granularity. 200 with empty points[] when the pair has no closed
 // buckets yet — distinct from 404 since the asset itself may be
 // known but just hasn't accrued bucketed history.
-func (s *Server) handleHistorySinceInception(w http.ResponseWriter, r *http.Request) {
+func (s *Server) handleHistorySinceInception(w http.ResponseWriter, r *http.Request) { //nolint:funlen // option parsing + 8s-timeout guard + grain-default + clamp logic are linear; splitting fragments the request lifecycle
 	if s.history == nil {
 		writeProblem(w, r,
 			"https://api.ratesengine.net/errors/history-unavailable",

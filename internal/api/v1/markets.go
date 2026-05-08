@@ -243,7 +243,7 @@ type MarketVolumeBucket struct {
 //     The latter surfaces high-USD-volume pairs first so clients
 //     don't paginate alphabetically through ~5K dust pairs to find
 //     the ones with real activity.
-func (s *Server) handleMarkets(w http.ResponseWriter, r *http.Request) { //nolint:gocognit,gocyclo // option parsing + source/no-source dispatch + sparkline backfill are linear; splitting would scatter the request lifecycle
+func (s *Server) handleMarkets(w http.ResponseWriter, r *http.Request) { //nolint:gocognit,gocyclo,funlen // option parsing + source/no-source dispatch + 8s-timeout guard + sparkline backfill are linear; splitting fragments the request lifecycle
 	cursor := r.URL.Query().Get("cursor")
 	limit := 100
 	if raw := r.URL.Query().Get("limit"); raw != "" {
