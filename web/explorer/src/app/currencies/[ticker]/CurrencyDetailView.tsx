@@ -295,62 +295,150 @@ function Sparkline({
 }
 
 function Converter({ detail }: { detail: CurrencyDetail }) {
+  // Bidirectional swap widget: both sides have a searchable
+  // currency picker. Default state mirrors the page (this currency
+  // ↔ USD). Editing either input recomputes the other side using
+  // the rate(from→to) cross-rate matrix.
+  const [from, setFrom] = useState(detail.ticker);
+  const [to, setTo] = useState<string>(detail.ticker === 'USD' ? 'EUR' : 'USD');
   const [amount, setAmount] = useState('1');
-  const [target, setTarget] = useState('USD');
+  const [activeSide, setActiveSide] = useState<'from' | 'to'>('from');
 
-  const numeric = Number(amount);
-  const rate = target === detail.ticker ? 1 : target === 'USD' ? detail.inverse_usd : detail.cross_rates[target];
-
-  const result = Number.isFinite(numeric) && Number.isFinite(rate) ? numeric * (rate ?? 0) : null;
-
-  const allTargets = useMemo(() => {
-    const keys = Object.keys(detail.cross_rates).filter((k) => k !== detail.ticker);
-    if (!keys.includes('USD') && detail.ticker !== 'USD') keys.unshift('USD');
-    return keys.sort();
+  const allTickers = useMemo(() => {
+    const set = new Set<string>([detail.ticker, 'USD', ...Object.keys(detail.cross_rates)]);
+    return Array.from(set).sort();
   }, [detail]);
+
+  // Cross-rate matrix: rate(detail.ticker → other) is in
+  // detail.cross_rates[other]. We synthesise rate(from→to) by
+  // routing through detail.ticker — this is pure forex maths
+  // (rate(A→B) = rate(detail→B) / rate(detail→A)).
+  function rateOf(target: string): number | null {
+    if (target === detail.ticker) return 1;
+    if (target === 'USD') {
+      return detail.inverse_usd > 0 ? detail.inverse_usd : null;
+    }
+    const v = detail.cross_rates[target];
+    return v != null && Number.isFinite(v) ? v : null;
+  }
+  function rateBetween(a: string, b: string): number | null {
+    const ra = rateOf(a);
+    const rb = rateOf(b);
+    if (ra == null || rb == null || ra === 0) return null;
+    return rb / ra;
+  }
+
+  const fwdRate = rateBetween(from, to);
+  const bwdRate = fwdRate != null && fwdRate !== 0 ? 1 / fwdRate : null;
+  const numericAmount = Number(amount);
+  const result = activeSide === 'from'
+    ? (Number.isFinite(numericAmount) && fwdRate != null ? numericAmount * fwdRate : null)
+    : (Number.isFinite(numericAmount) && bwdRate != null ? numericAmount * bwdRate : null);
+
+  function swap() {
+    setFrom(to);
+    setTo(from);
+    // Keep the visible value sensible: if the user was editing
+    // 'from', the new 'from' is the old 'to' so reuse the result.
+    if (result != null) setAmount(formatRate(result));
+    setActiveSide('from');
+  }
+
+  // Display: when activeSide is 'from', the right input shows the
+  // computed result; when 'to', the left input shows the computed
+  // back-conversion. Both inputs are editable; clicking one
+  // sets it as the active side.
+  const fromValue = activeSide === 'from' ? amount : (result != null ? formatRate(result) : '—');
+  const toValue = activeSide === 'to' ? amount : (result != null ? formatRate(result) : '—');
 
   return (
     <Panel
       title="Converter"
-      hint={`Rates derived from ${detail.source ?? 'currency-api'}`}
+      hint={`Rates derived from ${detail.source ?? 'massive'}`}
       source={asExample(`/v1/currencies/${detail.ticker}`, {})}
     >
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-        <label className="space-y-1">
-          <span className="text-xs uppercase tracking-wider text-slate-500">From</span>
-          <div className="flex items-center gap-2 rounded-md border border-slate-200 bg-white p-2 dark:border-slate-700 dark:bg-slate-900">
-            <input
-              type="number"
-              value={amount}
-              onChange={(e) => setAmount(e.target.value)}
-              min="0"
-              step="any"
-              inputMode="decimal"
-              className="w-full bg-transparent text-2xl font-mono tabular-nums focus:outline-none"
-            />
-            <span className="rounded bg-slate-100 px-1.5 py-0.5 font-mono text-xs uppercase tracking-wider text-slate-700 dark:bg-slate-800 dark:text-slate-300">
-              {detail.ticker}
-            </span>
-          </div>
-        </label>
-        <label className="space-y-1">
-          <span className="text-xs uppercase tracking-wider text-slate-500">To</span>
-          <div className="flex items-center gap-2 rounded-md border border-slate-200 bg-white p-2 dark:border-slate-700 dark:bg-slate-900">
-            <span className="w-full text-2xl font-mono tabular-nums text-slate-900 dark:text-slate-100">
-              {result != null ? formatRate(result) : '—'}
-            </span>
-            <CurrencyCombobox
-              tickers={allTargets}
-              value={target}
-              onChange={setTarget}
-            />
-          </div>
-        </label>
+      <div className="grid grid-cols-1 items-end gap-3 sm:grid-cols-[1fr_auto_1fr]">
+        <CurrencyInput
+          label="You pay"
+          tickers={allTickers}
+          ticker={from}
+          onTicker={setFrom}
+          value={fromValue}
+          onValue={(v) => {
+            setActiveSide('from');
+            setAmount(v);
+          }}
+          editable
+        />
+        <button
+          type="button"
+          aria-label="Swap currencies"
+          onClick={swap}
+          className="self-center rounded-md border border-slate-200 px-2 py-1 text-xs text-slate-500 hover:border-brand-500 hover:text-brand-600 dark:border-slate-700 dark:text-slate-400 sm:mb-1"
+        >
+          ⇄
+        </button>
+        <CurrencyInput
+          label="You get"
+          tickers={allTickers}
+          ticker={to}
+          onTicker={setTo}
+          value={toValue}
+          onValue={(v) => {
+            setActiveSide('to');
+            setAmount(v);
+          }}
+          editable
+        />
       </div>
       <p className="mt-3 text-xs text-slate-500">
-        1 {detail.ticker} = {rate != null ? formatRate(rate) : '—'} {target}
+        1 {from} = {fwdRate != null ? formatRate(fwdRate) : '—'} {to}
+        {fwdRate != null && (
+          <>
+            <span className="mx-2 text-slate-400">·</span>
+            <span>1 {to} = {formatRate(1 / fwdRate)} {from}</span>
+          </>
+        )}
       </p>
     </Panel>
+  );
+}
+
+function CurrencyInput({
+  label,
+  tickers,
+  ticker,
+  onTicker,
+  value,
+  onValue,
+  editable,
+}: {
+  label: string;
+  tickers: string[];
+  ticker: string;
+  onTicker: (t: string) => void;
+  value: string;
+  onValue: (v: string) => void;
+  editable?: boolean;
+}) {
+  return (
+    <label className="space-y-1">
+      <span className="text-xs uppercase tracking-wider text-slate-500">{label}</span>
+      <div className="flex items-center gap-2 rounded-md border border-slate-200 bg-white p-2 dark:border-slate-700 dark:bg-slate-900">
+        <input
+          type="number"
+          value={value === '—' ? '' : value}
+          placeholder={value === '—' ? '—' : ''}
+          onChange={editable ? (e) => onValue(e.target.value) : undefined}
+          readOnly={!editable}
+          min="0"
+          step="any"
+          inputMode="decimal"
+          className="w-full bg-transparent text-2xl font-mono tabular-nums focus:outline-none"
+        />
+        <CurrencyCombobox tickers={tickers} value={ticker} onChange={onTicker} />
+      </div>
+    </label>
   );
 }
 
