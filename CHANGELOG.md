@@ -15,6 +15,18 @@ against.
 
 ## [Unreleased]
 
+### Added
+
+- **Explorer**: Unified `/currencies/{slug}` URL space — Stellar-native
+  crypto friendly aliases (`stellar`, `aquarius`, `usd-coin`,
+  `euro-coin`, `stronghold-token`, `velo-token`, `yxlm`, `yusdc`,
+  plus lowercase ticker aliases) now resolve via Cloudflare Pages
+  301s to the canonical `/assets/{ticker}` detail page. Fiat
+  friendly slugs already shipped; this completes the unification
+  for the Stellar-native subset of #115. Non-Stellar names like
+  `bitcoin` / `ethereum` are deferred until the external supply
+  source ships (#114).
+
 ## [v0.5.0-rc.37] — 2026-05-08
 
 ### Added

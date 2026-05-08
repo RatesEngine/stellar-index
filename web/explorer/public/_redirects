@@ -10,3 +10,22 @@
 # /coins/<slug> → /assets/<slug> detail pages. Splat-capture
 # preserves the slug, query string, and any tab=... fragment.
 /coins/*  /assets/:splat  301
+
+# Unified /currencies/{slug} crypto friendly aliases. Source of
+# truth: web/explorer/src/app/currencies/[ticker]/slugs.ts —
+# CRYPTO_FRIENDLY_TO_BACKEND. Keep both lists in sync.
+/currencies/stellar           /assets/XLM    301
+/currencies/lumens            /assets/XLM    301
+/currencies/xlm               /assets/XLM    301
+/currencies/usd-coin          /assets/USDC   301
+/currencies/usdc              /assets/USDC   301
+/currencies/euro-coin         /assets/EURC   301
+/currencies/eurc              /assets/EURC   301
+/currencies/aquarius          /assets/AQUA   301
+/currencies/aqua              /assets/AQUA   301
+/currencies/stronghold-token  /assets/SHX    301
+/currencies/shx               /assets/SHX    301
+/currencies/velo-token        /assets/VELO   301
+/currencies/velo              /assets/VELO   301
+/currencies/yxlm              /assets/yXLM   301
+/currencies/yusdc             /assets/yUSDC  301
