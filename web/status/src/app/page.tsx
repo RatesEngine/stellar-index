@@ -153,31 +153,36 @@ const PUBLIC_ENDPOINTS: PublicEndpoint[] = [
     path: '/v1/vwap',
     group: 'Pricing',
     description: 'VWAP over a window',
-    probe: { kind: 'get', path: '/v1/vwap?asset=native&quote=fiat:USD&window=1m' },
+    // Probes that scan the trades hypertable directly need a pair
+    // with real on-chain trades. (native, fiat:USD) doesn't exist
+    // — XLM's USD price is a stablecoin-proxied USDC quote per the
+    // aggregator policy. Use USDC SAC's underlying classic for
+    // probe success.
+    probe: { kind: 'get', path: '/v1/vwap?base=native&quote=USDC-GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN' },
   },
   {
     path: '/v1/twap',
     group: 'Pricing',
     description: 'TWAP over a window',
-    probe: { kind: 'get', path: '/v1/twap?asset=native&quote=fiat:USD&window=1m' },
+    probe: { kind: 'get', path: '/v1/twap?base=native&quote=USDC-GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN' },
   },
   {
     path: '/v1/ohlc',
     group: 'Pricing',
     description: 'OHLC bar',
-    probe: { kind: 'get', path: '/v1/ohlc?asset=native&quote=fiat:USD&interval=1m' },
+    probe: { kind: 'get', path: '/v1/ohlc?base=native&quote=USDC-GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN' },
   },
   {
     path: '/v1/chart',
     group: 'Pricing',
     description: 'Multi-bar chart series',
-    probe: { kind: 'get', path: '/v1/chart?asset=native&quote=fiat:USD&interval=1m&limit=1' },
+    probe: { kind: 'get', path: '/v1/chart?asset=native&quote=fiat:USD&timeframe=24h&granularity=1h' },
   },
   {
     path: '/v1/history',
     group: 'Historical',
     description: 'Trade history within a window',
-    probe: { kind: 'get', path: '/v1/history?asset=native&quote=fiat:USD&limit=1' },
+    probe: { kind: 'get', path: '/v1/history?base=native&quote=fiat:USD&limit=1' },
   },
   {
     path: '/v1/observations',
