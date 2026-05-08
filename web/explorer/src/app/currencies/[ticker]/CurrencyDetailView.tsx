@@ -161,6 +161,8 @@ function HistoryPanel({ detail }: { detail: CurrencyDetail }) {
 
   const rangeLabel = RANGE_OPTIONS.find((o) => o.key === range)?.label ?? range;
 
+  const stats = hasData ? computeRangeStats(series) : null;
+
   return (
     <Panel
       title={`${rangeLabel} USD value`}
@@ -195,6 +197,7 @@ function HistoryPanel({ detail }: { detail: CurrencyDetail }) {
               {hasData ? `${positive ? '+' : ''}${changePct.toFixed(2)}%` : '—'}
             </div>
           </div>
+          {stats && <RangeStatsGrid stats={stats} ticker={detail.ticker} />}
           <LineChart
             data={series.map((p) => ({
               time: Math.floor(new Date(p.date).getTime() / 1000),
@@ -207,6 +210,151 @@ function HistoryPanel({ detail }: { detail: CurrencyDetail }) {
       )}
     </Panel>
   );
+}
+
+interface RangeStats {
+  high: number;
+  highDate: string;
+  low: number;
+  lowDate: string;
+  current: number;
+  fromHighPct: number;
+  fromLowPct: number;
+  daysSinceHigh: number;
+  avgDailyMovePct: number;
+  pointCount: number;
+}
+
+// computeRangeStats — derives volatility + range stats from the
+// already-fetched history series (no extra fetch). Caller is
+// responsible for ensuring `series` has ≥2 points.
+function computeRangeStats(series: HistoryPoint[]): RangeStats {
+  let high = -Infinity;
+  let low = Infinity;
+  let highIdx = 0;
+  let lowIdx = 0;
+  for (let i = 0; i < series.length; i++) {
+    const v = series[i].inverse_usd;
+    if (v > high) {
+      high = v;
+      highIdx = i;
+    }
+    if (v < low) {
+      low = v;
+      lowIdx = i;
+    }
+  }
+  const current = series[series.length - 1].inverse_usd;
+  // Average absolute day-over-day move as a percent of the prior
+  // close. Skips zeros to avoid divide-by-zero on data gaps.
+  let moveSum = 0;
+  let moveN = 0;
+  for (let i = 1; i < series.length; i++) {
+    const prev = series[i - 1].inverse_usd;
+    if (prev <= 0) continue;
+    moveSum += Math.abs(series[i].inverse_usd - prev) / prev;
+    moveN++;
+  }
+  const avgDailyMovePct = moveN > 0 ? (moveSum / moveN) * 100 : 0;
+  const lastTs = new Date(series[series.length - 1].date).getTime();
+  const highTs = new Date(series[highIdx].date).getTime();
+  const daysSinceHigh = Math.max(
+    0,
+    Math.round((lastTs - highTs) / 86_400_000),
+  );
+  const fromHighPct = high > 0 ? ((current - high) / high) * 100 : 0;
+  const fromLowPct = low > 0 ? ((current - low) / low) * 100 : 0;
+  return {
+    high,
+    highDate: series[highIdx].date,
+    low,
+    lowDate: series[lowIdx].date,
+    current,
+    fromHighPct,
+    fromLowPct,
+    daysSinceHigh,
+    avgDailyMovePct,
+    pointCount: series.length,
+  };
+}
+
+function RangeStatsGrid({
+  stats,
+  ticker,
+}: {
+  stats: RangeStats;
+  ticker: string;
+}) {
+  return (
+    <div className="grid grid-cols-2 gap-3 rounded-md border border-slate-200 bg-slate-50/60 p-3 text-sm dark:border-slate-800 dark:bg-slate-900/40 sm:grid-cols-4">
+      <Stat
+        label="Range high"
+        value={`$${formatRate(stats.high)}`}
+        sub={`${formatShortDate(stats.highDate)} · ${stats.daysSinceHigh}d ago`}
+      />
+      <Stat
+        label="Range low"
+        value={`$${formatRate(stats.low)}`}
+        sub={formatShortDate(stats.lowDate)}
+      />
+      <Stat
+        label="From high"
+        value={`${stats.fromHighPct >= 0 ? '+' : ''}${stats.fromHighPct.toFixed(2)}%`}
+        tone={stats.fromHighPct >= 0 ? 'pos' : 'neg'}
+        sub={`From low ${stats.fromLowPct >= 0 ? '+' : ''}${stats.fromLowPct.toFixed(2)}%`}
+      />
+      <Stat
+        label="Avg daily move"
+        value={`±${stats.avgDailyMovePct.toFixed(2)}%`}
+        sub={`across ${stats.pointCount} ${ticker} obs`}
+      />
+    </div>
+  );
+}
+
+function Stat({
+  label,
+  value,
+  sub,
+  tone,
+}: {
+  label: string;
+  value: string;
+  sub?: string;
+  tone?: 'pos' | 'neg';
+}) {
+  const toneClass =
+    tone === 'pos'
+      ? 'text-emerald-700 dark:text-emerald-400'
+      : tone === 'neg'
+        ? 'text-rose-700 dark:text-rose-400'
+        : 'text-slate-900 dark:text-slate-100';
+  return (
+    <div>
+      <div className="text-[10px] uppercase tracking-wider text-slate-500">
+        {label}
+      </div>
+      <div className={`mt-0.5 font-mono text-base tabular-nums ${toneClass}`}>
+        {value}
+      </div>
+      {sub && (
+        <div className="text-[11px] text-slate-500">{sub}</div>
+      )}
+    </div>
+  );
+}
+
+function formatShortDate(iso: string): string {
+  try {
+    const d = new Date(iso);
+    return d.toLocaleDateString(undefined, {
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric',
+    });
+  } catch {
+    return iso.slice(0, 10);
+  }
 }
 
 function RangeSelector({

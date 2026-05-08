@@ -17,6 +17,11 @@ against.
 
 ### Added
 
+- **Explorer**: Range-stats grid on `/currencies/{ticker}` history
+  panel — surfaces range high/low (with date), pct from high
+  (`days ago`), pct from low, and average absolute daily move %
+  computed client-side from the existing history series. No
+  extra fetch; updates as the user changes the range selector.
 - **Explorer**: Unified `/currencies/{slug}` URL space — Stellar-native
   crypto friendly aliases (`stellar`, `aquarius`, `usd-coin`,
   `euro-coin`, `stronghold-token`, `velo-token`, `yxlm`, `yusdc`,
