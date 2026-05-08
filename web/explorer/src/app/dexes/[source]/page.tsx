@@ -71,9 +71,11 @@ export async function generateMetadata({
   const { source } = await params;
   const info = DEX_INFO[source];
   if (!info) return { title: 'DEX not found' };
+  const canonical = `https://ratesengine.net/dexes/${encodeURIComponent(source)}`;
   return {
     title: `${info.name} — every pool, live`,
     description: `All ${info.name} pools observed in the last 14 days, with per-pool 24h trade count + last trade. Source: /v1/markets?source=${source}.`,
+    alternates: { canonical },
   };
 }
 

@@ -149,13 +149,18 @@ export async function generateMetadata({
   }
   const title = `${baseLabel} / ${quoteLabel}${suffix} — pair detail`;
   const description = `Live VWAP${suffix ? ` (${suffix.trim()})` : ''}, recent trades, and per-source breakdown for ${baseLabel} / ${quoteLabel} on Stellar.`;
+  // Canonical URL: the URL-encoded pair slug. Without this,
+  // any case- or encoding-variant of the same pair would be
+  // treated as a separate page by Google.
+  const canonical = `https://ratesengine.net/markets/${encodeURIComponent(pair)}`;
   return {
     title,
     description,
+    alternates: { canonical },
     openGraph: {
       title,
       description,
-      url: `/markets/${pair}`,
+      url: canonical,
       type: 'website',
     },
     twitter: {

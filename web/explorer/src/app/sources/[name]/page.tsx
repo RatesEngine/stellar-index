@@ -68,9 +68,11 @@ export async function generateMetadata({
   params: Params;
 }): Promise<Metadata> {
   const { name } = await params;
+  const canonical = `https://ratesengine.net/sources/${encodeURIComponent(name)}`;
   return {
     title: `${name} — source detail · Rates Engine`,
     description: `Per-venue source metadata, ingest cursor, and contribution profile for ${name}.`,
+    alternates: { canonical },
   };
 }
 

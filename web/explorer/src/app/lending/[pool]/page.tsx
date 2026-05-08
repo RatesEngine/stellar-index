@@ -126,9 +126,11 @@ export async function generateMetadata({
 }): Promise<Metadata> {
   const { pool } = await params;
   const label = BLEND_POOL_LABELS[pool]?.name ?? `${pool.slice(0, 6)}…${pool.slice(-6)}`;
+  const canonical = `https://ratesengine.net/lending/${pool}`;
   return {
     title: `${label} — Blend lending pool`,
     description: `Auction activity, user count, and contract metadata for the Blend pool at ${pool}.`,
+    alternates: { canonical },
   };
 }
 

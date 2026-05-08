@@ -109,9 +109,11 @@ export async function generateMetadata({
 }): Promise<Metadata> {
   const { g_strkey } = await params;
   const short = `${g_strkey.slice(0, 8)}…${g_strkey.slice(-4)}`;
+  const canonical = `https://ratesengine.net/issuers/${g_strkey}`;
   return {
     title: `Issuer ${short} — Stellar`,
     description: `Identity, auth flags, and issued assets for Stellar issuer ${short}.`,
+    alternates: { canonical },
   };
 }
 
