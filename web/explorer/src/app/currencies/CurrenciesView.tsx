@@ -161,9 +161,12 @@ export function CurrenciesView() {
       <Panel
         title={`${filtered.length} of ${rows.length} currencies`}
         hint={
-          fiatQ.data?.published_at
-            ? `Fiat rates published ${formatDate(fiatQ.data.published_at)}`
-            : 'Loading…'
+          <FreshnessHint
+            cryptoUpdatedAt={cryptoQ.dataUpdatedAt}
+            fiatUpdatedAt={fiatQ.dataUpdatedAt}
+            fiatPublishedAt={fiatQ.data?.published_at}
+            isFetching={cryptoQ.isFetching || fiatQ.isFetching}
+          />
         }
         source={asExample('/v1/coins', { limit: 200 })}
         bodyClassName="-mx-4"
@@ -647,6 +650,63 @@ function formatPriceSmart(n: number): string {
   if (n >= 1) return n.toFixed(4);
   if (n >= 0.0001) return n.toFixed(6);
   return n.toExponential(3);
+}
+
+// FreshnessHint — live "updated Xs ago" indicator. Re-renders every
+// second via a useEffect-based ticker so the relative time stays
+// honest as the page idles. Distinguishes the two upstream feeds
+// (crypto + fiat) since they have different cadences.
+function FreshnessHint({
+  cryptoUpdatedAt,
+  fiatUpdatedAt,
+  fiatPublishedAt,
+  isFetching,
+}: {
+  cryptoUpdatedAt: number;
+  fiatUpdatedAt: number;
+  fiatPublishedAt?: string;
+  isFetching: boolean;
+}) {
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const id = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(id);
+  }, []);
+
+  const cryptoAge = cryptoUpdatedAt > 0 ? Math.max(0, Math.round((now - cryptoUpdatedAt) / 1000)) : null;
+  const fiatAge = fiatUpdatedAt > 0 ? Math.max(0, Math.round((now - fiatUpdatedAt) / 1000)) : null;
+
+  return (
+    <span className="inline-flex flex-wrap items-center gap-1.5 text-xs text-slate-500 dark:text-slate-400">
+      {cryptoAge != null && (
+        <span>crypto · {formatRelativeShort(cryptoAge)}</span>
+      )}
+      {cryptoAge != null && fiatAge != null && <span className="text-slate-300">·</span>}
+      {fiatAge != null && (
+        <span>fiat · {formatRelativeShort(fiatAge)}</span>
+      )}
+      {fiatPublishedAt && (
+        <>
+          <span className="text-slate-300">·</span>
+          <span>fiat published {formatDate(fiatPublishedAt)}</span>
+        </>
+      )}
+      {isFetching && (
+        <>
+          <span className="text-slate-300">·</span>
+          <span className="inline-flex h-1.5 w-1.5 animate-pulse rounded-full bg-emerald-500" aria-label="refreshing" />
+        </>
+      )}
+    </span>
+  );
+}
+
+function formatRelativeShort(seconds: number): string {
+  if (seconds < 5) return 'just now';
+  if (seconds < 60) return `${seconds}s ago`;
+  if (seconds < 3600) return `${Math.round(seconds / 60)}m ago`;
+  if (seconds < 86400) return `${Math.round(seconds / 3600)}h ago`;
+  return `${Math.round(seconds / 86400)}d ago`;
 }
 
 function formatDate(iso: string): string {

@@ -5,8 +5,12 @@ import { RequestReveal } from './RequestReveal';
 export type PanelProps = {
   /** Title rendered in the panel header. Optional — some panels render their own. */
   title?: string;
-  /** Sub-label / context shown next to the title. */
-  hint?: string;
+  /**
+   * Sub-label / context shown next to the title. Strings are the
+   * common case; React nodes allow inline components (e.g. live-
+   * updating freshness chips).
+   */
+  hint?: React.ReactNode;
   /** API request that produced this panel's data. */
   source?: RequestExample;
   /** Anchor id for deep-linking (e.g. `#confidence-card`). */
