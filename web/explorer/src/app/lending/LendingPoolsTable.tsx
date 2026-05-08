@@ -15,15 +15,74 @@ interface LendingPool {
   last_seen: string;
 }
 
-// Curated annotations for the well-known Blend mainnet contracts.
-// Sourced from docs/operations/wasm-audits/blend.md (Phase 4 walk
-// of the on-chain Blend deployment, last verified 2026-05-03).
-// Other pool addresses fall through to "Lending pool" — the
-// reserve-asset breakdown per pool needs a Blend-pool-storage
-// reader that doesn't exist yet (#84).
-const BLEND_POOL_LABELS: Record<string, string> = {
-  CAQQR5SWBXKIGZKPBZDH3KM5GQ5GUTPKB7JAFCINLZBC5WXPJKRG3IM7: 'Backstop V2',
-  CDSYOAVXFY7SM5S64IZPPPYB4GVGGLMQVFREPSQQEZVIWXX5R23G4QSU: 'Pool Factory V2',
+// Curated metadata for every Blend mainnet contract we know of.
+// Sourced from docs/operations/wasm-audits/blend.md (Phase 4 walk,
+// last verified 2026-05-03). Reserve-asset breakdown per pool
+// needs a Blend-pool-storage reader that doesn't exist yet (#84);
+// until then this table at least gives users deploy timestamps +
+// initiator addresses so pools are distinguishable.
+interface PoolMeta {
+  label: string;
+  deployedAt?: string;
+  initiator?: string;
+}
+
+const BLEND_POOL_META: Record<string, PoolMeta> = {
+  CAQQR5SWBXKIGZKPBZDH3KM5GQ5GUTPKB7JAFCINLZBC5WXPJKRG3IM7: {
+    label: 'Backstop V2',
+    deployedAt: '2025-04-14',
+    initiator: 'GAX2VVWVHU5YQY5J3NJBXKHI3FFKZN54BE6GRJCWSIKSBZTQWJJNJMPC',
+  },
+  CDSYOAVXFY7SM5S64IZPPPYB4GVGGLMQVFREPSQQEZVIWXX5R23G4QSU: {
+    label: 'Pool Factory V2',
+    deployedAt: '2025-04-14',
+    initiator: 'GAX2VVWVHU5YQY5J3NJBXKHI3FFKZN54BE6GRJCWSIKSBZTQWJJNJMPC',
+  },
+  CAJJZSGMMM3PD7N33TAPHGBUGTB43OC73HVIK2L2G6BNGGGYOSSYBXBD: {
+    label: 'Pool #1 (genesis)',
+    deployedAt: '2025-04-14',
+    initiator: 'GAX2VVWVHU5YQY5J3NJBXKHI3FFKZN54BE6GRJCWSIKSBZTQWJJNJMPC',
+  },
+  CBNR7PYFY775UG7W37B4OJG2OBBUKLFW6VIBHFDKKLR2HECPRMRZMDK3: {
+    label: 'Pool #2',
+    deployedAt: '2025-04-15',
+    initiator: 'GBCAS7XIGDRZY4BMABJMGGW7J3YTITRRV5BTEMFQE5ZZSSVWHHX2ZSS4',
+  },
+  CCCCIQSDILITHMM7PBSLVDT5MISSY7R26MNZXCX4H7J5JQ5FPIYOGYFS: {
+    label: 'Pool #3',
+    deployedAt: '2025-04-17',
+    initiator: 'GBCAS7XIGDRZY4BMABJMGGW7J3YTITRRV5BTEMFQE5ZZSSVWHHX2ZSS4',
+  },
+  CB4OFHAY2TAEYUVPOJS36S657C6NYMSIFUNCCA5AHYT46Y5XUID3O2ED: {
+    label: 'Pool #4',
+    deployedAt: '2025-05-01',
+    initiator: 'GBIWJGAOSFC4KUPHXM573TKTWHMI7VW7D4GCHYZYH243Q6HVBV7ORBIT',
+  },
+  CAE7QVOMBLZ53CDRGK3UNRRHG5EZ5NQA7HHTFASEMYBWHG6MDFZTYHXC: {
+    label: 'Pool #5',
+    deployedAt: '2025-05-01',
+    initiator: 'GBIWJGAOSFC4KUPHXM573TKTWHMI7VW7D4GCHYZYH243Q6HVBV7ORBIT',
+  },
+  CBYOBT7ZCCLQCBUYYIABZLSEGDPEUWXCUXQTZYOG3YBDR7U357D5ZIRF: {
+    label: 'Pool #6',
+    deployedAt: '2025-07-13',
+    initiator: 'GCCI7K6QU6FVVIXWSLKRPTBKJCFBLEJKPTZMP27A2KL37N4ZL3OCM3GI',
+  },
+  CALRF5I2OCJCU577R6MZBCY5IIXNMAAG6PNMN7GUKEYIXBJCJN2FJRVI: {
+    label: 'Pool #7',
+    deployedAt: '2025-11-22',
+    initiator: 'GDH3FRHOOWXYXEASH43N2VOVFOPJSVJF3EQFSLBLJYFPHOUAF4N4AETH',
+  },
+  CADR6Q2UOCDJAGXMAB2E6SRT35STLZ2IGLZUCXJQG7TC2LNKCU5RTQVY: {
+    label: 'Pool #8',
+    deployedAt: '2025-11-25',
+    initiator: 'GDH3FRHOOWXYXEASH43N2VOVFOPJSVJF3EQFSLBLJYFPHOUAF4N4AETH',
+  },
+  CDMAVJPFXPADND3YRL4BSM3AKZWCTFMX27GLLXCML3PD62HEQS5FPVAI: {
+    label: 'Pool #9',
+    deployedAt: '2025-11-25',
+    initiator: 'GDH3FRHOOWXYXEASH43N2VOVFOPJSVJF3EQFSLBLJYFPHOUAF4N4AETH',
+  },
 };
 
 export function LendingPoolsTable() {
@@ -50,6 +109,7 @@ export function LendingPoolsTable() {
             <tr className="text-left text-[10px] uppercase tracking-wider text-slate-500">
               <Th>Protocol</Th>
               <Th>Pool</Th>
+              <Th>Deployed</Th>
               <Th align="right">24h auctions</Th>
               <Th align="right">All-time auctions</Th>
               <Th align="right">Users (30d)</Th>
@@ -59,63 +119,85 @@ export function LendingPoolsTable() {
           <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
             {q.isLoading && (
               <tr>
-                <td colSpan={6} className="px-4 py-6 text-center text-sm text-slate-500">
+                <td colSpan={7} className="px-4 py-6 text-center text-sm text-slate-500">
                   Loading pools…
                 </td>
               </tr>
             )}
             {!q.isLoading && rows.length === 0 && (
               <tr>
-                <td colSpan={6} className="px-4 py-6 text-center text-sm text-slate-500">
+                <td colSpan={7} className="px-4 py-6 text-center text-sm text-slate-500">
                   No Blend pools have emitted auction events yet.
                 </td>
               </tr>
             )}
-            {rows.map((p) => (
-              <tr key={p.pool} className="hover:bg-slate-50 dark:hover:bg-slate-900/40">
-                <Td>
-                  <span className="inline-block rounded bg-emerald-100 px-1.5 py-0.5 text-[11px] font-medium uppercase tracking-wider text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-200">
-                    {p.protocol}
-                  </span>
-                </Td>
-                <Td>
-                  <div className="space-y-0.5">
-                    <Link
-                      href={`/lending/${p.pool}`}
-                      className="block font-mono text-[11px] hover:text-brand-600"
-                      title={p.pool}
-                    >
-                      {p.pool.slice(0, 6)}…{p.pool.slice(-6)}
-                    </Link>
-                    {BLEND_POOL_LABELS[p.pool] && (
-                      <div className="text-[9px] uppercase tracking-wide text-slate-500">
-                        {BLEND_POOL_LABELS[p.pool]}
+            {rows.map((p) => {
+              const meta = BLEND_POOL_META[p.pool];
+              return (
+                <tr key={p.pool} className="hover:bg-slate-50 dark:hover:bg-slate-900/40">
+                  <Td>
+                    <span className="inline-block rounded bg-emerald-100 px-1.5 py-0.5 text-[11px] font-medium uppercase tracking-wider text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-200">
+                      {p.protocol}
+                    </span>
+                  </Td>
+                  <Td>
+                    <div className="space-y-0.5">
+                      <Link
+                        href={`/lending/${p.pool}`}
+                        className="block font-mono text-[11px] hover:text-brand-600"
+                        title={p.pool}
+                      >
+                        {p.pool.slice(0, 6)}…{p.pool.slice(-6)}
+                      </Link>
+                      {meta?.label && (
+                        <div className="text-[9px] uppercase tracking-wide text-slate-500">
+                          {meta.label}
+                        </div>
+                      )}
+                    </div>
+                  </Td>
+                  <Td>
+                    {meta?.deployedAt ? (
+                      <div className="space-y-0.5">
+                        <div className="font-mono text-[11px] text-slate-700 dark:text-slate-300">
+                          {meta.deployedAt}
+                        </div>
+                        {meta.initiator && (
+                          <div
+                            className="font-mono text-[9px] text-slate-500"
+                            title={meta.initiator}
+                          >
+                            by {meta.initiator.slice(0, 4)}…{meta.initiator.slice(-4)}
+                          </div>
+                        )}
                       </div>
+                    ) : (
+                      <span className="text-slate-300 dark:text-slate-700">—</span>
                     )}
-                  </div>
-                </Td>
-                <Td align="right">
-                  <span className="font-mono tabular-nums text-slate-700 dark:text-slate-300">
-                    {p.auctions_24h.toLocaleString()}
-                  </span>
-                </Td>
-                <Td align="right">
-                  <span className="font-mono tabular-nums text-slate-700 dark:text-slate-300">
-                    {p.auctions_total.toLocaleString()}
-                  </span>
-                </Td>
-                <Td align="right">
-                  <span className="font-mono tabular-nums text-slate-700 dark:text-slate-300">
-                    {p.unique_users_30d.toLocaleString()}
-                  </span>
-                </Td>
-                <Td align="right">
-                  <span className="font-mono text-xs text-slate-500">
-                    {formatRelative(p.last_seen)}
-                  </span>
-                </Td>
-              </tr>
-            ))}
+                  </Td>
+                  <Td align="right">
+                    <span className="font-mono tabular-nums text-slate-700 dark:text-slate-300">
+                      {p.auctions_24h.toLocaleString()}
+                    </span>
+                  </Td>
+                  <Td align="right">
+                    <span className="font-mono tabular-nums text-slate-700 dark:text-slate-300">
+                      {p.auctions_total.toLocaleString()}
+                    </span>
+                  </Td>
+                  <Td align="right">
+                    <span className="font-mono tabular-nums text-slate-700 dark:text-slate-300">
+                      {p.unique_users_30d.toLocaleString()}
+                    </span>
+                  </Td>
+                  <Td align="right">
+                    <span className="font-mono text-xs text-slate-500">
+                      {formatRelative(p.last_seen)}
+                    </span>
+                  </Td>
+                </tr>
+              );
+            })}
           </tbody>
         </table>
       </div>
