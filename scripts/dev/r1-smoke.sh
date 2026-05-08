@@ -30,7 +30,15 @@
 set -uo pipefail
 
 API_BASE_URL="${API_BASE_URL:-http://localhost:3000}"
-TIMEOUT="${SMOKE_TIMEOUT:-5}"
+# Per-request timeout. Default 10s sits comfortably above the 8s
+# server-side context.WithTimeout ceiling shipped across the cold-
+# path handlers (#1082, #1099-#1107) — a request that crosses 10s
+# wall-clock is genuinely hung (504-class), not just "scanning a
+# cold hypertable for the first time today." 5s, the previous
+# default, false-positived on /v1/markets?limit=5 cold-cache
+# responses (typical 6-8s) and was filling Healthchecks.io with
+# spurious failures.
+TIMEOUT="${SMOKE_TIMEOUT:-10}"
 FAILS=0
 
 # ANSI colour helpers — disabled when stdout isn't a TTY (cron,
@@ -41,8 +49,9 @@ else
   GREEN=""; RED=""; DIM=""; OFF=""
 fi
 
-# check NAME PATH [-- jq-test]   — runs GET ${BASE}${PATH} with a 5s
-# budget, asserts HTTP 200, optionally pipes the body to jq for a
+# check NAME PATH [-- jq-test]   — runs GET ${BASE}${PATH} under
+# the per-request TIMEOUT budget (10s default; see SMOKE_TIMEOUT
+# above), asserts HTTP 200, optionally pipes the body to jq for a
 # field assertion. The jq-test block is `jq -e '.<expr>'` — a
 # falsy / nonexistent value fails the check.
 check() {
