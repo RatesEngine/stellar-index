@@ -211,6 +211,15 @@ export function CurrenciesView() {
               </button>
             ))}
           </div>
+          <button
+            type="button"
+            onClick={() => exportRowsToCsv(filtered)}
+            disabled={filtered.length === 0}
+            className="rounded-md border border-slate-200 bg-white px-2.5 py-1 text-xs font-medium text-slate-600 hover:border-brand-500 hover:text-brand-600 disabled:cursor-not-allowed disabled:opacity-40 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300"
+            title="Download the current filtered + sorted view as a CSV"
+          >
+            Export CSV
+          </button>
         </div>
 
         <div className="overflow-x-auto">
@@ -710,6 +719,69 @@ function SortableTh({
       </button>
     </th>
   );
+}
+
+// exportRowsToCsv writes the currently-visible rows to the user's
+// clipboard-equivalent — a downloaded `currencies-YYYY-MM-DD.csv`
+// file. Pure browser-side; uses a Blob URL so no server roundtrip.
+// Header order mirrors the visible table so the export and the
+// page tell the same story.
+function exportRowsToCsv(rows: UnifiedRow[]) {
+  const header = [
+    'rank',
+    'kind',
+    'ticker',
+    'name',
+    'price_usd',
+    'change_1h_pct',
+    'change_24h_pct',
+    'change_7d_pct',
+    'market_cap_usd',
+    'volume_24h_usd',
+    'circulating_supply',
+  ];
+  const lines = [header.join(',')];
+  rows.forEach((r, i) => {
+    const fields = [
+      String(i + 1),
+      r.kind,
+      esc(r.ticker),
+      esc(r.name),
+      fmtNum(r.priceUsd),
+      fmtNum(r.change1hPct),
+      fmtNum(r.change24hPct),
+      fmtNum(r.change7dPct),
+      fmtNum(r.marketCapUsd),
+      fmtNum(r.volume24hUsd),
+      fmtNum(r.circulatingSupply),
+    ];
+    lines.push(fields.join(','));
+  });
+  const csv = lines.join('\n') + '\n';
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  const today = new Date().toISOString().slice(0, 10);
+  a.href = url;
+  a.download = `ratesengine-currencies-${today}.csv`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
+function esc(s: string): string {
+  if (s.includes(',') || s.includes('"') || s.includes('\n')) {
+    return `"${s.replace(/"/g, '""')}"`;
+  }
+  return s;
+}
+
+function fmtNum(n: number | null): string {
+  if (n == null || !Number.isFinite(n)) return '';
+  // Avoid scientific notation in CSV — spreadsheets handle plain
+  // decimal better than 1.234e-7.
+  return n.toString();
 }
 
 function formatPriceSmart(n: number): string {
