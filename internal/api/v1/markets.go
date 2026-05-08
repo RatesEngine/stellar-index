@@ -287,13 +287,31 @@ func (s *Server) handleMarkets(w http.ResponseWriter, r *http.Request) { //nolin
 		next string
 		err  error
 	)
+	// Hard 8s ceiling — DistinctPairsExt + SourceMarkets scan the
+	// trades hypertable's 24h window and can take 10s+ on a
+	// cold-cache path even with the cache wrapper. Companion to
+	// the same fix shipped on /v1/pools (#1082); without it the
+	// user sees a hung request that eventually times out at the
+	// ingress (observed 6.9s for /v1/markets?limit=5 on prod
+	// 2026-05-08 because limit=5 missed the prewarm-25-only set).
+	mCtx, mCancel := context.WithTimeout(r.Context(), 8*time.Second)
+	defer mCancel()
 	if source != "" {
-		rows, next, err = reader.SourceMarkets(r.Context(), source, cursor, limit, order)
+		rows, next, err = reader.SourceMarkets(mCtx, source, cursor, limit, order)
 	} else {
-		rows, next, err = reader.DistinctPairsExt(r.Context(), cursor, limit, order)
+		rows, next, err = reader.DistinctPairsExt(mCtx, cursor, limit, order)
 	}
 	if err != nil {
 		if clientAborted(r, err) {
+			return
+		}
+		if errors.Is(err, context.DeadlineExceeded) {
+			s.logger.Warn("DistinctPairs deadline exceeded",
+				"limit", limit, "source", source)
+			writeProblem(w, r,
+				"https://api.ratesengine.net/errors/markets-timeout",
+				"Markets query timed out", http.StatusServiceUnavailable,
+				"the underlying trades-hypertable scan didn't return in 8s; cache may still be warming. Retry in a few seconds.")
 			return
 		}
 		s.logger.Error("DistinctPairs failed", "err", err)
