@@ -504,14 +504,31 @@ function AssetCell({ row }: { row: UnifiedRow }) {
 // ticker. Real SVG icons land in a follow-up.
 function iconFor(row: UnifiedRow): string {
   const t = row.ticker;
+  // Expanded coverage of well-known unicode currency glyphs. Some
+  // codes share a glyph by convention (CNY/JPY both use ¥) — we
+  // pick the one most associated with the issuing region.
   const fiatSymbol: Record<string, string> = {
     USD: '$', EUR: '€', GBP: '£', JPY: '¥', CNY: '¥', KRW: '₩',
     INR: '₹', RUB: '₽', TRY: '₺', BRL: 'R$', CHF: '₣', AUD: '$',
     CAD: '$', NZD: '$', HKD: '$', SGD: '$', MXN: '$', ZAR: 'R',
     THB: '฿', PHP: '₱', NGN: '₦',
+    // Newly added — covers most of the friendly-slug map.
+    DKK: 'kr', SEK: 'kr', NOK: 'kr', PLN: 'zł', VND: '₫',
+    UAH: '₴', ILS: '₪', GHS: '₵', LAK: '₭', MNT: '₮', MYR: 'RM',
+    IDR: 'Rp', PKR: '₨', LKR: '₨', NPR: '₨', BDT: '৳', KZT: '₸',
+    AZN: '₼', GEL: '₾', AMD: '֏', BHD: '.د.ب', SAR: '﷼', AED: 'د.إ',
+    QAR: '﷼', KWD: 'د.ك', OMR: '﷼', JOD: 'د.أ', LBP: 'ل.ل',
+    EGP: '£', BTN: 'Nu', KHR: '៛', MMK: 'K', LBO: 'Rs', CLP: '$',
+    COP: '$', ARS: '$', PEN: 'S/', UYU: '$U', BOB: 'Bs',
+    XAF: 'FCFA', XOF: 'CFA',
   };
+  // Crypto symbols are sparse — most assets don't have a unicode
+  // glyph. Fall back to the ticker's first letter for visual
+  // distinctness; real SVG icons land in a follow-up.
   const cryptoSymbol: Record<string, string> = {
-    BTC: '₿', ETH: 'Ξ', XLM: '✦',
+    BTC: '₿', ETH: 'Ξ', XLM: '✦', LTC: 'Ł', DOGE: 'Ð',
+    USDC: '$', USDT: '$', PYUSD: '$', BUSD: '$', TUSD: '$',
+    DAI: '◈', EURC: '€', EUROC: '€', EUROB: '€', MXNe: '$',
   };
   if (row.kind === 'fiat' && fiatSymbol[t]) return fiatSymbol[t];
   if (row.kind === 'crypto' && cryptoSymbol[t]) return cryptoSymbol[t];
