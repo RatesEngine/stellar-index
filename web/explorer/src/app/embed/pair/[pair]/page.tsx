@@ -105,7 +105,7 @@ async function fetchChart(base: string, quote: string): Promise<ChartResp | null
   if (isCIStub) return null;
   try {
     const res = await fetch(
-      `${API_BASE_URL}/v1/chart?asset=${encodeURIComponent(base)}&quote=${encodeURIComponent(quote)}&interval=1h&limit=24`,
+      `${API_BASE_URL}/v1/chart?asset=${encodeURIComponent(base)}&quote=${encodeURIComponent(quote)}&timeframe=24h&granularity=1h`,
       { signal: AbortSignal.timeout(BUILD_FETCH_TIMEOUT_MS) },
     );
     if (!res.ok) return null;
