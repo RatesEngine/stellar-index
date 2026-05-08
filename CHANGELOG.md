@@ -15,6 +15,16 @@ against.
 
 ## [Unreleased]
 
+### Added
+
+- **`known_issuers.go` expanded from 14 to 27 entries** (Round 5)
+  via a stellar.expert directory sweep over the top observation-
+  count uncurated G-strkeys. Adds Lumenswap, Mobius, Allbridge,
+  Afreum, Ixinium, Scopuly, Firefly, Zeam.Money, Dogstarcoin,
+  XAU CL, sl8.online, UltraCapital (yUSDC).  Issuers now render
+  with org names + home domains on the explorer instead of
+  truncated G-strkeys.
+
 ## [v0.5.0-rc.33] — 2026-05-08
 
 ### Added

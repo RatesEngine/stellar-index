@@ -100,6 +100,61 @@ var knownIssuers = map[string]knownIssuer{
 		HomeDomain: "centre.io",
 		OrgName:    "Circle (EURC)",
 	},
+	// Round 5 (2026-05-08): legitimate issuers found via wider
+	// stellar.expert directory sweep. Each verified — directory
+	// has a `name` and either no `tags` or only neutral tags.
+	"GDGTVWSM4MGS4T7Z6W4RPWOCHE2I6RDFCIFZGS3DOA63LWQTRNZNTTFF": {
+		HomeDomain: "ultracapital.xyz",
+		OrgName:    "UltraCapital (yUSDC)",
+	},
+	"GBXRPL45NPHCVMFFAYZVUVFFVKSIZ362ZXFP7I2ETNQ3QKZMFLPRDTD5": {
+		HomeDomain: "fchain.io",
+		OrgName:    "Firefly",
+	},
+	"GAKTLPC4ZV37SSCITQ5IS5AQ4WPF4CF4VZJQPPAROSGXMYOATF5U6XPR": {
+		HomeDomain: "zeam.money",
+		OrgName:    "Zeam.Money",
+	},
+	"GAROH4EV3WVVTRQKEY43GZK3XSRBEYETRVZ7SVG5LHWOAANSMCTJBB3U": {
+		HomeDomain: "zeam.money",
+		OrgName:    "Zeam.Money",
+	},
+	"GBHFGY3ZNEJWLNO4LBUKLYOCEK4V7ENEBJGPRHHX7JU47GWHBREH37UR": {
+		HomeDomain: "sl8.online",
+		OrgName:    "sl8.online",
+	},
+	"GC6OYQJIZF3HFXCYPFCBXYXNGIBQ4TNSFUBUXQJOZWIP6F3YZK4QH3VQ": {
+		HomeDomain: "scopuly.com",
+		OrgName:    "Scopuly",
+	},
+	"GAB7STHVD5BDH3EEYXPI3OM7PCS4V443PYB5FNT6CFGJVPDLMKDM24WK": {
+		HomeDomain: "lumenswap.io",
+		OrgName:    "Lumenswap",
+	},
+	"GC4HS4CQCZULIOTGLLPGRAAMSBDLFRR6Y7HCUQG66LNQDISXKIXXADIM": {
+		HomeDomain: "ixinium.io",
+		OrgName:    "Ixinium",
+	},
+	"GBCB4WO6J4ET55RWK2SVX76LUQ4PQ7TCDHG2YFILQML7D6XR3HACLXAU": {
+		HomeDomain: "xau.cl",
+		OrgName:    "XAU CL",
+	},
+	"GAORYJ3KBDGIM7FFSKVUJHJ5NEFWIRDIAGGBJBJS7TY6ECZS53257IG4": {
+		HomeDomain: "dogstarcoin.com",
+		OrgName:    "Dogstarcoin",
+	},
+	"GA6HCMBLTZS5VYYBCATRBRZ3BZJMAFUDKYYF6AH6MVCMGWMRDNSWJPIH": {
+		HomeDomain: "mobius.network",
+		OrgName:    "Mobius",
+	},
+	"GDNUVPUOMWOF2ML5FA5E4HQDX7EHV3VCJTLLTO563PUMZKMHJUJIJSYI": {
+		HomeDomain: "afreum.com",
+		OrgName:    "Afreum",
+	},
+	"GALLBRBQHAPW5FOVXXHYWR6J4ZDAQ35BMSNADYGBW25VOUHUYRZM4XIL": {
+		HomeDomain: "allbridge.io",
+		OrgName:    "Allbridge",
+	},
 }
 
 // enrichIssuer fills empty home_domain / org_name fields on the
