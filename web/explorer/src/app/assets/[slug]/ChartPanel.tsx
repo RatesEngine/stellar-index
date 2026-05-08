@@ -6,15 +6,19 @@ import { Panel } from '@/components/reveal';
 import { CandleChart } from '@/components/charts/CandleChart';
 import { asExample, API_BASE_URL } from '@/api/client';
 
-type Timeframe = '24h' | '7d' | '30d' | '1y';
+// API-canonical timeframes per ADR-0020. The earlier '7d' / '30d'
+// labels were the obvious shorthand but the API rejects them as 400 —
+// the chart was silently empty for any window beyond 24h.
+type Timeframe = '1h' | '24h' | '1w' | '1mo' | '1y' | 'all';
 type Granularity = '1m' | '15m' | '1h' | '4h' | '1d';
 type Quote = 'native' | 'fiat:USD';
 
 const TIMEFRAMES: { key: Timeframe; label: string }[] = [
   { key: '24h', label: '24h' },
-  { key: '7d', label: '7d' },
-  { key: '30d', label: '30d' },
+  { key: '1w', label: '7d' },
+  { key: '1mo', label: '30d' },
   { key: '1y', label: '1y' },
+  { key: 'all', label: 'All' },
 ];
 
 const GRANULARITIES: { key: Granularity; label: string }[] = [
