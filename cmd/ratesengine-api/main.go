@@ -476,6 +476,10 @@ func run(cfgPath string, dryRun bool) error { //nolint:gocognit,funlen,gocyclo /
 		logger.With("component", "forex"),
 		time.Hour,
 	)
+	// Wire fx_quotes persistence — every refresh tick writes the
+	// latest rates + 7d history to the hypertable so /v1/currencies
+	// can serve historical charts beyond the in-memory window.
+	forexWorker = forexWorker.WithWriter(&forexQuoteWriter{store: store})
 	go func() {
 		if err := forexWorker.Run(rootCtx); err != nil && !errors.Is(err, context.Canceled) {
 			logger.Error("forex worker exited", "err", err)
@@ -529,6 +533,7 @@ func run(cfgPath string, dryRun bool) error { //nolint:gocognit,funlen,gocyclo /
 		SourcesStats:      v1.NewCachedSourcesStatsReader(store, 60*time.Second),
 		Lending:           store,
 		Currencies:        newForexAdapter(forexCache),
+		FXHistory:         &fxHistoryReader{store: store},
 		SEP10:             sep10Validator,
 		Hub:               hub,
 		CORS:              cors,
@@ -1957,4 +1962,48 @@ func (a *forexAdapter) Latest() *v1.CurrenciesSnapshot {
 		FetchedAt:   snap.FetchedAt,
 		History7d:   history,
 	}
+}
+
+// forexQuoteWriter adapts (*timescale.Store) to forex.FXQuoteWriter
+// (the worker can't import timescale without inverting the
+// dependency direction). Translates the per-package FXQuote shape.
+type forexQuoteWriter struct{ store *timescale.Store }
+
+func (w *forexQuoteWriter) InsertFXQuoteBatch(ctx context.Context, quotes []forex.FXQuote) error {
+	if len(quotes) == 0 {
+		return nil
+	}
+	out := make([]timescale.FXQuote, len(quotes))
+	for i, q := range quotes {
+		out[i] = timescale.FXQuote{
+			Bucket:     q.Bucket,
+			Ticker:     q.Ticker,
+			RateUSD:    q.RateUSD,
+			InverseUSD: q.InverseUSD,
+			Source:     q.Source,
+		}
+	}
+	return w.store.InsertFXQuoteBatch(ctx, out)
+}
+
+// fxHistoryReader adapts (*timescale.Store) to v1.FXHistoryReader.
+// Mirrors the writer adapter but on the read path; the v1 package's
+// FXQuotePoint deliberately omits Ticker + Source (the handler
+// already knows ticker, source is provenance not display data).
+type fxHistoryReader struct{ store *timescale.Store }
+
+func (r *fxHistoryReader) ListFXHistory(ctx context.Context, ticker string, from, to time.Time) ([]v1.FXQuotePoint, error) {
+	rows, err := r.store.ListFXHistory(ctx, ticker, from, to)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]v1.FXQuotePoint, len(rows))
+	for i, q := range rows {
+		out[i] = v1.FXQuotePoint{
+			Bucket:     q.Bucket,
+			RateUSD:    q.RateUSD,
+			InverseUSD: q.InverseUSD,
+		}
+	}
+	return out, nil
 }

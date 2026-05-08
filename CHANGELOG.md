@@ -15,6 +15,30 @@ against.
 
 ## [Unreleased]
 
+### Added
+
+- **Persistent fx_quotes hypertable** (PR #TBD) — daily forex
+  rate snapshots now backfill into a TimescaleDB hypertable
+  (migration 0028) so the per-currency page can render charts
+  beyond the 7-day in-memory window. The forex worker
+  upserts on every refresh tick; a one-shot
+  `scripts/ops/fx-history-backfill` walks Massive's
+  grouped-daily endpoint to seed up to 10 years of history.
+- **/v1/currencies/{ticker}?range=** — handler now accepts
+  `30d`, `90d`, `1y`, `5y`, `10y`, `all`. Reads from the new
+  fx_quotes hypertable and surfaces the series as
+  `history` + `history_range` in the response. Default behavior
+  (no `range` param) is unchanged: the in-memory 7d series in
+  `history_7d`.
+- **/currencies/[ticker]: range-selectable USD-value chart**
+  replaces the 7d-only sparkline. 30d through "all" tabs query
+  fx_quotes server-side; the wider chart uses a 720×200 SVG
+  optimised for hundreds of points (no per-point dots).
+- **Asset detail: market-cap timeline empty-state** on the
+  Supply tab — placeholder explaining the chart will land once
+  the supply-history hypertable joins up with per-asset USD
+  prices (no data fabrication; surfaces what's coming).
+
 ## [v0.5.0-rc.36] — 2026-05-08
 
 ### Performance

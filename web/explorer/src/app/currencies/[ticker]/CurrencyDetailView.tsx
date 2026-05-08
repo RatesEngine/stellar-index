@@ -23,10 +23,24 @@ interface CurrencyDetail {
   change_24h_pct?: number | null;
   change_7d_pct?: number | null;
   history_7d?: HistoryPoint[];
+  history_range?: string;
+  history?: HistoryPoint[];
   published_at?: string;
   fetched_at?: string;
   source?: string;
 }
+
+type RangeKey = '7d' | '30d' | '90d' | '1y' | '5y' | '10y' | 'all';
+
+const RANGE_OPTIONS: { key: RangeKey; label: string }[] = [
+  { key: '7d', label: '7d' },
+  { key: '30d', label: '30d' },
+  { key: '90d', label: '90d' },
+  { key: '1y', label: '1y' },
+  { key: '5y', label: '5y' },
+  { key: '10y', label: '10y' },
+  { key: 'all', label: 'All' },
+];
 
 const FEATURED_TARGETS = ['USD', 'EUR', 'GBP', 'JPY', 'CHF', 'CAD', 'AUD', 'CNY', 'INR', 'BRL', 'MXN', 'ZAR'];
 
@@ -102,42 +116,108 @@ export function CurrencyDetailView({ ticker }: { ticker: string }) {
 }
 
 function HistoryPanel({ detail }: { detail: CurrencyDetail }) {
-  const series = detail.history_7d ?? [];
-  if (series.length < 2) return null;
+  const [range, setRange] = useState<RangeKey>('1y');
 
-  // Compute change vs first point + percent.
-  const first = series[0].inverse_usd;
-  const last = series[series.length - 1].inverse_usd;
-  const changePct = first > 0 ? ((last - first) / first) * 100 : 0;
+  // 7d data ships in the base /v1/currencies/{ticker} response so
+  // the default render needs no second fetch. Anything longer hits
+  // /v1/currencies/{ticker}?range=<range> which queries the
+  // fx_quotes hypertable server-side.
+  const longQ = useQuery<HistoryPoint[]>({
+    queryKey: ['/v1/currencies', detail.ticker, 'history', range],
+    queryFn: async () => {
+      const env = await apiGet<{ data: CurrencyDetail }>(
+        `/v1/currencies/${detail.ticker}?range=${range}`,
+        {},
+      );
+      return env.data.history ?? [];
+    },
+    enabled: range !== '7d',
+    staleTime: 5 * 60_000,
+  });
+
+  const series: HistoryPoint[] =
+    range === '7d'
+      ? detail.history_7d ?? []
+      : longQ.data ?? [];
+
+  const hasData = series.length >= 2;
+  const first = hasData ? series[0].inverse_usd : 0;
+  const last = hasData ? series[series.length - 1].inverse_usd : 0;
+  const changePct = hasData && first > 0 ? ((last - first) / first) * 100 : 0;
   const positive = changePct >= 0;
+
+  const rangeLabel = RANGE_OPTIONS.find((o) => o.key === range)?.label ?? range;
 
   return (
     <Panel
-      title="7-day USD value"
-      hint={`1 ${detail.ticker} expressed in USD over the last week`}
-      source={asExample(`/v1/currencies/${detail.ticker}`, {})}
+      title={`${rangeLabel} USD value`}
+      hint={`1 ${detail.ticker} expressed in USD${
+        range === '7d' ? ' over the last week' : ''
+      }`}
+      source={asExample(`/v1/currencies/${detail.ticker}?range=${range}`, {})}
     >
-      <div className="flex flex-wrap items-end justify-between gap-2">
-        <div>
-          <div className="text-xs uppercase tracking-wider text-slate-500">
-            7d change
-          </div>
-          <div
-            className={`mt-1 text-2xl font-mono tabular-nums ${
-              positive ? 'text-emerald-700 dark:text-emerald-400' : 'text-rose-700 dark:text-rose-400'
-            }`}
-          >
-            {positive ? '+' : ''}
-            {changePct.toFixed(2)}%
-          </div>
-        </div>
-        <Sparkline
-          points={series.map((p) => p.inverse_usd)}
-          dates={series.map((p) => p.date)}
-          positive={positive}
-        />
+      <div className="mb-3 flex flex-wrap items-center gap-2">
+        <RangeSelector value={range} onChange={setRange} />
+        {range !== '7d' && longQ.isFetching && (
+          <span className="text-xs text-slate-500">Loading…</span>
+        )}
       </div>
+      {!hasData && !longQ.isFetching ? (
+        <p className="text-sm text-slate-500">
+          {range === '7d'
+            ? 'History is warming up.'
+            : `No persistent ${rangeLabel} history yet — backfill is in progress.`}
+        </p>
+      ) : (
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+          <div>
+            <div className="text-xs uppercase tracking-wider text-slate-500">
+              {rangeLabel} change
+            </div>
+            <div
+              className={`mt-1 text-2xl font-mono tabular-nums ${
+                positive ? 'text-emerald-700 dark:text-emerald-400' : 'text-rose-700 dark:text-rose-400'
+              }`}
+            >
+              {hasData ? `${positive ? '+' : ''}${changePct.toFixed(2)}%` : '—'}
+            </div>
+          </div>
+          <Sparkline
+            points={series.map((p) => p.inverse_usd)}
+            dates={series.map((p) => p.date)}
+            positive={positive}
+            wide={range !== '7d'}
+          />
+        </div>
+      )}
     </Panel>
+  );
+}
+
+function RangeSelector({
+  value,
+  onChange,
+}: {
+  value: RangeKey;
+  onChange: (v: RangeKey) => void;
+}) {
+  return (
+    <div className="inline-flex rounded-md border border-slate-200 bg-white p-0.5 text-xs dark:border-slate-700 dark:bg-slate-900">
+      {RANGE_OPTIONS.map((opt) => (
+        <button
+          key={opt.key}
+          type="button"
+          onClick={() => onChange(opt.key)}
+          className={`rounded px-2 py-1 font-medium tabular-nums ${
+            opt.key === value
+              ? 'bg-brand-100 text-brand-900 dark:bg-brand-900/40 dark:text-brand-100'
+              : 'text-slate-600 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800'
+          }`}
+        >
+          {opt.label}
+        </button>
+      ))}
+    </div>
   );
 }
 
@@ -145,13 +225,15 @@ function Sparkline({
   points,
   positive,
   dates,
+  wide,
 }: {
   points: number[];
   positive: boolean;
   dates?: string[];
+  wide?: boolean;
 }) {
-  const w = 320;
-  const h = 96;
+  const w = wide ? 720 : 320;
+  const h = wide ? 200 : 96;
   const padX = 28; // leave room for the right-side y-axis labels
   const padY = 6;
   const innerW = w - padX;
@@ -186,25 +268,27 @@ function Sparkline({
         {formatRate(min)}
       </text>
       <path d={area} fill={fill} stroke="none" />
-      <path d={path} fill="none" stroke={stroke} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-      {/* Data points with hover titles for context — native SVG <title>
-          renders as the OS tooltip when the user pauses over a dot. */}
-      {xy.map((pt, i) => (
-        <circle
-          key={i}
-          cx={pt.x}
-          cy={pt.y}
-          r={2.5}
-          fill={stroke}
-          stroke="white"
-          strokeWidth={0.75}
-        >
-          <title>
-            {dates?.[i] ? `${dates[i].slice(0, 10)} · ` : ''}
-            {formatRate(pt.p)}
-          </title>
-        </circle>
-      ))}
+      <path d={path} fill="none" stroke={stroke} strokeWidth={wide ? 1.25 : 1.5} strokeLinecap="round" strokeLinejoin="round" />
+      {/* Data points with hover titles only on the compact variant —
+          a 5y daily series has ~1,800 points, drawing each as a
+          circle would be slow and visually noisy. */}
+      {!wide &&
+        xy.map((pt, i) => (
+          <circle
+            key={i}
+            cx={pt.x}
+            cy={pt.y}
+            r={2.5}
+            fill={stroke}
+            stroke="white"
+            strokeWidth={0.75}
+          >
+            <title>
+              {dates?.[i] ? `${dates[i].slice(0, 10)} · ` : ''}
+              {formatRate(pt.p)}
+            </title>
+          </circle>
+        ))}
     </svg>
   );
 }

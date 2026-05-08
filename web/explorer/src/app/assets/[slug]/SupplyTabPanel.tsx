@@ -110,6 +110,9 @@ export function SupplyTabPanel({ assetID }: { assetID: string }) {
             </div>
           )}
 
+          <MarketCapChartEmpty />
+
+
           {a.supply_basis && (
             <p className="text-xs text-slate-500 dark:text-slate-400">
               <span className="font-mono">supply_basis</span>: {a.supply_basis}
@@ -143,6 +146,27 @@ export function SupplyTabPanel({ assetID }: { assetID: string }) {
         </>
       )}
     </Panel>
+  );
+}
+
+// MarketCapChartEmpty surfaces a placeholder where the historical
+// market-cap chart will live. The data source for this is a join
+// between asset_supply_history (per ADR-0011) and the per-asset
+// USD price track — neither is fully backfilled yet for SEP-41
+// tokens, so today the panel renders an explanation rather than
+// an empty SVG. Once both sides land the chart replaces this body.
+function MarketCapChartEmpty() {
+  return (
+    <div className="rounded-lg border border-dashed border-slate-300 bg-slate-50 p-4 text-sm text-slate-600 dark:border-slate-700 dark:bg-slate-900/50 dark:text-slate-400">
+      <h4 className="mb-1 font-semibold uppercase tracking-wider text-xs text-slate-500">
+        Market-cap timeline
+      </h4>
+      <p>
+        Coming once the supply-history hypertable backfills join up
+        with the per-asset USD price track. Today we surface only the
+        latest snapshot above.
+      </p>
+    </div>
   );
 }
 

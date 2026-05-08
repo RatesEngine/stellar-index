@@ -1,6 +1,7 @@
 package v1
 
 import (
+	"context"
 	"net/http"
 	"strconv"
 	"strings"
@@ -15,6 +16,23 @@ type CurrenciesReader interface {
 	// Latest returns the most recent forex snapshot, or nil if no
 	// fetch has completed yet (warming up).
 	Latest() *CurrenciesSnapshot
+}
+
+// FXHistoryReader serves long-form persisted history from the
+// fx_quotes hypertable. Distinct from the in-memory History7d on
+// the snapshot, which is bounded to one week. Optional — when nil
+// the handler simply omits the long-form history field.
+type FXHistoryReader interface {
+	ListFXHistory(ctx context.Context, ticker string, from, to time.Time) ([]FXQuotePoint, error)
+}
+
+// FXQuotePoint is the storage-layer-projected history datum.
+// Mirrors timescale.FXQuote field-for-field with the date axis as
+// `Bucket`. Wire shape uses CurrencyHistoryPoint downstream.
+type FXQuotePoint struct {
+	Bucket     time.Time
+	RateUSD    float64
+	InverseUSD float64
 }
 
 // CurrenciesSnapshot is the v1-side projection of the forex cache.
@@ -213,6 +231,16 @@ type CurrencyDetail struct {
 	Change24hPct *float64               `json:"change_24h_pct,omitempty"`
 	Change7dPct  *float64               `json:"change_7d_pct,omitempty"`
 	History7d    []CurrencyHistoryPoint `json:"history_7d,omitempty"`
+	// HistoryRange is the time window the History field covers, in
+	// the request's `range` syntax: "30d", "1y", "all". Empty when
+	// only the in-memory History7d is populated (e.g. when the
+	// fx_quotes reader is nil or returned no rows).
+	HistoryRange string `json:"history_range,omitempty"`
+	// History is the long-form persisted daily series from
+	// fx_quotes — a superset of History7d when available. Frontend
+	// charts render from History when present, falling back to
+	// History7d for the warming-up case.
+	History []CurrencyHistoryPoint `json:"history,omitempty"`
 	// Same circulation fields as the listing's CurrencyEntry.
 	// Sourced from the curated CSV at
 	// internal/sources/forex/circulation_data.csv (joined into the
@@ -343,6 +371,30 @@ func (s *Server) handleCurrencyDetail(w http.ResponseWriter, r *http.Request) { 
 		}
 	}
 
+	// Long-form history (fx_quotes) — only attempt when the reader
+	// is wired AND the request explicitly asked. Default behaviour
+	// stays unchanged for back-compat.
+	var longRange string
+	var longHistory []CurrencyHistoryPoint
+	rangeRaw := strings.ToLower(strings.TrimSpace(r.URL.Query().Get("range")))
+	if s.fxHistory != nil && rangeRaw != "" {
+		from, to, label, ok := parseFXHistoryRange(rangeRaw, snap.PublishedAt)
+		if ok {
+			points, err := s.fxHistory.ListFXHistory(r.Context(), target.Ticker, from, to)
+			if err == nil && len(points) > 0 {
+				longHistory = make([]CurrencyHistoryPoint, len(points))
+				for i, p := range points {
+					longHistory[i] = CurrencyHistoryPoint{
+						Date:       p.Bucket,
+						RateUSD:    p.RateUSD,
+						InverseUSD: p.InverseUSD,
+					}
+				}
+				longRange = label
+			}
+		}
+	}
+
 	writeJSON(w, CurrencyDetail{
 		Ticker:            target.Ticker,
 		Name:              target.Name,
@@ -352,6 +404,8 @@ func (s *Server) handleCurrencyDetail(w http.ResponseWriter, r *http.Request) { 
 		Change24hPct:      change24,
 		Change7dPct:       change7,
 		History7d:         history,
+		HistoryRange:      longRange,
+		History:           longHistory,
 		CirculatingSupply: target.CirculatingSupply,
 		MarketCapUSD:      target.MarketCapUSD,
 		CirculationAsOf:   target.CirculationAsOf,
@@ -360,4 +414,42 @@ func (s *Server) handleCurrencyDetail(w http.ResponseWriter, r *http.Request) { 
 		FetchedAt:         snap.FetchedAt,
 		Source:            "massive",
 	}, Flags{})
+}
+
+// parseFXHistoryRange converts a user-facing range token into a
+// [from, to] window anchored on the snapshot's publish date. The
+// label echoes the canonical form so the response surfaces what
+// was served (e.g. "1y" for an alias like "365d").
+func parseFXHistoryRange(raw string, anchor time.Time) (from, to time.Time, label string, ok bool) {
+	if anchor.IsZero() {
+		anchor = time.Now().UTC()
+	}
+	to = anchor.UTC().Truncate(24 * time.Hour)
+	switch raw {
+	case "all", "max":
+		// Fixed-floor sentinel; fx_quotes can't have rows older than
+		// the worker's first persistent write, but the Massive backfill
+		// script can populate up to ~10y. 11y window is generous.
+		from = to.AddDate(-11, 0, 0)
+		return from, to, "all", true
+	case "30d":
+		from = to.AddDate(0, 0, -30)
+		return from, to, "30d", true
+	case "90d", "3m":
+		from = to.AddDate(0, 0, -90)
+		return from, to, "90d", true
+	case "180d", "6m":
+		from = to.AddDate(0, 0, -180)
+		return from, to, "180d", true
+	case "1y", "12m", "365d":
+		from = to.AddDate(-1, 0, 0)
+		return from, to, "1y", true
+	case "5y":
+		from = to.AddDate(-5, 0, 0)
+		return from, to, "5y", true
+	case "10y":
+		from = to.AddDate(-10, 0, 0)
+		return from, to, "10y", true
+	}
+	return time.Time{}, time.Time{}, "", false
 }
