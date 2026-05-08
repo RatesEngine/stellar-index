@@ -78,7 +78,11 @@ export function CurrenciesView() {
           }>('/v1/coins', { limit: 200, include: 'sparkline' });
           return env.data?.coins ?? [];
         },
-        refetchInterval: 30_000,
+        // 15s — crypto trades land in the indexer within 6s of a
+        // ledger close, so refetching twice a ledger is the right
+        // cadence for the flash UX. Backend cache (rc.38 PR #1048)
+        // makes the per-fetch cost <100ms post-deploy.
+        refetchInterval: 15_000,
       },
       {
         queryKey: ['/v1/currencies', 'currencies-listing'],
@@ -88,6 +92,9 @@ export function CurrenciesView() {
           }>('/v1/currencies', { include: 'sparkline' });
           return env.data;
         },
+        // 60s — fiat is daily-grain at the upstream so refetching
+        // faster than 60s is wasted; the worker only roll-overs the
+        // snapshot once per hour.
         refetchInterval: 60_000,
       },
     ],
