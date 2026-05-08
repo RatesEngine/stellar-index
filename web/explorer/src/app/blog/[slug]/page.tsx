@@ -16,9 +16,20 @@ export async function generateMetadata({ params }: { params: Params }): Promise<
   const { slug } = await params;
   const post = loadBlogPost(slug);
   if (!post) return { title: 'Post not found — Blog' };
+  const canonical = `https://ratesengine.net/blog/${slug}`;
+  const title = `${post.title} — Blog`;
   return {
-    title: `${post.title} — Blog`,
+    title,
     description: post.summary,
+    alternates: { canonical },
+    openGraph: {
+      title,
+      description: post.summary,
+      url: canonical,
+      type: 'article',
+      publishedTime: post.date,
+    },
+    twitter: { card: 'summary_large_image', title, description: post.summary },
   };
 }
 
