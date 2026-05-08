@@ -289,13 +289,7 @@ export function CurrenciesView() {
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-              {isLoading && (
-                <tr>
-                  <td colSpan={11} className="px-4 py-8 text-center text-sm text-slate-500">
-                    Loading currencies…
-                  </td>
-                </tr>
-              )}
+              {isLoading && <SkeletonRows count={20} />}
               {!isLoading && filtered.length === 0 && (
                 <tr>
                   <td colSpan={11} className="px-4 py-10 text-center text-sm text-slate-500">
@@ -617,6 +611,46 @@ function iconFor(row: UnifiedRow): string {
   if (row.kind === 'fiat' && fiatSymbol[t]) return fiatSymbol[t];
   if (row.kind === 'crypto' && cryptoSymbol[t]) return cryptoSymbol[t];
   return t.slice(0, 1);
+}
+
+// SkeletonRows renders a placeholder body for the listing while
+// the underlying queries fetch on first paint. Lower perceived
+// latency than the previous one-line "Loading currencies…" cell:
+// the user sees row-shaped pulsing bars in the same layout the
+// real rows will land in, so the table doesn't shift when data
+// arrives. 11 columns (rank, watchlist, asset, price, 1h%, 24h%,
+// 7d%, mcap, vol24h, supply, 7d-chart) match the SortableTh
+// header above; widths are tuned to look reasonable across the
+// breakpoint range without over-engineering a per-column shape.
+function SkeletonRows({ count }: { count: number }) {
+  return (
+    <>
+      {Array.from({ length: count }, (_, i) => (
+        <tr
+          key={i}
+          aria-hidden="true"
+          className="animate-pulse"
+        >
+          <td className="px-4 py-3.5"><div className="h-3 w-4 rounded bg-slate-200 dark:bg-slate-800" /></td>
+          <td className="px-2 py-3.5"><div className="h-3 w-3 rounded bg-slate-200 dark:bg-slate-800" /></td>
+          <td className="px-4 py-3.5">
+            <div className="flex items-center gap-2">
+              <div className="h-6 w-6 rounded-full bg-slate-200 dark:bg-slate-800" />
+              <div className="h-3 w-20 rounded bg-slate-200 dark:bg-slate-800" />
+            </div>
+          </td>
+          <td className="px-4 py-3.5 text-right"><div className="ml-auto h-3 w-16 rounded bg-slate-200 dark:bg-slate-800" /></td>
+          <td className="px-4 py-3.5 text-right"><div className="ml-auto h-3 w-10 rounded bg-slate-200 dark:bg-slate-800" /></td>
+          <td className="px-4 py-3.5 text-right"><div className="ml-auto h-3 w-10 rounded bg-slate-200 dark:bg-slate-800" /></td>
+          <td className="px-4 py-3.5 text-right"><div className="ml-auto h-3 w-10 rounded bg-slate-200 dark:bg-slate-800" /></td>
+          <td className="px-4 py-3.5 text-right"><div className="ml-auto h-3 w-20 rounded bg-slate-200 dark:bg-slate-800" /></td>
+          <td className="px-4 py-3.5 text-right"><div className="ml-auto h-3 w-16 rounded bg-slate-200 dark:bg-slate-800" /></td>
+          <td className="px-4 py-3.5 text-right"><div className="ml-auto h-3 w-14 rounded bg-slate-200 dark:bg-slate-800" /></td>
+          <td className="px-4 py-3.5 text-right"><div className="ml-auto h-6 w-22 rounded bg-slate-200 dark:bg-slate-800" /></td>
+        </tr>
+      ))}
+    </>
+  );
 }
 
 function Sparkline({ points, positive }: { points: number[]; positive: boolean }) {
