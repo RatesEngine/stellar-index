@@ -1,7 +1,7 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
 
-import { SourceSparkline } from '@/components/SourceSparkline';
+import { SourceStatsPanel } from '@/app/dexes/[source]/SourceStatsPanel';
 import { formatCompact } from '@/lib/format';
 
 const API_BASE_URL =
@@ -77,11 +77,15 @@ export async function generateMetadata({
 async function fetchSource(name: string): Promise<Source | null> {
   if (isCIStub) return null;
   try {
-    // include=stats,sparkline joins the 24h trade count + the
-    // per-hour volume buckets the page renders below the activity
-    // grid. Both are cheap (single-pass aggregations on the trades
-    // hypertable) and served from the same /v1/sources call.
-    const res = await fetch(`${API_BASE_URL}/v1/sources?include=stats,sparkline`, {
+    // Plain /v1/sources (no stats/sparkline). The unfiltered
+    // call returns the full registry projection in <100ms and
+    // is enough to render the registry-profile panel +
+    // not-found check. Per-source 24h stats + sparkline used
+    // to be in-line via include=stats,sparkline but that
+    // endpoint takes 10-25s under cold-cache and was timing
+    // out static-export budgets at build time. The stats now
+    // load client-side via SourceStatsBlock below.
+    const res = await fetch(`${API_BASE_URL}/v1/sources`, {
       signal: AbortSignal.timeout(BUILD_FETCH_TIMEOUT_MS),
     });
     if (!res.ok) return null;
@@ -224,33 +228,6 @@ export default async function SourceDetailPage({
             mono
           />
           <Stat
-            label="24h trades"
-            value={
-              source.trade_count_24h != null && source.trade_count_24h > 0
-                ? source.trade_count_24h.toLocaleString()
-                : '—'
-            }
-            mono
-          />
-          <Stat
-            label="24h volume"
-            value={
-              source.volume_24h_usd
-                ? `$${formatCompact(Number(source.volume_24h_usd))}`
-                : '—'
-            }
-            mono
-          />
-          <Stat
-            label="24h pairs"
-            value={
-              source.markets_count_24h != null && source.markets_count_24h > 0
-                ? source.markets_count_24h.toLocaleString()
-                : '—'
-            }
-            mono
-          />
-          <Stat
             label="Backfill available"
             value={source.backfill_available ? 'yes' : 'no'}
           />
@@ -265,17 +242,15 @@ export default async function SourceDetailPage({
             tone={source.paid ? 'warn' : undefined}
           />
         </dl>
-        {source.volume_history_24h && source.volume_history_24h.length > 0 && (
-          <div className="mt-4 border-t border-slate-200 pt-3 dark:border-slate-800">
-            <div className="text-[10px] uppercase tracking-wider text-slate-500">
-              Volume by hour
-            </div>
-            <div className="mt-2">
-              <SourceSparkline buckets={source.volume_history_24h} width={400} height={48} />
-            </div>
-          </div>
-        )}
       </Panel>
+
+      {/* 24h activity panel — client-side. Was inlined SSR with
+          include=stats,sparkline but that endpoint takes 10-25s
+          under cold-cache and was eating the static-export budget. */}
+      <SourceStatsPanel
+        source={name}
+        unitsLabel={source.class === 'exchange' && source.subclass !== 'dex' ? 'pairs' : 'pools'}
+      />
 
       <Panel
         title="Ingest cursors"
