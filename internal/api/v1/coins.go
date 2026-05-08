@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/RatesEngine/rates-engine/internal/storage/timescale"
 )
@@ -211,10 +212,28 @@ func (s *Server) handleCoins(w http.ResponseWriter, r *http.Request) { //nolint:
 		listingLimit = limit - 1
 	}
 
-	rows, err := s.coins.ListCoinsExt(r.Context(), timescale.ListCoinsOptions{
+	// 8s ceiling on the listing read + every downstream batch
+	// (sparkline / ATH / native-row). Same pattern as #1082 /
+	// #1099 / #1100; the cached reader keeps p50 < 100ms but
+	// cold-cache paths can take 5-10s scanning the
+	// classic_assets + prices_1m hypertables. The downstream
+	// optional-include fan-outs already soft-fail on error
+	// (warn log + omit the field), so a deadline degrades
+	// gracefully across the chain.
+	listCtx, listCancel := context.WithTimeout(r.Context(), 8*time.Second)
+	defer listCancel()
+	rows, err := s.coins.ListCoinsExt(listCtx, timescale.ListCoinsOptions{
 		Limit: listingLimit, Issuer: issuer, Cursor: cursor, Q: q, Order: order,
 	})
 	if err != nil {
+		if errors.Is(err, context.DeadlineExceeded) {
+			s.logger.Warn("coins list deadline exceeded", "limit", listingLimit)
+			writeProblem(w, r,
+				"https://api.ratesengine.net/errors/coins-timeout",
+				"Coins listing timed out", http.StatusServiceUnavailable,
+				"the underlying classic_assets + prices_1m scan didn't return in 8s; cache may still be warming. Retry in a few seconds.")
+			return
+		}
 		s.logger.Warn("coins list", "err", err)
 		writeProblem(w, r,
 			"https://api.ratesengine.net/errors/coins-error",
