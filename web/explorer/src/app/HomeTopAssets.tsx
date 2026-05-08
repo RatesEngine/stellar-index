@@ -106,8 +106,11 @@ function Row({ coin, rank }: { coin: Coin; rank: number }) {
       <td className="px-4 py-3">
         <Link
           href={`/assets/${coin.slug}`}
-          className="group flex items-baseline gap-2"
+          className="group flex items-center gap-2"
         >
+          <span aria-hidden className="flex h-6 w-6 items-center justify-center rounded-full bg-slate-100 font-mono text-xs dark:bg-slate-800">
+            {iconForCode(coin.code)}
+          </span>
           <span className="font-medium text-ink group-hover:text-brand-600 dark:text-slate-100">
             {coin.code}
           </span>
@@ -214,4 +217,28 @@ function ChangePct({ raw }: { raw: string | null | undefined }) {
       {n.toFixed(2)}%
     </span>
   );
+}
+
+// iconForCode returns a single-glyph stand-in for the asset's
+// row icon. Mirrors the unified currencies listing's iconFor so
+// home + listing render the same visual treatment for the same
+// codes. Real SVG icons land in a follow-up.
+function iconForCode(code: string): string {
+  const c = code.toUpperCase();
+  const map: Record<string, string> = {
+    XLM: '✦',
+    BTC: '₿',
+    ETH: 'Ξ',
+    USDC: '$',
+    USDT: '$',
+    EURC: '€',
+    EUROC: '€',
+    DAI: '◈',
+    LTC: 'Ł',
+    DOGE: 'Ð',
+    AQUA: '🌊',
+    yXLM: '✦',
+    BLND: '🟧',
+  };
+  return map[c] ?? c.slice(0, 1);
 }
