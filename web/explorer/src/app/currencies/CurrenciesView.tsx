@@ -251,8 +251,28 @@ export function CurrenciesView() {
               )}
               {!isLoading && filtered.length === 0 && (
                 <tr>
-                  <td colSpan={10} className="px-4 py-8 text-center text-sm text-slate-500">
-                    {q ? `No currencies matched "${q}".` : 'No currencies — feeds warming up.'}
+                  <td colSpan={10} className="px-4 py-10 text-center text-sm text-slate-500">
+                    <div className="space-y-2">
+                      <div>
+                        {q
+                          ? `No currencies matched "${q}"${filter !== 'all' ? ` in the ${filter} filter` : ''}.`
+                          : filter !== 'all'
+                            ? `No currencies match the ${filter} filter.`
+                            : 'No currencies — feeds warming up.'}
+                      </div>
+                      {(q || filter !== 'all') && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setQ('');
+                            setFilter('all');
+                          }}
+                          className="inline-flex items-center gap-1 rounded-md border border-slate-200 bg-white px-3 py-1 text-xs text-slate-600 hover:border-brand-500 hover:text-brand-600 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300"
+                        >
+                          Clear filters
+                        </button>
+                      )}
+                    </div>
                   </td>
                 </tr>
               )}
