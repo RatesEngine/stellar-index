@@ -15,6 +15,8 @@ against.
 
 ## [Unreleased]
 
+## [v0.5.0-rc.31] — 2026-05-08
+
 ### Fixed
 
 - **`/v1/chart`: stablecoin-proxy fallback for X/fiat:USD.** The
