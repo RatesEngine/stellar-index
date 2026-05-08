@@ -15,6 +15,15 @@ against.
 
 ## [Unreleased]
 
+### Added
+
+- **/aggregators page now lists mainnet contract addresses** for
+  Soroswap (router + pair factory) and DeFindex (factory + USDC /
+  EURC / XLM autocompound vaults). Each row deep-links to
+  stellar.expert. Sourced from each project's authoritative
+  `public/mainnet.contracts.json` in their public repo,
+  verified 2026-05-08.
+
 ## [v0.5.0-rc.34] — 2026-05-08
 
 ### Added

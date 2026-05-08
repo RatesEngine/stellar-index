@@ -11,12 +11,18 @@ export const metadata: Metadata = {
     'Soroswap router, DeFindex yield vaults — protocols that route into the underlying DEXes and lending pools. Excluded from VWAP to avoid double-counting upstream markets.',
 };
 
+type ContractRef = {
+  label: string;
+  cstrkey: string;
+};
+
 type Entry = {
   name: string;
   type: 'router' | 'yield';
   blurb: string;
   notes: string[];
-  contracts?: string;
+  contractsRepo?: string;
+  contractRefs?: ContractRef[];
   homepage?: string;
 };
 
@@ -30,7 +36,13 @@ const ENTRIES: Entry[] = [
       'No router-specific decoder needed for trades — the underlying SoroswapPair swap events fire regardless. The router contract is tracked separately for routed-via attribution (what % of pair volume arrived via the router).',
       'Per the protocol-class contract, routers are in `/v1/sources` with class=aggregator and contribute zero VWAP weight by default. Including them would double-count the underlying pair trade.',
     ],
-    contracts: 'https://github.com/soroswap/core',
+    contractsRepo: 'https://github.com/soroswap/core',
+    contractRefs: [
+      // Sourced from soroswap/core public/mainnet.contracts.json,
+      // last verified 2026-05-08.
+      { label: 'Router', cstrkey: 'CAG5LRYQ5JVEUI5TEID72EYOVX44TTUJT5BQR2J6J77FH65PCCFAJDDH' },
+      { label: 'Pair factory', cstrkey: 'CA4HEQTL2WPEUYKYKCDOHCDNIV4QHNJ7EL4J4NQ6VADP7SYHVRYZ7AW2' },
+    ],
     homepage: 'https://soroswap.finance',
   },
   {
@@ -41,6 +53,15 @@ const ENTRIES: Entry[] = [
     notes: [
       'Position changes happen on the vault contract (deposit/withdraw); the actual yield-bearing legs are at Blend. We track the vault TVL but rely on Blend for the underlying yield observation.',
       'Excluded from VWAP — yield-aggregator inflows are not price-discovery events.',
+    ],
+    contractsRepo: 'https://github.com/paltalabs/defindex',
+    contractRefs: [
+      // Sourced from paltalabs/defindex public/mainnet.contracts.json,
+      // last verified 2026-05-08.
+      { label: 'Factory', cstrkey: 'CDKFHFJIET3A73A2YN4KV7NSV32S6YGQMUFH3DNJXLBWL4SKEGVRNFKI' },
+      { label: 'USDC autocompound', cstrkey: 'CDB2WMKQQNVZMEBY7Q7GZ5C7E7IAFSNMZ7GGVD6WKTCEWK7XOIAVZSAP' },
+      { label: 'EURC autocompound', cstrkey: 'CC5CE6MWISDXT3MLNQ7R3FVILFVFEIH3COWGH45GJKL6BD2ZHF7F7JVI' },
+      { label: 'XLM autocompound', cstrkey: 'CDPWNUW7UMCSVO36VAJSQHQECISPJLCVPDASKHRC5SEROAAZDUQ5DG2Z' },
     ],
     homepage: 'https://defindex.io',
   },
@@ -137,6 +158,31 @@ function Card({ entry }: { entry: Entry }) {
           </li>
         ))}
       </ul>
+      {entry.contractRefs && entry.contractRefs.length > 0 && (
+        <div className="mt-4 border-t border-slate-200 pt-3 dark:border-slate-800">
+          <div className="text-[10px] font-medium uppercase tracking-wider text-slate-500">
+            Mainnet contracts
+          </div>
+          <ul className="mt-1.5 space-y-1 text-xs">
+            {entry.contractRefs.map((c) => (
+              <li key={c.cstrkey} className="flex items-baseline justify-between gap-3">
+                <span className="text-slate-600 dark:text-slate-400">
+                  {c.label}
+                </span>
+                <a
+                  href={`https://stellar.expert/explorer/public/contract/${c.cstrkey}`}
+                  target="_blank"
+                  rel="noreferrer noopener"
+                  className="font-mono text-[11px] text-brand-600 hover:underline"
+                  title={c.cstrkey}
+                >
+                  {c.cstrkey.slice(0, 6)}…{c.cstrkey.slice(-4)}
+                </a>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
       <div className="mt-4 flex flex-wrap gap-3 text-xs">
         {entry.homepage && (
           <a
@@ -149,9 +195,9 @@ function Card({ entry }: { entry: Entry }) {
             <ExternalLink className="h-3 w-3" />
           </a>
         )}
-        {entry.contracts && (
+        {entry.contractsRepo && (
           <a
-            href={entry.contracts}
+            href={entry.contractsRepo}
             className="inline-flex items-center gap-1 text-slate-500 hover:underline"
             target="_blank"
             rel="noreferrer"
