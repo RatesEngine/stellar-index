@@ -49,7 +49,16 @@ interface UnifiedRow {
   history7d: number[]; // inverse-USD for fiat, price-USD for crypto
 }
 
-type FilterKind = 'all' | 'crypto' | 'fiat';
+type FilterKind = 'all' | 'crypto' | 'fiat' | 'stablecoin';
+
+// STABLECOIN_TICKERS — crypto rows whose ticker matches one of
+// these are treated as stablecoins. Curated from the operator's
+// configured `usd_pegged_classics` list plus the EUR/MXN-pegged
+// equivalents. Lower-case for case-insensitive matching.
+const STABLECOIN_TICKERS = new Set<string>([
+  'USDC', 'USDT', 'PYUSD', 'EUROC', 'EURC', 'EUROB', 'MXNe',
+  'USDX', 'USDx', 'EURx', 'BUSD', 'TUSD', 'DAI', 'GYEN',
+]);
 type SortKey = 'rank' | 'name' | 'price' | 'change_1h' | 'change_24h' | 'change_7d' | 'market_cap' | 'volume_24h' | 'supply';
 
 export function CurrenciesView() {
@@ -93,7 +102,11 @@ export function CurrenciesView() {
   const filtered = useMemo(() => {
     const term = q.trim().toLowerCase();
     let scoped = rows;
-    if (filter !== 'all') scoped = scoped.filter((r) => r.kind === filter);
+    if (filter === 'stablecoin') {
+      scoped = scoped.filter((r) => STABLECOIN_TICKERS.has(r.ticker.toUpperCase()));
+    } else if (filter !== 'all') {
+      scoped = scoped.filter((r) => r.kind === filter);
+    }
     if (term) {
       // Match against ticker, name, slug, AND the friendly slug map
       // so typing "us-dollar" or "japanese-yen" finds the right row
@@ -167,7 +180,7 @@ export function CurrenciesView() {
             />
           </div>
           <div className="ml-auto inline-flex rounded-md border border-slate-200 bg-white p-0.5 text-xs dark:border-slate-700 dark:bg-slate-900">
-            {(['all', 'crypto', 'fiat'] as const).map((f) => (
+            {(['all', 'crypto', 'stablecoin', 'fiat'] as const).map((f) => (
               <button
                 key={f}
                 type="button"
