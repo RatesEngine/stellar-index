@@ -225,16 +225,7 @@ export function CurrenciesView() {
         bodyClassName="-mx-4"
       >
         <div className="flex flex-wrap items-center gap-3 px-4 pb-3 pt-1">
-          <div className="relative">
-            <Search className="absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-            <input
-              type="search"
-              value={q}
-              onChange={(e) => setQ(e.target.value)}
-              placeholder="Search by ticker, name, or slug…"
-              className="w-72 rounded-md border border-slate-200 bg-white py-1.5 pl-8 pr-3 text-sm placeholder:text-slate-400 focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500 dark:border-slate-700 dark:bg-slate-900 dark:placeholder:text-slate-500"
-            />
-          </div>
+          <SearchInput value={q} onChange={setQ} />
           <div className="ml-auto inline-flex rounded-md border border-slate-200 bg-white p-0.5 text-xs dark:border-slate-700 dark:bg-slate-900">
             {(['all', 'crypto', 'stablecoin', 'fiat', 'watchlist'] as const).map((f) => (
               <button
@@ -766,6 +757,56 @@ function SortableTh({
 // file. Pure browser-side; uses a Blob URL so no server roundtrip.
 // Header order mirrors the visible table so the export and the
 // page tell the same story.
+// SearchInput wraps the listing's search box with a `/` keyboard
+// shortcut (matching the GitHub / Linear convention) and a
+// dismissive `Esc` clear. Click + focus behavior unchanged.
+function SearchInput({
+  value,
+  onChange,
+}: {
+  value: string;
+  onChange: (v: string) => void;
+}) {
+  const inputRef = useRef<HTMLInputElement | null>(null);
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      // Ignore the shortcut when the user is already typing
+      // somewhere — pressing `/` mid-typed message in another
+      // input shouldn't yank focus to the search.
+      const target = e.target as HTMLElement | null;
+      const tag = target?.tagName;
+      if (tag === 'INPUT' || tag === 'TEXTAREA' || (target && target.isContentEditable)) {
+        return;
+      }
+      if (e.key === '/') {
+        e.preventDefault();
+        inputRef.current?.focus();
+      }
+    }
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, []);
+  return (
+    <div className="relative">
+      <Search className="absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+      <input
+        ref={inputRef}
+        type="search"
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === 'Escape') {
+            onChange('');
+            (e.target as HTMLInputElement).blur();
+          }
+        }}
+        placeholder="Search by ticker, name, or slug… (press /)"
+        className="w-80 rounded-md border border-slate-200 bg-white py-1.5 pl-8 pr-3 text-sm placeholder:text-slate-400 focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500 dark:border-slate-700 dark:bg-slate-900 dark:placeholder:text-slate-500"
+      />
+    </div>
+  );
+}
+
 function exportRowsToCsv(rows: UnifiedRow[]) {
   const header = [
     'rank',
