@@ -17,6 +17,14 @@ against.
 
 ### Added
 
+- **`known_scams.go` expanded to 19 entries** via a wider sweep of
+  the top 487 uncurated issuers (>50K observations each) against
+  stellar.expert's directory. New entries include "Scam Assets"
+  factories, "Serial Minter / Fake Assets", "InterstellarExchange"
+  (flagged unsafe), and several generic counterfeiters. Every
+  flagged issuer now renders the red SCAM badge on /issuers and a
+  full-width red banner on /issuers/[g_strkey].
+
 - **Expanded `known_scams.go` from 1 to 4 entries.** Sweep against
   the top observation-count uncurated issuers via stellar.expert's
   directory yielded three more flagged G-strkeys: a 472-asset
