@@ -147,3 +147,13 @@ rpc_url = "https://eth.llamarpc.com"
     [divergence.chainlink.feeds."fiat:JPY/fiat:USD"]
     address = "0xBcE206caE7f0ec07b545EddE332A47C2F75bbeb3"
     decimals = 8
+
+# ──────────────────────────────────────────────────────────────────
+# [external.coingecko] — CoinGecko poller (aggregator-class). Free
+# tier hits 429 around 30 calls/minute, so override the connector's
+# 60s default with 120s to halve the rate. Bumped 2026-05-08 after
+# observing minute-cadence "http 429: Throttled" in indexer logs.
+# ──────────────────────────────────────────────────────────────────
+[external.coingecko]
+enabled = true
+poll_interval = "120s"
