@@ -137,7 +137,14 @@ func (s *Server) handleSources(w http.ResponseWriter, r *http.Request) { //nolin
 	statsBySource := map[string]stats{}
 	historyBySource := map[string][]VolumeBucket{}
 	if includeStats && s.sourcesStats != nil {
-		got, err := s.sourcesStats.GetSourceStats(r.Context())
+		// 8s ceiling on the stats fan-out — same pattern as
+		// /v1/markets (#1099) and /v1/pools (#1082). Soft-fail
+		// already serves the registry without stats on error,
+		// so a deadline just degrades gracefully rather than
+		// hanging the whole sources listing on a cold cache.
+		statsCtx, cancel := context.WithTimeout(r.Context(), 8*time.Second)
+		got, err := s.sourcesStats.GetSourceStats(statsCtx)
+		cancel()
 		if err != nil {
 			s.logger.Warn("source stats", "err", err)
 			// Soft-fail: serve the registry without stats.
@@ -156,7 +163,10 @@ func (s *Server) handleSources(w http.ResponseWriter, r *http.Request) { //nolin
 		}
 	}
 	if includeSparkline && s.sourcesStats != nil {
-		buckets, err := s.sourcesStats.GetSourceVolumeHistory24h(r.Context())
+		// Same 8s ceiling as the stats fan-out above.
+		sparkCtx, cancel := context.WithTimeout(r.Context(), 8*time.Second)
+		buckets, err := s.sourcesStats.GetSourceVolumeHistory24h(sparkCtx)
+		cancel()
 		if err != nil {
 			s.logger.Warn("source volume history", "err", err)
 		} else {
