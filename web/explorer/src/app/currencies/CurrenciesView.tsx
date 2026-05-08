@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useQueries } from '@tanstack/react-query';
-import { useRouter } from 'next/navigation';
+import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { Search } from 'lucide-react';
 
 import { Panel } from '@/components/reveal';
@@ -62,13 +62,53 @@ const STABLECOIN_TICKERS = new Set<string>([
 ]);
 type SortKey = 'rank' | 'name' | 'price' | 'change_1h' | 'change_24h' | 'change_7d' | 'market_cap' | 'volume_24h' | 'supply';
 
+const FILTER_VALUES: FilterKind[] = ['all', 'crypto', 'stablecoin', 'fiat', 'watchlist'];
+const SORT_VALUES: SortKey[] = ['rank', 'name', 'price', 'change_1h', 'change_24h', 'change_7d', 'market_cap', 'volume_24h', 'supply'];
+
+function parseFilter(s: string | null): FilterKind | null {
+  return s != null && (FILTER_VALUES as string[]).includes(s) ? (s as FilterKind) : null;
+}
+
+function parseSortKey(s: string | null): SortKey | null {
+  return s != null && (SORT_VALUES as string[]).includes(s) ? (s as SortKey) : null;
+}
+
 export function CurrenciesView() {
   const router = useRouter();
-  const [q, setQ] = useState('');
-  const [filter, setFilter] = useState<FilterKind>('all');
-  const [sortKey, setSortKey] = useState<SortKey>('market_cap');
-  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc');
+  const pathname = usePathname();
+  const params = useSearchParams();
+
+  // URL state: ?q=&filter=&sort=&dir= so a filtered+sorted view
+  // is a shareable link. State seeds from the URL on first render
+  // and writes back on change. We use shallow router.replace so
+  // back/forward gestures still feel right + we don't trigger a
+  // page-level re-render storm.
+  const [q, setQ] = useState(() => params.get('q') ?? '');
+  const [filter, setFilter] = useState<FilterKind>(() =>
+    parseFilter(params.get('filter')) ?? 'all',
+  );
+  const [sortKey, setSortKey] = useState<SortKey>(() =>
+    parseSortKey(params.get('sort')) ?? 'market_cap',
+  );
+  const [sortDir, setSortDir] = useState<'asc' | 'desc'>(() => {
+    const dir = params.get('dir');
+    return dir === 'asc' || dir === 'desc' ? dir : 'desc';
+  });
   const watchlist = useWatchlist();
+
+  // Push state changes back to the URL so the link reflects what
+  // the user is looking at. Defaults are stripped to keep URLs
+  // readable (?q= is implicit when the search is empty etc.).
+  useEffect(() => {
+    const sp = new URLSearchParams();
+    if (q.trim()) sp.set('q', q.trim());
+    if (filter !== 'all') sp.set('filter', filter);
+    if (sortKey !== 'market_cap') sp.set('sort', sortKey);
+    if (sortDir !== 'desc') sp.set('dir', sortDir);
+    const qs = sp.toString();
+    const next = qs ? `${pathname}?${qs}` : pathname;
+    router.replace(next, { scroll: false });
+  }, [q, filter, sortKey, sortDir, pathname, router]);
 
   const [cryptoQ, fiatQ] = useQueries({
     queries: [
