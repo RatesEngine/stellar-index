@@ -9,7 +9,14 @@ export const metadata: Metadata = {
     'Continuously cross-checks the canonical Rates Engine VWAP against external references (CoinGecko, Chainlink HTTP, Reflector, Redstone, Band). Persistent gaps flip flags.divergence_warning.',
 };
 
-const REFERENCES: { name: string; type: string; blurb: string }[] = [
+type FeedRef = { pair: string; address: string };
+type Reference = {
+  name: string;
+  type: string;
+  blurb: string;
+  feeds?: FeedRef[];
+};
+const REFERENCES: Reference[] = [
   {
     name: 'CoinGecko',
     type: 'HTTP price index',
@@ -20,7 +27,14 @@ const REFERENCES: { name: string; type: string; blurb: string }[] = [
     name: 'Chainlink HTTP',
     type: 'HTTP feed (off-chain Chainlink)',
     blurb:
-      'Independent price index. Drives the divergence worker\'s "are we wildly off" alerting threshold.',
+      'Independent price index via mainnet AggregatorV3 contracts on Ethereum. Queried over public RPC (eth.llamarpc.com). Drives the divergence worker\'s "are we wildly off" alerting threshold.',
+    feeds: [
+      // Operator-config from configs/ansible/.../ratesengine.toml.j2
+      // [divergence.chainlink.feeds]. Verified 2026-05-08.
+      { pair: 'EUR/USD', address: '0xb49f677943BC038e9857d61E7d053CaA2C1734C1' },
+      { pair: 'GBP/USD', address: '0x5c0Ab2d9b5a7ed9f470386e82BB36A3613cDd4b5' },
+      { pair: 'JPY/USD', address: '0xBcE206caE7f0ec07b545EddE332A47C2F75bbeb3' },
+    ],
   },
   {
     name: 'Reflector (DEX/CEX/FX)',
@@ -101,6 +115,34 @@ export default function DivergencesPage() {
             <p className="mt-3 text-sm text-slate-700 dark:text-slate-300">
               {r.blurb}
             </p>
+            {r.feeds && r.feeds.length > 0 && (
+              <div className="mt-4 border-t border-slate-200 pt-3 dark:border-slate-800">
+                <div className="text-[10px] font-medium uppercase tracking-wider text-slate-500">
+                  Wired feeds
+                </div>
+                <ul className="mt-1.5 space-y-1 text-xs">
+                  {r.feeds.map((f) => (
+                    <li
+                      key={f.address}
+                      className="flex items-baseline justify-between gap-3"
+                    >
+                      <span className="font-mono text-slate-600 dark:text-slate-400">
+                        {f.pair}
+                      </span>
+                      <a
+                        href={`https://etherscan.io/address/${f.address}`}
+                        target="_blank"
+                        rel="noreferrer noopener"
+                        className="font-mono text-[11px] text-brand-600 hover:underline"
+                        title={f.address}
+                      >
+                        {f.address.slice(0, 8)}…{f.address.slice(-4)}
+                      </a>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
           </div>
         ))}
       </div>
