@@ -39,18 +39,29 @@ const BLEND_POOL_LABELS: Record<string, { name: string; note?: string }> = {
 };
 
 export async function generateStaticParams() {
-  const fallback = [{ pool: 'CAQQR5SWBXKIGZKPBZDH3KM5GQ5GUTPKB7JAFCINLZBC5WXPJKRG3IM7' }];
-  if (isCIStub) return fallback;
+  // Curated well-known factory contracts that don't emit auctions
+  // and so don't show up in /v1/lending/pools — but operators and
+  // users still deep-link to them. Keep these in the static-params
+  // list so the routes pre-render even when the auction-stream
+  // listing is empty.
+  const curatedKeys = Object.keys(BLEND_POOL_LABELS).map((pool) => ({ pool }));
+  if (isCIStub) return curatedKeys;
   try {
     const res = await fetch(`${API_BASE_URL}/v1/lending/pools`, {
       signal: AbortSignal.timeout(BUILD_FETCH_TIMEOUT_MS),
     });
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const env = (await res.json()) as { data: LendingPool[] };
-    const pools = (env.data ?? []).map((p) => ({ pool: p.pool })).filter(p => p.pool);
-    return pools.length > 0 ? pools : fallback;
+    const fromAPI = (env.data ?? []).map((p) => ({ pool: p.pool })).filter((p) => p.pool);
+    const seen = new Set<string>();
+    const merged = [...fromAPI, ...curatedKeys].filter((p) => {
+      if (seen.has(p.pool)) return false;
+      seen.add(p.pool);
+      return true;
+    });
+    return merged.length > 0 ? merged : curatedKeys;
   } catch {
-    return fallback;
+    return curatedKeys;
   }
 }
 
