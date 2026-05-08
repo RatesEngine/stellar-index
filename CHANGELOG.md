@@ -15,6 +15,8 @@ against.
 
 ## [Unreleased]
 
+## [v0.5.0-rc.35] — 2026-05-08
+
 ### Added
 
 - **`/convert/[from]/[to]` static-prerendered conversion pages.**
