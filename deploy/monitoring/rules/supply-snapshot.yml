@@ -88,6 +88,41 @@ groups:
             that the F2 fields on /v1/assets/{id} are visibly old to
             customers. Escalate per the SEV-3 playbook.
 
+      # Closes the blind spot in `_stale`: when the metric has NEVER
+      # been emitted (textfile collector hasn't seen a `.prom` file
+      # at all), `time() - <missing>` evaluates to "no data" and the
+      # `_stale` alert silently never fires. r1 sat in this state for
+      # 24+ days before the 2026-05-08 audit caught it — the timer
+      # had simply never been installed.
+      #
+      # 36h matches the `_stale` cushion: fresh installs that haven't
+      # had time for one daily timer fire don't false-positive, but
+      # a deployment that's been running long enough to have written
+      # something does.
+      - alert: ratesengine_supply_snapshot_never_initialized
+        expr: |
+          absent_over_time(ratesengine_supply_snapshot_last_success_timestamp[36h]) == 1
+        for: 5m
+        labels:
+          severity: ticket
+          team: ratesengine
+          component: supply
+          runbook_url: https://github.com/RatesEngine/rates-engine/blob/main/docs/operations/runbooks/supply-snapshot-never-initialized.md
+        annotations:
+          summary: "supply snapshot has never published — pipeline uninitialized"
+          description: |
+            ratesengine_supply_snapshot_last_success_timestamp has been
+            absent from the scrape target for ≥ 36 h. Either the
+            systemd timer (supply-snapshot.timer) was never installed,
+            or node_exporter's textfile_collector isn't pointing at
+            the directory the writer outputs to. /v1/assets/{id}'s F2
+            fields render as null for every asset. Distinct from
+            `_stale` (which requires the metric to have existed at
+            some point); together they cover both "was working,
+            stopped" and "never worked." Runbook: install the timer
+            OR enable the aggregator-resident path
+            (`[supply] aggregator_refresh_enabled = true`).
+
       # Sanity floor — circulating > 0 always for native XLM. If
       # circulating drops to zero, either the reserve_balances_stroops
       # config is broken (claiming every reserve holds the total
