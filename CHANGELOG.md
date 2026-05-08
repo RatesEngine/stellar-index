@@ -15,6 +15,17 @@ against.
 
 ## [Unreleased]
 
+### Fixed
+
+- **`/v1/observations` 8s ceiling on the trades hypertable scan**.
+  The handler was missing from the cold-path timeout series shipped
+  in #1082, #1099-#1106 — a deliberate prod test on 2026-05-08
+  (`asset=native&quote=USDC-G…`) hit a 10s curl timeout against the
+  unguarded handler. Now wraps the reader call in
+  `context.WithTimeout(8s)`; on deadline returns
+  `503 application/problem+json` with `type=observations-timeout`,
+  matching the rest of the family.
+
 ### Added
 
 - **`/v1/price` fiat-vs-fiat cross-rate fallback**: when both
