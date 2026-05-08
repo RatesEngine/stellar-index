@@ -222,6 +222,7 @@ export function useChangeSummary(
     queryKey: ['/v1/changes', entityType, entityID],
     queryFn: () => apiGet<ChangeSummary>(`/v1/changes/${entityType}/${entityID}`),
     enabled: !!entityID,
+    staleTime: 60_000,
   });
 }
 
@@ -284,6 +285,7 @@ export function useSources(
       );
       return Array.isArray(env) ? env : env.data;
     },
+    staleTime: 5 * 60_000,
   });
 }
 
@@ -401,6 +403,7 @@ export function useIssuers(limit = 100) {
       );
       return Array.isArray(env) ? env : env.data;
     },
+    staleTime: 5 * 60_000,
   });
 }
 
@@ -445,6 +448,7 @@ export function useIssuer(gStrkey: string | undefined) {
       return 'data' in env ? env.data : env;
     },
     enabled: !!gStrkey,
+    staleTime: 5 * 60_000,
   });
 }
 
@@ -491,6 +495,8 @@ export function useMarkets(
       if (Array.isArray(env)) return { markets: env };
       return { markets: env.data, nextCursor: env.pagination?.next };
     },
+    staleTime: 60_000,
+    placeholderData: (prev) => prev,
   });
 }
 
@@ -556,6 +562,7 @@ export function useHistory(base: string | undefined, quote: string, limit = 100)
       });
       return env.data ?? [];
     },
+    staleTime: 30_000,
   });
 }
 
@@ -601,5 +608,6 @@ export function useAsset(assetID: string | undefined) {
       );
       return env.data;
     },
+    staleTime: 60_000,
   });
 }
