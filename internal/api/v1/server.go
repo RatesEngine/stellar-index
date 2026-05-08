@@ -11,6 +11,7 @@ import (
 	"github.com/RatesEngine/rates-engine/internal/api/streaming"
 	"github.com/RatesEngine/rates-engine/internal/api/v1/middleware"
 	"github.com/RatesEngine/rates-engine/internal/auth"
+	"github.com/RatesEngine/rates-engine/internal/canonical"
 	"github.com/RatesEngine/rates-engine/internal/incidents"
 	"github.com/RatesEngine/rates-engine/internal/obs"
 	"github.com/RatesEngine/rates-engine/internal/version"
@@ -90,8 +91,18 @@ type Server struct {
 	// asset symbols. Nil means "operator hasn't configured the map"
 	// — the endpoint serves an empty object.
 	sacWrappers map[string]string
-	mux         *http.ServeMux
-	started     time.Time
+	// usdPeggedClassics is the operator's allow-list of classic
+	// credit assets they declare as USD-pegged stablecoins.
+	// Mirrors trades.usd_pegged_classic_assets from config. Used
+	// at chart-fallback time: when /v1/chart is asked for X/fiat:USD
+	// and the literal pair has zero points (because we don't store
+	// synthetic XLM/USD in prices_1m — the proxy is applied at
+	// query time), the chart handler retries against X/<peg> for
+	// each entry until one returns data, marking the response
+	// `triangulated: true` for transparency.
+	usdPeggedClassics []canonical.Asset
+	mux               *http.ServeMux
+	started           time.Time
 }
 
 // DashboardAuthMounter is the interface main.go's
@@ -384,6 +395,17 @@ type Options struct {
 	// degrades to showing the raw C-strkey.
 	SACWrappers map[string]string
 
+	// USDPeggedClassics is the operator's allow-list of classic
+	// credit assets they trust as 1:1 USD stablecoins. Same list
+	// fed to trades.usd_pegged_classic_assets — wire it through
+	// from the same TradesConfig field. Used by /v1/chart to
+	// fall back from a literal X/fiat:USD lookup (which has no
+	// rows in prices_1m — the proxy is computed at query time)
+	// to X/<peg> when the literal pair returns 0 points. Empty
+	// disables the fallback; the chart endpoint still serves the
+	// literal pair when one exists.
+	USDPeggedClassics []canonical.Asset
+
 	// SessionAuth, when non-nil, wraps every handler so a present
 	// dashboard session cookie populates a SessionContext on the
 	// request context. Anonymous + bearer-token requests pass
@@ -400,50 +422,51 @@ func New(opts Options) *Server {
 		logger = slog.Default()
 	}
 	s := &Server{
-		logger:           logger,
-		checks:           opts.ReadyChecks,
-		assets:           opts.Assets,
-		prices:           opts.Prices,
-		history:          opts.History,
-		markets:          opts.Markets,
-		oracle:           opts.Oracle,
-		meta:             opts.Meta,
-		accounts:         opts.Accounts,
-		signups:          opts.Signups,
-		stripe:           opts.Stripe,
-		divergence:       opts.Divergence,
-		freeze:           opts.Freeze,
-		supply:           opts.Supply,
-		volume:           opts.Volume,
-		change24h:        opts.Change24h,
-		changesum:        opts.ChangeSummary,
-		coins:            opts.Coins,
-		issuers:          opts.Issuers,
-		cursors:          opts.Cursors,
-		networkStats:     opts.NetworkStats,
-		sourcesStats:     opts.SourcesStats,
-		lending:          opts.Lending,
-		currencies:       opts.Currencies,
-		sessionPeeker:    opts.SessionPeeker,
-		sep10:            opts.SEP10,
-		cors:             opts.CORS,
-		auth:             opts.Auth,
-		rateLimit:        opts.RateLimit,
-		usageTracker:     opts.UsageTracker,
-		usageReader:      opts.UsageReader,
-		hub:              opts.Hub,
-		confidence:       opts.Confidence,
-		triangulated:     opts.Triangulated,
-		cdnEnabled:       opts.CDNEnabled,
-		statusBackend:    opts.StatusBackend,
-		regionName:       valueOr(opts.RegionName, "unknown"),
-		regionDeployment: valueOr(opts.RegionDeployment, "production"),
-		dashboardAuth:    opts.DashboardAuth,
-		dashboardKeys:    opts.DashboardKeys,
-		sessionAuth:      opts.SessionAuth,
-		sacWrappers:      opts.SACWrappers,
-		mux:              http.NewServeMux(),
-		started:          time.Now().UTC(),
+		logger:            logger,
+		checks:            opts.ReadyChecks,
+		assets:            opts.Assets,
+		prices:            opts.Prices,
+		history:           opts.History,
+		markets:           opts.Markets,
+		oracle:            opts.Oracle,
+		meta:              opts.Meta,
+		accounts:          opts.Accounts,
+		signups:           opts.Signups,
+		stripe:            opts.Stripe,
+		divergence:        opts.Divergence,
+		freeze:            opts.Freeze,
+		supply:            opts.Supply,
+		volume:            opts.Volume,
+		change24h:         opts.Change24h,
+		changesum:         opts.ChangeSummary,
+		coins:             opts.Coins,
+		issuers:           opts.Issuers,
+		cursors:           opts.Cursors,
+		networkStats:      opts.NetworkStats,
+		sourcesStats:      opts.SourcesStats,
+		lending:           opts.Lending,
+		currencies:        opts.Currencies,
+		sessionPeeker:     opts.SessionPeeker,
+		sep10:             opts.SEP10,
+		cors:              opts.CORS,
+		auth:              opts.Auth,
+		rateLimit:         opts.RateLimit,
+		usageTracker:      opts.UsageTracker,
+		usageReader:       opts.UsageReader,
+		hub:               opts.Hub,
+		confidence:        opts.Confidence,
+		triangulated:      opts.Triangulated,
+		cdnEnabled:        opts.CDNEnabled,
+		statusBackend:     opts.StatusBackend,
+		regionName:        valueOr(opts.RegionName, "unknown"),
+		regionDeployment:  valueOr(opts.RegionDeployment, "production"),
+		dashboardAuth:     opts.DashboardAuth,
+		dashboardKeys:     opts.DashboardKeys,
+		sessionAuth:       opts.SessionAuth,
+		sacWrappers:       opts.SACWrappers,
+		usdPeggedClassics: opts.USDPeggedClassics,
+		mux:               http.NewServeMux(),
+		started:           time.Now().UTC(),
 	}
 	// Load + cache the embedded incident corpus once at startup;
 	// the data is small (a few markdown files) and ships with the

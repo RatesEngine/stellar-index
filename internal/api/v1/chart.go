@@ -1,6 +1,7 @@
 package v1
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"net/http"
@@ -93,6 +94,14 @@ func (s *Server) handleChart(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	triangulated := false
+	if len(points) == 0 {
+		if fp, ok := s.chartStablecoinFallback(r.Context(), pair, gran, from); ok {
+			points = fp
+			triangulated = true
+		}
+	}
+
 	wire := make([]HistoryPointWire, len(points))
 	for i, p := range points {
 		wire[i] = HistoryPointWire{T: p.Bucket, P: p.VWAP, VUSD: p.VolumeUSD}
@@ -105,7 +114,40 @@ func (s *Server) handleChart(w http.ResponseWriter, r *http.Request) {
 		Granularity: gran,
 		PriceType:   priceType,
 		Points:      wire,
-	}, Flags{})
+	}, Flags{Triangulated: triangulated})
+}
+
+// chartStablecoinFallback handles the X/fiat:USD → X/<peg> retry
+// path. The literal pair query never has rows in prices_1m for
+// fiat:USD because the synthetic stablecoin → USD mapping is
+// applied at /v1/coins read time, not at write time. When the
+// literal pair returned 0 points and the quote is fiat:USD, walk
+// the operator-declared USD-pegged classics and return the first
+// non-empty result. ok=false when no fallback fires (caller keeps
+// the empty result + leaves triangulated=false).
+//
+// Extracted to keep handleChart under the gocognit ceiling.
+func (s *Server) chartStablecoinFallback(
+	ctx context.Context, pair canonical.Pair, gran string, from time.Time,
+) ([]HistoryPoint, bool) {
+	if pair.Quote.Type != canonical.AssetFiat || pair.Quote.Code != "USD" {
+		return nil, false
+	}
+	for _, peg := range s.usdPeggedClassics {
+		if peg.Equal(pair.Base) {
+			continue
+		}
+		proxied, err := canonical.NewPair(pair.Base, peg)
+		if err != nil {
+			continue
+		}
+		pp, err := s.history.HistoryPointsInRange(ctx, proxied, gran, from, time.Time{}, historyMaxPoints)
+		if err != nil || len(pp) == 0 {
+			continue
+		}
+		return pp, true
+	}
+	return nil, false
 }
 
 // parseChartPair builds the canonical Pair from query params,

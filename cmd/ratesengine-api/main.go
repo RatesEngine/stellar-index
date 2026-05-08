@@ -495,48 +495,49 @@ func run(cfgPath string, dryRun bool) error { //nolint:gocognit,funlen,gocyclo /
 	}, logger)
 
 	apiSrv := v1.New(v1.Options{
-		Logger:           logger.With("component", "api"),
-		ReadyChecks:      checks,
-		Assets:           assetReader,
-		Prices:           priceReader,
-		History:          storeHistoryReader{s: store},
-		Markets:          marketsReader,
-		Oracle:           oracleReader,
-		Meta:             sep1Cache,
-		Accounts:         accountStore,
-		Signups:          signupTracker,
-		Stripe:           stripeCfg,
-		Divergence:       divergenceLooker,
-		Confidence:       redisConfidenceLooker{rdb: rdb},
-		Triangulated:     redisTriangulatedLooker{rdb: rdb},
-		Freeze:           freezeLooker,
-		Supply:           storeSupplyLooker{s: store},
-		Volume:           storeVolumeReader{s: store},
-		Change24h:        storeChange24hReader{s: store},
-		ChangeSummary:    store,
-		Coins:            store,
-		Issuers:          store,
-		Cursors:          store,
-		NetworkStats:     store,
-		SourcesStats:     store,
-		Lending:          store,
-		Currencies:       newForexAdapter(forexCache),
-		SEP10:            sep10Validator,
-		Hub:              hub,
-		CORS:             cors,
-		Auth:             authMW,
-		RateLimit:        rateLimit,
-		UsageTracker:     middleware.UsageTracker(usageCounter, logger.With("component", "usage")),
-		UsageReader:      usageReaderAdapter{c: usageCounter},
-		CDNEnabled:       cfg.API.CDNEnabled,
-		StatusBackend:    statusBackend,
-		RegionName:       cfg.Region.ID,
-		RegionDeployment: "production",
-		DashboardAuth:    nilOrMounter(dashboardBundle.auth),
-		DashboardKeys:    nilOrMounter(dashboardBundle.keys),
-		SessionAuth:      dashboardBundle.middleware,
-		SessionPeeker:    sessionPeekerAdapter{},
-		SACWrappers:      cfg.Supply.SACWrappers,
+		Logger:            logger.With("component", "api"),
+		ReadyChecks:       checks,
+		Assets:            assetReader,
+		Prices:            priceReader,
+		History:           storeHistoryReader{s: store},
+		Markets:           marketsReader,
+		Oracle:            oracleReader,
+		Meta:              sep1Cache,
+		Accounts:          accountStore,
+		Signups:           signupTracker,
+		Stripe:            stripeCfg,
+		Divergence:        divergenceLooker,
+		Confidence:        redisConfidenceLooker{rdb: rdb},
+		Triangulated:      redisTriangulatedLooker{rdb: rdb},
+		Freeze:            freezeLooker,
+		Supply:            storeSupplyLooker{s: store},
+		Volume:            storeVolumeReader{s: store},
+		Change24h:         storeChange24hReader{s: store},
+		ChangeSummary:     store,
+		Coins:             store,
+		Issuers:           store,
+		Cursors:           store,
+		NetworkStats:      store,
+		SourcesStats:      store,
+		Lending:           store,
+		Currencies:        newForexAdapter(forexCache),
+		SEP10:             sep10Validator,
+		Hub:               hub,
+		CORS:              cors,
+		Auth:              authMW,
+		RateLimit:         rateLimit,
+		UsageTracker:      middleware.UsageTracker(usageCounter, logger.With("component", "usage")),
+		UsageReader:       usageReaderAdapter{c: usageCounter},
+		CDNEnabled:        cfg.API.CDNEnabled,
+		StatusBackend:     statusBackend,
+		RegionName:        cfg.Region.ID,
+		RegionDeployment:  "production",
+		DashboardAuth:     nilOrMounter(dashboardBundle.auth),
+		DashboardKeys:     nilOrMounter(dashboardBundle.keys),
+		SessionAuth:       dashboardBundle.middleware,
+		SessionPeeker:     sessionPeekerAdapter{},
+		SACWrappers:       cfg.Supply.SACWrappers,
+		USDPeggedClassics: parseUSDPeggedClassics(cfg.Trades.USDPeggedClassicAssets, logger),
 	})
 
 	// Closed-bucket producer — only spawn when the operator
@@ -1811,6 +1812,35 @@ func warnUnsafeBind(logger *slog.Logger, listenAddr string, trustedProxyCIDRs []
 //
 // Default config ships AllowedOrigins=["*"] for the dev path; the
 // operator must explicitly narrow before exposing the API.
+// parseUSDPeggedClassics resolves the operator's
+// trades.usd_pegged_classic_assets strings into canonical Assets so
+// /v1/chart can use them as fallback quotes when the literal
+// X/fiat:USD pair has zero points. Mirrors the aggregator's
+// parseUSDPeggedClassicAssets — soft-fails on malformed entries,
+// same rationale (a missing peg is a smaller failure than refusing
+// to start).
+func parseUSDPeggedClassics(raws []string, logger *slog.Logger) []canonical.Asset {
+	if len(raws) == 0 {
+		return nil
+	}
+	out := make([]canonical.Asset, 0, len(raws))
+	for _, raw := range raws {
+		a, err := canonical.ParseAsset(raw)
+		if err != nil {
+			logger.Warn("usd_pegged_classic_assets: skipping malformed entry",
+				"raw", raw, "err", err)
+			continue
+		}
+		if a.Type != canonical.AssetClassic {
+			logger.Warn("usd_pegged_classic_assets: ignoring non-classic asset",
+				"raw", raw, "type", a.Type)
+			continue
+		}
+		out = append(out, a)
+	}
+	return out
+}
+
 func warnOpenCORS(logger *slog.Logger, allowedOrigins []string, authMode string) {
 	wildcardOnly := len(allowedOrigins) == 1 && allowedOrigins[0] == "*"
 	if !wildcardOnly {

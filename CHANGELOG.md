@@ -15,6 +15,20 @@ against.
 
 ## [Unreleased]
 
+### Fixed
+
+- **`/v1/chart`: stablecoin-proxy fallback for X/fiat:USD.** The
+  chart endpoint previously returned 0 points for any base asset
+  paired with `fiat:USD` (e.g. `native/fiat:USD`) because the
+  synthetic stablecoin → USD mapping is applied at /v1/coins
+  read-time only — `prices_1m` only contains literal classic-quote
+  pairs like `native/USDC-GA5Z…`. The handler now retries against
+  the operator-declared USD-pegged classics
+  (`trades.usd_pegged_classic_assets`) when the literal pair has
+  zero points, marking the response `flags.triangulated=true` for
+  transparency. The XLM/USD chart on the asset page goes from
+  empty to populated as soon as the API binary is redeployed.
+
 ### Performance
 
 - **Explorer: lazy-load `lightweight-charts` (~155 KB).** The candle
