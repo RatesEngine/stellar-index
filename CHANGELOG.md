@@ -15,6 +15,15 @@ against.
 
 ## [Unreleased]
 
+### Added
+
+- **Explorer**: cross-rates table on `/currencies/{ticker}`
+  becomes sortable + filterable when "Show all" is expanded.
+  Click a column header to sort by ticker / direct rate /
+  inverse rate (with `▲▼` indicator + `aria-sort`); a small
+  filter input above the table narrows down to a substring
+  match. Featured-only view (default) keeps its terse render.
+
 ### Fixed
 
 - **`/v1/oracle/lastprice`**: now consults the same

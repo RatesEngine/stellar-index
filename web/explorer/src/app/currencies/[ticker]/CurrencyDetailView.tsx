@@ -536,12 +536,40 @@ function CurrencyInput({
   );
 }
 
+type CrossSortKey = 'ticker' | 'rate' | 'inverse';
+
 function CrossRatesTable({ detail }: { detail: CurrencyDetail }) {
   const [showAll, setShowAll] = useState(false);
+  const [sort, setSort] = useState<CrossSortKey>('ticker');
+  const [dir, setDir] = useState<'asc' | 'desc'>('asc');
+  const [filter, setFilter] = useState('');
+
+  const allTickers = Object.keys(detail.cross_rates);
   const featured = FEATURED_TARGETS.filter((t) => t !== detail.ticker && detail.cross_rates[t] != null);
-  const visible = showAll
-    ? Object.keys(detail.cross_rates).sort()
-    : featured;
+  const baseList = showAll ? allTickers : featured;
+
+  const filtered = filter.trim()
+    ? baseList.filter((t) => t.toLowerCase().includes(filter.trim().toLowerCase()))
+    : baseList;
+
+  const sorted = [...filtered].sort((a, b) => {
+    const ra = detail.cross_rates[a];
+    const rb = detail.cross_rates[b];
+    let cmp = 0;
+    if (sort === 'ticker') cmp = a.localeCompare(b);
+    else if (sort === 'rate') cmp = ra - rb;
+    else if (sort === 'inverse') cmp = (ra > 0 ? 1 / ra : 0) - (rb > 0 ? 1 / rb : 0);
+    return dir === 'asc' ? cmp : -cmp;
+  });
+
+  function toggleSort(key: CrossSortKey) {
+    if (sort === key) {
+      setDir((d) => (d === 'asc' ? 'desc' : 'asc'));
+    } else {
+      setSort(key);
+      setDir(key === 'ticker' ? 'asc' : 'desc');
+    }
+  }
 
   return (
     <Panel
@@ -550,17 +578,28 @@ function CrossRatesTable({ detail }: { detail: CurrencyDetail }) {
       source={asExample(`/v1/currencies/${detail.ticker}`, {})}
       bodyClassName="-mx-4"
     >
+      {showAll && allTickers.length > 12 && (
+        <div className="mb-3 px-4">
+          <input
+            type="search"
+            value={filter}
+            onChange={(e) => setFilter(e.target.value)}
+            placeholder="Filter by ticker (EUR, JPY, …)"
+            className="w-full rounded-md border border-slate-200 bg-white px-3 py-1.5 text-sm placeholder:text-slate-400 focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500 dark:border-slate-700 dark:bg-slate-900 dark:placeholder:text-slate-500"
+          />
+        </div>
+      )}
       <div className="overflow-x-auto">
         <table className="min-w-full divide-y divide-slate-200 text-sm dark:divide-slate-800">
           <thead>
             <tr className="text-left text-[10px] uppercase tracking-wider text-slate-500">
-              <Th>Currency</Th>
-              <Th align="right">1 {detail.ticker} =</Th>
-              <Th align="right">1 unit = {detail.ticker}</Th>
+              <SortTh active={sort === 'ticker'} dir={dir} onClick={() => toggleSort('ticker')}>Currency</SortTh>
+              <SortTh align="right" active={sort === 'rate'} dir={dir} onClick={() => toggleSort('rate')}>1 {detail.ticker} =</SortTh>
+              <SortTh align="right" active={sort === 'inverse'} dir={dir} onClick={() => toggleSort('inverse')}>1 unit = {detail.ticker}</SortTh>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-            {visible.map((t) => {
+            {sorted.map((t) => {
               const rate = detail.cross_rates[t];
               return (
                 <tr key={t} className="hover:bg-slate-50 dark:hover:bg-slate-900/40">
@@ -585,17 +624,24 @@ function CrossRatesTable({ detail }: { detail: CurrencyDetail }) {
                 </tr>
               );
             })}
+            {sorted.length === 0 && (
+              <tr>
+                <td colSpan={3} className="px-4 py-6 text-center text-xs text-slate-500">
+                  No currencies match {filter.trim() ? `“${filter.trim()}”` : 'this view'}.
+                </td>
+              </tr>
+            )}
           </tbody>
         </table>
       </div>
-      {!showAll && featured.length < Object.keys(detail.cross_rates).length && (
+      {!showAll && featured.length < allTickers.length && (
         <div className="border-t border-slate-200 px-4 py-2 text-center dark:border-slate-800">
           <button
             type="button"
             onClick={() => setShowAll(true)}
             className="text-xs text-brand-600 hover:underline"
           >
-            Show all {Object.keys(detail.cross_rates).length} cross-rates →
+            Show all {allTickers.length} cross-rates →
           </button>
         </div>
       )}
@@ -603,10 +649,36 @@ function CrossRatesTable({ detail }: { detail: CurrencyDetail }) {
   );
 }
 
-function Th({ children, align }: { children: React.ReactNode; align?: 'left' | 'right' }) {
+function SortTh({
+  children,
+  align,
+  active,
+  dir,
+  onClick,
+}: {
+  children: React.ReactNode;
+  align?: 'left' | 'right';
+  active: boolean;
+  dir: 'asc' | 'desc';
+  onClick: () => void;
+}) {
+  const arrow = active ? (dir === 'asc' ? '▲' : '▼') : '';
   return (
-    <th scope="col" className={`px-4 py-2 ${align === 'right' ? 'text-right' : 'text-left'}`}>
-      {children}
+    <th
+      scope="col"
+      className={`px-4 py-2 ${align === 'right' ? 'text-right' : 'text-left'}`}
+      aria-sort={active ? (dir === 'asc' ? 'ascending' : 'descending') : 'none'}
+    >
+      <button
+        type="button"
+        onClick={onClick}
+        className={`inline-flex items-center gap-1 text-[10px] uppercase tracking-wider hover:text-brand-600 ${
+          active ? 'text-slate-900 dark:text-slate-100' : 'text-slate-500'
+        } ${align === 'right' ? 'flex-row-reverse' : ''}`}
+      >
+        <span>{children}</span>
+        {arrow && <span className="text-[8px]">{arrow}</span>}
+      </button>
     </th>
   );
 }
