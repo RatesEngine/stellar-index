@@ -11,24 +11,31 @@ export const metadata: Metadata = {
 
 const SITE_URL = 'https://ratesengine.net';
 
+// Slug forms — what `generateStaticParams` in the embed routes
+// actually pre-renders (per the /v1/coins listing's `slug` field).
+// The full asset_id form (`USDC-GA5Z…`) is also a valid input on the
+// API but isn't currently in the static-params output, so iframes
+// pointing at it 404. The showcase uses slugs to stay aligned with
+// what's actually built.
 const ASSET_EXAMPLES: { slug: string; label: string }[] = [
   { slug: 'XLM', label: 'XLM (native)' },
-  {
-    slug: 'USDC-GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN',
-    label: 'USDC (Centre)',
-  },
-  {
-    slug: 'AQUA-GBNZILSTVQZ4R7IKQDGHYGY2QXL5QOFJYQMXPKWRRM5PAV7Y4M67AQUA',
-    label: 'AQUA',
-  },
+  { slug: 'USDC', label: 'USDC (Centre)' },
+  { slug: 'AQUA', label: 'AQUA' },
 ];
 
+// Pair embeds key on `<base-asset-id>~<quote-asset-id>` and the
+// static-params builder enumerates real trading pairs from
+// /v1/markets — synthetic stablecoin-fiat pairs (e.g.
+// `native~fiat:USD`, an aggregator-time construct) aren't pre-rendered
+// because no row exists for them in /v1/markets. We feature one real
+// XLM/USDC pair instead; the explorer's stablecoin-proxy expansion is
+// what exposes the same XLM/USD VWAP via the /v1/price API for users
+// who want fiat-quoted figures.
 const PAIR_EXAMPLES: { pair: string; label: string }[] = [
   {
     pair: 'native~USDC-GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN',
     label: 'XLM / USDC',
   },
-  { pair: 'native~fiat:USD', label: 'XLM / USD' },
 ];
 
 const CURRENCY_EXAMPLES: { ticker: string; label: string }[] = [

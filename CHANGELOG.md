@@ -15,6 +15,17 @@ against.
 
 ## [Unreleased]
 
+### Fixed
+
+- **`/widgets` showcase no longer renders broken iframes**. The
+  hardcoded examples referenced asset_id forms (`USDC-GA5Z…`,
+  `AQUA-GBNZ…`) and a synthetic stablecoin-fiat pair
+  (`native~fiat:USD`) that aren't in the embed routes'
+  `generateStaticParams` output, so the iframes 404'd in the
+  showcase itself. Aligned the examples with what's actually
+  pre-rendered: friendly slugs (`USDC`, `AQUA`) for the asset
+  embed and the existing real XLM/USDC pair for the pair embed.
+
 ### Added
 
 - **`/v1/price` fiat-vs-fiat cross-rate fallback**: when both
