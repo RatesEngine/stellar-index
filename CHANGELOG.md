@@ -15,6 +15,88 @@ against.
 
 ## [Unreleased]
 
+### Added
+
+- **`pkg/client`: `Currencies(ctx, opts)` + `Currency(ctx, ticker)`**
+  SDK methods for `/v1/currencies` and `/v1/currencies/{ticker}`.
+  Mirrors the wire shapes the explorer's `/currencies` and
+  `/currencies/{ticker}` pages already consume — `RateUSD` is
+  "1 USD = N units of this currency" per the server contract,
+  and `*float64` pointer fields preserve the "no data" vs "0"
+  distinction on circulating-supply / market-cap. Detail variant
+  adds `InverseUSD`, `CrossRates` and a 7-day history strip.
+- **`pkg/client`: `LendingPools(ctx)`** SDK method for
+  `GET /v1/lending/pools`. Mirrors the wire shape of every Blend
+  pool observed in the trailing 7d auction stream — `LendingPool`
+  struct stays additive (TVL / utilisation / supply+borrow APYs
+  land in subsequent server releases without needing an SDK
+  bump, since the JSON decoder ignores unknown fields).
+### Security
+
+- **Caddy `Caddyfile.api` now 404s `/metrics` from the public
+  `api.ratesengine.net` host**. The API binary serves /metrics on
+  :3000 alongside /v1/* (one ServeMux), and the catch-all
+  `reverse_proxy` was forwarding the public hit straight through
+  — verified live: `curl -s https://api.ratesengine.net/metrics`
+  returns 8KB+ of Go runtime stats, request counters, and per-
+  source ingest gauges that fingerprint the deployment for any
+  attacker. Local Prometheus scraping uses
+  `127.0.0.1:3000/metrics` per `prometheus.r1.yml` and is
+  unaffected; status.ratesengine.net is the right surface for
+  public transparency. Operator action: re-apply via
+  `ansible-playbook configs/ansible/playbooks/r1.yml --tags caddy`.
+### Performance
+
+- **Cacheable read endpoints now emit `public, max-age=60,
+  s-maxage=300`** instead of falling through to the conservative
+  `private, no-store` default. Eight surfaces were missing from
+  the `policyForPath` table — verified live with `curl -sI`:
+  `/v1/coins/{slug}`, `/v1/currencies`, `/v1/currencies/{ticker}`,
+  `/v1/chart`, `/v1/lending/pools`, `/v1/network/stats`,
+  `/v1/sac-wrappers`, `/v1/incidents`, `/v1/pools`. Each was
+  bypassing the CDN AND telling the browser not to cache,
+  multiplying origin load on every page render
+  (`/v1/network/stats` and `/v1/sac-wrappers` each fire on every
+  explorer page load). Unblocks Cloudflare's edge from absorbing
+  the explorer's hot path.
+### Security
+
+- **`Vary: Origin` now emitted on every CORS-enabled response in
+  exact-match mode**, not just when the request's Origin matched
+  the allow list. Pre-fix, a cacheable response served to a
+  no-Origin request (curl, server-side fetch, monitoring probe)
+  was cached at the CDN without origin discrimination — a later
+  browser request whose Origin WOULD have been allowed would
+  receive that cached "no CORS" response and fail client-side
+  fetch(). The inverse poisoning vector also closes: a response
+  cached with one allowed Origin's `Allow-Origin: <a>` could
+  previously be served to a request from a different allowed
+  Origin `<b>`, breaking that client too. Wildcard mode is
+  unaffected (response is origin-independent so Vary would just
+  defeat caching). Two regression tests pin both branches.
+### Added
+
+- **`/v1/pools?asset=<asset_id>` filter** — restrict the pools
+  listing to rows where the asset appears on either side (base
+  OR quote). Mirrors the same filter shape just shipped on
+  `/v1/markets` (#1189). Backs the explorer's `/assets/{slug}`
+  Liquidity tab — single API request instead of two parallel
+  `?base=` + `?quote=` fetches with client-side merge. Mutually
+  exclusive with `?base=`/`?quote=` (the OR-shape and AND-shape
+  filters can't be mixed); combining returns 400
+  `conflicting-filters`. Invalid asset_ids return 400
+  `invalid-asset-id`. (PR #1190)
+- **`/v1/markets?asset=<asset_id>` filter** — restrict the markets
+  listing to pairs where the given canonical asset_id appears on
+  either side (base OR quote). Mirrors the `?base=` / `?quote=`
+  filters already on `/v1/pools`. Backs the explorer's
+  `/assets/{slug}` Markets tab so long-tail assets that fall
+  outside the global top-100 by volume now surface their markets
+  correctly. Mutually exclusive with `?source=`; combining the
+  two returns 400 `conflicting-filters`. Invalid asset_ids
+  return 400 `invalid-asset-id` (silent-empty-page guard, same
+  family as `?source=`). (PR #1189)
+
 ### Fixed
 
 - **`/v1/coins` `change_{1h,24h,7d}_pct` for XLM-triangulated assets
@@ -31,6 +113,125 @@ against.
   the row already displays. Same fix applied across `listCoins`
   and `GetCoinBySlug` queries.
 
+- **Explorer home page now emits `<link rel="canonical">`**.
+  Detail pages picked it up via #1094/#1095/#1097 but the root
+  `/` was left without one, so search engines were free to treat
+  `https://ratesengine.net/`, `https://ratesengine.net` (no
+  trailing slash), and `https://ratesengine.net/index.html` as
+  separate pages and split link equity between them. Default
+  `alternates.canonical: '/'` on the root layout fixes that;
+  detail pages still override per-route in their own
+  generateMetadata.
+- **`/v1/oracle/latest?source=<unknown>`** now returns 400
+  `unknown-source` instead of an empty 200 list. Same fail-fast
+  validation pattern shipped on /v1/markets (#1162) and
+  /v1/observations (#1164) — typo'd source names looked
+  identical on the wire to "this source has no observation for
+  the asset", masking input errors as data gaps.
+- **Sitemap URLs now match the canonical trailing-slash form the
+  explorer actually serves**. With `trailingSlash: true` in
+  next.config.js, every non-trailing-slash URL 308-redirects to
+  its trailing-slash form — but every URL the sitemap emitted
+  was bare (`/account`, `/issuers/G...`, `/markets/X~Y`), so every
+  sitemap entry sent crawlers through a 308 hop before reaching
+  the real page. Google penalises sitemaps that contain redirect
+  targets. New `siteURL()` helper appends the trailing slash;
+  verified live: every URL in the current sitemap returns 308,
+  post-fix they all return 200 directly.
+- **`<link rel="canonical">` on every top-level explorer page**.
+  Audit showed 14 pages — `/diagnostics`, `/methodology`, `/sdk`,
+  `/contact`, `/widgets`, `/changelog`, `/aggregators`, `/oracles`,
+  `/networks`, `/anomalies`, `/mev`, `/pricing`, `/company`,
+  `/careers` — all had `metadata.title` + `description` set but no
+  `alternates.canonical`. Search engines were free to treat the
+  trailing-slash variant, the no-trailing-slash variant, the
+  `index.html` form, and any `?ref=…` referral-tag form as
+  separate URLs and split link equity. Each page now declares its
+  own canonical alongside the existing meta. Companion to #1167
+  (home page) and the per-detail-page canonicals from #1094-1097.
+
+### Security
+
+- **Caddy `Caddyfile.api` now 404s `/metrics` from the public
+  `api.ratesengine.net` host**. The API binary serves /metrics on
+  :3000 alongside /v1/* (one ServeMux), and the catch-all
+  `reverse_proxy` was forwarding the public hit straight through
+  — verified live: `curl -s https://api.ratesengine.net/metrics`
+  returns 8KB+ of Go runtime stats, request counters, and per-
+  source ingest gauges that fingerprint the deployment for any
+  attacker. Local Prometheus scraping uses
+  `127.0.0.1:3000/metrics` per `prometheus.r1.yml` and is
+  unaffected; status.ratesengine.net is the right surface for
+  public transparency. Operator action: re-apply via
+  `ansible-playbook configs/ansible/playbooks/r1.yml --tags caddy`.
+
+### Fixed
+
+- **`/v1/incidents.atom` summary truncation is now UTF-8-safe**.
+  `summaryFromMarkdown` did `p[:397] + "..."` — a naive byte
+  slice that could split a multi-byte UTF-8 codepoint in half
+  for any incident post containing accented characters
+  (é/ñ/ü/…) or emoji. Verified live: a 396-byte ASCII prefix
+  + `éée trailing` produces an output where the last byte is
+  `\xC3` (the lead byte of `é`) without its trailing byte —
+  invalid UTF-8. Strict feed validators reject the entry; the
+  explorer's render shows a replacement character. Walk back
+  to the nearest rune-start byte at or before 397; tests cover
+  both 2-byte (Latin-1 supplement) and 4-byte (emoji) cases.
+- **`/v1/incidents` no longer returns `incidents: null` when the
+  embedded corpus is empty**. A fresh deployment (or one where
+  `incidents.Load` errored at startup) left `s.incidents == nil`,
+  which marshalled as `"incidents":null` and broke the
+  pkg/client SDK + explorer JS that `.map()` over the array.
+  Caught while writing the handler's first regression tests.
+- **Asset detail "Markets" tab fetches 100 by volume, not 500
+  alphabetically**. `MarketsTabPanel` on `/assets/{slug}` was
+  calling `useMarkets(500)` (default `pair` order) then
+  client-side filtering to markets involving the asset. Cold-
+  cache hit a 5–8s SQL scan (limit=500 isn't in the prewarm set
+  of 5/25/100/200), and the alphabetical sort meant the cap
+  could miss popular markets. Switched to
+  `useMarkets(100, 'volume_24h_usd_desc')` — hits warm cache,
+  ~5× smaller payload, and surfaces the asset's top-100-by-volume
+  markets first. Long-tail assets outside the global top-100 by
+  volume need a server-side `?asset=` filter on /v1/markets
+  (only /v1/pools has it today) — tracked as follow-up.
+- **Home page no longer fetches 500 markets to render 10**.
+  `HomeTopMarkets` called `useMarkets(500, …)` then immediately
+  `.slice(0, 10)` — sending and parsing 490 rows the user never
+  sees, and missing the API's prewarmed cache key (the prewarm
+  covers limits 5/25/100/200, not 500). Cold-cache home loads paid
+  the full `/v1/markets?limit=500` SQL scan against the trades
+  hypertable. Trimmed to `useMarkets(25, …)` — same top-10 with
+  headroom, hits the warm cache, ~20× smaller payload. Same
+  pattern previously fixed in `HomeNetworkStrip` (PR-comment
+  history). Also corrected the misleading `limit=500` `asExample`
+  hints on `/markets` MarketsTable — the actual fetch is
+  `limit=100` with the user's chosen order_by + sparkline.
+  (PR #1187)
+
+## [v0.5.0-rc.38] — 2026-05-09
+
+### Fixed
+
+- **`/v1/pools` prewarm now matches the handler's default order**.
+  The cold-cache user complaint ("dex pools still take forever to
+  load") had a single root cause: `prewarmOnce` warmed the cache
+  with `MarketsOrder = 0` (`MarketsOrderPair`) while the `/v1/pools`
+  handler defaults to `MarketsOrderVolume24hDesc` (= 1). Cache keys
+  include the order, so every cold-cache user request still ran
+  the 10–30s SQL scan against the live trades hypertable. Live
+  measurement on r1 (2026-05-09): `/v1/pools?source=sdex` 27s,
+  `soroswap` 16s, `phoenix` 12s, `aquarius` 9s, `comet` 11s. Fix
+  pins the prewarm to the handler's explicit default
+  (`timescale.MarketsOrderVolume24hDesc` for pools,
+  `timescale.MarketsOrderPair` for markets) and adds a per-DEX
+  loop covering the canonical `?source=<dex>&limit=100` cache
+  variants the explorer's `/dexes/{source}` pages fire. Bumped
+  the prewarm context from 20s → 60s so the per-source loop has
+  budget to complete a full warm cycle. Subsequent users hit warm
+  cache (sub-second) instead of stacking on the cold-query
+  timeout. (PR #1185)
 - **`/v1/markets?include=sparkline` shares the 8s timeout budget
   with the markets-list query**. Pre-fix, the sparkline batch ran
   on `r.Context()` unbounded, so a 5s markets query + 5s sparkline
