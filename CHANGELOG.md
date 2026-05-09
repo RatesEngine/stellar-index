@@ -287,6 +287,15 @@ against.
   (`30m`, `1h`, `5m`, `0.5h`); empty / omitted preserves the
   legacy "return everything" contract. Invalid duration → 400
   `errors/invalid-max-age`. Pinned by 5 sub-tests + 3+3 sub-cases.
+- **`X-RateLimit-Reset` response header on every rate-limited
+  endpoint**. The middleware already emitted `X-RateLimit-Limit`
+  and `X-RateLimit-Remaining` but not `Reset` — clients couldn't
+  pace themselves proactively, only learn the bucket had reset by
+  hitting it and getting a 429. Header value follows the GitHub /
+  Twitter convention: Unix-epoch seconds at which the current
+  fixed window ends. Computed from the bucket's window length —
+  no extra Redis trip. Pinned by
+  `TestRateLimit_EmitsXRateLimitResetHeader`.
 
 - **`/v1/price` fiat-vs-fiat cross-rate fallback**: when both
   `asset` and `quote` are fiat (e.g. `asset=fiat:EUR&quote=fiat:USD`)
