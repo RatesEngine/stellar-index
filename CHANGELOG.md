@@ -215,6 +215,19 @@ against.
   `/etc/ratesengine.toml.env` (or wherever the systemd unit
   pulls Environment= from), `systemctl restart
   ratesengine-indexer`.
+- **External-poller observability**: new
+  `ratesengine_external_poller_polls_total{source, outcome}`
+  counter (`outcome` ∈ {success, error, skipped}) and
+  `ratesengine_external_poller_last_success_unix{source}` gauge
+  emitted by the runner on every poll tick. Two new alerts:
+  `ratesengine_external_poller_stale` (P2, fires when no
+  successful poll in 30 min for 5+ min) and
+  `ratesengine_external_poller_error_rate_high` (P3, fires when
+  error rate > 50 % sustained 15 min). Closes the blind spot
+  shipped on r1 2026-05-09 where CoinGecko throttled for 13 h
+  with no metric or alert — only a per-minute WARN log. New
+  runbook `external-poller-stale.md` with the
+  CoinGecko-demo-key triage path baked in.
 
 - **`/v1/price` fiat-vs-fiat cross-rate fallback**: when both
   `asset` and `quote` are fiat (e.g. `asset=fiat:EUR&quote=fiat:USD`)

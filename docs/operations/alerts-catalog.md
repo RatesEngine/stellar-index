@@ -40,6 +40,8 @@ Severity maps to [sev-playbook.md §1](sev-playbook.md#1-severity-definitions).
 | `ratesengine_ingestion_decode_error` | `rate(ratesengine_source_decode_errors_total[5m])` | > 1/s sustained 5 min | P3 | [decode-errors](runbooks/decode-errors.md) |
 | `ratesengine_ingestion_discovery_drops` | `increase(ratesengine_discovery_dropped_hits_total[10m])` | > 0 sustained 10 min | P3 | [discovery-drops](runbooks/discovery-drops.md) |
 | `ratesengine_ingestion_insert_errors` | `rate(ratesengine_source_insert_errors_total[5m])` per (source, kind) | > 0.1/s (≈6/min) sustained 5 min | P2 | [insert-errors](runbooks/insert-errors.md) |
+| `ratesengine_external_poller_stale` | `time() - ratesengine_external_poller_last_success_unix` per source | > 1800 s for > 5 min | P2 | [external-poller-stale](runbooks/external-poller-stale.md) |
+| `ratesengine_external_poller_error_rate_high` | `rate(ratesengine_external_poller_polls_total{outcome="error"}[15m]) / sum(...) ` | > 0.5 sustained 15 min | P3 | [external-poller-stale](runbooks/external-poller-stale.md) |
 
 Historical note: the former `ratesengine_ingestion_lag_high` alert was retired
 when the repo moved off the legacy orchestrator topology and the live indexer
