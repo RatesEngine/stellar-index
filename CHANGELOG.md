@@ -69,6 +69,35 @@ against.
 
 ### Fixed
 
+- **`<link rel="canonical">` on every top-level explorer page**.
+  Audit showed 14 pages — `/diagnostics`, `/methodology`, `/sdk`,
+  `/contact`, `/widgets`, `/changelog`, `/aggregators`, `/oracles`,
+  `/networks`, `/anomalies`, `/mev`, `/pricing`, `/company`,
+  `/careers` — all had `metadata.title` + `description` set but no
+  `alternates.canonical`. Search engines were free to treat the
+  trailing-slash variant, the no-trailing-slash variant, the
+  `index.html` form, and any `?ref=…` referral-tag form as
+  separate URLs and split link equity. Each page now declares its
+  own canonical alongside the existing meta. Companion to #1167
+  (home page) and the per-detail-page canonicals from #1094-1097.
+
+### Security
+
+- **Caddy `Caddyfile.api` now 404s `/metrics` from the public
+  `api.ratesengine.net` host**. The API binary serves /metrics on
+  :3000 alongside /v1/* (one ServeMux), and the catch-all
+  `reverse_proxy` was forwarding the public hit straight through
+  — verified live: `curl -s https://api.ratesengine.net/metrics`
+  returns 8KB+ of Go runtime stats, request counters, and per-
+  source ingest gauges that fingerprint the deployment for any
+  attacker. Local Prometheus scraping uses
+  `127.0.0.1:3000/metrics` per `prometheus.r1.yml` and is
+  unaffected; status.ratesengine.net is the right surface for
+  public transparency. Operator action: re-apply via
+  `ansible-playbook configs/ansible/playbooks/r1.yml --tags caddy`.
+
+### Fixed
+
 - **`/v1/incidents.atom` summary truncation is now UTF-8-safe**.
   `summaryFromMarkdown` did `p[:397] + "..."` — a naive byte
   slice that could split a multi-byte UTF-8 codepoint in half
