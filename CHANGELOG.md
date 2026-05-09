@@ -99,6 +99,15 @@ against.
 
 ### Fixed
 
+- **Explorer home page now emits `<link rel="canonical">`**.
+  Detail pages picked it up via #1094/#1095/#1097 but the root
+  `/` was left without one, so search engines were free to treat
+  `https://ratesengine.net/`, `https://ratesengine.net` (no
+  trailing slash), and `https://ratesengine.net/index.html` as
+  separate pages and split link equity between them. Default
+  `alternates.canonical: '/'` on the root layout fixes that;
+  detail pages still override per-route in their own
+  generateMetadata.
 - **`/v1/oracle/latest?source=<unknown>`** now returns 400
   `unknown-source` instead of an empty 200 list. Same fail-fast
   validation pattern shipped on /v1/markets (#1162) and
