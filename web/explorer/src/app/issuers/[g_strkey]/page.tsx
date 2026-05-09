@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { Panel } from '@/components/reveal';
 import { asExample, API_BASE_URL } from '@/api/client';
 import { formatCompact } from '@/lib/format';
+import { SITE_OG_IMAGES, SITE_TWITTER_IMAGES } from '@/lib/seo';
 
 /**
  * /issuers/[g_strkey] — single-issuer detail page.
@@ -116,8 +117,8 @@ export async function generateMetadata({
     title,
     description,
     alternates: { canonical },
-    openGraph: { title, description, url: canonical, type: 'website' },
-    twitter: { card: 'summary_large_image', title, description },
+    openGraph: { title, description, url: canonical, type: 'website', images: SITE_OG_IMAGES },
+    twitter: { card: 'summary_large_image', title, description, images: SITE_TWITTER_IMAGES },
   };
 }
 

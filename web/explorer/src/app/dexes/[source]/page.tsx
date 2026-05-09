@@ -3,6 +3,7 @@ import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { ArrowLeft, ExternalLink } from 'lucide-react';
 
+import { SITE_OG_IMAGES, SITE_TWITTER_IMAGES } from '@/lib/seo';
 import { PoolsTable } from './PoolsTable';
 import { SourceStatsPanel } from './SourceStatsPanel';
 
@@ -78,8 +79,8 @@ export async function generateMetadata({
     title,
     description,
     alternates: { canonical },
-    openGraph: { title, description, url: canonical, type: 'website' },
-    twitter: { card: 'summary_large_image', title, description },
+    openGraph: { title, description, url: canonical, type: 'website', images: SITE_OG_IMAGES },
+    twitter: { card: 'summary_large_image', title, description, images: SITE_TWITTER_IMAGES },
   };
 }
 

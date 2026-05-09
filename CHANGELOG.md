@@ -130,6 +130,21 @@ against.
   `"this endpoint uses base/quote (not asset/quote — that
   form is on /v1/price)"`. Pinned by
   `TestHistory_MissingBaseWithAssetHint`.
+- **Explorer detail pages now emit `og:image` and
+  `twitter:image`**. Audited 2026-05-09 against r1: every
+  detail page that overrode `openGraph` (assets, currencies,
+  issuers, sources, exchanges, dexes, lending, convert,
+  blog, research/{adr,discovery,operations,architecture})
+  rendered HTML without `<meta property="og:image">`, so
+  Slack/Twitter/Discord previews showed only title +
+  description with no card image. Cause: Next.js 15 metadata
+  inheritance dropped `openGraph.images` from the layout
+  default when a page set its own `openGraph` block. Fix:
+  new `web/explorer/src/lib/seo.ts` exports
+  `SITE_OG_IMAGES` + `SITE_TWITTER_IMAGES` constants; every
+  page-level openGraph now spreads them explicitly. The
+  underlying asset (`/og.svg`, 1200×630) is unchanged —
+  only the per-page metadata wiring.
 
 ### Added
 

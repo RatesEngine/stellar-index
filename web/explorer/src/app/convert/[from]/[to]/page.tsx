@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 import Link from 'next/link';
 import { ArrowLeft, ArrowLeftRight } from 'lucide-react';
 
+import { SITE_OG_IMAGES } from '@/lib/seo';
 import { ConvertPair } from './ConvertPair';
 
 const API_BASE_URL =
@@ -140,6 +141,7 @@ export async function generateMetadata({ params }: { params: Params }): Promise<
         : `Live ${f} to ${t} forex rate + converter.`,
       url: `https://ratesengine.net/convert/${f}/${t}`,
       type: 'website',
+      images: SITE_OG_IMAGES,
     },
   };
 }
