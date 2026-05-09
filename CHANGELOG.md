@@ -17,6 +17,26 @@ against.
 
 ### Added
 
+- **`/v1/pools?asset=<asset_id>` filter** — restrict the pools
+  listing to rows where the asset appears on either side (base
+  OR quote). Mirrors the same filter shape just shipped on
+  `/v1/markets` (#1189). Backs the explorer's `/assets/{slug}`
+  Liquidity tab — single API request instead of two parallel
+  `?base=` + `?quote=` fetches with client-side merge. Mutually
+  exclusive with `?base=`/`?quote=` (the OR-shape and AND-shape
+  filters can't be mixed); combining returns 400
+  `conflicting-filters`. Invalid asset_ids return 400
+  `invalid-asset-id`. (PR #1190)
+- **`/v1/markets?asset=<asset_id>` filter** — restrict the markets
+  listing to pairs where the given canonical asset_id appears on
+  either side (base OR quote). Mirrors the `?base=` / `?quote=`
+  filters already on `/v1/pools`. Backs the explorer's
+  `/assets/{slug}` Markets tab so long-tail assets that fall
+  outside the global top-100 by volume now surface their markets
+  correctly. Mutually exclusive with `?source=`; combining the
+  two returns 400 `conflicting-filters`. Invalid asset_ids
+  return 400 `invalid-asset-id` (silent-empty-page guard, same
+  family as `?source=`). (PR #1189)
 - **`pkg/client`: SDK coverage gap fully closed**. Final batch
   after #1122/#1123/#1124. Adds `Client.Chart`,
   `Client.Observations`, `Client.ChangeSummary`, `Client.Incidents`,
@@ -39,6 +59,7 @@ against.
   struct stays additive (TVL / utilisation / supply+borrow APYs
   land in subsequent server releases without needing an SDK
   bump, since the JSON decoder ignores unknown fields).
+
 ### Security
 
 - **Caddy `Caddyfile.api` now 404s `/metrics` from the public
@@ -53,6 +74,20 @@ against.
   unaffected; status.ratesengine.net is the right surface for
   public transparency. Operator action: re-apply via
   `ansible-playbook configs/ansible/playbooks/r1.yml --tags caddy`.
+- **`Vary: Origin` now emitted on every CORS-enabled response in
+  exact-match mode**, not just when the request's Origin matched
+  the allow list. Pre-fix, a cacheable response served to a
+  no-Origin request (curl, server-side fetch, monitoring probe)
+  was cached at the CDN without origin discrimination — a later
+  browser request whose Origin WOULD have been allowed would
+  receive that cached "no CORS" response and fail client-side
+  fetch(). The inverse poisoning vector also closes: a response
+  cached with one allowed Origin's `Allow-Origin: <a>` could
+  previously be served to a request from a different allowed
+  Origin `<b>`, breaking that client too. Wildcard mode is
+  unaffected (response is origin-independent so Vary would just
+  defeat caching). Two regression tests pin both branches.
+
 ### Performance
 
 - **Cacheable read endpoints now emit `public, max-age=60,
@@ -67,43 +102,6 @@ against.
   (`/v1/network/stats` and `/v1/sac-wrappers` each fire on every
   explorer page load). Unblocks Cloudflare's edge from absorbing
   the explorer's hot path.
-### Security
-
-- **`Vary: Origin` now emitted on every CORS-enabled response in
-  exact-match mode**, not just when the request's Origin matched
-  the allow list. Pre-fix, a cacheable response served to a
-  no-Origin request (curl, server-side fetch, monitoring probe)
-  was cached at the CDN without origin discrimination — a later
-  browser request whose Origin WOULD have been allowed would
-  receive that cached "no CORS" response and fail client-side
-  fetch(). The inverse poisoning vector also closes: a response
-  cached with one allowed Origin's `Allow-Origin: <a>` could
-  previously be served to a request from a different allowed
-  Origin `<b>`, breaking that client too. Wildcard mode is
-  unaffected (response is origin-independent so Vary would just
-  defeat caching). Two regression tests pin both branches.
-### Added
-
-- **`/v1/pools?asset=<asset_id>` filter** — restrict the pools
-  listing to rows where the asset appears on either side (base
-  OR quote). Mirrors the same filter shape just shipped on
-  `/v1/markets` (#1189). Backs the explorer's `/assets/{slug}`
-  Liquidity tab — single API request instead of two parallel
-  `?base=` + `?quote=` fetches with client-side merge. Mutually
-  exclusive with `?base=`/`?quote=` (the OR-shape and AND-shape
-  filters can't be mixed); combining returns 400
-  `conflicting-filters`. Invalid asset_ids return 400
-  `invalid-asset-id`. (PR #1190)
-- **`/v1/markets?asset=<asset_id>` filter** — restrict the markets
-  listing to pairs where the given canonical asset_id appears on
-  either side (base OR quote). Mirrors the `?base=` / `?quote=`
-  filters already on `/v1/pools`. Backs the explorer's
-  `/assets/{slug}` Markets tab so long-tail assets that fall
-  outside the global top-100 by volume now surface their markets
-  correctly. Mutually exclusive with `?source=`; combining the
-  two returns 400 `conflicting-filters`. Invalid asset_ids
-  return 400 `invalid-asset-id` (silent-empty-page guard, same
-  family as `?source=`). (PR #1189)
 
 ### Fixed
 
@@ -157,24 +155,6 @@ against.
   separate URLs and split link equity. Each page now declares its
   own canonical alongside the existing meta. Companion to #1167
   (home page) and the per-detail-page canonicals from #1094-1097.
-
-### Security
-
-- **Caddy `Caddyfile.api` now 404s `/metrics` from the public
-  `api.ratesengine.net` host**. The API binary serves /metrics on
-  :3000 alongside /v1/* (one ServeMux), and the catch-all
-  `reverse_proxy` was forwarding the public hit straight through
-  — verified live: `curl -s https://api.ratesengine.net/metrics`
-  returns 8KB+ of Go runtime stats, request counters, and per-
-  source ingest gauges that fingerprint the deployment for any
-  attacker. Local Prometheus scraping uses
-  `127.0.0.1:3000/metrics` per `prometheus.r1.yml` and is
-  unaffected; status.ratesengine.net is the right surface for
-  public transparency. Operator action: re-apply via
-  `ansible-playbook configs/ansible/playbooks/r1.yml --tags caddy`.
-
-### Fixed
-
 - **`/v1/incidents.atom` summary truncation is now UTF-8-safe**.
   `summaryFromMarkdown` did `p[:397] + "..."` — a naive byte
   slice that could split a multi-byte UTF-8 codepoint in half
