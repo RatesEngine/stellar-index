@@ -109,6 +109,40 @@ func TestRateLimit_Rejects429AfterLimit(t *testing.T) {
 	}
 }
 
+// X-RateLimit-Reset is required for clients to back off proactively
+// (GitHub/Twitter convention: Unix-epoch seconds when the bucket
+// resets). Pin the header presence + future-tense semantics so a
+// refactor can't silently regress the value to "now" or omit it.
+func TestRateLimit_EmitsXRateLimitResetHeader(t *testing.T) {
+	rdb, _ := newRLRedis(t)
+	b := ratelimit.New(rdb, 5, time.Minute)
+
+	h := middleware.RateLimit(b, fixedKeyFn("k-reset"), nil, nil)(okHandler())
+
+	r := httptest.NewRequest(http.MethodGet, "/", nil)
+	w := httptest.NewRecorder()
+	now := time.Now().Unix()
+	h.ServeHTTP(w, r)
+
+	got := w.Header().Get("X-RateLimit-Reset")
+	if got == "" {
+		t.Fatal("X-RateLimit-Reset header missing")
+	}
+	resetAt, err := strconv.ParseInt(got, 10, 64)
+	if err != nil {
+		t.Fatalf("X-RateLimit-Reset = %q: not an integer", got)
+	}
+	// For a 60s window, reset must be in (now, now + 60] seconds.
+	// Equality on the upper bound covers the edge case where the
+	// request lands exactly at a window boundary.
+	if resetAt <= now {
+		t.Errorf("X-RateLimit-Reset = %d, want > %d (must be future)", resetAt, now)
+	}
+	if resetAt > now+60 {
+		t.Errorf("X-RateLimit-Reset = %d, want ≤ %d (≤ window length)", resetAt, now+60)
+	}
+}
+
 func TestRateLimit_EmptyKeyBypasses(t *testing.T) {
 	rdb, _ := newRLRedis(t)
 	b := ratelimit.New(rdb, 1, time.Minute)

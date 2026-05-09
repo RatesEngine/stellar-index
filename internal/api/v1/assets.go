@@ -283,9 +283,34 @@ func (s *Server) handleAssetList(w http.ResponseWriter, r *http.Request) {
 	writeEnvelope(w, env)
 }
 
+// normaliseAssetIDInput rescues the most common case-typo on
+// /v1/assets/{asset_id} — uppercase "NATIVE". The canonical
+// asset_id format demands lowercase `native` (per ADR-0010 +
+// asset_fiat_test.go's "case-significance is intentional" pin),
+// so callers passing `NATIVE` got 400 invalid-asset-id pre-fix.
+//
+// Scope is deliberately narrow: only the bare-`native` string
+// (case-insensitive) collapses. Other compound forms
+// (`USDC-Gxxxx`, `CDLZF…`, `fiat:USD`) preserve case-significance
+// because:
+//   - Stellar protocol allows issuers to mint case-different
+//     classic codes; uppercasing `usdc-Gxxxx` would silently
+//     merge two distinct assets.
+//   - Soroban contract IDs (C-strkeys) are uppercase-only by
+//     SEP-23 — the parser already accepts uppercase, no rescue
+//     needed.
+//   - `fiat:USD` is case-significant per asset_fiat.go (NewFiatAsset
+//     rejects lowercase ISO codes).
+func normaliseAssetIDInput(raw string) string {
+	if strings.EqualFold(raw, "native") {
+		return "native"
+	}
+	return raw
+}
+
 // handleAssetGet serves GET /v1/assets/{asset_id}.
 func (s *Server) handleAssetGet(w http.ResponseWriter, r *http.Request) {
-	rawID := r.PathValue("asset_id")
+	rawID := normaliseAssetIDInput(r.PathValue("asset_id"))
 
 	parsed, err := canonical.ParseAsset(rawID)
 	if err != nil {
@@ -386,7 +411,7 @@ type AssetMetadata struct {
 // reflected in sep1_status, not HTTP status — same behaviour as
 // /v1/assets/{id}).
 func (s *Server) handleAssetMetadata(w http.ResponseWriter, r *http.Request) {
-	rawID := r.PathValue("asset_id")
+	rawID := normaliseAssetIDInput(r.PathValue("asset_id"))
 
 	parsed, err := canonical.ParseAsset(rawID)
 	if err != nil {
