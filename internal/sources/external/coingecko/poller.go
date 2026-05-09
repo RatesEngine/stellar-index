@@ -36,6 +36,7 @@ import (
 	"net/url"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/RatesEngine/rates-engine/internal/canonical"
@@ -82,13 +83,37 @@ var tickerToID = map[string]string{
 
 var ErrMalformedResponse = errors.New("coingecko: malformed response")
 
+// MinBackoff is the floor for the post-429 cooldown. Even if the
+// venue's Retry-After is shorter (or absent), the next poll
+// waits at least this long.
+const MinBackoff = 60 * time.Second
+
+// MaxBackoff caps the exponential growth per the package comment
+// — at sustained denial we still re-attempt once an hour to
+// auto-recover when an operator provisions a key or the
+// per-IP cap resets.
+const MaxBackoff = 1 * time.Hour
+
 // Poller implements external.Poller.
 type Poller struct {
 	Endpoint string
 	Interval time.Duration
-	// APIKey is optional. CoinGecko Pro lets you pass
-	// x_cg_pro_api_key for higher rate limits. Empty → free tier.
+	// APIKey is the CoinGecko Pro key (param x_cg_pro_api_key).
+	// Empty → no Pro auth.
 	APIKey string
+	// DemoAPIKey is the free-tier "demo" key (param
+	// x_cg_demo_api_key). CoinGecko's public-no-auth tier was
+	// tightened in late 2024; demo keys are a free signup that
+	// raises per-IP throttling. Set this OR APIKey, not both.
+	// When both are set Pro wins.
+	DemoAPIKey string
+
+	// mu guards the cooldown state. The runner serialises calls per
+	// source so contention is nil; the lock makes concurrent reads
+	// safe under future test fixtures and metrics endpoints.
+	mu             sync.Mutex
+	nextAllowedAt  time.Time     // earliest UTC time the poller is allowed to hit the venue again
+	currentBackoff time.Duration // last applied backoff, doubled on consecutive 429s
 }
 
 // NewPoller constructs a Poller with defaults. No key required.
@@ -121,7 +146,22 @@ type simplePriceResponse map[string]map[string]float64
 // (id, vs_currency) combo in a single JSON map. We derive id +
 // vs_currency sets from the configured pair list, batch them,
 // then emit one OracleUpdate per (ticker, currency) hit.
+//
+// 429 handling: when the venue returns HTTP 429 (or 403 — CoinGecko
+// emits 403 for demo-key-required paths post-2024), the poller skips
+// subsequent calls until `nextAllowedAt` to avoid hammering the venue
+// with refusals. Cooldown duration is `Retry-After` (capped at
+// `MaxBackoff`) when the header is present, otherwise an exponential
+// backoff doubling from `MinBackoff` to `MaxBackoff`. The first
+// successful response resets the backoff to zero.
+//
+// Returning (nil, nil, nil) during cooldown — distinct from an error
+// — keeps the runner happy without adding "poller error" log spam
+// for the obvious "we're respecting cooldown" case.
 func (p *Poller) PollOnce(ctx context.Context, pairs []canonical.Pair) ([]canonical.Trade, []canonical.OracleUpdate, error) { //nolint:gocognit,gocyclo,funlen // dispatch-heavy; splitting would reduce linearity
+	if cooldownLeft := p.cooldownRemaining(); cooldownLeft > 0 {
+		return nil, nil, nil
+	}
 	idSet := map[string]struct{}{}
 	tickerForID := map[string]string{}
 	cryptoAssets := map[string]canonical.Asset{}
@@ -169,6 +209,8 @@ func (p *Poller) PollOnce(ctx context.Context, pairs []canonical.Pair) ([]canoni
 	q.Set("vs_currencies", strings.Join(currencies, ","))
 	if p.APIKey != "" {
 		q.Set("x_cg_pro_api_key", p.APIKey)
+	} else if p.DemoAPIKey != "" {
+		q.Set("x_cg_demo_api_key", p.DemoAPIKey)
 	}
 
 	endpoint := p.Endpoint
@@ -192,9 +234,21 @@ func (p *Poller) PollOnce(ctx context.Context, pairs []canonical.Pair) ([]canoni
 	if err != nil {
 		return nil, nil, fmt.Errorf("read body: %w", err)
 	}
-	if resp.StatusCode != http.StatusOK {
-		return nil, nil, fmt.Errorf("http %d: %s", resp.StatusCode, string(body))
+	// Treat 429 (Too Many Requests) and 403 (post-2024 demo-key-required
+	// path) as throttling. Apply backoff and bail without spamming the
+	// venue or polluting logs every minute.
+	if resp.StatusCode == http.StatusTooManyRequests || resp.StatusCode == http.StatusForbidden {
+		wait := backoffFromRetryAfter(resp.Header.Get("Retry-After"))
+		p.applyBackoff(wait)
+		return nil, nil, fmt.Errorf("http %d (throttled — backing off %s): %s",
+			resp.StatusCode, p.cooldownRemaining().Truncate(time.Second), truncate(string(body), 200))
 	}
+	if resp.StatusCode != http.StatusOK {
+		return nil, nil, fmt.Errorf("http %d: %s", resp.StatusCode, truncate(string(body), 200))
+	}
+	// Successful response — clear any prior backoff so the next 429
+	// starts fresh from MinBackoff rather than wherever we'd grown to.
+	p.resetBackoff()
 
 	var prices simplePriceResponse
 	if err := json.Unmarshal(body, &prices); err != nil {
@@ -246,6 +300,83 @@ func (p *Poller) PollOnce(ctx context.Context, pairs []canonical.Pair) ([]canoni
 		}
 	}
 	return nil, updates, nil
+}
+
+// cooldownRemaining returns how much longer the poller must wait
+// before hitting the venue again. Zero (or negative) means polling
+// is allowed. Lock-protected so the runner + tests can read state
+// safely.
+func (p *Poller) cooldownRemaining() time.Duration {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if p.nextAllowedAt.IsZero() {
+		return 0
+	}
+	return time.Until(p.nextAllowedAt)
+}
+
+// applyBackoff arms the cooldown. If `hint` (parsed Retry-After) is
+// positive, use it (clamped to [MinBackoff, MaxBackoff]). Otherwise
+// double the previous backoff up to MaxBackoff.
+func (p *Poller) applyBackoff(hint time.Duration) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	var wait time.Duration
+	if hint > 0 {
+		wait = hint
+		if wait < MinBackoff {
+			wait = MinBackoff
+		}
+		if wait > MaxBackoff {
+			wait = MaxBackoff
+		}
+	} else {
+		wait = p.currentBackoff * 2
+		if wait < MinBackoff {
+			wait = MinBackoff
+		}
+		if wait > MaxBackoff {
+			wait = MaxBackoff
+		}
+	}
+	p.currentBackoff = wait
+	p.nextAllowedAt = time.Now().Add(wait)
+}
+
+// resetBackoff clears the cooldown after a successful poll.
+func (p *Poller) resetBackoff() {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.currentBackoff = 0
+	p.nextAllowedAt = time.Time{}
+}
+
+// backoffFromRetryAfter parses the Retry-After header per RFC 7231
+// section 7.1.3 — either a non-negative integer of seconds or an
+// HTTP-date. Returns 0 when the header is absent or unparseable
+// (caller falls through to the exponential branch).
+func backoffFromRetryAfter(h string) time.Duration {
+	if h == "" {
+		return 0
+	}
+	if secs, err := strconv.Atoi(strings.TrimSpace(h)); err == nil && secs >= 0 {
+		return time.Duration(secs) * time.Second
+	}
+	if t, err := http.ParseTime(h); err == nil {
+		if d := time.Until(t); d > 0 {
+			return d
+		}
+	}
+	return 0
+}
+
+// truncate keeps log lines bounded — CoinGecko's HTML error pages
+// can be 50KB+ which would be useless noise in the indexer log.
+func truncate(s string, n int) string {
+	if len(s) <= n {
+		return s
+	}
+	return s[:n] + "…"
 }
 
 // floatToScaledInt converts a float64 price to a scaled *big.Int.

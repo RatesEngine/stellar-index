@@ -185,6 +185,36 @@ against.
   by 5 sub-tests covering the happy path, query-string
   preservation, root exemption, and 308-not-301
   method-preservation across POST/DELETE/PUT/PATCH.
+- **CoinGecko poller backs off on 429 / 403 instead of hammering
+  the venue every 60s**. Live audit on r1 2026-05-09 found the
+  poller logging `WARN poller error err: http 429: Throttled`
+  every minute since uptime — caused by CoinGecko's late-2024
+  unauthenticated-tier tightening. New behaviour:
+  - On 429 (Too Many Requests) or 403 (post-2024 demo-key-
+    required path), arm a cooldown using `Retry-After` (clamped
+    to `[60s, 1h]`) or exponential backoff doubling from 60s
+    to 1h max.
+  - During cooldown, `PollOnce` returns `(nil, nil, nil)` —
+    silent skip, no HTTP request, no log spam.
+  - First successful response resets backoff to zero.
+  Pinned by 15 sub-tests across the cooldown arm, Retry-After
+  parsing, exponential branch, success-reset, 403-treated-as-
+  throttling, and Retry-After parser edge cases.
+
+### Added
+
+- **CoinGecko demo-tier API key support**. Free signup at
+  coingecko.com produces a `x_cg_demo_api_key` that bypasses
+  the unauthenticated-tier 429s. Read from env vars
+  `COINGECKO_API_KEY` (Pro) or `COINGECKO_DEMO_API_KEY` (Demo)
+  in `cmd/ratesengine-indexer/main.go`; Pro wins when both are
+  set. No TOML schema change. Operator action to fix the live
+  r1 throttling: register a free key at
+  https://www.coingecko.com/en/developers/dashboard, set
+  `COINGECKO_DEMO_API_KEY=<key>` in
+  `/etc/ratesengine.toml.env` (or wherever the systemd unit
+  pulls Environment= from), `systemctl restart
+  ratesengine-indexer`.
 
 - **`/v1/price` fiat-vs-fiat cross-rate fallback**: when both
   `asset` and `quote` are fiat (e.g. `asset=fiat:EUR&quote=fiat:USD`)
