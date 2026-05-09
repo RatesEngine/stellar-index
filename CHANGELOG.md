@@ -15,6 +15,8 @@ against.
 
 ## [Unreleased]
 
+## [v0.5.0-rc.38] — 2026-05-09
+
 ### Fixed
 
 - **`/v1/pools` prewarm now matches the handler's default order**.
