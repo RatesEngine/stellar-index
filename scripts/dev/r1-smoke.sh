@@ -167,10 +167,34 @@ expect_status 400 "coins bad limit"      "/v1/coins?limit=999999" \
   -- '.type | endswith("/invalid-limit")'
 expect_status 404 "coins not found"      "/v1/coins/this-asset-id-does-not-exist" \
   -- '.type | endswith("/coin-not-found")'
-# /v1/coins?cursor=garbage 400 (#1134) follows once the fix is
-# deployed — adding the pin now would false-fail every smoke run
-# on the older binary. Promote in the follow-up PR cut after
-# #1134 lands in r1.
+
+# Pins queued for promotion once rc.38 deploys. Each verifies a
+# documented behaviour shipped in this session that's currently
+# wrong on rc.37 — adding them as live `expect_status` calls now
+# would false-fail every smoke run against the unpatched binary.
+# Uncomment after rc.38 reaches r1 (signal: `/v1/version` data.version
+# == v0.5.0-rc.38). The PRs below are all in main:
+#
+#   /v1/coins?cursor=garbage 400  (#1134, in main)
+#   /v1/markets?cursor=garbage 400 (#1135)
+#   /v1/markets?source=fakesrc 400 (#1162)
+#   /v1/observations?source=fakesrc 400 (#1164)
+#   /v1/oracle/latest?source=fakesrc 400 (#1168)
+#   /metrics 404 from public host (#1172 + binary loopback gate #1207)
+#   /.well-known/security.txt 200 (#1131)
+#   /v1/markets?asset=USDC 400 invalid-asset-id (#1189)
+#   /v1/markets?source=binance&asset=native 400 conflicting-filters (#1189)
+#   /v1/pools?asset=USDC 400 invalid-asset-id (#1190)
+#   /v1/pools?asset=native&base=native 400 conflicting-filters (#1190)
+#
+# Worked-example template ready to uncomment + adjust:
+#
+#   expect_status 400 "markets bad cursor" "/v1/markets?cursor=garbage" \
+#     -- '.type | endswith("/invalid-cursor")'
+#   expect_status 400 "markets unknown source" "/v1/markets?source=does-not-exist" \
+#     -- '.type | endswith("/unknown-source")'
+#   expect_status 404 "metrics blocked publicly" "/metrics"
+#   expect_status 200 "security.txt" "/.well-known/security.txt"
 echo
 
 if [ "$FAILS" -eq 0 ]; then
