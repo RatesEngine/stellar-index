@@ -168,6 +168,24 @@ against.
 
 ### Fixed
 
+- **`/v1/price?asset=X&quote=fiat:USD` now serves via classic-USDC
+  peg fallback at handler read time**, mirroring the `/v1/chart`
+  fallback shipped in #1015 (task #98). Same root cause: the
+  aggregator's `[aggregate].enable_stablecoin_fiat_proxy` is off
+  by default, so the literal X/fiat:USD pair never has rows in
+  `prices_1m` (no on-chain trades quote in fiat:USD on Stellar).
+  Pre-fix, the canonical XLM/USD price endpoint —
+  `/v1/price?asset=native&quote=fiat:USD` — returned 404 "no
+  trades or oracle observations" out-of-the-box on every fresh
+  deployment, even though the aggregator had a perfectly good
+  `native/USDC-classic` VWAP cached. The new
+  `tryStablecoinFiatProxy` fallback walks the operator's
+  `[trades].usd_pegged_classic_assets` allow-list in priority
+  order and rewrites the lookup; first peg with a row wins.
+  Response carries `flags.triangulated=true` and the wire `quote`
+  field echoes the user's request (`fiat:USD`), not the proxy
+  peg. Opt-in shape preserved — empty allow-list still 404s.
+  (PR #1217)
 - **Indexer now WARNs at boot when `[supply]` watched-sets are all
   empty**, instead of silently registering zero supply observers.
   This was the silent-failure mode behind r1's
