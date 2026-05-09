@@ -1020,6 +1020,58 @@ func TestKeys_HappyPath(t *testing.T) {
 	}
 }
 
+// TestRevokeKey_HappyPath — DELETE returns 204 No Content; the
+// SDK call returns nil error.
+func TestRevokeKey_HappyPath(t *testing.T) {
+	_, c := newTestServer(t, func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/v1/account/keys/k_target" {
+			t.Errorf("path = %q, want /v1/account/keys/k_target", r.URL.Path)
+		}
+		if r.Method != http.MethodDelete {
+			t.Errorf("method = %q, want DELETE", r.Method)
+		}
+		w.WriteHeader(http.StatusNoContent)
+	})
+	if err := c.RevokeKey(context.Background(), "k_target"); err != nil {
+		t.Fatalf("RevokeKey: %v", err)
+	}
+}
+
+// TestRevokeKey_EmptyKeyID — argument validation runs client-side
+// without a network round trip, returning a 400-classed APIError.
+func TestRevokeKey_EmptyKeyID(t *testing.T) {
+	_, c := newTestServer(t, func(w http.ResponseWriter, r *http.Request) {
+		t.Errorf("server hit for empty keyID — should validate client-side")
+	})
+	err := c.RevokeKey(context.Background(), "")
+	if err == nil {
+		t.Fatal("expected error for empty keyID")
+	}
+	var apiErr *client.APIError
+	if !errors.As(err, &apiErr) || apiErr.Status != 400 {
+		t.Errorf("err = %v, want *APIError with Status 400", err)
+	}
+}
+
+// TestRevokeKey_404 — server says the key doesn't exist (or was
+// already revoked); SDK surfaces it as *APIError so callers can
+// branch on the status without parsing the message.
+func TestRevokeKey_404(t *testing.T) {
+	_, c := newTestServer(t, func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/problem+json")
+		w.WriteHeader(http.StatusNotFound)
+		_, _ = w.Write([]byte(`{"type":"https://api.ratesengine.net/errors/key-not-found","title":"Key not found","status":404}`))
+	})
+	err := c.RevokeKey(context.Background(), "k_missing")
+	if err == nil {
+		t.Fatal("expected error from 404 response")
+	}
+	var apiErr *client.APIError
+	if !errors.As(err, &apiErr) || apiErr.Status != 404 {
+		t.Errorf("err = %v, want *APIError with Status 404", err)
+	}
+}
+
 // TestStatus_HappyPath — pins the wire contract for /v1/status,
 // including the nested Region / Latency / Freshness / Incidents
 // shapes.

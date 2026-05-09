@@ -28,6 +28,13 @@ against.
 
 ### Added
 
+- **`pkg/client.Client.RevokeKey`** SDK method to delete an API
+  key (`DELETE /v1/account/keys/{keyID}`). Closes the last CRUD
+  gap in the account-keys surface — the SDK already had `Keys`
+  (GET) and `CreateKey` (POST). Pinned by 3 sub-tests (happy
+  path 204; client-side empty-keyID validation; 404 surfaced as
+  typed `*APIError`).
+
 - **`/v1/price` fiat-vs-fiat cross-rate fallback**: when both
   `asset` and `quote` are fiat (e.g. `asset=fiat:EUR&quote=fiat:USD`)
   and the Timescale + Redis VWAP paths both miss, the handler
