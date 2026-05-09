@@ -1,7 +1,7 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
 
-import { loadReleases, type Release } from '@/lib/changelog';
+import { loadReleases, versionSlug, type Release } from '@/lib/changelog';
 
 export const metadata: Metadata = {
   title: 'Changelog',
@@ -100,11 +100,21 @@ export default function ChangelogPage() {
 
 function ReleaseCard({ release }: { release: Release }) {
   const isUnreleased = release.version.toLowerCase() === 'unreleased';
+  // `id` lets the atom feed's `#<slug>` anchors actually scroll
+  // here — without this, feed-reader subscribers land on the
+  // changelog page with no scroll target. The slug shape mirrors
+  // changelog.atom/route.ts via the shared `versionSlug` helper.
+  const id = versionSlug(release.version);
   return (
-    <article className="rounded-lg border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+    <article
+      id={id}
+      className="scroll-mt-20 rounded-lg border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-800 dark:bg-slate-900"
+    >
       <header className="mb-4 flex flex-wrap items-baseline justify-between gap-2 border-b border-slate-100 pb-3 dark:border-slate-800">
         <h2 className="font-mono text-2xl font-semibold tracking-tight">
-          {release.version}
+          <a href={`#${id}`} className="hover:text-brand-600">
+            {release.version}
+          </a>
         </h2>
         <div className="flex items-center gap-2 text-xs">
           {isUnreleased ? (

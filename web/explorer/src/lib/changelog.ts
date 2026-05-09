@@ -61,3 +61,19 @@ export function loadReleases(): Release[] {
     (r) => r.version.toLowerCase() !== 'unreleased' || r.blocks.length > 0,
   );
 }
+
+/**
+ * Slugify a version string into the URL-fragment form the
+ * changelog page renders as `id="…"` and the atom feed
+ * references as `…/changelog#…`. Single source of truth so the
+ * two stay in sync — a previous version had the slug only in the
+ * atom route and no anchor on the page itself, so feed-reader
+ * subscribers landed on the home of the changelog with no scroll
+ * target.
+ */
+export function versionSlug(version: string): string {
+  return version
+    .toLowerCase()
+    .replace(/[^a-z0-9.-]+/g, '-')
+    .replace(/^-+|-+$/g, '');
+}
