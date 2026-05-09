@@ -14,11 +14,19 @@ import (
 	"github.com/RatesEngine/rates-engine/internal/storage/timescale"
 )
 
-// dexSourceNames returns every source registered with
+// DexSourceNames returns every source registered with
 // Class=Exchange + Subclass=DEX, sorted for stable order. Cached
 // implicitly because external.Registry is a package-level
 // constant — no need to memoise.
-func dexSourceNames() []string {
+//
+// Exported so the prewarm goroutine in cmd/ratesengine-api can
+// compute the SAME slice the handler does. Without that, the
+// unfiltered /v1/pools prewarm builds `PoolsFilter{Sources: nil}`
+// → cache key `[]`, while the unfiltered handler builds
+// `PoolsFilter{Sources: DexSourceNames()}` → cache key
+// `[aquarius comet phoenix sdex soroswap]`. Different keys, so
+// the warmed entry never matches a user request.
+func DexSourceNames() []string {
 	out := make([]string, 0, len(external.Registry))
 	for name, md := range external.Registry {
 		if md.Class == external.ClassExchange && md.Subclass == external.SubclassDEX {
@@ -152,7 +160,7 @@ func (s *Server) handlePools(w http.ResponseWriter, r *http.Request) { //nolint:
 	// Resolve DEX source list from the registry. Hard-coded to
 	// Subclass=DEX so the endpoint is unambiguously "pools" — no
 	// CEX rows ever.
-	dexSources := dexSourceNames()
+	dexSources := DexSourceNames()
 	if reqSource := r.URL.Query().Get("source"); reqSource != "" {
 		// Filter to the requested DEX. Non-DEX names get rejected
 		// here (empty intersection → empty result list, not a 400)

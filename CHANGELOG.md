@@ -121,6 +121,21 @@ against.
 
 ### Fixed
 
+- **Unfiltered `/v1/pools` prewarm now matches the handler's
+  cache key**. Follow-up to PR #1185, which fixed the
+  `MarketsOrder` mismatch but missed a second mismatch in the
+  Sources dimension. The handler builds
+  `PoolsFilter{Sources: v1.DexSourceNames()}` for unfiltered
+  requests; the prewarm passed `PoolsFilter{}` (`Sources: nil`).
+  Cache key uses `fmt.Sprintf("%v", filter.Sources)` so
+  `nil` → `[]` while the handler's slice → `[aquarius comet
+  phoenix sdex soroswap]`. Different strings, different keys —
+  the unfiltered prewarm warmed a slot no user request ever
+  hits. Exported `v1.DexSourceNames` so the prewarm can call
+  the same source-of-truth as the handler. Per-DEX prewarm
+  (introduced in #1185) was unaffected — its `[]string{src}`
+  matches the handler's filtered single-element slice. (PR #1194)
+
 - **`/v1/coins` `change_{1h,24h,7d}_pct` for XLM-triangulated assets
   now reflects USD change, not XLM-denominated change**. Pre-fix
   USDC and PYUSD showed `-3.37%` and `-3.27%` 24h change live on

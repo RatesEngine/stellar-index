@@ -2096,11 +2096,19 @@ func prewarmOnce(
 	//   /v1/pools?source=sdex took 27s, soroswap 16s, phoenix 12s,
 	//   aquarius 9s, comet 11s. Match the handler's default
 	//   explicitly so the warmed key is the one users hit.
+	// Important: the unfiltered /v1/pools handler builds
+	// `PoolsFilter{Sources: v1.DexSourceNames()}` (the registry's
+	// DEX list) — NOT `Sources: nil`. Cache key includes the
+	// stringified Sources slice; passing `PoolsFilter{}` here
+	// (`Sources: nil` → key fragment `[]`) warms a different key
+	// than the user request lands on (`[aquarius comet phoenix
+	// sdex soroswap]`). Mirror the handler's behaviour explicitly.
+	dexSources := v1.DexSourceNames()
 	for _, lim := range []int{5, 25, 100, 200} {
 		if _, _, err := markets.DistinctPairsExt(mkCtx, "", lim, timescale.MarketsOrderPair); err != nil {
 			logger.Debug("prewarm markets failed", "limit", lim, "err", err)
 		}
-		if _, _, err := markets.AllPools(mkCtx, timescale.PoolsFilter{}, "", lim, timescale.MarketsOrderVolume24hDesc); err != nil {
+		if _, _, err := markets.AllPools(mkCtx, timescale.PoolsFilter{Sources: dexSources}, "", lim, timescale.MarketsOrderVolume24hDesc); err != nil {
 			logger.Debug("prewarm pools failed", "limit", lim, "err", err)
 		}
 	}
