@@ -288,8 +288,13 @@ async function fetchLendingPools(): Promise<string[]> {
 
 async function fetchMarketPairs(): Promise<string[]> {
   try {
+    // Match the per-pair generateStaticParams cap (500) so the
+    // sitemap doesn't undercount the routes we actually
+    // pre-render. Pre-2026-05-08 this was 100 in both places —
+    // bumped together so Google sees the same surface that
+    // returns 200.
     const res = await fetch(
-      `${API_BASE_URL}/v1/markets?limit=100&order_by=volume_24h_usd_desc`,
+      `${API_BASE_URL}/v1/markets?limit=500&order_by=volume_24h_usd_desc`,
       { signal: AbortSignal.timeout(5_000) },
     );
     if (!res.ok) throw new Error(`HTTP ${res.status}`);

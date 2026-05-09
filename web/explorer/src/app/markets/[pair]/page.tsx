@@ -96,9 +96,18 @@ function decodePairSlug(slug: string): { base: string; quote: string } | null {
 }
 
 export async function generateStaticParams() {
-  // Top 100 pairs by 24h volume — we pre-render the most interesting
-  // pairs and fall back to one canonical pair (XLM/USDC) when CI's
-  // stub host can't be reached.
+  // Top 500 pairs by 24h volume — bumped from 100 in the
+  // 2026-05-08 audit, where /markets/native~AQUA-G… (a natural
+  // click-through from /assets/AQUA) 404'd because AQUA pairs
+  // didn't crack the top 100 by USD volume. AQUA is the
+  // 4th-largest asset on Stellar by trade count but its dominant
+  // pair is XLM-quoted, which underweights it on the
+  // USD-volume sort. 500 covers the long tail visible in the
+  // /markets listing pagination.
+  //
+  // CF Pages build cost: ~50KB × 500 = ~25MB of HTML, well within
+  // bounds. Build time ≈ 4-5 min for the entire markets section,
+  // parallelised across page workers.
   const fallback = [
     {
       pair: pairSlug(
@@ -110,7 +119,7 @@ export async function generateStaticParams() {
   if (isCIStub) return fallback;
   try {
     const res = await fetch(
-      `${API_BASE_URL}/v1/markets?limit=100&order_by=volume_24h_usd_desc`,
+      `${API_BASE_URL}/v1/markets?limit=500&order_by=volume_24h_usd_desc`,
       { signal: AbortSignal.timeout(BUILD_FETCH_TIMEOUT_MS) },
     );
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
