@@ -18,10 +18,10 @@ const isCIStub =
   API_BASE_URL.includes('.invalid') || API_BASE_URL.includes('local-stub');
 const BUILD_FETCH_TIMEOUT_MS = 8_000;
 
-async function fetchPoolsForAsset(side: 'base' | 'quote', assetID: string): Promise<PoolRow[]> {
+async function fetchPoolsForAsset(assetID: string): Promise<PoolRow[]> {
   if (isCIStub) return [];
   try {
-    const url = `${API_BASE_URL}/v1/pools?${side}=${encodeURIComponent(assetID)}&limit=100&order_by=volume_24h_usd_desc`;
+    const url = `${API_BASE_URL}/v1/pools?asset=${encodeURIComponent(assetID)}&limit=100&order_by=volume_24h_usd_desc`;
     const res = await fetch(url, { signal: AbortSignal.timeout(BUILD_FETCH_TIMEOUT_MS) });
     if (!res.ok) return [];
     const env = (await res.json()) as { data?: PoolRow[] };
@@ -33,10 +33,12 @@ async function fetchPoolsForAsset(side: 'base' | 'quote', assetID: string): Prom
 
 /**
  * LiquidityTabPanel — every DEX pool that touches this asset on
- * either side, ranked by 24h USD volume. Two parallel fetches
- * to /v1/pools (one with ?base=, one with ?quote=) merged + deduped
- * into a single table — pairs only ever land on one side per pool
- * but the asset itself can be base in one pool and quote in another.
+ * either side, ranked by 24h USD volume. Single fetch to
+ * `/v1/pools?asset=<assetID>` (the OR-shape filter) — pre-2026-05-09
+ * this was two parallel `?base=` + `?quote=` fetches merged
+ * client-side, but the API now does the OR predicate server-side
+ * so we get one cache key, one SQL scan, and a smaller cached
+ * payload.
  *
  * Server component; fetched at request time. Empty-state when the
  * asset has no DEX activity in the recency window.
@@ -48,24 +50,26 @@ export async function LiquidityTabPanel({
   assetID: string;
   code: string;
 }) {
-  const [asBase, asQuote] = await Promise.all([
-    fetchPoolsForAsset('base', assetID),
-    fetchPoolsForAsset('quote', assetID),
-  ]);
-  const merged = [
-    ...asBase.map((p) => ({ ...p, side: 'base' as const })),
-    ...asQuote.map((p) => ({ ...p, side: 'quote' as const })),
-  ].sort((a, b) => {
-    const av = Number(a.volume_24h_usd ?? '0');
-    const bv = Number(b.volume_24h_usd ?? '0');
-    return (Number.isFinite(bv) ? bv : 0) - (Number.isFinite(av) ? av : 0);
-  });
+  const rows = await fetchPoolsForAsset(assetID);
+  // Defensive client-side filter: older API versions silently
+  // ignore unknown query params, so on a pre-`?asset=` deployment
+  // the response would be the global top pools (every asset
+  // detail page would render the same list). Drop this once every
+  // region runs a release that includes the filter.
+  const merged = rows
+    .filter((p) => p.base === assetID || p.quote === assetID)
+    .map((p) => ({ ...p, side: (p.base === assetID ? 'base' : 'quote') as 'base' | 'quote' }))
+    .sort((a, b) => {
+      const av = Number(a.volume_24h_usd ?? '0');
+      const bv = Number(b.volume_24h_usd ?? '0');
+      return (Number.isFinite(bv) ? bv : 0) - (Number.isFinite(av) ? av : 0);
+    });
 
   return (
     <Panel
       title={`Liquidity — every DEX pool that touches ${code}`}
-      hint="Per-source breakdown across DEXes. Backed by /v1/pools?base= and ?quote=."
-      source={asExample('/v1/pools', { base: assetID })}
+      hint="Per-source breakdown across DEXes. Backed by /v1/pools?asset= (base OR quote)."
+      source={asExample('/v1/pools', { asset: assetID, limit: 100, order_by: 'volume_24h_usd_desc' })}
       bodyClassName="-mx-4"
     >
       {merged.length === 0 ? (

@@ -486,16 +486,18 @@ type MarketsEnvelope = {
 export function useMarkets(
   limit = 100,
   orderBy?: 'pair' | 'volume_24h_usd_desc',
-  options?: { sparkline?: boolean },
+  options?: { sparkline?: boolean; asset?: string },
 ) {
   const include = options?.sparkline ? 'sparkline' : undefined;
+  const asset = options?.asset;
   return useQuery<{ markets: Market[]; nextCursor?: string }>({
-    queryKey: ['/v1/markets', limit, orderBy ?? 'pair', include ?? ''],
+    queryKey: ['/v1/markets', limit, orderBy ?? 'pair', include ?? '', asset ?? ''],
     queryFn: async () => {
       const env = await apiGet<MarketsEnvelope | Market[]>('/v1/markets', {
         limit,
         ...(orderBy ? { order_by: orderBy } : {}),
         ...(include ? { include } : {}),
+        ...(asset ? { asset } : {}),
       });
       if (Array.isArray(env)) return { markets: env };
       return { markets: env.data, nextCursor: env.pagination?.next };
