@@ -15,6 +15,20 @@ against.
 
 ## [Unreleased]
 
+### Fixed
+
+- **`<link rel="canonical">` on every top-level explorer page**.
+  Audit showed 14 pages — `/diagnostics`, `/methodology`, `/sdk`,
+  `/contact`, `/widgets`, `/changelog`, `/aggregators`, `/oracles`,
+  `/networks`, `/anomalies`, `/mev`, `/pricing`, `/company`,
+  `/careers` — all had `metadata.title` + `description` set but no
+  `alternates.canonical`. Search engines were free to treat the
+  trailing-slash variant, the no-trailing-slash variant, the
+  `index.html` form, and any `?ref=…` referral-tag form as
+  separate URLs and split link equity. Each page now declares its
+  own canonical alongside the existing meta. Companion to #1167
+  (home page) and the per-detail-page canonicals from #1094-1097.
+
 ### Security
 
 - **Caddy `Caddyfile.api` now 404s `/metrics` from the public
