@@ -17,6 +17,16 @@ against.
 
 ### Fixed
 
+- **Sitemap URLs now match the canonical trailing-slash form the
+  explorer actually serves**. With `trailingSlash: true` in
+  next.config.js, every non-trailing-slash URL 308-redirects to
+  its trailing-slash form — but every URL the sitemap emitted
+  was bare (`/account`, `/issuers/G...`, `/markets/X~Y`), so every
+  sitemap entry sent crawlers through a 308 hop before reaching
+  the real page. Google penalises sitemaps that contain redirect
+  targets. New `siteURL()` helper appends the trailing slash;
+  verified live: every URL in the current sitemap returns 308,
+  post-fix they all return 200 directly.
 - **`/v1/markets?include=sparkline` shares the 8s timeout budget
   with the markets-list query**. Pre-fix, the sparkline batch ran
   on `r.Context()` unbounded, so a 5s markets query + 5s sparkline
