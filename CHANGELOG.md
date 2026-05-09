@@ -87,6 +87,19 @@ against.
   Origin `<b>`, breaking that client too. Wildcard mode is
   unaffected (response is origin-independent so Vary would just
   defeat caching). Two regression tests pin both branches.
+- **`ratesengine_api_cache_ops_total{cache,op,result}` Prometheus
+  counter** for in-memory cache wrappers
+  (`v1.CachedMarketsReader`, …). Result is `hit` (returned cached
+  value, including single-flight-wait callers) or `miss` (called
+  upstream). Op breaks down per cached method
+  (`distinct_pairs` / `source_markets` / `asset_markets` /
+  `all_pools`). Motivation: three back-to-back prewarm-key drift
+  bugs (#1185 / #1194 / #1195) where the prewarm warmed one key
+  but user requests looked up another; each was invisible to
+  tests + log-greps and only surfaced from live latency probes
+  ("dex pools take forever"). With this counter an alert on
+  `rate(...{result="miss"}[5m]) / rate(...[5m]) > 0.5` sustained
+  catches the next drift in minutes instead of days. (PR #1196)
 
 ### Documentation
 

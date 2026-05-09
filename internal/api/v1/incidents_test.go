@@ -150,7 +150,7 @@ func TestHandleIncidents_WireShape(t *testing.T) {
 		},
 	}
 	rec := httptest.NewRecorder()
-	req := httptest.NewRequest("GET", "/v1/incidents", nil)
+	req := httptest.NewRequest(http.MethodGet, "/v1/incidents", nil)
 	s.handleIncidents(rec, req)
 
 	if rec.Code != 200 {
@@ -175,7 +175,7 @@ func TestHandleIncidents_WireShape(t *testing.T) {
 func TestHandleIncidents_EmptyList(t *testing.T) {
 	s := &Server{incidents: nil}
 	rec := httptest.NewRecorder()
-	req := httptest.NewRequest("GET", "/v1/incidents", nil)
+	req := httptest.NewRequest(http.MethodGet, "/v1/incidents", nil)
 	s.handleIncidents(rec, req)
 
 	body := rec.Body.String()
@@ -208,7 +208,7 @@ func TestHandleIncidentsAtom_ValidXML(t *testing.T) {
 		},
 	}
 	rec := httptest.NewRecorder()
-	req := httptest.NewRequest("GET", "/v1/incidents.atom", nil)
+	req := httptest.NewRequest(http.MethodGet, "/v1/incidents.atom", nil)
 	s.handleIncidentsAtom(rec, req)
 
 	if rec.Code != 200 {

@@ -55,7 +55,7 @@ type CORSOptions struct {
 //   - When AllowedOrigins contains "*": the wildcard is echoed
 //     back instead of reflecting the specific origin. Matches the
 //     spec + keeps the middleware simple.
-func CORS(opts CORSOptions) Middleware {
+func CORS(opts CORSOptions) Middleware { //nolint:gocognit // origin allow-list + preflight branch + Vary handling are all part of one cohesive CORS contract; splitting would scatter the policy
 	allowed := buildOriginSet(opts.AllowedOrigins)
 	wildcard := allowed["*"]
 	methods := strings.Join(defaultIfEmpty(opts.AllowedMethods,

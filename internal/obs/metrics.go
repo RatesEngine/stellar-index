@@ -28,6 +28,7 @@ func init() {
 	Registry.MustRegister(
 		HTTPRequestsTotal,
 		HTTPRequestDuration,
+		APICacheOpsTotal,
 
 		SourceEventsTotal,
 		SourceLagLedgers,
@@ -115,6 +116,31 @@ var HTTPRequestDuration = prometheus.NewHistogramVec(
 		Buckets: []float64{0.001, 0.005, 0.01, 0.025, 0.05, 0.1, 0.2, 0.5, 1, 2.5, 5, 10},
 	},
 	[]string{"method", "route"},
+)
+
+// APICacheOpsTotal — every read through an in-memory cache wrapper
+// (`v1.CachedMarketsReader`, `v1.CachedCoinsReader`, …) increments
+// this counter. The `result` label is `hit` (returned cached value)
+// or `miss` (called upstream). The `op` label names the cached
+// method (e.g. `all_pools`, `distinct_pairs`, `list_coins`).
+//
+// Why: prewarm goroutines warm cache keys that MUST match what
+// handlers look up. If those keys drift (different filter shape,
+// different limit, different order), every user request becomes a
+// miss while the prewarm slot sits unread. The bug is invisible to
+// tests + log-greps, so an operator dashboard on hit-rate is the
+// cheapest detector.
+//
+// Alert idea: `rate(ratesengine_api_cache_ops_total{result="miss"}
+// [5m]) / rate(ratesengine_api_cache_ops_total[5m]) > 0.5` sustained
+// 10 min on any (cache, op) is suspicious — prewarm should keep
+// hot ops > 90% hit.
+var APICacheOpsTotal = prometheus.NewCounterVec(
+	prometheus.CounterOpts{
+		Name: "ratesengine_api_cache_ops_total",
+		Help: "Cache reads through API in-memory cache wrappers, labelled by cache name + op + result (hit|miss).",
+	},
+	[]string{"cache", "op", "result"},
 )
 
 // ─── Ingestion-layer metrics ─────────────────────────────────────

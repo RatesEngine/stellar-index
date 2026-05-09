@@ -34,6 +34,27 @@ Histogram, labels `method`, `route`.
 Handler latency including time-in-middleware. Buckets 1ms – 10s with
 extra resolution at the 200ms / 500ms SLO boundaries.
 
+### `ratesengine_api_cache_ops_total`
+
+Counter, labels `cache`, `op`, `result`.
+
+Every read through the API's in-memory cache wrappers
+(`v1.CachedMarketsReader`, future `v1.CachedCoinsReader`, …)
+increments this counter. `cache` is the wrapper name (e.g.
+`markets`); `op` is the cached method (`distinct_pairs` /
+`source_markets` / `asset_markets` / `all_pools`); `result` is
+`hit` (returned cached value, including single-flight-wait
+callers that piggy-backed on an in-progress upstream call) or
+`miss` (called upstream).
+
+Use to detect prewarm-key drift: when a prewarm goroutine warms
+key A but the handler looks up key B, `result="miss"` rate
+stays high even though the prewarm cycle is running. Suggested
+alert: `rate(ratesengine_api_cache_ops_total{result="miss"}[5m])
+/ rate(ratesengine_api_cache_ops_total[5m]) > 0.5` sustained
+for 10 min on any (cache, op) pair — for hot ops the prewarm
+should keep miss rate under 10%.
+
 ## Ingestion (indexer binary)
 
 ### `ratesengine_source_events_total`
