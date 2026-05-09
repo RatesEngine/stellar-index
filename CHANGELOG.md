@@ -168,6 +168,16 @@ against.
 
 ### Fixed
 
+- **`/v1/price/tip?asset=X&quote=fiat:USD` gets the same
+  stablecoin-fiat proxy fallback as `/v1/price`** (#1217). Tip
+  was 404'ing on the same shape — `tipWindowVWAP →
+  PriceReader.LatestPrice → tryRedisVWAPFallback → tryFiatCrossRate`
+  with no peg-rewrite branch — so a customer reading the
+  fastest-feed XLM/USD price endpoint got the same out-of-the-box
+  404 as `/v1/price`. Now slots `tryStablecoinFiatProxy` between
+  the Redis cache layer and the fiat-cross-rate fallback in
+  `computeTip`. Same opt-in shape (empty allow-list still 404s).
+  (PR #1218)
 - **`/v1/price?asset=X&quote=fiat:USD` now serves via classic-USDC
   peg fallback at handler read time**, mirroring the `/v1/chart`
   fallback shipped in #1015 (task #98). Same root cause: the
