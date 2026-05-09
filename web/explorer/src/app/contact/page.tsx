@@ -14,6 +14,7 @@ export const metadata: Metadata = {
   title: 'Contact — Rates Engine',
   description:
     'How to reach the Rates Engine team. Security disclosures, sales for higher rate-limit tiers, GitHub for general issues, status feed for incident updates.',
+  alternates: { canonical: '/contact' },
 };
 
 type Channel = {

@@ -38,6 +38,7 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"unicode/utf8"
 
 	"github.com/RatesEngine/rates-engine/internal/canonical"
 	"github.com/RatesEngine/rates-engine/internal/sources/external"
@@ -372,11 +373,21 @@ func backoffFromRetryAfter(h string) time.Duration {
 
 // truncate keeps log lines bounded — CoinGecko's HTML error pages
 // can be 50KB+ which would be useless noise in the indexer log.
+// truncate cuts `s` to at most `n` bytes plus a trailing "…",
+// walking back to the nearest UTF-8 rune boundary at or before
+// byte n. Used in error messages for HTTP response bodies; raw
+// byte slicing produced invalid UTF-8 in operator log output
+// when CoinGecko's error pages contained Unicode (e.g. their
+// "rate limit" copy or proxy injection).
 func truncate(s string, n int) string {
 	if len(s) <= n {
 		return s
 	}
-	return s[:n] + "…"
+	end := n
+	for end > 0 && !utf8.RuneStart(s[end]) {
+		end--
+	}
+	return s[:end] + "…"
 }
 
 // floatToScaledInt converts a float64 price to a scaled *big.Int.
