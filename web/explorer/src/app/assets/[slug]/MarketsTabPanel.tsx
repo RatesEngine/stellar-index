@@ -18,18 +18,22 @@ import { formatCompact } from '@/lib/format';
 export function MarketsTabPanel({ assetID }: { assetID: string }) {
   // Server-side filter via `?asset=<assetID>` — the API restricts
   // the listing to pairs where this asset appears on either side,
-  // so we get back exactly the rows we'd want to render. No
-  // client-side filter needed, and the asset's markets are not
-  // gated on whether they crack the global top-N by volume (the
-  // problem with the previous shape).
+  // so we get back exactly the rows we'd want to render. The
+  // client-side filter below is a defensive guard: older API
+  // versions silently ignore unknown query params, so on a
+  // pre-`?asset=` deployment the response would be the global
+  // top-100 instead of this asset's markets — without the guard
+  // every asset detail page would render the same global list.
+  // Once every region is on a release that includes the filter,
+  // the client-side filter can be dropped.
   const markets = useMarkets(100, 'volume_24h_usd_desc', { asset: assetID });
 
   const matched = useMemo(() => {
     if (!markets.data) return [];
-    return [...markets.data.markets].sort(
-      (a, b) => b.trade_count_24h - a.trade_count_24h,
-    );
-  }, [markets.data]);
+    return markets.data.markets
+      .filter((m) => m.base === assetID || m.quote === assetID)
+      .sort((a, b) => b.trade_count_24h - a.trade_count_24h);
+  }, [markets.data, assetID]);
 
   if (markets.isError) {
     return (

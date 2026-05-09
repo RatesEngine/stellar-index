@@ -51,7 +51,13 @@ export async function LiquidityTabPanel({
   code: string;
 }) {
   const rows = await fetchPoolsForAsset(assetID);
+  // Defensive client-side filter: older API versions silently
+  // ignore unknown query params, so on a pre-`?asset=` deployment
+  // the response would be the global top pools (every asset
+  // detail page would render the same list). Drop this once every
+  // region runs a release that includes the filter.
   const merged = rows
+    .filter((p) => p.base === assetID || p.quote === assetID)
     .map((p) => ({ ...p, side: (p.base === assetID ? 'base' : 'quote') as 'base' | 'quote' }))
     .sort((a, b) => {
       const av = Number(a.volume_24h_usd ?? '0');
