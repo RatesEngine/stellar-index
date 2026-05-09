@@ -388,6 +388,17 @@ against.
   `/v1/issuers/{g_strkey}`, `/v1/changes/{entity_type}/{id}`.
   SEP-40 oracle endpoints now document the `crypto:<symbol>`
   keying explicitly so the default `crypto:XLM` example works.
+### Performance
+
+- **Explorer**: `/currencies` listing first paint shows real
+  rows instead of "Loading…". The page is now an async server
+  component that fetches `/v1/coins` + `/v1/currencies` at build
+  time and embeds the responses as TanStack Query
+  `initialData`. Queries are marked immediately stale
+  (`initialDataUpdatedAt: 0`) so the live refetch still fires
+  on mount and prices keep flashing on the usual 15 s / 60 s
+  cadence — but users no longer see an empty table flash before
+  the network round-trip lands.
 
 ### Added
 
