@@ -17,6 +17,14 @@ against.
 
 ### Fixed
 
+- **`/v1/markets?include=sparkline` shares the 8s timeout budget
+  with the markets-list query**. Pre-fix, the sparkline batch ran
+  on `r.Context()` unbounded, so a 5s markets query + 5s sparkline
+  query stacked into a 10s+ request that the gateway terminated.
+  Now both phases share `mCtx`; total request capped at 8s with
+  graceful degradation (sparkline misses log at WARN and the
+  response ships without sparkline data, matching the existing
+  best-effort contract).
 - **`/v1/issuers/{g_strkey}` accepts case-insensitive G-strkeys**.
   Pre-fix lowercase variants 404'd; chat clients that auto-
   lowercase URLs (Slack, Discord, some search results) and
