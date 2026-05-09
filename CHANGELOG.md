@@ -35,6 +35,15 @@ against.
   uses lowercase (Stellar protocol allows it) — the literal form
   wins when both exist. Companion to PR #1132's case-insensitive
   XLM intercept.
+- **`/v1/assets/NATIVE` (uppercase) no longer 400s**. The
+  canonical `asset_id` format mandates lowercase `native` (per
+  ADR-0010), so capitalised variants returned 400
+  invalid-asset-id with the long format reminder. The handler
+  now collapses the bare `native` token case-insensitively at
+  input. Other compound forms (`USDC-Gxxxx`, `CDLZF…`,
+  `fiat:USD`) keep their case-significance unchanged — Stellar
+  protocol allows issuers to mint case-different classic codes
+  and merging them would mask real mismatches.
 
 ### Added
 
