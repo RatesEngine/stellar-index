@@ -15,6 +15,22 @@ against.
 
 ## [Unreleased]
 
+### Fixed
+
+- **Home page no longer fetches 500 markets to render 10**.
+  `HomeTopMarkets` called `useMarkets(500, …)` then immediately
+  `.slice(0, 10)` — sending and parsing 490 rows the user never
+  sees, and missing the API's prewarmed cache key (the prewarm
+  covers limits 5/25/100/200, not 500). Cold-cache home loads paid
+  the full `/v1/markets?limit=500` SQL scan against the trades
+  hypertable. Trimmed to `useMarkets(25, …)` — same top-10 with
+  headroom, hits the warm cache, ~20× smaller payload. Same
+  pattern previously fixed in `HomeNetworkStrip` (PR-comment
+  history). Also corrected the misleading `limit=500` `asExample`
+  hints on `/markets` MarketsTable — the actual fetch is
+  `limit=100` with the user's chosen order_by + sparkline.
+  (PR #1187)
+
 ## [v0.5.0-rc.38] — 2026-05-09
 
 ### Fixed
