@@ -26,6 +26,10 @@ func (f *fakeMarketsReader) SourceMarkets(ctx context.Context, source, cursor st
 	return nil, "", nil
 }
 
+func (f *fakeMarketsReader) AssetMarkets(ctx context.Context, asset, cursor string, limit int, order timescale.MarketsOrder) ([]Market, string, error) {
+	return nil, "", nil
+}
+
 func (f *fakeMarketsReader) AllPools(ctx context.Context, filter timescale.PoolsFilter, cursor string, limit int, order timescale.MarketsOrder) ([]Pool, string, error) {
 	f.allPoolsCalls.Add(1)
 	if f.delay > 0 {
