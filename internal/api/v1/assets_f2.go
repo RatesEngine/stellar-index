@@ -219,6 +219,21 @@ func (s *Server) populateMarketCap(ctx context.Context, detail *AssetDetail, ass
 // lookupUSDPrice consults the PriceReader for the asset's USD price.
 // Returns ("", false) on any failure (no data, asset is fiat:USD
 // itself, etc.) — caller treats this as "market_cap unavailable".
+//
+// On the canonical Stellar deployment NO on-chain trade quotes in
+// fiat:USD — every USD-flavoured trade quotes in classic USDC or
+// one of the operator's other declared pegs. So a literal
+// LatestPrice(asset, fiat:USD) lookup against the prices_1m CAGG
+// returns ErrPriceNotFound for nearly every asset on-chain, and the
+// downstream F2 fields (market_cap_usd, fdv_usd, change_24h_pct)
+// silently stay null on /v1/assets/{id}. We fix this by mirroring
+// the handler's tryStablecoinFiatProxy fallback at the reader-call
+// level: when the literal lookup misses, walk the operator's
+// usd_pegged_classic_assets and rewrite asset/fiat:USD to
+// asset/<peg>. Same shape as the handler-side fallback in #1217;
+// here it lives at the F2-population layer where the handler's
+// priceFallback isn't reachable (the supply / change-24h paths
+// bypass the /v1/price handler entirely).
 func (s *Server) lookupUSDPrice(ctx context.Context, asset canonical.Asset) (string, bool) {
 	if asset.Equal(defaultPriceQuote) {
 		// fiat:USD priced against fiat:USD is meaningless;
@@ -226,15 +241,15 @@ func (s *Server) lookupUSDPrice(ctx context.Context, asset canonical.Asset) (str
 		return "", false
 	}
 	snap, _, _, err := s.prices.LatestPrice(ctx, asset, defaultPriceQuote)
-	if err != nil {
-		// Errors here include ErrPriceNotFound (asset has no USD
-		// pair indexed). Either way, market_cap is unavailable.
-		return "", false
+	if err == nil && snap.Price != "" {
+		return snap.Price, true
 	}
-	if snap.Price == "" {
-		return "", false
+	// Read-time stablecoin-fiat proxy fallback (matches the
+	// handler-side fix in #1217 / tryStablecoinFiatProxy).
+	if proxy, _, ok := s.tryStablecoinFiatProxy(ctx, asset, defaultPriceQuote); ok && proxy.Price != "" {
+		return proxy.Price, true
 	}
-	return snap.Price, true
+	return "", false
 }
 
 // populateChange24h fills detail.Change24hPct via the
