@@ -15,6 +15,29 @@ against.
 
 ## [Unreleased]
 
+### Added
+
+- **`/v1/pools?asset=<asset_id>` filter** — restrict the pools
+  listing to rows where the asset appears on either side (base
+  OR quote). Mirrors the same filter shape just shipped on
+  `/v1/markets` (#1189). Backs the explorer's `/assets/{slug}`
+  Liquidity tab — single API request instead of two parallel
+  `?base=` + `?quote=` fetches with client-side merge. Mutually
+  exclusive with `?base=`/`?quote=` (the OR-shape and AND-shape
+  filters can't be mixed); combining returns 400
+  `conflicting-filters`. Invalid asset_ids return 400
+  `invalid-asset-id`. (PR #1190)
+- **`/v1/markets?asset=<asset_id>` filter** — restrict the markets
+  listing to pairs where the given canonical asset_id appears on
+  either side (base OR quote). Mirrors the `?base=` / `?quote=`
+  filters already on `/v1/pools`. Backs the explorer's
+  `/assets/{slug}` Markets tab so long-tail assets that fall
+  outside the global top-100 by volume now surface their markets
+  correctly. Mutually exclusive with `?source=`; combining the
+  two returns 400 `conflicting-filters`. Invalid asset_ids
+  return 400 `invalid-asset-id` (silent-empty-page guard, same
+  family as `?source=`). (PR #1189)
+
 ### Fixed
 
 - **`/v1/incidents` no longer returns `incidents: null` when the
@@ -23,6 +46,54 @@ against.
   which marshalled as `"incidents":null` and broke the
   pkg/client SDK + explorer JS that `.map()` over the array.
   Caught while writing the handler's first regression tests.
+- **Asset detail "Markets" tab fetches 100 by volume, not 500
+  alphabetically**. `MarketsTabPanel` on `/assets/{slug}` was
+  calling `useMarkets(500)` (default `pair` order) then
+  client-side filtering to markets involving the asset. Cold-
+  cache hit a 5–8s SQL scan (limit=500 isn't in the prewarm set
+  of 5/25/100/200), and the alphabetical sort meant the cap
+  could miss popular markets. Switched to
+  `useMarkets(100, 'volume_24h_usd_desc')` — hits warm cache,
+  ~5× smaller payload, and surfaces the asset's top-100-by-volume
+  markets first. Long-tail assets outside the global top-100 by
+  volume need a server-side `?asset=` filter on /v1/markets
+  (only /v1/pools has it today) — tracked as follow-up.
+- **Home page no longer fetches 500 markets to render 10**.
+  `HomeTopMarkets` called `useMarkets(500, …)` then immediately
+  `.slice(0, 10)` — sending and parsing 490 rows the user never
+  sees, and missing the API's prewarmed cache key (the prewarm
+  covers limits 5/25/100/200, not 500). Cold-cache home loads paid
+  the full `/v1/markets?limit=500` SQL scan against the trades
+  hypertable. Trimmed to `useMarkets(25, …)` — same top-10 with
+  headroom, hits the warm cache, ~20× smaller payload. Same
+  pattern previously fixed in `HomeNetworkStrip` (PR-comment
+  history). Also corrected the misleading `limit=500` `asExample`
+  hints on `/markets` MarketsTable — the actual fetch is
+  `limit=100` with the user's chosen order_by + sparkline.
+  (PR #1187)
+
+## [v0.5.0-rc.38] — 2026-05-09
+
+### Fixed
+
+- **`/v1/pools` prewarm now matches the handler's default order**.
+  The cold-cache user complaint ("dex pools still take forever to
+  load") had a single root cause: `prewarmOnce` warmed the cache
+  with `MarketsOrder = 0` (`MarketsOrderPair`) while the `/v1/pools`
+  handler defaults to `MarketsOrderVolume24hDesc` (= 1). Cache keys
+  include the order, so every cold-cache user request still ran
+  the 10–30s SQL scan against the live trades hypertable. Live
+  measurement on r1 (2026-05-09): `/v1/pools?source=sdex` 27s,
+  `soroswap` 16s, `phoenix` 12s, `aquarius` 9s, `comet` 11s. Fix
+  pins the prewarm to the handler's explicit default
+  (`timescale.MarketsOrderVolume24hDesc` for pools,
+  `timescale.MarketsOrderPair` for markets) and adds a per-DEX
+  loop covering the canonical `?source=<dex>&limit=100` cache
+  variants the explorer's `/dexes/{source}` pages fire. Bumped
+  the prewarm context from 20s → 60s so the per-source loop has
+  budget to complete a full warm cycle. Subsequent users hit warm
+  cache (sub-second) instead of stacking on the cold-query
+  timeout. (PR #1185)
 - **`/v1/markets?include=sparkline` shares the 8s timeout budget
   with the markets-list query**. Pre-fix, the sparkline batch ran
   on `r.Context()` unbounded, so a 5s markets query + 5s sparkline

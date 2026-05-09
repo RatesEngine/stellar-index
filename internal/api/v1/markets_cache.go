@@ -11,8 +11,9 @@ import (
 )
 
 // CachedMarketsReader wraps a [MarketsReader] with a small per-key
-// TTL cache. The four list endpoints it backs (DistinctPairsExt,
-// SourceMarkets, AllPools, GetPairsVolumeHistory24hBatch) all run
+// TTL cache. The five list endpoints it backs (DistinctPairsExt,
+// SourceMarkets, AssetMarkets, AllPools,
+// GetPairsVolumeHistory24hBatch) all run
 // the same expensive 24h-trades-hypertable scan; the explorer hits
 // them on every /markets, /pools, and /dexes page load.
 //
@@ -92,6 +93,18 @@ func (c *CachedMarketsReader) SourceMarkets(ctx context.Context, source, cursor 
 	return rows, next, err
 }
 
+// AssetMarkets — cached.
+func (c *CachedMarketsReader) AssetMarkets(ctx context.Context, asset, cursor string, limit int, order timescale.MarketsOrder) ([]Market, string, error) {
+	if c.ttl <= 0 {
+		return c.upstream.AssetMarkets(ctx, asset, cursor, limit, order)
+	}
+	key := fmt.Sprintf("AssetMarkets|%s|%s|%d|%d", asset, cursor, limit, order)
+	rows, next, err := c.fetchPairs(ctx, key, func(ctx context.Context) ([]Market, string, error) {
+		return c.upstream.AssetMarkets(ctx, asset, cursor, limit, order)
+	})
+	return rows, next, err
+}
+
 // AllPools — cached. Filter struct stringified via fmt for the key.
 func (c *CachedMarketsReader) AllPools(ctx context.Context, filter timescale.PoolsFilter, cursor string, limit int, order timescale.MarketsOrder) ([]Pool, string, error) {
 	if c.ttl <= 0 {
@@ -100,8 +113,8 @@ func (c *CachedMarketsReader) AllPools(ctx context.Context, filter timescale.Poo
 	// Sources is a slice — fmt %v gives a stable repr for
 	// equal-length slices with the same element order. Handlers
 	// upstream sort sources from a registry so order is stable.
-	key := fmt.Sprintf("AllPools|%v|%s|%s|%s|%d|%d",
-		filter.Sources, filter.Base, filter.Quote, cursor, limit, order)
+	key := fmt.Sprintf("AllPools|%v|%s|%s|%s|%s|%d|%d",
+		filter.Sources, filter.Base, filter.Quote, filter.Asset, cursor, limit, order)
 	rows, next, err := c.fetchPools(ctx, key, func(ctx context.Context) ([]Pool, string, error) {
 		return c.upstream.AllPools(ctx, filter, cursor, limit, order)
 	})
