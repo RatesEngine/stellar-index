@@ -102,14 +102,14 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     issuerKeys,
     currencyTickers,
     marketPairs,
-    sourceNames,
+    sources,
     lendingPools,
   ] = await Promise.all([
     fetchCoinSlugs(),
     fetchIssuerKeys(),
     fetchCurrencyTickers(),
     fetchMarketPairs(),
-    fetchSourceNames(),
+    fetchSources(),
     fetchLendingPools(),
   ]);
   const assetPages: MetadataRoute.Sitemap = assetSlugs.map((slug) => ({
@@ -166,43 +166,43 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     changeFrequency: 'daily',
     priority: 0.6,
   }));
-  // Per-source / per-exchange / per-dex detail pages. Source
-  // names cover both the operator-facing /sources/{name} surface
-  // and the user-facing /exchanges/{name} + /dexes/{source}
-  // surfaces, which all share the underlying source-registry
-  // identifier. We list each surface explicitly because the
-  // routes are real prerendered pages — the same name might
-  // appear once per surface (e.g. binance has /sources/binance
-  // AND /exchanges/binance).
+  // Per-source / per-exchange / per-dex detail pages. Every
+  // source registry entry has a /sources/{name} page; only
+  // ClassExchange entries with subclass=cex|dex have user-facing
+  // /exchanges/{name} or /dexes/{source} pages.
+  //
+  // Pre-fix the sitemap emitted /exchanges/{name} AND /dexes/{name}
+  // for *every* source — including aggregators (coingecko, cmc),
+  // oracles (band, redstone, reflector-*), authority-sanity (ecb)
+  // and lending (blend) — which produced ~33 sitemap entries that
+  // 404'd at the page level. Google penalises sitemaps that
+  // contain known-broken URLs, so we now gate emission on the
+  // source's class+subclass to match the page's
+  // generateStaticParams (CEX_INFO / DEX_INFO maps).
   const sourcePages: MetadataRoute.Sitemap = [];
-  for (const name of sourceNames) {
+  for (const s of sources) {
     sourcePages.push({
-      url: `${SITE_URL}/sources/${name}`,
+      url: `${SITE_URL}/sources/${s.name}`,
       lastModified: now,
       changeFrequency: 'weekly',
       priority: 0.5,
     });
-  }
-  // Exchange + DEX surfaces filter the source list by class. The
-  // sitemap doesn't try to recover that classification; instead
-  // we list every name under both prefixes and let the build's
-  // generateStaticParams omit unsupported routes (a 404 from a
-  // non-existent prefix is fine — the listing pages still serve
-  // the filtered subset). Future: tighten by parsing the source
-  // registry response if classification becomes load-bearing.
-  for (const name of sourceNames) {
-    sourcePages.push({
-      url: `${SITE_URL}/exchanges/${name}`,
-      lastModified: now,
-      changeFrequency: 'weekly',
-      priority: 0.5,
-    });
-    sourcePages.push({
-      url: `${SITE_URL}/dexes/${name}`,
-      lastModified: now,
-      changeFrequency: 'weekly',
-      priority: 0.5,
-    });
+    if (s.class === 'exchange' && s.subclass === 'cex') {
+      sourcePages.push({
+        url: `${SITE_URL}/exchanges/${s.name}`,
+        lastModified: now,
+        changeFrequency: 'weekly',
+        priority: 0.5,
+      });
+    }
+    if (s.class === 'exchange' && s.subclass === 'dex') {
+      sourcePages.push({
+        url: `${SITE_URL}/dexes/${s.name}`,
+        lastModified: now,
+        changeFrequency: 'weekly',
+        priority: 0.5,
+      });
+    }
   }
   // Lending pools — Blend pool detail pages. Small set today
   // (~9 pools), so list every one at priority 0.5.
@@ -229,14 +229,26 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   ];
 }
 
-async function fetchSourceNames(): Promise<string[]> {
+type SitemapSource = {
+  name: string;
+  class: string;
+  subclass: string;
+};
+
+async function fetchSources(): Promise<SitemapSource[]> {
   try {
     const res = await fetch(`${API_BASE_URL}/v1/sources`, {
       signal: AbortSignal.timeout(5_000),
     });
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    const env = (await res.json()) as { data: { name: string }[] };
-    return (env.data ?? []).map((s) => s.name);
+    const env = (await res.json()) as {
+      data: { name: string; class?: string; subclass?: string }[];
+    };
+    return (env.data ?? []).map((s) => ({
+      name: s.name,
+      class: s.class ?? '',
+      subclass: s.subclass ?? '',
+    }));
   } catch {
     return [];
   }
