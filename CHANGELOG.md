@@ -61,6 +61,13 @@ against.
   to "this source has no trades") sent callers chasing nonexistent
   data. Validation guard mirrors the same fail-fast pattern shipped
   on /v1/coins (#1134), /v1/markets cursor (#1135), and /v1/pools.
+- **`/changelog.atom` no longer publishes the `[Unreleased]`
+  section as a syndicated entry.** Every explorer redeploy was
+  pinging Feedly / Slack RSS subscribers with what reads as a new
+  release: same urn, fresh `published`/`updated` timestamps. The
+  rendered `/changelog` page intentionally still shows Unreleased
+  so visitors get a forward look — only the syndication feed
+  asymmetry changed (atom = dated immutable releases only).
 
 ### Added
 
