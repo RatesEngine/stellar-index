@@ -95,7 +95,7 @@ type Pool struct {
 //   - source   (optional): single DEX name. Restricts the result to
 //     that one DEX's pools. Unknown / non-DEX
 //     source names return an empty list.
-func (s *Server) handlePools(w http.ResponseWriter, r *http.Request) {
+func (s *Server) handlePools(w http.ResponseWriter, r *http.Request) { //nolint:gocognit // option parsing + DEX-source filter + 8s-timeout guard are linear; splitting fragments the request lifecycle
 	cursor := r.URL.Query().Get("cursor")
 	limit := 100
 	if raw := r.URL.Query().Get("limit"); raw != "" {
@@ -120,6 +120,14 @@ func (s *Server) handlePools(w http.ResponseWriter, r *http.Request) {
 			"https://api.ratesengine.net/errors/invalid-order",
 			"Invalid order_by", http.StatusBadRequest,
 			"order_by must be 'pair' or 'volume_24h_usd_desc'")
+		return
+	}
+
+	if err := timescale.ValidateMarketsCursor(cursor, order); err != nil {
+		writeProblem(w, r,
+			"https://api.ratesengine.net/errors/invalid-cursor",
+			"Invalid cursor", http.StatusBadRequest,
+			"cursor: "+err.Error()+". Pass back the pagination.next value from a prior /v1/pools response, or omit the parameter to start at page 1.")
 		return
 	}
 
@@ -268,6 +276,14 @@ func (s *Server) handleMarkets(w http.ResponseWriter, r *http.Request) { //nolin
 			"https://api.ratesengine.net/errors/invalid-order",
 			"Invalid order_by", http.StatusBadRequest,
 			"order_by must be 'pair' or 'volume_24h_usd_desc'")
+		return
+	}
+
+	if err := timescale.ValidateMarketsCursor(cursor, order); err != nil {
+		writeProblem(w, r,
+			"https://api.ratesengine.net/errors/invalid-cursor",
+			"Invalid cursor", http.StatusBadRequest,
+			"cursor: "+err.Error()+". Pass back the pagination.next value from a prior /v1/markets response, or omit the parameter to start at page 1.")
 		return
 	}
 

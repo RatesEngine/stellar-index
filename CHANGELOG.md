@@ -98,6 +98,26 @@ against.
   `/v1/sources`, `/v1/lending/pools`) currently *reset* to
   page 1 on garbage rather than 400'ing — they have a milder
   failure mode and follow in a separate PR.
+- **`/v1/markets` and `/v1/pools` reject malformed cursors with
+  400 instead of leaking SQL errors as 500 / silently skipping
+  to a wrong page**. Previously:
+  - `?cursor=garbage&order_by=volume_24h_usd_desc` raised a
+    Postgres `invalid input syntax for type numeric` from the
+    embedded `CAST(NULLIF(split_part($cursor, ':', 1), '') AS
+    numeric)` and returned 500 (and burned CPU per request).
+  - `?cursor=garbage` (default `pair` order on `/v1/markets`)
+    fell through to a lexicographic `> $cursor` skip whose
+    result depended on Postgres collation — caller saw an
+    arbitrary "page" of markets sorted alphabetically past
+    `garbage`, indistinguishable from a real page.
+  Adds `timescale.ValidateMarketsCursor` that pins the encoded
+  shape per `MarketsOrder` (pipe-separated `<base>|<quote>`
+  pair suffix, optional digits-with-one-dot vol prefix). Wired
+  into both `handleMarkets` and `handlePools` after `order_by`
+  parsing — returns 400 problem+json with
+  `type=https://api.ratesengine.net/errors/invalid-cursor`.
+  Pinned by 19 sub-tests across both orderings; companion to
+  the same fix shipped on `/v1/coins` in #1134.
 
 ### Added
 
