@@ -377,11 +377,20 @@ func (s *Server) handleCoin(w http.ResponseWriter, r *http.Request) { //nolint:g
 	// wins the disambiguation tiebreak, and "native" 404s outright.
 	// The synthetic row is built from the same xlm_usd CTEs that
 	// drive triangulated pricing for every other asset.
+	//
+	// Case-insensitive match: a user typo of `/v1/coins/xlm`
+	// (lowercase) was previously routing to a real classic asset
+	// in classic_assets with code='xlm' — a scam token issued by
+	// `xlm-GBV7ORCO…`. The same security pattern that motivated
+	// the XLM-vs-scam-token disambiguation in #45, applied
+	// case-insensitively so `xlm`/`Xlm`/`XLm`/etc. all land on
+	// native XLM. Confirmed on prod 2026-05-09: /v1/coins/xlm
+	// was returning the GBV7ORCO scam asset until this fix.
 	var (
 		row timescale.CoinRow
 		err error
 	)
-	if slug == "XLM" || slug == "native" {
+	if strings.EqualFold(slug, "XLM") || strings.EqualFold(slug, "native") {
 		row, err = s.coins.GetNativeCoinRow(r.Context())
 	} else {
 		row, err = s.coins.GetCoinBySlug(r.Context(), slug)
