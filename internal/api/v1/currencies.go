@@ -388,14 +388,24 @@ func (s *Server) handleCurrencyDetail(w http.ResponseWriter, r *http.Request) { 
 	// Long-form history (fx_quotes) — only attempt when the reader
 	// is wired AND the request explicitly asked. Default behaviour
 	// stays unchanged for back-compat.
+	//
+	// 8s ceiling on the fx_quotes scan: `range=all` spans 11 years
+	// and a cold-cache hypertable scan can run several seconds. The
+	// in-memory History7d series is already populated by this point,
+	// so a deadline-exceed soft-fails into "ship the 7d series"
+	// rather than blocking the whole detail response. Same pattern
+	// as the cold-path guards in #1082, #1099-#1106.
 	var longRange string
 	var longHistory []CurrencyHistoryPoint
 	rangeRaw := strings.ToLower(strings.TrimSpace(r.URL.Query().Get("range")))
 	if s.fxHistory != nil && rangeRaw != "" {
 		from, to, label, ok := parseFXHistoryRange(rangeRaw, snap.PublishedAt)
 		if ok {
-			points, err := s.fxHistory.ListFXHistory(r.Context(), target.Ticker, from, to)
-			if err == nil && len(points) > 0 {
+			fxCtx, fxCancel := context.WithTimeout(r.Context(), 8*time.Second)
+			points, err := s.fxHistory.ListFXHistory(fxCtx, target.Ticker, from, to)
+			fxCancel()
+			switch {
+			case err == nil && len(points) > 0:
 				longHistory = make([]CurrencyHistoryPoint, len(points))
 				for i, p := range points {
 					longHistory[i] = CurrencyHistoryPoint{
@@ -405,6 +415,13 @@ func (s *Server) handleCurrencyDetail(w http.ResponseWriter, r *http.Request) { 
 					}
 				}
 				longRange = label
+			case err != nil:
+				// Soft-fail: warn for operators, fall through to the
+				// in-memory History7d already projected above. We don't
+				// 503 here because the rest of the response is fully
+				// populated — a missing long-form history is a
+				// degradation, not a complete failure.
+				s.logger.Warn("fx_quotes range fetch", "ticker", target.Ticker, "range", label, "err", err)
 			}
 		}
 	}
