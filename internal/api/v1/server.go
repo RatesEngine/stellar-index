@@ -754,6 +754,13 @@ func (s *Server) mountRoutes() {
 	// default text/plain 404 / 405 responses into RFC 9457
 	// problem+json.
 	s.mux.HandleFunc("GET /{$}", s.handleRoot)
+
+	// /.well-known/security.txt — RFC 9116 disclosure metadata.
+	// Researchers scanning the API origin for vulnerabilities find
+	// the disclosure email here without having to traverse to the
+	// explorer subdomain. The Canonical: directive points at the
+	// explorer's copy so the two stay aligned without drift.
+	s.mux.HandleFunc("GET /.well-known/security.txt", s.handleSecurityTxt)
 }
 
 // ─── Handlers ─────────────────────────────────────────────────────
@@ -859,6 +866,31 @@ func (s *Server) handleVersion(w http.ResponseWriter, _ *http.Request) {
 		"dirty":      version.Dirty,
 		"go_version": version.GoVersion,
 	}, Flags{})
+}
+
+// handleSecurityTxt serves /.well-known/security.txt per RFC 9116.
+//
+// The Canonical: URL points at the explorer copy
+// (ratesengine.net/.well-known/security.txt) so the two origins
+// don't drift; both the explorer and API surfaces deliberately
+// share the same disclosure email + policy URL. Expires is one
+// year out — handler runs at request time so it always returns a
+// valid future date as long as the binary is up.
+func (s *Server) handleSecurityTxt(w http.ResponseWriter, _ *http.Request) {
+	expires := time.Now().UTC().AddDate(1, 0, 0).Format(time.RFC3339)
+	body := "# Rates Engine — security.txt (api origin)\n" +
+		"# RFC-9116. Mirrors ratesengine.net/.well-known/security.txt;\n" +
+		"# the Canonical: URL is the authoritative copy.\n" +
+		"\n" +
+		"Contact: mailto:security@ratesengine.net\n" +
+		"Expires: " + expires + "\n" +
+		"Preferred-Languages: en\n" +
+		"Canonical: https://ratesengine.net/.well-known/security.txt\n" +
+		"Policy: https://github.com/RatesEngine/rates-engine/blob/main/SECURITY.md\n" +
+		"Acknowledgments: https://github.com/RatesEngine/rates-engine/security/advisories\n"
+	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+	w.Header().Set("Cache-Control", "public, max-age=86400")
+	_, _ = w.Write([]byte(body))
 }
 
 // handleRoot welcomes accidental visitors at GET /. Returns a small
