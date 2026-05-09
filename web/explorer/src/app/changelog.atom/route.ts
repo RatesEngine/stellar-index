@@ -12,6 +12,19 @@ import { NextResponse } from 'next/server';
 import { loadReleases, versionSlug, type Release } from '@/lib/changelog';
 
 // Required for output: 'export'.
+// force-static is REQUIRED here, not a perf optimisation:
+// loadReleases() does readFileSync('../../CHANGELOG.md'), which
+// only works at build time when the repo workspace is on disk.
+// At request time on CF Pages there's no filesystem access to the
+// repo root. Implication: the atom feed only updates when CF Pages
+// rebuilds. If CF Pages auto-deploy stops triggering on main
+// merges (regression of task #38), the atom feed silently goes
+// stale — visible only by diffing the feed's first <updated>
+// timestamp against the latest CHANGELOG.md commit time. Probe:
+//   curl -s https://ratesengine.net/changelog.atom | head -20
+// If the first entry's date < last main commit touching CHANGELOG.md,
+// CF Pages rebuild is wedged; manually trigger from the dashboard
+// or push any commit to main.
 export const dynamic = 'force-static';
 
 const SITE_URL = 'https://ratesengine.net';
