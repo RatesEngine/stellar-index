@@ -17,6 +17,24 @@ against.
 
 ### Fixed
 
+- **`/v1/pools` prewarm now matches the handler's default order**.
+  The cold-cache user complaint ("dex pools still take forever to
+  load") had a single root cause: `prewarmOnce` warmed the cache
+  with `MarketsOrder = 0` (`MarketsOrderPair`) while the `/v1/pools`
+  handler defaults to `MarketsOrderVolume24hDesc` (= 1). Cache keys
+  include the order, so every cold-cache user request still ran
+  the 10–30s SQL scan against the live trades hypertable. Live
+  measurement on r1 (2026-05-09): `/v1/pools?source=sdex` 27s,
+  `soroswap` 16s, `phoenix` 12s, `aquarius` 9s, `comet` 11s. Fix
+  pins the prewarm to the handler's explicit default
+  (`timescale.MarketsOrderVolume24hDesc` for pools,
+  `timescale.MarketsOrderPair` for markets) and adds a per-DEX
+  loop covering the canonical `?source=<dex>&limit=100` cache
+  variants the explorer's `/dexes/{source}` pages fire. Bumped
+  the prewarm context from 20s → 60s so the per-source loop has
+  budget to complete a full warm cycle. Subsequent users hit warm
+  cache (sub-second) instead of stacking on the cold-query
+  timeout. (PR #1185)
 - **`/v1/markets?include=sparkline` shares the 8s timeout budget
   with the markets-list query**. Pre-fix, the sparkline batch ran
   on `r.Context()` unbounded, so a 5s markets query + 5s sparkline

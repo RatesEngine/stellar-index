@@ -2024,7 +2024,7 @@ func prewarmOnce(
 		logger.Debug("prewarm sources volume history failed", "err", err)
 	}
 
-	mkCtx, mkCancel := context.WithTimeout(ctx, 20*time.Second)
+	mkCtx, mkCancel := context.WithTimeout(ctx, 60*time.Second)
 	defer mkCancel()
 	// Mirrors the most-trafficked /v1/markets, /v1/pools requests
 	// the explorer fires (default order, no source filter). The
@@ -2034,12 +2034,43 @@ func prewarmOnce(
 	// cache key under [v1.CachedMarketsReader.AllPools]; without
 	// per-limit prewarm, anything off the warmed key 503s under
 	// the new pools-server-timeout (#1082).
+	//
+	// Per-handler order semantics MUST match the cache key the
+	// handler will look up:
+	// - /v1/markets defaults to MarketsOrderPair (handler accepts
+	//   ""|"pair" → 0). Prewarming with 0 hits the right key.
+	// - /v1/pools defaults to MarketsOrderVolume24hDesc (handler
+	//   accepts ""|"volume_24h_usd_desc" → 1). Pre-2026-05-09 we
+	//   prewarmed with 0 which was a phantom slot — every cold-
+	//   cache user request still ran a 10-30s SQL scan because the
+	//   warmed key never matched. Live measurement that day:
+	//   /v1/pools?source=sdex took 27s, soroswap 16s, phoenix 12s,
+	//   aquarius 9s, comet 11s. Match the handler's default
+	//   explicitly so the warmed key is the one users hit.
 	for _, lim := range []int{5, 25, 100, 200} {
-		if _, _, err := markets.DistinctPairsExt(mkCtx, "", lim, 0); err != nil {
+		if _, _, err := markets.DistinctPairsExt(mkCtx, "", lim, timescale.MarketsOrderPair); err != nil {
 			logger.Debug("prewarm markets failed", "limit", lim, "err", err)
 		}
-		if _, _, err := markets.AllPools(mkCtx, timescale.PoolsFilter{}, "", lim, 0); err != nil {
+		if _, _, err := markets.AllPools(mkCtx, timescale.PoolsFilter{}, "", lim, timescale.MarketsOrderVolume24hDesc); err != nil {
 			logger.Debug("prewarm pools failed", "limit", lim, "err", err)
+		}
+	}
+
+	// Per-DEX prewarm — the explorer's /dexes/{source} pages each
+	// fire `/v1/pools?source=<dex>&limit=100`, which lands on a
+	// distinct cache key per source. Without this, every page click
+	// missed cache and ran a 10-30s full-window trades-hypertable
+	// scan; sometimes returning a 503 (#1082 path), sometimes
+	// overshooting because lib/pq doesn't reliably propagate
+	// context cancellation mid-query. Per-DEX prewarm runs the
+	// canonical limit=100 + default order the explorer hits;
+	// subsequent users land on warm cache (sub-second). Errors are
+	// logged at Debug — a missed cycle is fine since the user
+	// request still fronts the cache.
+	for _, src := range []string{"soroswap", "phoenix", "aquarius", "sdex", "comet"} {
+		filter := timescale.PoolsFilter{Sources: []string{src}}
+		if _, _, err := markets.AllPools(mkCtx, filter, "", 100, timescale.MarketsOrderVolume24hDesc); err != nil {
+			logger.Debug("prewarm per-source pools failed", "source", src, "err", err)
 		}
 	}
 
