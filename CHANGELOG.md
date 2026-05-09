@@ -25,6 +25,16 @@ against.
   the same regardless of case, so the handler now uppercases
   the path segment at input. Companion to PR #1153
   (case-insensitive `/v1/coins/{slug}`).
+- **`/v1/coins/{slug}` accepts case-insensitive variants**.
+  Pre-fix `/v1/coins/usdc` (lowercase) 404'd while
+  `/v1/coins/USDC` returned the row. The `classic_assets.slug`
+  column is uppercase by convention (USDC, AQUA, EURC), but URL
+  clients frequently lowercase. Add a retry: when the literal
+  slug misses, retry once with `strings.ToUpper`. Preserves
+  case-significance for the rare issued asset that intentionally
+  uses lowercase (Stellar protocol allows it) — the literal form
+  wins when both exist. Companion to PR #1132's case-insensitive
+  XLM intercept.
 
 ### Added
 
