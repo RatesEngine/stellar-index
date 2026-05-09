@@ -99,6 +99,12 @@ against.
 
 ### Fixed
 
+- **`/v1/oracle/latest?source=<unknown>`** now returns 400
+  `unknown-source` instead of an empty 200 list. Same fail-fast
+  validation pattern shipped on /v1/markets (#1162) and
+  /v1/observations (#1164) — typo'd source names looked
+  identical on the wire to "this source has no observation for
+  the asset", masking input errors as data gaps.
 - **Sitemap URLs now match the canonical trailing-slash form the
   explorer actually serves**. With `trailingSlash: true` in
   next.config.js, every non-trailing-slash URL 308-redirects to

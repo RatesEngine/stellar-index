@@ -156,6 +156,25 @@ func TestOracleLatest_SourceFilterThreaded(t *testing.T) {
 	}
 }
 
+// TestOracleLatest_UnknownSource400 — `?source=` with a name that
+// isn't in the in-memory `external.Registry` returns 400 instead
+// of falling through to an empty page (same silent-empty-page
+// anti-pattern fix shipped on /v1/markets and /v1/observations).
+func TestOracleLatest_UnknownSource400(t *testing.T) {
+	srv := v1.New(v1.Options{Oracle: &stubOracleReader{}})
+	ts := httpTestServer(t, srv)
+
+	resp := mustGet(t, ts.URL+"/v1/oracle/latest?asset=native&source=fake-venue")
+	if resp.StatusCode != http.StatusBadRequest {
+		t.Fatalf("status = %d, want 400", resp.StatusCode)
+	}
+	var p v1.Problem
+	mustDecode(t, resp, &p)
+	if p.Type != "https://api.ratesengine.net/errors/unknown-source" {
+		t.Errorf("Type = %q", p.Type)
+	}
+}
+
 func TestOracleLatest_EmptyIsEmptyArray(t *testing.T) {
 	srv := v1.New(v1.Options{Oracle: &stubOracleReader{updates: nil}})
 	ts := httpTestServer(t, srv)
