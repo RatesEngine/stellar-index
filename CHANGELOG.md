@@ -15,6 +15,21 @@ against.
 
 ## [Unreleased]
 
+### Performance
+
+- **Cacheable read endpoints now emit `public, max-age=60,
+  s-maxage=300`** instead of falling through to the conservative
+  `private, no-store` default. Eight surfaces were missing from
+  the `policyForPath` table — verified live with `curl -sI`:
+  `/v1/coins/{slug}`, `/v1/currencies`, `/v1/currencies/{ticker}`,
+  `/v1/chart`, `/v1/lending/pools`, `/v1/network/stats`,
+  `/v1/sac-wrappers`, `/v1/incidents`, `/v1/pools`. Each was
+  bypassing the CDN AND telling the browser not to cache,
+  multiplying origin load on every page render
+  (`/v1/network/stats` and `/v1/sac-wrappers` each fire on every
+  explorer page load). Unblocks Cloudflare's edge from absorbing
+  the explorer's hot path.
+
 ### Fixed
 
 - **`/v1/markets?include=sparkline` shares the 8s timeout budget
