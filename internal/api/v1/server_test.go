@@ -421,3 +421,38 @@ func TestRobotsTxt(t *testing.T) {
 		t.Errorf("body missing Sitemap pointer: %q", body)
 	}
 }
+
+// TestSecurityTxt pins the RFC 9116 disclosure metadata served at
+// /.well-known/security.txt. Researchers scanning the API origin
+// for vulnerabilities expect this path; without it they have no
+// signposted way to reach the disclosure email.
+func TestSecurityTxt(t *testing.T) {
+	ts := newTestServer(t)
+	resp, err := http.Get(ts.URL + "/.well-known/security.txt")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		t.Errorf("status = %d, want 200", resp.StatusCode)
+	}
+	if ct := resp.Header.Get("Content-Type"); ct != "text/plain; charset=utf-8" {
+		t.Errorf("content-type = %q, want text/plain; charset=utf-8", ct)
+	}
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		t.Fatal(err)
+	}
+	s := string(body)
+	for _, want := range []string{
+		"Contact: mailto:security@ratesengine.net",
+		"Expires: ",
+		"Canonical: https://ratesengine.net/.well-known/security.txt",
+		"Policy: https://github.com/RatesEngine/rates-engine/blob/main/SECURITY.md",
+	} {
+		if !strings.Contains(s, want) {
+			t.Errorf("body missing %q", want)
+		}
+	}
+}

@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"sync/atomic"
 	"time"
+	"unicode/utf8"
 )
 
 // MaxResponseBytes caps how much we will read off the wire per call.
@@ -148,11 +149,22 @@ func (c *Client) call(ctx context.Context, method string, params any, result any
 	return nil
 }
 
+// truncate cuts `s` to at most `n` bytes plus a trailing "…",
+// walking back to the nearest UTF-8 rune boundary at or before
+// byte n so multi-byte codepoints aren't sliced in half. Used
+// for log + error messages where the input is typically an HTTP
+// response body — those routinely contain UTF-8 (vendor error
+// pages, JSON-with-unicode), and a naive byte slice produced
+// invalid UTF-8 in journalctl + Loki output.
 func truncate(s string, n int) string {
 	if len(s) <= n {
 		return s
 	}
-	return s[:n] + "…"
+	end := n
+	for end > 0 && !utf8.RuneStart(s[end]) {
+		end--
+	}
+	return s[:end] + "…"
 }
 
 // ─── Public methods ────────────────────────────────────────────────

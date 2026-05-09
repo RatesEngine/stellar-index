@@ -143,6 +143,21 @@ func (s *Server) handleOracleLatest(w http.ResponseWriter, r *http.Request) {
 	}
 
 	source := r.URL.Query().Get("source") // optional
+	if source != "" {
+		// Validate against the in-memory registry so an unknown
+		// source name returns 400 instead of an empty page (the
+		// silent-empty-page anti-pattern: a typo in `?source=`
+		// looks identical on the wire to "this source has no
+		// observation for the asset"). Same fail-fast guard as
+		// /v1/markets and /v1/observations.
+		if _, ok := external.Registry[source]; !ok {
+			writeProblem(w, r,
+				"https://api.ratesengine.net/errors/unknown-source",
+				"Unknown source", http.StatusBadRequest,
+				"source must be a registered source name (see /v1/sources for the canonical list); got "+source)
+			return
+		}
+	}
 
 	olCtx, olCancel := context.WithTimeout(r.Context(), 8*time.Second)
 	defer olCancel()

@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 import Link from 'next/link';
 
 import { formatCompact } from '@/lib/format';
+import { SITE_OG_IMAGES, SITE_TWITTER_IMAGES } from '@/lib/seo';
 import { PairChart } from './PairChart';
 
 const API_BASE_URL =
@@ -162,11 +163,13 @@ export async function generateMetadata({
       description,
       url: canonical,
       type: 'website',
+      images: SITE_OG_IMAGES,
     },
     twitter: {
       card: 'summary_large_image',
       title,
       description,
+      images: SITE_TWITTER_IMAGES,
     },
   };
 }

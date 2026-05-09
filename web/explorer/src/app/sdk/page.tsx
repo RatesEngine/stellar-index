@@ -8,6 +8,7 @@ export const metadata: Metadata = {
   title: 'Go SDK — Rates Engine',
   description:
     'Official Go SDK for the Rates Engine API. Idiomatic typed client, SemVer-stable surface, paste-ready examples for every common pattern.',
+  alternates: { canonical: '/sdk' },
 };
 
 const INSTALL = `go get github.com/RatesEngine/rates-engine/pkg/client`;

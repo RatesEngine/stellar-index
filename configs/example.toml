@@ -148,8 +148,28 @@ cursor_store_scheme   = "postgres"
   # base    = "USD"
 
   # ClassAggregator — divergence signal only, excluded from VWAP.
+  #
+  # CoinGecko tightened the unauthenticated-tier throttling in late
+  # 2024 (anonymous calls now hit ~30/day per IP, then 429s). For a
+  # free signup that bumps the quota to ~30/min, register at
+  # https://www.coingecko.com/en/developers/dashboard and pass the
+  # demo key via env (preferred over toml so secrets don't land in
+  # the file):
+  #
+  #   COINGECKO_DEMO_API_KEY=cg-demo-... systemctl restart ratesengine-indexer
+  #
+  # For a Pro key, set COINGECKO_API_KEY instead — Pro wins when
+  # both are configured. Anonymous polling still works (the poller
+  # backs off on 429 instead of hammering the venue) but produces
+  # no data; the divergence signal stays empty until a key is
+  # provisioned.
+  #
+  # poll_interval = "60s" overrides the connector's built-in default
+  # cadence. CoinGecko's free tier doesn't need a higher cadence;
+  # the indexer's external poller registers the source class and
+  # the divergence service consults it at the aggregator's tick.
   [external.coingecko]
-  enabled = false   # /simple/price — free, no auth, ~10–30 req/min
+  enabled = false   # /simple/price — needs COINGECKO_DEMO_API_KEY env (post-2024)
 
   [external.coinmarketcap]
   enabled = false

@@ -13,6 +13,7 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"unicode/utf8"
 )
 
 // ─── cross-region-check ─────────────────────────────────────────
@@ -497,10 +498,17 @@ func mustJSONString(v any) string {
 }
 
 // truncate caps a string for error-message inclusion. Body dumps in
-// errors should be readable but bounded.
+// errors should be readable but bounded. Walks back to the nearest
+// UTF-8 rune boundary at or before byte n so multi-byte codepoints
+// aren't sliced in half — region-diff output routinely contains
+// UTF-8 (vendor error pages, asset names with accented characters).
 func truncate(s string, n int) string {
 	if len(s) <= n {
 		return s
 	}
-	return s[:n] + "...(truncated)"
+	end := n
+	for end > 0 && !utf8.RuneStart(s[end]) {
+		end--
+	}
+	return s[:end] + "...(truncated)"
 }

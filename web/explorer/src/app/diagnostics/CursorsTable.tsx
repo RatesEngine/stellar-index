@@ -14,18 +14,35 @@ import { useCursors, type Cursor } from '@/api/hooks';
  * `lag_seconds` column gets a coloured pill — green when the cursor
  * advanced in the last 60s, amber up to 10 minutes, red beyond.
  */
+// STALE_LAG_THRESHOLD_S — cursors that haven't advanced in this
+// long are hidden by default. Backfill jobs that ran weeks ago
+// leave their progress markers in the table forever; on r1 today
+// roughly 30 of 50 rows are completed-and-forgotten, drowning out
+// the live ingest cursor every operator opens this page to find.
+// Threshold matches the LagPill red tier (>10 min) but with a
+// generous floor so a slow-but-progressing backfill (an hour or
+// two between updates) doesn't disappear.
+const STALE_LAG_THRESHOLD_S = 3600;
+
 export function CursorsTable() {
   const { data, isLoading, isError, error } = useCursors();
   const [filter, setFilter] = useState('');
+  const [hideStale, setHideStale] = useState(true);
 
   const filtered = useMemo(() => {
     const q = filter.trim().toLowerCase();
-    if (!q) return data ?? [];
-    return (data ?? []).filter((c) => {
-      const hay = `${c.source} ${c.sub_source ?? ''}`.toLowerCase();
-      return hay.includes(q);
-    });
-  }, [data, filter]);
+    let rows = data ?? [];
+    if (hideStale) {
+      rows = rows.filter((c) => c.lag_seconds <= STALE_LAG_THRESHOLD_S);
+    }
+    if (q) {
+      rows = rows.filter((c) => {
+        const hay = `${c.source} ${c.sub_source ?? ''}`.toLowerCase();
+        return hay.includes(q);
+      });
+    }
+    return rows;
+  }, [data, filter, hideStale]);
 
   const grouped = useMemo(() => groupBySource(filtered), [filtered]);
 
@@ -75,11 +92,21 @@ export function CursorsTable() {
         <div className="flex flex-wrap items-center gap-3 text-xs">
           <input
             type="search"
+            aria-label="Filter cursors by source or sub-source"
             placeholder="Filter sources or sub-sources…"
             value={filter}
             onChange={(e) => setFilter(e.target.value)}
             className="w-64 rounded-md border border-slate-200 bg-white px-2.5 py-1 font-mono text-[11px] placeholder:text-slate-400 focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500 dark:border-slate-700 dark:bg-slate-900"
           />
+          <label className="inline-flex select-none items-center gap-1.5 font-mono text-[11px] text-slate-600 dark:text-slate-400">
+            <input
+              type="checkbox"
+              checked={hideStale}
+              onChange={(e) => setHideStale(e.target.checked)}
+              className="h-3.5 w-3.5 rounded border-slate-300 text-brand-600 focus:ring-brand-500 dark:border-slate-700 dark:bg-slate-800"
+            />
+            Hide stale (&gt;1h)
+          </label>
           <span className="font-mono text-[11px] text-slate-500">
             {filtered.length} of {(data ?? []).length} rows
             {filter && (
