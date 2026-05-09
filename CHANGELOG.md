@@ -44,6 +44,17 @@ against.
   `fiat:USD`) keep their case-significance unchanged — Stellar
   protocol allows issuers to mint case-different classic codes
   and merging them would mask real mismatches.
+- **Every 401 response now includes `WWW-Authenticate: Bearer
+  realm="ratesengine.net"`** (RFC 7235 §3.1 conformance). Live
+  audit on r1 today: `/v1/account/me` returned 401 with no
+  challenge header, leaving programmatic clients without a way
+  to discover the accepted auth scheme. The auth-middleware
+  layer was already setting it on its own 401 paths; the
+  handler-level `writeProblem` (used by /v1/account/* directly
+  for not-yet-authenticated requests) was missing it. Pin
+  added at the helper level so the conditional can't drift.
+  Pinned by 2 sub-tests covering the 401 happy path and the
+  inverse (4xx/5xx that aren't 401 must NOT set the header).
 
 ### Added
 

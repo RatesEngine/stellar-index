@@ -213,6 +213,14 @@ type authProblem struct {
 
 func writeAuthProblem(w http.ResponseWriter, status int, typeURL, title, detail string) {
 	w.Header().Set("Content-Type", "application/problem+json")
+	// RFC 7235 §3.1: every 401 MUST advertise at least one
+	// challenge so clients can discover the accepted auth scheme.
+	// All authenticated v1 endpoints accept Bearer (API key +
+	// SEP-10 token); the magic-link cookie path is parallel and
+	// has no standard challenge token, so we advertise Bearer.
+	if status == http.StatusUnauthorized {
+		w.Header().Set("WWW-Authenticate", `Bearer realm="ratesengine.net"`)
+	}
 	w.WriteHeader(status)
 	_ = json.NewEncoder(w).Encode(authProblem{
 		Type:   typeURL,
