@@ -17,6 +17,12 @@ against.
 
 ### Fixed
 
+- **`/v1/oracle/latest?source=<unknown>`** now returns 400
+  `unknown-source` instead of an empty 200 list. Same fail-fast
+  validation pattern shipped on /v1/markets (#1162) and
+  /v1/observations (#1164) — typo'd source names looked
+  identical on the wire to "this source has no observation for
+  the asset", masking input errors as data gaps.
 - **`/v1/markets?include=sparkline` shares the 8s timeout budget
   with the markets-list query**. Pre-fix, the sparkline batch ran
   on `r.Context()` unbounded, so a 5s markets query + 5s sparkline
