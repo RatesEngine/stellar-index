@@ -751,3 +751,47 @@ func (c *Client) Incidents(ctx context.Context) (*Envelope[IncidentsList], error
 	}
 	return &env, nil
 }
+
+// CurrenciesOptions controls the limit of [Client.Currencies].
+// Limit is server-clamped to [1, 500]; zero leaves the server
+// default in place (currently the full corpus).
+type CurrenciesOptions struct {
+	Limit int
+}
+
+// Currencies fetches the fiat / fiat-like currency list backing
+// /v1/currencies. RateUSD on each row is "1 USD = N units of this
+// currency" — the server publishes the snapshot from its forex
+// feed; circulating-supply + market-cap fields populate only for
+// the subset of currencies the operator has wired a circulation
+// source for.
+func (c *Client) Currencies(ctx context.Context, opts CurrenciesOptions) (*Envelope[CurrenciesList], error) {
+	v := url.Values{}
+	if opts.Limit > 0 {
+		v.Set("limit", strconv.Itoa(opts.Limit))
+	}
+	var env Envelope[CurrenciesList]
+	if err := c.doJSON(ctx, http.MethodGet, "/v1/currencies", v, nil, &env); err != nil {
+		return nil, err
+	}
+	return &env, nil
+}
+
+// Currency fetches the per-ticker detail backing
+// /v1/currencies/{ticker}. Adds InverseUSD (precomputed
+// 1/RateUSD), CrossRates against every other listed currency, and
+// a 7-day daily history strip on top of the bare-list shape.
+//
+// `ticker` is the ISO 4217 code (USD, EUR, JPY, …); the server
+// uppercase-normalises before lookup, so case doesn't matter.
+// Empty ticker returns 400 client-side without a network call.
+func (c *Client) Currency(ctx context.Context, ticker string) (*Envelope[CurrencyDetail], error) {
+	if ticker == "" {
+		return nil, &APIError{Status: 400, Title: "ticker required"}
+	}
+	var env Envelope[CurrencyDetail]
+	if err := c.doJSON(ctx, http.MethodGet, "/v1/currencies/"+url.PathEscape(ticker), nil, nil, &env); err != nil {
+		return nil, err
+	}
+	return &env, nil
+}

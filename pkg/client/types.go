@@ -551,3 +551,68 @@ type IncidentsList struct {
 	Incidents []Incident `json:"incidents"`
 	Count     int        `json:"count"`
 }
+
+// Currency is one row in the [Client.Currencies] response — a fiat
+// or fiat-like currency the upstream forex feed publishes. Per the
+// /v1/currencies contract: `RateUSD` is "1 USD = N units of this
+// currency" (i.e., USD is the base, the listed currency is the
+// quote). Circulating-supply and market-cap fields populate only
+// for currencies the operator has wired a circulation source for
+// (today: ~50 of the ~120 fiats); they're omitted otherwise.
+type Currency struct {
+	Ticker            string    `json:"ticker"`
+	Name              string    `json:"name"`
+	RateUSD           float64   `json:"rate_usd"`
+	Change24hPct      float64   `json:"change_24h_pct,omitempty"`
+	Change7dPct       float64   `json:"change_7d_pct,omitempty"`
+	UpdatedAt         time.Time `json:"updated_at"`
+	CirculatingSupply *float64  `json:"circulating_supply,omitempty"`
+	MarketCapUSD      *float64  `json:"market_cap_usd,omitempty"`
+	CirculationAsOf   string    `json:"circulation_as_of,omitempty"`
+	CirculationSource string    `json:"circulation_source,omitempty"`
+}
+
+// CurrenciesList wraps the [Client.Currencies] list response.
+// PublishedAt is the upstream feed's wall-clock timestamp;
+// FetchedAt is when our forex worker pulled the snapshot;
+// Source identifies the upstream (e.g. "massive").
+type CurrenciesList struct {
+	Currencies  []Currency `json:"currencies"`
+	PublishedAt time.Time  `json:"published_at"`
+	FetchedAt   time.Time  `json:"fetched_at"`
+	Source      string     `json:"source"`
+}
+
+// CurrencyHistoryPoint is one daily snapshot in
+// [CurrencyDetail.History7d]. `RateUSD` and `InverseUSD` mirror
+// the parent shape (RateUSD = "1 USD = N <ticker>";
+// InverseUSD = "1 <ticker> = N USD").
+type CurrencyHistoryPoint struct {
+	Date       time.Time `json:"date"`
+	RateUSD    float64   `json:"rate_usd"`
+	InverseUSD float64   `json:"inverse_usd"`
+}
+
+// CurrencyDetail is the data shape returned by [Client.Currency]
+// — the per-ticker view backing /currencies/{ticker} on the
+// explorer. Adds `InverseUSD` (1/RateUSD precomputed for display),
+// `CrossRates` (this currency in every other listed currency),
+// and a 7-day history strip on top of the bare-list shape.
+type CurrencyDetail struct {
+	Ticker     string  `json:"ticker"`
+	Name       string  `json:"name"`
+	RateUSD    float64 `json:"rate_usd"`
+	InverseUSD float64 `json:"inverse_usd"`
+	// CrossRates is keyed by ticker — value is "1 <Ticker> = N <key>".
+	CrossRates        map[string]float64     `json:"cross_rates,omitempty"`
+	Change24hPct      float64                `json:"change_24h_pct,omitempty"`
+	Change7dPct       float64                `json:"change_7d_pct,omitempty"`
+	History7d         []CurrencyHistoryPoint `json:"history_7d,omitempty"`
+	CirculatingSupply *float64               `json:"circulating_supply,omitempty"`
+	MarketCapUSD      *float64               `json:"market_cap_usd,omitempty"`
+	CirculationAsOf   string                 `json:"circulation_as_of,omitempty"`
+	CirculationSource string                 `json:"circulation_source,omitempty"`
+	PublishedAt       time.Time              `json:"published_at"`
+	FetchedAt         time.Time              `json:"fetched_at"`
+	Source            string                 `json:"source"`
+}

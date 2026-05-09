@@ -1299,3 +1299,149 @@ func TestNetworkStats_NullVolume(t *testing.T) {
 		t.Errorf("Volume24hUSD = %v, want nil (omitempty path)", got.Data.Volume24hUSD)
 	}
 }
+
+// TestCurrencies_HappyPath — pins the path, the wrapped
+// CurrenciesList shape (data.currencies + data.published_at +
+// data.fetched_at + data.source), and the per-currency wire
+// shape. Limit is forwarded as ?limit=N.
+func TestCurrencies_HappyPath(t *testing.T) {
+	_, c := newTestServer(t, func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/v1/currencies" {
+			t.Errorf("path = %q, want /v1/currencies", r.URL.Path)
+		}
+		if r.URL.Query().Get("limit") != "50" {
+			t.Errorf("limit = %q, want 50", r.URL.Query().Get("limit"))
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{
+			"data": {
+				"currencies": [
+					{
+						"ticker": "EUR",
+						"name": "Euro",
+						"rate_usd": 0.8483,
+						"change_24h_pct": 0.30,
+						"change_7d_pct": 0.34,
+						"updated_at": "2026-05-08T00:00:00Z",
+						"circulating_supply": 15800000000000,
+						"market_cap_usd": 18625486266650.95,
+						"circulation_as_of": "2024-12-31",
+						"circulation_source": "ECB:BSI.M2"
+					},
+					{
+						"ticker": "USD",
+						"name": "United States Dollar",
+						"rate_usd": 1,
+						"updated_at": "2026-05-08T00:00:00Z"
+					}
+				],
+				"published_at": "2026-05-08T00:00:00Z",
+				"fetched_at":   "2026-05-08T01:00:00Z",
+				"source":       "massive"
+			},
+			"as_of": "2026-05-09T10:00:00Z",
+			"flags": {}
+		}`))
+	})
+	got, err := c.Currencies(context.Background(), client.CurrenciesOptions{Limit: 50})
+	if err != nil {
+		t.Fatalf("Currencies: %v", err)
+	}
+	if len(got.Data.Currencies) != 2 {
+		t.Fatalf("len = %d, want 2", len(got.Data.Currencies))
+	}
+	if got.Data.Source != "massive" {
+		t.Errorf("Source = %q", got.Data.Source)
+	}
+	eur := got.Data.Currencies[0]
+	if eur.Ticker != "EUR" || eur.RateUSD != 0.8483 {
+		t.Errorf("EUR row = %+v", eur)
+	}
+	if eur.CirculatingSupply == nil || *eur.CirculatingSupply != 15800000000000 {
+		t.Errorf("CirculatingSupply = %v", eur.CirculatingSupply)
+	}
+	// USD row deliberately has no circulation fields — pointer must
+	// stay nil so callers can distinguish "no data" from "zero".
+	usd := got.Data.Currencies[1]
+	if usd.CirculatingSupply != nil {
+		t.Errorf("USD CirculatingSupply = %v, want nil", usd.CirculatingSupply)
+	}
+}
+
+// TestCurrencies_NoLimit — zero leaves ?limit off so the server
+// default kicks in. Mirrors the Assets pattern.
+func TestCurrencies_NoLimit(t *testing.T) {
+	_, c := newTestServer(t, func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Query().Has("limit") {
+			t.Errorf("limit sent on zero-value: %q", r.URL.Query().Get("limit"))
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"data":{"currencies":[],"published_at":"2026-05-08T00:00:00Z","fetched_at":"2026-05-08T01:00:00Z","source":"massive"},"as_of":"2026-05-09T10:00:00Z","flags":{}}`))
+	})
+	_, err := c.Currencies(context.Background(), client.CurrenciesOptions{})
+	if err != nil {
+		t.Fatalf("Currencies: %v", err)
+	}
+}
+
+// TestCurrency_HappyPath — pins per-ticker path, the detail wire
+// shape (CrossRates + History7d on top of the bare-list fields),
+// and that History7d times round-trip cleanly.
+func TestCurrency_HappyPath(t *testing.T) {
+	_, c := newTestServer(t, func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/v1/currencies/EUR" {
+			t.Errorf("path = %q, want /v1/currencies/EUR", r.URL.Path)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{
+			"data": {
+				"ticker": "EUR",
+				"name": "Euro",
+				"rate_usd": 0.8483,
+				"inverse_usd": 1.1788,
+				"cross_rates": {"GBP": 0.85, "JPY": 178.5},
+				"change_24h_pct": 0.30,
+				"change_7d_pct": 0.34,
+				"history_7d": [
+					{"date":"2026-05-03T00:00:00Z","rate_usd":0.8528,"inverse_usd":1.1726},
+					{"date":"2026-05-08T00:00:00Z","rate_usd":0.84988,"inverse_usd":1.1766}
+				],
+				"published_at": "2026-05-08T00:00:00Z",
+				"fetched_at":   "2026-05-08T01:00:00Z",
+				"source":       "massive"
+			},
+			"as_of": "2026-05-09T10:00:00Z",
+			"flags": {}
+		}`))
+	})
+	got, err := c.Currency(context.Background(), "EUR")
+	if err != nil {
+		t.Fatalf("Currency: %v", err)
+	}
+	if got.Data.Ticker != "EUR" || got.Data.InverseUSD != 1.1788 {
+		t.Errorf("EUR detail = %+v", got.Data)
+	}
+	if len(got.Data.CrossRates) != 2 || got.Data.CrossRates["GBP"] != 0.85 {
+		t.Errorf("CrossRates = %+v", got.Data.CrossRates)
+	}
+	if len(got.Data.History7d) != 2 {
+		t.Fatalf("History7d len = %d, want 2", len(got.Data.History7d))
+	}
+	if !got.Data.History7d[0].Date.Equal(time.Date(2026, 5, 3, 0, 0, 0, 0, time.UTC)) {
+		t.Errorf("History7d[0].Date = %v", got.Data.History7d[0].Date)
+	}
+}
+
+// TestCurrency_TickerRequired — empty ticker short-circuits before
+// hitting the network.
+func TestCurrency_TickerRequired(t *testing.T) {
+	c := client.New(client.Options{BaseURL: "http://nope.invalid"})
+	_, err := c.Currency(context.Background(), "")
+	if err == nil {
+		t.Fatal("expected error for empty ticker")
+	}
+	var apiErr *client.APIError
+	if !errors.As(err, &apiErr) || apiErr.Status != 400 {
+		t.Errorf("err = %v, want APIError status=400", err)
+	}
+}

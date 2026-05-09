@@ -15,6 +15,17 @@ against.
 
 ## [Unreleased]
 
+### Added
+
+- **`pkg/client`: `Currencies(ctx, opts)` + `Currency(ctx, ticker)`**
+  SDK methods for `/v1/currencies` and `/v1/currencies/{ticker}`.
+  Mirrors the wire shapes the explorer's `/currencies` and
+  `/currencies/{ticker}` pages already consume — `RateUSD` is
+  "1 USD = N units of this currency" per the server contract,
+  and `*float64` pointer fields preserve the "no data" vs "0"
+  distinction on circulating-supply / market-cap. Detail variant
+  adds `InverseUSD`, `CrossRates` and a 7-day history strip.
+
 ### Fixed
 
 - **`/v1/markets?include=sparkline` shares the 8s timeout budget
