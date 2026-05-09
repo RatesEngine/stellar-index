@@ -69,6 +69,17 @@ against.
 
 ### Fixed
 
+- **`/v1/incidents.atom` summary truncation is now UTF-8-safe**.
+  `summaryFromMarkdown` did `p[:397] + "..."` — a naive byte
+  slice that could split a multi-byte UTF-8 codepoint in half
+  for any incident post containing accented characters
+  (é/ñ/ü/…) or emoji. Verified live: a 396-byte ASCII prefix
+  + `éée trailing` produces an output where the last byte is
+  `\xC3` (the lead byte of `é`) without its trailing byte —
+  invalid UTF-8. Strict feed validators reject the entry; the
+  explorer's render shows a replacement character. Walk back
+  to the nearest rune-start byte at or before 397; tests cover
+  both 2-byte (Latin-1 supplement) and 4-byte (emoji) cases.
 - **`/v1/incidents` no longer returns `incidents: null` when the
   embedded corpus is empty**. A fresh deployment (or one where
   `incidents.Load` errored at startup) left `s.incidents == nil`,

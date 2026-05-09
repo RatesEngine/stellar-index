@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/RatesEngine/rates-engine/internal/incidents"
 )
@@ -159,7 +160,20 @@ func summaryFromMarkdown(body string) string {
 			continue
 		}
 		if len(p) > 400 {
-			p = p[:397] + "..."
+			// Walk back to the nearest rune boundary at or before
+			// byte 397 so multi-byte UTF-8 codepoints aren't split
+			// in half. A naive `p[:397]` would slice mid-rune for
+			// incident posts containing accented characters
+			// (é/ñ/ü/etc.) or any non-ASCII text, producing invalid
+			// UTF-8 in the atom feed body — strict feed validators
+			// (W3C feedvalidator.org, some Atom-1.0 readers) reject
+			// the whole entry, and the explorer's render shows a
+			// replacement character instead of the trailing rune.
+			end := 397
+			for end > 0 && !utf8.RuneStart(p[end]) {
+				end--
+			}
+			p = p[:end] + "..."
 		}
 		return p
 	}
