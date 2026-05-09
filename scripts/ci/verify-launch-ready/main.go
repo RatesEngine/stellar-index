@@ -45,6 +45,7 @@ import (
 	"regexp"
 	"sort"
 	"strings"
+	"unicode/utf8"
 )
 
 // Row is one parsed entry from the backlog table.
@@ -156,12 +157,21 @@ func surfaceFor(id string) string {
 	return id[:2]
 }
 
+// truncate caps `s` to at most `n` bytes plus a trailing "…",
+// walking back to the nearest UTF-8 rune boundary at or before
+// byte n. Used in launch-readiness CI report rendering — row
+// titles and notes routinely contain accented words / unicode
+// dashes / em-dashes that a naive byte slice would split.
 func truncate(s string, n int) string {
 	s = strings.TrimSpace(s)
 	if len(s) <= n {
 		return s
 	}
-	return s[:n] + "…"
+	end := n
+	for end > 0 && !utf8.RuneStart(s[end]) {
+		end--
+	}
+	return s[:end] + "…"
 }
 
 // readyEngineering returns true iff the row is in a state that
