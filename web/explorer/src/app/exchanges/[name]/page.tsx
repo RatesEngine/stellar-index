@@ -81,8 +81,23 @@ export default async function ExchangeDetailPage({
   const info = CEX_INFO[name];
   if (!info) notFound();
 
+  // Schema.org BreadcrumbList — Home → Exchanges → <name>.
+  const breadcrumbLD = {
+    '@context': 'https://schema.org',
+    '@type': 'BreadcrumbList',
+    itemListElement: [
+      { '@type': 'ListItem', position: 1, name: 'Home', item: 'https://ratesengine.net' },
+      { '@type': 'ListItem', position: 2, name: 'Exchanges', item: 'https://ratesengine.net/exchanges' },
+      { '@type': 'ListItem', position: 3, name: info.name, item: `https://ratesengine.net/exchanges/${name}` },
+    ],
+  };
+
   return (
     <div className="mx-auto max-w-7xl space-y-6 px-6 py-8">
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(breadcrumbLD) }}
+      />
       <Link
         href="/exchanges"
         className="inline-flex items-center gap-1.5 text-sm text-slate-600 hover:text-brand-600 dark:text-slate-400"

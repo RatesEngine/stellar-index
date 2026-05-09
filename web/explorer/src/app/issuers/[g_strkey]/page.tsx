@@ -175,8 +175,31 @@ export default async function IssuerDetailPage({ params }: { params: Params }) {
     }
   }
 
+  // Schema.org BreadcrumbList — gives Google a structured
+  // hierarchy (Home → Issuers → <org_name>) so search results can
+  // render the breadcrumb path under the title. Same shape as
+  // /assets/[slug] and /markets/[pair].
+  const breadcrumbLD = {
+    '@context': 'https://schema.org',
+    '@type': 'BreadcrumbList',
+    itemListElement: [
+      { '@type': 'ListItem', position: 1, name: 'Home', item: 'https://ratesengine.net' },
+      { '@type': 'ListItem', position: 2, name: 'Issuers', item: 'https://ratesengine.net/issuers' },
+      {
+        '@type': 'ListItem',
+        position: 3,
+        name: detail.org_name || shortKey(g_strkey),
+        item: `https://ratesengine.net/issuers/${g_strkey}`,
+      },
+    ],
+  };
+
   return (
     <div className="mx-auto max-w-7xl space-y-6 px-6 py-8">
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(breadcrumbLD) }}
+      />
       {detail.scam_reason && (
         <div className="rounded-lg border-2 border-rose-400 bg-rose-50 px-4 py-3 dark:border-rose-700 dark:bg-rose-950/40">
           <div className="flex items-baseline gap-2">

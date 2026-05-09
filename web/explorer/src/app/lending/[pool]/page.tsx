@@ -158,8 +158,24 @@ export default async function LendingPoolPage({ params }: { params: Params }) {
   const data = await fetchPool(pool);
   const label = BLEND_POOL_LABELS[pool];
 
+  // Schema.org BreadcrumbList — Home → Lending → <pool name or short hash>.
+  const poolName = label?.name || `${pool.slice(0, 8)}…${pool.slice(-8)}`;
+  const breadcrumbLD = {
+    '@context': 'https://schema.org',
+    '@type': 'BreadcrumbList',
+    itemListElement: [
+      { '@type': 'ListItem', position: 1, name: 'Home', item: 'https://ratesengine.net' },
+      { '@type': 'ListItem', position: 2, name: 'Lending', item: 'https://ratesengine.net/lending' },
+      { '@type': 'ListItem', position: 3, name: poolName, item: `https://ratesengine.net/lending/${pool}` },
+    ],
+  };
+
   return (
     <div className="mx-auto max-w-5xl space-y-6 px-6 py-8">
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(breadcrumbLD) }}
+      />
       <Link
         href="/lending"
         className="inline-flex items-center gap-1 text-sm text-slate-500 hover:text-brand-600"

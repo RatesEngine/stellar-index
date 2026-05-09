@@ -250,6 +250,27 @@ against.
   `/v1/coins/<garbage>` → 404 coin-not-found). All 22 checks
   green against r1 today.
 
+- **Schema.org BreadcrumbList JSON-LD on 6 more detail surfaces**:
+  `/issuers/{g_strkey}`, `/sources/{name}`, `/exchanges/{name}`,
+  `/dexes/{source}`, `/lending/{pool}`, `/convert/{from}/{to}`.
+  Lets Google render the breadcrumb hierarchy under the title in
+  search results (Home → Issuers → Circle, etc.). Same shape as
+  the existing JSON-LD on `/assets/{slug}` and `/markets/{pair}`
+  per #948 — expands SEO coverage from 3 → 9 detail pages.
+
+### Changed
+
+- **Explorer `/diagnostics` cursor table hides stale (>1h) rows
+  by default**. Live audit on r1 today: 30 of ~50
+  ingestion-cursor rows had `lag_seconds` over 5 days — completed
+  backfill jobs whose progress markers were never cleaned up,
+  drowning out the live ingest cursor that operators open the
+  page to find. New `Hide stale (>1h)` checkbox (default on)
+  filters to actively-progressing cursors; toggle off to see the
+  full set when investigating a stuck backfill.
+
+### Added
+
 - **`/v1/price` fiat-vs-fiat cross-rate fallback**: when both
   `asset` and `quote` are fiat (e.g. `asset=fiat:EUR&quote=fiat:USD`)
   and the Timescale + Redis VWAP paths both miss, the handler

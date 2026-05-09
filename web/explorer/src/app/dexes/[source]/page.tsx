@@ -93,8 +93,23 @@ export default async function SourceDetailPage({
   const info = DEX_INFO[source];
   if (!info) notFound();
 
+  // Schema.org BreadcrumbList — Home → DEXes → <name>.
+  const breadcrumbLD = {
+    '@context': 'https://schema.org',
+    '@type': 'BreadcrumbList',
+    itemListElement: [
+      { '@type': 'ListItem', position: 1, name: 'Home', item: 'https://ratesengine.net' },
+      { '@type': 'ListItem', position: 2, name: 'DEXes', item: 'https://ratesengine.net/dexes' },
+      { '@type': 'ListItem', position: 3, name: info.name, item: `https://ratesengine.net/dexes/${source}` },
+    ],
+  };
+
   return (
     <div className="mx-auto max-w-7xl space-y-6 px-6 py-8">
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(breadcrumbLD) }}
+      />
       <Link
         href="/dexes"
         className="inline-flex items-center gap-1.5 text-sm text-slate-600 hover:text-brand-600 dark:text-slate-400"
