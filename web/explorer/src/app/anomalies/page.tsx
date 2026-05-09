@@ -7,6 +7,7 @@ export const metadata: Metadata = {
   title: 'Anomalies — freeze and outlier timeline',
   description:
     'Every clear→firing freeze transition, with reason + recovery + frozen-value detail. Powered by the freeze-event durable mirror per ADR-0019.',
+  alternates: { canonical: '/anomalies' },
 };
 
 const REASONS: { name: string; trigger: string; meaning: string }[] = [

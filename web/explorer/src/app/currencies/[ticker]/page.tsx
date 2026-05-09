@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import { notFound } from 'next/navigation';
 
+import { SITE_OG_IMAGES, SITE_TWITTER_IMAGES } from '@/lib/seo';
 import { CurrencyDetailView } from './CurrencyDetailView';
 import { faqFor, nameFor } from './faq';
 import { allFriendlySlugs, friendlySlugFor, resolveFiatSlug } from './slugs';
@@ -77,11 +78,13 @@ export async function generateMetadata({ params }: { params: Params }): Promise<
       url: canonical,
       type: 'website',
       siteName: 'Rates Engine',
+      images: SITE_OG_IMAGES,
     },
     twitter: {
       card: 'summary_large_image',
       title,
       description,
+      images: SITE_TWITTER_IMAGES,
     },
   };
 }

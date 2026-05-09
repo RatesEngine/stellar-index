@@ -2,6 +2,7 @@ package v1
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"time"
 
@@ -45,9 +46,22 @@ func (s *Server) handleLendingPools(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, []LendingPool{}, Flags{})
 		return
 	}
-	rows, err := reader.ListBlendPools(r.Context())
+	// 8s ceiling — same pattern as #1082 / #1099–#1104.
+	// ListBlendPools fans out per-pool auction-count + user-count
+	// queries against the trades hypertable; cold cache can take 5+s.
+	lpCtx, lpCancel := context.WithTimeout(r.Context(), 8*time.Second)
+	defer lpCancel()
+	rows, err := reader.ListBlendPools(lpCtx)
 	if err != nil {
 		if clientAborted(r, err) {
+			return
+		}
+		if errors.Is(err, context.DeadlineExceeded) {
+			s.logger.Warn("ListBlendPools deadline exceeded")
+			writeProblem(w, r,
+				"https://api.ratesengine.net/errors/lending-timeout",
+				"Lending pools query timed out", http.StatusServiceUnavailable,
+				"the per-pool auction + user aggregates didn't return in 8s; retry shortly.")
 			return
 		}
 		s.logger.Error("ListBlendPools failed", "err", err)
