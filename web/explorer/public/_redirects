@@ -3,6 +3,18 @@
 # static export, so server-level 301s land before any HTML loads
 # (which is what we want for SEO + back-button correctness).
 
+# Cross-host redirects: rescue users who paste an API path against
+# the explorer host. Common reasons:
+#   - copy-pasted "/v1/coins" from docs without the api. subdomain
+#   - tools that strip subdomains when extracting URLs
+#   - habit of "/api/" prefix from other vendors (Heroku, Vercel,
+#     stripe-style /v1 nested under /api)
+# Pre-redirect every variant landed on the explorer's catch-all
+# 404 — opaque dead-end for anyone debugging an integration.
+/api      https://api.ratesengine.net/         301
+/api/*    https://api.ratesengine.net/:splat   301
+/v1/*     https://api.ratesengine.net/v1/:splat 301
+
 # /coins → /assets directory listing.
 /coins/  /assets/  301
 /coins   /assets   301

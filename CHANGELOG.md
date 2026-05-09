@@ -271,6 +271,15 @@ against.
 
 ### Added
 
+- **Explorer redirects API paths to api.ratesengine.net**.
+  `ratesengine.net/v1/coins`, `/api/v1/coins`, and bare `/api`
+  used to land on the explorer's catch-all 404 — opaque dead-end
+  for anyone debugging an integration who pasted the path
+  without the `api.` subdomain. Three new 301 rules in
+  `_redirects` rescue the common patterns (copy-pasted-from-docs
+  `/v1/...`, "/api/" prefix habit from other vendors, tools that
+  strip subdomains).
+
 - **`/v1/price` fiat-vs-fiat cross-rate fallback**: when both
   `asset` and `quote` are fiat (e.g. `asset=fiat:EUR&quote=fiat:USD`)
   and the Timescale + Redis VWAP paths both miss, the handler
