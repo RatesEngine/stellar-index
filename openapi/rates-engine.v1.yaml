@@ -1320,6 +1320,19 @@ paths:
                             percentage with two fractional digits.
                             Null when no current price or no
                             7d-ago prices_1m bucket within ±2h.
+                        issuer_scam_reason:
+                          type: string
+                          description: |
+                            Non-empty when the asset's `issuer`
+                            G-strkey appears on the curated scam
+                            directory sourced from
+                            stellar.expert. Same field surfaced on
+                            `/v1/issuers/{g_strkey}.scam_reason`;
+                            duplicated here so the asset detail
+                            page can render a warning at first
+                            paint without a second fetch. Always
+                            omitted for native XLM (no issuer) and
+                            for issuers with no scam record.
                   next_cursor:
                     type: string
                     description: Empty when no more pages.
@@ -1500,10 +1513,22 @@ paths:
           in: path
           required: true
           description: |
-            Canonical id for the entity. For `coin`, the asset slug
-            (e.g. `stellar`). For `pair`, `base/quote` form. For
-            `protocol`, the protocol slug. For `source`, the source
-            name (e.g. `binance`, `coinbase`).
+            Canonical id for the entity. Form depends on
+            `entity_type`:
+
+            - `coin`: any of the asset's identifier forms — friendly
+              slug (`XLM`, `USDC`), canonical asset_id (`native`,
+              `crypto:XLM`, `USDC-GA5Z…`), or bare classic code
+              (`USDC` → also tries `crypto:USDC`). The handler
+              expands the input into every candidate the
+              change-summary worker might have keyed under and
+              returns the first hit. Without expansion, a typo of
+              the canonical form would 404 even when data is
+              populated under a sibling form.
+            - `pair`: `base/quote` form (e.g. `native/USDC-GA5Z…`).
+            - `protocol`: protocol slug (e.g. `soroswap`, `blend`).
+            - `source`: source name (e.g. `binance`, `coinbase`,
+              `sdex`).
           schema:
             type: string
             example: binance
