@@ -193,7 +193,21 @@ func (s *Server) handleCurrencies(w http.ResponseWriter, r *http.Request) { //no
 	}
 
 	if raw := r.URL.Query().Get("limit"); raw != "" {
-		if n, err := strconv.Atoi(raw); err == nil && n > 0 && n < len(enriched) {
+		// Validate strictly — the rest of the v1 surface (/v1/coins,
+		// /v1/markets, /v1/pools) returns 400 invalid-limit on bad
+		// input. /v1/currencies used to silently ignore it (zero,
+		// negative, garbage all returned the full list). Bringing
+		// the contract in line so a typo doesn't masquerade as
+		// success. Cap at 500 to match the other listings.
+		n, err := strconv.Atoi(raw)
+		if err != nil || n < 1 || n > 500 {
+			writeProblem(w, r,
+				"https://api.ratesengine.net/errors/invalid-limit",
+				"Invalid limit", http.StatusBadRequest,
+				"limit must be an integer in [1, 500]")
+			return
+		}
+		if n < len(enriched) {
 			enriched = enriched[:n]
 		}
 	}

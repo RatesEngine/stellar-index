@@ -1751,7 +1751,11 @@ export interface paths {
         get: {
             parameters: {
                 query?: {
-                    /** @description Optional. Cap the returned currencies. */
+                    /**
+                     * @description Optional. Cap the returned currencies. Must be 1-500
+                     *     inclusive; out-of-range or non-integer input returns
+                     *     400 `type=https://api.ratesengine.net/errors/invalid-limit`.
+                     */
                     limit?: number;
                     /** @description Comma-separated. `sparkline` attaches `history_7d_rates`. */
                     include?: string;
