@@ -121,6 +121,17 @@ against.
 
 ### Fixed
 
+- **`/v1/coins?limit=200` prewarm now matches the handler's
+  internal `listingLimit`**. Same family as #1194. The handler
+  subtracts 1 from the requested limit when cursor/issuer/q are
+  all empty (the `prependNative` path that splices a synthetic
+  XLM row at the top of page 1 without overshooting), so a
+  `/v1/coins?limit=200` user request actually queries the store
+  with `ListCoinsOptions{Limit: 199, …}`. The prewarm passed
+  `Limit: 200` so its cache key (`ListCoinsExt|200|…`) never
+  matched the handler's lookup key (`ListCoinsExt|199|…`). The
+  explorer's `/currencies` page (the most-trafficked coins read)
+  was hitting cold cache on every load. (PR #1195)
 - **Unfiltered `/v1/pools` prewarm now matches the handler's
   cache key**. Follow-up to PR #1185, which fixed the
   `MarketsOrder` mismatch but missed a second mismatch in the

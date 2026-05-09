@@ -2133,9 +2133,19 @@ func prewarmOnce(
 
 	// /v1/coins?limit=200&include=sparkline backs the unified
 	// currencies listing — single most-trafficked coins read.
+	//
+	// Important: the handler's `prependNative` path subtracts one
+	// from `limit` when cursor/issuer/q are all empty (the explorer's
+	// no-filter case) so it can splice the synthetic XLM row at the
+	// top without overshooting the user's requested page size. So a
+	// /v1/coins?limit=200 user request actually calls
+	// `ListCoinsExt(ctx, ListCoinsOptions{Limit: 199, …})` under the
+	// hood — passing Limit=200 here warms a different cache key than
+	// the one the user request looks up. Mirror the listingLimit the
+	// handler actually uses.
 	coinsCtx, coinsCancel := context.WithTimeout(ctx, 20*time.Second)
 	defer coinsCancel()
-	if _, err := coins.ListCoinsExt(coinsCtx, timescale.ListCoinsOptions{Limit: 200}); err != nil {
+	if _, err := coins.ListCoinsExt(coinsCtx, timescale.ListCoinsOptions{Limit: 199}); err != nil {
 		logger.Debug("prewarm coins listing failed", "err", err)
 	}
 }
