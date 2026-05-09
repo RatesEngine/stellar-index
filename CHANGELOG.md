@@ -17,6 +17,17 @@ against.
 
 ### Fixed
 
+- **`/v1/incidents.atom` summary truncation is now UTF-8-safe**.
+  `summaryFromMarkdown` did `p[:397] + "..."` — a naive byte
+  slice that could split a multi-byte UTF-8 codepoint in half
+  for any incident post containing accented characters
+  (é/ñ/ü/…) or emoji. Verified live: a 396-byte ASCII prefix
+  + `éée trailing` produces an output where the last byte is
+  `\xC3` (the lead byte of `é`) without its trailing byte —
+  invalid UTF-8. Strict feed validators reject the entry; the
+  explorer's render shows a replacement character. Walk back
+  to the nearest rune-start byte at or before 397; tests cover
+  both 2-byte (Latin-1 supplement) and 4-byte (emoji) cases.
 - **`/v1/markets?include=sparkline` shares the 8s timeout budget
   with the markets-list query**. Pre-fix, the sparkline batch ran
   on `r.Context()` unbounded, so a 5s markets query + 5s sparkline
