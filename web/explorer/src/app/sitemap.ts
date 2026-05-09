@@ -15,6 +15,23 @@ export const dynamic = 'force-static';
 const SITE_URL = 'https://ratesengine.net';
 
 /**
+ * Build a sitemap URL that matches the canonical form the explorer
+ * actually serves. With `trailingSlash: true` in next.config.js,
+ * Next.js 308-redirects every non-trailing-slash URL to its
+ * trailing-slash form. A sitemap full of redirect-targets is bad
+ * SEO — Google penalises sitemaps that send crawlers through 308
+ * hops, and the canonical form is already the trailing-slash one.
+ *
+ * `path` is the URL path relative to SITE_URL. Empty string is the
+ * home page (`/`). Helper appends a `/` only when the path doesn't
+ * already end with one (so a caller passing `/foo/` stays idempotent).
+ */
+function siteURL(path: string): string {
+  if (path === '' || path === '/') return `${SITE_URL}/`;
+  return path.endsWith('/') ? `${SITE_URL}${path}` : `${SITE_URL}${path}/`;
+}
+
+/**
  * sitemap.xml — generated at build time. Static pages are
  * enumerated explicitly; dynamic /assets/[slug] entries mirror
  * generateStaticParams: live API only, no seed fallback (the
@@ -56,7 +73,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     '/signup',
     '/account',
   ].map((path) => ({
-    url: `${SITE_URL}${path}`,
+    url: siteURL(path),
     lastModified: now,
     changeFrequency: path === '' ? 'daily' : 'weekly',
     priority: path === '' ? 1 : 0.7,
@@ -67,31 +84,31 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   // be worth indexing — they are cited from /methodology and from
   // every PR description.
   const adrPages: MetadataRoute.Sitemap = loadADRs().map((adr) => ({
-    url: `${SITE_URL}/research/adr/${adr.id}`,
+    url: siteURL(`/research/adr/${adr.id}`),
     lastModified: now,
     changeFrequency: 'monthly',
     priority: 0.5,
   }));
   const archPages: MetadataRoute.Sitemap = loadArchitectureDocs().map((d) => ({
-    url: `${SITE_URL}/research/architecture/${d.slug}`,
+    url: siteURL(`/research/architecture/${d.slug}`),
     lastModified: now,
     changeFrequency: 'monthly',
     priority: 0.6,
   }));
   const discoveryPages: MetadataRoute.Sitemap = loadDiscoveryDocs().map((d) => ({
-    url: `${SITE_URL}/research/discovery/${d.slug}`,
+    url: siteURL(`/research/discovery/${d.slug}`),
     lastModified: now,
     changeFrequency: 'monthly',
     priority: 0.5,
   }));
   const opsPages: MetadataRoute.Sitemap = loadOperationsDocs().map((d) => ({
-    url: `${SITE_URL}/research/operations/${d.slug}`,
+    url: siteURL(`/research/operations/${d.slug}`),
     lastModified: now,
     changeFrequency: 'monthly',
     priority: 0.5,
   }));
   const blogPages: MetadataRoute.Sitemap = loadBlogPosts().map((p) => ({
-    url: `${SITE_URL}/blog/${p.slug}`,
+    url: siteURL(`/blog/${p.slug}`),
     lastModified: now,
     changeFrequency: 'monthly',
     priority: 0.6,
@@ -113,13 +130,13 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     fetchLendingPools(),
   ]);
   const assetPages: MetadataRoute.Sitemap = assetSlugs.map((slug) => ({
-    url: `${SITE_URL}/assets/${slug}`,
+    url: siteURL(`/assets/${slug}`),
     lastModified: now,
     changeFrequency: 'daily',
     priority: 0.6,
   }));
   const issuerPages: MetadataRoute.Sitemap = issuerKeys.map((g) => ({
-    url: `${SITE_URL}/issuers/${g}`,
+    url: siteURL(`/issuers/${g}`),
     lastModified: now,
     changeFrequency: 'weekly',
     priority: 0.5,
@@ -136,7 +153,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const currencyPages: MetadataRoute.Sitemap = [];
   for (const ticker of currencyTickers) {
     currencyPages.push({
-      url: `${SITE_URL}/currencies/${ticker}`,
+      url: siteURL(`/currencies/${ticker}`),
       lastModified: now,
       changeFrequency: 'daily',
       priority: 0.6,
@@ -146,7 +163,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       // Curated friendly slug exists and differs from the bare
       // ISO code → also list it as the canonical share URL.
       currencyPages.push({
-        url: `${SITE_URL}/currencies/${friendly}`,
+        url: siteURL(`/currencies/${friendly}`),
         lastModified: now,
         changeFrequency: 'daily',
         priority: 0.7,
@@ -161,7 +178,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   // exploding the file (every Stellar pair × 100s of issuers would
   // be tens of thousands of URLs of mostly-empty content).
   const marketPages: MetadataRoute.Sitemap = marketPairs.map((slug) => ({
-    url: `${SITE_URL}/markets/${encodeURIComponent(slug)}`,
+    url: siteURL(`/markets/${encodeURIComponent(slug)}`),
     lastModified: now,
     changeFrequency: 'daily',
     priority: 0.6,
@@ -182,14 +199,14 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const sourcePages: MetadataRoute.Sitemap = [];
   for (const s of sources) {
     sourcePages.push({
-      url: `${SITE_URL}/sources/${s.name}`,
+      url: siteURL(`/sources/${s.name}`),
       lastModified: now,
       changeFrequency: 'weekly',
       priority: 0.5,
     });
     if (s.class === 'exchange' && s.subclass === 'cex') {
       sourcePages.push({
-        url: `${SITE_URL}/exchanges/${s.name}`,
+        url: siteURL(`/exchanges/${s.name}`),
         lastModified: now,
         changeFrequency: 'weekly',
         priority: 0.5,
@@ -197,7 +214,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     }
     if (s.class === 'exchange' && s.subclass === 'dex') {
       sourcePages.push({
-        url: `${SITE_URL}/dexes/${s.name}`,
+        url: siteURL(`/dexes/${s.name}`),
         lastModified: now,
         changeFrequency: 'weekly',
         priority: 0.5,
@@ -207,7 +224,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   // Lending pools — Blend pool detail pages. Small set today
   // (~9 pools), so list every one at priority 0.5.
   const lendingPages: MetadataRoute.Sitemap = lendingPools.map((id) => ({
-    url: `${SITE_URL}/lending/${id}`,
+    url: siteURL(`/lending/${id}`),
     lastModified: now,
     changeFrequency: 'weekly',
     priority: 0.5,

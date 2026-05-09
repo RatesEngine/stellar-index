@@ -11,6 +11,7 @@ export const metadata: Metadata = {
   title: 'Networks — connected blockchains',
   description:
     'Per-network macro pulse: total assets, active markets, 24h USD volume, source contributors, ingest tip. Stellar today; more networks as we connect them.',
+  alternates: { canonical: '/networks' },
 };
 
 export default function NetworkPage() {
