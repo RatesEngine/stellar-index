@@ -17,6 +17,15 @@ against.
 
 ### Fixed
 
+- **Explorer home page now emits `<link rel="canonical">`**.
+  Detail pages picked it up via #1094/#1095/#1097 but the root
+  `/` was left without one, so search engines were free to treat
+  `https://ratesengine.net/`, `https://ratesengine.net` (no
+  trailing slash), and `https://ratesengine.net/index.html` as
+  separate pages and split link equity between them. Default
+  `alternates.canonical: '/'` on the root layout fixes that;
+  detail pages still override per-route in their own
+  generateMetadata.
 - **`/v1/markets?include=sparkline` shares the 8s timeout budget
   with the markets-list query**. Pre-fix, the sparkline batch ran
   on `r.Context()` unbounded, so a 5s markets query + 5s sparkline
