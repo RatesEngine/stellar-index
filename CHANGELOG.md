@@ -15,6 +15,20 @@ against.
 
 ## [Unreleased]
 
+### Security
+
+- **Caddy `Caddyfile.api` now 404s `/metrics` from the public
+  `api.ratesengine.net` host**. The API binary serves /metrics on
+  :3000 alongside /v1/* (one ServeMux), and the catch-all
+  `reverse_proxy` was forwarding the public hit straight through
+  — verified live: `curl -s https://api.ratesengine.net/metrics`
+  returns 8KB+ of Go runtime stats, request counters, and per-
+  source ingest gauges that fingerprint the deployment for any
+  attacker. Local Prometheus scraping uses
+  `127.0.0.1:3000/metrics` per `prometheus.r1.yml` and is
+  unaffected; status.ratesengine.net is the right surface for
+  public transparency. Operator action: re-apply via
+  `ansible-playbook configs/ansible/playbooks/r1.yml --tags caddy`.
 ### Performance
 
 - **Cacheable read endpoints now emit `public, max-age=60,
