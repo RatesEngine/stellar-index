@@ -108,7 +108,14 @@ func (s *Server) handleIncidentsAtom(w http.ResponseWriter, r *http.Request) {
 			Title:   inc.Title,
 			Updated: updated.UTC().Format(time.RFC3339),
 			Link: []atomLink{
-				{Rel: "alternate", Href: baseURL + "/#" + inc.Slug, Type: "text/html"},
+				// Per-incident detail page. Was previously the
+				// homepage with an `#<slug>` anchor, but the home
+				// page doesn't render an `id` per incident, so feed
+				// readers landed on `https://status.ratesengine.net/`
+				// with no scroll target. Use the canonical
+				// /incident/{slug} route so subscribers land on the
+				// postmortem they clicked.
+				{Rel: "alternate", Href: baseURL + "/incident/" + inc.Slug, Type: "text/html"},
 			},
 			Summary: summaryFromMarkdown(inc.BodyMarkdown),
 		}
