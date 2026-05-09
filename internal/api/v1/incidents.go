@@ -28,9 +28,17 @@ type IncidentsList struct {
 // If we ever cross 100 entries, an `?since=` filter is the
 // natural next step.
 func (s *Server) handleIncidents(w http.ResponseWriter, r *http.Request) {
+	// Nil-to-empty: a fresh deployment with no embedded posts
+	// (s.incidents == nil) would otherwise marshal as `null` rather
+	// than `[]`, breaking the pkg/client SDK + explorer JS that
+	// .map() over the array.
+	rows := s.incidents
+	if rows == nil {
+		rows = []incidents.Incident{}
+	}
 	writeJSON(w, IncidentsList{
-		Incidents: s.incidents,
-		Count:     len(s.incidents),
+		Incidents: rows,
+		Count:     len(rows),
 	}, Flags{})
 }
 

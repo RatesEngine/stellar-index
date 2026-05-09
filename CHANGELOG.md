@@ -17,6 +17,12 @@ against.
 
 ### Fixed
 
+- **`/v1/incidents` no longer returns `incidents: null` when the
+  embedded corpus is empty**. A fresh deployment (or one where
+  `incidents.Load` errored at startup) left `s.incidents == nil`,
+  which marshalled as `"incidents":null` and broke the
+  pkg/client SDK + explorer JS that `.map()` over the array.
+  Caught while writing the handler's first regression tests.
 - **`/v1/markets?include=sparkline` shares the 8s timeout budget
   with the markets-list query**. Pre-fix, the sparkline batch ran
   on `r.Context()` unbounded, so a 5s markets query + 5s sparkline
