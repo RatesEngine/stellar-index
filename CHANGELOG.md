@@ -17,6 +17,17 @@ against.
 
 ### Added
 
+- **`pkg/client`: VWAP, TWAP, Pools SDK methods**. Third batch
+  closing the SDK gap (after #1122 NetworkStats+LendingPools and
+  #1123 oracle+currencies). Adds `Client.VWAP`, `Client.TWAP`
+  (single-bar aggregations sharing an `AggregateBarQuery` input
+  + `AggregateBar` wire type) and `Client.Pools` (DEX/AMM
+  liquidity pool list with cursor pagination + source / order_by
+  filters; new `Pool` wire type). 5 unit tests pin happy paths,
+  query-param wiring, base/quote-required validation, and the
+  `truncated`/`outliers_filtered` bar fields. Remaining gaps:
+  `/v1/chart`, `/v1/observations`, `/v1/changes`, `/v1/incidents`,
+  `/v1/sac-wrappers` — bundling in the next batch.
 - **`/v1/price` fiat-vs-fiat cross-rate fallback**: when both
   `asset` and `quote` are fiat (e.g. `asset=fiat:EUR&quote=fiat:USD`)
   and the Timescale + Redis VWAP paths both miss, the handler

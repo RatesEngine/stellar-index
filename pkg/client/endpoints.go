@@ -698,3 +698,110 @@ func (c *Client) Version(ctx context.Context) (*Envelope[Version], error) {
 	}
 	return &env, nil
 }
+
+// AggregateBarQuery selects the input for a single-bar VWAP or
+// TWAP call. Both Base and Quote are required. From + To default
+// server-side to a 1h trailing window when zero.
+type AggregateBarQuery struct {
+	Base  string
+	Quote string
+	From  time.Time
+	To    time.Time
+}
+
+// VWAP returns a single volume-weighted-average-price bar over the
+// [From, To] window for (Base, Quote). The same math
+// `/v1/price` returns for the closed-bucket but with a caller-
+// chosen window — useful for custom analytic windows that don't
+// align with the 1m / 5m / 1h pre-computed bars.
+func (c *Client) VWAP(ctx context.Context, q AggregateBarQuery) (*Envelope[AggregateBar], error) {
+	if q.Base == "" {
+		return nil, &APIError{Status: 400, Title: "base required"}
+	}
+	if q.Quote == "" {
+		return nil, &APIError{Status: 400, Title: "quote required"}
+	}
+	v := url.Values{}
+	v.Set("base", q.Base)
+	v.Set("quote", q.Quote)
+	if !q.From.IsZero() {
+		v.Set("from", q.From.UTC().Format(time.RFC3339))
+	}
+	if !q.To.IsZero() {
+		v.Set("to", q.To.UTC().Format(time.RFC3339))
+	}
+	var env Envelope[AggregateBar]
+	if err := c.doJSON(ctx, http.MethodGet, "/v1/vwap", v, nil, &env); err != nil {
+		return nil, err
+	}
+	return &env, nil
+}
+
+// TWAP returns a single time-weighted-average-price bar over the
+// [From, To] window for (Base, Quote). Distinct from VWAP — TWAP
+// weights each per-second observation equally regardless of
+// volume, so a single-trade hour and a thousand-trade hour
+// contribute equally. Useful for liquidity-blind reference prices.
+func (c *Client) TWAP(ctx context.Context, q AggregateBarQuery) (*Envelope[AggregateBar], error) {
+	if q.Base == "" {
+		return nil, &APIError{Status: 400, Title: "base required"}
+	}
+	if q.Quote == "" {
+		return nil, &APIError{Status: 400, Title: "quote required"}
+	}
+	v := url.Values{}
+	v.Set("base", q.Base)
+	v.Set("quote", q.Quote)
+	if !q.From.IsZero() {
+		v.Set("from", q.From.UTC().Format(time.RFC3339))
+	}
+	if !q.To.IsZero() {
+		v.Set("to", q.To.UTC().Format(time.RFC3339))
+	}
+	var env Envelope[AggregateBar]
+	if err := c.doJSON(ctx, http.MethodGet, "/v1/twap", v, nil, &env); err != nil {
+		return nil, err
+	}
+	return &env, nil
+}
+
+// PoolsOptions paginates through the DEX/AMM liquidity pool list.
+// Limit clamps to [1, 500] server-side (default 100); Cursor
+// paginates — pass the previous response's `Pagination.Next`.
+//
+// Source restricts to a single DEX (e.g. "soroswap", "phoenix").
+// Unknown / non-DEX source names return an empty list since the
+// /v1/pools surface is DEX-only by contract.
+//
+// OrderBy is "volume_24h_usd_desc" (default) or "pair".
+type PoolsOptions struct {
+	Cursor  string
+	Limit   int
+	Source  string
+	OrderBy string
+}
+
+// Pools lists DEX/AMM liquidity pools — one row per
+// (source, base, quote) where source is a DEX. CEX pairs go
+// through [Client.Markets]; "pool" is AMM/DEX terminology and
+// applying it to centralised venues would misname the data.
+func (c *Client) Pools(ctx context.Context, opts PoolsOptions) (*Envelope[[]Pool], error) {
+	v := url.Values{}
+	if opts.Cursor != "" {
+		v.Set("cursor", opts.Cursor)
+	}
+	if opts.Limit > 0 {
+		v.Set("limit", strconv.Itoa(opts.Limit))
+	}
+	if opts.Source != "" {
+		v.Set("source", opts.Source)
+	}
+	if opts.OrderBy != "" {
+		v.Set("order_by", opts.OrderBy)
+	}
+	var env Envelope[[]Pool]
+	if err := c.doJSON(ctx, http.MethodGet, "/v1/pools", v, nil, &env); err != nil {
+		return nil, err
+	}
+	return &env, nil
+}

@@ -1092,6 +1092,115 @@ func TestVersion_HappyPath(t *testing.T) {
 	}
 }
 
+// TestVWAP_HappyPath — pins the single-bar shape and the from/to
+// query-param wiring (RFC3339 UTC).
+func TestVWAP_HappyPath(t *testing.T) {
+	from := time.Date(2026, 5, 8, 22, 0, 0, 0, time.UTC)
+	to := time.Date(2026, 5, 8, 23, 0, 0, 0, time.UTC)
+	_, c := newTestServer(t, func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/v1/vwap" {
+			t.Errorf("path = %q", r.URL.Path)
+		}
+		if got := r.URL.Query().Get("from"); got != from.Format(time.RFC3339) {
+			t.Errorf("from = %q", got)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"data":{"from":"2026-05-08T22:00:00Z","to":"2026-05-08T23:00:00Z","price":"6.13","base_volume":"195000000000","quote_volume":"1196000000000","trade_count":1519,"outliers_filtered":0,"truncated":false},"as_of":"2026-05-08T23:00:00Z","flags":{}}`))
+	})
+	got, err := c.VWAP(context.Background(), client.AggregateBarQuery{
+		Base: "USDC-G…", Quote: "native", From: from, To: to,
+	})
+	if err != nil {
+		t.Fatalf("VWAP: %v", err)
+	}
+	if got.Data.Price != "6.13" || got.Data.TradeCount != 1519 {
+		t.Errorf("Data = %+v", got.Data)
+	}
+}
+
+// TestVWAP_RequiresBaseQuote — both base and quote are mandatory
+// client-side; empty values short-circuit before the network.
+func TestVWAP_RequiresBaseQuote(t *testing.T) {
+	c := client.New(client.Options{BaseURL: "http://nope.invalid"})
+	if _, err := c.VWAP(context.Background(), client.AggregateBarQuery{Quote: "native"}); err == nil {
+		t.Error("VWAP with empty Base returned no error")
+	}
+	if _, err := c.VWAP(context.Background(), client.AggregateBarQuery{Base: "native"}); err == nil {
+		t.Error("VWAP with empty Quote returned no error")
+	}
+}
+
+// TestTWAP_HappyPath — same shape as VWAP but on the
+// time-weighted endpoint.
+func TestTWAP_HappyPath(t *testing.T) {
+	_, c := newTestServer(t, func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/v1/twap" {
+			t.Errorf("path = %q", r.URL.Path)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"data":{"from":"2026-05-08T22:00:00Z","to":"2026-05-08T23:00:00Z","price":"6.10","base_volume":"0","quote_volume":"0","trade_count":1500,"outliers_filtered":2,"truncated":true},"as_of":"2026-05-08T23:00:00Z","flags":{}}`))
+	})
+	got, err := c.TWAP(context.Background(), client.AggregateBarQuery{Base: "X", Quote: "Y"})
+	if err != nil {
+		t.Fatalf("TWAP: %v", err)
+	}
+	if !got.Data.Truncated {
+		t.Errorf("Truncated = false, want true")
+	}
+	if got.Data.OutliersFiltered != 2 {
+		t.Errorf("OutliersFiltered = %d, want 2", got.Data.OutliersFiltered)
+	}
+}
+
+// TestPools_HappyPath — pins the per-source pool shape and the
+// optional source/order_by/limit wiring.
+func TestPools_HappyPath(t *testing.T) {
+	_, c := newTestServer(t, func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/v1/pools" {
+			t.Errorf("path = %q", r.URL.Path)
+		}
+		if got := r.URL.Query().Get("limit"); got != "5" {
+			t.Errorf("limit = %q, want 5", got)
+		}
+		if got := r.URL.Query().Get("source"); got != "soroswap" {
+			t.Errorf("source = %q, want soroswap", got)
+		}
+		if got := r.URL.Query().Get("order_by"); got != "pair" {
+			t.Errorf("order_by = %q, want pair", got)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"data":[{"source":"soroswap","base":"native","quote":"USDC-G…","last_trade_at":"2026-05-09T00:00:00Z","trade_count_24h":42,"volume_24h_usd":"12345.67","last_price":"6.10"}],"as_of":"2026-05-09T00:00:00Z","flags":{}}`))
+	})
+	got, err := c.Pools(context.Background(), client.PoolsOptions{
+		Limit: 5, Source: "soroswap", OrderBy: "pair",
+	})
+	if err != nil {
+		t.Fatalf("Pools: %v", err)
+	}
+	if len(got.Data) != 1 || got.Data[0].Source != "soroswap" {
+		t.Errorf("Data = %+v", got.Data)
+	}
+	if got.Data[0].Volume24hUSD == nil || *got.Data[0].Volume24hUSD != "12345.67" {
+		t.Errorf("Volume24hUSD = %v", got.Data[0].Volume24hUSD)
+	}
+}
+
+// TestPools_EmptyArray — fresh deployment with no DEX trades yet
+// returns an empty array, not 404.
+func TestPools_EmptyArray(t *testing.T) {
+	_, c := newTestServer(t, func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"data":[],"as_of":"2026-05-09T00:00:00Z","flags":{}}`))
+	})
+	got, err := c.Pools(context.Background(), client.PoolsOptions{})
+	if err != nil {
+		t.Fatalf("Pools: %v", err)
+	}
+	if len(got.Data) != 0 {
+		t.Errorf("len(Data) = %d, want 0", len(got.Data))
+	}
+}
+
 // TestCursors_HappyPath — diagnostics endpoint returns
 // non-paginated array; test pins the wire shape.
 func TestCursors_HappyPath(t *testing.T) {

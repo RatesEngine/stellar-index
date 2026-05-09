@@ -511,3 +511,37 @@ type Version struct {
 	Dirty     string `json:"dirty"`
 	GoVersion string `json:"go_version"`
 }
+
+// AggregateBar is the data shape returned by [Client.VWAP] and
+// [Client.TWAP] — a single aggregated bar over the requested
+// [From, To] window. All numeric fields are decimal strings per
+// ADR-0003. `Truncated` reports whether the server-side scan hit
+// its row cap before reaching the requested To boundary; when
+// true, `From..To` describes the actual aggregated window which
+// may be narrower than the request.
+type AggregateBar struct {
+	From             time.Time `json:"from"`
+	To               time.Time `json:"to"`
+	Price            string    `json:"price"`
+	BaseVolume       string    `json:"base_volume"`
+	QuoteVolume      string    `json:"quote_volume"`
+	TradeCount       int64     `json:"trade_count"`
+	OutliersFiltered int64     `json:"outliers_filtered"`
+	Truncated        bool      `json:"truncated"`
+}
+
+// Pool is one entry in [Client.Pools] — same shape as [Market]
+// but with a `source` dimension so the same physical pair traded
+// on two DEXes shows as two rows.
+type Pool struct {
+	Source        string    `json:"source"`
+	Base          string    `json:"base"`
+	Quote         string    `json:"quote"`
+	LastTradeAt   time.Time `json:"last_trade_at"`
+	TradeCount24h int64     `json:"trade_count_24h"`
+	Volume24hUSD  *string   `json:"volume_24h_usd,omitempty"`
+	// LastPrice is the most recent quote-per-base price observed
+	// for THIS pool; per-source so two venues trading the same
+	// pair surface independent prices.
+	LastPrice *string `json:"last_price,omitempty"`
+}
