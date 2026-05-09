@@ -1406,10 +1406,68 @@ func (s *Store) LatestAssetStats(ctx context.Context, assetID string) (CoinRow, 
 	return out, nil
 }
 
+// ValidateCoinsCursor returns an error if `cursor` is non-empty
+// but doesn't match the encoded shape the listing emits for the
+// active order. Empty cursor is always valid (resume from the
+// first page). Callers should reject invalid cursors at the
+// handler boundary with a 400 — falling through silently
+// truncates the keyset predicate to "(0, \"\")" / "(0, \"\")"
+// which matches no rows under the default order, returning an
+// empty page that looks like end-of-pagination.
+func ValidateCoinsCursor(cursor string, order CoinsOrder) error {
+	if cursor == "" {
+		return nil
+	}
+	idx := strings.IndexByte(cursor, ':')
+	if idx < 0 {
+		return fmt.Errorf("missing ':' separator")
+	}
+	prefix, suffix := cursor[:idx], cursor[idx+1:]
+	if suffix == "" {
+		return fmt.Errorf("missing asset_id suffix")
+	}
+	if order == CoinsOrderVolume24hUSDDesc {
+		// Volume prefix may be empty (last row had a null vol_usd)
+		// or a Postgres-style numeric: digits with at most one '.'.
+		if prefix != "" && !isNumericPrefix(prefix) {
+			return fmt.Errorf("non-numeric volume prefix")
+		}
+		return nil
+	}
+	if prefix == "" {
+		return fmt.Errorf("missing observation_count prefix")
+	}
+	for j := 0; j < len(prefix); j++ {
+		if prefix[j] < '0' || prefix[j] > '9' {
+			return fmt.Errorf("non-numeric observation_count prefix")
+		}
+	}
+	return nil
+}
+
+// isNumericPrefix returns true for a non-empty digit string with
+// at most one '.' separator. Negative volumes don't exist in our
+// data, so we don't accept a leading '-'.
+func isNumericPrefix(s string) bool {
+	dot := false
+	for j := 0; j < len(s); j++ {
+		c := s[j]
+		switch {
+		case c >= '0' && c <= '9':
+		case c == '.' && !dot:
+			dot = true
+		default:
+			return false
+		}
+	}
+	return true
+}
+
 // parseCoinCursor decodes a `<obs_count>:<asset_id>` cursor.
 // Empty cursor → (0, "") which means "no cursor". Malformed
-// cursors fall through to the same (the handler validates the
-// shape upstream; we tolerate junk by ignoring it).
+// cursors fall through to the same; the handler is responsible
+// for rejecting them via ValidateCoinsCursor before this is
+// reached.
 func parseCoinCursor(cursor string) (obsCount int64, assetID string) {
 	if cursor == "" {
 		return 0, ""

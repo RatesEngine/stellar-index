@@ -81,6 +81,23 @@ against.
   silent-empty-page anti-pattern fix shipped on /v1/markets — a
   typed source name looked identical on the wire to "this source
   has no trades for the pair", masking typos as data gaps.
+- **`/v1/coins?cursor=<garbage>` no longer silently returns an
+  empty page**. Previously, a malformed cursor parsed as
+  `(0, "")` and the SQL keyset predicate
+  `(observation_count, asset_id) < (0, "")` matched nothing —
+  callers saw a 200 with `{"coins":[],"limit":100}` that looked
+  identical to legitimate end-of-pagination, leaving stale
+  bookmarks indistinguishable from "you've reached the end".
+  Handler now calls `timescale.ValidateCoinsCursor` before
+  dispatch and returns `400 invalid-cursor` (problem+json,
+  `type=https://api.ratesengine.net/errors/invalid-cursor`)
+  with a hint to drop the parameter or pass back a fresh
+  `next_cursor`. Empty cursor (no parameter) is still valid.
+  Same approach used by `/v1/history` since #1083. Other
+  cursored endpoints (`/v1/markets`, `/v1/issuers`,
+  `/v1/sources`, `/v1/lending/pools`) currently *reset* to
+  page 1 on garbage rather than 400'ing — they have a milder
+  failure mode and follow in a separate PR.
 
 ### Added
 
