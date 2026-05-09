@@ -17,6 +17,16 @@ against.
 
 ### Added
 
+- **`pkg/client`: oracle + currencies SDK methods**. Second batch
+  closing the SDK coverage gap (first was NetworkStats +
+  LendingPools in #1122). Adds `OracleLatest`, `OracleStreams`,
+  `Currencies`, `Currency` with full wire types
+  (`OracleReading`, `CurrenciesPayload`, `CurrencyEntry`,
+  `CurrencyDetail`, `CurrencyHistoryPoint`). 8 unit tests pin
+  happy paths, query-param wiring, source-filter routing, and
+  client-side validation errors. Remaining gaps: `/v1/twap`,
+  `/v1/vwap`, `/v1/chart`, `/v1/observations`, `/v1/changes`,
+  `/v1/incidents`, `/v1/pools`, `/v1/sac-wrappers`.
 - **`/v1/price` fiat-vs-fiat cross-rate fallback**: when both
   `asset` and `quote` are fiat (e.g. `asset=fiat:EUR&quote=fiat:USD`)
   and the Timescale + Redis VWAP paths both miss, the handler

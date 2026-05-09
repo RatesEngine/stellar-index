@@ -511,3 +511,104 @@ type Version struct {
 	Dirty     string `json:"dirty"`
 	GoVersion string `json:"go_version"`
 }
+
+// OracleReading is one entry in the array returned by
+// [Client.OracleLatest] and [Client.OracleStreams]. `Price` is
+// rendered at the source-declared decimal scale; `PriceRaw`
+// preserves the underlying integer per ADR-0003.
+type OracleReading struct {
+	Source     string    `json:"source"`
+	ContractID string    `json:"contract_id,omitempty"`
+	Asset      string    `json:"asset"`
+	Quote      string    `json:"quote"`
+	Timestamp  time.Time `json:"ts"`
+	// Price is the human-facing decimal string at Decimals scale.
+	Price string `json:"price"`
+	// PriceRaw is the underlying integer at Decimals scale,
+	// preserved for cross-checks (ADR-0003 — never lose the raw).
+	PriceRaw string `json:"price_raw"`
+	// Decimals is the source-declared scale (14 for Reflector,
+	// 9 for Band, etc.).
+	Decimals uint8 `json:"decimals"`
+	// Confidence is the oracle's own confidence score (0–1) when
+	// published. Zero means "not reported", not "zero confidence."
+	Confidence float64 `json:"confidence,omitempty"`
+	// Observer is the on-chain account that published the update
+	// (typically a Reflector relayer). Empty when unknown.
+	Observer string `json:"observer,omitempty"`
+}
+
+// CurrenciesPayload is the wire envelope returned by
+// [Client.Currencies]. PublishedAt is the date the upstream
+// stamped on the rates set (currency-api updates daily);
+// FetchedAt is when the binary last pulled the snapshot.
+type CurrenciesPayload struct {
+	Currencies  []CurrencyEntry `json:"currencies"`
+	PublishedAt time.Time       `json:"published_at,omitempty"`
+	FetchedAt   time.Time       `json:"fetched_at,omitempty"`
+	Source      string          `json:"source"`
+}
+
+// CurrencyEntry is one row in [CurrenciesPayload]. Numeric fields
+// are float64 because the upstream forex feed delivers them as
+// JSON numbers — distinct from on-chain assets where ADR-0003
+// requires string-precision. Forex magnitudes don't risk
+// IEEE-754 precision loss the way satoshi-precision crypto
+// amounts do.
+type CurrencyEntry struct {
+	Ticker         string    `json:"ticker"`
+	Name           string    `json:"name"`
+	RateUSD        float64   `json:"rate_usd"`
+	Change24hPct   *float64  `json:"change_24h_pct,omitempty"`
+	Change7dPct    *float64  `json:"change_7d_pct,omitempty"`
+	History7dRates []float64 `json:"history_7d_rates,omitempty"`
+	UpdatedAt      time.Time `json:"updated_at,omitempty"`
+	// CirculatingSupply is the central-bank monetary aggregate
+	// (typically M2) in the currency's natural local unit.
+	CirculatingSupply *float64 `json:"circulating_supply,omitempty"`
+	// MarketCapUSD is CirculatingSupply / RateUSD — the
+	// USD-denominated value of the monetary aggregate.
+	MarketCapUSD      *float64 `json:"market_cap_usd,omitempty"`
+	CirculationAsOf   string   `json:"circulation_as_of,omitempty"`
+	CirculationSource string   `json:"circulation_source,omitempty"`
+}
+
+// CurrencyDetail is the data shape returned by [Client.Currency].
+// Adds CrossRates (rate of the queried ticker against every other
+// currency in the snapshot), History7d, and an optional long-form
+// `History` series when the request set `Range`.
+type CurrencyDetail struct {
+	Ticker     string             `json:"ticker"`
+	Name       string             `json:"name"`
+	RateUSD    float64            `json:"rate_usd"`
+	InverseUSD float64            `json:"inverse_usd"`
+	CrossRates map[string]float64 `json:"cross_rates"`
+	// Change24hPct / Change7dPct are inverse-USD percent moves
+	// (positive = ticker strengthened against USD), daily-grain.
+	Change24hPct *float64               `json:"change_24h_pct,omitempty"`
+	Change7dPct  *float64               `json:"change_7d_pct,omitempty"`
+	History7d    []CurrencyHistoryPoint `json:"history_7d,omitempty"`
+	// HistoryRange echoes the canonical form of the requested
+	// Range (e.g. "1y" for an alias like "365d"). Empty when only
+	// the in-memory History7d series populated.
+	HistoryRange string `json:"history_range,omitempty"`
+	// History is the long-form persisted daily series from
+	// fx_quotes, populated when the request supplied Range. A
+	// superset of History7d when present.
+	History           []CurrencyHistoryPoint `json:"history,omitempty"`
+	CirculatingSupply *float64               `json:"circulating_supply,omitempty"`
+	MarketCapUSD      *float64               `json:"market_cap_usd,omitempty"`
+	CirculationAsOf   string                 `json:"circulation_as_of,omitempty"`
+	CirculationSource string                 `json:"circulation_source,omitempty"`
+	PublishedAt       time.Time              `json:"published_at,omitempty"`
+	FetchedAt         time.Time              `json:"fetched_at,omitempty"`
+	Source            string                 `json:"source"`
+}
+
+// CurrencyHistoryPoint is one daily rate datum in the History7d
+// or History arrays of [CurrencyDetail].
+type CurrencyHistoryPoint struct {
+	Date       time.Time `json:"date"`
+	RateUSD    float64   `json:"rate_usd"`    // 1 USD = N units of ticker
+	InverseUSD float64   `json:"inverse_usd"` // 1 unit of ticker = $X
+}

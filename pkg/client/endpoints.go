@@ -698,3 +698,102 @@ func (c *Client) Version(ctx context.Context) (*Envelope[Version], error) {
 	}
 	return &env, nil
 }
+
+// OracleLatestQuery selects the asset / source filter for a
+// [Client.OracleLatest] call. Asset is required; Source is
+// optional — when empty, the API returns the most-recent
+// observation per source.
+type OracleLatestQuery struct {
+	Asset  string
+	Source string // optional; restrict to a single source
+}
+
+// OracleLatest returns the most-recent oracle observation per
+// source for the requested asset. Empty array when no oracle has
+// ever recorded the asset (NOT 404 — the array shape lets a
+// poller observe the transition zero → some without contract
+// changes).
+//
+// The handler expands user-facing asset identifiers into every
+// canonical form an oracle might key under (e.g. `native` also
+// matches Reflector's `crypto:XLM` row), so passing the friendly
+// form is fine.
+func (c *Client) OracleLatest(ctx context.Context, q OracleLatestQuery) (*Envelope[[]OracleReading], error) {
+	if q.Asset == "" {
+		return nil, &APIError{Status: 400, Title: "asset required"}
+	}
+	v := url.Values{}
+	v.Set("asset", q.Asset)
+	if q.Source != "" {
+		v.Set("source", q.Source)
+	}
+	var env Envelope[[]OracleReading]
+	if err := c.doJSON(ctx, http.MethodGet, "/v1/oracle/latest", v, nil, &env); err != nil {
+		return nil, err
+	}
+	return &env, nil
+}
+
+// OracleStreams returns one row per (source, asset, quote) triple
+// that any oracle has published in the trailing 7 days — the
+// "every active price stream from every oracle" listing the
+// explorer /oracles page reads. Filtered server-side to
+// `class=oracle` sources only (CoinGecko, ECB, etc. are excluded
+// even though they write into the same hypertable).
+//
+// No query params; the population is small enough (~100 rows
+// at peak) that a full dump is the simplest contract.
+func (c *Client) OracleStreams(ctx context.Context) (*Envelope[[]OracleReading], error) {
+	var env Envelope[[]OracleReading]
+	if err := c.doJSON(ctx, http.MethodGet, "/v1/oracle/streams", nil, nil, &env); err != nil {
+		return nil, err
+	}
+	return &env, nil
+}
+
+// Currencies returns the latest forex snapshot from the wired
+// CurrenciesReader. Source today is the Massive (Polygon.io) feed;
+// data refreshes hourly. Empty currencies list with non-empty
+// `Source` means the worker hasn't completed its first fetch yet
+// ("warming up") — the wire shape stays consistent so clients
+// don't need a separate empty-vs-error code path.
+func (c *Client) Currencies(ctx context.Context) (*Envelope[CurrenciesPayload], error) {
+	var env Envelope[CurrenciesPayload]
+	if err := c.doJSON(ctx, http.MethodGet, "/v1/currencies", nil, nil, &env); err != nil {
+		return nil, err
+	}
+	return &env, nil
+}
+
+// CurrencyQuery selects a single currency for a [Client.Currency]
+// call. Ticker is the ISO 4217 code (uppercase recommended; the
+// API normalises). Range is optional and selects the long-form
+// history window — one of "30d", "90d" / "3m", "180d" / "6m",
+// "1y" / "12m" / "365d", "5y", "10y", "all" / "max". Omitted
+// → only the in-memory `History7d` series is returned.
+type CurrencyQuery struct {
+	Ticker string
+	Range  string // optional; long-form history window
+}
+
+// Currency returns the per-ticker detail surface — rate,
+// inverse-rate, cross-rates against every other tracked currency,
+// 24h/7d change percentages, the bounded in-memory History7d, and
+// (when Range is set) the long-form historical series from the
+// fx_quotes hypertable. Returns 404 when the ticker isn't in the
+// snapshot (typo / not covered by the upstream feed).
+func (c *Client) Currency(ctx context.Context, q CurrencyQuery) (*Envelope[CurrencyDetail], error) {
+	if q.Ticker == "" {
+		return nil, &APIError{Status: 400, Title: "ticker required"}
+	}
+	v := url.Values{}
+	if q.Range != "" {
+		v.Set("range", q.Range)
+	}
+	var env Envelope[CurrencyDetail]
+	path := "/v1/currencies/" + url.PathEscape(q.Ticker)
+	if err := c.doJSON(ctx, http.MethodGet, path, v, nil, &env); err != nil {
+		return nil, err
+	}
+	return &env, nil
+}

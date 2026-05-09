@@ -1092,6 +1092,151 @@ func TestVersion_HappyPath(t *testing.T) {
 	}
 }
 
+// TestOracleLatest_HappyPath — pins the per-source array shape and
+// the Decimals field which clients use to verify the Price
+// rendering against PriceRaw (ADR-0003).
+func TestOracleLatest_HappyPath(t *testing.T) {
+	_, c := newTestServer(t, func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/v1/oracle/latest" {
+			t.Errorf("path = %q", r.URL.Path)
+		}
+		if r.URL.Query().Get("asset") != "native" {
+			t.Errorf("asset query = %q", r.URL.Query().Get("asset"))
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"data":[{"source":"band","contract_id":"CCQ…","asset":"crypto:XLM","quote":"fiat:USD","ts":"2026-05-08T23:00:00Z","price":"0.163200000","price_raw":"163200000","decimals":9,"observer":"GCL…"}],"as_of":"2026-05-08T23:00:00Z","flags":{}}`))
+	})
+	got, err := c.OracleLatest(context.Background(), client.OracleLatestQuery{Asset: "native"})
+	if err != nil {
+		t.Fatalf("OracleLatest: %v", err)
+	}
+	if len(got.Data) != 1 || got.Data[0].Source != "band" || got.Data[0].Decimals != 9 {
+		t.Errorf("Data = %+v", got.Data)
+	}
+}
+
+// TestOracleLatest_SourceFilter — confirms the optional ?source=
+// is wired correctly.
+func TestOracleLatest_SourceFilter(t *testing.T) {
+	_, c := newTestServer(t, func(w http.ResponseWriter, r *http.Request) {
+		if got := r.URL.Query().Get("source"); got != "reflector-dex" {
+			t.Errorf("source query = %q, want reflector-dex", got)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"data":[],"as_of":"2026-05-08T23:00:00Z","flags":{}}`))
+	})
+	_, err := c.OracleLatest(context.Background(), client.OracleLatestQuery{
+		Asset: "native", Source: "reflector-dex",
+	})
+	if err != nil {
+		t.Fatalf("OracleLatest: %v", err)
+	}
+}
+
+// TestOracleLatest_AssetRequired — empty asset is a client-side
+// 400 (skips the network entirely).
+func TestOracleLatest_AssetRequired(t *testing.T) {
+	c := client.New(client.Options{BaseURL: "http://nope.invalid"})
+	_, err := c.OracleLatest(context.Background(), client.OracleLatestQuery{})
+	if err == nil {
+		t.Fatal("OracleLatest with empty Asset returned no error")
+	}
+	var apiErr *client.APIError
+	if !errors.As(err, &apiErr) || apiErr.Status != 400 {
+		t.Errorf("err = %v, want APIError{Status:400}", err)
+	}
+}
+
+// TestOracleStreams_HappyPath — pins the no-param array shape.
+func TestOracleStreams_HappyPath(t *testing.T) {
+	_, c := newTestServer(t, func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/v1/oracle/streams" {
+			t.Errorf("path = %q", r.URL.Path)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"data":[{"source":"reflector-fx","asset":"fiat:EUR","quote":"fiat:USD","ts":"2026-05-08T23:00:00Z","price":"1.085","price_raw":"108500000000000","decimals":14}],"as_of":"2026-05-08T23:00:00Z","flags":{}}`))
+	})
+	got, err := c.OracleStreams(context.Background())
+	if err != nil {
+		t.Fatalf("OracleStreams: %v", err)
+	}
+	if len(got.Data) != 1 || got.Data[0].Source != "reflector-fx" {
+		t.Errorf("Data = %+v", got.Data)
+	}
+}
+
+// TestCurrencies_HappyPath — pins the wrapped envelope shape (the
+// payload has both `currencies` and `published_at` fields).
+func TestCurrencies_HappyPath(t *testing.T) {
+	_, c := newTestServer(t, func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/v1/currencies" {
+			t.Errorf("path = %q", r.URL.Path)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"data":{"currencies":[{"ticker":"AED","name":"United Arab Emirates Dirham","rate_usd":3.673,"updated_at":"2026-05-08T00:00:00Z"}],"published_at":"2026-05-08T00:00:00Z","fetched_at":"2026-05-08T22:00:00Z","source":"massive"},"as_of":"2026-05-08T23:00:00Z","flags":{}}`))
+	})
+	got, err := c.Currencies(context.Background())
+	if err != nil {
+		t.Fatalf("Currencies: %v", err)
+	}
+	if got.Data.Source != "massive" || len(got.Data.Currencies) != 1 {
+		t.Errorf("Data = %+v", got.Data)
+	}
+	if got.Data.Currencies[0].RateUSD != 3.673 {
+		t.Errorf("RateUSD = %v, want 3.673", got.Data.Currencies[0].RateUSD)
+	}
+}
+
+// TestCurrency_HappyPath — single-ticker detail with cross-rates
+// + history.
+func TestCurrency_HappyPath(t *testing.T) {
+	_, c := newTestServer(t, func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/v1/currencies/EUR" {
+			t.Errorf("path = %q", r.URL.Path)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"data":{"ticker":"EUR","name":"Euro","rate_usd":0.92,"inverse_usd":1.0869,"cross_rates":{"GBP":0.79,"JPY":141.5},"published_at":"2026-05-08T00:00:00Z","source":"massive"},"as_of":"2026-05-08T23:00:00Z","flags":{}}`))
+	})
+	got, err := c.Currency(context.Background(), client.CurrencyQuery{Ticker: "EUR"})
+	if err != nil {
+		t.Fatalf("Currency: %v", err)
+	}
+	if got.Data.Ticker != "EUR" {
+		t.Errorf("Ticker = %q, want EUR", got.Data.Ticker)
+	}
+	if got.Data.CrossRates["GBP"] != 0.79 {
+		t.Errorf("CrossRates[GBP] = %v, want 0.79", got.Data.CrossRates["GBP"])
+	}
+}
+
+// TestCurrency_RangeQueryParam — confirms the optional Range maps
+// to ?range= on the wire.
+func TestCurrency_RangeQueryParam(t *testing.T) {
+	_, c := newTestServer(t, func(w http.ResponseWriter, r *http.Request) {
+		if got := r.URL.Query().Get("range"); got != "1y" {
+			t.Errorf("range query = %q, want 1y", got)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"data":{"ticker":"EUR","name":"Euro","rate_usd":0.92,"inverse_usd":1.0869,"cross_rates":{},"history_range":"1y","source":"massive"},"as_of":"2026-05-08T23:00:00Z","flags":{}}`))
+	})
+	got, err := c.Currency(context.Background(), client.CurrencyQuery{Ticker: "EUR", Range: "1y"})
+	if err != nil {
+		t.Fatalf("Currency: %v", err)
+	}
+	if got.Data.HistoryRange != "1y" {
+		t.Errorf("HistoryRange = %q, want 1y", got.Data.HistoryRange)
+	}
+}
+
+// TestCurrency_TickerRequired — empty ticker is a client-side 400.
+func TestCurrency_TickerRequired(t *testing.T) {
+	c := client.New(client.Options{BaseURL: "http://nope.invalid"})
+	_, err := c.Currency(context.Background(), client.CurrencyQuery{})
+	if err == nil {
+		t.Fatal("Currency with empty Ticker returned no error")
+	}
+}
+
 // TestCursors_HappyPath — diagnostics endpoint returns
 // non-paginated array; test pins the wire shape.
 func TestCursors_HappyPath(t *testing.T) {
