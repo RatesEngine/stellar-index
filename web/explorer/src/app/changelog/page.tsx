@@ -7,6 +7,7 @@ export const metadata: Metadata = {
   title: 'Changelog',
   description:
     'Every release of Rates Engine — features added, bugs fixed, and the architectural changes behind them. Source: CHANGELOG.md.',
+  alternates: { canonical: '/changelog' },
 };
 
 export default function ChangelogPage() {

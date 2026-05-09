@@ -403,7 +403,12 @@ const listCoinsBaseSelect = `
 		      THEN to_char((direct.vwap / direct_1h.vwap - 1) * 100, 'FM999999990.00')
 		      WHEN vs_xlm.vwap IS NOT NULL AND vs_xlm_1h.vwap IS NOT NULL
 		           AND vs_xlm_1h.vwap > 0
-		      THEN to_char((vs_xlm.vwap / vs_xlm_1h.vwap - 1) * 100, 'FM999999990.00')
+		           AND (SELECT vwap FROM xlm_usd) IS NOT NULL
+		           AND (SELECT vwap FROM xlm_usd_1h) IS NOT NULL
+		           AND (SELECT vwap FROM xlm_usd_1h) > 0
+		      THEN to_char(((vs_xlm.vwap    * (SELECT vwap FROM xlm_usd))
+		                  / (vs_xlm_1h.vwap * (SELECT vwap FROM xlm_usd_1h))
+		                  - 1) * 100, 'FM999999990.00')
 		      ELSE NULL
 		    END                                   AS change_1h_pct,
 		    CASE
@@ -419,7 +424,12 @@ const listCoinsBaseSelect = `
 		      THEN to_char((direct.vwap / direct_24h.vwap - 1) * 100, 'FM999999990.00')
 		      WHEN vs_xlm.vwap IS NOT NULL AND vs_xlm_24h.vwap IS NOT NULL
 		           AND vs_xlm_24h.vwap > 0
-		      THEN to_char((vs_xlm.vwap / vs_xlm_24h.vwap - 1) * 100, 'FM999999990.00')
+		           AND (SELECT vwap FROM xlm_usd) IS NOT NULL
+		           AND (SELECT vwap FROM xlm_usd_24h) IS NOT NULL
+		           AND (SELECT vwap FROM xlm_usd_24h) > 0
+		      THEN to_char(((vs_xlm.vwap     * (SELECT vwap FROM xlm_usd))
+		                  / (vs_xlm_24h.vwap * (SELECT vwap FROM xlm_usd_24h))
+		                  - 1) * 100, 'FM999999990.00')
 		      ELSE NULL
 		    END                                   AS change_24h_pct,
 		    CASE
@@ -435,7 +445,12 @@ const listCoinsBaseSelect = `
 		      THEN to_char((direct.vwap / direct_7d.vwap - 1) * 100, 'FM999999990.00')
 		      WHEN vs_xlm.vwap IS NOT NULL AND vs_xlm_7d.vwap IS NOT NULL
 		           AND vs_xlm_7d.vwap > 0
-		      THEN to_char((vs_xlm.vwap / vs_xlm_7d.vwap - 1) * 100, 'FM999999990.00')
+		           AND (SELECT vwap FROM xlm_usd) IS NOT NULL
+		           AND (SELECT vwap FROM xlm_usd_7d) IS NOT NULL
+		           AND (SELECT vwap FROM xlm_usd_7d) > 0
+		      THEN to_char(((vs_xlm.vwap    * (SELECT vwap FROM xlm_usd))
+		                  / (vs_xlm_7d.vwap * (SELECT vwap FROM xlm_usd_7d))
+		                  - 1) * 100, 'FM999999990.00')
 		      ELSE NULL
 		    END                                   AS change_7d_pct
 		  FROM classic_assets ca
@@ -1142,9 +1157,12 @@ const getCoinBySlugSQL = `
 		      WHEN (SELECT vwap FROM asset_vs_xlm) IS NOT NULL
 		           AND (SELECT vwap FROM asset_vs_xlm_1h) IS NOT NULL
 		           AND (SELECT vwap FROM asset_vs_xlm_1h) > 0
-		      THEN to_char(((SELECT vwap FROM asset_vs_xlm)
-		                  / (SELECT vwap FROM asset_vs_xlm_1h) - 1) * 100,
-		                  'FM999999990.00')
+		           AND (SELECT vwap FROM xlm_usd) IS NOT NULL
+		           AND (SELECT vwap FROM xlm_usd_1h) IS NOT NULL
+		           AND (SELECT vwap FROM xlm_usd_1h) > 0
+		      THEN to_char((((SELECT vwap FROM asset_vs_xlm)    * (SELECT vwap FROM xlm_usd))
+		                  / ((SELECT vwap FROM asset_vs_xlm_1h) * (SELECT vwap FROM xlm_usd_1h))
+		                  - 1) * 100, 'FM999999990.00')
 		      ELSE NULL
 		    END                                   AS change_1h_pct,
 		    CASE
@@ -1164,9 +1182,12 @@ const getCoinBySlugSQL = `
 		      WHEN (SELECT vwap FROM asset_vs_xlm) IS NOT NULL
 		           AND (SELECT vwap FROM asset_vs_xlm_24h) IS NOT NULL
 		           AND (SELECT vwap FROM asset_vs_xlm_24h) > 0
-		      THEN to_char(((SELECT vwap FROM asset_vs_xlm)
-		                  / (SELECT vwap FROM asset_vs_xlm_24h) - 1) * 100,
-		                  'FM999999990.00')
+		           AND (SELECT vwap FROM xlm_usd) IS NOT NULL
+		           AND (SELECT vwap FROM xlm_usd_24h) IS NOT NULL
+		           AND (SELECT vwap FROM xlm_usd_24h) > 0
+		      THEN to_char((((SELECT vwap FROM asset_vs_xlm)     * (SELECT vwap FROM xlm_usd))
+		                  / ((SELECT vwap FROM asset_vs_xlm_24h) * (SELECT vwap FROM xlm_usd_24h))
+		                  - 1) * 100, 'FM999999990.00')
 		      ELSE NULL
 		    END                                   AS change_24h_pct,
 		    CASE
@@ -1186,9 +1207,12 @@ const getCoinBySlugSQL = `
 		      WHEN (SELECT vwap FROM asset_vs_xlm) IS NOT NULL
 		           AND (SELECT vwap FROM asset_vs_xlm_7d) IS NOT NULL
 		           AND (SELECT vwap FROM asset_vs_xlm_7d) > 0
-		      THEN to_char(((SELECT vwap FROM asset_vs_xlm)
-		                  / (SELECT vwap FROM asset_vs_xlm_7d) - 1) * 100,
-		                  'FM999999990.00')
+		           AND (SELECT vwap FROM xlm_usd) IS NOT NULL
+		           AND (SELECT vwap FROM xlm_usd_7d) IS NOT NULL
+		           AND (SELECT vwap FROM xlm_usd_7d) > 0
+		      THEN to_char((((SELECT vwap FROM asset_vs_xlm)    * (SELECT vwap FROM xlm_usd))
+		                  / ((SELECT vwap FROM asset_vs_xlm_7d) * (SELECT vwap FROM xlm_usd_7d))
+		                  - 1) * 100, 'FM999999990.00')
 		      ELSE NULL
 		    END                                   AS change_7d_pct
 		  FROM chosen
@@ -1406,10 +1430,68 @@ func (s *Store) LatestAssetStats(ctx context.Context, assetID string) (CoinRow, 
 	return out, nil
 }
 
+// ValidateCoinsCursor returns an error if `cursor` is non-empty
+// but doesn't match the encoded shape the listing emits for the
+// active order. Empty cursor is always valid (resume from the
+// first page). Callers should reject invalid cursors at the
+// handler boundary with a 400 — falling through silently
+// truncates the keyset predicate to "(0, \"\")" / "(0, \"\")"
+// which matches no rows under the default order, returning an
+// empty page that looks like end-of-pagination.
+func ValidateCoinsCursor(cursor string, order CoinsOrder) error {
+	if cursor == "" {
+		return nil
+	}
+	idx := strings.IndexByte(cursor, ':')
+	if idx < 0 {
+		return fmt.Errorf("missing ':' separator")
+	}
+	prefix, suffix := cursor[:idx], cursor[idx+1:]
+	if suffix == "" {
+		return fmt.Errorf("missing asset_id suffix")
+	}
+	if order == CoinsOrderVolume24hUSDDesc {
+		// Volume prefix may be empty (last row had a null vol_usd)
+		// or a Postgres-style numeric: digits with at most one '.'.
+		if prefix != "" && !isNumericPrefix(prefix) {
+			return fmt.Errorf("non-numeric volume prefix")
+		}
+		return nil
+	}
+	if prefix == "" {
+		return fmt.Errorf("missing observation_count prefix")
+	}
+	for j := 0; j < len(prefix); j++ {
+		if prefix[j] < '0' || prefix[j] > '9' {
+			return fmt.Errorf("non-numeric observation_count prefix")
+		}
+	}
+	return nil
+}
+
+// isNumericPrefix returns true for a non-empty digit string with
+// at most one '.' separator. Negative volumes don't exist in our
+// data, so we don't accept a leading '-'.
+func isNumericPrefix(s string) bool {
+	dot := false
+	for j := 0; j < len(s); j++ {
+		c := s[j]
+		switch {
+		case c >= '0' && c <= '9':
+		case c == '.' && !dot:
+			dot = true
+		default:
+			return false
+		}
+	}
+	return true
+}
+
 // parseCoinCursor decodes a `<obs_count>:<asset_id>` cursor.
 // Empty cursor → (0, "") which means "no cursor". Malformed
-// cursors fall through to the same (the handler validates the
-// shape upstream; we tolerate junk by ignoring it).
+// cursors fall through to the same; the handler is responsible
+// for rejecting them via ValidateCoinsCursor before this is
+// reached.
 func parseCoinCursor(cursor string) (obsCount int64, assetID string) {
 	if cursor == "" {
 		return 0, ""

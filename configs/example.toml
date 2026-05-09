@@ -148,8 +148,28 @@ cursor_store_scheme   = "postgres"
   # base    = "USD"
 
   # ClassAggregator — divergence signal only, excluded from VWAP.
+  #
+  # CoinGecko tightened the unauthenticated-tier throttling in late
+  # 2024 (anonymous calls now hit ~30/day per IP, then 429s). For a
+  # free signup that bumps the quota to ~30/min, register at
+  # https://www.coingecko.com/en/developers/dashboard and pass the
+  # demo key via env (preferred over toml so secrets don't land in
+  # the file):
+  #
+  #   COINGECKO_DEMO_API_KEY=cg-demo-... systemctl restart ratesengine-indexer
+  #
+  # For a Pro key, set COINGECKO_API_KEY instead — Pro wins when
+  # both are configured. Anonymous polling still works (the poller
+  # backs off on 429 instead of hammering the venue) but produces
+  # no data; the divergence signal stays empty until a key is
+  # provisioned.
+  #
+  # poll_interval = "60s" overrides the connector's built-in default
+  # cadence. CoinGecko's free tier doesn't need a higher cadence;
+  # the indexer's external poller registers the source class and
+  # the divergence service consults it at the aggregator's tick.
   [external.coingecko]
-  enabled = false   # /simple/price — free, no auth, ~10–30 req/min
+  enabled = false   # /simple/price — needs COINGECKO_DEMO_API_KEY env (post-2024)
 
   [external.coinmarketcap]
   enabled = false
@@ -202,6 +222,32 @@ auth_mode                = "none"            # none | apikey | sep10
 anon_rate_limit_per_min  = 60
 key_rate_limit_per_min   = 1000
 cdn_enabled              = true
+# allowed_origins — CORS allow-list for browser clients.
+#
+# Recommended: leave at the default ["*"] for any deployment that
+# offers Rates Engine as a public Stellar pricing API. The
+# product's read tier is no-auth, used from customer wallets,
+# embed widgets, dashboards, and SDK consumers running in
+# arbitrary browsers — narrowing this to your own hostname
+# silently breaks every cross-origin caller (the browser blocks
+# the response without an explicit `Access-Control-Allow-Origin`
+# match).
+#
+# When narrowing makes sense: deployments that ALSO use session-
+# cookie auth on the same hostname (the magic-link / dashboard
+# flow at /v1/auth/login + /v1/dashboard/*) — wildcard CORS plus
+# session cookies is a CSRF foothold. The credentialed surface
+# is path-narrow; the public read surface (/v1/price, /v1/coins,
+# /v1/markets, /v1/observations, /v1/oracle/*, etc.) does not
+# accept session cookies and is safe under wildcard CORS.
+#
+# If you DO narrow this, also expect:
+#   - The /embed/* widget surface to stop functioning in customer
+#     iframes (their JS can't fetch live data from this API).
+#   - Third-party SDK consumers calling from browser JS to fail
+#     with CORS errors.
+#   - The Postman + curl examples to keep working (they bypass
+#     browser-enforced CORS).
 allowed_origins          = ["*"]
 trusted_proxy_cidrs      = []                  # empty = ignore X-Forwarded-For; set to immediate proxy CIDRs (for example ["10.0.0.0/8"])
 

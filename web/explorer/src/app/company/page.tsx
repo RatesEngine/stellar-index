@@ -6,6 +6,7 @@ export const metadata: Metadata = {
   title: 'Company — who we are',
   description:
     'Rates Engine — vendor-neutral pricing infrastructure for the Stellar network. Built against the SDF + Freighter RFPs and the awarded CTX proposal. Apache-2.0, pre-v1.',
+  alternates: { canonical: '/company' },
 };
 
 export default function CompanyPage() {

@@ -61,6 +61,42 @@ groups:
             error_dominant runbook if every tick is genuinely
             failing.
 
+      # Same blind spot as supply-snapshot's `_stale`: when no
+      # `outcome="ok"` increment has ever happened (aggregator
+      # running but `[supply] aggregator_refresh_enabled = false`,
+      # or the orchestrator hasn't started any supply tick yet),
+      # the metric series doesn't appear in /metrics — Prometheus
+      # counters with no increments are absent, not zero — so
+      # `_stalled` evaluates to "no data" and never fires.
+      #
+      # 36 h matches the cushion used in supply-snapshot's
+      # `_never_initialized`: a brand-new aggregator deployment has
+      # plenty of time to fire its first tick; a deployment that's
+      # been up for over a day without one is genuinely uninitialized.
+      - alert: ratesengine_aggregator_supply_refresh_never_initialized
+        expr: |
+          absent_over_time(ratesengine_aggregator_supply_refresh_total{outcome="ok"}[36h]) == 1
+        for: 5m
+        labels:
+          severity: ticket
+          team: ratesengine
+          component: supply
+          runbook_url: https://github.com/RatesEngine/rates-engine/blob/main/docs/operations/runbooks/supply-snapshot-never-initialized.md
+        annotations:
+          summary: "supply refresher (goroutine path) has never recorded a successful tick"
+          description: |
+            ratesengine_aggregator_supply_refresh_total{outcome="ok"}
+            has been absent for ≥ 36 h. Either
+            `[supply] aggregator_refresh_enabled = false` (the
+            default — operator hasn't opted into the goroutine
+            path), or the orchestrator hasn't fired its first tick.
+            Distinct from `_stalled` (which requires the metric to
+            have existed at some point); together they cover both
+            "was working, stopped" and "never worked." Routes to
+            the same runbook as the timer-path equivalent
+            (`supply-snapshot-never-initialized`) since the fix is
+            symmetric: pick Path A or Path B.
+
       - alert: ratesengine_aggregator_supply_refresh_error_dominant
         expr: |
           (

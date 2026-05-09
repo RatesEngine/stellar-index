@@ -552,6 +552,24 @@ func (r apiMarketsAdapter) SourceMarkets(ctx context.Context, source, cursor str
 	return out, next, nil
 }
 
+func (r apiMarketsAdapter) AssetMarkets(ctx context.Context, asset, cursor string, limit int, order timescale.MarketsOrder) ([]v1.Market, string, error) {
+	rows, next, err := r.s.AssetMarkets(ctx, asset, cursor, limit, order)
+	if err != nil {
+		return nil, "", err
+	}
+	out := make([]v1.Market, len(rows))
+	for i, m := range rows {
+		out[i] = v1.Market{
+			Base:          m.Pair.Base.String(),
+			Quote:         m.Pair.Quote.String(),
+			LastTradeAt:   m.LastTradeAt,
+			TradeCount24h: m.TradeCount24h,
+			Volume24hUSD:  m.Volume24hUSD,
+		}
+	}
+	return out, next, nil
+}
+
 func (r apiMarketsAdapter) GetPairsVolumeHistory24hBatch(ctx context.Context, pairs [][2]string) (map[string][]timescale.PairVolumePoint, error) {
 	return r.s.GetPairsVolumeHistory24hBatch(ctx, pairs)
 }

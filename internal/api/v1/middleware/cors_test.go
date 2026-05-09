@@ -150,6 +150,66 @@ func TestCORS_NoOriginNoHeaders(t *testing.T) {
 	}
 }
 
+// TestCORS_VaryOriginAlwaysSetForExactMatchMode — the middleware
+// MUST emit `Vary: Origin` on every response in exact-match mode
+// regardless of whether the current request's Origin matched the
+// allow list. Without this, a cacheable response served to a
+// no-Origin (curl / server-side) request would be cached at the
+// CDN without origin discrimination — a later browser request
+// whose Origin WOULD have been allowed would receive that cached
+// "no CORS" response, breaking client-side fetch().
+func TestCORS_VaryOriginAlwaysSetForExactMatchMode(t *testing.T) {
+	h := middleware.CORS(middleware.CORSOptions{
+		AllowedOrigins: []string{"https://ratesengine.net"},
+	})(corsOK())
+
+	t.Run("no Origin header still sets Vary", func(t *testing.T) {
+		r := httptest.NewRequest(http.MethodGet, "/v1/coins", nil)
+		w := httptest.NewRecorder()
+		h.ServeHTTP(w, r)
+		if got := w.Header().Get("Vary"); got != "Origin" {
+			t.Errorf("Vary on no-Origin request = %q, want Origin (CDN cache-key partition)", got)
+		}
+	})
+	t.Run("disallowed Origin still sets Vary", func(t *testing.T) {
+		r := httptest.NewRequest(http.MethodGet, "/v1/coins", nil)
+		r.Header.Set("Origin", "https://attacker.example")
+		w := httptest.NewRecorder()
+		h.ServeHTTP(w, r)
+		if got := w.Header().Get("Vary"); got != "Origin" {
+			t.Errorf("Vary on disallowed-Origin = %q, want Origin", got)
+		}
+	})
+	t.Run("allowed Origin still sets Vary", func(t *testing.T) {
+		r := httptest.NewRequest(http.MethodGet, "/v1/coins", nil)
+		r.Header.Set("Origin", "https://ratesengine.net")
+		w := httptest.NewRecorder()
+		h.ServeHTTP(w, r)
+		if got := w.Header().Get("Vary"); got != "Origin" {
+			t.Errorf("Vary on allowed-Origin = %q, want Origin", got)
+		}
+	})
+}
+
+// TestCORS_VaryNotSetForWildcardMode — when the operator opted
+// into wildcard mode (`Allow-Origin: *`), the response is
+// origin-independent so Vary: Origin would just defeat caching
+// without any benefit.
+func TestCORS_VaryNotSetForWildcardMode(t *testing.T) {
+	h := middleware.CORS(middleware.CORSOptions{
+		AllowedOrigins: []string{"*"},
+	})(corsOK())
+
+	r := httptest.NewRequest(http.MethodGet, "/v1/coins", nil)
+	r.Header.Set("Origin", "https://example.com")
+	w := httptest.NewRecorder()
+	h.ServeHTTP(w, r)
+
+	if got := w.Header().Get("Vary"); got != "" {
+		t.Errorf("Vary in wildcard mode = %q, want empty (response is origin-independent)", got)
+	}
+}
+
 // TestCORS_DefaultAllowedMethodsIncludePOST pins the v1-surface-
 // matching default. Pre-2026-05-02 the default was {GET, HEAD,
 // OPTIONS}; cross-origin POST to /v1/account/keys etc. would fail

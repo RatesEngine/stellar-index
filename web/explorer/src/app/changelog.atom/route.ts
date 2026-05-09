@@ -19,7 +19,16 @@ const FEED_TITLE = 'Rates Engine — release notes';
 const FEED_AUTHOR = 'Rates Engine';
 
 export function GET() {
-  const releases = loadReleases();
+  // Drop the Unreleased section from the syndication feed —
+  // every explorer redeploy would otherwise surface it as a "new
+  // release" entry to Feedly / Slack RSS subscribers. The
+  // rendered /changelog page intentionally keeps Unreleased
+  // visible (visitors want a forward look); the atom feed has the
+  // opposite contract — only dated, immutable releases belong
+  // here.
+  const releases = loadReleases().filter(
+    (r) => r.version.toLowerCase() !== 'unreleased',
+  );
   const updated = pickFeedUpdated(releases);
   const entries = releases.map(renderEntry).join('\n');
 
