@@ -168,6 +168,17 @@ against.
 
 ### Fixed
 
+- **`/v1/oracle/lastprice` and `/v1/oracle/x_last_price` get the
+  same X/fiat:USD → X/<peg> stablecoin-fiat proxy fallback** as
+  `/v1/price` (#1217). Pre-fix, the SEP-40 passthrough surface
+  inherited the same out-of-the-box 404 mode: an on-chain
+  integrator drop-in-replacing `lastprice(native)` against XLM
+  got 404 even though `/v1/coins/native` showed $0.16 cleanly.
+  Same intent as #1217 — keep the SEP-40 surface and the
+  closed-bucket surface consistent in coverage so an integrator
+  switching between them sees the same set of "available" pairs.
+  Two new tests pin the lastprice + x_last_price branches.
+  (PR #1220)
 - **`/v1/price/tip?asset=X&quote=fiat:USD` gets the same
   stablecoin-fiat proxy fallback as `/v1/price`** (#1217). Tip
   was 404'ing on the same shape — `tipWindowVWAP →
