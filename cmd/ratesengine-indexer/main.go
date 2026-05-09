@@ -480,6 +480,24 @@ func startExternalConnectors( //nolint:gocognit,gocyclo,funlen // dispatch-heavy
 		if cfg.CoinGecko.PollInterval > 0 {
 			p.Interval = cfg.CoinGecko.PollInterval
 		}
+		// CoinGecko's "public no-auth" tier was tightened in late 2024
+		// — unauthenticated requests get throttled aggressively or
+		// rejected outright (observed live on r1 2026-05-09 as one
+		// 429 per minute). Read the demo (free signup) and pro keys
+		// from env so operators can fix without a code-side toml
+		// schema change. Pro key wins when both are set.
+		if k := strings.TrimSpace(os.Getenv("COINGECKO_API_KEY")); k != "" {
+			p.APIKey = k
+		}
+		if k := strings.TrimSpace(os.Getenv("COINGECKO_DEMO_API_KEY")); k != "" {
+			p.DemoAPIKey = k
+		}
+		authMode := "anonymous"
+		if p.APIKey != "" {
+			authMode = "pro"
+		} else if p.DemoAPIKey != "" {
+			authMode = "demo"
+		}
 		pollers = append(pollers, external.PollerSpec{
 			Poller: p,
 			Pairs:  aggregatorPairs,
@@ -487,7 +505,8 @@ func startExternalConnectors( //nolint:gocognit,gocyclo,funlen // dispatch-heavy
 		logger.Info("external poller enabled",
 			"source", externalcoingecko.SourceName,
 			"pairs", len(aggregatorPairs),
-			"poll_interval", p.PollInterval())
+			"poll_interval", p.PollInterval(),
+			"auth_mode", authMode)
 		enabled = append(enabled, externalcoingecko.SourceName)
 	}
 

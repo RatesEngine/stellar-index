@@ -76,6 +76,7 @@ export function IssuersTable() {
         <div className="flex flex-wrap items-center gap-3 text-xs">
           <input
             type="search"
+            aria-label="Filter issuers by name, domain, or G-strkey"
             placeholder="Filter by name, domain, or G-strkey…"
             value={filter}
             onChange={(e) => setFilter(e.target.value)}

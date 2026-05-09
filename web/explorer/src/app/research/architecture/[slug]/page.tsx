@@ -8,6 +8,7 @@ import {
   loadArchitectureDocs,
 } from '@/lib/architecture';
 import { Markdown } from '@/lib/markdown';
+import { SITE_OG_IMAGES, SITE_TWITTER_IMAGES } from '@/lib/seo';
 
 // Each curated architecture doc rendered as a static page.
 // Reuses the same loader/renderer pattern as ADRs and incident
@@ -35,8 +36,8 @@ export async function generateMetadata({
     title,
     description: doc.description,
     alternates: { canonical },
-    openGraph: { title, description: doc.description, url: canonical, type: 'article' },
-    twitter: { card: 'summary_large_image', title, description: doc.description },
+    openGraph: { title, description: doc.description, url: canonical, type: 'article', images: SITE_OG_IMAGES },
+    twitter: { card: 'summary_large_image', title, description: doc.description, images: SITE_TWITTER_IMAGES },
   };
 }
 

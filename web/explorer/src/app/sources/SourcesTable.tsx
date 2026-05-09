@@ -97,6 +97,7 @@ export function SourcesTable() {
       <div className="flex flex-wrap items-center gap-3 text-xs">
         <input
           type="search"
+          aria-label="Filter sources by name, class, or subclass"
           placeholder="Filter by source name, class, or subclass…"
           value={filter}
           onChange={(e) => setFilter(e.target.value)}

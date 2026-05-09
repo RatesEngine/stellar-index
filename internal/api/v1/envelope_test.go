@@ -6,6 +6,7 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -197,6 +198,63 @@ func TestWriteProblem_RFC9457Shape(t *testing.T) {
 	}
 	if captured.RequestID != "fixed-id-1234" {
 		t.Errorf("RequestID = %q, want fixed-id-1234", captured.RequestID)
+	}
+}
+
+// TestWriteProblem_401SetsWWWAuthenticate pins the RFC 7235 §3.1
+// guarantee that every 401 advertises a Bearer challenge so
+// programmatic clients can discover the accepted auth scheme.
+// The header is also tested at the auth-middleware layer; this
+// covers the handler-level writeProblem path used by /v1/account/*
+// for not-yet-authenticated requests.
+func TestWriteProblem_401SetsWWWAuthenticate(t *testing.T) {
+	inner := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		writeProblem(w, r,
+			"https://api.ratesengine.net/errors/unauthorized",
+			"Authentication required",
+			http.StatusUnauthorized,
+			"sign in",
+		)
+	})
+	h := middleware.RequestID(inner)
+	req := httptest.NewRequest(http.MethodGet, "/v1/account/me", nil)
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusUnauthorized {
+		t.Fatalf("status = %d, want 401", rec.Code)
+	}
+	got := rec.Header().Get("WWW-Authenticate")
+	if got == "" {
+		t.Fatal("WWW-Authenticate header missing on 401")
+	}
+	if !strings.Contains(got, "Bearer") {
+		t.Errorf("WWW-Authenticate = %q, want it to advertise Bearer scheme", got)
+	}
+}
+
+// TestWriteProblem_NonAuthDoesNotSetWWWAuthenticate guards the
+// inverse: a 400 / 404 / 500 / 503 problem must NOT emit
+// WWW-Authenticate (RFC 7235's MUST applies to 401 only). Pre-fix
+// the helper had no condition; this pin keeps the conditional in
+// place.
+func TestWriteProblem_NonAuthDoesNotSetWWWAuthenticate(t *testing.T) {
+	for _, status := range []int{
+		http.StatusBadRequest,
+		http.StatusNotFound,
+		http.StatusInternalServerError,
+		http.StatusServiceUnavailable,
+	} {
+		inner := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			writeProblem(w, r, "https://api.ratesengine.net/errors/x", "x", status, "x")
+		})
+		h := middleware.RequestID(inner)
+		req := httptest.NewRequest(http.MethodGet, "/v1/x", nil)
+		rec := httptest.NewRecorder()
+		h.ServeHTTP(rec, req)
+		if got := rec.Header().Get("WWW-Authenticate"); got != "" {
+			t.Errorf("status %d: WWW-Authenticate = %q, want empty", status, got)
+		}
 	}
 }
 

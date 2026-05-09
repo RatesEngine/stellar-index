@@ -592,6 +592,7 @@ function CrossRatesTable({ detail }: { detail: CurrencyDetail }) {
         <div className="mb-3 px-4">
           <input
             type="search"
+            aria-label="Filter cross-rates by ticker"
             value={filter}
             onChange={(e) => setFilter(e.target.value)}
             placeholder="Filter by ticker (EUR, JPY, …)"
