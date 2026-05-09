@@ -272,6 +272,22 @@ func (s *Server) handleMarkets(w http.ResponseWriter, r *http.Request) { //nolin
 	}
 
 	source := r.URL.Query().Get("source")
+	if source != "" {
+		// Validate against the in-memory registry so an unknown
+		// source name returns 400 instead of an empty page (the
+		// silent-empty-page anti-pattern: a typo in `?source=`
+		// looks identical on the wire to "this source has no
+		// trades", which sends callers chasing nonexistent data).
+		// Mirrors the same guard pattern on /v1/coins (PR #1134),
+		// /v1/markets cursor (#1135), and /v1/pools.
+		if _, ok := external.Registry[source]; !ok {
+			writeProblem(w, r,
+				"https://api.ratesengine.net/errors/unknown-source",
+				"Unknown source", http.StatusBadRequest,
+				"source must be a registered source name (see /v1/sources for the canonical list); got "+source)
+			return
+		}
+	}
 
 	reader := s.markets
 	if reader == nil {

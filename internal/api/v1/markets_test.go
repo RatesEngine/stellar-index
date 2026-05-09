@@ -161,3 +161,39 @@ func TestMarkets_ReaderError500(t *testing.T) {
 		t.Errorf("status = %d, want 500", resp.StatusCode)
 	}
 }
+
+// TestMarkets_UnknownSource400 — `?source=` with a name that isn't
+// in the in-memory `external.Registry` returns 400 instead of an
+// empty page. The silent-empty-page anti-pattern (a typo looking
+// identical to "this source has no trades") sends callers chasing
+// nonexistent data; failing fast is the contract on every other
+// listing handler in this package.
+func TestMarkets_UnknownSource400(t *testing.T) {
+	srv := v1.New(v1.Options{Markets: &stubMarketsReader{}})
+	ts := httpTestServer(t, srv)
+
+	resp := mustGet(t, ts.URL+"/v1/markets?source=fake-source")
+	if resp.StatusCode != http.StatusBadRequest {
+		t.Fatalf("status = %d, want 400", resp.StatusCode)
+	}
+	var p v1.Problem
+	mustDecode(t, resp, &p)
+	if p.Type != "https://api.ratesengine.net/errors/unknown-source" {
+		t.Errorf("Type = %q", p.Type)
+	}
+}
+
+// TestMarkets_KnownSource200 — guards the inverse: a registered
+// source name passes the validation gate. We can't depend on a
+// specific name surviving registry refactors, so iterate any-one
+// from the known set ("binance" is registered for the lifetime of
+// this codebase per docs/discovery/external-refs/cex-feeds.md).
+func TestMarkets_KnownSource200(t *testing.T) {
+	srv := v1.New(v1.Options{Markets: &stubMarketsReader{}})
+	ts := httpTestServer(t, srv)
+
+	resp := mustGet(t, ts.URL+"/v1/markets?source=binance")
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d, want 200", resp.StatusCode)
+	}
+}

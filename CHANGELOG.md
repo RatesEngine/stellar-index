@@ -55,6 +55,12 @@ against.
   added at the helper level so the conditional can't drift.
   Pinned by 2 sub-tests covering the 401 happy path and the
   inverse (4xx/5xx that aren't 401 must NOT set the header).
+- **`/v1/markets?source=<unknown>`** now returns 400
+  `unknown-source` instead of an empty 200. The silent-empty-page
+  anti-pattern (a typed source name looking identical on the wire
+  to "this source has no trades") sent callers chasing nonexistent
+  data. Validation guard mirrors the same fail-fast pattern shipped
+  on /v1/coins (#1134), /v1/markets cursor (#1135), and /v1/pools.
 
 ### Added
 
