@@ -144,6 +144,21 @@ against.
   happy path and the empty-list path; ResolvedAt round-trips as
   `*time.Time` so callers distinguish "still open" from "resolved
   at zero time."
+- **API: trailing-slash paths 308-redirect to canonical no-slash
+  form**. `GET /v1/coins/native/` previously 404'd with
+  `errors/not-found` because every v1 route is registered without
+  a trailing slash and Go's `net/http` `ServeMux` treats the
+  slashed variant as a different path. New
+  `middleware.TrailingSlashRedirect` 308's any non-root request
+  whose path ends with `/` to the same path with the slash
+  stripped (preserving query string and method/body). Closes the
+  most common client-side papercut — axios with
+  `baseURL: '.../v1/'` joins awkwardly, OpenAPI generators emit
+  either form depending on codegen flags, mistyped curls. Pinned
+  by 5 sub-tests covering the happy path, query-string
+  preservation, root exemption, and 308-not-301
+  method-preservation across POST/DELETE/PUT/PATCH.
+
 - **`/v1/price` fiat-vs-fiat cross-rate fallback**: when both
   `asset` and `quote` are fiat (e.g. `asset=fiat:EUR&quote=fiat:USD`)
   and the Timescale + Redis VWAP paths both miss, the handler
