@@ -357,7 +357,15 @@ func (s *Server) handleMarkets(w http.ResponseWriter, r *http.Request) { //nolin
 		for i, m := range rows {
 			pairs[i] = [2]string{m.Base, m.Quote}
 		}
-		if hist, hErr := reader.GetPairsVolumeHistory24hBatch(r.Context(), pairs); hErr != nil {
+		// Use the same 8s budget as the markets-list query — without
+		// this, the sparkline batch ran on r.Context() unbounded and
+		// could push total request latency to 10-15s after the markets
+		// query had already burned 5-8s. Sharing mCtx caps the total
+		// request at 8s; if markets ate most of it, sparkline gets
+		// what's left and degrades gracefully (best-effort path: a
+		// failure here logs at WARN and the response ships without
+		// sparkline data).
+		if hist, hErr := reader.GetPairsVolumeHistory24hBatch(mCtx, pairs); hErr != nil {
 			s.logger.Warn("markets sparkline batch failed", "err", hErr)
 		} else {
 			for i, m := range rows {
