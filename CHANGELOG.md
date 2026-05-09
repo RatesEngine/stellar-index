@@ -15,6 +15,17 @@ against.
 
 ## [Unreleased]
 
+### Fixed
+
+- **`/v1/issuers/{g_strkey}` accepts case-insensitive G-strkeys**.
+  Pre-fix lowercase variants 404'd; chat clients that auto-
+  lowercase URLs (Slack, Discord, some search results) and
+  copy-paste flows would dead-end. Stellar G-strkeys are
+  uppercase base32 per SEP-23 and the underlying ed25519 key is
+  the same regardless of case, so the handler now uppercases
+  the path segment at input. Companion to PR #1153
+  (case-insensitive `/v1/coins/{slug}`).
+
 ### Added
 
 - **`/v1/price` fiat-vs-fiat cross-rate fallback**: when both

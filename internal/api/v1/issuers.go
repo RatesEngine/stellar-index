@@ -7,6 +7,7 @@ import (
 	"errors"
 	"net/http"
 	"strconv"
+	"strings"
 
 	"github.com/RatesEngine/rates-engine/internal/storage/timescale"
 )
@@ -145,6 +146,14 @@ func (s *Server) handleIssuer(w http.ResponseWriter, r *http.Request) {
 			"g_strkey path segment is required")
 		return
 	}
+	// Stellar G-strkeys are uppercase base32 by SEP-23 convention;
+	// the storage layer keys off the canonical uppercase form.
+	// URL clients (chat clients, search tools, manual typing)
+	// regularly lowercase, which used to 404 outright. Normalise
+	// at input — base32 alphabet is case-insensitive in Stellar
+	// SDK validation, so the underlying ed25519 public key is the
+	// same. No risk of merging two distinct accounts.
+	gStrkey = strings.ToUpper(gStrkey)
 
 	row, err := s.issuers.GetIssuer(r.Context(), gStrkey)
 	if errors.Is(err, sql.ErrNoRows) {
