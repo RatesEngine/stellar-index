@@ -316,3 +316,57 @@ func ExampleClient_Status() {
 
 	// Output: ok — p95=3.85ms, 13/17 sources active
 }
+
+// ExampleClient_NetworkStats demonstrates fetching the home-page
+// aggregate snapshot — total 24h USD volume, active markets count,
+// indexed-assets count, latest live ledger, and source-count
+// summary. One round trip replaces fan-out across /v1/coins,
+// /v1/markets, /v1/sources, /v1/diagnostics/cursors.
+//
+// `Volume24hUSD` is `*string` per ADR-0003 (raw cents can exceed
+// int64). nil means the rolling 24h window had no USD-equivalent
+// trades — render `—` rather than fabricating a zero.
+//
+// Note: `total_sources` here counts entries in the static binary
+// registry. /v1/status's `freshness.total_sources` counts sources
+// the operator has ENABLED at runtime — typically a strict subset.
+// See [docs/reference/api](https://docs.ratesengine.net) for the
+// full semantic table.
+func ExampleClient_NetworkStats() {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{
+			"data": {
+				"volume_24h_usd": "3176584845.46668496",
+				"markets_count_24h": 23848,
+				"assets_indexed": 86175,
+				"latest_ledger": 62490950,
+				"exchange_sources": 11,
+				"total_sources": 21
+			},
+			"as_of": "2026-05-09T15:09:00Z",
+			"flags": {"stale": false}
+		}`))
+	}))
+	defer srv.Close()
+
+	c := client.New(client.Options{BaseURL: srv.URL})
+	got, err := c.NetworkStats(context.Background())
+	if err != nil {
+		fmt.Println("error:", err)
+		return
+	}
+	vol := "—"
+	if got.Data.Volume24hUSD != nil {
+		vol = *got.Data.Volume24hUSD
+	}
+	fmt.Printf("ledger=%d, markets=%d, assets=%d, exchange/total=%d/%d, vol24h_usd=%s\n",
+		got.Data.LatestLedger,
+		got.Data.MarketsCount24h,
+		got.Data.AssetsIndexed,
+		got.Data.ExchangeSources,
+		got.Data.TotalSources,
+		vol)
+
+	// Output: ledger=62490950, markets=23848, assets=86175, exchange/total=11/21, vol24h_usd=3176584845.46668496
+}
