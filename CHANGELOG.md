@@ -168,6 +168,21 @@ against.
 
 ### Fixed
 
+- **Indexer now WARNs at boot when `[supply]` watched-sets are all
+  empty**, instead of silently registering zero supply observers.
+  This was the silent-failure mode behind r1's
+  `asset_supply_history` sitting at 0 rows for 6+ days post-deploy
+  — the operator hadn't populated the watched-sets yet (ops task
+  #97), but the indexer logged nothing about it. F2 fields
+  (`market_cap_usd`, `fdv_usd`, `circulating_supply`,
+  `total_supply`, `max_supply`) on `/v1/assets/{id}` stayed null
+  for every asset, with no signal until someone manually queried
+  the empty table. The new WARN names the missing config keys
+  (`sdf_reserve_accounts` for Algorithm 1 XLM,
+  `watched_classic_assets` for Algorithm 2,
+  `watched_sep41_contracts` for Algorithm 3) and explicitly states
+  the consequence — so the next operator who tails the indexer log
+  sees the problem in the first 30 seconds. (PR #1216)
 - **`/v1/coins?limit=200` prewarm now matches the handler's
   internal `listingLimit`**. Same family as #1194. The handler
   subtracts 1 from the requested limit when cursor/issuer/q are
