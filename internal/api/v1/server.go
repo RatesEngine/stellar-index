@@ -539,6 +539,13 @@ func (s *Server) Handler() http.Handler {
 		// CacheControl so the override gets the same Cache-Control
 		// directive a regular handler-side response would.
 		middleware.Envelope404,
+		// 308-redirect trailing-slash paths to their no-slash form
+		// (e.g. /v1/coins/native/ → /v1/coins/native). Every v1
+		// route is registered without a trailing slash; without this
+		// middleware, clients that auto-append (axios with `/v1/`
+		// baseURL, OpenAPI codegens, mistyped curl) hit a dead 404.
+		// 308 preserves method+body so POST/DELETE don't degrade.
+		middleware.TrailingSlashRedirect,
 	}
 	if s.cors != nil {
 		stack = append(stack, s.cors)

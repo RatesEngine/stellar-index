@@ -80,6 +80,27 @@ func TestObservations_IdentityPair_Returns400(t *testing.T) {
 	}
 }
 
+// TestObservations_UnknownSource400 — `?source=` with a name that
+// isn't in the in-memory `external.Registry` returns 400 instead
+// of an empty page. The silent-empty-page anti-pattern (a typo
+// looking identical to "this source has no trades for the pair")
+// sends callers chasing nonexistent data; same fail-fast guard
+// added to /v1/markets.
+func TestObservations_UnknownSource400(t *testing.T) {
+	srv := v1.New(v1.Options{History: &stubHistoryReader{}})
+	tsv := startHTTPTest(t, srv.Handler())
+
+	resp := mustGet(t, tsv.URL+"/v1/observations?asset=native&quote=fiat:USD&source=fake-venue")
+	if resp.StatusCode != http.StatusBadRequest {
+		t.Fatalf("status = %d, want 400", resp.StatusCode)
+	}
+	var p v1.Problem
+	mustDecode(t, resp, &p)
+	if p.Type != "https://api.ratesengine.net/errors/unknown-source" {
+		t.Errorf("Type = %q", p.Type)
+	}
+}
+
 // TestObservations_HappyPath_AllSources — every source's most-recent
 // observation flows through to the response, ordered as the reader
 // returned them. Single-source flag false (multiple sources).

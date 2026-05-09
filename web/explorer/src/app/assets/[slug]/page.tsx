@@ -5,6 +5,7 @@ import { Suspense } from 'react';
 import { Panel } from '@/components/reveal';
 import { asExample, API_BASE_URL } from '@/api/client';
 import { formatCompact, formatPrice } from '@/lib/format';
+import { SITE_OG_IMAGES, SITE_TWITTER_IMAGES } from '@/lib/seo';
 import { AssetClientFallback } from './AssetClientFallback';
 import { AssetTabs, ActiveTabSlot } from './AssetTabs';
 import { AssetAbout } from './AssetAbout';
@@ -311,11 +312,13 @@ export async function generateMetadata({
       description,
       url: canonical,
       type: 'website',
+      images: SITE_OG_IMAGES,
     },
     twitter: {
       card: 'summary_large_image',
       title,
       description,
+      images: SITE_TWITTER_IMAGES,
     },
   };
 }

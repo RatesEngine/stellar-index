@@ -6,6 +6,7 @@ export const metadata: Metadata = {
   title: 'Pricing — plans, quotas, SLAs',
   description:
     'Rates Engine pricing tiers. Free anonymous reads, $0 self-service Starter for higher per-key rate limits, Pro/Business/Enterprise for production volume. Same data on every tier.',
+  alternates: { canonical: '/pricing' },
 };
 
 interface Tier {

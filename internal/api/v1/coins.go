@@ -199,6 +199,14 @@ func (s *Server) handleCoins(w http.ResponseWriter, r *http.Request) { //nolint:
 		return
 	}
 
+	if err := timescale.ValidateCoinsCursor(cursor, order); err != nil {
+		writeProblem(w, r,
+			"https://api.ratesengine.net/errors/invalid-cursor",
+			"Invalid cursor", http.StatusBadRequest,
+			"cursor: "+err.Error()+". Pass back the next_cursor returned by a prior /v1/coins response, or omit the parameter to start at page 1.")
+		return
+	}
+
 	// Native XLM has no classic_assets row but is the most-active
 	// asset on the network — prepend it at the top of the first
 	// unfiltered page so /v1/coins (and the explorer's home page
@@ -394,6 +402,19 @@ func (s *Server) handleCoin(w http.ResponseWriter, r *http.Request) { //nolint:g
 		row, err = s.coins.GetNativeCoinRow(r.Context())
 	} else {
 		row, err = s.coins.GetCoinBySlug(r.Context(), slug)
+		// Case-insensitive fallback: classic_assets.slug is uppercase
+		// by convention (USDC, AQUA, EURC, etc.) but URL clients
+		// frequently lowercase. Retry once with strings.ToUpper when
+		// the literal slug missed AND the upper form differs — preserves
+		// case-significance for the rare issued asset that intentionally
+		// uses lowercase (Stellar protocol allows it) while rescuing
+		// the common /v1/coins/usdc → /v1/coins/USDC typo. Pre-fix
+		// the retry was missing and lowercase variants 404'd.
+		if errors.Is(err, sql.ErrNoRows) {
+			if upper := strings.ToUpper(slug); upper != slug {
+				row, err = s.coins.GetCoinBySlug(r.Context(), upper)
+			}
+		}
 	}
 	if errors.Is(err, sql.ErrNoRows) {
 		writeProblem(w, r,

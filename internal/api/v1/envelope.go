@@ -128,6 +128,17 @@ func writeProblem(w http.ResponseWriter, r *http.Request, typeURL, title string,
 	// next 5 minutes and replay it to other anonymous clients on
 	// the same cache key.
 	w.Header().Set("Cache-Control", "no-store")
+	// RFC 7235 §3.1: every 401 response MUST include a
+	// WWW-Authenticate header naming at least one challenge the
+	// client can use. Pre-fix our 401s emitted the problem+json
+	// envelope but no WWW-Authenticate, leaving programmatic
+	// clients without a way to discover the accepted scheme. Our
+	// authenticated endpoints all accept Bearer (API key + SEP-10
+	// token); the magic-link cookie path is parallel and doesn't
+	// have a standard challenge token, so we advertise Bearer only.
+	if status == http.StatusUnauthorized {
+		w.Header().Set("WWW-Authenticate", `Bearer realm="ratesengine.net"`)
+	}
 	w.WriteHeader(status)
 	_ = json.NewEncoder(w).Encode(p)
 }

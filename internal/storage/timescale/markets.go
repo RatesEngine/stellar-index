@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/lib/pq"
@@ -118,7 +119,7 @@ func (s *Store) DistinctPairs(ctx context.Context, cursor string, limit int) ([]
 // DistinctPairs is preserved as the legacy 3-arg form so existing
 // callers compile unchanged.
 func (s *Store) DistinctPairsExt(ctx context.Context, cursor string, limit int, order MarketsOrder) ([]Market, string, error) {
-	return s.distinctPairsCommon(ctx, "", cursor, limit, order)
+	return s.distinctPairsCommon(ctx, "", "", cursor, limit, order)
 }
 
 // SourceMarkets returns one page of (base, quote) pairs the given
@@ -127,7 +128,18 @@ func (s *Store) DistinctPairsExt(ctx context.Context, cursor string, limit int, 
 // before the GROUP BY — gives a per-DEX pool list with per-pool
 // 24h volume + trade count + last-trade timestamp.
 func (s *Store) SourceMarkets(ctx context.Context, source, cursor string, limit int, order MarketsOrder) ([]Market, string, error) {
-	return s.distinctPairsCommon(ctx, source, cursor, limit, order)
+	return s.distinctPairsCommon(ctx, source, "", cursor, limit, order)
+}
+
+// AssetMarkets returns one page of (base, quote) pairs where the
+// given canonical asset_id appears on either side of the pair —
+// `t.base_asset = $asset OR t.quote_asset = $asset`. Backs the
+// `/v1/markets?asset=<asset_id>` query that the explorer's
+// /assets/{slug} Markets tab uses to surface every market the
+// asset participates in without paying for a 500-row global scan
+// + client-side filter (the previous shape).
+func (s *Store) AssetMarkets(ctx context.Context, asset, cursor string, limit int, order MarketsOrder) ([]Market, string, error) {
+	return s.distinctPairsCommon(ctx, "", asset, cursor, limit, order)
 }
 
 // PoolsFilter narrows AllPools by venue and/or pair. Zero-value
@@ -139,10 +151,20 @@ func (s *Store) SourceMarkets(ctx context.Context, source, cursor string, limit 
 // page to render "which venues moved this pair in the last 24h".
 // Single-side filters (Base only / Quote only) are accepted but
 // uncommon.
+//
+// Asset filter is the OR-shape — base = X OR quote = X. Used by
+// asset-detail surfaces ("every pool touching this asset")
+// without forcing the caller to fire two parallel `?base=` +
+// `?quote=` requests and merge client-side. Mutually exclusive
+// with Base/Quote at the handler layer (the storage layer
+// accepts the combination, but its semantics aren't
+// well-defined: an asset-OR + base-AND would land on the
+// intersection or the union depending on interpretation).
 type PoolsFilter struct {
 	Sources []string
 	Base    string
 	Quote   string
+	Asset   string
 }
 
 // AllPools returns every (source, base, quote) tuple observed in
@@ -338,14 +360,22 @@ func buildPoolsQuery(since time.Time, filter PoolsFilter, cursor string, limit i
            AND lp.quote_asset = t.quote_asset
          WHERE t.ts >= $1
     `
-	// $4 sources, $5 base, $6 quote are always bound; empty values
-	// short-circuit each predicate so the planner skips it. Keeps
-	// the positional-arg layout stable across filter combinations
-	// (extending the slice would require renumbering downstream).
+	// $4 sources, $5 base, $6 quote, $7 asset are always bound;
+	// empty values short-circuit each predicate so the planner
+	// skips it. Keeps the positional-arg layout stable across
+	// filter combinations (extending the slice would require
+	// renumbering downstream).
+	//
+	// $7 asset is the OR-shape (base = X OR quote = X), distinct
+	// from $5/$6's AND-shape — used by asset-detail surfaces that
+	// want every pool touching an asset on either side without
+	// firing two parallel `?base=` + `?quote=` requests and
+	// merging client-side.
 	cte += `
            AND (cardinality($4::text[]) = 0 OR t.source = ANY($4))
            AND ($5 = '' OR t.base_asset = $5)
            AND ($6 = '' OR t.quote_asset = $6)
+           AND ($7 = '' OR t.base_asset = $7 OR t.quote_asset = $7)
     `
 	if order == MarketsOrderVolume24hDesc {
 		const tail = `
@@ -363,7 +393,7 @@ func buildPoolsQuery(since time.Time, filter PoolsFilter, cursor string, limit i
 		          (t.source || '|' || t.base_asset || '|' || t.quote_asset) ASC
 		 LIMIT $3
 		`
-		args := []any{since, cursor, limit + 1, pq.Array(filter.Sources), filter.Base, filter.Quote}
+		args := []any{since, cursor, limit + 1, pq.Array(filter.Sources), filter.Base, filter.Quote, filter.Asset}
 		return cte + tail, args
 	}
 	const tail = `
@@ -376,7 +406,7 @@ func buildPoolsQuery(since time.Time, filter PoolsFilter, cursor string, limit i
 	return cte + tail, args
 }
 
-func (s *Store) distinctPairsCommon(ctx context.Context, source, cursor string, limit int, order MarketsOrder) ([]Market, string, error) {
+func (s *Store) distinctPairsCommon(ctx context.Context, source, asset, cursor string, limit int, order MarketsOrder) ([]Market, string, error) {
 	if limit < 1 {
 		limit = 100
 	}
@@ -394,7 +424,7 @@ func (s *Store) distinctPairsCommon(ctx context.Context, source, cursor string, 
 	// exist". The extra row isn't returned to the caller; its only
 	// purpose is to toggle whether we emit a nextCursor.
 	since := time.Now().UTC().Add(-MarketsRecencyWindow)
-	q, args := buildDistinctPairsQuery(since, source, cursor, limit, order)
+	q, args := buildDistinctPairsQuery(since, source, asset, cursor, limit, order)
 	rows, err := s.db.QueryContext(ctx, q, args...)
 	if err != nil {
 		return nil, "", fmt.Errorf("timescale: DistinctPairs: %w", err)
@@ -476,6 +506,64 @@ func buildMarketRow(baseRaw, quoteRaw string, lastAt time.Time, count24h int64, 
 	return m, nil
 }
 
+// ValidateMarketsCursor returns an error if `cursor` is non-empty
+// but doesn't match the encoded shape that encodeMarketsCursor
+// emits for the active order. Empty cursor is always valid (start
+// from the first page). Callers should reject invalid cursors at
+// the handler boundary with a 400.
+//
+// Without this guard, a hand-crafted cursor (or a stale link from
+// before a pagination format change) silently degrades:
+//
+//   - MarketsOrderPair: the SQL predicate
+//     `(base || '|' || quote) > $cursor` falls through to a
+//     lexicographic skip — collation-dependent and almost never
+//     what the caller wants.
+//   - MarketsOrderVolume24hDesc: the predicate casts
+//     `split_part($cursor, ':', 1)::numeric`, which raises a
+//     Postgres "invalid input syntax for type numeric" error and
+//     a 500. Burns CPU per request.
+func ValidateMarketsCursor(cursor string, order MarketsOrder) error {
+	if cursor == "" {
+		return nil
+	}
+	pairPart := cursor
+	if order == MarketsOrderVolume24hDesc {
+		idx := strings.IndexByte(cursor, ':')
+		if idx < 0 {
+			return fmt.Errorf("missing ':' separator")
+		}
+		volPart := cursor[:idx]
+		// Volume prefix may be empty (last row had a null vol_usd).
+		// Otherwise: digits with at most one '.', no leading sign.
+		if volPart != "" {
+			dot := false
+			for j := 0; j < len(volPart); j++ {
+				c := volPart[j]
+				switch {
+				case c >= '0' && c <= '9':
+				case c == '.' && !dot:
+					dot = true
+				default:
+					return fmt.Errorf("non-numeric volume prefix")
+				}
+			}
+		}
+		pairPart = cursor[idx+1:]
+		if pairPart == "" {
+			return fmt.Errorf("missing pair suffix")
+		}
+	}
+	pipe := strings.IndexByte(pairPart, '|')
+	if pipe < 0 {
+		return fmt.Errorf("missing '|' separator in pair")
+	}
+	if pipe == 0 || pipe == len(pairPart)-1 {
+		return fmt.Errorf("missing base or quote in pair")
+	}
+	return nil
+}
+
 // encodeMarketsCursor formats the last-row cursor for the active
 // ordering — pair-only for MarketsOrderPair, `<vol>:<pair>` for
 // MarketsOrderVolume24hDesc.
@@ -506,7 +594,7 @@ func encodeMarketsCursor(last Market, order MarketsOrder) string {
 //     strict-less for vol DESC, strict-greater for pair ASC —
 //     the standard keyset tuple-comparison trick is adapted to
 //     mixed ordering.
-func buildDistinctPairsQuery(since time.Time, source, cursor string, limit int, order MarketsOrder) (string, []any) {
+func buildDistinctPairsQuery(since time.Time, source, asset, cursor string, limit int, order MarketsOrder) (string, []any) {
 	// LEFT JOIN against vol_24h once instead of correlating the
 	// subquery into SELECT + HAVING + ORDER BY. The previous
 	// shape had the planner evaluate
@@ -517,10 +605,11 @@ func buildDistinctPairsQuery(since time.Time, source, cursor string, limit int, 
 	// resolves vol once per (base, quote) tuple; warm cache stays
 	// at <100ms but cold cache drops by >10×.
 	//
-	// When source != "" the inner trades scan is also filtered to
-	// `t.source = $source` and the vol_24h CTE narrows to the same
-	// source's prices_1m rows so per-source volume is comparable
-	// to the per-source trade count.
+	// $4 source / $5 asset are always bound; empty values
+	// short-circuit each predicate so the planner skips it. Same
+	// pattern as buildPoolsQuery — keeps the positional-arg layout
+	// stable across filter combinations (extending the slice would
+	// require renumbering downstream).
 	cte := `
         WITH vol_24h AS (
           SELECT base_asset, quote_asset,
@@ -555,14 +644,9 @@ func buildDistinctPairsQuery(since time.Time, source, cursor string, limit int, 
             ON lp.base_asset = t.base_asset
            AND lp.quote_asset = t.quote_asset
          WHERE t.ts >= $1
+           AND ($4 = '' OR t.source = $4)
+           AND ($5 = '' OR t.base_asset = $5 OR t.quote_asset = $5)
     `
-	if source != "" {
-		// Source filter binds to a fixed argument index (always $4)
-		// regardless of which order branch we take below — the cursor
-		// branches use $1/$2/$3 for since/cursor/limit; appending
-		// source as $4 keeps the existing predicates unchanged.
-		cte += ` AND t.source = $4 `
-	}
 	switch order {
 	case MarketsOrderVolume24hDesc:
 		// Cursor: "<vol_or_blank>:<base>|<quote>". Two-tuple keyset
@@ -591,11 +675,7 @@ func buildDistinctPairsQuery(since time.Time, source, cursor string, limit int, 
 		          (t.base_asset || '|' || t.quote_asset) ASC
 		 LIMIT $3
 		`
-		args := []any{since, cursor, limit + 1}
-		if source != "" {
-			args = append(args, source)
-		}
-		return cte + tail, args
+		return cte + tail, []any{since, cursor, limit + 1, source, asset}
 	default: // MarketsOrderPair
 		const tail = `
 		   AND ($2 = '' OR (t.base_asset || '|' || t.quote_asset) > $2)
@@ -603,11 +683,7 @@ func buildDistinctPairsQuery(since time.Time, source, cursor string, limit int, 
 		 ORDER BY (t.base_asset || '|' || t.quote_asset) ASC
 		 LIMIT $3
 		`
-		args := []any{since, cursor, limit + 1}
-		if source != "" {
-			args = append(args, source)
-		}
-		return cte + tail, args
+		return cte + tail, []any{since, cursor, limit + 1, source, asset}
 	}
 }
 
