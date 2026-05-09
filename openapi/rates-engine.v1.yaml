@@ -887,6 +887,19 @@ paths:
           schema: { type: string }
           description: |
             Optional. Canonical quote asset_id. See `base`.
+        - name: asset
+          in: query
+          schema: { type: string }
+          description: |
+            Optional. Canonical asset_id (`native`, `USDC-G…`,
+            `fiat:USD`, …). Restricts to pools where the asset
+            appears on either side (base OR quote). Use this on
+            asset-detail surfaces to surface every pool touching
+            the asset in one request, instead of firing parallel
+            `?base=` + `?quote=` and merging client-side. Returns
+            400 `invalid-asset-id` for unparseable values; 400
+            `conflicting-filters` when combined with `base`/`quote`
+            (the OR-shape and AND-shape filters can't be mixed).
       responses:
         "200":
           description: Array of pool rows.
@@ -1044,6 +1057,31 @@ paths:
             type: string
             enum: [pair, volume_24h_usd_desc]
             default: pair
+        - name: source
+          in: query
+          required: false
+          description: |
+            Restrict the listing to markets a single source
+            observed in the recency window. Must match a
+            registered source name (see `/v1/sources`); an
+            unknown name returns 400 `unknown-source` rather
+            than an empty 200 (avoids the silent-empty-page
+            anti-pattern). Mutually exclusive with `asset`.
+          schema: { type: string }
+        - name: asset
+          in: query
+          required: false
+          description: |
+            Restrict the listing to markets where the given
+            canonical `asset_id` appears on either side (base
+            OR quote). Use this on asset-detail surfaces to
+            surface every market an asset participates in
+            without paying for a global scan + client-side
+            filter. Returns 400 `invalid-asset-id` if the
+            value isn't a parseable canonical asset_id (e.g.
+            `native`, `USDC-G…`, `fiat:USD`). Mutually
+            exclusive with `source`.
+          schema: { type: string }
       responses:
         "200":
           description: Array of markets + optional next cursor.

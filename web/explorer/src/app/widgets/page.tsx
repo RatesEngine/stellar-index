@@ -7,6 +7,7 @@ export const metadata: Metadata = {
   title: 'Widgets — embeddable price cards',
   description:
     'Drop-in iframe widgets for embedding live Rates Engine prices into wallets, dashboards, and product pages. No script, no API key, no build step.',
+  alternates: { canonical: '/widgets' },
 };
 
 const SITE_URL = 'https://ratesengine.net';

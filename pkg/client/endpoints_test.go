@@ -1445,3 +1445,73 @@ func TestCurrency_TickerRequired(t *testing.T) {
 		t.Errorf("err = %v, want APIError status=400", err)
 	}
 }
+
+// TestLendingPools_HappyPath — pins path, the array-shaped response
+// (one row per Blend pool from the 7d auction stream), and the
+// per-pool wire shape.
+func TestLendingPools_HappyPath(t *testing.T) {
+	_, c := newTestServer(t, func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/v1/lending/pools" {
+			t.Errorf("path = %q, want /v1/lending/pools", r.URL.Path)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{
+			"data": [
+				{
+					"protocol": "blend",
+					"pool": "CAJJZSGMMM3PD7N33TAPHGBUGTB43OC73HVIK2L2G6BNGGGYOSSYBXBD",
+					"auctions_24h": 30,
+					"auctions_total": 5687,
+					"unique_users_30d": 4,
+					"last_seen": "2026-05-09T10:15:52Z"
+				},
+				{
+					"protocol": "blend",
+					"pool": "CCCCIQSDILITHMM7PBSLVDT5MISSY7R26MNZXCX4H7J5JQ5FPIYOGYFS",
+					"auctions_24h": 2,
+					"auctions_total": 1544,
+					"unique_users_30d": 3,
+					"last_seen": "2026-05-08T20:11:32Z"
+				}
+			],
+			"as_of": "2026-05-09T10:00:00Z",
+			"flags": {}
+		}`))
+	})
+	got, err := c.LendingPools(context.Background())
+	if err != nil {
+		t.Fatalf("LendingPools: %v", err)
+	}
+	if len(got.Data) != 2 {
+		t.Fatalf("len = %d, want 2", len(got.Data))
+	}
+	if got.Data[0].Protocol != "blend" || got.Data[0].AuctionsTotal != 5687 {
+		t.Errorf("first row = %+v", got.Data[0])
+	}
+	if got.Data[0].UniqueUsers30d != 4 {
+		t.Errorf("UniqueUsers30d = %d", got.Data[0].UniqueUsers30d)
+	}
+	if !got.Data[0].LastSeen.Equal(time.Date(2026, 5, 9, 10, 15, 52, 0, time.UTC)) {
+		t.Errorf("LastSeen = %v", got.Data[0].LastSeen)
+	}
+}
+
+// TestLendingPools_EmptyArray — feature-gated; deployments that
+// haven't wired the LendingReader return an empty 200 list rather
+// than a 503. Mirrors how the API handler degrades.
+func TestLendingPools_EmptyArray(t *testing.T) {
+	_, c := newTestServer(t, func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"data":[],"as_of":"2026-05-09T10:00:00Z","flags":{}}`))
+	})
+	got, err := c.LendingPools(context.Background())
+	if err != nil {
+		t.Fatalf("LendingPools: %v", err)
+	}
+	if got.Data == nil {
+		t.Error("empty should serialise as [] not null")
+	}
+	if len(got.Data) != 0 {
+		t.Errorf("len = %d, want 0", len(got.Data))
+	}
+}

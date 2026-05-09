@@ -795,3 +795,20 @@ func (c *Client) Currency(ctx context.Context, ticker string) (*Envelope[Currenc
 	}
 	return &env, nil
 }
+
+// LendingPools fetches every Blend pool contract observed in the
+// trailing 7d auction stream — backed by GET /v1/lending/pools.
+// Sorted by total auction count desc.
+//
+// Today's wire shape is auction-derived: per-pool TVL, utilisation,
+// and supply/borrow APYs land via additional fields once the
+// pool-storage reader worker ships, so callers should be defensive
+// about new fields appearing in subsequent server releases (the
+// SDK's JSON decode ignores unknown fields, so this is non-breaking).
+func (c *Client) LendingPools(ctx context.Context) (*Envelope[[]LendingPool], error) {
+	var env Envelope[[]LendingPool]
+	if err := c.doJSON(ctx, http.MethodGet, "/v1/lending/pools", nil, nil, &env); err != nil {
+		return nil, err
+	}
+	return &env, nil
+}
