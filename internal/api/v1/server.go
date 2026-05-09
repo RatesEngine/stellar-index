@@ -762,6 +762,18 @@ func (s *Server) mountRoutes() {
 	// problem+json.
 	s.mux.HandleFunc("GET /{$}", s.handleRoot)
 
+	// /robots.txt — disallow crawler indexing of the API hostname.
+	// The endpoints are JSON, not user-facing HTML; crawlers
+	// hitting them waste their budget on payloads that won't rank
+	// for any meaningful search query. The companion explorer site
+	// (ratesengine.net) and docs site (docs.ratesengine.net) are
+	// where indexable content lives, with their own robots.txt
+	// directives. Without this handler Cloudflare's auto-managed
+	// robots.txt is served on GET but the API origin returns 404
+	// on HEAD — flagging the inconsistency is what surfaced this
+	// gap in the 2026-05-09 audit.
+	s.mux.HandleFunc("GET /robots.txt", s.handleRobotsTxt)
+
 	// /.well-known/security.txt — RFC 9116 disclosure metadata.
 	// Researchers scanning the API origin for vulnerabilities find
 	// the disclosure email here without having to traverse to the
@@ -911,4 +923,27 @@ func (s *Server) handleRoot(w http.ResponseWriter, _ *http.Request) {
 		"docs":    "https://docs.ratesengine.net",
 		"openapi": "https://docs.ratesengine.net/openapi.yaml",
 	}, Flags{})
+}
+
+// handleRobotsTxt serves /robots.txt. The API origin holds JSON
+// endpoints not meant for crawler indexing — point search engines
+// at the companion docs + explorer subdomains instead. The
+// `Sitemap:` directive lets a crawler that ignored the Disallow
+// (or has a per-bot exception) at least crawl what's worth
+// indexing.
+func (s *Server) handleRobotsTxt(w http.ResponseWriter, _ *http.Request) {
+	const body = `# api.ratesengine.net — JSON API, not for human reading.
+# Indexable content lives on the companion subdomains:
+#   - https://ratesengine.net          — explorer + market UI
+#   - https://docs.ratesengine.net     — API reference
+#   - https://status.ratesengine.net   — status + incident postmortems
+
+User-agent: *
+Disallow: /
+
+Sitemap: https://ratesengine.net/sitemap.xml
+`
+	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+	w.Header().Set("Cache-Control", "public, max-age=86400")
+	_, _ = w.Write([]byte(body))
 }
