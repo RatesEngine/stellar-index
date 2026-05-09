@@ -32,16 +32,16 @@ See **[CLAUDE.md](CLAUDE.md)**. It's your orientation map.
 
 ## Start here
 
-- **Hosted UI / explorer:** the showcase site (`web/explorer/`) is
-  a static-export Next.js explorer rendered at
-  <https://ratesengine.net> post-launch. Browse coins, markets,
-  issuers, sources, diagnostics; every panel reveals the exact
-  API call that produced it. Build locally via
+- **Hosted UI / explorer:** the explorer (`web/explorer/`) is a
+  static-export Next.js site rendered at
+  <https://ratesengine.net>. Browse coins, markets, issuers,
+  sources, diagnostics; every panel reveals the exact API call
+  that produced it. Build locally via
   `cd web/explorer && pnpm build` (output: `web/explorer/out/`).
   Operator runbook: [`docs/operations/explorer-deployment.md`](docs/operations/explorer-deployment.md).
 - **Users of the hosted API:** [`docs/getting-started.md`](docs/getting-started.md)
   walks from zero to your first authenticated request in five
-  minutes. Rendered at <https://docs.ratesengine.net> post-launch.
+  minutes. Rendered at <https://docs.ratesengine.net>.
 - **API examples:** [`examples/curl/`](examples/curl/) — ten runnable
   shell scripts covering signup, account info, price, OHLC, history,
   oracle latest, markets, and the SSE price stream.
