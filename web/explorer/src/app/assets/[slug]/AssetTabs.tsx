@@ -14,17 +14,14 @@ export type AssetTab =
 
 /**
  * Client tab strip for /assets/[slug]. Reads `?tab=` from URL state;
- * the parent server component renders both overview + chart bodies
- * and toggles visibility based on the active tab.
- *
- * Disabled tabs render as cursor-not-allowed labels until their
- * content lands in subsequent PRs.
+ * the parent server component renders all tab bodies and toggles
+ * visibility based on the active tab.
  */
 export function AssetTabs({ slug, hasIssuer }: { slug: string; hasIssuer: boolean }) {
   const params = useSearchParams();
   const active = (params.get('tab') as AssetTab) || 'overview';
 
-  type T = { key: AssetTab; label: string; disabled?: boolean };
+  type T = { key: AssetTab; label: string };
   const tabs: T[] = [
     { key: 'overview', label: 'Overview' },
     { key: 'chart', label: 'Chart' },
@@ -37,31 +34,21 @@ export function AssetTabs({ slug, hasIssuer }: { slug: string; hasIssuer: boolea
 
   return (
     <nav className="flex gap-1 overflow-x-auto border-b border-slate-200 text-sm dark:border-slate-800">
-      {tabs.map((t) =>
-        t.disabled ? (
-          <span
-            key={t.key}
-            className="cursor-not-allowed border-b-2 border-transparent px-3 py-2 text-slate-400 dark:text-slate-600"
-            title="Coming soon"
-          >
-            {t.label}
-          </span>
-        ) : (
-          <Link
-            key={t.key}
-            href={
-              t.key === 'overview' ? `/assets/${slug}` : `/assets/${slug}?tab=${t.key}`
-            }
-            className={`border-b-2 px-3 py-2 ${
-              t.key === active
-                ? 'border-brand-500 font-medium text-brand-600 dark:text-brand-400'
-                : 'border-transparent text-slate-600 hover:text-brand-600 dark:text-slate-300'
-            }`}
-          >
-            {t.label}
-          </Link>
-        ),
-      )}
+      {tabs.map((t) => (
+        <Link
+          key={t.key}
+          href={
+            t.key === 'overview' ? `/assets/${slug}` : `/assets/${slug}?tab=${t.key}`
+          }
+          className={`border-b-2 px-3 py-2 ${
+            t.key === active
+              ? 'border-brand-500 font-medium text-brand-600 dark:text-brand-400'
+              : 'border-transparent text-slate-600 hover:text-brand-600 dark:text-slate-300'
+          }`}
+        >
+          {t.label}
+        </Link>
+      ))}
     </nav>
   );
 }
