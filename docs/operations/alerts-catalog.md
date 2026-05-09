@@ -40,6 +40,8 @@ Severity maps to [sev-playbook.md §1](sev-playbook.md#1-severity-definitions).
 | `ratesengine_ingestion_decode_error` | `rate(ratesengine_source_decode_errors_total[5m])` | > 1/s sustained 5 min | P3 | [decode-errors](runbooks/decode-errors.md) |
 | `ratesengine_ingestion_discovery_drops` | `increase(ratesengine_discovery_dropped_hits_total[10m])` | > 0 sustained 10 min | P3 | [discovery-drops](runbooks/discovery-drops.md) |
 | `ratesengine_ingestion_insert_errors` | `rate(ratesengine_source_insert_errors_total[5m])` per (source, kind) | > 0.1/s (≈6/min) sustained 5 min | P2 | [insert-errors](runbooks/insert-errors.md) |
+| `ratesengine_external_poller_stale` | `time() - ratesengine_external_poller_last_success_unix` per source | > 1800 s for > 5 min | P2 | [external-poller-stale](runbooks/external-poller-stale.md) |
+| `ratesengine_external_poller_error_rate_high` | `rate(ratesengine_external_poller_polls_total{outcome="error"}[15m]) / sum(...) ` | > 0.5 sustained 15 min | P3 | [external-poller-stale](runbooks/external-poller-stale.md) |
 
 Historical note: the former `ratesengine_ingestion_lag_high` alert was retired
 when the repo moved off the legacy orchestrator topology and the live indexer
@@ -205,9 +207,11 @@ override.
 | `ratesengine_supply_snapshot_unit_failed_alert` | `ratesengine_supply_snapshot_unit_failed` | > 0 for ≥ 30 min | P3 | [supply-snapshot-unit-failed](runbooks/supply-snapshot-unit-failed.md) |
 | `ratesengine_supply_snapshot_stale` | `time() - ratesengine_supply_snapshot_last_success_timestamp` | > 36 h for ≥ 5 min | P3 | [supply-snapshot-stale](runbooks/supply-snapshot-stale.md) |
 | `ratesengine_supply_snapshot_critical_stale` | same | > 72 h for ≥ 5 min | **P2** | [supply-snapshot-stale](runbooks/supply-snapshot-stale.md) |
+| `ratesengine_supply_snapshot_never_initialized` | `absent_over_time(ratesengine_supply_snapshot_last_success_timestamp[36h])` | == 1 for ≥ 5 min | P3 | [supply-snapshot-never-initialized](runbooks/supply-snapshot-never-initialized.md) |
 | `ratesengine_supply_snapshot_circulating_zero` | `ratesengine_supply_snapshot_circulating_xlm{asset_key="XLM"}` | ≤ 0 for ≥ 5 min | **P2** | [supply-snapshot-circulating-zero](runbooks/supply-snapshot-circulating-zero.md) |
 | `ratesengine_aggregator_supply_refresh_stalled` | `time() - max(timestamp(ratesengine_aggregator_supply_refresh_total{outcome="ok"}))` | > 30 min for ≥ 5 min | **P2** | [supply-refresh-stalled](runbooks/supply-refresh-stalled.md) |
 | `ratesengine_aggregator_supply_refresh_error_dominant` | error-outcome rate / total-rate | > 50% for ≥ 30 min | P3 | [supply-refresh-error-dominant](runbooks/supply-refresh-error-dominant.md) |
+| `ratesengine_aggregator_supply_refresh_never_initialized` | `absent_over_time(ratesengine_aggregator_supply_refresh_total{outcome="ok"}[36h])` | == 1 for ≥ 5 min | P3 | [supply-snapshot-never-initialized](runbooks/supply-snapshot-never-initialized.md) |
 
 ## Infra / host alerts
 

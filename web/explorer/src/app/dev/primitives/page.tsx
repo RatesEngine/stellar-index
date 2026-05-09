@@ -1,3 +1,5 @@
+import type { Metadata } from 'next';
+
 import {
   AccelerationArrow,
   DirectionPill,
@@ -15,6 +17,18 @@ import {
  * Pure server-component render — every primitive takes static props
  * so this page is fully static-exportable.
  */
+
+// Reviewer-facing dev sandbox — explicitly noindex / nofollow so
+// Google doesn't index it as part of the explorer (the page has
+// no descriptive title, no canonical content, and would appear as
+// a low-quality "design-system primitives" hit). Pre-fix the root
+// layout's default robots: { index: true } shipped to this page
+// because no override was set.
+export const metadata: Metadata = {
+  title: 'Design-system primitives — dev sandbox',
+  robots: { index: false, follow: false },
+};
+
 export default function PrimitivesPage() {
   return (
     <main className="mx-auto max-w-5xl space-y-12 p-8">

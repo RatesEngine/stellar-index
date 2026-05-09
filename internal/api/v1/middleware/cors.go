@@ -73,14 +73,27 @@ func CORS(opts CORSOptions) Middleware {
 			origin := r.Header.Get("Origin")
 			originAllowed := wildcard || (origin != "" && allowed[origin])
 
+			// Always add `Vary: Origin` (except in strict-wildcard
+			// mode where `Allow-Origin: *` applies regardless of
+			// the requesting origin). Without this, a cacheable
+			// response served to a no-Origin request (curl, server-
+			// side fetch) is keyed without origin discrimination —
+			// a CDN can then return that cached "no CORS" response
+			// to a later browser request whose Origin WOULD have
+			// been allowed, breaking the second client's CORS.
+			// Inverse poisoning is also possible: a response cached
+			// with one allowed Origin's `Allow-Origin: <a>` could
+			// be served to a request from a different allowed
+			// Origin <b>, also breaking CORS.
+			if !wildcard {
+				w.Header().Add("Vary", "Origin")
+			}
+
 			if originAllowed {
 				if wildcard {
 					w.Header().Set("Access-Control-Allow-Origin", "*")
 				} else {
 					w.Header().Set("Access-Control-Allow-Origin", origin)
-					// Vary so caches don't serve one origin's
-					// allow-origin header to a different origin.
-					w.Header().Add("Vary", "Origin")
 				}
 			}
 

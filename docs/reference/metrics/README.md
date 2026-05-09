@@ -89,6 +89,31 @@ Aquarius / Reflector don't emit orphans — they're 1-event-per-
 observation. Emitted from decoder-maintained orphan counters via the
 live dispatcher path.
 
+### `ratesengine_external_poller_polls_total`
+
+Counter, labels `source`, `outcome` ∈ {success, error, skipped}.
+
+Per-source, per-outcome count of `PollOnce` invocations from the
+external-poller runner. Emitted on every poll tick of every
+configured external source (CoinGecko, CoinMarketCap, CryptoCompare,
+ECB, ExchangeRatesAPI, PolygonForex, Binance, Coinbase, Kraken,
+Bitstamp). The `skipped` outcome covers the per-poller cooldown path
+(e.g. CoinGecko's post-throttle backoff) — distinct from `success`
+so absence-of-success alerting isn't masked by the poller silently
+respecting a backoff window.
+
+### `ratesengine_external_poller_last_success_unix`
+
+Gauge, label `source`.
+
+UNIX-seconds timestamp of the most recent successful `PollOnce` per
+external source. Zero / unset when the poller has never succeeded
+since process start. Companion to
+`ratesengine_external_poller_polls_total`: a gauge makes "data is
+stale by N minutes" expressible as `time() - <gauge>` rather than
+multi-window rate math, which simplifies alerting (see
+`ratesengine_external_poller_stale`).
+
 ### `ratesengine_discovery_dropped_hits_total`
 
 Counter, no labels.

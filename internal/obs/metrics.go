@@ -35,6 +35,8 @@ func init() {
 		SourceEnabled,
 		SourceDecodeErrorsTotal,
 		SourceOrphanEventsTotal,
+		ExternalPollerPollsTotal,
+		ExternalPollerLastSuccessUnix,
 		DiscoveryDroppedHitsTotal,
 		DiscoverySkippedHitsTotal,
 		SourceInsertErrorsTotal,
@@ -164,6 +166,44 @@ var SourceDecodeErrorsTotal = prometheus.NewCounterVec(
 	prometheus.CounterOpts{
 		Name: "ratesengine_source_decode_errors_total",
 		Help: "Events that failed to decode, per source.",
+	},
+	[]string{"source"},
+)
+
+// ExternalPollerPollsTotal — per-source, per-outcome counter of
+// PollOnce invocations. Outcome is one of:
+//
+//   - success — venue returned 200 and the response decoded OK
+//   - error   — PollOnce returned a non-nil error (network, HTTP
+//     4xx/5xx, decode failure)
+//   - skipped — the poller's internal cooldown (after a previous
+//     throttle) suppressed the HTTP call
+//
+// Pre-2026-05-09 there was no signal at all when an external poller
+// was sustained-failing — CoinGecko throttling went undetected for
+// ~13h on r1 because the only output was a per-minute WARN log. The
+// `success` outcome plus PromQL absence-checking is the canonical
+// way to alert: `rate(...{outcome="success", source="<name>"}[30m])
+// == 0` for sources expected to contribute.
+var ExternalPollerPollsTotal = prometheus.NewCounterVec(
+	prometheus.CounterOpts{
+		Name: "ratesengine_external_poller_polls_total",
+		Help: "External poller invocations, labelled by source and outcome (success | error | skipped).",
+	},
+	[]string{"source", "outcome"},
+)
+
+// ExternalPollerLastSuccessUnix — per-source UNIX-seconds timestamp
+// of the most recent successful PollOnce. Zero / unset when the
+// poller has never succeeded since process start.
+//
+// Companion to ExternalPollerPollsTotal: a gauge makes "data is
+// stale by N minutes" expressible as `time() - <gauge>` rather than
+// requiring multi-window rate math, which is much easier to alert on.
+var ExternalPollerLastSuccessUnix = prometheus.NewGaugeVec(
+	prometheus.GaugeOpts{
+		Name: "ratesengine_external_poller_last_success_unix",
+		Help: "UNIX seconds of the most recent successful PollOnce, per source. Zero = never succeeded since startup.",
 	},
 	[]string{"source"},
 )
