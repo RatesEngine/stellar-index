@@ -718,3 +718,19 @@ func (c *Client) Version(ctx context.Context) (*Envelope[Version], error) {
 	}
 	return &env, nil
 }
+
+// NetworkStats fetches the home-page aggregate snapshot the
+// explorer renders in its network strip — 24h USD volume, active
+// markets count, indexed-assets count, latest live ledger, source
+// counts. Single round trip backed by GET /v1/network/stats.
+//
+// The Volume24hUSD field is *string per ADR-0003 (raw cents can
+// exceed int64); nil when no USD-equivalent trades landed in the
+// rolling 24h window.
+func (c *Client) NetworkStats(ctx context.Context) (*Envelope[NetworkStats], error) {
+	var env Envelope[NetworkStats]
+	if err := c.doJSON(ctx, http.MethodGet, "/v1/network/stats", nil, nil, &env); err != nil {
+		return nil, err
+	}
+	return &env, nil
+}

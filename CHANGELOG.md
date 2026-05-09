@@ -65,6 +65,13 @@ against.
   path 204; client-side empty-keyID validation; 404 surfaced as
   typed `*APIError`).
 
+- **`pkg/client`: `NetworkStats(ctx)`** SDK method for
+  `GET /v1/network/stats` — single-call home-page snapshot
+  (24h volume, market count, indexed-asset count, latest live
+  ledger, source counts). New `client.NetworkStats` type
+  preserves the `*string Volume24hUSD` per ADR-0003 so callers
+  can distinguish "no data" (nil) from "0". Tests cover the
+  happy path and the omitempty volume case.
 - **`/v1/price` fiat-vs-fiat cross-rate fallback**: when both
   `asset` and `quote` are fiat (e.g. `asset=fiat:EUR&quote=fiat:USD`)
   and the Timescale + Redis VWAP paths both miss, the handler

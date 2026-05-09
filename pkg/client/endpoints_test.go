@@ -1162,3 +1162,53 @@ func TestCursors_HappyPath(t *testing.T) {
 		t.Errorf("Data = %+v", got.Data)
 	}
 }
+
+// TestNetworkStats_HappyPath — single-shot home-page snapshot.
+// Pins the path, the *string Volume24hUSD round-trip, and the
+// integer source counts.
+func TestNetworkStats_HappyPath(t *testing.T) {
+	_, c := newTestServer(t, func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/v1/network/stats" {
+			t.Errorf("path = %q, want /v1/network/stats", r.URL.Path)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"data":{"volume_24h_usd":"3958193034.60","markets_count_24h":22158,"assets_indexed":86114,"latest_ledger":62484113,"exchange_sources":11,"total_sources":21},"as_of":"2026-05-09T04:17:59Z","flags":{}}`))
+	})
+	got, err := c.NetworkStats(context.Background())
+	if err != nil {
+		t.Fatalf("NetworkStats: %v", err)
+	}
+	if got.Data.Volume24hUSD == nil || *got.Data.Volume24hUSD != "3958193034.60" {
+		t.Errorf("Volume24hUSD = %v, want 3958193034.60", got.Data.Volume24hUSD)
+	}
+	if got.Data.MarketsCount24h != 22158 {
+		t.Errorf("MarketsCount24h = %d, want 22158", got.Data.MarketsCount24h)
+	}
+	if got.Data.AssetsIndexed != 86114 {
+		t.Errorf("AssetsIndexed = %d, want 86114", got.Data.AssetsIndexed)
+	}
+	if got.Data.LatestLedger != 62484113 {
+		t.Errorf("LatestLedger = %d", got.Data.LatestLedger)
+	}
+	if got.Data.ExchangeSources != 11 || got.Data.TotalSources != 21 {
+		t.Errorf("source counts = (%d, %d), want (11, 21)", got.Data.ExchangeSources, got.Data.TotalSources)
+	}
+}
+
+// TestNetworkStats_NullVolume — when prod has no USD-equivalent
+// trades in the rolling window, Volume24hUSD is omitted from the
+// JSON. Round-trip leaves the *string at nil; client code can
+// distinguish "no data" from "0".
+func TestNetworkStats_NullVolume(t *testing.T) {
+	_, c := newTestServer(t, func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"data":{"markets_count_24h":0,"assets_indexed":86114,"latest_ledger":62484113,"exchange_sources":11,"total_sources":21},"as_of":"2026-05-09T04:17:59Z","flags":{}}`))
+	})
+	got, err := c.NetworkStats(context.Background())
+	if err != nil {
+		t.Fatalf("NetworkStats: %v", err)
+	}
+	if got.Data.Volume24hUSD != nil {
+		t.Errorf("Volume24hUSD = %v, want nil (omitempty path)", got.Data.Volume24hUSD)
+	}
+}

@@ -511,3 +511,18 @@ type Version struct {
 	Dirty     string `json:"dirty"`
 	GoVersion string `json:"go_version"`
 }
+
+// NetworkStats is the data shape returned by [Client.NetworkStats] —
+// the home-page aggregate snapshot the explorer renders in its
+// network strip. One round trip replaces fan-out across coins +
+// markets + sources + diagnostics. Volume24hUSD is a *string per
+// ADR-0003 (raw cents can exceed int64); nil when the rolling 24h
+// window has no USD-equivalent trades.
+type NetworkStats struct {
+	Volume24hUSD    *string `json:"volume_24h_usd,omitempty"`
+	MarketsCount24h int64   `json:"markets_count_24h"`
+	AssetsIndexed   int64   `json:"assets_indexed"`
+	LatestLedger    int64   `json:"latest_ledger"`
+	ExchangeSources int     `json:"exchange_sources"`
+	TotalSources    int     `json:"total_sources"`
+}
