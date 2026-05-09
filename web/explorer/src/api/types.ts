@@ -2498,12 +2498,27 @@ export interface paths {
          *     Soroswap tracks the factory cursor + one cursor per pair)
          *     return one row per (source, sub_source) tuple.
          *
+         *     Pass `?max_age=<duration>` to omit completed-backfill
+         *     cursors that drown out the live ledgerstream marker —
+         *     useful when polling from monitoring tools that can't
+         *     post-filter. The explorer's `/diagnostics` page applies
+         *     the same filter client-side, defaulting to 1h.
+         *
          *     Returns 503 when the deployment hasn't wired the cursors
          *     reader.
          */
         get: {
             parameters: {
-                query?: never;
+                query?: {
+                    /**
+                     * @description Positive Go-duration string (e.g. `1h`, `30m`, `5m`,
+                     *     `0.5h`). When present, rows whose `lag_seconds`
+                     *     exceeds this value are excluded from the response.
+                     *     Empty / omitted preserves the legacy "return every
+                     *     cursor" contract.
+                     */
+                    max_age?: string;
+                };
                 header?: never;
                 path?: never;
                 cookie?: never;
@@ -2526,6 +2541,17 @@ export interface paths {
                             lag_seconds: number;
                         }[];
                     };
+                };
+                /**
+                 * @description `max_age` was set to something that doesn't parse as a
+                 *     positive Go duration. Body is the standard problem+json
+                 *     envelope with `type=https://api.ratesengine.net/errors/invalid-max-age`.
+                 */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
                 };
                 429: components["responses"]["RateLimited"];
                 500: components["responses"]["InternalError"];
