@@ -4,9 +4,11 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
+	"io"
 	"math/big"
 	"net/http"
 	"net/url"
+	"strings"
 	"testing"
 	"time"
 
@@ -144,6 +146,25 @@ func TestHistory_MissingBase400(t *testing.T) {
 	resp := mustGet(t, ts.URL+"/v1/history?quote=fiat:USD")
 	if resp.StatusCode != http.StatusBadRequest {
 		t.Errorf("status = %d, want 400", resp.StatusCode)
+	}
+}
+
+// When `asset` is supplied (the /v1/price/chart param convention)
+// and `base` is missing, the error detail nudges callers to the
+// right param name. Pin the hint shape so a refactor can't silently
+// drop it — that hint is the difference between a confused 400 and
+// a self-explanatory one.
+func TestHistory_MissingBaseWithAssetHint(t *testing.T) {
+	srv := v1.New(v1.Options{History: &stubHistoryReader{}})
+	ts := httpTestServer(t, srv)
+
+	resp := mustGet(t, ts.URL+"/v1/history?asset=native&quote=fiat:USD")
+	if resp.StatusCode != http.StatusBadRequest {
+		t.Fatalf("status = %d, want 400", resp.StatusCode)
+	}
+	body, _ := io.ReadAll(resp.Body)
+	if !strings.Contains(string(body), "base/quote") || !strings.Contains(string(body), "/v1/price") {
+		t.Errorf("body should mention base/quote and /v1/price; got %q", string(body))
 	}
 }
 

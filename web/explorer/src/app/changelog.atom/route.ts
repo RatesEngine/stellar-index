@@ -9,7 +9,7 @@
 
 import { NextResponse } from 'next/server';
 
-import { loadReleases, type Release } from '@/lib/changelog';
+import { loadReleases, versionSlug, type Release } from '@/lib/changelog';
 
 // Required for output: 'export'.
 export const dynamic = 'force-static';
@@ -19,7 +19,16 @@ const FEED_TITLE = 'Rates Engine — release notes';
 const FEED_AUTHOR = 'Rates Engine';
 
 export function GET() {
-  const releases = loadReleases();
+  // Drop the Unreleased section from the syndication feed —
+  // every explorer redeploy would otherwise surface it as a "new
+  // release" entry to Feedly / Slack RSS subscribers. The
+  // rendered /changelog page intentionally keeps Unreleased
+  // visible (visitors want a forward look); the atom feed has the
+  // opposite contract — only dated, immutable releases belong
+  // here.
+  const releases = loadReleases().filter(
+    (r) => r.version.toLowerCase() !== 'unreleased',
+  );
   const updated = pickFeedUpdated(releases);
   const entries = releases.map(renderEntry).join('\n');
 
@@ -46,9 +55,9 @@ ${entries}
 }
 
 function renderEntry(r: Release): string {
-  const id = `urn:ratesengine:release:${slugify(r.version)}`;
+  const id = `urn:ratesengine:release:${versionSlug(r.version)}`;
   const title = `Rates Engine ${r.version}`;
-  const url = `${SITE_URL}/changelog#${slugify(r.version)}`;
+  const url = `${SITE_URL}/changelog#${versionSlug(r.version)}`;
   const published = atomDate(r.date);
   // Body is the original markdown wrapped in CDATA so feed
   // readers that render plain text (Slack, terminal RSS) still
@@ -86,13 +95,6 @@ function atomDate(date?: string): string {
   const d = new Date(`${date}T00:00:00Z`);
   if (Number.isNaN(d.getTime())) return new Date().toISOString();
   return d.toISOString();
-}
-
-function slugify(version: string): string {
-  return version
-    .toLowerCase()
-    .replace(/[^a-z0-9.-]+/g, '-')
-    .replace(/^-+|-+$/g, '');
 }
 
 function esc(s: string): string {

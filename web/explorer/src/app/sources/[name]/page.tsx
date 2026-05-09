@@ -3,6 +3,7 @@ import Link from 'next/link';
 
 import { SourceStatsPanel } from '@/app/dexes/[source]/SourceStatsPanel';
 import { formatCompact } from '@/lib/format';
+import { SITE_OG_IMAGES, SITE_TWITTER_IMAGES } from '@/lib/seo';
 
 const API_BASE_URL =
   process.env.NEXT_PUBLIC_API_BASE_URL ?? 'https://api.ratesengine.net';
@@ -75,8 +76,8 @@ export async function generateMetadata({
     title,
     description,
     alternates: { canonical },
-    openGraph: { title, description, url: canonical, type: 'website' },
-    twitter: { card: 'summary_large_image', title, description },
+    openGraph: { title, description, url: canonical, type: 'website', images: SITE_OG_IMAGES },
+    twitter: { card: 'summary_large_image', title, description, images: SITE_TWITTER_IMAGES },
   };
 }
 
@@ -174,8 +175,23 @@ export default async function SourceDetailPage({
 
   const cursors = allCursors.filter((c) => c.source === name);
 
+  // Schema.org BreadcrumbList — Home → Sources → <name>.
+  const breadcrumbLD = {
+    '@context': 'https://schema.org',
+    '@type': 'BreadcrumbList',
+    itemListElement: [
+      { '@type': 'ListItem', position: 1, name: 'Home', item: 'https://ratesengine.net' },
+      { '@type': 'ListItem', position: 2, name: 'Sources', item: 'https://ratesengine.net/sources' },
+      { '@type': 'ListItem', position: 3, name, item: `https://ratesengine.net/sources/${name}` },
+    ],
+  };
+
   return (
     <div className="mx-auto max-w-7xl space-y-6 px-6 py-8">
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(breadcrumbLD) }}
+      />
       <header className="space-y-3">
         <Link
           href="/sources"

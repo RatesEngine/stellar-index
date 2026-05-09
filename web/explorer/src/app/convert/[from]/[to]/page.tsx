@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 import Link from 'next/link';
 import { ArrowLeft, ArrowLeftRight } from 'lucide-react';
 
+import { SITE_OG_IMAGES } from '@/lib/seo';
 import { ConvertPair } from './ConvertPair';
 
 const API_BASE_URL =
@@ -140,6 +141,7 @@ export async function generateMetadata({ params }: { params: Params }): Promise<
         : `Live ${f} to ${t} forex rate + converter.`,
       url: `https://ratesengine.net/convert/${f}/${t}`,
       type: 'website',
+      images: SITE_OG_IMAGES,
     },
   };
 }
@@ -153,8 +155,26 @@ export default async function ConvertPage({ params }: { params: Params }) {
   const rate = detail?.cross_rates?.[t] ?? null;
   const inverse = rate != null && rate > 0 ? 1 / rate : null;
 
+  // Schema.org BreadcrumbList — Home → Currencies → <from> → <from> to <to>.
+  // Four-step path because the converter sits one level below the
+  // currency-detail page in the IA (the "from" currency owns the conversion).
+  const breadcrumbLD = {
+    '@context': 'https://schema.org',
+    '@type': 'BreadcrumbList',
+    itemListElement: [
+      { '@type': 'ListItem', position: 1, name: 'Home', item: 'https://ratesengine.net' },
+      { '@type': 'ListItem', position: 2, name: 'Currencies', item: 'https://ratesengine.net/currencies' },
+      { '@type': 'ListItem', position: 3, name: f, item: `https://ratesengine.net/currencies/${f}` },
+      { '@type': 'ListItem', position: 4, name: `${f} to ${t}`, item: `https://ratesengine.net/convert/${f}/${t}` },
+    ],
+  };
+
   return (
     <div className="mx-auto max-w-4xl space-y-6 px-6 py-8">
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(breadcrumbLD) }}
+      />
       <Link
         href={`/currencies/${f}`}
         className="inline-flex items-center gap-1.5 text-sm text-slate-600 hover:text-brand-600 dark:text-slate-400"

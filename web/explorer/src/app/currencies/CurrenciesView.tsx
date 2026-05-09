@@ -73,7 +73,15 @@ function parseSortKey(s: string | null): SortKey | null {
   return s != null && (SORT_VALUES as string[]).includes(s) ? (s as SortKey) : null;
 }
 
-export function CurrenciesView() {
+export interface CurrenciesViewProps {
+  initialCrypto?: CryptoCoin[];
+  initialFiat?: FiatEnvelope;
+}
+
+export function CurrenciesView({
+  initialCrypto,
+  initialFiat,
+}: CurrenciesViewProps = {}) {
   const router = useRouter();
   const pathname = usePathname();
   const params = useSearchParams();
@@ -125,6 +133,12 @@ export function CurrenciesView() {
         // cadence for the flash UX. Backend cache (rc.38 PR #1048)
         // makes the per-fetch cost <100ms post-deploy.
         refetchInterval: 15_000,
+        // Build-time snapshot painted on first frame; the query
+        // is treated as immediately stale (initialDataUpdatedAt:
+        // 0) so the live refetch fires on mount even though we
+        // had data to show.
+        initialData: initialCrypto,
+        initialDataUpdatedAt: 0,
       },
       {
         queryKey: ['/v1/currencies', 'currencies-listing'],
@@ -138,6 +152,8 @@ export function CurrenciesView() {
         // faster than 60s is wasted; the worker only roll-overs the
         // snapshot once per hour.
         refetchInterval: 60_000,
+        initialData: initialFiat,
+        initialDataUpdatedAt: 0,
       },
     ],
   });
@@ -398,7 +414,7 @@ export function CurrenciesView() {
   );
 }
 
-interface CryptoCoin {
+export interface CryptoCoin {
   slug: string;
   asset_id: string;
   code: string;
@@ -413,7 +429,7 @@ interface CryptoCoin {
   price_history_7d?: number[];
 }
 
-interface FiatRow {
+export interface FiatRow {
   ticker: string;
   name: string;
   rate_usd: number;
@@ -422,6 +438,11 @@ interface FiatRow {
   history_7d_rates?: number[];
   market_cap_usd?: number;
   circulating_supply?: number;
+}
+
+export interface FiatEnvelope {
+  currencies?: FiatRow[];
+  published_at?: string;
 }
 
 function toCryptoUnified(c: CryptoCoin): UnifiedRow {
@@ -826,6 +847,7 @@ function SearchInput({
       <input
         ref={inputRef}
         type="search"
+        aria-label="Search currencies by ticker, name, or slug"
         value={value}
         onChange={(e) => onChange(e.target.value)}
         onKeyDown={(e) => {
