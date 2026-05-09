@@ -97,6 +97,7 @@ export function MarketsTable() {
         <div className="flex flex-wrap items-center gap-3 text-xs">
           <input
             type="search"
+            aria-label="Filter markets by base or quote asset"
             placeholder="Filter by base or quote asset…"
             value={filter}
             onChange={(e) => setFilter(e.target.value)}

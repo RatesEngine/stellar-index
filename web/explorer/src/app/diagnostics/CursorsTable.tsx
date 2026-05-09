@@ -92,6 +92,7 @@ export function CursorsTable() {
         <div className="flex flex-wrap items-center gap-3 text-xs">
           <input
             type="search"
+            aria-label="Filter cursors by source or sub-source"
             placeholder="Filter sources or sub-sources…"
             value={filter}
             onChange={(e) => setFilter(e.target.value)}

@@ -826,6 +826,7 @@ function SearchInput({
       <input
         ref={inputRef}
         type="search"
+        aria-label="Search currencies by ticker, name, or slug"
         value={value}
         onChange={(e) => onChange(e.target.value)}
         onKeyDown={(e) => {
