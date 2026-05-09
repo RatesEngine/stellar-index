@@ -145,6 +145,16 @@ against.
   page-level openGraph now spreads them explicitly. The
   underlying asset (`/og.svg`, 1200×630) is unchanged —
   only the per-page metadata wiring.
+### Changed
+
+- **Explorer `/diagnostics` cursor table hides stale (>1h) rows
+  by default**. Live audit on r1 today: 30 of ~50
+  ingestion-cursor rows had `lag_seconds` over 5 days — completed
+  backfill jobs whose progress markers were never cleaned up,
+  drowning out the live ingest cursor that operators open the
+  page to find. New `Hide stale (>1h)` checkbox (default on)
+  filters to actively-progressing cursors; toggle off to see the
+  full set when investigating a stuck backfill.
 
 ### Added
 
