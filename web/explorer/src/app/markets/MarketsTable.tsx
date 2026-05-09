@@ -55,7 +55,7 @@ export function MarketsTable() {
     return (
       <Panel
         title="Markets"
-        source={asExample('/v1/markets', { limit: 500 })}
+        source={asExample('/v1/markets', { limit: 100, order_by: orderBy, include: 'sparkline' })}
         bodyClassName="text-sm text-down-strong"
       >
         Failed to load markets:{' '}
@@ -67,7 +67,7 @@ export function MarketsTable() {
     return (
       <Panel
         title="Markets"
-        source={asExample('/v1/markets', { limit: 500 })}
+        source={asExample('/v1/markets', { limit: 100, order_by: orderBy, include: 'sparkline' })}
         bodyClassName="text-sm text-slate-500"
       >
         Loading…
@@ -78,7 +78,7 @@ export function MarketsTable() {
     return (
       <Panel
         title="Markets"
-        source={asExample('/v1/markets', { limit: 500 })}
+        source={asExample('/v1/markets', { limit: 100, order_by: orderBy, include: 'sparkline' })}
         bodyClassName="text-sm text-slate-500"
       >
         No active markets in the last 14 days.
@@ -90,7 +90,7 @@ export function MarketsTable() {
     <Panel
       title={`${data.markets.length} active markets`}
       hint="Pairs that traded in the last 14 days, ordered by 24h USD volume"
-      source={asExample('/v1/markets', { limit: 500 })}
+      source={asExample('/v1/markets', { limit: 100, order_by: orderBy, include: 'sparkline' })}
       bodyClassName="-mx-4"
     >
       <div className="px-4 pb-3 pt-1">

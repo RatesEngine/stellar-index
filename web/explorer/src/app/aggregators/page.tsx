@@ -9,6 +9,7 @@ export const metadata: Metadata = {
   title: 'Aggregators — routers and yield wrappers on Stellar',
   description:
     'Soroswap router, DeFindex yield vaults — protocols that route into the underlying DEXes and lending pools. Excluded from VWAP to avoid double-counting upstream markets.',
+  alternates: { canonical: '/aggregators' },
 };
 
 type ContractRef = {

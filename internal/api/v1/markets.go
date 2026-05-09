@@ -44,6 +44,14 @@ type MarketsReader interface {
 	// for paginated drill-down.
 	SourceMarkets(ctx context.Context, source, cursor string, limit int, order timescale.MarketsOrder) ([]Market, string, error)
 
+	// AssetMarkets is DistinctPairsExt narrowed to pairs where the
+	// given asset_id appears on either side (base OR quote). Backs
+	// /v1/markets?asset=<asset_id> — the explorer's
+	// /assets/{slug} Markets tab uses it to surface every market
+	// the asset participates in without paying for a global scan +
+	// client-side filter.
+	AssetMarkets(ctx context.Context, asset, cursor string, limit int, order timescale.MarketsOrder) ([]Market, string, error)
+
 	// AllPools returns every (source, base, quote) tuple — same
 	// pair on two venues becomes two rows. When `sources` is
 	// non-empty, restricts the result to rows whose source name
@@ -95,7 +103,17 @@ type Pool struct {
 //   - source   (optional): single DEX name. Restricts the result to
 //     that one DEX's pools. Unknown / non-DEX
 //     source names return an empty list.
-func (s *Server) handlePools(w http.ResponseWriter, r *http.Request) { //nolint:gocognit // option parsing + DEX-source filter + 8s-timeout guard are linear; splitting fragments the request lifecycle
+//   - base     (optional): canonical asset_id. Restricts to pools
+//     where this asset is on the base side. AND-combined with
+//     `quote` if both are passed (single-pair lookup).
+//   - quote    (optional): canonical asset_id. Same as `base` but
+//     on the quote side.
+//   - asset    (optional): canonical asset_id. Restricts to pools
+//     where this asset appears on either side (base OR quote).
+//     Mutually exclusive with `base`/`quote` — combining the two
+//     filter shapes (AND vs OR) has no well-defined semantics.
+//     Backs the explorer's /assets/{slug} Liquidity tab.
+func (s *Server) handlePools(w http.ResponseWriter, r *http.Request) { //nolint:gocognit,gocyclo,funlen // option parsing + DEX-source filter + asset/base+quote validation + 8s-timeout guard are linear; splitting fragments the request lifecycle
 	cursor := r.URL.Query().Get("cursor")
 	limit := 100
 	if raw := r.URL.Query().Get("limit"); raw != "" {
@@ -162,10 +180,30 @@ func (s *Server) handlePools(w http.ResponseWriter, r *http.Request) { //nolint:
 		writeJSON(w, []Pool{}, Flags{})
 		return
 	}
+	baseFilter := r.URL.Query().Get("base")
+	quoteFilter := r.URL.Query().Get("quote")
+	assetFilter := r.URL.Query().Get("asset")
+	if assetFilter != "" {
+		if _, err := canonical.ParseAsset(assetFilter); err != nil {
+			writeProblem(w, r,
+				"https://api.ratesengine.net/errors/invalid-asset-id",
+				"Invalid asset", http.StatusBadRequest,
+				"asset must be a canonical asset_id (e.g. 'native', 'USDC-G…', 'fiat:USD'); got "+assetFilter+" ("+err.Error()+")")
+			return
+		}
+		if baseFilter != "" || quoteFilter != "" {
+			writeProblem(w, r,
+				"https://api.ratesengine.net/errors/conflicting-filters",
+				"Conflicting filters", http.StatusBadRequest,
+				"asset (base OR quote) cannot be combined with base or quote (AND-shape) on /v1/pools; pick one filter shape.")
+			return
+		}
+	}
 	filter := timescale.PoolsFilter{
 		Sources: dexSources,
-		Base:    r.URL.Query().Get("base"),
-		Quote:   r.URL.Query().Get("quote"),
+		Base:    baseFilter,
+		Quote:   quoteFilter,
+		Asset:   assetFilter,
 	}
 	// Hard 8s ceiling — the AllPools query scans the trades
 	// hypertable's 24h window and can take 10s+ on a cold-cache
@@ -251,7 +289,14 @@ type MarketVolumeBucket struct {
 //     The latter surfaces high-USD-volume pairs first so clients
 //     don't paginate alphabetically through ~5K dust pairs to find
 //     the ones with real activity.
-func (s *Server) handleMarkets(w http.ResponseWriter, r *http.Request) { //nolint:gocognit,gocyclo,funlen // option parsing + source/no-source dispatch + 8s-timeout guard + sparkline backfill are linear; splitting fragments the request lifecycle
+//   - source   (optional): single source name (DEX or CEX). Restricts
+//     the result to pairs that source observed in the recency window.
+//   - asset    (optional): canonical asset_id. Restricts the result
+//     to pairs where the asset appears on either side (base OR
+//     quote). Mutually exclusive with `source` — combine the two
+//     in the client if you need both. Backs the explorer's
+//     /assets/{slug} Markets tab.
+func (s *Server) handleMarkets(w http.ResponseWriter, r *http.Request) { //nolint:gocognit,gocyclo,funlen // option parsing + source/asset/no-filter dispatch + 8s-timeout guard + sparkline backfill are linear; splitting fragments the request lifecycle
 	cursor := r.URL.Query().Get("cursor")
 	limit := 100
 	if raw := r.URL.Query().Get("limit"); raw != "" {
@@ -305,6 +350,28 @@ func (s *Server) handleMarkets(w http.ResponseWriter, r *http.Request) { //nolin
 		}
 	}
 
+	asset := r.URL.Query().Get("asset")
+	if asset != "" {
+		// Validate canonical asset_id shape so an unparseable input
+		// returns 400 with a useful diagnostic instead of an empty
+		// 200 (the silent-empty-page anti-pattern that confuses
+		// callers; same guard family as ?source= above).
+		if _, err := canonical.ParseAsset(asset); err != nil {
+			writeProblem(w, r,
+				"https://api.ratesengine.net/errors/invalid-asset-id",
+				"Invalid asset", http.StatusBadRequest,
+				"asset must be a canonical asset_id (e.g. 'native', 'USDC-G…', 'fiat:USD'); got "+asset+" ("+err.Error()+")")
+			return
+		}
+	}
+	if source != "" && asset != "" {
+		writeProblem(w, r,
+			"https://api.ratesengine.net/errors/conflicting-filters",
+			"Conflicting filters", http.StatusBadRequest,
+			"source and asset cannot be combined on /v1/markets; pick one. To find a single source's markets involving a specific asset, fetch /v1/markets?source=<src> and filter client-side, or use /v1/pools?source=<src>&base=<asset>.")
+		return
+	}
+
 	reader := s.markets
 	if reader == nil {
 		// Feature not wired — empty list is consistent with the
@@ -328,9 +395,12 @@ func (s *Server) handleMarkets(w http.ResponseWriter, r *http.Request) { //nolin
 	// 2026-05-08 because limit=5 missed the prewarm-25-only set).
 	mCtx, mCancel := context.WithTimeout(r.Context(), 8*time.Second)
 	defer mCancel()
-	if source != "" {
+	switch {
+	case source != "":
 		rows, next, err = reader.SourceMarkets(mCtx, source, cursor, limit, order)
-	} else {
+	case asset != "":
+		rows, next, err = reader.AssetMarkets(mCtx, asset, cursor, limit, order)
+	default:
 		rows, next, err = reader.DistinctPairsExt(mCtx, cursor, limit, order)
 	}
 	if err != nil {
