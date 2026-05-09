@@ -68,6 +68,11 @@ against.
   rendered `/changelog` page intentionally still shows Unreleased
   so visitors get a forward look — only the syndication feed
   asymmetry changed (atom = dated immutable releases only).
+- **`/v1/observations?source=<unknown>`** now returns 400
+  `unknown-source` instead of an empty 200 list. Same
+  silent-empty-page anti-pattern fix shipped on /v1/markets — a
+  typed source name looked identical on the wire to "this source
+  has no trades for the pair", masking typos as data gaps.
 
 ### Added
 
