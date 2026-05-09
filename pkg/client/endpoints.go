@@ -507,6 +507,26 @@ func (c *Client) CreateKey(ctx context.Context, req CreateKeyRequest) (*Envelope
 	return &env, nil
 }
 
+// RevokeKey deletes the API key identified by keyID. The deletion
+// is permanent; the key cannot be reactivated. Returns nil on
+// success (204), or an *APIError when the server rejects the
+// request — typically 401 (no credentials), 403 (caller doesn't
+// own the key), or 404 (key not found / already revoked).
+//
+// keyID is the public ID returned in [KeyCreated.ID] / on each
+// row of [Client.Keys] — NOT the plaintext secret. Returning the
+// secret would 400 since the route validates the path segment as
+// a key ID.
+func (c *Client) RevokeKey(ctx context.Context, keyID string) error {
+	if keyID == "" {
+		return &APIError{Status: 400, Title: "keyID required"}
+	}
+	// Server returns 204 No Content on success — no envelope to
+	// decode. Pass nil for the response struct so doJSON skips the
+	// JSON-decode step.
+	return c.doJSON(ctx, http.MethodDelete, "/v1/account/keys/"+keyID, nil, nil, nil)
+}
+
 // CoinsOptions paginates / filters the classic-asset directory.
 // `Limit` is server-side clamped to [1, 500] (default 100).
 // `Issuer`, when non-empty, restricts the listing to assets minted
