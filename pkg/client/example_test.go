@@ -482,3 +482,97 @@ func ExampleClient_Incidents() {
 
 	// Output: [SEV-3/resolved] 2026-05-06-postgres-lock-table-full — resolved 2026-05-06 22:39Z
 }
+
+// ExampleClient_LendingPools demonstrates fetching every Blend
+// pool contract observed in the trailing 7d auction stream.
+// Sorted by total auction count desc — first row is the most-
+// active pool. AuctionsTotal is lifetime; Auctions24h is the
+// recent activity slice; UniqueUsers30d is distinct addresses
+// that landed an auction in the last 30 days.
+//
+// Field stability: the wire shape is auction-derived today;
+// per-pool TVL, utilisation, and supply/borrow APYs land via
+// additional fields once the pool-storage reader worker ships.
+// JSON decode ignores unknown fields, so adding new fields is
+// non-breaking — but callers should NOT switch on field count.
+func ExampleClient_LendingPools() {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{
+			"data": [
+				{
+					"protocol": "blend",
+					"pool": "CAJJZSGMMM3PD7N33TAPHGBUGTB43OC73HVIK2L2G6BNGGGYOSSYBXBD",
+					"auctions_24h": 29,
+					"auctions_total": 5691,
+					"unique_users_30d": 4,
+					"last_seen": "2026-05-09T13:34:58Z"
+				}
+			],
+			"as_of": "2026-05-09T15:00:00Z",
+			"flags": {}
+		}`))
+	}))
+	defer srv.Close()
+
+	c := client.New(client.Options{BaseURL: srv.URL})
+	got, err := c.LendingPools(context.Background())
+	if err != nil {
+		fmt.Println("error:", err)
+		return
+	}
+	for _, p := range got.Data {
+		// Truncate the contract ID for display — full C-strkeys are
+		// 56 chars and don't render well in tables.
+		short := p.Pool
+		if len(short) > 12 {
+			short = short[:6] + "…" + short[len(short)-4:]
+		}
+		fmt.Printf("%s/%s: %d auctions/24h, %d total, %d users/30d\n",
+			p.Protocol, short, p.Auctions24h, p.AuctionsTotal, p.UniqueUsers30d)
+	}
+
+	// Output: blend/CAJJZS…BXBD: 29 auctions/24h, 5691 total, 4 users/30d
+}
+
+// ExampleClient_SACWrappers demonstrates the SAC (Stellar Asset
+// Contract) wrapper registry — a map from Soroban contract address
+// to the "<CODE>:<G_STRKEY>" form of the underlying classic asset.
+// Used to resolve `transfer` events on SAC contracts back to the
+// classic asset they wrap.
+//
+// Returned as a plain Go map; iterate keys for contracts or look
+// up a specific contract directly. The map is operator-config
+// (loaded from /etc/ratesengine.toml at boot), so it's small —
+// typically ~20 entries — and stable across regions running the
+// same config.
+func ExampleClient_SACWrappers() {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{
+			"data": {
+				"CAS3J7GYLGXMF6TDJBBYYSE3HQ6BBSMLNUQ34T6TZMYMW2EVH34XOWMA": "native",
+				"CCW67TSZV3SSS2HXMBQ5JFGCKJNXKZM7UQUWUZPUTHXSTZLEO7SJMI75": "USDC:GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN"
+			},
+			"as_of": "2026-05-09T15:00:00Z",
+			"flags": {}
+		}`))
+	}))
+	defer srv.Close()
+
+	c := client.New(client.Options{BaseURL: srv.URL})
+	got, err := c.SACWrappers(context.Background())
+	if err != nil {
+		fmt.Println("error:", err)
+		return
+	}
+	// Look up a specific Soroban contract — useful when a swap
+	// event's base/quote came in as a C-strkey and the explorer
+	// wants to render the underlying asset symbol.
+	const xlmSAC = "CAS3J7GYLGXMF6TDJBBYYSE3HQ6BBSMLNUQ34T6TZMYMW2EVH34XOWMA"
+	if asset, ok := got.Data[xlmSAC]; ok {
+		fmt.Printf("XLM SAC (%s…) wraps: %s\n", xlmSAC[:6], asset)
+	}
+
+	// Output: XLM SAC (CAS3J7…) wraps: native
+}
