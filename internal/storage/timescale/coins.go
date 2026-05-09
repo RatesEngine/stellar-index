@@ -403,7 +403,12 @@ const listCoinsBaseSelect = `
 		      THEN to_char((direct.vwap / direct_1h.vwap - 1) * 100, 'FM999999990.00')
 		      WHEN vs_xlm.vwap IS NOT NULL AND vs_xlm_1h.vwap IS NOT NULL
 		           AND vs_xlm_1h.vwap > 0
-		      THEN to_char((vs_xlm.vwap / vs_xlm_1h.vwap - 1) * 100, 'FM999999990.00')
+		           AND (SELECT vwap FROM xlm_usd) IS NOT NULL
+		           AND (SELECT vwap FROM xlm_usd_1h) IS NOT NULL
+		           AND (SELECT vwap FROM xlm_usd_1h) > 0
+		      THEN to_char(((vs_xlm.vwap    * (SELECT vwap FROM xlm_usd))
+		                  / (vs_xlm_1h.vwap * (SELECT vwap FROM xlm_usd_1h))
+		                  - 1) * 100, 'FM999999990.00')
 		      ELSE NULL
 		    END                                   AS change_1h_pct,
 		    CASE
@@ -419,7 +424,12 @@ const listCoinsBaseSelect = `
 		      THEN to_char((direct.vwap / direct_24h.vwap - 1) * 100, 'FM999999990.00')
 		      WHEN vs_xlm.vwap IS NOT NULL AND vs_xlm_24h.vwap IS NOT NULL
 		           AND vs_xlm_24h.vwap > 0
-		      THEN to_char((vs_xlm.vwap / vs_xlm_24h.vwap - 1) * 100, 'FM999999990.00')
+		           AND (SELECT vwap FROM xlm_usd) IS NOT NULL
+		           AND (SELECT vwap FROM xlm_usd_24h) IS NOT NULL
+		           AND (SELECT vwap FROM xlm_usd_24h) > 0
+		      THEN to_char(((vs_xlm.vwap     * (SELECT vwap FROM xlm_usd))
+		                  / (vs_xlm_24h.vwap * (SELECT vwap FROM xlm_usd_24h))
+		                  - 1) * 100, 'FM999999990.00')
 		      ELSE NULL
 		    END                                   AS change_24h_pct,
 		    CASE
@@ -435,7 +445,12 @@ const listCoinsBaseSelect = `
 		      THEN to_char((direct.vwap / direct_7d.vwap - 1) * 100, 'FM999999990.00')
 		      WHEN vs_xlm.vwap IS NOT NULL AND vs_xlm_7d.vwap IS NOT NULL
 		           AND vs_xlm_7d.vwap > 0
-		      THEN to_char((vs_xlm.vwap / vs_xlm_7d.vwap - 1) * 100, 'FM999999990.00')
+		           AND (SELECT vwap FROM xlm_usd) IS NOT NULL
+		           AND (SELECT vwap FROM xlm_usd_7d) IS NOT NULL
+		           AND (SELECT vwap FROM xlm_usd_7d) > 0
+		      THEN to_char(((vs_xlm.vwap    * (SELECT vwap FROM xlm_usd))
+		                  / (vs_xlm_7d.vwap * (SELECT vwap FROM xlm_usd_7d))
+		                  - 1) * 100, 'FM999999990.00')
 		      ELSE NULL
 		    END                                   AS change_7d_pct
 		  FROM classic_assets ca
@@ -1142,9 +1157,12 @@ const getCoinBySlugSQL = `
 		      WHEN (SELECT vwap FROM asset_vs_xlm) IS NOT NULL
 		           AND (SELECT vwap FROM asset_vs_xlm_1h) IS NOT NULL
 		           AND (SELECT vwap FROM asset_vs_xlm_1h) > 0
-		      THEN to_char(((SELECT vwap FROM asset_vs_xlm)
-		                  / (SELECT vwap FROM asset_vs_xlm_1h) - 1) * 100,
-		                  'FM999999990.00')
+		           AND (SELECT vwap FROM xlm_usd) IS NOT NULL
+		           AND (SELECT vwap FROM xlm_usd_1h) IS NOT NULL
+		           AND (SELECT vwap FROM xlm_usd_1h) > 0
+		      THEN to_char((((SELECT vwap FROM asset_vs_xlm)    * (SELECT vwap FROM xlm_usd))
+		                  / ((SELECT vwap FROM asset_vs_xlm_1h) * (SELECT vwap FROM xlm_usd_1h))
+		                  - 1) * 100, 'FM999999990.00')
 		      ELSE NULL
 		    END                                   AS change_1h_pct,
 		    CASE
@@ -1164,9 +1182,12 @@ const getCoinBySlugSQL = `
 		      WHEN (SELECT vwap FROM asset_vs_xlm) IS NOT NULL
 		           AND (SELECT vwap FROM asset_vs_xlm_24h) IS NOT NULL
 		           AND (SELECT vwap FROM asset_vs_xlm_24h) > 0
-		      THEN to_char(((SELECT vwap FROM asset_vs_xlm)
-		                  / (SELECT vwap FROM asset_vs_xlm_24h) - 1) * 100,
-		                  'FM999999990.00')
+		           AND (SELECT vwap FROM xlm_usd) IS NOT NULL
+		           AND (SELECT vwap FROM xlm_usd_24h) IS NOT NULL
+		           AND (SELECT vwap FROM xlm_usd_24h) > 0
+		      THEN to_char((((SELECT vwap FROM asset_vs_xlm)     * (SELECT vwap FROM xlm_usd))
+		                  / ((SELECT vwap FROM asset_vs_xlm_24h) * (SELECT vwap FROM xlm_usd_24h))
+		                  - 1) * 100, 'FM999999990.00')
 		      ELSE NULL
 		    END                                   AS change_24h_pct,
 		    CASE
@@ -1186,9 +1207,12 @@ const getCoinBySlugSQL = `
 		      WHEN (SELECT vwap FROM asset_vs_xlm) IS NOT NULL
 		           AND (SELECT vwap FROM asset_vs_xlm_7d) IS NOT NULL
 		           AND (SELECT vwap FROM asset_vs_xlm_7d) > 0
-		      THEN to_char(((SELECT vwap FROM asset_vs_xlm)
-		                  / (SELECT vwap FROM asset_vs_xlm_7d) - 1) * 100,
-		                  'FM999999990.00')
+		           AND (SELECT vwap FROM xlm_usd) IS NOT NULL
+		           AND (SELECT vwap FROM xlm_usd_7d) IS NOT NULL
+		           AND (SELECT vwap FROM xlm_usd_7d) > 0
+		      THEN to_char((((SELECT vwap FROM asset_vs_xlm)    * (SELECT vwap FROM xlm_usd))
+		                  / ((SELECT vwap FROM asset_vs_xlm_7d) * (SELECT vwap FROM xlm_usd_7d))
+		                  - 1) * 100, 'FM999999990.00')
 		      ELSE NULL
 		    END                                   AS change_7d_pct
 		  FROM chosen

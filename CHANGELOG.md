@@ -99,6 +99,20 @@ against.
 
 ### Fixed
 
+- **`/v1/coins` `change_{1h,24h,7d}_pct` for XLM-triangulated assets
+  now reflects USD change, not XLM-denominated change**. Pre-fix
+  USDC and PYUSD showed `-3.37%` and `-3.27%` 24h change live on
+  r1 — they're stablecoins and never depegged. The `vs_xlm`
+  fallback computed `vs_xlm.vwap / vs_xlm_24h.vwap` (raw XLM
+  ratio change) while `price_usd` correctly used
+  `vs_xlm.vwap × xlm_usd.vwap` (triangulated USD price). For
+  USD-stable assets these read inversely: USDC at $1 stays at $1
+  even when XLM moves 3% against it. Multiply both sides of the
+  change ratio by their respective `xlm_usd_*` factor so the
+  change consistently measures the same triangulated USD price
+  the row already displays. Same fix applied across `listCoins`
+  and `GetCoinBySlug` queries.
+
 - **Explorer home page now emits `<link rel="canonical">`**.
   Detail pages picked it up via #1094/#1095/#1097 but the root
   `/` was left without one, so search engines were free to treat
