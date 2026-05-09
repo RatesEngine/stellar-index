@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/lib/pq"
@@ -474,6 +475,64 @@ func buildMarketRow(baseRaw, quoteRaw string, lastAt time.Time, count24h int64, 
 		m.Volume24hUSD = &v
 	}
 	return m, nil
+}
+
+// ValidateMarketsCursor returns an error if `cursor` is non-empty
+// but doesn't match the encoded shape that encodeMarketsCursor
+// emits for the active order. Empty cursor is always valid (start
+// from the first page). Callers should reject invalid cursors at
+// the handler boundary with a 400.
+//
+// Without this guard, a hand-crafted cursor (or a stale link from
+// before a pagination format change) silently degrades:
+//
+//   - MarketsOrderPair: the SQL predicate
+//     `(base || '|' || quote) > $cursor` falls through to a
+//     lexicographic skip — collation-dependent and almost never
+//     what the caller wants.
+//   - MarketsOrderVolume24hDesc: the predicate casts
+//     `split_part($cursor, ':', 1)::numeric`, which raises a
+//     Postgres "invalid input syntax for type numeric" error and
+//     a 500. Burns CPU per request.
+func ValidateMarketsCursor(cursor string, order MarketsOrder) error {
+	if cursor == "" {
+		return nil
+	}
+	pairPart := cursor
+	if order == MarketsOrderVolume24hDesc {
+		idx := strings.IndexByte(cursor, ':')
+		if idx < 0 {
+			return fmt.Errorf("missing ':' separator")
+		}
+		volPart := cursor[:idx]
+		// Volume prefix may be empty (last row had a null vol_usd).
+		// Otherwise: digits with at most one '.', no leading sign.
+		if volPart != "" {
+			dot := false
+			for j := 0; j < len(volPart); j++ {
+				c := volPart[j]
+				switch {
+				case c >= '0' && c <= '9':
+				case c == '.' && !dot:
+					dot = true
+				default:
+					return fmt.Errorf("non-numeric volume prefix")
+				}
+			}
+		}
+		pairPart = cursor[idx+1:]
+		if pairPart == "" {
+			return fmt.Errorf("missing pair suffix")
+		}
+	}
+	pipe := strings.IndexByte(pairPart, '|')
+	if pipe < 0 {
+		return fmt.Errorf("missing '|' separator in pair")
+	}
+	if pipe == 0 || pipe == len(pairPart)-1 {
+		return fmt.Errorf("missing base or quote in pair")
+	}
+	return nil
 }
 
 // encodeMarketsCursor formats the last-row cursor for the active
