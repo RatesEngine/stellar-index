@@ -49,9 +49,14 @@ severity: P2
 
 ## Related
 
-- [`prewarm-handler-drift` feedback memory](../../../) — the pattern that motivated this alert (3 bugs in 24h, all the same shape).
-- `api-latency.md` — what the user sees when this fires.
-- The metric itself: `ratesengine_api_cache_ops_total` documented in [docs/reference/metrics/README.md](../../reference/metrics/README.md).
+- Worked examples of the pattern: PR #1185 (Order dimension drift),
+  #1194 (Sources dimension), #1195 (Limit dimension via implicit
+  handler-side subtraction). Read these for fix exemplars; all
+  three follow the same diff-and-fix shape this runbook describes.
+- [api-latency.md](api-latency.md) — what the user sees when this
+  fires (cache miss → cold-cache SQL → 5–10s response).
+- The metric itself: `ratesengine_api_cache_ops_total` documented
+  in [docs/reference/metrics/README.md](../../reference/metrics/README.md).
 
 ## Changelog
 
