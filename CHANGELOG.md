@@ -15,6 +15,22 @@ against.
 
 ## [Unreleased]
 
+### Security
+
+- **`Vary: Origin` now emitted on every CORS-enabled response in
+  exact-match mode**, not just when the request's Origin matched
+  the allow list. Pre-fix, a cacheable response served to a
+  no-Origin request (curl, server-side fetch, monitoring probe)
+  was cached at the CDN without origin discrimination — a later
+  browser request whose Origin WOULD have been allowed would
+  receive that cached "no CORS" response and fail client-side
+  fetch(). The inverse poisoning vector also closes: a response
+  cached with one allowed Origin's `Allow-Origin: <a>` could
+  previously be served to a request from a different allowed
+  Origin `<b>`, breaking that client too. Wildcard mode is
+  unaffected (response is origin-independent so Vary would just
+  defeat caching). Two regression tests pin both branches.
+
 ### Fixed
 
 - **`/v1/markets?include=sparkline` shares the 8s timeout budget
