@@ -228,6 +228,17 @@ against.
   with no metric or alert — only a per-minute WARN log. New
   runbook `external-poller-stale.md` with the
   CoinGecko-demo-key triage path baked in.
+- **r1 smoke probe coverage extended from 13 → 22 endpoints with
+  behaviour pinning**. New `expect_status` helper asserts arbitrary
+  HTTP status (not only 200), so the probe now catches regressions
+  where a documented 4xx silently weakens to a 200-with-empty-body
+  (the class of bug behind #1134). Net change: 8 new positive
+  checks (`/v1/coins/{slug}`, `/v1/issuers`, `/v1/currencies`,
+  `/v1/lending/pools`, `/v1/sac-wrappers`, `/v1/network/stats`,
+  `/v1/incidents`, `/v1/incidents.atom`, `/robots.txt`) and 2
+  negative behaviour pins (`?limit=999999` → 400 invalid-limit,
+  `/v1/coins/<garbage>` → 404 coin-not-found). All 22 checks
+  green against r1 today.
 
 - **`/v1/price` fiat-vs-fiat cross-rate fallback**: when both
   `asset` and `quote` are fiat (e.g. `asset=fiat:EUR&quote=fiat:USD`)
