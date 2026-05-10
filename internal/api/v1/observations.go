@@ -1,7 +1,10 @@
 package v1
 
 import (
+	"context"
+	"errors"
 	"net/http"
+	"time"
 
 	"github.com/RatesEngine/rates-engine/internal/canonical"
 	"github.com/RatesEngine/rates-engine/internal/sources/external"
@@ -92,9 +95,27 @@ func (s *Server) handleObservations(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	trades, err := s.computeObservations(r.Context(), pair, source, aggregate)
+	// 8s ceiling on the trades hypertable scan. Same pattern as
+	// #1082, #1099-#1106. The deliberate 2026-05-08 prod test
+	// (asset=native&quote=USDC-G…) hit a 10s curl timeout against
+	// the unguarded handler — the cold-cache "latest trade per
+	// source" scan over a high-traffic pair can run several seconds
+	// on first hit. The bound surfaces a structured 503 instead of
+	// holding the connection open until the upstream LB cuts it.
+	obsCtx, obsCancel := context.WithTimeout(r.Context(), 8*time.Second)
+	defer obsCancel()
+	trades, err := s.computeObservations(obsCtx, pair, source, aggregate)
 	if err != nil {
 		if clientAborted(r, err) {
+			return
+		}
+		if errors.Is(err, context.DeadlineExceeded) {
+			s.logger.Warn("computeObservations deadline exceeded",
+				"asset", asset.String(), "quote", quote.String(), "source", source)
+			writeProblem(w, r,
+				"https://api.ratesengine.net/errors/observations-timeout",
+				"Observations query timed out", http.StatusServiceUnavailable,
+				"the trades hypertable scan didn't return in 8s; retry shortly.")
 			return
 		}
 		s.logger.Error("LatestTradePerSource failed",

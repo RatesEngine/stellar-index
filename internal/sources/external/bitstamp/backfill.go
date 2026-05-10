@@ -180,6 +180,13 @@ func bitstampCandleToTrade(c bitstampCandle, symbol string, pair canonical.Pair,
 	quoteRaw := new(big.Int).Mul(base, price)
 	quote := new(big.Int).Quo(quoteRaw, pow10(externalAmountDecimals))
 
+	// Dust filter — see parse.go:parseTrade for the rationale. Same
+	// underflow can happen on a candle whose `volume` * `close`
+	// rounds to 0 at our 10^8 precision floor.
+	if quote.Sign() == 0 {
+		return canonical.Trade{}, ErrDustTrade
+	}
+
 	return canonical.Trade{
 		Source:      SourceName,
 		Ledger:      0,

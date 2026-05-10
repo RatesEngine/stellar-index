@@ -7,6 +7,7 @@ import (
 	"time"
 
 	v1 "github.com/RatesEngine/rates-engine/internal/api/v1"
+	"github.com/RatesEngine/rates-engine/internal/canonical"
 )
 
 // ─── /v1/oracle/lastprice ──────────────────────────────────────
@@ -91,6 +92,102 @@ func TestOracleLastPrice_RedisVWAPFallback(t *testing.T) {
 	mustDecode(t, resp, &env)
 	if env.Data.Price != "0.155" {
 		t.Errorf("price = %q, want \"0.155\"", env.Data.Price)
+	}
+}
+
+// TestOracleLastPrice_StablecoinFiatProxyFallback — when the
+// Redis VWAP cache also misses but the operator declared classic
+// USD pegs, the SEP-40 lastprice handler walks the pegs and returns
+// the rewritten X/<peg> snapshot. Mirrors the /v1/price fallback
+// from #1217. Without this, an on-chain integrator drop-in-replacing
+// SEP-40 lastprice() against XLM gets 404 even though /v1/coins
+// shows $0.16 fine.
+func TestOracleLastPrice_StablecoinFiatProxyFallback(t *testing.T) {
+	usdcClassic, err := canonical.ParseAsset("USDC-GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN")
+	if err != nil {
+		t.Fatalf("parse USDC: %v", err)
+	}
+	pegSnap := v1.PriceSnapshot{
+		AssetID:    "native",
+		Quote:      usdcClassic.String(),
+		Price:      "0.1626",
+		PriceType:  "vwap",
+		ObservedAt: time.Unix(1_770_000_000, 0).UTC(),
+	}
+	reader := &stubPriceReader{
+		snapshots: map[string]v1.PriceSnapshot{
+			"native/" + usdcClassic.String(): pegSnap,
+		},
+		sources: map[string][]string{
+			"native/" + usdcClassic.String(): {"sdex"},
+		},
+	}
+	srv := v1.New(v1.Options{
+		Prices:            reader,
+		USDPeggedClassics: []canonical.Asset{usdcClassic},
+	})
+	ts := startHTTPTest(t, srv.Handler())
+
+	resp := mustGet(t, ts.URL+"/v1/oracle/lastprice?asset=native")
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d, want 200 (peg fallback should serve)", resp.StatusCode)
+	}
+	var env struct {
+		Data v1.SEP40Price `json:"data"`
+	}
+	mustDecode(t, resp, &env)
+	if env.Data.Price != "0.1626" {
+		t.Errorf("price = %q, want \"0.1626\"", env.Data.Price)
+	}
+	// SEP-40 surface always quotes in fiat:USD; the wire `asset` is
+	// just the queried asset, so the fact we proxied through USDC
+	// shouldn't leak into the wire response.
+	if env.Data.Asset != "native" {
+		t.Errorf("asset = %q, want \"native\"", env.Data.Asset)
+	}
+}
+
+// TestOracleXLastPrice_StablecoinFiatProxyFallback — the
+// /v1/oracle/x_last_price?base=native&quote=fiat:USD case mirrors
+// the /v1/oracle/lastprice fix above. Without this, an integrator
+// asking for XLM/USD via the SEP-40 cross-pair surface gets the
+// same out-of-the-box 404.
+func TestOracleXLastPrice_StablecoinFiatProxyFallback(t *testing.T) {
+	usdcClassic, err := canonical.ParseAsset("USDC-GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN")
+	if err != nil {
+		t.Fatalf("parse USDC: %v", err)
+	}
+	pegSnap := v1.PriceSnapshot{
+		AssetID:    "native",
+		Quote:      usdcClassic.String(),
+		Price:      "0.1626",
+		PriceType:  "vwap",
+		ObservedAt: time.Unix(1_770_000_000, 0).UTC(),
+	}
+	reader := &stubPriceReader{
+		snapshots: map[string]v1.PriceSnapshot{
+			"native/" + usdcClassic.String(): pegSnap,
+		},
+		sources: map[string][]string{
+			"native/" + usdcClassic.String(): {"sdex"},
+		},
+	}
+	srv := v1.New(v1.Options{
+		Prices:            reader,
+		USDPeggedClassics: []canonical.Asset{usdcClassic},
+	})
+	ts := startHTTPTest(t, srv.Handler())
+
+	resp := mustGet(t, ts.URL+"/v1/oracle/x_last_price?base=native&quote=fiat:USD")
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d, want 200", resp.StatusCode)
+	}
+	var env struct {
+		Data v1.SEP40Price `json:"data"`
+	}
+	mustDecode(t, resp, &env)
+	if env.Data.Price != "0.1626" {
+		t.Errorf("price = %q, want \"0.1626\"", env.Data.Price)
 	}
 }
 
@@ -372,6 +469,62 @@ func TestOraclePrices_EmptyAsArray(t *testing.T) {
 	}
 	if len(env.Data) != 0 {
 		t.Errorf("expected empty array, got %d entries", len(env.Data))
+	}
+}
+
+// TestOraclePrices_StablecoinFiatProxyFallback — when the literal
+// asset/fiat:USD pair has no closed buckets but the operator
+// declared classic USD pegs, the handler walks the pegs and
+// returns the rewritten asset/<peg> snapshots. Mirrors the
+// fallback shipped on /v1/oracle/lastprice (#1220) and the other
+// X/fiat:USD surfaces (#1217 / #1218 / #1219). Without this,
+// /v1/oracle/prices?asset=native silently returned an empty data
+// array on Stellar mainnet.
+func TestOraclePrices_StablecoinFiatProxyFallback(t *testing.T) {
+	usdcClassic, err := canonical.ParseAsset("USDC-GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN")
+	if err != nil {
+		t.Fatalf("parse USDC: %v", err)
+	}
+	t0 := time.Unix(1_770_000_000, 0).UTC()
+	reader := &stubPriceReader{
+		// Literal native/fiat:USD missing. native/<USDC-classic>
+		// returns three closed buckets.
+		recent: map[string][]v1.PriceSnapshot{
+			"native/" + usdcClassic.String(): {
+				{AssetID: "native", Quote: usdcClassic.String(), Price: "0.1626", PriceType: "vwap", ObservedAt: t0},
+				{AssetID: "native", Quote: usdcClassic.String(), Price: "0.1625", PriceType: "vwap", ObservedAt: t0.Add(-1 * time.Minute)},
+			},
+		},
+	}
+	srv := v1.New(v1.Options{
+		Prices:            reader,
+		USDPeggedClassics: []canonical.Asset{usdcClassic},
+	})
+	ts := startHTTPTest(t, srv.Handler())
+
+	resp := mustGet(t, ts.URL+"/v1/oracle/prices?asset=native&records=10")
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d, want 200 (peg fallback should serve)", resp.StatusCode)
+	}
+	var env struct {
+		Data  []v1.SEP40Price `json:"data"`
+		Flags v1.Flags        `json:"flags"`
+	}
+	mustDecode(t, resp, &env)
+	if len(env.Data) != 2 {
+		t.Fatalf("got %d records via fallback, want 2", len(env.Data))
+	}
+	if env.Data[0].Price != "0.1626" {
+		t.Errorf("data[0].price = %q, want \"0.1626\" (newest from peg)", env.Data[0].Price)
+	}
+	if !env.Flags.Triangulated {
+		t.Errorf("flags.triangulated should be true on peg fallback")
+	}
+	// SEP-40 surface always quotes in fiat:USD; the wire `asset` is
+	// just the queried asset name — proxying through USDC shouldn't
+	// leak into the wire.
+	if env.Data[0].Asset != "native" {
+		t.Errorf("data[0].asset = %q, want \"native\"", env.Data[0].Asset)
 	}
 }
 

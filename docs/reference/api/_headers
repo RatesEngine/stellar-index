@@ -1,0 +1,26 @@
+# Cloudflare Pages headers for the docs site.
+#
+# Spec files served from this domain need permissive CORS so
+# external tools (Postman, openapi-typescript, code-generation
+# CLIs running in CI) can fetch them from arbitrary origins
+# without preflight failures.
+#
+# The HTML index uses Scalar which does its own first-party fetch
+# (same origin), so the catch-all CORS rule on /* is broad enough
+# to cover everything the docs site serves without a per-extension
+# carve-out.
+
+/*
+  Access-Control-Allow-Origin: *
+  Access-Control-Allow-Methods: GET, HEAD, OPTIONS
+  Access-Control-Allow-Headers: Content-Type
+  X-Content-Type-Options: nosniff
+
+# YAML files specifically — declare the right Content-Type so
+# spec parsers don't fall back to the CF default (text/plain) and
+# refuse to parse.
+/*.yaml
+  Content-Type: application/yaml; charset=utf-8
+
+/*.yml
+  Content-Type: application/yaml; charset=utf-8

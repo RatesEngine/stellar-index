@@ -154,10 +154,15 @@ jobs:
     name: Build all Dockerfiles
     runs-on: ubuntu-24.04
     timeout-minutes: 15
-    # Skip when docker/ doesn't exist yet (e.g. on PRs that pre-date
-    # the docker packaging work). Once docker/ lands the conditional
-    # auto-trips and the job runs.
-    if: hashFiles('docker/*.Dockerfile') != ''
+    # Note: a previous version had `if: hashFiles('docker/*.Dockerfile')
+    # != ''` here to skip the job when docker/ didn't exist yet, but
+    # `hashFiles()` reads the workspace which isn't checked out at
+    # job-level if-evaluation time. GitHub rejected the workflow file
+    # entirely and the workflow has been firing as "completed
+    # failure" with zero jobs on every push to main since (registered
+    # under its file path because the `name:` field couldn't be
+    # parsed past the broken expression). docker/ has 6 Dockerfiles
+    # now, so the guard is moot — drop it and let the job always run.
     steps:
       - name: Checkout
         uses: actions/checkout@v4
