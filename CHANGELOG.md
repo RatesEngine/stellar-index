@@ -17,6 +17,15 @@ against.
 
 ### Added
 
+- **`?source=<name>` filter on `/v1/diagnostics/cursors`** —
+  exact-match filter on the source column. Caught from a r1
+  audit: the param was being silently ignored, so an operator
+  asking for `?source=ledgerstream` to isolate the live cursor
+  from the ~50 backfill rows got everything. Composes with
+  `?max_age=` (both filters apply). Unknown values return an
+  empty array (not 400) — predictable for typos vs. brand-new
+  sources. OpenAPI updated; tests pin the filter shape and the
+  source+max_age composition.
 - **`/v1/pools?asset=<asset_id>` filter** — restrict the pools
   listing to rows where the asset appears on either side (base
   OR quote). Mirrors the same filter shape just shipped on
