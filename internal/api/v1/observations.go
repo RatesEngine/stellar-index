@@ -4,6 +4,7 @@ import (
 	"net/http"
 
 	"github.com/RatesEngine/rates-engine/internal/canonical"
+	"github.com/RatesEngine/rates-engine/internal/sources/external"
 )
 
 // handleObservations serves GET /v1/observations per ADR-0018
@@ -64,6 +65,21 @@ func (s *Server) handleObservations(w http.ResponseWriter, r *http.Request) {
 	}
 
 	source := r.URL.Query().Get("source")
+	if source != "" {
+		// Validate against the in-memory registry so an unknown
+		// source name returns 400 instead of an empty page (the
+		// silent-empty-page anti-pattern: a typo in `?source=`
+		// looks identical on the wire to "this source has no
+		// trades for the pair", which sends callers chasing
+		// nonexistent data). Same fail-fast guard as /v1/markets.
+		if _, ok := external.Registry[source]; !ok {
+			writeProblem(w, r,
+				"https://api.ratesengine.net/errors/unknown-source",
+				"Unknown source", http.StatusBadRequest,
+				"source must be a registered source name (see /v1/sources for the canonical list); got "+source)
+			return
+		}
+	}
 
 	// aggregate is currently single-valued ("latest"); reject anything
 	// else as a 400 rather than ignoring — keeps the surface honest.

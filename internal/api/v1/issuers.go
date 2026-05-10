@@ -7,6 +7,8 @@ import (
 	"errors"
 	"net/http"
 	"strconv"
+	"strings"
+	"time"
 
 	"github.com/RatesEngine/rates-engine/internal/storage/timescale"
 )
@@ -99,8 +101,19 @@ func (s *Server) handleIssuersList(w http.ResponseWriter, r *http.Request) {
 		}
 		limit = n
 	}
-	rows, err := s.issuers.ListIssuers(r.Context(), limit)
+	// 8s ceiling — same pattern as the cold-path series.
+	listCtx, listCancel := context.WithTimeout(r.Context(), 8*time.Second)
+	defer listCancel()
+	rows, err := s.issuers.ListIssuers(listCtx, limit)
 	if err != nil {
+		if errors.Is(err, context.DeadlineExceeded) {
+			s.logger.Warn("ListIssuers deadline exceeded", "limit", limit)
+			writeProblem(w, r,
+				"https://api.ratesengine.net/errors/issuers-timeout",
+				"Issuers list timed out", http.StatusServiceUnavailable,
+				"the issuer registry scan didn't return in 8s; retry shortly.")
+			return
+		}
 		s.logger.Warn("issuers list", "err", err)
 		writeProblem(w, r,
 			"https://api.ratesengine.net/errors/issuers-error",
@@ -145,8 +158,21 @@ func (s *Server) handleIssuer(w http.ResponseWriter, r *http.Request) {
 			"g_strkey path segment is required")
 		return
 	}
+	// Stellar G-strkeys are uppercase base32 by SEP-23 convention;
+	// the storage layer keys off the canonical uppercase form.
+	// URL clients (chat clients, search tools, manual typing)
+	// regularly lowercase, which used to 404 outright. Normalise
+	// at input — base32 alphabet is case-insensitive in Stellar
+	// SDK validation, so the underlying ed25519 public key is the
+	// same. No risk of merging two distinct accounts.
+	gStrkey = strings.ToUpper(gStrkey)
 
-	row, err := s.issuers.GetIssuer(r.Context(), gStrkey)
+	// 8s ceiling spans both calls — GetIssuer is fast but the
+	// fan-out to ListIssuerAssets can hit the trades hypertable
+	// for the per-asset observation count.
+	iCtx, iCancel := context.WithTimeout(r.Context(), 8*time.Second)
+	defer iCancel()
+	row, err := s.issuers.GetIssuer(iCtx, gStrkey)
 	if errors.Is(err, sql.ErrNoRows) {
 		writeProblem(w, r,
 			"https://api.ratesengine.net/errors/issuer-not-found",
@@ -155,6 +181,14 @@ func (s *Server) handleIssuer(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err != nil {
+		if errors.Is(err, context.DeadlineExceeded) {
+			s.logger.Warn("GetIssuer deadline exceeded", "g_strkey", gStrkey)
+			writeProblem(w, r,
+				"https://api.ratesengine.net/errors/issuer-timeout",
+				"Issuer read timed out", http.StatusServiceUnavailable,
+				"the issuer + asset list scan didn't return in 8s; retry shortly.")
+			return
+		}
 		s.logger.Warn("issuer read", "g_strkey", gStrkey, "err", err)
 		writeProblem(w, r,
 			"https://api.ratesengine.net/errors/issuer-error",
@@ -163,10 +197,10 @@ func (s *Server) handleIssuer(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	assets, err := s.issuers.ListIssuerAssets(r.Context(), gStrkey)
+	assets, err := s.issuers.ListIssuerAssets(iCtx, gStrkey)
 	if err != nil {
 		// Soft-fail on the asset list — the issuer card still
-		// renders without it.
+		// renders without it. Includes deadline exceeded.
 		s.logger.Warn("issuer assets", "g_strkey", gStrkey, "err", err)
 		assets = nil
 	}

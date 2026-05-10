@@ -12,10 +12,10 @@ classic credit assets, and SEP-41 Soroban tokens. This page walks
 you from zero to your first authenticated request in under five
 minutes.
 
-> **Hosted endpoint:** `https://api.ratesengine.net` (post-launch)
-> **Interactive explorer:** [`ratesengine.net`](https://ratesengine.net) (post-launch — browse coins / markets / issuers / sources / diagnostics; every panel reveals the API call that produced it)
-> **Reference docs:** [`docs.ratesengine.net`](https://docs.ratesengine.net) (post-launch)
-> **Status page:** [`status.ratesengine.net`](https://status.ratesengine.net) (post-launch — provisioning gated on L4.11)
+> **Hosted endpoint:** `https://api.ratesengine.net`
+> **Interactive explorer:** [`ratesengine.net`](https://ratesengine.net) — browse coins / markets / issuers / sources / diagnostics; every panel reveals the API call that produced it
+> **Reference docs:** [`docs.ratesengine.net`](https://docs.ratesengine.net)
+> **Status page:** [`status.ratesengine.net`](https://status.ratesengine.net)
 
 ## Quick start
 

@@ -239,6 +239,59 @@ func TestPriceTip_RedisFallbackForRewrittenPair(t *testing.T) {
 	}
 }
 
+// TestPriceTip_StablecoinFiatProxyFallback — when window VWAP +
+// LatestPrice + Redis VWAP cache all miss but the operator has
+// declared classic USD pegs, the handler rewrites X/fiat:USD to
+// X/<peg> at request time. Same shape as /v1/price's
+// tryStablecoinFiatProxy fallback (#1217). Without this
+// /v1/price/tip?asset=native&quote=fiat:USD 404s out of the box on
+// every fresh deployment.
+func TestPriceTip_StablecoinFiatProxyFallback(t *testing.T) {
+	usdcClassic, err := canonical.ParseAsset("USDC-GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN")
+	if err != nil {
+		t.Fatalf("parse USDC: %v", err)
+	}
+	hist := &stubHistoryReader{trades: nil}
+	prices := &stubPriceReader{
+		// Literal native/fiat:USD missing → ErrPriceNotFound.
+		// native/<USDC-classic> serves the actual VWAP.
+		snapshots: map[string]v1.PriceSnapshot{
+			"native/" + usdcClassic.String(): {
+				AssetID:    "native",
+				Quote:      usdcClassic.String(),
+				Price:      "0.1626",
+				PriceType:  "vwap",
+				ObservedAt: time.Unix(1745000000, 0).UTC(),
+			},
+		},
+		sources: map[string][]string{
+			"native/" + usdcClassic.String(): {"sdex"},
+		},
+	}
+	srv := v1.New(v1.Options{
+		Prices:            prices,
+		History:           hist,
+		USDPeggedClassics: []canonical.Asset{usdcClassic},
+	})
+	ts := startHTTPTest(t, srv.Handler())
+
+	resp := mustGet(t, ts.URL+"/v1/price/tip?asset=native&quote=fiat:USD")
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d, want 200 — stablecoin-fiat-proxy fallback should serve", resp.StatusCode)
+	}
+	body, _ := readAll(resp)
+	for _, want := range []string{
+		`"price":"0.1626"`,
+		`"quote":"fiat:USD"`,
+		`"sources":["sdex"]`,
+		`"stale":false`,
+	} {
+		if !strings.Contains(body, want) {
+			t.Errorf("body missing %q: %s", want, body)
+		}
+	}
+}
+
 // TestPriceTip_HistoryErrorFallsThroughToFallback — a hypertable
 // hiccup must NOT take down the tip surface when LatestPrice can
 // still serve. The handler logs the error and quietly drops to the

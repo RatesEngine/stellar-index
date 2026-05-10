@@ -7,6 +7,7 @@ export const metadata: Metadata = {
   title: 'Diagnostics — public system-health view',
   description:
     'Live ingest cursors, archive completeness, decoder coverage. Watch each indexer source tick in real time.',
+  alternates: { canonical: '/diagnostics' },
 };
 
 /**

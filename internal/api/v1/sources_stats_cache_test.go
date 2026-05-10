@@ -129,3 +129,47 @@ func TestCachedSourcesStatsReader_ErrorIsNotCached(t *testing.T) {
 		t.Errorf("upstream called %d times; want 2", got)
 	}
 }
+
+// TestCachedSourcesStatsReader_HitMissCounter pins the
+// ratesengine_api_cache_ops_total{cache="sources_stats"} counter
+// for both ops on the wrapper. Same regression-guard rationale as
+// the markets + coins variants — if a future refactor drops the
+// .Inc() on either branch the alert from #1197 silently stops
+// firing for these surfaces.
+func TestCachedSourcesStatsReader_HitMissCounter(t *testing.T) {
+	for _, tc := range []struct {
+		op   string
+		call func(c *CachedSourcesStatsReader) error
+	}{
+		{"source_stats", func(c *CachedSourcesStatsReader) error {
+			_, err := c.GetSourceStats(context.Background())
+			return err
+		}},
+		{"volume_history_24h", func(c *CachedSourcesStatsReader) error {
+			_, err := c.GetSourceVolumeHistory24h(context.Background())
+			return err
+		}},
+	} {
+		t.Run(tc.op, func(t *testing.T) {
+			up := &fakeUpstream{}
+			c := NewCachedSourcesStatsReader(up, 60*time.Second)
+
+			missBefore := readCacheCounter(t, "sources_stats", tc.op, "miss")
+			hitBefore := readCacheCounter(t, "sources_stats", tc.op, "hit")
+
+			if err := tc.call(c); err != nil {
+				t.Fatal(err)
+			}
+			if err := tc.call(c); err != nil {
+				t.Fatal(err)
+			}
+
+			if delta := readCacheCounter(t, "sources_stats", tc.op, "miss") - missBefore; delta != 1 {
+				t.Errorf("miss counter delta = %v, want 1", delta)
+			}
+			if delta := readCacheCounter(t, "sources_stats", tc.op, "hit") - hitBefore; delta != 1 {
+				t.Errorf("hit counter delta = %v, want 1", delta)
+			}
+		})
+	}
+}

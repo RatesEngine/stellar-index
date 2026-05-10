@@ -247,6 +247,93 @@ func TestPrice_RedisVWAPFallback_NotFoundPreserves404(t *testing.T) {
 	}
 }
 
+// TestPrice_StablecoinFiatProxy_FallsThroughToClassicPeg — the
+// fix for the production regression where /v1/price?asset=native&quote=fiat:USD
+// 404'd even though the aggregator had populated native/USDC-classic
+// because the operator hadn't enabled
+// [aggregate].enable_stablecoin_fiat_proxy. The handler-side fallback
+// walks usdPeggedClassics and returns the first peg whose pair has a
+// row, with flags.triangulated=true and the requested quote echoed back.
+func TestPrice_StablecoinFiatProxy_FallsThroughToClassicPeg(t *testing.T) {
+	usdcClassic, err := canonical.ParseAsset("USDC-GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN")
+	if err != nil {
+		t.Fatalf("parse USDC: %v", err)
+	}
+	pegSnap := v1.PriceSnapshot{
+		AssetID:    "native",
+		Quote:      usdcClassic.String(),
+		Price:      "0.1626",
+		PriceType:  "vwap",
+		ObservedAt: time.Unix(1745000000, 0).UTC(),
+	}
+	reader := &stubPriceReader{
+		snapshots: map[string]v1.PriceSnapshot{
+			"native/" + usdcClassic.String(): pegSnap,
+		},
+		sources: map[string][]string{
+			"native/" + usdcClassic.String(): {"sdex"},
+		},
+	}
+	srv := v1.New(v1.Options{
+		Prices:            reader,
+		USDPeggedClassics: []canonical.Asset{usdcClassic},
+	})
+	ts := startHTTPTest(t, srv.Handler())
+
+	resp := mustGet(t, ts.URL+"/v1/price?asset=native&quote=fiat:USD")
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d, want 200 (stablecoin-fiat-proxy fallback should serve)", resp.StatusCode)
+	}
+	body, _ := readAll(resp)
+	for _, want := range []string{
+		`"price":"0.1626"`,
+		`"price_type":"vwap"`,
+		`"quote":"fiat:USD"`,
+		`"triangulated":true`,
+		`"sources":["sdex"]`,
+	} {
+		if !strings.Contains(body, want) {
+			t.Errorf("body missing %q: %s", want, body)
+		}
+	}
+}
+
+// TestPrice_StablecoinFiatProxy_NoPegsLeaves404 — when the operator
+// hasn't declared any usd_pegged_classic_assets, the fallback skips
+// silently and the handler still 404s. This pins the opt-in shape.
+func TestPrice_StablecoinFiatProxy_NoPegsLeaves404(t *testing.T) {
+	reader := &stubPriceReader{err: v1.ErrPriceNotFound}
+	srv := v1.New(v1.Options{Prices: reader}) // no USDPeggedClassics
+	ts := startHTTPTest(t, srv.Handler())
+
+	resp := mustGet(t, ts.URL+"/v1/price?asset=native&quote=fiat:USD")
+	if resp.StatusCode != http.StatusNotFound {
+		t.Errorf("status = %d, want 404", resp.StatusCode)
+	}
+}
+
+// TestPrice_StablecoinFiatProxy_NonUSDQuoteSkips — the fallback only
+// fires for quote=fiat:USD. Other fiat quotes (EUR, GBP) shouldn't
+// pull the USD-pegged classic; if the user wants EUR pricing they
+// need on-chain EUR-quoted trades or the fiat-cross-rate fallback.
+func TestPrice_StablecoinFiatProxy_NonUSDQuoteSkips(t *testing.T) {
+	usdcClassic, err := canonical.ParseAsset("USDC-GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN")
+	if err != nil {
+		t.Fatalf("parse USDC: %v", err)
+	}
+	reader := &stubPriceReader{err: v1.ErrPriceNotFound}
+	srv := v1.New(v1.Options{
+		Prices:            reader,
+		USDPeggedClassics: []canonical.Asset{usdcClassic},
+	})
+	ts := startHTTPTest(t, srv.Handler())
+
+	resp := mustGet(t, ts.URL+"/v1/price?asset=native&quote=fiat:EUR")
+	if resp.StatusCode != http.StatusNotFound {
+		t.Errorf("status = %d, want 404 (USDC peg should not fire for EUR quote)", resp.StatusCode)
+	}
+}
+
 // stubDivergenceLooker is a minimal v1.DivergenceLooker for tests.
 // firing controls what DivergenceFiringFor returns; err is the
 // surfaced error (nil = clean response).

@@ -5,6 +5,7 @@ import (
 	"log/slog"
 	"net/http"
 	"strconv"
+	"time"
 
 	"github.com/RatesEngine/rates-engine/internal/auth"
 	"github.com/RatesEngine/rates-engine/internal/obs"
@@ -87,6 +88,7 @@ func RateLimit(bucket *ratelimit.Bucket, keyFn func(*http.Request) string, skip 
 
 			w.Header().Set("X-RateLimit-Limit", strconv.Itoa(bucket.Max()))
 			w.Header().Set("X-RateLimit-Remaining", strconv.Itoa(res.Remaining))
+			w.Header().Set("X-RateLimit-Reset", strconv.FormatInt(nextWindowResetUnix(bucket.Window()), 10))
 
 			if !res.Allowed {
 				retryAfter := int(res.RetryAfter.Seconds())
@@ -101,6 +103,29 @@ func RateLimit(bucket *ratelimit.Bucket, keyFn func(*http.Request) string, skip 
 			next.ServeHTTP(w, r)
 		})
 	}
+}
+
+// nextWindowResetUnix returns the Unix-epoch seconds of when the
+// fixed-window bucket's CURRENT window ends. Mirrors GitHub /
+// Twitter's `X-RateLimit-Reset` semantics: clients can compute
+// `seconds_until_reset = X-RateLimit-Reset - now` to back off
+// proactively without waiting for a 429. See:
+// https://datatracker.ietf.org/doc/html/draft-ietf-httpapi-ratelimit-headers
+//
+// Implementation matches the bucket's key derivation:
+//
+//	bucket key = unix() / window.Seconds()
+//	current window ends at = ((unix()/window) + 1) * window
+func nextWindowResetUnix(window time.Duration) int64 {
+	if window < time.Second {
+		// Bucket constructor rejects this; defensive zero stops the
+		// formula's divide-by-zero in case a future bucket variant
+		// permits sub-second windows without rejecting at New().
+		return time.Now().Unix()
+	}
+	windowSecs := int64(window.Seconds())
+	now := time.Now().Unix()
+	return ((now / windowSecs) + 1) * windowSecs
 }
 
 // RateLimitBySubject enforces separate anonymous and authenticated
@@ -155,6 +180,7 @@ func RateLimitBySubject(anonBucket, authBucket *ratelimit.Bucket, skip func(*htt
 			}
 			w.Header().Set("X-RateLimit-Limit", strconv.Itoa(effectiveMax))
 			w.Header().Set("X-RateLimit-Remaining", strconv.Itoa(res.Remaining))
+			w.Header().Set("X-RateLimit-Reset", strconv.FormatInt(nextWindowResetUnix(bucket.Window()), 10))
 
 			if !res.Allowed {
 				retryAfter := int(res.RetryAfter.Seconds())

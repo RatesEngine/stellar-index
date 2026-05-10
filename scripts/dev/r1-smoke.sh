@@ -17,11 +17,28 @@
 # Designed to be safe to run from cron / a healthcheck timer:
 # every endpoint is GET, response bodies are truncated, no auth
 # is required (anonymous tier covers everything checked).
+#
+# Two flavours of check:
+#   - check NAME PATH [-- jq-test]                  — wants HTTP 200
+#   - expect_status STATUS NAME PATH [-- jq-test]  — wants any status
+# Use expect_status for *behaviour pins* — asserting documented 4xx
+# responses (e.g. invalid-cursor, invalid-limit, coin-not-found) so
+# a regression that flips a documented 400 back to a silent 200
+# (the class of bug that motivated #1134) fails the smoke instead
+# of sailing past liveness checks.
 
 set -uo pipefail
 
 API_BASE_URL="${API_BASE_URL:-http://localhost:3000}"
-TIMEOUT="${SMOKE_TIMEOUT:-5}"
+# Per-request timeout. Default 10s sits comfortably above the 8s
+# server-side context.WithTimeout ceiling shipped across the cold-
+# path handlers (#1082, #1099-#1107) — a request that crosses 10s
+# wall-clock is genuinely hung (504-class), not just "scanning a
+# cold hypertable for the first time today." 5s, the previous
+# default, false-positived on /v1/markets?limit=5 cold-cache
+# responses (typical 6-8s) and was filling Healthchecks.io with
+# spurious failures.
+TIMEOUT="${SMOKE_TIMEOUT:-10}"
 FAILS=0
 
 # ANSI colour helpers — disabled when stdout isn't a TTY (cron,
@@ -32,13 +49,31 @@ else
   GREEN=""; RED=""; DIM=""; OFF=""
 fi
 
-# check NAME PATH [-- jq-test]   — runs GET ${BASE}${PATH} with a 5s
-# budget, asserts HTTP 200, optionally pipes the body to jq for a
+# check NAME PATH [-- jq-test]   — runs GET ${BASE}${PATH} under
+# the per-request TIMEOUT budget (10s default; see SMOKE_TIMEOUT
+# above), asserts HTTP 200, optionally pipes the body to jq for a
 # field assertion. The jq-test block is `jq -e '.<expr>'` — a
 # falsy / nonexistent value fails the check.
 check() {
-  local name="$1" path="$2"
-  shift 2
+  expect_status 200 "$@"
+}
+
+# expect_status STATUS NAME PATH [-- jq-test]
+#
+# Variant of [check] that asserts an arbitrary HTTP status. Used for
+# negative checks like:
+#
+#   expect_status 400 "coins bad cursor" "/v1/coins?cursor=garbage" \
+#     -- '.type | endswith("/invalid-cursor")'
+#
+# The jq-test runs against the response body — useful for asserting
+# the problem+json error type, not just "some 4xx". Behavioural
+# pinning catches regressions that flip a documented 400 into a
+# silent 200-with-empty-body (the class of bug that motivated this
+# helper — see #1134 / #1135 for context).
+expect_status() {
+  local want_status="$1" name="$2" path="$3"
+  shift 3
   local jq_check=""
   if [ "${1:-}" = "--" ]; then
     shift
@@ -49,7 +84,7 @@ check() {
   # User-Agent: ratesengine-smoke/N — the API's obs.HTTPMetrics
   # middleware excludes synthetic traffic from histograms so the
   # SLO recording rule isn't polluted by the smoke timer's cold-
-  # cache fan-out (every 5 min × 13 endpoints).
+  # cache fan-out (every 5 min × N endpoints).
   body="$(curl -sS -m "$TIMEOUT" -A "ratesengine-smoke/1" -w "\n%{http_code}" "${API_BASE_URL}${path}" 2>&1)" || {
     printf "  %sFAIL%s %-32s %s%s%s\n" "$RED" "$OFF" "$name" "$DIM" "curl error" "$OFF"
     FAILS=$((FAILS + 1))
@@ -58,8 +93,9 @@ check() {
   status="$(echo "$body" | tail -1)"
   body="$(echo "$body" | sed '$d')"
 
-  if [ "$status" != "200" ]; then
-    printf "  %sFAIL%s %-32s %sHTTP %s — %s%s\n" "$RED" "$OFF" "$name" "$DIM" "$status" "${body:0:80}" "$OFF"
+  if [ "$status" != "$want_status" ]; then
+    printf "  %sFAIL%s %-32s %sHTTP %s (want %s) — %s%s\n" \
+      "$RED" "$OFF" "$name" "$DIM" "$status" "$want_status" "${body:0:80}" "$OFF"
     FAILS=$((FAILS + 1))
     return
   fi
@@ -87,10 +123,15 @@ check "status"             "/v1/status"  -- '.data.overall'
 echo
 
 echo "  Catalogue"
-check "coins (top 5)"      "/v1/coins?limit=5"  -- '.data | length > 0'
+check "coins (top 5)"      "/v1/coins?limit=5"  -- '.data.coins | length > 0'
+check "coin native"        "/v1/coins/native"   -- '.data.code == "XLM"'
 check "assets (5)"         "/v1/assets?limit=5" -- '.data | length > 0'
 check "markets (5)"        "/v1/markets?limit=5"
 check "sources"            "/v1/sources"
+check "issuers (5)"        "/v1/issuers?limit=5"
+check "currencies"         "/v1/currencies"     -- '.data.currencies | length > 0'
+check "lending pools"      "/v1/lending/pools"
+check "sac wrappers"       "/v1/sac-wrappers"
 echo
 
 echo "  Pricing"
@@ -102,6 +143,58 @@ echo
 echo "  Diagnostics"
 check "cursors"            "/v1/diagnostics/cursors"
 check "oracle latest"      "/v1/oracle/latest?asset=native"
+check "network stats"      "/v1/network/stats"
+check "incidents"          "/v1/incidents"
+check "incidents.atom"     "/v1/incidents.atom"
+echo
+
+echo "  Discovery"
+# Service-discovery surfaces that crawlers + AI agents rely on to
+# find the API. A 404 here is silent — search engines don't always
+# retry. (robots.txt is currently served by Cloudflare's
+# auto-content-signals path, not the API binary; the check still
+# verifies "a 200 reaches the client" which is what crawlers see.)
+# /.well-known/security.txt follows once PR #1131 lands in r1.
+check "robots.txt"         "/robots.txt"
+echo
+
+echo "  Behaviour pins"
+# These don't just check liveness — they verify the API still
+# returns the documented error envelope, so a regression that
+# weakens a documented 4xx into a silent 200 (the class of bug
+# behind #1134) would fail the smoke immediately.
+expect_status 400 "coins bad limit"      "/v1/coins?limit=999999" \
+  -- '.type | endswith("/invalid-limit")'
+expect_status 404 "coins not found"      "/v1/coins/this-asset-id-does-not-exist" \
+  -- '.type | endswith("/coin-not-found")'
+
+# Pins queued for promotion once rc.38 deploys. Each verifies a
+# documented behaviour shipped in this session that's currently
+# wrong on rc.37 — adding them as live `expect_status` calls now
+# would false-fail every smoke run against the unpatched binary.
+# Uncomment after rc.38 reaches r1 (signal: `/v1/version` data.version
+# == v0.5.0-rc.38). The PRs below are all in main:
+#
+#   /v1/coins?cursor=garbage 400  (#1134, in main)
+#   /v1/markets?cursor=garbage 400 (#1135)
+#   /v1/markets?source=fakesrc 400 (#1162)
+#   /v1/observations?source=fakesrc 400 (#1164)
+#   /v1/oracle/latest?source=fakesrc 400 (#1168)
+#   /metrics 404 from public host (#1172 + binary loopback gate #1207)
+#   /.well-known/security.txt 200 (#1131)
+#   /v1/markets?asset=USDC 400 invalid-asset-id (#1189)
+#   /v1/markets?source=binance&asset=native 400 conflicting-filters (#1189)
+#   /v1/pools?asset=USDC 400 invalid-asset-id (#1190)
+#   /v1/pools?asset=native&base=native 400 conflicting-filters (#1190)
+#
+# Worked-example template ready to uncomment + adjust:
+#
+#   expect_status 400 "markets bad cursor" "/v1/markets?cursor=garbage" \
+#     -- '.type | endswith("/invalid-cursor")'
+#   expect_status 400 "markets unknown source" "/v1/markets?source=does-not-exist" \
+#     -- '.type | endswith("/unknown-source")'
+#   expect_status 404 "metrics blocked publicly" "/metrics"
+#   expect_status 200 "security.txt" "/.well-known/security.txt"
 echo
 
 if [ "$FAILS" -eq 0 ]; then

@@ -511,3 +511,163 @@ type Version struct {
 	Dirty     string `json:"dirty"`
 	GoVersion string `json:"go_version"`
 }
+
+// ChartSeries is the data shape returned by [Client.Chart]. The
+// per-point time series uses the same shape as
+// [HistoryPoint] (`t` / `p` / `v_usd`) but the envelope-level
+// metadata differs (Timeframe + bound Granularity).
+type ChartSeries struct {
+	AssetID     string         `json:"asset_id"`
+	Quote       string         `json:"quote"`
+	Granularity string         `json:"granularity"`
+	Timeframe   string         `json:"timeframe"`
+	PriceType   string         `json:"price_type"`
+	Points      []HistoryPoint `json:"points"`
+}
+
+// ChangeSummary is the data shape returned by [Client.ChangeSummary]
+// — per-entity multi-window delta rollup.
+type ChangeSummary struct {
+	EntityType   string  `json:"entity_type"`
+	EntityID     string  `json:"entity_id"`
+	RefreshedAt  string  `json:"refreshed_at"`
+	CurrentValue float64 `json:"current_value"`
+
+	H1Value     *float64 `json:"h1_value,omitempty"`
+	H1DeltaPct  *float64 `json:"h1_delta_pct,omitempty"`
+	H24Value    *float64 `json:"h24_value,omitempty"`
+	H24DeltaPct *float64 `json:"h24_delta_pct,omitempty"`
+	D7Value     *float64 `json:"d7_value,omitempty"`
+	D7DeltaPct  *float64 `json:"d7_delta_pct,omitempty"`
+	D30Value    *float64 `json:"d30_value,omitempty"`
+	D30DeltaPct *float64 `json:"d30_delta_pct,omitempty"`
+
+	ATHValue *float64 `json:"ath_value,omitempty"`
+	ATHAt    string   `json:"ath_at,omitempty"`
+	ATLValue *float64 `json:"atl_value,omitempty"`
+	ATLAt    string   `json:"atl_at,omitempty"`
+
+	StreakDirection string `json:"streak_direction,omitempty"`
+	StreakDays      *int   `json:"streak_days,omitempty"`
+	Acceleration    string `json:"acceleration,omitempty"`
+}
+
+// NetworkStats is the data shape returned by [Client.NetworkStats] —
+// the home-page aggregate snapshot the explorer renders in its
+// network strip. One round trip replaces fan-out across coins +
+// markets + sources + diagnostics. Volume24hUSD is a *string per
+// ADR-0003 (raw cents can exceed int64); nil when the rolling 24h
+// window has no USD-equivalent trades.
+type NetworkStats struct {
+	Volume24hUSD    *string `json:"volume_24h_usd,omitempty"`
+	MarketsCount24h int64   `json:"markets_count_24h"`
+	AssetsIndexed   int64   `json:"assets_indexed"`
+	LatestLedger    int64   `json:"latest_ledger"`
+	ExchangeSources int     `json:"exchange_sources"`
+	TotalSources    int     `json:"total_sources"`
+}
+
+// Incident is one customer-facing incident post returned by
+// [Client.Incidents]. Mirrors the wire shape served at
+// `/v1/incidents`; the SDK can't import the internal incidents
+// package directly. Severity is "SEV-1" / "SEV-2" / "SEV-3" /
+// "SEV-4"; Status is "investigating" / "identified" / "monitoring"
+// / "resolved". BodyMarkdown is the full Markdown post body.
+type Incident struct {
+	Slug               string     `json:"slug"`
+	Title              string     `json:"title"`
+	Severity           string     `json:"severity"`
+	Status             string     `json:"status"`
+	StartedAt          time.Time  `json:"started_at"`
+	ResolvedAt         *time.Time `json:"resolved_at,omitempty"`
+	AffectedComponents []string   `json:"affected_components,omitempty"`
+	PostmortemRef      string     `json:"postmortem,omitempty"`
+	BodyMarkdown       string     `json:"body_markdown"`
+}
+
+// IncidentsList wraps the [Client.Incidents] response. Sorted
+// most-recent-first (started_at desc) by the API.
+type IncidentsList struct {
+	Incidents []Incident `json:"incidents"`
+	Count     int        `json:"count"`
+}
+
+// Currency is one row in the [Client.Currencies] response — a fiat
+// or fiat-like currency the upstream forex feed publishes. Per the
+// /v1/currencies contract: `RateUSD` is "1 USD = N units of this
+// currency" (i.e., USD is the base, the listed currency is the
+// quote). Circulating-supply and market-cap fields populate only
+// for currencies the operator has wired a circulation source for
+// (today: ~50 of the ~120 fiats); they're omitted otherwise.
+type Currency struct {
+	Ticker            string    `json:"ticker"`
+	Name              string    `json:"name"`
+	RateUSD           float64   `json:"rate_usd"`
+	Change24hPct      float64   `json:"change_24h_pct,omitempty"`
+	Change7dPct       float64   `json:"change_7d_pct,omitempty"`
+	UpdatedAt         time.Time `json:"updated_at"`
+	CirculatingSupply *float64  `json:"circulating_supply,omitempty"`
+	MarketCapUSD      *float64  `json:"market_cap_usd,omitempty"`
+	CirculationAsOf   string    `json:"circulation_as_of,omitempty"`
+	CirculationSource string    `json:"circulation_source,omitempty"`
+}
+
+// CurrenciesList wraps the [Client.Currencies] list response.
+// PublishedAt is the upstream feed's wall-clock timestamp;
+// FetchedAt is when our forex worker pulled the snapshot;
+// Source identifies the upstream (e.g. "massive").
+type CurrenciesList struct {
+	Currencies  []Currency `json:"currencies"`
+	PublishedAt time.Time  `json:"published_at"`
+	FetchedAt   time.Time  `json:"fetched_at"`
+	Source      string     `json:"source"`
+}
+
+// CurrencyHistoryPoint is one daily snapshot in
+// [CurrencyDetail.History7d]. `RateUSD` and `InverseUSD` mirror
+// the parent shape (RateUSD = "1 USD = N <ticker>";
+// InverseUSD = "1 <ticker> = N USD").
+type CurrencyHistoryPoint struct {
+	Date       time.Time `json:"date"`
+	RateUSD    float64   `json:"rate_usd"`
+	InverseUSD float64   `json:"inverse_usd"`
+}
+
+// CurrencyDetail is the data shape returned by [Client.Currency]
+// — the per-ticker view backing /currencies/{ticker} on the
+// explorer. Adds `InverseUSD` (1/RateUSD precomputed for display),
+// `CrossRates` (this currency in every other listed currency),
+// and a 7-day history strip on top of the bare-list shape.
+type CurrencyDetail struct {
+	Ticker     string  `json:"ticker"`
+	Name       string  `json:"name"`
+	RateUSD    float64 `json:"rate_usd"`
+	InverseUSD float64 `json:"inverse_usd"`
+	// CrossRates is keyed by ticker — value is "1 <Ticker> = N <key>".
+	CrossRates        map[string]float64     `json:"cross_rates,omitempty"`
+	Change24hPct      float64                `json:"change_24h_pct,omitempty"`
+	Change7dPct       float64                `json:"change_7d_pct,omitempty"`
+	History7d         []CurrencyHistoryPoint `json:"history_7d,omitempty"`
+	CirculatingSupply *float64               `json:"circulating_supply,omitempty"`
+	MarketCapUSD      *float64               `json:"market_cap_usd,omitempty"`
+	CirculationAsOf   string                 `json:"circulation_as_of,omitempty"`
+	CirculationSource string                 `json:"circulation_source,omitempty"`
+	PublishedAt       time.Time              `json:"published_at"`
+	FetchedAt         time.Time              `json:"fetched_at"`
+	Source            string                 `json:"source"`
+}
+
+// LendingPool is one row from [Client.LendingPools] — a Blend pool
+// contract observed in the trailing 7d auction stream. Auction +
+// user counts are derived from the trades hypertable; per-pool
+// TVL / utilisation / supply+borrow APYs land via additional
+// fields once the pool-storage reader worker ships, so this
+// shape is designed to grow rather than version-bump.
+type LendingPool struct {
+	Protocol       string    `json:"protocol"`
+	Pool           string    `json:"pool"`
+	Auctions24h    int64     `json:"auctions_24h"`
+	AuctionsTotal  int64     `json:"auctions_total"`
+	UniqueUsers30d int64     `json:"unique_users_30d"`
+	LastSeen       time.Time `json:"last_seen"`
+}

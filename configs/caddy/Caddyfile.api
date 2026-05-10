@@ -36,6 +36,21 @@ api.ratesengine.net {
 		-Server
 	}
 
+	# Block the Prometheus metrics endpoint from the public domain.
+	# The API binary serves /metrics on :3000 alongside /v1/* (one
+	# port = one ServeMux), and the catch-all reverse_proxy below
+	# would otherwise forward the public hit straight through. Local
+	# Prometheus scraping uses 127.0.0.1:3000/metrics directly (per
+	# `prometheus.r1.yml`) and is unaffected — only the public-facing
+	# api.ratesengine.net path is closed. Surface area note: Go
+	# runtime stats, request counters, and per-source ingest gauges
+	# leaked operational fingerprinting to anyone hitting the public
+	# URL; status.ratesengine.net is the right surface for public
+	# transparency.
+	respond /metrics 404 {
+		close
+	}
+
 	# Health probe — Caddy reverse_proxy active health-check.
 	# Drops the upstream from rotation if /v1/healthz starts returning
 	# non-200, surfaces in /metrics. With one upstream this means

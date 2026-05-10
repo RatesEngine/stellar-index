@@ -34,6 +34,27 @@ Histogram, labels `method`, `route`.
 Handler latency including time-in-middleware. Buckets 1ms – 10s with
 extra resolution at the 200ms / 500ms SLO boundaries.
 
+### `ratesengine_api_cache_ops_total`
+
+Counter, labels `cache`, `op`, `result`.
+
+Every read through the API's in-memory cache wrappers
+(`v1.CachedMarketsReader`, future `v1.CachedCoinsReader`, …)
+increments this counter. `cache` is the wrapper name (e.g.
+`markets`); `op` is the cached method (`distinct_pairs` /
+`source_markets` / `asset_markets` / `all_pools`); `result` is
+`hit` (returned cached value, including single-flight-wait
+callers that piggy-backed on an in-progress upstream call) or
+`miss` (called upstream).
+
+Use to detect prewarm-key drift: when a prewarm goroutine warms
+key A but the handler looks up key B, `result="miss"` rate
+stays high even though the prewarm cycle is running. Suggested
+alert: `rate(ratesengine_api_cache_ops_total{result="miss"}[5m])
+/ rate(ratesengine_api_cache_ops_total[5m]) > 0.5` sustained
+for 10 min on any (cache, op) pair — for hot ops the prewarm
+should keep miss rate under 10%.
+
 ## Ingestion (indexer binary)
 
 ### `ratesengine_source_events_total`
@@ -88,6 +109,31 @@ incomplete N-of-8 field set aged past the buffer's 5-min ceiling.
 Aquarius / Reflector don't emit orphans — they're 1-event-per-
 observation. Emitted from decoder-maintained orphan counters via the
 live dispatcher path.
+
+### `ratesengine_external_poller_polls_total`
+
+Counter, labels `source`, `outcome` ∈ {success, error, skipped}.
+
+Per-source, per-outcome count of `PollOnce` invocations from the
+external-poller runner. Emitted on every poll tick of every
+configured external source (CoinGecko, CoinMarketCap, CryptoCompare,
+ECB, ExchangeRatesAPI, PolygonForex, Binance, Coinbase, Kraken,
+Bitstamp). The `skipped` outcome covers the per-poller cooldown path
+(e.g. CoinGecko's post-throttle backoff) — distinct from `success`
+so absence-of-success alerting isn't masked by the poller silently
+respecting a backoff window.
+
+### `ratesengine_external_poller_last_success_unix`
+
+Gauge, label `source`.
+
+UNIX-seconds timestamp of the most recent successful `PollOnce` per
+external source. Zero / unset when the poller has never succeeded
+since process start. Companion to
+`ratesengine_external_poller_polls_total`: a gauge makes "data is
+stale by N minutes" expressible as `time() - <gauge>` rather than
+multi-window rate math, which simplifies alerting (see
+`ratesengine_external_poller_stale`).
 
 ### `ratesengine_discovery_dropped_hits_total`
 

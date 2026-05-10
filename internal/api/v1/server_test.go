@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -382,6 +383,136 @@ var ioReadAll = func(r interface{ Read([]byte) (int, error) }) ([]byte, error) {
 				return buf, nil
 			}
 			return buf, fmt.Errorf("read: %w", err)
+		}
+	}
+}
+
+// TestRobotsTxt pins the robots.txt response — every API origin
+// should disallow crawler indexing of /v1/* JSON endpoints (the
+// indexable content lives on the companion subdomains). Without
+// this handler Cloudflare's auto-managed robots.txt is served on
+// GET but the API origin returns 404 on HEAD; the inconsistency
+// surfaced the missing handler in the 2026-05-09 audit.
+func TestRobotsTxt(t *testing.T) {
+	ts := newTestServer(t)
+	resp, err := http.Get(ts.URL + "/robots.txt")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		t.Errorf("status = %d, want 200", resp.StatusCode)
+	}
+	if ct := resp.Header.Get("Content-Type"); ct != "text/plain; charset=utf-8" {
+		t.Errorf("content-type = %q, want text/plain; charset=utf-8", ct)
+	}
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(body), "Disallow: /") {
+		t.Errorf("body missing Disallow directive: %q", body)
+	}
+	if !strings.Contains(string(body), "User-agent: *") {
+		t.Errorf("body missing User-agent directive: %q", body)
+	}
+	if !strings.Contains(string(body), "Sitemap: https://ratesengine.net/sitemap.xml") {
+		t.Errorf("body missing Sitemap pointer: %q", body)
+	}
+}
+
+// TestMetricsLoopbackOnly_NonLoopbackReturns404 pins the
+// defense-in-depth gate at the Go layer: /metrics from a non-
+// loopback RemoteAddr must 404. The intended posture is that
+// Caddy 404s /metrics from public hosts at the edge; this guard
+// catches the case where the Caddyfile config is stale.
+//
+// Test exercises the gate directly by calling ServeHTTP with a
+// synthetic request whose RemoteAddr is a public IP. Spinning up
+// a real httptest server can't exercise this path — every
+// httptest.Server connects via 127.0.0.1 so the gate would
+// always pass.
+func TestMetricsLoopbackOnly_NonLoopbackReturns404(t *testing.T) {
+	srv := v1.New(v1.Options{})
+	handler := srv.Handler()
+
+	for _, remoteAddr := range []string{
+		"203.0.113.42:54321", // public IPv4 (RFC 5737 docs example)
+		"198.51.100.1:1234",  // another docs-only IPv4
+		"[2001:db8::1]:443",  // IPv6 docs example
+	} {
+		t.Run(remoteAddr, func(t *testing.T) {
+			req := httptest.NewRequest(http.MethodGet, "/metrics", nil)
+			req.RemoteAddr = remoteAddr
+			rec := httptest.NewRecorder()
+			handler.ServeHTTP(rec, req)
+			if rec.Code != http.StatusNotFound {
+				t.Errorf("status = %d, want 404 (non-loopback /metrics must 404)", rec.Code)
+			}
+		})
+	}
+}
+
+// TestMetricsLoopbackOnly_LoopbackPasses pins the inverse —
+// loopback callers (the local Prometheus scraper) must still
+// receive the metrics body.
+func TestMetricsLoopbackOnly_LoopbackPasses(t *testing.T) {
+	srv := v1.New(v1.Options{})
+	handler := srv.Handler()
+
+	for _, remoteAddr := range []string{
+		"127.0.0.1:54321",
+		"127.5.5.5:1234", // any 127/8 address counts as loopback
+		"[::1]:443",
+	} {
+		t.Run(remoteAddr, func(t *testing.T) {
+			req := httptest.NewRequest(http.MethodGet, "/metrics", nil)
+			req.RemoteAddr = remoteAddr
+			rec := httptest.NewRecorder()
+			handler.ServeHTTP(rec, req)
+			if rec.Code != http.StatusOK {
+				t.Errorf("status = %d, want 200 (loopback /metrics must pass)", rec.Code)
+			}
+			body, _ := io.ReadAll(rec.Body)
+			if !strings.Contains(string(body), "go_goroutines") {
+				t.Errorf("body missing standard Prometheus content (go_goroutines)")
+			}
+		})
+	}
+}
+
+// TestSecurityTxt pins the RFC 9116 disclosure metadata served at
+// /.well-known/security.txt. Researchers scanning the API origin
+// for vulnerabilities expect this path; without it they have no
+// signposted way to reach the disclosure email.
+func TestSecurityTxt(t *testing.T) {
+	ts := newTestServer(t)
+	resp, err := http.Get(ts.URL + "/.well-known/security.txt")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		t.Errorf("status = %d, want 200", resp.StatusCode)
+	}
+	if ct := resp.Header.Get("Content-Type"); ct != "text/plain; charset=utf-8" {
+		t.Errorf("content-type = %q, want text/plain; charset=utf-8", ct)
+	}
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		t.Fatal(err)
+	}
+	s := string(body)
+	for _, want := range []string{
+		"Contact: mailto:security@ratesengine.net",
+		"Expires: ",
+		"Canonical: https://ratesengine.net/.well-known/security.txt",
+		"Policy: https://github.com/RatesEngine/rates-engine/blob/main/SECURITY.md",
+	} {
+		if !strings.Contains(s, want) {
+			t.Errorf("body missing %q", want)
 		}
 	}
 }

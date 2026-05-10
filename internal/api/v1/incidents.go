@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/RatesEngine/rates-engine/internal/incidents"
 )
@@ -28,9 +29,17 @@ type IncidentsList struct {
 // If we ever cross 100 entries, an `?since=` filter is the
 // natural next step.
 func (s *Server) handleIncidents(w http.ResponseWriter, r *http.Request) {
+	// Nil-to-empty: a fresh deployment with no embedded posts
+	// (s.incidents == nil) would otherwise marshal as `null` rather
+	// than `[]`, breaking the pkg/client SDK + explorer JS that
+	// .map() over the array.
+	rows := s.incidents
+	if rows == nil {
+		rows = []incidents.Incident{}
+	}
 	writeJSON(w, IncidentsList{
-		Incidents: s.incidents,
-		Count:     len(s.incidents),
+		Incidents: rows,
+		Count:     len(rows),
 	}, Flags{})
 }
 
@@ -108,7 +117,14 @@ func (s *Server) handleIncidentsAtom(w http.ResponseWriter, r *http.Request) {
 			Title:   inc.Title,
 			Updated: updated.UTC().Format(time.RFC3339),
 			Link: []atomLink{
-				{Rel: "alternate", Href: baseURL + "/#" + inc.Slug, Type: "text/html"},
+				// Per-incident detail page. Was previously the
+				// homepage with an `#<slug>` anchor, but the home
+				// page doesn't render an `id` per incident, so feed
+				// readers landed on `https://status.ratesengine.net/`
+				// with no scroll target. Use the canonical
+				// /incident/{slug} route so subscribers land on the
+				// postmortem they clicked.
+				{Rel: "alternate", Href: baseURL + "/incident/" + inc.Slug, Type: "text/html"},
 			},
 			Summary: summaryFromMarkdown(inc.BodyMarkdown),
 		}
@@ -151,7 +167,20 @@ func summaryFromMarkdown(body string) string {
 			continue
 		}
 		if len(p) > 400 {
-			p = p[:397] + "..."
+			// Walk back to the nearest rune boundary at or before
+			// byte 397 so multi-byte UTF-8 codepoints aren't split
+			// in half. A naive `p[:397]` would slice mid-rune for
+			// incident posts containing accented characters
+			// (é/ñ/ü/etc.) or any non-ASCII text, producing invalid
+			// UTF-8 in the atom feed body — strict feed validators
+			// (W3C feedvalidator.org, some Atom-1.0 readers) reject
+			// the whole entry, and the explorer's render shows a
+			// replacement character instead of the trailing rune.
+			end := 397
+			for end > 0 && !utf8.RuneStart(p[end]) {
+				end--
+			}
+			p = p[:end] + "..."
 		}
 		return p
 	}
