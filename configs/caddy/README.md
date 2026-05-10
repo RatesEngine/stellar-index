@@ -39,6 +39,18 @@ systemctl reload caddy
 
 The API needs `trusted_proxy_cidrs = ["127.0.0.1/32"]` in `/etc/ratesengine.toml`'s `[api]` section so it honours Caddy's `X-Forwarded-*` headers (without that, request-logger + rate-limit middleware key on `127.0.0.1` for every request — a real correctness bug for per-client rate limiting). R1 has this set as of 2026-05-05.
 
+## Real client IP under Cloudflare
+
+The Caddyfile's global `servers { trusted_proxies static <CF CIDRs>; client_ip_headers CF-Connecting-IP X-Forwarded-For }` block resolves the real client IP from CF's edge headers and propagates it down to the API as `X-Forwarded-For: {client_ip}`. This is mandatory for any CF-fronted deployment — without it, every request looks like it's coming from a CF edge POP, breaking per-IP rate-limit buckets and access logs (a single CF edge hitting the burst threshold blocks every customer behind it).
+
+The `trusted_proxies static <list>` form needs the CF IP ranges baked into the Caddyfile because we don't have the third-party `caddy-cloudflare-ip` plugin installed (would require an `xcaddy` rebuild). CF's published ranges change rarely; refresh on quarterly audits or when CF publishes a notice via:
+
+```sh
+curl -sS https://www.cloudflare.com/ips-v4 https://www.cloudflare.com/ips-v6
+```
+
+If we ever move Caddy to a non-CF-fronted box (direct internet exposure), DELETE the `trusted_proxies` block — leaving it would let an attacker spoof their IP by setting `CF-Connecting-IP` directly.
+
 ## DNS prerequisites for HTTPS
 
 Auto-HTTPS via Let's Encrypt requires:

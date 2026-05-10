@@ -35,8 +35,7 @@ type TWAPResult struct {
 // of outlier resistance (a single spurious print that corrects
 // 1 second later has 1-second weight, not a full window's worth).
 func (s *Server) handleTWAP(w http.ResponseWriter, r *http.Request) {
-	reader := s.history
-	if reader == nil {
+	if s.history == nil {
 		writeProblem(w, r,
 			"https://api.ratesengine.net/errors/twap-unavailable",
 			"TWAP serving not configured", http.StatusServiceUnavailable,
@@ -64,7 +63,7 @@ func (s *Server) handleTWAP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	const maxTrades = 10000
-	trades, err := reader.TradesInRange(r.Context(), pair, from, to, maxTrades)
+	trades, triangulated, err := s.tradesInRangeWithStablecoinFallback(r.Context(), pair, from, to, maxTrades)
 	if err != nil {
 		if clientAborted(r, err) {
 			return
@@ -100,5 +99,5 @@ func (s *Server) handleTWAP(w http.ResponseWriter, r *http.Request) {
 		Price:      ratToDecimal(price, ohlcPriceDigits),
 		TradeCount: len(trades),
 		Truncated:  len(trades) == maxTrades,
-	}, Flags{})
+	}, Flags{Triangulated: triangulated})
 }

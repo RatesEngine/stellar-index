@@ -243,6 +243,85 @@ func TestPollOnce_ProAPIKeyWinsOverDemo(t *testing.T) {
 	}
 }
 
+// TestPollOnce_429_LowRetryAfter_StillGrowsBackoff — pre-fix the
+// Retry-After branch took the hint at face value (clamped to
+// MinBackoff) and bypassed the doubling. CoinGecko's free tier
+// returns Retry-After consistently below MinBackoff (≈30s), so
+// clamping landed the cooldown at exactly MinBackoff = 60s
+// forever. The runner's PollInterval is also 60s, so each
+// recovery attempt produced another 429 → another 60s cooldown
+// → indefinite throttling at one 429-per-minute. Observed live
+// on r1 2026-05-09 → 2026-05-10.
+//
+// Post-fix, applyBackoff treats Retry-After as a FLOOR, not a
+// ceiling — consecutive 429s grow the cooldown exponentially
+// regardless of what the venue claims you can retry after.
+func TestPollOnce_429_LowRetryAfter_StillGrowsBackoff(t *testing.T) {
+	srv, _ := newCountingServer(t, func(w http.ResponseWriter, _ *http.Request) {
+		// Simulate CoinGecko free tier: Retry-After consistently
+		// below MinBackoff. Pre-fix this kept us pinned to MinBackoff;
+		// post-fix the doubling wins.
+		w.Header().Set("Retry-After", "10")
+		w.WriteHeader(http.StatusTooManyRequests)
+	})
+
+	p := NewPoller()
+	p.Endpoint = srv.URL
+
+	_, _, _ = p.PollOnce(context.Background(), buildPairs(t))
+	first := p.cooldownRemaining()
+	if first < (MinBackoff-2*time.Second) || first > MinBackoff {
+		t.Fatalf("first cooldown = %v, want ~MinBackoff (%v)", first, MinBackoff)
+	}
+
+	// Second 429 (cooldown reset for the test by stomping nextAllowedAt
+	// — the runner would not call PollOnce until cooldown expired, but
+	// in production we'd then get another 429 and need to grow). Force
+	// the second call by clearing nextAllowedAt without touching
+	// currentBackoff.
+	p.mu.Lock()
+	p.nextAllowedAt = time.Time{}
+	p.mu.Unlock()
+
+	_, _, _ = p.PollOnce(context.Background(), buildPairs(t))
+	second := p.cooldownRemaining()
+	// Want ~120s (doubled from 60s), well above the 10s Retry-After
+	// hint. Allow generous slack for scheduling noise.
+	if second < 110*time.Second || second > 130*time.Second {
+		t.Fatalf("second cooldown = %v, want ~2×MinBackoff = 120s (Retry-After=10s should NOT defeat exponential growth)", second)
+	}
+
+	// Third 429 → ~240s.
+	p.mu.Lock()
+	p.nextAllowedAt = time.Time{}
+	p.mu.Unlock()
+	_, _, _ = p.PollOnce(context.Background(), buildPairs(t))
+	third := p.cooldownRemaining()
+	if third < 230*time.Second || third > 250*time.Second {
+		t.Fatalf("third cooldown = %v, want ~4×MinBackoff = 240s", third)
+	}
+}
+
+// TestPollOnce_429_HighRetryAfter_HonouredAsFloor — when the
+// venue asks for an unusually long Retry-After (longer than our
+// growth trajectory), we honour it. The fix raised the floor; it
+// did not lower the ceiling.
+func TestPollOnce_429_HighRetryAfter_HonouredAsFloor(t *testing.T) {
+	srv, _ := newCountingServer(t, func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Retry-After", "300") // 5 min — well above first doubled value (60 s)
+		w.WriteHeader(http.StatusTooManyRequests)
+	})
+
+	p := NewPoller()
+	p.Endpoint = srv.URL
+
+	_, _, _ = p.PollOnce(context.Background(), buildPairs(t))
+	cool := p.cooldownRemaining()
+	if cool < 290*time.Second || cool > 300*time.Second {
+		t.Errorf("cooldown = %v, want ~300s (Retry-After honoured as floor)", cool)
+	}
+}
+
 func mustPair(t *testing.T, base, quote string) canonical.Pair {
 	t.Helper()
 	b, err := canonical.NewCryptoAsset(base)

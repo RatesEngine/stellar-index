@@ -180,7 +180,7 @@ func (s *Server) handleAccountMe(w http.ResponseWriter, r *http.Request) {
 	subject, ok := auth.SubjectFrom(r.Context())
 	if !ok || subject.Tier == auth.TierAnonymous || subject.Tier == "" {
 		writeProblem(w, r,
-			"https://api.ratesengine.net/errors/unauthorised",
+			"https://api.ratesengine.net/errors/unauthorized",
 			"Authentication required", http.StatusUnauthorized,
 			"/v1/account/me requires a magic-link session, API key, or SEP-10 token")
 		return
@@ -219,7 +219,7 @@ func (s *Server) handleAccountUsage(w http.ResponseWriter, r *http.Request) {
 	subject, ok := auth.SubjectFrom(r.Context())
 	if !ok || subject.Tier == auth.TierAnonymous || subject.Tier == "" {
 		writeProblem(w, r,
-			"https://api.ratesengine.net/errors/unauthorised",
+			"https://api.ratesengine.net/errors/unauthorized",
 			"Authentication required", http.StatusUnauthorized,
 			"/v1/account/usage requires an API key or SEP-10 token")
 		return
@@ -279,7 +279,7 @@ func (s *Server) handleAccountKeysCreate(w http.ResponseWriter, r *http.Request)
 	subject, ok := auth.SubjectFrom(r.Context())
 	if !ok || subject.Tier == auth.TierAnonymous || subject.Tier == "" {
 		writeProblem(w, r,
-			"https://api.ratesengine.net/errors/unauthorised",
+			"https://api.ratesengine.net/errors/unauthorized",
 			"Authentication required", http.StatusUnauthorized,
 			"/v1/account/keys requires an API key or SEP-10 token")
 		return
@@ -374,7 +374,7 @@ func (s *Server) handleAccountKeysList(w http.ResponseWriter, r *http.Request) {
 	subject, ok := auth.SubjectFrom(r.Context())
 	if !ok || subject.Tier == auth.TierAnonymous || subject.Tier == "" {
 		writeProblem(w, r,
-			"https://api.ratesengine.net/errors/unauthorised",
+			"https://api.ratesengine.net/errors/unauthorized",
 			"Authentication required", http.StatusUnauthorized,
 			"/v1/account/keys requires an API key or SEP-10 token")
 		return
@@ -433,7 +433,7 @@ func (s *Server) handleAccountKeysRevoke(w http.ResponseWriter, r *http.Request)
 	subject, ok := auth.SubjectFrom(r.Context())
 	if !ok || subject.Tier == auth.TierAnonymous || subject.Tier == "" {
 		writeProblem(w, r,
-			"https://api.ratesengine.net/errors/unauthorised",
+			"https://api.ratesengine.net/errors/unauthorized",
 			"Authentication required", http.StatusUnauthorized,
 			"/v1/account/keys requires an API key or SEP-10 token")
 		return

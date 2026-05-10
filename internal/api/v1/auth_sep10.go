@@ -49,7 +49,8 @@ func (s *Server) handleSEP10Challenge(w http.ResponseWriter, r *http.Request) {
 		if errors.Is(err, auth.ErrNotImplemented) {
 			writeProblem(w, r,
 				"https://api.ratesengine.net/errors/sep10-unavailable",
-				"SEP-10 not configured", http.StatusServiceUnavailable, "")
+				"SEP-10 not configured", http.StatusServiceUnavailable,
+				"this deployment has no SEP-10 validator wired — typically because the server signing seed isn't configured")
 			return
 		}
 		if clientAborted(r, err) {
@@ -195,6 +196,19 @@ func (s *Server) writeSEP10VerifyError(w http.ResponseWriter, r *http.Request, e
 			"https://api.ratesengine.net/errors/sep10-verification-failed",
 			"Challenge verification failed", http.StatusUnauthorized,
 			"the supplied signed transaction did not pass SEP-10 verification (signature missing or wrong account)")
+	case errors.Is(err, auth.ErrNotImplemented):
+		// Mirrors the challenge handler's ErrNotImplemented branch
+		// — when the server-side validator is the no-op stub
+		// (sep10 wired but signing seed not configured), Verify
+		// returns ErrNotImplemented. Pre-fix this fell through to
+		// the default branch and surfaced as 500 + "Internal
+		// error" — misleading because it's a deployment config
+		// state, not a server crash. Surfacing it as 503 with a
+		// detail makes the operator-side fix obvious.
+		writeProblem(w, r,
+			"https://api.ratesengine.net/errors/sep10-unavailable",
+			"SEP-10 not configured", http.StatusServiceUnavailable,
+			"this deployment has no SEP-10 validator wired — typically because the server signing seed isn't configured")
 	default:
 		if clientAborted(r, err) {
 			return
