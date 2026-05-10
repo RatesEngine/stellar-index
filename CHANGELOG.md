@@ -168,6 +168,17 @@ against.
 
 ### Fixed
 
+- **Bitstamp dust trades silently dropped** instead of being
+  logged as ERROR on every frame. Tiny lots (e.g. 1e-8 XLM at
+  $0.16) compute `base × price ÷ 10^8 = 0` under our integer-scale
+  precision floor; the canonical validator was rejecting them
+  with `quote_amount must be positive, got 0` and the indexer
+  was emitting "insert trade failed" at ERROR-per-frame.
+  Following #814's Coinbase + Binance pattern: typed
+  `ErrDustTrade` sentinel from `parseTrade` and
+  `bitstampCandleToTrade`; the existing streamer / backfill
+  error-skip branch absorbs it. Caught from r1 production logs
+  on 2026-05-10 — XLMUSD trades flooding the indexer ERROR log.
 - **`/v1/price/tip?asset=X&quote=fiat:USD` gets the same
   stablecoin-fiat proxy fallback as `/v1/price`** (#1217). Tip
   was 404'ing on the same shape — `tipWindowVWAP →
