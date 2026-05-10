@@ -1,6 +1,7 @@
 package v1_test
 
 import (
+	"context"
 	"errors"
 	"math/big"
 	"net/http"
@@ -191,5 +192,84 @@ func TestVWAP_ReaderError500(t *testing.T) {
 	resp := mustGet(t, ts.URL+"/v1/vwap?base=native&quote=fiat:USD")
 	if resp.StatusCode != http.StatusInternalServerError {
 		t.Errorf("status = %d, want 500", resp.StatusCode)
+	}
+}
+
+// pairAwareHistoryReader implements v1.HistoryReader and serves
+// trades per-pair. Only the methods exercised by the VWAP/TWAP
+// stablecoin-fallback tests are populated; the rest fall through
+// to the embedded stubHistoryReader's defaults.
+type pairAwareHistoryReader struct {
+	stubHistoryReader
+	tradesByPair map[string][]canonical.Trade
+}
+
+func (r *pairAwareHistoryReader) TradesInRange(_ context.Context, pair canonical.Pair, _, _ time.Time, _ int) ([]canonical.Trade, error) {
+	if r.err != nil {
+		return nil, r.err
+	}
+	return r.tradesByPair[pair.Base.String()+"/"+pair.Quote.String()], nil
+}
+
+// TestVWAP_StablecoinFiatProxyFallback — when the literal X/fiat:USD
+// pair has zero trades but the operator declared a USDC peg, the
+// handler retries against X/<USDC-classic> and serves the resulting
+// VWAP with flags.triangulated=true. Mirrors #1217 and #1218 for the
+// /v1/vwap surface.
+func TestVWAP_StablecoinFiatProxyFallback(t *testing.T) {
+	usdcClassic, err := canonical.ParseAsset("USDC-GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN")
+	if err != nil {
+		t.Fatalf("parse USDC: %v", err)
+	}
+	xlm, _ := canonical.ParseAsset("native")
+	classicPair, _ := canonical.NewPair(xlm, usdcClassic)
+
+	pegTrade := canonical.Trade{
+		Source: "sdex", Ledger: 1,
+		TxHash:      "0000000000000000000000000000000000000000000000000000000000000001",
+		Timestamp:   time.Unix(1_772_000_000, 0).UTC(),
+		Pair:        classicPair,
+		BaseAmount:  canonical.NewAmount(big.NewInt(100)),
+		QuoteAmount: canonical.NewAmount(big.NewInt(16)),
+	}
+	reader := &pairAwareHistoryReader{
+		// native/fiat:USD literal: zero trades.
+		// native/<USDC-classic>: one trade at 16/100 = 0.16.
+		tradesByPair: map[string][]canonical.Trade{
+			"native/" + usdcClassic.String(): {pegTrade},
+		},
+	}
+	srv := v1.New(v1.Options{
+		History:           reader,
+		USDPeggedClassics: []canonical.Asset{usdcClassic},
+	})
+	ts := httpTestServer(t, srv)
+
+	resp := mustGet(t, ts.URL+"/v1/vwap?base=native&quote=fiat:USD")
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d, want 200 (stablecoin-fiat fallback should serve)", resp.StatusCode)
+	}
+	body, _ := readAll(resp)
+	for _, want := range []string{
+		`"price":"0.1600000000"`,
+		`"triangulated":true`,
+		`"trade_count":1`,
+	} {
+		if !strings.Contains(body, want) {
+			t.Errorf("body missing %q: %s", want, body)
+		}
+	}
+}
+
+// TestVWAP_NoPegLeaves404 — without USDPeggedClassics the fallback
+// silently skips and the handler still 404s.
+func TestVWAP_NoPegLeaves404(t *testing.T) {
+	reader := &pairAwareHistoryReader{tradesByPair: map[string][]canonical.Trade{}}
+	srv := v1.New(v1.Options{History: reader})
+	ts := httpTestServer(t, srv)
+
+	resp := mustGet(t, ts.URL+"/v1/vwap?base=native&quote=fiat:USD")
+	if resp.StatusCode != http.StatusNotFound {
+		t.Errorf("status = %d, want 404", resp.StatusCode)
 	}
 }

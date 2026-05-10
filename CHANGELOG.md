@@ -17,6 +17,24 @@ against.
 
 ### Fixed
 
+- **`/v1/observations` 8s ceiling on the trades hypertable scan**.
+  The handler was missing from the cold-path timeout series shipped
+  in #1082, #1099-#1106 — a deliberate prod test on 2026-05-08
+  (`asset=native&quote=USDC-G…`) hit a 10s curl timeout against the
+  unguarded handler. Now wraps the reader call in
+  `context.WithTimeout(8s)`; on deadline returns
+  `503 application/problem+json` with `type=observations-timeout`,
+  matching the rest of the family.
+- **Auth-failure problem+json `type` URL spelling unified**. The
+  middleware-level 401 (no-auth-at-all) and the account-handler
+  401 (auth-needed-but-rejected) had drifted to two different
+  `type` URLs — `errors/unauthorized` (American, middleware) and
+  `errors/unauthorised` (British, account.go × 5). Clients keying
+  on the type URL saw two distinct error categories for what's
+  semantically one auth failure surface. Standardised on the
+  American spelling (matches HTTP-spec wording: "Unauthorized");
+  all 5 `account.go` call sites updated. No tests pinned the
+  British form so no test churn.
 - **Explorer home: `HomeCurrencies` and `HomeTopMarkets` now
   show a "couldn't load" notice on error instead of silently
   rendering nothing**. Previously both components had
@@ -60,6 +78,17 @@ against.
 
 ### Added
 
+- **HSTS on the explorer + status site** — both surfaces were
+  missing `Strict-Transport-Security`, leaving them vulnerable
+  to a downgrade-protocol-stripping attack on first visit.
+  Added `Strict-Transport-Security: max-age=31536000;
+  includeSubDomains` to `web/explorer/public/_headers` (both
+  `/*` and `/embed/*` blocks; CF Pages doesn't merge rules) and
+  created `web/status/public/_headers` with the same shape +
+  full CSP / X-Frame-Options / Permissions-Policy parity.
+  `preload` is intentionally omitted until the operator
+  submits the apex to https://hstspreload.org/ (preload is
+  irrevocable once browsers ship it; ratchet up in two steps).
 - **SDK godoc examples for `Healthz`, `Readyz`, `Version`,
   `Usage`, `CreateKey`, `RevokeKey`, `Keys`**
   (`pkg/client/example_test.go`). Round 4 / final round of the
@@ -319,6 +348,38 @@ against.
   `bitstampCandleToTrade`; the existing streamer / backfill
   error-skip branch absorbs it. Caught from r1 production logs
   on 2026-05-10 — XLMUSD trades flooding the indexer ERROR log.
+- **`/v1/ohlc` now applies the same X/fiat:USD → X/<peg> stablecoin
+  fallback** as `/v1/price` (#1217), `/v1/chart` (#1015), and the
+  vwap+twap pair (#1219). Pre-fix, `/v1/ohlc?base=native&quote=fiat:USD`
+  404'd "no trades in window" out-of-the-box on every fresh
+  deployment. Freighter RFP §3 names `/v1/ohlc` as a launch-blocker
+  for the asset-detail surface, so this gap was visible to every
+  asset detail page request. New `ohlcTradesWithStablecoinFallback`
+  helper walks the operator's classic USD pegs in priority order;
+  first peg with non-empty trades wins. Response carries
+  `flags.triangulated=true`. (PR #1225)
+- **`/v1/vwap` and `/v1/twap` now apply the same X/fiat:USD →
+  X/<peg> stablecoin-fiat proxy fallback** as `/v1/price` (#1217)
+  and `/v1/chart` (#1015). Pre-fix, `/v1/vwap?base=native&quote=fiat:USD`
+  and `/v1/twap?base=native&quote=fiat:USD` both 404'd "no trades
+  in window" out-of-the-box because no on-chain trades quote in
+  fiat:USD on Stellar. New helper `tradesInRangeWithStablecoinFallback`
+  retries against each operator-declared classic USD peg in priority
+  order; first non-empty result wins. Response carries
+  `flags.triangulated=true` so wire shape is honest about the
+  derivation. Same opt-in shape (empty allow-list still 404s);
+  non-USD fiat quotes skip the fallback. (PR #1219)
+- **`/v1/oracle/lastprice` and `/v1/oracle/x_last_price` get the
+  same X/fiat:USD → X/<peg> stablecoin-fiat proxy fallback** as
+  `/v1/price` (#1217). Pre-fix, the SEP-40 passthrough surface
+  inherited the same out-of-the-box 404 mode: an on-chain
+  integrator drop-in-replacing `lastprice(native)` against XLM
+  got 404 even though `/v1/coins/native` showed $0.16 cleanly.
+  Same intent as #1217 — keep the SEP-40 surface and the
+  closed-bucket surface consistent in coverage so an integrator
+  switching between them sees the same set of "available" pairs.
+  Two new tests pin the lastprice + x_last_price branches.
+  (PR #1220)
 - **Default Chainlink feed map covers BTC/ETH/LINK + EUR/GBP/JPY
   vs USD** so divergence cross-checks work out-of-the-box on a
   stock config. Same shape as the CoinGecko default-IDMap fix in
