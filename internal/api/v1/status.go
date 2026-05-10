@@ -413,7 +413,11 @@ func (s *Server) handleStatus(w http.ResponseWriter, r *http.Request) {
 	wg.Wait()
 
 	// Indexer + aggregator heartbeats. A heartbeat older than
-	// 60 s flags the service down.
+	// 60 s flags the service down. If the metrics backend is
+	// unreachable, the heartbeat is "unknown" — and "unknown"
+	// must NOT roll up to overall=ok (we observed this on r1
+	// 2026-05-10: Prometheus dead 18 h, /v1/status reported
+	// overall=ok despite both backend services being unknown).
 	now := time.Now().UTC()
 	staleAfter := 60 * time.Second
 	for _, name := range []string{"indexer", "aggregator"} {
@@ -430,6 +434,15 @@ func (s *Server) handleStatus(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 		out.Services = append(out.Services, svc)
+	}
+
+	// Backend itself is the canary: if any of the four backend
+	// queries failed, we can't truthfully report "ok" — the
+	// metrics pipeline is the channel that would tell us
+	// otherwise. Degrade the overall surface so operators (and
+	// the status-page poller) see the real state.
+	if hbErr != nil || latErr != nil || freErr != nil || incErr != nil {
+		out.Overall = "degraded"
 	}
 
 	if latErr == nil {
