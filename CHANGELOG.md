@@ -70,6 +70,17 @@ against.
 
 ### Added
 
+- **HSTS on the explorer + status site** — both surfaces were
+  missing `Strict-Transport-Security`, leaving them vulnerable
+  to a downgrade-protocol-stripping attack on first visit.
+  Added `Strict-Transport-Security: max-age=31536000;
+  includeSubDomains` to `web/explorer/public/_headers` (both
+  `/*` and `/embed/*` blocks; CF Pages doesn't merge rules) and
+  created `web/status/public/_headers` with the same shape +
+  full CSP / X-Frame-Options / Permissions-Policy parity.
+  `preload` is intentionally omitted until the operator
+  submits the apex to https://hstspreload.org/ (preload is
+  irrevocable once browsers ship it; ratchet up in two steps).
 - **SDK godoc examples for `Healthz`, `Readyz`, `Version`,
   `Usage`, `CreateKey`, `RevokeKey`, `Keys`**
   (`pkg/client/example_test.go`). Round 4 / final round of the
