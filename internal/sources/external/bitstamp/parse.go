@@ -110,6 +110,19 @@ func parseTrade(env eventEnvelope, pairMap map[string]canonical.Pair) (canonical
 	}
 	quote := new(big.Int).Quo(new(big.Int).Mul(base, price), pow10(externalAmountDecimals))
 
+	// Dust filter — when base × price floor-divides to 0 (e.g. a
+	// 1e-8 XLM lot at $0.16, or any size where size_float ×
+	// price_float < 1e-8 USD), the canonical validator rejects the
+	// row with "quote_amount must be positive, got 0". These are
+	// real bitstamp trades, just below our integer-scale precision
+	// floor. Drop silently — the streamer's error handler treats
+	// every parse error as a "skip this frame and stay subscribed",
+	// so returning a typed sentinel here keeps the wire log quiet
+	// without changing the streamer.
+	if quote.Sign() == 0 {
+		return canonical.Trade{}, ErrDustTrade
+	}
+
 	ts, err := parseMicrotimestamp(t.Microtimestamp, t.Timestamp)
 	if err != nil {
 		return canonical.Trade{}, fmt.Errorf("%w: %w", ErrMalformedFrame, err)
