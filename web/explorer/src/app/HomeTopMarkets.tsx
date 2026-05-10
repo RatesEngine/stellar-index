@@ -22,8 +22,6 @@ import { formatCompact } from '@/lib/format';
 export function HomeTopMarkets() {
   const { data, isLoading, isError } = useMarkets(25, 'volume_24h_usd_desc');
 
-  if (isError) return null;
-
   const top = (data?.markets ?? []).slice(0, 10);
 
   return (
@@ -47,7 +45,16 @@ export function HomeTopMarkets() {
         </Link>
       </div>
       <div className="overflow-hidden rounded-md border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
-        {isLoading && top.length === 0 ? (
+        {isError && top.length === 0 ? (
+          <div className="px-4 py-6 text-center text-sm">
+            <span className="text-amber-700 dark:text-amber-300">
+              Couldn&apos;t load top markets right now.
+            </span>{' '}
+            <Link href="/markets" className="text-brand-600 hover:underline">
+              Browse all markets →
+            </Link>
+          </div>
+        ) : isLoading && top.length === 0 ? (
           <div className="px-4 py-6 text-center text-sm text-slate-500">
             Loading…
           </div>
