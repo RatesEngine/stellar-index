@@ -299,6 +299,88 @@ func TestAssetMetadata_ReturnsOnlyOverlayFields(t *testing.T) {
 	}
 }
 
+// TestAssetGet_BackfillsHomeDomainFromKnownIssuersMap exercises R-016.
+// Prod live snapshot:
+//
+//	GET /v1/assets/USDC-G… → home_domain=null, sep1_status=not_applicable
+//	GET /v1/issuers/G…     → home_domain="centre.io"
+//
+// Two surfaces disagreed on whether SEP-1 metadata existed for the
+// same issuer. Root cause: the storage row for the asset doesn't
+// carry a home_domain (the watched-set sep1-refresh worker
+// populates it asynchronously and may not have run yet on a fresh
+// deployment), so the SEP-1 overlay step short-circuited to
+// "not_applicable". /v1/issuers, by contrast, runs every row
+// through `enrichIssuer` which has a hand-curated fallback. The
+// fix mirrors that policy on /v1/assets.
+func TestAssetGet_BackfillsHomeDomainFromKnownIssuersMap(t *testing.T) {
+	issuer := testUSDCIssuer
+	reader := &stubAssetReader{
+		byID: map[string]v1.AssetDetail{
+			"USDC-" + testUSDCIssuer: {
+				AssetID:    "USDC-" + testUSDCIssuer,
+				Type:       "classic",
+				Code:       "USDC",
+				Issuer:     &issuer,
+				HomeDomain: nil, // storage row didn't carry one
+				Decimals:   7,
+				// Sep1Status intentionally empty — we want the handler
+				// path to compute it AFTER the known-issuers backfill.
+			},
+		},
+	}
+	srv := v1.New(v1.Options{Assets: reader})
+	ts := httpTestServer(t, srv)
+
+	resp := mustGet(t, ts.URL+"/v1/assets/USDC-"+testUSDCIssuer)
+	var env struct {
+		Data v1.AssetDetail `json:"data"`
+	}
+	mustDecode(t, resp, &env)
+
+	if env.Data.HomeDomain == nil || *env.Data.HomeDomain != "centre.io" {
+		t.Errorf("HomeDomain = %v, want centre.io (from known_issuers map)", env.Data.HomeDomain)
+	}
+	// With no metadata resolver wired the status should advance from
+	// the empty default to "not_fetched" — distinct from the
+	// pre-fix "not_applicable" which incorrectly claimed the issuer
+	// has no home-domain at all.
+	if env.Data.Sep1Status != "not_fetched" {
+		t.Errorf("Sep1Status = %q, want not_fetched (resolver not wired but home_domain known)", env.Data.Sep1Status)
+	}
+}
+
+// TestAssetMetadata_BackfillsHomeDomainFromKnownIssuersMap is the
+// /v1/assets/{id}/metadata variant of the same fix — the two
+// surfaces share the same backfill so consumers see identical
+// SEP-1 status across them.
+func TestAssetMetadata_BackfillsHomeDomainFromKnownIssuersMap(t *testing.T) {
+	issuer := testUSDCIssuer
+	reader := &stubAssetReader{
+		byID: map[string]v1.AssetDetail{
+			"USDC-" + testUSDCIssuer: {
+				AssetID: "USDC-" + testUSDCIssuer, Type: "classic", Code: "USDC",
+				Issuer: &issuer, HomeDomain: nil, Decimals: 7,
+			},
+		},
+	}
+	srv := v1.New(v1.Options{Assets: reader})
+	ts := httpTestServer(t, srv)
+
+	resp := mustGet(t, ts.URL+"/v1/assets/USDC-"+testUSDCIssuer+"/metadata")
+	var env struct {
+		Data v1.AssetMetadata `json:"data"`
+	}
+	mustDecode(t, resp, &env)
+
+	if env.Data.HomeDomain == nil || *env.Data.HomeDomain != "centre.io" {
+		t.Errorf("HomeDomain = %v, want centre.io", env.Data.HomeDomain)
+	}
+	if env.Data.Sep1Status != "not_fetched" {
+		t.Errorf("Sep1Status = %q, want not_fetched", env.Data.Sep1Status)
+	}
+}
+
 // TestAssetMetadata_ProjectsSEP1IssuanceFields confirms the four
 // SEP-1 issuance declarations (conditions / fixed_number / max_number
 // / is_unlimited) round-trip from AssetDetail through the metadata

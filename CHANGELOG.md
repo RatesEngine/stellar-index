@@ -15,6 +15,20 @@ against.
 
 ## [Unreleased]
 
+### Fixed
+
+- **`/v1/assets/{id}` and `/v1/assets/{id}/metadata` now run their
+  responses through the same `enrichIssuer` known-issuers backfill
+  that `/v1/issuers` already used**. Pre-fix, the two surfaces
+  disagreed on whether SEP-1 metadata existed for the same issuer:
+  `/v1/assets/USDC-G…` reported `home_domain: null,
+  sep1_status: "not_applicable"` while `/v1/issuers/G…` reported
+  `home_domain: "centre.io"`. The asset surface relied on the
+  watched-set sep1-refresh worker having populated the storage row,
+  which doesn't run on a fresh deployment. Now both surfaces fall
+  back to the curated `internal/api/v1/known_issuers.go` map when
+  the storage row is empty. R-016 in `docs/review-2026-05-10.md`.
+
 ### Added
 
 - **`/v1/chart` envelope carries a `truncated` flag plus
