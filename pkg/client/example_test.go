@@ -987,3 +987,237 @@ func ExampleClient_Keys() {
 	// ak_a — production-server-1 (created 2026-05-01)
 	// ak_b — staging (created 2026-05-08)
 }
+
+// ExampleClient_Issuers demonstrates the issuer directory listing.
+// Sorted by total observation count across the issuer's classic
+// assets, descending — surfaces the most-active issuers first
+// (Centre / Anchorage / Stronghold etc.).
+//
+// HomeDomain + OrgName populate as the SEP-1 fetcher worker
+// resolves stellar.toml for each issuer. Pre-resolution they're
+// empty strings (not nil) — the wire shape stays uniform.
+func ExampleClient_Issuers() {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{
+			"data": [
+				{"g_strkey":"GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN",
+				 "home_domain":"centre.io","org_name":"Centre Consortium",
+				 "asset_count":1,"total_observation_count":50000000},
+				{"g_strkey":"GBNZILSTVQZ4R7IKQDGHYGY2QXL5QOFJYQMXPKWRRM5PAV7Y4M67AQUA",
+				 "home_domain":"aqua.network","org_name":"Aquarius",
+				 "asset_count":1,"total_observation_count":14764050}
+			],
+			"as_of": "2026-05-10T12:00:00Z",
+			"flags": {}
+		}`))
+	}))
+	defer srv.Close()
+
+	c := client.New(client.Options{BaseURL: srv.URL})
+	got, err := c.Issuers(context.Background(), client.IssuersOptions{})
+	if err != nil {
+		fmt.Println("error:", err)
+		return
+	}
+	for _, iss := range got.Data {
+		fmt.Printf("%s — %d observations across %d assets\n",
+			iss.OrgName, iss.TotalObservationCount, iss.AssetCount)
+	}
+
+	// Output:
+	// Centre Consortium — 50000000 observations across 1 assets
+	// Aquarius — 14764050 observations across 1 assets
+}
+
+// ExampleClient_Issuer demonstrates fetching one issuer's full
+// detail by Stellar G-strkey — the SEP-1 overlay (org name,
+// home domain, auth flags, raw stellar.toml payload) plus a list
+// of every classic asset the issuer has minted that we observe
+// trades for.
+//
+// Auth flags (AuthRequired / AuthRevocable / AuthImmutable /
+// AuthClawback) are pointer-nil pre-resolution; render `—` rather
+// than fabricating false.
+func ExampleClient_Issuer() {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{
+			"data": {
+				"g_strkey": "GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN",
+				"home_domain": "centre.io",
+				"org_name": "Centre Consortium",
+				"sep1_resolved_at": "2026-05-10T08:30:00Z",
+				"assets": [
+					{"asset_id":"USDC-GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN",
+					 "code":"USDC","slug":"USDC",
+					 "first_seen_ledger":1000000,"last_seen_ledger":62500000,
+					 "observation_count":50000000}
+				]
+			},
+			"as_of": "2026-05-10T12:00:00Z",
+			"flags": {}
+		}`))
+	}))
+	defer srv.Close()
+
+	c := client.New(client.Options{BaseURL: srv.URL})
+	got, err := c.Issuer(context.Background(),
+		"GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN")
+	if err != nil {
+		fmt.Println("error:", err)
+		return
+	}
+	fmt.Printf("%s (%s) issues %d asset(s)\n",
+		got.Data.OrgName, got.Data.HomeDomain, len(got.Data.Assets))
+	for _, a := range got.Data.Assets {
+		fmt.Printf("  - %s (%d observations)\n", a.Code, a.ObservationCount)
+	}
+
+	// Output:
+	// Centre Consortium (centre.io) issues 1 asset(s)
+	//   - USDC (50000000 observations)
+}
+
+// ExampleClient_AssetMetadata demonstrates the SEP-1 overlay
+// endpoint — every field the issuer publishes via stellar.toml
+// (org name, image, anchor asset, issuance declarations).
+// Distinct from the F2 supply fields on AssetDetail (which
+// observe live ledger state); SEP-1 fields are issuer-declared.
+//
+// Sep1Status reports the resolution state. Overlay fields populate
+// only when Sep1Status == "verified"; other states leave them nil.
+func ExampleClient_AssetMetadata() {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{
+			"data": {
+				"asset_id": "USDC-GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN",
+				"home_domain": "centre.io",
+				"sep1_status": "verified",
+				"name": "USD Coin",
+				"description": "Centre-issued USDC stablecoin",
+				"image": "https://centre.io/assets/usdc.svg",
+				"org_name": "Centre Consortium",
+				"anchor_asset": "USD",
+				"anchor_asset_type": "fiat",
+				"is_unlimited": false
+			},
+			"as_of": "2026-05-10T12:00:00Z",
+			"flags": {}
+		}`))
+	}))
+	defer srv.Close()
+
+	c := client.New(client.Options{BaseURL: srv.URL})
+	got, err := c.AssetMetadata(context.Background(),
+		"USDC-GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN")
+	if err != nil {
+		fmt.Println("error:", err)
+		return
+	}
+	if got.Data.Sep1Status != "verified" {
+		fmt.Println("not verified yet")
+		return
+	}
+	fmt.Printf("%s (%s) — anchored to %s\n",
+		*got.Data.Name, *got.Data.OrgName, *got.Data.AnchorAsset)
+
+	// Output: USD Coin (Centre Consortium) — anchored to USD
+}
+
+// ExampleClient_History demonstrates raw trade-level audit access
+// over an arbitrary [From, To) window. Distinct from
+// HistorySinceInception (bucketed VWAP/TWAP) — this surface
+// returns the underlying trade rows themselves, the same data
+// the aggregator consumes. Use cases: trade audits, regulatory
+// exports, custom aggregations the server doesn't pre-compute.
+//
+// Pagination via opaque `Cursor`; iterate while
+// `Pagination.Next` is non-empty.
+func ExampleClient_History() {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{
+			"data": [
+				{"source":"binance","ledger":0,"tx_hash":"abc","op_index":0,
+				 "ts":"2026-05-10T11:30:00Z","base_asset":"native","quote_asset":"fiat:USD",
+				 "base_amount":"100000000","quote_amount":"16475000","price":"0.16475"},
+				{"source":"kraken","ledger":0,"tx_hash":"def","op_index":0,
+				 "ts":"2026-05-10T11:30:05Z","base_asset":"native","quote_asset":"fiat:USD",
+				 "base_amount":"50000000","quote_amount":"8240000","price":"0.16480"}
+			],
+			"as_of": "2026-05-10T12:00:00Z",
+			"flags": {},
+			"pagination": {"next": ""}
+		}`))
+	}))
+	defer srv.Close()
+
+	c := client.New(client.Options{BaseURL: srv.URL})
+	from := time.Date(2026, 5, 10, 11, 0, 0, 0, time.UTC)
+	to := time.Date(2026, 5, 10, 12, 0, 0, 0, time.UTC)
+	got, err := c.History(context.Background(), client.HistoryRangeQuery{
+		Base: "native", Quote: "fiat:USD", From: from, To: to, Limit: 100,
+	})
+	if err != nil {
+		fmt.Println("error:", err)
+		return
+	}
+	for _, t := range got.Data {
+		fmt.Printf("%s %s @ %s\n",
+			t.Source, t.Timestamp.Format("15:04:05"), t.Price)
+	}
+
+	// Output:
+	// binance 11:30:00 @ 0.16475
+	// kraken 11:30:05 @ 0.16480
+}
+
+// ExampleClient_Currency demonstrates fetching one fiat
+// currency's full detail — rate vs USD plus 24h/7d change,
+// 7-day history strip, and cross-rates against every other
+// listed currency. Backs the explorer's `/currencies/{ticker}
+
+// ExampleClient_Cursors demonstrates the per-source ingest
+// cursor surface — which sources are caught up, which are
+// lagging, how stale the last update is. Used for operator
+// dashboards and the explorer's `/diagnostics` page.
+//
+// Sources that track multiple positions independently (each
+// backfill range, each per-pair cursor) return one row per
+// (source, sub_source) tuple. `LagSeconds` is computed
+// server-side so callers don't need a clock-sync agreement
+// with the API.
+func ExampleClient_Cursors() {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{
+			"data": [
+				{"source":"ledgerstream","last_ledger":62505721,
+				 "last_updated":"2026-05-10T12:00:00Z","lag_seconds":2},
+				{"source":"backfill","sub_source":"60000000-62000000:soroswap",
+				 "last_ledger":62000000,"last_updated":"2026-05-09T18:30:00Z",
+				 "lag_seconds":63000}
+			],
+			"as_of": "2026-05-10T12:00:00Z",
+			"flags": {}
+		}`))
+	}))
+	defer srv.Close()
+
+	c := client.New(client.Options{BaseURL: srv.URL})
+	got, err := c.Cursors(context.Background())
+	if err != nil {
+		fmt.Println("error:", err)
+		return
+	}
+	for _, cur := range got.Data {
+		fmt.Printf("%s: ledger=%d (lag=%ds)\n",
+			cur.Source, cur.LastLedger, cur.LagSeconds)
+	}
+
+	// Output:
+	// ledgerstream: ledger=62505721 (lag=2s)
+	// backfill: ledger=62000000 (lag=63000s)
+}

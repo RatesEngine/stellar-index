@@ -99,6 +99,15 @@ against.
 
 ### Added
 
+- **SDK godoc examples for `Issuers`, `Issuer`, `AssetMetadata`,
+  `History`, `Currency`, `Cursors`** (`pkg/client/example_test.go`).
+  Round 3 of the godoc-coverage push — closes the gap on the
+  remaining customer-facing methods. Together with the prior two
+  rounds, the SDK now has runnable examples for every Client
+  method a typical integration would touch in week one (catalogue
+  + pricing + history + diagnostics surfaces). Each example uses
+  the established httptest + asserted `// Output:` pattern so it
+  surfaces in pkg.go.dev AND verifies at build time.
 - **Explorer redirects for `/incidents`, `/converter`,
   `/oracles/<name>`** (404-audit follow-up, 2026-05-10).
   `/incidents` and `/incident/<slug>` now bounce to
