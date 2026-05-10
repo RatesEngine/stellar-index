@@ -17,6 +17,53 @@
 	# Auto-HTTPS on by default. If we ever need a no-DNS test mode:
 	#   auto_https disable_redirects
 	# but leave it on for production.
+
+	# ─── Real client IP from Cloudflare ────────────────────────────
+	# Without this block, Caddy sees Cloudflare's edge IP as the
+	# immediate peer, propagates that as X-Forwarded-For, and the
+	# API logs every request as if it came from a CF edge POP.
+	# Worse: per-IP rate-limit buckets become per-CF-edge buckets,
+	# so a single CF edge hitting the burst threshold blocks every
+	# customer behind it.
+	#
+	# Fix: trust X-Forwarded-For + CF-Connecting-IP only when the
+	# immediate peer is in Cloudflare's published IP ranges (CF
+	# guarantees these and changes them rarely — refresh from
+	# https://www.cloudflare.com/ips-v4 + ips-v6 on quarterly
+	# audits or when CF publishes a notice).
+	#
+	# `client_ip_headers` order matters: CF-Connecting-IP first
+	# (canonical for CF-fronted services), then X-Forwarded-For
+	# (defensive fallback if CF-Connecting-IP is ever stripped
+	# upstream). Caddy substitutes {client_ip} with the resolved
+	# value; the API's trusted_proxy_cidrs (still 127.0.0.1/32)
+	# then trusts Caddy's downstream X-Forwarded-For.
+	servers {
+		trusted_proxies static \
+			173.245.48.0/20 \
+			103.21.244.0/22 \
+			103.22.200.0/22 \
+			103.31.4.0/22 \
+			141.101.64.0/18 \
+			108.162.192.0/18 \
+			190.93.240.0/20 \
+			188.114.96.0/20 \
+			197.234.240.0/22 \
+			198.41.128.0/17 \
+			162.158.0.0/15 \
+			104.16.0.0/13 \
+			104.24.0.0/14 \
+			172.64.0.0/13 \
+			131.0.72.0/22 \
+			2400:cb00::/32 \
+			2606:4700::/32 \
+			2803:f800::/32 \
+			2405:b500::/32 \
+			2405:8100::/32 \
+			2a06:98c0::/29 \
+			2c0f:f248::/32
+		client_ip_headers CF-Connecting-IP X-Forwarded-For
+	}
 }
 
 # ─── API ──────────────────────────────────────────────────────────
@@ -64,8 +111,17 @@ api.ratesengine.net {
 		# (subdomain-based routing isn't in use today, but leaves
 		# the door open).
 		header_up Host {host}
-		header_up X-Real-IP {remote_host}
-		header_up X-Forwarded-For {remote_host}
+		# {client_ip} is Caddy's resolved real-client IP from the
+		# global trusted_proxies + client_ip_headers config above —
+		# safe to forward because it's only set when the immediate
+		# peer is in CF's published IP ranges. Forwarding
+		# {remote_host} here would re-introduce the bug (CF edge IP
+		# instead of real client). The API already trusts
+		# X-Forwarded-For from 127.0.0.1 (Caddy itself), so the
+		# resolved value flows through to the rate-limit and access-
+		# log layers correctly.
+		header_up X-Real-IP {client_ip}
+		header_up X-Forwarded-For {client_ip}
 		header_up X-Forwarded-Proto {scheme}
 	}
 

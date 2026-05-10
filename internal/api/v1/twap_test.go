@@ -4,6 +4,7 @@ import (
 	"errors"
 	"math/big"
 	"net/http"
+	"strings"
 	"testing"
 	"time"
 
@@ -108,5 +109,48 @@ func TestTWAP_ReaderError500(t *testing.T) {
 	resp := mustGet(t, ts.URL+"/v1/twap?base=native&quote=fiat:USD")
 	if resp.StatusCode != http.StatusInternalServerError {
 		t.Errorf("status = %d, want 500", resp.StatusCode)
+	}
+}
+
+// TestTWAP_StablecoinFiatProxyFallback — when the literal X/fiat:USD
+// pair has zero trades but the operator declared a USDC peg, the TWAP
+// handler retries against X/<USDC-classic> and serves the resulting
+// time-weighted average with flags.triangulated=true. Mirrors #1217 /
+// #1218 / #1219 for the /v1/twap surface — without it, every fresh
+// deployment 404s on the canonical XLM/USD TWAP query.
+func TestTWAP_StablecoinFiatProxyFallback(t *testing.T) {
+	usdcClassic, err := canonical.ParseAsset("USDC-GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN")
+	if err != nil {
+		t.Fatalf("parse USDC: %v", err)
+	}
+	xlm, _ := canonical.ParseAsset("native")
+	classicPair, _ := canonical.NewPair(xlm, usdcClassic)
+
+	pegTrade := canonical.Trade{
+		Source: "sdex", Ledger: 1,
+		TxHash:      "0000000000000000000000000000000000000000000000000000000000000001",
+		Timestamp:   time.Now().Add(-30 * time.Minute).UTC(),
+		Pair:        classicPair,
+		BaseAmount:  canonical.NewAmount(big.NewInt(100)),
+		QuoteAmount: canonical.NewAmount(big.NewInt(16)),
+	}
+	reader := &pairAwareHistoryReader{
+		tradesByPair: map[string][]canonical.Trade{
+			"native/" + usdcClassic.String(): {pegTrade},
+		},
+	}
+	srv := v1.New(v1.Options{
+		History:           reader,
+		USDPeggedClassics: []canonical.Asset{usdcClassic},
+	})
+	ts := httpTestServer(t, srv)
+
+	resp := mustGet(t, ts.URL+"/v1/twap?base=native&quote=fiat:USD")
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d, want 200 (stablecoin-fiat fallback should serve)", resp.StatusCode)
+	}
+	body, _ := readAll(resp)
+	if !strings.Contains(body, `"triangulated":true`) {
+		t.Errorf("body missing triangulated flag: %s", body)
 	}
 }
