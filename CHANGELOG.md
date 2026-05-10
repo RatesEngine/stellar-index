@@ -15,6 +15,18 @@ against.
 
 ## [Unreleased]
 
+### Fixed
+
+- **All-time-high (`/v1/coins/{slug}.ath`, `?include=ath` on
+  `/v1/coins`) is now derived from `prices_1d.vwap` instead of
+  `prices_1d.high_price`**. The single-tick max was being polluted
+  by sub-stroop dust trades — XLM was reporting an ATH of $1.03
+  on r1 because a single 1-stroop ↔ 1-stroop SDEX dust ManageOffer
+  cross set `max(quote/base) = 1.0` for the day. Day-VWAP is
+  volume-weighted and naturally rejects dust. Same family of fix
+  as `/v1/ohlc` outlier filtering. R-008 in
+  `docs/review-2026-05-10.md`.
+
 ### Changed
 
 - **`/v1/ohlc` applies a 4σ outlier filter by default**. OHLC's
