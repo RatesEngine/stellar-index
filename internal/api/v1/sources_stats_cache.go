@@ -5,6 +5,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/RatesEngine/rates-engine/internal/obs"
 	"github.com/RatesEngine/rates-engine/internal/storage/timescale"
 )
 
@@ -53,6 +54,7 @@ func (c *CachedSourcesStatsReader) GetSourceStats(ctx context.Context) ([]timesc
 	if time.Since(c.statsAt) < c.ttl && c.stats != nil {
 		out := c.stats
 		c.mu.Unlock()
+		obs.APICacheOpsTotal.WithLabelValues("sources_stats", "source_stats", "hit").Inc()
 		return out, nil
 	}
 
@@ -66,6 +68,7 @@ func (c *CachedSourcesStatsReader) GetSourceStats(ctx context.Context) ([]timesc
 			c.mu.Lock()
 			out := c.stats
 			c.mu.Unlock()
+			obs.APICacheOpsTotal.WithLabelValues("sources_stats", "source_stats", "hit").Inc()
 			return out, nil
 		case <-ctx.Done():
 			return nil, ctx.Err()
@@ -76,6 +79,7 @@ func (c *CachedSourcesStatsReader) GetSourceStats(ctx context.Context) ([]timesc
 	done := make(chan struct{})
 	c.statsFlight = done
 	c.mu.Unlock()
+	obs.APICacheOpsTotal.WithLabelValues("sources_stats", "source_stats", "miss").Inc()
 
 	rows, err := c.upstream.GetSourceStats(ctx)
 
@@ -100,6 +104,7 @@ func (c *CachedSourcesStatsReader) GetSourceVolumeHistory24h(ctx context.Context
 	if time.Since(c.histAt) < c.ttl && c.hist != nil {
 		out := c.hist
 		c.mu.Unlock()
+		obs.APICacheOpsTotal.WithLabelValues("sources_stats", "volume_history_24h", "hit").Inc()
 		return out, nil
 	}
 
@@ -111,6 +116,7 @@ func (c *CachedSourcesStatsReader) GetSourceVolumeHistory24h(ctx context.Context
 			c.mu.Lock()
 			out := c.hist
 			c.mu.Unlock()
+			obs.APICacheOpsTotal.WithLabelValues("sources_stats", "volume_history_24h", "hit").Inc()
 			return out, nil
 		case <-ctx.Done():
 			return nil, ctx.Err()
@@ -120,6 +126,7 @@ func (c *CachedSourcesStatsReader) GetSourceVolumeHistory24h(ctx context.Context
 	done := make(chan struct{})
 	c.histFlight = done
 	c.mu.Unlock()
+	obs.APICacheOpsTotal.WithLabelValues("sources_stats", "volume_history_24h", "miss").Inc()
 
 	rows, err := c.upstream.GetSourceVolumeHistory24h(ctx)
 

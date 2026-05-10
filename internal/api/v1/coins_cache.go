@@ -6,6 +6,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/RatesEngine/rates-engine/internal/obs"
 	"github.com/RatesEngine/rates-engine/internal/storage/timescale"
 )
 
@@ -60,7 +61,7 @@ func (c *CachedCoinsReader) ListCoinsExt(ctx context.Context, opts timescale.Lis
 	}
 	key := fmt.Sprintf("ListCoinsExt|%d|%s|%s|%s|%d",
 		opts.Limit, opts.Issuer, opts.Cursor, opts.Q, opts.Order)
-	return c.fetchRows(ctx, key, func(ctx context.Context) ([]timescale.CoinRow, error) {
+	return c.fetchRows(ctx, "list_coins", key, func(ctx context.Context) ([]timescale.CoinRow, error) {
 		return c.upstream.ListCoinsExt(ctx, opts)
 	})
 }
@@ -73,7 +74,7 @@ func (c *CachedCoinsReader) GetCoinsPriceHistory24hBatch(ctx context.Context, as
 		return c.upstream.GetCoinsPriceHistory24hBatch(ctx, assetIDs)
 	}
 	key := fmt.Sprintf("Price24hBatch|%v", assetIDs)
-	return c.fetchHistoryMap(ctx, key, func(ctx context.Context) (map[string][]timescale.CoinPricePoint, error) {
+	return c.fetchHistoryMap(ctx, "price_history_24h", key, func(ctx context.Context) (map[string][]timescale.CoinPricePoint, error) {
 		return c.upstream.GetCoinsPriceHistory24hBatch(ctx, assetIDs)
 	})
 }
@@ -85,7 +86,7 @@ func (c *CachedCoinsReader) GetCoinsPriceHistory7dBatch(ctx context.Context, ass
 		return c.upstream.GetCoinsPriceHistory7dBatch(ctx, assetIDs)
 	}
 	key := fmt.Sprintf("Price7dBatch|%v", assetIDs)
-	return c.fetchHistoryMap(ctx, key, func(ctx context.Context) (map[string][]timescale.CoinPricePoint, error) {
+	return c.fetchHistoryMap(ctx, "price_history_7d", key, func(ctx context.Context) (map[string][]timescale.CoinPricePoint, error) {
 		return c.upstream.GetCoinsPriceHistory7dBatch(ctx, assetIDs)
 	})
 }
@@ -141,13 +142,14 @@ func (c *CachedCoinsReader) GetCoinTradeCount24h(ctx context.Context, assetID st
 
 func (c *CachedCoinsReader) fetchRows(
 	ctx context.Context,
-	key string,
+	op, key string,
 	upstream func(context.Context) ([]timescale.CoinRow, error),
 ) ([]timescale.CoinRow, error) {
 	c.mu.Lock()
 	if e, ok := c.entries[key]; ok && e.flight == nil && time.Since(e.at) < c.ttl {
 		out := e.rows
 		c.mu.Unlock()
+		obs.APICacheOpsTotal.WithLabelValues("coins", op, "hit").Inc()
 		return out, nil
 	}
 	if e, ok := c.entries[key]; ok && e.flight != nil {
@@ -158,6 +160,7 @@ func (c *CachedCoinsReader) fetchRows(
 			c.mu.Lock()
 			out := c.entries[key]
 			c.mu.Unlock()
+			obs.APICacheOpsTotal.WithLabelValues("coins", op, "hit").Inc()
 			return out.rows, nil
 		case <-ctx.Done():
 			return nil, ctx.Err()
@@ -166,6 +169,7 @@ func (c *CachedCoinsReader) fetchRows(
 	done := make(chan struct{})
 	c.entries[key] = &coinsCacheEntry{flight: done}
 	c.mu.Unlock()
+	obs.APICacheOpsTotal.WithLabelValues("coins", op, "miss").Inc()
 
 	rows, err := upstream(ctx)
 
@@ -182,13 +186,14 @@ func (c *CachedCoinsReader) fetchRows(
 
 func (c *CachedCoinsReader) fetchHistoryMap(
 	ctx context.Context,
-	key string,
+	op, key string,
 	upstream func(context.Context) (map[string][]timescale.CoinPricePoint, error),
 ) (map[string][]timescale.CoinPricePoint, error) {
 	c.mu.Lock()
 	if e, ok := c.entries[key]; ok && e.flight == nil && time.Since(e.at) < c.ttl {
 		out := e.historyByAsset
 		c.mu.Unlock()
+		obs.APICacheOpsTotal.WithLabelValues("coins", op, "hit").Inc()
 		return out, nil
 	}
 	if e, ok := c.entries[key]; ok && e.flight != nil {
@@ -199,6 +204,7 @@ func (c *CachedCoinsReader) fetchHistoryMap(
 			c.mu.Lock()
 			out := c.entries[key]
 			c.mu.Unlock()
+			obs.APICacheOpsTotal.WithLabelValues("coins", op, "hit").Inc()
 			return out.historyByAsset, nil
 		case <-ctx.Done():
 			return nil, ctx.Err()
@@ -207,6 +213,7 @@ func (c *CachedCoinsReader) fetchHistoryMap(
 	done := make(chan struct{})
 	c.entries[key] = &coinsCacheEntry{flight: done}
 	c.mu.Unlock()
+	obs.APICacheOpsTotal.WithLabelValues("coins", op, "miss").Inc()
 
 	hist, err := upstream(ctx)
 

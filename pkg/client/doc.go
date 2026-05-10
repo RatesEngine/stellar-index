@@ -73,26 +73,35 @@
 //
 // # Coverage
 //
-// Typed methods today: Price, Assets, Asset, AssetMetadata,
-// HistorySinceInception, Me, Usage, CreateKey. SDK additions in
-// the queue (PRs #446–#450 from the 2026-05-02 audit pass):
-// PriceBatch, PriceTip, OHLC, History (bounded-range raw
-// trades), Sources, Markets, Pair.
+// Every server endpoint registered in
+// `internal/api/v1/server.go` has a typed Client method. As of
+// 2026-05-09 that's 35 methods spanning pricing (Price, PriceTip,
+// PriceBatch, Chart, History, HistorySinceInception, OHLC),
+// market data (Markets, Pair, Pools surfaces via Markets,
+// Observations), asset / coin catalogues (Assets, Asset, Coins,
+// Coin, AssetMetadata, Currencies, Currency, Issuers, Issuer,
+// SACWrappers), aggregate snapshots (NetworkStats, Sources,
+// LendingPools, ChangeSummary), incidents + status surfaces
+// (Incidents, Status, Cursors, Healthz, Readyz, Version), and
+// account/auth (Me, Usage, CreateKey, RevokeKey, Keys). Browse
+// godoc.org for the full list with runnable examples on each.
 //
 // Surfaces deliberately not in the SDK:
 //
 //   - SSE streams (`/v1/price/{,tip/}stream`, `/v1/observations/stream`)
 //     — architecturally outside the request/response shape; consumers
 //     use `net/http` with an eventsource-style reader directly.
-//   - VWAP / TWAP — the server pre-computes these but consumers can
-//     also derive them from the raw trades the History method
-//     returns; we don't ship a redundant SDK helper today.
 //   - SEP-40 oracle passthrough (`/v1/oracle/*`) — intended for
 //     SEP-40 oracle-shape consumers specifically; those callers
 //     typically use `internal/sources/reflector` or speak SEP-40
 //     directly rather than going through this generic SDK.
-//   - Operator endpoints (`/v1/healthz`, `/v1/readyz`, `/v1/version`,
-//     `/metrics`) — infra-facing, not customer-facing.
+//   - The `/metrics` Prometheus endpoint — scraped by Prometheus,
+//     not consumed via SDK.
+//
+// Operator endpoints (Healthz, Readyz, Version, Status) ARE in
+// the SDK despite being infra-facing — useful when an SDK consumer
+// runs a dashboard polling multiple regions. The Cursors method
+// exposes ingestion lag for the same reason.
 //
 // [ADR-0005]: https://github.com/RatesEngine/rates-engine/blob/main/docs/adr/0005-monorepo.md
 package client

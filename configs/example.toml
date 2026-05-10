@@ -148,8 +148,28 @@ cursor_store_scheme   = "postgres"
   # base    = "USD"
 
   # ClassAggregator — divergence signal only, excluded from VWAP.
+  #
+  # CoinGecko tightened the unauthenticated-tier throttling in late
+  # 2024 (anonymous calls now hit ~30/day per IP, then 429s). For a
+  # free signup that bumps the quota to ~30/min, register at
+  # https://www.coingecko.com/en/developers/dashboard and pass the
+  # demo key via env (preferred over toml so secrets don't land in
+  # the file):
+  #
+  #   COINGECKO_DEMO_API_KEY=cg-demo-... systemctl restart ratesengine-indexer
+  #
+  # For a Pro key, set COINGECKO_API_KEY instead — Pro wins when
+  # both are configured. Anonymous polling still works (the poller
+  # backs off on 429 instead of hammering the venue) but produces
+  # no data; the divergence signal stays empty until a key is
+  # provisioned.
+  #
+  # poll_interval = "60s" overrides the connector's built-in default
+  # cadence. CoinGecko's free tier doesn't need a higher cadence;
+  # the indexer's external poller registers the source class and
+  # the divergence service consults it at the aggregator's tick.
   [external.coingecko]
-  enabled = false   # /simple/price — free, no auth, ~10–30 req/min
+  enabled = false   # /simple/price — needs COINGECKO_DEMO_API_KEY env (post-2024)
 
   [external.coinmarketcap]
   enabled = false
@@ -202,6 +222,32 @@ auth_mode                = "none"            # none | apikey | sep10
 anon_rate_limit_per_min  = 60
 key_rate_limit_per_min   = 1000
 cdn_enabled              = true
+# allowed_origins — CORS allow-list for browser clients.
+#
+# Recommended: leave at the default ["*"] for any deployment that
+# offers Rates Engine as a public Stellar pricing API. The
+# product's read tier is no-auth, used from customer wallets,
+# embed widgets, dashboards, and SDK consumers running in
+# arbitrary browsers — narrowing this to your own hostname
+# silently breaks every cross-origin caller (the browser blocks
+# the response without an explicit `Access-Control-Allow-Origin`
+# match).
+#
+# When narrowing makes sense: deployments that ALSO use session-
+# cookie auth on the same hostname (the magic-link / dashboard
+# flow at /v1/auth/login + /v1/dashboard/*) — wildcard CORS plus
+# session cookies is a CSRF foothold. The credentialed surface
+# is path-narrow; the public read surface (/v1/price, /v1/coins,
+# /v1/markets, /v1/observations, /v1/oracle/*, etc.) does not
+# accept session cookies and is safe under wildcard CORS.
+#
+# If you DO narrow this, also expect:
+#   - The /embed/* widget surface to stop functioning in customer
+#     iframes (their JS can't fetch live data from this API).
+#   - Third-party SDK consumers calling from browser JS to fail
+#     with CORS errors.
+#   - The Postman + curl examples to keep working (they bypass
+#     browser-enforced CORS).
 allowed_origins          = ["*"]
 trusted_proxy_cidrs      = []                  # empty = ignore X-Forwarded-For; set to immediate proxy CIDRs (for example ["10.0.0.0/8"])
 
@@ -243,10 +289,49 @@ enabled  = false
 # rpc_url  = "https://eth.llamarpc.com"
 # Mainnet AggregatorV3 feeds for the pairs you want cross-checked.
 # Pair-string format: "<base>/<quote>" (canonical.Pair.String()).
+#
+# IMPORTANT: divergence cross-check only fires for pairs that ALSO
+# appear in [aggregate].pairs (or the built-in default of XLM / BTC /
+# ETH × USD / EUR / GBP). Configuring a Chainlink feed for a pair the
+# aggregator doesn't compute is a no-op — the worker has no
+# "our price" to compare against. If you want FX-pair cross-checks,
+# add the FX pairs to [aggregate].pairs first AND configure how the
+# aggregator should derive their "our price" (today's pipeline
+# computes VWAP from trades, which doesn't apply to fiat-fiat pairs;
+# fiat-fiat divergence cross-check needs the FX-shim integration that
+# isn't wired yet — flagged on the operator queue).
+#
+# Crypto-side feeds the aggregator's default coverage already
+# matches (these are the ones that actually populate
+# divergence_observations on a stock deployment):
+#
+# [divergence.chainlink.feeds."crypto:BTC/fiat:USD"]
+# address  = "0xF4030086522a5bEEa4988F8cA5B36dbC97BeE88c"
+# decimals = 8
+#
+# [divergence.chainlink.feeds."crypto:ETH/fiat:USD"]
+# address  = "0x5f4eC3Df9cbd43714FE2740f5E3616155c5b8419"
+# decimals = 8
+#
+# [divergence.chainlink.feeds."crypto:LINK/fiat:USD"]
+# address  = "0x2c1d072e956AFFC0D435Cb7AC38EF18d24d9127c"
+# decimals = 8
+#
+# FX-side feeds (only useful once the aggregator has fiat-fiat
+# coverage; documented for future operator reference):
+#
 # [divergence.chainlink.feeds."fiat:EUR/fiat:USD"]
 # address  = "0xb49f677943BC038e9857d61E7d053CaA2C1734C1"
 # decimals = 8
 # invert   = false
+#
+# [divergence.chainlink.feeds."fiat:GBP/fiat:USD"]
+# address  = "0x5c0Ab2d9b5a7ed9f470386e82BB36A3613cDd4b5"
+# decimals = 8
+#
+# [divergence.chainlink.feeds."fiat:JPY/fiat:USD"]
+# address  = "0xBcE206caE7f0ec07b545EddE332A47C2F75bbeb3"
+# decimals = 8
 
 # ──────────────────────────────────────────────────────────────────
 # Supply — circulating-supply pipeline (ADR-0011 / -0021 / -0022 /

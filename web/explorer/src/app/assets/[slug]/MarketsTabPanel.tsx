@@ -16,10 +16,17 @@ import { formatCompact } from '@/lib/format';
  * `/v1/coins/{slug}` lookup.
  */
 export function MarketsTabPanel({ assetID }: { assetID: string }) {
-  // Same alphabetic-pagination problem as /markets — fetch 500 so
-  // we don't miss markets where this asset participates that
-  // happen to sort beyond the first 100 base|quote keys.
-  const markets = useMarkets(500);
+  // Server-side filter via `?asset=<assetID>` — the API restricts
+  // the listing to pairs where this asset appears on either side,
+  // so we get back exactly the rows we'd want to render. The
+  // client-side filter below is a defensive guard: older API
+  // versions silently ignore unknown query params, so on a
+  // pre-`?asset=` deployment the response would be the global
+  // top-100 instead of this asset's markets — without the guard
+  // every asset detail page would render the same global list.
+  // Once every region is on a release that includes the filter,
+  // the client-side filter can be dropped.
+  const markets = useMarkets(100, 'volume_24h_usd_desc', { asset: assetID });
 
   const matched = useMemo(() => {
     if (!markets.data) return [];

@@ -40,6 +40,8 @@ Severity maps to [sev-playbook.md §1](sev-playbook.md#1-severity-definitions).
 | `ratesengine_ingestion_decode_error` | `rate(ratesengine_source_decode_errors_total[5m])` | > 1/s sustained 5 min | P3 | [decode-errors](runbooks/decode-errors.md) |
 | `ratesengine_ingestion_discovery_drops` | `increase(ratesengine_discovery_dropped_hits_total[10m])` | > 0 sustained 10 min | P3 | [discovery-drops](runbooks/discovery-drops.md) |
 | `ratesengine_ingestion_insert_errors` | `rate(ratesengine_source_insert_errors_total[5m])` per (source, kind) | > 0.1/s (≈6/min) sustained 5 min | P2 | [insert-errors](runbooks/insert-errors.md) |
+| `ratesengine_external_poller_stale` | `time() - ratesengine_external_poller_last_success_unix` per source | > 1800 s for > 5 min | P2 | [external-poller-stale](runbooks/external-poller-stale.md) |
+| `ratesengine_external_poller_error_rate_high` | `rate(ratesengine_external_poller_polls_total{outcome="error"}[15m]) / sum(...) ` | > 0.5 sustained 15 min | P3 | [external-poller-stale](runbooks/external-poller-stale.md) |
 
 Historical note: the former `ratesengine_ingestion_lag_high` alert was retired
 when the repo moved off the legacy orchestrator topology and the live indexer
@@ -55,6 +57,9 @@ signal lands.
 | `ratesengine_timescale_replica_lag` | `pg_replication_lag_seconds` on sync replica | > 5 s for > 2 min | P2 | [replica-lag](runbooks/replica-lag.md) |
 | `ratesengine_timescale_disk_full` | `(node_filesystem_avail_bytes / node_filesystem_size_bytes) * 100` on DB vol | < 10 % | **P1** | [db-disk-full](runbooks/db-disk-full.md) |
 | `ratesengine_timescale_disk_warning` | same | < 20 % | P2 | [db-disk-full](runbooks/db-disk-full.md) |
+| `ratesengine_node_root_disk_full` | same expr on `mountpoint="/"` (distinct from DB vol — root FS holds /var/log + /tmp + /var/cache) | < 10 % | **P1** | [redis-write-blocked-disk-full](runbooks/redis-write-blocked-disk-full.md) |
+| `ratesengine_node_root_disk_warning` | same | < 20 % | P2 | [redis-write-blocked-disk-full](runbooks/redis-write-blocked-disk-full.md) |
+| (no active alert — surfaced via API log) | `forex: fx_quotes persist failed` log line — runtime symptom of an unapplied schema migration | repeating every ~5 min | P3 | [fx-history-missing](runbooks/fx-history-missing.md) |
 | `ratesengine_timescale_connections_saturated` | `pg_stat_activity_count / pg_settings_max_connections * 100` | > 80 % for > 5 min | P2 | [pg-conns-saturated](runbooks/pg-conns-saturated.md) |
 | `ratesengine_timescale_cagg_stale` | `time() - ratesengine_cagg_last_refresh_unix` per CAGG | > 5× its refresh interval | P2 | [cagg-stale](runbooks/cagg-stale.md) |
 | `ratesengine_timescale_compression_lag` | `ratesengine_uncompressed_chunks_older_than_7d` | > 0 for > 24 h | P3 | [compression-lag](runbooks/compression-lag.md) |
@@ -69,6 +74,7 @@ signal lands.
 | `ratesengine_redis_memory_saturated` | `redis_memory_used_bytes / redis_memory_max_bytes * 100` | > 90 % for > 5 min | P2 | [redis-memory](runbooks/redis-memory.md) |
 | `ratesengine_redis_evictions_high` | `rate(redis_evicted_keys_total[5m])` | > 100/s | P2 | [redis-memory](runbooks/redis-memory.md) |
 | `ratesengine_redis_replication_broken` | `redis_connected_slaves` per master | < expected for > 2 min | P2 | [redis-replication](runbooks/redis-replication.md) |
+| `ratesengine_redis_writes_blocked` | `redis_rdb_last_bgsave_status` per master (also surfaces as `MISCONF` errors in client logs) | == 0 for > 60 s | **P1** | [redis-write-blocked-disk-full](runbooks/redis-write-blocked-disk-full.md) |
 
 ## API plane alerts
 
@@ -80,6 +86,7 @@ signal lands.
 | `ratesengine_api_error_rate_high` | `rate(http_requests_total{status=~"5.."}[5m]) / rate(http_requests_total[5m])` | > 1 % for > 2 min | P2 | [api-5xx](runbooks/api-5xx.md) |
 | `ratesengine_api_error_rate_critical` | same | > 5 % for > 2 min | **P1** | [api-5xx](runbooks/api-5xx.md) |
 | `ratesengine_api_price_stale` | `ratesengine_price_staleness_seconds` per asset | > 120 s sustained 5 min | P2 | [price-stale](runbooks/price-stale.md) |
+| `ratesengine_api_cache_miss_rate_high` | `rate(ratesengine_api_cache_ops_total{result="miss"}[5m]) / rate(ratesengine_api_cache_ops_total[5m])` per (cache, op) | > 50 % sustained 10 min on a hot op (≥ 0.1 req/s) | P2 | [cache-miss-rate-high](runbooks/cache-miss-rate-high.md) |
 
 ## SLA-probe alerts
 
@@ -205,9 +212,11 @@ override.
 | `ratesengine_supply_snapshot_unit_failed_alert` | `ratesengine_supply_snapshot_unit_failed` | > 0 for ≥ 30 min | P3 | [supply-snapshot-unit-failed](runbooks/supply-snapshot-unit-failed.md) |
 | `ratesengine_supply_snapshot_stale` | `time() - ratesengine_supply_snapshot_last_success_timestamp` | > 36 h for ≥ 5 min | P3 | [supply-snapshot-stale](runbooks/supply-snapshot-stale.md) |
 | `ratesengine_supply_snapshot_critical_stale` | same | > 72 h for ≥ 5 min | **P2** | [supply-snapshot-stale](runbooks/supply-snapshot-stale.md) |
+| `ratesengine_supply_snapshot_never_initialized` | `absent_over_time(ratesengine_supply_snapshot_last_success_timestamp[36h])` | == 1 for ≥ 5 min | P3 | [supply-snapshot-never-initialized](runbooks/supply-snapshot-never-initialized.md) |
 | `ratesengine_supply_snapshot_circulating_zero` | `ratesengine_supply_snapshot_circulating_xlm{asset_key="XLM"}` | ≤ 0 for ≥ 5 min | **P2** | [supply-snapshot-circulating-zero](runbooks/supply-snapshot-circulating-zero.md) |
 | `ratesengine_aggregator_supply_refresh_stalled` | `time() - max(timestamp(ratesengine_aggregator_supply_refresh_total{outcome="ok"}))` | > 30 min for ≥ 5 min | **P2** | [supply-refresh-stalled](runbooks/supply-refresh-stalled.md) |
 | `ratesengine_aggregator_supply_refresh_error_dominant` | error-outcome rate / total-rate | > 50% for ≥ 30 min | P3 | [supply-refresh-error-dominant](runbooks/supply-refresh-error-dominant.md) |
+| `ratesengine_aggregator_supply_refresh_never_initialized` | `absent_over_time(ratesengine_aggregator_supply_refresh_total{outcome="ok"}[36h])` | == 1 for ≥ 5 min | P3 | [supply-snapshot-never-initialized](runbooks/supply-snapshot-never-initialized.md) |
 
 ## Infra / host alerts
 
@@ -227,11 +236,19 @@ override.
 | `ratesengine_prometheus_scrape_failing` | `up{job=~"api\|indexer\|aggregator"}` | == 0 for any target > 2 min | P3 | [scrape-failing](runbooks/scrape-failing.md) |
 | `ratesengine_alertmanager_config_bad` | `alertmanager_config_last_reload_successful` | == 0 | P2 | [alertmanager-bad-config](runbooks/alertmanager-bad-config.md) |
 | `ratesengine_deadmansswitch` | `vector(1)` constant | MUST fire every minute | **P1** if receiver stops seeing it | [deadmansswitch](runbooks/deadmansswitch.md) |
+| `prometheus_down` (TSDB corruption) | systemd `prometheus.service` failed | exit-code != 0; runs ad-hoc, not a rule | **P1** | [prometheus-tsdb-corruption](runbooks/prometheus-tsdb-corruption.md) |
 
 The `deadmansswitch` alert is inverse-logic: AlertManager routes it
 to a receiver that expects it every minute. If the receiver stops
 seeing it, that's the alarm (catches AlertManager-down and
 Prometheus-down scenarios).
+
+`prometheus_down` is the disk-full / TSDB-corruption family — same
+root cause as `redis-write-blocked-disk-full`. Doesn't have its own
+Prometheus rule (Prometheus can't alert on its own absence — that's
+what `deadmansswitch` is for); the runbook lives under the catalog
+because the *recovery* needs documenting and the apt-shipped
+systemd unit's `Restart=on-abnormal` doesn't auto-recover from it.
 
 ---
 

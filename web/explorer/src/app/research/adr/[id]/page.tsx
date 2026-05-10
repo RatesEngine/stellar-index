@@ -5,6 +5,7 @@ import { ArrowLeft, ExternalLink } from 'lucide-react';
 
 import { loadADR, loadADRs } from '@/lib/adr';
 import { Markdown } from '@/lib/markdown';
+import { SITE_OG_IMAGES, SITE_TWITTER_IMAGES } from '@/lib/seo';
 import { StatusBadge } from '../../StatusBadge';
 
 // Each ADR rendered as its own page so every architectural
@@ -34,8 +35,8 @@ export async function generateMetadata({
     title,
     description,
     alternates: { canonical },
-    openGraph: { title, description, url: canonical, type: 'article' },
-    twitter: { card: 'summary_large_image', title, description },
+    openGraph: { title, description, url: canonical, type: 'article', images: SITE_OG_IMAGES },
+    twitter: { card: 'summary_large_image', title, description, images: SITE_TWITTER_IMAGES },
   };
 }
 

@@ -104,3 +104,41 @@ groups:
             (Freighter SLA is 30 s freshness; we alarm at 4× SLA). Usually
             means the source for this asset has stopped or the aggregator
             isn't writing.
+
+      # Per-(cache, op) miss rate. Set this against the in-memory
+      # cache wrappers (`v1.CachedMarketsReader`, etc) — when miss
+      # rate stays > 50 % for 10 min on a hot op, the prewarm key
+      # has drifted from what the handler looks up. We've shipped
+      # three of these bugs in 24 h (#1185 / #1194 / #1195); the
+      # alert is the cheapest detector. Deliberate that we
+      # threshold on RATIO not absolute miss count: a cache that
+      # serves 1 req/s with 100 % miss is fine, a cache that
+      # serves 1000 req/s with 50 % miss is a phantom-key drift.
+      - alert: ratesengine_api_cache_miss_rate_high
+        expr: |
+          (
+            sum by (cache, op) (rate(ratesengine_api_cache_ops_total{result="miss"}[5m]))
+            /
+            sum by (cache, op) (rate(ratesengine_api_cache_ops_total[5m]))
+          ) > 0.5
+          and
+          sum by (cache, op) (rate(ratesengine_api_cache_ops_total[5m])) > 0.1
+        for: 10m
+        labels:
+          severity: ticket
+          team: ratesengine
+          component: api
+          runbook_url: https://github.com/RatesEngine/rates-engine/blob/main/docs/operations/runbooks/cache-miss-rate-high.md
+        annotations:
+          summary: "API cache {{ $labels.cache }}/{{ $labels.op }} miss rate {{ $value | humanizePercentage }}"
+          description: |
+            Sustained > 50 % miss rate on the v1.Cached* wrapper for
+            {{ $labels.cache }}/{{ $labels.op }}. The prewarm goroutine
+            should keep hot ops > 90 % hit. Likely cause: the prewarm
+            is calling the cached reader with a slightly-different
+            argument tuple than the handler does (see
+            cmd/ratesengine-api/main.go prewarmOnce + the handler at
+            internal/api/v1/{markets,coins}.go). Cache key is a
+            stringified tuple of all args; one drifted dimension
+            (Order, Sources, Limit, …) means a phantom warmed slot.
+            Follow the cache-miss-rate-high runbook.

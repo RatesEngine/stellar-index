@@ -7,6 +7,7 @@ export const metadata: Metadata = {
   title: 'MEV — suspicious-pattern detector',
   description:
     'Sandwich attacks, oracle-update sandwiches, liquidation cascades, wash trading. The MEV detector watches Stellar specifically.',
+  alternates: { canonical: '/mev' },
 };
 
 const PATTERNS: { name: string; description: string; example: string }[] = [

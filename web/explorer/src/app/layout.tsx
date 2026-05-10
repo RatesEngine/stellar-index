@@ -67,6 +67,13 @@ export const metadata: Metadata = {
     },
   },
   alternates: {
+    // Default canonical for the home page. Detail pages override
+    // this in their own generateMetadata; without it the root URL
+    // would be served without a <link rel="canonical">, leaving
+    // search engines free to treat https://ratesengine.net/ vs
+    // https://ratesengine.net (no trailing slash) vs
+    // https://ratesengine.net/index.html as separate pages.
+    canonical: '/',
     types: {
       'application/atom+xml': [
         { url: '/blog.atom', title: 'Rates Engine — engineering notes' },

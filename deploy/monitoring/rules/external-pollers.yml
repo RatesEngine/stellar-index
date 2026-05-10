@@ -1,0 +1,67 @@
+---
+# External-poller staleness alerts — fires when an aggregator /
+# CEX poller stops producing successful polls. Catches the class
+# of bug shipped on r1 2026-05-09 where CoinGecko throttled the
+# unauthenticated tier and the only signal was a per-minute WARN
+# log (no metric, no alert) — the poller was effectively down for
+# 13 h before discovery.
+
+groups:
+  - name: ratesengine.external_pollers
+    interval: 60s
+    rules:
+
+      # 30-minute window with zero successful polls is the
+      # canonical "this source is down" signal. Background context:
+      # legitimate poll cadences are 5s (binance, coinbase, kraken)
+      # to 60s (coingecko, ECB-daily — but ECB still polls every
+      # 60s and gets cached responses). Any poller with no success
+      # in 30m is broken (config / auth / network) regardless of
+      # cadence, so a single rule covers the fleet.
+      - alert: ratesengine_external_poller_stale
+        expr: |
+          (time() - ratesengine_external_poller_last_success_unix) > 1800
+        for: 5m
+        labels:
+          severity: ticket
+          team: ratesengine
+          component: external-poller
+          runbook_url: https://github.com/RatesEngine/rates-engine/blob/main/docs/operations/runbooks/external-poller-stale.md
+        annotations:
+          summary: "external poller {{ $labels.source }} has not succeeded in 30+ min"
+          description: |
+            ratesengine_external_poller_last_success_unix for source
+            {{ $labels.source }} has been > 30 min stale for > 5 min.
+            Either the poller is sustained-throttled (4xx), the
+            upstream venue is down (5xx / network), or an auth token
+            expired. Check the indexer log for the matching
+            "poller error" lines and the source's auth_mode startup
+            log for the configured tier.
+
+      # Sustained error rate over 15 min — catches the case where
+      # the poller is hitting the venue successfully sometimes but
+      # >50% of attempts return non-nil err. Lower severity than
+      # the staleness alert because at least *some* data is flowing.
+      - alert: ratesengine_external_poller_error_rate_high
+        expr: |
+          (
+            rate(ratesengine_external_poller_polls_total{outcome="error"}[15m])
+            /
+            (
+              rate(ratesengine_external_poller_polls_total{outcome="success"}[15m])
+              + rate(ratesengine_external_poller_polls_total{outcome="error"}[15m])
+            )
+          ) > 0.5
+        for: 15m
+        labels:
+          severity: informational
+          team: ratesengine
+          component: external-poller
+          runbook_url: https://github.com/RatesEngine/rates-engine/blob/main/docs/operations/runbooks/external-poller-stale.md
+        annotations:
+          summary: "external poller {{ $labels.source }} error rate > 50 % (15 min)"
+          description: |
+            More than half of recent {{ $labels.source }} polls returned
+            an error. Data is still flowing on the success rate, but
+            something's degrading — investigate before it tips into
+            full staleness.

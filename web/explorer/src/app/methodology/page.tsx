@@ -5,6 +5,7 @@ export const metadata: Metadata = {
   title: 'Methodology — how Rates Engine computes prices',
   description:
     'Source classes, VWAP weighting, stablecoin proxy, freeze policy, closed-bucket contract, latency targets. The full methodology behind every price Rates Engine serves.',
+  alternates: { canonical: '/methodology' },
 };
 
 export default function MethodologyPage() {

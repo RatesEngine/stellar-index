@@ -507,6 +507,26 @@ func (c *Client) CreateKey(ctx context.Context, req CreateKeyRequest) (*Envelope
 	return &env, nil
 }
 
+// RevokeKey deletes the API key identified by keyID. The deletion
+// is permanent; the key cannot be reactivated. Returns nil on
+// success (204), or an *APIError when the server rejects the
+// request — typically 401 (no credentials), 403 (caller doesn't
+// own the key), or 404 (key not found / already revoked).
+//
+// keyID is the public ID returned in [KeyCreated.ID] / on each
+// row of [Client.Keys] — NOT the plaintext secret. Returning the
+// secret would 400 since the route validates the path segment as
+// a key ID.
+func (c *Client) RevokeKey(ctx context.Context, keyID string) error {
+	if keyID == "" {
+		return &APIError{Status: 400, Title: "keyID required"}
+	}
+	// Server returns 204 No Content on success — no envelope to
+	// decode. Pass nil for the response struct so doJSON skips the
+	// JSON-decode step.
+	return c.doJSON(ctx, http.MethodDelete, "/v1/account/keys/"+keyID, nil, nil, nil)
+}
+
 // CoinsOptions paginates / filters the classic-asset directory.
 // `Limit` is server-side clamped to [1, 500] (default 100).
 // `Issuer`, when non-empty, restricts the listing to assets minted
@@ -694,6 +714,219 @@ func (c *Client) Readyz(ctx context.Context) (*Envelope[Health], error) {
 func (c *Client) Version(ctx context.Context) (*Envelope[Version], error) {
 	var env Envelope[Version]
 	if err := c.doJSON(ctx, http.MethodGet, "/v1/version", nil, nil, &env); err != nil {
+		return nil, err
+	}
+	return &env, nil
+}
+
+// ChartQuery selects the asset / quote and the binned chart
+// timeframe + granularity. Asset is required.
+type ChartQuery struct {
+	Asset       string
+	Quote       string // optional; defaults to fiat:USD server-side
+	Timeframe   string // 1h / 24h / 7d / 30d / 90d / 1y / all; default 24h
+	Granularity string // 1m / 5m / 15m / 1h / 1d / 1w; defaults match Timeframe
+}
+
+// Chart returns the binned price + USD-volume series for a chart
+// rendering. Distinct from [Client.HistorySinceInception] (which
+// returns the FULL series at one granularity) — Chart trims to a
+// caller-chosen window and resolves a server-default granularity
+// per timeframe (24h → 1h bins, 7d → 4h, 30d → 1d, etc.).
+func (c *Client) Chart(ctx context.Context, q ChartQuery) (*Envelope[ChartSeries], error) {
+	if q.Asset == "" {
+		return nil, &APIError{Status: 400, Title: "asset required"}
+	}
+	v := url.Values{}
+	v.Set("asset", q.Asset)
+	if q.Quote != "" {
+		v.Set("quote", q.Quote)
+	}
+	if q.Timeframe != "" {
+		v.Set("timeframe", q.Timeframe)
+	}
+	if q.Granularity != "" {
+		v.Set("granularity", q.Granularity)
+	}
+	var env Envelope[ChartSeries]
+	if err := c.doJSON(ctx, http.MethodGet, "/v1/chart", v, nil, &env); err != nil {
+		return nil, err
+	}
+	return &env, nil
+}
+
+// NetworkStats fetches the home-page aggregate snapshot the
+// explorer renders in its network strip — 24h USD volume, active
+// markets count, indexed-assets count, latest live ledger, source
+// counts. Single round trip backed by GET /v1/network/stats.
+//
+// The Volume24hUSD field is *string per ADR-0003 (raw cents can
+// exceed int64); nil when no USD-equivalent trades landed in the
+// rolling 24h window.
+func (c *Client) NetworkStats(ctx context.Context) (*Envelope[NetworkStats], error) {
+	var env Envelope[NetworkStats]
+	if err := c.doJSON(ctx, http.MethodGet, "/v1/network/stats", nil, nil, &env); err != nil {
+		return nil, err
+	}
+	return &env, nil
+}
+
+// ObservationsQuery selects the input for [Client.Observations].
+// Asset is required; Quote defaults to fiat:USD; optional Source
+// restricts to a single source; Aggregate="latest" collapses the
+// per-source array to a 0/1-element slice of the most-recent.
+type ObservationsQuery struct {
+	Asset     string
+	Quote     string // optional
+	Source    string // optional
+	Aggregate string // optional; "latest" supported
+}
+
+// Observations returns the rawest per-source trade view per
+// ADR-0018 — one row per source that has recorded a trade on
+// (asset, quote). Empty array (NOT 404) when the pair has no
+// observations. flags.stale is always false on this surface (no
+// aggregation contract to fall short of).
+func (c *Client) Observations(ctx context.Context, q ObservationsQuery) (*Envelope[[]TradeRow], error) {
+	if q.Asset == "" {
+		return nil, &APIError{Status: 400, Title: "asset required"}
+	}
+	v := url.Values{}
+	v.Set("asset", q.Asset)
+	if q.Quote != "" {
+		v.Set("quote", q.Quote)
+	}
+	if q.Source != "" {
+		v.Set("source", q.Source)
+	}
+	if q.Aggregate != "" {
+		v.Set("aggregate", q.Aggregate)
+	}
+	var env Envelope[[]TradeRow]
+	if err := c.doJSON(ctx, http.MethodGet, "/v1/observations", v, nil, &env); err != nil {
+		return nil, err
+	}
+	return &env, nil
+}
+
+// ChangeSummaryQuery selects the entity (entity_type + id) for
+// a [Client.ChangeSummary] call. Both fields are required.
+// EntityType is one of "coin", "protocol", "pair", "source".
+type ChangeSummaryQuery struct {
+	EntityType string
+	EntityID   string
+}
+
+// ChangeSummary returns the per-entity 1h/24h/7d/30d delta
+// rollup, plus ATH/ATL + streak/acceleration markers. The
+// change-summary worker writes one row per (entity_type, entity_id)
+// every 5 min. For coin entities the API expands friendly slugs
+// (XLM, USDC) into canonical asset_id forms server-side per
+// PR #1115, so passing the slug works.
+func (c *Client) ChangeSummary(ctx context.Context, q ChangeSummaryQuery) (*Envelope[ChangeSummary], error) {
+	if q.EntityType == "" {
+		return nil, &APIError{Status: 400, Title: "entity_type required"}
+	}
+	if q.EntityID == "" {
+		return nil, &APIError{Status: 400, Title: "entity_id required"}
+	}
+	var env Envelope[ChangeSummary]
+	path := "/v1/changes/" + url.PathEscape(q.EntityType) + "/" + url.PathEscape(q.EntityID)
+	if err := c.doJSON(ctx, http.MethodGet, path, nil, nil, &env); err != nil {
+		return nil, err
+	}
+	return &env, nil
+}
+
+// Incidents fetches every customer-facing incident post the API
+// binary has embedded — backed by GET /v1/incidents. Results are
+// sorted started_at descending (most recent first). Severity is
+// the SEV-N tier; Status reports lifecycle. BodyMarkdown carries
+// the full incident write-up.
+//
+// The corpus ships with the binary (per-deploy), so two regions
+// running different builds may return different lists — clients
+// that need cross-region consistency should diff by Slug.
+func (c *Client) Incidents(ctx context.Context) (*Envelope[IncidentsList], error) {
+	var env Envelope[IncidentsList]
+	if err := c.doJSON(ctx, http.MethodGet, "/v1/incidents", nil, nil, &env); err != nil {
+		return nil, err
+	}
+	return &env, nil
+}
+
+// SACWrappers returns the SAC (Stellar Asset Contract) wrapper
+// registry — a map from Soroban contract address to the
+// "<CODE>:<G_STRKEY>" form of the underlying classic asset. Used
+// to resolve `transfer` events on SAC contracts back to the
+// classic asset they wrap.
+//
+// Returned as a plain map; iterate the map keys for contract
+// addresses or look up a specific contract directly.
+func (c *Client) SACWrappers(ctx context.Context) (*Envelope[map[string]string], error) {
+	var env Envelope[map[string]string]
+	if err := c.doJSON(ctx, http.MethodGet, "/v1/sac-wrappers", nil, nil, &env); err != nil {
+		return nil, err
+	}
+	return &env, nil
+}
+
+// CurrenciesOptions controls the limit of [Client.Currencies].
+// Limit is server-clamped to [1, 500]; zero leaves the server
+// default in place (currently the full corpus).
+type CurrenciesOptions struct {
+	Limit int
+}
+
+// Currencies fetches the fiat / fiat-like currency list backing
+// /v1/currencies. RateUSD on each row is "1 USD = N units of this
+// currency" — the server publishes the snapshot from its forex
+// feed; circulating-supply + market-cap fields populate only for
+// the subset of currencies the operator has wired a circulation
+// source for.
+func (c *Client) Currencies(ctx context.Context, opts CurrenciesOptions) (*Envelope[CurrenciesList], error) {
+	v := url.Values{}
+	if opts.Limit > 0 {
+		v.Set("limit", strconv.Itoa(opts.Limit))
+	}
+	var env Envelope[CurrenciesList]
+	if err := c.doJSON(ctx, http.MethodGet, "/v1/currencies", v, nil, &env); err != nil {
+		return nil, err
+	}
+	return &env, nil
+}
+
+// Currency fetches the per-ticker detail backing
+// /v1/currencies/{ticker}. Adds InverseUSD (precomputed
+// 1/RateUSD), CrossRates against every other listed currency, and
+// a 7-day daily history strip on top of the bare-list shape.
+//
+// `ticker` is the ISO 4217 code (USD, EUR, JPY, …); the server
+// uppercase-normalises before lookup, so case doesn't matter.
+// Empty ticker returns 400 client-side without a network call.
+func (c *Client) Currency(ctx context.Context, ticker string) (*Envelope[CurrencyDetail], error) {
+	if ticker == "" {
+		return nil, &APIError{Status: 400, Title: "ticker required"}
+	}
+	var env Envelope[CurrencyDetail]
+	if err := c.doJSON(ctx, http.MethodGet, "/v1/currencies/"+url.PathEscape(ticker), nil, nil, &env); err != nil {
+		return nil, err
+	}
+	return &env, nil
+}
+
+// LendingPools fetches every Blend pool contract observed in the
+// trailing 7d auction stream — backed by GET /v1/lending/pools.
+// Sorted by total auction count desc.
+//
+// Today's wire shape is auction-derived: per-pool TVL, utilisation,
+// and supply/borrow APYs land via additional fields once the
+// pool-storage reader worker ships, so callers should be defensive
+// about new fields appearing in subsequent server releases (the
+// SDK's JSON decode ignores unknown fields, so this is non-breaking).
+func (c *Client) LendingPools(ctx context.Context) (*Envelope[[]LendingPool], error) {
+	var env Envelope[[]LendingPool]
+	if err := c.doJSON(ctx, http.MethodGet, "/v1/lending/pools", nil, nil, &env); err != nil {
 		return nil, err
 	}
 	return &env, nil

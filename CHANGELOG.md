@@ -17,6 +17,745 @@ against.
 
 ### Added
 
+- **ADR-0026 — Stablecoin → fiat proxy is late-binding
+  aggregator policy, not eager ingest normalisation**
+  (`docs/adr/0026-stablecoin-fiat-proxy-late-binding.md`).
+  Records the implicit-from-the-start policy that a flurry
+  of API-side fallback PRs (#1217 / #1218 / #1219 / #1224 /
+  #1225 / #1226) each instantiated. Captures: the
+  late-binding-vs-eager-rewrite tradeoff (depeg detection,
+  per-stablecoin signal preservation, reversibility), the
+  default peg list (USDT/USDC/PYUSD/EUROC/EUROB/MXNe), the
+  operator runbook for a depeg event (remove the affected
+  peg from `api.peg_aliases`), and the cross-region
+  byte-identical contract this introduces (every region
+  ships the SAME peg list; cross-region monitor verifies
+  config hash). The policy was previously documented only
+  in CLAUDE.md "things that will surprise you" + scattered
+  PR descriptions.
+- **Three new Prometheus alert rules backing the 2026-05-10 incident
+  postmortem** (#1228 ships the runbook + customer-facing post;
+  this PR ships the rules that prevent silent recurrence):
+  - `ratesengine_node_root_disk_full` (P1) / `_warning` (P2) —
+    `ratesengine_timescale_disk_full` only watched
+    `/var/lib/postgresql` (own ZFS dataset, plenty of free space);
+    the root FS that actually filled wasn't covered. New rule
+    watches `mountpoint="/"`.
+  - `ratesengine_redis_writes_blocked` (P1) —
+    `redis_rdb_last_bgsave_status == 0` for > 60 s. Catches the
+    same incident from a different angle: Redis can't snapshot,
+    refuses every write, aggregator VWAP cache stops refreshing,
+    `/v1/price` 404s on rewritten/triangulated/proxy pairs.
+
+  Both alerts link `redis-write-blocked-disk-full.md` (cherry-picked
+  here so the doc-lint orphan check is satisfied without ordering
+  dependency between this PR and #1228). (PR #1229)
+- **Seed `configs/example.toml` documents Chainlink crypto +
+  FX feeds + the "must overlap with aggregator pairs" gotcha**.
+  Audit on 2026-05-10 found r1's Chainlink feeds were
+  configured only for fiat:EUR/GBP/JPY × USD — pairs the
+  aggregator's default coverage doesn't compute, so the
+  divergence worker had no overlap to cross-check and
+  `divergence_observations` was silently empty. The seed
+  config previously documented only the fiat:EUR/fiat:USD
+  example, leading every fresh operator down the same path.
+  Now documents the matching crypto-pair feed addresses
+  (BTC/USD, ETH/USD, LINK/USD) that align with the
+  aggregator's built-in default — so a stock deployment
+  populates divergence_observations out of the box once the
+  operator copies the crypto-feed block. Operator action
+  needed on r1 to add the crypto feeds (tracked).
+- **Runbook for the `fx_quotes` hypertable / migration 0028 gap.**
+  Captures the 2026-05-10 finding that r1's DB is at migration
+  0027 (PR #1041's migration 0028 was never applied), so the
+  forex worker WARN-spams `pq: relation "fx_quotes" does not
+  exist` on every refresh tick and `/v1/currencies/EUR.history_1y`
+  / `.history_all` stay empty (customer-visible regression of
+  task #104). New runbook at
+  `docs/operations/runbooks/fx-history-missing.md` documents the
+  triage + 5-min recovery (scp migration → `ratesengine-migrate
+  up` → confirm forex worker resumes → optional 10y backfill via
+  `scripts/ops/fx-history-backfill`). Cross-linked from
+  alerts-catalog + external-poller-stale. Prevention notes
+  capture the choice between auto-migrate-in-deploy-workflow
+  vs. gate-readyz-on-schema-version. (PR #1230)
+- **Runbook + customer-facing incident post for the 2026-05-10
+  Redis-write-blocked outage** — r1's root filesystem reached
+  100% with 35 GB of stale logs, blocking Redis snapshots,
+  blocking aggregator VWAP cache writes, and surfacing as
+  `/v1/price` 404s on rewritten / triangulated / stablecoin-proxy
+  pairs for ~9 hours. New runbook at
+  `docs/operations/runbooks/redis-write-blocked-disk-full.md`
+  captures triage signals + the 5-minute recovery sequence
+  (vacuum journal, truncate syslog.1, rm WASM-audit stderr,
+  trigger Redis BGSAVE). Customer-facing incident post at
+  `internal/incidents/data/2026-05-10-redis-writes-blocked-disk-full.md`
+  is auto-served by `/v1/incidents`. (PR #1228)
+- **ADR-0025 — Caddy trusts Cloudflare for client-IP signal via
+  CIDR-pinned static list** (`docs/adr/0025-caddy-cloudflare-trusted-proxy.md`).
+  Records the architectural commitment from PR #1239: Caddy's
+  global `servers { trusted_proxies static <CF CIDRs> }` block
+  pins trust on CF's published IP ranges (refreshed manually
+  on quarterly audit cadence rather than via the third-party
+  `caddy-cloudflare-ip` plugin). R2 / R3 inherit the same
+  topology when they ship; if we ever expose the API directly
+  without CF in front, the operator MUST delete the
+  `trusted_proxies` block on that listener — calling that out
+  in writing prevents a foot-gun. The ADR README index also
+  gets caught up — entries for ADR-0020 through ADR-0024
+  (already-accepted but not previously indexed) added in the
+  same change.
+- **`/v1/pools?asset=<asset_id>` filter** — restrict the pools
+  listing to rows where the asset appears on either side (base
+  OR quote). Mirrors the same filter shape just shipped on
+  `/v1/markets` (#1189). Backs the explorer's `/assets/{slug}`
+  Liquidity tab — single API request instead of two parallel
+  `?base=` + `?quote=` fetches with client-side merge. Mutually
+  exclusive with `?base=`/`?quote=` (the OR-shape and AND-shape
+  filters can't be mixed); combining returns 400
+  `conflicting-filters`. Invalid asset_ids return 400
+  `invalid-asset-id`. (PR #1190)
+- **`/v1/markets?asset=<asset_id>` filter** — restrict the markets
+  listing to pairs where the given canonical asset_id appears on
+  either side (base OR quote). Mirrors the `?base=` / `?quote=`
+  filters already on `/v1/pools`. Backs the explorer's
+  `/assets/{slug}` Markets tab so long-tail assets that fall
+  outside the global top-100 by volume now surface their markets
+  correctly. Mutually exclusive with `?source=`; combining the
+  two returns 400 `conflicting-filters`. Invalid asset_ids
+  return 400 `invalid-asset-id` (silent-empty-page guard, same
+  family as `?source=`). (PR #1189)
+- **`pkg/client`: SDK coverage gap fully closed**. Final batch
+  after #1122/#1123/#1124. Adds `Client.Chart`,
+  `Client.Observations`, `Client.ChangeSummary`, `Client.Incidents`,
+  `Client.SACWrappers` with full wire types (`ChartSeries`,
+  `ChangeSummary`, `IncidentsPayload`, `Incident`) and 6 unit
+  tests. Every endpoint registered in `internal/api/v1/server.go`
+  now has a typed Go-client wrapper. Together the four batches
+  added 14 methods, 9 wire types, and 23 unit tests.
+- **`pkg/client`: `Currencies(ctx, opts)` + `Currency(ctx, ticker)`**
+  SDK methods for `/v1/currencies` and `/v1/currencies/{ticker}`.
+  Mirrors the wire shapes the explorer's `/currencies` and
+  `/currencies/{ticker}` pages already consume — `RateUSD` is
+  "1 USD = N units of this currency" per the server contract,
+  and `*float64` pointer fields preserve the "no data" vs "0"
+  distinction on circulating-supply / market-cap. Detail variant
+  adds `InverseUSD`, `CrossRates` and a 7-day history strip.
+- **`pkg/client`: `LendingPools(ctx)`** SDK method for
+  `GET /v1/lending/pools`. Mirrors the wire shape of every Blend
+  pool observed in the trailing 7d auction stream — `LendingPool`
+  struct stays additive (TVL / utilisation / supply+borrow APYs
+  land in subsequent server releases without needing an SDK
+  bump, since the JSON decoder ignores unknown fields).
+
+### Security
+
+- **API binary's `/metrics` now refuses non-loopback callers
+  (defense-in-depth)**. PR #1172 added the Caddy block at the
+  edge, but a probe today found `curl https://api.ratesengine.net/metrics`
+  still returning 1372 lines of Go runtime + per-source counter
+  data — the operator hasn't re-applied the Caddyfile yet
+  (operator action pending). Adds a Go-layer gate
+  (`loopbackOnly`) so the binary itself returns 404 to any
+  RemoteAddr that isn't 127.0.0.0/8 or ::1 — the local
+  Prometheus scraper still reaches it via 127.0.0.1:3000, but
+  any reverse proxy that forwards public traffic gets a clean
+  404. Returns 404 (not 403) deliberately so a scanner can't
+  confirm the route exists. Six unit tests pin both branches
+  (3 non-loopback IP families × 404, 3 loopback addrs × 200).
+  Caddy block stays as the primary protection; this is the
+  belt-and-braces second layer that catches misconfiguration.
+  (PR #1207)
+- **Caddy `Caddyfile.api` now 404s `/metrics` from the public
+  `api.ratesengine.net` host**. The API binary serves /metrics on
+  :3000 alongside /v1/* (one ServeMux), and the catch-all
+  `reverse_proxy` was forwarding the public hit straight through
+  — verified live: `curl -s https://api.ratesengine.net/metrics`
+  returns 8KB+ of Go runtime stats, request counters, and per-
+  source ingest gauges that fingerprint the deployment for any
+  attacker. Local Prometheus scraping uses
+  `127.0.0.1:3000/metrics` per `prometheus.r1.yml` and is
+  unaffected; status.ratesengine.net is the right surface for
+  public transparency. Operator action: re-apply via
+  `ansible-playbook configs/ansible/playbooks/r1.yml --tags caddy`.
+- **`Vary: Origin` now emitted on every CORS-enabled response in
+  exact-match mode**, not just when the request's Origin matched
+  the allow list. Pre-fix, a cacheable response served to a
+  no-Origin request (curl, server-side fetch, monitoring probe)
+  was cached at the CDN without origin discrimination — a later
+  browser request whose Origin WOULD have been allowed would
+  receive that cached "no CORS" response and fail client-side
+  fetch(). The inverse poisoning vector also closes: a response
+  cached with one allowed Origin's `Allow-Origin: <a>` could
+  previously be served to a request from a different allowed
+  Origin `<b>`, breaking that client too. Wildcard mode is
+  unaffected (response is origin-independent so Vary would just
+  defeat caching). Two regression tests pin both branches.
+- **`ratesengine_api_cache_ops_total{cache,op,result}` Prometheus
+  counter** for in-memory cache wrappers
+  (`v1.CachedMarketsReader`, …). Result is `hit` (returned cached
+  value, including single-flight-wait callers) or `miss` (called
+  upstream). Op breaks down per cached method
+  (`distinct_pairs` / `source_markets` / `asset_markets` /
+  `all_pools`). Motivation: three back-to-back prewarm-key drift
+  bugs (#1185 / #1194 / #1195) where the prewarm warmed one key
+  but user requests looked up another; each was invisible to
+  tests + log-greps and only surfaced from live latency probes
+  ("dex pools take forever"). With this counter an alert on
+  `rate(...{result="miss"}[5m]) / rate(...[5m]) > 0.5` sustained
+  catches the next drift in minutes instead of days. (PR #1196)
+- **Prometheus alert `ratesengine_api_cache_miss_rate_high`** wired
+  to the new counter. Fires P2/ticket when miss rate > 50% sustained
+  10 min on any (cache, op) with ≥ 0.1 req/s traffic. The traffic
+  floor avoids flapping on quiet caches; the ratio (not absolute)
+  threshold means a low-volume cache with 100% miss won't page but
+  a high-volume cache with 50% miss will. Runbook
+  [cache-miss-rate-high.md](docs/operations/runbooks/cache-miss-rate-high.md)
+  walks the operator through diffing prewarm vs handler args
+  (which is what we did manually for #1185 / #1194 / #1195).
+  (PR #1197)
+- **`ratesengine_api_cache_ops_total` extended to `coins` and
+  `sources_stats` cache wrappers.** PR #1196 only instrumented
+  `markets`; this fills in the other two so the existing alert
+  (#1197) catches drift on every cached endpoint, not just the
+  ones that motivated the original bugs. New op labels:
+  `coins/list_coins`, `coins/price_history_24h`,
+  `coins/price_history_7d`, `sources_stats/source_stats`,
+  `sources_stats/volume_history_24h`. (PR #1198)
+
+### Documentation
+
+- **Clarify the source-count semantic gap between
+  `/v1/network/stats` and `/v1/status`**. Both endpoints expose
+  a field called `total_sources`, but they measure different
+  things: network/stats counts entries in the static binary
+  registry (constant per-build); status counts sources the
+  operator has enabled at runtime (Prometheus-derived, region-
+  scoped). On r1 today registry=21, enabled=17, active=15. The
+  semantic gap is by design — keeping the names in separate
+  envelopes prevents collision in any single response — but the
+  contrast was undocumented. Updated docstrings on
+  `internal/api/v1.NetworkStats` + the OpenAPI descriptions on
+  both endpoints so SDK consumers don't need to spelunk to find
+  out which one they want.
+
+### Performance
+
+- **Cacheable read endpoints now emit `public, max-age=60,
+  s-maxage=300`** instead of falling through to the conservative
+  `private, no-store` default. Eight surfaces were missing from
+  the `policyForPath` table — verified live with `curl -sI`:
+  `/v1/coins/{slug}`, `/v1/currencies`, `/v1/currencies/{ticker}`,
+  `/v1/chart`, `/v1/lending/pools`, `/v1/network/stats`,
+  `/v1/sac-wrappers`, `/v1/incidents`, `/v1/pools`. Each was
+  bypassing the CDN AND telling the browser not to cache,
+  multiplying origin load on every page render
+  (`/v1/network/stats` and `/v1/sac-wrappers` each fire on every
+  explorer page load). Unblocks Cloudflare's edge from absorbing
+  the explorer's hot path.
+
+### Fixed
+
+- **`/v1/price/tip?asset=X&quote=fiat:USD` gets the same
+  stablecoin-fiat proxy fallback as `/v1/price`** (#1217). Tip
+  was 404'ing on the same shape — `tipWindowVWAP →
+  PriceReader.LatestPrice → tryRedisVWAPFallback → tryFiatCrossRate`
+  with no peg-rewrite branch — so a customer reading the
+  fastest-feed XLM/USD price endpoint got the same out-of-the-box
+  404 as `/v1/price`. Now slots `tryStablecoinFiatProxy` between
+  the Redis cache layer and the fiat-cross-rate fallback in
+  `computeTip`. Same opt-in shape (empty allow-list still 404s).
+  (PR #1218)
+- **`/v1/price?asset=X&quote=fiat:USD` now serves via classic-USDC
+  peg fallback at handler read time**, mirroring the `/v1/chart`
+  fallback shipped in #1015 (task #98). Same root cause: the
+  aggregator's `[aggregate].enable_stablecoin_fiat_proxy` is off
+  by default, so the literal X/fiat:USD pair never has rows in
+  `prices_1m` (no on-chain trades quote in fiat:USD on Stellar).
+  Pre-fix, the canonical XLM/USD price endpoint —
+  `/v1/price?asset=native&quote=fiat:USD` — returned 404 "no
+  trades or oracle observations" out-of-the-box on every fresh
+  deployment, even though the aggregator had a perfectly good
+  `native/USDC-classic` VWAP cached. The new
+  `tryStablecoinFiatProxy` fallback walks the operator's
+  `[trades].usd_pegged_classic_assets` allow-list in priority
+  order and rewrites the lookup; first peg with a row wins.
+  Response carries `flags.triangulated=true` and the wire `quote`
+  field echoes the user's request (`fiat:USD`), not the proxy
+  peg. Opt-in shape preserved — empty allow-list still 404s.
+  (PR #1217)
+- **Indexer now WARNs at boot when `[supply]` watched-sets are all
+  empty**, instead of silently registering zero supply observers.
+  This was the silent-failure mode behind r1's
+  `asset_supply_history` sitting at 0 rows for 6+ days post-deploy
+  — the operator hadn't populated the watched-sets yet (ops task
+  #97), but the indexer logged nothing about it. F2 fields
+  (`market_cap_usd`, `fdv_usd`, `circulating_supply`,
+  `total_supply`, `max_supply`) on `/v1/assets/{id}` stayed null
+  for every asset, with no signal until someone manually queried
+  the empty table. The new WARN names the missing config keys
+  (`sdf_reserve_accounts` for Algorithm 1 XLM,
+  `watched_classic_assets` for Algorithm 2,
+  `watched_sep41_contracts` for Algorithm 3) and explicitly states
+  the consequence — so the next operator who tails the indexer log
+  sees the problem in the first 30 seconds. (PR #1216)
+- **`/v1/coins?limit=200` prewarm now matches the handler's
+  internal `listingLimit`**. Same family as #1194. The handler
+  subtracts 1 from the requested limit when cursor/issuer/q are
+  all empty (the `prependNative` path that splices a synthetic
+  XLM row at the top of page 1 without overshooting), so a
+  `/v1/coins?limit=200` user request actually queries the store
+  with `ListCoinsOptions{Limit: 199, …}`. The prewarm passed
+  `Limit: 200` so its cache key (`ListCoinsExt|200|…`) never
+  matched the handler's lookup key (`ListCoinsExt|199|…`). The
+  explorer's `/currencies` page (the most-trafficked coins read)
+  was hitting cold cache on every load. (PR #1195)
+- **Unfiltered `/v1/pools` prewarm now matches the handler's
+  cache key**. Follow-up to PR #1185, which fixed the
+  `MarketsOrder` mismatch but missed a second mismatch in the
+  Sources dimension. The handler builds
+  `PoolsFilter{Sources: v1.DexSourceNames()}` for unfiltered
+  requests; the prewarm passed `PoolsFilter{}` (`Sources: nil`).
+  Cache key uses `fmt.Sprintf("%v", filter.Sources)` so
+  `nil` → `[]` while the handler's slice → `[aquarius comet
+  phoenix sdex soroswap]`. Different strings, different keys —
+  the unfiltered prewarm warmed a slot no user request ever
+  hits. Exported `v1.DexSourceNames` so the prewarm can call
+  the same source-of-truth as the handler. Per-DEX prewarm
+  (introduced in #1185) was unaffected — its `[]string{src}`
+  matches the handler's filtered single-element slice. (PR #1194)
+
+- **`/v1/coins` `change_{1h,24h,7d}_pct` for XLM-triangulated assets
+  now reflects USD change, not XLM-denominated change**. Pre-fix
+  USDC and PYUSD showed `-3.37%` and `-3.27%` 24h change live on
+  r1 — they're stablecoins and never depegged. The `vs_xlm`
+  fallback computed `vs_xlm.vwap / vs_xlm_24h.vwap` (raw XLM
+  ratio change) while `price_usd` correctly used
+  `vs_xlm.vwap × xlm_usd.vwap` (triangulated USD price). For
+  USD-stable assets these read inversely: USDC at $1 stays at $1
+  even when XLM moves 3% against it. Multiply both sides of the
+  change ratio by their respective `xlm_usd_*` factor so the
+  change consistently measures the same triangulated USD price
+  the row already displays. Same fix applied across `listCoins`
+  and `GetCoinBySlug` queries.
+
+- **Explorer home page now emits `<link rel="canonical">`**.
+  Detail pages picked it up via #1094/#1095/#1097 but the root
+  `/` was left without one, so search engines were free to treat
+  `https://ratesengine.net/`, `https://ratesengine.net` (no
+  trailing slash), and `https://ratesengine.net/index.html` as
+  separate pages and split link equity between them. Default
+  `alternates.canonical: '/'` on the root layout fixes that;
+  detail pages still override per-route in their own
+  generateMetadata.
+- **`/v1/oracle/latest?source=<unknown>`** now returns 400
+  `unknown-source` instead of an empty 200 list. Same fail-fast
+  validation pattern shipped on /v1/markets (#1162) and
+  /v1/observations (#1164) — typo'd source names looked
+  identical on the wire to "this source has no observation for
+  the asset", masking input errors as data gaps.
+- **Sitemap URLs now match the canonical trailing-slash form the
+  explorer actually serves**. With `trailingSlash: true` in
+  next.config.js, every non-trailing-slash URL 308-redirects to
+  its trailing-slash form — but every URL the sitemap emitted
+  was bare (`/account`, `/issuers/G...`, `/markets/X~Y`), so every
+  sitemap entry sent crawlers through a 308 hop before reaching
+  the real page. Google penalises sitemaps that contain redirect
+  targets. New `siteURL()` helper appends the trailing slash;
+  verified live: every URL in the current sitemap returns 308,
+  post-fix they all return 200 directly.
+- **`<link rel="canonical">` on every top-level explorer page**.
+  Audit showed 14 pages — `/diagnostics`, `/methodology`, `/sdk`,
+  `/contact`, `/widgets`, `/changelog`, `/aggregators`, `/oracles`,
+  `/networks`, `/anomalies`, `/mev`, `/pricing`, `/company`,
+  `/careers` — all had `metadata.title` + `description` set but no
+  `alternates.canonical`. Search engines were free to treat the
+  trailing-slash variant, the no-trailing-slash variant, the
+  `index.html` form, and any `?ref=…` referral-tag form as
+  separate URLs and split link equity. Each page now declares its
+  own canonical alongside the existing meta. Companion to #1167
+  (home page) and the per-detail-page canonicals from #1094-1097.
+- **`/v1/incidents.atom` summary truncation is now UTF-8-safe**.
+  `summaryFromMarkdown` did `p[:397] + "..."` — a naive byte
+  slice that could split a multi-byte UTF-8 codepoint in half
+  for any incident post containing accented characters
+  (é/ñ/ü/…) or emoji. Verified live: a 396-byte ASCII prefix
+  + `éée trailing` produces an output where the last byte is
+  `\xC3` (the lead byte of `é`) without its trailing byte —
+  invalid UTF-8. Strict feed validators reject the entry; the
+  explorer's render shows a replacement character. Walk back
+  to the nearest rune-start byte at or before 397; tests cover
+  both 2-byte (Latin-1 supplement) and 4-byte (emoji) cases.
+- **`/v1/incidents` no longer returns `incidents: null` when the
+  embedded corpus is empty**. A fresh deployment (or one where
+  `incidents.Load` errored at startup) left `s.incidents == nil`,
+  which marshalled as `"incidents":null` and broke the
+  pkg/client SDK + explorer JS that `.map()` over the array.
+  Caught while writing the handler's first regression tests.
+- **Asset detail "Markets" tab fetches 100 by volume, not 500
+  alphabetically**. `MarketsTabPanel` on `/assets/{slug}` was
+  calling `useMarkets(500)` (default `pair` order) then
+  client-side filtering to markets involving the asset. Cold-
+  cache hit a 5–8s SQL scan (limit=500 isn't in the prewarm set
+  of 5/25/100/200), and the alphabetical sort meant the cap
+  could miss popular markets. Switched to
+  `useMarkets(100, 'volume_24h_usd_desc')` — hits warm cache,
+  ~5× smaller payload, and surfaces the asset's top-100-by-volume
+  markets first. Long-tail assets outside the global top-100 by
+  volume need a server-side `?asset=` filter on /v1/markets
+  (only /v1/pools has it today) — tracked as follow-up.
+- **Home page no longer fetches 500 markets to render 10**.
+  `HomeTopMarkets` called `useMarkets(500, …)` then immediately
+  `.slice(0, 10)` — sending and parsing 490 rows the user never
+  sees, and missing the API's prewarmed cache key (the prewarm
+  covers limits 5/25/100/200, not 500). Cold-cache home loads paid
+  the full `/v1/markets?limit=500` SQL scan against the trades
+  hypertable. Trimmed to `useMarkets(25, …)` — same top-10 with
+  headroom, hits the warm cache, ~20× smaller payload. Same
+  pattern previously fixed in `HomeNetworkStrip` (PR-comment
+  history). Also corrected the misleading `limit=500` `asExample`
+  hints on `/markets` MarketsTable — the actual fetch is
+  `limit=100` with the user's chosen order_by + sparkline.
+  (PR #1187)
+
+## [v0.5.0-rc.38] — 2026-05-09
+
+### Fixed
+
+- **`/v1/pools` prewarm now matches the handler's default order**.
+  The cold-cache user complaint ("dex pools still take forever to
+  load") had a single root cause: `prewarmOnce` warmed the cache
+  with `MarketsOrder = 0` (`MarketsOrderPair`) while the `/v1/pools`
+  handler defaults to `MarketsOrderVolume24hDesc` (= 1). Cache keys
+  include the order, so every cold-cache user request still ran
+  the 10–30s SQL scan against the live trades hypertable. Live
+  measurement on r1 (2026-05-09): `/v1/pools?source=sdex` 27s,
+  `soroswap` 16s, `phoenix` 12s, `aquarius` 9s, `comet` 11s. Fix
+  pins the prewarm to the handler's explicit default
+  (`timescale.MarketsOrderVolume24hDesc` for pools,
+  `timescale.MarketsOrderPair` for markets) and adds a per-DEX
+  loop covering the canonical `?source=<dex>&limit=100` cache
+  variants the explorer's `/dexes/{source}` pages fire. Bumped
+  the prewarm context from 20s → 60s so the per-source loop has
+  budget to complete a full warm cycle. Subsequent users hit warm
+  cache (sub-second) instead of stacking on the cold-query
+  timeout. (PR #1185)
+- **`/v1/markets?include=sparkline` shares the 8s timeout budget
+  with the markets-list query**. Pre-fix, the sparkline batch ran
+  on `r.Context()` unbounded, so a 5s markets query + 5s sparkline
+  query stacked into a 10s+ request that the gateway terminated.
+  Now both phases share `mCtx`; total request capped at 8s with
+  graceful degradation (sparkline misses log at WARN and the
+  response ships without sparkline data, matching the existing
+  best-effort contract).
+- **`/v1/issuers/{g_strkey}` accepts case-insensitive G-strkeys**.
+  Pre-fix lowercase variants 404'd; chat clients that auto-
+  lowercase URLs (Slack, Discord, some search results) and
+  copy-paste flows would dead-end. Stellar G-strkeys are
+  uppercase base32 per SEP-23 and the underlying ed25519 key is
+  the same regardless of case, so the handler now uppercases
+  the path segment at input. Companion to PR #1153
+  (case-insensitive `/v1/coins/{slug}`).
+- **`/v1/coins/{slug}` accepts case-insensitive variants**.
+  Pre-fix `/v1/coins/usdc` (lowercase) 404'd while
+  `/v1/coins/USDC` returned the row. The `classic_assets.slug`
+  column is uppercase by convention (USDC, AQUA, EURC), but URL
+  clients frequently lowercase. Add a retry: when the literal
+  slug misses, retry once with `strings.ToUpper`. Preserves
+  case-significance for the rare issued asset that intentionally
+  uses lowercase (Stellar protocol allows it) — the literal form
+  wins when both exist. Companion to PR #1132's case-insensitive
+  XLM intercept.
+- **`/v1/assets/NATIVE` (uppercase) no longer 400s**. The
+  canonical `asset_id` format mandates lowercase `native` (per
+  ADR-0010), so capitalised variants returned 400
+  invalid-asset-id with the long format reminder. The handler
+  now collapses the bare `native` token case-insensitively at
+  input. Other compound forms (`USDC-Gxxxx`, `CDLZF…`,
+  `fiat:USD`) keep their case-significance unchanged — Stellar
+  protocol allows issuers to mint case-different classic codes
+  and merging them would mask real mismatches.
+- **Every 401 response now includes `WWW-Authenticate: Bearer
+  realm="ratesengine.net"`** (RFC 7235 §3.1 conformance). Live
+  audit on r1 today: `/v1/account/me` returned 401 with no
+  challenge header, leaving programmatic clients without a way
+  to discover the accepted auth scheme. The auth-middleware
+  layer was already setting it on its own 401 paths; the
+  handler-level `writeProblem` (used by /v1/account/* directly
+  for not-yet-authenticated requests) was missing it. Pin
+  added at the helper level so the conditional can't drift.
+  Pinned by 2 sub-tests covering the 401 happy path and the
+  inverse (4xx/5xx that aren't 401 must NOT set the header).
+- **`/v1/markets?source=<unknown>`** now returns 400
+  `unknown-source` instead of an empty 200. The silent-empty-page
+  anti-pattern (a typed source name looking identical on the wire
+  to "this source has no trades") sent callers chasing nonexistent
+  data. Validation guard mirrors the same fail-fast pattern shipped
+  on /v1/coins (#1134), /v1/markets cursor (#1135), and /v1/pools.
+- **`/changelog.atom` no longer publishes the `[Unreleased]`
+  section as a syndicated entry.** Every explorer redeploy was
+  pinging Feedly / Slack RSS subscribers with what reads as a new
+  release: same urn, fresh `published`/`updated` timestamps. The
+  rendered `/changelog` page intentionally still shows Unreleased
+  so visitors get a forward look — only the syndication feed
+  asymmetry changed (atom = dated immutable releases only).
+- **`/v1/observations?source=<unknown>`** now returns 400
+  `unknown-source` instead of an empty 200 list. Same
+  silent-empty-page anti-pattern fix shipped on /v1/markets — a
+  typed source name looked identical on the wire to "this source
+  has no trades for the pair", masking typos as data gaps.
+- **`/v1/coins?cursor=<garbage>` no longer silently returns an
+  empty page**. Previously, a malformed cursor parsed as
+  `(0, "")` and the SQL keyset predicate
+  `(observation_count, asset_id) < (0, "")` matched nothing —
+  callers saw a 200 with `{"coins":[],"limit":100}` that looked
+  identical to legitimate end-of-pagination, leaving stale
+  bookmarks indistinguishable from "you've reached the end".
+  Handler now calls `timescale.ValidateCoinsCursor` before
+  dispatch and returns `400 invalid-cursor` (problem+json,
+  `type=https://api.ratesengine.net/errors/invalid-cursor`)
+  with a hint to drop the parameter or pass back a fresh
+  `next_cursor`. Empty cursor (no parameter) is still valid.
+  Same approach used by `/v1/history` since #1083. Other
+  cursored endpoints (`/v1/markets`, `/v1/issuers`,
+  `/v1/sources`, `/v1/lending/pools`) currently *reset* to
+  page 1 on garbage rather than 400'ing — they have a milder
+  failure mode and follow in a separate PR.
+- **`/v1/markets` and `/v1/pools` reject malformed cursors with
+  400 instead of leaking SQL errors as 500 / silently skipping
+  to a wrong page**. Previously:
+  - `?cursor=garbage&order_by=volume_24h_usd_desc` raised a
+    Postgres `invalid input syntax for type numeric` from the
+    embedded `CAST(NULLIF(split_part($cursor, ':', 1), '') AS
+    numeric)` and returned 500 (and burned CPU per request).
+  - `?cursor=garbage` (default `pair` order on `/v1/markets`)
+    fell through to a lexicographic `> $cursor` skip whose
+    result depended on Postgres collation — caller saw an
+    arbitrary "page" of markets sorted alphabetically past
+    `garbage`, indistinguishable from a real page.
+  Adds `timescale.ValidateMarketsCursor` that pins the encoded
+  shape per `MarketsOrder` (pipe-separated `<base>|<quote>`
+  pair suffix, optional digits-with-one-dot vol prefix). Wired
+  into both `handleMarkets` and `handlePools` after `order_by`
+  parsing — returns 400 problem+json with
+  `type=https://api.ratesengine.net/errors/invalid-cursor`.
+  Pinned by 19 sub-tests across both orderings; companion to
+  the same fix shipped on `/v1/coins` in #1134.
+- **`base/quote` endpoints (history, vwap, twap, ohlc, pairs,
+  oracle/x_last_price) emit a self-explanatory 400 when the
+  caller mistakenly passed `asset` instead of `base`**. The
+  endpoints' shared `parseBaseQuote` helper used to flatly
+  return `"base query parameter is required"` — leaving
+  callers who copy-pasted query params from `/v1/price`
+  (which uses `asset`/`quote`) confused about which name to
+  use where. Now, when `base` is missing but `asset` is
+  present, the detail appends a hint:
+  `"this endpoint uses base/quote (not asset/quote — that
+  form is on /v1/price)"`. Pinned by
+  `TestHistory_MissingBaseWithAssetHint`.
+- **Explorer detail pages now emit `og:image` and
+  `twitter:image`**. Audited 2026-05-09 against r1: every
+  detail page that overrode `openGraph` (assets, currencies,
+  issuers, sources, exchanges, dexes, lending, convert,
+  blog, research/{adr,discovery,operations,architecture})
+  rendered HTML without `<meta property="og:image">`, so
+  Slack/Twitter/Discord previews showed only title +
+  description with no card image. Cause: Next.js 15 metadata
+  inheritance dropped `openGraph.images` from the layout
+  default when a page set its own `openGraph` block. Fix:
+  new `web/explorer/src/lib/seo.ts` exports
+  `SITE_OG_IMAGES` + `SITE_TWITTER_IMAGES` constants; every
+  page-level openGraph now spreads them explicitly. The
+  underlying asset (`/og.svg`, 1200×630) is unchanged —
+  only the per-page metadata wiring.
+### Changed
+
+- **Explorer `/diagnostics` cursor table hides stale (>1h) rows
+  by default**. Live audit on r1 today: 30 of ~50
+  ingestion-cursor rows had `lag_seconds` over 5 days — completed
+  backfill jobs whose progress markers were never cleaned up,
+  drowning out the live ingest cursor that operators open the
+  page to find. New `Hide stale (>1h)` checkbox (default on)
+  filters to actively-progressing cursors; toggle off to see the
+  full set when investigating a stuck backfill.
+
+### Added
+
+- **`pkg/client.Client.RevokeKey`** SDK method to delete an API
+  key (`DELETE /v1/account/keys/{keyID}`). Closes the last CRUD
+  gap in the account-keys surface — the SDK already had `Keys`
+  (GET) and `CreateKey` (POST). Pinned by 3 sub-tests (happy
+  path 204; client-side empty-keyID validation; 404 surfaced as
+  typed `*APIError`).
+
+- **`pkg/client`: `NetworkStats(ctx)`** SDK method for
+  `GET /v1/network/stats` — single-call home-page snapshot
+  (24h volume, market count, indexed-asset count, latest live
+  ledger, source counts). New `client.NetworkStats` type
+  preserves the `*string Volume24hUSD` per ADR-0003 so callers
+  can distinguish "no data" (nil) from "0". Tests cover the
+  happy path and the omitempty volume case.
+- **`pkg/client`: `Incidents(ctx)`** SDK method for
+  `GET /v1/incidents` — every customer-facing incident post the
+  binary has embedded, sorted started_at desc. New
+  `client.Incident` + `client.IncidentsList` types mirror the
+  internal incident wire shape (the SDK can't import
+  `internal/incidents` directly per ADR-0005). Tests cover the
+  happy path and the empty-list path; ResolvedAt round-trips as
+  `*time.Time` so callers distinguish "still open" from "resolved
+  at zero time."
+- **API: trailing-slash paths 308-redirect to canonical no-slash
+  form**. `GET /v1/coins/native/` previously 404'd with
+  `errors/not-found` because every v1 route is registered without
+  a trailing slash and Go's `net/http` `ServeMux` treats the
+  slashed variant as a different path. New
+  `middleware.TrailingSlashRedirect` 308's any non-root request
+  whose path ends with `/` to the same path with the slash
+  stripped (preserving query string and method/body). Closes the
+  most common client-side papercut — axios with
+  `baseURL: '.../v1/'` joins awkwardly, OpenAPI generators emit
+  either form depending on codegen flags, mistyped curls. Pinned
+  by 5 sub-tests covering the happy path, query-string
+  preservation, root exemption, and 308-not-301
+  method-preservation across POST/DELETE/PUT/PATCH.
+- **CoinGecko poller backs off on 429 / 403 instead of hammering
+  the venue every 60s**. Live audit on r1 2026-05-09 found the
+  poller logging `WARN poller error err: http 429: Throttled`
+  every minute since uptime — caused by CoinGecko's late-2024
+  unauthenticated-tier tightening. New behaviour:
+  - On 429 (Too Many Requests) or 403 (post-2024 demo-key-
+    required path), arm a cooldown using `Retry-After` (clamped
+    to `[60s, 1h]`) or exponential backoff doubling from 60s
+    to 1h max.
+  - During cooldown, `PollOnce` returns `(nil, nil, nil)` —
+    silent skip, no HTTP request, no log spam.
+  - First successful response resets backoff to zero.
+  Pinned by 15 sub-tests across the cooldown arm, Retry-After
+  parsing, exponential branch, success-reset, 403-treated-as-
+  throttling, and Retry-After parser edge cases.
+
+### Added
+
+- **CoinGecko demo-tier API key support**. Free signup at
+  coingecko.com produces a `x_cg_demo_api_key` that bypasses
+  the unauthenticated-tier 429s. Read from env vars
+  `COINGECKO_API_KEY` (Pro) or `COINGECKO_DEMO_API_KEY` (Demo)
+  in `cmd/ratesengine-indexer/main.go`; Pro wins when both are
+  set. No TOML schema change. Operator action to fix the live
+  r1 throttling: register a free key at
+  https://www.coingecko.com/en/developers/dashboard, set
+  `COINGECKO_DEMO_API_KEY=<key>` in
+  `/etc/ratesengine.toml.env` (or wherever the systemd unit
+  pulls Environment= from), `systemctl restart
+  ratesengine-indexer`.
+- **External-poller observability**: new
+  `ratesengine_external_poller_polls_total{source, outcome}`
+  counter (`outcome` ∈ {success, error, skipped}) and
+  `ratesengine_external_poller_last_success_unix{source}` gauge
+  emitted by the runner on every poll tick. Two new alerts:
+  `ratesengine_external_poller_stale` (P2, fires when no
+  successful poll in 30 min for 5+ min) and
+  `ratesengine_external_poller_error_rate_high` (P3, fires when
+  error rate > 50 % sustained 15 min). Closes the blind spot
+  shipped on r1 2026-05-09 where CoinGecko throttled for 13 h
+  with no metric or alert — only a per-minute WARN log. New
+  runbook `external-poller-stale.md` with the
+  CoinGecko-demo-key triage path baked in.
+- **r1 smoke probe coverage extended from 13 → 22 endpoints with
+  behaviour pinning**. New `expect_status` helper asserts arbitrary
+  HTTP status (not only 200), so the probe now catches regressions
+  where a documented 4xx silently weakens to a 200-with-empty-body
+  (the class of bug behind #1134). Net change: 8 new positive
+  checks (`/v1/coins/{slug}`, `/v1/issuers`, `/v1/currencies`,
+  `/v1/lending/pools`, `/v1/sac-wrappers`, `/v1/network/stats`,
+  `/v1/incidents`, `/v1/incidents.atom`, `/robots.txt`) and 2
+  negative behaviour pins (`?limit=999999` → 400 invalid-limit,
+  `/v1/coins/<garbage>` → 404 coin-not-found). All 22 checks
+  green against r1 today.
+
+- **Schema.org BreadcrumbList JSON-LD on 6 more detail surfaces**:
+  `/issuers/{g_strkey}`, `/sources/{name}`, `/exchanges/{name}`,
+  `/dexes/{source}`, `/lending/{pool}`, `/convert/{from}/{to}`.
+  Lets Google render the breadcrumb hierarchy under the title in
+  search results (Home → Issuers → Circle, etc.). Same shape as
+  the existing JSON-LD on `/assets/{slug}` and `/markets/{pair}`
+  per #948 — expands SEO coverage from 3 → 9 detail pages.
+
+### Changed
+
+- **Explorer `/diagnostics` cursor table hides stale (>1h) rows
+  by default**. Live audit on r1 today: 30 of ~50
+  ingestion-cursor rows had `lag_seconds` over 5 days — completed
+  backfill jobs whose progress markers were never cleaned up,
+  drowning out the live ingest cursor that operators open the
+  page to find. New `Hide stale (>1h)` checkbox (default on)
+  filters to actively-progressing cursors; toggle off to see the
+  full set when investigating a stuck backfill.
+
+### Added
+
+- **Explorer redirects API paths to api.ratesengine.net**.
+  `ratesengine.net/v1/coins`, `/api/v1/coins`, and bare `/api`
+  used to land on the explorer's catch-all 404 — opaque dead-end
+  for anyone debugging an integration who pasted the path
+  without the `api.` subdomain. Three new 301 rules in
+  `_redirects` rescue the common patterns (copy-pasted-from-docs
+  `/v1/...`, "/api/" prefix habit from other vendors, tools that
+  strip subdomains).
+- **`/v1/diagnostics/cursors?max_age=<duration>` filter**. Server-
+  side companion to the explorer's client-side "Hide stale" toggle
+  (#1142). Direct API users can now ask `?max_age=1h` to omit
+  completed-backfill cursors that drown out the live ledgerstream
+  marker. `max_age` accepts any positive Go-duration string
+  (`30m`, `1h`, `5m`, `0.5h`); empty / omitted preserves the
+  legacy "return everything" contract. Invalid duration → 400
+  `errors/invalid-max-age`. Pinned by 5 sub-tests + 3+3 sub-cases.
+- **`X-RateLimit-Reset` response header on every rate-limited
+  endpoint**. The middleware already emitted `X-RateLimit-Limit`
+  and `X-RateLimit-Remaining` but not `Reset` — clients couldn't
+  pace themselves proactively, only learn the bucket had reset by
+  hitting it and getting a 429. Header value follows the GitHub /
+  Twitter convention: Unix-epoch seconds at which the current
+  fixed window ends. Computed from the bucket's window length —
+  no extra Redis trip. Pinned by
+  `TestRateLimit_EmitsXRateLimitResetHeader`.
+
+- **Cold-path 8-second response ceiling on every aggregation
+  endpoint** (#1082, #1099-#1106). Each handler now wraps its
+  reader call in `context.WithTimeout(r.Context(), 8*time.Second)`;
+  on deadline the response is `503 application/problem+json` with a
+  per-endpoint `type=...-timeout` URL pointing at the runbook
+  hierarchy. Previously a cold-cache hypertable scan could hold the
+  request open until the upstream LB cut it off (no body, no error
+  shape), which falsely flagged the smoke timer and surprised
+  Healthchecks.io. Endpoints covered: `/v1/pools`, `/v1/markets`,
+  `/v1/sources?include=stats`, `/v1/coins`, `/v1/chart`,
+  `/v1/history` (+ `/since-inception`), `/v1/oracle/latest`,
+  `/v1/oracle/streams`, `/v1/lending/pools`, `/v1/issuers`,
+  `/v1/issuers/{g_strkey}`. Steady-state behavior unchanged.
+- **`scripts/dev/r1-smoke.sh` per-request budget: 5s → 10s** (#1108).
+  Sits one second above the 8s server-side ceiling — a request that
+  crosses 10s wall-clock is genuinely hung (504-class), not just
+  scanning a cold partition for the first time today. The previous
+  5s default false-positived on cold-cache `/v1/markets?limit=5`
+  responses (typical 6-8s) and was filling Healthchecks.io with
+  spurious failures.
+- **`perf(api)`: prewarm `/v1/pools` + `/v1/markets` at 5/25/100/200
+  limits** (#1083). The API binary, after Postgres connectivity is
+  proven, fires four warm-up requests at server start so the first
+  user request after a deploy or pool-size shift doesn't pay the
+  cold-cache penalty. No behavior change for ongoing requests.
+- **Monitoring**: two `_never_initialized` alerts close the blind
+  spot in the existing `_stale` / `_stalled` family (#1110).
+  `time() - <missing>` evaluates to `no data`, so a deployment
+  whose supply pipeline has never published anything was invisible
+  to monitoring — confirmed on r1 by the 2026-05-08 audit (timer
+  not installed, `aggregator_refresh_enabled = false`,
+  `asset_supply_history` zero rows). Both new alerts use
+  `absent_over_time(...[36h]) == 1` with the same cushion as
+  `_stale` so fresh installs don't false-positive. Routes to a
+  shared runbook covering the two operator paths (systemd timer or
+  goroutine flag).
 - **`/v1/price` fiat-vs-fiat cross-rate fallback**: when both
   `asset` and `quote` are fiat (e.g. `asset=fiat:EUR&quote=fiat:USD`)
   and the Timescale + Redis VWAP paths both miss, the handler
@@ -108,6 +847,17 @@ against.
   `/v1/issuers/{g_strkey}`, `/v1/changes/{entity_type}/{id}`.
   SEP-40 oracle endpoints now document the `crypto:<symbol>`
   keying explicitly so the default `crypto:XLM` example works.
+### Performance
+
+- **Explorer**: `/currencies` listing first paint shows real
+  rows instead of "Loading…". The page is now an async server
+  component that fetches `/v1/coins` + `/v1/currencies` at build
+  time and embeds the responses as TanStack Query
+  `initialData`. Queries are marked immediately stale
+  (`initialDataUpdatedAt: 0`) so the live refetch still fires
+  on mount and prices keep flashing on the usual 15 s / 60 s
+  cadence — but users no longer see an empty table flash before
+  the network round-trip lands.
 
 ### Added
 
