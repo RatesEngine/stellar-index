@@ -34,6 +34,21 @@ against.
   Both alerts link `redis-write-blocked-disk-full.md` (cherry-picked
   here so the doc-lint orphan check is satisfied without ordering
   dependency between this PR and #1228). (PR #1229)
+- **Seed `configs/example.toml` documents Chainlink crypto +
+  FX feeds + the "must overlap with aggregator pairs" gotcha**.
+  Audit on 2026-05-10 found r1's Chainlink feeds were
+  configured only for fiat:EUR/GBP/JPY × USD — pairs the
+  aggregator's default coverage doesn't compute, so the
+  divergence worker had no overlap to cross-check and
+  `divergence_observations` was silently empty. The seed
+  config previously documented only the fiat:EUR/fiat:USD
+  example, leading every fresh operator down the same path.
+  Now documents the matching crypto-pair feed addresses
+  (BTC/USD, ETH/USD, LINK/USD) that align with the
+  aggregator's built-in default — so a stock deployment
+  populates divergence_observations out of the box once the
+  operator copies the crypto-feed block. Operator action
+  needed on r1 to add the crypto feeds (tracked).
 - **Runbook for the `fx_quotes` hypertable / migration 0028 gap.**
   Captures the 2026-05-10 finding that r1's DB is at migration
   0027 (PR #1041's migration 0028 was never applied), so the
