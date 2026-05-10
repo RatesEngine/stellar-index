@@ -252,3 +252,75 @@ func TestOHLC_StablecoinFiatProxy_NoPegLeaves404(t *testing.T) {
 		t.Errorf("status = %d, want 404", resp.StatusCode)
 	}
 }
+
+// TestOHLC_DefaultOutlierFilterRejectsDustTrade exercises R-007.
+// A bar full of normal native/USDC trades plus one 1-stroop ↔
+// 1-stroop SDEX dust print (price=1.0, ~6× the real XLM/USDC ratio)
+// must NOT have High pegged to $1 — the default 4σ filter drops the
+// outlier before ComputeOHLC sees it.
+//
+// Pre-fix: live r1 served `/v1/ohlc?base=native&quote=fiat:USD` with
+// High=1.0000000000 because ComputeOHLC iterates raw trades and
+// accepts any positive base+quote — a single dust ManageOffer cross
+// at the offer-book boundary trumps every legitimate print.
+//
+// Post-fix: ?outlier_sigma=0 still surfaces the dust High for callers
+// who want raw inspection; default surfaces the real cluster.
+func TestOHLC_DefaultOutlierFilterRejectsDustTrade(t *testing.T) {
+	t0 := time.Unix(1_772_000_000, 0).UTC()
+	trades := make([]canonical.Trade, 0, 30)
+	// 29 normal trades around price 0.16 (XLM/USDC reality).
+	// base=10000 stroops, quote=1600 stroops → price = 0.16 exactly.
+	for i := 0; i < 29; i++ {
+		trades = append(trades, mkOHLCTrade(10000, 1600, t0.Add(time.Duration(i)*time.Second)))
+	}
+	// One dust trade at price=1.0 — the R-007 contamination.
+	trades = append(trades, mkOHLCTrade(1, 1, t0.Add(29*time.Second)))
+
+	reader := &stubHistoryReader{trades: trades}
+	srv := v1.New(v1.Options{History: reader})
+	ts := httpTestServer(t, srv)
+
+	// Default — dust must be filtered.
+	resp := mustGet(t, ts.URL+"/v1/ohlc?base=native&quote=fiat:USD")
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d", resp.StatusCode)
+	}
+	var env struct {
+		Data v1.OHLCBar `json:"data"`
+	}
+	mustDecode(t, resp, &env)
+	if env.Data.High != "0.1600000000" {
+		t.Errorf("High = %q, want 0.1600000000 (dust trade should be filtered out)", env.Data.High)
+	}
+	if env.Data.TradeCount != 29 {
+		t.Errorf("TradeCount = %d, want 29 (dust dropped, 29 real trades remain)", env.Data.TradeCount)
+	}
+
+	// Opt-out — raw extremes available with outlier_sigma=0.
+	resp2 := mustGet(t, ts.URL+"/v1/ohlc?base=native&quote=fiat:USD&outlier_sigma=0")
+	if resp2.StatusCode != http.StatusOK {
+		t.Fatalf("opt-out status = %d", resp2.StatusCode)
+	}
+	var env2 struct {
+		Data v1.OHLCBar `json:"data"`
+	}
+	mustDecode(t, resp2, &env2)
+	if env2.Data.High != "1.0000000000" {
+		t.Errorf("opt-out High = %q, want 1.0000000000 (raw, dust included)", env2.Data.High)
+	}
+}
+
+// TestOHLC_InvalidSigma400 — non-numeric / negative / NaN /
+// ±Inf outlier_sigma values 400 with the canonical problem+json
+// shape, mirroring /v1/vwap.
+func TestOHLC_InvalidSigma400(t *testing.T) {
+	srv := v1.New(v1.Options{History: &stubHistoryReader{}})
+	ts := httpTestServer(t, srv)
+	for _, raw := range []string{"abc", "-1", "NaN", "Inf"} {
+		resp := mustGet(t, ts.URL+"/v1/ohlc?base=native&quote=fiat:USD&outlier_sigma="+raw)
+		if resp.StatusCode != http.StatusBadRequest {
+			t.Errorf("outlier_sigma=%q: status = %d, want 400", raw, resp.StatusCode)
+		}
+	}
+}

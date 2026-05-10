@@ -3,13 +3,28 @@ package v1
 import (
 	"context"
 	"errors"
+	"math"
 	"math/big"
 	"net/http"
+	"strconv"
 	"time"
 
 	"github.com/RatesEngine/rates-engine/internal/aggregate"
 	"github.com/RatesEngine/rates-engine/internal/canonical"
 )
+
+// ohlcDefaultOutlierSigma is the default σ threshold for the outlier
+// filter applied before ComputeOHLC. Unlike VWAP — which is volume-
+// weighted and naturally dampens dust trades — OHLC's High/Low have
+// no statistical robustness: a single 1-stroop ↔ 1-stroop SDEX dust
+// trade lands at price=1 and pegs the High of an entire bar. (R-007
+// in `docs/review-2026-05-10.md` — XLM/USD bar showed High=$1 from
+// one such trade.)
+//
+// 4.0 matches the aggregator orchestrator's default
+// (cfg.OutlierSigmaThreshold). Caller can override via
+// ?outlier_sigma=N, including 0 to disable for raw inspection.
+const ohlcDefaultOutlierSigma = 4.0
 
 // OHLCBar is the wire shape for /v1/ohlc entries. All prices are
 // decimal strings (ADR-0003). volume fields are in the asset's
@@ -75,6 +90,11 @@ func (s *Server) handleOHLC(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	sigma, ok := parseOHLCOutlierSigma(w, r)
+	if !ok {
+		return
+	}
+
 	// Pull all trades in window (capped at the handler's ceiling —
 	// if the window has more trades than that, the bar will under-
 	// count. Aggregator-persisted CAGGs will replace this raw-scan
@@ -93,6 +113,10 @@ func (s *Server) handleOHLC(w http.ResponseWriter, r *http.Request) {
 			"https://api.ratesengine.net/errors/internal",
 			"Internal error", http.StatusInternalServerError, "")
 		return
+	}
+
+	if sigma > 0 {
+		trades = aggregate.FilterOutliers(trades, sigma)
 	}
 
 	bar, err := aggregate.ComputeOHLC(trades)
@@ -124,6 +148,32 @@ func (s *Server) handleOHLC(w http.ResponseWriter, r *http.Request) {
 		TradeCount:  bar.TradeCount,
 		Truncated:   len(trades) == maxTradesForOHLC,
 	}, Flags{Triangulated: triangulated})
+}
+
+// parseOHLCOutlierSigma parses the optional ?outlier_sigma=N query
+// parameter, defaulting to [ohlcDefaultOutlierSigma]. Mirrors
+// /v1/vwap's parser but with a non-zero default — see the constant
+// docs for why OHLC needs the floor.
+//
+// `outlier_sigma=0` is the explicit opt-out: callers who want raw
+// per-trade extremes (e.g. the explorer's "show every print" view)
+// pass it to disable filtering entirely.
+//
+// Reports ok=false after writing a problem+json on parse failure.
+func parseOHLCOutlierSigma(w http.ResponseWriter, r *http.Request) (float64, bool) {
+	raw := r.URL.Query().Get("outlier_sigma")
+	if raw == "" {
+		return ohlcDefaultOutlierSigma, true
+	}
+	v, err := strconv.ParseFloat(raw, 64)
+	if err != nil || math.IsNaN(v) || math.IsInf(v, 0) || v < 0 {
+		writeProblem(w, r,
+			"https://api.ratesengine.net/errors/invalid-sigma",
+			"Invalid outlier_sigma", http.StatusBadRequest,
+			"outlier_sigma must be a non-negative finite number; omit for the default ("+strconv.FormatFloat(ohlcDefaultOutlierSigma, 'f', -1, 64)+") or 0 to disable filtering")
+		return 0, false
+	}
+	return v, true
 }
 
 // ohlcTradesWithStablecoinFallback wraps HistoryReader.TradesInRange

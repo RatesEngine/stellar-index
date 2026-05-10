@@ -688,11 +688,20 @@ paths:
         server's per-request cap (10000) and the bar reflects only
         the chronologically-first N; narrow the window or wait for
         CAGG-backed endpoints.
+
+        High/Low have no statistical robustness — a single dust
+        trade can dominate. The `outlier_sigma` filter (default 4σ)
+        drops outliers before bar computation; pass `outlier_sigma=0`
+        to opt into raw extremes.
       parameters:
         - { $ref: "#/components/parameters/Base" }
         - { $ref: "#/components/parameters/Quote" }
         - { $ref: "#/components/parameters/From" }
         - { $ref: "#/components/parameters/To" }
+        - name: outlier_sigma
+          in: query
+          schema: { type: number, minimum: 0, default: 4 }
+          description: "Drop trades > N σ from window mean before computing the bar. Default 4σ. Pass 0 to disable (raw extremes, including dust)."
       responses:
         "200":
           description: Single OHLC bar.
