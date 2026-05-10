@@ -17,6 +17,17 @@ against.
 
 ### Added
 
+- **HSTS on the explorer + status site** — both surfaces were
+  missing `Strict-Transport-Security`, leaving them vulnerable
+  to a downgrade-protocol-stripping attack on first visit.
+  Added `Strict-Transport-Security: max-age=31536000;
+  includeSubDomains` to `web/explorer/public/_headers` (both
+  `/*` and `/embed/*` blocks; CF Pages doesn't merge rules) and
+  created `web/status/public/_headers` with the same shape +
+  full CSP / X-Frame-Options / Permissions-Policy parity.
+  `preload` is intentionally omitted until the operator
+  submits the apex to https://hstspreload.org/ (preload is
+  irrevocable once browsers ship it; ratchet up in two steps).
 - **`/v1/pools?asset=<asset_id>` filter** — restrict the pools
   listing to rows where the asset appears on either side (base
   OR quote). Mirrors the same filter shape just shipped on
