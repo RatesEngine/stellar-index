@@ -67,6 +67,7 @@ export function VenueChart({ venue }: { venue: string }) {
   const [pairs, setPairs] = useState<Market[]>([]);
   const [selected, setSelected] = useState<{ base: string; quote: string } | null>(null);
   const [pairsLoading, setPairsLoading] = useState(true);
+  const [pairsError, setPairsError] = useState<string | null>(null);
   const [timeframe, setTimeframe] = useState<Timeframe>('24h');
   const [granularity, setGranularity] = useState<Granularity>('1h');
   const [data, setData] = useState<
@@ -80,6 +81,7 @@ export function VenueChart({ venue }: { venue: string }) {
   useEffect(() => {
     let cancelled = false;
     setPairsLoading(true);
+    setPairsError(null);
     apiGet<{ data: Market[] }>('/v1/markets', {
       source: venue,
       order_by: 'volume_24h_usd_desc',
@@ -92,8 +94,9 @@ export function VenueChart({ venue }: { venue: string }) {
         if (list[0]) setSelected({ base: list[0].base, quote: list[0].quote });
         setPairsLoading(false);
       })
-      .catch(() => {
+      .catch((err: Error) => {
         if (cancelled) return;
+        setPairsError(err.message);
         setPairsLoading(false);
       });
     return () => {
@@ -151,6 +154,29 @@ export function VenueChart({ venue }: { venue: string }) {
         source={asExample('/v1/markets', { source: venue })}
       >
         <div className="h-[360px]" />
+      </Panel>
+    );
+  }
+  if (pairsError) {
+    return (
+      <Panel
+        title="Live chart"
+        hint="Pair list unavailable"
+        source={asExample('/v1/markets', { source: venue })}
+      >
+        <div className="flex h-[360px] items-center justify-center px-4 text-center text-sm text-red-600 dark:text-red-400">
+          Couldn&apos;t load pairs for this venue ({pairsError}). Refresh to
+          retry, or check{' '}
+          <a
+            href="https://status.ratesengine.net"
+            target="_blank"
+            rel="noreferrer"
+            className="underline"
+          >
+            status.ratesengine.net
+          </a>
+          .
+        </div>
       </Panel>
     );
   }

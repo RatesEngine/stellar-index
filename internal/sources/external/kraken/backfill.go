@@ -242,8 +242,11 @@ func krakenCandleToTrade(c krakenCandle, symbol string, pair canonical.Pair, clo
 	// quote = base × price / 10^8
 	quoteRaw := new(big.Int).Mul(base, price)
 	quote := new(big.Int).Quo(quoteRaw, pow10(externalAmountDecimals))
+	// Dust filter — see parse.go::buildTrade for the rationale.
+	// Same underflow can happen on a candle whose `volume` * `vwap`
+	// rounds to 0 at our 10^8 precision floor.
 	if quote.Sign() == 0 {
-		return canonical.Trade{}, fmt.Errorf("zero quote")
+		return canonical.Trade{}, ErrDustTrade
 	}
 
 	return canonical.Trade{

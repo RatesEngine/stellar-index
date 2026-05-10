@@ -1,0 +1,26 @@
+# Cloudflare Pages reads this file from the build output and applies
+# the rules to every response. Same format as the explorer
+# (web/explorer/public/_headers); kept in sync intentionally —
+# both sites are static Next.js exports with no third-party loads
+# at runtime, so the threat model is identical.
+
+/*
+  X-Content-Type-Options: nosniff
+  X-Frame-Options: DENY
+  Referrer-Policy: strict-origin-when-cross-origin
+  Permissions-Policy: accelerometer=(), camera=(), geolocation=(), microphone=(), payment=(), usb=()
+  # HSTS — pin HTTPS for one year, subdomains included. Safe
+  # because every *.ratesengine.net surface (api / status / docs /
+  # the explorer apex) is HTTPS-only at the edge. `preload` is
+  # intentionally OMITTED until the operator submits the apex to
+  # https://hstspreload.org/.
+  Strict-Transport-Security: max-age=31536000; includeSubDomains
+  # CSP — same shape as the explorer. The status site fetches from
+  # api.ratesengine.net for tier probes / incident lists; localhost
+  # added so a built bundle can be served against a local dev API
+  # without a CSP-violation flood.
+  Content-Security-Policy: default-src 'self'; connect-src 'self' https://api.ratesengine.net http://localhost:3000; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self' data:; object-src 'none'; base-uri 'self'; frame-ancestors 'none'; form-action 'self'
+
+# Fingerprinted Next.js assets — far-future cache.
+/_next/static/*
+  Cache-Control: public, max-age=31536000, immutable

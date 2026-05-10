@@ -95,6 +95,102 @@ func TestOracleLastPrice_RedisVWAPFallback(t *testing.T) {
 	}
 }
 
+// TestOracleLastPrice_StablecoinFiatProxyFallback — when the
+// Redis VWAP cache also misses but the operator declared classic
+// USD pegs, the SEP-40 lastprice handler walks the pegs and returns
+// the rewritten X/<peg> snapshot. Mirrors the /v1/price fallback
+// from #1217. Without this, an on-chain integrator drop-in-replacing
+// SEP-40 lastprice() against XLM gets 404 even though /v1/coins
+// shows $0.16 fine.
+func TestOracleLastPrice_StablecoinFiatProxyFallback(t *testing.T) {
+	usdcClassic, err := canonical.ParseAsset("USDC-GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN")
+	if err != nil {
+		t.Fatalf("parse USDC: %v", err)
+	}
+	pegSnap := v1.PriceSnapshot{
+		AssetID:    "native",
+		Quote:      usdcClassic.String(),
+		Price:      "0.1626",
+		PriceType:  "vwap",
+		ObservedAt: time.Unix(1_770_000_000, 0).UTC(),
+	}
+	reader := &stubPriceReader{
+		snapshots: map[string]v1.PriceSnapshot{
+			"native/" + usdcClassic.String(): pegSnap,
+		},
+		sources: map[string][]string{
+			"native/" + usdcClassic.String(): {"sdex"},
+		},
+	}
+	srv := v1.New(v1.Options{
+		Prices:            reader,
+		USDPeggedClassics: []canonical.Asset{usdcClassic},
+	})
+	ts := startHTTPTest(t, srv.Handler())
+
+	resp := mustGet(t, ts.URL+"/v1/oracle/lastprice?asset=native")
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d, want 200 (peg fallback should serve)", resp.StatusCode)
+	}
+	var env struct {
+		Data v1.SEP40Price `json:"data"`
+	}
+	mustDecode(t, resp, &env)
+	if env.Data.Price != "0.1626" {
+		t.Errorf("price = %q, want \"0.1626\"", env.Data.Price)
+	}
+	// SEP-40 surface always quotes in fiat:USD; the wire `asset` is
+	// just the queried asset, so the fact we proxied through USDC
+	// shouldn't leak into the wire response.
+	if env.Data.Asset != "native" {
+		t.Errorf("asset = %q, want \"native\"", env.Data.Asset)
+	}
+}
+
+// TestOracleXLastPrice_StablecoinFiatProxyFallback — the
+// /v1/oracle/x_last_price?base=native&quote=fiat:USD case mirrors
+// the /v1/oracle/lastprice fix above. Without this, an integrator
+// asking for XLM/USD via the SEP-40 cross-pair surface gets the
+// same out-of-the-box 404.
+func TestOracleXLastPrice_StablecoinFiatProxyFallback(t *testing.T) {
+	usdcClassic, err := canonical.ParseAsset("USDC-GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN")
+	if err != nil {
+		t.Fatalf("parse USDC: %v", err)
+	}
+	pegSnap := v1.PriceSnapshot{
+		AssetID:    "native",
+		Quote:      usdcClassic.String(),
+		Price:      "0.1626",
+		PriceType:  "vwap",
+		ObservedAt: time.Unix(1_770_000_000, 0).UTC(),
+	}
+	reader := &stubPriceReader{
+		snapshots: map[string]v1.PriceSnapshot{
+			"native/" + usdcClassic.String(): pegSnap,
+		},
+		sources: map[string][]string{
+			"native/" + usdcClassic.String(): {"sdex"},
+		},
+	}
+	srv := v1.New(v1.Options{
+		Prices:            reader,
+		USDPeggedClassics: []canonical.Asset{usdcClassic},
+	})
+	ts := startHTTPTest(t, srv.Handler())
+
+	resp := mustGet(t, ts.URL+"/v1/oracle/x_last_price?base=native&quote=fiat:USD")
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d, want 200", resp.StatusCode)
+	}
+	var env struct {
+		Data v1.SEP40Price `json:"data"`
+	}
+	mustDecode(t, resp, &env)
+	if env.Data.Price != "0.1626" {
+		t.Errorf("price = %q, want \"0.1626\"", env.Data.Price)
+	}
+}
+
 func TestOracleLastPrice_HappyPath(t *testing.T) {
 	t0 := time.Unix(1_770_000_000, 0).UTC()
 	reader := &stubPriceReader{

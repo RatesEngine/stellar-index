@@ -82,6 +82,16 @@ func (s *Server) handleOracleLastPrice(w http.ResponseWriter, r *http.Request) {
 		snapshot, sources, _, ok = s.tryRedisVWAPFallback(r.Context(), asset, defaultPriceQuote)
 		stale = false
 		if !ok {
+			// Read-time stablecoin-fiat proxy: walks the operator's
+			// classic USD pegs and rewrites X/fiat:USD to X/<peg>.
+			// Same mechanism as /v1/price (#1217) — the SEP-40
+			// surface needs identical fallback coverage so an
+			// on-chain integrator drop-in-replacing the SEP-40
+			// `lastprice()` call sees the same "available" set as
+			// /v1/price.
+			snapshot, sources, ok = s.tryStablecoinFiatProxy(r.Context(), asset, defaultPriceQuote)
+		}
+		if !ok {
 			// Fiat-vs-fiat cross-rate from the forex snapshot —
 			// covers `lastprice(fiat:EUR)` etc., which would 404
 			// without this branch. Mirrors #1086's /v1/price
@@ -322,6 +332,15 @@ func (s *Server) handleOracleXLastPrice(w http.ResponseWriter, r *http.Request) 
 		var ok bool
 		snapshot, sources, _, ok = s.tryRedisVWAPFallback(r.Context(), base, quote)
 		stale = false
+		if !ok {
+			// Read-time stablecoin-fiat proxy: walks the operator's
+			// classic USD pegs and rewrites X/fiat:USD to X/<peg>.
+			// Mirrors the same fallback in /v1/price (#1217) and
+			// /v1/oracle/lastprice (this PR) — kept here too so a
+			// SEP-40 integrator calling `x_last_price(native, fiat:USD)`
+			// sees the same coverage as a /v1/price caller.
+			snapshot, sources, ok = s.tryStablecoinFiatProxy(r.Context(), base, quote)
+		}
 		if !ok {
 			// Fiat-vs-fiat cross-rate via the forex snapshot —
 			// covers `x_last_price(fiat:EUR, fiat:GBP)` etc.
