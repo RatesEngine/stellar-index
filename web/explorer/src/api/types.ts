@@ -1615,6 +1615,18 @@ export interface paths {
                     base?: string;
                     /** @description Optional. Canonical quote asset_id. See `base`. */
                     quote?: string;
+                    /**
+                     * @description Optional. Canonical asset_id (`native`, `USDC-G…`,
+                     *     `fiat:USD`, …). Restricts to pools where the asset
+                     *     appears on either side (base OR quote). Use this on
+                     *     asset-detail surfaces to surface every pool touching
+                     *     the asset in one request, instead of firing parallel
+                     *     `?base=` + `?quote=` and merging client-side. Returns
+                     *     400 `invalid-asset-id` for unparseable values; 400
+                     *     `conflicting-filters` when combined with `base`/`quote`
+                     *     (the OR-shape and AND-shape filters can't be mixed).
+                     */
+                    asset?: string;
                 };
                 header?: never;
                 path?: never;
@@ -1899,6 +1911,27 @@ export interface paths {
                      *     cursor returned by the previous response.
                      */
                     order_by?: "pair" | "volume_24h_usd_desc";
+                    /**
+                     * @description Restrict the listing to markets a single source
+                     *     observed in the recency window. Must match a
+                     *     registered source name (see `/v1/sources`); an
+                     *     unknown name returns 400 `unknown-source` rather
+                     *     than an empty 200 (avoids the silent-empty-page
+                     *     anti-pattern). Mutually exclusive with `asset`.
+                     */
+                    source?: string;
+                    /**
+                     * @description Restrict the listing to markets where the given
+                     *     canonical `asset_id` appears on either side (base
+                     *     OR quote). Use this on asset-detail surfaces to
+                     *     surface every market an asset participates in
+                     *     without paying for a global scan + client-side
+                     *     filter. Returns 400 `invalid-asset-id` if the
+                     *     value isn't a parseable canonical asset_id (e.g.
+                     *     `native`, `USDC-G…`, `fiat:USD`). Mutually
+                     *     exclusive with `source`.
+                     */
+                    asset?: string;
                 };
                 header?: never;
                 path?: never;
@@ -2779,9 +2812,25 @@ export interface paths {
                             assets_indexed: number;
                             /** @description Max last_ledger across non-backfill sources. */
                             latest_ledger: number;
-                            /** @description Count of `class=exchange` sources in the registry. */
+                            /**
+                             * @description Count of `class=exchange` sources REGISTERED in
+                             *     the binary's `internal/sources/external.Registry`
+                             *     map. Constant across regions running the same
+                             *     build; independent of operator config.
+                             */
                             exchange_sources: number;
-                            /** @description Count of all registered sources. */
+                            /**
+                             * @description Count of ALL registered sources (every entry in
+                             *     `internal/sources/external.Registry`). Different
+                             *     from `/v1/status`'s `freshness.total_sources`,
+                             *     which counts only sources the operator has
+                             *     ENABLED at runtime — typically a strict subset.
+                             *     Today on r1: registry=21, enabled=17, active=15.
+                             *     The two `total_sources` measure different things
+                             *     by design; see the field doc on
+                             *     `internal/api/v1.NetworkStats` for the full
+                             *     semantic table.
+                             */
                             total_sources: number;
                         };
                     };
@@ -4226,7 +4275,21 @@ export interface components {
             freshness?: {
                 /** Format: date-time */
                 last_aggregator_tick?: string;
+                /**
+                 * @description Sources that have emitted an event in the last 10
+                 *     minutes (Prometheus
+                 *     `count(rate(ratesengine_source_events_total[10m]) > 0)`).
+                 */
                 active_sources?: number;
+                /**
+                 * @description Sources the operator has ENABLED in this region
+                 *     (Prometheus `count(ratesengine_source_enabled == 1)`).
+                 *     Different from `/v1/network/stats.total_sources`,
+                 *     which counts every source REGISTERED in the binary
+                 *     regardless of enable state — typically a strict
+                 *     superset. Today on r1: enabled=17, registered=21,
+                 *     active=15.
+                 */
                 total_sources?: number;
             };
             incidents?: {
