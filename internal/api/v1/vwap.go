@@ -1,6 +1,7 @@
 package v1
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"math"
@@ -95,7 +96,7 @@ func (s *Server) handleVWAP(w http.ResponseWriter, r *http.Request) {
 	// aggregator binary's pre-computed rollups feed `/v1/price`'s
 	// closed-bucket surface (ADR-0015), not this endpoint.
 	const maxTrades = 10000
-	trades, err := reader.TradesInRange(r.Context(), pair, from, to, maxTrades)
+	trades, triangulated, err := s.tradesInRangeWithStablecoinFallback(r.Context(), pair, from, to, maxTrades)
 	if err != nil {
 		if clientAborted(r, err) {
 			return
@@ -152,5 +153,49 @@ func (s *Server) handleVWAP(w http.ResponseWriter, r *http.Request) {
 		TradeCount:       len(trades),
 		OutliersFiltered: outliersFiltered,
 		Truncated:        pre == maxTrades,
-	}, Flags{})
+	}, Flags{Triangulated: triangulated})
+}
+
+// tradesInRangeWithStablecoinFallback wraps HistoryReader.TradesInRange
+// with the same X/fiat:USD → X/<peg> retry shape used in the chart
+// handler (chartStablecoinFallback) and price handlers
+// (tryStablecoinFiatProxy). When the literal pair has zero trades AND
+// quote is fiat:USD AND the operator has declared classic USD pegs,
+// re-runs against each peg in priority order; first non-empty result
+// wins. triangulated=true when the fallback fired so callers can stamp
+// flags.triangulated.
+//
+// Without this, /v1/vwap and /v1/twap 404 with "no trades in window"
+// for any X/fiat:USD query out-of-the-box — same root cause as #1217.
+// Used by handleVWAP + handleTWAP; ohlc.go reads the CAGG, not raw
+// trades, so its fallback path is different (deferred — same family
+// of tracking, separate PR).
+func (s *Server) tradesInRangeWithStablecoinFallback(
+	ctx context.Context, pair canonical.Pair, from, to time.Time, maxTrades int,
+) ([]canonical.Trade, bool, error) {
+	trades, err := s.history.TradesInRange(ctx, pair, from, to, maxTrades)
+	if err != nil {
+		return nil, false, err
+	}
+	if len(trades) > 0 {
+		return trades, false, nil
+	}
+	if pair.Quote.Type != canonical.AssetFiat || pair.Quote.Code != "USD" {
+		return trades, false, nil
+	}
+	for _, peg := range s.usdPeggedClassics {
+		if peg.Equal(pair.Base) {
+			continue
+		}
+		proxied, err := canonical.NewPair(pair.Base, peg)
+		if err != nil {
+			continue
+		}
+		pp, err := s.history.TradesInRange(ctx, proxied, from, to, maxTrades)
+		if err != nil || len(pp) == 0 {
+			continue
+		}
+		return pp, true, nil
+	}
+	return trades, false, nil
 }

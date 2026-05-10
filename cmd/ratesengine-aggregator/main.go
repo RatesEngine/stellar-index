@@ -271,6 +271,7 @@ func run(cfgPath string, dryRun bool) error {
 			PerReferenceTimeout: time.Duration(
 				cfg.Divergence.PerReferenceTimeoutSeconds) * time.Second,
 			ObservationSink: timescale.NewDivergenceSink(store),
+			Logger:          logger.With("component", "divergence"),
 		})
 		if err != nil {
 			return fmt.Errorf("divergence service: %w", err)
