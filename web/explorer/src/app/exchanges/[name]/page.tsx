@@ -4,6 +4,7 @@ import { notFound } from 'next/navigation';
 import { ArrowLeft, ExternalLink } from 'lucide-react';
 
 import { SourceStatsPanel } from '@/app/dexes/[source]/SourceStatsPanel';
+import { SITE_OG_IMAGES, SITE_TWITTER_IMAGES } from '@/lib/seo';
 import { PairsTable } from './PairsTable';
 import { VenueChart } from './VenueChart';
 
@@ -66,8 +67,8 @@ export async function generateMetadata({
     title,
     description,
     alternates: { canonical },
-    openGraph: { title, description, url: canonical, type: 'website' },
-    twitter: { card: 'summary_large_image', title, description },
+    openGraph: { title, description, url: canonical, type: 'website', images: SITE_OG_IMAGES },
+    twitter: { card: 'summary_large_image', title, description, images: SITE_TWITTER_IMAGES },
   };
 }
 
@@ -80,8 +81,23 @@ export default async function ExchangeDetailPage({
   const info = CEX_INFO[name];
   if (!info) notFound();
 
+  // Schema.org BreadcrumbList — Home → Exchanges → <name>.
+  const breadcrumbLD = {
+    '@context': 'https://schema.org',
+    '@type': 'BreadcrumbList',
+    itemListElement: [
+      { '@type': 'ListItem', position: 1, name: 'Home', item: 'https://ratesengine.net' },
+      { '@type': 'ListItem', position: 2, name: 'Exchanges', item: 'https://ratesengine.net/exchanges' },
+      { '@type': 'ListItem', position: 3, name: info.name, item: `https://ratesengine.net/exchanges/${name}` },
+    ],
+  };
+
   return (
     <div className="mx-auto max-w-7xl space-y-6 px-6 py-8">
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(breadcrumbLD) }}
+      />
       <Link
         href="/exchanges"
         className="inline-flex items-center gap-1.5 text-sm text-slate-600 hover:text-brand-600 dark:text-slate-400"

@@ -10,6 +10,7 @@ import (
 
 	"github.com/RatesEngine/rates-engine/internal/canonical"
 	"github.com/RatesEngine/rates-engine/internal/consumer"
+	"github.com/RatesEngine/rates-engine/internal/obs"
 )
 
 // StreamerSpec is a configured streamer + the pair list it should
@@ -160,10 +161,22 @@ func runPoller(
 	doPoll := func() {
 		trades, updates, err := spec.Poller.PollOnce(ctx, spec.Pairs)
 		if err != nil {
+			obs.ExternalPollerPollsTotal.WithLabelValues(name, "error").Inc()
 			logger.Warn("poller error",
 				"source", name, "err", err)
 			return
 		}
+		// (nil trades, nil updates, nil err) is the convention for
+		// "poller skipped this tick" — used by per-poller cooldown
+		// after rate-limit (e.g. coingecko backoff). Don't conflate
+		// with success; operators alerting on `outcome="success"`
+		// staleness need a true silence here.
+		if trades == nil && updates == nil {
+			obs.ExternalPollerPollsTotal.WithLabelValues(name, "skipped").Inc()
+			return
+		}
+		obs.ExternalPollerPollsTotal.WithLabelValues(name, "success").Inc()
+		obs.ExternalPollerLastSuccessUnix.WithLabelValues(name).Set(float64(time.Now().Unix()))
 		for _, t := range trades {
 			select {
 			case <-ctx.Done():

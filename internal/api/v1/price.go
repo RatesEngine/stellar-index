@@ -440,25 +440,82 @@ func (s *Server) tryRedisVWAPFallback(ctx context.Context, asset, quote canonica
 }
 
 // priceFallback runs the post-Timescale-miss fallback chain for
-// /v1/price. Two layers, tried in order:
+// /v1/price. Three layers, tried in order:
 //
 //  1. Redis VWAP cache (covers triangulated chains + stablecoin
-//     proxy rewrites; provenance marker controls
-//     flags.triangulated).
-//  2. Fiat-vs-fiat cross-rate from the forex snapshot
+//     proxy rewrites that the aggregator has cached; provenance
+//     marker controls flags.triangulated).
+//  2. Read-time stablecoin → fiat:USD rewrite against the operator-
+//     declared classic USD-pegs (catches the case where the
+//     aggregator's [aggregate].enable_stablecoin_fiat_proxy isn't
+//     enabled but trades.usd_pegged_classic_assets is — the same
+//     fix the chart handler ships per #98 / PR #1015).
+//  3. Fiat-vs-fiat cross-rate from the forex snapshot
 //     (always returns triangulated=true since the value is derived).
 //
-// Returns ok=false when both layers miss; the caller turns that
+// Returns ok=false when every layer misses; the caller turns that
 // into a 404. Extracted from handlePrice to keep that handler
 // under the gocognit cap.
 func (s *Server) priceFallback(ctx context.Context, asset, quote canonical.Asset) (PriceSnapshot, []string, bool, bool) {
 	if snap, srcs, triangulated, ok := s.tryRedisVWAPFallback(ctx, asset, quote); ok {
 		return snap, srcs, triangulated, true
 	}
+	if snap, srcs, ok := s.tryStablecoinFiatProxy(ctx, asset, quote); ok {
+		return snap, srcs, true, true
+	}
 	if snap, srcs, ok := s.tryFiatCrossRate(asset, quote); ok {
 		return snap, srcs, true, true
 	}
 	return PriceSnapshot{}, nil, false, false
+}
+
+// tryStablecoinFiatProxy handles the X / fiat:USD → X / <classic-USD-peg>
+// rewrite at handler read time, as a safety net for deployments
+// where the aggregator's [aggregate].enable_stablecoin_fiat_proxy
+// is not enabled. The literal X/fiat:USD pair never has rows in
+// prices_1m on Stellar mainnet because no on-chain trades quote in
+// fiat:USD — every USD-flavoured trade quotes in classic USDC
+// (USDC-GA5Z…) or one of the other operator-declared pegs.
+//
+// Walks the operator's [trades].usd_pegged_classic_assets allow-list
+// in priority order; first peg whose pair has a non-stale Timescale
+// row wins. Same shape as chart.go's chartStablecoinFallback (#98 /
+// PR #1015) — without it, /v1/price?asset=native&quote=fiat:USD 404s
+// out-of-the-box on every fresh deployment, which is the most-basic
+// possible query against the canonical price endpoint.
+//
+// Returns ok=false when:
+//   - quote is not fiat:USD,
+//   - usdPeggedClassics is empty (operator hasn't opted in),
+//   - every peg's pair returns ErrPriceNotFound or an error.
+//
+// Sets flags.triangulated=true on the returned snapshot — the served
+// price is the X/<peg> VWAP rounded by the implicit assumption peg ≈ $1.
+// SingleSource is whatever the underlying X/<peg> lookup carried.
+func (s *Server) tryStablecoinFiatProxy(ctx context.Context, asset, quote canonical.Asset) (PriceSnapshot, []string, bool) {
+	if quote.Type != canonical.AssetFiat || quote.Code != "USD" {
+		return PriceSnapshot{}, nil, false
+	}
+	if len(s.usdPeggedClassics) == 0 || s.prices == nil {
+		return PriceSnapshot{}, nil, false
+	}
+	for _, peg := range s.usdPeggedClassics {
+		if peg.Equal(asset) {
+			continue
+		}
+		snap, srcs, _, err := s.prices.LatestPrice(ctx, asset, peg)
+		if err != nil {
+			// ErrPriceNotFound is the common case (peg not active for
+			// this asset); any other error gets the same treatment as
+			// the chart fallback — silent skip, try the next peg.
+			continue
+		}
+		// Rewrite the snapshot's Quote field so the wire response
+		// reflects what the user asked for, not the proxy peg.
+		snap.Quote = quote.String()
+		return snap, srcs, true
+	}
+	return PriceSnapshot{}, nil, false
 }
 
 // tryFiatCrossRate synthesises a fiat-vs-fiat price by cross-rating

@@ -352,13 +352,23 @@ func isLowerHex64(s string) bool {
 // parseBaseQuote extracts + validates base/quote from the request.
 // Returns (base, quote, true) on success; writes a problem response
 // and returns ok=false on failure.
+//
+// When `base` is missing but `asset` is present, the error detail
+// names the alias to redirect callers who copied query params from
+// /v1/price (which uses asset/quote rather than base/quote). Same
+// hint when only `quote` is missing alongside an `asset` param —
+// the user almost certainly mixed the two endpoint conventions.
 func parseBaseQuote(w http.ResponseWriter, r *http.Request) (canonical.Asset, canonical.Asset, bool) {
 	rawBase := r.URL.Query().Get("base")
 	if rawBase == "" {
+		detail := "base query parameter is required"
+		if r.URL.Query().Get("asset") != "" {
+			detail += "; this endpoint uses base/quote (not asset/quote — that form is on /v1/price)"
+		}
 		writeProblem(w, r,
 			"https://api.ratesengine.net/errors/missing-base",
 			"Missing base parameter", http.StatusBadRequest,
-			"base query parameter is required")
+			detail)
 		return canonical.Asset{}, canonical.Asset{}, false
 	}
 	base, err := canonical.ParseAsset(rawBase)

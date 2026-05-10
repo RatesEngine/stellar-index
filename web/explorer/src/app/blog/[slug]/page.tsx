@@ -5,6 +5,7 @@ import { ArrowLeft, Github } from 'lucide-react';
 
 import { loadBlogPost, loadBlogPosts } from '@/lib/blog';
 import { Markdown } from '@/lib/markdown';
+import { SITE_OG_IMAGES, SITE_TWITTER_IMAGES } from '@/lib/seo';
 
 type Params = Promise<{ slug: string }>;
 
@@ -28,8 +29,9 @@ export async function generateMetadata({ params }: { params: Params }): Promise<
       url: canonical,
       type: 'article',
       publishedTime: post.date,
+      images: SITE_OG_IMAGES,
     },
-    twitter: { card: 'summary_large_image', title, description: post.summary },
+    twitter: { card: 'summary_large_image', title, description: post.summary, images: SITE_TWITTER_IMAGES },
   };
 }
 

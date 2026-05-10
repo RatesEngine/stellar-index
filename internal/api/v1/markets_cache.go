@@ -7,12 +7,14 @@ import (
 	"time"
 
 	"github.com/RatesEngine/rates-engine/internal/canonical"
+	"github.com/RatesEngine/rates-engine/internal/obs"
 	"github.com/RatesEngine/rates-engine/internal/storage/timescale"
 )
 
 // CachedMarketsReader wraps a [MarketsReader] with a small per-key
-// TTL cache. The four list endpoints it backs (DistinctPairsExt,
-// SourceMarkets, AllPools, GetPairsVolumeHistory24hBatch) all run
+// TTL cache. The five list endpoints it backs (DistinctPairsExt,
+// SourceMarkets, AssetMarkets, AllPools,
+// GetPairsVolumeHistory24hBatch) all run
 // the same expensive 24h-trades-hypertable scan; the explorer hits
 // them on every /markets, /pools, and /dexes page load.
 //
@@ -74,7 +76,7 @@ func (c *CachedMarketsReader) DistinctPairsExt(ctx context.Context, cursor strin
 		return c.upstream.DistinctPairsExt(ctx, cursor, limit, order)
 	}
 	key := fmt.Sprintf("DistinctPairsExt|%s|%d|%d", cursor, limit, order)
-	rows, next, err := c.fetchPairs(ctx, key, func(ctx context.Context) ([]Market, string, error) {
+	rows, next, err := c.fetchPairs(ctx, "distinct_pairs", key, func(ctx context.Context) ([]Market, string, error) {
 		return c.upstream.DistinctPairsExt(ctx, cursor, limit, order)
 	})
 	return rows, next, err
@@ -86,8 +88,20 @@ func (c *CachedMarketsReader) SourceMarkets(ctx context.Context, source, cursor 
 		return c.upstream.SourceMarkets(ctx, source, cursor, limit, order)
 	}
 	key := fmt.Sprintf("SourceMarkets|%s|%s|%d|%d", source, cursor, limit, order)
-	rows, next, err := c.fetchPairs(ctx, key, func(ctx context.Context) ([]Market, string, error) {
+	rows, next, err := c.fetchPairs(ctx, "source_markets", key, func(ctx context.Context) ([]Market, string, error) {
 		return c.upstream.SourceMarkets(ctx, source, cursor, limit, order)
+	})
+	return rows, next, err
+}
+
+// AssetMarkets — cached.
+func (c *CachedMarketsReader) AssetMarkets(ctx context.Context, asset, cursor string, limit int, order timescale.MarketsOrder) ([]Market, string, error) {
+	if c.ttl <= 0 {
+		return c.upstream.AssetMarkets(ctx, asset, cursor, limit, order)
+	}
+	key := fmt.Sprintf("AssetMarkets|%s|%s|%d|%d", asset, cursor, limit, order)
+	rows, next, err := c.fetchPairs(ctx, "asset_markets", key, func(ctx context.Context) ([]Market, string, error) {
+		return c.upstream.AssetMarkets(ctx, asset, cursor, limit, order)
 	})
 	return rows, next, err
 }
@@ -100,25 +114,28 @@ func (c *CachedMarketsReader) AllPools(ctx context.Context, filter timescale.Poo
 	// Sources is a slice — fmt %v gives a stable repr for
 	// equal-length slices with the same element order. Handlers
 	// upstream sort sources from a registry so order is stable.
-	key := fmt.Sprintf("AllPools|%v|%s|%s|%s|%d|%d",
-		filter.Sources, filter.Base, filter.Quote, cursor, limit, order)
-	rows, next, err := c.fetchPools(ctx, key, func(ctx context.Context) ([]Pool, string, error) {
+	key := fmt.Sprintf("AllPools|%v|%s|%s|%s|%s|%d|%d",
+		filter.Sources, filter.Base, filter.Quote, filter.Asset, cursor, limit, order)
+	rows, next, err := c.fetchPools(ctx, "all_pools", key, func(ctx context.Context) ([]Pool, string, error) {
 		return c.upstream.AllPools(ctx, filter, cursor, limit, order)
 	})
 	return rows, next, err
 }
 
-// fetchPairs is the shared TTL+single-flight loop for the two
-// pair-returning methods.
+// fetchPairs is the shared TTL+single-flight loop for the
+// pair-returning methods. `op` is the metric label
+// (`distinct_pairs` / `source_markets` / `asset_markets`) so the
+// hit/miss counter can break down per cached method.
 func (c *CachedMarketsReader) fetchPairs(
 	ctx context.Context,
-	key string,
+	op, key string,
 	upstream func(context.Context) ([]Market, string, error),
 ) ([]Market, string, error) {
 	c.mu.Lock()
 	if e, ok := c.entries[key]; ok && e.flight == nil && time.Since(e.at) < c.ttl {
 		out, next := e.pairs, e.cursor
 		c.mu.Unlock()
+		obs.APICacheOpsTotal.WithLabelValues("markets", op, "hit").Inc()
 		return out, next, nil
 	}
 	if e, ok := c.entries[key]; ok && e.flight != nil {
@@ -129,6 +146,9 @@ func (c *CachedMarketsReader) fetchPairs(
 			c.mu.Lock()
 			out := c.entries[key]
 			c.mu.Unlock()
+			// Single-flight wait shared an upstream call — count
+			// as a hit since the caller didn't trigger work.
+			obs.APICacheOpsTotal.WithLabelValues("markets", op, "hit").Inc()
 			return out.pairs, out.cursor, nil
 		case <-ctx.Done():
 			return nil, "", ctx.Err()
@@ -137,6 +157,7 @@ func (c *CachedMarketsReader) fetchPairs(
 	done := make(chan struct{})
 	c.entries[key] = &marketsCacheEntry{flight: done}
 	c.mu.Unlock()
+	obs.APICacheOpsTotal.WithLabelValues("markets", op, "miss").Inc()
 
 	rows, cursor, err := upstream(ctx)
 
@@ -158,13 +179,14 @@ func (c *CachedMarketsReader) fetchPairs(
 // fetchPools mirrors fetchPairs for AllPools' return type.
 func (c *CachedMarketsReader) fetchPools(
 	ctx context.Context,
-	key string,
+	op, key string,
 	upstream func(context.Context) ([]Pool, string, error),
 ) ([]Pool, string, error) {
 	c.mu.Lock()
 	if e, ok := c.entries[key]; ok && e.flight == nil && time.Since(e.at) < c.ttl {
 		out, next := e.pools, e.cursor
 		c.mu.Unlock()
+		obs.APICacheOpsTotal.WithLabelValues("markets", op, "hit").Inc()
 		return out, next, nil
 	}
 	if e, ok := c.entries[key]; ok && e.flight != nil {
@@ -175,6 +197,7 @@ func (c *CachedMarketsReader) fetchPools(
 			c.mu.Lock()
 			out := c.entries[key]
 			c.mu.Unlock()
+			obs.APICacheOpsTotal.WithLabelValues("markets", op, "hit").Inc()
 			return out.pools, out.cursor, nil
 		case <-ctx.Done():
 			return nil, "", ctx.Err()
@@ -183,6 +206,7 @@ func (c *CachedMarketsReader) fetchPools(
 	done := make(chan struct{})
 	c.entries[key] = &marketsCacheEntry{flight: done}
 	c.mu.Unlock()
+	obs.APICacheOpsTotal.WithLabelValues("markets", op, "miss").Inc()
 
 	rows, cursor, err := upstream(ctx)
 

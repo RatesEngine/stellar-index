@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"log/slog"
+	"net"
 	"net/http"
 	"sync"
 	"time"
@@ -539,6 +540,13 @@ func (s *Server) Handler() http.Handler {
 		// CacheControl so the override gets the same Cache-Control
 		// directive a regular handler-side response would.
 		middleware.Envelope404,
+		// 308-redirect trailing-slash paths to their no-slash form
+		// (e.g. /v1/coins/native/ → /v1/coins/native). Every v1
+		// route is registered without a trailing slash; without this
+		// middleware, clients that auto-append (axios with `/v1/`
+		// baseURL, OpenAPI codegens, mistyped curl) hit a dead 404.
+		// 308 preserves method+body so POST/DELETE don't degrade.
+		middleware.TrailingSlashRedirect,
 	}
 	if s.cors != nil {
 		stack = append(stack, s.cors)
@@ -583,6 +591,31 @@ func (s *Server) Handler() http.Handler {
 // for debugging / testing.
 func (s *Server) Uptime() time.Duration { return time.Since(s.started) }
 
+// loopbackOnly wraps `next` so it returns 404 for any request
+// whose RemoteAddr is not a loopback IP (127.0.0.0/8 or ::1).
+// Used for `/metrics` so the binary refuses to answer scrapes
+// from anything but localhost — defense-in-depth against a
+// misconfigured reverse proxy that forwards public traffic to
+// the binary's :3000 port.
+//
+// Returns 404 (not 403) deliberately — 403 would confirm the
+// route exists; 404 mirrors what a properly-configured Caddy
+// would emit and gives no signal to a scanner.
+func loopbackOnly(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		host, _, err := net.SplitHostPort(r.RemoteAddr)
+		if err != nil {
+			host = r.RemoteAddr // RemoteAddr without port (rare)
+		}
+		ip := net.ParseIP(host)
+		if ip == nil || !ip.IsLoopback() {
+			http.NotFound(w, r)
+			return
+		}
+		next.ServeHTTP(w, r)
+	})
+}
+
 func (s *Server) mountRoutes() {
 	// Health / meta endpoints. Deliberately NOT behind rate-limit
 	// middleware — infra (k8s probes, load balancers) hits these.
@@ -602,7 +635,19 @@ func (s *Server) mountRoutes() {
 
 	// Prometheus scrape endpoint. Deliberately unversioned — it's
 	// operator-facing, not part of the public API contract.
-	s.mux.Handle("GET /metrics", obs.Handler())
+	//
+	// Defense-in-depth: also gate at the Go layer on RemoteAddr
+	// being a loopback address. The intended posture is that Caddy
+	// 404s `/metrics` from public hosts (configs/caddy/Caddyfile.api)
+	// and only the local Prometheus scraper hits the binary
+	// directly via 127.0.0.1:3000. This guard catches the case where
+	// the Caddyfile config is stale OR the binary is exposed behind
+	// a different proxy that hasn't been audited. /metrics on a
+	// public host fingerprints the deployment (Go runtime stats,
+	// per-source counters, build info) — the cost of a missed
+	// public hit is non-trivial enough to justify two layers of
+	// blocking.
+	s.mux.Handle("GET /metrics", loopbackOnly(obs.Handler()))
 
 	// Asset catalogue.
 	s.mux.HandleFunc("GET /v1/assets", s.handleAssetList)
@@ -754,6 +799,25 @@ func (s *Server) mountRoutes() {
 	// default text/plain 404 / 405 responses into RFC 9457
 	// problem+json.
 	s.mux.HandleFunc("GET /{$}", s.handleRoot)
+
+	// /robots.txt — disallow crawler indexing of the API hostname.
+	// The endpoints are JSON, not user-facing HTML; crawlers
+	// hitting them waste their budget on payloads that won't rank
+	// for any meaningful search query. The companion explorer site
+	// (ratesengine.net) and docs site (docs.ratesengine.net) are
+	// where indexable content lives, with their own robots.txt
+	// directives. Without this handler Cloudflare's auto-managed
+	// robots.txt is served on GET but the API origin returns 404
+	// on HEAD — flagging the inconsistency is what surfaced this
+	// gap in the 2026-05-09 audit.
+	s.mux.HandleFunc("GET /robots.txt", s.handleRobotsTxt)
+
+	// /.well-known/security.txt — RFC 9116 disclosure metadata.
+	// Researchers scanning the API origin for vulnerabilities find
+	// the disclosure email here without having to traverse to the
+	// explorer subdomain. The Canonical: directive points at the
+	// explorer's copy so the two stay aligned without drift.
+	s.mux.HandleFunc("GET /.well-known/security.txt", s.handleSecurityTxt)
 }
 
 // ─── Handlers ─────────────────────────────────────────────────────
@@ -861,6 +925,31 @@ func (s *Server) handleVersion(w http.ResponseWriter, _ *http.Request) {
 	}, Flags{})
 }
 
+// handleSecurityTxt serves /.well-known/security.txt per RFC 9116.
+//
+// The Canonical: URL points at the explorer copy
+// (ratesengine.net/.well-known/security.txt) so the two origins
+// don't drift; both the explorer and API surfaces deliberately
+// share the same disclosure email + policy URL. Expires is one
+// year out — handler runs at request time so it always returns a
+// valid future date as long as the binary is up.
+func (s *Server) handleSecurityTxt(w http.ResponseWriter, _ *http.Request) {
+	expires := time.Now().UTC().AddDate(1, 0, 0).Format(time.RFC3339)
+	body := "# Rates Engine — security.txt (api origin)\n" +
+		"# RFC-9116. Mirrors ratesengine.net/.well-known/security.txt;\n" +
+		"# the Canonical: URL is the authoritative copy.\n" +
+		"\n" +
+		"Contact: mailto:security@ratesengine.net\n" +
+		"Expires: " + expires + "\n" +
+		"Preferred-Languages: en\n" +
+		"Canonical: https://ratesengine.net/.well-known/security.txt\n" +
+		"Policy: https://github.com/RatesEngine/rates-engine/blob/main/SECURITY.md\n" +
+		"Acknowledgments: https://github.com/RatesEngine/rates-engine/security/advisories\n"
+	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+	w.Header().Set("Cache-Control", "public, max-age=86400")
+	_, _ = w.Write([]byte(body))
+}
+
 // handleRoot welcomes accidental visitors at GET /. Returns a small
 // envelope with the binary version + a pointer at the docs; not part
 // of the public API surface (no OpenAPI entry), strictly a "you've
@@ -872,4 +961,27 @@ func (s *Server) handleRoot(w http.ResponseWriter, _ *http.Request) {
 		"docs":    "https://docs.ratesengine.net",
 		"openapi": "https://docs.ratesengine.net/openapi.yaml",
 	}, Flags{})
+}
+
+// handleRobotsTxt serves /robots.txt. The API origin holds JSON
+// endpoints not meant for crawler indexing — point search engines
+// at the companion docs + explorer subdomains instead. The
+// `Sitemap:` directive lets a crawler that ignored the Disallow
+// (or has a per-bot exception) at least crawl what's worth
+// indexing.
+func (s *Server) handleRobotsTxt(w http.ResponseWriter, _ *http.Request) {
+	const body = `# api.ratesengine.net — JSON API, not for human reading.
+# Indexable content lives on the companion subdomains:
+#   - https://ratesengine.net          — explorer + market UI
+#   - https://docs.ratesengine.net     — API reference
+#   - https://status.ratesengine.net   — status + incident postmortems
+
+User-agent: *
+Disallow: /
+
+Sitemap: https://ratesengine.net/sitemap.xml
+`
+	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+	w.Header().Set("Cache-Control", "public, max-age=86400")
+	_, _ = w.Write([]byte(body))
 }
