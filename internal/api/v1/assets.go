@@ -357,6 +357,21 @@ func (s *Server) handleAssetGet(w http.ResponseWriter, r *http.Request) {
 		detail = detailFromAsset(parsed)
 	}
 
+	// Backfill HomeDomain from the curated known-issuers map when
+	// the storage row doesn't carry one (classic assets ingested
+	// before `ratesengine-ops sep1-refresh` ran, or issuers whose
+	// SEP-1 lookup never persisted because they aren't in the
+	// watched set). Mirrors enrichIssuer's policy on /v1/issuers,
+	// which is how that endpoint returns home_domain="centre.io"
+	// for USDC while /v1/assets was reporting null.
+	// R-016 in `docs/review-2026-05-10.md`.
+	if (detail.HomeDomain == nil || *detail.HomeDomain == "") && detail.Issuer != nil && *detail.Issuer != "" {
+		hd, _ := enrichIssuer(*detail.Issuer, "", "")
+		if hd != "" {
+			detail.HomeDomain = &hd
+		}
+	}
+
 	// SEP-1 overlay — only for assets with a home-domain and only if
 	// the operator has wired a metadata resolver. Budgeted with a
 	// short timeout so a slow issuer domain doesn't stall the API.
@@ -453,6 +468,15 @@ func (s *Server) handleAssetMetadata(w http.ResponseWriter, r *http.Request) {
 		detail = d
 	} else {
 		detail = detailFromAsset(parsed)
+	}
+
+	// Same known-issuers backfill as handleAssetGet (R-016) — keeps
+	// the two surfaces in lockstep on the SEP-1 status they report.
+	if (detail.HomeDomain == nil || *detail.HomeDomain == "") && detail.Issuer != nil && *detail.Issuer != "" {
+		hd, _ := enrichIssuer(*detail.Issuer, "", "")
+		if hd != "" {
+			detail.HomeDomain = &hd
+		}
 	}
 
 	if s.meta != nil && detail.HomeDomain != nil && *detail.HomeDomain != "" {
