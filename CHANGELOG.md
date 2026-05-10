@@ -31,6 +31,32 @@ against.
   alerts-catalog + external-poller-stale. Prevention notes
   capture the choice between auto-migrate-in-deploy-workflow
   vs. gate-readyz-on-schema-version. (PR #1230)
+- **Runbook + customer-facing incident post for the 2026-05-10
+  Redis-write-blocked outage** — r1's root filesystem reached
+  100% with 35 GB of stale logs, blocking Redis snapshots,
+  blocking aggregator VWAP cache writes, and surfacing as
+  `/v1/price` 404s on rewritten / triangulated / stablecoin-proxy
+  pairs for ~9 hours. New runbook at
+  `docs/operations/runbooks/redis-write-blocked-disk-full.md`
+  captures triage signals + the 5-minute recovery sequence
+  (vacuum journal, truncate syslog.1, rm WASM-audit stderr,
+  trigger Redis BGSAVE). Customer-facing incident post at
+  `internal/incidents/data/2026-05-10-redis-writes-blocked-disk-full.md`
+  is auto-served by `/v1/incidents`. (PR #1228)
+- **ADR-0025 — Caddy trusts Cloudflare for client-IP signal via
+  CIDR-pinned static list** (`docs/adr/0025-caddy-cloudflare-trusted-proxy.md`).
+  Records the architectural commitment from PR #1239: Caddy's
+  global `servers { trusted_proxies static <CF CIDRs> }` block
+  pins trust on CF's published IP ranges (refreshed manually
+  on quarterly audit cadence rather than via the third-party
+  `caddy-cloudflare-ip` plugin). R2 / R3 inherit the same
+  topology when they ship; if we ever expose the API directly
+  without CF in front, the operator MUST delete the
+  `trusted_proxies` block on that listener — calling that out
+  in writing prevents a foot-gun. The ADR README index also
+  gets caught up — entries for ADR-0020 through ADR-0024
+  (already-accepted but not previously indexed) added in the
+  same change.
 - **`/v1/pools?asset=<asset_id>` filter** — restrict the pools
   listing to rows where the asset appears on either side (base
   OR quote). Mirrors the same filter shape just shipped on

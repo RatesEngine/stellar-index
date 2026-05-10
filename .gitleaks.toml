@@ -94,3 +94,15 @@ description = "Historical web/showcase tree — gitleaks scans full repo history
 paths = [
   '''web/showcase/src/api/types\.ts''',
 ]
+
+[[rules.allowlists]]
+description = "Test-only Stellar G-strkey fixture (Circle USDC issuer's public account ID) used by the /v1/issuers handler tests. Bare G-address triggers gitleaks' generic-api-key entropy heuristic; same shape as the supply / dispatcher / pkg-client allowlists already declared above. Public account IDs aren't credentials."
+paths = [
+  '''internal/api/v1/issuers_test\.go''',
+]
+
+[[rules.allowlists]]
+description = "Audit working-doc — quotes a Stellar G-strkey (Circle USDC issuer) inline in a user-journey writeup as one of the example issuers a customer would explore. Same entropy-heuristic false positive as the test-file allowlists; public account ID, not a credential."
+paths = [
+  '''docs/audit-2026-05-02/03-journeys\.md''',
+]
