@@ -1,9 +1,11 @@
 package v1_test
 
 import (
+	"context"
 	"errors"
 	"math/big"
 	"net/http"
+	"strings"
 	"testing"
 	"time"
 
@@ -149,5 +151,104 @@ func TestOHLC_ReaderError500(t *testing.T) {
 	resp := mustGet(t, ts.URL+"/v1/ohlc?base=native&quote=fiat:USD")
 	if resp.StatusCode != http.StatusInternalServerError {
 		t.Errorf("status = %d, want 500", resp.StatusCode)
+	}
+}
+
+// ohlcPairAwareReader is a per-pair history reader scoped to this
+// test file. The shared stubHistoryReader returns the same trade
+// slice regardless of pair, which the stablecoin-fiat fallback
+// can't exercise. Mirrors the pairAwareHistoryReader in vwap_test.go
+// (PR #1219); kept colocated until that helper merges.
+type ohlcPairAwareReader struct {
+	stubHistoryReader
+	tradesByPair map[string][]canonical.Trade
+}
+
+func (r *ohlcPairAwareReader) TradesInRange(_ context.Context, pair canonical.Pair, _, _ time.Time, _ int) ([]canonical.Trade, error) {
+	if r.err != nil {
+		return nil, r.err
+	}
+	return r.tradesByPair[pair.Base.String()+"/"+pair.Quote.String()], nil
+}
+
+// TestOHLC_StablecoinFiatProxyFallback — when the literal
+// X/fiat:USD pair has zero trades but the operator declared a
+// USDC peg, the OHLC handler retries against X/<USDC-classic> and
+// returns the bar with flags.triangulated=true. Mirrors
+// /v1/chart's chartStablecoinFallback (#1015) and the same family
+// of fixes shipped this session for /v1/price (#1217), /v1/price/tip
+// (#1218), /v1/vwap + /v1/twap (#1219), /v1/oracle/lastprice (#1220).
+//
+// Without this, /v1/ohlc?base=native&quote=fiat:USD 404s with
+// "no trades in window" out of the box — Freighter RFP §3 names
+// /v1/ohlc as a launch-blocking surface for the asset-detail page.
+func TestOHLC_StablecoinFiatProxyFallback(t *testing.T) {
+	usdcClassic, err := canonical.ParseAsset("USDC-GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN")
+	if err != nil {
+		t.Fatalf("parse USDC: %v", err)
+	}
+	xlm, _ := canonical.ParseAsset("native")
+	classicPair, _ := canonical.NewPair(xlm, usdcClassic)
+
+	t0 := time.Now().UTC().Add(-30 * time.Minute)
+	pegTrades := []canonical.Trade{
+		{
+			Source: "sdex", Ledger: 1,
+			TxHash:      "0000000000000000000000000000000000000000000000000000000000000001",
+			Timestamp:   t0,
+			Pair:        classicPair,
+			BaseAmount:  canonical.NewAmount(big.NewInt(100)),
+			QuoteAmount: canonical.NewAmount(big.NewInt(16)),
+		},
+		{
+			Source: "sdex", Ledger: 2,
+			TxHash:      "0000000000000000000000000000000000000000000000000000000000000002",
+			Timestamp:   t0.Add(5 * time.Minute),
+			Pair:        classicPair,
+			BaseAmount:  canonical.NewAmount(big.NewInt(100)),
+			QuoteAmount: canonical.NewAmount(big.NewInt(17)),
+		},
+	}
+	reader := &ohlcPairAwareReader{
+		// Literal native/fiat:USD missing. native/<USDC-classic>
+		// has two trades — open=0.16, close=0.17.
+		tradesByPair: map[string][]canonical.Trade{
+			"native/" + usdcClassic.String(): pegTrades,
+		},
+	}
+	srv := v1.New(v1.Options{
+		History:           reader,
+		USDPeggedClassics: []canonical.Asset{usdcClassic},
+	})
+	ts := httpTestServer(t, srv)
+
+	resp := mustGet(t, ts.URL+"/v1/ohlc?base=native&quote=fiat:USD")
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d, want 200 (peg fallback should serve)", resp.StatusCode)
+	}
+	body, _ := readAll(resp)
+	for _, want := range []string{
+		`"open":"0.1600000000"`,
+		`"close":"0.1700000000"`,
+		`"trade_count":2`,
+		`"triangulated":true`,
+	} {
+		if !strings.Contains(body, want) {
+			t.Errorf("body missing %q: %s", want, body)
+		}
+	}
+}
+
+// TestOHLC_StablecoinFiatProxy_NoPegLeaves404 — without
+// USDPeggedClassics the fallback skips silently and the 404
+// "no trades" path still serves.
+func TestOHLC_StablecoinFiatProxy_NoPegLeaves404(t *testing.T) {
+	reader := &ohlcPairAwareReader{tradesByPair: map[string][]canonical.Trade{}}
+	srv := v1.New(v1.Options{History: reader})
+	ts := httpTestServer(t, srv)
+
+	resp := mustGet(t, ts.URL+"/v1/ohlc?base=native&quote=fiat:USD")
+	if resp.StatusCode != http.StatusNotFound {
+		t.Errorf("status = %d, want 404", resp.StatusCode)
 	}
 }

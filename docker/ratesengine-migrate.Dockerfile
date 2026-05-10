@@ -2,7 +2,7 @@
 # Build + runtime image for ratesengine-migrate.
 # See docker/README.md for the shared image-shape rationale.
 
-FROM golang:1.25-alpine AS builder
+FROM golang:1.26-alpine AS builder
 RUN apk add --no-cache git ca-certificates tzdata
 WORKDIR /src
 # Cache modules separately so source-only edits don't invalidate

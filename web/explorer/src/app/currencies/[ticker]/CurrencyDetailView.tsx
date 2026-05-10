@@ -164,12 +164,21 @@ function HistoryPanel({ detail }: { detail: CurrencyDetail }) {
 
   const stats = hasData ? computeRangeStats(series) : null;
 
+  // USD-vs-USD is always 1.0 by definition — surface the panel
+  // accordingly instead of inviting the silly "1 USD expressed in
+  // USD" hint. The cross-rates table below is the useful surface
+  // for the USD detail page.
+  const isSelfUSD = detail.ticker === 'USD';
   return (
     <Panel
-      title={`${rangeLabel} USD value`}
-      hint={`1 ${detail.ticker} expressed in USD${
-        range === '7d' ? ' over the last week' : ''
-      }`}
+      title={isSelfUSD ? 'USD vs USD' : `${rangeLabel} USD value`}
+      hint={
+        isSelfUSD
+          ? '1 USD = $1.00 by definition; see the cross-rates table below.'
+          : `1 ${detail.ticker} expressed in USD${
+              range === '7d' ? ' over the last week' : ''
+            }`
+      }
       source={asExample(`/v1/currencies/${detail.ticker}?range=${range}`, {})}
     >
       <div className="mb-3 flex flex-wrap items-center gap-2">

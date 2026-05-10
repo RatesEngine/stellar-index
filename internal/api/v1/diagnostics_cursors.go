@@ -31,7 +31,7 @@ type Cursor struct {
 // page) can see per-source ingest progress at a glance. Not a hot
 // path; the table is small (one row per (source, sub_source)).
 //
-// Optional query param:
+// Optional query params:
 //
 //   - max_age — Go-duration string (e.g. "1h", "30m", "5m"). When
 //     present, rows with lag_seconds greater than this value are
@@ -40,6 +40,15 @@ type Cursor struct {
 //     same filter client-side, defaulting to 1h — see
 //     CursorsTable). Empty / omitted = return everything.
 //     Invalid duration → 400 invalid-max-age.
+//
+//   - source — exact-match filter on the `source` column. Today's
+//     production values are "ledgerstream" (the live indexer) and
+//     "backfill" (one row per backfill range). Useful for
+//     `?source=ledgerstream` to isolate the live cursor from the
+//     ~50 backfill rows. Empty / omitted = return all sources.
+//     Unknown values return an empty array (not 400) — keeps the
+//     surface predictable when an operator typos vs. a brand-new
+//     source we haven't seen yet.
 func (s *Server) handleCursors(w http.ResponseWriter, r *http.Request) {
 	if s.cursors == nil {
 		writeProblem(w, r,
@@ -62,6 +71,8 @@ func (s *Server) handleCursors(w http.ResponseWriter, r *http.Request) {
 		maxAge = d
 	}
 
+	sourceFilter := r.URL.Query().Get("source")
+
 	rows, err := s.cursors.ListCursors(r.Context())
 	if err != nil {
 		s.logger.Warn("cursors list", "err", err)
@@ -75,6 +86,9 @@ func (s *Server) handleCursors(w http.ResponseWriter, r *http.Request) {
 	now := time.Now().UTC()
 	out := make([]Cursor, 0, len(rows))
 	for _, c := range rows {
+		if sourceFilter != "" && c.Source != sourceFilter {
+			continue
+		}
 		lag := now.Sub(c.UpdatedAt)
 		if maxAge > 0 && lag > maxAge {
 			continue
