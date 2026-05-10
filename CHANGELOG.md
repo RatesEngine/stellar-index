@@ -17,6 +17,18 @@ against.
 
 ### Fixed
 
+- **Handler-timeout paths return 503, not 500, when the per-call
+  context deadline fires and Postgres returns its own
+  `canceling statement` error**. `errors.Is(err,
+  context.DeadlineExceeded)` doesn't match the `pq.Error`
+  SQLSTATE 57014 that lib/pq surfaces after the v3 cancel-request
+  flow — so `/v1/markets`, `/v1/pools`, and `/v1/coins` were
+  500ing on the cold-cache path that the 8s ceiling was
+  specifically meant to convert into a retryable 503. New
+  `handlerTimedOut(callCtx, err)` helper consults the per-call
+  context's `Err()` as the authoritative signal. R-021 in
+  `docs/review-2026-05-10.md`.
+
 - **All-time-high (`/v1/coins/{slug}.ath`, `?include=ath` on
   `/v1/coins`) is now derived from `prices_1d.vwap` instead of
   `prices_1d.high_price`**. The single-tick max was being polluted

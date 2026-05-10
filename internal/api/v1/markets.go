@@ -2,7 +2,6 @@ package v1
 
 import (
 	"context"
-	"errors"
 	"net/http"
 	"sort"
 	"strconv"
@@ -227,7 +226,7 @@ func (s *Server) handlePools(w http.ResponseWriter, r *http.Request) { //nolint:
 		if clientAborted(r, err) {
 			return
 		}
-		if errors.Is(err, context.DeadlineExceeded) {
+		if handlerTimedOut(pCtx, err) {
 			s.logger.Warn("AllPools deadline exceeded", "limit", limit, "filter", filter)
 			writeProblem(w, r,
 				"https://api.ratesengine.net/errors/pools-timeout",
@@ -415,7 +414,7 @@ func (s *Server) handleMarkets(w http.ResponseWriter, r *http.Request) { //nolin
 		if clientAborted(r, err) {
 			return
 		}
-		if errors.Is(err, context.DeadlineExceeded) {
+		if handlerTimedOut(mCtx, err) {
 			s.logger.Warn("DistinctPairs deadline exceeded",
 				"limit", limit, "source", source)
 			writeProblem(w, r,

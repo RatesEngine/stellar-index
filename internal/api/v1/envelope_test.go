@@ -309,6 +309,44 @@ func TestClientAborted(t *testing.T) {
 	})
 }
 
+func TestHandlerTimedOut(t *testing.T) {
+	t.Run("err wraps DeadlineExceeded", func(t *testing.T) {
+		ctx := context.Background()
+		if !handlerTimedOut(ctx, context.DeadlineExceeded) {
+			t.Error("handlerTimedOut(live ctx, DeadlineExceeded) = false, want true")
+		}
+	})
+	t.Run("call ctx deadline fired, err is pq cancel", func(t *testing.T) {
+		// THE R-021 case: lib/pq returns its own
+		// `pq: canceling statement due to user request` error string
+		// after our context.WithTimeout fires. errors.Is misses it
+		// because pq.Error doesn't wrap context.DeadlineExceeded;
+		// the per-call context Err() is the authoritative signal.
+		ctx, cancel := context.WithDeadline(context.Background(), time.Now().Add(-1*time.Second))
+		defer cancel()
+		pqErr := errors.New("pq: canceling statement due to user request")
+		if !handlerTimedOut(ctx, pqErr) {
+			t.Error("handlerTimedOut(deadline-passed ctx, pq cancel) = false, want true")
+		}
+	})
+	t.Run("call ctx canceled (not deadlined), arbitrary err", func(t *testing.T) {
+		// context.Canceled (e.g. an explicit cancel()) is NOT a
+		// timeout — the handler shouldn't 503 on this branch.
+		ctx, cancel := context.WithCancel(context.Background())
+		cancel()
+		if handlerTimedOut(ctx, errors.New("downstream cancelled")) {
+			t.Error("handlerTimedOut(canceled-not-timed-out ctx) = true, want false")
+		}
+	})
+	t.Run("everything healthy", func(t *testing.T) {
+		ctx, cancel := context.WithTimeout(context.Background(), time.Hour)
+		defer cancel()
+		if handlerTimedOut(ctx, errors.New("storage broke")) {
+			t.Error("handlerTimedOut(live ctx, plain err) = true, want false")
+		}
+	})
+}
+
 func contains(haystack, needle []byte) bool {
 	for i := 0; i+len(needle) <= len(haystack); i++ {
 		if string(haystack[i:i+len(needle)]) == string(needle) {

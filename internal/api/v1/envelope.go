@@ -1,7 +1,9 @@
 package v1
 
 import (
+	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"time"
 
@@ -172,4 +174,35 @@ func writeProblem(w http.ResponseWriter, r *http.Request, typeURL, title string,
 // keeps the call sites stable.
 func clientAborted(r *http.Request, _ error) bool {
 	return r.Context().Err() != nil
+}
+
+// handlerTimedOut reports whether a handler-scoped context (created
+// via context.WithTimeout to cap an individual storage call) hit
+// its deadline. Use this on the per-call context — NOT
+// r.Context() — so genuine deadline-exceeded paths are recognised
+// even when the upstream driver returns its own
+// statement-cancellation error rather than wrapping
+// context.DeadlineExceeded.
+//
+// Background: lib/pq propagates a Go context cancellation to
+// PostgreSQL via the v3 cancel-request protocol, then returns the
+// resulting `pq: canceling statement due to user request` (SQLSTATE
+// 57014) — which does NOT unwrap to [context.DeadlineExceeded].
+// `errors.Is(err, context.DeadlineExceeded)` therefore misses every
+// case where a per-call deadline fired and the driver beat the
+// caller to noticing. The cleanest signal is the per-call context
+// itself: if its Err() is DeadlineExceeded, the request DID time
+// out regardless of how the driver phrased the resulting error.
+//
+// The OR with errors.Is keeps drivers that DO wrap correctly
+// (Timescale's hypercore extension does in some paths) on the same
+// branch.
+//
+// R-021 in `docs/review-2026-05-10.md` — pre-fix, /v1/markets cold
+// cache returned `500 Internal error` instead of `503 markets-timeout`.
+func handlerTimedOut(callCtx context.Context, err error) bool {
+	if errors.Is(err, context.DeadlineExceeded) {
+		return true
+	}
+	return callCtx.Err() == context.DeadlineExceeded
 }

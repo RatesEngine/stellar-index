@@ -259,7 +259,7 @@ func (s *Server) handleCoins(w http.ResponseWriter, r *http.Request) { //nolint:
 		if clientAborted(r, err) {
 			return
 		}
-		if errors.Is(err, context.DeadlineExceeded) {
+		if handlerTimedOut(listCtx, err) {
 			s.logger.Warn("coins list deadline exceeded", "limit", listingLimit)
 			writeProblem(w, r,
 				"https://api.ratesengine.net/errors/coins-timeout",
