@@ -388,6 +388,21 @@ against.
 
 ### Fixed
 
+- **F2 fields on `/v1/assets/{id}` (`market_cap_usd`, `fdv_usd`,
+  `change_24h_pct`) now populate via the same X/fiat:USD →
+  X/<peg> stablecoin-fiat proxy fallback that #1217 added to
+  `/v1/price`**. The F2 path's `lookupUSDPrice` and the binary's
+  `storeChange24hReader` both bypass the v1 handler's
+  `priceFallback`, so even with #1217 deployed every asset on
+  Stellar mainnet had `market_cap_usd / fdv_usd / change_24h_pct`
+  silently null — the steady-state because nothing on-chain ever
+  quotes in fiat:USD. `lookupUSDPrice` now calls the existing
+  `tryStablecoinFiatProxy` helper on miss; `storeChange24hReader`
+  walks the operator's `[trades].usd_pegged_classic_assets` for
+  the at-or-before lookup. One new test
+  (`TestLookupUSDPrice_StablecoinFiatProxyFallback`) pins the
+  /v1/assets path; existing TestChange24hPct tests still pass.
+  (PR #1223)
 - **Explorer `/exchanges/<venue>` chart now distinguishes "API
   outage" from "no pairs reporting"**. The pair-list fetcher's
   `.catch(() => setPairsLoading(false))` swallowed every error,
