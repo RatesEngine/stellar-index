@@ -73,10 +73,14 @@ SELECT create_hypertable(
 CREATE INDEX fx_quotes_ticker_idx
     ON fx_quotes (ticker, bucket DESC);
 
--- Cross-ticker latest-snapshot lookup (used by the worker's
--- gap-detector to resume from the newest persisted date).
-CREATE INDEX fx_quotes_bucket_idx
-    ON fx_quotes (bucket DESC);
+-- NOTE: a `(bucket DESC)` index is auto-created by Timescale's
+-- create_hypertable() above with the canonical name
+-- `fx_quotes_bucket_idx` — exactly what the gap-detector lookup
+-- (worker resumes from newest persisted date) needs. We do NOT
+-- create one explicitly here; an explicit `CREATE INDEX
+-- fx_quotes_bucket_idx ON fx_quotes (bucket DESC)` would
+-- collide with Timescale's auto-creation and fail the migration
+-- transaction (caught on r1 2026-05-10 — was a duplicate).
 
 ALTER TABLE fx_quotes SET (
     timescaledb.compress,
