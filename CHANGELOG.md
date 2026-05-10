@@ -17,6 +17,16 @@ against.
 
 ### Fixed
 
+- **Auth-failure problem+json `type` URL spelling unified**. The
+  middleware-level 401 (no-auth-at-all) and the account-handler
+  401 (auth-needed-but-rejected) had drifted to two different
+  `type` URLs — `errors/unauthorized` (American, middleware) and
+  `errors/unauthorised` (British, account.go × 5). Clients keying
+  on the type URL saw two distinct error categories for what's
+  semantically one auth failure surface. Standardised on the
+  American spelling (matches HTTP-spec wording: "Unauthorized");
+  all 5 `account.go` call sites updated. No tests pinned the
+  British form so no test churn.
 - **Explorer home: `HomeCurrencies` and `HomeTopMarkets` now
   show a "couldn't load" notice on error instead of silently
   rendering nothing**. Previously both components had
@@ -60,6 +70,17 @@ against.
 
 ### Added
 
+- **HSTS on the explorer + status site** — both surfaces were
+  missing `Strict-Transport-Security`, leaving them vulnerable
+  to a downgrade-protocol-stripping attack on first visit.
+  Added `Strict-Transport-Security: max-age=31536000;
+  includeSubDomains` to `web/explorer/public/_headers` (both
+  `/*` and `/embed/*` blocks; CF Pages doesn't merge rules) and
+  created `web/status/public/_headers` with the same shape +
+  full CSP / X-Frame-Options / Permissions-Policy parity.
+  `preload` is intentionally omitted until the operator
+  submits the apex to https://hstspreload.org/ (preload is
+  irrevocable once browsers ship it; ratchet up in two steps).
 - **SDK godoc examples for `Healthz`, `Readyz`, `Version`,
   `Usage`, `CreateKey`, `RevokeKey`, `Keys`**
   (`pkg/client/example_test.go`). Round 4 / final round of the
