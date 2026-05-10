@@ -289,10 +289,49 @@ enabled  = false
 # rpc_url  = "https://eth.llamarpc.com"
 # Mainnet AggregatorV3 feeds for the pairs you want cross-checked.
 # Pair-string format: "<base>/<quote>" (canonical.Pair.String()).
+#
+# IMPORTANT: divergence cross-check only fires for pairs that ALSO
+# appear in [aggregate].pairs (or the built-in default of XLM / BTC /
+# ETH × USD / EUR / GBP). Configuring a Chainlink feed for a pair the
+# aggregator doesn't compute is a no-op — the worker has no
+# "our price" to compare against. If you want FX-pair cross-checks,
+# add the FX pairs to [aggregate].pairs first AND configure how the
+# aggregator should derive their "our price" (today's pipeline
+# computes VWAP from trades, which doesn't apply to fiat-fiat pairs;
+# fiat-fiat divergence cross-check needs the FX-shim integration that
+# isn't wired yet — flagged on the operator queue).
+#
+# Crypto-side feeds the aggregator's default coverage already
+# matches (these are the ones that actually populate
+# divergence_observations on a stock deployment):
+#
+# [divergence.chainlink.feeds."crypto:BTC/fiat:USD"]
+# address  = "0xF4030086522a5bEEa4988F8cA5B36dbC97BeE88c"
+# decimals = 8
+#
+# [divergence.chainlink.feeds."crypto:ETH/fiat:USD"]
+# address  = "0x5f4eC3Df9cbd43714FE2740f5E3616155c5b8419"
+# decimals = 8
+#
+# [divergence.chainlink.feeds."crypto:LINK/fiat:USD"]
+# address  = "0x2c1d072e956AFFC0D435Cb7AC38EF18d24d9127c"
+# decimals = 8
+#
+# FX-side feeds (only useful once the aggregator has fiat-fiat
+# coverage; documented for future operator reference):
+#
 # [divergence.chainlink.feeds."fiat:EUR/fiat:USD"]
 # address  = "0xb49f677943BC038e9857d61E7d053CaA2C1734C1"
 # decimals = 8
 # invert   = false
+#
+# [divergence.chainlink.feeds."fiat:GBP/fiat:USD"]
+# address  = "0x5c0Ab2d9b5a7ed9f470386e82BB36A3613cDd4b5"
+# decimals = 8
+#
+# [divergence.chainlink.feeds."fiat:JPY/fiat:USD"]
+# address  = "0xBcE206caE7f0ec07b545EddE332A47C2F75bbeb3"
+# decimals = 8
 
 # ──────────────────────────────────────────────────────────────────
 # Supply — circulating-supply pipeline (ADR-0011 / -0021 / -0022 /
