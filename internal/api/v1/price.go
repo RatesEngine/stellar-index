@@ -834,20 +834,17 @@ func (s *Server) fetchBatchRow(w http.ResponseWriter, r *http.Request, raw strin
 	}
 	snap, sources, stale, err := s.prices.LatestPrice(r.Context(), asset, quote)
 	if errors.Is(err, ErrPriceNotFound) {
-		// Same Redis VWAP fallback as /v1/price, for aggregator-
-		// rewritten pairs (XLM/fiat:USD synthesised from
-		// XLM/USDC-GA5Z…) whose literal form isn't in prices_1m.
-		// Without this the batch call's headline pair silently omits
-		// even though the single-asset /v1/price serves it.
-		if cs, csrc, _, ok := s.tryRedisVWAPFallback(r.Context(), asset, quote); ok {
-			return batchRowOutcome{snap: cs, sources: csrc, asset: asset}
-		}
-		// Same fiat-vs-fiat cross-rate fallback as /v1/price.
-		// Skipping a fiat row in batch output — when the same
-		// query against /v1/price would have returned 200 — was
-		// silently confusing for batch consumers that include
-		// fiat tickers in their asset_ids list.
-		if fs, fsrc, ok := s.tryFiatCrossRate(asset, quote); ok {
+		// Share the full three-layer fallback chain with /v1/price
+		// (priceFallback). Pre-2026-05-10 the batch path inlined
+		// only Redis-VWAP + fiat-cross-rate and skipped
+		// tryStablecoinFiatProxy — the layer that resolves
+		// X/fiat:USD via the operator's classic USD-peg list. That
+		// asymmetry caused asset_ids that returned 200 on
+		// /v1/price (e.g. USDT-G…) to be silently dropped from the
+		// batch envelope on deployments where the aggregator's
+		// stablecoin-fiat-proxy isn't enabled. R-005 in
+		// docs/review-2026-05-10.md.
+		if fs, fsrc, _, ok := s.priceFallback(r.Context(), asset, quote); ok {
 			return batchRowOutcome{snap: fs, sources: fsrc, asset: asset}
 		}
 		return batchRowOutcome{skip: true} // omit, do not 404 the batch

@@ -11,6 +11,7 @@ import (
 	"time"
 
 	v1 "github.com/RatesEngine/rates-engine/internal/api/v1"
+	"github.com/RatesEngine/rates-engine/internal/canonical"
 )
 
 func TestPriceBatch_NoReader_Returns503(t *testing.T) {
@@ -168,6 +169,71 @@ func TestPriceBatch_RedisFallbackForRewrittenPair(t *testing.T) {
 	}
 	if env.Data[0].Price != "0.157384502084" {
 		t.Errorf("data[0].price = %q, want 0.157384502084", env.Data[0].Price)
+	}
+}
+
+// TestPriceBatch_StablecoinFallback exercises the X / fiat:USD →
+// X / <USD-pegged classic> retry inside fetchBatchRow. Mirrors the
+// /v1/price behaviour shipped in #1217 / tryStablecoinFiatProxy.
+//
+// Pre-2026-05-10 the batch path inlined only the Redis-VWAP and
+// fiat-cross-rate fallbacks, so an asset_id whose only price came
+// via the stablecoin-proxy chain (e.g. USDT-G… / USDC-G… on a
+// deployment with [aggregate].enable_stablecoin_fiat_proxy=false)
+// returned 200 from /v1/price but was silently dropped from the
+// batch envelope. R-005 in docs/review-2026-05-10.md.
+func TestPriceBatch_StablecoinFallback(t *testing.T) {
+	usdc, err := canonical.NewClassicAsset(
+		"USDC",
+		"GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN",
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	usdt, err := canonical.NewClassicAsset(
+		"USDT",
+		"GCQTGZQQ5G4PTM2GL7CDIFKUBIPEC52BROAQIAPW53XBRJVN6ZJVTG6V",
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t0 := time.Unix(1_770_000_000, 0).UTC()
+	reader := &stubPriceReader{
+		// USDT/fiat:USD missing — the literal pair never has rows on
+		// mainnet because no on-chain trades quote in fiat:USD.
+		// USDT/USDC present — provides the proxy value.
+		snapshots: map[string]v1.PriceSnapshot{
+			usdt.String() + "/" + usdc.String(): {
+				AssetID: usdt.String(), Quote: usdc.String(),
+				Price: "1.001", PriceType: "vwap", ObservedAt: t0,
+			},
+		},
+		sources: map[string][]string{
+			usdt.String() + "/" + usdc.String(): {"sdex"},
+		},
+	}
+	srv := v1.New(v1.Options{
+		Prices:            reader,
+		USDPeggedClassics: []canonical.Asset{usdc},
+	})
+	ts := startHTTPTest(t, srv.Handler())
+
+	resp := mustGet(t, ts.URL+"/v1/price/batch?asset_ids="+usdt.String()+"&quote=fiat:USD")
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d, want 200", resp.StatusCode)
+	}
+	var env struct {
+		Data []v1.PriceSnapshot `json:"data"`
+	}
+	mustDecode(t, resp, &env)
+	if len(env.Data) != 1 {
+		t.Fatalf("got %d entries, want 1 (stablecoin proxy should populate)", len(env.Data))
+	}
+	if env.Data[0].Price != "1.001" {
+		t.Errorf("data[0].price = %q, want 1.001", env.Data[0].Price)
+	}
+	if env.Data[0].AssetID != usdt.String() {
+		t.Errorf("data[0].asset_id = %q, want %q", env.Data[0].AssetID, usdt.String())
 	}
 }
 

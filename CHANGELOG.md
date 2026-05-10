@@ -15,6 +15,18 @@ against.
 
 ## [Unreleased]
 
+### Fixed
+
+- **`/v1/price/batch` no longer silently drops asset_ids whose price
+  comes via the stablecoin → fiat:USD proxy chain**. The batch path
+  inlined only the Redis-VWAP and fiat-cross-rate fallbacks, so
+  asset_ids that returned 200 from the single-asset `/v1/price`
+  (because they hit `tryStablecoinFiatProxy`) were missing from the
+  batch envelope without warning. `fetchBatchRow` now shares the
+  full three-layer `priceFallback` chain with `handlePrice`.
+  Regression test added in `price_batch_test.go`.
+  R-005 in `docs/review-2026-05-10.md`.
+
 ## [v0.5.0-rc.39] — 2026-05-10
 
 ### Fixed
