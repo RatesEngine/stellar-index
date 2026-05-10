@@ -115,6 +115,34 @@
 /lending/blend           /lending/   301
 /lending/blend/          /lending/   301
 
+# /incidents → status site. The explorer doesn't have an
+# /incidents listing page; per-incident postmortems live on
+# status.ratesengine.net under /incident/[slug]/. The status
+# site IS the incidents listing — bounce both /incidents and
+# bare /incident/<slug> to the right host so a typed URL or an
+# external share lands on the canonical page rather than the
+# explorer's catch-all 404. Found via 404-audit 2026-05-10.
+/incidents           https://status.ratesengine.net/             301
+/incidents/          https://status.ratesengine.net/             301
+/incident/*          https://status.ratesengine.net/incident/:splat  301
+
+# /converter → /convert/USD/XLM/. "Converter" (with the -er
+# suffix) is what users type from muscle memory (xe.com,
+# coinbase.com/converter, etc.). The actual route is /convert,
+# parameterised by [from]/[to]. Pre-redirect to a sensible default
+# pair so a typed URL lands on a working page instead of the 404.
+/converter           /convert/USD/XLM/   301
+/converter/          /convert/USD/XLM/   301
+/convert             /convert/USD/XLM/   301
+/convert/            /convert/USD/XLM/   301
+
+# /oracles/<name> → /oracles/. Per-oracle detail pages don't
+# exist yet (only the listing); a typed `/oracles/reflector` or
+# `/oracles/band` would 404. Bounce to the listing rather than
+# the catch-all 404 — the listing already has each oracle's
+# methodology + last-update inline.
+/oracles/*           /oracles/    301
+
 # Common-name 404s — natural URL guesses that should land on the
 # canonical category page rather than the 404 catch-all. Each was
 # returning 404 in the audit on 2026-05-10. The /coins → /assets
