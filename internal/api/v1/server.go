@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"log/slog"
+	"net"
 	"net/http"
 	"sync"
 	"time"
@@ -11,6 +12,8 @@ import (
 	"github.com/RatesEngine/rates-engine/internal/api/streaming"
 	"github.com/RatesEngine/rates-engine/internal/api/v1/middleware"
 	"github.com/RatesEngine/rates-engine/internal/auth"
+	"github.com/RatesEngine/rates-engine/internal/canonical"
+	"github.com/RatesEngine/rates-engine/internal/incidents"
 	"github.com/RatesEngine/rates-engine/internal/obs"
 	"github.com/RatesEngine/rates-engine/internal/version"
 )
@@ -59,10 +62,19 @@ type Server struct {
 	coins            CoinsReader
 	issuers          IssuersReader
 	cursors          CursorsReader
+	networkStats     NetworkStatsReader
+	sourcesStats     SourcesStatsReader
+	lending          LendingReader
+	currencies       CurrenciesReader
+	fxHistory        FXHistoryReader
+	sessionPeeker    SessionPeeker
+	incidents        []incidents.Incident
 	sep10            auth.SEP10Validator
 	cors             middleware.Middleware
 	auth             middleware.Middleware
 	rateLimit        middleware.Middleware
+	usageTracker     middleware.Middleware
+	usageReader      UsageReader
 	hub              *streaming.Hub
 	confidence       ConfidenceLooker
 	triangulated     TriangulatedPriceLooker
@@ -73,8 +85,26 @@ type Server struct {
 	dashboardAuth    DashboardAuthMounter
 	dashboardKeys    DashboardAuthMounter
 	sessionAuth      middleware.Middleware
-	mux              *http.ServeMux
-	started          time.Time
+	// sacWrappers is the operator-config map of Stellar-Asset-Contract
+	// C-strkey → "CODE-ISSUER" canonical asset key. Surfaced on
+	// /v1/sac-wrappers so the explorer can resolve raw Soroban
+	// contract addresses (which Soroswap/Phoenix/Aquarius/Comet
+	// emit as base/quote in their swap events) back to readable
+	// asset symbols. Nil means "operator hasn't configured the map"
+	// — the endpoint serves an empty object.
+	sacWrappers map[string]string
+	// usdPeggedClassics is the operator's allow-list of classic
+	// credit assets they declare as USD-pegged stablecoins.
+	// Mirrors trades.usd_pegged_classic_assets from config. Used
+	// at chart-fallback time: when /v1/chart is asked for X/fiat:USD
+	// and the literal pair has zero points (because we don't store
+	// synthetic XLM/USD in prices_1m — the proxy is applied at
+	// query time), the chart handler retries against X/<peg> for
+	// each entry until one returns data, marking the response
+	// `triangulated: true` for transparency.
+	usdPeggedClassics []canonical.Asset
+	mux               *http.ServeMux
+	started           time.Time
 }
 
 // DashboardAuthMounter is the interface main.go's
@@ -199,7 +229,7 @@ type Options struct {
 	// timescale.Store.GetChangeSummary, which reads the
 	// change_summary_5m hypertable populated by the changesummary
 	// worker (Phase 3). Powers every multi-window delta strip on
-	// the showcase. Nil makes the endpoint return 503.
+	// the explorer. Nil makes the endpoint return 503.
 	ChangeSummary ChangeSummaryReader
 
 	// Coins, when non-nil, backs GET /v1/coins. Production wiring
@@ -215,8 +245,44 @@ type Options struct {
 	// Cursors, when non-nil, backs GET /v1/diagnostics/cursors.
 	// Production wiring is timescale.Store directly (it implements
 	// ListCursors). Nil makes the endpoint return 503. Operator-
-	// facing diagnostic; powers the showcase /diagnostics page.
+	// facing diagnostic; powers the explorer /diagnostics page.
 	Cursors CursorsReader
+
+	// NetworkStats, when non-nil, backs GET /v1/network/stats —
+	// the consolidated home-page aggregate (24h volume, markets,
+	// assets indexed, latest ledger). Production wiring is
+	// timescale.Store directly. Nil makes the endpoint 503.
+	NetworkStats NetworkStatsReader
+
+	// SourcesStats, when non-nil, populates the per-source
+	// trade_count_24h field on /v1/sources?include=stats. Without
+	// it, the include flag is silently ignored and the response
+	// stays the all-static-registry projection.
+	SourcesStats SourcesStatsReader
+
+	// Lending, when non-nil, backs /v1/lending/pools (the per-Blend-
+	// pool summary listing). Leave nil and the handler serves an
+	// empty array — same degradation pattern as Markets.
+	Lending LendingReader
+
+	// Currencies, when non-nil, backs /v1/currencies — the world
+	// fiat-currency rates listing. Leave nil and the handler serves
+	// an empty currencies list ("warming up") with the source label
+	// still populated.
+	Currencies CurrenciesReader
+
+	// FXHistory, when non-nil, lets /v1/currencies/{ticker} surface
+	// long-form persisted history (fx_quotes hypertable) when the
+	// request carries `?range=1y` etc. Leave nil to keep the handler
+	// in 7d-only mode.
+	FXHistory FXHistoryReader
+
+	// SessionPeeker, when non-nil, lets handlers read the
+	// magic-link session bound to the request context. Used by
+	// /v1/account/me to surface user/account info for cookie-auth
+	// callers (the API-key path uses Subject; both can coexist on a
+	// request, in which case session takes precedence).
+	SessionPeeker SessionPeeker
 
 	// SEP10, when non-nil, backs GET /v1/auth/sep10/challenge and
 	// POST /v1/auth/sep10/token. Production wiring: an
@@ -246,6 +312,17 @@ type Options struct {
 	// but production wiring uses the by-subject form. See
 	// cmd/ratesengine-api/main.go for the canonical wire-up.
 	RateLimit middleware.Middleware
+
+	// UsageTracker, when non-nil, is inserted at the end of the
+	// middleware chain; fires per-request to record per-day
+	// counters that feed /v1/account/usage. Best-effort — never
+	// blocks a request. Pair with UsageReader to expose the data.
+	UsageTracker middleware.Middleware
+
+	// UsageReader, when non-nil, backs /v1/account/usage with
+	// real per-day counts. Without it the endpoint stays on its
+	// "empty list with locked wire shape" default.
+	UsageReader UsageReader
 
 	// Hub, when non-nil, backs the closed-bucket SSE endpoint
 	// (`/v1/price/stream`). Producers (typically the aggregator's
@@ -317,6 +394,26 @@ type Options struct {
 	// reachable.
 	DashboardKeys DashboardAuthMounter
 
+	// SACWrappers is the operator-config map of SAC C-strkey →
+	// "CODE-ISSUER" classic asset key. Backs /v1/sac-wrappers,
+	// the read-only resolution endpoint the explorer's AssetLabel
+	// joins client-side to render readable symbols for Soroban DEX
+	// pools (which use SAC contracts as base/quote at the wire). Nil
+	// or empty makes the endpoint return an empty map — the explorer
+	// degrades to showing the raw C-strkey.
+	SACWrappers map[string]string
+
+	// USDPeggedClassics is the operator's allow-list of classic
+	// credit assets they trust as 1:1 USD stablecoins. Same list
+	// fed to trades.usd_pegged_classic_assets — wire it through
+	// from the same TradesConfig field. Used by /v1/chart to
+	// fall back from a literal X/fiat:USD lookup (which has no
+	// rows in prices_1m — the proxy is computed at query time)
+	// to X/<peg> when the literal pair returns 0 points. Empty
+	// disables the fallback; the chart endpoint still serves the
+	// literal pair when one exists.
+	USDPeggedClassics []canonical.Asset
+
 	// SessionAuth, when non-nil, wraps every handler so a present
 	// dashboard session cookie populates a SessionContext on the
 	// request context. Anonymous + bearer-token requests pass
@@ -333,42 +430,62 @@ func New(opts Options) *Server {
 		logger = slog.Default()
 	}
 	s := &Server{
-		logger:           logger,
-		checks:           opts.ReadyChecks,
-		assets:           opts.Assets,
-		prices:           opts.Prices,
-		history:          opts.History,
-		markets:          opts.Markets,
-		oracle:           opts.Oracle,
-		meta:             opts.Meta,
-		accounts:         opts.Accounts,
-		signups:          opts.Signups,
-		stripe:           opts.Stripe,
-		divergence:       opts.Divergence,
-		freeze:           opts.Freeze,
-		supply:           opts.Supply,
-		volume:           opts.Volume,
-		change24h:        opts.Change24h,
-		changesum:        opts.ChangeSummary,
-		coins:            opts.Coins,
-		issuers:          opts.Issuers,
-		cursors:          opts.Cursors,
-		sep10:            opts.SEP10,
-		cors:             opts.CORS,
-		auth:             opts.Auth,
-		rateLimit:        opts.RateLimit,
-		hub:              opts.Hub,
-		confidence:       opts.Confidence,
-		triangulated:     opts.Triangulated,
-		cdnEnabled:       opts.CDNEnabled,
-		statusBackend:    opts.StatusBackend,
-		regionName:       valueOr(opts.RegionName, "unknown"),
-		regionDeployment: valueOr(opts.RegionDeployment, "production"),
-		dashboardAuth:    opts.DashboardAuth,
-		dashboardKeys:    opts.DashboardKeys,
-		sessionAuth:      opts.SessionAuth,
-		mux:              http.NewServeMux(),
-		started:          time.Now().UTC(),
+		logger:            logger,
+		checks:            opts.ReadyChecks,
+		assets:            opts.Assets,
+		prices:            opts.Prices,
+		history:           opts.History,
+		markets:           opts.Markets,
+		oracle:            opts.Oracle,
+		meta:              opts.Meta,
+		accounts:          opts.Accounts,
+		signups:           opts.Signups,
+		stripe:            opts.Stripe,
+		divergence:        opts.Divergence,
+		freeze:            opts.Freeze,
+		supply:            opts.Supply,
+		volume:            opts.Volume,
+		change24h:         opts.Change24h,
+		changesum:         opts.ChangeSummary,
+		coins:             opts.Coins,
+		issuers:           opts.Issuers,
+		cursors:           opts.Cursors,
+		networkStats:      opts.NetworkStats,
+		sourcesStats:      opts.SourcesStats,
+		lending:           opts.Lending,
+		currencies:        opts.Currencies,
+		fxHistory:         opts.FXHistory,
+		sessionPeeker:     opts.SessionPeeker,
+		sep10:             opts.SEP10,
+		cors:              opts.CORS,
+		auth:              opts.Auth,
+		rateLimit:         opts.RateLimit,
+		usageTracker:      opts.UsageTracker,
+		usageReader:       opts.UsageReader,
+		hub:               opts.Hub,
+		confidence:        opts.Confidence,
+		triangulated:      opts.Triangulated,
+		cdnEnabled:        opts.CDNEnabled,
+		statusBackend:     opts.StatusBackend,
+		regionName:        valueOr(opts.RegionName, "unknown"),
+		regionDeployment:  valueOr(opts.RegionDeployment, "production"),
+		dashboardAuth:     opts.DashboardAuth,
+		dashboardKeys:     opts.DashboardKeys,
+		sessionAuth:       opts.SessionAuth,
+		sacWrappers:       opts.SACWrappers,
+		usdPeggedClassics: opts.USDPeggedClassics,
+		mux:               http.NewServeMux(),
+		started:           time.Now().UTC(),
+	}
+	// Load + cache the embedded incident corpus once at startup;
+	// the data is small (a few markdown files) and ships with the
+	// binary, so re-parsing per-request is wasted work. New
+	// incident posts ship with a redeploy.
+	if loaded, err := incidents.Load(logger); err != nil {
+		logger.Warn("incidents: load failed; /v1/incidents returns empty",
+			"err", err)
+	} else {
+		s.incidents = loaded
 	}
 	s.mountRoutes()
 	return s
@@ -423,6 +540,13 @@ func (s *Server) Handler() http.Handler {
 		// CacheControl so the override gets the same Cache-Control
 		// directive a regular handler-side response would.
 		middleware.Envelope404,
+		// 308-redirect trailing-slash paths to their no-slash form
+		// (e.g. /v1/coins/native/ → /v1/coins/native). Every v1
+		// route is registered without a trailing slash; without this
+		// middleware, clients that auto-append (axios with `/v1/`
+		// baseURL, OpenAPI codegens, mistyped curl) hit a dead 404.
+		// 308 preserves method+body so POST/DELETE don't degrade.
+		middleware.TrailingSlashRedirect,
 	}
 	if s.cors != nil {
 		stack = append(stack, s.cors)
@@ -435,6 +559,13 @@ func (s *Server) Handler() http.Handler {
 	}
 	if s.rateLimit != nil {
 		stack = append(stack, s.rateLimit)
+	}
+	// Usage tracker runs INSIDE rate-limit so denied (429) requests
+	// don't pollute per-day counters — only allowed traffic counts
+	// against the user's billing window. Best-effort; failures
+	// log at debug and never block.
+	if s.usageTracker != nil {
+		stack = append(stack, s.usageTracker)
 	}
 	// Session resolver runs INSIDE rate-limit so the per-account
 	// rate limit could observe the dashboard subject in the future
@@ -460,14 +591,43 @@ func (s *Server) Handler() http.Handler {
 // for debugging / testing.
 func (s *Server) Uptime() time.Duration { return time.Since(s.started) }
 
+// loopbackOnly wraps `next` so it returns 404 for any request
+// whose RemoteAddr is not a loopback IP (127.0.0.0/8 or ::1).
+// Used for `/metrics` so the binary refuses to answer scrapes
+// from anything but localhost — defense-in-depth against a
+// misconfigured reverse proxy that forwards public traffic to
+// the binary's :3000 port.
+//
+// Returns 404 (not 403) deliberately — 403 would confirm the
+// route exists; 404 mirrors what a properly-configured Caddy
+// would emit and gives no signal to a scanner.
+func loopbackOnly(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		host, _, err := net.SplitHostPort(r.RemoteAddr)
+		if err != nil {
+			host = r.RemoteAddr // RemoteAddr without port (rare)
+		}
+		ip := net.ParseIP(host)
+		if ip == nil || !ip.IsLoopback() {
+			http.NotFound(w, r)
+			return
+		}
+		next.ServeHTTP(w, r)
+	})
+}
+
 func (s *Server) mountRoutes() {
 	// Health / meta endpoints. Deliberately NOT behind rate-limit
 	// middleware — infra (k8s probes, load balancers) hits these.
 	s.mux.HandleFunc("GET /v1/coins", s.handleCoins)
+	s.mux.HandleFunc("GET /v1/coins/{slug}", s.handleCoin)
 	s.mux.HandleFunc("GET /v1/issuers", s.handleIssuersList)
 	s.mux.HandleFunc("GET /v1/issuers/{g_strkey}", s.handleIssuer)
 	s.mux.HandleFunc("GET /v1/changes/{entity_type}/{id}", s.handleChangeSummary)
 	s.mux.HandleFunc("GET /v1/diagnostics/cursors", s.handleCursors)
+	s.mux.HandleFunc("GET /v1/incidents", s.handleIncidents)
+	s.mux.HandleFunc("GET /v1/incidents.atom", s.handleIncidentsAtom)
+	s.mux.HandleFunc("GET /v1/network/stats", s.handleNetworkStats)
 	s.mux.HandleFunc("GET /v1/healthz", s.handleHealthz)
 	s.mux.HandleFunc("GET /v1/readyz", s.handleReadyz)
 	s.mux.HandleFunc("GET /v1/version", s.handleVersion)
@@ -475,7 +635,19 @@ func (s *Server) mountRoutes() {
 
 	// Prometheus scrape endpoint. Deliberately unversioned — it's
 	// operator-facing, not part of the public API contract.
-	s.mux.Handle("GET /metrics", obs.Handler())
+	//
+	// Defense-in-depth: also gate at the Go layer on RemoteAddr
+	// being a loopback address. The intended posture is that Caddy
+	// 404s `/metrics` from public hosts (configs/caddy/Caddyfile.api)
+	// and only the local Prometheus scraper hits the binary
+	// directly via 127.0.0.1:3000. This guard catches the case where
+	// the Caddyfile config is stale OR the binary is exposed behind
+	// a different proxy that hasn't been audited. /metrics on a
+	// public host fingerprints the deployment (Go runtime stats,
+	// per-source counters, build info) — the cost of a missed
+	// public hit is non-trivial enough to justify two layers of
+	// blocking.
+	s.mux.Handle("GET /metrics", loopbackOnly(obs.Handler()))
 
 	// Asset catalogue.
 	s.mux.HandleFunc("GET /v1/assets", s.handleAssetList)
@@ -541,11 +713,20 @@ func (s *Server) mountRoutes() {
 	// Distinct trading pairs.
 	s.mux.HandleFunc("GET /v1/markets", s.handleMarkets)
 
+	// Per-pool listing — every (source, base, quote) tuple in the
+	// recency window. Backs the /dexes table on the explorer.
+	s.mux.HandleFunc("GET /v1/pools", s.handlePools)
+
 	// Single-pair activity summary.
 	s.mux.HandleFunc("GET /v1/pairs", s.handlePairs)
 
 	// Latest oracle readings per source for an asset.
 	s.mux.HandleFunc("GET /v1/oracle/latest", s.handleOracleLatest)
+
+	// Every active oracle stream — one row per (source, asset, quote)
+	// triple, latest observation in the trailing 7d window. Backs
+	// the explorer's /oracles "price streams" table.
+	s.mux.HandleFunc("GET /v1/oracle/streams", s.handleOracleStreams)
 
 	// SEP-40 passthrough surface — same data as /v1/price, reshaped
 	// to the single-quote SEP-40 contract that on-chain oracle
@@ -555,9 +736,23 @@ func (s *Server) mountRoutes() {
 	s.mux.HandleFunc("GET /v1/oracle/prices", s.handleOraclePrices)
 	s.mux.HandleFunc("GET /v1/oracle/x_last_price", s.handleOracleXLastPrice)
 
+	// Lending — Blend pools observed in the auction stream.
+	s.mux.HandleFunc("GET /v1/lending/pools", s.handleLendingPools)
+
+	// Currencies — world fiat rates vs USD (currency-api shim).
+	s.mux.HandleFunc("GET /v1/currencies", s.handleCurrencies)
+	s.mux.HandleFunc("GET /v1/currencies/{ticker}", s.handleCurrencyDetail)
+
 	// Source catalogue — every venue the aggregator knows about,
 	// with class + IncludeInVWAP metadata.
 	s.mux.HandleFunc("GET /v1/sources", s.handleSources)
+
+	// SAC wrapper resolution — operator-config map of
+	// Stellar-Asset-Contract C-strkey → "CODE-ISSUER" classic asset.
+	// Used by the explorer to render Soroban DEX pools (Soroswap /
+	// Phoenix / Aquarius / Comet) with readable asset symbols
+	// instead of raw C-strkeys.
+	s.mux.HandleFunc("GET /v1/sac-wrappers", s.handleSACWrappers)
 
 	// Account self-service. /me and /usage require an authenticated
 	// Subject; /keys (POST) additionally requires the AccountStore
@@ -567,6 +762,7 @@ func (s *Server) mountRoutes() {
 	s.mux.HandleFunc("GET /v1/account/usage", s.handleAccountUsage)
 	s.mux.HandleFunc("GET /v1/account/keys", s.handleAccountKeysList)
 	s.mux.HandleFunc("POST /v1/account/keys", s.handleAccountKeysCreate)
+	s.mux.HandleFunc("DELETE /v1/account/keys/{keyID}", s.handleAccountKeysRevoke)
 	s.mux.HandleFunc("POST /v1/signup", s.handleSignup)
 	s.mux.HandleFunc("POST /v1/webhooks/stripe", s.handleStripeWebhook)
 
@@ -603,6 +799,25 @@ func (s *Server) mountRoutes() {
 	// default text/plain 404 / 405 responses into RFC 9457
 	// problem+json.
 	s.mux.HandleFunc("GET /{$}", s.handleRoot)
+
+	// /robots.txt — disallow crawler indexing of the API hostname.
+	// The endpoints are JSON, not user-facing HTML; crawlers
+	// hitting them waste their budget on payloads that won't rank
+	// for any meaningful search query. The companion explorer site
+	// (ratesengine.net) and docs site (docs.ratesengine.net) are
+	// where indexable content lives, with their own robots.txt
+	// directives. Without this handler Cloudflare's auto-managed
+	// robots.txt is served on GET but the API origin returns 404
+	// on HEAD — flagging the inconsistency is what surfaced this
+	// gap in the 2026-05-09 audit.
+	s.mux.HandleFunc("GET /robots.txt", s.handleRobotsTxt)
+
+	// /.well-known/security.txt — RFC 9116 disclosure metadata.
+	// Researchers scanning the API origin for vulnerabilities find
+	// the disclosure email here without having to traverse to the
+	// explorer subdomain. The Canonical: directive points at the
+	// explorer's copy so the two stay aligned without drift.
+	s.mux.HandleFunc("GET /.well-known/security.txt", s.handleSecurityTxt)
 }
 
 // ─── Handlers ─────────────────────────────────────────────────────
@@ -710,6 +925,31 @@ func (s *Server) handleVersion(w http.ResponseWriter, _ *http.Request) {
 	}, Flags{})
 }
 
+// handleSecurityTxt serves /.well-known/security.txt per RFC 9116.
+//
+// The Canonical: URL points at the explorer copy
+// (ratesengine.net/.well-known/security.txt) so the two origins
+// don't drift; both the explorer and API surfaces deliberately
+// share the same disclosure email + policy URL. Expires is one
+// year out — handler runs at request time so it always returns a
+// valid future date as long as the binary is up.
+func (s *Server) handleSecurityTxt(w http.ResponseWriter, _ *http.Request) {
+	expires := time.Now().UTC().AddDate(1, 0, 0).Format(time.RFC3339)
+	body := "# Rates Engine — security.txt (api origin)\n" +
+		"# RFC-9116. Mirrors ratesengine.net/.well-known/security.txt;\n" +
+		"# the Canonical: URL is the authoritative copy.\n" +
+		"\n" +
+		"Contact: mailto:security@ratesengine.net\n" +
+		"Expires: " + expires + "\n" +
+		"Preferred-Languages: en\n" +
+		"Canonical: https://ratesengine.net/.well-known/security.txt\n" +
+		"Policy: https://github.com/RatesEngine/rates-engine/blob/main/SECURITY.md\n" +
+		"Acknowledgments: https://github.com/RatesEngine/rates-engine/security/advisories\n"
+	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+	w.Header().Set("Cache-Control", "public, max-age=86400")
+	_, _ = w.Write([]byte(body))
+}
+
 // handleRoot welcomes accidental visitors at GET /. Returns a small
 // envelope with the binary version + a pointer at the docs; not part
 // of the public API surface (no OpenAPI entry), strictly a "you've
@@ -721,4 +961,27 @@ func (s *Server) handleRoot(w http.ResponseWriter, _ *http.Request) {
 		"docs":    "https://docs.ratesengine.net",
 		"openapi": "https://docs.ratesengine.net/openapi.yaml",
 	}, Flags{})
+}
+
+// handleRobotsTxt serves /robots.txt. The API origin holds JSON
+// endpoints not meant for crawler indexing — point search engines
+// at the companion docs + explorer subdomains instead. The
+// `Sitemap:` directive lets a crawler that ignored the Disallow
+// (or has a per-bot exception) at least crawl what's worth
+// indexing.
+func (s *Server) handleRobotsTxt(w http.ResponseWriter, _ *http.Request) {
+	const body = `# api.ratesengine.net — JSON API, not for human reading.
+# Indexable content lives on the companion subdomains:
+#   - https://ratesengine.net          — explorer + market UI
+#   - https://docs.ratesengine.net     — API reference
+#   - https://status.ratesengine.net   — status + incident postmortems
+
+User-agent: *
+Disallow: /
+
+Sitemap: https://ratesengine.net/sitemap.xml
+`
+	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+	w.Header().Set("Cache-Control", "public, max-age=86400")
+	_, _ = w.Write([]byte(body))
 }

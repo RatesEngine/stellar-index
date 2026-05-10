@@ -1,0 +1,104 @@
+---
+# Manual-trigger Cloudflare Pages deploy for the explorer.
+#
+# **The recommended publish path is Cloudflare's git integration**
+# (see docs/operations/explorer-deployment.md §Recommended). It
+# auto-deploys on every push to main without consuming GitHub
+# Actions minutes. This workflow exists for two cases:
+#
+#   1. **Hotfix** — push a fixed version of an arbitrary commit
+#      (workflow_dispatch supports `ref:` selection).
+#   2. **CF git integration paused** — fall back to publishing
+#      from CI when the Pages project's git connection is
+#      disabled (e.g. mid-rotation of the CF GitHub app token).
+#
+# Only fires on workflow_dispatch — never on push. Operators
+# trigger via the Actions tab or:
+#
+#     gh workflow run explorer-deploy.yml --ref main \
+#         -f environment=production
+#
+# Required secrets (set once in repo settings):
+#   - CLOUDFLARE_API_TOKEN  — token with Pages:Edit on the
+#                             ratesengine-showcase project (the
+#                             rename to ratesengine-explorer is
+#                             pending — task #23; the existing
+#                             project still serves the apex domain)
+#   - CLOUDFLARE_ACCOUNT_ID — the CF account UUID
+
+name: explorer-deploy
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: "production or preview"
+        required: true
+        default: "production"
+        type: choice
+        options:
+          - production
+          - preview
+      api_base_url:
+        description: "NEXT_PUBLIC_API_BASE_URL bake-in (default https://api.ratesengine.net)"
+        required: false
+        default: "https://api.ratesengine.net"
+
+permissions:
+  contents: read
+  deployments: write
+
+# One deploy at a time. Mid-deploy cancellation is fine — the
+# new run takes over before traffic shifts.
+concurrency:
+  group: explorer-deploy-${{ github.event.inputs.environment }}
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: explorer-${{ github.event.inputs.environment }}
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10
+          run_install: false
+
+      - name: Set up Node
+        uses: actions/setup-node@v6
+        with:
+          node-version: "22"
+          cache: pnpm
+          cache-dependency-path: web/explorer/pnpm-lock.yaml
+
+      - name: Install dependencies
+        working-directory: web/explorer
+        run: pnpm install --frozen-lockfile
+
+      - name: Build
+        working-directory: web/explorer
+        env:
+          NEXT_PUBLIC_API_BASE_URL: ${{ github.event.inputs.api_base_url }}
+        run: pnpm build
+
+      - name: Verify build artefact
+        working-directory: web/explorer
+        run: |
+          test -d out || { echo "out/ missing — Next.js build produced no static export"; exit 1; }
+          test -f out/index.html || { echo "out/index.html missing — sitemap or routing broken"; exit 1; }
+          ls -la out/ | head
+
+      - name: Deploy to Cloudflare Pages
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          workingDirectory: web/explorer
+          command: >-
+            pages deploy out
+            --project-name ratesengine-showcase
+            --branch ${{ github.event.inputs.environment == 'production' && 'main' || github.ref_name }}

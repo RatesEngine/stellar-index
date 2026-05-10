@@ -10,6 +10,7 @@ import (
 
 	v1 "github.com/RatesEngine/rates-engine/internal/api/v1"
 	"github.com/RatesEngine/rates-engine/internal/canonical"
+	"github.com/RatesEngine/rates-engine/internal/storage/timescale"
 )
 
 type stubMarketsReader struct {
@@ -23,11 +24,47 @@ type stubMarketsReader struct {
 	pairErr   error
 }
 
-func (r *stubMarketsReader) DistinctPairs(_ context.Context, cursor string, limit int) ([]v1.Market, string, error) {
+func (r *stubMarketsReader) DistinctPairsExt(_ context.Context, cursor string, limit int, _ timescale.MarketsOrder) ([]v1.Market, string, error) {
 	if r.err != nil {
 		return nil, "", r.err
 	}
 	return r.pairs, r.nextCur, nil
+}
+
+func (r *stubMarketsReader) SourceMarkets(_ context.Context, _, _ string, _ int, _ timescale.MarketsOrder) ([]v1.Market, string, error) {
+	if r.err != nil {
+		return nil, "", r.err
+	}
+	return r.pairs, r.nextCur, nil
+}
+
+func (r *stubMarketsReader) AssetMarkets(_ context.Context, _, _ string, _ int, _ timescale.MarketsOrder) ([]v1.Market, string, error) {
+	if r.err != nil {
+		return nil, "", r.err
+	}
+	return r.pairs, r.nextCur, nil
+}
+
+func (r *stubMarketsReader) AllPools(_ context.Context, _ timescale.PoolsFilter, _ string, _ int, _ timescale.MarketsOrder) ([]v1.Pool, string, error) {
+	if r.err != nil {
+		return nil, "", r.err
+	}
+	out := make([]v1.Pool, len(r.pairs))
+	for i, m := range r.pairs {
+		out[i] = v1.Pool{
+			Source:        "test",
+			Base:          m.Base,
+			Quote:         m.Quote,
+			LastTradeAt:   m.LastTradeAt,
+			TradeCount24h: m.TradeCount24h,
+			Volume24hUSD:  m.Volume24hUSD,
+		}
+	}
+	return out, r.nextCur, nil
+}
+
+func (r *stubMarketsReader) GetPairsVolumeHistory24hBatch(_ context.Context, _ [][2]string) (map[string][]timescale.PairVolumePoint, error) {
+	return map[string][]timescale.PairVolumePoint{}, nil
 }
 
 func (r *stubMarketsReader) PairMarket(_ context.Context, _ canonical.Asset, _ canonical.Asset) (v1.Market, bool, error) {
@@ -129,5 +166,150 @@ func TestMarkets_ReaderError500(t *testing.T) {
 	resp := mustGet(t, ts.URL+"/v1/markets")
 	if resp.StatusCode != http.StatusInternalServerError {
 		t.Errorf("status = %d, want 500", resp.StatusCode)
+	}
+}
+
+// TestMarkets_UnknownSource400 — `?source=` with a name that isn't
+// in the in-memory `external.Registry` returns 400 instead of an
+// empty page. The silent-empty-page anti-pattern (a typo looking
+// identical to "this source has no trades") sends callers chasing
+// nonexistent data; failing fast is the contract on every other
+// listing handler in this package.
+func TestMarkets_UnknownSource400(t *testing.T) {
+	srv := v1.New(v1.Options{Markets: &stubMarketsReader{}})
+	ts := httpTestServer(t, srv)
+
+	resp := mustGet(t, ts.URL+"/v1/markets?source=fake-source")
+	if resp.StatusCode != http.StatusBadRequest {
+		t.Fatalf("status = %d, want 400", resp.StatusCode)
+	}
+	var p v1.Problem
+	mustDecode(t, resp, &p)
+	if p.Type != "https://api.ratesengine.net/errors/unknown-source" {
+		t.Errorf("Type = %q", p.Type)
+	}
+}
+
+// TestMarkets_KnownSource200 — guards the inverse: a registered
+// source name passes the validation gate. We can't depend on a
+// specific name surviving registry refactors, so iterate any-one
+// from the known set ("binance" is registered for the lifetime of
+// this codebase per docs/discovery/external-refs/cex-feeds.md).
+func TestMarkets_KnownSource200(t *testing.T) {
+	srv := v1.New(v1.Options{Markets: &stubMarketsReader{}})
+	ts := httpTestServer(t, srv)
+
+	resp := mustGet(t, ts.URL+"/v1/markets?source=binance")
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d, want 200", resp.StatusCode)
+	}
+}
+
+// TestMarkets_AssetFilter_HappyPath pins the `?asset=` query param
+// dispatching to AssetMarkets. The stub returns the same fixture
+// rows for every reader method, so we assert a 200 + non-empty body
+// rather than per-asset filtering (which is the storage layer's job).
+func TestMarkets_AssetFilter_HappyPath(t *testing.T) {
+	srv := v1.New(v1.Options{Markets: &stubMarketsReader{
+		pairs: []v1.Market{{Base: "USDC-GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN", Quote: "native"}},
+	}})
+	ts := httpTestServer(t, srv)
+
+	resp := mustGet(t, ts.URL+"/v1/markets?asset=native")
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d, want 200", resp.StatusCode)
+	}
+	var env struct {
+		Data []v1.Market `json:"data"`
+	}
+	mustDecode(t, resp, &env)
+	if len(env.Data) != 1 {
+		t.Errorf("want 1 row, got %d", len(env.Data))
+	}
+}
+
+// TestMarkets_InvalidAsset400 — unparseable asset_id values 400
+// rather than silently returning empty. Mirrors the
+// silent-empty-page guard family applied to `?source=`.
+func TestMarkets_InvalidAsset400(t *testing.T) {
+	srv := v1.New(v1.Options{Markets: &stubMarketsReader{}})
+	ts := httpTestServer(t, srv)
+
+	// "USDC" alone (no issuer) is not a canonical asset_id.
+	resp := mustGet(t, ts.URL+"/v1/markets?asset=USDC")
+	if resp.StatusCode != http.StatusBadRequest {
+		t.Fatalf("status = %d, want 400", resp.StatusCode)
+	}
+	var p v1.Problem
+	mustDecode(t, resp, &p)
+	if p.Type != "https://api.ratesengine.net/errors/invalid-asset-id" {
+		t.Errorf("Type = %q", p.Type)
+	}
+}
+
+// TestMarkets_SourceAndAssetTogether400 — combining the two
+// filters has no defined semantics on the storage side; reject up
+// front rather than silently picking one.
+func TestMarkets_SourceAndAssetTogether400(t *testing.T) {
+	srv := v1.New(v1.Options{Markets: &stubMarketsReader{}})
+	ts := httpTestServer(t, srv)
+
+	resp := mustGet(t, ts.URL+"/v1/markets?source=binance&asset=native")
+	if resp.StatusCode != http.StatusBadRequest {
+		t.Fatalf("status = %d, want 400", resp.StatusCode)
+	}
+	var p v1.Problem
+	mustDecode(t, resp, &p)
+	if p.Type != "https://api.ratesengine.net/errors/conflicting-filters" {
+		t.Errorf("Type = %q", p.Type)
+	}
+}
+
+// TestPools_AssetFilter_HappyPath — `/v1/pools?asset=<id>` is the
+// OR-shape filter (base = X OR quote = X) that lets asset-detail
+// surfaces fetch every pool touching the asset in one request.
+func TestPools_AssetFilter_HappyPath(t *testing.T) {
+	srv := v1.New(v1.Options{Markets: &stubMarketsReader{
+		pairs: []v1.Market{{Base: "native", Quote: "USDC-GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN"}},
+	}})
+	ts := httpTestServer(t, srv)
+
+	resp := mustGet(t, ts.URL+"/v1/pools?asset=native")
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d, want 200", resp.StatusCode)
+	}
+}
+
+// TestPools_InvalidAsset400 — silent-empty-page guard family.
+func TestPools_InvalidAsset400(t *testing.T) {
+	srv := v1.New(v1.Options{Markets: &stubMarketsReader{}})
+	ts := httpTestServer(t, srv)
+
+	resp := mustGet(t, ts.URL+"/v1/pools?asset=USDC")
+	if resp.StatusCode != http.StatusBadRequest {
+		t.Fatalf("status = %d, want 400", resp.StatusCode)
+	}
+	var p v1.Problem
+	mustDecode(t, resp, &p)
+	if p.Type != "https://api.ratesengine.net/errors/invalid-asset-id" {
+		t.Errorf("Type = %q", p.Type)
+	}
+}
+
+// TestPools_AssetAndBaseTogether400 — asset (OR) + base/quote
+// (AND) is rejected; combining the two filter shapes has no
+// well-defined semantics.
+func TestPools_AssetAndBaseTogether400(t *testing.T) {
+	srv := v1.New(v1.Options{Markets: &stubMarketsReader{}})
+	ts := httpTestServer(t, srv)
+
+	resp := mustGet(t, ts.URL+"/v1/pools?asset=native&base=native")
+	if resp.StatusCode != http.StatusBadRequest {
+		t.Fatalf("status = %d, want 400", resp.StatusCode)
+	}
+	var p v1.Problem
+	mustDecode(t, resp, &p)
+	if p.Type != "https://api.ratesengine.net/errors/conflicting-filters" {
+		t.Errorf("Type = %q", p.Type)
 	}
 }

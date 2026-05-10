@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"math/big"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
@@ -280,14 +281,8 @@ func (s *Server) handlePrice(w http.ResponseWriter, r *http.Request) {
 	snapshot, sources, stale, err := reader.LatestPrice(r.Context(), asset, quote)
 	triangulated := false
 	if errors.Is(err, ErrPriceNotFound) {
-		// Timescale miss — fall through to the triangulation cache
-		// if a TriangulatedPriceLooker is wired (per F-0014). When
-		// the aggregator's triangulation worker has cached an
-		// implied value for this pair, serve that with
-		// `flags.triangulated=true`. When no looker is wired or no
-		// triangulated value is cached, the original 404 stands.
 		var ok bool
-		snapshot, sources, triangulated, ok = s.tryRedisVWAPFallback(r.Context(), asset, quote)
+		snapshot, sources, triangulated, ok = s.priceFallback(r.Context(), asset, quote)
 		stale = false
 		if !ok {
 			writeProblem(w, r,
@@ -442,6 +437,166 @@ func (s *Server) tryRedisVWAPFallback(ctx context.Context, asset, quote canonica
 		WindowSeconds: int(triangulationLookupWindow.Seconds()),
 	}
 	return snap, []string{}, isTriangulated, true
+}
+
+// priceFallback runs the post-Timescale-miss fallback chain for
+// /v1/price. Three layers, tried in order:
+//
+//  1. Redis VWAP cache (covers triangulated chains + stablecoin
+//     proxy rewrites that the aggregator has cached; provenance
+//     marker controls flags.triangulated).
+//  2. Read-time stablecoin → fiat:USD rewrite against the operator-
+//     declared classic USD-pegs (catches the case where the
+//     aggregator's [aggregate].enable_stablecoin_fiat_proxy isn't
+//     enabled but trades.usd_pegged_classic_assets is — the same
+//     fix the chart handler ships per #98 / PR #1015).
+//  3. Fiat-vs-fiat cross-rate from the forex snapshot
+//     (always returns triangulated=true since the value is derived).
+//
+// Returns ok=false when every layer misses; the caller turns that
+// into a 404. Extracted from handlePrice to keep that handler
+// under the gocognit cap.
+func (s *Server) priceFallback(ctx context.Context, asset, quote canonical.Asset) (PriceSnapshot, []string, bool, bool) {
+	if snap, srcs, triangulated, ok := s.tryRedisVWAPFallback(ctx, asset, quote); ok {
+		return snap, srcs, triangulated, true
+	}
+	if snap, srcs, ok := s.tryStablecoinFiatProxy(ctx, asset, quote); ok {
+		return snap, srcs, true, true
+	}
+	if snap, srcs, ok := s.tryFiatCrossRate(asset, quote); ok {
+		return snap, srcs, true, true
+	}
+	return PriceSnapshot{}, nil, false, false
+}
+
+// tryStablecoinFiatProxy handles the X / fiat:USD → X / <classic-USD-peg>
+// rewrite at handler read time, as a safety net for deployments
+// where the aggregator's [aggregate].enable_stablecoin_fiat_proxy
+// is not enabled. The literal X/fiat:USD pair never has rows in
+// prices_1m on Stellar mainnet because no on-chain trades quote in
+// fiat:USD — every USD-flavoured trade quotes in classic USDC
+// (USDC-GA5Z…) or one of the other operator-declared pegs.
+//
+// Walks the operator's [trades].usd_pegged_classic_assets allow-list
+// in priority order; first peg whose pair has a non-stale Timescale
+// row wins. Same shape as chart.go's chartStablecoinFallback (#98 /
+// PR #1015) — without it, /v1/price?asset=native&quote=fiat:USD 404s
+// out-of-the-box on every fresh deployment, which is the most-basic
+// possible query against the canonical price endpoint.
+//
+// Returns ok=false when:
+//   - quote is not fiat:USD,
+//   - usdPeggedClassics is empty (operator hasn't opted in),
+//   - every peg's pair returns ErrPriceNotFound or an error.
+//
+// Sets flags.triangulated=true on the returned snapshot — the served
+// price is the X/<peg> VWAP rounded by the implicit assumption peg ≈ $1.
+// SingleSource is whatever the underlying X/<peg> lookup carried.
+func (s *Server) tryStablecoinFiatProxy(ctx context.Context, asset, quote canonical.Asset) (PriceSnapshot, []string, bool) {
+	if quote.Type != canonical.AssetFiat || quote.Code != "USD" {
+		return PriceSnapshot{}, nil, false
+	}
+	if len(s.usdPeggedClassics) == 0 || s.prices == nil {
+		return PriceSnapshot{}, nil, false
+	}
+	for _, peg := range s.usdPeggedClassics {
+		if peg.Equal(asset) {
+			continue
+		}
+		snap, srcs, _, err := s.prices.LatestPrice(ctx, asset, peg)
+		if err != nil {
+			// ErrPriceNotFound is the common case (peg not active for
+			// this asset); any other error gets the same treatment as
+			// the chart fallback — silent skip, try the next peg.
+			continue
+		}
+		// Rewrite the snapshot's Quote field so the wire response
+		// reflects what the user asked for, not the proxy peg.
+		snap.Quote = quote.String()
+		return snap, srcs, true
+	}
+	return PriceSnapshot{}, nil, false
+}
+
+// tryFiatCrossRate synthesises a fiat-vs-fiat price by cross-rating
+// through the wired CurrenciesReader's USD-base snapshot. Used as a
+// last-resort fallback on /v1/price after both the Timescale read
+// and the Redis VWAP cache miss — neither has fiat-vs-fiat trade
+// data because fiat conversions don't have on-chain trade pairs.
+//
+// Algebra:
+//
+//	rate_usd[X] = "1 USD = N units of X" (forex worker convention)
+//	1 X in Y    = (1/rate_usd[X]) × rate_usd[Y]
+//	            = rate_usd[Y] / rate_usd[X]
+//
+// Special-cases the common (asset=fiat:X, quote=fiat:USD) form so
+// /v1/price?asset=fiat:EUR&quote=fiat:USD returns
+// 1/rate_usd[EUR] without spuriously looking up rate_usd[USD] (=1
+// by definition).
+//
+// Returns ok=false when:
+//   - Either side isn't a fiat asset.
+//   - The currencies reader isn't wired or the cache hasn't warmed.
+//   - One ticker isn't in the snapshot (rate_usd unknown).
+//   - rate_usd[X] is zero (would divide by zero).
+//
+// PriceType is "vwap" because the upstream forex feed is itself a
+// volume-weighted average across the upstream's source set; sources
+// is `["massive"]` to credit the upstream feed.
+func (s *Server) tryFiatCrossRate(asset, quote canonical.Asset) (PriceSnapshot, []string, bool) {
+	if asset.Type != canonical.AssetFiat || quote.Type != canonical.AssetFiat {
+		return PriceSnapshot{}, nil, false
+	}
+	if s.currencies == nil {
+		return PriceSnapshot{}, nil, false
+	}
+	snap := s.currencies.Latest()
+	if snap == nil {
+		return PriceSnapshot{}, nil, false
+	}
+
+	// Build a lookup from ticker → rate_usd. The slice is small
+	// (~110 entries) and called rarely (last-resort fallback), so
+	// linear scan is fine; the alternative — a per-request map
+	// allocation — would not pay off.
+	var rateAsset, rateQuote float64
+	var foundAsset, foundQuote bool
+	for _, c := range snap.Currencies {
+		if c.Ticker == asset.Code {
+			rateAsset = c.RateUSD
+			foundAsset = true
+		}
+		if c.Ticker == quote.Code {
+			rateQuote = c.RateUSD
+			foundQuote = true
+		}
+		if foundAsset && foundQuote {
+			break
+		}
+	}
+	if !foundAsset || rateAsset <= 0 {
+		return PriceSnapshot{}, nil, false
+	}
+	// rate_usd[USD] is implicitly 1 — handle that without requiring
+	// the snapshot to carry an explicit USD entry. foundQuote is
+	// not read after this branch; the implicit-USD path just
+	// supplies rateQuote.
+	if !foundQuote {
+		if quote.Code != "USD" {
+			return PriceSnapshot{}, nil, false
+		}
+		rateQuote = 1
+	}
+	cross := rateQuote / rateAsset
+	priceStr := strconv.FormatFloat(cross, 'f', -1, 64)
+	return PriceSnapshot{
+		AssetID:    asset.String(),
+		Quote:      quote.String(),
+		Price:      priceStr,
+		PriceType:  "vwap",
+		ObservedAt: snap.PublishedAt,
+	}, []string{"massive"}, true
 }
 
 // attachConfidence consults the wired ConfidenceLooker (when set)
@@ -686,6 +841,14 @@ func (s *Server) fetchBatchRow(w http.ResponseWriter, r *http.Request, raw strin
 		// even though the single-asset /v1/price serves it.
 		if cs, csrc, _, ok := s.tryRedisVWAPFallback(r.Context(), asset, quote); ok {
 			return batchRowOutcome{snap: cs, sources: csrc, asset: asset}
+		}
+		// Same fiat-vs-fiat cross-rate fallback as /v1/price.
+		// Skipping a fiat row in batch output — when the same
+		// query against /v1/price would have returned 200 — was
+		// silently confusing for batch consumers that include
+		// fiat tickers in their asset_ids list.
+		if fs, fsrc, ok := s.tryFiatCrossRate(asset, quote); ok {
+			return batchRowOutcome{snap: fs, sources: fsrc, asset: asset}
 		}
 		return batchRowOutcome{skip: true} // omit, do not 404 the batch
 	}

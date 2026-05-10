@@ -14,7 +14,7 @@ import (
 
 // FreezeEventSink is the timescale-backed implementation of
 // freeze.EventSink. Records every clear→firing transition into the
-// `freeze_events` hypertable so the showcase /anomalies timeline
+// `freeze_events` hypertable so the explorer /anomalies timeline
 // has durable history.
 //
 // Idempotent on the (asset, quote) currently-firing row: if a row

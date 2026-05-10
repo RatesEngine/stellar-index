@@ -2,8 +2,23 @@ name: ci
 
 on:
   pull_request:
-  push:
-    branches: [main]
+    # Skip docs-only PRs — a CHANGELOG bump or markdown edit
+    # doesn't need to spin up 11 runners. Code-touching PRs
+    # still hit the full matrix via the doc-code consistency job.
+    paths-ignore:
+      - 'CHANGELOG.md'
+      - '**.md'
+      - 'docs/**'
+      - 'LICENSE'
+      - '.github/ISSUE_TEMPLATE/**'
+      - '.github/PULL_REQUEST_TEMPLATE.md'
+  # Push-to-main no longer fires CI: PRs are squash-merged so
+  # the merge commit is byte-identical to what the PR run already
+  # validated. Pre-cost-cut this doubled CI burn for zero added
+  # safety. If post-merge regression detection becomes needed
+  # later (e.g. main-only integration smoke), restore the trigger:
+  #   push:
+  #     branches: [main]
 
 env:
   GOFUMPT_VERSION: v0.8.0
@@ -201,25 +216,25 @@ jobs:
       - name: Generated API reference is in sync
         run: |
           ./scripts/dev/docs-api.sh
-          if ! git diff --exit-code -- docs/reference/api/index.html docs/reference/api/README.md; then
+          if ! git diff --exit-code -- docs/reference/api/index.html docs/reference/api/README.md docs/reference/api/rates-engine.v1.yaml; then
             echo "::error::Generated API reference is stale. Run 'make docs-api' locally and commit the result."
             exit 1
           fi
 
   # ────────────────────────────────────────────────────────────────
   # Showcase site — typecheck, lint, build the Next.js app at
-  # web/showcase/. Static-export build is fast (~30s).
+  # web/explorer/. Static-export build is fast (~30s).
   # Also verifies the OpenAPI → TypeScript codegen is in sync; if
   # the OpenAPI spec changed and someone forgot to regen the types,
   # this fails with a clear error.
   # ────────────────────────────────────────────────────────────────
 
-  web-showcase:
-    name: web/showcase
+  web-explorer:
+    name: web/explorer
     runs-on: ubuntu-latest
     defaults:
       run:
-        working-directory: web/showcase
+        working-directory: web/explorer
     steps:
       - uses: actions/checkout@v6
       - uses: pnpm/action-setup@v4
@@ -229,7 +244,7 @@ jobs:
         with:
           node-version: "20"
           cache: "pnpm"
-          cache-dependency-path: web/showcase/pnpm-lock.yaml
+          cache-dependency-path: web/explorer/pnpm-lock.yaml
       - run: pnpm install --frozen-lockfile
       - name: Generated API types are in sync
         run: |
@@ -247,6 +262,16 @@ jobs:
       # output: 'export' pipeline. The build-time API fetch falls
       # through to the seed-only path when CI can't reach the
       # production API — that's expected and not a CI failure.
+      #
+      # We deliberately run the build ONLY against the CI stub URL.
+      # A second build against the real API used to live here, but
+      # Next.js's per-page-render 60s worker timeout is too tight
+      # for /assets/native — XLM has 5,553 markets and the build
+      # serialises the response into the static HTML, which trips
+      # the timeout on busy build hosts. CF Pages does the real-API
+      # build at deploy time with its own retry policy, so the CI
+      # second-pass was redundant. Keep the stub-URL build — it
+      # exercises every code path that doesn't depend on API shape.
       - run: pnpm build
         env:
           # Force a deterministic api-base URL so the build doesn't
@@ -254,10 +279,9 @@ jobs:
           # generateStaticParams kicks in when the fetch fails, so
           # the build still succeeds with seed-only slugs.
           NEXT_PUBLIC_API_BASE_URL: http://api.ci-stub.invalid
-      - run: pnpm build
 
   # ────────────────────────────────────────────────────────────────
-  # Customer dashboard — same shape as web-showcase. Static-export
+  # Customer dashboard — same shape as web-explorer. Static-export
   # Next.js app at web/dashboard/ deployed to app.ratesengine.net.
   # ────────────────────────────────────────────────────────────────
   web-dashboard:
@@ -276,6 +300,33 @@ jobs:
           node-version: "20"
           cache: "pnpm"
           cache-dependency-path: web/dashboard/pnpm-lock.yaml
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm typecheck
+      - run: pnpm lint
+      - run: pnpm build
+        env:
+          NEXT_PUBLIC_API_BASE_URL: http://api.ci-stub.invalid
+
+  # ────────────────────────────────────────────────────────────────
+  # Status page — public-facing status.ratesengine.net. Replaces
+  # the cstate Hugo build with a custom Next.js static-export.
+  # ────────────────────────────────────────────────────────────────
+  web-status:
+    name: web/status
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: web/status
+    steps:
+      - uses: actions/checkout@v6
+      - uses: pnpm/action-setup@v4
+        with:
+          version: "10"
+      - uses: actions/setup-node@v6
+        with:
+          node-version: "20"
+          cache: "pnpm"
+          cache-dependency-path: web/status/pnpm-lock.yaml
       - run: pnpm install --frozen-lockfile
       - run: pnpm typecheck
       - run: pnpm lint

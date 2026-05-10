@@ -2,6 +2,7 @@ package coinbase
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"math/big"
 	"strings"
@@ -62,6 +63,13 @@ func parseFrame(raw []byte, pairMap map[string]canonical.Pair) (canonical.Trade,
 			return canonical.Trade{}, false, fmt.Errorf("%w: match: %w", ErrMalformedFrame, err)
 		}
 		tr, err := buildTrade(m, pairMap)
+		if errors.Is(err, ErrDustTrade) {
+			// Real coinbase trade below our integer-scale precision
+			// floor (e.g. 1e-8 XLM). The canonical validator would
+			// reject it; report as "no trade emitted" so the streamer
+			// silently advances to the next frame.
+			return canonical.Trade{}, false, nil
+		}
 		if err != nil {
 			return canonical.Trade{}, false, err
 		}
@@ -97,6 +105,15 @@ func buildTrade(m matchPayload, pairMap map[string]canonical.Pair) (canonical.Tr
 		return canonical.Trade{}, fmt.Errorf("%w: price %q: %w", ErrMalformedFrame, m.Price, err)
 	}
 	quote := new(big.Int).Quo(new(big.Int).Mul(base, price), pow10(externalAmountDecimals))
+	// Dust filter — when base × price floor-divides to 0 (e.g. a
+	// 1e-8 XLM lot at $0.16, or any size where size_float ×
+	// price_float < 1e-8 USD), the canonical validator would
+	// reject the row with "quote_amount must be positive". These
+	// are real coinbase trades, just below our integer-scale
+	// precision floor; drop silently.
+	if quote.Sign() == 0 {
+		return canonical.Trade{}, ErrDustTrade
+	}
 
 	ts, err := time.Parse(time.RFC3339Nano, m.Time)
 	if err != nil {

@@ -42,8 +42,8 @@ The week before the cut. Done while everything is still calm.
       committed; any code-side fixes the chaos run motivated have
       landed.
 - [ ] **Showcase site staged.** Cloudflare Pages project for
-      `web/showcase/` is connected per
-      [`showcase-deployment.md`](showcase-deployment.md), a
+      `web/explorer/` is connected per
+      [`explorer-deployment.md`](explorer-deployment.md), a
       preview deploy succeeded, `ratesengine.net` custom domain
       is bound but DNS still points at staging. Final cutover is
       step 5 of T-0.
@@ -141,8 +141,8 @@ Order matters. Don't skip.
    halts the cut → trigger rollback.
 
 5. **Showcase site goes live (`ratesengine.net`).** Per
-   [`showcase-deployment.md`](showcase-deployment.md), the
-   site is built statically from `web/showcase/` and served
+   [`explorer-deployment.md`](explorer-deployment.md), the
+   site is built statically from `web/explorer/` and served
    from Cloudflare Pages. Trigger a fresh build now that the
    API is in production auth-mode so the build-time
    `generateStaticParams` fetch picks up the live coin
@@ -204,7 +204,7 @@ rollback also includes a follow-up "we're rolling back" message.
   procedure this runbook orchestrates.
 - [`public-flip.md`](public-flip.md) — repo cut-over mechanics.
 - [`cdn-setup.md`](cdn-setup.md) — CDN provisioning.
-- [`showcase-deployment.md`](showcase-deployment.md) — `ratesengine.net` (showcase site) hosting.
+- [`explorer-deployment.md`](explorer-deployment.md) — `ratesengine.net` (showcase site) hosting.
 - [`status-page-setup.md`](status-page-setup.md) — status page setup.
 - [`chaos-wave1-runbook.md`](chaos-wave1-runbook.md) — chaos
   Wave 1 execution.

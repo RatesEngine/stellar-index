@@ -1,97 +1,54 @@
 # Public status page — `status.ratesengine.net`
 
-Static-site scaffold for the public status page committed to in
-the proposal §"Incident Detection and Response" + Freighter RFP
-F3.5 / F3.6 SLA targets.
+The status page is a custom Next.js static-export app at
+[`web/status/`](../../web/status). It replaces the previous
+cstate (Hugo) implementation that was vendored under this
+directory — see git history if you need the old version.
 
-## What ships from this repo
+## What ships from the codebase
 
-- [`cstate/config.toml`](cstate/config.toml) — Hugo / cstate
-  site configuration (title, base URL, theme params).
-- [`cstate/data/systems.yml`](cstate/data/systems.yml) — the
-  public component list. Each entry is a customer-facing
-  service surface; updates to component status flip the badge
-  on the index page.
-- [`cstate/content/issues/_TEMPLATE.md`](cstate/content/issues/_TEMPLATE.md)
-  — the front-matter + body template every new incident post
-  copies from. Per-incident files land alongside it as
-  `YYYY-MM-DD-<slug>.md`.
+- [`web/status/src/app/page.tsx`](../../web/status/src/app/page.tsx)
+  is the single page. It polls `/v1/status` every 30 s and
+  renders:
+    - Overall status banner (ok / degraded / down)
+    - Per-service heartbeats (api, indexer, aggregator) with
+      "last seen X ago" timestamps
+    - Request-latency strip (p50 / p95 / p99 over 5 min,
+      coloured against RFP targets 50 / 200 / 500 ms)
+    - Ingest freshness (last aggregator tick + active source
+      count)
+    - Active incidents — sourced from Alertmanager via
+      `/v1/status`; severity-coloured, runbook-linked
+    - Public endpoint matrix grouped by surface (Health,
+      Pricing, Catalogue, Oracle, Auth)
+    - Incident history — currently empty; past incidents will
+      land here once the auto-posting pipeline ships
 
-## What does NOT ship from this repo
+The endpoint list in `page.tsx` is intentionally curated —
+operator-only surfaces (`/metrics`, `/v1/diagnostics/*`) are
+excluded so the page focuses on what customers actually consume.
 
-The hosting target. cstate produces a static `public/`
-directory; you can host that anywhere — GitHub Pages, Vercel,
-Netlify, Cloudflare Pages, S3 + CloudFront, etc. The choice is
-operator preference + cost; this repo is the source-of-truth
-for content + config, not the hosting layer.
+## Hosting
 
-The DNS record. `status.ratesengine.net` → `<host>` lives in
-the operator's DNS, separate from the API's record so the
-status page can serve even when the API is down (which is
-exactly when customers need it).
+Cloudflare Pages project `ratesengine-status` with custom
+domain `status.ratesengine.net`. Bootstrap config managed by
+[`scripts/ops/cf-pages-bootstrap.sh`](../../scripts/ops/cf-pages-bootstrap.sh):
+- Root: `web/status`
+- Build command: `pnpm install --frozen-lockfile && pnpm build`
+- Output: `out`
+- Env: `NEXT_PUBLIC_API_BASE_URL=https://api.ratesengine.net`,
+  `NODE_VERSION=20`, `PNPM_VERSION=10`
 
-## Hosting recommendations
+## Why not cstate / Statuspage.io
 
-For launch, the simplest credible option is **Cloudflare Pages**
-+ this repo's `deploy/status-page/cstate/` as the build root:
+cstate v6 broke our v5 config shape, and the v5 vendored copy
+hit a chain of Hugo-template gotchas (pagination config,
+date-format params, `_TEMPLATE.md` rendering as a real
+incident). Maintaining a Hugo theme + a dozen cstate-specific
+config knobs to render "ok/not ok + latency" wasn't a good
+trade vs ~400 lines of TSX that read directly from
+`/v1/status` and look polished by default.
 
-1. Connect the repo to Cloudflare Pages.
-2. Build command: `hugo --minify` from this directory.
-3. Output directory: `public`.
-4. Bind `status.ratesengine.net` to the project.
-
-Cloudflare Pages serves from CF's edge for free, runs the build
-on every push, and survives any plausible regional outage of
-ours. The Statuspage.io commercial route is also acceptable but
-costs $79+/month for a paid tier and ties incidents to a
-proprietary platform.
-
-## Theme
-
-`cstate` is the chosen theme. It's an off-the-shelf Hugo theme
-focused on incident-status pages — no custom CSS / JS to
-maintain. Source: <https://github.com/cstate/cstate>. Pin a tag
-in the operator's local clone or git-submodule the theme into
-`themes/cstate/` at deploy time.
-
-## Operator workflows
-
-- **Routine pre-flight:** `hugo --gc -d public` from this
-  directory. Inspect `public/index.html` in a browser. Push.
-- **Posting an incident:** see
-  [`docs/operations/runbooks/sev-status-page-update.md`](../../docs/operations/runbooks/sev-status-page-update.md).
-  The runbook is the binding source of truth for the update
-  cadence (hourly during SEV-1, daily during SEV-2 — matches
-  Freighter F3.5 / F3.6).
-- **Editing the component list:** edit `cstate/data/systems.yml`
-  directly. Every entry corresponds to a customer-facing service
-  surface; keep the list narrow so visitors can pinpoint
-  which segment is affected during partial degradation.
-
-## Why a status page, not just metrics
-
-Metrics + alerts (Prometheus + AlertManager + Slack/Discord —
-see `configs/ansible/roles/prometheus/`) cover **operator-side**
-visibility. The status page covers **customer-side** visibility:
-
-- Customers who got a 503 want to know whether to retry, fail
-  over to a different price source, or wait.
-- A static HTML page survives outages that take the API down,
-  including ones taking down our Prometheus stack — that's the
-  whole point.
-- The Freighter SLA's "status updates within X minutes of
-  detection" is enforceable via this page; without it the
-  language has nowhere to land.
-
-## Pre-launch checklist
-
-- [ ] Hugo + cstate theme installed (operator workstation or CI).
-- [ ] Hosting target chosen + connected (Cloudflare Pages
-      recommended).
-- [ ] DNS for `status.ratesengine.net` → hosting target.
-- [ ] First test rebuild succeeds; index page renders with all
-      components green.
-- [ ] `docs/operations/sev-playbook.md` references the live URL
-      (it does, post-PR).
-- [ ] `docs/operations/runbooks/sev-status-page-update.md`
-      verified by the on-call rota in a tabletop.
+Statuspage.io ($79+/month, ties incidents to a proprietary
+platform) was rejected on the same make-vs-buy axis — the
+data already exists in our Prometheus + Alertmanager pipeline.

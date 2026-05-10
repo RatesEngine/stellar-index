@@ -119,7 +119,7 @@ development. If one does, it's a bug.
 ├── openapi/                   rates-engine.v1.yaml — source of truth for API
 ├── examples/                  curl scripts + Postman collection (auto-gen) for the public API
 ├── deploy/                    docker-compose (dev), systemd (production unit files), monitoring (Prometheus rules — multi-host), status-page (cstate scaffold)
-├── web/showcase/              Next.js 15 static-export explorer rendered at ratesengine.net (Cloudflare Pages)
+├── web/explorer/              Next.js 15 static-export explorer rendered at ratesengine.net (Cloudflare Pages)
 ├── scripts/                   dev/ops/ci helpers (incl. ci/lint-docs.sh, dev/r1-smoke.sh)
 ├── test/                      integration / fixtures (build tag: integration), load (k6), chaos
 │

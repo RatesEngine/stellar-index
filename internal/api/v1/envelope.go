@@ -1,9 +1,7 @@
 package v1
 
 import (
-	"context"
 	"encoding/json"
-	"errors"
 	"net/http"
 	"time"
 
@@ -130,6 +128,17 @@ func writeProblem(w http.ResponseWriter, r *http.Request, typeURL, title string,
 	// next 5 minutes and replay it to other anonymous clients on
 	// the same cache key.
 	w.Header().Set("Cache-Control", "no-store")
+	// RFC 7235 §3.1: every 401 response MUST include a
+	// WWW-Authenticate header naming at least one challenge the
+	// client can use. Pre-fix our 401s emitted the problem+json
+	// envelope but no WWW-Authenticate, leaving programmatic
+	// clients without a way to discover the accepted scheme. Our
+	// authenticated endpoints all accept Bearer (API key + SEP-10
+	// token); the magic-link cookie path is parallel and doesn't
+	// have a standard challenge token, so we advertise Bearer only.
+	if status == http.StatusUnauthorized {
+		w.Header().Set("WWW-Authenticate", `Bearer realm="ratesengine.net"`)
+	}
 	w.WriteHeader(status)
 	_ = json.NewEncoder(w).Encode(p)
 }
@@ -141,13 +150,26 @@ func writeProblem(w http.ResponseWriter, r *http.Request, typeURL, title string,
 // 499 (NGINX-style "client closed request") rather than the
 // misleading 500 a writeProblem would produce.
 //
-// Returns true for either (a) the raw ctx error wrapping context.
-// Canceled / DeadlineExceeded, or (b) the request's own context
-// being done (handles the case where a downstream wrapped the
-// error).
-func clientAborted(r *http.Request, err error) bool {
-	if err != nil && (errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded)) {
-		return true
-	}
+// Decision rule: the request's own context being done is the only
+// signal that means "client gone." A reader returning
+// context.DeadlineExceeded while r.Context() is still alive is a
+// SERVER-side deadline (one of the cold-path context.WithTimeout
+// guards added in #1082, #1099-#1105) — the client is still
+// waiting and deserves a 503 problem+json, not a silent abort.
+//
+// Handlers should structure error handling as:
+//
+//	if err != nil {
+//	    if clientAborted(r, err) { return }
+//	    if errors.Is(err, context.DeadlineExceeded) {
+//	        // 503 timeout response
+//	    }
+//	    // 500 internal
+//	}
+//
+// `err` is unused for the abort decision but kept in the signature
+// because it's the natural call site (handlers always have it) and
+// keeps the call sites stable.
+func clientAborted(r *http.Request, _ error) bool {
 	return r.Context().Err() != nil
 }

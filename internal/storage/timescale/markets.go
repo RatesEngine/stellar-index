@@ -2,18 +2,50 @@ package timescale
 
 import (
 	"context"
+	"database/sql"
 	"fmt"
+	"strings"
 	"time"
+
+	"github.com/lib/pq"
 
 	"github.com/RatesEngine/rates-engine/internal/canonical"
 )
 
 // Market is one distinct (base, quote) pair summary with activity
 // statistics. Returned by [Store.DistinctPairs].
+//
+// Volume24hUSD is the trailing-24h USD volume summed from the
+// prices_1m hypertable (which has per-bucket volume_usd
+// computed by the aggregator). Pointer + nil-when-zero so a
+// pair with no USD-equivalent trades emits JSON null rather
+// than "0" — important for downstream filtering.
 type Market struct {
 	Pair          canonical.Pair
 	LastTradeAt   time.Time
 	TradeCount24h int64
+	Volume24hUSD  *string
+	// LastPrice is the last quote-per-base price observed in
+	// prices_1m for this pair. nil when no recent bucket has a
+	// non-null `last_price` (cold pair, freshly-ingested fixture,
+	// etc.). Numeric-stringified for precision parity.
+	LastPrice *string
+}
+
+// Pool is one (source, base, quote) tuple — same shape as Market
+// but with the source dimension preserved. Returned by [Store.AllPools]
+// to back the /v1/pools listing where the same pair traded on
+// multiple venues becomes multiple rows.
+type Pool struct {
+	Source        string
+	Pair          canonical.Pair
+	LastTradeAt   time.Time
+	TradeCount24h int64
+	Volume24hUSD  *string
+	// LastPrice is the last quote-per-base price for this
+	// (source, base, quote) tuple — same wire shape as
+	// Market.LastPrice but per-pool.
+	LastPrice *string
 }
 
 // MarketsRecencyWindow bounds the trades scanned by DistinctPairs.
@@ -48,26 +80,333 @@ type Market struct {
 // drop the recency bound entirely.
 var MarketsRecencyWindow = 14 * 24 * time.Hour
 
+// MarketsOrder controls the sort + cursor scheme used by
+// DistinctPairs. Default is alphabetic by `<base>|<quote>` (stable
+// pagination through the entire 14-day-active set). Volume24hDesc
+// is used by the explorer's `/markets` page so the most active
+// USD-volume pairs surface in the first page rather than being
+// alphabetically deep behind ~5K dust pairs.
+type MarketsOrder int
+
+const (
+	// MarketsOrderPair = ORDER BY (base|quote) ASC. Cursor is the
+	// (base|quote) string. Stable; iterates the full set.
+	MarketsOrderPair MarketsOrder = iota
+	// MarketsOrderVolume24hDesc = ORDER BY volume_24h_usd DESC NULLS
+	// LAST, (base|quote) ASC. Cursor is `<vol_or_blank>:<base|quote>`.
+	// Pairs with USD volume surface first; the long-tail dust comes
+	// last. Useful for "what are the active markets" queries.
+	MarketsOrderVolume24hDesc
+)
+
 // DistinctPairs returns one page of recently-active (base, quote)
 // pairs from the trades hypertable, each with its most-recent trade
-// timestamp and a 24h trade count. Cursor-based pagination keyed on
-// the pair's canonical "<base>|<quote>" string; empty cursor starts
-// from the beginning.
+// timestamp, 24h trade count, and 24h USD volume.
+//
+// Pagination is cursor-based; the cursor format depends on
+// `order`. Empty cursor starts from the beginning.
 //
 // limit clamps to [1, 500] — matching DistinctAssets for consistency.
 //
 // Recency window: the query scans only chunks within the last
-// MarketsRecencyWindow (default 90d) so chunk pruning bounds I/O on
-// a hypertable with hundreds of millions of trades. Pairs that
-// haven't traded in that window do not appear. This matches the
-// public contract — "/v1/markets" lists active markets, not every
-// pair ever observed; an asset that hasn't traded in 90 days isn't
-// usefully described as having a market.
-//
-// Future direction: a materialised market_catalogue populated by the
-// indexer would let us drop the recency bound entirely (see the
-// long-standing DistinctAssets perf note — same future migration).
+// MarketsRecencyWindow (default 14d) so chunk pruning bounds I/O on
+// a hypertable with hundreds of millions of trades.
 func (s *Store) DistinctPairs(ctx context.Context, cursor string, limit int) ([]Market, string, error) {
+	return s.DistinctPairsExt(ctx, cursor, limit, MarketsOrderPair)
+}
+
+// DistinctPairsExt is DistinctPairs with explicit ordering control.
+// DistinctPairs is preserved as the legacy 3-arg form so existing
+// callers compile unchanged.
+func (s *Store) DistinctPairsExt(ctx context.Context, cursor string, limit int, order MarketsOrder) ([]Market, string, error) {
+	return s.distinctPairsCommon(ctx, "", "", cursor, limit, order)
+}
+
+// SourceMarkets returns one page of (base, quote) pairs the given
+// source observed in the trailing MarketsRecencyWindow. Same shape
+// as DistinctPairsExt but with `t.source = $source` filter applied
+// before the GROUP BY — gives a per-DEX pool list with per-pool
+// 24h volume + trade count + last-trade timestamp.
+func (s *Store) SourceMarkets(ctx context.Context, source, cursor string, limit int, order MarketsOrder) ([]Market, string, error) {
+	return s.distinctPairsCommon(ctx, source, "", cursor, limit, order)
+}
+
+// AssetMarkets returns one page of (base, quote) pairs where the
+// given canonical asset_id appears on either side of the pair —
+// `t.base_asset = $asset OR t.quote_asset = $asset`. Backs the
+// `/v1/markets?asset=<asset_id>` query that the explorer's
+// /assets/{slug} Markets tab uses to surface every market the
+// asset participates in without paying for a 500-row global scan
+// + client-side filter (the previous shape).
+func (s *Store) AssetMarkets(ctx context.Context, asset, cursor string, limit int, order MarketsOrder) ([]Market, string, error) {
+	return s.distinctPairsCommon(ctx, "", asset, cursor, limit, order)
+}
+
+// PoolsFilter narrows AllPools by venue and/or pair. Zero-value
+// fields mean "no filter on this dimension"; an unfiltered call
+// uses PoolsFilter{}.
+//
+// Pair filter (Base + Quote both non-empty) is the canonical
+// per-pair source-contribution query — used by the pair detail
+// page to render "which venues moved this pair in the last 24h".
+// Single-side filters (Base only / Quote only) are accepted but
+// uncommon.
+//
+// Asset filter is the OR-shape — base = X OR quote = X. Used by
+// asset-detail surfaces ("every pool touching this asset")
+// without forcing the caller to fire two parallel `?base=` +
+// `?quote=` requests and merge client-side. Mutually exclusive
+// with Base/Quote at the handler layer (the storage layer
+// accepts the combination, but its semantics aren't
+// well-defined: an asset-OR + base-AND would land on the
+// intersection or the union depending on interpretation).
+type PoolsFilter struct {
+	Sources []string
+	Base    string
+	Quote   string
+	Asset   string
+}
+
+// AllPools returns every (source, base, quote) tuple observed in
+// the trailing MarketsRecencyWindow. Distinct from DistinctPairsExt
+// which collapses across sources — same physical pair traded on
+// soroswap + sdex returns ONE row from DistinctPairsExt and TWO
+// rows from AllPools. Backs /v1/pools.
+//
+// `filter.Sources` constrains to a venue allowlist; `filter.Base` /
+// `filter.Quote` constrain by canonical asset_id. Empty fields
+// mean no filter.
+//
+// Cursor format: "<vol_or_blank>:<source>|<base>|<quote>" for
+// volume-desc; "<source>|<base>|<quote>" for pair-asc. Same
+// keyset-pagination shape as DistinctPairsExt with the source
+// dimension prepended.
+func (s *Store) AllPools(ctx context.Context, filter PoolsFilter, cursor string, limit int, order MarketsOrder) ([]Pool, string, error) { //nolint:gocognit // limit clamp + order branch + scan loop are linear; splitting would scatter the request lifecycle
+	if limit < 1 {
+		limit = 100
+	}
+	if limit > 500 {
+		limit = 500
+	}
+	since := time.Now().UTC().Add(-MarketsRecencyWindow)
+	q, args := buildPoolsQuery(since, filter, cursor, limit, order)
+	rows, err := s.db.QueryContext(ctx, q, args...)
+	if err != nil {
+		return nil, "", fmt.Errorf("timescale: AllPools: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+
+	out := make([]Pool, 0, limit)
+	hasMore := false
+	n := 0
+	for rows.Next() {
+		var (
+			source            string
+			baseRaw, quoteRaw string
+			lastAt            time.Time
+			count24h          int64
+			vol24hUSD         sql.NullString
+			lastPrice         sql.NullString
+		)
+		if err := rows.Scan(&source, &baseRaw, &quoteRaw, &lastAt, &count24h, &vol24hUSD, &lastPrice); err != nil {
+			return nil, "", fmt.Errorf("timescale: AllPools scan: %w", err)
+		}
+		n++
+		if n > limit {
+			hasMore = true
+			break
+		}
+		base, err := canonical.ParseAsset(baseRaw)
+		if err != nil {
+			return nil, "", fmt.Errorf("timescale: AllPools base %q: %w", baseRaw, err)
+		}
+		quote, err := canonical.ParseAsset(quoteRaw)
+		if err != nil {
+			return nil, "", fmt.Errorf("timescale: AllPools quote %q: %w", quoteRaw, err)
+		}
+		pair, err := canonical.NewPair(base, quote)
+		if err != nil {
+			return nil, "", fmt.Errorf("timescale: AllPools pair: %w", err)
+		}
+		p := Pool{
+			Source:        source,
+			Pair:          pair,
+			LastTradeAt:   lastAt.UTC(),
+			TradeCount24h: count24h,
+		}
+		if vol24hUSD.Valid && vol24hUSD.String != "" && vol24hUSD.String != "0" {
+			v := vol24hUSD.String
+			p.Volume24hUSD = &v
+		}
+		if lastPrice.Valid && lastPrice.String != "" {
+			v := lastPrice.String
+			p.LastPrice = &v
+		}
+		out = append(out, p)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, "", fmt.Errorf("timescale: AllPools rows: %w", err)
+	}
+	nextCursor := ""
+	if hasMore && len(out) > 0 {
+		last := out[len(out)-1]
+		key := last.Source + "|" + last.Pair.Base.String() + "|" + last.Pair.Quote.String()
+		if order == MarketsOrderVolume24hDesc {
+			vol := ""
+			if last.Volume24hUSD != nil {
+				vol = *last.Volume24hUSD
+			}
+			nextCursor = vol + ":" + key
+		} else {
+			nextCursor = key
+		}
+	}
+	return out, nextCursor, nil
+}
+
+func buildPoolsQuery(since time.Time, filter PoolsFilter, cursor string, limit int, order MarketsOrder) (string, []any) { //nolint:funlen // CTE + select + 2 ordering branches form one query template; splitting would scatter the SQL across helpers
+	// vol_24h derives per-(source, base, quote) USD volume directly
+	// from the trades hypertable rather than reading prices_1m's
+	// per-(base, quote) totals. Two reasons:
+	//
+	//   1. Per-source attribution. Two DEXes trading the same (base,
+	//      quote) pair (rare in practice — sdex uses classic credit
+	//      assets, Soroban DEXes use SAC contract addresses — but
+	//      possible) get their own slice rather than the cross-source
+	//      sum.
+	//   2. XLM-side fallback for Soroban trades. Phoenix / Aquarius /
+	//      Comet trades against the XLM SAC wrapper
+	//      (CAS3J7GYLGXMF6TDJBBYYSE3HQ6BBSMLNUQ34T6TZMYMW2EVH34XOWMA)
+	//      have NULL `usd_volume` because the operator's USD-pegged
+	//      allow-list (Phase 1 of the L2.2 path) doesn't include XLM
+	//      itself. We derive USD volume from base_amount × XLM/USD
+	//      when XLM is on the base side, or quote_amount × XLM/USD
+	//      when XLM is on the quote side. The XLM/USD price comes
+	//      from the same on-chain XLM/USDC vwap that powers
+	//      coins.go's xlm_usd CTE — single source of truth for the
+	//      stablecoin-proxy policy.
+	//
+	// Trades that are neither already-priced (Phase 1) nor have an
+	// XLM leg stay NULL in vol_usd — pure SEP-41/SEP-41 token
+	// swaps need real per-token USD oracles, which is a separate
+	// piece of work (see CHANGELOG #72).
+	cte := `
+        WITH xlm_usd AS (
+          SELECT vwap
+            FROM prices_1m
+           WHERE base_asset = 'native'
+             AND quote_asset IN (
+               'USDC-GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN',
+               'USDT-GCQTGZQQ5G4PTM2GL7CDIFKUBIPEC52BROAQIAPW53XBRJVN6ZJVTG6V',
+               'fiat:USD'
+             )
+             AND vwap IS NOT NULL
+             AND bucket >= NOW() - INTERVAL '24 hours'
+           ORDER BY bucket DESC
+           LIMIT 1
+        ),
+        vol_24h AS (
+          SELECT t.source, t.base_asset, t.quote_asset,
+                 SUM(
+                   CASE
+                     WHEN t.usd_volume IS NOT NULL
+                       THEN t.usd_volume::numeric
+                     -- XLM SAC or native on the base side: use
+                     -- base_amount × XLM/USD (classic 7-decimal
+                     -- scale; SEP-41 token decimals only matter
+                     -- for the OTHER side, which we're not pricing).
+                     WHEN t.base_asset IN ('native', 'CAS3J7GYLGXMF6TDJBBYYSE3HQ6BBSMLNUQ34T6TZMYMW2EVH34XOWMA')
+                       THEN (t.base_amount / 1e7) * (SELECT vwap FROM xlm_usd)
+                     -- XLM SAC or native on the quote side: use
+                     -- quote_amount × XLM/USD.
+                     WHEN t.quote_asset IN ('native', 'CAS3J7GYLGXMF6TDJBBYYSE3HQ6BBSMLNUQ34T6TZMYMW2EVH34XOWMA')
+                       THEN (t.quote_amount / 1e7) * (SELECT vwap FROM xlm_usd)
+                     ELSE NULL
+                   END
+                 )::text AS vol_usd
+            FROM trades t
+           WHERE t.ts >= NOW() - INTERVAL '24 hours'
+           GROUP BY t.source, t.base_asset, t.quote_asset
+        )
+        ,
+        last_px AS (
+          -- Most recent non-null per-(source, base, quote) price
+          -- from the trades hypertable. Pools-side (per-source)
+          -- analogue of the cross-source last_px CTE used by
+          -- buildDistinctPairsQuery — note we read directly from
+          -- trades because prices_1m collapses across sources.
+          SELECT DISTINCT ON (source, base_asset, quote_asset)
+                 source, base_asset, quote_asset,
+                 (quote_amount::numeric / NULLIF(base_amount::numeric, 0))::text AS last_px
+            FROM trades
+           WHERE ts >= NOW() - INTERVAL '24 hours'
+             AND base_amount IS NOT NULL AND base_amount <> 0
+             AND quote_amount IS NOT NULL
+           ORDER BY source, base_asset, quote_asset, ts DESC
+        )
+        SELECT t.source, t.base_asset, t.quote_asset,
+               MAX(t.ts) AS last_trade_at,
+               count(*) FILTER (WHERE t.ts > NOW() - INTERVAL '24 hours') AS count_24h,
+               v.vol_usd AS vol_24h_usd,
+               lp.last_px AS last_price
+          FROM trades t
+          LEFT JOIN vol_24h v
+            ON v.source = t.source
+           AND v.base_asset = t.base_asset
+           AND v.quote_asset = t.quote_asset
+          LEFT JOIN last_px lp
+            ON lp.source = t.source
+           AND lp.base_asset = t.base_asset
+           AND lp.quote_asset = t.quote_asset
+         WHERE t.ts >= $1
+    `
+	// $4 sources, $5 base, $6 quote, $7 asset are always bound;
+	// empty values short-circuit each predicate so the planner
+	// skips it. Keeps the positional-arg layout stable across
+	// filter combinations (extending the slice would require
+	// renumbering downstream).
+	//
+	// $7 asset is the OR-shape (base = X OR quote = X), distinct
+	// from $5/$6's AND-shape — used by asset-detail surfaces that
+	// want every pool touching an asset on either side without
+	// firing two parallel `?base=` + `?quote=` requests and
+	// merging client-side.
+	cte += `
+           AND (cardinality($4::text[]) = 0 OR t.source = ANY($4))
+           AND ($5 = '' OR t.base_asset = $5)
+           AND ($6 = '' OR t.quote_asset = $6)
+           AND ($7 = '' OR t.base_asset = $7 OR t.quote_asset = $7)
+    `
+	if order == MarketsOrderVolume24hDesc {
+		const tail = `
+		 GROUP BY t.source, t.base_asset, t.quote_asset, v.vol_usd, lp.last_px
+		HAVING $2 = ''
+		    OR COALESCE(v.vol_usd::numeric, 0)
+		         <  CAST(NULLIF(split_part($2, ':', 1), '') AS numeric)
+		    OR (
+		         COALESCE(v.vol_usd::numeric, 0)
+		         =  CAST(COALESCE(NULLIF(split_part($2, ':', 1), ''), '0') AS numeric)
+		         AND (t.source || '|' || t.base_asset || '|' || t.quote_asset)
+		             > substring($2 from position(':' in $2) + 1)
+		       )
+		 ORDER BY COALESCE(v.vol_usd::numeric, 0) DESC,
+		          (t.source || '|' || t.base_asset || '|' || t.quote_asset) ASC
+		 LIMIT $3
+		`
+		args := []any{since, cursor, limit + 1, pq.Array(filter.Sources), filter.Base, filter.Quote, filter.Asset}
+		return cte + tail, args
+	}
+	const tail = `
+	   AND ($2 = '' OR (t.source || '|' || t.base_asset || '|' || t.quote_asset) > $2)
+	 GROUP BY t.source, t.base_asset, t.quote_asset, v.vol_usd, lp.last_px
+	 ORDER BY (t.source || '|' || t.base_asset || '|' || t.quote_asset) ASC
+	 LIMIT $3
+	`
+	args := []any{since, cursor, limit + 1, pq.Array(filter.Sources), filter.Base, filter.Quote}
+	return cte + tail, args
+}
+
+func (s *Store) distinctPairsCommon(ctx context.Context, source, asset, cursor string, limit int, order MarketsOrder) ([]Market, string, error) {
 	if limit < 1 {
 		limit = 100
 	}
@@ -81,27 +420,32 @@ func (s *Store) DistinctPairs(ctx context.Context, cursor string, limit int) ([]
 	// evaluation. count_24h uses FILTER (more readable than the
 	// SUM/CASE form, identical plan).
 	//
-	// Overfetch by one (LIMIT $3 = limit+1) to detect "more pages
+	// Overfetch by one (LIMIT $N = limit+1) to detect "more pages
 	// exist". The extra row isn't returned to the caller; its only
 	// purpose is to toggle whether we emit a nextCursor.
 	since := time.Now().UTC().Add(-MarketsRecencyWindow)
-	const q = `
-        SELECT base_asset, quote_asset,
-               MAX(ts) AS last_trade_at,
-               count(*) FILTER (WHERE ts > NOW() - INTERVAL '24 hours') AS count_24h
-          FROM trades
-         WHERE ts >= $1
-           AND ($2 = '' OR (base_asset || '|' || quote_asset) > $2)
-         GROUP BY base_asset, quote_asset
-         ORDER BY (base_asset || '|' || quote_asset) ASC
-         LIMIT $3
-    `
-	rows, err := s.db.QueryContext(ctx, q, since, cursor, limit+1)
+	q, args := buildDistinctPairsQuery(since, source, asset, cursor, limit, order)
+	rows, err := s.db.QueryContext(ctx, q, args...)
 	if err != nil {
 		return nil, "", fmt.Errorf("timescale: DistinctPairs: %w", err)
 	}
 	defer func() { _ = rows.Close() }()
 
+	out, hasMore, err := scanDistinctPairs(rows, limit)
+	if err != nil {
+		return nil, "", err
+	}
+	nextCursor := ""
+	if hasMore && len(out) > 0 {
+		nextCursor = encodeMarketsCursor(out[len(out)-1], order)
+	}
+	return out, nextCursor, nil
+}
+
+// scanDistinctPairs reads up to `limit+1` rows; the +1th row toggles
+// hasMore. Pulled out of DistinctPairsExt so the latter stays under
+// the gocognit threshold.
+func scanDistinctPairs(rows *sql.Rows, limit int) ([]Market, bool, error) {
 	out := make([]Market, 0, limit)
 	n := 0
 	hasMore := false
@@ -110,45 +454,237 @@ func (s *Store) DistinctPairs(ctx context.Context, cursor string, limit int) ([]
 			baseRaw, quoteRaw string
 			lastAt            time.Time
 			count24h          int64
+			vol24hUSD         sql.NullString
+			lastPrice         sql.NullString
 		)
-		if err := rows.Scan(&baseRaw, &quoteRaw, &lastAt, &count24h); err != nil {
-			return nil, "", fmt.Errorf("timescale: DistinctPairs scan: %w", err)
+		if err := rows.Scan(&baseRaw, &quoteRaw, &lastAt, &count24h, &vol24hUSD, &lastPrice); err != nil {
+			return nil, false, fmt.Errorf("timescale: DistinctPairs scan: %w", err)
 		}
 		n++
 		if n > limit {
 			hasMore = true
 			break
 		}
-		base, err := canonical.ParseAsset(baseRaw)
+		m, err := buildMarketRow(baseRaw, quoteRaw, lastAt, count24h, vol24hUSD)
 		if err != nil {
-			return nil, "", fmt.Errorf("timescale: DistinctPairs base %q: %w", baseRaw, err)
+			return nil, false, err
 		}
-		quote, err := canonical.ParseAsset(quoteRaw)
-		if err != nil {
-			return nil, "", fmt.Errorf("timescale: DistinctPairs quote %q: %w", quoteRaw, err)
+		if lastPrice.Valid && lastPrice.String != "" {
+			v := lastPrice.String
+			m.LastPrice = &v
 		}
-		pair, err := canonical.NewPair(base, quote)
-		if err != nil {
-			return nil, "", fmt.Errorf("timescale: DistinctPairs pair: %w", err)
-		}
-		out = append(out, Market{
-			Pair:          pair,
-			LastTradeAt:   lastAt.UTC(),
-			TradeCount24h: count24h,
-		})
+		out = append(out, m)
 	}
 	if err := rows.Err(); err != nil {
-		return nil, "", fmt.Errorf("timescale: DistinctPairs rows: %w", err)
+		return nil, false, fmt.Errorf("timescale: DistinctPairs rows: %w", err)
 	}
+	return out, hasMore, nil
+}
 
-	nextCursor := ""
-	if hasMore && len(out) > 0 {
-		// Cursor points at the LAST row IN the returned page — next
-		// call resumes at "strictly greater than this pair".
-		last := out[len(out)-1]
-		nextCursor = last.Pair.Base.String() + "|" + last.Pair.Quote.String()
+func buildMarketRow(baseRaw, quoteRaw string, lastAt time.Time, count24h int64, vol24hUSD sql.NullString) (Market, error) {
+	base, err := canonical.ParseAsset(baseRaw)
+	if err != nil {
+		return Market{}, fmt.Errorf("timescale: DistinctPairs base %q: %w", baseRaw, err)
 	}
-	return out, nextCursor, nil
+	quote, err := canonical.ParseAsset(quoteRaw)
+	if err != nil {
+		return Market{}, fmt.Errorf("timescale: DistinctPairs quote %q: %w", quoteRaw, err)
+	}
+	pair, err := canonical.NewPair(base, quote)
+	if err != nil {
+		return Market{}, fmt.Errorf("timescale: DistinctPairs pair: %w", err)
+	}
+	m := Market{
+		Pair:          pair,
+		LastTradeAt:   lastAt.UTC(),
+		TradeCount24h: count24h,
+	}
+	if vol24hUSD.Valid && vol24hUSD.String != "" && vol24hUSD.String != "0" {
+		v := vol24hUSD.String
+		m.Volume24hUSD = &v
+	}
+	return m, nil
+}
+
+// ValidateMarketsCursor returns an error if `cursor` is non-empty
+// but doesn't match the encoded shape that encodeMarketsCursor
+// emits for the active order. Empty cursor is always valid (start
+// from the first page). Callers should reject invalid cursors at
+// the handler boundary with a 400.
+//
+// Without this guard, a hand-crafted cursor (or a stale link from
+// before a pagination format change) silently degrades:
+//
+//   - MarketsOrderPair: the SQL predicate
+//     `(base || '|' || quote) > $cursor` falls through to a
+//     lexicographic skip — collation-dependent and almost never
+//     what the caller wants.
+//   - MarketsOrderVolume24hDesc: the predicate casts
+//     `split_part($cursor, ':', 1)::numeric`, which raises a
+//     Postgres "invalid input syntax for type numeric" error and
+//     a 500. Burns CPU per request.
+func ValidateMarketsCursor(cursor string, order MarketsOrder) error {
+	if cursor == "" {
+		return nil
+	}
+	pairPart := cursor
+	if order == MarketsOrderVolume24hDesc {
+		idx := strings.IndexByte(cursor, ':')
+		if idx < 0 {
+			return fmt.Errorf("missing ':' separator")
+		}
+		volPart := cursor[:idx]
+		// Volume prefix may be empty (last row had a null vol_usd).
+		// Otherwise: digits with at most one '.', no leading sign.
+		if volPart != "" {
+			dot := false
+			for j := 0; j < len(volPart); j++ {
+				c := volPart[j]
+				switch {
+				case c >= '0' && c <= '9':
+				case c == '.' && !dot:
+					dot = true
+				default:
+					return fmt.Errorf("non-numeric volume prefix")
+				}
+			}
+		}
+		pairPart = cursor[idx+1:]
+		if pairPart == "" {
+			return fmt.Errorf("missing pair suffix")
+		}
+	}
+	pipe := strings.IndexByte(pairPart, '|')
+	if pipe < 0 {
+		return fmt.Errorf("missing '|' separator in pair")
+	}
+	if pipe == 0 || pipe == len(pairPart)-1 {
+		return fmt.Errorf("missing base or quote in pair")
+	}
+	return nil
+}
+
+// encodeMarketsCursor formats the last-row cursor for the active
+// ordering — pair-only for MarketsOrderPair, `<vol>:<pair>` for
+// MarketsOrderVolume24hDesc.
+func encodeMarketsCursor(last Market, order MarketsOrder) string {
+	pairKey := last.Pair.Base.String() + "|" + last.Pair.Quote.String()
+	if order == MarketsOrderVolume24hDesc {
+		vol := ""
+		if last.Volume24hUSD != nil {
+			vol = *last.Volume24hUSD
+		}
+		return vol + ":" + pairKey
+	}
+	return pairKey
+}
+
+// buildDistinctPairsQuery composes the per-pair-volume CTE +
+// SELECT for DistinctPairs given the limit and ordering. Pulled
+// out of DistinctPairs so the latter stays under the gocognit
+// threshold and the two ordering branches are readable side-by-
+// side.
+//
+// Cursor formats:
+//   - MarketsOrderPair          — `<base>|<quote>`. Strict-greater
+//     comparison resumes pagination.
+//   - MarketsOrderVolume24hDesc — `<vol_or_blank>:<base>|<quote>`.
+//     Empty vol prefix sorts as 0 (so cursor "":<pair> resumes
+//     into the null-volume tail). The compare on (vol, pair) is
+//     strict-less for vol DESC, strict-greater for pair ASC —
+//     the standard keyset tuple-comparison trick is adapted to
+//     mixed ordering.
+func buildDistinctPairsQuery(since time.Time, source, asset, cursor string, limit int, order MarketsOrder) (string, []any) {
+	// LEFT JOIN against vol_24h once instead of correlating the
+	// subquery into SELECT + HAVING + ORDER BY. The previous
+	// shape had the planner evaluate
+	//   (SELECT vol_usd FROM vol_24h WHERE base = t.base AND quote = t.quote)
+	// up to four times per output row (SELECT + 2× HAVING + ORDER BY)
+	// and that compounded with the trades-side group, producing
+	// 30s+ cold-cache p99. With a single LEFT JOIN the planner
+	// resolves vol once per (base, quote) tuple; warm cache stays
+	// at <100ms but cold cache drops by >10×.
+	//
+	// $4 source / $5 asset are always bound; empty values
+	// short-circuit each predicate so the planner skips it. Same
+	// pattern as buildPoolsQuery — keeps the positional-arg layout
+	// stable across filter combinations (extending the slice would
+	// require renumbering downstream).
+	cte := `
+        WITH vol_24h AS (
+          SELECT base_asset, quote_asset,
+                 SUM(volume_usd)::text AS vol_usd
+            FROM prices_1m
+           WHERE bucket >= NOW() - INTERVAL '24 hours'
+             AND volume_usd IS NOT NULL
+           GROUP BY base_asset, quote_asset
+        ),
+        last_px AS (
+          -- Most recent non-null last_price per (base, quote).
+          -- DISTINCT ON + ORDER BY base, quote, bucket DESC picks
+          -- one row per pair without an aggregate. Joins back as
+          -- a 1-row-per-pair table so it can be GROUP BY'd directly.
+          SELECT DISTINCT ON (base_asset, quote_asset)
+                 base_asset, quote_asset, last_price::text AS last_px
+            FROM prices_1m
+           WHERE bucket >= NOW() - INTERVAL '24 hours'
+             AND last_price IS NOT NULL
+           ORDER BY base_asset, quote_asset, bucket DESC
+        )
+        SELECT t.base_asset, t.quote_asset,
+               MAX(t.ts) AS last_trade_at,
+               count(*) FILTER (WHERE t.ts > NOW() - INTERVAL '24 hours') AS count_24h,
+               v.vol_usd AS vol_24h_usd,
+               lp.last_px AS last_price
+          FROM trades t
+          LEFT JOIN vol_24h v
+            ON v.base_asset = t.base_asset
+           AND v.quote_asset = t.quote_asset
+          LEFT JOIN last_px lp
+            ON lp.base_asset = t.base_asset
+           AND lp.quote_asset = t.quote_asset
+         WHERE t.ts >= $1
+           AND ($4 = '' OR t.source = $4)
+           AND ($5 = '' OR t.base_asset = $5 OR t.quote_asset = $5)
+    `
+	switch order {
+	case MarketsOrderVolume24hDesc:
+		// Cursor: "<vol_or_blank>:<base>|<quote>". Two-tuple keyset
+		// against (vol_24h_usd::numeric, base|quote). Use
+		// COALESCE-to-zero on the column so NULLS LAST + the
+		// numeric comparison agree (NULL < 0 in numeric is false,
+		// so we map NULL → 0 for ordering purposes; same effect
+		// as NULLS LAST since real volumes are positive).
+		//
+		// HAVING (vol, pair) `<` (cursor_vol, cursor_pair) won't
+		// work directly because the "next page" relation is
+		// `(v < cv) OR (v = cv AND pair > cpair)` — DESC on the
+		// first key flips the comparator. Encoded explicitly.
+		const tail = `
+		 GROUP BY t.base_asset, t.quote_asset, v.vol_usd, lp.last_px
+		HAVING $2 = ''
+		    OR COALESCE(v.vol_usd::numeric, 0)
+		         <  CAST(NULLIF(split_part($2, ':', 1), '') AS numeric)
+		    OR (
+		         COALESCE(v.vol_usd::numeric, 0)
+		         =  CAST(COALESCE(NULLIF(split_part($2, ':', 1), ''), '0') AS numeric)
+		         AND (t.base_asset || '|' || t.quote_asset)
+		             > substring($2 from position(':' in $2) + 1)
+		       )
+		 ORDER BY COALESCE(v.vol_usd::numeric, 0) DESC,
+		          (t.base_asset || '|' || t.quote_asset) ASC
+		 LIMIT $3
+		`
+		return cte + tail, []any{since, cursor, limit + 1, source, asset}
+	default: // MarketsOrderPair
+		const tail = `
+		   AND ($2 = '' OR (t.base_asset || '|' || t.quote_asset) > $2)
+		 GROUP BY t.base_asset, t.quote_asset, v.vol_usd, lp.last_px
+		 ORDER BY (t.base_asset || '|' || t.quote_asset) ASC
+		 LIMIT $3
+		`
+		return cte + tail, []any{since, cursor, limit + 1, source, asset}
+	}
 }
 
 // PairMarket returns the activity summary for a single (base, quote)
@@ -164,17 +700,28 @@ func (s *Store) DistinctPairs(ctx context.Context, cursor string, limit int) ([]
 func (s *Store) PairMarket(ctx context.Context, base, quote canonical.Asset) (Market, bool, error) {
 	since := time.Now().UTC().Add(-MarketsRecencyWindow)
 	const q = `
-        SELECT MAX(ts) AS last_trade_at,
-               count(*) FILTER (WHERE ts > NOW() - INTERVAL '24 hours') AS count_24h
-          FROM trades
-         WHERE ts >= $1
-           AND base_asset = $2 AND quote_asset = $3
+        SELECT MAX(t.ts) AS last_trade_at,
+               count(*) FILTER (WHERE t.ts > NOW() - INTERVAL '24 hours') AS count_24h,
+               (SELECT SUM(volume_usd)::text FROM prices_1m
+                 WHERE base_asset = $2 AND quote_asset = $3
+                   AND bucket >= NOW() - INTERVAL '24 hours'
+                   AND volume_usd IS NOT NULL) AS vol_24h_usd,
+               (SELECT last_price::text FROM prices_1m
+                 WHERE base_asset = $2 AND quote_asset = $3
+                   AND bucket >= NOW() - INTERVAL '24 hours'
+                   AND last_price IS NOT NULL
+                 ORDER BY bucket DESC LIMIT 1) AS last_price
+          FROM trades t
+         WHERE t.ts >= $1
+           AND t.base_asset = $2 AND t.quote_asset = $3
     `
 	var (
-		lastAt   *time.Time
-		count24h *int64
+		lastAt    *time.Time
+		count24h  *int64
+		vol24hUSD sql.NullString
+		lastPx    sql.NullString
 	)
-	if err := s.db.QueryRowContext(ctx, q, since, base.String(), quote.String()).Scan(&lastAt, &count24h); err != nil {
+	if err := s.db.QueryRowContext(ctx, q, since, base.String(), quote.String()).Scan(&lastAt, &count24h, &vol24hUSD, &lastPx); err != nil {
 		return Market{}, false, fmt.Errorf("timescale: PairMarket: %w", err)
 	}
 	if lastAt == nil {
@@ -188,9 +735,105 @@ func (s *Store) PairMarket(ctx context.Context, base, quote canonical.Asset) (Ma
 	if count24h != nil {
 		n = *count24h
 	}
-	return Market{
+	m := Market{
 		Pair:          pair,
 		LastTradeAt:   lastAt.UTC(),
 		TradeCount24h: n,
-	}, true, nil
+	}
+	if vol24hUSD.Valid && vol24hUSD.String != "" && vol24hUSD.String != "0" {
+		v := vol24hUSD.String
+		m.Volume24hUSD = &v
+	}
+	if lastPx.Valid && lastPx.String != "" {
+		v := lastPx.String
+		m.LastPrice = &v
+	}
+	return m, true, nil
+}
+
+// PairVolumePoint is one hourly USD-volume sample for a single
+// (base, quote) pair, used by the per-pair sparkline endpoint.
+// Hour is the bucket start (UTC); VolumeUSD is numeric-stringified
+// for full precision through the JSON boundary.
+type PairVolumePoint struct {
+	Hour      time.Time
+	VolumeUSD string
+}
+
+// pairKey is the lookup key for the batched per-pair volume map.
+// Wire shape stays string-based (`<base>|<quote>`) so the v1 API
+// adapter doesn't have to import canonical.Pair.
+type pairKey = string
+
+// GetPairsVolumeHistory24hBatch returns per-(base, quote) hourly
+// USD-volume buckets for the trailing 24h, suitable for the
+// /markets / /v1/markets sparkline column. Single CTE pass keyed
+// by ANY($1) on the pair tuple text.
+//
+// Unlike the per-source variant, this query reads volume_usd
+// directly from prices_1m — pairs aggregated across all sources
+// match the wire shape /v1/markets already returns. Holes are
+// zero-filled so each per-pair series always has 24 entries
+// oldest → newest.
+func (s *Store) GetPairsVolumeHistory24hBatch(ctx context.Context, pairs [][2]string) (map[pairKey][]PairVolumePoint, error) {
+	if len(pairs) == 0 {
+		return map[pairKey][]PairVolumePoint{}, nil
+	}
+	keys := make([]string, len(pairs))
+	for i, p := range pairs {
+		keys[i] = p[0] + "|" + p[1]
+	}
+	const q = `
+		WITH hours AS (
+		  SELECT generate_series(
+		    date_trunc('hour', now() - INTERVAL '23 hours'),
+		    date_trunc('hour', now()),
+		    INTERVAL '1 hour'
+		  ) AS bucket
+		),
+		want AS (
+		  SELECT split_part(k, '|', 1) AS base_asset,
+		         split_part(k, '|', 2) AS quote_asset,
+		         k                       AS pair_key
+		    FROM unnest($1::text[]) k
+		),
+		per_hour AS (
+		  SELECT base_asset || '|' || quote_asset AS pair_key,
+		         date_trunc('hour', bucket)        AS h,
+		         SUM(volume_usd)::text             AS vol
+		    FROM prices_1m
+		   WHERE bucket >= date_trunc('hour', now() - INTERVAL '23 hours')
+		     AND volume_usd IS NOT NULL
+		     AND (base_asset || '|' || quote_asset) = ANY($1)
+		   GROUP BY pair_key, h
+		)
+		SELECT w.pair_key,
+		       to_char(hours.bucket, 'YYYY-MM-DD"T"HH24:MI:SS"Z"') AS t,
+		       COALESCE(p.vol, '0') AS v
+		  FROM want w
+		  CROSS JOIN hours
+		  LEFT JOIN per_hour p ON p.pair_key = w.pair_key AND p.h = hours.bucket
+		 ORDER BY w.pair_key, hours.bucket ASC
+	`
+	rows, err := s.db.QueryContext(ctx, q, pq.Array(keys))
+	if err != nil {
+		return nil, fmt.Errorf("timescale: GetPairsVolumeHistory24hBatch: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+	out := make(map[pairKey][]PairVolumePoint, len(pairs))
+	for rows.Next() {
+		var key, ts, vol string
+		if err := rows.Scan(&key, &ts, &vol); err != nil {
+			return nil, fmt.Errorf("timescale: GetPairsVolumeHistory24hBatch scan: %w", err)
+		}
+		hour, err := time.Parse(time.RFC3339, ts)
+		if err != nil {
+			continue
+		}
+		out[key] = append(out[key], PairVolumePoint{Hour: hour, VolumeUSD: vol})
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("timescale: GetPairsVolumeHistory24hBatch rows: %w", err)
+	}
+	return out, nil
 }

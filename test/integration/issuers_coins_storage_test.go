@@ -109,7 +109,7 @@ func TestIssuersAndCoinsRegistryReads(t *testing.T) {
 	})
 
 	t.Run("ListCoins no filter", func(t *testing.T) {
-		got, err := store.ListCoins(ctx, 10, "")
+		got, err := store.ListCoins(ctx, 10, "", "")
 		if err != nil {
 			t.Fatalf("ListCoins: %v", err)
 		}
@@ -123,7 +123,7 @@ func TestIssuersAndCoinsRegistryReads(t *testing.T) {
 	})
 
 	t.Run("ListCoins issuer filter", func(t *testing.T) {
-		got, err := store.ListCoins(ctx, 10, issuerC)
+		got, err := store.ListCoins(ctx, 10, issuerC, "")
 		if err != nil {
 			t.Fatalf("ListCoins by issuer: %v", err)
 		}
@@ -144,7 +144,7 @@ func TestIssuersAndCoinsRegistryReads(t *testing.T) {
 	})
 
 	t.Run("ListCoins issuer filter — no match", func(t *testing.T) {
-		got, err := store.ListCoins(ctx, 10, "GUNKNOWN0000000000000000000000000000000000000000000000XX")
+		got, err := store.ListCoins(ctx, 10, "GUNKNOWN0000000000000000000000000000000000000000000000XX", "")
 		if err != nil {
 			t.Fatalf("ListCoins unknown issuer: %v", err)
 		}

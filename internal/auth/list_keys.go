@@ -59,3 +59,51 @@ func (s *RedisAPIKeyStore) ListKeysForIdentifier(ctx context.Context, identifier
 	}
 	return out, nil
 }
+
+// RevokeKeyByID deletes the API key whose KeyID matches `keyID`,
+// constrained to the supplied `identifier` so a caller can only
+// revoke keys they own. Returns nil + nil for "not found / not
+// yours" — distinguishing those would let an attacker probe key-
+// id existence cross-account, and the v1 handler treats both as
+// 404 anyway.
+//
+// SCAN-based like ListKeysForIdentifier; same trade-off applies
+// (O(N) on key count, fine at v1 scale). Once a `kid_idx`
+// secondary index lands at issuance time, this method becomes
+// O(1).
+func (s *RedisAPIKeyStore) RevokeKeyByID(ctx context.Context, identifier, keyID string) error {
+	if identifier == "" {
+		return errors.New("auth: RevokeKeyByID: identifier is required")
+	}
+	if keyID == "" {
+		return errors.New("auth: RevokeKeyByID: keyID is required")
+	}
+	iter := s.rdb.Scan(ctx, 0, cachekeys.APIKey("*"), 1000).Iterator()
+	for iter.Next(ctx) {
+		k := iter.Val()
+		raw, err := s.rdb.Get(ctx, k).Bytes()
+		if err != nil {
+			if errors.Is(err, redis.Nil) {
+				continue
+			}
+			return fmt.Errorf("auth: RevokeKeyByID: redis get %s: %w", k, err)
+		}
+		var rec APIKeyRecord
+		if err := json.Unmarshal(raw, &rec); err != nil {
+			continue
+		}
+		if rec.Identifier != identifier || rec.KeyID != keyID {
+			continue
+		}
+		if err := s.rdb.Del(ctx, k).Err(); err != nil {
+			return fmt.Errorf("auth: RevokeKeyByID: redis del %s: %w", k, err)
+		}
+		return nil
+	}
+	if err := iter.Err(); err != nil {
+		return fmt.Errorf("auth: RevokeKeyByID: redis scan: %w", err)
+	}
+	// Not found / not owned. Silent — the handler renders 404 either
+	// way and conflating the two prevents enumeration probes.
+	return nil
+}

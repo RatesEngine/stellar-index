@@ -6,6 +6,7 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -200,30 +201,96 @@ func TestWriteProblem_RFC9457Shape(t *testing.T) {
 	}
 }
 
+// TestWriteProblem_401SetsWWWAuthenticate pins the RFC 7235 §3.1
+// guarantee that every 401 advertises a Bearer challenge so
+// programmatic clients can discover the accepted auth scheme.
+// The header is also tested at the auth-middleware layer; this
+// covers the handler-level writeProblem path used by /v1/account/*
+// for not-yet-authenticated requests.
+func TestWriteProblem_401SetsWWWAuthenticate(t *testing.T) {
+	inner := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		writeProblem(w, r,
+			"https://api.ratesengine.net/errors/unauthorized",
+			"Authentication required",
+			http.StatusUnauthorized,
+			"sign in",
+		)
+	})
+	h := middleware.RequestID(inner)
+	req := httptest.NewRequest(http.MethodGet, "/v1/account/me", nil)
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusUnauthorized {
+		t.Fatalf("status = %d, want 401", rec.Code)
+	}
+	got := rec.Header().Get("WWW-Authenticate")
+	if got == "" {
+		t.Fatal("WWW-Authenticate header missing on 401")
+	}
+	if !strings.Contains(got, "Bearer") {
+		t.Errorf("WWW-Authenticate = %q, want it to advertise Bearer scheme", got)
+	}
+}
+
+// TestWriteProblem_NonAuthDoesNotSetWWWAuthenticate guards the
+// inverse: a 400 / 404 / 500 / 503 problem must NOT emit
+// WWW-Authenticate (RFC 7235's MUST applies to 401 only). Pre-fix
+// the helper had no condition; this pin keeps the conditional in
+// place.
+func TestWriteProblem_NonAuthDoesNotSetWWWAuthenticate(t *testing.T) {
+	for _, status := range []int{
+		http.StatusBadRequest,
+		http.StatusNotFound,
+		http.StatusInternalServerError,
+		http.StatusServiceUnavailable,
+	} {
+		inner := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			writeProblem(w, r, "https://api.ratesengine.net/errors/x", "x", status, "x")
+		})
+		h := middleware.RequestID(inner)
+		req := httptest.NewRequest(http.MethodGet, "/v1/x", nil)
+		rec := httptest.NewRecorder()
+		h.ServeHTTP(rec, req)
+		if got := rec.Header().Get("WWW-Authenticate"); got != "" {
+			t.Errorf("status %d: WWW-Authenticate = %q, want empty", status, got)
+		}
+	}
+}
+
 // TestClientAborted classifies cancellation states a handler may
 // observe while reading from the request body or upstream calls.
 // The clientAborted predicate gates the "skip writeProblem, let
-// HTTPMetrics label this 499" path — false negatives turn into
-// misleading 500s in metrics.
+// HTTPMetrics label this 499" path. The decision rule is
+// req-context-done → true; everything else (including bare ctx
+// errors when r.Context() is alive) is false so that server-side
+// context.WithTimeout deadlines (#1082, #1099-#1105) flow into
+// each handler's 503 timeout-response branch instead of being
+// silently swallowed.
 func TestClientAborted(t *testing.T) {
-	t.Run("ctx canceled error", func(t *testing.T) {
+	t.Run("ctx canceled error with live request ctx", func(t *testing.T) {
+		// Bare context.Canceled with the request still alive is a
+		// server-internal cancel — not a client abort.
 		req := httptest.NewRequest(http.MethodGet, "/", nil)
-		if !clientAborted(req, context.Canceled) {
-			t.Error("clientAborted(ctx.Canceled) = false, want true")
+		if clientAborted(req, context.Canceled) {
+			t.Error("clientAborted(ctx.Canceled, alive req ctx) = true, want false")
 		}
 	})
-	t.Run("deadline exceeded error", func(t *testing.T) {
+	t.Run("deadline exceeded error with live request ctx", func(t *testing.T) {
+		// THE bug fix: server-side context.WithTimeout(8s) deadlines
+		// must flow through to the handler's 503 path, not get
+		// swallowed as a client abort.
 		req := httptest.NewRequest(http.MethodGet, "/", nil)
-		if !clientAborted(req, context.DeadlineExceeded) {
-			t.Error("clientAborted(DeadlineExceeded) = false, want true")
+		if clientAborted(req, context.DeadlineExceeded) {
+			t.Error("clientAborted(DeadlineExceeded, alive req ctx) = true, want false (must flow to 503)")
 		}
 	})
 	t.Run("wrapped ctx canceled via request context", func(t *testing.T) {
 		ctx, cancel := context.WithCancel(context.Background())
 		cancel()
 		req := httptest.NewRequest(http.MethodGet, "/", nil).WithContext(ctx)
-		// Even with an unrelated err arg, request-context-done is
-		// the second branch.
+		// Even with an unrelated err arg, a done request context is
+		// the authoritative "client gone" signal.
 		if !clientAborted(req, errors.New("downstream wrapped error")) {
 			t.Error("clientAborted with done request context = false, want true")
 		}

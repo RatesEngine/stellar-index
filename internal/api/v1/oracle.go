@@ -2,11 +2,13 @@ package v1
 
 import (
 	"context"
+	"errors"
 	"math/big"
 	"net/http"
 	"time"
 
 	"github.com/RatesEngine/rates-engine/internal/canonical"
+	"github.com/RatesEngine/rates-engine/internal/sources/external"
 )
 
 // OracleReader is the storage-side interface for /v1/oracle/latest
@@ -26,6 +28,12 @@ type OracleReader interface {
 	// expand user-facing asset identifiers (e.g. `native`) into
 	// the per-oracle internal forms (e.g. `crypto:XLM`).
 	LatestOracleUpdatesForAssets(ctx context.Context, assets []canonical.Asset, sourceFilter string) ([]canonical.OracleUpdate, error)
+
+	// LatestOracleStreams returns one row per (source, asset, quote)
+	// triple — the most-recent observation in the trailing 7d
+	// window. Backs /v1/oracles/streams (the "every active price
+	// stream from every oracle" listing for the explorer).
+	LatestOracleStreams(ctx context.Context) ([]canonical.OracleUpdate, error)
 }
 
 // oracleAssetCandidates expands the user-facing asset identifier
@@ -135,11 +143,37 @@ func (s *Server) handleOracleLatest(w http.ResponseWriter, r *http.Request) {
 	}
 
 	source := r.URL.Query().Get("source") // optional
+	if source != "" {
+		// Validate against the in-memory registry so an unknown
+		// source name returns 400 instead of an empty page (the
+		// silent-empty-page anti-pattern: a typo in `?source=`
+		// looks identical on the wire to "this source has no
+		// observation for the asset"). Same fail-fast guard as
+		// /v1/markets and /v1/observations.
+		if _, ok := external.Registry[source]; !ok {
+			writeProblem(w, r,
+				"https://api.ratesengine.net/errors/unknown-source",
+				"Unknown source", http.StatusBadRequest,
+				"source must be a registered source name (see /v1/sources for the canonical list); got "+source)
+			return
+		}
+	}
 
+	olCtx, olCancel := context.WithTimeout(r.Context(), 8*time.Second)
+	defer olCancel()
 	updates, err := reader.LatestOracleUpdatesForAssets(
-		r.Context(), oracleAssetCandidates(asset), source)
+		olCtx, oracleAssetCandidates(asset), source)
 	if err != nil {
 		if clientAborted(r, err) {
+			return
+		}
+		if errors.Is(err, context.DeadlineExceeded) {
+			s.logger.Warn("LatestOracleUpdatesForAsset deadline exceeded",
+				"asset", asset.String(), "source", source)
+			writeProblem(w, r,
+				"https://api.ratesengine.net/errors/oracle-latest-timeout",
+				"Oracle latest query timed out", http.StatusServiceUnavailable,
+				"the oracle_updates hypertable scan didn't return in 8s; retry shortly.")
 			return
 		}
 		s.logger.Error("LatestOracleUpdatesForAsset failed",
@@ -153,6 +187,63 @@ func (s *Server) handleOracleLatest(w http.ResponseWriter, r *http.Request) {
 	rows := make([]OracleReading, len(updates))
 	for i, u := range updates {
 		rows[i] = oracleReadingFrom(u)
+	}
+	writeJSON(w, rows, Flags{})
+}
+
+// handleOracleStreams serves GET /v1/oracle/streams.
+//
+// Returns one row per (source, asset, quote) triple — the latest
+// observation each oracle has published in the trailing 7d. No
+// query parameters; the catalogue is small enough (~100s of rows
+// at peak) that a full dump is the simplest contract.
+//
+// Empty array + 200 when no oracles have published recently or no
+// OracleReader is wired — consistent with /v1/oracle/latest's
+// "nothing to report" handling.
+func (s *Server) handleOracleStreams(w http.ResponseWriter, r *http.Request) {
+	reader := s.oracle
+	if reader == nil {
+		writeJSON(w, []OracleReading{}, Flags{})
+		return
+	}
+	// 8s ceiling on the oracle_updates hypertable scan. Same
+	// pattern as #1082-#1103. Steady-state ~600ms per the
+	// 2026-05-08 prod probe, but cold-cache scans of 7d × 80
+	// oracle streams can take 5-10s.
+	osCtx, osCancel := context.WithTimeout(r.Context(), 8*time.Second)
+	defer osCancel()
+	updates, err := reader.LatestOracleStreams(osCtx)
+	if err != nil {
+		if clientAborted(r, err) {
+			return
+		}
+		if errors.Is(err, context.DeadlineExceeded) {
+			s.logger.Warn("LatestOracleStreams deadline exceeded")
+			writeProblem(w, r,
+				"https://api.ratesengine.net/errors/oracle-streams-timeout",
+				"Oracle streams query timed out", http.StatusServiceUnavailable,
+				"the oracle_updates hypertable scan didn't return in 8s; retry shortly.")
+			return
+		}
+		s.logger.Error("LatestOracleStreams failed", "err", err)
+		writeProblem(w, r,
+			"https://api.ratesengine.net/errors/internal",
+			"Internal error", http.StatusInternalServerError, "")
+		return
+	}
+	// Filter to only sources classed as ClassOracle. CoinGecko (an
+	// aggregator) and ECB (an authority-sanity feed) write into the
+	// same oracle_updates hypertable for divergence-comparison
+	// purposes, but they're not oracles and shouldn't appear on the
+	// /oracles page. The class is a registry fact, not a per-row
+	// flag in the table — filter at the wire boundary.
+	rows := make([]OracleReading, 0, len(updates))
+	for _, u := range updates {
+		if external.Lookup(u.Source).Class != external.ClassOracle {
+			continue
+		}
+		rows = append(rows, oracleReadingFrom(u))
 	}
 	writeJSON(w, rows, Flags{})
 }

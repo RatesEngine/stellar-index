@@ -94,6 +94,11 @@ func parseAggTradeFrame(raw []byte, pairMap map[string]canonical.Pair) (canonica
 	// at 10^16 — divide by 10^8 to land at 10^8 consistently.
 	quoteRaw := new(big.Int).Mul(baseAmt, priceScaled)
 	quoteAmt := new(big.Int).Quo(quoteRaw, pow10(externalAmountDecimals))
+	// Dust filter — same rationale as coinbase: tiny lots underflow
+	// integer scale; drop silently rather than fail validation.
+	if quoteAmt.Sign() == 0 {
+		return canonical.Trade{}, ErrDustTrade
+	}
 
 	return canonical.Trade{
 		Source:      SourceName,

@@ -48,6 +48,7 @@ jobs:
           mkdir -p _site
           cp -r docs/reference/api/index.html _site/index.html
           cp -r docs/reference/api/README.md _site/README.md
+          cp -r docs/reference/api/rates-engine.v1.yaml _site/rates-engine.v1.yaml
 
       - uses: actions/configure-pages@v6
       - uses: actions/upload-pages-artifact@v5

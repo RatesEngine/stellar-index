@@ -1,15 +1,15 @@
 // Package changesummary computes the multi-window delta strip
-// every entity on the showcase renders.
+// every entity on the explorer renders.
 //
 // Periodic worker reads the source table for each (entity_type,
 // entity_id), computes h1/h24/d7/d30 deltas + ATH/ATL + streak +
 // acceleration, and writes one row to the change_summary_5m
-// hypertable. Every list view + every detail page on the showcase
+// hypertable. Every list view + every detail page on the explorer
 // reads from this in O(1) — without it, every render would do
 // N+1 queries against prices_1m.
 //
 // See migrations/0022_create_change_summary_5m.up.sql for the
-// table shape and docs/architecture/showcase-site-data-inventory.md
+// table shape and docs/architecture/explorer-data-inventory.md
 // §6.1 + §9.6 for the design.
 package changesummary
 
@@ -158,7 +158,7 @@ func (w *Worker) Run(ctx context.Context) error {
 	defer t.Stop()
 
 	// Refresh once immediately so a fresh boot doesn't wait a full
-	// interval before the showcase has data.
+	// interval before the explorer has data.
 	w.refresh(ctx)
 
 	for {

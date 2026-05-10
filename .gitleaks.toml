@@ -63,3 +63,46 @@ description = "Generated Redocly HTML — embeds OpenAPI example values (canonic
 paths = [
   '''docs/reference/api/index\.html''',
 ]
+
+[[rules.allowlists]]
+description = "OpenAPI spec example values for /v1/signup + /v1/dashboard/keys: synthetic key_id (`k_...`) + plaintext (`re_live_...`) are fabricated illustrations of what the response shape looks like — not real credentials. Real secrets in production never get committed; the response examples MUST be high-entropy-looking to be useful to API consumers. Generated TS types (web/explorer/src/api/types.ts) inherit the same examples in JSDoc; same allowlist rationale applies."
+paths = [
+  '''openapi/rates-engine\.v1\.yaml''',
+  '''web/explorer/src/api/types\.ts''',
+]
+
+[[rules.allowlists]]
+description = "Explorer issuer-detail page — embeds Circle USDC issuer's public Stellar G-strkey as the static-params fallback so the page pre-renders with at least one route in the CI stub. Bare G-address is a public account ID, not a credential. Same pattern as the supply tests already allowlisted above."
+paths = [
+  '''web/explorer/src/app/issuers/\[g_strkey\]/page\.tsx''',
+]
+
+[[rules.allowlists]]
+description = "Explorer aggregators page — hardcoded contract IDs for Soroswap/Phoenix/Aquarius/Comet/DefIndex routers, factories, and autocompound vaults. These are deterministic public on-chain entries — Soroban contract IDs are derived from the hash of the deployer + WASM, NOT credentials. Used to label rows in the aggregators listing without a per-network registry roundtrip."
+paths = [
+  '''web/explorer/src/app/aggregators/page\.tsx''',
+]
+
+[[rules.allowlists]]
+description = "Generated Redocly-format spec mirror — `make docs-api` regenerates this from openapi/rates-engine.v1.yaml verbatim, so any allowlist on the source yaml must also cover the mirror. Contains the same OpenAPI example values (canonical asset_ids, signup/dashboard key shapes) the source already declares."
+paths = [
+  '''docs/reference/api/rates-engine\.v1\.yaml''',
+]
+
+[[rules.allowlists]]
+description = "Historical web/showcase tree — gitleaks scans full repo history. The web/showcase directory was renamed to web/explorer (task #19); past commits contain the old path with the same OpenAPI-derived TS bindings that web/explorer/src/api/types.ts has today (already allowlisted). Allowlist by path so historical scans pass."
+paths = [
+  '''web/showcase/src/api/types\.ts''',
+]
+
+[[rules.allowlists]]
+description = "Test-only Stellar G-strkey fixture (Circle USDC issuer's public account ID) used by the /v1/issuers handler tests. Bare G-address triggers gitleaks' generic-api-key entropy heuristic; same shape as the supply / dispatcher / pkg-client allowlists already declared above. Public account IDs aren't credentials."
+paths = [
+  '''internal/api/v1/issuers_test\.go''',
+]
+
+[[rules.allowlists]]
+description = "Audit working-doc — quotes a Stellar G-strkey (Circle USDC issuer) inline in a user-journey writeup as one of the example issuers a customer would explore. Same entropy-heuristic false positive as the test-file allowlists; public account ID, not a credential."
+paths = [
+  '''docs/audit-2026-05-02/03-journeys\.md''',
+]

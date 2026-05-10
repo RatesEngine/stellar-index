@@ -21,7 +21,7 @@ import (
 //     must-revalidate` (tip surface intentionally has no cross-region
 //     consistency contract per ADR-0018; caching shifts the contract.
 //     `/v1/diagnostics/*` is operator-facing live data — the
-//     showcase polls it every 15 s, so caching defeats the UX).
+//     explorer polls it every 15 s, so caching defeats the UX).
 //   - **Closed-bucket historical + catalogues** (`/v1/history*`,
 //     `/v1/ohlc`, `/v1/vwap`, `/v1/twap`, `/v1/markets`, `/v1/pairs`,
 //     `/v1/oracle/*`, `/v1/sources`, `/v1/coins`, `/v1/issuers*`,
@@ -114,7 +114,7 @@ func policyForPath(path string, cdnEnabled bool) string {
 		return "private, no-cache, must-revalidate"
 
 	// ─── Diagnostics — operator-facing live data ────────────────
-	// /v1/diagnostics/cursors is polled every 15s by the showcase
+	// /v1/diagnostics/cursors is polled every 15s by the explorer
 	// /diagnostics page; caching would defeat the "watch the
 	// indexer tick" UX. Same shape as tip/observations: tight
 	// freshness, never CDN-cached.
@@ -122,7 +122,7 @@ func policyForPath(path string, cdnEnabled bool) string {
 		return "private, no-cache, must-revalidate"
 
 	// ─── Status — customer-facing health rollup ─────────────────
-	// /v1/status is what the showcase /status page polls every 10 s
+	// /v1/status is what the explorer /status page polls every 10 s
 	// and what monitoring dashboards (and the smoke timer) poll on a
 	// longer interval. A 10 s cache absorbs the polling fan-out
 	// without delaying alert-state propagation enough to matter —
@@ -158,10 +158,31 @@ func policyForPath(path string, cdnEnabled bool) string {
 		path == "/v1/pairs",
 		path == "/v1/sources",
 		strings.HasPrefix(path, "/v1/oracle/"),
+		// /v1/chart is closed-bucket OHLCV (ADR-0015 contract);
+		// same caching semantics as /v1/ohlc / /v1/history.
+		path == "/v1/chart",
+		// Pools listing (DEX/AMM rows from the trades hypertable);
+		// refresh cadence matches /v1/markets.
+		path == "/v1/pools",
+		// Lending pools — Blend pool list; same registry shape.
+		path == "/v1/lending/pools",
+		// Network-stats strip — single SQL query backing the
+		// explorer's home network strip; cheap to cache.
+		path == "/v1/network/stats",
+		// Currencies — daily upstream forex refresh, easily cached.
+		path == "/v1/currencies",
+		strings.HasPrefix(path, "/v1/currencies/"),
+		// Incident JSON list — embedded with the binary, only
+		// changes on redeploy. (.atom variant sets its own header.)
+		path == "/v1/incidents",
+		// SAC wrapper map — operator-config, only changes on
+		// process restart. Most cacheable surface in the API.
+		path == "/v1/sac-wrappers",
 		// Registry catalogues — coin / issuer directories. Same
 		// shape as /v1/markets: large enumerable lists that change
 		// gradually as new assets/issuers are observed.
 		path == "/v1/coins",
+		strings.HasPrefix(path, "/v1/coins/"),
 		path == "/v1/issuers",
 		strings.HasPrefix(path, "/v1/issuers/"),
 		// Multi-window delta strip. Refreshed every 5 min by the

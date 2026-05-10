@@ -71,6 +71,11 @@ var _ = external.ClassExchange
 // streamer.go and never escape as package-level sentinels — they're
 // logged + metered + retried inside Start.
 var (
+	// ErrDustTrade — base × price floor-divided to a 0 quote amount.
+	// Real binance trade below our 10^8 integer-scale precision
+	// floor. Drop silently rather than logging at ERROR.
+	ErrDustTrade = errors.New("binance: dust trade (quote_amount underflow)")
+
 	// ErrMalformedFrame — frame didn't decode to the aggTrade shape
 	// we expect. Single-frame skip; logged and counted, doesn't
 	// abort the stream.

@@ -1,0 +1,19 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --font-sans:
+    -apple-system, BlinkMacSystemFont, 'Inter', 'Segoe UI', Roboto, sans-serif;
+  --font-mono:
+    'SF Mono', Menlo, Consolas, ui-monospace, monospace;
+}
+
+html { background: theme('colors.surface.subtle'); color: theme('colors.ink.DEFAULT'); }
+body { font-family: var(--font-sans); font-feature-settings: 'cv11'; }
+
+@keyframes pulse-dot {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
+}
+.live-dot { animation: pulse-dot 2s ease-in-out infinite; }

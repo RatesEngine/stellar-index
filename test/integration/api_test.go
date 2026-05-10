@@ -445,6 +445,10 @@ func (a oracleAdapter) LatestOracleUpdatesForAssets(ctx context.Context, assets 
 	return a.s.LatestOracleUpdatesForAssets(ctx, assets, sourceFilter)
 }
 
+func (a oracleAdapter) LatestOracleStreams(ctx context.Context) ([]c.OracleUpdate, error) {
+	return a.s.LatestOracleStreams(ctx)
+}
+
 // ─── Adapters + helpers ───────────────────────────────────────────
 
 // apiHistoryAdapter mirrors cmd/ratesengine-api/main.go's
@@ -498,8 +502,8 @@ func (r apiHistoryAdapter) HistoryPointsInRange(ctx context.Context, pair c.Pair
 
 type apiMarketsAdapter struct{ s *timescale.Store }
 
-func (r apiMarketsAdapter) DistinctPairs(ctx context.Context, cursor string, limit int) ([]v1.Market, string, error) {
-	rows, next, err := r.s.DistinctPairs(ctx, cursor, limit)
+func (r apiMarketsAdapter) DistinctPairsExt(ctx context.Context, cursor string, limit int, order timescale.MarketsOrder) ([]v1.Market, string, error) {
+	rows, next, err := r.s.DistinctPairsExt(ctx, cursor, limit, order)
 	if err != nil {
 		return nil, "", err
 	}
@@ -510,6 +514,7 @@ func (r apiMarketsAdapter) DistinctPairs(ctx context.Context, cursor string, lim
 			Quote:         m.Pair.Quote.String(),
 			LastTradeAt:   m.LastTradeAt,
 			TradeCount24h: m.TradeCount24h,
+			Volume24hUSD:  m.Volume24hUSD,
 		}
 	}
 	return out, next, nil
@@ -525,7 +530,67 @@ func (r apiMarketsAdapter) PairMarket(ctx context.Context, base, quote c.Asset) 
 		Quote:         m.Pair.Quote.String(),
 		LastTradeAt:   m.LastTradeAt,
 		TradeCount24h: m.TradeCount24h,
+		Volume24hUSD:  m.Volume24hUSD,
 	}, true, nil
+}
+
+func (r apiMarketsAdapter) SourceMarkets(ctx context.Context, source, cursor string, limit int, order timescale.MarketsOrder) ([]v1.Market, string, error) {
+	rows, next, err := r.s.SourceMarkets(ctx, source, cursor, limit, order)
+	if err != nil {
+		return nil, "", err
+	}
+	out := make([]v1.Market, len(rows))
+	for i, m := range rows {
+		out[i] = v1.Market{
+			Base:          m.Pair.Base.String(),
+			Quote:         m.Pair.Quote.String(),
+			LastTradeAt:   m.LastTradeAt,
+			TradeCount24h: m.TradeCount24h,
+			Volume24hUSD:  m.Volume24hUSD,
+		}
+	}
+	return out, next, nil
+}
+
+func (r apiMarketsAdapter) AssetMarkets(ctx context.Context, asset, cursor string, limit int, order timescale.MarketsOrder) ([]v1.Market, string, error) {
+	rows, next, err := r.s.AssetMarkets(ctx, asset, cursor, limit, order)
+	if err != nil {
+		return nil, "", err
+	}
+	out := make([]v1.Market, len(rows))
+	for i, m := range rows {
+		out[i] = v1.Market{
+			Base:          m.Pair.Base.String(),
+			Quote:         m.Pair.Quote.String(),
+			LastTradeAt:   m.LastTradeAt,
+			TradeCount24h: m.TradeCount24h,
+			Volume24hUSD:  m.Volume24hUSD,
+		}
+	}
+	return out, next, nil
+}
+
+func (r apiMarketsAdapter) GetPairsVolumeHistory24hBatch(ctx context.Context, pairs [][2]string) (map[string][]timescale.PairVolumePoint, error) {
+	return r.s.GetPairsVolumeHistory24hBatch(ctx, pairs)
+}
+
+func (r apiMarketsAdapter) AllPools(ctx context.Context, filter timescale.PoolsFilter, cursor string, limit int, order timescale.MarketsOrder) ([]v1.Pool, string, error) {
+	rows, next, err := r.s.AllPools(ctx, filter, cursor, limit, order)
+	if err != nil {
+		return nil, "", err
+	}
+	out := make([]v1.Pool, len(rows))
+	for i, p := range rows {
+		out[i] = v1.Pool{
+			Source:        p.Source,
+			Base:          p.Pair.Base.String(),
+			Quote:         p.Pair.Quote.String(),
+			LastTradeAt:   p.LastTradeAt,
+			TradeCount24h: p.TradeCount24h,
+			Volume24hUSD:  p.Volume24hUSD,
+		}
+	}
+	return out, next, nil
 }
 
 // mkAPITrade builds a Trade with a unique TxHash per (ledger, nonce).

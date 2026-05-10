@@ -1,11 +1,30 @@
 package v1
 
 import (
+	"context"
 	"net/http"
 	"sort"
+	"strings"
+	"time"
 
 	"github.com/RatesEngine/rates-engine/internal/sources/external"
+	"github.com/RatesEngine/rates-engine/internal/storage/timescale"
 )
+
+// SourcesStatsReader is the seam for /v1/sources?include=stats.
+// timescale.Store implements via GetSourceStats.
+type SourcesStatsReader interface {
+	GetSourceStats(ctx context.Context) ([]timescale.SourceStats, error)
+	GetSourceVolumeHistory24h(ctx context.Context) ([]timescale.SourceVolumeBucket, error)
+}
+
+// VolumeBucket is one wire-shape hour bucket on the per-source
+// 24h sparkline. Hour is RFC 3339; volume_usd is numeric-stringified
+// to preserve precision through the JSON boundary.
+type VolumeBucket struct {
+	Hour      time.Time `json:"hour"`
+	VolumeUSD string    `json:"volume_usd"`
+}
 
 // Source is the wire shape for /v1/sources entries.
 //
@@ -40,6 +59,17 @@ type Source struct {
 	// are always `true` — no on-chain WASM dependency.
 	BackfillSafe  bool `json:"backfill_safe"`
 	DefaultWeight int  `json:"default_weight"`
+	// Stats columns — populated only when `?include=stats` is set.
+	// 0 / "" when the source had no trades in 24h.
+	TradeCount24h   int64  `json:"trade_count_24h,omitempty"`
+	VolumeUSD24h    string `json:"volume_24h_usd,omitempty"`
+	MarketsCount24h int64  `json:"markets_count_24h,omitempty"`
+	// VolumeHistory24h — per-hour USD volume buckets for the
+	// trailing 24h. Populated only when the request includes
+	// `sparkline` (e.g. `?include=stats,sparkline`). Holes are
+	// filled with zero-volume buckets so the array always has 24
+	// entries, oldest → newest.
+	VolumeHistory24h []VolumeBucket `json:"volume_history_24h,omitempty"`
 }
 
 // validSourceClasses is the allow-list of values accepted for the
@@ -72,7 +102,7 @@ var validSourceClasses = map[string]bool{
 // with `include_in_vwap=false` is intentional policy
 // (aggregator/oracle/authority-sanity classes), not a missing
 // connector.
-func (s *Server) handleSources(w http.ResponseWriter, r *http.Request) {
+func (s *Server) handleSources(w http.ResponseWriter, r *http.Request) { //nolint:gocognit,gocyclo // include parsing + per-source stat-fill + sparkline backfill are linear; splitting would scatter the request lifecycle
 	classFilter := r.URL.Query().Get("class")
 	if classFilter != "" && !validSourceClasses[classFilter] {
 		writeProblem(w, r,
@@ -82,11 +112,96 @@ func (s *Server) handleSources(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// `include=stats` opt-in joins per-source 24h trade counts.
+	// Absent the param the response stays the static-registry
+	// projection it always was; opt-in lets callers that want the
+	// extra column pay the (cheap) DB hit, while everyone else
+	// keeps the all-static fast path. `include=stats,sparkline`
+	// additionally joins the per-hour 24h volume series.
+	includeFlags := strings.Split(r.URL.Query().Get("include"), ",")
+	includeStats, includeSparkline := false, false
+	for _, f := range includeFlags {
+		switch strings.TrimSpace(f) {
+		case "stats":
+			includeStats = true
+		case "sparkline":
+			includeSparkline = true
+			includeStats = true // sparkline implies stats
+		}
+	}
+	type stats struct {
+		trades  int64
+		volume  string
+		markets int64
+	}
+	statsBySource := map[string]stats{}
+	historyBySource := map[string][]VolumeBucket{}
+	if includeStats && s.sourcesStats != nil {
+		// 8s ceiling on the stats fan-out — same pattern as
+		// /v1/markets (#1099) and /v1/pools (#1082). Soft-fail
+		// already serves the registry without stats on error,
+		// so a deadline just degrades gracefully rather than
+		// hanging the whole sources listing on a cold cache.
+		statsCtx, cancel := context.WithTimeout(r.Context(), 8*time.Second)
+		got, err := s.sourcesStats.GetSourceStats(statsCtx)
+		cancel()
+		if err != nil {
+			s.logger.Warn("source stats", "err", err)
+			// Soft-fail: serve the registry without stats.
+		} else {
+			for _, ss := range got {
+				vol := ""
+				if ss.VolumeUSD24h.Valid {
+					vol = ss.VolumeUSD24h.String
+				}
+				statsBySource[ss.Source] = stats{
+					trades:  ss.TradeCount24h,
+					volume:  vol,
+					markets: ss.MarketsCount24h,
+				}
+			}
+		}
+	}
+	if includeSparkline && s.sourcesStats != nil {
+		// Same 8s ceiling as the stats fan-out above.
+		sparkCtx, cancel := context.WithTimeout(r.Context(), 8*time.Second)
+		buckets, err := s.sourcesStats.GetSourceVolumeHistory24h(sparkCtx)
+		cancel()
+		if err != nil {
+			s.logger.Warn("source volume history", "err", err)
+		} else {
+			// Build per-source raw maps first so we can fill missing
+			// hours with zero buckets (clients render a continuous
+			// sparkline rather than gappy bars).
+			rawBySource := map[string]map[time.Time]string{}
+			for _, b := range buckets {
+				if rawBySource[b.Source] == nil {
+					rawBySource[b.Source] = map[time.Time]string{}
+				}
+				rawBySource[b.Source][b.Hour.UTC()] = b.VolumeUSD
+			}
+			now := time.Now().UTC().Truncate(time.Hour)
+			for src, raw := range rawBySource {
+				series := make([]VolumeBucket, 0, 24)
+				for i := 23; i >= 0; i-- {
+					hour := now.Add(time.Duration(-i) * time.Hour)
+					vol := raw[hour]
+					if vol == "" {
+						vol = "0"
+					}
+					series = append(series, VolumeBucket{Hour: hour, VolumeUSD: vol})
+				}
+				historyBySource[src] = series
+			}
+		}
+	}
+
 	out := make([]Source, 0, len(external.Registry))
 	for name, md := range external.Registry {
 		if classFilter != "" && string(md.Class) != classFilter {
 			continue
 		}
+		st := statsBySource[name]
 		out = append(out, Source{
 			Name:              name,
 			Class:             string(md.Class),
@@ -96,6 +211,10 @@ func (s *Server) handleSources(w http.ResponseWriter, r *http.Request) {
 			BackfillAvailable: md.BackfillAvailable,
 			BackfillSafe:      md.BackfillSafe,
 			DefaultWeight:     md.DefaultWeight,
+			TradeCount24h:     st.trades,
+			VolumeUSD24h:      st.volume,
+			MarketsCount24h:   st.markets,
+			VolumeHistory24h:  historyBySource[name],
 		})
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].Name < out[j].Name })

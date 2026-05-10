@@ -315,37 +315,37 @@ release-dryrun: ## Validate whether in-repo goreleaser packaging exists for this
 	fi
 	@goreleaser release --snapshot --clean
 
-##@ Showcase site (web/showcase/) — see docs/architecture/showcase-site-implementation-plan.md
+##@ Showcase site (web/explorer/) — see docs/architecture/showcase-site-implementation-plan.md
 
-WEB_SHOWCASE_DIR := web/showcase
+WEB_EXPLORER_DIR := web/explorer
 
 .PHONY: web-install
 web-install: ## Install showcase-site dependencies (pnpm)
-	cd $(WEB_SHOWCASE_DIR) && pnpm install --frozen-lockfile
+	cd $(WEB_EXPLORER_DIR) && pnpm install --frozen-lockfile
 
 .PHONY: web-dev
 web-dev: ## Run the showcase site locally with HMR (http://localhost:3000)
-	cd $(WEB_SHOWCASE_DIR) && pnpm dev
+	cd $(WEB_EXPLORER_DIR) && pnpm dev
 
 .PHONY: web-build
 web-build: ## Build the showcase site for production
-	cd $(WEB_SHOWCASE_DIR) && pnpm build
+	cd $(WEB_EXPLORER_DIR) && pnpm build
 
 .PHONY: web-typecheck
 web-typecheck: ## Typecheck the showcase site
-	cd $(WEB_SHOWCASE_DIR) && pnpm typecheck
+	cd $(WEB_EXPLORER_DIR) && pnpm typecheck
 
 .PHONY: web-lint
 web-lint: ## Lint the showcase site
-	cd $(WEB_SHOWCASE_DIR) && pnpm lint
+	cd $(WEB_EXPLORER_DIR) && pnpm lint
 
 .PHONY: web-format
 web-format: ## Format the showcase site (prettier)
-	cd $(WEB_SHOWCASE_DIR) && pnpm format
+	cd $(WEB_EXPLORER_DIR) && pnpm format
 
 .PHONY: web-generate-api
-web-generate-api: ## Regenerate web/showcase/src/api/types.ts from OpenAPI
-	cd $(WEB_SHOWCASE_DIR) && pnpm generate:api
+web-generate-api: ## Regenerate web/explorer/src/api/types.ts from OpenAPI
+	cd $(WEB_EXPLORER_DIR) && pnpm generate:api
 
 ##@ Dashboard SPA (web/dashboard/) — customer-facing app.ratesengine.net
 
@@ -370,6 +370,30 @@ dashboard-typecheck: ## Typecheck the dashboard
 .PHONY: dashboard-lint
 dashboard-lint: ## Lint the dashboard
 	cd $(WEB_DASHBOARD_DIR) && pnpm lint
+
+##@ Status page (web/status/) — public-facing status.ratesengine.net
+
+WEB_STATUS_DIR := web/status
+
+.PHONY: status-install
+status-install: ## Install status-page dependencies (pnpm)
+	cd $(WEB_STATUS_DIR) && pnpm install --frozen-lockfile
+
+.PHONY: status-dev
+status-dev: ## Run the status page locally with HMR (http://localhost:3002)
+	cd $(WEB_STATUS_DIR) && pnpm dev
+
+.PHONY: status-build
+status-build: ## Build the status page for production
+	cd $(WEB_STATUS_DIR) && pnpm build
+
+.PHONY: status-typecheck
+status-typecheck: ## Typecheck the status page
+	cd $(WEB_STATUS_DIR) && pnpm typecheck
+
+.PHONY: status-lint
+status-lint: ## Lint the status page
+	cd $(WEB_STATUS_DIR) && pnpm lint
 
 ##@ Housekeeping
 

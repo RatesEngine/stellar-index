@@ -287,3 +287,57 @@ type BlendAssetAmount struct {
 	Asset  string
 	Amount string
 }
+
+// BlendPoolSummary is one row of the /v1/lending/pools listing.
+// Identifies a Blend pool contract observed in our auction
+// stream (any pool that has ever emitted a new/fill/delete
+// event into blend_auctions). Per-pool TVL / utilisation /
+// supply-borrow APYs land once the pool-storage reader worker
+// ships — surfaced via additional fields then.
+type BlendPoolSummary struct {
+	Pool           string
+	Auctions24h    int64
+	AuctionsTotal  int64
+	UniqueUsers30d int64
+	LastSeen       time.Time
+}
+
+// ListBlendPools returns one row per distinct pool contract
+// observed in blend_auctions, with auction counts and last-seen
+// timestamps. Sorted by AuctionsTotal desc so high-activity
+// pools surface first; ties broken by pool address for
+// deterministic output.
+//
+// 24h / 30d windows match the rest of the activity surfaces
+// (24h on /assets / /sources, 30d for the unique-user roll-up
+// since liquidations cluster).
+func (s *Store) ListBlendPools(ctx context.Context) ([]BlendPoolSummary, error) {
+	const q = `
+        SELECT pool,
+               COUNT(*) FILTER (WHERE ts > NOW() - INTERVAL '24 hours') AS auctions_24h,
+               COUNT(*)                                                  AS auctions_total,
+               COUNT(DISTINCT user_address)
+                 FILTER (WHERE ts > NOW() - INTERVAL '30 days')          AS unique_users_30d,
+               MAX(ts)                                                   AS last_seen
+          FROM blend_auctions
+         GROUP BY pool
+         ORDER BY auctions_total DESC, pool ASC
+    `
+	rows, err := s.db.QueryContext(ctx, q)
+	if err != nil {
+		return nil, fmt.Errorf("timescale: ListBlendPools: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+	var out []BlendPoolSummary
+	for rows.Next() {
+		var p BlendPoolSummary
+		if err := rows.Scan(&p.Pool, &p.Auctions24h, &p.AuctionsTotal, &p.UniqueUsers30d, &p.LastSeen); err != nil {
+			return nil, fmt.Errorf("timescale: ListBlendPools scan: %w", err)
+		}
+		out = append(out, p)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("timescale: ListBlendPools rows: %w", err)
+	}
+	return out, nil
+}

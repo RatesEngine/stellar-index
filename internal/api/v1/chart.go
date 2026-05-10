@@ -1,6 +1,7 @@
 package v1
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"net/http"
@@ -72,7 +73,14 @@ func (s *Server) handleChart(w http.ResponseWriter, r *http.Request) {
 		from = time.Now().Add(-tf.Duration).UTC()
 	}
 
-	points, err := s.history.HistoryPointsInRange(r.Context(), pair, gran, from, time.Time{}, historyMaxPoints)
+	// 8s ceiling on the chart query + downstream stablecoin
+	// fallback. Same pattern as #1082 / #1099 / #1100 / #1101.
+	// The chart's prices_1m / prices_5m / prices_1h scan can take
+	// 5–10s on a cold cache for long timeframes (`?timeframe=1y`
+	// + `granularity=1h` is ~8 760 buckets).
+	chartCtx, chartCancel := context.WithTimeout(r.Context(), 8*time.Second)
+	defer chartCancel()
+	points, err := s.history.HistoryPointsInRange(chartCtx, pair, gran, from, time.Time{}, historyMaxPoints)
 	if errors.Is(err, ErrUnknownGranularity) {
 		writeProblem(w, r,
 			"https://api.ratesengine.net/errors/invalid-granularity",
@@ -84,6 +92,16 @@ func (s *Server) handleChart(w http.ResponseWriter, r *http.Request) {
 		if clientAborted(r, err) {
 			return
 		}
+		if errors.Is(err, context.DeadlineExceeded) {
+			s.logger.Warn("HistoryPointsInRange deadline exceeded",
+				"asset", pair.Base.String(), "quote", pair.Quote.String(),
+				"timeframe", tfRaw, "granularity", gran)
+			writeProblem(w, r,
+				"https://api.ratesengine.net/errors/chart-timeout",
+				"Chart query timed out", http.StatusServiceUnavailable,
+				"the underlying prices_1m / prices_5m / prices_1h scan didn't return in 8s; cache may still be warming. Retry in a few seconds.")
+			return
+		}
 		s.logger.Error("HistoryPointsInRange failed",
 			"err", err, "asset", pair.Base.String(), "quote", pair.Quote.String(),
 			"timeframe", tfRaw, "granularity", gran)
@@ -91,6 +109,18 @@ func (s *Server) handleChart(w http.ResponseWriter, r *http.Request) {
 			"https://api.ratesengine.net/errors/internal",
 			"Internal error", http.StatusInternalServerError, "")
 		return
+	}
+
+	triangulated := false
+	if len(points) == 0 {
+		// Stablecoin fallback inherits chartCtx so the 8s ceiling
+		// covers the proxy retry too — without that, an empty
+		// literal pair could spend another 8s on each pegged
+		// alternative (10+ pegs × 8s each).
+		if fp, ok := s.chartStablecoinFallback(chartCtx, pair, gran, from); ok {
+			points = fp
+			triangulated = true
+		}
 	}
 
 	wire := make([]HistoryPointWire, len(points))
@@ -105,7 +135,40 @@ func (s *Server) handleChart(w http.ResponseWriter, r *http.Request) {
 		Granularity: gran,
 		PriceType:   priceType,
 		Points:      wire,
-	}, Flags{})
+	}, Flags{Triangulated: triangulated})
+}
+
+// chartStablecoinFallback handles the X/fiat:USD → X/<peg> retry
+// path. The literal pair query never has rows in prices_1m for
+// fiat:USD because the synthetic stablecoin → USD mapping is
+// applied at /v1/coins read time, not at write time. When the
+// literal pair returned 0 points and the quote is fiat:USD, walk
+// the operator-declared USD-pegged classics and return the first
+// non-empty result. ok=false when no fallback fires (caller keeps
+// the empty result + leaves triangulated=false).
+//
+// Extracted to keep handleChart under the gocognit ceiling.
+func (s *Server) chartStablecoinFallback(
+	ctx context.Context, pair canonical.Pair, gran string, from time.Time,
+) ([]HistoryPoint, bool) {
+	if pair.Quote.Type != canonical.AssetFiat || pair.Quote.Code != "USD" {
+		return nil, false
+	}
+	for _, peg := range s.usdPeggedClassics {
+		if peg.Equal(pair.Base) {
+			continue
+		}
+		proxied, err := canonical.NewPair(pair.Base, peg)
+		if err != nil {
+			continue
+		}
+		pp, err := s.history.HistoryPointsInRange(ctx, proxied, gran, from, time.Time{}, historyMaxPoints)
+		if err != nil || len(pp) == 0 {
+			continue
+		}
+		return pp, true
+	}
+	return nil, false
 }
 
 // parseChartPair builds the canonical Pair from query params,

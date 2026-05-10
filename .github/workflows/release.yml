@@ -86,7 +86,10 @@ jobs:
           - ratesengine-migrate
           - ratesengine-sla-probe
         goos: [linux]
-        goarch: [amd64, arm64]
+        # arm64 dropped 2026-05-08 — every region (R1/R2/R3 plan) is
+        # amd64. Re-add when an arm64 host is provisioned. See memory:
+        # feedback_release_cadence.md.
+        goarch: [amd64]
     steps:
       - name: Checkout at tag
         uses: actions/checkout@v4
@@ -171,8 +174,14 @@ jobs:
           set -euo pipefail
           TAG="${{ needs.resolve-tag.outputs.tag }}"
           NOTES=/tmp/release-notes.md
-          awk -v ver="[$TAG]" '
-            $0 ~ "^## \\[" ver "\\]" { capture = 1; print; next }
+          # awk-bracket-class trap: passing ver as `[v0.5.0-rc.N]`
+          # turned the literal brackets into a character class
+          # `[v0.5.0-rc.N]` (matches a single char from that set)
+          # so the regex never anchored to a real heading. Use a
+          # literal-string match (`==` on the slice we want) by
+          # checking for the prefix `## [<TAG>]` directly.
+          awk -v hdr="## [$TAG]" '
+            substr($0, 1, length(hdr)) == hdr { capture = 1; print; next }
             capture && /^## \[/ { exit }
             capture { print }
           ' CHANGELOG.md > "$NOTES"
@@ -280,7 +289,10 @@ jobs:
         with:
           context: .
           file: docker/${{ matrix.binary }}.Dockerfile
-          platforms: linux/amd64,linux/arm64
+          # arm64 dropped 2026-05-08 to halve container build cost.
+          # Re-add when an arm64 host is provisioned. See memory:
+          # feedback_release_cadence.md.
+          platforms: linux/amd64
           push: true
           tags: ${{ steps.tags.outputs.tags }}
           build-args: |

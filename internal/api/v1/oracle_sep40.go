@@ -70,11 +70,31 @@ func (s *Server) handleOracleLastPrice(w http.ResponseWriter, r *http.Request) {
 
 	snapshot, sources, stale, err := reader.LatestPrice(r.Context(), asset, defaultPriceQuote)
 	if errors.Is(err, ErrPriceNotFound) {
-		writeProblem(w, r,
-			"https://api.ratesengine.net/errors/price-not-found",
-			"No price data for asset", http.StatusNotFound,
-			"no observation for "+asset.String())
-		return
+		// Same Redis VWAP fallback as /v1/price (price.go) — covers
+		// stablecoin-proxy rewrites (XLM/fiat:USD synthesised from
+		// XLM/USDC-G…) + triangulated chains. Without this, SEP-40
+		// `lastprice(native)` 404s in steady state because
+		// prices_1m has no literal native/fiat:USD bucket, while
+		// /v1/price?asset=native&quote=fiat:USD succeeds via the
+		// same fallback. Caught by the 2026-05-08 prod audit.
+		var ok bool
+		snapshot, sources, _, ok = s.tryRedisVWAPFallback(r.Context(), asset, defaultPriceQuote)
+		stale = false
+		if !ok {
+			// Fiat-vs-fiat cross-rate from the forex snapshot —
+			// covers `lastprice(fiat:EUR)` etc., which would 404
+			// without this branch. Mirrors #1086's /v1/price
+			// fiat fallback.
+			snapshot, sources, ok = s.tryFiatCrossRate(asset, defaultPriceQuote)
+		}
+		if !ok {
+			writeProblem(w, r,
+				"https://api.ratesengine.net/errors/price-not-found",
+				"No price data for asset", http.StatusNotFound,
+				"no observation for "+asset.String())
+			return
+		}
+		err = nil
 	}
 	if err != nil {
 		if clientAborted(r, err) {
@@ -255,11 +275,28 @@ func (s *Server) handleOracleXLastPrice(w http.ResponseWriter, r *http.Request) 
 
 	snapshot, sources, stale, err := reader.LatestPrice(r.Context(), base, quote)
 	if errors.Is(err, ErrPriceNotFound) {
-		writeProblem(w, r,
-			"https://api.ratesengine.net/errors/price-not-found",
-			"No price data for pair", http.StatusNotFound,
-			"no observation for "+base.String()+" / "+quote.String())
-		return
+		// Same Redis VWAP fallback as /v1/price for stablecoin-
+		// proxy + triangulated pairs. Companion to the equivalent
+		// fix on /v1/oracle/lastprice — see that handler's comment
+		// for the full rationale.
+		var ok bool
+		snapshot, sources, _, ok = s.tryRedisVWAPFallback(r.Context(), base, quote)
+		stale = false
+		if !ok {
+			// Fiat-vs-fiat cross-rate via the forex snapshot —
+			// covers `x_last_price(fiat:EUR, fiat:GBP)` etc.
+			// Mirrors the `/v1/oracle/lastprice` and `/v1/price`
+			// fiat fallbacks (#1086 / this PR).
+			snapshot, sources, ok = s.tryFiatCrossRate(base, quote)
+		}
+		if !ok {
+			writeProblem(w, r,
+				"https://api.ratesengine.net/errors/price-not-found",
+				"No price data for pair", http.StatusNotFound,
+				"no observation for "+base.String()+" / "+quote.String())
+			return
+		}
+		err = nil
 	}
 	if err != nil {
 		if clientAborted(r, err) {

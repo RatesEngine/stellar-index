@@ -22,7 +22,7 @@ func TestPolicyForPath_PinsDirectives(t *testing.T) {
 		{"/v1/version", "no-store"},
 		{"/metrics", "no-store"},
 
-		// Status rollup — short public cache so the showcase polling
+		// Status rollup — short public cache so the explorer polling
 		// fan-out doesn't multiply against the API
 		{"/v1/status", "public, max-age=10, s-maxage=15"},
 
@@ -63,10 +63,27 @@ func TestPolicyForPath_PinsDirectives(t *testing.T) {
 
 		// Registry catalogues + change-summary
 		{"/v1/coins", "public, max-age=60, s-maxage=300"},
+		{"/v1/coins/USDC", "public, max-age=60, s-maxage=300"},
+		{"/v1/coins/native", "public, max-age=60, s-maxage=300"},
 		{"/v1/issuers", "public, max-age=60, s-maxage=300"},
 		{"/v1/issuers/GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN", "public, max-age=60, s-maxage=300"},
 		{"/v1/changes/coin/stellar", "public, max-age=60, s-maxage=300"},
 		{"/v1/changes/pair/native:USDC", "public, max-age=60, s-maxage=300"},
+
+		// Currencies + chart + lending + network-stats + sac-wrappers
+		// + incidents JSON + pools — all read endpoints that fall to
+		// the catalogue cache band post-fix. Pre-fix every one of
+		// these inherited the default `private, no-store` because
+		// they weren't in the policy table; verified live against
+		// r1 with `curl -sI`.
+		{"/v1/currencies", "public, max-age=60, s-maxage=300"},
+		{"/v1/currencies/EUR", "public, max-age=60, s-maxage=300"},
+		{"/v1/chart", "public, max-age=60, s-maxage=300"},
+		{"/v1/lending/pools", "public, max-age=60, s-maxage=300"},
+		{"/v1/network/stats", "public, max-age=60, s-maxage=300"},
+		{"/v1/sac-wrappers", "public, max-age=60, s-maxage=300"},
+		{"/v1/incidents", "public, max-age=60, s-maxage=300"},
+		{"/v1/pools", "public, max-age=60, s-maxage=300"},
 
 		// Diagnostics — operator-facing live data, never CDN-cached
 		{"/v1/diagnostics/cursors", "private, no-cache, must-revalidate"},

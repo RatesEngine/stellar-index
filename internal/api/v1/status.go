@@ -17,7 +17,7 @@ import (
 // StatusResponse is the wire shape for /v1/status — a customer-
 // facing rollup of system health. Distinct from /v1/healthz
 // (shallow liveness, k8s-style) and /v1/readyz (deep dependency
-// ping): /v1/status is what the public showcase status page
+// ping): /v1/status is what the public explorer status page
 // renders and what RFP-mandated "are the SLAs being met" pages
 // are built from.
 //

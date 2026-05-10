@@ -7,6 +7,8 @@ import (
 	"errors"
 	"net/http"
 	"strconv"
+	"strings"
+	"time"
 
 	"github.com/RatesEngine/rates-engine/internal/storage/timescale"
 )
@@ -22,17 +24,37 @@ type IssuersReader interface {
 
 // IssuerListEntry is the wire shape of one row in /v1/issuers.
 // Compact summary suitable for the issuer-directory page.
+//
+// OrgName is the issuer's organisation name from SEP-1
+// (`[DOCUMENTATION].ORG_NAME` in stellar.toml). Populated by
+// the `ratesengine-ops sep1-refresh` job; empty when never
+// resolved or when the issuer has no documentation block.
 type IssuerListEntry struct {
 	GStrkey               string `json:"g_strkey"`
 	HomeDomain            string `json:"home_domain,omitempty"`
+	OrgName               string `json:"org_name,omitempty"`
 	AssetCount            int64  `json:"asset_count"`
 	TotalObservationCount int64  `json:"total_observation_count"`
+	// ScamReason is non-empty when the issuer is flagged as scam /
+	// malicious by the curated `known_scams.go` map (sourced from
+	// stellar.expert's directory). Clients should render a warning
+	// badge — this issuer's assets shouldn't be trusted.
+	ScamReason string `json:"scam_reason,omitempty"`
 }
 
 // Issuer is the wire shape returned by /v1/issuers/{g_strkey}.
 type Issuer struct {
-	GStrkey        string          `json:"g_strkey"`
-	HomeDomain     string          `json:"home_domain,omitempty"`
+	GStrkey    string `json:"g_strkey"`
+	HomeDomain string `json:"home_domain,omitempty"`
+	// OrgName is the issuer's organisation name extracted from
+	// SEP-1 (`[DOCUMENTATION].ORG_NAME`). Same field as the
+	// listing endpoint surfaces; populated by the
+	// `ratesengine-ops sep1-refresh` job.
+	OrgName string `json:"org_name,omitempty"`
+	// ScamReason is non-empty when the issuer is flagged as scam /
+	// malicious by the curated `known_scams.go` map (sourced from
+	// stellar.expert's directory).
+	ScamReason     string          `json:"scam_reason,omitempty"`
 	AuthRequired   *bool           `json:"auth_required,omitempty"`
 	AuthRevocable  *bool           `json:"auth_revocable,omitempty"`
 	AuthImmutable  *bool           `json:"auth_immutable,omitempty"`
@@ -57,7 +79,7 @@ type IssuedAsset struct {
 //
 // Returns the issuer directory ordered by total observation count
 // across the issuer's classic assets — the proxy-for-activity
-// ranking the showcase /issuers page exposes. Returns 503 when
+// ranking the explorer /issuers page exposes. Returns 503 when
 // no IssuersReader is wired and 400 on out-of-range limit.
 func (s *Server) handleIssuersList(w http.ResponseWriter, r *http.Request) {
 	if s.issuers == nil {
@@ -79,8 +101,19 @@ func (s *Server) handleIssuersList(w http.ResponseWriter, r *http.Request) {
 		}
 		limit = n
 	}
-	rows, err := s.issuers.ListIssuers(r.Context(), limit)
+	// 8s ceiling — same pattern as the cold-path series.
+	listCtx, listCancel := context.WithTimeout(r.Context(), 8*time.Second)
+	defer listCancel()
+	rows, err := s.issuers.ListIssuers(listCtx, limit)
 	if err != nil {
+		if errors.Is(err, context.DeadlineExceeded) {
+			s.logger.Warn("ListIssuers deadline exceeded", "limit", limit)
+			writeProblem(w, r,
+				"https://api.ratesengine.net/errors/issuers-timeout",
+				"Issuers list timed out", http.StatusServiceUnavailable,
+				"the issuer registry scan didn't return in 8s; retry shortly.")
+			return
+		}
 		s.logger.Warn("issuers list", "err", err)
 		writeProblem(w, r,
 			"https://api.ratesengine.net/errors/issuers-error",
@@ -90,11 +123,14 @@ func (s *Server) handleIssuersList(w http.ResponseWriter, r *http.Request) {
 	}
 	out := make([]IssuerListEntry, len(rows))
 	for i, r := range rows {
+		homeDomain, orgName := enrichIssuer(r.GStrkey, r.HomeDomain, r.OrgName)
 		out[i] = IssuerListEntry{
 			GStrkey:               r.GStrkey,
-			HomeDomain:            r.HomeDomain,
+			HomeDomain:            homeDomain,
+			OrgName:               orgName,
 			AssetCount:            r.AssetCount,
 			TotalObservationCount: r.TotalObservationCount,
+			ScamReason:            scamReason(r.GStrkey),
 		}
 	}
 	writeJSON(w, out, Flags{})
@@ -103,7 +139,7 @@ func (s *Server) handleIssuersList(w http.ResponseWriter, r *http.Request) {
 // handleIssuer serves GET /v1/issuers/{g_strkey}.
 //
 // Returns 404 (problem+json) when the issuer has never been observed.
-// Always includes the assets array so the showcase issuer card has
+// Always includes the assets array so the explorer issuer card has
 // the per-issuer drill-down data without a second request.
 func (s *Server) handleIssuer(w http.ResponseWriter, r *http.Request) {
 	if s.issuers == nil {
@@ -122,8 +158,21 @@ func (s *Server) handleIssuer(w http.ResponseWriter, r *http.Request) {
 			"g_strkey path segment is required")
 		return
 	}
+	// Stellar G-strkeys are uppercase base32 by SEP-23 convention;
+	// the storage layer keys off the canonical uppercase form.
+	// URL clients (chat clients, search tools, manual typing)
+	// regularly lowercase, which used to 404 outright. Normalise
+	// at input — base32 alphabet is case-insensitive in Stellar
+	// SDK validation, so the underlying ed25519 public key is the
+	// same. No risk of merging two distinct accounts.
+	gStrkey = strings.ToUpper(gStrkey)
 
-	row, err := s.issuers.GetIssuer(r.Context(), gStrkey)
+	// 8s ceiling spans both calls — GetIssuer is fast but the
+	// fan-out to ListIssuerAssets can hit the trades hypertable
+	// for the per-asset observation count.
+	iCtx, iCancel := context.WithTimeout(r.Context(), 8*time.Second)
+	defer iCancel()
+	row, err := s.issuers.GetIssuer(iCtx, gStrkey)
 	if errors.Is(err, sql.ErrNoRows) {
 		writeProblem(w, r,
 			"https://api.ratesengine.net/errors/issuer-not-found",
@@ -132,6 +181,14 @@ func (s *Server) handleIssuer(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err != nil {
+		if errors.Is(err, context.DeadlineExceeded) {
+			s.logger.Warn("GetIssuer deadline exceeded", "g_strkey", gStrkey)
+			writeProblem(w, r,
+				"https://api.ratesengine.net/errors/issuer-timeout",
+				"Issuer read timed out", http.StatusServiceUnavailable,
+				"the issuer + asset list scan didn't return in 8s; retry shortly.")
+			return
+		}
 		s.logger.Warn("issuer read", "g_strkey", gStrkey, "err", err)
 		writeProblem(w, r,
 			"https://api.ratesengine.net/errors/issuer-error",
@@ -140,17 +197,20 @@ func (s *Server) handleIssuer(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	assets, err := s.issuers.ListIssuerAssets(r.Context(), gStrkey)
+	assets, err := s.issuers.ListIssuerAssets(iCtx, gStrkey)
 	if err != nil {
 		// Soft-fail on the asset list — the issuer card still
-		// renders without it.
+		// renders without it. Includes deadline exceeded.
 		s.logger.Warn("issuer assets", "g_strkey", gStrkey, "err", err)
 		assets = nil
 	}
 
+	homeDomain, orgName := enrichIssuer(row.GStrkey, row.HomeDomain, row.OrgName)
 	out := Issuer{
 		GStrkey:        row.GStrkey,
-		HomeDomain:     row.HomeDomain,
+		HomeDomain:     homeDomain,
+		OrgName:        orgName,
+		ScamReason:     scamReason(row.GStrkey),
 		AuthRequired:   row.AuthRequired,
 		AuthRevocable:  row.AuthRevocable,
 		AuthImmutable:  row.AuthImmutable,

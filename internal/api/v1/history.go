@@ -141,7 +141,7 @@ func tradeRowFrom(t canonical.Trade, decimals int) TradeRow {
 //   - from: to - 1h (1-hour window rolling back from `to`)
 //   - to:   now
 //   - limit: 1000 (server clamps to ≤ 10000)
-func (s *Server) handleHistory(w http.ResponseWriter, r *http.Request) {
+func (s *Server) handleHistory(w http.ResponseWriter, r *http.Request) { //nolint:funlen // option parsing + 8s-timeout guard + range/limit defaults are linear; splitting fragments the request lifecycle
 	reader := s.history
 	if reader == nil {
 		writeProblem(w, r,
@@ -208,10 +208,26 @@ func (s *Server) handleHistory(w http.ResponseWriter, r *http.Request) {
 		afterOpIndex = c.opIndex
 	}
 
-	trades, err := reader.TradesInRangeAfter(r.Context(), pair,
+	// 8s ceiling on the trades hypertable range query. Same
+	// pattern as #1082 / #1099 / #1100 / #1101 / #1102. Long
+	// `from` windows (no `from` set, or month-spanning) can take
+	// 5–10s on a cold cache scanning per-trade rows.
+	hCtx, hCancel := context.WithTimeout(r.Context(), 8*time.Second)
+	defer hCancel()
+	trades, err := reader.TradesInRangeAfter(hCtx, pair,
 		from, to, afterTs, afterLedger, afterTxHash, afterSource, afterOpIndex, limit)
 	if err != nil {
 		if clientAborted(r, err) {
+			return
+		}
+		if errors.Is(err, context.DeadlineExceeded) {
+			s.logger.Warn("TradesInRangeAfter deadline exceeded",
+				"base", base.String(), "quote", quote.String(),
+				"from", from, "to", to, "limit", limit)
+			writeProblem(w, r,
+				"https://api.ratesengine.net/errors/history-timeout",
+				"History query timed out", http.StatusServiceUnavailable,
+				"the underlying trades-hypertable scan didn't return in 8s. Try narrowing the from/to window or reducing the limit.")
 			return
 		}
 		s.logger.Error("TradesInRangeAfter failed",
@@ -336,13 +352,23 @@ func isLowerHex64(s string) bool {
 // parseBaseQuote extracts + validates base/quote from the request.
 // Returns (base, quote, true) on success; writes a problem response
 // and returns ok=false on failure.
+//
+// When `base` is missing but `asset` is present, the error detail
+// names the alias to redirect callers who copied query params from
+// /v1/price (which uses asset/quote rather than base/quote). Same
+// hint when only `quote` is missing alongside an `asset` param —
+// the user almost certainly mixed the two endpoint conventions.
 func parseBaseQuote(w http.ResponseWriter, r *http.Request) (canonical.Asset, canonical.Asset, bool) {
 	rawBase := r.URL.Query().Get("base")
 	if rawBase == "" {
+		detail := "base query parameter is required"
+		if r.URL.Query().Get("asset") != "" {
+			detail += "; this endpoint uses base/quote (not asset/quote — that form is on /v1/price)"
+		}
 		writeProblem(w, r,
 			"https://api.ratesengine.net/errors/missing-base",
 			"Missing base parameter", http.StatusBadRequest,
-			"base query parameter is required")
+			detail)
 		return canonical.Asset{}, canonical.Asset{}, false
 	}
 	base, err := canonical.ParseAsset(rawBase)
@@ -417,7 +443,7 @@ const (
 // granularity. 200 with empty points[] when the pair has no closed
 // buckets yet — distinct from 404 since the asset itself may be
 // known but just hasn't accrued bucketed history.
-func (s *Server) handleHistorySinceInception(w http.ResponseWriter, r *http.Request) {
+func (s *Server) handleHistorySinceInception(w http.ResponseWriter, r *http.Request) { //nolint:funlen // option parsing + 8s-timeout guard + grain-default + clamp logic are linear; splitting fragments the request lifecycle
 	if s.history == nil {
 		writeProblem(w, r,
 			"https://api.ratesengine.net/errors/history-unavailable",
@@ -478,7 +504,9 @@ func (s *Server) handleHistorySinceInception(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
-	points, err := s.history.HistoryPoints(r.Context(), pair, gran, historyMaxPoints)
+	hCtx, hCancel := context.WithTimeout(r.Context(), 8*time.Second)
+	defer hCancel()
+	points, err := s.history.HistoryPoints(hCtx, pair, gran, historyMaxPoints)
 	if errors.Is(err, ErrUnknownGranularity) {
 		writeProblem(w, r,
 			"https://api.ratesengine.net/errors/invalid-granularity",
@@ -488,6 +516,15 @@ func (s *Server) handleHistorySinceInception(w http.ResponseWriter, r *http.Requ
 	}
 	if err != nil {
 		if clientAborted(r, err) {
+			return
+		}
+		if errors.Is(err, context.DeadlineExceeded) {
+			s.logger.Warn("HistoryPoints deadline exceeded",
+				"asset", asset.String(), "quote", quote.String(), "granularity", gran)
+			writeProblem(w, r,
+				"https://api.ratesengine.net/errors/history-timeout",
+				"History query timed out", http.StatusServiceUnavailable,
+				"the underlying CAGG didn't return in 8s; cache may still be warming.")
 			return
 		}
 		s.logger.Error("HistoryPoints failed",

@@ -281,6 +281,22 @@ func (s *Store) InsertTrade(ctx context.Context, t canonical.Trade) error {
 	if err != nil {
 		return fmt.Errorf("timescale: InsertTrade: %w", err)
 	}
+
+	// Phase 4 (per migration 0023's docblock): auto-register the
+	// classic-asset registry from observed trades. Errors are
+	// soft-failures — the trade row is committed, we just log+skip
+	// the registry update so the hot path can't be sunk by a
+	// registry-side problem. Dedupe-cached so this is a no-op for
+	// every asset/issuer after the first touch in the process.
+	for _, side := range [2]canonical.Asset{t.Pair.Base, t.Pair.Quote} {
+		if regErr := s.registerClassicAssetSeen(ctx, side, t.Ledger, t.Timestamp); regErr != nil {
+			// Stay quiet at info level — this fires per unique asset
+			// once per process. A real DB problem would surface in
+			// metrics + the trade flow continuing to succeed is the
+			// right behaviour.
+			_ = regErr
+		}
+	}
 	return nil
 }
 

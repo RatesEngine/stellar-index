@@ -140,6 +140,11 @@ func main() { //nolint:gocyclo,gocognit,funlen // subcommand switch; each case i
 			fmt.Fprintf(os.Stderr, "supply: %v\n", err)
 			os.Exit(1)
 		}
+	case "sep1-refresh":
+		if err := sep1RefreshCmd(args[1:]); err != nil {
+			fmt.Fprintf(os.Stderr, "sep1-refresh: %v\n", err)
+			os.Exit(1)
+		}
 	case "wasm-history":
 		if err := wasmHistory(args[1:]); err != nil {
 			fmt.Fprintf(os.Stderr, "wasm-history: %v\n", err)
@@ -195,9 +200,9 @@ func main() { //nolint:gocyclo,gocognit,funlen // subcommand switch; each case i
 			fmt.Fprintf(os.Stderr, "upgrade-key: %v\n", err)
 			os.Exit(1)
 		}
-	case "version", "--version", "-v":
+	case "version", "--version", "-v", "-version":
 		fmt.Println(version.String())
-	case "help", "--help", "-h":
+	case "help", "--help", "-h", "-help":
 		printUsage()
 	default:
 		// Subcommands the usageBody flags as still-planned (cache-prime,

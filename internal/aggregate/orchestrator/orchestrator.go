@@ -346,12 +346,12 @@ type Config struct {
 	// ContributionSink, when non-nil, receives the per-source
 	// breakdown of every successful VWAP compute. Production wires
 	// `internal/storage/timescale.PriceSourceContributionSink` so
-	// the showcase source-contribution donut on every price card
+	// the explorer source-contribution donut on every price card
 	// reads from a postgres-resident history rather than recomputing
 	// at request time. Best-effort — sink failures log + continue.
 	//
 	// See migrations/0026 + Phase 2 of
-	// docs/architecture/showcase-site-implementation-plan.md.
+	// docs/architecture/explorer-implementation-plan.md.
 	ContributionSink ContributionSink
 
 	// Logger is the structured logger. If nil, slog.Default() is

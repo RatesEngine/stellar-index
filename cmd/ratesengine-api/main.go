@@ -76,9 +76,11 @@ import (
 	"github.com/RatesEngine/rates-engine/internal/platform"
 	"github.com/RatesEngine/rates-engine/internal/platform/postgresstore"
 	"github.com/RatesEngine/rates-engine/internal/ratelimit"
+	"github.com/RatesEngine/rates-engine/internal/sources/forex"
 	"github.com/RatesEngine/rates-engine/internal/storage/redisclient"
 	"github.com/RatesEngine/rates-engine/internal/storage/timescale"
 	"github.com/RatesEngine/rates-engine/internal/supply"
+	"github.com/RatesEngine/rates-engine/internal/usage"
 	"github.com/RatesEngine/rates-engine/internal/version"
 )
 
@@ -274,6 +276,13 @@ func run(cfgPath string, dryRun bool) error { //nolint:gocognit,funlen,gocyclo /
 		)
 	}
 
+	// Per-account usage counter — daily INCRs alongside rate-limit
+	// for /v1/account/usage. Shares the same Redis client; uses a
+	// distinct "usage:" key prefix so it never collides with the
+	// rate-limit bucket. Always wired when Redis is available; the
+	// middleware degrades to no-op if rdb is nil.
+	usageCounter := usage.New(rdb)
+
 	// authMW is built later (after the dashboard bundle) so the
 	// Postgres backend can borrow the same platform stores. Forward-
 	// declared as nil here so the linter sees the read in v1.Options
@@ -450,6 +459,33 @@ func run(cfgPath string, dryRun bool) error { //nolint:gocognit,funlen,gocyclo /
 		return fmt.Errorf("dashboard: %w", err)
 	}
 
+	// Forex shim — periodic fetch of fiat rates from massive.com.
+	// Cache is in-memory; worker installs a snapshot once per hour.
+	// Backs /v1/currencies. Worker survives upstream failures
+	// (logs at warn) — the cache holds the prior snapshot.
+	//
+	// API key comes from MASSIVE_API_KEY env var (passed through
+	// systemd EnvironmentFile=/etc/default/ratesengine on r1). When
+	// empty, the worker still constructs but every fetch returns
+	// 401; a stale cache stays in place and /v1/currencies serves
+	// "warming up" until the key is provided.
+	forexCache := forex.NewCache()
+	forexWorker := forex.NewWorker(
+		forex.NewClient(os.Getenv("MASSIVE_API_KEY")),
+		forexCache,
+		logger.With("component", "forex"),
+		time.Hour,
+	)
+	// Wire fx_quotes persistence — every refresh tick writes the
+	// latest rates + 7d history to the hypertable so /v1/currencies
+	// can serve historical charts beyond the in-memory window.
+	forexWorker = forexWorker.WithWriter(&forexQuoteWriter{store: store})
+	go func() {
+		if err := forexWorker.Run(rootCtx); err != nil && !errors.Is(err, context.Canceled) {
+			logger.Error("forex worker exited", "err", err)
+		}
+	}()
+
 	// Auth — translate the configured auth_mode + auth_backend into
 	// the middleware. auth_mode=none yields nil (server stack omits
 	// it; downstream code treats absence-of-Subject as anonymous).
@@ -462,41 +498,69 @@ func run(cfgPath string, dryRun bool) error { //nolint:gocognit,funlen,gocyclo /
 		SEP10:             sep10Validator,
 	}, logger)
 
+	// Hoist cache instances out of the Options literal so a prewarm
+	// goroutine can hammer them on startup + every 25s (just inside
+	// the 30s/60s TTLs) — keeps every cold-cache miss off the user's
+	// path. The first /exchanges or /dexes pageload after a binary
+	// restart now hits a warm cache.
+	cachedSourcesStats := v1.NewCachedSourcesStatsReader(store, 60*time.Second)
+	cachedMarketsReader := v1.NewCachedMarketsReader(marketsReader, 30*time.Second)
+	cachedCoinsReader := v1.NewCachedCoinsReader(store, 30*time.Second)
+	go prewarmCaches(rootCtx, logger.With("component", "prewarm"), cachedSourcesStats, cachedMarketsReader, cachedCoinsReader)
+
 	apiSrv := v1.New(v1.Options{
-		Logger:           logger.With("component", "api"),
-		ReadyChecks:      checks,
-		Assets:           assetReader,
-		Prices:           priceReader,
-		History:          storeHistoryReader{s: store},
-		Markets:          marketsReader,
-		Oracle:           oracleReader,
-		Meta:             sep1Cache,
-		Accounts:         accountStore,
-		Signups:          signupTracker,
-		Stripe:           stripeCfg,
-		Divergence:       divergenceLooker,
-		Confidence:       redisConfidenceLooker{rdb: rdb},
-		Triangulated:     redisTriangulatedLooker{rdb: rdb},
-		Freeze:           freezeLooker,
-		Supply:           storeSupplyLooker{s: store},
-		Volume:           storeVolumeReader{s: store},
-		Change24h:        storeChange24hReader{s: store},
-		ChangeSummary:    store,
-		Coins:            store,
-		Issuers:          store,
-		Cursors:          store,
-		SEP10:            sep10Validator,
-		Hub:              hub,
-		CORS:             cors,
-		Auth:             authMW,
-		RateLimit:        rateLimit,
-		CDNEnabled:       cfg.API.CDNEnabled,
-		StatusBackend:    statusBackend,
-		RegionName:       cfg.Region.ID,
-		RegionDeployment: "production",
-		DashboardAuth:    nilOrMounter(dashboardBundle.auth),
-		DashboardKeys:    nilOrMounter(dashboardBundle.keys),
-		SessionAuth:      dashboardBundle.middleware,
+		Logger:      logger.With("component", "api"),
+		ReadyChecks: checks,
+		Assets:      assetReader,
+		Prices:      priceReader,
+		History:     storeHistoryReader{s: store},
+		// Wrap with a 30s TTL cache. /v1/markets and /v1/pools both
+		// scan ~24h of the trades hypertable on every hit (5-10s
+		// each); the explorer hits them on every page load. 30s
+		// freshness is plenty for trade-volume aggregates.
+		Markets:       cachedMarketsReader,
+		Oracle:        oracleReader,
+		Meta:          sep1Cache,
+		Accounts:      accountStore,
+		Signups:       signupTracker,
+		Stripe:        stripeCfg,
+		Divergence:    divergenceLooker,
+		Confidence:    redisConfidenceLooker{rdb: rdb},
+		Triangulated:  redisTriangulatedLooker{rdb: rdb},
+		Freeze:        freezeLooker,
+		Supply:        storeSupplyLooker{s: store},
+		Volume:        storeVolumeReader{s: store},
+		Change24h:     storeChange24hReader{s: store},
+		ChangeSummary: store,
+		Coins:         cachedCoinsReader,
+		Issuers:       store,
+		Cursors:       store,
+		NetworkStats:  store,
+		// Wrap with a 60s TTL cache. The underlying SQL aggregations
+		// (24h trades-hypertable scan grouped by source) take 5-10s;
+		// the explorer hits these on every /dexes + /exchanges page
+		// load. 60s freshness is plenty for a 24h-trailing aggregate.
+		SourcesStats:      cachedSourcesStats,
+		Lending:           store,
+		Currencies:        newForexAdapter(forexCache),
+		FXHistory:         &fxHistoryReader{store: store},
+		SEP10:             sep10Validator,
+		Hub:               hub,
+		CORS:              cors,
+		Auth:              authMW,
+		RateLimit:         rateLimit,
+		UsageTracker:      middleware.UsageTracker(usageCounter, logger.With("component", "usage")),
+		UsageReader:       usageReaderAdapter{c: usageCounter},
+		CDNEnabled:        cfg.API.CDNEnabled,
+		StatusBackend:     statusBackend,
+		RegionName:        cfg.Region.ID,
+		RegionDeployment:  "production",
+		DashboardAuth:     nilOrMounter(dashboardBundle.auth),
+		DashboardKeys:     nilOrMounter(dashboardBundle.keys),
+		SessionAuth:       dashboardBundle.middleware,
+		SessionPeeker:     sessionPeekerAdapter{},
+		SACWrappers:       cfg.Supply.SACWrappers,
+		USDPeggedClassics: parseUSDPeggedClassics(cfg.Trades.USDPeggedClassicAssets, logger),
 	})
 
 	// Closed-bucket producer — only spawn when the operator
@@ -963,7 +1027,27 @@ func (r storeAssetReader) GetAsset(ctx context.Context, a canonical.Asset) (v1.A
 	if !has {
 		return v1.AssetDetail{}, v1.ErrAssetNotFound
 	}
-	return assetToDetail(a, r.homeDomainLookup), nil
+	detail := assetToDetail(a, r.homeDomainLookup)
+
+	// Best-effort F2 enrichment from the per-asset stats lookup
+	// — same data the /v1/coins listing carries. Failures here
+	// don't break the detail response; the field stays null and
+	// the rest of the body still serves cleanly. The proper
+	// supply pipeline (asset_supply_history) will overwrite
+	// these when it has a snapshot — populateF2Fields runs
+	// AFTER us in the handler stack.
+	if stats, err := r.s.LatestAssetStats(ctx, a.String()); err == nil {
+		if detail.VolumeUSD24h == nil && stats.Volume24hUSD != nil {
+			detail.VolumeUSD24h = stats.Volume24hUSD
+		}
+		if detail.CirculatingSupply == nil && stats.CirculatingSupply != nil {
+			detail.CirculatingSupply = stats.CirculatingSupply
+		}
+		if detail.MarketCapUSD == nil && stats.MarketCapUSD != nil {
+			detail.MarketCapUSD = stats.MarketCapUSD
+		}
+	}
+	return detail, nil
 }
 
 // storeMarketsReader adapts *timescale.Store to v1.MarketsReader.
@@ -971,8 +1055,8 @@ func (r storeAssetReader) GetAsset(ctx context.Context, a canonical.Asset) (v1.A
 // wire shape) so the API layer owns its own schema.
 type storeMarketsReader struct{ s *timescale.Store }
 
-func (r storeMarketsReader) DistinctPairs(ctx context.Context, cursor string, limit int) ([]v1.Market, string, error) {
-	rows, next, err := r.s.DistinctPairs(ctx, cursor, limit)
+func (r storeMarketsReader) DistinctPairsExt(ctx context.Context, cursor string, limit int, order timescale.MarketsOrder) ([]v1.Market, string, error) {
+	rows, next, err := r.s.DistinctPairsExt(ctx, cursor, limit, order)
 	if err != nil {
 		return nil, "", err
 	}
@@ -983,6 +1067,66 @@ func (r storeMarketsReader) DistinctPairs(ctx context.Context, cursor string, li
 			Quote:         m.Pair.Quote.String(),
 			LastTradeAt:   m.LastTradeAt,
 			TradeCount24h: m.TradeCount24h,
+			Volume24hUSD:  m.Volume24hUSD,
+			LastPrice:     m.LastPrice,
+		}
+	}
+	return out, next, nil
+}
+
+func (r storeMarketsReader) SourceMarkets(ctx context.Context, source, cursor string, limit int, order timescale.MarketsOrder) ([]v1.Market, string, error) {
+	rows, next, err := r.s.SourceMarkets(ctx, source, cursor, limit, order)
+	if err != nil {
+		return nil, "", err
+	}
+	out := make([]v1.Market, len(rows))
+	for i, m := range rows {
+		out[i] = v1.Market{
+			Base:          m.Pair.Base.String(),
+			Quote:         m.Pair.Quote.String(),
+			LastTradeAt:   m.LastTradeAt,
+			TradeCount24h: m.TradeCount24h,
+			Volume24hUSD:  m.Volume24hUSD,
+			LastPrice:     m.LastPrice,
+		}
+	}
+	return out, next, nil
+}
+
+func (r storeMarketsReader) AssetMarkets(ctx context.Context, asset, cursor string, limit int, order timescale.MarketsOrder) ([]v1.Market, string, error) {
+	rows, next, err := r.s.AssetMarkets(ctx, asset, cursor, limit, order)
+	if err != nil {
+		return nil, "", err
+	}
+	out := make([]v1.Market, len(rows))
+	for i, m := range rows {
+		out[i] = v1.Market{
+			Base:          m.Pair.Base.String(),
+			Quote:         m.Pair.Quote.String(),
+			LastTradeAt:   m.LastTradeAt,
+			TradeCount24h: m.TradeCount24h,
+			Volume24hUSD:  m.Volume24hUSD,
+			LastPrice:     m.LastPrice,
+		}
+	}
+	return out, next, nil
+}
+
+func (r storeMarketsReader) AllPools(ctx context.Context, filter timescale.PoolsFilter, cursor string, limit int, order timescale.MarketsOrder) ([]v1.Pool, string, error) {
+	rows, next, err := r.s.AllPools(ctx, filter, cursor, limit, order)
+	if err != nil {
+		return nil, "", err
+	}
+	out := make([]v1.Pool, len(rows))
+	for i, p := range rows {
+		out[i] = v1.Pool{
+			Source:        p.Source,
+			Base:          p.Pair.Base.String(),
+			Quote:         p.Pair.Quote.String(),
+			LastTradeAt:   p.LastTradeAt,
+			TradeCount24h: p.TradeCount24h,
+			Volume24hUSD:  p.Volume24hUSD,
+			LastPrice:     p.LastPrice,
 		}
 	}
 	return out, next, nil
@@ -998,7 +1142,13 @@ func (r storeMarketsReader) PairMarket(ctx context.Context, base, quote canonica
 		Quote:         m.Pair.Quote.String(),
 		LastTradeAt:   m.LastTradeAt,
 		TradeCount24h: m.TradeCount24h,
+		Volume24hUSD:  m.Volume24hUSD,
+		LastPrice:     m.LastPrice,
 	}, true, nil
+}
+
+func (r storeMarketsReader) GetPairsVolumeHistory24hBatch(ctx context.Context, pairs [][2]string) (map[string][]timescale.PairVolumePoint, error) {
+	return r.s.GetPairsVolumeHistory24hBatch(ctx, pairs)
 }
 
 // storeOracleReader adapts *timescale.Store to v1.OracleReader.
@@ -1010,6 +1160,10 @@ func (r storeOracleReader) LatestOracleUpdatesForAsset(ctx context.Context, asse
 
 func (r storeOracleReader) LatestOracleUpdatesForAssets(ctx context.Context, assets []canonical.Asset, sourceFilter string) ([]canonical.OracleUpdate, error) {
 	return r.s.LatestOracleUpdatesForAssets(ctx, assets, sourceFilter)
+}
+
+func (r storeOracleReader) LatestOracleStreams(ctx context.Context) ([]canonical.OracleUpdate, error) {
+	return r.s.LatestOracleStreams(ctx)
 }
 
 // cachedOracleReader wraps an inner OracleReader with a Redis
@@ -1074,6 +1228,14 @@ func (r cachedOracleReader) LatestOracleUpdatesForAssets(ctx context.Context, as
 	return updates, nil
 }
 
+// LatestOracleStreams pass-through — the underlying scan is one
+// query against oracle_updates with DISTINCT ON. Cheap enough to
+// skip the cache layer at this volume; revisit if the page becomes
+// a hot endpoint.
+func (r cachedOracleReader) LatestOracleStreams(ctx context.Context) ([]canonical.OracleUpdate, error) {
+	return r.inner.LatestOracleStreams(ctx)
+}
+
 // cachedAssetReader / cachedMarketsReader — Redis read-through
 // caches for the catalogue list endpoints. Same shape as
 // cachedOracleReader: deserialise on hit, hit-the-DB-then-SET on
@@ -1133,11 +1295,110 @@ func (r cachedMarketsReader) PairMarket(ctx context.Context, base, quote canonic
 	return r.inner.PairMarket(ctx, base, quote)
 }
 
-func (r cachedMarketsReader) DistinctPairs(ctx context.Context, cursor string, limit int) ([]v1.Market, string, error) {
+// GetPairsVolumeHistory24hBatch — pass-through. The query runs at
+// page granularity (max 500 pairs) and the result depends on the
+// 24h time window; not worth caching since invalidation tracks
+// every minute boundary.
+func (r cachedMarketsReader) GetPairsVolumeHistory24hBatch(ctx context.Context, pairs [][2]string) (map[string][]timescale.PairVolumePoint, error) {
+	return r.inner.GetPairsVolumeHistory24hBatch(ctx, pairs)
+}
+
+func (r cachedMarketsReader) AllPools(ctx context.Context, filter timescale.PoolsFilter, cursor string, limit int, order timescale.MarketsOrder) ([]v1.Pool, string, error) {
+	// Pools queries are heavy (group by source × pair); cache
+	// follows the same TTL as the markets list. Cache key
+	// includes the filter so pools-with-DEX-filter, pools-by-pair,
+	// and unfiltered pools don't collide.
 	if r.rdb == nil {
-		return r.inner.DistinctPairs(ctx, cursor, limit)
+		return r.inner.AllPools(ctx, filter, cursor, limit, order)
 	}
-	cacheKey := cachekeys.MarketsList(cursor, limit)
+	srcKey := strings.Join(filter.Sources, ",")
+	cacheKey := cachekeys.MarketsList(cursor, limit) + ":order=" + marketsOrderKey(order) + ":pools=1:src=" + srcKey + ":base=" + filter.Base + ":quote=" + filter.Quote + ":asset=" + filter.Asset
+	if raw, err := r.rdb.Get(ctx, cacheKey).Bytes(); err == nil {
+		var p listCachePayload[v1.Pool]
+		if jerr := json.Unmarshal(raw, &p); jerr == nil {
+			return p.Items, p.NextCursor, nil
+		}
+		r.log.Warn("pools cache decode failed", "key", cacheKey)
+	} else if !errors.Is(err, redis.Nil) {
+		r.log.Warn("pools cache read failed", "key", cacheKey, "err", err)
+	}
+	items, next, err := r.inner.AllPools(ctx, filter, cursor, limit, order)
+	if err != nil {
+		return nil, "", err
+	}
+	if buf, jerr := json.Marshal(listCachePayload[v1.Pool]{Items: items, NextCursor: next}); jerr == nil {
+		if serr := r.rdb.Set(ctx, cacheKey, buf, cachekeys.CatalogueListTTL).Err(); serr != nil {
+			r.log.Warn("pools cache write failed", "key", cacheKey, "err", serr)
+		}
+	}
+	return items, next, nil
+}
+
+func (r cachedMarketsReader) SourceMarkets(ctx context.Context, source, cursor string, limit int, order timescale.MarketsOrder) ([]v1.Market, string, error) {
+	// Per-source markets share the same cache shape as
+	// DistinctPairsExt but partition by source so a source's pool
+	// list isn't aliased with the global one.
+	if r.rdb == nil {
+		return r.inner.SourceMarkets(ctx, source, cursor, limit, order)
+	}
+	cacheKey := cachekeys.MarketsList(cursor, limit) + ":order=" + marketsOrderKey(order) + ":source=" + source
+	if raw, err := r.rdb.Get(ctx, cacheKey).Bytes(); err == nil {
+		var p listCachePayload[v1.Market]
+		if jerr := json.Unmarshal(raw, &p); jerr == nil {
+			return p.Items, p.NextCursor, nil
+		}
+		r.log.Warn("source-markets cache decode failed", "key", cacheKey)
+	} else if !errors.Is(err, redis.Nil) {
+		r.log.Warn("source-markets cache read failed", "key", cacheKey, "err", err)
+	}
+
+	items, next, err := r.inner.SourceMarkets(ctx, source, cursor, limit, order)
+	if err != nil {
+		return nil, "", err
+	}
+	if buf, jerr := json.Marshal(listCachePayload[v1.Market]{Items: items, NextCursor: next}); jerr == nil {
+		if serr := r.rdb.Set(ctx, cacheKey, buf, cachekeys.CatalogueListTTL).Err(); serr != nil {
+			r.log.Warn("source-markets cache write failed", "key", cacheKey, "err", serr)
+		}
+	}
+	return items, next, nil
+}
+
+func (r cachedMarketsReader) AssetMarkets(ctx context.Context, asset, cursor string, limit int, order timescale.MarketsOrder) ([]v1.Market, string, error) {
+	// Per-asset markets share the same cache shape as
+	// DistinctPairsExt but partition by asset so an asset's
+	// involvement list isn't aliased with the global one.
+	if r.rdb == nil {
+		return r.inner.AssetMarkets(ctx, asset, cursor, limit, order)
+	}
+	cacheKey := cachekeys.MarketsList(cursor, limit) + ":order=" + marketsOrderKey(order) + ":asset=" + asset
+	if raw, err := r.rdb.Get(ctx, cacheKey).Bytes(); err == nil {
+		var p listCachePayload[v1.Market]
+		if jerr := json.Unmarshal(raw, &p); jerr == nil {
+			return p.Items, p.NextCursor, nil
+		}
+		r.log.Warn("asset-markets cache decode failed", "key", cacheKey)
+	} else if !errors.Is(err, redis.Nil) {
+		r.log.Warn("asset-markets cache read failed", "key", cacheKey, "err", err)
+	}
+
+	items, next, err := r.inner.AssetMarkets(ctx, asset, cursor, limit, order)
+	if err != nil {
+		return nil, "", err
+	}
+	if buf, jerr := json.Marshal(listCachePayload[v1.Market]{Items: items, NextCursor: next}); jerr == nil {
+		if serr := r.rdb.Set(ctx, cacheKey, buf, cachekeys.CatalogueListTTL).Err(); serr != nil {
+			r.log.Warn("asset-markets cache write failed", "key", cacheKey, "err", serr)
+		}
+	}
+	return items, next, nil
+}
+
+func (r cachedMarketsReader) DistinctPairsExt(ctx context.Context, cursor string, limit int, order timescale.MarketsOrder) ([]v1.Market, string, error) {
+	if r.rdb == nil {
+		return r.inner.DistinctPairsExt(ctx, cursor, limit, order)
+	}
+	cacheKey := cachekeys.MarketsList(cursor, limit) + ":order=" + marketsOrderKey(order)
 	if raw, err := r.rdb.Get(ctx, cacheKey).Bytes(); err == nil {
 		var p listCachePayload[v1.Market]
 		if jerr := json.Unmarshal(raw, &p); jerr == nil {
@@ -1148,7 +1409,7 @@ func (r cachedMarketsReader) DistinctPairs(ctx context.Context, cursor string, l
 		r.log.Warn("markets cache read failed", "key", cacheKey, "err", err)
 	}
 
-	items, next, err := r.inner.DistinctPairs(ctx, cursor, limit)
+	items, next, err := r.inner.DistinctPairsExt(ctx, cursor, limit, order)
 	if err != nil {
 		return nil, "", err
 	}
@@ -1158,6 +1419,15 @@ func (r cachedMarketsReader) DistinctPairs(ctx context.Context, cursor string, l
 		}
 	}
 	return items, next, nil
+}
+
+func marketsOrderKey(o timescale.MarketsOrder) string {
+	switch o {
+	case timescale.MarketsOrderVolume24hDesc:
+		return "vol_desc"
+	default:
+		return "pair"
+	}
 }
 
 // redisConfidenceLooker adapts the shared Redis client to
@@ -1614,6 +1884,35 @@ func warnUnsafeBind(logger *slog.Logger, listenAddr string, trustedProxyCIDRs []
 //
 // Default config ships AllowedOrigins=["*"] for the dev path; the
 // operator must explicitly narrow before exposing the API.
+// parseUSDPeggedClassics resolves the operator's
+// trades.usd_pegged_classic_assets strings into canonical Assets so
+// /v1/chart can use them as fallback quotes when the literal
+// X/fiat:USD pair has zero points. Mirrors the aggregator's
+// parseUSDPeggedClassicAssets — soft-fails on malformed entries,
+// same rationale (a missing peg is a smaller failure than refusing
+// to start).
+func parseUSDPeggedClassics(raws []string, logger *slog.Logger) []canonical.Asset {
+	if len(raws) == 0 {
+		return nil
+	}
+	out := make([]canonical.Asset, 0, len(raws))
+	for _, raw := range raws {
+		a, err := canonical.ParseAsset(raw)
+		if err != nil {
+			logger.Warn("usd_pegged_classic_assets: skipping malformed entry",
+				"raw", raw, "err", err)
+			continue
+		}
+		if a.Type != canonical.AssetClassic {
+			logger.Warn("usd_pegged_classic_assets: ignoring non-classic asset",
+				"raw", raw, "type", a.Type)
+			continue
+		}
+		out = append(out, a)
+	}
+	return out
+}
+
 func warnOpenCORS(logger *slog.Logger, allowedOrigins []string, authMode string) {
 	wildcardOnly := len(allowedOrigins) == 1 && allowedOrigins[0] == "*"
 	if !wildcardOnly {
@@ -1621,8 +1920,276 @@ func warnOpenCORS(logger *slog.Logger, allowedOrigins []string, authMode string)
 	}
 	switch authMode {
 	case "apikey", "apikey_optional", "sep10":
-		logger.Warn("SECURITY: CORS allows every origin (\"*\") and auth_mode permits credentials — narrow [api].allowed_origins to your showcase / explorer hostnames before exposing the API publicly.",
+		logger.Warn("SECURITY: CORS allows every origin (\"*\") and auth_mode permits credentials — narrow [api].allowed_origins to your explorer / explorer hostnames before exposing the API publicly.",
 			"auth_mode", authMode,
 			"docs", "https://github.com/RatesEngine/rates-engine/blob/main/docs/operations/pre-launch-hardening.md")
 	}
+}
+
+// usageReaderAdapter bridges *usage.Counter to v1.UsageReader so
+// the v1 package stays free of the internal/usage import.
+type usageReaderAdapter struct{ c *usage.Counter }
+
+func (a usageReaderAdapter) Read(ctx context.Context, subject string, days int) ([]v1.UsageDay, error) {
+	rows, err := a.c.Read(ctx, subject, days)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]v1.UsageDay, len(rows))
+	for i, d := range rows {
+		out[i] = v1.UsageDay{Date: d.Date, Requests: d.Requests}
+	}
+	return out, nil
+}
+
+// sessionPeekerAdapter bridges dashboardauth.SessionFromContext
+// to v1.SessionPeeker so v1's /v1/account/me handler can read
+// the magic-link session without importing dashboardauth.
+//
+// Stateless — the lookup is a context.Value read.
+type sessionPeekerAdapter struct{}
+
+func (sessionPeekerAdapter) SessionFromContext(ctx context.Context) (v1.SessionInfo, bool) {
+	sc, ok := dashboardauth.SessionFromContext(ctx)
+	if !ok {
+		return v1.SessionInfo{}, false
+	}
+	return v1.SessionInfo{
+		UserID:          sc.User.ID.String(),
+		Email:           sc.User.Email,
+		DisplayName:     sc.User.DisplayName,
+		Role:            string(sc.User.Role),
+		IsStaff:         sc.User.IsStaff,
+		EmailVerifiedAt: sc.User.EmailVerifiedAt,
+		LastLoginAt:     sc.User.LastLoginAt,
+		AccountID:       sc.Account.ID.String(),
+		AccountName:     sc.Account.Name,
+		AccountSlug:     sc.Account.Slug,
+		AccountTier:     string(sc.Account.Tier),
+		AccountStatus:   string(sc.Account.Status),
+	}, true
+}
+
+// forexAdapter bridges the forex.Cache (raw snapshot type) to
+// v1.CurrenciesReader (wire-shape projection). The v1 package
+// can't import internal/sources/forex without inverting the
+// dependency direction; the adapter lives here so main.go owns
+// the conversion.
+type forexAdapter struct{ cache *forex.Cache }
+
+func newForexAdapter(c *forex.Cache) *forexAdapter { return &forexAdapter{cache: c} }
+
+func (a *forexAdapter) Latest() *v1.CurrenciesSnapshot {
+	snap := a.cache.Latest()
+	if snap == nil {
+		return nil
+	}
+	rows := make([]v1.CurrencyEntry, len(snap.Currencies))
+	for i, c := range snap.Currencies {
+		row := v1.CurrencyEntry{
+			Ticker:    c.Ticker,
+			Name:      c.Name,
+			RateUSD:   c.RateUSD,
+			UpdatedAt: c.UpdateAt,
+		}
+		// Join curated monetary-base CSV (lower-case keyed). Market
+		// cap is computed in USD-equivalent: the local-units M2
+		// divided by "1 USD = N units" rate gives "M2 in USD".
+		if entry, ok := snap.Circulation[strings.ToLower(c.Ticker)]; ok && entry.AggregateLocalUnits > 0 {
+			supply := entry.AggregateLocalUnits
+			row.CirculatingSupply = &supply
+			if c.RateUSD > 0 {
+				mcap := supply / c.RateUSD
+				row.MarketCapUSD = &mcap
+			}
+			row.CirculationAsOf = entry.AsOf.Format("2006-01-02")
+			row.CirculationSource = entry.Source
+		}
+		rows[i] = row
+	}
+	history := make(map[string][]v1.CurrencyHistoryRaw, len(snap.History7d))
+	for ticker, points := range snap.History7d {
+		out := make([]v1.CurrencyHistoryRaw, len(points))
+		for i, p := range points {
+			out[i] = v1.CurrencyHistoryRaw{Date: p.Date, RateUSD: p.RateUSD}
+		}
+		history[ticker] = out
+	}
+	return &v1.CurrenciesSnapshot{
+		Currencies:  rows,
+		PublishedAt: snap.PublishedAt,
+		FetchedAt:   snap.FetchedAt,
+		History7d:   history,
+	}
+}
+
+// prewarmCaches keeps the heaviest read caches hot. The
+// /v1/sources?include=stats and /v1/markets / /v1/pools queries
+// run aggregations over the trades hypertable that take 5–10s on
+// a cold path; cache TTLs of 30–60s mean a single user-pageload
+// with no recent neighbours always pays the full cost. Calling
+// the cached readers from this goroutine on a 25s cadence keeps
+// the entry alive continuously.
+//
+// Errors get logged at debug level — a transient warmup failure
+// is rare and the next cycle retries. Stops on ctx cancel.
+func prewarmCaches(
+	ctx context.Context,
+	logger *slog.Logger,
+	stats *v1.CachedSourcesStatsReader,
+	markets *v1.CachedMarketsReader,
+	coins *v1.CachedCoinsReader,
+) {
+	const cadence = 25 * time.Second
+	prewarmOnce(ctx, logger, stats, markets, coins)
+	tick := time.NewTicker(cadence)
+	defer tick.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-tick.C:
+			prewarmOnce(ctx, logger, stats, markets, coins)
+		}
+	}
+}
+
+func prewarmOnce(
+	ctx context.Context,
+	logger *slog.Logger,
+	stats *v1.CachedSourcesStatsReader,
+	markets *v1.CachedMarketsReader,
+	coins *v1.CachedCoinsReader,
+) {
+	// Per-call deadlines stop a slow query from stalling the whole
+	// cycle (a missed cycle is fine — the user's request can still
+	// hit the cached entry).
+	statsCtx, cancel := context.WithTimeout(ctx, 20*time.Second)
+	defer cancel()
+	if _, err := stats.GetSourceStats(statsCtx); err != nil {
+		logger.Debug("prewarm sources stats failed", "err", err)
+	}
+	if _, err := stats.GetSourceVolumeHistory24h(statsCtx); err != nil {
+		logger.Debug("prewarm sources volume history failed", "err", err)
+	}
+
+	mkCtx, mkCancel := context.WithTimeout(ctx, 60*time.Second)
+	defer mkCancel()
+	// Mirrors the most-trafficked /v1/markets, /v1/pools requests
+	// the explorer fires (default order, no source filter). The
+	// limit set covers the four common values we see in practice:
+	// 5 (audit script), 25 (Scalar default test), 100 (OpenAPI
+	// default), 200 (currencies listing). Each limit is its own
+	// cache key under [v1.CachedMarketsReader.AllPools]; without
+	// per-limit prewarm, anything off the warmed key 503s under
+	// the new pools-server-timeout (#1082).
+	//
+	// Per-handler order semantics MUST match the cache key the
+	// handler will look up:
+	// - /v1/markets defaults to MarketsOrderPair (handler accepts
+	//   ""|"pair" → 0). Prewarming with 0 hits the right key.
+	// - /v1/pools defaults to MarketsOrderVolume24hDesc (handler
+	//   accepts ""|"volume_24h_usd_desc" → 1). Pre-2026-05-09 we
+	//   prewarmed with 0 which was a phantom slot — every cold-
+	//   cache user request still ran a 10-30s SQL scan because the
+	//   warmed key never matched. Live measurement that day:
+	//   /v1/pools?source=sdex took 27s, soroswap 16s, phoenix 12s,
+	//   aquarius 9s, comet 11s. Match the handler's default
+	//   explicitly so the warmed key is the one users hit.
+	// Important: the unfiltered /v1/pools handler builds
+	// `PoolsFilter{Sources: v1.DexSourceNames()}` (the registry's
+	// DEX list) — NOT `Sources: nil`. Cache key includes the
+	// stringified Sources slice; passing `PoolsFilter{}` here
+	// (`Sources: nil` → key fragment `[]`) warms a different key
+	// than the user request lands on (`[aquarius comet phoenix
+	// sdex soroswap]`). Mirror the handler's behaviour explicitly.
+	dexSources := v1.DexSourceNames()
+	for _, lim := range []int{5, 25, 100, 200} {
+		if _, _, err := markets.DistinctPairsExt(mkCtx, "", lim, timescale.MarketsOrderPair); err != nil {
+			logger.Debug("prewarm markets failed", "limit", lim, "err", err)
+		}
+		if _, _, err := markets.AllPools(mkCtx, timescale.PoolsFilter{Sources: dexSources}, "", lim, timescale.MarketsOrderVolume24hDesc); err != nil {
+			logger.Debug("prewarm pools failed", "limit", lim, "err", err)
+		}
+	}
+
+	// Per-DEX prewarm — the explorer's /dexes/{source} pages each
+	// fire `/v1/pools?source=<dex>&limit=100`, which lands on a
+	// distinct cache key per source. Without this, every page click
+	// missed cache and ran a 10-30s full-window trades-hypertable
+	// scan; sometimes returning a 503 (#1082 path), sometimes
+	// overshooting because lib/pq doesn't reliably propagate
+	// context cancellation mid-query. Per-DEX prewarm runs the
+	// canonical limit=100 + default order the explorer hits;
+	// subsequent users land on warm cache (sub-second). Errors are
+	// logged at Debug — a missed cycle is fine since the user
+	// request still fronts the cache.
+	for _, src := range []string{"soroswap", "phoenix", "aquarius", "sdex", "comet"} {
+		filter := timescale.PoolsFilter{Sources: []string{src}}
+		if _, _, err := markets.AllPools(mkCtx, filter, "", 100, timescale.MarketsOrderVolume24hDesc); err != nil {
+			logger.Debug("prewarm per-source pools failed", "source", src, "err", err)
+		}
+	}
+
+	// /v1/coins?limit=200&include=sparkline backs the unified
+	// currencies listing — single most-trafficked coins read.
+	//
+	// Important: the handler's `prependNative` path subtracts one
+	// from `limit` when cursor/issuer/q are all empty (the explorer's
+	// no-filter case) so it can splice the synthetic XLM row at the
+	// top without overshooting the user's requested page size. So a
+	// /v1/coins?limit=200 user request actually calls
+	// `ListCoinsExt(ctx, ListCoinsOptions{Limit: 199, …})` under the
+	// hood — passing Limit=200 here warms a different cache key than
+	// the one the user request looks up. Mirror the listingLimit the
+	// handler actually uses.
+	coinsCtx, coinsCancel := context.WithTimeout(ctx, 20*time.Second)
+	defer coinsCancel()
+	if _, err := coins.ListCoinsExt(coinsCtx, timescale.ListCoinsOptions{Limit: 199}); err != nil {
+		logger.Debug("prewarm coins listing failed", "err", err)
+	}
+}
+
+// forexQuoteWriter adapts (*timescale.Store) to forex.FXQuoteWriter
+// (the worker can't import timescale without inverting the
+// dependency direction). Translates the per-package FXQuote shape.
+type forexQuoteWriter struct{ store *timescale.Store }
+
+func (w *forexQuoteWriter) InsertFXQuoteBatch(ctx context.Context, quotes []forex.FXQuote) error {
+	if len(quotes) == 0 {
+		return nil
+	}
+	out := make([]timescale.FXQuote, len(quotes))
+	for i, q := range quotes {
+		out[i] = timescale.FXQuote{
+			Bucket:     q.Bucket,
+			Ticker:     q.Ticker,
+			RateUSD:    q.RateUSD,
+			InverseUSD: q.InverseUSD,
+			Source:     q.Source,
+		}
+	}
+	return w.store.InsertFXQuoteBatch(ctx, out)
+}
+
+// fxHistoryReader adapts (*timescale.Store) to v1.FXHistoryReader.
+// Mirrors the writer adapter but on the read path; the v1 package's
+// FXQuotePoint deliberately omits Ticker + Source (the handler
+// already knows ticker, source is provenance not display data).
+type fxHistoryReader struct{ store *timescale.Store }
+
+func (r *fxHistoryReader) ListFXHistory(ctx context.Context, ticker string, from, to time.Time) ([]v1.FXQuotePoint, error) {
+	rows, err := r.store.ListFXHistory(ctx, ticker, from, to)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]v1.FXQuotePoint, len(rows))
+	for i, q := range rows {
+		out[i] = v1.FXQuotePoint{
+			Bucket:     q.Bucket,
+			RateUSD:    q.RateUSD,
+			InverseUSD: q.InverseUSD,
+		}
+	}
+	return out, nil
 }

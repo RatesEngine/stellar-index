@@ -183,13 +183,25 @@ func run(cfgPath string, dryRun bool) error {
 			"watched_classic_assets", len(cfg.Supply.WatchedClassicAssets),
 			"sac_wrappers", len(cfg.Supply.SACWrappers),
 			"watched_sep41_contracts", len(cfg.Supply.WatchedSEP41Contracts))
+	} else {
+		// Silent supply-pipeline absence is the bug-class behind r1's
+		// asset_supply_history sitting empty for 6+ days post-deploy
+		// (ops task #95 / #97). When every [supply] watched-set is
+		// empty no observer registers, F2 fields on /v1/assets/{id}
+		// stay null forever, and the only signal is "the table has
+		// zero rows when someone finally checks." Surface it loudly
+		// at boot so an operator who forgot to populate the watched-
+		// sets sees it the next time they tail the indexer log.
+		logger.Warn("supply pipeline is OFF — no [supply] watched-sets configured",
+			"hint", "set sdf_reserve_accounts (Algorithm 1 XLM), watched_classic_assets (Algorithm 2), and/or watched_sep41_contracts (Algorithm 3) in your TOML to enable; see ADR-0011/0021/0022/0023",
+			"effect", "asset_supply_history will not populate; F2 fields (market_cap_usd, fdv_usd, circulating_supply, total_supply, max_supply) on /v1/assets/{id} will be null for every asset")
 	}
 
 	// ─── Decoder-stats periodic flush ────────────────────────────
 	// Snapshots dispatcher.Stats() every 5 min and writes per-source
 	// deltas to the decoder_stats_5m hypertable. Powers
-	// /v1/diagnostics/decoders + the showcase /diagnostics page.
-	// See migrations/0020 + Phase 2 of the showcase implementation
+	// /v1/diagnostics/decoders + the explorer /diagnostics page.
+	// See migrations/0020 + Phase 2 of the explorer implementation
 	// plan.
 	decoderStatsFlusher := statsflush.New(disp, store,
 		logger.With("component", "decoder-stats-flush"),
@@ -477,13 +489,36 @@ func startExternalConnectors( //nolint:gocognit,gocyclo,funlen // dispatch-heavy
 
 	if cfg.CoinGecko.Enabled {
 		p := externalcoingecko.NewPoller()
+		if cfg.CoinGecko.PollInterval > 0 {
+			p.Interval = cfg.CoinGecko.PollInterval
+		}
+		// CoinGecko's "public no-auth" tier was tightened in late 2024
+		// — unauthenticated requests get throttled aggressively or
+		// rejected outright (observed live on r1 2026-05-09 as one
+		// 429 per minute). Read the demo (free signup) and pro keys
+		// from env so operators can fix without a code-side toml
+		// schema change. Pro key wins when both are set.
+		if k := strings.TrimSpace(os.Getenv("COINGECKO_API_KEY")); k != "" {
+			p.APIKey = k
+		}
+		if k := strings.TrimSpace(os.Getenv("COINGECKO_DEMO_API_KEY")); k != "" {
+			p.DemoAPIKey = k
+		}
+		authMode := "anonymous"
+		if p.APIKey != "" {
+			authMode = "pro"
+		} else if p.DemoAPIKey != "" {
+			authMode = "demo"
+		}
 		pollers = append(pollers, external.PollerSpec{
 			Poller: p,
 			Pairs:  aggregatorPairs,
 		})
 		logger.Info("external poller enabled",
 			"source", externalcoingecko.SourceName,
-			"pairs", len(aggregatorPairs))
+			"pairs", len(aggregatorPairs),
+			"poll_interval", p.PollInterval(),
+			"auth_mode", authMode)
 		enabled = append(enabled, externalcoingecko.SourceName)
 	}
 

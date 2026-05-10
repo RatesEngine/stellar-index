@@ -64,6 +64,13 @@ var _ = external.ClassExchange
 
 // Errors surfaced by the parser.
 var (
+	// ErrDustTrade — base × price floor-divided to a 0 quote
+	// amount. Tiny coinbase lots (e.g. 1e-8 XLM at $0.16) underflow
+	// the canonical.NewAmount integer scale (10^8). Real trades, but
+	// below our precision floor — drop silently rather than logging
+	// at ERROR.
+	ErrDustTrade = errors.New("coinbase: dust trade (quote_amount underflow)")
+
 	// ErrMalformedFrame — envelope or payload JSON didn't match
 	// the expected shape. Single-frame skip; stream stays up.
 	ErrMalformedFrame = errors.New("coinbase: malformed frame")

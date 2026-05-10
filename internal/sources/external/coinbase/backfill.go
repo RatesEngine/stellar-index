@@ -232,7 +232,7 @@ func coinbaseCandleToTrade(c coinbaseCandle, product string, pair canonical.Pair
 	quoteRaw := new(big.Int).Mul(base, price)
 	quote := new(big.Int).Quo(quoteRaw, pow10(externalAmountDecimals))
 	if quote.Sign() == 0 {
-		return canonical.Trade{}, fmt.Errorf("zero quote")
+		return canonical.Trade{}, ErrDustTrade
 	}
 
 	return canonical.Trade{

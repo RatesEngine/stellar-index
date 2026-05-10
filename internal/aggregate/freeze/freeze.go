@@ -64,7 +64,7 @@ type RedisCache interface {
 // `internal/storage/timescale.FreezeEventSink` here; tests pass
 // either nil or a fake.
 //
-// Per docs/architecture/showcase-site-implementation-plan.md
+// Per docs/architecture/explorer-implementation-plan.md
 // Phase 2: this is what migrates the Redis-only freeze state into
 // a queryable postgres timeline that powers /v1/anomalies.
 type EventSink interface {
@@ -87,7 +87,7 @@ type EventSink interface {
 //
 // When an EventSink is wired, the Writer also records the freeze
 // to the durable mirror — postgres-backed in production, used by
-// the showcase's /anomalies timeline.
+// the explorer's /anomalies timeline.
 //
 // Safe for concurrent Mark calls — fields are read-only after
 // construction; the underlying RedisCache is concurrent-safe by
@@ -162,7 +162,7 @@ func (w *Writer) Mark(ctx context.Context, asset, quote canonical.Asset, decisio
 	// Durable mirror. Best-effort: a sink failure must not surface
 	// to the caller because the Redis write — the load-bearing
 	// operation that drives flags.frozen on the API response — has
-	// already succeeded. The sink is for the showcase /anomalies
+	// already succeeded. The sink is for the explorer /anomalies
 	// timeline, not for liveness.
 	if w.sink != nil {
 		if sinkErr := w.sink.RecordFreeze(ctx, asset, quote, decision); sinkErr != nil {

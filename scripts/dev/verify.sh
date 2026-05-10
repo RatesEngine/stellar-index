@@ -33,11 +33,11 @@ echo "=== Test ==="          && make test
 echo "=== Integration build ===" && make test-integration-build
 # Showcase typecheck + lint + build. Graceful-skip when pnpm
 # isn't installed locally — CI runs the same gate via the
-# `web/showcase` job, so a local skip just defers the check.
+# `web/explorer` job, so a local skip just defers the check.
 # The build catches Next.js output: 'export' constraints
 # (e.g. dynamic = 'force-static' on sitemap/robots) that
 # typecheck alone misses.
-if command -v pnpm >/dev/null 2>&1 && [ -f web/showcase/pnpm-lock.yaml ]; then
+if command -v pnpm >/dev/null 2>&1 && [ -f web/explorer/pnpm-lock.yaml ]; then
     echo "=== Showcase typecheck ===" && make web-typecheck
     echo "=== Showcase lint ==="      && make web-lint
     echo "=== Showcase build ==="     && \
@@ -52,6 +52,13 @@ if command -v pnpm >/dev/null 2>&1 && [ -f web/dashboard/pnpm-lock.yaml ]; then
     echo "=== Dashboard lint ==="      && make dashboard-lint
     echo "=== Dashboard build ==="     && \
         NEXT_PUBLIC_API_BASE_URL=http://api.local-stub.invalid make dashboard-build >/dev/null
+fi
+# Status page — same pnpm gate.
+if command -v pnpm >/dev/null 2>&1 && [ -f web/status/pnpm-lock.yaml ]; then
+    echo "=== Status typecheck ===" && make status-typecheck
+    echo "=== Status lint ==="      && make status-lint
+    echo "=== Status build ==="     && \
+        NEXT_PUBLIC_API_BASE_URL=http://api.local-stub.invalid make status-build >/dev/null
 fi
 echo ""
 echo "✅ ALL CHECKS PASSED"

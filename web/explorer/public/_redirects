@@ -1,0 +1,86 @@
+# Cloudflare Pages redirect rules. Same syntax as Netlify's
+# _redirects. CF Pages applies these before falling back to the
+# static export, so server-level 301s land before any HTML loads
+# (which is what we want for SEO + back-button correctness).
+
+# Cross-host redirects: rescue users who paste an API path against
+# the explorer host. Common reasons:
+#   - copy-pasted "/v1/coins" from docs without the api. subdomain
+#   - tools that strip subdomains when extracting URLs
+#   - habit of "/api/" prefix from other vendors (Heroku, Vercel,
+#     stripe-style /v1 nested under /api)
+# Pre-redirect every variant landed on the explorer's catch-all
+# 404 — opaque dead-end for anyone debugging an integration.
+/api      https://api.ratesengine.net/         301
+/api/*    https://api.ratesengine.net/:splat   301
+/v1/*     https://api.ratesengine.net/v1/:splat 301
+
+# /coins → /assets directory listing.
+/coins/  /assets/  301
+/coins   /assets   301
+
+# /coins/<slug> → /assets/<slug> detail pages. Splat-capture
+# preserves the slug, query string, and any tab=... fragment.
+/coins/*  /assets/:splat  301
+
+# Unified /currencies/{slug} crypto friendly aliases. Source of
+# truth: web/explorer/src/app/currencies/[ticker]/slugs.ts —
+# CRYPTO_FRIENDLY_TO_BACKEND. Keep both lists in sync.
+#
+# CF Pages _redirects does NOT auto-match trailing-slash variants;
+# we list both `/currencies/foo` and `/currencies/foo/` because
+# Next.js's static export emits trailing-slash URLs by default
+# (e.g. internal links from Link href="/currencies/usd-coin/"),
+# and the bare form is what an external-share or typed URL hits.
+/currencies/stellar            /assets/XLM    301
+/currencies/stellar/           /assets/XLM/   301
+/currencies/lumens             /assets/XLM    301
+/currencies/lumens/            /assets/XLM/   301
+/currencies/xlm                /assets/XLM    301
+/currencies/xlm/               /assets/XLM/   301
+/currencies/usd-coin           /assets/USDC   301
+/currencies/usd-coin/          /assets/USDC/  301
+/currencies/usdc               /assets/USDC   301
+/currencies/usdc/              /assets/USDC/  301
+/currencies/euro-coin          /assets/EURC   301
+/currencies/euro-coin/         /assets/EURC/  301
+/currencies/eurc               /assets/EURC   301
+/currencies/eurc/              /assets/EURC/  301
+/currencies/aquarius           /assets/AQUA   301
+/currencies/aquarius/          /assets/AQUA/  301
+/currencies/aqua               /assets/AQUA   301
+/currencies/aqua/              /assets/AQUA/  301
+/currencies/stronghold-token   /assets/SHX    301
+/currencies/stronghold-token/  /assets/SHX/   301
+/currencies/shx                /assets/SHX    301
+/currencies/shx/               /assets/SHX/   301
+/currencies/velo-token         /assets/VELO   301
+/currencies/velo-token/        /assets/VELO/  301
+/currencies/velo               /assets/VELO   301
+/currencies/velo/              /assets/VELO/  301
+/currencies/yxlm               /assets/yXLM   301
+/currencies/yxlm/              /assets/yXLM/  301
+/currencies/yusdc              /assets/yUSDC  301
+/currencies/yusdc/             /assets/yUSDC/ 301
+
+# Bare category-with-no-id URLs that 404'd because the category is
+# only a route prefix (`/research/adr/[id]/page.tsx`,
+# `/lending/[pool]/page.tsx`) without an index page of its own.
+# Bounce them up one level to the canonical entry that DOES list
+# everything in the category. The 404 audit on 2026-05-08 caught
+# these as the only remaining bare-category dead-ends.
+/research/adr            /research/  301
+/research/adr/           /research/  301
+/research/architecture   /research/  301
+/research/architecture/  /research/  301
+/research/discovery      /research/  301
+/research/discovery/     /research/  301
+/research/operations     /research/  301
+/research/operations/    /research/  301
+
+# Same problem for lending: pools are keyed by contract address
+# (G-strkey), so the protocol name "blend" — even though it's
+# the only lending protocol we cover today — wasn't routable.
+# Bounce to the lending listing.
+/lending/blend           /lending/   301
+/lending/blend/          /lending/   301

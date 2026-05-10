@@ -200,3 +200,64 @@ func (s *Store) CountOracleUpdates(ctx context.Context) (int64, error) {
 	}
 	return n, nil
 }
+
+// LatestOracleStreams returns one row per (source, asset, quote)
+// triple — the most-recent observation in the trailing 7d window.
+// Backs the /v1/oracles/streams listing (the second table on the
+// explorer's /oracles page). Sources with no observation in the
+// window are absent from the result.
+//
+// 7d window matches the "live stream" semantic — observations
+// older than that signal a dead feed and shouldn't surface as
+// "current" on the page; the historical trail still lives in the
+// hypertable.
+func (s *Store) LatestOracleStreams(ctx context.Context) ([]canonical.OracleUpdate, error) {
+	const q = `
+        SELECT DISTINCT ON (source, asset, quote)
+               source, COALESCE(contract_id, ''),
+               ledger, tx_hash, op_index, ts,
+               asset, quote,
+               price, decimals,
+               COALESCE(confidence, 0),
+               COALESCE(observer, '')
+          FROM oracle_updates
+         WHERE ts > NOW() - INTERVAL '7 days'
+         ORDER BY source, asset, quote, ts DESC
+    `
+	rows, err := s.db.QueryContext(ctx, q)
+	if err != nil {
+		return nil, fmt.Errorf("timescale: LatestOracleStreams: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+	var out []canonical.OracleUpdate
+	for rows.Next() {
+		var u canonical.OracleUpdate
+		var assetStr, quoteStr string
+		var decimals int16
+		if err := rows.Scan(
+			&u.Source, &u.ContractID,
+			&u.Ledger, &u.TxHash, &u.OpIndex, &u.Timestamp,
+			&assetStr, &quoteStr,
+			&u.Price, &decimals,
+			&u.Confidence, &u.Observer,
+		); err != nil {
+			return nil, fmt.Errorf("timescale: LatestOracleStreams scan: %w", err)
+		}
+		u.Decimals = uint8(decimals)
+		a, err := canonical.ParseAsset(assetStr)
+		if err != nil {
+			continue
+		}
+		u.Asset = a
+		qa, err := canonical.ParseAsset(quoteStr)
+		if err != nil {
+			continue
+		}
+		u.Quote = qa
+		out = append(out, u)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("timescale: LatestOracleStreams rows: %w", err)
+	}
+	return out, nil
+}

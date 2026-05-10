@@ -1,91 +1,90 @@
-# Builds the public status page (cstate / Hugo) on every push or
-# PR that touches deploy/status-page/. Catches broken front-matter
-# in incident postings + bad systems.yml refs at PR time, before
-# operators push them live.
+---
+# Manual-trigger Cloudflare Pages deploy for status.ratesengine.net.
 #
-# This workflow does NOT deploy. The hosting target
-# (status.ratesengine.net) is operator-controlled and lives
-# outside this repo per deploy/status-page/README.md. The build
-# artifact is uploaded so an operator can grab it and ship if
-# they're not yet on a continuous-deploy host.
+# **The recommended publish path is Cloudflare's git integration**
+# — it auto-deploys on every push to main without consuming GitHub
+# Actions minutes. This workflow is the same hotfix / git-paused
+# fallback as docs-deploy.yml + explorer-deploy.yml.
+#
+# Builds the Next.js static-export status page at web/status/
+# and pushes it to the `ratesengine-status` Pages project.
+#
+# Required secrets (set once in repo settings):
+#   - CLOUDFLARE_API_TOKEN  — token with Pages:Edit on
+#                             ratesengine-status
+#   - CLOUDFLARE_ACCOUNT_ID — the CF account UUID
 
 name: status-page
 
 on:
-  push:
-    branches: [main]
-    paths:
-      - "deploy/status-page/**"
-      - ".github/workflows/status-page.yml"
-  pull_request:
-    paths:
-      - "deploy/status-page/**"
-      - ".github/workflows/status-page.yml"
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: "production or preview"
+        required: true
+        default: "production"
+        type: choice
+        options:
+          - production
+          - preview
+      api_base_url:
+        description: "NEXT_PUBLIC_API_BASE_URL bake-in (default https://api.ratesengine.net)"
+        required: false
+        default: "https://api.ratesengine.net"
 
 permissions:
   contents: read
+  deployments: write
+
+concurrency:
+  group: status-deploy-${{ github.event.inputs.environment }}
+  cancel-in-progress: true
 
 jobs:
-  build:
+  deploy:
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    environment:
+      name: status-${{ github.event.inputs.environment }}
     steps:
       - uses: actions/checkout@v6
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
         with:
-          # cstate ships as a theme submodule when the operator
-          # vendors it; we don't ship the theme bytes in this repo
-          # (per README.md), so submodules: false is correct.
-          submodules: false
+          version: 10
+          run_install: false
 
-      - name: Install Hugo
-        uses: peaceiris/actions-hugo@v3
+      - name: Set up Node
+        uses: actions/setup-node@v6
         with:
-          hugo-version: "0.139.0"
-          extended: true
+          node-version: "22"
+          cache: pnpm
+          cache-dependency-path: web/status/pnpm-lock.yaml
 
-      - name: Verify cstate theme is available
-        # cstate is the static-site generator on top of Hugo. The
-        # theme is fetched into themes/cstate at build time so
-        # operators don't need to vendor it. Pin to the upstream
-        # release tag so a theme upgrade is an explicit change.
+      - name: Install dependencies
+        working-directory: web/status
+        run: pnpm install --frozen-lockfile
+
+      - name: Build
+        working-directory: web/status
+        env:
+          NEXT_PUBLIC_API_BASE_URL: ${{ github.event.inputs.api_base_url }}
+        run: pnpm build
+
+      - name: Verify build artefact
+        working-directory: web/status
         run: |
-          set -euo pipefail
-          mkdir -p deploy/status-page/cstate/themes
-          if [ ! -d deploy/status-page/cstate/themes/cstate ]; then
-            git clone --depth 1 --branch v3.6.4 \
-              https://github.com/cstate/cstate.git \
-              deploy/status-page/cstate/themes/cstate
-          fi
+          test -d out || { echo "out/ missing"; exit 1; }
+          test -f out/index.html || { echo "out/index.html missing"; exit 1; }
+          ls -la out/ | head
 
-      - name: Lint systems.yml
-        # cstate happily renders an empty page if systems.yml is
-        # malformed — yamllint catches typos before they ship.
-        run: |
-          pip install --quiet yamllint
-          yamllint -d "{extends: relaxed, rules: {line-length: disable}}" \
-            deploy/status-page/cstate/data/systems.yml
-
-      - name: Build site
-        working-directory: deploy/status-page/cstate
-        run: hugo --minify --gc
-
-      - name: Verify build output
-        # Smoke-check that the build produced something — Hugo's
-        # exit code is 0 even when content/ is empty, which would
-        # ship a blank status page silently.
-        run: |
-          set -euo pipefail
-          if [ ! -f deploy/status-page/cstate/public/index.html ]; then
-            echo "::error::cstate build produced no index.html"
-            exit 1
-          fi
-          if ! grep -q "Rates Engine" deploy/status-page/cstate/public/index.html; then
-            echo "::error::index.html missing site title — config.toml may be misread"
-            exit 1
-          fi
-
-      - uses: actions/upload-artifact@v7
+      - name: Deploy to Cloudflare Pages
+        uses: cloudflare/wrangler-action@v3
         with:
-          name: status-page
-          path: deploy/status-page/cstate/public/
-          retention-days: 7
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          workingDirectory: web/status
+          command: >-
+            pages deploy out
+            --project-name ratesengine-status
+            --branch ${{ github.event.inputs.environment == 'production' && 'main' || github.ref_name }}
