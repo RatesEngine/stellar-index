@@ -102,3 +102,13 @@ the indexer. The metric + alert close that gap.
 See the launch incident report and PR #1139 (CoinGecko backoff +
 demo-key support) and PR #1140 (this metric + alert) for the
 discovery-path narrative.
+
+## Related runbooks
+
+- [`fx-history-missing.md`](fx-history-missing.md) — adjacent
+  forex-side gap: when a deployment is missing the `fx_quotes`
+  hypertable migration, the `forex` poller's `success` outcomes
+  stay healthy on the metric (the upstream HTTP fetch succeeds)
+  but the persist-to-DB step fails on every tick. Different
+  signal — an INFO-level `forex: fx_quotes persist failed` log
+  rather than a missed poll — but same broad family.
