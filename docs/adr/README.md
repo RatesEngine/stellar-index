@@ -61,6 +61,13 @@ See [_template.md](_template.md) for the boilerplate.
 | [0017](0017-archive-completeness-invariants.md) | Accepted | Archive completeness invariants — dual-archive integrity model with 4 hard contracts | 2026-04-27 |
 | [0018](0018-api-consistency-surfaces.md) | Accepted | API consistency surfaces — closed-bucket / tip / observations, three URLs three contracts | 2026-04-28 |
 | [0019](0019-anomaly-response-and-confidence-scoring.md) | Accepted | Anomaly response policy and confidence scoring — per-asset statistical baselines | 2026-04-28 |
+| [0020](0020-chart-api-contract.md) | Accepted | Chart API contract — timeframe + granularity + price_type | 2026-04-30 |
+| [0021](0021-account-entry-observer.md) | Accepted | AccountEntry observer — live home-domain + reserve-balance tracking | 2026-04-30 |
+| [0022](0022-classic-supply-observers.md) | Accepted | Classic-supply observers — Trustline / ClaimableBalance / LiquidityPool / ContractData entry tracking | 2026-04-30 |
+| [0023](0023-sep41-supply-observer.md) | Accepted | SEP-41 supply observer — mint / burn / clawback event-stream tracking | 2026-04-30 |
+| [0024](0024-redis-ha-via-sentinel.md) | Accepted | Redis HA via Sentinel (not Cluster) | 2026-04-30 |
+| [0025](0025-caddy-cloudflare-trusted-proxy.md) | Accepted | Caddy trusts Cloudflare for client-IP signal via CIDR-pinned static list | 2026-05-10 |
+| [0026](0026-stablecoin-fiat-proxy-late-binding.md) | Accepted | Stablecoin → fiat proxy is late-binding aggregator policy, not eager ingest normalisation | 2026-05-10 |
 
 ## Related
 

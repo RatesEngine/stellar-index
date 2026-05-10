@@ -262,6 +262,16 @@ jobs:
       # output: 'export' pipeline. The build-time API fetch falls
       # through to the seed-only path when CI can't reach the
       # production API — that's expected and not a CI failure.
+      #
+      # We deliberately run the build ONLY against the CI stub URL.
+      # A second build against the real API used to live here, but
+      # Next.js's per-page-render 60s worker timeout is too tight
+      # for /assets/native — XLM has 5,553 markets and the build
+      # serialises the response into the static HTML, which trips
+      # the timeout on busy build hosts. CF Pages does the real-API
+      # build at deploy time with its own retry policy, so the CI
+      # second-pass was redundant. Keep the stub-URL build — it
+      # exercises every code path that doesn't depend on API shape.
       - run: pnpm build
         env:
           # Force a deterministic api-base URL so the build doesn't
@@ -269,7 +279,6 @@ jobs:
           # generateStaticParams kicks in when the fetch fails, so
           # the build still succeeds with seed-only slugs.
           NEXT_PUBLIC_API_BASE_URL: http://api.ci-stub.invalid
-      - run: pnpm build
 
   # ────────────────────────────────────────────────────────────────
   # Customer dashboard — same shape as web-explorer. Static-export
