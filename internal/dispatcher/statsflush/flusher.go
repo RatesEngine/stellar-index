@@ -144,6 +144,20 @@ func (f *Flusher) flushAt(ctx context.Context, now time.Time) {
 		rows = append(rows, delta)
 	}
 
+	// Surface dispatcher-level tx-read errors at WARN when a delta
+	// appears in this flush window. The counter sits outside the
+	// per-source row schema (LedgerTransactionReader.Read failures
+	// aren't attributable to a source) so the statsflush hypertable
+	// can't carry it; the WARN log is the canonical signal until
+	// it gets promoted to a Prometheus counter.
+	if delta := current.TxReadErrors - f.last.TxReadErrors; delta > 0 {
+		f.logger.Warn("dispatcher: tx-read errors during this flush window",
+			"delta", delta,
+			"total", current.TxReadErrors,
+			"window", f.interval.String(),
+		)
+	}
+
 	if len(rows) > 0 {
 		if err := f.store.InsertDecoderStats(ctx, rows); err != nil {
 			f.logger.Warn("decoder-stats flush failed", "rows", len(rows), "err", err)
@@ -156,6 +170,7 @@ func (f *Flusher) flushAt(ctx context.Context, now time.Time) {
 		DecodeErrors:  copyIntMap(current.DecodeErrors),
 		OrphanEvents:  copyIntMap(current.OrphanEvents),
 		UnmatchedHits: current.UnmatchedHits,
+		TxReadErrors:  current.TxReadErrors,
 	}
 }
 
