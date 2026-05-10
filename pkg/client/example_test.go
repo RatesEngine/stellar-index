@@ -743,3 +743,193 @@ func ExampleClient_ChangeSummary() {
 
 	// Output: crypto:XLM: $0.1630, 24h=+3.21% 7d=-1.80% (up, increasing)
 }
+
+// ExampleClient_PriceBatch demonstrates the bulk pricing surface.
+// One round-trip returns prices for many assets — the recommended
+// path for portfolio + multi-asset views (per the Freighter RFP
+// §"Bulk query support preferred"). Cross-region consistent: every
+// returned snapshot is from the same closed-bucket window
+// `/v1/price` would have served for the same instant.
+//
+// Routing is automatic: ≤100 ids → GET, 101..1000 → POST. The
+// envelope's `flags.stale` is the OR over per-row staleness.
+//
+// Missing observations (asset has no indexed data) are silently
+// omitted from the response array — callers needing to detect
+// "asset X had no observation" diff input vs output.
+func ExampleClient_PriceBatch() {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{
+			"data": [
+				{"asset_id":"native","quote":"fiat:USD","price":"0.16475","price_type":"vwap","observed_at":"2026-05-10T12:00:00Z","window_seconds":60},
+				{"asset_id":"crypto:BTC","quote":"fiat:USD","price":"81000.00","price_type":"vwap","observed_at":"2026-05-10T12:00:00Z","window_seconds":60}
+			],
+			"as_of": "2026-05-10T12:00:00Z",
+			"flags": {"stale": false}
+		}`))
+	}))
+	defer srv.Close()
+
+	c := client.New(client.Options{BaseURL: srv.URL})
+	got, err := c.PriceBatch(context.Background(), client.PriceBatchQuery{
+		AssetIDs: []string{"native", "crypto:BTC"},
+		Quote:    "fiat:USD",
+	})
+	if err != nil {
+		fmt.Println("error:", err)
+		return
+	}
+	for _, row := range got.Data {
+		fmt.Printf("%s = %s\n", row.AssetID, row.Price)
+	}
+
+	// Output:
+	// native = 0.16475
+	// crypto:BTC = 81000.00
+}
+
+// ExampleClient_Coins demonstrates the activity-ranked coin
+// listing — what powers the explorer's `/assets` page. Returns
+// rows sorted by 24h volume desc by default, with sparkline /
+// market cap / supply / change-window fields populated where
+// observable. Pagination via `NextCursor`.
+//
+// The `Coin` shape is intentionally pointer-rich: a nil
+// `PriceUSD` means "no current price" (different from "0.0"),
+// nil `Change24hPct` means "no past-bucket snapshot" (different
+// from "0% change"). Render `—` on nil rather than fabricating
+// a zero.
+func ExampleClient_Coins() {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{
+			"data": {
+				"coins": [
+					{"slug":"XLM","asset_id":"native","code":"XLM","first_seen_ledger":1,
+					 "last_seen_ledger":62500000,"observation_count":120000000,
+					 "price_usd":"0.16475","volume_24h_usd":"125000.00","change_24h_pct":"+0.83"},
+					{"slug":"USDC","asset_id":"USDC-GA5Z...","code":"USDC",
+					 "issuer":"GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN",
+					 "first_seen_ledger":1000000,"last_seen_ledger":62500000,"observation_count":50000000,
+					 "price_usd":"1.00","volume_24h_usd":"500000.00","change_24h_pct":"+0.00"}
+				],
+				"next_cursor": "eyJsYXN0IjoiVVNEQyJ9",
+				"limit": 25
+			},
+			"as_of": "2026-05-10T12:00:00Z",
+			"flags": {}
+		}`))
+	}))
+	defer srv.Close()
+
+	c := client.New(client.Options{BaseURL: srv.URL})
+	got, err := c.Coins(context.Background(), client.CoinsOptions{Limit: 25})
+	if err != nil {
+		fmt.Println("error:", err)
+		return
+	}
+	for _, coin := range got.Data.Coins {
+		price := "—"
+		if coin.PriceUSD != nil {
+			price = "$" + *coin.PriceUSD
+		}
+		fmt.Printf("%-6s %s\n", coin.Code, price)
+	}
+	if got.Data.NextCursor != "" {
+		fmt.Println("more pages: yes")
+	}
+
+	// Output:
+	// XLM    $0.16475
+	// USDC   $1.00
+	// more pages: yes
+}
+
+// ExampleClient_Coin demonstrates a single-coin lookup by friendly
+// slug. Same row shape as one element of CoinsPage.Coins, plus
+// MarketsCount which only populates on the per-coin endpoint.
+//
+// The slug accepts friendly aliases ("XLM", "USDC") — the server
+// disambiguates against the curated list. For ambiguous codes
+// (multiple issuers using "AQUA"), prefer the canonical
+// asset_id form (`AQUA-GBNZ...`) for an exact match. 404 when
+// the slug doesn't match.
+func ExampleClient_Coin() {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{
+			"data": {
+				"slug": "XLM",
+				"asset_id": "native",
+				"code": "XLM",
+				"first_seen_ledger": 1,
+				"last_seen_ledger": 62500000,
+				"observation_count": 120000000,
+				"price_usd": "0.16475",
+				"volume_24h_usd": "125000.00",
+				"change_24h_pct": "+0.83",
+				"markets_count": 42
+			},
+			"as_of": "2026-05-10T12:00:00Z",
+			"flags": {}
+		}`))
+	}))
+	defer srv.Close()
+
+	c := client.New(client.Options{BaseURL: srv.URL})
+	got, err := c.Coin(context.Background(), "XLM")
+	if err != nil {
+		fmt.Println("error:", err)
+		return
+	}
+	mkts := int64(0)
+	if got.Data.MarketsCount != nil {
+		mkts = *got.Data.MarketsCount
+	}
+	fmt.Printf("%s ($%s, 24h=%s) trades on %d distinct markets\n",
+		got.Data.Code, *got.Data.PriceUSD, *got.Data.Change24hPct, mkts)
+
+	// Output: XLM ($0.16475, 24h=+0.83) trades on 42 distinct markets
+}
+
+// ExampleClient_Pair demonstrates a single-pair lookup — every
+// market the deployment has observed for one (base, quote) tuple,
+// each row attributed to a specific source. Returns a slice of
+// `Market` rows even when only one source has data, so the
+// caller doesn't branch on "1 vs many sources" / "0 vs 404"
+// (the empty array is the canonical "no such pair" signal).
+//
+// Useful for the explorer's `/markets/<base>~<quote>` detail page
+// and for "which venues quote XLM/USDC" UIs.
+func ExampleClient_Pair() {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{
+			"data": [
+				{"base":"native","quote":"fiat:USD","last_trade_at":"2026-05-10T12:00:00Z",
+				 "trade_count_24h":5400,"volume_24h_usd":"45000.00"},
+				{"base":"native","quote":"fiat:USD","last_trade_at":"2026-05-10T11:59:55Z",
+				 "trade_count_24h":7200,"volume_24h_usd":"53000.50"}
+			],
+			"as_of": "2026-05-10T12:00:00Z",
+			"flags": {}
+		}`))
+	}))
+	defer srv.Close()
+
+	c := client.New(client.Options{BaseURL: srv.URL})
+	got, err := c.Pair(context.Background(), "native", "fiat:USD")
+	if err != nil {
+		fmt.Println("error:", err)
+		return
+	}
+	totalTrades := int64(0)
+	for _, m := range got.Data {
+		totalTrades += m.TradeCount24h
+	}
+	fmt.Printf("XLM/USD: %d sources, %d trades in last 24h\n",
+		len(got.Data), totalTrades)
+
+	// Output: XLM/USD: 2 sources, 12600 trades in last 24h
+}
