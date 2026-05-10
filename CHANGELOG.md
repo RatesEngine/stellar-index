@@ -17,6 +17,23 @@ against.
 
 ### Added
 
+- **Three new Prometheus alert rules backing the 2026-05-10 incident
+  postmortem** (#1228 ships the runbook + customer-facing post;
+  this PR ships the rules that prevent silent recurrence):
+  - `ratesengine_node_root_disk_full` (P1) / `_warning` (P2) —
+    `ratesengine_timescale_disk_full` only watched
+    `/var/lib/postgresql` (own ZFS dataset, plenty of free space);
+    the root FS that actually filled wasn't covered. New rule
+    watches `mountpoint="/"`.
+  - `ratesengine_redis_writes_blocked` (P1) —
+    `redis_rdb_last_bgsave_status == 0` for > 60 s. Catches the
+    same incident from a different angle: Redis can't snapshot,
+    refuses every write, aggregator VWAP cache stops refreshing,
+    `/v1/price` 404s on rewritten/triangulated/proxy pairs.
+
+  Both alerts link `redis-write-blocked-disk-full.md` (cherry-picked
+  here so the doc-lint orphan check is satisfied without ordering
+  dependency between this PR and #1228). (PR #1229)
 - **`/v1/pools?asset=<asset_id>` filter** — restrict the pools
   listing to rows where the asset appears on either side (base
   OR quote). Mirrors the same filter shape just shipped on

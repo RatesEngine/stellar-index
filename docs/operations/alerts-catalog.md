@@ -57,6 +57,8 @@ signal lands.
 | `ratesengine_timescale_replica_lag` | `pg_replication_lag_seconds` on sync replica | > 5 s for > 2 min | P2 | [replica-lag](runbooks/replica-lag.md) |
 | `ratesengine_timescale_disk_full` | `(node_filesystem_avail_bytes / node_filesystem_size_bytes) * 100` on DB vol | < 10 % | **P1** | [db-disk-full](runbooks/db-disk-full.md) |
 | `ratesengine_timescale_disk_warning` | same | < 20 % | P2 | [db-disk-full](runbooks/db-disk-full.md) |
+| `ratesengine_node_root_disk_full` | same expr on `mountpoint="/"` (distinct from DB vol — root FS holds /var/log + /tmp + /var/cache) | < 10 % | **P1** | [redis-write-blocked-disk-full](runbooks/redis-write-blocked-disk-full.md) |
+| `ratesengine_node_root_disk_warning` | same | < 20 % | P2 | [redis-write-blocked-disk-full](runbooks/redis-write-blocked-disk-full.md) |
 | `ratesengine_timescale_connections_saturated` | `pg_stat_activity_count / pg_settings_max_connections * 100` | > 80 % for > 5 min | P2 | [pg-conns-saturated](runbooks/pg-conns-saturated.md) |
 | `ratesengine_timescale_cagg_stale` | `time() - ratesengine_cagg_last_refresh_unix` per CAGG | > 5× its refresh interval | P2 | [cagg-stale](runbooks/cagg-stale.md) |
 | `ratesengine_timescale_compression_lag` | `ratesengine_uncompressed_chunks_older_than_7d` | > 0 for > 24 h | P3 | [compression-lag](runbooks/compression-lag.md) |
@@ -71,6 +73,7 @@ signal lands.
 | `ratesengine_redis_memory_saturated` | `redis_memory_used_bytes / redis_memory_max_bytes * 100` | > 90 % for > 5 min | P2 | [redis-memory](runbooks/redis-memory.md) |
 | `ratesengine_redis_evictions_high` | `rate(redis_evicted_keys_total[5m])` | > 100/s | P2 | [redis-memory](runbooks/redis-memory.md) |
 | `ratesengine_redis_replication_broken` | `redis_connected_slaves` per master | < expected for > 2 min | P2 | [redis-replication](runbooks/redis-replication.md) |
+| `ratesengine_redis_writes_blocked` | `redis_rdb_last_bgsave_status` per master (also surfaces as `MISCONF` errors in client logs) | == 0 for > 60 s | **P1** | [redis-write-blocked-disk-full](runbooks/redis-write-blocked-disk-full.md) |
 
 ## API plane alerts
 
