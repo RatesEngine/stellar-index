@@ -121,6 +121,13 @@ func (c *CachedCoinsReader) GetCoinBySlug(ctx context.Context, slug string) (tim
 	return c.upstream.GetCoinBySlug(ctx, slug)
 }
 
+// GetCoinByAssetID is the canonical-asset_id (CODE-ISSUER) flavour
+// of [GetCoinBySlug]. Pass-through — same low-volume single-row
+// shape; not worth adding an additional cache dimension.
+func (c *CachedCoinsReader) GetCoinByAssetID(ctx context.Context, assetID string) (timescale.CoinRow, error) {
+	return c.upstream.GetCoinByAssetID(ctx, assetID)
+}
+
 func (c *CachedCoinsReader) GetNativeCoinRow(ctx context.Context) (timescale.CoinRow, error) {
 	return c.upstream.GetNativeCoinRow(ctx)
 }

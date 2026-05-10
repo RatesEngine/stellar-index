@@ -17,6 +17,45 @@ against.
 
 ### Fixed
 
+- **`/v1/changes/coin/{id}` accepts friendly slugs alongside the
+  canonical asset_id**. The change-summary worker writes rows under
+  the canonical form (`native`, `crypto:XLM`, `USDC-GA5Z…`); a
+  caller passing the friendly slug "XLM" or just "USDC" without
+  the issuer suffix was silently 404'ing against the strict-
+  equality lookup even when the underlying data existed. Caught
+  during the 2026-05-08 prod audit (`/v1/changes/coin/XLM` and
+  `/v1/changes/coin/native` both 404'd despite the worker having
+  written rows). Handler now expands the input into the same
+  candidate set `oracleAssetCandidates` uses for /v1/oracle/latest
+  (`XLM` → `[XLM, native, crypto:XLM]`) and tries each in order.
+  First hit wins; storage errors short-circuit. Pinned by 9 unit
+  tests in `changes_test.go`.
+- **`/widgets` showcase no longer renders broken iframes**. The
+  hardcoded examples referenced asset_id forms (`USDC-GA5Z…`,
+  `AQUA-GBNZ…`) and a synthetic stablecoin-fiat pair
+  (`native~fiat:USD`) that aren't in the embed routes'
+  `generateStaticParams` output, so the iframes 404'd in the
+  showcase itself. Aligned the examples with what's actually
+  pre-rendered: friendly slugs (`USDC`, `AQUA`) for the asset
+  embed and the existing real XLM/USDC pair for the pair embed.
+- **`/v1/observations` 8s ceiling on the trades hypertable scan**.
+  The handler was missing from the cold-path timeout series shipped
+  in #1082, #1099-#1106 — a deliberate prod test on 2026-05-08
+  (`asset=native&quote=USDC-G…`) hit a 10s curl timeout against the
+  unguarded handler. Now wraps the reader call in
+  `context.WithTimeout(8s)`; on deadline returns
+  `503 application/problem+json` with `type=observations-timeout`,
+  matching the rest of the family.
+- **Auth-failure problem+json `type` URL spelling unified**. The
+  middleware-level 401 (no-auth-at-all) and the account-handler
+  401 (auth-needed-but-rejected) had drifted to two different
+  `type` URLs — `errors/unauthorized` (American, middleware) and
+  `errors/unauthorised` (British, account.go × 5). Clients keying
+  on the type URL saw two distinct error categories for what's
+  semantically one auth failure surface. Standardised on the
+  American spelling (matches HTTP-spec wording: "Unauthorized");
+  all 5 `account.go` call sites updated. No tests pinned the
+  British form so no test churn.
 - **Explorer home: `HomeCurrencies` and `HomeTopMarkets` now
   show a "couldn't load" notice on error instead of silently
   rendering nothing**. Previously both components had
@@ -60,6 +99,47 @@ against.
 
 ### Added
 
+- **`/v1/coins` and `/v1/coins/{slug}`: `issuer_scam_reason` field**.
+  When an asset's issuer G-strkey appears on the curated scam
+  directory (sourced from stellar.expert, same data the
+  `/v1/issuers` family already exposes), the field is non-empty.
+  Closes a security UX gap: previously a user landing on
+  `/assets/{slug}` for a known-scam asset saw no warning until the
+  IssuerPanel completed its async fetch — now the field comes back
+  on the build-time response and the explorer renders a red banner
+  above the price block at first paint. Always omitted for native
+  XLM (no issuer) and for issuers we have no scam record on.
+- **`?source=<name>` filter on `/v1/diagnostics/cursors`** —
+  exact-match filter on the source column. Caught from a r1
+  audit: the param was being silently ignored, so an operator
+  asking for `?source=ledgerstream` to isolate the live cursor
+  from the ~50 backfill rows got everything. Composes with
+  `?max_age=` (both filters apply). Unknown values return an
+  empty array (not 400) — predictable for typos vs. brand-new
+  sources. OpenAPI updated; tests pin the filter shape and the
+  source+max_age composition.
+- **`pkg/client`: `VWAP`, `TWAP`, `Pools` SDK methods** — closes the
+  remaining gap in the Go SDK's coverage of the v1 surface. New
+  shared `AggregateQuery` shape feeds both VWAP and TWAP (TWAP
+  silently ignores `OutlierSigma` — kept on the shared shape for
+  ergonomic reuse). `Pools` carries a `PoolsQuery` with
+  Source/Base/Quote/Asset filter dimensions and the standard
+  cursor/limit/order_by pagination shape. New wire types:
+  `VWAPResult`, `TWAPResult`, `Pool`. Five tests pin happy-path
+  round-trips, query-param shape, and required-field validation.
+  Supersedes the stale PR #1124 (whose branch had drifted into
+  conflict). (PR #1226)
+- **HSTS on the explorer + status site** — both surfaces were
+  missing `Strict-Transport-Security`, leaving them vulnerable
+  to a downgrade-protocol-stripping attack on first visit.
+  Added `Strict-Transport-Security: max-age=31536000;
+  includeSubDomains` to `web/explorer/public/_headers` (both
+  `/*` and `/embed/*` blocks; CF Pages doesn't merge rules) and
+  created `web/status/public/_headers` with the same shape +
+  full CSP / X-Frame-Options / Permissions-Policy parity.
+  `preload` is intentionally omitted until the operator
+  submits the apex to https://hstspreload.org/ (preload is
+  irrevocable once browsers ship it; ratchet up in two steps).
 - **SDK godoc examples for `Healthz`, `Readyz`, `Version`,
   `Usage`, `CreateKey`, `RevokeKey`, `Keys`**
   (`pkg/client/example_test.go`). Round 4 / final round of the
@@ -318,6 +398,171 @@ against.
   metrics pipeline blind, the response was a confident lie.
   `/v1/status` now sets `overall: degraded` whenever any
   backend query fails. Test added pinning the regression.
+- **`/v1/coins/{slug}` now accepts canonical asset_id form
+  (`USDC-GA5Z…`) alongside friendly slug (`USDC`).** Pre-fix,
+  copying a canonical asset_id from any other API surface
+  (`/v1/assets/{id}.asset_id`, `/v1/markets[].base`,
+  `/v1/observations[].base_asset`) into `/v1/coins/<id>` got
+  404 — inconsistent with `/v1/assets/{id}` which accepts both.
+  Confirmed broken on r1 (`/v1/coins/AQUA-GBNZILSTV…` 404'd while
+  `/v1/coins/AQUA` 200'd against the same row). Fix is a one-line
+  SQL widening: `WHERE COALESCE(slug, code) = $1 OR asset_id = $1`
+  plus an `(asset_id = $1) DESC` ORDER BY tiebreak so a friendly
+  slug input still wins over a code-only collision (preserving
+  the #45 scam-token disambiguation guard). Handler adds a
+  `canonical.ParseAsset` short-circuit so the canonical-form
+  path skips the case-insensitive retry it doesn't need.
+  (PR #1231)
+- **`/v1/oracle/prices` now applies the same X/fiat:USD → X/<peg>
+  stablecoin-fiat proxy fallback** as `/v1/oracle/lastprice`
+  (#1220) and the other X/fiat:USD surfaces. Pre-fix, the SEP-40
+  `prices()` passthrough returned 200 with an empty `data` array
+  for any asset that trades only against classic USDC — same
+  out-of-the-box failure mode as `/v1/oracle/lastprice` had
+  pre-#1220, just expressed as 200-empty rather than 404. Adds a
+  shared `recentClosedWithStablecoinFallback` helper that walks
+  the operator's classic USD pegs in priority order; first peg
+  with non-empty closed buckets wins. Response carries
+  `flags.triangulated=true` so the wire shape is honest about the
+  derivation. (PR #1224)
+- **F2 fields on `/v1/assets/{id}` (`market_cap_usd`, `fdv_usd`,
+  `change_24h_pct`) now populate via the same X/fiat:USD →
+  X/<peg> stablecoin-fiat proxy fallback that #1217 added to
+  `/v1/price`**. The F2 path's `lookupUSDPrice` and the binary's
+  `storeChange24hReader` both bypass the v1 handler's
+  `priceFallback`, so even with #1217 deployed every asset on
+  Stellar mainnet had `market_cap_usd / fdv_usd / change_24h_pct`
+  silently null — the steady-state because nothing on-chain ever
+  quotes in fiat:USD. `lookupUSDPrice` now calls the existing
+  `tryStablecoinFiatProxy` helper on miss; `storeChange24hReader`
+  walks the operator's `[trades].usd_pegged_classic_assets` for
+  the at-or-before lookup. One new test
+  (`TestLookupUSDPrice_StablecoinFiatProxyFallback`) pins the
+  /v1/assets path; existing TestChange24hPct tests still pass.
+  (PR #1223)
+- **Explorer `/exchanges/<venue>` chart now distinguishes "API
+  outage" from "no pairs reporting"**. The pair-list fetcher's
+  `.catch(() => setPairsLoading(false))` swallowed every error,
+  so a 5xx on `/v1/markets?source=<venue>` rendered the same
+  "No pairs reporting in the last 14 days" empty-state as a
+  genuinely-empty venue. Now captures the error message into
+  `pairsError` state and surfaces it as a red "Couldn't load
+  pairs for this venue (HTTP 503). Refresh to retry, or check
+  status.ratesengine.net" panel — operators investigating a
+  user-reported "exchange page is broken" can now distinguish
+  data gap from infra gap at a glance. Same silent-drop family
+  as the home-page fixes shipped in #1251. (PR #1254)
+- **Kraken dust trades now use the typed `ErrDustTrade` sentinel**
+  — extends the #814 / #1234 pattern (Coinbase / Binance /
+  Bitstamp) to Kraken. Before this PR the live `parse.go` path
+  had NO dust check at all — a sub-precision-floor live trade
+  would have produced a Trade with quote=0, the canonical
+  validator would reject on insert, and the indexer would
+  log "insert trade failed" at ERROR per frame (the same
+  pattern that flooded r1 logs for Bitstamp until #1234).
+  Backfill already had a check but used a generic
+  `fmt.Errorf("zero quote")` rather than the typed sentinel
+  the consumers explicitly understand. Kraken isn't enabled on
+  r1 today (see `[external.kraken].enabled` in r1's TOML) so
+  this is a latent-bug fix — closing it now means flipping
+  Kraken on later doesn't surprise the operator with a fresh
+  ERROR storm.
+- **CoinGecko divergence reference now has a built-in default
+  IDMap matching the aggregator's default coverage** —
+  `internal/divergence/coingecko.go`. Caught from r1 on
+  2026-05-10: the type-level docs claimed "empty IDMap falls
+  back to a built-in default covering XLM + major stables"
+  but the constructor copied opts.IDMap as-is with no
+  fallback. Result: every operator without an explicit
+  `[divergence.coingecko].id_map` got `asset_unsupported`
+  failures for every divergence cross-check call —
+  `divergence_observations` silently empty, `flags.divergence_warning`
+  always false, the Compare-layer "ok" counter incremented
+  while no actual cross-check happened (the aggregator's
+  refresh metric showed 23,889 "ok" outcomes on r1 with zero
+  rows in the durable mirror). Default IDMap now covers the
+  canonical asset_id forms the aggregator computes by default
+  (`crypto:XLM` / `native` / `crypto:BTC` / `crypto:ETH` /
+  `crypto:LINK` / `crypto:SOL` / `crypto:ADA` / `crypto:DOT`)
+  plus major USD stablecoins (USDC / USDT / PYUSD) for
+  cross-checks against the underlying X/USDC or X/USDT path
+  enabled by ADR-0026. Operator entries merge OVER the
+  defaults so anyone who relied on the pre-fix behaviour can
+  still narrow the set.
+- **Caddy now resolves the real client IP from Cloudflare** —
+  `configs/caddy/Caddyfile.api`. The previous config rewrote
+  `X-Forwarded-For` to `{remote_host}` (the immediate TCP peer,
+  i.e. a CF edge POP), so every API request looked like it came
+  from a Cloudflare IP. Per-IP rate-limit buckets became
+  per-CF-edge buckets — a single CF edge hitting the burst
+  threshold blocked every customer behind it. Access logs were
+  similarly useless (every `remote_ip` was a 162.158.x.x or
+  104.22.x.x CF edge, never the actual customer). Fix: add a
+  global `servers { trusted_proxies static <CF CIDRs>;
+  client_ip_headers CF-Connecting-IP X-Forwarded-For }` block
+  and forward `{client_ip}` instead of `{remote_host}` from the
+  `reverse_proxy` directive. Trust is CIDR-pinned to CF's
+  published ranges so an attacker hitting the box's IP directly
+  can't spoof `CF-Connecting-IP`. README documents the
+  CIDR-refresh cadence.
+- **CoinGecko poller now grows the cooldown exponentially even
+  when the venue's `Retry-After` is short** — pre-fix the
+  Retry-After branch took the hint at face value (clamped to
+  `MinBackoff = 60s`) and bypassed the doubling. CoinGecko's
+  free tier returns Retry-After consistently below `MinBackoff`
+  (≈30s), so clamping landed the cooldown at exactly 60s
+  forever. The runner's PollInterval is also 60s, so each
+  recovery attempt produced another 429 → another 60s cooldown
+  → indefinite throttling at one 429-per-minute. Observed live
+  on r1 2026-05-09 → 2026-05-10. Post-fix, `applyBackoff` treats
+  Retry-After as a FLOOR — cooldown is `max(hint,
+  currentBackoff×2, MinBackoff)` clamped to `MaxBackoff` — so
+  consecutive 429s grow exponentially regardless of what the
+  venue claims you can retry after. Two new tests pin both shapes.
+  (PR #1227)
+- **Bitstamp dust trades silently dropped** instead of being
+  logged as ERROR on every frame. Tiny lots (e.g. 1e-8 XLM at
+  $0.16) compute `base × price ÷ 10^8 = 0` under our integer-scale
+  precision floor; the canonical validator was rejecting them
+  with `quote_amount must be positive, got 0` and the indexer
+  was emitting "insert trade failed" at ERROR-per-frame.
+  Following #814's Coinbase + Binance pattern: typed
+  `ErrDustTrade` sentinel from `parseTrade` and
+  `bitstampCandleToTrade`; the existing streamer / backfill
+  error-skip branch absorbs it. Caught from r1 production logs
+  on 2026-05-10 — XLMUSD trades flooding the indexer ERROR log.
+- **`/v1/ohlc` now applies the same X/fiat:USD → X/<peg> stablecoin
+  fallback** as `/v1/price` (#1217), `/v1/chart` (#1015), and the
+  vwap+twap pair (#1219). Pre-fix, `/v1/ohlc?base=native&quote=fiat:USD`
+  404'd "no trades in window" out-of-the-box on every fresh
+  deployment. Freighter RFP §3 names `/v1/ohlc` as a launch-blocker
+  for the asset-detail surface, so this gap was visible to every
+  asset detail page request. New `ohlcTradesWithStablecoinFallback`
+  helper walks the operator's classic USD pegs in priority order;
+  first peg with non-empty trades wins. Response carries
+  `flags.triangulated=true`. (PR #1225)
+- **`/v1/vwap` and `/v1/twap` now apply the same X/fiat:USD →
+  X/<peg> stablecoin-fiat proxy fallback** as `/v1/price` (#1217)
+  and `/v1/chart` (#1015). Pre-fix, `/v1/vwap?base=native&quote=fiat:USD`
+  and `/v1/twap?base=native&quote=fiat:USD` both 404'd "no trades
+  in window" out-of-the-box because no on-chain trades quote in
+  fiat:USD on Stellar. New helper `tradesInRangeWithStablecoinFallback`
+  retries against each operator-declared classic USD peg in priority
+  order; first non-empty result wins. Response carries
+  `flags.triangulated=true` so wire shape is honest about the
+  derivation. Same opt-in shape (empty allow-list still 404s);
+  non-USD fiat quotes skip the fallback. (PR #1219)
+- **`/v1/oracle/lastprice` and `/v1/oracle/x_last_price` get the
+  same X/fiat:USD → X/<peg> stablecoin-fiat proxy fallback** as
+  `/v1/price` (#1217). Pre-fix, the SEP-40 passthrough surface
+  inherited the same out-of-the-box 404 mode: an on-chain
+  integrator drop-in-replacing `lastprice(native)` against XLM
+  got 404 even though `/v1/coins/native` showed $0.16 cleanly.
+  Same intent as #1217 — keep the SEP-40 surface and the
+  closed-bucket surface consistent in coverage so an integrator
+  switching between them sees the same set of "available" pairs.
+  Two new tests pin the lastprice + x_last_price branches.
+  (PR #1220)
 - **Default Chainlink feed map covers BTC/ETH/LINK + EUR/GBP/JPY
   vs USD** so divergence cross-checks work out-of-the-box on a
   stock config. Same shape as the CoinGecko default-IDMap fix in

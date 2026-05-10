@@ -48,6 +48,18 @@ export function IssuerPanel({ gStrkey }: { gStrkey: string }) {
 
   return (
     <div className="space-y-4">
+      {data.scam_reason && (
+        <div
+          role="alert"
+          className="rounded-md border border-red-300 bg-red-50 p-3 text-sm text-red-900 dark:border-red-800 dark:bg-red-950/40 dark:text-red-200"
+        >
+          <strong className="font-semibold">Known scam issuer</strong> ·{' '}
+          {data.scam_reason}. Every asset in the table below was
+          minted by this account. Treat all of them with the same
+          warning the page header surfaces — do not establish
+          trustlines.
+        </div>
+      )}
       <Panel
         title="Issuer identity"
         hint={data.org_name ?? data.home_domain ?? '—'}

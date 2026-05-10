@@ -41,6 +41,10 @@ func (f *fakeCoinsUpstream) GetCoinBySlug(ctx context.Context, slug string) (tim
 	return timescale.CoinRow{AssetID: slug}, nil
 }
 
+func (f *fakeCoinsUpstream) GetCoinByAssetID(ctx context.Context, assetID string) (timescale.CoinRow, error) {
+	return timescale.CoinRow{AssetID: assetID}, nil
+}
+
 func (f *fakeCoinsUpstream) GetNativeCoinRow(ctx context.Context) (timescale.CoinRow, error) {
 	return timescale.CoinRow{AssetID: "native"}, nil
 }
