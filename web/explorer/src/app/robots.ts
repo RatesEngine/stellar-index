@@ -25,3 +25,8 @@ export default function robots(): MetadataRoute.Robots {
     host: 'https://ratesengine.net',
   };
 }
+
+// llms.txt lives at web/explorer/public/llms.txt — the
+// llmstxt.org-spec discovery file for AI agents indexing the
+// site. Not referenced from robots.txt because the spec is
+// "look at the well-known path", not "follow Sitemap:".

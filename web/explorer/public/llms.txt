@@ -1,0 +1,68 @@
+# Rates Engine
+
+> Public REST + SSE pricing API for the Stellar network. Aggregates
+> on-chain DEX/AMM trades, off-chain CEX trades, and oracle feeds
+> into VWAP/TWAP/OHLC. Apache-2.0, pre-v1.
+
+The canonical asset_id format is `<class>:<id>` — e.g.
+`crypto:XLM`, `fiat:USD`, `credit:USDC:GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN`.
+The string `native` is a shorthand for `crypto:XLM`.
+
+## Public surfaces
+
+- [Explorer](https://ratesengine.net): asset / market / pool / source / exchange browser, methodology docs, ADR + research browser.
+- [API](https://api.ratesengine.net): REST + SSE pricing endpoints. Anonymous-friendly; magic-link sign-in unlocks higher rate tiers.
+- [Docs](https://docs.ratesengine.net): OpenAPI v1 spec rendered with Scalar.
+- [Status](https://status.ratesengine.net): per-region service health + incident postmortems.
+
+## Key endpoints
+
+- [GET /v1/price?asset=<id>&quote=fiat:USD](https://api.ratesengine.net/v1/price?asset=native&quote=fiat:USD): closed-bucket VWAP for the most recent minute (cross-region byte-identical).
+- [GET /v1/price/tip?asset=<id>&quote=fiat:USD](https://api.ratesengine.net/v1/price/tip?asset=native&quote=fiat:USD): fastest-feed tip (lower latency, weaker consistency).
+- [GET /v1/price/stream?asset=<id>&quote=fiat:USD](https://api.ratesengine.net/v1/price/stream?asset=native&quote=fiat:USD): SSE stream of closed-bucket VWAPs.
+- [GET /v1/markets](https://api.ratesengine.net/v1/markets): every (base, quote) pair with 24h volume / trade count.
+- [GET /v1/pools](https://api.ratesengine.net/v1/pools): every Soroban DEX pool we observe (Soroswap, Aquarius, Phoenix, Comet, SDEX).
+- [GET /v1/sources](https://api.ratesengine.net/v1/sources): every venue/source we ingest from + classification (exchange / aggregator / oracle).
+- [GET /v1/oracle/streams](https://api.ratesengine.net/v1/oracle/streams): latest reading per (oracle, asset, quote) — Reflector / Band / Redstone / Chainlink HTTP.
+- [GET /v1/coins](https://api.ratesengine.net/v1/coins): activity-ranked listing with prices, sparklines, market_cap, supply.
+- [GET /v1/incidents](https://api.ratesengine.net/v1/incidents): active + recent SEVs with severity + affected components.
+- [GET /v1/status](https://api.ratesengine.net/v1/status): service-health rollup.
+
+## Architecture
+
+- [CLAUDE.md](https://github.com/RatesEngine/rates-engine/blob/main/CLAUDE.md): repo orientation, invariants, and counter-intuitive facts (start here if you're an LLM agent reading the repo cold).
+- [docs/architecture/ingest-pipeline.md](https://github.com/RatesEngine/rates-engine/blob/main/docs/architecture/ingest-pipeline.md): Galexie → dispatcher → decoder.
+- [docs/architecture/aggregation-plan.md](https://github.com/RatesEngine/rates-engine/blob/main/docs/architecture/aggregation-plan.md): VWAP / TWAP / outlier / triangulation policy chain.
+- [docs/architecture/contract-schema-evolution.md](https://github.com/RatesEngine/rates-engine/blob/main/docs/architecture/contract-schema-evolution.md): Soroban DeFi contracts upgrade in place; decoders must be WASM-version-aware for backfill.
+- [docs/adr/](https://github.com/RatesEngine/rates-engine/tree/main/docs/adr): all architecture decisions, immutable, accept-only-or-supersede.
+
+## Data sources we ingest
+
+- **On-chain (Stellar):** Soroswap, Aquarius, Phoenix, Comet, SDEX (via Galexie ledger archives — never via Horizon).
+- **Off-chain CEX:** Binance, Coinbase, Kraken, Bitstamp.
+- **Oracles:** Reflector (DEX/CEX/FX), Band, Redstone, Chainlink HTTP.
+- **Aggregators (cross-check only, not VWAP-contributing):** CoinGecko, CoinMarketCap, CryptoCompare.
+- **Authority FX:** ECB, exchangeratesapi, polygon-forex.
+
+## How rates are computed
+
+- See [/methodology](https://ratesengine.net/methodology) for the full write-up.
+- Short version: trades from `class=exchange` sources contribute to the VWAP. Aggregators and oracles are reported alongside but excluded from the canonical VWAP (mixing them double-counts upstream markets or imposes their methodology on top of ours).
+- Stablecoin → fiat is a **late-binding** aggregator policy, not an ingest policy. We store the real pair (`XLM/USDT`, `XLM/USDC`); the aggregator maps `USDT/USDC/PYUSD → USD`, `EUROC/EUROB → EUR`, `MXNe → MXN` at VWAP compute time. Eager normalisation at ingest would hide a depeg event.
+
+## SDK
+
+- Go: `go get github.com/RatesEngine/rates-engine/pkg/client` — see [/sdk](https://ratesengine.net/sdk) for examples.
+
+## Licensing + status
+
+- License: Apache-2.0 ([LICENSE](https://github.com/RatesEngine/rates-engine/blob/main/LICENSE)).
+- Status: pre-v1 (currently v0.5.0-rc.x). API surface is SemVer-stable per [docs/architecture/semver-policy.md](https://github.com/RatesEngine/rates-engine/blob/main/docs/architecture/semver-policy.md).
+- Security disclosures: [SECURITY.md](https://github.com/RatesEngine/rates-engine/blob/main/SECURITY.md) — `security@ratesengine.net`.
+
+## Optional
+
+- [CHANGELOG](https://github.com/RatesEngine/rates-engine/blob/main/CHANGELOG.md): every release notes entry.
+- [/changelog.atom](https://ratesengine.net/changelog.atom): Atom feed of release notes for syndication.
+- [docs/discovery/](https://github.com/RatesEngine/rates-engine/tree/main/docs/discovery): Phase-1 audit archive — read-only, but referenced often for "why does Stellar / source X behave like Y".
+- [docs/operations/runbooks/](https://github.com/RatesEngine/rates-engine/tree/main/docs/operations/runbooks): one runbook per alert. Read these before touching production.
