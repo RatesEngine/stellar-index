@@ -1411,3 +1411,184 @@ func ExampleClient_Pair() {
 
 	// Output: XLM/USD: 2 sources, 12600 trades in last 24h
 }
+
+// ExampleClient_PriceTip demonstrates the fastest-feed tip endpoint.
+// Trades off cross-region byte-identical consistency (which
+// `/v1/price` provides via the closed-bucket VWAP) for lower
+// latency — most callers driving live UIs want this. The
+// `?window_seconds=` knob picks how recent a sample to consider
+// "fresh"; default 30 s matches the Freighter freshness target.
+func ExampleClient_PriceTip() {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{
+			"data": {
+				"asset_id": "native",
+				"quote": "fiat:USD",
+				"price": "0.16475",
+				"price_type": "tip",
+				"observed_at": "2026-05-10T12:00:42Z",
+				"window_seconds": 30
+			},
+			"as_of": "2026-05-10T12:00:42Z",
+			"sources": ["binance"],
+			"flags": {"stale": false}
+		}`))
+	}))
+	defer srv.Close()
+
+	c := client.New(client.Options{BaseURL: srv.URL})
+	resp, err := c.PriceTip(context.Background(), client.PriceTipQuery{
+		Asset:         "native",
+		Quote:         "fiat:USD",
+		WindowSeconds: 30,
+	})
+	if err != nil {
+		fmt.Println("error:", err)
+		return
+	}
+	fmt.Printf("XLM/USD tip: %s (window: %ds)\n",
+		resp.Data.Price, resp.Data.WindowSeconds)
+
+	// Output: XLM/USD tip: 0.16475 (window: 30s)
+}
+
+// ExampleClient_Sources demonstrates listing the source registry —
+// every venue / oracle / aggregator the deployment can ingest from.
+// Class drives "include in VWAP" semantics: only `exchange` rows
+// contribute by default; aggregators and oracles are reported
+// alongside but excluded from the canonical VWAP (mixing them would
+// double-count upstream markets or impose their methodology on
+// our output).
+func ExampleClient_Sources() {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{
+			"data": [
+				{"name":"binance","class":"exchange","subclass":"cex",
+				 "include_in_vwap":true,"backfill_available":true,"backfill_safe":true,"default_weight":100},
+				{"name":"soroswap","class":"exchange","subclass":"dex",
+				 "include_in_vwap":true,"backfill_available":true,"backfill_safe":true,"default_weight":100},
+				{"name":"reflector-dex","class":"oracle",
+				 "include_in_vwap":false,"backfill_available":true,"backfill_safe":true,"default_weight":100}
+			],
+			"as_of": "2026-05-10T12:00:00Z",
+			"flags": {}
+		}`))
+	}))
+	defer srv.Close()
+
+	c := client.New(client.Options{BaseURL: srv.URL})
+	got, err := c.Sources(context.Background(), client.SourcesOptions{})
+	if err != nil {
+		fmt.Println("error:", err)
+		return
+	}
+	for _, s := range got.Data {
+		// Only `exchange` class contributes to VWAP per project policy.
+		fmt.Printf("%-15s class=%-10s vwap=%v\n", s.Name, s.Class, s.IncludeInVWAP)
+	}
+
+	// Output:
+	// binance         class=exchange   vwap=true
+	// soroswap        class=exchange   vwap=true
+	// reflector-dex   class=oracle     vwap=false
+}
+
+// ExampleClient_Markets demonstrates listing every (base, quote)
+// pair the deployment has observed at least one trade for, sorted
+// by 24h USD volume descending. Useful for "top markets" UIs and
+// for picking pairs to chart.
+//
+// Server-side limits: Limit ≤ 500. Larger requests return 400.
+func ExampleClient_Markets() {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{
+			"data": [
+				{"base":"native","quote":"crypto:BTC",
+				 "last_trade_at":"2026-05-10T12:00:00Z","trade_count_24h":4827,"volume_24h_usd":"125000.00"},
+				{"base":"native","quote":"fiat:USD",
+				 "last_trade_at":"2026-05-10T11:59:50Z","trade_count_24h":12345,"volume_24h_usd":"98000.50"}
+			],
+			"as_of": "2026-05-10T12:00:00Z",
+			"flags": {}
+		}`))
+	}))
+	defer srv.Close()
+
+	c := client.New(client.Options{BaseURL: srv.URL})
+	got, err := c.Markets(context.Background(), client.MarketsOptions{
+		Limit:   25,
+		OrderBy: client.MarketsOrderByVolume24hUSDDesc,
+	})
+	if err != nil {
+		fmt.Println("error:", err)
+		return
+	}
+	for _, m := range got.Data {
+		vol := "—"
+		if m.Volume24hUSD != nil {
+			vol = "$" + *m.Volume24hUSD
+		}
+		fmt.Printf("%s/%s: vol_24h=%s trades_24h=%d\n",
+			m.Base, m.Quote, vol, m.TradeCount24h)
+	}
+
+	// Output:
+	// native/crypto:BTC: vol_24h=$125000.00 trades_24h=4827
+	// native/fiat:USD: vol_24h=$98000.50 trades_24h=12345
+}
+
+// ExampleClient_OHLC demonstrates fetching one OHLC bar over an
+// arbitrary range. Server aggregates trades in [from, to) into a
+// single bar — pass a 1-hour range for a 1-hour bar, a 1-day
+// range for a daily bar, etc. For multi-bar series, call
+// repeatedly with adjacent windows or use `/v1/chart` (which
+// returns a series in one request).
+//
+// Truncated=true means the bar covers a window that hit the
+// per-bar trade-count cap — high-volume pairs over long windows
+// are the typical trigger. Treat truncated bars as a hint to
+// narrow the range.
+func ExampleClient_OHLC() {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{
+			"data": {
+				"from": "2026-05-10T11:00:00Z",
+				"to":   "2026-05-10T12:00:00Z",
+				"open":  "0.16412",
+				"high":  "0.16498",
+				"low":   "0.16387",
+				"close": "0.16475",
+				"base_volume":  "85432.10",
+				"quote_volume": "14082.41",
+				"trade_count":  217,
+				"truncated":    false
+			},
+			"as_of": "2026-05-10T12:00:00Z",
+			"flags": {}
+		}`))
+	}))
+	defer srv.Close()
+
+	c := client.New(client.Options{BaseURL: srv.URL})
+	from := time.Date(2026, 5, 10, 11, 0, 0, 0, time.UTC)
+	to := time.Date(2026, 5, 10, 12, 0, 0, 0, time.UTC)
+	got, err := c.OHLC(context.Background(), client.OHLCQuery{
+		Base:  "native",
+		Quote: "fiat:USD",
+		From:  from,
+		To:    to,
+	})
+	if err != nil {
+		fmt.Println("error:", err)
+		return
+	}
+	bar := got.Data
+	fmt.Printf("o=%s h=%s l=%s c=%s vol=%s trades=%d\n",
+		bar.Open, bar.High, bar.Low, bar.Close, bar.BaseVolume, bar.TradeCount)
+
+	// Output: o=0.16412 h=0.16498 l=0.16387 c=0.16475 vol=85432.10 trades=217
+}

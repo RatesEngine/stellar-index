@@ -99,6 +99,15 @@ against.
 
 ### Added
 
+- **SDK godoc examples for `PriceTip`, `Sources`, `Markets`,
+  `OHLC`** (`pkg/client/example_test.go`). Each is a runnable
+  example with canned httptest server response + asserted
+  `// Output:` comment so the doc is verified at build time and
+  surfaced in pkg.go.dev. Picks the four most-likely-to-be-used
+  methods after `Price` / `Asset` (already had examples) — the
+  PriceTip / OHLC pair backs every "live UI" use case, while
+  Markets / Sources back the catalogue / source-attribution
+  surfaces.
 - **SDK godoc examples for `PriceBatch`, `Coins`, `Coin`, `Pair`**
   (`pkg/client/example_test.go`). Round 2 of the godoc-coverage
   push — picks the next four highest-traffic methods that lacked
