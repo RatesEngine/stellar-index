@@ -508,6 +508,8 @@ func run(cfgPath string, dryRun bool) error { //nolint:gocognit,funlen,gocyclo /
 	cachedCoinsReader := v1.NewCachedCoinsReader(store, 30*time.Second)
 	go prewarmCaches(rootCtx, logger.With("component", "prewarm"), cachedSourcesStats, cachedMarketsReader, cachedCoinsReader)
 
+	usdPegs := parseUSDPeggedClassics(cfg.Trades.USDPeggedClassicAssets, logger)
+
 	apiSrv := v1.New(v1.Options{
 		Logger:      logger.With("component", "api"),
 		ReadyChecks: checks,
@@ -530,7 +532,7 @@ func run(cfgPath string, dryRun bool) error { //nolint:gocognit,funlen,gocyclo /
 		Freeze:        freezeLooker,
 		Supply:        storeSupplyLooker{s: store},
 		Volume:        storeVolumeReader{s: store},
-		Change24h:     storeChange24hReader{s: store},
+		Change24h:     storeChange24hReader{s: store, pegs: usdPegs},
 		ChangeSummary: store,
 		Coins:         cachedCoinsReader,
 		Issuers:       store,
@@ -560,7 +562,7 @@ func run(cfgPath string, dryRun bool) error { //nolint:gocognit,funlen,gocyclo /
 		SessionAuth:       dashboardBundle.middleware,
 		SessionPeeker:     sessionPeekerAdapter{},
 		SACWrappers:       cfg.Supply.SACWrappers,
-		USDPeggedClassics: parseUSDPeggedClassics(cfg.Trades.USDPeggedClassicAssets, logger),
+		USDPeggedClassics: usdPegs,
 	})
 
 	// Closed-bucket producer — only spawn when the operator
@@ -1765,20 +1767,47 @@ var usdQuoteAsset = func() canonical.Asset {
 // translated to v1.ErrChange24hUnavailable so the handler treats
 // it as "feature unavailable for this asset" rather than a real
 // failure. Other errors propagate unchanged.
-type storeChange24hReader struct{ s *timescale.Store }
+//
+// Pegs is the same operator-declared classic USD-pegged set used
+// by the v1 handler's tryStablecoinFiatProxy fallback. When the
+// literal asset/fiat:USD lookup misses (the steady-state case on
+// Stellar mainnet — nothing on-chain quotes in fiat:USD), this
+// adapter walks the pegs and re-runs the at-or-before lookup
+// against asset/<peg>. First non-error result wins. Without
+// this, /v1/assets/{id}.change_24h_pct silently stays null for
+// every on-chain asset (mirrors the same gap fixed in #1217 for
+// the /v1/price handler).
+type storeChange24hReader struct {
+	s    *timescale.Store
+	pegs []canonical.Asset
+}
 
 func (r storeChange24hReader) USDPrice24hAgo(ctx context.Context, asset canonical.Asset) (string, error) {
 	row, err := r.s.ClosedVWAP1mAtOrBefore(ctx,
 		canonical.Pair{Base: asset, Quote: usdQuoteAsset},
 		time.Now().Add(-24*time.Hour),
 	)
-	if errors.Is(err, sql.ErrNoRows) {
-		return "", v1.ErrChange24hUnavailable
+	if err == nil {
+		return row.VWAP, nil
 	}
-	if err != nil {
+	if !errors.Is(err, sql.ErrNoRows) {
 		return "", err
 	}
-	return row.VWAP, nil
+	// Stablecoin-fiat proxy fallback: walk the operator's USD pegs
+	// and try asset/<peg>. First non-error row wins.
+	for _, peg := range r.pegs {
+		if peg.Equal(asset) {
+			continue
+		}
+		pegRow, pegErr := r.s.ClosedVWAP1mAtOrBefore(ctx,
+			canonical.Pair{Base: asset, Quote: peg},
+			time.Now().Add(-24*time.Hour),
+		)
+		if pegErr == nil {
+			return pegRow.VWAP, nil
+		}
+	}
+	return "", v1.ErrChange24hUnavailable
 }
 
 // storeSupplyLooker adapts *timescale.Store to v1.SupplyLooker for

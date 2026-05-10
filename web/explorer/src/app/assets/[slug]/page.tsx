@@ -107,6 +107,12 @@ interface CoinSummary {
   // Read from the trades hypertable directly. Companion to the
   // all-time `observation_count`.
   trade_count_24h?: number | null;
+  // Non-empty when the asset's issuer is on the curated scam list
+  // (sourced from stellar.expert's directory). Mirrors the
+  // `scam_reason` field on /v1/issuers; surfaced here so the asset
+  // detail page can render a warning at first paint instead of
+  // waiting for the IssuerPanel fetch to complete.
+  issuer_scam_reason?: string | null;
 }
 
 interface TopMarket {
@@ -440,6 +446,19 @@ export default async function AssetDetailPage({ params }: { params: Params }) {
             Issuer home domain:{' '}
             <code className="font-mono">{detail.home_domain}</code>
           </p>
+        )}
+        {coin.issuer_scam_reason && (
+          <div
+            role="alert"
+            className="rounded-md border border-red-300 bg-red-50 p-3 text-sm text-red-900 dark:border-red-800 dark:bg-red-950/40 dark:text-red-200"
+          >
+            <strong className="font-semibold">Known scam asset</strong> ·{' '}
+            {coin.issuer_scam_reason}. The issuer is on the
+            stellar.expert curated directory of malicious accounts —
+            do not trust this asset, do not establish trustlines, and
+            do not execute the prices below as if they reflected an
+            honest market.
+          </div>
         )}
       </header>
 

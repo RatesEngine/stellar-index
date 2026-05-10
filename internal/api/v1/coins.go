@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/RatesEngine/rates-engine/internal/canonical"
 	"github.com/RatesEngine/rates-engine/internal/storage/timescale"
 )
 
@@ -19,6 +20,12 @@ import (
 type CoinsReader interface {
 	ListCoinsExt(ctx context.Context, opts timescale.ListCoinsOptions) ([]timescale.CoinRow, error)
 	GetCoinBySlug(ctx context.Context, slug string) (timescale.CoinRow, error)
+	// GetCoinByAssetID looks up a classic asset by its canonical
+	// asset_id (CODE-ISSUER form). Distinct from [GetCoinBySlug]
+	// which looks up by the friendly short slug (USDC, AQUA).
+	// Used by /v1/coins/{slug} when the URL contains a canonical
+	// asset_id rather than a friendly slug.
+	GetCoinByAssetID(ctx context.Context, assetID string) (timescale.CoinRow, error)
 	GetNativeCoinRow(ctx context.Context) (timescale.CoinRow, error)
 	GetCoinTopMarkets(ctx context.Context, assetID string, limit int) ([]timescale.CoinTopMarket, error)
 	GetCoinPriceHistory24h(ctx context.Context, assetID string) ([]timescale.CoinPricePoint, error)
@@ -95,6 +102,14 @@ type Coin struct {
 	// could fabricate an ATH). Null when the asset has no
 	// USD-quoted history.
 	ATH *CoinATH `json:"ath,omitempty"`
+	// IssuerScamReason is non-empty when this asset's `issuer`
+	// G-strkey appears in the curated `known_scams.go` map sourced
+	// from stellar.expert's directory. Mirrors the same field
+	// served on /v1/issuers and /v1/issuers/{g_strkey}; clients
+	// should render a prominent warning ("known scam asset — do
+	// not trust") when present. Always omitted for native XLM
+	// (issuer is empty) and for issuers we have no scam record on.
+	IssuerScamReason string `json:"issuer_scam_reason,omitempty"`
 }
 
 // CoinATH is the all-time-high USD price + bucket-day pair on
@@ -361,7 +376,7 @@ func (s *Server) handleCoins(w http.ResponseWriter, r *http.Request) { //nolint:
 // top-N listing first.
 //
 // Returns 404 when the slug doesn't match any classic asset.
-func (s *Server) handleCoin(w http.ResponseWriter, r *http.Request) { //nolint:gocognit // dispatch fans across optional reader calls; collapsing would lose call-site context
+func (s *Server) handleCoin(w http.ResponseWriter, r *http.Request) { //nolint:gocognit,gocyclo // dispatch fans across optional reader calls + 4-shape input parsing (XLM/native intercept, canonical asset_id, friendly slug, case-insensitive retry); collapsing would lose call-site context
 	if s.coins == nil {
 		writeProblem(w, r,
 			"https://api.ratesengine.net/errors/coins-unavailable",
@@ -401,18 +416,35 @@ func (s *Server) handleCoin(w http.ResponseWriter, r *http.Request) { //nolint:g
 	if strings.EqualFold(slug, "XLM") || strings.EqualFold(slug, "native") {
 		row, err = s.coins.GetNativeCoinRow(r.Context())
 	} else {
-		row, err = s.coins.GetCoinBySlug(r.Context(), slug)
-		// Case-insensitive fallback: classic_assets.slug is uppercase
-		// by convention (USDC, AQUA, EURC, etc.) but URL clients
-		// frequently lowercase. Retry once with strings.ToUpper when
-		// the literal slug missed AND the upper form differs — preserves
-		// case-significance for the rare issued asset that intentionally
-		// uses lowercase (Stellar protocol allows it) while rescuing
-		// the common /v1/coins/usdc → /v1/coins/USDC typo. Pre-fix
-		// the retry was missing and lowercase variants 404'd.
-		if errors.Is(err, sql.ErrNoRows) {
-			if upper := strings.ToUpper(slug); upper != slug {
-				row, err = s.coins.GetCoinBySlug(r.Context(), upper)
+		// Canonical asset_id form (CODE-ISSUER like
+		// USDC-GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN)
+		// is what every other API surface accepts as the wire form.
+		// /v1/coins/{slug} historically only accepted the friendly
+		// short form (USDC, AQUA, EURC) — anyone copying the
+		// canonical asset_id from another endpoint's response into
+		// /v1/coins/<id> got a 404. Probe the canonical form first
+		// when the slug looks like one (contains a `-` followed by
+		// a G-strkey); fall back to the friendly-slug path otherwise.
+		// classic_assets.asset_id is the canonical-form column, so
+		// look up by exact equality there.
+		if a, parseErr := canonical.ParseAsset(slug); parseErr == nil &&
+			a.Type == canonical.AssetClassic && a.Issuer != "" {
+			row, err = s.coins.GetCoinByAssetID(r.Context(), a.String())
+		} else {
+			row, err = s.coins.GetCoinBySlug(r.Context(), slug)
+			// Case-insensitive fallback: classic_assets.slug is uppercase
+			// by convention (USDC, AQUA, EURC, etc.) but URL clients
+			// frequently lowercase. Retry once with strings.ToUpper when
+			// the literal slug missed AND the upper form differs —
+			// preserves case-significance for the rare issued asset that
+			// intentionally uses lowercase (Stellar protocol allows it)
+			// while rescuing the common /v1/coins/usdc → /v1/coins/USDC
+			// typo. Pre-fix the retry was missing and lowercase variants
+			// 404'd.
+			if errors.Is(err, sql.ErrNoRows) {
+				if upper := strings.ToUpper(slug); upper != slug {
+					row, err = s.coins.GetCoinBySlug(r.Context(), upper)
+				}
 			}
 		}
 	}
@@ -525,5 +557,6 @@ func coinFromRow(row timescale.CoinRow) Coin {
 		Change1hPct:       row.Change1hPct,
 		Change24hPct:      row.Change24hPct,
 		Change7dPct:       row.Change7dPct,
+		IssuerScamReason:  scamReason(row.IssuerGStrkey),
 	}
 }
