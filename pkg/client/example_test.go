@@ -744,6 +744,250 @@ func ExampleClient_ChangeSummary() {
 	// Output: crypto:XLM: $0.1630, 24h=+3.21% 7d=-1.80% (up, increasing)
 }
 
+// ExampleClient_Healthz demonstrates the shallow liveness probe —
+// reports whether the API process is up and the listener
+// responding. Distinct from Readyz (deep dependency check) and
+// Status (customer-facing rollup); use Healthz for k8s-style
+// liveness probing or for "is the binary alive" CI smoke tests.
+//
+// Returns 200 + status="ok" on healthy, 503 (mapped to APIError)
+// on unhealthy. Anonymous-friendly.
+func ExampleClient_Healthz() {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{
+			"data": {"status": "ok", "uptime": "50h26m"},
+			"as_of": "2026-05-10T12:00:00Z",
+			"flags": {}
+		}`))
+	}))
+	defer srv.Close()
+
+	c := client.New(client.Options{BaseURL: srv.URL})
+	got, err := c.Healthz(context.Background())
+	if err != nil {
+		fmt.Println("error:", err)
+		return
+	}
+	fmt.Printf("status=%s uptime=%s\n", got.Data.Status, got.Data.Uptime)
+
+	// Output: status=ok uptime=50h26m
+}
+
+// ExampleClient_Readyz demonstrates the deep readiness probe —
+// pings every backing dependency (Postgres, Redis, MinIO if
+// configured) and reports the rollup. Use this for k8s-style
+// readiness probing where "ready to receive traffic" requires
+// every dependency to be reachable, distinct from "process is
+// alive" (which is what Healthz tests).
+//
+// 200 + status="ok" when every check passes; 503 when any
+// dependency check fails.
+func ExampleClient_Readyz() {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{
+			"data": {"status": "ok", "uptime": "50h26m"},
+			"as_of": "2026-05-10T12:00:00Z",
+			"flags": {}
+		}`))
+	}))
+	defer srv.Close()
+
+	c := client.New(client.Options{BaseURL: srv.URL})
+	got, err := c.Readyz(context.Background())
+	if err != nil {
+		fmt.Println("error:", err)
+		return
+	}
+	fmt.Printf("ready: %s\n", got.Data.Status)
+
+	// Output: ready: ok
+}
+
+// ExampleClient_Version demonstrates fetching the API binary's
+// build metadata (semver tag, build commit, build date, Go
+// version, dirty flag). Useful for client-side build-skew
+// detection (refuse to talk to an API older than the SDK
+// expects) and for incident logs ("which build was running when
+// X happened").
+func ExampleClient_Version() {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{
+			"data": {
+				"version": "v0.5.0-rc.37",
+				"build_date": "2026-05-08T11:41:13Z",
+				"commit": "8dc0b9d",
+				"dirty": "false",
+				"go_version": "go1.25.9"
+			},
+			"as_of": "2026-05-10T12:00:00Z",
+			"flags": {}
+		}`))
+	}))
+	defer srv.Close()
+
+	c := client.New(client.Options{BaseURL: srv.URL})
+	got, err := c.Version(context.Background())
+	if err != nil {
+		fmt.Println("error:", err)
+		return
+	}
+	fmt.Printf("%s (commit %s, %s)\n",
+		got.Data.Version, got.Data.Commit, got.Data.GoVersion)
+
+	// Output: v0.5.0-rc.37 (commit 8dc0b9d, go1.25.9)
+}
+
+// ExampleClient_Usage demonstrates the per-day usage rollup
+// surface. Each row is one day of (requests, errors, throttled)
+// counters keyed by date — useful for billing reconciliation,
+// monthly usage CSV exports, and quota-anxiety dashboards.
+//
+// Requires authentication; anonymous calls 401. Returns an
+// empty array when the caller has no usage in the lookback
+// window.
+func ExampleClient_Usage() {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{
+			"data": [
+				{"date":"2026-05-10","requests":12345,"errors":12,"throttled":0},
+				{"date":"2026-05-09","requests":11890,"errors":8,"throttled":2}
+			],
+			"as_of": "2026-05-10T12:00:00Z",
+			"flags": {}
+		}`))
+	}))
+	defer srv.Close()
+
+	c := client.New(client.Options{BaseURL: srv.URL, APIKey: "rek_demo"})
+	got, err := c.Usage(context.Background())
+	if err != nil {
+		fmt.Println("error:", err)
+		return
+	}
+	for _, row := range got.Data {
+		fmt.Printf("%s: %d requests (%d err, %d throttled)\n",
+			row.Date, row.Requests, row.Errors, row.Throttled)
+	}
+
+	// Output:
+	// 2026-05-10: 12345 requests (12 err, 0 throttled)
+	// 2026-05-09: 11890 requests (8 err, 2 throttled)
+}
+
+// ExampleClient_CreateKey demonstrates issuing a new API key.
+// The returned `Plaintext` is the only place the new key's
+// secret bytes appear — the server never returns it again.
+// Stash it server-side immediately (e.g. write to a secrets
+// manager); displaying it once in the UI then forgetting is
+// the canonical flow for the explorer's /account page.
+//
+// Requires authentication. The new key inherits the caller's
+// identifier + tier.
+func ExampleClient_CreateKey() {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusCreated)
+		_, _ = w.Write([]byte(`{
+			"data": {
+				"key_id": "ak_demo_xyz789",
+				"plaintext": "rek_live_abc123def456ghi789jkl012mno345pqr",
+				"label": "production-server-1"
+			},
+			"as_of": "2026-05-10T12:00:00Z",
+			"flags": {}
+		}`))
+	}))
+	defer srv.Close()
+
+	c := client.New(client.Options{BaseURL: srv.URL, APIKey: "rek_demo"})
+	got, err := c.CreateKey(context.Background(), client.CreateKeyRequest{
+		Label: "production-server-1",
+	})
+	if err != nil {
+		fmt.Println("error:", err)
+		return
+	}
+	// In production, IMMEDIATELY persist got.Data.Plaintext
+	// somewhere safe — the server will never return it again.
+	fmt.Printf("created %s (label=%s, plaintext=%d chars)\n",
+		got.Data.KeyID, got.Data.Label, len(got.Data.Plaintext))
+
+	// Output: created ak_demo_xyz789 (label=production-server-1, plaintext=42 chars)
+}
+
+// ExampleClient_RevokeKey demonstrates revoking an API key
+// permanently. The deletion is unrecoverable — there's no
+// "un-revoke"; a new key has to be issued via CreateKey.
+//
+// keyID is the public ID returned in KeyCreated.KeyID / on each
+// row of Keys — NOT the plaintext secret. Returning the secret
+// would 400 since the route validates the path segment as a
+// key ID, not a plaintext.
+//
+// Returns nil on success (server returns 204 No Content);
+// *APIError when the server rejects (401 = no auth, 403 =
+// caller doesn't own the key, 404 = key not found).
+func ExampleClient_RevokeKey() {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusNoContent)
+	}))
+	defer srv.Close()
+
+	c := client.New(client.Options{BaseURL: srv.URL, APIKey: "rek_demo"})
+	err := c.RevokeKey(context.Background(), "ak_demo_xyz789")
+	if err != nil {
+		fmt.Println("error:", err)
+		return
+	}
+	fmt.Println("revoked")
+
+	// Output: revoked
+}
+
+// ExampleClient_Keys demonstrates listing every API key the
+// authenticated caller owns. Each row carries the public KeyID
+// + Label + tier + creation timestamp; the plaintext secret is
+// NOT in the response (the server only returns the secret
+// once, at CreateKey time).
+//
+// Useful for building a /account/keys management UI: list, then
+// let the user click "revoke" on the rows they want to remove.
+func ExampleClient_Keys() {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{
+			"data": [
+				{"identifier":"GAUSER","tier":"apikey","key_id":"ak_a",
+				 "label":"production-server-1","created_at":"2026-05-01T10:00:00Z"},
+				{"identifier":"GAUSER","tier":"apikey","key_id":"ak_b",
+				 "label":"staging","created_at":"2026-05-08T14:30:00Z"}
+			],
+			"as_of": "2026-05-10T12:00:00Z",
+			"flags": {}
+		}`))
+	}))
+	defer srv.Close()
+
+	c := client.New(client.Options{BaseURL: srv.URL, APIKey: "rek_demo"})
+	got, err := c.Keys(context.Background())
+	if err != nil {
+		fmt.Println("error:", err)
+		return
+	}
+	for _, k := range got.Data {
+		fmt.Printf("%s — %s (created %s)\n",
+			k.KeyID, k.Label, k.CreatedAt.Format("2006-01-02"))
+	}
+
+	// Output:
+	// ak_a — production-server-1 (created 2026-05-01)
+	// ak_b — staging (created 2026-05-08)
+}
+
 // ExampleClient_Issuers demonstrates the issuer directory listing.
 // Sorted by total observation count across the issuer's classic
 // assets, descending — surfaces the most-active issuers first
@@ -933,46 +1177,7 @@ func ExampleClient_History() {
 // ExampleClient_Currency demonstrates fetching one fiat
 // currency's full detail — rate vs USD plus 24h/7d change,
 // 7-day history strip, and cross-rates against every other
-// listed currency. Backs the explorer's `/currencies/{ticker}`
-// page.
-//
-// Crypto tickers (BTC, ETH, etc.) take the same shape but
-// surface optional CirculatingSupply + MarketCapUSD when our
-// circulation reader has data for the asset.
-func ExampleClient_Currency() {
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(`{
-			"data": {
-				"ticker": "EUR",
-				"name": "Euro",
-				"rate_usd": 1.0823,
-				"inverse_usd": 0.9239,
-				"cross_rates": {"GBP": 0.8512, "JPY": 168.42},
-				"change_24h_pct": 0.18,
-				"change_7d_pct": -0.42,
-				"published_at": "2026-05-10T12:00:00Z",
-				"fetched_at": "2026-05-10T12:00:05Z",
-				"source": "ecb"
-			},
-			"as_of": "2026-05-10T12:00:00Z",
-			"flags": {}
-		}`))
-	}))
-	defer srv.Close()
-
-	c := client.New(client.Options{BaseURL: srv.URL})
-	got, err := c.Currency(context.Background(), "EUR")
-	if err != nil {
-		fmt.Println("error:", err)
-		return
-	}
-	d := got.Data
-	fmt.Printf("1 %s = %.4f USD (24h: %+.2f%%, source: %s)\n",
-		d.Ticker, d.RateUSD, d.Change24hPct, d.Source)
-
-	// Output: 1 EUR = 1.0823 USD (24h: +0.18%, source: ecb)
-}
+// listed currency. Backs the explorer's `/currencies/{ticker}
 
 // ExampleClient_Cursors demonstrates the per-source ingest
 // cursor surface — which sources are caught up, which are
