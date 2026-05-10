@@ -168,6 +168,21 @@ against.
 
 ### Fixed
 
+- **CoinGecko poller now grows the cooldown exponentially even
+  when the venue's `Retry-After` is short** — pre-fix the
+  Retry-After branch took the hint at face value (clamped to
+  `MinBackoff = 60s`) and bypassed the doubling. CoinGecko's
+  free tier returns Retry-After consistently below `MinBackoff`
+  (≈30s), so clamping landed the cooldown at exactly 60s
+  forever. The runner's PollInterval is also 60s, so each
+  recovery attempt produced another 429 → another 60s cooldown
+  → indefinite throttling at one 429-per-minute. Observed live
+  on r1 2026-05-09 → 2026-05-10. Post-fix, `applyBackoff` treats
+  Retry-After as a FLOOR — cooldown is `max(hint,
+  currentBackoff×2, MinBackoff)` clamped to `MaxBackoff` — so
+  consecutive 429s grow exponentially regardless of what the
+  venue claims you can retry after. Two new tests pin both shapes.
+  (PR #1227)
 - **`/v1/price/tip?asset=X&quote=fiat:USD` gets the same
   stablecoin-fiat proxy fallback as `/v1/price`** (#1217). Tip
   was 404'ing on the same shape — `tipWindowVWAP →

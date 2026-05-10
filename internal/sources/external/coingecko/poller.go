@@ -316,29 +316,37 @@ func (p *Poller) cooldownRemaining() time.Duration {
 	return time.Until(p.nextAllowedAt)
 }
 
-// applyBackoff arms the cooldown. If `hint` (parsed Retry-After) is
-// positive, use it (clamped to [MinBackoff, MaxBackoff]). Otherwise
-// double the previous backoff up to MaxBackoff.
+// applyBackoff arms the cooldown. We always grow the backoff
+// exponentially on consecutive 429s — `hint` (parsed Retry-After)
+// is treated as a floor, not a ceiling. Clamped to MaxBackoff.
+//
+// Why both: pre-fix the Retry-After branch took the hint at face
+// value (clamped to MinBackoff) and bypassed the doubling. CoinGecko's
+// free tier returns Retry-After values consistently below MinBackoff
+// (commonly 30 s), so clamping landed us at exactly MinBackoff = 60 s
+// forever — which matches the runner's PollInterval = 60 s, producing
+// one 429 per minute indefinitely (observed live on r1 2026-05-09 →
+// 2026-05-10). The right behaviour for sustained throttling is to
+// back off even when the venue claims you can retry sooner — they
+// can't be trusted to slow YOU down enough when many clients share
+// the same IP cap.
+//
+// max(hint, currentBackoff*2, MinBackoff) — clamped to MaxBackoff —
+// honours an unusually-long Retry-After (e.g. 5 minutes) but doesn't
+// let a chronically-undersize hint defeat the backoff.
 func (p *Poller) applyBackoff(hint time.Duration) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	var wait time.Duration
-	if hint > 0 {
+	doubled := p.currentBackoff * 2
+	wait := doubled
+	if hint > wait {
 		wait = hint
-		if wait < MinBackoff {
-			wait = MinBackoff
-		}
-		if wait > MaxBackoff {
-			wait = MaxBackoff
-		}
-	} else {
-		wait = p.currentBackoff * 2
-		if wait < MinBackoff {
-			wait = MinBackoff
-		}
-		if wait > MaxBackoff {
-			wait = MaxBackoff
-		}
+	}
+	if wait < MinBackoff {
+		wait = MinBackoff
+	}
+	if wait > MaxBackoff {
+		wait = MaxBackoff
 	}
 	p.currentBackoff = wait
 	p.nextAllowedAt = time.Now().Add(wait)
