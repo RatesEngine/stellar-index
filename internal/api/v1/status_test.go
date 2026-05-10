@@ -3,6 +3,7 @@ package v1
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -213,6 +214,40 @@ func TestStatus_WithBackend_PageAlertDegrades(t *testing.T) {
 	}
 	if st.Incidents.PageCount != 1 {
 		t.Errorf("PageCount = %d, want 1", st.Incidents.PageCount)
+	}
+}
+
+// TestStatus_BackendErrorDegradesOverall pins the regression
+// from r1 2026-05-10: when Prometheus is dead, every backend
+// query (Heartbeats, Latency, Freshness, Incidents) errors out;
+// /v1/status was returning Overall="ok" because the rollup logic
+// only flagged "degraded" inside the success branches. With the
+// metrics pipeline blind, "ok" is a lie — degrade so the
+// status-page poller (and operators reading the API directly)
+// see the real state.
+func TestStatus_BackendErrorDegradesOverall(t *testing.T) {
+	srv := New(Options{
+		RegionName: "r1",
+		StatusBackend: &fakeStatusBackend{
+			hbErr:  errors.New("prometheus: connection refused"),
+			latErr: errors.New("prometheus: connection refused"),
+			freErr: errors.New("prometheus: connection refused"),
+			incErr: errors.New("prometheus: connection refused"),
+		},
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/v1/status", nil)
+	rr := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rr, req)
+
+	var env Envelope
+	json.NewDecoder(rr.Body).Decode(&env)
+	body, _ := json.Marshal(env.Data)
+	var st StatusResponse
+	json.Unmarshal(body, &st)
+
+	if st.Overall != "degraded" {
+		t.Errorf("Overall = %q, want degraded (metrics backend unreachable)", st.Overall)
 	}
 }
 

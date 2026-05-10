@@ -128,6 +128,41 @@ func TestParseFrame_TradeOnUnknownChannel(t *testing.T) {
 	}
 }
 
+func TestParseFrame_DustTradeReturnsTypedSentinel(t *testing.T) {
+	// 1e-8 XLM at $0.16 — base × price floor-divides to 0 at 10^8
+	// integer scale. The canonical validator would reject the row
+	// with "quote_amount must be positive, got 0" → ERROR-log-on-
+	// every-trade and silent ingestion drop.
+	//
+	// Per #814's pattern (Coinbase + Binance), parseTrade now returns
+	// ErrDustTrade so the streamer's existing skip-on-error branch
+	// drops the frame quietly instead.
+	//
+	// Reproduces the production log signature from r1 2026-05-10
+	// 15:26:51 UTC ("insert trade failed … quote_amount must be
+	// positive, got 0" with source=bitstamp).
+	raw := []byte(`{
+      "event":"trade",
+      "channel":"live_trades_xlmusd",
+      "data":{
+        "id":572438361,
+        "timestamp":"1745000000",
+        "microtimestamp":"1745000000123456",
+        "amount":0.00000001,
+        "amount_str":"0.00000001",
+        "price":0.16000000,
+        "price_str":"0.16000000",
+        "type":0,
+        "buy_order_id":1,
+        "sell_order_id":2
+      }
+    }`)
+	_, _, err := parseFrame(raw, mustPairs(t))
+	if !errors.Is(err, ErrDustTrade) {
+		t.Errorf("expected ErrDustTrade, got %v", err)
+	}
+}
+
 func TestParseFrame_MalformedJSON(t *testing.T) {
 	_, _, err := parseFrame([]byte(`{not json`), mustPairs(t))
 	if !errors.Is(err, ErrMalformedFrame) {

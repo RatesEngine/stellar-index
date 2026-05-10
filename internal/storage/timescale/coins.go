@@ -972,10 +972,23 @@ func (s *Store) GetCoinTopMarkets(ctx context.Context, assetID string, limit int
 // the same canonical row.
 const getCoinBySlugSQL = `
 		WITH chosen AS (
+		  -- Three input shapes accepted (in tiebreak preference):
+		  --   1. friendly slug (USDC, AQUA, EURC)        — slug column
+		  --   2. raw code without issuer (USDC, AQUA)    — code column
+		  --   3. canonical asset_id (USDC-GA5Z…)         — asset_id column
+		  -- The OR-WHERE catches all three; the ORDER BY tiebreaks in
+		  -- preference order so a slug input wins over a code-only
+		  -- collision (the disambiguation guard from #45 / scam-token
+		  -- protection still applies on the friendly-slug path because
+		  -- a curated slug column value beats every code-only match).
+		  -- Pre-2026-05-10 canonical asset_id form (CODE-ISSUER) 404'd
+		  -- because the WHERE only matched COALESCE(slug, code).
 		  SELECT asset_id
 		    FROM classic_assets
 		   WHERE COALESCE(slug, code) = $1
+		      OR asset_id = $1
 		   ORDER BY (slug = $1) DESC NULLS LAST,
+		            (asset_id = $1) DESC NULLS LAST,
 		            observation_count DESC, asset_id ASC
 		   LIMIT 1
 		),
@@ -1220,6 +1233,10 @@ const getCoinBySlugSQL = `
 		  LEFT JOIN per_asset_24h_vol vol ON true
 `
 
+// GetCoinBySlug looks up by friendly slug (USDC, AQUA, EURC),
+// canonical asset_id (USDC-GA5Z…), OR raw code with case-insensitive
+// retry — see the SQL's WHERE clause + the handler's case-fallback
+// for the full input-shape table.
 func (s *Store) GetCoinBySlug(ctx context.Context, slug string) (CoinRow, error) {
 	r, err := scanCoinRow(s.db.QueryRowContext(ctx, getCoinBySlugSQL, slug))
 	if err != nil {
@@ -1228,6 +1245,15 @@ func (s *Store) GetCoinBySlug(ctx context.Context, slug string) (CoinRow, error)
 		return CoinRow{}, err
 	}
 	return r, nil
+}
+
+// GetCoinByAssetID is a thin wrapper kept for clarity at the
+// handler layer — the underlying SQL accepts canonical asset_id
+// alongside friendly slug since 2026-05-10, so this just calls
+// GetCoinBySlug. (Pre-fix the canonical form 404'd; see the
+// alerts-catalog row "Coin canonical asset_id 404" for context.)
+func (s *Store) GetCoinByAssetID(ctx context.Context, assetID string) (CoinRow, error) {
+	return s.GetCoinBySlug(ctx, assetID)
 }
 
 // GetNativeCoinRow returns the synthetic CoinRow for native XLM.

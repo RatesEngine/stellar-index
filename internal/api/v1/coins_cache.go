@@ -39,6 +39,15 @@ type coinsCacheEntry struct {
 	// One field per method we cache. Only one is populated per entry.
 	rows           []timescale.CoinRow
 	historyByAsset map[string][]timescale.CoinPricePoint
+
+	// err is set by the leader before close(flight) on a failing
+	// upstream call. Waiters hold a pointer to the SAME entry they
+	// joined the flight on so they can read entry.err here even
+	// after the leader removes the entry from the map (we don't
+	// TTL-cache errors). Without this, a waiter that wakes after
+	// the leader's delete derefs `c.entries[key].rows` on nil and
+	// panics — same root cause as the markets_cache fix.
+	err error
 }
 
 // NewCachedCoinsReader wraps `upstream` with a TTL cache. ttl=0
@@ -112,6 +121,13 @@ func (c *CachedCoinsReader) GetCoinBySlug(ctx context.Context, slug string) (tim
 	return c.upstream.GetCoinBySlug(ctx, slug)
 }
 
+// GetCoinByAssetID is the canonical-asset_id (CODE-ISSUER) flavour
+// of [GetCoinBySlug]. Pass-through — same low-volume single-row
+// shape; not worth adding an additional cache dimension.
+func (c *CachedCoinsReader) GetCoinByAssetID(ctx context.Context, assetID string) (timescale.CoinRow, error) {
+	return c.upstream.GetCoinByAssetID(ctx, assetID)
+}
+
 func (c *CachedCoinsReader) GetNativeCoinRow(ctx context.Context) (timescale.CoinRow, error) {
 	return c.upstream.GetNativeCoinRow(ctx)
 }
@@ -153,21 +169,24 @@ func (c *CachedCoinsReader) fetchRows(
 		return out, nil
 	}
 	if e, ok := c.entries[key]; ok && e.flight != nil {
+		entry := e
 		ch := e.flight
 		c.mu.Unlock()
 		select {
 		case <-ch:
-			c.mu.Lock()
-			out := c.entries[key]
-			c.mu.Unlock()
+			if entry.err != nil {
+				obs.APICacheOpsTotal.WithLabelValues("coins", op, "miss").Inc()
+				return nil, entry.err
+			}
 			obs.APICacheOpsTotal.WithLabelValues("coins", op, "hit").Inc()
-			return out.rows, nil
+			return entry.rows, nil
 		case <-ctx.Done():
 			return nil, ctx.Err()
 		}
 	}
 	done := make(chan struct{})
-	c.entries[key] = &coinsCacheEntry{flight: done}
+	entry := &coinsCacheEntry{flight: done}
+	c.entries[key] = entry
 	c.mu.Unlock()
 	obs.APICacheOpsTotal.WithLabelValues("coins", op, "miss").Inc()
 
@@ -175,9 +194,12 @@ func (c *CachedCoinsReader) fetchRows(
 
 	c.mu.Lock()
 	if err == nil {
-		c.entries[key] = &coinsCacheEntry{at: time.Now(), rows: rows}
+		entry.at = time.Now()
+		entry.rows = rows
+		entry.flight = nil
 	} else {
-		delete(c.entries, key) // don't cache the error
+		entry.err = err
+		delete(c.entries, key) // don't cache the error for new callers
 	}
 	c.mu.Unlock()
 	close(done)
@@ -197,21 +219,24 @@ func (c *CachedCoinsReader) fetchHistoryMap(
 		return out, nil
 	}
 	if e, ok := c.entries[key]; ok && e.flight != nil {
+		entry := e
 		ch := e.flight
 		c.mu.Unlock()
 		select {
 		case <-ch:
-			c.mu.Lock()
-			out := c.entries[key]
-			c.mu.Unlock()
+			if entry.err != nil {
+				obs.APICacheOpsTotal.WithLabelValues("coins", op, "miss").Inc()
+				return nil, entry.err
+			}
 			obs.APICacheOpsTotal.WithLabelValues("coins", op, "hit").Inc()
-			return out.historyByAsset, nil
+			return entry.historyByAsset, nil
 		case <-ctx.Done():
 			return nil, ctx.Err()
 		}
 	}
 	done := make(chan struct{})
-	c.entries[key] = &coinsCacheEntry{flight: done}
+	entry := &coinsCacheEntry{flight: done}
+	c.entries[key] = entry
 	c.mu.Unlock()
 	obs.APICacheOpsTotal.WithLabelValues("coins", op, "miss").Inc()
 
@@ -219,8 +244,11 @@ func (c *CachedCoinsReader) fetchHistoryMap(
 
 	c.mu.Lock()
 	if err == nil {
-		c.entries[key] = &coinsCacheEntry{at: time.Now(), historyByAsset: hist}
+		entry.at = time.Now()
+		entry.historyByAsset = hist
+		entry.flight = nil
 	} else {
+		entry.err = err
 		delete(c.entries, key)
 	}
 	c.mu.Unlock()

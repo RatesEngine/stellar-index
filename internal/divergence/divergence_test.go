@@ -256,16 +256,59 @@ func TestCoinGecko_HappyPath(t *testing.T) {
 	}
 }
 
-// TestCoinGecko_AssetNotInIDMap — operator hasn't added the asset's
-// CoinGecko slug; LookupPrice returns ErrAssetUnsupported (not a
-// transport error).
+// TestCoinGecko_AssetNotInIDMap — an asset that's neither in the
+// operator's IDMap nor in the built-in default falls back to
+// ErrAssetUnsupported (not a transport error). The bare native /
+// XLM / BTC / ETH paths are now covered by the built-in default,
+// so we use a deliberately-unknown synthetic asset to exercise
+// the unsupported branch.
 func TestCoinGecko_AssetNotInIDMap(t *testing.T) {
 	ref := divergence.NewCoinGeckoReference(divergence.CoinGeckoOptions{
-		IDMap: map[string]string{}, // empty
+		IDMap: map[string]string{}, // empty — relies on built-in default
 	})
-	_, err := ref.LookupPrice(context.Background(), xlmUSD(t), time.Now())
-	if !errors.Is(err, divergence.ErrAssetUnsupported) {
+	// Build a pair whose base ISN'T in the default IDMap. A classic
+	// SEP-1 asset (long-tail issuer) is parseable but not curated;
+	// the lookup should return ErrAssetUnsupported.
+	base, err := canonical.ParseAsset("AQUA-GBNZILSTVQZ4R7IKQDGHYGY2QXL5QOFJYQMXPKWRRM5PAV7Y4M67AQUA")
+	if err != nil {
+		t.Fatalf("ParseAsset(AQUA-...): %v", err)
+	}
+	usd, err := canonical.ParseAsset("fiat:USD")
+	if err != nil {
+		t.Fatalf("ParseAsset(fiat:USD): %v", err)
+	}
+	pair := canonical.Pair{Base: base, Quote: usd}
+	if _, err := ref.LookupPrice(context.Background(), pair, time.Now()); !errors.Is(err, divergence.ErrAssetUnsupported) {
 		t.Errorf("err = %v, want ErrAssetUnsupported", err)
+	}
+}
+
+// TestCoinGecko_DefaultIDMapCoversCommonPairs — a stock deployment
+// (no operator IDMap) MUST recognise the canonical asset_id forms
+// the aggregator computes by default. Caught from r1 audit
+// (2026-05-10): the previous behaviour was empty-IDMap → every
+// pair returns ErrAssetUnsupported → divergence_observations
+// silently empty even though Compare's "ok" counter incremented.
+func TestCoinGecko_DefaultIDMapCoversCommonPairs(t *testing.T) {
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if got := r.URL.Query().Get("ids"); got != "stellar" {
+			t.Errorf("ids = %q, want stellar (default IDMap missed XLM)", got)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"stellar":{"usd":0.16475}}`))
+	}))
+	defer ts.Close()
+
+	ref := divergence.NewCoinGeckoReference(divergence.CoinGeckoOptions{
+		BaseURL: ts.URL,
+		IDMap:   map[string]string{}, // empty — the regression scenario
+	})
+	got, err := ref.LookupPrice(context.Background(), xlmUSD(t), time.Now())
+	if err != nil {
+		t.Fatalf("LookupPrice: %v", err)
+	}
+	if got != 0.16475 {
+		t.Errorf("price = %v, want 0.16475", got)
 	}
 }
 

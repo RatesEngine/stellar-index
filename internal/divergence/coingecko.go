@@ -57,6 +57,17 @@ type CoinGeckoOptions struct {
 }
 
 // NewCoinGeckoReference constructs a CoinGecko-backed reference.
+//
+// When opts.IDMap is empty, the reference falls back to a built-in
+// default that covers the canonical asset_id forms the aggregator
+// computes by default (XLM in both `crypto:XLM` and `native` forms,
+// BTC, ETH, LINK, plus the major USD stablecoins). Without this
+// fallback every divergence-cross-check call returns
+// `ErrAssetUnsupported` and `divergence_observations` stays empty
+// for any operator who hasn't manually populated `[divergence.coingecko].id_map`
+// — which the type-level docs already promised wouldn't happen.
+// Operator-supplied entries merge OVER the defaults (operator wins),
+// so an operator can still narrow the set or override a slug.
 func NewCoinGeckoReference(opts CoinGeckoOptions) *CoinGeckoReference {
 	httpClient := opts.HTTPClient
 	if httpClient == nil {
@@ -68,7 +79,7 @@ func NewCoinGeckoReference(opts CoinGeckoOptions) *CoinGeckoReference {
 	}
 	baseURL = strings.TrimRight(baseURL, "/")
 
-	idMap := make(map[string]string, len(opts.IDMap))
+	idMap := defaultCoinGeckoIDMap()
 	for k, v := range opts.IDMap {
 		idMap[k] = v
 	}
@@ -82,6 +93,38 @@ func NewCoinGeckoReference(opts CoinGeckoOptions) *CoinGeckoReference {
 		baseURL:    baseURL,
 		idMap:      idMap,
 		quoteMap:   quoteMap,
+	}
+}
+
+// defaultCoinGeckoIDMap covers the canonical asset_id forms the
+// aggregator computes by default (per cmd/ratesengine-aggregator/
+// main.go::defaultPairs — XLM/BTC/ETH × USD/EUR/GBP, with XLM in
+// both `crypto:XLM` and `native` forms). Major USD stablecoins are
+// included so a deployment with stablecoin-fiat-proxy enabled
+// (ADR-0026) can cross-check the underlying USDC/USDT path too.
+//
+// Slugs verified against https://api.coingecko.com/api/v3/coins/list.
+// Mirrors the per-source coingecko poller's `tickerToID` map
+// (internal/sources/external/coingecko/poller.go) — kept separate
+// here because the divergence path keys on canonical asset_id
+// strings (`crypto:XLM`, `native`) while the poller keys on bare
+// upper-case tickers.
+func defaultCoinGeckoIDMap() map[string]string {
+	return map[string]string{
+		"crypto:XLM":  "stellar",
+		"native":      "stellar",
+		"crypto:BTC":  "bitcoin",
+		"crypto:ETH":  "ethereum",
+		"crypto:LINK": "chainlink",
+		"crypto:SOL":  "solana",
+		"crypto:ADA":  "cardano",
+		"crypto:DOT":  "polkadot",
+		// Major USD stablecoins — useful when the aggregator's
+		// stablecoin-fiat proxy (ADR-0026) is on and we want to
+		// cross-check the underlying X/USDC or X/USDT path.
+		"crypto:USDC":  "usd-coin",
+		"crypto:USDT":  "tether",
+		"crypto:PYUSD": "paypal-usd",
 	}
 }
 
