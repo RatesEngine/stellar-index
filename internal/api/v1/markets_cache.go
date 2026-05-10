@@ -45,6 +45,14 @@ type marketsCacheEntry struct {
 	pairs  []Market
 	pools  []Pool
 	cursor string
+
+	// err is set by the leader before close(flight) on a failing
+	// upstream call. Waiters hold a pointer to the SAME entry they
+	// joined the flight on — so even if the leader removes the entry
+	// from the map (we don't TTL-cache errors), waiters can still
+	// read entry.err here and return it instead of nil-derefing the
+	// missing entry. See fetchPairs / fetchPools.
+	err error
 }
 
 // NewCachedMarketsReader wraps `upstream` with a TTL cache. ttl=0
@@ -139,23 +147,29 @@ func (c *CachedMarketsReader) fetchPairs(
 		return out, next, nil
 	}
 	if e, ok := c.entries[key]; ok && e.flight != nil {
+		// Capture the entry pointer (not just the chan) so we can
+		// read the leader's result/err off the SAME struct we joined
+		// on. This survives the leader's `delete(c.entries, key)` on
+		// error, which would otherwise leave the re-read of
+		// c.entries[key] returning nil → panic on out.pairs.
+		entry := e
 		ch := e.flight
 		c.mu.Unlock()
 		select {
 		case <-ch:
-			c.mu.Lock()
-			out := c.entries[key]
-			c.mu.Unlock()
-			// Single-flight wait shared an upstream call — count
-			// as a hit since the caller didn't trigger work.
+			if entry.err != nil {
+				obs.APICacheOpsTotal.WithLabelValues("markets", op, "miss").Inc()
+				return nil, "", entry.err
+			}
 			obs.APICacheOpsTotal.WithLabelValues("markets", op, "hit").Inc()
-			return out.pairs, out.cursor, nil
+			return entry.pairs, entry.cursor, nil
 		case <-ctx.Done():
 			return nil, "", ctx.Err()
 		}
 	}
 	done := make(chan struct{})
-	c.entries[key] = &marketsCacheEntry{flight: done}
+	entry := &marketsCacheEntry{flight: done}
+	c.entries[key] = entry
 	c.mu.Unlock()
 	obs.APICacheOpsTotal.WithLabelValues("markets", op, "miss").Inc()
 
@@ -163,13 +177,13 @@ func (c *CachedMarketsReader) fetchPairs(
 
 	c.mu.Lock()
 	if err == nil {
-		c.entries[key] = &marketsCacheEntry{
-			at:     time.Now(),
-			pairs:  rows,
-			cursor: cursor,
-		}
+		entry.at = time.Now()
+		entry.pairs = rows
+		entry.cursor = cursor
+		entry.flight = nil
 	} else {
-		delete(c.entries, key) // don't cache the error
+		entry.err = err
+		delete(c.entries, key) // don't cache the error for new callers
 	}
 	c.mu.Unlock()
 	close(done)
@@ -190,21 +204,24 @@ func (c *CachedMarketsReader) fetchPools(
 		return out, next, nil
 	}
 	if e, ok := c.entries[key]; ok && e.flight != nil {
+		entry := e
 		ch := e.flight
 		c.mu.Unlock()
 		select {
 		case <-ch:
-			c.mu.Lock()
-			out := c.entries[key]
-			c.mu.Unlock()
+			if entry.err != nil {
+				obs.APICacheOpsTotal.WithLabelValues("markets", op, "miss").Inc()
+				return nil, "", entry.err
+			}
 			obs.APICacheOpsTotal.WithLabelValues("markets", op, "hit").Inc()
-			return out.pools, out.cursor, nil
+			return entry.pools, entry.cursor, nil
 		case <-ctx.Done():
 			return nil, "", ctx.Err()
 		}
 	}
 	done := make(chan struct{})
-	c.entries[key] = &marketsCacheEntry{flight: done}
+	entry := &marketsCacheEntry{flight: done}
+	c.entries[key] = entry
 	c.mu.Unlock()
 	obs.APICacheOpsTotal.WithLabelValues("markets", op, "miss").Inc()
 
@@ -212,12 +229,12 @@ func (c *CachedMarketsReader) fetchPools(
 
 	c.mu.Lock()
 	if err == nil {
-		c.entries[key] = &marketsCacheEntry{
-			at:     time.Now(),
-			pools:  rows,
-			cursor: cursor,
-		}
+		entry.at = time.Now()
+		entry.pools = rows
+		entry.cursor = cursor
+		entry.flight = nil
 	} else {
+		entry.err = err
 		delete(c.entries, key)
 	}
 	c.mu.Unlock()

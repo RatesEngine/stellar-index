@@ -78,4 +78,12 @@ var (
 	// added, or if we subscribed to a symbol that wasn't in the
 	// map at construct time (defensive — Start rejects this path).
 	ErrUnknownSymbol = errors.New("kraken: symbol not in configured PairMap")
+
+	// ErrDustTrade — base × price floor-divided to a 0 quote
+	// amount. Tiny lots (e.g. 1e-8 XLM at $0.16) underflow the
+	// canonical.NewAmount integer scale (10^8). Real trades, but
+	// below our precision floor — drop silently rather than
+	// logging at ERROR. Same shape as the Coinbase + Binance +
+	// Bitstamp dust filter (#814 / #1234).
+	ErrDustTrade = errors.New("kraken: dust trade (quote_amount underflow)")
 )

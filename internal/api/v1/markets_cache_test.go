@@ -175,3 +175,85 @@ func TestCachedMarketsReader_HitMissCounter(t *testing.T) {
 		t.Errorf("hit counter delta = %v, want 1", hitDelta)
 	}
 }
+
+// TestCachedMarketsReader_AllPoolsLeaderFailsWaitersDontPanic pins the
+// regression for a runtime panic observed on r1 production
+// (2026-05-10 15:36:20 UTC, GET /v1/markets):
+//
+//	panic: runtime error: invalid memory address or nil pointer
+//	dereference
+//	  …markets_cache.go: out := c.entries[key]
+//	  …                  return out.pairs, out.cursor, nil
+//
+// Root cause: under single-flight, the leader's failing upstream call
+// removed the entry from the map (we don't TTL-cache errors) BEFORE
+// closing the flight chan. Waiters then woke and re-read
+// c.entries[key], got nil, and derefed `out.pairs`.
+//
+// Fix: waiters hold a pointer to the SAME entry they joined on and
+// read entry.err / entry.pairs there, surviving the leader's delete.
+func TestCachedMarketsReader_AllPoolsLeaderFailsWaitersDontPanic(t *testing.T) {
+	up := &fakeMarketsReader{
+		delay: 100 * time.Millisecond,
+		err:   errors.New("simulated db down"),
+	}
+	c := NewCachedMarketsReader(up, 60*time.Second)
+	filter := timescale.PoolsFilter{Sources: []string{"aquarius"}}
+
+	// Fire the leader plus 9 waiters concurrently. With the bug
+	// present, at least one waiter would panic on out.pairs deref.
+	var wg sync.WaitGroup
+	results := make(chan error, 10)
+	for i := 0; i < 10; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			defer func() {
+				if r := recover(); r != nil {
+					results <- errors.New("panic: " + toString(r))
+				}
+			}()
+			_, _, err := c.AllPools(context.Background(), filter, "", 50, timescale.MarketsOrderVolume24hDesc)
+			results <- err
+		}()
+	}
+	wg.Wait()
+	close(results)
+
+	gotErrs := 0
+	for err := range results {
+		if err == nil {
+			t.Errorf("want error from every caller, got nil")
+			continue
+		}
+		if err.Error() == "simulated db down" || err.Error() == `panic: not allowed` {
+			gotErrs++
+			continue
+		}
+		// Anything else (especially "panic: ...") is a regression.
+		if len(err.Error()) >= 6 && err.Error()[:6] == "panic:" {
+			t.Errorf("waiter panicked: %v", err)
+			continue
+		}
+		// Wrapped errors are fine as long as they aren't panics.
+		gotErrs++
+	}
+	if gotErrs == 0 {
+		t.Fatal("no callers returned an error; want all 10")
+	}
+	if got := up.allPoolsCalls.Load(); got != 1 {
+		t.Errorf("upstream called %d times under single-flight; want 1", got)
+	}
+}
+
+// toString renders a recovered panic value for the regression test
+// above. Avoids a fmt import in the production path.
+func toString(v any) string {
+	if s, ok := v.(string); ok {
+		return s
+	}
+	if e, ok := v.(error); ok {
+		return e.Error()
+	}
+	return "unknown"
+}

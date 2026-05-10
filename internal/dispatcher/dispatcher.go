@@ -237,6 +237,15 @@ type Dispatcher struct {
 	// for test assertions.
 	decodeErrors  map[string]int
 	unmatchedHits int
+	// txReadErrors is the count of malformed transactions skipped
+	// during ProcessLedger. Bumped when LedgerTransactionReader.Read
+	// returns a non-EOF error — the tx is dropped (one bad tx must
+	// not abort the whole ledger) but we want operators to see the
+	// signal rather than have it disappear silently. Pre-2026-05-10
+	// the silent skip meant a slow corruption (ingest seeing a real
+	// drop rate) was invisible until a downstream price gap
+	// triggered a manual investigation.
+	txReadErrors int
 }
 
 // New constructs a Dispatcher with the given Soroban-event
@@ -327,6 +336,12 @@ type Stats struct {
 	DecodeErrors  map[string]int
 	OrphanEvents  map[string]int
 	UnmatchedHits int
+	// TxReadErrors counts malformed transactions skipped during
+	// ProcessLedger. Operators reading the snapshot can spot a
+	// sustained climb that would otherwise be invisible (the bad
+	// tx is dropped and the ledger continues; without this counter
+	// the only signal would be a downstream price gap days later).
+	TxReadErrors int
 }
 
 func (d *Dispatcher) Stats() Stats {
@@ -348,6 +363,7 @@ func (d *Dispatcher) Stats() Stats {
 		DecodeErrors:  decodeCopied,
 		OrphanEvents:  orphanCopied,
 		UnmatchedHits: d.unmatchedHits,
+		TxReadErrors:  d.txReadErrors,
 	}
 }
 
@@ -363,7 +379,11 @@ func (d *Dispatcher) Stats() Stats {
 //   - A failure to construct the transaction reader (bad LCM)
 //     returns an error immediately.
 //   - Per-transaction read errors are skipped with an internal
-//     counter bump (future: promoted to obs metric when wired).
+//     counter bump on `Stats().TxReadErrors`. The statsflush
+//     periodic snapshot logs at WARN whenever the delta in a
+//     flush window > 0 — operators see the silent-corruption
+//     signal instead of having it disappear (the pre-2026-05-10
+//     behaviour).
 //   - Per-event decode errors are skipped; the caller sees a
 //     successful return with fewer outputs.
 //
@@ -392,7 +412,11 @@ func (d *Dispatcher) ProcessLedger(lcm xdr.LedgerCloseMeta, passphrase string) (
 		}
 		if err != nil {
 			// Skip the transaction but keep going; one malformed tx
-			// should not abort the whole ledger.
+			// should not abort the whole ledger. Bump the counter so
+			// `Stats().TxReadErrors` surfaces the drop — silent skip
+			// here meant a slow corruption rate was invisible
+			// pre-2026-05-10.
+			d.txReadErrors++
 			continue
 		}
 		if !tx.Result.Successful() {

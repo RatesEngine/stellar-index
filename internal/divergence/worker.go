@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
 	"time"
 
 	"github.com/redis/go-redis/v9"
@@ -119,6 +120,12 @@ type ServiceOptions struct {
 	// delta history that the Redis cache discards. Optional — nil
 	// keeps legacy Redis-only behaviour.
 	ObservationSink ObservationSink
+
+	// Logger, when non-nil, receives WARN-level log lines for sink
+	// failures. Optional — nil silences the path (legacy behaviour).
+	// The aggregator passes its component logger so failures land
+	// in the same journal stream as the rest of the orchestrator.
+	Logger *slog.Logger
 }
 
 // Service wraps a set of References + a cache writer, exposing a
@@ -136,6 +143,14 @@ type Service struct {
 	minSources int
 	timeout    time.Duration
 	sink       ObservationSink
+	// logger is optional — nil-safe. When set, sink failures are
+	// logged at WARN per (pair, reference) instead of being
+	// silently dropped. Pre-2026-05-10 the missing-log meant
+	// Postgres write failures (e.g. during the disk-full SEV-2
+	// cascade) silently dropped every divergence_observations row
+	// — operators only saw it when the explorer's /divergences
+	// page surfaced a gap, days later.
+	logger *slog.Logger
 }
 
 // NewService constructs a divergence service. Returns an error when
@@ -163,6 +178,7 @@ func NewService(opts ServiceOptions) (*Service, error) {
 		minSources: minSources,
 		timeout:    timeout,
 		sink:       opts.ObservationSink,
+		logger:     opts.Logger,
 	}, nil
 }
 
@@ -246,7 +262,7 @@ func (s *Service) flushObservations(
 		}
 		deltaPct := (ourPrice - refPrice) / refPrice * 100.0
 		firing := absFloat(deltaPct) > s.threshold
-		_ = s.sink.RecordObservation(ctx, ObservationRecord{
+		if err := s.sink.RecordObservation(ctx, ObservationRecord{
 			Pair:       pair,
 			Reference:  refName,
 			OurPrice:   ourPrice,
@@ -254,7 +270,16 @@ func (s *Service) flushObservations(
 			DeltaPct:   deltaPct,
 			Firing:     firing,
 			ObservedAt: observedAt,
-		})
+		}); err != nil && s.logger != nil {
+			// Best-effort write — the Redis cache (load-bearing for
+			// flags.divergence_warning) already succeeded. Log so
+			// operators see the durable-mirror gap; pre-2026-05-10
+			// this was a fully-silent drop.
+			s.logger.Warn("divergence: sink RecordObservation failed",
+				"pair", pair.String(),
+				"reference", refName,
+				"err", err)
+		}
 	}
 }
 
