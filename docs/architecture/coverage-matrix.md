@@ -1,6 +1,6 @@
 ---
 title: RFP × Proposal × Delivery — Coverage Matrix
-last_verified: 2026-05-10
+last_verified: 2026-05-11
 status: ratified
 ---
 
@@ -29,6 +29,16 @@ full production findings register (R-001 through R-023).
 **The ❌ rows are the action list before public-flip.** All 5 are
 listed with reproducible curl commands in
 [`../review-2026-05-10.md`](../review-2026-05-10.md) §Appendix B.
+
+> **2026-05-11 update:** All five ❌ rows from the 2026-05-10
+> review have landed code fixes on `main` and are awaiting the
+> next RC + r1 deploy. The Prod cells in the per-requirement
+> tables below still read against `v0.5.0-rc.39` — they are
+> snapshot-correct as of the review timestamp. After the next
+> deploy, re-run the curl probes from
+> [`../review-2026-05-10.md`](../review-2026-05-10.md) §Appendix B
+> and flip the cells; the resolution log at the top of that
+> document tracks which PR closed each row.
 
 The 2026-05-02 pass corrected three internally-contradictory ⚠
 caveats:
@@ -628,3 +638,21 @@ week lands.
   R-009 (SEP-10 returns 503 on r1 — server signing seed not configured).
   No ❌ blocks the API entirely; each is a fixable bug or operator
   config gap.
+
+- **2026-05-11** — **All five 2026-05-10 ❌ rows have landing
+  code fixes on `main`** (PRs #1261, #1262, #1263, #1264, #1265,
+  #1268, #1270, #1271, #1272 across the session). Headline
+  resolutions:
+  R-005 → #1261 (batch shares full /v1/price fallback chain),
+  R-007 → #1262 (OHLC outlier filter, default 4σ),
+  R-008 → #1263 (ATH from day-VWAP, dust-resistant),
+  R-013 → #1265 (chart truncated/data_starts_at signals),
+  R-014 → #1272 (markets default sort = volume_24h_usd_desc),
+  R-016 → #1270 (asset SEP-1 backfill from known_issuers map),
+  R-011 → #1271 (observations triangulation hint on empty),
+  R-021 → #1264 (handler-timeout helper recognises pq cancel),
+  R-001/R-002 → #1268 (prewarm covers volume-desc + per-CEX).
+  R-006 + R-009 remain operator config (#97, #119). The Prod
+  cells in this matrix continue to read against rc.39; flip
+  them after the next deploy + re-curl. Resolution log in the
+  review doc tracks each row → PR.
