@@ -232,11 +232,19 @@ override.
 | `ratesengine_prometheus_scrape_failing` | `up{job=~"api\|indexer\|aggregator"}` | == 0 for any target > 2 min | P3 | [scrape-failing](runbooks/scrape-failing.md) |
 | `ratesengine_alertmanager_config_bad` | `alertmanager_config_last_reload_successful` | == 0 | P2 | [alertmanager-bad-config](runbooks/alertmanager-bad-config.md) |
 | `ratesengine_deadmansswitch` | `vector(1)` constant | MUST fire every minute | **P1** if receiver stops seeing it | [deadmansswitch](runbooks/deadmansswitch.md) |
+| `prometheus_down` (TSDB corruption) | systemd `prometheus.service` failed | exit-code != 0; runs ad-hoc, not a rule | **P1** | [prometheus-tsdb-corruption](runbooks/prometheus-tsdb-corruption.md) |
 
 The `deadmansswitch` alert is inverse-logic: AlertManager routes it
 to a receiver that expects it every minute. If the receiver stops
 seeing it, that's the alarm (catches AlertManager-down and
 Prometheus-down scenarios).
+
+`prometheus_down` is the disk-full / TSDB-corruption family — same
+root cause as `redis-write-blocked-disk-full`. Doesn't have its own
+Prometheus rule (Prometheus can't alert on its own absence — that's
+what `deadmansswitch` is for); the runbook lives under the catalog
+because the *recovery* needs documenting and the apt-shipped
+systemd unit's `Restart=on-abnormal` doesn't auto-recover from it.
 
 ---
 
