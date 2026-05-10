@@ -329,6 +329,17 @@ against.
 
 ### Fixed
 
+- **`/v1/vwap` and `/v1/twap` now apply the same X/fiat:USD →
+  X/<peg> stablecoin-fiat proxy fallback** as `/v1/price` (#1217)
+  and `/v1/chart` (#1015). Pre-fix, `/v1/vwap?base=native&quote=fiat:USD`
+  and `/v1/twap?base=native&quote=fiat:USD` both 404'd "no trades
+  in window" out-of-the-box because no on-chain trades quote in
+  fiat:USD on Stellar. New helper `tradesInRangeWithStablecoinFallback`
+  retries against each operator-declared classic USD peg in priority
+  order; first non-empty result wins. Response carries
+  `flags.triangulated=true` so wire shape is honest about the
+  derivation. Same opt-in shape (empty allow-list still 404s);
+  non-USD fiat quotes skip the fallback. (PR #1219)
 - **`/v1/oracle/lastprice` and `/v1/oracle/x_last_price` get the
   same X/fiat:USD → X/<peg> stablecoin-fiat proxy fallback** as
   `/v1/price` (#1217). Pre-fix, the SEP-40 passthrough surface
