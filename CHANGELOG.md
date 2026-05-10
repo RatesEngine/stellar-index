@@ -15,6 +15,24 @@ against.
 
 ## [Unreleased]
 
+### Fixed
+
+- **Divergence sink failures now log at WARN instead of being
+  silently swallowed** —
+  `internal/divergence/worker.go::flushObservations` discarded
+  the `RecordObservation` error with `_ = ...`. So when
+  Postgres was struggling (e.g. during the 2026-05-09 disk-full
+  SEV-2 cascade) every divergence_observations row was lost
+  with no signal. Operators only saw the gap days later when
+  the explorer's /divergences page surfaced missing data.
+  `ServiceOptions` now takes an optional `*slog.Logger`; when
+  set, sink failures log per (pair, reference) at WARN. The
+  Redis cache write (load-bearing for `flags.divergence_warning`)
+  remains the priority — sink failure does NOT abort the
+  refresh path. Aggregator passes its component logger; the
+  API binary doesn't construct a sink so the field stays nil
+  and the path is no-op.
+
 ### Added
 
 - **`/v1/pools?asset=<asset_id>` filter** — restrict the pools
