@@ -14,6 +14,14 @@
   X-Frame-Options: DENY
   Referrer-Policy: strict-origin-when-cross-origin
   Permissions-Policy: accelerometer=(), camera=(), geolocation=(), microphone=(), payment=(), usb=()
+  # HSTS — pin HTTPS for one year, including subdomains
+  # (api.ratesengine.net, status.ratesengine.net,
+  # docs.ratesengine.net are all HTTPS-only at the edge so the
+  # includeSubDomains directive is safe). `preload` is
+  # intentionally OMITTED until the operator has submitted the
+  # apex to https://hstspreload.org/ — preload is irrevocable
+  # once browsers ship it, so we ratchet up in two steps.
+  Strict-Transport-Security: max-age=31536000; includeSubDomains
   # CSP — restrictive but functional. 'unsafe-inline' is required
   # for Next.js static-export bootstrap scripts and Tailwind inline
   # styles; revisit if Next stops emitting them. connect-src lists
@@ -49,4 +57,8 @@
   X-Frame-Options: ALLOWALL
   Referrer-Policy: strict-origin-when-cross-origin
   Permissions-Policy: accelerometer=(), camera=(), geolocation=(), microphone=(), payment=(), usb=()
+  # HSTS still applies to /embed/* — _headers rules are full
+  # replacement (NOT merged) per CF Pages docs, so we repeat the
+  # parent's HSTS directive here. Same lifetime / same scope.
+  Strict-Transport-Security: max-age=31536000; includeSubDomains
   Content-Security-Policy: default-src 'self'; connect-src 'self' https://api.ratesengine.net http://localhost:3000; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self' data:; object-src 'none'; base-uri 'self'; frame-ancestors *; form-action 'self'
