@@ -168,6 +168,19 @@ against.
 
 ### Fixed
 
+- **Nil-pointer panic in markets/coins single-flight cache** —
+  caught on r1 production (2026-05-10 15:36 UTC, GET `/v1/markets`).
+  When the leader's upstream call failed under single-flight,
+  `fetchPairs` / `fetchPools` (and the equivalents in
+  `coins_cache.go`) deleted the entry from the map BEFORE closing
+  the flight chan. Waiters then woke, re-read `c.entries[key]`,
+  got `nil`, and panicked dereferencing `out.pairs`. Fix:
+  waiters now hold a pointer to the same entry they joined on
+  (so the leader's `delete` can't erase what they read) and the
+  leader stashes its err on that entry pre-close. Regression
+  test added under `-race`. Untested error-path race still
+  caches the err for in-flight waiters but doesn't TTL-cache it
+  for new callers — same semantics as before, minus the panic.
 - **`/v1/price/tip?asset=X&quote=fiat:USD` gets the same
   stablecoin-fiat proxy fallback as `/v1/price`** (#1217). Tip
   was 404'ing on the same shape — `tipWindowVWAP →
