@@ -71,6 +71,79 @@ groups:
             retention tuning / vacuum / compression policy review. Hard page
             fires at 10 %.
 
+      # Root filesystem (/) — distinct from /var/lib/postgresql
+      # which has its own ZFS dataset with separate space.
+      # Caught the 2026-05-10 outage retrospectively: root FS hit
+      # 100 % from log accumulation before any existing alert
+      # fired. Without this rule the operator sees the symptom
+      # downstream (Redis MISCONF → /v1/price 404s) rather than
+      # the cause.
+      - alert: ratesengine_node_root_disk_full
+        expr: |
+          (node_filesystem_avail_bytes{mountpoint="/"} /
+           node_filesystem_size_bytes{mountpoint="/"}) * 100 < 10
+        for: 1m
+        labels:
+          severity: page
+          team: ratesengine
+          component: storage
+          runbook_url: https://github.com/RatesEngine/rates-engine/blob/main/docs/operations/runbooks/redis-write-blocked-disk-full.md
+        annotations:
+          summary: "Root filesystem on {{ $labels.instance }} {{ $value | humanize }}% free (SEV-1)"
+          description: |
+            Root FS (/) under 10 % free on {{ $labels.instance }}.
+            Redis can't snapshot once full; with the default
+            stop-writes-on-bgsave-error=yes that blocks every cache
+            write, blocking aggregator VWAP refresh, surfacing as
+            `/v1/price` 404s on rewritten / triangulated /
+            stablecoin-proxy pairs (incident 2026-05-10).
+
+      - alert: ratesengine_node_root_disk_warning
+        expr: |
+          (node_filesystem_avail_bytes{mountpoint="/"} /
+           node_filesystem_size_bytes{mountpoint="/"}) * 100 < 20
+        for: 10m
+        labels:
+          severity: ticket
+          team: ratesengine
+          component: storage
+          runbook_url: https://github.com/RatesEngine/rates-engine/blob/main/docs/operations/runbooks/redis-write-blocked-disk-full.md
+        annotations:
+          summary: "Root filesystem on {{ $labels.instance }} {{ $value | humanize }}% free"
+          description: |
+            Root FS (/) under 20 % on {{ $labels.instance }}.
+            Investigate /var/log + /tmp + /var/cache before this
+            grows into the page-tier alert.
+
+      # Redis BGSAVE health — when Redis can't snapshot to disk
+      # (typically because the volume backing /var/lib/redis is
+      # full) it sets stop-writes-on-bgsave-error and rejects
+      # every SET. The aggregator's VWAP cache writes start
+      # failing for every pair. Catches the same incident shape
+      # as the root-disk alert above from a different angle:
+      # the disk could be on a separate mount, or the failure
+      # could be caused by something other than disk space
+      # (permissions, fork failure on memory pressure).
+      - alert: ratesengine_redis_writes_blocked
+        expr: redis_rdb_last_bgsave_status == 0
+        for: 1m
+        labels:
+          severity: page
+          team: ratesengine
+          component: cache
+          runbook_url: https://github.com/RatesEngine/rates-engine/blob/main/docs/operations/runbooks/redis-write-blocked-disk-full.md
+        annotations:
+          summary: "Redis BGSAVE failing on {{ $labels.instance }} (SEV-1) — writes blocked"
+          description: |
+            Redis BGSAVE on {{ $labels.instance }} has been failing
+            for 1+ minute. With the default
+            stop-writes-on-bgsave-error=yes, every Redis write is
+            being rejected — aggregator VWAP cache stops refreshing,
+            `/v1/price` 404s on rewritten/triangulated/proxy pairs
+            (incident 2026-05-10). Free disk on the Redis volume
+            (typically `/`), then `redis-cli BGSAVE` to clear the
+            stop-writes block.
+
       - alert: ratesengine_timescale_connections_saturated
         expr: |
           (pg_stat_activity_count / on (instance)
