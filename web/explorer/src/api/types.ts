@@ -2541,6 +2541,11 @@ export interface paths {
          *     post-filter. The explorer's `/diagnostics` page applies
          *     the same filter client-side, defaulting to 1h.
          *
+         *     Pass `?source=<name>` for an exact-match filter on the
+         *     `source` column — typical values are `ledgerstream` (the
+         *     live indexer) and `backfill` (one row per backfill
+         *     range). Composes with `?max_age=` (both filters apply).
+         *
          *     Returns 503 when the deployment hasn't wired the cursors
          *     reader.
          */
@@ -2555,6 +2560,15 @@ export interface paths {
                      *     cursor" contract.
                      */
                     max_age?: string;
+                    /**
+                     * @description Exact-match filter on the `source` column. Typical
+                     *     values: `ledgerstream` (the live indexer) or
+                     *     `backfill` (one row per backfill range). Unknown
+                     *     values return an empty array (not 400) — keeps the
+                     *     surface predictable when an operator typos vs. a
+                     *     brand-new source we haven't seen yet.
+                     */
+                    source?: string;
                 };
                 header?: never;
                 path?: never;
