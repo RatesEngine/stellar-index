@@ -125,6 +125,16 @@ func buildTrade(t tradePayload, pairMap map[string]canonical.Pair) (canonical.Tr
 	quoteRaw := new(big.Int).Mul(base, price)
 	quote := new(big.Int).Quo(quoteRaw, pow10(externalAmountDecimals))
 
+	// Dust filter — when base × price floor-divides to 0 (e.g.
+	// a 1e-8 XLM lot at $0.16), the canonical validator rejects
+	// the row with "quote_amount must be positive, got 0". These
+	// are real Kraken trades, just below our integer-scale
+	// precision floor; drop silently. Same shape as the
+	// Coinbase + Binance + Bitstamp dust filter.
+	if quote.Sign() == 0 {
+		return canonical.Trade{}, ErrDustTrade
+	}
+
 	ts, err := time.Parse(time.RFC3339Nano, t.Timestamp)
 	if err != nil {
 		return canonical.Trade{}, fmt.Errorf("%w: timestamp %q: %w", ErrMalformedFrame, t.Timestamp, err)

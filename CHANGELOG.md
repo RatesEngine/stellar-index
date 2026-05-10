@@ -168,6 +168,21 @@ against.
 
 ### Fixed
 
+- **Kraken dust trades now use the typed `ErrDustTrade` sentinel**
+  — extends the #814 / #1234 pattern (Coinbase / Binance /
+  Bitstamp) to Kraken. Before this PR the live `parse.go` path
+  had NO dust check at all — a sub-precision-floor live trade
+  would have produced a Trade with quote=0, the canonical
+  validator would reject on insert, and the indexer would
+  log "insert trade failed" at ERROR per frame (the same
+  pattern that flooded r1 logs for Bitstamp until #1234).
+  Backfill already had a check but used a generic
+  `fmt.Errorf("zero quote")` rather than the typed sentinel
+  the consumers explicitly understand. Kraken isn't enabled on
+  r1 today (see `[external.kraken].enabled` in r1's TOML) so
+  this is a latent-bug fix — closing it now means flipping
+  Kraken on later doesn't surprise the operator with a fresh
+  ERROR storm.
 - **`/v1/price/tip?asset=X&quote=fiat:USD` gets the same
   stablecoin-fiat proxy fallback as `/v1/price`** (#1217). Tip
   was 404'ing on the same shape — `tipWindowVWAP →
