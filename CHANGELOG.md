@@ -15,6 +15,8 @@ against.
 
 ## [Unreleased]
 
+## [v0.5.0-rc.39] — 2026-05-10
+
 ### Fixed
 
 - **`/v1/changes/coin/{id}` accepts friendly slugs alongside the
