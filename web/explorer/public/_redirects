@@ -63,6 +63,36 @@
 /currencies/yusdc              /assets/yUSDC  301
 /currencies/yusdc/             /assets/yUSDC/ 301
 
+# Singular-form redirects for category pages — users naturally
+# type `/oracle/`, `/dex/`, `/exchange/` etc. without the
+# canonical plural. The 2026-05-08 audit confirmed all 9 below
+# 404'd cold; bouncing each to its canonical plural eliminates
+# the dead-end.
+/oracle                        /oracles/      301
+/oracle/                       /oracles/      301
+/exchange                      /exchanges/    301
+/exchange/                     /exchanges/    301
+/dex                           /dexes/        301
+/dex/                          /dexes/        301
+
+# Aggregator-family aliases — `/aggregators/` covers both routers
+# (Soroswap Router, …) and yield vaults (DeFindex, …), so all of
+# `/router`, `/routers`, `/aggregator`, `/yield`, `/vault`,
+# `/vaults` are reasonable user-typed forms that should land
+# there rather than 404.
+/router                        /aggregators/  301
+/router/                       /aggregators/  301
+/routers                       /aggregators/  301
+/routers/                      /aggregators/  301
+/aggregator                    /aggregators/  301
+/aggregator/                   /aggregators/  301
+/yield                         /aggregators/  301
+/yield/                        /aggregators/  301
+/vault                         /aggregators/  301
+/vault/                        /aggregators/  301
+/vaults                        /aggregators/  301
+/vaults/                       /aggregators/  301
+
 # Bare category-with-no-id URLs that 404'd because the category is
 # only a route prefix (`/research/adr/[id]/page.tsx`,
 # `/lending/[pool]/page.tsx`) without an index page of its own.
