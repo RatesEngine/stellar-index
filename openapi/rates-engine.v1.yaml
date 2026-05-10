@@ -1635,6 +1635,11 @@ paths:
         post-filter. The explorer's `/diagnostics` page applies
         the same filter client-side, defaulting to 1h.
 
+        Pass `?source=<name>` for an exact-match filter on the
+        `source` column — typical values are `ledgerstream` (the
+        live indexer) and `backfill` (one row per backfill
+        range). Composes with `?max_age=` (both filters apply).
+
         Returns 503 when the deployment hasn't wired the cursors
         reader.
       parameters:
@@ -1650,6 +1655,19 @@ paths:
           schema:
             type: string
             example: "1h"
+        - name: source
+          in: query
+          required: false
+          description: |
+            Exact-match filter on the `source` column. Typical
+            values: `ledgerstream` (the live indexer) or
+            `backfill` (one row per backfill range). Unknown
+            values return an empty array (not 400) — keeps the
+            surface predictable when an operator typos vs. a
+            brand-new source we haven't seen yet.
+          schema:
+            type: string
+            example: "ledgerstream"
       responses:
         "200":
           description: Array of cursor entries, one per (source, sub_source).
