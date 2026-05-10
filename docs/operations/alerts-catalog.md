@@ -71,6 +71,7 @@ signal lands.
 | `ratesengine_redis_memory_saturated` | `redis_memory_used_bytes / redis_memory_max_bytes * 100` | > 90 % for > 5 min | P2 | [redis-memory](runbooks/redis-memory.md) |
 | `ratesengine_redis_evictions_high` | `rate(redis_evicted_keys_total[5m])` | > 100/s | P2 | [redis-memory](runbooks/redis-memory.md) |
 | `ratesengine_redis_replication_broken` | `redis_connected_slaves` per master | < expected for > 2 min | P2 | [redis-replication](runbooks/redis-replication.md) |
+| `ratesengine_redis_writes_blocked` | `redis_rdb_last_bgsave_status` per master (also surfaces as `MISCONF` errors in client logs) | == 0 for > 60 s | **P1** | [redis-write-blocked-disk-full](runbooks/redis-write-blocked-disk-full.md) |
 
 ## API plane alerts
 
