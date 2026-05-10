@@ -15,6 +15,18 @@ against.
 
 ## [Unreleased]
 
+### Changed
+
+- **`/v1/observations` now sets `flags.triangulated=true` on an
+  empty result when /v1/price would have served a value via the
+  Redis VWAP cache or stablecoin-fiat proxy**. The endpoint is
+  raw-per-source by ADR-0018, so a triangulated pair has no rows
+  to return — but the empty `data: []` was indistinguishable from
+  "this pair is unpriced" and sent integrators chasing nonexistent
+  data. The hint never fires when the caller passed `?source=`
+  (source-filtered queries are asking about a specific venue, not
+  the aggregate). R-011 in `docs/review-2026-05-10.md`.
+
 ### Fixed
 
 - **`/v1/assets/{id}` and `/v1/assets/{id}/metadata` now run their

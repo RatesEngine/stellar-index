@@ -235,6 +235,68 @@ func TestObservations_EmptyArrayWhenNoData(t *testing.T) {
 	}
 }
 
+// TestObservations_EmptyHintsTriangulationWhenAvailable exercises
+// R-011. /v1/observations is the raw per-source surface (ADR-0018
+// Surface 3), so a triangulated pair has no rows to return — but
+// the empty result is genuinely confusing when /v1/price WOULD
+// have served a value via the same Redis VWAP fallback.
+//
+// Pre-fix (verified live on r1): an empty `data: []` and
+// `triangulated: false` looked indistinguishable from "this pair
+// is unpriced", which sent integrators chasing nonexistent data.
+// Now the handler probes the triangulation cache when its own
+// result is empty + no source filter, and surfaces
+// `triangulated: true` so consumers know to query /v1/price for
+// the proxied value.
+func TestObservations_EmptyHintsTriangulationWhenAvailable(t *testing.T) {
+	hist := &stubHistoryReader{observations: nil}
+	looker := &stubTriangulatedPriceLooker{
+		value:          "0.16800000000000000000",
+		isTriangulated: true,
+		found:          true,
+	}
+	srv := v1.New(v1.Options{History: hist, Triangulated: looker})
+	tsv := startHTTPTest(t, srv.Handler())
+
+	resp := mustGet(t, tsv.URL+"/v1/observations?asset=native&quote=fiat:USD")
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d, want 200", resp.StatusCode)
+	}
+	body, _ := readAll(resp)
+	if !strings.Contains(body, `"data":[]`) {
+		t.Errorf("expected empty data array: %s", body)
+	}
+	if !strings.Contains(body, `"triangulated":true`) {
+		t.Errorf("expected triangulated=true hint when empty + cache-hit: %s", body)
+	}
+}
+
+// TestObservations_EmptyDoesNotHintWhenSourceFiltered confirms the
+// triangulation hint never fires when the caller asked for a
+// specific source. A source-filtered query is asking "did THIS
+// venue see a trade?" — answering "no, but a triangulated price
+// exists" would be irrelevant noise (triangulated values aren't
+// attributable to any single source).
+func TestObservations_EmptyDoesNotHintWhenSourceFiltered(t *testing.T) {
+	hist := &stubHistoryReader{observations: nil}
+	looker := &stubTriangulatedPriceLooker{
+		value:          "0.16800000000000000000",
+		isTriangulated: true,
+		found:          true,
+	}
+	srv := v1.New(v1.Options{History: hist, Triangulated: looker})
+	tsv := startHTTPTest(t, srv.Handler())
+
+	resp := mustGet(t, tsv.URL+"/v1/observations?asset=native&quote=fiat:USD&source=binance")
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d, want 200", resp.StatusCode)
+	}
+	body, _ := readAll(resp)
+	if !strings.Contains(body, `"triangulated":false`) {
+		t.Errorf("source-filtered empty result must keep triangulated=false: %s", body)
+	}
+}
+
 // TestObservations_InternalError — reader error propagates as 500
 // without leaking the underlying message.
 func TestObservations_InternalError(t *testing.T) {

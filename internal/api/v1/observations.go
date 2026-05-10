@@ -141,7 +141,39 @@ func (s *Server) handleObservations(w http.ResponseWriter, r *http.Request) {
 	// (informational). Stale and Frozen stay false on this surface
 	// per ADR-0018.
 	flags := Flags{SingleSource: len(srcs) == 1}
+
+	// Triangulation hint: an empty observations array is genuinely
+	// confusing when the same (asset, quote) pair returns a price
+	// from /v1/price via triangulation or stablecoin-fiat proxy. The
+	// consumer sees `data: []` on /v1/observations and assumes the
+	// pair is unpriced, when really it's just that no source carries
+	// a DIRECT trade for it (ADR-0018 Surface 3 is raw-only by
+	// design). Set flags.triangulated=true when an empty result
+	// coexists with a triangulated/proxied price elsewhere — same
+	// signal /v1/price returns. R-011 in
+	// `docs/review-2026-05-10.md`.
+	if len(rows) == 0 && source == "" {
+		flags.Triangulated = s.observationsHaveTriangulatedPrice(obsCtx, pair)
+	}
+
 	writeJSON(w, rows, flags, srcs...)
+}
+
+// observationsHaveTriangulatedPrice is the best-effort lookup that
+// powers the empty-observations triangulation hint. Returns true
+// when /v1/price would have served a value for the same pair via
+// either the Redis VWAP cache (triangulation worker output) or the
+// stablecoin-fiat proxy (X / fiat:USD → X / <peg>). All errors
+// downgrade to false silently — this is a UX hint, not a
+// load-bearing signal.
+func (s *Server) observationsHaveTriangulatedPrice(ctx context.Context, pair canonical.Pair) bool {
+	if _, _, _, ok := s.tryRedisVWAPFallback(ctx, pair.Base, pair.Quote); ok {
+		return true
+	}
+	if _, _, ok := s.tryStablecoinFiatProxy(ctx, pair.Base, pair.Quote); ok {
+		return true
+	}
+	return false
 }
 
 // rejectObservationsTierParams enforces the URL-discipline rule from
