@@ -283,6 +283,23 @@ against.
 
 ### Fixed
 
+- **Default Chainlink feed map covers BTC/ETH/LINK + EUR/GBP/JPY
+  vs USD** so divergence cross-checks work out-of-the-box on a
+  stock config. Same shape as the CoinGecko default-IDMap fix in
+  #1249: the type-level docs implied the operator could deploy
+  with no `[divergence.chainlink].feed_map` and still get
+  Chainlink cross-checks on the major pairs the aggregator
+  computes by default, but `NewChainlinkReference` was copying
+  `opts.FeedMap` as-is with no fallback — every lookup returned
+  `asset_unsupported`. Defaults pin the immutable Ethereum
+  mainnet AggregatorV3 proxy addresses; operator-supplied entries
+  merge OVER the defaults so an operator can still narrow the
+  set, override an address, or flip an Invert flag. XLM/USD,
+  USDC/USD, USDT/USD remain absent — Chainlink does not publish
+  these on Ethereum mainnet at audit time. Closes the code-side
+  half of operator action #119; the operator no longer needs to
+  hand-paste contract addresses into `r1.toml` to unblock
+  Chainlink cross-checks on the default pair set. (PR #1255)
 - **Nil-pointer panic in markets/coins single-flight cache** —
   caught on r1 production (2026-05-10 15:36 UTC, GET `/v1/markets`).
   When the leader's upstream call failed under single-flight,

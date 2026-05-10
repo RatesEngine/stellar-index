@@ -83,8 +83,10 @@ type ChainlinkOptions struct {
 	// httptest.Server URLs.
 	RPCURL string
 
-	// FeedMap maps canonical pair string → feed metadata. Empty
-	// yields ErrAssetUnsupported on every lookup.
+	// FeedMap maps canonical pair string → feed metadata. When empty
+	// the constructor seeds a built-in default covering BTC/ETH/LINK
+	// vs USD plus EUR/GBP/JPY vs USD (see defaultChainlinkFeedMap).
+	// Operator-supplied entries merge OVER the defaults.
 	//
 	// Pair string format mirrors canonical.Pair.String():
 	// "<base>/<quote>" e.g. "native/fiat:USD" (XLM/USD via
@@ -114,6 +116,25 @@ type ChainlinkFeed struct {
 }
 
 // NewChainlinkReference constructs a Chainlink-backed reference.
+//
+// When opts.FeedMap is empty, the reference falls back to a built-in
+// default covering the major crypto and fiat AggregatorV3 contracts
+// on Ethereum mainnet (BTC/USD, ETH/USD, LINK/USD, EUR/USD, GBP/USD,
+// JPY/USD). Without this fallback every divergence cross-check call
+// for a default-config deployment returned ErrAssetUnsupported and
+// `divergence_observations` stayed empty for any operator who hadn't
+// manually populated `[divergence.chainlink].feed_map` — same shape
+// as the CoinGecko default-IDMap gap fixed in #1249.
+//
+// Operator-supplied entries merge OVER the defaults (operator wins),
+// so an operator can still narrow the set, override an address, or
+// flip an Invert flag.
+//
+// Pinned to Ethereum mainnet AggregatorV3 contract addresses; these
+// are immutable proxies in practice — Chainlink upgrades the
+// underlying aggregator while keeping the proxy address stable. If
+// a feed is ever migrated to a new proxy, operators override via
+// the FeedMap.
 func NewChainlinkReference(opts ChainlinkOptions) *ChainlinkReference {
 	httpClient := opts.HTTPClient
 	if httpClient == nil {
@@ -124,7 +145,7 @@ func NewChainlinkReference(opts ChainlinkOptions) *ChainlinkReference {
 		rpcURL = "https://cloudflare-eth.com"
 	}
 	rpcURL = strings.TrimRight(rpcURL, "/")
-	feedMap := make(map[string]chainlinkFeedSpec, len(opts.FeedMap))
+	feedMap := defaultChainlinkFeedMap()
 	for k, v := range opts.FeedMap {
 		spec := chainlinkFeedSpec(v)
 		if spec.Decimals == 0 {
@@ -136,6 +157,38 @@ func NewChainlinkReference(opts ChainlinkOptions) *ChainlinkReference {
 		httpClient: httpClient,
 		rpcURL:     rpcURL,
 		feedMap:    feedMap,
+	}
+}
+
+// defaultChainlinkFeedMap returns the built-in seed of pair →
+// AggregatorV3 contract addresses. Covers what the aggregator's
+// defaultPairs() computes by default (BTC, ETH, LINK against USD)
+// plus the major fiat-anchor reference rates (EUR, GBP, JPY against
+// USD) used by the FX-cross fallback path.
+//
+// All addresses are Chainlink mainnet (Ethereum) proxies — see
+// https://docs.chain.link/data-feeds/price-feeds/addresses. Decimals
+// is 8 on every entry (Chainlink's standard for crypto/USD and
+// fiat/USD).
+//
+// XLM/USD, USDC/USD, USDT/USD are deliberately absent — Chainlink
+// does not publish these on Ethereum mainnet at audit time
+// (docs/discovery/oracles/chainlink.md). Operators wanting cross-
+// checks on those pairs can configure them via the FeedMap once
+// Chainlink ships them.
+func defaultChainlinkFeedMap() map[string]chainlinkFeedSpec {
+	const dec = 8
+	return map[string]chainlinkFeedSpec{
+		// Crypto / USD — covers our default top-of-book pairs.
+		"crypto:BTC/fiat:USD":  {Address: "0xF4030086522a5bEEa4988F8cA5B36dbC97BeE88c", Decimals: dec},
+		"crypto:ETH/fiat:USD":  {Address: "0x5f4eC3Df9cbd43714FE2740f5E3616155c5b8419", Decimals: dec},
+		"crypto:LINK/fiat:USD": {Address: "0x2c1d072e956AFFC0D435Cb7AC38EF18d24d9127c", Decimals: dec},
+		// Fiat / USD — anchors the FX-cross fallback used when the
+		// aggregator triangulates X/fiat:Y via X/fiat:USD +
+		// fiat:USD/fiat:Y.
+		"fiat:EUR/fiat:USD": {Address: "0xb49f677943BC038e9857d61E7d053CaA2C1734C1", Decimals: dec},
+		"fiat:GBP/fiat:USD": {Address: "0x5c0Ab2d9b5a7ed9f470386e82BB36A3613cDd4b5", Decimals: dec},
+		"fiat:JPY/fiat:USD": {Address: "0xBcE206caE7f0ec07b545EddE332A47C2F75bbeb3", Decimals: dec},
 	}
 }
 
