@@ -17,6 +17,16 @@ against.
 
 ### Added
 
+- **Explorer redirects for `/incidents`, `/converter`,
+  `/oracles/<name>`** (404-audit follow-up, 2026-05-10).
+  `/incidents` and `/incident/<slug>` now bounce to
+  status.ratesengine.net (the canonical incidents host —
+  postmortems live there, the explorer never had a listing
+  page). `/converter` (the muscle-memory typo for `/convert`)
+  and bare `/convert` now land on `/convert/USD/XLM/` instead
+  of 404. `/oracles/<name>` bounces to the `/oracles` listing
+  until per-oracle detail pages exist. CF Pages applies all
+  five 301s pre-render so they're cheap.
 - **`/v1/pools?asset=<asset_id>` filter** — restrict the pools
   listing to rows where the asset appears on either side (base
   OR quote). Mirrors the same filter shape just shipped on
