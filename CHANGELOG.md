@@ -168,6 +168,16 @@ against.
 
 ### Fixed
 
+- **`/v1/status` no longer reports `overall: ok` when the
+  metrics backend is unreachable**. Caught on r1 2026-05-10:
+  Prometheus had been dead for 18 h (TSDB corruption from the
+  preceding day's disk-full SEV-2), every backend query (heartbeats,
+  latency, freshness, incidents) errored out, and the rollup
+  logic happily reported `overall: ok` because the "degrade"
+  branches all lived inside the `err == nil` blocks. With the
+  metrics pipeline blind, the response was a confident lie.
+  `/v1/status` now sets `overall: degraded` whenever any
+  backend query fails. Test added pinning the regression.
 - **`/v1/price/tip?asset=X&quote=fiat:USD` gets the same
   stablecoin-fiat proxy fallback as `/v1/price`** (#1217). Tip
   was 404'ing on the same shape — `tipWindowVWAP →
