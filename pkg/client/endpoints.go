@@ -931,3 +931,146 @@ func (c *Client) LendingPools(ctx context.Context) (*Envelope[[]LendingPool], er
 	}
 	return &env, nil
 }
+
+// AggregateQuery is the input for [Client.VWAP] and [Client.TWAP].
+// Base + Quote are required; From + To default to a 1-hour window
+// ending at the previous closed-bucket boundary per ADR-0015.
+//
+// OutlierSigma applies to VWAP only (TWAP ignores it — time-weighting
+// is itself a form of outlier resistance). Zero or unset disables
+// the sigma filter.
+type AggregateQuery struct {
+	Base         string
+	Quote        string
+	From         time.Time
+	To           time.Time
+	OutlierSigma float64
+}
+
+// VWAP fetches the volume-weighted average price for (base, quote)
+// over the requested [from, to) window. Backs GET /v1/vwap.
+//
+// Distinct from [Client.Price] (which serves the closed-bucket
+// VWAP from the prices_1m CAGG with cross-region consistency per
+// ADR-0015). VWAP scans raw trades for the requested window — use
+// it for arbitrary ranges; use [Client.Price] for the canonical
+// "current price" closed-bucket value.
+//
+// If the response carries Truncated=true, the requested window had
+// more trades than the server's per-request cap (10000); narrow
+// the window and retry.
+func (c *Client) VWAP(ctx context.Context, q AggregateQuery) (*Envelope[VWAPResult], error) {
+	if q.Base == "" {
+		return nil, &APIError{Status: 400, Title: "base required"}
+	}
+	if q.Quote == "" {
+		return nil, &APIError{Status: 400, Title: "quote required"}
+	}
+	v := url.Values{}
+	v.Set("base", q.Base)
+	v.Set("quote", q.Quote)
+	if !q.From.IsZero() {
+		v.Set("from", q.From.UTC().Format(time.RFC3339))
+	}
+	if !q.To.IsZero() {
+		v.Set("to", q.To.UTC().Format(time.RFC3339))
+	}
+	if q.OutlierSigma > 0 {
+		v.Set("outlier_sigma", strconv.FormatFloat(q.OutlierSigma, 'f', -1, 64))
+	}
+	var env Envelope[VWAPResult]
+	if err := c.doJSON(ctx, http.MethodGet, "/v1/vwap", v, nil, &env); err != nil {
+		return nil, err
+	}
+	return &env, nil
+}
+
+// TWAP fetches the time-weighted average price for (base, quote)
+// over the requested [from, to) window. Backs GET /v1/twap.
+//
+// TWAP weights each trade's price by the duration until the next
+// trade (or windowEnd for the final trade) — see
+// `internal/aggregate/twap.go` for the formula. There's no
+// outlier_sigma equivalent; the AggregateQuery.OutlierSigma field
+// is silently ignored on this surface (kept on the shared shape so
+// the same query value can be passed to both VWAP and TWAP).
+func (c *Client) TWAP(ctx context.Context, q AggregateQuery) (*Envelope[TWAPResult], error) {
+	if q.Base == "" {
+		return nil, &APIError{Status: 400, Title: "base required"}
+	}
+	if q.Quote == "" {
+		return nil, &APIError{Status: 400, Title: "quote required"}
+	}
+	v := url.Values{}
+	v.Set("base", q.Base)
+	v.Set("quote", q.Quote)
+	if !q.From.IsZero() {
+		v.Set("from", q.From.UTC().Format(time.RFC3339))
+	}
+	if !q.To.IsZero() {
+		v.Set("to", q.To.UTC().Format(time.RFC3339))
+	}
+	var env Envelope[TWAPResult]
+	if err := c.doJSON(ctx, http.MethodGet, "/v1/twap", v, nil, &env); err != nil {
+		return nil, err
+	}
+	return &env, nil
+}
+
+// PoolsQuery is the input for [Client.Pools]. All fields optional;
+// Source narrows to one DEX (soroswap, phoenix, aquarius, sdex,
+// comet); Base + Quote together pin a single pair; Asset matches
+// rows where the asset appears on either side (mutually exclusive
+// with Base/Quote). Cursor + Limit drive pagination.
+type PoolsQuery struct {
+	Source string
+	Base   string
+	Quote  string
+	Asset  string
+	Cursor string
+	Limit  int
+	// OrderBy: "" or "volume_24h_usd_desc" (default), or "pair".
+	OrderBy string
+}
+
+// Pools returns DEX/AMM liquidity pools — one row per
+// (source, base, quote) where source is a DEX. Backs GET /v1/pools.
+//
+// Distinct from [Client.Markets] (which collapses across sources):
+// the same physical pair traded on two DEXes returns ONE Market
+// row but TWO Pool rows. Use Pools when you need per-venue
+// breakdown; use Markets when you want the unified pair view.
+//
+// Pagination follows the cursor protocol — pass back
+// `env.Pagination.Next` from a prior response as PoolsQuery.Cursor
+// to fetch the next page; an empty Pagination.Next signals no more
+// results.
+func (c *Client) Pools(ctx context.Context, q PoolsQuery) (*Envelope[[]Pool], error) {
+	v := url.Values{}
+	if q.Source != "" {
+		v.Set("source", q.Source)
+	}
+	if q.Base != "" {
+		v.Set("base", q.Base)
+	}
+	if q.Quote != "" {
+		v.Set("quote", q.Quote)
+	}
+	if q.Asset != "" {
+		v.Set("asset", q.Asset)
+	}
+	if q.Cursor != "" {
+		v.Set("cursor", q.Cursor)
+	}
+	if q.Limit > 0 {
+		v.Set("limit", strconv.Itoa(q.Limit))
+	}
+	if q.OrderBy != "" {
+		v.Set("order_by", q.OrderBy)
+	}
+	var env Envelope[[]Pool]
+	if err := c.doJSON(ctx, http.MethodGet, "/v1/pools", v, nil, &env); err != nil {
+		return nil, err
+	}
+	return &env, nil
+}

@@ -671,3 +671,54 @@ type LendingPool struct {
 	UniqueUsers30d int64     `json:"unique_users_30d"`
 	LastSeen       time.Time `json:"last_seen"`
 }
+
+// VWAPResult is the data shape returned by [Client.VWAP] —
+// volume-weighted average price over the requested [from, to)
+// window. Mirrors `internal/api/v1.VWAPResult`.
+//
+// Truncated is true when the window had MORE than the server's
+// max-trades cap (10000 today) — Price then only reflects the
+// chronologically-first 10000 trades and is NOT the true window
+// VWAP. Clients should narrow the window and retry. For fixed
+// cross-region-consistent VWAPs use [Client.Price] (closed-bucket
+// per ADR-0015) instead.
+type VWAPResult struct {
+	From             time.Time `json:"from"`
+	To               time.Time `json:"to"`
+	Price            string    `json:"price"`
+	BaseVolume       string    `json:"base_volume"`
+	QuoteVolume      string    `json:"quote_volume"`
+	TradeCount       int       `json:"trade_count"`
+	OutliersFiltered int       `json:"outliers_filtered"`
+	Truncated        bool      `json:"truncated"`
+}
+
+// TWAPResult is the data shape returned by [Client.TWAP] —
+// time-weighted average price over the requested [from, to)
+// window. Mirrors `internal/api/v1.TWAPResult`. No outlier_sigma
+// param on TWAP — time-weighting itself is a form of outlier
+// resistance.
+type TWAPResult struct {
+	From       time.Time `json:"from"`
+	To         time.Time `json:"to"`
+	Price      string    `json:"price"`
+	TradeCount int       `json:"trade_count"`
+	Truncated  bool      `json:"truncated"`
+}
+
+// Pool is one row from [Client.Pools] — a single (source, base,
+// quote) tuple from the DEX/AMM listing. Distinct from [Market]
+// (which collapses across sources): the same physical pair traded
+// on two DEXes returns ONE Market row but TWO Pool rows.
+//
+// LastPrice is per-source so two venues trading the same pair
+// surface independent prices.
+type Pool struct {
+	Source        string    `json:"source"`
+	Base          string    `json:"base"`
+	Quote         string    `json:"quote"`
+	LastTradeAt   time.Time `json:"last_trade_at"`
+	TradeCount24h int64     `json:"trade_count_24h"`
+	Volume24hUSD  *string   `json:"volume_24h_usd,omitempty"`
+	LastPrice     *string   `json:"last_price,omitempty"`
+}
