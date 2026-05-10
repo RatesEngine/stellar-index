@@ -335,7 +335,18 @@ func (s *Server) handleMarkets(w http.ResponseWriter, r *http.Request) { //nolin
 	}
 	var order timescale.MarketsOrder
 	switch r.URL.Query().Get("order_by") {
-	case "", "pair":
+	case "":
+		// Default switched from MarketsOrderPair to volume-desc on
+		// 2026-05-10. The alphabetical default surfaced spam tokens
+		// (`0-…`, `0TAX-…`, `0x1F3D4-…`) at the top of the listing
+		// — useless for callers expecting a "what's interesting on
+		// Stellar" view, and the explorer always passed
+		// `?order_by=volume_24h_usd_desc` explicitly to work around
+		// it. Now the implicit default matches what every consumer
+		// actually wants. R-014 in `docs/review-2026-05-10.md`.
+		// Callers wanting the alphabetical view pass `?order_by=pair`.
+		order = timescale.MarketsOrderVolume24hDesc
+	case "pair":
 		order = timescale.MarketsOrderPair
 	case "volume_24h_usd_desc":
 		order = timescale.MarketsOrderVolume24hDesc

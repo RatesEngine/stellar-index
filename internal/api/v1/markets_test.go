@@ -18,13 +18,19 @@ type stubMarketsReader struct {
 	nextCur string
 	err     error
 
+	// lastDistinctOrder captures the order arg the handler passed
+	// on the most recent DistinctPairsExt call. Lets tests assert
+	// the handler's default-resolution behaviour.
+	lastDistinctOrder timescale.MarketsOrder
+
 	// PairMarket stub state.
 	pair      v1.Market
 	pairFound bool
 	pairErr   error
 }
 
-func (r *stubMarketsReader) DistinctPairsExt(_ context.Context, cursor string, limit int, _ timescale.MarketsOrder) ([]v1.Market, string, error) {
+func (r *stubMarketsReader) DistinctPairsExt(_ context.Context, cursor string, limit int, order timescale.MarketsOrder) ([]v1.Market, string, error) {
+	r.lastDistinctOrder = order
 	if r.err != nil {
 		return nil, "", r.err
 	}
@@ -294,6 +300,57 @@ func TestPools_InvalidAsset400(t *testing.T) {
 	if p.Type != "https://api.ratesengine.net/errors/invalid-asset-id" {
 		t.Errorf("Type = %q", p.Type)
 	}
+}
+
+// TestMarkets_DefaultOrderIsVolumeDesc pins the post-2026-05-10
+// default. R-014 in `docs/review-2026-05-10.md` — the
+// alphabetical default surfaced spam tokens (`0-…`, `0TAX-…`)
+// at the top of every cold listing. The explorer always passed
+// `?order_by=volume_24h_usd_desc` explicitly to work around it;
+// now the implicit default matches what every consumer wants.
+//
+// Callers paginating the entire universe of pairs in lex order
+// can still pass `?order_by=pair` explicitly.
+func TestMarkets_DefaultOrderIsVolumeDesc(t *testing.T) {
+	t.Run("no order_by → volume desc", func(t *testing.T) {
+		reader := &stubMarketsReader{}
+		srv := v1.New(v1.Options{Markets: reader})
+		ts := httpTestServer(t, srv)
+
+		resp := mustGet(t, ts.URL+"/v1/markets")
+		if resp.StatusCode != http.StatusOK {
+			t.Fatalf("status = %d", resp.StatusCode)
+		}
+		if reader.lastDistinctOrder != timescale.MarketsOrderVolume24hDesc {
+			t.Errorf("default order = %v, want MarketsOrderVolume24hDesc", reader.lastDistinctOrder)
+		}
+	})
+	t.Run("explicit order_by=pair → MarketsOrderPair", func(t *testing.T) {
+		reader := &stubMarketsReader{}
+		srv := v1.New(v1.Options{Markets: reader})
+		ts := httpTestServer(t, srv)
+
+		resp := mustGet(t, ts.URL+"/v1/markets?order_by=pair")
+		if resp.StatusCode != http.StatusOK {
+			t.Fatalf("status = %d", resp.StatusCode)
+		}
+		if reader.lastDistinctOrder != timescale.MarketsOrderPair {
+			t.Errorf("explicit pair order = %v, want MarketsOrderPair", reader.lastDistinctOrder)
+		}
+	})
+	t.Run("explicit order_by=volume_24h_usd_desc → MarketsOrderVolume24hDesc", func(t *testing.T) {
+		reader := &stubMarketsReader{}
+		srv := v1.New(v1.Options{Markets: reader})
+		ts := httpTestServer(t, srv)
+
+		resp := mustGet(t, ts.URL+"/v1/markets?order_by=volume_24h_usd_desc")
+		if resp.StatusCode != http.StatusOK {
+			t.Fatalf("status = %d", resp.StatusCode)
+		}
+		if reader.lastDistinctOrder != timescale.MarketsOrderVolume24hDesc {
+			t.Errorf("explicit volume order = %v, want MarketsOrderVolume24hDesc", reader.lastDistinctOrder)
+		}
+	})
 }
 
 // TestPools_AssetAndBaseTogether400 — asset (OR) + base/quote

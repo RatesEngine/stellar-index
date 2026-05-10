@@ -17,6 +17,22 @@ against.
 
 ### Changed
 
+- **`/v1/markets` default sort changed from `pair` (alphabetical)
+  to `volume_24h_usd_desc`** (R-014). The alphabetical default
+  surfaced spam tokens (`0-…`, `0TAX-…`, `0x1F3D4-…`) at the top
+  of every cold listing — useless for the "what's interesting on
+  Stellar" query and the explorer always passed
+  `?order_by=volume_24h_usd_desc` explicitly to work around it.
+  Now the implicit default matches what every consumer wants.
+  Callers paginating the entire universe of pairs in lex order can
+  still pass `?order_by=pair` explicitly. **Cursor-format
+  compatibility note:** because the cursor is sort-key-tagged
+  (validated via `ValidateMarketsCursor`), cursors generated under
+  the old alphabetical default will return 400 against the new
+  default — pass `?order_by=pair` alongside the cursor to resume
+  the alphabetical pagination, or drop the cursor and start fresh
+  on the new default.
+
 - **`/v1/observations` now sets `flags.triangulated=true` on an
   empty result when /v1/price would have served a value via the
   Redis VWAP cache or stablecoin-fiat proxy**. The endpoint is

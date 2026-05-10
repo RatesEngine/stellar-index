@@ -1908,12 +1908,19 @@ export interface paths {
                     cursor?: components["parameters"]["Cursor"];
                     limit?: number;
                     /**
-                     * @description Sort order. `pair` (default) returns markets in lex
-                     *     order of `<base>|<quote>` — stable for paginating the
-                     *     full set. `volume_24h_usd_desc` orders by 24h USD
-                     *     volume desc (NULLS LAST), then by `<base>|<quote>`
-                     *     for ties — surfaces the high-activity pairs first
-                     *     without paginating through ~5K alphabetic dust pairs.
+                     * @description Sort order. `volume_24h_usd_desc` (default) orders by
+                     *     24h USD volume desc (NULLS LAST), then by
+                     *     `<base>|<quote>` for ties — surfaces the high-activity
+                     *     pairs first without paginating through ~5K alphabetic
+                     *     dust pairs.
+                     *
+                     *     `pair` returns markets in lex order of
+                     *     `<base>|<quote>` — stable for paginating the full set,
+                     *     but surfaces spam-token pairs (`0-…`, `0TAX-…`) at the
+                     *     top of the listing. Pre-2026-05-10 this was the
+                     *     default; we kept it as an explicit option so callers
+                     *     paginating the entire universe of pairs aren't broken.
+                     *
                      *     Cursor format differs per ordering; keep using the
                      *     cursor returned by the previous response.
                      */
