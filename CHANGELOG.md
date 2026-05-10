@@ -17,6 +17,15 @@ against.
 
 ### Added
 
+- **SDK godoc examples for `Healthz`, `Readyz`, `Version`,
+  `Usage`, `CreateKey`, `RevokeKey`, `Keys`**
+  (`pkg/client/example_test.go`). Round 4 / final round of the
+  godoc-coverage push. Closes the gap on the auth-flow
+  (CreateKey/RevokeKey/Keys/Usage) and basic health probes
+  (Healthz/Readyz/Version) that were the last methods without
+  runnable examples on pkg.go.dev. SDK now has examples for
+  every public Client method (26 methods, 27 examples — Pair
+  + Markets each have one).
 - **`/v1/pools?asset=<asset_id>` filter** — restrict the pools
   listing to rows where the asset appears on either side (base
   OR quote). Mirrors the same filter shape just shipped on
