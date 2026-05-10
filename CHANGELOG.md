@@ -29,6 +29,20 @@ against.
   trigger Redis BGSAVE). Customer-facing incident post at
   `internal/incidents/data/2026-05-10-redis-writes-blocked-disk-full.md`
   is auto-served by `/v1/incidents`. (PR #1228)
+- **ADR-0025 — Caddy trusts Cloudflare for client-IP signal via
+  CIDR-pinned static list** (`docs/adr/0025-caddy-cloudflare-trusted-proxy.md`).
+  Records the architectural commitment from PR #1239: Caddy's
+  global `servers { trusted_proxies static <CF CIDRs> }` block
+  pins trust on CF's published IP ranges (refreshed manually
+  on quarterly audit cadence rather than via the third-party
+  `caddy-cloudflare-ip` plugin). R2 / R3 inherit the same
+  topology when they ship; if we ever expose the API directly
+  without CF in front, the operator MUST delete the
+  `trusted_proxies` block on that listener — calling that out
+  in writing prevents a foot-gun. The ADR README index also
+  gets caught up — entries for ADR-0020 through ADR-0024
+  (already-accepted but not previously indexed) added in the
+  same change.
 - **`/v1/pools?asset=<asset_id>` filter** — restrict the pools
   listing to rows where the asset appears on either side (base
   OR quote). Mirrors the same filter shape just shipped on
