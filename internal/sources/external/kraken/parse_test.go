@@ -180,6 +180,26 @@ func TestBuildTrade_UnknownSymbol(t *testing.T) {
 	}
 }
 
+// TestBuildTrade_DustReturnsTypedSentinel pins the regression for
+// the bitstamp/coinbase/binance dust-trade family extended to
+// Kraken (#1234 / #814). 1e-8 XLM at $0.16 → base × price floor-
+// divides to 0 at 10^8 integer scale → canonical validator would
+// reject with "quote_amount must be positive, got 0" → indexer
+// logs ERROR per frame. With ErrDustTrade the streamer's error-
+// skip branch silently absorbs it.
+func TestBuildTrade_DustReturnsTypedSentinel(t *testing.T) {
+	_, err := buildTrade(tradePayload{
+		Symbol:    "XLM/USD",
+		Qty:       "0.00000001",
+		Price:     "0.16000000",
+		TradeID:   1,
+		Timestamp: "2026-04-24T00:00:00Z",
+	}, buildPairMap(t))
+	if !errors.Is(err, ErrDustTrade) {
+		t.Errorf("expected ErrDustTrade, got %v", err)
+	}
+}
+
 func TestDecimalStringToScaledInt_KrakenPrecision(t *testing.T) {
 	// Kraken publishes at most 8 decimal places for prices, often
 	// fewer. Verify the scaling matches what Binance produces for
