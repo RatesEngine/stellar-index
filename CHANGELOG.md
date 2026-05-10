@@ -388,6 +388,18 @@ against.
 
 ### Fixed
 
+- **`/v1/oracle/prices` now applies the same X/fiat:USD → X/<peg>
+  stablecoin-fiat proxy fallback** as `/v1/oracle/lastprice`
+  (#1220) and the other X/fiat:USD surfaces. Pre-fix, the SEP-40
+  `prices()` passthrough returned 200 with an empty `data` array
+  for any asset that trades only against classic USDC — same
+  out-of-the-box failure mode as `/v1/oracle/lastprice` had
+  pre-#1220, just expressed as 200-empty rather than 404. Adds a
+  shared `recentClosedWithStablecoinFallback` helper that walks
+  the operator's classic USD pegs in priority order; first peg
+  with non-empty closed buckets wins. Response carries
+  `flags.triangulated=true` so the wire shape is honest about the
+  derivation. (PR #1224)
 - **F2 fields on `/v1/assets/{id}` (`market_cap_usd`, `fdv_usd`,
   `change_24h_pct`) now populate via the same X/fiat:USD →
   X/<peg> stablecoin-fiat proxy fallback that #1217 added to

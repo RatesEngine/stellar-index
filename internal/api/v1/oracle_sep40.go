@@ -1,6 +1,7 @@
 package v1
 
 import (
+	"context"
 	"errors"
 	"net/http"
 	"strconv"
@@ -188,7 +189,7 @@ func (s *Server) handleOraclePrices(w http.ResponseWriter, r *http.Request) {
 		records = n
 	}
 
-	snapshots, err := reader.RecentClosedSnapshots(r.Context(), asset, defaultPriceQuote, records)
+	snapshots, triangulated, err := s.recentClosedWithStablecoinFallback(r.Context(), asset, defaultPriceQuote, records)
 	if err != nil {
 		if clientAborted(r, err) {
 			return
@@ -209,7 +210,46 @@ func (s *Server) handleOraclePrices(w http.ResponseWriter, r *http.Request) {
 			Timestamp: snap.ObservedAt,
 		}
 	}
-	writeJSON(w, out, Flags{})
+	writeJSON(w, out, Flags{Triangulated: triangulated})
+}
+
+// recentClosedWithStablecoinFallback wraps PriceReader.RecentClosedSnapshots
+// with the same X/fiat:USD → X/<peg> retry shape used in the
+// other handler-side stablecoin-proxy fallbacks (#1217 / #1218 /
+// #1219 / #1220). When the literal asset/fiat:USD lookup returns an
+// empty slice AND quote is fiat:USD AND the operator declared
+// classic USD pegs, walks the pegs and returns the first non-empty
+// asset/<peg> result. triangulated=true on the return so the
+// envelope can stamp Flags{Triangulated: true}.
+//
+// Without this, /v1/oracle/prices?asset=native silently returns an
+// empty data array on Stellar mainnet — same out-of-the-box failure
+// mode as /v1/oracle/lastprice had pre-#1220, just expressed as
+// 200-empty rather than 404.
+func (s *Server) recentClosedWithStablecoinFallback(
+	ctx context.Context, asset, quote canonical.Asset, n int,
+) ([]PriceSnapshot, bool, error) {
+	snapshots, err := s.prices.RecentClosedSnapshots(ctx, asset, quote, n)
+	if err != nil {
+		return nil, false, err
+	}
+	if len(snapshots) > 0 {
+		return snapshots, false, nil
+	}
+	if quote.Type != canonical.AssetFiat || quote.Code != "USD" {
+		return snapshots, false, nil
+	}
+	for _, peg := range s.usdPeggedClassics {
+		if peg.Equal(asset) {
+			continue
+		}
+		pegSnapshots, pegErr := s.prices.RecentClosedSnapshots(ctx, asset, peg, n)
+		if pegErr != nil || len(pegSnapshots) == 0 {
+			continue
+		}
+		return pegSnapshots, true, nil
+	}
+	return snapshots, false, nil
 }
 
 // oraclePricesDefault + Max mirror the OpenAPI bounds for the

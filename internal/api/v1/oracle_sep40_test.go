@@ -472,5 +472,61 @@ func TestOraclePrices_EmptyAsArray(t *testing.T) {
 	}
 }
 
+// TestOraclePrices_StablecoinFiatProxyFallback — when the literal
+// asset/fiat:USD pair has no closed buckets but the operator
+// declared classic USD pegs, the handler walks the pegs and
+// returns the rewritten asset/<peg> snapshots. Mirrors the
+// fallback shipped on /v1/oracle/lastprice (#1220) and the other
+// X/fiat:USD surfaces (#1217 / #1218 / #1219). Without this,
+// /v1/oracle/prices?asset=native silently returned an empty data
+// array on Stellar mainnet.
+func TestOraclePrices_StablecoinFiatProxyFallback(t *testing.T) {
+	usdcClassic, err := canonical.ParseAsset("USDC-GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN")
+	if err != nil {
+		t.Fatalf("parse USDC: %v", err)
+	}
+	t0 := time.Unix(1_770_000_000, 0).UTC()
+	reader := &stubPriceReader{
+		// Literal native/fiat:USD missing. native/<USDC-classic>
+		// returns three closed buckets.
+		recent: map[string][]v1.PriceSnapshot{
+			"native/" + usdcClassic.String(): {
+				{AssetID: "native", Quote: usdcClassic.String(), Price: "0.1626", PriceType: "vwap", ObservedAt: t0},
+				{AssetID: "native", Quote: usdcClassic.String(), Price: "0.1625", PriceType: "vwap", ObservedAt: t0.Add(-1 * time.Minute)},
+			},
+		},
+	}
+	srv := v1.New(v1.Options{
+		Prices:            reader,
+		USDPeggedClassics: []canonical.Asset{usdcClassic},
+	})
+	ts := startHTTPTest(t, srv.Handler())
+
+	resp := mustGet(t, ts.URL+"/v1/oracle/prices?asset=native&records=10")
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d, want 200 (peg fallback should serve)", resp.StatusCode)
+	}
+	var env struct {
+		Data  []v1.SEP40Price `json:"data"`
+		Flags v1.Flags        `json:"flags"`
+	}
+	mustDecode(t, resp, &env)
+	if len(env.Data) != 2 {
+		t.Fatalf("got %d records via fallback, want 2", len(env.Data))
+	}
+	if env.Data[0].Price != "0.1626" {
+		t.Errorf("data[0].price = %q, want \"0.1626\" (newest from peg)", env.Data[0].Price)
+	}
+	if !env.Flags.Triangulated {
+		t.Errorf("flags.triangulated should be true on peg fallback")
+	}
+	// SEP-40 surface always quotes in fiat:USD; the wire `asset` is
+	// just the queried asset name — proxying through USDC shouldn't
+	// leak into the wire.
+	if env.Data[0].Asset != "native" {
+		t.Errorf("data[0].asset = %q, want \"native\"", env.Data[0].Asset)
+	}
+}
+
 // (errors import retained — used by other tests in this file.)
 var _ = errors.New
