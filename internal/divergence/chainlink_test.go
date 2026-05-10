@@ -185,6 +185,64 @@ func TestChainlink_Name(t *testing.T) {
 	}
 }
 
+// TestChainlink_DefaultFeedMapCoversCommonPairs pins the regression
+// fixed alongside the CoinGecko default-IDMap fix (#1249): an
+// operator deploying with a stock config (no
+// `[divergence.chainlink].feed_map` block) must not get
+// asset_unsupported on the major crypto + fiat-anchor pairs the
+// aggregator computes by default.
+func TestChainlink_DefaultFeedMapCoversCommonPairs(t *testing.T) {
+	// Fake RPC: every call returns 100 * 10^8 = 10_000_000_000.
+	answer := big.NewInt(10_000_000_000)
+	srv := fakeChainlinkRPC(t, bigInt256Hex(answer))
+
+	ref := NewChainlinkReference(ChainlinkOptions{
+		RPCURL: srv.URL,
+		// FeedMap deliberately empty — the constructor must seed
+		// the default.
+	})
+
+	// Every pair below is in the default. Each should resolve
+	// without asset_unsupported.
+	pairs := []struct{ base, quote string }{
+		{"crypto:BTC", "fiat:USD"},
+		{"crypto:ETH", "fiat:USD"},
+		{"crypto:LINK", "fiat:USD"},
+		{"fiat:EUR", "fiat:USD"},
+		{"fiat:GBP", "fiat:USD"},
+		{"fiat:JPY", "fiat:USD"},
+	}
+	for _, p := range pairs {
+		t.Run(p.base+"_"+p.quote, func(t *testing.T) {
+			pair := mustPair(t, p.base, p.quote)
+			price, err := ref.LookupPrice(context.Background(), pair, time.Now())
+			if err != nil {
+				t.Fatalf("LookupPrice(%s): %v — default feed map missing entry?", pair.String(), err)
+			}
+			if price <= 0 {
+				t.Errorf("LookupPrice(%s) = %g, want positive", pair.String(), price)
+			}
+		})
+	}
+}
+
+// TestChainlink_OperatorOverridesDefault verifies that an entry in
+// opts.FeedMap wins over the matching default entry.
+func TestChainlink_OperatorOverridesDefault(t *testing.T) {
+	srv := fakeChainlinkRPC(t, bigInt256Hex(big.NewInt(1_00000000)))
+	const overrideAddr = "0xdeadbeef00000000000000000000000000000001"
+	ref := NewChainlinkReference(ChainlinkOptions{
+		RPCURL: srv.URL,
+		FeedMap: map[string]ChainlinkFeed{
+			"crypto:BTC/fiat:USD": {Address: overrideAddr, Decimals: 8},
+		},
+	})
+	got := ref.feedMap["crypto:BTC/fiat:USD"]
+	if got.Address != overrideAddr {
+		t.Errorf("operator override lost — got Address=%s want %s", got.Address, overrideAddr)
+	}
+}
+
 // ─── Helpers ─────────────────────────────────────────────────────
 
 // bigInt256Hex pads a positive big.Int to 32-byte 0x-prefixed hex.
