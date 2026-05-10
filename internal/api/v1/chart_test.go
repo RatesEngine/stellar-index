@@ -276,3 +276,104 @@ func TestChart_StablecoinFallback(t *testing.T) {
 		t.Errorf("fallback call = %q, want native/USDC-…", reader.calls[1])
 	}
 }
+
+// TestChart_TruncatedFlagOnRetentionShortfall — when the requested
+// timeframe extends before the earliest available data, the
+// envelope flips Truncated=true and surfaces both DataStartsAt and
+// RequestedFrom so consumers can render a "history begins ..." hint
+// instead of guessing whether the deployment is data-thin or the
+// asset is genuinely flat. R-013 in `docs/review-2026-05-10.md`.
+func TestChart_TruncatedFlagOnRetentionShortfall(t *testing.T) {
+	// 7 days of 1d points, but request `timeframe=1y` (=365d window).
+	now := time.Now().UTC().Truncate(24 * time.Hour)
+	pts := make([]v1.HistoryPoint, 0, 7)
+	for i := 6; i >= 0; i-- {
+		pts = append(pts, v1.HistoryPoint{Bucket: now.Add(-time.Duration(i) * 24 * time.Hour), VWAP: "0.16"})
+	}
+	reader := &stubHistoryReader{points: pts}
+	srv := v1.New(v1.Options{History: reader})
+	ts := httpTestServer(t, srv)
+
+	resp := mustGet(t, ts.URL+"/v1/chart?asset=native&quote=fiat:USD&timeframe=1y")
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status=%d", resp.StatusCode)
+	}
+	var env struct {
+		Data v1.ChartSeries `json:"data"`
+	}
+	mustDecode(t, resp, &env)
+
+	if !env.Data.Truncated {
+		t.Error("Truncated = false, want true (1y asked, only 7 days returned)")
+	}
+	if env.Data.DataStartsAt == nil {
+		t.Fatal("DataStartsAt = nil on truncated response")
+	}
+	if env.Data.RequestedFrom == nil {
+		t.Fatal("RequestedFrom = nil on truncated response")
+	}
+	if !env.Data.DataStartsAt.Equal(pts[0].Bucket) {
+		t.Errorf("DataStartsAt = %v, want %v", env.Data.DataStartsAt, pts[0].Bucket)
+	}
+	// RequestedFrom should be ~365d before now.
+	delta := time.Since(*env.Data.RequestedFrom) - 365*24*time.Hour
+	if delta < -10*time.Second || delta > 10*time.Second {
+		t.Errorf("RequestedFrom = %v ago, want ~365d", time.Since(*env.Data.RequestedFrom))
+	}
+}
+
+// TestChart_NotTruncatedWhenDataReachesWindowStart — when data
+// covers the full requested window, Truncated stays false and the
+// helper fields stay omitted from the JSON payload entirely.
+func TestChart_NotTruncatedWhenDataReachesWindowStart(t *testing.T) {
+	// Deeper history than the 24h request — first point is well
+	// before `from`. Nothing is truncated.
+	now := time.Now().UTC()
+	reader := &stubHistoryReader{
+		points: []v1.HistoryPoint{
+			{Bucket: now.Add(-25 * time.Hour), VWAP: "0.16"},
+			{Bucket: now.Add(-1 * time.Hour), VWAP: "0.17"},
+		},
+	}
+	srv := v1.New(v1.Options{History: reader})
+	ts := httpTestServer(t, srv)
+
+	resp := mustGet(t, ts.URL+"/v1/chart?asset=native&quote=fiat:USD&timeframe=24h")
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status=%d", resp.StatusCode)
+	}
+	var env struct {
+		Data v1.ChartSeries `json:"data"`
+	}
+	mustDecode(t, resp, &env)
+	if env.Data.Truncated {
+		t.Error("Truncated = true, want false (data reaches window start)")
+	}
+	if env.Data.DataStartsAt != nil {
+		t.Errorf("DataStartsAt = %v, want nil when not truncated", env.Data.DataStartsAt)
+	}
+}
+
+// TestChart_TimeframeAllNeverTruncated — `timeframe=all` means
+// "everything you have" by definition, so a short result is the
+// full result, never truncated.
+func TestChart_TimeframeAllNeverTruncated(t *testing.T) {
+	now := time.Now().UTC()
+	reader := &stubHistoryReader{
+		points: []v1.HistoryPoint{{Bucket: now.Add(-1 * time.Hour), VWAP: "0.16"}},
+	}
+	srv := v1.New(v1.Options{History: reader})
+	ts := httpTestServer(t, srv)
+
+	resp := mustGet(t, ts.URL+"/v1/chart?asset=native&quote=fiat:USD&timeframe=all")
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status=%d", resp.StatusCode)
+	}
+	var env struct {
+		Data v1.ChartSeries `json:"data"`
+	}
+	mustDecode(t, resp, &env)
+	if env.Data.Truncated {
+		t.Error("Truncated = true on timeframe=all; that timeframe means 'everything', never truncated")
+	}
+}

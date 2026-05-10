@@ -15,6 +15,19 @@ against.
 
 ## [Unreleased]
 
+### Added
+
+- **`/v1/chart` envelope carries a `truncated` flag plus
+  `data_starts_at` and `requested_from` timestamps when the
+  requested timeframe extends before the deployment's earliest
+  available data**. r1 today only retains ~7 days of high-resolution
+  history but still accepts `?timeframe=1y` — pre-fix, consumers
+  couldn't tell whether the returned 7 daily points were the last 7
+  days of a long history or all the history this deployment has.
+  `timeframe=all` always reports `truncated=false` (that timeframe
+  means "everything you have" by definition). OpenAPI + pkg/client
+  ChartSeries updated. R-013 in `docs/review-2026-05-10.md`.
+
 ### Fixed
 
 - **Handler-timeout paths return 503, not 500, when the per-call

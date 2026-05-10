@@ -3374,7 +3374,29 @@ components:
                 points:
                   type: array
                   items: { $ref: "#/components/schemas/HistoryPoint" }
-              required: [asset_id, quote, timeframe, granularity, price_type, points]
+                truncated:
+                  type: boolean
+                  description: |
+                    True when the requested timeframe extends before
+                    the earliest available data on this deployment
+                    (e.g. asking `?timeframe=1y` when retention is
+                    only 7 days). Always false for `timeframe=all`.
+                data_starts_at:
+                  type: string
+                  format: date-time
+                  description: |
+                    Earliest bucket in the result set. Only present
+                    when `truncated=true`. Render as "history begins
+                    at <ts>" so users know to widen retention or
+                    pick a shorter timeframe.
+                requested_from:
+                  type: string
+                  format: date-time
+                  description: |
+                    Window start the consumer asked for (derived
+                    from `timeframe`). Only present when
+                    `truncated=true`.
+              required: [asset_id, quote, timeframe, granularity, price_type, points, truncated]
           required: [data]
 
     TradeRow:

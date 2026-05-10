@@ -12,13 +12,24 @@ import (
 
 // ChartSeries is the wire shape for /v1/chart. Mirrors the OpenAPI
 // ChartEnvelope.data shape. See ADR-0020 for the contract decision.
+//
+// `truncated` + `data_starts_at` signal that the requested timeframe
+// extends beyond the deployment's actual retention. R1 today only
+// has ~7 days of high-resolution history but still accepts
+// `?timeframe=1y` — without these fields a consumer can't tell
+// whether the returned 7 daily points are "the last 7 days of a
+// long history" or "all the history this deployment has". R-013 in
+// `docs/review-2026-05-10.md`.
 type ChartSeries struct {
-	AssetID     string             `json:"asset_id"`
-	Quote       string             `json:"quote"`
-	Timeframe   string             `json:"timeframe"`
-	Granularity string             `json:"granularity"`
-	PriceType   string             `json:"price_type"` // "vwap" today; "twap" reserved
-	Points      []HistoryPointWire `json:"points"`
+	AssetID       string             `json:"asset_id"`
+	Quote         string             `json:"quote"`
+	Timeframe     string             `json:"timeframe"`
+	Granularity   string             `json:"granularity"`
+	PriceType     string             `json:"price_type"` // "vwap" today; "twap" reserved
+	Points        []HistoryPointWire `json:"points"`
+	Truncated     bool               `json:"truncated"`                // true when the requested window starts before the earliest available data
+	DataStartsAt  *time.Time         `json:"data_starts_at,omitempty"` // earliest bucket timestamp present in the result; only populated when Truncated
+	RequestedFrom *time.Time         `json:"requested_from,omitempty"` // window start the consumer asked for; only populated when Truncated
 }
 
 // chartTimeframeSpec captures what each RFP-prescribed timeframe
@@ -128,14 +139,62 @@ func (s *Server) handleChart(w http.ResponseWriter, r *http.Request) {
 		wire[i] = HistoryPointWire{T: p.Bucket, P: p.VWAP, VUSD: p.VolumeUSD}
 	}
 
-	writeJSON(w, ChartSeries{
+	series := ChartSeries{
 		AssetID:     pair.Base.String(),
 		Quote:       pair.Quote.String(),
 		Timeframe:   tfRaw,
 		Granularity: gran,
 		PriceType:   priceType,
 		Points:      wire,
-	}, Flags{Triangulated: triangulated})
+	}
+	// Retention-truncation signal. We treat the response as truncated
+	// when the consumer asked for a bounded window AND the earliest
+	// returned bucket starts more than one granularity unit after
+	// `from` — that's the difference between "the last 7 days are
+	// flat" and "this deployment only has 7 days of data". R-013.
+	//
+	// `timeframe=all` (from.IsZero()) intentionally never trips the
+	// flag — that timeframe explicitly means "everything you have",
+	// so a short result IS the full result.
+	if !from.IsZero() && len(points) > 0 {
+		if grace := chartGranularityGrace(gran); points[0].Bucket.Sub(from) > grace {
+			startsAt := points[0].Bucket
+			requested := from
+			series.Truncated = true
+			series.DataStartsAt = &startsAt
+			series.RequestedFrom = &requested
+		}
+	}
+
+	writeJSON(w, series, Flags{Triangulated: triangulated})
+}
+
+// chartGranularityGrace is the gap (in time) between `from` and the
+// first returned bucket above which we consider the response
+// truncated by retention. Picks one granularity period — anything
+// less is "the first bucket happens to be empty"; anything more
+// means the underlying CAGG simply doesn't have data going that far
+// back. Unknown granularity strings fall through with a generous
+// 1-day grace so we don't false-positive.
+func chartGranularityGrace(gran string) time.Duration {
+	switch gran {
+	case "1m":
+		return time.Minute
+	case "15m":
+		return 15 * time.Minute
+	case "1h":
+		return time.Hour
+	case "4h":
+		return 4 * time.Hour
+	case "1d":
+		return 24 * time.Hour
+	case "1w":
+		return 7 * 24 * time.Hour
+	case "1mo":
+		return 30 * 24 * time.Hour
+	default:
+		return 24 * time.Hour
+	}
 }
 
 // chartStablecoinFallback handles the X/fiat:USD → X/<peg> retry

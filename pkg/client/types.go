@@ -516,13 +516,25 @@ type Version struct {
 // per-point time series uses the same shape as
 // [HistoryPoint] (`t` / `p` / `v_usd`) but the envelope-level
 // metadata differs (Timeframe + bound Granularity).
+//
+// Truncated reports whether the requested timeframe extends before
+// the earliest available data on this deployment (e.g. asking for
+// `Timeframe: "1y"` when the deployment only retains 7 days). When
+// true, DataStartsAt + RequestedFrom are populated so consumers
+// can render "history begins at <ts>" instead of guessing whether
+// the deployment is data-thin or the asset is genuinely flat.
+// `Timeframe: "all"` always reports Truncated=false because that
+// timeframe means "everything you have" by definition.
 type ChartSeries struct {
-	AssetID     string         `json:"asset_id"`
-	Quote       string         `json:"quote"`
-	Granularity string         `json:"granularity"`
-	Timeframe   string         `json:"timeframe"`
-	PriceType   string         `json:"price_type"`
-	Points      []HistoryPoint `json:"points"`
+	AssetID       string         `json:"asset_id"`
+	Quote         string         `json:"quote"`
+	Granularity   string         `json:"granularity"`
+	Timeframe     string         `json:"timeframe"`
+	PriceType     string         `json:"price_type"`
+	Points        []HistoryPoint `json:"points"`
+	Truncated     bool           `json:"truncated"`
+	DataStartsAt  *time.Time     `json:"data_starts_at,omitempty"`
+	RequestedFrom *time.Time     `json:"requested_from,omitempty"`
 }
 
 // ChangeSummary is the data shape returned by [Client.ChangeSummary]
