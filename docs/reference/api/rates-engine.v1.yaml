@@ -887,6 +887,19 @@ paths:
           schema: { type: string }
           description: |
             Optional. Canonical quote asset_id. See `base`.
+        - name: asset
+          in: query
+          schema: { type: string }
+          description: |
+            Optional. Canonical asset_id (`native`, `USDC-G…`,
+            `fiat:USD`, …). Restricts to pools where the asset
+            appears on either side (base OR quote). Use this on
+            asset-detail surfaces to surface every pool touching
+            the asset in one request, instead of firing parallel
+            `?base=` + `?quote=` and merging client-side. Returns
+            400 `invalid-asset-id` for unparseable values; 400
+            `conflicting-filters` when combined with `base`/`quote`
+            (the OR-shape and AND-shape filters can't be mixed).
       responses:
         "200":
           description: Array of pool rows.
@@ -954,8 +967,11 @@ paths:
       parameters:
         - name: limit
           in: query
-          schema: { type: integer, minimum: 1 }
-          description: "Optional. Cap the returned currencies."
+          schema: { type: integer, minimum: 1, maximum: 500 }
+          description: |
+            Optional. Cap the returned currencies. Must be 1-500
+            inclusive; out-of-range or non-integer input returns
+            400 `type=https://api.ratesengine.net/errors/invalid-limit`.
         - name: include
           in: query
           schema: { type: string }
@@ -1041,6 +1057,31 @@ paths:
             type: string
             enum: [pair, volume_24h_usd_desc]
             default: pair
+        - name: source
+          in: query
+          required: false
+          description: |
+            Restrict the listing to markets a single source
+            observed in the recency window. Must match a
+            registered source name (see `/v1/sources`); an
+            unknown name returns 400 `unknown-source` rather
+            than an empty 200 (avoids the silent-empty-page
+            anti-pattern). Mutually exclusive with `asset`.
+          schema: { type: string }
+        - name: asset
+          in: query
+          required: false
+          description: |
+            Restrict the listing to markets where the given
+            canonical `asset_id` appears on either side (base
+            OR quote). Use this on asset-detail surfaces to
+            surface every market an asset participates in
+            without paying for a global scan + client-side
+            filter. Returns 400 `invalid-asset-id` if the
+            value isn't a parseable canonical asset_id (e.g.
+            `native`, `USDC-G…`, `fiat:USD`). Mutually
+            exclusive with `source`.
+          schema: { type: string }
       responses:
         "200":
           description: Array of markets + optional next cursor.
@@ -1320,6 +1361,19 @@ paths:
                             percentage with two fractional digits.
                             Null when no current price or no
                             7d-ago prices_1m bucket within ±2h.
+                        issuer_scam_reason:
+                          type: string
+                          description: |
+                            Non-empty when the asset's `issuer`
+                            G-strkey appears on the curated scam
+                            directory sourced from
+                            stellar.expert. Same field surfaced on
+                            `/v1/issuers/{g_strkey}.scam_reason`;
+                            duplicated here so the asset detail
+                            page can render a warning at first
+                            paint without a second fetch. Always
+                            omitted for native XLM (no issuer) and
+                            for issuers with no scam record.
                   next_cursor:
                     type: string
                     description: Empty when no more pages.
@@ -1500,10 +1554,22 @@ paths:
           in: path
           required: true
           description: |
-            Canonical id for the entity. For `coin`, the asset slug
-            (e.g. `stellar`). For `pair`, `base/quote` form. For
-            `protocol`, the protocol slug. For `source`, the source
-            name (e.g. `binance`, `coinbase`).
+            Canonical id for the entity. Form depends on
+            `entity_type`:
+
+            - `coin`: any of the asset's identifier forms — friendly
+              slug (`XLM`, `USDC`), canonical asset_id (`native`,
+              `crypto:XLM`, `USDC-GA5Z…`), or bare classic code
+              (`USDC` → also tries `crypto:USDC`). The handler
+              expands the input into every candidate the
+              change-summary worker might have keyed under and
+              returns the first hit. Without expansion, a typo of
+              the canonical form would 404 even when data is
+              populated under a sibling form.
+            - `pair`: `base/quote` form (e.g. `native/USDC-GA5Z…`).
+            - `protocol`: protocol slug (e.g. `soroswap`, `blend`).
+            - `source`: source name (e.g. `binance`, `coinbase`,
+              `sdex`).
           schema:
             type: string
             example: binance
@@ -1563,8 +1629,27 @@ paths:
         Soroswap tracks the factory cursor + one cursor per pair)
         return one row per (source, sub_source) tuple.
 
+        Pass `?max_age=<duration>` to omit completed-backfill
+        cursors that drown out the live ledgerstream marker —
+        useful when polling from monitoring tools that can't
+        post-filter. The explorer's `/diagnostics` page applies
+        the same filter client-side, defaulting to 1h.
+
         Returns 503 when the deployment hasn't wired the cursors
         reader.
+      parameters:
+        - name: max_age
+          in: query
+          required: false
+          description: |
+            Positive Go-duration string (e.g. `1h`, `30m`, `5m`,
+            `0.5h`). When present, rows whose `lag_seconds`
+            exceeds this value are excluded from the response.
+            Empty / omitted preserves the legacy "return every
+            cursor" contract.
+          schema:
+            type: string
+            example: "1h"
       responses:
         "200":
           description: Array of cursor entries, one per (source, sub_source).
@@ -1585,6 +1670,11 @@ paths:
                     last_ledger: { type: integer }
                     last_updated: { type: string, format: date-time }
                     lag_seconds: { type: integer, format: int64 }
+        "400":
+          description: |
+            `max_age` was set to something that doesn't parse as a
+            positive Go duration. Body is the standard problem+json
+            envelope with `type=https://api.ratesengine.net/errors/invalid-max-age`.
         "429": { $ref: "#/components/responses/RateLimited" }
         "500": { $ref: "#/components/responses/InternalError" }
         "503": { $ref: "#/components/responses/ServiceUnavailable" }
@@ -1737,10 +1827,24 @@ paths:
                     description: Max last_ledger across non-backfill sources.
                   exchange_sources:
                     type: integer
-                    description: Count of `class=exchange` sources in the registry.
+                    description: |
+                      Count of `class=exchange` sources REGISTERED in
+                      the binary's `internal/sources/external.Registry`
+                      map. Constant across regions running the same
+                      build; independent of operator config.
                   total_sources:
                     type: integer
-                    description: Count of all registered sources.
+                    description: |
+                      Count of ALL registered sources (every entry in
+                      `internal/sources/external.Registry`). Different
+                      from `/v1/status`'s `freshness.total_sources`,
+                      which counts only sources the operator has
+                      ENABLED at runtime — typically a strict subset.
+                      Today on r1: registry=21, enabled=17, active=15.
+                      The two `total_sources` measure different things
+                      by design; see the field doc on
+                      `internal/api/v1.NetworkStats` for the full
+                      semantic table.
               example:
                 data:
                   volume_24h_usd: "5941104763.13358600"
@@ -2889,8 +2993,22 @@ components:
           type: object
           properties:
             last_aggregator_tick: { type: string, format: date-time }
-            active_sources:       { type: integer }
-            total_sources:        { type: integer }
+            active_sources:
+              type: integer
+              description: |
+                Sources that have emitted an event in the last 10
+                minutes (Prometheus
+                `count(rate(ratesengine_source_events_total[10m]) > 0)`).
+            total_sources:
+              type: integer
+              description: |
+                Sources the operator has ENABLED in this region
+                (Prometheus `count(ratesengine_source_enabled == 1)`).
+                Different from `/v1/network/stats.total_sources`,
+                which counts every source REGISTERED in the binary
+                regardless of enable state — typically a strict
+                superset. Today on r1: enabled=17, registered=21,
+                active=15.
         incidents:
           type: object
           properties:

@@ -17,6 +17,94 @@ against.
 
 ### Added
 
+- **ADR-0026 — Stablecoin → fiat proxy is late-binding
+  aggregator policy, not eager ingest normalisation**
+  (`docs/adr/0026-stablecoin-fiat-proxy-late-binding.md`).
+  Records the implicit-from-the-start policy that a flurry
+  of API-side fallback PRs (#1217 / #1218 / #1219 / #1224 /
+  #1225 / #1226) each instantiated. Captures: the
+  late-binding-vs-eager-rewrite tradeoff (depeg detection,
+  per-stablecoin signal preservation, reversibility), the
+  default peg list (USDT/USDC/PYUSD/EUROC/EUROB/MXNe), the
+  operator runbook for a depeg event (remove the affected
+  peg from `api.peg_aliases`), and the cross-region
+  byte-identical contract this introduces (every region
+  ships the SAME peg list; cross-region monitor verifies
+  config hash). The policy was previously documented only
+  in CLAUDE.md "things that will surprise you" + scattered
+  PR descriptions.
+- **Three new Prometheus alert rules backing the 2026-05-10 incident
+  postmortem** (#1228 ships the runbook + customer-facing post;
+  this PR ships the rules that prevent silent recurrence):
+  - `ratesengine_node_root_disk_full` (P1) / `_warning` (P2) —
+    `ratesengine_timescale_disk_full` only watched
+    `/var/lib/postgresql` (own ZFS dataset, plenty of free space);
+    the root FS that actually filled wasn't covered. New rule
+    watches `mountpoint="/"`.
+  - `ratesengine_redis_writes_blocked` (P1) —
+    `redis_rdb_last_bgsave_status == 0` for > 60 s. Catches the
+    same incident from a different angle: Redis can't snapshot,
+    refuses every write, aggregator VWAP cache stops refreshing,
+    `/v1/price` 404s on rewritten/triangulated/proxy pairs.
+
+  Both alerts link `redis-write-blocked-disk-full.md` (cherry-picked
+  here so the doc-lint orphan check is satisfied without ordering
+  dependency between this PR and #1228). (PR #1229)
+- **Seed `configs/example.toml` documents Chainlink crypto +
+  FX feeds + the "must overlap with aggregator pairs" gotcha**.
+  Audit on 2026-05-10 found r1's Chainlink feeds were
+  configured only for fiat:EUR/GBP/JPY × USD — pairs the
+  aggregator's default coverage doesn't compute, so the
+  divergence worker had no overlap to cross-check and
+  `divergence_observations` was silently empty. The seed
+  config previously documented only the fiat:EUR/fiat:USD
+  example, leading every fresh operator down the same path.
+  Now documents the matching crypto-pair feed addresses
+  (BTC/USD, ETH/USD, LINK/USD) that align with the
+  aggregator's built-in default — so a stock deployment
+  populates divergence_observations out of the box once the
+  operator copies the crypto-feed block. Operator action
+  needed on r1 to add the crypto feeds (tracked).
+- **Runbook for the `fx_quotes` hypertable / migration 0028 gap.**
+  Captures the 2026-05-10 finding that r1's DB is at migration
+  0027 (PR #1041's migration 0028 was never applied), so the
+  forex worker WARN-spams `pq: relation "fx_quotes" does not
+  exist` on every refresh tick and `/v1/currencies/EUR.history_1y`
+  / `.history_all` stay empty (customer-visible regression of
+  task #104). New runbook at
+  `docs/operations/runbooks/fx-history-missing.md` documents the
+  triage + 5-min recovery (scp migration → `ratesengine-migrate
+  up` → confirm forex worker resumes → optional 10y backfill via
+  `scripts/ops/fx-history-backfill`). Cross-linked from
+  alerts-catalog + external-poller-stale. Prevention notes
+  capture the choice between auto-migrate-in-deploy-workflow
+  vs. gate-readyz-on-schema-version. (PR #1230)
+- **Runbook + customer-facing incident post for the 2026-05-10
+  Redis-write-blocked outage** — r1's root filesystem reached
+  100% with 35 GB of stale logs, blocking Redis snapshots,
+  blocking aggregator VWAP cache writes, and surfacing as
+  `/v1/price` 404s on rewritten / triangulated / stablecoin-proxy
+  pairs for ~9 hours. New runbook at
+  `docs/operations/runbooks/redis-write-blocked-disk-full.md`
+  captures triage signals + the 5-minute recovery sequence
+  (vacuum journal, truncate syslog.1, rm WASM-audit stderr,
+  trigger Redis BGSAVE). Customer-facing incident post at
+  `internal/incidents/data/2026-05-10-redis-writes-blocked-disk-full.md`
+  is auto-served by `/v1/incidents`. (PR #1228)
+- **ADR-0025 — Caddy trusts Cloudflare for client-IP signal via
+  CIDR-pinned static list** (`docs/adr/0025-caddy-cloudflare-trusted-proxy.md`).
+  Records the architectural commitment from PR #1239: Caddy's
+  global `servers { trusted_proxies static <CF CIDRs> }` block
+  pins trust on CF's published IP ranges (refreshed manually
+  on quarterly audit cadence rather than via the third-party
+  `caddy-cloudflare-ip` plugin). R2 / R3 inherit the same
+  topology when they ship; if we ever expose the API directly
+  without CF in front, the operator MUST delete the
+  `trusted_proxies` block on that listener — calling that out
+  in writing prevents a foot-gun. The ADR README index also
+  gets caught up — entries for ADR-0020 through ADR-0024
+  (already-accepted but not previously indexed) added in the
+  same change.
 - **`/v1/pools?asset=<asset_id>` filter** — restrict the pools
   listing to rows where the asset appears on either side (base
   OR quote). Mirrors the same filter shape just shipped on
