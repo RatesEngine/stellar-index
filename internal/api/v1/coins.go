@@ -249,6 +249,16 @@ func (s *Server) handleCoins(w http.ResponseWriter, r *http.Request) { //nolint:
 		Limit: listingLimit, Issuer: issuer, Cursor: cursor, Q: q, Order: order,
 	})
 	if err != nil {
+		// Client closed the connection mid-flight — pq returns
+		// "canceling statement due to user request (57014)" via the
+		// Go driver, which doesn't unwrap as context.Canceled but
+		// the request context IS cancelled. Detect via the request
+		// context, not the error chain. Don't 500 (the response
+		// never reaches the client) and don't WARN (it's a normal
+		// client behaviour, not a server error).
+		if clientAborted(r, err) {
+			return
+		}
 		if errors.Is(err, context.DeadlineExceeded) {
 			s.logger.Warn("coins list deadline exceeded", "limit", listingLimit)
 			writeProblem(w, r,
