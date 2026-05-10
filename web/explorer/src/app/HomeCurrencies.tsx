@@ -35,8 +35,6 @@ export function HomeCurrencies() {
     refetchInterval: 5 * 60_000,
   });
 
-  if (q.isError) return null;
-
   return (
     <section className="space-y-3">
       <div className="flex items-baseline justify-between">
@@ -58,6 +56,24 @@ export function HomeCurrencies() {
           All currencies <ArrowRight className="h-3 w-3" />
         </Link>
       </div>
+      {q.isError && (
+        <div className="rounded-md border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800 dark:border-amber-900/40 dark:bg-amber-950/40 dark:text-amber-200">
+          Couldn&apos;t load live currency rates. The full directory at{' '}
+          <Link href="/currencies" className="underline hover:no-underline">
+            /currencies
+          </Link>{' '}
+          may have more luck — or check{' '}
+          <a
+            href="https://status.ratesengine.net"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="underline hover:no-underline"
+          >
+            status.ratesengine.net
+          </a>{' '}
+          for ongoing incidents.
+        </div>
+      )}
       <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
         {FEATURED.map((t) => {
           const row = q.data?.[t];
