@@ -15,6 +15,22 @@ against.
 
 ## [Unreleased]
 
+### Changed
+
+- **`/v1/ohlc` applies a 4σ outlier filter by default**. OHLC's
+  High/Low have no statistical robustness — a single 1-stroop ↔
+  1-stroop SDEX dust ManageOffer cross at the offer-book boundary
+  was pinning XLM/USD `high=$1.0000000000` on the live r1 surface
+  even though the real cluster was at ~$0.168. The handler now
+  routes trades through `aggregate.FilterOutliers` (already used by
+  the aggregator orchestrator and `/v1/vwap`) before
+  `aggregate.ComputeOHLC`. New `?outlier_sigma=N` query param lets
+  callers tune the threshold; pass `outlier_sigma=0` to opt out for
+  raw extremes (the explorer's "show every print" view). The
+  per-bar volume + trade_count fields reflect the post-filter set,
+  matching the High/Low semantics. R-007 in
+  `docs/review-2026-05-10.md`.
+
 ### Fixed
 
 - **`/v1/price/batch` no longer silently drops asset_ids whose price
