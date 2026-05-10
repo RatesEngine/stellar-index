@@ -114,3 +114,16 @@
 # Bounce to the lending listing.
 /lending/blend           /lending/   301
 /lending/blend/          /lending/   301
+
+# /favicon.ico → /icon.svg. Next 15's `src/app/icon.svg` metadata
+# route serves the SVG and emits the right <link rel="icon"> in the
+# rendered HTML, so modern browsers find the favicon via that link
+# tag and never ask for /favicon.ico. But many crawlers, RSS
+# readers, link-preview cards, and browser address-bar fallbacks
+# STILL hit /favicon.ico unconditionally — without this rule every
+# one of those requests was a noisy 404. SVG favicons render in
+# Chrome 80+, Firefox 80+, Safari 15+, Edge — essentially every
+# client shipping for 4+ years. Older clients that wouldn't render
+# the SVG would have rendered nothing here anyway (no prior .ico),
+# so this is strictly an improvement.
+/favicon.ico             /icon.svg   301
