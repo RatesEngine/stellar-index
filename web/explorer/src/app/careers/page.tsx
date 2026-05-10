@@ -6,6 +6,7 @@ export const metadata: Metadata = {
   title: 'Careers — work on Stellar pricing infrastructure',
   description:
     'Roles at Rates Engine — Apache-2.0 codebase, real on-chain pricing, no AI-slop shortcuts. No open roles listed today; contributions via GitHub PRs welcome.',
+  alternates: { canonical: '/careers' },
 };
 
 const VALUES = [

@@ -5,6 +5,7 @@ import { ArrowLeft, ExternalLink } from 'lucide-react';
 
 import { loadDiscoveryDoc, loadDiscoveryDocs } from '@/lib/discovery';
 import { Markdown } from '@/lib/markdown';
+import { SITE_OG_IMAGES, SITE_TWITTER_IMAGES } from '@/lib/seo';
 
 // Each curated discovery audit rendered as a static page. Same
 // shape as the ADR + architecture browsers; the body is the
@@ -31,8 +32,8 @@ export async function generateMetadata({
     title,
     description: doc.description,
     alternates: { canonical },
-    openGraph: { title, description: doc.description, url: canonical, type: 'article' },
-    twitter: { card: 'summary_large_image', title, description: doc.description },
+    openGraph: { title, description: doc.description, url: canonical, type: 'article', images: SITE_OG_IMAGES },
+    twitter: { card: 'summary_large_image', title, description: doc.description, images: SITE_TWITTER_IMAGES },
   };
 }
 

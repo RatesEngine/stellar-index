@@ -390,7 +390,33 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Current aggregated price for one asset. */
+        /**
+         * Current aggregated price for one asset.
+         * @description Returns the most-recent VWAP (or last-trade fallback) for the
+         *     `asset` / `quote` pair from the closed-bucket cache.
+         *
+         *     Resolution order (handler tries each in turn, takes the first
+         *     non-empty result):
+         *
+         *     1. Closed-bucket VWAP from `prices_1m` (the canonical
+         *        aggregated value).
+         *     2. Triangulated value from the Redis VWAP cache. Covers two
+         *        sub-cases: (a) implied chains computed by the
+         *        triangulation worker, surfaced with `flags.triangulated=true`;
+         *        (b) stablecoin-proxy rewrites the aggregator emits at
+         *        tick-time (e.g. `XLM/fiat:USD` synthesised from
+         *        `XLM/USDC-G…`) without a triangulation marker.
+         *     3. Fiat-vs-fiat cross-rate from the forex snapshot when both
+         *        sides are `fiat:` typed (e.g.
+         *        `?asset=fiat:EUR&quote=fiat:USD`). Computed as
+         *        `rate_usd[Y] / rate_usd[X]`. Returned with
+         *        `flags.triangulated=true` since the value is derived
+         *        rather than a direct trade. Same fallback fires on
+         *        `/v1/price/tip`, `/v1/price/batch`,
+         *        `/v1/oracle/lastprice`, and `/v1/oracle/x_last_price`.
+         *
+         *     Returns 404 only when every path above misses.
+         */
         get: {
             parameters: {
                 query: {
@@ -1589,6 +1615,18 @@ export interface paths {
                     base?: string;
                     /** @description Optional. Canonical quote asset_id. See `base`. */
                     quote?: string;
+                    /**
+                     * @description Optional. Canonical asset_id (`native`, `USDC-G…`,
+                     *     `fiat:USD`, …). Restricts to pools where the asset
+                     *     appears on either side (base OR quote). Use this on
+                     *     asset-detail surfaces to surface every pool touching
+                     *     the asset in one request, instead of firing parallel
+                     *     `?base=` + `?quote=` and merging client-side. Returns
+                     *     400 `invalid-asset-id` for unparseable values; 400
+                     *     `conflicting-filters` when combined with `base`/`quote`
+                     *     (the OR-shape and AND-shape filters can't be mixed).
+                     */
+                    asset?: string;
                 };
                 header?: never;
                 path?: never;
@@ -1725,7 +1763,11 @@ export interface paths {
         get: {
             parameters: {
                 query?: {
-                    /** @description Optional. Cap the returned currencies. */
+                    /**
+                     * @description Optional. Cap the returned currencies. Must be 1-500
+                     *     inclusive; out-of-range or non-integer input returns
+                     *     400 `type=https://api.ratesengine.net/errors/invalid-limit`.
+                     */
                     limit?: number;
                     /** @description Comma-separated. `sparkline` attaches `history_7d_rates`. */
                     include?: string;
@@ -1869,6 +1911,27 @@ export interface paths {
                      *     cursor returned by the previous response.
                      */
                     order_by?: "pair" | "volume_24h_usd_desc";
+                    /**
+                     * @description Restrict the listing to markets a single source
+                     *     observed in the recency window. Must match a
+                     *     registered source name (see `/v1/sources`); an
+                     *     unknown name returns 400 `unknown-source` rather
+                     *     than an empty 200 (avoids the silent-empty-page
+                     *     anti-pattern). Mutually exclusive with `asset`.
+                     */
+                    source?: string;
+                    /**
+                     * @description Restrict the listing to markets where the given
+                     *     canonical `asset_id` appears on either side (base
+                     *     OR quote). Use this on asset-detail surfaces to
+                     *     surface every market an asset participates in
+                     *     without paying for a global scan + client-side
+                     *     filter. Returns 400 `invalid-asset-id` if the
+                     *     value isn't a parseable canonical asset_id (e.g.
+                     *     `native`, `USDC-G…`, `fiat:USD`). Mutually
+                     *     exclusive with `source`.
+                     */
+                    asset?: string;
                 };
                 header?: never;
                 path?: never;
@@ -2195,6 +2258,19 @@ export interface paths {
                                  *     7d-ago prices_1m bucket within ±2h.
                                  */
                                 change_7d_pct?: string | null;
+                                /**
+                                 * @description Non-empty when the asset's `issuer`
+                                 *     G-strkey appears on the curated scam
+                                 *     directory sourced from
+                                 *     stellar.expert. Same field surfaced on
+                                 *     `/v1/issuers/{g_strkey}.scam_reason`;
+                                 *     duplicated here so the asset detail
+                                 *     page can render a warning at first
+                                 *     paint without a second fetch. Always
+                                 *     omitted for native XLM (no issuer) and
+                                 *     for issuers with no scam record.
+                                 */
+                                issuer_scam_reason?: string;
                             }[];
                             /** @description Empty when no more pages. */
                             next_cursor?: string;
@@ -2366,10 +2442,22 @@ export interface paths {
                     /** @example source */
                     entity_type: "coin" | "protocol" | "pair" | "source";
                     /**
-                     * @description Canonical id for the entity. For `coin`, the asset slug
-                     *     (e.g. `stellar`). For `pair`, `base/quote` form. For
-                     *     `protocol`, the protocol slug. For `source`, the source
-                     *     name (e.g. `binance`, `coinbase`).
+                     * @description Canonical id for the entity. Form depends on
+                     *     `entity_type`:
+                     *
+                     *     - `coin`: any of the asset's identifier forms — friendly
+                     *       slug (`XLM`, `USDC`), canonical asset_id (`native`,
+                     *       `crypto:XLM`, `USDC-GA5Z…`), or bare classic code
+                     *       (`USDC` → also tries `crypto:USDC`). The handler
+                     *       expands the input into every candidate the
+                     *       change-summary worker might have keyed under and
+                     *       returns the first hit. Without expansion, a typo of
+                     *       the canonical form would 404 even when data is
+                     *       populated under a sibling form.
+                     *     - `pair`: `base/quote` form (e.g. `native/USDC-GA5Z…`).
+                     *     - `protocol`: protocol slug (e.g. `soroswap`, `blend`).
+                     *     - `source`: source name (e.g. `binance`, `coinbase`,
+                     *       `sdex`).
                      * @example binance
                      */
                     id: string;
@@ -2447,12 +2535,27 @@ export interface paths {
          *     Soroswap tracks the factory cursor + one cursor per pair)
          *     return one row per (source, sub_source) tuple.
          *
+         *     Pass `?max_age=<duration>` to omit completed-backfill
+         *     cursors that drown out the live ledgerstream marker —
+         *     useful when polling from monitoring tools that can't
+         *     post-filter. The explorer's `/diagnostics` page applies
+         *     the same filter client-side, defaulting to 1h.
+         *
          *     Returns 503 when the deployment hasn't wired the cursors
          *     reader.
          */
         get: {
             parameters: {
-                query?: never;
+                query?: {
+                    /**
+                     * @description Positive Go-duration string (e.g. `1h`, `30m`, `5m`,
+                     *     `0.5h`). When present, rows whose `lag_seconds`
+                     *     exceeds this value are excluded from the response.
+                     *     Empty / omitted preserves the legacy "return every
+                     *     cursor" contract.
+                     */
+                    max_age?: string;
+                };
                 header?: never;
                 path?: never;
                 cookie?: never;
@@ -2475,6 +2578,17 @@ export interface paths {
                             lag_seconds: number;
                         }[];
                     };
+                };
+                /**
+                 * @description `max_age` was set to something that doesn't parse as a
+                 *     positive Go duration. Body is the standard problem+json
+                 *     envelope with `type=https://api.ratesengine.net/errors/invalid-max-age`.
+                 */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
                 };
                 429: components["responses"]["RateLimited"];
                 500: components["responses"]["InternalError"];
@@ -2698,9 +2812,25 @@ export interface paths {
                             assets_indexed: number;
                             /** @description Max last_ledger across non-backfill sources. */
                             latest_ledger: number;
-                            /** @description Count of `class=exchange` sources in the registry. */
+                            /**
+                             * @description Count of `class=exchange` sources REGISTERED in
+                             *     the binary's `internal/sources/external.Registry`
+                             *     map. Constant across regions running the same
+                             *     build; independent of operator config.
+                             */
                             exchange_sources: number;
-                            /** @description Count of all registered sources. */
+                            /**
+                             * @description Count of ALL registered sources (every entry in
+                             *     `internal/sources/external.Registry`). Different
+                             *     from `/v1/status`'s `freshness.total_sources`,
+                             *     which counts only sources the operator has
+                             *     ENABLED at runtime — typically a strict subset.
+                             *     Today on r1: registry=21, enabled=17, active=15.
+                             *     The two `total_sources` measure different things
+                             *     by design; see the field doc on
+                             *     `internal/api/v1.NetworkStats` for the full
+                             *     semantic table.
+                             */
                             total_sources: number;
                         };
                     };
@@ -4145,7 +4275,21 @@ export interface components {
             freshness?: {
                 /** Format: date-time */
                 last_aggregator_tick?: string;
+                /**
+                 * @description Sources that have emitted an event in the last 10
+                 *     minutes (Prometheus
+                 *     `count(rate(ratesengine_source_events_total[10m]) > 0)`).
+                 */
                 active_sources?: number;
+                /**
+                 * @description Sources the operator has ENABLED in this region
+                 *     (Prometheus `count(ratesengine_source_enabled == 1)`).
+                 *     Different from `/v1/network/stats.total_sources`,
+                 *     which counts every source REGISTERED in the binary
+                 *     regardless of enable state — typically a strict
+                 *     superset. Today on r1: enabled=17, registered=21,
+                 *     active=15.
+                 */
                 total_sources?: number;
             };
             incidents?: {

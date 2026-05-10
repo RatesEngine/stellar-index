@@ -1093,6 +1093,25 @@ func (r storeMarketsReader) SourceMarkets(ctx context.Context, source, cursor st
 	return out, next, nil
 }
 
+func (r storeMarketsReader) AssetMarkets(ctx context.Context, asset, cursor string, limit int, order timescale.MarketsOrder) ([]v1.Market, string, error) {
+	rows, next, err := r.s.AssetMarkets(ctx, asset, cursor, limit, order)
+	if err != nil {
+		return nil, "", err
+	}
+	out := make([]v1.Market, len(rows))
+	for i, m := range rows {
+		out[i] = v1.Market{
+			Base:          m.Pair.Base.String(),
+			Quote:         m.Pair.Quote.String(),
+			LastTradeAt:   m.LastTradeAt,
+			TradeCount24h: m.TradeCount24h,
+			Volume24hUSD:  m.Volume24hUSD,
+			LastPrice:     m.LastPrice,
+		}
+	}
+	return out, next, nil
+}
+
 func (r storeMarketsReader) AllPools(ctx context.Context, filter timescale.PoolsFilter, cursor string, limit int, order timescale.MarketsOrder) ([]v1.Pool, string, error) {
 	rows, next, err := r.s.AllPools(ctx, filter, cursor, limit, order)
 	if err != nil {
@@ -1293,7 +1312,7 @@ func (r cachedMarketsReader) AllPools(ctx context.Context, filter timescale.Pool
 		return r.inner.AllPools(ctx, filter, cursor, limit, order)
 	}
 	srcKey := strings.Join(filter.Sources, ",")
-	cacheKey := cachekeys.MarketsList(cursor, limit) + ":order=" + marketsOrderKey(order) + ":pools=1:src=" + srcKey + ":base=" + filter.Base + ":quote=" + filter.Quote
+	cacheKey := cachekeys.MarketsList(cursor, limit) + ":order=" + marketsOrderKey(order) + ":pools=1:src=" + srcKey + ":base=" + filter.Base + ":quote=" + filter.Quote + ":asset=" + filter.Asset
 	if raw, err := r.rdb.Get(ctx, cacheKey).Bytes(); err == nil {
 		var p listCachePayload[v1.Pool]
 		if jerr := json.Unmarshal(raw, &p); jerr == nil {
@@ -1340,6 +1359,36 @@ func (r cachedMarketsReader) SourceMarkets(ctx context.Context, source, cursor s
 	if buf, jerr := json.Marshal(listCachePayload[v1.Market]{Items: items, NextCursor: next}); jerr == nil {
 		if serr := r.rdb.Set(ctx, cacheKey, buf, cachekeys.CatalogueListTTL).Err(); serr != nil {
 			r.log.Warn("source-markets cache write failed", "key", cacheKey, "err", serr)
+		}
+	}
+	return items, next, nil
+}
+
+func (r cachedMarketsReader) AssetMarkets(ctx context.Context, asset, cursor string, limit int, order timescale.MarketsOrder) ([]v1.Market, string, error) {
+	// Per-asset markets share the same cache shape as
+	// DistinctPairsExt but partition by asset so an asset's
+	// involvement list isn't aliased with the global one.
+	if r.rdb == nil {
+		return r.inner.AssetMarkets(ctx, asset, cursor, limit, order)
+	}
+	cacheKey := cachekeys.MarketsList(cursor, limit) + ":order=" + marketsOrderKey(order) + ":asset=" + asset
+	if raw, err := r.rdb.Get(ctx, cacheKey).Bytes(); err == nil {
+		var p listCachePayload[v1.Market]
+		if jerr := json.Unmarshal(raw, &p); jerr == nil {
+			return p.Items, p.NextCursor, nil
+		}
+		r.log.Warn("asset-markets cache decode failed", "key", cacheKey)
+	} else if !errors.Is(err, redis.Nil) {
+		r.log.Warn("asset-markets cache read failed", "key", cacheKey, "err", err)
+	}
+
+	items, next, err := r.inner.AssetMarkets(ctx, asset, cursor, limit, order)
+	if err != nil {
+		return nil, "", err
+	}
+	if buf, jerr := json.Marshal(listCachePayload[v1.Market]{Items: items, NextCursor: next}); jerr == nil {
+		if serr := r.rdb.Set(ctx, cacheKey, buf, cachekeys.CatalogueListTTL).Err(); serr != nil {
+			r.log.Warn("asset-markets cache write failed", "key", cacheKey, "err", serr)
 		}
 	}
 	return items, next, nil
@@ -2024,7 +2073,7 @@ func prewarmOnce(
 		logger.Debug("prewarm sources volume history failed", "err", err)
 	}
 
-	mkCtx, mkCancel := context.WithTimeout(ctx, 20*time.Second)
+	mkCtx, mkCancel := context.WithTimeout(ctx, 60*time.Second)
 	defer mkCancel()
 	// Mirrors the most-trafficked /v1/markets, /v1/pools requests
 	// the explorer fires (default order, no source filter). The
@@ -2034,20 +2083,69 @@ func prewarmOnce(
 	// cache key under [v1.CachedMarketsReader.AllPools]; without
 	// per-limit prewarm, anything off the warmed key 503s under
 	// the new pools-server-timeout (#1082).
+	//
+	// Per-handler order semantics MUST match the cache key the
+	// handler will look up:
+	// - /v1/markets defaults to MarketsOrderPair (handler accepts
+	//   ""|"pair" → 0). Prewarming with 0 hits the right key.
+	// - /v1/pools defaults to MarketsOrderVolume24hDesc (handler
+	//   accepts ""|"volume_24h_usd_desc" → 1). Pre-2026-05-09 we
+	//   prewarmed with 0 which was a phantom slot — every cold-
+	//   cache user request still ran a 10-30s SQL scan because the
+	//   warmed key never matched. Live measurement that day:
+	//   /v1/pools?source=sdex took 27s, soroswap 16s, phoenix 12s,
+	//   aquarius 9s, comet 11s. Match the handler's default
+	//   explicitly so the warmed key is the one users hit.
+	// Important: the unfiltered /v1/pools handler builds
+	// `PoolsFilter{Sources: v1.DexSourceNames()}` (the registry's
+	// DEX list) — NOT `Sources: nil`. Cache key includes the
+	// stringified Sources slice; passing `PoolsFilter{}` here
+	// (`Sources: nil` → key fragment `[]`) warms a different key
+	// than the user request lands on (`[aquarius comet phoenix
+	// sdex soroswap]`). Mirror the handler's behaviour explicitly.
+	dexSources := v1.DexSourceNames()
 	for _, lim := range []int{5, 25, 100, 200} {
-		if _, _, err := markets.DistinctPairsExt(mkCtx, "", lim, 0); err != nil {
+		if _, _, err := markets.DistinctPairsExt(mkCtx, "", lim, timescale.MarketsOrderPair); err != nil {
 			logger.Debug("prewarm markets failed", "limit", lim, "err", err)
 		}
-		if _, _, err := markets.AllPools(mkCtx, timescale.PoolsFilter{}, "", lim, 0); err != nil {
+		if _, _, err := markets.AllPools(mkCtx, timescale.PoolsFilter{Sources: dexSources}, "", lim, timescale.MarketsOrderVolume24hDesc); err != nil {
 			logger.Debug("prewarm pools failed", "limit", lim, "err", err)
+		}
+	}
+
+	// Per-DEX prewarm — the explorer's /dexes/{source} pages each
+	// fire `/v1/pools?source=<dex>&limit=100`, which lands on a
+	// distinct cache key per source. Without this, every page click
+	// missed cache and ran a 10-30s full-window trades-hypertable
+	// scan; sometimes returning a 503 (#1082 path), sometimes
+	// overshooting because lib/pq doesn't reliably propagate
+	// context cancellation mid-query. Per-DEX prewarm runs the
+	// canonical limit=100 + default order the explorer hits;
+	// subsequent users land on warm cache (sub-second). Errors are
+	// logged at Debug — a missed cycle is fine since the user
+	// request still fronts the cache.
+	for _, src := range []string{"soroswap", "phoenix", "aquarius", "sdex", "comet"} {
+		filter := timescale.PoolsFilter{Sources: []string{src}}
+		if _, _, err := markets.AllPools(mkCtx, filter, "", 100, timescale.MarketsOrderVolume24hDesc); err != nil {
+			logger.Debug("prewarm per-source pools failed", "source", src, "err", err)
 		}
 	}
 
 	// /v1/coins?limit=200&include=sparkline backs the unified
 	// currencies listing — single most-trafficked coins read.
+	//
+	// Important: the handler's `prependNative` path subtracts one
+	// from `limit` when cursor/issuer/q are all empty (the explorer's
+	// no-filter case) so it can splice the synthetic XLM row at the
+	// top without overshooting the user's requested page size. So a
+	// /v1/coins?limit=200 user request actually calls
+	// `ListCoinsExt(ctx, ListCoinsOptions{Limit: 199, …})` under the
+	// hood — passing Limit=200 here warms a different cache key than
+	// the one the user request looks up. Mirror the listingLimit the
+	// handler actually uses.
 	coinsCtx, coinsCancel := context.WithTimeout(ctx, 20*time.Second)
 	defer coinsCancel()
-	if _, err := coins.ListCoinsExt(coinsCtx, timescale.ListCoinsOptions{Limit: 200}); err != nil {
+	if _, err := coins.ListCoinsExt(coinsCtx, timescale.ListCoinsOptions{Limit: 199}); err != nil {
 		logger.Debug("prewarm coins listing failed", "err", err)
 	}
 }
