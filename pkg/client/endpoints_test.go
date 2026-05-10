@@ -1621,3 +1621,175 @@ func TestLendingPools_EmptyArray(t *testing.T) {
 		t.Errorf("len = %d, want 0", len(got.Data))
 	}
 }
+
+// TestVWAP_HappyPath — happy path round-trip + query-param shape.
+// Pins:
+//   - GET /v1/vwap with base + quote + sigma forwarded
+//   - From + To formatted as RFC3339 UTC
+//   - VWAPResult fields decoded correctly (string price, int counts)
+func TestVWAP_HappyPath(t *testing.T) {
+	_, c := newTestServer(t, func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/v1/vwap" {
+			t.Errorf("path = %q, want /v1/vwap", r.URL.Path)
+		}
+		q := r.URL.Query()
+		if q.Get("base") != "native" || q.Get("quote") != "fiat:USD" {
+			t.Errorf("base/quote = %q/%q, want native/fiat:USD", q.Get("base"), q.Get("quote"))
+		}
+		if q.Get("outlier_sigma") != "3" {
+			t.Errorf("outlier_sigma = %q, want 3", q.Get("outlier_sigma"))
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{
+			"data": {
+				"from": "2026-05-10T09:00:00Z",
+				"to":   "2026-05-10T10:00:00Z",
+				"price": "0.16",
+				"base_volume": "1000000",
+				"quote_volume": "160000",
+				"trade_count": 42,
+				"outliers_filtered": 1,
+				"truncated": false
+			},
+			"as_of": "2026-05-10T10:00:00Z",
+			"flags": {}
+		}`))
+	})
+	got, err := c.VWAP(context.Background(), client.AggregateQuery{
+		Base:         "native",
+		Quote:        "fiat:USD",
+		OutlierSigma: 3,
+	})
+	if err != nil {
+		t.Fatalf("VWAP: %v", err)
+	}
+	if got.Data.Price != "0.16" {
+		t.Errorf("Price = %q, want 0.16", got.Data.Price)
+	}
+	if got.Data.TradeCount != 42 {
+		t.Errorf("TradeCount = %d, want 42", got.Data.TradeCount)
+	}
+	if got.Data.OutliersFiltered != 1 {
+		t.Errorf("OutliersFiltered = %d, want 1", got.Data.OutliersFiltered)
+	}
+}
+
+// TestVWAP_ValidatesRequired — empty Base or Quote returns 400
+// without making an HTTP call.
+func TestVWAP_ValidatesRequired(t *testing.T) {
+	_, c := newTestServer(t, func(w http.ResponseWriter, r *http.Request) {
+		t.Errorf("server should not have been hit")
+	})
+	if _, err := c.VWAP(context.Background(), client.AggregateQuery{Quote: "fiat:USD"}); err == nil {
+		t.Error("missing base should error")
+	}
+	if _, err := c.VWAP(context.Background(), client.AggregateQuery{Base: "native"}); err == nil {
+		t.Error("missing quote should error")
+	}
+}
+
+// TestTWAP_HappyPath — same shape as VWAP minus the outlier_sigma
+// param (TWAP doesn't carry one; sigma on AggregateQuery is silently
+// ignored on this surface).
+func TestTWAP_HappyPath(t *testing.T) {
+	_, c := newTestServer(t, func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/v1/twap" {
+			t.Errorf("path = %q, want /v1/twap", r.URL.Path)
+		}
+		if r.URL.Query().Get("outlier_sigma") != "" {
+			t.Errorf("outlier_sigma must NOT be sent on /v1/twap; got %q", r.URL.Query().Get("outlier_sigma"))
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{
+			"data": {
+				"from": "2026-05-10T09:00:00Z",
+				"to":   "2026-05-10T10:00:00Z",
+				"price": "0.1625",
+				"trade_count": 17,
+				"truncated": false
+			},
+			"as_of": "2026-05-10T10:00:00Z",
+			"flags": {}
+		}`))
+	})
+	got, err := c.TWAP(context.Background(), client.AggregateQuery{
+		Base:         "native",
+		Quote:        "fiat:USD",
+		OutlierSigma: 3, // intentionally set; should NOT be forwarded
+	})
+	if err != nil {
+		t.Fatalf("TWAP: %v", err)
+	}
+	if got.Data.Price != "0.1625" {
+		t.Errorf("Price = %q, want 0.1625", got.Data.Price)
+	}
+}
+
+// TestPools_HappyPath — round-trips a paginated response. Confirms
+// query params (source/asset/limit) forward correctly and pagination
+// cursor decodes onto Envelope.Pagination.
+func TestPools_HappyPath(t *testing.T) {
+	_, c := newTestServer(t, func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/v1/pools" {
+			t.Errorf("path = %q, want /v1/pools", r.URL.Path)
+		}
+		q := r.URL.Query()
+		if q.Get("source") != "soroswap" {
+			t.Errorf("source = %q, want soroswap", q.Get("source"))
+		}
+		if q.Get("limit") != "5" {
+			t.Errorf("limit = %q, want 5", q.Get("limit"))
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{
+			"data": [
+				{
+					"source": "soroswap",
+					"base":   "native",
+					"quote":  "USDC-GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN",
+					"last_trade_at": "2026-05-10T10:00:00Z",
+					"trade_count_24h": 100,
+					"volume_24h_usd": "12345.67",
+					"last_price": "0.1626"
+				}
+			],
+			"as_of": "2026-05-10T10:00:00Z",
+			"flags": {},
+			"pagination": {"next": "12345.67:soroswap|native|USDC-GA5Z…"}
+		}`))
+	})
+	got, err := c.Pools(context.Background(), client.PoolsQuery{
+		Source: "soroswap",
+		Limit:  5,
+	})
+	if err != nil {
+		t.Fatalf("Pools: %v", err)
+	}
+	if len(got.Data) != 1 {
+		t.Fatalf("len = %d, want 1", len(got.Data))
+	}
+	if got.Data[0].Source != "soroswap" {
+		t.Errorf("Source = %q", got.Data[0].Source)
+	}
+	if got.Data[0].Volume24hUSD == nil || *got.Data[0].Volume24hUSD != "12345.67" {
+		t.Errorf("Volume24hUSD = %v, want \"12345.67\"", got.Data[0].Volume24hUSD)
+	}
+	if got.Pagination.Next == "" {
+		t.Error("Pagination.Next should decode from envelope")
+	}
+}
+
+// TestPools_NoFilters — bare call (no query params) is valid: returns
+// the full top-of-list paginated set.
+func TestPools_NoFilters(t *testing.T) {
+	_, c := newTestServer(t, func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.RawQuery != "" {
+			t.Errorf("expected no query string; got %q", r.URL.RawQuery)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"data":[],"as_of":"2026-05-10T10:00:00Z","flags":{}}`))
+	})
+	if _, err := c.Pools(context.Background(), client.PoolsQuery{}); err != nil {
+		t.Fatalf("Pools: %v", err)
+	}
+}

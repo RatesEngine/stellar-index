@@ -5,8 +5,10 @@ import (
 	"database/sql"
 	"errors"
 	"net/http"
+	"strings"
 	"time"
 
+	"github.com/RatesEngine/rates-engine/internal/canonical"
 	"github.com/RatesEngine/rates-engine/internal/storage/timescale"
 )
 
@@ -63,6 +65,58 @@ var allowedChangeSummaryEntityTypes = map[string]struct{}{
 	"source":   {},
 }
 
+// changeSummaryCoinCandidates returns the entity_id forms to try
+// for a coin lookup. The worker writes rows under the canonical
+// asset_id (`native`, `crypto:XLM`, `USDC-GA5Z…`), but consumers
+// reasonably reach for the friendly slug (`XLM`, `USDC`); without
+// expansion `/v1/changes/coin/XLM` 404s even when XLM data is
+// populated under `native` and `crypto:XLM`.
+//
+// First entry is always the literal user input so an exact match
+// short-circuits; subsequent entries are best-effort translations.
+//
+// For non-coin entity_types, returns just the literal input — the
+// pair / protocol / source forms are documented as exact strings.
+func changeSummaryCoinCandidates(entityType, entityID string) []string {
+	if entityType != "coin" {
+		return []string{entityID}
+	}
+
+	out := []string{entityID}
+	seen := map[string]struct{}{entityID: {}}
+	add := func(id string) {
+		if _, ok := seen[id]; ok {
+			return
+		}
+		seen[id] = struct{}{}
+		out = append(out, id)
+	}
+
+	upper := strings.ToUpper(strings.TrimSpace(entityID))
+	if upper == "XLM" {
+		add("native")
+		add("crypto:XLM")
+	}
+	// Bare classic-asset code (e.g. "USDC", "EURC") → also try the
+	// global crypto ticker form, which the aggregator publishes for
+	// CEX/FX-quoted trades. The full `<CODE>-G…` strkey form is
+	// already the literal entityID when callers provide it.
+	if upper != "" && upper != "NATIVE" && !strings.Contains(entityID, "-") && !strings.Contains(entityID, ":") {
+		add("crypto:" + upper)
+	}
+	// `native` → also try `crypto:XLM`.
+	if entityID == "native" {
+		add("crypto:XLM")
+	}
+	// Try canonical.ParseAsset to see if the literal form parses to
+	// a known asset; if so, also include its String() form (which
+	// may differ from the input, e.g. casing).
+	if a, err := canonical.ParseAsset(entityID); err == nil {
+		add(a.String())
+	}
+	return out
+}
+
 // handleChangeSummary serves GET /v1/changes/{entity_type}/{id}.
 //
 // Returns 503 when no ChangeSummary reader is wired (operator
@@ -99,8 +153,31 @@ func (s *Server) handleChangeSummary(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	row, err := s.changesum.GetChangeSummary(r.Context(), entityType, entityID)
-	if errors.Is(err, sql.ErrNoRows) {
+	// For coin entities, the worker writes one row per canonical
+	// asset_id form (`native`, `crypto:XLM`, `USDC-GA5Z…`, …). A
+	// caller passing the friendly slug "XLM" or just "USDC" without
+	// the issuer suffix would 404 against the strict-equality lookup
+	// even when the underlying data exists. Expand into the same set
+	// of candidate forms `oracleAssetCandidates` uses for
+	// /v1/oracle/latest, then try each in order. First hit wins.
+	candidates := changeSummaryCoinCandidates(entityType, entityID)
+
+	var (
+		row timescale.ChangeSummaryRow
+		err error
+		hit bool
+	)
+	for _, id := range candidates {
+		row, err = s.changesum.GetChangeSummary(r.Context(), entityType, id)
+		if err == nil {
+			hit = true
+			break
+		}
+		if !errors.Is(err, sql.ErrNoRows) {
+			break // real storage error — surface it below
+		}
+	}
+	if !hit && errors.Is(err, sql.ErrNoRows) {
 		writeProblem(w, r,
 			"https://api.ratesengine.net/errors/change-summary-not-found",
 			"Change summary not found", http.StatusNotFound,
