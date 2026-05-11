@@ -397,6 +397,25 @@ func (c *Client) Sources(ctx context.Context, opts SourcesOptions) (*Envelope[[]
 	return &env, nil
 }
 
+// Methodology returns a machine-readable summary of the active
+// aggregation policy: VWAP method, per-endpoint outlier filters,
+// stablecoin → fiat-USD proxy allow-list, source classes,
+// registered venues, and ADR refs. Same data the explorer
+// /methodology page renders, in a parseable form.
+//
+// No options — the response is a static projection of compile-
+// time constants + the in-memory source registry + operator
+// config. Sub-millisecond on the server.
+//
+// R-023 in `docs/review-2026-05-10.md`.
+func (c *Client) Methodology(ctx context.Context) (*Envelope[Methodology], error) {
+	var env Envelope[Methodology]
+	if err := c.doJSON(ctx, http.MethodGet, "/v1/methodology", nil, nil, &env); err != nil {
+		return nil, err
+	}
+	return &env, nil
+}
+
 // MarketsOrderBy controls server-side sort + cursor scheme.
 type MarketsOrderBy string
 

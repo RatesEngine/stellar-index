@@ -1892,6 +1892,34 @@ paths:
         "500": { $ref: "#/components/responses/InternalError" }
         "503": { $ref: "#/components/responses/ServiceUnavailable" }
 
+  /methodology:
+    get:
+      tags: [meta]
+      summary: Machine-readable summary of the active aggregation policy.
+      description: |
+        Returns a static projection of the aggregator's policy: the
+        VWAP method, per-endpoint outlier filters, the operator's
+        stablecoin → fiat-USD proxy allow-list, the four source
+        classes (exchange / aggregator / oracle / authority_sanity)
+        and which contributes to the served price, the flat list of
+        registered venues with class / weight / VWAP-inclusion flags,
+        and pointers to the long-form ADRs that govern each section.
+
+        Designed for transparency consumers (compliance, auditors,
+        AI agents, integrators verifying RFP §10 "open methodology"
+        claims) who want to verify what the deployment is doing
+        without parsing the explorer's HTML at /methodology or
+        chasing ADR cross-refs. Sub-millisecond — no DB call;
+        derived from compile-time constants + the in-memory source
+        registry + operator config.
+      responses:
+        "200":
+          description: Methodology snapshot.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/MethodologyEnvelope" }
+        "500": { $ref: "#/components/responses/InternalError" }
+
   /sources:
     get:
       tags: [meta]
@@ -3628,6 +3656,77 @@ components:
         default_weight:     { type: integer, description: "Default per-source weight for weighted-aggregation paths (when those land)." }
         trade_count_24h:    { type: integer, description: "Trailing-24h trade count for this source. Populated only when the request used `?include=stats`; absent (omitted) otherwise." }
       required: [name, class, include_in_vwap, paid, backfill_available, backfill_safe, default_weight]
+
+    Methodology:
+      type: object
+      properties:
+        version:
+          type: string
+          description: On-disk shape version. Bumps on breaking changes.
+        aggregation:
+          type: object
+          properties:
+            price_method:
+              type: string
+              enum: [vwap]
+              description: Formula for the headline served price.
+            outlier_filter:
+              type: object
+              properties:
+                endpoint:
+                  type: string
+                  description: API surface this rule applies to. Empty = global default.
+                default_sigma:
+                  type: number
+                  description: σ threshold applied when caller doesn't override via `?outlier_sigma=`.
+                note:
+                  type: string
+              required: [default_sigma]
+            stablecoin_fiat_proxy:
+              type: array
+              items:
+                type: object
+                properties:
+                  asset_id: { type: string }
+                  pegs_to:  { type: string }
+                required: [asset_id, pegs_to]
+            closed_bucket_window_seconds:
+              type: integer
+              description: Boundary granularity rate endpoints snap "now" to. Per ADR-0015.
+          required: [price_method, outlier_filter, stablecoin_fiat_proxy, closed_bucket_window_seconds]
+        source_classes:
+          type: array
+          items:
+            type: object
+            properties:
+              name:
+                type: string
+                enum: [exchange, aggregator, oracle, authority_sanity]
+              contributes_to_vwap: { type: boolean }
+              description:         { type: string }
+            required: [name, contributes_to_vwap, description]
+        sources:
+          type: array
+          description: Same data as `/v1/sources` (without live trade-count stats) — included so a transparency consumer can verify the policy in one round trip.
+          items: { $ref: "#/components/schemas/Source" }
+        references:
+          type: array
+          items:
+            type: object
+            properties:
+              id:    { type: string, description: "ADR identifier (e.g. ADR-0007)." }
+              title: { type: string }
+              url:   { type: string, description: "Repo-relative path." }
+            required: [id, title, url]
+      required: [version, aggregation, source_classes, sources, references]
+
+    MethodologyEnvelope:
+      allOf:
+        - { $ref: "#/components/schemas/EnvelopeMeta" }
+        - type: object
+          properties:
+            data: { $ref: "#/components/schemas/Methodology" }
+          required: [data]
 
     SourcesEnvelope:
       allOf:

@@ -616,7 +616,7 @@ func loopbackOnly(next http.Handler) http.Handler {
 	})
 }
 
-func (s *Server) mountRoutes() {
+func (s *Server) mountRoutes() { //nolint:funlen // route registration is intentionally one block for grep-ability; splitting into sub-functions makes "where is /v1/X served?" harder to answer.
 	// Health / meta endpoints. Deliberately NOT behind rate-limit
 	// middleware — infra (k8s probes, load balancers) hits these.
 	s.mux.HandleFunc("GET /v1/coins", s.handleCoins)
@@ -746,6 +746,13 @@ func (s *Server) mountRoutes() {
 	// Source catalogue — every venue the aggregator knows about,
 	// with class + IncludeInVWAP metadata.
 	s.mux.HandleFunc("GET /v1/sources", s.handleSources)
+
+	// Methodology — machine-readable summary of the active
+	// aggregation policy (VWAP method, outlier filters,
+	// stablecoin proxy, source classes, ADR refs). Mirrors what
+	// the explorer's /methodology HTML page documents, in a form
+	// transparency consumers can parse. R-023.
+	s.mux.HandleFunc("GET /v1/methodology", s.handleMethodology)
 
 	// SAC wrapper resolution — operator-config map of
 	// Stellar-Asset-Contract C-strkey → "CODE-ISSUER" classic asset.

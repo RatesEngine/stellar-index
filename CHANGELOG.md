@@ -15,6 +15,25 @@ against.
 
 ## [Unreleased]
 
+### Added
+
+- **`/v1/methodology`** — machine-readable summary of the active
+  aggregation policy (R-023). Returns the VWAP method,
+  per-endpoint outlier filters, the operator's stablecoin →
+  fiat-USD proxy allow-list, the four source classes
+  (exchange / aggregator / oracle / authority_sanity) and which
+  contributes to the served price, the flat list of registered
+  venues with class / weight / VWAP-inclusion flags, and pointers
+  to the long-form ADRs that govern each section. Designed for
+  transparency consumers (compliance, auditors, integrators) who
+  want to verify the policy without parsing the explorer's HTML
+  /methodology page or chasing ADR cross-refs. Sub-millisecond —
+  derived from compile-time constants + the in-memory source
+  registry + operator config; no DB call. OpenAPI spec, pkg/client
+  `Methodology` shape, and explorer types kept in lock-step.
+  Three regression tests pin baseline shape, peg-config
+  round-trip, and empty-pegs deployment.
+
 ### Changed
 
 - **`/v1/markets` default sort changed from `pair` (alphabetical)

@@ -249,6 +249,58 @@ type Source struct {
 	DefaultWeight     int    `json:"default_weight"`
 }
 
+// Methodology is the data shape returned by [Client.Methodology].
+// Machine-readable summary of the active aggregation policy:
+// VWAP method, outlier filters, stablecoin → fiat-USD proxy
+// allow-list, source classes, registered venues, ADR refs.
+//
+// Designed for transparency consumers (compliance, auditors,
+// integrators verifying RFP §10 "open methodology" claims) who
+// want to verify what the deployment is doing without parsing
+// the explorer's HTML or chasing ADR cross-refs.
+type Methodology struct {
+	Version       string                   `json:"version"`
+	Aggregation   MethodologyAggregation   `json:"aggregation"`
+	SourceClasses []MethodologySourceClass `json:"source_classes"`
+	Sources       []Source                 `json:"sources"`
+	References    []MethodologyReference   `json:"references"`
+}
+
+// MethodologyAggregation captures the price-derivation policy.
+type MethodologyAggregation struct {
+	PriceMethod               string                     `json:"price_method"`
+	OutlierFilter             MethodologyOutlierFilter   `json:"outlier_filter"`
+	StablecoinFiatProxy       []MethodologyStablecoinPeg `json:"stablecoin_fiat_proxy"`
+	ClosedBucketWindowSeconds int                        `json:"closed_bucket_window_seconds"`
+}
+
+// MethodologyOutlierFilter is one σ-trim rule.
+type MethodologyOutlierFilter struct {
+	Endpoint     string  `json:"endpoint,omitempty"`
+	DefaultSigma float64 `json:"default_sigma"`
+	Note         string  `json:"note,omitempty"`
+}
+
+// MethodologyStablecoinPeg is one (token → fiat) mapping.
+type MethodologyStablecoinPeg struct {
+	AssetID string `json:"asset_id"`
+	PegsTo  string `json:"pegs_to"`
+}
+
+// MethodologySourceClass describes one of the four registry classes.
+type MethodologySourceClass struct {
+	Name              string `json:"name"`
+	ContributesToVWAP bool   `json:"contributes_to_vwap"`
+	Description       string `json:"description"`
+}
+
+// MethodologyReference points at an ADR or other narrative doc.
+type MethodologyReference struct {
+	ID    string `json:"id"`
+	Title string `json:"title"`
+	URL   string `json:"url"`
+}
+
 // Market is the data shape returned by [Client.Markets] and
 // [Client.Pair] — one (base, quote) pair the deployment has
 // observed at least one trade for, with a 24h activity summary.

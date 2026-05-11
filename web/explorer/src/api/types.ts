@@ -2875,6 +2875,60 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/methodology": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Machine-readable summary of the active aggregation policy.
+         * @description Returns a static projection of the aggregator's policy: the
+         *     VWAP method, per-endpoint outlier filters, the operator's
+         *     stablecoin → fiat-USD proxy allow-list, the four source
+         *     classes (exchange / aggregator / oracle / authority_sanity)
+         *     and which contributes to the served price, the flat list of
+         *     registered venues with class / weight / VWAP-inclusion flags,
+         *     and pointers to the long-form ADRs that govern each section.
+         *
+         *     Designed for transparency consumers (compliance, auditors,
+         *     AI agents, integrators verifying RFP §10 "open methodology"
+         *     claims) who want to verify what the deployment is doing
+         *     without parsing the explorer's HTML at /methodology or
+         *     chasing ADR cross-refs. Sub-millisecond — no DB call;
+         *     derived from compile-time constants + the in-memory source
+         *     registry + operator config.
+         */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Methodology snapshot. */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["MethodologyEnvelope"];
+                    };
+                };
+                500: components["responses"]["InternalError"];
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/sources": {
         parameters: {
             query?: never;
@@ -4763,6 +4817,48 @@ export interface components {
             default_weight: number;
             /** @description Trailing-24h trade count for this source. Populated only when the request used `?include=stats`; absent (omitted) otherwise. */
             trade_count_24h?: number;
+        };
+        Methodology: {
+            /** @description On-disk shape version. Bumps on breaking changes. */
+            version: string;
+            aggregation: {
+                /**
+                 * @description Formula for the headline served price.
+                 * @enum {string}
+                 */
+                price_method: "vwap";
+                outlier_filter: {
+                    /** @description API surface this rule applies to. Empty = global default. */
+                    endpoint?: string;
+                    /** @description σ threshold applied when caller doesn't override via `?outlier_sigma=`. */
+                    default_sigma: number;
+                    note?: string;
+                };
+                stablecoin_fiat_proxy: {
+                    asset_id: string;
+                    pegs_to: string;
+                }[];
+                /** @description Boundary granularity rate endpoints snap "now" to. Per ADR-0015. */
+                closed_bucket_window_seconds: number;
+            };
+            source_classes: {
+                /** @enum {string} */
+                name: "exchange" | "aggregator" | "oracle" | "authority_sanity";
+                contributes_to_vwap: boolean;
+                description: string;
+            }[];
+            /** @description Same data as `/v1/sources` (without live trade-count stats) — included so a transparency consumer can verify the policy in one round trip. */
+            sources: components["schemas"]["Source"][];
+            references: {
+                /** @description ADR identifier (e.g. ADR-0007). */
+                id: string;
+                title: string;
+                /** @description Repo-relative path. */
+                url: string;
+            }[];
+        };
+        MethodologyEnvelope: components["schemas"]["EnvelopeMeta"] & {
+            data: components["schemas"]["Methodology"];
         };
         SourcesEnvelope: components["schemas"]["EnvelopeMeta"] & {
             data: components["schemas"]["Source"][];
