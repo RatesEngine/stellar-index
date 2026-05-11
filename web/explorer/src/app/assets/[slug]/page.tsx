@@ -46,10 +46,23 @@ export async function generateStaticParams() {
   // the cache for the per-page renders that follow. One API call
   // does double duty.
   const cache = await getBuildCoinsCache();
-  if (!cache || cache.size === 0) return fallback;
+  // Verified-currency catalogue slugs (us-dollar, chinese-yuan,
+  // usdc, …) aren't in /v1/coins (which only knows about Stellar-
+  // network assets), but they ARE valid /assets/[slug] routes that
+  // render the cross-chain identity view. Pull them from
+  // /v1/assets/verified so they get pre-rendered too.
+  const verifiedSlugs = await fetchVerifiedSlugsForStaticParams();
+  if ((!cache || cache.size === 0) && verifiedSlugs.length === 0) {
+    return fallback;
+  }
   const seen = new Set<string>();
   const out: { slug: string }[] = [];
-  for (const slug of [...fallback.map((f) => f.slug), ...cache.keys()]) {
+  const cacheKeys = cache ? Array.from(cache.keys()) : [];
+  for (const slug of [
+    ...fallback.map((f) => f.slug),
+    ...cacheKeys,
+    ...verifiedSlugs,
+  ]) {
     if (!seen.has(slug)) {
       seen.add(slug);
       out.push({ slug });
@@ -251,6 +264,25 @@ function getBuildCoinsCache(): Promise<Map<string, CoinSummary> | null> {
     }
   })();
   return buildCoinsCachePromise;
+}
+
+// fetchVerifiedSlugsForStaticParams pulls the verified-currency
+// catalogue slugs (us-dollar, chinese-yuan, usdc, …) so
+// generateStaticParams can pre-render those routes too. Falls back
+// to an empty list on transport error — the rest of the route set
+// still gets generated.
+async function fetchVerifiedSlugsForStaticParams(): Promise<string[]> {
+  if (isCIStub) return [];
+  try {
+    const res = await fetch(`${API_BASE_URL}/v1/assets/verified`, {
+      signal: AbortSignal.timeout(BUILD_FETCH_TIMEOUT_MS),
+    });
+    if (!res.ok) return [];
+    const env = (await res.json()) as { data: { slug: string }[] };
+    return (env.data ?? []).map((d) => d.slug).filter(Boolean);
+  } catch {
+    return [];
+  }
 }
 
 // fetchCoin retries up to 3x with a 500ms backoff on network /
@@ -478,16 +510,24 @@ export async function generateMetadata({
 
 export default async function AssetDetailPage({ params }: { params: Params }) {
   const { slug } = await params;
-  const coin = await fetchCoin(slug);
+  const [coin, globalViewEarly] = await Promise.all([
+    fetchCoin(slug),
+    fetchGlobalAsset(slug),
+  ]);
 
   if (!coin) {
-    // Build-time /v1/coins/{slug} fetch returned null. Two
-    // possibilities: (a) the slug really doesn't exist, or (b)
-    // the CF Pages build host couldn't reach api.ratesengine.net
-    // during this build (cold connection pool / API restart). We
-    // can't distinguish at build time, so we hand off to a client
-    // fallback that retries from the user's browser and renders
-    // the right state (real not-found vs. transient build issue).
+    // Two reasons fetchCoin can be null:
+    //   (a) slug is a verified-currency catalogue entry (chinese-yuan,
+    //       us-dollar, …) — no row in /v1/coins, but globalViewEarly
+    //       carries the full cross-chain identity. Render the
+    //       verified-currency view instead of the not-found
+    //       fallback.
+    //   (b) the slug really doesn't exist, OR the build host
+    //       couldn't reach the API. Hand off to the client fallback
+    //       to retry from the user's browser.
+    if (globalViewEarly) {
+      return <VerifiedCurrencyView slug={slug} view={globalViewEarly} />;
+    }
     return (
       <div className="mx-auto max-w-7xl space-y-6 px-6 py-8">
         <header className="space-y-3">
@@ -504,15 +544,14 @@ export default async function AssetDetailPage({ params }: { params: Params }) {
     );
   }
 
-  const [detail, price, globalView] = await Promise.all([
+  const [detail, price] = await Promise.all([
     fetchAssetDetail(coin.asset_id),
     fetchPrice(coin.asset_id),
-    // Cross-chain identity surface (R-018 Phase 1.5). Non-null
-    // only when the route's slug matches a verified-currency
-    // catalogue entry; otherwise the NetworksPanel doesn't
-    // render and the page falls back to its Stellar-only view.
-    fetchGlobalAsset(slug),
   ]);
+  // globalViewEarly was fetched in parallel with coin above (R-018
+  // Phase 1.5) — reusing it here avoids a second /v1/assets/{slug}
+  // call for verified currencies that ALSO have a coin row.
+  const globalView = globalViewEarly;
 
   // Schema.org BreadcrumbList — gives Google a structured
   // hierarchy (Home → Assets → XLM) so search results can
@@ -1272,6 +1311,79 @@ function Stat({
           </span>
         )}
       </dd>
+    </div>
+  );
+}
+
+// VerifiedCurrencyView renders /assets/{verified-slug} for slugs
+// that exist in the verified-currency catalogue but have no row in
+// /v1/coins (fiat tickers like us-dollar / chinese-yuan; crypto
+// tickers that don't trade on Stellar like usdt / wbtc). Without
+// this branch those routes 404'd at build time because the page's
+// primary fetchCoin returned null and the AssetClientFallback
+// loops on a /v1/coins/{slug} retry that's never going to succeed.
+//
+// Renders: header with name + ticker + class + USD price (from
+// GlobalAssetView.price_usd); networks panel; chart panel (only
+// fires for fiat:fiat pairs via /v1/chart's fx_quotes path —
+// crypto verified slugs without a Stellar issuer skip the chart).
+function VerifiedCurrencyView({
+  slug,
+  view,
+}: {
+  slug: string;
+  view: GlobalAssetView;
+}) {
+  const isFiat = (view as GlobalAssetView & { class?: string }).class === 'fiat';
+  // For fiat tickers the canonical chart asset_id is `fiat:<ISO>`.
+  // For crypto verified slugs we don't have a chart for the slug
+  // itself; the per-network drill-down covers that.
+  const chartAssetID = isFiat ? `fiat:${view.ticker}` : null;
+  const priceNum = view.price_usd ? Number(view.price_usd) : null;
+  return (
+    <div className="mx-auto max-w-7xl space-y-6 px-6 py-8">
+      <header className="space-y-2">
+        <nav className="text-xs text-slate-500">
+          <Link href="/assets" className="hover:text-brand-600">
+            Assets
+          </Link>{' '}
+          / <span>{view.ticker}</span>
+        </nav>
+        <h1 className="flex flex-wrap items-baseline gap-3 text-3xl font-semibold tracking-tight">
+          <span>{view.name}</span>
+          <span className="font-mono text-base text-slate-500">
+            {view.ticker}
+          </span>
+          <span className="rounded bg-slate-100 px-2 py-0.5 text-xs font-medium uppercase tracking-wider text-slate-600 dark:bg-slate-800 dark:text-slate-300">
+            {(view as GlobalAssetView & { class?: string }).class ?? 'verified'}
+          </span>
+        </h1>
+        {priceNum != null && Number.isFinite(priceNum) && (
+          <div className="text-2xl font-mono">
+            ${priceNum < 0.001 ? priceNum.toExponential(3) : priceNum.toFixed(priceNum >= 100 ? 2 : 6)}
+            <span className="ml-2 text-xs text-slate-500">USD</span>
+          </div>
+        )}
+        {view.description && (
+          <p className="max-w-3xl text-sm text-slate-600 dark:text-slate-400">
+            {view.description}
+          </p>
+        )}
+      </header>
+      <NetworksPanel
+        ticker={view.ticker}
+        networks={view.networks ?? []}
+        source={asExample(`/v1/assets/${view.slug}`)}
+      />
+      {chartAssetID && (
+        <ChartPanel assetID={chartAssetID} />
+      )}
+      {slug && (
+        <p className="text-xs text-slate-500">
+          Slug:{' '}
+          <code className="font-mono">{slug}</code>
+        </p>
+      )}
     </div>
   );
 }
