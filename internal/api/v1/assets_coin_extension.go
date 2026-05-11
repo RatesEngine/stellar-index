@@ -123,6 +123,24 @@ func (s *Server) applyCoinRowToDetail(detail *AssetDetail, row timescale.CoinRow
 	if reason := scamReason(row.IssuerGStrkey); reason != "" {
 		detail.IssuerScamReason = reason
 	}
+	// Identity + activity metadata. Mirrors CoinSummary scalars so
+	// the explorer's asset-detail page can drop its parallel
+	// /v1/coins/{slug} fetch (R-018 finish — consumer migration).
+	if row.Slug != "" {
+		detail.Slug = row.Slug
+	}
+	if row.FirstSeenLedger != 0 {
+		v := row.FirstSeenLedger
+		detail.FirstSeenLedger = &v
+	}
+	if row.LastSeenLedger != 0 {
+		v := row.LastSeenLedger
+		detail.LastSeenLedger = &v
+	}
+	if row.ObservationCount != 0 {
+		v := row.ObservationCount
+		detail.ObservationCount = &v
+	}
 }
 
 // applyCoinExtensionResults populates the array-shaped fields from

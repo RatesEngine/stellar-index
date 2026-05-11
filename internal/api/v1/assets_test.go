@@ -11,6 +11,7 @@ import (
 
 	v1 "github.com/RatesEngine/rates-engine/internal/api/v1"
 	"github.com/RatesEngine/rates-engine/internal/canonical"
+	"github.com/RatesEngine/rates-engine/internal/storage/timescale"
 )
 
 const testUSDCIssuer = "GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN"
@@ -566,4 +567,130 @@ func TestAssetList_NetworkUnknown_400(t *testing.T) {
 	if resp.StatusCode != http.StatusBadRequest {
 		t.Errorf("status=%d want 400", resp.StatusCode)
 	}
+}
+
+func TestAssetList_FromCoinsReader_IncludesPrice(t *testing.T) {
+	// When a CoinsReader is wired, the listing endpoint sources from
+	// ListCoinsExt and projects each CoinRow into an AssetDetail
+	// with the coin-overlay fields populated.
+	price := "1.0008"
+	vol := "1131827.32"
+	coinRow := timescale.CoinRow{
+		Slug:             "USDC",
+		AssetID:          "USDC-" + testUSDCIssuer,
+		Code:             "USDC",
+		IssuerGStrkey:    testUSDCIssuer,
+		ObservationCount: 41610630,
+		FirstSeenLedger:  50457424,
+		LastSeenLedger:   62523839,
+		PriceUSD:         &price,
+		Volume24hUSD:     &vol,
+	}
+	coins := &stubCoinsReaderExt{}
+	// stubCoinsReaderExt.ListCoinsExt returns nil — override by
+	// constructing a custom struct inline.
+	listReader := &listingStub{rows: []timescale.CoinRow{coinRow}}
+	srv := v1.New(v1.Options{Coins: listReader, Assets: &stubAssetReader{}})
+	_ = coins
+	ts := httpTestServer(t, srv)
+	resp := mustGet(t, ts.URL+"/v1/assets?limit=10")
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status=%d", resp.StatusCode)
+	}
+	var env struct {
+		Data []v1.AssetDetail `json:"data"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&env); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if len(env.Data) != 1 {
+		t.Fatalf("got %d rows, want 1", len(env.Data))
+	}
+	d := env.Data[0]
+	if d.Slug != "USDC" {
+		t.Errorf("slug=%q want USDC", d.Slug)
+	}
+	if d.PriceUSD == nil || *d.PriceUSD != "1.0008" {
+		t.Errorf("price_usd=%v want 1.0008", d.PriceUSD)
+	}
+	if d.VolumeUSD24h == nil || *d.VolumeUSD24h != "1131827.32" {
+		t.Errorf("volume_24h_usd=%v", d.VolumeUSD24h)
+	}
+	if d.ObservationCount == nil || *d.ObservationCount != 41610630 {
+		t.Errorf("observation_count=%v", d.ObservationCount)
+	}
+}
+
+func TestAssetList_FromCoinsReader_IssuerFilter(t *testing.T) {
+	// ?issuer=G should pass through to the CoinsReader's Issuer
+	// option. Stub records what was passed.
+	listReader := &listingStub{}
+	srv := v1.New(v1.Options{Coins: listReader, Assets: &stubAssetReader{}})
+	ts := httpTestServer(t, srv)
+	mustGet(t, ts.URL+"/v1/assets?issuer="+testUSDCIssuer)
+	if listReader.lastOpts.Issuer != testUSDCIssuer {
+		t.Errorf("ListCoinsExt called with Issuer=%q, want %q", listReader.lastOpts.Issuer, testUSDCIssuer)
+	}
+}
+
+// listingStub is a tiny CoinsReader implementation tailored to the
+// listing-endpoint tests. Each method returns the configured value;
+// recording the most-recent ListCoinsExt opts lets tests assert
+// what filter the handler passed through.
+type listingStub struct {
+	rows     []timescale.CoinRow
+	lastOpts timescale.ListCoinsOptions
+}
+
+func (s *listingStub) ListCoinsExt(_ context.Context, opts timescale.ListCoinsOptions) ([]timescale.CoinRow, error) {
+	s.lastOpts = opts
+	return s.rows, nil
+}
+
+func (s *listingStub) GetCoinBySlug(_ context.Context, _ string) (timescale.CoinRow, error) {
+	return timescale.CoinRow{}, nil
+}
+
+func (s *listingStub) GetCoinByAssetID(_ context.Context, _ string) (timescale.CoinRow, error) {
+	return timescale.CoinRow{}, nil
+}
+
+func (s *listingStub) GetNativeCoinRow(_ context.Context) (timescale.CoinRow, error) {
+	return timescale.CoinRow{}, nil
+}
+
+func (s *listingStub) GetCoinTopMarkets(_ context.Context, _ string, _ int) ([]timescale.CoinTopMarket, error) {
+	return nil, nil
+}
+
+func (s *listingStub) GetCoinPriceHistory24h(_ context.Context, _ string) ([]timescale.CoinPricePoint, error) {
+	return nil, nil
+}
+
+func (s *listingStub) GetCoinPriceHistory7d(_ context.Context, _ string) ([]timescale.CoinPricePoint, error) {
+	return nil, nil
+}
+
+func (s *listingStub) GetCoinsPriceHistory24hBatch(_ context.Context, _ []string) (map[string][]timescale.CoinPricePoint, error) {
+	return nil, nil
+}
+
+func (s *listingStub) GetCoinsPriceHistory7dBatch(_ context.Context, _ []string) (map[string][]timescale.CoinPricePoint, error) {
+	return nil, nil
+}
+
+func (s *listingStub) GetCoinMarketsCount(_ context.Context, _ string) (int64, error) {
+	return 0, nil
+}
+
+func (s *listingStub) GetCoinATH(_ context.Context, _ string) (*timescale.CoinATH, error) {
+	return nil, nil
+}
+
+func (s *listingStub) GetCoinsATHBatch(_ context.Context, _ []string) (map[string]timescale.CoinATH, error) {
+	return nil, nil
+}
+
+func (s *listingStub) GetCoinTradeCount24h(_ context.Context, _ string) (int64, error) {
+	return 0, nil
 }

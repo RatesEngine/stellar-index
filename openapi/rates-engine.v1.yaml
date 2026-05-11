@@ -184,6 +184,18 @@ paths:
       parameters:
         - { $ref: "#/components/parameters/Cursor" }
         - { $ref: "#/components/parameters/Limit" }
+        - name: issuer
+          in: query
+          required: false
+          description: |
+            Filter the listing to assets minted by the supplied
+            issuer G-strkey. Sourced from the same ListCoinsExt path
+            `/v1/coins?issuer=` uses; rows include the full coin-
+            overlay shape (price_usd / volume_24h_usd / change_*_pct
+            / etc) when a CoinsReader is wired.
+          schema:
+            type: string
+            pattern: "^G[A-Z2-7]{55}$"
         - name: network
           in: query
           required: false

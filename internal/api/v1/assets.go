@@ -12,6 +12,7 @@ import (
 	"github.com/RatesEngine/rates-engine/internal/canonical"
 	"github.com/RatesEngine/rates-engine/internal/currency"
 	"github.com/RatesEngine/rates-engine/internal/metadata"
+	"github.com/RatesEngine/rates-engine/internal/storage/timescale"
 )
 
 // MetadataResolver is the narrow dependency the assets handler needs
@@ -184,6 +185,21 @@ type AssetDetail struct {
 	// prominent warning when present.
 	IssuerScamReason string `json:"issuer_scam_reason,omitempty"`
 
+	// Slug is the friendly short identifier for the asset (e.g.
+	// "USDC" for the canonical Circle USDC, or the issuer-
+	// disambiguated form like "USDC-GA5Z…" for collisions). Mirror
+	// of CoinSummary.Slug; lets consumers build canonical /assets/
+	// URLs without a parallel /v1/coins lookup.
+	Slug string `json:"slug,omitempty"`
+
+	// FirstSeenLedger / LastSeenLedger / ObservationCount are the
+	// trades-hypertable activity metadata. Mirrored from CoinRow so
+	// the explorer's asset-detail page can drop its parallel
+	// /v1/coins/{slug} fetch.
+	FirstSeenLedger  *uint32 `json:"first_seen_ledger,omitempty"`
+	LastSeenLedger   *uint32 `json:"last_seen_ledger,omitempty"`
+	ObservationCount *int64  `json:"observation_count,omitempty"`
+
 	// ─── SEP-1 issuance declarations ───────────────────────────
 	//
 	// Drawn directly from the issuer's stellar.toml [[CURRENCIES]]
@@ -342,6 +358,18 @@ func (s *Server) handleAssetList(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	issuer := strings.TrimSpace(r.URL.Query().Get("issuer"))
+
+	// Coins-backed listing — when a CoinsReader is wired, source the
+	// listing from the same ListCoinsExt path /v1/coins uses. Gives
+	// each row the price / volume / change / sparkline / ATH fields
+	// (R-018 finish — assets-unification endgame). Falls through to
+	// the lean AssetReader path when no CoinsReader is configured.
+	if s.coins != nil {
+		s.handleAssetListFromCoins(w, r, issuer, cursor, limit)
+		return
+	}
+
 	reader := s.assetReaderOrNil()
 	if reader == nil {
 		// Feature not wired yet — empty list is consistent with
@@ -379,6 +407,120 @@ func (s *Server) handleAssetList(w http.ResponseWriter, r *http.Request) {
 		env.Pagination = &Pagination{Next: next}
 	}
 	writeEnvelope(w, env)
+}
+
+// handleAssetListFromCoins serves /v1/assets when a CoinsReader is
+// wired. Sources rows from ListCoinsExt and projects each CoinRow
+// into an AssetDetail with the coin-overlay fields populated — same
+// shape as /v1/coins listings, just under the /v1/assets URL.
+//
+// Honors ?issuer= filter (passed through to ListCoinsExt) and the
+// default order (observation_count_desc). cursor passes through
+// unchanged.
+func (s *Server) handleAssetListFromCoins(
+	w http.ResponseWriter,
+	r *http.Request,
+	issuer, cursor string,
+	limit int,
+) {
+	opts := timescale.ListCoinsOptions{
+		Limit:  limit,
+		Issuer: issuer,
+		Cursor: cursor,
+	}
+	rows, err := s.coins.ListCoinsExt(r.Context(), opts)
+	if err != nil {
+		if clientAborted(r, err) {
+			return
+		}
+		s.logger.Error("ListCoinsExt (assets listing) failed", "err", err)
+		writeProblem(w, r,
+			"https://api.ratesengine.net/errors/internal",
+			"Internal error", http.StatusInternalServerError, "")
+		return
+	}
+	// Overfetch-by-one for cursor pagination — same shape as
+	// handleCoins. The +1th row determines whether there's a next
+	// page; it isn't returned to the caller.
+	hasMore := len(rows) > limit
+	if hasMore {
+		rows = rows[:limit]
+	}
+	out := make([]AssetDetail, 0, len(rows))
+	for _, row := range rows {
+		out = append(out, assetDetailFromCoinRow(row))
+	}
+	env := Envelope{Data: out, Flags: Flags{}}
+	if hasMore && len(out) > 0 {
+		last := rows[len(rows)-1]
+		env.Pagination = &Pagination{
+			Next: fmt.Sprintf("%d:%s", last.ObservationCount, last.AssetID),
+		}
+	}
+	writeEnvelope(w, env)
+}
+
+// assetDetailFromCoinRow projects a storage CoinRow into the
+// AssetDetail wire shape. Mirrors the scalar field population in
+// applyCoinRowToDetail but for listing rows (so the listing endpoint
+// returns the same per-row shape /v1/coins users were getting).
+func assetDetailFromCoinRow(row timescale.CoinRow) AssetDetail {
+	asset, err := canonical.ParseAsset(row.AssetID)
+	d := AssetDetail{
+		AssetID:    row.AssetID,
+		Code:       row.Code,
+		Decimals:   7,
+		Sep1Status: "not_applicable",
+	}
+	if err == nil {
+		d.Type = string(asset.Type)
+	}
+	if row.IssuerGStrkey != "" {
+		v := row.IssuerGStrkey
+		d.Issuer = &v
+	}
+	// Slug + activity metadata.
+	if row.Slug != "" {
+		d.Slug = row.Slug
+	}
+	if row.FirstSeenLedger != 0 {
+		v := row.FirstSeenLedger
+		d.FirstSeenLedger = &v
+	}
+	if row.LastSeenLedger != 0 {
+		v := row.LastSeenLedger
+		d.LastSeenLedger = &v
+	}
+	if row.ObservationCount != 0 {
+		v := row.ObservationCount
+		d.ObservationCount = &v
+	}
+	// Coin-overlay scalars (price / volume / change percentages).
+	if row.PriceUSD != nil {
+		d.PriceUSD = row.PriceUSD
+	}
+	if row.Volume24hUSD != nil {
+		d.VolumeUSD24h = row.Volume24hUSD
+	}
+	if row.MarketCapUSD != nil {
+		d.MarketCapUSD = row.MarketCapUSD
+	}
+	if row.CirculatingSupply != nil {
+		d.CirculatingSupply = row.CirculatingSupply
+	}
+	if row.Change1hPct != nil {
+		d.Change1hPct = row.Change1hPct
+	}
+	if row.Change24hPct != nil {
+		d.Change24hPct = row.Change24hPct
+	}
+	if row.Change7dPct != nil {
+		d.Change7dPct = row.Change7dPct
+	}
+	if reason := scamReason(row.IssuerGStrkey); reason != "" {
+		d.IssuerScamReason = reason
+	}
+	return d
 }
 
 // externalNetworks is the allowlist for /v1/assets?network= values
