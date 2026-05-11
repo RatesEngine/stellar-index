@@ -28,7 +28,7 @@ require (
 require github.com/stellar/go-stellar-sdk v0.5.0 // SCVal/XDR decoding for Soroban event connectors (ADR-0013). Pinned SHA in VERSIONS.md.
 
 require (
-	cloud.google.com/go/bigquery v1.76.0
+	cloud.google.com/go/bigquery v1.77.0
 	github.com/coder/websocket v1.8.14
 	github.com/google/uuid v1.6.0
 	github.com/prometheus/client_model v0.6.2
