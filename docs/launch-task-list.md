@@ -1,6 +1,6 @@
 ---
 title: Launch task list — code-grounded RFP/proposal audit
-last_verified: 2026-05-03
+last_verified: 2026-05-11
 status: ratified backlog
 related:
   - docs/stellar-rfp.md
@@ -438,6 +438,105 @@ post-launch.
 **Effort:** external; 2-hour session.
 **Owner:** external.
 
+### G12. [OPERATOR] Populate supply-pipeline watched-sets on r1 (R-006)
+
+**The gap:** F2 supply fields (`circulating_supply`,
+`total_supply`, `max_supply`, `market_cap_usd`, `fdv_usd`) are
+NULL on every asset in production because r1's
+`[supply].watched_classic_assets` and
+`[supply].watched_sep41_assets` config lists are empty. The
+indexer has nothing to watch, so the supply observer never
+populates the per-class hypertables, so the F2 reader returns NULL.
+
+**Surface evidence:** Live curl 2026-05-10 — every row of
+`/v1/coins`, `/v1/assets/{id}`, `/v1/changes/coin/{id}` returns
+`circulating_supply: null`, `market_cap_usd: null`,
+`fdv_usd: null`. R-006 in
+[`docs/review-2026-05-10.md`](review-2026-05-10.md).
+
+**Acceptance:** Populate the watched-set arrays in
+`/etc/ratesengine.toml` on r1 (minimum: USDC, USDT, EURC, AQUA,
+yXLM, SHX, VELO, BTC, ETH, PYUSD, plus operator additions).
+Restart the indexer. Re-curl `/v1/coins/USDC` and verify
+non-null F2 fields.
+
+**Effort:** 15 min config + restart + re-verify.
+**Owner:** operator (Ash).
+
+### G13. [OPERATOR] Configure SEP-10 server signing seed on r1 (R-009)
+
+**The gap:** `/v1/auth/sep10/challenge?account=G…` returns
+`503 SEP-10 not configured` on production because r1's
+`[auth.sep10]` config is missing `server_signing_seed` +
+`server_signing_public`. RFP §"Authentication" lists SEP-10 as
+a supported auth mechanism alongside API keys.
+
+**Surface evidence:** R-009 in
+[`docs/review-2026-05-10.md`](review-2026-05-10.md).
+
+**Acceptance:** Generate a Stellar keypair dedicated to the
+SEP-10 server (NOT a validator key, NOT an issuer key). Set
+both fields in r1 config. Restart `ratesengine-api`. Re-curl
+`/v1/auth/sep10/challenge?account=G…` and verify 200 + a valid
+challenge transaction XDR.
+
+**Effort:** 30 min (keypair generation + config + restart +
+SEP-10 verify-script run).
+**Owner:** operator (Ash).
+
+### G14. [OPERATOR] Resolve anonymous-tier rate-limit / Chainlink coverage gaps
+
+Two operator-config items captured for visibility:
+
+**Sub-item a — anonymous-tier ceiling (R-019).** Anonymous-tier
+rate limit reads `60/min` against an RFP target ≥ 1000/min.
+Either raise `[ratelimit].anonymous_rpm` or document that
+1000/min is the authenticated-tier target (not anonymous).
+Effort: 5 min decision + config.
+
+**Sub-item b — Chainlink coverage (R-119).** r1 Chainlink feeds
+are FX-only; no crypto divergence cross-checks happen. Either
+configure additional Chainlink feeds for the watched crypto set,
+or document that Chainlink contributes FX-only and CG/CMC are
+the crypto divergence sources. Effort: 30 min.
+
+**Acceptance:** Both sub-items decided and recorded in
+[`docs/operations/r1-deployment-state.md`](operations/r1-deployment-state.md)
+with the chosen disposition.
+
+**Owner:** operator (Ash).
+
+### G15. Multi-network assets migration (R-018)
+
+**The gap:** `/v1/coins` and `/v1/assets` are two endpoints
+describing the same Stellar-canonical asset with overlapping but
+different field sets. Worse, no endpoint represents
+"USDC as a cross-chain currency" — the explorer's `/assets/USDC`
+returns Stellar USDC only, which conflates two genuinely
+different concepts (multi-chain global USDC vs. Stellar-issued
+Circle USDC).
+
+**Plan:**
+[`docs/architecture/multi-network-assets-migration.md`](architecture/multi-network-assets-migration.md)
+captures the agreed design. Five-phase migration:
+
+| Phase | What | Status |
+|---|---|---|
+| 1.1 | Verified-currency catalogue + unverified-asset warning | not started — first session of the next leg |
+| 1.2 | CG + CMC connectors (catalogue augmentation + aggregator-price ingest) | not started |
+| 1.3 | Per-ticker VWAP worker + three-tier fallback chain (`vwap_native` → `aggregator_avg` → `triangulated`) | not started |
+| 1.4 | `/v1/assets/{slug}` global view + drop `/v1/coins` | not started |
+| 1.5 | Explorer migration | not started |
+
+**Acceptance:** Phase 1.1 through 1.5 shipped; `/v1/coins`
+removed; explorer renders `/assets/usdc` with multi-network
+view + Stellar drill-down; unverified-asset warning fires on
+ticker collision.
+
+**Effort:** ~3 weeks of focused work across all five phases.
+**Owner:** code; operator decides verified-catalogue
+additions.
+
 ---
 
 ## H. Explicit deferrals (post-launch)
@@ -485,6 +584,37 @@ completes and the security review is in flight.
 parallel over the next 2 weeks and the security review in flight,
 production cutover lands mid-to-late May 2026 (vs the original
 2026-06-30 plan, comfortably ahead).
+
+The G12-G15 additions extend the original 11-item list:
+
+- G12-G14 are operator-config items surfaced in the 2026-05-10
+  production review; ~1 hour total operator time.
+- G15 is the multi-network migration; ~3 weeks; has its own
+  plan doc.
+
+---
+
+## J. Post-launch polish backlog
+
+Items captured from the in-session task tracker that aren't
+launch-blocking but should outlive the session. None of these
+gate the public flip; each can ship as time allows.
+
+| ID | Item | Origin |
+|---|---|---|
+| J1 | [OPERATOR] CF Pages project rename: `ratesengine-showcase` → `ratesengine-explorer` | UI cleanup; aliases work today |
+| J2 | Site IA restructure follow-ups (explorer navigation polish) | UX polish |
+| J3 | Lending pool detail pages — surface pair-level data instead of contract address only | Feature, post-MVP |
+| J4 | DefIndex + Soroswap-router data on `/aggregators` page (in-progress at session close) | Feature |
+| J5 | Re-backfill USD volume on Comet trades after the recent SAC-wrapper config addition | Data-quality cleanup |
+| J6 | R-015 — `/v1/diagnostics/cursors` filter for `?status=active` or auto-cleanup of completed backfill cursors | Diagnostic polish |
+| J7 | R-020 — pure-scam-token suppression beyond the volume-desc default sort on `/v1/markets` | Deferred per operator decision 2026-05-11 (scam warnings are visible; data still useful) |
+| J8 | OpenAPI lint: fix 4 pre-existing `oas3-valid-media-example` errors (`/coins`, `/incidents`, `/network/stats`, `/signup`) so CI on every PR doesn't have a permanent red mark | Lint hygiene |
+| J9 | Refresh `internal/sources/soroswap/decode_test.go` fixture from a real capture (TODO in code) | Test debt |
+
+These items will not appear in §H "Explicit deferrals" because
+they aren't yet ratified post-launch — they're just not on the
+critical path. Promote to §G if any becomes launch-blocking.
 
 ---
 
