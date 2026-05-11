@@ -292,37 +292,26 @@ the 99.9 % requirement.
 
 Ordered roughly by criticality — items deeper down depend on items above.
 
-### G1. Decide + close `change_24h_pct` (§C2)
+### G1. Decide + close `change_24h_pct` (§C2) — ✅ **shipped**
 
-**The gap:** OpenAPI declares the field; no code computes it.
-**Acceptance:** EITHER (a) `internal/api/v1/assets_f2.go` populates
-`detail.Change24hPct` from the closed-bucket pct delta over a 24h
-window (CAGG-served), with `pkg/client/types.go::AssetDetail`
-gaining the field, OR (b) the field is removed from
-`openapi/rates-engine.v1.yaml:1400` and the proposal-corrections
-register notes the carve-out.
+Implemented as option (a). `internal/api/v1/assets_f2.go` populates
+`detail.Change24hPct` from the trailing-24h closed-bucket pct delta
+read by the `Change24hReader` wiring; the field is on
+`AssetDetail` (server + `pkg/client`) + the OpenAPI Asset schema;
+three regression tests pin happy path, "no comparison bucket"
+absence, and "no current price" absence
+(`internal/api/v1/assets_f2_test.go::Test{Change24hPct_*}`). Live on
+r1 since at least rc.39.
 
-**Effort:** half-day for option (a); 30 min for option (b).
-**Owner:** `internal/api/v1/assets_f2.go`.
+### G2. Wire `streaming.Hub` end-to-end so `/v1/price/stream` actually serves (§A5, §F1) — ✅ **shipped**
 
-### G2. Wire `streaming.Hub` end-to-end so `/v1/price/stream` actually serves (§A5, §F1)
-
-**The gap:** `internal/api/v1/price_stream.go::handlePriceStream`
-returns 503 unconditionally because no caller of `v1.New` ever
-sets `Options.Hub`, and the aggregator never publishes to a Hub.
-The closed-bucket SSE surface is dead code.
-
-**Acceptance:**
-- `cmd/ratesengine-api/main.go` constructs `streaming.NewHub(...)`
-  and passes it as `Options.Hub`.
-- The aggregator (or a sibling fanout process) subscribes to bucket
-  closes and calls `hub.Publish(PriceStreamTopic(asset, quote), event)`
-  on every closed bucket.
-- An integration test under `test/integration/` connects two
-  subscribers to the same topic and asserts byte-identical payloads.
-
-**Effort:** 1 day.
-**Owner:** `internal/api/streaming/`, `cmd/ratesengine-{api,aggregator}/main.go`.
+`cmd/ratesengine-api/main.go::main` constructs `streaming.NewHub(0)`
+(line 400) and passes it as `Options.Hub` (line 563);
+`streampublish.New(hub, priceReader, cfg.API.Streaming.PollInterval, …)`
+(line 602) drives the publisher goroutine for operator-configured
+`api.streaming.pairs`. The 2026-05-10 review section A5 confirmed
+live: `GET /v1/price/stream → 3 windows (300/3600/86400) emitted
+within 6s ✓`. Live on r1.
 
 ### G3. Phase 2 USD-volume coverage (§A8 ⚠)
 
@@ -382,18 +371,24 @@ CHANGELOG entry.
 **Effort:** half-day.
 **Owner:** infra + `test/load/`.
 
-### G7. Discord webhook in Alertmanager (§F2)
+### G7. Discord webhook in Alertmanager (§F2) — ✅ **shipped (code)**
 
-**The gap:** Proposal commits to Discord *and* Slack; only Slack
-is wired.
+Option (a). The Ansible role at
+`configs/ansible/roles/prometheus/templates/alertmanager.yml.j2`
+emits parallel `slack_configs` + `discord_configs` blocks on the
+`chat-default` receiver when the corresponding webhook var is set
+(`alertmanager_slack_webhook_url`, `alertmanager_discord_webhook_url`
+— both default to empty, both degrade silently to "no fanout" when
+unset). The R1 standalone config
+(`configs/alertmanager/alertmanager.r1.yml`) is Slack-only by
+default; mirroring Discord on R1 is a one-line addition to
+`/etc/default/alertmanager-secrets` + a re-apply.
 
-**Acceptance:** EITHER (a) `configs/ansible/roles/prometheus/`
-gains `alertmanager_discord_webhook_url` and the Alertmanager
-template routes critical alerts to it, OR (b) the proposal's
-Discord clause is recorded in the corrections register.
-
-**Effort:** 1 hour either way.
-**Owner:** `configs/ansible/roles/prometheus/`.
+**Operator-side TODO** (not gating): provision a Discord webhook URL
+and either set `alertmanager_discord_webhook_url` in the Ansible
+inventory or add `DISCORD_WEBHOOK_URL=…` to
+`/etc/default/alertmanager-secrets` on R1 + extend
+`alertmanager.r1.yml` to fan out.
 
 ### G8. External security review (L5.6)
 
