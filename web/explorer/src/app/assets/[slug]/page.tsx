@@ -575,6 +575,36 @@ export default async function AssetDetailPage({ params }: { params: Params }) {
           <h1 className="text-3xl font-semibold tracking-tight">
             {coin.code}
           </h1>
+          {globalView?.name && globalView.name !== coin.code && (
+            <span className="text-lg text-slate-600 dark:text-slate-400">
+              {globalView.name}
+            </span>
+          )}
+          {globalView && (
+            <span
+              className="inline-flex items-center gap-1 rounded-md bg-emerald-100 px-2 py-0.5 text-[11px] font-medium uppercase tracking-wider text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-200"
+              title={
+                globalView.verified_issuer
+                  ? `Verified by ${globalView.verified_issuer}`
+                  : 'Verified currency'
+              }
+            >
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                viewBox="0 0 20 20"
+                fill="currentColor"
+                className="h-3 w-3"
+                aria-hidden="true"
+              >
+                <path
+                  fillRule="evenodd"
+                  d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z"
+                  clipRule="evenodd"
+                />
+              </svg>
+              Verified
+            </span>
+          )}
           {detail?.type && (
             <span
               className="rounded-md bg-slate-100 px-2 py-0.5 text-[11px] uppercase tracking-wider text-slate-600 dark:bg-slate-800 dark:text-slate-300"
@@ -584,7 +614,15 @@ export default async function AssetDetailPage({ params }: { params: Params }) {
             </span>
           )}
         </div>
-        {detail?.home_domain && (
+        {globalView?.verified_issuer && (
+          <p className="text-sm text-slate-600 dark:text-slate-400">
+            Issued by{' '}
+            <span className="font-medium text-slate-700 dark:text-slate-300">
+              {globalView.verified_issuer}
+            </span>
+          </p>
+        )}
+        {!globalView?.verified_issuer && detail?.home_domain && (
           <p className="text-sm text-slate-600 dark:text-slate-400">
             Issuer home domain:{' '}
             <code className="font-mono">{detail.home_domain}</code>
