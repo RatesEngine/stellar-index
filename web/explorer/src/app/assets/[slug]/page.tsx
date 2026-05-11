@@ -17,6 +17,7 @@ import { LiquidityTabPanel } from './LiquidityTabPanel';
 import { MarketsTabPanel } from './MarketsTabPanel';
 import { HistoryTabPanel } from './HistoryTabPanel';
 import { SupplyTabPanel } from './SupplyTabPanel';
+import { NetworksPanel, type NetworkEntry } from './NetworksPanel';
 
 /**
  * /assets/[slug] — single asset detail page.
@@ -150,6 +151,33 @@ interface PriceResp {
   flags?: { stale?: boolean; triangulated?: boolean };
 }
 
+/**
+ * GlobalAssetView is the wire shape `/v1/assets/{slug}` returns
+ * when `{slug}` is a verified-currency catalogue slug (USDC, EURC,
+ * AQUA, …). Distinct from the AssetDetail shape above which the
+ * SAME endpoint returns for canonical asset_ids like `USDC-G5Z…`
+ * or `native`. See R-018 Phase 1.4a for the dispatch rationale.
+ *
+ * The page fetches both: AssetDetail is the per-Stellar-asset
+ * surface (always; keyed off coin.asset_id), and GlobalAssetView
+ * is the cross-chain identity surface (when the route's slug
+ * happens to be a verified-currency slug).
+ */
+interface GlobalAssetView {
+  ticker: string;
+  slug: string;
+  name: string;
+  description?: string;
+  verified_issuer?: string;
+  coingecko_id?: string;
+  coinmarketcap_id?: string;
+  price_usd?: string | null;
+  price_authority?: 'vwap_native' | 'aggregator_avg' | 'triangulated';
+  price_sources?: string[];
+  price_as_of?: string | null;
+  networks: NetworkEntry[];
+}
+
 // Static export hits every page once at build time. CI's stub
 // hostname doesn't resolve, and Node's DNS retry budget swallows
 // the AbortSignal — bypass network entirely when the URL looks
@@ -268,6 +296,53 @@ async function fetchAssetDetail(assetId: string): Promise<AssetDetail | null> {
     if (!res.ok) return null;
     const env = (await res.json()) as { data: AssetDetail };
     return env.data ?? null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * fetchGlobalAsset hits `/v1/assets/{slug}` with the lowercased
+ * route slug. When the slug matches a verified-currency catalogue
+ * entry the API dispatches to handleGlobalAsset and returns the
+ * cross-chain GlobalAssetView shape; otherwise it falls through to
+ * canonical asset_id parsing and either returns the Stellar-asset
+ * AssetDetail shape (irrelevant here — the page already fetches
+ * that via fetchAssetDetail) or 400/404.
+ *
+ * Returns null when:
+ *   - the slug isn't a verified currency (no `ticker` / `networks`
+ *     fields on the response)
+ *   - the fetch fails for any transport reason
+ *   - we're in a CI stub build
+ *
+ * Detection runs by checking `data.ticker && Array.isArray(data.networks)`
+ * — the AssetDetail shape has neither field, so even when the API
+ * misroutes we recover by ignoring the result.
+ */
+async function fetchGlobalAsset(slug: string): Promise<GlobalAssetView | null> {
+  if (isCIStub) return null;
+  try {
+    const res = await fetch(
+      `${API_BASE_URL}/v1/assets/${encodeURIComponent(slug.toLowerCase())}`,
+      { signal: AbortSignal.timeout(BUILD_FETCH_TIMEOUT_MS) },
+    );
+    if (!res.ok) return null;
+    const env = (await res.json()) as {
+      data: GlobalAssetView | Record<string, unknown>;
+    };
+    const d = env.data;
+    if (!d || typeof d !== 'object') return null;
+    // Shape discriminator: GlobalAssetView has `ticker` (string) AND
+    // `networks` (array). AssetDetail has `asset_id` (string) but
+    // no `ticker`/`networks`.
+    if (
+      typeof (d as GlobalAssetView).ticker === 'string' &&
+      Array.isArray((d as GlobalAssetView).networks)
+    ) {
+      return d as GlobalAssetView;
+    }
+    return null;
   } catch {
     return null;
   }
@@ -420,9 +495,14 @@ export default async function AssetDetailPage({ params }: { params: Params }) {
     );
   }
 
-  const [detail, price] = await Promise.all([
+  const [detail, price, globalView] = await Promise.all([
     fetchAssetDetail(coin.asset_id),
     fetchPrice(coin.asset_id),
+    // Cross-chain identity surface (R-018 Phase 1.5). Non-null
+    // only when the route's slug matches a verified-currency
+    // catalogue entry; otherwise the NetworksPanel doesn't
+    // render and the page falls back to its Stellar-only view.
+    fetchGlobalAsset(slug),
   ]);
 
   // Schema.org BreadcrumbList — gives Google a structured
@@ -558,6 +638,14 @@ export default async function AssetDetailPage({ params }: { params: Params }) {
           </div>
         )}
       </header>
+
+      {globalView && globalView.networks.length > 0 && (
+        <NetworksPanel
+          ticker={globalView.ticker}
+          networks={globalView.networks}
+          source={asExample(`/v1/assets/${globalView.slug}`)}
+        />
+      )}
 
       <Suspense fallback={null}>
         <AssetTabs slug={coin.slug} hasIssuer={!!coin.issuer} />
