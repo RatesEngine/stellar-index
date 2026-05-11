@@ -15,6 +15,37 @@ against.
 
 ## [Unreleased]
 
+## [v0.5.0-rc.43] — 2026-05-11
+
+### Fixed
+
+- **Fiat market_cap_usd now populates on /v1/assets/* surfaces.**
+  rc.42 shipped the M2-based market-cap math but FX-pair prices_1m
+  buckets have trade_count of 1-3 (snapshots, not trades); the
+  default VWAPMinTradeCount=5 threshold caused tier-1 to skip the
+  FX rate, leaving market_cap_usd empty on every non-USD fiat row.
+  Lower the threshold to 1 for fiat — each FX observation IS the
+  rate. CNY listing cap should now show ~\$42T (M2 ¥302T × USD/CNY
+  rate from the live FX feeds).
+
+### Added
+
+- **`/v1/assets/{ticker}` ticker fallback.** When `{ticker}` is a
+  3-letter ISO code matching a verified-currency entry (USD, EUR,
+  CNY, …), the dispatch now resolves it via the catalogue's
+  ticker index — same view as `/v1/assets/{friendly-slug}`.
+  Lets clients hold ISO codes without a friendly-slug lookup
+  table.
+
+### Changed
+
+- **`/v1/currencies` + `/v1/currencies/{ticker}` deprecated.**
+  Mirror of the /v1/coins deprecation from Phase 1.4a: every
+  response emits `Deprecation: true` + `Link: </v1/assets/{slug}>;
+  rel="successor-version"`. Routes still serve fully; the
+  Cloudflare Pages `_redirects` rules handle browser-side migration
+  for the explorer. Direct API consumers should plan their move.
+
 ## [v0.5.0-rc.42] — 2026-05-11
 
 ### Added
