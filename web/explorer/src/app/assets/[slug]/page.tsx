@@ -40,28 +40,21 @@ export async function generateStaticParams() {
   // (see handleCoin → GetNativeCoinRow). Without this, the most
   // important asset on the network would 404 on the explorer.
   const fallback = [{ slug: 'XLM' }, { slug: 'native' }];
-  try {
-    // 10s here — generateStaticParams is a one-shot at build
-    // time; the 500-asset listing query is heavier than a single
-    // /v1/coins/{slug} hit so allow more headroom.
-    const res = await fetch(`${API_BASE_URL}/v1/coins?limit=500`, {
-      signal: AbortSignal.timeout(10_000),
-    });
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    const env = (await res.json()) as { data: { coins: { slug: string }[] } };
-    const slugs = (env.data?.coins ?? []).map((c) => c.slug);
-    const seen = new Set<string>();
-    const out: { slug: string }[] = [];
-    for (const slug of [...fallback.map((f) => f.slug), ...slugs]) {
-      if (!seen.has(slug)) {
-        seen.add(slug);
-        out.push({ slug });
-      }
+  // Reuse the build-time listing cache that fetchCoin populates
+  // — generateStaticParams runs first, so this is what primes
+  // the cache for the per-page renders that follow. One API call
+  // does double duty.
+  const cache = await getBuildCoinsCache();
+  if (!cache || cache.size === 0) return fallback;
+  const seen = new Set<string>();
+  const out: { slug: string }[] = [];
+  for (const slug of [...fallback.map((f) => f.slug), ...cache.keys()]) {
+    if (!seen.has(slug)) {
+      seen.add(slug);
+      out.push({ slug });
     }
-    return out.length > 0 ? out : fallback;
-  } catch {
-    return fallback;
   }
+  return out.length > 0 ? out : fallback;
 }
 
 type Params = Promise<{ slug: string }>;
@@ -160,6 +153,56 @@ const isCIStub =
 // and in practice the API responds in <300ms steady-state.
 const BUILD_FETCH_TIMEOUT_MS = 8_000;
 
+// Build-time listing cache. The previous per-slug fetchCoin made
+// up to 500 parallel `/v1/coins/{slug}` calls during static
+// export — even at ~300ms steady-state that's an api-side burst
+// that ran into the per-handler 8s ceiling for slugs that landed
+// during a brief slow window. The fallback "couldn't be
+// prerendered" message then baked into the HTML for the unlucky
+// slugs (XLM hit this in production).
+//
+// Fix: fetch the entire 500-row listing ONCE (with the same
+// includes the page needs), build a Map<slug, CoinSummary>, and
+// have fetchCoin read from the cache first. Falls back to the
+// per-slug retry loop only when the slug isn't in the cache
+// (e.g. a slug Next was asked about that wasn't in the listing —
+// shouldn't happen normally since generateStaticParams derives
+// from the same listing).
+let buildCoinsCachePromise:
+  | Promise<Map<string, CoinSummary> | null>
+  | null = null;
+
+function getBuildCoinsCache(): Promise<Map<string, CoinSummary> | null> {
+  if (buildCoinsCachePromise) return buildCoinsCachePromise;
+  buildCoinsCachePromise = (async () => {
+    if (isCIStub) return null;
+    try {
+      const res = await fetch(
+        `${API_BASE_URL}/v1/coins?limit=500&include=sparkline,sparkline7d,ath`,
+        { signal: AbortSignal.timeout(BUILD_FETCH_TIMEOUT_MS * 2) },
+      );
+      if (!res.ok) return null;
+      const env = (await res.json()) as {
+        data: { coins?: CoinSummary[] } | CoinSummary[];
+      };
+      // Envelope shape varies: list endpoints wrap in
+      // `{coins: [...]}`, but defensive on the type.
+      const rows = Array.isArray(env.data)
+        ? env.data
+        : (env.data?.coins ?? []);
+      const map = new Map<string, CoinSummary>();
+      for (const c of rows) {
+        if (c.slug) map.set(c.slug, c);
+        if (c.asset_id) map.set(c.asset_id, c);
+      }
+      return map;
+    } catch {
+      return null;
+    }
+  })();
+  return buildCoinsCachePromise;
+}
+
 // fetchCoin retries up to 3x with a 500ms backoff on network /
 // 5xx errors. Build-time fetch failures previously baked
 // "Asset not found" into the static HTML for every slug rendered
@@ -168,6 +211,13 @@ const BUILD_FETCH_TIMEOUT_MS = 8_000;
 // 4xx (404 included) returns null on the first try, no retry.
 async function fetchCoin(slug: string): Promise<CoinSummary | null> {
   if (isCIStub) return null;
+  // Cache-first: one listing call covers up to 500 rows. Per-slug
+  // fetches only fire on misses (slugs the listing didn't return).
+  const cache = await getBuildCoinsCache();
+  if (cache) {
+    const hit = cache.get(slug);
+    if (hit) return hit;
+  }
   for (let attempt = 0; attempt < 3; attempt++) {
     try {
       const res = await fetch(
