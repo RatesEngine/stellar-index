@@ -259,6 +259,17 @@ export interface paths {
                      */
                     cursor?: components["parameters"]["Cursor"];
                     limit?: components["parameters"]["Limit"];
+                    /**
+                     * @description Restrict to assets on the named network. `stellar` (or
+                     *     omitted) returns the indexer's full Stellar-network
+                     *     catalogue. Off-Stellar networks (`ethereum`, `solana`,
+                     *     `polygon`, `base`, `arbitrum`, `tron`, `bitcoin`, `bsc`,
+                     *     `avalanche`, `xrpl`) source from the verified-currency
+                     *     catalogue; rows are returned with `type: external` and
+                     *     `asset_id` shaped as `<network>:<contract>`. Drives the
+                     *     `/blockchains/{network}` click-through in the explorer.
+                     */
+                    network?: "stellar" | "ethereum" | "solana" | "polygon" | "base" | "arbitrum" | "tron" | "bitcoin" | "bsc" | "avalanche" | "xrpl";
                 };
                 header?: never;
                 path?: never;
@@ -289,6 +300,57 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/assets/verified": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Verified-currency catalogue listing.
+         * @description Returns every entry in the binary's verified-currency
+         *     catalogue (`internal/currency/data/seed.yaml`) — the
+         *     hand-curated set of cross-chain currencies (USDC, EURC,
+         *     AQUA, …) that the API surfaces with a "verified" badge.
+         *
+         *     Distinct from `/v1/assets` which lists every Stellar-indexed
+         *     asset (verified or not). This endpoint is identity-only —
+         *     no price block, no per-currency `network_count` × price
+         *     round-trips — so it's a cheap directory call suitable for
+         *     building a verified-currencies section on a listing page.
+         *
+         *     Order matches the seed-file order (deterministic).
+         */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description List of verified-currency directory entries. */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["VerifiedCurrencyListEnvelope"];
+                    };
+                };
+                503: components["responses"]["ServiceUnavailable"];
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/assets/{asset_id}": {
         parameters: {
             query?: never;
@@ -296,7 +358,28 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Asset detail. */
+        /**
+         * Asset detail — Stellar-network view OR cross-chain global view.
+         * @description Dispatch depends on the `asset_id` path parameter:
+         *
+         *     - **Verified-currency slug** (e.g. `usdc`, `eurc`, `aqua`) →
+         *       returns the cross-chain `GlobalAssetView` shape: ticker, slug,
+         *       name, verified-issuer attribution, current USD price + price
+         *       authority, plus a `networks[]` list with one entry per
+         *       network the currency is issued on. Stellar network entries
+         *       carry a `deep_link` to the per-Stellar-asset view; non-
+         *       Stellar entries carry contract + external_link. See R-018
+         *       Phase 1.4a.
+         *     - **Canonical Stellar asset_id** (`native`, `CODE-G…`,
+         *       `C…` SAC contract, `fiat:CODE`) → returns the existing
+         *       `Asset` shape (per-Stellar-network detail with SEP-1
+         *       overlay + F2 supply fields).
+         *
+         *     Slugs match a hand-curated catalogue
+         *     (`internal/currency/data/seed.yaml`); unknown slugs fall
+         *     through to canonical parsing and return 400 if no canonical
+         *     form matches.
+         */
         get: {
             parameters: {
                 query?: never;
@@ -316,14 +399,101 @@ export interface paths {
             };
             requestBody?: never;
             responses: {
-                /** @description Asset + metadata. */
+                /** @description Asset + metadata. Shape depends on whether `asset_id` is a slug or a canonical id. */
                 200: {
                     headers: {
                         [name: string]: unknown;
                     };
                     content: {
-                        "application/json": components["schemas"]["AssetEnvelope"];
+                        "application/json": components["schemas"]["AssetEnvelope"] | components["schemas"]["GlobalAssetEnvelope"];
                     };
+                };
+                400: components["responses"]["BadRequest"];
+                404: components["responses"]["NotFound"];
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/assets/{asset_id}/{network}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Verified-currency per-network drill-down.
+         * @description Companion to the global view at `/v1/assets/{slug}`. When
+         *     `{asset_id}` is a verified-currency catalogue slug and
+         *     `{network}` matches a network the currency is issued on,
+         *     the handler dispatches:
+         *
+         *     - **Stellar entries** → 303 redirect to
+         *       `/v1/assets/{canonical_asset_id}` so consumers get the
+         *       full `AssetDetail` shape (SEP-1 overlay, F2 supply
+         *       fields, `unverified_warning` flag).
+         *     - **Non-Stellar entries** → 200 `PerNetworkAssetView` with
+         *       the catalogue's contract address + external link.
+         *
+         *     404 when either the slug or the network isn't in the
+         *     catalogue. R-018 assets-unification step 3.
+         *
+         *     Note: the more-specific `/v1/assets/{asset_id}/metadata`
+         *     path wins via Go 1.22+ mux precedence (literal beats
+         *     wildcard).
+         */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    /**
+                     * @description Canonical asset identifier. One of `native`, `<code>-<issuer>`,
+                     *     `<code>:<issuer>` (alias), or `<contract_id>`. Strkeys
+                     *     validated per SEP-23. The handler is strict — short symbols
+                     *     like `XLM` or `USDC` are NOT accepted here; use `native` or
+                     *     the full `<code>-<G…>` form.
+                     * @example native
+                     */
+                    asset_id: components["parameters"]["AssetIdPath"];
+                    /**
+                     * @description Network identifier (lowercase): `stellar`, `ethereum`,
+                     *     `solana`, `polygon`, `base`, `arbitrum`, `bsc`,
+                     *     `avalanche`, `tron`, `bitcoin`, `xrpl`, `cardano`,
+                     *     `dogecoin`, `polkadot`. Must match a network entry on
+                     *     the catalogue's `{asset_id}` slug.
+                     */
+                    network: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Non-Stellar network drill-down — identity + contract address. */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["EnvelopeMeta"] & {
+                            data: components["schemas"]["PerNetworkAssetView"];
+                        };
+                    };
+                };
+                /** @description Stellar entry — see Location header for the canonical asset_id view. */
+                303: {
+                    headers: {
+                        /** @description Path to the `/v1/assets/{canonical_asset_id}` view. */
+                        Location?: string;
+                        [name: string]: unknown;
+                    };
+                    content?: never;
                 };
                 404: components["responses"]["NotFound"];
             };
@@ -2205,32 +2375,23 @@ export interface paths {
                     content: {
                         /**
                          * @example {
-                         *       "data": {
-                         *         "coins": [
-                         *           {
-                         *             "slug": "USDC",
-                         *             "asset_id": "USDC-GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN",
-                         *             "code": "USDC",
-                         *             "issuer": "GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN",
-                         *             "first_seen_ledger": 50457424,
-                         *             "last_seen_ledger": 62413938,
-                         *             "observation_count": 41610618,
-                         *             "price_usd": "1.00012",
-                         *             "volume_24h_usd": "573830.99",
-                         *             "market_cap_usd": "812345678.45",
-                         *             "circulating_supply": "812245567.21"
-                         *           }
-                         *         ],
-                         *         "next_cursor": "32406192:yXLM-GARDNV3Q7YGT4AKSDF25LT32YSCCW4EV22Y2TV3I2PU2MMXJTEDL5T55",
-                         *         "limit": 100
-                         *       },
-                         *       "as_of": "2026-05-05T16:03:05.111Z",
-                         *       "flags": {
-                         *         "stale": false,
-                         *         "reduced_redundancy": false,
-                         *         "triangulated": false,
-                         *         "divergence_warning": false
-                         *       }
+                         *       "coins": [
+                         *         {
+                         *           "slug": "USDC",
+                         *           "asset_id": "USDC-GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN",
+                         *           "code": "USDC",
+                         *           "issuer": "GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN",
+                         *           "first_seen_ledger": 50457424,
+                         *           "last_seen_ledger": 62413938,
+                         *           "observation_count": 41610618,
+                         *           "price_usd": "1.00012",
+                         *           "volume_24h_usd": "573830.99",
+                         *           "market_cap_usd": "812345678.45",
+                         *           "circulating_supply": "812245567.21"
+                         *         }
+                         *       ],
+                         *       "next_cursor": "32406192:yXLM-GARDNV3Q7YGT4AKSDF25LT32YSCCW4EV22Y2TV3I2PU2MMXJTEDL5T55",
+                         *       "limit": 100
                          *     }
                          */
                         "application/json": {
@@ -2567,6 +2728,19 @@ export interface paths {
             parameters: {
                 query?: {
                     /**
+                     * @description Semantic convenience filter (R-015). Values:
+                     *       - `active` — only rows with `lag_seconds <= 600` (10 min).
+                     *         Excludes completed backfill cursors that linger in the
+                     *         table after their range finished.
+                     *       - `stale`  — complement; only rows older than the 10-min
+                     *         boundary. Useful for spotting dead ingest paths.
+                     *       - omitted — return everything (subject to `max_age` + `source`).
+                     *     Composes with `max_age`: for `status=active` the effective
+                     *     window is whichever bound is tighter; for `status=stale` the
+                     *     window becomes `[10m, max_age]`.
+                     */
+                    status?: "active" | "stale";
+                    /**
                      * @description Positive Go-duration string (e.g. `1h`, `30m`, `5m`,
                      *     `0.5h`). When present, rows whose `lag_seconds`
                      *     exceeds this value are excluded from the response.
@@ -2608,9 +2782,11 @@ export interface paths {
                     };
                 };
                 /**
-                 * @description `max_age` was set to something that doesn't parse as a
-                 *     positive Go duration. Body is the standard problem+json
-                 *     envelope with `type=https://api.ratesengine.net/errors/invalid-max-age`.
+                 * @description Either `max_age` didn't parse as a positive Go duration
+                 *     (`type=https://api.ratesengine.net/errors/invalid-max-age`),
+                 *     or `status` was set to a value other than `active` /
+                 *     `stale` (`type=https://api.ratesengine.net/errors/invalid-status`).
+                 *     Body is the standard problem+json envelope.
                  */
                 400: {
                     headers: {
@@ -2670,26 +2846,22 @@ export interface paths {
                     content: {
                         /**
                          * @example {
-                         *       "data": {
-                         *         "count": 1,
-                         *         "incidents": [
-                         *           {
-                         *             "slug": "2026-05-06-postgres-lock-table-full",
-                         *             "title": "[SEV-3] Indexer dropping ~1% of trades — Postgres lock-table-full",
-                         *             "severity": "SEV-3",
-                         *             "status": "resolved",
-                         *             "started_at": "2026-05-06T15:00:00Z",
-                         *             "resolved_at": "2026-05-06T22:39:00Z",
-                         *             "affected_components": [
-                         *               "indexer",
-                         *               "storage"
-                         *             ],
-                         *             "body_markdown": "## Identification\n\nSome trades arriving on coinbase, binance…"
-                         *           }
-                         *         ]
-                         *       },
-                         *       "as_of": "2026-05-07T00:45:00Z",
-                         *       "flags": {}
+                         *       "count": 1,
+                         *       "incidents": [
+                         *         {
+                         *           "slug": "2026-05-06-postgres-lock-table-full",
+                         *           "title": "[SEV-3] Indexer dropping ~1% of trades — Postgres lock-table-full",
+                         *           "severity": "SEV-3",
+                         *           "status": "resolved",
+                         *           "started_at": "2026-05-06T15:00:00Z",
+                         *           "resolved_at": "2026-05-06T22:39:00Z",
+                         *           "affected_components": [
+                         *             "indexer",
+                         *             "storage"
+                         *           ],
+                         *           "body_markdown": "## Identification\n\nSome trades arriving on coinbase, binance…"
+                         *         }
+                         *       ]
                          *     }
                          */
                         "application/json": {
@@ -2816,16 +2988,12 @@ export interface paths {
                     content: {
                         /**
                          * @example {
-                         *       "data": {
-                         *         "volume_24h_usd": "5941104763.13358600",
-                         *         "markets_count_24h": 4934,
-                         *         "assets_indexed": 442190,
-                         *         "latest_ledger": 62450017,
-                         *         "exchange_sources": 11,
-                         *         "total_sources": 21
-                         *       },
-                         *       "as_of": "2026-05-07T01:55:00Z",
-                         *       "flags": {}
+                         *       "volume_24h_usd": "5941104763.13358600",
+                         *       "markets_count_24h": 4934,
+                         *       "assets_indexed": 442190,
+                         *       "latest_ledger": 62450017,
+                         *       "exchange_sources": 11,
+                         *       "total_sources": 21
                          *     }
                          */
                         "application/json": {
@@ -3654,7 +3822,13 @@ export interface paths {
                          *         "tier": "apikey",
                          *         "rate_limit_per_min": 1000
                          *       },
-                         *       "as_of": "2026-05-05T14:35:42.881Z"
+                         *       "as_of": "2026-05-05T14:35:42.881Z",
+                         *       "flags": {
+                         *         "stale": false,
+                         *         "reduced_redundancy": false,
+                         *         "triangulated": false,
+                         *         "divergence_warning": false
+                         *       }
                          *     }
                          */
                         "application/json": components["schemas"]["EnvelopeMeta"] & {
@@ -4273,6 +4447,11 @@ export interface components {
          *       source. When `frozen=true` this is forced true (an LKG
          *       fallback is by definition single-sourced). Informational;
          *       combined with `frozen` this is the manipulation signature.
+         *     - `unverified_ticker_collision` — fires on `/v1/assets/{id}`
+         *       when the asset's code matches a verified currency's
+         *       Stellar ticker but the issuer doesn't. The matching
+         *       `unverified_warning` body on the AssetDetail carries
+         *       the verified-currency pointer (R-018 Phase 1.1).
          */
         Flags: {
             /** @default false */
@@ -4287,6 +4466,8 @@ export interface components {
             frozen: boolean;
             /** @default false */
             single_source: boolean;
+            /** @default false */
+            unverified_ticker_collision: boolean;
         };
         /**
          * @description Present on list endpoints when more rows exist beyond the
@@ -4504,6 +4685,172 @@ export interface components {
              *     phase 2 lands additively without a wire-shape change.
              */
             volume_24h_usd?: string | null;
+            /**
+             * @description Attached when the requested asset's code matches a
+             *     verified currency's Stellar ticker (USDC, EURC, AQUA, …)
+             *     but the issuer doesn't match the verified entry. Lights
+             *     `flags.unverified_ticker_collision` on the envelope.
+             *
+             *     Null for the verified asset itself, for non-classic
+             *     assets (native / Soroban / fiat), and for any code that
+             *     no verified currency claims on Stellar. See R-018 /
+             *     docs/architecture/multi-network-assets-migration.md
+             *     Phase 1.1.
+             */
+            unverified_warning?: components["schemas"]["UnverifiedWarning"] | null;
+        };
+        /**
+         * @description Pointer at the verified Stellar-canonical asset when an
+         *     unverified asset shares the same ticker code. Every field
+         *     is human-render-ready — the `note` sentence is verbatim-safe
+         *     for a warning banner.
+         */
+        UnverifiedWarning: {
+            /** @description Canonical slug (e.g. "usdc") the consumer can redirect to. */
+            verified_slug: string;
+            /** @description Verified canonical asset_id (e.g. USDC-GA5Z…). */
+            verified_asset_id: string;
+            /** @description Human-readable currency name (e.g. "USD Coin"). */
+            verified_name: string;
+            /** @description Short attribution (e.g. "Circle (centre.io)"). Empty when the catalogue entry didn't include a verified_issuer_label. */
+            verified_issuer?: string | null;
+            /** @description One-sentence warning rendered verbatim by clients. */
+            note: string;
+        };
+        /**
+         * @description Cross-chain identity surface served by /v1/assets/{slug} (R-018
+         *     Phase 1.4a). Distinct from `Asset` which is the per-Stellar-
+         *     network view. Consumers reach this surface by passing a
+         *     catalogue slug (e.g. `usdc`); the `Asset` surface is reached
+         *     by passing a canonical asset_id (e.g. `USDC-GA5Z…`).
+         */
+        GlobalAssetView: {
+            /** @description Display ticker (e.g. "USDC"). */
+            ticker: string;
+            /** @description URL slug (lowercase, e.g. "usdc"). */
+            slug: string;
+            /** @description Human-readable currency name. */
+            name: string;
+            /** @description One-sentence summary. */
+            description?: string;
+            /** @description Short attribution string (e.g. "Circle (centre.io)"). Empty when the catalogue entry didn't include a verified_issuer_label. */
+            verified_issuer?: string;
+            /** @description CoinGecko slug for this currency (when known). */
+            coingecko_id?: string;
+            /** @description CoinMarketCap integer ID for this currency (when known). */
+            coinmarketcap_id?: string;
+            /** @description USD price from the three-tier fallback chain. Null when no tier produced a price — consumer drills into networks[].stellar.deep_link for the per-Stellar-asset price instead. */
+            price_usd?: string | null;
+            /**
+             * @description Which tier of the fallback chain produced `price_usd`.
+             *     - `vwap_native`: our own VWAP across exchange-class trades.
+             *     - `aggregator_avg`: average across CG / CMC / CryptoCompare.
+             *     - `triangulated`: derived via bridge currency (X_USD ≈
+             *       X_BTC × BTC_USD or similar).
+             * @enum {string}
+             */
+            price_authority?: "vwap_native" | "aggregator_avg" | "triangulated";
+            /** @description Contributor venue / aggregator names — for transparency. */
+            price_sources?: string[];
+            /**
+             * Format: date-time
+             * @description Observation timestamp of the served price.
+             */
+            price_as_of?: string | null;
+            networks: components["schemas"]["NetworkView"][];
+        };
+        /** @description One per-network identity entry in a GlobalAssetView's networks list. */
+        NetworkView: {
+            /** @description Network identifier (lowercase): `stellar`, `ethereum`, `solana`, `bitcoin`, `tron`, `polygon`, `base`, `arbitrum`, `bsc`, `avalanche`, `xrpl`, etc. */
+            network: string;
+            /**
+             * @description `indexed`: we ingest this network's trades; explorer
+             *     renders a deep_link to the per-Stellar-asset view.
+             *     `external`: we know the asset exists there but don't
+             *     ingest trades; explorer renders contract + an external
+             *     link (etherscan.io, solscan.io, etc).
+             * @enum {string}
+             */
+            data_quality: "indexed" | "external";
+            /** @description Canonical Stellar asset_id (e.g. USDC-GA5Z…). Only present for stellar entries. */
+            asset_id?: string;
+            /** @description Classic asset code (Stellar only). */
+            code?: string;
+            /** @description G-strkey issuer address (Stellar only). */
+            issuer?: string;
+            /** @description Path to the per-Stellar-asset view (e.g. /v1/assets/USDC-GA5Z…). Stellar entries only. */
+            deep_link?: string;
+            /** @description Token contract address on the non-Stellar network. */
+            contract?: string;
+            /** @description Override URL for the explorer's drill-out link. Optional — explorer applies a per-network default when empty. */
+            external_link?: string;
+        };
+        GlobalAssetEnvelope: components["schemas"]["EnvelopeMeta"] & {
+            data: components["schemas"]["GlobalAssetView"];
+        };
+        /**
+         * @description Drill-down shape returned by `/v1/assets/{slug}/{network}`
+         *     for non-Stellar network entries. Stellar entries redirect
+         *     (303) to `/v1/assets/{canonical_asset_id}` instead.
+         */
+        PerNetworkAssetView: {
+            ticker: string;
+            slug: string;
+            name: string;
+            /** @enum {string} */
+            class: "crypto" | "stablecoin" | "fiat";
+            /** @description Network identifier (lowercase). */
+            network: string;
+            /**
+             * @description Always `external` for this surface — we don't ingest
+             *     trades from non-Stellar networks. Stellar dispatches
+             *     via 303 redirect; this view never serves Stellar.
+             * @enum {string}
+             */
+            data_quality: "external";
+            /** @description Token contract address on the target network. */
+            contract?: string;
+            /** @description Block-explorer URL (operator-overridable via the catalogue's external_link field). */
+            external_link?: string;
+        };
+        /**
+         * @description One entry in the response to GET /v1/assets/verified — the
+         *     verified-currency catalogue directory. Distinct from
+         *     GlobalAssetView in two ways: no price block (listing payload
+         *     stays small; consumers fetch /v1/assets/{slug} per row for
+         *     pricing) and the cross-chain `networks[]` is preserved for
+         *     each row so a listing UI can render network chips inline.
+         */
+        VerifiedCurrencyListItem: {
+            /** @description Display ticker (e.g. "USDC"). */
+            ticker: string;
+            /** @description URL slug (lowercase, e.g. "usdc"). */
+            slug: string;
+            /** @description Human-readable currency name. */
+            name: string;
+            /** @description Short attribution string (e.g. "Circle (centre.io)"). Empty when the catalogue entry didn't include a verified_issuer_label. */
+            verified_issuer?: string;
+            /** @description CoinGecko slug for this currency (when known). */
+            coingecko_id?: string;
+            /** @description CoinMarketCap integer ID for this currency (when known). */
+            coinmarketcap_id?: string;
+            /** @description Number of networks this currency is issued on — convenience for listing UIs that don't need the full networks[] array. */
+            network_count: number;
+            /** @description Decimal string (2 fractional digits). Computed for fiat rows only: M2 × current FX rate. Crypto/stablecoin rows leave this empty (their per-Stellar-asset F2 fields on /v1/assets/{asset_id} are the canonical source). */
+            market_cap_usd?: string;
+            /**
+             * @description Asset taxonomy — drives listing-side rendering + filtering.
+             * @enum {string}
+             */
+            class: "crypto" | "stablecoin" | "fiat";
+            /** @description Natural-unit amount in circulation. For fiat: M2 (broad money). Empty for crypto/stablecoin. */
+            circulating_supply?: string;
+            /** @description Exponent mapping circulating_supply to display value. 0 for fiat. */
+            supply_decimals?: number;
+            networks: components["schemas"]["NetworkView"][];
+        };
+        VerifiedCurrencyListEnvelope: components["schemas"]["EnvelopeMeta"] & {
+            data: components["schemas"]["VerifiedCurrencyListItem"][];
         };
         AssetEnvelope: components["schemas"]["EnvelopeMeta"] & {
             data: components["schemas"]["Asset"];
@@ -4563,6 +4910,48 @@ export interface components {
             window_seconds?: number | null;
             /** @description Trailing-24h price change as a signed decimal percentage with two fractional digits (e.g. "+1.27", "-0.05", "0.00"). Computed as (now - then) / then * 100 against the latest closed prices_1m bucket whose end is at-or-before now-24h. Null when the asset has no current USD price OR no comparison bucket in the 24h-ago window. */
             change_24h_pct?: string | null;
+            /** @description Latest VWAP/last-trade USD price. Mirror of CoinSummary.price_usd. */
+            price_usd?: string | null;
+            /** @description Trailing-1h price change as a signed percentage. */
+            change_1h_pct?: string | null;
+            /** @description Trailing-7d price change as a signed percentage. */
+            change_7d_pct?: string | null;
+            /** @description Top 5 markets by 24h USD volume. Each row is the counterparty of a (base, quote) pair the asset participated in. */
+            top_markets?: {
+                /** @description The OTHER side of the pair. */
+                counterparty: string;
+                /**
+                 * @description Which side this asset took.
+                 * @enum {string}
+                 */
+                side: "base" | "quote";
+                volume_24h_usd?: string | null;
+                trade_count_24h: number;
+            }[] | null;
+            /** @description 24 hourly USD-price samples (oldest first) for sparkline rendering. */
+            price_history_24h?: {
+                /** Format: date-time */
+                t: string;
+                p?: string | null;
+            }[] | null;
+            /** @description 7 daily USD-price samples (oldest first). */
+            price_history_7d?: {
+                /** Format: date-time */
+                t: string;
+                p?: string | null;
+            }[] | null;
+            /** @description Distinct (base, quote) pairs the asset participated in over the trailing 24h. */
+            markets_count?: number | null;
+            /** @description Total trades the asset participated in (as base or quote) over the trailing 24h. */
+            trade_count_24h?: number | null;
+            /** @description All-time-high USD price + day it was set. Null when the asset has no USD-quoted history. */
+            ath?: {
+                usd: string;
+                /** Format: date-time */
+                at: string;
+            } | null;
+            /** @description Non-empty when this asset's issuer appears in the curated scam directory. */
+            issuer_scam_reason?: string;
             /** @description aggregator */
             volume_24h_usd?: string | null;
             /** @description aggregator + supply derivation */

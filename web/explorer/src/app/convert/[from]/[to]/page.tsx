@@ -3,6 +3,7 @@ import Link from 'next/link';
 import { ArrowLeft, ArrowLeftRight } from 'lucide-react';
 
 import { SITE_OG_IMAGES } from '@/lib/seo';
+import { assetHrefFor } from '@/lib/fiat-slugs';
 import { ConvertPair } from './ConvertPair';
 
 const API_BASE_URL =
@@ -163,8 +164,8 @@ export default async function ConvertPage({ params }: { params: Params }) {
     '@type': 'BreadcrumbList',
     itemListElement: [
       { '@type': 'ListItem', position: 1, name: 'Home', item: 'https://ratesengine.net' },
-      { '@type': 'ListItem', position: 2, name: 'Currencies', item: 'https://ratesengine.net/currencies' },
-      { '@type': 'ListItem', position: 3, name: f, item: `https://ratesengine.net/currencies/${f}` },
+      { '@type': 'ListItem', position: 2, name: 'Assets', item: 'https://ratesengine.net/assets' },
+      { '@type': 'ListItem', position: 3, name: f, item: `https://ratesengine.net${assetHrefFor(f)}` },
       { '@type': 'ListItem', position: 4, name: `${f} to ${t}`, item: `https://ratesengine.net/convert/${f}/${t}` },
     ],
   };
@@ -176,7 +177,7 @@ export default async function ConvertPage({ params }: { params: Params }) {
         dangerouslySetInnerHTML={{ __html: JSON.stringify(breadcrumbLD) }}
       />
       <Link
-        href={`/currencies/${f}`}
+        href={assetHrefFor(f)}
         className="inline-flex items-center gap-1.5 text-sm text-slate-600 hover:text-brand-600 dark:text-slate-400"
       >
         <ArrowLeft className="h-3.5 w-3.5" />
@@ -250,13 +251,13 @@ export default async function ConvertPage({ params }: { params: Params }) {
           Convert {t} to {f} instead
         </Link>
         <Link
-          href={`/currencies/${f}`}
+          href={assetHrefFor(f)}
           className="inline-flex items-center rounded-md border border-slate-200 bg-white px-3 py-2 text-slate-700 hover:border-brand-500 hover:text-brand-600 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300"
         >
           {f} cross-rates
         </Link>
         <Link
-          href={`/currencies/${t}`}
+          href={assetHrefFor(t)}
           className="inline-flex items-center rounded-md border border-slate-200 bg-white px-3 py-2 text-slate-700 hover:border-brand-500 hover:text-brand-600 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300"
         >
           {t} cross-rates

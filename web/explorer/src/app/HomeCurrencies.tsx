@@ -5,6 +5,7 @@ import { ArrowRight } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
 
 import { apiGet } from '@/api/client';
+import { assetHrefFor } from '@/lib/fiat-slugs';
 
 interface CurrencyRow {
   ticker: string;
@@ -43,24 +44,24 @@ export function HomeCurrencies() {
           <p className="text-sm text-slate-600 dark:text-slate-400">
             Live USD-base rates for the major fiat currencies — full
             ~200-ticker coverage at{' '}
-            <Link href="/currencies" className="text-brand-600 hover:underline">
-              /currencies
+            <Link href="/assets" className="text-brand-600 hover:underline">
+              /assets
             </Link>
             .
           </p>
         </div>
         <Link
-          href="/currencies"
+          href="/assets"
           className="inline-flex items-center gap-1 text-xs text-brand-600 hover:underline"
         >
-          All currencies <ArrowRight className="h-3 w-3" />
+          All assets <ArrowRight className="h-3 w-3" />
         </Link>
       </div>
       {q.isError && (
         <div className="rounded-md border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800 dark:border-amber-900/40 dark:bg-amber-950/40 dark:text-amber-200">
           Couldn&apos;t load live currency rates. The full directory at{' '}
-          <Link href="/currencies" className="underline hover:no-underline">
-            /currencies
+          <Link href="/assets" className="underline hover:no-underline">
+            /assets
           </Link>{' '}
           may have more luck — or check{' '}
           <a
@@ -80,7 +81,7 @@ export function HomeCurrencies() {
           return (
             <Link
               key={t}
-              href={`/currencies/${t}`}
+              href={assetHrefFor(t)}
               className="rounded-xl border border-slate-200 bg-white p-3 transition-colors hover:border-brand-500 dark:border-slate-800 dark:bg-slate-900"
             >
               <div className="flex items-center justify-between">

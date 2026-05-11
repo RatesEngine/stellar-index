@@ -7,6 +7,7 @@ import { useEffect, useMemo, useState } from 'react';
 
 import { apiGet } from '@/api/client';
 import { useCoins, useVerifiedSlugs, type Coin } from '@/api/hooks';
+import { assetHrefFor } from '@/lib/fiat-slugs';
 
 type Result = {
   type: 'coin' | 'pair' | 'protocol' | 'oracle' | 'page' | 'currency';
@@ -359,7 +360,7 @@ function currencyResult(c: CurrencyEntry): Result {
     type: 'currency',
     label: c.ticker,
     hint: c.name,
-    href: `/currencies/${c.ticker}`,
+    href: assetHrefFor(c.ticker),
   };
 }
 

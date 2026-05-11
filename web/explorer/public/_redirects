@@ -32,318 +32,58 @@
 # Next.js's static export emits trailing-slash URLs by default
 # (e.g. internal links from Link href="/currencies/usd-coin/"),
 # and the bare form is what an external-share or typed URL hits.
-/currencies/stellar            /assets/XLM    301
-/currencies/stellar/           /assets/XLM/   301
-/currencies/lumens             /assets/XLM    301
-/currencies/lumens/            /assets/XLM/   301
-/currencies/xlm                /assets/XLM    301
-/currencies/xlm/               /assets/XLM/   301
-/currencies/usd-coin           /assets/USDC   301
-/currencies/usd-coin/          /assets/USDC/  301
-/currencies/usdc               /assets/USDC   301
-/currencies/usdc/              /assets/USDC/  301
-/currencies/euro-coin          /assets/EURC   301
-/currencies/euro-coin/         /assets/EURC/  301
-/currencies/eurc               /assets/EURC   301
-/currencies/eurc/              /assets/EURC/  301
-/currencies/aquarius           /assets/AQUA   301
-/currencies/aquarius/          /assets/AQUA/  301
-/currencies/aqua               /assets/AQUA   301
-/currencies/aqua/              /assets/AQUA/  301
-/currencies/stronghold-token   /assets/SHX    301
-/currencies/stronghold-token/  /assets/SHX/   301
-/currencies/shx                /assets/SHX    301
-/currencies/shx/               /assets/SHX/   301
-/currencies/velo-token         /assets/VELO   301
-/currencies/velo-token/        /assets/VELO/  301
-/currencies/velo               /assets/VELO   301
-/currencies/velo/              /assets/VELO/  301
-/currencies/yxlm               /assets/yXLM   301
-/currencies/yxlm/              /assets/yXLM/  301
-/currencies/yusdc              /assets/yUSDC  301
-/currencies/yusdc/             /assets/yUSDC/ 301
+# Crypto /currencies/ aliases — assets-unification.
+# Trailing-slash only (next.js 308 handles bare form).
+/currencies/xlm/  /assets/XLM/  301
+/currencies/usdc/  /assets/USDC/  301
+/currencies/eurc/  /assets/EURC/  301
+/currencies/aqua/  /assets/AQUA/  301
+/currencies/shx/  /assets/SHX/  301
+/currencies/velo/  /assets/VELO/  301
+/currencies/yxlm/  /assets/yXLM/  301
+/currencies/yusdc/  /assets/yUSDC/  301
 
-# Singular-form redirects for category pages — users naturally
-# type `/oracle/`, `/dex/`, `/exchange/` etc. without the
-# canonical plural. The 2026-05-08 audit confirmed all 9 below
-# 404'd cold; bouncing each to its canonical plural eliminates
-# the dead-end.
-/oracle                        /oracles/      301
-/oracle/                       /oracles/      301
-/exchange                      /exchanges/    301
-/exchange/                     /exchanges/    301
-/dex                           /dexes/        301
-/dex/                          /dexes/        301
-
-# Aggregator-family aliases — `/aggregators/` covers both routers
-# (Soroswap Router, …) and yield vaults (DeFindex, …), so all of
-# `/router`, `/routers`, `/aggregator`, `/yield`, `/vault`,
-# `/vaults` are reasonable user-typed forms that should land
-# there rather than 404.
-/router                        /aggregators/  301
-/router/                       /aggregators/  301
-/routers                       /aggregators/  301
-/routers/                      /aggregators/  301
-/aggregator                    /aggregators/  301
-/aggregator/                   /aggregators/  301
-/yield                         /aggregators/  301
-/yield/                        /aggregators/  301
-/vault                         /aggregators/  301
-/vault/                        /aggregators/  301
-/vaults                        /aggregators/  301
-/vaults/                       /aggregators/  301
-
-# Bare category-with-no-id URLs that 404'd because the category is
-# only a route prefix (`/research/adr/[id]/page.tsx`,
-# `/lending/[pool]/page.tsx`) without an index page of its own.
-# Bounce them up one level to the canonical entry that DOES list
-# everything in the category. The 404 audit on 2026-05-08 caught
-# these as the only remaining bare-category dead-ends.
-/research/adr            /research/  301
-/research/adr/           /research/  301
-/research/architecture   /research/  301
-/research/architecture/  /research/  301
-/research/discovery      /research/  301
-/research/discovery/     /research/  301
-/research/operations     /research/  301
-/research/operations/    /research/  301
-
-# Same problem for lending: pools are keyed by contract address
-# (G-strkey), so the protocol name "blend" — even though it's
-# the only lending protocol we cover today — wasn't routable.
-# Bounce to the lending listing.
-/lending/blend           /lending/   301
-/lending/blend/          /lending/   301
-
-# /incidents → status site. The explorer doesn't have an
-# /incidents listing page; per-incident postmortems live on
-# status.ratesengine.net under /incident/[slug]/. The status
-# site IS the incidents listing — bounce both /incidents and
-# bare /incident/<slug> to the right host so a typed URL or an
-# external share lands on the canonical page rather than the
-# explorer's catch-all 404. Found via 404-audit 2026-05-10.
-/incidents           https://status.ratesengine.net/             301
-/incidents/          https://status.ratesengine.net/             301
-/incident/*          https://status.ratesengine.net/incident/:splat  301
-
-# /converter → /convert/USD/XLM/. "Converter" (with the -er
-# suffix) is what users type from muscle memory (xe.com,
-# coinbase.com/converter, etc.). The actual route is /convert,
-# parameterised by [from]/[to]. Pre-redirect to a sensible default
-# pair so a typed URL lands on a working page instead of the 404.
-/converter           /convert/USD/XLM/   301
-/converter/          /convert/USD/XLM/   301
-/convert             /convert/USD/XLM/   301
-/convert/            /convert/USD/XLM/   301
-
-# /oracles/<name> → /oracles/. Per-oracle detail pages don't
-# exist yet (only the listing); a typed `/oracles/reflector` or
-# `/oracles/band` would 404. Bounce to the listing rather than
-# the catch-all 404 — the listing already has each oracle's
-# methodology + last-update inline.
-/oracles/*           /oracles/    301
-
-# Common-name 404s — natural URL guesses that should land on the
-# canonical category page rather than the 404 catch-all. Each was
-# returning 404 in the audit on 2026-05-10. The /coins → /assets
-# rules exist higher in this file already; this block adds the
-# adjacent singular/synonym variants so a user typing /pool, /pools,
-# /token, /tokens, /coin, /price, /prices in the address bar lands
-# somewhere useful instead of hitting the static-export 404.
-/pool          /dexes/                            301
-/pool/         /dexes/                            301
-/pools         /dexes/                            301
-/pools/        /dexes/                            301
-/coin          /assets/                           301
-/coin/         /assets/                           301
-/token         /assets/                           301
-/token/        /assets/                           301
-/tokens        /assets/                           301
-/tokens/       /assets/                           301
-/price         /markets/                          301
-/price/        /markets/                          301
-/prices        /markets/                          301
-/prices/       /markets/                          301
-# /api existed without trailing slash via the cross-host rule above;
-# add the trailing-slash variant so /api/ → api.ratesengine.net too.
-/api/          https://api.ratesengine.net/       301
-# /docs and /docs/* — the rendered API reference lives at
-# docs.ratesengine.net (splat preserves the deep-link path so
-# /docs/v1/price → docs.ratesengine.net/v1/price).
-/docs          https://docs.ratesengine.net/      301
-/docs/         https://docs.ratesengine.net/      301
-/docs/*        https://docs.ratesengine.net/:splat 301
-
-# /favicon.ico → /icon.svg. Next 15's `src/app/icon.svg` metadata
-# route serves the SVG and emits the right <link rel="icon"> in the
-# rendered HTML, so modern browsers find the favicon via that link
-# tag and never ask for /favicon.ico. But many crawlers, RSS
-# readers, link-preview cards, and browser address-bar fallbacks
-# STILL hit /favicon.ico unconditionally — without this rule every
-# one of those requests was a noisy 404. SVG favicons render in
-# Chrome 80+, Firefox 80+, Safari 15+, Edge — essentially every
-# client shipping for 4+ years. Older clients that wouldn't render
-# the SVG would have rendered nothing here anyway (no prior .ico),
-# so this is strictly an improvement.
-/favicon.ico             /icon.svg   301
-
-# Fiat-currency unification (R-018 assets-unification 2026-05-11):
-# /currencies/{fiat} → /assets/{friendly-slug}. The catalogue uses
-# friendly slugs (us-dollar, japanese-yen, chinese-yuan, …) for
-# fiat entries; ISO codes (USD, EUR, JPY, …) also redirect to the
-# friendly slug so existing links work.
-#
-# Crypto entries in /currencies/* are handled by the per-currency
-# entries above. Fiat is a separate set because the older
-# /currencies pages routed by ISO ticker; the new /assets routing
-# uses friendly slugs.
-
-# US Dollar
-/currencies/us-dollar       /assets/us-dollar    301
-/currencies/us-dollar/      /assets/us-dollar/   301
-/currencies/usd             /assets/us-dollar    301
-/currencies/usd/            /assets/us-dollar/   301
-/currencies/USD             /assets/us-dollar    301
-/currencies/USD/            /assets/us-dollar/   301
-# Euro
-/currencies/euro            /assets/euro         301
-/currencies/euro/           /assets/euro/        301
-/currencies/eur             /assets/euro         301
-/currencies/eur/            /assets/euro/        301
-/currencies/EUR             /assets/euro         301
-/currencies/EUR/            /assets/euro/        301
-# British Pound
-/currencies/british-pound   /assets/british-pound   301
+# Fiat currencies — assets-unification (R-018). Each entry maps
+# /currencies/{friendly}/ and /currencies/{iso}/ to the
+# canonical /assets/{friendly}/. trailing-slash form only —
+# next.config.mjs's trailingSlash:true 308-redirects the bare
+# form before _redirects evaluates. Cap _redirects below CF's
+# free-plan ~100-rule limit (R-018 finish-up).
+/currencies/us-dollar/  /assets/us-dollar/  301
+/currencies/usd/  /assets/us-dollar/  301
+/currencies/euro/  /assets/euro/  301
+/currencies/eur/  /assets/euro/  301
 /currencies/british-pound/  /assets/british-pound/  301
-/currencies/gbp             /assets/british-pound   301
-/currencies/gbp/            /assets/british-pound/  301
-/currencies/GBP             /assets/british-pound   301
-/currencies/GBP/            /assets/british-pound/  301
-# Japanese Yen
-/currencies/japanese-yen    /assets/japanese-yen    301
-/currencies/japanese-yen/   /assets/japanese-yen/   301
-/currencies/yen             /assets/japanese-yen    301
-/currencies/yen/            /assets/japanese-yen/   301
-/currencies/jpy             /assets/japanese-yen    301
-/currencies/jpy/            /assets/japanese-yen/   301
-/currencies/JPY             /assets/japanese-yen    301
-/currencies/JPY/            /assets/japanese-yen/   301
-# Chinese Yuan (Renminbi)
-/currencies/chinese-yuan    /assets/chinese-yuan    301
-/currencies/chinese-yuan/   /assets/chinese-yuan/   301
-/currencies/renminbi        /assets/chinese-yuan    301
-/currencies/renminbi/       /assets/chinese-yuan/   301
-/currencies/yuan            /assets/chinese-yuan    301
-/currencies/yuan/           /assets/chinese-yuan/   301
-/currencies/cny             /assets/chinese-yuan    301
-/currencies/cny/            /assets/chinese-yuan/   301
-/currencies/CNY             /assets/chinese-yuan    301
-/currencies/CNY/            /assets/chinese-yuan/   301
-# Indian Rupee
-/currencies/indian-rupee    /assets/indian-rupee    301
-/currencies/indian-rupee/   /assets/indian-rupee/   301
-/currencies/rupee           /assets/indian-rupee    301
-/currencies/rupee/          /assets/indian-rupee/   301
-/currencies/inr             /assets/indian-rupee    301
-/currencies/inr/            /assets/indian-rupee/   301
-/currencies/INR             /assets/indian-rupee    301
-/currencies/INR/            /assets/indian-rupee/   301
-# Swiss Franc
-/currencies/swiss-franc     /assets/swiss-franc     301
-/currencies/swiss-franc/    /assets/swiss-franc/    301
-/currencies/chf             /assets/swiss-franc     301
-/currencies/chf/            /assets/swiss-franc/    301
-/currencies/CHF             /assets/swiss-franc     301
-/currencies/CHF/            /assets/swiss-franc/    301
-# Canadian Dollar
-/currencies/canadian-dollar /assets/canadian-dollar  301
-/currencies/canadian-dollar/ /assets/canadian-dollar/ 301
-/currencies/cad             /assets/canadian-dollar  301
-/currencies/cad/            /assets/canadian-dollar/ 301
-/currencies/CAD             /assets/canadian-dollar  301
-/currencies/CAD/            /assets/canadian-dollar/ 301
-# Australian Dollar
-/currencies/australian-dollar  /assets/australian-dollar   301
-/currencies/australian-dollar/ /assets/australian-dollar/  301
-/currencies/aud             /assets/australian-dollar   301
-/currencies/aud/            /assets/australian-dollar/  301
-/currencies/AUD             /assets/australian-dollar   301
-/currencies/AUD/            /assets/australian-dollar/  301
-# New Zealand Dollar
-/currencies/new-zealand-dollar  /assets/new-zealand-dollar   301
-/currencies/new-zealand-dollar/ /assets/new-zealand-dollar/  301
-/currencies/nzd             /assets/new-zealand-dollar  301
-/currencies/nzd/            /assets/new-zealand-dollar/ 301
-/currencies/NZD             /assets/new-zealand-dollar  301
-/currencies/NZD/            /assets/new-zealand-dollar/ 301
-# Brazilian Real
-/currencies/brazilian-real  /assets/brazilian-real   301
-/currencies/brazilian-real/ /assets/brazilian-real/  301
-/currencies/real            /assets/brazilian-real   301
-/currencies/real/           /assets/brazilian-real/  301
-/currencies/brl             /assets/brazilian-real   301
-/currencies/brl/            /assets/brazilian-real/  301
-/currencies/BRL             /assets/brazilian-real   301
-/currencies/BRL/            /assets/brazilian-real/  301
-# Mexican Peso
-/currencies/mexican-peso    /assets/mexican-peso     301
-/currencies/mexican-peso/   /assets/mexican-peso/    301
-/currencies/mxn             /assets/mexican-peso     301
-/currencies/mxn/            /assets/mexican-peso/    301
-/currencies/MXN             /assets/mexican-peso     301
-/currencies/MXN/            /assets/mexican-peso/    301
-# South Korean Won
-/currencies/south-korean-won  /assets/south-korean-won   301
-/currencies/south-korean-won/ /assets/south-korean-won/  301
-/currencies/won             /assets/south-korean-won   301
-/currencies/won/            /assets/south-korean-won/  301
-/currencies/krw             /assets/south-korean-won   301
-/currencies/krw/            /assets/south-korean-won/  301
-/currencies/KRW             /assets/south-korean-won   301
-/currencies/KRW/            /assets/south-korean-won/  301
-# Hong Kong Dollar
-/currencies/hong-kong-dollar  /assets/hong-kong-dollar  301
-/currencies/hong-kong-dollar/ /assets/hong-kong-dollar/ 301
-/currencies/hkd             /assets/hong-kong-dollar  301
-/currencies/hkd/            /assets/hong-kong-dollar/ 301
-/currencies/HKD             /assets/hong-kong-dollar  301
-/currencies/HKD/            /assets/hong-kong-dollar/ 301
-# Singapore Dollar
-/currencies/singapore-dollar  /assets/singapore-dollar  301
-/currencies/singapore-dollar/ /assets/singapore-dollar/ 301
-/currencies/sgd             /assets/singapore-dollar  301
-/currencies/sgd/            /assets/singapore-dollar/ 301
-/currencies/SGD             /assets/singapore-dollar  301
-/currencies/SGD/            /assets/singapore-dollar/ 301
-# South African Rand
-/currencies/south-african-rand  /assets/south-african-rand   301
-/currencies/south-african-rand/ /assets/south-african-rand/  301
-/currencies/rand            /assets/south-african-rand   301
-/currencies/rand/           /assets/south-african-rand/  301
-/currencies/zar             /assets/south-african-rand   301
-/currencies/zar/            /assets/south-african-rand/  301
-/currencies/ZAR             /assets/south-african-rand   301
-/currencies/ZAR/            /assets/south-african-rand/  301
-# Turkish Lira
-/currencies/turkish-lira    /assets/turkish-lira     301
-/currencies/turkish-lira/   /assets/turkish-lira/    301
-/currencies/lira            /assets/turkish-lira     301
-/currencies/lira/           /assets/turkish-lira/    301
-/currencies/try             /assets/turkish-lira     301
-/currencies/try/            /assets/turkish-lira/    301
-/currencies/TRY             /assets/turkish-lira     301
-/currencies/TRY/            /assets/turkish-lira/    301
-# Swedish Krona
-/currencies/swedish-krona   /assets/swedish-krona    301
-/currencies/swedish-krona/  /assets/swedish-krona/   301
-/currencies/sek             /assets/swedish-krona    301
-/currencies/sek/            /assets/swedish-krona/   301
-/currencies/SEK             /assets/swedish-krona    301
-/currencies/SEK/            /assets/swedish-krona/   301
-# Norwegian Krone
-/currencies/norwegian-krone /assets/norwegian-krone  301
-/currencies/norwegian-krone/ /assets/norwegian-krone/ 301
-/currencies/nok             /assets/norwegian-krone  301
-/currencies/nok/            /assets/norwegian-krone/ 301
-/currencies/NOK             /assets/norwegian-krone  301
-/currencies/NOK/            /assets/norwegian-krone/ 301
+/currencies/gbp/  /assets/british-pound/  301
+/currencies/japanese-yen/  /assets/japanese-yen/  301
+/currencies/jpy/  /assets/japanese-yen/  301
+/currencies/chinese-yuan/  /assets/chinese-yuan/  301
+/currencies/cny/  /assets/chinese-yuan/  301
+/currencies/indian-rupee/  /assets/indian-rupee/  301
+/currencies/inr/  /assets/indian-rupee/  301
+/currencies/swiss-franc/  /assets/swiss-franc/  301
+/currencies/chf/  /assets/swiss-franc/  301
+/currencies/canadian-dollar/  /assets/canadian-dollar/  301
+/currencies/cad/  /assets/canadian-dollar/  301
+/currencies/australian-dollar/  /assets/australian-dollar/  301
+/currencies/aud/  /assets/australian-dollar/  301
+/currencies/new-zealand-dollar/  /assets/new-zealand-dollar/  301
+/currencies/nzd/  /assets/new-zealand-dollar/  301
+/currencies/brazilian-real/  /assets/brazilian-real/  301
+/currencies/brl/  /assets/brazilian-real/  301
+/currencies/mexican-peso/  /assets/mexican-peso/  301
+/currencies/mxn/  /assets/mexican-peso/  301
+/currencies/south-korean-won/  /assets/south-korean-won/  301
+/currencies/krw/  /assets/south-korean-won/  301
+/currencies/hong-kong-dollar/  /assets/hong-kong-dollar/  301
+/currencies/hkd/  /assets/hong-kong-dollar/  301
+/currencies/singapore-dollar/  /assets/singapore-dollar/  301
+/currencies/sgd/  /assets/singapore-dollar/  301
+/currencies/south-african-rand/  /assets/south-african-rand/  301
+/currencies/zar/  /assets/south-african-rand/  301
+/currencies/turkish-lira/  /assets/turkish-lira/  301
+/currencies/try/  /assets/turkish-lira/  301
+/currencies/swedish-krona/  /assets/swedish-krona/  301
+/currencies/sek/  /assets/swedish-krona/  301
+/currencies/norwegian-krone/  /assets/norwegian-krone/  301
+/currencies/nok/  /assets/norwegian-krone/  301

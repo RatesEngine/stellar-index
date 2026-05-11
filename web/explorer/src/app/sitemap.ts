@@ -6,7 +6,7 @@ import { loadArchitectureDocs } from '@/lib/architecture';
 import { loadBlogPosts } from '@/lib/blog';
 import { loadDiscoveryDocs } from '@/lib/discovery';
 import { loadOperationsDocs } from '@/lib/operations';
-import { friendlySlugFor } from '@/app/currencies/[ticker]/slugs';
+import { fiatSlugFor } from '@/lib/fiat-slugs';
 
 // Required for `output: 'export'` — sitemap is generated at build
 // time and emitted as a static file. Same applies to robots.ts.
@@ -63,7 +63,6 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     '/anomalies',
     '/divergences',
     '/mev',
-    '/currencies',
     '/exchanges',
     '/pricing',
     '/blog',
@@ -141,35 +140,15 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     changeFrequency: 'weekly',
     priority: 0.5,
   }));
-  // Per-currency detail pages. Both forms are pre-rendered:
-  //   /currencies/{ticker}        — bare ISO 4217 code (USD, EUR…)
-  //   /currencies/{friendly-slug} — curated SEO-friendly form
-  //                                 (us-dollar, japanese-yen…)
-  // The friendly-slug form is the canonical share URL when a
-  // curated entry exists; the ISO form is preserved so a typed
-  // /currencies/USD doesn't 404. Sitemap lists both with the
-  // friendly form at slightly higher priority so search indexers
-  // pick that as canonical.
-  const currencyPages: MetadataRoute.Sitemap = [];
-  for (const ticker of currencyTickers) {
-    currencyPages.push({
-      url: siteURL(`/currencies/${ticker}`),
-      lastModified: now,
-      changeFrequency: 'daily',
-      priority: 0.6,
-    });
-    const friendly = friendlySlugFor(ticker);
-    if (friendly !== ticker.toLowerCase()) {
-      // Curated friendly slug exists and differs from the bare
-      // ISO code → also list it as the canonical share URL.
-      currencyPages.push({
-        url: siteURL(`/currencies/${friendly}`),
-        lastModified: now,
-        changeFrequency: 'daily',
-        priority: 0.7,
-      });
-    }
-  }
+  // Per-currency detail pages now live under /assets/{friendly-slug}
+  // after the assets-unification migration. One entry per ticker —
+  // canonical URL is the friendly form (us-dollar, japanese-yen, …).
+  const currencyPages: MetadataRoute.Sitemap = currencyTickers.map((ticker) => ({
+    url: siteURL(`/assets/${fiatSlugFor(ticker)}`),
+    lastModified: now,
+    changeFrequency: 'daily',
+    priority: 0.7,
+  }));
 
   // Per-pair detail pages. The route is /markets/{base}~{quote},
   // URL-encoded once. We pre-render the top 100 by 24h volume at
