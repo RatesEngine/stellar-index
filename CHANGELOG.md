@@ -15,6 +15,38 @@ against.
 
 ## [Unreleased]
 
+## [v0.5.0-rc.45] — 2026-05-11
+
+### Fixed
+
+- **`/v1/markets` reads `prices_1m` instead of scanning 41M trades.**
+  DistinctPairs was scanning the raw `trades` hypertable over a
+  14-day window with a HashAggregate spilling to 32 disk partitions
+  — 8s+ cold-cache p99 that consistently blew the handler's 8s
+  deadline. Live measurement before the fix: 86 % of `/v1/markets`
+  requests returned 503/500 over the back half of the day, driving
+  the SLO availability/latency burn pages plus the API
+  error-rate/latency tickets. Rewriting the query to source from
+  the `prices_1m` 1-min CAGG (3M rows vs 41M; pre-aggregated
+  `volume_usd` + `trade_count` + `last_price` + `sources[]`) cuts
+  the query from **8.4 s → 0.44 s** — 19× speedup. `last_trade_at`
+  is now bucket-rounded to the minute (within 60s of the actual
+  last trade); `count_24h` and `vol_24h_usd` are byte-identical to
+  the previous shape.
+
+### Explorer build
+
+- **`staticPageGenerationTimeout` bumped to 180 s** (was the default
+  60 s). Pre-rendering ~500 asset pages with 4-6 API fetches each
+  hit the per-page ceiling under build-host rate-limit pressure.
+  Note: not sufficient on its own — further explorer-build
+  investigation underway in a follow-up.
+- **Explorer version surface** — footer build badge + `re-build-sha`
+  / `re-build-time` meta tags. Mirrors the API's `/v1/version`
+  endpoint so an operator can confirm which build a given page
+  reflects. Reads `CF_PAGES_COMMIT_SHA` (CF git auto-deploy) or
+  `GITHUB_SHA` (manual workflow).
+
 ## [v0.5.0-rc.44] — 2026-05-11
 
 ### Fixed
