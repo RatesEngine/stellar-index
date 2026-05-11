@@ -2888,9 +2888,17 @@ components:
     PriceType:
       name: price_type
       in: query
+      description: |
+        Series type. `vwap` (default) returns the price series.
+        `twap` is reserved for forward compatibility (currently
+        400). `market_cap` returns a USD-denominated market-cap
+        series for fiat:* base assets (M2 from the verified-
+        currency catalogue × daily FX rate from fx_quotes). Crypto
+        market_cap is deferred until the market_cap_1d CAGG ships
+        (501 today).
       schema:
         type: string
-        enum: [vwap, twap]
+        enum: [vwap, twap, market_cap]
         default: vwap
     TypeFilter:
       name: type

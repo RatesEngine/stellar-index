@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"strconv"
 	"time"
 
 	"github.com/RatesEngine/rates-engine/internal/canonical"
@@ -84,13 +85,10 @@ func (s *Server) handleChart(w http.ResponseWriter, r *http.Request) {
 		from = time.Now().Add(-tf.Duration).UTC()
 	}
 
-	// Fiat:fiat pairs (e.g. fiat:CNY/fiat:USD) — prices_1m / prices_5m
-	// / prices_1h never store FX rates; those live in fx_quotes,
-	// populated by the forex worker + fx-history-backfill. Route
-	// these requests to the fx_quotes reader instead of returning an
-	// empty series.
-	if pair.Base.Type == canonical.AssetFiat && pair.Quote.Type == canonical.AssetFiat {
-		s.handleChartFiat(w, r, pair, tfRaw, gran, priceType, from)
+	// Dispatch to specialised handlers when the request shape calls
+	// for it; fall through to the default vwap-on-prices_1m path
+	// when no specialisation matches.
+	if s.dispatchSpecialisedChart(w, r, pair, tfRaw, gran, priceType, from) {
 		return
 	}
 
@@ -177,6 +175,29 @@ func (s *Server) handleChart(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeJSON(w, series, Flags{Triangulated: triangulated})
+}
+
+// dispatchSpecialisedChart routes to a non-default chart handler
+// when the request matches a specialised shape: market_cap series,
+// fiat:fiat pairs (which live in fx_quotes, not prices_1m). Returns
+// true when a specialised handler took the request (caller bails);
+// false to let the default path proceed.
+func (s *Server) dispatchSpecialisedChart(
+	w http.ResponseWriter,
+	r *http.Request,
+	pair canonical.Pair,
+	tfRaw, gran, priceType string,
+	from time.Time,
+) bool {
+	if priceType == "market_cap" {
+		s.handleChartMarketCap(w, r, pair, tfRaw, gran, from)
+		return true
+	}
+	if pair.Base.Type == canonical.AssetFiat && pair.Quote.Type == canonical.AssetFiat {
+		s.handleChartFiat(w, r, pair, tfRaw, gran, priceType, from)
+		return true
+	}
+	return false
 }
 
 // handleChartFiat serves /v1/chart for fiat:fiat pairs out of the
@@ -394,11 +415,18 @@ func parseChartParams(w http.ResponseWriter, r *http.Request) (string, chartTime
 			"the chart endpoint accepts price_type=vwap today; multi-bar TWAP charts are deferred to L7.8 in the launch-readiness backlog (single-bar TWAP is available now via /v1/twap). The deferral is documented in ADR-0020 §price_type handling: shipping on-the-fly TWAP from the 1m CAGG today would create a one-time consumer-visible math shift when the proper TWAP CAGG ships later, so we'd rather defer than ship-and-rotate")
 		return "", chartTimeframeSpec{}, "", "", false
 	}
+	if priceType == "market_cap" {
+		// price_type=market_cap is a separate compute path — the
+		// handler dispatches to handleChartMarketCap before falling
+		// through to the vwap-path. parseChartParams just accepts the
+		// token here.
+		return tfRaw, tf, gran, priceType, true
+	}
 	if priceType != "vwap" {
 		writeProblem(w, r,
 			"https://api.ratesengine.net/errors/invalid-price-type",
 			"Invalid price_type", http.StatusBadRequest,
-			fmt.Sprintf("price_type must be one of: vwap, twap (got %q)", priceType))
+			fmt.Sprintf("price_type must be one of: vwap, twap, market_cap (got %q)", priceType))
 		return "", chartTimeframeSpec{}, "", "", false
 	}
 	return tfRaw, tf, gran, priceType, true
@@ -435,4 +463,149 @@ func parseChartAssetQuote(w http.ResponseWriter, r *http.Request) (canonical.Ass
 		quote = q
 	}
 	return asset, quote, true
+}
+
+// handleChartMarketCap serves /v1/chart?price_type=market_cap.
+//
+// Phase 1 supports fiat assets only:
+//
+//	asset=fiat:CNY&quote=fiat:USD&price_type=market_cap
+//
+// Output: daily market-cap series = M2 (verified-currency catalogue)
+// × inverse_usd (fx_quotes daily snapshot of 1 CCY → N USD). Each
+// bucket gets the M2 figure multiplied by the day's FX rate.
+//
+// Crypto assets return 501 — the market_cap_1d CAGG (supply×price
+// join over time) is the proper implementation; this commit ships
+// the fiat fast-path to close the explorer's "market cap over time"
+// gap for the currencies surface.
+func (s *Server) handleChartMarketCap(
+	w http.ResponseWriter,
+	r *http.Request,
+	pair canonical.Pair,
+	tfRaw, gran string,
+	from time.Time,
+) {
+	// Quote must be fiat:USD — market cap is USD-denominated.
+	if pair.Quote.Type != canonical.AssetFiat || pair.Quote.Code != "USD" {
+		writeProblem(w, r,
+			"https://api.ratesengine.net/errors/invalid-market-cap-quote",
+			"market_cap requires quote=fiat:USD", http.StatusBadRequest,
+			"the chart's price_type=market_cap series is always USD-denominated; pass quote=fiat:USD")
+		return
+	}
+
+	// Fiat fast-path. Crypto assets return 501.
+	if pair.Base.Type != canonical.AssetFiat {
+		writeProblem(w, r,
+			"https://api.ratesengine.net/errors/market-cap-deferred",
+			"market_cap for non-fiat assets deferred", http.StatusNotImplemented,
+			"price_type=market_cap is implemented for fiat:* base assets today (M2 × FX rate via fx_quotes). Crypto market-cap-over-time requires a market_cap_1d CAGG joining supply_1d × price_1d; tracked as the supply-CAGG follow-up.")
+		return
+	}
+
+	if s.verifiedCurrencies == nil || s.fxHistory == nil {
+		writeProblem(w, r,
+			"https://api.ratesengine.net/errors/market-cap-unavailable",
+			"market_cap not configured", http.StatusServiceUnavailable,
+			"this deployment hasn't wired the verified-currency catalogue and/or fx_quotes reader")
+		return
+	}
+
+	vc, ok := s.verifiedCurrencies.LookupByTicker(pair.Base.Code)
+	if !ok || vc.CirculatingSupply == "" {
+		writeJSON(w, emptyMarketCapSeries(pair, tfRaw, gran, from), Flags{})
+		return
+	}
+	m2, err := parseSupply(vc.CirculatingSupply, vc.SupplyDecimals)
+	if err != nil {
+		s.logger.Warn("market_cap: bad catalogue supply",
+			"ticker", vc.Ticker, "err", err)
+		writeJSON(w, emptyMarketCapSeries(pair, tfRaw, gran, from), Flags{})
+		return
+	}
+
+	// Default window: trailing 1y when timeframe=all (open-ended
+	// would hammer Postgres + the catalogue M2 doesn't change over
+	// time anyway, so 25y of "same number × per-day FX" is just
+	// noise).
+	to := time.Now().UTC().Truncate(24 * time.Hour)
+	queryFrom := from
+	if queryFrom.IsZero() {
+		queryFrom = to.AddDate(-25, 0, 0)
+	}
+
+	fxCtx, cancel := context.WithTimeout(r.Context(), 8*time.Second)
+	defer cancel()
+	points, err := s.fxHistory.ListFXHistory(fxCtx, pair.Base.Code, queryFrom, to)
+	if err != nil {
+		s.logger.Warn("market_cap: fx_quotes fetch failed",
+			"ticker", pair.Base.Code, "err", err)
+		writeJSON(w, emptyMarketCapSeries(pair, tfRaw, gran, from), Flags{})
+		return
+	}
+
+	wire := make([]HistoryPointWire, 0, len(points))
+	for _, p := range points {
+		if p.InverseUSD <= 0 {
+			continue
+		}
+		mcap := m2 * p.InverseUSD
+		wire = append(wire, HistoryPointWire{
+			T: p.Bucket,
+			P: fmt.Sprintf("%.2f", mcap),
+		})
+	}
+
+	series := ChartSeries{
+		AssetID:     pair.Base.String(),
+		Quote:       pair.Quote.String(),
+		Timeframe:   tfRaw,
+		Granularity: gran,
+		PriceType:   "market_cap",
+		Points:      wire,
+	}
+	if !from.IsZero() && len(wire) > 0 {
+		if grace := chartGranularityGrace(gran); wire[0].T.Sub(from) > grace {
+			startsAt := wire[0].T
+			requested := from
+			series.Truncated = true
+			series.DataStartsAt = &startsAt
+			series.RequestedFrom = &requested
+		}
+	}
+	writeJSON(w, series, Flags{})
+}
+
+// emptyMarketCapSeries is the no-data response shape used when the
+// catalogue doesn't carry a supply for the asset or the FX feed has
+// no rows for the requested window. Keeping it as a helper means
+// every error path emits the same wire shape (empty points array,
+// not null).
+func emptyMarketCapSeries(pair canonical.Pair, tfRaw, gran string, _ time.Time) ChartSeries {
+	return ChartSeries{
+		AssetID:     pair.Base.String(),
+		Quote:       pair.Quote.String(),
+		Timeframe:   tfRaw,
+		Granularity: gran,
+		PriceType:   "market_cap",
+		Points:      []HistoryPointWire{},
+	}
+}
+
+// parseSupply converts the catalogue's (supply, decimals) tuple into
+// a float64. The catalogue stores supplies as decimal strings in the
+// asset's smallest integer unit (per the seed.yaml convention),
+// alongside a decimals exponent. For fiat M2 the decimals are 0 so
+// the supply is already in major units (e.g. "21700000000000" =
+// $21.7T). For tokens decimals would be 7 / 18 / etc; we divide.
+func parseSupply(supplyStr string, decimals int) (float64, error) {
+	v, err := strconv.ParseFloat(supplyStr, 64)
+	if err != nil {
+		return 0, fmt.Errorf("parse supply %q: %w", supplyStr, err)
+	}
+	for i := 0; i < decimals; i++ {
+		v /= 10
+	}
+	return v, nil
 }

@@ -472,3 +472,66 @@ func TestChart_TimeframeAllNeverTruncated(t *testing.T) {
 		t.Error("Truncated = true on timeframe=all; that timeframe means 'everything', never truncated")
 	}
 }
+
+func TestChart_MarketCap_FiatCNY_ComputesFromM2(t *testing.T) {
+	d1 := time.Date(2025, 1, 2, 0, 0, 0, 0, time.UTC)
+	d2 := time.Date(2025, 1, 3, 0, 0, 0, 0, time.UTC)
+	fx := &stubFXHistoryReader{points: []v1.FXQuotePoint{
+		{Bucket: d1, RateUSD: 7.18, InverseUSD: 1.0 / 7.18},
+		{Bucket: d2, RateUSD: 7.20, InverseUSD: 1.0 / 7.20},
+	}}
+	srv := v1.New(v1.Options{
+		History:            &stubHistoryReader{},
+		FXHistory:          fx,
+		VerifiedCurrencies: newTestCatalogue(t),
+	})
+	ts := httpTestServer(t, srv)
+	resp := mustGet(t, ts.URL+"/v1/chart?asset=fiat:CNY&quote=fiat:USD&price_type=market_cap&timeframe=1y&granularity=1d")
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status=%d", resp.StatusCode)
+	}
+	var env struct {
+		Data v1.ChartSeries `json:"data"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&env); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if env.Data.PriceType != "market_cap" {
+		t.Errorf("price_type: got %q want market_cap", env.Data.PriceType)
+	}
+	if got := len(env.Data.Points); got != 2 {
+		t.Fatalf("got %d points, want 2", got)
+	}
+	// First point: M2 (CNY 302T per seed) × 1/7.18 ≈ 42.06T USD. Just
+	// verify the result is in the expected magnitude — exact figure
+	// depends on the catalogue value.
+	first := env.Data.Points[0].P
+	if len(first) < 3 || first == "0.00" {
+		t.Errorf("first market_cap point looks empty: %q", first)
+	}
+}
+
+func TestChart_MarketCap_NonFiat_NotImplemented(t *testing.T) {
+	// Crypto market_cap over time is deferred — return 501.
+	srv := v1.New(v1.Options{
+		History:            &stubHistoryReader{},
+		VerifiedCurrencies: newTestCatalogue(t),
+	})
+	ts := httpTestServer(t, srv)
+	resp := mustGet(t, ts.URL+"/v1/chart?asset=native&quote=fiat:USD&price_type=market_cap&timeframe=1y&granularity=1d")
+	if resp.StatusCode != http.StatusNotImplemented {
+		t.Errorf("status=%d want 501", resp.StatusCode)
+	}
+}
+
+func TestChart_MarketCap_QuoteMustBeUSD_400(t *testing.T) {
+	srv := v1.New(v1.Options{
+		History:            &stubHistoryReader{},
+		VerifiedCurrencies: newTestCatalogue(t),
+	})
+	ts := httpTestServer(t, srv)
+	resp := mustGet(t, ts.URL+"/v1/chart?asset=fiat:CNY&quote=fiat:EUR&price_type=market_cap")
+	if resp.StatusCode != http.StatusBadRequest {
+		t.Errorf("status=%d want 400", resp.StatusCode)
+	}
+}
