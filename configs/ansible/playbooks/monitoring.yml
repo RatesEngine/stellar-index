@@ -1,0 +1,46 @@
+---
+# Brings up Prometheus + Alertmanager on archival-node hosts.
+# Companion to playbooks/archival-node.yml — the archival-node
+# playbook installs node_exporter and bind-mounts the metric ports;
+# this playbook wires the scrape + alert routing layer on top.
+#
+# Idempotent; safe to re-run. Splits from the archival-node playbook
+# so operators who run their own Prometheus stack (cross-region
+# aggregator, vendor like Grafana Cloud, etc.) can skip this without
+# affecting the host-level role.
+#
+# Usage:
+#
+#   ansible-playbook -i inventory/r1.yml playbooks/monitoring.yml
+#
+# Per-deployment configuration (set in inventory `vars:`):
+#   - alertmanager_healthchecks_deadmansswitch_url
+#   - alertmanager_slack_webhook_url       (defaults: empty → no chat fanout)
+#   - alertmanager_slack_channel           (defaults: "#ratesengine-alerts")
+#   - alertmanager_slack_channel_pages     (defaults: "#ratesengine-pages")
+#   - alertmanager_discord_webhook_url     (optional)
+#   - alertmanager_pagerduty_key           (optional)
+#
+# Secret handling: pass the webhook URLs via ansible-vault (e.g. an
+# encrypted inventory/r1.secrets.yml file you `--ask-vault-pass`
+# unlock at apply time). Hardcoding webhooks in a non-vault inventory
+# is a CI-exposure risk — the playbook accepts empty strings and
+# degrades to "alerts visible in Alertmanager UI only", which is
+# safer than committing a webhook to git.
+#
+# Apply notes (R1 specifically):
+#
+# The standalone `configs/alertmanager/alertmanager.r1.yml` +
+# `apply.sh` pair was the pre-Ansible bootstrap path. Both
+# arrangements produce the same routing — the template here is the
+# preferred long-term arrangement (one place to edit; multi-region
+# consistency); the standalone files stay valid for one-off
+# emergency edits without needing an ansible run.
+
+- name: Monitoring (Prometheus + Alertmanager)
+  hosts: archival_nodes
+  become: true
+  gather_facts: true
+
+  roles:
+    - prometheus

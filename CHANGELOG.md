@@ -17,6 +17,27 @@ against.
 
 ### Added
 
+- **Ansible: monitoring playbook + log-discipline task** codify the
+  post-incident operator lore from 2026-05-10. The
+  `configs/ansible/roles/prometheus/templates/alertmanager.yml.j2`
+  template now uses the `page` / `ticket` / `informational`
+  severity vocabulary matching every rule in `deploy/monitoring/`
+  and `configs/prometheus/rules.r1/`, plus a `deadmansswitch`
+  receiver wired to a Healthchecks.io URL. New
+  `configs/ansible/playbooks/monitoring.yml` invokes the role on
+  `archival_nodes`. New `configs/ansible/roles/archival-node/tasks/
+  15-log-discipline.yml` installs an `/etc/logrotate.d/rsyslog`
+  override (100 MB cap, 7-rotation history, gzip-compressed) and
+  `/etc/systemd/journald.conf.d/00-cap.conf` with
+  `SystemMaxUse=500M` + `SystemKeepFree=300M` — both directly
+  addressing the operational follow-ups in
+  `internal/incidents/data/2026-05-10-redis-writes-blocked-disk-full.md`.
+  A from-scratch r1 (or future R2/R3) rebuild now picks up the
+  fix automatically. Operator action: provision
+  `/etc/default/alertmanager-secrets` (Slack + Healthchecks URLs)
+  and run `ansible-playbook -i inventory/r1.yml playbooks/monitoring.yml`
+  on r1 to actually start delivering alerts.
+
 - **`/v1/assets/{slug}` global view + `/v1/coins` deprecation**
   (R-018 Phase 1.4a). The `/v1/assets/{asset_id}` route now
   dispatches on the path parameter: a verified-currency slug

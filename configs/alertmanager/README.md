@@ -1,15 +1,23 @@
 # R1 single-host Alertmanager config
 
 Companion to [`configs/prometheus/prometheus.r1.yml`](../prometheus/prometheus.r1.yml)
-+ [`configs/prometheus/rules.r1/`](../prometheus/rules.r1/). The
-multi-host Ansible role at
-[`configs/ansible/roles/prometheus/templates/alertmanager.yml.j2`](../ansible/roles/prometheus/templates/alertmanager.yml.j2)
-uses Prometheus's stock severity vocabulary (`critical` /
-`warning` / `info`); our rules in `deploy/monitoring/rules/`
-deliberately use `page` / `ticket` / `informational` to match the
-[severity ladder runbook](../../docs/operations/severity-ladder.md).
-This config bridges the two on R1 until the Ansible template gets
-parameterised severity routing.
++ [`configs/prometheus/rules.r1/`](../prometheus/rules.r1/).
+
+Two parallel apply paths produce the same routing:
+
+- **Standalone** (this directory): `apply.sh` env-substitutes the
+  YAML and reloads systemd-managed Alertmanager. Use for one-off
+  config changes without an Ansible run.
+- **Ansible** (recommended for new deployments + multi-region):
+  [`configs/ansible/roles/prometheus/templates/alertmanager.yml.j2`](../ansible/roles/prometheus/templates/alertmanager.yml.j2)
+  renders the same shape via the
+  [monitoring playbook](../ansible/playbooks/monitoring.yml).
+
+Both paths use the `page` / `ticket` / `informational` severity
+vocabulary defined in the
+[severity ladder runbook](../../docs/operations/severity-ladder.md)
+— matching every rule in `deploy/monitoring/rules/` +
+`configs/prometheus/rules.r1/`.
 
 ## Routing
 

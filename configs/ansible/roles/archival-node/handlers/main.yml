@@ -57,3 +57,19 @@
   ansible.builtin.systemd:
     name: ssh
     state: restarted
+
+# 15-log-discipline — journald cap is applied by restarting the
+# daemon; the new SystemMaxUse limit takes effect on the next
+# rotation cycle. Restarting is cheap (sub-second) and idempotent.
+- name: Restart systemd-journald
+  ansible.builtin.systemd:
+    name: systemd-journald
+    state: restarted
+
+# rsyslog needs a HUP rather than a restart to pick up the
+# /etc/logrotate.d/rsyslog drop-in; reload triggers a HUP via
+# systemd's ExecReload, which rotates without interrupting logging.
+- name: Reload rsyslog
+  ansible.builtin.systemd:
+    name: rsyslog
+    state: reloaded

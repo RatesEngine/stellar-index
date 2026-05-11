@@ -1,0 +1,119 @@
+---
+# Codifies the disk-fill prevention work that came out of incident
+# 2026-05-10-redis-writes-blocked-disk-full (root FS hit 100% with
+# 35 GB of stale logs; Redis BGSAVE blocked; aggregator VWAP cache
+# writes failed; /v1/price 404'd on every rewritten/triangulated
+# pair for ~9 hours).
+#
+# Two layered fixes, both applied here so a from-scratch r1 rebuild
+# can't regress:
+#
+#   1. rsyslog logrotate drop-in: cap the live syslog at 100M with
+#      7-rotation history, gzip-compressed. Pre-fix, /var/log/syslog
+#      had grown to 8.6 GB and rotated-but-not-compressed copies
+#      had piled up.
+#
+#   2. systemd-journald cap: SystemMaxUse=500M. Pre-fix the journal
+#      held 3.5 GB unbounded.
+#
+# These map directly to the postmortem's open follow-ups (see
+# `internal/incidents/data/2026-05-10-redis-writes-blocked-disk-full.md`
+# under "Operational follow-ups" — items 1 and 4). The Prometheus
+# alerts on root-FS fill (deploy/monitoring/rules/storage.yml,
+# `ratesengine_node_root_disk_warning` + `_full`) catch the
+# downstream symptom; this task addresses the upstream cause so
+# the alert never has to fire in steady state.
+
+- name: Install rsyslog logrotate override
+  ansible.builtin.copy:
+    dest: /etc/logrotate.d/rsyslog
+    owner: root
+    group: root
+    mode: "0644"
+    content: |
+      # Managed by ansible (archival-node role / 15-log-discipline.yml).
+      # Caps the live syslog + auth.log + kern.log family so the
+      # 2026-05-10 disk-fill incident class can't repeat.
+      #
+      # `maxsize 100M` — rotate as soon as a file crosses 100 MB,
+      #                  even mid-cycle. Without this the file
+      #                  could grow unbounded between daily rotations.
+      # `rotate 7`     — keep 7 historic rotations (~7 days at
+      #                  typical churn; weeks at quiet times).
+      # `compress` +
+      # `delaycompress`— gzip rotated copies, but defer one cycle
+      #                  so the most-recent rotation stays readable
+      #                  without zcat. Reproduces stock Ubuntu policy.
+      # `notifempty`   — skip rotation when a file is empty (avoids
+      #                  generating zero-byte syslog.1.gz artefacts).
+      # `missingok`    — don't fail if any of the listed files
+      #                  doesn't exist on this host (some are
+      #                  service-specific and may be absent on
+      #                  minimal installs).
+      #
+      # After rotating, send rsyslog a HUP via systemctl reload —
+      # the daemon re-opens the file handles and resumes writing
+      # to the freshly-rotated current files.
+      /var/log/syslog
+      /var/log/mail.info
+      /var/log/mail.warn
+      /var/log/mail.err
+      /var/log/mail.log
+      /var/log/daemon.log
+      /var/log/kern.log
+      /var/log/auth.log
+      /var/log/user.log
+      /var/log/lpr.log
+      /var/log/cron.log
+      /var/log/debug
+      /var/log/messages
+      {
+              rotate 7
+              daily
+              maxsize 100M
+              missingok
+              notifempty
+              compress
+              delaycompress
+              sharedscripts
+              postrotate
+                      /usr/lib/rsyslog/rsyslog-rotate
+              endscript
+      }
+  notify:
+    - Reload rsyslog
+  tags: [log-discipline, logrotate]
+
+- name: Ensure /etc/systemd/journald.conf.d exists
+  ansible.builtin.file:
+    path: /etc/systemd/journald.conf.d
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+  tags: [log-discipline, journald]
+
+- name: Install journald SystemMaxUse cap
+  ansible.builtin.copy:
+    dest: /etc/systemd/journald.conf.d/00-cap.conf
+    owner: root
+    group: root
+    mode: "0644"
+    content: |
+      # Managed by ansible (archival-node role / 15-log-discipline.yml).
+      # Caps systemd-journald's persistent storage at 500 MB.
+      #
+      # Pre-2026-05-10 the journal was unbounded and consumed
+      # 3.5 GB of /var/log on r1, contributing to the disk-fill
+      # incident. 500 MB matches the value the operator set
+      # manually on r1 during the recovery; codifying here so a
+      # rebuilt host gets the cap automatically.
+      [Journal]
+      SystemMaxUse=500M
+      # SystemKeepFree=300M ensures the journal never consumes the
+      # last 300 MB of free space on the journal's filesystem (a
+      # final guardrail above SystemMaxUse).
+      SystemKeepFree=300M
+  notify:
+    - Restart systemd-journald
+  tags: [log-discipline, journald]

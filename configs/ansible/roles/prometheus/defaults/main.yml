@@ -61,7 +61,20 @@ prometheus_node_scrape_interval: 30s
 alertmanager_pagerduty_key: ""
 alertmanager_slack_webhook_url: ""
 alertmanager_slack_channel: "#ratesengine-alerts"
+# Page-tier (SEV-1) goes to a dedicated channel so the on-call
+# rotation can mute the ticket channel without missing pages.
+alertmanager_slack_channel_pages: "#ratesengine-pages"
 alertmanager_discord_webhook_url: ""
+
+# Healthchecks.io deadmansswitch endpoint. The
+# `ratesengine_deadmansswitch` alert fires every 60 s while
+# Prometheus is alive; Alertmanager pings this URL on receive.
+# When the heartbeat stops (Prometheus or Alertmanager itself
+# down) Healthchecks pages us via a separately-hosted channel.
+# Recommended provisioning: a 90-second-grace check on hc-ping.com,
+# accountable to a different runbook (see
+# docs/operations/runbooks/deadmansswitch.md).
+alertmanager_healthchecks_deadmansswitch_url: ""
 
 # ── Firewall ───────────────────────────────────────────────────
 # AlertManager cluster gossip needs TCP between the two prom

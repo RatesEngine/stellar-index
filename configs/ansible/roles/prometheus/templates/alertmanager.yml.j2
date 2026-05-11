@@ -1,89 +1,154 @@
 {# Render-time — managed by ansible (prometheus role). Don't edit. #}
 {# Validated by `amtool check-config` before reload. #}
+{#                                                                        #}
+{# This template uses the page / ticket / informational severity         #}
+{# vocabulary defined in docs/operations/severity-ladder.md — the same   #}
+{# labels every rule in deploy/monitoring/rules/ + configs/prometheus/   #}
+{# rules.r1/ emits. The receiver fanout mirrors the standalone           #}
+{# configs/alertmanager/alertmanager.r1.yml so a host can be brought up  #}
+{# from either path with consistent behaviour.                            #}
 
 global:
   resolve_timeout: 5m
-{% if alertmanager_slack_webhook_url %}
-  slack_api_url: {{ alertmanager_slack_webhook_url }}
-{% endif %}
 
+# ─── Routing tree ────────────────────────────────────────────────
+#
+# Default `chat-default` (rather than a more drastic "pagerduty-
+# default") so unknown-severity alerts surface in chat without
+# spurious paging. Per-severity matchers below route the standard
+# ladder. Deadmansswitch is a separately-rooted heartbeat that
+# never matches any other route.
 route:
-  # Default receiver when no per-severity match — set conservatively
-  # to PagerDuty so unrouted alerts still land somewhere visible.
-  receiver: 'pagerduty-default'
-  group_by: ['alertname', 'severity']
+  receiver: chat-default
+  group_by: [alertname, severity]
   group_wait: 30s
   group_interval: 5m
   repeat_interval: 12h
-  routes:
-    - matchers:
-        - severity = "critical"
-      receiver: 'pagerduty-default'
-    - matchers:
-        - severity = "warning"
-      receiver: 'chat-fanout'
-    - matchers:
-        - severity = "info"
-      receiver: 'chat-fanout'
 
+  routes:
+    # Deadmansswitch — fires constantly while Prometheus +
+    # Alertmanager are alive. Routed to Healthchecks.io; when the
+    # heartbeat stops, Healthchecks pages us via a separately-
+    # hosted channel, catching outages of Prometheus or
+    # Alertmanager themselves.
+    # See docs/operations/runbooks/deadmansswitch.md.
+    - matchers: [alertname = "ratesengine_deadmansswitch"]
+      receiver: deadmansswitch
+      group_interval: 60s
+      repeat_interval: 60s
+      continue: false
+
+    # Page — SEV-1: customer-visible outage. Highest-urgency chat
+    # channel + (when wired) PagerDuty.
+    - matchers: [severity = "page"]
+      receiver: chat-page
+      continue: false
+
+    # Ticket — actionable but not customer-urgent. Lower repeat
+    # cadence so a long-running ticket doesn't spam the channel.
+    - matchers: [severity = "ticket"]
+      receiver: chat-default
+      repeat_interval: 24h
+      continue: false
+
+    # Informational — accumulates in the Alertmanager UI. No
+    # chat fanout (would dilute the page + ticket signal).
+    - matchers: [severity = "informational"]
+      receiver: silent
+      continue: false
+
+# ─── Inhibit rules ───────────────────────────────────────────────
+#
+# Suppress lower-severity variants of the same alert when a page is
+# already firing — prevents stacking when an incident escalates and
+# both the ticket-tier baseline alert and the page-tier escalation
+# fire simultaneously.
+inhibit_rules:
+  - source_matchers: [severity = "page"]
+    target_matchers: [severity =~ "ticket|informational"]
+    equal: [alertname, component]
+
+# ─── Receivers ───────────────────────────────────────────────────
+#
+# Every chat receiver short-circuits to a no-op stub when its
+# webhook URL is unset — alerts still accumulate in the Alertmanager
+# UI but don't fan out. Operators can wire any subset.
 receivers:
-  - name: 'pagerduty-default'
+  # Deadmansswitch heartbeat — Healthchecks.io webhook.
+  - name: deadmansswitch
+{% if alertmanager_healthchecks_deadmansswitch_url %}
+    webhook_configs:
+      - url: {{ alertmanager_healthchecks_deadmansswitch_url }}
+        send_resolved: false
+{% else %}
+    # No HEALTHCHECKS_DEADMANSSWITCH_URL — set
+    # alertmanager_healthchecks_deadmansswitch_url in inventory
+    # (or env-substitute at apply time). Without it the dead-man
+    # heartbeat doesn't reach Healthchecks, defeating the
+    # "Prometheus or Alertmanager itself is down" detection.
+{% endif %}
+
+  # Page-tier fanout — Slack + (future) PagerDuty.
+  - name: chat-page
+{% if alertmanager_slack_webhook_url %}
+    slack_configs:
+      - api_url: {{ alertmanager_slack_webhook_url }}
+        channel: '{{ alertmanager_slack_channel_pages }}'
+        send_resolved: true
+        title: '🚨 PAGE — {{ "{{" }} .GroupLabels.alertname {{ "}}" }}'
+        text: |
+          {{ "{{" }} range .Alerts {{ "}}" }}
+          *{{ "{{" }} .Annotations.summary {{ "}}" }}*
+          {{ "{{" }} .Annotations.description {{ "}}" }}
+          {{ "{{" }} if .Annotations.runbook_url {{ "}}" }}Runbook: {{ "{{" }} .Annotations.runbook_url {{ "}}" }}{{ "{{" }} end {{ "}}" }}
+          {{ "{{" }} end {{ "}}" }}
+{% endif %}
 {% if alertmanager_pagerduty_key %}
     pagerduty_configs:
       - service_key: {{ alertmanager_pagerduty_key }}
         send_resolved: true
-{% else %}
-    # No pagerduty_key set — alerts accumulate in the AlertManager
-    # UI but don't fan out. Set alertmanager_pagerduty_key in vault
-    # to enable PagerDuty integration.
+{% endif %}
+{% if not alertmanager_slack_webhook_url and not alertmanager_pagerduty_key %}
+    # No chat / pagerduty wiring on page-tier — alerts visible only
+    # in Alertmanager UI. Set alertmanager_slack_webhook_url and/or
+    # alertmanager_pagerduty_key.
 {% endif %}
 
-  # chat-fanout — Slack + Discord parallel fanout. Either, both,
-  # or neither may be wired; an empty webhook degrades silently to
-  # "no receiver of that flavour". The proposal commits to both
-  # ("integrated into discord/slack") so this template ships them
-  # as peers rather than picking a primary.
-  - name: 'chat-fanout'
+  # Ticket-tier + default. Slack only (no page-out).
+  - name: chat-default
 {% if alertmanager_slack_webhook_url %}
     slack_configs:
-      - channel: {{ alertmanager_slack_channel }}
+      - api_url: {{ alertmanager_slack_webhook_url }}
+        channel: '{{ alertmanager_slack_channel }}'
         send_resolved: true
         title: '{{ "{{" }} .GroupLabels.alertname {{ "}}" }}'
         text: |
           {{ "{{" }} range .Alerts {{ "}}" }}
-          *{{ "{{" }} .Labels.severity | toUpper {{ "}}" }}* {{ "{{" }} .Annotations.summary {{ "}}" }}
+          *[{{ "{{" }} .Labels.severity | toUpper {{ "}}" }}]* {{ "{{" }} .Annotations.summary {{ "}}" }}
           {{ "{{" }} .Annotations.description {{ "}}" }}
-          {{ "{{" }} if .Annotations.runbook_url {{ "}}" }}runbook: {{ "{{" }} .Annotations.runbook_url {{ "}}" }}{{ "{{" }} end {{ "}}" }}
+          {{ "{{" }} if .Annotations.runbook_url {{ "}}" }}Runbook: {{ "{{" }} .Annotations.runbook_url {{ "}}" }}{{ "{{" }} end {{ "}}" }}
           {{ "{{" }} end {{ "}}" }}
 {% endif %}
 {% if alertmanager_discord_webhook_url %}
-    # Discord webhooks accept the same JSON envelope as Slack's
-    # "incoming-webhook" path when AlertManager's discord_configs
-    # is used (added in AM 0.27). Title + body come from the same
-    # group/alert templating as Slack so operators see consistent
-    # text in either channel.
+    # Parallel Discord fanout. The proposal commits to "discord/slack"
+    # — this keeps both channels in lockstep when both webhooks are set.
     discord_configs:
       - webhook_url: {{ alertmanager_discord_webhook_url }}
         send_resolved: true
         title: '{{ "{{" }} .GroupLabels.alertname {{ "}}" }}'
         message: |
           {{ "{{" }} range .Alerts {{ "}}" }}
-          **{{ "{{" }} .Labels.severity | toUpper {{ "}}" }}** {{ "{{" }} .Annotations.summary {{ "}}" }}
+          **[{{ "{{" }} .Labels.severity | toUpper {{ "}}" }}]** {{ "{{" }} .Annotations.summary {{ "}}" }}
           {{ "{{" }} .Annotations.description {{ "}}" }}
-          {{ "{{" }} if .Annotations.runbook_url {{ "}}" }}runbook: {{ "{{" }} .Annotations.runbook_url {{ "}}" }}{{ "{{" }} end {{ "}}" }}
+          {{ "{{" }} if .Annotations.runbook_url {{ "}}" }}Runbook: {{ "{{" }} .Annotations.runbook_url {{ "}}" }}{{ "{{" }} end {{ "}}" }}
           {{ "{{" }} end {{ "}}" }}
 {% endif %}
 {% if not alertmanager_slack_webhook_url and not alertmanager_discord_webhook_url %}
-    # Neither slack_webhook_url nor discord_webhook_url set — no
-    # fanout. Alerts accumulate in the AlertManager UI but don't
-    # reach any chat channel. Set at least one webhook in vault.
+    # Neither Slack nor Discord wired — ticket alerts visible only
+    # in the Alertmanager UI. Set at least one webhook.
 {% endif %}
 
-inhibit_rules:
-  # If a critical-severity alert fires for the same service, mute
-  # warnings + info for that alertname to avoid stacking.
-  - source_matchers:
-      - severity = "critical"
-    target_matchers:
-      - severity =~ "warning|info"
-    equal: ['alertname', 'service']
+  # Silent — informational alerts accumulate in the Alertmanager UI
+  # without fanout. No receiver config = no delivery; AM still
+  # tracks alert state for inspection.
+  - name: silent
