@@ -15,6 +15,38 @@ against.
 
 ## [Unreleased]
 
+## [v0.5.0-rc.47] — 2026-05-11
+
+### Added
+
+- **`/v1/assets` is now a strict superset of `/v1/coins`.** The
+  listing endpoint sources from `ListCoinsExt` when a `CoinsReader`
+  is wired, projecting each row into `AssetDetail` with the full
+  coin-overlay shape (`price_usd`, `volume_24h_usd`,
+  `market_cap_usd`, `circulating_supply`, `change_*_pct`,
+  `issuer_scam_reason`). Pagination uses the same
+  `<observation_count>:<asset_id>` cursor format as `/v1/coins`.
+- **`/v1/assets?issuer=<G-strkey>`** filters the listing to one
+  issuer. Wires straight through to `ListCoinsExt`'s Issuer option.
+  Unblocks `/v1/issuers/{g}` → `/v1/assets` migration in the
+  explorer.
+- **`AssetDetail` adds `slug`, `first_seen_ledger`,
+  `last_seen_ledger`, `observation_count`** — the catalogue
+  identity + activity-metadata scalars CoinRow carries but the
+  rc.46 overlay didn't lift. Lets explorer consumers drop their
+  parallel `/v1/coins/{slug}` fetches.
+
+### Changed (explorer)
+
+- **Every explorer `/v1/coins` fetch site migrated to `/v1/assets`.**
+  `useCoins` hook keeps its name + return shape for ergonomic
+  continuity but the underlying API call is now `/v1/assets`,
+  envelope-reshaped from `{data:[], pagination:{next}}` into the
+  legacy `{coins:[], next_cursor, limit}` so the 4 home consumers
+  (HomeTopMovers, HomeTopAssets, HomeNetworkStrip, AssetsTable)
+  work unchanged. Direct fetch sites (asset-detail listing cache,
+  sitemap, embed-asset, issuer page) hit `/v1/assets` end-to-end.
+
 ## [v0.5.0-rc.46] — 2026-05-11
 
 ### Added
