@@ -235,19 +235,26 @@ func TestAssetsVerified_NoCatalogue_503(t *testing.T) {
 // non-USD row to exercise the reader path.
 func TestAssetsVerified_FiatMarketCap(t *testing.T) {
 	cat := newTestCatalogue(t)
-	reader := &stubGlobalPriceReader{}
-	// FX rate stub: every fiat:CCY → fiat:USD pair returns 0.14
-	// (matches CNY/USD; not realistic for the rest of the world
-	// but fine for the unit test — we only need the cap math to
-	// work).
-	reader.vwap.price = "0.14000000000000"
-	reader.vwap.tradeCount = 100
-	reader.vwap.sources = []string{"polygon-forex"}
-	reader.vwap.ok = true
+	// Stub PriceReader with a 0.14 FX rate for every fiat:CCY/fiat:USD
+	// pair. Production reads the same path /v1/price uses, which
+	// includes the Redis-triangulated fallback when prices_1m
+	// misses for fiat:fiat pairs.
+	snapshots := map[string]v1.PriceSnapshot{}
+	for _, vc := range cat.ByClass(currency.ClassFiat) {
+		if vc.Ticker == "USD" {
+			continue
+		}
+		key := "fiat:" + vc.Ticker + "/fiat:USD"
+		snapshots[key] = v1.PriceSnapshot{
+			AssetID: "fiat:" + vc.Ticker, Quote: "fiat:USD",
+			Price: "0.14000000000000", PriceType: "vwap",
+		}
+	}
+	priceStub := &stubPriceReader{snapshots: snapshots}
 
 	srv := v1.New(v1.Options{
 		VerifiedCurrencies: cat,
-		GlobalPrice:        reader,
+		Prices:             priceStub,
 	})
 	ts := httpTestServer(t, srv)
 

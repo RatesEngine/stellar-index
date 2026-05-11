@@ -26,7 +26,7 @@ import { API_BASE_URL } from '@/api/client';
 // not-found panel.
 export function AssetClientFallback({ slug }: { slug: string }) {
   const [state, setState] = useState<
-    'loading' | 'recoverable' | 'missing' | 'error'
+    'loading' | 'reloading' | 'recoverable' | 'missing' | 'error'
   >('loading');
   const [errMsg, setErrMsg] = useState<string | null>(null);
 
@@ -46,13 +46,22 @@ export function AssetClientFallback({ slug }: { slug: string }) {
       .then((env) => {
         if (env == null) return;
         if (env?.data?.slug) {
+          // Static HTML for /assets/{slug}/ rendered without the
+          // API response (build-time fetch hit a deploy window).
+          // Live API is reachable now — auto-reload ONCE to get
+          // the freshly-rebuilt page from Cloudflare's edge or, if
+          // CF hasn't rebuilt yet, the same fallback re-runs and
+          // we render the friendly recovery panel below without
+          // looping.
+          const reloadKey = `assetFallbackReloaded:${slug}`;
+          if (typeof window !== 'undefined' && !sessionStorage.getItem(reloadKey)) {
+            sessionStorage.setItem(reloadKey, '1');
+            // Brief delay so the reload feels intentional (not a flash).
+            setTimeout(() => window.location.reload(), 600);
+            setState('reloading');
+            return;
+          }
           setState('recoverable');
-          // The static HTML for /assets/{slug}/ was built without
-          // the API response. A hard reload after a small delay
-          // gives Cloudflare's edge a chance to serve a freshly-
-          // rebuilt copy if one has landed; otherwise the user
-          // sees this fallback render with the (now-known-good)
-          // API data inline below.
           return;
         }
         setState('missing');
@@ -65,7 +74,7 @@ export function AssetClientFallback({ slug }: { slug: string }) {
     return () => controller.abort();
   }, [slug]);
 
-  if (state === 'loading') {
+  if (state === 'loading' || state === 'reloading') {
     return (
       <Panel
         title="Loading asset…"
@@ -81,33 +90,43 @@ export function AssetClientFallback({ slug }: { slug: string }) {
   if (state === 'recoverable') {
     return (
       <Panel
-        title={`${slug} — recovering`}
+        title={`${slug}`}
         bodyClassName="space-y-2 text-sm text-slate-600 dark:text-slate-400"
       >
         <p>
-          The static page for <code className="font-mono">{slug}</code> couldn&apos;t
-          be prerendered (build-time API timeout). Live data is available — try
-          one of these:
+          We&apos;ve got live data for <code className="font-mono">{slug}</code>{' '}
+          but this snapshot was rendered before the latest deploy settled.
+          Try:
         </p>
         <ul className="list-disc pl-5">
           <li>
-            <Link className="text-brand-600 hover:underline" href="/assets">
-              Browse the full asset list
-            </Link>{' '}
-            and click through (the listing fetches client-side).
+            <button
+              type="button"
+              onClick={() => {
+                try { sessionStorage.removeItem(`assetFallbackReloaded:${slug}`); } catch {/* noop */}
+                window.location.reload();
+              }}
+              className="text-brand-600 hover:underline"
+            >
+              Reload the page
+            </button>
+            {' '}— a freshly-rebuilt static copy usually lands within a minute.
           </li>
           <li>
-            Reload the page — a recent build may already be live at the edge.
+            <Link className="text-brand-600 hover:underline" href="/assets">
+              Browse the asset list
+            </Link>
+            {' '}— the listing fetches client-side and works even mid-deploy.
           </li>
           <li>
             Or query the API directly:{' '}
             <a
               className="font-mono text-brand-600 hover:underline"
-              href={`${API_BASE_URL}/v1/coins/${encodeURIComponent(slug)}`}
+              href={`${API_BASE_URL}/v1/assets/${encodeURIComponent(slug)}`}
               target="_blank"
               rel="noreferrer"
             >
-              /v1/coins/{slug}
+              /v1/assets/{slug}
             </a>
           </li>
         </ul>

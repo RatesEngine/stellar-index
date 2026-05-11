@@ -267,21 +267,26 @@ func TestAssetGet_Fiat_USDIdentity(t *testing.T) {
 	}
 }
 
-// TestAssetGet_Fiat_CNY_MarketCap — non-USD fiat: handler runs
-// ComputeGlobalPrice on the fiat:CNY → fiat:USD pair (FX feeds
-// populate prices_1m for these), then multiplies M2 by the result.
-// Stubbing a known FX rate to verify the cap math.
+// TestAssetGet_Fiat_CNY_MarketCap — non-USD fiat: handler reads
+// the FX rate from PriceReader (s.prices) for the fiat:CNY/fiat:USD
+// pair, then multiplies M2 by the result. PriceReader is used
+// rather than ComputeGlobalPrice because the FX-rate Redis
+// triangulated fallback (which prices_1m doesn't carry for
+// fiat:fiat) is in scope of the production PriceReader.
 func TestAssetGet_Fiat_CNY_MarketCap(t *testing.T) {
 	cat := newTestCatalogue(t)
-	reader := &stubGlobalPriceReader{}
-	reader.vwap.price = "0.14000000000000"
-	reader.vwap.tradeCount = 100
-	reader.vwap.sources = []string{"polygon-forex"}
-	reader.vwap.ok = true
+	priceStub := &stubPriceReader{
+		snapshots: map[string]v1.PriceSnapshot{
+			"fiat:CNY/fiat:USD": {
+				AssetID: "fiat:CNY", Quote: "fiat:USD",
+				Price: "0.14000000000000", PriceType: "vwap",
+			},
+		},
+	}
 
 	srv := v1.New(v1.Options{
 		VerifiedCurrencies: cat,
-		GlobalPrice:        reader,
+		Prices:             priceStub,
 	})
 	ts := httpTestServer(t, srv)
 

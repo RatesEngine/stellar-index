@@ -114,6 +114,17 @@ func (s *Server) buildGlobalAssetView(ctx context.Context, vc *currency.Verified
 		view.SupplyDecimals = vc.SupplyDecimals
 	}
 
+	// Fiat goes through PriceReader (s.prices) — different reader
+	// from crypto/stablecoin's ComputeGlobalPrice because fiat:fiat
+	// FX rates live in the aggregator's Redis triangulated cache,
+	// not in the prices_1m CAGG. See fiatMarketCapUSD's docstring
+	// for the full rationale. Handled BEFORE the s.globalPrice nil
+	// guard so a deployment with only PriceReader wired still
+	// populates fiat fully.
+	if vc.Class == currency.ClassFiat {
+		return s.populateFiatView(ctx, view, vc)
+	}
+
 	// Populate the price block via the three-tier fallback chain
 	// (vwap_native → aggregator_avg → triangulated). Skipped when
 	// the binary didn't wire a GlobalPriceReader, leaving the price
@@ -135,29 +146,11 @@ func (s *Server) buildGlobalAssetView(ctx context.Context, vc *currency.Verified
 		return view
 	}
 
-	// Special-case: USD vs USD. Skip the storage lookup (which would
-	// 404 or return weird semantics) and synthesise an identity price.
-	if vc.Class == currency.ClassFiat && strings.EqualFold(vc.Ticker, "USD") {
-		identity := "1.00000000000000"
-		asOf := time.Now().UTC()
-		view.PriceUSD = &identity
-		view.PriceAuthority = aggregate.AuthorityVWAPNative
-		view.PriceSources = []string{"identity"}
-		view.PriceAsOf = &asOf
-		view.MarketCapUSD = computeFiatMarketCap(vc.CirculatingSupply, identity)
-		return view
-	}
-
 	opts := s.globalPriceOpts
 	if opts.AggregatorSources == nil {
 		// Leave aggregator tier disabled if the binary didn't wire a
 		// source list — better to skip than fail.
 		opts.AggregatorSources = nil
-	}
-	// FX pairs have very low trade counts (snapshots, not trades).
-	// Lower the threshold so non-USD fiat populates a price.
-	if vc.Class == currency.ClassFiat {
-		opts = fiatGlobalPriceOpts(opts)
 	}
 
 	res, err := aggregate.ComputeGlobalPrice(ctx, base, quote, s.globalPrice, opts)
@@ -176,15 +169,51 @@ func (s *Server) buildGlobalAssetView(ctx context.Context, vc *currency.Verified
 	view.PriceSources = res.Sources
 	asOf := res.AsOf
 	view.PriceAsOf = &asOf
-
-	// Fiat market cap: CirculatingSupply (M2) × PriceUSD.
 	// Crypto / stablecoin market cap stays on the per-asset surface
-	// (/v1/assets/{asset_id}); not computed here because the
-	// catalogue's CirculatingSupply is typically empty for those
-	// classes.
-	if vc.Class == currency.ClassFiat {
-		view.MarketCapUSD = computeFiatMarketCap(vc.CirculatingSupply, price)
+	// (/v1/assets/{asset_id}'s F2 fields) — catalogue.CirculatingSupply
+	// is empty for those classes, so no inline computation here.
+	// Fiat already returned above with both price + cap populated.
+	return view
+}
+
+// populateFiatView fills the price + market-cap block for a fiat
+// currency. USD is identity-priced; other fiats consult
+// PriceReader.LatestPrice for the fiat:CCY/fiat:USD rate. Returns
+// the view as-is when the rate isn't available (PriceReader nil,
+// rate not found, ticker not in canonical allow-list).
+func (s *Server) populateFiatView(ctx context.Context, view GlobalAssetView, vc *currency.VerifiedCurrency) GlobalAssetView {
+	if strings.EqualFold(vc.Ticker, "USD") {
+		identity := "1.00000000000000"
+		asOf := time.Now().UTC()
+		view.PriceUSD = &identity
+		view.PriceAuthority = aggregate.AuthorityVWAPNative
+		view.PriceSources = []string{"identity"}
+		view.PriceAsOf = &asOf
+		view.MarketCapUSD = computeFiatMarketCap(vc.CirculatingSupply, identity)
+		return view
 	}
+	if s.prices == nil {
+		return view
+	}
+	base, err := canonical.NewFiatAsset(vc.Ticker)
+	if err != nil {
+		return view
+	}
+	quote, err := canonical.NewFiatAsset("USD")
+	if err != nil {
+		return view
+	}
+	snap, sources, _, err := s.prices.LatestPrice(ctx, base, quote)
+	if err != nil {
+		return view
+	}
+	price := snap.Price
+	view.PriceUSD = &price
+	view.PriceAuthority = aggregate.AuthorityVWAPNative
+	view.PriceSources = sources
+	obs := snap.ObservedAt
+	view.PriceAsOf = &obs
+	view.MarketCapUSD = computeFiatMarketCap(vc.CirculatingSupply, price)
 	return view
 }
 
@@ -206,23 +235,34 @@ func assetForCurrency(vc *currency.VerifiedCurrency) (canonical.Asset, bool) {
 
 // fiatMarketCapUSD computes market_cap_usd for a fiat catalogue
 // entry. USD is special-cased to identity (price = 1.00); every
-// other fiat goes through ComputeGlobalPrice against fiat:CCY →
-// fiat:USD to get the current FX rate, then multiplies by M2.
-// Returns nil when the FX rate isn't available (no fiat pair in
-// prices_1m yet) or the supply parse fails.
+// other fiat goes through PriceReader.LatestPrice for the
+// fiat:CCY/fiat:USD pair, then multiplies by M2.
 //
-// FX-pair VWAP buckets typically have very low trade counts (one
-// observation per minute from each FX vendor, often 1-3 total)
-// because FX feeds publish snapshots, not order-book trades.
-// Override the global default VWAPMinTradeCount (5) down to 1 for
-// fiat — any non-empty bucket is authoritative because each
-// observation IS the rate, not a sample of trading activity.
+// Why PriceReader (s.prices) rather than ComputeGlobalPrice
+// (s.globalPrice):
+//
+// Fiat FX rates are written into the aggregator's Redis cache by
+// the triangulation worker (`vwap:fiat:CCY:fiat:USD:300s` with a
+// `triangulated` provenance marker), not into the prices_1m CAGG.
+// The standalone /v1/price endpoint reads this Redis fallback after
+// a CAGG miss. ComputeGlobalPrice's tier 1 reads the CAGG directly
+// and tier 3 reads a SEPARATE TriangulatedPriceLooker that returns
+// fxonly when explicit triangulation chains are configured — neither
+// surfaces the Redis-cached implied VWAP that /v1/price uses for
+// fiat:fiat. PriceReader.LatestPrice consults both paths
+// transparently, so we delegate.
+//
+// Returns nil when the FX rate isn't available or the supply parse
+// fails.
 func (s *Server) fiatMarketCapUSD(ctx context.Context, vc *currency.VerifiedCurrency) *string {
 	if vc.CirculatingSupply == "" {
 		return nil
 	}
 	if strings.EqualFold(vc.Ticker, "USD") {
 		return computeFiatMarketCap(vc.CirculatingSupply, "1.00000000000000")
+	}
+	if s.prices == nil {
+		return nil
 	}
 	base, err := canonical.NewFiatAsset(vc.Ticker)
 	if err != nil {
@@ -233,21 +273,11 @@ func (s *Server) fiatMarketCapUSD(ctx context.Context, vc *currency.VerifiedCurr
 	if err != nil {
 		return nil
 	}
-	opts := fiatGlobalPriceOpts(s.globalPriceOpts)
-	res, err := aggregate.ComputeGlobalPrice(ctx, base, quote, s.globalPrice, opts)
+	snap, _, _, err := s.prices.LatestPrice(ctx, base, quote)
 	if err != nil {
 		return nil
 	}
-	return computeFiatMarketCap(vc.CirculatingSupply, res.Price)
-}
-
-// fiatGlobalPriceOpts lowers VWAPMinTradeCount to 1 so an FX pair
-// with a single per-minute snapshot can populate. See the docstring
-// on fiatMarketCapUSD for the rationale.
-func fiatGlobalPriceOpts(base aggregate.GlobalPriceOptions) aggregate.GlobalPriceOptions {
-	out := base
-	out.VWAPMinTradeCount = 1
-	return out
+	return computeFiatMarketCap(vc.CirculatingSupply, snap.Price)
 }
 
 // computeFiatMarketCap returns market_cap_usd = supplyStr × priceStr
@@ -493,9 +523,11 @@ func (s *Server) handleAssetsVerified(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Compute market_cap_usd for fiat rows in parallel. Skipped for
-	// crypto/stablecoin (no catalogue supply) and when no
-	// GlobalPriceReader is wired (no FX rate source).
-	if s.globalPrice != nil {
+	// crypto/stablecoin (no catalogue supply) and when no PriceReader
+	// is wired (no FX rate source — fiatMarketCapUSD uses s.prices,
+	// not s.globalPrice, to pick up the Redis-triangulated FX
+	// fallback that prices_1m doesn't carry for fiat:fiat pairs).
+	if s.prices != nil {
 		ctx := r.Context()
 		var wg sync.WaitGroup
 		for i, vc := range entries {
