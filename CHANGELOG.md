@@ -15,6 +15,8 @@ against.
 
 ## [Unreleased]
 
+## [v0.5.0-rc.40] — 2026-05-11
+
 ### Added
 
 - **Ansible: monitoring playbook + log-discipline task** codify the
