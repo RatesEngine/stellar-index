@@ -38,9 +38,20 @@ const nextConfig = {
   // All API access is client-side from the browser to api.ratesengine.net,
   // which is already CDN-cached per cdn-setup.md. No server-side fetches
   // needed — that's the entire point of the static-export architecture.
+  //
+  // Build identifiers (BUILD_SHA / BUILD_TIME) are surfaced in the footer
+  // so an operator viewing the live site can confirm which commit it
+  // reflects. CF Pages sets CF_PAGES_COMMIT_SHA automatically; for the
+  // GitHub Actions manual-deploy fallback we read GITHUB_SHA. Local
+  // builds get "dev".
   env: {
     NEXT_PUBLIC_API_BASE_URL:
       process.env.NEXT_PUBLIC_API_BASE_URL ?? 'https://api.ratesengine.net',
+    NEXT_PUBLIC_BUILD_SHA:
+      process.env.CF_PAGES_COMMIT_SHA ??
+      process.env.GITHUB_SHA ??
+      'dev',
+    NEXT_PUBLIC_BUILD_TIME: new Date().toISOString(),
   },
 };
 

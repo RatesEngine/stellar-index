@@ -105,6 +105,17 @@ export default function RootLayout({
   return (
     <html lang="en">
       <head>
+        {/* Build identifier — same SHA + time as the footer badge,
+            in machine-readable form. `curl -s ratesengine.net | grep
+            re-build` reveals the live build without rendering JS. */}
+        <meta
+          name="re-build-sha"
+          content={process.env.NEXT_PUBLIC_BUILD_SHA ?? 'dev'}
+        />
+        <meta
+          name="re-build-time"
+          content={process.env.NEXT_PUBLIC_BUILD_TIME ?? ''}
+        />
         {/* Set html.dark before first paint to avoid theme flash */}
         <script dangerouslySetInnerHTML={{ __html: themeInit }} />
         {/* Schema.org JSON-LD — Organization + WebSite. Lets Google

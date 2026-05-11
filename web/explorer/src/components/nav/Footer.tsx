@@ -86,11 +86,37 @@ export function Footer() {
             >
               GitHub
             </a>
+            <BuildBadge />
           </div>
           <span>Apache-2.0</span>
         </div>
       </div>
     </footer>
+  );
+}
+
+// BuildBadge — shows the short commit SHA + build time so an
+// operator can quickly tell which deploy a given page reflects.
+// Hovering surfaces the full SHA and the upstream commit URL.
+// When BUILD_SHA is "dev" (local builds) we keep the badge silent
+// to avoid noise during development.
+function BuildBadge() {
+  const sha = process.env.NEXT_PUBLIC_BUILD_SHA ?? 'dev';
+  const time = process.env.NEXT_PUBLIC_BUILD_TIME ?? '';
+  if (sha === 'dev') return null;
+  const short = sha.slice(0, 8);
+  const date = time ? time.slice(0, 10) : '';
+  return (
+    <a
+      href={`https://github.com/RatesEngine/rates-engine/commit/${sha}`}
+      target="_blank"
+      rel="noopener noreferrer"
+      title={`Built ${time} from commit ${sha}`}
+      className="font-mono text-[10px] tracking-tight text-slate-400 hover:text-slate-700 dark:text-slate-500 dark:hover:text-slate-300"
+    >
+      build {short}
+      {date && <span className="hidden md:inline"> · {date}</span>}
+    </a>
   );
 }
 
