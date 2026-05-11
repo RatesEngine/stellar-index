@@ -84,6 +84,16 @@ func (s *Server) handleChart(w http.ResponseWriter, r *http.Request) {
 		from = time.Now().Add(-tf.Duration).UTC()
 	}
 
+	// Fiat:fiat pairs (e.g. fiat:CNY/fiat:USD) — prices_1m / prices_5m
+	// / prices_1h never store FX rates; those live in fx_quotes,
+	// populated by the forex worker + fx-history-backfill. Route
+	// these requests to the fx_quotes reader instead of returning an
+	// empty series.
+	if pair.Base.Type == canonical.AssetFiat && pair.Quote.Type == canonical.AssetFiat {
+		s.handleChartFiat(w, r, pair, tfRaw, gran, priceType, from)
+		return
+	}
+
 	// 8s ceiling on the chart query + downstream stablecoin
 	// fallback. Same pattern as #1082 / #1099 / #1100 / #1101.
 	// The chart's prices_1m / prices_5m / prices_1h scan can take
@@ -167,6 +177,104 @@ func (s *Server) handleChart(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeJSON(w, series, Flags{Triangulated: triangulated})
+}
+
+// handleChartFiat serves /v1/chart for fiat:fiat pairs out of the
+// fx_quotes hypertable. Frankfurter (and historically Massive) writes
+// daily ECB reference rates into fx_quotes — so any sub-daily
+// granularity (1m / 15m / 1h / 4h) just gets the daily bar replicated
+// to the consumer's chosen grain (front-end renders flat candles).
+//
+// Pair conventions:
+//   - fiat:CCY/fiat:USD  → reader returns rate (1 CCY = N USD); use InverseUSD
+//   - fiat:USD/fiat:CCY  → reader returns inverse (1 USD = N CCY); use RateUSD
+//   - fiat:CCY1/fiat:CCY2 (cross) → not yet supported; returns empty
+//     series + a non-fatal "triangulated=false". The explorer falls
+//     back to "no data for this window"; a follow-up can implement
+//     cross-currency triangulation on read.
+func (s *Server) handleChartFiat(
+	w http.ResponseWriter,
+	r *http.Request,
+	pair canonical.Pair,
+	tfRaw, gran, priceType string,
+	from time.Time,
+) {
+	series := ChartSeries{
+		AssetID:     pair.Base.String(),
+		Quote:       pair.Quote.String(),
+		Timeframe:   tfRaw,
+		Granularity: gran,
+		PriceType:   priceType,
+		Points:      []HistoryPointWire{},
+	}
+
+	if s.fxHistory == nil {
+		writeJSON(w, series, Flags{})
+		return
+	}
+
+	// Identify the non-USD ticker + which side it's on.
+	var ticker string
+	var useInverse bool
+	switch {
+	case pair.Base.Code == "USD" && pair.Quote.Code != "USD":
+		ticker, useInverse = pair.Quote.Code, false
+	case pair.Quote.Code == "USD" && pair.Base.Code != "USD":
+		ticker, useInverse = pair.Base.Code, true
+	default:
+		// Cross-fiat (e.g. EUR/JPY) or USD/USD — neither supported here.
+		writeJSON(w, series, Flags{})
+		return
+	}
+
+	// Default window: trailing 1y when timeframe=all (open-ended would
+	// hammer Postgres for 25y on every request; the chart consumer
+	// only renders one screen anyway).
+	to := time.Now().UTC().Truncate(24 * time.Hour)
+	queryFrom := from
+	if queryFrom.IsZero() {
+		queryFrom = to.AddDate(-25, 0, 0) // ECB inception
+	}
+
+	fxCtx, cancel := context.WithTimeout(r.Context(), 8*time.Second)
+	defer cancel()
+	points, err := s.fxHistory.ListFXHistory(fxCtx, ticker, queryFrom, to)
+	if err != nil {
+		s.logger.Warn("chart fiat fx_quotes fetch failed",
+			"ticker", ticker, "err", err)
+		writeJSON(w, series, Flags{})
+		return
+	}
+
+	wire := make([]HistoryPointWire, 0, len(points))
+	for _, p := range points {
+		rate := p.RateUSD
+		if useInverse {
+			rate = p.InverseUSD
+		}
+		if rate <= 0 {
+			continue
+		}
+		wire = append(wire, HistoryPointWire{
+			T: p.Bucket,
+			P: fmt.Sprintf("%.10f", rate),
+			// FX rates have no volume — omit v_usd entirely.
+		})
+	}
+	series.Points = wire
+
+	// Retention-truncation signal — same shape as the crypto path.
+	if !from.IsZero() && len(wire) > 0 {
+		if grace := chartGranularityGrace(gran); wire[0].T.Sub(from) > grace {
+			startsAt := wire[0].T
+			requested := from
+			series.Truncated = true
+			series.DataStartsAt = &startsAt
+			series.RequestedFrom = &requested
+		}
+	}
+
+	writeJSON(w, series, Flags{})
 }
 
 // chartGranularityGrace is the gap (in time) between `from` and the

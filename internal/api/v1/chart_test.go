@@ -11,6 +11,101 @@ import (
 	"github.com/RatesEngine/rates-engine/internal/canonical"
 )
 
+// stubFXHistoryReader implements v1.FXHistoryReader for chart-fiat tests.
+type stubFXHistoryReader struct {
+	points []v1.FXQuotePoint
+	err    error
+}
+
+func (s *stubFXHistoryReader) ListFXHistory(_ context.Context, _ string, _, _ time.Time) ([]v1.FXQuotePoint, error) {
+	return s.points, s.err
+}
+
+func TestChart_Fiat_USDtoCNY_ReturnsInverseSeries(t *testing.T) {
+	// Reader returns USD-base rates: 1 USD = 7.18 CNY etc.
+	d1 := time.Date(2024, 1, 2, 0, 0, 0, 0, time.UTC)
+	d2 := time.Date(2024, 1, 3, 0, 0, 0, 0, time.UTC)
+	fx := &stubFXHistoryReader{points: []v1.FXQuotePoint{
+		{Bucket: d1, RateUSD: 7.18, InverseUSD: 1 / 7.18},
+		{Bucket: d2, RateUSD: 7.20, InverseUSD: 1 / 7.20},
+	}}
+	srv := v1.New(v1.Options{History: &stubHistoryReader{}, FXHistory: fx})
+	ts := httpTestServer(t, srv)
+	resp := mustGet(t, ts.URL+"/v1/chart?asset=fiat:USD&quote=fiat:CNY&timeframe=1y&granularity=1d")
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status=%d want 200", resp.StatusCode)
+	}
+	var env struct {
+		Data v1.ChartSeries `json:"data"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&env); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if got := len(env.Data.Points); got != 2 {
+		t.Fatalf("got %d points, want 2", got)
+	}
+	// USD→CNY: useInverse=false, P should be RateUSD (~7.18).
+	if env.Data.Points[0].P == "" {
+		t.Errorf("point[0].P empty")
+	}
+}
+
+func TestChart_Fiat_CNYtoUSD_UsesInverse(t *testing.T) {
+	d1 := time.Date(2024, 1, 2, 0, 0, 0, 0, time.UTC)
+	fx := &stubFXHistoryReader{points: []v1.FXQuotePoint{
+		{Bucket: d1, RateUSD: 7.18, InverseUSD: 1.0 / 7.18},
+	}}
+	srv := v1.New(v1.Options{History: &stubHistoryReader{}, FXHistory: fx})
+	ts := httpTestServer(t, srv)
+	resp := mustGet(t, ts.URL+"/v1/chart?asset=fiat:CNY&quote=fiat:USD&timeframe=1y&granularity=1d")
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status=%d want 200", resp.StatusCode)
+	}
+	var env struct {
+		Data v1.ChartSeries `json:"data"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&env); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if len(env.Data.Points) != 1 {
+		t.Fatalf("got %d points, want 1", len(env.Data.Points))
+	}
+	// Should be ~0.139 (= 1/7.18) — inverse path. Quick "starts with 0." check.
+	if env.Data.Points[0].P[:2] != "0." {
+		t.Errorf("inverse rate %q not in 0.x form", env.Data.Points[0].P)
+	}
+}
+
+func TestChart_Fiat_CrossPair_EmptySeries(t *testing.T) {
+	// EUR/JPY (neither side USD) is not yet supported.
+	fx := &stubFXHistoryReader{points: []v1.FXQuotePoint{
+		{Bucket: time.Now(), RateUSD: 1.0, InverseUSD: 1.0},
+	}}
+	srv := v1.New(v1.Options{History: &stubHistoryReader{}, FXHistory: fx})
+	ts := httpTestServer(t, srv)
+	resp := mustGet(t, ts.URL+"/v1/chart?asset=fiat:EUR&quote=fiat:JPY&timeframe=1y&granularity=1d")
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status=%d want 200", resp.StatusCode)
+	}
+	var env struct {
+		Data v1.ChartSeries `json:"data"`
+	}
+	_ = json.NewDecoder(resp.Body).Decode(&env)
+	if len(env.Data.Points) != 0 {
+		t.Errorf("cross-fiat should return empty series, got %d", len(env.Data.Points))
+	}
+}
+
+func TestChart_Fiat_NoFXHistoryReader_EmptySeries(t *testing.T) {
+	// FXHistory nil → empty series, not 500.
+	srv := v1.New(v1.Options{History: &stubHistoryReader{}})
+	ts := httpTestServer(t, srv)
+	resp := mustGet(t, ts.URL+"/v1/chart?asset=fiat:CNY&quote=fiat:USD&timeframe=1y&granularity=1d")
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status=%d want 200", resp.StatusCode)
+	}
+}
+
 func TestChart_503WhenReaderNil(t *testing.T) {
 	srv := v1.New(v1.Options{})
 	ts := httpTestServer(t, srv)

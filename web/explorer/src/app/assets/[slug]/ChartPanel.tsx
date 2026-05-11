@@ -51,6 +51,12 @@ interface ChartPoint {
   close?: string;
 }
 
+interface ChartMeta {
+  truncated: boolean;
+  data_starts_at?: string;
+  requested_from?: string;
+}
+
 /**
  * Chart tab content for /assets/[slug]?tab=chart.
  *
@@ -75,16 +81,24 @@ export function ChartPanel({
   // When the asset itself is native XLM, "vs XLM" is the identity
   // pair (the API rightly returns 400). Default to USD and drop
   // the XLM option from the picker for that case.
+  //
+  // For fiat assets (fiat:CNY, fiat:EUR, …) the only sensible quote
+  // is USD — they don't trade against XLM directly. Force USD and
+  // drop the XLM picker. The API also routes fiat:fiat pairs to
+  // fx_quotes (Frankfurter-backed daily series), so charts work
+  // back to ~1999 once fx-history-backfill has been run.
   const isNative = assetID === 'native';
-  const quoteOptions = isNative
+  const isFiat = assetID.startsWith('fiat:');
+  const quoteOptions = isNative || isFiat
     ? QUOTES.filter((q) => q.key !== 'native')
     : QUOTES;
   const [timeframe, setTimeframe] = useState<Timeframe>('24h');
   const [granularity, setGranularity] = useState<Granularity>('1h');
-  const [quote, setQuote] = useState<Quote>(isNative ? 'fiat:USD' : 'native');
+  const [quote, setQuote] = useState<Quote>(isNative || isFiat ? 'fiat:USD' : 'native');
   const [data, setData] = useState<
     { time: number; open: number; high: number; low: number; close: number }[]
   >([]);
+  const [meta, setMeta] = useState<ChartMeta | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -97,7 +111,14 @@ export function ChartPanel({
       .then((r) => {
         if (!r.ok) throw new Error(`HTTP ${r.status}`);
         return r.json() as Promise<{
-          data: ChartPoint[] | { points?: ChartPoint[] };
+          data:
+            | ChartPoint[]
+            | {
+                points?: ChartPoint[];
+                truncated?: boolean;
+                data_starts_at?: string;
+                requested_from?: string;
+              };
         }>;
       })
       .then((env) => {
@@ -108,6 +129,18 @@ export function ChartPanel({
         const points = Array.isArray(env.data)
           ? (env.data as ChartPoint[])
           : (env.data?.points ?? []);
+        // Retention-truncation signal — surface when the consumer's
+        // requested window extends beyond what the deployment has
+        // ingested ("you asked for 1y, this is the 8d we have").
+        if (!Array.isArray(env.data)) {
+          setMeta({
+            truncated: env.data?.truncated ?? false,
+            data_starts_at: env.data?.data_starts_at,
+            requested_from: env.data?.requested_from,
+          });
+        } else {
+          setMeta(null);
+        }
         const bars = points.map((p) => {
           const t = (p as unknown as { t?: string; ts?: string }).t ?? p.ts ?? '';
           const v = Number(
@@ -187,11 +220,29 @@ export function ChartPanel({
           </div>
         )}
         {!loading && !error && data.length > 0 && (
-          <CandleChart data={data} height={420} />
+          <>
+            {meta?.truncated && meta.data_starts_at && (
+              <div className="mb-2 rounded border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-800 dark:border-amber-700 dark:bg-amber-900/30 dark:text-amber-300">
+                Showing data from{' '}
+                <strong>{formatYMD(meta.data_starts_at)}</strong> — the
+                deployment hasn&apos;t accumulated the full {timeframe}{' '}
+                window yet. Earlier history will appear automatically as
+                ingestion continues.
+              </div>
+            )}
+            <CandleChart data={data} height={420} />
+          </>
         )}
       </Panel>
     </div>
   );
+}
+
+// formatYMD trims an ISO timestamp to YYYY-MM-DD so the banner
+// reads naturally regardless of whether the API returned a date
+// (Frankfurter / fx_quotes) or a full timestamp (prices_1m).
+function formatYMD(iso: string): string {
+  return iso.slice(0, 10);
 }
 
 function Picker<T extends string>({
