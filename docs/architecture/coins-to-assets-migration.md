@@ -99,6 +99,33 @@ the URL, accept the new envelope shape.
    callers remain.
 6. Drop `/v1/coins` handler when consumer count hits zero.
 
+## Additional AssetDetail fields still needed
+
+The detail page reads four CoinRow fields that the rc.46 overlay
+didn't lift onto AssetDetail. Migrating `assets/[slug]/page.tsx`
+to drop its parallel `/v1/coins/{slug}` fetch needs these added
+first:
+
+  - `slug` (short-form, e.g. "USDC")
+  - `first_seen_ledger`
+  - `last_seen_ledger`
+  - `observation_count`
+
+These are observability/metadata fields rather than rendering-
+critical (the page would still load without them — just lose the
+"first seen 50457424 / last seen 62523839" metadata strip and
+the canonical-URL slug). They're easy adds: existing CoinRow
+already carries the data; just lift them in
+applyCoinExtensionFields the same way the rc.46 overlay did.
+
+## `?issuer=` filter gap
+
+`/v1/issuers/{g_strkey}` (the issuer detail page) fetches
+`/v1/coins?issuer=G...&limit=500` to render the issuer's full
+catalogue with per-asset 24h USD volume. `/v1/assets` doesn't
+have an `?issuer=` filter today; migration requires either
+adding that filter or keeping this consumer on `/v1/coins`.
+
 ## Risk
 
 The explorer build has been fragile around static-params
