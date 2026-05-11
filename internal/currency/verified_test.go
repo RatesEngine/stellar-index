@@ -347,6 +347,78 @@ func TestTickers(t *testing.T) {
 	}
 }
 
+func TestSeedFiatEntries_HaveExpectedShape(t *testing.T) {
+	cat, err := LoadEmbedded()
+	if err != nil {
+		t.Fatalf("LoadEmbedded: %v", err)
+	}
+	fiat := cat.ByClass(ClassFiat)
+	if len(fiat) < 10 {
+		t.Fatalf("seed has %d fiat entries; want at least 10", len(fiat))
+	}
+	wantPresent := map[string]bool{
+		"us-dollar":     false,
+		"euro":          false,
+		"chinese-yuan":  false,
+		"japanese-yen":  false,
+		"british-pound": false,
+		"indian-rupee":  false,
+	}
+	for _, vc := range fiat {
+		if vc.Class != ClassFiat {
+			t.Errorf("ByClass returned non-fiat entry: %+v", vc)
+		}
+		if vc.CirculatingSupply == "" {
+			t.Errorf("fiat entry %q missing circulating_supply", vc.Slug)
+		}
+		if len(vc.Networks) != 0 {
+			t.Errorf("fiat entry %q has networks (%d); fiat is network-agnostic",
+				vc.Slug, len(vc.Networks))
+		}
+		if _, ok := wantPresent[vc.Slug]; ok {
+			wantPresent[vc.Slug] = true
+		}
+	}
+	for slug, present := range wantPresent {
+		if !present {
+			t.Errorf("required fiat slug %q missing from seed", slug)
+		}
+	}
+}
+
+func TestSeedClassDefaults(t *testing.T) {
+	cat, err := LoadEmbedded()
+	if err != nil {
+		t.Fatalf("LoadEmbedded: %v", err)
+	}
+	usdc, _ := cat.LookupBySlug("usdc")
+	if usdc.Class != ClassStablecoin {
+		t.Errorf("usdc.Class = %q, want stablecoin", usdc.Class)
+	}
+	xlm, _ := cat.LookupBySlug("xlm")
+	if xlm.Class != ClassCrypto {
+		t.Errorf("xlm.Class = %q, want crypto (default)", xlm.Class)
+	}
+	cny, ok := cat.LookupBySlug("chinese-yuan")
+	if !ok || cny.Class != ClassFiat {
+		t.Errorf("chinese-yuan.Class = %q, want fiat", cny.Class)
+	}
+}
+
+func TestLoadFromBytes_RejectsUnknownClass(t *testing.T) {
+	y := `verified_currencies:
+  - ticker: FOO
+    slug: foo
+    name: Foo
+    class: not-a-real-class
+    networks: [{network: stellar}]
+`
+	_, err := LoadFromBytes([]byte(y))
+	if err == nil || !strings.Contains(err.Error(), "unknown class") {
+		t.Errorf("expected 'unknown class' error, got %v", err)
+	}
+}
+
 func TestSeedDataIntegrity(t *testing.T) {
 	// Sanity-check: every entry with a Stellar classic network entry
 	// must have non-empty code, issuer, and asset_id, and the

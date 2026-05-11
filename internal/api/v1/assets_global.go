@@ -204,14 +204,17 @@ func (s *Server) handleGlobalAsset(w http.ResponseWriter, r *http.Request, vc *c
 //  2. Description is omitted to keep payloads small — the detail
 //     page already surfaces it.
 type VerifiedCurrencyListItem struct {
-	Ticker         string        `json:"ticker"`
-	Slug           string        `json:"slug"`
-	Name           string        `json:"name"`
-	VerifiedIssuer string        `json:"verified_issuer,omitempty"`
-	CoinGeckoID    string        `json:"coingecko_id,omitempty"`
-	CMCID          string        `json:"coinmarketcap_id,omitempty"`
-	NetworkCount   int           `json:"network_count"`
-	Networks       []NetworkView `json:"networks"`
+	Ticker            string        `json:"ticker"`
+	Slug              string        `json:"slug"`
+	Name              string        `json:"name"`
+	Class             string        `json:"class"`
+	VerifiedIssuer    string        `json:"verified_issuer,omitempty"`
+	CoinGeckoID       string        `json:"coingecko_id,omitempty"`
+	CMCID             string        `json:"coinmarketcap_id,omitempty"`
+	CirculatingSupply string        `json:"circulating_supply,omitempty"`
+	SupplyDecimals    int           `json:"supply_decimals,omitempty"`
+	NetworkCount      int           `json:"network_count"`
+	Networks          []NetworkView `json:"networks"`
 }
 
 // handleAssetsVerified serves GET /v1/assets/verified — the full
@@ -233,14 +236,17 @@ func (s *Server) handleAssetsVerified(w http.ResponseWriter, r *http.Request) {
 	out := make([]VerifiedCurrencyListItem, 0, len(entries))
 	for _, vc := range entries {
 		out = append(out, VerifiedCurrencyListItem{
-			Ticker:         vc.Ticker,
-			Slug:           vc.Slug,
-			Name:           vc.Name,
-			VerifiedIssuer: vc.VerifiedIssuerLabel,
-			CoinGeckoID:    vc.CoinGeckoID,
-			CMCID:          vc.CoinMarketCapID,
-			NetworkCount:   len(vc.Networks),
-			Networks:       networkViewsFromCatalogue(vc),
+			Ticker:            vc.Ticker,
+			Slug:              vc.Slug,
+			Name:              vc.Name,
+			Class:             string(vc.Class),
+			VerifiedIssuer:    vc.VerifiedIssuerLabel,
+			CoinGeckoID:       vc.CoinGeckoID,
+			CMCID:             vc.CoinMarketCapID,
+			CirculatingSupply: vc.CirculatingSupply,
+			SupplyDecimals:    vc.SupplyDecimals,
+			NetworkCount:      len(vc.Networks),
+			Networks:          networkViewsFromCatalogue(vc),
 		})
 	}
 	writeJSON(w, out, Flags{})

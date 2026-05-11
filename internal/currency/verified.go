@@ -11,6 +11,41 @@ import (
 //go:embed data/seed.yaml
 var seedYAML []byte
 
+// AssetClass classifies a verified currency for the
+// everything-is-an-asset routing model (operator decision 2026-05-11).
+// Crypto is the default; new classes plug in as ingestion lights up
+// for them. Stocks / metals / commodities / funds are future-scope
+// placeholders.
+type AssetClass string
+
+const (
+	// ClassCrypto — non-pegged cryptocurrencies (BTC, ETH, XLM, AQUA, …).
+	// Default for catalogue entries without an explicit class.
+	ClassCrypto AssetClass = "crypto"
+	// ClassStablecoin — fiat-pegged crypto (USDC, USDT, EURC, PYUSD, …).
+	// Distinct from `fiat` so the explorer can render the peg
+	// relationship + depeg-risk surface differently from a pure fiat rate.
+	ClassStablecoin AssetClass = "stablecoin"
+	// ClassFiat — sovereign currencies (USD, EUR, GBP, JPY, CNY, …).
+	// Circulating supply (M2; see seed.yaml comment) lets the
+	// explorer compute a comparable market cap for ranking against
+	// crypto.
+	ClassFiat AssetClass = "fiat"
+)
+
+// IsKnownClass returns true when c is one of the values defined
+// above. Used by the loader's validation step to fail loudly on a
+// typo'd class rather than silently treating an unknown class as
+// "crypto".
+func IsKnownClass(c AssetClass) bool {
+	switch c {
+	case ClassCrypto, ClassStablecoin, ClassFiat:
+		return true
+	default:
+		return false
+	}
+}
+
 // VerifiedCurrency is one entry in the verified-currency catalogue.
 // Pointer-shared across every index in the *Catalogue so callers can
 // rely on value-equality (the *VerifiedCurrency returned from
@@ -23,7 +58,30 @@ type VerifiedCurrency struct {
 	CoinGeckoID         string
 	CoinMarketCapID     string
 	VerifiedIssuerLabel string
-	Networks            []NetworkEntry
+	// Class places this currency in one of the asset-class buckets
+	// (crypto / stablecoin / fiat). Drives explorer rendering and
+	// the asset-listing taxonomy. Defaults to ClassCrypto when the
+	// seed entry omits it.
+	Class AssetClass
+	// CirculatingSupply is the total amount in circulation, expressed
+	// in the natural unit of the currency: stroops for XLM (10⁷),
+	// dollars for USD / EUR / etc. (10⁰), and so on per
+	// SupplyDecimals below. Operator-curated and approximate — the
+	// per-class semantic is documented per entry in seed.yaml:
+	//   - Crypto / stablecoin: actual on-chain circulating supply
+	//     (today usually unset; the per-Stellar-asset F2 fields
+	//     supersede when available).
+	//   - Fiat: M2 (broad money supply: physical cash + checkable
+	//     deposits + savings + money-market funds), per central-bank
+	//     reporting. Operators should refresh quarterly.
+	// Empty string means "no supply data available".
+	CirculatingSupply string
+	// SupplyDecimals is the divisor exponent that maps
+	// CirculatingSupply (smallest integer unit) to display value.
+	// 7 for XLM (stroops → XLM); 0 for fiat (raw dollars / yen /
+	// yuan). Zero default works for fiat.
+	SupplyDecimals int
+	Networks       []NetworkEntry
 }
 
 // NetworkEntry is one per-network identity for a verified currency.
@@ -78,6 +136,9 @@ type rawCurrency struct {
 	CoinGeckoID         string       `yaml:"coingecko_id"`
 	CoinMarketCapID     string       `yaml:"coinmarketcap_id"`
 	VerifiedIssuerLabel string       `yaml:"verified_issuer_label"`
+	Class               string       `yaml:"class"`
+	CirculatingSupply   string       `yaml:"circulating_supply"`
+	SupplyDecimals      int          `yaml:"supply_decimals"`
 	Networks            []rawNetwork `yaml:"networks"`
 }
 
@@ -160,13 +221,25 @@ func validateRawEntry(i int, rc rawCurrency) error {
 		return fmt.Errorf("currency: entry %d (%s): slug is required", i, rc.Ticker)
 	case rc.Name == "":
 		return fmt.Errorf("currency: entry %d (%s): name is required", i, rc.Ticker)
-	case len(rc.Networks) == 0:
+	case len(rc.Networks) == 0 && rc.Class != string(ClassFiat):
+		// Fiat entries are network-agnostic (sovereign currencies
+		// don't have on-chain issuance in the cross-chain catalogue
+		// sense). Every other class needs at least one network.
 		return fmt.Errorf("currency: entry %d (%s): at least one network entry required", i, rc.Ticker)
 	}
 	return nil
 }
 
 func buildVerifiedCurrency(rc rawCurrency) (*VerifiedCurrency, error) {
+	class := AssetClass(rc.Class)
+	if class == "" {
+		class = ClassCrypto
+	}
+	if !IsKnownClass(class) {
+		return nil, fmt.Errorf(
+			"currency: %s: unknown class %q (allowed: crypto, stablecoin, fiat)",
+			rc.Ticker, rc.Class)
+	}
 	vc := &VerifiedCurrency{
 		Ticker:              rc.Ticker,
 		Slug:                strings.ToLower(rc.Slug),
@@ -175,6 +248,9 @@ func buildVerifiedCurrency(rc rawCurrency) (*VerifiedCurrency, error) {
 		CoinGeckoID:         rc.CoinGeckoID,
 		CoinMarketCapID:     rc.CoinMarketCapID,
 		VerifiedIssuerLabel: rc.VerifiedIssuerLabel,
+		Class:               class,
+		CirculatingSupply:   rc.CirculatingSupply,
+		SupplyDecimals:      rc.SupplyDecimals,
 		Networks:            make([]NetworkEntry, 0, len(rc.Networks)),
 	}
 	for _, rn := range rc.Networks {
@@ -354,6 +430,21 @@ func (c *Catalogue) Tickers() []string {
 	out := make([]string, 0, len(c.entries))
 	for _, vc := range c.entries {
 		out = append(out, strings.ToUpper(vc.Ticker))
+	}
+	return out
+}
+
+// ByClass returns every catalogue entry of the given class, in
+// seed order. Returns nil for the unknown / empty class.
+func (c *Catalogue) ByClass(class AssetClass) []*VerifiedCurrency {
+	if c == nil {
+		return nil
+	}
+	out := make([]*VerifiedCurrency, 0, len(c.entries))
+	for _, vc := range c.entries {
+		if vc.Class == class {
+			out = append(out, vc)
+		}
 	}
 	return out
 }

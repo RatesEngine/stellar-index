@@ -55,6 +55,7 @@ verified_currencies:
     slug: usdc
     name: USD Coin
     description: Circle's USD-pegged stablecoin redeemable 1:1 for USD.
+    class: stablecoin
     coingecko_id: usd-coin
     coinmarketcap_id: 3408
     verified_issuer_label: Circle (centre.io)
@@ -78,6 +79,7 @@ verified_currencies:
     slug: usdt
     name: Tether
     description: Tether-issued USD-pegged stablecoin (Tether Holdings Ltd.).
+    class: stablecoin
     coingecko_id: tether
     coinmarketcap_id: 825
     networks:
@@ -94,6 +96,7 @@ verified_currencies:
     slug: pyusd
     name: PayPal USD
     description: PayPal's USD-pegged stablecoin issued by Paxos Trust.
+    class: stablecoin
     coingecko_id: paypal-usd
     coinmarketcap_id: 27772
     networks:
@@ -107,6 +110,7 @@ verified_currencies:
     slug: eurc
     name: Euro Coin
     description: Circle's EUR-pegged stablecoin.
+    class: stablecoin
     coingecko_id: euro-coin
     coinmarketcap_id: 20641
     verified_issuer_label: Circle (centre.io)
@@ -343,3 +347,220 @@ verified_currencies:
     networks:
       - network: ethereum
         contract: "0x2260FAC5E5542a773Aa44fBCfeDf7C193bc2C599"
+
+  # ─── Fiat currencies ─────────────────────────────────────────────
+  #
+  # Sovereign currencies. `class: fiat` routes to a fiat-flavored
+  # GlobalAssetView (no on-chain networks; price_usd from FX feeds,
+  # market_cap_usd computed from circulating_supply × price_usd).
+  #
+  # **Circulating supply uses M2** (broad money: physical cash +
+  # checkable deposits + savings + money-market funds). M2 is the
+  # closest comparable analog to crypto's "circulating supply"
+  # concept because both measure the total nominal claim outstanding
+  # — narrower M0 would only capture physical cash, missing the bulk
+  # of what's actually in circulation as money.
+  #
+  # Figures are operator-curated and approximate; refresh quarterly
+  # from each issuing central bank's published M2 series:
+  #   USD: federalreserve.gov/releases/h6/
+  #   EUR: ecb.europa.eu/stats/monetary
+  #   CNY: pbc.gov.cn (statistics → monetary)
+  #   JPY: boj.or.jp/en/statistics/
+  #   GBP: bankofengland.co.uk/statistics
+  #   INR: rbi.org.in (database on indian economy → money)
+  #   etc.
+  #
+  # Slugs follow the friendly-name convention so URLs are readable
+  # (/assets/us-dollar rather than /assets/usd). The all-caps ticker
+  # remains the canonical identifier for FX lookups + display.
+
+  - ticker: USD
+    slug: us-dollar
+    name: US Dollar
+    description: Official currency of the United States. Reserve currency for most international trade and central-bank holdings.
+    class: fiat
+    coingecko_id: usd
+    circulating_supply: "21700000000000"
+    supply_decimals: 0
+    networks: []
+
+  - ticker: EUR
+    slug: euro
+    name: Euro
+    description: Official currency of the Eurozone (20 EU member states).
+    class: fiat
+    coingecko_id: eur
+    circulating_supply: "16000000000000"
+    supply_decimals: 0
+    networks: []
+
+  - ticker: CNY
+    slug: chinese-yuan
+    name: Chinese Yuan
+    description: Official currency of the People's Republic of China (renminbi). Largest M2 globally — China's banking system holds the most outstanding-money claims of any single currency area.
+    class: fiat
+    coingecko_id: cny
+    circulating_supply: "302000000000000"
+    supply_decimals: 0
+    networks: []
+
+  - ticker: JPY
+    slug: japanese-yen
+    name: Japanese Yen
+    description: Official currency of Japan.
+    class: fiat
+    coingecko_id: jpy
+    circulating_supply: "1243000000000000"
+    supply_decimals: 0
+    networks: []
+
+  - ticker: GBP
+    slug: british-pound
+    name: British Pound
+    description: Official currency of the United Kingdom.
+    class: fiat
+    coingecko_id: gbp
+    circulating_supply: "3000000000000"
+    supply_decimals: 0
+    networks: []
+
+  - ticker: INR
+    slug: indian-rupee
+    name: Indian Rupee
+    description: Official currency of India.
+    class: fiat
+    coingecko_id: inr
+    circulating_supply: "258000000000000"
+    supply_decimals: 0
+    networks: []
+
+  - ticker: BRL
+    slug: brazilian-real
+    name: Brazilian Real
+    description: Official currency of Brazil.
+    class: fiat
+    coingecko_id: brl
+    circulating_supply: "5200000000000"
+    supply_decimals: 0
+    networks: []
+
+  - ticker: KRW
+    slug: south-korean-won
+    name: South Korean Won
+    description: Official currency of South Korea.
+    class: fiat
+    coingecko_id: krw
+    circulating_supply: "3900000000000000"
+    supply_decimals: 0
+    networks: []
+
+  - ticker: HKD
+    slug: hong-kong-dollar
+    name: Hong Kong Dollar
+    description: Official currency of Hong Kong. USD-pegged via the Linked Exchange Rate System.
+    class: fiat
+    coingecko_id: hkd
+    circulating_supply: "16000000000000"
+    supply_decimals: 0
+    networks: []
+
+  - ticker: AUD
+    slug: australian-dollar
+    name: Australian Dollar
+    description: Official currency of Australia.
+    class: fiat
+    coingecko_id: aud
+    circulating_supply: "2800000000000"
+    supply_decimals: 0
+    networks: []
+
+  - ticker: CAD
+    slug: canadian-dollar
+    name: Canadian Dollar
+    description: Official currency of Canada.
+    class: fiat
+    coingecko_id: cad
+    circulating_supply: "2500000000000"
+    supply_decimals: 0
+    networks: []
+
+  - ticker: CHF
+    slug: swiss-franc
+    name: Swiss Franc
+    description: Official currency of Switzerland and Liechtenstein.
+    class: fiat
+    coingecko_id: chf
+    circulating_supply: "1100000000000"
+    supply_decimals: 0
+    networks: []
+
+  - ticker: MXN
+    slug: mexican-peso
+    name: Mexican Peso
+    description: Official currency of Mexico.
+    class: fiat
+    coingecko_id: mxn
+    circulating_supply: "11000000000000"
+    supply_decimals: 0
+    networks: []
+
+  - ticker: SGD
+    slug: singapore-dollar
+    name: Singapore Dollar
+    description: Official currency of Singapore.
+    class: fiat
+    coingecko_id: sgd
+    circulating_supply: "900000000000"
+    supply_decimals: 0
+    networks: []
+
+  - ticker: ZAR
+    slug: south-african-rand
+    name: South African Rand
+    description: Official currency of South Africa.
+    class: fiat
+    coingecko_id: zar
+    circulating_supply: "4700000000000"
+    supply_decimals: 0
+    networks: []
+
+  - ticker: TRY
+    slug: turkish-lira
+    name: Turkish Lira
+    description: Official currency of Turkey.
+    class: fiat
+    coingecko_id: try
+    circulating_supply: "13000000000000"
+    supply_decimals: 0
+    networks: []
+
+  - ticker: NZD
+    slug: new-zealand-dollar
+    name: New Zealand Dollar
+    description: Official currency of New Zealand.
+    class: fiat
+    coingecko_id: nzd
+    circulating_supply: "430000000000"
+    supply_decimals: 0
+    networks: []
+
+  - ticker: SEK
+    slug: swedish-krona
+    name: Swedish Krona
+    description: Official currency of Sweden.
+    class: fiat
+    coingecko_id: sek
+    circulating_supply: "5000000000000"
+    supply_decimals: 0
+    networks: []
+
+  - ticker: NOK
+    slug: norwegian-krone
+    name: Norwegian Krone
+    description: Official currency of Norway.
+    class: fiat
+    coingecko_id: nok
+    circulating_supply: "2800000000000"
+    supply_decimals: 0
+    networks: []

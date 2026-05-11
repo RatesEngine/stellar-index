@@ -865,12 +865,17 @@ type NetworkView struct {
 // pricing requires a per-row fetch via [Client.Asset] with the
 // `Slug` value.
 type VerifiedCurrencyListItem struct {
-	Ticker         string        `json:"ticker"`
-	Slug           string        `json:"slug"`
-	Name           string        `json:"name"`
-	VerifiedIssuer string        `json:"verified_issuer,omitempty"`
-	CoinGeckoID    string        `json:"coingecko_id,omitempty"`
-	CMCID          string        `json:"coinmarketcap_id,omitempty"`
-	NetworkCount   int           `json:"network_count"`
-	Networks       []NetworkView `json:"networks"`
+	Ticker string `json:"ticker"`
+	Slug   string `json:"slug"`
+	Name   string `json:"name"`
+	// Class is one of "crypto" / "stablecoin" / "fiat" — drives the
+	// listing taxonomy on consumers (R-018 assets-unification).
+	Class             string        `json:"class"`
+	VerifiedIssuer    string        `json:"verified_issuer,omitempty"`
+	CoinGeckoID       string        `json:"coingecko_id,omitempty"`
+	CMCID             string        `json:"coinmarketcap_id,omitempty"`
+	CirculatingSupply string        `json:"circulating_supply,omitempty"`
+	SupplyDecimals    int           `json:"supply_decimals,omitempty"`
+	NetworkCount      int           `json:"network_count"`
+	Networks          []NetworkView `json:"networks"`
 }
