@@ -154,6 +154,11 @@ func (s *Server) buildGlobalAssetView(ctx context.Context, vc *currency.Verified
 		// source list — better to skip than fail.
 		opts.AggregatorSources = nil
 	}
+	// FX pairs have very low trade counts (snapshots, not trades).
+	// Lower the threshold so non-USD fiat populates a price.
+	if vc.Class == currency.ClassFiat {
+		opts = fiatGlobalPriceOpts(opts)
+	}
 
 	res, err := aggregate.ComputeGlobalPrice(ctx, base, quote, s.globalPrice, opts)
 	if err != nil {
@@ -205,6 +210,13 @@ func assetForCurrency(vc *currency.VerifiedCurrency) (canonical.Asset, bool) {
 // fiat:USD to get the current FX rate, then multiplies by M2.
 // Returns nil when the FX rate isn't available (no fiat pair in
 // prices_1m yet) or the supply parse fails.
+//
+// FX-pair VWAP buckets typically have very low trade counts (one
+// observation per minute from each FX vendor, often 1-3 total)
+// because FX feeds publish snapshots, not order-book trades.
+// Override the global default VWAPMinTradeCount (5) down to 1 for
+// fiat — any non-empty bucket is authoritative because each
+// observation IS the rate, not a sample of trading activity.
 func (s *Server) fiatMarketCapUSD(ctx context.Context, vc *currency.VerifiedCurrency) *string {
 	if vc.CirculatingSupply == "" {
 		return nil
@@ -221,15 +233,21 @@ func (s *Server) fiatMarketCapUSD(ctx context.Context, vc *currency.VerifiedCurr
 	if err != nil {
 		return nil
 	}
-	opts := s.globalPriceOpts
-	if opts.AggregatorSources == nil {
-		opts.AggregatorSources = nil
-	}
+	opts := fiatGlobalPriceOpts(s.globalPriceOpts)
 	res, err := aggregate.ComputeGlobalPrice(ctx, base, quote, s.globalPrice, opts)
 	if err != nil {
 		return nil
 	}
 	return computeFiatMarketCap(vc.CirculatingSupply, res.Price)
+}
+
+// fiatGlobalPriceOpts lowers VWAPMinTradeCount to 1 so an FX pair
+// with a single per-minute snapshot can populate. See the docstring
+// on fiatMarketCapUSD for the rationale.
+func fiatGlobalPriceOpts(base aggregate.GlobalPriceOptions) aggregate.GlobalPriceOptions {
+	out := base
+	out.VWAPMinTradeCount = 1
+	return out
 }
 
 // computeFiatMarketCap returns market_cap_usd = supplyStr × priceStr

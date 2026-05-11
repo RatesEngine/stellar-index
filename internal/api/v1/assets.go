@@ -460,20 +460,28 @@ func (s *Server) resolveAssetDetail(w http.ResponseWriter, r *http.Request, pars
 }
 
 // tryServeGlobalAsset returns true when `raw` matched a verified-
-// currency slug and the global view was served. Caller bails out of
-// the canonical-id path on a true return. Pulled out of
-// handleAssetGet to keep that function's complexity budget under
-// the gocognit ceiling.
+// currency catalogue entry (by slug OR by ticker) and the global
+// view was served. Caller bails out of the canonical-id path on a
+// true return.
+//
+// Both lookups are case-insensitive. Ticker fallback lets
+// /v1/assets/USD dispatch to the same view as /v1/assets/us-dollar
+// (and /USDC = /usdc, /EUR = /euro, etc.) — useful for clients
+// that have an ISO ticker on hand but not the friendly slug.
+// Slug match wins over ticker match if both resolve.
 func (s *Server) tryServeGlobalAsset(w http.ResponseWriter, r *http.Request, raw string) bool {
 	if s.verifiedCurrencies == nil {
 		return false
 	}
-	vc, ok := s.verifiedCurrencies.LookupBySlug(raw)
-	if !ok {
-		return false
+	if vc, ok := s.verifiedCurrencies.LookupBySlug(raw); ok {
+		s.handleGlobalAsset(w, r, vc)
+		return true
 	}
-	s.handleGlobalAsset(w, r, vc)
-	return true
+	if vc, ok := s.verifiedCurrencies.LookupByTicker(raw); ok {
+		s.handleGlobalAsset(w, r, vc)
+		return true
+	}
+	return false
 }
 
 // verifiedCurrencyFlags applies the unverified-collision warning

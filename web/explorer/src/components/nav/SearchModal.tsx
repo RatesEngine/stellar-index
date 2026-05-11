@@ -22,8 +22,7 @@ type CurrencyEntry = { ticker: string; name: string };
 
 const STATIC_PAGES: Result[] = [
   { type: 'page', label: 'Home', href: '/' },
-  { type: 'page', label: 'Currencies', hint: 'world fiat rates vs USD', href: '/currencies' },
-  { type: 'page', label: 'Assets', href: '/assets' },
+  { type: 'page', label: 'Assets', hint: 'every asset — crypto, fiat, stablecoins', href: '/assets' },
   { type: 'page', label: 'Exchanges', hint: 'CEXes + per-pair tables', href: '/exchanges' },
   { type: 'page', label: 'Markets', hint: 'cross-source pair listing', href: '/markets' },
   { type: 'page', label: 'Issuers', href: '/issuers' },
@@ -296,10 +295,13 @@ function search(
     });
   }
 
-  // ISO-4217 ticker exact match → direct-jump to /currencies/<ticker>.
-  // Catalogue is loaded once on modal open; we only direct-jump on
-  // an exact 3-letter-ticker match so partial codes (e.g. "U" while
-  // the user is mid-typing "USDC") fall through to coin results.
+  // ISO-4217 ticker exact match → direct-jump to /assets/<ticker>.
+  // R-018 assets-unification: fiat currencies live under /assets;
+  // /v1/assets/{ticker} dispatches via the catalogue's ticker
+  // fallback (matches USD → us-dollar slug → GlobalAssetView).
+  // We only direct-jump on an exact 3-letter-ticker match so
+  // partial codes (e.g. "U" while the user is mid-typing "USDC")
+  // fall through to coin results.
   const upper = q.trim().toUpperCase();
   if (/^[A-Z]{3}$/.test(upper)) {
     const match = currencies.find((c) => c.ticker === upper);
@@ -307,8 +309,8 @@ function search(
       direct.push({
         type: 'currency',
         label: `${match.ticker} — ${match.name}`,
-        hint: 'open currency detail',
-        href: `/currencies/${match.ticker}`,
+        hint: 'open asset detail',
+        href: `/assets/${match.ticker}`,
       });
     }
   }
