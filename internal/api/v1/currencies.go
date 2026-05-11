@@ -8,6 +8,26 @@ import (
 	"time"
 )
 
+// setCurrenciesDeprecation marks `/v1/currencies` responses as
+// deprecated in favour of `/v1/assets/{slug}` (R-018 assets-
+// unification operator decision 2026-05-11). Same shape as
+// setCoinsDeprecation: emit `Deprecation: true` + a Link header
+// pointing at the successor URL so polite clients see the move.
+//
+// `ticker`: the path segment from /v1/currencies/{ticker} — when
+// non-empty the Link points at /v1/assets/{ticker} (the API will
+// follow its own slug-resolution; the operator's verified
+// catalogue includes friendly-slug aliases so /v1/assets/USD →
+// dispatches to /v1/assets/us-dollar). Empty for the bare list.
+func setCurrenciesDeprecation(w http.ResponseWriter, ticker string) {
+	w.Header().Set("Deprecation", "true")
+	successor := "/v1/assets"
+	if ticker != "" {
+		successor = "/v1/assets/" + ticker
+	}
+	w.Header().Set("Link", "<"+successor+`>; rel="successor-version"`)
+}
+
 // CurrenciesReader is the seam for /v1/currencies. The forex
 // package's *Cache implements via Latest. Defined as an interface
 // so this package doesn't import internal/sources/forex (the
@@ -128,6 +148,7 @@ type CurrenciesPayload struct {
 //     per-ticker 7d series of inverse-USD rates so listings can
 //     render mini charts without a follow-up per-ticker fetch.
 func (s *Server) handleCurrencies(w http.ResponseWriter, r *http.Request) { //nolint:gocognit,gocyclo // include parsing + per-row enrich + limit clamp are linear; splitting would scatter the request lifecycle
+	setCurrenciesDeprecation(w, "")
 	reader := s.currencies
 	if reader == nil {
 		writeJSON(w, CurrenciesPayload{Source: "massive"}, Flags{})
@@ -281,6 +302,7 @@ type CurrencyHistoryPoint struct {
 // the upstream feed). 200 + warming-up payload if the cache is
 // empty.
 func (s *Server) handleCurrencyDetail(w http.ResponseWriter, r *http.Request) { //nolint:gocognit,gocyclo,funlen // input validation + history projection + change derivation are linear; splitting would scatter the request lifecycle
+	setCurrenciesDeprecation(w, r.PathValue("ticker"))
 	ticker := strings.ToUpper(strings.TrimSpace(r.PathValue("ticker")))
 	if ticker == "" {
 		writeProblem(w, r,
