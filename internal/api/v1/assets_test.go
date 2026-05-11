@@ -508,3 +508,62 @@ func TestAssetGet_ReaderError500(t *testing.T) {
 		t.Errorf("status = %d, want 500", resp.StatusCode)
 	}
 }
+
+func TestAssetList_NetworkStellar_DefaultPath(t *testing.T) {
+	// network=stellar should hit the existing reader path.
+	xlm := v1.AssetDetail{AssetID: "native", Type: "native", Code: "XLM"}
+	reader := &stubAssetReader{page: []v1.AssetDetail{xlm}, nextCur: ""}
+	srv := v1.New(v1.Options{Assets: reader, VerifiedCurrencies: newTestCatalogue(t)})
+	ts := httpTestServer(t, srv)
+	resp := mustGet(t, ts.URL+"/v1/assets?network=stellar&limit=10")
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status=%d", resp.StatusCode)
+	}
+	var env struct {
+		Data []v1.AssetDetail `json:"data"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&env); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if len(env.Data) != 1 || env.Data[0].AssetID != "native" {
+		t.Errorf("expected xlm row, got %+v", env.Data)
+	}
+}
+
+func TestAssetList_NetworkEthereum_ProjectsCatalogue(t *testing.T) {
+	// network=ethereum returns the verified-currency catalogue entries
+	// that have an ethereum networks[] row. The seed catalogue has
+	// USDC and several others on ethereum.
+	srv := v1.New(v1.Options{VerifiedCurrencies: newTestCatalogue(t)})
+	ts := httpTestServer(t, srv)
+	resp := mustGet(t, ts.URL+"/v1/assets?network=ethereum&limit=500")
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status=%d", resp.StatusCode)
+	}
+	var env struct {
+		Data []v1.AssetDetail `json:"data"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&env); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if len(env.Data) == 0 {
+		t.Fatal("expected ethereum rows from catalogue")
+	}
+	for _, d := range env.Data {
+		if d.Type != "external" {
+			t.Errorf("row %s type=%q want external", d.AssetID, d.Type)
+		}
+		if !strings.HasPrefix(d.AssetID, "ethereum:") {
+			t.Errorf("row %s asset_id should start with 'ethereum:'", d.AssetID)
+		}
+	}
+}
+
+func TestAssetList_NetworkUnknown_400(t *testing.T) {
+	srv := v1.New(v1.Options{VerifiedCurrencies: newTestCatalogue(t)})
+	ts := httpTestServer(t, srv)
+	resp := mustGet(t, ts.URL+"/v1/assets?network=potato")
+	if resp.StatusCode != http.StatusBadRequest {
+		t.Errorf("status=%d want 400", resp.StatusCode)
+	}
+}

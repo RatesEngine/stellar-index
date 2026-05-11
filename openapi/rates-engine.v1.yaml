@@ -184,6 +184,32 @@ paths:
       parameters:
         - { $ref: "#/components/parameters/Cursor" }
         - { $ref: "#/components/parameters/Limit" }
+        - name: network
+          in: query
+          required: false
+          description: |
+            Restrict to assets on the named network. `stellar` (or
+            omitted) returns the indexer's full Stellar-network
+            catalogue. Off-Stellar networks (`ethereum`, `solana`,
+            `polygon`, `base`, `arbitrum`, `tron`, `bitcoin`, `bsc`,
+            `avalanche`, `xrpl`) source from the verified-currency
+            catalogue; rows are returned with `type: external` and
+            `asset_id` shaped as `<network>:<contract>`. Drives the
+            `/blockchains/{network}` click-through in the explorer.
+          schema:
+            type: string
+            enum:
+              - stellar
+              - ethereum
+              - solana
+              - polygon
+              - base
+              - arbitrum
+              - tron
+              - bitcoin
+              - bsc
+              - avalanche
+              - xrpl
       responses:
         "200":
           description: Page of assets.

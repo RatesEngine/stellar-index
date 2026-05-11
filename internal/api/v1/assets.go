@@ -279,6 +279,23 @@ func (s *Server) handleAssetList(w http.ResponseWriter, r *http.Request) {
 		limit = parsed
 	}
 
+	// Network filter. Drives the /blockchains/{network} → assets
+	// click-through. Recognised values:
+	//   - "" / "stellar" → existing reader path; returns the indexer's
+	//     full Stellar-network catalogue.
+	//   - "ethereum" / "solana" / "polygon" / "base" / "arbitrum" /
+	//     "tron" / "bitcoin" → returns the verified-currency catalogue
+	//     entries that have a `networks[]` row matching that chain,
+	//     projected to AssetDetail (type=external, asset_id =
+	//     "<network>:<contract>"). We don't index those chains
+	//     ourselves — the catalogue is the source of truth for who's
+	//     issued there.
+	network := strings.ToLower(strings.TrimSpace(r.URL.Query().Get("network")))
+	if network != "" && network != "stellar" {
+		s.handleAssetListExternalNetwork(w, r, network, limit, cursor)
+		return
+	}
+
 	reader := s.assetReaderOrNil()
 	if reader == nil {
 		// Feature not wired yet — empty list is consistent with
@@ -316,6 +333,100 @@ func (s *Server) handleAssetList(w http.ResponseWriter, r *http.Request) {
 		env.Pagination = &Pagination{Next: next}
 	}
 	writeEnvelope(w, env)
+}
+
+// externalNetworks is the allowlist for /v1/assets?network= values
+// that route to the verified-currency catalogue. Stellar is handled
+// by the indexer reader; everything in this set is sourced from the
+// catalogue's networks[] arrays.
+var externalNetworks = map[string]struct{}{
+	"ethereum":  {},
+	"solana":    {},
+	"polygon":   {},
+	"base":      {},
+	"arbitrum":  {},
+	"tron":      {},
+	"bitcoin":   {},
+	"bsc":       {},
+	"avalanche": {},
+	"xrpl":      {},
+}
+
+// handleAssetListExternalNetwork serves /v1/assets?network=<chain>
+// for non-Stellar networks. Source is the verified-currency
+// catalogue's networks[] arrays; rows are projected into AssetDetail
+// with type="external" and asset_id="<network>:<contract>" so
+// downstream consumers can treat the response uniformly with the
+// Stellar branch.
+//
+// Pagination is by simple offset for now — the catalogue is small
+// (~45 entries) and the per-network filter narrows it further, so
+// cursor pagination would be over-engineering.
+func (s *Server) handleAssetListExternalNetwork(w http.ResponseWriter, r *http.Request, network string, limit int, cursor string) {
+	if _, ok := externalNetworks[network]; !ok {
+		writeProblem(w, r,
+			"https://api.ratesengine.net/errors/invalid-network",
+			"Unknown network", http.StatusBadRequest,
+			"network must be one of: stellar, ethereum, solana, polygon, base, arbitrum, tron, bitcoin, bsc, avalanche, xrpl")
+		return
+	}
+	if s.verifiedCurrencies == nil {
+		writeJSON(w, []AssetDetail{}, Flags{})
+		return
+	}
+	out := projectCatalogueForNetwork(s.verifiedCurrencies.All(), network)
+	// Offset pagination via cursor=<int>.
+	offset := 0
+	if cursor != "" {
+		if n, err := strconv.Atoi(cursor); err == nil && n > 0 {
+			offset = n
+		}
+	}
+	if offset >= len(out) {
+		writeJSON(w, []AssetDetail{}, Flags{})
+		return
+	}
+	end := offset + limit
+	if end > len(out) {
+		end = len(out)
+	}
+	page := out[offset:end]
+	env := Envelope{Data: page, Flags: Flags{}}
+	if end < len(out) {
+		next := strconv.Itoa(end)
+		env.Pagination = &Pagination{Next: next}
+	}
+	writeEnvelope(w, env)
+}
+
+// projectCatalogueForNetwork walks the catalogue and returns one
+// AssetDetail per (verified-currency, network-entry) pair where the
+// network matches. Exported to a free function for unit testing.
+func projectCatalogueForNetwork(entries []*currency.VerifiedCurrency, network string) []AssetDetail {
+	out := make([]AssetDetail, 0, 8)
+	for _, vc := range entries {
+		for _, n := range vc.Networks {
+			if n.Network != network {
+				continue
+			}
+			contract := n.Contract
+			code := vc.Ticker
+			name := vc.Name
+			detail := AssetDetail{
+				AssetID:    network + ":" + contract,
+				Type:       "external",
+				Code:       code,
+				Decimals:   0,
+				Sep1Status: "not_applicable",
+				Name:       &name,
+			}
+			if contract != "" {
+				detail.ContractID = &contract
+			}
+			out = append(out, detail)
+		}
+	}
+	return out
 }
 
 // normaliseAssetIDInput rescues the most common case-typo on
