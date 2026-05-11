@@ -6,13 +6,16 @@ import Link from 'next/link';
 import { useEffect, useMemo, useState } from 'react';
 
 import { apiGet } from '@/api/client';
-import { useCoins, type Coin } from '@/api/hooks';
+import { useCoins, useVerifiedSlugs, type Coin } from '@/api/hooks';
 
 type Result = {
   type: 'coin' | 'pair' | 'protocol' | 'oracle' | 'page' | 'currency';
   label: string;
   hint?: string;
   href: string;
+  // Verified-currency flag (R-018 Phase 1.5). When true, the row
+  // renders a small green-check badge next to the label.
+  verified?: boolean;
 };
 
 type CurrencyEntry = { ticker: string; name: string };
@@ -140,13 +143,21 @@ export function SearchModal() {
     return () => clearTimeout(t);
   }, [q]);
 
+  const { data: verifiedSlugs } = useVerifiedSlugs();
+
   const results = useMemo(() => {
     const isServerSearched = debouncedQ.length >= 2;
     const sourceCoins = isServerSearched
       ? (searchedCoins.data?.coins ?? [])
       : (topCoins.data?.coins ?? []);
-    return search(q, sourceCoins, currencies.data ?? [], isServerSearched);
-  }, [q, debouncedQ, searchedCoins.data, topCoins.data, currencies.data]);
+    return search(
+      q,
+      sourceCoins,
+      currencies.data ?? [],
+      isServerSearched,
+      verifiedSlugs,
+    );
+  }, [q, debouncedQ, searchedCoins.data, topCoins.data, currencies.data, verifiedSlugs]);
 
   return (
     <>
@@ -210,6 +221,27 @@ export function SearchModal() {
                         {r.type}
                       </span>
                       <span className="font-medium">{r.label}</span>
+                      {r.verified && (
+                        <span
+                          title="Verified currency"
+                          aria-label="Verified currency"
+                          className="inline-flex items-center"
+                        >
+                          <svg
+                            xmlns="http://www.w3.org/2000/svg"
+                            viewBox="0 0 20 20"
+                            fill="currentColor"
+                            className="h-3 w-3 text-emerald-600 dark:text-emerald-400"
+                            aria-hidden="true"
+                          >
+                            <path
+                              fillRule="evenodd"
+                              d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z"
+                              clipRule="evenodd"
+                            />
+                          </svg>
+                        </span>
+                      )}
                       {r.hint && (
                         <span className="text-xs text-slate-500">— {r.hint}</span>
                       )}
@@ -236,9 +268,12 @@ function search(
   coins: Coin[],
   currencies: CurrencyEntry[],
   isServerSearched: boolean,
+  verifiedSlugs?: Set<string>,
 ): Result[] {
   const norm = q.trim().toLowerCase();
-  const coinResults = coins.map(coinResult);
+  const coinResults = coins.map((c) =>
+    coinResult(c, verifiedSlugs?.has(c.slug.toLowerCase()) ?? false),
+  );
   if (!norm) {
     // Empty query → top 5 coins as a starter list (already sorted
     // by observation_count desc by the API).
@@ -338,12 +373,13 @@ function lookupAssetID(coins: Coin[], code: string): string | null {
   return null;
 }
 
-function coinResult(c: Coin): Result {
+function coinResult(c: Coin, verified: boolean): Result {
   return {
     type: 'coin',
     label: c.code,
     hint: c.slug,
     href: `/assets/${c.slug}`,
+    verified,
   };
 }
 
