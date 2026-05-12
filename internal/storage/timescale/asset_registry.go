@@ -9,20 +9,39 @@ import (
 	"github.com/RatesEngine/rates-engine/internal/canonical"
 )
 
-// assetRegistryDedupe is a process-lifetime cache of asset_ids that
-// have already been touched by registerClassicAssetSeen. Avoids
-// hitting the DB once per trade with the same upsert when the
-// dispatcher streams thousands of trades for the same pair —
-// the first touch in a process registers the (asset, issuer);
-// every subsequent touch for the same asset_id is a no-op.
+// assetRegistryDedupeTTL throttles per-asset upserts so the
+// classic_assets row's `last_seen_*` + `observation_count` keep
+// advancing while still bounding DB pressure. F-1243 (codex
+// audit-2026-05-12): the prior `sync.Map` of asset_id → struct{}
+// short-circuited every subsequent trade in the same process,
+// leaving the row frozen at first observation. A coarse TTL
+// caps the upsert rate to one per asset per window while
+// guaranteeing the row advances under sustained trading.
+//
+// 60 seconds is generous enough to keep the indexer hot path
+// out of the registry table (one upsert per asset per minute
+// is trivial Postgres load even at 1000s of assets) and tight
+// enough that the dashboard's "last seen" column always reflects
+// activity within the last minute.
+const assetRegistryDedupeTTL = 60 * time.Second
+
+// assetRegistryDedupe is a process-lifetime cache of (asset_id →
+// last successful upsert time). The next trade for the same
+// asset within `assetRegistryDedupeTTL` skips the DB round-trip;
+// trades outside the window upsert again so `last_seen_*` +
+// `observation_count` advance. F-1243 (codex audit-2026-05-12).
 //
 // Process-lifetime is intentional: the indexer restarts often
-// enough that we'll re-touch the row periodically (which is fine
-// because each touch ON CONFLICT updates last_seen_*). A persistent
-// cross-process cache (Redis) would be over-engineering.
-var assetRegistryDedupe sync.Map // key: asset_id (string) → struct{}{}
+// enough that we'll re-touch the row periodically. A persistent
+// cross-process cache (Redis) would be over-engineering — the
+// upsert is idempotent and the TTL bounds the worst-case load.
+var assetRegistryDedupe sync.Map // key: asset_id (string) → time.Time (last upsert)
 
-// issuerRegistryDedupe is the analogous cache for issuer rows.
+// issuerRegistryDedupe stays as a process-lifetime sentinel
+// cache — the issuers table has no `last_seen` columns so
+// there's nothing to advance after the first INSERT. The
+// per-row DDL difference from classic_assets is documented in
+// migrations 0023 (classic_assets) vs 0022 (issuers).
 var issuerRegistryDedupe sync.Map
 
 // registerClassicAssetSeen ensures a `classic_assets` row exists
@@ -50,7 +69,13 @@ func (s *Store) registerClassicAssetSeen(
 		return nil
 	}
 	assetID := asset.String()
-	if _, seen := assetRegistryDedupe.Load(assetID); seen {
+	// F-1243 (codex audit-2026-05-12): TTL-based dedupe. The
+	// prior `sync.Map` of bare sentinels froze the row at first
+	// observation; now we only skip the upsert when the last
+	// successful one was within `assetRegistryDedupeTTL`. Out-of-
+	// window trades fire the upsert again so `last_seen_*` and
+	// `observation_count` advance.
+	if shouldSkipAssetRegistryUpsert(assetID, time.Now()) {
 		return nil
 	}
 
@@ -90,8 +115,26 @@ func (s *Store) registerClassicAssetSeen(
 	); err != nil {
 		return fmt.Errorf("timescale: registerClassicAssetSeen %s: %w", assetID, err)
 	}
-	assetRegistryDedupe.Store(assetID, struct{}{})
+	assetRegistryDedupe.Store(assetID, time.Now())
 	return nil
+}
+
+// shouldSkipAssetRegistryUpsert returns true when `now` falls
+// within `assetRegistryDedupeTTL` of the last recorded upsert
+// for `assetID`. Returns false on no-cache (first time) and on
+// expired-cache (TTL elapsed). Extracted as a pure function so
+// the F-1243 TTL-gate semantics can be unit-tested without
+// standing up a Postgres container.
+func shouldSkipAssetRegistryUpsert(assetID string, now time.Time) bool {
+	cached, ok := assetRegistryDedupe.Load(assetID)
+	if !ok {
+		return false
+	}
+	lastUpsert, ok := cached.(time.Time)
+	if !ok {
+		return false
+	}
+	return now.Sub(lastUpsert) < assetRegistryDedupeTTL
 }
 
 // registerIssuerSeen ensures a row exists in the `issuers` table

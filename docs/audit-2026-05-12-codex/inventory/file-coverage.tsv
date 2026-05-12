@@ -31,7 +31,7 @@ cmd/ratesengine-aggregator/change_summary.go	cmd	cmd/ratesengine-aggregator	runt
 cmd/ratesengine-aggregator/contribution_sink.go	cmd	cmd/ratesengine-aggregator	runtime	done	EV-0055;EV-0060;EV-0103;F-1242	XFI-0034	Reviewed contribution sink adapter and batch forwarding; current workspace writes `volume_usd` from a still-misaligned pre-filter total.
 cmd/ratesengine-aggregator/main.go	cmd	cmd/ratesengine-aggregator	runtime	done	EV-0024;EV-0047;EV-0055;EV-0105;EV-0106;EV-0123;EV-0134;F-1213;F-1236;F-1249;F-1260	XFI-0009;XFI-0028;XFI-0041;XFI-0052	Reviewed aggregation, stablecoin/min-volume gating, webhook producer fan-out, Redis/cache, supply refresher wiring, and the native-XLM live-to-static reserve fallback that still bypasses the stale-component gate through `MinComponentLedger=0`
 cmd/ratesengine-aggregator/main_test.go	cmd	cmd/ratesengine-aggregator	test	done	EV-0052;EV-0055		Command package tests pass; coverage tied to main wiring
-cmd/ratesengine-api/main.go	cmd	cmd/ratesengine-api	runtime	done	EV-0038;EV-0053;EV-0054;EV-0055;EV-0069;EV-0073;EV-0076;EV-0094;EV-0095;EV-0096;EV-0100;EV-0103;EV-0126;EV-0127;EV-0128;EV-0130;EV-0142;EV-0143;EV-0144;EV-0145;F-1217;F-1218;F-1219;F-1226;F-1228;F-1238;F-1245;F-1247;F-1249;F-1258;F-1259	XFI-0011;XFI-0012;XFI-0013;XFI-0018;XFI-0020;XFI-0030;XFI-0037;XFI-0039;XFI-0041;XFI-0050;XFI-0051	Reviewed startup wiring, auth/billing seams, HTTP timeouts, Redis optionality, signup store/tracker/verifier/gate coupling, webhook worker/producer coupling, usage-reader nil path, usage/account-attribution drift, current StripePlatformBridge wiring, SEP-10/stream fixes, and partial KeyPolicy production wiring
+cmd/ratesengine-api/main.go	cmd	cmd/ratesengine-api	runtime	done	EV-0038;EV-0053;EV-0054;EV-0055;EV-0069;EV-0073;EV-0076;EV-0094;EV-0095;EV-0096;EV-0100;EV-0103;EV-0126;EV-0127;EV-0128;EV-0130;EV-0142;EV-0143;EV-0144;EV-0145;EV-0146;F-1217;F-1218;F-1219;F-1226;F-1228;F-1238;F-1245;F-1247;F-1249;F-1258;F-1259	XFI-0011;XFI-0012;XFI-0013;XFI-0018;XFI-0020;XFI-0030;XFI-0037;XFI-0039;XFI-0041;XFI-0050;XFI-0051	Reviewed startup wiring, auth/billing seams, HTTP timeouts, Redis optionality, landed signup store/tracker/verifier/gate coupling, webhook worker/producer coupling, usage-reader nil path, usage/account-attribution drift, current StripePlatformBridge wiring, SEP-10/stream fixes, and partial KeyPolicy production wiring
 cmd/ratesengine-api/main_test.go	cmd	cmd/ratesengine-api	test	done	EV-0052;EV-0055		Command package tests pass; startup/test seams reviewed
 cmd/ratesengine-indexer/main.go	cmd	cmd/ratesengine-indexer	runtime	done	EV-0048;EV-0055;EV-0080;EV-0102;F-1237;F-1251	XFI-0029;XFI-0043	Reviewed connector wiring, source startup, committed CMC ID propagation, cursor/observer hooks, and FX-derived USD-volume resolver wiring
 cmd/ratesengine-indexer/main_test.go	cmd	cmd/ratesengine-indexer	test	done	EV-0052;EV-0055		Command package tests pass; indexer wiring coverage reviewed
@@ -967,6 +967,8 @@ internal/api/v1/middleware/recoverer.go	internal	internal/api/v1	runtime	todo			
 internal/api/v1/middleware/recoverer_test.go	internal	internal/api/v1	test	todo			cold audit pending
 internal/api/v1/middleware/remoteip.go	internal	internal/api/v1	runtime	todo			cold audit pending
 internal/api/v1/middleware/remoteip_test.go	internal	internal/api/v1	test	todo			cold audit pending
+internal/api/v1/middleware/require_email_verified.go	internal	internal/api/v1	runtime	in_progress	EV-0144;EV-0146;F-1218	XFI-0012	Reviewed committed opt-in email-verification gate logic, signup-key scoping, and remaining default-off posture risk
+internal/api/v1/middleware/require_email_verified_test.go	internal	internal/api/v1	test	in_progress	EV-0144;EV-0146;F-1218	XFI-0012	Reviewed middleware coverage for anonymous, legacy-key, verified-signup, and unverified-signup paths
 internal/api/v1/middleware/request_id.go	internal	internal/api/v1	runtime	todo			cold audit pending
 internal/api/v1/middleware/security_headers.go	internal	internal/api/v1	runtime	todo			cold audit pending
 internal/api/v1/middleware/trailingslash.go	internal	internal/api/v1	runtime	todo			cold audit pending
@@ -1001,11 +1003,11 @@ internal/api/v1/price_tip_test.go	internal	internal/api/v1	test	todo			cold audi
 internal/api/v1/sac_wrappers.go	internal	internal/api/v1	runtime	todo			cold audit pending
 internal/api/v1/sac_wrappers_test.go	internal	internal/api/v1	test	todo			cold audit pending
 internal/api/v1/scaled_decimal_test.go	internal	internal/api/v1	test	todo			cold audit pending
-internal/api/v1/server.go	internal	internal/api/v1	runtime	in_progress	EV-0012;EV-0094;EV-0095;EV-0100;EV-0103;EV-0128;EV-0143;EV-0144;EV-0145;F-1202;F-1218;F-1226;F-1258;F-1259	XFI-0012;XFI-0018;XFI-0050;XFI-0051	Reviewed route table, middleware stack, usage optionality wiring, usage reader contract, health/status split wording, partial KeyPolicy integration, monthly-quota stack insertion, and the moving signup verified-state gate insertion
+internal/api/v1/server.go	internal	internal/api/v1	runtime	in_progress	EV-0012;EV-0094;EV-0095;EV-0100;EV-0103;EV-0128;EV-0143;EV-0144;EV-0145;EV-0146;F-1202;F-1218;F-1226;F-1258;F-1259	XFI-0012;XFI-0018;XFI-0050;XFI-0051	Reviewed route table, middleware stack, usage optionality wiring, usage reader contract, health/status split wording, partial KeyPolicy integration, monthly-quota stack insertion, and landed signup verified-state gate insertion
 internal/api/v1/server_test.go	internal	internal/api/v1	test	todo			cold audit pending
 internal/api/v1/signup.go	internal	internal/api/v1	runtime	in_progress	EV-0028;EV-0099;EV-0127;EV-0143;F-1218	XFI-0012	Reviewed unverified plaintext-key minting, Redis-backed reservation fix, wave-44 token/email producer, and the narrowed current-main 503 posture for Redis-less signup; broader signup/API audit still open
 internal/api/v1/signup_test.go	internal	internal/api/v1	test	in_progress	EV-0028;EV-0099;EV-0143;F-1218	XFI-0012	Reviewed current duplicate-signup test posture plus the producer-side verification test additions; broader signup test audit still open
-internal/api/v1/signup_verify.go	internal	internal/api/v1	runtime	in_progress	EV-0143;EV-0144;EV-0145;F-1218	XFI-0012	Reviewed token-consume success path, verified-state marker call, and the current workspace's opt-in access-control coupling
+internal/api/v1/signup_verify.go	internal	internal/api/v1	runtime	in_progress	EV-0143;EV-0144;EV-0145;EV-0146;F-1218	XFI-0012	Reviewed token-consume success path, verified-state marker call, and the settled opt-in access-control coupling
 internal/api/v1/signup_verify_test.go	internal	internal/api/v1	test	in_progress	EV-0143;F-1218	XFI-0012	Reviewed current consumer/producer-path coverage around signup verification; no closure-grade request-path gate proof exists
 internal/api/v1/sources.go	internal	internal/api/v1	runtime	todo			cold audit pending
 internal/api/v1/sources_stats_cache.go	internal	internal/api/v1	runtime	todo			cold audit pending
@@ -1048,13 +1050,15 @@ internal/auth/signup_ip_throttle_test.go	internal	internal/auth/signup_ip_thrott
 internal/auth/signup_email_locker.go	internal	internal/auth/signup_email_locker.go	runtime	todo			cold audit pending
 internal/auth/signup_email_locker_test.go	internal	internal/auth/signup_email_locker_test.go	test	todo			cold audit pending
 internal/auth/signup_tracker.go	internal	internal/auth/signup_tracker.go	runtime	done	EV-0084;EV-0099;F-1218;F-1254	XFI-0012;XFI-0046	Reviewed duplicate-signup Redis namespace, ACL coupling, and current SETNX reservation semantics
-internal/auth/signup_verifier.go	internal	internal/auth/signup_verifier.go	runtime	in_progress	EV-0143;F-1218	XFI-0012	Reviewed signup verification token reserve/consume storage contract and its current production use from the signup flow
-internal/auth/signup_verifier_test.go	internal	internal/auth/signup_verifier_test.go	test	in_progress	EV-0143;F-1218	XFI-0012	Reviewed token reserve/consume/TTL coverage for the verification backing store
+internal/auth/signup_verifier.go	internal	internal/auth/signup_verifier.go	runtime	in_progress	EV-0143;EV-0146;F-1218	XFI-0012	Reviewed signup verification token reserve/consume storage contract and its landed production use from the signup flow
+internal/auth/signup_verifier_test.go	internal	internal/auth/signup_verifier_test.go	test	in_progress	EV-0143;EV-0146;F-1218	XFI-0012	Reviewed token reserve/consume/TTL coverage for the verification backing store
 internal/auth/store.go	internal	internal/auth/store.go	runtime	todo			cold audit pending
+internal/auth/store_mark_email_verified.go	internal	internal/auth/store_mark_email_verified.go	runtime	in_progress	EV-0144;EV-0146;F-1218	XFI-0012	Reviewed committed Redis API-key verified-state marker semantics and default-off policy implications
+internal/auth/store_mark_email_verified_test.go	internal	internal/auth/store_mark_email_verified_test.go	test	in_progress	EV-0144;EV-0146;F-1218	XFI-0012	Reviewed marker coverage for happy path, idempotent re-mark, not-found, zero-time, and empty-key failures
 internal/auth/store_redis_test.go	internal	internal/auth/store_redis_test.go	test	todo			cold audit pending
 internal/auth/store_update.go	internal	internal/auth/store_update.go	runtime	todo			cold audit pending
 internal/auth/store_update_test.go	internal	internal/auth/store_update_test.go	test	todo			cold audit pending
-internal/auth/subject.go	internal	internal/auth/subject.go	runtime	in_progress	EV-0100;EV-0128;EV-0143;F-1218;F-1226	XFI-0012;XFI-0018	Reviewed policy-carrying subject fields, landed MonthlyQuota subject propagation, and the in-flight EmailVerifiedAt policy contract; broader auth subject audit still open
+internal/auth/subject.go	internal	internal/auth/subject.go	runtime	in_progress	EV-0100;EV-0128;EV-0143;EV-0146;F-1218;F-1226	XFI-0012;XFI-0018	Reviewed policy-carrying subject fields, landed MonthlyQuota subject propagation, and the settled EmailVerifiedAt policy contract; broader auth subject audit still open
 internal/auth/touch_debouncer.go	internal	internal/auth/touch_debouncer.go	runtime	done	EV-0132;EV-0133;F-1226	XFI-0018	Reviewed landed Redis SETNX debounce implementation, TTL behavior, key namespace, and ACL coupling
 internal/auth/touch_debouncer_test.go	internal	internal/auth/touch_debouncer_test.go	test	done	EV-0132;F-1226	XFI-0018	Reviewed committed debouncer coverage for TTL expiry, per-key isolation, empty-key bypass, and default TTL selection
 internal/auth/subject_test.go	internal	internal/auth/subject_test.go	test	todo			cold audit pending
@@ -1089,7 +1093,7 @@ internal/canonical/strkey_test.go	internal	internal/canonical/strkey_test.go	tes
 internal/canonical/trade.go	internal	internal/canonical/trade.go	runtime	todo			cold audit pending
 internal/canonical/trade_test.go	internal	internal/canonical/trade_test.go	test	todo			cold audit pending
 internal/config/aggregator_direct_test.go	internal	internal/config/aggregator_direct_test.go	test	todo			cold audit pending
-internal/config/config.go	internal	internal/config/config.go	runtime	in_progress	EV-0083;EV-0144;EV-0145;F-1218;F-1253	XFI-0012;XFI-0045	Reviewed Redis username config field in ACL-lockdown flow plus the new opt-in signup email-verification gate flag; broader config parser review remains open
+internal/config/config.go	internal	internal/config/config.go	runtime	in_progress	EV-0083;EV-0144;EV-0145;EV-0146;F-1218;F-1253	XFI-0012;XFI-0045	Reviewed Redis username config field in ACL-lockdown flow plus the landed opt-in signup email-verification gate flag; broader config parser review remains open
 internal/config/doc.go	internal	internal/config/doc.go	runtime	todo			cold audit pending
 internal/config/load.go	internal	internal/config/load.go	runtime	todo			cold audit pending
 internal/config/load_test.go	internal	internal/config/load_test.go	test	todo			cold audit pending
