@@ -9,28 +9,41 @@
 # for the same closed bucket + same pair, ADR-0015 is broken and
 # the multi-region story is fiction.
 #
+# Pre-launch posture (F-1234 audit-2026-05-12): only R1 is
+# deployed today; R2/R3 are tracked as future work in
+# docs/architecture/r2-r3-bringup.md. To skip a not-yet-deployed
+# region, set its env var empty (`R2= R3= ./verify-cross-region.sh`).
+# Single-region invocations report "no regions to compare against"
+# and exit 0 rather than failing — failing on absent R2/R3 just
+# trains operators to ignore the script.
+#
 # Usage:
 #   ./scripts/dev/verify-cross-region.sh
-#       # default pair set, default per-region URLs
+#       # default pair set, default per-region URLs (only R1)
 #   PAIRS='native,fiat:USD;USDC-G...,fiat:USD' \
 #     ./scripts/dev/verify-cross-region.sh
 #   R1=https://api-r1.ratesengine.net \
 #     R2=https://api-r2.ratesengine.net \
 #     R3=https://api-r3.ratesengine.net \
 #     ./scripts/dev/verify-cross-region.sh
+#   R2= R3= ./scripts/dev/verify-cross-region.sh
+#     # explicit "R1 only — R2/R3 not deployed yet"
 #
 # Exit:
-#   0 — every (region × pair) combination returned a price, AND
-#       every pair's three regional prices are byte-identical.
-#   1 — any pair has divergent prices across regions.
-#   2 — at least one region failed to respond for a pair.
+#   0 — every available-region pair returned a price AND, when
+#       ≥ 2 regions are configured, every pair's regional prices
+#       are byte-identical.
+#   1 — any pair has divergent prices across configured regions.
+#   2 — at least one configured region failed to respond for a pair.
 
 set -euo pipefail
 
 # ─── Per-region URLs (override via env) ──────────────────────
-R1="${R1:-https://api-r1.ratesengine.net}"
-R2="${R2:-https://api-r2.ratesengine.net}"
-R3="${R3:-https://api-r3.ratesengine.net}"
+# Default R1 to the public hostname; default R2/R3 to empty so
+# pre-multi-region deployments skip them rather than fail.
+R1="${R1:-https://api.ratesengine.net}"
+R2="${R2:-}"
+R3="${R3:-}"
 
 # ─── Pair set (override via PAIRS env, semicolon-separated) ──
 DEFAULT_PAIRS="native,fiat:USD"
@@ -51,10 +64,25 @@ FAIL_DIVERGE=0
 FAIL_UNREACH=0
 
 bold "▶ verify-cross-region against:"
-echo "    R1=$R1"
-echo "    R2=$R2"
-echo "    R3=$R3"
+echo "    R1=${R1:-(unset)}"
+echo "    R2=${R2:-(unset — skipped)}"
+echo "    R3=${R3:-(unset — skipped)}"
 echo
+
+# Count configured regions. Single-region runs short-circuit:
+# there's nothing to compare to, but failing the script trains
+# operators to ignore it (F-1234).
+CONFIGURED=0
+[ -n "$R1" ] && CONFIGURED=$((CONFIGURED + 1))
+[ -n "$R2" ] && CONFIGURED=$((CONFIGURED + 1))
+[ -n "$R3" ] && CONFIGURED=$((CONFIGURED + 1))
+if [ "$CONFIGURED" -lt 2 ]; then
+    bold "Only $CONFIGURED region configured."
+    echo "Cross-region consistency check needs ≥ 2 regions to compare."
+    echo "R2/R3 bringup is tracked in docs/architecture/r2-r3-bringup.md;"
+    echo "until those land, this script is a no-op — passing exit 0."
+    exit 0
+fi
 
 IFS=';' read -ra PAIR_LIST <<<"$PAIRS"
 for pair in "${PAIR_LIST[@]}"; do
@@ -82,6 +110,11 @@ for pair in "${PAIR_LIST[@]}"; do
             R2) host="$R2" ;;
             R3) host="$R3" ;;
         esac
+        # Skip regions the operator hasn't configured (R2/R3 in
+        # the single-region pre-launch posture).
+        if [ -z "$host" ]; then
+            continue
+        fi
         out_file="${TMPDIR}/${region_label}-${base//\//_}-${quote//\//_}.json"
         http_code=$(curl -sk -o "$out_file" -w "%{http_code}" \
             "${host}/v1/price?base=${base}&quote=${quote}" \
@@ -108,23 +141,48 @@ for pair in "${PAIR_LIST[@]}"; do
         esac
     done
 
-    # Did we get a price from every region?
-    if [ "$r1ok" != "yes" ] || [ "$r2ok" != "yes" ] || [ "$r3ok" != "yes" ]; then
-        red "  → SKIP consistency check (not all regions reachable)"
+    # Build the list of "ok regions we got a price from" honouring
+    # the configured set — unset regions are absent by design, not
+    # by failure.
+    collected=()
+    [ -n "$R1" ] && [ "$r1ok" = "yes" ] && collected+=("R1=$p1")
+    [ -n "$R2" ] && [ "$r2ok" = "yes" ] && collected+=("R2=$p2")
+    [ -n "$R3" ] && [ "$r3ok" = "yes" ] && collected+=("R3=$p3")
+
+    expected=0
+    [ -n "$R1" ] && expected=$((expected + 1))
+    [ -n "$R2" ] && expected=$((expected + 1))
+    [ -n "$R3" ] && expected=$((expected + 1))
+
+    if [ "${#collected[@]}" -lt "$expected" ]; then
+        red "  → SKIP consistency check — ${#collected[@]}/${expected} configured regions reachable"
         echo
         continue
     fi
-    if [ "$p1" = "$p2" ] && [ "$p2" = "$p3" ]; then
-        green "  ✓ all three regions: ${p1}"
-        echo "    R1 as_of=${a1}"
-        echo "    R2 as_of=${a2}"
-        echo "    R3 as_of=${a3}"
+
+    # Compare every collected price against the first. Skips
+    # unset regions naturally because they never landed in
+    # `collected`.
+    first_price="${collected[0]#*=}"
+    diverged=no
+    for entry in "${collected[@]}"; do
+        if [ "${entry#*=}" != "$first_price" ]; then
+            diverged=yes
+            break
+        fi
+    done
+
+    if [ "$diverged" = "no" ]; then
+        green "  ✓ all ${#collected[@]} regions: ${first_price}"
+        [ -n "$R1" ] && [ "$r1ok" = "yes" ] && echo "    R1 as_of=${a1}"
+        [ -n "$R2" ] && [ "$r2ok" = "yes" ] && echo "    R2 as_of=${a2}"
+        [ -n "$R3" ] && [ "$r3ok" = "yes" ] && echo "    R3 as_of=${a3}"
         PASS=$((PASS + 1))
     else
         red "  ✗ DIVERGENCE — closed-bucket consistency violated (ADR-0015):"
-        echo "    R1: price=${p1}  as_of=${a1}"
-        echo "    R2: price=${p2}  as_of=${a2}"
-        echo "    R3: price=${p3}  as_of=${a3}"
+        [ -n "$R1" ] && [ "$r1ok" = "yes" ] && echo "    R1: price=${p1}  as_of=${a1}"
+        [ -n "$R2" ] && [ "$r2ok" = "yes" ] && echo "    R2: price=${p2}  as_of=${a2}"
+        [ -n "$R3" ] && [ "$r3ok" = "yes" ] && echo "    R3: price=${p3}  as_of=${a3}"
         echo "    If as_of timestamps differ across regions by more"
         echo "    than the bucket window (typically 1m), one region"
         echo "    is replication-lagged. Investigate before launch."
@@ -137,7 +195,7 @@ done
 echo "─────────────────────────────────────────"
 TOTAL=$((PASS + FAIL_DIVERGE + FAIL_UNREACH))
 if [ "$FAIL_DIVERGE" -eq 0 ] && [ "$FAIL_UNREACH" -eq 0 ]; then
-    green "$PASS / $TOTAL pairs consistent across R1/R2/R3"
+    green "$PASS / $TOTAL pairs consistent across $CONFIGURED region(s)"
     bold "ADR-0015 closed-bucket consistency holds. ✓"
     exit 0
 fi

@@ -17,6 +17,20 @@ against.
 
 ### Changed
 
+- **Multi-region tooling now handles single-region operation
+  gracefully (F-1234).** Pre-R2/R3-bringup only R1 is deployed.
+  `scripts/dev/verify-cross-region.sh`, `ratesengine-ops
+  cross-region-check`, and `ratesengine-ops cross-region-monitor`
+  all used to fail with "need at least 2 regions to compare"
+  even when called against the only deployed region. Operators
+  who triggered them got a confusing failure and learned to
+  ignore the family. Now: each command logs a one-line
+  "single-region — pre-launch posture, see r2-r3-bringup.md"
+  notice and exits 0. The check fires for real once a second
+  region URL is supplied. Default R1 URL in
+  verify-cross-region.sh points at the live public hostname
+  (`api.ratesengine.net`); R2/R3 default empty.
+
 - **R1 prometheus.r1.yml scrape coverage + rule_files path
   (F-1219 + F-1220).** Added scrape jobs for redis_exporter
   (port 9121, installed by the redis-sentinel ansible role),

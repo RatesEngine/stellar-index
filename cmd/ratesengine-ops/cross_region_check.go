@@ -130,7 +130,17 @@ func crossRegionCheck(args []string) error { //nolint:funlen,gocognit,gocyclo //
 		return err
 	}
 	if len(regions) < 2 {
-		return fmt.Errorf("need at least 2 regions to compare; got %d", len(regions))
+		// F-1234 (audit-2026-05-12): pre-R2/R3-bringup posture has
+		// only R1 deployed; treating that as an error trains
+		// operators to ignore the command. Return nil so the
+		// pre-launch smoke flow can call this unconditionally and
+		// get a meaningful no-op until multi-region lands.
+		_, _ = fmt.Fprintf(os.Stdout,
+			"cross-region-check: only %d region configured; consistency check needs ≥ 2 regions.\n"+
+				"This is the pre-launch posture (R2/R3 not yet deployed). Returning success.\n"+
+				"Track R2/R3 bringup in docs/architecture/r2-r3-bringup.md.\n",
+			len(regions))
+		return nil
 	}
 
 	pairs := splitCSV(*pairsCSV)

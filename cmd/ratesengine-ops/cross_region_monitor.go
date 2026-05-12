@@ -78,7 +78,17 @@ func crossRegionMonitor(args []string) error { //nolint:funlen,gocognit,gocyclo 
 		return err
 	}
 	if len(regions) < 2 {
-		return fmt.Errorf("need at least 2 regions to compare; got %d", len(regions))
+		// F-1234 (audit-2026-05-12): pre-R2/R3-bringup posture has
+		// only R1 deployed. Refusing to start trains operators to
+		// disable the monitor; instead log + exit cleanly so a
+		// systemd unit wrapper can stay disabled until R2/R3 land
+		// and a healthy `systemctl status` reports the reason.
+		_, _ = fmt.Fprintf(os.Stdout,
+			"cross-region-monitor: only %d region configured; needs ≥ 2 to compare.\n"+
+				"This is the pre-launch posture (R2/R3 not yet deployed). Exiting cleanly.\n"+
+				"Track R2/R3 bringup in docs/architecture/r2-r3-bringup.md.\n",
+			len(regions))
+		return nil
 	}
 
 	pairs := splitCSV(*pairsCSV)
