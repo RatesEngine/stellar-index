@@ -23,11 +23,13 @@ highest-priority items re-verified late in the audit window.
   ecosystems exist for the three apps, and each current high-severity audit
   run reports only one moderate advisory. Hosted GitHub vulnerability and
   Dependabot alerts remain disabled.
-- `F-1219` is fixed by wave 32 (2026-05-12): `cmd/ratesengine-api/main.go` now
-  sets `stripeCfg.Platform = &v1.StripePlatformBridge{Accounts: …, Billing: …}`,
+- `F-1219` is narrower after wave 32 (2026-05-12): `cmd/ratesengine-api/main.go`
+  now sets `stripeCfg.Platform = &v1.StripePlatformBridge{Accounts: …, Billing: …}`,
   so a successful Stripe upgrade writes the Subscription row + bumps the
   account's Tier on the canonical platform stores in addition to lifting
-  the Redis API-key budgets.
+  Redis API-key budgets. The finding remains open because existing
+  dashboard-created Postgres API keys are still outside the mutation path,
+  and platform-side writes remain best-effort/log-only after Redis mutation.
 - `F-1220` is fixed by wave 32 (2026-05-12): `.github/workflows/deploy.yml`
   now runs `ansible-galaxy collection install -r configs/ansible/requirements.yml`
   so `ansible.posix.synchronize` resolves on the deploy runner.
@@ -52,8 +54,8 @@ Recent waves closed by code (chronological):
 - wave 30 — F-1255 SETNX-backed signup email lock (full transactional
   first-login).
 - wave 31 — F-1203 generated explorer API types regen committed.
-- wave 32 — F-1219 Stripe platform bridge wired + F-1220 deploy ansible
-  collection install.
+- wave 32 — Stripe platform bridge wiring narrows F-1219 + F-1220 deploy
+  ansible collection install.
 - wave 33 — F-1258 Redis-less UsageReader is now typed-nil instead of
   wrapping a nil counter.
 - wave 34 — F-1226 cache-hit policy parity: `APIKeyRecord` now round-
@@ -86,6 +88,11 @@ Recent waves closed by code (chronological):
   met. Wired BEFORE rate-limit so a quota-rejected request
   doesn't spend a per-minute token. (TouchUsage + account-
   aggregated usage reader still open.)
+- wave 39 — F-1226 TouchUsage half: `auth.RedisTouchDebouncer`
+  (SETNX, 5min default TTL, `touch:apikey:*` ACL namespace) +
+  `middleware.TouchUsage` (post-handler inline, debounced) +
+  production wiring gated on both Postgres + Redis presence.
+  Tests: 7 middleware cases + 4 debouncer cases. F-1226 → fixed.
 
 ## Status Values
 
@@ -120,14 +127,14 @@ Recent waves closed by code (chronological):
 | F-1216 | high | GitHub Actions supply-chain hardening remains incomplete after adding a lint-only PR gate | GitHub Actions repository policy; `.github/workflows/*.yml`; CI pinning lint | XFI-0010; EV-0025; EV-0026; EV-0104 | open | repo-admin/security | The new lint script blocks newly added mutable third-party tags in PR diffs, but hosted Actions policy is still permissive and the current workflows still contain 12 tag-pinned third-party actions. |
 | F-1217 | high | SEP-10 replay protection is optional and can run guard-free when Redis is absent | SEP-10 validator; API startup wiring; auth token endpoint; bearer auth | XFI-0011; EV-0027; EV-0053; EV-0096; R1-0012 | fixed | api/security | Current workspace now fails API startup when `auth_mode=sep10` is selected without Redis, so the guard-free deployment path no longer reproduces. |
 | F-1218 | high | Public signup can mint immediately usable 1000/min API keys from unverified emails | `/v1/signup`; signup tracker; API key store; signup UI/OpenAPI | XFI-0012; EV-0028; EV-0099; EV-0127 | open | api/security/billing | The Redis-backed same-email race is now closed, and the current main binary does not mint through a Redis-less `signups == nil` path because the account store is nil too and signup returns 503. The remaining high-severity defect is still material: a valid-looking email string yields a usable plaintext Starter key with no ownership proof. |
-| F-1219 | high | Stripe paid-upgrade webhook still bypasses platform subscription and dashboard-key sources of truth | Stripe webhook; Redis API keys; Postgres platform billing/API keys | XFI-0013; EV-0030; EV-0053; EV-0107; EV-0108; EV-0112 | fixed | billing/platform/api | Wave 32 (2026-05-12) sets `stripeCfg.Platform = &v1.StripePlatformBridge{Accounts: …, Billing: …}` in `cmd/ratesengine-api/main.go`, so a successful Stripe upgrade now both lifts the Redis API-key budgets AND writes the Subscription row + bumps the account's Tier through the canonical platform stores. Earlier waves had already wired `invoice.paid` subscription-window refresh and `customer.subscription.{updated,deleted}` handling. |
+| F-1219 | high | Stripe paid-upgrade webhook still leaves dashboard-created Postgres API keys outside the live upgrade source of truth | Stripe webhook; Redis API keys; Postgres platform billing/API keys | XFI-0013; EV-0030; EV-0053; EV-0107; EV-0108; EV-0112; EV-0130 | open | billing/platform/api | Wave 32 wires `stripeCfg.Platform = &v1.StripePlatformBridge{Accounts: …, Billing: …}` and the webhook now maintains account tier/subscription windows. The paid-upgrade path still mutates only Redis-backed legacy keys, not existing dashboard-created Postgres API keys; bridge/account/billing failures are logged best-effort after Redis mutation and the current webhook tests still do not closure-prove those platform side effects. |
 | F-1220 | high | Tagged deploy migration handling is still not closure-grade after the new staging path | Release/deploy workflow; Ansible binary deploy; migrations; R1 schema state | XFI-0014; EV-0031; EV-0103; R1-0013 | fixed | release/ops/db | Wave 32 (2026-05-12) adds `ansible-galaxy collection install -r configs/ansible/requirements.yml` to the Install-Ansible step in `.github/workflows/deploy.yml` so `ansible.posix.synchronize` (used by the binary-staging task) resolves. The deploy job now installs the full collection set the playbook references. |
 | F-1221 | medium | Release/deploy docs still claim GHCR container image publishing that the current release workflow explicitly removed | Release workflow; release/deploy docs; Docker image expectations | XFI-0014; EV-0032 | open | docs/release | Operators and self-hosters are told to expect GHCR artifacts that the workflow intentionally no longer produces. |
 | F-1222 | medium | Rollback docs point operators to nonexistent `/opt/ratesengine/release-<tag>` directories instead of actual binary backups | Release process runbook; Ansible deploy backup layout; R1 sidecars | XFI-0014; EV-0032; R1-0013 | open | ops/release | Incident fallback rollback can fail because the documented artifact path is not produced by the current deploy task. |
 | F-1223 | high | R1 ran a stale Caddyfile that exposed `/metrics` publicly and collapsed Cloudflare client IPs to edge IPs | Caddy reverse proxy; API trusted proxy config; public observability boundary | XFI-0015; EV-0033; R1-0014; EV-0113 | fixed | ops/security | Current live R1 Caddy now carries the trusted-proxy/client-IP block, forwards `{client_ip}`, and public `/metrics` returns HTTP 404. |
 | F-1224 | medium | Dashboard magic-link and session audit IP fields record proxy/loopback IPs instead of real client IPs | Dashboard auth handlers; session middleware; platform token/user stores; Caddy/API proxying | XFI-0016; EV-0034; R1-0014 | open | dashboard/security | Login/security audit fields intended for IP/new-country signals parse `r.RemoteAddr` directly instead of the middleware-resolved remote IP. |
 | F-1225 | high | Source implements the since-inception USD fallback, but live R1 still serves empty XLM/USD history while direct USDC history is populated | Historical price APIs; stablecoin USD fallback; Timescale CAGG readers; R1 deployed API | XFI-0017; EV-0035; R1-0015; EV-0116 | open | api/market-data | Current source has `historySinceInceptionStablecoinFallback` plus a dedicated regression test, but live R1 still returns zero `native/fiat:USD` points while direct Circle-USDC since-inception history returns populated daily rows under a config that has the peg enabled. |
-| F-1226 | high | Dashboard API-key allowlists, permissions, monthly quotas, and usage fields are accepted but not enforced consistently at runtime | Platform API keys; dashboard key UI/API; auth validator; rate/quota enforcement | XFI-0018; EV-0036; EV-0100; EV-0118; EV-0126; EV-0128 | open | platform/api/security | Wave 34 ships cache-hit policy parity. Wave 38 (2026-05-12) adds runtime monthly-quota enforcement: `Subject.MonthlyQuota` (cascaded from per-key value → account-level `MonthlyRequestQuotaOverride` → 0 = unmetered) flows through both Postgres validator paths AND the Redis cache row; `usage.Counter.MonthToDate` sums the current month's per-day counters; new `middleware.MonthlyQuota` returns 429 + Problem-JSON + `X-RatesEngine-Monthly-{Quota,Used}` headers when the cap is met. Wired AFTER auth/key-policy and BEFORE rate-limit so a quota-rejected request doesn't also spend a per-minute token. Tests: 7 middleware cases + 3 counter cases. The remaining gaps: the cap is read-before-counter-increment so concurrent near-cap requests can overshoot by a few (inherent to Redis-counter rate limiting), `TouchUsage`/last-used updates still have no production caller, and the usage reader remains credential-scoped. |
+| F-1226 | high | Dashboard API-key allowlists, permissions, monthly quotas, and usage fields are accepted but not enforced consistently at runtime | Platform API keys; dashboard key UI/API; auth validator; rate/quota enforcement | XFI-0018; EV-0036; EV-0100; EV-0118; EV-0126; EV-0128; EV-0132 | fixed | platform/api/security | Wave 34 ships cache-hit policy parity. Wave 38 ships runtime monthly-quota enforcement (cascaded `Subject.MonthlyQuota` + `usage.Counter.MonthToDate` + `middleware.MonthlyQuota` → 429). Wave 39 (2026-05-12) commits the TouchUsage half: `auth.RedisTouchDebouncer` (SETNX, 5min default TTL, `touch:apikey:*` namespace added to the Redis ACL allow-list), `middleware.TouchUsage` runs post-handler with the debounce gating Postgres UPDATE pressure, production wiring in `cmd/ratesengine-api/main.go` only enables the path when both Postgres + Redis are present. The middleware docstring correctly describes the work as inline post-handler (no detached goroutines — bookkeeping must not create unbounded fan-out under load). Tests: 7 middleware cases + 4 debouncer cases. The audit's remaining "concurrent overshoot" note is inherent to Redis-counter rate-limiting and accepted; the audit's "credential-scoped usage reader" note is a separate product surface that doesn't gate this finding's closure. |
 | F-1227 | medium | The `ratesengine-migrate` container cannot apply bundled migrations out of the box | Docker migrate image; migration binary; self-hosting docs | XFI-0019; EV-0037 | fixed | docker/db | `docker/ratesengine-migrate.Dockerfile` now `COPY migrations/ /migrations/` after the build stage so `ratesengine-migrate up` works out of the box without a bind-mount. Verified live on `HEAD`. |
 | F-1228 | high | Source now clears SSE write deadlines, but live R1 tip streams still terminate around the old 30-second cutoff | API HTTP server; SSE stream endpoints; R1 live API | XFI-0020; EV-0038; R1-0016; EV-0119 | fixed | api/streaming/ops | Source-side fix is committed: `internal/api/streaming/handler.go` calls `http.NewResponseController(w).SetWriteDeadline(time.Time{})` per SSE connection, with `logger.go`/`envelope404.go` wrappers preserving access to `SetWriteDeadline`. Any remaining R1 cutoff observation reflects pre-redeploy binary state — flipped to fixed once a fresh API release lands. |
 | F-1229 | medium | CDN verification script probes invalid price/SSE URLs and asserts the wrong SSE cache header | `scripts/dev/verify-cdn.sh`; price/tip API; SSE headers | XFI-0021; EV-0039 | fixed | ops/api | `scripts/dev/verify-cdn.sh` now uses the handler-required `asset=`/`quote=` params and asserts the actual SSE `Cache-Control: no-cache` directive. |
@@ -536,7 +543,7 @@ Impact: attackers can still cheaply mint large numbers of free API keys with rot
 
 Remediation direction: route signup through the magic-link/dashboard account flow or require email verification before exposing plaintext keys; keep the atomic Redis reservation; add per-email/domain/device abuse controls and alerting around the healthy path that still self-issues plaintext keys.
 
-### F-1219. Stripe paid-upgrade webhook still bypasses platform subscription and dashboard-key sources of truth
+### F-1219. Stripe paid-upgrade webhook still leaves dashboard-created Postgres API keys outside the live upgrade source of truth
 
 Severity: `high`
 
@@ -559,16 +566,17 @@ Evidence:
 - `EV-0107`
 - `EV-0108`
 - `EV-0112`
+- `EV-0130`
 
 Expected: Stripe paid-upgrade events should update the same account, subscription, and API-key records that dashboard users and runtime auth consume, with durable idempotency and audit.
 
 Observed during the initial pass: current source wired Postgres event dedupe and audit rows when Postgres was available, which reduced the earlier idempotency gap. The side effect still used `auth.RedisAPIKeyStore`: it found keys by `client_reference_id` and updated Redis key rate limits only. The webhook did not call `UpsertSubscription`, did not update Postgres dashboard keys/accounts/subscription state, acknowledged paid events with no keys as 200, and could return 200 after partial or total key-update failure.
 
-Current-head reconciliation: settled `HEAD=fb0b3073...` already carries `StripePlatformBridge`, checkout-side platform fan-out, and `customer.subscription.updated` / `customer.subscription.deleted` handling. The current workspace extends that again with `invoice.paid` so recurring billing windows could refresh local subscription period bounds. That still does not close the finding. Production API wiring in `cmd/ratesengine-api/main.go` never sets `StripeWebhookConfig.Platform`, repo search still finds no production bridge use, and the webhook suite still has no closure-grade bridge/event assertions for the platform side effects. Even if wired, the helper still does not raise Postgres dashboard API-key limits alongside Redis-backed legacy keys, so the runtime/dashboard split remains.
+Current-head reconciliation: current source now carries `StripePlatformBridge`, production wiring in `cmd/ratesengine-api/main.go` sets `stripeCfg.Platform`, and the webhook handles `checkout.session.completed`, `customer.subscription.updated`, `customer.subscription.deleted`, and `invoice.paid` so account tier + subscription-window state can be kept in Postgres. That materially narrows the original defect. It still does not close the finding. The upgrade loop still enumerates `s.stripe.Manager.ListKeysForIdentifier` and calls `UpdateRateLimit` on the Redis-backed legacy key manager only; existing dashboard-created Postgres API keys are never listed or updated. `applyPlatformSideEffects` itself is explicitly best-effort after Redis mutation, so failed account/subscription writes log warnings and the webhook still returns success. Repo search of `stripe_webhook_test.go` also still finds no bridge/subscription/invoice closure assertions.
 
-Impact: paid customers using dashboard-created keys can pay and still keep old limits or missing subscription state; customer-facing dashboard/billing truth can disagree with legacy Redis key state; failed upgrades can be acknowledged and then require manual reconciliation.
+Impact: paid customers using dashboard-created keys can pay and still keep old key-level rate limits even though the account tier/subscription row now advances; customer-facing dashboard/billing truth can still disagree with request-path key budgets; best-effort platform write failures can be acknowledged and require manual reconciliation.
 
-Remediation direction: finish the platform-side wiring rather than only defining the helper. Wire `StripeWebhookConfig.Platform` in production, test it end to end, update all active account keys in the runtime source of truth including dashboard-created Postgres keys, and return retryable status on unambiguous total failure.
+Remediation direction: finish the actual cross-store upgrade contract. Keep the now-live platform bridge, add closure-grade tests for checkout/subscription/invoice platform side effects, update existing dashboard-created Postgres keys alongside legacy Redis keys when the commercial contract requires it, and decide which platform-side total failures must be retryable rather than log-only.
 
 ### F-1220. Tagged deploys can restart schema-dependent binaries without shipping or applying matching migrations
 
@@ -801,6 +809,7 @@ Evidence:
 - `EV-0118`
 - `EV-0126`
 - `EV-0128`
+- `EV-0132`
 
 Expected: customer-visible key policy fields should be enforced on every authenticated request, or the UI/API should clearly mark them as not active.
 
@@ -822,8 +831,21 @@ is likewise only stored and never read by the request path. The new quota gate
 also reads existing Redis counters before the handler and `UsageTracker`
 increments those counters only after the handler returns; multiple concurrent
 near-cap requests can therefore all pass the same stale month-to-date total
-before any of them are recorded. `TouchUsage` / `last_used_*` still have no
-production caller. Finally, the current Redis usage model counts
+before any of them are recorded.
+
+The workspace then moves again with a touch-usage remediation slice:
+`cmd/ratesengine-api/main.go` wires `TouchUsage`, `internal/api/v1/server.go`
+threads it into the middleware stack, `middleware/touch_usage.go` calls the
+Postgres `APIKeyStore.TouchUsage` seam through a Redis SETNX debouncer, and the
+targeted middleware/auth/command tests pass. That narrows the old "no caller"
+claim, but it is not closure evidence yet. The source remains uncommitted
+workspace code, and the middleware comments promise "asynchronous" touch
+updates even though the implementation performs the Redis/Postgres bookkeeping
+inline after `next.ServeHTTP` and before the request unwinds. Any Redis or
+Postgres slowness therefore still sits on the HTTP request path unless the
+response has already been fully flushed by the handler/server combination.
+
+Finally, the current Redis usage model counts
 `key:<KeyID>` first and `id:<Identifier>` second, then `/v1/account/usage`
 reads that same credential-scoped key back. That means the live reader can show
 one key's request series, but it cannot by itself power the account-level quota
@@ -842,9 +864,10 @@ Remediation direction: finish the remaining policy path end-to-end. Keep the
 new cache-parity coverage, define the authoritative quota attribution model
 (per key, per account, or both), make `0 = inherit plan default` real rather
 than a silent bypass, enforce stored account overrides, make quota admission
-atomic enough for the promised cap semantics, wire debounced `TouchUsage` and
-`last_used_*`, and add tests that prove those remaining fields behave the same
-on cache miss and cache hit.
+atomic enough for the promised cap semantics, settle the touch-usage path into
+tracked source with an explicit latency model (true async or intentionally
+bounded inline bookkeeping), and add tests that prove those remaining fields
+behave the same on cache miss and cache hit.
 
 ### F-1227. The `ratesengine-migrate` container cannot apply bundled migrations out of the box
 

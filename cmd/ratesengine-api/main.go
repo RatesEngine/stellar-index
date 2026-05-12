@@ -660,6 +660,14 @@ func run(cfgPath string, dryRun bool) error { //nolint:gocognit,funlen,gocyclo /
 		MonthlyQuota: middleware.MonthlyQuota(usageCounter, logger.With("component", "monthly-quota")),
 		RateLimit:    rateLimit,
 		UsageTracker: middleware.UsageTracker(usageCounter, logger.With("component", "usage")),
+		// F-1226 (codex audit-2026-05-12) wave 39 — TouchUsage half:
+		// asynchronously update the api_keys row's `last_used_at` /
+		// `last_used_ip` / `last_used_user_agent` columns, debounced
+		// per (key, 5min) via Redis SETNX so the hot row sees at
+		// most one UPDATE per window. Only wired when both Postgres
+		// and Redis are present; deployments missing either fall
+		// back to the legacy "no last_used updates" posture.
+		TouchUsage: touchUsageMiddlewareOrNil(dashboardBundle.keysStore, rdb, logger),
 		// F-1258 (codex audit-2026-05-12): only wire the UsageReader
 		// adapter when the underlying counter is real. Pre-fix we
 		// passed `usageReaderAdapter{c: nil}` even on Redis-less
@@ -2211,6 +2219,23 @@ func warnOpenCORS(logger *slog.Logger, allowedOrigins []string, authMode string)
 			"auth_mode", authMode,
 			"docs", "https://github.com/RatesEngine/rates-engine/blob/main/docs/operations/pre-launch-hardening.md")
 	}
+}
+
+// touchUsageMiddlewareOrNil returns the wired TouchUsage
+// middleware when BOTH a Postgres-backed keys store AND a Redis
+// client are present; otherwise nil so the server's chain
+// assembly skips it.
+//
+// F-1226 (codex audit-2026-05-12) wave 39: Postgres is required
+// for the actual UPDATE, Redis for the SETNX debounce. Either
+// missing → legacy "no last_used updates" posture, which the
+// dashboard renders as "—".
+func touchUsageMiddlewareOrNil(keys platform.APIKeyStore, rdb redis.UniversalClient, logger *slog.Logger) middleware.Middleware {
+	if keys == nil || rdb == nil {
+		return nil
+	}
+	debouncer := auth.NewRedisTouchDebouncer(rdb, 0)
+	return middleware.TouchUsage(keys, debouncer, logger.With("component", "touch-usage"))
 }
 
 // usageReaderOrNil returns a v1.UsageReader bound to `c` when

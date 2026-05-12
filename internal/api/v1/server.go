@@ -78,6 +78,7 @@ type Server struct {
 	keyPolicy         middleware.Middleware
 	rateLimit         middleware.Middleware
 	monthlyQuota      middleware.Middleware
+	touchUsage        middleware.Middleware
 	usageTracker      middleware.Middleware
 	usageReader       UsageReader
 	hub               *streaming.Hub
@@ -378,6 +379,15 @@ type Options struct {
 	// Postgres-backed keys carry `Subject.MonthlyQuota`).
 	MonthlyQuota middleware.Middleware
 
+	// TouchUsage, when non-nil, is inserted INSIDE rate-limit so
+	// a denied (429) request doesn't update the dashboard's "last
+	// seen" column for the rejected attempt. The middleware
+	// itself fires post-handler with a Redis-SETNX debounce, so
+	// per-request cost is one Redis SETNX even on cache hit. F-1226
+	// (codex audit-2026-05-12) wave 39. Skipped when nil — opt-in
+	// per deployment (requires both Postgres keys store + Redis).
+	TouchUsage middleware.Middleware
+
 	// UsageReader, when non-nil, backs /v1/account/usage with
 	// real per-day counts. Without it the endpoint stays on its
 	// "empty list with locked wire shape" default.
@@ -562,6 +572,7 @@ func New(opts Options) *Server {
 		keyPolicy:          opts.KeyPolicy,
 		rateLimit:          opts.RateLimit,
 		monthlyQuota:       opts.MonthlyQuota,
+		touchUsage:         opts.TouchUsage,
 		usageTracker:       opts.UsageTracker,
 		usageReader:        opts.UsageReader,
 		hub:                opts.Hub,
@@ -703,6 +714,15 @@ func (s *Server) Handler() http.Handler {
 	// log at debug and never block.
 	if s.usageTracker != nil {
 		stack = append(stack, s.usageTracker)
+	}
+	// TouchUsage runs INSIDE rate-limit (and after the usage
+	// tracker for ordering symmetry) so a denied (429) request
+	// doesn't bump the dashboard's "last seen" column for the
+	// rejected attempt. Wraps next.ServeHTTP — the actual touch
+	// fires post-handler with a SETNX debounce so per-request
+	// cost is bounded. F-1226 (codex audit-2026-05-12) wave 39.
+	if s.touchUsage != nil {
+		stack = append(stack, s.touchUsage)
 	}
 	// Session resolver runs INSIDE rate-limit so the per-account
 	// rate limit could observe the dashboard subject in the future

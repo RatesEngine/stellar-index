@@ -264,6 +264,23 @@ without evidence IDs.
   remain unresolved.
 - `CMD-0130` folded the new highest-priority auth/quota/signup reviews back
   into the per-file control ledger and refreshed the snapshot/area metadata.
+- `CMD-0131` resolved stale audit drift around `F-1219`: the platform bridge
+  is now genuinely wired in production source, but the finding remains open
+  because paid upgrades still do not mutate existing dashboard-created
+  Postgres API keys and bridge failures remain best-effort.
+- `CMD-0132` restores file-ledger parity after the monthly-quota middleware
+  moved from workspace-only remediation into tracked scope. The refreshed
+  audit TSV now covers `1,884` tracked non-audit files exactly and the current
+  roll-up is `done=105`, `in_progress=67`, `todo=1712`.
+- `CMD-0133` narrows the live `F-1226` touch-usage thread: current workspace
+  code now wires a Redis-debounced Postgres touch path and the focused test set
+  passes, but the files remain untracked workspace remediation and the inline
+  post-handler latency model plus quota/account-aggregation gaps still block
+  closure.
+- `CMD-0134` closes the immediate cross-file ACL question for that touch path
+  in the current workspace: the new `touch:apikey:*` Redis family is also
+  present in the rendered Redis ACL template. That coherence check is useful,
+  but both sides are still moving workspace edits rather than landed closure.
 - `CMD-0121` preserved `F-1228` as a source/live drift issue: the SSE deadline
   fix exists in code, yet the public R1 stream still terminates around the
   former 30-second cutoff.
@@ -290,11 +307,12 @@ without evidence IDs.
   current `fb0b3073...`; `EV-0078` resolves the first count mismatch,
   `EV-0097` preserves the refresh back to `1,870` tracked rows,
   `EV-0101` restores parity after the two committed key-policy files
-  increased tracked scope to `1,872`, and `EV-0122` now restores parity
-  again at `1,882` tracked non-audit rows after the incident-emitter,
-  signup-locker, and migration-0030 files entered scope.
+  increased tracked scope to `1,872`, `EV-0122` restores parity again at
+  `1,882` tracked non-audit rows after the incident-emitter, signup-locker,
+  and migration-0030 files entered scope, and `EV-0131` advances the same
+  control to `1,884` rows after the monthly-quota middleware became tracked.
   Current findings remain source/R1 verified and not imported from prior
   audits, but final whole-repo closure still requires terminal review
   status across the refreshed TSV. The current inventory roll-up is
-  `done=105`, `in_progress=64`, `todo=1713`, with tracked-file parity
-  restored at `1882` rows and preserved through `CMD-0130`.
+  `done=105`, `in_progress=67`, `todo=1712`, with tracked-file parity
+  restored at `1884` rows and preserved through `CMD-0132`.

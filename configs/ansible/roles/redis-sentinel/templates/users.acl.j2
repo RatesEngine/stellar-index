@@ -50,7 +50,7 @@ user ratesengine on >{{ redis_password }} \
   -@all +@read +@write +@scripting +@pubsub +@connection \
   -@admin -@dangerous \
   ~vwap:* ~confidence:* ~freeze:* ~div:* \
-  ~rl:* ~signup-ip:* ~signup:email:* ~signup:lock:* \
+  ~rl:* ~signup-ip:* ~signup:email:* ~signup:lock:* ~touch:apikey:* \
   ~toml:* ~meta:* ~price:* ~apikey:* ~health:* ~oracle:* \
   ~sub:* ~sep10:seen:* ~usage:* \
   ~assets:list:* ~markets:list:* \
@@ -71,6 +71,10 @@ user ratesengine on >{{ redis_password }} \
 # per-email serialisation namespace the dashboardauth callback
 # acquires before Account.Create to keep concurrent first-login
 # callbacks from racing.
+#
+# F-1226 wave 39 (codex audit-2026-05-12): `touch:apikey:*` is
+# the SETNX-debounce namespace the api-key TouchUsage middleware
+# uses to gate hot-row UPDATEs on the api_keys table.
 
 {# When the operator wants per-component lockdown they uncomment #}
 {# the three users below (rotating distinct passwords through the #}
