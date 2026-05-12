@@ -123,13 +123,15 @@ check "status"             "/v1/status"  -- '.data.overall'
 echo
 
 echo "  Catalogue"
-check "coins (top 5)"      "/v1/coins?limit=5"  -- '.data.coins | length > 0'
-check "coin native"        "/v1/coins/native"   -- '.data.code == "XLM"'
+# /v1/coins + /v1/currencies removed in rc.48 (28ac6ac9 +
+# 80c57e38); every consumer moved to /v1/assets per the F-1201
+# audit-2026-05-12 migration. Smoke checks updated to match.
 check "assets (5)"         "/v1/assets?limit=5" -- '.data | length > 0'
+check "asset native"       "/v1/assets/native"  -- '.data.asset_id == "native"'
+check "assets verified"    "/v1/assets/verified" -- '.data | length > 0'
 check "markets (5)"        "/v1/markets?limit=5"
 check "sources"            "/v1/sources"
 check "issuers (5)"        "/v1/issuers?limit=5"
-check "currencies"         "/v1/currencies"     -- '.data.currencies | length > 0'
 check "lending pools"      "/v1/lending/pools"
 check "sac wrappers"       "/v1/sac-wrappers"
 echo
@@ -163,10 +165,15 @@ echo "  Behaviour pins"
 # returns the documented error envelope, so a regression that
 # weakens a documented 4xx into a silent 200 (the class of bug
 # behind #1134) would fail the smoke immediately.
-expect_status 400 "coins bad limit"      "/v1/coins?limit=999999" \
+expect_status 400 "assets bad limit"     "/v1/assets?limit=999999" \
   -- '.type | endswith("/invalid-limit")'
-expect_status 404 "coins not found"      "/v1/coins/this-asset-id-does-not-exist" \
-  -- '.type | endswith("/coin-not-found")'
+# Use a well-formed-but-nonexistent classic asset_id (random
+# 4-char code against a real but unrelated G-strkey) so the API
+# accepts the shape, falls through to a real catalogue lookup,
+# and returns the documented 404 — distinct from the 400 path
+# for ill-formed inputs.
+expect_status 404 "asset not found"      "/v1/assets/AAAA-GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN" \
+  -- '.type | endswith("/asset-not-found")'
 
 # Pins queued for promotion once rc.38 deploys. Each verifies a
 # documented behaviour shipped in this session that's currently
