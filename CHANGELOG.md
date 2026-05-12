@@ -17,6 +17,22 @@ against.
 
 ### Added
 
+- **SEP-10 challenge-replay defence (F-1224).** Added a
+  `sep10.ReplayGuard` interface + `sep10.RedisReplayGuard` Redis-
+  backed implementation. After a challenge XDR clears
+  `txnbuild.VerifyChallengeTxSigners`, the validator hashes the
+  signed XDR with SHA-256 and `SETNX`'s the dedupe key
+  (`sep10:seen:<base64-url-no-pad>`) with TTL = `ChallengeTTL`.
+  A second submission of the same signed XDR finds the slot
+  taken and returns `auth.ErrUnauthorized` instead of minting a
+  fresh JWT. Wired in `cmd/ratesengine-api/main.go` to the
+  same Redis client the rest of the auth subsystem uses;
+  initial validator construction at `main.go:144` happens before
+  rdb is available, so the validator is rebuilt with the guard
+  once rdb exists. `miniredis`-backed unit tests pin the three
+  contracts (first claim ok, replay rejected, TTL expiry allows
+  fresh claim, distinct hashes don't collide).
+
 - **`ratesengine_aggregator_vwap_cache_write_errors_total` metric**
   + paired `ratesengine_aggregator_cache_write_errors` page-tier
   alert. The May-10 SEV-2 (Redis BGSAVE blocked by full root FS for
@@ -34,6 +50,79 @@ against.
   bug — separate fix).
 
 ### Fixed
+
+- **`flags.stale` semantic bug fixed (F-1254).**
+  `internal/api/v1/price.go` reset `stale = false` after falling
+  through to `priceFallback` (last-trade / stablecoin proxy /
+  triangulation). The May-10 SEV-2 (Redis BGSAVE blocked → cache
+  empty → every closed-bucket read hit ErrPriceNotFound →
+  priceFallback served last-trade for ~9 h) hit this path: the
+  customer-visible response was the fallback, but `flags.stale`
+  was false. Per ADR-0018 §"flags.stale semantic" and the doc
+  comment on `Flags.Stale`, fallback responses ARE stale by
+  definition. Set `stale = ok` on the fallback branch in both
+  the single-asset and `/v1/price/batch` paths so any non-VWAP
+  response now correctly carries `stale=true`. Companion fix
+  to F-1253's cache-write-error counter (the upstream signal)
+  and F-1252 (the alert-routing the May-10 incident exposed).
+
+- **`/v1/price/batch` sources nondeterminism (F-1259).**
+  `internal/api/v1/price.go:902-905 lookupPriceBatch` unioned
+  per-row sources through a `map[string]struct{}` and emitted
+  them in map-iteration order, breaking the ADR-0015
+  byte-identical cross-region property for batch responses.
+  Added `sort.Strings(srcs)` before `writeJSON` so batch
+  responses match the single-asset path's stable lexical order
+  (set by `timescale.normalizeVwapSources` at the storage
+  boundary per F-0016 closure).
+
+- **Cache-Control gap on credential surfaces (F-1225).**
+  `/v1/auth/login`, `/v1/auth/callback`, `/v1/auth/logout`,
+  `/v1/dashboard/keys*`, `/v1/signup`, `/v1/webhooks/stripe`,
+  `/v1/price/stream`, `/v1/methodology`, and `/v1/incidents.atom`
+  all fell through `policyForPath`'s switch with no case match,
+  emitting no `Cache-Control` header. Most concerning was
+  `/v1/auth/callback`: a CDN in front of the API could have
+  cached the magic-link consume response and re-issued the
+  session cookie to subsequent requests. Added explicit cases:
+  every `/v1/auth/*` and `/v1/dashboard/*` and the two
+  state-changing surfaces (`/v1/signup`, `/v1/webhooks/stripe`)
+  use `private, no-store`; `/v1/price/stream` uses `no-store`;
+  `/v1/methodology` and `/v1/incidents.atom` get explicit
+  public-cache policies appropriate to their content cadence.
+
+- **4 of 4 `make test-integration` failures (F-1250).**
+  - `TestPlatformPostgresStores/APIKey/CRUD+revoke+touch` —
+    `test/integration/platform_postgres_stores_test.go:400,510`
+    constructed key IDs as `"kid_" + uuid.New().String()[:12]`
+    which contains a hyphen at position 9, violating
+    migration-0027 check `id ~ '^kid_[a-f0-9]{12,}$'`. Switched
+    to `strings.ReplaceAll(uuid.New().String(), "-", "")[:12]`
+    (12 hex chars).
+  - `TestEndToEnd_LedgerstreamToTimescale/soroban_LCM_with_reflector_FX_update`
+    + `TestTradesInRangeAndMarkets` — both used hand-crafted
+    G-strkeys (`GA7QYNF7…UWDA` and `GA5ZSEJYB…ZVM`) with invalid
+    CRCs. The strkey package now enforces CRC; tests switched
+    to AQUA's real mainnet G-strkey
+    (`GBNZILSTVQZ4R7IKQDGHYGY2QXL5QOFJYQMXPKWRRM5PAV7Y4M67AQUA`)
+    which round-trips cleanly and is distinct from USDC's
+    issuer.
+  - `TestSupplyStorageRoundTrip` — schema/reader drift:
+    migration `0005_create_asset_supply_history.up.sql:60`
+    creates a UNIQUE index on `(asset_key, ledger_sequence, time)`
+    (TimescaleDB requires the partition column in any unique
+    index on a hypertable), but `internal/storage/timescale/supply.go:47`
+    used `ON CONFLICT (asset_key, ledger_sequence) DO NOTHING`.
+    Postgres requires an exact column-set match; the INSERT
+    failed with `42P10`. Updated the conflict target to all 3
+    columns and revised the doc comment to explain the
+    invariant preservation.
+  - Plus `TestTradesInRangeAndMarkets` `DistinctPairs` returned
+    0 markets after the strkey fix because the test inserted
+    into `trades` directly but `DistinctPairs` reads from the
+    `prices_1m` continuous aggregate (post rc.45 commit
+    `8717bc20`). Added a `CALL refresh_continuous_aggregate('prices_1m', NULL, NULL)`
+    before the assertion, mirroring `test/integration/api_test.go:65-74`.
 
 - **R1 alert blackout closed: 9 alert families wired up, textfile
   evidence chain repaired (F-1219 + F-1220 + F-1221 + F-1252).**

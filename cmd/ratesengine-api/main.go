@@ -141,7 +141,13 @@ func run(cfgPath string, dryRun bool) error { //nolint:gocognit,funlen,gocyclo /
 	// are missing or empty, the constructor errors and the binary
 	// fails loud at startup rather than silently 503-ing on every
 	// challenge.
-	sep10Validator, err := buildSEP10Validator(cfg.API.SEP10)
+	//
+	// `nil` Redis client at this construction site means the
+	// replay-guard defence (F-1224) is disabled at startup. The
+	// validator is rebuilt below once `rdb` exists so production
+	// always has the guard wired; this early Noop construction
+	// keeps dry-run + early-failure paths unchanged.
+	sep10Validator, err := buildSEP10Validator(cfg.API.SEP10, nil)
 	if err != nil {
 		// auth_mode=sep10 makes this a hard failure (we MUST have a
 		// validator to bootstrap auth at all). Otherwise log + carry
@@ -206,6 +212,28 @@ func run(cfgPath string, dryRun bool) error { //nolint:gocognit,funlen,gocyclo /
 			}
 		}
 		logger.Info("redis configured", "mode", mode)
+	}
+
+	// F-1224 (audit-2026-05-12): rebuild the SEP-10 validator with
+	// the Redis-backed replay guard now that we have an `rdb`. The
+	// earlier construction at line ~144 was Redis-less; that one is
+	// retained because failing the env-var check there is the
+	// fast-fail-on-misconfig path, but production always replaces
+	// it here with a guarded validator. Skipped silently when
+	// either the original construction errored (sep10Validator is
+	// the Noop) or Redis is not configured (sep10Validator stays
+	// guard-free; the replay defence falls open).
+	if rdb != nil {
+		if _, isNoop := sep10Validator.(auth.NoopSEP10Validator); !isNoop {
+			guarded, err := buildSEP10Validator(cfg.API.SEP10, rdb)
+			if err == nil {
+				sep10Validator = guarded
+				logger.Info("sep10 replay-guard wired", "store", "redis")
+			} else {
+				logger.Warn("sep10 replay-guard rebuild failed; falling back to non-guarded validator",
+					"err", err)
+			}
+		}
 	}
 
 	// Build readiness-check set. Each implements v1.ReadyChecker.
@@ -898,7 +926,7 @@ func buildDashboardBundle(cfg config.DashboardConfig, db *sql.DB, rdb redis.Univ
 	}, nil
 }
 
-func buildSEP10Validator(cfg config.SEP10Config) (auth.SEP10Validator, error) {
+func buildSEP10Validator(cfg config.SEP10Config, rdb redis.UniversalClient) (auth.SEP10Validator, error) {
 	if cfg.SeedEnv == "" || cfg.JWTSecretEnv == "" {
 		return nil, errors.New("sep10: seed_env / jwt_secret_env not configured")
 	}
@@ -913,6 +941,17 @@ func buildSEP10Validator(cfg config.SEP10Config) (auth.SEP10Validator, error) {
 
 	network := stellarNetworkPassphrase()
 
+	// F-1224 (audit-2026-05-12): wire the Redis-backed replay
+	// guard whenever the API has Redis (i.e. always in production).
+	// Without it, a captured signed challenge XDR is reusable for
+	// the full ChallengeTTL window — long enough for an attacker
+	// who steals one signed XDR (e.g. via XSS exfil) to mint a
+	// stream of JWTs after the user closes the tab.
+	var replayGuard sep10.ReplayGuard
+	if rdb != nil {
+		replayGuard = sep10.NewRedisReplayGuard(rdb)
+	}
+
 	v, err := sep10.NewValidator(sep10.Options{
 		ServerSeed:        seed,
 		NetworkPassphrase: network,
@@ -921,6 +960,7 @@ func buildSEP10Validator(cfg config.SEP10Config) (auth.SEP10Validator, error) {
 		ChallengeTTL:      cfg.ChallengeTTL,
 		JWTTTL:            cfg.JWTTTL,
 		JWTSecret:         []byte(jwtSecret),
+		ReplayGuard:       replayGuard,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("sep10: NewValidator: %w", err)

@@ -12,10 +12,19 @@ import (
 )
 
 // InsertSupply appends a [supply.Supply] snapshot to
-// asset_supply_history. Idempotent on (asset_key, ledger_sequence) —
-// re-deriving at the same ledger is a no-op via ON CONFLICT DO
-// NOTHING. The aggregator writes one snapshot per
-// asset-affecting bucket close.
+// asset_supply_history. Idempotent on
+// (asset_key, ledger_sequence, time) — re-deriving at the same
+// ledger is a no-op via ON CONFLICT DO NOTHING. The aggregator
+// writes one snapshot per asset-affecting bucket close.
+//
+// The third column (`time`) is required by TimescaleDB's unique-
+// index constraint that the partition column be part of any
+// uniqueness invariant on a hypertable — see
+// migrations/0005_create_asset_supply_history.up.sql:55-61. In
+// practice two writes for the same (asset, ledger) carry the same
+// `time` derived from the ledger close timestamp, so the
+// (asset_key, ledger_sequence) uniqueness invariant the migration's
+// comment describes is preserved at the application level.
 //
 // Validates that AssetKey + TotalSupply + CirculatingSupply are
 // populated (the supply-package computers always populate them; this
@@ -44,7 +53,7 @@ func (s *Store) InsertSupply(ctx context.Context, snap supply.Supply) error {
 		    (time, asset_key, total_supply, circulating_supply, max_supply, basis, ledger_sequence)
 		VALUES
 		    ($1, $2, $3::numeric, $4::numeric, $5::numeric, $6, $7)
-		ON CONFLICT (asset_key, ledger_sequence) DO NOTHING
+		ON CONFLICT (asset_key, ledger_sequence, time) DO NOTHING
 	`
 	_, err := s.db.ExecContext(ctx, q,
 		snap.ObservedAt.UTC(),

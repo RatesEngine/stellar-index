@@ -2,6 +2,8 @@ package sep10
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/base64"
 	"errors"
 	"fmt"
 	"time"
@@ -11,6 +13,38 @@ import (
 
 	"github.com/RatesEngine/rates-engine/internal/auth"
 )
+
+// ReplayGuard records the hash of every successfully-verified
+// challenge transaction so the same signed XDR can't be re-used to
+// mint multiple JWTs inside its time-bound window.
+//
+// SEP-10 §3.4 acknowledges the replay risk and leaves implementations
+// to choose their own defence. Without one, a captured signed
+// challenge XDR is reusable for the full ChallengeTTL (default
+// 15 m) — long enough for an attacker who steals a single signed
+// XDR (e.g. via an XSS exfil on the client wallet) to mint a steady
+// stream of JWTs even after the user closes the tab.
+//
+// MarkSeenIfFresh stores the hash with the supplied TTL (the
+// remaining lifetime of the challenge time-bound) and returns
+// [auth.ErrUnauthorized] when the hash is already present.
+//
+// Wired in production via internal/auth/sep10/redisreplay.go
+// (Redis-backed). Nil ReplayGuard preserves prior behaviour for
+// callers that haven't opted in. F-1224 (audit-2026-05-12).
+type ReplayGuard interface {
+	MarkSeenIfFresh(ctx context.Context, txHash string, ttl time.Duration) error
+}
+
+// challengeTxHash hashes the verified challenge transaction's
+// signed XDR. The hash is the dedupe key the ReplayGuard stores;
+// the SHA-256 keeps the key bounded (44 bytes base64) regardless
+// of XDR length, and constant-time hashing avoids leaking the XDR
+// content into the cache key namespace.
+func challengeTxHash(signedXDR string) string {
+	sum := sha256.Sum256([]byte(signedXDR))
+	return base64.RawURLEncoding.EncodeToString(sum[:])
+}
 
 // Options configures a [Validator].
 type Options struct {
@@ -54,6 +88,13 @@ type Options struct {
 
 	// Now overrides time.Now for tests. Production leaves this nil.
 	Now func() time.Time
+
+	// ReplayGuard, when non-nil, dedupes verified challenge
+	// transactions so a captured signed XDR cannot be re-submitted
+	// inside its time-bound window. Nil = no replay defence (prior
+	// behaviour). See [ReplayGuard] for production wiring.
+	// F-1224 (audit-2026-05-12).
+	ReplayGuard ReplayGuard
 }
 
 // Validator implements [auth.SEP10Validator] using the
@@ -71,6 +112,7 @@ type Validator struct {
 	jwtTTL       time.Duration
 	jwtSecret    []byte
 	now          func() time.Time
+	replayGuard  ReplayGuard
 }
 
 // NewValidator constructs a [Validator] from [Options]. Returns an
@@ -125,6 +167,7 @@ func NewValidator(opts Options) (*Validator, error) {
 		jwtTTL:       jwtTTL,
 		jwtSecret:    append([]byte(nil), opts.JWTSecret...),
 		now:          now,
+		replayGuard:  opts.ReplayGuard,
 	}, nil
 }
 
@@ -181,7 +224,7 @@ func (v *Validator) Challenge(_ context.Context, clientAccount string) (auth.Cha
 //     account isn't a known signer of the challenge.
 //   - [auth.ErrTokenExpired] — challenge's time-bound window has
 //     elapsed.
-func (v *Validator) Verify(_ context.Context, signedXDR string) (auth.Token, error) {
+func (v *Validator) Verify(ctx context.Context, signedXDR string) (auth.Token, error) {
 	// ReadChallengeTx parses the transaction and validates structure
 	// (server source account, single sequence number, manage_data
 	// ops with the web auth domain, time bounds present). Returns
@@ -214,6 +257,25 @@ func (v *Validator) Verify(_ context.Context, signedXDR string) (auth.Token, err
 	}
 	if len(signersFound) == 0 {
 		return auth.Token{}, fmt.Errorf("%w: no signers verified", auth.ErrUnauthorized)
+	}
+
+	// F-1224 (audit-2026-05-12): replay defence. After signature
+	// verification succeeded, mark this challenge tx hash as
+	// consumed for the remaining time-bound window. A second
+	// submission of the same signed XDR returns ErrUnauthorized
+	// before we issue a fresh JWT. Marking AFTER VerifyChallengeTxSigners
+	// keeps the dedupe namespace bounded — we never spend a slot
+	// on bogus / unsigned XDR.
+	//
+	// Falls open (continues to issue JWT) when no ReplayGuard is
+	// configured, preserving prior behaviour for callers that
+	// haven't opted in.
+	if v.replayGuard != nil {
+		if err := v.replayGuard.MarkSeenIfFresh(
+			ctx, challengeTxHash(signedXDR), v.challengeTTL,
+		); err != nil {
+			return auth.Token{}, err
+		}
 	}
 
 	now := v.now().UTC()

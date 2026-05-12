@@ -158,7 +158,11 @@ func TestEndToEnd_LedgerstreamToTimescale(t *testing.T) {
 		// Dispatcher with just the FX decoder registered — scopes the
 		// test to exactly what we're proving. WithDecoderObserver
 		// stamps a known G-strkey on the row so we can assert on it.
-		const observerStrkey = "GA7QYNF7SOWQ3GLR2BGMZEHXAVIRZA4KVWLTJJFC7MGXUA74P7UJUWDA"
+		// AQUA mainnet issuer — chosen because it's a real, stable
+		// G-strkey that survives the strkey-CRC validation that the
+		// canonical package now enforces (the prior hand-crafted
+		// observer strkey "GA7QYN…" had an invalid checksum).
+		const observerStrkey = "GBNZILSTVQZ4R7IKQDGHYGY2QXL5QOFJYQMXPKWRRM5PAV7Y4M67AQUA"
 		fxDecoder := reflector.NewDecoder(reflector.VariantFX, fxContract,
 			reflector.WithDecoderObserver(observerStrkey))
 		disp := dispatcher.New(fxDecoder)

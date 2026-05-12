@@ -35,9 +35,13 @@ func TestTradesInRangeAndMarkets(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// Same format, different last char so it's a distinct issuer
-	// for DistinctPairs. Format-only validation (no CRC).
-	fake, err := c.NewClassicAsset("USDX", "GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVM")
+	// AQUA's issuer — a real, CRC-valid mainnet G-strkey, distinct
+	// from USDC's issuer above. We need the strkey to round-trip
+	// through canonical.NewClassicAsset's CRC check, so a
+	// hand-crafted "USDC-issuer with last char tweaked" string
+	// (which used to work when validation was format-only) no
+	// longer round-trips.
+	fake, err := c.NewClassicAsset("AQUA", "GBNZILSTVQZ4R7IKQDGHYGY2QXL5QOFJYQMXPKWRRM5PAV7Y4M67AQUA")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -95,12 +99,25 @@ func TestTradesInRangeAndMarkets(t *testing.T) {
 	}
 
 	// ─── DistinctPairs ──────────────────────────────────────────────
+	// Force-refresh prices_1m so DistinctPairs sees the seeded
+	// trades. Per rc.45 (commit 8717bc20), DistinctPairs reads the
+	// 1-min continuous aggregate rather than scanning the raw
+	// trades table — without this refresh the seeded rows are
+	// present in `trades` but absent from `prices_1m` until the
+	// 30 s policy fires (longer than the test window). Mirrors the
+	// pattern in test/integration/api_test.go:65-74.
+	if _, err := store.DB().ExecContext(ctx,
+		`CALL refresh_continuous_aggregate('prices_1m', NULL, NULL)`,
+	); err != nil {
+		t.Fatalf("refresh prices_1m: %v", err)
+	}
+
 	markets, next, err := store.DistinctPairs(ctx, "", 500)
 	if err != nil {
 		t.Fatalf("DistinctPairs: %v", err)
 	}
 	if len(markets) != 2 {
-		t.Fatalf("got %d markets, want 2 (XLM/USDC + XLM/USDX)", len(markets))
+		t.Fatalf("got %d markets, want 2 (XLM/USDC + XLM/AQUA)", len(markets))
 	}
 	if next != "" {
 		t.Errorf("expected empty cursor on final page, got %q", next)

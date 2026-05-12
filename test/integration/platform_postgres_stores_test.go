@@ -397,7 +397,7 @@ func TestPlatformPostgresStores(t *testing.T) {
 
 		hash := sha256.Sum256([]byte("rek_plaintext_xyz"))
 		key := platform.APIKey{
-			ID:                     "kid_" + uuid.New().String()[:12],
+			ID:                     "kid_" + strings.ReplaceAll(uuid.New().String(), "-", "")[:12],
 			AccountID:              acct.ID,
 			CreatedByUserID:        owner.ID,
 			Name:                   "primary",
@@ -507,7 +507,7 @@ func TestPlatformPostgresStores(t *testing.T) {
 
 		// Hash-collision (re-Create same hash) → ErrConflict.
 		dup := key
-		dup.ID = "kid_" + uuid.New().String()[:12]
+		dup.ID = "kid_" + strings.ReplaceAll(uuid.New().String(), "-", "")[:12]
 		_, err = keys.Create(ctx, dup)
 		if !errors.Is(err, platform.ErrConflict) {
 			t.Errorf("expected ErrConflict on duplicate hash, got %v", err)

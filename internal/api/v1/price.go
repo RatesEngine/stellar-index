@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"math/big"
 	"net/http"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -283,7 +284,19 @@ func (s *Server) handlePrice(w http.ResponseWriter, r *http.Request) {
 	if errors.Is(err, ErrPriceNotFound) {
 		var ok bool
 		snapshot, sources, triangulated, ok = s.priceFallback(r.Context(), asset, quote)
-		stale = false
+		// F-1254 (audit-2026-05-12): when the closed-bucket VWAP read
+		// returned ErrPriceNotFound and we degraded to one of the
+		// priceFallback chain (last-trade / stablecoin proxy /
+		// triangulation), the response is BY DEFINITION below the
+		// surface's documented baseline contract — that's the exact
+		// `flags.stale` semantic per ADR-0018. The May-10 SEV-2
+		// (Redis BGSAVE blocked → cache empty → every closed-bucket
+		// read hit ErrPriceNotFound → priceFallback served last-trade
+		// for ~9 h) didn't surface stale=true to customers because
+		// this assignment was clearing the flag. Customers got stale
+		// data with stale=false. Set stale=true on every fallback —
+		// the chain itself is the staleness signal.
+		stale = ok
 		if !ok {
 			writeProblem(w, r,
 				"https://api.ratesengine.net/errors/price-not-found",
@@ -845,7 +858,12 @@ func (s *Server) fetchBatchRow(w http.ResponseWriter, r *http.Request, raw strin
 		// stablecoin-fiat-proxy isn't enabled. R-005 in
 		// docs/review-2026-05-10.md.
 		if fs, fsrc, _, ok := s.priceFallback(r.Context(), asset, quote); ok {
-			return batchRowOutcome{snap: fs, sources: fsrc, asset: asset}
+			// F-1254: priceFallback responses are by definition below
+			// the closed-bucket VWAP contract (last-trade / proxy /
+			// triangulation). Mark stale so callers can tell the
+			// batch row was a fallback. Mirrors the single-asset
+			// path's stale=ok assignment above.
+			return batchRowOutcome{snap: fs, sources: fsrc, stale: true, asset: asset}
 		}
 		return batchRowOutcome{skip: true} // omit, do not 404 the batch
 	}
@@ -903,6 +921,14 @@ func (s *Server) lookupPriceBatch(w http.ResponseWriter, r *http.Request, ids []
 	for src := range allSources {
 		srcs = append(srcs, src)
 	}
+	// Sort for ADR-0015 byte-identical cross-region property —
+	// single-asset reads sort sources at the storage boundary
+	// (timescale.normalizeVwapSources, F-0016 closure); the batch
+	// endpoint unions per-row sources through a map and previously
+	// emitted them in map-iteration order, breaking the
+	// byte-identical contract for batch responses (F-1259 in
+	// audit-2026-05-12).
+	sort.Strings(srcs)
 	writeJSON(w, out, Flags{
 		Stale:        anyStale,
 		Frozen:       anyFrozen,

@@ -104,6 +104,43 @@ func policyForPath(path string, cdnEnabled bool) string {
 	case strings.HasPrefix(path, "/v1/auth/sep10"):
 		return "private, no-store"
 
+	// ─── Magic-link auth + dashboard — same trust class as SEP-10
+	// F-1225 (audit-2026-05-12): /v1/auth/{login,callback,logout}
+	// + /v1/dashboard/keys* fell through to the no-match branch
+	// (no Cache-Control set), so a CDN in front of the API could
+	// have cached /v1/auth/callback's session-cookie response and
+	// re-issued it to subsequent requests. Webhook receivers
+	// (/v1/webhooks/stripe) + /v1/signup are also credential /
+	// state-changing surfaces that must never cache. /v1/methodology
+	// + /v1/incidents.atom + /v1/price/stream are not credential
+	// surfaces but had no explicit policy — fold them in here so
+	// no v1 route reaches the no-match default branch.
+	case strings.HasPrefix(path, "/v1/auth/"),
+		strings.HasPrefix(path, "/v1/dashboard/"),
+		path == "/v1/signup",
+		path == "/v1/webhooks/stripe":
+		return "private, no-store"
+
+	// ─── SSE streams — bypass CDN cache; the response is a long-
+	// lived event stream, not a cacheable body. Without this CDNs
+	// may try to buffer + replay.
+	case strings.HasPrefix(path, "/v1/price/stream"):
+		return "no-store"
+
+	// ─── Public-but-policy-opinionated paths that lacked an
+	// explicit case before F-1225. Methodology page is mostly
+	// static prose; the atom feed is poll-cadence content.
+	case path == "/v1/methodology":
+		if cdnEnabled {
+			return "public, max-age=300, s-maxage=600"
+		}
+		return "public, max-age=300"
+	case path == "/v1/incidents.atom":
+		if cdnEnabled {
+			return "public, max-age=60, s-maxage=120"
+		}
+		return "public, max-age=60"
+
 	// ─── Tip + observations — private surfaces (ADR-0018) ───────
 	// Tip has no cross-region consistency contract; caching
 	// would shift the contract. Same for observations.

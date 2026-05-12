@@ -281,6 +281,24 @@ and the per-pair lens lives in the Redis key namespace
 (`vwap:<base>:<quote>:<window>`). Operators alert on a sustained
 zero-rate as the "aggregator is silent" signal.
 
+### `ratesengine_aggregator_vwap_cache_write_errors_total`
+
+Counter, no labels.
+
+Cumulative count of failed Redis `SET` attempts during the VWAP
+cache write step in `internal/aggregate/orchestrator/orchestrator.go`.
+The aggregator returns an error and the next tick retries — but
+from the customer surface, sustained failures here mean
+`/v1/price` returns 404 on every cached pair (rewritten,
+triangulated, stablecoin-proxy paths) while the Timescale-direct
+paths continue serving. Surfaces the May-10 SEV-2 incident class
+(`internal/incidents/data/2026-05-10-redis-writes-blocked-disk-full.md`)
+where Redis BGSAVE failed for ~9 h and the only customer signal
+was 404s on rewritten pairs because `flags.stale` was not flipped
+(the aggregator process was alive and ticking, just unable to
+publish). Operators alert on `rate(...[5m]) > 0` for ≥ 2 min as
+the upstream-of-stale signal.
+
 ### `ratesengine_aggregator_empty_windows_total`
 
 Counter, no labels.
