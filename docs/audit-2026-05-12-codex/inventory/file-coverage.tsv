@@ -911,7 +911,7 @@ internal/api/v1/dashboardauth/handlers_test.go	internal	internal/api/v1	test	tod
 internal/api/v1/dashboardauth/middleware.go	internal	internal/api/v1	runtime	done	EV-0087		Reviewed dashboard session resolution/touch middleware during auth slice pass
 internal/api/v1/dashboardauth/signup_lock_test.go	internal	internal/api/v1	test	todo			cold audit pending
 internal/api/v1/dashboardkeys/doc.go	internal	internal/api/v1	runtime	todo			cold audit pending
-internal/api/v1/dashboardkeys/handlers.go	internal	internal/api/v1	runtime	done	EV-0023;EV-0089;EV-0090;EV-0092;EV-0103;F-1212;F-1256;F-1257	XFI-0008;XFI-0048;XFI-0049	Reviewed create/list/revoke flow, current tier-clamp fix, customer-facing budget-contract drift, and quota concurrency gap that survives the new store-level CTE
+internal/api/v1/dashboardkeys/handlers.go	internal	internal/api/v1	runtime	done	EV-0023;EV-0089;EV-0090;EV-0092;EV-0103;EV-0148;F-1212;F-1256;F-1257;F-1262	XFI-0008;XFI-0048;XFI-0049;XFI-0054	Reviewed create/list/revoke flow, current tier-clamp fix, customer-facing budget-contract drift, advisory-lock quota path, and the omitted-referer default create failure exposed in the real Postgres path
 internal/api/v1/dashboardkeys/handlers_test.go	internal	internal/api/v1	test	todo			cold audit pending
 internal/api/v1/dashboardwebhooks/doc.go	internal	internal/api/v1	runtime	done	EV-0072;EV-0076;F-1246;F-1249	XFI-0038;XFI-0041	Reviewed dashboard webhook contract docs against live worker/store/product seams
 internal/api/v1/dashboardwebhooks/handlers.go	internal	internal/api/v1	runtime	done	EV-0068;EV-0069;EV-0074;EV-0076;EV-0096;F-1244;F-1245;F-1248;F-1249	XFI-0036;XFI-0037;XFI-0040;XFI-0041	Reviewed create/update/list/delete flows, secret handling, current SSRF validation hardening, quota race, and missing producer path
@@ -1191,7 +1191,7 @@ internal/platform/doc.go	internal	internal/platform/doc.go	runtime	todo			cold a
 internal/platform/errors.go	internal	internal/platform/errors.go	runtime	todo			cold audit pending
 internal/platform/errors_test.go	internal	internal/platform/errors_test.go	test	todo			cold audit pending
 internal/platform/postgresstore/account_store.go	internal	internal/platform/postgresstore	runtime	done	EV-0086;EV-0126;F-1226;F-1255	XFI-0018;XFI-0047	Reviewed account creation conflict handling in first-login race path plus persisted monthly quota override field with no request-path consumer
-internal/platform/postgresstore/apikey_store.go	internal	internal/platform/postgresstore	runtime	in_progress	EV-0023;EV-0089;EV-0092;EV-0103;EV-0121;EV-0126;F-1212;F-1226;F-1257	XFI-0008;XFI-0018;XFI-0049	Reviewed persisted dashboard key budget path, inert monthly quota/TouchUsage surfaces, and the new capped-create advisory-lock transaction; closure evidence remains blocked until the concurrent integration test can run past F-1261
+internal/platform/postgresstore/apikey_store.go	internal	internal/platform/postgresstore	runtime	in_progress	EV-0023;EV-0089;EV-0092;EV-0103;EV-0121;EV-0126;EV-0148;F-1212;F-1226;F-1257;F-1262	XFI-0008;XFI-0018;XFI-0049;XFI-0054	Reviewed persisted dashboard key budget path, monthly quota/TouchUsage surfaces, capped-create advisory-lock transaction, and the nil referer-allowlist SQL NULL defect that now blocks quota proof
 internal/platform/postgresstore/audit_store.go	internal	internal/platform/postgresstore	runtime	todo			cold audit pending
 internal/platform/postgresstore/billing_store.go	internal	internal/platform/postgresstore	runtime	todo			cold audit pending
 internal/platform/postgresstore/doc.go	internal	internal/platform/postgresstore	runtime	todo			cold audit pending
@@ -1563,7 +1563,7 @@ migrations/0028_create_fx_quotes.up.sql	migrations	migrations	migration_or_sql	t
 migrations/0029_drop_unused_blend_jsonb_gin_indexes.down.sql	migrations	migrations	migration_or_sql	todo			cold audit pending
 migrations/0029_drop_unused_blend_jsonb_gin_indexes.up.sql	migrations	migrations	migration_or_sql	todo			cold audit pending
 migrations/0030_asset_supply_history_unique_constraint.down.sql	migrations	migrations	migration_or_sql	in_progress	EV-0137;F-1261	XFI-0053	Reviewed rollback shape while rechecking the broken compressed-hypertable migration pair
-migrations/0030_asset_supply_history_unique_constraint.up.sql	migrations	migrations	migration_or_sql	in_progress	EV-0120;EV-0137;F-1261	XFI-0053	Reviewed the failing compressed-hypertable constraint swap; remediation/retest still open
+migrations/0030_asset_supply_history_unique_constraint.up.sql	migrations	migrations	migration_or_sql	done	EV-0120;EV-0137;EV-0147;F-1261	XFI-0053	Reviewed the former compressed-hypertable failure and the landed decompress/disable-DDL/restore-compression remediation; migration round-trip now passes
 migrations/README.md	migrations	migrations	documentation	in_progress	EV-0120;F-1261	XFI-0053	Reviewed the 0030 entry; wording still claims a constraint path that does not match the executable SQL
 openapi/rates-engine.v1.yaml	openapi	openapi	config	in_progress	EV-0010;EV-0011;EV-0090;EV-0095;EV-0103;F-1203;F-1256;F-1259	XFI-0048;XFI-0051	Reviewed source spec against generated artifacts, dashboard key-budget contract drift, partially revised usage docs, and incorrect healthz checks wording
 pkg/client/asset_detail_test.go	pkg	pkg	test	todo			cold audit pending
@@ -1671,13 +1671,13 @@ test/integration/fx_quote_at_or_before_test.go	test	test/integration	test	todo		
 test/integration/issuers_coins_storage_test.go	test	test/integration	test	todo			cold audit pending
 test/integration/ledgerstream_to_storage_test.go	test	test/integration	test	todo			cold audit pending
 test/integration/migrations_test.go	test	test/integration	test	todo			cold audit pending
-test/integration/platform_postgres_stores_test.go	test	test/integration	test	in_progress	EV-0120;EV-0121;EV-0137;F-1248;F-1257;F-1261	XFI-0040;XFI-0049;XFI-0053	Reviewed new concurrent quota scenarios and re-confirmed the current migration bootstrap failure that prevents them from executing
+test/integration/platform_postgres_stores_test.go	test	test/integration	test	in_progress	EV-0120;EV-0121;EV-0137;EV-0147;EV-0148;F-1248;F-1257;F-1261;F-1262	XFI-0040;XFI-0049;XFI-0053;XFI-0054	Reviewed concurrent quota scenarios after migration bootstrap recovered: webhook proof passes, API-key proof now fails earlier on referer_allowlist NULL handling
 test/integration/sep41_supply_storage_test.go	test	test/integration	test	todo			cold audit pending
 test/integration/storage_test.go	test	test/integration	test	todo			cold audit pending
 test/integration/supply_storage_test.go	test	test/integration	test	todo			cold audit pending
 test/integration/trades_range_test.go	test	test/integration	test	todo			cold audit pending
 test/integration/trades_usd_volume_test.go	test	test/integration	test	todo			cold audit pending
-test/integration/usd_fx_resolver_test.go	test	test/integration	test	done	EV-0080;EV-0102;EV-0139;F-1251	XFI-0043	Reviewed the repaired integration expectation; tagged execution still aborts in migration 0030 before the resolver assertion runs
+test/integration/usd_fx_resolver_test.go	test	test/integration	test	done	EV-0080;EV-0102;EV-0139;EV-0147;F-1251	XFI-0043	Reviewed the repaired integration expectation and the now-green DB-backed tagged execution after migration bootstrap recovered
 test/load/README.md	test	test/load	documentation	todo			cold audit pending
 test/load/doc.go	test	test/load	runtime	todo			cold audit pending
 test/load/docker-compose.k6.yaml	test	test/load	config	todo			cold audit pending
@@ -1713,7 +1713,7 @@ web/dashboard/src/app/signin/page.tsx	web	web/dashboard	frontend	todo			cold aud
 web/dashboard/src/app/usage/page.tsx	web	web/dashboard	frontend	todo			cold audit pending
 web/dashboard/src/components/AppShell.tsx	web	web/dashboard	frontend	todo			cold audit pending
 web/dashboard/src/components/AuthedRoute.tsx	web	web/dashboard	frontend	todo			cold audit pending
-web/dashboard/src/lib/api.ts	web	web/dashboard	frontend	todo			cold audit pending
+web/dashboard/src/lib/api.ts	web	web/dashboard	frontend	in_progress	EV-0148;F-1262	XFI-0054	Reviewed optional referer_allowlist request shape that can omit the field on normal dashboard key-create calls; broader dashboard API client audit remains open
 web/dashboard/src/lib/auth.tsx	web	web/dashboard	frontend	todo			cold audit pending
 web/dashboard/src/lib/cn.ts	web	web/dashboard	frontend	todo			cold audit pending
 web/dashboard/tailwind.config.ts	web	web/dashboard	frontend	todo			cold audit pending

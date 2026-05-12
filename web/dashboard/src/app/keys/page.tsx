@@ -244,7 +244,7 @@ function CreateKeyForm({
       </Field>
       <Field
         label="Rate limit (requests / minute)"
-        hint="Default for free tier is 1000."
+        hint="Capped to your account tier — Free 60, Starter 1000, Pro 10000, Business 60000, Enterprise 100000. Higher values silently clamp to the tier ceiling on save."
       >
         <input
           type="number"
