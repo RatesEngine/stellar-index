@@ -205,3 +205,12 @@ func (r *statusRecorder) Flush() {
 		f.Flush()
 	}
 }
+
+// Unwrap exposes the underlying ResponseWriter so
+// http.NewResponseController can reach SetWriteDeadline / Hijack
+// on it. Required for SSE handlers that need to clear the global
+// 30s WriteTimeout so long-running streams don't get cut.
+// F-1228 (codex audit-2026-05-12).
+func (r *statusRecorder) Unwrap() http.ResponseWriter {
+	return r.ResponseWriter
+}

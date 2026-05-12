@@ -2,6 +2,7 @@ package streaming
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
 	"strings"
@@ -60,6 +61,38 @@ func StreamFromChannel(w http.ResponseWriter, r *http.Request, ch <-chan Event, 
 	if !ok {
 		http.Error(w, "streaming not supported", http.StatusInternalServerError)
 		return
+	}
+
+	// F-1228 (codex audit-2026-05-12): the API's http.Server is
+	// configured with `WriteTimeout: 30s` to keep short-running
+	// handlers honest. That deadline ALSO applies to SSE streams,
+	// so without an explicit override the kernel resets the
+	// connection at 30s elapsed — well below the 60s reverse-proxy
+	// idle timeout these heartbeats are designed to dodge.
+	//
+	// http.NewResponseController + SetWriteDeadline(zero-Time)
+	// clears the per-connection deadline for THIS request only,
+	// leaving the global WriteTimeout in place for every other
+	// handler. The request context (which has the cleanup hooks
+	// for cancellation) is unaffected.
+	//
+	// On wrappers that don't expose SetWriteDeadline through the
+	// Unwrap chain (httptest writers, middleware ResponseWriters
+	// without an Unwrap method) the call returns
+	// http.ErrNotSupported — which we tolerate, because those
+	// transports don't enforce the per-write deadline that this
+	// fix counters either. The middleware chain in cmd/ratesengine-
+	// api/main.go exposes Unwrap() on every wrapper so production
+	// SSE connections do reach this seam.
+	rc := http.NewResponseController(w)
+	if err := rc.SetWriteDeadline(time.Time{}); err != nil && !errors.Is(err, http.ErrNotSupported) {
+		// Anything other than "transport doesn't support it"
+		// would mask a regression silently — log + continue, but
+		// don't 500 because the stream is still serviceable
+		// (worst case: it closes at the global WriteTimeout).
+		// Writing as an SSE comment line so the connection isn't
+		// broken; errors from this write are themselves swallowed.
+		_, _ = fmt.Fprintf(w, ":sse-write-deadline-reset-error: %s\n\n", err.Error())
 	}
 
 	// SSE headers per WHATWG. Setting these BEFORE WriteHeader so

@@ -1158,6 +1158,60 @@ func TestTick_MinUSDVolumeFilter(t *testing.T) {
 		}
 	})
 
+	// F-1213 (codex audit-2026-05-12) regression: classic USD-pegged
+	// proxy trades are at 7-decimal scale, not the off-chain 1e8
+	// uniform. Pre-fix, the gate divided every QuoteAmount by 1e8 —
+	// a $10k classic-USDC window summed to $1k and was dropped under
+	// MinUSDVolume=10000. Post-fix, fetchForTarget computes the USD
+	// volume against per-source-pair decimals, and dropForMinUSDVolume
+	// honours that pre-computed total.
+	t.Run("classic USD-pegged proxy: $10k publishes under min=10000", func(t *testing.T) {
+		classicUSDC, err := canonical.NewClassicAsset("USDC", "GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN")
+		if err != nil {
+			t.Fatalf("NewClassicAsset: %v", err)
+		}
+		xlmUSDCPair, _ := canonical.NewPair(xlm, classicUSDC)
+		// quote_amount = 100_000_000_000 at 7-dec = $10,000.
+		classicUSDCTrade := canonical.Trade{
+			Source:      "soroswap", // ClassExchange + IncludeInVWAP=true on Stellar DEX sources
+			Ledger:      52_500_000,
+			TxHash:      "0000000000000000000000000000000000000000000000000000000000000000",
+			Timestamp:   time.Now(),
+			Pair:        xlmUSDCPair,
+			BaseAmount:  canonical.NewAmount(big.NewInt(1_000_000_000_000)),
+			QuoteAmount: canonical.NewAmount(big.NewInt(100_000_000_000)),
+		}
+		store := &mockStore{
+			perPair: map[string][]canonical.Trade{
+				xlmUSDCPair.String(): {classicUSDCTrade},
+				// Direct XLM/fiat:USD: no trades.
+				pair.String(): nil,
+			},
+		}
+		rdb, _ := newTestRedis(t)
+		orch := New(store, rdb, Config{
+			Pairs:                     []canonical.Pair{pair},
+			Windows:                   []time.Duration{5 * time.Minute},
+			MinUSDVolume:              10_000,
+			EnableStablecoinFiatProxy: true,
+			USDPeggedClassicAssets:    []canonical.Asset{classicUSDC},
+			// soroswap → ClassExchange + IncludeInVWAP by registry default;
+			// no class-filter override needed.
+		})
+
+		before := testutil.ToFloat64(obs.AggregatorDroppedWindowsTotal.WithLabelValues("min_usd_volume"))
+		if err := orch.Tick(context.Background()); err != nil {
+			t.Fatalf("Tick: %v", err)
+		}
+		after := testutil.ToFloat64(obs.AggregatorDroppedWindowsTotal.WithLabelValues("min_usd_volume"))
+		if after-before != 0 {
+			t.Errorf("min_usd_volume drop counter incremented %v times; want 0 — $10k classic USDC at 7-dec should pass the $10k threshold", after-before)
+		}
+		if orch.Stats().VWAPWrites != 1 {
+			t.Errorf("VWAPWrites = %d, want 1 (window should publish)", orch.Stats().VWAPWrites)
+		}
+	})
+
 	t.Run("non-USD pair: filter exempt", func(t *testing.T) {
 		// XLM/EUR — quote is fiat:EUR, NOT fiat:USD. Threshold should
 		// not apply; thin window publishes.

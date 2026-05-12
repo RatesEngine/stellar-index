@@ -108,6 +108,16 @@ func (r *statusRecorder) Write(b []byte) (int, error) {
 	return n, err
 }
 
+// Unwrap exposes the underlying ResponseWriter so
+// http.NewResponseController can reach SetWriteDeadline / Flush /
+// Hijack on it. Without this, SSE handlers (which need
+// SetWriteDeadline(zero-Time) to dodge the global 30s WriteTimeout)
+// would see http.ErrNotSupported on every middleware-wrapped
+// connection in production. F-1228 (codex audit-2026-05-12).
+func (r *statusRecorder) Unwrap() http.ResponseWriter {
+	return r.ResponseWriter
+}
+
 // Flush preserves http.Flusher for SSE endpoints — without this,
 // wrapping breaks chunked streaming.
 func (r *statusRecorder) Flush() {

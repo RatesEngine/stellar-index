@@ -46,9 +46,13 @@ func newTestRig(t *testing.T) (*Handlers, *fakeKeyStore, dashboardauth.SessionCo
 			Role:      platform.RoleOwner,
 		},
 		Account: platform.Account{
-			ID:     uuid.New(),
-			Slug:   "example",
-			Tier:   platform.TierFree,
+			ID:   uuid.New(),
+			Slug: "example",
+			// Default test account uses Starter tier (1000/min ceiling)
+			// so legacy tests that supply RateLimitPerMin: 1000 don't
+			// silently get clamped to the free-tier cap. F-1212 tier-
+			// clamp regressions get their own test below.
+			Tier:   platform.TierStarter,
 			Status: platform.AccountActive,
 		},
 	}
@@ -123,6 +127,57 @@ func TestHandleCreate_RejectsMissingName(t *testing.T) {
 	h.HandleCreate(w, req)
 	if w.Code != http.StatusBadRequest {
 		t.Errorf("status = %d", w.Code)
+	}
+}
+
+// TestHandleCreate_TierClampsRateLimit pins F-1212 (codex
+// audit-2026-05-12): a Free account requesting a 100_000/min
+// budget gets clamped to the free-tier ceiling (60/min), and a
+// Pro account requesting the same gets clamped to the Pro ceiling
+// (10_000/min). Regression-guards against any future change that
+// re-introduces direct customer control over the persisted
+// budget.
+func TestHandleCreate_TierClampsRateLimit(t *testing.T) {
+	cases := []struct {
+		name      string
+		tier      platform.Tier
+		requested int
+		wantCap   int
+	}{
+		{"free clamps 100k to 60", platform.TierFree, 100_000, 60},
+		{"free clamps 1000 to 60", platform.TierFree, 1000, 60},
+		{"starter passes 1000", platform.TierStarter, 1000, 1000},
+		{"starter clamps 10000 to 1000", platform.TierStarter, 10_000, 1000},
+		{"pro passes 10000", platform.TierPro, 10_000, 10_000},
+		{"pro clamps 100k to 10k", platform.TierPro, 100_000, 10_000},
+		{"business passes 60k", platform.TierBusiness, 60_000, 60_000},
+		{"enterprise passes 100k", platform.TierEnterprise, 100_000, 100_000},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			h, store, sc := newTestRig(t)
+			sc.Account.Tier = tc.tier
+			req := sessionRequest(t, http.MethodPost, "/v1/dashboard/keys", createRequest{
+				Name:            "tier-test",
+				RateLimitPerMin: tc.requested,
+			}, sc)
+			w := httptest.NewRecorder()
+			h.HandleCreate(w, req)
+			if w.Code != http.StatusCreated {
+				t.Fatalf("status = %d, body = %s", w.Code, w.Body.String())
+			}
+			var got int
+			for _, k := range store.byID {
+				if k.AccountID == sc.Account.ID && k.Name == "tier-test" {
+					got = k.RateLimitPerMin
+					break
+				}
+			}
+			if got != tc.wantCap {
+				t.Errorf("persisted RateLimitPerMin = %d, want %d (requested %d on %s tier)",
+					got, tc.wantCap, tc.requested, tc.tier)
+			}
+		})
 	}
 }
 

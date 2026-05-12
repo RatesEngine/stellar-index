@@ -19,6 +19,39 @@ const (
 	TierEnterprise Tier = "enterprise"
 )
 
+// MaxRateLimitPerMin returns the per-tier ceiling for the customer-
+// supplied `rate_limit_per_min` field on dashboard-minted keys.
+//
+// Without this ceiling, the dashboard key-creation flow accepted any
+// positive value up to 100_000 regardless of the account's tier —
+// meaning a Free account could self-mint a key budgeted for 100×
+// the Starter default. F-1212 (codex audit-2026-05-12).
+//
+// Tier ladder mirrors `docs/architecture/billing-tiers.md`:
+//
+//   - Free:       60/min  (parity with anon-tier; keys for development only)
+//   - Starter:    1000/min
+//   - Pro:        10_000/min
+//   - Business:   60_000/min
+//   - Enterprise: 100_000/min  (operator-approved overrides go higher)
+//
+// An unknown tier value is treated as Free (defensive — a corrupt
+// row should not unlock paid budgets).
+func (t Tier) MaxRateLimitPerMin() int {
+	switch t {
+	case TierStarter:
+		return 1000
+	case TierPro:
+		return 10_000
+	case TierBusiness:
+		return 60_000
+	case TierEnterprise:
+		return 100_000
+	default: // TierFree + any unknown value
+		return 60
+	}
+}
+
 // AccountStatus is the lifecycle state of an account.
 type AccountStatus string
 

@@ -213,6 +213,14 @@ func (h *Handlers) HandleCreate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// F-1212 (codex audit-2026-05-12): clamp customer-supplied
+	// rate_limit_per_min to the account's tier ceiling. Free
+	// accounts get 60/min; paid tiers get their respective caps.
+	// Without this clamp the handler honoured any value up to
+	// 100_000, letting a Free account self-mint a key with 100×
+	// the Starter budget.
+	req.RateLimitPerMin = clampRateLimitToTier(req.RateLimitPerMin, sc.Account.Tier)
+
 	if status, problem := h.checkQuota(r, sc.Account.ID); problem != "" {
 		writeProblem(w, status, problem, r.URL.Path)
 		return
@@ -369,6 +377,26 @@ func parseCreateRequest(r *http.Request) (createRequest, int, string) {
 		return req, http.StatusBadRequest, "rate_limit_per_min must be ≤ 100000"
 	}
 	return req, 0, ""
+}
+
+// clampRateLimitToTier returns the lower of `requested` and the
+// account's per-tier ceiling. Free accounts that try to mint a key
+// with `rate_limit_per_min: 100000` get silently downgraded to the
+// free-tier cap (60/min) rather than rejected — this matches the
+// per-tier-default fallback pattern at line 365 and keeps the
+// dashboard UX simple (one field, one cap). F-1212 (codex
+// audit-2026-05-12).
+//
+// Operator-issued or partner-issued keys aren't created through this
+// handler — they go through ratesengine-ops and are not subject to
+// this clamp. See [platform.Tier.MaxRateLimitPerMin] for the
+// per-tier ladder.
+func clampRateLimitToTier(requested int, tier platform.Tier) int {
+	ceiling := tier.MaxRateLimitPerMin()
+	if requested > ceiling {
+		return ceiling
+	}
+	return requested
 }
 
 // checkQuota counts active keys for the account; returns

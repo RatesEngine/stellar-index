@@ -578,7 +578,7 @@ func (o *Orchestrator) refreshPairWindow(
 	now time.Time,
 ) error {
 	from := now.Add(-window)
-	trades, err := o.fetchForTarget(ctx, pair, from, now)
+	trades, usdVolume, err := o.fetchForTarget(ctx, pair, from, now)
 	if err != nil {
 		return fmt.Errorf("fetch %s %v: %w", pair.String(), window, err)
 	}
@@ -604,7 +604,7 @@ func (o *Orchestrator) refreshPairWindow(
 		return nil
 	}
 
-	if o.dropForMinUSDVolume(pair, trades) {
+	if o.dropForMinUSDVolume(pair, trades, usdVolume) {
 		return nil
 	}
 
@@ -804,6 +804,14 @@ func distinctSourceCount(trades []canonical.Trade) int {
 // one backer pair per peg, each backer pair is fetched and its
 // trades are rewritten onto the target pair.
 //
+// The returned `usdVolume` is the correctly-scaled total USD value
+// of every merged trade, computed BEFORE pair rewrites blur the
+// original quote-decimal convention. This is the value the min-
+// volume gate compares against — without it, classic/SAC USD-pegged
+// proxy trades (7-decimal scale) would be summed under the off-chain
+// uniform-1e8 assumption and the gate would see 10× understatement.
+// F-1213 (codex audit-2026-05-12).
+//
 // Per-backer fetch errors are logged and skipped rather than
 // aborting the whole window — a single connector misbehaving at
 // the Timescale layer shouldn't black out an otherwise-healthy
@@ -812,14 +820,18 @@ func (o *Orchestrator) fetchForTarget(
 	ctx context.Context,
 	target canonical.Pair,
 	from, to time.Time,
-) ([]canonical.Trade, error) {
+) (trades []canonical.Trade, usdVolume float64, err error) {
 	if !o.cfg.EnableStablecoinFiatProxy {
-		return o.store.TradesInRange(ctx, target, from, to, o.cfg.MaxTradesPerWindow)
+		t, err := o.store.TradesInRange(ctx, target, from, to, o.cfg.MaxTradesPerWindow)
+		if err != nil {
+			return nil, 0, err
+		}
+		return t, usdVolumeForPair(target, t, o.cfg.USDPeggedClassicAssets), nil
 	}
 
 	sources, err := aggregate.ExpandTargetPairWithClassicPegs(target, o.cfg.USDPeggedClassicAssets)
 	if err != nil {
-		return nil, fmt.Errorf("expand target %s: %w", target.String(), err)
+		return nil, 0, fmt.Errorf("expand target %s: %w", target.String(), err)
 	}
 
 	// Collect trades from each source pair. Rewriting non-target
@@ -828,6 +840,7 @@ func (o *Orchestrator) fetchForTarget(
 	// the target pair and the downstream VWAP math treats them
 	// as homogenous.
 	var merged []canonical.Trade
+	var sumUSD float64
 	for _, src := range sources {
 		batch, ferr := o.store.TradesInRange(ctx, src, from, to, o.cfg.MaxTradesPerWindow)
 		if ferr != nil {
@@ -838,6 +851,10 @@ func (o *Orchestrator) fetchForTarget(
 			)
 			continue
 		}
+		// Compute USD volume against the SOURCE pair's quote-decimal
+		// convention — once we rewrite the Pair to `target`
+		// (fiat:USD) below, the original 7-vs-8 decimal is lost.
+		sumUSD += usdVolumeForPair(src, batch, o.cfg.USDPeggedClassicAssets)
 		if src.Equal(target) {
 			merged = append(merged, batch...)
 			continue
@@ -847,7 +864,66 @@ func (o *Orchestrator) fetchForTarget(
 			merged = append(merged, batch[i])
 		}
 	}
-	return merged, nil
+	return merged, sumUSD, nil
+}
+
+// usdVolumeForPair sums the USD value of every trade in `batch`
+// using the correct quote-decimal scale for `pair`:
+//
+//   - fiat:USD: 10^8 (off-chain CEX/FX convention)
+//   - classic USD-pegged credit on `classicUSDPegs`: 10^7
+//     (Stellar-classic decimals are uniformly 7)
+//   - anything else: returns 0 (the gate doesn't apply)
+//
+// The gate's correctness depends on this matching what the
+// indexer's `trades.usd_volume` populator does at write time —
+// both must agree on which assets count as USD-pegged and at
+// what scale, or the gate silently drifts away from the table.
+func usdVolumeForPair(pair canonical.Pair, batch []canonical.Trade, classicUSDPegs []canonical.Asset) float64 {
+	if len(batch) == 0 {
+		return 0
+	}
+	var decimals int
+	switch {
+	case pair.Quote.Type == canonical.AssetFiat && pair.Quote.Code == "USD":
+		decimals = 8
+	case pair.Quote.Type == canonical.AssetClassic && isUSDPeggedClassic(pair.Quote, classicUSDPegs):
+		// Stellar-classic credits are uniformly 7-decimal.
+		decimals = 7
+	default:
+		return 0
+	}
+	sum := new(big.Int)
+	for i := range batch {
+		amt := batch[i].QuoteAmount.BigInt()
+		if amt == nil {
+			continue
+		}
+		sum.Add(sum, amt)
+	}
+	if sum.Sign() == 0 {
+		return 0
+	}
+	scale := new(big.Int).Exp(big.NewInt(10), big.NewInt(int64(decimals)), nil)
+	rat := new(big.Rat).SetFrac(sum, scale)
+	f, _ := rat.Float64()
+	return f
+}
+
+// isUSDPeggedClassic reports whether `asset` is one of the
+// operator-declared classic USD-pegged credits. Matched by exact
+// (code, issuer) equality — the same shape the orchestrator's
+// expansion path uses.
+func isUSDPeggedClassic(asset canonical.Asset, pegs []canonical.Asset) bool {
+	for _, p := range pegs {
+		if p.Type != canonical.AssetClassic {
+			continue
+		}
+		if p.Code == asset.Code && p.Issuer == asset.Issuer {
+			return true
+		}
+	}
+	return false
 }
 
 // dropForMinUSDVolume returns true (and bumps the matching counters
@@ -857,12 +933,21 @@ func (o *Orchestrator) fetchForTarget(
 // move on. Extracted from refreshPairWindow to keep its cognitive
 // complexity under the linter cap.
 //
+// `usdVolume` is the pre-computed sum from [fetchForTarget] using
+// per-source-pair quote-decimal scales (8 for fiat:USD, 7 for
+// classic USD-pegged). Passing it down lets the gate correctly
+// compare apples-to-apples even when the input slice has been
+// rewritten to all carry the same `Pair.Quote = fiat:USD` —
+// without this F-1213 (codex audit-2026-05-12) lurks where a
+// $10k classic-USDC window looks like $1k to the gate.
+//
 // See [Config.MinUSDVolume] for the threshold semantics.
-func (o *Orchestrator) dropForMinUSDVolume(pair canonical.Pair, trades []canonical.Trade) bool {
+func (o *Orchestrator) dropForMinUSDVolume(pair canonical.Pair, trades []canonical.Trade, usdVolume float64) bool {
+	_ = trades // retained for tracing dimensions if future gates want it
 	if o.cfg.MinUSDVolume <= 0 || !minUSDVolumeApplies(pair) {
 		return false
 	}
-	if windowUSDVolume(trades) >= o.cfg.MinUSDVolume {
+	if usdVolume >= o.cfg.MinUSDVolume {
 		return false
 	}
 	obs.AggregatorDroppedWindowsTotal.WithLabelValues("min_usd_volume").Inc()
