@@ -123,12 +123,28 @@ func newStripeTestServer(t *testing.T, mgr v1.StripeKeyManager, now time.Time) *
 // behaviour the existing tests rely on.
 func newStripeTestServerWithEvents(t *testing.T, mgr v1.StripeKeyManager, events v1.StripeEventStore, now time.Time) *httptest.Server {
 	t.Helper()
+	return newStripeTestServerWithOptions(t, mgr, events, nil, now)
+}
+
+// newStripeTestServerWithOptions is the test-server builder that
+// exposes every wiring slot (manager + dedupe store + audit sink).
+// Existing tests stay on the narrower helpers; F-1240's audit
+// tests use this one.
+func newStripeTestServerWithOptions(
+	t *testing.T,
+	mgr v1.StripeKeyManager,
+	events v1.StripeEventStore,
+	audit v1.StripeAuditSink,
+	now time.Time,
+) *httptest.Server {
+	t.Helper()
 	srv := v1.New(v1.Options{
 		Auth: fakeAuthMiddleware(auth.Subject{}), // anonymous
 		Stripe: &v1.StripeWebhookConfig{
 			SigningSecret: testStripeSecret,
 			Manager:       mgr,
 			Events:        events,
+			Audit:         audit,
 			Now:           func() time.Time { return now },
 			MaxAge:        5 * time.Minute,
 		},
@@ -136,6 +152,18 @@ func newStripeTestServerWithEvents(t *testing.T, mgr v1.StripeKeyManager, events
 	ts := httptest.NewServer(srv.Handler())
 	t.Cleanup(ts.Close)
 	return ts
+}
+
+// recordingAuditSink captures every Append call so tests can
+// assert F-1240's plan.upgrade audit row was written.
+type recordingAuditSink struct {
+	entries []platform.AuditEntry
+	err     error
+}
+
+func (r *recordingAuditSink) Append(_ context.Context, e platform.AuditEntry) error {
+	r.entries = append(r.entries, e)
+	return r.err
 }
 
 func postStripe(t *testing.T, ts *httptest.Server, body, sigHeader string) *http.Response {
@@ -435,3 +463,110 @@ func TestStripeWebhook_Dedupe_NoEventsStore_FallsBack(t *testing.T) {
 // expansion (currently only the legacy-failure tests use it; the
 // dedupe tests use sync via the fake store).
 var _ = errors.New
+
+// TestStripeWebhook_Audit_AppendsOnSuccessfulUpgrade pins the
+// F-1240 contract: every successful tier upgrade writes one
+// plan.upgrade row to the audit store with actor_kind=webhook,
+// target referencing the Stripe event id, and metadata carrying
+// identifier + tier + key counts.
+func TestStripeWebhook_Audit_AppendsOnSuccessfulUpgrade(t *testing.T) {
+	now := time.Now().UTC()
+	mgr := &fakeStripeManager{
+		keys: map[string][]auth.APIKeyRecord{
+			"signup-aud": {
+				{KeyID: "kid_a", Identifier: "signup-aud", Tier: auth.TierAPIKey, RateLimitPerMin: 1000},
+				{KeyID: "kid_b", Identifier: "signup-aud", Tier: auth.TierAPIKey, RateLimitPerMin: 1000},
+			},
+		},
+	}
+	audit := &recordingAuditSink{}
+	ts := newStripeTestServerWithOptions(t, mgr, nil, audit, now)
+	body := `{"id":"evt_aud","type":"checkout.session.completed","data":{"object":{"id":"cs_aud","client_reference_id":"signup-aud","payment_status":"paid","metadata":{"tier":"pro"}}}}`
+	sig := stripeSign(t, body, testStripeSecret, now)
+
+	resp := postStripe(t, ts, body, sig)
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d, want 200", resp.StatusCode)
+	}
+	if len(audit.entries) != 1 {
+		t.Fatalf("audit.Append called %d times, want 1 (one row per event, not per key)",
+			len(audit.entries))
+	}
+	got := audit.entries[0]
+	if got.ActorKind != platform.ActorWebhook {
+		t.Errorf("ActorKind = %q, want webhook", got.ActorKind)
+	}
+	if got.Action != "plan.upgrade" {
+		t.Errorf("Action = %q, want plan.upgrade", got.Action)
+	}
+	if got.TargetKind != "stripe_event" {
+		t.Errorf("TargetKind = %q, want stripe_event", got.TargetKind)
+	}
+	if got.TargetID != "evt_aud" {
+		t.Errorf("TargetID = %q, want evt_aud", got.TargetID)
+	}
+	if got.Timestamp.IsZero() {
+		t.Error("Timestamp must be set")
+	}
+	// Metadata sanity — at minimum must carry the identifier and
+	// tier so the dashboard can render a readable line.
+	if !strings.Contains(string(got.Metadata), `"identifier":"signup-aud"`) {
+		t.Errorf("Metadata missing identifier: %s", got.Metadata)
+	}
+	if !strings.Contains(string(got.Metadata), `"tier":"pro"`) {
+		t.Errorf("Metadata missing tier: %s", got.Metadata)
+	}
+	if !strings.Contains(string(got.Metadata), `"keys_upgraded":2`) {
+		t.Errorf("Metadata missing keys_upgraded count: %s", got.Metadata)
+	}
+}
+
+// TestStripeWebhook_Audit_NilSinkSkipsCleanly — pre-F-1240
+// behaviour preserved: nil Audit sink means no row is written,
+// and the webhook still 200s without complaint.
+func TestStripeWebhook_Audit_NilSinkSkipsCleanly(t *testing.T) {
+	now := time.Now().UTC()
+	mgr := &fakeStripeManager{
+		keys: map[string][]auth.APIKeyRecord{
+			"signup-nil": {{KeyID: "kid_n", Identifier: "signup-nil", Tier: auth.TierAPIKey, RateLimitPerMin: 1000}},
+		},
+	}
+	ts := newStripeTestServerWithOptions(t, mgr, nil, nil /* no audit sink */, now)
+	body := `{"id":"evt_nil","type":"checkout.session.completed","data":{"object":{"id":"cs_nil","client_reference_id":"signup-nil","payment_status":"paid","metadata":{"tier":"pro"}}}}`
+	sig := stripeSign(t, body, testStripeSecret, now)
+
+	resp := postStripe(t, ts, body, sig)
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d, want 200", resp.StatusCode)
+	}
+}
+
+// TestStripeWebhook_Audit_AppendErrorIsSwallowed — an audit-store
+// failure MUST NOT block the webhook ack. The upgrade succeeded
+// already; turning a transient audit-DB hiccup into a Stripe
+// retry storm would re-upgrade the customer on the retry but
+// also keep replaying the original (already-completed) event.
+func TestStripeWebhook_Audit_AppendErrorIsSwallowed(t *testing.T) {
+	now := time.Now().UTC()
+	mgr := &fakeStripeManager{
+		keys: map[string][]auth.APIKeyRecord{
+			"signup-err": {{KeyID: "kid_e", Identifier: "signup-err", Tier: auth.TierAPIKey, RateLimitPerMin: 1000}},
+		},
+	}
+	audit := &recordingAuditSink{err: errors.New("simulated audit-db blip")}
+	ts := newStripeTestServerWithOptions(t, mgr, nil, audit, now)
+	body := `{"id":"evt_err","type":"checkout.session.completed","data":{"object":{"id":"cs_err","client_reference_id":"signup-err","payment_status":"paid","metadata":{"tier":"pro"}}}}`
+	sig := stripeSign(t, body, testStripeSecret, now)
+
+	resp := postStripe(t, ts, body, sig)
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d, want 200 (audit failure must not block ack)", resp.StatusCode)
+	}
+	if len(audit.entries) != 1 {
+		t.Errorf("audit.entries = %d, want 1 (call still recorded even when handler returned error)",
+			len(audit.entries))
+	}
+}

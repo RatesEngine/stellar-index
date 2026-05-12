@@ -63,11 +63,30 @@ type StripeWebhookConfig struct {
 	SigningSecret string
 	Manager       StripeKeyManager
 	Events        StripeEventStore
+	// Audit receives one platform.AuditEntry per successful tier
+	// upgrade (one row per webhook event, NOT per upgraded key —
+	// the row carries the upgraded-key count + identifier in
+	// metadata so the dashboard can show "the upgrade happened"
+	// without rendering N rows for a customer with N keys).
+	//
+	// Nil = no audit row written (pre-F-1240 behaviour preserved
+	// for tests + deployments that haven't migrated to the
+	// platform postgres schema). F-1240 (audit-2026-05-12).
+	Audit StripeAuditSink
 	// Now is overridable for tests; defaults to time.Now.
 	Now func() time.Time
 	// MaxAge is the maximum Stripe-Signature timestamp drift accepted
 	// (rejects replays). Default 5 min.
 	MaxAge time.Duration
+}
+
+// StripeAuditSink is the narrow subset of [platform.AuditStore]
+// the Stripe webhook needs. Declared as an interface so we don't
+// drag the full audit-log surface into the v1 package's public
+// signature; production wires
+// `internal/platform/postgresstore.AuditStore`.
+type StripeAuditSink interface {
+	Append(ctx context.Context, e platform.AuditEntry) error
 }
 
 // stripeTierMap controls which tier a Stripe metadata.tier value
@@ -228,6 +247,15 @@ func (s *Server) handleStripeWebhook(w http.ResponseWriter, r *http.Request) {
 		"identifier", identifier, "event_id", ev.ID,
 		"tier", tierName, "rate_limit_per_min", rateLimit,
 		"keys_total", len(keys), "keys_upgraded", upgraded)
+
+	// F-1240: durable audit row for the tier upgrade. One row per
+	// event (not per key) — the metadata carries the upgraded-key
+	// count + identifier so the dashboard surface can render "the
+	// upgrade happened" without N rows for a customer holding N
+	// keys. Best-effort; Append errors are logged but never block
+	// the webhook ack (audit-log unavailability must not turn a
+	// successful Stripe upgrade into a retry storm).
+	s.recordStripeUpgradeAudit(r.Context(), ev, identifier, tierName, rateLimit, len(keys), upgraded)
 
 	// F-1227: mark the dedupe row processed so a delayed
 	// re-delivery of the same event doesn't re-run the upgrade
@@ -403,6 +431,54 @@ func (s *Server) markStripeEventProcessed(ctx context.Context, eventID string) {
 	if err := s.stripe.Events.MarkStripeEventProcessed(ctx, eventID); err != nil {
 		s.logger.Warn("stripe webhook: MarkStripeEventProcessed failed (best-effort)",
 			"err", err, "event_id", eventID)
+	}
+}
+
+// recordStripeUpgradeAudit writes one audit_log row per successful
+// tier upgrade. One row per event (not per key) — the metadata
+// carries the upgraded-key count + identifier so the dashboard can
+// render "the upgrade happened" without N rows for a customer
+// holding N keys. F-1240 (audit-2026-05-12).
+//
+// Best-effort: a failure here is logged at WARN but never blocks
+// the webhook ack. Audit-log unavailability MUST NOT turn a
+// successful Stripe upgrade into a retry storm.
+func (s *Server) recordStripeUpgradeAudit(
+	ctx context.Context,
+	ev stripeEvent,
+	identifier, tier string,
+	rateLimit, keysTotal, keysUpgraded int,
+) {
+	if s.stripe == nil || s.stripe.Audit == nil {
+		return
+	}
+	meta, err := json.Marshal(map[string]any{
+		"identifier":         identifier,
+		"tier":               tier,
+		"rate_limit_per_min": rateLimit,
+		"keys_total":         keysTotal,
+		"keys_upgraded":      keysUpgraded,
+		"stripe_event_id":    ev.ID,
+		"stripe_event_type":  ev.Type,
+	})
+	if err != nil {
+		// Unreachable — map[string]any of primitives never fails to
+		// marshal. Surface as WARN if it ever does.
+		s.logger.Warn("stripe webhook: audit metadata marshal failed (skipping audit row)",
+			"err", err, "event_id", ev.ID)
+		return
+	}
+	entry := platform.AuditEntry{
+		ActorKind:  platform.ActorWebhook,
+		Action:     "plan.upgrade",
+		TargetKind: "stripe_event",
+		TargetID:   ev.ID,
+		Metadata:   meta,
+		Timestamp:  s.stripeNow(),
+	}
+	if err := s.stripe.Audit.Append(ctx, entry); err != nil {
+		s.logger.Warn("stripe webhook: audit append failed (best-effort)",
+			"err", err, "event_id", ev.ID, "identifier", identifier)
 	}
 }
 

@@ -371,8 +371,13 @@ func run(cfgPath string, dryRun bool) error { //nolint:gocognit,funlen,gocyclo /
 		// usually has Postgres), in which case the legacy "rely on
 		// idempotent UpdateRateLimit" path stays.
 		if pgDB := store.DB(); pgDB != nil {
-			stripeCfg.Events = postgresstore.NewBillingStore(postgresstore.New(pgDB))
-			logger.Info("stripe webhook wired", "endpoint", "/v1/webhooks/stripe", "dedupe", "postgres")
+			pgStore := postgresstore.New(pgDB)
+			stripeCfg.Events = postgresstore.NewBillingStore(pgStore)
+			// F-1240: durable audit row per tier upgrade. Same
+			// postgres connection as the dedupe store; both target
+			// the platform schema from migration 0027.
+			stripeCfg.Audit = postgresstore.NewAuditStore(pgStore)
+			logger.Info("stripe webhook wired", "endpoint", "/v1/webhooks/stripe", "dedupe", "postgres", "audit", "postgres")
 		} else {
 			logger.Warn("stripe webhook wired without dedupe — Postgres absent",
 				"endpoint", "/v1/webhooks/stripe")

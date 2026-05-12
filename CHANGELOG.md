@@ -115,6 +115,23 @@ against.
 
 ### Added
 
+- **Stripe webhook tier-upgrade audit log (F-1240).** New
+  `internal/platform/postgresstore.AuditStore` implements the
+  `platform.AuditStore` interface against the `audit_log` table
+  from migration 0027 (Append / AppendBatch / List). The Stripe
+  webhook handler now writes one `plan.upgrade` audit row per
+  successful upgrade event (one row per event, not per key —
+  metadata carries identifier + tier + key counts so the
+  dashboard can render "the upgrade happened" without N rows
+  for a customer holding N keys). `StripeWebhookConfig.Audit`
+  is a narrow `StripeAuditSink` interface so the v1 package
+  doesn't import the full audit-store surface. Append failures
+  log at WARN and never block the webhook ack — audit-log
+  unavailability must not turn a successful Stripe upgrade
+  into a Stripe retry storm. 3 new unit tests cover the happy
+  path, the nil-sink legacy fallback, and the swallowed-error
+  contract.
+
 - **Depeg-scenario test wiring stablecoin late binding ↔ divergence
   worker (F-1230).** ADR-0026's stablecoin late binding deliberately
   conceals stablecoin↔fiat drift so XLM/USDC trades flow into the
