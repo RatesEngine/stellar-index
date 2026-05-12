@@ -167,6 +167,20 @@ against.
   `configs/prometheus/rules.r1/ingestion.yml`. Runbook + alerts
   catalog updated to reflect the new threshold and rationale.
 
+### Documented
+
+- **RFP F4.2 one-year retention catch-up procedure (F-1265).**
+  `docs/operations/backfill-procedure.md` gains a new section
+  walking through the 1-year catch-up backfill needed to meet
+  Freighter RFP F4.2's ≥1y retention commitment. Covers
+  resolving the target ledger window from the Galexie archive
+  manifest, sanity-checking upstream archive completeness, row-
+  count estimation, the chunked-by-week run loop with `-resume`
+  so a mid-chunk crash doesn't re-do 12 hours of work, the CAGG
+  force-refresh sequence, and a `/v1/chart?timeframe=1y`
+  verification step. Pre-flip operator step; the code path is
+  unchanged.
+
 ### Added
 
 - **R1 TOML supply.watched_* defaults (F-1266).** The

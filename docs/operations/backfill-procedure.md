@@ -246,6 +246,98 @@ If the archive genuinely doesn't cover the range, cross-anchor
 recovery is in `docs/operations/archival-node-bringup.md`
 §"Disaster recovery".
 
+## RFP F4.2 one-year retention catch-up (F-1265)
+
+The Freighter RFP F4.2 commitment is "Historical retention ≥ 1
+year (ideally since inception)". Pre-launch R1 only has the
+prices_1m data the indexer has filled since first deploy
+(~7 days at audit time 2026-05-12); `/v1/chart?timeframe=1y`
+truncates accordingly. This section walks through running the
+catch-up backfill so the RFP commitment is met on launch day.
+
+### When to run it
+
+Once before public-flip, and any time the operator's data window
+shrinks back below 1 year (e.g. after a disaster-recovery
+restore that started from a more recent snapshot).
+
+### Scope
+
+The catch-up runs ~1 year of pubnet ledgers — at typical Stellar
+cadence of 5 s/ledger that's ~6.3M ledgers. Pacing depends on
+the dispatcher's parallelism + the source set; budget 6–12 hours
+wall-clock on a single R1 box at `-parallel 4`.
+
+### Plan
+
+1. **Resolve the target window.** The audit's data point: prod
+   should anchor at "1 year ago today". Compute the
+   corresponding ledger sequence via the Galexie archive's
+   manifest:
+
+   ```sh
+   ssh r1 'ls -1 /var/lib/galexie/galexie-archive/2025-05-* | head -1'
+   # Use the first ledger in the earliest archive bucket
+   # within scope. Round DOWN to a multiple of 64.
+   ```
+
+2. **Sanity-check the upstream archive.** Catch-up reads only
+   from the immutable archive bucket; the live bucket isn't
+   in scope. Confirm no gaps:
+
+   ```sh
+   ratesengine-ops verify-archive \
+     -from <year-ago> -to <today> \
+     -bucket galexie-archive
+   ```
+
+3. **Estimate the row count.** Each Soroban DEX source emits
+   roughly 50–500 trades per day at recent volume; aggregator
+   prices_1m row count is bounded by (pairs × minutes). A
+   1-year backfill across the audited Soroban set produces
+   roughly 50–200 GB of trade rows + ~10–20 GB of CAGG
+   materialisation (compressed: ~5×).
+
+4. **Run in 1-week chunks.** Don't try the whole year as a
+   single `-from`/`-to`: a crash mid-run is a 12-hour resume,
+   and the run holds the source-cursor row for its duration.
+
+   ```sh
+   # Adapt to your range; each chunk is ~120k ledgers.
+   for week_from in $(seq -w 50000000 120000 56000000); do
+     week_to=$((week_from + 120000))
+     ratesengine-ops backfill \
+       -config /etc/ratesengine.toml \
+       -from "$week_from" -to "$week_to" \
+       -resume \
+       -parallel 4 2>&1 | tee "backfill-${week_from}.log"
+     # Stop if the chunk failed — don't paper over.
+   done
+   ```
+
+5. **Refresh the CAGGs.** Backfill writes trades directly;
+   prices_1m / prices_15m / prices_1h auto-materialise on next
+   refresh tick, but for a 1-year catch-up the timer's natural
+   cadence would take days. Force-refresh once the trade-insert
+   loop is done:
+
+   ```sh
+   psql ratesengine -c "CALL refresh_continuous_aggregate('prices_1m',  NULL, NULL);"
+   psql ratesengine -c "CALL refresh_continuous_aggregate('prices_15m', NULL, NULL);"
+   psql ratesengine -c "CALL refresh_continuous_aggregate('prices_1h',  NULL, NULL);"
+   psql ratesengine -c "CALL refresh_continuous_aggregate('prices_1d',  NULL, NULL);"
+   ```
+
+6. **Verify.** `/v1/chart?asset=native&quote=fiat:USD&timeframe=1y`
+   should return a non-truncated point set; spot-check earliest
+   bucket's timestamp.
+
+### Failure & resumption
+
+Each chunk runs with `-resume` so a crash mid-chunk re-anchors at
+the last persisted cursor. Don't manually edit the cursor table —
+that path is `ratesengine-ops backfill -resume` only.
+
 ## When NOT to use this
 
 - **Live tail.** That's the indexer's job; backfill exits at
