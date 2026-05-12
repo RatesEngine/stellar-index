@@ -114,6 +114,13 @@ func (s *Server) applyF2Fields(ctx context.Context, detail *AssetDetail, asset c
 	// snapshot still get the percentage where applicable.
 	s.populateChange24h(ctx, detail, asset)
 
+	// F-1271: inline price_usd independent of supply availability,
+	// so wallet UIs that just want the current price don't pay a
+	// second /v1/price RT even for assets without a supply snapshot.
+	// populateMarketCap re-uses detail.PriceUSD when wired (no
+	// second lookup paid).
+	s.populatePriceUSD(ctx, detail, asset)
+
 	if s.supply == nil {
 		return
 	}
@@ -187,17 +194,37 @@ func populateSupplyFields(detail *AssetDetail, snap supply.Supply) {
 	}
 }
 
-// populateMarketCap fills market_cap_usd + fdv_usd when a USD
-// price is available. Compute failures log at WARN; the field
-// stays nil so the rest of the body still serves cleanly.
-func (s *Server) populateMarketCap(ctx context.Context, detail *AssetDetail, asset canonical.Asset, snap supply.Supply, key string) {
-	if s.prices == nil {
+// populatePriceUSD inlines detail.PriceUSD via the lookupUSDPrice
+// path. Idempotent: if the coins-overlay or another caller already
+// set PriceUSD, this is a no-op (the two paths can't fight). F-1271
+// (audit-2026-05-12).
+func (s *Server) populatePriceUSD(ctx context.Context, detail *AssetDetail, asset canonical.Asset) {
+	if s.prices == nil || detail.PriceUSD != nil {
 		return
 	}
 	usdPrice, ok := s.lookupUSDPrice(ctx, asset)
 	if !ok {
 		return
 	}
+	priceCopy := usdPrice
+	detail.PriceUSD = &priceCopy
+}
+
+// populateMarketCap fills market_cap_usd + fdv_usd from the supply
+// snapshot and the already-populated detail.PriceUSD. Re-uses the
+// inlined price (set by populatePriceUSD or the coins-overlay path)
+// to avoid a second prices_1m lookup. Compute failures log at WARN;
+// the field stays nil so the rest of the body still serves cleanly.
+func (s *Server) populateMarketCap(ctx context.Context, detail *AssetDetail, asset canonical.Asset, snap supply.Supply, key string) {
+	if detail.PriceUSD == nil {
+		// populatePriceUSD ran first and didn't find a price (no
+		// prices reader wired OR lookupUSDPrice returned !ok).
+		// market_cap / fdv have no value to compute against.
+		return
+	}
+	usdPrice := *detail.PriceUSD
+	_ = ctx
+	_ = asset
 	if snap.CirculatingSupply != nil {
 		if mc, err := usdMarketValue(snap.CirculatingSupply, usdPrice, detail.Decimals); err != nil {
 			s.logger.Warn("market_cap_usd compute failed",

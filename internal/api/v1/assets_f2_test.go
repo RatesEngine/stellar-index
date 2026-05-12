@@ -165,6 +165,42 @@ func TestF2_NativeAssetWithSupplyAndPrice(t *testing.T) {
 	mustContain(t, body, `"market_cap_usd":"3493000000.00"`)
 	// fdv = 500_018_068_120_000_000 / 10^7 × 0.07 = $3,500,126,476.84
 	mustContain(t, body, `"fdv_usd":"3500126476.84"`)
+	// F-1271: price_usd is inlined so wallet UIs don't need a
+	// second /v1/price RT. The handler doesn't go through the
+	// coins-overlay path for native (no coin row), so this
+	// exercises the populateMarketCap-side fallback.
+	mustContain(t, body, `"price_usd":"0.07"`)
+}
+
+// TestF2_PriceUSDInlinedWithoutSupply pins F-1271's contract: even
+// when the asset has no supply snapshot (so market_cap_usd stays
+// null), price_usd must still surface from the price lookup that
+// populateMarketCap already pays for. Wallets that just want the
+// current price shouldn't need a second round-trip.
+func TestF2_PriceUSDInlinedWithoutSupply(t *testing.T) {
+	supplyStub := &stubSupplyLooker{hit: false} // no supply row
+	priceStub := &stubPriceReader{
+		snapshots: map[string]v1.PriceSnapshot{
+			"native/fiat:USD": {Price: "0.07", PriceType: "vwap"},
+		},
+	}
+	srv := v1.New(v1.Options{
+		Prices: priceStub,
+		Supply: supplyStub,
+	})
+	ts := startHTTPTest(t, srv.Handler())
+
+	resp := mustGet(t, ts.URL+"/v1/assets/native")
+	body, _ := readAll(resp)
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d", resp.StatusCode)
+	}
+	// price_usd present even though no supply snapshot exists.
+	mustContain(t, body, `"price_usd":"0.07"`)
+	// market_cap_usd absent — no circulating supply to multiply by.
+	if strings.Contains(body, `"market_cap_usd"`) {
+		t.Errorf("market_cap_usd should be absent without a supply snapshot; body=%s", body)
+	}
 }
 
 // TestF2_NoSupplyLooker_FieldsAbsent — without a SupplyLooker

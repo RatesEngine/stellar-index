@@ -113,6 +113,16 @@ type AssetDetail struct {
 	TotalSupply       *string `json:"total_supply,omitempty"`
 	MaxSupply         *string `json:"max_supply,omitempty"`
 
+	// PriceUSD is the current per-asset USD price as a fixed-
+	// precision decimal string — same value the dedicated
+	// `/v1/price?asset=…&quote=fiat:USD` endpoint returns. Inlined
+	// here so wallet UIs (Freighter, retail apps) don't pay a
+	// second round-trip on every asset-detail render. Null when
+	// no USD price can be derived (no on-chain trades, prices_1m
+	// has no row, or operator hasn't enabled stablecoin-fiat
+	// proxy). F-1271 (audit-2026-05-12).
+	PriceUSD *string `json:"price_usd,omitempty"`
+
 	// MarketCapUSD = circulating × USD price / 10^Decimals,
 	// formatted to two fractional digits. Null when supply or USD
 	// price is unavailable.

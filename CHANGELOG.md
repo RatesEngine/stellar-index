@@ -115,6 +115,21 @@ against.
 
 ### Added
 
+- **Inline `price_usd` on `/v1/assets/{id}` (F-1271).** The
+  asset-detail body now carries `price_usd` whenever the price
+  lookup succeeds — previously it only surfaced via the optional
+  coins-overlay block (assets not in the coins catalogue had a
+  null `price_usd` even though the same handler was already
+  fetching the price for `market_cap_usd`). Freighter wallet
+  + retail apps that just want the current price no longer pay
+  a second `/v1/price` round-trip on every asset-detail render.
+  Extracted `populatePriceUSD` runs before the supply early-
+  return so off-chain assets without a supply snapshot also get
+  the field; `populateMarketCap` now re-uses the already-inlined
+  price instead of paying for a second lookup. OpenAPI spec
+  updated; postman + api docs regenerated. 1 new unit test
+  covers the no-supply path.
+
 - **`postgresstore.BillingStore` subscription mirror (F-1231).**
   `UpsertSubscription` and `GetActiveSubscriptionForAccount`,
   previously stubbed, now hit the `subscriptions` table from

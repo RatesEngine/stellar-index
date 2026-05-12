@@ -2967,6 +2967,7 @@ components:
         circulating_supply: { type: string, nullable: true, description: "Raw integer in asset's smallest unit (per ADR-0011 supply derivation). Null when no snapshot exists." }
         total_supply:       { type: string, nullable: true, description: "Raw integer in asset's smallest unit. Null when no snapshot exists." }
         max_supply:         { type: string, nullable: true, description: "Raw integer in asset's smallest unit. Null for uncapped issuers without operator override or SEP-1 declaration." }
+        price_usd:          { type: string, nullable: true, description: "Current per-asset USD price as a fixed-precision decimal string — same value `/v1/price?asset=…&quote=fiat:USD` returns. Inlined so wallet UIs don't need a second round-trip. Null when no USD price can be derived." }
         market_cap_usd:     { type: string, nullable: true, description: "circulating_supply × USD price / 10^decimals, two fractional digits. Null when supply or USD price is unavailable." }
         fdv_usd:            { type: string, nullable: true, description: "max_supply × USD price / 10^decimals, two fractional digits. Null when max_supply is null or USD price unavailable." }
         supply_basis:

@@ -147,9 +147,23 @@ type AssetDetail struct {
 	// only when a CoinsReader is wired AND the asset has a row in
 	// the coins catalogue (skipped for fiat:* and external:* assets).
 
-	// PriceUSD is the latest VWAP/last-trade USD price. Mirror of
-	// CoinSummary.PriceUSD. Null when no USD-quoted price exists for
-	// this asset.
+	// PriceUSD is the latest VWAP/last-trade USD price as a
+	// fixed-precision decimal string. Inlined so wallet UIs
+	// (Freighter, retail apps) don't pay a second
+	// `/v1/price?asset=…&quote=fiat:USD` round-trip on every
+	// asset-detail render (F-1271 audit-2026-05-12). Populated by:
+	//
+	//   1. Coins overlay when a CoinsReader is wired AND the asset
+	//      is in the coins catalogue (richer enrichment path —
+	//      delegates to CoinSummary.PriceUSD).
+	//   2. Direct USD-price lookup in populateMarketCap when the
+	//      overlay didn't populate it (covers fiat:* / external:*
+	//      / SEP-41 not in the coins catalogue / any asset whose
+	//      market_cap path already paid for the price lookup).
+	//
+	// Null only when no USD price can be derived at all (no
+	// on-chain trades, prices_1m has no row, and stablecoin-fiat
+	// proxy is disabled).
 	PriceUSD *string `json:"price_usd,omitempty"`
 
 	// Change1hPct / Change7dPct round out the trailing-window set
