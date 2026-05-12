@@ -11,7 +11,7 @@ per-finding `Current-head reconciliation` notes carry the actual
 close-state. This summary collapses both into a single
 truth-snapshot for any post-audit consumer.
 
-**Closed by code/config + verified live on R1** (50 findings):
+**Closed by code/config + verified live on R1** (51 findings):
 
   F-1201 firewall · F-1202 route removal · F-1203 explorer types ·
   F-1204 audit-public-api/llms · F-1208 alert tuning · F-1209 swap
@@ -75,7 +75,7 @@ is operator credential / arch decision):
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | F-1201 | critical | R1 exposes internal storage, observability, and admin services publicly while both nftables and UFW are inactive | R1 host firewall; Ansible archival-node firewall; MinIO/Prometheus/Loki/Promtail/node_exporter/Galexie | XFI-0001; R1-0005; R1-0006; R1-0008; EV-0019 | open | ops/security | External TCP connections succeeded to internal-service ports that repo config says should be default-deny or internal-only. |
 | F-1202 | high | Source API contract and deployed R1 API disagreed for removed `/v1/coins` and `/v1/currencies` surfaces | API route table; R1 deployed binary; generated API artifacts | XFI-0002; EV-0012; EV-0020; EV-0066; R1-0001 | fixed | api/release | Current R1 now returns 404 for all removed legacy routes, matching source. Keep the historical evidence because it existed earlier in the same audit window; the live mismatch itself is no longer open. |
-| F-1203 | high | Generated explorer API types remain stale and local docs verification did not catch it | `web/explorer/src/api/types.ts`; generation/docs CI | XFI-0002; EV-0007; EV-0011; EV-0013; EV-0067 | open | api/web/ci | On current `HEAD`, docs YAML regenerates cleanly, but `pnpm generate:api` still produces a 362-line diff in explorer TS types, including dashboard webhook routes and updated legacy-route wording. |
+| F-1203 | high | Generated explorer API types remain stale and local docs verification did not catch it | `web/explorer/src/api/types.ts`; generation/docs CI | XFI-0002; EV-0007; EV-0011; EV-0013; EV-0067 | fixed | api/web/ci | The 362-line diff shrunk across earlier waves as the OpenAPI yaml drove the explorer types regen on each PR; wave 31 (2026-05-12) commits the residual ~55-line regen output (account-usage prose now reflects the live Redis counter from F-1259, and the dashboard-key rate-limit field now documents the tier-clamp from F-1256). Running `pnpm generate:api` is now a no-op on `HEAD`. |
 | F-1204 | medium | Public API audit tooling and machine-facing docs still advertise removed `/v1/coins` and `/v1/currencies` routes | `scripts/dev/audit-public-api.sh`; `web/explorer/public/llms.txt` | XFI-0002; EV-0065; EV-0066 | open | web/api/docs | Live explorer/status and smoke consumers were migrated, but the public audit script still fails 5 checks against current R1 and `llms.txt` still advertises `GET /v1/coins`. |
 | F-1205 | high | R1 is missing SLA, archive-integrity, and supply evidence timers that repo monitoring/runbooks expect | R1 systemd; `deploy/systemd/*`; monitoring rules; runbooks | XFI-0003; R1-0002; R1-0003; R1-0004 | open | ops | Only smoke and heartbeat timers from Rates Engine are installed; evidence-producing timers are absent. |
 | F-1206 | high | Public launch readiness gate fails despite canonical local verify passing | `scripts/ci/verify-launch-ready`; `Makefile`; launch readiness docs | XFI-0004; EV-0009; EV-0013 | open | release/ops | Cross-region, security-review, failover-chaos, and finalisation blockers remain red. |

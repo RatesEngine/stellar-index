@@ -3059,11 +3059,21 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * Usage-summary placeholder (currently empty).
-         * @description Placeholder self-service surface. The handler currently
-         *     returns an empty list while the backing counter store is not
-         *     implemented yet; `from` / `to` are reserved for the future
-         *     implementation and are ignored today.
+         * Daily request counters for the authenticated key.
+         * @description Returns per-day request counts for the authenticated caller
+         *     over the last 31 days (or the `from`/`to` window when
+         *     supplied). Counts are incremented by the usage middleware on
+         *     every successful (non-rate-limited, non-policy-denied)
+         *     request and persisted in Redis under the `usage:<subject>:
+         *     <YYYY-MM-DD>` key family.
+         *
+         *     F-1259 (codex audit-2026-05-12) — the previous "placeholder,
+         *     returns empty list" wording reflected the pre-launch state;
+         *     the counter is now wired in `cmd/ratesengine-api/main.go`
+         *     whenever Redis is reachable. Deployments without Redis
+         *     (e.g. local dev with `-no-redis`) still return an empty
+         *     envelope — the absence of the counter is reflected on
+         *     /v1/healthz under `checks`.
          */
         get: {
             parameters: {
@@ -4273,7 +4283,22 @@ export interface components {
             /** @description Customer-facing label. */
             name: string;
             description?: string;
-            /** @description Default 1000. */
+            /**
+             * @description Requested per-minute rate-limit budget for this key.
+             *     **Silently clamped to the account's tier ceiling** —
+             *     see `platform.Tier.MaxRateLimitPerMin` in code:
+             *
+             *       - Free:       60/min  (key parity with anon-tier)
+             *       - Starter:    1000/min
+             *       - Pro:        10000/min
+             *       - Business:   60000/min
+             *       - Enterprise: 100000/min
+             *
+             *     A request of 100000 on a Free account persists 60.
+             *     The `maximum: 100000` in this schema is the hard ceiling
+             *     for any tier; the effective cap is whichever is lower.
+             *     F-1256 (codex audit-2026-05-12).
+             */
             rate_limit_per_min?: number;
             /** Format: int64 */
             monthly_quota?: number;
