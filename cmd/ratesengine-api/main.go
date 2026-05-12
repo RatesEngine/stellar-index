@@ -72,6 +72,7 @@ import (
 	"github.com/RatesEngine/rates-engine/internal/canonical"
 	"github.com/RatesEngine/rates-engine/internal/config"
 	"github.com/RatesEngine/rates-engine/internal/currency"
+	"github.com/RatesEngine/rates-engine/internal/customerwebhook"
 	"github.com/RatesEngine/rates-engine/internal/divergence"
 	"github.com/RatesEngine/rates-engine/internal/metadata"
 	"github.com/RatesEngine/rates-engine/internal/notify"
@@ -703,6 +704,25 @@ func run(cfgPath string, dryRun bool) error { //nolint:gocognit,funlen,gocyclo /
 		}()
 	}
 
+	// Customer-webhook delivery worker (F-1270). Drains the
+	// queue every 5s, HMAC-signs payloads, POSTs to customer URLs
+	// with exponential backoff on 5xx/network errors. Wired only
+	// when the dashboard webhook store came up (i.e. Postgres is
+	// reachable + the dashboard surface is enabled); leaves
+	// non-dashboard deployments unaffected.
+	if dashboardBundle.webhookStore != nil {
+		worker := customerwebhook.New(dashboardBundle.webhookStore, customerwebhook.Options{
+			Logger: logger.With("component", "customer-webhook"),
+		})
+		go func() {
+			if err := worker.Run(rootCtx); err != nil && !errors.Is(err, context.Canceled) {
+				logger.Error("customer-webhook worker exited",
+					"err", err)
+			}
+		}()
+		logger.Info("customer-webhook delivery worker started")
+	}
+
 	serveErr := make(chan error, 1)
 	go func() {
 		logger.Info("http listening", "addr", httpSrv.Addr)
@@ -850,13 +870,14 @@ func nilOrMounter[T v1.DashboardAuthMounter](h T) v1.DashboardAuthMounter {
 // validator (cfg.API.AuthBackend == "postgres") can borrow the
 // same handles instead of opening a second connection pool.
 type dashboardBundle struct {
-	auth        *dashboardauth.Handlers
-	keys        *dashboardkeys.Handlers
-	webhooks    *dashboardwebhooks.Handlers
-	middleware  middleware.Middleware
-	keysStore   platform.APIKeyStore
-	accounts    platform.AccountStore
-	pgValidator *auth.PostgresAPIKeyValidator
+	auth         *dashboardauth.Handlers
+	keys         *dashboardkeys.Handlers
+	webhooks     *dashboardwebhooks.Handlers
+	webhookStore platform.WebhookStore
+	middleware   middleware.Middleware
+	keysStore    platform.APIKeyStore
+	accounts     platform.AccountStore
+	pgValidator  *auth.PostgresAPIKeyValidator
 }
 
 // buildDashboardBundle wires the customer-dashboard magic-link
@@ -942,11 +963,14 @@ func buildDashboardBundle(cfg config.DashboardConfig, db *sql.DB, rdb redis.Univ
 	}
 
 	// F-1270: dashboard webhook handlers atop the same Postgres
-	// store the delivery worker reads. Operators wire the worker
-	// separately via internal/customerwebhook.New (own systemd
-	// unit or alongside the API binary — both shapes work).
+	// store the delivery worker reads. Single store handle threads
+	// through both surfaces: dashboard handlers (CRUD) and the
+	// delivery worker (drain queue). The worker runs as a goroutine
+	// in this binary's main() — see the `customer-webhook delivery
+	// worker` block there.
+	webhookStore := postgresstore.NewWebhookStore(postgresstore.New(db))
 	webhooksH, err := dashboardwebhooks.NewHandlers(dashboardwebhooks.Config{
-		Webhooks: postgresstore.NewWebhookStore(postgresstore.New(db)),
+		Webhooks: webhookStore,
 		Logger:   logger.With("component", "dashboard-webhooks"),
 	})
 	if err != nil {
@@ -962,13 +986,14 @@ func buildDashboardBundle(cfg config.DashboardConfig, db *sql.DB, rdb redis.Univ
 	// middleware — the latter needs the same Accounts / Users /
 	// Tokens stores to resolve the cookie on every request.
 	return dashboardBundle{
-		auth:        authH,
-		keys:        keysH,
-		webhooks:    webhooksH,
-		middleware:  middleware.Middleware(dashboardauth.Middleware(&authCfg)),
-		keysStore:   keysStore,
-		accounts:    accounts,
-		pgValidator: pgValidator,
+		auth:         authH,
+		keys:         keysH,
+		webhooks:     webhooksH,
+		webhookStore: webhookStore,
+		middleware:   middleware.Middleware(dashboardauth.Middleware(&authCfg)),
+		keysStore:    keysStore,
+		accounts:     accounts,
+		pgValidator:  pgValidator,
 	}, nil
 }
 

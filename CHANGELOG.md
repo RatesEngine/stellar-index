@@ -77,6 +77,16 @@ against.
 
 ### Added
 
+- **Customer-webhook delivery worker wired into the API binary
+  (F-1270 follow-up).** The worker that drains the
+  `webhook_deliveries` queue (HMAC sign + POST + retry) now runs
+  as a goroutine in `cmd/ratesengine-api/main.go` whenever the
+  dashboard surface comes up (Postgres reachable). Pre-this:
+  operator had to launch the worker as a separate process per
+  the docblock "operator-launched via internal/customerwebhook.New".
+  Single-binary deploy now does it inline — same context, same
+  lifecycle, same logger; one less ansible task.
+
 - **Customer-webhook delivery alerts + runbook (F-1270 follow-up).**
   Two new Prometheus alerts wired into both the multi-host and R1
   rules: `_delivery_failing` (P3) fires when 5xx + network-error
