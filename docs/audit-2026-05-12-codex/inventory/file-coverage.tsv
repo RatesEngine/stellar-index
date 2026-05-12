@@ -29,7 +29,7 @@ SECURITY.md	SECURITY.md	SECURITY.md	documentation	done	EV-0050;EV-0051;F-1207		R
 VERSIONS.md	VERSIONS.md	VERSIONS.md	documentation	todo			cold audit pending
 cmd/ratesengine-aggregator/change_summary.go	cmd	cmd/ratesengine-aggregator	runtime	done	EV-0055		Reviewed storage-neutral adapter boundary for change summaries; no standalone finding
 cmd/ratesengine-aggregator/contribution_sink.go	cmd	cmd/ratesengine-aggregator	runtime	done	EV-0055;EV-0060;EV-0103;F-1242	XFI-0034	Reviewed contribution sink adapter and batch forwarding; current workspace writes `volume_usd` from a still-misaligned pre-filter total.
-cmd/ratesengine-aggregator/main.go	cmd	cmd/ratesengine-aggregator	runtime	done	EV-0024;EV-0047;EV-0055;EV-0105;EV-0106;EV-0123;EV-0134;F-1213;F-1236;F-1249;F-1260	XFI-0009;XFI-0028;XFI-0041;XFI-0052	Reviewed aggregation, stablecoin/min-volume gating, webhook producer fan-out, Redis/cache, supply refresher wiring, and the native-XLM live-to-static reserve fallback that still bypasses the stale-component gate through `MinComponentLedger=0`
+cmd/ratesengine-aggregator/main.go	cmd	cmd/ratesengine-aggregator	runtime	done	EV-0024;EV-0047;EV-0055;EV-0105;EV-0106;EV-0123;EV-0134;EV-0155;F-1213;F-1236;F-1249;F-1260	XFI-0009;XFI-0028;XFI-0041;XFI-0052	Reviewed aggregation, stablecoin/min-volume gating, webhook producer fan-out, Redis/cache, supply refresher wiring, and the native-XLM live-to-static reserve fallback that still bypasses the stale-component gate through `MinComponentLedger=0`
 cmd/ratesengine-aggregator/main_test.go	cmd	cmd/ratesengine-aggregator	test	done	EV-0052;EV-0055		Command package tests pass; coverage tied to main wiring
 cmd/ratesengine-api/main.go	cmd	cmd/ratesengine-api	runtime	done	EV-0038;EV-0053;EV-0054;EV-0055;EV-0069;EV-0073;EV-0076;EV-0094;EV-0095;EV-0096;EV-0100;EV-0103;EV-0126;EV-0127;EV-0128;EV-0130;EV-0142;EV-0143;EV-0144;EV-0145;EV-0146;F-1217;F-1218;F-1219;F-1226;F-1228;F-1238;F-1245;F-1247;F-1249;F-1258;F-1259	XFI-0011;XFI-0012;XFI-0013;XFI-0018;XFI-0020;XFI-0030;XFI-0037;XFI-0039;XFI-0041;XFI-0050;XFI-0051	Reviewed startup wiring, auth/billing seams, HTTP timeouts, Redis optionality, landed signup store/tracker/verifier/gate coupling, webhook worker/producer coupling, usage-reader nil path, usage/account-attribution drift, current StripePlatformBridge wiring, SEP-10/stream fixes, and partial KeyPolicy production wiring
 cmd/ratesengine-api/main_test.go	cmd	cmd/ratesengine-api	test	done	EV-0052;EV-0055		Command package tests pass; startup/test seams reviewed
@@ -53,7 +53,7 @@ cmd/ratesengine-ops/main.go	cmd	cmd/ratesengine-ops	runtime	done	EV-0055;EV-0102
 cmd/ratesengine-ops/mint_key.go	cmd	cmd/ratesengine-ops	runtime	done	EV-0053;EV-0055;F-1219	XFI-0013	Reviewed Redis key bootstrap path and billing/key-source split interaction
 cmd/ratesengine-ops/seed_soroswap_pairs.go	cmd	cmd/ratesengine-ops	runtime	done	EV-0055		Reviewed Soroswap factory seeding, RPC fallback, and pair upsert hook
 cmd/ratesengine-ops/sep1_refresh.go	cmd	cmd/ratesengine-ops	runtime	done	EV-0055		Reviewed issuer SEP-1 refresh loop, resolver boundary, and dry-run/write behavior
-cmd/ratesengine-ops/supply.go	cmd	cmd/ratesengine-ops	runtime	done	EV-0047;EV-0055;EV-0106;EV-0123;EV-0134;F-1236	XFI-0028	Reviewed supply snapshot/audit commands and the native-XLM live-to-static reserve fallback that still stamps fresh-ledger snapshots without a freshness signal
+cmd/ratesengine-ops/supply.go	cmd	cmd/ratesengine-ops	runtime	done	EV-0047;EV-0055;EV-0106;EV-0123;EV-0134;EV-0155;F-1236	XFI-0028	Reviewed supply snapshot/audit commands and the native-XLM live-to-static reserve fallback that still stamps fresh-ledger snapshots without a freshness signal
 cmd/ratesengine-ops/upgrade_key.go	cmd	cmd/ratesengine-ops	runtime	done	EV-0053;EV-0055;F-1219	XFI-0013	Reviewed Redis-only key upgrade path and billing/platform split interaction
 cmd/ratesengine-ops/verify_archive_chunks.go	cmd	cmd/ratesengine-ops	runtime	done	EV-0055		Reviewed archive verification chunks, boundary stitching, checkpoint checks, and metrics server
 cmd/ratesengine-ops/verify_archive_chunks_integration_test.go	cmd	cmd/ratesengine-ops	test	done	EV-0052;EV-0055		Reviewed filesystem-backed parallel archive verification integration test
@@ -1482,24 +1482,24 @@ internal/supply/crosscheck_refresher_test.go	internal	internal/supply/crosscheck
 internal/supply/crosscheck_test.go	internal	internal/supply/crosscheck_test.go	test	todo			cold audit pending
 internal/supply/doc.go	internal	internal/supply/doc.go	runtime	todo			cold audit pending
 internal/supply/key.go	internal	internal/supply/key.go	runtime	todo			cold audit pending
-internal/supply/lcm_reader.go	internal	internal/supply/lcm_reader.go	runtime	in_progress	EV-0123;EV-0134;F-1236	XFI-0028	Reviewed live reserve observation miss handling, `ErrNoObservation` fallback trigger, and the now-present XLM reserve-account freshness producer
+internal/supply/lcm_reader.go	internal	internal/supply/lcm_reader.go	runtime	in_progress	EV-0123;EV-0134;EV-0155;F-1236	XFI-0028	Reviewed live reserve observation miss handling, `ErrNoObservation` fallback trigger, and the now-present XLM reserve-account freshness producer
 internal/supply/lcm_reader_test.go	internal	internal/supply/lcm_reader_test.go	test	todo			cold audit pending
 internal/supply/overlay.go	internal	internal/supply/overlay.go	runtime	todo			cold audit pending
 internal/supply/overlay_test.go	internal	internal/supply/overlay_test.go	test	todo			cold audit pending
 internal/supply/policy.go	internal	internal/supply/policy.go	runtime	todo			cold audit pending
 internal/supply/policy_test.go	internal	internal/supply/policy_test.go	test	todo			cold audit pending
-internal/supply/refresher.go	internal	internal/supply/refresher.go	runtime	in_progress	EV-0123;F-1236	XFI-0028	Reviewed stale-component gate and zero-value bypass semantics
+internal/supply/refresher.go	internal	internal/supply/refresher.go	runtime	in_progress	EV-0123;EV-0155;F-1236	XFI-0028	Reviewed stale-component gate and zero-value bypass semantics
 internal/supply/refresher_test.go	internal	internal/supply/refresher_test.go	test	todo			cold audit pending
 internal/supply/sep41.go	internal	internal/supply/sep41.go	runtime	todo			cold audit pending
 internal/supply/sep41_test.go	internal	internal/supply/sep41_test.go	test	todo			cold audit pending
-internal/supply/storage_classic_reader.go	internal	internal/supply/storage_classic_reader.go	runtime	in_progress	EV-0123;F-1236	XFI-0028	Reviewed classic freshness propagation and permissive `err -> MinComponentLedger=0` fallback
+internal/supply/storage_classic_reader.go	internal	internal/supply/storage_classic_reader.go	runtime	in_progress	EV-0123;EV-0155;F-1236	XFI-0028	Reviewed classic freshness propagation and permissive `err -> MinComponentLedger=0` fallback
 internal/supply/storage_classic_reader_test.go	internal	internal/supply/storage_classic_reader_test.go	test	todo			cold audit pending
-internal/supply/storage_sep41_reader.go	internal	internal/supply/storage_sep41_reader.go	runtime	in_progress	EV-0123;F-1236	XFI-0028	Reviewed SEP41 freshness propagation and permissive `err -> MinComponentLedger=0` fallback
+internal/supply/storage_sep41_reader.go	internal	internal/supply/storage_sep41_reader.go	runtime	in_progress	EV-0123;EV-0155;F-1236	XFI-0028	Reviewed SEP41 freshness propagation and permissive `err -> MinComponentLedger=0` fallback
 internal/supply/storage_sep41_reader_test.go	internal	internal/supply/storage_sep41_reader_test.go	test	todo			cold audit pending
 internal/supply/supply.go	internal	internal/supply/supply.go	runtime	todo			cold audit pending
 internal/supply/textfile.go	internal	internal/supply/textfile.go	runtime	todo			cold audit pending
 internal/supply/textfile_test.go	internal	internal/supply/textfile_test.go	test	todo			cold audit pending
-internal/supply/xlm.go	internal	internal/supply/xlm.go	runtime	in_progress	EV-0123;EV-0134;F-1236	XFI-0028	Reviewed native-XLM supply emission path; live readers now populate `MinComponentLedger`, but static fallback and freshness-reader errors still collapse to the permissive zero-value bypass
+internal/supply/xlm.go	internal	internal/supply/xlm.go	runtime	in_progress	EV-0123;EV-0134;EV-0155;F-1236	XFI-0028	Reviewed native-XLM supply emission path; live readers now populate `MinComponentLedger`, but static fallback and freshness-reader errors still collapse to the permissive zero-value bypass
 internal/supply/xlm_test.go	internal	internal/supply/xlm_test.go	test	todo			cold audit pending
 internal/usage/counter.go	internal	internal/usage/counter.go	runtime	done	EV-0084;EV-0094;EV-0103;EV-0128;F-1226;F-1254;F-1258	XFI-0018;XFI-0046;XFI-0050	Reviewed usage Redis key family, ACL/template drift, nil-counter defensive constructor, and in-flight MonthToDate quota reader semantics
 internal/usage/counter_test.go	internal	internal/usage/counter_test.go	test	in_progress	EV-0128;F-1226	XFI-0018	Reviewed new MonthToDate counter coverage; broader usage-counter test audit still open
