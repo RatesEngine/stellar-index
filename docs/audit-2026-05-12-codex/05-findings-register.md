@@ -49,23 +49,23 @@ Cold findings only. No prior finding is imported into this register.
 | F-1230 | high | R1 `since-inception` history for core XLM/USDC starts on 2026-05-03, not one year or inception | Historical API; backfill; R1 data depth | XFI-0022; EV-0040; R1-0017 | open | data/backfill/api | Direct XLM/Circle-USDC daily history has only nine buckets. |
 | F-1231 | high | Canonical CI is PR-only while `main` is unprotected, so direct pushes can bypass full verification | GitHub CI triggers; branch protection; release governance | XFI-0023; EV-0041; EV-0025; EV-0099 | fixed | repo-admin/ci | Current `ci.yml` now runs on pushes to `main`, closing the direct-main verification bypass even though branch protection itself remains open under `F-1214`. |
 | F-1232 | high | Circle USDC has `price_usd` on asset detail but 404s or disappears from `/v1/price` and batch price APIs | Price API; batch API; asset detail price enrichment | XFI-0024; EV-0042; R1-0018 | open | api/market-data | Asset detail returns USDC USD price, but single price 404s and batch returns an empty array for the same asset. |
-| F-1233 | high | SDEX historical backfill silently drops legacy V0 claim atoms while claiming genesis coverage | SDEX decoder; dispatcher metrics; historical backfill | XFI-0025; EV-0044 | open | ingest/backfill/sdex | Legacy V0 claim atoms are rejected then suppressed inside the source adapter, so old SDEX fills disappear without decode-error metrics. |
+| F-1233 | high | SDEX historical backfill silently drops legacy V0 claim atoms while claiming genesis coverage | SDEX decoder; dispatcher metrics; historical backfill | XFI-0025; EV-0044; EV-0105 | fixed | ingest/backfill/sdex | Current committed code decodes V0 claim atoms into canonical trades by deriving the seller G-strkey, and targeted SDEX tests pass. |
 | F-1234 | medium | Oracle decoders silently skip unknown feeds inside mixed batches, hiding upstream coverage drift | Reflector/Redstone/Band decoders; canonical allow-lists; decoder metrics | XFI-0026; EV-0045 | open | oracle/coverage/observability | New oracle-supported assets can be omitted from stored oracle rows without decode-error metrics as long as the same event contains at least one known asset. |
 | F-1235 | medium | External CEX stream parser errors are skipped without the decode-error metrics promised by runbooks | Binance/Kraken/Bitstamp/Coinbase streamers; external metrics; decode-error runbook | XFI-0027; EV-0046; EV-0098 | fixed | external/observability | Current `HEAD` increments `SourceDecodeErrorsTotal` in all four streamer parse-error branches, closing the observability gap. |
-| F-1236 | high | Supply snapshots can be stamped at a fresh ledger while using stale component observations | Supply refreshers; supply observer storage; asset supply API/market-cap fields | XFI-0028; EV-0047 | open | supply/data-quality | Snapshot ledger is the max ingestion cursor, but component readers use latest-at-or-before rows without freshness checks. |
+| F-1236 | high | Supply snapshots can be stamped at a fresh ledger while using stale component observations | Supply refreshers; supply observer storage; asset supply API/market-cap fields | XFI-0028; EV-0047; EV-0106 | open | supply/data-quality | Snapshot ledger is still max-cursor on committed `HEAD`; the current uncommitted min-supply-cursor remediation attempt does not build because it references nonexistent `timescale.Cursor.Name`. |
 | F-1237 | medium | CoinMarketCap ID disambiguation remains incomplete across runtime and verification paths | Verified currency catalogue; CMC poller; external aggregator observations; ops verification source wiring | XFI-0029; EV-0048; EV-0102 | open | external/identity | The indexer now passes numeric CMC IDs into the poller, but the ops verification path still omits them and the poller still lacks a committed ID-mode response fixture proving numeric-ID requests map back to the intended asset. |
 | F-1238 | medium | Redis-less API deployments fail startup because closed-bucket stream subscriber is gated on Hub, not Redis | API startup; Redis optionality; closed-bucket SSE stream | XFI-0030; EV-0054; EV-0096 | fixed | api/streaming/ops | Current workspace now gates the Redis pub/sub subscriber on `rdb != nil && hub != nil`, so Redis-less API startup no longer aborts on subscriber construction. |
 | F-1239 | medium | WASM history and extraction ops tools panic at completion when progress output is disabled | `ratesengine-ops` WASM audit/extraction commands; Soroban coverage evidence | XFI-0031; EV-0055 | open | ops/data-quality | `-progress-every 0` suppresses in-loop progress but completion still computes modulo by zero after the ledger walk. |
 | F-1240 | medium | Docker images build with a different Go toolchain than CI/release while docs claim binary equivalence | Dockerfiles; Go module pin; CI/release workflows; self-hosted image builds | XFI-0032; EV-0057 | open | docker/release | All Dockerfiles use `golang:1.26-alpine`; CI/release use `go.mod` `1.25.10`, and Docker docs still claim `golang:1.25-alpine` and release-equivalent binaries. |
 | F-1241 | medium | The operator migration index stops at `0015` even though the repository ships dense schema history through `0029` | `migrations/README.md`; migration review/deploy/runbook workflows | XFI-0033; EV-0058; EV-0059 | open | db/docs/ops | The README claims to be the current migration inventory and says to update it on every new migration, but it omits fourteen live migration families that materially change schema and operational expectations. |
-| F-1242 | medium | Contribution-history `volume_usd` remediation is still inconsistent with the filtered contribution set | Aggregator contribution sink; contribution schema/storage; future source-breakdown API/UI | XFI-0034; EV-0060; EV-0103 | open | aggregate/storage/product | The workspace now writes non-null `volume_usd`, but it splits the pre-filter window USD total by post-filter contribution weights. Any class/outlier drop can make the persisted per-source USD rows no longer match the actual surviving VWAP contribution set. |
+| F-1242 | medium | Contribution-history `volume_usd` remediation is still inconsistent with the filtered contribution set | Aggregator contribution sink; contribution schema/storage; future source-breakdown API/UI | XFI-0034; EV-0060; EV-0103; EV-0104; EV-0105 | fixed | aggregate/storage/product | Current committed code carries per-trade USD attribution by stable trade ID and persists only post-filter survivor dollars per source, so the previously-recorded attribution mismatch no longer reproduces. |
 | F-1243 | high | Classic-asset registry freshness and observation counts freeze after the first same-process trade for an asset | Trade insert registry hook; `classic_assets`; issuer/asset catalogue ranking and detail metadata | XFI-0035; EV-0062 | open | storage/assets/data-quality | The dedupe cache exits before the upsert that should update first/last seen ledgers and increment observations, so a long-running ingest/backfill process leaves registry metadata stale until restart. |
 | F-1244 | high | Dashboard webhook signing secrets are persisted as live HMAC keys while docs and type names claim hash-only / never-persisted semantics | Dashboard webhook create path; Postgres webhook store; outbound worker signing | XFI-0036; EV-0068 | open | security/platform/webhooks | A database read of `customer_webhooks.secret_hash` yields the actual signing key bytes the worker uses, contrary to the published secret-handling contract. |
 | F-1245 | high | Customer webhook URLs create an outbound SSRF primitive because validation enforces only `https://` and the worker follows default redirects | Dashboard webhook URL validation; outbound delivery worker; API process egress boundary | XFI-0037; EV-0069; EV-0096 | fixed | security/platform/webhooks | Current workspace now validates internal/private destinations at registration, re-resolves before delivery, and disables redirect following in the worker client. |
 | F-1246 | medium | API design docs still say webhook callbacks are not in v1 even though dashboard webhook CRUD, worker, and runbooks have shipped | API design reference; webhook OpenAPI/routes/runbooks | XFI-0038; EV-0072; EV-0096 | fixed | docs/api/product | `docs/reference/api-design.md` now states webhook callbacks shipped and explains how they relate to SSE. |
 | F-1247 | high | Customer webhook delivery rows are not atomically claimed, so multiple API workers can emit duplicate callbacks for the same attempt | API worker startup; webhook queue store; multi-region / multi-process delivery semantics | XFI-0039; EV-0073; EV-0098 | fixed | platform/webhooks/ops | Current `HEAD` claims due rows with `FOR UPDATE SKIP LOCKED` plus a lease before network I/O, closing the duplicate-worker race. |
 | F-1248 | medium | The documented ten-webhook-per-account limit is enforced with a raceable pre-check, so concurrent creates can exceed the cap | Dashboard webhook quota check; Postgres insert path; schema invariants | XFI-0040; EV-0074; EV-0098 | open | platform/webhooks | The new store-level CTE narrows the old race but still performs an unlocked snapshot count, so concurrent below-cap creates can still both insert. |
-| F-1249 | high | Customer webhook callbacks are exposed and operated as a shipped feature, but no production code enqueues any delivery events | Customer webhook event model; queue writer; dashboard/API docs; operational runbooks | XFI-0041; EV-0076 | open | platform/webhooks/product | The worker can drain rows and the API lets customers subscribe, yet no incident/anomaly/divergence producer ever calls `EnqueueDelivery`, so the feature cannot deliver real callbacks. |
+| F-1249 | high | Customer webhook callbacks are exposed and operated as a shipped feature, but declared event coverage is still only partially wired | Customer webhook event model; queue writer; dashboard/API docs; operational runbooks | XFI-0041; EV-0076; EV-0105; EV-0106 | open | platform/webhooks/product | Current committed code now produces `anomaly.freeze` and `divergence.firing`, but `incident.sev1` and `incident.resolved` still have no production enqueue path, and closure-grade per-event enqueue coverage/observability is still missing. |
 | F-1250 | medium | Freeze-event open-row dedupe is raceable, so concurrent same-pair freezes can create multiple still-firing durable rows | Freeze writer; Timescale freeze-event mirror; anomalies timeline/recovery semantics | XFI-0042; EV-0079 | open | aggregate/storage/anomaly | The SQL comment claims transactional dedupe, but the code uses an unlocked `WHERE NOT EXISTS` insert and the PK includes `frozen_at`, so concurrent callers can both insert distinct open rows. |
 | F-1251 | high | FX-based `usd_volume` remediation is still incomplete: historical freshness is fixed, but the integration contract and zero-value freshness semantics remain inconsistent | Indexer USD-volume Phase 2; VWAP FX resolver; historical/backfill enrichment; integration coverage | XFI-0043; EV-0080; EV-0102 | open | storage/indexer/data-quality | The resolver now evaluates staleness at trade time and returns the historical rate, but the targeted integration still fails because runtime returns fixed-scale NUMERIC text while the test/comment expect trimmed text; `Freshness: 0` is still documented as disabled while the constructor treats it as default-one-hour. |
 | F-1252 | medium | Multi-region cutover instructions invoke a nonexistent `make verify-cross-region` launch check | Cutover runbook; verification script; Makefile command surface | XFI-0044; EV-0082 | open | docs/ops/release | The pre-flight checklist names a make target that does not exist, so an operator following the launch runbook gets a Make failure exactly where a gating consistency check is expected. |
@@ -76,6 +76,7 @@ Cold findings only. No prior finding is imported into this register.
 | F-1257 | medium | The attempted 25-active-key/account quota fix still uses a raceable unlocked count CTE | Dashboard key quota check; Postgres insert path; platform schema | XFI-0049; EV-0092; EV-0103 | open | platform/keys | The workspace moved quota handling into `APIKeyStore.Create`, but the new `WITH active_count ... INSERT ... WHERE n < max` has the same MVCC snapshot race already preserved for webhooks under `F-1248`. |
 | F-1258 | high | Redis-less API deployments can still panic through the usage-reader path after the middleware-side nil fix | API startup wiring; usage middleware; usage counter; account usage reader | XFI-0050; EV-0094; EV-0103 | open | api/ops/runtime | The workspace now omits the middleware counter when Redis is absent, but still passes `UsageReader: usageReaderAdapter{c:nil}` into the server; `/v1/account/usage` then dereferences the nil inner counter on `Read`. |
 | F-1259 | medium | Usage docs are still internally inconsistent after the source OpenAPI rewrite | Account usage handler; OpenAPI/reference docs; product architecture docs | XFI-0051; EV-0095; EV-0103 | open | docs/api/product | The source OpenAPI text now describes live Redis-backed usage, but generated reference YAML, Postman, API-design docs, architecture inventory, and the handler comment remain stale; the new source text also incorrectly says Redis absence is reflected on `/v1/healthz` checks. |
+| F-1260 | high | `aggregate.min_usd_volume` still evaluates discarded pre-filter volume, so thin survivor windows can publish above a manipulation floor they do not actually meet | Aggregator stablecoin/USD-volume path; class/outlier filtering; VWAP publish gate | XFI-0052; EV-0105 | open | aggregate/market-data | `refreshPairWindow` computes `usdVolume` before class/outlier filtering, then applies the threshold after filtering with a helper that ignores the survivor slice and compares the stale total. |
 
 ## Finding Template
 
@@ -841,7 +842,7 @@ Remediation direction: define first-class stablecoin-to-fiat behavior for declar
 
 Severity: `high`
 
-Status: `open`
+Status: `fixed`
 
 Affected surface:
 
@@ -857,14 +858,17 @@ Evidence:
 
 - `XFI-0025`
 - `EV-0044`
+- `EV-0105`
 
 Expected: SDEX backfill either decodes every claim-atom shape required by the requested historical range, including legacy V0, or rejects/marks unsupported ranges with visible errors and coverage metadata.
 
-Observed: `decodeClaimAtom` returns `ErrUnknownClaimAtomType` for `ClaimAtomTypeV0`, the legacy raw-Ed25519 claim atom shape. The SDEX dispatcher adapter catches each per-claim error and continues, returning a successful `Decode` result with fewer outputs. Because the dispatcher only increments `DecodeErrors` when `OpDecoder.Decode` itself returns an error, replaying old ledgers drops V0 fills without an error metric. The same package README says SDEX backfill is supported to genesis, while the discovery notes say historical backfill must handle V0.
+Observed during the initial pass: `decodeClaimAtom` returned `ErrUnknownClaimAtomType` for `ClaimAtomTypeV0`, the legacy raw-Ed25519 claim atom shape. The SDEX dispatcher adapter caught each per-claim error and continued, returning a successful `Decode` result with fewer outputs. Because the dispatcher only increments `DecodeErrors` when `OpDecoder.Decode` itself returns an error, replaying old ledgers dropped V0 fills without an error metric. The same package README said SDEX backfill was supported to genesis, while the discovery notes said historical backfill must handle V0.
 
 Impact: since-inception and one-year-plus SDEX history is materially incomplete for old protocol ranges, but operators and clients get no direct signal that data was skipped. This weakens market-history depth claims and any CoinGecko/CMC-style charting, volume, or OHLC computation over pre-modern Stellar DEX history.
 
-Remediation direction: implement V0 decoding by deriving the seller G-address from raw Ed25519 bytes, add fixture/unit coverage for V0 claim atoms, and add backfill-range coverage metadata or explicit unsupported-range rejection for any protocol-era gaps.
+Current-head reconciliation: committed code now decodes `ClaimAtomTypeV0` by deriving the seller G-strkey from raw Ed25519 bytes and surfaces it as a regular trade row. `TestDecoder_v0ClaimAtom_decodedAsOrderBook` pins the branch, and `go test ./internal/sources/sdex` passes on the settled tree. The original V0-drop defect no longer reproduces.
+
+Remediation direction: retained for audit history; the data-loss condition that made this finding true is fixed in current committed code.
 
 ### F-1234. Oracle decoders silently skip unknown feeds inside mixed batches, hiding upstream coverage drift
 
@@ -950,10 +954,13 @@ Evidence:
 
 - `XFI-0028`
 - `EV-0047`
+- `EV-0106`
 
 Expected: a supply snapshot for ledger `N` should be computed from supply-observer components that are complete through ledger `N`, or it should publish explicit component freshness/lag metadata and avoid presenting stale inputs as current supply.
 
 Observed: the aggregator and CLI choose the maximum `last_ledger` across ingestion cursors as the snapshot ledger. Component readers then use `AtOrBefore` storage queries for trustlines, claimable balances, LP reserves, SAC balances, SEP-41 event totals, and account observations. These reader interfaces return balances/totals but not the ledger of each component row, so the refresher cannot detect a stale component before inserting a snapshot at the max ledger.
+
+Current-worktree reconciliation: an uncommitted remediation attempt tries to switch both the aggregator path and `ratesengine-ops supply snapshot` path from max-of-all cursors to min-of-`supply.*` cursors. That attempt does not compile: both patches test `strings.HasPrefix(c.Name, "supply.")`, but `timescale.Cursor` exposes `Source` and `Sub`, not `Name`. `go test ./cmd/ratesengine-aggregator` and `go test ./cmd/ratesengine-ops` both fail on the undefined field, so the remediation is not closure-grade and committed `HEAD` still preserves the original max-cursor behavior.
 
 Impact: if one supply observer stalls while another source advances, asset supply and derived market-cap fields can look current but include old balances. This is especially risky for Stellar-specific depth claims around classic/SAC/SEP-41 supply and for customer-facing asset detail pages.
 
@@ -1079,7 +1086,7 @@ Remediation direction: update the README table through the latest migration, add
 
 Severity: `medium`
 
-Status: `open`
+Status: `fixed`
 
 Affected surface:
 
@@ -1095,16 +1102,20 @@ Evidence:
 - `XFI-0034`
 - `EV-0060`
 - `EV-0103`
+- `EV-0104`
+- `EV-0105`
 
 Expected: if the aggregator durably records per-source contribution history before the source-breakdown product surface ships, the persisted row should contain the fields that schema/comments say will power that surface, or the unused fields should stay explicitly unclaimed and unwritten.
 
 Observed during the initial pass: the production aggregator wired `ContributionSink` on every orchestrator run. The storage row included `VolumeUSD`, and migration 0026 said `volume_usd` powers the per-source dollar tooltip, but the sink forwarded only asset, quote, bucket, source, weight, and trade count. `VolumeUSD` was never populated by any production caller, so the database stored `NULL` for every contribution row.
 
-Current-workspace reconciliation: the sink now sets `row.VolumeUSD = rec.USDVolumeTotal * c.Weight`, and the orchestrator now passes `USDVolumeTotal` into `ContributionRecord`. That changes the failure mode rather than closing it. `usdVolumeTotal` is computed in `fetchForTarget` before the later class filter and outlier filter mutate the trade slice; `aggregate.SourceContributions(trades)` runs after those filters. Persisted per-source USD rows can therefore split the pre-filter total across post-filter weights, overstating or misallocating the contribution-history dollars whenever trades are dropped before VWAP publication.
+Intermediate reconciliation: the first remediation attempt set `row.VolumeUSD = rec.USDVolumeTotal * c.Weight`, which changed the failure mode rather than closing it. `usdVolumeTotal` was computed in `fetchForTarget` before the later class filter and outlier filter mutated the trade slice, while `aggregate.SourceContributions(trades)` ran afterward.
 
-Impact: the system is no longer guaranteed to accumulate all-`NULL` volume rows, but it can now accumulate inaccurate non-null rows. That is worse for a future transparency UI because the values look authoritative while drifting from the filtered contribution set actually used for publication.
+Current-head reconciliation: settled `HEAD=e787c11b...` now carries per-trade USD attribution keyed by stable `canonical.Trade.ID()`, runs class/outlier filtering, then sums only the surviving per-source USD values inside `flushContributions`. The sink persists `SourceUSDVolume[c.Source]` directly. The specific attribution mismatch recorded in `EV-0103` no longer reproduces, and `go test ./cmd/ratesengine-aggregator ./internal/aggregate/orchestrator` passes.
 
-Remediation direction: if `volume_usd` is part of the shipped contract, compute it from the same post-filter trade slice that determines contribution weights, or carry per-source USD amounts through filtering directly. Add tests that include a dropped outlier or class-filtered row and prove the sum of persisted per-source USD volume matches the intended published contribution population.
+Impact: historical context only; the field went from all-NULL, through one flawed partial remediation, to a current committed implementation that now follows the same filtered survivor set as contribution weights.
+
+Remediation direction: retained for audit history; the previously-recorded sink mismatch is fixed in current committed code.
 
 ### F-1243. Classic-asset registry freshness and observation counts freeze after the first same-process trade for an asset
 
@@ -1281,7 +1292,7 @@ Impact: a customer or script issuing parallel create requests can exceed the ser
 
 Remediation direction: move quota enforcement into a real serialization boundary. A transactional account-level advisory lock or account-row lock plus count-and-insert, a durable allocation table, or a serializable retry loop is materially stronger than an unlocked count CTE. Add concurrency tests that launch more than ten creates in parallel and prove the persisted count never exceeds ten.
 
-### F-1249. Customer webhook callbacks are exposed and operated as a shipped feature, but no production code enqueues any delivery events
+### F-1249. Customer webhook callbacks are exposed and operated as a shipped feature, but declared event coverage is still only partially wired
 
 Severity: `high`
 
@@ -1300,14 +1311,18 @@ Evidence:
 
 - `XFI-0041`
 - `EV-0076`
+- `EV-0105`
+- `EV-0106`
 
 Expected: once customers can register event subscriptions and operators monitor webhook delivery health, the product must actually fan incident/anomaly/divergence events into the delivery queue.
 
-Observed: the codebase defines event types, accepts them in dashboard CRUD, exposes them in OpenAPI, starts a queue-draining worker, and publishes a runbook for delivery failures. But a repo-wide source search finds `EnqueueDelivery` only at its interface/store implementation and tests/fakes; no production event producer inserts pending rows for `incident.sev1`, `incident.resolved`, `anomaly.freeze`, or `divergence.firing`.
+Observed during the initial pass: the codebase defined event types, accepted them in dashboard CRUD, exposed them in OpenAPI, started a queue-draining worker, and published a runbook for delivery failures. But a repo-wide source search found `EnqueueDelivery` only at its interface/store implementation and tests/fakes; no production event producer inserted pending rows for `incident.sev1`, `incident.resolved`, `anomaly.freeze`, or `divergence.firing`.
+
+Current shared-workspace reconciliation: the webhook fan-out slice now has two committed producer paths. `anomaly.freeze` is emitted from the freeze-event sink after a new durable freeze row is inserted. `divergence.firing` is emitted through an edge-triggered warning hook on the divergence service, with unit coverage proving repeat refreshes above threshold do not re-spam subscribers until the pair recovers and re-crosses. That materially narrows the product gap, but it does not close it: repo search still finds no production enqueue path for `incident.sev1` or `incident.resolved`, and the remediation gate's per-event integration coverage plus enqueue success/failure observability are still absent.
 
 Impact: customers can configure a callback feature that never receives real product events, while operators can watch worker metrics and runbooks that appear to describe a live system. That is a shipped-surface correctness failure and a direct customer-trust risk.
 
-Remediation direction: implement the missing producer side explicitly. Wire concrete incident/anomaly/divergence event sources to a fan-out service that filters subscribed enabled hooks and calls `EnqueueDelivery` once per target webhook, with idempotency and observability. Add integration tests that trigger each event class and assert delivery rows are created before the worker runs.
+Remediation direction: finish the producer side explicitly. Keep the new anomaly/divergence paths, wire concrete incident producers into the same fan-out layer, then add integration tests that trigger each declared event family and assert delivery rows are created before the worker runs. Add enqueue success/failure observability so event-loss on the producer side is visible rather than only logged.
 
 ### F-1250. Freeze-event open-row dedupe is raceable, so concurrent same-pair freezes can create multiple still-firing durable rows
 
@@ -1603,3 +1618,29 @@ Current-workspace reconciliation: the source OpenAPI file now describes live Red
 Impact: customers and internal reviewers are told a live usage feature is absent, while generated clients and product documentation remain anchored to outdated behavior. That distorts product readiness judgments and makes future audit/review work easier to misread.
 
 Remediation direction: rewrite the usage contract around current conditional semantics everywhere, correct the `/healthz` versus `/readyz` wording, and regenerate all derived API reference artifacts from the corrected source OpenAPI. Keep docs lint green, but add a targeted drift guard if this class of source-vs-generated/reference mismatch keeps escaping.
+
+### F-1260. `aggregate.min_usd_volume` still evaluates discarded pre-filter volume, so thin survivor windows can publish above a manipulation floor they do not actually meet
+
+Severity: `high`
+
+Status: `open`
+
+Affected surface:
+
+- `internal/aggregate/orchestrator/orchestrator.go`
+- `internal/aggregate/outliers.go`
+- `configs/example.toml`
+- R1 `[aggregate].min_usd_volume` posture
+
+Evidence:
+
+- `XFI-0052`
+- `EV-0105`
+
+Expected: `aggregate.min_usd_volume` is documented and commented as a post-class, post-outlier publish gate. Only the filtered survivor set that can actually contribute to the VWAP should decide whether the bucket clears the manipulation floor.
+
+Observed: `refreshPairWindow` computes `usdVolume` immediately after `fetchForTarget`, before both `filterForVWAP` and `aggregate.FilterOutliers`. After filtering, the function calls `dropForMinUSDVolume(pair, trades, usdVolume)`, but `dropForMinUSDVolume` ignores the filtered `trades` slice and compares the stale pre-filter `usdVolume` instead. Its own comment says it operates on the post-class/post-outlier window, and `Config.MinUSDVolume` says the same.
+
+Impact: a window can exceed the configured threshold only because of trades the aggregator later discards, yet still publish a VWAP built from a much thinner surviving set. That weakens the manipulation-resistance gate exactly where the threshold is supposed to stop low-liquidity publication. It is distinct from `F-1213`: the quote-decimal undercount bug concerns how USD is normalized; this finding concerns when the normalized total is sampled relative to filtering.
+
+Remediation direction: recompute or carry USD volume through the same filtered survivor set that reaches VWAP publication, then add tests where a pre-filter window clears the threshold but the post-filter survivor set does not. The bucket must be rejected unless the surviving filtered USD volume itself satisfies `MinUSDVolume`.

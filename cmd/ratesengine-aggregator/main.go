@@ -711,6 +711,19 @@ func runSupplyRefresh(ctx context.Context, r *supply.Refresher, cadence time.Dur
 // the max last_ledger across every ingestion cursor — same shape
 // as cmd/ratesengine-ops/supply.go::resolveSnapshotLedger but
 // inlined here so the aggregator path stays self-contained.
+//
+// F-1236 (codex audit-2026-05-12) — KNOWN: this stamps the
+// freshest cursor but the supply-component readers
+// (LatestAccountObservationAtOrBefore, trustline / claimable /
+// LP-reserve / SAC-balance / SEP-41) silently return whatever
+// row they have at-or-before the picked ledger, even when that
+// row is much older. The component readers DO return per-row
+// ledger metadata (AccountObservationRow.Ledger and friends)
+// but the Refresher doesn't yet thread per-component freshness
+// into a snapshot-level rejection. Full fix: extend
+// `supply.Supply` with MinComponentLedger + reject snapshots
+// where (snapshotLedger - minComponentLedger) > threshold.
+// Tracked as F-1236 in docs/audit-2026-05-12-codex/.
 type supplyAggregatorLedgers struct{ s *timescale.Store }
 
 func (a supplyAggregatorLedgers) LatestKnownLedger(ctx context.Context) (uint32, time.Time, error) {

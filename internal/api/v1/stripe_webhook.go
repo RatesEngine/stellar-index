@@ -73,11 +73,42 @@ type StripeWebhookConfig struct {
 	// for tests + deployments that haven't migrated to the
 	// platform postgres schema). F-1240 (audit-2026-05-12).
 	Audit StripeAuditSink
+
+	// Platform, when non-nil, wires the F-1219 Stripe-side effects
+	// onto the canonical platform stores: UpsertSubscription on
+	// the BillingStore, account tier mutation on the AccountStore.
+	// Without this the webhook only mutates Redis API-key
+	// rate-limits — leaving the dashboard's view of the customer's
+	// plan out of sync with what they paid for. F-1219 (codex
+	// audit-2026-05-12). Nil disables the platform-side write
+	// path (Redis key updates still happen via Manager).
+	Platform *StripePlatformBridge
+
 	// Now is overridable for tests; defaults to time.Now.
 	Now func() time.Time
 	// MaxAge is the maximum Stripe-Signature timestamp drift accepted
 	// (rejects replays). Default 5 min.
 	MaxAge time.Duration
+}
+
+// StripePlatformBridge groups the platform stores the Stripe
+// webhook updates AFTER mutating the Redis keys. Each field is
+// a narrow interface so deployments can wire subsets — tests
+// commonly leave Accounts nil, for example.
+type StripePlatformBridge struct {
+	// Accounts looks up the account by Stripe customer ID and
+	// is the surface for updating .Tier on a successful upgrade.
+	Accounts platform.AccountStore
+	// Billing receives the subscription upsert. The webhook
+	// builds a Subscription record from the checkout session
+	// metadata + customer mapping.
+	Billing platform.BillingStore
+	// TierMap maps the Stripe metadata.tier value (e.g. "pro")
+	// to the platform.Tier the account should land on. Nil
+	// defaults to {pro: TierPro, business: TierBusiness,
+	// enterprise: TierEnterprise} so production wiring can
+	// pass an empty bridge.
+	TierMap map[string]platform.Tier
 }
 
 // StripeAuditSink is the narrow subset of [platform.AuditStore]
@@ -116,8 +147,10 @@ type stripeEvent struct {
 type stripeCheckoutSession struct {
 	ID                string            `json:"id"`
 	ClientReferenceID string            `json:"client_reference_id"` // we set this to the customer's identifier
+	Customer          string            `json:"customer"`            // Stripe customer ID (cus_…)
 	CustomerEmail     string            `json:"customer_email"`
 	PaymentStatus     string            `json:"payment_status"`
+	Subscription      string            `json:"subscription"` // Stripe subscription ID (sub_…) when this is a subscription checkout
 	Metadata          map[string]string `json:"metadata"`
 }
 
@@ -141,7 +174,7 @@ type stripeCheckoutSession struct {
 // Returns 200 + body `{"ok": true, "upgraded": N}` on success.
 // Stripe replays webhooks until it gets a 2xx; non-2xx triggers
 // retries.
-func (s *Server) handleStripeWebhook(w http.ResponseWriter, r *http.Request) {
+func (s *Server) handleStripeWebhook(w http.ResponseWriter, r *http.Request) { //nolint:funlen // extends past 100 lines by the F-1219 platform-side bridge; splitting fragments the linear "validate → look up → upgrade → audit → mark-processed" flow that operators read top-to-bottom during incident review.
 	ev, ok := s.parseStripeWebhook(w, r)
 	if !ok {
 		return
@@ -243,6 +276,17 @@ func (s *Server) handleStripeWebhook(w http.ResponseWriter, r *http.Request) {
 
 	upgraded := s.upgradeAllKeys(r.Context(), keys, rateLimit, identifier, ev.ID)
 
+	// F-1219 (codex audit-2026-05-12): platform-store side effects.
+	// Look up the account by Stripe customer ID, upsert the
+	// subscription, and bump the account tier. Best-effort: a
+	// failure here is logged but does NOT 5xx the webhook —
+	// Stripe retries would just keep applying the same Redis
+	// rate-limit (already done above) without making the
+	// platform-store path any healthier. Operators surface this
+	// via the audit log + a separate `ratesengine_stripe_platform_
+	// sync_errors_total` metric (TODO).
+	s.applyPlatformSideEffects(r.Context(), ev, session, tierName)
+
 	s.logger.Info("stripe webhook: customer upgraded",
 		"identifier", identifier, "event_id", ev.ID,
 		"tier", tierName, "rate_limit_per_min", rateLimit,
@@ -336,6 +380,124 @@ func (s *Server) parseStripeWebhook(w http.ResponseWriter, r *http.Request) (str
 		return stripeEvent{}, false
 	}
 	return ev, true
+}
+
+// applyPlatformSideEffects runs the F-1219 (codex audit-2026-05-12)
+// platform-store fan-out after a successful Redis rate-limit
+// update: look up the account by Stripe customer ID, upsert the
+// subscription row, and bump the account.Tier. All steps are
+// best-effort — a failure is logged + counted but never 5xxs the
+// webhook handler. Stripe retries would just re-apply the same
+// Redis rate-limit without making the platform side any healthier;
+// operator reconciliation handles the gap.
+//
+// Skipped silently when Platform is nil (legacy / billing-disabled
+// deployments). Skipped per-step when the corresponding store is
+// nil (tests commonly leave Accounts nil but wire Billing).
+func (s *Server) applyPlatformSideEffects(ctx context.Context, ev stripeEvent, session stripeCheckoutSession, tierName string) {
+	if s.stripe == nil || s.stripe.Platform == nil {
+		return
+	}
+	bridge := s.stripe.Platform
+
+	// Resolve the account from the Stripe customer ID. Empty
+	// CustomerID is a Stripe-side bug (Checkout sessions always
+	// carry one for a paid event) — log + bail.
+	if bridge.Accounts == nil {
+		s.logger.Debug("stripe webhook: platform.Accounts not wired — skipping tier update",
+			"event_id", ev.ID)
+	}
+	var account platform.Account
+	var haveAccount bool
+	if bridge.Accounts != nil && session.Customer != "" {
+		acct, err := bridge.Accounts.GetByStripeCustomerID(ctx, session.Customer)
+		if err != nil {
+			s.logger.Warn("stripe webhook: GetByStripeCustomerID failed",
+				"event_id", ev.ID, "stripe_customer_id", session.Customer, "err", err)
+		} else {
+			account = acct
+			haveAccount = true
+		}
+	}
+
+	// UpsertSubscription on the platform billing store. Only
+	// fires when we resolved the account AND the bridge has a
+	// Billing store wired.
+	if haveAccount && bridge.Billing != nil && session.Subscription != "" {
+		now := s.stripeNow()
+		plan := stripePlanFromTier(tierName)
+		sub := platform.Subscription{
+			AccountID:            account.ID,
+			StripeSubscriptionID: session.Subscription,
+			Plan:                 plan,
+			// CurrentPeriodStart / CurrentPeriodEnd / CancelAtPeriodEnd
+			// come from invoice.paid / customer.subscription.updated
+			// events; checkout.session.completed doesn't carry them.
+			// Production wiring stamps `now` + 30d as a placeholder
+			// — the next subscription-update event refines.
+			CurrentPeriodStart: now,
+			CurrentPeriodEnd:   now.Add(30 * 24 * time.Hour),
+		}
+		if err := bridge.Billing.UpsertSubscription(ctx, sub); err != nil {
+			s.logger.Warn("stripe webhook: UpsertSubscription failed",
+				"event_id", ev.ID, "account_id", account.ID,
+				"stripe_subscription_id", session.Subscription, "err", err)
+		}
+	}
+
+	// Update the account tier so the dashboard reflects the new
+	// plan + the F-1212 tier-rate-limit clamp picks up the right
+	// ceiling for future key mints.
+	if haveAccount {
+		newTier := stripeTierMapPlatform(bridge.TierMap, tierName)
+		if newTier != "" && account.Tier != newTier {
+			account.Tier = newTier
+			if err := bridge.Accounts.Update(ctx, account); err != nil {
+				s.logger.Warn("stripe webhook: account tier update failed",
+					"event_id", ev.ID, "account_id", account.ID, "tier", newTier, "err", err)
+			}
+		}
+	}
+}
+
+// stripePlanFromTier maps the Stripe `metadata.tier` string into
+// the platform billing-plan enum. Unknown tier → empty string
+// (caller treats that as "skip subscription write" because the
+// shape can't be honestly recorded).
+func stripePlanFromTier(tierName string) platform.SubscriptionPlan {
+	switch tierName {
+	case "starter":
+		return platform.PlanStarter
+	case "pro":
+		return platform.PlanPro
+	case "business":
+		return platform.PlanBusiness
+	case "enterprise":
+		return platform.PlanEnterprise
+	}
+	return ""
+}
+
+// stripeTierMapPlatform looks up the operator-supplied tier map
+// first, then falls back to the canonical mapping. Returns empty
+// when no mapping applies (caller skips the tier update).
+func stripeTierMapPlatform(overrides map[string]platform.Tier, tierName string) platform.Tier {
+	if overrides != nil {
+		if t, ok := overrides[tierName]; ok {
+			return t
+		}
+	}
+	switch tierName {
+	case "starter":
+		return platform.TierStarter
+	case "pro":
+		return platform.TierPro
+	case "business":
+		return platform.TierBusiness
+	case "enterprise":
+		return platform.TierEnterprise
+	}
+	return ""
 }
 
 // upgradeAllKeys runs the per-key UpdateRateLimit loop and

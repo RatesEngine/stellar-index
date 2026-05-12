@@ -202,10 +202,17 @@ func supplySnapshotMaybeEmitFailure(textfileOut, assetRaw string, startedAt time
 
 // resolveSnapshotLedger picks the ledger to attribute the snapshot
 // to. Operator-supplied -ledger wins; otherwise we use the max
-// last_ledger across all ingestion cursors as the freshest known
-// chain position. observedAt is now() — the cursor doesn't carry
-// its own close time and computing one would mean reading the LCM
-// archive, which is more cost than this attribution buys.
+// last_ledger across all ingestion cursors.
+//
+// F-1236 (codex audit-2026-05-12) — KNOWN: a stalled supply
+// observer can leave a component balance behind the snapshot
+// ledger; the per-component reader's at-or-before query silently
+// returns an older row. The matching long-form note lives on
+// `supplyAggregatorLedgers` in cmd/ratesengine-aggregator/main.go
+// — full fix needs per-component ledger threading into snapshot
+// acceptance (the per-row Ledger is already returned by
+// AccountObservationRow et al, so it's a refactor of the Refresher
+// + Supply shapes, not a new storage primitive).
 func resolveSnapshotLedger(ctx context.Context, store *timescale.Store, opLedger uint32) (uint32, time.Time, error) {
 	if opLedger > 0 {
 		return opLedger, time.Now().UTC(), nil

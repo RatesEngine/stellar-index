@@ -29,7 +29,7 @@ SECURITY.md	SECURITY.md	SECURITY.md	documentation	done	EV-0050;EV-0051;F-1207		R
 VERSIONS.md	VERSIONS.md	VERSIONS.md	documentation	todo			cold audit pending
 cmd/ratesengine-aggregator/change_summary.go	cmd	cmd/ratesengine-aggregator	runtime	done	EV-0055		Reviewed storage-neutral adapter boundary for change summaries; no standalone finding
 cmd/ratesengine-aggregator/contribution_sink.go	cmd	cmd/ratesengine-aggregator	runtime	done	EV-0055;EV-0060;EV-0103;F-1242	XFI-0034	Reviewed contribution sink adapter and batch forwarding; current workspace writes `volume_usd` from a still-misaligned pre-filter total.
-cmd/ratesengine-aggregator/main.go	cmd	cmd/ratesengine-aggregator	runtime	done	EV-0024;EV-0047;EV-0055;F-1213;F-1236	XFI-0009;XFI-0028	Reviewed aggregation, stablecoin/min-volume, Redis/cache, supply refresher, and timers
+cmd/ratesengine-aggregator/main.go	cmd	cmd/ratesengine-aggregator	runtime	done	EV-0024;EV-0047;EV-0055;EV-0105;EV-0106;F-1213;F-1236;F-1249;F-1260	XFI-0009;XFI-0028;XFI-0041;XFI-0052	Reviewed aggregation, stablecoin/min-volume gating, webhook producer fan-out for anomaly/divergence, Redis/cache, supply refresher, and timers; current supply-ledger workspace attempt does not build
 cmd/ratesengine-aggregator/main_test.go	cmd	cmd/ratesengine-aggregator	test	done	EV-0052;EV-0055		Command package tests pass; coverage tied to main wiring
 cmd/ratesengine-api/main.go	cmd	cmd/ratesengine-api	runtime	done	EV-0038;EV-0053;EV-0054;EV-0055;EV-0069;EV-0073;EV-0076;EV-0094;EV-0095;EV-0096;EV-0100;EV-0103;F-1217;F-1219;F-1226;F-1228;F-1238;F-1245;F-1247;F-1249;F-1258;F-1259	XFI-0011;XFI-0013;XFI-0018;XFI-0020;XFI-0030;XFI-0037;XFI-0039;XFI-0041;XFI-0050;XFI-0051	Reviewed startup wiring, auth/billing seams, HTTP timeouts, Redis optionality, webhook worker/producer coupling, usage-reader nil path, usage docs drift, SEP-10/stream fixes, and partial KeyPolicy production wiring
 cmd/ratesengine-api/main_test.go	cmd	cmd/ratesengine-api	test	done	EV-0052;EV-0055		Command package tests pass; startup/test seams reviewed
@@ -51,7 +51,7 @@ cmd/ratesengine-ops/main.go	cmd	cmd/ratesengine-ops	runtime	done	EV-0055;EV-0102
 cmd/ratesengine-ops/mint_key.go	cmd	cmd/ratesengine-ops	runtime	done	EV-0053;EV-0055;F-1219	XFI-0013	Reviewed Redis key bootstrap path and billing/key-source split interaction
 cmd/ratesengine-ops/seed_soroswap_pairs.go	cmd	cmd/ratesengine-ops	runtime	done	EV-0055		Reviewed Soroswap factory seeding, RPC fallback, and pair upsert hook
 cmd/ratesengine-ops/sep1_refresh.go	cmd	cmd/ratesengine-ops	runtime	done	EV-0055		Reviewed issuer SEP-1 refresh loop, resolver boundary, and dry-run/write behavior
-cmd/ratesengine-ops/supply.go	cmd	cmd/ratesengine-ops	runtime	done	EV-0047;EV-0055;F-1236	XFI-0028	Reviewed supply snapshot/audit commands and component freshness interaction
+cmd/ratesengine-ops/supply.go	cmd	cmd/ratesengine-ops	runtime	done	EV-0047;EV-0055;EV-0106;F-1236	XFI-0028	Reviewed supply snapshot/audit commands and component freshness interaction; current uncommitted min-supply-cursor remediation does not build against `timescale.Cursor`
 cmd/ratesengine-ops/upgrade_key.go	cmd	cmd/ratesengine-ops	runtime	done	EV-0053;EV-0055;F-1219	XFI-0013	Reviewed Redis-only key upgrade path and billing/platform split interaction
 cmd/ratesengine-ops/verify_archive_chunks.go	cmd	cmd/ratesengine-ops	runtime	done	EV-0055		Reviewed archive verification chunks, boundary stitching, checkpoint checks, and metrics server
 cmd/ratesengine-ops/verify_archive_chunks_integration_test.go	cmd	cmd/ratesengine-ops	test	done	EV-0052;EV-0055		Reviewed filesystem-backed parallel archive verification integration test
@@ -1091,8 +1091,9 @@ internal/currency/data/seed.yaml	internal	internal/currency/data	config	todo			c
 internal/currency/doc.go	internal	internal/currency/doc.go	runtime	todo			cold audit pending
 internal/currency/verified.go	internal	internal/currency/verified.go	runtime	todo			cold audit pending
 internal/currency/verified_test.go	internal	internal/currency/verified_test.go	test	todo			cold audit pending
+internal/customerwebhook/fanout.go	internal	internal/customerwebhook	runtime	done	EV-0105;EV-0106;F-1249	XFI-0041	Reviewed shared producer fan-out service for anomaly/divergence callbacks, best-effort enqueue semantics, and the residual incident-event gap
 internal/customerwebhook/ssrf.go	internal	internal/customerwebhook	runtime	done	EV-0096;F-1245	XFI-0037	Reviewed send-time DNS re-resolution, internal-address rejection, and redirect-defence support for webhook delivery
-internal/customerwebhook/worker.go	internal	internal/customerwebhook/worker.go	runtime	done	EV-0068;EV-0069;EV-0073;EV-0076;EV-0096;F-1244;F-1245;F-1247;F-1249	XFI-0036;XFI-0037;XFI-0039;XFI-0041	Reviewed HMAC-key storage contract, outbound network boundary, current SSRF transport hardening, multi-worker duplicate delivery, and producer absence
+internal/customerwebhook/worker.go	internal	internal/customerwebhook/worker.go	runtime	done	EV-0068;EV-0069;EV-0073;EV-0076;EV-0096;EV-0105;EV-0106;F-1244;F-1245;F-1247;F-1249	XFI-0036;XFI-0037;XFI-0039;XFI-0041	Reviewed HMAC-key storage contract, outbound network boundary, current SSRF transport hardening, multi-worker duplicate delivery, and remaining incident-only producer absence
 internal/customerwebhook/worker_test.go	internal	internal/customerwebhook/worker_test.go	test	done	EV-0069;EV-0070;EV-0096;F-1245	XFI-0037	Reviewed delivery worker coverage and current targeted package pass after SSRF transport hardening
 internal/dispatcher/contract_call_test.go	internal	internal/dispatcher/contract_call_test.go	test	todo			cold audit pending
 internal/dispatcher/contract_event_conv_test.go	internal	internal/dispatcher/contract_event_conv_test.go	test	todo			cold audit pending
@@ -1113,8 +1114,8 @@ internal/divergence/depeg_test.go	internal	internal/divergence/depeg_test.go	tes
 internal/divergence/divergence_test.go	internal	internal/divergence/divergence_test.go	test	todo			cold audit pending
 internal/divergence/doc.go	internal	internal/divergence/doc.go	runtime	todo			cold audit pending
 internal/divergence/reference.go	internal	internal/divergence/reference.go	runtime	todo			cold audit pending
-internal/divergence/worker.go	internal	internal/divergence/worker.go	runtime	todo			cold audit pending
-internal/divergence/worker_test.go	internal	internal/divergence/worker_test.go	test	todo			cold audit pending
+internal/divergence/worker.go	internal	internal/divergence/worker.go	runtime	done	EV-0106;F-1249	XFI-0041	Reviewed edge-triggered `divergence.firing` webhook producer hook, Redis cache ordering, and current incident-only residual gap
+internal/divergence/worker_test.go	internal	internal/divergence/worker_test.go	test	done	EV-0106;F-1249	XFI-0041	Reviewed edge-triggered warning-hook regression coverage for `divergence.firing`
 internal/events/event.go	internal	internal/events/event.go	runtime	todo			cold audit pending
 internal/events/event_test.go	internal	internal/events/event_test.go	test	todo			cold audit pending
 internal/hashdb/hashdb.go	internal	internal/hashdb/hashdb.go	runtime	todo			cold audit pending
@@ -1553,6 +1554,7 @@ pkg/client/errors.go	pkg	pkg	runtime	todo			cold audit pending
 pkg/client/errors_test.go	pkg	pkg	test	todo			cold audit pending
 pkg/client/example_test.go	pkg	pkg	test	todo			cold audit pending
 pkg/client/types.go	pkg	pkg	runtime	todo			cold audit pending
+scripts/ci/lint-actions-pinning.sh	scripts	scripts	script	done	EV-0104;F-1216	XFI-0010	Reviewed PR-diff GitHub Actions pinning gate; current mutable third-party action tags still remain in the repository
 scripts/ci/lint-docs.sh	scripts	scripts	script	in_progress	EV-0007,F-1203		Passed despite generated drift
 scripts/ci/lint-imports.baseline	scripts	scripts	unknown	todo			cold audit pending
 scripts/ci/lint-imports.sh	scripts	scripts	script	todo			cold audit pending

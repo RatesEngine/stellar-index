@@ -184,15 +184,26 @@ without evidence IDs.
   action tags; the contribution rewrite now carries per-trade USD
   attribution through the filter chain and should be re-checked for
   `F-1242` once that workspace settles.
+- `CMD-0107` reconciled the settled Wave 11 state, marked `F-1233`
+  and `F-1242` fixed on current committed code, narrowed `F-1249` after
+  the first webhook producer landed, and surfaced new high-severity
+  aggregator finding `F-1260` for stale pre-filter USD-volume gating.
+- `CMD-0108` audited Wave 13's divergence webhook producer and the
+  later uncommitted supply-ledger attempt. `F-1249` now narrows to the
+  two incident event families only, while `F-1236` remains open because
+  the workspace fix does not compile against `timescale.Cursor`.
 - Closure caveat: the TSV remains the per-file coverage control. Rows
   with `todo` still require terminal file-level review before claiming
   literal every-file closure. `EV-0063` documented the scope drift when
   the repository advanced from the original `80c57e...` anchor to
-  current `8a61c17e...`; `EV-0078` resolves the first count mismatch,
-  `EV-0097` preserves the refresh back to `1,870` tracked rows, and
-  `EV-0101` restores parity again after the two committed key-policy
-  files increased tracked scope to `1,872`.
+  current `60c8a2e4...`; `EV-0078` resolves the first count mismatch,
+  `EV-0097` preserves the refresh back to `1,870` tracked rows,
+  `EV-0101` restores parity after the two committed key-policy files
+  increased tracked scope to `1,872`, and the latest inventory refresh
+  now lands at `1,874` tracked non-audit rows after
+  `scripts/ci/lint-actions-pinning.sh` and
+  `internal/customerwebhook/fanout.go` entered scope.
   Current findings remain source/R1 verified and not imported from prior
   audits, but final whole-repo closure still requires terminal review
   status across the refreshed TSV. The current inventory roll-up is
-  `done=99`, `in_progress=50`, `todo=1723`.
+  `done=102`, `in_progress=51`, `todo=1721`.
