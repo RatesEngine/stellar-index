@@ -381,13 +381,18 @@ type ContributionRecord struct {
 	ComputedAt    time.Time
 	Contributions []aggregate.SourceContribution
 
-	// USDVolumeTotal is the pre-rewrite, decimals-correct total
-	// USD value of every trade in this window. Computed in
-	// `fetchForTarget` (F-1213) where the original source-pair
-	// decimals are still known. Zero means "not applicable" — the
-	// sink decides whether to persist or stamp NULL. F-1242 (codex
-	// audit-2026-05-12).
-	USDVolumeTotal float64
+	// SourceUSDVolume is the per-source USD-volume breakdown
+	// computed from the POST-filter trade slice — class filter +
+	// outlier filter have already run. Keys are the same
+	// `Source` values that appear in Contributions. F-1242
+	// (codex audit-2026-05-12): the prior shape was a pre-filter
+	// USDVolumeTotal split by post-filter weights, which
+	// over-attributed dollars when outliers dropped — non-NULL
+	// rows looked authoritative while drifting from the
+	// contribution set actually published. The sink now reads
+	// SourceUSDVolume directly so persisted `volume_usd` matches
+	// what VWAP actually saw.
+	SourceUSDVolume map[string]float64
 }
 
 // DivergenceRefresher is the seam the orchestrator uses to keep the
@@ -586,7 +591,7 @@ func (o *Orchestrator) refreshPairWindow(
 	now time.Time,
 ) error {
 	from := now.Add(-window)
-	trades, usdVolume, err := o.fetchForTarget(ctx, pair, from, now)
+	trades, usdVolume, tradeUSD, err := o.fetchForTarget(ctx, pair, from, now)
 	if err != nil {
 		return fmt.Errorf("fetch %s %v: %w", pair.String(), window, err)
 	}
@@ -628,7 +633,7 @@ func (o *Orchestrator) refreshPairWindow(
 		return fmt.Errorf("vwap %s %v: %w", pair.String(), window, err)
 	}
 
-	o.flushContributions(ctx, pair, window, trades, usdVolume)
+	o.flushContributions(ctx, pair, window, trades, tradeUSD)
 
 	// Phase 1 anomaly evaluation BEFORE cache write — class-deviation
 	// + source-count threshold (the L2.4 stop-gap). On freeze we
@@ -820,6 +825,14 @@ func distinctSourceCount(trades []canonical.Trade) int {
 // uniform-1e8 assumption and the gate would see 10× understatement.
 // F-1213 (codex audit-2026-05-12).
 //
+// `tradeUSD` is a parallel per-trade USD-value map keyed by
+// canonical.Trade.ID(). Lets the filter chain drop trades by index
+// while preserving USD attribution: F-1242 (codex audit-2026-05-12)
+// — `flushContributions` sums per-source USD over the post-filter
+// survivors so the persisted `volume_usd` matches the contribution
+// population the VWAP was actually computed against, not the
+// pre-filter total.
+//
 // Per-backer fetch errors are logged and skipped rather than
 // aborting the whole window — a single connector misbehaving at
 // the Timescale layer shouldn't black out an otherwise-healthy
@@ -828,27 +841,24 @@ func (o *Orchestrator) fetchForTarget(
 	ctx context.Context,
 	target canonical.Pair,
 	from, to time.Time,
-) (trades []canonical.Trade, usdVolume float64, err error) {
+) (trades []canonical.Trade, usdVolume float64, tradeUSD map[string]float64, err error) {
 	if !o.cfg.EnableStablecoinFiatProxy {
 		t, err := o.store.TradesInRange(ctx, target, from, to, o.cfg.MaxTradesPerWindow)
 		if err != nil {
-			return nil, 0, err
+			return nil, 0, nil, err
 		}
-		return t, usdVolumeForPair(target, t, o.cfg.USDPeggedClassicAssets), nil
+		total, perTrade := usdVolumeForPairPerTrade(target, t, o.cfg.USDPeggedClassicAssets)
+		return t, total, perTrade, nil
 	}
 
 	sources, err := aggregate.ExpandTargetPairWithClassicPegs(target, o.cfg.USDPeggedClassicAssets)
 	if err != nil {
-		return nil, 0, fmt.Errorf("expand target %s: %w", target.String(), err)
+		return nil, 0, nil, fmt.Errorf("expand target %s: %w", target.String(), err)
 	}
 
-	// Collect trades from each source pair. Rewriting non-target
-	// source trades through ProxyPair happens here — by the time
-	// the merged slice leaves this function every trade carries
-	// the target pair and the downstream VWAP math treats them
-	// as homogenous.
 	var merged []canonical.Trade
 	var sumUSD float64
+	tradeUSD = map[string]float64{}
 	for _, src := range sources {
 		batch, ferr := o.store.TradesInRange(ctx, src, from, to, o.cfg.MaxTradesPerWindow)
 		if ferr != nil {
@@ -859,10 +869,14 @@ func (o *Orchestrator) fetchForTarget(
 			)
 			continue
 		}
-		// Compute USD volume against the SOURCE pair's quote-decimal
-		// convention — once we rewrite the Pair to `target`
-		// (fiat:USD) below, the original 7-vs-8 decimal is lost.
-		sumUSD += usdVolumeForPair(src, batch, o.cfg.USDPeggedClassicAssets)
+		// Per-trade USD value against the SOURCE pair's quote-decimal
+		// convention — captured BEFORE the rewrite below blurs the
+		// original 7-vs-8 decimal.
+		batchTotal, batchPerTrade := usdVolumeForPairPerTrade(src, batch, o.cfg.USDPeggedClassicAssets)
+		sumUSD += batchTotal
+		for id, v := range batchPerTrade {
+			tradeUSD[id] = v
+		}
 		if src.Equal(target) {
 			merged = append(merged, batch...)
 			continue
@@ -872,50 +886,61 @@ func (o *Orchestrator) fetchForTarget(
 			merged = append(merged, batch[i])
 		}
 	}
-	return merged, sumUSD, nil
+	return merged, sumUSD, tradeUSD, nil
 }
 
-// usdVolumeForPair sums the USD value of every trade in `batch`
-// using the correct quote-decimal scale for `pair`:
-//
-//   - fiat:USD: 10^8 (off-chain CEX/FX convention)
-//   - classic USD-pegged credit on `classicUSDPegs`: 10^7
-//     (Stellar-classic decimals are uniformly 7)
-//   - anything else: returns 0 (the gate doesn't apply)
-//
-// The gate's correctness depends on this matching what the
-// indexer's `trades.usd_volume` populator does at write time —
-// both must agree on which assets count as USD-pegged and at
-// what scale, or the gate silently drifts away from the table.
+// usdVolumeForPair was the F-1213 entry point that returned only
+// the windowed total. Superseded by [usdVolumeForPairPerTrade]
+// which exposes the per-trade map needed for F-1242 post-filter
+// per-source attribution. Kept here as a documentation pointer;
+// the implementation lives in usdVolumeForPairPerTrade.
 func usdVolumeForPair(pair canonical.Pair, batch []canonical.Trade, classicUSDPegs []canonical.Asset) float64 {
+	total, _ := usdVolumeForPairPerTrade(pair, batch, classicUSDPegs)
+	return total
+}
+
+// _ = usdVolumeForPair retains the function as a stable seam in
+// case future code wants the just-the-total signature back.
+var _ = usdVolumeForPair
+
+// usdVolumeForPairPerTrade is the F-1242 (codex audit-2026-05-12)
+// extension of [usdVolumeForPair] — it returns the same total plus
+// a per-trade.ID() → USD-value map. The map is keyed before
+// `fetchForTarget` rewrites Pair to the target, so the
+// per-source filter chain can drop trades by index without losing
+// the per-trade USD attribution the contribution sink uses.
+//
+// Returns (0, nil) when the pair's quote isn't a recognised USD
+// surface — the contribution sink stamps NULL `volume_usd` in
+// that case, matching the prior all-NULL posture for non-USD
+// targets.
+func usdVolumeForPairPerTrade(pair canonical.Pair, batch []canonical.Trade, classicUSDPegs []canonical.Asset) (float64, map[string]float64) {
 	if len(batch) == 0 {
-		return 0
+		return 0, nil
 	}
 	var decimals int
 	switch {
 	case pair.Quote.Type == canonical.AssetFiat && pair.Quote.Code == "USD":
 		decimals = 8
 	case pair.Quote.Type == canonical.AssetClassic && isUSDPeggedClassic(pair.Quote, classicUSDPegs):
-		// Stellar-classic credits are uniformly 7-decimal.
 		decimals = 7
 	default:
-		return 0
-	}
-	sum := new(big.Int)
-	for i := range batch {
-		amt := batch[i].QuoteAmount.BigInt()
-		if amt == nil {
-			continue
-		}
-		sum.Add(sum, amt)
-	}
-	if sum.Sign() == 0 {
-		return 0
+		return 0, nil
 	}
 	scale := new(big.Int).Exp(big.NewInt(10), big.NewInt(int64(decimals)), nil)
-	rat := new(big.Rat).SetFrac(sum, scale)
-	f, _ := rat.Float64()
-	return f
+	perTrade := make(map[string]float64, len(batch))
+	var total float64
+	for i := range batch {
+		amt := batch[i].QuoteAmount.BigInt()
+		if amt == nil || amt.Sign() == 0 {
+			continue
+		}
+		rat := new(big.Rat).SetFrac(amt, scale)
+		v, _ := rat.Float64()
+		perTrade[batch[i].ID()] = v
+		total += v
+	}
+	return total, perTrade
 }
 
 // isUSDPeggedClassic reports whether `asset` is one of the
@@ -1115,7 +1140,7 @@ func (o *Orchestrator) flushContributions(
 	pair canonical.Pair,
 	window time.Duration,
 	trades []canonical.Trade,
-	usdVolumeTotal float64,
+	tradeUSD map[string]float64,
 ) {
 	if o.cfg.ContributionSink == nil {
 		return
@@ -1124,12 +1149,27 @@ func (o *Orchestrator) flushContributions(
 	if len(contributions) == 0 {
 		return
 	}
+	// F-1242 (codex audit-2026-05-12): walk the POST-filter trade
+	// slice and sum per-source USD value from the per-trade map.
+	// This matches the contribution population VWAP was computed
+	// against; an outlier-dropped trade contributes 0 USD to its
+	// source's row instead of double-attributing through the
+	// pre-filter total.
+	var sourceUSD map[string]float64
+	if len(tradeUSD) > 0 {
+		sourceUSD = make(map[string]float64, len(contributions))
+		for i := range trades {
+			if v, ok := tradeUSD[trades[i].ID()]; ok {
+				sourceUSD[trades[i].Source] += v
+			}
+		}
+	}
 	if err := o.cfg.ContributionSink.RecordContributions(ctx, ContributionRecord{
-		Pair:           pair,
-		Window:         window,
-		ComputedAt:     time.Now().UTC(),
-		Contributions:  contributions,
-		USDVolumeTotal: usdVolumeTotal,
+		Pair:            pair,
+		Window:          window,
+		ComputedAt:      time.Now().UTC(),
+		Contributions:   contributions,
+		SourceUSDVolume: sourceUSD,
 	}); err != nil {
 		o.logger.Debug("contribution sink",
 			"pair", pair.String(), "window", window, "err", err)

@@ -170,6 +170,14 @@ without evidence IDs.
   verified package-level CMC/timescale/dashboard-auth tests, reran the
   targeted FX integration, and recorded why `F-1237`, `F-1251`, and
   `F-1255` remain open.
+- `CMD-0105` audited the later Wave 10 shared-workspace remediation
+  slice. It records that deploy-migration coupling is improved but not
+  yet proven runnable with the workflow's `ansible-core` install,
+  contribution `volume_usd` writes still mismatch the filtered trade
+  set, the dashboard-key cap CTE repeats the prior MVCC race class, the
+  Redis-less usage reader can still nil-deref on `/v1/account/usage`,
+  and usage docs remain internally inconsistent despite source OpenAPI
+  edits.
 - Closure caveat: the TSV remains the per-file coverage control. Rows
   with `todo` still require terminal file-level review before claiming
   literal every-file closure. `EV-0063` documented the scope drift when

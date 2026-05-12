@@ -15,7 +15,7 @@ Snapshot anchor: `80c57e38eeee729ec2d879d54286419206cee864`
 | Current findings imported | none |
 | Tracked file source | `git ls-files` |
 | Tracked file count before this directory | `1,747` |
-| Execution-time scope drift | current `HEAD` advanced to `82a6052c...`; the inventory remains reconciled at `1,872` tracked rows on 2026-05-12 after the webhook SSRF guard, committed key-policy middleware/test files, and Wave 9 CMC/FX/auth reconciliations entered scope; see `EV-0063`, `EV-0078`, `EV-0097`, `EV-0098`, `EV-0099`, `EV-0101`, and `EV-0102` |
+| Execution-time scope drift | current `HEAD` advanced to `82a6052c...`; the inventory remains reconciled at `1,872` tracked rows on 2026-05-12 after the webhook SSRF guard, committed key-policy middleware/test files, and Wave 9 CMC/FX/auth reconciliations entered scope; the later Wave 10 workspace is recorded separately as in-flight evidence in `EV-0103`; see `EV-0063`, `EV-0078`, `EV-0097`, `EV-0098`, `EV-0099`, `EV-0101`, `EV-0102`, and `EV-0103` |
 | File inventory | [inventory/file-coverage.tsv](inventory/file-coverage.tsv) |
 | Evidence ledger | [evidence/log.md](evidence/log.md) |
 | Command ledger | [evidence/commands.md](evidence/commands.md) |
@@ -42,7 +42,7 @@ Snapshot anchor: `80c57e38eeee729ec2d879d54286419206cee864`
 | --- | --- | --- | --- |
 | W01 | Snapshot, repository hygiene, and ownership | in_progress | EV-0015, EV-0018 |
 | W02 | Architecture, ADRs, and negative space | todo | code-to-doc trace |
-| W03 | Build, toolchain, reproducibility, and release | in_progress | EV-0013, EV-0009, EV-0031, EV-0032, EV-0037, EV-0041, EV-0099 |
+| W03 | Build, toolchain, reproducibility, and release | in_progress | EV-0013, EV-0009, EV-0031, EV-0032, EV-0037, EV-0041, EV-0099, EV-0103 |
 | W04 | Dependency, provenance, and supply chain | in_progress | EV-0014, EV-0015, EV-0025, EV-0026, EV-0099 |
 | W05 | Configuration and secret boundaries | in_progress | EV-0022, EV-0024, EV-0033, EV-0083, EV-0084, EV-0098 |
 | W06 | Canonical identity, asset semantics, and numeric safety | todo | code refs, tests |
@@ -51,16 +51,16 @@ Snapshot anchor: `80c57e38eeee729ec2d879d54286419206cee864`
 | W09 | Stellar account, supply, and balance observers | in_progress | EV-0047 |
 | W10 | Oracle and reference-price source decoders | in_progress | EV-0045 |
 | W11 | External market-data source fleet | in_progress | EV-0046, EV-0098, EV-0102 |
-| W12 | Storage, migrations, and query correctness | in_progress | EV-0017, EV-0058, EV-0059, EV-0060, EV-0062, EV-0079, EV-0080, EV-0086, EV-0092, EV-0102 |
+| W12 | Storage, migrations, and query correctness | in_progress | EV-0017, EV-0058, EV-0059, EV-0060, EV-0062, EV-0079, EV-0080, EV-0086, EV-0092, EV-0102, EV-0103 |
 | W13 | Redis, cache keys, streaming pub/sub, and freshness | in_progress | EV-0038, EV-0039, EV-0084, EV-0094 |
 | W14 | Aggregation, baselines, anomaly, freeze, and confidence | in_progress | EV-0024, EV-0079 |
-| W15 | API runtime, middleware, contracts, and client SDK | in_progress | EV-0010, EV-0011, EV-0012, EV-0068, EV-0069, EV-0076, EV-0086, EV-0089, EV-0090, EV-0092, EV-0094, EV-0095, EV-0096, EV-0098, EV-0099, EV-0100, EV-0102 |
+| W15 | API runtime, middleware, contracts, and client SDK | in_progress | EV-0010, EV-0011, EV-0012, EV-0068, EV-0069, EV-0076, EV-0086, EV-0089, EV-0090, EV-0092, EV-0094, EV-0095, EV-0096, EV-0098, EV-0099, EV-0100, EV-0102, EV-0103 |
 | W16 | Dashboard, explorer, status page, SEO, and embeds | in_progress | EV-0012, EV-0014, EV-0090 |
 | W17 | Observability, metrics, alerts, status, and incident flow | in_progress | R1-0010, EV-0073, EV-0098 |
 | W18 | Operations, R1 runtime, archive completeness, and DR | in_progress | R1-0001 through R1-0010, EV-0073, EV-0082 |
-| W19 | Security, auth, abuse, and privacy | in_progress | F-1201, F-1207, EV-0015, EV-0068, EV-0069, EV-0083, EV-0084, EV-0086, EV-0096, EV-0098, EV-0099, EV-0100, EV-0102 |
+| W19 | Security, auth, abuse, and privacy | in_progress | F-1201, F-1207, EV-0015, EV-0068, EV-0069, EV-0083, EV-0084, EV-0086, EV-0096, EV-0098, EV-0099, EV-0100, EV-0102, EV-0103 |
 | W20 | Tests, fixtures, chaos, load, and CI reality | in_progress | EV-0006, EV-0013, EV-0041, EV-0070, EV-0095, EV-0099 |
-| W21 | Documentation truth and customer commitments | in_progress | EV-0021, EV-0032, EV-0039, EV-0040, EV-0072, EV-0076, EV-0082, EV-0090, EV-0095, EV-0096 |
+| W21 | Documentation truth and customer commitments | in_progress | EV-0021, EV-0032, EV-0039, EV-0040, EV-0072, EV-0076, EV-0082, EV-0090, EV-0095, EV-0096, EV-0103 |
 | W22 | Competitive product completeness | in_progress | EV-0035, EV-0038, EV-0040, EV-0042 |
 | W23 | Generated artifacts and drift | in_progress | F-1203 |
 | W24 | Cross-file interaction and system coupling | in_progress | XFI-0001 through XFI-0051 |

@@ -130,6 +130,22 @@ jobs:
         # baseline to shrink monotonically.
         run: ./scripts/ci/lint-imports.sh
 
+  actions-pinning:
+    name: github-actions SHA-pinning lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+      - name: lint-actions-pinning
+        # F-1216 (codex audit-2026-05-12): warns on existing
+        # tag-pinned third-party actions and HARD-FAILS when a
+        # PR introduces a new tag-pinned third-party use. Existing
+        # tag pins are bumped to SHA via Dependabot PRs over time.
+        env:
+          PR_DIFF: "1"
+        run: bash scripts/ci/lint-actions-pinning.sh
+
   monitoring-rules:
     name: prometheus rule validation
     runs-on: ubuntu-latest

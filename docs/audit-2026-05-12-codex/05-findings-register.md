@@ -1527,14 +1527,17 @@ Evidence:
 
 - `XFI-0049`
 - `EV-0092`
+- `EV-0103`
 
 Expected: the dashboard's active-key cap should hold under concurrent requests, not only under serial UX flows.
 
-Observed: `HandleCreate` calls `checkQuota`, which lists all account keys and counts those with zero `RevokedAt`. If the count is below 25, the handler later performs an independent insert through `APIKeyStore.Create`. The schema provides active-key indexes but no database invariant or transactional compare-and-insert guard for the 25-row ceiling. Current tests only pre-seed 25 rows and verify a single follow-up create returns 409.
+Observed during the initial pass: `HandleCreate` called `checkQuota`, which listed all account keys and counted those with zero `RevokedAt`. If the count was below 25, the handler later performed an independent insert through `APIKeyStore.Create`. The schema provided active-key indexes but no database invariant or transactional compare-and-insert guard for the 25-row ceiling. Current tests only pre-seeded 25 rows and verified a single follow-up create returned 409.
+
+Current-workspace reconciliation: `APIKeyStore.Create` now accepts `maxActiveKeysPerAccount`, returns `ErrAPIKeyQuotaExceeded`, and uses `WITH active_count AS (...) INSERT ... WHERE active_count.n < $16`. That is still not a serialization boundary under PostgreSQL's normal MVCC semantics. Two create statements that begin from the same below-cap snapshot can each see the same `active_count.n`, both satisfy the predicate, and both insert. The handler's new 409 branch only handles the serial over-cap case; it does not make the boundary atomic. There is still no row lock, advisory lock, unique/exclusion invariant, serializable retry, or concurrent persistence test.
 
 Impact: coordinated or accidental concurrent create requests can leave an account with more active dashboard keys than the product promises. That weakens the anti-sprawl ceiling operators rely on for customer-key hygiene and makes later cleanup/reporting less trustworthy.
 
-Remediation direction: enforce the cap atomically at the persistence boundary. Use a transaction with the appropriate account-scoped lock/check, or move the count/create operation into a store method that serializes per-account create semantics. Add a concurrent create test that starts below the threshold and proves persisted active keys never exceed 25.
+Remediation direction: enforce the cap atomically at a real serialization point. Use a transaction with an account-scoped lock/check, a serializable retry loop, or an equivalent database invariant that actually excludes concurrent over-cap inserts. Add a concurrent create test that starts below the threshold and proves persisted active keys never exceed 25.
 
 ### F-1258. Redis-less API deployments still wire a non-nil usage middleware around a nil Redis client, so authenticated requests can panic instead of degrading cleanly
 
@@ -1553,14 +1556,17 @@ Evidence:
 
 - `XFI-0050`
 - `EV-0094`
+- `EV-0103`
 
 Expected: when API Redis is not configured, optional Redis-backed features should either be omitted cleanly or become explicit no-ops. An authenticated request should not cross into a nil Redis client because startup accepted that deployment mode.
 
-Observed: `redisclient.Build` may return nil and the API still proceeds. Later, `usageCounter := usage.New(rdb)` executes unconditionally and `middleware.UsageTracker(usageCounter, ...)` is always passed into the server. The middleware skips only when the `*usage.Counter` itself is nil, but here it is non-nil with a nil embedded Redis client. Once an authenticated request finishes its handler path, `UsageTracker` calls `counter.Increment`, which dereferences `c.rdb.TxPipeline()` directly.
+Observed during the initial pass: `redisclient.Build` could return nil and the API still proceeded. Later, `usageCounter := usage.New(rdb)` executed unconditionally and `middleware.UsageTracker(usageCounter, ...)` was always passed into the server. The middleware skipped only when the `*usage.Counter` itself was nil, but here it was non-nil with a nil embedded Redis client. Once an authenticated request finished its handler path, `UsageTracker` called `counter.Increment`, which dereferenced `c.rdb.TxPipeline()` directly.
 
-Impact: a Redis-less API deployment that is otherwise intended to stay online can panic during authenticated traffic while processing best-effort usage metering. That breaks the documented optional-Redis degradation model and turns an observability add-on into a request-path reliability hazard.
+Current-workspace reconciliation: `cmd/ratesengine-api/main.go` now constructs `usageCounter` only when Redis exists, and `usage.New(nil)` returns nil defensively. That closes the original middleware panic route. A second nil path remains: API wiring still sets `UsageReader: usageReaderAdapter{c: usageCounter}` even when `usageCounter == nil`. The server therefore sees a non-nil `UsageReader`, enters `handleAccountUsage`, and `usageReaderAdapter.Read` dereferences `a.c.Read(...)` on a nil inner counter. Redis-less authenticated traffic can still panic on `/v1/account/usage`.
 
-Remediation direction: make the optionality real. Either only construct/pass a usage counter when Redis exists, or make `usage.Counter` explicitly nil-safe and have the middleware treat nil-backed counters as disabled. Add an API wiring test for `rdb=nil` that exercises an authenticated request through the full middleware stack without panic.
+Impact: a Redis-less API deployment that is otherwise intended to stay online is safer on ordinary authenticated requests, but `/v1/account/usage` can still cross into a nil dependency and panic. The optional-Redis degradation model is therefore still broken on a customer-facing route.
+
+Remediation direction: keep the middleware-side fix, then omit `UsageReader` entirely when `usageCounter == nil` or make `usageReaderAdapter.Read` nil-safe. Add API wiring tests for `rdb=nil` that exercise both an ordinary authenticated request and `/v1/account/usage` without panic.
 
 ### F-1259. `/v1/account/usage` docs and generated references still call the endpoint always-empty even though current runtime wiring can return real Redis-backed daily counts
 
@@ -1583,11 +1589,14 @@ Evidence:
 
 - `XFI-0051`
 - `EV-0095`
+- `EV-0103`
 
 Expected: once the usage reader is live in current runtime wiring, customer-facing docs and generated references should describe conditional real data semantics instead of the retired stub contract.
 
-Observed: `ratesengine-api` wires `UsageTracker` and `UsageReader`, and `handleAccountUsage` now reads a trailing 30-day usage window when the reader is present. Yet its own doc comment still says the endpoint always returns `[]`, the OpenAPI summary says "currently empty," the generated reference YAML/Postman artifacts copy that contract, and the API design / explorer inventory docs still call it a placeholder or stub.
+Observed during the initial pass: `ratesengine-api` wired `UsageTracker` and `UsageReader`, and `handleAccountUsage` read a trailing 30-day usage window when the reader was present. Yet its own doc comment still said the endpoint always returned `[]`, the OpenAPI summary said "currently empty," the generated reference YAML/Postman artifacts copied that contract, and the API design / explorer inventory docs still called it a placeholder or stub.
+
+Current-workspace reconciliation: the source OpenAPI file now describes live Redis-backed daily counters and tier-clamp semantics elsewhere, but the generated reference YAML, Postman collection, API design doc, architecture inventory, and `internal/api/v1/account.go` comment remain stale. The new OpenAPI copy also says Redis-less deployments are reflected on `/v1/healthz` under `checks`, while `healthResponse.Checks` is explicitly absent on `/healthz` and populated only on `/readyz`.
 
 Impact: customers and internal reviewers are told a live usage feature is absent, while generated clients and product documentation remain anchored to outdated behavior. That distorts product readiness judgments and makes future audit/review work easier to misread.
 
-Remediation direction: rewrite the usage contract around current conditional semantics: Redis-backed deployments return trailing daily counts, deployments without a reader return an empty list, and `from`/`to` remain reserved if that is still the implementation choice. Regenerate all derived API reference artifacts from the corrected OpenAPI source.
+Remediation direction: rewrite the usage contract around current conditional semantics everywhere, correct the `/healthz` versus `/readyz` wording, and regenerate all derived API reference artifacts from the corrected source OpenAPI. Keep docs lint green, but add a targeted drift guard if this class of source-vs-generated/reference mismatch keeps escaping.
