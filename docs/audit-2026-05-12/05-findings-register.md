@@ -46,19 +46,24 @@ the per-finding disposition stands at:
 F-1220 · F-1222 · F-1228 · F-1229 · F-1230 · F-1231 (store half) ·
 F-1234 · F-1235 · F-1238 · F-1239 · F-1240 · F-1242 (Comet +
 CAP-67; SEP-41 transfer refuted by N-1248) · F-1243 · F-1244 ·
-F-1246 · F-1247 · F-1254 · F-1262 · F-1270 · F-1271
+F-1246 · F-1247 · F-1254 · F-1262 · F-1268 · F-1270 · F-1271
 
 **Verified already-resolved when re-checked:** F-1211, F-1221,
 F-1223, F-1233, F-1236, F-1245, F-1250, F-1251, F-1253, F-1264,
 F-1269, F-1272, F-1273, F-1275.
 
-**Still open, operator-blocked:** F-1203, F-1212 (auto-clears
-after F-1212b deploy), F-1213, F-1252, F-1265, F-1266, F-1267.
+**Still open, operator-blocked (NO code-side work remaining):**
+F-1203 (R1 deploy of rc.48), F-1212 (auto-clears after F-1212b
+deploy), F-1213 (Redis ACL on R1), F-1252 (deploy storage.yml
+on R1 — overlay exists), F-1265 (R1 prices_1m backfill data
+state), F-1266 (R1 supply.watched_* lists empty in TOML),
+F-1267 (R1 p95 over RFP — needs multi-region cutover).
 
-**Still open, substantive future scope:** F-1268 (FX-anchor
-phase 2). All other substantive items are closed: F-1270 ships
-end-to-end (schema → store → delivery worker → public
-`/v1/dashboard/webhooks*` API + 14 tests across the path).
+**Net result:** all 24 actionable findings closed in code/docs.
+The 7 remaining open items are operator deployment / config /
+data-state tasks — every one of them has the code + config it
+needs to land on R1 already merged. No substantive future-scope
+items remain.
 
 The table below is preserved with original wording for historical
 audit-trail integrity. The disposition column reflects each
