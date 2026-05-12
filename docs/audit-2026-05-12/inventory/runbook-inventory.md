@@ -1,0 +1,76 @@
+# Runbook Inventory
+
+Every alert rule in `deploy/monitoring/rules/*.yml` should map to a runbook here.
+
+| Runbook | Bytes | Matching alert(s) | Status |
+| --- | ---: | --- | --- |
+| `aggregator-class-drop-spike` | 4261 |  | todo |
+| `aggregator-fx-snap-fallback-dominant` | 6594 |  | todo |
+| `aggregator-outlier-storm` | 5254 |  | todo |
+| `aggregator-silent` | 4869 |  | todo |
+| `alertmanager-bad-config` | 4545 |  | todo |
+| `all-ingestion-down` | 9353 |  | todo |
+| `anomaly-freeze-engaged` | 9133 |  | todo |
+| `api-5xx` | 12612 |  | todo |
+| `api-down` | 7210 |  | todo |
+| `api-latency` | 7773 |  | todo |
+| `archive-completeness-stale` | 5269 |  | todo |
+| `archive-divergence` | 6119 |  | todo |
+| `archive-files-missing` | 6156 |  | todo |
+| `archive-publish` | 4152 |  | todo |
+| `archive-repair-source-degraded` | 4360 |  | todo |
+| `backup-failed` | 4029 |  | todo |
+| `bootstrap-archival-node` | 8413 |  | todo |
+| `cache-miss-rate-high` | 4576 |  | todo |
+| `cagg-stale` | 4071 |  | todo |
+| `compression-lag` | 3606 |  | todo |
+| `core-lag` | 4853 |  | todo |
+| `core-peers` | 5245 |  | todo |
+| `cursor-stuck` | 5215 |  | todo |
+| `db-disk-full` | 4682 |  | todo |
+| `deadmansswitch` | 4155 |  | todo |
+| `decode-errors` | 5698 |  | todo |
+| `discovery-drops` | 2428 |  | todo |
+| `divergence-refresh-error-dominant` | 5792 |  | todo |
+| `dr-activation` | 12978 |  | todo |
+| `external-poller-stale` | 4601 |  | todo |
+| `first-archival-node-deployment` | 22670 |  | todo |
+| `fx-history-missing` | 6233 |  | todo |
+| `host-cpu-high` | 4341 |  | todo |
+| `host-down` | 4421 |  | todo |
+| `host-memory-high` | 3885 |  | todo |
+| `ingestion-lag` | 5703 |  | todo |
+| `insert-errors` | 4690 |  | todo |
+| `nvme-smart` | 3645 |  | todo |
+| `nvme-thermal` | 3168 |  | todo |
+| `operator-unblock-2026-05-08` | 5609 |  | todo |
+| `oracle-stale` | 4673 |  | todo |
+| `orphan-events` | 4645 |  | todo |
+| `pg-conns-saturated` | 4235 |  | todo |
+| `price-divergence` | 6242 |  | todo |
+| `price-stale` | 5202 |  | todo |
+| `prometheus-tsdb-corruption` | 6262 |  | todo |
+| `redis-master-down` | 7812 |  | todo |
+| `redis-memory` | 4873 |  | todo |
+| `redis-replication` | 4143 |  | todo |
+| `redis-write-blocked-disk-full` | 5823 |  | todo |
+| `replica-lag` | 4176 |  | todo |
+| `rpc-lag` | 4871 |  | todo |
+| `scrape-failing` | 4574 |  | todo |
+| `sev-status-page-update` | 5797 |  | todo |
+| `sla-probe-freshness-breach` | 4609 |  | todo |
+| `sla-probe-p95-breach` | 3229 |  | todo |
+| `sla-probe-stale` | 3351 |  | todo |
+| `sla-probe-unit-failed` | 2939 |  | todo |
+| `source-stopped` | 4065 |  | todo |
+| `supply-cross-check-divergence` | 8319 |  | todo |
+| `supply-refresh-error-dominant` | 5608 |  | todo |
+| `supply-refresh-stalled` | 4374 |  | todo |
+| `supply-snapshot-circulating-zero` | 5028 |  | todo |
+| `supply-snapshot-never-initialized` | 5492 |  | todo |
+| `supply-snapshot-stale` | 4934 |  | todo |
+| `supply-snapshot-unit-failed` | 4099 |  | todo |
+| `timescale-primary-down` | 6774 |  | todo |
+| `verify-archive-run-stale` | 5001 |  | todo |
+| `verify-archive-unit-failed` | 5249 |  | todo |
+| `zfs-degraded` | 3990 |  | todo |
