@@ -353,12 +353,44 @@ mTLS for internal service-to-service only (see [HA plan §6](../architecture/ha-
 - **Response when limit hit:** 429 with
   `Retry-After` header and an RFC 9457 problem payload.
 
+### 7.1 Tier → rate-limit mapping
+
+The Freighter RFP commits "≥ 1000 requests/minute per client". The
+"per client" wording means *per API key*, not per IP. Anonymous
+callers (no API key) are bucketed by IP at a much tighter cap so a
+single shared egress can't burn the public surface.
+
+| Tier | How obtained | Default rate-limit per minute | Identity |
+| ---- | ------------ | ----------------------------: | -------- |
+| Anonymous | no API key | **60** | per IP (XFF-aware via `api.trusted_proxy_cidrs`) |
+| Starter (free) | `POST /v1/signup` | **1,000** | per `X-API-Key` |
+| Pro | Stripe upgrade (`metadata.tier=pro`) | **10,000** | per `X-API-Key` |
+| Business | Stripe upgrade (`metadata.tier=business`) | **50,000** | per `X-API-Key` |
+| Enterprise | Stripe override (`metadata.rate_limit_per_min=…`) | per-contract | per `X-API-Key` |
+
+Operator notes:
+
+- Tier-to-budget mapping lives in `internal/api/v1/stripe_webhook.go`'s
+  `stripeTierMap` table; updates are a code change + redeploy.
+- Per-key overrides are persisted on the `auth.APIKeyRecord` and
+  consulted on every request via the
+  `middleware.RateLimitBySubject` path.
+- The signup endpoint additionally enforces a per-IP bulk-mint cap
+  (default 5 signups/hour/IP) via `auth.RedisSignupIPThrottle`,
+  separate from the global rate-limit middleware. See F-1232 in
+  `docs/audit-2026-05-12/`.
+
 Response headers on every successful request:
 
 ```
 X-RateLimit-Limit: 1000
 X-RateLimit-Remaining: 987
 ```
+
+The `X-RateLimit-Limit` header reflects the *active* budget for
+the current request's identity — anonymous callers see 60,
+authenticated callers see their tier's budget (1,000 / 10,000 /
+50,000 / per-contract).
 
 ---
 

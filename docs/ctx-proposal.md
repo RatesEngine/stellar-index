@@ -44,15 +44,19 @@ Oracle feeds are integrated as secondary validation inputs and fallback sources.
 
 Reflector is a decentralized oracle network native to Stellar and Soroban, fully compliant with SEP-40. It is the primary oracle integration due to its Stellar-native design and active mainnet deployment.
 
-Integration is via direct Soroban contract calls using the SEP-40 interface: `lastprice(asset)` for current prices, `prices(asset, n)` for historical records, `twap(asset, n)` for time-weighted averages, and the cross-pair equivalents `x_last_price(base, quote)`, `x_prices`, and `x_twap`. Assets are queried using `Asset::Stellar(Address)` for Soroban tokens or `Asset::Other(Symbol)` for off-chain references.
+Reflector is deployed as **three distinct on-chain contracts** (DEX, CEX, FX), not a single oracle contract — see `docs/discovery/proposal-corrections.md §2`. We integrate all three independently and surface them as `reflector-dex`, `reflector-cex`, `reflector-fx` in `/v1/sources`.
+
+Integration is via direct Soroban contract calls using the SEP-40 interface: `lastprice(asset)` for current prices, `prices(asset, n)` for historical records, and the cross-pair equivalent `x_last_price(base, quote)`. **`twap` and `x_twap` / `x_prices` do NOT exist on the on-chain SEP-40 contract** — Reflector deliberately does not surface them. We compute TWAP locally over `prices(asset, n)` results in `internal/aggregate/twap.go`; cross-pair history is similarly derived in-process. See `docs/discovery/proposal-corrections.md §1`.
+
+Assets are queried using `Asset::Stellar(Address)` for Soroban tokens or `Asset::Other(Symbol)` for off-chain references.
 
 The oracle contract is polled at its configured resolution interval. Prices are ingested, timestamped, and run through the shared normalization and validation pipeline before use.
 
 **Redstone**
 
-Redstone has an active Stellar mainnet deployment via its `stellar-connector` package. Deployed price feeds include BTC, ETH, USDC, EUROC, EUROB, PYUSD, and others, with per-symbol Soroban contracts on mainnet.
+Redstone has an active Stellar mainnet deployment via its `stellar-connector` package. **19 price feeds are deployed today** (BTC, ETH, USDC, EUROC, EUROB, PYUSD, plus 13 institutional / RWA assets), each with a per-symbol Soroban contract on mainnet — material upside vs the original "7 feeds" estimate; see `docs/discovery/proposal-corrections.md §5`.
 
-Redstone uses a push/pull hybrid model: signed price packages are submitted on-chain by relayers, verified through threshold signature checking, and stored in contract state. Integration is via `readPricesFromContract()` calls to the deployed per-symbol feed contracts, using the `redstone_adapter` as the coordination point. Price data is structured as `{ price: U256, package_timestamp, write_timestamp }`.
+Redstone uses a push/pull hybrid model: signed price packages are submitted on-chain by relayers, verified through threshold signature checking, and stored in contract state. The `redstone_adapter` contract emits a `WritePrices` event (topic `"REDSTONE"`) on every batch; **the event body carries prices + timestamps but NOT the feed_id**, so we plumb feed_ids through `events.Event.OpArgs` from the `write_prices(updater, feed_ids, payload)` invoke op (the same `ContractCallDecoder` hook Band uses). Price data is structured as `{ price: U256, package_timestamp, write_timestamp }`. See `docs/discovery/proposal-corrections.md §5` and the CLAUDE.md Redstone surprise list.
 
 Redstone provides strong coverage for major pairs and institutional assets and will serve as a secondary validation source alongside Reflector.
 
@@ -64,7 +68,9 @@ Stellar is part of Chainlink Scale and will be integrating Chainlink’s Data Fe
 
 **Band Protocol**
 
-Band Protocol operates BandChain, a Cosmos-based oracle network. Integration will be via the BandChain REST API for reference prices on supported symbol pairs. As with Chainlink, Band data is classified as a secondary validation source and does not contribute directly to VWAP or TWAP aggregation.
+Band Protocol operates BandChain, a Cosmos-based oracle network. Band has **a native Soroban deployment** (the `StandardReference` contract), and we integrate against that contract directly — not the BandChain REST API the original proposal text described. See `docs/discovery/proposal-corrections.md §4`.
+
+Band's Soroban contract is unusual in that it **emits zero events**: prices land via `relay()` / `force_relay()` invoke ops that update contract state without a topic-bearing event. We observe Band updates via the dispatcher's `ContractCallDecoder` hook (matching `(contract_id, function_name)`) rather than the topic-match path used by other Soroban sources — see CLAUDE.md "Things that will surprise you" Band entry. As with Chainlink, Band data is classified as a secondary validation source and does not contribute directly to VWAP or TWAP aggregation.
 
 ### **Stellar Classic DEX (SDEX)**
 
@@ -83,6 +89,8 @@ Soroban-based DEX and AMM activity is indexed through contract event streams and
 **Soroswap**
 
 Soroswap is a Uniswap V2-style AMM deployed on Soroban mainnet (audited by OtterSec). Each trading pair has an individual pair contract. Prices are derived from two complementary sources: pool reserve ratios via `get_reserves() -> (i128, i128)` for continuous implied pricing, and swap events emitted on each trade containing input and output amounts for executed price and volume.
+
+**SwapEvent does NOT carry post-state reserves** — those land in a separately-emitted `SyncEvent` immediately following the swap. Our decoder correlates the two by `(ledger, tx_hash, op_index)` to reconstruct the post-trade state; see `docs/discovery/proposal-corrections.md §3` and the CLAUDE.md Soroswap surprise list.
 
 Integration uses the factory contract to enumerate all deployed pairs and subscribes to Swap, Deposit, and Withdraw events for real-time updates. Swap events include post-state reserves (`new_reserve_0`, `new_reserve_1`), which are used as the authoritative reserve state for TWAP construction. Reserve-based implied prices are continuously cross-validated against executed swap prices.
 
