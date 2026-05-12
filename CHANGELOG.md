@@ -75,6 +75,17 @@ against.
   closed name set, the tailored error path, and the unchanged
   WASM-audit gate.
 
+### Tested
+
+- **`internal/usage` package gains unit-test coverage.** The
+  per-subject daily usage counter (Redis-backed) was the one
+  remaining no-test package in `internal/`. 8 tests cover the
+  Increment/Read round-trip, day-boundary handling, empty-subject
+  no-op, retention clamp, key-prefix isolation, URL-encoded
+  subjects (so `:` inside IPv6 addresses doesn't collide on the
+  date separator), and the 35-day retention TTL applied on every
+  key.
+
 ### Documented
 
 - **ADR-0012 placeholder (F-1262).** Filled the numeric gap in
