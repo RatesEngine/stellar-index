@@ -59,7 +59,7 @@ func TestWriter_MarkRoundTrip(t *testing.T) {
 		DeviationPct: 12.5,
 		Reason:       "deviation 12.5% exceeds 10% threshold for stablecoin",
 	}
-	if err := w.Mark(context.Background(), asset, quote, decision); err != nil {
+	if err := w.Mark(context.Background(), asset, quote, "1.000000000000", decision); err != nil {
 		t.Fatalf("Mark: %v", err)
 	}
 
@@ -103,11 +103,11 @@ func TestWriter_MarkRefreshesTTL(t *testing.T) {
 	asset, quote := nativeUSD(t)
 	dec := anomaly.Decision{Action: anomaly.ActionFreeze, Class: anomaly.ClassDefault}
 
-	if err := w.Mark(context.Background(), asset, quote, dec); err != nil {
+	if err := w.Mark(context.Background(), asset, quote, "", dec); err != nil {
 		t.Fatalf("Mark (first): %v", err)
 	}
 	mr.FastForward(20 * time.Second)
-	if err := w.Mark(context.Background(), asset, quote, dec); err != nil {
+	if err := w.Mark(context.Background(), asset, quote, "", dec); err != nil {
 		t.Fatalf("Mark (refresh): %v", err)
 	}
 
@@ -148,7 +148,7 @@ func TestLooker_FrozenForPair_PresentMarker(t *testing.T) {
 	l, _ := freeze.NewLooker(rdb)
 	asset, quote := nativeUSD(t)
 
-	if err := w.Mark(context.Background(), asset, quote,
+	if err := w.Mark(context.Background(), asset, quote, "",
 		anomaly.Decision{Action: anomaly.ActionFreeze}); err != nil {
 		t.Fatal(err)
 	}
@@ -172,7 +172,7 @@ func TestLooker_FrozenForPair_TTLExpiry(t *testing.T) {
 	l, _ := freeze.NewLooker(rdb)
 	asset, quote := nativeUSD(t)
 
-	if err := w.Mark(context.Background(), asset, quote,
+	if err := w.Mark(context.Background(), asset, quote, "",
 		anomaly.Decision{Action: anomaly.ActionFreeze}); err != nil {
 		t.Fatal(err)
 	}
@@ -199,7 +199,7 @@ func TestLooker_DistinctPairsIsolated(t *testing.T) {
 	eur, _ := canonical.ParseAsset("fiat:EUR")
 
 	// Freeze XLM/USD only.
-	if err := w.Mark(context.Background(), xlm, usd,
+	if err := w.Mark(context.Background(), xlm, usd, "",
 		anomaly.Decision{Action: anomaly.ActionFreeze}); err != nil {
 		t.Fatal(err)
 	}
@@ -222,13 +222,19 @@ type recordingSink struct {
 }
 
 type recordedFreeze struct {
-	Asset    canonical.Asset
-	Quote    canonical.Asset
-	Decision anomaly.Decision
+	Asset       canonical.Asset
+	Quote       canonical.Asset
+	FrozenValue string
+	Decision    anomaly.Decision
 }
 
-func (r *recordingSink) RecordFreeze(_ context.Context, asset, quote canonical.Asset, decision anomaly.Decision) error {
-	r.calls = append(r.calls, recordedFreeze{Asset: asset, Quote: quote, Decision: decision})
+func (r *recordingSink) RecordFreeze(_ context.Context, asset, quote canonical.Asset, frozenValue string, decision anomaly.Decision) error {
+	r.calls = append(r.calls, recordedFreeze{
+		Asset:       asset,
+		Quote:       quote,
+		FrozenValue: frozenValue,
+		Decision:    decision,
+	})
 	return r.err
 }
 
@@ -251,7 +257,7 @@ func TestWriter_Mark_FiresEventSink(t *testing.T) {
 		DeviationPct: 8.5,
 		Reason:       "test",
 	}
-	if err := w.Mark(context.Background(), asset, quote, decision); err != nil {
+	if err := w.Mark(context.Background(), asset, quote, "0.999500000000", decision); err != nil {
 		t.Fatalf("Mark: %v", err)
 	}
 	if len(sink.calls) != 1 {
@@ -267,6 +273,9 @@ func TestWriter_Mark_FiresEventSink(t *testing.T) {
 	if got.Decision.DeviationPct != decision.DeviationPct {
 		t.Errorf("deviation = %v, want %v", got.Decision.DeviationPct, decision.DeviationPct)
 	}
+	if got.FrozenValue != "0.999500000000" {
+		t.Errorf("frozenValue = %q, want %q", got.FrozenValue, "0.999500000000")
+	}
 }
 
 // TestWriter_Mark_SinkErrorIsSwallowed — a sink failure must not
@@ -280,7 +289,7 @@ func TestWriter_Mark_SinkErrorIsSwallowed(t *testing.T) {
 		t.Fatalf("NewWriter: %v", err)
 	}
 	asset, quote := nativeUSD(t)
-	if err := w.Mark(context.Background(), asset, quote,
+	if err := w.Mark(context.Background(), asset, quote, "",
 		anomaly.Decision{Action: anomaly.ActionFreeze}); err != nil {
 		t.Fatalf("Mark: sink error must not propagate, got: %v", err)
 	}

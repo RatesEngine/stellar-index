@@ -105,8 +105,14 @@ type Cache interface {
 // the same pair refreshes the marker's TTL, matching the policy
 // "freeze stays in effect as long as the underlying anomaly
 // persists".
+//
+// frozenValue is the last-known-good VWAP being frozen on, encoded
+// as a fixed-precision decimal string (the orchestrator formats with
+// `formatRatFixed(prev, 12)`). Empty string when no prior bucket
+// exists. Forwarded to the durable EventSink so freeze_events
+// records the frozen-on price; the Redis marker doesn't carry it.
 type FreezeMarker interface {
-	Mark(ctx context.Context, asset, quote canonical.Asset, decision anomaly.Decision) error
+	Mark(ctx context.Context, asset, quote canonical.Asset, frozenValue string, decision anomaly.Decision) error
 }
 
 // Config controls the orchestrator's behaviour. Built from config.go
@@ -639,7 +645,7 @@ func (o *Orchestrator) refreshPairWindow(
 			SourceCount: distinctSourceCount(trades),
 		}
 		if phase2FreezeFires(input, o.cfg.Phase2Thresholds) {
-			o.markPhase2Freeze(ctx, pair, input)
+			o.markPhase2Freeze(ctx, pair, input, prevForConfidence)
 			return nil
 		}
 	}
@@ -754,7 +760,15 @@ func (o *Orchestrator) evaluateAndMaybeFreeze(
 		"reason", decision.Reason)
 
 	if o.cfg.FreezeWriter != nil {
-		if err := o.cfg.FreezeWriter.Mark(ctx, pair.Base, pair.Quote, decision); err != nil {
+		// LKG VWAP we're freezing on: the prior bucket's value (which
+		// stays in cache because we skip the cache write below).
+		// Empty string when no prior bucket exists (first-tick freeze
+		// on this pair); the sink stamps NULL in that case.
+		var frozenValue string
+		if prev != nil {
+			frozenValue = formatRatFixed(prev, 12)
+		}
+		if err := o.cfg.FreezeWriter.Mark(ctx, pair.Base, pair.Quote, frozenValue, decision); err != nil {
 			o.logger.Warn("freeze writer mark failed",
 				"pair", pair.String(),
 				"err", err)

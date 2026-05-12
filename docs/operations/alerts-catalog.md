@@ -186,6 +186,7 @@ override.
 | ---- | ------ | --------- | -------- | ------- |
 | `ratesengine_anomaly_freeze_engaged` | `ratesengine_anomaly_freeze_engaged_total` per class | rate > 0 over 5m | P3 | [anomaly-freeze-engaged](runbooks/anomaly-freeze-engaged.md) |
 | `ratesengine_anomaly_freeze_sustained` | `ratesengine_anomaly_freeze_engaged_total` per class | rate > 0 sustained 1h+ | **P1** | [anomaly-freeze-sustained](runbooks/anomaly-freeze-sustained.md) |
+| `ratesengine_anomaly_freeze_recovery_stalled` | `ratesengine_anomaly_freeze_engaged_total` vs `_recovered_total` + `_recovery_sweeps_total{outcome!="ok"}` | engaged > recovered for 2h+ AND sweep errors in last 15m | P3 | [freeze-recovery-stalled](runbooks/freeze-recovery-stalled.md) |
 
 ## Divergence / quality alerts
 

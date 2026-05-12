@@ -3,6 +3,7 @@ package orchestrator
 import (
 	"context"
 	"fmt"
+	"math/big"
 
 	"github.com/RatesEngine/rates-engine/internal/aggregate/anomaly"
 	"github.com/RatesEngine/rates-engine/internal/canonical"
@@ -113,6 +114,7 @@ func (o *Orchestrator) markPhase2Freeze(
 	ctx context.Context,
 	pair canonical.Pair,
 	c confidenceWithSourceCount,
+	prevVWAP *big.Rat,
 ) {
 	o.mu.Lock()
 	o.freezesEngaged++
@@ -139,7 +141,14 @@ func (o *Orchestrator) markPhase2Freeze(
 		Reason: fmt.Sprintf("phase2:3_signal_AND confidence=%.3f z=%.2f sources=%d",
 			c.Confidence, c.ZScore, c.SourceCount),
 	}
-	if err := o.cfg.FreezeWriter.Mark(ctx, pair.Base, pair.Quote, decision); err != nil {
+	// LKG VWAP we're freezing on: the prior bucket's value (which
+	// stays in cache because the Phase 2 caller skips the cache
+	// write below). Empty string when no prior bucket exists.
+	var frozenValue string
+	if prevVWAP != nil {
+		frozenValue = formatRatFixed(prevVWAP, 12)
+	}
+	if err := o.cfg.FreezeWriter.Mark(ctx, pair.Base, pair.Quote, frozenValue, decision); err != nil {
 		o.logger.Warn("phase2 freeze marker write failed",
 			"pair", pair.String(), "err", err)
 	}

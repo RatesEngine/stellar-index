@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/RatesEngine/rates-engine/internal/aggregate/anomaly"
+	"github.com/RatesEngine/rates-engine/internal/aggregate/freeze"
 	"github.com/RatesEngine/rates-engine/internal/canonical"
 )
 
@@ -86,7 +87,7 @@ func WithFreezeLedgerProvider(p LedgerProvider) FreezeEventSinkOption {
 // timestamp resolution; if two callers try to insert at the
 // identical microsecond, one wins on PK-conflict and the other
 // silently no-ops via ON CONFLICT DO NOTHING.
-func (s *FreezeEventSink) RecordFreeze(ctx context.Context, asset, quote canonical.Asset, decision anomaly.Decision) error {
+func (s *FreezeEventSink) RecordFreeze(ctx context.Context, asset, quote canonical.Asset, frozenValue string, decision anomaly.Decision) error {
 	now := s.clock().UTC()
 	var ledger uint32
 	if s.getLedger != nil {
@@ -103,6 +104,16 @@ func (s *FreezeEventSink) RecordFreeze(ctx context.Context, asset, quote canonic
 	// land here; we expose the most-specific reason we have.
 	reason := mapFreezeReason(decision)
 
+	// frozen_value column is NUMERIC NOT NULL — write 0 when the
+	// orchestrator had no prior bucket to freeze on (first-tick
+	// freeze). The decimal-string value is forwarded verbatim;
+	// pgx/lib-pq parses NUMERIC literals from strings without
+	// precision loss.
+	frozenValueArg := frozenValue
+	if frozenValueArg == "" {
+		frozenValueArg = "0"
+	}
+
 	const q = `
 		INSERT INTO freeze_events (
 		    asset_id, quote_id,
@@ -110,7 +121,7 @@ func (s *FreezeEventSink) RecordFreeze(ctx context.Context, asset, quote canonic
 		    reason, frozen_value,
 		    detail
 		)
-		SELECT $1, $2, $3, $4, $5, $6, $7
+		SELECT $1, $2, $3, $4, $5, $6::NUMERIC, $7
 		WHERE NOT EXISTS (
 		    SELECT 1 FROM freeze_events
 		    WHERE asset_id = $1 AND quote_id = $2 AND recovered_at IS NULL
@@ -121,18 +132,55 @@ func (s *FreezeEventSink) RecordFreeze(ctx context.Context, asset, quote canonic
 		asset.String(), quote.String(),
 		now, int64(ledger),
 		reason,
-		// frozen_value: the Decision shape doesn't carry the bucket
-		// VWAP we're freezing on. Pass 0 for now; recovered via the
-		// previous-bucket lookup at API serve time. Future improvement:
-		// extend Decision to include the LKG value so the sink can
-		// stamp it directly.
-		0,
+		frozenValueArg,
 		detail,
 	); err != nil {
 		return fmt.Errorf("timescale: RecordFreeze %s/%s: %w",
 			asset.String(), quote.String(), err)
 	}
 	return nil
+}
+
+// ListOpen returns every (asset, quote) currently in firing state
+// — `freeze_events` rows with recovered_at IS NULL. Snapshot read,
+// no locking; the recovery worker can race a fresh RecordFreeze
+// safely because both end states (still firing / cleared) are
+// idempotent on the open-row PK.
+//
+// Returns the freeze package's OpenFreezePair shape so the
+// recovery worker (which lives in `internal/aggregate/freeze`)
+// avoids a hard dependency on this storage adapter.
+func (s *FreezeEventSink) ListOpen(ctx context.Context) ([]freeze.OpenFreezePair, error) {
+	const q = `
+		SELECT asset_id, quote_id
+		  FROM freeze_events
+		 WHERE recovered_at IS NULL
+	`
+	rows, err := s.db.QueryContext(ctx, q)
+	if err != nil {
+		return nil, fmt.Errorf("timescale: ListOpen: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+	var out []freeze.OpenFreezePair
+	for rows.Next() {
+		var assetID, quoteID string
+		if err := rows.Scan(&assetID, &quoteID); err != nil {
+			return nil, fmt.Errorf("timescale: ListOpen scan: %w", err)
+		}
+		asset, err := canonical.ParseAsset(assetID)
+		if err != nil {
+			return nil, fmt.Errorf("timescale: ListOpen parse asset %q: %w", assetID, err)
+		}
+		quote, err := canonical.ParseAsset(quoteID)
+		if err != nil {
+			return nil, fmt.Errorf("timescale: ListOpen parse quote %q: %w", quoteID, err)
+		}
+		out = append(out, freeze.OpenFreezePair{Asset: asset, Quote: quote})
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("timescale: ListOpen rows: %w", err)
+	}
+	return out, nil
 }
 
 // MarkRecovered closes out the currently-firing row for (asset,

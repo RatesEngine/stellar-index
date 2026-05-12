@@ -526,6 +526,29 @@ Redis marker JSON (deviation_pct, reason, frozen_at) — labelled by
 class only here so cardinality stays bound to the small AssetClass
 enum.
 
+### `ratesengine_anomaly_freeze_recovered_total`
+
+Counter, no labels.
+
+Freeze rows the recovery worker closed (`MarkRecovered` stamped
+`recovered_at` on the durable `freeze_events` row after the Redis
+marker TTL elapsed). Steady-state rate trails
+`ratesengine_anomaly_freeze_engaged_total` by the freeze TTL plus
+the recovery-worker poll interval (default 60s). A persistent gap
+between the two indicates the recovery worker is broken — see the
+[freeze-recovery-stalled runbook](../../operations/runbooks/freeze-recovery-stalled.md).
+
+### `ratesengine_anomaly_freeze_recovery_sweeps_total`
+
+Counter, label `outcome` (`ok` / `partial` / `error`).
+
+Recovery-worker poll cycles. `error` outcomes mean the lister or
+Redis transport failed for the entire sweep; `partial` means
+`MarkRecovered` failed for one or more rows (postgres write path
+issue) but the rest of the sweep completed. Sustained non-`ok`
+indicates an upstream infrastructure problem; the recovery worker
+itself retries on the next tick.
+
 ## verify-archive (ratesengine-ops one-shot)
 
 Emitted by `ratesengine-ops verify-archive` when the operator

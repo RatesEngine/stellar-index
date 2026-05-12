@@ -781,13 +781,19 @@ type recordingFreezeMarker struct {
 }
 
 type recordedMark struct {
-	asset    canonical.Asset
-	quote    canonical.Asset
-	decision anomaly.Decision
+	asset       canonical.Asset
+	quote       canonical.Asset
+	frozenValue string
+	decision    anomaly.Decision
 }
 
-func (r *recordingFreezeMarker) Mark(_ context.Context, asset, quote canonical.Asset, decision anomaly.Decision) error {
-	r.marks = append(r.marks, recordedMark{asset: asset, quote: quote, decision: decision})
+func (r *recordingFreezeMarker) Mark(_ context.Context, asset, quote canonical.Asset, frozenValue string, decision anomaly.Decision) error {
+	r.marks = append(r.marks, recordedMark{
+		asset:       asset,
+		quote:       quote,
+		frozenValue: frozenValue,
+		decision:    decision,
+	})
 	return r.err
 }
 

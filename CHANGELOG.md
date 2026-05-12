@@ -17,6 +17,26 @@ against.
 
 ### Added
 
+- **Freeze EventSink LKG VWAP + recovery worker (F-1228 + F-1229).**
+  `freeze.EventSink.RecordFreeze` and `freeze.Writer.Mark` now
+  carry the last-known-good VWAP we're freezing on as a
+  fixed-precision decimal string (orchestrator passes
+  `formatRatFixed(prev, 12)`); the timescale sink stamps it on
+  the new `freeze_events` row instead of the previous hardcoded
+  `frozen_value = 0`. The recovery worker is the inverse half:
+  every 60s it lists open `freeze_events` rows, checks whether
+  the Redis marker still exists, and calls `MarkRecovered` when
+  the marker is gone (TTL elapsed → underlying anomaly cleared).
+  Without it, durable rows accumulated forever and the explorer
+  /anomalies timeline showed resolved freezes as still-firing.
+  New metrics `ratesengine_anomaly_freeze_recovered_total` and
+  `ratesengine_anomaly_freeze_recovery_sweeps_total{outcome}`,
+  new alert `ratesengine_anomaly_freeze_recovery_stalled` (P3),
+  new runbook `freeze-recovery-stalled.md`. Two phase-1 + phase-2
+  orchestrator callers updated to thread the prevVWAP through.
+  3 new unit tests + extended existing freeze + orchestrator
+  tests.
+
 - **Per-IP signup throttle (F-1232).** New `v1.SignupIPThrottle`
   interface + `auth.RedisSignupIPThrottle` Redis-backed
   implementation. Default 5 signups per IP per hour via

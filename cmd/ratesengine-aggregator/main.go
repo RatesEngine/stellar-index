@@ -215,6 +215,7 @@ func run(cfgPath string, dryRun bool) error {
 		return fmt.Errorf("anomaly checker: %w", err)
 	}
 	var freezeWriter orchestrator.FreezeMarker
+	var freezeRecovery *freeze.Recovery
 	if checker != nil && rdb != nil {
 		// Optional durable mirror: every freeze decision lands in the
 		// freeze_events hypertable so the explorer /anomalies timeline
@@ -222,17 +223,28 @@ func run(cfgPath string, dryRun bool) error {
 		// row, so refreshing the Redis TTL doesn't create duplicates.
 		// See migrations/0018_create_freeze_events.up.sql + Phase 2
 		// of docs/architecture/explorer-implementation-plan.md.
+		sink := timescale.NewFreezeEventSink(store)
 		opts := []freeze.WriterOption{
-			freeze.WithEventSink(timescale.NewFreezeEventSink(store)),
+			freeze.WithEventSink(sink),
 		}
 		w, err := freeze.NewWriter(rdb, 0, opts...) // 0 → cachekeys.FreezeTTL default
 		if err != nil {
 			return fmt.Errorf("freeze writer: %w", err)
 		}
 		freezeWriter = w
+		// Recovery worker: closes durable freeze rows after the Redis
+		// marker TTL elapses (the orchestrator stops refreshing the
+		// marker once the underlying anomaly clears). Without this the
+		// freeze_events table accumulates open rows forever and the
+		// explorer /anomalies timeline shows resolved freezes as
+		// permanently firing. F-1229.
+		freezeRecovery = freeze.NewRecovery(rdb, sink, sink, freeze.RecoveryOptions{
+			Logger: logger,
+		})
 		logger.Info("anomaly + freeze: wired",
 			"thresholds", len(cfg.Anomaly.Thresholds),
-			"event_sink", "timescale")
+			"event_sink", "timescale",
+			"recovery_worker", "wired")
 	} else if checker != nil {
 		logger.Warn("anomaly enabled but no Redis — freeze markers won't be written; anomaly metric still emits")
 	}
@@ -425,6 +437,19 @@ func run(cfgPath string, dryRun bool) error {
 				runCrossCheckRefresh(rootCtx, ccRefresher, cfg.Supply.AggregatorRefreshCadence)
 			}()
 		}
+	}
+
+	// ─── Freeze-recovery worker (F-1229) ────────────────────────
+	// Closes durable freeze rows once the Redis marker TTL elapses;
+	// without it, the freeze_events table accumulates open rows
+	// forever even after the anomaly clears. Wired only when the
+	// freeze writer itself is wired (anomaly + Redis both present).
+	if freezeRecovery != nil {
+		refresherWG.Add(1)
+		go func() {
+			defer refresherWG.Done()
+			_ = freezeRecovery.Run(rootCtx)
+		}()
 	}
 
 	// ─── Run ─────────────────────────────────────────────────────

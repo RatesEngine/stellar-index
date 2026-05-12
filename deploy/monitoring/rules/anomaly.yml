@@ -74,3 +74,39 @@ groups:
             stale. Either confirm the manipulation pattern + adjust
             policy, OR widen the class threshold + reload.
             Runbook: https://github.com/RatesEngine/rates-engine/blob/main/docs/operations/runbooks/anomaly-freeze-engaged.md
+
+      # Recovery-side health: the freeze recovery worker closes
+      # durable freeze_events rows once the Redis marker TTL elapses.
+      # When it stalls, the explorer /anomalies timeline shows
+      # resolved freezes as still-firing — silent quality regression
+      # rather than an outage. F-1229.
+      - alert: ratesengine_anomaly_freeze_recovery_stalled
+        expr: |
+          sum(rate(ratesengine_anomaly_freeze_engaged_total[1h]))
+            > sum(rate(ratesengine_anomaly_freeze_recovered_total[1h]))
+            and on() (sum(rate(ratesengine_anomaly_freeze_recovery_sweeps_total{outcome!="ok"}[15m])) > 0)
+        for: 2h
+        labels:
+          severity: ticket
+          team: ratesengine
+          component: aggregator
+          runbook_url: https://github.com/RatesEngine/rates-engine/blob/main/docs/operations/runbooks/freeze-recovery-stalled.md
+        annotations:
+          summary: "Freeze recovery worker is stalled (P3)"
+          description: |
+            ratesengine_anomaly_freeze_engaged_total has outpaced
+            ratesengine_anomaly_freeze_recovered_total for 2h+, AND
+            the recovery worker reported sweep failures within the
+            last 15 min. The durable freeze_events table is
+            accumulating open rows that the explorer /anomalies
+            timeline will show as forever-firing.
+
+            The API itself is unaffected — flags.frozen is driven by
+            the Redis marker, not the durable mirror. Customer-facing
+            data is correct; only the explorer history is wrong.
+
+            Most common cause: postgres connection pool exhaustion
+            or a Redis ACL drift. Check the recovery worker logs
+            (component=freeze-recovery) for the specific transport
+            error.
+            Runbook: https://github.com/RatesEngine/rates-engine/blob/main/docs/operations/runbooks/freeze-recovery-stalled.md

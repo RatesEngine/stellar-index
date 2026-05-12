@@ -65,6 +65,8 @@ func init() {
 		SupplyCrossCheckTotal,
 
 		AnomalyFreezeEngagedTotal,
+		AnomalyFreezeRecoveredTotal,
+		AnomalyFreezeRecoverySweepsTotal,
 		AggregatorTriangulationsTotal,
 		AggregatorFXSnapFallbackTotal,
 		AggregatorBaselineRefreshTotal,
@@ -652,6 +654,31 @@ var AnomalyFreezeEngagedTotal = prometheus.NewCounterVec(
 		Help: "ActionFreeze decisions emitted by the aggregator anomaly checker, labelled by asset class.",
 	},
 	[]string{"class"},
+)
+
+// AnomalyFreezeRecoveredTotal — counter of freeze rows the recovery
+// worker closed (Redis marker TTL elapsed → MarkRecovered stamped
+// recovered_at on the durable `freeze_events` row). Steady-state
+// rate trails AnomalyFreezeEngagedTotal by the freeze TTL plus the
+// recovery worker's poll interval.
+var AnomalyFreezeRecoveredTotal = prometheus.NewCounter(
+	prometheus.CounterOpts{
+		Name: "ratesengine_anomaly_freeze_recovered_total",
+		Help: "Freeze rows closed by the recovery worker after the Redis marker TTL elapsed.",
+	},
+)
+
+// AnomalyFreezeRecoverySweepsTotal — counter of recovery-worker
+// poll cycles, labelled by outcome (ok / partial / error). Sustained
+// `error` indicates the lister or Redis transport is broken; sustained
+// `partial` means MarkRecovered is failing for one or more rows
+// (postgres write path issue).
+var AnomalyFreezeRecoverySweepsTotal = prometheus.NewCounterVec(
+	prometheus.CounterOpts{
+		Name: "ratesengine_anomaly_freeze_recovery_sweeps_total",
+		Help: "Freeze recovery-worker sweep cycles. Outcome ∈ {ok, partial, error}.",
+	},
+	[]string{"outcome"},
 )
 
 // AggregatorTriangulationsTotal — counter of triangulation

@@ -73,11 +73,18 @@ type EventSink interface {
 	// recovered_at IS NULL already exists for this pair, the call
 	// is a no-op. Otherwise INSERT a new row with frozen_at=now.
 	//
+	// frozenValue is the last-known-good VWAP we're freezing on,
+	// formatted as a fixed-precision decimal string (matching the
+	// API wire shape — the orchestrator passes
+	// `formatRatFixed(prev, 12)`). Empty string is allowed when no
+	// prior bucket exists (first-tick freeze) — implementations
+	// stamp NULL or 0 in that case.
+	//
 	// Implementations must NOT block the Writer's hot path on
 	// network failures — log + continue. The Redis marker write
 	// is the load-bearing operation; the durable mirror is best-
 	// effort.
-	RecordFreeze(ctx context.Context, asset, quote canonical.Asset, decision anomaly.Decision) error
+	RecordFreeze(ctx context.Context, asset, quote canonical.Asset, frozenValue string, decision anomaly.Decision) error
 }
 
 // Writer marks a (asset, quote) pair as frozen by writing a
@@ -136,9 +143,16 @@ func WithEventSink(sink EventSink) WriterOption {
 // refreshes its TTL, which matches the desired semantics ("freeze
 // stays in effect as long as the underlying anomaly persists").
 //
+// frozenValue is the last-known-good VWAP being frozen on, encoded
+// as a fixed-precision decimal string (orchestrator passes
+// `formatRatFixed(prev, 12)`); empty string when no prior bucket
+// exists (first-tick freeze). Forwarded to the EventSink so the
+// freeze_events table records the frozen-on price; not stored in
+// the Redis marker because the API only needs the boolean flag.
+//
 // Returns the underlying error wrapped when the Redis write fails;
 // callers log + continue (the next bucket close retries the write).
-func (w *Writer) Mark(ctx context.Context, asset, quote canonical.Asset, decision anomaly.Decision) error {
+func (w *Writer) Mark(ctx context.Context, asset, quote canonical.Asset, frozenValue string, decision anomaly.Decision) error {
 	marker := Marker{
 		AssetID:      asset.String(),
 		QuoteID:      quote.String(),
@@ -165,7 +179,7 @@ func (w *Writer) Mark(ctx context.Context, asset, quote canonical.Asset, decisio
 	// already succeeded. The sink is for the explorer /anomalies
 	// timeline, not for liveness.
 	if w.sink != nil {
-		if sinkErr := w.sink.RecordFreeze(ctx, asset, quote, decision); sinkErr != nil {
+		if sinkErr := w.sink.RecordFreeze(ctx, asset, quote, frozenValue, decision); sinkErr != nil {
 			// Caller logs at DEBUG; we don't want to spam WARN on
 			// every transient postgres blip. The sink is expected
 			// to log its own failures with full context.
