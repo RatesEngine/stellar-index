@@ -232,6 +232,63 @@ func TestPrice_RedisVWAPFallback_TriangulatedSetsFlag(t *testing.T) {
 	}
 }
 
+// TestPrice_FallbackChainSetsStaleFlag pins the F-1254 contract:
+// every priceFallback degradation MUST surface flags.stale=true.
+//
+// The May-10 SEV-2 (Redis BGSAVE blocked → cache empty → every
+// closed-bucket read hit ErrPriceNotFound → priceFallback served
+// last-known-good for ~9h) didn't surface stale=true to customers
+// because the handler used to clear the flag after a successful
+// fallback. Customers got stale data with stale=false, defeating
+// the entire point of the contract.
+//
+// The fallback chain is itself the staleness signal — by definition
+// any path that lands in priceFallback is below the surface's
+// documented baseline contract. This test pins that semantic for
+// every fallback the handler reaches.
+//
+// F-1254 (audit-2026-05-12).
+func TestPrice_FallbackChainSetsStaleFlag(t *testing.T) {
+	t.Run("triangulated fallback", func(t *testing.T) {
+		reader := &stubPriceReader{err: v1.ErrPriceNotFound}
+		looker := &stubTriangulatedPriceLooker{
+			value:          "0.5500",
+			isTriangulated: true,
+			found:          true,
+		}
+		srv := v1.New(v1.Options{Prices: reader, Triangulated: looker})
+		ts := startHTTPTest(t, srv.Handler())
+
+		resp := mustGet(t, ts.URL+"/v1/price?asset=crypto:XLM&quote=fiat:EUR")
+		if resp.StatusCode != http.StatusOK {
+			t.Fatalf("status = %d, want 200", resp.StatusCode)
+		}
+		body, _ := readAll(resp)
+		if !strings.Contains(body, `"stale":true`) {
+			t.Errorf("triangulated fallback must set stale=true; body: %s", body)
+		}
+	})
+	t.Run("direct stablecoin-rewrite fallback", func(t *testing.T) {
+		reader := &stubPriceReader{err: v1.ErrPriceNotFound}
+		looker := &stubTriangulatedPriceLooker{
+			value:          "0.1242",
+			isTriangulated: false, // direct rewrite — no triangulation marker
+			found:          true,
+		}
+		srv := v1.New(v1.Options{Prices: reader, Triangulated: looker})
+		ts := startHTTPTest(t, srv.Handler())
+
+		resp := mustGet(t, ts.URL+"/v1/price?asset=native&quote=fiat:USD")
+		if resp.StatusCode != http.StatusOK {
+			t.Fatalf("status = %d, want 200", resp.StatusCode)
+		}
+		body, _ := readAll(resp)
+		if !strings.Contains(body, `"stale":true`) {
+			t.Errorf("direct-rewrite fallback must set stale=true; body: %s", body)
+		}
+	})
+}
+
 // TestPrice_RedisVWAPFallback_NotFoundPreserves404 — when the cache
 // has no value for the requested pair, the handler still returns
 // 404 just as if the looker weren't wired at all.

@@ -48,6 +48,15 @@ against.
 
 ### Fixed
 
+- **Guard test for `flags.stale=true` on every fallback path (F-1254).**
+  The stale-flag fix in `internal/api/v1/price.go:287-299` (the
+  May-10 SEV-2 lesson — "fallback chain is itself the staleness
+  signal") had no regression test. New
+  `TestPrice_FallbackChainSetsStaleFlag` covers both the
+  triangulated and direct-rewrite fallback paths and asserts
+  `flags.stale=true` on each — so a future change that re-clears
+  the flag is caught immediately.
+
 - **API reference doc drift after rc.48 (F-1246).** Regenerated
   `docs/reference/api/rates-engine.v1.yaml` to match the current
   OpenAPI source — three residual `/v1/coins` references in the
