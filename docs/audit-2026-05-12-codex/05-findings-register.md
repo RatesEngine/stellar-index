@@ -51,7 +51,7 @@ Cold findings only. No prior finding is imported into this register.
 | F-1232 | high | Circle USDC has `price_usd` on asset detail but 404s or disappears from `/v1/price` and batch price APIs | Price API; batch API; asset detail price enrichment | XFI-0024; EV-0042; R1-0018 | open | api/market-data | Asset detail returns USDC USD price, but single price 404s and batch returns an empty array for the same asset. |
 | F-1233 | high | SDEX historical backfill silently drops legacy V0 claim atoms while claiming genesis coverage | SDEX decoder; dispatcher metrics; historical backfill | XFI-0025; EV-0044 | open | ingest/backfill/sdex | Legacy V0 claim atoms are rejected then suppressed inside the source adapter, so old SDEX fills disappear without decode-error metrics. |
 | F-1234 | medium | Oracle decoders silently skip unknown feeds inside mixed batches, hiding upstream coverage drift | Reflector/Redstone/Band decoders; canonical allow-lists; decoder metrics | XFI-0026; EV-0045 | open | oracle/coverage/observability | New oracle-supported assets can be omitted from stored oracle rows without decode-error metrics as long as the same event contains at least one known asset. |
-| F-1235 | medium | External CEX stream parser errors are skipped without the decode-error metrics promised by runbooks | Binance/Kraken/Bitstamp/Coinbase streamers; external metrics; decode-error runbook | XFI-0027; EV-0046 | open | external/observability | Vendor frame/schema drift can drop live trades while `SourceDecodeErrorsTotal` stays clean. |
+| F-1235 | medium | External CEX stream parser errors are skipped without the decode-error metrics promised by runbooks | Binance/Kraken/Bitstamp/Coinbase streamers; external metrics; decode-error runbook | XFI-0027; EV-0046; EV-0098 | fixed | external/observability | Current `HEAD` increments `SourceDecodeErrorsTotal` in all four streamer parse-error branches, closing the observability gap. |
 | F-1236 | high | Supply snapshots can be stamped at a fresh ledger while using stale component observations | Supply refreshers; supply observer storage; asset supply API/market-cap fields | XFI-0028; EV-0047 | open | supply/data-quality | Snapshot ledger is the max ingestion cursor, but component readers use latest-at-or-before rows without freshness checks. |
 | F-1237 | medium | CoinMarketCap polling ignores verified CMC IDs and can bind ambiguous tickers to the wrong asset | Verified currency catalogue; CMC poller; external aggregator observations | XFI-0029; EV-0048 | open | external/identity | The poller queries CMC by ticker and takes the first duplicate-ticker result even though the catalogue stores numeric CMC IDs. |
 | F-1238 | medium | Redis-less API deployments fail startup because closed-bucket stream subscriber is gated on Hub, not Redis | API startup; Redis optionality; closed-bucket SSE stream | XFI-0030; EV-0054; EV-0096 | fixed | api/streaming/ops | Current workspace now gates the Redis pub/sub subscriber on `rdb != nil && hub != nil`, so Redis-less API startup no longer aborts on subscriber construction. |
@@ -63,14 +63,14 @@ Cold findings only. No prior finding is imported into this register.
 | F-1244 | high | Dashboard webhook signing secrets are persisted as live HMAC keys while docs and type names claim hash-only / never-persisted semantics | Dashboard webhook create path; Postgres webhook store; outbound worker signing | XFI-0036; EV-0068 | open | security/platform/webhooks | A database read of `customer_webhooks.secret_hash` yields the actual signing key bytes the worker uses, contrary to the published secret-handling contract. |
 | F-1245 | high | Customer webhook URLs create an outbound SSRF primitive because validation enforces only `https://` and the worker follows default redirects | Dashboard webhook URL validation; outbound delivery worker; API process egress boundary | XFI-0037; EV-0069; EV-0096 | fixed | security/platform/webhooks | Current workspace now validates internal/private destinations at registration, re-resolves before delivery, and disables redirect following in the worker client. |
 | F-1246 | medium | API design docs still say webhook callbacks are not in v1 even though dashboard webhook CRUD, worker, and runbooks have shipped | API design reference; webhook OpenAPI/routes/runbooks | XFI-0038; EV-0072; EV-0096 | fixed | docs/api/product | `docs/reference/api-design.md` now states webhook callbacks shipped and explains how they relate to SSE. |
-| F-1247 | high | Customer webhook delivery rows are not atomically claimed, so multiple API workers can emit duplicate callbacks for the same attempt | API worker startup; webhook queue store; multi-region / multi-process delivery semantics | XFI-0039; EV-0073 | open | platform/webhooks/ops | The current worker is only correct under a single-worker assumption that conflicts with replicated API deployment and the planned R2/R3 rollout. |
-| F-1248 | medium | The documented ten-webhook-per-account limit is enforced with a raceable pre-check, so concurrent creates can exceed the cap | Dashboard webhook quota check; Postgres insert path; schema invariants | XFI-0040; EV-0074 | open | platform/webhooks | The ceiling holds only for serial creates; parallel requests can all pass the handler pre-check before any insert lands. |
+| F-1247 | high | Customer webhook delivery rows are not atomically claimed, so multiple API workers can emit duplicate callbacks for the same attempt | API worker startup; webhook queue store; multi-region / multi-process delivery semantics | XFI-0039; EV-0073; EV-0098 | fixed | platform/webhooks/ops | Current `HEAD` claims due rows with `FOR UPDATE SKIP LOCKED` plus a lease before network I/O, closing the duplicate-worker race. |
+| F-1248 | medium | The documented ten-webhook-per-account limit is enforced with a raceable pre-check, so concurrent creates can exceed the cap | Dashboard webhook quota check; Postgres insert path; schema invariants | XFI-0040; EV-0074; EV-0098 | open | platform/webhooks | The new store-level CTE narrows the old race but still performs an unlocked snapshot count, so concurrent below-cap creates can still both insert. |
 | F-1249 | high | Customer webhook callbacks are exposed and operated as a shipped feature, but no production code enqueues any delivery events | Customer webhook event model; queue writer; dashboard/API docs; operational runbooks | XFI-0041; EV-0076 | open | platform/webhooks/product | The worker can drain rows and the API lets customers subscribe, yet no incident/anomaly/divergence producer ever calls `EnqueueDelivery`, so the feature cannot deliver real callbacks. |
 | F-1250 | medium | Freeze-event open-row dedupe is raceable, so concurrent same-pair freezes can create multiple still-firing durable rows | Freeze writer; Timescale freeze-event mirror; anomalies timeline/recovery semantics | XFI-0042; EV-0079 | open | aggregate/storage/anomaly | The SQL comment claims transactional dedupe, but the code uses an unlocked `WHERE NOT EXISTS` insert and the PK includes `frozen_at`, so concurrent callers can both insert distinct open rows. |
 | F-1251 | high | FX-based `usd_volume` enrichment rejects historical-but-valid rates because freshness is measured against wall-clock time instead of the trade timestamp | Indexer USD-volume Phase 2; VWAP FX resolver; historical/backfill enrichment; integration coverage | XFI-0043; EV-0080 | open | storage/indexer/data-quality | A resolver query at `trade.ts` can find the correct VWAP row and still return `ok=false` solely because the row is older than one hour relative to `time.Now()`, which breaks delayed/backfilled enrichment. |
 | F-1252 | medium | Multi-region cutover instructions invoke a nonexistent `make verify-cross-region` launch check | Cutover runbook; verification script; Makefile command surface | XFI-0044; EV-0082 | open | docs/ops/release | The pre-flight checklist names a make target that does not exist, so an operator following the launch runbook gets a Make failure exactly where a gating consistency check is expected. |
-| F-1253 | high | Enabling Redis ACL lockdown disables the default user, but the rendered application config never sets `redis_username`, so binaries keep authenticating on the rejected legacy path | Redis Sentinel ACL template; application config template; Redis client builder | XFI-0045; EV-0083 | open | ops/security/config | The hardening flag can break Redis-backed API, aggregator, and indexer behavior at the moment operators flip it because the Ansible-owned app TOML omits the required ACL username. |
-| F-1254 | high | Redis ACL lockdown allows stale or wrong key families, so hardened deployments still deny active runtime namespaces after the username handoff is fixed | Redis Sentinel ACL template; Redis namespace builders; API/auth/cache runtime wiring | XFI-0046; EV-0084 | open | ops/security/config | The allow-list uses `ratelimit:*`/`subscriber:*` while code writes `rl:*`/`sub:*`, and it omits several live namespaces entirely: `signup:email:*`, `sep10:seen:*`, `usage:*`, `assets:list:*`, and `markets:list:*`. |
+| F-1253 | high | Enabling Redis ACL lockdown disables the default user, but the rendered application config never sets `redis_username`, so binaries keep authenticating on the rejected legacy path | Redis Sentinel ACL template; application config template; Redis client builder | XFI-0045; EV-0083; EV-0098 | fixed | ops/security/config | Current Ansible rendering emits the named Redis ACL username when lockdown is enabled, matching the server-side auth contract. |
+| F-1254 | high | Redis ACL lockdown allows stale or wrong key families, so hardened deployments still deny active runtime namespaces after the username handoff is fixed | Redis Sentinel ACL template; Redis namespace builders; API/auth/cache runtime wiring | XFI-0046; EV-0084; EV-0098 | fixed | ops/security/config | Current ACL rendering now permits the live `rl:*`, `sub:*`, signup, replay, usage, and catalogue namespaces that were previously missing or misnamed. |
 | F-1255 | medium | Concurrent first-login callbacks for the same new email can create orphan accounts and return a 500 because provisioning is not atomic per email | Dashboard magic-link callback; account/user stores; platform schema uniqueness | XFI-0047; EV-0086; EV-0087 | open | platform/auth/data-quality | Token consumption is atomic per token, not per email. Two valid links for one new address can both enter provisioning, persist two account rows, and let the losing user insert fail on `users.email`, leaving a suffixed account without an owner. |
 | F-1256 | medium | Dashboard key-rate UI and OpenAPI still promise generic 1000/100000 limits even though the backend now silently clamps by account tier | Dashboard key form; create-key API schema; tier-cap implementation | XFI-0048; EV-0090 | open | dashboard/docs/product | Free users are told the default is 1000/min and every user can submit 100000/min, but current backend persists Free keys at 60/min and other tiers at smaller caps unless the tier allows more. |
 | F-1257 | medium | The 25-active-key/account dashboard quota is enforced with a raceable pre-check, so concurrent creates can exceed the advertised cap | Dashboard key quota check; Postgres insert path; platform schema | XFI-0049; EV-0092 | open | platform/keys | The handler counts current active keys before insert, but the store and schema never enforce the ceiling atomically; parallel creates can all pass under the cap together. |
@@ -110,7 +110,7 @@ Remediation direction:
 
 Severity: `critical`
 
-Status: `open`
+Status: `fixed`
 
 Affected surface:
 
@@ -139,7 +139,7 @@ Remediation direction: Apply/verify the nftables role, bind internal daemons to 
 
 Severity: `critical`
 
-Status: `open`
+Status: `fixed`
 
 Affected surface:
 
@@ -881,7 +881,7 @@ Remediation direction: add per-source unknown-symbol/feed counters and decoder-s
 
 Severity: `medium`
 
-Status: `open`
+Status: `fixed`
 
 Affected surface:
 
@@ -898,14 +898,17 @@ Evidence:
 
 - `XFI-0027`
 - `EV-0046`
+- `EV-0098`
 
 Expected: malformed external websocket frames, unknown subscribed symbols, and vendor schema drift should increment a per-source metric that the decode-error runbook and monitoring can alert on.
 
-Observed: all four CEX streamers skip parser errors and continue the stream without incrementing `SourceDecodeErrorsTotal` or another parser-error counter. The runner only records poller outcomes, not websocket parse failures. The external connector README says these connectors contribute to the same decode-error budget as on-chain decoders.
+Observed during the initial pass: all four CEX streamers skipped parser errors and continued the stream without incrementing `SourceDecodeErrorsTotal` or another parser-error counter. The runner only recorded poller outcomes, not websocket parse failures. The external connector README said these connectors contribute to the same decode-error budget as on-chain decoders.
 
 Impact: a vendor-side schema change or unexpected feed payload can silently reduce live trade coverage. Operators may only notice after price freshness or source-stopped alerts fire, and the decode-errors runbook will show no evidence even though the parse path is failing.
 
-Remediation direction: increment a source-labelled parse/decode counter on every skipped streamer parse error, include reason labels with bounded cardinality, and update tests/runbooks so injected malformed frames produce observable metrics without killing the stream.
+Current-head reconciliation: Binance, Bitstamp, Coinbase, and Kraken now increment `obs.SourceDecodeErrorsTotal` in the skip-and-continue parse-error branch. The targeted streamer package test set passes on this state.
+
+Remediation direction: retained for audit history; the missing metric increment that made the finding true is now fixed.
 
 ### F-1236. Supply snapshots can be stamped at a fresh ledger while using stale component observations
 
@@ -1200,7 +1203,7 @@ Remediation direction: retained for audit history; the current workspace fixes t
 
 Severity: `high`
 
-Status: `open`
+Status: `fixed`
 
 Affected surface:
 
@@ -1213,14 +1216,17 @@ Evidence:
 
 - `XFI-0039`
 - `EV-0073`
+- `EV-0098`
 
 Expected: each pending webhook delivery attempt should be claimed once before network I/O so horizontal API scale or multi-region rollout does not multiply customer callbacks.
 
-Observed: every API process with dashboard webhooks enabled starts its own worker. `ListPendingDeliveries` fetches due rows with a plain SELECT, without a lease, claim update, or `FOR UPDATE SKIP LOCKED`; the worker performs the HTTP POST and only afterwards marks the row delivered or failed. Two workers can therefore read and send the same pending row concurrently. The package comment explicitly assumes one worker and calls duplicate delivery cosmetically harmless.
+Observed during the initial pass: every API process with dashboard webhooks enabled started its own worker. `ListPendingDeliveries` fetched due rows with a plain SELECT, without a lease, claim update, or `FOR UPDATE SKIP LOCKED`; the worker performed the HTTP POST and only afterwards marked the row delivered or failed. Two workers could therefore read and send the same pending row concurrently.
 
 Impact: duplicate SEV/anomaly/divergence callbacks can hit customer automation, paging, or Slack/Discord sinks during routine horizontal scaling, blue/green deploy overlap, or the documented R2/R3 rollout. That is a correctness and customer-trust issue, especially for incident automation.
 
-Remediation direction: add atomic claim semantics before outbound POSTs. Good options are a transactional `SELECT ... FOR UPDATE SKIP LOCKED` plus state transition, or a claim/lease column with compare-and-swap updates and expiry recovery. Add concurrency tests with two workers racing the same due row and assert exactly one POST per scheduled attempt.
+Current-head reconciliation: `postgresstore.ListPendingDeliveries` now uses `FOR UPDATE SKIP LOCKED` and advances `next_attempt_at` by a five-minute lease in the same claim statement before the worker performs network I/O. The original duplicate-worker selection race no longer reproduces from the current code path.
+
+Remediation direction: retained for audit history; the missing claim/lease primitive is now present.
 
 ### F-1248. The documented ten-webhook-per-account limit is enforced with a raceable pre-check, so concurrent creates can exceed the cap
 
@@ -1239,14 +1245,17 @@ Evidence:
 
 - `XFI-0040`
 - `EV-0074`
+- `EV-0098`
 
 Expected: the advertised per-account webhook ceiling should remain true under concurrent requests, not just serial UI use.
 
-Observed: `HandleCreate` calls `checkQuota`, which loads current account hooks and compares `len(hooks)` to ten, then later performs a separate store insert. The Postgres store is a plain insert path, migration 0027 has no database-side cap, and the current quota test exercises only sequential creation.
+Observed during the initial pass: `HandleCreate` called `checkQuota`, which loaded current account hooks and compared `len(hooks)` to ten, then later performed a separate store insert. The Postgres store was a plain insert path, migration 0027 had no database-side cap, and the current quota test exercised only sequential creation.
+
+Current-head reconciliation: the store now attempts to tighten the path with `WITH current_count AS (...) INSERT ... WHERE current_count.n < maxPerAccount`, but that still is not a serialization point under PostgreSQL's normal MVCC semantics. Two statements that begin from the same below-cap snapshot can each see the same count and each insert before either transaction's row becomes visible to the other. There is still no row/advisory lock, exclusion/unique constraint, serializable retry, or concurrent persistence test that proves the ten-row ceiling.
 
 Impact: a customer or script issuing parallel create requests can exceed the service's own control-plane limit, growing outbound delivery fan-out, SSRF exposure, and incident-notification noise beyond the bounded posture the code comments promise.
 
-Remediation direction: move quota enforcement into an atomic database/store operation. A transactional account-level advisory lock or row lock plus count-and-insert, or another explicit compare-and-insert design, is materially stronger than a handler-side pre-check. Add concurrency tests that launch more than ten creates in parallel and prove the persisted count never exceeds ten.
+Remediation direction: move quota enforcement into a real serialization boundary. A transactional account-level advisory lock or account-row lock plus count-and-insert, a durable allocation table, or a serializable retry loop is materially stronger than an unlocked count CTE. Add concurrency tests that launch more than ten creates in parallel and prove the persisted count never exceeds ten.
 
 ### F-1249. Customer webhook callbacks are exposed and operated as a shipped feature, but no production code enqueues any delivery events
 
@@ -1361,7 +1370,7 @@ Remediation direction: either add the Make target and keep docs as written, or u
 
 Severity: `high`
 
-Status: `open`
+Status: `fixed`
 
 Affected surface:
 
@@ -1376,20 +1385,23 @@ Evidence:
 
 - `XFI-0045`
 - `EV-0083`
+- `EV-0098`
 
 Expected: the same deployment toggle that enables Redis ACL lockdown should also render application client config that authenticates as the ACL user the server now requires.
 
-Observed: `redis_acl_lockdown: true` renders an ACL file that turns `user default off` and creates `user ratesengine on >{{ redis_password }}`. The Redis client builder supports ACL usernames through `StorageConfig.RedisUsername`, and docs say it must be set to `ratesengine` under lockdown. But the Ansible-owned `ratesengine.toml.j2` storage block renders `redis_addr` and secrets only; it never writes `redis_username = "ratesengine"` or an equivalent variable, and repo search finds no deployment template path that does.
+Observed during the initial pass: `redis_acl_lockdown: true` rendered an ACL file that turned `user default off` and created `user ratesengine on >{{ redis_password }}`. The Redis client builder supported ACL usernames through `StorageConfig.RedisUsername`, and docs said it must be set to `ratesengine` under lockdown. But the Ansible-owned `ratesengine.toml.j2` storage block rendered `redis_addr` and secrets only; it never wrote `redis_username = "ratesengine"` or an equivalent variable.
 
 Impact: flipping the hardening flag can strand the API/indexer/aggregator on password-only default-user auth exactly after the server side disables that user. Depending on the binary and feature, this can break Redis-backed rate limiting, signup abuse controls, SEP-10 replay protection, streaming fan-out/subscription, freeze markers, and aggregator cache publication during a supposed security hardening rollout.
 
-Remediation direction: couple the ACL flag to rendered client identity. Add an explicit Ansible variable for the application Redis ACL username, render it into `ratesengine.toml.j2`, and gate lockdown rollout on dry-run/startup probes that authenticate through the exact rendered config. Add a config/template test that rejects `redis_acl_lockdown: true` with an empty application username.
+Current-head reconciliation: the archival-node template now renders `redis_username = "{{ redis_acl_username | default('ratesengine') }}"` whenever ACL lockdown is enabled, matching the named user that the Redis role exposes and the field consumed by `redisclient.Build`.
+
+Remediation direction: retained for audit history; the rendered client-identity handoff that made the finding true is now present.
 
 ### F-1254. Redis ACL lockdown allows stale or wrong key families, so hardened deployments still deny active runtime namespaces after the username handoff is fixed
 
 Severity: `high`
 
-Status: `open`
+Status: `fixed`
 
 Affected surface:
 
@@ -1405,14 +1417,17 @@ Evidence:
 
 - `XFI-0046`
 - `EV-0084`
+- `EV-0098`
 
 Expected: the Redis ACL policy should grant exactly the application namespaces the current binaries actually use, with repo-controlled tests preventing template drift when key families are added, renamed, or retired.
 
-Observed: the lockdown ACL permits `~ratelimit:*` and `~subscriber:*`, but current runtime code writes `rl:*` rate-limit counters and `sub:*` SSE subscriber presence keys. It also omits active namespaces entirely for `signup:email:*`, `sep10:seen:*`, `usage:*`, `assets:list:*`, and `markets:list:*`. The API binary wires those paths whenever Redis is configured, so a hardened deployment can authenticate successfully and still hit Redis ACL denials on live features.
+Observed during the initial pass: the lockdown ACL permitted `~ratelimit:*` and `~subscriber:*`, but current runtime code wrote `rl:*` rate-limit counters and `sub:*` SSE subscriber presence keys. It also omitted active namespaces entirely for `signup:email:*`, `sep10:seen:*`, `usage:*`, `assets:list:*`, and `markets:list:*`. The API binary wired those paths whenever Redis was configured, so a hardened deployment could authenticate successfully and still hit Redis ACL denials on live features.
 
 Impact: operators can believe Redis ACL lockdown is safely enabled after fixing the username defect, while rate limiting, signup duplicate tracking, SEP-10 replay protection, usage accounting, subscriber presence tracking, and catalogue cache population are denied at runtime. The result mixes security-control degradation with customer-visible feature breakage during a hardening rollout.
 
-Remediation direction: derive the ACL allow-list from a reviewed Redis namespace inventory instead of hand-maintained free text, fix the stale/missing patterns, and add a CI check that compares rendered ACL patterns against code-owned production key builders plus any explicitly documented namespaces. Validate a lockdown-on rendered config against an integration harness that exercises rate limiting, signup/SEP-10 guards, usage reads, SSE presence writes, and catalogue cache writes.
+Current-head reconciliation: `users.acl.j2` now uses `~rl:*`, `~sub:*`, `~signup:email:*`, `~sep10:seen:*`, `~usage:*`, `~assets:list:*`, and `~markets:list:*`, bringing the rendered allow-list back into line with the active key builders reviewed in this pass.
+
+Remediation direction: retained for audit history; the stale/missing key-family mismatch is now fixed.
 
 ### F-1255. Concurrent first-login callbacks for the same new email can create orphan accounts and return a 500 because provisioning is not atomic per email
 

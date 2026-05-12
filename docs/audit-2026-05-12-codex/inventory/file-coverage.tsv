@@ -103,7 +103,7 @@ configs/ansible/roles/archival-node/templates/minio.env.j2	configs	configs/ansib
 configs/ansible/roles/archival-node/templates/nftables.conf.j2	configs	configs/ansible	unknown	in_progress	XFI-0001,F-1201		Reviewed default-deny and internal CIDR contract
 configs/ansible/roles/archival-node/templates/pg_hba.conf.j2	configs	configs/ansible	unknown	todo			cold audit pending
 configs/ansible/roles/archival-node/templates/postgresql.conf.j2	configs	configs/ansible	unknown	todo			cold audit pending
-configs/ansible/roles/archival-node/templates/ratesengine.toml.j2	configs	configs/ansible	unknown	done	EV-0083;F-1253	XFI-0045	Reviewed rendered storage/client Redis settings against ACL-lockdown server template
+configs/ansible/roles/archival-node/templates/ratesengine.toml.j2	configs	configs/ansible	unknown	done	EV-0083;EV-0098;F-1253	XFI-0045	Reviewed rendered storage/client Redis settings against ACL-lockdown server template and current username-handoff fix
 configs/ansible/roles/archival-node/templates/sshd_config.j2	configs	configs/ansible	unknown	todo			cold audit pending
 configs/ansible/roles/archival-node/templates/stellar-core.cfg.j2	configs	configs/ansible	unknown	todo			cold audit pending
 configs/ansible/roles/archival-node/templates/stellar-rpc.cfg.j2	configs	configs/ansible	unknown	todo			cold audit pending
@@ -198,7 +198,7 @@ configs/ansible/roles/redis-sentinel/tasks/main.yml	configs	configs/ansible	conf
 configs/ansible/roles/redis-sentinel/templates/redis-systemd-override.conf.j2	configs	configs/ansible	unknown	todo			cold audit pending
 configs/ansible/roles/redis-sentinel/templates/redis.conf.j2	configs	configs/ansible	unknown	done	EV-0083;F-1253	XFI-0045	Reviewed Redis server-side ACL-file activation path
 configs/ansible/roles/redis-sentinel/templates/sentinel.conf.j2	configs	configs/ansible	unknown	todo			cold audit pending
-configs/ansible/roles/redis-sentinel/templates/users.acl.j2	configs	configs/ansible	unknown	done	EV-0083;EV-0084;F-1253;F-1254	XFI-0045;XFI-0046	Reviewed default-user shutdown, named application ACL user contract, and ACL keyspace allow-list drift
+configs/ansible/roles/redis-sentinel/templates/users.acl.j2	configs	configs/ansible	unknown	done	EV-0083;EV-0084;EV-0098;F-1253;F-1254	XFI-0045;XFI-0046	Reviewed default-user shutdown, named application ACL user contract, prior ACL drift, and current keyspace allow-list fix
 configs/ansible/tasks/deploy-one-binary.yml	configs	configs/ansible	config	todo			cold audit pending
 configs/audit/README.md	configs	configs/audit	documentation	todo			cold audit pending
 configs/audit/wasm-walk-contracts.yaml	configs	configs/audit	config	todo			cold audit pending
@@ -1175,7 +1175,7 @@ internal/platform/postgresstore/doc.go	internal	internal/platform/postgresstore	
 internal/platform/postgresstore/store.go	internal	internal/platform/postgresstore	runtime	todo			cold audit pending
 internal/platform/postgresstore/token_store.go	internal	internal/platform/postgresstore	runtime	done	EV-0086;EV-0087;F-1255	XFI-0047	Reviewed magic-link token atomicity and its per-token rather than per-email boundary
 internal/platform/postgresstore/user_store.go	internal	internal/platform/postgresstore	runtime	done	EV-0086;EV-0087;F-1255	XFI-0047	Reviewed user/session store behavior and email uniqueness boundary in first-login race
-internal/platform/postgresstore/webhook_store.go	internal	internal/platform/postgresstore	runtime	done	EV-0068;EV-0073;EV-0074;EV-0076;F-1244;F-1247;F-1248;F-1249	XFI-0036;XFI-0039;XFI-0040;XFI-0041	Reviewed CRUD/store queue semantics, plaintext-equivalent signing-key storage, duplicate-delivery queue race, quota atomicity gap, and missing producer path
+internal/platform/postgresstore/webhook_store.go	internal	internal/platform/postgresstore	runtime	done	EV-0068;EV-0073;EV-0074;EV-0076;EV-0098;F-1244;F-1247;F-1248;F-1249	XFI-0036;XFI-0039;XFI-0040;XFI-0041	Reviewed CRUD/store queue semantics, plaintext-equivalent signing-key storage, fixed delivery claiming, still-insufficient quota atomicity, and missing producer path
 internal/platform/token.go	internal	internal/platform/token.go	runtime	done	EV-0086;F-1255	XFI-0047	Reviewed token lifecycle contract for magic-link provisioning
 internal/platform/usage.go	internal	internal/platform/usage.go	runtime	todo			cold audit pending
 internal/platform/user.go	internal	internal/platform/user.go	runtime	done	EV-0086;EV-0087;F-1255	XFI-0047	Reviewed user/session domain contract for auth provisioning flow
@@ -1244,7 +1244,7 @@ internal/sources/external/binance/parse.go	internal	internal/sources/external	ru
 internal/sources/external/binance/parse_test.go	internal	internal/sources/external	test	todo			cold audit pending
 internal/sources/external/binance/restbase_test.go	internal	internal/sources/external	test	todo			cold audit pending
 internal/sources/external/binance/start_errors_test.go	internal	internal/sources/external	test	todo			cold audit pending
-internal/sources/external/binance/streamer.go	internal	internal/sources/external	runtime	todo			cold audit pending
+internal/sources/external/binance/streamer.go	internal	internal/sources/external	runtime	in_progress	EV-0046;EV-0098;F-1235	XFI-0027	Reviewed parse-error observability seam and current decode-metric fix; broader streamer audit still open
 internal/sources/external/binance/streamer_test.go	internal	internal/sources/external	test	todo			cold audit pending
 internal/sources/external/bitstamp/adapter_test.go	internal	internal/sources/external	test	todo			cold audit pending
 internal/sources/external/bitstamp/backfill.go	internal	internal/sources/external	runtime	todo			cold audit pending
@@ -1258,7 +1258,7 @@ internal/sources/external/bitstamp/parse.go	internal	internal/sources/external	r
 internal/sources/external/bitstamp/parse_test.go	internal	internal/sources/external	test	todo			cold audit pending
 internal/sources/external/bitstamp/restbase_test.go	internal	internal/sources/external	test	todo			cold audit pending
 internal/sources/external/bitstamp/start_errors_test.go	internal	internal/sources/external	test	todo			cold audit pending
-internal/sources/external/bitstamp/streamer.go	internal	internal/sources/external	runtime	todo			cold audit pending
+internal/sources/external/bitstamp/streamer.go	internal	internal/sources/external	runtime	in_progress	EV-0046;EV-0098;F-1235	XFI-0027	Reviewed parse-error observability seam and current decode-metric fix; broader streamer audit still open
 internal/sources/external/bitstamp/streamer_helpers_test.go	internal	internal/sources/external	test	todo			cold audit pending
 internal/sources/external/coinbase/adapter_test.go	internal	internal/sources/external	test	todo			cold audit pending
 internal/sources/external/coinbase/backfill.go	internal	internal/sources/external	runtime	todo			cold audit pending
@@ -1272,7 +1272,7 @@ internal/sources/external/coinbase/parse.go	internal	internal/sources/external	r
 internal/sources/external/coinbase/parse_test.go	internal	internal/sources/external	test	todo			cold audit pending
 internal/sources/external/coinbase/restbase_test.go	internal	internal/sources/external	test	todo			cold audit pending
 internal/sources/external/coinbase/start_errors_test.go	internal	internal/sources/external	test	todo			cold audit pending
-internal/sources/external/coinbase/streamer.go	internal	internal/sources/external	runtime	todo			cold audit pending
+internal/sources/external/coinbase/streamer.go	internal	internal/sources/external	runtime	in_progress	EV-0046;EV-0098;F-1235	XFI-0027	Reviewed parse-error observability seam and current decode-metric fix; broader streamer audit still open
 internal/sources/external/coinbase/streamer_helpers_test.go	internal	internal/sources/external	test	todo			cold audit pending
 internal/sources/external/coingecko/decimal_helpers_test.go	internal	internal/sources/external	test	todo			cold audit pending
 internal/sources/external/coingecko/identity_test.go	internal	internal/sources/external	test	todo			cold audit pending
@@ -1309,7 +1309,7 @@ internal/sources/external/kraken/parse.go	internal	internal/sources/external	run
 internal/sources/external/kraken/parse_test.go	internal	internal/sources/external	test	todo			cold audit pending
 internal/sources/external/kraken/restbase_test.go	internal	internal/sources/external	test	todo			cold audit pending
 internal/sources/external/kraken/start_errors_test.go	internal	internal/sources/external	test	todo			cold audit pending
-internal/sources/external/kraken/streamer.go	internal	internal/sources/external	runtime	todo			cold audit pending
+internal/sources/external/kraken/streamer.go	internal	internal/sources/external	runtime	in_progress	EV-0046;EV-0098;F-1235	XFI-0027	Reviewed parse-error observability seam and current decode-metric fix; broader streamer audit still open
 internal/sources/external/kraken/streamer_test.go	internal	internal/sources/external	test	todo			cold audit pending
 internal/sources/external/polygonforex/decimal_helpers_test.go	internal	internal/sources/external	test	todo			cold audit pending
 internal/sources/external/polygonforex/events.go	internal	internal/sources/external	runtime	todo			cold audit pending

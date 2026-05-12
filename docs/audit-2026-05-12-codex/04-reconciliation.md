@@ -100,15 +100,14 @@ without evidence IDs.
 
 ### 2026-05-12 Execution Reconciliation
 
-- Cold execution evidence now spans `CMD-0007` through `CMD-0095`,
-  `EV-0005` through `EV-0093`, `R1-0001` through `R1-0018`, and
-  `XFI-0001` through `XFI-0049`.
-- Findings `F-1201` through `F-1257` remain evidence-backed and are
-  mapped to remediation rows `R-1201` through `R-1255`; `F-1202` and
-  `F-1212` are
-  now marked `fixed` because R1 caught up to the route removal during
-  the audit window and current dashboard-key code clamps persisted
-  customer budgets by tier.
+- Cold execution evidence now spans `CMD-0007` through `CMD-0100`,
+  `EV-0005` through `EV-0098`, `R1-0001` through `R1-0018`, and
+  `XFI-0001` through `XFI-0051`.
+- Findings `F-1201` through `F-1259` remain evidence-backed and are
+  mapped to remediation rows `R-1201` through `R-1257`; `F-1202`,
+  `F-1212`, `F-1217`, `F-1235`, `F-1238`, `F-1245`, `F-1246`,
+  `F-1247`, `F-1253`, and `F-1254` are now marked `fixed` on the
+  current shared `HEAD`.
 - Live R1 checks covered process state, timers, firewall/listeners,
   external reachability, host capacity, Prometheus alerts, config
   snippets, Caddy drift, API/history/SSE behavior, and stablecoin
@@ -138,17 +137,23 @@ without evidence IDs.
   provisioning race that can strand orphan accounts when multiple valid
   callbacks land for one new email, and two dashboard-key follow-ons:
   stale customer-facing/UI/OpenAPI budget semantics after the security
-  fix, plus a still-raceable 25-active-key/account quota.
-- `CMD-0095` reran `./scripts/ci/lint-docs.sh`, rechecked tracked-vs-
-  inventory row parity, and recorded the latest TSV roll-up after the
-  dashboard-key pass.
+  fix, plus a still-raceable 25-active-key/account quota. The Wave 5
+  remediation commit then closed the CEX parse-metric gap, the
+  duplicate webhook-delivery claim race, and both Redis ACL lockdown
+  drift findings. It also attempted to close the ten-webhook/account
+  quota race, but the new count-then-insert CTE is still not serializing
+  concurrent creates under normal PostgreSQL MVCC, so `F-1248` remains
+  open.
+- `CMD-0100` revalidated the settled `7c9e79ae...` workspace against
+  those Wave 5 changes, ran the targeted webhook/external-source test
+  set, and recorded that `F-1248` survives the attempted remediation.
 - Closure caveat: the TSV remains the per-file coverage control. Rows
   with `todo` still require terminal file-level review before claiming
   literal every-file closure. `EV-0063` documented the scope drift when
   the repository advanced from the original `80c57e...` anchor to
-  current `6e873cac...`; `EV-0078` resolves that count mismatch by
-  refreshing and merging the inventory back to `1,869` tracked rows.
+  current `7c9e79ae...`; `EV-0078` resolves the first count mismatch,
+  and `EV-0097` preserves the later refresh back to `1,870` tracked rows.
   Current findings remain source/R1 verified and not imported from prior
   audits, but final whole-repo closure still requires terminal review
   status across the refreshed TSV. The current inventory roll-up is
-  `done=97`, `in_progress=38`, `todo=1734`.
+  `done=99`, `in_progress=41`, `todo=1730`.

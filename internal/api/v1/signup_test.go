@@ -45,10 +45,25 @@ func (f *fakeSignupTracker) MarkSignup(_ context.Context, h, keyID string) error
 	if f.setErr != nil {
 		return f.setErr
 	}
-	if _, exists := f.store[h]; exists {
-		return nil // SETNX-style: race-loss is silent
-	}
+	// MarkSignup is upgrade-or-set: it overwrites a pending
+	// reservation with the real key_id. F-1218 (codex audit-2026-05-12).
 	f.store[h] = keyID
+	return nil
+}
+
+// ReserveEmail mirrors the Redis SETNX semantics: returns
+// auth.ErrSignupEmailReserved when the email-hash is already
+// claimed. F-1218 (codex audit-2026-05-12).
+func (f *fakeSignupTracker) ReserveEmail(_ context.Context, h string) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.setErr != nil {
+		return f.setErr
+	}
+	if _, exists := f.store[h]; exists {
+		return auth.ErrSignupEmailReserved
+	}
+	f.store[h] = "pending"
 	return nil
 }
 

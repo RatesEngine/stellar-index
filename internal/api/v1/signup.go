@@ -28,9 +28,19 @@ type SignupTracker interface {
 	// signed up with this email-hash, or "" if none exists.
 	LookupByEmailHash(ctx context.Context, emailHash string) (string, error)
 
+	// ReserveEmail atomically claims the email-hash for an in-flight
+	// signup. Returns [auth.ErrSignupEmailReserved] if the email is
+	// already reserved (pending) or has a confirmed mapping. On
+	// success the caller proceeds to mint the key and then calls
+	// MarkSignup to upgrade the reservation. F-1218 (codex
+	// audit-2026-05-12).
+	ReserveEmail(ctx context.Context, emailHash string) error
+
 	// MarkSignup persists the email-hash → key-id mapping so a
 	// future LookupByEmailHash returns it. Called only AFTER
-	// Account.Create succeeds.
+	// Account.Create succeeds. Idempotent over a prior
+	// ReserveEmail: the reservation TTL is cleared and the key_id
+	// becomes the durable value.
 	MarkSignup(ctx context.Context, emailHash, keyID string) error
 }
 
@@ -139,23 +149,31 @@ func (s *Server) handleSignup(w http.ResponseWriter, r *http.Request) {
 	emailHash := hex.EncodeToString(sum[:])
 	identifier := "signup-" + emailHash[:16]
 
-	// 7. Duplicate check (best-effort if no tracker wired).
+	// 7. Atomic email reservation (best-effort if no tracker wired).
+	// F-1218 (codex audit-2026-05-12): the prior shape was
+	// `LookupByEmailHash → mint → MarkSignup`, which let two
+	// parallel signups for the same email both pass the lookup
+	// and each mint a key. ReserveEmail uses SETNX with a
+	// "pending" placeholder so only the first caller proceeds;
+	// the second sees auth.ErrSignupEmailReserved before any
+	// mint side-effect. The reservation has a 5-minute TTL so a
+	// crashed handler doesn't strand the email.
 	if s.signups != nil {
-		existingKeyID, err := s.signups.LookupByEmailHash(r.Context(), emailHash)
-		if err != nil {
-			s.logger.Error("signup tracker lookup failed",
-				"err", err, "identifier", identifier)
-			writeProblem(w, r,
-				"https://api.ratesengine.net/errors/internal",
-				"Internal error", http.StatusInternalServerError,
-				"signup lookup failed; try again in a moment")
-			return
-		}
-		if existingKeyID != "" {
+		err := s.signups.ReserveEmail(r.Context(), emailHash)
+		if errors.Is(err, auth.ErrSignupEmailReserved) {
 			writeProblem(w, r,
 				"https://api.ratesengine.net/errors/already-signed-up",
 				"Already signed up", http.StatusConflict,
 				"this email already has an account; use POST /v1/account/keys with that account's key to mint additional keys, or contact support to recover access")
+			return
+		}
+		if err != nil {
+			s.logger.Error("signup tracker reserve failed",
+				"err", err, "identifier", identifier)
+			writeProblem(w, r,
+				"https://api.ratesengine.net/errors/internal",
+				"Internal error", http.StatusInternalServerError,
+				"signup reservation failed; try again in a moment")
 			return
 		}
 	}

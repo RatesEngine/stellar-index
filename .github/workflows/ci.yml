@@ -12,13 +12,23 @@ on:
       - 'LICENSE'
       - '.github/ISSUE_TEMPLATE/**'
       - '.github/PULL_REQUEST_TEMPLATE.md'
-  # Push-to-main no longer fires CI: PRs are squash-merged so
-  # the merge commit is byte-identical to what the PR run already
-  # validated. Pre-cost-cut this doubled CI burn for zero added
-  # safety. If post-merge regression detection becomes needed
-  # later (e.g. main-only integration smoke), restore the trigger:
-  #   push:
-  #     branches: [main]
+  # Push-to-main now also fires CI. F-1231 (codex audit-2026-05-12):
+  # hosted GitHub reports `main.protected=false`, so the PR-only
+  # assumption isn't actually enforced — direct pushes (live-in-
+  # development sessions, hot-fix commits, the /loop workflow) can
+  # land code without the canonical suite running. Re-enabling the
+  # push trigger doubles CI burn but covers the gap branch
+  # protection currently doesn't. When main IS protection-enforced,
+  # this trigger becomes redundant and can be removed again.
+  push:
+    branches: [main]
+    paths-ignore:
+      - 'CHANGELOG.md'
+      - '**.md'
+      - 'docs/**'
+      - 'LICENSE'
+      - '.github/ISSUE_TEMPLATE/**'
+      - '.github/PULL_REQUEST_TEMPLATE.md'
 
 env:
   GOFUMPT_VERSION: v0.8.0
