@@ -292,11 +292,15 @@ docs-config: ## Regenerate config reference from struct tags
 	@$(GO) run ./cmd/ratesengine-ops docs-config > docs/reference/config/README.md
 
 .PHONY: docs-metrics
-docs-metrics: ## Regenerate metrics registry reference
+docs-metrics: ## (no-op) Metrics reference is hand-edited — drift is guarded by 'make lint-docs'
 	@# The metrics reference at docs/reference/metrics/README.md is hand-
 	@# written today — there's no Prometheus Registry walker wired up.
 	@# Drift is guarded by scripts/ci/lint-docs.sh section 3 (every
 	@# registered metric in internal/obs must appear in the README).
+	@# F-1256 (audit-2026-05-12) — kept under `docs-metrics` so the
+	@# parallel structure with docs-api / docs-config / docs-postman
+	@# survives, but the help string now states explicitly that this
+	@# is a no-op.
 	@echo "docs-metrics is manual today; docs/reference/metrics/README.md is hand-edited."
 	@echo "Drift enforced by 'make lint-docs'. See TODO in metrics/README.md."
 

@@ -287,3 +287,132 @@ func TestOracleLatest_ClassicExpandsToCryptoTicker(t *testing.T) {
 		}
 	}
 }
+
+// ─── /v1/oracle/streams handler tests (F-1226, audit-2026-05-12) ───
+
+// TestOracleStreams_EmptyArrayWhenReaderNil pins the degradation
+// posture: nil OracleReader returns a 200 with `data: []`, not a
+// 503. Consistent with /v1/oracle/latest's "nothing to report"
+// branch — the explorer's /oracles page renders an empty table
+// rather than an error state when no readings have arrived.
+func TestOracleStreams_EmptyArrayWhenReaderNil(t *testing.T) {
+	srv := v1.New(v1.Options{})
+	ts := httpTestServer(t, srv)
+
+	resp := mustGet(t, ts.URL+"/v1/oracle/streams")
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d, want 200", resp.StatusCode)
+	}
+	var env struct {
+		Data []v1.OracleReading `json:"data"`
+	}
+	mustDecode(t, resp, &env)
+	if len(env.Data) != 0 {
+		t.Errorf("data = %+v, want empty array", env.Data)
+	}
+}
+
+// TestOracleStreams_FiltersToOracleClass pins the source-class
+// filter that's baked into the handler: rows from sources that
+// are NOT ClassOracle (e.g. CoinGecko = ClassAggregator,
+// ECB = ClassAuthoritySanity) write into the same oracle_updates
+// hypertable for divergence-comparison purposes, but they must
+// not appear on the public /oracles page. The class is a registry
+// fact, not a per-row flag — filtering happens at the wire boundary.
+func TestOracleStreams_FiltersToOracleClass(t *testing.T) {
+	reader := &stubOracleReader{
+		updates: []canonical.OracleUpdate{
+			mkReflectorUpdate("reflector-dex", "12000000000000", 14),
+			mkReflectorUpdate("redstone", "12100000000000", 14),
+			mkReflectorUpdate("band", "12200000000000", 14),
+			// Non-oracle classes — must be filtered out.
+			mkReflectorUpdate("coingecko", "12050000000000", 14),
+			mkReflectorUpdate("ecb", "12060000000000", 14),
+		},
+	}
+	srv := v1.New(v1.Options{Oracle: reader})
+	ts := httpTestServer(t, srv)
+
+	resp := mustGet(t, ts.URL+"/v1/oracle/streams")
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d, want 200", resp.StatusCode)
+	}
+	var env struct {
+		Data []v1.OracleReading `json:"data"`
+	}
+	mustDecode(t, resp, &env)
+
+	// 3 oracle sources, 2 non-oracle dropped.
+	if len(env.Data) != 3 {
+		t.Fatalf("len(data) = %d, want 3 oracle rows", len(env.Data))
+	}
+	seen := map[string]bool{}
+	for _, r := range env.Data {
+		seen[r.Source] = true
+	}
+	wantOracles := []string{"reflector-dex", "redstone", "band"}
+	for _, want := range wantOracles {
+		if !seen[want] {
+			t.Errorf("missing expected oracle %q in response", want)
+		}
+	}
+	for _, notWant := range []string{"coingecko", "ecb"} {
+		if seen[notWant] {
+			t.Errorf("non-oracle %q leaked into /v1/oracle/streams response", notWant)
+		}
+	}
+}
+
+// TestOracleStreams_RendersPriceAtDeclaredDecimals pins the same
+// scaling contract as /v1/oracle/latest — `price_raw` carries the
+// integer + `price` carries the decimal-scaled human string. A
+// regression that bypasses scaledDecimalString (e.g. raw passthrough
+// on the streams path) would surface as a 14-decimal-off price.
+func TestOracleStreams_RendersPriceAtDeclaredDecimals(t *testing.T) {
+	reader := &stubOracleReader{
+		updates: []canonical.OracleUpdate{
+			mkReflectorUpdate("reflector-dex", "12000000000000", 14),
+		},
+	}
+	srv := v1.New(v1.Options{Oracle: reader})
+	ts := httpTestServer(t, srv)
+
+	resp := mustGet(t, ts.URL+"/v1/oracle/streams")
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d, want 200", resp.StatusCode)
+	}
+	var env struct {
+		Data []v1.OracleReading `json:"data"`
+	}
+	mustDecode(t, resp, &env)
+	if len(env.Data) != 1 {
+		t.Fatalf("len(data) = %d, want 1", len(env.Data))
+	}
+	r := env.Data[0]
+	if r.Price != "0.12000000000000" {
+		t.Errorf("price = %q, want 0.12000000000000 (14-decimal scaling)", r.Price)
+	}
+	if r.PriceRaw != "12000000000000" {
+		t.Errorf("price_raw = %q, want the integer value", r.PriceRaw)
+	}
+	if r.Decimals != 14 {
+		t.Errorf("decimals = %d, want 14", r.Decimals)
+	}
+}
+
+// TestOracleStreams_ReaderError500 — an unexpected error from the
+// hypertable scan surfaces as a 500. Same posture as
+// /v1/oracle/latest. (The timeout/clientAborted branches are
+// covered by handler unit-tests where a context can be cancelled
+// before the handler returns; here we only assert the generic
+// error surface.)
+func TestOracleStreams_ReaderError500(t *testing.T) {
+	reader := &stubOracleReader{err: errors.New("scan failed")}
+	srv := v1.New(v1.Options{Oracle: reader})
+	ts := httpTestServer(t, srv)
+
+	resp := mustGet(t, ts.URL+"/v1/oracle/streams")
+	if resp.StatusCode != http.StatusInternalServerError {
+		t.Fatalf("status = %d, want 500", resp.StatusCode)
+	}
+}

@@ -35,6 +35,12 @@ service-account*.json
 *.pfx
 *.jks
 *.keystore
+# Defence-in-depth glob for ansible-style secrets files
+# (F-1207, audit-2026-05-12): the inventory-path-scoped rules below
+# already cover the canonical path, but a stray *.secrets.yml outside
+# configs/ansible/inventory/ would not be caught without this.
+*.secrets.yml
+*.secrets.yaml
 
 # Local runtime state
 /bucket-data/

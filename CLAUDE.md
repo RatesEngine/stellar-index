@@ -286,11 +286,16 @@ linked doc first.
   bugs** in its i128 decoding and SDEX trade extraction. We do
   **not** inherit from it. →
   [docs/discovery/data-sources/withobsrvr-cdp-pipeline-workflow.md](docs/discovery/data-sources/withobsrvr-cdp-pipeline-workflow.md)
-- **stellar-rpc is NOT in our production ingest path.** Removed
-  from r1 on 2026-04-23 alongside stellar-core and the core
-  prometheus exporter. The indexer reads Galexie's MinIO output
-  directly via `go-stellar-sdk/ingest.ApplyLedgerMetadata`. If you
-  catch yourself writing `rpc.GetEvents` for ingest, stop and read
+- **stellar-rpc is NOT in our production ingest path.** The
+  standalone `stellar-rpc` and `stellar-core` watcher services were
+  removed from r1 on 2026-04-23, along with the core prometheus
+  exporter. `stellar-core` itself still runs on r1 — but only as a
+  *captive-core* subprocess spawned by Galexie
+  (`/usr/bin/stellar-core … --metadata-output-stream fd:3`) — which
+  is the supported Galexie deployment shape per ADR-0002. The
+  indexer reads Galexie's MinIO output directly via
+  `go-stellar-sdk/ingest.ApplyLedgerMetadata`. If you catch yourself
+  writing `rpc.GetEvents` for ingest, stop and read
   [docs/architecture/ingest-pipeline.md](docs/architecture/ingest-pipeline.md). →
   [docs/operations/r1-deployment-state.md](docs/operations/r1-deployment-state.md)
 - **Soroban DeFi contracts upgrade in place.** Soroswap / Phoenix /
