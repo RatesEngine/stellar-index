@@ -338,6 +338,27 @@ Publisher and this Subscriber — investigate if non-zero).
 `malformed` = JSON decoded but Asset or Quote was empty (no
 valid topic to route to; message dropped). All paths log; only
 the `ok` path forwards.
+
+### `ratesengine_api_cors_decisions_total`
+
+Counter, label `outcome` (`no_origin` / `allowed_origin` /
+`allowed_wildcard` / `denied`).
+
+Per-request CORS decisions emitted by the API binary's CORS
+middleware. `no_origin` = request had no Origin header (server-
+to-server, curl); `allowed_origin` = exact-match allow-list hit;
+`allowed_wildcard` = wildcard policy (`*`) matched; `denied` =
+Origin header present but not in the allow-list (browser will
+block the response).
+
+The pre-existing `warnOpenCORS` startup-only check fires once at
+boot then drifts out of memory. This counter is the per-request
+companion — operators dashboard cross-origin traffic patterns and
+alert when a wildcard policy starts handling real cross-origin
+traffic in production (the silent failure mode of
+`RATESENGINE_ALLOWED_ORIGINS=*` slipping into prod with
+credentialed auth_mode). F-1244.
+
 ### `ratesengine_aggregator_dropped_trades_total`
 
 Counter, label `reason` (`class` / `outlier`).

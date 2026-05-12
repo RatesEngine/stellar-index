@@ -58,6 +58,7 @@ func init() {
 		AggregatorEmptyWindowsTotal,
 		AggregatorStreamPublishTotal,
 		APIStreamSubscribeTotal,
+		APICORSDecisionsTotal,
 		AggregatorDroppedTradesTotal,
 		AggregatorDroppedWindowsTotal,
 
@@ -547,6 +548,34 @@ var APIStreamSubscribeTotal = prometheus.NewCounterVec(
 	prometheus.CounterOpts{
 		Name: "ratesengine_api_stream_subscribe_total",
 		Help: "Closed-bucket Redis pub/sub messages processed by the API subscriber, labelled by outcome.",
+	},
+	[]string{"outcome"},
+)
+
+// APICORSDecisionsTotal — per-request CORS outcome counter.
+//
+// Outcomes:
+//   - "no_origin"        — request had no Origin header (server-to-server, curl).
+//     Middleware passes through; no CORS headers emitted.
+//   - "allowed_origin"   — Origin matched a configured allow-list entry.
+//     Allow-Origin echoed back.
+//   - "allowed_wildcard" — wildcard policy ("*") was configured and matched.
+//     Allow-Origin: * emitted.
+//   - "denied"           — request had an Origin header that did NOT match
+//     the allow-list; no Allow-Origin emitted (browser
+//     will block the response).
+//
+// Why a counter, not a startup-only warning: the startup warning in
+// warnOpenCORS (cmd/ratesengine-api/main.go) fires once at boot and
+// is forgotten. Per-request visibility lets operators dashboard
+// actual cross-origin traffic patterns and alert when a wildcard
+// policy starts handling real cross-origin requests in production
+// — the silent failure mode of `RATESENGINE_ALLOWED_ORIGINS=*`
+// slipping into prod with credentialed auth_mode. F-1244.
+var APICORSDecisionsTotal = prometheus.NewCounterVec(
+	prometheus.CounterOpts{
+		Name: "ratesengine_api_cors_decisions_total",
+		Help: "Per-request CORS decisions. Outcome ∈ {no_origin, allowed_origin, allowed_wildcard, denied}.",
 	},
 	[]string{"outcome"},
 )

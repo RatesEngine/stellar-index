@@ -5,7 +5,10 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"github.com/prometheus/client_golang/prometheus/testutil"
+
 	"github.com/RatesEngine/rates-engine/internal/api/v1/middleware"
+	"github.com/RatesEngine/rates-engine/internal/obs"
 )
 
 // corsOK is a tiny handler that 200s, so tests can distinguish
@@ -242,5 +245,45 @@ func TestCORS_DefaultAllowedMethodsIncludePOST(t *testing.T) {
 		if !contains(got, m) {
 			t.Errorf("Allow-Methods default = %q, want substring %q", got, m)
 		}
+	}
+}
+
+// TestCORS_PerRequestObservability — every request increments the
+// CORS decisions counter with the right outcome label. F-1244 lets
+// operators see real cross-origin traffic patterns + alert when a
+// wildcard policy starts handling actual cross-origin requests in
+// production rather than just at startup.
+func TestCORS_PerRequestObservability(t *testing.T) {
+	cases := []struct {
+		name        string
+		origins     []string
+		reqOrigin   string
+		wantOutcome string
+	}{
+		{"no origin", []string{"https://allowed.example.com"}, "", "no_origin"},
+		{"allowed exact", []string{"https://allowed.example.com"}, "https://allowed.example.com", "allowed_origin"},
+		{"allowed wildcard", []string{"*"}, "https://anywhere.example.com", "allowed_wildcard"},
+		{"denied", []string{"https://allowed.example.com"}, "https://evil.example.com", "denied"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			before := testutil.ToFloat64(obs.APICORSDecisionsTotal.WithLabelValues(tc.wantOutcome))
+
+			h := middleware.CORS(middleware.CORSOptions{
+				AllowedOrigins: tc.origins,
+			})(corsOK())
+			r := httptest.NewRequest(http.MethodGet, "/v1/assets", nil)
+			if tc.reqOrigin != "" {
+				r.Header.Set("Origin", tc.reqOrigin)
+			}
+			w := httptest.NewRecorder()
+			h.ServeHTTP(w, r)
+
+			after := testutil.ToFloat64(obs.APICORSDecisionsTotal.WithLabelValues(tc.wantOutcome))
+			if after-before != 1 {
+				t.Errorf("APICORSDecisionsTotal{outcome=%q} delta = %v, want 1",
+					tc.wantOutcome, after-before)
+			}
+		})
 	}
 }

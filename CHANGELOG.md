@@ -57,6 +57,20 @@ against.
 
 ### Added
 
+- **Per-request CORS observability metric (F-1244).** New
+  `ratesengine_api_cors_decisions_total{outcome}` counter wired
+  into the CORS middleware. Outcomes: `no_origin` /
+  `allowed_origin` / `allowed_wildcard` / `denied`. The
+  pre-existing `warnOpenCORS` startup-only check fires once at
+  boot then drifts out of memory; this counter is the per-request
+  companion so operators can dashboard real cross-origin traffic
+  and alert when a wildcard policy starts handling actual cross-
+  origin requests in production (the silent failure mode of
+  `RATESENGINE_ALLOWED_ORIGINS=*` slipping in alongside
+  credentialed auth_mode). Wired into the existing middleware
+  without changing public CORS behaviour; one new test case covers
+  all four outcomes.
+
 - **Freeze EventSink LKG VWAP + recovery worker (F-1228 + F-1229).**
   `freeze.EventSink.RecordFreeze` and `freeze.Writer.Mark` now
   carry the last-known-good VWAP we're freezing on as a

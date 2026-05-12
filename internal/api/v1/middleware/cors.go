@@ -4,6 +4,8 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+
+	"github.com/RatesEngine/rates-engine/internal/obs"
 )
 
 // CORSOptions configures [CORS]. Pass a zero-valued struct for the
@@ -95,6 +97,21 @@ func CORS(opts CORSOptions) Middleware { //nolint:gocognit // origin allow-list 
 				} else {
 					w.Header().Set("Access-Control-Allow-Origin", origin)
 				}
+			}
+
+			// Per-request CORS observability (F-1244). One increment
+			// per request so operators can dashboard cross-origin
+			// traffic patterns and alert when a wildcard policy
+			// starts handling real cross-origin traffic in prod.
+			switch {
+			case origin == "":
+				obs.APICORSDecisionsTotal.WithLabelValues("no_origin").Inc()
+			case originAllowed && wildcard:
+				obs.APICORSDecisionsTotal.WithLabelValues("allowed_wildcard").Inc()
+			case originAllowed:
+				obs.APICORSDecisionsTotal.WithLabelValues("allowed_origin").Inc()
+			default:
+				obs.APICORSDecisionsTotal.WithLabelValues("denied").Inc()
 			}
 
 			if r.Method == http.MethodOptions && r.Header.Get("Access-Control-Request-Method") != "" {
