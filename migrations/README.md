@@ -92,7 +92,7 @@ migration lands.
 | 0027 | [`0027_platform_v1_schema.up.sql`](0027_platform_v1_schema.up.sql) | Platform v1 schema — accounts / users / sessions / API keys / Stripe subscriptions / dashboard webhook store, the dashboard's authority surface |
 | 0028 | [`0028_create_fx_quotes.up.sql`](0028_create_fx_quotes.up.sql) | `fx_quotes` hypertable — long-form persisted ECB / exchangerates / polygon-forex FX history backing `/v1/chart` fiat:fiat past 7d |
 | 0029 | [`0029_drop_unused_blend_jsonb_gin_indexes.up.sql`](0029_drop_unused_blend_jsonb_gin_indexes.up.sql) | Drops two unused JSONB GIN indexes on `blend_auctions` — the auction query path uses btree on the typed columns |
-| 0030 | [`0030_asset_supply_history_unique_constraint.up.sql`](0030_asset_supply_history_unique_constraint.up.sql) | Promotes `asset_supply_history_asset_ledger_idx` from UNIQUE INDEX → UNIQUE CONSTRAINT via `ADD CONSTRAINT … USING INDEX`. Unblocks the supply-snapshot writer's `ON CONFLICT (asset_key, ledger_sequence, time)` clause on Timescale hypertables. F-1205 follow-up |
+| 0030 | [`0030_asset_supply_history_unique_constraint.up.sql`](0030_asset_supply_history_unique_constraint.up.sql) | Promotes `asset_supply_history_asset_ledger_idx` from UNIQUE INDEX → UNIQUE CONSTRAINT (`DROP INDEX` + `ADD CONSTRAINT … UNIQUE (asset_key, ledger_sequence, time)`) so the supply-snapshot writer's `ON CONFLICT` clause matches it on Timescale hypertables. Decompresses chunks + disables compression around the DDL and restores the 0005 compression settings after the swap (F-1261 codex audit-2026-05-13 — mirrors the 0004/trades pattern). F-1205 follow-up |
 
 F-1241 (codex audit-2026-05-12): the table previously stopped at
 0015, leaving 0016..0029 (14 migrations) undocumented even though

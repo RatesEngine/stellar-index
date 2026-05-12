@@ -322,6 +322,13 @@ without evidence IDs.
   wave-45 gate/marker wiring now exists in the moving checkout and its focused
   tests pass, but the new files are still untracked, the gate defaults off, and
   docs lint currently fails on the unreconciled config-reference key.
+- `CMD-0146` removes only that transient docs-sync objection. The generated
+  config reference now includes `api.signup_require_email_verification` and
+  docs lint passes again; `F-1218` still stays open because the new gate/store
+  files are workspace-only and the hardening posture remains opt-in-off.
+- `CMD-0147` settles the moving-workspace phase: wave 45 is now committed at
+  `HEAD=93594529...`, but `F-1218` remains open because the new gate defaults
+  off and live R1 has no explicit enabling config line.
 - `CMD-0122` surfaced new high-severity migration finding `F-1261`.
   Migration `0030_asset_supply_history_unique_constraint` fails against the
   compressed hypertable created by `0005`, fresh integration bootstrap dies
