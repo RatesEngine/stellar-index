@@ -55,6 +55,7 @@ type Server struct {
 	accounts          AccountStore
 	signups           SignupTracker
 	signupIPThrottle  SignupIPThrottle
+	signupVerifier    SignupVerifier
 	stripe            *StripeWebhookConfig
 	divergence        DivergenceLooker
 	freeze            FrozenLooker
@@ -207,6 +208,17 @@ type Options struct {
 	// Nil keeps the legacy "trust the global rate limit alone"
 	// behaviour. F-1232 (audit-2026-05-12).
 	SignupIPThrottle SignupIPThrottle
+
+	// SignupVerifier, when non-nil, backs the email-ownership-
+	// proof flow added in F-1218 (codex audit-2026-05-12). The
+	// signup handler issues a single-use token via
+	// `Reserve(token, keyID, ttl)`; the
+	// `GET /v1/signup/verify?token=…` handler consumes it via
+	// `Consume(token)` and (in subsequent waves) flips the key
+	// to a verified state. Nil disables the verify endpoint —
+	// it returns 503 with a clear "verification not configured"
+	// message so customers don't get the silent-no-op surprise.
+	SignupVerifier SignupVerifier
 
 	// Stripe, when non-nil, backs POST /v1/webhooks/stripe (paid-
 	// tier upgrade webhook). Nil makes the endpoint return 503 so
@@ -550,6 +562,7 @@ func New(opts Options) *Server {
 		accounts:           opts.Accounts,
 		signups:            opts.Signups,
 		signupIPThrottle:   opts.SignupIPThrottle,
+		signupVerifier:     opts.SignupVerifier,
 		stripe:             opts.Stripe,
 		divergence:         opts.Divergence,
 		freeze:             opts.Freeze,
@@ -937,6 +950,11 @@ func (s *Server) mountRoutes() { //nolint:funlen // route registration is intent
 	s.mux.HandleFunc("POST /v1/account/keys", s.handleAccountKeysCreate)
 	s.mux.HandleFunc("DELETE /v1/account/keys/{keyID}", s.handleAccountKeysRevoke)
 	s.mux.HandleFunc("POST /v1/signup", s.handleSignup)
+	// F-1218 (codex audit-2026-05-12): email-ownership-proof
+	// flow. The signup handler issues a token (subsequent
+	// wave) and emails it; this endpoint consumes the token
+	// from the click-through link.
+	s.mux.HandleFunc("GET /v1/signup/verify", s.handleSignupVerify)
 	s.mux.HandleFunc("POST /v1/webhooks/stripe", s.handleStripeWebhook)
 
 	// Customer-dashboard magic-link auth — POST /v1/auth/login +

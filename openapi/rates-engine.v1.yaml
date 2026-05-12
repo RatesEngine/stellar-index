@@ -2164,6 +2164,70 @@ paths:
             application/problem+json:
               schema: { $ref: "#/components/schemas/Problem" }
 
+  /signup/verify:
+    get:
+      tags: [account]
+      summary: Confirm email ownership for a signup-issued API key.
+      description: |
+        F-1218 (codex audit-2026-05-12): closes the email-
+        ownership-proof loop on `POST /v1/signup`. The signup
+        handler issues a single-use token and emails it to the
+        submitted address; this endpoint consumes the token from
+        the click-through link.
+
+        Single-use semantics via Redis GETDEL — the second
+        click on the link returns 404, the same shape as a
+        forged or expired token. Token TTL defaults to 24h to
+        match the dashboard magic-link convention.
+
+        Subsequent waves layer:
+          1. The email-send step on POST /v1/signup that
+             populates the verifier with the issued token.
+          2. An optional validator gate (operator opt-in via
+             config) that rejects unverified keys with 403.
+
+        Today this endpoint just consumes the token; the
+        success path returns the key_id so the customer's
+        dashboard / CLI can correlate the verified key.
+      parameters:
+        - name: token
+          in: query
+          required: true
+          schema: { type: string }
+          description: The plaintext token from the verification email.
+      responses:
+        "200":
+          description: Token consumed; email ownership confirmed.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - { $ref: "#/components/schemas/EnvelopeMeta" }
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        properties:
+                          verified: { type: boolean }
+                          key_id:   { type: string }
+                          detail:   { type: string }
+                        required: [verified]
+        "400":
+          description: Missing `?token=` query parameter.
+          content:
+            application/problem+json:
+              schema: { $ref: "#/components/schemas/Problem" }
+        "404":
+          description: Unknown / consumed / expired token.
+          content:
+            application/problem+json:
+              schema: { $ref: "#/components/schemas/Problem" }
+        "503":
+          description: SignupVerifier not configured (Redis unavailable).
+          content:
+            application/problem+json:
+              schema: { $ref: "#/components/schemas/Problem" }
+
   /dashboard/keys:
     get:
       tags: [dashboard]

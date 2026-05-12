@@ -368,6 +368,17 @@ func run(cfgPath string, dryRun bool) error { //nolint:gocognit,funlen,gocyclo /
 		signupIPThrottle = auth.NewRedisSignupIPThrottle(rdb, auth.SignupIPThrottleOptions{})
 	}
 
+	// F-1218 wave 42 + 43 (codex audit-2026-05-12): the email-
+	// ownership-proof verifier. Wired only when Redis is reachable;
+	// the signup handler issues a token in a future wave and the
+	// /v1/signup/verify endpoint consumes it via SignupVerifier.
+	// Redis-less deployments leave this nil and the verify endpoint
+	// returns 503 with a clear "not configured" message.
+	var signupVerifier v1.SignupVerifier
+	if rdb != nil {
+		signupVerifier = auth.NewRedisSignupVerifier(rdb)
+	}
+
 	// Stripe webhook handler — gated on (Redis up + signing secret
 	// configured). Without the secret the handler 503s every request
 	// (fail-closed; otherwise a forged event could lift any
@@ -626,6 +637,7 @@ func run(cfgPath string, dryRun bool) error { //nolint:gocognit,funlen,gocyclo /
 		Accounts:         accountStore,
 		Signups:          signupTracker,
 		SignupIPThrottle: signupIPThrottle,
+		SignupVerifier:   signupVerifier,
 		Stripe:           stripeCfg,
 		Divergence:       divergenceLooker,
 		Confidence:       redisConfidenceLooker{rdb: rdb},
