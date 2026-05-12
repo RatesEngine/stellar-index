@@ -68,4 +68,20 @@ type Supply struct {
 	Basis             Basis
 	LedgerSequence    uint32
 	ObservedAt        time.Time
+
+	// MinComponentLedger is the oldest ledger any per-component
+	// observation contributing to this snapshot was last updated
+	// at. F-1236 (codex audit-2026-05-12): the refresher uses
+	// this to detect "snapshot stamped at fresh ledger N but
+	// constructed from per-component observations as old as M"
+	// and reject snapshots where (N - M) exceeds the operator-
+	// configured stale-component threshold.
+	//
+	// Zero = "computer didn't populate" (legacy / non-storage-
+	// backed computers like the static-config XLM reader). The
+	// refresher treats zero as "no freshness signal" and falls
+	// through to the legacy max-ledger semantics, matching the
+	// pre-F-1236 posture for deployments that haven't wired
+	// storage-backed readers yet.
+	MinComponentLedger uint32
 }

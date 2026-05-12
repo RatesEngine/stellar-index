@@ -144,6 +144,23 @@ type stripeEvent struct {
 	} `json:"data"`
 }
 
+// stripeCheckoutSession is the shape we consume from BOTH
+// `checkout.session.completed` events (the original supported
+// type) and `customer.subscription.*` events (F-1219 follow-up).
+//
+// JSON keys overlap conveniently:
+//
+//   - checkout.session.completed.data.object has: id,
+//     client_reference_id, customer, customer_email,
+//     payment_status, subscription, metadata
+//   - customer.subscription.{updated,deleted}.data.object has:
+//     id, customer, status, current_period_end,
+//     cancel_at_period_end, metadata
+//
+// The `id` field doubles as both checkout-session id and
+// subscription id depending on event type. The handler maps
+// according to ev.Type so a future Stripe schema change to one
+// shape doesn't poison the other path.
 type stripeCheckoutSession struct {
 	ID                string            `json:"id"`
 	ClientReferenceID string            `json:"client_reference_id"` // we set this to the customer's identifier
@@ -152,6 +169,14 @@ type stripeCheckoutSession struct {
 	PaymentStatus     string            `json:"payment_status"`
 	Subscription      string            `json:"subscription"` // Stripe subscription ID (sub_…) when this is a subscription checkout
 	Metadata          map[string]string `json:"metadata"`
+
+	// customer.subscription.* fields below. Zero values when the
+	// event is a checkout.session.completed.
+	Status             string `json:"status"`               // active | past_due | canceled | unpaid | …
+	CurrentPeriodStart int64  `json:"current_period_start"` // Unix seconds
+	CurrentPeriodEnd   int64  `json:"current_period_end"`   // Unix seconds
+	CancelAtPeriodEnd  bool   `json:"cancel_at_period_end"`
+	CanceledAt         int64  `json:"canceled_at"` // Unix seconds; zero = not canceled
 }
 
 // handleStripeWebhook serves POST /v1/webhooks/stripe.
@@ -183,9 +208,21 @@ func (s *Server) handleStripeWebhook(w http.ResponseWriter, r *http.Request) { /
 		return
 	}
 
-	// Only react to checkout.session.completed today. Other event
-	// types acknowledge with 200 so Stripe stops retrying.
-	if ev.Type != "checkout.session.completed" {
+	// F-1219 follow-up (codex audit-2026-05-12) — customer.subscription.*
+	// events refine the placeholder CurrentPeriodEnd the
+	// checkout.session.completed path stamped at +30d. These also
+	// carry the canceled_at + cancel_at_period_end fields we use
+	// to surface "subscription ending" state on the dashboard
+	// without polling Stripe.
+	switch ev.Type {
+	case "customer.subscription.updated", "customer.subscription.deleted":
+		s.handleStripeSubscriptionEvent(r.Context(), ev)
+		s.markStripeEventProcessed(r.Context(), ev.ID)
+		writeJSON(w, map[string]any{"ok": true, "applied": ev.Type}, Flags{})
+		return
+	case "checkout.session.completed":
+		// handled below
+	default:
 		s.logger.Info("stripe webhook: ignored event type",
 			"type", ev.Type, "event_id", ev.ID)
 		// Mark the dedupe row as processed so a retry of this
@@ -380,6 +417,78 @@ func (s *Server) parseStripeWebhook(w http.ResponseWriter, r *http.Request) (str
 		return stripeEvent{}, false
 	}
 	return ev, true
+}
+
+// handleStripeSubscriptionEvent processes customer.subscription.
+// {updated,deleted} events — the F-1219 follow-up that refines
+// the placeholder CurrentPeriodEnd the checkout.session.completed
+// path stamps at +30d. Also wires CancelAtPeriodEnd + CanceledAt
+// so the dashboard can surface "subscription ending Jan 31" or
+// "subscription canceled" without polling Stripe.
+//
+// Idempotent — Stripe at-least-once delivery means the same event
+// arrives multiple times; UpsertSubscription is keyed on
+// stripe_subscription_id, so re-applying the same payload is a
+// no-op. On `customer.subscription.deleted` we additionally
+// downgrade the account tier back to Free.
+//
+// Best-effort: errors log + count but don't 5xx the webhook
+// (Stripe retries don't make platform-store outages better).
+// Returns without effect when Platform isn't wired.
+func (s *Server) handleStripeSubscriptionEvent(ctx context.Context, ev stripeEvent) {
+	if s.stripe == nil || s.stripe.Platform == nil {
+		return
+	}
+	bridge := s.stripe.Platform
+	obj := ev.Data.Object
+	if obj.Customer == "" || obj.ID == "" {
+		s.logger.Warn("stripe webhook: subscription event missing required fields",
+			"event_id", ev.ID, "type", ev.Type)
+		return
+	}
+	if bridge.Accounts == nil {
+		return
+	}
+	acct, err := bridge.Accounts.GetByStripeCustomerID(ctx, obj.Customer)
+	if err != nil {
+		s.logger.Warn("stripe webhook: subscription event GetByStripeCustomerID failed",
+			"event_id", ev.ID, "stripe_customer_id", obj.Customer, "err", err)
+		return
+	}
+	if bridge.Billing != nil {
+		var canceledAt time.Time
+		if obj.CanceledAt > 0 {
+			canceledAt = time.Unix(obj.CanceledAt, 0).UTC()
+		}
+		tierName := strings.ToLower(strings.TrimSpace(obj.Metadata["tier"]))
+		sub := platform.Subscription{
+			AccountID:            acct.ID,
+			StripeSubscriptionID: obj.ID,
+			Plan:                 stripePlanFromTier(tierName),
+			CurrentPeriodStart:   time.Unix(obj.CurrentPeriodStart, 0).UTC(),
+			CurrentPeriodEnd:     time.Unix(obj.CurrentPeriodEnd, 0).UTC(),
+			CancelAtPeriodEnd:    obj.CancelAtPeriodEnd,
+			CanceledAt:           canceledAt,
+		}
+		if err := bridge.Billing.UpsertSubscription(ctx, sub); err != nil {
+			s.logger.Warn("stripe webhook: subscription event UpsertSubscription failed",
+				"event_id", ev.ID, "account_id", acct.ID, "err", err)
+		}
+	}
+	// Tier roll-down on subscription deletion: bump the account
+	// back to Free so the F-1212 tier-clamp prevents the customer
+	// from minting paid-tier keys after their plan ends.
+	// `customer.subscription.updated` events with a non-active
+	// status (past_due, unpaid) keep the tier intact — Stripe
+	// drives a separate `customer.subscription.deleted` when the
+	// plan actually terminates.
+	if ev.Type == "customer.subscription.deleted" && acct.Tier != platform.TierFree {
+		acct.Tier = platform.TierFree
+		if err := bridge.Accounts.Update(ctx, acct); err != nil {
+			s.logger.Warn("stripe webhook: tier downgrade-to-free failed",
+				"event_id", ev.ID, "account_id", acct.ID, "err", err)
+		}
+	}
 }
 
 // applyPlatformSideEffects runs the F-1219 (codex audit-2026-05-12)

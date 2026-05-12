@@ -35,7 +35,7 @@ Cold findings only. No prior finding is imported into this register.
 | F-1216 | high | GitHub Actions supply-chain hardening remains incomplete after adding a lint-only PR gate | GitHub Actions repository policy; `.github/workflows/*.yml`; CI pinning lint | XFI-0010; EV-0025; EV-0026; EV-0104 | open | repo-admin/security | The new lint script blocks newly added mutable third-party tags in PR diffs, but hosted Actions policy is still permissive and the current workflows still contain 12 tag-pinned third-party actions. |
 | F-1217 | high | SEP-10 replay protection is optional and can run guard-free when Redis is absent | SEP-10 validator; API startup wiring; auth token endpoint; bearer auth | XFI-0011; EV-0027; EV-0053; EV-0096; R1-0012 | fixed | api/security | Current workspace now fails API startup when `auth_mode=sep10` is selected without Redis, so the guard-free deployment path no longer reproduces. |
 | F-1218 | high | Public signup can mint immediately usable 1000/min API keys from unverified emails, and Redis-less deployments still skip duplicate protection entirely | `/v1/signup`; signup tracker; API key store; signup UI/OpenAPI | XFI-0012; EV-0028; EV-0099 | open | api/security/billing | The same-email race is now closed when Redis tracking is wired, but signup still returns usable keys without email ownership proof and tracker-nil deployments still mint duplicates by design. |
-| F-1219 | high | Stripe paid-upgrade webhook still bypasses platform subscription and dashboard-key sources of truth | Stripe webhook; Redis API keys; Postgres platform billing/API keys | XFI-0013; EV-0030; EV-0053 | open | billing/platform/api | Current source has Postgres Stripe event dedupe/audit wiring, but the webhook still mutates only Redis keys by `client_reference_id`; subscriptions, accounts, and Postgres dashboard keys are not upgraded. |
+| F-1219 | high | Stripe paid-upgrade webhook still bypasses platform subscription and dashboard-key sources of truth | Stripe webhook; Redis API keys; Postgres platform billing/API keys | XFI-0013; EV-0030; EV-0053; EV-0107 | open | billing/platform/api | The current workspace adds a dormant platform bridge, but production wiring never sets it, tests do not exercise it, and Postgres dashboard-key limits are still not upgraded. |
 | F-1220 | high | Tagged deploy migration handling is still not closure-grade after the new staging path | Release/deploy workflow; Ansible binary deploy; migrations; R1 schema state | XFI-0014; EV-0031; EV-0103; R1-0013 | open | release/ops/db | The shared workspace now stages tag-matched migrations and adds a pre-swap migration task, but the deploy job installs only `ansible-core` while the new task uses `ansible.posix.synchronize`, which is a separate collection. The new path is not yet proven runnable end to end. |
 | F-1221 | medium | Release/deploy docs still claim GHCR container image publishing that the current release workflow explicitly removed | Release workflow; release/deploy docs; Docker image expectations | XFI-0014; EV-0032 | open | docs/release | Operators and self-hosters are told to expect GHCR artifacts that the workflow intentionally no longer produces. |
 | F-1222 | medium | Rollback docs point operators to nonexistent `/opt/ratesengine/release-<tag>` directories instead of actual binary backups | Release process runbook; Ansible deploy backup layout; R1 sidecars | XFI-0014; EV-0032; R1-0013 | open | ops/release | Incident fallback rollback can fail because the documented artifact path is not produced by the current deploy task. |
@@ -111,7 +111,7 @@ Remediation direction:
 
 Severity: `critical`
 
-Status: `fixed`
+Status: `open`
 
 Affected surface:
 
@@ -421,14 +421,17 @@ Evidence:
 - `XFI-0013`
 - `EV-0030`
 - `EV-0053`
+- `EV-0107`
 
 Expected: Stripe paid-upgrade events should update the same account, subscription, and API-key records that dashboard users and runtime auth consume, with durable idempotency and audit.
 
-Observed: current source wires Postgres event dedupe and audit rows when Postgres is available, which reduces the earlier idempotency gap. The side effect still uses `auth.RedisAPIKeyStore`: it finds keys by `client_reference_id` and updates Redis key rate limits only. The webhook does not call `UpsertSubscription`, does not update Postgres dashboard keys/accounts/subscription state, acknowledges paid events with no keys as 200, and can return 200 after partial or total key-update failure.
+Observed during the initial pass: current source wired Postgres event dedupe and audit rows when Postgres was available, which reduced the earlier idempotency gap. The side effect still used `auth.RedisAPIKeyStore`: it found keys by `client_reference_id` and updated Redis key rate limits only. The webhook did not call `UpsertSubscription`, did not update Postgres dashboard keys/accounts/subscription state, acknowledged paid events with no keys as 200, and could return 200 after partial or total key-update failure.
+
+Current-workspace reconciliation: an uncommitted remediation slice adds `StripePlatformBridge` and `applyPlatformSideEffects`, capable of resolving an account by Stripe customer ID, upserting a subscription row, and mutating `Account.Tier`. That does not close the finding. Production API wiring in `cmd/ratesengine-api/main.go` never sets `StripeWebhookConfig.Platform`, repo search finds no other bridge user, and the existing Stripe webhook tests do not exercise the new path. Even if wired, the helper still does not raise Postgres dashboard API-key limits alongside Redis-backed legacy keys, so the runtime/dashboard split remains.
 
 Impact: paid customers using dashboard-created keys can pay and still keep old limits or missing subscription state; customer-facing dashboard/billing truth can disagree with legacy Redis key state; failed upgrades can be acknowledged and then require manual reconciliation.
 
-Remediation direction: move Stripe side effects onto platform Postgres account/subscription/API-key stores, call subscription upserts for relevant Stripe event types, update all active account keys in the runtime source of truth, and return retryable status on unambiguous total failure.
+Remediation direction: finish the platform-side wiring rather than only defining the helper. Wire `StripeWebhookConfig.Platform` in production, test it end to end, update all active account keys in the runtime source of truth including dashboard-created Postgres keys, and return retryable status on unambiguous total failure.
 
 ### F-1220. Tagged deploys can restart schema-dependent binaries without shipping or applying matching migrations
 

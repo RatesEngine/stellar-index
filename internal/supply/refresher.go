@@ -44,27 +44,67 @@ type Outcome struct {
 type OutcomeKind string
 
 const (
-	OutcomeKindOK            OutcomeKind = "ok"
-	OutcomeKindNoLedger      OutcomeKind = "no_ledger"      // LedgerLookup error
-	OutcomeKindNoObservation OutcomeKind = "no_observation" // ChainReader fell through with no static fallback either
-	OutcomeKindComputeError  OutcomeKind = "compute_error"  // computer failed for non-observation reasons
-	OutcomeKindWriteError    OutcomeKind = "write_error"    // InsertSupply failed
+	OutcomeKindOK             OutcomeKind = "ok"
+	OutcomeKindNoLedger       OutcomeKind = "no_ledger"       // LedgerLookup error
+	OutcomeKindNoObservation  OutcomeKind = "no_observation"  // ChainReader fell through with no static fallback either
+	OutcomeKindComputeError   OutcomeKind = "compute_error"   // computer failed for non-observation reasons
+	OutcomeKindStaleComponent OutcomeKind = "stale_component" // F-1236: a component observation lags the snapshot ledger past the configured threshold
+	OutcomeKindWriteError     OutcomeKind = "write_error"     // InsertSupply failed
 )
+
+// DefaultStaleComponentLedgers is the F-1236 freshness threshold
+// the Refresher applies when none is operator-configured: a
+// snapshot whose MinComponentLedger lags the snapshot ledger by
+// more than 1000 ledgers (~85 min at 5s ledger close cadence)
+// is rejected. Operators tune via [WithStaleComponentLedgers].
+//
+// Conservative default — most operator deployments see all
+// supply observers complete within one ledger of the trade
+// indexer, so 1000 is large enough to never false-reject under
+// normal load while small enough to catch a genuinely stalled
+// observer before the supply table accrues misleading rows.
+const DefaultStaleComponentLedgers uint32 = 1000
 
 // Refresher runs one supply-snapshot cycle per [Refresher.Tick]
 // call. Composes ledger resolution + computer + inserter; the
 // aggregator drives it via a ticker in its own goroutine,
 // mirroring the baseline-refresher shape.
 type Refresher struct {
-	ledgers  LedgerLookup
-	computer SnapshotComputer
-	inserter SnapshotInserter
-	logger   *slog.Logger
+	ledgers              LedgerLookup
+	computer             SnapshotComputer
+	inserter             SnapshotInserter
+	logger               *slog.Logger
+	staleComponentLedger uint32
+}
+
+// RefresherOption tunes a [Refresher].
+type RefresherOption func(*Refresher)
+
+// WithStaleComponentLedgers overrides the F-1236 (codex
+// audit-2026-05-12) freshness threshold. The Refresher rejects
+// a snapshot when (snap.LedgerSequence - snap.MinComponentLedger)
+// exceeds this value AND MinComponentLedger > 0 (zero means the
+// computer didn't populate the field — legacy path stays
+// unaffected). Set to 0 to disable the gate.
+func WithStaleComponentLedgers(maxLag uint32) RefresherOption {
+	return func(r *Refresher) {
+		r.staleComponentLedger = maxLag
+	}
 }
 
 // NewRefresher constructs the Refresher.
-func NewRefresher(ledgers LedgerLookup, computer SnapshotComputer, inserter SnapshotInserter, logger *slog.Logger) *Refresher {
-	return &Refresher{ledgers: ledgers, computer: computer, inserter: inserter, logger: logger}
+func NewRefresher(ledgers LedgerLookup, computer SnapshotComputer, inserter SnapshotInserter, logger *slog.Logger, opts ...RefresherOption) *Refresher {
+	r := &Refresher{
+		ledgers:              ledgers,
+		computer:             computer,
+		inserter:             inserter,
+		logger:               logger,
+		staleComponentLedger: DefaultStaleComponentLedgers,
+	}
+	for _, o := range opts {
+		o(r)
+	}
+	return r
 }
 
 // Tick runs one refresh cycle:
@@ -97,6 +137,28 @@ func (r *Refresher) Tick(ctx context.Context) Outcome {
 		r.logger.Warn("supply refresh: compute failed",
 			"err", err, "ledger", ledger, "kind", string(kind))
 		return Outcome{Kind: kind, Err: err}
+	}
+
+	// F-1236 (codex audit-2026-05-12): reject snapshots whose
+	// per-component observations lag the snapshot ledger by more
+	// than the configured threshold. MinComponentLedger == 0
+	// means the computer didn't populate the field (legacy
+	// path); we don't gate in that case so deployments without
+	// freshness-aware computers stay on the pre-F-1236 posture.
+	if r.staleComponentLedger > 0 && snap.MinComponentLedger > 0 {
+		if snap.LedgerSequence > snap.MinComponentLedger &&
+			snap.LedgerSequence-snap.MinComponentLedger > r.staleComponentLedger {
+			err := fmt.Errorf("supply: stale component — snapshot ledger %d, min component ledger %d, gap %d > threshold %d",
+				snap.LedgerSequence, snap.MinComponentLedger,
+				snap.LedgerSequence-snap.MinComponentLedger, r.staleComponentLedger)
+			r.logger.Warn("supply refresh: rejecting stale-component snapshot",
+				"asset", snap.AssetKey,
+				"snapshot_ledger", snap.LedgerSequence,
+				"min_component_ledger", snap.MinComponentLedger,
+				"gap", snap.LedgerSequence-snap.MinComponentLedger,
+				"threshold", r.staleComponentLedger)
+			return Outcome{Kind: OutcomeKindStaleComponent, Err: err, Snapshot: snap}
+		}
 	}
 
 	if err := r.inserter.InsertSupply(ctx, snap); err != nil {

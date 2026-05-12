@@ -192,6 +192,10 @@ without evidence IDs.
   later uncommitted supply-ledger attempt. `F-1249` now narrows to the
   two incident event families only, while `F-1236` remains open because
   the workspace fix does not compile against `timescale.Cursor`.
+- `CMD-0109` audited the current Stripe remediation attempt. The new
+  bridge helper is dormant in production wiring, untested in the
+  webhook suite, and still leaves Postgres dashboard API-key limits
+  untouched, so `F-1219` remains open.
 - Closure caveat: the TSV remains the per-file coverage control. Rows
   with `todo` still require terminal file-level review before claiming
   literal every-file closure. `EV-0063` documented the scope drift when

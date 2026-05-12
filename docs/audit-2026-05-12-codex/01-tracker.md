@@ -54,13 +54,13 @@ Snapshot anchor: `80c57e38eeee729ec2d879d54286419206cee864`
 | W12 | Storage, migrations, and query correctness | in_progress | EV-0017, EV-0058, EV-0059, EV-0060, EV-0062, EV-0079, EV-0080, EV-0086, EV-0092, EV-0102, EV-0103, EV-0104, EV-0105, EV-0106 |
 | W13 | Redis, cache keys, streaming pub/sub, and freshness | in_progress | EV-0038, EV-0039, EV-0084, EV-0094 |
 | W14 | Aggregation, baselines, anomaly, freeze, and confidence | in_progress | EV-0024, EV-0079, EV-0105, EV-0106 |
-| W15 | API runtime, middleware, contracts, and client SDK | in_progress | EV-0010, EV-0011, EV-0012, EV-0068, EV-0069, EV-0076, EV-0086, EV-0089, EV-0090, EV-0092, EV-0094, EV-0095, EV-0096, EV-0098, EV-0099, EV-0100, EV-0102, EV-0103, EV-0105, EV-0106 |
+| W15 | API runtime, middleware, contracts, and client SDK | in_progress | EV-0010, EV-0011, EV-0012, EV-0068, EV-0069, EV-0076, EV-0086, EV-0089, EV-0090, EV-0092, EV-0094, EV-0095, EV-0096, EV-0098, EV-0099, EV-0100, EV-0102, EV-0103, EV-0105, EV-0106, EV-0107 |
 | W16 | Dashboard, explorer, status page, SEO, and embeds | in_progress | EV-0012, EV-0014, EV-0090 |
 | W17 | Observability, metrics, alerts, status, and incident flow | in_progress | R1-0010, EV-0073, EV-0098, EV-0106 |
 | W18 | Operations, R1 runtime, archive completeness, and DR | in_progress | R1-0001 through R1-0010, EV-0073, EV-0082 |
-| W19 | Security, auth, abuse, and privacy | in_progress | F-1201, F-1207, EV-0015, EV-0068, EV-0069, EV-0083, EV-0084, EV-0086, EV-0096, EV-0098, EV-0099, EV-0100, EV-0102, EV-0103 |
+| W19 | Security, auth, abuse, and privacy | in_progress | F-1201, F-1207, EV-0015, EV-0068, EV-0069, EV-0083, EV-0084, EV-0086, EV-0096, EV-0098, EV-0099, EV-0100, EV-0102, EV-0103, EV-0107 |
 | W20 | Tests, fixtures, chaos, load, and CI reality | in_progress | EV-0006, EV-0013, EV-0041, EV-0070, EV-0095, EV-0099, EV-0105, EV-0106 |
-| W21 | Documentation truth and customer commitments | in_progress | EV-0021, EV-0032, EV-0039, EV-0040, EV-0072, EV-0076, EV-0082, EV-0090, EV-0095, EV-0096, EV-0103 |
+| W21 | Documentation truth and customer commitments | in_progress | EV-0021, EV-0032, EV-0039, EV-0040, EV-0072, EV-0076, EV-0082, EV-0090, EV-0095, EV-0096, EV-0103, EV-0107 |
 | W22 | Competitive product completeness | in_progress | EV-0035, EV-0038, EV-0040, EV-0042 |
 | W23 | Generated artifacts and drift | in_progress | F-1203 |
 | W24 | Cross-file interaction and system coupling | in_progress | XFI-0001 through XFI-0052 |

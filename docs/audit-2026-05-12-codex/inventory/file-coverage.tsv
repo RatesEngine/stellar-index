@@ -1003,7 +1003,7 @@ internal/api/v1/sources_stats_cache_test.go	internal	internal/api/v1	test	todo		
 internal/api/v1/sources_test.go	internal	internal/api/v1	test	todo			cold audit pending
 internal/api/v1/status.go	internal	internal/api/v1	runtime	todo			cold audit pending
 internal/api/v1/status_test.go	internal	internal/api/v1	test	todo			cold audit pending
-internal/api/v1/stripe_webhook.go	internal	internal/api/v1	runtime	todo			cold audit pending
+internal/api/v1/stripe_webhook.go	internal	internal/api/v1	runtime	done	EV-0030;EV-0053;EV-0107;F-1219	XFI-0013	Reviewed Redis-only upgrade behavior, platform dedupe/audit seams, and the dormant/unwired StripePlatformBridge that still leaves dashboard Postgres key upgrades unresolved
 internal/api/v1/stripe_webhook_test.go	internal	internal/api/v1	test	todo			cold audit pending
 internal/api/v1/test_helpers_test.go	internal	internal/api/v1	test	todo			cold audit pending
 internal/api/v1/twap.go	internal	internal/api/v1	runtime	todo			cold audit pending
