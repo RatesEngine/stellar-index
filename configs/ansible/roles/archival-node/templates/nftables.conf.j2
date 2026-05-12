@@ -45,9 +45,15 @@ table inet filter {
     ip protocol icmp limit rate 10/second accept
     ip6 nexthdr ipv6-icmp limit rate 10/second accept
 
-    # SSH — only from allowed CIDRs, rate-limited
+    # SSH — only from allowed CIDRs, rate-limited.
+    # F-1201 follow-up (codex audit-2026-05-12): 30/minute (was
+    # 4/minute) is tight enough to throttle brute-force scanners
+    # but loose enough that operator multi-shell sessions over
+    # SSH multiplexing don't accidentally lock themselves out
+    # (verified on r1: a /loop session hammering SSH at ~10/min
+    # hit the old 4/min cap mid-deploy).
 {% for rule in public_allow_ports if rule.port == 22 %}
-    tcp dport {{ rule.port }} ip saddr @ssh_allowed_v4 ct state new limit rate 4/minute accept comment "{{ rule.comment }}"
+    tcp dport {{ rule.port }} ip saddr @ssh_allowed_v4 ct state new limit rate 30/minute accept comment "{{ rule.comment }}"
 {% endfor %}
 
     # Public ports (stellar-core SCP peer)

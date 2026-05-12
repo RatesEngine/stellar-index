@@ -692,6 +692,35 @@ trust class); this minimal in-place config is the immediate-fix
 drop-in placeholder until the full archival-node role re-runs
 on r1 via the deploy workflow.
 
+### 2026-05-12 F-1201 follow-up: SSH rate widened
+
+Wave-23's minimal nftables set SSH at `4/minute new conns`,
+which locked out operator work (a /loop session hammering SSH
+naturally exceeds 4 new connects per minute when each shell-out
+spawns a fresh session). Widened to `30/minute` on r1 + in
+`configs/ansible/roles/archival-node/templates/nftables.conf.j2`.
+
+### 2026-05-12 F-1209 mitigation: +16G swap
+
+R1 had been at ~95% memory with the 4G swap partition fully
+consumed. `free -h` showed 9.1Gi available out of 188Gi total.
+Postgres `shared_buffers=48GB` (25% of total RAM) + minio +
+galexie's captive-core working set leaves marginal headroom for
+page cache, and the kernel had been swapping under pressure.
+
+Added a 16GB swap file at `/swap_f1209` (`fallocate -l 16G`,
+`mkswap`, `swapon`, persistent via `/etc/fstab` entry
+`/swap_f1209 none swap sw,pri=1 0 0`). Swap is now 19Gi total
+(4Gi original partition + 16Gi file); 16Gi free initially.
+Doesn't fix the underlying tuning, but adds breathing room
+during a memory-burst event so postgres doesn't trip OOMKiller.
+
+The audit's remediation suggestion was operator-side capacity:
+either bump RAM (Hetzner box-swap) or tune postgres
+`shared_buffers` down. Adding swap is the low-risk in-place
+mitigation; the proper fix remains an operator capacity
+decision tracked under F-1209.
+
 ### 2026-05-12 alert-state snapshot post-Caddy roll
 
 Firing alerts (14 total):
