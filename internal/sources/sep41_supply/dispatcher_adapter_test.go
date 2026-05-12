@@ -267,6 +267,113 @@ func TestDecoder_DecodeNegativeAmount(t *testing.T) {
 	}
 }
 
+// TestDecoder_CAP67_FourTopic_BackCompat pins the CLAUDE.md surprise:
+// post-P23 (Whisk, mainnet 2025-09-03) SEP-41 supply events grew a
+// fourth topic carrying the SEP-11 asset string
+// (`sep0011_asset`). The decoder reads counterparty positionally
+// (topic[1] for burn, topic[2] for mint/clawback) and IGNORES the
+// optional 4th topic — but a future contributor reading the
+// shorter pre-P23 spec might naively assert topic length and
+// reject the post-P23 shape.
+//
+// Lock the behaviour with explicit fixtures for both arities.
+// F-1242 (audit-2026-05-12).
+func TestDecoder_CAP67_FourTopic_BackCompat(t *testing.T) {
+	d, _ := NewDecoder([]string{cWatched})
+
+	// Use XLM's pubnet SEP-11 representation as a realistic
+	// 4th-topic value (the field carries a SEP-11 asset string).
+	sep0011 := encodeScVal(t, symbolScVal("native"))
+
+	cases := []struct {
+		name            string
+		buildEvent      func(t *testing.T) events.Event
+		wantKind        string
+		wantCounterPty  string
+		wantOrigArity   int
+		extendArityWith string // the optional 4th topic
+	}{
+		{
+			name:            "mint pre-P23 (3 topics)",
+			buildEvent:      func(t *testing.T) events.Event { return mintEvent(t, cWatched, 100) },
+			wantKind:        SymbolMint,
+			wantCounterPty:  gHolder,
+			wantOrigArity:   3,
+			extendArityWith: "",
+		},
+		{
+			name: "mint post-P23 (4 topics inc. sep0011_asset)",
+			buildEvent: func(t *testing.T) events.Event {
+				ev := mintEvent(t, cWatched, 100)
+				ev.Topic = append(ev.Topic, sep0011)
+				return ev
+			},
+			wantKind:       SymbolMint,
+			wantCounterPty: gHolder,
+			wantOrigArity:  4,
+		},
+		{
+			name:           "burn pre-P23 (2 topics)",
+			buildEvent:     func(t *testing.T) events.Event { return burnEvent(t, cWatched, 100) },
+			wantKind:       SymbolBurn,
+			wantCounterPty: gHolder,
+			wantOrigArity:  2,
+		},
+		{
+			name: "burn post-P23 (3 topics inc. sep0011_asset)",
+			buildEvent: func(t *testing.T) events.Event {
+				ev := burnEvent(t, cWatched, 100)
+				ev.Topic = append(ev.Topic, sep0011)
+				return ev
+			},
+			wantKind:       SymbolBurn,
+			wantCounterPty: gHolder,
+			wantOrigArity:  3,
+		},
+		{
+			name:           "clawback pre-P23 (3 topics)",
+			buildEvent:     func(t *testing.T) events.Event { return clawbackEvent(t, cWatched, 100) },
+			wantKind:       SymbolClawback,
+			wantCounterPty: gHolder,
+			wantOrigArity:  3,
+		},
+		{
+			name: "clawback post-P23 (4 topics inc. sep0011_asset)",
+			buildEvent: func(t *testing.T) events.Event {
+				ev := clawbackEvent(t, cWatched, 100)
+				ev.Topic = append(ev.Topic, sep0011)
+				return ev
+			},
+			wantKind:       SymbolClawback,
+			wantCounterPty: gHolder,
+			wantOrigArity:  4,
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			ev := tc.buildEvent(t)
+			if len(ev.Topic) != tc.wantOrigArity {
+				t.Fatalf("test fixture arity = %d, expected %d", len(ev.Topic), tc.wantOrigArity)
+			}
+			outs, err := d.Decode(ev)
+			if err != nil {
+				t.Fatalf("Decode: %v", err)
+			}
+			if len(outs) != 1 {
+				t.Fatalf("Decode returned %d events, want 1", len(outs))
+			}
+			out := outs[0].(Event)
+			if out.Kind != tc.wantKind {
+				t.Errorf("Kind = %q, want %q", out.Kind, tc.wantKind)
+			}
+			if out.Counterparty != tc.wantCounterPty {
+				t.Errorf("Counterparty = %q, want %q (positional decode must ignore the 4th topic)",
+					out.Counterparty, tc.wantCounterPty)
+			}
+		})
+	}
+}
+
 // TestDecoder_HasI128SafeAmount — ensure the decoder preserves
 // large values that exceed int64.
 func TestDecoder_HasI128SafeAmount(t *testing.T) {

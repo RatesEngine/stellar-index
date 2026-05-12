@@ -106,6 +106,26 @@ against.
 
 ### Added
 
+- **Guard tests for two CLAUDE.md surprises (F-1242).**
+  Locks behaviours that no production test previously asserted:
+  - `comet.TestDecodeSwap_DispatchIsByTopicNotContract` proves
+    that two events with different `ContractID`s but the same
+    `(POOL, swap)` topic both decode to `Source="comet"` — i.e.,
+    the Comet decoder is generic Balancer-v1, not contract-
+    specific. A future change that narrows the decoder to a
+    specific allow-list would silently drop trades from any new
+    Balancer-v1 deployment; this test fires first.
+  - `sep41_supply.TestDecoder_CAP67_FourTopic_BackCompat` exercises
+    mint / burn / clawback events with both pre-P23 (3/2/3 topics)
+    and post-P23/CAP-67 (4/3/4 topics with `sep0011_asset`)
+    arities. The decoder reads counterparty positionally and
+    must ignore the optional 4th topic; a future contributor who
+    naively asserts topic length would break the post-P23 path.
+  The third surprise (SEP-41 transfer dual i128/Map shape) has
+  no production transfer-amount decoder yet, so the dual-shape
+  guard already lives in `sac_balances.TestObserver_Decode{I128,
+  MapVal}`; documented as such in the audit register.
+
 - **Per-request CORS observability metric (F-1244).** New
   `ratesengine_api_cors_decisions_total{outcome}` counter wired
   into the CORS middleware. Outcomes: `no_origin` /
