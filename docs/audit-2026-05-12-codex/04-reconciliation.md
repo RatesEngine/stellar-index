@@ -100,8 +100,8 @@ without evidence IDs.
 
 ### 2026-05-12 Execution Reconciliation
 
-- Cold execution evidence now spans `CMD-0007` through `CMD-0101`,
-  `EV-0005` through `EV-0099`, `R1-0001` through `R1-0018`, and
+- Cold execution evidence now spans `CMD-0007` through `CMD-0103`,
+  `EV-0005` through `EV-0101`, `R1-0001` through `R1-0018`, and
   `XFI-0001` through `XFI-0051`.
 - Findings `F-1201` through `F-1259` remain evidence-backed and are
   mapped to remediation rows `R-1201` through `R-1257`; `F-1202`,
@@ -152,13 +152,22 @@ without evidence IDs.
   narrowed but remains open, and records that `F-1218` narrowed but
   remains open because unverified plaintext-key issuance and
   tracker-nil duplicate minting still exist.
+- `CMD-0102` revalidated the Wave 8 key-policy work and preserved
+  `F-1226` as open because cache-hit requests still lose policy fields,
+  monthly quotas remain unenforced, and `TouchUsage` still has no
+  production caller.
+- `CMD-0103` reran docs lint after the committed Wave 8 middleware/test
+  files entered tracked scope and restored literal inventory parity at
+  `tracked=1872`, `rows=1872`.
 - Closure caveat: the TSV remains the per-file coverage control. Rows
   with `todo` still require terminal file-level review before claiming
   literal every-file closure. `EV-0063` documented the scope drift when
   the repository advanced from the original `80c57e...` anchor to
-  current `27343a46...`; `EV-0078` resolves the first count mismatch,
-  and `EV-0097` preserves the later refresh back to `1,870` tracked rows.
+  current `8a61c17e...`; `EV-0078` resolves the first count mismatch,
+  `EV-0097` preserves the refresh back to `1,870` tracked rows, and
+  `EV-0101` restores parity again after the two committed key-policy
+  files increased tracked scope to `1,872`.
   Current findings remain source/R1 verified and not imported from prior
   audits, but final whole-repo closure still requires terminal review
   status across the refreshed TSV. The current inventory roll-up is
-  `done=99`, `in_progress=47`, `todo=1724`.
+  `done=99`, `in_progress=50`, `todo=1723`.

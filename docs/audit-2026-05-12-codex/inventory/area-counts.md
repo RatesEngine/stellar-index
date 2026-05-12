@@ -29,7 +29,7 @@ Generated from `git ls-files` excluding `docs/audit-2026-05-12-codex/**`.
 | `examples` | 14 |
 | `go.mod` | 1 |
 | `go.sum` | 1 |
-| `internal` | 671 |
+| `internal` | 673 |
 | `migrations` | 59 |
 | `openapi` | 1 |
 | `pkg` | 10 |

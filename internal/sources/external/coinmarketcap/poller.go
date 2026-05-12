@@ -71,6 +71,21 @@ type Poller struct {
 	APIKey   string
 	Endpoint string
 	Interval time.Duration
+
+	// CMCIDs maps upper-case ticker → CMC numeric id (as a
+	// string, e.g. "512" for XLM). F-1237 (codex audit-2026-05-12):
+	// querying CMC by `symbol=` is ambiguous — multiple coins can
+	// share the same ticker (LUNA, LUNC, etc.) and CMC picks the
+	// highest-ranked match, which can drift between tickers and
+	// over time. When this map is populated, the poller queries by
+	// `id=<numeric>` for every ticker present so the bound asset
+	// is unambiguous. Tickers without an entry fall back to the
+	// `symbol=` query — same behaviour as before.
+	//
+	// Wired from `currency.Catalogue.CoinMarketCapIDs()` in the
+	// indexer/aggregator binaries. Leave nil to preserve the
+	// legacy symbol-only path.
+	CMCIDs map[string]string
 }
 
 // NewPoller constructs a Poller with validated API key.
@@ -143,7 +158,14 @@ func (p *Poller) PollOnce(ctx context.Context, pairs []canonical.Pair) ([]canoni
 	}
 
 	symbols := make([]string, 0, len(symbolSet))
+	ids := make([]string, 0, len(symbolSet))
 	for s := range symbolSet {
+		if p.CMCIDs != nil {
+			if id, ok := p.CMCIDs[s]; ok && id != "" {
+				ids = append(ids, id)
+				continue
+			}
+		}
 		symbols = append(symbols, s)
 	}
 	currencies := make([]string, 0, len(currencySet))
@@ -152,7 +174,18 @@ func (p *Poller) PollOnce(ctx context.Context, pairs []canonical.Pair) ([]canoni
 	}
 
 	q := url.Values{}
-	q.Set("symbol", strings.Join(symbols, ","))
+	// F-1237 (codex audit-2026-05-12): prefer `id=<numeric>` over
+	// `symbol=` for any ticker that has an authoritative CMC ID in
+	// the catalogue. CMC's symbol-only path returns the highest-
+	// ranked match for an ambiguous ticker, which silently binds
+	// the wrong coin to our oracle output. The numeric ID is
+	// stable across rankings.
+	if len(ids) > 0 {
+		q.Set("id", strings.Join(ids, ","))
+	}
+	if len(symbols) > 0 {
+		q.Set("symbol", strings.Join(symbols, ","))
+	}
 	q.Set("convert", strings.Join(currencies, ","))
 
 	endpoint := p.Endpoint

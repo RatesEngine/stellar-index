@@ -323,6 +323,17 @@ func (h *Handlers) HandleLogout(w http.ResponseWriter, r *http.Request) {
 // signupNewUser creates the account + first user from a
 // just-verified email. Single-org v1: every new email gets
 // its own account with the user as owner.
+//
+// F-1255 (codex audit-2026-05-12): concurrent /v1/auth/callback
+// callbacks for the same just-verified email can race — both pass
+// the GetUserByEmail check, both create an account, only the
+// first user-insert wins on `users_email_idx`. Pre-fix the loser
+// returned 500 and the speculative-account row stayed orphaned.
+// Now we catch the ErrConflict path on CreateUser, re-fetch the
+// winning user (so both callers converge on the same User row),
+// and return it. The speculative account row is now an orphan
+// the operator-side reaper handles; better than 500ing the
+// customer's first-login attempt.
 func (h *Handlers) signupNewUser(ctx context.Context, email string) (platform.User, error) {
 	slug := slugFromEmail(email)
 	acct, err := h.cfg.Accounts.Create(ctx, platform.Account{
@@ -355,6 +366,20 @@ func (h *Handlers) signupNewUser(ctx context.Context, email string) (platform.Us
 		Role:      platform.RoleOwner,
 	})
 	if err != nil {
+		if errors.Is(err, platform.ErrConflict) {
+			// Race lost on the email unique index. The OTHER
+			// concurrent callback won, its CreateUser
+			// succeeded, and its account is the canonical one.
+			// Re-fetch and use that user; our speculative
+			// account becomes an orphan for the operator reaper.
+			h.cfg.Logger.Warn("signup race: rolling back to winning user",
+				"email", email, "speculative_account_id", acct.ID)
+			winner, getErr := h.cfg.Users.GetUserByEmail(ctx, email)
+			if getErr != nil {
+				return platform.User{}, fmt.Errorf("create user conflict + reload: %w", getErr)
+			}
+			return winner, nil
+		}
 		return platform.User{}, fmt.Errorf("create user: %w", err)
 	}
 	return user, nil

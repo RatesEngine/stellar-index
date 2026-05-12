@@ -575,13 +575,19 @@ func startExternalConnectors( //nolint:gocognit,gocyclo,funlen // dispatch-heavy
 		if err != nil {
 			return nil, nil, fmt.Errorf("coinmarketcap: %w", err)
 		}
+		// F-1237 (codex audit-2026-05-12): bind the verified-
+		// currency catalogue's CMC IDs so the poller queries by
+		// `id=<numeric>` for any ticker with an authoritative ID,
+		// disambiguating polluted tickers (LUNA, LUNC, etc.).
+		p.CMCIDs = catalogue.CoinMarketCapIDs()
 		pollers = append(pollers, external.PollerSpec{
 			Poller: p,
 			Pairs:  aggregatorPairs,
 		})
 		logger.Info("external poller enabled",
 			"source", externalcoinmarketcap.SourceName,
-			"pairs", len(aggregatorPairs))
+			"pairs", len(aggregatorPairs),
+			"cmc_ids", len(p.CMCIDs))
 		enabled = append(enabled, externalcoinmarketcap.SourceName)
 	}
 

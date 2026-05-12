@@ -951,6 +951,8 @@ internal/api/v1/middleware/cors_test.go	internal	internal/api/v1	test	todo			col
 internal/api/v1/middleware/doc.go	internal	internal/api/v1	runtime	todo			cold audit pending
 internal/api/v1/middleware/envelope404.go	internal	internal/api/v1	runtime	todo			cold audit pending
 internal/api/v1/middleware/flush_test.go	internal	internal/api/v1	test	todo			cold audit pending
+internal/api/v1/middleware/keypolicy.go	internal	internal/api/v1	runtime	in_progress	EV-0100;F-1226	XFI-0018	Reviewed new policy middleware shape and current cache-hit parity gap; broader middleware audit still open
+internal/api/v1/middleware/keypolicy_test.go	internal	internal/api/v1	test	in_progress	EV-0100;F-1226	XFI-0018	Reviewed new policy middleware tests; broader negative/cache-path coverage still open
 internal/api/v1/middleware/logger.go	internal	internal/api/v1	runtime	todo			cold audit pending
 internal/api/v1/middleware/middleware_test.go	internal	internal/api/v1	test	todo			cold audit pending
 internal/api/v1/middleware/ratelimit.go	internal	internal/api/v1	runtime	in_progress	EV-0023,F-1212	XFI-0008	Uses Subject.RateLimitPerMin as effective per-key override

@@ -15,7 +15,7 @@ Snapshot anchor: `80c57e38eeee729ec2d879d54286419206cee864`
 | Current findings imported | none |
 | Tracked file source | `git ls-files` |
 | Tracked file count before this directory | `1,747` |
-| Execution-time scope drift | current `HEAD` advanced to `27343a46...`; the inventory remains reconciled at `1,870` tracked rows on 2026-05-12 after `internal/customerwebhook/ssrf.go` entered scope and the Wave 5/Wave 7 remediation commits landed; see `EV-0063`, `EV-0078`, `EV-0097`, `EV-0098`, and `EV-0099` |
+| Execution-time scope drift | current `HEAD` advanced to `8a61c17e...`; the inventory remains reconciled at `1,872` tracked rows on 2026-05-12 after `internal/customerwebhook/ssrf.go` and the committed key-policy middleware/test files entered scope; see `EV-0063`, `EV-0078`, `EV-0097`, `EV-0098`, `EV-0099`, and `EV-0101` |
 | File inventory | [inventory/file-coverage.tsv](inventory/file-coverage.tsv) |
 | Evidence ledger | [evidence/log.md](evidence/log.md) |
 | Command ledger | [evidence/commands.md](evidence/commands.md) |

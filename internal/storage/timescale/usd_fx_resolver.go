@@ -158,10 +158,18 @@ func (r *VWAPUSDFXResolver) USDPriceAt(ctx context.Context, asset canonical.Asse
 		r.storeCache(key, fxCacheEntry{rate: "", cachedAt: r.clock()})
 		return "", false, nil
 	}
-	if r.freshness > 0 && r.clock().Sub(observedAt) > r.freshness {
-		// Stale: don't return the rate, but cache the negative
-		// result for the TTL window so we don't re-query on every
-		// trade.
+	if r.freshness > 0 && at.Sub(observedAt) > r.freshness {
+		// F-1251 (codex audit-2026-05-12): staleness is measured
+		// against the TRADE timestamp `at`, not wall-clock. Pre-
+		// fix the comparison used `r.clock().Sub(observedAt)`,
+		// which rejected every historical / backfill trade older
+		// than the 1h window even when a contemporaneous FX
+		// anchor existed (the trade ran at T, the anchor was at
+		// T-30m, both an hour ago — fine in trade-time but the
+		// old check saw it as "anchor is 1h30m stale by my
+		// wall-clock"). Now: at-time freshness, so historical
+		// replay and backfill correctly inherit a peer-aligned
+		// USD rate.
 		r.storeCache(key, fxCacheEntry{rate: "", cachedAt: r.clock()})
 		return "", false, nil
 	}
