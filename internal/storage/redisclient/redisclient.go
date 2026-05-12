@@ -33,6 +33,10 @@ import (
 // The returned client is safe for concurrent use; close it via
 // [redis.UniversalClient.Close] on shutdown.
 func Build(cfg config.StorageConfig) redis.UniversalClient {
+	// Username is empty by default (legacy default-user path) and
+	// set to "ratesengine" (or per-component) when the operator
+	// flipped redis_acl_lockdown=true in the redis-sentinel ansible
+	// role. F-1213 (audit-2026-05-12).
 	if len(cfg.RedisSentinelAddrs) > 0 {
 		return redis.NewFailoverClient(&redis.FailoverOptions{
 			MasterName:    cfg.RedisMasterName,
@@ -41,6 +45,7 @@ func Build(cfg config.StorageConfig) redis.UniversalClient {
 			// Sentinel — see ADR-0024 §"Auth": requirepass +
 			// masterauth + sentinel auth-pass all share the vault
 			// entry.
+			Username:         cfg.RedisUsername,
 			Password:         cfg.RedisPassword,
 			SentinelPassword: cfg.RedisPassword,
 		})
@@ -50,6 +55,7 @@ func Build(cfg config.StorageConfig) redis.UniversalClient {
 	}
 	return redis.NewClient(&redis.Options{
 		Addr:     cfg.RedisAddr,
+		Username: cfg.RedisUsername,
 		Password: cfg.RedisPassword,
 	})
 }

@@ -169,6 +169,29 @@ against.
 
 ### Added
 
+- **Opt-in Redis ACL lockdown template (F-1213).** Closes the
+  pre-flip Redis-ACL gap on R1 by codifying a narrow ACL config
+  in the redis-sentinel ansible role. New `redis_acl_lockdown`
+  flag (default false for backward compat) renders
+  `templates/users.acl.j2` to `/etc/redis/users.acl`, references
+  it from `redis.conf.j2` via `aclfile`, and:
+  - Disables the legacy `default` user (`off nopass nocommands`)
+    so no password-less access path remains.
+  - Creates a `ratesengine` application user with
+    `+@read +@write +@scripting +@pubsub +@connection` minus the
+    `@admin` + `@dangerous` families, scoped via `~prefix:*` to
+    exactly the cache key prefixes the application uses (vwap,
+    confidence, freeze, div, ratelimit, signup-ip, toml, meta,
+    price, apikey, health, oracle, subscriber) plus the pub/sub
+    channels (`&closed-bucket-*`, `&stream-*`).
+  Application binaries get a new `[storage].redis_username` TOML
+  key (default empty = legacy path; operators set it to
+  `ratesengine` when they flip the lockdown). `redisclient.Build`
+  threads it into both the FailoverClient and single-node code
+  paths. Commented-out per-component (`re_aggregator` /
+  `re_api` / `re_indexer`) users in the template show the
+  follow-on split when operators add per-binary passwords.
+
 - **L2.2 Phase 2 FX-anchor USD volume coverage (F-1268).** New
   `timescale.VWAPUSDFXResolver` implements the pre-existing
   `USDVolumeFXResolver` interface against the `prices_1m`

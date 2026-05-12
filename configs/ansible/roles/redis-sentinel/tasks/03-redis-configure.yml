@@ -35,3 +35,21 @@
     mode: "0640"
   when: not redis_first_run_only or redis_sentinel_state.rc != 0
   notify: "redis config changed"
+
+# F-1213 (audit-2026-05-12): when redis_acl_lockdown is true, render
+# a narrow ACL file that disables the legacy default user + creates
+# one application user with scoped commands + key patterns. The
+# redis.conf.j2 template references this file iff the flag is set.
+# Opt-in to preserve backward compat for deployments that aren't
+# ready to migrate; R1 should flip this on pre-flip.
+- name: render /etc/redis/users.acl (lockdown)
+  template:
+    src: users.acl.j2
+    dest: /etc/redis/users.acl
+    owner: "{{ redis_user }}"
+    group: "{{ redis_group }}"
+    mode: "0640"
+  when:
+    - redis_acl_lockdown | bool
+    - not redis_first_run_only or redis_sentinel_state.rc != 0
+  notify: "redis config changed"

@@ -1,0 +1,69 @@
+{# users.acl.j2 — Redis 6+ ACL config rendered by the redis-sentinel #}
+{# role when `redis_acl_lockdown: true`. F-1213 audit-2026-05-12. #}
+{# #}
+{# Pre-F-1213: Redis on R1 ran with the default `requirepass` flow + #}
+{# the legacy `default` user retaining `on nopass ~* &* +@all` — so a #}
+{# password-less client (or any compromised process on the box) could #}
+{# enumerate every key + run admin commands like FLUSHALL or DEBUG. #}
+{# #}
+{# This file closes the legacy default-user surface and replaces it #}
+{# with one narrow per-component user that covers the cache key set #}
+{# the application actually uses. Operators with stricter posture #}
+{# split the per-component user further (aggregator-only / api-only / #}
+{# indexer-only) — each gets its own >password and ~keypattern. #}
+{# Today the application binaries share `redis_password` so a single #}
+{# `ratesengine` user is sufficient. #}
+
+# Disable the legacy default user. `off` means it cannot AUTH at all
+# — every connection MUST authenticate as one of the named users
+# below. Combined with `protected-mode yes` in redis.conf this
+# eliminates the "compromised local process gets everything" path.
+user default off nopass nocommands
+
+# Application user. ONE password shared with every application
+# binary today (aggregator + indexer + api + customerwebhook
+# worker); future per-component split adds parallel users with
+# their own >password lines.
+#
+# Command surface (`+@read +@write +@scripting +@pubsub` minus the
+# admin/dangerous families):
+#
+#   - @read       — GET / HGET / LRANGE / SMEMBERS / ZRANGE / EXISTS
+#   - @write      — SET / DEL / EXPIRE / HSET / SADD / ZADD / INCR
+#   - @scripting  — EVAL / EVALSHA (rate-limit token bucket)
+#   - @pubsub     — SUBSCRIBE / PUBLISH (closed-bucket stream)
+#   - @connection — AUTH / PING / SELECT / HELLO (everyone needs these)
+#
+# Explicitly DENIED (each `-cmd` overrides the `+@write`-default
+# permission):
+#
+#   - @admin      — CONFIG SET / DEBUG / SHUTDOWN / FLUSHALL / FLUSHDB
+#   - @dangerous  — KEYS (full-keyspace scan), MIGRATE, MODULE,
+#                   CLUSTER, REPLICAOF, SLAVEOF, FAILOVER, RESET,
+#                   FUNCTION, ACL, CLIENT KILL, LATENCY, MEMORY
+#                   DOCTOR, OBJECT, SLOWLOG, MONITOR, COMMAND COUNT
+#
+# Key-pattern allow-list (`~`) restricts the user to the cache key
+# prefixes the application actually uses. Anything outside the list
+# (operator scratch keys, third-party tool spillover) is invisible.
+user ratesengine on >{{ redis_password }} \
+  -@all +@read +@write +@scripting +@pubsub +@connection \
+  -@admin -@dangerous \
+  ~vwap:* ~confidence:* ~freeze:* ~div:* \
+  ~ratelimit:* ~signup-ip:* \
+  ~toml:* ~meta:* ~price:* ~apikey:* ~health:* ~oracle:* \
+  ~subscriber:* \
+  &closed-bucket-* &stream-*
+
+{# When the operator wants per-component lockdown they uncomment #}
+{# the three users below (rotating distinct passwords through the #}
+{# vault) and stop the API / aggregator / indexer binaries with #}
+{# their own narrower `REDIS_PASSWORD` env vars: #}
+{# #}
+{# user re_aggregator on >$pass_aggregator -@all +@read +@write -@admin -@dangerous \ #}
+{#   ~vwap:* ~confidence:* ~freeze:* ~div:* ~health:* &closed-bucket-* #}
+{# user re_api        on >$pass_api        -@all +@read +@write +@pubsub -@admin -@dangerous \ #}
+{#   ~vwap:* ~confidence:* ~freeze:* ~div:* ~ratelimit:* ~signup-ip:* \ #}
+{#   ~toml:* ~meta:* ~price:* ~apikey:* ~oracle:* ~subscriber:* &closed-bucket-* &stream-* #}
+{# user re_indexer    on >$pass_indexer    -@all +@read +@write -@admin -@dangerous \ #}
+{#   ~health:* #}

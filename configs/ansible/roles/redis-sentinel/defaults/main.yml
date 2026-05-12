@@ -25,6 +25,22 @@ redis_group: redis
 # same value so replicas authenticate to the primary.
 redis_password: ""
 
+# F-1213 (audit-2026-05-12): when true, the role also renders
+# /etc/redis/users.acl from `templates/users.acl.j2` and points
+# redis.conf at it via `aclfile`. Disables the legacy `default on
+# nopass ~* +@all` user and grants the application a single
+# `ratesengine` user with `+@read +@write +@scripting +@pubsub`
+# minus the @admin / @dangerous families, scoped to the cache
+# key prefixes the application actually uses (vwap:, freeze:,
+# div:, ratelimit:, signup-ip:, …).
+#
+# Opt-in for backward compat — leave false on first-run; flip
+# true at pre-flip after confirming every application binary
+# auths as the `ratesengine` user (production wiring already
+# does via redis_password). On a flipped config, the legacy
+# password-only path is REJECTED because the default user is off.
+redis_acl_lockdown: false
+
 # Memory + eviction. Cache-only deployment, allkeys-lru is the
 # only sane default — keys older than working set get evicted
 # before OOM kills the process.

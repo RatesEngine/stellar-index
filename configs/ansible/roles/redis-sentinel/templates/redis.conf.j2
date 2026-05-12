@@ -10,6 +10,18 @@ protected-mode yes
 requirepass {{ redis_password }}
 masterauth {{ redis_password }}
 
+{% if redis_acl_lockdown | bool %}
+# F-1213 (audit-2026-05-12): narrow ACLs in addition to requirepass.
+# When the aclfile is loaded:
+#   - The legacy `default` user is `off` — no password works for it.
+#   - Application binaries authenticate as the `ratesengine` user
+#     (using the same password they previously sent against the
+#     default user via AUTH or HELLO AUTH).
+#   - Operator CLI access uses a separate `cli` ACL or the
+#     unix-socket-bound admin user; not surfaced here by default.
+aclfile /etc/redis/users.acl
+{% endif %}
+
 # Persistence (ha-plan §3.4: AOF every-second + RDB nightly)
 appendonly {{ redis_appendonly }}
 appendfsync {{ redis_aof_appendfsync }}
