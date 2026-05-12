@@ -147,6 +147,15 @@ type APIKeyRecord struct {
 	// the runtime quota middleware enforces. Zero (the default)
 	// disables the check. F-1226 (codex audit-2026-05-12).
 	MonthlyQuota int64 `json:"monthly_quota,omitempty"`
+
+	// EmailVerifiedAt is the timestamp the customer clicked
+	// the verification link in the post-signup email. Zero =
+	// never verified. F-1218 wave 45 (codex audit-2026-05-12):
+	// the optional `RequireEmailVerified` middleware uses this
+	// flag to gate /v1/* access — keys minted via /v1/signup
+	// stay usable until an operator opts in via config, then
+	// unverified keys 403 until the customer clicks the link.
+	EmailVerifiedAt time.Time `json:"email_verified_at,omitempty"`
 }
 
 // RedisOption configures a [RedisAPIKeyValidator] at construction.
@@ -226,6 +235,16 @@ func (v *RedisAPIKeyValidator) Lookup(ctx context.Context, key string) (Subject,
 		CreatedAt:       rec.CreatedAt,
 		Label:           rec.Label,
 		KeyPrefix:       rec.KeyPrefix,
+		// F-1218 wave 45 (codex audit-2026-05-12): populate the
+		// EmailVerifiedAt timestamp so the optional
+		// `middleware.RequireEmailVerified` can gate /v1/* access
+		// on whether the customer ever clicked the post-signup
+		// verification link. Zero = never verified; the gate
+		// fires when `RequireEmailVerified` is wired AND the
+		// subject's identifier indicates a /v1/signup origin
+		// (legacy operator-minted + dashboard-minted keys are
+		// scoped out so the gate doesn't break them).
+		EmailVerifiedAt: rec.EmailVerifiedAt,
 	}, nil
 }
 

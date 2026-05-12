@@ -639,19 +639,24 @@ func run(cfgPath string, dryRun bool) error { //nolint:gocognit,funlen,gocyclo /
 		SignupIPThrottle:    signupIPThrottle,
 		SignupVerifier:      signupVerifier,
 		SignupVerifyEmailer: signupVerifyEmailerOrNil(dashboardBundle.sender, dashboardBundle.emailFrom),
-		Stripe:              stripeCfg,
-		Divergence:          divergenceLooker,
-		Confidence:          redisConfidenceLooker{rdb: rdb},
-		Triangulated:        redisTriangulatedLooker{rdb: rdb},
-		Freeze:              freezeLooker,
-		Supply:              storeSupplyLooker{s: store},
-		Volume:              storeVolumeReader{s: store},
-		Change24h:           storeChange24hReader{s: store, pegs: usdPegs},
-		ChangeSummary:       store,
-		Coins:               cachedCoinsReader,
-		Issuers:             store,
-		Cursors:             store,
-		NetworkStats:        store,
+		// F-1218 wave 45 (codex audit-2026-05-12): the verify
+		// handler flips the EmailVerifiedAt flag on the
+		// underlying Redis-stored API key record after Consume.
+		APIKeyEmailVerifier:  apiKeyEmailVerifierOrNil(rdb),
+		RequireEmailVerified: requireEmailVerifiedOrNil(cfg.API.SignupRequireEmailVerification),
+		Stripe:               stripeCfg,
+		Divergence:           divergenceLooker,
+		Confidence:           redisConfidenceLooker{rdb: rdb},
+		Triangulated:         redisTriangulatedLooker{rdb: rdb},
+		Freeze:               freezeLooker,
+		Supply:               storeSupplyLooker{s: store},
+		Volume:               storeVolumeReader{s: store},
+		Change24h:            storeChange24hReader{s: store, pegs: usdPegs},
+		ChangeSummary:        store,
+		Coins:                cachedCoinsReader,
+		Issuers:              store,
+		Cursors:              store,
+		NetworkStats:         store,
 		// Wrap with a 60s TTL cache. The underlying SQL aggregations
 		// (24h trades-hypertable scan grouped by source) take 5-10s;
 		// the explorer hits these on every /dexes + /exchanges page
@@ -2291,6 +2296,39 @@ func (a *signupVerifyEmailerAdapter) SendSignupVerification(ctx context.Context,
 		},
 	}
 	return a.sender.Send(ctx, msg)
+}
+
+// apiKeyEmailVerifierOrNil returns the v1.APIKeyEmailVerifier
+// adapter when Redis is reachable; otherwise nil so the verify
+// handler skips the marker step. F-1218 wave 45 (codex audit-
+// 2026-05-12).
+func apiKeyEmailVerifierOrNil(rdb redis.UniversalClient) v1.APIKeyEmailVerifier {
+	if rdb == nil {
+		return nil
+	}
+	return &apiKeyEmailVerifierAdapter{store: auth.NewRedisAPIKeyStore(rdb)}
+}
+
+// apiKeyEmailVerifierAdapter bridges the v1.APIKeyEmailVerifier
+// interface to auth.RedisAPIKeyStore.MarkEmailVerified.
+type apiKeyEmailVerifierAdapter struct {
+	store *auth.RedisAPIKeyStore
+}
+
+func (a *apiKeyEmailVerifierAdapter) MarkEmailVerified(ctx context.Context, keyID string, at time.Time) error {
+	_, err := a.store.MarkEmailVerified(ctx, keyID, at)
+	return err
+}
+
+// requireEmailVerifiedOrNil returns the F-1218 wave 45 gate
+// middleware when the operator has opted in via
+// `cfg.API.SignupRequireEmailVerification`; nil keeps the gate
+// off so the pre-F-1218 wire contract is preserved.
+func requireEmailVerifiedOrNil(enabled bool) middleware.Middleware {
+	if !enabled {
+		return nil
+	}
+	return middleware.RequireEmailVerified()
 }
 
 // signupVerifyEmailerOrNil returns the v1.SignupVerifyEmailer

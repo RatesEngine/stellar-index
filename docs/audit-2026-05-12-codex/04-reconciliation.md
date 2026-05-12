@@ -301,9 +301,27 @@ without evidence IDs.
   the FX resolver fixes are landed, but the migration `0030` blocker prevents
   the tagged DB-backed integration proof from running, so the finding belongs
   in `needs_evidence` rather than `fixed`.
-- `CMD-0121` preserved `F-1228` as a source/live drift issue: the SSE deadline
-  fix exists in code, yet the public R1 stream still terminates around the
-  former 30-second cutoff.
+- `CMD-0141` refreshes `F-1225` against current live R1. The source fallback
+  and its regression test remain present, but deployed R1 still serves empty
+  `native/fiat:USD` since-inception history while direct Circle-USDC history is
+  populated under a peg-enabled config.
+- `CMD-0142` refreshes `F-1228` against current live R1. The SSE deadline fix
+  still exists in code and the focused stream packages pass, yet the R1
+  loopback tip-stream probe again terminates at elapsed `30.0` seconds under a
+  68-second client ceiling.
+- `CMD-0143` refreshes `F-1219` on current head. The platform bridge remains
+  wired and useful, but Stripe still lifts only Redis-backed legacy key budgets,
+  leaves Postgres dashboard-key budgets untouched, and lacks closure-grade
+  tests for the bridge/subscription/invoice side effects.
+- `CMD-0144` refreshes `F-1218` against the current signup-verification state.
+  Wave 44 now emits tokens/emails, but the key is still usable before proof of
+  ownership; the wave-45 verified-state marker is not production-wired, its
+  Redis implementation is still untracked workspace code, and no actual
+  request-path `RequireEmailVerified` middleware exists in-tree.
+- `CMD-0145` immediately supersedes that narrower workspace snapshot: the
+  wave-45 gate/marker wiring now exists in the moving checkout and its focused
+  tests pass, but the new files are still untracked, the gate defaults off, and
+  docs lint currently fails on the unreconciled config-reference key.
 - `CMD-0122` surfaced new high-severity migration finding `F-1261`.
   Migration `0030_asset_supply_history_unique_constraint` fails against the
   compressed hypertable created by `0005`, fresh integration bootstrap dies

@@ -132,6 +132,16 @@ type Subject struct {
 	// Postgres-backed validator (Postgres is the only store that
 	// has this column at time of writing).
 	MonthlyQuota int64
+
+	// EmailVerifiedAt is the timestamp the customer confirmed
+	// ownership of the email they signed up with by clicking the
+	// link emailed by the F-1218 wave 44 producer step. Zero =
+	// never verified. The optional `middleware.RequireEmailVerified`
+	// (F-1218 wave 45) gates /v1/* access on this field when the
+	// operator opts in via config — unverified API-key Subjects
+	// 403 with a clear message pointing at the verify endpoint.
+	// Without the middleware, the field is informational only.
+	EmailVerifiedAt time.Time
 }
 
 // SubjectPermissionEntry mirrors platform.KeyPermissionEntry so

@@ -42,6 +42,20 @@ type SignupVerifyEmailer interface {
 	SendSignupVerification(ctx context.Context, toEmail, verifyURL string) error
 }
 
+// APIKeyEmailVerifier is the v1 boundary for flipping a Redis-
+// stored API key's `EmailVerifiedAt` timestamp. Production
+// wiring is `auth.RedisAPIKeyStore.MarkEmailVerified`. F-1218
+// wave 45 (codex audit-2026-05-12): the `/v1/signup/verify`
+// handler calls this after Consume so the optional
+// `middleware.RequireEmailVerified` gate can rely on the flag.
+// Nil-safe — when no marker is wired (Redis-less / SAC-style
+// deployment) the verify handler still succeeds, the wire
+// shape stays the same, but downstream gates can't honour the
+// signal.
+type APIKeyEmailVerifier interface {
+	MarkEmailVerified(ctx context.Context, keyID string, at time.Time) error
+}
+
 // SignupVerifyResult is the wire shape for `GET /v1/signup/
 // verify?token=…` responses. The key_id surfaces so the
 // dashboard / CLI can correlate the verified key with the
@@ -105,6 +119,19 @@ func (s *Server) handleSignupVerify(w http.ResponseWriter, r *http.Request) {
 			"Internal error", http.StatusInternalServerError,
 			"verification failed; try again in a moment")
 		return
+	}
+	// F-1218 wave 45 (codex audit-2026-05-12): flip the
+	// `EmailVerifiedAt` timestamp on the key record so the
+	// optional `RequireEmailVerified` middleware can let this
+	// caller through on subsequent requests. Best-effort —
+	// a marker failure logs at warn but doesn't fail the
+	// verify response (the token has already been consumed;
+	// surfacing 500 here would leave the customer stuck).
+	if s.apiKeyEmailVerifier != nil {
+		if err := s.apiKeyEmailVerifier.MarkEmailVerified(r.Context(), keyID, time.Time{}); err != nil {
+			s.logger.Warn("signup verify: MarkEmailVerified failed; gate stays unsatisfied for this key",
+				"err", err, "key_id", keyID)
+		}
 	}
 	writeJSON(w, SignupVerifyResult{
 		Verified: true,

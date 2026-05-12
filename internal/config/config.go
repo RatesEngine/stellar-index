@@ -522,20 +522,30 @@ type TriangulationChainConfig struct {
 
 // APIConfig controls the public REST+SSE server.
 type APIConfig struct {
-	ListenAddr          string          `toml:"listen_addr" doc:"Bind address for the HTTP server." default:"0.0.0.0:3000"`
-	ExternalBaseURL     string          `toml:"external_base_url" doc:"Public-facing base URL (e.g. https://api.ratesengine.net/v1)." default:"https://api.ratesengine.net/v1"`
-	AuthMode            string          `toml:"auth_mode" doc:"Authentication mode — none / apikey / apikey_optional / sep10. 'none' attaches anonymous Subject to every request. 'apikey' requires Authorization: Bearer <key> on every request; missing → 401. 'apikey_optional' is the freemium shape — anonymous floor (60/min) without a key, per-key tier (1000/min default) with a valid key, invalid key → 401. 'sep10' requires a SEP-10 JWT. The API binary wires real validators when the required dependencies are present; deployments that opt into auth without satisfying those fail loud rather than silently demoting to anonymous." default:"none"`
-	AuthBackend         string          `toml:"auth_backend" doc:"Backing store for API-key validation. 'redis' (default) uses the legacy apikey:<hash> JSON records minted by /v1/signup. 'postgres' uses the platform.api_keys table (the dashboard's source of truth) with Redis as a read-through cache — required for keys minted from the dashboard to authenticate against the runtime API. Cutover knob: deployments running both /v1/signup keys and dashboard-minted keys should use 'postgres' (the validator falls back to Postgres on Redis cache miss + writes back, so existing legacy keys keep working transparently)." default:"redis"`
-	AnonRateLimitPerMin int             `toml:"anon_rate_limit_per_min" doc:"Per-IP rate limit for anonymous requests." default:"60"`
-	KeyRateLimitPerMin  int             `toml:"key_rate_limit_per_min" doc:"Per-API-key rate limit, default tier." default:"1000"`
-	CDNEnabled          bool            `toml:"cdn_enabled" doc:"Emit CDN-friendly Cache-Control headers on long-immutable endpoints." default:"true"`
-	AllowedOrigins      []string        `toml:"allowed_origins" doc:"CORS allow-list for browser clients." default:"[\"*\"]"`
-	TrustedProxyCIDRs   []string        `toml:"trusted_proxy_cidrs" doc:"Immediate peer CIDR allow-list that is permitted to supply X-Forwarded-For. Empty means the API ignores that header and uses the socket peer address for logging, anonymous identity, and IP-based rate limiting." default:"[]"`
-	SEP10               SEP10Config     `toml:"sep10" doc:"SEP-10 Web Auth — server signing seed, JWT secret, TTLs. Active when auth_mode=sep10 OR when /v1/auth/sep10/* endpoints are exposed."`
-	Streaming           StreamingConfig `toml:"streaming" doc:"Closed-bucket SSE fanout — pairs the API binary republishes to the streaming Hub on every new closed prices_1m bucket. Empty Pairs leaves /v1/price/stream returning 503; Hub still constructs so subscribers can connect (and immediately drop) without a panic."`
-	Stripe              StripeConfig    `toml:"stripe" doc:"Stripe webhook handler — paid-tier upgrades wired to POST /v1/webhooks/stripe. Empty signing_secret leaves the endpoint 503."`
-	PrometheusURL       string          `toml:"prometheus_url" doc:"Prometheus HTTP API root (e.g. http://localhost:9090) backing /v1/status. Empty leaves /v1/status serving an in-process surface (uptime + region only)." default:""`
-	Dashboard           DashboardConfig `toml:"dashboard" doc:"Customer dashboard auth flow — magic-link email login + cookie sessions backing the dashboard SPA at app.ratesengine.net. Empty leaves /v1/auth/{login,callback,logout} returning 503."`
+	ListenAddr          string `toml:"listen_addr" doc:"Bind address for the HTTP server." default:"0.0.0.0:3000"`
+	ExternalBaseURL     string `toml:"external_base_url" doc:"Public-facing base URL (e.g. https://api.ratesengine.net/v1)." default:"https://api.ratesengine.net/v1"`
+	AuthMode            string `toml:"auth_mode" doc:"Authentication mode — none / apikey / apikey_optional / sep10. 'none' attaches anonymous Subject to every request. 'apikey' requires Authorization: Bearer <key> on every request; missing → 401. 'apikey_optional' is the freemium shape — anonymous floor (60/min) without a key, per-key tier (1000/min default) with a valid key, invalid key → 401. 'sep10' requires a SEP-10 JWT. The API binary wires real validators when the required dependencies are present; deployments that opt into auth without satisfying those fail loud rather than silently demoting to anonymous." default:"none"`
+	AuthBackend         string `toml:"auth_backend" doc:"Backing store for API-key validation. 'redis' (default) uses the legacy apikey:<hash> JSON records minted by /v1/signup. 'postgres' uses the platform.api_keys table (the dashboard's source of truth) with Redis as a read-through cache — required for keys minted from the dashboard to authenticate against the runtime API. Cutover knob: deployments running both /v1/signup keys and dashboard-minted keys should use 'postgres' (the validator falls back to Postgres on Redis cache miss + writes back, so existing legacy keys keep working transparently)." default:"redis"`
+	AnonRateLimitPerMin int    `toml:"anon_rate_limit_per_min" doc:"Per-IP rate limit for anonymous requests." default:"60"`
+	KeyRateLimitPerMin  int    `toml:"key_rate_limit_per_min" doc:"Per-API-key rate limit, default tier." default:"1000"`
+
+	// SignupRequireEmailVerification opts the deployment into
+	// the F-1218 wave 45 gate: API-key Subjects whose
+	// EmailVerifiedAt is zero AND whose identifier indicates
+	// /v1/signup origin get 403 with a Problem-JSON pointing
+	// at the verify endpoint. Default false to preserve the
+	// pre-F-1218 wire contract — operators flip this on after
+	// they've given existing customers a grace window to click
+	// their verification link.
+	SignupRequireEmailVerification bool            `toml:"signup_require_email_verification" doc:"F-1218: when true, /v1/signup-minted API keys must complete email-ownership-proof (clicking the link emailed at signup) before they can authenticate. Default false to preserve the pre-F-1218 wire contract; flip true after the rollout window when operators have given existing customers time to verify." default:"false"`
+	CDNEnabled                     bool            `toml:"cdn_enabled" doc:"Emit CDN-friendly Cache-Control headers on long-immutable endpoints." default:"true"`
+	AllowedOrigins                 []string        `toml:"allowed_origins" doc:"CORS allow-list for browser clients." default:"[\"*\"]"`
+	TrustedProxyCIDRs              []string        `toml:"trusted_proxy_cidrs" doc:"Immediate peer CIDR allow-list that is permitted to supply X-Forwarded-For. Empty means the API ignores that header and uses the socket peer address for logging, anonymous identity, and IP-based rate limiting." default:"[]"`
+	SEP10                          SEP10Config     `toml:"sep10" doc:"SEP-10 Web Auth — server signing seed, JWT secret, TTLs. Active when auth_mode=sep10 OR when /v1/auth/sep10/* endpoints are exposed."`
+	Streaming                      StreamingConfig `toml:"streaming" doc:"Closed-bucket SSE fanout — pairs the API binary republishes to the streaming Hub on every new closed prices_1m bucket. Empty Pairs leaves /v1/price/stream returning 503; Hub still constructs so subscribers can connect (and immediately drop) without a panic."`
+	Stripe                         StripeConfig    `toml:"stripe" doc:"Stripe webhook handler — paid-tier upgrades wired to POST /v1/webhooks/stripe. Empty signing_secret leaves the endpoint 503."`
+	PrometheusURL                  string          `toml:"prometheus_url" doc:"Prometheus HTTP API root (e.g. http://localhost:9090) backing /v1/status. Empty leaves /v1/status serving an in-process surface (uptime + region only)." default:""`
+	Dashboard                      DashboardConfig `toml:"dashboard" doc:"Customer dashboard auth flow — magic-link email login + cookie sessions backing the dashboard SPA at app.ratesengine.net. Empty leaves /v1/auth/{login,callback,logout} returning 503."`
 }
 
 // DashboardConfig wires the magic-link email login flow + cookie
