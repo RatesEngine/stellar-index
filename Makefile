@@ -284,7 +284,7 @@ docs-api: ## Regenerate API reference from openapi/rates-engine.v1.yaml (Redocly
 	@./scripts/dev/docs-api.sh
 
 .PHONY: docs-postman
-docs-postman: ## Regenerate Postman collection from openapi/rates-engine.v1.yaml (gitignored — operators run on demand)
+docs-postman: ## Regenerate examples/postman/rates-engine.postman_collection.json from the OpenAPI spec
 	@./scripts/dev/docs-postman.sh
 
 .PHONY: docs-config

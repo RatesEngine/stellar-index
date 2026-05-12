@@ -7,11 +7,12 @@ The OpenAPI spec is the source of truth — regenerate after any
 spec change with:
 
 ```sh
-npx --yes openapi-to-postmanv2 \
-  -s openapi/rates-engine.v1.yaml \
-  -o examples/postman/rates-engine.postman_collection.json \
-  -p
+make docs-postman
 ```
+
+This is the customer-facing canonical path. The docs-site build
+pipeline (docs.ratesengine.net) regenerates its own copy at
+build time; nothing else in the repo writes to this file.
 
 ## Importing
 

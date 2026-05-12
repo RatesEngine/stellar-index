@@ -17,6 +17,16 @@ against.
 
 ### Fixed
 
+- **Postman collection drift (F-1247).** `make docs-postman` now
+  writes to the customer-facing canonical at
+  `examples/postman/rates-engine.postman_collection.json` —
+  previously it wrote to a gitignored `docs/reference/api/...`
+  path, so the tracked customer copy drifted silently every time
+  the OpenAPI spec moved. The docs-site build pipeline runs its
+  own regeneration; the in-repo file is for customers who clone
+  the repo to import the collection. README + Makefile docstring
+  updated; canonical refreshed (656k bytes).
+
 - **`classic_assets.first_seen_*` ordering bug under chunked
   backfill (F-1239).** The ON CONFLICT clause in
   `registerClassicAssetSeen` previously updated only `last_seen_*`
