@@ -144,6 +144,26 @@ func run(cfgPath string, dryRun bool) error {
 			"classic_pegs", len(cfg.Trades.USDPeggedClassicAssets),
 			"sac_wrappers", len(cfg.Supply.SACWrappers),
 		)
+
+		// L2.2 Phase 2 / F-1268: FX-anchor multiplication. The
+		// quote spec above covers any USD-pegged classic the
+		// operator declared; this resolver covers everything else
+		// by looking up `<quote>/<peg>` in prices_1m at the trade's
+		// timestamp. Together they take non-NULL `usd_volume`
+		// coverage from "USD-pegged stablecoins only" → "any quote
+		// that's traded against a USD-pegged stablecoin in the
+		// observation window". Cached per-asset-per-minute to keep
+		// the trade-insert hot path affordable.
+		fxResolver, err := timescale.NewVWAPUSDFXResolver(store, timescale.VWAPUSDFXResolverOptions{
+			USDPegs: cfg.Trades.USDPeggedClassicAssets,
+		})
+		if err != nil {
+			return fmt.Errorf("usd-volume fx resolver: %w", err)
+		}
+		store.SetUSDVolumeFXResolver(fxResolver)
+		logger.Info("on-chain usd_volume Phase 2 (FX-anchor) enabled",
+			"pegs_for_resolver", len(cfg.Trades.USDPeggedClassicAssets),
+		)
 	}
 
 	// ─── Dispatcher + decoders ─────────────────────────────────

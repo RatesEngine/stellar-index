@@ -169,6 +169,27 @@ against.
 
 ### Added
 
+- **L2.2 Phase 2 FX-anchor USD volume coverage (F-1268).** New
+  `timescale.VWAPUSDFXResolver` implements the pre-existing
+  `USDVolumeFXResolver` interface against the `prices_1m`
+  CAGG: for any on-chain quote asset not already on the
+  operator's `[trades].usd_pegged_classic_assets` list, the
+  resolver looks up `<quote>/<USD-peg>` at the trade's
+  timestamp and supplies a per-minute-bucket-cached USD rate
+  that `tradeUSDVolume` multiplies through. Pre-Phase-2: only
+  CEX/FX + operator-allow-listed pegs contributed to
+  `volume_24h_usd`; an EURC/XLM Soroswap trade contributed 0
+  even though we had a fresh EURC/USDC VWAP one minute earlier.
+  Now it inherits USD value through the peg chain. Wired
+  alongside the Phase 1 quote spec in
+  `cmd/ratesengine-indexer/main.go` whenever
+  `usd_pegged_classic_assets` is non-empty (no new config
+  knob). 7 unit tests cover defaults, cache hits, negative
+  cache, TTL expiry, minute-bucket key stability. The
+  AssetDetail `volume_24h_usd` docstring rewritten to
+  document the three-tier coverage chain (Phase 1 off-chain
+  + Phase 1 on-chain pegs + Phase 2 FX-anchor).
+
 - **Customer-facing dashboard webhook CRUD handlers (F-1270
   complete).** New `internal/api/v1/dashboardwebhooks` package
   mounts five routes: GET/POST/PATCH/DELETE

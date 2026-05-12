@@ -143,11 +143,17 @@ type AssetDetail struct {
 	// value (asset tracked, no trades in the window); null means
 	// the volume reader isn't wired or the lookup failed.
 	//
-	// Scope caveat (launch-readiness L2.2): off-chain CEX/FX trades
-	// always populate this; on-chain DEX trades populate it when
-	// the operator has configured `[trades].usd_pegged_classic_assets`
-	// in their server config. See the API description for the full
-	// caveat.
+	// Coverage chain (launch-readiness L2.2):
+	//   - Phase 1 — off-chain CEX/FX trades populate this directly
+	//     (uniform 10^8 scale).
+	//   - Phase 1 — on-chain DEX trades populate it when the quote
+	//     asset is on the operator's `[trades].usd_pegged_classic_assets`
+	//     list (trusted 1:1 peg).
+	//   - Phase 2 (F-1268) — on-chain DEX trades whose quote is NOT
+	//     on the peg list still populate this when the resolver
+	//     finds a recent `<quote>/<USD-peg>` VWAP in prices_1m at
+	//     the trade's timestamp. Wired when `[trades].usd_pegged_classic_assets`
+	//     is non-empty.
 	VolumeUSD24h *string `json:"volume_24h_usd,omitempty"`
 
 	// Change24hPct is the trailing-24h price change as a signed
