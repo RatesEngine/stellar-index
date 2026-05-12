@@ -2,6 +2,63 @@
 
 Cold findings only. No prior finding is imported into this register.
 
+## Closure summary (as of 2026-05-12 end-of-day, post-/loop)
+
+The codex audit landed 52 findings (F-1201..F-1259, minus the ones
+the codex agent itself retracted during reconciliation). The
+table below preserves each finding's original status field; the
+per-finding `Current-head reconciliation` notes carry the actual
+close-state. This summary collapses both into a single
+truth-snapshot for any post-audit consumer.
+
+**Closed by code/config + verified live on R1** (47 findings):
+
+  F-1201 firewall · F-1202 route removal · F-1203 explorer types ·
+  F-1204 audit-public-api/llms · F-1208 alert tuning · F-1209 swap
+  mitigation · F-1210 status_root · F-1211 sev-playbook/rollback ·
+  F-1212 tier rate-limit · F-1213 USD volume gate · F-1216 CI
+  SHA-pin gate · F-1217 SEP-10 replay · F-1218 signup race · F-1219
+  Stripe → platform store · F-1220 deploy migration gate · F-1221
+  release docs · F-1222 rollback paths · F-1223 Caddyfile /metrics ·
+  F-1224 real client IP · F-1225 history fallback · F-1226 key
+  policy middleware · F-1227 migrate container · F-1228 SSE write
+  timeout · F-1229 verify-cdn script · F-1231 CI push trigger ·
+  F-1232 USDC peg-self · F-1233 SDEX V0 · F-1234 unknown-symbols
+  metric · F-1235 CEX decode metric · F-1236 supply freshness gate ·
+  F-1237 CMC ID disambig · F-1238 Redis-less startup · F-1239
+  wasm-history panic · F-1240 Docker Go toolchain · F-1241 migration
+  README · F-1242 contribution USD · F-1244 webhook secret naming ·
+  F-1245 SSRF defence · F-1246 api-design doc · F-1247 webhook race ·
+  F-1248 webhook quota race · F-1250 freeze dedupe · F-1251 FX
+  freshness · F-1252 cross-region target · F-1253 Redis ACL
+  username · F-1254 Redis ACL keys · F-1256 rate-limit docs ·
+  F-1257 api-key quota race · F-1258 Redis-less usage · F-1259
+  account/usage docs
+
+**Partially closed** (code + live action shipped; remaining piece
+is operator credential / arch decision):
+
+  - F-1205 — 3 of 4 evidence timers live; sla-probe needs operator-
+    minted `RATESENGINE_PROBE_API_KEY` at Partner/Operator tier
+  - F-1249 — anomaly.freeze + divergence.firing producers wired;
+    incident.sev1 / incident.resolved producer needs an arch
+    decision on incident creation (today web/status/ JSON)
+  - F-1255 — speculative-account orphan recovery shipped; full
+    transactional first-login atomicity is a deeper refactor
+  - F-1207 — next.js bumped + CI `pnpm audit` gate added;
+    hosted GitHub Dependabot/vulnerability alerts remain admin-UI
+
+**Open, gated on admin-UI / operator-decision-only**:
+
+  - F-1206 — launch readiness gate (multi-region R2/R3 + security
+    review + failover chaos; all out-of-loop-scope operator work)
+  - F-1214 — main branch protection (GitHub admin UI)
+  - F-1215 — production env reviewers (GitHub admin UI)
+  - F-1216 (admin half) — allowed-actions selectivity (admin UI;
+    CI gate already shipped)
+  - F-1230 — 1-year prices_1m backfill (6-12h operator-supervised
+    job; runbook + tooling all in place)
+
 ## Status Values
 
 - `open`
