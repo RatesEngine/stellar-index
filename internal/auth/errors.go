@@ -43,4 +43,11 @@ var (
 	// indefinitely; they are the deliberate "no validator wired"
 	// disabled state, not a stub awaiting replacement).
 	ErrNotImplemented = errors.New("auth: validator not implemented in this build")
+
+	// ErrSignupRateLimited — returned by the per-IP signup throttle
+	// (`v1.SignupIPThrottle`) when a single IP exhausts its
+	// hourly signup budget. Distinct from the global rate-limit
+	// 429 so the handler can ship a more specific error envelope.
+	// F-1232 (audit-2026-05-12).
+	ErrSignupRateLimited = errors.New("auth: signup rate limited for this IP")
 )

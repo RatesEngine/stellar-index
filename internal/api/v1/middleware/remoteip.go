@@ -54,6 +54,20 @@ func resolveRemoteIP(r *http.Request) string {
 	return remoteIPFor(r)
 }
 
+// RemoteIP returns the request's caller IP, honouring trusted-proxy
+// CIDRs the operator configured via [SetTrustedProxyCIDRs]. When
+// the request arrived via a trusted proxy the first non-empty entry
+// of `X-Forwarded-For` is returned; otherwise the direct peer.
+//
+// Exported for handlers that need to derive a per-IP throttle key
+// outside the middleware chain — e.g. `/v1/signup` per-IP signup
+// cap (F-1232 audit-2026-05-12). Returns "" when no IP can be
+// resolved (well-formed requests always have one; the empty case
+// is left to the caller's policy).
+func RemoteIP(r *http.Request) string {
+	return remoteIPFor(r)
+}
+
 func requestCameViaTrustedProxy(peer string) bool {
 	addr, err := netip.ParseAddr(peer)
 	if err != nil {

@@ -340,6 +340,17 @@ func run(cfgPath string, dryRun bool) error { //nolint:gocognit,funlen,gocyclo /
 		signupTracker = auth.NewRedisSignupTracker(rdb)
 	}
 
+	// F-1232 (audit-2026-05-12): per-IP signup throttle, separate
+	// from the global rate-limit middleware. Default 5/hour/IP —
+	// tight enough to block bulk-mint, loose enough that an
+	// operator onboarding a small team through a single shared
+	// egress completes normally. Operators tune via
+	// `[api].signup_ip_max_per_window` if needed.
+	var signupIPThrottle v1.SignupIPThrottle
+	if rdb != nil {
+		signupIPThrottle = auth.NewRedisSignupIPThrottle(rdb, auth.SignupIPThrottleOptions{})
+	}
+
 	// Stripe webhook handler — gated on (Redis up + signing secret
 	// configured). Without the secret the handler 503s every request
 	// (fail-closed; otherwise a forged event could lift any
@@ -574,24 +585,25 @@ func run(cfgPath string, dryRun bool) error { //nolint:gocognit,funlen,gocyclo /
 		// scan ~24h of the trades hypertable on every hit (5-10s
 		// each); the explorer hits them on every page load. 30s
 		// freshness is plenty for trade-volume aggregates.
-		Markets:       cachedMarketsReader,
-		Oracle:        oracleReader,
-		Meta:          sep1Cache,
-		Accounts:      accountStore,
-		Signups:       signupTracker,
-		Stripe:        stripeCfg,
-		Divergence:    divergenceLooker,
-		Confidence:    redisConfidenceLooker{rdb: rdb},
-		Triangulated:  redisTriangulatedLooker{rdb: rdb},
-		Freeze:        freezeLooker,
-		Supply:        storeSupplyLooker{s: store},
-		Volume:        storeVolumeReader{s: store},
-		Change24h:     storeChange24hReader{s: store, pegs: usdPegs},
-		ChangeSummary: store,
-		Coins:         cachedCoinsReader,
-		Issuers:       store,
-		Cursors:       store,
-		NetworkStats:  store,
+		Markets:          cachedMarketsReader,
+		Oracle:           oracleReader,
+		Meta:             sep1Cache,
+		Accounts:         accountStore,
+		Signups:          signupTracker,
+		SignupIPThrottle: signupIPThrottle,
+		Stripe:           stripeCfg,
+		Divergence:       divergenceLooker,
+		Confidence:       redisConfidenceLooker{rdb: rdb},
+		Triangulated:     redisTriangulatedLooker{rdb: rdb},
+		Freeze:           freezeLooker,
+		Supply:           storeSupplyLooker{s: store},
+		Volume:           storeVolumeReader{s: store},
+		Change24h:        storeChange24hReader{s: store, pegs: usdPegs},
+		ChangeSummary:    store,
+		Coins:            cachedCoinsReader,
+		Issuers:          store,
+		Cursors:          store,
+		NetworkStats:     store,
 		// Wrap with a 60s TTL cache. The underlying SQL aggregations
 		// (24h trades-hypertable scan grouped by source) take 5-10s;
 		// the explorer hits these on every /dexes + /exchanges page

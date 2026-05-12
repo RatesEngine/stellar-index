@@ -54,6 +54,7 @@ type Server struct {
 	meta             MetadataResolver
 	accounts         AccountStore
 	signups          SignupTracker
+	signupIPThrottle SignupIPThrottle
 	stripe           *StripeWebhookConfig
 	divergence       DivergenceLooker
 	freeze           FrozenLooker
@@ -190,6 +191,18 @@ type Options struct {
 	// implementation that persists email-hash → key-id; nil makes
 	// the duplicate check a no-op (key always mints).
 	Signups SignupTracker
+
+	// SignupIPThrottle, when non-nil, applies a per-IP cap to
+	// /v1/signup separate from the global-rate-limit middleware.
+	// The global IP bucket allows 60/min anonymous; that's plenty
+	// for browsing the public surfaces but lets an attacker
+	// bulk-mint signup→key_id pairs (one signup per request, so
+	// 60 keys per minute per IP, ~3,600/hour). This throttle
+	// hardens specifically against the signup-bulk-mint abuse
+	// vector — typical wiring is a 5/hour-per-IP Redis bucket.
+	// Nil keeps the legacy "trust the global rate limit alone"
+	// behaviour. F-1232 (audit-2026-05-12).
+	SignupIPThrottle SignupIPThrottle
 
 	// Stripe, when non-nil, backs POST /v1/webhooks/stripe (paid-
 	// tier upgrade webhook). Nil makes the endpoint return 503 so
@@ -495,6 +508,7 @@ func New(opts Options) *Server {
 		meta:               opts.Meta,
 		accounts:           opts.Accounts,
 		signups:            opts.Signups,
+		signupIPThrottle:   opts.SignupIPThrottle,
 		stripe:             opts.Stripe,
 		divergence:         opts.Divergence,
 		freeze:             opts.Freeze,

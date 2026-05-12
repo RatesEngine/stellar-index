@@ -11,6 +11,7 @@ import (
 	"net/mail"
 	"strings"
 
+	"github.com/RatesEngine/rates-engine/internal/api/v1/middleware"
 	"github.com/RatesEngine/rates-engine/internal/auth"
 )
 
@@ -31,6 +32,31 @@ type SignupTracker interface {
 	// future LookupByEmailHash returns it. Called only AFTER
 	// Account.Create succeeds.
 	MarkSignup(ctx context.Context, emailHash, keyID string) error
+}
+
+// SignupIPThrottle is the v1 boundary for the per-IP signup
+// rate-limit. Production wires a Redis-backed token bucket with
+// a tight cap (default 5/hour); nil disables the check entirely
+// (legacy behaviour, relies only on the global rate-limit
+// middleware).
+//
+// Designed as a separate seam from the global rate limit so a
+// future deployment can swap in a stricter / different policy
+// (e.g. CAPTCHA, proof-of-work, federated denylist) without
+// touching the global path.
+//
+// F-1232 (audit-2026-05-12): the global anonymous bucket allows
+// 60/min per IP — plenty for browsing the public surfaces but
+// 60 signups/min/IP is also 3,600 keys/hour per IP, well above
+// any legitimate signup rate. Tightening here closes the
+// bulk-mint vector without affecting other anonymous traffic.
+type SignupIPThrottle interface {
+	// CheckIP returns nil when the IP is below its signup quota,
+	// or [auth.ErrSignupRateLimited] when the quota is exhausted.
+	// Other errors (typically Redis unavailable) propagate so the
+	// handler can fall open with a 503 — better than silently
+	// disabling the throttle.
+	CheckIP(ctx context.Context, ip string) error
 }
 
 // signupRequest is the inbound POST /v1/signup body.
@@ -102,6 +128,10 @@ func (s *Server) handleSignup(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if !s.signupIPThrottleOK(w, r) {
+		return
+	}
+
 	// Email-hash → identifier. SHA-256 of the lowercased address;
 	// truncate hex to 16 chars (= 64 bits, ample collision
 	// resistance for the population size).
@@ -170,6 +200,41 @@ func (s *Server) handleSignup(w http.ResponseWriter, r *http.Request) {
 		Tier:            string(rec.Tier),
 		RateLimitPerMin: rec.RateLimitPerMin,
 	}, Flags{})
+}
+
+// signupIPThrottleOK runs the F-1232 per-IP signup throttle check.
+// Returns true when the request should proceed, false when the
+// handler has already written the response (429 on quota
+// exhaustion). Falls open on Redis errors so a transient backend
+// blip doesn't take signup offline; the global rate-limit
+// middleware still applies as a safety net.
+//
+// Extracted from handleSignup to keep that function under the
+// gocognit threshold.
+func (s *Server) signupIPThrottleOK(w http.ResponseWriter, r *http.Request) bool {
+	if s.signupIPThrottle == nil {
+		return true
+	}
+	ip := middleware.RemoteIP(r)
+	if ip == "" {
+		return true
+	}
+	err := s.signupIPThrottle.CheckIP(r.Context(), ip)
+	if err == nil {
+		return true
+	}
+	if errors.Is(err, auth.ErrSignupRateLimited) {
+		writeProblem(w, r,
+			"https://api.ratesengine.net/errors/signup-rate-limited",
+			"Signup rate limit exceeded", http.StatusTooManyRequests,
+			"too many signups from this IP recently; wait an hour and try again, or contact support if you're a legitimate operator bulk-onboarding a team")
+		return false
+	}
+	s.logger.Warn("signup IP throttle check failed; falling open",
+		"err", err, "ip", ip)
+	// Fall open — Redis blip shouldn't take signup offline, and the
+	// global rate limit still applies.
+	return true
 }
 
 // parseAndValidateSignup runs the auth-required + body-shape +

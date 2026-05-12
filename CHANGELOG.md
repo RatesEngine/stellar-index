@@ -17,6 +17,21 @@ against.
 
 ### Added
 
+- **Per-IP signup throttle (F-1232).** New `v1.SignupIPThrottle`
+  interface + `auth.RedisSignupIPThrottle` Redis-backed
+  implementation. Default 5 signups per IP per hour via
+  `INCR + EXPIRE` sliding window. The global anonymous rate
+  limit (60/min/IP) is plenty for browsing public surfaces but
+  lets a single IP bulk-mint 3,600 email→key_id pairs/hour via
+  signup. The new throttle closes that vector without affecting
+  other anonymous traffic; falls open on Redis errors. Wired in
+  `cmd/ratesengine-api/main.go` whenever Redis is available.
+  New `auth.ErrSignupRateLimited` sentinel + exported
+  `middleware.RemoteIP` for handlers needing trusted-proxy-aware
+  client IP outside the middleware chain. 5 unit tests
+  (under-cap, over-cap, distinct IPs, empty IP falls open,
+  defaults applied).
+
 - **Stripe webhook event dedupe (F-1227).** New
   `internal/platform/postgresstore.BillingStore` implements the
   `AppendStripeEvent` / `MarkStripeEventProcessed` /
