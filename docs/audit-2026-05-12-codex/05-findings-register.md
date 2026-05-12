@@ -35,7 +35,7 @@ Cold findings only. No prior finding is imported into this register.
 | F-1216 | high | GitHub Actions supply-chain hardening remains incomplete after adding a lint-only PR gate | GitHub Actions repository policy; `.github/workflows/*.yml`; CI pinning lint | XFI-0010; EV-0025; EV-0026; EV-0104 | open | repo-admin/security | The new lint script blocks newly added mutable third-party tags in PR diffs, but hosted Actions policy is still permissive and the current workflows still contain 12 tag-pinned third-party actions. |
 | F-1217 | high | SEP-10 replay protection is optional and can run guard-free when Redis is absent | SEP-10 validator; API startup wiring; auth token endpoint; bearer auth | XFI-0011; EV-0027; EV-0053; EV-0096; R1-0012 | fixed | api/security | Current workspace now fails API startup when `auth_mode=sep10` is selected without Redis, so the guard-free deployment path no longer reproduces. |
 | F-1218 | high | Public signup can mint immediately usable 1000/min API keys from unverified emails, and Redis-less deployments still skip duplicate protection entirely | `/v1/signup`; signup tracker; API key store; signup UI/OpenAPI | XFI-0012; EV-0028; EV-0099 | open | api/security/billing | The same-email race is now closed when Redis tracking is wired, but signup still returns usable keys without email ownership proof and tracker-nil deployments still mint duplicates by design. |
-| F-1219 | high | Stripe paid-upgrade webhook still bypasses platform subscription and dashboard-key sources of truth | Stripe webhook; Redis API keys; Postgres platform billing/API keys | XFI-0013; EV-0030; EV-0053; EV-0107 | open | billing/platform/api | The current workspace adds a dormant platform bridge, but production wiring never sets it, tests do not exercise it, and Postgres dashboard-key limits are still not upgraded. |
+| F-1219 | high | Stripe paid-upgrade webhook still bypasses platform subscription and dashboard-key sources of truth | Stripe webhook; Redis API keys; Postgres platform billing/API keys | XFI-0013; EV-0030; EV-0053; EV-0107; EV-0108 | open | billing/platform/api | Wave 15 adds subscription-event handling and keeps the platform bridge helper, but production wiring still never sets `StripeWebhookConfig.Platform`, the webhook suite still lacks bridge/subscription-event coverage, and Postgres dashboard-key limits are still not upgraded. |
 | F-1220 | high | Tagged deploy migration handling is still not closure-grade after the new staging path | Release/deploy workflow; Ansible binary deploy; migrations; R1 schema state | XFI-0014; EV-0031; EV-0103; R1-0013 | open | release/ops/db | The shared workspace now stages tag-matched migrations and adds a pre-swap migration task, but the deploy job installs only `ansible-core` while the new task uses `ansible.posix.synchronize`, which is a separate collection. The new path is not yet proven runnable end to end. |
 | F-1221 | medium | Release/deploy docs still claim GHCR container image publishing that the current release workflow explicitly removed | Release workflow; release/deploy docs; Docker image expectations | XFI-0014; EV-0032 | open | docs/release | Operators and self-hosters are told to expect GHCR artifacts that the workflow intentionally no longer produces. |
 | F-1222 | medium | Rollback docs point operators to nonexistent `/opt/ratesengine/release-<tag>` directories instead of actual binary backups | Release process runbook; Ansible deploy backup layout; R1 sidecars | XFI-0014; EV-0032; R1-0013 | open | ops/release | Incident fallback rollback can fail because the documented artifact path is not produced by the current deploy task. |
@@ -52,7 +52,7 @@ Cold findings only. No prior finding is imported into this register.
 | F-1233 | high | SDEX historical backfill silently drops legacy V0 claim atoms while claiming genesis coverage | SDEX decoder; dispatcher metrics; historical backfill | XFI-0025; EV-0044; EV-0105 | fixed | ingest/backfill/sdex | Current committed code decodes V0 claim atoms into canonical trades by deriving the seller G-strkey, and targeted SDEX tests pass. |
 | F-1234 | medium | Oracle decoders silently skip unknown feeds inside mixed batches, hiding upstream coverage drift | Reflector/Redstone/Band decoders; canonical allow-lists; decoder metrics | XFI-0026; EV-0045 | open | oracle/coverage/observability | New oracle-supported assets can be omitted from stored oracle rows without decode-error metrics as long as the same event contains at least one known asset. |
 | F-1235 | medium | External CEX stream parser errors are skipped without the decode-error metrics promised by runbooks | Binance/Kraken/Bitstamp/Coinbase streamers; external metrics; decode-error runbook | XFI-0027; EV-0046; EV-0098 | fixed | external/observability | Current `HEAD` increments `SourceDecodeErrorsTotal` in all four streamer parse-error branches, closing the observability gap. |
-| F-1236 | high | Supply snapshots can be stamped at a fresh ledger while using stale component observations | Supply refreshers; supply observer storage; asset supply API/market-cap fields | XFI-0028; EV-0047; EV-0106 | open | supply/data-quality | Snapshot ledger is still max-cursor on committed `HEAD`; the current uncommitted min-supply-cursor remediation attempt does not build because it references nonexistent `timescale.Cursor.Name`. |
+| F-1236 | high | Supply snapshots can be stamped at a fresh ledger while using stale component observations | Supply refreshers; supply observer storage; asset supply API/market-cap fields | XFI-0028; EV-0047; EV-0106; EV-0108; EV-0109 | open | supply/data-quality | Wave 16 commits classic/SEP41 `MinComponentLedger` threading, but production storage readers still never populate that field, so the stale-component gate remains dormant on real snapshots. |
 | F-1237 | medium | CoinMarketCap ID disambiguation remains incomplete across runtime and verification paths | Verified currency catalogue; CMC poller; external aggregator observations; ops verification source wiring | XFI-0029; EV-0048; EV-0102 | open | external/identity | The indexer now passes numeric CMC IDs into the poller, but the ops verification path still omits them and the poller still lacks a committed ID-mode response fixture proving numeric-ID requests map back to the intended asset. |
 | F-1238 | medium | Redis-less API deployments fail startup because closed-bucket stream subscriber is gated on Hub, not Redis | API startup; Redis optionality; closed-bucket SSE stream | XFI-0030; EV-0054; EV-0096 | fixed | api/streaming/ops | Current workspace now gates the Redis pub/sub subscriber on `rdb != nil && hub != nil`, so Redis-less API startup no longer aborts on subscriber construction. |
 | F-1239 | medium | WASM history and extraction ops tools panic at completion when progress output is disabled | `ratesengine-ops` WASM audit/extraction commands; Soroban coverage evidence | XFI-0031; EV-0055 | open | ops/data-quality | `-progress-every 0` suppresses in-loop progress but completion still computes modulo by zero after the ledger walk. |
@@ -199,7 +199,7 @@ Remediation direction: choose the canonical incident source for `web/status`, up
 
 Severity: `high`
 
-Status: `fixed`
+Status: `open`
 
 Affected surface:
 
@@ -343,7 +343,7 @@ Remediation direction: keep the PR-diff lint if desired, but finish the actual r
 
 Severity: `high`
 
-Status: `fixed`
+Status: `open`
 
 Affected surface:
 
@@ -422,12 +422,13 @@ Evidence:
 - `EV-0030`
 - `EV-0053`
 - `EV-0107`
+- `EV-0108`
 
 Expected: Stripe paid-upgrade events should update the same account, subscription, and API-key records that dashboard users and runtime auth consume, with durable idempotency and audit.
 
 Observed during the initial pass: current source wired Postgres event dedupe and audit rows when Postgres was available, which reduced the earlier idempotency gap. The side effect still used `auth.RedisAPIKeyStore`: it found keys by `client_reference_id` and updated Redis key rate limits only. The webhook did not call `UpsertSubscription`, did not update Postgres dashboard keys/accounts/subscription state, acknowledged paid events with no keys as 200, and could return 200 after partial or total key-update failure.
 
-Current-workspace reconciliation: an uncommitted remediation slice adds `StripePlatformBridge` and `applyPlatformSideEffects`, capable of resolving an account by Stripe customer ID, upserting a subscription row, and mutating `Account.Tier`. That does not close the finding. Production API wiring in `cmd/ratesengine-api/main.go` never sets `StripeWebhookConfig.Platform`, repo search finds no other bridge user, and the existing Stripe webhook tests do not exercise the new path. Even if wired, the helper still does not raise Postgres dashboard API-key limits alongside Redis-backed legacy keys, so the runtime/dashboard split remains.
+Current-head reconciliation: settled `HEAD=c82c1602...` expands the webhook implementation again. `internal/api/v1/stripe_webhook.go` now keeps `StripePlatformBridge`/`applyPlatformSideEffects` and additionally accepts `customer.subscription.updated` plus `customer.subscription.deleted` so period/cancel state could be mirrored and deleted subscriptions could roll accounts down to Free. That still does not close the finding. Production API wiring in `cmd/ratesengine-api/main.go` never sets `StripeWebhookConfig.Platform`, repo search finds no other bridge user, and the webhook suite still has no committed bridge or `customer.subscription.*` assertions. Even if wired, the helper still does not raise Postgres dashboard API-key limits alongside Redis-backed legacy keys, so the runtime/dashboard split remains.
 
 Impact: paid customers using dashboard-created keys can pay and still keep old limits or missing subscription state; customer-facing dashboard/billing truth can disagree with legacy Redis key state; failed upgrades can be acknowledged and then require manual reconciliation.
 
@@ -958,16 +959,18 @@ Evidence:
 - `XFI-0028`
 - `EV-0047`
 - `EV-0106`
+- `EV-0108`
+- `EV-0109`
 
 Expected: a supply snapshot for ledger `N` should be computed from supply-observer components that are complete through ledger `N`, or it should publish explicit component freshness/lag metadata and avoid presenting stale inputs as current supply.
 
 Observed: the aggregator and CLI choose the maximum `last_ledger` across ingestion cursors as the snapshot ledger. Component readers then use `AtOrBefore` storage queries for trustlines, claimable balances, LP reserves, SAC balances, SEP-41 event totals, and account observations. These reader interfaces return balances/totals but not the ledger of each component row, so the refresher cannot detect a stale component before inserting a snapshot at the max ledger.
 
-Current-worktree reconciliation: an uncommitted remediation attempt tries to switch both the aggregator path and `ratesengine-ops supply snapshot` path from max-of-all cursors to min-of-`supply.*` cursors. That attempt does not compile: both patches test `strings.HasPrefix(c.Name, "supply.")`, but `timescale.Cursor` exposes `Source` and `Sub`, not `Name`. `go test ./cmd/ratesengine-aggregator` and `go test ./cmd/ratesengine-ops` both fail on the undefined field, so the remediation is not closure-grade and committed `HEAD` still preserves the original max-cursor behavior.
+Current-head reconciliation: settled `HEAD=65197ec0...` now commits both halves of the consumer-side scaffolding: `Supply.MinComponentLedger`, a configurable refresher threshold, rejection tests for stale/non-stale/legacy-zero snapshots, and classic/SEP41 computer threading from `comps.MinComponentLedger` into the emitted `Supply`. That remains non-closing. Repo-wide search shows production storage readers still return `ClassicSupplyComponents` and `SEP41SupplyComponents` without any component-ledger population, so real snapshots still reach the refresher with `MinComponentLedger == 0`, which explicitly disables the new gate. The current code therefore proves the rejector and value conduit exist, not that production freshness signals exist.
 
 Impact: if one supply observer stalls while another source advances, asset supply and derived market-cap fields can look current but include old balances. This is especially risky for Stellar-specific depth claims around classic/SAC/SEP-41 supply and for customer-facing asset detail pages.
 
-Remediation direction: resolve the snapshot ledger as the minimum complete ledger across all required supply observer cursors for the target asset, or return component ledgers from storage readers and reject/mark snapshots when any component exceeds a freshness lag. Expose component freshness in diagnostics and tests.
+Remediation direction: keep the rejection gate, then finish the producer side. Return component ledgers from every relevant storage reader, compute the minimum contributing ledger across classic/SEP-41/XLM paths, thread it into `Supply.MinComponentLedger`, and add integration-level stale-reader tests proving real storage-backed snapshots reject instead of falling through the legacy zero-value bypass. Expose component freshness in diagnostics.
 
 ### F-1237. CoinMarketCap ID disambiguation remains incomplete across runtime and verification paths
 

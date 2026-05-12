@@ -525,6 +525,7 @@ docs/operations/drills/scenarios/sev2-redis-sentinel-failover.md	docs	docs/opera
 docs/operations/drills/scenarios/sev2-source-decoder-regression.md	docs	docs/operations	documentation	todo			cold audit pending
 docs/operations/explorer-deployment.md	docs	docs/operations	documentation	todo			cold audit pending
 docs/operations/galexie-backfill.md	docs	docs/operations	documentation	todo			cold audit pending
+docs/operations/github-actions-sha-pinning.md	docs	docs/operations	documentation	todo			added in Wave 16; cold audit pending
 docs/operations/hubble-event-counts.md	docs	docs/operations	documentation	todo			cold audit pending
 docs/operations/incidents/README.md	docs	docs/operations	documentation	todo			cold audit pending
 docs/operations/launch-day-checklist.md	docs	docs/operations	documentation	todo			cold audit pending

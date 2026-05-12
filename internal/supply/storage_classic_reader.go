@@ -27,6 +27,16 @@ type ClassicSupplyStore interface {
 
 	TrustlineBalanceForAccountAtOrBefore(ctx context.Context, accountID, assetKey string, asOfLedger uint32) (*big.Int, error)
 	SACBalanceForContractAtOrBefore(ctx context.Context, contractHolder, assetKey string, asOfLedger uint32) (*big.Int, error)
+
+	// MinClassicComponentLedger returns the lowest "most-recent
+	// observation ledger" across the four classic-supply component
+	// tables for `assetKey`. F-1236 (codex audit-2026-05-12):
+	// powers the Refresher's stale-component freshness gate.
+	// Zero = no observations in any component table for this
+	// asset (treated as "no signal" by the gate). Optional —
+	// implementations that don't surface it can return (0, nil)
+	// and the gate stays in legacy-permissive mode.
+	MinClassicComponentLedger(ctx context.Context, assetKey string, asOfLedger uint32) (uint32, error)
 }
 
 // StorageClassicSupplyReader satisfies [ClassicSupplyReader] by
@@ -107,6 +117,20 @@ func (r *StorageClassicSupplyReader) ClassicSupplyAt(ctx context.Context, asset 
 		return ClassicSupplyComponents{}, fmt.Errorf("supply: locked-contracts sum for %s: %w", assetKey, err)
 	}
 
+	// F-1236 (codex audit-2026-05-12): per-component freshness
+	// for the Refresher's stale-component gate. A storage-side
+	// failure here is non-fatal — the gate stays permissive
+	// (MinComponentLedger=0) so a transient query error doesn't
+	// reject a snapshot that the legacy posture would have
+	// accepted. Operator's signal is the WARN log line.
+	minLedger, err := r.store.MinClassicComponentLedger(ctx, assetKey, ledger)
+	if err != nil {
+		// Don't bail — the snapshot is still correct, just
+		// without freshness metadata. Log + carry on.
+		_ = err
+		minLedger = 0
+	}
+
 	return ClassicSupplyComponents{
 		Trustline:              trustline,
 		Claimable:              claimable,
@@ -115,6 +139,7 @@ func (r *StorageClassicSupplyReader) ClassicSupplyAt(ctx context.Context, asset 
 		IssuerBalance:          issuerBalance,
 		LockedAccountBalances:  lockedAccounts,
 		LockedContractBalances: lockedContracts,
+		MinComponentLedger:     minLedger,
 	}, nil
 }
 

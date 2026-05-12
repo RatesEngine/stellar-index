@@ -25,7 +25,7 @@ Generated from `git ls-files` excluding `docs/audit-2026-05-12-codex/**`.
 | `configs` | 176 |
 | `deploy` | 41 |
 | `docker` | 7 |
-| `docs` | 506 |
+| `docs` | 507 |
 | `examples` | 14 |
 | `go.mod` | 1 |
 | `go.sum` | 1 |

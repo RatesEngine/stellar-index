@@ -359,3 +359,53 @@ func scanSum(ctx context.Context, db *sql.DB, q string, args ...any) (*big.Int, 
 	}
 	return v, nil
 }
+
+// MinClassicComponentLedger returns the lowest "most-recent
+// observation ledger" across the four classic-supply component
+// tables for `assetKey`, scoped to ledgers at-or-before
+// `asOfLedger`. Used by the supply Refresher to detect snapshots
+// whose component observations lag the snapshot ledger by more
+// than a threshold. F-1236 (codex audit-2026-05-12).
+//
+// Each component contributes MAX(ledger) of any row matching
+// (asset_key, ledger <= asOfLedger). The function returns the
+// MIN of those four maxima — the slowest observer.
+//
+// A component that has NO observations for the asset returns
+// 0 from its MAX. Treated as "no signal" — excluded from the
+// MIN. A zero result means no component has any observation
+// (genuinely uninstrumented asset); caller treats that as
+// "skip the freshness gate" via the documented zero-means-no-
+// signal contract on Supply.MinComponentLedger.
+func (s *Store) MinClassicComponentLedger(ctx context.Context, assetKey string, asOfLedger uint32) (uint32, error) {
+	// Per-component MAX(ledger). Empty tables → 0. NULLIF +
+	// MIN over a CTE filters out the "no observations yet"
+	// components so a brand-new asset that's only been observed
+	// in trustlines doesn't have its MinComponentLedger pinned
+	// to 0 by the empty claimable/LP/SAC tables.
+	const q = `
+		WITH per_component AS (
+		    SELECT NULLIF(COALESCE(MAX(ledger), 0), 0) AS l
+		      FROM trustline_observations
+		     WHERE asset_key = $1 AND ledger <= $2
+		    UNION ALL
+		    SELECT NULLIF(COALESCE(MAX(ledger), 0), 0) AS l
+		      FROM claimable_observations
+		     WHERE asset_key = $1 AND ledger <= $2
+		    UNION ALL
+		    SELECT NULLIF(COALESCE(MAX(ledger), 0), 0) AS l
+		      FROM lp_reserve_observations
+		     WHERE asset_key = $1 AND ledger <= $2
+		    UNION ALL
+		    SELECT NULLIF(COALESCE(MAX(ledger), 0), 0) AS l
+		      FROM sac_balance_observations
+		     WHERE asset_key = $1 AND ledger <= $2
+		)
+		SELECT COALESCE(MIN(l), 0) FROM per_component WHERE l IS NOT NULL
+	`
+	var minLedger uint32
+	if err := s.db.QueryRowContext(ctx, q, assetKey, int(asOfLedger)).Scan(&minLedger); err != nil {
+		return 0, fmt.Errorf("timescale: MinClassicComponentLedger: %w", err)
+	}
+	return minLedger, nil
+}

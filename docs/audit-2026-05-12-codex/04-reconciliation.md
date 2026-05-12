@@ -196,18 +196,34 @@ without evidence IDs.
   bridge helper is dormant in production wiring, untested in the
   webhook suite, and still leaves Postgres dashboard API-key limits
   untouched, so `F-1219` remains open.
+- `CMD-0110` reconciled settled `HEAD=c82c1602...` plus the latest
+  supply-worktree follow-up. Wave 15 adds Stripe subscription-event
+  handling and a supply stale-component rejection gate, but neither
+  closes the findings yet: production API wiring still never sets
+  `StripeWebhookConfig.Platform`, and the supply freshness field is not
+  populated by production storage readers. The current
+  `ClassicComputer`/`SEP41Computer` worktree changes only thread a field
+  that remains zero from real readers.
+- `CMD-0111` reconciled settled `HEAD=65197ec0...`. Wave 16 commits the
+  classic/SEP41 freshness-field threading plus a new GitHub Actions
+  SHA-pinning operations guide, raising tracked non-audit scope to
+  `1,875`. `F-1236` remains open because the committed storage-backed
+  readers still never populate `MinComponentLedger`; the refresher gate
+  can only reject stale snapshots when an upstream reader finally emits
+  a non-zero freshness signal.
 - Closure caveat: the TSV remains the per-file coverage control. Rows
   with `todo` still require terminal file-level review before claiming
   literal every-file closure. `EV-0063` documented the scope drift when
   the repository advanced from the original `80c57e...` anchor to
-  current `60c8a2e4...`; `EV-0078` resolves the first count mismatch,
+  current `65197ec0...`; `EV-0078` resolves the first count mismatch,
   `EV-0097` preserves the refresh back to `1,870` tracked rows,
   `EV-0101` restores parity after the two committed key-policy files
   increased tracked scope to `1,872`, and the latest inventory refresh
-  now lands at `1,874` tracked non-audit rows after
-  `scripts/ci/lint-actions-pinning.sh` and
-  `internal/customerwebhook/fanout.go` entered scope.
+  now lands at `1,875` tracked non-audit rows after
+  `scripts/ci/lint-actions-pinning.sh`,
+  `internal/customerwebhook/fanout.go`, and
+  `docs/operations/github-actions-sha-pinning.md` entered scope.
   Current findings remain source/R1 verified and not imported from prior
   audits, but final whole-repo closure still requires terminal review
   status across the refreshed TSV. The current inventory roll-up is
-  `done=102`, `in_progress=51`, `todo=1721`.
+  `done=105`, `in_progress=51`, `todo=1719`.

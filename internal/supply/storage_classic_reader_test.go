@@ -63,6 +63,12 @@ func (f *fakeClassicStore) SACBalanceForContractAtOrBefore(_ context.Context, co
 	return big.NewInt(0), nil
 }
 
+// MinClassicComponentLedger — fakes a single per-asset value;
+// tests that don't care leave it at 0 (gate-skip).
+func (f *fakeClassicStore) MinClassicComponentLedger(_ context.Context, _ string, _ uint32) (uint32, error) {
+	return 0, nil
+}
+
 func mustClassic(t *testing.T, code, issuer string) canonical.Asset {
 	t.Helper()
 	a, err := canonical.NewClassicAsset(code, issuer)
