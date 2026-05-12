@@ -26,9 +26,15 @@ import (
 // pipeline already consumes.
 //
 // Phase 1 scope (launch-readiness L2.2 phase 1): USD-pegged
-// stablecoins only, classic-decimal (7) only. SEP-41 tokens with
-// non-classic decimals (rare on Stellar today) and non-USD pegs
-// (EUR / MXN) are deferred to phase 2.
+// stablecoins only, classic-decimal (7) only. This struct stays
+// USD-only — the orthogonal Phase 2 path (F-1268
+// audit-2026-05-12) lives in [VWAPUSDFXResolver] and covers
+// non-USD pegs (EUR / MXN / etc.) by looking up
+// `<quote>/<USD-peg>` in prices_1m at the trade's timestamp.
+// SEP-41 tokens with non-classic decimals (rare on Stellar today)
+// remain unsupported on either path — they'd need per-asset
+// decimals plumbed through the trade insert path; not a current
+// blocker.
 type USDVolumeQuoteSpec struct {
 	// classicUSDPegs is the set of classic asset_keys (in the
 	// canonical "CODE-ISSUER" wire form) the operator has declared
