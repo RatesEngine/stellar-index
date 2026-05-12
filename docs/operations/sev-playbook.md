@@ -189,15 +189,43 @@ this custom Next.js app — older references in
 **Source of truth:**
 [`web/status/`](../../web/status/) — site source + component list
 + incident composition lives in this repo. Posting an incident
-happens by editing the `src/data/incidents/` JSON files and
-pushing to `main` (the Cloudflare Pages deploy is automatic on
-push).
+happens by editing the `internal/incidents/data/<slug>.md` files
+(the same corpus is embedded into the API binary at build time so
+`/v1/incidents` and `web/status/` stay in lockstep) and pushing
+to `main` (the Cloudflare Pages deploy is automatic on push).
 
 **How to post:**
 [`runbooks/sev-status-page-update.md`](runbooks/sev-status-page-update.md)
 — the binding runbook for every SEV-1 / SEV-2 update. Includes
 the cadence (hourly / daily), the safe-to-publish detail level,
 and the workstation-down fallback path.
+
+**Customer-webhook fan-out** (F-1249, codex audit-2026-05-12):
+the dashboard exposes `incident.sev1` + `incident.resolved`
+hook subscriptions. Because the corpus is build-time embedded
+there is no in-process state-transition signal — fan-out is
+operator-triggered as part of the SEV runbook:
+
+```sh
+# After deploying the binary that includes the new .md:
+ratesengine-ops emit-incident \
+  -config /etc/ratesengine.toml \
+  -slug 2026-05-12-redis-blip \
+  -event sev1
+
+# Later, after deploying the .md update with status=resolved:
+ratesengine-ops emit-incident \
+  -config /etc/ratesengine.toml \
+  -slug 2026-05-12-redis-blip \
+  -event resolved
+```
+
+The command refuses semantically-impossible combinations (sev1
+on a resolved incident, resolved on an investigating one, sev1
+on a non-SEV-1 entry) before any network I/O so an operator
+finger-trouble doesn't fire a confusing webhook to every
+subscriber. Zero-subscriber fan-outs are a successful no-op
+with a stderr line.
 
 Status-page states (modelled after Atlassian Statuspage):
 - **Operational** — green; no active incident.

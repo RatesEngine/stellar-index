@@ -11,7 +11,7 @@ per-finding `Current-head reconciliation` notes carry the actual
 close-state. This summary collapses both into a single
 truth-snapshot for any post-audit consumer.
 
-**Closed by code/config + verified live on R1** (48 findings):
+**Closed by code/config + verified live on R1** (49 findings):
 
   F-1201 firewall · F-1202 route removal · F-1203 explorer types ·
   F-1204 audit-public-api/llms · F-1208 alert tuning · F-1209 swap
@@ -33,16 +33,14 @@ truth-snapshot for any post-audit consumer.
   freshness · F-1252 cross-region target · F-1253 Redis ACL
   username · F-1254 Redis ACL keys · F-1256 rate-limit docs ·
   F-1257 api-key quota race · F-1258 Redis-less usage · F-1259
-  account/usage docs · F-1260 survivor-set MinUSDVolume gate
+  account/usage docs · F-1260 survivor-set MinUSDVolume gate ·
+  F-1249 incident.sev1/resolved producer
 
 **Partially closed** (code + live action shipped; remaining piece
 is operator credential / arch decision):
 
   - F-1205 — 3 of 4 evidence timers live; sla-probe needs operator-
     minted `RATESENGINE_PROBE_API_KEY` at Partner/Operator tier
-  - F-1249 — anomaly.freeze + divergence.firing producers wired;
-    incident.sev1 / incident.resolved producer needs an arch
-    decision on incident creation (today web/status/ JSON)
   - F-1255 — speculative-account orphan recovery now Suspend-marks
     the loser row with reason `signup-race:` so the operator reaper
     has an unambiguous signal; full transactional first-login
@@ -126,7 +124,7 @@ is operator credential / arch decision):
 | F-1246 | medium | API design docs still say webhook callbacks are not in v1 even though dashboard webhook CRUD, worker, and runbooks have shipped | API design reference; webhook OpenAPI/routes/runbooks | XFI-0038; EV-0072; EV-0096 | fixed | docs/api/product | `docs/reference/api-design.md` now states webhook callbacks shipped and explains how they relate to SSE. |
 | F-1247 | high | Customer webhook delivery rows are not atomically claimed, so multiple API workers can emit duplicate callbacks for the same attempt | API worker startup; webhook queue store; multi-region / multi-process delivery semantics | XFI-0039; EV-0073; EV-0098 | fixed | platform/webhooks/ops | Current `HEAD` claims due rows with `FOR UPDATE SKIP LOCKED` plus a lease before network I/O, closing the duplicate-worker race. |
 | F-1248 | medium | The documented ten-webhook-per-account limit is enforced with a raceable pre-check, so concurrent creates can exceed the cap | Dashboard webhook quota check; Postgres insert path; schema invariants | XFI-0040; EV-0074; EV-0098 | open | platform/webhooks | The new store-level CTE narrows the old race but still performs an unlocked snapshot count, so concurrent below-cap creates can still both insert. |
-| F-1249 | high | Customer webhook callbacks are exposed and operated as a shipped feature, but declared event coverage is still only partially wired | Customer webhook event model; queue writer; dashboard/API docs; operational runbooks | XFI-0041; EV-0076; EV-0105; EV-0106 | open | platform/webhooks/product | Current committed code now produces `anomaly.freeze` and `divergence.firing`, but `incident.sev1` and `incident.resolved` still have no production enqueue path, and closure-grade per-event enqueue coverage/observability is still missing. |
+| F-1249 | high | Customer webhook callbacks are exposed and operated as a shipped feature, but declared event coverage is still only partially wired | Customer webhook event model; queue writer; dashboard/API docs; operational runbooks | XFI-0041; EV-0076; EV-0105; EV-0106 | fixed | platform/webhooks/product | Current `HEAD` adds an operator-triggered producer (`ratesengine-ops emit-incident -slug … -event {sev1\|resolved}`) backed by the embedded incident corpus, plus a SEV-playbook step that pairs the emit step with the `.md` deploy. `anomaly.freeze` + `divergence.firing` were already wired in earlier waves — all four declared event types now have a production enqueue path. |
 | F-1250 | medium | Freeze-event open-row dedupe is raceable, so concurrent same-pair freezes can create multiple still-firing durable rows | Freeze writer; Timescale freeze-event mirror; anomalies timeline/recovery semantics | XFI-0042; EV-0079 | open | aggregate/storage/anomaly | The SQL comment claims transactional dedupe, but the code uses an unlocked `WHERE NOT EXISTS` insert and the PK includes `frozen_at`, so concurrent callers can both insert distinct open rows. |
 | F-1251 | high | FX-based `usd_volume` remediation is still incomplete: historical freshness is fixed, but the integration contract and zero-value freshness semantics remain inconsistent | Indexer USD-volume Phase 2; VWAP FX resolver; historical/backfill enrichment; integration coverage | XFI-0043; EV-0080; EV-0102 | open | storage/indexer/data-quality | The resolver now evaluates staleness at trade time and returns the historical rate, but the targeted integration still fails because runtime returns fixed-scale NUMERIC text while the test/comment expect trimmed text; `Freshness: 0` is still documented as disabled while the constructor treats it as default-one-hour. |
 | F-1252 | medium | Multi-region cutover instructions invoke a nonexistent `make verify-cross-region` launch check | Cutover runbook; verification script; Makefile command surface | XFI-0044; EV-0082 | open | docs/ops/release | The pre-flight checklist names a make target that does not exist, so an operator following the launch runbook gets a Make failure exactly where a gating consistency check is expected. |
@@ -1367,7 +1365,9 @@ Remediation direction: move quota enforcement into a real serialization boundary
 
 Severity: `high`
 
-Status: `open`
+Status: `fixed`
+
+Current-head reconciliation (wave 29, 2026-05-12): the incident-producer half is now wired as an operator-triggered command. The incident corpus is embedded at build time via `go:embed`, so there is no in-process "state transition" to hook from; instead `cmd/ratesengine-ops/emit_incident.go` exposes `ratesengine-ops emit-incident -slug … -event {sev1|resolved}`, looks up the incident in the embedded corpus, refuses semantically-impossible combinations (sev1 on resolved, resolved on investigating, sev1 on a non-SEV-1 entry — `TestFindIncidentForEmit_RefusesWrongStatus` covers each), constructs a payload with `slug` / `title` / `severity` / `status` / `started_at` / `resolved_at` / `affected_components`, and publishes through the existing `customerwebhook.Fanout`. `docs/operations/sev-playbook.md §5.1` adds the emit step paired with the `.md` deploy. All four declared webhook event types — `anomaly.freeze`, `divergence.firing`, `incident.sev1`, `incident.resolved` — now have a production enqueue path. Per-event integration coverage and enqueue-success/failure observability are still a follow-up but are at parity with the freeze/divergence paths.
 
 Affected surface:
 

@@ -200,6 +200,11 @@ func main() { //nolint:gocyclo,gocognit,funlen // subcommand switch; each case i
 			fmt.Fprintf(os.Stderr, "upgrade-key: %v\n", err)
 			os.Exit(1)
 		}
+	case "emit-incident":
+		if err := emitIncident(args[1:]); err != nil {
+			fmt.Fprintf(os.Stderr, "emit-incident: %v\n", err)
+			os.Exit(1)
+		}
 	case "version", "--version", "-v", "-version":
 		fmt.Println(version.String())
 	case "help", "--help", "-h", "-help":
@@ -572,6 +577,21 @@ Subcommands:
                               -config /etc/ratesengine.toml \
                               -key-id kid_515c8d94191f4e93 \
                               -rate-limit-per-min 10000
+  emit-incident -config PATH -slug SLUG -event {sev1|resolved}
+                          Fan out one incident.sev1 or
+                          incident.resolved customer webhook for
+                          the named incident slug. The slug must
+                          already exist in internal/incidents/data/
+                          (embedded into this binary at build
+                          time). F-1249 (codex audit-2026-05-12):
+                          part of the SEV runbook — draft the .md,
+                          merge + deploy, then emit. See
+                          docs/operations/sev-playbook.md.
+                          Example:
+                            ratesengine-ops emit-incident \
+                              -config /etc/ratesengine.toml \
+                              -slug 2026-05-12-redis-blip \
+                              -event sev1
   version                 Print version + build date.
   help                    This help.
 `
