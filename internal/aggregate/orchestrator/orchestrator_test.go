@@ -1245,6 +1245,65 @@ func TestTick_MinUSDVolumeFilter(t *testing.T) {
 			t.Errorf("key %q missing — non-USD pair should publish", key)
 		}
 	})
+
+	// F-1260 (codex audit-2026-05-12) regression: class filter
+	// gutting most of a window must not let the few survivors ride
+	// in on the pre-filter total.
+	//
+	// Setup: one FX-class trade ($1k, polygon-forex registered as
+	// ClassExchange/IncludeInVWAP=true, retained) + one trade from
+	// an UNKNOWN source ($100k, dropped by filterForVWAP because
+	// the registry's fail-closed default is IncludeInVWAP=false).
+	// Pre-filter total = $101k; survivor total = $1k. Threshold
+	// $10k: pre-fix the gate would clear (and publish a VWAP from
+	// the $1k survivor); post-fix the gate must reject.
+	t.Run("class filter gutted window: drops despite pre-filter clearing threshold", func(t *testing.T) {
+		survivor := canonical.Trade{
+			Source:      "polygon-forex", // ClassExchange, IncludeInVWAP=true
+			Ledger:      0,
+			TxHash:      "0000000000000000000000000000000000000000000000000000000000000000",
+			OpIndex:     0,
+			Timestamp:   time.Now(),
+			Pair:        pair,
+			BaseAmount:  canonical.NewAmount(big.NewInt(100_000_000)),
+			QuoteAmount: canonical.NewAmount(big.NewInt(100_000_000_000)), // $1,000 at 1e8
+		}
+		discardedByClass := canonical.Trade{
+			// "test-no-vwap" is not in external.Registry → fail-closed
+			// default is IncludeInVWAP=false → filterForVWAP drops it.
+			Source:      "test-no-vwap",
+			Ledger:      0,
+			TxHash:      "1111111111111111111111111111111111111111111111111111111111111111",
+			OpIndex:     0,
+			Timestamp:   time.Now(),
+			Pair:        pair,
+			BaseAmount:  canonical.NewAmount(big.NewInt(100_000_000)),
+			QuoteAmount: canonical.NewAmount(big.NewInt(10_000_000_000_000)), // $100,000 at 1e8
+		}
+		store := &mockStore{trades: []canonical.Trade{discardedByClass, survivor}}
+		rdb, mr := newTestRedis(t)
+		orch := New(store, rdb, Config{
+			Pairs:        []canonical.Pair{pair},
+			Windows:      []time.Duration{5 * time.Minute},
+			MinUSDVolume: 10_000, // pre-filter $101k clears, survivor $1k doesn't
+		})
+
+		before := testutil.ToFloat64(obs.AggregatorDroppedWindowsTotal.WithLabelValues("min_usd_volume"))
+		if err := orch.Tick(context.Background()); err != nil {
+			t.Fatalf("Tick: %v", err)
+		}
+		after := testutil.ToFloat64(obs.AggregatorDroppedWindowsTotal.WithLabelValues("min_usd_volume"))
+		if after-before != 1 {
+			t.Errorf("min_usd_volume drop counter delta = %v, want 1 — survivor set ($1k) must fail the $10k gate even though pre-filter total ($101k) cleared it", after-before)
+		}
+		if orch.Stats().VWAPWrites != 0 {
+			t.Errorf("VWAPWrites = %d, want 0 (window must be rejected on survivor volume)", orch.Stats().VWAPWrites)
+		}
+		key := "vwap:" + xlm.String() + ":" + usd.String() + ":300"
+		if mr.Exists(key) {
+			t.Errorf("key %q exists after rejection", key)
+		}
+	})
 }
 
 // recordingStreamPublisher captures PublishClosedBucket calls for

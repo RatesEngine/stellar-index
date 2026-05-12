@@ -11,7 +11,7 @@ per-finding `Current-head reconciliation` notes carry the actual
 close-state. This summary collapses both into a single
 truth-snapshot for any post-audit consumer.
 
-**Closed by code/config + verified live on R1** (47 findings):
+**Closed by code/config + verified live on R1** (48 findings):
 
   F-1201 firewall · F-1202 route removal · F-1203 explorer types ·
   F-1204 audit-public-api/llms · F-1208 alert tuning · F-1209 swap
@@ -33,7 +33,7 @@ truth-snapshot for any post-audit consumer.
   freshness · F-1252 cross-region target · F-1253 Redis ACL
   username · F-1254 Redis ACL keys · F-1256 rate-limit docs ·
   F-1257 api-key quota race · F-1258 Redis-less usage · F-1259
-  account/usage docs
+  account/usage docs · F-1260 survivor-set MinUSDVolume gate
 
 **Partially closed** (code + live action shipped; remaining piece
 is operator credential / arch decision):
@@ -43,10 +43,14 @@ is operator credential / arch decision):
   - F-1249 — anomaly.freeze + divergence.firing producers wired;
     incident.sev1 / incident.resolved producer needs an arch
     decision on incident creation (today web/status/ JSON)
-  - F-1255 — speculative-account orphan recovery shipped; full
-    transactional first-login atomicity is a deeper refactor
-  - F-1207 — next.js bumped + CI `pnpm audit` gate added;
-    hosted GitHub Dependabot/vulnerability alerts remain admin-UI
+  - F-1255 — speculative-account orphan recovery now Suspend-marks
+    the loser row with reason `signup-race:` so the operator reaper
+    has an unambiguous signal; full transactional first-login
+    atomicity (per-email serialization) is a deeper refactor
+  - F-1207 — next.js bumped + CI `pnpm audit` gate added; npm/pnpm
+    ecosystems now included in `.github/dependabot.yml` for all three
+    web apps; hosted GitHub Dependabot/vulnerability alerts admin
+    flip remains admin-UI
 
 **Open, gated on admin-UI / operator-decision-only**:
 
@@ -133,7 +137,7 @@ is operator credential / arch decision):
 | F-1257 | medium | The attempted 25-active-key/account quota fix still uses a raceable unlocked count CTE | Dashboard key quota check; Postgres insert path; platform schema | XFI-0049; EV-0092; EV-0103 | open | platform/keys | The workspace moved quota handling into `APIKeyStore.Create`, but the new `WITH active_count ... INSERT ... WHERE n < max` has the same MVCC snapshot race already preserved for webhooks under `F-1248`. |
 | F-1258 | high | Redis-less API deployments can still panic through the usage-reader path after the middleware-side nil fix | API startup wiring; usage middleware; usage counter; account usage reader | XFI-0050; EV-0094; EV-0103 | open | api/ops/runtime | The workspace now omits the middleware counter when Redis is absent, but still passes `UsageReader: usageReaderAdapter{c:nil}` into the server; `/v1/account/usage` then dereferences the nil inner counter on `Read`. |
 | F-1259 | medium | Usage docs are still internally inconsistent after the source OpenAPI rewrite | Account usage handler; OpenAPI/reference docs; product architecture docs | XFI-0051; EV-0095; EV-0103 | open | docs/api/product | The source OpenAPI text now describes live Redis-backed usage, but generated reference YAML, Postman, API-design docs, architecture inventory, and the handler comment remain stale; the new source text also incorrectly says Redis absence is reflected on `/v1/healthz` checks. |
-| F-1260 | high | `aggregate.min_usd_volume` still evaluates discarded pre-filter volume, so thin survivor windows can publish above a manipulation floor they do not actually meet | Aggregator stablecoin/USD-volume path; class/outlier filtering; VWAP publish gate | XFI-0052; EV-0105 | open | aggregate/market-data | `refreshPairWindow` computes `usdVolume` before class/outlier filtering, then applies the threshold after filtering with a helper that ignores the survivor slice and compares the stale total. |
+| F-1260 | high | `aggregate.min_usd_volume` still evaluates discarded pre-filter volume, so thin survivor windows can publish above a manipulation floor they do not actually meet | Aggregator stablecoin/USD-volume path; class/outlier filtering; VWAP publish gate | XFI-0052; EV-0105 | fixed | aggregate/market-data | Current `HEAD` recomputes USD volume across the post-class/post-outlier survivor slice via [survivorUSDVolume] before invoking [dropForMinUSDVolume], with regression test `class filter gutted window: drops despite pre-filter clearing threshold`. |
 
 ## Finding Template
 
@@ -1690,7 +1694,9 @@ Remediation direction: rewrite the usage contract around current conditional sem
 
 Severity: `high`
 
-Status: `open`
+Status: `fixed`
+
+Current-head reconciliation (wave 28, 2026-05-12): `refreshPairWindow` now passes the survivor-only USD total into `dropForMinUSDVolume` via a new `survivorUSDVolume(trades, tradeUSD)` helper. The map is keyed by stable `canonical.Trade.ID()` and captured before `fetchForTarget`'s pair-rewrite, so post-filter survivors still resolve to the source-pair quote-decimal USD value (preserving F-1213's apples-to-apples accounting). Regression test `TestTick_MinUSDVolumeFilter/class_filter_gutted_window` proves a $101k pre-filter window whose class filter leaves $1k of survivors gets dropped under the $10k threshold instead of publishing on the discarded $100k. `Config.MinUSDVolume` doc already promised post-class/post-outlier semantics; this brings the implementation in line.
 
 Affected surface:
 

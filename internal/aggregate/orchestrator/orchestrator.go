@@ -591,7 +591,12 @@ func (o *Orchestrator) refreshPairWindow(
 	now time.Time,
 ) error {
 	from := now.Add(-window)
-	trades, usdVolume, tradeUSD, err := o.fetchForTarget(ctx, pair, from, now)
+	// `_` here is the pre-filter USD total. F-1260 (codex audit-
+	// 2026-05-12) moved the MinUSDVolume gate to a survivor-only sum
+	// computed below from `tradeUSD`, so the pre-filter scalar isn't
+	// the gate input anymore. Kept on the return value for backwards
+	// compatibility with future callers + lint readability.
+	trades, _, tradeUSD, err := o.fetchForTarget(ctx, pair, from, now)
 	if err != nil {
 		return fmt.Errorf("fetch %s %v: %w", pair.String(), window, err)
 	}
@@ -617,7 +622,14 @@ func (o *Orchestrator) refreshPairWindow(
 		return nil
 	}
 
-	if o.dropForMinUSDVolume(pair, trades, usdVolume) {
+	// F-1260 (codex audit-2026-05-12): sum USD across the SURVIVOR
+	// slice, not the pre-filter total returned by fetchForTarget.
+	// Without this, windows that get gutted by class/outlier filters
+	// can still publish above MinUSDVolume on volume that never made
+	// it into the VWAP — the gate is supposed to keep thin survivor
+	// sets out, so the input it evaluates must be the survivor set.
+	survivorUSD := survivorUSDVolume(trades, tradeUSD)
+	if o.dropForMinUSDVolume(pair, trades, survivorUSD) {
 		return nil
 	}
 
@@ -959,6 +971,33 @@ func isUSDPeggedClassic(asset canonical.Asset, pegs []canonical.Asset) bool {
 	return false
 }
 
+// survivorUSDVolume returns the USD volume contributed by the
+// post-filter survivor slice, looked up by stable trade ID in the
+// per-trade map captured before fetchForTarget's pair rewrites.
+//
+// F-1260 (codex audit-2026-05-12): the MinUSDVolume manipulation
+// gate is documented as a post-class, post-outlier publish gate,
+// but previously evaluated the pre-filter total — letting thin
+// survivor windows clear the floor on volume the filter had
+// already discarded. This helper bridges the rewrite scheme
+// (Pair carries the target after fetchForTarget) with the source-
+// pair quote-decimal accounting that fed the gate's input.
+//
+// A missing key contributes zero — the only way an ID misses the
+// map is if `usdVolumeForPairPerTrade` decided the source pair's
+// quote isn't a recognised USD surface, in which case the trade
+// doesn't contribute to the USD-volume gate by definition.
+func survivorUSDVolume(trades []canonical.Trade, tradeUSD map[string]float64) float64 {
+	if len(trades) == 0 || len(tradeUSD) == 0 {
+		return 0
+	}
+	var total float64
+	for i := range trades {
+		total += tradeUSD[trades[i].ID()]
+	}
+	return total
+}
+
 // dropForMinUSDVolume returns true (and bumps the matching counters
 // + emptyWindows stat) when the post-class + post-outlier window
 // fails the per-pair USD-volume threshold. Caller treats the true
@@ -966,13 +1005,11 @@ func isUSDPeggedClassic(asset canonical.Asset, pegs []canonical.Asset) bool {
 // move on. Extracted from refreshPairWindow to keep its cognitive
 // complexity under the linter cap.
 //
-// `usdVolume` is the pre-computed sum from [fetchForTarget] using
-// per-source-pair quote-decimal scales (8 for fiat:USD, 7 for
-// classic USD-pegged). Passing it down lets the gate correctly
-// compare apples-to-apples even when the input slice has been
-// rewritten to all carry the same `Pair.Quote = fiat:USD` —
-// without this F-1213 (codex audit-2026-05-12) lurks where a
-// $10k classic-USDC window looks like $1k to the gate.
+// `usdVolume` is the SURVIVOR-set USD total — F-1260 (codex audit-
+// 2026-05-12) replaced the pre-filter scalar with [survivorUSDVolume]
+// of the post-class + post-outlier slice. Before F-1260 the caller
+// passed in the pre-filter total, which let thin windows publish
+// above MinUSDVolume on volume the filter had already discarded.
 //
 // See [Config.MinUSDVolume] for the threshold semantics.
 func (o *Orchestrator) dropForMinUSDVolume(pair canonical.Pair, trades []canonical.Trade, usdVolume float64) bool {
