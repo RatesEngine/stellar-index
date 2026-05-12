@@ -17,6 +17,20 @@ against.
 
 ### Changed
 
+- **Prometheus multi-host ↔ R1 overlay drift caught at CI (F-1222).**
+  Multi-host rules in `deploy/monitoring/rules/` use underscored
+  job labels (`ratesengine_api`) matching the multi-host ansible
+  scrape config; R1's single-host overlay at
+  `configs/prometheus/rules.r1/` uses hyphenated labels matching
+  the R1 systemd units. Editing only one half silently breaks the
+  other deployment shape. New header notes pin the convention in
+  the canonical files; `scripts/ci/lint-docs.sh` now flags any
+  multi-host rule file without an R1-overlay sibling so the gap
+  surfaces at CI time. Created R1 overlays for `cache.yml`,
+  `stellar.yml`, `storage.yml` to satisfy the new pairing
+  check — the underlying rules already match upstream metric
+  names so no expression changes were needed.
+
 - **Tailored error for supply-observer backfill attempts (F-1243).**
   `ratesengine-ops backfill accounts` (or any of the six supply
   observers: `accounts`, `trustlines`, `claimable_balances`,

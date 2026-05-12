@@ -1,5 +1,17 @@
 ---
 # API serving-plane alerts — SLA enforcement per Freighter RFP.
+#
+# Job-label convention (F-1222 audit-2026-05-12). The multi-host
+# rules in this directory use UNDERSCORED job names
+# (`ratesengine_api`, `ratesengine_aggregator`, …) matching the
+# ansible-rendered scrape config at
+# `configs/ansible/roles/prometheus/templates/prometheus.yml.j2`.
+# R1's single-host deployment uses HYPHENATED job names
+# (`ratesengine-api`, …) matching its systemd units; the R1-
+# specific overlay at `configs/prometheus/rules.r1/` is the
+# source of truth for R1's Prometheus. Editing only one half
+# silently breaks the other deployment shape — keep both in
+# sync when changing alert expressions.
 
 groups:
   - name: ratesengine.api

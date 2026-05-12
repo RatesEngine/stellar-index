@@ -1,6 +1,12 @@
 ---
 # Service-level-objective (SLO) burn-rate alerts.
 #
+# Job-label convention (F-1222 audit-2026-05-12). The multi-host
+# rules in this directory use UNDERSCORED job names
+# (`ratesengine_api`) matching `configs/ansible/roles/prometheus/
+# templates/prometheus.yml.j2`. R1 uses hyphenated job names via
+# the `configs/prometheus/rules.r1/` overlay; keep both in sync.
+#
 # Pattern from the Google SRE workbook (chapter 5: "Alerting on
 # SLOs"): multi-window, multi-burn-rate. An alert fires when BOTH:
 #

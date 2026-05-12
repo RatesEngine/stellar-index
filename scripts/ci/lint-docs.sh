@@ -343,6 +343,27 @@ fi
 # alerts-catalog.md or sev-playbook.md or be cross-referenced from
 # another runbook (chained-procedure case).
 
+# ─── Prometheus rules: assert each multi-host rule has an R1 sibling ──
+#
+# Multi-host rules in `deploy/monitoring/rules/` use underscored job
+# names (matching the ansible multi-host scrape config). R1's single-
+# host overlay at `configs/prometheus/rules.r1/` mirrors the same
+# alerts with hyphenated job names. F-1222 (audit-2026-05-12) caught
+# silent drift between the two — editing the multi-host file alone
+# leaves R1 with a stale rule. This check flags any multi-host file
+# that has no matching R1 sibling so reviewers catch the drift at
+# CI time.
+
+echo "Checking Prometheus rule pairing (multi-host ↔ R1 overlay)..."
+if [ -d deploy/monitoring/rules ] && [ -d configs/prometheus/rules.r1 ]; then
+  for r in deploy/monitoring/rules/*.yml; do
+    fname="${r##*/}"
+    if [ ! -f "configs/prometheus/rules.r1/$fname" ]; then
+      err "Multi-host rule file $r has no configs/prometheus/rules.r1/$fname sibling — see F-1222 in $r header. Either add an R1 overlay or remove this rule."
+    fi
+  done
+fi
+
 echo "Checking runbook orphans..."
 if [ -d docs/operations/runbooks ]; then
   for r in docs/operations/runbooks/*.md; do

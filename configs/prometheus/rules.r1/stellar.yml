@@ -1,0 +1,109 @@
+---
+# Stellar node alerts — stellar-core, stellar-rpc, archive publishing.
+#
+# Deployment posture (2026-04-23 onward): r1 does NOT run stellar-core
+# or stellar-rpc — both were removed in the FSN1 trim along with the
+# stellar-core-prometheus-exporter (see
+# `docs/operations/r1-deployment-state.md` §Services). On r1 the
+# core/rpc alerts below are therefore *inert*: their underlying
+# metrics have no producer, so the rules never evaluate to true and
+# no series exists for the `for:` window to start. Each runbook
+# under `docs/operations/runbooks/` carries the same disclaimer.
+#
+# The rules stay in this file because Phase-3 (Tier-1 validator
+# rollout per ADR-0004) brings stellar-core back, at which point
+# `run_stellar_core` flips on in the ansible role and the
+# stellar-core-prometheus-exporter starts producing the metrics
+# below. Removing the rules now would force re-authoring them at
+# Phase-3; keeping them inert costs nothing.
+#
+# Two alerts in this file remain active on r1 today:
+#   - ratesengine_stellar_archive_publish_fail — references
+#     `ratesengine_stellar_archive_publish_errors_total`, which the
+#     stellar-archivist publish loop emits when a checkpoint upload
+#     fails. r1 doesn't currently publish a history archive, so this
+#     stays inert today, but operators wiring publishing back on
+#     don't need a rule edit to start surfacing the signal.
+#   - ratesengine_stellar_archive_divergence — references
+#     `ratesengine_archive_divergence_total`, which the
+#     verify-archive Tier-D job DOES emit on r1 (per
+#     `docs/operations/runbooks/archive-divergence.md`). Active.
+
+groups:
+  - name: ratesengine.stellar
+    interval: 30s
+    rules:
+
+      - alert: ratesengine_stellar_core_ledger_age
+        expr: (time() - ratesengine_stellar_core_last_ledger_time_unix) > 60
+        for: 2m
+        labels:
+          severity: page
+          team: ratesengine
+          component: stellar
+          runbook_url: https://github.com/RatesEngine/rates-engine/blob/main/docs/operations/runbooks/core-lag.md
+        annotations:
+          summary: "stellar-core ledger age {{ $value | humanizeDuration }} (SEV-1)"
+          description: |
+            stellar-core hasn't applied a ledger in > 60 s. Either the node
+            is out of sync (catchup required) or it's disconnected from the
+            network. Upstream data to our pipeline halts.
+
+      - alert: ratesengine_stellar_core_peers_low
+        expr: ratesengine_stellar_core_peer_count < 5
+        for: 5m
+        labels:
+          severity: ticket
+          team: ratesengine
+          component: stellar
+          runbook_url: https://github.com/RatesEngine/rates-engine/blob/main/docs/operations/runbooks/core-peers.md
+        annotations:
+          summary: "stellar-core has only {{ $value }} peers"
+          description: |
+            stellar-core connected to < 5 peers. Quorum resilience degraded.
+            Check firewall (11625 open), preferred peers list, network health.
+
+      - alert: ratesengine_stellar_rpc_lag
+        expr: ratesengine_stellar_rpc_latest_ledger_age_seconds > 300
+        for: 5m
+        labels:
+          severity: ticket
+          team: ratesengine
+          component: stellar
+          runbook_url: https://github.com/RatesEngine/rates-engine/blob/main/docs/operations/runbooks/rpc-lag.md
+        annotations:
+          summary: "stellar-rpc lagging by {{ $value | humanizeDuration }}"
+          description: |
+            stellar-rpc's latestLedger is > 5 min behind wall-clock. Its
+            captive-core may be catching up. Indexer continues reading from
+            it but with increasing freshness debt.
+
+      - alert: ratesengine_stellar_archive_publish_fail
+        expr: increase(ratesengine_stellar_archive_publish_errors_total[1h]) > 0
+        for: 1h
+        labels:
+          severity: informational
+          team: ratesengine
+          component: stellar
+          runbook_url: https://github.com/RatesEngine/rates-engine/blob/main/docs/operations/runbooks/archive-publish.md
+        annotations:
+          summary: "Archive-publish errors in the last hour"
+          description: |
+            stellar-core failed to publish a checkpoint to our history archive.
+            Not customer-visible but affects Tier-1 posture if sustained.
+
+      - alert: ratesengine_stellar_archive_divergence
+        expr: ratesengine_archive_divergence_total > 0
+        for: 0s
+        labels:
+          severity: page
+          team: ratesengine
+          component: stellar
+          runbook_url: https://github.com/RatesEngine/rates-engine/blob/main/docs/operations/runbooks/archive-divergence.md
+        annotations:
+          summary: "Archive hash divergence detected (SEV-1)"
+          description: |
+            Our published archive's bucket hash differs from at least one
+            reference archive (SDF/LOBSTR/Satoshipay). This is a correctness
+            signal — investigate immediately. If unresolved, delist the
+            affected checkpoints.

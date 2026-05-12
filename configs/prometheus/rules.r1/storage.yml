@@ -1,0 +1,253 @@
+---
+# Storage alerts — Postgres + TimescaleDB + pgBackRest.
+
+groups:
+  - name: ratesengine.storage
+    interval: 30s
+    rules:
+
+      - alert: ratesengine_timescale_primary_down
+        expr: up{job="postgres",role="primary"} == 0
+        for: 30s
+        labels:
+          severity: page
+          team: ratesengine
+          component: storage
+          runbook_url: https://github.com/RatesEngine/rates-engine/blob/main/docs/operations/runbooks/timescale-primary-down.md
+        annotations:
+          summary: "TimescaleDB primary is down (SEV-1)"
+          description: |
+            Postgres primary {{ $labels.instance }} has been unreachable for
+            30+ s. Writes are blocked everywhere. Patroni should auto-failover
+            within 60 s — if not, follow the manual-failover path in the
+            runbook.
+
+      - alert: ratesengine_timescale_replica_lag
+        expr: pg_replication_lag_seconds > 5
+        for: 2m
+        labels:
+          severity: ticket
+          team: ratesengine
+          component: storage
+          runbook_url: https://github.com/RatesEngine/rates-engine/blob/main/docs/operations/runbooks/replica-lag.md
+        annotations:
+          summary: "Postgres sync replica lagging {{ $value }}s"
+          description: |
+            Replica {{ $labels.instance }} is more than 5 s behind the primary
+            for 2+ minutes. If this is the sync replica, writes on the primary
+            are being held back until it catches up — look for saturation on
+            the replica.
+
+      # F-1251 (audit-2026-05-12): lock-table headroom. The
+      # 2026-05-06 SEV-3 hit `out of shared memory (53200)` when
+      # the per-tx lock table saturated under concurrent ingest.
+      # Default Postgres setting (max_locks_per_transaction = 64)
+      # × max_connections = 200 = 12,800-entry table. The R1
+      # ansible role now templates max_locks_per_transaction = 256
+      # by default (51,200 entries — 4× headroom). This alert
+      # fires at 70% saturation so we get warning before the
+      # next bump is forced. Depends on postgres_exporter (not
+      # currently scraped on R1 — see configs/prometheus/rules.r1/
+      # README.md "remaining files NOT shipped"; the alert lights
+      # up when the exporter lands.)
+      - alert: ratesengine_timescale_lock_table_pressure
+        expr: |
+          pg_locks_count
+            / (pg_settings_max_locks_per_transaction * pg_settings_max_connections)
+            > 0.7
+        for: 5m
+        labels:
+          severity: ticket
+          team: ratesengine
+          component: storage
+          runbook_url: https://github.com/RatesEngine/rates-engine/blob/main/docs/operations/runbooks/pg-conns-saturated.md
+        annotations:
+          summary: "Postgres lock-table > 70% saturated (P3)"
+          description: |
+            Lock-table utilisation is {{ $value | humanizePercentage }}.
+            The next sustained ingest spike risks SQLSTATE 53200
+            ("out of shared memory") and dropped INSERTs — the
+            2026-05-06 SEV-3 class. Bump
+            `postgres_max_locks_per_transaction` in the archival-node
+            role and reapply.
+
+      - alert: ratesengine_timescale_disk_full
+        expr: |
+          (node_filesystem_avail_bytes{mountpoint="/var/lib/postgresql"} /
+           node_filesystem_size_bytes{mountpoint="/var/lib/postgresql"}) * 100 < 10
+        for: 1m
+        labels:
+          severity: page
+          team: ratesengine
+          component: storage
+          runbook_url: https://github.com/RatesEngine/rates-engine/blob/main/docs/operations/runbooks/db-disk-full.md
+        annotations:
+          summary: "Postgres disk {{ $value | humanize }}% free (SEV-1)"
+          description: |
+            Postgres data volume on {{ $labels.instance }} has < 10 % free.
+            WAL will refuse to write once full, halting all writes. Act now.
+
+      - alert: ratesengine_timescale_disk_warning
+        expr: |
+          (node_filesystem_avail_bytes{mountpoint="/var/lib/postgresql"} /
+           node_filesystem_size_bytes{mountpoint="/var/lib/postgresql"}) * 100 < 20
+        for: 10m
+        labels:
+          severity: ticket
+          team: ratesengine
+          component: storage
+          runbook_url: https://github.com/RatesEngine/rates-engine/blob/main/docs/operations/runbooks/db-disk-full.md
+        annotations:
+          summary: "Postgres disk {{ $value | humanize }}% free"
+          description: |
+            Postgres data volume on {{ $labels.instance }} under 20 %. Plan
+            retention tuning / vacuum / compression policy review. Hard page
+            fires at 10 %.
+
+      # Root filesystem (/) — distinct from /var/lib/postgresql
+      # which has its own ZFS dataset with separate space.
+      # Caught the 2026-05-10 outage retrospectively: root FS hit
+      # 100 % from log accumulation before any existing alert
+      # fired. Without this rule the operator sees the symptom
+      # downstream (Redis MISCONF → /v1/price 404s) rather than
+      # the cause.
+      - alert: ratesengine_node_root_disk_full
+        expr: |
+          (node_filesystem_avail_bytes{mountpoint="/"} /
+           node_filesystem_size_bytes{mountpoint="/"}) * 100 < 10
+        for: 1m
+        labels:
+          severity: page
+          team: ratesengine
+          component: storage
+          runbook_url: https://github.com/RatesEngine/rates-engine/blob/main/docs/operations/runbooks/redis-write-blocked-disk-full.md
+        annotations:
+          summary: "Root filesystem on {{ $labels.instance }} {{ $value | humanize }}% free (SEV-1)"
+          description: |
+            Root FS (/) under 10 % free on {{ $labels.instance }}.
+            Redis can't snapshot once full; with the default
+            stop-writes-on-bgsave-error=yes that blocks every cache
+            write, blocking aggregator VWAP refresh, surfacing as
+            `/v1/price` 404s on rewritten / triangulated /
+            stablecoin-proxy pairs (incident 2026-05-10).
+
+      - alert: ratesengine_node_root_disk_warning
+        expr: |
+          (node_filesystem_avail_bytes{mountpoint="/"} /
+           node_filesystem_size_bytes{mountpoint="/"}) * 100 < 20
+        for: 10m
+        labels:
+          severity: ticket
+          team: ratesengine
+          component: storage
+          runbook_url: https://github.com/RatesEngine/rates-engine/blob/main/docs/operations/runbooks/redis-write-blocked-disk-full.md
+        annotations:
+          summary: "Root filesystem on {{ $labels.instance }} {{ $value | humanize }}% free"
+          description: |
+            Root FS (/) under 20 % on {{ $labels.instance }}.
+            Investigate /var/log + /tmp + /var/cache before this
+            grows into the page-tier alert.
+
+      # Redis BGSAVE health — when Redis can't snapshot to disk
+      # (typically because the volume backing /var/lib/redis is
+      # full) it sets stop-writes-on-bgsave-error and rejects
+      # every SET. The aggregator's VWAP cache writes start
+      # failing for every pair. Catches the same incident shape
+      # as the root-disk alert above from a different angle:
+      # the disk could be on a separate mount, or the failure
+      # could be caused by something other than disk space
+      # (permissions, fork failure on memory pressure).
+      - alert: ratesengine_redis_writes_blocked
+        expr: redis_rdb_last_bgsave_status == 0
+        for: 1m
+        labels:
+          severity: page
+          team: ratesengine
+          component: cache
+          runbook_url: https://github.com/RatesEngine/rates-engine/blob/main/docs/operations/runbooks/redis-write-blocked-disk-full.md
+        annotations:
+          summary: "Redis BGSAVE failing on {{ $labels.instance }} (SEV-1) — writes blocked"
+          description: |
+            Redis BGSAVE on {{ $labels.instance }} has been failing
+            for 1+ minute. With the default
+            stop-writes-on-bgsave-error=yes, every Redis write is
+            being rejected — aggregator VWAP cache stops refreshing,
+            `/v1/price` 404s on rewritten/triangulated/proxy pairs
+            (incident 2026-05-10). Free disk on the Redis volume
+            (typically `/`), then `redis-cli BGSAVE` to clear the
+            stop-writes block.
+
+      - alert: ratesengine_timescale_connections_saturated
+        expr: |
+          (pg_stat_activity_count / on (instance)
+           pg_settings_max_connections) * 100 > 80
+        for: 5m
+        labels:
+          severity: ticket
+          team: ratesengine
+          component: storage
+          runbook_url: https://github.com/RatesEngine/rates-engine/blob/main/docs/operations/runbooks/pg-conns-saturated.md
+        annotations:
+          summary: "Postgres connection pool {{ $value | humanize }}% used"
+          description: |
+            > 80 % of max_connections in use for 5+ minutes. PgBouncer should
+            be smoothing this; check that the pool is healthy + sized right.
+
+      - alert: ratesengine_timescale_cagg_stale
+        expr: |
+          (time() - ratesengine_cagg_last_refresh_unix) > 5 * ratesengine_cagg_refresh_interval_seconds
+        for: 5m
+        labels:
+          severity: ticket
+          team: ratesengine
+          component: storage
+          runbook_url: https://github.com/RatesEngine/rates-engine/blob/main/docs/operations/runbooks/cagg-stale.md
+        annotations:
+          summary: "Continuous aggregate {{ $labels.cagg }} hasn't refreshed"
+          description: |
+            Refresh for {{ $labels.cagg }} is 5× its configured interval
+            overdue. API reads from this CAGG will return stale data until it
+            refreshes; check timescaledb job-scheduler health.
+
+      - alert: ratesengine_timescale_compression_lag
+        expr: ratesengine_uncompressed_chunks_older_than_7d > 0
+        for: 24h
+        labels:
+          severity: informational
+          team: ratesengine
+          component: storage
+          runbook_url: https://github.com/RatesEngine/rates-engine/blob/main/docs/operations/runbooks/compression-lag.md
+        annotations:
+          summary: "{{ $value }} chunks older than 7d are still uncompressed"
+          description: |
+            Compression policy should run on chunks older than 7 days. If some
+            aren't compressed, the timescaledb job scheduler may be misfiring.
+
+      - alert: ratesengine_timescale_backup_failed
+        expr: |
+          (time() - ratesengine_pgbackrest_last_success_unix) > 2 * ratesengine_pgbackrest_expected_interval_seconds
+        for: 5m
+        labels:
+          severity: ticket
+          team: ratesengine
+          component: storage
+          runbook_url: https://github.com/RatesEngine/rates-engine/blob/main/docs/operations/runbooks/backup-failed.md
+        annotations:
+          summary: "pgBackRest last success was {{ $value | humanizeDuration }} ago"
+          description: |
+            Backup has missed at least one expected cycle. Check pgBackRest
+            logs + MinIO connectivity.
+
+      - alert: ratesengine_timescale_backup_none_24h
+        expr: (time() - ratesengine_pgbackrest_last_success_unix) > 24 * 3600
+        for: 5m
+        labels:
+          severity: page
+          team: ratesengine
+          component: storage
+          runbook_url: https://github.com/RatesEngine/rates-engine/blob/main/docs/operations/runbooks/backup-failed.md
+        annotations:
+          summary: "No successful Postgres backup in > 24 h (SEV-1)"
+          description: |
+            RPO breach. At 24h+ without a backup we exceed the documented
+            5-min RPO target by 288×. Escalate immediately.

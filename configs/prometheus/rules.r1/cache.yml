@@ -1,0 +1,65 @@
+---
+# Redis cache alerts — per ADR-0007 key schema + HA plan §3.4 topology.
+
+groups:
+  - name: ratesengine.cache
+    interval: 30s
+    rules:
+
+      - alert: ratesengine_redis_master_down
+        expr: redis_up{role="master"} == 0
+        for: 30s
+        labels:
+          severity: page
+          team: ratesengine
+          component: cache
+          runbook_url: https://github.com/RatesEngine/rates-engine/blob/main/docs/operations/runbooks/redis-master-down.md
+        annotations:
+          summary: "Redis master {{ $labels.instance }} down (SEV-1)"
+          description: |
+            A Redis master has been unreachable for 30+ s. Sentinel should
+            promote a replica within 30 s — until it does, API handlers for
+            keys on this shard fall back to Timescale with stale_flag=true.
+
+      - alert: ratesengine_redis_memory_saturated
+        expr: (redis_memory_used_bytes / redis_memory_max_bytes) * 100 > 90
+        for: 5m
+        labels:
+          severity: ticket
+          team: ratesengine
+          component: cache
+          runbook_url: https://github.com/RatesEngine/rates-engine/blob/main/docs/operations/runbooks/redis-memory.md
+        annotations:
+          summary: "Redis {{ $labels.instance }} memory {{ $value | humanize }}% used"
+          description: |
+            At > 90 % memory for 5+ minutes. allkeys-lru will start evicting
+            rate-limit counters + asset-metadata caches. Plan a scale-up.
+
+      - alert: ratesengine_redis_evictions_high
+        expr: rate(redis_evicted_keys_total[5m]) > 100
+        for: 5m
+        labels:
+          severity: ticket
+          team: ratesengine
+          component: cache
+          runbook_url: https://github.com/RatesEngine/rates-engine/blob/main/docs/operations/runbooks/redis-memory.md
+        annotations:
+          summary: "Redis {{ $labels.instance }} evicting {{ $value | humanize }}/s keys"
+          description: |
+            Eviction rate exceeds 100/s sustained 5+ min. LRU pressure. API
+            hit rates drop and Timescale fallback load rises.
+
+      - alert: ratesengine_redis_replication_broken
+        expr: |
+          redis_connected_slaves < on(instance) redis_expected_slaves
+        for: 2m
+        labels:
+          severity: ticket
+          team: ratesengine
+          component: cache
+          runbook_url: https://github.com/RatesEngine/rates-engine/blob/main/docs/operations/runbooks/redis-replication.md
+        annotations:
+          summary: "Redis master {{ $labels.instance }} missing replicas"
+          description: |
+            Master reports fewer connected replicas than expected (< {{ $labels.expected }}).
+            Sentinel can't promote on failover if replicas are gone.
