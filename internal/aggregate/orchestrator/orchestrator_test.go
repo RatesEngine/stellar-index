@@ -902,6 +902,15 @@ func TestTick_AnomalyFreeze_SkipsCacheAndMarks(t *testing.T) {
 		t.Errorf("decision passed to Mark wasn't frozen: %+v", m.decision)
 	}
 
+	// F-1228 (audit-2026-05-12): the frozenValue arg must carry
+	// the LKG VWAP we're freezing on (the prior bucket's
+	// formatRatFixed value). prevVWAPs is preset to big.NewRat(1, 1)
+	// → 12-decimal formatted form is "1.000000000000".
+	if m.frozenValue != "1.000000000000" {
+		t.Errorf("frozenValue = %q, want %q (LKG VWAP at 12 decimals)",
+			m.frozenValue, "1.000000000000")
+	}
+
 	// prevVWAPs slot stayed at 1.00 — the next tick still compares
 	// against the LKG, not the bad reading.
 	if o.prevVWAPs[stateKey].Cmp(big.NewRat(1, 1)) != 0 {
