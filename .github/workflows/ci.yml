@@ -279,6 +279,8 @@ jobs:
           # generateStaticParams kicks in when the fetch fails, so
           # the build still succeeds with seed-only slugs.
           NEXT_PUBLIC_API_BASE_URL: http://api.ci-stub.invalid
+      # F-1207 (codex audit-2026-05-12): pnpm advisory gate.
+      - run: pnpm audit --audit-level high
 
   # ────────────────────────────────────────────────────────────────
   # Customer dashboard — same shape as web-explorer. Static-export
@@ -306,6 +308,12 @@ jobs:
       - run: pnpm build
         env:
           NEXT_PUBLIC_API_BASE_URL: http://api.ci-stub.invalid
+      # F-1207 (codex audit-2026-05-12): pnpm advisory gate. Fails
+      # on any HIGH or CRITICAL advisory across the dashboard's
+      # transitive deps. Without this, vulnerable next.js versions
+      # (e.g. 15.0.4) shipped to production for months unnoticed
+      # because Dependabot only covered gomod/actions/docker.
+      - run: pnpm audit --audit-level high
 
   # ────────────────────────────────────────────────────────────────
   # Status page — public-facing status.ratesengine.net. Replaces
@@ -333,3 +341,5 @@ jobs:
       - run: pnpm build
         env:
           NEXT_PUBLIC_API_BASE_URL: http://api.ci-stub.invalid
+      # F-1207 (codex audit-2026-05-12): pnpm advisory gate.
+      - run: pnpm audit --audit-level high

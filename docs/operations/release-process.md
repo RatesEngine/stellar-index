@@ -20,9 +20,14 @@ The pipeline is:
 git tag vX.Y.Z      → release.yml fires
                     → cross-compiles linux/amd64 + linux/arm64
                     → uploads binaries + SHA256SUMS to GitHub Releases
-                    → builds + pushes container images to ghcr.io
                     → operator runs deploy.yml (or manual scp)
 ```
+
+> **No container images.** `release.yml` deliberately does NOT push
+> to ghcr.io — F-1221 (codex audit-2026-05-12) flagged old docs that
+> implied otherwise. Self-hosters who want OCI images build them
+> locally from the per-binary Dockerfiles under `docker/`. See
+> `docker/README.md`.
 
 Run the `release.yml` and `deploy.yml` workflows in
 `.github/workflows/`; this doc captures the human-side decisions
@@ -91,9 +96,11 @@ mid-release wastes a tag and forces a `.N+1` cut.
    - Computes SHA256 sums
    - Uploads the binaries + `SHA256SUMS` + the CHANGELOG section as
      release notes to GitHub Releases
-   - Builds container images via `docker/<binary>.Dockerfile` and
-     pushes to `ghcr.io/RatesEngine/<binary>:vX.Y.Z` plus
-     `:latest` (only on non-pre-release tags)
+   - **Does not** publish container images. The previous GHCR job
+     was dropped (search the git log for "release: drop ghcr.io
+     push") because no consumer of those images existed. Self-
+     hosters who need images build them from `docker/<binary>
+     .Dockerfile` locally — see `docker/README.md`.
 5. **Verify the release.**
    ```sh
    gh release view vX.Y.Z
@@ -135,10 +142,20 @@ rollback is a binary swap on each affected host.
    history or from `r1-deployment-state.md`'s "Running version"
    line at the time the current release was cut.
 2. **Confirm the previous binary is still on disk.** The deploy
-   convention keeps the last 5 release directories under
-   `/opt/ratesengine/release-<tag>/`. If it's been pruned,
+   task in `configs/ansible/tasks/deploy-one-binary.yml` keeps the
+   last 5 previous binaries as
+   `/usr/local/bin/<binary>.prev-<previous-tag>` and writes a sidecar
+   marker to `/var/lib/ratesengine/deployed-versions/<binary>`. Check
+   both:
+   ```sh
+   ssh root@<host> 'ls -lh /usr/local/bin/ratesengine-*.prev-* 2>/dev/null'
+   ssh root@<host> 'cat /var/lib/ratesengine/deployed-versions/ratesengine-api'
+   ```
+   If the wanted `.prev-<tag>` is pruned (>5 releases back),
    rebuild it from the tag (`git checkout <tag> && make build`)
-   on a build host before continuing.
+   on a build host before continuing. F-1222 (codex audit-2026-05-12):
+   prior docs pointed at `/opt/ratesengine/release-<tag>/` which the
+   deploy task does not produce.
 3. **Decide the scope.** A bad indexer release does not require
    rolling back the API. Roll back only the affected binary unless
    the failure is shared (e.g. a config schema break).
@@ -166,7 +183,8 @@ BINARY=ratesengine-api                        # or -indexer, -aggregator
 
 ssh root@<host> "
   systemctl stop ${BINARY} && \
-  cp /opt/ratesengine/release-${PREVIOUS}/${BINARY} /usr/local/bin/${BINARY} && \
+  cp /usr/local/bin/${BINARY}.prev-${PREVIOUS} /usr/local/bin/${BINARY} && \
+  echo ${PREVIOUS} > /var/lib/ratesengine/deployed-versions/${BINARY} && \
   systemctl start ${BINARY} && \
   systemctl status ${BINARY} --no-pager | head -20
 "

@@ -21,6 +21,16 @@ RUN CGO_ENABLED=0 GOOS=linux \
 
 FROM gcr.io/distroless/static-debian12:nonroot
 COPY --from=builder /out/ratesengine-migrate /usr/local/bin/ratesengine-migrate
+# F-1227 (codex audit-2026-05-12): the migrate binary defaults
+# `-migrations migrations`, so a runtime image that copies only the
+# binary cannot apply schema out of the box — `ratesengine-migrate
+# up` exits with "open migrations: no such file or directory" before
+# touching the DB. Bake the migrations into the image so the default
+# subcommand works without a bind-mount + flag. The Ansible role
+# already syncs `/usr/local/share/ratesengine/migrations` and passes
+# `-migrations` explicitly; that path keeps working in parallel.
+COPY migrations/ /migrations/
+WORKDIR /
 USER nonroot:nonroot
 # no listening port
 ENTRYPOINT ["/usr/local/bin/ratesengine-migrate"]

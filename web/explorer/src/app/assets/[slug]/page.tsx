@@ -884,12 +884,20 @@ function OverviewBody({
             <Stat
               label="First seen"
               mono
-              value={`#${coin.first_seen_ledger.toLocaleString()}`}
+              value={
+                coin.first_seen_ledger != null
+                  ? `#${coin.first_seen_ledger.toLocaleString()}`
+                  : '—'
+              }
             />
             <Stat
               label="Last seen"
               mono
-              value={`#${coin.last_seen_ledger.toLocaleString()}`}
+              value={
+                coin.last_seen_ledger != null
+                  ? `#${coin.last_seen_ledger.toLocaleString()}`
+                  : '—'
+              }
             />
           </dl>
         </Panel>

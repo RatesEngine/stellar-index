@@ -535,6 +535,20 @@ func (s *Server) handleHistorySinceInception(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
+	// F-1225 (codex audit-2026-05-12): stablecoin → fiat:USD fallback.
+	// The literal X/fiat:USD pair never has rows in the CAGGs on
+	// Stellar mainnet because no on-chain trades quote in fiat:USD —
+	// every USD-flavoured trade quotes in classic USDC (USDC-GA5Z…)
+	// or one of the other operator-declared pegs. The chart + price
+	// handlers already implement this fallback; without it, since-
+	// inception XLM/USD returns empty while chart/price/VWAP all
+	// surface data. Mirrors `chartStablecoinFallback` shape.
+	if len(points) == 0 {
+		if fp, ok := s.historySinceInceptionStablecoinFallback(hCtx, pair, gran); ok {
+			points = fp
+		}
+	}
+
 	wire := make([]HistoryPointWire, len(points))
 	for i, p := range points {
 		wire[i] = HistoryPointWire{T: p.Bucket, P: p.VWAP, VUSD: p.VolumeUSD}
@@ -547,4 +561,38 @@ func (s *Server) handleHistorySinceInception(w http.ResponseWriter, r *http.Requ
 		Granularity: gran,
 		Points:      wire,
 	}, Flags{})
+}
+
+// historySinceInceptionStablecoinFallback walks the operator's
+// USD-pegged classic allow-list when the literal X/fiat:USD pair
+// returned no points. Mirrors [chartStablecoinFallback] but uses
+// the since-inception variant (no `from` lower bound). Returns
+// ok=false when:
+//
+//   - quote is not fiat:USD,
+//   - no operator-declared pegs are wired,
+//   - every peg's CAGG read returns empty / errors out.
+//
+// F-1225 (codex audit-2026-05-12).
+func (s *Server) historySinceInceptionStablecoinFallback(
+	ctx context.Context, pair canonical.Pair, gran string,
+) ([]HistoryPoint, bool) {
+	if pair.Quote.Type != canonical.AssetFiat || pair.Quote.Code != "USD" {
+		return nil, false
+	}
+	for _, peg := range s.usdPeggedClassics {
+		if peg.Equal(pair.Base) {
+			continue
+		}
+		proxied, err := canonical.NewPair(pair.Base, peg)
+		if err != nil {
+			continue
+		}
+		pp, err := s.history.HistoryPoints(ctx, proxied, gran, historyMaxPoints)
+		if err != nil || len(pp) == 0 {
+			continue
+		}
+		return pp, true
+	}
+	return nil, false
 }

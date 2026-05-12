@@ -23,7 +23,7 @@ CODEOWNERS	CODEOWNERS	CODEOWNERS	policy	done	EV-0025;EV-0026;EV-0050;F-1214	XFI-
 CODE_OF_CONDUCT.md	CODE_OF_CONDUCT.md	CODE_OF_CONDUCT.md	documentation	todo			cold audit pending
 CONTRIBUTING.md	CONTRIBUTING.md	CONTRIBUTING.md	documentation	done	EV-0026;EV-0050;F-1214;F-1231	XFI-0010;XFI-0023	Reviewed local policy claims against hosted controls
 LICENSE	LICENSE	LICENSE	unknown	todo			cold audit pending
-Makefile	Makefile	Makefile	unknown	in_progress	EV-0013,F-1206		Reviewed verify and launch readiness split
+Makefile	Makefile	Makefile	unknown	in_progress	EV-0013;EV-0082;F-1206;F-1252	XFI-0044	Reviewed verify/launch-readiness split and absence of the documented `verify-cross-region` target
 README.md	README.md	README.md	documentation	todo			cold audit pending
 SECURITY.md	SECURITY.md	SECURITY.md	documentation	done	EV-0050;EV-0051;F-1207		Reviewed disclosure/dependency-security context; dependency alerts disabled separately tracked
 VERSIONS.md	VERSIONS.md	VERSIONS.md	documentation	todo			cold audit pending
@@ -103,7 +103,7 @@ configs/ansible/roles/archival-node/templates/minio.env.j2	configs	configs/ansib
 configs/ansible/roles/archival-node/templates/nftables.conf.j2	configs	configs/ansible	unknown	in_progress	XFI-0001,F-1201		Reviewed default-deny and internal CIDR contract
 configs/ansible/roles/archival-node/templates/pg_hba.conf.j2	configs	configs/ansible	unknown	todo			cold audit pending
 configs/ansible/roles/archival-node/templates/postgresql.conf.j2	configs	configs/ansible	unknown	todo			cold audit pending
-configs/ansible/roles/archival-node/templates/ratesengine.toml.j2	configs	configs/ansible	unknown	todo			cold audit pending
+configs/ansible/roles/archival-node/templates/ratesengine.toml.j2	configs	configs/ansible	unknown	done	EV-0083;F-1253	XFI-0045	Reviewed rendered storage/client Redis settings against ACL-lockdown server template
 configs/ansible/roles/archival-node/templates/sshd_config.j2	configs	configs/ansible	unknown	todo			cold audit pending
 configs/ansible/roles/archival-node/templates/stellar-core.cfg.j2	configs	configs/ansible	unknown	todo			cold audit pending
 configs/ansible/roles/archival-node/templates/stellar-rpc.cfg.j2	configs	configs/ansible	unknown	todo			cold audit pending
@@ -184,7 +184,7 @@ configs/ansible/roles/prometheus/templates/alertmanager.yml.j2	configs	configs/a
 configs/ansible/roles/prometheus/templates/prometheus.service.j2	configs	configs/ansible	unknown	todo			cold audit pending
 configs/ansible/roles/prometheus/templates/prometheus.yml.j2	configs	configs/ansible	unknown	todo			cold audit pending
 configs/ansible/roles/redis-sentinel/README.md	configs	configs/ansible	documentation	todo			cold audit pending
-configs/ansible/roles/redis-sentinel/defaults/main.yml	configs	configs/ansible	config	todo			cold audit pending
+configs/ansible/roles/redis-sentinel/defaults/main.yml	configs	configs/ansible	config	done	EV-0083;F-1253	XFI-0045	Reviewed ACL-lockdown toggle semantics and rollout coupling
 configs/ansible/roles/redis-sentinel/handlers/main.yml	configs	configs/ansible	config	todo			cold audit pending
 configs/ansible/roles/redis-sentinel/meta/main.yml	configs	configs/ansible	config	todo			cold audit pending
 configs/ansible/roles/redis-sentinel/tasks/01-preflight.yml	configs	configs/ansible	config	todo			cold audit pending
@@ -196,15 +196,15 @@ configs/ansible/roles/redis-sentinel/tasks/06-firewall.yml	configs	configs/ansib
 configs/ansible/roles/redis-sentinel/tasks/07-monitoring.yml	configs	configs/ansible	config	todo			cold audit pending
 configs/ansible/roles/redis-sentinel/tasks/main.yml	configs	configs/ansible	config	todo			cold audit pending
 configs/ansible/roles/redis-sentinel/templates/redis-systemd-override.conf.j2	configs	configs/ansible	unknown	todo			cold audit pending
-configs/ansible/roles/redis-sentinel/templates/redis.conf.j2	configs	configs/ansible	unknown	todo			cold audit pending
+configs/ansible/roles/redis-sentinel/templates/redis.conf.j2	configs	configs/ansible	unknown	done	EV-0083;F-1253	XFI-0045	Reviewed Redis server-side ACL-file activation path
 configs/ansible/roles/redis-sentinel/templates/sentinel.conf.j2	configs	configs/ansible	unknown	todo			cold audit pending
-configs/ansible/roles/redis-sentinel/templates/users.acl.j2	configs	configs/ansible	unknown	todo			cold audit pending
+configs/ansible/roles/redis-sentinel/templates/users.acl.j2	configs	configs/ansible	unknown	done	EV-0083;EV-0084;F-1253;F-1254	XFI-0045;XFI-0046	Reviewed default-user shutdown, named application ACL user contract, and ACL keyspace allow-list drift
 configs/ansible/tasks/deploy-one-binary.yml	configs	configs/ansible	config	todo			cold audit pending
 configs/audit/README.md	configs	configs/audit	documentation	todo			cold audit pending
 configs/audit/wasm-walk-contracts.yaml	configs	configs/audit	config	todo			cold audit pending
 configs/caddy/Caddyfile.api	configs	configs/caddy	unknown	todo			cold audit pending
 configs/caddy/README.md	configs	configs/caddy	documentation	todo			cold audit pending
-configs/example.toml	configs	configs/example.toml	config	todo			cold audit pending
+configs/example.toml	configs	configs/example.toml	config	in_progress	EV-0083;F-1253	XFI-0045	Reviewed Redis ACL username omission in example config; broader config-surface review remains open
 configs/healthchecks/README.md	configs	configs/healthchecks	documentation	todo			cold audit pending
 configs/healthchecks/heartbeat.sh	configs	configs/healthchecks	script	todo			cold audit pending
 configs/healthchecks/install.sh	configs	configs/healthchecks	script	todo			cold audit pending
@@ -528,7 +528,7 @@ docs/operations/galexie-backfill.md	docs	docs/operations	documentation	todo			co
 docs/operations/hubble-event-counts.md	docs	docs/operations	documentation	todo			cold audit pending
 docs/operations/incidents/README.md	docs	docs/operations	documentation	todo			cold audit pending
 docs/operations/launch-day-checklist.md	docs	docs/operations	documentation	todo			cold audit pending
-docs/operations/multi-region-cutover.md	docs	docs/operations	documentation	todo			cold audit pending
+docs/operations/multi-region-cutover.md	docs	docs/operations	documentation	done	EV-0082;F-1252	XFI-0044	Reviewed cross-region pre-flight command truth; runbook points at a nonexistent Make target
 docs/operations/perf-todo.md	docs	docs/operations	documentation	todo			cold audit pending
 docs/operations/post-launch-queries.md	docs	docs/operations	documentation	todo			cold audit pending
 docs/operations/postmortems/_template.md	docs	docs/operations	documentation	todo			cold audit pending
@@ -790,7 +790,7 @@ docs/reference/api/icon.svg	docs	docs/reference	asset	todo			cold audit pending
 docs/reference/api/index.html	docs	docs/reference	unknown	todo			cold audit pending
 docs/reference/api/og.svg	docs	docs/reference	asset	todo			cold audit pending
 docs/reference/api/rates-engine.v1.yaml	docs	docs/reference	config	in_progress	EV-0010,F-1203		Generated artifact drift confirmed by regeneration
-docs/reference/config/README.md	docs	docs/reference	documentation	todo			cold audit pending
+docs/reference/config/README.md	docs	docs/reference	documentation	in_progress	EV-0083;F-1253	XFI-0045	Reviewed documented Redis ACL username requirement; broader generated config-reference review remains open
 docs/reference/metrics/README.md	docs	docs/reference	documentation	todo			cold audit pending
 docs/review-2026-05-10.md	docs	docs/review-2026-05-10.md	documentation	todo			cold audit pending
 docs/stellar-rfp.md	docs	docs/stellar-rfp.md	documentation	todo			cold audit pending
@@ -903,9 +903,9 @@ internal/api/v1/coins_cache_test.go	internal	internal/api/v1	test	todo			cold au
 internal/api/v1/currencies.go	internal	internal/api/v1	runtime	in_progress	EV-0012,F-1202		Reviewed removed legacy HTTP surface note
 internal/api/v1/dashboardauth/auth.go	internal	internal/api/v1	runtime	todo			cold audit pending
 internal/api/v1/dashboardauth/fakes_test.go	internal	internal/api/v1	test	todo			cold audit pending
-internal/api/v1/dashboardauth/handlers.go	internal	internal/api/v1	runtime	todo			cold audit pending
+internal/api/v1/dashboardauth/handlers.go	internal	internal/api/v1	runtime	done	EV-0086;EV-0087;F-1255	XFI-0047	Reviewed magic-link login/callback/logout handlers and concurrent first-login provisioning race
 internal/api/v1/dashboardauth/handlers_test.go	internal	internal/api/v1	test	todo			cold audit pending
-internal/api/v1/dashboardauth/middleware.go	internal	internal/api/v1	runtime	todo			cold audit pending
+internal/api/v1/dashboardauth/middleware.go	internal	internal/api/v1	runtime	done	EV-0087		Reviewed dashboard session resolution/touch middleware during auth slice pass
 internal/api/v1/dashboardkeys/doc.go	internal	internal/api/v1	runtime	todo			cold audit pending
 internal/api/v1/dashboardkeys/handlers.go	internal	internal/api/v1	runtime	in_progress	EV-0023,F-1212	XFI-0008	Customer-controlled key rate limit accepted up to 100000/min
 internal/api/v1/dashboardkeys/handlers_test.go	internal	internal/api/v1	test	todo			cold audit pending
@@ -1027,13 +1027,13 @@ internal/auth/list_keys.go	internal	internal/auth/list_keys.go	runtime	todo			co
 internal/auth/sep10.go	internal	internal/auth/sep10.go	runtime	todo			cold audit pending
 internal/auth/sep10/doc.go	internal	internal/auth/sep10	runtime	todo			cold audit pending
 internal/auth/sep10/jwt.go	internal	internal/auth/sep10	runtime	todo			cold audit pending
-internal/auth/sep10/redisreplay.go	internal	internal/auth/sep10	runtime	todo			cold audit pending
+internal/auth/sep10/redisreplay.go	internal	internal/auth/sep10	runtime	done	EV-0084;F-1254	XFI-0046	Reviewed replay-guard Redis namespace and ACL coupling
 internal/auth/sep10/redisreplay_test.go	internal	internal/auth/sep10	test	todo			cold audit pending
 internal/auth/sep10/validator.go	internal	internal/auth/sep10	runtime	todo			cold audit pending
 internal/auth/sep10/validator_test.go	internal	internal/auth/sep10	test	todo			cold audit pending
 internal/auth/signup_ip_throttle.go	internal	internal/auth/signup_ip_throttle.go	runtime	todo			cold audit pending
 internal/auth/signup_ip_throttle_test.go	internal	internal/auth/signup_ip_throttle_test.go	test	todo			cold audit pending
-internal/auth/signup_tracker.go	internal	internal/auth/signup_tracker.go	runtime	todo			cold audit pending
+internal/auth/signup_tracker.go	internal	internal/auth/signup_tracker.go	runtime	done	EV-0084;F-1254	XFI-0046	Reviewed duplicate-signup Redis namespace and ACL coupling
 internal/auth/store.go	internal	internal/auth/store.go	runtime	todo			cold audit pending
 internal/auth/store_redis_test.go	internal	internal/auth/store_redis_test.go	test	todo			cold audit pending
 internal/auth/store_update.go	internal	internal/auth/store_update.go	runtime	todo			cold audit pending
@@ -1042,7 +1042,7 @@ internal/auth/subject.go	internal	internal/auth/subject.go	runtime	todo			cold a
 internal/auth/subject_test.go	internal	internal/auth/subject_test.go	test	todo			cold audit pending
 internal/auth/validators_test.go	internal	internal/auth/validators_test.go	test	todo			cold audit pending
 internal/cachekeys/doc.go	internal	internal/cachekeys/doc.go	runtime	todo			cold audit pending
-internal/cachekeys/keys.go	internal	internal/cachekeys/keys.go	runtime	todo			cold audit pending
+internal/cachekeys/keys.go	internal	internal/cachekeys/keys.go	runtime	done	EV-0084;F-1254	XFI-0046	Reviewed production Redis key families and ACL/template drift
 internal/cachekeys/keys_test.go	internal	internal/cachekeys/keys_test.go	test	todo			cold audit pending
 internal/canonical/amount.go	internal	internal/canonical/amount.go	runtime	todo			cold audit pending
 internal/canonical/amount_edge_test.go	internal	internal/canonical/amount_edge_test.go	test	todo			cold audit pending
@@ -1071,7 +1071,7 @@ internal/canonical/strkey_test.go	internal	internal/canonical/strkey_test.go	tes
 internal/canonical/trade.go	internal	internal/canonical/trade.go	runtime	todo			cold audit pending
 internal/canonical/trade_test.go	internal	internal/canonical/trade_test.go	test	todo			cold audit pending
 internal/config/aggregator_direct_test.go	internal	internal/config/aggregator_direct_test.go	test	todo			cold audit pending
-internal/config/config.go	internal	internal/config/config.go	runtime	todo			cold audit pending
+internal/config/config.go	internal	internal/config/config.go	runtime	in_progress	EV-0083;F-1253	XFI-0045	Reviewed Redis username config field in ACL-lockdown flow; broader config parser review remains open
 internal/config/doc.go	internal	internal/config/doc.go	runtime	todo			cold audit pending
 internal/config/load.go	internal	internal/config/load.go	runtime	todo			cold audit pending
 internal/config/load_test.go	internal	internal/config/load_test.go	test	todo			cold audit pending
@@ -1166,20 +1166,20 @@ internal/platform/billing.go	internal	internal/platform/billing.go	runtime	todo	
 internal/platform/doc.go	internal	internal/platform/doc.go	runtime	todo			cold audit pending
 internal/platform/errors.go	internal	internal/platform/errors.go	runtime	todo			cold audit pending
 internal/platform/errors_test.go	internal	internal/platform/errors_test.go	test	todo			cold audit pending
-internal/platform/postgresstore/account_store.go	internal	internal/platform/postgresstore	runtime	todo			cold audit pending
+internal/platform/postgresstore/account_store.go	internal	internal/platform/postgresstore	runtime	done	EV-0086;F-1255	XFI-0047	Reviewed account creation conflict handling in first-login race path
 internal/platform/postgresstore/apikey_store.go	internal	internal/platform/postgresstore	runtime	in_progress	EV-0023,F-1212	XFI-0008	Persists dashboard-supplied key budget fields
 internal/platform/postgresstore/audit_store.go	internal	internal/platform/postgresstore	runtime	todo			cold audit pending
 internal/platform/postgresstore/billing_store.go	internal	internal/platform/postgresstore	runtime	todo			cold audit pending
 internal/platform/postgresstore/doc.go	internal	internal/platform/postgresstore	runtime	todo			cold audit pending
 internal/platform/postgresstore/store.go	internal	internal/platform/postgresstore	runtime	todo			cold audit pending
-internal/platform/postgresstore/token_store.go	internal	internal/platform/postgresstore	runtime	todo			cold audit pending
-internal/platform/postgresstore/user_store.go	internal	internal/platform/postgresstore	runtime	todo			cold audit pending
+internal/platform/postgresstore/token_store.go	internal	internal/platform/postgresstore	runtime	done	EV-0086;EV-0087;F-1255	XFI-0047	Reviewed magic-link token atomicity and its per-token rather than per-email boundary
+internal/platform/postgresstore/user_store.go	internal	internal/platform/postgresstore	runtime	done	EV-0086;EV-0087;F-1255	XFI-0047	Reviewed user/session store behavior and email uniqueness boundary in first-login race
 internal/platform/postgresstore/webhook_store.go	internal	internal/platform/postgresstore	runtime	done	EV-0068;EV-0073;EV-0074;EV-0076;F-1244;F-1247;F-1248;F-1249	XFI-0036;XFI-0039;XFI-0040;XFI-0041	Reviewed CRUD/store queue semantics, plaintext-equivalent signing-key storage, duplicate-delivery queue race, quota atomicity gap, and missing producer path
-internal/platform/token.go	internal	internal/platform/token.go	runtime	todo			cold audit pending
+internal/platform/token.go	internal	internal/platform/token.go	runtime	done	EV-0086;F-1255	XFI-0047	Reviewed token lifecycle contract for magic-link provisioning
 internal/platform/usage.go	internal	internal/platform/usage.go	runtime	todo			cold audit pending
-internal/platform/user.go	internal	internal/platform/user.go	runtime	todo			cold audit pending
+internal/platform/user.go	internal	internal/platform/user.go	runtime	done	EV-0086;EV-0087;F-1255	XFI-0047	Reviewed user/session domain contract for auth provisioning flow
 internal/platform/webhook.go	internal	internal/platform/webhook.go	runtime	done	EV-0068;EV-0076;F-1244;F-1249	XFI-0036;XFI-0041	Reviewed webhook domain model and interface contract against implemented storage and absent event fan-out
-internal/ratelimit/bucket.go	internal	internal/ratelimit/bucket.go	runtime	todo			cold audit pending
+internal/ratelimit/bucket.go	internal	internal/ratelimit/bucket.go	runtime	done	EV-0084;F-1254	XFI-0046	Reviewed rate-limit Redis key family and ACL/template drift
 internal/ratelimit/bucket_edges_test.go	internal	internal/ratelimit/bucket_edges_test.go	test	todo			cold audit pending
 internal/ratelimit/bucket_test.go	internal	internal/ratelimit/bucket_test.go	test	todo			cold audit pending
 internal/ratelimit/doc.go	internal	internal/ratelimit/doc.go	runtime	todo			cold audit pending
@@ -1405,7 +1405,7 @@ internal/stellarrpc/invoke.go	internal	internal/stellarrpc/invoke.go	runtime	tod
 internal/stellarrpc/invoke_test.go	internal	internal/stellarrpc/invoke_test.go	test	todo			cold audit pending
 internal/stellarrpc/options_test.go	internal	internal/stellarrpc/options_test.go	test	todo			cold audit pending
 internal/stellarrpc/types.go	internal	internal/stellarrpc/types.go	runtime	todo			cold audit pending
-internal/storage/redisclient/redisclient.go	internal	internal/storage/redisclient	runtime	todo			cold audit pending
+internal/storage/redisclient/redisclient.go	internal	internal/storage/redisclient	runtime	done	EV-0083;F-1253	XFI-0045	Reviewed Redis client username propagation for single-node and Sentinel modes
 internal/storage/redisclient/redisclient_test.go	internal	internal/storage/redisclient	test	todo			cold audit pending
 internal/storage/timescale/account_observations.go	internal	internal/storage/timescale	runtime	todo			cold audit pending
 internal/storage/timescale/account_observations_test.go	internal	internal/storage/timescale	test	todo			cold audit pending
@@ -1476,7 +1476,7 @@ internal/supply/textfile.go	internal	internal/supply/textfile.go	runtime	todo			
 internal/supply/textfile_test.go	internal	internal/supply/textfile_test.go	test	todo			cold audit pending
 internal/supply/xlm.go	internal	internal/supply/xlm.go	runtime	todo			cold audit pending
 internal/supply/xlm_test.go	internal	internal/supply/xlm_test.go	test	todo			cold audit pending
-internal/usage/counter.go	internal	internal/usage/counter.go	runtime	todo			cold audit pending
+internal/usage/counter.go	internal	internal/usage/counter.go	runtime	done	EV-0084;F-1254	XFI-0046	Reviewed usage Redis key family and ACL/template drift
 internal/usage/counter_test.go	internal	internal/usage/counter_test.go	test	todo			cold audit pending
 internal/version/version.go	internal	internal/version/version.go	runtime	todo			cold audit pending
 internal/version/version_test.go	internal	internal/version/version_test.go	test	todo			cold audit pending
@@ -1533,7 +1533,7 @@ migrations/0025_create_routers_and_attribution.up.sql	migrations	migrations	migr
 migrations/0026_create_source_contributions_and_sdex_offers.down.sql	migrations	migrations	migration_or_sql	todo			cold audit pending
 migrations/0026_create_source_contributions_and_sdex_offers.up.sql	migrations	migrations	migration_or_sql	todo			cold audit pending
 migrations/0027_platform_v1_schema.down.sql	migrations	migrations	migration_or_sql	todo			cold audit pending
-migrations/0027_platform_v1_schema.up.sql	migrations	migrations	migration_or_sql	todo			cold audit pending
+migrations/0027_platform_v1_schema.up.sql	migrations	migrations	migration_or_sql	in_progress	EV-0086;F-1255	XFI-0047	Reviewed account/user uniqueness constraints relevant to first-login provisioning; full migration pass still open
 migrations/0028_create_fx_quotes.down.sql	migrations	migrations	migration_or_sql	todo			cold audit pending
 migrations/0028_create_fx_quotes.up.sql	migrations	migrations	migration_or_sql	todo			cold audit pending
 migrations/0029_drop_unused_blend_jsonb_gin_indexes.down.sql	migrations	migrations	migration_or_sql	todo			cold audit pending
@@ -1569,7 +1569,7 @@ scripts/dev/docs-postman.sh	scripts	scripts	script	todo			cold audit pending
 scripts/dev/encode-topics/main.go	scripts	scripts	runtime	todo			cold audit pending
 scripts/dev/r1-smoke.sh	scripts	scripts	script	in_progress	EV-0020,F-1204		Smoke script still expects removed legacy endpoints
 scripts/dev/verify-cdn.sh	scripts	scripts	script	todo			cold audit pending
-scripts/dev/verify-cross-region.sh	scripts	scripts	script	todo			cold audit pending
+scripts/dev/verify-cross-region.sh	scripts	scripts	script	done	EV-0082;F-1252	XFI-0044	Reviewed implemented consistency-check path against operational docs
 scripts/dev/verify.sh	scripts	scripts	script	todo			cold audit pending
 scripts/dev/wait-pr-checks.sh	scripts	scripts	script	todo			cold audit pending
 scripts/ops/cf-pages-bootstrap.sh	scripts	scripts	script	todo			cold audit pending

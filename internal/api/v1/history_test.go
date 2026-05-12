@@ -24,6 +24,11 @@ type stubHistoryReader struct {
 	// tests don't have to share state with TradesInRange tests.
 	observations []canonical.Trade
 	points       []v1.HistoryPoint
+	// pointsByPair, when non-nil, overrides `points` based on the
+	// query pair. Used by the F-1225 stablecoin-fallback regression
+	// test where the literal XLM/fiat:USD pair returns empty and a
+	// proxied XLM/USDC-G… pair carries the fixture.
+	pointsByPair map[string][]v1.HistoryPoint
 	lastCall     struct {
 		from, to     time.Time
 		limit        int
@@ -71,11 +76,15 @@ func (r *stubHistoryReader) TradesInRangeAfter(_ context.Context, _ canonical.Pa
 }
 
 // HistoryPoints stub records the granularity + returns the
-// pre-set fixture (or pointsErr).
-func (r *stubHistoryReader) HistoryPoints(_ context.Context, _ canonical.Pair, granularity string, _ int) ([]v1.HistoryPoint, error) {
+// pre-set fixture (or pointsErr). Honours pointsByPair when set,
+// otherwise falls back to the global `points` slice.
+func (r *stubHistoryReader) HistoryPoints(_ context.Context, pair canonical.Pair, granularity string, _ int) ([]v1.HistoryPoint, error) {
 	r.lastCall.granularity = granularity
 	if r.pointsErr != nil {
 		return nil, r.pointsErr
+	}
+	if r.pointsByPair != nil {
+		return r.pointsByPair[pair.String()], nil
 	}
 	return r.points, nil
 }
@@ -519,6 +528,53 @@ func TestHistorySinceInception_HappyPath(t *testing.T) {
 
 	if reader.lastCall.granularity != "1d" {
 		t.Errorf("reader saw granularity=%q, want default-resolved 1d", reader.lastCall.granularity)
+	}
+}
+
+// TestHistorySinceInception_StablecoinFallback pins F-1225 (codex
+// audit-2026-05-12): when the literal X/fiat:USD CAGG read returns
+// empty (because no on-chain trades quote in fiat:USD), the handler
+// retries against each operator-declared classic USD-peg and serves
+// the first non-empty result. Without this, since-inception
+// XLM/fiat:USD returns empty even when XLM/<USDC-classic> has data.
+func TestHistorySinceInception_StablecoinFallback(t *testing.T) {
+	t0 := time.Unix(1_770_000_000, 0).UTC()
+	usdcG := "USDC-GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN"
+
+	reader := &stubHistoryReader{
+		pointsByPair: map[string][]v1.HistoryPoint{
+			// Literal pair: empty (the case where the bug bit).
+			"native/fiat:USD": nil,
+			// Proxied pair: has data.
+			"native/" + usdcG: {
+				{Bucket: t0, VWAP: "0.123"},
+				{Bucket: t0.Add(24 * time.Hour), VWAP: "0.124"},
+			},
+		},
+	}
+	classicUSDC, _ := canonical.ParseAsset(usdcG)
+	srv := v1.New(v1.Options{
+		History:           reader,
+		USDPeggedClassics: []canonical.Asset{classicUSDC},
+	})
+	ts := httpTestServer(t, srv)
+
+	resp := mustGet(t, ts.URL+"/v1/history/since-inception?asset=native&quote=fiat:USD")
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d, want 200", resp.StatusCode)
+	}
+	var env struct {
+		Data v1.HistorySeries `json:"data"`
+	}
+	mustDecode(t, resp, &env)
+	if len(env.Data.Points) != 2 {
+		t.Fatalf("got %d points, want 2 (fallback should have served XLM/<USDC> data)", len(env.Data.Points))
+	}
+	// Wire shape still reports the requested quote, not the proxy peg —
+	// the user asked for fiat:USD and the snapshot is interpreted as
+	// USD via the implicit peg ≈ $1 assumption.
+	if env.Data.Quote != "fiat:USD" {
+		t.Errorf("quote = %q, want fiat:USD (unchanged by fallback)", env.Data.Quote)
 	}
 }
 

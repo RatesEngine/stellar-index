@@ -76,17 +76,18 @@ audit "diagnostics/cursors"    "/v1/diagnostics/cursors"
 audit "incidents"              "/v1/incidents"
 
 # Catalogue
-audit "coins (top 5)"          "/v1/coins?limit=5"
-audit "coins/{slug}=XLM"       "/v1/coins/XLM"
-audit "coins/{slug}=USDC"      "/v1/coins/USDC"
+# /v1/coins + /v1/currencies were removed in rc.48; the unified
+# /v1/assets surface replaces both. F-1204 (codex audit-2026-05-12).
 audit "assets (5)"             "/v1/assets?limit=5"
 audit "assets/{id}=native"     "/v1/assets/native"
 audit "assets metadata=native" "/v1/assets/native/metadata"
+audit "assets verified"        "/v1/assets/verified"
+audit "assets/{slug}=xlm"      "/v1/assets/xlm"
+audit "assets/{slug}=usdc"     "/v1/assets/usdc"
+audit "assets/{slug}=euro"     "/v1/assets/euro"
 audit "markets (5)"            "/v1/markets?limit=5"
 audit "sources"                "/v1/sources"
 audit "issuers (5)"            "/v1/issuers?limit=5"
-audit "currencies"             "/v1/currencies"
-audit "currencies/{ticker}"    "/v1/currencies/EUR"
 audit "sac-wrappers"           "/v1/sac-wrappers"
 audit "lending/pools"          "/v1/lending/pools?limit=5"
 audit "oracle/streams"         "/v1/oracle/streams"

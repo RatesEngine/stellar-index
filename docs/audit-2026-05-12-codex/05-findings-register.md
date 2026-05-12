@@ -68,6 +68,10 @@ Cold findings only. No prior finding is imported into this register.
 | F-1249 | high | Customer webhook callbacks are exposed and operated as a shipped feature, but no production code enqueues any delivery events | Customer webhook event model; queue writer; dashboard/API docs; operational runbooks | XFI-0041; EV-0076 | open | platform/webhooks/product | The worker can drain rows and the API lets customers subscribe, yet no incident/anomaly/divergence producer ever calls `EnqueueDelivery`, so the feature cannot deliver real callbacks. |
 | F-1250 | medium | Freeze-event open-row dedupe is raceable, so concurrent same-pair freezes can create multiple still-firing durable rows | Freeze writer; Timescale freeze-event mirror; anomalies timeline/recovery semantics | XFI-0042; EV-0079 | open | aggregate/storage/anomaly | The SQL comment claims transactional dedupe, but the code uses an unlocked `WHERE NOT EXISTS` insert and the PK includes `frozen_at`, so concurrent callers can both insert distinct open rows. |
 | F-1251 | high | FX-based `usd_volume` enrichment rejects historical-but-valid rates because freshness is measured against wall-clock time instead of the trade timestamp | Indexer USD-volume Phase 2; VWAP FX resolver; historical/backfill enrichment; integration coverage | XFI-0043; EV-0080 | open | storage/indexer/data-quality | A resolver query at `trade.ts` can find the correct VWAP row and still return `ok=false` solely because the row is older than one hour relative to `time.Now()`, which breaks delayed/backfilled enrichment. |
+| F-1252 | medium | Multi-region cutover instructions invoke a nonexistent `make verify-cross-region` launch check | Cutover runbook; verification script; Makefile command surface | XFI-0044; EV-0082 | open | docs/ops/release | The pre-flight checklist names a make target that does not exist, so an operator following the launch runbook gets a Make failure exactly where a gating consistency check is expected. |
+| F-1253 | high | Enabling Redis ACL lockdown disables the default user, but the rendered application config never sets `redis_username`, so binaries keep authenticating on the rejected legacy path | Redis Sentinel ACL template; application config template; Redis client builder | XFI-0045; EV-0083 | open | ops/security/config | The hardening flag can break Redis-backed API, aggregator, and indexer behavior at the moment operators flip it because the Ansible-owned app TOML omits the required ACL username. |
+| F-1254 | high | Redis ACL lockdown allows stale or wrong key families, so hardened deployments still deny active runtime namespaces after the username handoff is fixed | Redis Sentinel ACL template; Redis namespace builders; API/auth/cache runtime wiring | XFI-0046; EV-0084 | open | ops/security/config | The allow-list uses `ratelimit:*`/`subscriber:*` while code writes `rl:*`/`sub:*`, and it omits several live namespaces entirely: `signup:email:*`, `sep10:seen:*`, `usage:*`, `assets:list:*`, and `markets:list:*`. |
+| F-1255 | medium | Concurrent first-login callbacks for the same new email can create orphan accounts and return a 500 because provisioning is not atomic per email | Dashboard magic-link callback; account/user stores; platform schema uniqueness | XFI-0047; EV-0086; EV-0087 | open | platform/auth/data-quality | Token consumption is atomic per token, not per email. Two valid links for one new address can both enter provisioning, persist two account rows, and let the losing user insert fail on `users.email`, leaving a suffixed account without an owner. |
 
 ## Finding Template
 
@@ -1310,3 +1314,113 @@ Reproduction or reasoning path:
 - Current result: fails with `expected resolver to find EURC/USDC VWAP, got ok=false`.
 
 Remediation direction: define freshness relative to the requested trade timestamp, not wall-clock process time, and split "unset" from "explicitly disabled" freshness semantics if zero is meant to disable checks. Keep an integration case with an old wall-clock seed but a valid at-trade anchor, and add a second case proving genuinely stale-at-trade anchors are rejected.
+
+### F-1252. Multi-region cutover instructions invoke a nonexistent `make verify-cross-region` launch check
+
+Severity: `medium`
+
+Status: `open`
+
+Affected surface:
+
+- `docs/operations/multi-region-cutover.md`
+- `scripts/dev/verify-cross-region.sh`
+- `Makefile`
+
+Evidence:
+
+- `XFI-0044`
+- `EV-0082`
+
+Expected: a launch or failover checklist should call a command that exists in the current repository, especially when the step gates cross-region price consistency before a high-risk cutover.
+
+Observed: the Stage 5 pre-flight checklist in `docs/operations/multi-region-cutover.md` says "Cross-region consistency check passes (`make verify-cross-region`, see `scripts/dev/verify-cross-region.sh`)." Repository search finds no `verify-cross-region` target in `Makefile`; only the shell script and direct ops binary commands exist.
+
+Impact: an operator following the cutover playbook gets a Make target failure at the exact moment they need a deterministic consistency check, creating avoidable ambiguity during a regional bring-up or failover drill.
+
+Remediation direction: either add the Make target and keep docs as written, or update every operational reference to the direct script invocation. Keep one canonical command in the runbook and test it from the documented working directory.
+
+### F-1253. Enabling Redis ACL lockdown disables the default user, but the rendered application config never sets `redis_username`, so binaries keep authenticating on the rejected legacy path
+
+Severity: `high`
+
+Status: `open`
+
+Affected surface:
+
+- `configs/ansible/roles/redis-sentinel/templates/users.acl.j2`
+- `configs/ansible/roles/redis-sentinel/templates/redis.conf.j2`
+- `configs/ansible/roles/redis-sentinel/defaults/main.yml`
+- `configs/ansible/roles/archival-node/templates/ratesengine.toml.j2`
+- `internal/config/config.go`
+- `internal/storage/redisclient/redisclient.go`
+
+Evidence:
+
+- `XFI-0045`
+- `EV-0083`
+
+Expected: the same deployment toggle that enables Redis ACL lockdown should also render application client config that authenticates as the ACL user the server now requires.
+
+Observed: `redis_acl_lockdown: true` renders an ACL file that turns `user default off` and creates `user ratesengine on >{{ redis_password }}`. The Redis client builder supports ACL usernames through `StorageConfig.RedisUsername`, and docs say it must be set to `ratesengine` under lockdown. But the Ansible-owned `ratesengine.toml.j2` storage block renders `redis_addr` and secrets only; it never writes `redis_username = "ratesengine"` or an equivalent variable, and repo search finds no deployment template path that does.
+
+Impact: flipping the hardening flag can strand the API/indexer/aggregator on password-only default-user auth exactly after the server side disables that user. Depending on the binary and feature, this can break Redis-backed rate limiting, signup abuse controls, SEP-10 replay protection, streaming fan-out/subscription, freeze markers, and aggregator cache publication during a supposed security hardening rollout.
+
+Remediation direction: couple the ACL flag to rendered client identity. Add an explicit Ansible variable for the application Redis ACL username, render it into `ratesengine.toml.j2`, and gate lockdown rollout on dry-run/startup probes that authenticate through the exact rendered config. Add a config/template test that rejects `redis_acl_lockdown: true` with an empty application username.
+
+### F-1254. Redis ACL lockdown allows stale or wrong key families, so hardened deployments still deny active runtime namespaces after the username handoff is fixed
+
+Severity: `high`
+
+Status: `open`
+
+Affected surface:
+
+- `configs/ansible/roles/redis-sentinel/templates/users.acl.j2`
+- `internal/ratelimit/bucket.go`
+- `internal/cachekeys/keys.go`
+- `internal/auth/signup_tracker.go`
+- `internal/auth/sep10/redisreplay.go`
+- `internal/usage/counter.go`
+- `cmd/ratesengine-api/main.go`
+
+Evidence:
+
+- `XFI-0046`
+- `EV-0084`
+
+Expected: the Redis ACL policy should grant exactly the application namespaces the current binaries actually use, with repo-controlled tests preventing template drift when key families are added, renamed, or retired.
+
+Observed: the lockdown ACL permits `~ratelimit:*` and `~subscriber:*`, but current runtime code writes `rl:*` rate-limit counters and `sub:*` SSE subscriber presence keys. It also omits active namespaces entirely for `signup:email:*`, `sep10:seen:*`, `usage:*`, `assets:list:*`, and `markets:list:*`. The API binary wires those paths whenever Redis is configured, so a hardened deployment can authenticate successfully and still hit Redis ACL denials on live features.
+
+Impact: operators can believe Redis ACL lockdown is safely enabled after fixing the username defect, while rate limiting, signup duplicate tracking, SEP-10 replay protection, usage accounting, subscriber presence tracking, and catalogue cache population are denied at runtime. The result mixes security-control degradation with customer-visible feature breakage during a hardening rollout.
+
+Remediation direction: derive the ACL allow-list from a reviewed Redis namespace inventory instead of hand-maintained free text, fix the stale/missing patterns, and add a CI check that compares rendered ACL patterns against code-owned production key builders plus any explicitly documented namespaces. Validate a lockdown-on rendered config against an integration harness that exercises rate limiting, signup/SEP-10 guards, usage reads, SSE presence writes, and catalogue cache writes.
+
+### F-1255. Concurrent first-login callbacks for the same new email can create orphan accounts and return a 500 because provisioning is not atomic per email
+
+Severity: `medium`
+
+Status: `open`
+
+Affected surface:
+
+- `internal/api/v1/dashboardauth/handlers.go`
+- `internal/platform/postgresstore/token_store.go`
+- `internal/platform/postgresstore/account_store.go`
+- `internal/platform/postgresstore/user_store.go`
+- `migrations/0027_platform_v1_schema.up.sql`
+
+Evidence:
+
+- `XFI-0047`
+- `EV-0086`
+- `EV-0087`
+
+Expected: first-login provisioning for one email should converge on one account/user result even if multiple valid magic links are consumed in parallel. The flow should be transactional or retry idempotently on the email uniqueness boundary.
+
+Observed: multiple magic links can exist for the same unregistered email. Each callback consumes its own token atomically, then performs `GetUserByEmail`; if no user exists yet, it creates an account row before creating the user row. Under concurrency, two callbacks can both see no user, each create an account, and the losing user insert then fail on `users_email_idx`. Because `signupNewUser` retries account slug conflicts by creating a suffixed slug, the second account row can remain committed even though its owner user was never created.
+
+Impact: first login can return an internal error for one of two legitimate concurrent clicks, and the database accumulates orphan free-tier accounts that do not correspond to an actual user. That pollutes customer/account reporting and makes later cleanup or billing migration harder than it should be.
+
+Remediation direction: move new-user provisioning behind one transactional/idempotent persistence boundary keyed by normalized email. Acceptable shapes include a single transaction that creates-or-loads the user/account pair, or a retry-on-unique-email path that discards the speculative account and reloads the winner. Add an integration test that consumes two distinct same-email tokens concurrently and asserts one logical account/user result with no orphan account rows.

@@ -100,11 +100,11 @@ without evidence IDs.
 
 ### 2026-05-12 Execution Reconciliation
 
-- Cold execution evidence now spans `CMD-0007` through `CMD-0084`,
-  `EV-0005` through `EV-0081`, `R1-0001` through `R1-0018`, and
-  `XFI-0001` through `XFI-0043`.
-- Findings `F-1201` through `F-1251` remain evidence-backed and are
-  mapped to remediation rows `R-1201` through `R-1249`; `F-1202` is
+- Cold execution evidence now spans `CMD-0007` through `CMD-0091`,
+  `EV-0005` through `EV-0088`, `R1-0001` through `R1-0018`, and
+  `XFI-0001` through `XFI-0047`.
+- Findings `F-1201` through `F-1255` remain evidence-backed and are
+  mapped to remediation rows `R-1201` through `R-1253`; `F-1202` is
   now marked `fixed` because R1 caught up to the route removal during
   the audit window.
 - Live R1 checks covered process state, timers, firewall/listeners,
@@ -129,10 +129,15 @@ without evidence IDs.
   outbound worker path, quota enforcement races under concurrent create
   requests, and the callback queue currently has no production event
   producer at all. The follow-on new-runtime pass also found raceable
-  freeze-event open-row dedupe and a verified failing integration path in
-  FX-derived `usd_volume` freshness handling.
-- `CMD-0084` reran `./scripts/ci/lint-docs.sh` after the latest ledger
-  updates and passed.
+  freeze-event open-row dedupe, a verified failing integration path in
+  FX-derived `usd_volume` freshness handling, a Redis ACL lockdown seam
+  where both the username handoff and the actual key-pattern allow-list
+  are out of sync with current binaries, and a dashboard first-login
+  provisioning race that can strand orphan accounts when multiple valid
+  callbacks land for one new email.
+- `CMD-0091` reran `./scripts/ci/lint-docs.sh`, rechecked tracked-vs-
+  inventory row parity, and recorded the latest TSV roll-up after the
+  auth provisioning pass.
 - Closure caveat: the TSV remains the per-file coverage control. Rows
   with `todo` still require terminal file-level review before claiming
   literal every-file closure. `EV-0063` documented the scope drift when
@@ -141,4 +146,5 @@ without evidence IDs.
   refreshing and merging the inventory back to `1,869` tracked rows.
   Current findings remain source/R1 verified and not imported from prior
   audits, but final whole-repo closure still requires terminal review
-  status across the refreshed TSV.
+  status across the refreshed TSV. The current inventory roll-up is
+  `done=95`, `in_progress=39`, `todo=1735`.

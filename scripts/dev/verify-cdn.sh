@@ -51,7 +51,10 @@ echo "$H" | grep -iE "cf-cache-status|x-cache" || echo "    (no edge-cache heade
 echo
 
 bold "2. Hot surface — short max-age"
-H=$(curl -sIk "$HOST/v1/price?base=native&quote=fiat:USD" 2>&1 || true)
+# Handler requires `asset=`, not `base=`. F-1229 (codex audit-2026-05-12):
+# the prior `base=native` form returned 400 invalid-query-param, so the
+# CDN policy check never reached a 200 path.
+H=$(curl -sIk "$HOST/v1/price?asset=native&quote=fiat:USD" 2>&1 || true)
 check "/v1/price max-age short (≤60s)" "max-age=" "$(echo "$H" | grep -i cache-control || echo MISSING)"
 echo
 
@@ -76,9 +79,14 @@ echo
 bold "4. SSE surface — passthrough, no buffering"
 # We don't actually consume the stream — just check the
 # response starts within 5s and the headers are right.
-H=$(curl -sIk --max-time 5 "$HOST/v1/price/tip/stream?base=native&quote=fiat:USD" 2>&1 || true)
+# F-1229 (codex audit-2026-05-12): handler param is `asset=`,
+# and the SSE Cache-Control directive is `no-cache` (which lets
+# clients revalidate / not cache the bytes), not `no-store`
+# (which would forbid any persistence at all and conflict with the
+# Last-Event-ID resume contract).
+H=$(curl -sIk --max-time 5 "$HOST/v1/price/tip/stream?asset=native&quote=fiat:USD" 2>&1 || true)
 check "SSE Content-Type" "text/event-stream" "$(echo "$H" | grep -i content-type || echo MISSING)"
-check "SSE Cache-Control" "no-store" "$(echo "$H" | grep -i cache-control || echo MISSING)"
+check "SSE Cache-Control" "no-cache" "$(echo "$H" | grep -i cache-control || echo MISSING)"
 echo
 
 bold "5. Health surface — reachable"

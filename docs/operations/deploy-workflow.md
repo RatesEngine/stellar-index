@@ -11,13 +11,15 @@ How a tagged binary release lands on a host. End-to-end pipeline:
 ```
 git tag vX.Y.Z          → release.yml fires automatically
                         → cross-compiles binaries, pushes to GitHub Release
-                        → builds + pushes container images to ghcr.io
+                        # No GHCR push — F-1221 (codex audit-2026-05-12);
+                        # docker/<binary>.Dockerfile remains for self-host builds.
 
 operator triggers       → deploy.yml workflow_dispatch (region + version + binaries)
                         → downloads binaries from GitHub Release
                         → SHA256SUMS verification
                         → Ansible playbook over SSH
-                        → backup → install → restart → health probe → rollback on fail
+                        → backup (prev binary → /usr/local/bin/<b>.prev-<tag>)
+                        → install → restart → health probe → rollback on fail
 ```
 
 This doc covers the **deploy** half. The **release** half is in
