@@ -169,6 +169,25 @@ against.
 
 ### Added
 
+- **`postgresstore.WebhookStore` customer-webhook data plane
+  (F-1270 partial).** Implements the existing
+  `platform.WebhookStore` interface against the
+  `customer_webhooks` + `webhook_deliveries` tables from
+  migration 0027: Create / Get / List / Update / Delete on the
+  registry; Enqueue / ListPending / MarkDelivered /
+  MarkAttemptFailed on the delivery queue; Append / Update /
+  ListDeliveries on the dashboard delivery log. Four new
+  `WebhookEventType` constants (`incident.sev1`,
+  `incident.resolved`, `anomaly.freeze`, `divergence.firing`)
+  pin the closed event set without forcing the schema to use an
+  enum. New integration subtest
+  `WebhookStore/CRUD+queue` covers the full lifecycle:
+  create → list → update → enqueue → fail-with-retry →
+  enqueue → mark-delivered → list-history → delete-cascades.
+  `RotateWebhookSecret` is a tagged stub pending the dashboard
+  CRUD handlers. Delivery worker + customer-facing API are
+  follow-up commits.
+
 - **Inline `price_usd` on `/v1/assets/{id}` (F-1271).** The
   asset-detail body now carries `price_usd` whenever the price
   lookup succeeds — previously it only surfaced via the optional

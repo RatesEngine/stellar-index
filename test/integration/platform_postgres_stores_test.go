@@ -626,4 +626,148 @@ func TestPlatformPostgresStores(t *testing.T) {
 			t.Errorf("expected AccountID-required error, got %v", err)
 		}
 	})
+
+	t.Run("WebhookStore/CRUD+queue", func(t *testing.T) {
+		webhooks := postgresstore.NewWebhookStore(store)
+		acct, err := accounts.Create(ctx, platform.Account{
+			Name:         "Hooked Co",
+			Slug:         "hooked-" + strings.ToLower(uuid.New().String()[:8]),
+			BillingEmail: "hook-" + uuid.New().String() + "@h.example",
+			Tier:         platform.TierStarter,
+			Status:       platform.AccountActive,
+		})
+		if err != nil {
+			t.Fatalf("create webhook-test account: %v", err)
+		}
+
+		// 1. Create + Get
+		hash := sha256.Sum256([]byte("seekrit"))
+		created, err := webhooks.CreateWebhook(ctx, platform.CustomerWebhook{
+			AccountID:  acct.ID,
+			Name:       "ops-slack",
+			URL:        "https://hooks.slack.example/services/T/B/X",
+			SecretHash: hash[:],
+			Events: []string{
+				string(platform.WebhookEventIncidentSEV1),
+				string(platform.WebhookEventAnomalyFreeze),
+			},
+			Enabled: true,
+		})
+		if err != nil {
+			t.Fatalf("CreateWebhook: %v", err)
+		}
+		if created.ID == uuid.Nil {
+			t.Error("ID not populated on create")
+		}
+		got, err := webhooks.GetWebhook(ctx, created.ID)
+		if err != nil {
+			t.Fatalf("GetWebhook: %v", err)
+		}
+		if got.URL != "https://hooks.slack.example/services/T/B/X" {
+			t.Errorf("URL round-trip: %q", got.URL)
+		}
+		if len(got.Events) != 2 {
+			t.Errorf("Events round-trip: %v", got.Events)
+		}
+
+		// 2. List
+		listed, err := webhooks.ListWebhooksForAccount(ctx, acct.ID)
+		if err != nil {
+			t.Fatalf("ListWebhooksForAccount: %v", err)
+		}
+		if len(listed) != 1 {
+			t.Errorf("expected 1 webhook in list, got %d", len(listed))
+		}
+
+		// 3. Update
+		got.Name = "ops-slack-renamed"
+		got.Enabled = false
+		if err := webhooks.UpdateWebhook(ctx, got); err != nil {
+			t.Fatalf("UpdateWebhook: %v", err)
+		}
+		after, _ := webhooks.GetWebhook(ctx, got.ID)
+		if after.Name != "ops-slack-renamed" {
+			t.Errorf("name not updated: %q", after.Name)
+		}
+		if after.Enabled {
+			t.Errorf("enabled should be false after update")
+		}
+
+		// 4. EnqueueDelivery + ListPendingDeliveries
+		err = webhooks.EnqueueDelivery(ctx, platform.WebhookDelivery{
+			WebhookID:     created.ID,
+			EventType:     string(platform.WebhookEventIncidentSEV1),
+			Payload:       []byte(`{"incident_id":"abc","summary":"test"}`),
+			NextAttemptAt: time.Now().UTC().Add(-time.Second), // due immediately
+		})
+		if err != nil {
+			t.Fatalf("EnqueueDelivery: %v", err)
+		}
+		pending, err := webhooks.ListPendingDeliveries(ctx, 10)
+		if err != nil {
+			t.Fatalf("ListPendingDeliveries: %v", err)
+		}
+		if len(pending) != 1 {
+			t.Fatalf("expected 1 pending delivery, got %d", len(pending))
+		}
+		if pending[0].EventType != string(platform.WebhookEventIncidentSEV1) {
+			t.Errorf("EventType round-trip: %q", pending[0].EventType)
+		}
+		if pending[0].AttemptCount != 0 {
+			t.Errorf("AttemptCount should start at 0, got %d", pending[0].AttemptCount)
+		}
+
+		// 5. MarkAttemptFailed bumps the counter and reschedules
+		nextTry := time.Now().UTC().Add(2 * time.Minute)
+		if err := webhooks.MarkAttemptFailed(ctx, pending[0].ID, "503 bad gateway", 503, nextTry); err != nil {
+			t.Fatalf("MarkAttemptFailed: %v", err)
+		}
+		// Should no longer be in the due-now list.
+		pending, err = webhooks.ListPendingDeliveries(ctx, 10)
+		if err != nil {
+			t.Fatalf("ListPendingDeliveries after retry: %v", err)
+		}
+		if len(pending) != 0 {
+			t.Errorf("expected 0 pending (rescheduled to future), got %d", len(pending))
+		}
+
+		// 6. MarkDelivered closes the row out
+		// (write a fresh delivery + immediately mark delivered)
+		err = webhooks.EnqueueDelivery(ctx, platform.WebhookDelivery{
+			WebhookID:     created.ID,
+			EventType:     string(platform.WebhookEventAnomalyFreeze),
+			Payload:       []byte(`{}`),
+			NextAttemptAt: time.Now().UTC().Add(-time.Second),
+		})
+		if err != nil {
+			t.Fatalf("EnqueueDelivery #2: %v", err)
+		}
+		pending, _ = webhooks.ListPendingDeliveries(ctx, 10)
+		if len(pending) != 1 {
+			t.Fatalf("expected 1 fresh pending delivery, got %d", len(pending))
+		}
+		if err := webhooks.MarkDelivered(ctx, pending[0].ID, 200); err != nil {
+			t.Fatalf("MarkDelivered: %v", err)
+		}
+		// 7. ListDeliveries returns the full history including the just-marked one
+		hist, err := webhooks.ListDeliveries(ctx, created.ID, 10)
+		if err != nil {
+			t.Fatalf("ListDeliveries: %v", err)
+		}
+		if len(hist) != 2 {
+			t.Errorf("expected 2 attempts in history, got %d", len(hist))
+		}
+
+		// 8. Delete cascades to deliveries
+		if err := webhooks.DeleteWebhook(ctx, created.ID); err != nil {
+			t.Fatalf("DeleteWebhook: %v", err)
+		}
+		if _, err := webhooks.GetWebhook(ctx, created.ID); !errors.Is(err, platform.ErrNotFound) {
+			t.Errorf("expected ErrNotFound on deleted webhook, got %v", err)
+		}
+		histAfter, _ := webhooks.ListDeliveries(ctx, created.ID, 10)
+		if len(histAfter) != 0 {
+			t.Errorf("expected deliveries cascade-deleted with webhook; got %d", len(histAfter))
+		}
+	})
 }

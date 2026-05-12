@@ -8,6 +8,35 @@ import (
 	"github.com/google/uuid"
 )
 
+// WebhookEventType is the closed set of customer-deliverable event
+// kinds. Adding a new type requires a corresponding entry in the
+// /v1/account/webhooks/events customer-facing docs. The events
+// column is text[] so future values can be tolerated by readers
+// that haven't been updated.
+type WebhookEventType string
+
+const (
+	// WebhookEventIncidentSEV1 fires when a SEV-1 incident has been
+	// declared (status-page page-level event). Triggered by
+	// Alertmanager via an internal inbound-webhook receiver that
+	// fans the event out to every customer subscribed to it.
+	// F-1270 (audit-2026-05-12).
+	WebhookEventIncidentSEV1 WebhookEventType = "incident.sev1"
+
+	// WebhookEventIncidentResolved fires when a previously-active
+	// incident has cleared. Same incident_id as the corresponding
+	// SEV-1 event so consumers can correlate.
+	WebhookEventIncidentResolved WebhookEventType = "incident.resolved"
+
+	// WebhookEventAnomalyFreeze fires when the aggregator engages a
+	// freeze on a (asset, quote) the customer cares about.
+	WebhookEventAnomalyFreeze WebhookEventType = "anomaly.freeze"
+
+	// WebhookEventDivergenceFiring fires when a price-divergence
+	// warning starts or clears. Body carries `firing: true|false`.
+	WebhookEventDivergenceFiring WebhookEventType = "divergence.firing"
+)
+
 // CustomerWebhook is an outbound HTTPS endpoint a customer
 // registers to receive event notifications. Stripe-shape:
 // signed deliveries (HMAC-SHA-256 of payload), exponential
@@ -82,4 +111,29 @@ type WebhookStore interface {
 	// ListDeliveries returns recent attempts for the webhook,
 	// most-recent first. Used by the dashboard delivery log.
 	ListDeliveries(ctx context.Context, webhookID uuid.UUID, limit int) ([]WebhookDelivery, error)
+
+	// ─── Worker-side queue surface (F-1270 audit-2026-05-12) ─────
+
+	// EnqueueDelivery inserts one pending delivery row keyed off
+	// an existing webhook. The worker then drains the queue via
+	// ListPendingDeliveries. attempt_count starts at 0;
+	// NextAttemptAt zero is normalised to "now" so the first
+	// poll picks it up immediately.
+	EnqueueDelivery(ctx context.Context, d WebhookDelivery) error
+
+	// ListPendingDeliveries returns up to `limit` deliveries
+	// whose next_attempt_at is in the past, ordered FIFO. The
+	// delivery worker calls this on each poll tick.
+	ListPendingDeliveries(ctx context.Context, limit int) ([]WebhookDelivery, error)
+
+	// MarkDelivered records a successful POST: stamps
+	// delivered_at=now, clears next_attempt_at, records the
+	// response_status. Idempotent.
+	MarkDelivered(ctx context.Context, id uuid.UUID, responseStatus int) error
+
+	// MarkAttemptFailed records a failed POST + schedules the
+	// next retry. nextAttemptAt zero = permanently failed (drops
+	// out of the pending-listing predicate; consumers see the
+	// row via ListDeliveries with delivered_at unset).
+	MarkAttemptFailed(ctx context.Context, id uuid.UUID, errMsg string, responseStatus int, nextAttemptAt time.Time) error
 }
