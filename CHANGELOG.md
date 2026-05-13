@@ -18,6 +18,20 @@ against.
 ### Added
 
 - New observability metric
+  `ratesengine_divergence_refresh_duration_seconds` (Histogram,
+  label `outcome`). Per-pair divergence-refresh latency; pairs
+  with the existing `_total` counter (counter says how often /
+  whether successful, histogram says how long). The natural
+  failure mode of `RefreshPair` is "one external vendor's API
+  is slow and the refresh tick stretches" — invisible before
+  this metric. Operators can now chart `ok` p95/p99 separately
+  to detect vendor slowdown without a `refresh_error` outcome.
+  Buckets span 10 ms → 30 s. Wired in
+  `internal/aggregate/orchestrator/divergence_refresh.go` to
+  time the full per-pair attempt (cache lookup + parse +
+  HTTP fan-out). Same wave-88 pattern applied to a different
+  worker.
+- New observability metric
   `ratesengine_customer_webhook_delivery_duration_seconds`
   (Histogram, label `outcome`). Latency of the outbound HTTP
   POST inside the customer-webhook delivery worker — closes

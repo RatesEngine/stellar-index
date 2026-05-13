@@ -662,6 +662,31 @@ dashboards can distinguish "mismatch fired and the run aborted at
 second X" from "chunk aborted for an unrelated reason (canceled
 context)".
 
+### `ratesengine_divergence_refresh_duration_seconds`
+
+Histogram, label `outcome` (`ok` / `no_vwap` / `parse_error` /
+`refresh_error`).
+
+Per-pair divergence-refresh latency. Pairs with the existing
+`_total` counter — that one tells you how often refreshes happen
++ whether they succeed; this one tells you how long they take.
+
+`RefreshPair` fans out to every configured external reference
+(CoinGecko, Chainlink, …) for the pair, so the natural failure
+mode is "one vendor's API goes slow and the whole refresh tick
+stretches" — invisible without this metric. Operators chart
+`ok` p95/p99 separately to detect vendor slowdown without a
+`refresh_error` outcome (the slow vendor still returns,
+eventually).
+
+Buckets span 10 ms → 30 s — covers a healthy local cache-only
+refresh (≤ 50 ms when every reference is cached), a single slow
+vendor (~1-5 s on CG / Chainlink), and the worst-case
+per-reference timeout (`per_reference_timeout_seconds`,
+default 5 s) compounded across multiple references. No alert
+wired today; the existing failing-rate signal lives in the
+`_total` counter.
+
 ### `ratesengine_customer_webhook_delivery_duration_seconds`
 
 Histogram, label `outcome` (`delivered` / `server_error` /
@@ -720,6 +745,12 @@ per-key rate-limit lift failure.
 
 ## Changelog
 
+- 2026-05-13 — added divergence-refresh latency histogram
+  (`ratesengine_divergence_refresh_duration_seconds`). Pairs
+  with the existing `_total` counter to give operators per-pair
+  per-outcome p95/p99 — surfaces "one vendor's API is slow" as
+  a chartable signal even when the refresh still eventually
+  succeeds.
 - 2026-05-13 — added customer-webhook delivery latency
   histogram (`ratesengine_customer_webhook_delivery_duration_seconds`).
   Pairs with the existing `_attempts_total` counter to give

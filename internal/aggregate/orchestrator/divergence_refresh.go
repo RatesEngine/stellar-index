@@ -50,6 +50,13 @@ func (o *Orchestrator) refreshDivergenceAll(ctx context.Context, now time.Time) 
 		if err := ctx.Err(); err != nil {
 			return
 		}
+		// Time the full per-pair refresh attempt — including the
+		// VWAP cache lookup + parse + HTTP fan-out to every
+		// configured reference. Recorded against the outcome
+		// label so operators chart `ok` p95/p99 separately from
+		// `refresh_error` (often the fast-fail path) and the
+		// near-zero `no_vwap` / `parse_error` paths.
+		start := time.Now()
 		key := cachekeys.VWAP(pair.Base, pair.Quote, shortest)
 		raw, err := o.cache.Get(ctx, key).Result()
 		if err != nil {
@@ -57,6 +64,7 @@ func (o *Orchestrator) refreshDivergenceAll(ctx context.Context, now time.Time) 
 			// a freeze; log at debug so an operator looking at INFO
 			// doesn't see false noise.
 			obs.DivergenceRefreshTotal.WithLabelValues("no_vwap").Inc()
+			obs.DivergenceRefreshDurationSeconds.WithLabelValues("no_vwap").Observe(time.Since(start).Seconds())
 			o.logger.Debug("divergence refresh: no vwap in cache",
 				"pair", pair.String(), "window", shortest, "err", err)
 			continue
@@ -64,16 +72,19 @@ func (o *Orchestrator) refreshDivergenceAll(ctx context.Context, now time.Time) 
 		ourPrice, err := strconv.ParseFloat(raw, 64)
 		if err != nil {
 			obs.DivergenceRefreshTotal.WithLabelValues("parse_error").Inc()
+			obs.DivergenceRefreshDurationSeconds.WithLabelValues("parse_error").Observe(time.Since(start).Seconds())
 			o.logger.Warn("divergence refresh: vwap parse failed",
 				"pair", pair.String(), "raw", raw, "err", err)
 			continue
 		}
 		if err := o.cfg.DivergenceRefresher.RefreshPair(ctx, pair, ourPrice, now); err != nil {
 			obs.DivergenceRefreshTotal.WithLabelValues("refresh_error").Inc()
+			obs.DivergenceRefreshDurationSeconds.WithLabelValues("refresh_error").Observe(time.Since(start).Seconds())
 			o.logger.Warn("divergence refresh failed",
 				"pair", pair.String(), "err", err)
 			continue
 		}
 		obs.DivergenceRefreshTotal.WithLabelValues("ok").Inc()
+		obs.DivergenceRefreshDurationSeconds.WithLabelValues("ok").Observe(time.Since(start).Seconds())
 	}
 }

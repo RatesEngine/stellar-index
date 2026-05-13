@@ -84,6 +84,7 @@ func init() {
 		StripePlatformSyncErrorsTotal,
 
 		CustomerWebhookDeliveryDurationSeconds,
+		DivergenceRefreshDurationSeconds,
 	)
 }
 
@@ -389,6 +390,31 @@ var DivergenceRefreshTotal = prometheus.NewCounterVec(
 	prometheus.CounterOpts{
 		Name: "ratesengine_divergence_refresh_total",
 		Help: "Aggregator divergence-cache refresh outcomes per Tick (ok|no_vwap|parse_error|refresh_error).",
+	},
+	[]string{"outcome"},
+)
+
+// DivergenceRefreshDurationSeconds — latency histogram for the
+// per-pair divergence refresh call. `RefreshPair` fans out to
+// every configured external reference (CoinGecko, Chainlink, …)
+// for the pair, so the natural failure mode is "one vendor's API
+// goes slow and the whole refresh tick stretches" — currently
+// invisible without this metric.
+//
+// Labelled by outcome (matches the counter labels) so operators
+// chart `ok` p95/p99 separately from `refresh_error` (often the
+// fast-fail path) and `no_vwap` (cache miss, no work done).
+//
+// Buckets span 10 ms → 30 s — covers a healthy local cache-only
+// refresh (≤ 50 ms when every reference is cached), a single
+// slow vendor (~1-5 s on CG / Chainlink), and the worst-case
+// per-reference timeout (`per_reference_timeout_seconds`,
+// default 5 s) compounded across multiple references.
+var DivergenceRefreshDurationSeconds = prometheus.NewHistogramVec(
+	prometheus.HistogramOpts{
+		Name:    "ratesengine_divergence_refresh_duration_seconds",
+		Help:    "Per-pair divergence-refresh latency, labelled by outcome (ok|no_vwap|parse_error|refresh_error).",
+		Buckets: []float64{0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10, 30},
 	},
 	[]string{"outcome"},
 )
