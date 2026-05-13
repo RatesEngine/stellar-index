@@ -17,6 +17,18 @@ against.
 
 ### Documentation
 
+- `runbooks/decode-errors.md` adds a new "Per-source quick
+  reference" section pulling the per-source decode-regression
+  surprises from CLAUDE.md and `docs/discovery/dexes-amms` /
+  `docs/discovery/oracles` into a single operator-facing matrix.
+  Covers the seven sources whose ingest path has a known wire-
+  level surprise that operators routinely re-discover the hard way
+  (Soroswap SwapEvent/SyncEvent split, Phoenix 8-events-per-swap,
+  Comet shared topic, Reflector triple-contract + missing twap,
+  Band zero-events + E18-vs-E9 scale, Redstone missing feed_id in
+  body + OpArgs plumbing, SDEX P23 unified events, SEP-41 transfer
+  i128-or-map). Cross-references the WASM-audit + contract-schema-
+  evolution docs for backfill-safety implications.
 - `runbooks/external-poller-error-rate-high.md` adds a new
   "Vendor-specific 429 patterns" section covering CoinGecko's
   three pricing tiers (public / demo / Pro), the post-2024

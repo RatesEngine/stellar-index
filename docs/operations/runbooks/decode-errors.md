@@ -1,6 +1,6 @@
 ---
 title: Runbook — decode-errors
-last_verified: 2026-05-03
+last_verified: 2026-05-13
 status: draft
 severity: P3
 ---
@@ -64,6 +64,35 @@ In decreasing order of frequency:
 3. **Decoder regression in our repo.** After a deploy of the indexer, an ingest-path commit may have broken a specific event path. `git log --oneline internal/sources/<source>/` scoped to the post-deploy window identifies candidates. Revert is the fastest mitigation.
 
 4. **Orchestrator hitting an off-schedule test/admin tx.** A contract's admin method (pause, upgrade) emits events that look like a swap but decode differently. These are rare and usually coincide with a DEX deploy. The fix is a decoder that ignores them; meanwhile, the error rate should revert to normal once the tx clears.
+
+## Per-source quick reference
+
+If the alert label points at one of these sources, the listed
+surprise is the single most common cause of decode regressions —
+worth checking BEFORE deeper diagnosis. The full long-form notes
+live in `docs/discovery/dexes-amms/` and `docs/discovery/oracles/`;
+this table is the operator-facing summary derived from them and
+the CLAUDE.md "Things that will surprise you" list.
+
+| Source | Most common decode-regression cause | First place to look |
+| ------ | ----------------------------------- | ------------------- |
+| `soroswap` | `SwapEvent` has no post-state reserves; reserves come in the immediately-following `SyncEvent`. A missing/orphaned `SyncEvent` produces a partner-less swap that decodes but has no usable reserve context. | `discovery/dexes-amms/soroswap.md`; check `orphan-events` rate. |
+| `phoenix` | Phoenix emits **8 events per swap** (one per field with a 2-tuple topic `("swap", "<field>")`). A swap reconstruction that's short of all 8 looks malformed. | `discovery/dexes-amms/phoenix.md`; group by `(ledger, tx_hash, op_index)`. |
+| `comet` | Comet uses a shared `("POOL", <event>)` topic across **every** pool contract — the decoder matches by topic bytes, not pool contract ID. A new pubnet contract deploying Balancer-v1 Comet code will look identical on the wire. | `discovery/dexes-amms/comet.md`; filter downstream by `Trade.Source = "comet"` + contract-address context. |
+| `reflector` | Reflector is **three separate contracts** (DEX / CEX / FX) and has NO on-chain `twap` or `x_*` methods (proposal said it does; it doesn't). | `discovery/oracles/reflector.md`; check which Reflector contract is decoding. |
+| `band` | Band's Soroban contract emits **zero events** — observed via `relay()` / `force_relay()` `InvokeContract` op args through the dispatcher's `ContractCallDecoder` interface (PR 168). Pair rates are at E18 scale; relayed single-asset rates are at E9. | `discovery/oracles/band.md`; verify the `ContractCallDecoder` is wired. |
+| `redstone` | Adapter emits topic `"REDSTONE"` events but the body carries NO `feed_id`. Feed IDs live in the tx's `write_prices(updater, feed_ids, payload)` op args — plumbed through `events.Event.OpArgs` (PR 166). Length-mismatch between feed_ids and updated_feeds returns `ErrFeedIDCountMismatch`. | `discovery/oracles/redstone.md`; check the OpArgs plumbing. |
+| `sdex` (classic) | Post-P23 (mainnet 2025-09-03) every classic asset movement emits a unified transfer/mint/burn event with a 4th `sep0011_asset` topic. Pre-P23 you parse operations+effects. The decoder handles both — but a protocol bump can introduce a third event shape. | `discovery/notes/cap-67-unified-events.md`; check `protocolVersion` from `rpc-probe`. |
+| Any SEP-41 token | `transfer` event data can be EITHER a simple `i128` OR a map containing `amount` + `to_muxed_id`. Type-test before `MustI128()`. | `discovery/notes/sep-41-token-events.md`. |
+
+When a Soroban DEX/oracle source decode-errors immediately after a
+Stellar protocol bump or a known DEX redeploy: the source's WASM
+likely changed event/topic shape. **Backfill is unsafe across the
+upgrade boundary** until the WASM-hash audit re-runs (see
+[`docs/operations/wasm-audits/`](../wasm-audits/) and
+[`architecture/contract-schema-evolution.md`](../../architecture/contract-schema-evolution.md))
+— flip `BackfillSafe = false` for that source until the audit log
+shows the new WASM hash decodes cleanly.
 
 ## Mitigation
 
