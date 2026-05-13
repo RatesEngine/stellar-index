@@ -1,16 +1,16 @@
 path	top_level	audit_unit	file_kind	status	evidence_refs	cross_refs	notes
 .github/PULL_REQUEST_TEMPLATE.md	.github	.github/PULL_REQUEST_TEMPLATE.md	documentation	done	EV-0050		Reviewed PR checklist/invariant prompts; governance enforcement gap tracked separately
 .github/RELEASE_NOTES_TEMPLATE.md	.github	.github/RELEASE_NOTES_TEMPLATE.md	documentation	done	EV-0050;F-1221;F-1222	XFI-0014	Reviewed release-note migration/security prompts; release artifact/doc drift tracked separately
-.github/dependabot.yml	.github	.github/dependabot.yml	config	done	EV-0014;EV-0051;F-1207	XFI-0005	Reviewed dependency coverage; lacks web npm/pnpm ecosystems and hosted alerts are disabled
+.github/dependabot.yml	.github	.github/dependabot.yml	config	done	EV-0014;EV-0051;EV-0284;F-1207	XFI-0005	Reviewed dependency coverage and refreshed hosted posture; hosted vulnerability/Dependabot alerts remain disabled
 .github/workflows/api-audit.yml	.github	.github/workflows	config	done	EV-0041;EV-0050;F-1231	XFI-0023	Reviewed path-limited main-push smoke coverage
 .github/workflows/api-docs.yml	.github	.github/workflows	config	done	EV-0050;EV-0257;F-1203	XFI-0002;XFI-0088	Reviewed manual-only generated API docs publish path and confirmed its OIDC grant is tied to GitHub Pages deploy
-.github/workflows/ci.yml	.github	.github/workflows	config	done	EV-0013;EV-0014;EV-0041;EV-0050;EV-0099;EV-0250;EV-0252;EV-0255;F-1207;F-1231;F-1294	XFI-0005;XFI-0023;XFI-0086	Reviewed CI web/build/security gates, current push-to-main restoration, pnpm audit gates, and promtool/gitleaks installer integrity; promtool and gitleaks now both verify release archive digests before extraction
-.github/workflows/deploy.yml	.github	.github/workflows	config	done	EV-0026;EV-0031;EV-0050;EV-0103;EV-0257;EV-0259;EV-0263;EV-0265;F-1215;F-1216;F-1220;F-1296;F-1297;F-1298;F-1299	XFI-0010;XFI-0014;XFI-0088;XFI-0089;XFI-0090;XFI-0091	Reviewed production deploy workflow, environment approval, action pinning, the still-unproven tag-matched migration staging path, unused OIDC token minting permission, host-key pinning fallback, manual-input shell injection, and mutable Ansible tooling install
+.github/workflows/ci.yml	.github	.github/workflows	config	done	EV-0013;EV-0014;EV-0041;EV-0050;EV-0099;EV-0250;EV-0252;EV-0255;EV-0284;F-1207;F-1231;F-1294	XFI-0005;XFI-0023;XFI-0086	Reviewed CI web/build/security gates, current push-to-main restoration, pnpm audit gates, promtool/gitleaks installer integrity, and refreshed hosted action-policy posture
+.github/workflows/deploy.yml	.github	.github/workflows	config	done	EV-0026;EV-0031;EV-0050;EV-0103;EV-0257;EV-0259;EV-0263;EV-0265;EV-0284;F-1215;F-1216;F-1220;F-1296;F-1297;F-1298;F-1299	XFI-0010;XFI-0014;XFI-0088;XFI-0089;XFI-0090;XFI-0091	Reviewed production deploy workflow, environment approval, action pinning, tag-matched migration staging path, OIDC, host-key pinning, manual-input handling, mutable Ansible tooling, and refreshed hosted environment protection posture
 .github/workflows/docs-deploy.yml	.github	.github/workflows	config	done	EV-0026;EV-0050;EV-0263;F-1215;F-1216	XFI-0010;XFI-0090	Reviewed Cloudflare Pages deploy fallback path, environment/action controls, and choice-input branch interpolation as a counterexample to deploy/release shell injection
 .github/workflows/explorer-deploy.yml	.github	.github/workflows	config	done	EV-0026;EV-0050;EV-0263;F-1215;F-1216	XFI-0010;XFI-0090	Reviewed Cloudflare Pages deploy fallback path, environment/action controls, and env-passed API base URL pattern as a counterexample to deploy/release shell injection
 .github/workflows/k6-weekly.yml	.github	.github/workflows	config	done	EV-0050;F-1206	XFI-0004	Reviewed disabled schedule/manual-only SLA evidence workflow
 .github/workflows/release-validate.yml	.github	.github/workflows	config	done	EV-0037;EV-0050;F-1227	XFI-0019	Reviewed release-validation docker smoke limitation
-.github/workflows/release.yml	.github	.github/workflows	config	done	EV-0026;EV-0032;EV-0050;EV-0257;EV-0261;EV-0263;F-1216;F-1221;F-1296;F-1298	XFI-0010;XFI-0014;XFI-0088;XFI-0090	Reviewed binary-only amd64 release path, mutable action tags, stale GHCR/arm64 docs mismatch, unused OIDC token minting permission, and manual tag-input shell injection
+.github/workflows/release.yml	.github	.github/workflows	config	done	EV-0026;EV-0032;EV-0050;EV-0257;EV-0261;EV-0263;EV-0284;F-1216;F-1221;F-1296;F-1298	XFI-0010;XFI-0014;XFI-0088;XFI-0090	Reviewed binary-only amd64 release path, mutable action tags, stale GHCR/arm64 docs mismatch, OIDC/manual input history, and refreshed hosted Actions allow-list posture
 .github/workflows/status-page.yml	.github	.github/workflows	config	done	EV-0026;EV-0050;EV-0263;F-1215;F-1216	XFI-0010;XFI-0090	Reviewed Cloudflare Pages deploy fallback path, environment/action controls, and env-passed API base URL pattern as a counterexample to deploy/release shell injection
 .gitignore	.gitignore	.gitignore	policy	done	EV-0022;EV-0050		Reviewed secret/runtime/build ignore boundaries
 .gitleaks.toml	.gitleaks.toml	.gitleaks.toml	config	done	EV-0015;EV-0050		Reviewed allowlists and local scan result; no new secret-leak finding
@@ -19,9 +19,9 @@ path	top_level	audit_unit	file_kind	status	evidence_refs	cross_refs	notes
 AGENTS.md	AGENTS.md	AGENTS.md	documentation	done	EV-0180			Reviewed agent-facing orientation claims; no new defect beyond separately tracked CLAUDE/F-1211 drift
 CHANGELOG.md	CHANGELOG.md	CHANGELOG.md	documentation	done	EV-0180			Reviewed as historical release log; legacy status-page mentions are archival entries, not current operator instructions
 CLAUDE.md	CLAUDE.md	CLAUDE.md	documentation	in_progress	EV-0178;EV-0261;F-1211;F-1221	XFI-0007;XFI-0014	Status-page repo orientation still names retired cstate scaffold and release orientation still claims arm64 plus GHCR artifacts
-CODEOWNERS	CODEOWNERS	CODEOWNERS	policy	done	EV-0025;EV-0026;EV-0050;F-1214	XFI-0010	Reviewed ownership policy; hosted branch protection does not enforce it
+CODEOWNERS	CODEOWNERS	CODEOWNERS	policy	done	EV-0025;EV-0026;EV-0050;EV-0284;F-1214	XFI-0010	Reviewed ownership policy; refreshed hosted branch protection still does not enforce it
 CODE_OF_CONDUCT.md	CODE_OF_CONDUCT.md	CODE_OF_CONDUCT.md	documentation	done	EV-0180			Reviewed conduct/reporting policy surface; no additional audit finding
-CONTRIBUTING.md	CONTRIBUTING.md	CONTRIBUTING.md	documentation	done	EV-0026;EV-0050;F-1214;F-1231	XFI-0010;XFI-0023	Reviewed local policy claims against hosted controls
+CONTRIBUTING.md	CONTRIBUTING.md	CONTRIBUTING.md	documentation	done	EV-0026;EV-0050;EV-0284;F-1214;F-1231	XFI-0010;XFI-0023	Reviewed local policy claims against refreshed hosted controls
 LICENSE	LICENSE	LICENSE	policy	done	EV-0180			Reviewed repository license artifact; no additional audit finding
 Makefile	Makefile	Makefile	unknown	in_progress	EV-0013;EV-0082;F-1206;F-1252	XFI-0044	Reviewed verify/launch-readiness split and absence of the documented `verify-cross-region` target
 README.md	README.md	README.md	documentation	done	EV-0180			Reviewed project-status claims against current launch-readiness posture; no new defect
@@ -61,7 +61,7 @@ cmd/ratesengine-ops/verify_archive_chunks_test.go	cmd	cmd/ratesengine-ops	test	d
 cmd/ratesengine-ops/wasm_extract.go	cmd	cmd/ratesengine-ops	runtime	done	EV-0055;F-1239	XFI-0031	Reviewed Galexie WASM extraction worker path; progress-zero panic tracked
 cmd/ratesengine-ops/wasm_extract_test.go	cmd	cmd/ratesengine-ops	test	done	EV-0052;EV-0055		Reviewed WASM code extraction change-type tests; missing progress-zero coverage tracked
 cmd/ratesengine-ops/wasm_history_test.go	cmd	cmd/ratesengine-ops	test	done	EV-0052;EV-0055		Reviewed WASM transition/storage/code-upload/merge tests; missing progress-zero coverage tracked
-cmd/ratesengine-sla-probe/main.go	cmd	cmd/ratesengine-sla-probe	runtime	done	EV-0020;EV-0055;EV-0267;EV-0274;F-1300;F-1303	XFI-0002;XFI-0092;XFI-0095	Reviewed endpoint construction, auth header, observed_at freshness, report verdict logic, textfile-write fatal exit semantics, and the Healthchecks wrapper's missing-binary boundary
+cmd/ratesengine-sla-probe/main.go	cmd	cmd/ratesengine-sla-probe	runtime	done	EV-0020;EV-0055;EV-0267;EV-0274;EV-0280;F-1300;F-1303;F-1305	XFI-0002;XFI-0092;XFI-0095;XFI-0097	Reviewed endpoint construction, auth header, observed_at freshness, report verdict logic, textfile-write fatal exit semantics, the Healthchecks wrapper's missing-binary boundary, and the live failing R1 SLA proof output
 cmd/ratesengine-sla-probe/main_test.go	cmd	cmd/ratesengine-sla-probe	test	done	EV-0052;EV-0055		Reviewed SLA latency/availability/freshness/static endpoint tests
 cmd/ratesengine-sla-probe/textfile.go	cmd	cmd/ratesengine-sla-probe	runtime	done	EV-0055		Reviewed Prometheus textfile output, pass/fail timestamp behavior, and atomic write
 cmd/ratesengine-sla-probe/textfile_test.go	cmd	cmd/ratesengine-sla-probe	test	done	EV-0052;EV-0055		Reviewed textfile metric ordering/pass/fail/atomic-write tests
@@ -226,7 +226,7 @@ configs/prometheus/prometheus.r1.yml	configs	configs/prometheus	config	done	EV-0
 configs/prometheus/rules.r1/README.md	configs	configs/prometheus	documentation	done	EV-0188;EV-0194;F-1268	XFI-0060	Reviewed stale copy-target drift and confirmed current README now deploys into `/etc/prometheus/rules.r1/`
 configs/prometheus/rules.r1/aggregator.yml	configs	configs/prometheus	config	todo			cold audit pending
 configs/prometheus/rules.r1/anomaly.yml	configs	configs/prometheus	config	todo			cold audit pending
-configs/prometheus/rules.r1/api.yml	configs	configs/prometheus	config	done	EV-0215;F-1276	XFI-0068	Reviewed as the real R1 API alert selector source (`ratesengine-api`)
+configs/prometheus/rules.r1/api.yml	configs	configs/prometheus	config	done	EV-0215;EV-0282;F-1276;F-1306	XFI-0068;XFI-0098	Reviewed as the real R1 API alert selector source and found the price-stale alert queries a metric with no live producer
 configs/prometheus/rules.r1/archive-completeness.yml	configs	configs/prometheus	config	todo			cold audit pending
 configs/prometheus/rules.r1/cache.yml	configs	configs/prometheus	config	todo			cold audit pending
 configs/prometheus/rules.r1/divergence.yml	configs	configs/prometheus	config	todo			cold audit pending
@@ -255,7 +255,7 @@ deploy/docker-compose/init/00-timescale-extension.sql	deploy	deploy/docker-compo
 deploy/monitoring/README.md	deploy	deploy/monitoring	documentation	done	EV-0182			Reviewed alert-rule routing/docs context while reconciling Alertmanager severity-vocabulary drift
 deploy/monitoring/rules/aggregator.yml	deploy	deploy/monitoring	config	todo			cold audit pending
 deploy/monitoring/rules/anomaly.yml	deploy	deploy/monitoring	config	todo			cold audit pending
-deploy/monitoring/rules/api.yml	deploy	deploy/monitoring	config	done	EV-0215;F-1276	XFI-0068	Reviewed as the real multi-host API alert selector source (`ratesengine_api`)
+deploy/monitoring/rules/api.yml	deploy	deploy/monitoring	config	done	EV-0215;EV-0282;F-1276;F-1306	XFI-0068;XFI-0098	Reviewed as the real multi-host API alert selector source and found the price-stale alert queries a metric with no producer
 deploy/monitoring/rules/archive-completeness.yml	deploy	deploy/monitoring	config	todo			cold audit pending
 deploy/monitoring/rules/cache.yml	deploy	deploy/monitoring	config	todo			cold audit pending
 deploy/monitoring/rules/divergence.yml	deploy	deploy/monitoring	config	todo			cold audit pending
@@ -263,7 +263,7 @@ deploy/monitoring/rules/external-pollers.yml	deploy	deploy/monitoring	config	tod
 deploy/monitoring/rules/infra.yml	deploy	deploy/monitoring	config	todo			cold audit pending
 deploy/monitoring/rules/ingestion.yml	deploy	deploy/monitoring	config	todo			cold audit pending
 deploy/monitoring/rules/meta.yml	deploy	deploy/monitoring	config	todo			cold audit pending
-deploy/monitoring/rules/sla-probe.yml	deploy	deploy/monitoring	config	in_progress	EV-0267;F-1300	XFI-0092	Partially reviewed as the Prometheus consumer of SLA probe textfile metrics
+deploy/monitoring/rules/sla-probe.yml	deploy	deploy/monitoring	config	in_progress	EV-0267;EV-0280;F-1300;F-1305	XFI-0092;XFI-0097	Partially reviewed as the Prometheus consumer of SLA probe textfile metrics and the live failing R1 SLA proof verdict
 deploy/monitoring/rules/slo.yml	deploy	deploy/monitoring	config	todo			cold audit pending
 deploy/monitoring/rules/stellar.yml	deploy	deploy/monitoring	config	todo			cold audit pending
 deploy/monitoring/rules/storage.yml	deploy	deploy/monitoring	config	todo			cold audit pending
@@ -402,7 +402,7 @@ docs/audit-2026-05-12-codex/evidence/README.md	docs	docs/audit-2026-05-12-codex	
 docs/audit-2026-05-12-codex/evidence/commands.md	docs	docs/audit-2026-05-12-codex	documentation	done	EV-0278;EV-0279;CMD-0275;CMD-0276		Recorded live R1 Healthchecks refresh and wave-135 control reconciliation command evidence
 docs/audit-2026-05-12-codex/evidence/cross-file-interactions.md	docs	docs/audit-2026-05-12-codex	documentation	done	EV-0278;EV-0279;CMD-0276	XFI-0003	Reconciled XFI statuses after closure updates and refreshed XFI-0003 with the live missing SLA timer/wrapper/URL evidence
 docs/audit-2026-05-12-codex/evidence/log.md	docs	docs/audit-2026-05-12-codex	documentation	done	EV-0278;EV-0279;CMD-0275;CMD-0276		Recorded Healthchecks live-state evidence and control-plane synchronization evidence
-docs/audit-2026-05-12-codex/evidence/r1-runtime.md	docs	docs/audit-2026-05-12-codex	documentation	todo			cold audit pending
+docs/audit-2026-05-12-codex/evidence/r1-runtime.md	docs	docs/audit-2026-05-12-codex	documentation	done	EV-0278;EV-0280;R1-0031;R1-0032	XFI-0003;XFI-0097	Recorded live Healthchecks timer absence evidence followed by direct R1 proof that the SLA timer is now active but its textfile verdict is failing freshness
 docs/audit-2026-05-12-codex/inventory/README.md	docs	docs/audit-2026-05-12-codex	documentation	todo			cold audit pending
 docs/audit-2026-05-12-codex/inventory/area-counts.md	docs	docs/audit-2026-05-12-codex	documentation	todo			cold audit pending
 docs/audit-2026-05-12-codex/inventory/file-coverage.tsv	docs	docs/audit-2026-05-12-codex	unknown	todo			cold audit pending
@@ -618,7 +618,7 @@ docs/operations/runbooks/oracle-stale.md	docs	docs/operations	documentation	todo
 docs/operations/runbooks/orphan-events.md	docs	docs/operations	documentation	todo			cold audit pending
 docs/operations/runbooks/pg-conns-saturated.md	docs	docs/operations	documentation	todo			cold audit pending
 docs/operations/runbooks/price-divergence.md	docs	docs/operations	documentation	todo			cold audit pending
-docs/operations/runbooks/price-stale.md	docs	docs/operations	documentation	todo			cold audit pending
+docs/operations/runbooks/price-stale.md	docs	docs/operations	documentation	done	EV-0282;F-1306	XFI-0098	Reviewed runbook diagnosis commands against source/R1 and found they depend on nonexistent `ratesengine_price_staleness_seconds` series
 docs/operations/runbooks/prometheus-tsdb-corruption.md	docs	docs/operations	documentation	todo			cold audit pending
 docs/operations/runbooks/redis-master-down.md	docs	docs/operations	documentation	in_progress	EV-0196;EV-0198;EV-0214;F-1271;F-1275	XFI-0063;XFI-0067	Auth assumptions now match source, but the maintained degraded-serving claim conflicts with HAProxy `/readyz` routing during Redis loss
 docs/operations/runbooks/redis-memory.md	docs	docs/operations	documentation	todo			cold audit pending
@@ -630,7 +630,7 @@ docs/operations/runbooks/scrape-failing.md	docs	docs/operations	documentation	to
 docs/operations/runbooks/sev-status-page-update.md	docs	docs/operations	documentation	in_progress	EV-0021,F-1211	XFI-0007	Binding SEV runbook points to removed cstate files
 docs/operations/runbooks/sla-probe-freshness-breach.md	docs	docs/operations	documentation	todo			cold audit pending
 docs/operations/runbooks/sla-probe-p95-breach.md	docs	docs/operations	documentation	done	EV-0215;EV-0229;F-1276	XFI-0068	Rechecked incident query example; selector drift is closed in this runbook
-docs/operations/runbooks/sla-probe-stale.md	docs	docs/operations	documentation	in_progress	EV-0267;F-1300	XFI-0092	Partially reviewed as the runbook consumer of the missing sla_probe.prom failure mode
+docs/operations/runbooks/sla-probe-stale.md	docs	docs/operations	documentation	in_progress	EV-0267;EV-0280;F-1300;F-1305	XFI-0092;XFI-0097	Partially reviewed as the runbook consumer of the missing/failing sla_probe.prom failure modes
 docs/operations/runbooks/sla-probe-unit-failed.md	docs	docs/operations	documentation	todo			cold audit pending
 docs/operations/runbooks/slo-availability-burn-fast.md	docs	docs/operations	documentation	todo			cold audit pending
 docs/operations/runbooks/slo-availability-burn-medium.md	docs	docs/operations	documentation	todo			cold audit pending
@@ -654,7 +654,7 @@ docs/operations/runbooks/zfs-degraded.md	docs	docs/operations	documentation	todo
 docs/operations/sac-wrappers-and-usd-volume.md	docs	docs/operations	documentation	todo			cold audit pending
 docs/operations/sep1-resolution.md	docs	docs/operations	documentation	todo			cold audit pending
 docs/operations/sev-playbook.md	docs	docs/operations	documentation	todo			cold audit pending
-docs/operations/sla-probe.md	docs	docs/operations	documentation	in_progress	EV-0267;EV-0274;F-1300;F-1303	XFI-0092;XFI-0095	Partially reviewed for SLA textfile-output contract, systemd wiring, and Healthchecks missing-binary failure mode
+docs/operations/sla-probe.md	docs	docs/operations	documentation	in_progress	EV-0267;EV-0274;EV-0280;F-1300;F-1303;F-1305	XFI-0092;XFI-0095;XFI-0097	Partially reviewed for SLA textfile-output contract, systemd wiring, Healthchecks missing-binary failure mode, and the live R1 failing probe verdict
 docs/operations/sla-proof-procedure.md	docs	docs/operations	documentation	todo			cold audit pending
 docs/operations/sla-proof-template.md	docs	docs/operations	documentation	todo			cold audit pending
 docs/operations/status-page-setup.md	docs	docs/operations	documentation	in_progress	EV-0021,F-1211	XFI-0007	Setup doc still selects Upptime/GitHub Pages despite web/status implementation
@@ -1016,7 +1016,7 @@ internal/api/v1/oracle_sep40_test.go	internal	internal/api/v1	test	todo			cold a
 internal/api/v1/oracle_test.go	internal	internal/api/v1	test	todo			cold audit pending
 internal/api/v1/pairs.go	internal	internal/api/v1	runtime	todo			cold audit pending
 internal/api/v1/pairs_test.go	internal	internal/api/v1	test	todo			cold audit pending
-internal/api/v1/price.go	internal	internal/api/v1	runtime	todo			cold audit pending
+internal/api/v1/price.go	internal	internal/api/v1	runtime	in_progress	EV-0282;F-1306	XFI-0098	Partially reviewed price response/staleness path; handler intentionally avoids emitting PriceStalenessSeconds, leaving the documented alert without a producer
 internal/api/v1/price_batch_test.go	internal	internal/api/v1	test	todo			cold audit pending
 internal/api/v1/price_stream.go	internal	internal/api/v1	runtime	in_progress	EV-0141;F-1228	XFI-0020	Reviewed shared SSE runtime dependency while reconciling the live R1 cutoff; endpoint-specific stream audit remains open
 internal/api/v1/price_stream_test.go	internal	internal/api/v1	test	todo			cold audit pending
@@ -1196,7 +1196,7 @@ internal/obs/doc.go	internal	internal/obs/doc.go	runtime	todo			cold audit pendi
 internal/obs/http_middleware.go	internal	internal/obs/http_middleware.go	runtime	todo			cold audit pending
 internal/obs/log.go	internal	internal/obs/log.go	runtime	todo			cold audit pending
 internal/obs/log_test.go	internal	internal/obs/log_test.go	test	todo			cold audit pending
-internal/obs/metrics.go	internal	internal/obs/metrics.go	runtime	in_progress	EV-0215;EV-0229;F-1276	XFI-0068	Rechecked API metric-source commentary; stale `job=\"api\"` comment remains the narrowed F-1276 scope
+internal/obs/metrics.go	internal	internal/obs/metrics.go	runtime	in_progress	EV-0215;EV-0229;EV-0282;F-1276;F-1306	XFI-0068;XFI-0098	Rechecked API metric-source commentary and PriceStalenessSeconds registration; the gauge is defined but has no runtime producer outside test warmup
 internal/obs/metrics_test.go	internal	internal/obs/metrics_test.go	test	todo			cold audit pending
 internal/obs/middleware_unit_test.go	internal	internal/obs/middleware_unit_test.go	test	todo			cold audit pending
 internal/obstest/histogram.go	internal	internal/obstest/histogram.go	test	done	EV-0191		Reviewed newly tracked Prometheus histogram test helper; dependency-light utility package, no new finding from this pass

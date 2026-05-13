@@ -324,8 +324,10 @@ func (s *Server) handlePrice(w http.ResponseWriter, r *http.Request) {
 	// the handler would create one series per distinct queried
 	// asset, and Stellar has tens of thousands of them (see the
 	// cardinality warning on the metric declaration). The
-	// aggregator owns this metric when it ships and will restrict
-	// emission to a top-N allow-list.
+	// aggregator owns this metric (F-1306, audit-2026-05-13):
+	// `internal/aggregate/orchestrator/orchestrator.go::emitStalenessGauges`
+	// runs at end-of-Tick and emits per-asset staleness for every
+	// configured pair in the bounded VWAP set.
 
 	// Confidence is enrichment per ADR-0019. Looked up only on
 	// `/v1/price` (the closed-bucket surface) — tip + observations

@@ -467,6 +467,17 @@ type Orchestrator struct {
 	// sequentially within Tick — so this map needs no separate lock.
 	prevVWAPs map[string]*big.Rat
 
+	// lastWriteAt tracks the wall-clock timestamp of the most recent
+	// successful VWAP cache-write per pair (keyed by `pair.Base.String()`,
+	// matching the `asset` label on `obs.PriceStalenessSeconds`). Used
+	// by `emitStalenessGauges` at end-of-Tick to drive the
+	// `ratesengine_api_price_stale` alert (F-1306, codex audit-2026-05-13).
+	// Bounded by len(cfg.Pairs) — a small operator-curated allow-list,
+	// so cardinality fits well inside Prometheus's per-metric comfort
+	// zone. Same single-Tick-at-a-time invariant as prevVWAPs, so no
+	// lock needed.
+	lastWriteAt map[string]time.Time
+
 	// Stats exposed for metrics / test assertions. Zero-copy.
 	mu             sync.Mutex
 	lastTickAt     time.Time
@@ -493,11 +504,12 @@ func New(store Store, cache Cache, cfg Config) *Orchestrator {
 		logger = slog.Default()
 	}
 	return &Orchestrator{
-		store:     store,
-		cache:     cache,
-		cfg:       cfg,
-		logger:    logger,
-		prevVWAPs: make(map[string]*big.Rat, len(cfg.Pairs)*max(len(cfg.Windows), 1)),
+		store:       store,
+		cache:       cache,
+		cfg:         cfg,
+		logger:      logger,
+		prevVWAPs:   make(map[string]*big.Rat, len(cfg.Pairs)*max(len(cfg.Windows), 1)),
+		lastWriteAt: make(map[string]time.Time, len(cfg.Pairs)),
 	}
 }
 
@@ -578,7 +590,39 @@ func (o *Orchestrator) Tick(ctx context.Context) error {
 		outcome = "error"
 	}
 	obs.AggregatorTicksTotal.WithLabelValues(outcome).Inc()
+
+	// F-1306 (codex audit-2026-05-13): emit per-asset staleness so the
+	// `ratesengine_api_price_stale` alert has a producer. Runs at end-of-
+	// Tick whether or not any window wrote, so pairs with no fresh
+	// trades climb past the alert threshold even though Tick doesn't
+	// publish anything new for them.
+	o.emitStalenessGauges(now)
+
 	return nil
+}
+
+// emitStalenessGauges sets `ratesengine_price_staleness_seconds` for
+// every configured pair to `time.Since(lastWriteAt[asset]).Seconds()`.
+// Pairs that have never written carry the wall-clock age since the
+// aggregator started (orchestrator construction time would be cleaner
+// but the orchestrator doesn't currently track its own birthday — the
+// "no writes yet" branch falls back to `now` so a fresh aggregator
+// shows ~0 staleness on the first tick and then climbs if it never
+// produces a write, which matches the alert intent).
+func (o *Orchestrator) emitStalenessGauges(now time.Time) {
+	for _, pair := range o.cfg.Pairs {
+		asset := pair.Base.String()
+		last, ok := o.lastWriteAt[asset]
+		if !ok {
+			// First sighting — treat as "just observed" so the metric
+			// is non-zero/present but doesn't immediately page.
+			last = now
+			o.lastWriteAt[asset] = last
+		}
+		obs.PriceStalenessSeconds.WithLabelValues(asset).Set(
+			now.Sub(last).Seconds(),
+		)
+	}
 }
 
 // refreshPairWindow computes VWAP for one (pair, window) and
@@ -710,6 +754,13 @@ func (o *Orchestrator) refreshPairWindow(
 	o.vwapWrites++
 	o.mu.Unlock()
 	obs.AggregatorVWAPWritesTotal.Inc()
+
+	// F-1306 (codex audit-2026-05-13): record the wall-clock write
+	// time per pair so emitStalenessGauges can drive the
+	// `ratesengine_price_staleness_seconds` series the api alert
+	// rule queries. Pair-level (not pair×window) — staleness reads
+	// off the asset/quote shape that customers see via /v1/price.
+	o.lastWriteAt[pair.Base.String()] = now
 
 	o.publishToStream(ctx, pair, window, value, now)
 	return nil

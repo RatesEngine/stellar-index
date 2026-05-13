@@ -849,3 +849,37 @@ without evidence IDs.
   `done=178 / in_progress=131 / todo=1617`, tracked-file parity
   `1926 / 1926`, docs lint green, and no finding-status mismatches between
   the register table and detailed sections.
+- `CMD-0277` verifies the R1 SLA timer directly: `ratesengine-sla-probe.timer`
+  is enabled/active, the wrapper and probe binary exist, the redacted
+  Healthchecks URL key is present, and `sla_probe.prom` is written. This closes
+  the rollout finding `F-1205`, but the same evidence opens `F-1305` because
+  the textfile reports `ratesengine_sla_probe_unit_failed 1` and price
+  freshness `186.574s`, above the 30s SLA target.
+- `CMD-0278` restores audit-control parity after splitting the SLA timer
+  rollout from the live failing verdict:
+  findings `94 fixed / 11 open`, XFI `88 fixed / 9 open`, remediation
+  `90 fixed / 13 open`, file coverage
+  `done=185 / in_progress=131 / todo=1610`, tracked-file parity
+  `1926 / 1926`, docs lint green, and no finding-status mismatches between
+  the register table and detailed sections.
+- `CMD-0279` adds `F-1306`: R1 is serving a stale
+  `/v1/price?asset=native&quote=fiat:USD` response with `flags.stale=true`,
+  but the documented `ratesengine_api_price_stale` alert cannot fire because
+  `ratesengine_price_staleness_seconds` has no live series and source has no
+  producer outside test warmup.
+- `CMD-0280` restores audit-control parity after the price-stale alert
+  producer finding:
+  findings `94 fixed / 12 open`, XFI `88 fixed / 10 open`, remediation
+  `90 fixed / 14 open`, file coverage
+  `done=186 / in_progress=132 / todo=1608`, tracked-file parity
+  `1926 / 1926`, docs lint green, and no finding-status mismatches between
+  the register table and detailed sections.
+- `CMD-0281` refreshes hosted GitHub posture: branch `main` is still
+  unprotected, vulnerability/Dependabot alerts are disabled, Actions still
+  allows all actions/workflows, and all production environments still have
+  empty protection rules with admin bypass enabled.
+- `CMD-0282` restores audit-control parity after the hosted-control refresh:
+  findings `94 fixed / 12 open`, XFI `88 fixed / 10 open`, remediation
+  `90 fixed / 14 open`, file coverage
+  `done=186 / in_progress=132 / todo=1608`, docs lint green, and no
+  finding-status mismatches between the register table and detailed sections.

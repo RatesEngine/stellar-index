@@ -427,18 +427,18 @@ Recent waves closed by code (chronological):
 | F-1202 | high | Source API contract and deployed R1 API disagreed for removed `/v1/coins` and `/v1/currencies` surfaces | API route table; R1 deployed binary; generated API artifacts | XFI-0002; EV-0012; EV-0020; EV-0066; R1-0001 | fixed | api/release | Current R1 now returns 404 for all removed legacy routes, matching source. Keep the historical evidence because it existed earlier in the same audit window; the live mismatch itself is no longer open. |
 | F-1203 | high | Generated explorer API types remain stale and local docs verification did not catch it | `web/explorer/src/api/types.ts`; generation/docs CI | XFI-0002; EV-0007; EV-0011; EV-0013; EV-0067 | fixed | api/web/ci | The 362-line diff shrunk across earlier waves as the OpenAPI yaml drove the explorer types regen on each PR; wave 31 (2026-05-12) commits the residual ~55-line regen output (account-usage prose now reflects the live Redis counter from F-1259, and the dashboard-key rate-limit field now documents the tier-clamp from F-1256). Running `pnpm generate:api` is now a no-op on `HEAD`. |
 | F-1204 | medium | Public API audit tooling and machine-facing docs still advertise removed `/v1/coins` and `/v1/currencies` routes | `scripts/dev/audit-public-api.sh`; `web/explorer/public/llms.txt` | XFI-0002; EV-0065; EV-0066 | fixed | web/api/docs | `scripts/dev/audit-public-api.sh` migrated to `/v1/assets` shapes (the historical mention is in a comment block explaining the rc.48 removal). Wave 56 (2026-05-13) rewrites the `llms.txt` entry to drop the inline `formerly /v1/coins` parenthetical that was tripping the audit's literal-string grep — the migration history is preserved via the post-position note "the older `coins` and `currencies` route shapes were retired in rc.48 and removed from the API entirely." Wave 80 (2026-05-13) widens the sweep to seven additional operator-facing surfaces that still mentioned the removed routes: `configs/example.toml` CORS section, `docs/operations/cdn-setup.md` CDN policy table, `docs/operations/runbooks/fx-history-missing.md` (now references `/v1/assets/eur` with a one-line note about the rc.48 retirement), `docs/operations/runbooks/supply-snapshot-never-initialized.md` (curl examples migrated to `/v1/assets/native`), `docs/operations/sac-wrappers-and-usd-volume.md`, `docs/operations/post-launch-queries.md`, and `docs/operations/perf-todo.md`. Operators following any of these no longer hit 404s on routes that haven't existed since rc.48. |
-| F-1205 | high | R1 evidence-timer rollout is incomplete because the SLA probe timer is still absent live | R1 systemd; `deploy/systemd/*`; `configs/healthchecks/*`; monitoring rules; runbooks | XFI-0003; R1-0002; R1-0003; R1-0004; R1-0025; R1-0031; EV-0113; EV-0172; EV-0278 | fixed | ops | Closed wave 128 (operator action via ssh): installed `ratesengine-sla-probe.{service,timer}` on r1 plus the wrapper at `/opt/ratesengine/healthchecks/sla-probe.sh`; created the `ratesengine` system user/group that the wave-126 sandbox unit expects; chown'd `/var/lib/node_exporter/textfile_collector` to `ratesengine:ratesengine` mode 0775; `systemctl enable --now`. Timer active, first run succeeded, `sla_probe.prom` written. HEALTHCHECKS_URL_SLA_PROBE secret-fill-in is a separate operator step. |
+| F-1205 | high | R1 evidence-timer rollout is incomplete because the SLA probe timer is still absent live | R1 systemd; `deploy/systemd/*`; `configs/healthchecks/*`; monitoring rules; runbooks | XFI-0003; R1-0002; R1-0003; R1-0004; R1-0025; R1-0031; R1-0032; EV-0113; EV-0172; EV-0278; EV-0280 | fixed | ops | Closed wave 128 after direct R1 verification: `ratesengine-sla-probe.timer` is now enabled/active, the wrapper and probe binary exist, `HEALTHCHECKS_URL_SLA_PROBE` is present redacted, and `sla_probe.prom` is written. The probe verdict currently fails the SLA target; that distinct live service-health issue is tracked as `F-1305`. |
 | F-1206 | high | Public launch readiness gate fails despite canonical local verify passing | `scripts/ci/verify-launch-ready`; `Makefile`; launch readiness docs | XFI-0004; EV-0009; EV-0013; EV-0170 | open | release/ops | Cross-region, security-review, failover-chaos, and finalisation blockers remain red. |
-| F-1207 | critical | Hosted GitHub dependency-alert controls remain disabled after the web Next.js remediation wave | `web/*/package.json`; `.github/workflows/ci.yml`; `.github/dependabot.yml`; hosted GitHub dependency alerts | XFI-0005; EV-0014; EV-0051; EV-0099; EV-0114; EV-0171 | open | web/security | The three web apps now pin `next@15.5.18`, Dependabot npm ecosystems exist for explorer/dashboard/status, and each current `pnpm audit --audit-level high` run reports only one moderate advisory. The remaining open defect is hosted posture: repository vulnerability alerts and Dependabot alerts are still disabled. |
+| F-1207 | critical | Hosted GitHub dependency-alert controls remain disabled after the web Next.js remediation wave | `web/*/package.json`; `.github/workflows/ci.yml`; `.github/dependabot.yml`; hosted GitHub dependency alerts | XFI-0005; EV-0014; EV-0051; EV-0099; EV-0114; EV-0171; EV-0284 | open | web/security | The three web apps now pin `next@15.5.18`, Dependabot npm ecosystems exist for explorer/dashboard/status, and each current `pnpm audit --audit-level high` run reports only one moderate advisory. Fresh GitHub API evidence still shows repository vulnerability alerts disabled and Dependabot alerts disabled. |
 | F-1208 | high | R1 source-health remains degraded: only 12/17 sources are active, ECB is stale, and Redstone is pending source-stopped | R1 indexer/Prometheus/API readiness | XFI-0006; R1-0001; R1-0009; R1-0010; R1-0029; EV-0175 | open | ingestion/ops | The earlier broad multi-source-stopped state has narrowed, but current R1 still reports `overall=degraded`, `active_sources=12`, `total_sources=17`, a firing `ratesengine_external_poller_stale{source=\"ecb\"}` alert, and a pending `ratesengine_ingestion_source_stopped{source=\"redstone\"}` alert. |
 | F-1209 | medium | R1 host capacity is already under memory/swap pressure and MinIO is 78% full | R1 host capacity; infra alerts; storage runbooks | XFI-0006; R1-0007; R1-0010; R1-0030; EV-0175 | open | ops | Memory alert is firing at about 94.19%, swap remains effectively exhausted (`20.45G/20.47G` used), and MinIO remains 4.9T of 6.4T used. |
 | F-1210 | medium | API `/healthz` and `/readyz` scope is too narrow for launch/SLA truth | API health endpoints; status semantics; monitoring | XFI-0006; R1-0009; R1-0010 | fixed | api/ops | The serving-plane scoping is intentional, not an oversight: `/healthz` + `/readyz` answer "is the load balancer safe to route to this instance" — they MUST NOT flap on backfill stalls, ingest silences, or non-critical timer misfires (an ingest stall pulling every API instance out of rotation would turn a backfill-only outage into a customer-facing total outage). The SLA-truth rollup lives at `/v1/status` (which the Cloudflare-Pages status page also consumes). Wave 59 (2026-05-13) makes this design intent first-class on the wire: OpenAPI's `/healthz` + `/readyz` descriptions now explicitly document the serving-plane scope, point operators at `/v1/status` for SLA signals, and explain the "load-balancer-rotation safety" rationale. The handler-side godoc already carried the F-1210 reasoning; OpenAPI now matches. |
 | F-1211 | medium | Status-page incident docs and comms templates point to removed Upptime/cstate workflows instead of the shipped Cloudflare Pages app | `web/status`; `deploy/status-page`; operations runbooks; comms templates | XFI-0007; EV-0021; EV-0178 | fixed | ops/comms/web | Closed wave 126 (commit cb3bb1f3): legacy candidate tool names stripped from active prose in CLAUDE.md, launch-task-list.md, launch-readiness-backlog.md, deploy/comms/{README,incident-update}.md. Shipped status page is web/status/ (Cloudflare Pages); no other tooling claimed. |
 | F-1212 | high | Free dashboard accounts can self-mint API keys with paid-tier rate limits up to 100,000 requests/minute | Dashboard key management; platform API keys; auth validator; rate-limit middleware | XFI-0008; EV-0023; EV-0089 | fixed | dashboard/billing/api | Current `HEAD` now clamps dashboard-minted key budgets by account tier before insert and tests the tier ladder, so the privilege-escalation path no longer reproduces. |
 | F-1213 | high | Stablecoin fiat proxy undercounted Stellar USD volume by 10x in the min-volume manipulation gate | Aggregator stablecoin proxy; Stellar DEX quote decimals; `aggregate.min_usd_volume`; R1 aggregator config | XFI-0009; EV-0024; R1-0011; EV-0116 | fixed | aggregate/market-data | Current code computes USD totals against each source pair's real quote-decimal convention before pair rewrite, and the classic-USDC `$10k` regression test passes. R1 still keeps `min_usd_volume=0`, but that is now an explicit operator posture rather than a workaround for this arithmetic bug. |
-| F-1214 | critical | `main` is unprotected, so required CI, CODEOWNER review, and signed commits are not enforced | GitHub branch protection/rulesets; `CONTRIBUTING.md`; `CODEOWNERS`; release process | XFI-0010; EV-0025; EV-0026; EV-0176 | open | repo-admin/security | Fresh GitHub API evidence still shows branch protection unavailable on the current private repo tier, contradicting local policy docs and removing the merge gate for production code. |
-| F-1215 | high | Production deployment environments have no required reviewers despite holding deploy secrets | GitHub environments; `.github/workflows/deploy.yml`; Cloudflare Pages deploy workflows; repo Actions secrets | XFI-0010; EV-0025; EV-0026; EV-0176 | open | repo-admin/ops | `r1`, docs, explorer, status, and GitHub Pages environments still have empty protection rules and admin bypass enabled; manual deployment jobs can access production secrets without environment approval. |
-| F-1216 | high | GitHub Actions supply-chain hardening remains incomplete after adding a lint-only PR gate | GitHub Actions repository policy; `.github/workflows/*.yml`; CI pinning lint | XFI-0010; EV-0025; EV-0026; EV-0104; EV-0176 | open | repo-admin/security | Fresh GitHub API evidence still shows `allowed_actions=all` and `sha_pinning_required=false`; the new lint script blocks newly added mutable third-party tags in PR diffs, but current workflows still contain 12 tag-pinned third-party actions. |
+| F-1214 | critical | `main` is unprotected, so required CI, CODEOWNER review, and signed commits are not enforced | GitHub branch protection/rulesets; `CONTRIBUTING.md`; `CODEOWNERS`; release process | XFI-0010; EV-0025; EV-0026; EV-0176; EV-0284 | open | repo-admin/security | Fresh GitHub API evidence still shows `main.protected=false`; direct branch-protection reads fail because the private repo tier does not expose the feature, contradicting local policy docs and removing the merge gate for production code. |
+| F-1215 | high | Production deployment environments have no required reviewers despite holding deploy secrets | GitHub environments; `.github/workflows/deploy.yml`; Cloudflare Pages deploy workflows; repo Actions secrets | XFI-0010; EV-0025; EV-0026; EV-0176; EV-0284 | open | repo-admin/ops | `r1`, docs, explorer, status, and GitHub Pages environments still have empty protection rules and admin bypass enabled; manual deployment jobs can access production secrets without environment approval. |
+| F-1216 | high | GitHub Actions supply-chain hardening remains incomplete after adding a lint-only PR gate | GitHub Actions repository policy; `.github/workflows/*.yml`; CI pinning lint | XFI-0010; EV-0025; EV-0026; EV-0104; EV-0176; EV-0284 | open | repo-admin/security | Fresh GitHub API evidence still shows `allowed_actions=all`; the selected-actions endpoint returns a conflict because all actions/workflows are allowed. Workflow token default is read-only, but the hosted action allow-list/SHA-pinning control remains absent. |
 | F-1217 | high | SEP-10 replay protection is optional and can run guard-free when Redis is absent | SEP-10 validator; API startup wiring; auth token endpoint; bearer auth | XFI-0011; EV-0027; EV-0053; EV-0096; R1-0012 | fixed | api/security | Current workspace now fails API startup when `auth_mode=sep10` is selected without Redis, so the guard-free deployment path no longer reproduces. |
 | F-1218 | high | Public signup can mint immediately usable 1000/min API keys from unverified emails unless the new email-verification gate is explicitly enabled | `/v1/signup`; signup tracker; verification flow; API key store; signup UI/OpenAPI; R1 config | XFI-0012; EV-0028; EV-0099; EV-0127; EV-0143; EV-0144; EV-0145; EV-0146; EV-0165; EV-0172; R1-0021; R1-0026 | fixed | api/security/billing | Closed wave 126 (commit cb3bb1f3): config default for signup_require_email_verification flipped to true. Pre-launch deployment with no consumer traffic; operators who want to allow unverified signup must opt in explicitly. |
 | F-1219 | high | Stripe paid-upgrade webhook still leaves dashboard-created Postgres API keys outside the live upgrade source of truth | Stripe webhook; Redis API keys; Postgres platform billing/API keys | XFI-0013; EV-0030; EV-0053; EV-0107; EV-0108; EV-0112; EV-0130; EV-0142; EV-0165; EV-0168 | fixed | billing/platform/api | Wave 55 (2026-05-13) closes the per-key half: `StripePlatformBridge` gains an `APIKeys platform.APIKeyStore` slot; the webhook's `applyAccountTierAndKeyUpgrade` calls `upgradePlatformAPIKeys` after the account-tier bump to `ListForAccount` + `Update` every active key with `RateLimitPerMin < target` up to the new tier's budget. Idempotent (already-at-or-above keys skipped, so a re-delivered event doesn't downgrade an operator-lifted key) and revoked-aware (revoked rows are not touched). Production wiring in `cmd/ratesengine-api/main.go` plugs `postgresstore.NewAPIKeyStore(pgStore)` into the bridge. Regression test `TestStripeWebhook_PlatformBridge_LiftsPostgresKeys` proves a 4-key fixture: 2 below-target keys lift to 10000 (Pro), 1 revoked + 1 already-above-target stay untouched. |
@@ -527,6 +527,9 @@ Recent waves closed by code (chronological):
 | F-1302 | medium | Healthchecks smoke wrapper exits successfully when the smoke script is missing or not executable | `configs/healthchecks/smoke.sh`; `configs/healthchecks/ratesengine-smoke.service`; `configs/healthchecks/install.sh`; `configs/healthchecks/README.md`; `scripts/dev/r1-smoke.sh` | XFI-0094; EV-0271 | fixed | ops/monitoring/smoke | Closed wave 127 (commit 9e5dfe8f): configs/healthchecks/smoke.sh fans out to ${HEALTHCHECKS_URL_SMOKE}/fail when the smoke script is missing or non-executable; broken install no longer silently disables the 5-min check. |
 | F-1303 | medium | Healthchecks SLA wrapper exits successfully when the SLA probe binary is missing or not executable | `configs/healthchecks/sla-probe.sh`; `configs/healthchecks/ratesengine-sla-probe.service`; `configs/healthchecks/install.sh`; `cmd/ratesengine-sla-probe/main.go`; `docs/operations/sla-probe.md` | XFI-0095; EV-0274 | fixed | ops/monitoring/sla | Closed wave 127 (commit 9e5dfe8f): configs/healthchecks/sla-probe.sh fans out to ${HEALTHCHECKS_URL_SLA_PROBE}/fail when the probe binary is missing or non-executable; broken deploy no longer silently disables the SLA check. |
 | F-1304 | medium | Pre-launch Healthchecks apply step omits `ratesengine-sla-probe.timer` after adding the SLA-probe URL | `docs/operations/pre-launch-hardening.md`; `configs/healthchecks/README.md`; `configs/healthchecks/install.sh`; `configs/healthchecks/ratesengine-sla-probe.service`; `configs/healthchecks/ratesengine-sla-probe.timer` | XFI-0096; EV-0276 | fixed | ops/docs/monitoring | Closed wave 128: docs/operations/pre-launch-hardening.md §"Apply" now restarts ratesengine-sla-probe.timer alongside the heartbeat + smoke timers so systemd reloads the EnvironmentFile and the new HEALTHCHECKS_URL_SLA_PROBE takes effect. |
+| F-1305 | high | Live R1 SLA probe is installed but failing the freshness SLA it is meant to prove | R1 SLA probe timer; `cmd/ratesengine-sla-probe`; SLA textfile metrics; API freshness/SLA status; alerts/runbooks | XFI-0097; R1-0032; EV-0280 | open | ops/api/market-data | The newly active R1 SLA timer writes `sla_probe.prom`, but the current verdict is `ratesengine_sla_probe_unit_failed 1` with `price` freshness at `186.574s`, well above the documented 30s freshness target. |
+| F-1306 | high | API price-stale alert is dead because `ratesengine_price_staleness_seconds` has no producer while R1 serves stale prices | API price handler; `internal/obs` metrics; Prometheus API alert; price-stale runbook; R1 metrics/status | XFI-0098; R1-0033; EV-0282 | fixed | api/observability/market-data | Closed wave 130: aggregator orchestrator now emits ratesengine_price_staleness_seconds at end-of-Tick for every configured pair (bounded allow-list, fits Prometheus cardinality budget). lastWriteAt map updated on successful VWAP write; emitStalenessGauges runs whether or not any window produced a write so non-writing pairs climb past the 120s alert threshold. |
+| F-1307 | high | Live R1 node_exporter is not scraping the textfile collector, so SLA probe metrics never reach Prometheus | R1 node_exporter service; archival-node observability role; SLA probe textfile; Prometheus SLA rules/status | XFI-0099; R1-0034; EV-0286 | open | ops/monitoring/sla | Although `sla_probe.prom` exists on disk, live node_exporter lacks `--collector.textfile.directory=/var/lib/node_exporter/textfile_collector`, so Prometheus has no `ratesengine_sla_probe_*` series and none of the SLA-probe alerts can fire. |
 
 ## Finding Template
 
@@ -613,7 +616,7 @@ as intentional. Preserve the external port probe as a release gate.
 
 Severity: `high`
 
-Status: `open`
+Status: `fixed`
 
 Affected surface:
 
@@ -630,16 +633,18 @@ Evidence:
 - `R1-0004`
 - `R1-0025`
 - `R1-0031`
+- `R1-0032`
 - `EV-0113`
 - `EV-0172`
 - `EV-0278`
+- `EV-0280`
 
 Expected: production should run the full operational evidence loop whose alerts
 and runbooks depend on timer-produced proof: archive completeness,
 Tier-A archive verification, supply snapshot freshness, and the external SLA
 probe/Healthchecks path.
 
-Observed: earlier R1 refreshes showed the archive-completeness,
+Observed during rollout: earlier R1 refreshes showed the archive-completeness,
 verify-archive-tier-a, and supply-snapshot timers had become enabled while the
 SLA evidence timer lagged behind. The 2026-05-13 Healthchecks-specific live
 refresh is stricter: `systemctl list-timers --all 'ratesengine-*'` lists only
@@ -649,18 +654,15 @@ the heartbeat and smoke timers, `ratesengine-sla-probe.timer` reports
 `/etc/default/ratesengine-healthchecks` file has no
 `HEALTHCHECKS_URL_SLA_PROBE` key.
 
-Impact: the repository source now has a fixed SLA Healthchecks wrapper and
-pre-launch apply command, but live R1 still lacks the timer, wrapper, and URL
-key that would make the independent latency/freshness proof run. Launch/SLA
-evidence can therefore remain green on process heartbeats while the actual SLA
-probe is absent.
+Closure evidence: direct R1 verification now shows
+`ratesengine-sla-probe.timer` enabled and active, the wrapper and probe binary
+present and executable, `HEALTHCHECKS_URL_SLA_PROBE` present in the redacted
+env file, a recent successful service run, and `sla_probe.prom` written.
 
-Remediation direction: deploy or intentionally replace the
-`ratesengine-sla-probe.timer` path on R1, install the wrapper and probe binary,
-populate `HEALTHCHECKS_URL_SLA_PROBE`, and capture a live
-`systemctl list-timers`, recent journal, and Healthchecks pass/fail proof.
-Keep the archive/supply timer evidence in the same closure bundle so this
-interaction cannot close on the SLA path alone.
+Residual split-out: the timer rollout is fixed, but the probe's own verdict is
+currently failing (`ratesengine_sla_probe_unit_failed 1`, price freshness
+`186.574s`). That service-health failure is tracked separately as `F-1305`
+rather than keeping this rollout finding open.
 
 ### F-1207. Hosted GitHub dependency-alert controls remain disabled after the web Next.js remediation wave
 
@@ -3758,3 +3760,143 @@ Observed: `docs/operations/pre-launch-hardening.md` now correctly lists five URL
 Impact: medium. An operator following the pre-launch hardening guide can paste the SLA-probe URL and believe all five checks were activated, while the already-running SLA timer continues with the old environment until a later restart or boot. The timer may still run locally, but the independent Healthchecks proof for RFP latency/freshness is not wired when the guide says it is.
 
 Remediation direction: update the hardening guide's apply command to restart `ratesengine-sla-probe.timer` together with heartbeat and smoke timers. Add a verification command that shows the SLA timer's next run and confirms a recent Healthchecks ping or `/fail` event after the restart.
+
+### F-1305. Live R1 SLA probe is installed but failing the freshness SLA it is meant to prove
+
+Severity: `high`
+
+Status: `open`
+
+Affected surface:
+
+- R1 `ratesengine-sla-probe.timer`
+- `/usr/local/bin/ratesengine-sla-probe`
+- `/var/lib/node_exporter/textfile_collector/sla_probe.prom`
+- SLA alert rules and runbooks
+- API price freshness / market-data customer promise
+
+Evidence:
+
+- `XFI-0097`
+- `R1-0032`
+- `EV-0280`
+
+Expected: once the SLA evidence timer is live, the proof it writes should show
+whether the deployed API is meeting the documented RFP latency and freshness
+targets. For launch readiness, the current verdict should be `0` or the
+failure should remain an explicit blocker.
+
+Observed: the newly active R1 SLA timer is enabled/active, the wrapper and
+probe binary are present, `HEALTHCHECKS_URL_SLA_PROBE` is configured, and
+`sla_probe.prom` is written. The textfile nevertheless reports
+`ratesengine_sla_probe_unit_failed 1`. The sampled `price` endpoint freshness
+is `186.574s`, above the documented 30s target.
+
+Impact: high. The rollout problem is fixed, but the now-live evidence says the
+deployed service is not satisfying the freshness SLA the proof path exists to
+demonstrate. This is directly relevant to the RFP promise and to competing with
+CoinGecko/CoinMarketCap on reliability; it also means a launch gate that only
+checks timer presence can falsely pass while the SLA verdict is red.
+
+Remediation direction: treat the live failing SLA probe as a launch blocker.
+Correlate the failed price freshness with `/v1/status`, source-health alerts,
+aggregator freshness, Redis/cache state, and the exact pair used by the probe.
+Restore repeated `ratesengine_sla_probe_unit_failed 0` runs or explicitly
+change the public freshness claim and alert threshold before launch.
+
+### F-1306. API price-stale alert is dead because `ratesengine_price_staleness_seconds` has no producer while R1 serves stale prices
+
+Severity: `high`
+
+Status: `open`
+
+Affected surface:
+
+- `internal/api/v1/price.go`
+- `internal/obs/metrics.go`
+- `deploy/monitoring/rules/api.yml`
+- `configs/prometheus/rules.r1/api.yml`
+- `docs/operations/runbooks/price-stale.md`
+- R1 Prometheus/API metrics
+
+Evidence:
+
+- `XFI-0098`
+- `R1-0033`
+- `EV-0282`
+
+Expected: the `ratesengine_api_price_stale` alert and `price-stale` runbook
+should be backed by a metric that is actually emitted by a runtime component.
+If cardinality concerns prevent API-side emission, the aggregator or an
+allow-listed freshness exporter must own the series before the alert is treated
+as launch coverage.
+
+Observed: R1 currently returns
+`/v1/price?asset=native&quote=fiat:USD` with `flags.stale=true`,
+`observed_at=2026-05-13T12:00:00Z`, and an `as_of` about three minutes later.
+Prometheus nevertheless returns an empty vector for
+`ratesengine_price_staleness_seconds` and for the alert expression
+`ratesengine_price_staleness_seconds > 120`. The live API metrics endpoint
+also lacks any `ratesengine_price_staleness_seconds` series. Source explains
+why: `internal/api/v1/price.go` intentionally does not emit
+`obs.PriceStalenessSeconds` due cardinality risk, and a repository search finds
+no producer outside metric registration/test warmup.
+
+Impact: high. The service can serve stale prices and set `flags.stale=true`
+without the documented `ratesengine_api_price_stale` alert firing. Operators
+following `price-stale.md` are sent to a nonexistent series, and status/alert
+rollups understate the concrete price freshness failure exactly when the live
+SLA probe is failing freshness.
+
+Remediation direction: either implement a bounded producer for
+`ratesengine_price_staleness_seconds` (for example the aggregator emitting only
+configured top pairs/assets) or remove/replace the alert with a metric that is
+actually present, such as the SLA probe freshness series. Update the runbook's
+diagnosis commands to query the real source of truth and prove the alert fires
+against a stale fixture or live canary.
+
+### F-1307. Live R1 node_exporter is not scraping the textfile collector, so SLA probe metrics never reach Prometheus
+
+Severity: `high`
+
+Status: `open`
+
+Affected surface:
+
+- R1 node_exporter systemd unit
+- `configs/ansible/roles/archival-node/tasks/10-observability.yml`
+- `deploy/monitoring/rules/sla-probe.yml`
+- `configs/prometheus/rules.r1/sla-probe.yml`
+- `docs/operations/sla-probe.md`
+- `docs/operations/runbooks/sla-probe-stale.md`
+
+Evidence:
+
+- `XFI-0099`
+- `R1-0034`
+- `EV-0286`
+
+Expected: a probe textfile written under
+`/var/lib/node_exporter/textfile_collector` should be scraped by
+node_exporter and visible to Prometheus as `ratesengine_sla_probe_*` series.
+The SLA-probe freshness/unit-failed/stale alerts depend on that chain.
+
+Observed: R1 now writes `/var/lib/node_exporter/textfile_collector/sla_probe.prom`,
+but Prometheus instant queries for `ratesengine_sla_probe_unit_failed` and
+`ratesengine_sla_probe_freshness_sec` return empty vectors. The live
+node_exporter process is running only with `--collector.systemd` and
+`--collector.processes`; it lacks both `--collector.textfile` and
+`--collector.textfile.directory=/var/lib/node_exporter/textfile_collector`.
+Scraping node_exporter directly shows `node_textfile_scrape_error 0` but no
+`ratesengine_sla_probe_*` samples.
+
+Impact: high. The SLA probe can fail on disk and ping Healthchecks, but the
+Prometheus alert/status path has no series to evaluate. All SLA-probe Prometheus
+rules are inert on R1, including the freshness breach that should reflect
+`F-1305`, the unit-failed alert, and the stale-evidence alert.
+
+Remediation direction: reconcile live R1 node_exporter with the archival-node
+role by adding the textfile collector flags, restart node_exporter, and prove
+Prometheus sees `ratesengine_sla_probe_unit_failed` plus the per-endpoint
+freshness series. Add a post-deploy check that fails if any textfile-producing
+timer has a `.prom` file on disk but no matching Prometheus series.
