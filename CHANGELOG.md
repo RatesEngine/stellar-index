@@ -17,6 +17,18 @@ against.
 
 ### Documentation
 
+- `web/status/README.md` — new top-level README for the public
+  status page, matching the convention already established by
+  `web/explorer/README.md` and `web/dashboard/README.md`. The
+  wave-67 supersede note on `status-page-hosting-comparison.md`
+  pointed future readers at this README as the shipped-
+  implementation reference, but the file didn't actually exist.
+  Documents the stack, the incident-corpus dual-loader pattern
+  (build-time loader for the static export + Go `go:embed` for
+  the API binary's `/v1/incidents` + customer-webhook fan-out
+  at `incident.sev1` / `incident.resolved`), the authoring
+  procedure (cross-references the SEV runbook), and the local
+  dev / build / deploy commands.
 - `runbooks/source-stopped.md` adds a new "Per-source cadence
   reference" matrix listing the expected emission cadence + the
   expected idle cap (upper bound on a normal silent stretch) +
