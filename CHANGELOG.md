@@ -17,6 +17,20 @@ against.
 
 ### Documentation
 
+- OpenAPI now documents the JSON body shape of all four customer-
+  webhook event types: `IncidentWebhookPayload` (covers
+  `incident.sev1` + `incident.resolved`), `AnomalyFreezeWebhookPayload`
+  (covers `anomaly.freeze`), and `DivergenceFiringWebhookPayload`
+  (covers `divergence.firing`). The wire-shape was implicit in the
+  Go producers (`cmd/ratesengine-ops/emit_incident.go`,
+  `cmd/ratesengine-aggregator/main.go`) but was nowhere in the
+  customer-facing OpenAPI surface — customers writing webhook
+  handlers had no schema to write Zod/Pydantic/etc. validators
+  against. The `DashboardWebhook.events` field description now
+  cross-references the per-event payload schemas. Generated
+  artifacts regenerated: `docs/reference/api/rates-engine.v1.yaml`,
+  `examples/postman/rates-engine.postman_collection.json`,
+  `web/explorer/src/api/types.ts`.
 - `web/status/README.md` — new top-level README for the public
   status page, matching the convention already established by
   `web/explorer/README.md` and `web/dashboard/README.md`. The

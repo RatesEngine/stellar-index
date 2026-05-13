@@ -3021,6 +3021,10 @@ components:
           type: array
           description: |
             Closed enum of event types the customer subscribed to.
+            Per-event JSON body shapes documented at
+            `IncidentWebhookPayload` (`incident.sev1` / `incident.resolved`),
+            `AnomalyFreezeWebhookPayload` (`anomaly.freeze`), and
+            `DivergenceFiringWebhookPayload` (`divergence.firing`).
           items:
             type: string
             enum:
@@ -3093,6 +3097,90 @@ components:
         last_response_status: { type: integer, nullable: true, description: "HTTP status of the most-recent attempt." }
         created_at:           { type: string, format: date-time }
       required: [id, event_type, attempt_count, created_at]
+
+    # ──────────────────────────────────────────────────────────
+    # Customer-webhook payload schemas
+    #
+    # Schemas for the JSON body customers receive when one of the
+    # four event types fires. The worker POSTs these payloads to
+    # the customer's configured URL with an HMAC-SHA-256
+    # signature in `X-RatesEngine-Signature` (verify via the
+    # `wsec_<64 hex>` secret returned exactly once at create time).
+    #
+    # Every payload carries `event` (the event-type discriminator)
+    # and `at` (RFC 3339 nanosecond timestamp). The remaining
+    # fields are event-specific.
+    # ──────────────────────────────────────────────────────────
+
+    IncidentWebhookPayload:
+      type: object
+      description: |
+        Body of an `incident.sev1` or `incident.resolved` webhook
+        delivery. Fired by the operator command
+        `ratesengine-ops emit-incident` from the Markdown corpus
+        at `internal/incidents/data/<YYYY-MM-DD>-<slug>.md`.
+
+        `incident.sev1` fires when an operator publishes a new
+        SEV-1 incident; `incident.resolved` fires when the same
+        incident is marked resolved (the second fire-up carries
+        `resolved_at` and may carry `postmortem`).
+      properties:
+        event:                { type: string, enum: [incident.sev1, incident.resolved] }
+        slug:                 { type: string, description: "Stable identifier matching the incident's Markdown filename (without the `.md` suffix)." }
+        title:                { type: string, description: "Customer-facing one-line summary." }
+        severity:             { type: string, enum: [SEV-1, SEV-2, SEV-3] }
+        status:               { type: string, enum: [investigating, identified, monitoring, resolved] }
+        started_at:           { type: string, format: date-time, description: "When the incident was first detected." }
+        resolved_at:          { type: string, format: date-time, nullable: true, description: "Only present on `incident.resolved` deliveries." }
+        affected_components:
+          type: array
+          items: { type: string }
+          description: "One or more impacted surfaces — names match the status-page component set (api / indexer / aggregator / storage)."
+        postmortem:           { type: string, nullable: true, description: "URL or path of the public postmortem, when published." }
+        at:                   { type: string, format: date-time, description: "When this delivery was generated (server time, RFC 3339 nanosecond)." }
+      required: [event, slug, title, severity, status, started_at, affected_components, at]
+
+    AnomalyFreezeWebhookPayload:
+      type: object
+      description: |
+        Body of an `anomaly.freeze` webhook delivery. Fired by the
+        aggregator when the freeze policy engages on a pair —
+        meaning the served price is intentionally pinned to its
+        last-good value because the live signal failed an anomaly
+        check (manipulation-resistance, sudden divergence, etc.).
+        See ADR-0019 for the freeze policy.
+      properties:
+        event:                { type: string, enum: [anomaly.freeze] }
+        asset:                { type: string, description: "Canonical asset_id of the base asset (e.g. `native`, `credit:USDC:G…`, `C…` for Soroban)." }
+        quote:                { type: string, description: "Canonical asset_id of the quote asset (e.g. `fiat:USD`)." }
+        frozen_value:         { type: string, description: "The price value we pinned the pair to during the freeze (decimal as a string to preserve precision)." }
+        reason:
+          type: string
+          description: "Why the freeze engaged. Values are stable; new reasons may be added in future versions."
+        at:                   { type: string, format: date-time, description: "When the freeze was engaged (server time, RFC 3339 nanosecond)." }
+      required: [event, asset, quote, frozen_value, reason, at]
+
+    DivergenceFiringWebhookPayload:
+      type: object
+      description: |
+        Body of a `divergence.firing` webhook delivery. Fired by
+        the divergence service when our aggregated price for a pair
+        differs from a configured external reference (CoinGecko,
+        Chainlink, etc.) by more than the configured threshold for
+        the configured number of consecutive checks.
+      properties:
+        event:                { type: string, enum: [divergence.firing] }
+        pair:                 { type: string, description: "Canonical pair string (e.g. `native/fiat:USD`, `crypto:BTC/fiat:USD`)." }
+        our_price:            { type: string, description: "Our aggregated price for the pair at the check time (decimal-as-string)." }
+        median:               { type: string, description: "Median of the available external references for the same pair (decimal-as-string)." }
+        divergence_pct:       { type: number, format: double, description: "Percent divergence between `our_price` and `median`." }
+        success_count:        { type: integer, description: "How many external references successfully responded to the check." }
+        sources:
+          type: array
+          items: { type: string }
+          description: "Names of the external reference sources that contributed to the median."
+        at:                   { type: string, format: date-time, description: "When the divergence check ran (server time, RFC 3339 nanosecond)." }
+      required: [event, pair, our_price, median, divergence_pct, success_count, sources, at]
 
     # Base envelope pieces
     Flags:

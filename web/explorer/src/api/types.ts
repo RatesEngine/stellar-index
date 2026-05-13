@@ -11,7 +11,25 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Liveness — process is up. */
+        /**
+         * Liveness — process is up.
+         * @description Shallow liveness probe. Returns 200 as long as the
+         *     process is running and the mux is serving. Does NOT
+         *     touch the database, Redis, or any downstream
+         *     dependency — those are the readiness probe's job.
+         *
+         *     F-1210 (codex audit-2026-05-12): `/healthz` is
+         *     deliberately scoped to the serving-plane process
+         *     liveness, NOT to SLA truth. Use `/v1/status` (the
+         *     comprehensive rollup) for ingest lag, supply
+         *     freshness, per-pair latency, evidence-timer
+         *     coverage, and the rest of the launch-readiness
+         *     signals — those are dashboarded separately because
+         *     liveness probes (k8s, systemd, load balancer pool
+         *     membership) MUST NOT flap when a backfill stalls,
+         *     an external source goes silent, or a non-critical
+         *     timer misfires.
+         */
         get: {
             parameters: {
                 query?: never;
@@ -21,7 +39,10 @@ export interface paths {
             };
             requestBody?: never;
             responses: {
-                /** @description Alive. */
+                /**
+                 * @description Alive. `status` field is `ok`; a pointer at
+                 *     `/v1/status` is included for the SLA-truth rollup.
+                 */
                 200: {
                     headers: {
                         [name: string]: unknown;
@@ -47,7 +68,32 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Readiness — all dependencies reachable. */
+        /**
+         * Readiness — serving-plane dependencies reachable.
+         * @description Deep readiness probe scoped to the SERVING PLANE:
+         *     every registered `ReadyChecker` (Postgres, Redis)
+         *     is pinged in parallel under a shared 2-second
+         *     deadline. 200 iff all pass; 503 with a per-check
+         *     failure list otherwise.
+         *
+         *     F-1210 (codex audit-2026-05-12): like `/healthz`,
+         *     `/readyz` is deliberately scoped — it answers
+         *     "should the load balancer route traffic to this
+         *     instance?", NOT "is the launch-readiness gate
+         *     green?" Ingest lag, supply freshness, latency
+         *     SLOs, alert state, and evidence-timer coverage are
+         *     the rich-rollup concern at `/v1/status`. An ingest
+         *     stall must NOT pull every API instance out of
+         *     rotation — it would turn a backfill-only outage
+         *     into a customer-facing total outage.
+         *
+         *     Operators monitoring launch-readiness should poll
+         *     `/v1/status` (which the Cloudflare-Pages status
+         *     page also consumes). Customers checking "can I
+         *     call the API right now" use `/v1/healthz` (cheap)
+         *     or `/v1/readyz` (deeper, but still serving-plane
+         *     only).
+         */
         get: {
             parameters: {
                 query?: never;
@@ -57,7 +103,7 @@ export interface paths {
             };
             requestBody?: never;
             responses: {
-                /** @description Ready to serve. */
+                /** @description Ready to serve. `checks[]` lists each dependency-ping result. */
                 200: {
                     headers: {
                         [name: string]: unknown;
@@ -66,7 +112,13 @@ export interface paths {
                         "application/json": components["schemas"]["HealthResponse"];
                     };
                 };
-                /** @description Dependencies unreachable. */
+                /**
+                 * @description One or more serving-plane dependencies failed their
+                 *     ping under the deadline. `status` field is
+                 *     `degraded` and `flags.stale` is `true`; the
+                 *     response body carries the `checks` array so
+                 *     operators can see which dependency failed.
+                 */
                 503: {
                     headers: {
                         [name: string]: unknown;
@@ -3073,7 +3125,9 @@ export interface paths {
          *     whenever Redis is reachable. Deployments without Redis
          *     (e.g. local dev with `-no-redis`) still return an empty
          *     envelope — the absence of the counter is reflected on
-         *     /v1/healthz under `checks`.
+         *     /v1/readyz under `checks` (NOT `/v1/healthz` — the
+         *     per-dependency `checks` field is `/readyz`-only; the
+         *     `/healthz` liveness probe stays minimal by design).
          */
         get: {
             parameters: {
@@ -3488,6 +3542,100 @@ export interface paths {
                 };
             };
         };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/signup/verify": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Confirm email ownership for a signup-issued API key.
+         * @description F-1218 (codex audit-2026-05-12): closes the email-
+         *     ownership-proof loop on `POST /v1/signup`. The signup
+         *     handler issues a single-use token and emails it to the
+         *     submitted address; this endpoint consumes the token from
+         *     the click-through link.
+         *
+         *     Single-use semantics via Redis GETDEL — the second
+         *     click on the link returns 404, the same shape as a
+         *     forged or expired token. Token TTL defaults to 24h to
+         *     match the dashboard magic-link convention.
+         *
+         *     Subsequent waves layer:
+         *       1. The email-send step on POST /v1/signup that
+         *          populates the verifier with the issued token.
+         *       2. An optional validator gate (operator opt-in via
+         *          config) that rejects unverified keys with 403.
+         *
+         *     Today this endpoint just consumes the token; the
+         *     success path returns the key_id so the customer's
+         *     dashboard / CLI can correlate the verified key.
+         */
+        get: {
+            parameters: {
+                query: {
+                    /** @description The plaintext token from the verification email. */
+                    token: string;
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Token consumed; email ownership confirmed. */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["EnvelopeMeta"] & {
+                            data?: {
+                                verified: boolean;
+                                key_id?: string;
+                                detail?: string;
+                            };
+                        };
+                    };
+                };
+                /** @description Missing `?token=` query parameter. */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["Problem"];
+                    };
+                };
+                /** @description Unknown / consumed / expired token. */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["Problem"];
+                    };
+                };
+                /** @description SignupVerifier not configured (Redis unavailable). */
+                503: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["Problem"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -4337,7 +4485,13 @@ export interface components {
             name: string;
             /** @description HTTPS endpoint. Worker POSTs JSON with HMAC-SHA-256 signature in X-RatesEngine-Signature. */
             url: string;
-            /** @description Closed enum of event types the customer subscribed to. */
+            /**
+             * @description Closed enum of event types the customer subscribed to.
+             *     Per-event JSON body shapes documented at
+             *     `IncidentWebhookPayload` (`incident.sev1` / `incident.resolved`),
+             *     `AnomalyFreezeWebhookPayload` (`anomaly.freeze`), and
+             *     `DivergenceFiringWebhookPayload` (`divergence.firing`).
+             */
             events: ("incident.sev1" | "incident.resolved" | "anomaly.freeze" | "divergence.firing")[];
             /** @description When false, worker skips deliveries (silently terminates pending rows). */
             enabled: boolean;
@@ -4397,6 +4551,104 @@ export interface components {
             last_response_status?: number | null;
             /** Format: date-time */
             created_at: string;
+        };
+        /**
+         * @description Body of an `incident.sev1` or `incident.resolved` webhook
+         *     delivery. Fired by the operator command
+         *     `ratesengine-ops emit-incident` from the Markdown corpus
+         *     at `internal/incidents/data/<YYYY-MM-DD>-<slug>.md`.
+         *
+         *     `incident.sev1` fires when an operator publishes a new
+         *     SEV-1 incident; `incident.resolved` fires when the same
+         *     incident is marked resolved (the second fire-up carries
+         *     `resolved_at` and may carry `postmortem`).
+         */
+        IncidentWebhookPayload: {
+            /** @enum {string} */
+            event: "incident.sev1" | "incident.resolved";
+            /** @description Stable identifier matching the incident's Markdown filename (without the `.md` suffix). */
+            slug: string;
+            /** @description Customer-facing one-line summary. */
+            title: string;
+            /** @enum {string} */
+            severity: "SEV-1" | "SEV-2" | "SEV-3";
+            /** @enum {string} */
+            status: "investigating" | "identified" | "monitoring" | "resolved";
+            /**
+             * Format: date-time
+             * @description When the incident was first detected.
+             */
+            started_at: string;
+            /**
+             * Format: date-time
+             * @description Only present on `incident.resolved` deliveries.
+             */
+            resolved_at?: string | null;
+            /** @description One or more impacted surfaces — names match the status-page component set (api / indexer / aggregator / storage). */
+            affected_components: string[];
+            /** @description URL or path of the public postmortem, when published. */
+            postmortem?: string | null;
+            /**
+             * Format: date-time
+             * @description When this delivery was generated (server time, RFC 3339 nanosecond).
+             */
+            at: string;
+        };
+        /**
+         * @description Body of an `anomaly.freeze` webhook delivery. Fired by the
+         *     aggregator when the freeze policy engages on a pair —
+         *     meaning the served price is intentionally pinned to its
+         *     last-good value because the live signal failed an anomaly
+         *     check (manipulation-resistance, sudden divergence, etc.).
+         *     See ADR-0019 for the freeze policy.
+         */
+        AnomalyFreezeWebhookPayload: {
+            /** @enum {string} */
+            event: "anomaly.freeze";
+            /** @description Canonical asset_id of the base asset (e.g. `native`, `credit:USDC:G…`, `C…` for Soroban). */
+            asset: string;
+            /** @description Canonical asset_id of the quote asset (e.g. `fiat:USD`). */
+            quote: string;
+            /** @description The price value we pinned the pair to during the freeze (decimal as a string to preserve precision). */
+            frozen_value: string;
+            /** @description Why the freeze engaged. Values are stable; new reasons may be added in future versions. */
+            reason: string;
+            /**
+             * Format: date-time
+             * @description When the freeze was engaged (server time, RFC 3339 nanosecond).
+             */
+            at: string;
+        };
+        /**
+         * @description Body of a `divergence.firing` webhook delivery. Fired by
+         *     the divergence service when our aggregated price for a pair
+         *     differs from a configured external reference (CoinGecko,
+         *     Chainlink, etc.) by more than the configured threshold for
+         *     the configured number of consecutive checks.
+         */
+        DivergenceFiringWebhookPayload: {
+            /** @enum {string} */
+            event: "divergence.firing";
+            /** @description Canonical pair string (e.g. `native/fiat:USD`, `crypto:BTC/fiat:USD`). */
+            pair: string;
+            /** @description Our aggregated price for the pair at the check time (decimal-as-string). */
+            our_price: string;
+            /** @description Median of the available external references for the same pair (decimal-as-string). */
+            median: string;
+            /**
+             * Format: double
+             * @description Percent divergence between `our_price` and `median`.
+             */
+            divergence_pct: number;
+            /** @description How many external references successfully responded to the check. */
+            success_count: number;
+            /** @description Names of the external reference sources that contributed to the median. */
+            sources: string[];
+            /**
+             * Format: date-time
+             * @description When the divergence check ran (server time, RFC 3339 nanosecond).
+             */
+            at: string;
         };
         /**
          * @description Advisory quality markers. See docs/architecture/ha-plan.md §9
