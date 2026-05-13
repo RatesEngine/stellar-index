@@ -19,9 +19,13 @@ keepalived_priority: 99            # 100 on lb-01, 99 on lb-02 (per-host overrid
 keepalived_vrrp_password: ""
 
 # ── HAProxy backend ────────────────────────────────────────────
-# Default health-check path. /v1/readyz is the deep ready probe
-# (Timescale + Redis reachable per internal/api/v1/server.go);
-# /v1/healthz would only confirm process-alive.
+# Default health-check path. /v1/readyz is the deep ready probe.
+# Wave-110 (F-1275) split readiness into critical (Postgres —
+# 503 when down) vs non-critical (Redis — 200 + status="degraded"
+# when down, because cache misses fall back to Timescale per
+# ADR-0007). HAProxy backends therefore stay in the pool during
+# a Redis outage. `/v1/healthz` only confirms process-alive and
+# would miss a Postgres outage.
 haproxy_health_check_path: /v1/readyz
 
 # Default api backend port; override per-deployment if api binds

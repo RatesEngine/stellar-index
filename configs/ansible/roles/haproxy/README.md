@@ -86,8 +86,8 @@ in production.
 
 ## Health-check semantics
 
-- **Path**: `/v1/readyz` (the deep ready probe — passes only
-  when Timescale + Redis are both reachable).
+- **Path**: `/v1/readyz` (the deep ready probe — wave-110 split
+  readiness into critical and non-critical checks).
 - **Cadence**: 5s interval, 3 fails before drain, 2 successes
   before re-add → 15s detection latency.
 - **Slowstart**: 10s ramp prevents cold pods from getting
@@ -95,7 +95,13 @@ in production.
 
 A pod that's *running* but can't read from Timescale shouldn't
 receive traffic — `/v1/healthz` would mark it healthy
-(process-alive); `/v1/readyz` correctly marks it unready.
+(process-alive); `/v1/readyz` correctly drains it on a
+Postgres failure (503, `status="unready"`). Redis-only
+failures return 200 with `status="degraded"` and keep the
+backend in the pool because cache misses fall back to
+Timescale per ADR-0007 — pre-wave-110 a Redis outage would
+have drained every healthy API backend even though the
+customer-facing surface was still serving.
 
 ## Failover scenarios
 

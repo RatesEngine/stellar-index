@@ -2,31 +2,33 @@
 
 Cold findings only. No prior finding is imported into this register.
 
-## Closure summary (verified reconciliation snapshot, 2026-05-13 wave-112 refresh)
+## Closure summary (verified reconciliation snapshot, 2026-05-13 wave-113 refresh)
 
 The register below is authoritative; this summary captures the
-highest-priority items as of the wave-112 reconciliation recheck. Status counts
+highest-priority items as of the wave-113 reconciliation recheck. Status counts
 at this snapshot:
 
-- **Findings register**: 62 fixed / 21 open (83 total).
-- **XFI cross-file table**: 58 fixed / 17 open (75 total).
-- **Remediation plan**: 60 fixed / 21 open (81 total — multi-finding
+- **Findings register**: 63 fixed / 21 open (84 total).
+- **XFI cross-file table**: 59 fixed / 17 open (76 total).
+- **Remediation plan**: 61 fixed / 21 open (82 total — multi-finding
   R-rows split the count; the open remediation rows resolve to
   the current finding set plus mixed multi-finding operator rows).
 
-All three surfaces are mutually consistent as of wave 112.
+All three surfaces are mutually consistent as of wave 113.
 
 **Latest high-priority state.** Earlier code-actionable findings through
 wave 95 shipped, but the deployment/HA tranche reopened code/config risk:
-`F-1275` shows Redis unavailability can drain every API backend through
-HAProxy's `/readyz` routing; `F-1278` shows HA-role nftables drop-ins do not
+`F-1275` is now source-closed because Redis-only readiness failure returns
+200/degraded and is regression-tested; `F-1284` is the residual docs drift in
+HAProxy/HA prose that still describes Redis as readiness-critical.
+`F-1278` shows HA-role nftables drop-ins do not
 compose deterministically with the repo firewall model even after the
 `priority -100` remediation attempt; and `F-1280` remains open on missing
 README/inventory guidance for the required etcd checksum after source-side
 preflight validation landed. The Patroni follow-up closed `F-1279`,
 `F-1281`, and `F-1282`, then added `F-1283` for the Timescale primary-down
 runbook's stale etcd protocol/quorum/key examples. Quality-improvement work
-also continued in waves 96-112 (CI gap closure on the R1 rule overlay,
+also continued in waves 96-113 (CI gap closure on the R1 rule overlay,
 remediation-plan reconciliation, status-page closure falsification,
 monitoring-doc breadth review, the Ansible role-doc pass, Healthchecks,
 R1 rule-overlay, audit-input setup review, the Redis/Sentinel deployment
@@ -144,9 +146,6 @@ requires source-backed or live-environment closure evidence):
 - `F-1273` — Redis/Sentinel docs: remove the remaining future-state
   `internal/cachekeys` FailoverClient claims from the shipped design note and
   role README.
-- `F-1275` — HA/API availability: change the edge/backend health model so
-  Redis degradation does not drain every otherwise healthy API backend when
-  the intended contract is Timescale-backed degraded serving.
 - `F-1276` — monitoring docs: replace stale `job="api"` PromQL examples with
   the current multi-host/R1 job-label families.
 - `F-1277` — API runbook docs: replace the nonexistent
@@ -160,6 +159,8 @@ requires source-backed or live-environment closure evidence):
   or placeholder checksums.
 - `F-1283` — Patroni/Timescale docs: update the primary-down runbook's etcd
   protocol, leader-key, and quorum examples to match the shipped role.
+- `F-1284` — HAProxy/HA docs: update readyz descriptions so Redis-only
+  failure is described as 200/degraded rather than backend-draining.
 
 Recent waves closed by code (chronological):
 
@@ -479,7 +480,7 @@ Recent waves closed by code (chronological):
 | F-1272 | medium | `redis_exporter` was left on the wrong auth contract during Redis ACL remediation, first in lockdown mode and then in the default non-lockdown branch | `configs/ansible/roles/redis-sentinel/defaults/main.yml`; `configs/ansible/roles/redis-sentinel/templates/redis.conf.j2`; `configs/ansible/roles/redis-sentinel/templates/users.acl.j2`; `configs/ansible/roles/redis-sentinel/tasks/07-monitoring.yml`; `configs/ansible/roles/prometheus/templates/prometheus.yml.j2`; `configs/ansible/roles/redis-sentinel/README.md` | XFI-0064; EV-0197; EV-0200; EV-0211 | fixed | ops/redis/observability/security | Current workspace source makes `-redis.user=redis_exporter` conditional on `redis_acl_lockdown | bool`, matching the ACL-file emission branch and preserving the legacy password-only exporter path when lockdown is off. |
 | F-1273 | medium | Redis Sentinel reference docs still retain pre-shipped architecture claims even after the drill command was corrected to the authenticated listener contract | `docs/architecture/redis-sentinel-ansible-role-design-note.md`; `configs/ansible/roles/redis-sentinel/README.md`; `docs/operations/drills/scenarios/sev2-redis-sentinel-failover.md`; `configs/ansible/roles/redis-sentinel/templates/sentinel.conf.j2`; `internal/storage/redisclient/redisclient.go` | XFI-0065; EV-0201; EV-0208; EV-0212 | fixed | ops/docs/redis | The drill command now includes `-a "$REDIS_PASSWORD"`, but both the shipped design note and the role README still say the Sentinel client belongs in future `internal/cachekeys` work even though `internal/storage/redisclient` is already live. |
 | F-1274 | medium | The shipped HAProxy role still points operators at an `api-pod-down` runbook that does not exist anywhere in the tracked tree | `configs/ansible/roles/haproxy/README.md`; `docs/architecture/haproxy-ansible-role-design-note.md`; `docs/operations/runbooks/` | XFI-0066; EV-0207; EV-0213 | fixed | ops/docs/haproxy | Current workspace HAProxy docs no longer claim a missing `api-pod-down.md` companion runbook; they explicitly redirect to `api-down.md` and record that the older reference was wrong. |
-| F-1275 | high | HAProxy drains every API backend on Redis unavailability because it routes on `/v1/readyz`, while `/v1/readyz` fails Redis checks even though the documented Redis outage contract promises degraded-but-serving behavior | HAProxy health-check path; API readiness checker set; Redis outage/runbook contract; HA failure matrix | XFI-0067; EV-0214 | fixed | api/ops/availability/redis | With Redis configured, `cmd/ratesengine-api` registers `redisChecker`, `/v1/readyz` returns 503 when any checker fails, and HAProxy's shipped config routes only when `/v1/readyz` is 200. A shared Redis outage therefore drains all healthy API processes from the edge exactly while the Redis runbook says customers should still be served from Timescale fallback. |
+| F-1275 | high | HAProxy drains every API backend on Redis unavailability because it routes on `/v1/readyz`, while `/v1/readyz` fails Redis checks even though the documented Redis outage contract promises degraded-but-serving behavior | HAProxy health-check path; API readiness checker set; Redis outage/runbook contract; HA failure matrix | XFI-0067; EV-0214; EV-0227 | fixed | api/ops/availability/redis | Current source makes Redis a non-critical ready check: Redis-only failure returns HTTP 200 with body status `degraded`, and a regression test pins the HAProxy contract. Residual HAProxy/HA documentation drift is split into `F-1284`. |
 | F-1276 | medium | API alert/runbook examples still use the retired generic Prometheus selector `job="api"` even though current source uses `ratesengine_api` for multi-host HA and `ratesengine-api` on R1 | API alert catalog; API down/5xx/latency/SLA runbooks; metrics source comment; current Prometheus scrape/rule shapes | XFI-0068; EV-0215 | fixed | ops/docs/monitoring | Operators following the current docs paste queries that do not match either supported job-label family, which weakens incident diagnosis and keeps the alert catalog inconsistent with the rules it claims to mirror. |
 | F-1277 | low | The `api-down` runbook cites a nonexistent `internal/api/v1/healthz.go` implementation file instead of the actual readiness handler location | `docs/operations/runbooks/api-down.md`; `internal/api/v1/server.go` | XFI-0069; EV-0216 | fixed | ops/docs/api | The single source citation in the runbook points at a path that is not tracked, which makes the operator breadcrumb fail during an incident or audit follow-up. |
 | F-1278 | high | The HA-role nftables "drop-ins" are not a sound allow-list composition: by themselves they accept everything, and alongside the repo's default-drop chain their accept chains still cannot reliably open the intended ports | HAProxy, Redis Sentinel, Patroni, Prometheus, and Loki firewall tasks; archival-node default-drop template; HA role design notes/operator claims | XFI-0070; EV-0217; EV-0224 | fixed | ops/security/firewall | The first remediation wave changed the HA drop-ins from `priority 0` to `priority -100`, but that still does not close the finding: nftables `accept` in an earlier base chain is not final, so the later priority-0 default-drop chain can still drop the same packet. The current comments therefore document an incorrect fix. |
@@ -488,6 +489,7 @@ Recent waves closed by code (chronological):
 | F-1281 | medium | Patroni's textfile scraper requires `jq`, but the Patroni role never installs it | `configs/ansible/roles/patroni/tasks/11-monitoring.yml`; `configs/ansible/roles/patroni/tasks/05-patroni-install.yml`; `configs/ansible/roles/patroni/README.md`; Prometheus node_exporter textfile scrape contract | XFI-0073; EV-0221; EV-0224 | fixed | ops/observability/patroni | Current source installs `jq` in `tasks/05-patroni-install.yml` before the role writes the scraper that uses it. |
 | F-1282 | medium | Patroni's documented point-in-time pgBackRest restore target is ignored by the actual restore command | `configs/ansible/roles/patroni/defaults/main.yml`; `configs/ansible/roles/patroni/tasks/08-patroni-bootstrap.yml`; `configs/ansible/roles/patroni/README.md`; `docs/architecture/patroni-ansible-role-design-note.md` | XFI-0074; EV-0222; EV-0224 | fixed | ops/dr/patroni | Current source validates `latest`, `immediate`, and `time:<timestamp>` target forms and maps them to pgBackRest `--type=default`, `--type=immediate`, or `--type=time --target=...`, so the documented variable now affects the restore command. |
 | F-1283 | medium | Timescale primary-down runbook uses HTTPS etcd endpoints, a five-node quorum threshold, and a stale leader key that do not match the shipped Patroni role | `docs/operations/runbooks/timescale-primary-down.md`; `configs/ansible/roles/patroni/templates/etcd.conf.j2`; `configs/ansible/roles/patroni/templates/patroni.yml.j2`; `configs/ansible/roles/patroni/tasks/04-etcd-systemd.yml`; Patroni design note | XFI-0075; EV-0225 | fixed | ops/docs/patroni | The runbook tells operators to query `https://etcd-*.internal:2379`, `get /ratesengine/leader`, and expect at least 3 of 5 healthy etcd members. The role renders unauthenticated HTTP etcd endpoints, Patroni's namespace is `/service/` with per-cluster scope, and preflight asserts exactly three `postgres_cluster` hosts. |
+| F-1284 | medium | HAProxy and HA docs still describe `/v1/readyz` as Redis-critical after the API changed Redis readiness to degraded-but-serving | `configs/ansible/roles/haproxy/defaults/main.yml`; `configs/ansible/roles/haproxy/templates/haproxy.cfg.j2`; `configs/ansible/roles/haproxy/README.md`; `docs/architecture/ha-plan.md`; `internal/api/v1/server.go`; `cmd/ratesengine-api/main.go` | XFI-0076; EV-0227 | fixed | ops/docs/haproxy/api | Runtime now keeps HAProxy backends in service during Redis-only failures, but HAProxy defaults/template comments, the HAProxy README, and the HA plan still say `/v1/readyz` requires Redis or routes only when Redis is reachable. |
 
 ## Finding Template
 
@@ -2850,7 +2852,7 @@ Remediation direction: source drift closed. Keep future HAProxy operator docs ti
 
 Severity: `high`
 
-Status: `open`
+Status: `fixed`
 
 Affected surface:
 
@@ -2866,14 +2868,15 @@ Evidence:
 
 - `XFI-0067`
 - `EV-0214`
+- `EV-0227`
 
 Expected: Redis loss should have one coherent serving-plane contract. If product/ops docs say a Redis master failure is degraded-but-serving via Timescale fallback and rate-limit fail-open, the edge load balancer must not simultaneously evict every API backend solely because Redis is unavailable.
 
-Observed: the current HA path does exactly that. `cmd/ratesengine-api/main.go` registers `redisChecker` whenever Redis is configured; `internal/api/v1/server.go` returns HTTP 503 from `/v1/readyz` if any checker fails; and the shipped HAProxy role health-checks `/v1/readyz` and routes only on 200. The HA plan explicitly says Redis master failure makes `readyz` false during the 15-30 s Sentinel failover window. Meanwhile `docs/operations/runbooks/redis-master-down.md` says clients still get served through Timescale fallback with `stale=true`, "so not an outage," and `api-down.md` says Redis red should not take a host out of Ready. Those claims cannot all be true at once.
+Observed: this is now source-closed. `cmd/ratesengine-api/main.go::redisChecker.Critical()` returns false, and `internal/api/v1/server.go::handleReadyz` returns HTTP 200 with body `status="degraded"` when only non-critical checks fail. `internal/api/v1/server_test.go::TestReadyz_NonCriticalFailureReturns200Degraded` pins the Redis-only failure shape that keeps HAProxy backends in service. Residual documentation drift in HAProxy/HA surfaces is tracked separately as `F-1284`.
 
-Impact: high. During a shared Redis outage or Sentinel failover, otherwise live API processes can be drained from HAProxy as a group, converting a designed fail-open/degraded dependency incident into a customer-visible edge outage. The longer Sentinel failover or Redis recovery takes, the longer HAProxy has no healthy upstreams despite application code that is intended to keep serving.
+Impact: fixed. Redis-only readiness failure no longer drains every backend in current source; the remaining risk is stale operator documentation.
 
-Remediation direction: decide the routing contract explicitly and make code/config/docs converge. The likely choices are either health-check HAProxy on a serving-plane probe that ignores Redis, or keep Redis in routing readiness and revise the Redis outage contract plus incident playbooks to admit a bounded public outage. Add a regression proof that covers Redis-down plus HAProxy health semantics end to end.
+Remediation direction: keep the regression test and reconcile HAProxy/HA docs under `F-1284`.
 
 ### F-1276. API incident docs still use the retired `job="api"` selector family
 
@@ -3091,3 +3094,31 @@ Observed: `timescale-primary-down.md` tells operators to query `https://etcd-1.i
 Impact: medium. During a primary-down incident, the direct etcd diagnosis path can fail on TLS mismatch, send operators to a nonexistent key, and set the wrong quorum expectation for the deployed three-node DCS.
 
 Remediation direction: update the runbook's etcd examples to the role's current HTTP endpoint model or add TLS/auth variables to the role and switch both sides together. Use the actual Patroni namespace/scope path or prefer `patronictl`/`etcdctl endpoint status` examples that do not rely on a stale key. Replace the five-node quorum text with the current three-node quorum threshold.
+
+### F-1284. HAProxy and HA docs still describe Redis as readiness-critical after the runtime fix
+
+Severity: `medium`
+
+Status: `open`
+
+Affected surface:
+
+- `configs/ansible/roles/haproxy/defaults/main.yml`
+- `configs/ansible/roles/haproxy/templates/haproxy.cfg.j2`
+- `configs/ansible/roles/haproxy/README.md`
+- `docs/architecture/ha-plan.md`
+- `internal/api/v1/server.go`
+- `cmd/ratesengine-api/main.go`
+
+Evidence:
+
+- `XFI-0076`
+- `EV-0227`
+
+Expected: HAProxy operator docs and architecture docs should describe the same readiness semantics implemented by the API: Postgres-critical failures return 503, while Redis-only failures return 200 with body `status="degraded"`.
+
+Observed: runtime now implements the intended fail-open Redis contract, but HAProxy/HA docs still describe the old one. `configs/ansible/roles/haproxy/defaults/main.yml` says `/v1/readyz` is the deep probe for "Timescale + Redis reachable"; `haproxy.cfg.j2` repeats that it "passes only when Timescale + Redis are both reachable"; the HAProxy README says the path "passes only when Timescale + Redis are both reachable"; and `docs/architecture/ha-plan.md` still says HAProxy routes only to `readyz=200` after a deep Timescale + Redis check and that Redis master loss makes `readyz` false during failover.
+
+Impact: medium. The code will route correctly, but operators reading the role docs or HA plan will reason about the wrong failure mode during Redis incidents and may attempt unnecessary HAProxy/API intervention.
+
+Remediation direction: update HAProxy defaults/template comments, role README, and HA plan to describe critical vs non-critical ready checks. Point Redis outage triage at the degraded body/check details and `/v1/status`, not backend eviction.

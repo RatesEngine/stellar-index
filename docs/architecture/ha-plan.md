@@ -293,8 +293,12 @@ provisioned; cloud is pay-as-you-use for DR.
 
 - **Instances:** 3 pods on 3 hosts, stateless, behind HAProxy.
 - **Health checks:** HTTP `/healthz` (shallow: process up) and
-  `/readyz` (deep: Timescale + Redis reachable). HAProxy routes only
-  to `readyz=200`.
+  `/readyz` (deep: every registered `ReadyChecker` polled in
+  parallel; wave-110 split into critical (Postgres → 503) vs
+  non-critical (Redis → 200 with `status="degraded"`). HAProxy
+  routes only to `readyz=200`, so a Redis-only outage no
+  longer drains the pool — cache misses fall through to
+  Timescale per ADR-0007.
 - **Autoscaling:** static 3 at launch; target 50% CPU. Scale-up
   requires an operational decision; we do not let the autoscaler
   paper over a bug.
@@ -405,7 +409,7 @@ year-over-year at this order of magnitude. Re-measure post-launch.
 | -------------- | ------------ | --------- | --------------- |
 | 1 `ratesengine-api` pod | 33% reduced serving capacity | HAProxy routes to other 2; auto-restart | < 30 s |
 | 2 `ratesengine-api` pods | 66% reduced | degraded SLA warning alert | 1–5 min manual intervention |
-| Redis master | One hash slot unavailable for ~30 s | stale_flag on affected keys; readyz false during window | Sentinel failover 15–30 s |
+| Redis master | One hash slot unavailable for ~30 s | stale_flag on affected keys; `/v1/readyz` returns 200 with `status="degraded"` during the window (wave-110 critical/non-critical split — Redis is non-critical, cache misses fall through to Timescale); HAProxy keeps the backend in service | Sentinel failover 15–30 s |
 | Timescale primary | Writes fail | Patroni elects replica; api switches read pool via PgBouncer | 30–60 s |
 | PgBouncer pair | All DB access fails | Depends on keepalived VIP failover timing | 5–15 s |
 | 1 stellar-core | Aggregator loses one ingest source | duplicate stream from others; dedup by hash | instant |

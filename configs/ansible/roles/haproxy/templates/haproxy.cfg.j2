@@ -41,10 +41,13 @@ frontend api_https
 
 backend api_pool
     balance roundrobin
-    # Health-check via /v1/readyz — the deep ready probe; passes
-    # only when Timescale + Redis are both reachable per
-    # internal/api/v1/server.go. /v1/healthz would only confirm
-    # process-alive (insufficient for routing).
+    # Health-check via /v1/readyz — the deep ready probe.
+    # Wave-110 (F-1275) split readiness into critical vs
+    # non-critical: Postgres failure returns 503 (drain backend);
+    # Redis failure returns 200 with status="degraded" (keep
+    # backend in pool — cache misses fall through to Timescale
+    # per ADR-0007). /v1/healthz only confirms process-alive
+    # and would miss a Postgres outage.
     option httpchk GET {{ haproxy_health_check_path }}
     http-check expect status 200
     # 5s interval × 3 fails before drain × 2 successes before
