@@ -57,25 +57,43 @@ export async function generateStaticParams() {
   if ((!cache || cache.size === 0) && verifiedSlugs.length === 0) {
     return fallback;
   }
-  // Dedup case-insensitively. /v1/coins emits uppercase short-form
-  // slugs (XLM, USDC, AQUA); /v1/assets/verified emits lowercase
-  // catalogue slugs (xlm, usdc, aqua). Without case-folding both
-  // routes get pre-rendered as separate pages and the build worker
-  // hangs on the lowercase variants (180s × 3 attempts before the
-  // build hard-fails). First-seen wins so the more-likely-to-be-
-  // linked form (the listing's casing) is the one that materialises.
+  // For catalogue entries we emit BOTH cases so user-typed URLs
+  // and existing table links both resolve. /v1/coins emits
+  // uppercase short-form slugs (XLM, USDC, AQUA); /v1/assets/verified
+  // emits lowercase catalogue slugs. Without both, either the
+  // explorer's own tables 404 (they link uppercase from /v1/coins)
+  // or user-typed lowercase URLs 404.
+  //
+  // Non-catalogue Stellar assets (unverified codes like sBNB,
+  // FOO, etc) keep their /v1/coins casing — they only ever appear
+  // in one form.
   const seen = new Set<string>();
   const out: { slug: string }[] = [];
+  const verifiedSet = new Set(verifiedSlugs.map((s) => s.toLowerCase()));
   const cacheKeys = cache ? Array.from(cache.keys()) : [];
   for (const slug of [
-    ...fallback.map((f) => f.slug),
-    ...cacheKeys,
     ...verifiedSlugs,
+    ...cacheKeys,
+    ...fallback.map((f) => f.slug),
   ]) {
-    const key = slug.toLowerCase();
-    if (!seen.has(key)) {
-      seen.add(key);
+    if (!seen.has(slug)) {
+      seen.add(slug);
       out.push({ slug });
+    }
+    // For catalogue slugs, also emit the alternate casing so
+    // both /assets/usdc/ and /assets/USDC/ resolve. /v1/coins
+    // gives us USDC; verified gives us usdc; both should work.
+    const lower = slug.toLowerCase();
+    const upper = slug.toUpperCase();
+    if (verifiedSet.has(lower)) {
+      if (!seen.has(lower)) {
+        seen.add(lower);
+        out.push({ slug: lower });
+      }
+      if (!seen.has(upper)) {
+        seen.add(upper);
+        out.push({ slug: upper });
+      }
     }
   }
   return out.length > 0 ? out : fallback;
@@ -191,6 +209,7 @@ interface GlobalAssetView {
   slug: string;
   name: string;
   description?: string;
+  class?: 'fiat' | 'crypto' | 'stablecoin';
   verified_issuer?: string;
   coingecko_id?: string;
   coinmarketcap_id?: string;
@@ -483,8 +502,11 @@ export async function generateMetadata({
   params: Params;
 }): Promise<Metadata> {
   const { slug } = await params;
-  const coin = await fetchCoin(slug);
-  const code = coin?.code ?? slug;
+  const [coin, globalView] = await Promise.all([
+    fetchCoin(slug),
+    fetchGlobalAsset(slug),
+  ]);
+  const code = globalView?.ticker ?? coin?.code ?? slug;
   const priceNum = coin?.price_usd ? Number(coin.price_usd) : null;
   const change24h = coin?.change_24h_pct ? Number(coin.change_24h_pct) : null;
 
@@ -506,18 +528,29 @@ export async function generateMetadata({
     }
   }
 
-  const title = `${code}${suffix} — Stellar asset`;
-  const description =
-    priceNum != null
+  // Cross-chain identity (catalogue match) → multi-network framing.
+  // Stellar-only (no catalogue) → "Stellar asset" framing.
+  const classLabel = globalView?.class
+    ? globalView.class.charAt(0).toUpperCase() + globalView.class.slice(1)
+    : null;
+  const title = globalView
+    ? `${code}${suffix} — ${classLabel ?? 'Cross-chain asset'}`
+    : `${code}${suffix} — Stellar asset`;
+  const description = globalView
+    ? `${globalView.name}: live prices and markets across ${globalView.networks
+        .map((n) => n.network.charAt(0).toUpperCase() + n.network.slice(1))
+        .join(', ')}.`
+    : priceNum != null
       ? `${code} on Stellar:${suffix} · live VWAP across on-chain DEXes, classic SDEX, and major exchanges.`
       : `Live price, markets, and issuer detail for ${code} on Stellar — VWAP'd across on-chain DEXes, classic SDEX, and major exchanges.`;
 
-  // Canonical URL: prefer the API-returned slug (e.g. `XLM`,
-  // `USDC`, the SAC-wrapped form for SAC tokens) over whatever
-  // form the user typed (`xlm`, `usdc-GA5Z…`, etc). Without a
-  // rel=canonical, Google would treat /assets/XLM and
-  // /assets/native as separate pages with duplicate content.
-  const canonicalSlug = coin?.slug ?? slug;
+  // Canonical URL: catalogue lowercase slug wins (cross-chain
+  // identity is the canonical entity), then API-returned slug
+  // (e.g. `XLM`, `USDC`, the SAC-wrapped form), then whatever
+  // form the user typed. Without rel=canonical, Google would
+  // treat /assets/XLM and /assets/native as separate pages with
+  // duplicate content.
+  const canonicalSlug = globalView?.slug ?? coin?.slug ?? slug;
   const canonical = `https://ratesengine.net/assets/${canonicalSlug}`;
 
   return {
@@ -547,19 +580,22 @@ export default async function AssetDetailPage({ params }: { params: Params }) {
     fetchGlobalAsset(slug),
   ]);
 
+  // For verified-catalogue slugs, /assets/[slug] is the
+  // cross-chain identity page — no issuer-specific info, no
+  // Stellar SDEX markets. Issuer + Stellar trades belong on
+  // /assets/[slug]/Stellar (the [network] route). This branch
+  // fires regardless of whether /v1/coins also returned a row
+  // for the slug (USDC has rows; XLM has native); the catalogue
+  // dispatch is authoritative for the parent page.
+  if (globalViewEarly) {
+    return <VerifiedCurrencyView slug={slug} view={globalViewEarly} />;
+  }
+
   if (!coin) {
-    // Two reasons fetchCoin can be null:
-    //   (a) slug is a verified-currency catalogue entry (chinese-yuan,
-    //       us-dollar, …) — no row in /v1/coins, but globalViewEarly
-    //       carries the full cross-chain identity. Render the
-    //       verified-currency view instead of the not-found
-    //       fallback.
-    //   (b) the slug really doesn't exist, OR the build host
-    //       couldn't reach the API. Hand off to the client fallback
-    //       to retry from the user's browser.
-    if (globalViewEarly) {
-      return <VerifiedCurrencyView slug={slug} view={globalViewEarly} />;
-    }
+    // No catalogue entry AND no /v1/coins row. Two reasons:
+    //   (a) slug really doesn't exist
+    //   (b) build host couldn't reach the API — fall back to the
+    //       client component to retry from the user's browser.
     return (
       <div className="mx-auto max-w-7xl space-y-6 px-6 py-8">
         <header className="space-y-3">
@@ -580,10 +616,13 @@ export default async function AssetDetailPage({ params }: { params: Params }) {
     fetchAssetDetail(coin.asset_id),
     fetchPrice(coin.asset_id),
   ]);
-  // globalViewEarly was fetched in parallel with coin above (R-018
-  // Phase 1.5) — reusing it here avoids a second /v1/assets/{slug}
-  // call for verified currencies that ALSO have a coin row.
-  const globalView = globalViewEarly;
+  // Reaching this point means slug had a /v1/coins row but NO
+  // catalogue entry — an unverified Stellar asset. There's no
+  // cross-chain identity to render, so globalView is null and
+  // every `globalView?.x` reference below short-circuits. Cast
+  // through to keep the wider type so downstream `?.` chains
+  // typecheck without further narrowing pain.
+  const globalView = globalViewEarly as GlobalAssetView | null;
 
   // Schema.org BreadcrumbList — gives Google a structured
   // hierarchy (Home → Assets → XLM) so search results can

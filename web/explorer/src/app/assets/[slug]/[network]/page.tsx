@@ -125,7 +125,11 @@ async function fetchCatalogueWithRetry(): Promise<Map<string, GlobalAssetView>> 
 
 /**
  * Static-export enumeration of every (slug, network) pair the
- * catalogue knows about.
+ * catalogue knows about. Emits all four case variants per slug
+ * (lower / upper / Capitalized / as-stored) × all known network
+ * casings so user-typed URLs and existing table links both
+ * resolve. The catalogue has <50 entries so 4× expansion is
+ * cheap (still well under 1000 routes for the whole network grid).
  */
 export async function generateStaticParams(): Promise<
   { slug: string; network: string }[]
@@ -134,9 +138,20 @@ export async function generateStaticParams(): Promise<
   if (isCIStub) return fallback;
   const map = await getCatalogue();
   const out: { slug: string; network: string }[] = [];
+  const seen = new Set<string>();
   for (const view of map.values()) {
+    const slugVariants = caseVariants(view.slug);
     for (const n of view.networks) {
-      out.push({ slug: view.slug, network: n.network.toLowerCase() });
+      const netVariants = caseVariants(n.network);
+      for (const s of slugVariants) {
+        for (const nv of netVariants) {
+          const key = `${s}|${nv}`;
+          if (!seen.has(key)) {
+            seen.add(key);
+            out.push({ slug: s, network: nv });
+          }
+        }
+      }
     }
   }
   if (out.length === 0) {
@@ -147,10 +162,23 @@ export async function generateStaticParams(): Promise<
   return out;
 }
 
+function caseVariants(s: string): string[] {
+  const lower = s.toLowerCase();
+  const upper = s.toUpperCase();
+  const cap = lower.charAt(0).toUpperCase() + lower.slice(1);
+  const variants = new Set<string>([s, lower, upper, cap]);
+  return Array.from(variants);
+}
+
 async function fetchGlobalAsset(slug: string): Promise<GlobalAssetView | null> {
   if (isCIStub) return null;
   const map = await getCatalogue();
-  return map.get(slug) ?? null;
+  // Case-insensitive lookup — generateStaticParams emits multiple
+  // case variants, all of which should resolve to the catalogue's
+  // canonical (lowercase) entry.
+  const hit = map.get(slug);
+  if (hit) return hit;
+  return map.get(slug.toLowerCase()) ?? null;
 }
 
 function findNetwork(

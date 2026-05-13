@@ -15,6 +15,27 @@ against.
 
 ## [Unreleased]
 
+### Fixed
+
+- **`/assets/{slug}` and `/assets/{slug}/{network}` now resolve in
+  both case variants** for catalogue entries. Previously only the
+  uppercase form (`/assets/USDC/`) was prerendered because dedup in
+  `generateStaticParams` picked first-seen casing, so user-typed
+  lowercase URLs (`/assets/usdc/`) and any links pointing at the
+  catalogue's canonical lowercase slugs returned 404. Now both
+  cases get a route per catalogue entry; non-catalogue Stellar
+  assets keep their listing casing as before.
+- **`/assets/{slug}` for verified-catalogue currencies now renders
+  the cross-chain identity view, not the Stellar-issuer view.**
+  The dispatcher used to fall through to AssetDetail (with the
+  IssuerPanel) whenever `/v1/coins` returned a row, even when
+  the slug also matched a catalogue entry. Result: `/assets/USDC/`
+  was showing Circle's Stellar issuer detail instead of the
+  cross-chain page. The `[network]` route (`/assets/USDC/Stellar/`)
+  is now the only place per-issuer detail lives. Title +
+  description for catalogue slugs now use cross-chain framing
+  (`USDC — Stablecoin`) instead of Stellar-only framing.
+
 ### Changed
 
 - **Ansible template now bakes in `anon_rate_limit_per_min = 600`
