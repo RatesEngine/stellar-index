@@ -1,6 +1,6 @@
 ---
 title: Showcase site — implementation plan
-last_verified: 2026-05-04
+last_verified: 2026-05-13
 status: planning
 ---
 
@@ -254,7 +254,7 @@ Most endpoints from §10 of the data-inventory doc. Each is a thin handler over 
 
 | # | Ticket group | Endpoints | Est |
 |---|---|---|---|
-| 5.1 | Coin endpoints | `/v1/coins`, `/v1/coins/{slug}`, `/v1/coins/{slug}/{metadata,stats,supply/history,supply/breakdown,sep41-events,trustlines/history,holders/history,events,protocols}` | M |
+| 5.1 | Asset endpoints (originally planned as `/v1/coins`; unified into `/v1/assets` per [coins-to-assets-migration.md](coins-to-assets-migration.md)) | `/v1/assets`, `/v1/assets/{id}`, `/v1/assets/{id}/{metadata,stats,supply/history,supply/breakdown,sep41-events,trustlines/history,holders/history,events,protocols}` | M |
 | 5.2 | Pair / market endpoints | `/v1/pairs`, `/v1/pairs/{base}/{quote}/{venues,spread,liquidity-flow}`, `/v1/markets/heatmap` | M |
 | 5.3 | Aggregation transparency | `/v1/price/{base}/{quote}/sources`, `/v1/price/{base}/{quote}/why` | M |
 | 5.4 | Source endpoints | `/v1/sources?include=health`, `/v1/sources/{name}/{health,race,reliability,weight-history,wasm-history}` | M |

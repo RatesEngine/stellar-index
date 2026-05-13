@@ -31,6 +31,13 @@ against.
 
 ### Documentation
 
+- `docs/architecture/explorer-implementation-plan.md` row 5.1
+  ("Coin endpoints") updated to reflect the rc.48 reality —
+  endpoints renamed from `/v1/coins`-shape to `/v1/assets`-shape,
+  with a parenthetical note explaining the original naming +
+  cross-reference to `coins-to-assets-migration.md`. Row label
+  changed from "Coin endpoints" to "Asset endpoints" to match.
+  last_verified bumped to 2026-05-13.
 - `docs/architecture/coins-to-assets-migration.md` marked
   `complete` (was `in progress`) with a top-of-file callout
   noting that the rc.48 cut removed both `/v1/coins` and
