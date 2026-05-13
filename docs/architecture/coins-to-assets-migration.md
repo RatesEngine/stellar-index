@@ -1,10 +1,24 @@
 ---
 title: /v1/coins → /v1/assets consumer migration plan
-last_verified: 2026-05-11
-status: in progress
+last_verified: 2026-05-13
+status: complete
 ---
 
 # /v1/coins → /v1/assets consumer migration
+
+> **Migration complete (rc.48, 2026-05-11).** The
+> `/v1/coins` and `/v1/currencies` HTTP surfaces were removed
+> entirely from the API in rc.48 (commit `28ac6ac9`,
+> [release notes](../../CHANGELOG.md)). Every consumer is now
+> on `/v1/assets`. This document is preserved as a record of
+> the migration plan — the work it described is done.
+>
+> If you're looking for the current asset-API contract, see
+> the OpenAPI spec at
+> [`openapi/rates-engine.v1.yaml`](../../openapi/rates-engine.v1.yaml)
+> (`/v1/assets`, `/v1/assets/{id}`, plus the
+> `GlobalAssetView` vs `AssetDetail` discriminator pattern
+> documented in CLAUDE.md "Things that will surprise you").
 
 Tracking the assets-unification endgame: removing the explorer's
 `/v1/coins` dependency in favour of `/v1/assets` (R-018 final).
@@ -137,3 +151,10 @@ narrows the blame surface.
 The `/v1/coins` endpoint stays operational throughout the
 migration — there's no urgency to drop it, and removing it
 requires zero downstream consumers (incl. external API users).
+
+> **Update (rc.48, 2026-05-11).** Both `/v1/coins` and
+> `/v1/currencies` were removed from the API entirely once the
+> last consumer migrated. The downstream-consumer audit
+> (F-1204 + the wave-80 widening sweep) cleared the last
+> operator-facing references; this migration plan is now
+> archived as a record of how it was done.

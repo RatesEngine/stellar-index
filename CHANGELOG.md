@@ -31,6 +31,14 @@ against.
 
 ### Documentation
 
+- `docs/architecture/coins-to-assets-migration.md` marked
+  `complete` (was `in progress`) with a top-of-file callout
+  noting that the rc.48 cut removed both `/v1/coins` and
+  `/v1/currencies` entirely. Adds a pointer to the OpenAPI spec
+  + the GlobalAssetView vs AssetDetail discriminator pattern
+  (CLAUDE.md surprise list) for readers landing here looking for
+  the current contract. The doc is preserved as a record of how
+  the migration was done.
 - Four alert runbooks normalised to the wave-78 template shape
   (`## At a glance` + `## Related` are universally required —
   these four were the only alert-shaped runbooks missing one or
