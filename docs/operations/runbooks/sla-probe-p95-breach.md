@@ -35,7 +35,7 @@ sudo journalctl -u sla-probe.service -n 1 --output=cat | jq .
 
 # 2. Confirm direct-traffic histograms agree (rules out probe-only artefacts).
 curl -s http://prometheus:9090/api/v1/query --data-urlencode \
-  'query=histogram_quantile(0.95, sum by (route, le) (rate(http_request_duration_seconds_bucket{job="api"}[5m])))' | \
+  'query=histogram_quantile(0.95, sum by (route, le) (rate(http_request_duration_seconds_bucket{job=~"ratesengine[_-]api"}[5m])))' | \
   jq -r '.data.result[] | "\(.metric.route): \(.value[1])s"' | sort -k2 -rn | head
 
 # 3. Run a one-off probe locally to see if it's regional / network.

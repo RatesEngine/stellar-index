@@ -359,6 +359,7 @@ func TestAPI_Readyz(t *testing.T) {
 type pgReadyChecker struct{ s *timescale.Store }
 
 func (c pgReadyChecker) Name() string                   { return "postgres" }
+func (c pgReadyChecker) Critical() bool                 { return true }
 func (c pgReadyChecker) Ping(ctx context.Context) error { return c.s.DB().PingContext(ctx) }
 
 // TestAPI_OracleLatest stands up the v1 handler against a real

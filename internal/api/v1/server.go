@@ -24,16 +24,33 @@ import (
 // the serving-plane dependencies are responsive. Implementations
 // in cmd/ratesengine-api/main.go:
 //
-//   - storeChecker (wraps *timescale.Store.DB().PingContext)
-//   - redisChecker (wraps *redis.Client.Ping)
+//   - storeChecker (wraps *timescale.Store.DB().PingContext) — critical
+//   - redisChecker (wraps *redis.Client.Ping) — non-critical
 //
 // Ping MUST respect ctx and return promptly on cancellation — the
 // handler runs every checker in parallel under a shared 2 s
 // deadline; a misbehaving checker that ignores ctx can turn readyz
 // into a cascade-failure vector for the liveness probe.
+//
+// Critical() distinguishes "API can't serve requests without
+// this" (Postgres — no fallback for trade/aggregate reads) from
+// "API can degrade-but-serve without this" (Redis — cache miss
+// falls back to Timescale per ADR-0007). The /readyz handler
+// uses this to return 503 ONLY when a critical check fails;
+// a failing non-critical check produces a 200 response with
+// `status="degraded"` so edge load balancers (HAProxy, k8s
+// readiness probes) keep the backend in service while operators
+// see the per-check breakdown in the response body.
+//
+// F-1275 (codex audit-2026-05-13): pre-wave-110 every check was
+// effectively critical — a Redis outage would 503 readyz and
+// HAProxy would drain every healthy API backend even though
+// Timescale fallback kept the actual customer-facing surface
+// serving correctly.
 type ReadyChecker interface {
 	Ping(ctx context.Context) error
 	Name() string
+	Critical() bool
 }
 
 // Server is the HTTP handler for the Rates Engine v1 API.
@@ -1123,9 +1140,11 @@ func (s *Server) handleReadyz(w http.ResponseWriter, r *http.Request) {
 	defer cancel()
 
 	results := make([]checkResult, len(s.checks))
+	criticalFlags := make([]bool, len(s.checks))
 	var wg sync.WaitGroup
 	for i, c := range s.checks {
 		wg.Add(1)
+		criticalFlags[i] = c.Critical()
 		go func(i int, c ReadyChecker) {
 			defer wg.Done()
 			err := c.Ping(ctx)
@@ -1138,11 +1157,20 @@ func (s *Server) handleReadyz(w http.ResponseWriter, r *http.Request) {
 	}
 	wg.Wait()
 
-	allOK := true
-	for _, r := range results {
-		if !r.OK {
-			allOK = false
-			break
+	// F-1275 (codex audit-2026-05-13): split fail-cases into
+	// critical (503) vs non-critical (200 with status="degraded").
+	// Pre-wave-110 a Redis outage would 503 readyz and HAProxy
+	// would drain every healthy API backend even though Timescale
+	// fallback kept the customer-facing surface serving correctly.
+	criticalFailed := false
+	anyFailed := false
+	for i, r := range results {
+		if r.OK {
+			continue
+		}
+		anyFailed = true
+		if criticalFlags[i] {
+			criticalFailed = true
 		}
 	}
 
@@ -1152,8 +1180,9 @@ func (s *Server) handleReadyz(w http.ResponseWriter, r *http.Request) {
 		Checks:     results,
 		StatusRoot: "/v1/status",
 	}
-	if !allOK {
-		resp.Status = "degraded"
+	switch {
+	case criticalFailed:
+		resp.Status = "unready"
 		env := Envelope{
 			Data:  resp,
 			AsOf:  time.Now().UTC(),
@@ -1162,6 +1191,15 @@ func (s *Server) handleReadyz(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusServiceUnavailable)
 		_ = json.NewEncoder(w).Encode(env)
+		return
+	case anyFailed:
+		// Non-critical dependency degraded — API still serves
+		// (Timescale fallback for Redis cache misses per
+		// ADR-0007); 200 keeps the backend in HAProxy's pool;
+		// the response body's status="degraded" + per-check
+		// breakdown tells operators what's down.
+		resp.Status = "degraded"
+		writeJSON(w, resp, Flags{Stale: true})
 		return
 	}
 

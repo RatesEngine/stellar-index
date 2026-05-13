@@ -61,7 +61,7 @@ the rest.
 
 ```sh
 # Top status/route combinations by count in the last 5 min
-promql 'topk(5, sum by (route, status) (rate(http_requests_total{job="api",status=~"5.."}[5m])))'
+promql 'topk(5, sum by (route, status) (rate(http_requests_total{job=~"ratesengine[_-]api",status=~"5.."}[5m])))'
 # (or click the Grafana link in the alert annotation)
 ```
 

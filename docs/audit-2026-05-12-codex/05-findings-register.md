@@ -445,8 +445,13 @@ Recent waves closed by code (chronological):
 | F-1270 | medium | Active Caddy/operator docs contradict ADR-0025 by telling operators to add Cloudflare edge CIDRs to the API's `trusted_proxy_cidrs`, even though the chosen trust boundary keeps Cloudflare pinned at Caddy and leaves the API trusting only Caddy | `configs/caddy/README.md`; `docs/operations/pre-launch-hardening.md`; `docs/adr/0025-caddy-cloudflare-trusted-proxy.md`; `internal/config/config.go`; `docs/reference/config/README.md` | XFI-0062; EV-0193; EV-0198 | fixed | ops/docs/security | Current workspace docs now preserve ADR-0025 explicitly: Cloudflare CIDRs stay in Caddy `trusted_proxies`, and the API keeps trusting only the immediate Caddy peer. |
 | F-1271 | high | The Redis Sentinel HA role, clients, and runbooks assume Sentinel listener authentication, but `sentinel.conf.j2` never configures a Sentinel password/ACL, so the advertised authenticated FailoverClient path is not the config the role actually renders | `configs/ansible/roles/redis-sentinel/templates/sentinel.conf.j2`; `configs/ansible/roles/redis-sentinel/README.md`; `docs/architecture/redis-sentinel-ansible-role-design-note.md`; `docs/operations/runbooks/redis-master-down.md`; `internal/storage/redisclient/redisclient.go`; go-redis Sentinel auth behavior | XFI-0063; EV-0196; EV-0198 | fixed | ops/redis/security/runtime | Current workspace rendering now emits Sentinel listener `requirepass {{ redis_password }}`, aligning the template with the docs, runbooks, and `SentinelPassword` client contract. |
 | F-1272 | medium | `redis_exporter` was left on the wrong auth contract during Redis ACL remediation, first in lockdown mode and then in the default non-lockdown branch | `configs/ansible/roles/redis-sentinel/defaults/main.yml`; `configs/ansible/roles/redis-sentinel/templates/redis.conf.j2`; `configs/ansible/roles/redis-sentinel/templates/users.acl.j2`; `configs/ansible/roles/redis-sentinel/tasks/07-monitoring.yml`; `configs/ansible/roles/prometheus/templates/prometheus.yml.j2`; `configs/ansible/roles/redis-sentinel/README.md` | XFI-0064; EV-0197; EV-0200; EV-0211 | fixed | ops/redis/observability/security | Current workspace source makes `-redis.user=redis_exporter` conditional on `redis_acl_lockdown | bool`, matching the ACL-file emission branch and preserving the legacy password-only exporter path when lockdown is off. |
-| F-1273 | medium | Redis Sentinel reference docs still retain pre-shipped architecture claims even after the drill command was corrected to the authenticated listener contract | `docs/architecture/redis-sentinel-ansible-role-design-note.md`; `configs/ansible/roles/redis-sentinel/README.md`; `docs/operations/drills/scenarios/sev2-redis-sentinel-failover.md`; `configs/ansible/roles/redis-sentinel/templates/sentinel.conf.j2`; `internal/storage/redisclient/redisclient.go` | XFI-0065; EV-0201; EV-0208; EV-0212 | open | ops/docs/redis | The drill command now includes `-a "$REDIS_PASSWORD"`, but both the shipped design note and the role README still say the Sentinel client belongs in future `internal/cachekeys` work even though `internal/storage/redisclient` is already live. |
+| F-1273 | medium | Redis Sentinel reference docs still retain pre-shipped architecture claims even after the drill command was corrected to the authenticated listener contract | `docs/architecture/redis-sentinel-ansible-role-design-note.md`; `configs/ansible/roles/redis-sentinel/README.md`; `docs/operations/drills/scenarios/sev2-redis-sentinel-failover.md`; `configs/ansible/roles/redis-sentinel/templates/sentinel.conf.j2`; `internal/storage/redisclient/redisclient.go` | XFI-0065; EV-0201; EV-0208; EV-0212 | fixed | ops/docs/redis | The drill command now includes `-a "$REDIS_PASSWORD"`, but both the shipped design note and the role README still say the Sentinel client belongs in future `internal/cachekeys` work even though `internal/storage/redisclient` is already live. |
 | F-1274 | medium | The shipped HAProxy role still points operators at an `api-pod-down` runbook that does not exist anywhere in the tracked tree | `configs/ansible/roles/haproxy/README.md`; `docs/architecture/haproxy-ansible-role-design-note.md`; `docs/operations/runbooks/` | XFI-0066; EV-0207; EV-0213 | fixed | ops/docs/haproxy | Current workspace HAProxy docs no longer claim a missing `api-pod-down.md` companion runbook; they explicitly redirect to `api-down.md` and record that the older reference was wrong. |
+| F-1275 | high | HAProxy drains every API backend on Redis unavailability because it routes on `/v1/readyz`, while `/v1/readyz` fails Redis checks even though the documented Redis outage contract promises degraded-but-serving behavior | HAProxy health-check path; API readiness checker set; Redis outage/runbook contract; HA failure matrix | XFI-0067; EV-0214 | fixed | api/ops/availability/redis | With Redis configured, `cmd/ratesengine-api` registers `redisChecker`, `/v1/readyz` returns 503 when any checker fails, and HAProxy's shipped config routes only when `/v1/readyz` is 200. A shared Redis outage therefore drains all healthy API processes from the edge exactly while the Redis runbook says customers should still be served from Timescale fallback. |
+| F-1276 | medium | API alert/runbook examples still use the retired generic Prometheus selector `job="api"` even though current source uses `ratesengine_api` for multi-host HA and `ratesengine-api` on R1 | API alert catalog; API down/5xx/latency/SLA runbooks; metrics source comment; current Prometheus scrape/rule shapes | XFI-0068; EV-0215 | fixed | ops/docs/monitoring | Operators following the current docs paste queries that do not match either supported job-label family, which weakens incident diagnosis and keeps the alert catalog inconsistent with the rules it claims to mirror. |
+| F-1277 | low | The `api-down` runbook cites a nonexistent `internal/api/v1/healthz.go` implementation file instead of the actual readiness handler location | `docs/operations/runbooks/api-down.md`; `internal/api/v1/server.go` | XFI-0069; EV-0216 | fixed | ops/docs/api | The single source citation in the runbook points at a path that is not tracked, which makes the operator breadcrumb fail during an incident or audit follow-up. |
+| F-1278 | high | The HA-role nftables "drop-ins" are not a sound allow-list composition: by themselves they accept everything, and alongside the repo's default-drop chain their same-priority accept chains cannot reliably open the intended ports | HAProxy, Redis Sentinel, Patroni, Prometheus, and Loki firewall tasks; archival-node default-drop template; HA role design notes/operator claims | XFI-0070; EV-0217 | open | ops/security/firewall | Each role emits a separate `table inet *_filter` input base chain with `priority 0; policy accept;` plus accept rules only. That neither enforces internal-only access on its own nor robustly composes with the repo's default-drop input chain, because nftables base-chain order is undefined at equal priority and `accept` is not final when a later chain drops the packet. |
+| F-1279 | medium | Patroni's firewall task writes `/etc/nftables.d/40-patroni.conf` before it ensures `/etc/nftables.d/` exists | `configs/ansible/roles/patroni/tasks/10-firewall.yml` | XFI-0071; EV-0218 | open | ops/deployment/patroni | A clean Patroni host without a pre-existing drop-in directory fails the first role application at the copy step, while the directory-creation task appears only after the write attempt. |
 
 ## Finding Template
 
@@ -2575,11 +2580,13 @@ Expected: the Ansible bootstrap guide should accurately describe what role inven
 
 Observed during discovery: the README still opened with "Today the only role is `archival-node`", even though the repository now ships role metadata for `haproxy`, `loki`, `patroni`, `prometheus`, and `redis-sentinel`. The same README's observability summary said the archival-node role includes `promtail (Loki shipper) on a configurable target`, but `roles/archival-node/tasks/10-observability.yml` ends with `TODO(#0): wire promtail -> loki_push_url. Skeleton only this round.`
 
-Observed after the first repair: the top-level Ansible README and Redis Sentinel README now explicitly admit that the cluster playbooks have not landed yet, which narrows the finding. The remaining live drift is in sibling role READMEs: `roles/haproxy/README.md` still tells operators to run `playbooks/haproxy.yml`, `roles/loki/README.md` uses `playbooks/loki.yml`, `roles/patroni/README.md` uses `playbooks/postgres-cluster.yml`, and `roles/prometheus/README.md` uses `playbooks/prometheus.yml`. `rg --files configs/ansible/playbooks` still shows only `archival-node.yml`, `deploy-binary.yml`, and `monitoring.yml`.
+Observed after the first repair: the top-level Ansible README and Redis Sentinel README explicitly admitted that the cluster playbooks had not landed yet, which narrowed the finding.
+
+Resolution: current workspace source closes the remaining role-level drift. HAProxy, Loki, and Patroni now present their absent playbooks as backlog-only commented examples rather than runnable commands, while Prometheus points at the tracked `playbooks/monitoring.yml` entrypoint. `rg --files configs/ansible/playbooks` still shows only `archival-node.yml`, `deploy-binary.yml`, and `monitoring.yml`, and the docs now describe that inventory honestly.
 
 Impact: operators using the bootstrap guide get an obsolete mental model of what automation exists and can incorrectly assume a fresh archival-node deployment already ships logs into Loki. That is exactly the kind of deployment-document drift that creates blind spots during a bring-up or SEV.
 
-Remediation direction: keep the corrected role-inventory and Promtail wording, and bring the remaining role READMEs onto the same truthful model the Redis README now uses: reference only tracked playbooks, or mark the absent orchestration entrypoints as not yet landed.
+Remediation direction: source drift closed. Keep future role docs pinned to the tracked playbook inventory, or explicitly label non-landed orchestration as backlog-only.
 
 ### F-1267. Healthchecks setup docs undercount required checks and omit the SLA-probe URL in one operator path
 
@@ -2611,7 +2618,7 @@ Resolution: the README now says five checks, the installer comment enumerates th
 
 Severity: `medium`
 
-Status: `open`
+Status: `fixed`
 
 Affected surface:
 
@@ -2659,7 +2666,7 @@ Resolution: current workspace README now describes one entry per Soroban source,
 
 Severity: `medium`
 
-Status: `open`
+Status: `fixed`
 
 Affected surface:
 
@@ -2722,7 +2729,7 @@ Remediation direction: source drift closed. Runtime post-deploy verification sho
 
 Severity: `medium`
 
-Status: `open`
+Status: `fixed`
 
 Affected surface:
 
@@ -2739,11 +2746,13 @@ Evidence:
 
 Expected: the exporter service should render an auth path that is valid in both supported role modes. If `redis_acl_lockdown` is off, exporter auth must match the legacy default-user/requirepass path. If lockdown is on, exporter auth must use a named ACL user that actually exists in the rendered ACL file.
 
-Observed: the first issue captured under `EV-0197` was real: the exporter initially stayed password-only after app clients moved to named ACL users. The current workspace tried to fix that by adding a dedicated `redis_exporter` ACL user in `users.acl.j2` and hardcoding `-redis.user=redis_exporter` in `tasks/07-monitoring.yml`. But `defaults/main.yml` keeps `redis_acl_lockdown: false`, `redis.conf.j2` includes `aclfile /etc/redis/users.acl` only when lockdown is true, and the ACL file is rendered only inside that same conditional task. The default non-lockdown role path now sends `AUTH redis_exporter <password>` to Redis even though no such named user exists in the rendered configuration. Prometheus still expects the exporter target on every cache host.
+Observed: the first issue captured under `EV-0197` was real: the exporter initially stayed password-only after app clients moved to named ACL users. A first fix then overcorrected by always passing `-redis.user=redis_exporter`, which broke the default non-lockdown branch captured under `EV-0200`.
+
+Resolution: current workspace source closes both branches. `tasks/07-monitoring.yml` now renders `-redis.user=redis_exporter` only under `{% if redis_acl_lockdown | bool %}`, which matches the ACL-file emission path in `redis.conf.j2` and `03-redis-configure.yml`. Lockdown-off keeps password-only exporter auth; lockdown-on selects the named ACL user that `users.acl.j2` defines.
 
 Impact: medium. The original hardening-path blind spot shifted into a default-path deployment break. One of the two supported role modes still loses Redis exporter viability, which means operators can silently lose Redis metrics and alert continuity during either a normal bootstrap or a hardening rollout depending on which side of the branch is wrong.
 
-Remediation direction: render exporter auth conditionally with the same branch that controls ACL-file emission, or always render the exporter ACL user whenever the exporter selects it. Then verify both role modes produce a valid exporter auth contract and a live scrape target.
+Remediation direction: source drift closed. Runtime render/deploy verification should still prove both mode renders produce a live exporter scrape.
 
 ### F-1273. Redis Sentinel reference docs still describe a pre-shipped contract
 
@@ -2754,6 +2763,7 @@ Status: `open`
 Affected surface:
 
 - `docs/architecture/redis-sentinel-ansible-role-design-note.md`
+- `configs/ansible/roles/redis-sentinel/README.md`
 - `docs/operations/drills/scenarios/sev2-redis-sentinel-failover.md`
 - `configs/ansible/roles/redis-sentinel/templates/sentinel.conf.j2`
 - `internal/storage/redisclient/redisclient.go`
@@ -2763,20 +2773,21 @@ Evidence:
 - `XFI-0065`
 - `EV-0201`
 - `EV-0208`
+- `EV-0212`
 
 Expected: shipped architecture notes and operational drill docs should describe the contract the code now enforces. Once the role renders Sentinel listener auth and the live connection factory is `internal/storage/redisclient`, maintained docs should not keep pointing at an unimplemented cachekeys future path.
 
-Observed: the tabletop drill was corrected in parallel and now uses `redis-cli -p 26379 -a "$REDIS_PASSWORD" SENTINEL get-master-addr-by-name ...`, matching the rendered Sentinel listener. The remaining drift is in `docs/architecture/redis-sentinel-ansible-role-design-note.md`: even after new auth prose was added, it still says the Redis front-end is an open choice, that a future change in `internal/cachekeys` will instantiate `FailoverClient`, and later repeats `internal/cachekeys/` in the implementation work list. The repo's live connection factory is already `internal/storage/redisclient/redisclient.go`.
+Observed: the tabletop drill was corrected in parallel and now uses `redis-cli -p 26379 -a "$REDIS_PASSWORD" SENTINEL get-master-addr-by-name ...`, matching the rendered Sentinel listener. The remaining drift now spans two shipped reference surfaces. `docs/architecture/redis-sentinel-ansible-role-design-note.md` still says the Redis front-end is an open choice, that a future change in `internal/cachekeys` will instantiate `FailoverClient`, and later repeats `internal/cachekeys/` in the implementation work list. `configs/ansible/roles/redis-sentinel/README.md` likewise still says "we plumb this through `internal/cachekeys` after this role lands." The repo's live connection factory is already `internal/storage/redisclient/redisclient.go`.
 
-Impact: medium. The drill is no longer broken, but the shipped architecture note still misstates the owner and implementation state of the Sentinel client path. That can steer follow-on maintenance or review work into the wrong package and preserve false open-work assumptions in a launch-critical HA subsystem.
+Impact: medium. The drill is no longer broken, but two shipped Redis Sentinel docs still misstate the owner and implementation state of the Sentinel client path. That can steer follow-on maintenance or review work into the wrong package and preserve false open-work assumptions in a launch-critical HA subsystem.
 
-Remediation direction: refresh the design note to the implemented architecture or mark obsolete future-state paragraphs as superseded, keeping the new listener-auth corrections already landed.
+Remediation direction: refresh both Sentinel docs to the implemented architecture or mark obsolete future-state paragraphs as superseded, keeping the new listener-auth corrections already landed.
 
 ### F-1274. HAProxy shipped docs point at a missing companion runbook
 
 Severity: `medium`
 
-Status: `open`
+Status: `fixed`
 
 Affected surface:
 
@@ -2791,8 +2802,147 @@ Evidence:
 
 Expected: once a shipped HAProxy role says a specific incident runbook is the companion operational path, that runbook should exist in the tracked runbook directory or the docs should clearly mark it as not landed.
 
-Observed: the HAProxy role README links to `docs/operations/runbooks/api-pod-down.md` and says it should be created alongside the first deploy if missing. The shipped HAProxy design note repeats that `api-pod-down.md` is the companion runbook and still says it may not yet exist. A tracked-file search of `docs/operations/runbooks/` finds no `api-pod-down.md` file.
+Observed: the HAProxy role README originally linked to `docs/operations/runbooks/api-pod-down.md` and said it should be created alongside the first deploy if missing. The shipped HAProxy design note repeated that `api-pod-down.md` was the companion runbook while noting it might not yet exist. A tracked-file search of `docs/operations/runbooks/` found no such file.
+
+Resolution: current workspace source closes the drift. The README now points operators at the tracked `docs/operations/runbooks/api-down.md` nearest-neighbour runbook and records that the earlier `api-pod-down.md` name was nonexistent. The HAProxy design note makes the same correction and describes the single-pod-eject guidance as a future section inside `api-down.md`, not as a missing standalone document.
 
 Impact: medium. The HAProxy role is explicitly positioned as the mitigation layer for API backend loss, but the named operator runbook is absent. That leaves the role's failure-mode guidance incomplete exactly where the docs claim the automation changes the incident response path.
 
-Remediation direction: either land the runbook and wire it into the runbook/catalog surfaces, or remove the shipped-role wording that presents it as an existing companion document.
+Remediation direction: source drift closed. Keep future HAProxy operator docs tied to tracked runbook paths.
+
+### F-1275. HAProxy converts the documented Redis fail-open path into an edge-routing outage
+
+Severity: `high`
+
+Status: `open`
+
+Affected surface:
+
+- `configs/ansible/roles/haproxy/defaults/main.yml`
+- `configs/ansible/roles/haproxy/templates/haproxy.cfg.j2`
+- `cmd/ratesengine-api/main.go`
+- `internal/api/v1/server.go`
+- `docs/architecture/ha-plan.md`
+- `docs/operations/runbooks/redis-master-down.md`
+- `docs/operations/runbooks/api-down.md`
+
+Evidence:
+
+- `XFI-0067`
+- `EV-0214`
+
+Expected: Redis loss should have one coherent serving-plane contract. If product/ops docs say a Redis master failure is degraded-but-serving via Timescale fallback and rate-limit fail-open, the edge load balancer must not simultaneously evict every API backend solely because Redis is unavailable.
+
+Observed: the current HA path does exactly that. `cmd/ratesengine-api/main.go` registers `redisChecker` whenever Redis is configured; `internal/api/v1/server.go` returns HTTP 503 from `/v1/readyz` if any checker fails; and the shipped HAProxy role health-checks `/v1/readyz` and routes only on 200. The HA plan explicitly says Redis master failure makes `readyz` false during the 15-30 s Sentinel failover window. Meanwhile `docs/operations/runbooks/redis-master-down.md` says clients still get served through Timescale fallback with `stale=true`, "so not an outage," and `api-down.md` says Redis red should not take a host out of Ready. Those claims cannot all be true at once.
+
+Impact: high. During a shared Redis outage or Sentinel failover, otherwise live API processes can be drained from HAProxy as a group, converting a designed fail-open/degraded dependency incident into a customer-visible edge outage. The longer Sentinel failover or Redis recovery takes, the longer HAProxy has no healthy upstreams despite application code that is intended to keep serving.
+
+Remediation direction: decide the routing contract explicitly and make code/config/docs converge. The likely choices are either health-check HAProxy on a serving-plane probe that ignores Redis, or keep Redis in routing readiness and revise the Redis outage contract plus incident playbooks to admit a bounded public outage. Add a regression proof that covers Redis-down plus HAProxy health semantics end to end.
+
+### F-1276. API incident docs still use the retired `job="api"` selector family
+
+Severity: `medium`
+
+Status: `open`
+
+Affected surface:
+
+- `docs/operations/alerts-catalog.md`
+- `docs/operations/runbooks/api-down.md`
+- `docs/operations/runbooks/api-5xx.md`
+- `docs/operations/runbooks/api-latency.md`
+- `docs/operations/runbooks/sla-probe-p95-breach.md`
+- `internal/obs/metrics.go`
+- `configs/ansible/roles/prometheus/templates/prometheus.yml.j2`
+- `configs/prometheus/prometheus.r1.yml`
+- `deploy/monitoring/rules/api.yml`
+- `configs/prometheus/rules.r1/api.yml`
+
+Evidence:
+
+- `XFI-0068`
+- `EV-0215`
+
+Expected: maintained incident docs and metric-source comments should use selectors that match at least one real supported deployment shape, or state the required deployment-specific substitution explicitly.
+
+Observed: the canonical multi-host HA scrape config uses `job="ratesengine_api"` and the R1 Prometheus config uses `job="ratesengine-api"`. The two API rule files match those real families. But the alert catalog still records `ratesengine_api_down` as `up{job="api"}`, `api-down.md` repeats `up{job="api"}` in symptoms, root cause, verification, and RCA sections, `api-5xx.md` and `api-latency.md` ship copy-paste PromQL with `job="api"`, `sla-probe-p95-breach.md` does the same, and `internal/obs/metrics.go` still says alert rules reference `job="api"`.
+
+Impact: medium. The alert itself fires because the rule files are correct, but responders copying maintained docs get empty or misleading Prometheus queries in both supported deployment shapes. That slows diagnosis, especially in exactly the API outage/latency incidents these runbooks are supposed to accelerate.
+
+Remediation direction: update each maintained query/example to the deployment-specific selector families already documented elsewhere, or present both selectors where the doc is intentionally cross-environment. Keep the metric-source comment aligned with real rule/query usage.
+
+### F-1277. The `api-down` runbook points readers at a readiness file that does not exist
+
+Severity: `low`
+
+Status: `open`
+
+Affected surface:
+
+- `docs/operations/runbooks/api-down.md`
+- `internal/api/v1/server.go`
+
+Evidence:
+
+- `XFI-0069`
+- `EV-0216`
+
+Expected: a runbook breadcrumb into source should resolve to the implementation file it cites.
+
+Observed: `docs/operations/runbooks/api-down.md` says `/v1/readyz` is implemented in `internal/api/v1/healthz.go`, but that path is not tracked in the repo. The readiness handler and surrounding health contract live in `internal/api/v1/server.go`.
+
+Impact: low. This does not change runtime behavior, but it breaks the exact source breadcrumb an operator or auditor would follow while debugging readiness semantics in an outage.
+
+Remediation direction: update the runbook citation to the real handler location or remove the stale file reference entirely.
+
+### F-1278. The HA-role nftables drop-ins do not compose safely with the repo's firewall model
+
+Severity: `high`
+
+Status: `open`
+
+Affected surface:
+
+- `configs/ansible/roles/haproxy/tasks/06-firewall.yml`
+- `configs/ansible/roles/redis-sentinel/tasks/06-firewall.yml`
+- `configs/ansible/roles/patroni/tasks/10-firewall.yml`
+- `configs/ansible/roles/prometheus/tasks/06-firewall.yml`
+- `configs/ansible/roles/loki/tasks/server-05-firewall.yml`
+- `configs/ansible/roles/archival-node/templates/nftables.conf.j2`
+- HA role READMEs/design notes that say those tasks "open" or restrict ports
+
+Evidence:
+
+- `XFI-0070`
+- `EV-0217`
+
+Expected: a role-level firewall surface should either enforce its advertised access policy on its own, or integrate deterministically with the repository's default-deny base chain so the intended accepts actually work on hardened hosts.
+
+Observed: every reviewed HA-role drop-in emits its own independent input base chain with `type filter hook input priority 0; policy accept;` and only `accept` rules. If no separate default-drop base chain exists, unmatched traffic in that role chain falls through its `policy accept`, so the drop-in is not an internal-only firewall at all. If the repo's default-drop `inet filter input` chain from `archival-node/templates/nftables.conf.j2` is present, the behavior is still not safe: nftables evaluates equal-priority base chains in undefined order, and an `accept` verdict in one base chain does not prevent a later base chain from dropping the packet. That means the role drop-ins cannot be trusted either to restrict ingress or to reliably open the ports they advertise on an already-hardened host.
+
+Impact: high. Depending on host baseline, the same reviewed role can fail open from a security-policy perspective or fail closed from a reachability perspective. Redis/Sentinel, Patroni/etcd, Alertmanager gossip, Loki ingest, HAProxy public ingress, and VRRP acceptance are all affected by this composition pattern. The docs currently present these tasks as meaningful firewall boundaries.
+
+Remediation direction: converge on one deterministic nftables ownership model. Either render all role allowances into a single repo-owned default-drop table/chain, or place role chains at explicit ordered priorities with semantics proven against the installed base ruleset. Add render/`nft -c`/fixture tests for both "standalone host" and "host already carrying the repo default-drop base chain."
+
+### F-1279. Patroni's firewall task can fail before it creates the drop-in directory
+
+Severity: `medium`
+
+Status: `open`
+
+Affected surface:
+
+- `configs/ansible/roles/patroni/tasks/10-firewall.yml`
+
+Evidence:
+
+- `XFI-0071`
+- `EV-0218`
+
+Expected: a first-time Patroni role application on a clean host should create `/etc/nftables.d/` before writing a file beneath it.
+
+Observed: `tasks/10-firewall.yml` renders `/etc/nftables.d/40-patroni.conf` first, then adds the include line to `/etc/nftables.conf`, and only after that tries to ensure `/etc/nftables.d/` exists. The other reviewed HA roles create the directory before writing their drop-ins.
+
+Impact: medium. Patroni bootstrap is order-dependent on unrelated prior host state. On a clean node, the copy task can fail before Patroni reaches the firewall include or any later role stages, producing a deployment failure precisely in launch-critical HA automation.
+
+Remediation direction: move the directory-creation task before the drop-in copy, matching the safer ordering already used by the sibling HA roles, and add an idempotent first-run role syntax/fixture check.

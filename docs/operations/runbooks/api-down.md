@@ -19,7 +19,7 @@ severity: P1
 
 ## Symptoms
 
-- `sum(up{job="api"}) == 0` — every API host's `ratesengine-api`
+- `sum(up{job=~"ratesengine[_-]api"}) == 0` — every API host's `ratesengine-api`
   exporter is down for ≥ 60 s.
 - `/v1/healthz` and `/v1/readyz` return non-200 (or time out) when
   HAProxy probes them on each backend.
@@ -51,8 +51,15 @@ ssh root@lb-01 "echo 'show servers state api_pool' | \
 ssh root@api-01 "curl -sS http://127.0.0.1:3000/v1/readyz | jq"
 ```
 
-`/v1/readyz` gates on Timescale + Redis health (see
-`internal/api/v1/healthz.go`). If readyz reports red:
+`/v1/readyz` gates on Timescale + Redis health (handler at
+`internal/api/v1/server.go::handleReadyz`; per-check
+implementations in `cmd/ratesengine-api/main.go::storeChecker`
+and `redisChecker`). Since wave 110 (F-1275) the handler
+distinguishes critical (Postgres → 503) from non-critical
+(Redis → 200 + `status="degraded"`); HAProxy only drains a
+backend on the critical path. F-1277 (2026-05-13): the earlier
+reference to a nonexistent `internal/api/v1/healthz.go` is
+corrected. If readyz reports red:
 
 - `timescale` red → jump to [`timescale-primary-down.md`](timescale-primary-down.md).
 - `redis` red → the API serves fail-open for rate limiting and
@@ -83,7 +90,7 @@ ssh root@api-01 "curl -sS http://127.0.0.1:3000/v1/readyz | jq"
    away. The keepalived VIP failover from `lb-01` to `lb-02`
    masks an LB host failure but not a backend-pool failure.
 
-5. **HAProxy/keepalived itself broken.** `up{job="api"}` is
+5. **HAProxy/keepalived itself broken.** `up{job=~"ratesengine[_-]api"}` is
    scraped via Prometheus's static config pointing at each
    api host's exporter, but customer traffic flows through the
    VIP. If the VIP is down (keepalived split-brain, both LBs
@@ -122,7 +129,7 @@ ssh root@api-01 "curl -sS http://127.0.0.1:3000/v1/readyz | jq"
       the keepalived state (`MASTER` vs `BACKUP`). Force VIP to
       the healthy LB if split-brain.
 
-- [ ] Verification: `up{job="api"}` returns to 1 for every backend;
+- [ ] Verification: `up{job=~"ratesengine[_-]api"}` returns to 1 for every backend;
       `/v1/healthz` returns 200 from outside the VIP; alert clears
       within 5 min.
 
@@ -134,7 +141,7 @@ Gather for the postmortem:
   affected host.
 - HAProxy's backend transition log (`/var/log/haproxy.log`) for
   the same window.
-- Prometheus screenshots: `up{job="api"}` per instance,
+- Prometheus screenshots: `up{job=~"ratesengine[_-]api"}` per instance,
   `http_requests_total`, `process_start_time_seconds` (restart
   count proxy).
 - The release tag running before vs during the outage from

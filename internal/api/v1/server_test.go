@@ -17,11 +17,14 @@ import (
 
 // stubCheck is a ReadyChecker that returns a configurable error.
 // An optional `sleep` models a slow dependency so tests can verify
-// the readyz handler runs probes in parallel.
+// the readyz handler runs probes in parallel. `critical` defaults
+// to true (the legacy behaviour); F-1275 (wave 110) regression
+// tests set it to false to exercise the degraded-but-serving path.
 type stubCheck struct {
-	name  string
-	err   error
-	sleep time.Duration
+	name     string
+	err      error
+	sleep    time.Duration
+	critical bool
 }
 
 func (s *stubCheck) Ping(ctx context.Context) error {
@@ -34,7 +37,8 @@ func (s *stubCheck) Ping(ctx context.Context) error {
 	}
 	return s.err
 }
-func (s *stubCheck) Name() string { return s.name }
+func (s *stubCheck) Name() string   { return s.name }
+func (s *stubCheck) Critical() bool { return s.critical }
 
 func newTestServer(t *testing.T, checks ...v1.ReadyChecker) *httptest.Server {
 	t.Helper()
@@ -79,8 +83,8 @@ func TestHealthz(t *testing.T) {
 
 func TestReadyz_AllChecksPass(t *testing.T) {
 	ts := newTestServer(t,
-		&stubCheck{name: "postgres"},
-		&stubCheck{name: "redis"},
+		&stubCheck{name: "postgres", critical: true},
+		&stubCheck{name: "redis", critical: false},
 	)
 	resp, err := http.Get(ts.URL + "/v1/readyz")
 	if err != nil {
@@ -114,10 +118,14 @@ func TestReadyz_AllChecksPass(t *testing.T) {
 	}
 }
 
-func TestReadyz_OneFailure(t *testing.T) {
+// TestReadyz_CriticalFailureReturns503 — a failing critical
+// check (Postgres) returns 503 with status="unready" + stale
+// flag. F-1275 (wave 110) sharpened the contract: only critical
+// failures take a backend out of HAProxy's pool.
+func TestReadyz_CriticalFailureReturns503(t *testing.T) {
 	ts := newTestServer(t,
-		&stubCheck{name: "postgres"},
-		&stubCheck{name: "redis", err: errors.New("connection refused")},
+		&stubCheck{name: "postgres", critical: true, err: errors.New("postgres: connection refused")},
+		&stubCheck{name: "redis", critical: false},
 	)
 	resp, err := http.Get(ts.URL + "/v1/readyz")
 	if err != nil {
@@ -129,13 +137,45 @@ func TestReadyz_OneFailure(t *testing.T) {
 		t.Errorf("status = %d, want 503", resp.StatusCode)
 	}
 	body, _ := readAll(resp)
+	if !strings.Contains(body, `"status":"unready"`) {
+		t.Errorf("body should report unready when critical check fails: %s", body)
+	}
+	if !strings.Contains(body, "postgres: connection refused") {
+		t.Errorf("body should include failing-check error: %s", body)
+	}
+	if !strings.Contains(body, `"stale":true`) {
+		t.Errorf("body should set stale flag: %s", body)
+	}
+}
+
+// TestReadyz_NonCriticalFailureReturns200Degraded pins the
+// F-1275 (wave 110) contract: a Redis-only failure produces a
+// 200 with status="degraded" so HAProxy keeps the backend in
+// service while the response body tells operators what's down.
+// Pre-wave-110 this case 503'd and HAProxy drained every
+// healthy API backend during a Redis outage even though
+// Timescale fallback kept the customer surface serving.
+func TestReadyz_NonCriticalFailureReturns200Degraded(t *testing.T) {
+	ts := newTestServer(t,
+		&stubCheck{name: "postgres", critical: true},
+		&stubCheck{name: "redis", critical: false, err: errors.New("redis: connection refused")},
+	)
+	resp, err := http.Get(ts.URL + "/v1/readyz")
+	if err != nil {
+		t.Fatalf("GET /v1/readyz: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		t.Errorf("status = %d, want 200 (non-critical failure must keep backend in HAProxy pool)", resp.StatusCode)
+	}
+	body, _ := readAll(resp)
 	if !strings.Contains(body, `"status":"degraded"`) {
 		t.Errorf("body should report degraded: %s", body)
 	}
-	if !strings.Contains(body, "connection refused") {
+	if !strings.Contains(body, "redis: connection refused") {
 		t.Errorf("body should include failing-check error: %s", body)
 	}
-	// Stale flag must be set when degraded.
 	if !strings.Contains(body, `"stale":true`) {
 		t.Errorf("body should set stale flag: %s", body)
 	}
@@ -149,9 +189,9 @@ func TestReadyz_ProbesRunInParallel(t *testing.T) {
 	const elapsedCap = 900 * time.Millisecond
 
 	ts := newTestServer(t,
-		&stubCheck{name: "a", sleep: perProbeSleep},
-		&stubCheck{name: "b", sleep: perProbeSleep},
-		&stubCheck{name: "c", sleep: perProbeSleep},
+		&stubCheck{name: "a", critical: true, sleep: perProbeSleep},
+		&stubCheck{name: "b", critical: true, sleep: perProbeSleep},
+		&stubCheck{name: "c", critical: true, sleep: perProbeSleep},
 	)
 
 	start := time.Now()

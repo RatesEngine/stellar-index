@@ -83,7 +83,7 @@ signal lands.
 
 | Name | Metric | Condition | Severity | Runbook |
 | ---- | ------ | --------- | -------- | ------- |
-| `ratesengine_api_down` | `up{job="api"}` across regions | == 0 for > 60 s | **P1** | [api-down](runbooks/api-down.md) |
+| `ratesengine_api_down` | `up{job=~"ratesengine[_-]api"}` across regions | == 0 for > 60 s | **P1** | [api-down](runbooks/api-down.md) |
 | `ratesengine_api_latency_p95_high` | `histogram_quantile(0.95, rate(http_request_duration_seconds_bucket[5m]))` | > 500 ms for > 2 min | P2 | [api-latency](runbooks/api-latency.md) |
 | `ratesengine_api_latency_p99_high` | `histogram_quantile(0.99, ...)` | > 2 s for > 2 min | P2 | [api-latency](runbooks/api-latency.md) |
 | `ratesengine_api_error_rate_high` | `rate(http_requests_total{status=~"5.."}[5m]) / rate(http_requests_total[5m])` | > 1 % for > 2 min | P2 | [api-5xx](runbooks/api-5xx.md) |

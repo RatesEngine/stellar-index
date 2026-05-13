@@ -52,7 +52,7 @@ tolerate the symptom until the alert clears.
 ```sh
 # Which endpoint is slow?
 curl -s http://prometheus:9090/api/v1/query --data-urlencode \
-  'query=histogram_quantile(0.95, sum by (route, le) (rate(http_request_duration_seconds_bucket{job="api"}[5m])))' | \
+  'query=histogram_quantile(0.95, sum by (route, le) (rate(http_request_duration_seconds_bucket{job=~"ratesengine[_-]api"}[5m])))' | \
   jq -r '.data.result[] | "\(.metric.route): \(.value[1])s"' | sort -k2 -rn | head
 
 # Is Redis healthy? Cache-miss storms are the common trigger.

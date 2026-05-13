@@ -1213,21 +1213,36 @@ func (a divergenceAdapter) DivergenceFiringFor(ctx context.Context, asset canoni
 
 // storeChecker adapts *timescale.Store to the v1.ReadyChecker
 // interface so /readyz can include it in the dependency poll.
+//
+// Postgres is critical — every request that returns trade /
+// aggregate / supply data reads from Timescale. There's no
+// fallback path; a Postgres outage really does mean the API
+// can't serve. Critical()==true so /readyz returns 503 when
+// Postgres is unreachable.
 type storeChecker struct{ s *timescale.Store }
 
-func (c storeChecker) Name() string { return "postgres" }
+func (c storeChecker) Name() string   { return "postgres" }
+func (c storeChecker) Critical() bool { return true }
 func (c storeChecker) Ping(ctx context.Context) error {
 	return c.s.DB().PingContext(ctx)
 }
 
 // redisChecker adapts redis.UniversalClient to the v1.ReadyChecker
-// interface. Redis is optional at API layer — readyz reports the
-// actual state. UniversalClient (vs typed Client) lets the same
-// adapter work against both the dev single-node and production
-// Sentinel-backed FailoverClient.
+// interface. Redis is non-critical at API layer — cache misses
+// fall back to Timescale per ADR-0007, so a Redis outage degrades
+// latency (every read becomes a Timescale query instead of a
+// Redis read) but does NOT break correctness. UniversalClient
+// (vs typed Client) lets the same adapter work against both the
+// dev single-node and production Sentinel-backed FailoverClient.
+//
+// F-1275 (codex audit-2026-05-13): Critical()==false so a Redis
+// outage produces a 200 with status="degraded" from /v1/readyz
+// instead of a 503; HAProxy keeps the backend in service while
+// operators see the degradation in the response body.
 type redisChecker struct{ rdb redis.UniversalClient }
 
-func (c redisChecker) Name() string { return "redis" }
+func (c redisChecker) Name() string   { return "redis" }
+func (c redisChecker) Critical() bool { return false }
 func (c redisChecker) Ping(ctx context.Context) error {
 	return c.rdb.Ping(ctx).Err()
 }
