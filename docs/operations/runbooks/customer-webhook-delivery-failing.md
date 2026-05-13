@@ -1,6 +1,6 @@
 ---
 title: Runbook — customer-webhook-delivery-failing
-last_verified: 2026-05-12
+last_verified: 2026-05-13
 status: draft
 severity: P3
 ---
@@ -110,6 +110,13 @@ Decision tree:
 - `internal/customerwebhook/worker.go` — implementation
 - `docs/operations/runbooks/anomaly-freeze-engaged.md` — the
   upstream event that fires SEV-1 → customer webhook
+- [`stripe-platform-sync-errors.md`](stripe-platform-sync-errors.md)
+  — the OTHER webhook health surface. This runbook is for the
+  OUTBOUND deliveries (us → customer); the Stripe one is for
+  INBOUND deliveries (Stripe → us). Operators paged on either
+  should know about both — a degraded Stripe bridge can leave
+  customer dashboards stale even while the OUTBOUND worker is
+  green.
 - F-1270 audit register entry — context for the customer-
   facing webhook feature
 

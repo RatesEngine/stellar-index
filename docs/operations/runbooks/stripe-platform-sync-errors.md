@@ -140,6 +140,21 @@ violation introduced by a manual fix elsewhere.
    self-heal once the store comes back. For events older than that,
    manually replay the relevant Stripe events from the dashboard.
 
+## Related
+
+- `internal/api/v1/stripe_webhook.go` — implementation; search
+  for `obs.StripePlatformSyncErrorsTotal` to find the five
+  failure sites covered by the per-`operation` label.
+- [`customer-webhook-delivery-failing.md`](customer-webhook-delivery-failing.md)
+  — the OTHER webhook health surface. This runbook is for the
+  INBOUND deliveries (Stripe → us); the customer-webhook one is
+  for OUTBOUND deliveries (us → customer). Operators paged on
+  either should know about both — the OUTBOUND worker can be
+  green while customer dashboards are stale because of an
+  INBOUND Stripe-bridge degradation.
+- F-1219 audit register entry — context for the platform-bridge
+  fan-out the metric instruments.
+
 ## Why this exists
 
 `ratesengine_stripe_platform_sync_errors_total` was introduced on
