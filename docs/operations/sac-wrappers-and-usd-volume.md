@@ -54,8 +54,9 @@ ssh root@136.243.90.96 'cat >> /etc/ratesengine.toml' << 'EOF'
 EOF
 ```
 
-Note the **colon** separator (not the dash that `/v1/coins`
-asset_id uses). This is the form `[supply].sac_wrappers` parses.
+Note the **colon** separator (not the dash that the canonical
+`/v1/assets` asset_id form uses). This is the form
+`[supply].sac_wrappers` parses.
 
 ### 3. Restart the api + indexer + aggregator
 

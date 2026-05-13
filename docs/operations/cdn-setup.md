@@ -21,7 +21,7 @@ Per ADR-0018 each surface emits a different `Cache-Control` header:
 | `/v1/price`, `/v1/price/tip` | `Cache-Control: public, max-age=1` | Closed-bucket / tip — cache for ~tick-cadence; CDN absorbs hot-asset request floods |
 | `/v1/history/since-inception` | `Cache-Control: public, max-age=300, s-maxage=86400` | Historical data is immutable on closed buckets — long edge-cache, short browser-cache |
 | `/v1/assets/{id}` | `Cache-Control: public, max-age=60` | Asset-detail blocks; F2 fields refresh on supply-snapshot cadence |
-| `/v1/sources`, `/v1/markets`, `/v1/coins`, `/v1/issuers`, `/v1/issuers/{g}` | `Cache-Control: public, max-age=60, s-maxage=300` | Catalogue surfaces — change rarely |
+| `/v1/sources`, `/v1/markets`, `/v1/assets`, `/v1/issuers`, `/v1/issuers/{g}` | `Cache-Control: public, max-age=60, s-maxage=300` | Catalogue surfaces — change rarely |
 | `/v1/changes/{entity_type}/{id}` | `Cache-Control: public, max-age=60, s-maxage=300` | Multi-window delta strip — refreshed every 5 min by the change-summary worker |
 | `/v1/diagnostics/*` | `Cache-Control: private, no-cache, must-revalidate` | Operator-facing live data — showcase polls every 15 s |
 | `/v1/account/*`, `/v1/auth/*` | `Cache-Control: no-store` | Per-caller; never cacheable |

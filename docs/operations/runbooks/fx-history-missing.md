@@ -14,11 +14,15 @@ that depends on the new table fails silently at runtime.
 
 This runbook captures the 2026-05-10 finding on r1 + the recovery
 sequence so future operators don't re-investigate from
-"`/currencies/EUR.history_1y` returns 0 points" backwards.
+"FX history is empty for EUR" backwards. (Original 2026-05-10
+investigation was against `/v1/currencies/EUR`, retired in
+rc.48 — same data now flows through `/v1/assets/eur`; the
+underlying `fx_quotes` table is the same and the runbook below
+applies unchanged.)
 
 ## Signal
 
-- `/v1/currencies/EUR` (or any other ticker) returns
+- `/v1/assets/eur` (or any other fiat ticker) returns
   `history_1y: 0` and `history_all: 0` on the wire while
   `history_7d` populates normally.
 - API log shows recurring WARN every forex refresh tick:

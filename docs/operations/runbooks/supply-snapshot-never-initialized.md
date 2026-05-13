@@ -14,7 +14,7 @@ severity: P3
 | Alert | `ratesengine_supply_snapshot_never_initialized` (P3, ticket) |
 | Detected by | `deploy/monitoring/rules/supply-snapshot.yml` |
 | Typical MTTR | 10 min (one-shot operator action) |
-| Impact | `/v1/assets/{id}` F2 fields (circulating / total / max / market_cap_usd / fdv_usd) render as `null` for every asset; `/v1/coins/{slug}` likewise. |
+| Impact | `/v1/assets/{id}` F2 fields (circulating / total / max / market_cap_usd / fdv_usd) render as `null` for every asset. |
 
 ## Why this exists separately from `_stale`
 
@@ -32,9 +32,10 @@ doesn't false-positive.
 ## Symptoms
 
 - The alert annotation summary: "supply snapshot has never published — pipeline uninitialized."
-- `/v1/coins/XLM` returns no `circulating_supply` / `market_cap_usd`
-  fields (they're omitted when null per the wire-shape contract).
-- `/v1/assets/native` likewise.
+- `/v1/assets/native` returns no `circulating_supply` /
+  `market_cap_usd` fields (they're omitted when null per the
+  wire-shape contract).
+- `/v1/assets/xlm` (catalogue-slug variant) likewise.
 - `psql … -c "SELECT count(*) FROM asset_supply_history"` returns 0.
 
 ## Quick diagnosis (≤ 5 min)
@@ -133,7 +134,7 @@ sudo -u postgres psql -d ratesengine -c \
    FROM asset_supply_history GROUP BY asset_key ORDER BY asset_key"
 
 # API surfaces the data.
-curl -s 'https://api.ratesengine.net/v1/coins/XLM' | jq '.data.circulating_supply'
+curl -s 'https://api.ratesengine.net/v1/assets/native' | jq '.data.circulating_supply'
 # Expect a numeric string, not null.
 ```
 

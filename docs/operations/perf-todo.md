@@ -23,7 +23,6 @@ the underlying DB cost; warm reads are sub-millisecond.
 | `/v1/oracle/latest` | ~600 ms | ~0.5 ms | 200 ms | Redis 30 s TTL (#696) |
 | `/v1/markets` | ~570 ms | ~0.3 ms | — | Redis 60 s TTL (#697) |
 | `/v1/assets` | ~635 ms | ~0.4 ms | — | Redis 60 s TTL (#697) |
-| `/v1/coins` | ~18 ms | — | — | already fast — no cache wired |
 
 Customer impact: the moment any consumer makes more than one
 request per minute they see warm reads end-to-end. The smoke

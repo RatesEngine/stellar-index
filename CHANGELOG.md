@@ -17,6 +17,23 @@ against.
 
 ### Documentation
 
+- F-1204 sweep widened (wave 80) — found seven more operator-
+  facing surfaces still referencing the rc.48-removed `/v1/coins`
+  and `/v1/currencies` routes after the original close (which
+  only fixed `audit-public-api.sh` and `llms.txt`). Updated:
+  `configs/example.toml` (CORS public-read example),
+  `docs/operations/cdn-setup.md` (CDN policy table),
+  `docs/operations/runbooks/fx-history-missing.md` (curl
+  signal),
+  `docs/operations/runbooks/supply-snapshot-never-initialized.md`
+  (impact text + diagnosis curl),
+  `docs/operations/sac-wrappers-and-usd-volume.md` (asset_id
+  format note),
+  `docs/operations/post-launch-queries.md` (catalogue surface
+  list × 2),
+  `docs/operations/perf-todo.md` (perf table row removed).
+  Operators following any of these surfaces no longer hit
+  404s on routes that haven't existed since rc.48.
 - `docs/operations/runbooks/_template.md` refreshed against
   patterns established across the wave-65, -70, -71, -73, -75
   runbook series. Removes the long-stale `TODO(#0)` claim that

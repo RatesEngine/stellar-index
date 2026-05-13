@@ -247,7 +247,7 @@ cdn_enabled              = true
 # cookie auth on the same hostname (the magic-link / dashboard
 # flow at /v1/auth/login + /v1/dashboard/*) — wildcard CORS plus
 # session cookies is a CSRF foothold. The credentialed surface
-# is path-narrow; the public read surface (/v1/price, /v1/coins,
+# is path-narrow; the public read surface (/v1/price, /v1/assets,
 # /v1/markets, /v1/observations, /v1/oracle/*, etc.) does not
 # accept session cookies and is safe under wildcard CORS.
 #
