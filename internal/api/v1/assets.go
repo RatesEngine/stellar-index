@@ -375,34 +375,37 @@ func (s *Server) handleAssetList(w http.ResponseWriter, r *http.Request) {
 	//                   → catalogue crypto rows only (BTC, ETH, XLM, …).
 	//                   "blockchain" is the spec's surface alias for
 	//                   the same set.
-	//   - "" / "all"    → existing classic_assets + external-network
-	//                   paths below; catalogue rows do NOT merge in
-	//                   until R-018 finalisation lands the
-	//                   cursor-phased catalogue→classic protocol.
+	//   - "all" / ""    → catalogue rows (all 3 classes, market-cap
+	//                   ordered) THEN classic_assets via volume-desc.
+	//                   See handleAssetListUnified.
 	assetClass := normaliseAssetClass(r.URL.Query().Get("asset_class"))
 	if assetClass == "fiat" || assetClass == "stablecoin" || assetClass == "crypto" {
 		s.handleAssetListFromCatalogue(w, r, assetClass, limit, cursor)
 		return
 	}
 
-	// Network filter. Drives the /blockchains/{network} → assets
-	// click-through. Recognised values:
-	//   - "" / "stellar" → existing reader path; returns the indexer's
-	//     full Stellar-network catalogue.
-	//   - "ethereum" / "solana" / "polygon" / "base" / "arbitrum" /
-	//     "tron" / "bitcoin" → returns the verified-currency catalogue
-	//     entries that have a `networks[]` row matching that chain,
-	//     projected to AssetDetail (type=external, asset_id =
-	//     "<network>:<contract>"). We don't index those chains
-	//     ourselves — the catalogue is the source of truth for who's
-	//     issued there.
+	// Network filter takes precedence over the unified-all path —
+	// the explorer fires /assets?network=ethereum (etc.) from the
+	// /blockchains/{network} click-through and that page wants
+	// catalogue rows projected to that network, not the merged view.
 	network := strings.ToLower(strings.TrimSpace(r.URL.Query().Get("network")))
 	if network != "" && network != "stellar" {
 		s.handleAssetListExternalNetwork(w, r, network, limit, cursor)
 		return
 	}
-
 	issuer := strings.TrimSpace(r.URL.Query().Get("issuer"))
+
+	// Unified "All" listing — catalogue rows first (market-cap
+	// ordered) then classic_assets via the existing volume-desc
+	// path. Cursor encodes the phase so the explorer's paginate-
+	// forward UX walks both naturally. OPT-IN via asset_class=all
+	// so existing SDK consumers integrated against the legacy
+	// classic-only listing don't see a wire-shape change. The
+	// explorer's /assets page passes asset_class=all explicitly.
+	if assetClass == "all" {
+		s.handleAssetListUnified(w, r, limit, cursor)
+		return
+	}
 
 	// Coins-backed listing — when a CoinsReader is wired, source the
 	// listing from the same ListCoinsExt path /v1/coins uses. Gives
@@ -819,6 +822,183 @@ func bigFloatFromOptionalString(s *string) *big.Float {
 		return nil
 	}
 	return f
+}
+
+// handleAssetListUnified serves /v1/assets when no asset_class
+// filter is set and no issuer filter is in play — the CMC/CoinGecko-
+// style "All Assets" view (R-018 assets-unification endgame).
+//
+// Wire shape: catalogue rows (≤45 across all 3 classes) come first,
+// ordered by market_cap_usd desc (fiats top the chart at $44T/$21T/
+// $18T/…, then crypto + stablecoin catalogue entries which lack
+// supply data today and sort below the fiats). Classic_assets pages
+// follow, ordered by trailing-24h volume_usd desc (the existing
+// CoinsOrderVolume24hUSDDesc path — most-actively-traded Stellar-
+// classic rows surface first within their phase).
+//
+// Cursor protocol — phase-prefixed:
+//   - empty cursor             → catalogue phase, offset 0.
+//   - "catalogue:<offset>"     → catalogue phase resumed at offset.
+//   - "classic:<inner_cursor>" → classic phase via ListCoinsExt; the
+//     inner cursor is whatever
+//     CoinsOrderVolume24hUSDDesc emits.
+//   - "classic:"               → classic phase fresh start (catalogue
+//     just exhausted; inner cursor empty).
+//
+// Page sequence on a default limit=100 (catalogue has ~45 rows):
+//
+//	page 1 → 45 catalogue rows + 55 classic rows (single call to
+//	         this handler that exhausts catalogue then continues
+//	         into classic for the remainder).
+//	page 2+ → 100 classic rows each via the classic phase.
+//
+// Phase transitions within a single page are NOT supported in v1
+// of this protocol — each page is either fully catalogue or fully
+// classic. (Mixed pages would complicate downstream consumers
+// expecting a single ordering predicate per page.) When catalogue
+// has fewer remaining than `limit`, this handler returns the
+// catalogue tail and signals "classic:" next cursor; the client
+// fires the next page to fetch classic rows.
+func (s *Server) handleAssetListUnified(w http.ResponseWriter, r *http.Request, limit int, cursor string) {
+	phase, inner := parseUnifiedCursor(cursor)
+
+	if phase == "catalogue" {
+		s.serveCatalogueUnifiedPage(w, r, limit, inner)
+		return
+	}
+	// phase == "classic"
+	s.serveClassicUnifiedPage(w, r, limit, inner)
+}
+
+// parseUnifiedCursor decodes the phase-prefixed cursor format. An
+// empty cursor maps to catalogue phase offset 0.
+func parseUnifiedCursor(cursor string) (phase, inner string) {
+	if cursor == "" {
+		return "catalogue", "0"
+	}
+	if rest, ok := strings.CutPrefix(cursor, "catalogue:"); ok {
+		return "catalogue", rest
+	}
+	if rest, ok := strings.CutPrefix(cursor, "classic:"); ok {
+		return "classic", rest
+	}
+	// Legacy cursor format (no phase prefix) — treat as classic-phase
+	// to preserve backward compatibility with consumers that round-
+	// tripped a pre-unified cursor.
+	return "classic", cursor
+}
+
+// serveCatalogueUnifiedPage projects the catalogue, computes
+// market_cap, sorts, slices to the requested offset/limit, and
+// writes the envelope with the appropriate next-cursor.
+func (s *Server) serveCatalogueUnifiedPage(w http.ResponseWriter, r *http.Request, limit int, innerCursor string) {
+	if s.verifiedCurrencies == nil {
+		// No catalogue → skip directly to classic phase.
+		s.serveClassicUnifiedPage(w, r, limit, "")
+		return
+	}
+	entries := s.verifiedCurrencies.All()
+	caps := s.computeAllCatalogueMarketCaps(r.Context(), entries)
+	rows := projectCatalogueRows(entries, caps)
+	sortAssetDetailsByMarketCapDesc(rows)
+
+	offset := 0
+	if innerCursor != "" {
+		if n, err := strconv.Atoi(innerCursor); err == nil && n > 0 {
+			offset = n
+		}
+	}
+	if offset >= len(rows) {
+		// Catalogue done → transition to classic.
+		s.serveClassicUnifiedPage(w, r, limit, "")
+		return
+	}
+	end := offset + limit
+	if end > len(rows) {
+		end = len(rows)
+	}
+	env := Envelope{Data: rows[offset:end], Flags: Flags{}}
+	if end < len(rows) {
+		env.Pagination = &Pagination{Next: "catalogue:" + strconv.Itoa(end)}
+	} else {
+		// Catalogue exhausted on this page → next page picks up classic.
+		env.Pagination = &Pagination{Next: "classic:"}
+	}
+	writeEnvelope(w, env)
+}
+
+// serveClassicUnifiedPage delegates to the existing CoinsReader
+// path with Volume24hUSDDesc ordering. The inner cursor is what
+// that path returned on the prior call. Next-cursor gets phase-
+// prefixed before going out the wire.
+func (s *Server) serveClassicUnifiedPage(w http.ResponseWriter, r *http.Request, limit int, innerCursor string) {
+	if s.coins == nil {
+		// No coins reader wired → empty terminator.
+		writeJSON(w, []AssetDetail{}, Flags{})
+		return
+	}
+	opts := timescale.ListCoinsOptions{
+		Limit:  limit,
+		Cursor: innerCursor,
+		Order:  timescale.CoinsOrderVolume24hUSDDesc,
+	}
+	// Overfetch-by-one (same shape as handleAssetListFromCoins) to
+	// drive the cursor advance.
+	opts.Limit = limit + 1
+	rows, err := s.coins.ListCoinsExt(r.Context(), opts)
+	if err != nil {
+		if clientAborted(r, err) {
+			return
+		}
+		s.logger.Error("ListCoinsExt (unified) failed", "err", err)
+		writeProblem(w, r,
+			"https://api.ratesengine.net/errors/internal",
+			"Internal error", http.StatusInternalServerError, "")
+		return
+	}
+	hasMore := len(rows) > limit
+	if hasMore {
+		rows = rows[:limit]
+	}
+	out := make([]AssetDetail, 0, len(rows))
+	for _, row := range rows {
+		out = append(out, assetDetailFromCoinRow(row))
+	}
+	env := Envelope{Data: out, Flags: Flags{}}
+	if hasMore && len(out) > 0 {
+		last := rows[len(rows)-1]
+		// Volume24hUSDDesc cursor shape: <vol_or_blank>:<asset_id>.
+		volStr := ""
+		if last.Volume24hUSD != nil {
+			volStr = *last.Volume24hUSD
+		}
+		inner := volStr + ":" + last.AssetID
+		env.Pagination = &Pagination{Next: "classic:" + inner}
+	}
+	writeEnvelope(w, env)
+}
+
+// computeAllCatalogueMarketCaps fans out fiatMarketCapUSD across
+// the full catalogue (all classes), parallel-indexed to entries.
+// Empty string at index i means the row has no market_cap.
+func (s *Server) computeAllCatalogueMarketCaps(ctx context.Context, entries []*currency.VerifiedCurrency) []string {
+	caps := make([]string, len(entries))
+	var wg sync.WaitGroup
+	for i, vc := range entries {
+		if vc.Class != currency.ClassFiat || vc.CirculatingSupply == "" {
+			continue
+		}
+		i, vc := i, vc
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			if capStr := s.fiatMarketCapUSD(ctx, vc); capStr != nil {
+				caps[i] = *capStr
+			}
+		}()
+	}
+	wg.Wait()
+	return caps
 }
 
 // projectCatalogueForNetwork walks the catalogue and returns one
