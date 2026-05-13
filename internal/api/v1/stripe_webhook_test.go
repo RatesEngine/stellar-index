@@ -16,9 +16,11 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/prometheus/client_golang/prometheus/testutil"
 
 	v1 "github.com/RatesEngine/rates-engine/internal/api/v1"
 	"github.com/RatesEngine/rates-engine/internal/auth"
+	"github.com/RatesEngine/rates-engine/internal/obs"
 	"github.com/RatesEngine/rates-engine/internal/platform"
 )
 
@@ -752,5 +754,101 @@ func TestStripeWebhook_PlatformBridge_LiftsPostgresKeys(t *testing.T) {
 		if k.ID == "kid_dash_revoked" || k.ID == "kid_dash_high" {
 			t.Errorf("Postgres key %q should NOT have been touched (revoked or already at-or-above target)", k.ID)
 		}
+	}
+}
+
+// fakePlatformAccountsForBridgeWithError — variant of
+// `fakePlatformAccountsForBridge` whose `GetByStripeCustomerID`
+// always returns an error, exercising the platform-store error
+// path in [v1.Server.applyPlatformSideEffects].
+type fakePlatformAccountsForBridgeWithError struct{}
+
+func (*fakePlatformAccountsForBridgeWithError) GetByStripeCustomerID(_ context.Context, _ string) (platform.Account, error) {
+	return platform.Account{}, errors.New("postgres unreachable")
+}
+
+func (*fakePlatformAccountsForBridgeWithError) Update(_ context.Context, _ platform.Account) error {
+	panic("unused")
+}
+
+func (*fakePlatformAccountsForBridgeWithError) Create(_ context.Context, _ platform.Account) (platform.Account, error) {
+	panic("unused")
+}
+
+func (*fakePlatformAccountsForBridgeWithError) Get(_ context.Context, _ uuid.UUID) (platform.Account, error) {
+	panic("unused")
+}
+
+func (*fakePlatformAccountsForBridgeWithError) GetBySlug(_ context.Context, _ string) (platform.Account, error) {
+	panic("unused")
+}
+
+func (*fakePlatformAccountsForBridgeWithError) Suspend(_ context.Context, _ uuid.UUID, _ string) error {
+	panic("unused")
+}
+
+func (*fakePlatformAccountsForBridgeWithError) Unsuspend(_ context.Context, _ uuid.UUID) error {
+	panic("unused")
+}
+
+// TestStripeWebhook_PlatformBridge_GetAccountErrorIncrementsMetric
+// pins the wave-65 (2026-05-13) observability seam: a platform-
+// store failure in `GetByStripeCustomerID` increments
+// `ratesengine_stripe_platform_sync_errors_total{operation="get_account"}`
+// AND the webhook still returns 200 (Stripe retries would not
+// heal Postgres, so 5xx-ing here would just retry-storm).
+//
+// This pins the operator-visible signal that the F-1219 wave-32
+// follow-up note promised — without the metric the platform-store
+// half can silently degrade for hours while Redis stays healthy.
+func TestStripeWebhook_PlatformBridge_GetAccountErrorIncrementsMetric(t *testing.T) {
+	now := time.Now().UTC()
+	mgr := &fakeStripeManager{
+		keys: map[string][]auth.APIKeyRecord{
+			"signup-broken": {
+				{KeyID: "kid_signup_broken", Identifier: "signup-broken", Tier: auth.TierAPIKey, RateLimitPerMin: 1000},
+			},
+		},
+	}
+
+	before := testutil.ToFloat64(obs.StripePlatformSyncErrorsTotal.WithLabelValues("get_account"))
+
+	srv := v1.New(v1.Options{
+		Auth: fakeAuthMiddleware(auth.Subject{}),
+		Stripe: &v1.StripeWebhookConfig{
+			SigningSecret: testStripeSecret,
+			Manager:       mgr,
+			Now:           func() time.Time { return now },
+			MaxAge:        5 * time.Minute,
+			Platform: &v1.StripePlatformBridge{
+				Accounts: &fakePlatformAccountsForBridgeWithError{},
+			},
+		},
+	})
+	ts := httptest.NewServer(srv.Handler())
+	t.Cleanup(ts.Close)
+
+	body := `{"id":"evt_broken_pro","type":"checkout.session.completed","data":{"object":{"id":"cs_broken","client_reference_id":"signup-broken","customer":"cus_broken","payment_status":"paid","metadata":{"tier":"pro"}}}}`
+	sig := stripeSign(t, body, testStripeSecret, now)
+	resp := postStripe(t, ts, body, sig)
+	defer resp.Body.Close()
+
+	// Webhook MUST return 200 — Stripe retries on 5xx would not
+	// heal Postgres, so the wave-65 metric is the right signal,
+	// not a 5xx response.
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d, want 200 (platform-store failures must NOT 5xx)", resp.StatusCode)
+	}
+
+	// Redis-side: the lift still happened (we don't gate Redis on
+	// platform-store health).
+	if got := len(mgr.updates); got != 1 {
+		t.Errorf("Redis updates = %d, want 1 (Redis path is independent of platform-store path)", got)
+	}
+
+	// The new metric must have advanced by exactly 1.
+	after := testutil.ToFloat64(obs.StripePlatformSyncErrorsTotal.WithLabelValues("get_account"))
+	if got := after - before; got != 1 {
+		t.Errorf("get_account metric delta = %v, want 1", got)
 	}
 }
