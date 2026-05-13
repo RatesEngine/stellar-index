@@ -614,6 +614,7 @@ func buildClassicRefreshers(cfg config.Config, store *timescale.Store, logger *s
 				bound,
 				supplyAggregatorInserter{s: store},
 				logger.With("asset", raw),
+				supply.WithStrictFreshnessRequired(cfg.Supply.StrictFreshnessRequired),
 			),
 			assetKey: assetKey,
 		})
@@ -646,6 +647,7 @@ func buildSEP41Refreshers(cfg config.Config, store *timescale.Store, logger *slo
 				bound,
 				supplyAggregatorInserter{s: store},
 				logger.With("asset", contractID),
+				supply.WithStrictFreshnessRequired(cfg.Supply.StrictFreshnessRequired),
 			),
 			assetKey: contractID, // supply.AssetKey form for SEP-41 is the bare contract id
 		})
@@ -671,6 +673,7 @@ func buildXLMRefresher(cfg config.Config, store *timescale.Store, logger *slog.L
 		computer,
 		supplyAggregatorInserter{s: store},
 		logger.With("asset", "native"),
+		supply.WithStrictFreshnessRequired(cfg.Supply.StrictFreshnessRequired),
 	), nil
 }
 

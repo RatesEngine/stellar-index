@@ -729,6 +729,19 @@ type SupplyConfig struct {
 	//
 	// Empty (the default) leaves the SEP-41 supply pipeline off.
 	WatchedSEP41Contracts []string `toml:"watched_sep41_contracts" doc:"Operator-curated SEP-41 Soroban contract C-strkeys to track for Algorithm 3 supply per ADR-0023. Empty leaves the SEP-41 supply pipeline off." default:"[]"`
+
+	// StrictFreshnessRequired flips the supply Refresher into the
+	// stricter F-1236 wave-60 (codex audit-2026-05-13) posture:
+	// snapshots arriving with `MinComponentLedger == 0` (no
+	// freshness anchor — happens on the static-XLM fallback path
+	// or when a freshness producer transiently fails) get
+	// rejected with `OutcomeKindMissingFreshness` instead of
+	// being published. Default false preserves the legacy
+	// permissive interpretation. Operators flip true once every
+	// freshness producer is wired AND every reader is shown to
+	// never fail-open under steady-state load — typically post-
+	// launch, after a few weeks of green snapshot timers.
+	StrictFreshnessRequired bool `toml:"strict_freshness_required" doc:"F-1236: when true, supply snapshots without a MinComponentLedger anchor (i.e. zero-value freshness, the static-XLM fallback or a transiently-failing producer) are rejected rather than published. Default false preserves backwards-compatible permissive behaviour; flip true after the freshness producers are confirmed wired in steady state." default:"false"`
 }
 
 // Validate reports inconsistencies in the supply block. Currently

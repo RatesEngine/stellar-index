@@ -44,12 +44,13 @@ type Outcome struct {
 type OutcomeKind string
 
 const (
-	OutcomeKindOK             OutcomeKind = "ok"
-	OutcomeKindNoLedger       OutcomeKind = "no_ledger"       // LedgerLookup error
-	OutcomeKindNoObservation  OutcomeKind = "no_observation"  // ChainReader fell through with no static fallback either
-	OutcomeKindComputeError   OutcomeKind = "compute_error"   // computer failed for non-observation reasons
-	OutcomeKindStaleComponent OutcomeKind = "stale_component" // F-1236: a component observation lags the snapshot ledger past the configured threshold
-	OutcomeKindWriteError     OutcomeKind = "write_error"     // InsertSupply failed
+	OutcomeKindOK               OutcomeKind = "ok"
+	OutcomeKindNoLedger         OutcomeKind = "no_ledger"         // LedgerLookup error
+	OutcomeKindNoObservation    OutcomeKind = "no_observation"    // ChainReader fell through with no static fallback either
+	OutcomeKindComputeError     OutcomeKind = "compute_error"     // computer failed for non-observation reasons
+	OutcomeKindStaleComponent   OutcomeKind = "stale_component"   // F-1236: a component observation lags the snapshot ledger past the configured threshold
+	OutcomeKindMissingFreshness OutcomeKind = "missing_freshness" // F-1236 wave 60 (codex audit-2026-05-13): strict mode + MinComponentLedger==0 (no signal); reject rather than publish without a freshness anchor
+	OutcomeKindWriteError       OutcomeKind = "write_error"       // InsertSupply failed
 )
 
 // DefaultStaleComponentLedgers is the F-1236 freshness threshold
@@ -70,11 +71,12 @@ const DefaultStaleComponentLedgers uint32 = 1000
 // aggregator drives it via a ticker in its own goroutine,
 // mirroring the baseline-refresher shape.
 type Refresher struct {
-	ledgers              LedgerLookup
-	computer             SnapshotComputer
-	inserter             SnapshotInserter
-	logger               *slog.Logger
-	staleComponentLedger uint32
+	ledgers                 LedgerLookup
+	computer                SnapshotComputer
+	inserter                SnapshotInserter
+	logger                  *slog.Logger
+	staleComponentLedger    uint32
+	strictFreshnessRequired bool
 }
 
 // RefresherOption tunes a [Refresher].
@@ -89,6 +91,28 @@ type RefresherOption func(*Refresher)
 func WithStaleComponentLedgers(maxLag uint32) RefresherOption {
 	return func(r *Refresher) {
 		r.staleComponentLedger = maxLag
+	}
+}
+
+// WithStrictFreshnessRequired flips the Refresher into the
+// stricter F-1236 wave-60 (codex audit-2026-05-13) posture:
+// a snapshot whose `MinComponentLedger == 0` is rejected with
+// [OutcomeKindMissingFreshness] rather than passing the gate.
+// Default false preserves the legacy permissive interpretation
+// of zero ("no freshness signal — let it through") so
+// deployments running the static-XLM fallback or where one of
+// the freshness producers can transiently fail (Postgres
+// timeout, Redis blip) keep publishing snapshots.
+//
+// Operators turn this on after every freshness producer is
+// confirmed wired AND every reader is shown to never
+// fail-open under steady-state load — typically post-launch,
+// after a few weeks of green snapshot timers. Once enabled,
+// the supply table only ever accumulates rows whose component
+// observations are demonstrably anchored to a recent ledger.
+func WithStrictFreshnessRequired(strict bool) RefresherOption {
+	return func(r *Refresher) {
+		r.strictFreshnessRequired = strict
 	}
 }
 
@@ -137,6 +161,23 @@ func (r *Refresher) Tick(ctx context.Context) Outcome {
 		r.logger.Warn("supply refresh: compute failed",
 			"err", err, "ledger", ledger, "kind", string(kind))
 		return Outcome{Kind: kind, Err: err}
+	}
+
+	// F-1236 wave 60 (codex audit-2026-05-13): strict mode
+	// rejects snapshots that arrive with NO freshness signal
+	// (MinComponentLedger == 0), instead of the legacy
+	// permissive interpretation ("no signal — let it through").
+	// Default off: preserves backwards compat for deployments on
+	// the static-XLM fallback or with transiently-failing
+	// freshness producers. Operators turn it on once every
+	// producer is wired + every reader is shown to never
+	// fail-open under steady-state load.
+	if r.strictFreshnessRequired && snap.MinComponentLedger == 0 {
+		err := fmt.Errorf("supply: strict-freshness mode — snapshot has no MinComponentLedger anchor")
+		r.logger.Warn("supply refresh: rejecting freshness-less snapshot under strict mode",
+			"asset", snap.AssetKey,
+			"snapshot_ledger", snap.LedgerSequence)
+		return Outcome{Kind: OutcomeKindMissingFreshness, Err: err, Snapshot: snap}
 	}
 
 	// F-1236 (codex audit-2026-05-12): reject snapshots whose

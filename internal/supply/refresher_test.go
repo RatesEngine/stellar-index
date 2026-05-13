@@ -161,6 +161,97 @@ func TestRefresher_StaleComponentZeroDisablesGate(t *testing.T) {
 	}
 }
 
+// TestRefresher_StrictFreshness_RejectsZeroAnchor pins the
+// F-1236 wave-60 (codex audit-2026-05-13) strict-mode gate:
+// a snapshot with `MinComponentLedger == 0` (no freshness
+// anchor) is rejected with `OutcomeKindMissingFreshness` when
+// `WithStrictFreshnessRequired(true)` is wired. The inserter
+// is NOT called.
+func TestRefresher_StrictFreshness_RejectsZeroAnchor(t *testing.T) {
+	inserter := &stubInserter{}
+	r := NewRefresher(
+		stubLedgers{ledger: 50_000_000, observedAt: time.Unix(1_770_000_000, 0).UTC()},
+		stubComputer{out: Supply{
+			AssetKey:           "XLM",
+			TotalSupply:        big.NewInt(1_000_000),
+			CirculatingSupply:  big.NewInt(900_000),
+			Basis:              BasisXLMSDFReserveExclusion,
+			LedgerSequence:     50_000_000,
+			MinComponentLedger: 0, // no freshness signal — the audit's risk shape
+		}},
+		inserter,
+		discardLogger(),
+		WithStrictFreshnessRequired(true),
+	)
+	out := r.Tick(context.Background())
+	if out.Kind != OutcomeKindMissingFreshness {
+		t.Fatalf("kind=%s, want %s (err=%v)", out.Kind, OutcomeKindMissingFreshness, out.Err)
+	}
+	if inserter.calls != 0 {
+		t.Errorf("inserter called on freshness-less snapshot under strict mode (want 0, got %d)", inserter.calls)
+	}
+}
+
+// TestRefresher_StrictFreshness_AcceptsAnchored — the strict-
+// mode gate ONLY rejects zero-anchor snapshots; a snapshot
+// with a real `MinComponentLedger` (and within the
+// stale-component window) still inserts cleanly.
+func TestRefresher_StrictFreshness_AcceptsAnchored(t *testing.T) {
+	inserter := &stubInserter{}
+	r := NewRefresher(
+		stubLedgers{ledger: 50_000_500, observedAt: time.Unix(1_770_000_000, 0).UTC()},
+		stubComputer{out: Supply{
+			AssetKey:           "XLM",
+			TotalSupply:        big.NewInt(1_000_000),
+			CirculatingSupply:  big.NewInt(900_000),
+			Basis:              BasisXLMSDFReserveExclusion,
+			LedgerSequence:     50_000_500,
+			MinComponentLedger: 50_000_000, // anchored, 500 ledgers behind
+		}},
+		inserter,
+		discardLogger(),
+		WithStrictFreshnessRequired(true),
+		WithStaleComponentLedgers(1000),
+	)
+	out := r.Tick(context.Background())
+	if out.Kind != OutcomeKindOK {
+		t.Fatalf("kind=%s, want ok (err=%v)", out.Kind, out.Err)
+	}
+	if inserter.calls != 1 {
+		t.Errorf("inserter.calls=%d want 1", inserter.calls)
+	}
+}
+
+// TestRefresher_StrictFreshness_DefaultOff — without
+// `WithStrictFreshnessRequired(true)`, a freshness-less
+// snapshot still publishes (legacy permissive behaviour
+// preserved). This pins the backwards-compat default so a
+// future operator can't quietly tighten without a config flip.
+func TestRefresher_StrictFreshness_DefaultOff(t *testing.T) {
+	inserter := &stubInserter{}
+	r := NewRefresher(
+		stubLedgers{ledger: 50_000_000, observedAt: time.Unix(1_770_000_000, 0).UTC()},
+		stubComputer{out: Supply{
+			AssetKey:           "XLM",
+			TotalSupply:        big.NewInt(1_000_000),
+			CirculatingSupply:  big.NewInt(900_000),
+			Basis:              BasisXLMSDFReserveExclusion,
+			LedgerSequence:     50_000_000,
+			MinComponentLedger: 0,
+		}},
+		inserter,
+		discardLogger(),
+		// No WithStrictFreshnessRequired — default false.
+	)
+	out := r.Tick(context.Background())
+	if out.Kind != OutcomeKindOK {
+		t.Fatalf("kind=%s, want ok (default permissive); err=%v", out.Kind, out.Err)
+	}
+	if inserter.calls != 1 {
+		t.Errorf("inserter.calls=%d want 1 (default permissive must publish)", inserter.calls)
+	}
+}
+
 func TestRefresher_NoLedger(t *testing.T) {
 	inserter := &stubInserter{}
 	r := NewRefresher(

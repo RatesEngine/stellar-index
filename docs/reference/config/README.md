@@ -185,6 +185,7 @@ the `env:` column.
 | `supply.watched_classic_assets` | `[]string` | `[]` | — | Operator-curated classic credit assets (CODE-ISSUER form) to track for Algorithm 2 supply per ADR-0022. Empty leaves the classic-supply pipeline off. |
 | `supply.sac_wrappers` | `map` | `{}` | — | SAC wrapper contract C-strkey → supply.AssetKey (CODE:ISSUER) map. Drives the SAC balance observer's watched-contract filter. Pure SEP-41 contracts reuse this map by mapping contract_id → contract_id. |
 | `supply.watched_sep41_contracts` | `[]string` | `[]` | — | Operator-curated SEP-41 Soroban contract C-strkeys to track for Algorithm 3 supply per ADR-0023. Empty leaves the SEP-41 supply pipeline off. |
+| `supply.strict_freshness_required` | `bool` | `false` | — | F-1236: when true, supply snapshots without a MinComponentLedger anchor (i.e. zero-value freshness, the static-XLM fallback or a transiently-failing producer) are rejected rather than published. Default false preserves backwards-compatible permissive behaviour; flip true after the freshness producers are confirmed wired in steady state. |
 
 ### `[trades]`
 
