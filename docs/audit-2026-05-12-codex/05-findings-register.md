@@ -3823,7 +3823,9 @@ Evidence:
 
 - `XFI-0098`
 - `R1-0033`
+- `R1-0035`
 - `EV-0282`
+- `EV-0287`
 
 Expected: the `ratesengine_api_price_stale` alert and `price-stale` runbook
 should be backed by a metric that is actually emitted by a runtime component.
@@ -3831,7 +3833,7 @@ If cardinality concerns prevent API-side emission, the aggregator or an
 allow-listed freshness exporter must own the series before the alert is treated
 as launch coverage.
 
-Observed: R1 currently returns
+Observed at open: R1 returned
 `/v1/price?asset=native&quote=fiat:USD` with `flags.stale=true`,
 `observed_at=2026-05-13T12:00:00Z`, and an `as_of` about three minutes later.
 Prometheus nevertheless returns an empty vector for
@@ -3841,6 +3843,12 @@ also lacks any `ratesengine_price_staleness_seconds` series. Source explains
 why: `internal/api/v1/price.go` intentionally does not emit
 `obs.PriceStalenessSeconds` due cardinality risk, and a repository search finds
 no producer outside metric registration/test warmup.
+
+Current-source/live split: a follow-up source change adds an aggregator-side
+bounded producer for configured pairs, but direct R1 verification still shows
+no `ratesengine_price_staleness_seconds` series in Prometheus or the live
+aggregator metrics endpoint. This remains open until R1 emits the series and
+the alert query is non-empty for the watched pair set.
 
 Impact: high. The service can serve stale prices and set `flags.stale=true`
 without the documented `ratesengine_api_price_stale` alert firing. Operators
@@ -3859,7 +3867,7 @@ against a stale fixture or live canary.
 
 Severity: `high`
 
-Status: `open`
+Status: `fixed`
 
 Affected surface:
 
@@ -3874,14 +3882,16 @@ Evidence:
 
 - `XFI-0099`
 - `R1-0034`
+- `R1-0035`
 - `EV-0286`
+- `EV-0287`
 
 Expected: a probe textfile written under
 `/var/lib/node_exporter/textfile_collector` should be scraped by
 node_exporter and visible to Prometheus as `ratesengine_sla_probe_*` series.
 The SLA-probe freshness/unit-failed/stale alerts depend on that chain.
 
-Observed: R1 now writes `/var/lib/node_exporter/textfile_collector/sla_probe.prom`,
+Observed at open: R1 wrote `/var/lib/node_exporter/textfile_collector/sla_probe.prom`,
 but Prometheus instant queries for `ratesengine_sla_probe_unit_failed` and
 `ratesengine_sla_probe_freshness_sec` return empty vectors. The live
 node_exporter process is running only with `--collector.systemd` and
@@ -3890,13 +3900,13 @@ node_exporter process is running only with `--collector.systemd` and
 Scraping node_exporter directly shows `node_textfile_scrape_error 0` but no
 `ratesengine_sla_probe_*` samples.
 
-Impact: high. The SLA probe can fail on disk and ping Healthchecks, but the
+Impact at open: high. The SLA probe can fail on disk and ping Healthchecks, but the
 Prometheus alert/status path has no series to evaluate. All SLA-probe Prometheus
 rules are inert on R1, including the freshness breach that should reflect
 `F-1305`, the unit-failed alert, and the stale-evidence alert.
 
-Remediation direction: reconcile live R1 node_exporter with the archival-node
-role by adding the textfile collector flags, restart node_exporter, and prove
-Prometheus sees `ratesengine_sla_probe_unit_failed` plus the per-endpoint
-freshness series. Add a post-deploy check that fails if any textfile-producing
-timer has a `.prom` file on disk but no matching Prometheus series.
+Closure evidence: direct R1 verification now shows node_exporter running with
+`--collector.textfile --collector.textfile.directory=/var/lib/node_exporter/textfile_collector`,
+node_exporter exposing `ratesengine_sla_probe_unit_failed` and
+`ratesengine_sla_probe_freshness_sec`, and Prometheus returning those series.
+The SLA verdict is still failing; that remains tracked under `F-1305`.
