@@ -80,10 +80,29 @@ paths:
     get:
       tags: [health]
       summary: Liveness — process is up.
+      description: |
+        Shallow liveness probe. Returns 200 as long as the
+        process is running and the mux is serving. Does NOT
+        touch the database, Redis, or any downstream
+        dependency — those are the readiness probe's job.
+
+        F-1210 (codex audit-2026-05-12): `/healthz` is
+        deliberately scoped to the serving-plane process
+        liveness, NOT to SLA truth. Use `/v1/status` (the
+        comprehensive rollup) for ingest lag, supply
+        freshness, per-pair latency, evidence-timer
+        coverage, and the rest of the launch-readiness
+        signals — those are dashboarded separately because
+        liveness probes (k8s, systemd, load balancer pool
+        membership) MUST NOT flap when a backfill stalls,
+        an external source goes silent, or a non-critical
+        timer misfires.
       security: []
       responses:
         "200":
-          description: Alive.
+          description: |
+            Alive. `status` field is `ok`; a pointer at
+            `/v1/status` is included for the SLA-truth rollup.
           content:
             application/json:
               schema: { $ref: "#/components/schemas/HealthResponse" }
@@ -91,16 +110,45 @@ paths:
   /readyz:
     get:
       tags: [health]
-      summary: Readiness — all dependencies reachable.
+      summary: Readiness — serving-plane dependencies reachable.
+      description: |
+        Deep readiness probe scoped to the SERVING PLANE:
+        every registered `ReadyChecker` (Postgres, Redis)
+        is pinged in parallel under a shared 2-second
+        deadline. 200 iff all pass; 503 with a per-check
+        failure list otherwise.
+
+        F-1210 (codex audit-2026-05-12): like `/healthz`,
+        `/readyz` is deliberately scoped — it answers
+        "should the load balancer route traffic to this
+        instance?", NOT "is the launch-readiness gate
+        green?" Ingest lag, supply freshness, latency
+        SLOs, alert state, and evidence-timer coverage are
+        the rich-rollup concern at `/v1/status`. An ingest
+        stall must NOT pull every API instance out of
+        rotation — it would turn a backfill-only outage
+        into a customer-facing total outage.
+
+        Operators monitoring launch-readiness should poll
+        `/v1/status` (which the Cloudflare-Pages status
+        page also consumes). Customers checking "can I
+        call the API right now" use `/v1/healthz` (cheap)
+        or `/v1/readyz` (deeper, but still serving-plane
+        only).
       security: []
       responses:
         "200":
-          description: Ready to serve.
+          description: Ready to serve. `checks[]` lists each dependency-ping result.
           content:
             application/json:
               schema: { $ref: "#/components/schemas/HealthResponse" }
         "503":
-          description: Dependencies unreachable.
+          description: |
+            One or more serving-plane dependencies failed their
+            ping under the deadline. `status` field is
+            `degraded` and `flags.stale` is `true`; the
+            response body carries the `checks` array so
+            operators can see which dependency failed.
           content:
             application/problem+json:
               schema: { $ref: "#/components/schemas/Problem" }
