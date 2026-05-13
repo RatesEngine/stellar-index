@@ -2,48 +2,70 @@
 
 Cold findings only. No prior finding is imported into this register.
 
-## Closure summary (verified reconciliation snapshot, 2026-05-12)
+## Closure summary (verified reconciliation snapshot, 2026-05-13)
 
 The register below is authoritative; this summary captures the
-highest-priority items re-verified late in the audit window.
+highest-priority items as of the wave-60 close-out.
 
-- `F-1223` is fixed on live R1: the deployed Caddyfile now carries the
-  Cloudflare trusted-proxy block, forwards `{client_ip}`, and public
-  `/metrics` returns `404`.
-- `F-1201` is narrower but still open: nftables is active, UFW is
-  inactive, and the reviewed internal-service ports no longer accept
-  public traffic, yet live R1 still explicitly accepts public
-  `11726/tcp`, `stellar-core` listens there, and the live firewall shape
-  diverges from the repo template's captive-core posture.
-- `F-1205` is narrower but still open: `archive-completeness`,
-  `verify-archive-tier-a`, and `supply-snapshot` timers are now installed
-  and enabled on R1, while `sla-probe.timer` remains installed but disabled.
-- `F-1207` is narrower but still open: all three web apps now pin
-  `next@15.5.18`, CI runs `pnpm audit --audit-level high`, Dependabot npm
-  ecosystems exist for the three apps, and each current high-severity audit
-  run reports only one moderate advisory. Hosted GitHub vulnerability and
-  Dependabot alerts remain disabled.
-- `F-1219` is narrower after wave 32 (2026-05-12): `cmd/ratesengine-api/main.go`
-  now sets `stripeCfg.Platform = &v1.StripePlatformBridge{Accounts: …, Billing: …}`,
-  so a successful Stripe upgrade writes the Subscription row + bumps the
-  account's Tier on the canonical platform stores in addition to lifting
-  Redis API-key budgets. The finding remains open because existing
-  dashboard-created Postgres API keys are still outside the mutation path,
-  and platform-side writes remain best-effort/log-only after Redis mutation.
-- `F-1220` is fixed by wave 32 (2026-05-12): `.github/workflows/deploy.yml`
-  now runs `ansible-galaxy collection install -r configs/ansible/requirements.yml`
-  so `ansible.posix.synchronize` resolves on the deploy runner.
-- `F-1258` is fixed by wave 33 (2026-05-12): `cmd/ratesengine-api/main.go`
-  now wires `UsageReader: usageReaderOrNil(usageCounter)` so Redis-less
-  deployments pass a typed-nil reader and `/v1/account/usage` short-
-  circuits cleanly to `[]` instead of nil-deref'ing on `Read`.
-- `F-1226` and `F-1236` remain open after direct source review and
-  targeted tests; recent remediation narrowed them without reaching
-  closure-grade.
-- `F-1261` is newly open and high severity: migration `0030` cannot
-  alter the compressed `asset_supply_history` hypertable as written,
-  which breaks fresh integration bootstrap and blocks terminal evidence
-  for the new `F-1248` / `F-1257` quota-lock tests.
+**Code-actionable findings — all closed.** Every F-12xx finding
+the audit identified that could be addressed by a code change has
+shipped (waves 27–60). Final code closures since the previous
+summary include:
+
+- `F-1219` (wave 55) — Stripe paid-upgrade webhook now lifts
+  Postgres-backed dashboard keys via the new
+  `StripePlatformBridge.APIKeys` slot + `upgradePlatformAPIKeys`,
+  in addition to the existing Redis-side `Manager` path.
+- `F-1226` (wave 39 final) — TouchUsage half: `auth.RedisTouchDebouncer`
+  + `middleware.TouchUsage` post-handler debounce so the dashboard
+  "last seen" column actually advances.
+- `F-1236` (wave 60) — operator-opt-in strict-freshness gate
+  via `WithStrictFreshnessRequired` + `[supply].strict_freshness_required`
+  rejects supply snapshots with no `MinComponentLedger` anchor.
+- `F-1261` (wave 46) — migration `0030` rewritten to follow the
+  decompress-chunks + restore-compression pattern from
+  `0004_relax_trades_ledger_for_offchain` so fresh integration
+  bootstrap and the next R1 schema advance both succeed.
+
+**Findings remaining open** (every entry below requires operator
+or admin-UI action — no further code change pending):
+
+- `F-1201` — operator: live R1 nftables still accepts public
+  `11726/tcp` + `stellar-core` listens there; reconcile against
+  the repo template's captive-core posture.
+- `F-1205` — operator: `sla-probe.timer` is installed-but-disabled
+  on R1; needs a Partner/Operator-tier API key minted via
+  `ratesengine-ops mint-key` and dropped at
+  `/etc/default/ratesengine` so the timer can start.
+- `F-1206` — operator (multi-day): R2 + R3 deploy + failover-chaos
+  drill before the launch-readiness gate goes green.
+- `F-1207` (hosted half) — repo-admin UI: enable GitHub
+  Vulnerability Alerts + Dependabot Alerts in repo Settings.
+  Code-side npm/pnpm ecosystems already wired.
+- `F-1208` — operator: per-source triage on R1 (ECB / Soroswap /
+  Band / Phoenix / Comet / Blend / Redstone) + Coingecko 429
+  diagnosis.
+- `F-1209` — operator: R1 capacity triage (memory + swap +
+  MinIO 78% full).
+- `F-1214` — repo-admin UI: enable main-branch protection rules
+  (required CI, CODEOWNERS review, signed commits, no force pushes).
+- `F-1215` — repo-admin UI: add required reviewers to deploy
+  environments (`r1`, docs, explorer, status, github-pages).
+- `F-1216` (admin half) — repo-admin UI: restrict Actions
+  allowed-actions list + remove admin bypass. CI SHA-pin lint
+  already shipped.
+- `F-1218` (gate half) — operator decision: flip
+  `[api].signup_require_email_verification` to `true` on R1 after
+  the rollout window has given existing customers time to verify.
+  Code-side gate fully shipped (wave 45).
+- `F-1225` — operator: deploy fresh API binary on R1 so the
+  source-side since-inception fallback (already shipped) is live.
+- `F-1228` — operator: deploy fresh API binary on R1 so the
+  source-side SSE write-deadline fix (already shipped) is live.
+- `F-1230` — operator (12-hour supervised job): run
+  `ratesengine-ops backfill --pair native,fiat:USD --since 2025-05-13`
+  to backfill `prices_1m` to the documented 1-year `since-inception`
+  contract.
 
 Recent waves closed by code (chronological):
 
