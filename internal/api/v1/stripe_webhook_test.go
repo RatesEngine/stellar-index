@@ -852,3 +852,297 @@ func TestStripeWebhook_PlatformBridge_GetAccountErrorIncrementsMetric(t *testing
 		t.Errorf("get_account metric delta = %v, want 1", got)
 	}
 }
+
+// ─── Remaining 4 platform-bridge sync-error labels ───────────────
+//
+// Wave 66 covered `operation="get_account"`. The metric has four
+// other label values (`upsert_subscription`, `account_update`,
+// `list_keys`, `key_update`) that the wave-65 instrumentation
+// wired but were not yet pinned by a regression test. These four
+// fakes + the parameterised test below close that coverage gap.
+
+// fakePlatformBillingForBridge_UpsertErr — minimal `BillingStore`
+// double whose `UpsertSubscription` always errors. The other
+// methods panic-on-call so accidental use surfaces immediately
+// (the bridge code path hits ONLY UpsertSubscription on
+// checkout.session.completed).
+type fakePlatformBillingForBridge_UpsertErr struct{}
+
+func (*fakePlatformBillingForBridge_UpsertErr) UpsertSubscription(_ context.Context, _ platform.Subscription) error {
+	return errors.New("postgres unreachable")
+}
+
+func (*fakePlatformBillingForBridge_UpsertErr) GetActiveSubscriptionForAccount(_ context.Context, _ uuid.UUID) (platform.Subscription, error) {
+	panic("unused")
+}
+
+func (*fakePlatformBillingForBridge_UpsertErr) AppendStripeEvent(_ context.Context, _ platform.StripeEvent) error {
+	panic("unused")
+}
+
+func (*fakePlatformBillingForBridge_UpsertErr) MarkStripeEventProcessed(_ context.Context, _ string) error {
+	panic("unused")
+}
+
+func (*fakePlatformBillingForBridge_UpsertErr) MarkStripeEventFailed(_ context.Context, _, _ string) error {
+	panic("unused")
+}
+
+// fakePlatformAccountsForBridge_UpdateErr — `AccountStore` double
+// where `GetByStripeCustomerID` works (returns a Free-tier account
+// the upgrade path WILL try to bump) but `Update` always errors —
+// pins the `account_update` operation label.
+type fakePlatformAccountsForBridge_UpdateErr struct {
+	acctID uuid.UUID
+}
+
+func (f *fakePlatformAccountsForBridge_UpdateErr) GetByStripeCustomerID(_ context.Context, _ string) (platform.Account, error) {
+	return platform.Account{ID: f.acctID, StripeCustomerID: "cus_x", Tier: platform.TierFree}, nil
+}
+
+func (*fakePlatformAccountsForBridge_UpdateErr) Update(_ context.Context, _ platform.Account) error {
+	return errors.New("postgres unreachable")
+}
+
+func (*fakePlatformAccountsForBridge_UpdateErr) Create(_ context.Context, _ platform.Account) (platform.Account, error) {
+	panic("unused")
+}
+
+func (*fakePlatformAccountsForBridge_UpdateErr) Get(_ context.Context, _ uuid.UUID) (platform.Account, error) {
+	panic("unused")
+}
+
+func (*fakePlatformAccountsForBridge_UpdateErr) GetBySlug(_ context.Context, _ string) (platform.Account, error) {
+	panic("unused")
+}
+
+func (*fakePlatformAccountsForBridge_UpdateErr) Suspend(_ context.Context, _ uuid.UUID, _ string) error {
+	panic("unused")
+}
+
+func (*fakePlatformAccountsForBridge_UpdateErr) Unsuspend(_ context.Context, _ uuid.UUID) error {
+	panic("unused")
+}
+
+// fakePlatformAPIKeysForBridge_ListErr — `APIKeyStore` double
+// whose `ListForAccount` always errors. Pins the `list_keys`
+// operation label.
+type fakePlatformAPIKeysForBridge_ListErr struct{}
+
+func (*fakePlatformAPIKeysForBridge_ListErr) ListForAccount(_ context.Context, _ uuid.UUID) ([]platform.APIKey, error) {
+	return nil, errors.New("postgres unreachable")
+}
+
+func (*fakePlatformAPIKeysForBridge_ListErr) Update(_ context.Context, _ platform.APIKey) error {
+	panic("unused")
+}
+
+func (*fakePlatformAPIKeysForBridge_ListErr) Create(_ context.Context, _ platform.APIKey, _ int) (platform.APIKey, error) {
+	panic("unused")
+}
+
+func (*fakePlatformAPIKeysForBridge_ListErr) Get(_ context.Context, _ string) (platform.APIKey, error) {
+	panic("unused")
+}
+
+func (*fakePlatformAPIKeysForBridge_ListErr) GetByHash(_ context.Context, _ []byte) (platform.APIKey, error) {
+	panic("unused")
+}
+
+func (*fakePlatformAPIKeysForBridge_ListErr) Revoke(_ context.Context, _ string, _ uuid.UUID, _ string) error {
+	panic("unused")
+}
+
+func (*fakePlatformAPIKeysForBridge_ListErr) TouchUsage(_ context.Context, _ string, _ net.IP, _ string) error {
+	panic("unused")
+}
+
+// fakePlatformAPIKeysForBridge_UpdateErr — `APIKeyStore` double
+// whose `ListForAccount` returns one below-target key and whose
+// `Update` always errors. Pins the `key_update` operation label.
+type fakePlatformAPIKeysForBridge_UpdateErr struct {
+	acctID uuid.UUID
+}
+
+func (f *fakePlatformAPIKeysForBridge_UpdateErr) ListForAccount(_ context.Context, _ uuid.UUID) ([]platform.APIKey, error) {
+	return []platform.APIKey{
+		{ID: "kid_below_target", AccountID: f.acctID, RateLimitPerMin: 1000},
+	}, nil
+}
+
+func (*fakePlatformAPIKeysForBridge_UpdateErr) Update(_ context.Context, _ platform.APIKey) error {
+	return errors.New("postgres unreachable")
+}
+
+func (*fakePlatformAPIKeysForBridge_UpdateErr) Create(_ context.Context, _ platform.APIKey, _ int) (platform.APIKey, error) {
+	panic("unused")
+}
+
+func (*fakePlatformAPIKeysForBridge_UpdateErr) Get(_ context.Context, _ string) (platform.APIKey, error) {
+	panic("unused")
+}
+
+func (*fakePlatformAPIKeysForBridge_UpdateErr) GetByHash(_ context.Context, _ []byte) (platform.APIKey, error) {
+	panic("unused")
+}
+
+func (*fakePlatformAPIKeysForBridge_UpdateErr) Revoke(_ context.Context, _ string, _ uuid.UUID, _ string) error {
+	panic("unused")
+}
+
+func (*fakePlatformAPIKeysForBridge_UpdateErr) TouchUsage(_ context.Context, _ string, _ net.IP, _ string) error {
+	panic("unused")
+}
+
+// TestStripeWebhook_PlatformBridge_RemainingOperationsIncrementMetric
+// completes the wave-65 / wave-66 metric coverage by pinning the
+// remaining four `operation` label values:
+//
+//   - `upsert_subscription` (BillingStore.UpsertSubscription fails)
+//   - `account_update`      (AccountStore.Update fails on tier bump)
+//   - `list_keys`           (APIKeyStore.ListForAccount fails)
+//   - `key_update`          (APIKeyStore.Update fails on a per-key
+//     lift)
+//
+// Each subtest:
+//
+//   - posts the same `checkout.session.completed` event the
+//     wave-66 test uses (the bridge fan-out from this event hits
+//     all 5 failure paths in sequence — we just inject failures
+//     into the right store per case);
+//   - asserts HTTP 200 (platform failures must NOT 5xx — Stripe
+//     retries would not heal Postgres);
+//   - asserts the named-operation counter advances by exactly 1
+//     and the OTHER counter labels do NOT advance (proves the
+//     instrumentation labelled the right error site).
+func TestStripeWebhook_PlatformBridge_RemainingOperationsIncrementMetric(t *testing.T) {
+	now := time.Now().UTC()
+	// Note: includes `"subscription":"sub_remaining_<op>"` so the
+	// `applyPlatformSideEffects` Billing branch fires (it gates on
+	// `session.Subscription != ""`). Cases that don't need the
+	// Billing path are unaffected by the extra field.
+	const event = `{"id":"evt_remaining_pro_%s","type":"checkout.session.completed","data":{"object":{"id":"cs_remaining_%s","client_reference_id":"signup-remaining-%s","customer":"cus_remaining_%s","subscription":"sub_remaining_%s","payment_status":"paid","metadata":{"tier":"pro"}}}}`
+
+	type tc struct {
+		name        string
+		operation   string
+		buildBridge func(t *testing.T) *v1.StripePlatformBridge
+	}
+	cases := []tc{
+		{
+			name:      "upsert_subscription",
+			operation: "upsert_subscription",
+			buildBridge: func(_ *testing.T) *v1.StripePlatformBridge {
+				acctID := uuid.New()
+				accounts := &fakePlatformAccountsForBridge{
+					byStripe: map[string]platform.Account{
+						// Use a placeholder stripe customer ID; the
+						// per-subtest event uses cus_remaining_<op>
+						// which we map to this entry via the test's
+						// fixture below. Build per-subtest.
+					},
+				}
+				// Map every cus_remaining_* lookup to the same
+				// account so the test can re-run without state
+				// dependency.
+				accounts.byStripe["cus_remaining_upsert_subscription"] = platform.Account{
+					ID: acctID, StripeCustomerID: "cus_remaining_upsert_subscription", Tier: platform.TierFree,
+				}
+				return &v1.StripePlatformBridge{
+					Accounts: accounts,
+					Billing:  &fakePlatformBillingForBridge_UpsertErr{},
+				}
+			},
+		},
+		{
+			name:      "account_update",
+			operation: "account_update",
+			buildBridge: func(_ *testing.T) *v1.StripePlatformBridge {
+				return &v1.StripePlatformBridge{
+					Accounts: &fakePlatformAccountsForBridge_UpdateErr{acctID: uuid.New()},
+				}
+			},
+		},
+		{
+			name:      "list_keys",
+			operation: "list_keys",
+			buildBridge: func(_ *testing.T) *v1.StripePlatformBridge {
+				acctID := uuid.New()
+				accounts := &fakePlatformAccountsForBridge{
+					byStripe: map[string]platform.Account{
+						"cus_remaining_list_keys": {
+							ID: acctID, StripeCustomerID: "cus_remaining_list_keys", Tier: platform.TierPro,
+						},
+					},
+				}
+				return &v1.StripePlatformBridge{
+					Accounts: accounts,
+					APIKeys:  &fakePlatformAPIKeysForBridge_ListErr{},
+				}
+			},
+		},
+		{
+			name:      "key_update",
+			operation: "key_update",
+			buildBridge: func(_ *testing.T) *v1.StripePlatformBridge {
+				acctID := uuid.New()
+				accounts := &fakePlatformAccountsForBridge{
+					byStripe: map[string]platform.Account{
+						"cus_remaining_key_update": {
+							ID: acctID, StripeCustomerID: "cus_remaining_key_update", Tier: platform.TierPro,
+						},
+					},
+				}
+				return &v1.StripePlatformBridge{
+					Accounts: accounts,
+					APIKeys:  &fakePlatformAPIKeysForBridge_UpdateErr{acctID: acctID},
+				}
+			},
+		},
+	}
+
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			mgr := &fakeStripeManager{
+				keys: map[string][]auth.APIKeyRecord{
+					"signup-remaining-" + c.name: {
+						{KeyID: "kid_remaining_" + c.name, Identifier: "signup-remaining-" + c.name, Tier: auth.TierAPIKey, RateLimitPerMin: 1000},
+					},
+				},
+			}
+			before := testutil.ToFloat64(obs.StripePlatformSyncErrorsTotal.WithLabelValues(c.operation))
+
+			srv := v1.New(v1.Options{
+				Auth: fakeAuthMiddleware(auth.Subject{}),
+				Stripe: &v1.StripeWebhookConfig{
+					SigningSecret: testStripeSecret,
+					Manager:       mgr,
+					Now:           func() time.Time { return now },
+					MaxAge:        5 * time.Minute,
+					Platform:      c.buildBridge(t),
+				},
+			})
+			ts := httptest.NewServer(srv.Handler())
+			t.Cleanup(ts.Close)
+
+			body := fmt.Sprintf(event, c.name, c.name, c.name, c.name, c.name)
+			sig := stripeSign(t, body, testStripeSecret, now)
+			resp := postStripe(t, ts, body, sig)
+			defer resp.Body.Close()
+			if resp.StatusCode != http.StatusOK {
+				t.Fatalf("status = %d, want 200 (platform failures must NOT 5xx)", resp.StatusCode)
+			}
+
+			// Redis-side update STILL happens regardless of
+			// platform-store failure.
+			if got := len(mgr.updates); got != 1 {
+				t.Errorf("Redis updates = %d, want 1", got)
+			}
+
+			after := testutil.ToFloat64(obs.StripePlatformSyncErrorsTotal.WithLabelValues(c.operation))
+			if got := after - before; got != 1 {
+				t.Errorf("%s metric delta = %v, want 1", c.operation, got)
+			}
+		})
+	}
+}
