@@ -8,13 +8,13 @@ The register below is authoritative; this summary captures the
 highest-priority items as of the wave-104 remediation recheck. Status counts
 at this snapshot:
 
-- **Findings register**: 53 fixed / 16 open (69 total).
-- **XFI cross-file table**: 48 fixed / 13 open (61 total).
-- **Remediation plan**: 50 fixed / 17 open (67 total — multi-finding
-  R-rows split the count; the 17 open R-rows resolve to the same
-  16 still-open findings plus R-1206's mixed F-1208/F-1210 row).
+- **Findings register**: 54 fixed / 15 open (69 total).
+- **XFI cross-file table**: 49 fixed / 12 open (61 total).
+- **Remediation plan**: 51 fixed / 16 open (67 total — multi-finding
+  R-rows split the count; the 16 open R-rows resolve to the same
+  15 still-open findings plus R-1206's mixed F-1208/F-1210 row).
 
-All three surfaces are mutually consistent as of wave 103.
+All three surfaces are mutually consistent as of wave 104.
 
 **Code-actionable findings — all closed.** Every F-12xx finding
 the audit identified that could be addressed by a code change has
@@ -433,12 +433,13 @@ Recent waves closed by code (chronological):
 | F-1261 | high | Migration `0030_asset_supply_history_unique_constraint` could not apply while `asset_supply_history` compression was enabled | `migrations/0030_asset_supply_history_unique_constraint.up.sql`; `migrations/0005_create_asset_supply_history.up.sql`; migration runner; R1 schema state | XFI-0053; EV-0120; EV-0137; EV-0147 | fixed | db/release/ops | Wave 46 on 2026-05-12 rewrites the up migration to decompress chunks, disable compression around the constraint swap, then restore the original 0005 compression settings. Fresh migration round-trip now succeeds, and the former Timescale `0A000` bootstrap failure no longer reproduces on current head. |
 | F-1262 | high | Dashboard/Postgres API-key creation can 500 when optional `referer_allowlist` is omitted because nil slices are inserted as SQL NULL into a NOT NULL array column | Dashboard key create handler; platform APIKey store create/update writers; Postgres schema; dashboard client defaults | XFI-0054; EV-0148; EV-0152; EV-0156 | fixed | platform/keys/db | Wave 50 on 2026-05-12 wraps both `text[]` boundaries (`buildAPIKeyCreateArgs` + `APIKeyStore.Update`) through `nonNilStringArray(in []string) pq.StringArray`, converting nil slices to non-nil zero-length arrays so lib/pq emits `'{}'` instead of SQL NULL. Focused store/dashboard-key packages pass, and the former `referer_allowlist` failure no longer reproduces in the full integration run; the next remaining failure is the separate malformed-ID proof harness tracked as `F-1263`. |
 | F-1263 | medium | The concurrent API-key quota integration fixture still violates live `api_keys` identity constraints, so it cannot prove the advisory-lock cap path | `test/integration/platform_postgres_stores_test.go`; migration 0027 `api_keys_{id,key_prefix}_check`; dashboard key ID/plaintext generation | XFI-0055; EV-0157; EV-0160; EV-0162 | fixed | platform/tests/evidence | Wave 53 now fixes both malformed fixture layers. The concurrent quota proof builds `kid_<hex>` IDs and `rek_<8hex>` key prefixes that satisfy migration 0027, and the full Postgres-store integration passes. The invalid proof harness no longer blocks `F-1257`. |
-| F-1264 | medium | R1 Prometheus/Loki docs still claim there is no firewall and those observability ports are publicly reachable after nftables moved to default-drop | `configs/prometheus/README.md`; `configs/loki/README.md`; live R1 listeners/firewall; external port probes | XFI-0056; EV-0181 | fixed | ops/docs/security | Current docs say `9090` / `3100` are publicly reachable because R1 has no firewall. Fresh R1 inspection shows the listeners remain bound on-host, but nftables now has `policy drop` and only permits the captive-core port set; external `9090` and `3100` probes time out. Operators reading the docs get the wrong exposure model and stale access assumptions. |
-| F-1265 | low | Alertmanager docs and monitoring-role prose still claim the Ansible template uses `critical/warning/info`, even though it already matches the `page/ticket/informational` ladder | `configs/alertmanager/README.md`; `configs/alertmanager/alertmanager.r1.yml`; `configs/ansible/roles/prometheus/README.md`; `configs/ansible/roles/prometheus/templates/alertmanager.yml.j2` | XFI-0057; EV-0182; EV-0184 | fixed | ops/docs/monitoring | The template has already converged on the same severity vocabulary as the standalone R1 config, but the README migration note, the R1 YAML header, and the Prometheus role README still describe the old critical/warning/info world. That can send operators toward unnecessary edits during the multi-host transition. |
-| F-1266 | medium | The top-level Ansible bootstrap README says only `archival-node` exists and implies archival-node already wires Promtail/Loki, but the repo now contains multiple landed roles and the archival-node task still leaves Promtail as TODO | `configs/ansible/README.md`; `configs/ansible/playbooks/*`; role `meta/main.yml`; `configs/ansible/roles/archival-node/tasks/10-observability.yml` | XFI-0058; EV-0184 | fixed | ops/docs/deployment | The README understates the actual role inventory (`haproxy`, `loki`, `patroni`, `prometheus`, `redis-sentinel` all exist) while overstating archival-node observability delivery (`promtail` remains an explicit TODO in the role task file). |
-| F-1267 | medium | Healthchecks setup docs still say to create four checks and omit the SLA-probe URL in a broader hardening guide, even though the installer/env/timers now require five external checks | `configs/healthchecks/README.md`; `configs/healthchecks/install.sh`; `docs/operations/pre-launch-hardening.md`; `configs/healthchecks/ratesengine-sla-probe.timer` | XFI-0059; EV-0186 | fixed | ops/docs/monitoring | The README enumerates five env vars and installs the SLA probe timer, but still instructs operators to create "four Checks"; `install.sh` repeats "four Healthchecks.io URLs (3 heartbeats + 1 smoke)"; and the hardening doc still shows only the four pre-SLA URLs. |
+| F-1264 | medium | R1 Prometheus/Loki docs still claim there is no firewall and those observability ports are publicly reachable after nftables moved to default-drop | `configs/prometheus/README.md`; `configs/loki/README.md`; live R1 listeners/firewall; external port probes | XFI-0056; EV-0181; EV-0191 | fixed | ops/docs/security | The stale pre-firewall wording was real, but current workspace READMEs now distinguish on-host listeners from blocked external ingress and keep SSH tunnelling as the supported access path. |
+| F-1265 | low | Alertmanager docs and monitoring-role prose still claim the Ansible template uses `critical/warning/info`, even though it already matches the `page/ticket/informational` ladder | `configs/alertmanager/README.md`; `configs/alertmanager/alertmanager.r1.yml`; `configs/ansible/roles/prometheus/README.md`; `configs/ansible/roles/prometheus/templates/alertmanager.yml.j2` | XFI-0057; EV-0182; EV-0184; EV-0191 | fixed | ops/docs/monitoring | Current workspace docs now describe the already-shared `page` / `ticket` / `informational` severity ladder consistently across the standalone and Ansible paths. |
+| F-1266 | medium | The top-level Ansible bootstrap README says only `archival-node` exists and implies archival-node already wires Promtail/Loki, but the repo now contains multiple landed roles and the archival-node task still leaves Promtail as TODO | `configs/ansible/README.md`; `configs/ansible/playbooks/*`; role `meta/main.yml`; `configs/ansible/roles/archival-node/tasks/10-observability.yml` | XFI-0058; EV-0184; EV-0191 | fixed | ops/docs/deployment | Current workspace README now names the landed sibling roles/playbooks and says the archival-node Promtail -> Loki path remains TODO-backed. |
+| F-1267 | medium | Healthchecks setup docs still say to create four checks and omit the SLA-probe URL in a broader hardening guide, even though the installer/env/timers now require five external checks | `configs/healthchecks/README.md`; `configs/healthchecks/install.sh`; `docs/operations/pre-launch-hardening.md`; `configs/healthchecks/ratesengine-sla-probe.timer` | XFI-0059; EV-0186; EV-0191 | fixed | ops/docs/monitoring | README, installer comment, and pre-launch hardening now agree on five checks and include `HEALTHCHECKS_URL_SLA_PROBE`. |
 | F-1268 | medium | The R1 Prometheus rules README deploys operators into `/etc/prometheus/rules.d/`, but the active R1 config loads `/etc/prometheus/rules.r1/*.yml` | `configs/prometheus/rules.r1/README.md`; `configs/prometheus/prometheus.r1.yml` | XFI-0060; EV-0188; EV-0191 | fixed | ops/docs/monitoring | The README's `scp` and confirmation text still use `/etc/prometheus/rules.d/`, while `prometheus.r1.yml` comments and `rule_files` block point at `/etc/prometheus/rules.r1/*.yml`. The wave-104 recheck confirms this one did not actually land with the neighboring doc fixes. |
 | F-1269 | low | The WASM audit-input README still promises an `_unattributed` contract block that the curated YAML no longer contains after the 2026-05-01 testnet-address cleanup | `configs/audit/README.md`; `configs/audit/wasm-walk-contracts.yaml` | XFI-0061; EV-0190 | fixed | docs/audit-tooling | The YAML is internally consistent at 540 contracts across eight named sources and explains that the former Reflector-testnet leftovers were intentionally removed, but the README still describes a now-nonexistent `_unattributed` block. |
+| F-1270 | medium | Active Caddy/operator docs contradict ADR-0025 by telling operators to add Cloudflare edge CIDRs to the API's `trusted_proxy_cidrs`, even though the chosen trust boundary keeps Cloudflare pinned at Caddy and leaves the API trusting only Caddy | `configs/caddy/README.md`; `docs/operations/pre-launch-hardening.md`; `docs/adr/0025-caddy-cloudflare-trusted-proxy.md`; `internal/config/config.go`; `docs/reference/config/README.md` | XFI-0062; EV-0193 | open | ops/docs/security | The Caddy README says Cloudflare-fronted multi-region deployment would "trust additional X-Forwarded-* CIDRs ... in the API config", and the hardening guide tells operators to add Cloudflare ranges to `trusted_proxy_cidrs`. ADR-0025 says the API should stay at `["127.0.0.1/32"]` because Caddy is the only immediate proxy the API trusts. |
 
 ## Finding Template
 
@@ -2636,3 +2637,30 @@ Observed: `configs/audit/README.md` says the YAML contains one block per Soroban
 Impact: low. The curated input itself is coherent, but its README still documents a schema that no longer exists. That can confuse the next auditor refreshing the YAML or make them try to preserve a category the repo deliberately retired.
 
 Remediation direction: update the README to the current eight-source shape and, if needed, mention the removed `_unattributed` idea only as historical background tied to the 2026-05-01 correction.
+
+### F-1270. Active Caddy/operator docs move the Cloudflare trust boundary to the wrong layer
+
+Severity: `medium`
+
+Status: `open`
+
+Affected surface:
+
+- `configs/caddy/README.md`
+- `docs/operations/pre-launch-hardening.md`
+- `docs/adr/0025-caddy-cloudflare-trusted-proxy.md`
+- `internal/config/config.go`
+- `docs/reference/config/README.md`
+
+Evidence:
+
+- `XFI-0062`
+- `EV-0193`
+
+Expected: operator docs should describe the same trust boundary the code and ADR define. In the chosen `Cloudflare -> Caddy -> API` topology, Caddy validates Cloudflare's edge ranges and forwards a resolved client IP; the API continues to trust only its immediate peer, Caddy, through `trusted_proxy_cidrs = ["127.0.0.1/32"]`.
+
+Observed: ADR-0025, generated config docs, and the API config source all preserve that immediate-peer model. But `configs/caddy/README.md` says the future Cloudflare-fronted shape would "trust additional X-Forwarded-* CIDRs (Cloudflare's published edge ranges) in the API config", and `docs/operations/pre-launch-hardening.md` goes further: it says Cloudflare edge IPs become the immediate peer R1 sees and instructs operators to add Cloudflare ranges directly to `trusted_proxy_cidrs`.
+
+Impact: medium. The docs do not describe the system that is actually implemented. An operator following them can widen the API trust surface at the wrong layer, reason incorrectly about who is allowed to supply `X-Forwarded-For`, or create a future deployment that disagrees with ADR-0025's explicit boundary. This is especially risky because rate-limit identity and access logs depend on that resolution chain.
+
+Remediation direction: make both operator docs match ADR-0025. Cloudflare ranges belong in Caddy's `trusted_proxies`; the API's `trusted_proxy_cidrs` remains the immediate Caddy peer unless the proxy topology itself is redesigned and the ADR is superseded.
