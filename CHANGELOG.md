@@ -17,6 +17,19 @@ against.
 
 ### Added
 
+- Regression test
+  `TestWorker_DeliveryDurationMetricRecorded` pins the wave-88
+  customer-webhook latency-histogram wiring end-to-end —
+  asserts a successful delivery produces a sample on
+  `ratesengine_customer_webhook_delivery_duration_seconds{outcome="delivered"}`.
+  Without this test, a future refactor could silently delete the
+  timing call without any signal (the existing
+  `TestWorker_DeliversOn2xx` asserts the counter side but not the
+  histogram). Includes a small `histogramSampleCount` test helper
+  that reads the underlying `dto.Metric` via the parent vector's
+  Collect, since `WithLabelValues(...)` on a HistogramVec returns
+  an Observer (not a Collector) so `testutil.CollectAndCount`
+  can't act on it directly.
 - New observability metric
   `ratesengine_anomaly_freeze_recovery_sweep_duration_seconds`
   (Histogram, label `outcome`). Final wave-88/89/90/91 entry in

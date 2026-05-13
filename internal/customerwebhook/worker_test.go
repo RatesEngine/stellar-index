@@ -14,8 +14,11 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/prometheus/client_golang/prometheus"
+	io_prom_dto "github.com/prometheus/client_model/go"
 
 	"github.com/RatesEngine/rates-engine/internal/customerwebhook"
+	"github.com/RatesEngine/rates-engine/internal/obs"
 	"github.com/RatesEngine/rates-engine/internal/platform"
 )
 
@@ -316,3 +319,80 @@ func TestWorker_MissingWebhookTerminates(t *testing.T) {
 
 // errorsIs keeps the errors import live for future expansion.
 var _ = errors.Is
+
+// TestWorker_DeliveryDurationMetricRecorded pins the wave-88
+// (2026-05-13) latency-histogram wiring: a successful delivery
+// produces a sample on
+// `ratesengine_customer_webhook_delivery_duration_seconds`
+// labelled `outcome="delivered"`. Without this test, a future
+// refactor could silently delete the timing call without any
+// signal — the existing TestWorker_DeliversOn2xx asserts the
+// counter side but not the histogram.
+//
+// Uses CollectAndCount on the metric's WithLabelValues child so
+// the assertion stays independent of bucket-by-bucket values
+// (which depend on test-machine performance).
+func TestWorker_DeliveryDurationMetricRecorded(t *testing.T) {
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer ts.Close()
+
+	store := newFakeStore()
+	webhookID, secret := makeWebhook(t, ts.URL, true)
+	store.addWebhook(platform.CustomerWebhook{
+		ID: webhookID, URL: ts.URL, SecretHash: secret, Enabled: true,
+	})
+	store.enqueue(platform.WebhookDelivery{
+		ID:            uuid.New(),
+		WebhookID:     webhookID,
+		EventType:     string(platform.WebhookEventIncidentSEV1),
+		Payload:       []byte(`{}`),
+		NextAttemptAt: time.Now().Add(-time.Second),
+	})
+
+	// CollectAndCount on the parent HistogramVec returns the number
+	// of distinct (label-set) series tracked. Before this tick the
+	// `delivered` label may already have one (other tests in the
+	// package observe through the same shared registry); the
+	// stable assertion is that this tick records SOME observation,
+	// which the per-label histogram exposes via its own counter
+	// (`_count` suffix in the wire format). Use the wire-level
+	// inspection: collect the family and look for the
+	// `outcome="delivered"` series's sample-count delta.
+	before := histogramSampleCount(t, obs.CustomerWebhookDeliveryDurationSeconds, "delivered")
+	runOneTick(t, store, customerwebhook.Options{PollInterval: 30 * time.Millisecond})
+	after := histogramSampleCount(t, obs.CustomerWebhookDeliveryDurationSeconds, "delivered")
+
+	if after <= before {
+		t.Errorf("delivery duration histogram did not advance: before=%d after=%d", before, after)
+	}
+}
+
+// histogramSampleCount returns the sample count of the histogram
+// series with the given outcome label. Reads the underlying
+// dto.Metric from the parent vector — the per-label
+// `WithLabelValues(...)` Observer doesn't satisfy
+// prometheus.Collector so testutil.CollectAndCount can't act on
+// it directly.
+func histogramSampleCount(t *testing.T, vec *prometheus.HistogramVec, outcome string) uint64 {
+	t.Helper()
+	ch := make(chan prometheus.Metric, 16)
+	go func() {
+		vec.Collect(ch)
+		close(ch)
+	}()
+	var total uint64
+	for m := range ch {
+		var dto io_prom_dto.Metric
+		if err := m.Write(&dto); err != nil {
+			t.Fatalf("histogram Write: %v", err)
+		}
+		for _, l := range dto.GetLabel() {
+			if l.GetName() == "outcome" && l.GetValue() == outcome {
+				total += dto.GetHistogram().GetSampleCount()
+			}
+		}
+	}
+	return total
+}
