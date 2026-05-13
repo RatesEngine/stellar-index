@@ -19,6 +19,14 @@ set -uo pipefail
 
 PROBE_BIN="${PROBE_BIN:-/usr/local/bin/ratesengine-sla-probe}"
 BASE_URL="${SLA_PROBE_BASE_URL:-http://localhost:3000/v1}"
+# F-1305 (codex audit-2026-05-13): 30s default keeps the probe
+# cheap on a quiet deployment, but on a single-instance host
+# under memory pressure (e.g. r1 today) a 30s window of ~800
+# requests is too sensitive to single-timeout jitter — one
+# straggler at 99.9% availability = unit_failed=1. Operators on
+# memory-pressured single-instance hosts should override to
+# SLA_PROBE_DURATION=120s (or longer) in /etc/default/ratesengine-
+# healthchecks for a smoother percentile.
 DURATION="${SLA_PROBE_DURATION:-30s}"
 # F-1305 / F-1311 (codex audit-2026-05-13): default concurrency=1
 # (was 2). At 2 the probe drives ~2.5k req/s against the API which
