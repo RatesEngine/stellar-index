@@ -120,13 +120,13 @@ on every push to `main` + creates per-PR previews. Free tier covers
 unmetered requests on Pages-served static assets.
 
 **v1 fallback: rsync → r1.** `make web-build` produces `out/`; rsync
-that to `/var/www/showcase/` on r1; Cloudflare proxies `app.ratesengine.net`
+that to `/var/www/showcase/` on r1; Cloudflare proxies `ratesengine.net`
 → r1 nginx → static files. Same TLS termination + CDN as the API.
 
-Dynamic routes (`/coins/{slug}`, `/contracts/{id}`, `/tx/{hash}`,
+Dynamic routes (`/assets/{id}`, `/contracts/{id}`, `/tx/{hash}`,
 `/accounts/{G}`) use **client-side rendering**: the build emits a
 shell, the page hydrates and fetches data from `api.ratesengine.net`
-via TanStack Query. High-traffic routes (top-N coins, all protocols,
+via TanStack Query. High-traffic routes (top-N assets, all protocols,
 all sources) get pre-rendered via `generateStaticParams` for SEO;
 the long-tail is JS-rendered (Google handles it fine in 2026).
 

@@ -7,9 +7,10 @@ status: planning
 # Showcase site — data, IA, and API plan
 
 **Codename:** none yet — referred to as "the showcase" in this doc.
-**Domain (proposed):** `app.ratesengine.net` for the site,
-`docs.ratesengine.net` already serves the auto-generated API
-reference.
+**Domain:** `ratesengine.net` for the site (live on Cloudflare
+Pages). `docs.ratesengine.net` serves the auto-generated API
+reference. The customer dashboard at `app.ratesengine.net` is a
+separate Next.js app under [`web/dashboard/`](../../web/dashboard/README.md).
 
 This doc is the **single planning artefact** for the customer-facing
 explorer. It captures: who it's for, the design principles, the URL
@@ -1426,7 +1427,7 @@ Keyboard shortcut opens search modal. Every page.
 Every chart, donut, metric has a "Share / Embed" button. Generates:
 
 ```html
-<iframe src="https://app.ratesengine.net/embed/chart?coin=stellar&quote=usdc&granularity=1h&timeframe=24h"
+<iframe src="https://ratesengine.net/embed/chart?asset=native&quote=fiat:USD&granularity=1h&timeframe=24h"
         width="800" height="400" frameborder="0"></iframe>
 ```
 

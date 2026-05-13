@@ -31,6 +31,21 @@ against.
 
 ### Documentation
 
+- Wave-85 hostname-bug sweep widening: a fresh grep on
+  `app.ratesengine.net` found three more places where the
+  explorer was misattributed to the dashboard's hostname:
+  `web/explorer/README.md` v1-fallback paragraph (rsync target +
+  Cloudflare proxy URL), `docs/architecture/explorer-implementation-plan.md`
+  showcase-domain row, and `docs/architecture/explorer-data-inventory.md`
+  Domain (proposed) field plus an iframe embed example. Every
+  occurrence corrected to `ratesengine.net` (or in the
+  implementation-plan row, kept as a parenthetical pointing
+  out the dashboard lives at the separate `app.ratesengine.net`
+  with a cross-reference to web/dashboard/README.md). The embed
+  example also migrated from `coin=stellar&quote=usdc` shape
+  to the canonical `asset=native&quote=fiat:USD` shape (the
+  rc.48 /v1/coins removal made the old query-param shape stale
+  too).
 - `web/explorer/README.md` factually corrected. Two real bugs:
   (1) the README claimed the explorer lives at
   `app.ratesengine.net` — wrong; that's the dashboard's
