@@ -25,10 +25,24 @@
     - { path: /etc/promtail,                  owner: root, group: "{{ promtail_user }}", mode: "0750" }
     - { path: "{{ promtail_data_dir }}",       owner: "{{ promtail_user }}", group: "{{ promtail_user }}", mode: "0750" }
 
+# F-1285 (codex audit-2026-05-13): fail fast if the operator
+# hasn't supplied the promtail release SHA256.
+- name: assert promtail_release_sha256 is set
+  assert:
+    that:
+      - promtail_release_sha256 is defined
+      - promtail_release_sha256 | length == 64
+    fail_msg: >-
+      promtail_release_sha256 must be set in inventory (SHA-256 of
+      promtail-linux-amd64.zip for the version pinned by
+      `promtail_version`). Get the SHA from the release page:
+      https://github.com/grafana/loki/releases/tag/v{{ promtail_version }}
+
 - name: download promtail tarball
   get_url:
     url: "https://github.com/grafana/loki/releases/download/v{{ promtail_version }}/promtail-linux-amd64.zip"
     dest: /tmp/promtail.zip
+    checksum: "sha256:{{ promtail_release_sha256 }}"
     mode: "0644"
 
 - name: extract promtail binary

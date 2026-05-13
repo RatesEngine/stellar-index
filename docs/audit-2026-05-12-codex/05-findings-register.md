@@ -2,19 +2,19 @@
 
 Cold findings only. No prior finding is imported into this register.
 
-## Closure summary (verified reconciliation snapshot, 2026-05-13 wave-113 refresh)
+## Closure summary (verified reconciliation snapshot, 2026-05-13 wave-115 refresh)
 
 The register below is authoritative; this summary captures the
-highest-priority items as of the wave-113 reconciliation recheck. Status counts
+highest-priority items as of the wave-115 reconciliation recheck. Status counts
 at this snapshot:
 
-- **Findings register**: 63 fixed / 21 open (84 total).
-- **XFI cross-file table**: 59 fixed / 17 open (76 total).
-- **Remediation plan**: 61 fixed / 21 open (82 total — multi-finding
+- **Findings register**: 64 fixed / 22 open (86 total).
+- **XFI cross-file table**: 60 fixed / 18 open (78 total).
+- **Remediation plan**: 62 fixed / 22 open (84 total — multi-finding
   R-rows split the count; the open remediation rows resolve to
   the current finding set plus mixed multi-finding operator rows).
 
-All three surfaces are mutually consistent as of wave 113.
+All three surfaces are mutually consistent as of wave 115.
 
 **Latest high-priority state.** Earlier code-actionable findings through
 wave 95 shipped, but the deployment/HA tranche reopened code/config risk:
@@ -28,7 +28,7 @@ README/inventory guidance for the required etcd checksum after source-side
 preflight validation landed. The Patroni follow-up closed `F-1279`,
 `F-1281`, and `F-1282`, then added `F-1283` for the Timescale primary-down
 runbook's stale etcd protocol/quorum/key examples. Quality-improvement work
-also continued in waves 96-113 (CI gap closure on the R1 rule overlay,
+also continued in waves 96-114 (CI gap closure on the R1 rule overlay,
 remediation-plan reconciliation, status-page closure falsification,
 monitoring-doc breadth review, the Ansible role-doc pass, Healthchecks,
 R1 rule-overlay, audit-input setup review, the Redis/Sentinel deployment
@@ -46,8 +46,13 @@ and `F-1273` remains open because both the Sentinel design note and role README
 still describe the live FailoverClient path as future `internal/cachekeys` work
 after the drill command itself was repaired.
 `F-1274` is source-closed after the HAProxy docs redirected to tracked
-`api-down.md`; `F-1276` and `F-1277` remain open on stale API incident
-PromQL/source breadcrumbs. The same pass also confirms `F-1265`, `F-1270`,
+`api-down.md`; `F-1277` is source-closed after `api-down.md` was corrected to
+`internal/api/v1/server.go::handleReadyz`; and `F-1276` narrows to the stale
+`job="api"` comment in `internal/obs/metrics.go`. The next monitoring-role
+pass adds `F-1285` for unauthenticated upstream binary downloads in the Loki,
+Promtail, Prometheus, and Alertmanager install paths, and `F-1286` for Loki's
+systemd credential mapping that relies on shell-style variable expansion that
+systemd does not perform. The same pass also confirms `F-1265`, `F-1270`,
 `F-1271`, `F-1266`, and `F-1272` are source-closed on the current workspace.
 Final code closures since the prior summary include:
 
@@ -146,10 +151,8 @@ requires source-backed or live-environment closure evidence):
 - `F-1273` — Redis/Sentinel docs: remove the remaining future-state
   `internal/cachekeys` FailoverClient claims from the shipped design note and
   role README.
-- `F-1276` — monitoring docs: replace stale `job="api"` PromQL examples with
-  the current multi-host/R1 job-label families.
-- `F-1277` — API runbook docs: replace the nonexistent
-  `internal/api/v1/healthz.go` breadcrumb with the live readiness handler path.
+- `F-1276` — monitoring docs/source comments: replace the remaining stale
+  `job="api"` source comment with the current multi-host/R1 job-label family.
 - `F-1278` — HA firewall config: replace the accept-only nftables drop-ins
   with a deterministic allow-list composition that works with the default-drop
   baseline; the current `priority -100` change still leaves early accepts
@@ -490,6 +493,8 @@ Recent waves closed by code (chronological):
 | F-1282 | medium | Patroni's documented point-in-time pgBackRest restore target is ignored by the actual restore command | `configs/ansible/roles/patroni/defaults/main.yml`; `configs/ansible/roles/patroni/tasks/08-patroni-bootstrap.yml`; `configs/ansible/roles/patroni/README.md`; `docs/architecture/patroni-ansible-role-design-note.md` | XFI-0074; EV-0222; EV-0224 | fixed | ops/dr/patroni | Current source validates `latest`, `immediate`, and `time:<timestamp>` target forms and maps them to pgBackRest `--type=default`, `--type=immediate`, or `--type=time --target=...`, so the documented variable now affects the restore command. |
 | F-1283 | medium | Timescale primary-down runbook uses HTTPS etcd endpoints, a five-node quorum threshold, and a stale leader key that do not match the shipped Patroni role | `docs/operations/runbooks/timescale-primary-down.md`; `configs/ansible/roles/patroni/templates/etcd.conf.j2`; `configs/ansible/roles/patroni/templates/patroni.yml.j2`; `configs/ansible/roles/patroni/tasks/04-etcd-systemd.yml`; Patroni design note | XFI-0075; EV-0225 | fixed | ops/docs/patroni | The runbook tells operators to query `https://etcd-*.internal:2379`, `get /ratesengine/leader`, and expect at least 3 of 5 healthy etcd members. The role renders unauthenticated HTTP etcd endpoints, Patroni's namespace is `/service/` with per-cluster scope, and preflight asserts exactly three `postgres_cluster` hosts. |
 | F-1284 | medium | HAProxy and HA docs still describe `/v1/readyz` as Redis-critical after the API changed Redis readiness to degraded-but-serving | `configs/ansible/roles/haproxy/defaults/main.yml`; `configs/ansible/roles/haproxy/templates/haproxy.cfg.j2`; `configs/ansible/roles/haproxy/README.md`; `docs/architecture/ha-plan.md`; `internal/api/v1/server.go`; `cmd/ratesengine-api/main.go` | XFI-0076; EV-0227 | fixed | ops/docs/haproxy/api | Runtime now keeps HAProxy backends in service during Redis-only failures, but HAProxy defaults/template comments, the HAProxy README, and the HA plan still say `/v1/readyz` requires Redis or routes only when Redis is reachable. |
+| F-1285 | high | Loki, Promtail, Prometheus, and Alertmanager roles download upstream release archives without enforced checksums | `configs/ansible/roles/loki/tasks/{server-02-install.yml,agent-01-install.yml}`; `configs/ansible/roles/prometheus/tasks/02-install.yml`; role defaults/READMEs | XFI-0077; EV-0231 | fixed | ops/security/supply-chain | Loki and Promtail use `get_url` without any checksum, while Prometheus and Alertmanager use optional `prometheus_sha256 | default(omit)` / `alertmanager_sha256 | default(omit)` with no default or README requirement. A clean documented HA monitoring deployment therefore installs unauthenticated upstream binaries. |
+| F-1286 | high | Loki's systemd unit maps MinIO credentials through literal `${...}` strings that systemd does not expand | `configs/ansible/roles/loki/templates/loki.service.j2`; `configs/ansible/roles/loki/templates/loki-config.yaml.j2`; `configs/ansible/roles/loki/defaults/main.yml`; `configs/ansible/roles/loki/README.md`; systemd execution environment semantics | XFI-0078; EV-0232 | fixed | ops/deployment/loki | The service sets `AWS_ACCESS_KEY_ID=${RATESENGINE_S3_ACCESS_KEY}` and `AWS_SECRET_ACCESS_KEY=${RATESENGINE_S3_SECRET_KEY}` before `EnvironmentFile=-/etc/default/loki`, but systemd `Environment=` does not perform `$` expansion. Loki can start with literal credential values and fail S3 chunk writes despite the README telling operators to provide the existing env-var pair. |
 
 ## Finding Template
 
@@ -3124,3 +3129,59 @@ Observed: runtime now implements the intended fail-open Redis contract, but HAPr
 Impact: medium. The code will route correctly, but operators reading the role docs or HA plan will reason about the wrong failure mode during Redis incidents and may attempt unnecessary HAProxy/API intervention.
 
 Remediation direction: update HAProxy defaults/template comments, role README, and HA plan to describe critical vs non-critical ready checks. Point Redis outage triage at the degraded body/check details and `/v1/status`, not backend eviction.
+
+### F-1285. Loki, Promtail, Prometheus, and Alertmanager roles download upstream release archives without enforced checksums
+
+Severity: `high`
+
+Status: `open`
+
+Affected surface:
+
+- `configs/ansible/roles/loki/tasks/server-02-install.yml`
+- `configs/ansible/roles/loki/tasks/agent-01-install.yml`
+- `configs/ansible/roles/prometheus/tasks/02-install.yml`
+- `configs/ansible/roles/loki/defaults/main.yml`
+- `configs/ansible/roles/loki/README.md`
+- `configs/ansible/roles/prometheus/defaults/main.yml`
+- `configs/ansible/roles/prometheus/README.md`
+
+Evidence:
+
+- `XFI-0077`
+- `EV-0231`
+
+Expected: every upstream binary archive installed by production Ansible roles should be pinned to both a version and a mandatory digest, or the role should fail before download when the digest is missing.
+
+Observed: Loki server downloads `loki-linux-amd64.zip` from the Grafana GitHub release URL with no checksum. Promtail downloads `promtail-linux-amd64.zip` the same way. Prometheus and Alertmanager at least include checksum fields, but both use optional `{{ prometheus_sha256 | default(omit) }}` / `{{ alertmanager_sha256 | default(omit) }}` expressions. The role defaults pin only versions, and neither the Loki nor Prometheus README makes release checksums required inventory input.
+
+Impact: high. A clean documented monitoring deployment can install unauthenticated network-fetched observability binaries on production hosts. Compromise, cache poisoning, CDN/GitHub account abuse, or operator typo on the release path can become host code execution without a digest gate catching it.
+
+Remediation direction: add mandatory checksum variables for Loki, Promtail, Prometheus, and Alertmanager; preflight-assert they are non-empty real SHA-256 values; wire each `get_url` to the corresponding digest; and document the release/checksum source in role READMEs and sample inventory. Role tests should fail when any checksum is omitted.
+
+### F-1286. Loki's systemd unit maps MinIO credentials through literal `${...}` strings that systemd does not expand
+
+Severity: `high`
+
+Status: `open`
+
+Affected surface:
+
+- `configs/ansible/roles/loki/templates/loki.service.j2`
+- `configs/ansible/roles/loki/templates/loki-config.yaml.j2`
+- `configs/ansible/roles/loki/defaults/main.yml`
+- `configs/ansible/roles/loki/README.md`
+- systemd service environment semantics
+
+Evidence:
+
+- `XFI-0078`
+- `EV-0232`
+
+Expected: the Loki service should receive real AWS-compatible MinIO credentials in `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY`, matching the README promise that operators can provide the existing Galexie env-var pair.
+
+Observed: the service template sets `Environment=AWS_ACCESS_KEY_ID=${RATESENGINE_S3_ACCESS_KEY}` and `Environment=AWS_SECRET_ACCESS_KEY=${RATESENGINE_S3_SECRET_KEY}` before `EnvironmentFile=-/etc/default/loki`. Defaults map those variable names through `loki_s3_access_key_env` and `loki_s3_secret_key_env`, and the Loki config comments say AWS env vars are set from that pair. systemd `Environment=` assignments do not shell-expand values from the environment file, so the unit can hand Loki literal `${RATESENGINE_S3_ACCESS_KEY}` / `${RATESENGINE_S3_SECRET_KEY}` strings instead of credentials.
+
+Impact: high. Loki can start with syntactically present but wrong S3 credentials, then fail chunk writes to MinIO. That breaks log retention/queryability exactly when operators need the logging plane for launch and incident response.
+
+Remediation direction: make `/etc/default/loki` define `AWS_ACCESS_KEY_ID=` and `AWS_SECRET_ACCESS_KEY=` directly, or template those AWS variables from vaulted values. Remove the pseudo-indirection from `Environment=`, update the README to document the real file/variable contract, and add a rendered-unit smoke check that proves systemd sees non-literal AWS credential env names before service start.

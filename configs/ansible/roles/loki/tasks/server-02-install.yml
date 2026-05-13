@@ -13,10 +13,28 @@
     - { path: "{{ loki_data_dir }}/index_cache", owner: loki, group: loki, mode: "0750" }
     - { path: "{{ loki_data_dir }}/compactor",   owner: loki, group: loki, mode: "0750" }
 
+# F-1285 (codex audit-2026-05-13): fail fast if the operator
+# hasn't supplied the loki release SHA256 in inventory. We can't
+# ship a baked default — SHA changes with every release we bump
+# to and the role pins via `loki_version`. The pre-fix get_url
+# had no checksum at all, installing unauthenticated upstream
+# binaries.
+- name: assert loki_release_sha256 is set
+  assert:
+    that:
+      - loki_release_sha256 is defined
+      - loki_release_sha256 | length == 64
+    fail_msg: >-
+      loki_release_sha256 must be set in inventory (SHA-256 of
+      loki-linux-amd64.zip for the version pinned by `loki_version`).
+      Get the SHA from the release page:
+      https://github.com/grafana/loki/releases/tag/v{{ loki_version }}
+
 - name: download loki tarball
   get_url:
     url: "https://github.com/grafana/loki/releases/download/v{{ loki_version }}/loki-linux-amd64.zip"
     dest: /tmp/loki.zip
+    checksum: "sha256:{{ loki_release_sha256 }}"
     mode: "0644"
 
 - name: extract loki binary

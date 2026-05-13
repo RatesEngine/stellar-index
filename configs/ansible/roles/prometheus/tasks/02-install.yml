@@ -17,12 +17,28 @@
     - { path: /etc/alertmanager,         owner: root, group: "{{ alertmanager_user }}", mode: "0750" }
     - { path: /var/lib/alertmanager,     owner: "{{ alertmanager_user }}", group: "{{ alertmanager_group }}", mode: "0750" }
 
+# F-1285 (codex audit-2026-05-13): fail fast if the operator
+# hasn't supplied the prometheus release SHA256 in inventory.
+# Pre-fix used `prometheus_sha256 | default(omit)` which silently
+# DROPPED the checksum entirely when the variable wasn't set —
+# installing unauthenticated upstream binaries.
+- name: assert prometheus_sha256 is set
+  assert:
+    that:
+      - prometheus_sha256 is defined
+      - prometheus_sha256 | length == 64
+    fail_msg: >-
+      prometheus_sha256 must be set in inventory (SHA-256 of
+      prometheus-{{ prometheus_version }}.linux-amd64.tar.gz).
+      Get the SHA from the release page:
+      https://github.com/prometheus/prometheus/releases/tag/v{{ prometheus_version }}
+
 - name: download prometheus tarball
   get_url:
     url: "https://github.com/prometheus/prometheus/releases/download/v{{ prometheus_version }}/prometheus-{{ prometheus_version }}.linux-amd64.tar.gz"
     dest: /tmp/prometheus.tar.gz
     mode: "0644"
-    checksum: "sha256:{{ prometheus_sha256 | default(omit) }}"
+    checksum: "sha256:{{ prometheus_sha256 }}"
 
 - name: extract prometheus tarball
   unarchive:
@@ -42,12 +58,25 @@
     - prometheus
     - promtool
 
+# F-1285 (codex audit-2026-05-13): same fail-fast pattern as the
+# prometheus checksum assert above.
+- name: assert alertmanager_sha256 is set
+  assert:
+    that:
+      - alertmanager_sha256 is defined
+      - alertmanager_sha256 | length == 64
+    fail_msg: >-
+      alertmanager_sha256 must be set in inventory (SHA-256 of
+      alertmanager-{{ alertmanager_version }}.linux-amd64.tar.gz).
+      Get the SHA from the release page:
+      https://github.com/prometheus/alertmanager/releases/tag/v{{ alertmanager_version }}
+
 - name: download alertmanager tarball
   get_url:
     url: "https://github.com/prometheus/alertmanager/releases/download/v{{ alertmanager_version }}/alertmanager-{{ alertmanager_version }}.linux-amd64.tar.gz"
     dest: /tmp/alertmanager.tar.gz
     mode: "0644"
-    checksum: "sha256:{{ alertmanager_sha256 | default(omit) }}"
+    checksum: "sha256:{{ alertmanager_sha256 }}"
 
 - name: extract alertmanager tarball
   unarchive:

@@ -11,11 +11,24 @@ Type=simple
 User=loki
 Group=loki
 
-# MinIO credentials from env (same vars as galexie). Loki picks
-# them up via the AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY pair
-# the upstream s3-driver expects.
-Environment=AWS_ACCESS_KEY_ID=${{ '{' }}{{ loki_s3_access_key_env }}{{ '}' }}
-Environment=AWS_SECRET_ACCESS_KEY=${{ '{' }}{{ loki_s3_secret_key_env }}{{ '}' }}
+# F-1286 (codex audit-2026-05-13): MinIO credentials must come
+# from `/etc/default/loki` DIRECTLY as `AWS_ACCESS_KEY_ID=` and
+# `AWS_SECRET_ACCESS_KEY=`. Earlier templates used
+# `Environment=AWS_ACCESS_KEY_ID=${RATESENGINE_S3_ACCESS_KEY}`
+# attempting to reuse the galexie convention's env-var names,
+# but systemd `Environment=` does NOT perform `$` expansion —
+# the literal `${RATESENGINE_S3_ACCESS_KEY}` string would be
+# passed to Loki as the access key, failing S3 chunk writes
+# while the process otherwise looked healthy.
+#
+# Operators put both into /etc/default/loki:
+#
+#   AWS_ACCESS_KEY_ID=<value>
+#   AWS_SECRET_ACCESS_KEY=<value>
+#
+# (Galexie's separate /etc/default/galexie can still use the
+# RATESENGINE_S3_* convention — these are two different
+# EnvironmentFile sources.)
 EnvironmentFile=-/etc/default/loki
 
 ExecStart=/usr/local/bin/loki \

@@ -30,6 +30,11 @@ loki_replication_factor: 1
 loki_s3_endpoint: "{{ hostvars[groups['log_aggregator'][0]].s3_endpoint | default('http://127.0.0.1:9000') }}"
 loki_s3_bucket: loki-chunks
 loki_s3_region: r1
+# F-1286 (codex audit-2026-05-13): these env-var-name knobs are
+# retained for inventory compatibility but the loki.service.j2
+# template no longer reads them — systemd `Environment=`
+# cannot expand `${VAR}`. Operators put `AWS_ACCESS_KEY_ID=`
+# and `AWS_SECRET_ACCESS_KEY=` directly into /etc/default/loki.
 loki_s3_access_key_env: RATESENGINE_S3_ACCESS_KEY
 loki_s3_secret_key_env: RATESENGINE_S3_SECRET_KEY
 

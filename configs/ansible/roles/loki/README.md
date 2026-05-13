@@ -86,9 +86,20 @@ Chunks → MinIO via S3 backend (already deployed for galexie).
 The role expects:
 - `loki-chunks` bucket created.
 - A `loki-writer` IAM user with PutObject + GetObject on the
-  bucket. Credentials referenced via the same env-var pair as
-  `galexie` (default: `RATESENGINE_S3_ACCESS_KEY` /
-  `RATESENGINE_S3_SECRET_KEY`).
+  bucket. **Credentials go into `/etc/default/loki` as
+  `AWS_ACCESS_KEY_ID=` and `AWS_SECRET_ACCESS_KEY=`** — the
+  systemd unit's `EnvironmentFile=-/etc/default/loki` reads
+  them directly and the upstream S3 driver expects those exact
+  variable names. F-1286 (2026-05-13): earlier prose tried to
+  remap from the galexie convention's `RATESENGINE_S3_*` names
+  via `Environment=AWS_ACCESS_KEY_ID=${RATESENGINE_S3_ACCESS_KEY}`,
+  but systemd `Environment=` does not perform `$` expansion —
+  the literal `${...}` string would have been passed as the
+  access key, failing S3 chunk writes while Loki looked
+  process-alive. Set the two `AWS_*` env vars in
+  `/etc/default/loki` directly. Galexie's separate
+  `/etc/default/galexie` still uses the `RATESENGINE_S3_*`
+  convention; they're independent EnvironmentFile sources.
 
 Index → BoltDB on local filesystem under `/var/lib/loki/index`.
 Single-host so a shared index backend would be overkill.
