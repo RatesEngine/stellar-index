@@ -17,6 +17,18 @@ against.
 
 ### Documentation
 
+- `runbooks/source-stopped.md` adds a new "Per-source cadence
+  reference" matrix listing the expected emission cadence + the
+  expected idle cap (upper bound on a normal silent stretch) +
+  the first-look-when-stopped surface for each of the 11 active
+  sources. Operators paged on a stopped source can now check
+  whether the silence is within the source's normal off-peak
+  window before treating it as a real stop. Covers the off-peak
+  prone Soroban DEXes (Phoenix / Comet / Aquarius / Blend), the
+  zero-event Band relay, the three Reflector contracts at their
+  different cadences, the four CEX WebSocket streamers, the CG
+  poller cooldown semantics, and ECB's once-per-business-day
+  fiat fix. Cross-references the wave-70 CG runbook section.
 - `runbooks/decode-errors.md` adds a new "Per-source quick
   reference" section pulling the per-source decode-regression
   surprises from CLAUDE.md and `docs/discovery/dexes-amms` /

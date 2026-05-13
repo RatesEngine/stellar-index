@@ -1,6 +1,6 @@
 ---
 title: Runbook — source-stopped
-last_verified: 2026-05-12
+last_verified: 2026-05-13
 status: draft
 severity: P2
 ---
@@ -54,6 +54,37 @@ Key signals:
 - **Shared upstream failure**: on-chain and external sources both flatten at once. Jump to `all-ingestion-down.md`.
 - **On-chain-only flattening**: inspect ledgerstream/indexer logs and current cursor movement for a dispatcher-path issue.
 - **Per-source-only issue (others fine)**: the source's filter is rejecting everything, the source is legitimately idle, or a protocol change broke its decoder. Check `decode-errors` alert for correlation.
+
+## Per-source cadence reference
+
+Use this matrix BEFORE assuming a source is genuinely stopped —
+several sources have natural cadences that span the alert's
+30-minute rate window. The "expected idle cap" column is the
+upper bound on a *normal* silent stretch; sustained idleness
+beyond it warrants investigation.
+
+| Source | Expected cadence (active hours) | Expected idle cap (normal silence) | First-look-when-stopped |
+| ------ | ------------------------------- | ---------------------------------- | ----------------------- |
+| `sdex` (classic) | Continuous during US/EU trading; sparse off-hours | 30 min off-hours | Hubble cross-check via `ratesengine-ops hubble-check`; if Hubble shows trades we missed, decoder regression. |
+| `soroswap` | Continuous during US/EU trading hours | 30 min off-hours | Soroban-RPC `getEvents` for the contract; if events flowing on-chain but not into us, decoder regression or cursor stuck. |
+| `phoenix` | Low cadence; off-peak windows are common | 45 min off-peak | Same as soroswap. Phoenix's 8-event-per-swap shape (CLAUDE.md surprise) means partial decode-error storms can mimic source-stopped. |
+| `comet` | Pool-activity-driven; sparse | 45 min | Verify the contract address matches the operator-watched pool; Comet's shared `("POOL", <event>)` topic can attract events from unrelated Balancer-v1 deploys. |
+| `aquarius` | Tied to AMM pool activity; sparse | 30 min | Soroban-RPC `getEvents`. |
+| `blend` | Auction-driven; very sparse outside active markets | 90 min | Auctions don't run continuously — verify there's an active auction window before treating silence as a stop. |
+| `band` | Operator-controlled `relay()` cadence; typically every 5-15 min when configured | 20 min | Band emits **zero events** (CLAUDE.md surprise) — observed via `InvokeContract` op args through the dispatcher's `ContractCallDecoder`. Verify the `ContractCallDecoder` is wired and the contract is still being relayed-to upstream. |
+| `redstone` | Batch pushes every ~1 min during active periods | 10 min active / 30 min off-peak | Redstone's adapter event topic is `"REDSTONE"`; the body has no `feed_id` (lives in OpArgs). Verify the OpArgs plumbing is intact. |
+| `reflector` (×3 contracts: DEX/CEX/FX) | Continuous on the active feed | 15 min DEX/CEX, 60 min FX (FX feed is much slower) | Reflector is **three separate contracts** — confirm WHICH one is silent. The DEX/CEX contracts are the most-watched; the FX contract's slower cadence makes it falsely-page-prone. |
+| `binance`, `kraken`, `bitstamp`, `coinbase` (CEX WS streamers) | Continuous (sub-second) when open | 60 s gap = anomalous; 5 min = certainly broken | These are WebSocket streamers, not pollers — silence usually means the WS connection dropped silently. Check streamer-error metrics + reconnect logs. |
+| `coingecko` (poller) | Default 60s interval | 5 min (one missed cycle plus cooldown headroom) | CG-specific cooldown semantics — see [`external-poller-error-rate-high.md` § Vendor-specific 429 patterns](external-poller-error-rate-high.md#vendor-specific-429-patterns). |
+| `ecb` (FX dailies) | Once per business day ~16:00 CET | 24 hours weekdays / 72 hours weekends-and-holidays | ECB doesn't publish on EU bank holidays; cross-reference the silence date against the published TARGET2 closing days before treating as a stop. |
+
+When the silent source is one of the off-peak-prone ones (Phoenix,
+Comet, Aquarius, Blend, ECB) AND the silence is within the
+expected idle cap, this is almost always a false positive —
+extending the alert window for that specific source is the right
+fix, not restarting the indexer. The current alert's 30m × 15m
+window was tuned in 2026-05-12 (F-1212b) to suppress most of these
+but doesn't catch every off-peak case for the longer-cadence sources.
 
 ## Mitigation
 
