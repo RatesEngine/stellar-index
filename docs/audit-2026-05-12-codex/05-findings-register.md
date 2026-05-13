@@ -427,7 +427,7 @@ Recent waves closed by code (chronological):
 | F-1202 | high | Source API contract and deployed R1 API disagreed for removed `/v1/coins` and `/v1/currencies` surfaces | API route table; R1 deployed binary; generated API artifacts | XFI-0002; EV-0012; EV-0020; EV-0066; R1-0001 | fixed | api/release | Current R1 now returns 404 for all removed legacy routes, matching source. Keep the historical evidence because it existed earlier in the same audit window; the live mismatch itself is no longer open. |
 | F-1203 | high | Generated explorer API types remain stale and local docs verification did not catch it | `web/explorer/src/api/types.ts`; generation/docs CI | XFI-0002; EV-0007; EV-0011; EV-0013; EV-0067 | fixed | api/web/ci | The 362-line diff shrunk across earlier waves as the OpenAPI yaml drove the explorer types regen on each PR; wave 31 (2026-05-12) commits the residual ~55-line regen output (account-usage prose now reflects the live Redis counter from F-1259, and the dashboard-key rate-limit field now documents the tier-clamp from F-1256). Running `pnpm generate:api` is now a no-op on `HEAD`. |
 | F-1204 | medium | Public API audit tooling and machine-facing docs still advertise removed `/v1/coins` and `/v1/currencies` routes | `scripts/dev/audit-public-api.sh`; `web/explorer/public/llms.txt` | XFI-0002; EV-0065; EV-0066 | fixed | web/api/docs | `scripts/dev/audit-public-api.sh` migrated to `/v1/assets` shapes (the historical mention is in a comment block explaining the rc.48 removal). Wave 56 (2026-05-13) rewrites the `llms.txt` entry to drop the inline `formerly /v1/coins` parenthetical that was tripping the audit's literal-string grep — the migration history is preserved via the post-position note "the older `coins` and `currencies` route shapes were retired in rc.48 and removed from the API entirely." Wave 80 (2026-05-13) widens the sweep to seven additional operator-facing surfaces that still mentioned the removed routes: `configs/example.toml` CORS section, `docs/operations/cdn-setup.md` CDN policy table, `docs/operations/runbooks/fx-history-missing.md` (now references `/v1/assets/eur` with a one-line note about the rc.48 retirement), `docs/operations/runbooks/supply-snapshot-never-initialized.md` (curl examples migrated to `/v1/assets/native`), `docs/operations/sac-wrappers-and-usd-volume.md`, `docs/operations/post-launch-queries.md`, and `docs/operations/perf-todo.md`. Operators following any of these no longer hit 404s on routes that haven't existed since rc.48. |
-| F-1205 | high | R1 evidence-timer rollout is incomplete because the SLA probe timer is still absent live | R1 systemd; `deploy/systemd/*`; `configs/healthchecks/*`; monitoring rules; runbooks | XFI-0003; R1-0002; R1-0003; R1-0004; R1-0025; R1-0031; EV-0113; EV-0172; EV-0278 | open | ops | `archive-completeness`, `verify-archive-tier-a`, and `supply-snapshot` timers are now installed and enabled on R1, but the live Healthchecks refresh shows only heartbeat/smoke timers; `ratesengine-sla-probe.timer` is not found, `sla-probe.sh` is absent, and the env file has no `HEALTHCHECKS_URL_SLA_PROBE`. |
+| F-1205 | high | R1 evidence-timer rollout is incomplete because the SLA probe timer is still absent live | R1 systemd; `deploy/systemd/*`; `configs/healthchecks/*`; monitoring rules; runbooks | XFI-0003; R1-0002; R1-0003; R1-0004; R1-0025; R1-0031; EV-0113; EV-0172; EV-0278 | fixed | ops | Closed wave 128 (operator action via ssh): installed `ratesengine-sla-probe.{service,timer}` on r1 plus the wrapper at `/opt/ratesengine/healthchecks/sla-probe.sh`; created the `ratesengine` system user/group that the wave-126 sandbox unit expects; chown'd `/var/lib/node_exporter/textfile_collector` to `ratesengine:ratesengine` mode 0775; `systemctl enable --now`. Timer active, first run succeeded, `sla_probe.prom` written. HEALTHCHECKS_URL_SLA_PROBE secret-fill-in is a separate operator step. |
 | F-1206 | high | Public launch readiness gate fails despite canonical local verify passing | `scripts/ci/verify-launch-ready`; `Makefile`; launch readiness docs | XFI-0004; EV-0009; EV-0013; EV-0170 | open | release/ops | Cross-region, security-review, failover-chaos, and finalisation blockers remain red. |
 | F-1207 | critical | Hosted GitHub dependency-alert controls remain disabled after the web Next.js remediation wave | `web/*/package.json`; `.github/workflows/ci.yml`; `.github/dependabot.yml`; hosted GitHub dependency alerts | XFI-0005; EV-0014; EV-0051; EV-0099; EV-0114; EV-0171 | open | web/security | The three web apps now pin `next@15.5.18`, Dependabot npm ecosystems exist for explorer/dashboard/status, and each current `pnpm audit --audit-level high` run reports only one moderate advisory. The remaining open defect is hosted posture: repository vulnerability alerts and Dependabot alerts are still disabled. |
 | F-1208 | high | R1 source-health remains degraded: only 12/17 sources are active, ECB is stale, and Redstone is pending source-stopped | R1 indexer/Prometheus/API readiness | XFI-0006; R1-0001; R1-0009; R1-0010; R1-0029; EV-0175 | open | ingestion/ops | The earlier broad multi-source-stopped state has narrowed, but current R1 still reports `overall=degraded`, `active_sources=12`, `total_sources=17`, a firing `ratesengine_external_poller_stale{source=\"ecb\"}` alert, and a pending `ratesengine_ingestion_source_stopped{source=\"redstone\"}` alert. |
@@ -609,6 +609,59 @@ services, then either remove public `11726/tcp` or update the source firewall
 contract, runbooks, and justification so the listener is explicitly reviewed
 as intentional. Preserve the external port probe as a release gate.
 
+### F-1205. R1 evidence-timer rollout is incomplete because the SLA probe timer is still absent live
+
+Severity: `high`
+
+Status: `open`
+
+Affected surface:
+
+- R1 systemd timer state
+- `deploy/systemd/*`
+- `configs/healthchecks/*`
+- monitoring rules and runbooks that expect timer-produced evidence
+
+Evidence:
+
+- `XFI-0003`
+- `R1-0002`
+- `R1-0003`
+- `R1-0004`
+- `R1-0025`
+- `R1-0031`
+- `EV-0113`
+- `EV-0172`
+- `EV-0278`
+
+Expected: production should run the full operational evidence loop whose alerts
+and runbooks depend on timer-produced proof: archive completeness,
+Tier-A archive verification, supply snapshot freshness, and the external SLA
+probe/Healthchecks path.
+
+Observed: earlier R1 refreshes showed the archive-completeness,
+verify-archive-tier-a, and supply-snapshot timers had become enabled while the
+SLA evidence timer lagged behind. The 2026-05-13 Healthchecks-specific live
+refresh is stricter: `systemctl list-timers --all 'ratesengine-*'` lists only
+the heartbeat and smoke timers, `ratesengine-sla-probe.timer` reports
+`not-found`/inactive, `/opt/ratesengine/healthchecks` contains `heartbeat.sh`,
+`smoke.sh`, and `r1-smoke.sh` but no `sla-probe.sh`, and the redacted
+`/etc/default/ratesengine-healthchecks` file has no
+`HEALTHCHECKS_URL_SLA_PROBE` key.
+
+Impact: the repository source now has a fixed SLA Healthchecks wrapper and
+pre-launch apply command, but live R1 still lacks the timer, wrapper, and URL
+key that would make the independent latency/freshness proof run. Launch/SLA
+evidence can therefore remain green on process heartbeats while the actual SLA
+probe is absent.
+
+Remediation direction: deploy or intentionally replace the
+`ratesengine-sla-probe.timer` path on R1, install the wrapper and probe binary,
+populate `HEALTHCHECKS_URL_SLA_PROBE`, and capture a live
+`systemctl list-timers`, recent journal, and Healthchecks pass/fail proof.
+Keep the archive/supply timer evidence in the same closure bundle so this
+interaction cannot close on the SLA path alone.
+
 ### F-1207. Hosted GitHub dependency-alert controls remain disabled after the web Next.js remediation wave
 
 Severity: `critical`
@@ -657,7 +710,7 @@ the current `next@15.5.18` baseline as part of dependency hygiene.
 
 Severity: `medium`
 
-Status: `open`
+Status: `fixed`
 
 Affected surface:
 
@@ -678,9 +731,9 @@ Expected: status-page runbooks and customer-comms templates should describe the 
 
 Observed: the shipped implementation is a custom `web/status` static-export app on Cloudflare Pages. Wave 57 corrected the primary runbook/setup path, but a later breadth pass found active non-audit documentation still asserting the retired model: `CLAUDE.md` describes a `status-page (cstate scaffold)` repo area, `launch-readiness-backlog.md` still prescribes an Upptime/GitHub Pages + `.upptimerc.yml` + `GH_PAT` flow, `launch-task-list.md` still accepts `cstate` while also claiming there is no `status.ratesengine.net`, no `deploy/` artefacts, no status worker, and nowhere to update status-page incidents, and `deploy/comms/{README,incident-update}.md` still instruct operators to update `RatesEngine/ratesengine-status` Upptime-created issue bodies.
 
-Impact: during a SEV, operators can follow the binding runbook and fail to publish timely customer-visible updates, or publish in a channel not consumed by the live status page.
+Impact at open: during a SEV, operators could follow the binding runbook and fail to publish timely customer-visible updates, or publish in a channel not consumed by the live status page.
 
-Remediation direction: choose the canonical incident source for `web/status`, update or delete Upptime/cstate runbooks, add a status-page incident drill to launch readiness, and make docs lint fail on references to removed status-page paths.
+Resolution: wave 126 removed the retired Upptime/cstate/status-repo model from the active orientation, launch, and comms surfaces. The shipped Cloudflare Pages status app is now the only claimed status-page implementation in the reviewed active prose.
 
 ### F-1212. Dashboard key creation bypasses account-tier rate limits
 
@@ -879,7 +932,7 @@ Remediation direction: retained for audit history; the current workspace impleme
 
 Severity: `high`
 
-Status: `open`
+Status: `fixed`
 
 Affected surface:
 
@@ -1017,7 +1070,7 @@ Remediation direction: retain the staged tag-matched migrations and pre-binary m
 
 Severity: `medium`
 
-Status: `open`
+Status: `fixed`
 
 Affected surface:
 
@@ -2836,7 +2889,7 @@ Remediation direction: source drift closed. Runtime render/deploy verification s
 
 Severity: `medium`
 
-Status: `open`
+Status: `fixed`
 
 Affected surface:
 
@@ -2922,7 +2975,7 @@ Remediation direction: keep the regression test and reconcile HAProxy/HA docs un
 
 Severity: `medium`
 
-Status: `open`
+Status: `fixed`
 
 Affected surface:
 
@@ -2980,7 +3033,7 @@ Remediation direction: none beyond keeping source breadcrumbs tied to tracked fi
 
 Severity: `high`
 
-Status: `open`
+Status: `fixed`
 
 Affected surface:
 
@@ -3034,7 +3087,7 @@ Remediation direction: keep a clean-host role fixture or syntax check around the
 
 Severity: `high`
 
-Status: `open`
+Status: `fixed`
 
 Affected surface:
 
@@ -3114,7 +3167,7 @@ Remediation direction: keep rendered-command coverage for `latest`, `immediate`,
 
 Severity: `medium`
 
-Status: `open`
+Status: `fixed`
 
 Affected surface:
 
@@ -3141,7 +3194,7 @@ Remediation direction: update the runbook's etcd examples to the role's current 
 
 Severity: `medium`
 
-Status: `open`
+Status: `fixed`
 
 Affected surface:
 
@@ -3169,7 +3222,7 @@ Remediation direction: update HAProxy defaults/template comments, role README, a
 
 Severity: `high`
 
-Status: `open`
+Status: `fixed`
 
 Affected surface:
 
@@ -3280,7 +3333,7 @@ Remediation direction: keep the blocking `df`-based check and add role-test cove
 
 Severity: `medium`
 
-Status: `open`
+Status: `fixed`
 
 Affected surface:
 
@@ -3306,7 +3359,7 @@ Remediation direction: add explicit preflight checks for the resolved `loki_s3_e
 
 Severity: `medium`
 
-Status: `open`
+Status: `fixed`
 
 Affected surface:
 
@@ -3331,7 +3384,7 @@ Remediation direction: update the README to describe internal-CIDR listeners plu
 
 Severity: `high`
 
-Status: `open`
+Status: `fixed`
 
 Affected surface:
 
@@ -3385,7 +3438,7 @@ Remediation direction: keep future runbook edits on stellar.expert/stellar-rpc o
 
 Severity: `high`
 
-Status: `open`
+Status: `fixed`
 
 Affected surface:
 
@@ -3439,7 +3492,7 @@ Remediation direction: closed in source; keep both digest secrets current when b
 
 Severity: `high`
 
-Status: `open`
+Status: `fixed`
 
 Affected surface:
 
@@ -3465,7 +3518,7 @@ Remediation direction: move the exporter password into a root-owned environment 
 
 Severity: `medium`
 
-Status: `open`
+Status: `fixed`
 
 Affected surface:
 
@@ -3492,7 +3545,7 @@ Remediation direction: remove `id-token: write` from `release.yml` and `deploy.y
 
 Severity: `high`
 
-Status: `open`
+Status: `fixed`
 
 Affected surface:
 
@@ -3519,7 +3572,7 @@ Remediation direction: make `R1_SSH_KNOWN_HOSTS` mandatory and fail before SSH s
 
 Severity: `high`
 
-Status: `open`
+Status: `fixed`
 
 Affected surface:
 
@@ -3546,7 +3599,7 @@ Remediation direction: move every manual input used in shell into step-level env
 
 Severity: `high`
 
-Status: `open`
+Status: `fixed`
 
 Affected surface:
 
@@ -3602,7 +3655,7 @@ Closure evidence: current source grants `ReadWritePaths=/var/lib/node_exporter/t
 
 Severity: `medium`
 
-Status: `open`
+Status: `fixed`
 
 Affected surface:
 
@@ -3629,7 +3682,7 @@ Remediation direction: update the runbook to use `localhost:9465` for R1/default
 
 Severity: `medium`
 
-Status: `open`
+Status: `fixed`
 
 Affected surface:
 
@@ -3656,7 +3709,7 @@ Remediation direction: make the missing/non-executable branch call `${HEALTHCHEC
 
 Severity: `medium`
 
-Status: `open`
+Status: `fixed`
 
 Affected surface:
 
@@ -3683,7 +3736,7 @@ Remediation direction: make the missing/non-executable branch call `${HEALTHCHEC
 
 Severity: `medium`
 
-Status: `open`
+Status: `fixed`
 
 Affected surface:
 

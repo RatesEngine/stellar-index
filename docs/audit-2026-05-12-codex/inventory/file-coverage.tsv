@@ -388,10 +388,10 @@ docs/audit-2026-05-12-codex/00-plan.md	docs	docs/audit-2026-05-12-codex	document
 docs/audit-2026-05-12-codex/01-tracker.md	docs	docs/audit-2026-05-12-codex	documentation	todo			cold audit pending
 docs/audit-2026-05-12-codex/02-protocol.md	docs	docs/audit-2026-05-12-codex	documentation	todo			cold audit pending
 docs/audit-2026-05-12-codex/03-journeys.md	docs	docs/audit-2026-05-12-codex	documentation	todo			cold audit pending
-docs/audit-2026-05-12-codex/04-reconciliation.md	docs	docs/audit-2026-05-12-codex	documentation	todo			cold audit pending
-docs/audit-2026-05-12-codex/05-findings-register.md	docs	docs/audit-2026-05-12-codex	documentation	todo			cold audit pending
+docs/audit-2026-05-12-codex/04-reconciliation.md	docs	docs/audit-2026-05-12-codex	documentation	done	EV-0279;CMD-0276		Reviewed and updated audit-control reconciliation after moving-workspace closure updates, live R1 Healthchecks refresh, count parity, docs lint, and status-mismatch checks
+docs/audit-2026-05-12-codex/05-findings-register.md	docs	docs/audit-2026-05-12-codex	documentation	done	EV-0278;EV-0279;CMD-0276	XFI-0003	Reconciled table/detail statuses after shared closure updates and added the missing detailed F-1205 live Healthchecks timer rollout section
 docs/audit-2026-05-12-codex/06-exclusions-register.md	docs	docs/audit-2026-05-12-codex	documentation	todo			cold audit pending
-docs/audit-2026-05-12-codex/07-remediation-plan.md	docs	docs/audit-2026-05-12-codex	documentation	todo			cold audit pending
+docs/audit-2026-05-12-codex/07-remediation-plan.md	docs	docs/audit-2026-05-12-codex	documentation	done	EV-0278;EV-0279;CMD-0276	XFI-0003	Reconciled remediation statuses after moving-workspace closure updates and narrowed R-1204 to the live missing SLA timer/wrapper/URL path
 docs/audit-2026-05-12-codex/08-competitive-parity-matrix.md	docs	docs/audit-2026-05-12-codex	documentation	todo			cold audit pending
 docs/audit-2026-05-12-codex/09-stellar-depth-matrix.md	docs	docs/audit-2026-05-12-codex	documentation	todo			cold audit pending
 docs/audit-2026-05-12-codex/10-adversarial-attack-tree.md	docs	docs/audit-2026-05-12-codex	documentation	todo			cold audit pending
@@ -399,9 +399,9 @@ docs/audit-2026-05-12-codex/11-r1-live-probe-protocol.md	docs	docs/audit-2026-05
 docs/audit-2026-05-12-codex/12-claude-plan-delta.md	docs	docs/audit-2026-05-12-codex	documentation	todo			cold audit pending
 docs/audit-2026-05-12-codex/README.md	docs	docs/audit-2026-05-12-codex	documentation	todo			cold audit pending
 docs/audit-2026-05-12-codex/evidence/README.md	docs	docs/audit-2026-05-12-codex	documentation	todo			cold audit pending
-docs/audit-2026-05-12-codex/evidence/commands.md	docs	docs/audit-2026-05-12-codex	documentation	todo			cold audit pending
-docs/audit-2026-05-12-codex/evidence/cross-file-interactions.md	docs	docs/audit-2026-05-12-codex	documentation	todo			cold audit pending
-docs/audit-2026-05-12-codex/evidence/log.md	docs	docs/audit-2026-05-12-codex	documentation	todo			cold audit pending
+docs/audit-2026-05-12-codex/evidence/commands.md	docs	docs/audit-2026-05-12-codex	documentation	done	EV-0278;EV-0279;CMD-0275;CMD-0276		Recorded live R1 Healthchecks refresh and wave-135 control reconciliation command evidence
+docs/audit-2026-05-12-codex/evidence/cross-file-interactions.md	docs	docs/audit-2026-05-12-codex	documentation	done	EV-0278;EV-0279;CMD-0276	XFI-0003	Reconciled XFI statuses after closure updates and refreshed XFI-0003 with the live missing SLA timer/wrapper/URL evidence
+docs/audit-2026-05-12-codex/evidence/log.md	docs	docs/audit-2026-05-12-codex	documentation	done	EV-0278;EV-0279;CMD-0275;CMD-0276		Recorded Healthchecks live-state evidence and control-plane synchronization evidence
 docs/audit-2026-05-12-codex/evidence/r1-runtime.md	docs	docs/audit-2026-05-12-codex	documentation	todo			cold audit pending
 docs/audit-2026-05-12-codex/inventory/README.md	docs	docs/audit-2026-05-12-codex	documentation	todo			cold audit pending
 docs/audit-2026-05-12-codex/inventory/area-counts.md	docs	docs/audit-2026-05-12-codex	documentation	todo			cold audit pending

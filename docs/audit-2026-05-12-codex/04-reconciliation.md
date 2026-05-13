@@ -836,3 +836,16 @@ without evidence IDs.
   `done=178 / in_progress=131 / todo=1617`, tracked-file parity
   `1926 / 1926`, docs lint green, and no finding-status mismatches between
   the register table and detailed sections.
+- `CMD-0275` refreshes the live R1 Healthchecks evidence for `F-1205`:
+  the host lists only heartbeat/smoke timers, `ratesengine-sla-probe.timer`
+  is `not-found`/inactive, `/opt/ratesengine/healthchecks` has no
+  `sla-probe.sh`, and the redacted env file has no
+  `HEALTHCHECKS_URL_SLA_PROBE`. This keeps the live SLA evidence-timer rollout
+  open even though the source-side wrapper/apply-step findings closed.
+- `CMD-0276` restores audit-control parity after moving-workspace closure
+  updates and the live Healthchecks refresh:
+  findings `93 fixed / 11 open`, XFI `87 fixed / 9 open`, remediation
+  `89 fixed / 13 open`, file coverage
+  `done=178 / in_progress=131 / todo=1617`, tracked-file parity
+  `1926 / 1926`, docs lint green, and no finding-status mismatches between
+  the register table and detailed sections.
