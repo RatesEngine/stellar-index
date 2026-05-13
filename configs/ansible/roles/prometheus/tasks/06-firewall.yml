@@ -1,8 +1,15 @@
 ---
-# Prometheus + AlertManager UI bind to loopback only — operators
-# SSH-tunnel; no public ingress rule needed. The one rule we DO
-# need is AlertManager cluster-gossip on 9094 between the two
-# prom hosts.
+# F-1287 (codex audit-2026-05-13): Prometheus + Alertmanager bind
+# to 0.0.0.0:9090/9093 (not loopback) so peer-Prometheus scrape
+# + alert-delivery in a multi-host topology can reach each other.
+# The firewall drop-in below restricts both ports inbound to
+# `prometheus_internal_cidrs` only, preserving the public-
+# exposure protection the loopback default used to provide.
+# Operators still SSH-tunnel for the web UI — SSH bypasses the
+# firewall.
+#
+# AlertManager cluster gossip on 9094 is the additional rule
+# specific to the prom-pair gossip channel.
 
 - name: ensure nftables installed
   apt:
@@ -21,13 +28,19 @@
     mode: "0644"
     content: |
       # Managed by ansible (prometheus role).
-      # AlertManager cluster gossip between prom-pair hosts.
-      # Prometheus + Alertmanager UI loopback-only (no rule needed).
+      # Internal-only access to:
+      #   - 9090 (Prometheus web/scrape) — peer Prometheuses scrape each other
+      #   - 9093 (Alertmanager API) — peer Prometheuses deliver alerts
+      #   - 9094 (Alertmanager cluster gossip) — prom-pair gossip channel
+      # F-1287 (codex audit-2026-05-13): pre-fix this drop-in
+      # only opened 9094 because the role defaults bound 9090/9093
+      # to loopback, leaving the cluster scrape + alert delivery
+      # broken in a multi-host topology.
       table inet prometheus_filter {
         chain input {
           type filter hook input priority -100; policy accept;
       {% for cidr in prometheus_internal_cidrs %}
-          ip saddr {{ cidr }} tcp dport {{ alertmanager_cluster_listen_port }} accept comment "alertmanager-cluster-{{ cidr }}";
+          ip saddr {{ cidr }} tcp dport { 9090, 9093, {{ alertmanager_cluster_listen_port }} } accept comment "prometheus-stack-{{ cidr }}";
           ip saddr {{ cidr }} udp dport {{ alertmanager_cluster_listen_port }} accept comment "alertmanager-cluster-udp-{{ cidr }}";
       {% endfor %}
         }

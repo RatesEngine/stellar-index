@@ -59,19 +59,29 @@
     - alertmanager_slack_webhook_url | default('') | length == 0
     - alertmanager_discord_webhook_url | default('') | length == 0
 
+# F-1288 (codex audit-2026-05-13): pre-fix this assert used a
+# convoluted `ansible_mounts | selectattr | first | default`
+# Jinja expression that failed on hosts where /var isn't a
+# separate mount (which is most of them), and the task
+# swallowed those failures with `ignore_errors: yes` — so the
+# README's claim that the role asserts ≥ 20 GB was untrue. The
+# rewrite shells out to `df --output=avail -B1 /var` (which
+# walks up to the containing mount automatically) so the check
+# works regardless of mount-layout, and removes `ignore_errors`.
+- name: collect /var free bytes
+  command: df --output=avail -B1 /var
+  register: _var_df
+  changed_when: false
+
 - name: assert disk space at /var (TSDB needs ~15 GB at 30d retention)
   assert:
     that:
-      - >
-        ansible_mounts |
-        selectattr('mount', 'equalto', '/var') | first |
-        default({'size_available': 0}) | dict('size_available') |
-        default(0) | int >= (20 * 1024 * 1024 * 1024)
+      - (_var_df.stdout_lines[1] | int) >= (20 * 1024 * 1024 * 1024)
     fail_msg: >-
-      /var has insufficient free space for the TSDB. Expecting
-      ≥ 20 GB; provision a larger volume or reduce
+      /var has insufficient free space for the TSDB
+      (got {{ (_var_df.stdout_lines[1] | int) // (1024*1024*1024) }} GB,
+      need ≥ 20 GB). Provision a larger volume or reduce
       prometheus_retention_days. (Check `df -h /var`.)
-  ignore_errors: yes  # ansible_mounts shape varies; soft-fail rather than block.
 
 - name: assert time sync is active (chronyd or systemd-timesyncd)
   shell: |

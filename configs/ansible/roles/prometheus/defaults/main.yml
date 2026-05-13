@@ -13,11 +13,21 @@ prometheus_retention_days: 30
 prometheus_retention_size: "0"   # 0 = no size limit; time-based eviction only
 
 # ── Listening addresses ────────────────────────────────────────
-# Loopback-only; operators SSH-tunnel. Change to 127.0.0.1:N if
-# you want to expose, but expose-via-haproxy is the better
-# pattern.
-prometheus_listen: "127.0.0.1:9090"
-alertmanager_listen: "127.0.0.1:9093"
+# F-1287 (codex audit-2026-05-13): bound to 0.0.0.0 so peer
+# Prometheuses on the cluster can reach each other (the
+# `prometheus.yml.j2` scrape config targets
+# `{{ hostvars[h].ansible_host }}:9090` per host across the
+# cluster — loopback bind broke that completely for the
+# multi-host topology). The role's nftables drop-in at
+# 06-firewall.yml restricts 9090/9093 inbound to
+# `prometheus_internal_cidrs` only, so the public-exposure
+# concern the previous loopback default protected against is
+# preserved by the firewall layer instead of the bind.
+#
+# Operators still SSH-tunnel for the web UI — the firewall
+# blocks public; SSH bypasses the firewall.
+prometheus_listen: "0.0.0.0:9090"
+alertmanager_listen: "0.0.0.0:9093"
 # Cluster gossip between AlertManager peers. Bound to the host's
 # private IP (must be reachable from the peer).
 alertmanager_cluster_listen_port: 9094
