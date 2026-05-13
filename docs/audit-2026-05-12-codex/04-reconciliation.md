@@ -1057,3 +1057,21 @@ without evidence IDs.
   release publishes `ratesengine-sla-probe` and Healthchecks enables the timer,
   but fresh-host bootstrap and default tagged deploy omit the binary while the
   deploy docs describe daemon health checks that do not apply to CLI binaries.
+- `CMD-0319` reconciles moving-workspace status drift with direct evidence:
+  hosted dependency alerts now close `F-1207`; current Galexie source closes
+  `F-1312`; Actions policy improved from all-actions to selected-actions but
+  leaves wildcard external patterns and SHA pinning open under `F-1216`; and
+  R1 SLA remains red under `F-1305` because `unit_failed=1` persists without a
+  `RATESENGINE_PROBE_API_KEY`.
+- `CMD-0320` reconciles the next moving-workspace change: `F-1314` is now
+  source-closed because `sla-probe` is in the bootstrap loops and
+  `ratesengine-sla-probe` is in the default deploy binary set. `F-1313` remains
+  open because stale deploy-systemd/default-env references still exist in
+  active non-audit docs. `F-1206` remains open because `verify-launch-ready`
+  still exits red on L4.14-L4.17, L5.6, and L5.8.
+- `CMD-0321` restores audit-control parity after the moving-workspace
+  reconciliation:
+  findings `104 fixed / 10 open`, XFI `97 fixed / 9 open`, remediation
+  `99 fixed / 13 open`, file coverage
+  `done=193 / in_progress=131 / todo=1602`, docs lint green, and no
+  finding-status mismatches between the register table and detailed sections.

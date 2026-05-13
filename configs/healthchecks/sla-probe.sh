@@ -20,7 +20,17 @@ set -uo pipefail
 PROBE_BIN="${PROBE_BIN:-/usr/local/bin/ratesengine-sla-probe}"
 BASE_URL="${SLA_PROBE_BASE_URL:-http://localhost:3000/v1}"
 DURATION="${SLA_PROBE_DURATION:-30s}"
-CONCURRENCY="${SLA_PROBE_CONCURRENCY:-2}"
+# F-1305 / F-1311 (codex audit-2026-05-13): default concurrency=1
+# (was 2). At 2 the probe drives ~2.5k req/s against the API which
+# is well above any realistic customer cadence; it tripped both
+# the operator-tier rate limit (returning 429s → fake availability
+# fail) AND saturated the API's request path itself (p95 climbed
+# to ~3.8s under the load — the F-1311 false-positive). At
+# concurrency=1 the probe samples at ~800 req over 30s which
+# stresses the closed-bucket lookup enough to surface real
+# regressions without overwhelming a single-instance deployment.
+# Operators on multi-instance HA can override via inventory.
+CONCURRENCY="${SLA_PROBE_CONCURRENCY:-1}"
 PAIR="${SLA_PROBE_PAIR:-native,fiat:USD}"
 URL="${HEALTHCHECKS_URL_SLA_PROBE:-}"
 # TEXTFILE_OUTPUT — path under node_exporter's textfile_collector

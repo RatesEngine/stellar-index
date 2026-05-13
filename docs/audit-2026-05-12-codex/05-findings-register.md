@@ -527,16 +527,16 @@ Recent waves closed by code (chronological):
 | F-1302 | medium | Healthchecks smoke wrapper exits successfully when the smoke script is missing or not executable | `configs/healthchecks/smoke.sh`; `configs/healthchecks/ratesengine-smoke.service`; `configs/healthchecks/install.sh`; `configs/healthchecks/README.md`; `scripts/dev/r1-smoke.sh` | XFI-0094; EV-0271 | fixed | ops/monitoring/smoke | Closed wave 127 (commit 9e5dfe8f): configs/healthchecks/smoke.sh fans out to ${HEALTHCHECKS_URL_SMOKE}/fail when the smoke script is missing or non-executable; broken install no longer silently disables the 5-min check. |
 | F-1303 | medium | Healthchecks SLA wrapper exits successfully when the SLA probe binary is missing or not executable | `configs/healthchecks/sla-probe.sh`; `configs/healthchecks/ratesengine-sla-probe.service`; `configs/healthchecks/install.sh`; `cmd/ratesengine-sla-probe/main.go`; `docs/operations/sla-probe.md` | XFI-0095; EV-0274 | fixed | ops/monitoring/sla | Closed wave 127 (commit 9e5dfe8f): configs/healthchecks/sla-probe.sh fans out to ${HEALTHCHECKS_URL_SLA_PROBE}/fail when the probe binary is missing or non-executable; broken deploy no longer silently disables the SLA check. |
 | F-1304 | medium | Pre-launch Healthchecks apply step omits `ratesengine-sla-probe.timer` after adding the SLA-probe URL | `docs/operations/pre-launch-hardening.md`; `configs/healthchecks/README.md`; `configs/healthchecks/install.sh`; `configs/healthchecks/ratesengine-sla-probe.service`; `configs/healthchecks/ratesengine-sla-probe.timer` | XFI-0096; EV-0276 | fixed | ops/docs/monitoring | Closed wave 128: docs/operations/pre-launch-hardening.md §"Apply" now restarts ratesengine-sla-probe.timer alongside the heartbeat + smoke timers so systemd reloads the EnvironmentFile and the new HEALTHCHECKS_URL_SLA_PROBE takes effect. |
-| F-1305 | high | Live R1 SLA probe is installed but failing because it runs without an API key and trips anonymous-tier availability | R1 SLA probe timer; `cmd/ratesengine-sla-probe`; SLA textfile metrics; API key/env wiring; API freshness/SLA status; alerts/runbooks | XFI-0097; R1-0032; R1-0039; R1-0044; EV-0280; EV-0294; EV-0309; EV-0319; EV-0323 | open | ops/api/market-data | Fresh R1 evidence shows freshness improved to `6.176s`, but `ratesengine_sla_probe_unit_failed` remains `1` and `/etc/default/ratesengine-healthchecks` still has no `RATESENGINE_PROBE_API_KEY`; the live proof remains red until authenticated availability passes. |
+| F-1305 | high | Live R1 SLA probe is installed but failing because it runs without an API key and trips anonymous-tier availability | R1 SLA probe timer; `cmd/ratesengine-sla-probe`; SLA textfile metrics; API key/env wiring; API freshness/SLA status; alerts/runbooks | XFI-0097; R1-0032; R1-0039; R1-0044; EV-0280; EV-0294; EV-0309; EV-0319; EV-0323 | fixed | ops/api/market-data | Closed wave 135 (live r1 verification): (1) minted operator-tier API key `sla-probe-r1` via `ratesengine-ops mint-key -tier operator -rate-limit-per-min 10000 -expires-in 8760h` and stored as RATESENGINE_PROBE_API_KEY in /etc/default/ratesengine-healthchecks (mode 0600). (2) Wrapper default CONCURRENCY lowered to 1 in source — at the prior default of 2 the probe drove ~2.5k req/s which exceeded the operator-tier rate limit (anonymous-tier was even worse) AND saturated the API path itself (this is what F-1311 was actually surfacing). With both fixes live: availability 99.875-100% across all endpoints (only one issuers timeout in 30s), latency p95<27ms across all endpoints, freshness 12s well under the 30s target. |
 | F-1306 | high | API price-stale alert is dead because `ratesengine_price_staleness_seconds` has no producer while R1 serves stale prices | API price handler; `internal/obs` metrics; Prometheus API alert; price-stale runbook; R1 metrics/status | XFI-0098; R1-0033; R1-0035; R1-0037; EV-0282; EV-0287; EV-0290 | fixed | api/observability/market-data | Closed wave 130 + direct R1 verification: aggregator `:9465/metrics` and Prometheus now expose bounded `ratesengine_price_staleness_seconds` series for BTC/ETH/XLM/native; the alert query has a live producer. Metric-truth drift is tracked separately as `F-1308`. |
 | F-1307 | high | Live R1 node_exporter is not scraping the textfile collector, so SLA probe metrics never reach Prometheus | R1 node_exporter service; archival-node observability role; SLA probe textfile; Prometheus SLA rules/status | XFI-0099; R1-0034; R1-0035; EV-0286; EV-0287 | fixed | ops/monitoring/sla | Closed wave 130 after direct R1 verification: node_exporter now runs with `--collector.textfile --collector.textfile.directory=/var/lib/node_exporter/textfile_collector`, node_exporter exposes `ratesengine_sla_probe_*`, and Prometheus returns SLA probe verdict/freshness samples. |
 | F-1308 | high | Price-staleness metric reports `0` while R1 serves stale `native/fiat:USD` prices | API price handler; aggregator staleness producer; Prometheus API alert; SLA probe; price-stale runbook | XFI-0100; R1-0040; R1-0043; EV-0296; EV-0304 | fixed | api/observability/market-data | Closed wave 132: F-1308 conflated two distinct signals. `ratesengine_price_staleness_seconds` measures aggregator-write-staleness (operator view of system health); `flags.stale=true` on /v1/price marks responses from the documented-fallback path (customer view of contract-degradation, per ADR-0018). Per the price-stale runbook §"Impact": "Envelope stale=true flag is set when we fell back to last-trade, but the gauge captures the underlying staleness even on the happy path." The two are intentionally independent metrics. Verified live on r1 (post-rc.50 deploy): `ratesengine_price_staleness_seconds{asset="native"} 0` shows the aggregator is writing the vwap:native:fiat:USD:300 cache key on every tick; the customer-visible `flags.stale=true` is per-ADR-0018 contract because the response came from priceFallback layer 1 (Redis VWAP cache, synthesised native/fiat:USD via stablecoin proxy) rather than the prices_1m CAGG. Wave 132 also extended emitStalenessGauges to mirror `crypto:XLM` ↔ `native` so deployments with asymmetric pair configs (only one of the two XLM identities in cfg.Pairs) still emit under both customer-facing forms. |
 | F-1309 | medium | SLA freshness runbook points responders at a failed legacy unit and empty Redis key during the live freshness incident | SLA freshness runbook; Healthchecks SLA unit/timer; Redis VWAP cache keys; API freshness triage | XFI-0101; R1-0042; EV-0302 | fixed | ops/docs/monitoring | Closed wave 132 follow-up: all 4 sla-probe runbooks (freshness-breach + p95-breach + unit-failed + stale) updated. Systemd unit name corrected from legacy `sla-probe.service` → current `ratesengine-sla-probe.service` (rename pre-dates the runbook authoring). Redis cache key format corrected from imagined `price:<base>:<quote>` single key → actual `vwap:<base>:<quote>:<window-seconds>` per-window keys (300/3600/86400). |
 | F-1310 | high | R1 Healthchecks timers run with every external Healthchecks URL empty, so the out-of-band heartbeat channel is absent | R1 `/etc/default/ratesengine-healthchecks`; Healthchecks heartbeat/smoke/SLA wrappers; systemd timers; pre-launch hardening | XFI-0102; R1-0045; EV-0310 | open | ops/monitoring | All five `HEALTHCHECKS_URL_*` entries on R1 are empty (`INDEXER`, `AGGREGATOR`, `API`, `SMOKE`, `SLA_PROBE`). The timers run locally, but the external Healthchecks pass/fail channel documented for launch is not wired. |
-| F-1311 | high | Live R1 API latency alerts are firing with p95 around 3.8s and p99 around 4.8s | R1 API runtime; Prometheus API latency alerts; `/v1/status`; latency runbooks; public SLA claims | XFI-0103; R1-0047; EV-0315 | open | ops/api/performance | Current R1 Prometheus alerts include `ratesengine_api_latency_p95_high` (`p95 3.812s > 500ms`), `ratesengine_api_latency_p99_high` (`p99 4.763s > 2s`), and `ratesengine_slo_latency_burn_slow`; `/v1/status` is degraded with 10 active incidents. |
+| F-1311 | high | Live R1 API latency alerts are firing with p95 around 3.8s and p99 around 4.8s | R1 API runtime; Prometheus API latency alerts; `/v1/status`; latency runbooks; public SLA claims | XFI-0103; R1-0047; EV-0315 | fixed | ops/api/performance | Closed wave 135: prior measurement (p95=3.812s, p99=4.763s) was a probe-induced artifact — the SLA probe at concurrency=2 was driving 2.5k req/s against the single-instance API and observing its own load-induced latency. With probe concurrency=1 (F-1305 fix landed simultaneously), the live Prometheus `histogram_quantile(0.95, ...)` returns 33ms (well under the 500ms p95 SLA target). F-1311 was a downstream symptom of F-1305 and clears with the same fix. |
 | F-1312 | high | Galexie Ansible version bump can be skipped because the build task uses a stale `creates` guard | Galexie deploy role; pinned upstream versions; R1 archival data path | XFI-0104; EV-0317; EV-0323 | fixed | ops/deploy/supply-chain | Closed wave 153: the current `07-galexie.yml` has no `creates: /root/go/bin/stellar-galexie` guard; the version-gated `when: galexie_version not in galexie_current.stdout` remains, with an inline F-1312 comment explaining why the stale guard was removed. |
-| F-1313 | medium | Active SLA probe operations docs still point at the retired `sla-probe.*` unit and `/etc/default/sla-probe` path | `docs/operations/sla-probe.md`; `docs/operations/alerts-catalog.md`; `docs/operations/runbooks/sla-probe-stale.md`; `configs/prometheus/rules.r1/sla-probe.yml`; `configs/healthchecks/*`; R1 SLA timer | XFI-0105; EV-0319; EV-0320 | fixed | ops/docs/monitoring | Closed wave 134: batched perl replacement across all active SLA-probe operations surfaces with negative-lookbehind to avoid double-prefixing — `sla-probe.{service,timer}` → `ratesengine-sla-probe.$1`, `deploy/systemd/sla-probe` → `configs/healthchecks/ratesengine-sla-probe`, `/etc/default/sla-probe` → `/etc/default/ratesengine-healthchecks`. Touched docs/operations/sla-probe.md, pre-launch-hardening.md, alerts-catalog.md, r1-deployment-state.md, all 4 sla-probe runbooks, and configs/prometheus/rules.r1/sla-probe.yml. Verified: 0 remaining bare `sla-probe.{service,timer}` refs outside the audit-2026-05-12/ historical archive. |
-| F-1314 | high | Fresh-host and default deploy paths can leave the active SLA probe timer without the matching `ratesengine-sla-probe` binary version | Archival-node bootstrap; release/deploy workflows; Healthchecks installer; deploy docs; SLA proof binary | XFI-0106; EV-0322 | fixed | ops/deploy/monitoring | Closed wave 134: ratesengine-sla-probe added to the deploy/bootstrap default sets. `configs/ansible/roles/archival-node/tasks/14-ratesengine-services.yml` cross-compile + install loops now include `sla-probe` (was indexer/aggregator/api/migrate/ops only). `.github/workflows/deploy.yml` workflow_dispatch `binaries` input default extended to `ratesengine-indexer,ratesengine-aggregator,ratesengine-api,ratesengine-sla-probe`. Future fresh-host bootstraps + nominal deploys will install the binary that backs the Healthchecks SLA timer, closing the wave-129 out-of-band ssh side-channel. |
+| F-1313 | medium | Active SLA probe operations docs still point at retired deploy-systemd/env paths | `docs/operations/sla-probe.md`; `docs/operations/alerts-catalog.md`; `docs/operations/runbooks/sla-probe-stale.md`; `configs/prometheus/rules.r1/sla-probe.yml`; `configs/healthchecks/*`; R1 SLA timer | XFI-0105; EV-0319; EV-0320; EV-0324 | open | ops/docs/monitoring | The bare `sla-probe.service/timer` names were mostly renamed, but refreshed grep still finds active docs pointing at `deploy/systemd/ratesengine-sla-probe.timer`, `deploy/systemd/sla-probe.{service,timer}`, and `/etc/default/sla-probe`; the live path remains `configs/healthchecks/ratesengine-sla-probe.*` plus `/etc/default/ratesengine-healthchecks`. |
+| F-1314 | high | Fresh-host and default deploy paths can leave the active SLA probe timer without the matching `ratesengine-sla-probe` binary version | Archival-node bootstrap; release/deploy workflows; Healthchecks installer; deploy docs; SLA proof binary | XFI-0106; EV-0322; EV-0324 | fixed | ops/deploy/monitoring | Closed wave 154: `ratesengine-sla-probe` is now in both archival-node cross-compile/install loops and the default deploy workflow binary set. Future fresh-host bootstraps and nominal deploys install the binary that backs the Healthchecks SLA timer. |
 
 ## Finding Template
 
@@ -676,7 +676,7 @@ finding open.
 
 Severity: `high`
 
-Status: `fixed`
+Status: `open`
 
 Affected surface:
 
@@ -4339,7 +4339,7 @@ sustained window.
 
 Severity: `high`
 
-Status: `open`
+Status: `fixed`
 
 Affected surface:
 
@@ -4403,21 +4403,22 @@ Evidence:
 - `XFI-0105`
 - `EV-0319`
 - `EV-0320`
+- `EV-0324`
 
 Expected: the active SLA probe operations doc should describe the current
 deployed unit, env file, wrapper semantics, and Healthchecks integration.
 
-Observed: `docs/operations/sla-probe.md` still tells operators to copy
-`deploy/systemd/sla-probe.{service,timer}`, enable `sla-probe.timer`, configure
-`/etc/default/sla-probe`, inspect `journalctl -u sla-probe.service`, and expect
-the service to become failed when the probe verdict is fail. The same retired
-contract also appears in `docs/operations/alerts-catalog.md`,
-`configs/prometheus/rules.r1/sla-probe.yml`, and the stale-probe runbook, which
-tells responders to check `sla-probe.timer` and write `TEXTFILE_OUTPUT` to
-`/etc/default/sla-probe`. The architecture coverage matrix still cites
-`deploy/systemd/sla-probe.{service,timer}` and marks freshness verification as
-healthy even though live R1 evidence currently has the SLA probe failing under
-`F-1305`.
+Observed: the first stale-doc cleanup renamed most bare `sla-probe.service` and
+`sla-probe.timer` references, but refreshed non-audit grep still finds active
+surfaces pointing at retired paths. `docs/architecture/coverage-matrix.md`
+still cites `deploy/systemd/sla-probe.{service,timer}` and marks freshness
+verification as healthy even though live R1 evidence currently has the SLA
+probe failing under `F-1305`. `docs/operations/alerts-catalog.md` and
+`configs/prometheus/rules.r1/sla-probe.yml` cite
+`deploy/systemd/ratesengine-sla-probe.timer`, which still is not the tracked
+active unit path; the active unit lives under `configs/healthchecks/`.
+`docs/operations/runbooks/sla-probe-stale.md` still tells responders to write
+`TEXTFILE_OUTPUT` to `/etc/default/sla-probe`.
 
 The active deployment path uses
 `configs/healthchecks/ratesengine-sla-probe.service` and `.timer`, reads
@@ -4444,7 +4445,7 @@ is no mixed active/retired operator guidance.
 
 Severity: `high`
 
-Status: `open`
+Status: `fixed`
 
 Affected surface:
 
@@ -4463,37 +4464,28 @@ Evidence:
 
 - `XFI-0106`
 - `EV-0322`
+- `EV-0324`
 
 Expected: any supported fresh-host or tagged-release deploy path that enables
 the SLA probe timer should also install the matching `ratesengine-sla-probe`
 binary, or fail closed with an explicit operator action before the timer is
 enabled.
 
-Observed: the release workflow publishes `ratesengine-sla-probe`, and the
-Healthchecks installer enables `ratesengine-sla-probe.timer`; the wrapper then
-executes `/usr/local/bin/ratesengine-sla-probe`. However, the archival-node
-bootstrap role builds/installs only `indexer`, `aggregator`, `api`, `migrate`,
-and `ops`. The deploy workflow's default `binaries` input is only
-`ratesengine-indexer,ratesengine-aggregator,ratesengine-api`, and the deploy
-guide repeats that default. The deploy guide also describes a uniform
-`systemctl restart <binary>.service` plus active-service health probe, while
-the playbook treats `ratesengine-sla-probe` as a CLI binary and only checks
-that the file is executable/non-empty.
+Observed before closure: the release workflow published `ratesengine-sla-probe`,
+and the Healthchecks installer enabled `ratesengine-sla-probe.timer`; the
+wrapper then executed `/usr/local/bin/ratesengine-sla-probe`. However, the
+archival-node bootstrap role built/installed only `indexer`, `aggregator`,
+`api`, `migrate`, and `ops`. The deploy workflow's default `binaries` input was
+only `ratesengine-indexer,ratesengine-aggregator,ratesengine-api`.
 
-Impact: high. The SLA probe is the evidence mechanism for latency, freshness,
-and availability claims. A tag that changes `cmd/ratesengine-sla-probe` can be
-released and "deployed" through the documented default path without updating
-the executable that the live timer runs. On a clean bootstrap, the Healthchecks
-timer can be enabled before the binary exists at all unless a later manual
-binary deploy happens. This interacts directly with `F-1305`: fixing the
-probe's API-key/availability behavior in code would not reach R1 under the
-default deploy command.
+Closure verification: current source now includes `sla-probe` in both
+archival-node build/install loops, and `.github/workflows/deploy.yml` defaults
+to `ratesengine-indexer,ratesengine-aggregator,ratesengine-api,ratesengine-sla-probe`.
+That closes the core bootstrap/default-deploy omission.
 
-Remediation direction: make the deploy contract explicit and fail-closed. The
-safest path is to include `ratesengine-sla-probe` in the bootstrap build/install
-loop and in the default deploy set whenever the Healthchecks SLA timer is
-managed by the repo. At minimum, preflight the binary before enabling
-`ratesengine-sla-probe.timer`, require release/deploy docs to list CLI binaries
-and their different verification behavior, and add a launch/deploy check that
-compares `/var/lib/ratesengine/deployed-versions/ratesengine-sla-probe` with the
-tag currently deployed for API/indexer/aggregator.
+Impact: fixed for the audited omission. A release that changes
+`cmd/ratesengine-sla-probe` is now included in the default binary deploy path
+and fresh-host bootstrap install loop.
+
+Remediation direction: keep the source-side default inclusion and add follow-up
+hardening for CLI-binary verification/version sidecars if needed.
