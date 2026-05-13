@@ -31,7 +31,7 @@ severity: P2
 
 ```sh
 # 1. Get the most-recent probe report.
-sudo journalctl -u sla-probe.service -n 1 --output=cat | jq .
+sudo journalctl -u ratesengine-sla-probe.service -n 1 --output=cat | jq .
 
 # 2. Confirm direct-traffic histograms agree (rules out probe-only artefacts).
 curl -s http://prometheus:9090/api/v1/query --data-urlencode \

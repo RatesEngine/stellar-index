@@ -31,7 +31,7 @@ severity: P3
 
 ```sh
 # Pull the most-recent failed-reasons array — it names the breach.
-sudo journalctl -u sla-probe.service -n 1 --output=cat | jq -r '.failed_reasons[]'
+sudo journalctl -u ratesengine-sla-probe.service -n 1 --output=cat | jq -r '.failed_reasons[]'
 ```
 
 Output is one of:

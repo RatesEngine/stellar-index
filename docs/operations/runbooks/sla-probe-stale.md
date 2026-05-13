@@ -32,14 +32,14 @@ sudo systemctl status sla-probe.timer
 sudo systemctl list-timers sla-probe.timer
 
 # 2. When did the unit last run?
-sudo journalctl -u sla-probe.service --since "2 hours ago" -n 50
+sudo journalctl -u ratesengine-sla-probe.service --since "2 hours ago" -n 50
 
 # 3. Is the textfile being written?
 ls -la /var/lib/node_exporter/textfile_collector/sla_probe.prom
 
 # 4. Force a one-off run.
-sudo systemctl start sla-probe.service
-sudo journalctl -u sla-probe.service -n 1 --output=cat | jq .
+sudo systemctl start ratesengine-sla-probe.service
+sudo journalctl -u ratesengine-sla-probe.service -n 1 --output=cat | jq .
 ```
 
 ## Typical root causes
@@ -75,7 +75,7 @@ sudo journalctl -u sla-probe.service -n 1 --output=cat | jq .
       is silent.
 - [ ] Step 2 — Apply the matching fix from "Typical root causes."
 - [ ] Step 3 — Force a probe run via
-      `sudo systemctl start sla-probe.service` and confirm
+      `sudo systemctl start ratesengine-sla-probe.service` and confirm
       `last_pass_timestamp` updates.
 - [ ] Verification: alert clears within 5 min after a successful
       probe run lands in node_exporter.

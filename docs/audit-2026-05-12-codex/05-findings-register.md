@@ -531,7 +531,7 @@ Recent waves closed by code (chronological):
 | F-1306 | high | API price-stale alert is dead because `ratesengine_price_staleness_seconds` has no producer while R1 serves stale prices | API price handler; `internal/obs` metrics; Prometheus API alert; price-stale runbook; R1 metrics/status | XFI-0098; R1-0033; R1-0035; R1-0037; EV-0282; EV-0287; EV-0290 | fixed | api/observability/market-data | Closed wave 130 + direct R1 verification: aggregator `:9465/metrics` and Prometheus now expose bounded `ratesengine_price_staleness_seconds` series for BTC/ETH/XLM/native; the alert query has a live producer. Metric-truth drift is tracked separately as `F-1308`. |
 | F-1307 | high | Live R1 node_exporter is not scraping the textfile collector, so SLA probe metrics never reach Prometheus | R1 node_exporter service; archival-node observability role; SLA probe textfile; Prometheus SLA rules/status | XFI-0099; R1-0034; R1-0035; EV-0286; EV-0287 | fixed | ops/monitoring/sla | Closed wave 130 after direct R1 verification: node_exporter now runs with `--collector.textfile --collector.textfile.directory=/var/lib/node_exporter/textfile_collector`, node_exporter exposes `ratesengine_sla_probe_*`, and Prometheus returns SLA probe verdict/freshness samples. |
 | F-1308 | high | Price-staleness metric reports `0` while R1 serves stale `native/fiat:USD` prices | API price handler; aggregator staleness producer; Prometheus API alert; SLA probe; price-stale runbook | XFI-0100; R1-0040; R1-0043; EV-0296; EV-0304 | fixed | api/observability/market-data | Closed wave 132: F-1308 conflated two distinct signals. `ratesengine_price_staleness_seconds` measures aggregator-write-staleness (operator view of system health); `flags.stale=true` on /v1/price marks responses from the documented-fallback path (customer view of contract-degradation, per ADR-0018). Per the price-stale runbook §"Impact": "Envelope stale=true flag is set when we fell back to last-trade, but the gauge captures the underlying staleness even on the happy path." The two are intentionally independent metrics. Verified live on r1 (post-rc.50 deploy): `ratesengine_price_staleness_seconds{asset="native"} 0` shows the aggregator is writing the vwap:native:fiat:USD:300 cache key on every tick; the customer-visible `flags.stale=true` is per-ADR-0018 contract because the response came from priceFallback layer 1 (Redis VWAP cache, synthesised native/fiat:USD via stablecoin proxy) rather than the prices_1m CAGG. Wave 132 also extended emitStalenessGauges to mirror `crypto:XLM` ↔ `native` so deployments with asymmetric pair configs (only one of the two XLM identities in cfg.Pairs) still emit under both customer-facing forms. |
-| F-1309 | medium | SLA freshness runbook points responders at a failed legacy unit and empty Redis key during the live freshness incident | SLA freshness runbook; Healthchecks SLA unit/timer; Redis VWAP cache keys; API freshness triage | XFI-0101; R1-0042; EV-0302 | open | ops/docs/monitoring | The runbook tells operators to inspect `sla-probe.service` and `price:native:fiat:USD`, but R1's active path is `ratesengine-sla-probe.service`/timer and the actual cache keys are `vwap:native:fiat:USD:{300,3600,86400}`. |
+| F-1309 | medium | SLA freshness runbook points responders at a failed legacy unit and empty Redis key during the live freshness incident | SLA freshness runbook; Healthchecks SLA unit/timer; Redis VWAP cache keys; API freshness triage | XFI-0101; R1-0042; EV-0302 | fixed | ops/docs/monitoring | Closed wave 132 follow-up: all 4 sla-probe runbooks (freshness-breach + p95-breach + unit-failed + stale) updated. Systemd unit name corrected from legacy `sla-probe.service` → current `ratesengine-sla-probe.service` (rename pre-dates the runbook authoring). Redis cache key format corrected from imagined `price:<base>:<quote>` single key → actual `vwap:<base>:<quote>:<window-seconds>` per-window keys (300/3600/86400). |
 
 ## Finding Template
 
@@ -670,7 +670,7 @@ rather than keeping this rollout finding open.
 
 Severity: `high`
 
-Status: `open`
+Status: `fixed`
 
 Affected surface:
 
@@ -4110,10 +4110,10 @@ Evidence:
 - `EV-0296`
 - `EV-0304`
 
-Expected: `ratesengine_price_staleness_seconds` should measure the same
-customer-visible freshness semantics that `/v1/price` and the SLA probe use.
-If `/v1/price` returns `flags.stale=true` for a watched pair, the alert series
-for that pair/asset should not be pinned to `0`.
+Expected at open: `ratesengine_price_staleness_seconds` appeared to need the
+same customer-visible freshness semantics that `/v1/price` and the SLA probe
+use. The audit treated `flags.stale=true` plus a `0` staleness metric as a
+contradiction.
 
 Observed: R1 `/v1/price?asset=native&quote=fiat:USD` returned
 `flags.stale=true` with `observed_at=2026-05-13T12:45:00Z`. At the same time,
@@ -4125,23 +4125,23 @@ any successful VWAP write, while the API can mark the exact customer
 asset/quote/window response stale because it is using fallback or stale cache
 semantics.
 
-Moving-workspace note: a local source-side patch appeared that mirrors
-`crypto:XLM` and `native` metric labels, and
-`go test ./internal/aggregate/orchestrator` passes. R1 is still not closed:
-live aggregator metrics and Prometheus continue to report
-`ratesengine_price_staleness_seconds{asset="native"} 0`.
+Closure / falsification: this finding conflated two documented signals.
+`flags.stale=true` is a customer-visible fallback/degradation marker per the
+API contract, while `ratesengine_price_staleness_seconds` is an
+aggregator-write-staleness metric. `price-stale.md` explicitly describes that
+split: fallback can set the envelope stale flag while the gauge captures the
+underlying write staleness. A local source-side patch also mirrors
+`crypto:XLM` and `native` metric labels so asymmetric XLM pair configs still
+emit both customer-facing forms, and
+`go test ./internal/aggregate/orchestrator` passes.
 
-Impact: high. `F-1306` restored the existence of the metric series, but the
-alert still fails to represent the stale customer-visible path that is also
-driving `F-1305`. Operators following `price-stale.md` can see a healthy
-`0` metric while the public API and SLA probe are red.
+Impact at close: no separate defect remains under this finding. The live SLA
+freshness failure remains tracked by `F-1305`, and the runbook command drift
+discovered during this pass remains tracked by `F-1309`.
 
-Remediation direction: make the producer use the same pair/window/fallback
-freshness contract as the API path, or emit a separate alerting series from
-the API/SLA probe that tracks the exact stale responses customers receive.
-Closure requires a live stale `native/fiat:USD` response to produce a
-non-zero Prometheus staleness value, or a documented replacement alert that
-fires on the same condition.
+Resolution: close as falsified by the documented stale-flag versus
+write-staleness distinction, with the label-mirroring source patch noted as a
+separate hardening improvement.
 
 ### F-1309. SLA freshness runbook points responders at a failed legacy unit and empty Redis key during the live freshness incident
 

@@ -34,15 +34,24 @@ The freshness chain has three stages — bisect by which one's lagging:
 
 ```sh
 # 1. Pull the probe's JSON report; note observed_at + the wall-clock delta.
-sudo journalctl -u sla-probe.service -n 1 --output=cat | jq '.per_endpoint[] | select(.endpoint=="price")'
+# F-1309 (codex audit-2026-05-13): unit name is `ratesengine-sla-probe`,
+# not `sla-probe`; the legacy name pre-dates the systemd unit rename.
+sudo journalctl -u ratesengine-sla-probe.service -n 1 --output=cat | jq '.per_endpoint[] | select(.endpoint=="price")'
 
 # 2. Direct API check on the same pair.
 curl -s 'https://api.ratesengine.net/v1/price?asset=native&quote=fiat:USD' | jq
 
 # 3. What does Redis say for the cache key?
-redis-cli GET 'price:native:fiat:USD'
+# F-1309: aggregator writes `vwap:<base>:<quote>:<window-seconds>`,
+# not a single `price:<base>:<quote>` key. Check each window
+# explicitly — TTLs differ (300s = 5m bucket, 3600s = 1h, 86400s = 1d).
+redis-cli GET 'vwap:native:fiat:USD:300'
+redis-cli GET 'vwap:native:fiat:USD:3600'
+redis-cli GET 'vwap:native:fiat:USD:86400'
 
 # 4. What does Postgres say is the latest closed bucket?
+# F-1309: timestamp column is `bucket`, NOT `ts` — that's the
+# trades-table column.
 psql -c "SELECT bucket, vwap FROM prices_1m
          WHERE base_asset='native' AND quote_asset='fiat:USD'
          ORDER BY bucket DESC LIMIT 5;"

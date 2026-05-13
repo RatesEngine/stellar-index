@@ -984,3 +984,13 @@ without evidence IDs.
   `94 fixed / 13 open`, file coverage
   `done=186 / in_progress=133 / todo=1607`, docs lint green, and no
   finding-status mismatches between the register table and detailed sections.
+- `CMD-0303` closes `F-1308` as falsified by third-pass review: the audit had
+  conflated `flags.stale=true` fallback/degradation semantics with
+  `ratesengine_price_staleness_seconds` aggregator-write staleness. `F-1305`
+  remains open for SLA freshness, and `F-1309` remains open for the stale
+  runbook commands discovered during the same pass.
+- `CMD-0304` restores audit-control parity after the `F-1308` closure:
+  findings `100 fixed / 9 open`, XFI `93 fixed / 8 open`, remediation
+  `95 fixed / 12 open`, file coverage
+  `done=186 / in_progress=133 / todo=1607`, docs lint green, and no
+  finding-status mismatches between the register table and detailed sections.
