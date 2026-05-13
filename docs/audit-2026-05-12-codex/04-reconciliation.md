@@ -818,3 +818,21 @@ without evidence IDs.
   sending `${HEALTHCHECKS_URL_SLA_PROBE}/fail` when the probe binary itself is
   missing or not executable, leaving a binary-deploy break invisible to the
   external SLA heartbeat.
+- `CMD-0272` restores audit-control parity after the SLA Healthchecks
+  moving-fix/missing-binary pass:
+  findings `70 fixed / 33 open`, XFI `65 fixed / 30 open`, remediation
+  `67 fixed / 34 open`, file coverage
+  `done=178 / in_progress=131 / todo=1617`, tracked-file parity
+  `1926 / 1926`, docs lint green, and no finding-status mismatches between
+  the register table and detailed sections.
+- `CMD-0273` adds `F-1304`: `pre-launch-hardening.md` lists the
+  SLA-probe Healthchecks URL but omits `ratesengine-sla-probe.timer` from the
+  apply/restart command, unlike the canonical Healthchecks README and installer
+  guidance.
+- `CMD-0274` restores audit-control parity after the Healthchecks hardening
+  guide restart finding:
+  findings `70 fixed / 34 open`, XFI `65 fixed / 31 open`, remediation
+  `67 fixed / 35 open`, file coverage
+  `done=178 / in_progress=131 / todo=1617`, tracked-file parity
+  `1926 / 1926`, docs lint green, and no finding-status mismatches between
+  the register table and detailed sections.

@@ -158,7 +158,15 @@ SLACK_WEBHOOK_URL='https://hooks.slack.com/services/...'
 Apply:
 
 ```sh
-systemctl restart 'ratesengine-heartbeat@*.timer' ratesengine-smoke.timer
+# F-1304 (codex audit-2026-05-13): ratesengine-sla-probe.timer
+# must be in the restart set so systemd reloads the EnvironmentFile
+# and the new HEALTHCHECKS_URL_SLA_PROBE takes effect — without it
+# the timer keeps the old value (or runs with the URL unset) and
+# the SLA-evidence Healthchecks check stays silent.
+systemctl restart \
+  'ratesengine-heartbeat@*.timer' \
+  ratesengine-smoke.timer \
+  ratesengine-sla-probe.timer
 bash /opt/ratesengine/alertmanager/apply.sh
 ```
 
