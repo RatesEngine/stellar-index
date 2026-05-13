@@ -19,7 +19,7 @@
       # Loki ingest port from log_shippers on internal CIDR.
       table inet loki_filter {
         chain input {
-          type filter hook input priority 0; policy accept;
+          type filter hook input priority -100; policy accept;
       {% for cidr in loki_internal_cidrs %}
           ip saddr {{ cidr }} tcp dport {{ loki_http_port }} accept comment "loki-{{ cidr }}";
       {% endfor %}

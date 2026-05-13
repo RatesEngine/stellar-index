@@ -22,7 +22,7 @@
       # 80/443 public, VRRP between LB peers, stats loopback-only.
       table inet haproxy_filter {
         chain input {
-          type filter hook input priority 0; policy accept;
+          type filter hook input priority -100; policy accept;
           # Public api ingress.
           tcp dport { 80, 443 } accept comment "haproxy-public";
           # VRRP from peer LB hosts (multicast 224.0.0.18 is the

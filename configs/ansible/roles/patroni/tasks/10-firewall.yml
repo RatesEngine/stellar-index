@@ -1,11 +1,30 @@
 ---
 # Open the cluster's internal ports to the internal CIDRs only.
 # Pattern matches the archival-node role's nftables idiom.
+#
+# F-1278 (codex audit-2026-05-13): priority -100 (runs BEFORE
+# the archival-node default-drop chain at priority 0) so accept
+# verdicts in this chain stop the lower-priority drop chain
+# from seeing the packet. Pre-wave-111 this used `priority 0`
+# which is the same priority as the default-drop chain — at
+# equal priority nftables base-chain order is undefined,
+# producing nondeterministic accept-vs-drop outcomes.
 
 - name: ensure nftables installed
   apt:
     name: nftables
     state: present
+
+# F-1279 (codex audit-2026-05-13): the directory-creation task
+# MUST run before the drop-in copy. Pre-wave-111 the directory
+# was created at the end of the file, so a clean Patroni host
+# without a pre-existing /etc/nftables.d/ would fail the first
+# role application at the copy step.
+- name: ensure /etc/nftables.d/ exists
+  file:
+    path: /etc/nftables.d
+    state: directory
+    mode: '0755'
 
 - name: render Patroni nftables drop-in
   copy:
@@ -15,13 +34,14 @@
       # Postgres + Patroni REST + etcd, internal-only.
       table inet patroni_filter {
         chain input {
-          type filter hook input priority 0; policy accept;
+          type filter hook input priority -100; policy accept;
       {% for cidr in patroni_internal_cidrs %}
           ip saddr {{ cidr }} tcp dport { {{ patroni_postgres_port }}, 8008, {{ etcd_client_port }}, {{ etcd_peer_port }} } accept comment "patroni-{{ cidr }}";
       {% endfor %}
           ip saddr 127.0.0.1 tcp dport { {{ patroni_postgres_port }}, 8008, {{ etcd_client_port }} } accept comment "patroni-loopback";
-          # Implicit: anything not from internal CIDRs hits the
-          # main filter chain's defaults.
+          # Anything not accepted here falls through to the
+          # priority-0 default-drop chain in the archival-node
+          # base template, which drops it (F-1278).
         }
       }
     mode: '0644'
@@ -33,9 +53,3 @@
     line: 'include "/etc/nftables.d/*.conf"'
     state: present
   notify: "firewall rules changed"
-
-- name: ensure /etc/nftables.d/ exists
-  file:
-    path: /etc/nftables.d
-    state: directory
-    mode: '0755'

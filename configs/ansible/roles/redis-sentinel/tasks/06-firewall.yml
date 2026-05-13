@@ -22,7 +22,7 @@
       # Redis data plane + Sentinel control plane, internal-only.
       table inet redis_filter {
         chain input {
-          type filter hook input priority 0; policy accept;
+          type filter hook input priority -100; policy accept;
       {% for cidr in redis_internal_cidrs %}
           ip saddr {{ cidr }} tcp dport { {{ redis_port }}, {{ redis_sentinel_port }} } accept comment "redis-{{ cidr }}";
       {% endfor %}

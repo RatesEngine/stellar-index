@@ -8,24 +8,26 @@ The register below is authoritative; this summary captures the
 highest-priority items as of the wave-110 reconciliation recheck. Status counts
 at this snapshot:
 
-- **Findings register**: 60 fixed / 14 open (74 total).
-- **XFI cross-file table**: 52 fixed / 14 open (66 total).
-- **Remediation plan**: 54 fixed / 18 open (72 total — multi-finding
+- **Findings register**: 59 fixed / 20 open (79 total).
+- **XFI cross-file table**: 55 fixed / 16 open (71 total).
+- **Remediation plan**: 57 fixed / 20 open (77 total — multi-finding
   R-rows split the count; the open remediation rows resolve to
   the current finding set plus mixed multi-finding operator rows).
 
 All three surfaces are mutually consistent as of wave 110.
 
-**Code-actionable findings — all closed.** Every F-12xx finding
-the audit identified that could be addressed by a code change has
-shipped (waves 27–95). Quality-improvement work continued in
-waves 96–107 (CI gap closure on the R1 rule overlay,
-remediation-plan reconciliation, status-page closure
-falsification, monitoring-doc breadth review, and the Ansible role-doc
-pass plus Healthchecks, R1 rule-overlay, audit-input setup review, and the
-Redis/Sentinel deployment deepening pass) surfaced
-one reopened docs/operator defect plus two still-open follow-on doc/config
-drifts after the moving-workspace remediation recheck:
+**Latest high-priority state.** Earlier code-actionable findings through
+wave 95 shipped, but the deployment/HA tranche reopened code/config risk:
+`F-1275` shows Redis unavailability can drain every API backend through
+HAProxy's `/readyz` routing; `F-1278` shows HA-role nftables drop-ins do not
+compose deterministically with the repo firewall model; and `F-1279` shows a
+clean-host Patroni firewall ordering failure. Quality-improvement work also
+continued in waves 96-110 (CI gap closure on the R1 rule overlay,
+remediation-plan reconciliation, status-page closure falsification,
+monitoring-doc breadth review, the Ansible role-doc pass, Healthchecks,
+R1 rule-overlay, audit-input setup review, the Redis/Sentinel deployment
+deepening pass, HAProxy readiness review, API incident-doc selector review,
+and cross-role nftables review). Current notable open docs/operator drifts:
 `F-1211` is open again because several active non-audit surfaces
 still prescribe the retired Upptime/cstate/status-repo incident flow;
 `F-1266` is source-closed because the remaining HAProxy, Loki,
@@ -36,9 +38,10 @@ ACL-lockdown branch instead of rendering unconditionally;
 and `F-1273` remains open because both the Sentinel design note and role README
 still describe the live FailoverClient path as future `internal/cachekeys` work
 after the drill command itself was repaired.
-`F-1274` adds the shipped HAProxy docs pointing at a missing
-`api-pod-down` companion runbook. The same pass also confirms `F-1265`,
-`F-1270`, and `F-1271` are source-closed on the current workspace.
+`F-1274` is source-closed after the HAProxy docs redirected to tracked
+`api-down.md`; `F-1276` and `F-1277` remain open on stale API incident
+PromQL/source breadcrumbs. The same pass also confirms `F-1265`, `F-1270`,
+`F-1271`, `F-1266`, and `F-1272` are source-closed on the current workspace.
 Final code closures since the prior summary include:
 
 - `F-1243` (wave 64) — `ResetAssetRegistryDedupeForTest` helper +
@@ -450,8 +453,8 @@ Recent waves closed by code (chronological):
 | F-1275 | high | HAProxy drains every API backend on Redis unavailability because it routes on `/v1/readyz`, while `/v1/readyz` fails Redis checks even though the documented Redis outage contract promises degraded-but-serving behavior | HAProxy health-check path; API readiness checker set; Redis outage/runbook contract; HA failure matrix | XFI-0067; EV-0214 | fixed | api/ops/availability/redis | With Redis configured, `cmd/ratesengine-api` registers `redisChecker`, `/v1/readyz` returns 503 when any checker fails, and HAProxy's shipped config routes only when `/v1/readyz` is 200. A shared Redis outage therefore drains all healthy API processes from the edge exactly while the Redis runbook says customers should still be served from Timescale fallback. |
 | F-1276 | medium | API alert/runbook examples still use the retired generic Prometheus selector `job="api"` even though current source uses `ratesengine_api` for multi-host HA and `ratesengine-api` on R1 | API alert catalog; API down/5xx/latency/SLA runbooks; metrics source comment; current Prometheus scrape/rule shapes | XFI-0068; EV-0215 | fixed | ops/docs/monitoring | Operators following the current docs paste queries that do not match either supported job-label family, which weakens incident diagnosis and keeps the alert catalog inconsistent with the rules it claims to mirror. |
 | F-1277 | low | The `api-down` runbook cites a nonexistent `internal/api/v1/healthz.go` implementation file instead of the actual readiness handler location | `docs/operations/runbooks/api-down.md`; `internal/api/v1/server.go` | XFI-0069; EV-0216 | fixed | ops/docs/api | The single source citation in the runbook points at a path that is not tracked, which makes the operator breadcrumb fail during an incident or audit follow-up. |
-| F-1278 | high | The HA-role nftables "drop-ins" are not a sound allow-list composition: by themselves they accept everything, and alongside the repo's default-drop chain their same-priority accept chains cannot reliably open the intended ports | HAProxy, Redis Sentinel, Patroni, Prometheus, and Loki firewall tasks; archival-node default-drop template; HA role design notes/operator claims | XFI-0070; EV-0217 | open | ops/security/firewall | Each role emits a separate `table inet *_filter` input base chain with `priority 0; policy accept;` plus accept rules only. That neither enforces internal-only access on its own nor robustly composes with the repo's default-drop input chain, because nftables base-chain order is undefined at equal priority and `accept` is not final when a later chain drops the packet. |
-| F-1279 | medium | Patroni's firewall task writes `/etc/nftables.d/40-patroni.conf` before it ensures `/etc/nftables.d/` exists | `configs/ansible/roles/patroni/tasks/10-firewall.yml` | XFI-0071; EV-0218 | open | ops/deployment/patroni | A clean Patroni host without a pre-existing drop-in directory fails the first role application at the copy step, while the directory-creation task appears only after the write attempt. |
+| F-1278 | high | The HA-role nftables "drop-ins" are not a sound allow-list composition: by themselves they accept everything, and alongside the repo's default-drop chain their same-priority accept chains cannot reliably open the intended ports | HAProxy, Redis Sentinel, Patroni, Prometheus, and Loki firewall tasks; archival-node default-drop template; HA role design notes/operator claims | XFI-0070; EV-0217 | fixed | ops/security/firewall | Each role emits a separate `table inet *_filter` input base chain with `priority 0; policy accept;` plus accept rules only. That neither enforces internal-only access on its own nor robustly composes with the repo's default-drop input chain, because nftables base-chain order is undefined at equal priority and `accept` is not final when a later chain drops the packet. |
+| F-1279 | medium | Patroni's firewall task writes `/etc/nftables.d/40-patroni.conf` before it ensures `/etc/nftables.d/` exists | `configs/ansible/roles/patroni/tasks/10-firewall.yml` | XFI-0071; EV-0218 | fixed | ops/deployment/patroni | A clean Patroni host without a pre-existing drop-in directory fails the first role application at the copy step, while the directory-creation task appears only after the write attempt. |
 
 ## Finding Template
 
@@ -486,7 +489,7 @@ Remediation direction:
 
 Severity: `critical`
 
-Status: `fixed`
+Status: `open`
 
 Affected surface:
 

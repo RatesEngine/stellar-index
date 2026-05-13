@@ -25,7 +25,7 @@
       # Prometheus + Alertmanager UI loopback-only (no rule needed).
       table inet prometheus_filter {
         chain input {
-          type filter hook input priority 0; policy accept;
+          type filter hook input priority -100; policy accept;
       {% for cidr in prometheus_internal_cidrs %}
           ip saddr {{ cidr }} tcp dport {{ alertmanager_cluster_listen_port }} accept comment "alertmanager-cluster-{{ cidr }}";
           ip saddr {{ cidr }} udp dport {{ alertmanager_cluster_listen_port }} accept comment "alertmanager-cluster-udp-{{ cidr }}";
