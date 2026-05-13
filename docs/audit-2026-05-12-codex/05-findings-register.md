@@ -2,31 +2,31 @@
 
 Cold findings only. No prior finding is imported into this register.
 
-## Closure summary (verified reconciliation snapshot, 2026-05-13 wave-111 refresh)
+## Closure summary (verified reconciliation snapshot, 2026-05-13 wave-112 refresh)
 
 The register below is authoritative; this summary captures the
-highest-priority items as of the wave-111 reconciliation recheck. Status counts
+highest-priority items as of the wave-112 reconciliation recheck. Status counts
 at this snapshot:
 
-- **Findings register**: 59 fixed / 23 open (82 total).
-- **XFI cross-file table**: 55 fixed / 19 open (74 total).
-- **Remediation plan**: 57 fixed / 23 open (80 total — multi-finding
+- **Findings register**: 62 fixed / 21 open (83 total).
+- **XFI cross-file table**: 58 fixed / 17 open (75 total).
+- **Remediation plan**: 60 fixed / 21 open (81 total — multi-finding
   R-rows split the count; the open remediation rows resolve to
   the current finding set plus mixed multi-finding operator rows).
 
-All three surfaces are mutually consistent as of wave 111.
+All three surfaces are mutually consistent as of wave 112.
 
 **Latest high-priority state.** Earlier code-actionable findings through
 wave 95 shipped, but the deployment/HA tranche reopened code/config risk:
 `F-1275` shows Redis unavailability can drain every API backend through
 HAProxy's `/readyz` routing; `F-1278` shows HA-role nftables drop-ins do not
-compose deterministically with the repo firewall model; and `F-1279` shows a
-clean-host Patroni firewall ordering failure. The Patroni deepening pass then
-added three more source-backed defects: `F-1280` (undocumented placeholder
-etcd checksum), `F-1281` (missing `jq` dependency for Patroni textfile
-metrics), and `F-1282` (documented pgBackRest restore target ignored by the
-actual restore command). Quality-improvement work also continued in waves
-96-111 (CI gap closure on the R1 rule overlay,
+compose deterministically with the repo firewall model even after the
+`priority -100` remediation attempt; and `F-1280` remains open on missing
+README/inventory guidance for the required etcd checksum after source-side
+preflight validation landed. The Patroni follow-up closed `F-1279`,
+`F-1281`, and `F-1282`, then added `F-1283` for the Timescale primary-down
+runbook's stale etcd protocol/quorum/key examples. Quality-improvement work
+also continued in waves 96-112 (CI gap closure on the R1 rule overlay,
 remediation-plan reconciliation, status-page closure falsification,
 monitoring-doc breadth review, the Ansible role-doc pass, Healthchecks,
 R1 rule-overlay, audit-input setup review, the Redis/Sentinel deployment
@@ -151,17 +151,15 @@ requires source-backed or live-environment closure evidence):
   the current multi-host/R1 job-label families.
 - `F-1277` — API runbook docs: replace the nonexistent
   `internal/api/v1/healthz.go` breadcrumb with the live readiness handler path.
-- `F-1278` — HA firewall config: replace the same-priority accept-only
-  nftables drop-ins with a deterministic allow-list composition that works
-  with the default-drop baseline.
-- `F-1279` — Patroni Ansible: create `/etc/nftables.d/` before writing the
-  Patroni firewall drop-in on clean hosts.
+- `F-1278` — HA firewall config: replace the accept-only nftables drop-ins
+  with a deterministic allow-list composition that works with the default-drop
+  baseline; the current `priority -100` change still leaves early accepts
+  droppable by the later default-drop chain.
 - `F-1280` — Patroni Ansible: define/document a real etcd release checksum
-  path instead of the placeholder fallback.
-- `F-1281` — Patroni observability: install or otherwise declare `jq` for the
-  Patroni textfile scraper.
-- `F-1282` — Patroni DR: either wire `patroni_pgbackrest_restore_target` into
-  the restore command or remove the false PITR claim from defaults/docs.
+  path in the README/inventory model now that source preflight rejects missing
+  or placeholder checksums.
+- `F-1283` — Patroni/Timescale docs: update the primary-down runbook's etcd
+  protocol, leader-key, and quorum examples to match the shipped role.
 
 Recent waves closed by code (chronological):
 
