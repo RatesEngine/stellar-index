@@ -15,6 +15,8 @@ against.
 
 ## [Unreleased]
 
+## [v0.5.0-rc.50] — 2026-05-13
+
 ### Documentation
 
 - Wave-103 reconciler-drift catch-up. The codex reconciler's
