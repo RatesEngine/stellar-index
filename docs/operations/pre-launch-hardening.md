@@ -98,20 +98,25 @@ limiting at the edge, and IP-based bot blocking out of the box.
 
 1. In Cloudflare dashboard, set the `api` A record to
    `136.243.90.96` with the **orange cloud** (proxy) ON.
-2. Cloudflare's edge IPs are now the immediate peer R1 sees.
-   Add their range to `trusted_proxy_cidrs`:
-   ```toml
-   trusted_proxy_cidrs = [
-     "127.0.0.1/32",
-     # Cloudflare IPv4 ranges — fetch fresh from
-     # https://www.cloudflare.com/ips-v4/
-     "173.245.48.0/20",
-     "103.21.244.0/22",
-     "103.22.200.0/22",
-     # … etc
-   ]
-   ```
-3. (Optional) Cloudflare Origin Cert — replace Caddy's
+2. Cloudflare's edge IPs are now the immediate peer R1's Caddy
+   sees. **No API-side `trusted_proxy_cidrs` change needed**
+   per ADR-0025 — the trust boundary stays at Caddy. The
+   Caddyfile's global `servers { trusted_proxies static <CF
+   CIDRs>; client_ip_headers CF-Connecting-IP X-Forwarded-For }`
+   block resolves the real client IP at Caddy and forwards it
+   downstream as `X-Forwarded-For: {client_ip}`. The API
+   continues to trust only `127.0.0.1/32` (Caddy on the same
+   host) and accepts the resolved client IP in the
+   `X-Forwarded-For` header from Caddy. (F-1270, 2026-05-13:
+   earlier text told operators to expand the API-side
+   `trusted_proxy_cidrs` to include Cloudflare ranges, which
+   contradicts the chosen ADR-0025 trust boundary.)
+3. Refresh CF's CIDR list inside the Caddyfile on quarterly
+   audits or when CF publishes a notice — see
+   [`configs/caddy/README.md` §"Real client IP under
+   Cloudflare"](../../configs/caddy/README.md) for the curl
+   commands and the audit cadence.
+4. (Optional) Cloudflare Origin Cert — replace Caddy's
    Let's Encrypt with a long-lived Cloudflare-issued cert so
    the connection from CF edge → R1 origin is authenticated.
 

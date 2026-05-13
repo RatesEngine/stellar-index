@@ -27,11 +27,9 @@ one reopened docs/operator defect plus two newly open doc/config drifts after
 the workspace remediation recheck:
 `F-1211` is open again because several active non-audit surfaces
 still prescribe the retired Upptime/cstate/status-repo incident flow;
-`F-1268` still catches the R1 rules README pointing
-operators at `/etc/prometheus/rules.d/` even though the active R1 Prometheus
-config loads `/etc/prometheus/rules.r1/*.yml`; `F-1269` catches the WASM-audit
-README still promising an `_unattributed` block that the curated YAML
-intentionally removed after the 2026-05-01 testnet-address correction.
+`F-1270` now catches active Caddy/operator docs moving the Cloudflare trust
+boundary into API `trusted_proxy_cidrs` despite ADR-0025 keeping that trust at
+Caddy.
 The concurrent remediation slice did close the freshly surfaced docs drifts
 `F-1264` through `F-1267`: firewall-access prose, Alertmanager severity
 vocabulary, Ansible role inventory/Promtail wording, and the five-check
@@ -437,9 +435,10 @@ Recent waves closed by code (chronological):
 | F-1265 | low | Alertmanager docs and monitoring-role prose still claim the Ansible template uses `critical/warning/info`, even though it already matches the `page/ticket/informational` ladder | `configs/alertmanager/README.md`; `configs/alertmanager/alertmanager.r1.yml`; `configs/ansible/roles/prometheus/README.md`; `configs/ansible/roles/prometheus/templates/alertmanager.yml.j2` | XFI-0057; EV-0182; EV-0184; EV-0191 | fixed | ops/docs/monitoring | Current workspace docs now describe the already-shared `page` / `ticket` / `informational` severity ladder consistently across the standalone and Ansible paths. |
 | F-1266 | medium | The top-level Ansible bootstrap README says only `archival-node` exists and implies archival-node already wires Promtail/Loki, but the repo now contains multiple landed roles and the archival-node task still leaves Promtail as TODO | `configs/ansible/README.md`; `configs/ansible/playbooks/*`; role `meta/main.yml`; `configs/ansible/roles/archival-node/tasks/10-observability.yml` | XFI-0058; EV-0184; EV-0191 | fixed | ops/docs/deployment | Current workspace README now names the landed sibling roles/playbooks and says the archival-node Promtail -> Loki path remains TODO-backed. |
 | F-1267 | medium | Healthchecks setup docs still say to create four checks and omit the SLA-probe URL in a broader hardening guide, even though the installer/env/timers now require five external checks | `configs/healthchecks/README.md`; `configs/healthchecks/install.sh`; `docs/operations/pre-launch-hardening.md`; `configs/healthchecks/ratesengine-sla-probe.timer` | XFI-0059; EV-0186; EV-0191 | fixed | ops/docs/monitoring | README, installer comment, and pre-launch hardening now agree on five checks and include `HEALTHCHECKS_URL_SLA_PROBE`. |
-| F-1268 | medium | The R1 Prometheus rules README deploys operators into `/etc/prometheus/rules.d/`, but the active R1 config loads `/etc/prometheus/rules.r1/*.yml` | `configs/prometheus/rules.r1/README.md`; `configs/prometheus/prometheus.r1.yml` | XFI-0060; EV-0188; EV-0191 | fixed | ops/docs/monitoring | The README's `scp` and confirmation text still use `/etc/prometheus/rules.d/`, while `prometheus.r1.yml` comments and `rule_files` block point at `/etc/prometheus/rules.r1/*.yml`. The wave-104 recheck confirms this one did not actually land with the neighboring doc fixes. |
-| F-1269 | low | The WASM audit-input README still promises an `_unattributed` contract block that the curated YAML no longer contains after the 2026-05-01 testnet-address cleanup | `configs/audit/README.md`; `configs/audit/wasm-walk-contracts.yaml` | XFI-0061; EV-0190 | fixed | docs/audit-tooling | The YAML is internally consistent at 540 contracts across eight named sources and explains that the former Reflector-testnet leftovers were intentionally removed, but the README still describes a now-nonexistent `_unattributed` block. |
+| F-1268 | medium | The R1 Prometheus rules README deploys operators into `/etc/prometheus/rules.d/`, but the active R1 config loads `/etc/prometheus/rules.r1/*.yml` | `configs/prometheus/rules.r1/README.md`; `configs/prometheus/prometheus.r1.yml` | XFI-0060; EV-0188; EV-0191; EV-0194 | fixed | ops/docs/monitoring | Current workspace README now copies into `/etc/prometheus/rules.r1/` and explicitly says that path matches `prometheus.r1.yml`. |
+| F-1269 | low | The WASM audit-input README still promises an `_unattributed` contract block that the curated YAML no longer contains after the 2026-05-01 testnet-address cleanup | `configs/audit/README.md`; `configs/audit/wasm-walk-contracts.yaml` | XFI-0061; EV-0190; EV-0194 | fixed | docs/audit-tooling | Current workspace README now states that `_unattributed` was intentionally removed during the 2026-05-01 cleanup and describes the live eight-source schema accurately. |
 | F-1270 | medium | Active Caddy/operator docs contradict ADR-0025 by telling operators to add Cloudflare edge CIDRs to the API's `trusted_proxy_cidrs`, even though the chosen trust boundary keeps Cloudflare pinned at Caddy and leaves the API trusting only Caddy | `configs/caddy/README.md`; `docs/operations/pre-launch-hardening.md`; `docs/adr/0025-caddy-cloudflare-trusted-proxy.md`; `internal/config/config.go`; `docs/reference/config/README.md` | XFI-0062; EV-0193 | open | ops/docs/security | The Caddy README says Cloudflare-fronted multi-region deployment would "trust additional X-Forwarded-* CIDRs ... in the API config", and the hardening guide tells operators to add Cloudflare ranges to `trusted_proxy_cidrs`. ADR-0025 says the API should stay at `["127.0.0.1/32"]` because Caddy is the only immediate proxy the API trusts. |
+| F-1271 | high | The Redis Sentinel HA role, clients, and runbooks assume Sentinel listener authentication, but `sentinel.conf.j2` never configures a Sentinel password/ACL, so the advertised authenticated FailoverClient path is not the config the role actually renders | `configs/ansible/roles/redis-sentinel/templates/sentinel.conf.j2`; `configs/ansible/roles/redis-sentinel/README.md`; `docs/architecture/redis-sentinel-ansible-role-design-note.md`; `docs/operations/runbooks/redis-master-down.md`; `internal/storage/redisclient/redisclient.go`; go-redis Sentinel auth behavior | XFI-0063; EV-0196 | open | ops/redis/security/runtime | Repo docs and code all carry one shared `redis_password` into Sentinel client auth (`redis-cli -p 26379 -a ...`, `SentinelPassword: cfg.RedisPassword`), but the rendered Sentinel config contains only `sentinel auth-pass` for Sentinel-to-master auth and no listener-side `requirepass`/ACL. |
 
 ## Finding Template
 
@@ -474,7 +473,7 @@ Remediation direction:
 
 Severity: `critical`
 
-Status: `open`
+Status: `fixed`
 
 Affected surface:
 
@@ -2608,17 +2607,17 @@ Evidence:
 
 Expected: the R1 rule-overlay README should instruct operators to place copied rule files into the same directory that `prometheus.r1.yml` actually includes.
 
-Observed: the README's apply step copies `configs/prometheus/rules.r1/*.yml` to `/etc/prometheus/rules.d/` and then says `prometheus.r1.yml` already loads `/etc/prometheus/rules.d/*.yml`. The actual config says the opposite: its comments and `rule_files` block use `/etc/prometheus/rules.r1/*.yml`.
+Observed during discovery: the README's apply step copied `configs/prometheus/rules.r1/*.yml` to `/etc/prometheus/rules.d/` and then said `prometheus.r1.yml` already loaded `/etc/prometheus/rules.d/*.yml`. The actual config said the opposite: its comments and `rule_files` block used `/etc/prometheus/rules.r1/*.yml`.
 
 Impact: an operator can follow the README exactly, reload Prometheus successfully, and still have the intended R1 overlay alerts absent because the files landed outside the configured include path.
 
-Remediation direction: align the README with the live config path or intentionally change the config to match the README, then add a lightweight lint/assertion so the copied directory in docs cannot drift from the `rule_files` include path again.
+Resolution: current workspace README now copies to `/etc/prometheus/rules.r1/`, says that path matches the configured `rule_files` glob, and records the corrected historical drift. `EV-0194` confirms the closure.
 
 ### F-1269. The WASM audit-input README still describes a removed `_unattributed` bucket
 
 Severity: `low`
 
-Status: `open`
+Status: `fixed`
 
 Affected surface:
 
@@ -2632,11 +2631,11 @@ Evidence:
 
 Expected: the README should describe the actual schema of the curated YAML used for future WASM-history audits.
 
-Observed: `configs/audit/README.md` says the YAML contains one block per Soroban source plus an `_unattributed` block for operational contracts whose `ContractInstance` entries were TTL-evicted. The YAML has 540 contracts across exactly eight named source blocks and no `_unattributed` key. Its footer explains why: the former three "TTL-evicted" leftovers were actually Reflector testnet addresses misread during the earlier investigation and were intentionally removed on 2026-05-01.
+Observed during discovery: `configs/audit/README.md` said the YAML contains one block per Soroban source plus an `_unattributed` block for operational contracts whose `ContractInstance` entries were TTL-evicted. The YAML had 540 contracts across exactly eight named source blocks and no `_unattributed` key. Its footer explained why: the former three "TTL-evicted" leftovers were actually Reflector testnet addresses misread during the earlier investigation and were intentionally removed on 2026-05-01.
 
 Impact: low. The curated input itself is coherent, but its README still documents a schema that no longer exists. That can confuse the next auditor refreshing the YAML or make them try to preserve a category the repo deliberately retired.
 
-Remediation direction: update the README to the current eight-source shape and, if needed, mention the removed `_unattributed` idea only as historical background tied to the 2026-05-01 correction.
+Resolution: current workspace README now describes one entry per Soroban source, states that `_unattributed` was intentionally removed in the 2026-05-01 testnet-address cleanup, and therefore matches the curated YAML. `EV-0194` confirms the closure.
 
 ### F-1270. Active Caddy/operator docs move the Cloudflare trust boundary to the wrong layer
 

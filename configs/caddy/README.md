@@ -13,7 +13,7 @@ For r1's pre-multi-region shape:
 - **HTTP/3 + HTTP/2 + TLS 1.3** without per-feature flags.
 - **Active health-checks** on the upstream — drops `localhost:3000` from rotation if `/v1/healthz` starts returning non-200, which is the right signal for the wedged-listener-but-systemd-active failure mode.
 
-When we add R2 / R3, Cloudflare in front of all three regions becomes the right layer for **DDoS protection + WAF + multi-region GeoIP routing**. Caddy stays as the per-region origin TLS terminator — Cloudflare → Caddy → API. The Caddyfile shape doesn't change between "naked Caddy" today and "Caddy behind Cloudflare" tomorrow; we'd just trust additional X-Forwarded-* CIDRs (Cloudflare's published edge ranges) in the API config.
+When we add R2 / R3, Cloudflare in front of all three regions becomes the right layer for **DDoS protection + WAF + multi-region GeoIP routing**. Caddy stays as the per-region origin TLS terminator — Cloudflare → Caddy → API. The Caddy global `servers { trusted_proxies static <CF CIDRs>; client_ip_headers CF-Connecting-IP X-Forwarded-For }` block resolves the real client IP at Caddy and forwards it downstream as the only thing the API sees. The API's `trusted_proxy_cidrs = ["127.0.0.1/32"]` config STAYS THE SAME — Caddy is still the only proxy the API trusts; what changes is what Caddy puts in `X-Forwarded-For` (real client IP after CF resolution, not a CF edge IP). See ADR-0025 for the full rationale; F-1270 (2026-05-13) corrected an earlier version of this paragraph that described an API-side trust expansion that ADR-0025 explicitly rejects.
 
 ## Operator install (R1)
 
