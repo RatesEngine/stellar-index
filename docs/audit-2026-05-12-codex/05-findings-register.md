@@ -2,32 +2,37 @@
 
 Cold findings only. No prior finding is imported into this register.
 
-## Closure summary (verified reconciliation snapshot, 2026-05-13 wave-110 refresh)
+## Closure summary (verified reconciliation snapshot, 2026-05-13 wave-111 refresh)
 
 The register below is authoritative; this summary captures the
-highest-priority items as of the wave-110 reconciliation recheck. Status counts
+highest-priority items as of the wave-111 reconciliation recheck. Status counts
 at this snapshot:
 
-- **Findings register**: 59 fixed / 20 open (79 total).
-- **XFI cross-file table**: 55 fixed / 16 open (71 total).
-- **Remediation plan**: 57 fixed / 20 open (77 total — multi-finding
+- **Findings register**: 59 fixed / 23 open (82 total).
+- **XFI cross-file table**: 55 fixed / 19 open (74 total).
+- **Remediation plan**: 57 fixed / 23 open (80 total — multi-finding
   R-rows split the count; the open remediation rows resolve to
   the current finding set plus mixed multi-finding operator rows).
 
-All three surfaces are mutually consistent as of wave 110.
+All three surfaces are mutually consistent as of wave 111.
 
 **Latest high-priority state.** Earlier code-actionable findings through
 wave 95 shipped, but the deployment/HA tranche reopened code/config risk:
 `F-1275` shows Redis unavailability can drain every API backend through
 HAProxy's `/readyz` routing; `F-1278` shows HA-role nftables drop-ins do not
 compose deterministically with the repo firewall model; and `F-1279` shows a
-clean-host Patroni firewall ordering failure. Quality-improvement work also
-continued in waves 96-110 (CI gap closure on the R1 rule overlay,
+clean-host Patroni firewall ordering failure. The Patroni deepening pass then
+added three more source-backed defects: `F-1280` (undocumented placeholder
+etcd checksum), `F-1281` (missing `jq` dependency for Patroni textfile
+metrics), and `F-1282` (documented pgBackRest restore target ignored by the
+actual restore command). Quality-improvement work also continued in waves
+96-111 (CI gap closure on the R1 rule overlay,
 remediation-plan reconciliation, status-page closure falsification,
 monitoring-doc breadth review, the Ansible role-doc pass, Healthchecks,
 R1 rule-overlay, audit-input setup review, the Redis/Sentinel deployment
 deepening pass, HAProxy readiness review, API incident-doc selector review,
-and cross-role nftables review). Current notable open docs/operator drifts:
+cross-role nftables review, and Patroni runnable-defaults/DR review).
+Current notable open docs/operator drifts:
 `F-1211` is open again because several active non-audit surfaces
 still prescribe the retired Upptime/cstate/status-repo incident flow;
 `F-1266` is source-closed because the remaining HAProxy, Loki,
@@ -80,8 +85,9 @@ a CI gap that would have let R1-overlay edits with broken PromQL
 ship undetected). These weren't audit-driven but they're in the
 audit's spirit, and the metrics are now operator-charted.
 
-**Findings remaining open** (every entry below requires operator
-or admin-UI action — no further code change pending):
+**Findings remaining open** (entries below include operator/admin work,
+deployment work, code/config defects, and documentation drift; every one still
+requires source-backed or live-environment closure evidence):
 
 - `F-1201` — operator: live R1 nftables still accepts public
   `11726/tcp` + `stellar-core` listens there; reconcile against
@@ -112,6 +118,10 @@ or admin-UI action — no further code change pending):
   remaining per-source triage stays operator-only.
 - `F-1209` — operator: R1 capacity triage (memory + swap +
   MinIO 78% full).
+- `F-1211` — docs/comms: remove the surviving active
+  Upptime/cstate/status-repo instructions from root planning docs and
+  deploy comms templates, leaving only the shipped Cloudflare Pages status
+  workflow.
 - `F-1214` — repo-admin UI: enable main-branch protection rules
   (required CI, CODEOWNERS review, signed commits, no force pushes).
 - `F-1215` — repo-admin UI: add required reviewers to deploy
@@ -131,6 +141,27 @@ or admin-UI action — no further code change pending):
   `ratesengine-ops backfill --pair native,fiat:USD --since 2025-05-13`
   to backfill `prices_1m` to the documented 1-year `since-inception`
   contract.
+- `F-1273` — Redis/Sentinel docs: remove the remaining future-state
+  `internal/cachekeys` FailoverClient claims from the shipped design note and
+  role README.
+- `F-1275` — HA/API availability: change the edge/backend health model so
+  Redis degradation does not drain every otherwise healthy API backend when
+  the intended contract is Timescale-backed degraded serving.
+- `F-1276` — monitoring docs: replace stale `job="api"` PromQL examples with
+  the current multi-host/R1 job-label families.
+- `F-1277` — API runbook docs: replace the nonexistent
+  `internal/api/v1/healthz.go` breadcrumb with the live readiness handler path.
+- `F-1278` — HA firewall config: replace the same-priority accept-only
+  nftables drop-ins with a deterministic allow-list composition that works
+  with the default-drop baseline.
+- `F-1279` — Patroni Ansible: create `/etc/nftables.d/` before writing the
+  Patroni firewall drop-in on clean hosts.
+- `F-1280` — Patroni Ansible: define/document a real etcd release checksum
+  path instead of the placeholder fallback.
+- `F-1281` — Patroni observability: install or otherwise declare `jq` for the
+  Patroni textfile scraper.
+- `F-1282` — Patroni DR: either wire `patroni_pgbackrest_restore_target` into
+  the restore command or remove the false PITR claim from defaults/docs.
 
 Recent waves closed by code (chronological):
 
@@ -386,7 +417,7 @@ Recent waves closed by code (chronological):
 | F-1208 | high | R1 source-health remains degraded: only 12/17 sources are active, ECB is stale, and Redstone is pending source-stopped | R1 indexer/Prometheus/API readiness | XFI-0006; R1-0001; R1-0009; R1-0010; R1-0029; EV-0175 | open | ingestion/ops | The earlier broad multi-source-stopped state has narrowed, but current R1 still reports `overall=degraded`, `active_sources=12`, `total_sources=17`, a firing `ratesengine_external_poller_stale{source=\"ecb\"}` alert, and a pending `ratesengine_ingestion_source_stopped{source=\"redstone\"}` alert. |
 | F-1209 | medium | R1 host capacity is already under memory/swap pressure and MinIO is 78% full | R1 host capacity; infra alerts; storage runbooks | XFI-0006; R1-0007; R1-0010; R1-0030; EV-0175 | open | ops | Memory alert is firing at about 94.19%, swap remains effectively exhausted (`20.45G/20.47G` used), and MinIO remains 4.9T of 6.4T used. |
 | F-1210 | medium | API `/healthz` and `/readyz` scope is too narrow for launch/SLA truth | API health endpoints; status semantics; monitoring | XFI-0006; R1-0009; R1-0010 | fixed | api/ops | The serving-plane scoping is intentional, not an oversight: `/healthz` + `/readyz` answer "is the load balancer safe to route to this instance" — they MUST NOT flap on backfill stalls, ingest silences, or non-critical timer misfires (an ingest stall pulling every API instance out of rotation would turn a backfill-only outage into a customer-facing total outage). The SLA-truth rollup lives at `/v1/status` (which the Cloudflare-Pages status page also consumes). Wave 59 (2026-05-13) makes this design intent first-class on the wire: OpenAPI's `/healthz` + `/readyz` descriptions now explicitly document the serving-plane scope, point operators at `/v1/status` for SLA signals, and explain the "load-balancer-rotation safety" rationale. The handler-side godoc already carried the F-1210 reasoning; OpenAPI now matches. |
-| F-1211 | medium | Status-page incident docs and comms templates point to removed Upptime/cstate workflows instead of the shipped Cloudflare Pages app | `web/status`; `deploy/status-page`; operations runbooks; comms templates | XFI-0007; EV-0021; EV-0178 | fixed | ops/comms/web | Wave 57 corrected the main runbook/setup path, but the wave-98 breadth pass falsified closure: `CLAUDE.md`, `docs/architecture/launch-readiness-backlog.md`, `docs/launch-task-list.md`, and `deploy/comms/{README,incident-update}.md` still retain active Upptime/cstate/status-repo instructions that disagree with the shipped `web/status` Cloudflare Pages workflow. The launch-task list is materially worse than a stale implementation choice: it still says there is no public status page, no deploy artifacts, and nowhere to publish status updates. |
+| F-1211 | medium | Status-page incident docs and comms templates point to removed Upptime/cstate workflows instead of the shipped Cloudflare Pages app | `web/status`; `deploy/status-page`; operations runbooks; comms templates | XFI-0007; EV-0021; EV-0178 | open | ops/comms/web | Wave 57 corrected the main runbook/setup path, but the wave-98 breadth pass falsified closure: `CLAUDE.md`, `docs/architecture/launch-readiness-backlog.md`, `docs/launch-task-list.md`, and `deploy/comms/{README,incident-update}.md` still retain active Upptime/cstate/status-repo instructions that disagree with the shipped `web/status` Cloudflare Pages workflow. The launch-task list is materially worse than a stale implementation choice: it still says there is no public status page, no deploy artifacts, and nowhere to publish status updates. |
 | F-1212 | high | Free dashboard accounts can self-mint API keys with paid-tier rate limits up to 100,000 requests/minute | Dashboard key management; platform API keys; auth validator; rate-limit middleware | XFI-0008; EV-0023; EV-0089 | fixed | dashboard/billing/api | Current `HEAD` now clamps dashboard-minted key budgets by account tier before insert and tests the tier ladder, so the privilege-escalation path no longer reproduces. |
 | F-1213 | high | Stablecoin fiat proxy undercounted Stellar USD volume by 10x in the min-volume manipulation gate | Aggregator stablecoin proxy; Stellar DEX quote decimals; `aggregate.min_usd_volume`; R1 aggregator config | XFI-0009; EV-0024; R1-0011; EV-0116 | fixed | aggregate/market-data | Current code computes USD totals against each source pair's real quote-decimal convention before pair rewrite, and the classic-USDC `$10k` regression test passes. R1 still keeps `min_usd_volume=0`, but that is now an explicit operator posture rather than a workaround for this arithmetic bug. |
 | F-1214 | critical | `main` is unprotected, so required CI, CODEOWNER review, and signed commits are not enforced | GitHub branch protection/rulesets; `CONTRIBUTING.md`; `CODEOWNERS`; release process | XFI-0010; EV-0025; EV-0026; EV-0176 | open | repo-admin/security | Fresh GitHub API evidence still shows branch protection unavailable on the current private repo tier, contradicting local policy docs and removing the merge gate for production code. |
