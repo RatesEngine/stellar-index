@@ -49,89 +49,108 @@ const isCIStub =
   API_BASE_URL.includes('.invalid') || API_BASE_URL.includes('local-stub');
 const FETCH_TIMEOUT_MS = 8_000;
 
-interface VerifiedCurrencyEntry {
+interface VerifiedCurrencyListItem {
+  ticker: string;
   slug: string;
-  networks: { network: string }[];
+  name: string;
+  class?: string;
+  networks: NetworkEntry[];
+}
+
+/**
+ * Build-time catalogue source. Both generateStaticParams AND
+ * fetchGlobalAsset derive from the same single `/v1/assets/verified`
+ * call — without this consolidation, the build fires hundreds of
+ * `/v1/assets/{slug}` requests in parallel and trips r1's anonymous-
+ * tier rate limit (60 req/min), producing prerendered "Not found"
+ * pages for every [slug]/[network] route. The catalogue listing
+ * already carries `networks[]` per entry, so per-slug fetches are
+ * redundant at build time.
+ *
+ * Sequential retry on 429 (small jittered backoff) because even
+ * the single call occasionally races a parallel /assets/[slug]
+ * build phase that's hammering the same endpoint.
+ */
+let cataloguePromise: Promise<Map<string, GlobalAssetView>> | null = null;
+
+function getCatalogue(): Promise<Map<string, GlobalAssetView>> {
+  if (cataloguePromise) return cataloguePromise;
+  cataloguePromise = fetchCatalogueWithRetry();
+  return cataloguePromise;
+}
+
+async function fetchCatalogueWithRetry(): Promise<Map<string, GlobalAssetView>> {
+  if (isCIStub) return new Map();
+  const maxAttempts = 5;
+  for (let attempt = 0; attempt < maxAttempts; attempt++) {
+    try {
+      const res = await fetch(`${API_BASE_URL}/v1/assets/verified`, {
+        signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
+      });
+      if (res.status === 429) {
+        const backoffMs = 1000 * (attempt + 1) + Math.floor(Math.random() * 500);
+        // eslint-disable-next-line no-console
+        console.warn(
+          `[catalogue] /v1/assets/verified 429 (attempt ${attempt + 1}/${maxAttempts}); backing off ${backoffMs}ms`,
+        );
+        await new Promise((r) => setTimeout(r, backoffMs));
+        continue;
+      }
+      if (!res.ok) {
+        // eslint-disable-next-line no-console
+        console.warn(`[catalogue] /v1/assets/verified http=${res.status}`);
+        return new Map();
+      }
+      const env = (await res.json()) as { data?: VerifiedCurrencyListItem[] };
+      const map = new Map<string, GlobalAssetView>();
+      for (const item of env.data ?? []) {
+        map.set(item.slug, {
+          ticker: item.ticker,
+          slug: item.slug,
+          name: item.name,
+          class: item.class as GlobalAssetView['class'],
+          networks: item.networks ?? [],
+        });
+      }
+      return map;
+    } catch (err) {
+      // eslint-disable-next-line no-console
+      console.warn(
+        `[catalogue] fetch threw (attempt ${attempt + 1}): ${err instanceof Error ? err.message : String(err)}`,
+      );
+    }
+  }
+  return new Map();
 }
 
 /**
  * Static-export enumeration of every (slug, network) pair the
- * catalogue knows about. Fetches /v1/assets/verified once at build
- * time and emits one route per network entry per catalogue slug.
- * Static-asset count is bounded at len(catalogue) × max networks
- * per row — ~70 routes today (45 catalogue × ≤6 networks each).
+ * catalogue knows about.
  */
 export async function generateStaticParams(): Promise<
   { slug: string; network: string }[]
 > {
   const fallback = [{ slug: 'usdc', network: 'stellar' }];
-  if (isCIStub) {
+  if (isCIStub) return fallback;
+  const map = await getCatalogue();
+  const out: { slug: string; network: string }[] = [];
+  for (const view of map.values()) {
+    for (const n of view.networks) {
+      out.push({ slug: view.slug, network: n.network.toLowerCase() });
+    }
+  }
+  if (out.length === 0) {
+    // eslint-disable-next-line no-console
+    console.warn(`[assets/[slug]/[network]] catalogue empty; using fallback`);
     return fallback;
   }
-  try {
-    const res = await fetch(`${API_BASE_URL}/v1/assets/verified`, {
-      signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
-    });
-    if (!res.ok) {
-      // eslint-disable-next-line no-console
-      console.warn(
-        `[assets/[slug]/[network]] /v1/assets/verified returned ${res.status}; using fallback list`,
-      );
-      return fallback;
-    }
-    const env = (await res.json()) as { data?: VerifiedCurrencyEntry[] };
-    const entries = env.data ?? [];
-    const out: { slug: string; network: string }[] = [];
-    for (const e of entries) {
-      for (const n of e.networks ?? []) {
-        out.push({ slug: e.slug, network: n.network.toLowerCase() });
-      }
-    }
-    if (out.length === 0) {
-      // eslint-disable-next-line no-console
-      console.warn(
-        `[assets/[slug]/[network]] catalogue returned 0 network pairs; using fallback list`,
-      );
-      return fallback;
-    }
-    // eslint-disable-next-line no-console
-    console.log(
-      `[assets/[slug]/[network]] generating ${out.length} routes from /v1/assets/verified`,
-    );
-    return out;
-  } catch (err) {
-    // eslint-disable-next-line no-console
-    console.warn(
-      `[assets/[slug]/[network]] fetch threw, falling back: ${err instanceof Error ? err.message : String(err)}`,
-    );
-    return fallback;
-  }
+  return out;
 }
 
 async function fetchGlobalAsset(slug: string): Promise<GlobalAssetView | null> {
   if (isCIStub) return null;
-  try {
-    const res = await fetch(
-      `${API_BASE_URL}/v1/assets/${encodeURIComponent(slug)}`,
-      { signal: AbortSignal.timeout(FETCH_TIMEOUT_MS) },
-    );
-    if (!res.ok) return null;
-    const env = (await res.json()) as {
-      data: GlobalAssetView | Record<string, unknown>;
-    };
-    const d = env.data;
-    if (
-      typeof d === 'object' &&
-      d !== null &&
-      typeof (d as GlobalAssetView).ticker === 'string' &&
-      Array.isArray((d as GlobalAssetView).networks)
-    ) {
-      return d as GlobalAssetView;
-    }
-    return null;
-  } catch {
-    return null;
-  }
+  const map = await getCatalogue();
+  return map.get(slug) ?? null;
 }
 
 function findNetwork(
@@ -164,6 +183,8 @@ export default async function AssetOnNetworkPage(props: {
   const { slug, network } = await props.params;
   const view = await fetchGlobalAsset(slug);
   if (!view) {
+    // eslint-disable-next-line no-console
+    console.error(`[assets/[slug]/[network]] fetchGlobalAsset(${slug}) returned null at build time`);
     notFound();
   }
   const entry = findNetwork(view, network);

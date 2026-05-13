@@ -15,6 +15,24 @@ against.
 
 ## [Unreleased]
 
+### Fixed
+
+- **Explorer build no longer 429s on `/assets/[slug]/[network]`
+  prerender.** Next.js opts out of its built-in fetch dedup when
+  `signal` is set, so each prerendered slug+network page was
+  separately re-fetching `/v1/assets/{slug}` and the build was
+  firing hundreds of requests in parallel — far above r1's
+  anonymous-tier rate limit (60 req/min). Result: every
+  `[slug]/[network]` route prerendered as a "Not found" page on
+  prod. Fix consolidates the catalogue source: a single
+  `/v1/assets/verified` call (with 429-aware retry) populates a
+  module-level Map from which both `generateStaticParams` and
+  per-page `fetchGlobalAsset` read. Concurrent r1 config bump
+  (`anon_rate_limit_per_min = 600`, `key_rate_limit_per_min =
+  6000`) gives real consumers headroom too — the prior 60/min
+  was unworkable for any client doing a static build or
+  dashboard refresh.
+
 ## [v0.5.0-rc.50] — 2026-05-13
 
 ### Documentation
