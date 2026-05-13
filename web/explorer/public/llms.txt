@@ -24,7 +24,7 @@ The string `native` is a shorthand for `crypto:XLM`.
 - [GET /v1/pools](https://api.ratesengine.net/v1/pools): every Soroban DEX pool we observe (Soroswap, Aquarius, Phoenix, Comet, SDEX).
 - [GET /v1/sources](https://api.ratesengine.net/v1/sources): every venue/source we ingest from + classification (exchange / aggregator / oracle).
 - [GET /v1/oracle/streams](https://api.ratesengine.net/v1/oracle/streams): latest reading per (oracle, asset, quote) — Reflector / Band / Redstone / Chainlink HTTP.
-- [GET /v1/assets](https://api.ratesengine.net/v1/assets?limit=200): activity-ranked listing with prices, sparklines, market_cap, supply (formerly /v1/coins; the unified surface covers fiat + crypto + stablecoin + classic + SAC in one stream).
+- [GET /v1/assets](https://api.ratesengine.net/v1/assets?limit=200): activity-ranked listing with prices, sparklines, market_cap, supply. The unified surface covers fiat + crypto + stablecoin + classic + SAC in one stream; the older `coins` and `currencies` route shapes were retired in rc.48 and removed from the API entirely.
 - [GET /v1/incidents](https://api.ratesengine.net/v1/incidents): active + recent SEVs with severity + affected components.
 - [GET /v1/status](https://api.ratesengine.net/v1/status): service-health rollup.
 

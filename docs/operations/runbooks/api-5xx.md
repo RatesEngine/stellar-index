@@ -137,9 +137,15 @@ Follow the rolling rollback procedure in
 [`release-process.md`](../release-process.md) → Rollback: drain
 one host out of HAProxy via the admin socket
 (`disable server api_pool/api-01`), swap that host's binary back
-to the previous tag under `/opt/ratesengine/release-<tag>/`,
-restart the unit, re-enable in HAProxy, repeat for `api-02` and
-`api-03`. The two undrained hosts carry traffic during each swap.
+to the previous tag from
+`/usr/local/bin/ratesengine-api.prev-<previous-tag>` (the
+deploy task keeps the last 5; `/var/lib/ratesengine/deployed-versions/ratesengine-api`
+tracks the running version). F-1222 (codex audit-2026-05-12):
+the pre-fix prose pointed at `/opt/ratesengine/release-<tag>/`
+which the deploy task does not produce. After the binary
+swap, restart the unit, re-enable in HAProxy, repeat for
+`api-02` and `api-03`. The two undrained hosts carry traffic
+during each swap.
 
 Verification:
 - [ ] `ratesengine_api_error_rate_critical` clears within 3 min.

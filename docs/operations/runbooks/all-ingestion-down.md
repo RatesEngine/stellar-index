@@ -126,22 +126,36 @@ Route by the result:
   grep "^Running version" docs/operations/r1-deployment-state.md
   ```
 - **Revert** to the previous release per
-  [`release-process.md`](../release-process.md) §4.4 ("Rollback
-  path"). The indexer ships as a systemd-managed binary, not a
-  containerised service — so the revert is:
+  [`release-process.md`](../release-process.md) §"Rollback".
+  The indexer ships as a systemd-managed binary, not a
+  containerised service — so the revert is a single binary
+  swap. F-1222 (codex audit-2026-05-12): the deploy task keeps
+  the last 5 previous binaries as
+  `/usr/local/bin/<binary>.prev-<previous-tag>` and records
+  the running version under
+  `/var/lib/ratesengine/deployed-versions/<binary>` (NOT under
+  `/opt/ratesengine/release-<tag>/` — the `goreleaser`-style
+  release archive doesn't exist on this host).
+
+  The preferred path is to trigger the deploy workflow with
+  the previous tag (`gh workflow run deploy.yml -f
+  region=r1 -f version=<previous>`); for the manual fallback:
   ```sh
   # On each indexer host:
-  PREVIOUS=2026.05.01.1                    # whichever tag was healthy
-  ssh root@indexer-01 \
-      "cd /opt/ratesengine/release-${PREVIOUS} && \
-       systemctl stop ratesengine-indexer && \
-       cp ratesengine-indexer /usr/local/bin/ && \
-       systemctl start ratesengine-indexer && \
-       systemctl status ratesengine-indexer --no-pager"
+  PREVIOUS=v0.5.0-rc.40                    # whichever tag was healthy
+  ssh root@indexer-01 <<EOF
+    set -euxo pipefail
+    test -f /usr/local/bin/ratesengine-indexer.prev-${PREVIOUS}
+    systemctl stop ratesengine-indexer
+    install -m 0755 /usr/local/bin/ratesengine-indexer.prev-${PREVIOUS} /usr/local/bin/ratesengine-indexer
+    systemctl start ratesengine-indexer
+    systemctl status ratesengine-indexer --no-pager
+  EOF
   # Repeat for every host in the inventory's ratesengine_indexer
-  # group. The release archive (/opt/ratesengine/release-*) is
-  # kept by goreleaser packaging convention; deploys leave the
-  # previous N=3 releases in place for exactly this rollback.
+  # group. If the wanted .prev-<tag> is older than 5 releases
+  # back the operator rebuilds it from the tag on a build host
+  # (`git checkout <tag> && make build`) — see
+  # release-process.md §Rollback for the full recipe.
   ```
   Then file a SEV-2 minimum + a postmortem in
   `docs/operations/postmortems/` per release-process.md §4.4.
