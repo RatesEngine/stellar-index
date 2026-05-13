@@ -336,6 +336,18 @@ without evidence IDs.
   growth. The Codex TSV now matches the current non-audit tree at `1,897`
   rows, the roll-up is `done=111`, `in_progress=87`, `todo=1699`, and docs
   lint passes on the current moving workspace.
+- `CMD-0159` through `CMD-0163` falsify and then settle the moving wave-52/54
+  closure claims. `F-1259` genuinely closes once the tracked Postman artifact
+  is checked instead of the deleted local byproduct; `F-1244` remains open
+  until the platform spec drops its false sealed-box webhook-secret claim, then
+  closes after the wave-54 spec rewrite; `F-1263` broadens from malformed-ID to
+  malformed-ID-plus-prefix fixture drift, then closes after the corrected full
+  `TestPlatformPostgresStores` proof runs green, which also clears the remaining
+  `F-1257` evidence gate.
+- `CMD-0164` restores control parity on settled `HEAD=a783b5ed...`: tracked
+  non-audit scope and TSV rows both equal `1,898`; status roll-up is
+  `done=112`, `in_progress=88`, `todo=1698`; `internal` area count is `693`;
+  docs lint passes.
 - `CMD-0122` surfaced new high-severity migration finding `F-1261`.
   Migration `0030_asset_supply_history_unique_constraint` fails against the
   compressed hypertable created by `0005`, fresh integration bootstrap dies
@@ -366,9 +378,11 @@ without evidence IDs.
   and `EV-0136` restores parity at `1,888` rows after committed wave 39 added
   the touch-usage middleware/debouncer pair plus tests. `EV-0151` advances
   that same control to `1,897` rows after wave 47/48 scope growth and the
-  missing `asset_registry_test.go` ledger row was added.
+  missing `asset_registry_test.go` ledger row was added. `EV-0164` advances
+  parity again at `1,898` tracked non-audit rows after the wave-50
+  `apikey_store_test.go` scope growth and the wave-54 reconciliation refresh.
   Current findings remain source/R1 verified and not imported from prior
   audits, but final whole-repo closure still requires terminal review
   status across the refreshed TSV. The current inventory roll-up is
-  `done=111`, `in_progress=87`, `todo=1699`, with tracked-file parity
-  restored at `1897` rows and preserved through `CMD-0152`.
+  `done=112`, `in_progress=88`, `todo=1698`, with tracked-file parity
+  restored at `1898` rows and preserved through `CMD-0164`.

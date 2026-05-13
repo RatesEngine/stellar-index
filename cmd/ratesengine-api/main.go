@@ -417,8 +417,13 @@ func run(cfgPath string, dryRun bool) error { //nolint:gocognit,funlen,gocyclo /
 			stripeCfg.Platform = &v1.StripePlatformBridge{
 				Accounts: postgresstore.NewAccountStore(pgStore),
 				Billing:  postgresstore.NewBillingStore(pgStore),
+				// F-1219 wave 55 (codex audit-2026-05-13):
+				// fan the upgrade out to Postgres-backed
+				// dashboard keys too — pre-fix only Redis-
+				// stored /v1/signup keys were lifted.
+				APIKeys: postgresstore.NewAPIKeyStore(pgStore),
 			}
-			logger.Info("stripe webhook wired", "endpoint", "/v1/webhooks/stripe", "dedupe", "postgres", "audit", "postgres", "platform", "accounts+billing")
+			logger.Info("stripe webhook wired", "endpoint", "/v1/webhooks/stripe", "dedupe", "postgres", "audit", "postgres", "platform", "accounts+billing+apikeys")
 		} else {
 			logger.Warn("stripe webhook wired without dedupe — Postgres absent",
 				"endpoint", "/v1/webhooks/stripe")

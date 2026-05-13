@@ -340,7 +340,7 @@ docs/architecture/loki-ansible-role-design-note.md	docs	docs/architecture	docume
 docs/architecture/multi-network-assets-migration.md	docs	docs/architecture	documentation	todo			cold audit pending
 docs/architecture/oracle-manipulation-defense.md	docs	docs/architecture	documentation	todo			cold audit pending
 docs/architecture/patroni-ansible-role-design-note.md	docs	docs/architecture	documentation	todo			cold audit pending
-docs/architecture/platform-spec.md	docs	docs/architecture	documentation	in_progress	EV-0161;F-1244	XFI-0036	Reviewed webhook-secret protection claims; still contradicts the shipped recoverable `bytea secret_hash` model by promising libsodium sealed boxes
+docs/architecture/platform-spec.md	docs	docs/architecture	documentation	in_progress	EV-0161;EV-0163;F-1244	XFI-0036	Reviewed webhook-secret protection claims; wave-54 rewrite now distinguishes planned TOTP sealed boxes from recoverable plain-`bytea` webhook signing keys, closing the F-1244 spec drift
 docs/architecture/prometheus-ansible-role-design-note.md	docs	docs/architecture	documentation	todo			cold audit pending
 docs/architecture/r2-r3-bringup.md	docs	docs/architecture	documentation	todo			cold audit pending
 docs/architecture/redis-sentinel-ansible-role-design-note.md	docs	docs/architecture	documentation	todo			cold audit pending

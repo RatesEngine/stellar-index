@@ -103,6 +103,16 @@ type StripePlatformBridge struct {
 	// builds a Subscription record from the checkout session
 	// metadata + customer mapping.
 	Billing platform.BillingStore
+	// APIKeys, when non-nil, surfaces the platform-side keys
+	// belonging to the upgraded account so the Stripe handler
+	// can lift their `RateLimitPerMin` in lock-step with the
+	// Redis-backed legacy keys. F-1219 (codex audit-2026-05-13)
+	// follow-up: pre-fix the upgrade only touched Redis-stored
+	// `/v1/signup` keys, leaving Postgres-backed dashboard keys
+	// stuck at the pre-paid budget. Nil disables the per-key
+	// platform fan-out (deployments without a Postgres store
+	// stay on the Redis-only path).
+	APIKeys platform.APIKeyStore
 	// TierMap maps the Stripe metadata.tier value (e.g. "pro")
 	// to the platform.Tier the account should land on. Nil
 	// defaults to {pro: TierPro, business: TierBusiness,
@@ -644,19 +654,99 @@ func (s *Server) applyPlatformSideEffects(ctx context.Context, ev stripeEvent, s
 		}
 	}
 
+	// F-1219 (codex audit-2026-05-13) follow-up: lift the
+	// account-tier + every Postgres-backed dashboard key for
+	// the account, so a customer who minted keys from the
+	// dashboard gets the same upgrade as a customer who came
+	// in via /v1/signup.
+	if haveAccount {
+		s.applyAccountTierAndKeyUpgrade(ctx, ev, bridge, account, tierName)
+	}
+}
+
+// applyAccountTierAndKeyUpgrade runs the per-account half of
+// the F-1219 platform fan-out: bump `account.Tier` if it
+// differs from the new plan, then lift every active platform-
+// backed API key up to the per-minute rate-limit budget the
+// new tier promises. Both steps are best-effort + idempotent.
+// Extracted from `applyPlatformSideEffects` to keep that
+// function's cognitive complexity under the linter cap.
+func (s *Server) applyAccountTierAndKeyUpgrade(ctx context.Context, ev stripeEvent, bridge *StripePlatformBridge, account platform.Account, tierName string) {
 	// Update the account tier so the dashboard reflects the new
 	// plan + the F-1212 tier-rate-limit clamp picks up the right
 	// ceiling for future key mints.
-	if haveAccount {
-		newTier := stripeTierMapPlatform(bridge.TierMap, tierName)
-		if newTier != "" && account.Tier != newTier {
-			account.Tier = newTier
-			if err := bridge.Accounts.Update(ctx, account); err != nil {
-				s.logger.Warn("stripe webhook: account tier update failed",
-					"event_id", ev.ID, "account_id", account.ID, "tier", newTier, "err", err)
-			}
+	newTier := stripeTierMapPlatform(bridge.TierMap, tierName)
+	if newTier != "" && account.Tier != newTier {
+		account.Tier = newTier
+		if err := bridge.Accounts.Update(ctx, account); err != nil {
+			s.logger.Warn("stripe webhook: account tier update failed",
+				"event_id", ev.ID, "account_id", account.ID, "tier", newTier, "err", err)
 		}
 	}
+	// Lift the per-key rate-limit on Postgres-backed keys.
+	// F-1219 wave 55 (codex audit-2026-05-13).
+	if bridge.APIKeys != nil {
+		s.upgradePlatformAPIKeys(ctx, ev, bridge.APIKeys, account, tierName)
+	}
+}
+
+// upgradePlatformAPIKeys lifts every Postgres-backed dashboard
+// key for `account` to the rate-limit budget the customer's new
+// tier promises. F-1219 wave 55 (codex audit-2026-05-13).
+//
+// Idempotent: keys already at-or-above the new budget are
+// skipped (so a re-delivered Stripe event doesn't downgrade a
+// key the operator manually lifted further). The
+// `auth.Tier.MaxRateLimitPerMin` ceiling is the source of
+// truth for "the budget this tier promises".
+func (s *Server) upgradePlatformAPIKeys(ctx context.Context, ev stripeEvent, store platform.APIKeyStore, account platform.Account, tierName string) {
+	target := stripeTierBudget(tierName)
+	if target <= 0 {
+		s.logger.Debug("stripe webhook: no platform-key budget for tier; skipping per-key upgrade",
+			"event_id", ev.ID, "tier", tierName)
+		return
+	}
+	keys, err := store.ListForAccount(ctx, account.ID)
+	if err != nil {
+		s.logger.Warn("stripe webhook: ListForAccount failed; skipping per-key upgrade",
+			"event_id", ev.ID, "account_id", account.ID, "err", err)
+		return
+	}
+	upgraded := 0
+	for i := range keys {
+		k := keys[i]
+		if !k.RevokedAt.IsZero() {
+			continue
+		}
+		if k.RateLimitPerMin >= target {
+			continue
+		}
+		k.RateLimitPerMin = target
+		if err := store.Update(ctx, k); err != nil {
+			s.logger.Warn("stripe webhook: platform-key Update failed",
+				"event_id", ev.ID, "account_id", account.ID,
+				"key_id", k.ID, "err", err)
+			continue
+		}
+		upgraded++
+	}
+	if upgraded > 0 {
+		s.logger.Info("stripe webhook: lifted platform-backed dashboard keys",
+			"event_id", ev.ID, "account_id", account.ID,
+			"tier", tierName, "rate_limit_per_min", target,
+			"keys_upgraded", upgraded)
+	}
+}
+
+// stripeTierBudget returns the per-minute rate-limit ceiling
+// the named Stripe metadata.tier value promises. Mirrors
+// `stripeTierMap` (which carries the same ladder for the
+// Redis-side upgrade) so the two upgrade paths can't drift.
+func stripeTierBudget(tierName string) int {
+	if v, ok := stripeTierMap[tierName]; ok {
+		return v
+	}
+	return 0
 }
 
 // stripePlanFromTier maps the Stripe `metadata.tier` string into

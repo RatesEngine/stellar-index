@@ -7,12 +7,15 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/google/uuid"
 
 	v1 "github.com/RatesEngine/rates-engine/internal/api/v1"
 	"github.com/RatesEngine/rates-engine/internal/auth"
@@ -568,5 +571,186 @@ func TestStripeWebhook_Audit_AppendErrorIsSwallowed(t *testing.T) {
 	if len(audit.entries) != 1 {
 		t.Errorf("audit.entries = %d, want 1 (call still recorded even when handler returned error)",
 			len(audit.entries))
+	}
+}
+
+// fakePlatformAccountsForBridge — narrow `platform.AccountStore`
+// double for the F-1219 wave-55 test. Only `GetByStripeCustomerID`
+// + `Update` are exercised; the other methods panic so any
+// accidental use surfaces immediately.
+type fakePlatformAccountsForBridge struct {
+	mu       sync.Mutex
+	byStripe map[string]platform.Account
+	updates  []platform.Account
+}
+
+func (f *fakePlatformAccountsForBridge) GetByStripeCustomerID(_ context.Context, sid string) (platform.Account, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	a, ok := f.byStripe[sid]
+	if !ok {
+		return platform.Account{}, platform.ErrNotFound
+	}
+	return a, nil
+}
+
+func (f *fakePlatformAccountsForBridge) Update(_ context.Context, a platform.Account) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.updates = append(f.updates, a)
+	return nil
+}
+
+func (*fakePlatformAccountsForBridge) Create(_ context.Context, _ platform.Account) (platform.Account, error) {
+	panic("unused")
+}
+
+func (*fakePlatformAccountsForBridge) Get(_ context.Context, _ uuid.UUID) (platform.Account, error) {
+	panic("unused")
+}
+
+func (*fakePlatformAccountsForBridge) GetBySlug(_ context.Context, _ string) (platform.Account, error) {
+	panic("unused")
+}
+
+func (*fakePlatformAccountsForBridge) Suspend(_ context.Context, _ uuid.UUID, _ string) error {
+	panic("unused")
+}
+
+func (*fakePlatformAccountsForBridge) Unsuspend(_ context.Context, _ uuid.UUID) error {
+	panic("unused")
+}
+
+// fakePlatformAPIKeysForBridge — narrow `platform.APIKeyStore`
+// double for the F-1219 wave-55 test. ListForAccount returns the
+// seeded slice; Update records every call so assertions can
+// confirm both keys were lifted.
+type fakePlatformAPIKeysForBridge struct {
+	mu      sync.Mutex
+	byAcct  map[uuid.UUID][]platform.APIKey
+	updates []platform.APIKey
+}
+
+func (f *fakePlatformAPIKeysForBridge) ListForAccount(_ context.Context, accountID uuid.UUID) ([]platform.APIKey, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	out := make([]platform.APIKey, len(f.byAcct[accountID]))
+	copy(out, f.byAcct[accountID])
+	return out, nil
+}
+
+func (f *fakePlatformAPIKeysForBridge) Update(_ context.Context, k platform.APIKey) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.updates = append(f.updates, k)
+	// Reflect the update back into the source-of-truth slice
+	// so a subsequent ListForAccount returns the new value.
+	for i := range f.byAcct[k.AccountID] {
+		if f.byAcct[k.AccountID][i].ID == k.ID {
+			f.byAcct[k.AccountID][i] = k
+			return nil
+		}
+	}
+	return nil
+}
+
+func (*fakePlatformAPIKeysForBridge) Create(_ context.Context, _ platform.APIKey, _ int) (platform.APIKey, error) {
+	panic("unused")
+}
+
+func (*fakePlatformAPIKeysForBridge) Get(_ context.Context, _ string) (platform.APIKey, error) {
+	panic("unused")
+}
+
+func (*fakePlatformAPIKeysForBridge) GetByHash(_ context.Context, _ []byte) (platform.APIKey, error) {
+	panic("unused")
+}
+
+func (*fakePlatformAPIKeysForBridge) Revoke(_ context.Context, _ string, _ uuid.UUID, _ string) error {
+	panic("unused")
+}
+
+func (*fakePlatformAPIKeysForBridge) TouchUsage(_ context.Context, _ string, _ net.IP, _ string) error {
+	panic("unused")
+}
+
+// TestStripeWebhook_PlatformBridge_LiftsPostgresKeys — F-1219
+// wave 55 (codex audit-2026-05-13): a successful Stripe upgrade
+// lifts BOTH the Redis-stored legacy keys AND the Postgres-
+// backed dashboard keys belonging to the same account. Pre-
+// fix the platform-bridge Pro upgrade left dashboard keys
+// stuck at 1000/min while Redis-stored keys jumped to 10000.
+func TestStripeWebhook_PlatformBridge_LiftsPostgresKeys(t *testing.T) {
+	now := time.Now().UTC()
+	mgr := &fakeStripeManager{
+		keys: map[string][]auth.APIKeyRecord{
+			"signup-acme": {
+				{KeyID: "kid_signup", Identifier: "signup-acme", Tier: auth.TierAPIKey, RateLimitPerMin: 1000},
+			},
+		},
+	}
+	acctID := uuid.New()
+	accounts := &fakePlatformAccountsForBridge{
+		byStripe: map[string]platform.Account{
+			"cus_acme": {ID: acctID, Slug: "acme", StripeCustomerID: "cus_acme", Tier: platform.TierFree},
+		},
+	}
+	keys := &fakePlatformAPIKeysForBridge{
+		byAcct: map[uuid.UUID][]platform.APIKey{
+			acctID: {
+				{ID: "kid_dash_a", AccountID: acctID, RateLimitPerMin: 1000},
+				{ID: "kid_dash_b", AccountID: acctID, RateLimitPerMin: 1000},
+				// Already-revoked key — must be skipped.
+				{ID: "kid_dash_revoked", AccountID: acctID, RateLimitPerMin: 1000, RevokedAt: now.Add(-time.Hour)},
+				// Already-above-target key — must be skipped (no
+				// downgrade on stale event re-delivery).
+				{ID: "kid_dash_high", AccountID: acctID, RateLimitPerMin: 50000},
+			},
+		},
+	}
+
+	srv := v1.New(v1.Options{
+		Auth: fakeAuthMiddleware(auth.Subject{}),
+		Stripe: &v1.StripeWebhookConfig{
+			SigningSecret: testStripeSecret,
+			Manager:       mgr,
+			Now:           func() time.Time { return now },
+			MaxAge:        5 * time.Minute,
+			Platform: &v1.StripePlatformBridge{
+				Accounts: accounts,
+				APIKeys:  keys,
+			},
+		},
+	})
+	ts := httptest.NewServer(srv.Handler())
+	t.Cleanup(ts.Close)
+
+	body := `{"id":"evt_acme_pro","type":"checkout.session.completed","data":{"object":{"id":"cs_acme","client_reference_id":"signup-acme","customer":"cus_acme","payment_status":"paid","metadata":{"tier":"pro"}}}}`
+	sig := stripeSign(t, body, testStripeSecret, now)
+	resp := postStripe(t, ts, body, sig)
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d, want 200", resp.StatusCode)
+	}
+
+	// Redis-side: the one signup key lifted to Pro (10000).
+	if got := len(mgr.updates); got != 1 {
+		t.Errorf("Redis updates = %d, want 1", got)
+	}
+	// Postgres-side: only the two below-target active dashboard
+	// keys lifted; the revoked + already-above-target keys must
+	// not be touched.
+	keys.mu.Lock()
+	defer keys.mu.Unlock()
+	if got := len(keys.updates); got != 2 {
+		t.Fatalf("Postgres key Update calls = %d, want 2 (revoked + already-above-target must be skipped)", got)
+	}
+	for _, k := range keys.updates {
+		if k.RateLimitPerMin != 10000 {
+			t.Errorf("Postgres key %q lifted to %d, want 10000 (Pro tier)", k.ID, k.RateLimitPerMin)
+		}
+		if k.ID == "kid_dash_revoked" || k.ID == "kid_dash_high" {
+			t.Errorf("Postgres key %q should NOT have been touched (revoked or already at-or-above target)", k.ID)
+		}
 	}
 }

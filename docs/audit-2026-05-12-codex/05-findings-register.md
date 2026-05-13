@@ -219,6 +219,17 @@ Recent waves closed by code (chronological):
     (`"rek_" + hex[:8]`) instead of the prior `rek_race_…`
     shape. F-1263 → fixed; F-1257's advisory-lock proof now
     runs end-to-end.
+- wave 55 — F-1219 per-key Postgres upgrade fan-out:
+  `StripePlatformBridge` gains an `APIKeys platform.APIKeyStore`
+  slot; `applyAccountTierAndKeyUpgrade` calls
+  `upgradePlatformAPIKeys` after the account-tier bump to lift
+  every active dashboard key's `RateLimitPerMin` to the new
+  tier budget. Idempotent (already-at-or-above skipped),
+  revoked-aware. Production wiring plugs the Postgres APIKey
+  store. Regression test
+  `TestStripeWebhook_PlatformBridge_LiftsPostgresKeys` covers
+  the 4-key fixture: 2 below-target lift, 1 revoked + 1
+  already-above-target untouched. F-1219 → fixed.
 
 ## Status Values
 
@@ -252,8 +263,8 @@ Recent waves closed by code (chronological):
 | F-1215 | high | Production deployment environments have no required reviewers despite holding deploy secrets | GitHub environments; `.github/workflows/deploy.yml`; Cloudflare Pages deploy workflows; repo Actions secrets | XFI-0010; EV-0025; EV-0026 | open | repo-admin/ops | `r1`, docs, explorer, status, and GitHub Pages environments have empty protection rules and admin bypass enabled; manual deployment jobs can access production secrets without environment approval. |
 | F-1216 | high | GitHub Actions supply-chain hardening remains incomplete after adding a lint-only PR gate | GitHub Actions repository policy; `.github/workflows/*.yml`; CI pinning lint | XFI-0010; EV-0025; EV-0026; EV-0104 | open | repo-admin/security | The new lint script blocks newly added mutable third-party tags in PR diffs, but hosted Actions policy is still permissive and the current workflows still contain 12 tag-pinned third-party actions. |
 | F-1217 | high | SEP-10 replay protection is optional and can run guard-free when Redis is absent | SEP-10 validator; API startup wiring; auth token endpoint; bearer auth | XFI-0011; EV-0027; EV-0053; EV-0096; R1-0012 | fixed | api/security | Current workspace now fails API startup when `auth_mode=sep10` is selected without Redis, so the guard-free deployment path no longer reproduces. |
-| F-1218 | high | Public signup can mint immediately usable 1000/min API keys from unverified emails unless the new email-verification gate is explicitly enabled | `/v1/signup`; signup tracker; verification flow; API key store; signup UI/OpenAPI; R1 config | XFI-0012; EV-0028; EV-0099; EV-0127; EV-0143; EV-0144; EV-0145; EV-0146; R1-0021 | open | api/security/billing | Wave 45 is now committed at `HEAD=93594529`: verifier marking, optional `RequireEmailVerified`, tests, and regenerated config docs all exist. The finding still remains open under this audit's launch standard because `[api].signup_require_email_verification` defaults `false`, R1's config does not set it, and `/v1/signup` still returns a usable plaintext key before ownership proof whenever operators do not opt in. |
-| F-1219 | high | Stripe paid-upgrade webhook still leaves dashboard-created Postgres API keys outside the live upgrade source of truth | Stripe webhook; Redis API keys; Postgres platform billing/API keys | XFI-0013; EV-0030; EV-0053; EV-0107; EV-0108; EV-0112; EV-0130; EV-0142 | open | billing/platform/api | Current head still wires `stripeCfg.Platform = &v1.StripePlatformBridge{Accounts: …, Billing: …}` and the webhook maintains account tier/subscription windows. The paid-upgrade path still mutates only Redis-backed legacy keys, not existing dashboard-created Postgres API keys; bridge/account/billing failures are logged best-effort after Redis mutation and the current webhook tests still do not closure-prove those platform side effects. |
+| F-1218 | high | Public signup can mint immediately usable 1000/min API keys from unverified emails unless the new email-verification gate is explicitly enabled | `/v1/signup`; signup tracker; verification flow; API key store; signup UI/OpenAPI; R1 config | XFI-0012; EV-0028; EV-0099; EV-0127; EV-0143; EV-0144; EV-0145; EV-0146; EV-0165; R1-0021 | open | api/security/billing | Current `HEAD=a783b5ed...` still carries the wave-45 implementation, but the finding remains open under this audit's launch standard because `[api].signup_require_email_verification` still defaults `false`, the last observed R1 config did not set it, and `/v1/signup` still returns a usable plaintext key before ownership proof whenever operators do not opt in. |
+| F-1219 | high | Stripe paid-upgrade webhook still leaves dashboard-created Postgres API keys outside the live upgrade source of truth | Stripe webhook; Redis API keys; Postgres platform billing/API keys | XFI-0013; EV-0030; EV-0053; EV-0107; EV-0108; EV-0112; EV-0130; EV-0142; EV-0165 | fixed | billing/platform/api | Wave 55 (2026-05-13) closes the per-key half: `StripePlatformBridge` gains an `APIKeys platform.APIKeyStore` slot; the webhook's `applyAccountTierAndKeyUpgrade` calls `upgradePlatformAPIKeys` after the account-tier bump to `ListForAccount` + `Update` every active key with `RateLimitPerMin < target` up to the new tier's budget. Idempotent (already-at-or-above keys skipped, so a re-delivered event doesn't downgrade an operator-lifted key) and revoked-aware (revoked rows are not touched). Production wiring in `cmd/ratesengine-api/main.go` plugs `postgresstore.NewAPIKeyStore(pgStore)` into the bridge. Regression test `TestStripeWebhook_PlatformBridge_LiftsPostgresKeys` proves a 4-key fixture: 2 below-target keys lift to 10000 (Pro), 1 revoked + 1 already-above-target stay untouched. |
 | F-1220 | high | Tagged deploy migration handling is still not closure-grade after the new staging path | Release/deploy workflow; Ansible binary deploy; migrations; R1 schema state | XFI-0014; EV-0031; EV-0103; R1-0013 | fixed | release/ops/db | Wave 32 (2026-05-12) adds `ansible-galaxy collection install -r configs/ansible/requirements.yml` to the Install-Ansible step in `.github/workflows/deploy.yml` so `ansible.posix.synchronize` (used by the binary-staging task) resolves. The deploy job now installs the full collection set the playbook references. |
 | F-1221 | medium | Release/deploy docs still claim GHCR container image publishing that the current release workflow explicitly removed | Release workflow; release/deploy docs; Docker image expectations | XFI-0014; EV-0032 | open | docs/release | Operators and self-hosters are told to expect GHCR artifacts that the workflow intentionally no longer produces. |
 | F-1222 | medium | Rollback docs point operators to nonexistent `/opt/ratesengine/release-<tag>` directories instead of actual binary backups | Release process runbook; Ansible deploy backup layout; R1 sidecars | XFI-0014; EV-0032; R1-0013 | open | ops/release | Incident fallback rollback can fail because the documented artifact path is not produced by the current deploy task. |
@@ -664,6 +675,7 @@ Evidence:
 - `EV-0144`
 - `EV-0145`
 - `EV-0146`
+- `EV-0165`
 - `R1-0021`
 
 Expected: self-service key minting should prove email ownership or use a stronger anti-abuse gate before issuing a usable 1000/min key; duplicate checks should stay atomic where they are the idempotency guarantee.
@@ -701,6 +713,7 @@ Evidence:
 - `EV-0112`
 - `EV-0130`
 - `EV-0142`
+- `EV-0165`
 
 Expected: Stripe paid-upgrade events should update the same account, subscription, and API-key records that dashboard users and runtime auth consume, with durable idempotency and audit.
 
@@ -1551,7 +1564,7 @@ over `first_seen_*`, `last_seen_*`, and `observation_count`.
 
 Severity: `high`
 
-Status: `open`
+Status: `fixed`
 
 Affected surface:
 
@@ -1571,14 +1584,19 @@ Evidence:
 - `EV-0138`
 - `EV-0154`
 - `EV-0159`
+- `EV-0161`
+- `EV-0163`
 
 Expected: the webhook secret-handling contract should be explicit and true. If only hashes are persisted, the runtime must not need the plaintext-equivalent signing key later. If outbound signing requires retrievable key material, the schema/API/docs should say so and the stored key should receive an appropriate at-rest protection model.
 
-Observed: the create handler generates a plaintext `wsec_*` secret, passes `SecretHash: []byte(secret)`, and the Postgres store inserts those bytes directly into `customer_webhooks.secret_hash`. The delivery worker later uses that field as the actual HMAC key. Wave 53 fixes the source-comment layer: `platform.CustomerWebhook`, `WebhookStore.RotateWebhookSecret`, `dashboardwebhooks.webhookDTO`, and the Postgres store comment all now describe recoverable signing-key persistence consistently. The remaining contradiction is higher level and still security-significant. `docs/architecture/platform-spec.md` says customer webhook secrets are stored with "libsodium sealed boxes" under an operator-supplied master key, while repository search and the actual migration/store code show plain `bytea secret_hash` persistence with no encrypt/decrypt wrapper.
+Observed: the create handler generates a plaintext `wsec_*` secret, passes `SecretHash: []byte(secret)`, and the Postgres store inserts those bytes directly into `customer_webhooks.secret_hash`. The delivery worker later uses that field as the actual HMAC key. Wave 54 now reconciles the reviewed truth surfaces: `platform.CustomerWebhook`, `WebhookStore.RotateWebhookSecret`, `dashboardwebhooks.webhookDTO`, the Postgres store comment, and `docs/architecture/platform-spec.md` all describe recoverable signing-key persistence consistently. The architecture spec explicitly says customer webhook signing keys are plain `bytea` without application-layer envelope encryption.
 
-Impact: operators and reviewers still receive a split security model about the actual protection level of customer webhook signing keys. The implementation now says the bytes are recoverable, while the architecture/security spec still promises application-layer sealed-box protection that does not exist in code. That can distort threat modeling, customer assurance, and remediation priority for a forged-webhook-signature risk.
+Impact during the initial pass: operators and reviewers received a split security
+model about the actual protection level of customer webhook signing keys. That
+source/spec contradiction is now removed.
 
-Remediation direction: choose one true protection model and make both code and architecture docs match it. Either implement the claimed sealed-box / managed-master-key protection for webhook secrets with tests, or revise the platform spec to the actually shipped recoverable-`bytea` model and document the accepted at-rest boundary honestly.
+Remediation direction: retained for audit history; the current workspace chose
+the honest recoverable-`bytea` model and aligns the reviewed code/docs to it.
 
 ### F-1245. Customer webhook URLs create an outbound SSRF primitive because validation enforces only `https://` and the worker follows default redirects
 
