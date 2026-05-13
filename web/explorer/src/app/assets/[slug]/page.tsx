@@ -12,7 +12,9 @@ import { AssetAbout } from './AssetAbout';
 import { AssetConverter } from './AssetConverter';
 import { ChartPanel } from './ChartPanel';
 import { PriceSparklines } from './PriceSparklines';
-import { IssuerPanel } from './IssuerPanel';
+// IssuerPanel intentionally NOT imported here — issuer info is
+// Stellar-network-specific and lives on /assets/{slug}/stellar
+// per the assets-redesign spec (R-018 phase 2).
 import { LiquidityTabPanel } from './LiquidityTabPanel';
 import { MarketsTabPanel } from './MarketsTabPanel';
 import { HistoryTabPanel } from './HistoryTabPanel';
@@ -739,13 +741,14 @@ export default async function AssetDetailPage({ params }: { params: Params }) {
       {globalView && globalView.networks.length > 0 && (
         <NetworksPanel
           ticker={globalView.ticker}
+          slug={globalView.slug}
           networks={globalView.networks}
           source={asExample(`/v1/assets/${globalView.slug}`)}
         />
       )}
 
       <Suspense fallback={null}>
-        <AssetTabs slug={coin.slug} hasIssuer={!!coin.issuer} />
+        <AssetTabs slug={coin.slug} hasIssuer={false} />
       </Suspense>
 
       <Suspense fallback={null}>
@@ -757,9 +760,10 @@ export default async function AssetDetailPage({ params }: { params: Params }) {
           markets={<MarketsTabPanel assetID={coin.asset_id} />}
           history={<HistoryTabPanel assetID={coin.asset_id} />}
           supply={<SupplyTabPanel assetID={coin.asset_id} />}
-          issuer={
-            coin.issuer ? <IssuerPanel gStrkey={coin.issuer} /> : undefined
-          }
+          // Issuer panel removed per R-018 phase 2 — Stellar-
+          // specific issuer info now lives on /assets/{slug}/stellar.
+          // The NetworksPanel above links into the per-network deep
+          // dive when the catalogue has a Stellar entry.
           liquidity={
             <LiquidityTabPanel assetID={coin.asset_id} code={coin.code} />
           }
@@ -1391,6 +1395,7 @@ function VerifiedCurrencyView({
       </header>
       <NetworksPanel
         ticker={view.ticker}
+        slug={view.slug}
         networks={view.networks ?? []}
         source={asExample(`/v1/assets/${view.slug}`)}
       />

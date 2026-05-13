@@ -43,10 +43,16 @@ export interface NetworkEntry {
  */
 export function NetworksPanel({
   ticker,
+  slug,
   networks,
   source,
 }: {
   ticker: string;
+  /**
+   * Catalogue slug (e.g. "usdc"). Used to build the per-network
+   * deep-dive route at /assets/{slug}/{network}.
+   */
+  slug: string;
   networks: NetworkEntry[];
   source: RequestExample;
 }) {
@@ -72,8 +78,18 @@ export function NetworksPanel({
               key={n.network}
               className="border-t border-slate-200 dark:border-slate-800"
             >
-              <td className="py-2 align-top font-medium capitalize">
-                {n.network}
+              <td className="py-2 align-top">
+                {/* Link to the per-network deep-dive route per
+                    R-018 phase 2 — `/assets/{slug}/{network}`. The
+                    deep dive holds the issuer info (Stellar) /
+                    contract metadata (non-Stellar) that used to
+                    live inline on /assets/{slug}. */}
+                <Link
+                  href={`/assets/${slug}/${n.network}`}
+                  className="font-medium capitalize text-brand-600 hover:underline"
+                >
+                  {n.network}
+                </Link>
               </td>
               <td className="py-2 align-top">
                 <DataQualityBadge quality={n.data_quality} />
