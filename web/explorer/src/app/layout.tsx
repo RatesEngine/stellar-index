@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import './globals.css';
 import { Navbar } from '@/components/nav/Navbar';
+import { DegradedBanner } from '@/components/nav/DegradedBanner';
 import { Footer } from '@/components/nav/Footer';
 import { QueryProvider } from '@/components/QueryProvider';
 
@@ -174,6 +175,7 @@ export default function RootLayout({
       <body className="flex min-h-screen flex-col">
         <QueryProvider>
           <Navbar />
+          <DegradedBanner />
           <main className="flex-1">{children}</main>
           <Footer />
         </QueryProvider>

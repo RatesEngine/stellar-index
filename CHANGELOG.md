@@ -17,6 +17,37 @@ against.
 
 ### Fixed
 
+- **Live-site QA pass — F-01/F-03/F-04 resolved, F-02 partial.**
+  Working through `docs/review-2026-05-13-live-site-qa.md`:
+
+    - **F-01** (degraded state invisible in explorer): new
+      `DegradedBanner` component polls `/v1/status` every 60s and
+      renders a fixed band between Navbar and content when
+      overall ≠ "ok". Tone (amber/red) keys off `pageCount > 0`.
+      Includes top alert name + link to status page. Quiet when
+      everything's fine; noisy enough to set expectations when
+      it isn't.
+    - **F-02** (pools 503 silently rendered as "No pools matched"):
+      DexesView now branches on `q.isError` and surfaces an
+      explicit error card with retry + link to status. Empty-
+      state path is gated behind `!q.isError`. Backend perf
+      (the underlying 7s cold-cache p99) tracked alongside the
+      `api_cache_miss_rate_high` workstream.
+    - **F-03** (CORS credentials mismatch): explorer's `useMe()`
+      no longer sends `credentials: include` against an API that
+      explicitly refuses credentialed CORS. Cost: signed-in
+      users see signed-out CTAs in the explorer navbar
+      (dashboard.ratesengine.net is unaffected — same-origin).
+      Inline comment documents the cross-origin cookie work
+      needed to re-enable session detection (Domain=
+      .ratesengine.net + ACA-Credentials + SameSite=None).
+    - **F-04** (`deep_link` API path leaked to next/link):
+      `NetworksPanel` no longer feeds API `deep_link` values
+      (e.g. `/v1/assets/USDC-GA5Z…`) into `<Link>`. Stellar
+      rows now build the explorer route explicitly
+      (`/assets/{slug}/stellar`); the API deep_link stays in
+      the JSON for programmatic consumers.
+
 - **Incident triage sweep — 9 active alerts → root-cause +
   preventatives.** Worked through every alert firing on r1 today
   and either resolved the root cause, codified prevention in

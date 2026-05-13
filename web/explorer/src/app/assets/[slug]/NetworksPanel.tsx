@@ -95,7 +95,7 @@ export function NetworksPanel({
                 <DataQualityBadge quality={n.data_quality} />
               </td>
               <td className="py-2 align-top">
-                {renderAddress(n)}
+                {renderAddress(n, slug)}
               </td>
             </tr>
           ))}
@@ -120,26 +120,35 @@ function DataQualityBadge({ quality }: { quality: NetworkEntry['data_quality'] }
   );
 }
 
-function renderAddress(n: NetworkEntry) {
-  // Stellar — deep_link points at the per-Stellar-asset view.
+function renderAddress(n: NetworkEntry, slug: string) {
+  // Stellar — link to the explorer's per-network deep-dive route
+  // (`/assets/{slug}/stellar`). Pre-2026-05-13 we plumbed the API's
+  // `deep_link` value (`/v1/assets/USDC-GA5Z…`) straight into
+  // <Link>; Next.js then tried to prefetch that API path as if it
+  // were an explorer route, producing console noise + preflight
+  // failures (QA finding F-04 in
+  // docs/review-2026-05-13-live-site-qa.md). The API deep link
+  // remains in the JSON for programmatic consumers; the UI
+  // builds the explorer route explicitly so site routing and API
+  // routing stay separate.
   if (n.network === 'stellar') {
     if (n.asset_id === 'native') {
       return (
         <Link
-          href={n.deep_link ?? '/assets/native'}
+          href={`/assets/${slug}/stellar`}
           className="text-brand-600 hover:underline"
         >
           native (XLM)
         </Link>
       );
     }
-    if (n.asset_id && n.deep_link) {
+    if (n.asset_id) {
       const display = n.code && n.issuer
         ? `${n.code} · ${n.issuer.slice(0, 6)}…${n.issuer.slice(-4)}`
         : n.asset_id;
       return (
         <Link
-          href={n.deep_link}
+          href={`/assets/${slug}/stellar`}
           className="font-mono text-xs text-brand-600 hover:underline"
           title={n.asset_id}
         >

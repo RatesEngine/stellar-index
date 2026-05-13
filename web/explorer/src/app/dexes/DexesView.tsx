@@ -203,7 +203,41 @@ export function DexesView() {
                   </td>
                 </tr>
               )}
-              {!q.isLoading && pools.length === 0 && (
+              {/* Distinguish "API failed" from "API returned 0 rows".
+                  Pre-2026-05-13 a 503 from /v1/pools (the trades-
+                  hypertable scan timed out) silently rendered as
+                  "No pools matched." — QA finding F-02 in
+                  docs/review-2026-05-13-live-site-qa.md. */}
+              {!q.isLoading && q.isError && (
+                <tr>
+                  <td colSpan={8} className="px-4 py-8 text-center text-sm">
+                    <div className="text-bad-700">
+                      Couldn&apos;t load pools right now.
+                    </div>
+                    <div className="mt-1 text-xs text-slate-500">
+                      The pools query is timing out (likely a hot
+                      trades-hypertable scan). Retry or check{' '}
+                      <a
+                        href="https://status.ratesengine.net"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="underline-offset-2 hover:underline"
+                      >
+                        status.ratesengine.net
+                      </a>
+                      .
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => q.refetch()}
+                      className="mt-2 rounded-md border border-bad-500/40 px-3 py-1 text-xs text-bad-700 hover:bg-bad-50 dark:hover:bg-bad-900/20"
+                    >
+                      Retry
+                    </button>
+                  </td>
+                </tr>
+              )}
+              {!q.isLoading && !q.isError && pools.length === 0 && (
                 <tr>
                   <td colSpan={8} className="px-4 py-8 text-center text-sm text-slate-500">
                     No pools matched.

@@ -155,15 +155,44 @@ export type MeResponse = {
   tier?: string;
 };
 
-// useMe — null when signed-out (401), MeResponse when authed.
-// Kept short: cookie sessions are stable across requests.
+// useMe — null on the public explorer; MeResponse only when the
+// page is loaded with the dashboard cookie already in scope (e.g.
+// dashboard.ratesengine.net which is same-origin with its own
+// /v1/account/me).
+//
+// On the public explorer at ratesengine.net we deliberately DO
+// NOT send `credentials: include`: the API's CORS middleware
+// (internal/api/v1/middleware/cors.go) explicitly does not emit
+// `Access-Control-Allow-Credentials: true`, and pre-2026-05-13
+// the explorer was sending credentialed cross-origin requests
+// against an API that refused them — every page load logged a
+// CORS error in the browser console (QA finding F-03 in
+// docs/review-2026-05-13-live-site-qa.md).
+//
+// Result: signed-in users on the explorer see the signed-out
+// "Sign in / Create account" CTAs in the navbar even when their
+// dashboard session is alive. That's the cost of avoiding the
+// cross-origin cookie architecture for now. Reinstating cross-
+// origin session detection is a separate workstream that has
+// to land:
+//   1. Cookie set by /v1/auth/callback with `Domain=.ratesengine.net`
+//      so it's visible to the explorer's apex.
+//   2. CORS middleware updated to emit
+//      `Access-Control-Allow-Credentials: true` for the explorer
+//      origin allow-list.
+//   3. SameSite=None+Secure on the cookie so Safari / Chrome
+//      include it on cross-origin requests.
 export function useMe() {
   return useQuery<MeResponse | null>({
-    queryKey: ['/v1/account/me', 'cookie'],
+    queryKey: ['/v1/account/me', 'no-credentials'],
     queryFn: async () => {
       const url = `${API_BASE_URL_FOR_ME}/v1/account/me`;
       const res = await fetch(url, {
-        credentials: 'include',
+        // Intentionally NO `credentials: include` — see comment
+        // above. Without it the request is non-credentialed and
+        // the API's plain Allow-Origin header satisfies CORS;
+        // the response is always 401 (no cookie sent) so this
+        // hook returns null, and the navbar renders signed-out.
         headers: { Accept: 'application/json' },
       });
       if (res.status === 401) return null;
