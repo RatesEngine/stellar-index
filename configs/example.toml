@@ -55,6 +55,16 @@ postgres_dsn       = "postgres://ratesengine@127.0.0.1:5432/ratesengine?sslmode=
 
 redis_addr         = "127.0.0.1:6379"
 # redis_password_env = "RATESENGINE_REDIS_PASSWORD"   # uncomment + set env
+#
+# redis_username (F-1213, codex audit-2026-05-12). Empty (default)
+# AUTHs as Redis's legacy 'default' user. Set to 'ratesengine' (or
+# the operator's per-component user) when `redis_acl_lockdown` is
+# enabled in the ansible role — without a username the broker-side
+# ACL rejects the connection, so the two settings must be flipped
+# together. The Ansible template at
+# `configs/ansible/roles/archival-node/templates/ratesengine.toml.j2`
+# already renders this when the lockdown variable is set.
+# redis_username     = "ratesengine"
 
 # Production: enable Sentinel mode per ADR-0024. When
 # redis_sentinel_addrs is non-empty the binary uses
@@ -251,6 +261,24 @@ cdn_enabled              = true
 allowed_origins          = ["*"]
 trusted_proxy_cidrs      = []                  # empty = ignore X-Forwarded-For; set to immediate proxy CIDRs (for example ["10.0.0.0/8"])
 
+# signup_require_email_verification (F-1218, codex audit-2026-05-13).
+# Default false — preserves the pre-F-1218 wire contract where
+# /v1/signup-minted API keys can authenticate immediately without
+# proving they own the supplied email address. When true, those
+# keys are 403'd by `middleware.RequireEmailVerified` until the
+# verification link emailed at signup is clicked.
+#
+# Flip to true after a rollout window where existing customers
+# have had time to click their verification email. New deployments
+# that never had a pre-flag-flip customer base can default true
+# from day one.
+#
+# Independent of `auth_mode` (the gate runs against API-key
+# Subjects regardless of whether other auth modes are enabled
+# alongside) — but only meaningful when /v1/signup is reachable
+# (i.e. when sep10/apikey is the auth mode and signup is wired).
+# signup_require_email_verification = false
+
 # Closed-bucket SSE fanout — pairs the API binary republishes to
 # the streaming Hub on every new closed prices_1m bucket. Empty
 # `pairs` leaves the producer disabled (subscribers connect and
@@ -369,6 +397,23 @@ enabled  = false
 # aggregator_refresh_cadence = "5m"
 # [supply.sac_wrappers]
 # "C…SAC-CONTRACT" = "USDC:GA…"
+#
+# strict_freshness_required (F-1236, codex audit-2026-05-13).
+# Default false — preserves the legacy permissive interpretation
+# of `MinComponentLedger == 0` ("no freshness signal — let it
+# through"). Snapshots arriving without a freshness anchor
+# (typically the static-XLM fallback path or a transiently-
+# failing freshness producer) are still published and the
+# resulting market-cap / circulating-supply rows will be stamped
+# at the freshest cursor ledger even when they're not
+# anchored to a real component observation.
+#
+# Flip to true once every freshness producer is wired AND every
+# reader is shown to never fail-open under steady-state load —
+# typically post-launch, after a few weeks of green snapshot
+# timers. When true, freshness-less snapshots are rejected with
+# `OutcomeKindMissingFreshness` instead of published.
+# strict_freshness_required = false
 
 # ──────────────────────────────────────────────────────────────────
 # Trades — trade-insert policy. Per launch-readiness L2.2 phase 1,

@@ -15,6 +15,20 @@ against.
 
 ## [Unreleased]
 
+### Documentation
+
+- `configs/example.toml` now documents three audit-driven config
+  flags that previously existed only in `internal/config` struct
+  tags: `[storage].redis_username` (F-1213, the named ACL user
+  required when `redis_acl_lockdown` is enabled in the ansible
+  role), `[api].signup_require_email_verification` (F-1218, opts
+  the deployment into the verified-email gate after the rollout
+  window), and `[supply].strict_freshness_required` (F-1236,
+  rejects supply snapshots without a `MinComponentLedger` anchor).
+  Each entry explains the default + when to flip it. Operators
+  reading the example config no longer have to grep `internal/`
+  to discover the audit's policy levers.
+
 ### Added
 
 - `verify-launch-ready` gains a `-skip-ids` flag that ignores
