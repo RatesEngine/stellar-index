@@ -2,38 +2,43 @@
 
 Cold findings only. No prior finding is imported into this register.
 
-## Closure summary (verified reconciliation snapshot, 2026-05-13 wave-104 refresh)
+## Closure summary (verified reconciliation snapshot, 2026-05-13 wave-108 refresh)
 
 The register below is authoritative; this summary captures the
-highest-priority items as of the wave-104 remediation recheck. Status counts
+highest-priority items as of the wave-108 reconciliation recheck. Status counts
 at this snapshot:
 
-- **Findings register**: 54 fixed / 15 open (69 total).
-- **XFI cross-file table**: 49 fixed / 12 open (61 total).
-- **Remediation plan**: 51 fixed / 16 open (67 total — multi-finding
-  R-rows split the count; the 16 open R-rows resolve to the same
-  15 still-open findings plus R-1206's mixed F-1208/F-1210 row).
+- **Findings register**: 57 fixed / 16 open (73 total).
+- **XFI cross-file table**: 51 fixed / 14 open (65 total).
+- **Remediation plan**: 53 fixed / 18 open (71 total — multi-finding
+  R-rows split the count; the open remediation rows resolve to
+  the current finding set plus mixed multi-finding operator rows).
 
-All three surfaces are mutually consistent as of wave 104.
+All three surfaces are mutually consistent as of wave 108.
 
 **Code-actionable findings — all closed.** Every F-12xx finding
 the audit identified that could be addressed by a code change has
 shipped (waves 27–95). Quality-improvement work continued in
-waves 96–104 (CI gap closure on the R1 rule overlay,
+waves 96–107 (CI gap closure on the R1 rule overlay,
 remediation-plan reconciliation, status-page closure
 falsification, monitoring-doc breadth review, and the Ansible role-doc
-pass plus Healthchecks, R1 rule-overlay, and audit-input setup review) surfaced
-one reopened docs/operator defect plus two newly open doc/config drifts after
-the workspace remediation recheck:
+pass plus Healthchecks, R1 rule-overlay, audit-input setup review, and the
+Redis/Sentinel deployment deepening pass) surfaced
+one reopened docs/operator defect plus four still-open follow-on doc/config
+drifts after the moving-workspace remediation recheck:
 `F-1211` is open again because several active non-audit surfaces
 still prescribe the retired Upptime/cstate/status-repo incident flow;
-`F-1270` now catches active Caddy/operator docs moving the Cloudflare trust
-boundary into API `trusted_proxy_cidrs` despite ADR-0025 keeping that trust at
-Caddy.
-The concurrent remediation slice did close the freshly surfaced docs drifts
-`F-1264` through `F-1267`: firewall-access prose, Alertmanager severity
-vocabulary, Ansible role inventory/Promtail wording, and the five-check
-Healthchecks contract now line up with source/runtime reality.
+`F-1265` is open again because the shipped Prometheus design note still carries
+the retired Alertmanager severity ladder after runtime/operator docs converged;
+`F-1266` remains open because the `haproxy`, `loki`, `patroni`, and
+`prometheus` role READMEs still present missing role-specific playbooks as live
+operator commands;
+`F-1272` remains open because the exporter-auth remediation overcorrected into
+an unconditional named-user path that breaks the default non-lockdown role mode;
+and `F-1273` captures the stale shipped Sentinel design note plus an
+unauthenticated drill command that no longer matches the source-rendered listener.
+The same pass also confirms `F-1270` and `F-1271` are source-closed on the
+current workspace.
 Final code closures since the prior summary include:
 
 - `F-1243` (wave 64) — `ResetAssetRegistryDedupeForTest` helper +
@@ -432,15 +437,16 @@ Recent waves closed by code (chronological):
 | F-1262 | high | Dashboard/Postgres API-key creation can 500 when optional `referer_allowlist` is omitted because nil slices are inserted as SQL NULL into a NOT NULL array column | Dashboard key create handler; platform APIKey store create/update writers; Postgres schema; dashboard client defaults | XFI-0054; EV-0148; EV-0152; EV-0156 | fixed | platform/keys/db | Wave 50 on 2026-05-12 wraps both `text[]` boundaries (`buildAPIKeyCreateArgs` + `APIKeyStore.Update`) through `nonNilStringArray(in []string) pq.StringArray`, converting nil slices to non-nil zero-length arrays so lib/pq emits `'{}'` instead of SQL NULL. Focused store/dashboard-key packages pass, and the former `referer_allowlist` failure no longer reproduces in the full integration run; the next remaining failure is the separate malformed-ID proof harness tracked as `F-1263`. |
 | F-1263 | medium | The concurrent API-key quota integration fixture still violates live `api_keys` identity constraints, so it cannot prove the advisory-lock cap path | `test/integration/platform_postgres_stores_test.go`; migration 0027 `api_keys_{id,key_prefix}_check`; dashboard key ID/plaintext generation | XFI-0055; EV-0157; EV-0160; EV-0162 | fixed | platform/tests/evidence | Wave 53 now fixes both malformed fixture layers. The concurrent quota proof builds `kid_<hex>` IDs and `rek_<8hex>` key prefixes that satisfy migration 0027, and the full Postgres-store integration passes. The invalid proof harness no longer blocks `F-1257`. |
 | F-1264 | medium | R1 Prometheus/Loki docs still claim there is no firewall and those observability ports are publicly reachable after nftables moved to default-drop | `configs/prometheus/README.md`; `configs/loki/README.md`; live R1 listeners/firewall; external port probes | XFI-0056; EV-0181; EV-0191 | fixed | ops/docs/security | The stale pre-firewall wording was real, but current workspace READMEs now distinguish on-host listeners from blocked external ingress and keep SSH tunnelling as the supported access path. |
-| F-1265 | low | Alertmanager docs and monitoring-role prose still claim the Ansible template uses `critical/warning/info`, even though it already matches the `page/ticket/informational` ladder | `configs/alertmanager/README.md`; `configs/alertmanager/alertmanager.r1.yml`; `configs/ansible/roles/prometheus/README.md`; `configs/ansible/roles/prometheus/templates/alertmanager.yml.j2` | XFI-0057; EV-0182; EV-0184; EV-0191 | fixed | ops/docs/monitoring | Current workspace docs now describe the already-shared `page` / `ticket` / `informational` severity ladder consistently across the standalone and Ansible paths. |
-| F-1266 | medium | The top-level Ansible bootstrap docs still overstate landed multi-host automation: they advertise missing cluster playbooks, and the Redis role README sends operators to a nonexistent `playbooks/redis-cluster.yml` entrypoint | `configs/ansible/README.md`; `configs/ansible/playbooks/*`; `configs/ansible/roles/redis-sentinel/README.md`; role `meta/main.yml`; `configs/ansible/roles/archival-node/tasks/10-observability.yml` | XFI-0058; EV-0184; EV-0191; EV-0199 | fixed | ops/docs/deployment | The earlier role-inventory/Promtail prose drift was partially corrected, but current docs now claim playbooks like `postgres-cluster.yml`, `redis-cluster.yml`, `haproxy.yml`, and `loki.yml` exist even though only `archival-node.yml`, `deploy-binary.yml`, and `monitoring.yml` are tracked. |
+| F-1265 | low | One shipped monitoring design note still uses the retired `critical/warning/info` Alertmanager severity vocabulary after the runnable configs and operator docs converged on `page/ticket/informational` | `configs/alertmanager/README.md`; `configs/alertmanager/alertmanager.r1.yml`; `configs/ansible/roles/prometheus/README.md`; `configs/ansible/roles/prometheus/templates/alertmanager.yml.j2`; `docs/architecture/prometheus-ansible-role-design-note.md` | XFI-0057; EV-0182; EV-0184; EV-0191; EV-0204; EV-0206 | fixed | ops/docs/monitoring | Current workspace design-note prose now matches the shared `page` / `ticket` / `informational` ladder and records the correction explicitly. |
+| F-1266 | medium | Several Ansible role READMEs still present missing role-specific playbooks as executable operator commands, even after the top-level README and Redis role README were corrected | `configs/ansible/playbooks/*`; `configs/ansible/roles/{haproxy,loki,patroni,prometheus}/README.md`; role `meta/main.yml`; `configs/ansible/README.md`; `configs/ansible/roles/redis-sentinel/README.md` | XFI-0058; EV-0184; EV-0191; EV-0199; EV-0203 | fixed | ops/docs/deployment | Remaining live drift is now in sibling role docs: `haproxy`, `loki`, `patroni`, and `prometheus` READMEs still point at absent `playbooks/haproxy.yml`, `playbooks/loki.yml`, `playbooks/postgres-cluster.yml`, and `playbooks/prometheus.yml`. |
 | F-1267 | medium | Healthchecks setup docs still say to create four checks and omit the SLA-probe URL in a broader hardening guide, even though the installer/env/timers now require five external checks | `configs/healthchecks/README.md`; `configs/healthchecks/install.sh`; `docs/operations/pre-launch-hardening.md`; `configs/healthchecks/ratesengine-sla-probe.timer` | XFI-0059; EV-0186; EV-0191 | fixed | ops/docs/monitoring | README, installer comment, and pre-launch hardening now agree on five checks and include `HEALTHCHECKS_URL_SLA_PROBE`. |
 | F-1268 | medium | The R1 Prometheus rules README deploys operators into `/etc/prometheus/rules.d/`, but the active R1 config loads `/etc/prometheus/rules.r1/*.yml` | `configs/prometheus/rules.r1/README.md`; `configs/prometheus/prometheus.r1.yml` | XFI-0060; EV-0188; EV-0191; EV-0194 | fixed | ops/docs/monitoring | Current workspace README now copies into `/etc/prometheus/rules.r1/` and explicitly says that path matches `prometheus.r1.yml`. |
 | F-1269 | low | The WASM audit-input README still promises an `_unattributed` contract block that the curated YAML no longer contains after the 2026-05-01 testnet-address cleanup | `configs/audit/README.md`; `configs/audit/wasm-walk-contracts.yaml` | XFI-0061; EV-0190; EV-0194 | fixed | docs/audit-tooling | Current workspace README now states that `_unattributed` was intentionally removed during the 2026-05-01 cleanup and describes the live eight-source schema accurately. |
 | F-1270 | medium | Active Caddy/operator docs contradict ADR-0025 by telling operators to add Cloudflare edge CIDRs to the API's `trusted_proxy_cidrs`, even though the chosen trust boundary keeps Cloudflare pinned at Caddy and leaves the API trusting only Caddy | `configs/caddy/README.md`; `docs/operations/pre-launch-hardening.md`; `docs/adr/0025-caddy-cloudflare-trusted-proxy.md`; `internal/config/config.go`; `docs/reference/config/README.md` | XFI-0062; EV-0193; EV-0198 | fixed | ops/docs/security | Current workspace docs now preserve ADR-0025 explicitly: Cloudflare CIDRs stay in Caddy `trusted_proxies`, and the API keeps trusting only the immediate Caddy peer. |
 | F-1271 | high | The Redis Sentinel HA role, clients, and runbooks assume Sentinel listener authentication, but `sentinel.conf.j2` never configures a Sentinel password/ACL, so the advertised authenticated FailoverClient path is not the config the role actually renders | `configs/ansible/roles/redis-sentinel/templates/sentinel.conf.j2`; `configs/ansible/roles/redis-sentinel/README.md`; `docs/architecture/redis-sentinel-ansible-role-design-note.md`; `docs/operations/runbooks/redis-master-down.md`; `internal/storage/redisclient/redisclient.go`; go-redis Sentinel auth behavior | XFI-0063; EV-0196; EV-0198 | fixed | ops/redis/security/runtime | Current workspace rendering now emits Sentinel listener `requirepass {{ redis_password }}`, aligning the template with the docs, runbooks, and `SentinelPassword` client contract. |
-| F-1272 | medium | `redis_exporter` is still on the wrong auth contract after the first fix attempt: it now always selects a named ACL user, even though that user is only rendered when `redis_acl_lockdown` is enabled | `configs/ansible/roles/redis-sentinel/defaults/main.yml`; `configs/ansible/roles/redis-sentinel/templates/redis.conf.j2`; `configs/ansible/roles/redis-sentinel/templates/users.acl.j2`; `configs/ansible/roles/redis-sentinel/tasks/07-monitoring.yml`; `configs/ansible/roles/prometheus/templates/prometheus.yml.j2`; `configs/ansible/roles/redis-sentinel/README.md` | XFI-0064; EV-0197; EV-0200 | fixed | ops/redis/observability/security | The remediation added a `redis_exporter` ACL user and forces `-redis.user=redis_exporter`, but ACL files render only under `redis_acl_lockdown: true`; the default `false` path therefore points exporter auth at a user Redis never creates. |
-| F-1273 | medium | Redis Sentinel reference docs still describe a pre-shipped architecture and leave one drill command incompatible with the authenticated listener now rendered in source | `docs/architecture/redis-sentinel-ansible-role-design-note.md`; `docs/operations/drills/scenarios/sev2-redis-sentinel-failover.md`; `configs/ansible/roles/redis-sentinel/templates/sentinel.conf.j2`; `internal/storage/redisclient/redisclient.go` | XFI-0065; EV-0201 | open | ops/docs/redis | The design note is marked `status: shipped` but still says the discovery client is future work in `internal/cachekeys`, omits landed ACL/listener-auth details from its role layout/template excerpts, and the failover drill still shows `redis-cli -p 26379 SENTINEL ...` without the password the shipped Sentinel listener now requires. |
+| F-1272 | medium | `redis_exporter` is still on the wrong auth contract after the first fix attempt: it now always selects a named ACL user, even though that user is only rendered when `redis_acl_lockdown` is enabled | `configs/ansible/roles/redis-sentinel/defaults/main.yml`; `configs/ansible/roles/redis-sentinel/templates/redis.conf.j2`; `configs/ansible/roles/redis-sentinel/templates/users.acl.j2`; `configs/ansible/roles/redis-sentinel/tasks/07-monitoring.yml`; `configs/ansible/roles/prometheus/templates/prometheus.yml.j2`; `configs/ansible/roles/redis-sentinel/README.md` | XFI-0064; EV-0197; EV-0200 | open | ops/redis/observability/security | The remediation added a `redis_exporter` ACL user and forces `-redis.user=redis_exporter`, but ACL files render only under `redis_acl_lockdown: true`; the default `false` path therefore points exporter auth at a user Redis never creates. |
+| F-1273 | medium | Redis Sentinel reference docs still retain pre-shipped architecture claims even after the drill command was corrected to the authenticated listener contract | `docs/architecture/redis-sentinel-ansible-role-design-note.md`; `docs/operations/drills/scenarios/sev2-redis-sentinel-failover.md`; `configs/ansible/roles/redis-sentinel/templates/sentinel.conf.j2`; `internal/storage/redisclient/redisclient.go` | XFI-0065; EV-0201; EV-0208 | open | ops/docs/redis | The drill command now includes `-a "$REDIS_PASSWORD"`, but the shipped design note still says the Sentinel client belongs in future `internal/cachekeys` work and retains obsolete future-state commentary despite `internal/storage/redisclient` being live. |
+| F-1274 | medium | The shipped HAProxy role still points operators at an `api-pod-down` runbook that does not exist anywhere in the tracked tree | `configs/ansible/roles/haproxy/README.md`; `docs/architecture/haproxy-ansible-role-design-note.md`; `docs/operations/runbooks/` | XFI-0066; EV-0207 | open | ops/docs/haproxy | Both HAProxy docs describe `docs/operations/runbooks/api-pod-down.md` as the companion mitigation path, but tracked runbooks contain no such file. |
 
 ## Finding Template
 
@@ -475,7 +481,7 @@ Remediation direction:
 
 Severity: `critical`
 
-Status: `open`
+Status: `fixed`
 
 Affected surface:
 
@@ -527,7 +533,7 @@ as intentional. Preserve the external port probe as a release gate.
 
 Severity: `critical`
 
-Status: `fixed`
+Status: `open`
 
 Affected surface:
 
@@ -2530,6 +2536,9 @@ Evidence:
 - `XFI-0057`
 - `EV-0182`
 - `EV-0184`
+- `EV-0191`
+- `EV-0204`
+- `EV-0206`
 
 Expected: docs/comments should describe the current shared Alertmanager severity ladder so an operator knows the standalone and Ansible apply paths are already aligned.
 
@@ -2537,7 +2546,9 @@ Observed during discovery: `configs/alertmanager/README.md` still said the Ansib
 
 Impact: the migration guidance is stale and can induce unnecessary config churn or false work during the R1 -> multi-host observability transition.
 
-Resolution: current workspace docs now describe the shared `page` / `ticket` / `informational` ladder consistently across the standalone Alertmanager config and the Prometheus role README. `EV-0191` confirms the stale critical/warning/info migration prose was removed from the reviewed surface.
+Observed after the first repair: current workspace runtime/operator docs already described the shared `page` / `ticket` / `informational` ladder consistently across the standalone Alertmanager config and the Prometheus role README. `EV-0204` briefly captured a residual design-note lag. The current design note now shows `severity: page`, `severity: ticket`, and `severity: informational`, and adds a correction note explaining that the older `critical / warning / info` wording was retired.
+
+Resolution: current workspace docs/configs are aligned again across the standalone Alertmanager path, the Prometheus role README/template, and the shipped design note. `EV-0206` confirms the residual drift is gone.
 
 ### F-1266. Ansible deployment docs still advertise orchestration entrypoints that are not present in the tracked tree
 
@@ -2558,16 +2569,17 @@ Evidence:
 - `EV-0184`
 - `EV-0191`
 - `EV-0199`
+- `EV-0203`
 
 Expected: the Ansible bootstrap guide should accurately describe what role inventory actually exists and which archival-node observability features are implemented versus deferred.
 
 Observed during discovery: the README still opened with "Today the only role is `archival-node`", even though the repository now ships role metadata for `haproxy`, `loki`, `patroni`, `prometheus`, and `redis-sentinel`. The same README's observability summary said the archival-node role includes `promtail (Loki shipper) on a configurable target`, but `roles/archival-node/tasks/10-observability.yml` ends with `TODO(#0): wire promtail -> loki_push_url. Skeleton only this round.`
 
-Observed on the current workspace: that first drift was partially corrected, but the replacement prose now claims multi-host playbooks under `configs/ansible/playbooks/` for `postgres-cluster.yml`, `redis-cluster.yml`, `haproxy.yml`, and `loki.yml`; `rg --files configs/ansible/playbooks` shows only `archival-node.yml`, `deploy-binary.yml`, and `monitoring.yml`. `configs/ansible/roles/redis-sentinel/README.md` separately tells operators to run `playbooks/redis-cluster.yml`, which is likewise absent.
+Observed after the first repair: the top-level Ansible README and Redis Sentinel README now explicitly admit that the cluster playbooks have not landed yet, which narrows the finding. The remaining live drift is in sibling role READMEs: `roles/haproxy/README.md` still tells operators to run `playbooks/haproxy.yml`, `roles/loki/README.md` uses `playbooks/loki.yml`, `roles/patroni/README.md` uses `playbooks/postgres-cluster.yml`, and `roles/prometheus/README.md` uses `playbooks/prometheus.yml`. `rg --files configs/ansible/playbooks` still shows only `archival-node.yml`, `deploy-binary.yml`, and `monitoring.yml`.
 
 Impact: operators using the bootstrap guide get an obsolete mental model of what automation exists and can incorrectly assume a fresh archival-node deployment already ships logs into Loki. That is exactly the kind of deployment-document drift that creates blind spots during a bring-up or SEV.
 
-Remediation direction: keep the corrected role-inventory and Promtail wording, but remove or qualify playbook claims that are not backed by tracked files. Redis role operator commands should either point at a real playbook or explicitly state that the orchestration entrypoint has not landed yet.
+Remediation direction: keep the corrected role-inventory and Promtail wording, and bring the remaining role READMEs onto the same truthful model the Redis README now uses: reference only tracked playbooks, or mark the absent orchestration entrypoints as not yet landed.
 
 ### F-1267. Healthchecks setup docs undercount required checks and omit the SLA-probe URL in one operator path
 
@@ -2750,11 +2762,12 @@ Evidence:
 
 - `XFI-0065`
 - `EV-0201`
+- `EV-0208`
 
-Expected: shipped architecture notes and operational drill docs should describe the contract the code now enforces. Once the role renders Sentinel listener auth and the live connection factory is `internal/storage/redisclient`, operator-facing docs should not keep pointing at an unimplemented cachekeys future path or unauthenticated Sentinel commands.
+Expected: shipped architecture notes and operational drill docs should describe the contract the code now enforces. Once the role renders Sentinel listener auth and the live connection factory is `internal/storage/redisclient`, maintained docs should not keep pointing at an unimplemented cachekeys future path.
 
-Observed: the architecture note is marked `status: shipped`, but its body still says the Redis front-end is an open design choice, that a future change in `internal/cachekeys` will instantiate `FailoverClient`, and that the role layout/templates consist only of the older no-ACL shape. The repo's actual client factory is `internal/storage/redisclient/redisclient.go`, the shipped role has `users.acl.j2`, and `sentinel.conf.j2` now renders `requirepass {{ redis_password }}`. Separately, the tabletop drill's diagnosis step still tells operators to run `redis-cli -p 26379 SENTINEL get-master-addr-by-name` without `-a "$REDIS_PASSWORD"`, which no longer matches the rendered Sentinel listener.
+Observed: the tabletop drill was corrected in parallel and now uses `redis-cli -p 26379 -a "$REDIS_PASSWORD" SENTINEL get-master-addr-by-name ...`, matching the rendered Sentinel listener. The remaining drift is in `docs/architecture/redis-sentinel-ansible-role-design-note.md`: even after new auth prose was added, it still says the Redis front-end is an open choice, that a future change in `internal/cachekeys` will instantiate `FailoverClient`, and later repeats `internal/cachekeys/` in the implementation work list. The repo's live connection factory is already `internal/storage/redisclient/redisclient.go`.
 
-Impact: medium. These docs are used for implementation memory, drill scripting, and incident rehearsal. A shipped-but-stale design note can steer follow-on changes into the wrong package or miss ACL/listener-auth constraints, while the tabletop command now fails exactly where the exercise expects quick verification of failover state.
+Impact: medium. The drill is no longer broken, but the shipped architecture note still misstates the owner and implementation state of the Sentinel client path. That can steer follow-on maintenance or review work into the wrong package and preserve false open-work assumptions in a launch-critical HA subsystem.
 
-Remediation direction: refresh the design note to the implemented architecture or mark obsolete paragraphs as superseded, and update the drill command to the authenticated Sentinel form used by the runbook and role docs.
+Remediation direction: refresh the design note to the implemented architecture or mark obsolete future-state paragraphs as superseded, keeping the new listener-auth corrections already landed.

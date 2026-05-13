@@ -137,13 +137,13 @@ route:
   repeat_interval: 12h
   routes:
     - match:
-        severity: critical
+        severity: page
       receiver: 'pagerduty-default'
     - match:
-        severity: warning
+        severity: ticket
       receiver: 'slack-default'
     - match:
-        severity: info
+        severity: informational
       receiver: 'slack-default'
 
 receivers:
@@ -156,6 +156,12 @@ receivers:
         channel: '{{ alertmanager_slack_channel | default("#alerts") }}'
         title: '{{ '{{' }} .GroupLabels.alertname {{ '}}' }}'
 ```
+
+F-1265 (2026-05-13): the severity vocabulary above used to be
+`critical / warning / info` to match an earlier Alertmanager
+default. The runnable configs and operator docs converged on
+`page / ticket / informational` after R1 standup; this design
+note's example now matches what the templates actually render.
 
 `alertmanager_pagerduty_key` and `alertmanager_slack_webhook_url`
 are vault-supplied. When absent, the role still installs but the

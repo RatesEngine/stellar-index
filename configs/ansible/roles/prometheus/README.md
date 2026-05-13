@@ -77,10 +77,13 @@ all:
 
 ```sh
 cd configs/ansible
-ansible-playbook -i inventory/r1.yml playbooks/prometheus.yml --tags prometheus
+# F-1266 (2026-05-13): the actual entrypoint is monitoring.yml,
+# not the non-existent playbooks/prometheus.yml that earlier
+# versions of this README named.
+ansible-playbook -i inventory/r1.yml playbooks/monitoring.yml --tags prometheus
 
 # Reload after rule-file edits (no daemon restart):
-ansible-playbook -i inventory/r1.yml playbooks/prometheus.yml --tags prometheus,config
+ansible-playbook -i inventory/r1.yml playbooks/monitoring.yml --tags prometheus,config
 ```
 
 `promtool check config` validates `prometheus.yml` BEFORE reload;

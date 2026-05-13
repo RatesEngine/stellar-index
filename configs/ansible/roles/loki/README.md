@@ -63,16 +63,21 @@ both (the role applies both task surfaces).
 
 ## Running
 
+F-1266 (2026-05-13): `playbooks/loki.yml` is on the L4 cutover
+backlog and hasn't landed yet; the role is applied ad-hoc via
+tag-filtered plays today. When the playbook lands, restore the
+original commands below.
+
 ```sh
 cd configs/ansible
-# Deploy Loki server only
-ansible-playbook -i inventory/r1.yml playbooks/loki.yml --tags loki,server
+# Deploy Loki server only — playbook TBD:
+# ansible-playbook -i inventory/r1.yml playbooks/loki.yml --tags loki,server
 
-# Deploy Promtail agent only (every host in log_shippers)
-ansible-playbook -i inventory/r1.yml playbooks/loki.yml --tags loki,agent
+# Deploy Promtail agent only (every host in log_shippers) — playbook TBD:
+# ansible-playbook -i inventory/r1.yml playbooks/loki.yml --tags loki,agent
 
-# Both
-ansible-playbook -i inventory/r1.yml playbooks/loki.yml --tags loki
+# Both — playbook TBD:
+# ansible-playbook -i inventory/r1.yml playbooks/loki.yml --tags loki
 ```
 
 ## Storage backend

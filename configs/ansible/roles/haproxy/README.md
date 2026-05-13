@@ -65,13 +65,19 @@ re-elects on health-check failure regardless of original priority.
 
 ## Running
 
+F-1266 (2026-05-13): `playbooks/haproxy.yml` is on the L4
+cutover backlog and hasn't landed yet; the role is applied
+ad-hoc via tag-filtered plays today. When the playbook lands,
+restore the original commands below.
+
 ```sh
 cd configs/ansible
-ansible-playbook -i inventory/r1.yml playbooks/haproxy.yml --tags haproxy
+# Standard bring-up — playbook TBD:
+# ansible-playbook -i inventory/r1.yml playbooks/haproxy.yml --tags haproxy
 
 # Re-render config without restarting (cert rotation, backend
-# pool change):
-ansible-playbook -i inventory/r1.yml playbooks/haproxy.yml --tags haproxy,config
+# pool change) — playbook TBD:
+# ansible-playbook -i inventory/r1.yml playbooks/haproxy.yml --tags haproxy,config
 ```
 
 The `03-haproxy-configure` task validates the rendered config via

@@ -85,8 +85,12 @@ sequence.
 
 - Confirm via `/v1/readyz` that the `redis` check is now back
   to `status: ok` after a brief flap.
-- Confirm via `redis-cli -p 26379 SENTINEL get-master-addr-by-name`
-  that the new master is correctly promoted.
+- Confirm via `redis-cli -p 26379 -a "$REDIS_PASSWORD" SENTINEL get-master-addr-by-name ratesengine-r1-cache`
+  that the new master is correctly promoted. (F-1273,
+  2026-05-13: the `-a "$REDIS_PASSWORD"` is required since wave 106
+  added `requirepass` to the Sentinel listener; earlier versions
+  of this drill omitted both the password and the master-name
+  arg.)
 - Identify root cause via `cache-01` host logs + `redis-server`
   stderr — likely OOM-kill on the rogue debug session.
 - Decide whether to **fail back to cache-01** (no — let it stay

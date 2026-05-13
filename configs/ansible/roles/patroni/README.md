@@ -66,13 +66,18 @@ on subsequent runs.
 
 ## Running
 
+F-1266 (2026-05-13): `playbooks/postgres-cluster.yml` is on
+the L4 cutover backlog and hasn't landed yet; the role is
+applied ad-hoc via tag-filtered plays today. When the playbook
+lands, restore the original commands below.
+
 ```sh
 cd configs/ansible
-# Bring up a fresh cluster (first run)
-ansible-playbook -i inventory/r1.yml playbooks/postgres-cluster.yml --tags patroni
+# Bring up a fresh cluster (first run) — playbook TBD:
+# ansible-playbook -i inventory/r1.yml playbooks/postgres-cluster.yml --tags patroni
 
-# Re-apply config without restarting
-ansible-playbook -i inventory/r1.yml playbooks/postgres-cluster.yml --tags patroni,config --skip-tags restart
+# Re-apply config without restarting — playbook TBD:
+# ansible-playbook -i inventory/r1.yml playbooks/postgres-cluster.yml --tags patroni,config --skip-tags restart
 
 # Promote a specific replica (operator action — not covered by
 # this role's playbook):

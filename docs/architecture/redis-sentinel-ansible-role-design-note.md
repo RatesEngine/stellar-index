@@ -61,8 +61,8 @@ role lands so the source-of-truth stops contradicting itself.
 | Persistence | ha-plan §3.4 | AOF every-second + RDB nightly |
 | Failover RTO | ha-plan §3.4 | 15-30 s |
 | Cross-region replication | ha-plan §3.4 | Explicitly NO — cache-only, re-hydrates from Timescale |
-| Front | (open) | Recommend a small client-side discovery library (`internal/cachekeys` already abstracts the cache; teach it to consult Sentinel for the current primary) — sidesteps the need for HAProxy or VIP for Redis specifically |
-| Auth | This role decides | `requirepass` + `masterauth` set from vault; no public listener |
+| Front | **shipped** | Client-side Sentinel-aware discovery via go-redis `FailoverClient` in `internal/storage/redisclient/`. Application binaries pass `redis_sentinel_addrs` + `redis_master_name` + `redis_username` + `redis_password` and the client resolves the current primary automatically. No HAProxy or VIP required. |
+| Auth | This role decides | **shipped**. `requirepass` + `masterauth` on the Redis instance, `requirepass` on the Sentinel listener (F-1271, wave 106), optional ACL lockdown via `redis_acl_lockdown` flag with named `ratesengine` + `redis_exporter` users (F-1272, waves 106-107). Vault-supplied; no public listener. |
 
 ## Layout
 
