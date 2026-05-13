@@ -15,6 +15,15 @@ against.
 
 ## [Unreleased]
 
+### Changed
+
+- **Ansible template now bakes in `anon_rate_limit_per_min = 600`
+  / `key_rate_limit_per_min = 6000`.** Codifies the live r1 bump
+  applied 2026-05-13. The prior defaults (60 / 1000 per min) were
+  too tight for any consumer doing a static build or dashboard
+  refresh from a single IP — the explorer Cloudflare Pages build
+  was the canary.
+
 ### Fixed
 
 - **Explorer build no longer 429s on `/assets/[slug]/[network]`

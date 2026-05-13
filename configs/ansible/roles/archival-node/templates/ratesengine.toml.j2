@@ -169,6 +169,15 @@ allowed_origins = [
 ]
 auth_mode = "apikey_optional"
 
+# Per-IP rate limit, anonymous + authenticated tiers. Defaults
+# (60/min, 1000/min) were unworkable for any client doing a
+# static-export build or refreshing a multi-row dashboard from a
+# single IP — the explorer's Cloudflare Pages build was tripping
+# the 60/min anon ceiling and prerendering /assets/[slug]/[network]
+# pages as "Not found". Raised 2026-05-13.
+anon_rate_limit_per_min = 600
+key_rate_limit_per_min  = 6000
+
 # ──────────────────────────────────────────────────────────────────
 # Divergence cross-checks. These are reference-only sources — they
 # do NOT contribute to VWAP. Each tick the aggregator queries every
