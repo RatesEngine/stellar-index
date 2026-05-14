@@ -53,6 +53,15 @@ on:
         required: false
         type: string
         default: '15'
+      migrations_skip:
+        # F-1301 (rc.51 deploy): the playbook's hardcoded passwordless
+        # DSN fails auth against the live db; operators who have
+        # already applied migrations out-of-band (or who know the
+        # schema is unchanged from the prior tag) can skip the step.
+        description: 'Skip the migration sync + apply (use ONLY when migrations are already applied or schema is unchanged)'
+        required: false
+        type: boolean
+        default: false
 
 # Concurrency: at most one deploy per region in flight. Prevents two
 # operators racing each other and producing inconsistent state.
@@ -293,6 +302,7 @@ jobs:
           VERSION: ${{ inputs.version }}
           BINARIES: ${{ inputs.binaries }}
           HEALTH_GRACE: ${{ inputs.health_grace_seconds }}
+          MIGRATIONS_SKIP: ${{ inputs.migrations_skip }}
         run: |
           set -euo pipefail
           ansible-playbook \
@@ -303,6 +313,7 @@ jobs:
             -e "binaries_csv=${BINARIES}" \
             -e "local_dist_dir=$GITHUB_WORKSPACE/dist" \
             -e "health_grace_seconds=${HEALTH_GRACE}" \
+            -e "migrations_skip=${MIGRATIONS_SKIP}" \
             configs/ansible/playbooks/deploy-binary.yml
 
       - name: Summary
