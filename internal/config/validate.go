@@ -31,6 +31,7 @@ var ErrInvalidConfig = errors.New("config: invalid")
 var KnownSources = map[string]struct{}{
 	"soroswap":        {},
 	"soroswap-router": {},
+	"defindex":        {},
 	"aquarius":        {},
 	"phoenix":         {},
 	"comet":           {},

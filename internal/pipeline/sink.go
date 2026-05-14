@@ -15,6 +15,7 @@ import (
 	"github.com/RatesEngine/rates-engine/internal/sources/blend"
 	claimable_balances "github.com/RatesEngine/rates-engine/internal/sources/claimable_balances"
 	"github.com/RatesEngine/rates-engine/internal/sources/comet"
+	"github.com/RatesEngine/rates-engine/internal/sources/defindex"
 	"github.com/RatesEngine/rates-engine/internal/sources/external"
 	"github.com/RatesEngine/rates-engine/internal/sources/liquidity_pools"
 	"github.com/RatesEngine/rates-engine/internal/sources/phoenix"
@@ -156,6 +157,28 @@ func handleOneEvent(ctx context.Context, logger *slog.Logger, store *timescale.S
 			"recipient", e.Swap.Recipient,
 			"amount_in", e.Swap.AmountIn.String(),
 			"amount_out", e.Swap.AmountOut.String(),
+		)
+	case defindex.Event:
+		// Phase A: log-only sink. Phase B will tag matching same-tx
+		// Blend / Soroswap legs as `routed_via=defindex-{vault}` and
+		// write to the aggregator_exposures hypertable from a
+		// separate periodic ticker. Until then we emit one INFO line
+		// per vault flow so operators can verify the dispatcher
+		// routes vault events correctly via the journal.
+		amounts := make([]string, len(e.Flow.Amounts))
+		for i, a := range e.Flow.Amounts {
+			amounts[i] = a.String()
+		}
+		logger.Info("defindex vault flow",
+			"source", defindex.SourceName,
+			"tx_hash", e.Flow.TxHash,
+			"ledger", e.Flow.Ledger,
+			"vault", e.Flow.VaultName,
+			"contract_id", e.Flow.ContractID,
+			"direction", string(e.Flow.Direction),
+			"counterparty", e.Flow.Counterparty,
+			"amounts", amounts,
+			"df_token_delta", e.Flow.DfTokenDelta.String(),
 		)
 	case external.TradeEvent:
 		persistTrade(ctx, logger, store, e.Trade)

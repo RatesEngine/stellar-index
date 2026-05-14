@@ -36,6 +36,7 @@ import (
 	"github.com/RatesEngine/rates-engine/internal/sources/blend"
 	"github.com/RatesEngine/rates-engine/internal/sources/claimable_balances"
 	"github.com/RatesEngine/rates-engine/internal/sources/comet"
+	"github.com/RatesEngine/rates-engine/internal/sources/defindex"
 	"github.com/RatesEngine/rates-engine/internal/sources/liquidity_pools"
 	"github.com/RatesEngine/rates-engine/internal/sources/phoenix"
 	"github.com/RatesEngine/rates-engine/internal/sources/redstone"
@@ -146,6 +147,13 @@ func BuildDispatcher(names []string, oracle config.OracleConfig, soroswapOpts ..
 			// ContractCallDecoder, same pattern as Band.
 			callDecoders = append(callDecoders,
 				soroswap_router.NewDecoder(soroswap_router.MainnetRouter))
+		case defindex.SourceName:
+			// DeFindex vault contracts emit standard Soroban events
+			// (`("DeFindexVault","deposit"|"withdraw")`) — event-based
+			// Decoder is the right hook. Phase A matches the 3 known
+			// autocompound vaults; multi-vault discovery via the
+			// factory is a Phase-B follow-up.
+			decoders = append(decoders, defindex.NewDecoder(defindex.MainnetVaults))
 		case sdex.SourceName:
 			opDecoders = append(opDecoders, sdex.NewDecoder())
 		case blend.SourceName:

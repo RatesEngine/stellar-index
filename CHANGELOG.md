@@ -17,6 +17,26 @@ against.
 
 ### Added
 
+- **DeFindex vault decoder** (`internal/sources/defindex/`).
+  Event-based decoder (`dispatcher.Decoder`, NOT
+  `ContractCallDecoder`) for paltalabs/defindex's autocompound
+  vaults. Phase A matches `("DeFindexVault","deposit")` and
+  `("DeFindexVault","withdraw")` events on the 3 known vaults
+  (USDC / EURC / XLM autocompound). Decoder pulls
+  `depositor` / `withdrawer`, multi-asset `amounts` vec
+  (i128, no truncation per ADR-0003), and the share-token
+  delta (`df_tokens_minted` / `_burned`) by name from the
+  body Map (decode-by-name per
+  contract-schema-evolution.md). Phase B will tag matching
+  same-tx Blend / Soroswap legs as
+  `routed_via=defindex-{vault}` and write
+  `aggregator_exposures` rows from a separate periodic
+  ticker. Pre-seed migration `0033_seed_defindex_vaults.up.sql`
+  populates the 3 vaults in the `routers` registry as
+  `kind='aggregator-vault'`. WASM-history audit started at
+  `docs/operations/wasm-audits/defindex.md`;
+  `BackfillSafe=false` until the per-hash review lands.
+
 - **Soroswap Router decoder** (`internal/sources/soroswap_router/`).
   New ContractCallDecoder following the Band oracle pattern —
   matches by `(contract_id, function_name)` and decodes

@@ -64,6 +64,7 @@ var Registry = map[string]Metadata{
 	// protocol exposures). See docs/architecture/explorer-data-
 	// inventory.md §7.9 + migration 0025 (routers + aggregator_exposures).
 	"soroswap-router": {Class: ClassRouter, DefaultWeight: 0, IncludeInVWAP: false, Paid: false, BackfillAvailable: true, BackfillSafe: false /* WASM audit pending — keep BackfillSafe=false until docs/operations/wasm-audits/soroswap-router.md lands */},
+	"defindex":        {Class: ClassRouter, DefaultWeight: 0, IncludeInVWAP: false, Paid: false, BackfillAvailable: true, BackfillSafe: false /* WASM audit pending — vault hash 0f3073...8f3a baseline; see docs/operations/wasm-audits/defindex.md */},
 
 	// ─── Off-chain centralised exchanges (this package's scope) ─
 	"binance":  {Class: ClassExchange, Subclass: SubclassCEX, DefaultWeight: 100, IncludeInVWAP: true, Paid: false, BackfillAvailable: true, BackfillSafe: true},
