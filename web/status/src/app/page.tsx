@@ -1163,7 +1163,6 @@ function RegionPanel({
         rows={snapshot.backfill_coverage}
         asOf={snapshot.backfill_coverage_as_of}
       />
-      <BackfillTable rows={snapshot.backfill} />
       <SourceHealthTable rows={snapshot.sources} />
     </div>
   );
@@ -1440,83 +1439,13 @@ function BackfillCoverageTable({
   );
 }
 
-function BackfillTable({
-  rows,
-}: {
-  rows: IngestionSnapshot['backfill'];
-}) {
-  // Go marshals a nil slice as `null` (not `[]`) so the wire shape
-  // can carry `backfill: null` even though OpenAPI calls it an
-  // array. Defensive: treat null/undefined as "no rows" rather
-  // than crashing on `.length`. Same defense in
-  // SourceHealthTable + BackfillCoverageTable.
-  if (!rows || rows.length === 0) {
-    return (
-      <div className="rounded-md border border-surface-line bg-surface-subtle p-3 text-xs text-ink-faint">
-        No active backfill — every decoder caught up to tip.
-      </div>
-    );
-  }
-  return (
-    <div>
-      <h3 className="mb-2 text-xs font-semibold uppercase tracking-wider text-ink-faint">
-        Backfill by decoder
-      </h3>
-      <div className="overflow-hidden rounded-md border border-surface-line">
-        <table className="w-full text-xs">
-          <thead className="bg-surface-subtle text-ink-faint">
-            <tr>
-              <th className="px-3 py-2 text-left font-medium">Decoder</th>
-              <th className="px-3 py-2 text-right font-medium" title="Backfill chunks where last_ledger == range_end">
-                ✓ done
-              </th>
-              <th className="px-3 py-2 text-right font-medium" title="Incomplete chunks updated within the last 10 minutes — actively progressing">
-                ▶ running
-              </th>
-              <th className="px-3 py-2 text-right font-medium" title="Incomplete chunks not updated for 10+ minutes — needs `ratesengine-ops backfill -resume`">
-                ⚠ stalled
-              </th>
-              <th className="px-3 py-2 text-right font-medium">Newest ledger</th>
-              <th className="px-3 py-2 text-right font-medium">Oldest lag</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-surface-line">
-            {rows.map((r) => (
-              <tr key={r.decoder}>
-                <td className="px-3 py-2 font-mono break-all">{r.decoder}</td>
-                <td className="px-3 py-2 text-right tabular-nums text-ok-700">
-                  {r.ranges_complete}
-                </td>
-                <td className={`px-3 py-2 text-right tabular-nums ${r.ranges_running > 0 ? 'text-brand-600' : 'text-ink-faint'}`}>
-                  {r.ranges_running}
-                </td>
-                <td className={`px-3 py-2 text-right tabular-nums ${r.ranges_stalled > 0 ? 'text-bad-700 font-semibold' : 'text-ink-faint'}`}>
-                  {r.ranges_stalled}
-                </td>
-                <td className="px-3 py-2 text-right font-mono tabular-nums">
-                  {r.newest_ledger > 0 ? r.newest_ledger.toLocaleString() : '—'}
-                </td>
-                <td className="px-3 py-2 text-right tabular-nums">
-                  {r.oldest_lag_seconds > 0
-                    ? formatAge(r.oldest_lag_seconds)
-                    : '—'}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-    </div>
-  );
-}
-
 function SourceHealthTable({
   rows,
 }: {
   rows: IngestionSnapshot['sources'];
 }) {
-  // Same defensive shape-handling as BackfillTable — Go marshals
-  // nil slices as `null`.
+  // Defensive shape-handling — Go marshals nil slices as `null`,
+  // not `[]`, so a typed-as-array field can still arrive as null.
   const safeRows = rows ?? [];
   if (safeRows.length === 0) return null;
   return (
