@@ -111,6 +111,11 @@ func main() { //nolint:gocyclo,gocognit,funlen // subcommand switch; each case i
 			fmt.Fprintf(os.Stderr, "backfill-external: %v\n", err)
 			os.Exit(1)
 		}
+	case "backfill-chainlink":
+		if err := backfillChainlink(args[1:]); err != nil {
+			fmt.Fprintf(os.Stderr, "backfill-chainlink: %v\n", err)
+			os.Exit(1)
+		}
 	case "verify-decoders":
 		if err := verifyDecoders(args[1:]); err != nil {
 			fmt.Fprintf(os.Stderr, "verify-decoders: %v\n", err)
@@ -466,6 +471,20 @@ Subcommands:
                               -from 2024-01-01T00:00:00Z \
                               -to   2024-12-31T00:00:00Z \
                               -granularity 1h
+  backfill-chainlink -config PATH [-from-block N] [-to-block N] [-chunk-blocks N] [-sleep-ms N] [-dry-run]
+                          Walk every configured Chainlink feed's
+                          AnswerUpdated event log across the requested
+                          block range and insert one OracleUpdate row
+                          per historical round into oracle_updates.
+                          Idempotent (deterministic synthesised
+                          tx_hash + ON CONFLICT). ~33k eth_getLogs
+                          calls / 7h wall time for all 516 mainnet
+                          feeds at 5k blocks/chunk on Alchemy free
+                          tier — run overnight. Example:
+                            ratesengine-ops backfill-chainlink \
+                              -config /etc/ratesengine.toml \
+                              -from-block 15537393  # post-Merge marker
+                              -sleep-ms 50          # ~20 req/s polite cap
   hubble-check -config PATH -from N -to N -bigquery-project PROJ [-max-mismatches N] [-dry-run-bytes]
                           Cross-check our SDEX trades against SDF's
                           published hubble-public.crypto_stellar.history_trades

@@ -50,6 +50,7 @@ import (
 	"github.com/RatesEngine/rates-engine/internal/sources/external"
 	externalbinance "github.com/RatesEngine/rates-engine/internal/sources/external/binance"
 	externalbitstamp "github.com/RatesEngine/rates-engine/internal/sources/external/bitstamp"
+	externalchainlink "github.com/RatesEngine/rates-engine/internal/sources/external/chainlink"
 	externalcoinbase "github.com/RatesEngine/rates-engine/internal/sources/external/coinbase"
 	externalcoingecko "github.com/RatesEngine/rates-engine/internal/sources/external/coingecko"
 	externalcoinmarketcap "github.com/RatesEngine/rates-engine/internal/sources/external/coinmarketcap"
@@ -606,6 +607,42 @@ func startExternalConnectors( //nolint:gocognit,gocyclo,funlen // dispatch-heavy
 		enabled = append(enabled, externalcryptocompare.SourceName)
 	}
 
+	if cfg.Chainlink.Enabled {
+		feedMap, pairs, err := chainlinkFeedSetFromConfig(cfg.Chainlink.FeedMap)
+		if err != nil {
+			return nil, nil, fmt.Errorf("chainlink: %w", err)
+		}
+		if len(pairs) == 0 {
+			logger.Warn("chainlink ingest enabled but feed_map is empty after parse — skipping",
+				"source", externalchainlink.SourceName)
+		} else {
+			p := externalchainlink.NewPoller(cfg.Chainlink.RPCUrl, feedMap)
+			if cfg.Chainlink.PollInterval > 0 {
+				p.Interval = cfg.Chainlink.PollInterval
+			}
+			p.Logger = logger
+			pollers = append(pollers, external.PollerSpec{
+				Poller: p,
+				Pairs:  pairs,
+			})
+			authMode := "anonymous"
+			switch {
+			case strings.Contains(cfg.Chainlink.RPCUrl, "alchemy"):
+				authMode = "alchemy"
+			case strings.Contains(cfg.Chainlink.RPCUrl, "infura"):
+				authMode = "infura"
+			case strings.Contains(cfg.Chainlink.RPCUrl, "quicknode"):
+				authMode = "quicknode"
+			}
+			logger.Info("external poller enabled",
+				"source", externalchainlink.SourceName,
+				"feeds", len(pairs),
+				"poll_interval", p.PollInterval(),
+				"rpc_provider", authMode)
+			enabled = append(enabled, externalchainlink.SourceName)
+		}
+	}
+
 	if cfg.ECB.Enabled {
 		p := externalecb.NewPoller()
 		// ECB speaks fiat-only; derive the pair list from anything
@@ -807,6 +844,28 @@ func defaultFXPairs(base string) []canonical.Pair {
 		out = append(out, p)
 	}
 	return out
+}
+
+// chainlinkFeedSetFromConfig is the tiny adapter that bridges the
+// operator-facing config schema (config.ChainlinkFeedSetting) and
+// the chainlink package's runtime FeedSpec. Kept in the cmd dir
+// because the chainlink package can't import config (would create
+// a cycle: config has no dep on chainlink today, and we want to
+// keep it that way).
+//
+// The actual default-fallback + parse logic lives in
+// chainlink.BuildFeedSet so both the indexer (live poll) and
+// ratesengine-ops (backfill subcommand) hit the same code path.
+func chainlinkFeedSetFromConfig(in map[string]config.ChainlinkFeedSetting) (map[string]externalchainlink.FeedSpec, []canonical.Pair, error) {
+	adapted := make(map[string]externalchainlink.FeedSpec, len(in))
+	for k, v := range in {
+		adapted[k] = externalchainlink.FeedSpec{
+			Address:  v.Address,
+			Decimals: v.Decimals,
+			Invert:   v.Invert,
+		}
+	}
+	return externalchainlink.BuildFeedSet(adapted)
 }
 
 // ─── Dispatcher wiring ──────────────────────────────────────────

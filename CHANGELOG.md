@@ -17,6 +17,53 @@ against.
 
 ### Added
 
+- **Chainlink ingest source** (`internal/sources/external/chainlink/`).
+  Promotes the formerly-divergence-only Chainlink reference into a
+  full ingest source — writes `canonical.OracleUpdate` rows to
+  `oracle_updates` on its own poller goroutine alongside Reflector /
+  Redstone / Band. Implements `external.Poller`; lives parallel to
+  the existing `internal/divergence/chainlink.go` cross-check (which
+  stays in place for synchronous divergence_warning checks).
+
+  Wire shape: poll `AggregatorV3.latestRoundData()` over JSON-RPC,
+  dedupe by `(feed_address, roundId)`, project to canonical with
+  synthetic deterministic tx_hash (sha256(feed || roundId)) for
+  idempotent restart. Default 30s cadence; per-feed Decimals/Invert
+  overrides via TOML. Default endpoint is Cloudflare public; operator
+  drops an Alchemy URL (with embedded API key) into r1's TOML or via
+  `CHAINLINK_RPC_URL` env. Bounded concurrency (8) per tick.
+
+  Backfill: new `ratesengine-ops backfill-chainlink` subcommand walks
+  `AnswerUpdated` event logs via chunked `eth_getLogs` (5k blocks /
+  call, the safe default for Alchemy / Infura / QuickNode response-
+  size caps). ~33k RPC calls and ~7h wall time for all-time backfill
+  of the default 6 majors on Alchemy free tier (~19% of monthly
+  quota); scale linearly with feed count up to all 516 ETH-mainnet
+  Chainlink feeds within the same free-tier envelope. Idempotent on
+  the oracle_updates PK; safe to re-run over already-covered ranges.
+
+  Surface: registered in `external.Registry` as
+  `ClassOracle / BackfillSafe=true / IncludeInVWAP=false`. Picked up
+  by `/v1/sources?class=oracle` automatically — explorer's /oracles
+  page surfaces it without UI changes.
+
+- **Oracle CAGG ladder** (migration 0034). Seven continuous
+  aggregates on `oracle_updates` at the standard
+  `1m/15m/1h/4h/1d/1w/1mo` tiers — sister to the trade CAGG ladder
+  in migration 0002. Closes the gap where every `/v1/oracle/*`
+  history query was scanning raw `oracle_updates`; manageable at
+  ~3 oracle sources × ~860 rows/day each, untenable once Chainlink
+  arrives at scale.
+
+  Aggregation semantics differ from trades: oracles are point-in-
+  time observations, so each bucket carries `first / last / min /
+  max / last_decimals / count` (no VWAP / TWAP because there is no
+  volume dimension). One row per `(source, asset, quote, bucket)` —
+  per-source identity preserved so cross-oracle comparison stays
+  meaningful. Refresh policies match the trade ladder; no retention
+  on sub-1h tiers (matches the operator's "store everything forever"
+  decision in migration 0031), indefinite for 1h+ per the proposal.
+
 - **DeFindex vault decoder** (`internal/sources/defindex/`).
   Event-based decoder (`dispatcher.Decoder`, NOT
   `ContractCallDecoder`) for paltalabs/defindex's autocompound

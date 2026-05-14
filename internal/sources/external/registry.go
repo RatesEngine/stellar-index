@@ -83,6 +83,15 @@ var Registry = map[string]Metadata{
 
 	// ─── Sovereign daily anchors (sanity check only) ─────────────
 	"ecb": {Class: ClassAuthoritySanity, DefaultWeight: 100, IncludeInVWAP: false, Paid: false, BackfillAvailable: true, BackfillSafe: true},
+
+	// ─── Off-chain oracles (Chainlink via EVM RPC) ───────────────
+	// Chainlink is on Ethereum mainnet, not Stellar; we read it via
+	// JSON-RPC against AggregatorV3 contracts. Class=ClassOracle
+	// because it's a price publisher (not raw trades). BackfillSafe
+	// is true — off-chain HTTPS source, no on-chain Soroban WASM
+	// dependency to audit. Backfill via eth_getLogs walks
+	// AnswerUpdated events. See internal/sources/external/chainlink/.
+	"chainlink": {Class: ClassOracle, DefaultWeight: 100, IncludeInVWAP: false, Paid: false /* Alchemy free tier covers 516-feed scale */, BackfillAvailable: true, BackfillSafe: true},
 }
 
 // Lookup returns metadata for a source, with a safe fallback for

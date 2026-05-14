@@ -44,8 +44,14 @@ import (
 // with the wire form `fiat:USD`. See ADR-0010.
 type OracleUpdate struct {
 	// Source is the oracle name: "reflector-dex", "reflector-cex",
-	// "reflector-fx", "redstone", "band", "chainlink-http",
+	// "reflector-fx", "redstone", "band", "chainlink",
 	// "coingecko", "coinmarketcap". Stable — part of identity.
+	//
+	// Note: "chainlink" is the EVM-via-HTTP ingest source
+	// (internal/sources/external/chainlink) — observable on the
+	// /v1/sources?class=oracle surface. Distinct from
+	// internal/divergence/chainlink.go which is an in-memory
+	// cross-check helper that doesn't write to oracle_updates.
 	Source string `json:"source"`
 
 	// ContractID is the originating contract address for on-chain

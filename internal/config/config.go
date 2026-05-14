@@ -211,6 +211,7 @@ type ExternalConfig struct {
 	CoinMarketCap    CoinMarketCapVenueConfig    `toml:"coinmarketcap"    doc:"CoinMarketCap /v2 quotes poller. Class=aggregator. Paid API key; Standard tier ($79/mo+) for commercial redistribution."`
 	CryptoCompare    CryptoCompareVenueConfig    `toml:"cryptocompare"    doc:"CryptoCompare /data/pricemulti poller. Class=aggregator. Paid API key via Authorization header."`
 	ECB              ExternalVenueConfig         `toml:"ecb"              doc:"European Central Bank daily FX reference rates. Class=authority_sanity (daily anchor, not VWAP). Free, no auth."`
+	Chainlink        ChainlinkVenueConfig        `toml:"chainlink"        doc:"Chainlink Data Feeds via EVM JSON-RPC (Alchemy / Infura / public). Class=oracle (no VWAP contribution). Lives parallel to internal/divergence/chainlink.go which is the synchronous cross-check."`
 }
 
 // ExternalVenueConfig is the common per-venue toggle shape for
@@ -262,6 +263,30 @@ type CoinMarketCapVenueConfig struct {
 type CryptoCompareVenueConfig struct {
 	Enabled bool   `toml:"enabled" doc:"Whether this connector runs. Off by default." default:"false"`
 	APIKey  string `toml:"api_key" doc:"CryptoCompare API key, passed as 'Authorization: Apikey <KEY>'. Prefer env var." env:"CRYPTOCOMPARE_API_KEY" default:""`
+}
+
+// ChainlinkVenueConfig carries the Chainlink ingest connector
+// settings.
+//
+// RPCUrl IS the credential — Alchemy / Infura encode the API key
+// directly in the URL path (.../v2/<KEY>), so we treat the whole
+// URL as the secret. Operator best-practice: leave this blank in
+// any tracked TOML and set the env var at the process level.
+type ChainlinkVenueConfig struct {
+	Enabled      bool                            `toml:"enabled"       doc:"Whether the Chainlink ingest poller runs. Off by default."  default:"false"`
+	RPCUrl       string                          `toml:"rpc_url"       doc:"Ethereum mainnet JSON-RPC endpoint (Alchemy / Infura / public). For Alchemy this includes the API key in the URL path (.../v2/<KEY>) — treat the whole value as a secret. Prefer env var." env:"CHAINLINK_RPC_URL" default:""`
+	PollInterval time.Duration                   `toml:"poll_interval" doc:"Override the default 30s poll cadence. Empty/zero uses the package default." default:""`
+	FeedMap      map[string]ChainlinkFeedSetting `toml:"feed_map"      doc:"Maps canonical pair string ('crypto:BTC/fiat:USD' etc.) to the AggregatorV3 contract address + decimals + invert. Empty falls back to the built-in default covering BTC/ETH/LINK/EUR/GBP/JPY vs USD." default:"{}"`
+}
+
+// ChainlinkFeedSetting is one entry in [ChainlinkVenueConfig.FeedMap].
+// Mirrors [DivergenceChainlinkConfig]'s ChainlinkFeed but kept on its
+// own type so the operator-facing TOML schemas of the two consumers
+// (divergence cross-check vs ingest source) can evolve independently.
+type ChainlinkFeedSetting struct {
+	Address  string `toml:"address"  doc:"0x-prefixed AggregatorV3 contract address on Ethereum mainnet."`
+	Decimals uint8  `toml:"decimals" doc:"Power-of-10 divisor for the raw int256 answer. Defaults to 8 (Chainlink's standard). Operator sets per-feed only when the feed publishes at a non-standard scale." default:"8"`
+	Invert   bool   `toml:"invert"   doc:"If true, the canonical pair is the reciprocal of the feed's natural quote — e.g. operator wants USD/EUR but the feed publishes EUR/USD. price → 1/price after scaling." default:"false"`
 }
 
 // OracleConfig gathers on-chain oracle contract addresses. Each
@@ -870,6 +895,7 @@ func Default() Config {
 			CoinMarketCap:    CoinMarketCapVenueConfig{Enabled: false},
 			CryptoCompare:    CryptoCompareVenueConfig{Enabled: false},
 			ECB:              ExternalVenueConfig{Enabled: false},
+			Chainlink:        ChainlinkVenueConfig{Enabled: false, FeedMap: map[string]ChainlinkFeedSetting{}},
 		},
 		Aggregate: AggregateConfig{
 			VWAPWindowSeconds:     300,

@@ -103,6 +103,13 @@ the `env:` column.
 | `external.cryptocompare.api_key` | `string` | _(required)_ | `CRYPTOCOMPARE_API_KEY` | CryptoCompare API key, passed as 'Authorization: Apikey <KEY>'. Prefer env var. |
 | `external.ecb.enabled` | `bool` | `false` | — | Whether this connector runs. Off by default — no network egress until operator opts in. |
 | `external.ecb.poll_interval` | `int64` | _(required)_ | — | Override the connector's built-in default poll cadence (e.g. "120s"). Empty/zero uses the connector default. |
+| `external.chainlink.enabled` | `bool` | `false` | — | Whether the Chainlink ingest poller runs. Off by default. |
+| `external.chainlink.rpc_url` | `string` | _(required)_ | `CHAINLINK_RPC_URL` | Ethereum mainnet JSON-RPC endpoint (Alchemy / Infura / public). For Alchemy this includes the API key in the URL path (.../v2/<KEY>) — treat the whole value as a secret. Prefer env var. |
+| `external.chainlink.poll_interval` | `int64` | _(required)_ | — | Override the default 30s poll cadence. Empty/zero uses the package default. |
+| `external.chainlink.feed_map` | `map[string]ChainlinkFeedSetting` | `{}` | — | Maps canonical pair string ('crypto:BTC/fiat:USD' etc.) to the AggregatorV3 contract address + decimals + invert. Empty falls back to the built-in default covering BTC/ETH/LINK/EUR/GBP/JPY vs USD. |
+| `external.chainlink.feed_map.<key>.address` | `string` | _(required)_ | — | 0x-prefixed AggregatorV3 contract address on Ethereum mainnet. |
+| `external.chainlink.feed_map.<key>.decimals` | `uint8` | `8` | — | Power-of-10 divisor for the raw int256 answer. Defaults to 8 (Chainlink's standard). Operator sets per-feed only when the feed publishes at a non-standard scale. |
+| `external.chainlink.feed_map.<key>.invert` | `bool` | `false` | — | If true, the canonical pair is the reciprocal of the feed's natural quote — e.g. operator wants USD/EUR but the feed publishes EUR/USD. price → 1/price after scaling. |
 
 ### `[aggregate]`
 
@@ -146,7 +153,7 @@ the `env:` column.
 | `api.auth_backend` | `string` | `redis` | — | Backing store for API-key validation. 'redis' (default) uses the legacy apikey:<hash> JSON records minted by /v1/signup. 'postgres' uses the platform.api_keys table (the dashboard's source of truth) with Redis as a read-through cache — required for keys minted from the dashboard to authenticate against the runtime API. Cutover knob: deployments running both /v1/signup keys and dashboard-minted keys should use 'postgres' (the validator falls back to Postgres on Redis cache miss + writes back, so existing legacy keys keep working transparently). |
 | `api.anon_rate_limit_per_min` | `int` | `60` | — | Per-IP rate limit for anonymous requests. |
 | `api.key_rate_limit_per_min` | `int` | `1000` | — | Per-API-key rate limit, default tier. |
-| `api.signup_require_email_verification` | `bool` | `false` | — | F-1218: when true, /v1/signup-minted API keys must complete email-ownership-proof (clicking the link emailed at signup) before they can authenticate. Default false to preserve the pre-F-1218 wire contract; flip true after the rollout window when operators have given existing customers time to verify. |
+| `api.signup_require_email_verification` | `bool` | `true` | — | F-1218: when true, /v1/signup-minted API keys must complete email-ownership-proof (clicking the link emailed at signup) before they can authenticate. Default true (2026-05-13): we are still pre-launch with no consumer traffic, so the safe default is to require verification — operators who want to allow unverified signup must opt in explicitly. Pre-launch default-flip narrows the launch-blocker surface; F-1218 closure required this. |
 | `api.cdn_enabled` | `bool` | `true` | — | Emit CDN-friendly Cache-Control headers on long-immutable endpoints. |
 | `api.allowed_origins` | `[]string` | `["*"]` | — | CORS allow-list for browser clients. |
 | `api.trusted_proxy_cidrs` | `[]string` | `[]` | — | Immediate peer CIDR allow-list that is permitted to supply X-Forwarded-For. Empty means the API ignores that header and uses the socket peer address for logging, anonymous identity, and IP-based rate limiting. |
