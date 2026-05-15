@@ -15,15 +15,24 @@ unix_socket_directories   = '/var/run/postgresql'
 
 # Per-tx lock table sizing. Postgres sizes its lock table as
 # `max_locks_per_transaction × max_connections`. TimescaleDB's
-# chunk-based storage takes one shared-memory lock per chunk an
-# INSERT touches — under concurrent ingest from many sources, the
-# default of 64 saturates the table and writes start failing with
-# SQLSTATE 53200 ("out of shared memory"). The 2026-05-06 SEV-3
-# (`internal/incidents/data/2026-05-06-postgres-lock-table-full.md`)
-# hit this path: ~1% of trades dropped before operators bumped
-# this knob to 256 by hand on R1. Codified here so a from-scratch
-# R1 rebuild or R2/R3 cutover inherits the fix automatically.
-max_locks_per_transaction = {{ postgres_max_locks_per_transaction | default(256) }}
+# chunk-based storage takes one shared-memory lock per chunk a
+# query touches — not just INSERTs: any broad SELECT over a
+# many-chunk hypertable (per-source coverage, pools/markets CTE,
+# cagg/fx coverage) locks one entry per scanned chunk. Under
+# concurrent load this saturates the table; writes/reads fail
+# with SQLSTATE 53200 ("out of shared memory"). Two incidents:
+#   - 2026-05-06 SEV-3 (default 64): ~1% of trades dropped, bumped
+#     to 256 by hand
+#     (`internal/incidents/data/2026-05-06-postgres-lock-table-full.md`).
+#   - 2026-05-15 (256): trades grew to ~2,738 chunks; the all-time
+#     SDEX backfill + concurrent diagnostic queries thrashed the
+#     table again (single query observed holding 26,927 locks).
+#     Re-sized to 4096 with permanent growth headroom — see the
+#     long-form rationale on postgres_max_locks_per_transaction in
+#     the role's defaults/main.yml.
+# Codified here so a from-scratch R1 rebuild or R2/R3 cutover
+# inherits the sizing automatically.
+max_locks_per_transaction = {{ postgres_max_locks_per_transaction | default(4096) }}
 
 # ─── Memory (~25% shared_buffers, ~50% effective_cache_size) ────────
 shared_buffers            = {{ postgres_shared_buffers }}

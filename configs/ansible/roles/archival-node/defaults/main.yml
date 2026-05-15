@@ -144,12 +144,26 @@ postgres_wal_compression: "zstd"
 postgres_max_connections: 200
 
 # Per-tx lock table sizing — see postgresql.conf.j2 for context.
-# 256 was the value the operator set by hand on R1 during the
-# 2026-05-06 SEV-3 ("Postgres lock-table-full"), giving 4× headroom
-# over the Postgres default of 64. Lock table size is
-# `max_locks_per_transaction × max_connections` = 256 × 200 = 51,200
-# entries. F-1251 (audit-2026-05-12).
-postgres_max_locks_per_transaction: 256
+# History of this knob (it keeps needing to grow as the trades
+# hypertable accrues chunks — every full-scan query needs ~1 lock
+# per chunk):
+#   - Postgres default 64 → table 64×200=12,800. Blew during the
+#     2026-05-06 SEV-3 ("Postgres lock-table-full", SQLSTATE 53200).
+#   - Bumped 64→256 by hand (4×) → table 256×200=51,200. Lasted
+#     ~9 days: by 2026-05-15 trades had grown to ~2,738 chunks and
+#     concurrent diagnostic queries (coverage / pools / cagg / fx)
+#     + the all-time SDEX backfill thrashed the table again — a
+#     single observed query held 26,927 locks.
+#   - 2026-05-15: 256→4096 (16× the default, 8× the prior value) →
+#     table 4096×200 = 819,200 entries. Sized for permanent
+#     headroom rather than another incremental bump: handles ~30
+#     concurrent peak-size (~27k-lock) queries, or the chunk count
+#     growing to ~15,000 (decades at ~365/yr) while still leaving
+#     room for 50+ concurrent full scans. Memory cost ≈ 220 MB,
+#     negligible against the 48 GB shared_buffers / 188 GB host RAM.
+# Lock table size = max_locks_per_transaction × max_connections.
+# F-1251 (audit-2026-05-12); re-sized 2026-05-15.
+postgres_max_locks_per_transaction: 4096
 
 postgres_db_core:        "stellar_core"
 postgres_user_core:      "stellar_core"

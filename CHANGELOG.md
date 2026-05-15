@@ -15,6 +15,27 @@ against.
 
 ## [Unreleased]
 
+### Changed
+
+- **`max_locks_per_transaction` 256 → 4096** (archival-node ansible
+  role default + R1 postgresql.conf). The per-transaction lock-table
+  sizing knob drives the instance-wide lock table
+  (`max_locks_per_transaction × max_connections`). TimescaleDB takes
+  one lock per chunk a query scans — not just INSERTs; any broad
+  SELECT over the now-2,738-chunk `trades` hypertable
+  (per-source coverage, the pools/markets CTE, cagg/fx coverage)
+  locks one entry per scanned chunk. The 64→256 hand-bump from the
+  2026-05-06 SEV-3 lasted ~9 days before the table grew enough that
+  concurrent diagnostics + the all-time SDEX backfill thrashed it
+  again (a single query observed holding 26,927 locks; coverage
+  snapshot stuck "pending", `/v1/pools?order_by=pair` 500s, cagg/fx
+  coverage `out of shared memory`). Re-sized to 4096 (819,200-entry
+  table) for permanent growth headroom rather than another
+  incremental bump — memory cost ≈220 MB, negligible against the
+  48 GB shared_buffers / 188 GB host. Applied live to R1 (postgres
+  restart) + codified in the role so R1 rebuilds and R2/R3 cutover
+  inherit it.
+
 ## [v0.5.0-rc.52] — 2026-05-15
 
 ### Changed

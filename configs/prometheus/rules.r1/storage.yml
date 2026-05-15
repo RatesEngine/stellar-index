@@ -40,13 +40,16 @@ groups:
 
       # F-1251 (audit-2026-05-12): lock-table headroom. The
       # 2026-05-06 SEV-3 hit `out of shared memory (53200)` when
-      # the per-tx lock table saturated under concurrent ingest.
-      # Default Postgres setting (max_locks_per_transaction = 64)
-      # × max_connections = 200 = 12,800-entry table. The R1
-      # ansible role now templates max_locks_per_transaction = 256
-      # by default (51,200 entries — 4× headroom). This alert
-      # fires at 70% saturation so we get warning before the
-      # next bump is forced. Depends on postgres_exporter (not
+      # the per-tx lock table saturated under concurrent ingest
+      # (default max_locks_per_transaction = 64 × 200 conns =
+      # 12,800-entry table). Bumped to 256 (51,200) by hand, which
+      # held ~9 days before the 2026-05-15 recurrence: trades grew
+      # to ~2,738 chunks and concurrent diagnostic queries + the
+      # all-time SDEX backfill thrashed it again. The R1 ansible
+      # role now templates max_locks_per_transaction = 4096
+      # (819,200 entries — permanent growth headroom). This alert
+      # fires at 70% saturation so we get warning long before any
+      # future bump is forced. Depends on postgres_exporter (not
       # currently scraped on R1 — see configs/prometheus/rules.r1/
       # README.md "remaining files NOT shipped"; the alert lights
       # up when the exporter lands.)
