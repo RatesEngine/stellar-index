@@ -17,6 +17,22 @@ against.
 
 ### Fixed
 
+- **`/v1/diagnostics/ingestion` `entries` is no longer silently 0 for
+  every source.** The `fxHistoryReader` adapter
+  (`cmd/ratesengine-api`) wraps `*timescale.Store` and forwards the
+  coverage-reader methods (`FXCoverageStats`, `CAGGCoverageStats`)
+  but was **missing a `SourceEntryCounts` delegate**. So the
+  request-time type assertion `s.fxHistory.(SourceEntryCountReader)`
+  in `fillIngestionEntryCounts` failed closed and returned silently,
+  leaving `entryCounts` nil → `entries: 0` for *every* source
+  (sdex included) even though `source_entry_counts` (migration 0035,
+  maintained live by the indexer and reconciled by
+  `seed-entry-counts`) was fully populated (sdex 2.7 B, …). Shipped
+  missing in rc.55, so the status page showed all protocols at 0
+  entries. Added the one-line delegate (same precedent as the two
+  sibling forwards, which document this exact "renders empty"
+  failure mode) and made the `!ok` path Warn-log instead of failing
+  invisibly so this wiring-regression class can't recur unnoticed.
 - **`extendWithLiveTail` now bridges interior sub-tip coverage gaps,
   fixing the ~96% (Soroban) / 99.5% (SDEX) density cap.** The
   live-ingest tail was credited only *above* the top of the merged

@@ -552,6 +552,13 @@ func (s *Server) fillIngestionCAGGCoverage(ctx context.Context, out *IngestionDi
 func (s *Server) fillIngestionEntryCounts(ctx context.Context, out *IngestionDiagnostics) {
 	reader, ok := s.fxHistory.(SourceEntryCountReader)
 	if !ok || reader == nil {
+		// Not a test fake (those inject a discard logger): in
+		// production this means the fxHistory adapter is missing its
+		// SourceEntryCounts delegate, which silently zeroes the
+		// `entries` column for every source. Warn so this class of
+		// wiring regression is visible instead of invisible — it
+		// shipped unnoticed in rc.55.
+		s.logger.Warn("diagnostics/ingestion: entry_counts reader unavailable — entries will read 0 for all sources")
 		return
 	}
 	counts, err := reader.SourceEntryCounts(ctx)

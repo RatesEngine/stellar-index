@@ -2840,3 +2840,16 @@ func (r *fxHistoryReader) FXCoverageStats(ctx context.Context) (timescale.FXCove
 func (r *fxHistoryReader) CAGGCoverageStats(ctx context.Context) (timescale.CAGGCoverage, error) {
 	return r.store.CAGGCoverageStats(ctx)
 }
+
+// SourceEntryCounts delegates so the wrapper satisfies
+// v1.SourceEntryCountReader too. Same pattern as the two above —
+// and the one that bit us: without this delegate the type
+// assertion in fillIngestionEntryCounts fails closed and the
+// `entries` column on /v1/diagnostics/ingestion is silently 0 for
+// EVERY source, even though source_entry_counts (migration 0035,
+// maintained live by the indexer + seed-entry-counts) is fully
+// populated. Shipped missing in rc.55; entries read 0 on the
+// status page until this landed.
+func (r *fxHistoryReader) SourceEntryCounts(ctx context.Context) (map[string]int64, error) {
+	return r.store.SourceEntryCounts(ctx)
+}
