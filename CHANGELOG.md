@@ -15,6 +15,49 @@ against.
 
 ## [Unreleased]
 
+### Fixed
+
+- **`/v1/observations` short-circuit for aggregator-only quotes —
+  the actual #29 fix (replaces the unworkable detached-SWR
+  approach).** Post-rc.58 live-verify showed the `CachedHistoryReader`
+  SWR did NOT warm the cache: the detached fill returned `pq: 57014`
+  fast (root cause: the underlying `LatestTradePerSource` query for
+  `WHERE base='native' AND quote='fiat:USD'` is an unbounded
+  per-chunk scan over the 2.7 B-row `trades` hypertable, measured
+  **>60 s** on r1 — the empty-result fan-out proving emptiness).
+  Real fix: aggregator-only quote types (`fiat:*` per ADR-0010,
+  `crypto:*` per ADR-0014) are reference-currency abstractions —
+  `trades.quote_asset` *only* stores concrete token assets
+  (Stellar classic / Soroban), never bare `fiat:USD` / `crypto:BTC`,
+  so the result is *always* empty by definition. Added a fast-path
+  in `handleObservations`: if `pair.Quote.Type` is `AssetFiat` or
+  `AssetCrypto`, return the canonical empty result + triangulation
+  hint (the meaningful signal for proxy/triangulated quotes anyway,
+  identical to the post-storage empty branch) without touching
+  storage. Sub-millisecond, semantically identical to running the
+  query, ~60 s cheaper. The status-page poll
+  (`?asset=native&quote=fiat:USD`) now returns instantly.
+  Regression test `TestObservations_FiatCryptoQuoteShortCircuit`
+  pins the no-storage-call contract via a stub History that errors
+  if called; 4 existing tests updated to use a real classic USDC
+  quote (their fiat:USD URLs were test-fictional and would have
+  spuriously short-circuited). `go test -race` green. #30 (the
+  missing `(base, quote, source, ts)` index) is no longer
+  load-bearing for the visible status-page path; it remains the
+  durable fix for non-empty token-quote pairs that are still slow.
+
+- **`/v1/assets/native` prewarm-drift (#37).** The existing
+  `prewarmLight` only primed `coins.ListCoinsExt` — it never
+  touched the per-asset SWR entries #24 added (especially
+  `GetNativeCoinRow`, the heaviest single-asset cache key, which
+  hits the whole-asset-universe CTE). Every cold post-restart
+  `/v1/assets/native` request paid ~3 s on first hit and bounced
+  1–3 s on rapid retries as each #24 cache entry filled
+  incrementally. Added `coins.GetNativeCoinRow(ctx)` to
+  `prewarmLight` — drift-safe (calls the same method
+  `assets_coin_extension.go` invokes for `/v1/assets/native`).
+  Heeds [[feedback_prewarm_handler_drift]].
+
 ## [v0.5.0-rc.58] — 2026-05-19
 
 ### Added

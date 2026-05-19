@@ -2784,6 +2784,21 @@ func prewarmLight(
 	if _, err := coins.ListCoinsExt(coinsCtx, timescale.ListCoinsOptions{Limit: 199}); err != nil {
 		logger.Debug("prewarm coins listing failed", "err", err)
 	}
+
+	// #37 fix: /v1/assets/native is the most-trafficked single-asset
+	// page (XLM is the explorer's default landing) and its
+	// GetNativeCoinRow hits the heavy `listCoinsBaseSelect`
+	// whole-asset-universe CTE — sub-200ms when cached, ~3s cold.
+	// Pre-fix, prewarmLight only ran ListCoinsExt; native's
+	// GetNativeCoinRow cache key (added by #24's per-asset SWR
+	// pass) was never touched → every native page-load cold-filled
+	// it (bouncing 1-3s on rapid retries as each #24 SWR entry
+	// fills incrementally). Drift-safe: this is the EXACT method
+	// the /v1/assets/native handler calls
+	// (assets_coin_extension.go GetNativeCoinRow path).
+	if _, err := coins.GetNativeCoinRow(coinsCtx); err != nil {
+		logger.Debug("prewarm native coin row failed", "err", err)
+	}
 }
 
 // forexQuoteWriter adapts (*timescale.Store) to forex.FXQuoteWriter

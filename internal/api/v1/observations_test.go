@@ -1,10 +1,12 @@
 package v1_test
 
 import (
+	"context"
 	"errors"
 	"math/big"
 	"net/http"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -116,7 +118,7 @@ func TestObservations_HappyPath_AllSources(t *testing.T) {
 	srv := v1.New(v1.Options{History: hist})
 	tsv := startHTTPTest(t, srv.Handler())
 
-	resp := mustGet(t, tsv.URL+"/v1/observations?asset=native&quote=fiat:USD")
+	resp := mustGet(t, tsv.URL+"/v1/observations?asset=native&quote=USDC-GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN")
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("status = %d", resp.StatusCode)
 	}
@@ -153,7 +155,7 @@ func TestObservations_SourceFilter(t *testing.T) {
 	srv := v1.New(v1.Options{History: hist})
 	tsv := startHTTPTest(t, srv.Handler())
 
-	resp := mustGet(t, tsv.URL+"/v1/observations?asset=native&quote=fiat:USD&source=phoenix")
+	resp := mustGet(t, tsv.URL+"/v1/observations?asset=native&quote=USDC-GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN&source=phoenix")
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("status = %d", resp.StatusCode)
 	}
@@ -187,7 +189,7 @@ func TestObservations_AggregateLatest(t *testing.T) {
 	srv := v1.New(v1.Options{History: hist})
 	tsv := startHTTPTest(t, srv.Handler())
 
-	resp := mustGet(t, tsv.URL+"/v1/observations?asset=native&quote=fiat:USD&aggregate=latest")
+	resp := mustGet(t, tsv.URL+"/v1/observations?asset=native&quote=USDC-GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN&aggregate=latest")
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("status = %d", resp.StatusCode)
 	}
@@ -304,12 +306,72 @@ func TestObservations_InternalError(t *testing.T) {
 	srv := v1.New(v1.Options{History: hist})
 	tsv := startHTTPTest(t, srv.Handler())
 
-	resp := mustGet(t, tsv.URL+"/v1/observations?asset=native&quote=fiat:USD")
+	resp := mustGet(t, tsv.URL+"/v1/observations?asset=native&quote=USDC-GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN")
 	if resp.StatusCode != http.StatusInternalServerError {
 		t.Fatalf("status = %d, want 500", resp.StatusCode)
 	}
 	body, _ := readAll(resp)
 	if strings.Contains(body, "hypertable timeout") {
 		t.Errorf("internal error leaked: %s", body)
+	}
+}
+
+// observationsCallTracker is a HistoryReader that records calls to
+// LatestTradePerSource and returns an error if called. Used to prove
+// the #29 fiat:*/crypto:* short-circuit does NOT touch storage —
+// pre-fix the handler called LatestTradePerSource for fiat:USD,
+// which on r1 ran an unbounded per-chunk scan over the trades
+// hypertable (>60s measured, blowing the 8s ceiling → 503). The
+// short-circuit returns the canonical empty result without storage.
+type observationsCallTracker struct{ calls atomic.Int64 }
+
+func (h *observationsCallTracker) LatestTradePerSource(_ context.Context, _ canonical.Pair, _ string) ([]canonical.Trade, error) {
+	h.calls.Add(1)
+	return nil, errors.New("LatestTradePerSource MUST NOT be called for fiat:/crypto: quotes (#29 short-circuit)")
+}
+
+func (h *observationsCallTracker) TradesInRange(_ context.Context, _ canonical.Pair, _, _ time.Time, _ int) ([]canonical.Trade, error) {
+	return nil, nil
+}
+
+func (h *observationsCallTracker) TradesInRangeAfter(_ context.Context, _ canonical.Pair, _, _, _ time.Time, _ uint32, _, _ string, _ uint32, _ int) ([]canonical.Trade, error) {
+	return nil, nil
+}
+
+func (h *observationsCallTracker) HistoryPoints(_ context.Context, _ canonical.Pair, _ string, _ int) ([]v1.HistoryPoint, error) {
+	return nil, nil
+}
+
+func (h *observationsCallTracker) HistoryPointsInRange(_ context.Context, _ canonical.Pair, _ string, _, _ time.Time, _ int) ([]v1.HistoryPoint, error) {
+	return nil, nil
+}
+
+// TestObservations_FiatCryptoQuoteShortCircuit — #29. fiat:* (ADR-0010)
+// and crypto:* (ADR-0014) are aggregator-only reference assets;
+// trades.quote_asset NEVER stores them. LatestTradePerSource on those
+// quotes does an unbounded per-chunk scan over the entire trades
+// hypertable proving emptiness (>60s on r1 → 503 via the 8s handler
+// ceiling — the visible status-page incident). The short-circuit
+// returns the canonical empty observations result without touching
+// storage; this test pins it via a History stub that errors if
+// called.
+func TestObservations_FiatCryptoQuoteShortCircuit(t *testing.T) {
+	hist := &observationsCallTracker{}
+	srv := v1.New(v1.Options{History: hist})
+	tsv := startHTTPTest(t, srv.Handler())
+
+	for _, q := range []string{"fiat:USD", "fiat:EUR", "crypto:BTC"} {
+		resp := mustGet(t, tsv.URL+"/v1/observations?asset=native&quote="+q)
+		if resp.StatusCode != http.StatusOK {
+			t.Fatalf("quote=%s status=%d, want 200 (short-circuit)", q, resp.StatusCode)
+		}
+		body, _ := readAll(resp)
+		if !strings.Contains(body, `"data":[]`) {
+			t.Errorf("quote=%s: want empty data array, got: %s", q, body)
+		}
+	}
+
+	if n := hist.calls.Load(); n != 0 {
+		t.Fatalf("LatestTradePerSource called %d times; short-circuit must NOT call storage for fiat:/crypto: quotes", n)
 	}
 }
