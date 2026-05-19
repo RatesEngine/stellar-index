@@ -289,123 +289,31 @@ type BackfillCoverage struct {
 	TradeCount     int64
 }
 
-// BackfillCoverageStats returns one row per source with min/max
-// ledger + trade count.
+// BackfillCoverageStats is intentionally a no-op (returns no rows).
+// Retained only for interface/return-type compatibility with the
+// CoverageCache scaffolding, which is removed in the server-side
+// snapshot-pregeneration refactor (#16).
 //
-// Implementation note (2026-05-15 rewrite): the prior single-query
-// `GROUP BY source` form deadlocked on `out of shared memory:
-// max_locks_per_transaction` once trades grew to >2700 chunks. A
-// hypertable scan acquires an AccessShareLock per chunk, the
-// GROUP BY scans all chunks in one transaction, and 2700+ exceeds
-// the per-transaction lock budget (256 on r1).
-//
-// Per-source loop fixes that — each source query runs in its own
-// implicit transaction with a fresh lock budget. The (source, ledger)
-// index gives MIN/MAX per source via cheap index seeks; COUNT still
-// has to scan all matching chunks but per-source scans use the
-// index-only path. For the highest-volume source (sdex, ~2700 chunks
-// of data) we fall back to TimescaleDB's approximate_row_count when
-// the precise COUNT errors out — the status page renders an estimate
-// rather than zero.
-func (s *Store) BackfillCoverageStats(ctx context.Context) ([]BackfillCoverage, error) {
-	// On-chain sources we report ledger ranges for. Off-chain sources
-	// (CEX/FX/aggregator) emit no ledger context, so EarliestLedger
-	// and LatestLedger are zero on the wire (Applies=false at the API
-	// layer). Listed explicitly rather than queried distinct-source
-	// because (a) avoids a SELECT DISTINCT on trades that would itself
-	// hit the lock-table issue and (b) keeps the diagnostic surface
-	// stable when an operator pauses ingest from a source.
-	sources := []string{
-		"sdex",
-		"soroswap",
-		"aquarius",
-		"phoenix",
-		"comet",
-		"blend",
-		"reflector-cex",
-		"reflector-dex",
-		"reflector-fx",
-		"redstone",
-		"band",
-		"soroswap-router",
-		"defindex",
-	}
-	// Shared scalars computed ONCE, not per-source:
-	//   - hypertable approximate row count (chunk-stats based, no
-	//     row locks, but iterates ~2700 chunk catalog entries — ~15s)
-	//   - recent-24h total row count (chunk-excluded to the last day's
-	//     chunks — ~1-2s)
-	// trade_count per source = approxTotal × recentSrc / recentTotal.
-	// Every query below is best-effort and individually time-bounded
-	// via scanScalarBestEffort. A single source can no longer abort
-	// the whole snapshot: pre-fix, an oracle source (band / redstone /
-	// reflector-* — they write to oracle_updates, never `trades`)
-	// made `… WHERE source=$1 ORDER BY ts LIMIT 1` scan every chunk
-	// to prove emptiness, hit the statement-timeout (57014), and the
-	// `return nil, err` blanked CoverageCache permanently (its
-	// cold-start Refresh never succeeded) while the failing query
-	// fed the SLO availability/latency burn every refresh interval.
-	// These stats are best-effort enrichment only — the headline
-	// density is cursor-derived and `entries` come from
-	// source_entry_counts — so degrading to 0 on timeout is the
-	// correct, safe behaviour. Always returns (rows, nil).
-	approxTotal := s.scanScalarBestEffort(ctx,
-		`SELECT approximate_row_count('trades')::numeric`)
-	recentTotal := s.scanScalarBestEffort(ctx,
-		`SELECT COUNT(*)::numeric FROM trades WHERE ts >= NOW() - INTERVAL '24 hours'`)
-
-	out := make([]BackfillCoverage, 0, len(sources))
-	for _, src := range sources {
-		row := BackfillCoverage{Source: src}
-		// ts-ordered LIMIT 1: chunk-exclusion makes this ~3s for a
-		// source that HAS trades; a zero-trades source would scan
-		// every chunk, so the per-query timeout bounds it and it
-		// degrades to 0 (these sources are mapped → the API derives
-		// earliest/latest from cursors, not this cache, anyway).
-		row.EarliestLedger = int64(s.scanScalarBestEffort(ctx,
-			`SELECT COALESCE((SELECT ledger FROM trades WHERE source = $1 ORDER BY ts ASC LIMIT 1), 0)`,
-			src))
-		row.LatestLedger = int64(s.scanScalarBestEffort(ctx,
-			`SELECT COALESCE((SELECT ledger FROM trades WHERE source = $1 ORDER BY ts DESC LIMIT 1), 0)`,
-			src))
-		// Per-source 24h count scaled to an approximate all-time
-		// count via the shared-scalar ratio. Approximate by design —
-		// the precise per-source COUNT(*) is minutes on sdex and the
-		// status page only needs rough magnitude.
-		recentSrc := s.scanScalarBestEffort(ctx,
-			`SELECT COUNT(*)::numeric FROM trades WHERE source = $1 AND ts >= NOW() - INTERVAL '24 hours'`,
-			src)
-		if recentTotal > 0 && recentSrc > 0 {
-			row.TradeCount = int64(approxTotal * recentSrc / recentTotal)
-		}
-		out = append(out, row)
-	}
-	return out, nil
-}
-
-// coverageStatTimeout bounds each individual BackfillCoverageStats
-// query. A real per-source earliest/latest is ~3s via chunk
-// exclusion; a zero-trades source (oracle sources never write to
-// `trades`) would otherwise scan all ~2700 chunks until the caller's
-// deadline. 8s comfortably covers the legitimate case while capping
-// the pathological one.
-const coverageStatTimeout = 8 * time.Second
-
-// scanScalarBestEffort runs a single-scalar query under
-// coverageStatTimeout and returns 0 on ANY error (timeout, no rows,
-// driver error) instead of propagating it. This is what makes
-// BackfillCoverageStats fail-soft per-query: one slow/empty source
-// degrades to 0 rather than blanking the entire diagnostic snapshot
-// and — pre-fix — permanently breaking CoverageCache's cold start
-// while a 57014-timing-out query fed the SLO burn every refresh.
-func (s *Store) scanScalarBestEffort(ctx context.Context, query string, args ...any) float64 {
-	cctx, cancel := context.WithTimeout(ctx, coverageStatTimeout)
-	defer cancel()
-	var v float64
-	if err := s.db.QueryRowContext(cctx, query, args...).Scan(&v); err != nil {
-		return 0
-	}
-	return v
+// Why it does nothing: it used to scan `trades` per source for
+// earliest/latest ledger + an approximate trade count, cached by
+// CoverageCache and read via buildBackfillCoverage. The 2026-05
+// cursor-first refactor made that output 100% dead — every mapped
+// source's density/covered/earliest/latest is derived from the
+// backfill-cursor union, and buildBackfillCoverage's cacheRows path
+// `continue`s past every source this function scanned (all are in
+// sourceGenesisLedger). So the result was thrown away entirely
+// while the function still ran ~13 per-source ts-ordered scans + a
+// ~15s approximate_row_count('trades') every refresh interval.
+// Oracle sources (band/redstone/reflector-*) write to
+// oracle_updates and have ZERO `trades` rows, so their scan could
+// not chunk-exclude and walked the full ~2700-chunk hypertable to
+// the statement-timeout (57014) — the root cause of the
+// CoverageCache cold-start hang and a primary SLO-burn contributor.
+// #12 only time-bounded that wasted work; this removes it entirely
+// (the honest fix). Cursor-first coverage + the source_entry_counts
+// tally already supply everything the diagnostics surface needs.
+func (s *Store) BackfillCoverageStats(_ context.Context) ([]BackfillCoverage, error) {
+	return nil, nil
 }
 
 // SupplyCoverageStats returns the current coverage state of the

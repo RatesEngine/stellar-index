@@ -17,6 +17,21 @@ against.
 
 ### Fixed
 
+- **`BackfillCoverageStats` gutted to a no-op — removes the dead
+  per-source `trades` scan entirely (the honest fix; #12 only
+  bounded it).** Consumer trace confirmed its output is 100 %
+  unused: `buildBackfillCoverage` is cursor-first for every mapped
+  source and its `cacheRows` path `continue`s past every source the
+  function scanned (all in `sourceGenesisLedger`). It nonetheless
+  ran ~13 per-source ts-ordered scans + a ~15 s
+  `approximate_row_count('trades')` every refresh interval, and the
+  oracle sources' zero-`trades` scans walked the full ~2700-chunk
+  hypertable to the 57014 timeout — the CoverageCache cold-start
+  hang + a primary SLO-burn contributor. Now does zero DB work;
+  the dead `scanScalarBestEffort`/`coverageStatTimeout` from #12 are
+  removed too. The (now-inert, zero-cost) CoverageCache scaffolding
+  is removed in the #16 snapshot-pregeneration refactor that
+  supersedes this whole path.
 - **`verify-archive-tier-a.service`: `TimeoutStartSec` 4h → 17h —
   fixes a bootstrap deadlock that kept
   `ratesengine_verify_archive_unit_failed` firing permanently.** The
