@@ -4149,7 +4149,7 @@ func renderB64SCVal(b64 string, depth int) any {
 	return renderSCVal(sv, depth)
 }
 
-func renderSCVal(sv sdkxdr.ScVal, depth int) any { //nolint:gocyclo,gocognit // flat type switch; one arm per SCVal kind
+func renderSCVal(sv sdkxdr.ScVal, depth int) any { //nolint:gocyclo,gocognit,funlen // flat type switch; one arm per SCVal kind
 	switch sv.Type {
 	case sdkxdr.ScValTypeScvBool:
 		return sv.MustB()
