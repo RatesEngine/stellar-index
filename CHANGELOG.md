@@ -33,6 +33,31 @@ against.
 
 ### Fixed
 
+- **`/v1/observations` ~8 s → 503 fixed via `CachedHistoryReader`
+  SWR (#29).** The status page polls
+  `?asset=native&quote=fiat:USD` every ~2 min; that pair has zero
+  direct trades (`fiat:USD` is an aggregator proxy, never a stored
+  `quote_asset`) yet `LatestTradePerSource` is an unbounded
+  `DISTINCT ON (source) … ORDER BY source, ts DESC` over the
+  2.7 B-row `trades` hypertable — no time bound → no chunk
+  exclusion → ~8 s even for an empty result → the handler's 8 s
+  ceiling 503s. New `internal/api/v1/history_cache.go`
+  SWR-caches **`LatestTradePerSource` only** (every other
+  `HistoryReader` method passes through), wired at 2 m TTL in
+  `cmd/ratesengine-api/main.go`. Mirrors the proven #22/#23
+  pattern with one deliberate change: the cold fill is
+  **detached** (own 30 s budget) so it outlives the 8 s request
+  ceiling — the first caller(s) still 503 (bounded by their own
+  ctx) but the fill warms the cache out-of-band, so the next poll
+  is fast. Zero correctness loss (the exact query result,
+  including a legitimate empty slice, is cached). Also corrected
+  the `HistoryReader.LatestTradePerSource` doc, which falsely
+  claimed a `(base_asset,quote_asset,source,ts DESC)` index that
+  was never created. The real query-cheapening (create that
+  index) is deferred (#30 — multi-GB on a 2.7 B-row hypertable,
+  r1 disk-constrained). `go test -race` green (4 new tests incl.
+  the detached-cold-fill-warms case). Bundles into rc.58.
+
 - **`defindex` decoder re-derived from real on-chain schema —
   was decoding nothing (#28).** The decoder + its docs/tests were
   written against `paltalabs/defindex` tag `1.0.0`

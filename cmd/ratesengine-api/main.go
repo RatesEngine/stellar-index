@@ -711,7 +711,13 @@ func run(cfgPath string, dryRun bool) error { //nolint:gocognit,funlen,gocyclo /
 		ReadyChecks: checks,
 		Assets:      assetReader,
 		Prices:      priceReader,
-		History:     storeHistoryReader{s: store},
+		// 2m SWR cache on LatestTradePerSource only (the
+		// /v1/observations primitive — an unbounded DISTINCT ON scan
+		// over the trades hypertable, ~8s → 503; #29). All other
+		// HistoryReader methods pass through. Cold fill is detached
+		// so it outlives the handler's 8s ceiling and warms the
+		// cache for the status page's 2-min poll.
+		History: v1.NewCachedHistoryReader(storeHistoryReader{s: store}, 2*time.Minute),
 		// Wrap with a 30s TTL cache. /v1/markets and /v1/pools both
 		// scan ~24h of the trades hypertable on every hit (5-10s
 		// each); the explorer hits them on every page load. 30s

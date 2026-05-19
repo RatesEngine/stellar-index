@@ -73,9 +73,21 @@ type HistoryReader interface {
 	// applied at the SQL layer so a per-source query is cheap.
 	//
 	// This is the storage-side primitive for the ADR-0018 Surface 3
-	// `/v1/observations` endpoint. Production impl is a DISTINCT ON
-	// (source) scan covered by the (base_asset, quote_asset, source,
-	// ts DESC) index — cost is ~O(num_sources) rather than O(rows_in_pair).
+	// `/v1/observations` endpoint. The production impl is a
+	// `DISTINCT ON (source) … WHERE base=$1 AND quote=$2
+	// ORDER BY source, ts DESC` scan with **no time bound**, so
+	// TimescaleDB cannot do chunk exclusion and probes every chunk
+	// of the `trades` hypertable — multiple seconds on a busy
+	// deployment even when the result is empty.
+	//
+	// NOTE: an earlier revision of this comment claimed a
+	// `(base_asset, quote_asset, source, ts DESC)` index made this
+	// O(num_sources). That index was never created (r1 has only
+	// `(base_asset, quote_asset, ts DESC)`), so the claim was false.
+	// Mitigation today: [CachedHistoryReader] SWR-caches this method
+	// (#29). The real query-cheapening fix — create that composite
+	// index (deferred: it is multi-GB on a 2.7B-row hypertable and
+	// r1 is disk-constrained) — is the durable root-cause follow-up.
 	LatestTradePerSource(ctx context.Context, pair canonical.Pair, sourceFilter string) ([]canonical.Trade, error)
 }
 
