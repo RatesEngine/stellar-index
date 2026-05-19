@@ -264,7 +264,7 @@ func TestComputeSourceDensity(t *testing.T) {
 			wantDensityMax: 1.0,
 		},
 		{
-			name: "live tail does NOT fill an interior backfill hole",
+			name: "live tail bridges an interior sub-tip gap (bracketed both sides)",
 			cursors: []timescale.Cursor{
 				{Source: "backfill", Sub: "1-200:sdex", LastLedger: 200, UpdatedAt: now},
 				{Source: "backfill", Sub: "500-800:sdex", LastLedger: 800, UpdatedAt: now},
@@ -273,11 +273,69 @@ func TestComputeSourceDensity(t *testing.T) {
 			source:  "sdex",
 			genesis: 1,
 			tip:     1000,
-			// [1,200] ∪ [500,800] ∪ live-tail [800,1000]
-			// = [1,200] ∪ [500,1000]; hole [201,499] stays open.
-			wantCovered:    200 + 501,
-			wantDensityMin: 0.700,
-			wantDensityMax: 0.702,
+			// Hole [201,499] is bracketed by backfill [1,200] below
+			// and [500,800] above, and 500 ≤ liveTop 1000 → it lies
+			// wholly within the gap-free live span (ADR-0017), so
+			// live ingest provably walked it. [1,200] ∪ bridge
+			// [200,500] ∪ [500,800] ∪ head-band [800,1000] = [1,1000].
+			wantCovered:    1000,
+			wantDensityMin: 1.0,
+			wantDensityMax: 1.0,
+		},
+		{
+			name: "fragmented union: disjoint high gap-backfill island no longer caps density",
+			// The r1 shape in miniature: a lower contiguous backfill
+			// block, then a stalled-then-gap-backfilled disjoint
+			// island higher up that fragmented the union and (pre-fix)
+			// anchored the head band above the interior span, capping
+			// density ~96%. The interior span is gap-free live-ingested.
+			cursors: []timescale.Cursor{
+				{Source: "backfill", Sub: "1-300:sdex", LastLedger: 300, UpdatedAt: now},
+				{Source: "backfill", Sub: "700-750:sdex", LastLedger: 750, UpdatedAt: now},
+				{Source: "ledgerstream", Sub: "", LastLedger: 1000, UpdatedAt: now},
+			},
+			source:         "sdex",
+			genesis:        1,
+			tip:            1000,
+			wantCovered:    1000, // pre-fix: 300 + 301 = 601 (~0.601, the cap)
+			wantDensityMin: 1.0,
+			wantDensityMax: 1.0,
+		},
+		{
+			name: "interior gap whose upper bracket is above the live cursor is NOT bridged",
+			cursors: []timescale.Cursor{
+				{Source: "backfill", Sub: "1-200:sdex", LastLedger: 200, UpdatedAt: now},
+				{Source: "backfill", Sub: "500-800:sdex", LastLedger: 800, UpdatedAt: now},
+				{Source: "ledgerstream", Sub: "", LastLedger: 400, UpdatedAt: now},
+			},
+			source:  "sdex",
+			genesis: 1,
+			tip:     1000,
+			// liveTop=400 < upper bracket start 500 → the gap is not
+			// proven within the live span; left open. No head band
+			// either (400 ≤ backfill top 800). = [1,200] ∪ [500,800].
+			wantCovered:    200 + 301,
+			wantDensityMin: 0.500,
+			wantDensityMax: 0.502,
+		},
+		{
+			name: "lower boundary [genesis, firstBackfillStart] is never credited",
+			cursors: []timescale.Cursor{
+				{Source: "backfill", Sub: "500-800:sdex", LastLedger: 800, UpdatedAt: now},
+				{Source: "ledgerstream", Sub: "", LastLedger: 1000, UpdatedAt: now},
+			},
+			source:  "sdex",
+			genesis: 1,
+			tip:     1000,
+			// Single backfill block has no lower neighbour, so [1,499]
+			// is the lower boundary, not an adjacent-pair interior gap
+			// → stays uncovered even though live is at tip. Head band
+			// [800,1000] applies. = [500,1000]. (Guards the honest
+			// "never-backfilled-low source reads low" property, e.g.
+			// band's pre-deploy early history under the #10 genesis.)
+			wantCovered:    501,
+			wantDensityMin: 0.500,
+			wantDensityMax: 0.502,
 		},
 		{
 			name: "live below backfill top → no change",

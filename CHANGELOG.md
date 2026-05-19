@@ -17,6 +17,25 @@ against.
 
 ### Fixed
 
+- **`extendWithLiveTail` now bridges interior sub-tip coverage gaps,
+  fixing the ~96% (Soroban) / 99.5% (SDEX) density cap.** The
+  live-ingest tail was credited only *above* the top of the merged
+  backfill union. When a disjoint high gap-backfill island (e.g. the
+  62,606,296–62,613,951 gap re-fill) fragmented the union, a
+  ~309,700-ledger interior span [62,296,595→62,606,296] — fully
+  populated by gap-free live ingest (22.8 M trades verified on r1) —
+  got zero credit, capping density at ~96% Soroban / 99.5% SDEX
+  (the *same* absolute hole over different genesis denominators).
+  The tail now also fills any gap **between** two merged backfill
+  intervals whose upper neighbour starts at/below the live cursor:
+  bracketed by backfill coverage on both sides and wholly within the
+  gap-free live span (ADR-0017 archivecompleteness), so live ingest
+  provably walked it. The honest guards are retained — the
+  `[genesis, firstBackfillStart]` lower boundary is never an
+  adjacent-pair interior gap so it stays uncovered (a
+  never-backfilled-low source still reads honestly, e.g. band's
+  pre-deploy history under the new #10 genesis), a never-backfilled
+  source stays 0%, and nothing is credited above the live cursor.
 - **`sourceGenesisLedger` now holds exact first-WASM-deploy ledgers,
   not rounded deploy-era constants.** The per-source genesis is the
   denominator of `backfill_coverage[].density_pct`, so a rounded
