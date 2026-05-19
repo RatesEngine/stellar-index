@@ -599,83 +599,101 @@ func encodeMarketsCursor(last Market, order MarketsOrder) string {
 //     the standard keyset tuple-comparison trick is adapted to
 //     mixed ordering.
 func buildDistinctPairsQuery(since time.Time, source, asset, cursor string, limit int, order MarketsOrder) (string, []any) {
-	// Source the query from prices_1m alone instead of joining the
-	// raw `trades` hypertable.
+	// /v1/markets is a DIRECTORY query ("which pairs are active +
+	// their 24h volume / last price"), not a history view. Sourcing
+	// it from prices_1m × 14 days was O(~52k pairs × 20,160 1-min
+	// buckets); post all-time backfill prices_1m ballooned and the
+	// aggregate seq-scans multi-million-row materialized chunks →
+	// ~8s+, blowing BOTH the 8s handler ceiling and the prewarm
+	// budget, so the cache never warmed and /v1/markets 503'd for
+	// real users (#20). The earlier "prices_1m alone, ~0.46s"
+	// measurement (2026-05-11) no longer holds at this data scale.
 	//
-	// Previous shape (trades + 2 CTEs against prices_1m) was scanning
-	// ~41M rows over the 14-day window and the HashAggregate spilled
-	// to disk in 32 partitions — 8s+ cold-cache p99, blowing the
-	// handler timeout. Live measurement 2026-05-11: ~8.4s for
-	// LIMIT=100, default order, no filter — 86% of /v1/markets
-	// requests 503'd over the back half of the day.
+	// Right-granularity rewrite. NO data or precision loss anywhere
+	// data is consumed at resolution — prices_1m and every detail
+	// endpoint (/history, /ohlc, /chart, /vwap, /twap) are
+	// untouched; this changes only which CAGG this one *listing*
+	// query reads:
+	//   - active-pair set + last_trade_at + last_price (latest
+	//     within the 14d window) ← prices_1d   (~14 buckets/pair)
+	//   - 24h trade_count + volume_usd          ← prices_1h over the
+	//     trailing 24h (~24 buckets/pair, only 24h-active pairs)
+	// SUM is associative, so the 24h totals are identical to the
+	// prior prices_1m FILTER form (Σ over hourly buckets = Σ over
+	// minute buckets = the 24h total). The ONLY change is
+	// last_trade_at rounds to the day instead of the minute —
+	// immaterial for a directory; the exact ts/price is always on
+	// the detail endpoints. count_24h is COALESCE'd to 0 for
+	// 14d-active-but-24h-idle pairs (more robust than the prior
+	// FILTER-SUM, which yielded NULL for that case).
 	//
-	// prices_1m is already a 1-minute CAGG of trades with
-	// pre-aggregated volume_usd, trade_count, and last_price per
-	// (base, quote) per minute (3M rows over 14d vs 41M raw trades).
-	// Same query against prices_1m runs in ~0.46s — 18× faster.
-	//
-	// Trade-offs:
-	//   - last_trade_at is bucket-rounded to the minute. Within 60s
-	//     of the actual last trade. Acceptable for a "markets
-	//     listing" endpoint.
-	//   - count_24h = SUM(trade_count) over the last 24h of buckets.
-	//     Identical to the trade count (each trade increments
-	//     trade_count exactly once in its bucket).
-	//   - Source filter matches `$4 = ANY(p.sources)`. prices_1m's
-	//     `sources text[]` records every venue that contributed to
-	//     that minute's bucket, so the array-contains predicate is
-	//     functionally identical to the previous `t.source = $4`.
-	//
-	// $4 source / $5 asset are always bound; empty values
-	// short-circuit each predicate so the planner skips it.
-	cte := `
-        SELECT p.base_asset, p.quote_asset,
-               MAX(p.bucket) AS last_trade_at,
-               SUM(p.trade_count) FILTER (WHERE p.bucket > NOW() - INTERVAL '24 hours') AS count_24h,
-               NULLIF(SUM(p.volume_usd) FILTER (WHERE p.bucket > NOW() - INTERVAL '24 hours'), 0)::text AS vol_24h_usd,
-               (array_agg(p.last_price ORDER BY p.bucket DESC) FILTER (WHERE p.last_price IS NOT NULL))[1]::text AS last_price
-          FROM prices_1m p
-         WHERE p.bucket >= $1
-           AND ($4 = '' OR $4 = ANY(p.sources))
-           AND ($5 = '' OR p.base_asset = $5 OR p.quote_asset = $5)
+	// $1 since(14d) bounds the prices_1d set; $4 source / $5 asset
+	// filter BOTH CTEs (empty short-circuits → planner skips); the
+	// keyset-cursor ($2) + LIMIT $3 overfetch-by-one shape is
+	// byte-for-byte the prior pagination contract.
+	const ctes = `
+        WITH d AS (
+            SELECT p.base_asset, p.quote_asset,
+                   MAX(p.bucket) AS last_trade_at,
+                   (array_agg(p.last_price ORDER BY p.bucket DESC)
+                      FILTER (WHERE p.last_price IS NOT NULL))[1]::text AS last_price
+              FROM prices_1d p
+             WHERE p.bucket >= $1
+               AND ($4 = '' OR $4 = ANY(p.sources))
+               AND ($5 = '' OR p.base_asset = $5 OR p.quote_asset = $5)
+             GROUP BY p.base_asset, p.quote_asset
+        ),
+        h AS (
+            SELECT p.base_asset, p.quote_asset,
+                   SUM(p.trade_count) AS count_24h,
+                   SUM(p.volume_usd)  AS vol_24h_num
+              FROM prices_1h p
+             WHERE p.bucket > NOW() - INTERVAL '24 hours'
+               AND ($4 = '' OR $4 = ANY(p.sources))
+               AND ($5 = '' OR p.base_asset = $5 OR p.quote_asset = $5)
+             GROUP BY p.base_asset, p.quote_asset
+        )
+        SELECT d.base_asset, d.quote_asset, d.last_trade_at,
+               COALESCE(h.count_24h, 0)        AS count_24h,
+               NULLIF(h.vol_24h_num, 0)::text  AS vol_24h_usd,
+               d.last_price
+          FROM d
+          LEFT JOIN h
+            ON h.base_asset = d.base_asset
+           AND h.quote_asset = d.quote_asset
     `
 	switch order {
 	case MarketsOrderVolume24hDesc:
 		// Cursor: "<vol_or_blank>:<base>|<quote>". Two-tuple keyset
-		// against (vol_24h_usd::numeric, base|quote). Use
-		// COALESCE-to-zero on the column so NULLS LAST + the
-		// numeric comparison agree (NULL < 0 in numeric is false,
-		// so we map NULL → 0 for ordering purposes; same effect
-		// as NULLS LAST since real volumes are positive).
-		//
-		// HAVING (vol, pair) `<` (cursor_vol, cursor_pair) won't
-		// work directly because the "next page" relation is
-		// `(v < cv) OR (v = cv AND pair > cpair)` — DESC on the
-		// first key flips the comparator. Encoded explicitly.
+		// against (vol_24h, base|quote). COALESCE NULL→0 so a
+		// 24h-idle pair sorts last under DESC (same effect as
+		// NULLS LAST; real volumes are positive). The "next page"
+		// relation is (v < cv) OR (v = cv AND pair > cpair) — DESC
+		// on the first key flips the comparator, encoded explicitly
+		// (identical to the prior HAVING form, now a WHERE since d/h
+		// are already grouped).
 		const tail = `
-		 GROUP BY p.base_asset, p.quote_asset
-		HAVING $2 = ''
-		    OR COALESCE(NULLIF(SUM(p.volume_usd) FILTER (WHERE p.bucket > NOW() - INTERVAL '24 hours'), 0), 0)
-		         <  CAST(NULLIF(split_part($2, ':', 1), '') AS numeric)
-		    OR (
-		         COALESCE(NULLIF(SUM(p.volume_usd) FILTER (WHERE p.bucket > NOW() - INTERVAL '24 hours'), 0), 0)
-		         =  CAST(COALESCE(NULLIF(split_part($2, ':', 1), ''), '0') AS numeric)
-		         AND (p.base_asset || '|' || p.quote_asset)
-		             > substring($2 from position(':' in $2) + 1)
-		       )
-		 ORDER BY COALESCE(NULLIF(SUM(p.volume_usd) FILTER (WHERE p.bucket > NOW() - INTERVAL '24 hours'), 0), 0) DESC,
-		          (p.base_asset || '|' || p.quote_asset) ASC
-		 LIMIT $3
-		`
-		return cte + tail, []any{since, cursor, limit + 1, source, asset}
+         WHERE $2 = ''
+            OR COALESCE(h.vol_24h_num, 0)
+                 <  CAST(NULLIF(split_part($2, ':', 1), '') AS numeric)
+            OR (
+                 COALESCE(h.vol_24h_num, 0)
+                 =  CAST(COALESCE(NULLIF(split_part($2, ':', 1), ''), '0') AS numeric)
+                 AND (d.base_asset || '|' || d.quote_asset)
+                     > substring($2 from position(':' in $2) + 1)
+               )
+         ORDER BY COALESCE(h.vol_24h_num, 0) DESC,
+                  (d.base_asset || '|' || d.quote_asset) ASC
+         LIMIT $3
+        `
+		return ctes + tail, []any{since, cursor, limit + 1, source, asset}
 	default: // MarketsOrderPair
 		const tail = `
-		   AND ($2 = '' OR (p.base_asset || '|' || p.quote_asset) > $2)
-		 GROUP BY p.base_asset, p.quote_asset
-		 ORDER BY (p.base_asset || '|' || p.quote_asset) ASC
-		 LIMIT $3
-		`
-		return cte + tail, []any{since, cursor, limit + 1, source, asset}
+         WHERE ($2 = '' OR (d.base_asset || '|' || d.quote_asset) > $2)
+         ORDER BY (d.base_asset || '|' || d.quote_asset) ASC
+         LIMIT $3
+        `
+		return ctes + tail, []any{since, cursor, limit + 1, source, asset}
 	}
 }
 

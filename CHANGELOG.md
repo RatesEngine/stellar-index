@@ -15,6 +15,33 @@ against.
 
 ## [Unreleased]
 
+### Fixed
+
+- **`/v1/markets` no longer 8 s-times-out / 503s — `distinctPairsCommon`
+  reads right-granularity CAGGs (#20).** The query that powers
+  `/v1/markets` (+ `?source=` / `?asset=` variants) aggregated
+  `prices_1m × 14 days × ~52 k pairs`; post all-time backfill
+  `prices_1m` ballooned so it seq-scanned multi-million-row
+  materialised chunks (~8 s+), blowing both the 8 s handler ceiling
+  and leaving the prewarm unable to warm the cache → real users got
+  8 s 503/500/empty-200 (live log: a Chrome client, a node client).
+  It's a *directory* query, so it now sources the 14-day
+  active-pair set + `last_trade_at` + `last_price` from `prices_1d`
+  and the 24 h `trade_count`/`volume_usd` from `prices_1h` (Σ is
+  associative → 24 h totals identical to the prior `prices_1m`
+  FILTER form). **No data/precision loss anywhere data is consumed
+  at resolution** — `prices_1m` and every detail endpoint
+  (`/history`, `/ohlc`, `/chart`, `/vwap`, `/twap`) are untouched;
+  the only change is the listing's `last_trade_at` rounds to the
+  day. Verified on r1 real data: plan cost 330 k → 46 k, raw-scan →
+  `prices_1d`/`prices_1h` index scans, ~8 s+&uncompletable →
+  ~7 s cold / 373 ms warm, results sane & correctly volume-desc
+  ordered (BTC/USDT $1.0 B, ETH/USDT $588 M, …). Keyset cursor /
+  order / `Market` shape preserved byte-for-byte; `count_24h`
+  COALESCE'd to 0 for 24 h-idle pairs (more robust than the prior
+  FILTER-SUM NULL). Takes effect on r1 with the rc.57 deploy;
+  end-to-end re-measure via `api-latency-sweep.sh` post-deploy.
+
 ### Added
 
 - **`scripts/dev/api-latency-sweep.sh`** — granular latency profiler
