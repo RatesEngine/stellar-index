@@ -162,6 +162,18 @@ chain-link locally. See [archive-completeness.md](archive-completeness.md).
 | `ratesengine_archive_completeness_stale` | `time() - archive_completeness_last_success_timestamp` | > 26 h | P2 | [archive-completeness-stale](runbooks/archive-completeness-stale.md) |
 | `ratesengine_archive_completeness_critical_stale` | same | > 48 h on R1 (integrity leader) | **P1** | [archive-completeness-stale](runbooks/archive-completeness-stale.md) |
 | `ratesengine_archive_repair_source_degraded` | `archive_completeness_repair_failures_total / archive_completeness_repair_attempts_total` per source | > 0.10 over 1 h | P3 | [archive-repair-source-degraded](runbooks/archive-repair-source-degraded.md) |
+| `ratesengine_galexie_archive_tip_lag_high` | `galexie_archive_tip_lag_ledgers` (archive newest vs live newest) | > 5,000 for 30 m | P3 | [galexie-archive-tip-lag](runbooks/galexie-archive-tip-lag.md) |
+| `ratesengine_galexie_archive_tip_lag_severe` | same | > 50,000 for 30 m | **P1** | [galexie-archive-tip-lag](runbooks/galexie-archive-tip-lag.md) |
+| `ratesengine_galexie_archive_tip_lag_metric_stale` | `time() - galexie_archive_tip_lag_updated_seconds` | > 30 m for 15 m | P3 | [galexie-archive-tip-lag](runbooks/galexie-archive-tip-lag.md) |
+
+Defense-in-depth for `#26` — the original 23-day silent stall of
+`galexie-archive`. The post-`#26` fix is the hourly
+`galexie-archive-fill.timer`; these alerts page within hours if
+that timer (or its `mc` aliases / aws-public IAM / MinIO
+mtime-poison failure mode) silently breaks. Metric source:
+node_exporter textfile_collector reads
+`/var/lib/node_exporter/textfile_collector/galexie_archive_tip_lag.prom`,
+refreshed every 5 min by `galexie-archive-tip-lag.timer`.
 
 ## verify-archive timer alerts
 

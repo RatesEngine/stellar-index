@@ -138,6 +138,19 @@
     group: root
     mode: "0755"
 
+- name: Install galexie-archive-tip-lag metric updater (#31)
+  # Defense-in-depth for #26 — writes a Prometheus textfile gauge of
+  # the ledger lag between galexie-live and galexie-archive. The
+  # accompanying alert pages within hours if the hourly catch-up
+  # timer silently breaks (the failure class that caused the 23-day
+  # original incident).
+  ansible.builtin.copy:
+    src: galexie-archive-tip-lag.sh
+    dest: /usr/local/bin/galexie-archive-tip-lag
+    owner: root
+    group: root
+    mode: "0755"
+
 - name: Template galexie-specific captive-core.cfg
   # Galexie needs its OWN captive config because the PEER_PORT must
   # differ from stellar-rpc's (otherwise both captive-cores race
@@ -218,6 +231,25 @@
 - name: Enable + start galexie-archive-fill.timer
   ansible.builtin.systemd:
     name: galexie-archive-fill.timer
+    state: started
+    enabled: true
+    daemon_reload: true
+
+# #31 defense-in-depth: tip-lag textfile metric + alert. Pages
+# within hours if the #26 hourly catch-up timer silently breaks.
+- name: Install galexie-archive-tip-lag systemd service + timer
+  ansible.builtin.template:
+    src: "systemd/{{ item }}.j2"
+    dest: "/etc/systemd/system/{{ item }}"
+    mode: "0644"
+  loop:
+    - galexie-archive-tip-lag.service
+    - galexie-archive-tip-lag.timer
+  notify: Reload systemd
+
+- name: Enable + start galexie-archive-tip-lag.timer
+  ansible.builtin.systemd:
+    name: galexie-archive-tip-lag.timer
     state: started
     enabled: true
     daemon_reload: true

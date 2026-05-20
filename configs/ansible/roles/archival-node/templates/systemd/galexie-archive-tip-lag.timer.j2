@@ -1,0 +1,25 @@
+# systemd timer: every 5min recompute the galexie-archive tip-lag.
+#
+# Cadence matches the alert urgency curve — Prometheus alert
+# `ratesengine_galexie_archive_tip_lag_high` fires at warn 5,000
+# ledgers (~7h drift, well within the hourly catch-up timer's
+# expected steady-state) and pages at 50,000 ledgers (~3.5d). A 5min
+# update cadence gives Prometheus enough sampling resolution to
+# trigger the `for: 30m` warn condition cleanly without burning
+# excess metadata IO.
+#
+# :3 past the 5min boundary off the :00/:30 marks (same fleet-collision
+# rationale as cron-create's avoid-collision rule).
+
+[Unit]
+Description=Update galexie-archive tip-lag metric every 5 minutes (#31)
+Documentation=https://github.com/RatesEngine/rates-engine/blob/main/docs/operations/runbooks/galexie-archive-tip-lag.md
+
+[Timer]
+OnCalendar=*-*-* *:03,08,13,18,23,28,33,38,43,48,53,58:00 UTC
+RandomizedDelaySec=30
+Persistent=true
+Unit=galexie-archive-tip-lag.service
+
+[Install]
+WantedBy=timers.target

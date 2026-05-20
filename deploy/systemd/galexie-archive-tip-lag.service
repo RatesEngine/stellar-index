@@ -1,0 +1,32 @@
+# systemd service: galexie-archive tip-lag textfile updater (#31).
+#
+# Computes the ledger lag between galexie-live (current) and
+# galexie-archive (durable mirror), writes a Prometheus textfile
+# at /var/lib/node_exporter/textfile_collector/galexie_archive_tip_lag.prom
+# for node_exporter to surface. Defense-in-depth for #26: the
+# hourly galexie-archive-fill.timer is the primary recurrence
+# fix; if it silently breaks, this metric + its alert pages within
+# hours instead of the 23 days the original incident went unnoticed.
+#
+# Lightweight: two small `mc ls` calls (top-level partitions, then
+# top object of the newest partition), runs in seconds.
+#
+# Runs as root: uses the `local` mc alias which lives in root's
+# ~/.mc/config.json (same as galexie-archive-fill.service per #26).
+
+[Unit]
+Description=Rates Engine — galexie-archive tip-lag metric updater (#31)
+Documentation=https://github.com/RatesEngine/rates-engine/blob/main/docs/operations/runbooks/galexie-archive-tip-lag.md
+After=minio.service
+Wants=minio.service
+
+[Service]
+Type=oneshot
+User=root
+ExecStart=/usr/local/bin/galexie-archive-tip-lag
+TimeoutStartSec=60
+Nice=10
+IOSchedulingClass=idle
+
+[Install]
+WantedBy=multi-user.target

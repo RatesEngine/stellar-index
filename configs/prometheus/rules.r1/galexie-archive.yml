@@ -1,0 +1,90 @@
+---
+# galexie-archive tip-lag alerts (#31) — defense-in-depth for #26.
+#
+# #26 was a 23-day silent stall of galexie-archive (the ADR-0016 R1
+# durable full-mirror). The recurrence fix shipped in #26 is the
+# hourly `galexie-archive-fill.timer`; this alert is the safety net
+# under it — if that timer (or its `mc` aliases, aws-public IAM,
+# etc.) silently breaks, we want to PAGE in hours, not weeks.
+#
+# Scrape source: node_exporter's textfile_collector reads
+# `/var/lib/node_exporter/textfile_collector/galexie_archive_tip_lag.prom`,
+# updated every 5 min by `galexie-archive-tip-lag.timer` →
+# `/usr/local/bin/galexie-archive-tip-lag`.
+#
+# Metrics published:
+#   galexie_archive_tip_ledger          — gauge, newest ledger in archive bucket.
+#   galexie_live_tip_ledger             — gauge, newest ledger in live bucket.
+#   galexie_archive_tip_lag_ledgers     — gauge, live - archive (lag in ledgers).
+#   galexie_archive_tip_lag_updated_seconds — gauge, unix-time of last successful update.
+#
+# Steady-state expectation: hourly fill timer keeps the lag at
+# <12,000 ledgers (~1h drift at ~3.3s/ledger mainnet pace).
+# Warn threshold: 5,000 sustained for 30 min → catch-up degrading.
+# Page threshold: 50,000 (~3.5d drift) → catch-up has clearly broken.
+
+groups:
+  - name: ratesengine.galexie_archive_tip_lag
+    interval: 60s
+    rules:
+
+      - alert: ratesengine_galexie_archive_tip_lag_high
+        expr: galexie_archive_tip_lag_ledgers > 5000
+        for: 30m
+        labels:
+          severity: ticket
+          team: ratesengine
+          component: archive
+          runbook_url: https://github.com/RatesEngine/rates-engine/blob/main/docs/operations/runbooks/galexie-archive-tip-lag.md
+        annotations:
+          summary: "galexie-archive lag {{ $value }} ledgers behind live (sustained 30m, P3)"
+          description: |
+            galexie-archive (R1 durable full-mirror) has drifted
+            {{ $value }} ledgers behind galexie-live for 30+ minutes.
+            Steady-state is <12k (one hourly fill cycle). At 5k+
+            sustained the hourly galexie-archive-fill timer is either
+            slow or partially failing. Customer impact: none yet
+            (live ingest unaffected, durable upstream aws-public-blockchain
+            backstops); R1's full-mirror guarantee degrading. Investigate
+            galexie-archive-fill.timer status + last log + aws-public
+            mc-alias reachability.
+            Runbook: https://github.com/RatesEngine/rates-engine/blob/main/docs/operations/runbooks/galexie-archive-tip-lag.md
+
+      - alert: ratesengine_galexie_archive_tip_lag_severe
+        expr: galexie_archive_tip_lag_ledgers > 50000
+        for: 30m
+        labels:
+          severity: page
+          team: ratesengine
+          component: archive
+          runbook_url: https://github.com/RatesEngine/rates-engine/blob/main/docs/operations/runbooks/galexie-archive-tip-lag.md
+        annotations:
+          summary: "galexie-archive lag {{ $value }} ledgers behind live (P1)"
+          description: |
+            galexie-archive is {{ $value }} ledgers behind galexie-live
+            (~3.5+ days at mainnet pace). The hourly
+            galexie-archive-fill.timer has clearly broken — same
+            failure class as the original 23-day stall #26 was the
+            initial fix for. Customer impact: local WASM-walks +
+            historical backfills past the gap will fail; R1's
+            full-mirror integrity-leader role is broken until repair.
+            Runbook: same as above.
+
+      - alert: ratesengine_galexie_archive_tip_lag_metric_stale
+        expr: time() - galexie_archive_tip_lag_updated_seconds > 1800
+        for: 15m
+        labels:
+          severity: ticket
+          team: ratesengine
+          component: archive
+          runbook_url: https://github.com/RatesEngine/rates-engine/blob/main/docs/operations/runbooks/galexie-archive-tip-lag.md
+        annotations:
+          summary: "galexie-archive tip-lag metric not updated >30m"
+          description: |
+            The galexie-archive-tip-lag.timer hasn't successfully
+            updated its textfile for >30 min (timer fires every
+            5 min). The alert metric itself is the canary; without
+            it we lose the safety net. Check
+            `systemctl status galexie-archive-tip-lag.timer` +
+            the service's last journal entries; verify the script
+            can read both MinIO buckets via the `local` mc alias.

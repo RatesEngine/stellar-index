@@ -15,6 +15,27 @@ against.
 
 ## [Unreleased]
 
+### Added
+
+- **galexie-archive tip-lag alert (#31) — defense-in-depth for
+  #26.** Adds a Prometheus textfile-collector metric
+  (`galexie_archive_tip_lag_ledgers` and friends) computed every
+  5 min by `galexie-archive-tip-lag.{service,timer}` running
+  `/usr/local/bin/galexie-archive-tip-lag`. The accompanying alert
+  pages (`ratesengine_galexie_archive_tip_lag_severe`) within hours
+  if the hourly `galexie-archive-fill.timer` silently breaks — the
+  exact failure class that let #26 go undetected for 23 days.
+  Rules added to BOTH `deploy/monitoring/rules/galexie-archive.yml`
+  and `configs/prometheus/rules.r1/galexie-archive.yml` (wave-96
+  dual-dir). Runbook at
+  `docs/operations/runbooks/galexie-archive-tip-lag.md`. Codified
+  in Ansible (`07-galexie.yml`: copy script + install
+  `.j2`-templated unit + enable timer). Live on r1 (current lag
+  9,388 ledgers — well below the warn threshold of 5,000 sustained
+  for 30 min). Three alert variants: `_high` (P3, warn 5 k for
+  30 m), `_severe` (P1, page 50 k for 30 m), `_metric_stale` (P3,
+  the metric file hasn't refreshed in 30 m — the alert canary).
+
 ## [v0.5.0-rc.59] — 2026-05-20
 
 ### Changed
