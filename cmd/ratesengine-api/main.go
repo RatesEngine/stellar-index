@@ -944,6 +944,22 @@ func run(cfgPath string, dryRun bool) error { //nolint:gocognit,funlen,gocyclo /
 		serveErr <- nil
 	}()
 
+	// #37 full fix: HTTP self-call prewarm. Hits /v1/assets/<id> for
+	// native + every verified currency on a 60s cadence so EVERY
+	// cache the handler touches — not just the 7 CachedCoinsReader
+	// SWR slots warmed by prewarmCaches — stays hot. Covers the F2
+	// path (Volume24hUSDForAsset / LatestSupply / lookupUSDPrice /
+	// populateChange24h) and any downstream readers added in future
+	// without prewarm wiring needing to track them.
+	//
+	// Drift-safe by construction: the call hits the same Server.Handler
+	// + same mux + same handler functions a user request takes, so
+	// every internal lookup happens with byte-identical args. Per
+	// `feedback_prewarm_handler_drift` this is the canonical pattern
+	// when handler fan-out is wider than the prewarm goroutine knows
+	// about.
+	go selfPrewarmAssetEndpoints(rootCtx, logger.With("component", "self-prewarm"), cfg.API.ListenAddr, verifiedAssetIDs)
+
 	select {
 	case <-rootCtx.Done():
 		logger.Info("shutdown signal received — draining for up to 30s")
@@ -2933,6 +2949,81 @@ func prewarmAssetCall(ctx context.Context, logger *slog.Logger, name, assetID st
 		logger.Debug("prewarm asset call failed", "reader", name, "asset_id", assetID, "err", err)
 	}
 	_ = ctx // each fn already captures the context; arg kept for symmetry / future timeout pattern.
+}
+
+// selfPrewarmAssetEndpoints loops every 60s and HTTP-GETs
+// /v1/assets/<id> for native + every verified currency, against
+// our own listener. This warms ALL caches the handler touches —
+// not just the 7 CachedCoinsReader SWR slots that prewarmCaches
+// already covers, but also the F2-path readers (Volume24hUSDForAsset,
+// supply.LatestSupply, lookupUSDPrice, populateChange24h) that
+// prewarmCaches doesn't know about. Drift-safe by construction:
+// the call hits the same Server.Handler the user request would,
+// so every internal lookup happens with byte-identical args.
+//
+// Per `feedback_prewarm_handler_drift`: this is the canonical
+// pattern when handler fan-out is wider than the prewarm
+// goroutine's per-reader enumeration. Adding a new reader to the
+// /v1/assets/{id} handler tomorrow needs zero update here —
+// because we don't enumerate readers, we just exercise the
+// handler.
+//
+// Initial 3s sleep: lets the listener bind + lets prewarmCaches'
+// first cycle settle (so the user-facing latency we measure on
+// first warm hit reflects steady state, not the
+// boot-sequence-race window).
+func selfPrewarmAssetEndpoints(ctx context.Context, logger *slog.Logger, listenAddr string, verifiedAssetIDs []string) {
+	select {
+	case <-time.After(3 * time.Second):
+	case <-ctx.Done():
+		return
+	}
+
+	baseURL := fmt.Sprintf("http://%s/v1/assets/", listenAddr)
+	client := &http.Client{Timeout: 30 * time.Second}
+
+	// native first — biggest cache-miss surface (explorer's default
+	// landing). Then every verified currency.
+	targets := append([]string{"native"}, verifiedAssetIDs...)
+
+	runPass := func() {
+		for _, id := range targets {
+			if ctx.Err() != nil {
+				return
+			}
+			start := time.Now()
+			req, err := http.NewRequestWithContext(ctx, http.MethodGet, baseURL+id, nil)
+			if err != nil {
+				logger.Debug("self-prewarm request build failed", "asset_id", id, "err", err)
+				continue
+			}
+			resp, err := client.Do(req)
+			elapsed := time.Since(start)
+			if err != nil {
+				if ctx.Err() == nil {
+					logger.Debug("self-prewarm GET failed", "asset_id", id, "err", err, "elapsed", elapsed.String())
+				}
+				continue
+			}
+			_ = resp.Body.Close()
+			logger.Debug("self-prewarm /v1/assets", "asset_id", id, "status", resp.StatusCode, "elapsed", elapsed.String())
+		}
+	}
+
+	// Initial pass + steady-state cadence. 60s matches prewarmCaches'
+	// lightCadence so F2-path caches don't expire between cycles
+	// (their underlying TTLs are 1–2 min).
+	runPass()
+	ticker := time.NewTicker(60 * time.Second)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			runPass()
+		}
+	}
 }
 
 // forexQuoteWriter adapts (*timescale.Store) to forex.FXQuoteWriter
