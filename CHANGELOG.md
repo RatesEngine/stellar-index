@@ -17,6 +17,25 @@ against.
 
 ### Added
 
+- **`ledgerstream.Stream` gains an opt-in tiered read path
+  (#7 implementation step 1b).** `Config` learns a new optional
+  `ColdDataStore datastore.DataStoreConfig` field; when set,
+  `Stream` constructs a [`TieredDataStore`](#7-step-1a) wrapping
+  the hot (`Config.DataStore`) + cold (`Config.ColdDataStore`)
+  underlying stores, builds a `BufferedStorageBackend` directly
+  on top, and drives the LCM iteration with a loop that mirrors
+  the SDK's `ingest.ApplyLedgerMetadata` shape — same bounded /
+  unbounded validation, same `max(2, range.From)` clamp, same
+  GetLedger-per-ledger sequence, same WithMetrics wrap when a
+  registry is provided. When `ColdDataStore` is zero-valued
+  (the default), the legacy single-source path through
+  `ingest.ApplyLedgerMetadata` is used unchanged — backward
+  compatible with every existing caller. This satisfies ADR-0027
+  §Sequencing step 1 ("Land the dual-source read path behind a
+  `LCM_TIER_ENABLED=false` flag"); the flag here is the
+  presence/absence of `ColdDataStore` rather than a separate
+  bool. Operator-facing config wiring (parsing the cold-tier TOML
+  block + populating `cfg.ColdDataStore`) is the next step.
 - **`ledgerstream.TieredDataStore` — two-tier `datastore.DataStore`
   fallback chain (#7 implementation step 1).** Satisfies the SDK's
   `datastore.DataStore` interface; composes a `hot` + `cold`

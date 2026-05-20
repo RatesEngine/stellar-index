@@ -46,8 +46,21 @@ import (
 // rather than silently skipping.
 type Config struct {
 	// DataStore — required. Describes the Galexie output bucket
-	// (S3/MinIO/GCS) or a filesystem directory for tests.
+	// (S3/MinIO/GCS) or a filesystem directory for tests. In a
+	// tiered deployment this is the **hot** tier (local
+	// galexie-archive on r1).
 	DataStore datastore.DataStoreConfig
+
+	// ColdDataStore — optional. When non-zero (Type set), Stream
+	// constructs a [TieredDataStore] wrapping DataStore (hot) +
+	// ColdDataStore (cold) per ADR-0027, so reads of LCMs absent
+	// from the local mirror transparently fall back to a cold
+	// upstream (typically `aws-public-blockchain` S3 — the AWS
+	// Open Data Sponsorship bucket). Writes always target hot.
+	// The zero-value disables tiering; the legacy single-source
+	// path through ingest.ApplyLedgerMetadata is used instead —
+	// behaviour exactly matches pre-#7-step-1.
+	ColdDataStore datastore.DataStoreConfig
 
 	// Buffered — optional. If nil, Stream derives sensible defaults
 	// from DataStore.Schema.LedgersPerFile via
@@ -63,8 +76,18 @@ type Config struct {
 	// Registry — optional. When non-nil, the backend registers
 	// Prometheus metrics (buffer_fetch_latency_seconds, etc.) under
 	// RegistryNamespace. Use our main obs registry in production.
+	// When ColdDataStore is also set, the [TieredDataStore]'s
+	// tier_read_total + cold_read_duration_seconds metrics
+	// register under the same registry.
 	Registry          *prometheus.Registry
 	RegistryNamespace string
+}
+
+// tieringEnabled reports whether Config requests a tiered
+// (hot + cold) read path. The zero-value ColdDataStore disables
+// tiering; any non-empty Type opts in.
+func (c *Config) tieringEnabled() bool {
+	return c.ColdDataStore.Type != ""
 }
 
 // Stream reads ledgers in [from, to] from the datastore and invokes
@@ -121,6 +144,10 @@ func Stream(
 		ledgerRange = ledgerbackend.BoundedRange(from, to)
 	}
 
+	if cfg.tieringEnabled() {
+		return streamTiered(ctx, cfg, ledgerRange, buffered, callback)
+	}
+
 	return ingest.ApplyLedgerMetadata(
 		ledgerRange,
 		ingest.PublisherConfig{
@@ -133,4 +160,80 @@ func Stream(
 		ctx,
 		callback,
 	)
+}
+
+// streamTiered is the hot+cold branch of [Stream]. It mirrors the
+// SDK's ingest.ApplyLedgerMetadata loop (producer.go) but injects
+// a [TieredDataStore] as the BufferedStorageBackend's underlying
+// store instead of letting the SDK construct one from
+// DataStoreConfig. Both hot and cold instances of the SDK's
+// concrete DataStore are built from cfg.DataStore + cfg.ColdDataStore
+// respectively, then wrapped.
+//
+// Behavioural parity with ApplyLedgerMetadata: same bounded/unbounded
+// validation, same from-clamp (max(2, range.From)), same GetLedger
+// loop, same error wrapping.
+func streamTiered(
+	ctx context.Context,
+	cfg Config,
+	ledgerRange ledgerbackend.Range,
+	buffered ledgerbackend.BufferedStorageBackendConfig,
+	callback func(xdr.LedgerCloseMeta) error,
+) error {
+	hot, err := datastore.NewDataStore(ctx, cfg.DataStore)
+	if err != nil {
+		return fmt.Errorf("ledgerstream: hot datastore: %w", err)
+	}
+	cold, err := datastore.NewDataStore(ctx, cfg.ColdDataStore)
+	if err != nil {
+		// Close hot so the build error doesn't leak its resources;
+		// the inner Close error is intentionally swallowed — the
+		// caller wants the construction failure surfaced first.
+		_ = hot.Close()
+		return fmt.Errorf("ledgerstream: cold datastore: %w", err)
+	}
+	tiered := NewTieredDataStore(hot, cold, cfg.Registry)
+
+	schema, err := datastore.LoadSchema(ctx, tiered, cfg.DataStore)
+	if err != nil {
+		_ = tiered.Close()
+		return fmt.Errorf("ledgerstream: load schema: %w", err)
+	}
+
+	var backend ledgerbackend.LedgerBackend
+	backend, err = ledgerbackend.NewBufferedStorageBackend(buffered, tiered, schema)
+	if err != nil {
+		_ = tiered.Close()
+		return fmt.Errorf("ledgerstream: new buffered storage backend: %w", err)
+	}
+	if cfg.Registry != nil {
+		backend = ledgerbackend.WithMetrics(backend, cfg.Registry, cfg.RegistryNamespace)
+	}
+	defer func() { _ = backend.Close() }()
+
+	if ledgerRange.Bounded() && ledgerRange.To() <= ledgerRange.From() {
+		return fmt.Errorf("ledgerstream: invalid end value for bounded range, must be greater than start")
+	}
+	if !ledgerRange.Bounded() && ledgerRange.To() > 0 {
+		return fmt.Errorf("ledgerstream: invalid end value for unbounded range, must be zero")
+	}
+
+	from := ledgerRange.From()
+	if from < 2 {
+		from = 2
+	}
+	if err := backend.PrepareRange(ctx, ledgerRange); err != nil {
+		return fmt.Errorf("ledgerstream: prepare range: %w", err)
+	}
+
+	for seq := from; seq <= ledgerRange.To() || !ledgerRange.Bounded(); seq++ {
+		lcm, err := backend.GetLedger(ctx, seq)
+		if err != nil {
+			return fmt.Errorf("ledgerstream: get ledger %d: %w", seq, err)
+		}
+		if err := callback(lcm); err != nil {
+			return fmt.Errorf("ledgerstream: callback %d: %w", seq, err)
+		}
+	}
+	return nil
 }
