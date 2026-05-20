@@ -3,43 +3,22 @@
 # :9100 and :9473 respectively; both bound to loopback and reachable
 # only over the internal_cidrs (nftables enforces).
 
-# F-1291 (codex audit-2026-05-13): same fail-fast checksum
-# pattern as F-1280/F-1285. Pre-fix get_url had no checksum.
-- name: assert node_exporter_release_sha256 is set
-  ansible.builtin.assert:
-    that:
-      - node_exporter_release_sha256 is defined
-      - node_exporter_release_sha256 | length == 64
-    fail_msg: >-
-      node_exporter_release_sha256 must be set in inventory.
-      Get the SHA from the release page:
-      https://github.com/prometheus/node_exporter/releases/tag/v{{ node_exporter_version }}
-
-- name: Download node_exporter
-  ansible.builtin.get_url:
-    url: "https://github.com/prometheus/node_exporter/releases/download/v{{ node_exporter_version }}/node_exporter-{{ node_exporter_version }}.linux-amd64.tar.gz"
-    dest: "/tmp/node_exporter-{{ node_exporter_version }}.tar.gz"
-    mode: "0644"
-    checksum: "sha256:{{ node_exporter_release_sha256 }}"
-
-- name: Extract node_exporter
-  ansible.builtin.unarchive:
-    src: "/tmp/node_exporter-{{ node_exporter_version }}.tar.gz"
-    dest: /usr/local/bin/
-    remote_src: true
-    extra_opts:
-      - "--strip-components=1"
-      - "--wildcards"
-      - "*/node_exporter"
-
-- name: Create node_exporter user
-  ansible.builtin.user:
-    name: node_exporter
-    system: true
-    shell: /usr/sbin/nologin
-    home: /var/lib/node_exporter
-    create_home: false
+# Node-exporter source-of-truth: the Debian package
+# `prometheus-node-exporter` (#33 cutover 2026-05-20). Previously
+# we hand-downloaded /usr/local/bin/node_exporter and a custom
+# systemd unit, which (a) silently squatted :9100 against any
+# parallel-installed package, (b) didn't auto-update for CVE
+# coverage, and (c) ran a 2024 binary. The package version of the
+# unit + binary is the canonical setup; we keep the same
+# collectors and the same textfile_collector dir for full
+# metric-source continuity (archive_completeness.prom,
+# sla_probe.prom, galexie_archive_tip_lag.prom etc.).
+- name: Install prometheus-node-exporter Debian package
+  ansible.builtin.apt:
+    name: prometheus-node-exporter
     state: present
+    update_cache: true
+    cache_valid_time: 3600
 
 # Textfile-collector landing dir. cmd/ratesengine-sla-probe writes
 # its prom file here; cmd/ratesengine-ops verify-archive +
@@ -116,41 +95,41 @@
     state: started
   tags: [observability, sla-probe]
 
-- name: Install node_exporter systemd unit
+# Configure the Debian package's ARGS to mirror the legacy flags
+# so existing textfile_collector .prom files (and their alerts)
+# remain visible after the cutover. `--collector.textfile` is
+# implied by `--collector.textfile.directory` in node_exporter
+# ≥1.7.x — dropped to avoid the deprecation warning.
+- name: Template /etc/default/prometheus-node-exporter
   ansible.builtin.copy:
-    dest: /etc/systemd/system/node_exporter.service
+    dest: /etc/default/prometheus-node-exporter
+    owner: root
+    group: root
     mode: "0644"
     content: |
-      [Unit]
-      Description=Prometheus Node Exporter
-      After=network-online.target
-      Wants=network-online.target
+      # Managed by ansible (archival-node role / 10-observability.yml).
+      ARGS="--web.listen-address=0.0.0.0:{{ node_exporter_port }} --collector.systemd --collector.processes --collector.textfile.directory=/var/lib/node_exporter/textfile_collector"
+  notify: Restart prometheus-node-exporter
 
-      [Service]
-      User=node_exporter
-      Group=node_exporter
-      Type=simple
-      ExecStart=/usr/local/bin/node_exporter \
-        --web.listen-address=0.0.0.0:{{ node_exporter_port }} \
-        --collector.systemd \
-        --collector.processes \
-        --collector.textfile \
-        --collector.textfile.directory=/var/lib/node_exporter/textfile_collector
-      Restart=on-failure
-      RestartSec=5s
-
-      [Install]
-      WantedBy=multi-user.target
-  notify:
-    - Reload systemd
-    - Restart node_exporter
-
-- name: Enable + start node_exporter
+- name: Enable + start prometheus-node-exporter
   ansible.builtin.systemd:
-    name: node_exporter
+    name: prometheus-node-exporter
     state: started
     enabled: true
     daemon_reload: true
+
+# Idempotent cleanup for boxes that ran the old (pre-#33)
+# playbook: stop + disable the hand-rolled node_exporter.service
+# so the two binaries no longer collide on :9100. The unit file +
+# /usr/local/bin/node_exporter binary are left in place as a
+# zero-downtime rollback path (`systemctl stop
+# prometheus-node-exporter && systemctl start node_exporter`).
+- name: Stop legacy node_exporter.service (#33 cutover)
+  ansible.builtin.systemd:
+    name: node_exporter.service
+    state: stopped
+    enabled: false
+  failed_when: false  # absent on fresh installs — fine
 
 # stellar-core-prometheus-exporter scrapes the primary stellar-core
 # daemon's /info endpoint. Only install when we actually run the

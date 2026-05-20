@@ -39,8 +39,15 @@
     state: restarted
 
 - name: Restart node_exporter
+  # Legacy handler kept for any pre-#33 task references; new tasks
+  # should notify `Restart prometheus-node-exporter` instead.
   ansible.builtin.systemd:
     name: node_exporter
+    state: restarted
+
+- name: Restart prometheus-node-exporter
+  ansible.builtin.systemd:
+    name: prometheus-node-exporter
     state: restarted
 
 - name: Restart core exporter

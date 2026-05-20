@@ -17,6 +17,26 @@ against.
 
 ### Changed
 
+- **node-exporter consolidation: legacy → Debian package (#33).**
+  The pre-#33 state was two units fighting `:9100` — a hand-rolled
+  `node_exporter.service` (custom unit + `/usr/local/bin/node_exporter`,
+  2024 binary) running, and the apt-installed
+  `prometheus-node-exporter.service` perpetually failing because
+  the port was taken. Cut over to the Debian package live on r1:
+  configured `/etc/default/prometheus-node-exporter` with the
+  legacy's exact flags (`--collector.systemd --collector.processes
+  --collector.textfile.directory=/var/lib/node_exporter/textfile_collector`
+  — preserves every existing textfile metric: `archive_completeness.prom`,
+  `sla_probe.prom`, `galexie_archive_tip_lag.prom`), stopped + disabled
+  the legacy unit, restarted the package. Live-verified: 13 textfile
+  metric lines visible, 3127 `node_*` metrics serving,
+  `prometheus-node-exporter` no longer in the failed-unit list.
+  Codified in Ansible (`10-observability.yml`): apt-install the
+  package, template `ARGS=`, enable, idempotent stop+disable of any
+  pre-existing legacy unit. Legacy unit file + binary deliberately
+  retained for zero-downtime rollback (`systemctl stop
+  prometheus-node-exporter && systemctl start node_exporter`).
+
 - **`/v1/diagnostics/ingestion` pregenerated server-side (#16).**
   Background goroutine `Server.StartIngestionSnapshotRefresh`
   builds the full ingestion-diagnostics snapshot every 15 s into
