@@ -15,6 +15,8 @@ against.
 
 ## [Unreleased]
 
+## [v0.5.0-rc.59] — 2026-05-20
+
 ### Changed
 
 - **`defindex` `BackfillSafe: true`** — audit closed
