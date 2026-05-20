@@ -837,6 +837,14 @@ func run(cfgPath string, dryRun bool) error { //nolint:gocognit,funlen,gocyclo /
 		return nil
 	}
 
+	// #16: background refresher for /v1/diagnostics/ingestion. Builds
+	// the snapshot every 15s into an atomic.Pointer that the handler
+	// serves sub-ms (the inline build was 200-500ms — fine, but the
+	// status-page tile polls every 15-30s and this turns it into a
+	// near-zero-cost endpoint). Inline-build remains as the
+	// not-yet-warm fallback inside the handler.
+	go apiSrv.StartIngestionSnapshotRefresh(rootCtx)
+
 	httpSrv := &http.Server{
 		Addr:              cfg.API.ListenAddr,
 		Handler:           apiSrv.Handler(),

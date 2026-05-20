@@ -15,6 +15,22 @@ against.
 
 ## [Unreleased]
 
+### Changed
+
+- **`/v1/diagnostics/ingestion` pregenerated server-side (#16).**
+  Background goroutine `Server.StartIngestionSnapshotRefresh`
+  builds the full ingestion-diagnostics snapshot every 15 s into
+  an `atomic.Pointer[ingestionSnapshotEntry]`; the handler reads
+  the atomic and writes it sub-ms instead of the previous ~417 ms
+  inline build (7 parallel DB-filler goroutines + post-fillers
+  coverage projection). Inline build remains as the cold-start
+  fallback (the atomic is nil until the first refresh fires).
+  Cadence (15 s) matches the existing `Cache-Control: max-age=15`
+  header. Refresh uses a detached `context.Background()`-derived
+  ctx (`//nolint:gosec,contextcheck` — intentional, the parent is
+  the api process lifetime, not any request). Launched alongside
+  the existing `prewarmCaches` goroutine in `cmd/ratesengine-api`.
+
 ### Added
 
 - **galexie-archive tip-lag alert (#31) — defense-in-depth for

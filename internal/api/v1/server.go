@@ -7,6 +7,7 @@ import (
 	"net"
 	"net/http"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/RatesEngine/rates-engine/internal/aggregate"
@@ -160,6 +161,13 @@ type Server struct {
 	// each entry until one returns data, marking the response
 	// `triangulated: true` for transparency.
 	usdPeggedClassics []canonical.Asset
+	// ingestionSnapshot caches a fully-built IngestionDiagnostics
+	// computed every ~15s by a background goroutine launched via
+	// [Server.StartIngestionSnapshotRefresh]. Powers
+	// /v1/diagnostics/ingestion sub-millisecond when populated
+	// (#16). Nil before the first refresh fires; handler falls back
+	// to inline-build (the legacy 200-500ms path) in that case.
+	ingestionSnapshot atomic.Pointer[ingestionSnapshotEntry]
 	mux               *http.ServeMux
 	started           time.Time
 }

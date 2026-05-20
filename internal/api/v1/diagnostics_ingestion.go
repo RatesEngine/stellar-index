@@ -375,6 +375,16 @@ type SourceHealthRow struct {
 // so 15s smooths the load from a refreshing status page without
 // hiding live degradation.
 func (s *Server) handleDiagnosticsIngestion(w http.ResponseWriter, r *http.Request) {
+	// #16: serve from the background-refreshed snapshot when present —
+	// sub-millisecond instead of the 200-500ms inline build. Falls back
+	// to inline-build when the refresher hasn't fired yet (process just
+	// booted) so first-request-after-restart is never stuck.
+	if entry := s.ingestionSnapshot.Load(); entry != nil {
+		w.Header().Set("Cache-Control", "public, max-age=15, s-maxage=15")
+		writeJSON(w, entry.snap, Flags{})
+		return
+	}
+
 	// Per-handler ceiling — 30s. Each filler uses its own
 	// sub-context (5-10s each) so one slow reader doesn't starve
 	// the others. Pre-2026-05-14 the parent ctx was 6s and the
@@ -385,6 +395,64 @@ func (s *Server) handleDiagnosticsIngestion(w http.ResponseWriter, r *http.Reque
 	ctx, cancel := context.WithTimeout(r.Context(), 30*time.Second)
 	defer cancel()
 
+	out := s.buildIngestionSnapshot(ctx)
+	w.Header().Set("Cache-Control", "public, max-age=15, s-maxage=15")
+	writeJSON(w, out, Flags{})
+}
+
+// ingestionSnapshotEntry wraps a computed IngestionDiagnostics for
+// atomic storage. Kept separate from the response type so future
+// per-snapshot metadata (computedAt for staleness checks, build
+// duration for an SLI) lands here without bloating the wire shape.
+type ingestionSnapshotEntry struct {
+	snap IngestionDiagnostics
+}
+
+// StartIngestionSnapshotRefresh launches a background goroutine that
+// refreshes [Server.ingestionSnapshot] every 15s (matches the
+// existing `Cache-Control: max-age=15`) by running the same build
+// path the inline-fallback handler uses. Stops on ctx cancellation.
+// Safe to call once at server start; calling twice would double the
+// work but not corrupt state (atomic.Pointer.Store semantics). One
+// shoot-and-store per cycle: a slow build doesn't block subsequent
+// reads — they keep serving the previous snapshot until store.
+//
+// Cadence rationale: 15s matches the explorer's status-tile poll
+// cadence + the existing browser cache-control header. Tighter is
+// wasted DB calls; looser would surface a 1-cycle lag spike during
+// post-restart cold-cache windows that the cache header already
+// permits anyway.
+func (s *Server) StartIngestionSnapshotRefresh(ctx context.Context) {
+	const cadence = 15 * time.Second
+	// Fire once immediately so the first user request hits the warm
+	// path. Build under its own per-call ctx — independent of the
+	// caller's parent ctx — for the same outlive-request-lifetime
+	// rationale as the SWR detached-fill pattern in CachedHistoryReader.
+	doRefresh := func() { //nolint:gosec,contextcheck // G118/contextcheck — intentional detached build; the parent ctx is the LIFETIME of the api process, not any individual request, so the closure deliberately doesn't accept the caller's ctx + uses context.Background+timeout instead.
+		buildCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+		out := s.buildIngestionSnapshot(buildCtx)
+		s.ingestionSnapshot.Store(&ingestionSnapshotEntry{snap: out})
+	}
+	doRefresh()
+	t := time.NewTicker(cadence)
+	defer t.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-t.C:
+			doRefresh()
+		}
+	}
+}
+
+// buildIngestionSnapshot runs the parallel-fillers pipeline that
+// composes one IngestionDiagnostics. Called by both the inline-
+// handler fallback (when the atomic snapshot isn't populated yet)
+// and the background refresher. Self-contained — no response
+// writes, no header sets; returns the snapshot only.
+func (s *Server) buildIngestionSnapshot(ctx context.Context) IngestionDiagnostics { //nolint:funlen,gocognit,gocyclo // linear filler-orchestration; splitting would obscure the parallel pattern.
 	out := IngestionDiagnostics{
 		Region: RegionInfo{
 			Name:       s.regionName,
@@ -466,9 +534,7 @@ func (s *Server) handleDiagnosticsIngestion(w http.ResponseWriter, r *http.Reque
 		// trades-scan cache time.
 		out.BackfillCoverageAt = time.Now().UTC().Format(time.RFC3339)
 	}
-
-	w.Header().Set("Cache-Control", "public, max-age=15, s-maxage=15")
-	writeJSON(w, out, Flags{})
+	return out
 }
 
 // fillIngestionLedger reads network-stats and copies the four
