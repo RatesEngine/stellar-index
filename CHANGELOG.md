@@ -17,6 +17,26 @@ against.
 
 ### Added
 
+- **`StorageConfig` cold-tier fields + `LedgerstreamConfig` wires
+  them (#7 implementation step 1c).** New TOML fields in
+  `[storage]`: `s3_cold_endpoint`, `s3_cold_region`,
+  `s3_cold_bucket_archive`, `s3_cold_access_key_env`,
+  `s3_cold_secret_key_env`. All default to empty — every
+  pre-ADR-0027 deployment continues to use the legacy single-
+  source path byte-for-byte. `StorageConfig.ColdTieringEnabled()`
+  returns true iff `s3_cold_bucket_archive` is set (the
+  `LCM_TIER_ENABLED=false` of ADR-0027 §Step 1 expressed as a
+  field presence). `pipeline.LedgerstreamConfig` populates
+  `ledgerstream.Config.ColdDataStore` when tiering is enabled
+  **and** the caller is reading the archive bucket — the live
+  bucket (`galexie-live`) is the rolling near-tip working set
+  authored locally and is never tiered. Tests cover the
+  no-cold-tier default, the cold-tier-archive path, the
+  cold-tier-skipped-for-live-bucket guard, and the
+  `ColdTieringEnabled` truth table. ADR-0027 §Step 1 is now
+  complete in code; §Steps 2-5 (trim + rehydrate operators,
+  flag-flip on r1, bulk trim, monthly cadence) follow as
+  separate commits.
 - **`ledgerstream.Stream` gains an opt-in tiered read path
   (#7 implementation step 1b).** `Config` learns a new optional
   `ColdDataStore datastore.DataStoreConfig` field; when set,

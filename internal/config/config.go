@@ -418,6 +418,32 @@ type StorageConfig struct {
 	S3BucketLive       string   `toml:"s3_bucket_live" doc:"Live Galexie export bucket name." default:"galexie-live"`
 	S3AccessKeyEnv     string   `toml:"s3_access_key_env" doc:"Env var holding S3 access key ID." env:"RATESENGINE_S3_ACCESS_KEY" default:"RATESENGINE_S3_ACCESS_KEY"`
 	S3SecretKeyEnv     string   `toml:"s3_secret_key_env" doc:"Env var holding S3 secret access key." env:"RATESENGINE_S3_SECRET_KEY" default:"RATESENGINE_S3_SECRET_KEY"`
+
+	// Cold-tier (LCM cache tiering — ADR-0027). When
+	// S3ColdBucketArchive is non-empty, ledger reads cascade hot
+	// (S3BucketArchive, MinIO) → cold (this bucket) via
+	// internal/ledgerstream's TieredDataStore. The cold tier is
+	// READ-ONLY by design — we never write back; the canonical
+	// production target is `aws-public-blockchain/v1.1/stellar/
+	// ledgers/pubnet` (the AWS Open Data Sponsorship bucket — the
+	// same source R2 reads per ADR-0016). Zero-value disables
+	// tiering and the legacy single-source path is used unchanged
+	// (default — flip the bucket field on as part of ADR-0027
+	// §Sequencing step 3, not earlier).
+	S3ColdEndpoint      string `toml:"s3_cold_endpoint" doc:"Cold-tier S3 endpoint. Empty disables tiering. Production: https://s3.amazonaws.com" default:""`
+	S3ColdRegion        string `toml:"s3_cold_region" doc:"Cold-tier S3 region. Production (aws-public-blockchain): us-east-1" default:""`
+	S3ColdBucketArchive string `toml:"s3_cold_bucket_archive" doc:"Cold-tier bucket + prefix for historical LCMs. Empty disables tiering. Production: aws-public-blockchain/v1.1/stellar/ledgers/pubnet" default:""`
+	S3ColdAccessKeyEnv  string `toml:"s3_cold_access_key_env" doc:"Env var holding cold-tier S3 access key. Empty = anonymous reads (correct for public buckets)." env:"" default:""`
+	S3ColdSecretKeyEnv  string `toml:"s3_cold_secret_key_env" doc:"Env var holding cold-tier S3 secret key. Empty = anonymous reads." env:"" default:""`
+}
+
+// ColdTieringEnabled reports whether the cold-tier read path
+// should be wired up. The flag is the presence/absence of the
+// cold-bucket field — ADR-0027 §Step 1 "LCM_TIER_ENABLED=false"
+// in its terms — so unset is the safe default for every
+// pre-ADR-0027 deployment.
+func (s StorageConfig) ColdTieringEnabled() bool {
+	return s.S3ColdBucketArchive != ""
 }
 
 // IngestionConfig controls the indexer's source fleet.
