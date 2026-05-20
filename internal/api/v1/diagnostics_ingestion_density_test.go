@@ -264,7 +264,13 @@ func TestComputeSourceDensity(t *testing.T) {
 			wantDensityMax: 1.0,
 		},
 		{
-			name: "live tail bridges an interior sub-tip gap (bracketed both sides)",
+			// 2026-05-20: was "live tail bridges an interior sub-tip gap".
+			// Bridging removed because it over-credited sources whose
+			// live ingest only walked the head band (e.g. soroswap-router
+			// + defindex added to enabled_sources after the indexer's
+			// live cursor had already crossed the bridged ledgers — see
+			// extendWithLiveTail's function-level comment).
+			name: "interior sub-tip gap is NOT bridged (post-2026-05-20 honesty)",
 			cursors: []timescale.Cursor{
 				{Source: "backfill", Sub: "1-200:sdex", LastLedger: 200, UpdatedAt: now},
 				{Source: "backfill", Sub: "500-800:sdex", LastLedger: 800, UpdatedAt: now},
@@ -273,33 +279,33 @@ func TestComputeSourceDensity(t *testing.T) {
 			source:  "sdex",
 			genesis: 1,
 			tip:     1000,
-			// Hole [201,499] is bracketed by backfill [1,200] below
-			// and [500,800] above, and 500 ≤ liveTop 1000 → it lies
-			// wholly within the gap-free live span (ADR-0017), so
-			// live ingest provably walked it. [1,200] ∪ bridge
-			// [200,500] ∪ [500,800] ∪ head-band [800,1000] = [1,1000].
-			wantCovered:    1000,
-			wantDensityMin: 1.0,
-			wantDensityMax: 1.0,
+			// [1,200] ∪ [500,800] ∪ head-band [800,1000] = [1,200] ∪
+			// [500,1000]. Hole [201,499] stays uncovered.
+			wantCovered:    200 + 501,
+			wantDensityMin: 0.700,
+			wantDensityMax: 0.702,
 		},
 		{
-			name: "fragmented union: disjoint high gap-backfill island no longer caps density",
-			// The r1 shape in miniature: a lower contiguous backfill
-			// block, then a stalled-then-gap-backfilled disjoint
-			// island higher up that fragmented the union and (pre-fix)
-			// anchored the head band above the interior span, capping
-			// density ~96%. The interior span is gap-free live-ingested.
+			// 2026-05-20: was "fragmented union: disjoint high
+			// gap-backfill island no longer caps density". Bridging
+			// removed; the disjoint island case now reports honestly.
+			// Operators close the [301,699] gap by re-running an
+			// actual backfill over that range instead of silently
+			// claiming live ingest covered it.
+			name: "fragmented union: disjoint high gap-backfill island reports honest under-coverage",
 			cursors: []timescale.Cursor{
 				{Source: "backfill", Sub: "1-300:sdex", LastLedger: 300, UpdatedAt: now},
 				{Source: "backfill", Sub: "700-750:sdex", LastLedger: 750, UpdatedAt: now},
 				{Source: "ledgerstream", Sub: "", LastLedger: 1000, UpdatedAt: now},
 			},
-			source:         "sdex",
-			genesis:        1,
-			tip:            1000,
-			wantCovered:    1000, // pre-fix: 300 + 301 = 601 (~0.601, the cap)
-			wantDensityMin: 1.0,
-			wantDensityMax: 1.0,
+			source:  "sdex",
+			genesis: 1,
+			tip:     1000,
+			// [1,300] ∪ [700,750] ∪ head-band [750,1000] =
+			// [1,300] ∪ [700,1000]. Gap [301,699] stays uncovered.
+			wantCovered:    300 + 301,
+			wantDensityMin: 0.600,
+			wantDensityMax: 0.602,
 		},
 		{
 			name: "interior gap whose upper bracket is above the live cursor is NOT bridged",

@@ -15,6 +15,32 @@ against.
 
 ## [Unreleased]
 
+### Fixed
+
+- **Density formula no longer over-credits via interior-gap
+  bridging (user-reported).** Status-page reported 100% density
+  for `soroswap-router` and `defindex` while the #38 historical
+  backfill was only ~78% through their range. Root cause:
+  `extendWithLiveTail` (`diagnostics_ingestion.go:1056`) was
+  bridging interior gaps between two backfill intervals whenever
+  the upper bracket's start ≤ liveTop, on the assumption that
+  live ingest had walked the gap. That assumption is FALSE for
+  sources added to `enabled_sources` after live ingest had
+  already crossed the gap-end ledger — exactly the case for
+  soroswap-router + defindex which were enabled at rc.5x while
+  the live cursor was already at ~62.5M; the interior
+  [60M, 62.5M] gap got false credit. Fix: remove interior-gap
+  bridging entirely. Live-tail credit is now **head-band only**
+  — from the top of the backfill union up to `min(liveTop, tip)`.
+  The previously-protected edge case ("disjoint high
+  gap-backfill island silently capping density at ~96%") becomes
+  honest under-coverage: operators close such gaps with a
+  targeted backfill rather than silent live-credit. Density on
+  defindex/router should now drop from the false 100% to the
+  honest ~78%-and-rising as #38 progresses. Two existing tests
+  that locked in the bridging behaviour were updated to the new
+  honesty-first policy.
+
 ## [v0.5.0-rc.61] — 2026-05-20
 
 ### Fixed

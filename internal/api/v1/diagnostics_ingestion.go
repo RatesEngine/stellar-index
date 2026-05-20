@@ -1028,30 +1028,57 @@ func liveLedgerstreamTop(cursors []timescale.Cursor) int64 {
 }
 
 // extendWithLiveTail credits the live-ingest tail on top of the
-// backfill union. Live ingest is gap-free from its low-water to tip
-// (sequential walker + archivecompleteness daemon, ADR-0017), so two
-// region classes are creditable to it:
+// backfill union. Live ingest is gap-free from its low-water to
+// tip (sequential walker + archivecompleteness daemon, ADR-0017)
+// — but **only for sources actively enabled in the indexer's
+// decoder set during that live walk**. The ledgerstream cursor
+// itself doesn't carry per-source attribution: it advances
+// regardless of which decoders were running. So we can only
+// credit the live cursor for a source's coverage in regions
+// where live ingest provably decoded it.
 //
-//   - Head band: from the top of the backfill union up to
-//     min(liveTop, tip) — the always-advancing caught-up frontier,
-//     so a fully-synced source reads ~100% and stays there.
-//   - Interior sub-tip gaps: a gap BETWEEN two merged backfill
-//     intervals whose upper neighbour starts at/below liveTop. The
-//     gap is bracketed by backfill coverage on both sides and lies
-//     wholly within the gap-free live span, so live ingest provably
-//     walked it (a stalled backfill range later covered live, or a
-//     disjoint high gap-backfill island that fragmented the union —
-//     the latter was silently capping density at ~96%). It is NOT
-//     the [genesis, firstBackfillStart] region: that's the lower
-//     boundary, never an adjacent-pair interior gap, so it is left
-//     uncovered and a never-backfilled-low source still reads
-//     honestly.
+// Credit awarded:
+//
+//   - **Head band only.** From the top of the backfill union up
+//     to min(liveTop, tip). Justification: a backfill that
+//     covers [start, backfill_top] proves the source's decoder
+//     handled that range; the live indexer running NOW (still
+//     decoding the source — otherwise we'd have a stale cursor
+//     somewhere) provably walks forward from backfill_top to
+//     tip with the source still enabled. The narrow stretch
+//     between backfill_top and liveTop is therefore safe to
+//     credit; a fully-synced source reads ~100% and stays
+//     there as the tip advances.
+//
+// Credit deliberately NOT awarded:
+//
+//   - **Interior sub-tip gaps (removed 2026-05-20).** A gap
+//     between two merged backfill intervals USED to be bridged
+//     when its upper neighbour started ≤ liveTop, on the
+//     assumption that live ingest had walked the gap with
+//     the source enabled. That assumption is FALSE for sources
+//     added to enabled_sources after live ingest had already
+//     crossed the gap-end ledger (e.g. soroswap-router /
+//     defindex enabled at rc.5x while the live cursor was
+//     already at ~62.5M; an interior gap between 60M and 62.5M
+//     was incorrectly credited as covered, surfacing 100%
+//     density even though neither backfill nor live had
+//     decoded the source in [60M, 62.5M]). Without per-source
+//     live-first-enabled ledger tracking we can't prove
+//     interior coverage — so we credit nothing in that band
+//     and surface the honest under-count. The edge case the
+//     bridging was originally protecting against ("a disjoint
+//     high gap-backfill island silently capping density at
+//     ~96%") is now operator-action: re-run an actual
+//     backfill across the gap rather than silently crediting
+//     it.
 //
 // Honest-by-construction guards retained:
+//
 //   - merged empty (never backfilled, e.g. BackfillSafe=false
 //     Soroban source) → unchanged, stays 0%.
-//   - no live cursor (liveTop ≤ 0: test fixture / region without
-//     live ingest) → unchanged.
+//   - no live cursor (liveTop ≤ 0: test fixture / region
+//     without live ingest) → unchanged.
 //   - nothing is ever credited above min(liveTop, tip).
 func extendWithLiveTail(merged []coverageInterval, cursors []timescale.Cursor, tip int64) []coverageInterval {
 	if len(merged) == 0 {
@@ -1068,20 +1095,10 @@ func extendWithLiveTail(merged []coverageInterval, cursors []timescale.Cursor, t
 	out := make([]coverageInterval, 0, len(merged)+1)
 	out = append(out, merged...)
 
-	// Interior sub-tip gaps: bridge any gap between consecutive
-	// backfill intervals whose upper neighbour starts ≤ liveTop.
-	// Bounds are inclusive and mergeCoverageIntervals joins on
-	// Start ≤ End+1, so Start:gapLo / End:gapHi overlaps both
-	// neighbours by one ledger and collapses cleanly on re-merge —
-	// same convention as the head band below.
-	for i := 0; i+1 < len(merged); i++ {
-		gapLo, gapHi := merged[i].End, merged[i+1].Start
-		if gapLo < gapHi && gapHi <= liveTop {
-			out = append(out, coverageInterval{Start: gapLo, End: gapHi})
-		}
-	}
-
-	// Head band: extend the union top up to liveTop.
+	// Head band only: extend the union top up to liveTop. No
+	// interior-gap bridging — see the function-level comment
+	// for the soroswap-router / defindex over-credit case the
+	// bridging caused.
 	if backfillTop := merged[len(merged)-1].End; liveTop > backfillTop {
 		out = append(out, coverageInterval{Start: backfillTop, End: liveTop})
 	}
