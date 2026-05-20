@@ -15,6 +15,8 @@ against.
 
 ## [Unreleased]
 
+## [v0.5.0-rc.61] — 2026-05-20
+
 ### Fixed
 
 - **`entries` counter expanded to ALL observer-driven sinks
