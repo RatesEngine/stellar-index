@@ -15,6 +15,40 @@ against.
 
 ## [Unreleased]
 
+### Changed
+
+- **Issuer-filter pushdown into `listCoinsBaseSelect` CTEs (#27).**
+  Live r1 `EXPLAIN ANALYZE` on `/v1/assets?issuer=GA5Z…`:
+  `per_asset_24h_vol`'s `Partial HashAggregate` scanned **256,724
+  rows** of `prices_1m` to materialise stats for every asset, then
+  the outer SELECT discarded all but 9 (the actual issuer's
+  asset count). 1.3M shared-buffer hits for a single-issuer
+  query. The PostgreSQL 12+ default of inlining CTEs doesn't
+  help here because each per-asset CTE has an aggregate
+  (`SUM`/`DISTINCT ON`) that becomes a predicate-pushdown barrier;
+  the issuer filter on `ca.issuer_g_strkey` is unrelated to the
+  CTEs' `GROUP BY asset_id`, so the planner can't push through.
+  Fix: when `issuer` is set in `buildCoinsQuery`,
+  `listCoinsBaseSelectSQL` prepends a `chosen_assets` CTE that
+  materialises the issuer's asset_id set once, and each of the
+  nine per-asset CTEs adds `AND base_asset IN (SELECT asset_id
+  FROM chosen_assets)` (`per_asset_24h_vol` also adds the
+  symmetric `quote_asset IN` to the union's quote-side branch).
+  The four `xlm_usd` CTEs deliberately stay unfiltered (they
+  look up XLM specifically, not the caller's asset). Sentinel
+  comments (`/*PUSHDOWN_BASE*/`, `/*PUSHDOWN_QUOTE*/`) embedded
+  in the SQL get replaced in-place — keeping the const + the
+  renderer adjacent rather than maintaining two parallel
+  300-line SQL strings. q-search pushdown intentionally deferred
+  — `LIKE` patterns on three columns combined with the outer
+  `LIKE` rules don't reduce as predictably; if profiling later
+  shows that path is hot, a q-side `chosen_assets` variant can
+  be added. Backfill behaviour unchanged: unfiltered LIST
+  (the dominant traffic pattern) is byte-for-byte the same SQL.
+  Six tests cover the renderer + buildCoinsQuery branches
+  (no-pushdown, with-pushdown, no-issuer, issuer-only,
+  q-only-no-pushdown, issuer+q).
+
 ### Fixed
 
 - **Prewarm extended to verified-currency canonical asset_ids

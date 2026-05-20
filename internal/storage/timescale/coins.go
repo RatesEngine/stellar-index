@@ -211,13 +211,13 @@ const listCoinsBaseSelect = `
 		        FROM prices_1m
 		       WHERE bucket >= now() - INTERVAL '24 hours'
 		         AND bucket  <  now()
-		         AND volume_usd IS NOT NULL
+		         AND volume_usd IS NOT NULL /*PUSHDOWN_BASE*/
 		      UNION ALL
 		      SELECT quote_asset AS asset_id, volume_usd
 		        FROM prices_1m
 		       WHERE bucket >= now() - INTERVAL '24 hours'
 		         AND bucket  <  now()
-		         AND volume_usd IS NOT NULL
+		         AND volume_usd IS NOT NULL /*PUSHDOWN_QUOTE*/
 		    ) t
 		   GROUP BY asset_id
 		),
@@ -226,7 +226,7 @@ const listCoinsBaseSelect = `
 		    FROM prices_1m
 		   WHERE quote_asset = 'fiat:USD'
 		     AND bucket >= now() - INTERVAL '7 days'
-		     AND vwap IS NOT NULL
+		     AND vwap IS NOT NULL /*PUSHDOWN_BASE*/
 		   ORDER BY base_asset, bucket DESC
 		),
 		direct_usd_1h AS (
@@ -235,7 +235,7 @@ const listCoinsBaseSelect = `
 		   WHERE quote_asset = 'fiat:USD'
 		     AND bucket BETWEEN now() - INTERVAL '90 minutes'
 		                   AND now() - INTERVAL '55 minutes'
-		     AND vwap IS NOT NULL
+		     AND vwap IS NOT NULL /*PUSHDOWN_BASE*/
 		   ORDER BY base_asset, bucket DESC
 		),
 		direct_usd_24h AS (
@@ -244,7 +244,7 @@ const listCoinsBaseSelect = `
 		   WHERE quote_asset = 'fiat:USD'
 		     AND bucket BETWEEN now() - INTERVAL '26 hours'
 		                   AND now() - INTERVAL '23 hours 30 minutes'
-		     AND vwap IS NOT NULL
+		     AND vwap IS NOT NULL /*PUSHDOWN_BASE*/
 		   ORDER BY base_asset, bucket DESC
 		),
 		direct_usd_7d AS (
@@ -253,7 +253,7 @@ const listCoinsBaseSelect = `
 		   WHERE quote_asset = 'fiat:USD'
 		     AND bucket BETWEEN now() - INTERVAL '7 days 12 hours'
 		                   AND now() - INTERVAL '6 days 22 hours'
-		     AND vwap IS NOT NULL
+		     AND vwap IS NOT NULL /*PUSHDOWN_BASE*/
 		   ORDER BY base_asset, bucket DESC
 		),
 		asset_vs_xlm AS (
@@ -261,7 +261,7 @@ const listCoinsBaseSelect = `
 		    FROM prices_1m
 		   WHERE quote_asset = 'native'
 		     AND bucket >= now() - INTERVAL '7 days'
-		     AND vwap IS NOT NULL
+		     AND vwap IS NOT NULL /*PUSHDOWN_BASE*/
 		   ORDER BY base_asset, bucket DESC
 		),
 		asset_vs_xlm_1h AS (
@@ -270,7 +270,7 @@ const listCoinsBaseSelect = `
 		   WHERE quote_asset = 'native'
 		     AND bucket BETWEEN now() - INTERVAL '90 minutes'
 		                   AND now() - INTERVAL '55 minutes'
-		     AND vwap IS NOT NULL
+		     AND vwap IS NOT NULL /*PUSHDOWN_BASE*/
 		   ORDER BY base_asset, bucket DESC
 		),
 		asset_vs_xlm_24h AS (
@@ -279,7 +279,7 @@ const listCoinsBaseSelect = `
 		   WHERE quote_asset = 'native'
 		     AND bucket BETWEEN now() - INTERVAL '26 hours'
 		                   AND now() - INTERVAL '23 hours 30 minutes'
-		     AND vwap IS NOT NULL
+		     AND vwap IS NOT NULL /*PUSHDOWN_BASE*/
 		   ORDER BY base_asset, bucket DESC
 		),
 		asset_vs_xlm_7d AS (
@@ -288,7 +288,7 @@ const listCoinsBaseSelect = `
 		   WHERE quote_asset = 'native'
 		     AND bucket BETWEEN now() - INTERVAL '7 days 12 hours'
 		                   AND now() - INTERVAL '6 days 22 hours'
-		     AND vwap IS NOT NULL
+		     AND vwap IS NOT NULL /*PUSHDOWN_BASE*/
 		   ORDER BY base_asset, bucket DESC
 		),
 		xlm_usd AS (
@@ -484,25 +484,93 @@ const listCoinsBaseSelect = `
 		  LEFT JOIN asset_vs_xlm_7d   vs_xlm_7d   ON vs_xlm_7d.asset_id  = ca.asset_id
 `
 
+// listCoinsBaseSelectSQL renders [listCoinsBaseSelect] with optional
+// asset-filter pushdown into each per-asset CTE (#27). When
+// pushdownPredicate is empty, the function strips the
+// /*PUSHDOWN_BASE*/ + /*PUSHDOWN_QUOTE*/ marker comments and
+// returns the SQL unchanged (each CTE materialises stats for
+// every asset). When non-empty, it prepends a `chosen_assets`
+// CTE that holds the asset_id list matching pushdownPredicate
+// (which the caller must construct using positional args that
+// match the rest of the query) and replaces each marker with
+// `AND <side>_asset IN (SELECT asset_id FROM chosen_assets)`.
+//
+// Measured impact (2026-05-20 on r1, /v1/assets?issuer=GA5Z…):
+// the per_asset_24h_vol CTE without pushdown reads 256k rows
+// for a 1-row result (1.3M buffer hits); with pushdown it reads
+// ~9 rows. Same shape for the eight other per-asset CTEs.
+// The four xlm_usd CTEs deliberately stay unfiltered — they
+// look up XLM specifically, not the caller-supplied asset.
+//
+// pushdownPredicate is the WHERE-expression body for the
+// chosen_assets CTE — e.g. "issuer_g_strkey = $1" or any
+// combination using positional args $N matching the caller's
+// args slice. buildCoinsQuery owns the arg-numbering contract
+// (issuer is $1 when set, so the predicate is the literal
+// string "issuer_g_strkey = $1").
+func listCoinsBaseSelectSQL(pushdownPredicate string) string {
+	if pushdownPredicate == "" {
+		// No pushdown — strip the marker comments. Leaving them
+		// in is harmless (they're valid SQL comments) but stripping
+		// keeps EXPLAIN output and pg_stat_statements normalised.
+		s := strings.ReplaceAll(listCoinsBaseSelect, "/*PUSHDOWN_BASE*/", "")
+		s = strings.ReplaceAll(s, "/*PUSHDOWN_QUOTE*/", "")
+		return s
+	}
+	chosenCTE := "\n\t\tWITH chosen_assets AS (SELECT asset_id FROM classic_assets WHERE " + pushdownPredicate + "),\n\t\t"
+	// Replace the leading `WITH per_asset_24h_vol AS (` with the
+	// chosen_assets CTE followed by per_asset_24h_vol (chosen first
+	// so its asset_id pool is materialised once and reused by every
+	// downstream CTE). The original const starts with
+	// "\n\t\tWITH per_asset_24h_vol AS (" — match on the WITH so the
+	// replacement is unambiguous.
+	s := strings.Replace(
+		listCoinsBaseSelect,
+		"\n\t\tWITH per_asset_24h_vol AS (",
+		chosenCTE+"per_asset_24h_vol AS (",
+		1,
+	)
+	s = strings.ReplaceAll(s, "/*PUSHDOWN_BASE*/", "AND base_asset IN (SELECT asset_id FROM chosen_assets)")
+	s = strings.ReplaceAll(s, "/*PUSHDOWN_QUOTE*/", "AND quote_asset IN (SELECT asset_id FROM chosen_assets)")
+	return s
+}
+
 // buildCoinsQuery composes the WHERE + ORDER + LIMIT around
-// listCoinsBaseSelect, given the limit / issuer-filter / keyset
+// listCoinsBaseSelectSQL, given the limit / issuer-filter / keyset
 // cursor / search query. The combinatorial explosion of
 // (issuer × cursor × q) is too painful as a switch; use a
 // slice + numbered placeholders.
 func buildCoinsQuery(limit int, issuer, cursor, q string, order CoinsOrder) (string, []any) {
 	var (
-		conds []string
-		args  []any
+		conds             []string
+		args              []any
+		pushdownPredicate string
 	)
 	if issuer != "" {
 		args = append(args, issuer)
 		conds = append(conds, fmt.Sprintf("ca.issuer_g_strkey = $%d", len(args)))
+		// #27 pushdown: the issuer filter narrows the asset set
+		// drastically (a single G-strkey typically issues handfuls
+		// of assets, not thousands). chosen_assets materialises that
+		// set once and every per-asset CTE filters against it,
+		// dropping per_asset_24h_vol's row count from ~256k to ~9
+		// in the GA5Z… case measured 2026-05-20. Reuses $1 (the
+		// issuer arg) so no additional placeholder is needed.
+		pushdownPredicate = fmt.Sprintf("issuer_g_strkey = $%d", len(args))
 	}
 	if q != "" {
 		args = append(args, "%"+q+"%")
 		conds = append(conds, fmt.Sprintf(
 			"(LOWER(ca.code) LIKE LOWER($%d) OR LOWER(COALESCE(ca.slug, ca.code)) LIKE LOWER($%d) OR LOWER(ca.issuer_g_strkey) LIKE LOWER($%d))",
 			len(args), len(args), len(args)))
+		// q-search pushdown intentionally NOT added — LIKE patterns
+		// on three columns combined with the outer SELECT's
+		// `ca.code LIKE` rule don't reduce as predictably as the
+		// issuer case, and adding the same chosen_assets predicate
+		// in WHERE would double-evaluate the same LIKE for no win.
+		// If profiling later shows the q-only path is hot, add a
+		// q-side chosen_assets variant. For now the SWR cache covers
+		// the small filtered-LIST traffic.
 	}
 	args = append(args, coinsCursorArgs(cursor, order)...)
 	if cursor != "" {
@@ -515,7 +583,7 @@ func buildCoinsQuery(limit int, issuer, cursor, q string, order CoinsOrder) (str
 	if len(conds) > 0 {
 		where = " WHERE " + strings.Join(conds, " AND ")
 	}
-	return listCoinsBaseSelect + where + coinsOrderBy(order) + " LIMIT " + limitPlaceholder, args
+	return listCoinsBaseSelectSQL(pushdownPredicate) + where + coinsOrderBy(order) + " LIMIT " + limitPlaceholder, args
 }
 
 // coinsCursorArgs returns the positional args appended for the
