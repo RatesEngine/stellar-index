@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/RatesEngine/rates-engine/internal/api/v1/middleware"
@@ -213,4 +214,75 @@ func handlerTimedOut(callCtx context.Context, err error) bool {
 		return true
 	}
 	return callCtx.Err() == context.DeadlineExceeded
+}
+
+// transientStorageErr reports whether a storage-layer error looks
+// like a transient infrastructure hiccup rather than a real server
+// bug. Handlers SHOULD map true to a 503 problem+json (retryable)
+// rather than the misleading 500 a writeProblem default would
+// produce; the sla-probe's availability_pct counts 5xx as failure,
+// so a single transient driver-level error costs an availability
+// point even when the underlying request was processable on a
+// retry.
+//
+// Examples this catches:
+//
+//   - **SQLSTATE 57014 NOT carried by a context cancellation.**
+//     Postgres can issue `canceling statement due to user request`
+//     from server-side statement_timeout, lock_timeout, or
+//     idle_in_transaction_session_timeout — none of which trip
+//     [clientAborted] (the http request context is alive) or
+//     [handlerTimedOut] (the per-call context hasn't deadlined).
+//     The result reaches the handler as a bare 57014; without this
+//     helper it returns 500.
+//   - **lib/pq driver-bad-conn errors.** `driver: bad connection`
+//     surfaces when a Postgres backend was killed (admin restart,
+//     OOM killer, idle-connection reaper) between checkout and
+//     query execution. The connection-pool retry would normally
+//     paper over it; surfaces only when retries are exhausted.
+//   - **EOF / broken pipe.** Network-level transient between the
+//     api binary and postgres or redis. Re-running the same
+//     request would typically succeed.
+//
+// The classifier is INTENTIONALLY string-based for the SQLSTATE
+// match — lib/pq's typed `*pq.Error.Code` would require importing
+// the driver into the handler layer (already a dep, but a wider
+// surface than strict). The substring `57014` is stable across
+// lib/pq versions (it's wire-format from postgres itself); the
+// 'canceling statement' fragment is the human-readable companion
+// the driver always includes.
+//
+// Caller pattern (mirrors clientAborted / handlerTimedOut order):
+//
+//	if err != nil {
+//	    if clientAborted(r, err) { return }
+//	    if handlerTimedOut(callCtx, err) { /* 503 timeout */ }
+//	    if transientStorageErr(err) { /* 503 retry-later */ }
+//	    /* 500 internal */
+//	}
+//
+// Refs: #34 residual ("/v1/issuers returns HTTP 500 (fast ~50ms)
+// on the sla-probe's request shape — real bug, low severity").
+func transientStorageErr(err error) bool {
+	if err == nil {
+		return false
+	}
+	s := err.Error()
+	// SQLSTATE 57014 from postgres-side cancellations (not the
+	// client-side context cancellation flavour, which clientAborted
+	// already handles).
+	if strings.Contains(s, "57014") || strings.Contains(s, "canceling statement") {
+		return true
+	}
+	// lib/pq + the standard database/sql driver-bad-connection
+	// surface. Pool retry exhausted by this point.
+	if strings.Contains(s, "driver: bad connection") || strings.Contains(s, "bad connection") {
+		return true
+	}
+	// Network-level transients between the api and postgres / redis.
+	if strings.Contains(s, "broken pipe") || strings.Contains(s, "connection reset") ||
+		strings.Contains(s, "unexpected EOF") || strings.Contains(s, "EOF") {
+		return true
+	}
+	return false
 }

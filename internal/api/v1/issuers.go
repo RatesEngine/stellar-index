@@ -126,6 +126,20 @@ func (s *Server) handleIssuersList(w http.ResponseWriter, r *http.Request) {
 				"the issuer registry scan didn't return in 8s; retry shortly.")
 			return
 		}
+		if transientStorageErr(err) {
+			// Postgres-side cancellation (57014 from statement_timeout
+			// / lock_timeout / idle_in_transaction reset), bad-connection
+			// after pool retries exhausted, or a network EOF. These
+			// are infrastructure transients that a retry would succeed
+			// on — surface 503 so sla-probe doesn't book it as a
+			// permanent availability failure. #34 residual.
+			s.logger.Warn("issuers list: transient storage error", "err", err)
+			writeProblem(w, r,
+				"https://api.ratesengine.net/errors/issuers-transient",
+				"Issuers list temporarily unavailable", http.StatusServiceUnavailable,
+				"the storage layer hit a transient error; retry shortly.")
+			return
+		}
 		s.logger.Warn("issuers list", "err", err)
 		writeProblem(w, r,
 			"https://api.ratesengine.net/errors/issuers-error",

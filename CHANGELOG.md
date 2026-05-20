@@ -17,6 +17,29 @@ against.
 
 ### Fixed
 
+- **`/v1/issuers` no longer 5xx's on transient storage errors
+  (#34 residual).** Postgres can issue SQLSTATE 57014
+  (`canceling statement due to user request`) from server-side
+  `statement_timeout` / `lock_timeout` /
+  `idle_in_transaction_session_timeout` — none of which trip
+  `clientAborted` (the http request context is alive) or
+  `handlerTimedOut` (the per-call context hasn't deadlined). The
+  error reached the issuers handler as a bare 57014 and fell
+  through to a 500. Combined with the sla-probe's threshold
+  set at exactly 99.0%, a single transient per ~430-sample
+  burst put availability under threshold and fired
+  `ratesengine_sla_probe_unit_failed_alert`. Fix: new
+  `transientStorageErr(err)` helper in `envelope.go` that
+  classifies the three transient classes (SQLSTATE 57014 not
+  carried by context cancellation, `driver: bad connection`
+  after pool retries exhausted, and EOF / broken-pipe network
+  blips) and returns 503 with the `issuers-transient` problem
+  type. Standard handler ordering preserved: clientAborted →
+  handlerTimedOut → transientStorageErr → 500. The 503 still
+  registers as a non-2xx for the sla-probe's availability
+  metric, BUT — operator runbook: configure the probe to
+  count 5xx-but-not-503 as failures, OR loosen the threshold
+  to 98.5%. The cleaner long-term path is operator-facing.
 - **Density formula no longer over-credits via interior-gap
   bridging (user-reported).** Status-page reported 100% density
   for `soroswap-router` and `defindex` while the #38 historical
