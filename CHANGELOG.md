@@ -17,7 +17,27 @@ against.
 
 ### Fixed
 
-- **`/v1/issuers` no longer 5xx's on transient storage errors
+- **Prewarm extended to all 7 readers fired by `/v1/assets/{id}`
+  (full deferred-#37).** rc.61 partial covered only
+  `GetCoinByAssetID` per verified asset; live measurement on r1
+  post-rc.61 confirmed the canonical-form path still dropped to
+  2.2s on first hit because the other SIX readers fired by the
+  handler (`GetCoinTopMarkets(id, 5)`,
+  `GetCoinPriceHistory24h`, `GetCoinPriceHistory7d`,
+  `GetCoinMarketsCount`, `GetCoinTradeCount24h`, `GetCoinATH`)
+  cold-filled per request. Subsequent hits served sub-ms only
+  because the first request populated all 7 SWR slots. Full fix:
+  new `prewarmAssetDetail(ctx, logger, coins, assetID)` helper
+  that calls EVERY one of the 7 readers per verified canonical
+  asset_id PLUS native. Limit=5 on `GetCoinTopMarkets` matches
+  the handler's literal — per the
+  `feedback_prewarm_handler_drift` memory, any drift in
+  args (limit, order, sources) means a different SWR cache key
+  → silent miss → the same bug class. Each reader's prewarm
+  call logs at Debug; transient failures don't block subsequent
+  readers. Net effect post-deploy: every verified-currency
+  canonical-form lookup (and native) should land sub-200ms on
+  FIRST hit, not just subsequent.
   (#34 residual).** Postgres can issue SQLSTATE 57014
   (`canceling statement due to user request`) from server-side
   `statement_timeout` / `lock_timeout` /

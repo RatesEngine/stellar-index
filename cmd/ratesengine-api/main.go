@@ -2855,10 +2855,84 @@ func prewarmLight(
 	// Errors logged at Debug — a transient miss is fine since the
 	// user request still fronts the cache.
 	for _, assetID := range verifiedAssetIDs {
-		if _, err := coins.GetCoinByAssetID(coinsCtx, assetID); err != nil {
-			logger.Debug("prewarm verified asset failed", "asset_id", assetID, "err", err)
-		}
+		prewarmAssetDetail(coinsCtx, logger, coins, assetID)
 	}
+	// Native gets the same full fan-out treatment as verified assets.
+	// GetNativeCoinRow above warms the single coin-row SWR slot; this
+	// covers the SIX OTHER readers /v1/assets/native fans out to.
+	prewarmAssetDetail(coinsCtx, logger, coins, "native")
+}
+
+// prewarmAssetDetail warms every SWR cache key the
+// /v1/assets/{id} handler fans out to for a single asset.
+//
+// /v1/assets/{id} fires SEVEN SWR-cached reader calls per request
+// (full fan-out at internal/api/v1/assets_coin_extension.go):
+//
+//	GetCoinByAssetID         — the coin row itself (rc.61 #37 fix)
+//	GetCoinTopMarkets(id, 5) — top 5 markets per asset
+//	GetCoinPriceHistory24h   — 24h sparkline
+//	GetCoinPriceHistory7d    — 7d sparkline
+//	GetCoinMarketsCount      — total markets count
+//	GetCoinTradeCount24h     — 24h trade count
+//	GetCoinATH               — all-time high
+//
+// Pre-#37 full-deferred: only GetCoinByAssetID was prewarmed; the
+// other SIX readers cold-filled on first hit, costing ~2s on
+// /v1/assets/USDC-GA5Z…'s first request post-restart even though
+// subsequent hits served sub-ms warm. Live-measured 2026-05-20.
+//
+// Drift-safe: each call uses the EXACT method the handler calls
+// (per assets_coin_extension.go), so the cache-key shapes match
+// byte-for-byte. Per the memory `feedback_prewarm_handler_drift`,
+// this is the lock-in that keeps the warm slot landing on the
+// same key the user request hits.
+//
+// Errors logged at Debug — transient misses are fine because the
+// user request still fronts the cache (cold-fill happens on the
+// user's request path if prewarm missed).
+//
+// Limit `5` for GetCoinTopMarkets matches the handler's literal
+// (assets_coin_extension.go:77 → `GetCoinTopMarkets(ctx, assetID, 5)`).
+// If the handler later varies the limit (e.g. higher for verified
+// currencies), this prewarm must mirror the new value — drift in
+// limit means a different SWR cache key, same bug class.
+func prewarmAssetDetail(ctx context.Context, logger *slog.Logger, coins *v1.CachedCoinsReader, assetID string) {
+	// Per-reader prewarm. We don't bail on the first failure — each
+	// reader has its own cache slot and a partial prewarm still
+	// helps subsequent reads.
+	prewarmAssetCall(ctx, logger, "GetCoinByAssetID", assetID, func() (any, error) {
+		return coins.GetCoinByAssetID(ctx, assetID)
+	})
+	prewarmAssetCall(ctx, logger, "GetCoinTopMarkets", assetID, func() (any, error) {
+		return coins.GetCoinTopMarkets(ctx, assetID, 5)
+	})
+	prewarmAssetCall(ctx, logger, "GetCoinPriceHistory24h", assetID, func() (any, error) {
+		return coins.GetCoinPriceHistory24h(ctx, assetID)
+	})
+	prewarmAssetCall(ctx, logger, "GetCoinPriceHistory7d", assetID, func() (any, error) {
+		return coins.GetCoinPriceHistory7d(ctx, assetID)
+	})
+	prewarmAssetCall(ctx, logger, "GetCoinMarketsCount", assetID, func() (any, error) {
+		return coins.GetCoinMarketsCount(ctx, assetID)
+	})
+	prewarmAssetCall(ctx, logger, "GetCoinTradeCount24h", assetID, func() (any, error) {
+		return coins.GetCoinTradeCount24h(ctx, assetID)
+	})
+	prewarmAssetCall(ctx, logger, "GetCoinATH", assetID, func() (any, error) {
+		return coins.GetCoinATH(ctx, assetID)
+	})
+}
+
+// prewarmAssetCall shrinks the per-reader-Debug-log boilerplate
+// into one site so adding/removing readers in [prewarmAssetDetail]
+// stays a single-line change. The `any` return type allows
+// uniform handling across the diverse reader signatures.
+func prewarmAssetCall(ctx context.Context, logger *slog.Logger, name, assetID string, fn func() (any, error)) {
+	if _, err := fn(); err != nil {
+		logger.Debug("prewarm asset call failed", "reader", name, "asset_id", assetID, "err", err)
+	}
+	_ = ctx // each fn already captures the context; arg kept for symmetry / future timeout pattern.
 }
 
 // forexQuoteWriter adapts (*timescale.Store) to forex.FXQuoteWriter
