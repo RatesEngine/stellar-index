@@ -1,13 +1,19 @@
 # CCTP-Stellar coverage — architecture & decoder design
 
-**Status:** Design / pre-implementation. Task #40.
-**Last verified:** 2026-05-20
+**Status:** Implemented (#40). Live ingest wired 2026-05-22.
+**Last verified:** 2026-05-22
 
 This document captures the contract identities, event schemas, and
-open design questions for integrating Circle's CCTP v2 on Stellar
-into the Rates Engine's source fleet. The implementation lands in
-`internal/sources/cctp/` once the design questions below are
-resolved (operator-gated decisions, not autonomous work).
+the design decisions for integrating Circle's CCTP v2 on Stellar
+into the Rates Engine's source fleet. The implementation lives in
+`internal/sources/cctp/` (decoder + dispatcher adapter + consumer)
+with persistence to the `cctp_events` hypertable (migration 0038).
+The storage shape — a per-protocol table rather than a shared
+`bridge_events` — was operator-confirmed 2026-05-22. Remaining
+work: the WASM-history audit that flips `BackfillSafe` true, and
+verification against real on-chain events once mainnet traffic
+exists. The design narrative below is retained as the rationale
+record.
 
 ## Why we track CCTP
 

@@ -17,6 +17,19 @@ against.
 
 ### Added
 
+- **CCTP-Stellar bridge ingest (#40).** Circle's CCTP v2 is now a
+  wired source. The decoder for the four contract events
+  (`deposit_for_burn`, `mint_and_withdraw`, `message_sent`,
+  `message_received`) had shipped earlier; this completes the
+  source — a stateless topic `Decoder` gated on the three known
+  CCTP contracts, a `consumer.Event` projection, dispatcher
+  registration, and persistence to a new `cctp_events` hypertable
+  (migration 0038). CCTP is `Class=ClassBridge`: bridge flow, never
+  contributes to VWAP. `deposit_for_burn` / `mint_and_withdraw` are
+  USDC supply exits / entries beyond the classic trustline channel.
+  Enable by adding `"cctp"` to `ingestion.enabled_sources`;
+  `BackfillSafe` stays `false` pending the WASM-history audit.
+
 - **`trades_pair_source_ts_idx` composite index (#30).** Migration
   0037 adds `(base_asset, quote_asset, source, ts DESC, ledger DESC)`
   on `trades`. `Store.LatestTradePerSource` (behind `/v1/observations`)

@@ -34,6 +34,7 @@ import (
 	"github.com/RatesEngine/rates-engine/internal/sources/aquarius"
 	"github.com/RatesEngine/rates-engine/internal/sources/band"
 	"github.com/RatesEngine/rates-engine/internal/sources/blend"
+	"github.com/RatesEngine/rates-engine/internal/sources/cctp"
 	"github.com/RatesEngine/rates-engine/internal/sources/claimable_balances"
 	"github.com/RatesEngine/rates-engine/internal/sources/comet"
 	"github.com/RatesEngine/rates-engine/internal/sources/defindex"
@@ -163,6 +164,13 @@ func BuildDispatcher(names []string, oracle config.OracleConfig, soroswapOpts ..
 			// decoded event but no contract-list filter is needed
 			// at dispatch time. See internal/sources/blend/README.md.
 			decoders = append(decoders, blend.NewDecoder())
+		case cctp.SourceName:
+			// Circle CCTP v2 — stateless topic Decoder, gated on the
+			// three known CCTP contracts (deposit_for_burn /
+			// mint_and_withdraw / message_sent / message_received).
+			// Class=ClassBridge: bridge flow, never VWAP. See
+			// internal/sources/cctp/README.md.
+			decoders = append(decoders, cctp.NewDecoder())
 		default:
 			return nil, fmt.Errorf("unknown source %q in ingestion.enabled_sources — check internal/sources/", name)
 		}

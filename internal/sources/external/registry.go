@@ -66,6 +66,19 @@ var Registry = map[string]Metadata{
 	"soroswap-router": {Class: ClassRouter, DefaultWeight: 0, IncludeInVWAP: false, Paid: false, BackfillAvailable: true, BackfillSafe: true /* audited 2026-05-19; r1 wasm-history walk: single hash 4c3db3eb...07 over the contract's entire life [50746272→tip], zero mid-life upgrades; both swap_exact_tokens_for_tokens + swap_tokens_for_exact_tokens exports verified present; ContractCallDecoder (router emits no events). See docs/operations/wasm-audits/soroswap-router.md */},
 	"defindex":        {Class: ClassRouter, DefaultWeight: 0, IncludeInVWAP: false, Paid: false, BackfillAvailable: true, BackfillSafe: true /* audited 2026-05-19; decoder re-derived to the real on-chain schema ("BlendStrategy",deposit|withdraw){from,amount}, topic-dispatched across all emitters (the tag-1.0.0 "DeFindexVault" schema was fiction; deployed WASM 11329c24...988 is Blend strategy code). Live-verified post-rc.58 deploy: indexer emitting `defindex strategy flow` log lines against real traffic (9 in 90min sample). wasm2wat data-section scan of the deployed bytes confirmed all required symbols present (BlendStrategy/deposit/withdraw/from/amount). See docs/operations/wasm-audits/defindex.md */},
 
+	// ─── Cross-chain bridges (flow coverage; excluded from VWAP) ─
+	// Bridges move tokens across chains — they publish no prices and
+	// emit no trades, so they never contribute to VWAP. Captured for
+	// the granular-coverage mission: CCTP's deposit_for_burn /
+	// mint_and_withdraw are USDC supply exits / entries beyond the
+	// classic trustline mint/burn channel. BackfillSafe stays false
+	// until a WASM-history audit lands at
+	// docs/operations/wasm-audits/cctp.md — the contracts are brand
+	// new (a single WASM hash is expected) but the audit is required
+	// program work per CLAUDE.md "Soroban DeFi contracts upgrade in
+	// place". See docs/architecture/cctp-stellar-coverage.md.
+	"cctp": {Class: ClassBridge, DefaultWeight: 0, IncludeInVWAP: false, Paid: false, BackfillAvailable: true, BackfillSafe: false},
+
 	// ─── Off-chain centralised exchanges (this package's scope) ─
 	"binance":  {Class: ClassExchange, Subclass: SubclassCEX, DefaultWeight: 100, IncludeInVWAP: true, Paid: false, BackfillAvailable: true, BackfillSafe: true},
 	"kraken":   {Class: ClassExchange, Subclass: SubclassCEX, DefaultWeight: 100, IncludeInVWAP: true, Paid: false, BackfillAvailable: true /* implemented, but 720-interval cap: ~30d at 1h */, BackfillSafe: true},

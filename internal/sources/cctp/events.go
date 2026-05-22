@@ -20,14 +20,15 @@
 // outbound-transfer record. Same for inbound (MessageReceived +
 // MintAndWithdraw).
 //
-// Design rationale, full per-event schemas extracted from the
-// contracts' Rust source, and the operator-gated open questions:
-// docs/architecture/cctp-stellar-coverage.md.
+// Design rationale and full per-event schemas extracted from the
+// contracts' Rust source: docs/architecture/cctp-stellar-coverage.md.
 //
-// Storage shape (`bridge_events` shared vs `cctp_events` separate)
-// is operator-gated and not yet wired — this package emits canonical
-// Go-side event values; the sink that persists them ships after the
-// storage decision lands.
+// Wiring (#40): decode.go decodes; consumer.go projects each event
+// into the canonical cctp.Event row; dispatcher_adapter.go is the
+// dispatcher Decoder; the indexer's sink persists via
+// Store.InsertCCTPEvent into the cctp_events hypertable
+// (migration 0038, per-protocol table — operator-confirmed
+// 2026-05-22). See README.md §Wiring.
 package cctp
 
 import (

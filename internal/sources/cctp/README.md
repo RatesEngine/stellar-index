@@ -59,33 +59,39 @@ and surface them as one logical "outbound USDC transfer" record.
 The decoder doesn't do the pairing — that's a sink-layer
 concern.
 
-## Wiring status
+## Wiring
 
-This package is **not yet registered** in
-`internal/sources/external/registry.go`. Registration follows the
-storage-shape decision documented in
-[`docs/architecture/cctp-stellar-coverage.md`](../../../docs/architecture/cctp-stellar-coverage.md)
-§Storage shape — `bridge_events` shared table with Rozo vs
-`cctp_events` separate.
+This package is **wired into the ingest pipeline** (#40):
 
-Once storage lands:
+- `dispatcher_adapter.go` — `Decoder`, a stateless topic Decoder
+  gated on the three known CCTP contracts (`Matches` checks
+  topic[0] **and** `IsCCTPContract`).
+- `consumer.go` — the `cctp.Event` `consumer.Event`, plus the
+  projections from each `Decode*` struct into the `cctp_events`
+  row shape. The decoder does **not** pair `DepositForBurn` with
+  `MessageSent`; each event is its own row, correlatable later by
+  `(ledger, tx_hash)`.
+- `internal/pipeline/dispatcher.go` — `BuildDispatcher` registers
+  `cctp.NewDecoder()` when `"cctp"` is in `ingestion.enabled_sources`.
+- `internal/pipeline/sink.go` — `persistCCTPEvent` writes each
+  event via `Store.InsertCCTPEvent` and bumps the entry counter.
+- Storage: `cctp_events` hypertable, migration
+  [`0038_create_cctp_events`](../../../migrations/0038_create_cctp_events.up.sql).
+- Registry: `internal/sources/external/registry.go` —
+  `Class: ClassBridge, IncludeInVWAP: false, DefaultWeight: 0,
+  BackfillAvailable: true, BackfillSafe: false`.
 
-1. Add a `consumer.go` implementing `consumer.Source` that
-   classifies events, decodes via the four `Decode*` functions,
-   and writes to the chosen storage shape. Handle the
-   pair-correlation by `(ledger, tx_hash)` if a single-row
-   merged shape is chosen.
-2. Add a `dispatcher_adapter.go` per the existing source
-   convention.
-3. Register `"cctp"` in `internal/sources/external/registry.go`:
-   `Class: ClassBridge, IncludeInVWAP: false, DefaultWeight: 0,
-   Paid: false, BackfillAvailable: true, BackfillSafe: false`
-   — flip `BackfillSafe: true` only after the WASM-history audit
-   lands at `docs/operations/wasm-audits/cctp.md`. Per the
-   user's direction "CCTP shouldn't have any history because it
-   is brand new", live-only ingest covers the use case.
-4. Add the source to `cmd/ratesengine-indexer/main.go`'s dispatch
-   chain.
+**Operator steps to turn it on:**
+
+1. Apply migration 0038 (`ratesengine-migrate up` after the SCP —
+   migrations are not auto-deployed).
+2. Add `"cctp"` to `ingestion.enabled_sources` in the region TOML.
+3. `BackfillSafe` stays `false` until a WASM-history audit lands
+   at `docs/operations/wasm-audits/cctp.md`. The contracts are
+   brand new (a single WASM hash is expected) but the audit is
+   required program work before `ratesengine-ops backfill` will
+   run CCTP against historical ranges. Live ingest works without
+   it — per the user's direction CCTP needs little/no history.
 
 ## Tests
 

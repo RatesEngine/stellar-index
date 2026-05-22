@@ -14,6 +14,7 @@ import (
 	"github.com/RatesEngine/rates-engine/internal/sources/aquarius"
 	"github.com/RatesEngine/rates-engine/internal/sources/band"
 	"github.com/RatesEngine/rates-engine/internal/sources/blend"
+	"github.com/RatesEngine/rates-engine/internal/sources/cctp"
 	claimable_balances "github.com/RatesEngine/rates-engine/internal/sources/claimable_balances"
 	"github.com/RatesEngine/rates-engine/internal/sources/comet"
 	"github.com/RatesEngine/rates-engine/internal/sources/defindex"
@@ -215,6 +216,8 @@ func handleOneEvent(ctx context.Context, logger *slog.Logger, store *timescale.S
 		persistBlendFillAuction(ctx, logger, store, e)
 	case blend.DeleteAuctionEvent:
 		persistBlendDeleteAuction(ctx, logger, store, e)
+	case cctp.Event:
+		persistCCTPEvent(ctx, logger, store, e)
 	case accounts.Observation:
 		persistAccountObservation(ctx, logger, store, e)
 	case trustlines.Observation:
@@ -347,6 +350,32 @@ func persistBlendDeleteAuction(ctx context.Context, logger *slog.Logger, store *
 	logger.Info("blend delete_auction ingested",
 		"pool", e.Pool, "user", e.User, "auction_type", e.AuctionType,
 		"ledger", e.Ledger)
+}
+
+func persistCCTPEvent(ctx context.Context, logger *slog.Logger, store *timescale.Store, e cctp.Event) {
+	if err := store.InsertCCTPEvent(ctx, timescale.CCTPEvent{
+		ContractID:         e.ContractID,
+		Ledger:             e.Ledger,
+		TxHash:             e.TxHash,
+		OpIndex:            uint32(e.OpIndex),
+		ObservedAt:         e.ObservedAt,
+		EventType:          timescale.CCTPEventType(e.EventType),
+		Amount:             e.Amount,
+		Fee:                e.Fee,
+		Token:              e.Token,
+		CounterpartyDomain: e.CounterpartyDomain,
+		Attributes:         e.Attributes,
+	}); err != nil {
+		obs.SourceInsertErrorsTotal.WithLabelValues(cctp.SourceName, "cctp_event").Inc()
+		logger.Error("insert CCTP event failed",
+			"contract_id", e.ContractID, "event_type", e.EventType,
+			"ledger", e.Ledger, "tx_hash", e.TxHash, "err", err)
+		return
+	}
+	bumpEntryCount(ctx, logger, store, cctp.SourceName)
+	logger.Debug("CCTP event ingested",
+		"source", cctp.SourceName, "event_type", e.EventType,
+		"contract_id", e.ContractID, "ledger", e.Ledger, "tx_hash", e.TxHash)
 }
 
 // bumpEntryCount is the shared 'entries' counter increment used by
