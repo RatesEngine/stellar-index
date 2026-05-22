@@ -53,6 +53,20 @@ against.
   net in place. The alert is silent until cold-tiering is enabled
   (the metric stays at zero before then).
 
+### Fixed
+
+- **`decoder_stats_5m.events_seen` always 0.** The statsflush
+  flusher stamped `EventsSeen: 0` on every row with a `dispatcher.
+  Stats doesn't expose per-source events_seen yet; fill when added`
+  TODO. Per-source decoder error-rate (errors/events) was therefore
+  uncomputable — the numerator existed, the denominator was always
+  zero. The dispatcher now bumps `eventsSeen[name]++` in every
+  Matches→Decode site (events, contract calls, entry changes,
+  classic ops), exposes it via `Stats.EventsSeen`, and the flusher
+  writes the per-bucket delta to `decoder_stats_5m`. Bumped
+  pre-Decode so a decoder that matches then errors still counts —
+  exactly the shape that makes error-rate meaningful.
+
 ### Changed
 
 - **`oracle_updates` retention removed (#14).** Migration 0040 drops

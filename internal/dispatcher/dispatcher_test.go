@@ -111,8 +111,42 @@ func TestDispatch_decodeErrorCountedPerSource(t *testing.T) {
 	if got := disp.Stats().DecodeErrors["boom"]; got != 2 {
 		t.Errorf("DecodeErrors[boom] = %d, want 2", got)
 	}
+	// EventsSeen is bumped BEFORE Decode runs, so a decoder that
+	// matches and then errors still counts toward events_seen.
+	// Without this, error-rate (errors/events) is uninterpretable.
+	if got := disp.Stats().EventsSeen["boom"]; got != 2 {
+		t.Errorf("EventsSeen[boom] = %d, want 2 (events_seen bumps on Matches, before Decode)", got)
+	}
 	if got := disp.Stats().UnmatchedHits; got != 0 {
 		t.Errorf("UnmatchedHits = %d, want 0 (decoder matched but errored)", got)
+	}
+}
+
+func TestDispatch_eventsSeenCountedPerSource(t *testing.T) {
+	// Two decoders, two events each. EventsSeen is per-source, only
+	// the matched decoder's counter advances.
+	disp := New(
+		&fakeDecoder{name: "alpha", topic0: "A"},
+		&fakeDecoder{name: "beta", topic0: "B"},
+	)
+	for i := 0; i < 2; i++ {
+		_, _ = disp.dispatchOne(events.Event{Topic: []string{"A"}})
+	}
+	for i := 0; i < 3; i++ {
+		_, _ = disp.dispatchOne(events.Event{Topic: []string{"B"}})
+	}
+	// One unmatched — must NOT bump either decoder.
+	_, _ = disp.dispatchOne(events.Event{Topic: []string{"Z"}})
+
+	s := disp.Stats()
+	if got := s.EventsSeen["alpha"]; got != 2 {
+		t.Errorf("EventsSeen[alpha] = %d, want 2", got)
+	}
+	if got := s.EventsSeen["beta"]; got != 3 {
+		t.Errorf("EventsSeen[beta] = %d, want 3", got)
+	}
+	if got := s.UnmatchedHits; got != 1 {
+		t.Errorf("UnmatchedHits = %d, want 1", got)
 	}
 }
 

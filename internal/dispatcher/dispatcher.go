@@ -239,6 +239,15 @@ type Dispatcher struct {
 	// weren't there. See [Dispatcher.SetDiscoverySink].
 	discoverySink DiscoverySink
 
+	// Per-source events_seen — bumped every time a decoder's
+	// Matches() claims an input (event / contract call / entry
+	// change / op). Counts the denominator of "decoder error rate"
+	// the statsflush flusher writes to decoder_stats_5m. Bumped
+	// pre-Decode, so a decoder that matches and then errors still
+	// shows up in the events_seen count — which is what makes the
+	// error-rate signal meaningful.
+	eventsSeen map[string]int
+
 	// Error counters — read via Stats(). Production wiring in
 	// cmd/ratesengine-indexer increments obs.SourceDecodeErrorsTotal
 	// per source name on decode failures; internal counters here are
@@ -263,6 +272,7 @@ type Dispatcher struct {
 func New(decoders ...Decoder) *Dispatcher {
 	return &Dispatcher{
 		decoders:     decoders,
+		eventsSeen:   map[string]int{},
 		decodeErrors: map[string]int{},
 	}
 }
@@ -341,6 +351,12 @@ func (d *Dispatcher) SetDiscoverySink(sink DiscoverySink) {
 // for events no decoder claimed. Zero-copy read — caller should
 // treat as immutable.
 type Stats struct {
+	// EventsSeen is the per-source count of inputs (events,
+	// contract calls, entry changes, ops) that a decoder's Matches()
+	// claimed. The denominator of "decoder error rate" the
+	// decoder_stats_5m hypertable carries; without it, errors are an
+	// uninterpretable count rather than a rate.
+	EventsSeen    map[string]int
 	DecodeErrors  map[string]int
 	OrphanEvents  map[string]int
 	UnmatchedHits int
@@ -353,6 +369,10 @@ type Stats struct {
 }
 
 func (d *Dispatcher) Stats() Stats {
+	seenCopied := make(map[string]int, len(d.eventsSeen))
+	for k, v := range d.eventsSeen {
+		seenCopied[k] = v
+	}
 	decodeCopied := make(map[string]int, len(d.decodeErrors))
 	for k, v := range d.decodeErrors {
 		decodeCopied[k] = v
@@ -368,6 +388,7 @@ func (d *Dispatcher) Stats() Stats {
 		}
 	}
 	return Stats{
+		EventsSeen:    seenCopied,
 		DecodeErrors:  decodeCopied,
 		OrphanEvents:  orphanCopied,
 		UnmatchedHits: d.unmatchedHits,
@@ -646,6 +667,7 @@ func (d *Dispatcher) dispatchContractCall(ctx ContractCallContext) ([]consumer.E
 		if !ccd.Matches(ctx.ContractID, ctx.FunctionName) {
 			continue
 		}
+		d.eventsSeen[ccd.Name()]++
 		outs, err := ccd.Decode(ctx)
 		if err != nil {
 			d.decodeErrors[ccd.Name()]++
@@ -672,6 +694,7 @@ func (d *Dispatcher) dispatchEntryChange(ctx LedgerEntryChangeContext) ([]consum
 		if !ld.Matches(ctx.Change) {
 			continue
 		}
+		d.eventsSeen[ld.Name()]++
 		outs, err := ld.Decode(ctx)
 		if err != nil {
 			d.decodeErrors[ld.Name()]++
@@ -695,6 +718,7 @@ func (d *Dispatcher) dispatchOp(ctx OpContext) ([]consumer.Event, error) {
 		if !od.Matches(ctx.Op) {
 			continue
 		}
+		d.eventsSeen[od.Name()]++
 		outs, err := od.Decode(ctx)
 		if err != nil {
 			d.decodeErrors[od.Name()]++
@@ -745,6 +769,7 @@ func (d *Dispatcher) dispatchOne(ev events.Event) ([]consumer.Event, error) {
 		if !dec.Matches(ev) {
 			continue
 		}
+		d.eventsSeen[dec.Name()]++
 		outs, err := dec.Decode(ev)
 		if err != nil {
 			d.decodeErrors[dec.Name()]++

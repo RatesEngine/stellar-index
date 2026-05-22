@@ -78,7 +78,11 @@ func New(source StatsSource, store *timescale.Store, logger *slog.Logger, opts O
 		logger:   logger,
 		interval: interval,
 		ledger:   opts.LedgerSource,
-		last:     dispatcher.Stats{DecodeErrors: map[string]int{}, OrphanEvents: map[string]int{}},
+		last: dispatcher.Stats{
+			EventsSeen:   map[string]int{},
+			DecodeErrors: map[string]int{},
+			OrphanEvents: map[string]int{},
+		},
 	}
 }
 
@@ -130,7 +134,7 @@ func (f *Flusher) flushAt(ctx context.Context, now time.Time) {
 		delta := timescale.DecoderStatsBucket{
 			Bucket:       bucket,
 			Source:       source,
-			EventsSeen:   0, // dispatcher.Stats doesn't expose per-source events_seen yet; fill when added
+			EventsSeen:   int64(current.EventsSeen[source] - f.last.EventsSeen[source]),
 			DecodeErrors: int64(current.DecodeErrors[source] - f.last.DecodeErrors[source]),
 			OrphanEvents: int64(current.OrphanEvents[source] - f.last.OrphanEvents[source]),
 			LastLedger:   lastLedger,
@@ -138,7 +142,7 @@ func (f *Flusher) flushAt(ctx context.Context, now time.Time) {
 		// Skip rows where every counter is zero AND we have no
 		// ledger context. Avoids writing meaningless zero-rows on
 		// quiet sources.
-		if delta.DecodeErrors == 0 && delta.OrphanEvents == 0 && delta.LastLedger == 0 {
+		if delta.EventsSeen == 0 && delta.DecodeErrors == 0 && delta.OrphanEvents == 0 && delta.LastLedger == 0 {
 			continue
 		}
 		rows = append(rows, delta)
@@ -167,6 +171,7 @@ func (f *Flusher) flushAt(ctx context.Context, now time.Time) {
 	// Snapshot for next-tick delta computation. Make a copy of the
 	// maps so concurrent dispatcher writes can't mutate our reference.
 	f.last = dispatcher.Stats{
+		EventsSeen:    copyIntMap(current.EventsSeen),
 		DecodeErrors:  copyIntMap(current.DecodeErrors),
 		OrphanEvents:  copyIntMap(current.OrphanEvents),
 		UnmatchedHits: current.UnmatchedHits,
@@ -180,11 +185,17 @@ func (f *Flusher) flushAt(ctx context.Context, now time.Time) {
 // resolved; we want to record the "fresh data point" for the
 // dashboard line).
 func allSources(current, last dispatcher.Stats) map[string]struct{} {
-	out := make(map[string]struct{}, len(current.DecodeErrors)+len(current.OrphanEvents))
+	out := make(map[string]struct{}, len(current.EventsSeen)+len(current.DecodeErrors)+len(current.OrphanEvents))
+	for k := range current.EventsSeen {
+		out[k] = struct{}{}
+	}
 	for k := range current.DecodeErrors {
 		out[k] = struct{}{}
 	}
 	for k := range current.OrphanEvents {
+		out[k] = struct{}{}
+	}
+	for k := range last.EventsSeen {
 		out[k] = struct{}{}
 	}
 	for k := range last.DecodeErrors {
