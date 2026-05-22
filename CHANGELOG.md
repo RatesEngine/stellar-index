@@ -15,6 +15,8 @@ against.
 
 ## [Unreleased]
 
+## [v0.5.0-rc.72] — 2026-05-22
+
 ### Fixed
 
 - **`/v1/price/batch` p99 pinned at the 10s ceiling (#64).**
