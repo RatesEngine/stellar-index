@@ -575,10 +575,13 @@ export default function StatusPage() {
       <OverallBanner status={status?.overall ?? 'unknown'} tone={overallTone} />
       {error && (
         <div className="rounded-md border border-bad-500/30 bg-bad-50 px-4 py-3 text-sm text-bad-700">
-          Status feed unreachable: {error}. Showing the last known snapshot.
+          Status feed unreachable: {error}.{' '}
+          {status
+            ? 'Showing the last known snapshot below.'
+            : 'No snapshot has been received yet — retrying every 30 s.'}
         </div>
       )}
-      {loading && !status && (
+      {loading && !status && !error && (
         <div className="rounded-md border border-surface-line bg-surface px-4 py-8 text-center text-sm text-ink-faint">
           Loading status…
         </div>
