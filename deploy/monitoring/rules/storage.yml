@@ -43,8 +43,9 @@ groups:
       # the per-tx lock table saturated under concurrent ingest.
       # Default Postgres setting (max_locks_per_transaction = 64)
       # × max_connections = 200 = 12,800-entry table. The R1
-      # ansible role now templates max_locks_per_transaction = 256
-      # by default (51,200 entries — 4× headroom). This alert
+      # ansible role now templates max_locks_per_transaction = 4096
+      # by default (819,200 entries — permanent growth headroom;
+      # re-sized 2026-05-15 after a 256 recurrence). This alert
       # fires at 70% saturation so we get warning before the
       # next bump is forced. Depends on postgres_exporter (not
       # currently scraped on R1 — see configs/prometheus/rules.r1/
