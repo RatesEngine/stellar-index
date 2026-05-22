@@ -15,6 +15,20 @@ against.
 
 ## [Unreleased]
 
+### Added
+
+- **`ratesengine_ledgerstream_tier_both_missing` page-grade alert
+  (#7).** ADR-0027's cold-tier failure mode (an LCM that is missing
+  from BOTH the local hot tier AND the AWS public bucket cold tier)
+  now alerts at page severity, with a runbook covering the
+  rehydrate-from-peer / disable-trim-timer / fix-config decision
+  tree. The metric was already exported by
+  `internal/ledgerstream/tiered.go`; the rule, the R1 overlay and
+  the runbook close the operational surface so an operator
+  enabling cold-tiering (§3) plus the bulk trim (§4) has the safety
+  net in place. The alert is silent until cold-tiering is enabled
+  (the metric stays at zero before then).
+
 ### Changed
 
 - **`oracle_updates` retention removed (#14).** Migration 0040 drops

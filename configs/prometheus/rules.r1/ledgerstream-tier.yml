@@ -1,0 +1,43 @@
+---
+# Ledgerstream tier-read alerts per ADR-0027 (LCM cache tiering).
+#
+# R1 overlay — identical to the multi-host rule in
+# deploy/monitoring/rules/ledgerstream-tier.yml. R1 is the first
+# region that will run with cold-tiering enabled (the local pool was
+# at 93% before ADR-0027); R2 + R3 already read AWS direct per
+# ADR-0016 and won't see these metrics until they grow a hot tier.
+#
+# See the multi-host file for the alert rationale.
+
+groups:
+  - name: ratesengine.ledgerstream_tier
+    interval: 60s
+    rules:
+
+      - alert: ratesengine_ledgerstream_tier_both_missing
+        expr: increase(ratesengine_ledgerstream_tier_read_total{outcome="both_missing"}[5m]) > 0
+        for: 5m
+        labels:
+          severity: page
+          team: ratesengine
+          component: ledgerstream
+          runbook_url: https://github.com/RatesEngine/rates-engine/blob/main/docs/operations/runbooks/ledgerstream-tier-both-missing.md
+        annotations:
+          summary: "LCM read missed BOTH tiers in the last 5 min — indexer cannot progress"
+          description: |
+            The TieredDataStore tried to read at least one
+            LedgerCloseMeta object that returned "not found" from
+            BOTH the local galexie-archive (hot) AND the
+            aws-public-blockchain bucket (cold). The indexer or
+            backfill consumer that hit this is now stalled.
+
+            Most likely causes (runbook walks them):
+              1. The hot range has been trimmed and the
+                 corresponding cold object is missing or
+                 inaccessible — AWS Open Data partition is in a
+                 transient miss state, or the partition naming
+                 drifted, or the AWS sponsorship has lapsed.
+              2. A local trim ran too aggressively (the live
+                 cursor moved backwards onto a trimmed range).
+              3. The MinIO endpoint, the AWS endpoint, or both,
+                 are mis-configured for this binary.
