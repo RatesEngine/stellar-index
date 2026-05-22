@@ -17,6 +17,18 @@ against.
 
 ### Added
 
+- **Rozo-Stellar bridge ingest (#41).** Rozo's v1 intent-bridge is
+  now a wired source. The decoder for the two v1 Payment events
+  (`payment`, `flush`) had shipped earlier; this completes the
+  source — a stateless topic `Decoder` gated on the three live v1
+  Payment contracts, a `consumer.Event` projection, dispatcher
+  registration, and persistence to a new `rozo_events` hypertable
+  (migration 0039, fully typed — no jsonb blob). `Class=ClassBridge`,
+  never VWAP. Enable by adding `"rozo"` to
+  `ingestion.enabled_sources`; `BackfillSafe` stays `false` pending
+  the WASM-history audit. v2 Forwarder / IntentBridge stay
+  unwired — they are pre-mainnet.
+
 - **CCTP-Stellar bridge ingest (#40).** Circle's CCTP v2 is now a
   wired source. The decoder for the four contract events
   (`deposit_for_burn`, `mint_and_withdraw`, `message_sent`,

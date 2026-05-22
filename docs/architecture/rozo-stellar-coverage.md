@@ -1,15 +1,21 @@
 # Rozo intents — architecture & decoder design
 
-**Status:** Design / pre-implementation. Task #41.
-**Last verified:** 2026-05-20
+**Status:** v1 Payment implemented (#41). Live ingest wired
+2026-05-22. v2 Forwarder / IntentBridge remain pre-mainnet.
+**Last verified:** 2026-05-22
 
 This document captures the contract identities, event schemas, and
 deployment status for integrating Rozo's intent-based cross-chain
-contracts on Stellar into the Rates Engine. Implementation lands
-in `internal/sources/rozo/` once the design questions below are
-resolved (operator-gated, shares
-[[docs/architecture/cctp-stellar-coverage]]'s open
-`ClassBridge` question).
+contracts on Stellar into the Rates Engine. The v1 Payment
+implementation lives in `internal/sources/rozo/` (decoder +
+dispatcher adapter + consumer) with persistence to the `rozo_events`
+hypertable (migration 0039). The storage shape — a per-protocol
+table rather than a shared `bridge_events` — was operator-confirmed
+2026-05-22. v2 Forwarder / IntentBridge and the newer rozo-intents
+schema are pre-mainnet; the design narrative below is retained for
+when they deploy. Remaining v1 work: the WASM-history audit that
+flips `BackfillSafe` true, and verification against real on-chain
+events.
 
 ## What Rozo is
 

@@ -78,6 +78,11 @@ var Registry = map[string]Metadata{
 	// program work per CLAUDE.md "Soroban DeFi contracts upgrade in
 	// place". See docs/architecture/cctp-stellar-coverage.md.
 	"cctp": {Class: ClassBridge, DefaultWeight: 0, IncludeInVWAP: false, Paid: false, BackfillAvailable: true, BackfillSafe: false},
+	// Rozo v1 intent-bridge — same bridge semantics. payment / flush
+	// events from the three live v1 Payment contracts. BackfillSafe
+	// false until docs/operations/wasm-audits/rozo.md lands. See
+	// docs/architecture/rozo-stellar-coverage.md.
+	"rozo": {Class: ClassBridge, DefaultWeight: 0, IncludeInVWAP: false, Paid: false, BackfillAvailable: true, BackfillSafe: false},
 
 	// ─── Off-chain centralised exchanges (this package's scope) ─
 	"binance":  {Class: ClassExchange, Subclass: SubclassCEX, DefaultWeight: 100, IncludeInVWAP: true, Paid: false, BackfillAvailable: true, BackfillSafe: true},

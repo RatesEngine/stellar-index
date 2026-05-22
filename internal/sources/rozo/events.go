@@ -5,11 +5,14 @@
 // rozo-intents schema are pre-mainnet and documented in
 // docs/architecture/rozo-stellar-coverage.md for follow-up.
 //
-// Design rationale + open questions: see the architecture doc.
-// Storage shape (`bridge_events` shared vs `rozo_events` separate)
-// is operator-gated and not yet wired — this package emits canonical
-// Go-side event values; the sink that persists them ships after the
-// storage decision lands.
+// Design rationale: docs/architecture/rozo-stellar-coverage.md.
+//
+// Wiring (#41): decode.go decodes; consumer.go projects each event
+// into the canonical rozo.Event row; dispatcher_adapter.go is the
+// dispatcher Decoder; the indexer's sink persists via
+// Store.InsertRozoEvent into the rozo_events hypertable
+// (migration 0039, per-protocol table — operator-confirmed
+// 2026-05-22). See README.md §Wiring.
 package rozo
 
 import (

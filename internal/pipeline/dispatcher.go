@@ -42,6 +42,7 @@ import (
 	"github.com/RatesEngine/rates-engine/internal/sources/phoenix"
 	"github.com/RatesEngine/rates-engine/internal/sources/redstone"
 	"github.com/RatesEngine/rates-engine/internal/sources/reflector"
+	"github.com/RatesEngine/rates-engine/internal/sources/rozo"
 	"github.com/RatesEngine/rates-engine/internal/sources/sac_balances"
 	"github.com/RatesEngine/rates-engine/internal/sources/sdex"
 	sep41supply "github.com/RatesEngine/rates-engine/internal/sources/sep41_supply"
@@ -171,6 +172,12 @@ func BuildDispatcher(names []string, oracle config.OracleConfig, soroswapOpts ..
 			// Class=ClassBridge: bridge flow, never VWAP. See
 			// internal/sources/cctp/README.md.
 			decoders = append(decoders, cctp.NewDecoder())
+		case rozo.SourceName:
+			// Rozo v1 Payment — stateless topic Decoder, gated on the
+			// three known Rozo v1 contracts (payment / flush).
+			// Class=ClassBridge: bridge flow, never VWAP. See
+			// internal/sources/rozo/README.md.
+			decoders = append(decoders, rozo.NewDecoder())
 		default:
 			return nil, fmt.Errorf("unknown source %q in ingestion.enabled_sources — check internal/sources/", name)
 		}

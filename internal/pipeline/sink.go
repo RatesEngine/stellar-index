@@ -23,6 +23,7 @@ import (
 	"github.com/RatesEngine/rates-engine/internal/sources/phoenix"
 	"github.com/RatesEngine/rates-engine/internal/sources/redstone"
 	"github.com/RatesEngine/rates-engine/internal/sources/reflector"
+	"github.com/RatesEngine/rates-engine/internal/sources/rozo"
 	sac_balances "github.com/RatesEngine/rates-engine/internal/sources/sac_balances"
 	"github.com/RatesEngine/rates-engine/internal/sources/sdex"
 	sep41_supply "github.com/RatesEngine/rates-engine/internal/sources/sep41_supply"
@@ -218,6 +219,8 @@ func handleOneEvent(ctx context.Context, logger *slog.Logger, store *timescale.S
 		persistBlendDeleteAuction(ctx, logger, store, e)
 	case cctp.Event:
 		persistCCTPEvent(ctx, logger, store, e)
+	case rozo.Event:
+		persistRozoEvent(ctx, logger, store, e)
 	case accounts.Observation:
 		persistAccountObservation(ctx, logger, store, e)
 	case trustlines.Observation:
@@ -375,6 +378,32 @@ func persistCCTPEvent(ctx context.Context, logger *slog.Logger, store *timescale
 	bumpEntryCount(ctx, logger, store, cctp.SourceName)
 	logger.Debug("CCTP event ingested",
 		"source", cctp.SourceName, "event_type", e.EventType,
+		"contract_id", e.ContractID, "ledger", e.Ledger, "tx_hash", e.TxHash)
+}
+
+func persistRozoEvent(ctx context.Context, logger *slog.Logger, store *timescale.Store, e rozo.Event) {
+	if err := store.InsertRozoEvent(ctx, timescale.RozoEvent{
+		ContractID:  e.ContractID,
+		Ledger:      e.Ledger,
+		TxHash:      e.TxHash,
+		OpIndex:     uint32(e.OpIndex),
+		ObservedAt:  e.ObservedAt,
+		EventType:   timescale.RozoEventType(e.EventType),
+		Amount:      e.Amount,
+		Destination: e.Destination,
+		From:        e.From,
+		Memo:        e.Memo,
+		Token:       e.Token,
+	}); err != nil {
+		obs.SourceInsertErrorsTotal.WithLabelValues(rozo.SourceName, "rozo_event").Inc()
+		logger.Error("insert Rozo event failed",
+			"contract_id", e.ContractID, "event_type", e.EventType,
+			"ledger", e.Ledger, "tx_hash", e.TxHash, "err", err)
+		return
+	}
+	bumpEntryCount(ctx, logger, store, rozo.SourceName)
+	logger.Debug("Rozo event ingested",
+		"source", rozo.SourceName, "event_type", e.EventType,
 		"contract_id", e.ContractID, "ledger", e.Ledger, "tx_hash", e.TxHash)
 }
 
