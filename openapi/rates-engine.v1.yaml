@@ -1797,6 +1797,97 @@ paths:
                   (first paragraph of the markdown body), and
                   full `<content>` (the markdown body).
 
+  /ledger/tip:
+    get:
+      tags: [meta]
+      summary: Live-ingest frontier — latest ingested ledger + lag.
+      description: |
+        A deliberately lightweight slice of `/v1/diagnostics/ingestion`:
+        only the live-ingest frontier (highest ledger the indexer has
+        committed) and its wall-clock age. Lets a status page or
+        monitor poll "what ledger are we on" without pulling the full
+        ingestion snapshot (24h volume, backfill state, supply, the
+        source registry, …).
+
+        `latest_ledger` is read from the `ledgerstream` row of the
+        ingestion-cursors table — upserted once per ledger, so it is
+        the freshest tip signal available. It is NOT identical to
+        `/v1/diagnostics/ingestion`'s `ledger.latest_ledger`, which is
+        derived from prices_1m's `MAX(ledger_sequence)` and only
+        advances on ledgers that produced a trade row; the two agree
+        within a few ledgers in steady state.
+
+        Cache: `public, max-age=2` — the cursor advances every ~5s,
+        so a 2s edge cache smooths a refreshing status page without
+        hiding a stall. For push semantics use `/v1/ledger/stream`.
+      responses:
+        "200":
+          description: Current live-ingest frontier.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - { $ref: "#/components/schemas/EnvelopeMeta" }
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        required: [latest_ledger, ingested_at, lag_seconds]
+                        properties:
+                          latest_ledger:
+                            type: integer
+                            format: int64
+                            description: Highest ledger the indexer has committed.
+                          ingested_at:
+                            type: string
+                            format: date-time
+                            description: When that ledger's cursor was committed (RFC 3339).
+                          lag_seconds:
+                            type: integer
+                            format: int64
+                            description: Wall-clock age of the cursor commit.
+                    required: [data]
+        "500":        { $ref: "#/components/responses/InternalError" }
+        "503":        { $ref: "#/components/responses/ServiceUnavailable" }
+
+  /ledger/stream:
+    get:
+      tags: [meta]
+      summary: SSE stream of the live-ingest frontier.
+      description: |
+        Streaming counterpart of `/v1/ledger/tip`. Pushes a
+        `ledger_update` event each time the indexer commits a new
+        ledger, so a status page renders blocks arriving in real time
+        instead of polling.
+
+        - First event fires synchronously on connect with the current
+          tip.
+        - Recurring events fire once per new ledger (poll cadence
+          ~2s), plus a keepalive refresh every ~10s if the ledger has
+          not advanced — so `lag_seconds` stays current even during an
+          ingest stall.
+        - Heartbeats every 15 s as comment lines.
+        - Each event's `data` payload mirrors the `/v1/ledger/tip`
+          envelope (`data` + `as_of`) so one type decodes both the
+          polled and the streamed response.
+        - 503 pre-flight when no cursors reader is wired or the live
+          cursor has not been established yet — once the SSE body
+          starts there is no way to signal a non-200 status.
+      parameters:
+        - name: Last-Event-ID
+          in: header
+          required: false
+          schema: { type: string }
+          description: Opaque ID for resuming a previously-broken stream.
+      responses:
+        "200":
+          description: SSE stream of ledger_update events.
+          content:
+            text/event-stream:
+              schema: { type: string }
+        "500":        { $ref: "#/components/responses/InternalError" }
+        "503":        { $ref: "#/components/responses/ServiceUnavailable" }
+
   /network/stats:
     get:
       tags: [meta]

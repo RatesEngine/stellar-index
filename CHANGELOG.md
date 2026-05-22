@@ -15,6 +15,21 @@ against.
 
 ## [Unreleased]
 
+### Added
+
+- **`/v1/ledger/tip` + `/v1/ledger/stream` — the live-ingest
+  frontier (#58).** `/v1/ledger/tip` is a lightweight endpoint
+  returning just the highest ledger the indexer has committed and
+  its lag — a status page or monitor can poll "what ledger are we
+  on" without pulling the whole `/v1/diagnostics/ingestion`
+  snapshot. `latest_ledger` reads the `ledgerstream` ingestion
+  cursor (upserted once per ledger), so it is the freshest tip
+  signal available. `/v1/ledger/stream` is the SSE counterpart:
+  it pushes a `ledger_update` event per new ledger (poll cadence
+  ~2s) plus a keepalive refresh every ~10s so `lag_seconds` stays
+  honest during an ingest stall — letting the status page render
+  blocks arriving in real time instead of polling on a 30s timer.
+
 ### Fixed
 
 - **Live-tail ingest lag sawtoothed 0→30s (#57).** The SDK

@@ -923,6 +923,15 @@ func (s *Server) mountRoutes() { //nolint:funlen // route registration is intent
 	s.mux.HandleFunc("GET /v1/changes/{entity_type}/{id}", s.handleChangeSummary)
 	s.mux.HandleFunc("GET /v1/diagnostics/cursors", s.handleCursors)
 	s.mux.HandleFunc("GET /v1/diagnostics/ingestion", s.handleDiagnosticsIngestion)
+
+	// Live-ingest frontier — a lightweight slice of the ingestion
+	// snapshot (latest ingested ledger + lag). /tip is a 2s-cached
+	// poll; /stream is the SSE counterpart that pushes one
+	// ledger_update per new ledger so a status page renders blocks
+	// arriving in real time.
+	s.mux.HandleFunc("GET /v1/ledger/tip", s.handleLedgerTip)
+	s.mux.HandleFunc("GET /v1/ledger/stream", s.handleLedgerStream)
+
 	s.mux.HandleFunc("GET /v1/incidents", s.handleIncidents)
 	s.mux.HandleFunc("GET /v1/incidents.atom", s.handleIncidentsAtom)
 	s.mux.HandleFunc("GET /v1/network/stats", s.handleNetworkStats)
