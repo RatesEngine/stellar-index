@@ -143,3 +143,29 @@ The role now faithfully rebuilds r1. Two operator follow-ups:
 2. **§1 sshd** — the role hardens sshd correctly; r1's *live* sshd is
    still stock. Hardening live r1 is a separate r1-side change
    (touches SSH access) — tracked as its own task.
+
+## Render-verification (2026-05-22, post-reconciliation)
+
+Every reconciled template was rendered with `ansible-playbook`
+(`-i r1.example.yml`, precedence-faithful) and diffed against r1's
+live files:
+
+| Template | Result |
+| --- | --- |
+| `ratesengine.toml.j2` | functionally byte-identical to live `/etc/ratesengine.toml` (only delta = the Ansible-managed header + comment placement) |
+| `ratesengine-indexer/aggregator/api.service.j2` | **byte-identical** to r1's live units |
+| `ratesengine.env.j2` | renders clean; all 10 keys match r1 (secret *values* are vault-sourced — unverifiable here by design) |
+| `galexie-backfill.toml.j2`, backfill `captive-core.cfg` | identical to r1's live files + added explanatory comments |
+| `verify-archive-tier-a` / `archive-completeness` / `supply-snapshot` service+timer | render r1's EFFECTIVE config (base unit + folded drop-ins); diffs are comments only |
+
+Also verified: every template variable resolves (no undefined-var
+runtime failure); `ansible-playbook --syntax-check` passes.
+
+**NOT verifiable from here — the operator's acceptance gate:** a
+`ansible-playbook --check --diff -i <real r1.yml> playbooks/archival-node.yml`
+run against r1 with the real vault. `--check` renders every
+template + reports what *would* change, non-destructively. A
+faithful role shows near-zero diff. Run that before trusting the
+role for an actual rebuild. Task wiring (install/enable tasks,
+handlers, file modes) is syntax-checked but only a real run
+executes it.
