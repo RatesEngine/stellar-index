@@ -15,6 +15,28 @@ against.
 
 ## [Unreleased]
 
+## [v0.5.0-rc.68] — 2026-05-22
+
+### Fixed
+
+- **SLA probe false-failed on `/v1/issuers` availability (#54).**
+  `ratesengine-sla-probe`'s worker loop recorded every `hit()`
+  result unconditionally — including the one request per worker
+  still in flight when the run-duration context expired. That
+  cancelled request was counted as a 2xx miss, so every run
+  reported exactly `concurrency` phantom failures (~0.3% loss),
+  over-attributed to the slowest endpoint (`/v1/issuers`, ~81ms —
+  the widest window to be in flight when the deadline lands). It
+  was tripping `ratesengine_sla_probe_unit_failed` (P3) with no
+  real breach: the API served 100% (server logs + 2,400 manual
+  requests confirm), latency/freshness passed comfortably. Fix:
+  discard samples whose request was cancelled by the run-duration
+  ctx (the probe aborting itself ≠ a server failure); a genuine
+  mid-window failure still counts. Also gave the probe a cloned
+  transport with `MaxIdleConnsPerHost = concurrency*2` so the
+  single-host workload reuses keep-alive connections instead of
+  churning the default pool of 2.
+
 ## [v0.5.0-rc.67] — 2026-05-21
 
 ### Fixed

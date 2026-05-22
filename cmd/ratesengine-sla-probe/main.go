@@ -272,7 +272,16 @@ func runProbe(baseURL, apiKey string, endpoints []endpoint, duration time.Durati
 func collectSamples(ctx context.Context, baseURL, apiKey string, endpoints []endpoint, concurrency int) map[string][]probeSample {
 	var mu sync.Mutex
 	samples := make(map[string][]probeSample)
-	httpClient := &http.Client{Timeout: 30 * time.Second}
+
+	// Every endpoint is on the same host; the default transport's
+	// MaxIdleConnsPerHost (2) would force connection churn the moment
+	// concurrency > 2, and a churned keep-alive is a closed-connection
+	// race waiting to happen. Size the idle pool to the worker count
+	// so each worker keeps a warm connection between requests (#54).
+	transport := http.DefaultTransport.(*http.Transport).Clone()
+	transport.MaxIdleConns = concurrency * 2
+	transport.MaxIdleConnsPerHost = concurrency * 2
+	httpClient := &http.Client{Timeout: 30 * time.Second, Transport: transport}
 
 	var wg sync.WaitGroup
 	wg.Add(concurrency)
@@ -289,6 +298,19 @@ func collectSamples(ctx context.Context, baseURL, apiKey string, endpoints []end
 				ep := endpoints[i]
 				i = (i + 1) % len(endpoints)
 				lat, ok, observedAt := hit(ctx, httpClient, baseURL, apiKey, ep)
+				// If the run-duration ctx expired while this request
+				// was in flight, the probe itself aborted it — the
+				// server did not fail it. Discard rather than count a
+				// self-inflicted cancel as an availability miss: at
+				// end-of-run every worker has exactly one in-flight
+				// request, so without this the probe always reports
+				// `concurrency` phantom failures, over-attributed to
+				// the slowest endpoint (widest window to be in flight
+				// when the deadline lands). That false ~0.3% loss is
+				// what tripped ratesengine_sla_probe_unit_failed (#54).
+				if ctx.Err() != nil {
+					return
+				}
 				mu.Lock()
 				samples[ep.Name] = append(samples[ep.Name], probeSample{lat, ok, observedAt})
 				mu.Unlock()

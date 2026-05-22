@@ -112,6 +112,46 @@ func TestRunProbe_FailsOn5xx(t *testing.T) {
 	}
 }
 
+// TestRunProbe_DeadlineCancelledSamplesNotCountedAsFailures proves
+// the #54 fix: a request still in flight when the run-duration
+// deadline expires is the probe aborting ITSELF, not a server
+// failure. The fake server here always returns 200 after a delay
+// that guarantees every worker is mid-request when the short run
+// window closes — so any availability < 100% would be a phantom
+// failure from counting deadline-cancelled in-flight samples. This
+// is exactly what tripped ratesengine_sla_probe_unit_failed on r1
+// (the slowest endpoint, /v1/issuers, took the blame because it
+// held the widest in-flight window).
+func TestRunProbe_DeadlineCancelledSamplesNotCountedAsFailures(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		// Long enough that at end-of-run every worker is reliably
+		// still inside c.Do() when the run ctx is cancelled.
+		time.Sleep(40 * time.Millisecond)
+		_, _ = w.Write([]byte(`{}`))
+	}))
+	defer srv.Close()
+
+	endpoints := []endpoint{{Name: "healthz", Path: "/healthz"}}
+	rep := runProbe(srv.URL, "", endpoints, 150*time.Millisecond, 4, slaTargets{
+		P95MS:           10000, // generous — this test is about availability, not latency
+		P99MS:           10000,
+		FreshnessSec:    30,
+		AvailabilityPct: 99.0,
+	})
+	if len(rep.PerEndpoint) != 1 {
+		t.Fatalf("PerEndpoint len=%d want 1", len(rep.PerEndpoint))
+	}
+	st := rep.PerEndpoint[0]
+	if st.AvailabilityPct != 100 {
+		t.Errorf("availability=%g want 100 — the server never errored; "+
+			"deadline-cancelled in-flight samples must be discarded, not counted as failures (#54)",
+			st.AvailabilityPct)
+	}
+	if st.Samples == 0 {
+		t.Error("no samples recorded — discard logic must drop only the deadline-cancelled tail, not everything")
+	}
+}
+
 func TestHit_ParsesObservedAt(t *testing.T) {
 	now := time.Now().UTC().Truncate(time.Second)
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
