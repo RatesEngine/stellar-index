@@ -17,6 +17,17 @@ against.
 
 ### Added
 
+- **`cagg-broad-recompute` operator procedure (#5).** A one-shot
+  procedure doc for refreshing every continuous aggregate over the
+  preserved raw range. Necessary after a retention change (0031
+  trades / 0040 oracle_updates) or any backfill that lands rows
+  older than the CAGG's current oldest bucket. Lists the per-grain
+  `CALL refresh_continuous_aggregate(...)` commands for trades,
+  oracle, and pools-per-source CAGGs, the live-monitoring queries,
+  estimated runtime on r1, and explicit anti-conditions (don't run
+  during peak ingest / paired with other heavy r1 jobs / when
+  `data` zpool is over 85%).
+
 - **Monthly `galexie-archive-trim` systemd unit (#7, ADR-0027 §5).**
   The monthly trim cadence that ages newly-cold ledgers out of local
   MinIO into the AWS public bucket. `compute-trim-cutoff.sh` derives
