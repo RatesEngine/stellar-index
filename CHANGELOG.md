@@ -15,6 +15,22 @@ against.
 
 ## [Unreleased]
 
+### Fixed
+
+- **AWS-SDK checksum-warning log flood (#62).** Since
+  `aws-sdk-go-v2/config` v1.29.0 the SDK's default response-checksum
+  mode is `when_supported`: it tries to validate a checksum on every
+  S3 GET and, when the response carries none, logs `Response has no
+  supported checksum. Not validating response payload.` at WARN.
+  galexie's MinIO GetObject responses carry no such checksum, so a
+  verify-archive chain walk (~1200 ledgers/s) emitted that line per
+  read — ballooning `/tmp/va-full.log` to 1.65 GB and burying the
+  real verify-archive failure under noise. `ratesengine-indexer` and
+  `ratesengine-ops` now default `AWS_RESPONSE_CHECKSUM_VALIDATION` to
+  `when_required` at process start (operator-set values are
+  respected), so the SDK validates only when the operation requires
+  it — S3 GetObject does not.
+
 ## [v0.5.0-rc.72] — 2026-05-22
 
 ### Fixed

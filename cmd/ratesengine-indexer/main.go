@@ -71,6 +71,11 @@ import (
 const cursorSource = "ledgerstream"
 
 func main() {
+	// Default the aws-sdk-go-v2 response-checksum mode before any S3
+	// datastore is built — MinIO responses carry no checksum, so the
+	// SDK's "when_supported" default WARN-spams every ledger read.
+	pipeline.QuietS3ChecksumWarnings()
+
 	var (
 		cfgPath     = flag.String("config", "", "Path to TOML config file (required)")
 		dryRun      = flag.Bool("dry-run", false, "Load config + open connections + exit without ingesting")

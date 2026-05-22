@@ -51,6 +51,7 @@ import (
 	"github.com/RatesEngine/rates-engine/internal/dispatcher"
 	"github.com/RatesEngine/rates-engine/internal/events"
 	"github.com/RatesEngine/rates-engine/internal/ledgerstream"
+	"github.com/RatesEngine/rates-engine/internal/pipeline"
 	"github.com/RatesEngine/rates-engine/internal/scval"
 	"github.com/RatesEngine/rates-engine/internal/sources/aquarius"
 	"github.com/RatesEngine/rates-engine/internal/sources/band"
@@ -77,6 +78,12 @@ import (
 )
 
 func main() { //nolint:gocyclo,gocognit,funlen // subcommand switch; each case is trivial, splitting adds indirection without clarity
+	// Default the aws-sdk-go-v2 response-checksum mode before any
+	// subcommand builds an S3 datastore — MinIO responses carry no
+	// checksum, so the SDK's "when_supported" default WARN-spams
+	// every ledger read (verify-archive's 1.65 GB log of noise).
+	pipeline.QuietS3ChecksumWarnings()
+
 	args := os.Args[1:]
 	if len(args) == 0 {
 		printUsage()
