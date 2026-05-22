@@ -54,6 +54,11 @@ the `env:` column.
 | `storage.s3_bucket_live` | `string` | `galexie-live` | — | Live Galexie export bucket name. |
 | `storage.s3_access_key_env` | `string` | `RATESENGINE_S3_ACCESS_KEY` | `RATESENGINE_S3_ACCESS_KEY` | Env var holding S3 access key ID. |
 | `storage.s3_secret_key_env` | `string` | `RATESENGINE_S3_SECRET_KEY` | `RATESENGINE_S3_SECRET_KEY` | Env var holding S3 secret access key. |
+| `storage.s3_cold_endpoint` | `string` | _(required)_ | — | Cold-tier S3 endpoint. Empty disables tiering. Production: https://s3.amazonaws.com |
+| `storage.s3_cold_region` | `string` | _(required)_ | — | Cold-tier S3 region. Production (aws-public-blockchain): us-east-1 |
+| `storage.s3_cold_bucket_archive` | `string` | _(required)_ | — | Cold-tier bucket + prefix for historical LCMs. Empty disables tiering. Production: aws-public-blockchain/v1.1/stellar/ledgers/pubnet |
+| `storage.s3_cold_access_key_env` | `string` | _(required)_ | — | Env var holding cold-tier S3 access key. Empty = anonymous reads (correct for public buckets). |
+| `storage.s3_cold_secret_key_env` | `string` | _(required)_ | — | Env var holding cold-tier S3 secret key. Empty = anonymous reads. |
 
 ### `[ingestion]`
 
