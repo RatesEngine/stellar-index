@@ -1,0 +1,20 @@
+# systemd timer: monthly galexie-archive trim per ADR-0027 §5.
+#
+# Rendered by Ansible. Do not edit by hand.
+#
+# 1st of each month at 03:17 UTC. Off-:00 minute avoids cron-aligned
+# herds (same rationale as galexie-archive-fill.timer). 03:00 UTC is
+# globally low-traffic for Stellar.
+
+[Unit]
+Description=Monthly galexie-archive trim (ADR-0027)
+Documentation=https://github.com/RatesEngine/rates-engine/blob/main/docs/adr/0027-lcm-cache-tiering.md
+
+[Timer]
+OnCalendar=*-*-01 03:17:00 UTC
+RandomizedDelaySec=600
+Persistent=true
+Unit=galexie-archive-trim.service
+
+[Install]
+WantedBy=timers.target

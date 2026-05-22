@@ -1,0 +1,51 @@
+# systemd service: monthly galexie-archive trim per ADR-0027 §Trim
+# operator.
+#
+# Rendered by Ansible. Do not edit by hand — regenerate via
+# `ansible-playbook ... --tags ratesengine`.
+#
+# Once cold-tiering is enabled (storage.cold_tier_enabled=true) and
+# the operator-triggered bulk trim has freed the bulk of the pool,
+# this timer runs ratesengine-ops trim-galexie-archive monthly to
+# age newly-cold ledgers out of local MinIO into the AWS public
+# bucket. Each run trims the freshest month past the 90 d hot
+# window; --verify-upstream HEADs the AWS bucket before each DELETE
+# so no local object disappears without a proven cold copy.
+#
+# Sequencing: this unit is installed but NOT enabled by the ansible
+# role per [[feedback_cold_tier_premature_enable]] — bare enablement
+# before §3 (cold-tiering enabled) + §4 (bulk-trim done) is either a
+# no-op or destructive. The operator enables it post-bulk-trim with
+# `systemctl enable --now galexie-archive-trim.timer`.
+
+[Unit]
+Description=Rates Engine — monthly galexie-archive trim (ADR-0027 §Trim operator)
+Documentation=https://github.com/RatesEngine/rates-engine/blob/main/docs/adr/0027-lcm-cache-tiering.md
+After=network-online.target postgresql.service ratesengine-indexer.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=root
+
+ExecStartPre=/usr/local/sbin/compute-trim-cutoff.sh
+EnvironmentFile=/run/galexie-archive-trim.env
+
+ExecStart=/usr/local/bin/ratesengine-ops trim-galexie-archive \
+  -older-than-ledger ${TRIM_CUTOFF} \
+  -verify-upstream \
+  -commit
+
+TimeoutStartSec=21600
+Nice=10
+IOSchedulingClass=idle
+
+ProtectSystem=full
+PrivateTmp=true
+NoNewPrivileges=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+
+[Install]
+WantedBy=multi-user.target

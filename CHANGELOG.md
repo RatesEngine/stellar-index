@@ -17,6 +17,19 @@ against.
 
 ### Added
 
+- **Monthly `galexie-archive-trim` systemd unit (#7, ADR-0027 §5).**
+  The monthly trim cadence that ages newly-cold ledgers out of local
+  MinIO into the AWS public bucket. `compute-trim-cutoff.sh` derives
+  the cutoff (indexer cursor − 90 days of ledgers) at run time, the
+  service invokes `ratesengine-ops trim-galexie-archive
+  -older-than-ledger ${CUTOFF} -verify-upstream -commit`, the timer
+  fires on the 1st of each month at 03:17 UTC. The Ansible role
+  installs the unit but **does not enable** it — per
+  `feedback_cold_tier_premature_enable` the monthly trim is
+  destructive before §3 (cold-tiering on) + §4 (bulk-trim done);
+  the operator runs `systemctl enable --now
+  galexie-archive-trim.timer` by hand once that rollout completes.
+
 - **`ratesengine_ledgerstream_tier_both_missing` page-grade alert
   (#7).** ADR-0027's cold-tier failure mode (an LCM that is missing
   from BOTH the local hot tier AND the AWS public bucket cold tier)

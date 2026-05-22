@@ -1,0 +1,70 @@
+# systemd service: monthly galexie-archive trim per ADR-0027 §Trim
+# operator.
+#
+# Once cold-tiering is enabled (storage.cold_tier_enabled=true) and
+# the operator-triggered bulk trim has freed the bulk of the pool,
+# this timer runs ratesengine-ops trim-galexie-archive monthly to
+# age newly-cold ledgers out of local MinIO into the AWS public
+# bucket. Each run trims the freshest month that's passed the 90 d
+# hot window; --verify-upstream HEADs the AWS bucket before each
+# DELETE so no local object disappears without a proven cold copy.
+#
+# Sequencing: this timer is intended to be enabled by the operator
+# AFTER the §4 bulk-trim per [[feedback_cold_tier_premature_enable]].
+# Bare enablement before bulk-trim is a no-op (the hot window
+# already covers everything) but enabling it before cold-tiering is
+# turned on would attempt to delete local objects with no upstream
+# fallback — destructive. The ansible role installs the units but
+# does NOT `systemctl enable` them; the operator runs
+# `systemctl enable --now galexie-archive-trim.timer` once the
+# §3 + §4 rollout is complete.
+#
+# Compute-pre: an ExecStartPre helper writes TRIM_CUTOFF to a runtime
+# env file. The cutoff = current indexer cursor minus 90 days of
+# ledgers (1,555,200). Translating "90 days" → ledger sequence has
+# to happen at run time; the helper mirrors the compute-archive-to.sh
+# pattern.
+
+[Unit]
+Description=Rates Engine — monthly galexie-archive trim (ADR-0027 §Trim operator)
+Documentation=https://github.com/RatesEngine/rates-engine/blob/main/docs/adr/0027-lcm-cache-tiering.md
+After=network-online.target postgresql.service ratesengine-indexer.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=root
+
+# ExecStartPre writes TRIM_CUTOFF to /run/galexie-archive-trim.env.
+# /run is tmpfs so the file is fresh each fire (correct: we want
+# the cutoff recomputed against the current indexer cursor every
+# month, not a stale value from a year-ago run).
+ExecStartPre=/usr/local/sbin/compute-trim-cutoff.sh
+EnvironmentFile=/run/galexie-archive-trim.env
+
+# --verify-upstream is the default per the trim binary but spelled
+# out here so the unit file documents the safety guarantee. --commit
+# is required for actual deletion (the binary's own --dry-run /
+# --commit guard); without it the run is a no-op.
+ExecStart=/usr/local/bin/ratesengine-ops trim-galexie-archive \
+  -older-than-ledger ${TRIM_CUTOFF} \
+  -verify-upstream \
+  -commit
+
+# The trim can take hours on first runs (HEAD + DELETE across
+# thousands of partitions); cap generously. Subsequent monthly
+# runs trim only the freshest month → minutes.
+TimeoutStartSec=21600
+Nice=10
+IOSchedulingClass=idle
+
+# Hardening — same shape as verify-archive-tier-a.service.
+ProtectSystem=full
+PrivateTmp=true
+NoNewPrivileges=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+
+[Install]
+WantedBy=multi-user.target

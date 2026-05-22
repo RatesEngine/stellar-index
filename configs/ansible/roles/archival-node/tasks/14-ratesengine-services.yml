@@ -210,7 +210,19 @@
     group: root
     mode: "0755"
 
-- name: Install verify-archive-tier-a / archive-completeness / supply-snapshot units
+- name: Install compute-trim-cutoff.sh helper (ADR-0027 §Trim operator)
+  # galexie-archive-trim.service's ExecStartPre derives TRIM_CUTOFF
+  # = current indexer cursor − 90 days of ledgers. Same pattern as
+  # compute-archive-to.sh; the trim binary requires an explicit
+  # ledger sequence, and systemd can't do arithmetic in the unit.
+  ansible.builtin.copy:
+    src: compute-trim-cutoff.sh
+    dest: /usr/local/sbin/compute-trim-cutoff.sh
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Install verify-archive-tier-a / archive-completeness / supply-snapshot / galexie-archive-trim units
   ansible.builtin.template:
     src: "systemd/{{ item }}.j2"
     dest: "/etc/systemd/system/{{ item }}"
@@ -222,9 +234,17 @@
     - archive-completeness.timer
     - supply-snapshot.service
     - supply-snapshot.timer
+    - galexie-archive-trim.service
+    - galexie-archive-trim.timer
   notify: Reload systemd
 
 - name: Enable + start verify-archive / completeness / supply-snapshot timers
+  # galexie-archive-trim.timer is INTENTIONALLY OMITTED from this
+  # loop — per [[feedback_cold_tier_premature_enable]] and ADR-0027
+  # §Sequencing, the monthly trim is destructive before §3 (cold-
+  # tiering enabled) + §4 (bulk-trim done). The operator runs
+  # `systemctl enable --now galexie-archive-trim.timer` by hand
+  # after the bulk-trim completes.
   ansible.builtin.systemd:
     name: "{{ item }}"
     state: started

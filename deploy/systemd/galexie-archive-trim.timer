@@ -1,0 +1,30 @@
+# systemd timer: monthly galexie-archive trim per ADR-0027 §5
+# Monthly trim cadence.
+#
+# 1st of each month at 03:17 UTC. The off-:00 minute keeps the run
+# off the cron-aligned thundering-herd (same rationale as
+# galexie-archive-fill.timer). 03:00 UTC is a low-traffic window
+# globally for Stellar — the indexer is still live but customer-
+# facing API load is at its quietest.
+#
+# Persistent=true: if the host was down on the 1st, the timer
+# fires on the next boot so a reboot can't silently skip a month.
+#
+# RandomizedDelaySec=600 (10 min) — multiple regions running this
+# unit will fire at slightly different minutes, avoiding any
+# correlated load against the AWS public bucket. (R1 is the only
+# region with cold-tiering enabled at time of writing; the jitter
+# is forward-looking.)
+
+[Unit]
+Description=Monthly galexie-archive trim (ADR-0027)
+Documentation=https://github.com/RatesEngine/rates-engine/blob/main/docs/adr/0027-lcm-cache-tiering.md
+
+[Timer]
+OnCalendar=*-*-01 03:17:00 UTC
+RandomizedDelaySec=600
+Persistent=true
+Unit=galexie-archive-trim.service
+
+[Install]
+WantedBy=timers.target
