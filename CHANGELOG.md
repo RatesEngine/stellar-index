@@ -15,6 +15,18 @@ against.
 
 ## [Unreleased]
 
+### Changed
+
+- **`oracle_updates` retention removed (#14).** Migration 0040 drops
+  the 90-day retention policy on the `oracle_updates` hypertable.
+  Sister to migration 0031 which did the same for `trades`: every
+  raw oracle observation is now preserved indefinitely. The 0034
+  CAGGs (`oracle_prices_1m` … `oracle_prices_1mo`) are unchanged;
+  the migration header documents the per-grain
+  `refresh_continuous_aggregate` operator call that re-backfills
+  them over the full raw range so the API serves long-form oracle
+  history.
+
 ### Added
 
 - **All 19 RedStone feeds now decode (#53).** The decoder matched
