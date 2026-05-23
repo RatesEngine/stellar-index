@@ -55,6 +55,19 @@ against.
 
 ### Fixed
 
+- **SDEX density structurally locked at 99.99999%.** The
+  `sourceGenesisLedger` map declared SDEX's earliest-possible ledger
+  as 1 — but Stellar's network-genesis ledger carries zero
+  operations by design (it is the genesis spec record), so no SDEX
+  trade can ever live in ledger 1. The density denominator therefore
+  counted an unreachable ledger; the metric was structurally
+  prevented from ever reaching 100 % no matter how complete the
+  indexer was. `#51`'s gap-fill verification surfaced it exactly:
+  `62,688,969 / 62,688,970` with the missing one being ledger 1.
+  Fixed to `"sdex": 2` — the earliest ledger that can actually carry
+  an SDEX operation. (Soroban sources already used exact first-WASM-
+  deploy ledgers and were untouched.)
+
 - **`decoder_stats_5m.events_seen` always 0.** The statsflush
   flusher stamped `EventsSeen: 0` on every row with a `dispatcher.
   Stats doesn't expose per-source events_seen yet; fill when added`

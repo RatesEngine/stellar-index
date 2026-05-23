@@ -109,11 +109,12 @@ type CAGGCoverageView struct {
 // report 0 / 0 (no Stellar ledger); `applies` distinguishes the two
 // cases for the UI (no point drawing a "coverage bar" for binance).
 //
-// GenesisLedger is the source's known start point — 1 for SDEX
-// (Stellar pubnet genesis), the contract deploy ledger for
-// Soroban contracts, 0 ("not applicable") for CEX/FX. Hardcoded
-// in `sourceGenesisLedger`; when an operator deploys a new source
-// add a row there.
+// GenesisLedger is the source's earliest-possible-data ledger —
+// 2 for SDEX (Stellar's genesis ledger 1 carries no operations so
+// no SDEX trade can live in it; ledger 2 is the first that can),
+// the contract deploy ledger for Soroban contracts, 0 ("not
+// applicable") for CEX/FX. Hardcoded in `sourceGenesisLedger`;
+// when an operator deploys a new source add a row there.
 //
 // DensityPct is the fraction of (genesis → tip) ledgers we've
 // SUCCESSFULLY PROCESSED for this source, measured via the union
@@ -170,7 +171,15 @@ type BackfillCoverageRow struct {
 
 // sourceGenesisLedger is the operator-curated map of "what's the
 // earliest ledger this source can possibly have data for". Values:
-//   - 1                : SDEX (Stellar pubnet genesis 2015-08-19).
+//   - 2                : SDEX. Stellar pubnet's network-genesis is
+//     ledger 1, but ledger 1 carries zero operations by design —
+//     it's the genesis spec record — so no SDEX trade can ever
+//     live in it. The earliest ledger an SDEX trade can occupy is
+//     ledger 2. Setting this to 1 would lock DensityPct at
+//     99.99999...% no matter how complete the indexer is (verified
+//     via #51's gap-fill: 62,688,969 / 62,688,970 with the
+//     residual = ledger 1). The 100%-density mission needs 100%
+//     reachable; this is the minimum-honest denominator floor.
 //   - <first deploy>    : the EXACT ledger the source's first
 //     contract WASM was installed on mainnet — the minimum
 //     create_contract ledger across ALL of that protocol's
@@ -189,7 +198,7 @@ type BackfillCoverageRow struct {
 // list intentionally sits next to the projection so a reviewer
 // notices it during PR review.
 var sourceGenesisLedger = map[string]int64{
-	"sdex": 1,
+	"sdex": 2,
 	// Soroban contracts — exact first-deploy ledgers, MIN across
 	// every contract the source routes, from the per-source WASM
 	// audits (docs/operations/wasm-audits/<src>.md +
