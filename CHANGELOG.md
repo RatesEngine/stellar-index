@@ -15,6 +15,29 @@ against.
 
 ## [Unreleased]
 
+## [v0.5.0-rc.74] — 2026-05-23
+
+### Fixed
+
+- **`verify-archive` parallelism fix crashed on least-privilege
+  MinIO IAM.** rc.73 added tip-resolution for `-to=0 -workers N`
+  via `datastore.FindLatestLedgerSequence`, but that — and the
+  per-chunk workers' `BufferedStorageBackend.PrepareRange` for
+  `BoundedRange` — both require `s3:ListBucket`. r1's
+  `ratesengine_reader` MinIO IAM grants `GetObject` only (single-
+  chunk `UnboundedRange` doesn't need List, which is why the
+  pre-rc.73 single-chunk-by-accident behaviour worked). The
+  systemd nightly's `-workers 12 -to=0` therefore hit AccessDenied
+  on first fire of the rc.73 binary, breaking the nightly chain
+  walk. Now the resolution path is fail-soft: on either
+  `NewDataStore` or `FindLatestLedgerSequence` denial, log a clear
+  "fall back to single-chunk serial; grant s3:ListBucket to the
+  reader IAM to enable parallelism" message and demote `workers=1`.
+  Old single-chunk behaviour is fully preserved; operators who
+  grant List get the real parallel speedup automatically. Explicit
+  `-to N -workers M` still loud-fails on per-worker AccessDenied
+  (operator asked for parallelism, so the failure is actionable).
+
 ## [v0.5.0-rc.73] — 2026-05-23
 
 ### Added

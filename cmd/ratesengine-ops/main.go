@@ -2109,18 +2109,39 @@ func verifyArchiveLCMWalk(cfg config.Config, bucket string, from, to uint32, max
 	// Skipped when workers ≤ 1 (single-chunk serial walk is what
 	// `to=0` is FOR; resolving tip there would defeat the live-tail
 	// path) and when `to` already names an explicit upper bound.
+	//
+	// Fail-soft: tip resolution AND the per-chunk workers'
+	// BoundedRange PrepareRange both require bucket `ListObjectsV2`
+	// permission. Setups with least-privilege MinIO IAM (r1's
+	// `ratesengine_reader` grants GetObject only) deny it. Rather
+	// than crash the whole walk, log a clear message and demote to
+	// single-chunk serial (UnboundedRange — works without List, the
+	// pre-this-fix behaviour). An operator who genuinely wants the
+	// parallel speedup grants `s3:ListBucket` to the reader and the
+	// next walk picks it up automatically.
 	if to == 0 && workers > 1 {
+		const listGrantHint = "verify-archive: " +
+			"falling back to single-chunk serial walk. Parallel mode " +
+			"requires bucket ListObjectsV2 (BoundedRange PrepareRange " +
+			"in the per-chunk workers needs it too, not just this tip " +
+			"resolution); grant `s3:ListBucket` to the reader IAM to " +
+			"enable -workers N parallelism."
+
 		ds, dsErr := datastore.NewDataStore(ctx, lsCfg.DataStore)
 		if dsErr != nil {
-			return 0, "", fmt.Errorf("resolve tip for %d-way parallel split: open datastore: %w", workers, dsErr)
+			fmt.Fprintf(os.Stderr, "verify-archive: tip resolution failed (open datastore: %v); %s\n", dsErr, listGrantHint)
+			workers = 1
+		} else {
+			tip, tipErr := datastore.FindLatestLedgerSequence(ctx, ds)
+			_ = ds.Close()
+			if tipErr != nil {
+				fmt.Fprintf(os.Stderr, "verify-archive: tip resolution failed (find latest ledger: %v); %s\n", tipErr, listGrantHint)
+				workers = 1
+			} else {
+				fmt.Fprintf(os.Stderr, "verify-archive: resolved -to=0 → tip %d for %d-way parallel split\n", tip, workers)
+				to = tip
+			}
 		}
-		tip, tipErr := datastore.FindLatestLedgerSequence(ctx, ds)
-		_ = ds.Close()
-		if tipErr != nil {
-			return 0, "", fmt.Errorf("resolve tip for %d-way parallel split: find latest ledger: %w", workers, tipErr)
-		}
-		fmt.Fprintf(os.Stderr, "verify-archive: resolved -to=0 → tip %d for %d-way parallel split\n", tip, workers)
-		to = tip
 	}
 
 	chunks := splitRange(from, to, workers)
