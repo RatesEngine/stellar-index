@@ -15,7 +15,60 @@ against.
 
 ## [Unreleased]
 
+## [v0.5.0-rc.73] — 2026-05-23
+
 ### Added
+
+- **All 19 RedStone feeds now decode (#53).** The decoder matched
+  feed_ids against the crypto allow-list (`IsKnownCrypto`). The
+  on-chain `feed_id()` strings — captured 2026-05-22 — are not the
+  display names for 5 of 19 feeds, so EUROC (feed_id `EUROC/EUR`)
+  silently never decoded and the 11 RWA / tokenized-BTC feeds were
+  all dropped. `internal/sources/redstone/feeds.go` replaces the
+  allow-list match with an explicit 19-entry registry keyed on the
+  exact feed_id, each mapped to a canonical `(base, quote)` pair.
+  Tokenized real-world assets (BENJI, GILTS, CETES, KTB, TESOURO,
+  USTRY, SPXU, iBENJI) decode as the new `rwa` `AssetType`
+  (ADR-0028); SolvBTC variants are `crypto`. The quote is now
+  per-feed — EUROC lands as EUR-denominated instead of being
+  mislabelled USD. RedStone stays `ClassOracle` / `IncludeInVWAP=
+  false`, so NAV-quoted RWA references never feed market VWAP.
+
+- **CCTP-Stellar bridge ingest (#40).** Circle's CCTP v2 is now a
+  wired source. The decoder for the four contract events
+  (`deposit_for_burn`, `mint_and_withdraw`, `message_sent`,
+  `message_received`) had shipped earlier; this completes the
+  source — a stateless topic `Decoder` gated on the three known
+  CCTP contracts, a `consumer.Event` projection, dispatcher
+  registration, and persistence to a new `cctp_events` hypertable
+  (migration 0038). CCTP is `Class=ClassBridge`: bridge flow, never
+  contributes to VWAP. `deposit_for_burn` / `mint_and_withdraw` are
+  USDC supply exits / entries beyond the classic trustline channel.
+  Enable by adding `"cctp"` to `ingestion.enabled_sources`;
+  `BackfillSafe` stays `false` pending the WASM-history audit.
+
+- **Rozo-Stellar bridge ingest (#41).** Rozo's v1 intent-bridge is
+  now a wired source. The decoder for the two v1 Payment events
+  (`payment`, `flush`) had shipped earlier; this completes the
+  source — a stateless topic `Decoder` gated on the three live v1
+  Payment contracts, a `consumer.Event` projection, dispatcher
+  registration, and persistence to a new `rozo_events` hypertable
+  (migration 0039, fully typed — no jsonb blob). `Class=ClassBridge`,
+  never VWAP. Enable by adding `"rozo"` to
+  `ingestion.enabled_sources`; `BackfillSafe` stays `false` pending
+  the WASM-history audit. v2 Forwarder / IntentBridge stay
+  unwired — they are pre-mainnet.
+
+- **`trades_pair_source_ts_idx` composite index (#30).** Migration
+  0037 adds `(base_asset, quote_asset, source, ts DESC, ledger DESC)`
+  on `trades`. `Store.LatestTradePerSource` (behind `/v1/observations`)
+  runs `SELECT DISTINCT ON (source) … ORDER BY source, ts DESC,
+  ledger DESC`; with only the pre-existing pair index that degraded
+  to an O(rows_in_pair) scan-then-sort. The new index orders exactly
+  as the query does within the `(base_asset, quote_asset)` prefix, so
+  the planner walks it as an O(num_sources) skip-scan. On an
+  already-populated node build it `CONCURRENTLY` by hand first — see
+  the migration header.
 
 - **`cagg-broad-recompute` operator procedure (#5).** A one-shot
   procedure doc for refreshing every continuous aggregate over the
@@ -53,56 +106,15 @@ against.
   net in place. The alert is silent until cold-tiering is enabled
   (the metric stays at zero before then).
 
-### Fixed
-
-- **`verify-archive -workers N` silently dropped when `-to=0`.** The
-  default `-to=0` (treat as "unbounded/live") fed `splitRange(from, 0,
-  N)` which hit its `to <= from` guard and returned a single chunk —
-  an N-way parallel chain walk silently degraded to a serial one.
-  Hit by a manual `-from 2 -to 0 -workers 6` bootstrap that crawled
-  ~22h instead of ~4h, and would hit every fresh-state bootstrap of
-  the systemd `-from-last-verified` timer for the same reason.
-  Fixed: when `to == 0 && workers > 1` we now query
-  `datastore.FindLatestLedgerSequence` once at start, adopt that as
-  the upper bound for the split, and log the resolution so it's
-  visible. `to=0` with `workers ≤ 1` keeps its existing live-tail
-  semantics.
-
-- **SDEX density structurally locked at 99.99999%.** The
-  `sourceGenesisLedger` map declared SDEX's earliest-possible ledger
-  as 1 — but Stellar's network-genesis ledger carries zero
-  operations by design (it is the genesis spec record), so no SDEX
-  trade can ever live in ledger 1. The density denominator therefore
-  counted an unreachable ledger; the metric was structurally
-  prevented from ever reaching 100 % no matter how complete the
-  indexer was. `#51`'s gap-fill verification surfaced it exactly:
-  `62,688,969 / 62,688,970` with the missing one being ledger 1.
-  Fixed to `"sdex": 2` — the earliest ledger that can actually carry
-  an SDEX operation. (Soroban sources already used exact first-WASM-
-  deploy ledgers and were untouched.)
-
-- **`ratesengine_source_matched_events_total` Prometheus metric**
-  (#dispatcher-events-seen follow-up). The earlier database-side fix
-  (`decoder_stats_5m.events_seen` populated correctly) made decoder
-  error-rate computable post-hoc; this exposes the same per-source
-  denominator on Prometheus, so the live dashboard
-  `rate(decode_errors[5m]) / rate(matched_events[5m])` works without
-  joining against the downstream `source_events_total` (which is a
-  different thing — that's per-source decoder OUTPUTS, not INPUTS).
+- **`ratesengine_source_matched_events_total` Prometheus metric.**
+  Per-source counter of inputs a decoder's `Matches()` claimed —
+  the denominator of decoder error-rate. Mirrors the
+  `decoder_stats_5m.events_seen` fix below onto Prometheus so the
+  live dashboard `rate(decode_errors[5m]) / rate(matched_events[5m])`
+  works without joining against the downstream `source_events_total`
+  (which counts decoder OUTPUTS, not INPUTS — different thing).
   Wired into `pipeline.emitDispatcherMetricDeltas` alongside the
   existing decode_errors / orphan_events deltas.
-
-- **`decoder_stats_5m.events_seen` always 0.** The statsflush
-  flusher stamped `EventsSeen: 0` on every row with a `dispatcher.
-  Stats doesn't expose per-source events_seen yet; fill when added`
-  TODO. Per-source decoder error-rate (errors/events) was therefore
-  uncomputable — the numerator existed, the denominator was always
-  zero. The dispatcher now bumps `eventsSeen[name]++` in every
-  Matches→Decode site (events, contract calls, entry changes,
-  classic ops), exposes it via `Stats.EventsSeen`, and the flusher
-  writes the per-bucket delta to `decoder_stats_5m`. Bumped
-  pre-Decode so a decoder that matches then errors still counts —
-  exactly the shape that makes error-rate meaningful.
 
 ### Changed
 
@@ -116,66 +128,7 @@ against.
   them over the full raw range so the API serves long-form oracle
   history.
 
-### Added
-
-- **All 19 RedStone feeds now decode (#53).** The decoder matched
-  feed_ids against the crypto allow-list (`IsKnownCrypto`). The
-  on-chain `feed_id()` strings — captured 2026-05-22 — are not the
-  display names for 5 of 19 feeds, so EUROC (feed_id `EUROC/EUR`)
-  silently never decoded and the 11 RWA / tokenized-BTC feeds were
-  all dropped. `internal/sources/redstone/feeds.go` replaces the
-  allow-list match with an explicit 19-entry registry keyed on the
-  exact feed_id, each mapped to a canonical `(base, quote)` pair.
-  Tokenized real-world assets (BENJI, GILTS, CETES, KTB, TESOURO,
-  USTRY, SPXU, iBENJI) decode as the new `rwa` `AssetType`
-  (ADR-0028); SolvBTC variants are `crypto`. The quote is now
-  per-feed — EUROC lands as EUR-denominated instead of being
-  mislabelled USD. RedStone stays `ClassOracle` / `IncludeInVWAP=
-  false`, so NAV-quoted RWA references never feed market VWAP.
-
-- **Rozo-Stellar bridge ingest (#41).** Rozo's v1 intent-bridge is
-  now a wired source. The decoder for the two v1 Payment events
-  (`payment`, `flush`) had shipped earlier; this completes the
-  source — a stateless topic `Decoder` gated on the three live v1
-  Payment contracts, a `consumer.Event` projection, dispatcher
-  registration, and persistence to a new `rozo_events` hypertable
-  (migration 0039, fully typed — no jsonb blob). `Class=ClassBridge`,
-  never VWAP. Enable by adding `"rozo"` to
-  `ingestion.enabled_sources`; `BackfillSafe` stays `false` pending
-  the WASM-history audit. v2 Forwarder / IntentBridge stay
-  unwired — they are pre-mainnet.
-
-- **CCTP-Stellar bridge ingest (#40).** Circle's CCTP v2 is now a
-  wired source. The decoder for the four contract events
-  (`deposit_for_burn`, `mint_and_withdraw`, `message_sent`,
-  `message_received`) had shipped earlier; this completes the
-  source — a stateless topic `Decoder` gated on the three known
-  CCTP contracts, a `consumer.Event` projection, dispatcher
-  registration, and persistence to a new `cctp_events` hypertable
-  (migration 0038). CCTP is `Class=ClassBridge`: bridge flow, never
-  contributes to VWAP. `deposit_for_burn` / `mint_and_withdraw` are
-  USDC supply exits / entries beyond the classic trustline channel.
-  Enable by adding `"cctp"` to `ingestion.enabled_sources`;
-  `BackfillSafe` stays `false` pending the WASM-history audit.
-
-- **`trades_pair_source_ts_idx` composite index (#30).** Migration
-  0037 adds `(base_asset, quote_asset, source, ts DESC, ledger DESC)`
-  on `trades`. `Store.LatestTradePerSource` (behind `/v1/observations`)
-  runs `SELECT DISTINCT ON (source) … ORDER BY source, ts DESC,
-  ledger DESC`; with only the pre-existing pair index that degraded
-  to an O(rows_in_pair) scan-then-sort. The new index orders exactly
-  as the query does within the `(base_asset, quote_asset)` prefix, so
-  the planner walks it as an O(num_sources) skip-scan. On an
-  already-populated node build it `CONCURRENTLY` by hand first — see
-  the migration header.
-
 ### Fixed
-
-- **RedStone EUROC feed never decoded (#53).** The EUROC feed's
-  on-chain feed_id is `EUROC/EUR`, which never matched the crypto
-  allow-list entry `EUROC`, so the feed was silently skipped since
-  launch. Fixed by the explicit feed registry above; EUROC now lands
-  as an EUR-denominated observation.
 
 - **AWS-SDK checksum-warning log flood (#62).** Since
   `aws-sdk-go-v2/config` v1.29.0 the SDK's default response-checksum
@@ -190,6 +143,50 @@ against.
   `when_required` at process start (operator-set values are
   respected), so the SDK validates only when the operation requires
   it — S3 GetObject does not.
+
+- **RedStone EUROC feed never decoded (#53).** The EUROC feed's
+  on-chain feed_id is `EUROC/EUR`, which never matched the crypto
+  allow-list entry `EUROC`, so the feed was silently skipped since
+  launch. Fixed by the explicit feed registry above; EUROC now lands
+  as an EUR-denominated observation.
+
+- **`decoder_stats_5m.events_seen` always 0.** The statsflush
+  flusher stamped `EventsSeen: 0` on every row with a `dispatcher.
+  Stats doesn't expose per-source events_seen yet; fill when added`
+  TODO. Per-source decoder error-rate (errors/events) was therefore
+  uncomputable — the numerator existed, the denominator was always
+  zero. The dispatcher now bumps `eventsSeen[name]++` in every
+  Matches→Decode site (events, contract calls, entry changes,
+  classic ops), exposes it via `Stats.EventsSeen`, and the flusher
+  writes the per-bucket delta to `decoder_stats_5m`. Bumped
+  pre-Decode so a decoder that matches then errors still counts —
+  exactly the shape that makes error-rate meaningful.
+
+- **SDEX density structurally locked at 99.99999%.** The
+  `sourceGenesisLedger` map declared SDEX's earliest-possible ledger
+  as 1 — but Stellar's network-genesis ledger carries zero
+  operations by design (it is the genesis spec record), so no SDEX
+  trade can ever live in ledger 1. The density denominator therefore
+  counted an unreachable ledger; the metric was structurally
+  prevented from ever reaching 100 % no matter how complete the
+  indexer was. `#51`'s gap-fill verification surfaced it exactly:
+  `62,688,969 / 62,688,970` with the missing one being ledger 1.
+  Fixed to `"sdex": 2` — the earliest ledger that can actually carry
+  an SDEX operation. (Soroban sources already used exact first-WASM-
+  deploy ledgers and were untouched.)
+
+- **`verify-archive -workers N` silently dropped when `-to=0`.** The
+  default `-to=0` (treat as "unbounded/live") fed `splitRange(from, 0,
+  N)` which hit its `to <= from` guard and returned a single chunk —
+  an N-way parallel chain walk silently degraded to a serial one.
+  Hit by a manual `-from 2 -to 0 -workers 6` bootstrap that crawled
+  ~22h instead of ~4h, and would hit every fresh-state bootstrap of
+  the systemd `-from-last-verified` timer for the same reason.
+  Fixed: when `to == 0 && workers > 1` we now query
+  `datastore.FindLatestLedgerSequence` once at start, adopt that as
+  the upper bound for the split, and log the resolution so it's
+  visible. `to=0` with `workers ≤ 1` keeps its existing live-tail
+  semantics.
 
 ## [v0.5.0-rc.72] — 2026-05-22
 
