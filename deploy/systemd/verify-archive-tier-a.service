@@ -99,20 +99,35 @@ ProtectKernelModules=true
 ProtectControlGroups=true
 
 # systemd's hard cap MUST exceed the binary's own -max-runtime
-# (VERIFY_ARCHIVE_MAX_RUNTIME, 16h). The binary self-bounds at
+# (VERIFY_ARCHIVE_MAX_RUNTIME, 0 = uncapped) AND must accommodate
+# the slowest plausible bootstrap walk. The binary self-bounds at
 # -max-runtime and exits cleanly *writing the -from-last-verified
 # state file*; only then are subsequent runs incremental (minutes).
-# Regression fixed 2026-05-19 (Task #13): TimeoutStartSec was 4h
-# while -max-runtime was 16h, so on a fresh deploy / after a state-
-# file loss the bootstrap full pass (~10-14h at 12 workers, state
-# absent → -from genesis) was SIGTERM'd by systemd at 4h before it
-# could seed state → every run a full pass → permanent
-# ratesengine_verify_archive_unit_failed (a true bootstrap
-# deadlock; the old "4h is plenty for incremental" comment ignored
-# that the FIRST run is always a full pass). 17h = 16h binary cap
-# + 1h graceful-shutdown/state-write grace, still well inside the
-# 24h timer cadence.
-TimeoutStartSec=17h
+#
+# 2026-05-19 (Task #13): TimeoutStartSec was 4h while -max-runtime
+# was 16h, so on a fresh deploy / after a state-file loss the
+# bootstrap full pass (~10-14h at 12 workers, state absent →
+# -from genesis) was SIGTERM'd at 4h before it could seed state.
+# Raised to 17h then.
+#
+# 2026-05-23 (#62 root cause): 17h was sized for the 12-worker
+# parallel walk the unit prescribes, but the parallelism never
+# actually happened on r1 — `splitRange(from, to=0, n)` hit its
+# `to <= from` guard and silently returned a single chunk
+# (rc.74's fail-soft fix documents this), AND r1's least-privilege
+# MinIO `ratesengine_reader` IAM grants `GetObject` only, so the
+# parallel path's BoundedRange PrepareRange can't run anyway until
+# `s3:ListBucket` is granted. End-to-end the walk is therefore
+# serial, ~700 ledgers/s, and the full 62.6M-ledger bootstrap pass
+# takes ~25h — comfortably past the 17h cap. The walk got SIGTERM'd
+# at 17h05m with chunk[0] at ledger 40.5M, every line "verified".
+#
+# 36h = serial-walk headroom (25h walk + grace), still inside the
+# daily timer cadence so the next fire isn't queued behind this
+# one. Once `s3:ListBucket` is granted to the reader IAM the
+# parallel walk completes in ~hours — 36h becomes overkill, but
+# the cap stays safe.
+TimeoutStartSec=36h
 
 [Install]
 WantedBy=multi-user.target

@@ -15,6 +15,28 @@ against.
 
 ## [Unreleased]
 
+### Changed
+
+- **`verify-archive-tier-a.service` `TimeoutStartSec` 17h → 36h
+  (#62).** The 17h cap was sized for the 12-worker parallel walk
+  the unit prescribes, but on r1 the walk has been silently serial
+  all along — `splitRange(from, to=0, n)` returned a single chunk
+  (rc.74's fail-soft documents this), AND the MinIO
+  `ratesengine_reader` IAM grants `GetObject` only so the parallel
+  BoundedRange path needs `s3:ListBucket` it doesn't have. Serial
+  walk at ~700 ledgers/s = ~25h for the 62.6M-ledger bootstrap →
+  busted the 17h cap (SIGTERM at 17h05m, chunk[0] ledger 40.5M,
+  every line clean — timeout failure, not a chain defect, but
+  indistinguishable from the alert's POV → that was the original
+  `#62` symptom). 36h gives serial-walk headroom and still fits
+  inside the daily timer cadence. Once `s3:ListBucket` is granted
+  the parallel walk completes in hours and 36h becomes overkill,
+  but the cap stays safe. Takes effect on next `ansible-playbook
+  -i inventory/r1.yml playbooks/archival-node.yml --tags
+  ratesengine` apply (the timer is disabled on r1 right now to
+  break the recurring-failure loop — re-enable after the playbook
+  runs).
+
 ## [v0.5.0-rc.74] — 2026-05-23
 
 ### Fixed

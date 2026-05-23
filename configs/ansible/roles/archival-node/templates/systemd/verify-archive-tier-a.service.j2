@@ -74,12 +74,27 @@ ProtectControlGroups=true
 # TimeoutStartSec MUST exceed the binary's -max-runtime so the
 # binary self-bounds and seeds the -from-last-verified state file
 # before systemd would SIGTERM it. With MAX_RUNTIME=0 (uncapped)
-# the bootstrap full pass is the long pole — ~10-14h at 12 workers.
-# 17h leaves headroom for that plus a graceful state-write, and
-# still sits well inside the 24h timer cadence. (Task #13,
-# 2026-05-19: a 4h cap SIGTERM'd the bootstrap pass before it could
-# seed state → every run a full pass → permanent unit_failed.)
-TimeoutStartSec=17h
+# the bootstrap full pass is the long pole.
+#
+# Task #13 (2026-05-19): 4h was too tight even for the FAST case;
+# raised to 17h sized for the 12-worker parallel walk.
+#
+# #62 root cause (2026-05-23): the parallel walk never actually
+# happened on r1 — splitRange hit its `to <= from` guard for the
+# default `-to=0`, AND r1's least-privilege MinIO IAM grants
+# `GetObject` only so the per-chunk BoundedRange path needs
+# `s3:ListBucket` it doesn't have (rc.74's fail-soft demotes to
+# single-chunk serial automatically). End-to-end serial walk at
+# ~700 ledgers/s = ~25h for a 62.6M-ledger bootstrap, busting the
+# 17h cap. The walk got SIGTERM'd at 17h05m with chunk[0] at
+# ledger 40.5M, every verified line clean — a timeout failure, not
+# a chain defect, but indistinguishable from the alert's POV.
+#
+# 36h gives serial-walk headroom and still fits inside the daily
+# timer cadence. Once `s3:ListBucket` is granted to the reader IAM
+# the parallel walk completes in hours and 36h becomes overkill,
+# but the cap stays safe.
+TimeoutStartSec=36h
 
 # The first-ever verify run is a full ~13.8h pass. Deprioritize so
 # it yields CPU/IO to the API + postgres during daytime hours
