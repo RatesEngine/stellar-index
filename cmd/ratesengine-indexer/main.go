@@ -71,10 +71,16 @@ import (
 const cursorSource = "ledgerstream"
 
 func main() {
-	// Default the aws-sdk-go-v2 response-checksum mode before any S3
-	// datastore is built — MinIO responses carry no checksum, so the
-	// SDK's "when_supported" default WARN-spams every ledger read.
-	pipeline.QuietS3ChecksumWarnings()
+	// Wrap fd 2 with a line-filter BEFORE any aws-sdk-go-v2 code
+	// captures os.Stderr (config.LoadDefaultConfig binds the
+	// default logger at that point). Drops the per-S3-GET
+	// "Response has no supported checksum" WARN that floods
+	// journald when MinIO is the backend — every GetObjectInput
+	// in go-stellar-sdk's datastore/s3.go hardcodes ChecksumMode:
+	// Enabled, so the previous env-var approach was a no-op for
+	// our use. Fail-soft: any pipe/dup2 error logs to the original
+	// stderr and startup continues with unfiltered output.
+	pipeline.SilenceSDKChecksumWarnings()
 
 	var (
 		cfgPath     = flag.String("config", "", "Path to TOML config file (required)")

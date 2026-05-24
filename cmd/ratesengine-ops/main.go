@@ -79,11 +79,15 @@ import (
 )
 
 func main() { //nolint:gocyclo,gocognit,funlen // subcommand switch; each case is trivial, splitting adds indirection without clarity
-	// Default the aws-sdk-go-v2 response-checksum mode before any
-	// subcommand builds an S3 datastore — MinIO responses carry no
-	// checksum, so the SDK's "when_supported" default WARN-spams
-	// every ledger read (verify-archive's 1.65 GB log of noise).
-	pipeline.QuietS3ChecksumWarnings()
+	// Wrap fd 2 with a line-filter BEFORE any aws-sdk-go-v2 code
+	// captures os.Stderr. Drops the per-S3-GET "Response has no
+	// supported checksum" WARN that floods journald during
+	// verify-archive's 12-way parallel walk (~22k WARN/30s on
+	// r1, ballooning logs to 1.65 GB). The rc.72 env-var
+	// approach (QuietS3ChecksumWarnings) was a no-op because
+	// go-stellar-sdk's datastore/s3.go:161 hardcodes
+	// ChecksumMode: Enabled per request. Fail-soft.
+	pipeline.SilenceSDKChecksumWarnings()
 
 	args := os.Args[1:]
 	if len(args) == 0 {

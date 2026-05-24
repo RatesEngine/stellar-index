@@ -34,6 +34,20 @@ against.
   drop below it signals "someone re-rounded back to a deploy-era
   constant". (Spans this fix + the prior 92d713a / 0966d6f3 /
   495b79f7 follow-ups; final correctness guard for #10.)
+- **SDK checksum-validation WARN flood actually silenced (#62a).**
+  The rc.72 env-var fix (`QuietS3ChecksumWarnings`) was a no-op:
+  `go-stellar-sdk/support/datastore/s3.go:161` hardcodes
+  `ChecksumMode: types.ChecksumModeEnabled` per request, overriding
+  the env-var default. verify-archive's 12-way parallel walk
+  flooded journald with ~22k WARN/30s during r1 bootstrap. The
+  real fix wraps fd-2 with a filtering pipe at process start +
+  drops lines containing "Response has no supported checksum"
+  before they reach journald. Fail-soft: if pipe/dup3 errors,
+  startup continues with raw stderr. Renamed +
+  `pipeline.SilenceSDKChecksumWarnings` (was
+  `QuietS3ChecksumWarnings`). The env-var approach + its
+  upstream-respect rationale is documented in the function's
+  doc comment.
 
 ## [v0.5.0-rc.76] — 2026-05-24
 
