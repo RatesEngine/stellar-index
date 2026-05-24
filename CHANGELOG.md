@@ -15,6 +15,38 @@ against.
 
 ## [Unreleased]
 
+### Added
+
+- **`verify-archive` per-chunk resume across restarts (#62).** The
+  state file previously was written only on clean exit ("at the end
+  on success" per the doc comment) — a SIGTERM during a bootstrap
+  walk discarded everything verified so far, so
+  `-from-last-verified` on the next fire restarted from genesis.
+  Yesterday's #62 walk burned 17h05m of clean work (ledger 2 →
+  40.5M, every line verified) before the timeout SIGTERMed it; with
+  state writing only on completion, that progress couldn't be
+  recovered.
+  - The state file now carries a per-tier `InProgress` section with
+    the original run plan (from / to / workers / chunks) plus a
+    `Done` flag per chunk. As each chunk's walker completes
+    successfully, the orchestrator marks that chunk Done and
+    rewrites the state file atomically. SIGTERM at any point leaves
+    a coherent record of which chunks finished.
+  - On the next fire, `verify-archive` reads the prior InProgress.
+    If the run plan still matches (same from / to / workers /
+    chunk-count), only the chunks that aren't Done get re-issued —
+    completed chunks are skipped. A plan mismatch (operator changed
+    flags, tip moved) ignores the prior state cleanly and starts
+    fresh, with a log line naming the difference.
+  - Worst case: a SIGTERM mid-walk loses one chunk's in-flight work
+    (~1/12 of the bootstrap, not the whole thing). Mid-chunk
+    resumption would require persisting a per-chunk `-resume-from-
+    hash` anchor — deferred until the 1/12-loss proves too costly.
+  - The end-of-walk `updateTierState` unconditionally clears
+    InProgress now, including on no-advance success (every chunk
+    was already Done from the prior run). Legacy state files
+    without the `in_progress` key parse cleanly as `nil`.
+
 ### Changed
 
 - **`verify-archive-tier-a.service` `TimeoutStartSec` 17h → 36h

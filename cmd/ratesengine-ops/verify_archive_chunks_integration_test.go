@@ -65,6 +65,7 @@ func TestRunVerifyChunks_FilesystemBackend_ParallelWalk(t *testing.T) {
 		filepath.Join(dir, "no-archive-root"),
 		time.Now(),
 		1*time.Hour, // suppress per-chunk progress prints
+		chunkOrchestratorOpts{},
 	)
 	if err != nil {
 		t.Fatalf("runVerifyChunks: %v", err)

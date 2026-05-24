@@ -266,6 +266,28 @@ func verifyChunk(
 	return res, err
 }
 
+// chunkOrchestratorOpts carries resume-aware hooks for
+// [runVerifyChunks]. The zero value is the legacy single-pass shape:
+// chunks are numbered 0..len-1 in the progress log + result array,
+// and no per-chunk completion is reported anywhere.
+type chunkOrchestratorOpts struct {
+	// ChunkIdxs maps each position in `chunks` to the chunk's
+	// ORIGINAL idx in the parent run's full pre-resume chunk list.
+	// nil ⇒ identity (0, 1, …, len(chunks)-1). When resume has
+	// filtered already-Done chunks out, this preserves the original
+	// numbering so the progress log + state-file row stay
+	// consistent across restarts ("chunk[5]" always means the same
+	// 5M-ledger slice).
+	ChunkIdxs []int
+
+	// OnChunkDone is invoked synchronously after each chunk's
+	// walker returns without error, with the chunk's original idx
+	// and its terminal chunkResult. nil ⇒ no-op. The caller
+	// (verifyArchiveLCMWalk) writes a state-file update marking
+	// the chunk Done so a subsequent SIGTERMed run can skip it.
+	OnChunkDone func(originalIdx int, res chunkResult)
+}
+
 // runVerifyChunks orchestrates parallel chunk verification. Splits
 // the range, runs `workers` chunks concurrently via errgroup,
 // stitches boundary hashes after all chunks complete.
@@ -285,9 +307,23 @@ func runVerifyChunks(
 	archiveRoot string,
 	startedAt time.Time,
 	progressEvery time.Duration,
+	opts chunkOrchestratorOpts,
 ) ([]chunkResult, error) {
 	if len(chunks) == 0 {
 		return nil, errors.New("verify-archive: empty chunk list")
+	}
+
+	// Resolve per-position → original-idx mapping. Default is
+	// identity (no resume filtering).
+	idxs := opts.ChunkIdxs
+	if idxs == nil {
+		idxs = make([]int, len(chunks))
+		for i := range chunks {
+			idxs[i] = i
+		}
+	}
+	if len(idxs) != len(chunks) {
+		return nil, fmt.Errorf("verify-archive: ChunkIdxs len %d != chunks len %d", len(idxs), len(chunks))
 	}
 
 	results := make([]chunkResult, len(chunks))
@@ -300,9 +336,10 @@ func runVerifyChunks(
 	g, gctx := errgroup.WithContext(ctx)
 	for i, chunk := range chunks {
 		i, chunk := i, chunk // capture
+		originalIdx := idxs[i]
 		g.Go(func() error {
 			res, err := verifyChunk(
-				gctx, lsCfg, chunk, i,
+				gctx, lsCfg, chunk, originalIdx,
 				doChain, doCheckpoint, archiveRoot,
 				&progressMu, startedAt, progressEvery,
 				&totalVerified,
@@ -311,6 +348,13 @@ func runVerifyChunks(
 			results[i] = res
 			totalVerified += int64(res.Verified)
 			updateMu.Unlock()
+			// Mark Done in the state file only on clean completion
+			// — an errored chunk's partial-progress isn't durable
+			// (in-flight-chunk resume is a future revision; see
+			// ChunkProgress doc in verify_archive_state.go).
+			if err == nil && opts.OnChunkDone != nil {
+				opts.OnChunkDone(originalIdx, res)
+			}
 			return err
 		})
 	}

@@ -2005,8 +2005,20 @@ func verifyArchive(args []string) error { //nolint:funlen,gocognit,gocyclo // li
 
 	// Tier A + B (LCM walk via ledgerstream). Skipped when tier=peers.
 	if doChain || doCheckpoint {
+		// verifyArchiveLCMWalk owns the state file's InProgress
+		// section for the in-flight period: it seeds it before the
+		// walk + writes a per-chunk update after each chunk Done so
+		// a SIGTERMed run can resume from the chunk boundary
+		// instead of restarting from genesis. We pass priorState in
+		// for resume-plan-matching, then re-read after to apply our
+		// own end-of-run updateTierState cleanly.
+		walkTier := "chain"
+		if doCheckpoint && !doChain {
+			walkTier = "checkpoint"
+		}
 		highestLedger, highestHash, err := verifyArchiveLCMWalk(cfg, bucket, effectiveFrom, uint32(*to), *maxRuntime, *workers,
-			doChain, doCheckpoint, *archiveRoot, *failOnMissed, effectiveResumeHash)
+			doChain, doCheckpoint, *archiveRoot, *failOnMissed, effectiveResumeHash,
+			*stateFile, walkTier, priorState)
 		if err != nil {
 			return err
 		}
@@ -2014,9 +2026,20 @@ func verifyArchive(args []string) error { //nolint:funlen,gocognit,gocyclo // li
 		// the operator's -tier flag — "chain", "checkpoint", or "all"
 		// (we record under each underlying tier so a future
 		// `-tier chain -from-last-verified` run reads the right one).
-		if *stateFile != "" && highestLedger > 0 {
+		//
+		// Always write on no-error (even when highestLedger == 0):
+		// updateTierState clears the InProgress section, and a no-
+		// advance success (every chunk was already Done from the
+		// prior run) still needs that cleanup. Re-read first so the
+		// per-chunk Done updates the walker wrote during the run
+		// aren't clobbered.
+		if *stateFile != "" {
+			latestState, rerr := readVerifyArchiveState(*stateFile)
+			if rerr != nil {
+				return fmt.Errorf("re-read state %s: %w", *stateFile, rerr)
+			}
 			now := time.Now().UTC()
-			newState := priorState
+			newState := latestState
 			if doChain {
 				newState = updateTierState(newState, "chain", highestLedger, highestHash, now)
 			}
@@ -2026,8 +2049,12 @@ func verifyArchive(args []string) error { //nolint:funlen,gocognit,gocyclo // li
 			if err := writeVerifyArchiveState(*stateFile, newState); err != nil {
 				return fmt.Errorf("write state %s: %w", *stateFile, err)
 			}
-			fmt.Fprintf(os.Stderr, "verify-archive: state advanced to ledger %d (file: %s)\n",
-				highestLedger, *stateFile)
+			if highestLedger > 0 {
+				fmt.Fprintf(os.Stderr, "verify-archive: state advanced to ledger %d (file: %s)\n",
+					highestLedger, *stateFile)
+			} else {
+				fmt.Fprintf(os.Stderr, "verify-archive: in-progress chunks cleared, no high-water advance (file: %s)\n", *stateFile)
+			}
 		}
 	}
 
@@ -2064,7 +2091,7 @@ func verifyArchive(args []string) error { //nolint:funlen,gocognit,gocyclo // li
 // chunk results — used by the caller to advance the persisted
 // verify-archive state. highestLedgerHashHex is hex-encoded;
 // callers carry it forward as -resume-from-hash on the next run.
-func verifyArchiveLCMWalk(cfg config.Config, bucket string, from, to uint32, maxRuntime time.Duration, workers int, doChain, doCheckpoint bool, archiveRoot string, failOnMissed bool, resumeFromHash string) (uint32, string, error) { //nolint:funlen,gocognit,gocyclo
+func verifyArchiveLCMWalk(cfg config.Config, bucket string, from, to uint32, maxRuntime time.Duration, workers int, doChain, doCheckpoint bool, archiveRoot string, failOnMissed bool, resumeFromHash string, stateFile, tier string, priorState VerifyArchiveState) (uint32, string, error) { //nolint:funlen,gocognit,gocyclo
 	lsCfg := ledgerstream.Config{
 		DataStore: datastore.DataStoreConfig{
 			Type: "S3",
@@ -2153,10 +2180,59 @@ func verifyArchiveLCMWalk(cfg config.Config, bucket string, from, to uint32, max
 			workers, len(chunks), (to-from+1)/uint32(workers))
 	}
 
+	// Resume-from-prior-run: if the prior run's per-chunk progress
+	// matches this run's plan (from/to/workers/chunk-count), skip
+	// the chunks already Done. This is what makes a SIGTERMed
+	// bootstrap multi-night-safe — the next fire picks up where the
+	// last one left off, not from genesis. The state-file is owned
+	// by the runner inside this function for the in-flight period;
+	// main re-reads after we return to apply its own updateTierState.
+	filteredChunks, chunkIdxs, resumeReason := resumeChunks(priorState, tier, from, to, workers, chunks)
+	if stateFile != "" {
+		fmt.Fprintf(os.Stderr, "verify-archive: %s\n", resumeReason)
+	}
+	if filteredChunks == nil {
+		// Every chunk in the prior run was Done — this run is a
+		// no-op success. Caller's updateTierState clears InProgress.
+		// Return zero highest-ledger so updateTierState doesn't
+		// regress the LastVerifiedLedger high-water mark.
+		return 0, "", nil
+	}
+
+	// Seed the in-flight state with the full unfiltered chunk plan
+	// so a SIGTERM mid-run still leaves a coherent in-progress
+	// record (including already-Done markers). Mutated under
+	// stateMu by the OnChunkDone callback below.
+	stateNow := startTierProgress(priorState, tier, from, to, workers, chunks, time.Now().UTC())
+	if stateFile != "" {
+		if err := writeVerifyArchiveState(stateFile, stateNow); err != nil {
+			// Non-fatal — losing the per-chunk resume is worse than
+			// degrading to single-pass behaviour for this run.
+			fmt.Fprintf(os.Stderr, "verify-archive: warn: initial in-progress state write failed: %v\n", err)
+		}
+	}
+	var stateMu sync.Mutex
+
 	results, walkErr := runVerifyChunks(
-		ctx, lsCfg, chunks,
+		ctx, lsCfg, filteredChunks,
 		doChain, doCheckpoint, archiveRoot,
 		startedAt, progressEvery,
+		chunkOrchestratorOpts{
+			ChunkIdxs: chunkIdxs,
+			OnChunkDone: func(originalIdx int, res chunkResult) {
+				if stateFile == "" {
+					return
+				}
+				stateMu.Lock()
+				defer stateMu.Unlock()
+				stateNow = markChunkDone(stateNow, tier, originalIdx, res.LastHash, time.Now().UTC())
+				if err := writeVerifyArchiveState(stateFile, stateNow); err != nil {
+					fmt.Fprintf(os.Stderr,
+						"verify-archive: warn: per-chunk state write failed (chunk[%d] Done): %v\n",
+						originalIdx, err)
+				}
+			},
+		},
 	)
 
 	// Aggregate counters across chunks for the final summary. Match
