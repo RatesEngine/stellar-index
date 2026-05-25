@@ -15,6 +15,24 @@ against.
 
 ## [Unreleased]
 
+## [v0.5.0-rc.79] — 2026-05-26
+
+### Fixed
+
+- **migration 0041 PK + InsertSorobanEventsBatch ON CONFLICT
+  shape mismatch.** rc.78's `internal/storage/timescale/soroban_events.go`
+  ON CONFLICT clause referenced `(ledger, tx_hash, op_index,
+  event_index)` — the original sub-agent design. TimescaleDB
+  rejected that PK on the hypertable (TS103: unique index must
+  include the partitioning column). Migration was fixed locally
+  to `(ledger_close_time, ledger, tx_hash, op_index, event_index)`
+  + same ordering on the ON CONFLICT (commit `6347b54f`), but
+  rc.78 binary shipped with the OLD ON CONFLICT clause. Result:
+  every batch insert on r1 returned `42P10: no unique or
+  exclusion constraint matching ON CONFLICT specification`. Zero
+  rows landed in soroban_events. rc.79 ships the matching ON
+  CONFLICT clause so live ingest writes succeed.
+
 ## [v0.5.0-rc.78] — 2026-05-26
 
 ### Added
