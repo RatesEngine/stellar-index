@@ -74,6 +74,7 @@ var (
 	TopicSymbolSync     = scval.MustEncodeSymbol(EventSync)     // topic[1]
 	TopicSymbolDeposit  = scval.MustEncodeSymbol(EventDeposit)  // topic[1]
 	TopicSymbolWithdraw = scval.MustEncodeSymbol(EventWithdraw) // topic[1]
+	TopicSymbolSkim     = scval.MustEncodeSymbol(EventSkim)     // topic[1]
 	TopicSymbolNewPair  = scval.MustEncodeSymbol(EventNewPair)  // topic[1] on factory
 )
 

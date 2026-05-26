@@ -19,6 +19,7 @@ func TestClassify(t *testing.T) {
 		{"pair/sync", []string{TopicPrefixPair, TopicSymbolSync}, EventSync},
 		{"pair/deposit", []string{TopicPrefixPair, TopicSymbolDeposit}, EventDeposit},
 		{"pair/withdraw", []string{TopicPrefixPair, TopicSymbolWithdraw}, EventWithdraw},
+		{"pair/skim", []string{TopicPrefixPair, TopicSymbolSkim}, EventSkim},
 		{"factory/new_pair", []string{TopicPrefixFactory, TopicSymbolNewPair}, EventNewPair},
 		// Wrong prefix for a pair event — ignored.
 		{"factory/swap (never emitted)", []string{TopicPrefixFactory, TopicSymbolSwap}, ""},

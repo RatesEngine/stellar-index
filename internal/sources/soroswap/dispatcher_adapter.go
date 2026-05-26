@@ -30,13 +30,14 @@ type PairTokens struct {
 //     events. The swap event itself only carries amounts; token
 //     identities come from the pair contract's deploy record.
 //
-// The Decoder processes three topic shapes:
+// The Decoder processes four topic shapes:
 //   - SoroswapPair:swap  → feeds the swap+sync buffer
 //   - SoroswapPair:sync  → feeds the swap+sync buffer; completes a pair
+//   - SoroswapPair:skim  → emits a SkimEvent (excess-reserves claim)
 //   - SoroswapFactory:new_pair → populates the pair→tokens registry
 //
-// Other pair-contract events (deposit/withdraw/skim) match but
-// produce no output — they're not trades.
+// Other pair-contract events (deposit/withdraw) match but produce
+// no output — they're not trades and have their own follow-ups.
 //
 // Per docs/architecture/ingest-pipeline.md the dispatcher is
 // serial, but the mutex is belt-and-braces and also lets operator
@@ -150,6 +151,32 @@ func (d *Decoder) Decode(ev events.Event) ([]consumer.Event, error) {
 		}
 		d.SeedPair(fields.Pair, fields.Token0, fields.Token1)
 		return nil, nil
+	}
+
+	// Pair-contract skim: emit a SkimEvent so the storage sink can
+	// land a row in soroswap_skim_events. Standalone event — does
+	// NOT feed the swap+sync correlation buffer (skim is its own
+	// pair-state mutation, not a trade).
+	if kind == EventSkim {
+		closedAt, err := ev.EventClosedAt()
+		if err != nil {
+			return nil, err
+		}
+		fields, err := decodeSkim(ev.Value)
+		if err != nil {
+			return nil, err
+		}
+		return []consumer.Event{SkimEvent{
+			ContractID: ev.ContractID,
+			Ledger:     ev.Ledger,
+			TxHash:     ev.TxHash,
+			OpIndex:    uint32(ev.OperationIndex),
+			EventIndex: 0,
+			ObservedAt: closedAt,
+			To:         fields.To,
+			Amount0:    fields.Amount0,
+			Amount1:    fields.Amount1,
+		}}, nil
 	}
 
 	// We only care about swap + sync from pair contracts for

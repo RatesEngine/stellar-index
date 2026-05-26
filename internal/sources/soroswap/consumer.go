@@ -26,6 +26,37 @@ func (TradeEvent) Source() string { return SourceName }
 // Compile-time check that TradeEvent satisfies consumer.Event.
 var _ consumer.Event = TradeEvent{}
 
+// SkimEvent is the [consumer.Event] shape emitted by the Soroswap
+// Decoder on a pair-contract `skim` event. Mirrors the
+// soroswap_skim_events row (migration 0042): the universal
+// identity fields, the always-present Amount0 / Amount1 i128
+// excesses, and the optional `to` recipient (empty when absent on
+// today's WASM; populated if a future upgrade adds it).
+//
+// The indexer's event sink type-switches on this at its output
+// channel (internal/pipeline/sink.go) and writes via
+// Store.InsertSoroswapSkimEvent.
+type SkimEvent struct {
+	ContractID string // pair contract C-strkey
+	Ledger     uint32
+	TxHash     string
+	OpIndex    uint32
+	EventIndex uint32 // 0 — one skim event per op; reserved for future Soroban op shapes
+	ObservedAt time.Time
+	To         string // optional recipient strkey; "" → NULL
+	Amount0    canonical.Amount
+	Amount1    canonical.Amount
+}
+
+// EventKind implements [consumer.Event].
+func (SkimEvent) EventKind() string { return "soroswap.skim" }
+
+// Source implements [consumer.Event] — matches [SourceName].
+func (SkimEvent) Source() string { return SourceName }
+
+// Compile-time check that SkimEvent satisfies consumer.Event.
+var _ consumer.Event = SkimEvent{}
+
 // ─── Correlation buffer ─────────────────────────────────────────
 // Groups swap + sync by (ledger, tx_hash, op_index). Emits complete
 // pairs back to the caller; holds incompletes until either their

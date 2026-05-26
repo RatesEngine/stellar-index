@@ -204,6 +204,108 @@ func TestSdkDecodeNewPair_missingPair(t *testing.T) {
 	}
 }
 
+// ─── SkimEvent body decoder ──────────────────────────────────────
+
+func TestSdkDecodeSkim_phase1Shape(t *testing.T) {
+	// SkimEvent { skimmed_0: i128, skimmed_1: i128 } — the field
+	// names captured in docs/discovery/dexes-amms/soroswap.md from
+	// the Phase-1 audit of contracts/pair/src/event.rs. No `to`
+	// field in this shape — current Soroswap WASM omits it.
+	body := b64(t, scMap(
+		xdr.ScMapEntry{Key: symbol("skimmed_0"), Val: i128(big.NewInt(7_500))},
+		xdr.ScMapEntry{Key: symbol("skimmed_1"), Val: i128(big.NewInt(1_234_567))},
+	))
+	out, err := sdkDecodeSkim(body)
+	if err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if out.Amount0.BigInt().Cmp(big.NewInt(7_500)) != 0 {
+		t.Errorf("skimmed_0 = %s", out.Amount0)
+	}
+	if out.Amount1.BigInt().Cmp(big.NewInt(1_234_567)) != 0 {
+		t.Errorf("skimmed_1 = %s", out.Amount1)
+	}
+	if out.To != "" {
+		t.Errorf("To = %q, want empty (no `to` field in body)", out.To)
+	}
+}
+
+func TestSdkDecodeSkim_amountAliasShape(t *testing.T) {
+	// Schema-evolution-safety: decoder falls back to `amount_0` /
+	// `amount_1` when the canonical Soroswap names are absent (the
+	// common alias seen in Uniswap-v2 derivatives). If a future
+	// Soroswap WASM upgrade renames the fields, the decoder still
+	// produces a row instead of silently dropping the event.
+	body := b64(t, scMap(
+		xdr.ScMapEntry{Key: symbol("amount_0"), Val: i128(big.NewInt(11))},
+		xdr.ScMapEntry{Key: symbol("amount_1"), Val: i128(big.NewInt(22))},
+	))
+	out, err := sdkDecodeSkim(body)
+	if err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if out.Amount0.BigInt().Cmp(big.NewInt(11)) != 0 {
+		t.Errorf("amount_0 = %s", out.Amount0)
+	}
+	if out.Amount1.BigInt().Cmp(big.NewInt(22)) != 0 {
+		t.Errorf("amount_1 = %s", out.Amount1)
+	}
+}
+
+func TestSdkDecodeSkim_withOptionalTo(t *testing.T) {
+	// If a future upgrade adds a `to` Address field to the body,
+	// the decoder picks it up and surfaces it in SkimFields.To.
+	to := makeContractStrkey(t, 0x77)
+	body := b64(t, scMap(
+		xdr.ScMapEntry{Key: symbol("skimmed_0"), Val: i128(big.NewInt(1))},
+		xdr.ScMapEntry{Key: symbol("skimmed_1"), Val: i128(big.NewInt(2))},
+		xdr.ScMapEntry{Key: symbol("to"), Val: contractAddrFromStrkey(t, to)},
+	))
+	out, err := sdkDecodeSkim(body)
+	if err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if out.To != to {
+		t.Errorf("To = %q, want %q", out.To, to)
+	}
+}
+
+func TestSdkDecodeSkim_largeI128(t *testing.T) {
+	// Beyond int64 range — same ADR-0003 boundary as the swap
+	// large-i128 test.
+	big1 := new(big.Int)
+	big1.SetString("987654321098765432109876543210", 10) // > 2^96
+	body := b64(t, scMap(
+		xdr.ScMapEntry{Key: symbol("skimmed_0"), Val: i128(big1)},
+		xdr.ScMapEntry{Key: symbol("skimmed_1"), Val: i128(big.NewInt(0))},
+	))
+	out, err := sdkDecodeSkim(body)
+	if err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if out.Amount0.BigInt().Cmp(big1) != 0 {
+		t.Errorf("large i128 wrong: got %s want %s", out.Amount0, big1)
+	}
+}
+
+func TestSdkDecodeSkim_missingBothNamesIsError(t *testing.T) {
+	// Neither `skimmed_0` nor `amount_0` — schema fully unrecognised.
+	body := b64(t, scMap(
+		xdr.ScMapEntry{Key: symbol("something_else"), Val: i128(big.NewInt(1))},
+		xdr.ScMapEntry{Key: symbol("skimmed_1"), Val: i128(big.NewInt(2))},
+	))
+	if _, err := sdkDecodeSkim(body); err == nil {
+		t.Fatal("expected error when both skimmed_0 and amount_0 are missing")
+	}
+}
+
+func TestSdkDecodeSkim_wrongTopKind(t *testing.T) {
+	body := b64(t, i128(big.NewInt(42)))
+	if _, err := sdkDecodeSkim(body); err == nil {
+		t.Fatal("expected error on non-Map body")
+	}
+}
+
 // ─── Byte-level drift guard ──────────────────────────────────────
 
 func TestTopicConstantsMatchEncoderOutput(t *testing.T) {

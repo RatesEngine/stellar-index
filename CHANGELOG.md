@@ -63,6 +63,28 @@ against.
   audit at `docs/operations/wasm-audits/comet.md`.
 
 ## [v0.5.0-rc.78] — 2026-05-26
+### Added
+
+- **Soroswap `skim` event handler + `soroswap_skim_events` hypertable
+  (#28).** Closes the "every emitted Soroswap pair-contract topic
+  gets classified" gap. `TopicSymbolSkim` had been declared in
+  `internal/sources/soroswap/events.go` since the package was first
+  written but was unreachable through `classify()` — the 5th
+  pair-contract event (alongside swap/sync/deposit/withdraw) was
+  silently dropped by the dispatcher. The Decoder now decodes
+  `SkimEvent { skimmed_0, skimmed_1 }` (tolerant of the
+  `amount_0`/`amount_1` Uniswap-v2-derivative aliases per
+  contract-schema-evolution.md), pulls an optional `to` Address
+  field when a future WASM upgrade adds it, and emits a new
+  `soroswap.SkimEvent` consumer.Event the pipeline sink lands as a
+  row in a new `soroswap_skim_events` hypertable (migration 0042;
+  PK leads with `ledger_close_time` per TS103; amounts NUMERIC per
+  ADR-0003; compression after 7 days segmented by `contract_id`).
+  Skim is not a trade — never feeds VWAP, never lands in the
+  `trades` hypertable. Historical fill is a `INSERT … SELECT FROM
+  soroban_events WHERE topic_0_sym = 'skim' AND contract_id IN
+  (<pair set>)` query (ADR-0029 raw landing zone) — operator
+  runbook follow-up after the initial backfill window lands.
 
 ### Added
 

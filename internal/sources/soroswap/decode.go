@@ -64,6 +64,8 @@ func classify(e *events.Event) string {
 			return EventDeposit
 		case TopicSymbolWithdraw:
 			return EventWithdraw
+		case TopicSymbolSkim:
+			return EventSkim
 		}
 		return ""
 	}
@@ -154,6 +156,7 @@ type swapAmounts struct {
 var (
 	decodeSwapAmounts = sdkDecodeSwapAmounts
 	decodeNewPair     = sdkDecodeNewPair
+	decodeSkim        = sdkDecodeSkim
 )
 
 // sdkDecodeSwapAmounts decodes the SwapEvent body. Pulls all four
@@ -252,4 +255,91 @@ func sdkDecodeNewPair(valueB64 string) (NewPairFields, error) {
 		return NewPairFields{}, fmt.Errorf("token_1 asset: %w", err)
 	}
 	return NewPairFields{Token0: a0, Token1: a1, Pair: pairAddr}, nil
+}
+
+// SkimFields is the decoded SkimEvent — emitted by a pair contract
+// when a caller invokes `skim()` to claim the excess balance the
+// pool's reserves don't account for (Uniswap-v2-style mechanism;
+// the difference between the contract's actual token balance and the
+// stored reserves goes to the caller's chosen address).
+//
+// Contract reference (pair/src/event.rs — Phase-1 capture in
+// docs/discovery/dexes-amms/soroswap.md §"SoroswapPair, skim"):
+//
+//	struct SkimEvent { skimmed_0: i128, skimmed_1: i128 }
+//
+// To stay decode-by-name (per contract-schema-evolution.md), the
+// decoder tolerates both the documented field names AND the common
+// Uniswap-v2-style `amount_0` / `amount_1` aliases — if a future
+// WASM upgrade renames the fields the decoder still produces a row
+// rather than silently dropping. A `to` Address field is decoded
+// when present (some Uniswap-v2 ports surface the recipient in the
+// body) and left empty when absent — current Soroswap WASM omits
+// it.
+type SkimFields struct {
+	// Amount0 is the token0 excess transferred out of the pool.
+	Amount0 canonical.Amount
+	// Amount1 is the token1 excess transferred out of the pool.
+	Amount1 canonical.Amount
+	// To is the C-strkey (contract) / G-strkey (account) of the
+	// skim recipient, when the contract surfaces it in the body.
+	// Empty string when the field is absent — discovery-doc Soroswap
+	// `SkimEvent` carries no `to`; nullable in storage so we don't
+	// fabricate a value.
+	To string
+}
+
+// sdkDecodeSkim decodes a SkimEvent body. Same Map-by-field-name
+// path as sdkDecodeSwapAmounts; tolerant of both the
+// `skimmed_0`/`skimmed_1` field names from the Phase-1 audit and the
+// `amount_0`/`amount_1` alias the upstream Uniswap-v2 derivative
+// uses in some forks. The `to` Address is optional — absent on
+// today's Soroswap WASM, populated if a future upgrade adds it.
+func sdkDecodeSkim(valueB64 string) (SkimFields, error) {
+	body, err := scval.Parse(valueB64)
+	if err != nil {
+		return SkimFields{}, fmt.Errorf("parse body: %w", err)
+	}
+	entries, err := scval.AsMap(body)
+	if err != nil {
+		return SkimFields{}, fmt.Errorf("body not a Map: %w", err)
+	}
+
+	amt0, err := skimAmountField(entries, "skimmed_0", "amount_0")
+	if err != nil {
+		return SkimFields{}, fmt.Errorf("SkimEvent.skimmed_0: %w", err)
+	}
+	amt1, err := skimAmountField(entries, "skimmed_1", "amount_1")
+	if err != nil {
+		return SkimFields{}, fmt.Errorf("SkimEvent.skimmed_1: %w", err)
+	}
+
+	// Optional `to` — silently absent on current Soroswap WASM, so a
+	// missing field is fine; only a present-but-wrong-shape value is
+	// an error worth surfacing.
+	var to string
+	if sv, ok := scval.MapField(entries, "to"); ok {
+		toStr, err := scval.AsAddressStrkey(sv)
+		if err != nil {
+			return SkimFields{}, fmt.Errorf("SkimEvent.to: %w", err)
+		}
+		to = toStr
+	}
+
+	return SkimFields{Amount0: amt0, Amount1: amt1, To: to}, nil
+}
+
+// skimAmountField looks up an i128 amount field by its primary name
+// and, if absent, falls back to an alias (the Uniswap-v2 derivative
+// naming). Either resolves to an i128 amount or returns an error
+// when both names are missing or the value isn't an i128.
+func skimAmountField(entries []scval.ScMapEntry, primary, alias string) (canonical.Amount, error) {
+	sv, ok := scval.MapField(entries, primary)
+	if !ok {
+		sv, ok = scval.MapField(entries, alias)
+	}
+	if !ok {
+		return canonical.Amount{}, fmt.Errorf("neither %q nor %q present", primary, alias)
+	}
+	return scval.AsAmountFromI128(sv)
 }

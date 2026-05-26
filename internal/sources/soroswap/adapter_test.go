@@ -3,6 +3,7 @@ package soroswap
 import (
 	"math/big"
 	"testing"
+	"time"
 
 	"github.com/stellar/go-stellar-sdk/xdr"
 
@@ -208,6 +209,114 @@ func TestDecoder_Decode_unrelatedTopicReturnsNilNil(t *testing.T) {
 	if len(out) != 0 {
 		t.Errorf("got %d events for unrelated topic, want 0", len(out))
 	}
+}
+
+// makeSkimEvent builds a pair-contract skim event with the canonical
+// `skimmed_0` / `skimmed_1` i128 body shape (Phase-1 audit).
+func makeSkimEvent(t *testing.T, pair string, amt0, amt1 *big.Int) events.Event {
+	t.Helper()
+	body := b64(t, scMap(
+		xdr.ScMapEntry{Key: symbol("skimmed_0"), Val: i128(amt0)},
+		xdr.ScMapEntry{Key: symbol("skimmed_1"), Val: i128(amt1)},
+	))
+	return events.Event{
+		Topic:          []string{TopicPrefixPair, TopicSymbolSkim},
+		Value:          body,
+		Ledger:         52_000_002,
+		TxHash:         "skimtx0",
+		OperationIndex: 0,
+		LedgerClosedAt: "2026-04-23T12:00:02Z",
+		ContractID:     pair,
+	}
+}
+
+func TestDecoder_Matches_skimTopic(t *testing.T) {
+	d := NewDecoder()
+	ev := events.Event{Topic: []string{TopicPrefixPair, TopicSymbolSkim}}
+	if !d.Matches(ev) {
+		t.Error("Matches(skim) = false, want true (skim is now classified)")
+	}
+}
+
+func TestDecoder_Decode_skimEmitsSkimEvent(t *testing.T) {
+	d := NewDecoder()
+	pair := makeContractStrkey(t, 0x20)
+
+	out, err := d.Decode(makeSkimEvent(t, pair, big.NewInt(7_500), big.NewInt(1_234_567)))
+	if err != nil {
+		t.Fatalf("Decode skim: %v", err)
+	}
+	if len(out) != 1 {
+		t.Fatalf("got %d events for skim, want 1", len(out))
+	}
+	se, ok := out[0].(SkimEvent)
+	if !ok {
+		t.Fatalf("expected SkimEvent, got %T", out[0])
+	}
+	if se.Source() != SourceName {
+		t.Errorf("Source() = %q, want %q", se.Source(), SourceName)
+	}
+	if se.EventKind() != "soroswap.skim" {
+		t.Errorf("EventKind() = %q, want \"soroswap.skim\"", se.EventKind())
+	}
+	if se.ContractID != pair {
+		t.Errorf("ContractID = %q, want %q", se.ContractID, pair)
+	}
+	if se.Amount0.BigInt().Cmp(big.NewInt(7_500)) != 0 {
+		t.Errorf("Amount0 = %s", se.Amount0)
+	}
+	if se.Amount1.BigInt().Cmp(big.NewInt(1_234_567)) != 0 {
+		t.Errorf("Amount1 = %s", se.Amount1)
+	}
+	if !se.ObservedAt.Equal(mustParseRFC3339(t, "2026-04-23T12:00:02Z")) {
+		t.Errorf("ObservedAt = %v, want 2026-04-23T12:00:02Z", se.ObservedAt)
+	}
+	if se.To != "" {
+		t.Errorf("To = %q, want empty (phase-1 shape has no `to` field)", se.To)
+	}
+}
+
+func TestDecoder_Decode_skimDoesNotFeedSwapBuffer(t *testing.T) {
+	// A skim event is independent of the swap+sync correlation
+	// buffer. After processing a standalone skim, the buffer's
+	// in-flight count must remain 0 (no swap-without-sync warning
+	// would otherwise leak through).
+	d := NewDecoder()
+	pair := makeContractStrkey(t, 0x20)
+
+	if _, err := d.Decode(makeSkimEvent(t, pair, big.NewInt(1), big.NewInt(2))); err != nil {
+		t.Fatalf("Decode skim: %v", err)
+	}
+	if got := d.buf.size(); got != 0 {
+		t.Errorf("buffer size = %d after skim, want 0 (skim is not buffered)", got)
+	}
+	if got := d.EvictedOrphans(); got != 0 {
+		t.Errorf("EvictedOrphans() = %d after skim, want 0", got)
+	}
+	if got := d.SkippedUnknownPair(); got != 0 {
+		t.Errorf("SkippedUnknownPair() = %d after skim, want 0 (skim does not need pair registry)", got)
+	}
+}
+
+func TestDecoder_Decode_skimMalformedBodyReturnsError(t *testing.T) {
+	d := NewDecoder()
+	bad := events.Event{
+		Topic:          []string{TopicPrefixPair, TopicSymbolSkim},
+		Value:          "not-base64",
+		LedgerClosedAt: "2026-04-23T12:00:00Z",
+	}
+	if _, err := d.Decode(bad); err == nil {
+		t.Error("expected decode error on malformed skim body, got nil")
+	}
+}
+
+func mustParseRFC3339(t *testing.T, s string) time.Time {
+	t.Helper()
+	ts, err := time.Parse(time.RFC3339, s)
+	if err != nil {
+		t.Fatalf("parse %q: %v", s, err)
+	}
+	return ts
 }
 
 func TestDecoder_Decode_depositTopicIsNoop(t *testing.T) {

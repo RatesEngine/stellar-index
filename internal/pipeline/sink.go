@@ -131,6 +131,8 @@ func handleOneEvent(ctx context.Context, logger *slog.Logger, store *timescale.S
 	switch e := ev.(type) {
 	case soroswap.TradeEvent:
 		persistTrade(ctx, logger, store, e.Trade)
+	case soroswap.SkimEvent:
+		persistSoroswapSkim(ctx, logger, store, e)
 	case aquarius.TradeEvent:
 		persistTrade(ctx, logger, store, e.Trade)
 	case phoenix.TradeEvent:
@@ -550,6 +552,37 @@ func persistSACBalanceObservation(ctx context.Context, logger *slog.Logger, stor
 		"contract_id", o.ContractID, "holder", o.Holder, "asset_key", o.AssetKey,
 		"ledger", o.Ledger, "balance_stroops", o.Balance.String(),
 		"is_removal", o.IsRemoval)
+}
+
+func persistSoroswapSkim(ctx context.Context, logger *slog.Logger, store *timescale.Store, e soroswap.SkimEvent) {
+	txHash, err := timescale.DecodeSoroswapTxHash(e.TxHash)
+	if err != nil {
+		obs.SourceInsertErrorsTotal.WithLabelValues(soroswap.SourceName, "soroswap_skim_event").Inc()
+		logger.Error("decode soroswap skim tx_hash failed",
+			"contract_id", e.ContractID, "ledger", e.Ledger, "tx_hash", e.TxHash, "err", err)
+		return
+	}
+	if err := store.InsertSoroswapSkimEvent(ctx, timescale.SoroswapSkimEvent{
+		ContractID:      e.ContractID,
+		Ledger:          e.Ledger,
+		LedgerCloseTime: e.ObservedAt,
+		TxHash:          txHash,
+		OpIndex:         int16(e.OpIndex),
+		EventIndex:      int16(e.EventIndex),
+		To:              e.To,
+		Amount0:         e.Amount0.String(),
+		Amount1:         e.Amount1.String(),
+	}); err != nil {
+		obs.SourceInsertErrorsTotal.WithLabelValues(soroswap.SourceName, "soroswap_skim_event").Inc()
+		logger.Error("insert soroswap skim event failed",
+			"contract_id", e.ContractID, "ledger", e.Ledger, "tx_hash", e.TxHash, "err", err)
+		return
+	}
+	bumpEntryCount(ctx, logger, store, soroswap.SourceName)
+	logger.Debug("soroswap skim event ingested",
+		"contract_id", e.ContractID, "ledger", e.Ledger,
+		"amount_0", e.Amount0.String(), "amount_1", e.Amount1.String(),
+		"to", e.To)
 }
 
 func persistSEP41SupplyEvent(ctx context.Context, logger *slog.Logger, store *timescale.Store, e sep41_supply.Event) {
