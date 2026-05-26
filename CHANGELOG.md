@@ -15,46 +15,31 @@ against.
 
 ## [Unreleased]
 
+## [v0.5.0-rc.80] — 2026-05-26
+
 ### Fixed
 
 - **`sorobanevents.AsyncSink` cursor-drop incoherence (ADR-0029,
   superseding the original buffer-full-drop design).** The
-  2026-05-26 fill walk dropped ~13.1M rows of ~3.03B (~0.43%)
-  across 8 parallel chunks because `PushEvent` dropped rows on a
-  full channel while the backfill cursor advanced per produced
-  ledger — so the dropped rows had no recovery path (`-resume`
-  short-circuited at the "already complete" branch). The fix:
-  `PushEvent` now blocks on a full channel (back-pressure into the
-  dispatcher) so the cursor cannot outrun durable writes. Stop()
-  closes a new `stopping` channel that unblocks any in-flight
-  producers (counted as dropped — shutdown-race only). The
-  backfill driver and live indexer both watch ctx and call Stop
-  early on cancellation so a hung Postgres can't deadlock the hot
-  path past SIGTERM. ADR-0029 updated with the post-mortem; runbook
-  to reset the 12 soroban-events cursors and re-walk is in
-  follow-up rc.80 ops. Regression-tested via
+  2026-05-26 fill walk dropped ~18.86M rows of ~4.66B (~0.40%)
+  across all 12 parallel chunks because `PushEvent` dropped rows
+  on a full channel while the backfill cursor advanced per
+  produced ledger — so the dropped rows had no recovery path
+  (`-resume` short-circuited at the "already complete" branch).
+  The fix: `PushEvent` now blocks on a full channel (back-pressure
+  into the dispatcher) so the cursor cannot outrun durable writes.
+  Stop() closes a new `stopping` channel that unblocks any
+  in-flight producers (counted as dropped — shutdown-race only).
+  The backfill driver and live indexer both watch ctx and call
+  Stop early on cancellation so a hung Postgres can't deadlock the
+  hot path past SIGTERM. ADR-0029 updated with the post-mortem;
+  runbook to reset the 12 soroban-events cursors and re-walk is
+  in follow-up rc.80 ops. Regression-tested via
   `internal/sources/sorobanevents/dispatcher_adapter_test.go` (no
   drops under sustained back-pressure; Stop releases blocked
   producers; pending rows drain on shutdown without channel-close
   panic).
 
-## [v0.5.0-rc.79] — 2026-05-26
-
-### Fixed
-
-- **migration 0041 PK + InsertSorobanEventsBatch ON CONFLICT
-  shape mismatch.** rc.78's `internal/storage/timescale/soroban_events.go`
-  ON CONFLICT clause referenced `(ledger, tx_hash, op_index,
-  event_index)` — the original sub-agent design. TimescaleDB
-  rejected that PK on the hypertable (TS103: unique index must
-  include the partitioning column). Migration was fixed locally
-  to `(ledger_close_time, ledger, tx_hash, op_index, event_index)`
-  + same ordering on the ON CONFLICT (commit `6347b54f`), but
-  rc.78 binary shipped with the OLD ON CONFLICT clause. Result:
-  every batch insert on r1 returned `42P10: no unique or
-  exclusion constraint matching ON CONFLICT specification`. Zero
-  rows landed in soroban_events. rc.79 ships the matching ON
-  CONFLICT clause so live ingest writes succeed.
 ### Added
 
 - **Comet Balancer-v1 liquidity events end-to-end (#26).** The
@@ -79,12 +64,32 @@ against.
   publication. BPT `transfer` events go through the SEP-41
   standard token-event surface and are already claimed by
   `internal/sources/sep41_supply` when the pool is in scope.
-  Historical fill plan: walk `soroban_events` (migration 0041,
-  rc.78) for the pre-rc back-window — a `ratesengine-ops
-  comet-backfill` subcommand wrapping `decodeLiquidityEvent` is
-  the cleanest path and is tracked as a follow-up. Updated wasm
-  audit at `docs/operations/wasm-audits/comet.md`.
-### Added
+  Historical fill plan: walk `soroban_events` (migration 0041)
+  for the pre-rc back-window — a `ratesengine-ops comet-backfill`
+  subcommand wrapping `decodeLiquidityEvent` is the cleanest path
+  and is tracked as a follow-up. Updated wasm audit at
+  `docs/operations/wasm-audits/comet.md`.
+
+- **Soroswap `skim` event handler + `soroswap_skim_events` hypertable
+  (#28).** Closes the "every emitted Soroswap pair-contract topic
+  gets classified" gap. `TopicSymbolSkim` had been declared in
+  `internal/sources/soroswap/events.go` since the package was first
+  written but was unreachable through `classify()` — the 5th
+  pair-contract event (alongside swap/sync/deposit/withdraw) was
+  silently dropped by the dispatcher. The Decoder now decodes
+  `SkimEvent { skimmed_0, skimmed_1 }` (tolerant of the
+  `amount_0`/`amount_1` Uniswap-v2-derivative aliases per
+  contract-schema-evolution.md), pulls an optional `to` Address
+  field when a future WASM upgrade adds it, and emits a new
+  `soroswap.SkimEvent` consumer.Event the pipeline sink lands as a
+  row in a new `soroswap_skim_events` hypertable (migration 0043;
+  PK leads with `ledger_close_time` per TS103; amounts NUMERIC per
+  ADR-0003; compression after 7 days segmented by `contract_id`).
+  Skim is not a trade — never feeds VWAP, never lands in the
+  `trades` hypertable. Historical fill is a `INSERT … SELECT FROM
+  soroban_events WHERE topic_0_sym = 'skim' AND contract_id IN
+  (<pair set>)` query (ADR-0029 raw landing zone) — operator
+  runbook follow-up after the initial backfill window lands.
 
 - **Phoenix liquidity + stake event decoders (#27).** Phoenix's pool
   contract (volatile `contracts/pool/` + stableswap
@@ -101,7 +106,7 @@ against.
   back the reads: `phoenix_liquidity` (provide + withdraw rows,
   per-pool / per-sender / per-action indexes) and
   `phoenix_stake_events` (bond + unbond rows, per-contract / per-user
-  / per-action indexes). Both partition daily on
+  / per-action indexes; migration 0044). Both partition daily on
   `ledger_close_time`, compress segment-by (pool, action) /
   (stake_contract, action) after 7 days. Per ADR-0003, all i128
   amounts ride NUMERIC; PKs include `ledger_close_time` per
@@ -112,7 +117,6 @@ against.
   'withdraw_liquidity','bond','unbond')` fed through the same
   per-action correlation buffer — pending the per-WASM-hash decoder
   audit log being extended to enumerate the new field strings.
-### Added
 
 - **Blend money-market decoder (#25, per [[project_every_event_principle]]).**
   Extended `internal/sources/blend/decode.go::classify()` to handle
@@ -122,34 +126,52 @@ against.
   reserve_emission_update, gulp_emissions, set_admin, update_pool,
   queue_set_reserve, cancel_set_reserve, set_reserve, set_status,
   deploy. New hypertables `blend_positions`, `blend_emissions`,
-  `blend_admin` via migration 0042. Live ingest captures every
+  `blend_admin` via migration 0045. Live ingest captures every
   event going forward; historical fill via `INSERT … SELECT FROM
   soroban_events WHERE contract_id IN (<blend pool contracts>)
   AND topic_0_sym IN (…)` once the soroban_events fill walk lands.
 
-## [v0.5.0-rc.78] — 2026-05-26
-### Added
+### Changed
 
-- **Soroswap `skim` event handler + `soroswap_skim_events` hypertable
-  (#28).** Closes the "every emitted Soroswap pair-contract topic
-  gets classified" gap. `TopicSymbolSkim` had been declared in
-  `internal/sources/soroswap/events.go` since the package was first
-  written but was unreachable through `classify()` — the 5th
-  pair-contract event (alongside swap/sync/deposit/withdraw) was
-  silently dropped by the dispatcher. The Decoder now decodes
-  `SkimEvent { skimmed_0, skimmed_1 }` (tolerant of the
-  `amount_0`/`amount_1` Uniswap-v2-derivative aliases per
-  contract-schema-evolution.md), pulls an optional `to` Address
-  field when a future WASM upgrade adds it, and emits a new
-  `soroswap.SkimEvent` consumer.Event the pipeline sink lands as a
-  row in a new `soroswap_skim_events` hypertable (migration 0042;
-  PK leads with `ledger_close_time` per TS103; amounts NUMERIC per
-  ADR-0003; compression after 7 days segmented by `contract_id`).
-  Skim is not a trade — never feeds VWAP, never lands in the
-  `trades` hypertable. Historical fill is a `INSERT … SELECT FROM
-  soroban_events WHERE topic_0_sym = 'skim' AND contract_id IN
-  (<pair set>)` query (ADR-0029 raw landing zone) — operator
-  runbook follow-up after the initial backfill window lands.
+- **CCTP + Rozo flipped to `BackfillSafe = true` after WASM-history
+  audit (#21).** Walk on 2026-05-26: `ratesengine-ops wasm-history
+  -from 60000000 -to 62642779 -parallel 4` across all 6 mainnet
+  contracts (3 CCTP + 3 Rozo) — 5h02m wall, 2,642,780 ledgers
+  scanned, ZERO WASM upgrades observed (output JSON `ranges=null`
+  per contract). CCTP's three contracts each have their own WASM
+  (one per role: token messenger / message transmitter / token
+  minter); Rozo's three contracts share a single WASM hash
+  `b56aedeaf80c3d4b…` (per stellar.expert + RozoAI's
+  `internal/sources/rozo/events.go` confirmation that all three
+  emit identical `PaymentEvent` / `FlushEvent` schemas). Decoder
+  coverage was already complete; with single-WASM-per-contract
+  confirmed for the audit range, no decoder drift risk for
+  historical replay. `internal/sources/external/registry.go`'s
+  `BackfillSafe` flag flipped `false → true` for both. Historical
+  replay now unblocked via `INSERT … SELECT FROM soroban_events`
+  per the canonical query shape in
+  `docs/operations/wasm-audits/cctp.md` + `rozo.md`. Walk evidence
+  archived to `/tmp/wasm-history-bridges.json` on r1.
+
+## [v0.5.0-rc.79] — 2026-05-26
+
+### Fixed
+
+- **migration 0041 PK + InsertSorobanEventsBatch ON CONFLICT
+  shape mismatch.** rc.78's `internal/storage/timescale/soroban_events.go`
+  ON CONFLICT clause referenced `(ledger, tx_hash, op_index,
+  event_index)` — the original sub-agent design. TimescaleDB
+  rejected that PK on the hypertable (TS103: unique index must
+  include the partitioning column). Migration was fixed locally
+  to `(ledger_close_time, ledger, tx_hash, op_index, event_index)`
+  + same ordering on the ON CONFLICT (commit `6347b54f`), but
+  rc.78 binary shipped with the OLD ON CONFLICT clause. Result:
+  every batch insert on r1 returned `42P10: no unique or
+  exclusion constraint matching ON CONFLICT specification`. Zero
+  rows landed in soroban_events. rc.79 ships the matching ON
+  CONFLICT clause so live ingest writes succeed.
+
+## [v0.5.0-rc.78] — 2026-05-26
 
 ### Added
 
