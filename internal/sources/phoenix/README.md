@@ -26,7 +26,28 @@ one-value body:
 | `swap` | `spread_amount` | i128 |
 | `swap` | `referral_fee_amount` | i128 |
 
-To reconstruct one swap we **must group 8 events** by
+The same N-events-per-action pattern services Phoenix's
+liquidity-management events (Task #27, contracts/pool/src/contract.rs
+lines 346-355 / 501-508) and the per-pool stake contract
+(contracts/stake/src/contract.rs lines 165-167 / 196-198):
+
+| Action | Topic[0] | Events | Required fields |
+| ------ | -------- | ------ | --------------- |
+| swap | `swap` | 8 | sender, sell_token, offer_amount, actual received amount, buy_token, return_amount, spread_amount, referral_fee_amount |
+| provide_liquidity | `provide_liquidity` | 5 | sender, token_a, token_a-amount, token_b, token_b-amount |
+| withdraw_liquidity | `withdraw_liquidity` | 4 (+1 optional) | sender, shares_amount, return_amount_a, return_amount_b (+ `auto unbonded` when the withdrawal also unbonds) |
+| bond | `bond` | 3 | user, token, amount |
+| unbond | `unbond` | 3 | user, token, amount |
+
+`provide_liquidity` and `withdraw_liquidity` write to the
+`phoenix_liquidity` hypertable (migration 0044). `bond` and `unbond`
+write to `phoenix_stake_events` (also 0044). The `withdraw_liquidity`
+optional 5th `auto unbonded` event is recognised so it doesn't fall
+into `ErrUnknownField`, but is intentionally discarded — the stake
+contract's `unbond` event carries the same data through a more
+authoritative channel.
+
+To reconstruct each action we **must group its N events** by
 `(ledger, tx_hash, op_index)` and assemble them into a single
 record. This is the third event-correlation shape our consumer fleet
 handles:
@@ -127,13 +148,33 @@ don't want to ship a partial decoder.
 
 ## Status
 
-Production for volatile (constant-product) pools. The 8-event
-correlation buffer, the SCVal decoding via `internal/scval`
-(ADR-0013), and the topic-match dispatch all run against real
-mainnet event fixtures captured under `test/fixtures/phoenix/`.
+Production for volatile (constant-product) pools — swaps + liquidity
+management + LP staking. The 8-event swap, 5-event
+`provide_liquidity`, 4-event `withdraw_liquidity`, and 3-event
+`bond`/`unbond` correlation buffers all decode against real
+fixtures and write to `trades`, `phoenix_liquidity`, and
+`phoenix_stake_events` respectively. The 5th `auto unbonded`
+optional event on withdraws is recognised + discarded
+(intentionally).
 
-Stableswap pool support is **not shipped** — Phoenix's stableswap
-emits a different field set we haven't enumerated yet (see Q5
-above). The volatile path is the dominant traffic and runs cleanly
-without it; stableswap drops to the orphan-events counter rather
-than mis-decoding.
+Stableswap pool support is **partially shipped** — Phoenix's stable
+pool emits identical `provide_liquidity` / `withdraw_liquidity`
+topic shapes (verified against `contracts/pool_stable/src/contract.rs`
+lines 353-362 / 506-513), so the new liquidity decoders cover both
+pool variants. Stable-pool **swap** still drops to the orphan
+counter; the field set is different and remains unenumerated (Q5).
+
+### Historical fill
+
+Granular-coverage mission: once `soroban_events` (ADR-0029) has
+been backfilled across the Soroban era, populate
+`phoenix_liquidity` + `phoenix_stake_events` for the historical
+range via `INSERT … SELECT FROM soroban_events WHERE topic_0_sym IN
+('provide_liquidity','withdraw_liquidity','bond','unbond')`, fed
+through the per-action correlation buffer the same way the live
+ingest does. Pending the per-WASM-hash decoder audit log
+([docs/operations/wasm-audits/phoenix.md](../../../docs/operations/wasm-audits/phoenix.md))
+being extended to cover the liquidity + stake field sets — current
+audit only enumerates the 8 swap-field strings; we need to confirm
+both WASM hashes also include the literal `provide_liquidity` /
+`withdraw_liquidity` / `bond` / `unbond` symbols.

@@ -137,6 +137,10 @@ func handleOneEvent(ctx context.Context, logger *slog.Logger, store *timescale.S
 		persistTrade(ctx, logger, store, e.Trade)
 	case phoenix.TradeEvent:
 		persistTrade(ctx, logger, store, e.Trade)
+	case phoenix.LiquidityEvent:
+		persistPhoenixLiquidity(ctx, logger, store, e)
+	case phoenix.StakeEvent:
+		persistPhoenixStake(ctx, logger, store, e)
 	case comet.TradeEvent:
 		persistTrade(ctx, logger, store, e.Trade)
 	case comet.LiquidityEvent:
@@ -583,6 +587,64 @@ func persistSoroswapSkim(ctx context.Context, logger *slog.Logger, store *timesc
 		"contract_id", e.ContractID, "ledger", e.Ledger,
 		"amount_0", e.Amount0.String(), "amount_1", e.Amount1.String(),
 		"to", e.To)
+}
+
+func persistPhoenixLiquidity(ctx context.Context, logger *slog.Logger, store *timescale.Store, e phoenix.LiquidityEvent) {
+	c := e.Change
+	sharesStr := ""
+	// Withdraw rows have shares_amount populated; provide rows don't.
+	if c.Action == phoenix.EventActionWithdrawLiquidity {
+		sharesStr = c.SharesAmount.String()
+	}
+	if err := store.InsertPhoenixLiquidityChange(ctx, timescale.PhoenixLiquidityChange{
+		Pool:         c.Pool,
+		Ledger:       c.Ledger,
+		ObservedAt:   c.ClosedAt,
+		TxHash:       c.TxHash,
+		OpIndex:      uint32(c.OpIndex),
+		Action:       timescale.PhoenixLiquidityAction(c.Action),
+		Sender:       c.Sender,
+		TokenA:       c.TokenA,
+		TokenB:       c.TokenB,
+		AmountA:      c.AmountA.String(),
+		AmountB:      c.AmountB.String(),
+		SharesAmount: sharesStr,
+	}); err != nil {
+		obs.SourceInsertErrorsTotal.WithLabelValues(phoenix.SourceName, "phoenix_liquidity").Inc()
+		logger.Error("insert phoenix liquidity failed",
+			"pool", c.Pool, "action", c.Action,
+			"ledger", c.Ledger, "tx_hash", c.TxHash, "err", err)
+		return
+	}
+	bumpEntryCount(ctx, logger, store, phoenix.SourceName)
+	logger.Debug("phoenix liquidity ingested",
+		"pool", c.Pool, "action", c.Action,
+		"sender", c.Sender, "ledger", c.Ledger)
+}
+
+func persistPhoenixStake(ctx context.Context, logger *slog.Logger, store *timescale.Store, e phoenix.StakeEvent) {
+	c := e.Change
+	if err := store.InsertPhoenixStakeEvent(ctx, timescale.PhoenixStakeEvent{
+		StakeContract: c.Contract,
+		Ledger:        c.Ledger,
+		ObservedAt:    c.ClosedAt,
+		TxHash:        c.TxHash,
+		OpIndex:       uint32(c.OpIndex),
+		Action:        timescale.PhoenixStakeAction(c.Action),
+		User:          c.User,
+		LPToken:       c.LPToken,
+		Amount:        c.Amount.String(),
+	}); err != nil {
+		obs.SourceInsertErrorsTotal.WithLabelValues(phoenix.SourceName, "phoenix_stake").Inc()
+		logger.Error("insert phoenix stake event failed",
+			"stake_contract", c.Contract, "action", c.Action,
+			"ledger", c.Ledger, "tx_hash", c.TxHash, "err", err)
+		return
+	}
+	bumpEntryCount(ctx, logger, store, phoenix.SourceName)
+	logger.Debug("phoenix stake event ingested",
+		"stake_contract", c.Contract, "action", c.Action,
+		"user", c.User, "ledger", c.Ledger)
 }
 
 func persistSEP41SupplyEvent(ctx context.Context, logger *slog.Logger, store *timescale.Store, e sep41_supply.Event) {

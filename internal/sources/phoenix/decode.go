@@ -112,6 +112,48 @@ func classify(e *events.Event) (fieldTopic string, isSwap bool) {
 	return e.Topic[1], true
 }
 
+// action is the family of Phoenix events we recognise: swap, the
+// two liquidity actions, or the two stake actions. The dispatcher
+// hot path uses classifyAny so a single topic[0] match drives the
+// routing without three separate Matches() calls per event.
+type action int
+
+const (
+	actionUnknown action = iota
+	actionSwap
+	actionProvideLiquidity
+	actionWithdrawLiquidity
+	actionBond
+	actionUnbond
+)
+
+// classifyAny is the union of classify + liquidity / stake topic
+// matching. Returns (action, topic[1] blob) when the event is one
+// of the five Phoenix actions; (actionUnknown, "") otherwise.
+//
+// Keeping the existing two-return classify() alongside this helper
+// preserves the existing call-sites (swap tests and the original
+// dispatcher path) while letting new code reach for the broader
+// classifier — same byte-equality match work, one routing fan-out.
+func classifyAny(e *events.Event) (action, string) {
+	if len(e.Topic) < 2 {
+		return actionUnknown, ""
+	}
+	switch e.Topic[0] {
+	case TopicSymbolSwap:
+		return actionSwap, e.Topic[1]
+	case TopicSymbolProvideLiquidity:
+		return actionProvideLiquidity, e.Topic[1]
+	case TopicSymbolWithdrawLiquidity:
+		return actionWithdrawLiquidity, e.Topic[1]
+	case TopicSymbolBond:
+		return actionBond, e.Topic[1]
+	case TopicSymbolUnbond:
+		return actionUnbond, e.Topic[1]
+	}
+	return actionUnknown, ""
+}
+
 // decodeSwap finalises a complete RawSwap into a canonical.Trade.
 // Field mapping (per Q3):
 //   - Trade.Pair.Base    = asset parsed from SellToken event body
@@ -215,4 +257,292 @@ func sdkDecodeI128(valueB64 string) (canonical.Amount, error) {
 		return canonical.Amount{}, fmt.Errorf("parse: %w", err)
 	}
 	return scval.AsAmountFromI128(sv)
+}
+
+// ─── provide_liquidity / withdraw_liquidity reassembly ──────────
+//
+// Both follow the same N-event-per-action pattern as swap. Each
+// per-field event's body is a bare single-value SCVal (Address for
+// the asset/account fields, I128 for the amount fields). The
+// dispatcher's serial-call assumption means buffer access is
+// single-threaded; the Decoder's mutex is belt-and-braces.
+
+// RawProvideLiquidity is the partial set of 5 fields observed for
+// a single provide_liquidity call. Slots populate by topic[1]; the
+// record is ready when all 5 are non-nil.
+type RawProvideLiquidity struct {
+	Ledger   uint32
+	TxHash   string
+	OpIndex  uint32
+	Pool     string
+	ClosedAt time.Time
+
+	Sender       *events.Event
+	TokenA       *events.Event
+	TokenAAmount *events.Event
+	TokenB       *events.Event
+	TokenBAmount *events.Event
+}
+
+// Complete reports whether all 5 slots are populated.
+func (r *RawProvideLiquidity) Complete() bool {
+	return r.Sender != nil &&
+		r.TokenA != nil &&
+		r.TokenAAmount != nil &&
+		r.TokenB != nil &&
+		r.TokenBAmount != nil
+}
+
+func (r *RawProvideLiquidity) fieldsPresent() int {
+	n := 0
+	for _, p := range [...]*events.Event{r.Sender, r.TokenA, r.TokenAAmount, r.TokenB, r.TokenBAmount} {
+		if p != nil {
+			n++
+		}
+	}
+	return n
+}
+
+func (r *RawProvideLiquidity) assign(e *events.Event, fieldTopic string) error {
+	switch fieldTopic {
+	case TopicSymbolPLSender:
+		r.Sender = e
+	case TopicSymbolPLTokenA:
+		r.TokenA = e
+	case TopicSymbolPLTokenAAmt:
+		r.TokenAAmount = e
+	case TopicSymbolPLTokenB:
+		r.TokenB = e
+	case TopicSymbolPLTokenBAmt:
+		r.TokenBAmount = e
+	default:
+		return fmt.Errorf("%w: %q", ErrUnknownField, fieldTopic)
+	}
+	return nil
+}
+
+// RawWithdrawLiquidity is the partial set of 4 required fields
+// observed for a single withdraw_liquidity call. The optional
+// `auto unbonded` 5th event is dropped at classify time — it
+// duplicates information the stake-contract `unbond` decoder
+// already captures, and not every withdraw emits it.
+type RawWithdrawLiquidity struct {
+	Ledger   uint32
+	TxHash   string
+	OpIndex  uint32
+	Pool     string
+	ClosedAt time.Time
+
+	Sender        *events.Event
+	SharesAmount  *events.Event
+	ReturnAmountA *events.Event
+	ReturnAmountB *events.Event
+}
+
+// Complete reports whether all 4 required slots are populated.
+func (r *RawWithdrawLiquidity) Complete() bool {
+	return r.Sender != nil &&
+		r.SharesAmount != nil &&
+		r.ReturnAmountA != nil &&
+		r.ReturnAmountB != nil
+}
+
+func (r *RawWithdrawLiquidity) fieldsPresent() int {
+	n := 0
+	for _, p := range [...]*events.Event{r.Sender, r.SharesAmount, r.ReturnAmountA, r.ReturnAmountB} {
+		if p != nil {
+			n++
+		}
+	}
+	return n
+}
+
+func (r *RawWithdrawLiquidity) assign(e *events.Event, fieldTopic string) error {
+	switch fieldTopic {
+	case TopicSymbolWLSender:
+		r.Sender = e
+	case TopicSymbolWLSharesAmount:
+		r.SharesAmount = e
+	case TopicSymbolWLReturnAmountA:
+		r.ReturnAmountA = e
+	case TopicSymbolWLReturnAmountB:
+		r.ReturnAmountB = e
+	case TopicSymbolWLAutoUnbonded:
+		// Optional event — recognised so we don't ErrUnknownField,
+		// but not stored. The withdraw record is independent of
+		// auto-unbond presence.
+		return nil
+	default:
+		return fmt.Errorf("%w: %q", ErrUnknownField, fieldTopic)
+	}
+	return nil
+}
+
+// RawStake is the partial set of 3 fields observed for one
+// bond / unbond call from the stake contract. The same shape
+// services both — the action (bond vs unbond) is carried alongside
+// in the buffer's group key.
+type RawStake struct {
+	Ledger   uint32
+	TxHash   string
+	OpIndex  uint32
+	Contract string
+	ClosedAt time.Time
+	IsBond   bool // true for bond, false for unbond
+
+	User   *events.Event
+	Token  *events.Event
+	Amount *events.Event
+}
+
+// Complete reports whether all 3 slots are populated.
+func (r *RawStake) Complete() bool {
+	return r.User != nil && r.Token != nil && r.Amount != nil
+}
+
+func (r *RawStake) fieldsPresent() int {
+	n := 0
+	for _, p := range [...]*events.Event{r.User, r.Token, r.Amount} {
+		if p != nil {
+			n++
+		}
+	}
+	return n
+}
+
+func (r *RawStake) assign(e *events.Event, fieldTopic string) error {
+	switch fieldTopic {
+	case TopicSymbolStakeUser:
+		r.User = e
+	case TopicSymbolStakeToken:
+		r.Token = e
+	case TopicSymbolStakeAmount:
+		r.Amount = e
+	default:
+		return fmt.Errorf("%w: %q", ErrUnknownField, fieldTopic)
+	}
+	return nil
+}
+
+// ─── Finalisers ─────────────────────────────────────────────────
+
+// decodeProvideLiquidity turns a complete RawProvideLiquidity into
+// the canonical LiquidityChange that the consumer projects onto a
+// phoenix_liquidity row.
+func decodeProvideLiquidity(r *RawProvideLiquidity) (LiquidityChange, error) {
+	if !r.Complete() {
+		return LiquidityChange{}, fmt.Errorf("%w: provide_liquidity have %d/%d fields",
+			ErrIncompleteLiquidity, r.fieldsPresent(), ProvideLiquidityFieldCount)
+	}
+	sender, err := decodeAddress(r.Sender.Value)
+	if err != nil {
+		return LiquidityChange{}, fmt.Errorf("provide_liquidity sender: %w", err)
+	}
+	tokenA, err := decodeAddress(r.TokenA.Value)
+	if err != nil {
+		return LiquidityChange{}, fmt.Errorf("provide_liquidity token_a: %w", err)
+	}
+	tokenB, err := decodeAddress(r.TokenB.Value)
+	if err != nil {
+		return LiquidityChange{}, fmt.Errorf("provide_liquidity token_b: %w", err)
+	}
+	amountA, err := decodeI128(r.TokenAAmount.Value)
+	if err != nil {
+		return LiquidityChange{}, fmt.Errorf("provide_liquidity token_a-amount: %w", err)
+	}
+	amountB, err := decodeI128(r.TokenBAmount.Value)
+	if err != nil {
+		return LiquidityChange{}, fmt.Errorf("provide_liquidity token_b-amount: %w", err)
+	}
+	return LiquidityChange{
+		Action:   EventActionProvideLiquidity,
+		Pool:     r.Pool,
+		Ledger:   r.Ledger,
+		TxHash:   r.TxHash,
+		OpIndex:  int(r.OpIndex),
+		ClosedAt: r.ClosedAt,
+		Sender:   sender,
+		TokenA:   tokenA,
+		AmountA:  amountA,
+		TokenB:   tokenB,
+		AmountB:  amountB,
+	}, nil
+}
+
+// decodeWithdrawLiquidity turns a complete RawWithdrawLiquidity
+// into the canonical LiquidityChange. Shares amount lives on the
+// dedicated field; per-token return amounts go in AmountA / AmountB.
+// TokenA / TokenB stay empty — the withdraw event does not carry
+// the pool's asset addresses (only the share-token); downstream can
+// join against the provide_liquidity rows that established the pool.
+func decodeWithdrawLiquidity(r *RawWithdrawLiquidity) (LiquidityChange, error) {
+	if !r.Complete() {
+		return LiquidityChange{}, fmt.Errorf("%w: withdraw_liquidity have %d/%d fields",
+			ErrIncompleteLiquidity, r.fieldsPresent(), WithdrawLiquidityFieldCount)
+	}
+	sender, err := decodeAddress(r.Sender.Value)
+	if err != nil {
+		return LiquidityChange{}, fmt.Errorf("withdraw_liquidity sender: %w", err)
+	}
+	shares, err := decodeI128(r.SharesAmount.Value)
+	if err != nil {
+		return LiquidityChange{}, fmt.Errorf("withdraw_liquidity shares_amount: %w", err)
+	}
+	returnA, err := decodeI128(r.ReturnAmountA.Value)
+	if err != nil {
+		return LiquidityChange{}, fmt.Errorf("withdraw_liquidity return_amount_a: %w", err)
+	}
+	returnB, err := decodeI128(r.ReturnAmountB.Value)
+	if err != nil {
+		return LiquidityChange{}, fmt.Errorf("withdraw_liquidity return_amount_b: %w", err)
+	}
+	return LiquidityChange{
+		Action:       EventActionWithdrawLiquidity,
+		Pool:         r.Pool,
+		Ledger:       r.Ledger,
+		TxHash:       r.TxHash,
+		OpIndex:      int(r.OpIndex),
+		ClosedAt:     r.ClosedAt,
+		Sender:       sender,
+		SharesAmount: shares,
+		AmountA:      returnA,
+		AmountB:      returnB,
+	}, nil
+}
+
+// decodeStake turns a complete RawStake into the canonical
+// StakeChange. Same shape services bond / unbond — the action
+// label is set from the buffer's group key.
+func decodeStake(r *RawStake) (StakeChange, error) {
+	if !r.Complete() {
+		return StakeChange{}, fmt.Errorf("%w: have %d/%d fields",
+			ErrIncompleteStake, r.fieldsPresent(), StakeFieldCount)
+	}
+	user, err := decodeAddress(r.User.Value)
+	if err != nil {
+		return StakeChange{}, fmt.Errorf("stake user: %w", err)
+	}
+	token, err := decodeAddress(r.Token.Value)
+	if err != nil {
+		return StakeChange{}, fmt.Errorf("stake token: %w", err)
+	}
+	amount, err := decodeI128(r.Amount.Value)
+	if err != nil {
+		return StakeChange{}, fmt.Errorf("stake amount: %w", err)
+	}
+	action := EventActionUnbond
+	if r.IsBond {
+		action = EventActionBond
+	}
+	return StakeChange{
+		Action:   action,
+		Contract: r.Contract,
+		Ledger:   r.Ledger,
+		TxHash:   r.TxHash,
+		OpIndex:  int(r.OpIndex),
+		ClosedAt: r.ClosedAt,
+		User:     user,
+		LPToken:  token,
+		Amount:   amount,
+	}, nil
 }

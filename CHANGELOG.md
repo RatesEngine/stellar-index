@@ -61,6 +61,34 @@ against.
   comet-backfill` subcommand wrapping `decodeLiquidityEvent` is
   the cleanest path and is tracked as a follow-up. Updated wasm
   audit at `docs/operations/wasm-audits/comet.md`.
+### Added
+
+- **Phoenix liquidity + stake event decoders (#27).** Phoenix's pool
+  contract (volatile `contracts/pool/` + stableswap
+  `contracts/pool_stable/`) and per-pool stake contract emit four
+  N-events-per-action shapes the indexer previously silently dropped:
+  `provide_liquidity` (5 events: sender, token_a, token_a-amount,
+  token_b, token_b-amount), `withdraw_liquidity` (4 events: sender,
+  shares_amount, return_amount_a, return_amount_b, plus an optional
+  5th `auto unbonded`), `bond` (3 events: user, token, amount), and
+  `unbond` (3 events: same shape as bond). The existing 8-event swap
+  reassembly is extended to a per-action correlation-buffer fleet —
+  one map per action so a same-(ledger,tx,op) bond+unbond pair can't
+  collide on shared field names. Two new TimescaleDB hypertables
+  back the reads: `phoenix_liquidity` (provide + withdraw rows,
+  per-pool / per-sender / per-action indexes) and
+  `phoenix_stake_events` (bond + unbond rows, per-contract / per-user
+  / per-action indexes). Both partition daily on
+  `ledger_close_time`, compress segment-by (pool, action) /
+  (stake_contract, action) after 7 days. Per ADR-0003, all i128
+  amounts ride NUMERIC; PKs include `ledger_close_time` per
+  TimescaleDB TS103 (the lesson from migration 0041). Historical
+  fill follow-up: once `soroban_events` (ADR-0029) covers the
+  Soroban era, populate both tables via `INSERT … SELECT FROM
+  soroban_events WHERE topic_0_sym IN ('provide_liquidity',
+  'withdraw_liquidity','bond','unbond')` fed through the same
+  per-action correlation buffer — pending the per-WASM-hash decoder
+  audit log being extended to enumerate the new field strings.
 
 ## [v0.5.0-rc.78] — 2026-05-26
 ### Added

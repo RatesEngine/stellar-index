@@ -43,6 +43,74 @@ const SwapFieldCount = 8
 // event. topic[1] carries the per-field name.
 const EventActionSwap = "swap"
 
+// ─── Liquidity actions ──────────────────────────────────────────
+//
+// Phoenix's pool contract (both volatile `contracts/pool/` and
+// stableswap `contracts/pool_stable/`) emits the same N-event-per-
+// action shape as `swap` for liquidity management:
+//
+//	provide_liquidity (5 events): sender, token_a, token_a-amount,
+//	                              token_b, token_b-amount
+//	withdraw_liquidity (4 events): sender, shares_amount,
+//	                               return_amount_a, return_amount_b
+//
+// The withdraw path also OPTIONALLY emits a 5th
+// `("withdraw_liquidity", "auto unbonded")` event with a tuple body
+// (stake_amount, stake_timestamp). We classify it but do not require
+// it for the withdraw correlation to complete — most withdrawals
+// don't auto-unbond.
+//
+// Stake contract (`contracts/stake/`) emits its own 3-event-per-
+// action shape for bond/unbond:
+//
+//	bond   (3 events): user, token, amount
+//	unbond (3 events): user, token, amount
+//
+// Field strings are the literal contract source — keep spellings
+// identical, including the `-amount` hyphens on the liquidity-token
+// fields. The contract emits all topics as String (not Symbol):
+// soroban-sdk serialises tuple-literal strings as ScVal::String.
+
+const (
+	EventActionProvideLiquidity  = "provide_liquidity"
+	EventActionWithdrawLiquidity = "withdraw_liquidity"
+	EventActionBond              = "bond"
+	EventActionUnbond            = "unbond"
+)
+
+// Field names for `provide_liquidity` (5 events per call).
+// The `token_a-amount` / `token_b-amount` hyphens come from the
+// contract source — see contracts/pool/src/contract.rs:346-355.
+const (
+	FieldPLSender              = "sender"
+	FieldPLTokenA              = "token_a"
+	FieldPLTokenAAmt           = "token_a-amount"
+	FieldPLTokenB              = "token_b"
+	FieldPLTokenBAmt           = "token_b-amount"
+	ProvideLiquidityFieldCount = 5
+)
+
+// Field names for `withdraw_liquidity` (4 events per call, plus the
+// optional `auto unbonded` 5th — see [FieldWLAutoUnbonded]).
+const (
+	FieldWLSender               = "sender"
+	FieldWLSharesAmount         = "shares_amount"
+	FieldWLReturnAmountA        = "return_amount_a"
+	FieldWLReturnAmountB        = "return_amount_b"
+	FieldWLAutoUnbonded         = "auto unbonded" // optional — emitted only when withdrawing also unbonds
+	WithdrawLiquidityFieldCount = 4
+)
+
+// Field names for `bond` / `unbond` (3 events per call, same shape
+// for both actions — see contracts/stake/src/contract.rs:165-167
+// and 196-198).
+const (
+	FieldStakeUser   = "user"
+	FieldStakeToken  = "token"
+	FieldStakeAmount = "amount"
+	StakeFieldCount  = 3
+)
+
 // Mainnet contract addresses — Phase-1 verified against
 // Phoenix-Protocol-Group/phoenix-contracts `scripts/*.sh`.
 const (
@@ -74,6 +142,37 @@ var (
 	TopicSymbolReferralFee    = scval.MustEncodeString(FieldReferralFee)    //
 )
 
+// Liquidity-management topic[0] encodings + topic[1] field names.
+// Same ScString-discriminator reasoning as swap above: contracts
+// publish via tuple-literals like
+// `.publish(("provide_liquidity", "sender"), …)` so both slots
+// serialise as ScVal::String.
+var (
+	TopicSymbolProvideLiquidity  = scval.MustEncodeString(EventActionProvideLiquidity)  // topic[0]
+	TopicSymbolWithdrawLiquidity = scval.MustEncodeString(EventActionWithdrawLiquidity) // topic[0]
+	TopicSymbolBond              = scval.MustEncodeString(EventActionBond)              // topic[0]
+	TopicSymbolUnbond            = scval.MustEncodeString(EventActionUnbond)            // topic[0]
+
+	// provide_liquidity topic[1] variants.
+	TopicSymbolPLSender    = scval.MustEncodeString(FieldPLSender)
+	TopicSymbolPLTokenA    = scval.MustEncodeString(FieldPLTokenA)
+	TopicSymbolPLTokenAAmt = scval.MustEncodeString(FieldPLTokenAAmt)
+	TopicSymbolPLTokenB    = scval.MustEncodeString(FieldPLTokenB)
+	TopicSymbolPLTokenBAmt = scval.MustEncodeString(FieldPLTokenBAmt)
+
+	// withdraw_liquidity topic[1] variants (4 required + 1 optional).
+	TopicSymbolWLSender        = scval.MustEncodeString(FieldWLSender)
+	TopicSymbolWLSharesAmount  = scval.MustEncodeString(FieldWLSharesAmount)
+	TopicSymbolWLReturnAmountA = scval.MustEncodeString(FieldWLReturnAmountA)
+	TopicSymbolWLReturnAmountB = scval.MustEncodeString(FieldWLReturnAmountB)
+	TopicSymbolWLAutoUnbonded  = scval.MustEncodeString(FieldWLAutoUnbonded)
+
+	// bond / unbond topic[1] variants (shared field set).
+	TopicSymbolStakeUser   = scval.MustEncodeString(FieldStakeUser)
+	TopicSymbolStakeToken  = scval.MustEncodeString(FieldStakeToken)
+	TopicSymbolStakeAmount = scval.MustEncodeString(FieldStakeAmount)
+)
+
 // Errors returned by the decode path.
 var (
 	// ErrUnknownField — topic[1] didn't match any of the 8 expected
@@ -89,4 +188,14 @@ var (
 	// ErrMalformedPayload — field values don't match expected types
 	// or produce a nonsense Trade (zero amount, same base/quote).
 	ErrMalformedPayload = errors.New("phoenix: malformed swap payload")
+
+	// ErrIncompleteLiquidity — bubbles up if decodeProvideLiquidity /
+	// decodeWithdrawLiquidity is called before every required field
+	// has landed. Defence-in-depth: the buffer only returns completed
+	// records, so callers shouldn't see this in normal flow.
+	ErrIncompleteLiquidity = errors.New("phoenix: incomplete liquidity event")
+
+	// ErrIncompleteStake — same shape as ErrIncompleteLiquidity, for
+	// the bond / unbond 3-event reassembly.
+	ErrIncompleteStake = errors.New("phoenix: incomplete stake event")
 )
