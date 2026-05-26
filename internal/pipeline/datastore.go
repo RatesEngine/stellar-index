@@ -45,6 +45,19 @@ func LedgerstreamConfig(cfg config.Config, bucket string) ledgerstream.Config {
 			NetworkPassphrase: cfg.Stellar.Passphrase(),
 			Compression:       "zstd",
 		},
+		// Trailing-edge tolerance: bounded backfills routinely race
+		// the live tip — Galexie writes partition files lazily, so a
+		// chunk_to set hours into the future hits "object missing"
+		// errors at the trailing edge. The 2026-05-26 soroban-events
+		// fill walk failed exactly this way on chunk 11. Setting the
+		// tolerance flag here applies it to every consumer of this
+		// helper (currently: ratesengine-ops backfill, the live
+		// indexer's bounded archive-then-live preamble). Has no
+		// effect on unbounded streams (live tail) — those wait for
+		// the file via RetryWait instead. See ledgerstream.Config
+		// godoc for the delivery caveat (the SDK can drop pre-fetched
+		// ledgers in the buffer race window).
+		TolerateTrailingMissing: true,
 	}
 
 	// Live-tail latency: the live bucket is read as an unbounded

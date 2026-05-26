@@ -28,6 +28,8 @@ package ledgerstream
 import (
 	"context"
 	"fmt"
+	"regexp"
+	"strconv"
 	"time"
 
 	"github.com/prometheus/client_golang/prometheus"
@@ -95,6 +97,46 @@ type Config struct {
 	// SDK/derived default untouched. Ignored for bounded ranges (a
 	// missing object there is a hard error, not a wait-for-tip).
 	LiveRetryWait time.Duration
+
+	// TolerateTrailingMissing — when true, a bounded Stream that
+	// fails with the SDK's "ledger object containing sequence X is
+	// missing" error is converted to a clean walk-complete (returns
+	// nil with a WARN log) provided X is within TrailingMissingWindow
+	// of the bounded To. Use for backfills that may race the live
+	// tip (Galexie writes partition files lazily) or for archive-
+	// integrity walks where a trailing-edge gap is "the tip isn't
+	// here yet" rather than corruption. False (default) preserves
+	// strict bounded semantics: any missing file is an error,
+	// matching pre-2026-05-26 behaviour.
+	//
+	// Mid-range gaps still error regardless of this flag — the
+	// window check guards against masking real corruption. The
+	// 2026-05-26 audit walks against the same archive confirmed
+	// the chain is intact up to the live tip; the failure mode
+	// this targets is exclusively the trailing 1-2 partitions
+	// that Galexie hasn't finished uploading yet.
+	//
+	// Delivery caveat: when the SDK's BufferedStorageBackend hits a
+	// missing file it cancels its internal context, dropping any
+	// pre-fetched ledgers in the buffer that hadn't been delivered
+	// to the callback yet. This is SDK-level behaviour. Result: the
+	// last delivered ledger can be up to BufferSize ledgers behind
+	// the missing-file's seq. Operators relying on full coverage
+	// (e.g. 100%-density backfills) must clamp -to below the live
+	// tip in advance; the tolerate flag's role is graceful exit on
+	// trailing-edge races (chain-check, defence in depth), not a
+	// substitute for tip-aware -to selection.
+	TolerateTrailingMissing bool
+
+	// TrailingMissingWindow — how close to the bounded range's To
+	// the missing-file's sequence must be to qualify as
+	// trailing-edge. Default 65536 (one full Galexie 64k-ledger
+	// partition plus slack — covers any "Galexie hasn't written
+	// the next partition yet" race plus operator-set To values
+	// that overshoot the tip by hours). Mid-range gaps farther
+	// from To than the window error regardless of the tolerate
+	// flag. Ignored when TolerateTrailingMissing is false.
+	TrailingMissingWindow uint32
 }
 
 // tieringEnabled reports whether Config requests a tiered
@@ -166,22 +208,95 @@ func Stream(
 		ledgerRange = ledgerbackend.BoundedRange(from, to)
 	}
 
+	var err error
 	if cfg.tieringEnabled() {
-		return streamTiered(ctx, cfg, ledgerRange, buffered, callback)
+		err = streamTiered(ctx, cfg, ledgerRange, buffered, callback)
+	} else {
+		err = ingest.ApplyLedgerMetadata(
+			ledgerRange,
+			ingest.PublisherConfig{
+				Registry:              cfg.Registry,
+				RegistryNamespace:     cfg.RegistryNamespace,
+				BufferedStorageConfig: buffered,
+				DataStoreConfig:       cfg.DataStore,
+				Log:                   cfg.Logger,
+			},
+			ctx,
+			callback,
+		)
 	}
+	return maybeTolerateTrailingMissing(cfg, to, err)
+}
 
-	return ingest.ApplyLedgerMetadata(
-		ledgerRange,
-		ingest.PublisherConfig{
-			Registry:              cfg.Registry,
-			RegistryNamespace:     cfg.RegistryNamespace,
-			BufferedStorageConfig: buffered,
-			DataStoreConfig:       cfg.DataStore,
-			Log:                   cfg.Logger,
-		},
-		ctx,
-		callback,
-	)
+// maybeTolerateTrailingMissing converts a bounded-stream missing-
+// file error into a clean walk-complete (nil) when the operator
+// opted in via Config.TolerateTrailingMissing AND the missing
+// sequence is within the trailing window of the bounded To. All
+// other error shapes pass through unchanged. Always returns nil
+// for nil err.
+func maybeTolerateTrailingMissing(cfg Config, to uint32, err error) error {
+	if err == nil {
+		return nil
+	}
+	if !cfg.TolerateTrailingMissing || to == 0 {
+		return err
+	}
+	seq, ok := parseTrailingMissingSeq(err)
+	if !ok {
+		return err
+	}
+	window := cfg.TrailingMissingWindow
+	if window == 0 {
+		window = defaultTrailingMissingWindow
+	}
+	if seq > to || to-seq > window {
+		return err
+	}
+	if cfg.Logger != nil {
+		cfg.Logger.WithFields(map[string]interface{}{
+			"missing_ledger": seq,
+			"range_to":       to,
+			"gap_to_tip":     to - seq,
+			"window":         window,
+		}).Warn("ledgerstream: bounded walk hit trailing-edge missing file — treating as walk-complete (TolerateTrailingMissing=true)")
+	}
+	return nil
+}
+
+// defaultTrailingMissingWindow is one Galexie 64k-ledger partition
+// plus 1536 ledgers of slack, covering any tip-race between the
+// operator's chosen -to and the partition file Galexie hasn't
+// finished writing yet.
+const defaultTrailingMissingWindow uint32 = 65536
+
+// trailingMissingRE matches the SDK's
+// `ledger object containing sequence X is missing` error wrap. The
+// SDK uses `pkg/errors.Wrapf`, which produces a colon-joined chain
+// — the sequence appears verbatim in the message regardless of how
+// many layers deep the wrap is. Capturing group 1 is the sequence
+// as a decimal integer.
+var trailingMissingRE = regexp.MustCompile(`ledger object containing sequence (\d+) is missing`)
+
+// parseTrailingMissingSeq extracts the sequence number from the
+// SDK's trailing-edge missing-file error. Returns (0, false) when
+// the error does not match the SDK's known wrap shape.
+//
+// We match on the error string because the SDK
+// (github.com/stellar/go-stellar-sdk/ingest/ledgerbackend.ledger_buffer)
+// wraps with pkg/errors.Wrapf and exposes no typed sentinel.
+func parseTrailingMissingSeq(err error) (uint32, bool) {
+	if err == nil {
+		return 0, false
+	}
+	m := trailingMissingRE.FindStringSubmatch(err.Error())
+	if len(m) != 2 {
+		return 0, false
+	}
+	n, perr := strconv.ParseUint(m[1], 10, 32)
+	if perr != nil {
+		return 0, false
+	}
+	return uint32(n), true
 }
 
 // streamTiered is the hot+cold branch of [Stream]. It mirrors the

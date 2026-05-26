@@ -2156,6 +2156,19 @@ func verifyArchiveLCMWalk(cfg config.Config, bucket string, from, to uint32, max
 			NetworkPassphrase: cfg.Stellar.Passphrase(),
 			Compression:       "zstd",
 		},
+		// verify-archive's purpose is chain-check, not full-coverage
+		// delivery — at the trailing edge Galexie may not have
+		// uploaded the next 1-2 partition files yet, and the systemd
+		// timer fires every 6h so the operator can't ensure -to
+		// stays well behind the tip. Tolerate the SDK "is missing"
+		// error within 65k ledgers of -to (~one partition + slack);
+		// the chain up to the last-delivered ledger is what we'd
+		// report anyway. The 2026-05-25 incident
+		// (project_62_diagnosis_2026_05_25) was exactly this:
+		// bootstrap walked 62.64M ledgers clean, then failed on the
+		// trailing-edge missing file. With the tolerate flag set,
+		// the walk would have reported success.
+		TolerateTrailingMissing: true,
 	}
 
 	// maxRuntime == 0 → no cap (uncancellable parent). Operators
@@ -3203,6 +3216,11 @@ func wasmHistory(args []string) error { //nolint:funlen,gocognit,gocyclo // line
 			NetworkPassphrase: cfg.Stellar.Passphrase(),
 			Compression:       "zstd",
 		},
+		// wasm-history walks tend to scan recent ranges (audit
+		// trailing N months). The trailing edge can be at the live
+		// tip; if -to overshoots a not-yet-uploaded partition the
+		// walk would error otherwise.
+		TolerateTrailingMissing: true,
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())

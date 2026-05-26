@@ -15,6 +15,34 @@ against.
 
 ## [Unreleased]
 
+### Added
+
+- **`ledgerstream.Config.TolerateTrailingMissing` (with companion
+  `TrailingMissingWindow`).** Closes the trailing-edge failure
+  that bit both verify-archive (`project_62_diagnosis_2026_05_25`)
+  and the 2026-05-26 soroban-events fill walk chunk 11
+  (`ledger object containing sequence 62642880 is missing`). When
+  the flag is set and the SDK reports a missing file within
+  `TrailingMissingWindow` ledgers of the bounded `to`, Stream
+  returns nil (walk-complete) with a WARN. Mid-range gaps still
+  error — the window check guards against masking real corruption.
+  Default window 65536 (one Galexie 64k partition plus slack).
+  Wired into the standard `LedgerstreamConfig` helper (so
+  `ratesengine-ops backfill` + the indexer's bounded preamble
+  inherit it), the verify-archive walker (the timer can now
+  re-enable), and the `wasm-history` walker. Delivery caveat
+  documented on the Config field: the SDK cancels its internal
+  context on a missing file, which can drop pre-fetched ledgers
+  in the buffer — operators relying on 100% coverage must clamp
+  `-to` below the live tip, the tolerate flag is for graceful
+  exit at the trailing edge, not a substitute for tip-aware
+  range selection. Regression-tested in
+  `internal/ledgerstream/trailing_edge_internal_test.go` (regex
+  parses every observed SDK wrap shape) and
+  `internal/ledgerstream/trailing_edge_stream_test.go` (Stream
+  returns nil only when within-window; mid-range gaps + strict
+  mode still error).
+
 ## [v0.5.0-rc.80] — 2026-05-26
 
 ### Fixed
