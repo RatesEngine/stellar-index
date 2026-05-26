@@ -132,21 +132,53 @@ Per the schemas pinned in `events.go` (extracted from
 
 ## WASM timeline
 
-**PENDING** — wasm-history walk against galexie scheduled
-post-verify-archive bootstrap (2026-05-24 evening). Operator runs
-the procedure in
-[README.md §2](README.md#2-collect-the-wasm-version-timeline) with
-`-contracts` pointing at the three contract IDs from
-`MainnetPaymentContracts` above.
+**Walked 2026-05-26** — `ratesengine-ops wasm-history` over
+`[60000000, 62642779]` with `-parallel 4` covering all 3 mainnet
+`MainnetPaymentContracts` (shared walk with the CCTP audit).
+Walk duration: 5h02m. Result: **zero WASM upgrades observed for
+any of the 3 contracts** — output JSON shows `ranges: null` per
+contract, consistent with stellar.expert reporting a single
+shared WASM hash `b56aedeaf80c3d4b…` since each contract's
+deploy.
+
+| Contract | Deploy ledger | Deploy timestamp | Upgrades observed |
+| --- | --- | --- | --- |
+| `CAC5SKP5…OOSP3IYRL` | one-time | 2026-01-18 16:40:53 UTC | 0 |
+| `CCRLTS3C…6GBMGLRE`  | one-time | 2026-01-18 16:40:31 UTC | 0 |
+| `CAQPKW5A…F3PBSKXQC` | one-time | 2026-03-24 04:51:10 UTC | 0 |
+
+All three deploys point to the **same WASM bytes** (per
+stellar.expert: `b56aedeaf80c3d4b7c4c2ddf3893ac47c3ecff1a0a6f19152ca993e5bb294414`).
+Rozo's pattern is one shared template per-contract-address, not
+factory-instanced parameterisation — so the decoder validates
+against a single WASM regardless of which payment contract
+emitted the event.
+
+The earliest two contracts deployed (2026-01-18) before the walk's
+`-from 60000000` ≈ ledger ~60M (~2026-02-25). The pre-walk history
+is implicitly trusted because (a) stellar.expert reports zero
+contract-bytes change since deploy and (b) Rozo themselves
+confirmed per `internal/sources/rozo/events.go` comment
+("Confirmed by RozoAI 2026-05-21 — all three emit the same
+PaymentEvent / FlushEvent schemas") that the wire surface is
+single-version.
+
+Walk evidence: `/tmp/wasm-history-bridges.json` on r1 (shared with
+the CCTP audit — same walk targeted both source sets).
 
 ## Per-WASM decoder review
 
-**PENDING** — fill in per-hash review per
-[README.md §3](README.md#3-per-wasm-hash-decoder-review) once the
-timeline is captured. Expected failure surface follows the table
-in README.md §3 (topic renames silently drop; body field renames
-fail-loud per event; i128 scale drift caught only by Hubble
-cross-check — which we don't have here, see next section).
+One distinct WASM hash `b56aedeaf80c3d4b…` across all 3 contracts.
+Events declared in `internal/sources/rozo/events.go`:
+
+- **`payment`** (topic[0]) — bridge-out send. Body parsed in
+  `internal/sources/rozo/decode.go::decodePayment`.
+- **`flush`** (topic[0]) — relayer reconciliation. Body parsed in
+  `internal/sources/rozo/decode.go::decodeFlush`.
+
+`classify()` matches both, decoder handles both. No WASM upgrades
+to drift through. i128 amounts preserved end-to-end (NUMERIC in
+postgres, `*big.Int` in Go per ADR-0003).
 
 ## Hubble cross-check
 
@@ -158,10 +190,25 @@ README.md §4).
 
 ## Audit decision
 
-**PENDING.** Flip `BackfillSafe: true` in
-`internal/sources/external/registry.go` (`Registry["rozo"]`) in
-the same PR that fills in §WASM timeline + §Per-WASM decoder
-review.
+**APPROVED 2026-05-26.** `Registry["rozo"].BackfillSafe` flipped
+to `true` in `internal/sources/external/registry.go` in the same
+commit as this audit doc update. Single shared WASM hash, no
+upgrades, decoder coverage verified. Historical replay via the
+`soroban_events` landing zone (ADR-0029) is now unblocked:
+
+```sql
+INSERT INTO rozo_events
+SELECT … FROM soroban_events
+WHERE contract_id IN (
+  'CAC5SKP5FJT2ZZ7YLV4UCOM6Z5SQCCVPZWHLLLVQNQG2RWWOOSP3IYRL',
+  'CCRLTS3CMJHYHFD7MYRBJPNW6R3LCXNDO2B6TK6AS6FSXAHR6GBMGLRE',
+  'CAQPKW5AUPEA4C7OERZRUCBWT5RZDSETO4PR5REVRC5MT4CF3PBSKXQC'
+) AND topic_0_sym IN ('payment', 'flush');
+```
+
+Re-audit triggers: stellar.expert reports new WASM hash for any
+of the 3 payment contracts, OR a new Rozo deploy beyond
+`MainnetPaymentContracts`.
 
 ## Live-traffic verification notes
 

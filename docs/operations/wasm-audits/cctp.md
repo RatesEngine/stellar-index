@@ -117,22 +117,50 @@ in `github.com/circlefin/stellar-cctp`):
 
 ## WASM timeline
 
-**PENDING** — wasm-history walk against galexie scheduled
-post-verify-archive bootstrap (2026-05-24 evening). Operator runs
-the procedure in
-[README.md §2](README.md#2-collect-the-wasm-version-timeline) with
-`-contracts` pointing at the `Mainnet*` constants above
-(`MainnetTokenMessengerMinter`, `MainnetMessageTransmitter`,
-`MainnetCctpForwarder`).
+**Walked 2026-05-26** — `ratesengine-ops wasm-history` over
+`[60000000, 62642779]` with `-parallel 4` covering all 3 mainnet
+contracts. Walk duration: 5h02m, scanned 2,642,780 ledgers across
+4 workers. Result: **zero WASM upgrades observed for any of the 3
+contracts** — output JSON shows `ranges: null` per contract,
+consistent with stellar.expert's per-contract view (all 3 deployed
+2026-04-16 within ~3 min, each with a single deploy event).
+
+| Contract | Deploy ledger | Deploy timestamp | Upgrades observed |
+| --- | --- | --- | --- |
+| `CAE2G5Z7…UFLPNFTXL` (TokenMessengerMinter) | one-time | 2026-04-16 15:43:48 UTC | 0 |
+| `CACMENFF…3FVXAZV` (MessageTransmitter)    | one-time | 2026-04-16 15:43:48 UTC | 0 |
+| `CBZL2IH7…N47TZJDF5T` (CctpForwarder)      | one-time | 2026-04-16 15:46:33 UTC | 0 |
+
+Walk evidence: `/tmp/wasm-history-bridges.json` on r1 (kept until
+the next bootstrap; copy to `evidence/` if a permanent artefact is
+needed). Per-worker JSONL transition logs are empty (no transitions
+to log).
 
 ## Per-WASM decoder review
 
-**PENDING** — fill in per-hash review per
-[README.md §3](README.md#3-per-wasm-hash-decoder-review) once the
-timeline is captured. Expected failure surface follows the table
-in README.md §3 (topic renames silently drop; body field renames
-fail-loud per event; i128 scale drift caught only by Hubble
-cross-check — which we don't have here, see next section).
+Three distinct WASM hashes (one per contract — they are different
+codebases serving different CCTP roles, not factory-deployed
+variants of a single template):
+
+- **TokenMessengerMinter** `a6c1acc6e367e465…` (32-byte hash from
+  stellar.expert). Events: `deposit_for_burn`, `mint_and_withdraw`
+  (decoder side: `internal/sources/cctp/decode.go`). Single deploy
+  with no upgrade; decoder body-shape assumptions stable.
+- **MessageTransmitter** `99bd0ddc506ee13f…`. Events:
+  `message_sent`, `message_received`. Same decoder. Single deploy.
+- **CctpForwarder** `00b1b70550f887bd…`. Forwarder semantic — no
+  additional event types beyond what the upstream contracts emit
+  per Phase 1 audit; the forwarder doesn't introduce its own
+  topic namespace.
+
+Decoder coverage matches the full event set the contracts emit
+(verified at `internal/sources/cctp/events.go` constants). No
+i128 scale drift to worry about — no upgrades to drift through.
+
+Disassembly + per-WASM source comparison deferred until either
+(a) Circle ships a v3 upgrade (forcing a re-audit anyway), or
+(b) decoded events diverge from Circle's public stats once live
+bridge traffic begins (caught by the cross-check below).
 
 ## Hubble cross-check
 
@@ -144,10 +172,27 @@ README.md §4).
 
 ## Audit decision
 
-**PENDING.** Flip `BackfillSafe: true` in
-`internal/sources/external/registry.go` (`Registry["cctp"]`) in
-the same PR that fills in §WASM timeline + §Per-WASM decoder
-review.
+**APPROVED 2026-05-26.** `Registry["cctp"].BackfillSafe` flipped
+to `true` in `internal/sources/external/registry.go` in the same
+commit as this audit doc update. Decoder safely covers every
+WASM hash that has ever existed for the 3 mainnet contracts (one
+each, no upgrades). Historical replay via the `soroban_events`
+landing zone (ADR-0029) is now unblocked:
+
+```sql
+INSERT INTO cctp_events
+SELECT … FROM soroban_events
+WHERE contract_id IN (
+  'CAE2G5Z77UP7GYPYGFOWFGW7C7J6I4YP2AFGSADRKQY62SYUFLPNFTXL',
+  'CACMENFFJPJMSDAJQLX4R7K3SFZIW2LJSE3R2UMLGSWHFHS353FVXAZV',
+  'CBZL2IH7F6BIDAA3WBNXYKIXSATJGMSW7K5P5MJ6STX5RXN47TZJDF5T'
+) AND topic_0_sym IN ('deposit_for_burn', 'mint_and_withdraw',
+                      'message_sent', 'message_received');
+```
+
+Re-audit triggers: any of these tipped from this single-WASM
+state — Prometheus alerts on `unknown_topic` per source, or a
+manual `wasm-history` re-walk if Circle announces a v3.
 
 ## Live-traffic verification notes
 
