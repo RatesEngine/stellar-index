@@ -15,6 +15,33 @@ against.
 
 ## [Unreleased]
 
+### Added
+
+- Exporter-down meta-alerts for redis/postgres/pgbackrest/minio so a future cascade surfaces immediately when the metric-producing exporter dies (F-0085).
+- Ansible tasks to install redis_exporter + postgres_exporter + pgbackrest_exporter on r1 — closes the cascade-blind gap discovered during the 2026-05-26 audit (F-0152). Each exporter feeds an alert family that was previously dependent on absent scrape data.
+- `make vuln` target invoking `govulncheck ./...` + chained into `make verify` (F-0057).
+- `make verify-r1-sync` Makefile target + supporting `scripts/dev/verify-r1-sync.sh` script to md5-compare every tracked config path against deployed copy on r1 — operator-pre-deploy drift check (F-0142, Wave-1 follow-up to F-0133..F-0140 drift cluster).
+- Ansible task `17-ratesengine-healthchecks.yml` deploys smoke + heartbeat + sla-probe scripts + systemd units to r1 idempotently — eliminates the manual `install.sh` re-run risk class (F-0137 root cause of drift cluster F-0133..F-0136).
+
+### Changed
+
+- ADR-0028 status: Proposed → Accepted 2026-05-27 (matches deployed canonical.AssetRWA code per F-0111 POSITIVE; closes F-0110 policy/implementation drift).
+- `/v1/markets` (and `/v1/pairs` / `MarketRow`) field `last_trade_at` now carries the minute-precise `MAX(prices_1m.bucket)` over the trailing 24h instead of the daily-bucket-start from `prices_1d`. A new `bucket_close_at` field exposes the daily bucket-start if you need it. Pre-fix most rows surfaced exactly-midnight UTC values and clients computing freshness against `now()` saw spuriously-large staleness (F-0065). Pairs idle >24h but active in the 14d recency window fall back to the daily bucket-start for `last_trade_at` (i.e. the two fields match), since `prices_1m` retention is 30 days and the 24h-window scan won't surface a minute-precise signal beyond that.
+
+### Fixed
+
+- Guard `ratesengine_aggregator_silent` alert against absent-series silence under Redis-MISCONF cascade (F-0080).
+- Cascade-affected handlers (`/v1/oracle/*`, `/v1/lending/pools`, `/v1/vwap`, `/v1/observations*`, `/v1/price/tip*`) now return HTTP 503 + Retry-After: 30 on Redis cache-unavailable errors instead of HTTP 500 internal-error (F-0086, F-0087, F-0089, F-0090, F-0145, F-0146).
+- `/v1/status` no longer reports `overall:"ok"` when every service signal is `unknown` (F-0055). Now computes overall from worst-case service state; sets `flags.stale:true` when not all-ok.
+- Pull `ledgerstream.Config` construction in ops subcommands into a single helper that always opts into `TolerateTrailingMissing`. Eliminates the trap (F-0070) where `verify-decoders` and `scan-soroban-events` could hit the rc.81 trailing-edge-missing-file failure that `verify-archive` and `wasm-history` already tolerated.
+- Sync deployed alertmanager.yml on r1 with repo source (F-0139 — was 27 LOC behind). Filed F-0155 follow-up for Ansible role path mismatch.
+- `/v1/diagnostics/ingestion` now matches `/v1/network/stats` behaviour — falls back to Postgres on empty cache and sets `flags.stale:true` when serving zero-valued fields. Previously returned all-zeros with `flags.stale:false` under cache-cold conditions (F-0095).
+
+### Security
+
+- Signup IP throttle + global rate-limit now fail-CLOSED with HTTP 503 + Retry-After after 30s of sustained Redis errors (was fail-OPEN regardless of duration, F-0049/F-0050/F-0149/F-0150). Transient blips < 30s still fail-OPEN for UX. Dwell-time configurable via `auth.SignupIPThrottleOptions.DwellTime` and `ratelimit.WithDwellTime`; negative value preserves legacy fail-open-always for operators who explicitly opt out.
+- SHA-pin first-party GitHub Actions (`actions/checkout`, `actions/setup-go`) and add `github-actions` ecosystem to Dependabot so SHA pins refresh automatically (F-0056, F-0058).
+
 ## [v0.5.0-rc.81] — 2026-05-26
 
 ### Added
