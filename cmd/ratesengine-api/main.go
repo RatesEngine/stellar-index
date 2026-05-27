@@ -522,6 +522,17 @@ func run(cfgPath string, dryRun bool) error { //nolint:gocognit,funlen,gocyclo /
 		logger.Info("oracle reader wrapped with Redis cache",
 			"ttl", cachekeys.OracleLatestTTL.String())
 	}
+	// In-process TTL + single-flight layer on top of the Redis cache.
+	// F-0013 (audit-2026-05-26): /v1/oracle/latest p95 271 ms > 200 ms
+	// SLO. The Redis cache helps the cross-instance read pattern but
+	// has no single-flight, so concurrent misses stampede upstream;
+	// during the F-0039 Redis MISCONF cascade every read falls
+	// straight through to the DB. The in-process layer is fast, has
+	// single-flight, and survives Redis being unavailable.
+	const oracleInProcessTTL = 3 * time.Second
+	oracleReader = v1.NewCachedOracleReader(oracleReader, oracleInProcessTTL)
+	logger.Info("oracle reader wrapped with in-process cache",
+		"ttl", oracleInProcessTTL.String())
 
 	// Catalogue readers — same Redis read-through pattern for the
 	// /v1/assets and /v1/markets list endpoints. Both derive from
