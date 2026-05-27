@@ -386,7 +386,8 @@ func (s *Server) handleStatus(w http.ResponseWriter, r *http.Request) {
 			StatusService{Name: "indexer", Status: "unknown"},
 			StatusService{Name: "aggregator", Status: "unknown"},
 		)
-		writeJSON(w, out, Flags{Stale: true})
+		out.Overall = rollupOverall(out.Services, false, false)
+		writeJSON(w, out, Flags{Stale: out.Overall != "ok"})
 		return
 	}
 
@@ -414,10 +415,7 @@ func (s *Server) handleStatus(w http.ResponseWriter, r *http.Request) {
 
 	// Indexer + aggregator heartbeats. A heartbeat older than
 	// 60 s flags the service down. If the metrics backend is
-	// unreachable, the heartbeat is "unknown" — and "unknown"
-	// must NOT roll up to overall=ok (we observed this on r1
-	// 2026-05-10: Prometheus dead 18 h, /v1/status reported
-	// overall=ok despite both backend services being unknown).
+	// unreachable, the heartbeat is "unknown".
 	now := time.Now().UTC()
 	staleAfter := 60 * time.Second
 	for _, name := range []string{"indexer", "aggregator"} {
@@ -429,20 +427,10 @@ func (s *Server) handleStatus(w http.ResponseWriter, r *http.Request) {
 					svc.Status = "ok"
 				} else {
 					svc.Status = "down"
-					out.Overall = "degraded"
 				}
 			}
 		}
 		out.Services = append(out.Services, svc)
-	}
-
-	// Backend itself is the canary: if any of the four backend
-	// queries failed, we can't truthfully report "ok" — the
-	// metrics pipeline is the channel that would tell us
-	// otherwise. Degrade the overall surface so operators (and
-	// the status-page poller) see the real state.
-	if hbErr != nil || latErr != nil || freErr != nil || incErr != nil {
-		out.Overall = "degraded"
 	}
 
 	if latErr == nil {
@@ -453,10 +441,78 @@ func (s *Server) handleStatus(w http.ResponseWriter, r *http.Request) {
 	}
 	if incErr == nil {
 		out.Incidents = incidents
-		if incidents.PageCount > 0 {
-			out.Overall = "degraded"
+	}
+
+	// Compute overall from the worst-case per-service state and the
+	// backend-canary signals. F-0055: previously any service in
+	// "unknown" silently rolled up to overall="ok" because we only
+	// degraded inside the success branches of each loop. Now the
+	// rollup explicitly handles the unknown floor — if every
+	// service is unknown, overall is "unknown" (not "ok").
+	backendErr := hbErr != nil || latErr != nil || freErr != nil || incErr != nil
+	pageFiring := incErr == nil && incidents.PageCount > 0
+	out.Overall = rollupOverall(out.Services, backendErr, pageFiring)
+
+	// flags.stale reflects whether this envelope is reporting
+	// non-fresh state — any non-"ok" overall trips it so polling
+	// clients (status page, dashboards) can distinguish a healthy
+	// snapshot from a degraded/unknown/down one without parsing
+	// every per-service entry.
+	writeJSON(w, out, Flags{Stale: out.Overall != "ok"})
+}
+
+// rollupOverall computes the customer-facing `overall` field from
+// the per-service rollup plus the two cross-cutting signals
+// (metrics-backend unreachable; page-severity alert firing).
+//
+// Precedence (worst wins):
+//
+//   - "down": any service is down.
+//   - "degraded": any service is degraded, OR backendErr, OR
+//     a page-severity alert is firing, OR services are in a mixed
+//     known state (e.g. one ok + one unknown — partial visibility
+//     is honest degradation, not "ok").
+//   - "unknown": every service is unknown (or has a zero LastSeen).
+//     Distinct from "down" — we have no signal at all, rather than
+//     a definite negative one. F-0055: this branch was missing
+//     pre-fix, which caused overall=ok during full metrics-backend
+//     outages.
+//   - "ok": every service is ok and no canary signal trips.
+func rollupOverall(services []StatusService, backendErr, pageFiring bool) string {
+	var anyDown, anyDegraded, anyOK, anyUnknown bool
+	for _, svc := range services {
+		switch svc.Status {
+		case "down":
+			anyDown = true
+		case "degraded":
+			anyDegraded = true
+		case "ok":
+			// A service self-reporting "ok" with a zero LastSeen
+			// hasn't actually been observed — treat it as unknown for
+			// rollup purposes. (The in-process "api" entry always
+			// stamps LastSeen at request time so it's a real "ok".)
+			if svc.LastSeen.IsZero() && svc.Name != "api" {
+				anyUnknown = true
+			} else {
+				anyOK = true
+			}
+		default:
+			anyUnknown = true
 		}
 	}
 
-	writeJSON(w, out, Flags{})
+	switch {
+	case anyDown:
+		return "down"
+	case anyDegraded, backendErr, pageFiring:
+		return "degraded"
+	case anyUnknown && !anyOK:
+		return "unknown"
+	case anyUnknown && anyOK:
+		// Mixed known/unknown is partial visibility — surface as
+		// degraded so callers can't mistake it for a full-green roll.
+		return "degraded"
+	default:
+		return "ok"
+	}
 }

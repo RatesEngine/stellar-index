@@ -66,8 +66,13 @@ func TestStatus_NoBackend_DegradedSurface(t *testing.T) {
 	if st.Region.Name != "r1" {
 		t.Errorf("Region.Name = %q, want r1", st.Region.Name)
 	}
-	if st.Overall != "ok" {
-		t.Errorf("Overall = %q, want ok (in-process surface)", st.Overall)
+	// F-0055: the in-process surface (api=ok + indexer/aggregator
+	// unknown) is partial visibility. The mixed-state branch of
+	// the overall rollup returns "degraded" — silently reporting
+	// "ok" while two of three services are unknown is the exact
+	// bug this regression test pins.
+	if st.Overall != "degraded" {
+		t.Errorf("Overall = %q, want degraded (partial visibility: api ok, indexer/aggregator unknown)", st.Overall)
 	}
 	if !env.Flags.Stale {
 		t.Errorf("flags.stale = false; want true when no backend wired")
@@ -138,7 +143,7 @@ func TestStatus_WithBackend_HappyPath(t *testing.T) {
 	}
 }
 
-func TestStatus_WithBackend_StaleHeartbeatDegraded(t *testing.T) {
+func TestStatus_WithBackend_StaleHeartbeatDown(t *testing.T) {
 	now := time.Now().UTC()
 	srv := New(Options{
 		RegionName: "r1",
@@ -161,8 +166,14 @@ func TestStatus_WithBackend_StaleHeartbeatDegraded(t *testing.T) {
 	var st StatusResponse
 	json.Unmarshal(body, &st)
 
-	if st.Overall != "degraded" {
-		t.Errorf("Overall = %q, want degraded (stale indexer hb)", st.Overall)
+	// Per F-0055 rollup precedence (worst wins): any service in
+	// "down" makes overall=down. A stale heartbeat is a definite
+	// negative signal, not "degraded" partial visibility.
+	if st.Overall != "down" {
+		t.Errorf("Overall = %q, want down (stale indexer hb)", st.Overall)
+	}
+	if !env.Flags.Stale {
+		t.Errorf("flags.stale = false; want true when overall != ok")
 	}
 	for _, s := range st.Services {
 		if s.Name == "indexer" && s.Status != "down" {
@@ -367,5 +378,163 @@ func TestPrometheusStatusBackend_IncidentsDedupesByAlertname(t *testing.T) {
 	}
 	if len(got.Active) != 1 {
 		t.Errorf("Active len = %d, want 1", len(got.Active))
+	}
+}
+
+// TestStatus_OverallRollup_F0055 pins the F-0055 fix: the
+// customer-facing `overall` field is computed from the worst-case
+// per-service state plus the two cross-cutting canaries
+// (backend-error, page-firing). Each table row exercises one
+// branch of the precedence chain in rollupOverall; flags.stale is
+// asserted as the inverse of overall=="ok" so the wire envelope
+// stays consistent with the rollup verdict.
+func TestStatus_OverallRollup_F0055(t *testing.T) {
+	now := time.Now().UTC()
+	recent := now.Add(-3 * time.Second) // within 60s threshold
+	stale := now.Add(-10 * time.Minute) // past 60s threshold
+
+	type expect struct {
+		overall string
+		stale   bool
+	}
+	cases := []struct {
+		name    string
+		backend *fakeStatusBackend
+		want    expect
+	}{
+		{
+			// All three services healthy, no canary trips → ok.
+			name: "all_ok",
+			backend: &fakeStatusBackend{
+				heartbeats: map[string]time.Time{
+					"indexer": recent, "aggregator": recent,
+				},
+			},
+			want: expect{overall: "ok", stale: false},
+		},
+		{
+			// Indexer heartbeat way past threshold → svc=down → overall=down.
+			name: "any_down",
+			backend: &fakeStatusBackend{
+				heartbeats: map[string]time.Time{
+					"indexer": stale, "aggregator": recent,
+				},
+			},
+			want: expect{overall: "down", stale: true},
+		},
+		{
+			// Backend errors on every query AND services degrade
+			// to unknown (hbErr != nil branch). api=ok keeps
+			// anyOK=true; indexer/aggregator unknown → mixed →
+			// degraded (the backendErr canary also forces this).
+			name: "backend_error_partial",
+			backend: &fakeStatusBackend{
+				hbErr:  errors.New("prometheus dead"),
+				latErr: errors.New("prometheus dead"),
+				freErr: errors.New("prometheus dead"),
+				incErr: errors.New("prometheus dead"),
+			},
+			want: expect{overall: "degraded", stale: true},
+		},
+		{
+			// No service is down/degraded, but a page-severity
+			// alert is firing → cross-cutting canary trips
+			// degraded.
+			name: "page_alert_firing",
+			backend: &fakeStatusBackend{
+				heartbeats: map[string]time.Time{
+					"indexer": recent, "aggregator": recent,
+				},
+				incidents: StatusIncidents{
+					ActiveCount: 1, PageCount: 1,
+					Active: []ActiveIncident{
+						{Name: "ratesengine_api_down", Severity: "page"},
+					},
+				},
+			},
+			want: expect{overall: "degraded", stale: true},
+		},
+		{
+			// Mixed known/unknown (api ok + indexer/aggregator
+			// unknown because heartbeats map is empty) → partial
+			// visibility surfaces as degraded, NOT ok.
+			name: "mixed_ok_and_unknown",
+			backend: &fakeStatusBackend{
+				heartbeats: map[string]time.Time{
+					// neither indexer nor aggregator present
+				},
+			},
+			want: expect{overall: "degraded", stale: true},
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			srv := New(Options{
+				RegionName:    "r1",
+				StatusBackend: tc.backend,
+			})
+
+			req := httptest.NewRequest(http.MethodGet, "/v1/status", nil)
+			rr := httptest.NewRecorder()
+			srv.Handler().ServeHTTP(rr, req)
+
+			var env Envelope
+			if err := json.NewDecoder(rr.Body).Decode(&env); err != nil {
+				t.Fatalf("decode envelope: %v", err)
+			}
+			body, _ := json.Marshal(env.Data)
+			var st StatusResponse
+			if err := json.Unmarshal(body, &st); err != nil {
+				t.Fatalf("decode StatusResponse: %v", err)
+			}
+
+			if st.Overall != tc.want.overall {
+				t.Errorf("Overall = %q, want %q", st.Overall, tc.want.overall)
+			}
+			if env.Flags.Stale != tc.want.stale {
+				t.Errorf("flags.stale = %v, want %v", env.Flags.Stale, tc.want.stale)
+			}
+		})
+	}
+}
+
+// TestRollupOverall_AllUnknownBranch exercises the
+// every-service-is-unknown branch of rollupOverall directly. The
+// http-level tests can't easily synthesise this state because the
+// handler always stamps an "ok" api entry; this unit test pokes
+// rollupOverall with a synthetic services slice so the "unknown"
+// branch (distinct from "down" and from "ok") is pinned.
+func TestRollupOverall_AllUnknownBranch(t *testing.T) {
+	// All three services unknown, no canary trips → overall=unknown.
+	// This is the pure F-0055 evidence-from-prod state: every signal
+	// is unknown + zero LastSeen. Previously rolled to "ok"; now
+	// rolls to "unknown".
+	services := []StatusService{
+		{Name: "api", Status: "unknown"},
+		{Name: "indexer", Status: "unknown"},
+		{Name: "aggregator", Status: "unknown"},
+	}
+	if got := rollupOverall(services, false, false); got != "unknown" {
+		t.Errorf("all-unknown rollup = %q, want unknown", got)
+	}
+
+	// Zero-time LastSeen on a non-api "ok" service is treated as
+	// unknown — guards against a backend returning Status="ok"
+	// with no heartbeat data behind it.
+	services = []StatusService{
+		{Name: "indexer", Status: "ok"}, // zero LastSeen
+	}
+	if got := rollupOverall(services, false, false); got != "unknown" {
+		t.Errorf("zero-time ok rollup = %q, want unknown", got)
+	}
+
+	// A service explicitly marked degraded → overall=degraded.
+	services = []StatusService{
+		{Name: "api", Status: "ok", LastSeen: time.Now()},
+		{Name: "indexer", Status: "degraded", LastSeen: time.Now()},
+	}
+	if got := rollupOverall(services, false, false); got != "degraded" {
+		t.Errorf("any-degraded rollup = %q, want degraded", got)
 	}
 }
