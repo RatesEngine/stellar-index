@@ -1,0 +1,228 @@
+---
+# F-0137 (audit-2026-05-26): closes the drift cluster F-0133..F-0136
+# root cause. `configs/healthchecks/install.sh` is the deploy
+# mechanism for the smoke + heartbeat + sla-probe stack — but it's
+# a MANUAL operator script (grep -rn 'install.sh\|r1-smoke'
+# configs/ansible/ returned empty pre-patch). Every change to a
+# wrapper script or systemd unit under `configs/healthchecks/`
+# required a manual re-run on r1; the deployed `r1-smoke.sh` was
+# 100 LoC + 10 checks behind the repo until the Wave-0 manual
+# re-sync flushed it.
+#
+# This task mirrors what `install.sh` does, but in idempotent
+# Ansible. Three wrapper-script + unit groups, each with its own
+# handler so a touch on `smoke.sh` restarts only `ratesengine-
+# smoke.timer` (not all five timers). The env-file at
+# /etc/default/ratesengine-healthchecks is operator-populated;
+# we provision a placeholder ONLY on first install (`force: false`)
+# so subsequent applies preserve the Healthchecks.io URLs the
+# operator pasted in.
+#
+# After this task lands, every healthchecks/ edit deploys via the
+# regular `ansible-playbook archival-node.yml --tags healthchecks`
+# loop; install.sh stays as the ad-hoc bring-up path for new hosts
+# before they're in inventory (see the deprecation note at the top
+# of that script).
+
+- name: Ensure /opt/ratesengine/healthchecks/ exists
+  ansible.builtin.file:
+    path: /opt/ratesengine/healthchecks
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+
+# ── Wrapper scripts ────────────────────────────────────────────
+#
+# Four shell scripts — three from configs/healthchecks/ plus
+# r1-smoke.sh from scripts/dev/ which the smoke timer's wrapper
+# invokes. Sourcing each via `{{ playbook_dir }}/../../../` keeps
+# a single source of truth (no file duplication under role
+# files/); the same convention 14-ratesengine-services.yml uses
+# to pull binaries from bin/ and migrations from migrations/.
+
+- name: Install heartbeat.sh
+  ansible.builtin.copy:
+    src: "{{ playbook_dir }}/../../../configs/healthchecks/heartbeat.sh"
+    dest: /opt/ratesengine/healthchecks/heartbeat.sh
+    owner: root
+    group: root
+    mode: "0755"
+  notify: Restart ratesengine-heartbeat timers
+
+- name: Install smoke.sh
+  ansible.builtin.copy:
+    src: "{{ playbook_dir }}/../../../configs/healthchecks/smoke.sh"
+    dest: /opt/ratesengine/healthchecks/smoke.sh
+    owner: root
+    group: root
+    mode: "0755"
+  notify: Restart ratesengine-smoke timer
+
+- name: Install r1-smoke.sh
+  # The smoke wrapper invokes /opt/ratesengine/healthchecks/r1-smoke.sh
+  # (see SMOKE_SCRIPT default in smoke.sh) — copying the script
+  # alongside the wrapper means the unit doesn't depend on a repo
+  # checkout being present on r1.
+  ansible.builtin.copy:
+    src: "{{ playbook_dir }}/../../../scripts/dev/r1-smoke.sh"
+    dest: /opt/ratesengine/healthchecks/r1-smoke.sh
+    owner: root
+    group: root
+    mode: "0755"
+  notify: Restart ratesengine-smoke timer
+
+- name: Install sla-probe.sh
+  ansible.builtin.copy:
+    src: "{{ playbook_dir }}/../../../configs/healthchecks/sla-probe.sh"
+    dest: /opt/ratesengine/healthchecks/sla-probe.sh
+    owner: root
+    group: root
+    mode: "0755"
+  notify: Restart ratesengine-sla-probe timer
+
+# ── systemd units ─────────────────────────────────────────────
+#
+# Six units total: heartbeat (template service + timer), smoke
+# (service + timer), sla-probe (service + timer). Static — no
+# Jinja templating needed — so copied verbatim from the repo
+# rather than rendered. Each notify routes the timer-restart
+# handler matching the unit group so a heartbeat-only edit
+# doesn't churn the smoke or sla-probe timers.
+
+- name: Install ratesengine-heartbeat@.service
+  ansible.builtin.copy:
+    src: "{{ playbook_dir }}/../../../configs/healthchecks/ratesengine-heartbeat@.service"
+    dest: /etc/systemd/system/ratesengine-heartbeat@.service
+    owner: root
+    group: root
+    mode: "0644"
+  notify:
+    - Reload systemd
+    - Restart ratesengine-heartbeat timers
+
+- name: Install ratesengine-heartbeat@.timer
+  ansible.builtin.copy:
+    src: "{{ playbook_dir }}/../../../configs/healthchecks/ratesengine-heartbeat@.timer"
+    dest: /etc/systemd/system/ratesengine-heartbeat@.timer
+    owner: root
+    group: root
+    mode: "0644"
+  notify:
+    - Reload systemd
+    - Restart ratesengine-heartbeat timers
+
+- name: Install ratesengine-smoke.service
+  ansible.builtin.copy:
+    src: "{{ playbook_dir }}/../../../configs/healthchecks/ratesengine-smoke.service"
+    dest: /etc/systemd/system/ratesengine-smoke.service
+    owner: root
+    group: root
+    mode: "0644"
+  notify:
+    - Reload systemd
+    - Restart ratesengine-smoke timer
+
+- name: Install ratesengine-smoke.timer
+  ansible.builtin.copy:
+    src: "{{ playbook_dir }}/../../../configs/healthchecks/ratesengine-smoke.timer"
+    dest: /etc/systemd/system/ratesengine-smoke.timer
+    owner: root
+    group: root
+    mode: "0644"
+  notify:
+    - Reload systemd
+    - Restart ratesengine-smoke timer
+
+- name: Install ratesengine-sla-probe.service
+  ansible.builtin.copy:
+    src: "{{ playbook_dir }}/../../../configs/healthchecks/ratesengine-sla-probe.service"
+    dest: /etc/systemd/system/ratesengine-sla-probe.service
+    owner: root
+    group: root
+    mode: "0644"
+  notify:
+    - Reload systemd
+    - Restart ratesengine-sla-probe timer
+
+- name: Install ratesengine-sla-probe.timer
+  ansible.builtin.copy:
+    src: "{{ playbook_dir }}/../../../configs/healthchecks/ratesengine-sla-probe.timer"
+    dest: /etc/systemd/system/ratesengine-sla-probe.timer
+    owner: root
+    group: root
+    mode: "0644"
+  notify:
+    - Reload systemd
+    - Restart ratesengine-sla-probe timer
+
+# ── Env-file (operator-populated) ─────────────────────────────
+#
+# /etc/default/ratesengine-healthchecks holds the five
+# Healthchecks.io URLs (3 heartbeats + 1 smoke + 1 sla-probe).
+# Operator pastes them in on first install; subsequent applies
+# preserve the populated file. `force: false` is the key
+# idempotency knob — without it Ansible would overwrite the
+# populated file with the placeholder every run.
+
+- name: Provision placeholder /etc/default/ratesengine-healthchecks if missing
+  ansible.builtin.copy:
+    dest: /etc/default/ratesengine-healthchecks
+    owner: root
+    group: root
+    mode: "0600"
+    force: false
+    content: |
+      # Healthchecks.io URLs — operator-populated. Re-run of the
+      # archival-node role will NOT overwrite this file (force: false).
+      #
+      # Each is a separate "Check" on healthchecks.io. Empty URL silently
+      # skips the ping (the underlying probe still runs and logs failures
+      # via journalctl, so the timer is useful even before URLs are wired).
+      #
+      # Per-binary heartbeats (60 s cadence, suggested grace 120 s):
+      HEALTHCHECKS_URL_INDEXER=
+      HEALTHCHECKS_URL_AGGREGATOR=
+      HEALTHCHECKS_URL_API=
+      # API surface smoke test (5 min cadence, suggested grace 10 min):
+      HEALTHCHECKS_URL_SMOKE=
+      # SLA probe (RFP latency + freshness; 15 min cadence, grace 30 min):
+      HEALTHCHECKS_URL_SLA_PROBE=
+      # SLA probe tuning (defaults match the binary's flag defaults).
+      # SLA_PROBE_BASE_URL=http://localhost:3000/v1
+      # SLA_PROBE_DURATION=30s
+      # SLA_PROBE_CONCURRENCY=1
+      # SLA_PROBE_PAIR=native,fiat:USD
+
+# ── Enable timers ─────────────────────────────────────────────
+#
+# `enabled: true` makes them survive a reboot; `state: started`
+# brings them up if they aren't already. daemon_reload here is
+# defence-in-depth — the Reload-systemd handler runs at the END
+# of the play; we want the timers usable mid-play if a later
+# task happens to depend on a probe firing.
+
+- name: Enable + start ratesengine-heartbeat timers
+  ansible.builtin.systemd:
+    name: "ratesengine-heartbeat@{{ item }}.timer"
+    state: started
+    enabled: true
+    daemon_reload: true
+  loop:
+    - indexer
+    - aggregator
+    - api
+
+- name: Enable + start ratesengine-smoke timer
+  ansible.builtin.systemd:
+    name: ratesengine-smoke.timer
+    state: started
+    enabled: true
+    daemon_reload: true
+
+- name: Enable + start ratesengine-sla-probe timer
+  ansible.builtin.systemd:
+    name: ratesengine-sla-probe.timer
+    state: started
+    enabled: true
+    daemon_reload: true

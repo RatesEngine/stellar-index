@@ -63,11 +63,34 @@ it:
 
 ## Install on R1
 
+### Production: Ansible role (idempotent)
+
+```sh
+ansible-playbook -i configs/ansible/inventory/r1.yml \
+  configs/ansible/playbooks/archival-node.yml \
+  --tags healthchecks
+```
+
+The role at `configs/ansible/roles/archival-node/tasks/17-ratesengine-healthchecks.yml`
+copies the wrapper scripts + systemd units to r1, provisions the
+env-file placeholder (only if missing — operator URLs are
+preserved across applies), enables the timers, and notifies a
+per-group restart handler so a change to `smoke.sh` only
+restarts `ratesengine-smoke.timer` (not the heartbeat or
+sla-probe timers). Closes the drift gap F-0137 caught in the
+2026-05-26 audit, where every edit under this directory needed a
+manual `install.sh` re-run.
+
+### Ad-hoc: manual installer (new host without inventory yet)
+
 ```sh
 # From a machine with the repo checked out:
 scp -r configs/healthchecks/ root@136.243.90.96:/tmp/
 ssh root@136.243.90.96 'bash /tmp/healthchecks/install.sh'
 ```
+
+Same outcome on a single host, but no drift tracking — only use
+this when the host isn't yet in Ansible inventory.
 
 Then on healthchecks.io, create **five Checks** (F-1267,
 2026-05-13 — was four before the SLA-probe timer joined the

@@ -99,3 +99,25 @@
   ansible.builtin.systemd:
     name: rsyslog
     state: reloaded
+
+# 17-ratesengine-healthchecks — wrapper-script and unit edits
+# notify only the matching timer group, so a touch on smoke.sh
+# doesn't churn the heartbeat or sla-probe timers.
+- name: Restart ratesengine-heartbeat timers
+  ansible.builtin.systemd:
+    name: "ratesengine-heartbeat@{{ item }}.timer"
+    state: restarted
+  loop:
+    - indexer
+    - aggregator
+    - api
+
+- name: Restart ratesengine-smoke timer
+  ansible.builtin.systemd:
+    name: ratesengine-smoke.timer
+    state: restarted
+
+- name: Restart ratesengine-sla-probe timer
+  ansible.builtin.systemd:
+    name: ratesengine-sla-probe.timer
+    state: restarted

@@ -1,6 +1,19 @@
 #!/usr/bin/env bash
 # Install per-binary Healthchecks.io heartbeats on R1.
 #
+# NOTE: this script is the bare-bones manual installer. Production
+# deploys SHOULD use the Ansible role at
+# `configs/ansible/roles/archival-node/tasks/17-ratesengine-healthchecks.yml`
+# which is idempotent and tracks drift. This script remains for
+# ad-hoc bring-up of a new host before Ansible inventory exists.
+#
+# Drift footprint (F-0137 / audit-2026-05-26): every manual re-run
+# of this script was a chance for the deployed copy of a wrapper /
+# unit / r1-smoke.sh to lag the repo. The Ansible task closes that
+# gap by running on every `archival-node` playbook apply with
+# per-group handlers that only restart the timers that actually
+# changed.
+#
 # Idempotent — re-running re-syncs the script + units. The
 # /etc/default/ratesengine-healthchecks env file is created with
 # placeholder values on first run (operator fills in the URLs);
