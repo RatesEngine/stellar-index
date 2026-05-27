@@ -15,6 +15,15 @@ against.
 
 ## [Unreleased]
 
+## [v0.5.0-rc.82] — 2026-05-27
+
+Audit-2026-05-26 Wave-0 + Wave-1 batch. Closes the F-0039 cascade
+chain plus the structural drift cluster (F-0133..F-0142) that made
+it invisible. Operationally r1 is already recovered (disk freed,
+Redis healthy, postgres@15-main restarted, deployed configs synced);
+this binary ships the code-side resilience improvements so the next
+cascade surfaces in minutes instead of hours.
+
 ### Added
 
 - Exporter-down meta-alerts for redis/postgres/pgbackrest/minio so a future cascade surfaces immediately when the metric-producing exporter dies (F-0085).
