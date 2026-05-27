@@ -17,6 +17,7 @@ against.
 
 ### Added
 
+- Density coverage calc (`/v1/diagnostics/ingestion`) now includes the live ledgerstream cursor's coverage from `first_ledger` (newly persisted via migration 0046). Density_pct can now hit 1.0 on a perfectly-backfilled-plus-live-tail source. Previously the calc was backfill-cursor-only and capped at ~0.98 even at perfect ingestion (per `project_density_100pct_goal` mission). The `ingestion_cursors` table gains a `first_ledger` column populated for existing backfill cursors by parsing `from` out of `sub_source`; the live cursor's `first_ledger` is captured by `UpsertCursor`'s INSERT branch and preserved across every advance by the ON CONFLICT DO UPDATE clause. NULL `first_ledger` (pre-migration rows) falls back to `sourceGenesisLedger` so the live span is credited [genesis, last_ledger] until the indexer re-inserts.
 - docs-lint check that fails CI when any /v1/incidents entry has unchecked `[ ]` follow-up checkboxes AND the incident is older than 30 days (F-0099 forcing function). Closes the meta-failure-mode of post-mortem action items rotting indefinitely between recurrences of the same cascade — the 2026-05-10 SEV-2 shipped with 4 `[ ]` items and the same cascade recurred on 2026-05-26 with all four still unchecked.
 
 ### Changed
@@ -25,8 +26,10 @@ against.
 
 ### Fixed
 
+- Indexer's postgres connection pool now sets explicit pool-tuning constants (`internal/storage/timescale.PoolConnMaxLifetime` = 30 min, `PoolConnMaxIdleTime` = 5 min, `PoolMaxOpenConns` = 25, `PoolMaxIdleConns` = 5) via a new extracted `configurePool` helper, and the indexer's `watchPostgresPing` goroutine probes the pool every 60 s emitting `ratesengine_postgres_ping_total{outcome=ok|error}` plus the `ratesengine_postgres_ping_failure_streak` gauge. A new `ratesengine_postgres_ping_failing` page alert (in both `configs/prometheus/rules.r1/storage.yml` and `deploy/monitoring/rules/storage.yml`) fires when the error rate stays above 0.5/s for 2 min, with the new `docs/operations/runbooks/postgres-ping-failing.md`. Previously, a postgres outage that lasted past the natural conn lifetime left dead conns in the pool and the indexer would silently fail writes for hours until manually restarted — root cause of the ~14 h cascade-gap on 2026-05-26-27 (F-0151). The new lifetime forces fresh conns regularly; the ping surfaces stuck pools to alerting in minutes instead of hours.
 - CoinGecko poller default cadence bumped from 60s to 300s; the connector already uses the `/simple/price` batch endpoint, so daily call volume drops from ~1,440/day to ~288/day with ample headroom for the market-cap refresher and divergence reference under a shared demo-tier IP cap. Closes the sustained "poller error … http 429 — backing off 59m59s" loop observed live on r1 (F-0030).
 - `internal/divergence/coingecko.go` now batches per-tick lookups into a single `/simple/price` call instead of one HTTP call per pair. Daily call volume drops from ~25,920 (9 pairs × every-30s tick) to ~2,880 (one batched call × every-30s tick) — well within the demo-tier 10K limit (F-0030 follow-up).
+- `galexie-archive-fill` Phase-1b auto-detection of trailing-edge partial partitions: file-count the latest `PARTIAL_CHECK_WINDOW=4` partitions per hourly fire and re-mirror any local partition that has fewer files than AWS. Closes the F-0158 trailing-partition-stuck failure mode where `comm -23 aws local` treated a partition with 416/64000 files as "present" and never revisited it. Recovered ~150k missing files in `FC42F7FF--62720000-62783999`, `FC43F1FF--62656000-62719999`, `FC44EBFF--62592000-62655999` on r1 same session.
 
 ## [v0.5.0-rc.82] — 2026-05-27
 

@@ -245,116 +245,153 @@ func TestComputeSourceDensity(t *testing.T) {
 			// A source that's never been backfilled stays 0 even
 			// though live ingest is running — live-only coverage
 			// from the deploy ledger is not "we have its history",
-			// and there's no anchor proving [genesis, liveLow].
+			// and the cursor-first projection requires at least
+			// one backfill anchor proving the decoder ran for this
+			// source. extendWithLiveTail's len(merged)==0 early-
+			// return enforces this guard.
 			wantCovered:    0,
 			wantDensityMin: 0.0,
 			wantDensityMax: 0.0,
 		},
 		{
-			name: "live tail closes the head band on top of backfill",
+			// Same as above but with FirstLedger populated — the
+			// guard is len(merged)==0, NOT FirstLedger==0, so a
+			// populated FirstLedger MUST NOT bypass the no-backfill
+			// guard.
+			name: "live cursor with FirstLedger but NO backfill anchor → still 0",
 			cursors: []timescale.Cursor{
-				{Source: "backfill", Sub: "1-800:sdex", LastLedger: 800, UpdatedAt: now},
-				{Source: "ledgerstream", Sub: "", LastLedger: 1000, UpdatedAt: now},
+				{Source: "ledgerstream", Sub: "", FirstLedger: 1, LastLedger: 1000, UpdatedAt: now},
 			},
 			source:         "sdex",
 			genesis:        1,
 			tip:            1000,
-			wantCovered:    1000, // [1,800] ∪ live-tail [800,1000]
+			wantCovered:    0,
+			wantDensityMin: 0.0,
+			wantDensityMax: 0.0,
+		},
+		{
+			name: "live tail with FirstLedger closes the full backfill→tip span",
+			cursors: []timescale.Cursor{
+				{Source: "backfill", Sub: "1-800:sdex", LastLedger: 800, UpdatedAt: now},
+				{Source: "ledgerstream", Sub: "", FirstLedger: 1, LastLedger: 1000, UpdatedAt: now},
+			},
+			source:         "sdex",
+			genesis:        1,
+			tip:            1000,
+			wantCovered:    1000, // [1,800] ∪ live [1,1000] = [1,1000]
 			wantDensityMin: 1.0,
 			wantDensityMax: 1.0,
 		},
 		{
-			// 2026-05-20: was "live tail bridges an interior sub-tip gap".
-			// Bridging removed because it over-credited sources whose
-			// live ingest only walked the head band (e.g. soroswap-router
-			// + defindex added to enabled_sources after the indexer's
-			// live cursor had already crossed the bridged ledgers — see
-			// extendWithLiveTail's function-level comment).
-			name: "interior sub-tip gap is NOT bridged (post-2026-05-20 honesty)",
+			// Migration 0046: when a live cursor exposes FirstLedger,
+			// the live span [FirstLedger, LastLedger] gets merged into
+			// the coverage union directly. A non-bridging scenario:
+			// FirstLedger=500 means live ingest only walked [500, 1000]
+			// (e.g. soroswap-router enabled at L500 with live cursor
+			// already past). The pre-FirstLedger interior gap [201, 499]
+			// stays uncovered — the FIX for the over-credit case the
+			// old head-band heuristic introduced.
+			name: "interior gap NOT bridged when live FirstLedger sits above it",
 			cursors: []timescale.Cursor{
 				{Source: "backfill", Sub: "1-200:sdex", LastLedger: 200, UpdatedAt: now},
 				{Source: "backfill", Sub: "500-800:sdex", LastLedger: 800, UpdatedAt: now},
-				{Source: "ledgerstream", Sub: "", LastLedger: 1000, UpdatedAt: now},
+				{Source: "ledgerstream", Sub: "", FirstLedger: 500, LastLedger: 1000, UpdatedAt: now},
 			},
 			source:  "sdex",
 			genesis: 1,
 			tip:     1000,
-			// [1,200] ∪ [500,800] ∪ head-band [800,1000] = [1,200] ∪
+			// [1,200] ∪ [500,800] ∪ live [500,1000] = [1,200] ∪
 			// [500,1000]. Hole [201,499] stays uncovered.
 			wantCovered:    200 + 501,
 			wantDensityMin: 0.700,
 			wantDensityMax: 0.702,
 		},
 		{
-			// 2026-05-20: was "fragmented union: disjoint high
-			// gap-backfill island no longer caps density". Bridging
-			// removed; the disjoint island case now reports honestly.
-			// Operators close the [301,699] gap by re-running an
-			// actual backfill over that range instead of silently
-			// claiming live ingest covered it.
-			name: "fragmented union: disjoint high gap-backfill island reports honest under-coverage",
+			// Migration-0046 NULL fallback: FirstLedger=0 (pre-rollout
+			// row) → fall back to genesis. This is the 100%-mission
+			// path on r1 today: the live cursor pre-dates the column,
+			// and the operator's intent is "live ingest has been
+			// running since genesis", so we credit [genesis, last].
+			// Once UpsertCursor's INSERT branch lands and the live
+			// indexer re-creates the cursor (via a deliberate reset),
+			// the real FirstLedger replaces the fallback.
+			name: "NULL FirstLedger falls back to genesis (pre-migration rollout)",
 			cursors: []timescale.Cursor{
 				{Source: "backfill", Sub: "1-300:sdex", LastLedger: 300, UpdatedAt: now},
 				{Source: "backfill", Sub: "700-750:sdex", LastLedger: 750, UpdatedAt: now},
-				{Source: "ledgerstream", Sub: "", LastLedger: 1000, UpdatedAt: now},
-			},
-			source:  "sdex",
-			genesis: 1,
-			tip:     1000,
-			// [1,300] ∪ [700,750] ∪ head-band [750,1000] =
-			// [1,300] ∪ [700,1000]. Gap [301,699] stays uncovered.
-			wantCovered:    300 + 301,
-			wantDensityMin: 0.600,
-			wantDensityMax: 0.602,
-		},
-		{
-			name: "interior gap whose upper bracket is above the live cursor is NOT bridged",
-			cursors: []timescale.Cursor{
-				{Source: "backfill", Sub: "1-200:sdex", LastLedger: 200, UpdatedAt: now},
-				{Source: "backfill", Sub: "500-800:sdex", LastLedger: 800, UpdatedAt: now},
-				{Source: "ledgerstream", Sub: "", LastLedger: 400, UpdatedAt: now},
-			},
-			source:  "sdex",
-			genesis: 1,
-			tip:     1000,
-			// liveTop=400 < upper bracket start 500 → the gap is not
-			// proven within the live span; left open. No head band
-			// either (400 ≤ backfill top 800). = [1,200] ∪ [500,800].
-			wantCovered:    200 + 301,
-			wantDensityMin: 0.500,
-			wantDensityMax: 0.502,
-		},
-		{
-			name: "lower boundary [genesis, firstBackfillStart] is never credited",
-			cursors: []timescale.Cursor{
-				{Source: "backfill", Sub: "500-800:sdex", LastLedger: 800, UpdatedAt: now},
-				{Source: "ledgerstream", Sub: "", LastLedger: 1000, UpdatedAt: now},
-			},
-			source:  "sdex",
-			genesis: 1,
-			tip:     1000,
-			// Single backfill block has no lower neighbour, so [1,499]
-			// is the lower boundary, not an adjacent-pair interior gap
-			// → stays uncovered even though live is at tip. Head band
-			// [800,1000] applies. = [500,1000]. (Guards the honest
-			// "never-backfilled-low source reads low" property, e.g.
-			// band's pre-deploy early history under the #10 genesis.)
-			wantCovered:    501,
-			wantDensityMin: 0.500,
-			wantDensityMax: 0.502,
-		},
-		{
-			name: "live below backfill top → no change",
-			cursors: []timescale.Cursor{
-				{Source: "backfill", Sub: "1-900:sdex", LastLedger: 900, UpdatedAt: now},
-				{Source: "ledgerstream", Sub: "", LastLedger: 500, UpdatedAt: now},
+				{Source: "ledgerstream", Sub: "", LastLedger: 1000, UpdatedAt: now}, // FirstLedger=0 → fallback
 			},
 			source:         "sdex",
 			genesis:        1,
 			tip:            1000,
-			wantCovered:    900, // live tail 500 ≤ backfill top 900
+			wantCovered:    1000, // fallback live [1,1000] swallows the [301,699] island gap
+			wantDensityMin: 1.0,
+			wantDensityMax: 1.0,
+		},
+		{
+			name: "live cursor below tip with FirstLedger=genesis still covers full span",
+			cursors: []timescale.Cursor{
+				{Source: "backfill", Sub: "1-200:sdex", LastLedger: 200, UpdatedAt: now},
+				{Source: "backfill", Sub: "500-800:sdex", LastLedger: 800, UpdatedAt: now},
+				{Source: "ledgerstream", Sub: "", FirstLedger: 1, LastLedger: 400, UpdatedAt: now},
+			},
+			source:  "sdex",
+			genesis: 1,
+			tip:     1000,
+			// live [1,400] ∪ backfill [1,200] ∪ [500,800] =
+			// [1,400] ∪ [500,800] = 400 + 301 = 701.
+			wantCovered:    701,
+			wantDensityMin: 0.700,
+			wantDensityMax: 0.702,
+		},
+		{
+			// The original "lower boundary never credited" test
+			// pre-dated migration 0046. Under 100%-mission semantics
+			// the live cursor's [FirstLedger, last] band closes the
+			// [genesis, firstBackfillStart] sub-band exactly. Test
+			// renamed to reflect the new contract.
+			name: "100% mission: live FirstLedger=genesis + backfill→tip → 100%",
+			cursors: []timescale.Cursor{
+				{Source: "backfill", Sub: "500-1000:sdex", LastLedger: 1000, UpdatedAt: now},
+				{Source: "ledgerstream", Sub: "", FirstLedger: 1, LastLedger: 1000, UpdatedAt: now},
+			},
+			source:         "sdex",
+			genesis:        1,
+			tip:            1000,
+			wantCovered:    1000, // backfill [500,1000] ∪ live [1,1000] = [1,1000]
+			wantDensityMin: 1.0,
+			wantDensityMax: 1.0,
+		},
+		{
+			name: "live below backfill top → live span still credited",
+			cursors: []timescale.Cursor{
+				{Source: "backfill", Sub: "1-900:sdex", LastLedger: 900, UpdatedAt: now},
+				{Source: "ledgerstream", Sub: "", FirstLedger: 1, LastLedger: 500, UpdatedAt: now},
+			},
+			source:         "sdex",
+			genesis:        1,
+			tip:            1000,
+			wantCovered:    900, // backfill [1,900] ∪ live [1,500] = [1,900]
 			wantDensityMin: 0.899,
 			wantDensityMax: 0.901,
+		},
+		{
+			// Defensive: live cursor's FirstLedger is somehow ABOVE
+			// LastLedger (shouldn't happen — UpsertCursor's INSERT
+			// path sets them equal, and the UPDATE path only advances
+			// LastLedger). Belt-and-braces guard: don't credit
+			// anything for a malformed span.
+			name: "malformed live span (FirstLedger > LastLedger) credits nothing extra",
+			cursors: []timescale.Cursor{
+				{Source: "backfill", Sub: "1-500:sdex", LastLedger: 500, UpdatedAt: now},
+				{Source: "ledgerstream", Sub: "", FirstLedger: 900, LastLedger: 100, UpdatedAt: now},
+			},
+			source:         "sdex",
+			genesis:        1,
+			tip:            1000,
+			wantCovered:    500, // only backfill [1,500] survives
+			wantDensityMin: 0.499,
+			wantDensityMax: 0.501,
 		},
 		{
 			name: "range extends past tip → clamped",

@@ -240,6 +240,187 @@ func TestStoreRoundTrip(t *testing.T) {
 	if cur.LastLedger != 52_430_200 {
 		t.Errorf("advance after regression-attempt lost: got %d", cur.LastLedger)
 	}
+
+	// ─── first_ledger semantics (migration 0046) ────────────────
+	// The cursor we created above started at last_ledger=52_430_001;
+	// migration 0046 should have captured that as first_ledger on
+	// the INSERT branch of UpsertCursor and preserved it across
+	// every subsequent advance.
+	if cur.FirstLedger != 52_430_001 {
+		t.Errorf("FirstLedger not captured on insert / drifted across updates: got %d, want 52430001",
+			cur.FirstLedger)
+	}
+
+	// A brand-new (source, sub) pair: first_ledger == last_ledger
+	// on the very first write.
+	if err := store.UpsertCursor(ctx, "phoenix", "", 60_000_000); err != nil {
+		t.Fatalf("UpsertCursor phoenix: %v", err)
+	}
+	phoenixCur, err := store.GetCursor(ctx, "phoenix", "")
+	if err != nil {
+		t.Fatalf("GetCursor phoenix: %v", err)
+	}
+	if phoenixCur.FirstLedger != 60_000_000 {
+		t.Errorf("fresh cursor FirstLedger = %d, want 60000000", phoenixCur.FirstLedger)
+	}
+	if phoenixCur.LastLedger != 60_000_000 {
+		t.Errorf("fresh cursor LastLedger = %d, want 60000000", phoenixCur.LastLedger)
+	}
+
+	// Advance the phoenix cursor and confirm FirstLedger sticks
+	// at the original value — the SET clause must NOT touch it.
+	if err := store.UpsertCursor(ctx, "phoenix", "", 60_500_000); err != nil {
+		t.Fatalf("UpsertCursor phoenix advance: %v", err)
+	}
+	phoenixCur, _ = store.GetCursor(ctx, "phoenix", "")
+	if phoenixCur.FirstLedger != 60_000_000 {
+		t.Errorf("FirstLedger drifted on advance: got %d, want 60000000 (anchor must be preserved)",
+			phoenixCur.FirstLedger)
+	}
+	if phoenixCur.LastLedger != 60_500_000 {
+		t.Errorf("LastLedger after advance = %d, want 60500000", phoenixCur.LastLedger)
+	}
+}
+
+// TestCursorFirstLedgerBackfillMigration verifies migration 0046's
+// UPDATE statement — for every existing backfill cursor at the time
+// the migration ran, first_ledger should equal the `from` integer
+// parsed out of sub_source. We simulate the "row predates migration
+// 0046" case by inserting a row directly via SQL (bypassing
+// UpsertCursor's INSERT-time first_ledger capture), leaving its
+// first_ledger NULL, then re-applying the migration UPDATE logic.
+func TestCursorFirstLedgerBackfillMigration(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+	defer cancel()
+
+	dsn := startTimescale(t, ctx)
+	applyMigrations(t, dsn)
+
+	db, err := sql.Open("postgres", dsn)
+	if err != nil {
+		t.Fatalf("sql.Open: %v", err)
+	}
+	defer func() { _ = db.Close() }()
+
+	// Simulate a pre-migration-0046 row: insert directly with NULL
+	// first_ledger. (Post-migration the production path always
+	// writes via UpsertCursor which captures first_ledger.)
+	_, err = db.ExecContext(ctx,
+		`INSERT INTO ingestion_cursors (source, sub_source, first_ledger, last_ledger)
+		   VALUES ('backfill', '50500000-53174999:soroswap', NULL, 51_000_000)`,
+	)
+	if err != nil {
+		t.Fatalf("insert pre-migration row: %v", err)
+	}
+	_, err = db.ExecContext(ctx,
+		`INSERT INTO ingestion_cursors (source, sub_source, first_ledger, last_ledger)
+		   VALUES ('backfill', 'malformed-no-decoder', NULL, 1)`,
+	)
+	if err != nil {
+		t.Fatalf("insert malformed row: %v", err)
+	}
+
+	// Re-apply migration 0046's UPDATE logic.
+	res, err := db.ExecContext(ctx, `
+		UPDATE ingestion_cursors
+		   SET first_ledger = split_part(sub_source, '-', 1)::integer
+		 WHERE source = 'backfill'
+		   AND sub_source ~ '^[0-9]+-[0-9]+:.+$'
+		   AND first_ledger IS NULL
+	`)
+	if err != nil {
+		t.Fatalf("re-apply migration UPDATE: %v", err)
+	}
+	affected, _ := res.RowsAffected()
+	if affected != 1 {
+		t.Errorf("UPDATE affected %d rows, want 1 (only the soroswap range matches the regex)", affected)
+	}
+
+	// Verify the soroswap range got 50500000.
+	var firstLedger sql.NullInt64
+	err = db.QueryRowContext(ctx,
+		`SELECT first_ledger FROM ingestion_cursors
+		  WHERE source = 'backfill' AND sub_source = '50500000-53174999:soroswap'`,
+	).Scan(&firstLedger)
+	if err != nil {
+		t.Fatalf("select soroswap first_ledger: %v", err)
+	}
+	if !firstLedger.Valid || firstLedger.Int64 != 50_500_000 {
+		t.Errorf("first_ledger = %v, want 50500000", firstLedger)
+	}
+
+	// Malformed sub_source: regex filter skipped it, first_ledger
+	// stays NULL (better than silently writing 0).
+	err = db.QueryRowContext(ctx,
+		`SELECT first_ledger FROM ingestion_cursors
+		  WHERE source = 'backfill' AND sub_source = 'malformed-no-decoder'`,
+	).Scan(&firstLedger)
+	if err != nil {
+		t.Fatalf("select malformed first_ledger: %v", err)
+	}
+	if firstLedger.Valid {
+		t.Errorf("malformed first_ledger = %v, want NULL", firstLedger.Int64)
+	}
+}
+
+// TestCursorFirstLedgerMigrationReversible verifies migration 0046
+// can be rolled back without data loss on the rest of the table —
+// dropping the column doesn't disturb existing (source, sub_source,
+// last_ledger) rows.
+func TestCursorFirstLedgerMigrationReversible(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+	defer cancel()
+
+	dsn := startTimescale(t, ctx)
+	applyMigrations(t, dsn)
+
+	db, err := sql.Open("postgres", dsn)
+	if err != nil {
+		t.Fatalf("sql.Open: %v", err)
+	}
+	defer func() { _ = db.Close() }()
+
+	// Seed a row via the production path so first_ledger is set.
+	store, err := timescale.Open(ctx, dsn)
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	defer func() { _ = store.Close() }()
+	if err := store.UpsertCursor(ctx, "comet", "", 51_500_000); err != nil {
+		t.Fatalf("UpsertCursor: %v", err)
+	}
+
+	// Roll the column back via the down migration's DROP COLUMN.
+	if _, err := db.ExecContext(ctx, `ALTER TABLE ingestion_cursors DROP COLUMN first_ledger`); err != nil {
+		t.Fatalf("down migration ALTER DROP COLUMN: %v", err)
+	}
+
+	// last_ledger should still be there.
+	var lastLedger int64
+	err = db.QueryRowContext(ctx,
+		`SELECT last_ledger FROM ingestion_cursors WHERE source = 'comet' AND sub_source = ''`,
+	).Scan(&lastLedger)
+	if err != nil {
+		t.Fatalf("select last_ledger after down: %v", err)
+	}
+	if lastLedger != 51_500_000 {
+		t.Errorf("post-rollback last_ledger = %d, want 51500000", lastLedger)
+	}
+
+	// Column should be gone.
+	var exists bool
+	err = db.QueryRowContext(ctx, `
+		SELECT EXISTS (
+		  SELECT 1 FROM information_schema.columns
+		   WHERE table_name = 'ingestion_cursors' AND column_name = 'first_ledger'
+		)
+	`).Scan(&exists)
+	if err != nil {
+		t.Fatalf("information_schema check: %v", err)
+	}
+	if exists {
+		t.Error("first_ledger column still present after down migration")
+	}
 }
 
 // TestInsertTrade_MultiOpSameTxBothLand covers the most common

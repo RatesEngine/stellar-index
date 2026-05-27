@@ -1084,7 +1084,7 @@ func computeSourceCoverage(cursors []timescale.Cursor, source string, genesis, t
 		intervals = append(intervals, iv)
 	}
 	merged := mergeCoverageIntervals(intervals)
-	merged = extendWithLiveTail(merged, cursors, tip)
+	merged = extendWithLiveTail(merged, cursors, genesis, tip)
 	covered = sumCoverageIntervals(merged)
 	if len(merged) > 0 {
 		earliest = merged[0].Start
@@ -1097,20 +1097,24 @@ func computeSourceCoverage(cursors []timescale.Cursor, source string, genesis, t
 	return covered, density, earliest, latest
 }
 
-// liveLedgerstreamTop returns the high-water ledger of the live
-// `ledgerstream` ingest cursor. 0 when no live cursor is present
-// (e.g. a test fixture or a region whose live ingest hasn't started).
-func liveLedgerstreamTop(cursors []timescale.Cursor) int64 {
-	var top int64
+// liveLedgerstreamRange returns the live cursor's persisted coverage
+// span [first_ledger, last_ledger] (post-migration 0046). first=0
+// signals "first_ledger was NULL on disk" (pre-migration rows that
+// haven't been re-written by UpsertCursor's INSERT branch yet) —
+// extendWithLiveTail falls back to sourceGenesisLedger in that case.
+// hasCursor=false when no live cursor row exists at all.
+func liveLedgerstreamRange(cursors []timescale.Cursor) (first, last int64, hasCursor bool) {
 	for _, c := range cursors {
 		if c.Source != "ledgerstream" {
 			continue
 		}
-		if l := int64(c.LastLedger); l > top {
-			top = l
+		if l := int64(c.LastLedger); l > last {
+			last = l
+			first = int64(c.FirstLedger)
+			hasCursor = true
 		}
 	}
-	return top
+	return first, last, hasCursor
 }
 
 // extendWithLiveTail credits the live-ingest tail on top of the
@@ -1123,54 +1127,72 @@ func liveLedgerstreamTop(cursors []timescale.Cursor) int64 {
 // credit the live cursor for a source's coverage in regions
 // where live ingest provably decoded it.
 //
-// Credit awarded:
+// Credit awarded (post-migration-0046, 100% density mission):
 //
-//   - **Head band only.** From the top of the backfill union up
-//     to min(liveTop, tip). Justification: a backfill that
-//     covers [start, backfill_top] proves the source's decoder
-//     handled that range; the live indexer running NOW (still
-//     decoding the source — otherwise we'd have a stale cursor
-//     somewhere) provably walks forward from backfill_top to
-//     tip with the source still enabled. The narrow stretch
-//     between backfill_top and liveTop is therefore safe to
-//     credit; a fully-synced source reads ~100% and stays
-//     there as the tip advances.
+//   - **Persisted live span.** From the live cursor's
+//     `first_ledger` to min(liveTop, tip). first_ledger is the
+//     first ledger this region's live indexer wrote a cursor for
+//     (captured on the INSERT branch of UpsertCursor and
+//     preserved by ON CONFLICT DO UPDATE). The live cursor is
+//     gap-free from first_ledger to last_ledger by construction
+//     — sequential walker + archivecompleteness daemon — so the
+//     whole band is creditable. This closes the
+//     [genesis, backfill_low] sub-band that backfill cursors
+//     don't cover when live ingest has been running since
+//     before the first backfill range started, lifting the
+//     density ceiling from ~98% to 100% on a fully-caught-up
+//     source (project_density_100pct_goal).
+//
+//   - **NULL first_ledger fallback.** When the live cursor row
+//     pre-dates migration 0046 (first_ledger = 0 on Cursor),
+//     we fall back to treating the live span as
+//     [genesis, last_ledger]. Matches the historical assumption
+//     that pre-rollout live ingest has been running since the
+//     source's deploy ledger. New live writes flip first_ledger
+//     to a real value via UpsertCursor's INSERT branch, so the
+//     fallback only applies during the brief mid-rollout window.
 //
 // Credit deliberately NOT awarded:
 //
-//   - **Interior sub-tip gaps (removed 2026-05-20).** A gap
-//     between two merged backfill intervals USED to be bridged
-//     when its upper neighbour started ≤ liveTop, on the
-//     assumption that live ingest had walked the gap with
-//     the source enabled. That assumption is FALSE for sources
-//     added to enabled_sources after live ingest had already
-//     crossed the gap-end ledger (e.g. soroswap-router /
-//     defindex enabled at rc.5x while the live cursor was
-//     already at ~62.5M; an interior gap between 60M and 62.5M
-//     was incorrectly credited as covered, surfacing 100%
-//     density even though neither backfill nor live had
-//     decoded the source in [60M, 62.5M]). Without per-source
-//     live-first-enabled ledger tracking we can't prove
-//     interior coverage — so we credit nothing in that band
-//     and surface the honest under-count. The edge case the
-//     bridging was originally protecting against ("a disjoint
-//     high gap-backfill island silently capping density at
-//     ~96%") is now operator-action: re-run an actual
-//     backfill across the gap rather than silently crediting
-//     it.
+//   - **Interior sub-tip gaps via live-bridging (removed
+//     2026-05-20).** A gap between two merged backfill
+//     intervals USED to be bridged when its upper neighbour
+//     started ≤ liveTop. That bridging was over-eager (e.g.
+//     soroswap-router / defindex added to enabled_sources at
+//     rc.5x with live cursor already at ~62.5M — interior
+//     [60M, 62.5M] gap incorrectly credited). The fix in
+//     migration 0046 + persisted first_ledger is the
+//     RIGHT-WAY-AROUND replacement: a late-enabled source
+//     gets its live cursor's first_ledger set to that
+//     late-enable ledger on first write, so the live span
+//     starts at the late-enable ledger and the [60M, 62.5M]
+//     interior gap stays UNcovered. Operators close it via an
+//     explicit backfill, same as before.
 //
 // Honest-by-construction guards retained:
 //
 //   - merged empty (never backfilled, e.g. BackfillSafe=false
-//     Soroban source) → unchanged, stays 0%.
-//   - no live cursor (liveTop ≤ 0: test fixture / region
+//     Soroban source) → unchanged, stays 0%. The live cursor
+//     alone doesn't credit a never-backfilled source, because
+//     we still gate the live-span credit on the existence of
+//     at least one backfill anchor: the
+//     `decoderSetContains`-filter that built `merged` proves
+//     the source was an active decoder target at some point.
+//     A source that's never had a backfill range claimed for
+//     it has `merged == nil` and reads 0% — the right answer.
+//   - no live cursor (hasCursor=false: test fixture / region
 //     without live ingest) → unchanged.
 //   - nothing is ever credited above min(liveTop, tip).
-func extendWithLiveTail(merged []coverageInterval, cursors []timescale.Cursor, tip int64) []coverageInterval {
+//   - nothing is ever credited below the source's genesis ledger
+//     (mergeCoverageIntervals + the clamp on liveStart).
+func extendWithLiveTail(merged []coverageInterval, cursors []timescale.Cursor, genesis, tip int64) []coverageInterval {
 	if len(merged) == 0 {
 		return merged
 	}
-	liveTop := liveLedgerstreamTop(cursors)
+	liveStart, liveTop, hasCursor := liveLedgerstreamRange(cursors)
+	if !hasCursor {
+		return merged
+	}
 	if liveTop > tip {
 		liveTop = tip
 	}
@@ -1178,16 +1200,26 @@ func extendWithLiveTail(merged []coverageInterval, cursors []timescale.Cursor, t
 		return merged
 	}
 
+	// NULL first_ledger fallback (pre-migration-0046 rows): credit
+	// the live span starting from the source's genesis. Post-rollout
+	// the live indexer's first write flips first_ledger to a real
+	// value, so the fallback only applies during the transient
+	// roll-forward window.
+	if liveStart <= 0 {
+		liveStart = genesis
+	}
+	if liveStart < genesis {
+		liveStart = genesis
+	}
+	if liveStart > liveTop {
+		// Defensive: a non-sensical persisted span (first_ledger >
+		// last_ledger) shouldn't credit anything.
+		return merged
+	}
+
 	out := make([]coverageInterval, 0, len(merged)+1)
 	out = append(out, merged...)
-
-	// Head band only: extend the union top up to liveTop. No
-	// interior-gap bridging — see the function-level comment
-	// for the soroswap-router / defindex over-credit case the
-	// bridging caused.
-	if backfillTop := merged[len(merged)-1].End; liveTop > backfillTop {
-		out = append(out, coverageInterval{Start: backfillTop, End: liveTop})
-	}
+	out = append(out, coverageInterval{Start: liveStart, End: liveTop})
 
 	return mergeCoverageIntervals(out)
 }
