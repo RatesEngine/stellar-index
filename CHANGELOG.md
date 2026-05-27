@@ -17,6 +17,7 @@ against.
 
 ### Added
 
+- `/v1/ohlc` now supports multi-bar series via `interval=1m|5m|15m|30m|1h|4h|1d|1w` + `limit=N` (max 1000, default 100). Closes the CG/CMC parity gap where consumers expected a series response instead of a single bar (F-0071). Single-bar behaviour preserved when `interval` is unset. Multi-bar mode reads the closed-bucket `prices_<N>` CAGGs (with re-bucketing via `time_bucket` for 5m/30m ← `prices_1m` and 4h ← `prices_1h`); the in-progress bucket is excluded per ADR-0015. Empty series returns 200 + `intervals: []` (NOT 404 — series clients expect a stable shape). Wire fields are compact (`t/o/h/l/c/v_base/v_quote/n`) matching CoinGecko / CoinMarketCap conventions.
 - Density coverage calc (`/v1/diagnostics/ingestion`) now includes the live ledgerstream cursor's coverage from `first_ledger` (newly persisted via migration 0046). Density_pct can now hit 1.0 on a perfectly-backfilled-plus-live-tail source. Previously the calc was backfill-cursor-only and capped at ~0.98 even at perfect ingestion (per `project_density_100pct_goal` mission). The `ingestion_cursors` table gains a `first_ledger` column populated for existing backfill cursors by parsing `from` out of `sub_source`; the live cursor's `first_ledger` is captured by `UpsertCursor`'s INSERT branch and preserved across every advance by the ON CONFLICT DO UPDATE clause. NULL `first_ledger` (pre-migration rows) falls back to `sourceGenesisLedger` so the live span is credited [genesis, last_ledger] until the indexer re-inserts.
 - docs-lint check that fails CI when any /v1/incidents entry has unchecked `[ ]` follow-up checkboxes AND the incident is older than 30 days (F-0099 forcing function). Closes the meta-failure-mode of post-mortem action items rotting indefinitely between recurrences of the same cascade — the 2026-05-10 SEV-2 shipped with 4 `[ ]` items and the same cascade recurred on 2026-05-26 with all four still unchecked.
 
@@ -67,6 +68,7 @@ cascade surfaces in minutes instead of hours.
 
 - Signup IP throttle + global rate-limit now fail-CLOSED with HTTP 503 + Retry-After after 30s of sustained Redis errors (was fail-OPEN regardless of duration, F-0049/F-0050/F-0149/F-0150). Transient blips < 30s still fail-OPEN for UX. Dwell-time configurable via `auth.SignupIPThrottleOptions.DwellTime` and `ratelimit.WithDwellTime`; negative value preserves legacy fail-open-always for operators who explicitly opt out.
 - SHA-pin first-party GitHub Actions (`actions/checkout`, `actions/setup-go`) and add `github-actions` ecosystem to Dependabot so SHA pins refresh automatically (F-0056, F-0058).
+- Bump `aws-sdk-go-v2/{aws/protocol/eventstream, service/s3}` past GHSA-xmrv-pmrh-hhx2 (EventStream decoder DoS panic on malformed header value-type byte). Bump `postcss` past GHSA-qx2v-qp2m-jg93 (XSS via unescaped `</style>` in CSS stringify output) across all 3 `web/` packages via `pnpm.overrides` (Next.js still pins the vulnerable transitive). Closes 5 remaining dependabot moderate-severity alerts.
 
 ## [v0.5.0-rc.81] — 2026-05-26
 
