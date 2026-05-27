@@ -103,6 +103,9 @@ func TestParseAsset(t *testing.T) {
 		wantErr bool
 	}{
 		{"native", c.NativeAsset(), false},
+		{"XLM", c.NativeAsset(), false},    // F-0024 shorthand
+		{"xlm", c.NativeAsset(), false},    // F-0024 case-insensitive
+		{"NATIVE", c.NativeAsset(), false}, // F-0024 case-insensitive
 		{"USDC-" + usdcIssuer, mustClassic("USDC", usdcIssuer), false},
 		{"USDC:" + usdcIssuer, mustClassic("USDC", usdcIssuer), false}, // colon alias
 		{xlmSAC, mustSoroban(xlmSAC), false},
