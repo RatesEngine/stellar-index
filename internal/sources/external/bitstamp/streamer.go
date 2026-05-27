@@ -7,6 +7,9 @@ import (
 	"fmt"
 	"log/slog"
 	"math/rand"
+	"net"
+	"net/http"
+	"strings"
 	"time"
 
 	"github.com/coder/websocket"
@@ -15,6 +18,11 @@ import (
 	"github.com/RatesEngine/rates-engine/internal/obs"
 	"github.com/RatesEngine/rates-engine/internal/sources/external"
 )
+
+// healthyConnectionThreshold — a connection that lived this long
+// before disconnecting is considered healthy, and the next reconnect
+// resets backoff to InitialBackoff. F-0029.
+const healthyConnectionThreshold = 5 * time.Minute
 
 // Streamer implements external.Streamer for Bitstamp. One
 // connection per process; sends N subscribe frames on connect
@@ -37,7 +45,7 @@ func NewStreamer(pairMap map[string]canonical.Pair) *Streamer {
 	return &Streamer{
 		PairMap:        pairMap,
 		Endpoint:       WSEndpoint,
-		InitialBackoff: 1 * time.Second,
+		InitialBackoff: 5 * time.Second,
 		MaxBackoff:     60 * time.Second,
 	}
 }
@@ -81,22 +89,33 @@ func (s *Streamer) Start(ctx context.Context, pairs []canonical.Pair) (<-chan ca
 func (s *Streamer) run(ctx context.Context, symbols []string, logger *slog.Logger, out chan<- canonical.Trade) {
 	defer close(out)
 
-	backoff := s.InitialBackoff
-	if backoff <= 0 {
-		backoff = 1 * time.Second
+	initialBackoff := s.InitialBackoff
+	if initialBackoff <= 0 {
+		initialBackoff = 5 * time.Second
 	}
 	maxBackoff := s.MaxBackoff
 	if maxBackoff <= 0 {
 		maxBackoff = 60 * time.Second
 	}
+	backoff := initialBackoff
 
 	for {
 		if ctx.Err() != nil {
 			return
 		}
+		connectedAt := time.Now()
 		err := s.runOnce(ctx, symbols, out)
 		if ctx.Err() != nil {
 			return
+		}
+		lifetime := time.Since(connectedAt)
+		reason := classifyDisconnect(err)
+		obs.CEXStreamDisconnectTotal.WithLabelValues(SourceName, reason).Inc()
+
+		// F-0029: a healthy long-lived connection rewinds backoff so
+		// the next cycle isn't penalised for ancient prior failures.
+		if lifetime >= healthyConnectionThreshold {
+			backoff = initialBackoff
 		}
 		// Server-initiated reconnect is benign — log at info, use
 		// initial backoff (don't grow the backoff window for a
@@ -104,13 +123,11 @@ func (s *Streamer) run(ctx context.Context, symbols []string, logger *slog.Logge
 		if errors.Is(err, ErrRequestedReconnect) {
 			logger.Info("bitstamp reconnecting per server request",
 				"source", SourceName)
-			backoff = s.InitialBackoff
-			if backoff <= 0 {
-				backoff = 1 * time.Second
-			}
+			backoff = initialBackoff
 		} else {
 			logger.Warn("bitstamp stream disconnected, reconnecting",
-				"source", SourceName, "err", err, "backoff", backoff)
+				"source", SourceName, "err", err,
+				"lifetime", lifetime, "backoff", backoff, "reason", reason)
 		}
 		select {
 		case <-ctx.Done():
@@ -124,11 +141,55 @@ func (s *Streamer) run(ctx context.Context, symbols []string, logger *slog.Logge
 	}
 }
 
+// classifyDisconnect maps a runOnce error into a small reason label
+// for the disconnect counter. See binance.classifyDisconnect for the
+// same logic — duplicated rather than shared so this package stays
+// independently auditable. F-0029.
+func classifyDisconnect(err error) string {
+	if err == nil {
+		return "other"
+	}
+	if errors.Is(err, ErrRequestedReconnect) {
+		return "server_requested"
+	}
+	msg := err.Error()
+	switch {
+	case strings.Contains(msg, "connection reset by peer"):
+		return "reset"
+	case strings.Contains(msg, "broken pipe"):
+		return "broken_pipe"
+	case strings.Contains(msg, "i/o timeout"), strings.Contains(msg, "timeout"):
+		return "timeout"
+	case strings.HasPrefix(msg, "dial:"):
+		return "dial"
+	default:
+		return "other"
+	}
+}
+
+// keepAliveHTTPClient — see binance.keepAliveHTTPClient. F-0029.
+func keepAliveHTTPClient() *http.Client {
+	dialer := &net.Dialer{
+		Timeout:   30 * time.Second,
+		KeepAlive: 30 * time.Second,
+	}
+	transport := &http.Transport{
+		DialContext:           dialer.DialContext,
+		MaxIdleConns:          4,
+		IdleConnTimeout:       90 * time.Second,
+		TLSHandshakeTimeout:   10 * time.Second,
+		ExpectContinueTimeout: 1 * time.Second,
+	}
+	return &http.Client{Transport: transport}
+}
+
 func (s *Streamer) runOnce(ctx context.Context, symbols []string, out chan<- canonical.Trade) error { //nolint:gocognit // dispatch-heavy; splitting would reduce linearity
 	if s.Endpoint == "" {
 		s.Endpoint = WSEndpoint
 	}
-	conn, resp, err := websocket.Dial(ctx, s.Endpoint, nil)
+	conn, resp, err := websocket.Dial(ctx, s.Endpoint, &websocket.DialOptions{
+		HTTPClient: keepAliveHTTPClient(),
+	})
 	if err != nil {
 		return fmt.Errorf("dial: %w", err)
 	}
