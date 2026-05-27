@@ -24,7 +24,7 @@ import (
 // Migration 0047 MUST be applied before running this — per
 // CLAUDE.md "Migrations not auto-deployed".
 //
-//nolint:funlen,gocognit // linear pipeline.
+//nolint:funlen,gocognit,gocyclo // linear pipeline.
 func sep41TransfersBackfill(args []string) error {
 	fs := flag.NewFlagSet("sep41-transfers-backfill", flag.ContinueOnError)
 	cfgPath := fs.String("config", "", "Path to TOML config file (required)")

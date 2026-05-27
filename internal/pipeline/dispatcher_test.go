@@ -160,9 +160,10 @@ func TestRegisterSupplyEventDecoders_NoOpWhenEmpty(t *testing.T) {
 }
 
 // TestRegisterSupplyEventDecoders_RegistersWhenWatched confirms
-// the sep41_supply decoder attaches when WatchedSEP41Contracts is
-// set. Closes the L2.12a final slice — Algorithm 3 mint/burn/clawback
-// event sums start landing in `sep41_supply_events`.
+// the sep41_supply + sep41_transfers decoders attach when
+// WatchedSEP41Contracts is set. Algorithm 3 mint/burn/clawback
+// event sums start landing in `sep41_supply_events`; F-0021
+// audit-trail events start landing in `sep41_transfers`.
 func TestRegisterSupplyEventDecoders_RegistersWhenWatched(t *testing.T) {
 	disp := dispatcher.New()
 	cfg := config.SupplyConfig{
@@ -172,7 +173,13 @@ func TestRegisterSupplyEventDecoders_RegistersWhenWatched(t *testing.T) {
 	if err != nil {
 		t.Fatalf("RegisterSupplyEventDecoders: %v", err)
 	}
-	if len(registered) != 1 || registered[0] != "sep41_supply" {
-		t.Errorf("registered = %v, want [sep41_supply]", registered)
+	want := []string{"sep41_supply", "sep41_transfers"}
+	if len(registered) != len(want) {
+		t.Fatalf("registered = %v, want %v", registered, want)
+	}
+	for i, w := range want {
+		if registered[i] != w {
+			t.Errorf("registered[%d] = %q, want %q", i, registered[i], w)
+		}
 	}
 }

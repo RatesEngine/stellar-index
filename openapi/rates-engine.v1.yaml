@@ -1348,6 +1348,104 @@ paths:
         "500": { $ref: "#/components/responses/InternalError" }
         "503": { $ref: "#/components/responses/ServiceUnavailable" }
 
+  /contracts/{contract_id}/transfers:
+    get:
+      tags: [meta]
+      summary: Per-contract SEP-41 transfer audit trail.
+      description: |
+        Returns the most-recent N (default 100, max 500)
+        audit-trail rows for the given SEP-41 token contract,
+        ordered newest-first. Includes every `transfer` /
+        `approve` / `set_admin` / `set_authorized` event the
+        decoder observed; `mint` / `burn` / `clawback` live
+        separately in supply analytics.
+
+        Powers the per-account net-position queries that
+        CoinGecko / CoinMarketCap structurally cannot offer —
+        they only see exchange-side flows, not on-chain
+        transfers.
+
+        F-0021 closure (audit-2026-05-26).
+      parameters:
+        - name: contract_id
+          in: path
+          required: true
+          schema:
+            type: string
+            description: SEP-41 token contract C-strkey.
+            example: CCW67TSZV3SSS2HXMBQ5JFGCKJNXKZM7UQUWUZPUTHXSTZLEO7SJMI75
+        - name: from
+          in: query
+          required: false
+          schema:
+            type: string
+            description: |
+              Filter to events where this G/C-strkey was the
+              sender (transfer.from, approve.from).
+        - name: to
+          in: query
+          required: false
+          schema:
+            type: string
+            description: |
+              Filter to events where this G/C-strkey was the
+              recipient (transfer.to, approve.spender,
+              set_admin.new_admin, set_authorized.id).
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 500
+            default: 100
+      responses:
+        "200":
+          description: Per-contract audit-trail rows, newest-first.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [contract_id, count, limit, transfers]
+                properties:
+                  contract_id: { type: string }
+                  count: { type: integer }
+                  limit: { type: integer }
+                  from: { type: string }
+                  to: { type: string }
+                  transfers:
+                    type: array
+                    items:
+                      type: object
+                      required: [ledger, ledger_close_time, event_kind]
+                      properties:
+                        ledger: { type: integer }
+                        ledger_close_time: { type: string, format: date-time }
+                        tx_hash: { type: string }
+                        op_index: { type: integer }
+                        event_index: { type: integer }
+                        event_kind:
+                          type: string
+                          enum: [transfer, approve, set_admin, set_authorized]
+                        from: { type: string }
+                        to: { type: string }
+                        amount:
+                          type: string
+                          description: |
+                            i128 amount as a decimal string (ADR-0003).
+                            Populated for transfer + approve; omitted
+                            for set_admin + set_authorized.
+                        live_until_ledger:
+                          type: integer
+                          description: approve.live_until_ledger.
+                        authorized:
+                          type: boolean
+                          description: set_authorized.authorize.
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+        "500": { $ref: "#/components/responses/InternalError" }
+        "503": { $ref: "#/components/responses/ServiceUnavailable" }
+
   /changes/{entity_type}/{id}:
     get:
       tags: [meta]

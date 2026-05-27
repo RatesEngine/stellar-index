@@ -49,6 +49,8 @@ type SEP41TransferRow struct {
 
 // InsertSEP41TransferBatch persists rows via a single multi-row
 // INSERT. Idempotent on the full PK via ON CONFLICT DO NOTHING.
+//
+//nolint:gocognit,gocyclo // per-row validation + 12-col placeholder builder; linear.
 func (s *Store) InsertSEP41TransferBatch(ctx context.Context, rows []SEP41TransferRow) error {
 	if len(rows) == 0 {
 		return nil
@@ -130,6 +132,8 @@ func (s *Store) InsertSEP41Transfer(ctx context.Context, r SEP41TransferRow) err
 // ListSEP41Transfers returns the most-recent N rows for a contract,
 // optionally filtered by from_addr / to_addr. Powers GET
 // /v1/contracts/{id}/transfers.
+//
+//nolint:gocognit,gocyclo // linear query-build + row-scan loop.
 func (s *Store) ListSEP41Transfers(ctx context.Context, contractID, fromAddr, toAddr string, limit int) ([]SEP41TransferRow, error) {
 	if contractID == "" {
 		return nil, errors.New("timescale: ListSEP41Transfers: empty contractID")
