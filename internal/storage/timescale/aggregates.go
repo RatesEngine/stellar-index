@@ -565,3 +565,202 @@ func (s *Store) Volume24hUSDForAsset(ctx context.Context, assetKey string) (stri
 	}
 	return out, nil
 }
+
+// OHLCBar is one bucket of OHLC + volume + trade-count returned by
+// [Store.OHLCSeries] / [Store.OHLCSeriesReBucketed]. Bucket is the
+// START of the window; window end = bucket + interval.
+//
+// All price fields are decimal strings from the Postgres NUMERIC
+// column (no float round-trip). Volume fields are integer-string
+// sums (base/quote stroops). TradeCount is the row count.
+type OHLCBar struct {
+	Bucket      time.Time
+	Open        string
+	High        string
+	Low         string
+	Close       string
+	BaseVolume  string
+	QuoteVolume string
+	TradeCount  int64
+}
+
+// OHLCSeries returns chronologically-ordered (oldest-first) OHLC
+// bars from the CAGG matching `granularity` for the half-open
+// window [from, to). Used by /v1/ohlc's multi-bar mode (F-0071).
+//
+// Bucket rule: the CAGG's native bucket size IS the interval, so
+// rows map 1:1 to bars — no SQL-side re-bucketing. Callers that
+// need a non-CAGG-native interval (5m, 30m, 4h) route through
+// [Store.OHLCSeriesReBucketed].
+//
+// Per ADR-0015 the in-progress bucket is excluded via a
+// `bucket + <interval> <= now()` guard. `limit` clamps row count
+// (0 = unbounded). Returns empty slice + nil error when no
+// closed buckets exist in window.
+//
+// `quote_amount` is derived as `vwap * volume` at SELECT time:
+// VWAP is defined as Σ(price·base) / Σ(base), so vwap·Σ(base) =
+// Σ(price·base) = Σ(quote). This is exact in NUMERIC arithmetic
+// — no precision loss vs storing volume_quote in the CAGG.
+func (s *Store) OHLCSeries(
+	ctx context.Context,
+	p canonical.Pair,
+	granularity HistoryGranularity,
+	from, to time.Time,
+	limit int,
+) ([]OHLCBar, error) {
+	if err := granularity.Validate(); err != nil {
+		return nil, err
+	}
+	if !to.After(from) {
+		return nil, fmt.Errorf("timescale: OHLCSeries: to %v <= from %v", to, from)
+	}
+	table := "prices_" + string(granularity)
+	interval := granularity.closedBucketInterval()
+	// #nosec G201 — table + interval are derived from the validated
+	// HistoryGranularity enum, not user input. See Validate.
+	q := fmt.Sprintf(`
+		SELECT
+		    bucket,
+		    first_price::text,
+		    high_price::text,
+		    low_price::text,
+		    last_price::text,
+		    volume::text,
+		    (vwap * volume)::text,
+		    trade_count
+		  FROM %s
+		 WHERE base_asset = $1
+		   AND quote_asset = $2
+		   AND bucket >= $3
+		   AND bucket <  $4
+		   AND bucket + INTERVAL '%s' <= now()
+		 ORDER BY bucket ASC
+	`, table, interval)
+	args := []any{p.Base.String(), p.Quote.String(), from.UTC(), to.UTC()}
+	if limit > 0 {
+		q += fmt.Sprintf(" LIMIT $%d", len(args)+1)
+		args = append(args, limit)
+	}
+	rows, err := s.db.QueryContext(ctx, q, args...)
+	if err != nil {
+		return nil, fmt.Errorf("timescale: OHLCSeries[%s]: %w", granularity, err)
+	}
+	defer func() { _ = rows.Close() }()
+
+	out := make([]OHLCBar, 0, 128)
+	for rows.Next() {
+		var bar OHLCBar
+		if err := rows.Scan(
+			&bar.Bucket,
+			&bar.Open, &bar.High, &bar.Low, &bar.Close,
+			&bar.BaseVolume, &bar.QuoteVolume, &bar.TradeCount,
+		); err != nil {
+			return nil, fmt.Errorf("timescale: OHLCSeries[%s] scan: %w", granularity, err)
+		}
+		out = append(out, bar)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("timescale: OHLCSeries[%s] rows: %w", granularity, err)
+	}
+	return out, nil
+}
+
+// OHLCSeriesReBucketed is [Store.OHLCSeries] but re-buckets the
+// source CAGG's rows into a coarser `outInterval` via Postgres
+// `time_bucket`. Supports the requested intervals that don't have
+// a native CAGG (5m, 30m, 4h) while still reading from a CAGG
+// rather than the trades hypertable. Folds N source buckets into
+// one output bucket per the standard OHLC roll-up:
+//
+//   - open  = first_price ORDERED BY bucket ASC  (first input bar's open)
+//   - close = last_price  ORDERED BY bucket ASC  (last input bar's close)
+//   - high  = max(high_price)
+//   - low   = min(low_price)
+//   - base_volume  = Σ volume
+//   - quote_volume = Σ (vwap * volume)  (Σ quote per the VWAP identity)
+//   - trade_count  = Σ trade_count
+//
+// `outInterval` MUST be an integer multiple of the source CAGG's
+// native bucket size — caller responsibility (e.g. granularity=1m
+// + outInterval='5 minutes'). Postgres time_bucket snaps to its
+// configured origin, which for our CAGGs is the Unix epoch (UTC).
+// 5m buckets land at 12:00/12:05/12:10..., 4h at 00:00/04:00/...
+//
+// `outInterval` composes directly into the SQL after a literal
+// allow-list check — never user-passed verbatim. Same ADR-0015
+// closed-bucket guard as [Store.OHLCSeries].
+func (s *Store) OHLCSeriesReBucketed(
+	ctx context.Context,
+	p canonical.Pair,
+	sourceGranularity HistoryGranularity,
+	outInterval string,
+	from, to time.Time,
+	limit int,
+) ([]OHLCBar, error) {
+	if err := sourceGranularity.Validate(); err != nil {
+		return nil, err
+	}
+	if !to.After(from) {
+		return nil, fmt.Errorf("timescale: OHLCSeriesReBucketed: to %v <= from %v", to, from)
+	}
+	// Allow-list — outInterval composes directly into the SQL, so
+	// it MUST NOT come from untrusted input. The handler maps
+	// fixed-enum interval strings to these Postgres literals.
+	switch outInterval {
+	case "5 minutes", "15 minutes", "30 minutes", "1 hour", "4 hours",
+		"1 day", "1 week":
+	default:
+		return nil, fmt.Errorf("timescale: OHLCSeriesReBucketed: outInterval %q not in allow-list", outInterval)
+	}
+	table := "prices_" + string(sourceGranularity)
+	// #nosec G201 — table comes from the validated enum;
+	// outInterval comes from the allow-list above. No user input
+	// reaches the SQL string.
+	q := fmt.Sprintf(`
+		SELECT
+		    time_bucket(INTERVAL '%s', bucket)                          AS out_bucket,
+		    (array_agg(first_price ORDER BY bucket ASC))[1]::text       AS open,
+		    max(high_price)::text                                       AS high,
+		    min(low_price)::text                                        AS low,
+		    (array_agg(last_price ORDER BY bucket DESC))[1]::text       AS close,
+		    sum(volume)::text                                           AS base_volume,
+		    sum(vwap * volume)::text                                    AS quote_volume,
+		    sum(trade_count)::bigint                                    AS trade_count
+		  FROM %s
+		 WHERE base_asset = $1
+		   AND quote_asset = $2
+		   AND bucket >= $3
+		   AND bucket <  $4
+		 GROUP BY out_bucket
+		 HAVING time_bucket(INTERVAL '%s', bucket) + INTERVAL '%s' <= now()
+		 ORDER BY out_bucket ASC
+	`, outInterval, table, outInterval, outInterval)
+	args := []any{p.Base.String(), p.Quote.String(), from.UTC(), to.UTC()}
+	if limit > 0 {
+		q += fmt.Sprintf(" LIMIT $%d", len(args)+1)
+		args = append(args, limit)
+	}
+	rows, err := s.db.QueryContext(ctx, q, args...)
+	if err != nil {
+		return nil, fmt.Errorf("timescale: OHLCSeriesReBucketed[%s→%s]: %w", sourceGranularity, outInterval, err)
+	}
+	defer func() { _ = rows.Close() }()
+
+	out := make([]OHLCBar, 0, 128)
+	for rows.Next() {
+		var bar OHLCBar
+		if err := rows.Scan(
+			&bar.Bucket,
+			&bar.Open, &bar.High, &bar.Low, &bar.Close,
+			&bar.BaseVolume, &bar.QuoteVolume, &bar.TradeCount,
+		); err != nil {
+			return nil, fmt.Errorf("timescale: OHLCSeriesReBucketed[%s→%s] scan: %w", sourceGranularity, outInterval, err)
+		}
+		out = append(out, bar)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("timescale: OHLCSeriesReBucketed[%s→%s] rows: %w", sourceGranularity, outInterval, err)
+	}
+	return out, nil
+}

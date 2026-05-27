@@ -2037,6 +2037,61 @@ func (r storeHistoryReader) HistoryPointsInRange(ctx context.Context, pair canon
 	return convertHistoryPoints(rows), nil
 }
 
+// OHLCSeries adapts [timescale.Store.OHLCSeries] /
+// [timescale.Store.OHLCSeriesReBucketed] to the v1.HistoryReader
+// interface. Routes the request to a native CAGG when the requested
+// interval has one (1m, 15m, 1h, 1d, 1w) and falls back to
+// re-bucketing a finer CAGG for 5m/30m (via prices_1m) and 4h
+// (via prices_1h). Unknown intervals propagate as
+// v1.ErrUnknownGranularity.
+func (r storeHistoryReader) OHLCSeries(ctx context.Context, pair canonical.Pair, interval string, from, to time.Time, limit int) ([]v1.OHLCSeriesBar, error) {
+	var (
+		bars []timescale.OHLCBar
+		err  error
+	)
+	switch interval {
+	case "1m":
+		bars, err = r.s.OHLCSeries(ctx, pair, timescale.Granularity1m, from, to, limit)
+	case "15m":
+		bars, err = r.s.OHLCSeries(ctx, pair, timescale.Granularity15m, from, to, limit)
+	case "1h":
+		bars, err = r.s.OHLCSeries(ctx, pair, timescale.Granularity1h, from, to, limit)
+	case "1d":
+		bars, err = r.s.OHLCSeries(ctx, pair, timescale.Granularity1d, from, to, limit)
+	case "1w":
+		bars, err = r.s.OHLCSeries(ctx, pair, timescale.Granularity1w, from, to, limit)
+	case "5m":
+		bars, err = r.s.OHLCSeriesReBucketed(ctx, pair, timescale.Granularity1m, "5 minutes", from, to, limit)
+	case "30m":
+		bars, err = r.s.OHLCSeriesReBucketed(ctx, pair, timescale.Granularity1m, "30 minutes", from, to, limit)
+	case "4h":
+		bars, err = r.s.OHLCSeriesReBucketed(ctx, pair, timescale.Granularity1h, "4 hours", from, to, limit)
+	default:
+		return nil, v1.ErrUnknownGranularity
+	}
+	if err != nil {
+		return nil, err
+	}
+	return convertOHLCBars(bars), nil
+}
+
+func convertOHLCBars(bars []timescale.OHLCBar) []v1.OHLCSeriesBar {
+	out := make([]v1.OHLCSeriesBar, len(bars))
+	for i, b := range bars {
+		out[i] = v1.OHLCSeriesBar{
+			T:      b.Bucket,
+			O:      b.Open,
+			H:      b.High,
+			L:      b.Low,
+			C:      b.Close,
+			VBase:  b.BaseVolume,
+			VQuote: b.QuoteVolume,
+			N:      b.TradeCount,
+		}
+	}
+	return out
+}
+
 func convertHistoryPoints(rows []timescale.HistoryPoint) []v1.HistoryPoint {
 	out := make([]v1.HistoryPoint, len(rows))
 	for i, row := range rows {

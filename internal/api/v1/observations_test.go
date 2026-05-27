@@ -346,6 +346,10 @@ func (h *observationsCallTracker) HistoryPointsInRange(_ context.Context, _ cano
 	return nil, nil
 }
 
+func (h *observationsCallTracker) OHLCSeries(_ context.Context, _ canonical.Pair, _ string, _, _ time.Time, _ int) ([]v1.OHLCSeriesBar, error) {
+	return nil, nil
+}
+
 // TestObservations_FiatCryptoQuoteShortCircuit — #29. fiat:* (ADR-0010)
 // and crypto:* (ADR-0014) are aggregator-only reference assets;
 // trades.quote_asset NEVER stores them. LatestTradePerSource on those

@@ -314,6 +314,10 @@ func (r *pairKeyedHistoryReader) LatestTradePerSource(_ context.Context, _ canon
 	return nil, nil
 }
 
+func (r *pairKeyedHistoryReader) OHLCSeries(_ context.Context, _ canonical.Pair, _ string, _, _ time.Time, _ int) ([]v1.OHLCSeriesBar, error) {
+	return nil, nil
+}
+
 // TestChart_StablecoinFallback exercises the X/fiat:USD →
 // X/<USD-pegged classic> retry. /v1/chart for native/fiat:USD
 // with no literal points but USDC trades available should return

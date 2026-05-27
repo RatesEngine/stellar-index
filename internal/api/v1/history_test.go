@@ -29,6 +29,12 @@ type stubHistoryReader struct {
 	// test where the literal XLM/fiat:USD pair returns empty and a
 	// proxied XLM/USDC-G… pair carries the fixture.
 	pointsByPair map[string][]v1.HistoryPoint
+	// ohlcBars is the static fixture returned by OHLCSeries. Tests
+	// that want per-call behaviour override via ohlcSeriesFn.
+	ohlcBars []v1.OHLCSeriesBar
+	// ohlcSeriesFn, when non-nil, overrides ohlcBars and lets tests
+	// inject error/per-call behaviour.
+	ohlcSeriesFn func(ctx context.Context, pair canonical.Pair, interval string, from, to time.Time, limit int) ([]v1.OHLCSeriesBar, error)
 	lastCall     struct {
 		from, to     time.Time
 		limit        int
@@ -39,6 +45,7 @@ type stubHistoryReader struct {
 		afterOpIndex uint32
 		granularity  string
 		sourceFilter string
+		ohlcInterval string
 	}
 	// pointsErr is set by tests that want to drive the
 	// since-inception handler to a specific error code (e.g.
@@ -101,6 +108,33 @@ func (r *stubHistoryReader) HistoryPointsInRange(_ context.Context, _ canonical.
 	}
 	return r.points, nil
 }
+
+// OHLCSeries stub: when ohlcSeriesFn is non-nil, delegate (lets
+// tests inject per-call behaviour); otherwise return r.ohlcBars.
+// Records interval + from/to/limit on lastCall so tests can
+// assert the handler forwarded the correct args.
+func (r *stubHistoryReader) OHLCSeries(ctx context.Context, pair canonical.Pair, interval string, from, to time.Time, limit int) ([]v1.OHLCSeriesBar, error) {
+	r.lastCall.ohlcInterval = interval
+	r.lastCall.from = from
+	r.lastCall.to = to
+	r.lastCall.limit = limit
+	if r.ohlcSeriesFn != nil {
+		return r.ohlcSeriesFn(ctx, pair, interval, from, to, limit)
+	}
+	if r.err != nil {
+		return nil, r.err
+	}
+	return r.ohlcBars, nil
+}
+
+// LastInterval / LastFrom / LastTo / LastLimit are public-test
+// accessors for the OHLC-series call-tracking fields. Keep
+// lastCall internal so tests in other files can't accidentally
+// mutate it.
+func (r *stubHistoryReader) LastInterval() string { return r.lastCall.ohlcInterval }
+func (r *stubHistoryReader) LastFrom() time.Time  { return r.lastCall.from }
+func (r *stubHistoryReader) LastTo() time.Time    { return r.lastCall.to }
+func (r *stubHistoryReader) LastLimit() int       { return r.lastCall.limit }
 
 // LatestTradePerSource stub: returns r.observations (per-source
 // fixture distinct from the full r.trades slice) so observations

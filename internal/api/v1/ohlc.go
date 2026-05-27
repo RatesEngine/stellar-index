@@ -55,12 +55,25 @@ const ohlcPriceDigits = 10
 
 // handleOHLC serves GET /v1/ohlc?base=...&quote=...&from=...&to=...
 //
-// Single-bar response for the window [from, to). Interval-series
-// support (N bars, each interval-seconds wide) lands in a follow-up.
+// Two modes share this route:
 //
-// Defaults match /v1/history:
+//  1. Single-bar (default — back-compat): no `interval` query
+//     param. Returns one [OHLCBar] for the window [from, to)
+//     computed from raw trades via [aggregate.ComputeOHLC]. This is
+//     the original /v1/ohlc semantics.
+//  2. Multi-bar series (F-0071, CG/CMC parity): `interval` is one
+//     of 1m / 5m / 15m / 30m / 1h / 4h / 1d / 1w. Returns
+//     [OHLCSeriesResponse.Intervals] — up to `limit` (default 100,
+//     max 1000) closed bars, oldest first, sourced from the
+//     prices_<n> continuous aggregates.
+//
+// Defaults (single-bar mode) match /v1/history:
 //   - from: to - 1h
-//   - to:   now
+//   - to:   now (clamped to the previous closed-bucket boundary)
+//
+// Defaults (series mode) are interval-aware:
+//   - to:   now snapped DOWN to interval boundary
+//   - from: to - limit*interval
 func (s *Server) handleOHLC(w http.ResponseWriter, r *http.Request) {
 	reader := s.history
 	if reader == nil {
@@ -80,6 +93,17 @@ func (s *Server) handleOHLC(w http.ResponseWriter, r *http.Request) {
 		writeProblem(w, r,
 			"https://api.ratesengine.net/errors/invalid-pair",
 			"Invalid pair", http.StatusBadRequest, err.Error())
+		return
+	}
+
+	// Branch to the multi-bar series handler when `interval` is
+	// supplied. Invalid intervals 400 before any other work.
+	if raw := r.URL.Query().Get("interval"); raw != "" {
+		interval, ok := parseOHLCInterval(w, r, raw)
+		if !ok {
+			return
+		}
+		s.handleOHLCSeries(w, r, pair, interval)
 		return
 	}
 

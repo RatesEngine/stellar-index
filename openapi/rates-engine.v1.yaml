@@ -870,39 +870,86 @@ paths:
   /ohlc:
     get:
       tags: [ohlc]
-      summary: Single OHLC bar for a pair over a window.
+      summary: OHLC bar (single window or multi-bar series) for a pair.
       description: |
-        Single-bar response for the window [from, to). Interval-series
-        (N bars, each interval-seconds wide) is a follow-up —
-        delivered via the aggregator's continuous-aggregate path.
+        Two modes share this route — selected by the presence of the
+        `interval` query parameter:
 
-        Defaults: `from = to - 1h`, `to = now`. `truncated=true` on
-        the response means the window had more trades than the
-        server's per-request cap (10000) and the bar reflects only
-        the chronologically-first N; narrow the window or wait for
-        CAGG-backed endpoints.
+        1. **Single-bar (default — back-compat)**: no `interval`. Returns
+           one OHLC bar (`OHLCBar`) for the window `[from, to)` computed
+           from raw trades. Single-bar mode 404s on an empty window.
+           `truncated=true` means the window exceeded the per-request cap
+           (10000 trades) and the bar reflects only the first N.
+           `outlier_sigma` (default 4σ) drops dust before bar computation;
+           `outlier_sigma=0` to opt into raw extremes.
 
-        High/Low have no statistical robustness — a single dust
-        trade can dominate. The `outlier_sigma` filter (default 4σ)
-        drops outliers before bar computation; pass `outlier_sigma=0`
-        to opt into raw extremes.
+           Defaults: `from = to - 1h`, `to = now` (clamped to the
+           previous 30 s closed-bucket boundary per ADR-0015).
+
+        2. **Multi-bar series (CG/CMC parity, F-0071)**: `interval` is
+           one of `1m`, `5m`, `15m`, `30m`, `1h`, `4h`, `1d`, `1w`.
+           Returns `OHLCSeriesResponse` — an `intervals[]` array of
+           closed CAGG-backed bars sourced from `prices_<N>`. The
+           in-progress bucket is excluded (closed-bucket guard).
+           `limit` clamps the bar count (default 100, max 1000).
+           Empty window returns 200 + `{intervals: []}` (NOT 404 —
+           series clients expect a stable shape across pairs/windows).
+
+           Defaults (series mode):
+             - `to`   = now snapped DOWN to the interval's UTC boundary
+               (1m → :00, 1h → top of hour, 1d → 00:00 UTC).
+             - `from` = `to - limit * interval`.
+
+           5m, 30m, and 4h are CAGG-re-bucketed from finer-grain
+           continuous aggregates (5m/30m ← prices_1m, 4h ← prices_1h).
       parameters:
         - { $ref: "#/components/parameters/Base" }
         - { $ref: "#/components/parameters/Quote" }
         - { $ref: "#/components/parameters/From" }
         - { $ref: "#/components/parameters/To" }
+        - name: interval
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [1m, 5m, 15m, 30m, 1h, 4h, 1d, 1w]
+          description: |
+            Bar width for multi-bar series mode. Omit for the
+            single-bar response over `[from, to)`. Invalid intervals
+            return 400 `errors/invalid-interval`.
+        - name: limit
+          in: query
+          required: false
+          schema: { type: integer, minimum: 1, maximum: 1000, default: 100 }
+          description: |
+            Series-mode bar count (max 1000, default 100). Ignored in
+            single-bar mode. Invalid values return 400
+            `errors/limit-too-large`.
         - name: outlier_sigma
           in: query
           schema: { type: number, minimum: 0, default: 4 }
-          description: "Drop trades > N σ from window mean before computing the bar. Default 4σ. Pass 0 to disable (raw extremes, including dust)."
+          description: "Drop trades > N σ from window mean before computing the bar (single-bar mode only). Default 4σ. Pass 0 to disable."
       responses:
         "200":
-          description: Single OHLC bar.
+          description: |
+            OHLC response. Wire shape depends on mode:
+            single-bar (no `interval`) returns `OHLCEnvelope`;
+            multi-bar (`interval` set) returns
+            `OHLCSeriesEnvelope`.
           content:
             application/json:
-              schema: { $ref: "#/components/schemas/OHLCEnvelope" }
+              schema:
+                oneOf:
+                  - { $ref: "#/components/schemas/OHLCEnvelope" }
+                  - { $ref: "#/components/schemas/OHLCSeriesEnvelope" }
         "400": { $ref: "#/components/responses/BadRequest" }
-        "404": { $ref: "#/components/responses/NotFound" }
+        "404":
+          description: |
+            Single-bar mode only — no trades in window. Series mode
+            returns 200 with `intervals: []` instead.
+          content:
+            application/problem+json:
+              schema: { $ref: "#/components/schemas/Problem" }
         "429": { $ref: "#/components/responses/RateLimited" }
         "500": { $ref: "#/components/responses/InternalError" }
         "503": { $ref: "#/components/responses/ServiceUnavailable" }
@@ -4218,6 +4265,68 @@ components:
         - type: object
           properties:
             data: { $ref: "#/components/schemas/OHLCBar" }
+          required: [data]
+
+    # OHLC series (CG/CMC parity, F-0071).
+    OHLCSeriesBar:
+      type: object
+      description: |
+        One bar in a multi-bar /v1/ohlc?interval= response. Compact
+        wire field names (`t/o/h/l/c/v_base/v_quote/n`) match the
+        convention used by CoinGecko / CoinMarketCap so this endpoint
+        can be a drop-in replacement for those vendors' OHLC feeds.
+
+        `t` is the bucket-start timestamp aligned to UTC interval
+        boundaries (1h → top of hour, 1d → 00:00 UTC, 1w → Monday
+        00:00 UTC). Bucket end = `t + interval`.
+      properties:
+        t:
+          type: string
+          format: date-time
+          description: Bucket-start timestamp (UTC, interval-aligned).
+        o: { type: string, description: "Open price (decimal string)." }
+        h: { type: string, description: "High price (decimal string)." }
+        l: { type: string, description: "Low price (decimal string)." }
+        c: { type: string, description: "Close price (decimal string)." }
+        v_base:  { type: string, description: "Σ base_amount stroops over the bucket (decimal string)." }
+        v_quote: { type: string, description: "Σ quote_amount stroops over the bucket (decimal string)." }
+        n: { type: integer, format: int64, description: "Trade count in the bucket." }
+        truncated:
+          type: boolean
+          description: "Reserved for future row-cap signalling; absent today."
+      required: [t, o, h, l, c, v_base, v_quote, n]
+
+    OHLCSeriesResponse:
+      type: object
+      description: Multi-bar OHLC series response (F-0071).
+      properties:
+        base:     { type: string, description: "Canonical base asset id." }
+        quote:    { type: string, description: "Canonical quote asset id." }
+        interval: { type: string, enum: [1m, 5m, 15m, 30m, 1h, 4h, 1d, 1w] }
+        from:
+          type: string
+          format: date-time
+          description: |
+            Inclusive lower bound of the series window. When the
+            client omitted `from`, this is `to - limit*interval`.
+        to:
+          type: string
+          format: date-time
+          description: |
+            Exclusive upper bound. When the client omitted `to`, this
+            is now() snapped DOWN to the interval's UTC boundary —
+            ADR-0015 cross-region rate-equality guarantee.
+        intervals:
+          type: array
+          items: { $ref: "#/components/schemas/OHLCSeriesBar" }
+      required: [base, quote, interval, from, to, intervals]
+
+    OHLCSeriesEnvelope:
+      allOf:
+        - { $ref: "#/components/schemas/EnvelopeMeta" }
+        - type: object
+          properties:
+            data: { $ref: "#/components/schemas/OHLCSeriesResponse" }
           required: [data]
 
     # VWAP / TWAP
