@@ -373,6 +373,26 @@ Source: `/usr/local/bin/galexie-archive-fill` on r1, restartable.
 Logs to `/var/log/galexie-mirror.log`. Monitor via
 `galexie-backfill-status`.
 
+**Phase 1b auto-partial detection (F-0158 fix, 2026-05-27).** Every
+run now file-counts the latest `PARTIAL_CHECK_WINDOW=4` partitions on
+AWS and re-mirrors any local partition with fewer files than AWS.
+This closes the trailing-edge blind spot in the partition-level
+set-diff (see "Partition-level worklists hide partial partitions"
+below): when AWS first publishes a new partition with only a handful
+of ledgers and our hourly timer fires, the old script mirrored those
+few files, marked the partition "present", and never revisited.
+Override via `PARTIAL_CHECK_WINDOW=N galexie-archive-fill` (set to
+`0` to disable). The cost is N × recursive `mc ls`, sub-second at
+N=4.
+
+If you have known partials OUTSIDE the trailing window (operator
+already knows the names from `verify-archive`), still use the
+explicit override:
+
+```sh
+PARTIALS="PART1 PART2 PART3" galexie-archive-fill
+```
+
 #### `mc mirror` gotcha — `--overwrite=false` doesn't mean what it says
 
 Verified against `mc RELEASE.2025-08-13T08-35-41Z` on r1 2026-04-26:
