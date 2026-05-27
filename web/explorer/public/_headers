@@ -25,12 +25,17 @@
   # CSP — restrictive but functional. 'unsafe-inline' is required
   # for Next.js static-export bootstrap scripts and Tailwind inline
   # styles; revisit if Next stops emitting them. connect-src lists
-  # the API origin so fetch() works; localhost added so a built
-  # bundle can be served against a local dev API without a
-  # CSP-violation flood. frame-ancestors 'none' is the modern
-  # equivalent of X-Frame-Options DENY (browsers prefer the CSP
-  # form when both are set).
-  Content-Security-Policy: default-src 'self'; connect-src 'self' https://api.ratesengine.net http://localhost:3000; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self' data:; object-src 'none'; base-uri 'self'; frame-ancestors 'none'; form-action 'self'
+  # the API origin so fetch() works. frame-ancestors 'none' is the
+  # modern equivalent of X-Frame-Options DENY (browsers prefer the
+  # CSP form when both are set).
+  #
+  # F-0054 (audit-2026-05-26): an earlier revision permitted
+  # http://localhost:3000 in connect-src as a dev-convenience —
+  # left over after a one-time test of serving the built bundle
+  # against a local API. The Next dev server doesn't read _headers
+  # at all (it serves no production headers), so production
+  # leakage is the only effect. Removed.
+  Content-Security-Policy: default-src 'self'; connect-src 'self' https://api.ratesengine.net; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self' data:; object-src 'none'; base-uri 'self'; frame-ancestors 'none'; form-action 'self'
 
 # Fingerprinted Next.js assets — far-future cache. CF Pages already
 # does this by default but the explicit header doubles as
@@ -61,4 +66,4 @@
   # replacement (NOT merged) per CF Pages docs, so we repeat the
   # parent's HSTS directive here. Same lifetime / same scope.
   Strict-Transport-Security: max-age=31536000; includeSubDomains
-  Content-Security-Policy: default-src 'self'; connect-src 'self' https://api.ratesengine.net http://localhost:3000; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self' data:; object-src 'none'; base-uri 'self'; frame-ancestors *; form-action 'self'
+  Content-Security-Policy: default-src 'self'; connect-src 'self' https://api.ratesengine.net; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self' data:; object-src 'none'; base-uri 'self'; frame-ancestors *; form-action 'self'

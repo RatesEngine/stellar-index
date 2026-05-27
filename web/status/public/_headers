@@ -16,10 +16,11 @@
   # https://hstspreload.org/.
   Strict-Transport-Security: max-age=31536000; includeSubDomains
   # CSP — same shape as the explorer. The status site fetches from
-  # api.ratesengine.net for tier probes / incident lists; localhost
-  # added so a built bundle can be served against a local dev API
-  # without a CSP-violation flood.
-  Content-Security-Policy: default-src 'self'; connect-src 'self' https://api.ratesengine.net http://localhost:3000; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self' data:; object-src 'none'; base-uri 'self'; frame-ancestors 'none'; form-action 'self'
+  # api.ratesengine.net for tier probes / incident lists. F-0054
+  # (audit-2026-05-26): removed http://localhost:3000 from
+  # connect-src — a dev-convenience that leaked into prod with no
+  # functional benefit (Next dev server doesn't read _headers).
+  Content-Security-Policy: default-src 'self'; connect-src 'self' https://api.ratesengine.net; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self' data:; object-src 'none'; base-uri 'self'; frame-ancestors 'none'; form-action 'self'
 
 # Fingerprinted Next.js assets — far-future cache.
 /_next/static/*

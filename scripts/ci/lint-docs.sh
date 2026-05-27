@@ -464,6 +464,22 @@ if [ -d "$INCIDENT_DIR" ]; then
   done
 fi
 
+# ─── 16. Production CSP must not permit http://localhost ──────────────────
+#
+# F-0054 (audit-2026-05-26): an earlier revision left
+# `http://localhost:3000` in the Cloudflare Pages CSP `connect-src` of
+# the explorer + status sites as a dev-convenience that leaked into
+# production. The Next dev server doesn't apply _headers anyway, so
+# the dev-build use case is moot; permitting localhost in prod CSP is
+# pure config drift between dev and prod. This guard fails CI if it
+# regresses.
+
+for hf in web/explorer/public/_headers web/status/public/_headers; do
+  if [ -f "$hf" ] && grep -qE 'Content-Security-Policy:.*localhost' "$hf"; then
+    err "$hf permits 'localhost' in a Content-Security-Policy header — F-0054 forbids this in production builds. Remove the localhost permit; dev work uses 'next dev' which doesn't read _headers."
+  fi
+done
+
 # ─── Summary ────────────────────────────────────────────────────────────────
 
 count=$(cat "$ERROR_FILE")
