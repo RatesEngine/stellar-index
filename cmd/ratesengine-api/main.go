@@ -624,6 +624,14 @@ func run(cfgPath string, dryRun bool) error { //nolint:gocognit,funlen,gocyclo /
 	cachedSourcesStats := v1.NewCachedSourcesStatsReader(store, 10*time.Minute)
 	cachedMarketsReader := v1.NewCachedMarketsReader(marketsReader, 2*time.Minute)
 	cachedCoinsReader := v1.NewCachedCoinsReader(store, 2*time.Minute)
+	// F-0011 (2026-05-26): `/v1/issuers` p95 was ~404ms (over the
+	// 200ms SLO target). EXPLAIN ANALYZE on r1 showed the listing's
+	// HashAggregate-over-58k-issuers + top-N heapsort takes ~196ms
+	// in PG alone before JSON marshalling. No index helps (full
+	// aggregate over both tables is mandatory). 5min TTL is the
+	// "verified-issuer catalogue moves on human timescale" knob —
+	// same rationale as cachedSourcesStats.
+	cachedIssuersReader := v1.NewCachedIssuersReader(store, 5*time.Minute)
 
 	usdPegs := parseUSDPeggedClassics(cfg.Trades.USDPeggedClassicAssets, logger)
 
@@ -776,7 +784,7 @@ func run(cfgPath string, dryRun bool) error { //nolint:gocognit,funlen,gocyclo /
 		Change24h:            storeChange24hReader{s: store, pegs: usdPegs},
 		ChangeSummary:        store,
 		Coins:                cachedCoinsReader,
-		Issuers:              store,
+		Issuers:              cachedIssuersReader,
 		Cursors:              store,
 		NetworkStats:         store,
 		// Wrap with a 60s TTL cache. The underlying SQL aggregations
