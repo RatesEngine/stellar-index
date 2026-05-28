@@ -257,3 +257,33 @@ groups:
             back-pressure event that lost in-flight events.
 
             Runbook: https://github.com/RatesEngine/rates-engine/blob/main/docs/operations/runbooks/ingestion-duplicate-flood.md
+
+      # Mirror of source_insert_stale in deploy/monitoring/rules/
+      # ingestion.yml — timestamp-shape sibling to duplicate_flood
+      # above. wave-96 pair lint requires both copies to stay in
+      # sync.
+      - alert: ratesengine_ingestion_source_insert_stale
+        expr: |
+          time() - ratesengine_source_last_insert_unix > 3600
+          and on (source) ratesengine_source_enabled == 1
+        for: 10m
+        labels:
+          severity: ticket
+          team: ratesengine
+          component: ingestion
+          runbook_url: https://github.com/RatesEngine/rates-engine/blob/main/docs/operations/runbooks/ingestion-duplicate-flood.md
+        annotations:
+          summary: "Source {{ $labels.source }} hasn't landed a new row in >1h"
+          description: |
+            ratesengine_source_last_insert_unix{source="{{ $labels.source }}"}
+            hasn't advanced in over an hour while the source is
+            still enabled. Same root-cause cluster as the
+            duplicate-flood alert; the timestamp-shape signal
+            catches low-volume sources whose insert rate sits
+            under the rate-shape alert's 0.5/s threshold.
+
+            Cross-check ratesengine_source_last_event_unix — if the
+            dispatcher is still matching events, the gap is the
+            stuck-tip diagnostic (cursor advances, data doesn't).
+
+            Runbook: https://github.com/RatesEngine/rates-engine/blob/main/docs/operations/runbooks/ingestion-duplicate-flood.md
