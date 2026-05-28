@@ -3262,9 +3262,12 @@ claim was wrong; record the corrected understanding.
   when the test pair has no trades in the default window. Per
   ADR-0018 that's the documented contract. The smoke script
   asserts HTTP 200, which is overly strict.
-- **Disposition:** `open` Wave-2. Use `expect_status 200` only
-  on pairs with guaranteed liquidity (XLM/USDC the direction
-  with SDEX activity); otherwise `expect_status 200 OR 404`.
+- **Disposition:** `closed` (verified 2026-05-28). The smoke
+  script at `scripts/dev/r1-smoke.sh:172` was already updated
+  to `expect_status "200|404" "ohlc USDC/XLM"` — multi-status
+  acceptance was added to `expect_status()` in an earlier
+  hardening pass and the OHLC line uses it. Live smoke run on
+  r1 returned `ok ohlc USDC/XLM` against `expect_status "200|404"`.
 
 #### F-0157 — Smoke "asset not found" behaviour pin reports curl transport error
 
@@ -3274,6 +3277,13 @@ claim was wrong; record the corrected understanding.
   escaping suspect in the smoke script's curl invocation when
   the asset_id contains `:` or `-` characters interpreted by
   the shell.
+- **Disposition:** `closed` (verified 2026-05-28). Root cause
+  was the slow-resolver branch crossing the 10s `-m` timeout,
+  not shell-escaping. `scripts/dev/r1-smoke.sh:99-108` now
+  builds the URL via `printf '%s%s'` defensively (mitigates the
+  shell-escaping risk too) and the asset-resolver path budget
+  was inflated. Live smoke run on r1 returned `ok asset not
+  found` against `/v1/assets/AAAA-GA5Z...` with HTTP 404.
 - **Disposition:** `open` Wave-2. Single-quote the URL more
   defensively in the smoke script.
 
