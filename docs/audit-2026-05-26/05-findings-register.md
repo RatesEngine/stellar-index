@@ -513,15 +513,37 @@ F-0028 will track the soroban_events lag separately)
   In effect we cannot run a back-pressured fill walk in
   parallel with live ingest without compromising live
   freshness.
-- **Disposition:** `open` Wave 0. Likely remediation directions:
-  1. Reduce fill walk parallelism while live ingest runs
-     (`-parallel 4` instead of `-parallel 12`)
-  2. Use a separate Postgres replica for fill walk writes
-  3. Add per-sink prioritisation in AsyncSink so live takes
-     precedence over backfill
-  4. Operational guidance: never run fill walk + verify-archive
-     concurrently with live ingest; run during dedicated
-     maintenance windows
+- **Disposition:** `closed-operationally + documented`
+  (2026-05-28). Took remediation paths (1) + (4) from the
+  audit's list, plus added alerting that pages on recurrence:
+  - **Path (1) — reduced parallelism**: operationally
+    cleared this session by SIGTERMing the 12-way fill walks
+    + restarting at `-parallel 4` during concurrent live
+    ingest (recorded at memory
+    `feedback_post_multisource_sdex_bump`).
+  - **Path (4) — operational guidance**: new doc
+    `docs/operations/backfill-with-live-ingest.md`
+    documents the steady-state posture (live indexer owns
+    Postgres at full priority; backfill + verify-archive
+    run at reduced parallelism or in dedicated maintenance
+    windows) plus operator commands to stop a running fill
+    walk / verify-archive and recover live cursor lag.
+  - **Recurrence detection**: tasks #61 / #62 / #67 shipped
+    `trade_insert_outcome_total{outcome=duplicate}` and
+    `source_last_insert_unix` plus the matching
+    `ratesengine_ingestion_duplicate_flood` and
+    `ratesengine_ingestion_source_insert_stale` alerts.
+    Pre-this-session the F-0020 7 h freeze was visible only
+    through manual psql; post-this-session it pages within
+    10 min of the first stuck cursor.
+  Architecture paths (2) replica + (3) per-sink
+  prioritisation remain tracked under W28/W30 for future
+  work — listed as "Long-term architecture options" in the
+  new operations doc. The audit's CRITICAL severity is
+  appropriate to the original observation; the durable
+  countermeasure is the alert-shipped posture that surfaces
+  recurrence at first observation rather than requiring an
+  audit pass to detect it.
 - **Cross-ref:** F-0016 (initial discovery), W28
   (back-pressure design caveat), W30 (cold-tier interaction).
 
