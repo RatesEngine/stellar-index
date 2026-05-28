@@ -34,6 +34,59 @@ Histogram, labels `method`, `route`.
 Handler latency including time-in-middleware. Buckets 1ms – 10s with
 extra resolution at the 200ms / 500ms SLO boundaries.
 
+### `ratesengine_ingest_gap_ledgers`
+
+Gauge, labels `source`.
+
+Total missing ledgers in contiguous data-coverage gaps >= the
+detector's `min-gap-size` threshold (1000 by default) per source.
+**Data-derived** complement to the cursor-derived density
+projection in `/v1/diagnostics/ingestion`: cursor coverage
+measures process state ("did we walk this ledger") and can read
+100% while data is missing; this gauge measures reality by
+querying `soroban_events` distinct-ledger coverage directly.
+Refreshed every 5 min by the gap detector goroutine in the
+aggregator binary (`internal/storage/timescale.RunGapDetector`).
+Source label values: `soroban-events` today; SDEX detection is a
+follow-up.
+
+### `ratesengine_ingest_gap_count`
+
+Gauge, labels `source`.
+
+Number of contiguous gaps per source at the detector's most
+recent cycle. A single 100K-ledger gap and 100 ten-ledger gaps
+both report ≈100K in `ratesengine_ingest_gap_ledgers` but very
+different shapes; chart this alongside the size gauge to
+distinguish "one big halt" (cascade signature) from "many small
+drops" (flaky-write pattern).
+
+### `ratesengine_ingest_gap_max_size_ledgers`
+
+Gauge, labels `source`.
+
+Size of the largest contiguous gap per source at the detector's
+most recent cycle. Drives the `ratesengine_ingest_gap_detected`
+P1 alert (fires when > 1000 sustained 15 min).
+
+### `ratesengine_ingest_gap_detector_runs_total`
+
+Counter, labels `source`, `outcome`.
+
+Periodic gap-detector cycle outcomes — `ok` on a clean scan,
+`error` on a transient Postgres / timeout failure. Operators
+chart `rate({outcome="ok"}[5m])` to confirm the worker is alive;
+the `ratesengine_ingest_gap_detector_silent` ticket-tier alert
+fires when this rate goes to zero.
+
+### `ratesengine_ingest_gap_detector_duration_seconds`
+
+Histogram, labels `source`, `outcome`.
+
+Wall-clock latency of one detector cycle. The LAG()-over-DISTINCT
+scan against ~12 M Soroban-era ledgers takes ~2-3 s on r1; the
+60s scan timeout is the upper bound.
+
 ### `http_request_success_duration_seconds`
 
 Histogram, labels `method`, `route`.

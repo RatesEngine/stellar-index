@@ -268,3 +268,75 @@ groups:
             stuck-tip diagnostic (cursor advances, data doesn't).
 
             Runbook: https://github.com/RatesEngine/rates-engine/blob/main/docs/operations/runbooks/ingestion-duplicate-flood.md
+
+      # Data-derived gap detector. The cursor-derived density
+      # projection in /v1/diagnostics/ingestion measures process
+      # state ("did we walk this ledger") and can read 100% while
+      # data is missing — the F-0020 audit found that exact pattern,
+      # with the soroban_events writer halted across a 92,737-ledger
+      # contiguous window. This alert fires on the data-derived
+      # gauge instead: a sustained contiguous gap of >1000 ledgers
+      # in soroban_events that doesn't close on its own implies an
+      # ingest halt that needs operator action.
+      #
+      # Threshold: max_gap_size > 1000 sustained 15 min. The 5-min
+      # detector cadence × 3 cycles ensures the alert isn't fooled
+      # by the brief window between cascade-clear + targeted-backfill
+      # completion. 1000 ledgers (~1.5 h network time) filters out
+      # legitimate no-Soroban-activity stretches.
+      - alert: ratesengine_ingest_gap_detected
+        expr: |
+          ratesengine_ingest_gap_max_size_ledgers > 1000
+        for: 15m
+        labels:
+          severity: page
+          team: ratesengine
+          component: ingestion
+          runbook_url: https://github.com/RatesEngine/rates-engine/blob/main/docs/operations/runbooks/ingest-gap-detected.md
+        annotations:
+          summary: "Data-coverage gap of {{ $value }} ledgers in {{ $labels.source }}"
+          description: |
+            ratesengine_ingest_gap_max_size_ledgers{source="{{ $labels.source }}"}
+            = {{ $value }} ledgers — a contiguous block of {{ $labels.source }}
+            ingest is missing. Cursor inventory may read fine; this
+            alert reads the data table directly.
+
+            Resolve via:
+              ratesengine-ops find-data-gaps --config /etc/ratesengine.toml --output text
+            which prints the exact [from, to] ranges + ready-to-paste
+            `ratesengine-ops backfill` commands.
+
+            Runbook: https://github.com/RatesEngine/rates-engine/blob/main/docs/operations/runbooks/ingest-gap-detected.md
+
+      # Meta-alert: gap detector itself is wedged. Fires when
+      # runs_total{outcome="ok"} stops incrementing AND the gauges
+      # aren't being refreshed — distinguishes "no gaps" (healthy)
+      # from "detector silent" (broken).
+      - alert: ratesengine_ingest_gap_detector_silent
+        expr: |
+          rate(ratesengine_ingest_gap_detector_runs_total{outcome="ok"}[15m]) == 0
+          OR
+          absent_over_time(ratesengine_ingest_gap_detector_runs_total[15m]) == 1
+        for: 10m
+        labels:
+          severity: ticket
+          team: ratesengine
+          component: ingestion
+          runbook_url: https://github.com/RatesEngine/rates-engine/blob/main/docs/operations/runbooks/ingest-gap-detector-silent.md
+        annotations:
+          summary: "Data-gap detector hasn't run in >15 min"
+          description: |
+            The aggregator's data-gap detector goroutine appears
+            stuck or absent. Without it the operator-facing
+            `ratesengine_ingest_gap_max_size_ledgers` gauge stops
+            updating — gauges read stale value until restart.
+
+            Likely causes: aggregator binary crash-looping; Postgres
+            connection-pool exhaustion preventing the 60s scan
+            timeout from completing; deploy regression that removed
+            the worker wiring.
+
+            Cross-check: aggregator service `active`?
+            postgres_exporter targets `up`?
+
+            Runbook: https://github.com/RatesEngine/rates-engine/blob/main/docs/operations/runbooks/ingest-gap-detector-silent.md

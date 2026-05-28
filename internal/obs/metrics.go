@@ -29,6 +29,11 @@ func init() {
 		HTTPRequestsTotal,
 		HTTPRequestDuration,
 		HTTPRequestSuccessDuration,
+		IngestGapLedgers,
+		IngestGapCount,
+		IngestGapMaxSize,
+		IngestGapDetectorRunsTotal,
+		IngestGapDetectorDurationSeconds,
 		APICacheOpsTotal,
 
 		SourceEventsTotal,
@@ -166,6 +171,90 @@ var HTTPRequestDuration = prometheus.NewHistogramVec(
 		Buckets: []float64{0.001, 0.005, 0.01, 0.025, 0.05, 0.1, 0.2, 0.5, 1, 2.5, 5, 10},
 	},
 	[]string{"method", "route"},
+)
+
+// IngestGapLedgers is the **data-derived** ingest-gap signal: total
+// missing ledgers in contiguous gaps >= the worker's threshold per
+// source. Reported by [internal/storage/timescale.GapDetector]
+// against the soroban_events hypertable on a periodic timer.
+//
+// Pairs with IngestGapCount + IngestGapMaxSize to feed an alert
+// rule that fires when an ingest gap forms (e.g. the F-0020
+// cascade-window soroban_events writer halt — the alert would have
+// caught the 92,737-ledger gap within one detector cycle instead
+// of requiring an audit pass to surface).
+//
+// Source label values today: only `soroban-events` — the pseudo-
+// source covering every Soroban-era event ledger. SDEX uses a
+// separate ingest path; its gap detection is a follow-up
+// (gap-finding on the trades table requires a different
+// statistical threshold because SDEX trade density across history
+// is naturally bursty).
+//
+// Gauge semantics: set to current value on every detector cycle;
+// reset to 0 when the worker finds no gaps >= threshold. NOT a
+// counter — operators read absolute value, not deltas.
+var IngestGapLedgers = prometheus.NewGaugeVec(
+	prometheus.GaugeOpts{
+		Name: "ratesengine_ingest_gap_ledgers",
+		Help: "Total missing ledgers in contiguous data-coverage gaps (>= detector min-gap-size) per source. Data-derived; complements cursor-coverage density.",
+	},
+	[]string{"source"},
+)
+
+// IngestGapCount counts the number of contiguous gaps per source
+// at the same detector cycle that updates IngestGapLedgers. A
+// single 100K-ledger gap and 100 ten-ledger gaps both report 1000
+// missing ledgers in IngestGapLedgers but very different shapes;
+// operators chart this gauge to distinguish "one big halt"
+// (typical cascade signature) from "many small drops" (typical
+// flaky-write pattern).
+var IngestGapCount = prometheus.NewGaugeVec(
+	prometheus.GaugeOpts{
+		Name: "ratesengine_ingest_gap_count",
+		Help: "Number of contiguous data-coverage gaps (>= detector min-gap-size) per source at the most recent detector cycle.",
+	},
+	[]string{"source"},
+)
+
+// IngestGapMaxSize reports the size of the largest contiguous gap
+// per source. Useful when the operator wants to know "how big is
+// the biggest hole" without parsing the gap list. Always equals
+// max(IngestGapLedgers / IngestGapCount) under the cycle's
+// invariant, but exposed directly so a single PromQL query can
+// alert on it.
+var IngestGapMaxSize = prometheus.NewGaugeVec(
+	prometheus.GaugeOpts{
+		Name: "ratesengine_ingest_gap_max_size_ledgers",
+		Help: "Size of the largest contiguous data-coverage gap per source at the most recent detector cycle.",
+	},
+	[]string{"source"},
+)
+
+// IngestGapDetectorRunsTotal counts detector cycle attempts +
+// outcomes. Operators read its rate to confirm the detector is
+// alive even when IngestGapLedgers is steady at zero (which is the
+// healthy state). Outcome ∈ {ok, error} — the latter increments
+// when the underlying SQL fails (typically a transient Postgres
+// connection blip).
+var IngestGapDetectorRunsTotal = prometheus.NewCounterVec(
+	prometheus.CounterOpts{
+		Name: "ratesengine_ingest_gap_detector_runs_total",
+		Help: "Periodic data-gap detector runs, by outcome. Rate goes to zero if the worker has wedged.",
+	},
+	[]string{"source", "outcome"},
+)
+
+// IngestGapDetectorDurationSeconds measures detector-cycle latency.
+// Operators chart `outcome=ok` p95/p99 separately from `error`
+// outcomes (see wave-100 obstest patterns).
+var IngestGapDetectorDurationSeconds = prometheus.NewHistogramVec(
+	prometheus.HistogramOpts{
+		Name:    "ratesengine_ingest_gap_detector_duration_seconds",
+		Help:    "Wall-clock duration of one data-gap detector cycle, by source × outcome.",
+		Buckets: []float64{0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10, 30, 60},
+	},
+	[]string{"source", "outcome"},
 )
 
 // HTTPRequestSuccessDuration is the success-only twin of

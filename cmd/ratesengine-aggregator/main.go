@@ -517,6 +517,22 @@ func run(cfgPath string, dryRun bool) error {
 		}()
 	}
 
+	// Data-derived gap detector — scans soroban_events for
+	// contiguous ledger-coverage gaps >= 1000 ledgers every 5 min
+	// and emits the gauges that feed
+	// `ratesengine_ingest_gap_ledgers_significant` alert. The
+	// prevention countermeasure for the F-0020 cascade-window
+	// pattern: pre-this-worker, a Soroban-events writer halt was
+	// only discoverable via an audit pass against the cursor
+	// inventory + manual SQL; now it pages.
+	refresherWG.Add(1)
+	go func() {
+		defer refresherWG.Done()
+		if err := timescale.RunGapDetector(rootCtx, store, logger.With("component", "gap-detector")); err != nil && !errors.Is(err, context.Canceled) {
+			logger.Error("gap-detector exited with error", "err", err)
+		}
+	}()
+
 	// ─── Run ─────────────────────────────────────────────────────
 	logger.Info("orchestrator starting")
 	if err := orch.Run(rootCtx); err != nil && !errors.Is(err, context.Canceled) {
