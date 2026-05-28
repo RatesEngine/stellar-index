@@ -12,16 +12,21 @@ import (
 // GapDetectorInterval is the cadence at which [RunGapDetector]
 // re-scans soroban_events for contiguous data-coverage gaps.
 //
-// Why 5 minutes:
-//   - The expensive part is the LAG()-over-DISTINCT scan, which on
-//     r1 against ~12 M distinct ledgers runs in ~2-3 s.
-//   - The metric feeds a paging alert on a >threshold gap; 5 min
-//     means the alert fires within ~6-8 min of the gap forming,
-//     which is the right urgency for an ingest halt.
-//   - 5 min × 13 sources (when SDEX gap detection ships) is still
-//     under 5% wall-clock of a single connection, which is plenty
-//     of head room.
-const GapDetectorInterval = 5 * time.Minute
+// Why 30 minutes:
+//   - The expensive part is the LAG()-over-DISTINCT scan. Live r1
+//     measurement (2026-05-28) clocked 4m51s against ~50M distinct
+//     ledgers. The original 5-minute cadence was sized against a
+//     synthetic 12M-row test fixture and was infeasible in prod —
+//     a scan rarely completed within its own interval.
+//   - The metric feeds a paging alert on a >threshold gap held
+//     for 15 min; 30 min cadence keeps the alert latency in the
+//     ~45-60 min envelope, which is appropriate for an "ingest
+//     halt" page (not a sub-minute fast-failure signal).
+//   - Wall-clock cost: ~5 min scan every 30 min ≈ 17% of one
+//     connection's time, exclusively on the aggregator's pool.
+//     A future optimisation may incrementally refresh a
+//     soroban_event_ledgers materialised view instead.
+const GapDetectorInterval = 30 * time.Minute
 
 // GapDetectorMinGapSize is the threshold below which a contiguous
 // gap is treated as expected no-Soroban-activity noise rather than
@@ -30,11 +35,13 @@ const GapDetectorInterval = 5 * time.Minute
 // godoc on that subcommand for the rationale.
 const GapDetectorMinGapSize = int64(1000)
 
-// gapDetectorTimeout caps one scan attempt. The actual r1 latency
-// is ~2-3 s; 60 s is enough headroom for a transient Postgres blip
-// or a chunk-compression mid-pass without holding the goroutine
-// open through a deeper outage.
-const gapDetectorTimeout = 60 * time.Second
+// gapDetectorTimeout caps one scan attempt. Live r1 measurement
+// (2026-05-28) was 4m51s against ~50M distinct ledgers; 15 min
+// gives ~3x headroom for chunk-compression mid-pass or transient
+// Postgres pressure without holding the goroutine open across a
+// deeper outage. Paired with [GapDetectorInterval] of 30 min, a
+// timeout means at most one missed cycle before the next attempt.
+const gapDetectorTimeout = 15 * time.Minute
 
 // RunGapDetector blocks until ctx is cancelled, periodically
 // scanning soroban_events for contiguous ledger-coverage gaps and
