@@ -10,46 +10,43 @@ import (
 )
 
 // GapDetectorInterval is the cadence at which [RunGapDetector]
-// re-scans soroban_events for contiguous data-coverage gaps.
+// re-scans every registered per-source hypertable for contiguous
+// data-coverage gaps.
 //
 // Why 30 minutes:
 //   - The expensive part is the LAG()-over-DISTINCT scan. Live r1
 //     measurement (2026-05-28) clocked 4m51s against ~50M distinct
-//     ledgers. The original 5-minute cadence was sized against a
-//     synthetic 12M-row test fixture and was infeasible in prod —
-//     a scan rarely completed within its own interval.
+//     ledgers in soroban_events alone; the per-source tables add
+//     a smaller per-target cost (<30s each on r1) but the sum
+//     across 13 targets is ~7-10 min worst-case.
 //   - The metric feeds a paging alert on a >threshold gap held
 //     for 15 min; 30 min cadence keeps the alert latency in the
 //     ~45-60 min envelope, which is appropriate for an "ingest
 //     halt" page (not a sub-minute fast-failure signal).
-//   - Wall-clock cost: ~5 min scan every 30 min ≈ 17% of one
-//     connection's time, exclusively on the aggregator's pool.
-//     A future optimisation may incrementally refresh a
-//     soroban_event_ledgers materialised view instead.
+//   - Future optimisation may incrementally refresh a
+//     soroban_event_ledgers materialised view to bring the
+//     dominant scan cost back under a second.
 const GapDetectorInterval = 30 * time.Minute
 
 // GapDetectorMinGapSize is the threshold below which a contiguous
-// gap is treated as expected no-Soroban-activity noise rather than
-// an ingest gap. Matches `ratesengine-ops find-data-gaps`'s
-// default of 1000 ledgers (~1.5 h of network time) — see the
-// godoc on that subcommand for the rationale.
+// gap is treated as expected no-activity noise rather than an
+// ingest gap. Matches `ratesengine-ops find-data-gaps`'s default
+// of 1000 ledgers (~1.5 h of network time) — see the godoc on
+// that subcommand for the rationale.
 const GapDetectorMinGapSize = int64(1000)
 
-// gapDetectorTimeout caps one scan attempt. Live r1 measurement
-// (2026-05-28) was 4m51s against ~50M distinct ledgers; 15 min
-// gives ~3x headroom for chunk-compression mid-pass or transient
-// Postgres pressure without holding the goroutine open across a
-// deeper outage. Paired with [GapDetectorInterval] of 30 min, a
-// timeout means at most one missed cycle before the next attempt.
-const gapDetectorTimeout = 15 * time.Minute
+// gapDetectorPerTargetTimeout caps one per-target scan. Sized for
+// soroban_events's 5-min measurement with 3x headroom; the per-
+// source tables complete in <30s typically so this is the upper
+// bound, not the median. Per-target timeout means one slow table
+// doesn't poison the rest of the cycle — each target runs in
+// isolation.
+const gapDetectorPerTargetTimeout = 15 * time.Minute
 
 // RunGapDetector blocks until ctx is cancelled, periodically
-// scanning soroban_events for contiguous ledger-coverage gaps and
-// emitting [obs.IngestGapLedgers] + [obs.IngestGapCount] +
-// [obs.IngestGapMaxSize] gauges per source plus the
-// [obs.IngestGapDetectorRunsTotal] +
-// [obs.IngestGapDetectorDurationSeconds] meta-metrics for the
-// worker itself.
+// scanning every target in [DefaultGapDetectorTargets] for
+// contiguous ledger-coverage gaps and emitting per-(source, table)
+// gauges + meta-metrics.
 //
 // Data-derived complement to the cursor-derived density projection
 // in /v1/diagnostics/ingestion. Cursor coverage measures process
@@ -57,20 +54,21 @@ const gapDetectorTimeout = 15 * time.Minute
 // is missing — the F-0020 audit found exactly that, with the
 // soroban_events writer halted across a 92,737-ledger contiguous
 // window while the cursor inventory + density projection said
-// fine. This worker scans the data table directly and surfaces the
-// honest signal as a Prometheus gauge that operators (and an
-// alert rule) can act on.
+// fine. This worker scans every per-source data table directly
+// and surfaces the honest signal as Prometheus gauges that
+// operators (and an alert rule) can act on.
 //
-// Failure semantics: a transient Postgres error on a single
-// detector cycle does NOT clear the gauges — the last-known value
-// stays put. Operators rely on the paired
+// Failure semantics: a transient Postgres error on one target's
+// scan does NOT clear its gauges and does NOT halt the remaining
+// targets in the cycle — the last-known value stays put and the
+// loop continues. Operators rely on the paired
 // `ratesengine_ingest_gap_detector_runs_total{outcome=error}`
-// counter to detect a sustained detector outage (e.g. Postgres
-// down for >24 h).
+// counter to detect a sustained per-target detector outage.
 //
-// First scan runs immediately on goroutine start so the gauges are
-// populated before the first interval tick — a process that's just
-// come up has a non-empty signal within ~3 s rather than ~5 min.
+// First scan runs immediately on goroutine start so the gauges
+// are populated before the first interval tick — a process that's
+// just come up has a non-empty signal within ~7 min rather than
+// ~37 min (= interval + first scan duration).
 func RunGapDetector(ctx context.Context, store *Store, logger *slog.Logger) error {
 	if store == nil {
 		return nil
@@ -79,7 +77,7 @@ func RunGapDetector(ctx context.Context, store *Store, logger *slog.Logger) erro
 		logger = slog.Default()
 	}
 
-	runOneGapDetectorCycle(ctx, store, logger)
+	runOneGapDetectorCycle(ctx, store, logger, DefaultGapDetectorTargets)
 
 	ticker := time.NewTicker(GapDetectorInterval)
 	defer ticker.Stop()
@@ -89,34 +87,59 @@ func RunGapDetector(ctx context.Context, store *Store, logger *slog.Logger) erro
 		case <-ctx.Done():
 			return ctx.Err()
 		case <-ticker.C:
-			runOneGapDetectorCycle(ctx, store, logger)
+			runOneGapDetectorCycle(ctx, store, logger, DefaultGapDetectorTargets)
 		}
 	}
 }
 
-// runOneGapDetectorCycle is one scan + metric-emission pass.
+// runOneGapDetectorCycle is one full pass over every target.
 // Separated from RunGapDetector so the cycle is unit-testable
-// (the test wires a real Store via testcontainers + asserts the
-// gauges directly).
-func runOneGapDetectorCycle(ctx context.Context, store *Store, logger *slog.Logger) {
-	const source = "soroban-events"
-	start := time.Now()
-	scanCtx, cancel := context.WithTimeout(ctx, gapDetectorTimeout)
-	defer cancel()
-
-	tip, err := resolveGapDetectorTip(scanCtx, store)
+// (the integration test wires a real Store via testcontainers +
+// asserts gauges directly).
+//
+// Each target runs in its own bounded sub-context so one slow
+// scan can't starve the rest of the cycle.
+func runOneGapDetectorCycle(ctx context.Context, store *Store, logger *slog.Logger, targets []GapDetectorTarget) {
+	tip, err := resolveGapDetectorTip(ctx, store)
 	if err != nil {
-		obs.IngestGapDetectorRunsTotal.WithLabelValues(source, "error").Inc()
-		obs.IngestGapDetectorDurationSeconds.WithLabelValues(source, "error").Observe(time.Since(start).Seconds())
-		logger.Warn("gap-detector: tip resolve failed", "err", err)
+		// Tip resolution failure is global — every target is blocked
+		// because they all need the tip as the upper scan bound.
+		// Record one error per target so the per-target outcome
+		// counter stays coherent.
+		for _, target := range targets {
+			obs.IngestGapDetectorRunsTotal.WithLabelValues(target.Source, target.Table, "error").Inc()
+		}
+		logger.Warn("gap-detector: tip resolve failed; skipping cycle", "err", err)
 		return
 	}
 
-	gaps, err := store.FindSorobanEventsLedgerGaps(scanCtx, 0, tip, GapDetectorMinGapSize)
+	for _, target := range targets {
+		scanOneGapDetectorTarget(ctx, store, logger, target, tip)
+	}
+}
+
+// scanOneGapDetectorTarget runs one target's scan + metric
+// emission under its own timeout. Separated from
+// runOneGapDetectorCycle so the cycle loop reads as "for each
+// target, scan it" and the failure-mode boilerplate (timeout,
+// error counter, gauge non-clear) lives in one place.
+//
+// Gauges are NOT cleared on error — last-known value persists so
+// an alert that was firing stays firing through a transient blip.
+//
+//nolint:gocognit // linear pipeline; the metric fan-out reads cleanly inline.
+func scanOneGapDetectorTarget(ctx context.Context, store *Store, logger *slog.Logger, target GapDetectorTarget, tip int64) {
+	start := time.Now()
+	scanCtx, cancel := context.WithTimeout(ctx, gapDetectorPerTargetTimeout)
+	defer cancel()
+
+	gaps, err := store.FindPerSourceLedgerGaps(scanCtx, target, 0, tip, GapDetectorMinGapSize)
 	if err != nil {
-		obs.IngestGapDetectorRunsTotal.WithLabelValues(source, "error").Inc()
-		obs.IngestGapDetectorDurationSeconds.WithLabelValues(source, "error").Observe(time.Since(start).Seconds())
-		logger.Warn("gap-detector: scan failed", "err", err, "tip", tip)
+		obs.IngestGapDetectorRunsTotal.WithLabelValues(target.Source, target.Table, "error").Inc()
+		obs.IngestGapDetectorDurationSeconds.WithLabelValues(target.Source, target.Table, "error").
+			Observe(time.Since(start).Seconds())
+		logger.Warn("gap-detector: scan failed",
+			"source", target.Source, "table", target.Table, "err", err, "tip", tip)
 		return
 	}
 
@@ -128,43 +151,44 @@ func runOneGapDetectorCycle(ctx context.Context, store *Store, logger *slog.Logg
 		}
 	}
 
-	obs.IngestGapLedgers.WithLabelValues(source).Set(float64(totalMissing))
-	obs.IngestGapCount.WithLabelValues(source).Set(float64(len(gaps)))
-	obs.IngestGapMaxSize.WithLabelValues(source).Set(float64(largest))
-	obs.IngestGapDetectorRunsTotal.WithLabelValues(source, "ok").Inc()
-	obs.IngestGapDetectorDurationSeconds.WithLabelValues(source, "ok").Observe(time.Since(start).Seconds())
+	obs.IngestGapLedgers.WithLabelValues(target.Source, target.Table).Set(float64(totalMissing))
+	obs.IngestGapCount.WithLabelValues(target.Source, target.Table).Set(float64(len(gaps)))
+	obs.IngestGapMaxSize.WithLabelValues(target.Source, target.Table).Set(float64(largest))
+	obs.IngestGapDetectorRunsTotal.WithLabelValues(target.Source, target.Table, "ok").Inc()
+	obs.IngestGapDetectorDurationSeconds.WithLabelValues(target.Source, target.Table, "ok").
+		Observe(time.Since(start).Seconds())
 
 	if totalMissing > 0 {
 		logger.Warn("gap-detector: data-coverage gaps detected",
-			"source", source,
+			"source", target.Source,
+			"table", target.Table,
 			"tip", tip,
 			"total_missing_ledgers", totalMissing,
 			"gap_count", len(gaps),
 			"max_gap_size", largest,
 		)
 	} else {
-		logger.Debug("gap-detector: clean coverage", "source", source, "tip", tip)
+		logger.Debug("gap-detector: clean coverage",
+			"source", target.Source, "table", target.Table, "tip", tip)
 	}
 }
 
 // resolveGapDetectorTip reads the live ledgerstream cursor's
-// last_ledger as the scan's upper bound. Used in lieu of "scan
-// to MAX(ledger) in soroban_events" because that would silently
-// scan ABOVE tip if soroban_events has stale rows from a previous
-// test fixture; using the cursor is the authoritative "what's
-// the live tip right now" answer.
+// last_ledger as the scan's upper bound. Used in lieu of
+// "scan to MAX(ledger) in each table" because that would silently
+// scan ABOVE tip if any table has stale rows from a previous test
+// fixture; using the cursor is the authoritative "what's the live
+// tip right now" answer.
 //
 // Returns 0 if no live cursor row exists (test fixture / region
-// without live ingest); the caller's [FindSorobanEventsLedgerGaps]
-// is safe at to=0 → it returns no gaps because the WHERE filter
-// yields zero rows. The detector still emits a runs_total
-// increment so operators can tell the worker is alive and just
-// has nothing to scan.
+// without live ingest); the callers' [FindPerSourceLedgerGaps] is
+// safe at to=0 (returns nil with no error). The detector still
+// emits per-target runs_total increments via the cycle loop so
+// operators can tell the worker is alive and just has nothing to
+// scan.
 func resolveGapDetectorTip(ctx context.Context, store *Store) (int64, error) {
 	c, err := store.GetCursor(ctx, "ledgerstream", "")
 	if err != nil {
-		// ErrNotFound is OK — no live cursor yet means the worker
-		// has nothing to scan. Any other error is real.
 		if errors.Is(err, ErrNotFound) {
 			return 0, nil
 		}

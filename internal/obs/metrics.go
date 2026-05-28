@@ -184,12 +184,16 @@ var HTTPRequestDuration = prometheus.NewHistogramVec(
 // caught the 92,737-ledger gap within one detector cycle instead
 // of requiring an audit pass to surface).
 //
-// Source label values today: only `soroban-events` — the pseudo-
-// source covering every Soroban-era event ledger. SDEX uses a
-// separate ingest path; its gap detection is a follow-up
-// (gap-finding on the trades table requires a different
-// statistical threshold because SDEX trade density across history
-// is naturally bursty).
+// Labels:
+//   - `source` — semantic source identifier (e.g. blend-positions,
+//     soroban-events, sep41-transfers). One source may span
+//     multiple tables (Blend's three projections).
+//   - `table` — the actual Postgres hypertable name. Disambiguates
+//     when one source has multiple targets.
+//
+// SDEX uses a separate ingest path (trades hypertable, classic
+// not Soroban); its detection lives under {source="sdex",
+// table="trades"} as of rc.88 / PR #3.
 //
 // Gauge semantics: set to current value on every detector cycle;
 // reset to 0 when the worker finds no gaps >= threshold. NOT a
@@ -197,9 +201,9 @@ var HTTPRequestDuration = prometheus.NewHistogramVec(
 var IngestGapLedgers = prometheus.NewGaugeVec(
 	prometheus.GaugeOpts{
 		Name: "ratesengine_ingest_gap_ledgers",
-		Help: "Total missing ledgers in contiguous data-coverage gaps (>= detector min-gap-size) per source. Data-derived; complements cursor-coverage density.",
+		Help: "Total missing ledgers in contiguous data-coverage gaps (>= detector min-gap-size) per (source, table). Data-derived; complements cursor-coverage density.",
 	},
-	[]string{"source"},
+	[]string{"source", "table"},
 )
 
 // IngestGapCount counts the number of contiguous gaps per source
@@ -212,9 +216,9 @@ var IngestGapLedgers = prometheus.NewGaugeVec(
 var IngestGapCount = prometheus.NewGaugeVec(
 	prometheus.GaugeOpts{
 		Name: "ratesengine_ingest_gap_count",
-		Help: "Number of contiguous data-coverage gaps (>= detector min-gap-size) per source at the most recent detector cycle.",
+		Help: "Number of contiguous data-coverage gaps (>= detector min-gap-size) per (source, table) at the most recent detector cycle.",
 	},
-	[]string{"source"},
+	[]string{"source", "table"},
 )
 
 // IngestGapMaxSize reports the size of the largest contiguous gap
@@ -226,9 +230,9 @@ var IngestGapCount = prometheus.NewGaugeVec(
 var IngestGapMaxSize = prometheus.NewGaugeVec(
 	prometheus.GaugeOpts{
 		Name: "ratesengine_ingest_gap_max_size_ledgers",
-		Help: "Size of the largest contiguous data-coverage gap per source at the most recent detector cycle.",
+		Help: "Size of the largest contiguous data-coverage gap per (source, table) at the most recent detector cycle.",
 	},
-	[]string{"source"},
+	[]string{"source", "table"},
 )
 
 // IngestGapDetectorRunsTotal counts detector cycle attempts +
@@ -240,9 +244,9 @@ var IngestGapMaxSize = prometheus.NewGaugeVec(
 var IngestGapDetectorRunsTotal = prometheus.NewCounterVec(
 	prometheus.CounterOpts{
 		Name: "ratesengine_ingest_gap_detector_runs_total",
-		Help: "Periodic data-gap detector runs, by outcome. Rate goes to zero if the worker has wedged.",
+		Help: "Periodic data-gap detector runs, by (source, table, outcome). Rate goes to zero if the worker has wedged.",
 	},
-	[]string{"source", "outcome"},
+	[]string{"source", "table", "outcome"},
 )
 
 // IngestGapDetectorDurationSeconds measures detector-cycle latency.
@@ -250,11 +254,14 @@ var IngestGapDetectorRunsTotal = prometheus.NewCounterVec(
 // outcomes (see wave-100 obstest patterns).
 var IngestGapDetectorDurationSeconds = prometheus.NewHistogramVec(
 	prometheus.HistogramOpts{
-		Name:    "ratesengine_ingest_gap_detector_duration_seconds",
-		Help:    "Wall-clock duration of one data-gap detector cycle, by source × outcome.",
-		Buckets: []float64{0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10, 30, 60},
+		Name: "ratesengine_ingest_gap_detector_duration_seconds",
+		Help: "Wall-clock duration of one data-gap detector cycle, by (source, table, outcome). Buckets extend to 600s because soroban_events scans on r1 measure ~300s against ~50M distinct ledgers.",
+		// Extended buckets to 600 because the soroban_events scan on
+		// r1 is ~300s; the original 60s cap put every successful
+		// scan in the overflow bucket.
+		Buckets: []float64{0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10, 30, 60, 120, 300, 600},
 	},
-	[]string{"source", "outcome"},
+	[]string{"source", "table", "outcome"},
 )
 
 // HTTPRequestSuccessDuration is the success-only twin of

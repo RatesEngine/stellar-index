@@ -47,19 +47,21 @@ func TestFindDataGapsReport_TotalMissingLedgers(t *testing.T) {
 }
 
 // TestWriteFindDataGapsText_NoGaps verifies the operator-friendly
-// path when soroban_events is gap-free — the message has to be
+// path when the scanned target is gap-free — the message has to be
 // unambiguous so an operator scanning logs doesn't assume the
 // subcommand silently no-op'd.
 func TestWriteFindDataGapsText_NoGaps(t *testing.T) {
 	out := captureStdout(t, func() {
 		writeFindDataGapsText(findDataGapsReport{
 			ScannedAt:  time.Now().UTC(),
+			Source:     "soroban-events",
+			Table:      "soroban_events",
 			MinGapSize: 1000,
 			FromLedger: 0,
 			ToLedger:   62763483,
 		})
 	})
-	if !strings.Contains(out, "scanned [0, 62763483]") {
+	if !strings.Contains(out, "ledgers=[0, 62763483]") {
 		t.Errorf("missing scan summary; got %q", out)
 	}
 	if !strings.Contains(out, "no gaps found") {
@@ -74,6 +76,8 @@ func TestWriteFindDataGapsText_NoGaps(t *testing.T) {
 func TestWriteFindDataGapsText_WithGaps(t *testing.T) {
 	r := findDataGapsReport{
 		ScannedAt:  time.Now().UTC(),
+		Source:     "soroban-events",
+		Table:      "soroban_events",
 		MinGapSize: 1000,
 		FromLedger: 0,
 		ToLedger:   62763483,
@@ -87,7 +91,8 @@ func TestWriteFindDataGapsText_WithGaps(t *testing.T) {
 		writeFindDataGapsText(r)
 	})
 	want := []string{
-		"scanned [0, 62763483] for gaps >= 1000",
+		"source=soroban-events table=soroban_events",
+		"ledgers=[0, 62763483] min_gap_size=1000",
 		"2 gap(s), totalling 103396 missing ledgers",
 		"[62642781, 62735517]  size=92737",
 		"[62746866, 62757524]  size=10659",
@@ -106,18 +111,25 @@ func TestWriteFindDataGapsText_WithGaps(t *testing.T) {
 // scripts piping into `jq '.gaps[] | "\(.start) \(.end)"'`
 // depend on the lowercase keys.
 func TestWriteFindDataGapsJSON_Shape(t *testing.T) {
-	r := findDataGapsReport{
-		ScannedAt:  time.Date(2026, 5, 28, 18, 29, 50, 0, time.UTC),
-		MinGapSize: 1000,
-		FromLedger: 0,
-		ToLedger:   62763483,
-		Gaps: []timescale.LedgerGap{
-			{Start: 62642781, End: 62735517, Size: 92737},
+	multi := findDataGapsMultiReport{
+		ScannedAt: time.Date(2026, 5, 28, 18, 29, 50, 0, time.UTC),
+		Reports: []findDataGapsReport{
+			{
+				ScannedAt:  time.Date(2026, 5, 28, 18, 29, 50, 0, time.UTC),
+				Source:     "soroban-events",
+				Table:      "soroban_events",
+				MinGapSize: 1000,
+				FromLedger: 0,
+				ToLedger:   62763483,
+				Gaps: []timescale.LedgerGap{
+					{Start: 62642781, End: 62735517, Size: 92737},
+				},
+				TotalMissingLedgers: 92737,
+			},
 		},
-		TotalMissingLedgers: 92737,
 	}
 	out := captureStdout(t, func() {
-		if err := writeFindDataGapsJSON(r); err != nil {
+		if err := writeFindDataGapsJSON(multi); err != nil {
 			t.Fatal(err)
 		}
 	})
@@ -125,14 +137,24 @@ func TestWriteFindDataGapsJSON_Shape(t *testing.T) {
 	if err := json.Unmarshal([]byte(out), &parsed); err != nil {
 		t.Fatalf("invalid JSON: %v\n%s", err, out)
 	}
-	for _, k := range []string{"scanned_at", "min_gap_size", "from_ledger", "to_ledger", "gaps", "total_missing_ledgers"} {
+	for _, k := range []string{"scanned_at", "reports"} {
 		if _, ok := parsed[k]; !ok {
 			t.Errorf("missing top-level key %q in %v", k, parsed)
 		}
 	}
-	gaps, ok := parsed["gaps"].([]any)
+	reports, ok := parsed["reports"].([]any)
+	if !ok || len(reports) != 1 {
+		t.Fatalf("reports shape unexpected: %v", parsed["reports"])
+	}
+	firstReport, _ := reports[0].(map[string]any)
+	for _, k := range []string{"source", "table", "min_gap_size", "from_ledger", "to_ledger", "gaps", "total_missing_ledgers"} {
+		if _, ok := firstReport[k]; !ok {
+			t.Errorf("missing per-report key %q in %v", k, firstReport)
+		}
+	}
+	gaps, ok := firstReport["gaps"].([]any)
 	if !ok || len(gaps) != 1 {
-		t.Fatalf("gaps shape unexpected: %v", parsed["gaps"])
+		t.Fatalf("gaps shape unexpected: %v", firstReport["gaps"])
 	}
 	first, ok := gaps[0].(map[string]any)
 	if !ok {
@@ -142,6 +164,35 @@ func TestWriteFindDataGapsJSON_Shape(t *testing.T) {
 		if _, ok := first[k]; !ok {
 			t.Errorf("missing gap key %q in %v", k, first)
 		}
+	}
+}
+
+func TestResolveFindDataGapsTargets(t *testing.T) {
+	t.Parallel()
+	cases := []struct {
+		name      string
+		source    string
+		wantCount int
+		wantErr   bool
+	}{
+		{name: "all sources", source: "all", wantCount: len(timescale.DefaultGapDetectorTargets)},
+		{name: "empty defaults to all", source: "", wantCount: len(timescale.DefaultGapDetectorTargets)},
+		{name: "single existing source", source: "blend-positions", wantCount: 1},
+		{name: "two existing sources", source: "blend-positions,phoenix-liquidity", wantCount: 2},
+		{name: "with whitespace", source: " blend-positions , phoenix-liquidity ", wantCount: 2},
+		{name: "unknown source fails", source: "bogus", wantErr: true},
+		{name: "partial unknown fails fast", source: "blend-positions,bogus", wantErr: true},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			out, err := resolveFindDataGapsTargets(tc.source)
+			if (err != nil) != tc.wantErr {
+				t.Fatalf("err=%v wantErr=%v", err, tc.wantErr)
+			}
+			if !tc.wantErr && len(out) != tc.wantCount {
+				t.Errorf("got %d targets; want %d", len(out), tc.wantCount)
+			}
+		})
 	}
 }
 

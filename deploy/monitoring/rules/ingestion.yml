@@ -286,7 +286,7 @@ groups:
       # legitimate no-Soroban-activity stretches.
       - alert: ratesengine_ingest_gap_detected
         expr: |
-          ratesengine_ingest_gap_max_size_ledgers > 1000
+          max by (source) (ratesengine_ingest_gap_max_size_ledgers) > 1000
         for: 15m
         labels:
           severity: page
@@ -294,17 +294,19 @@ groups:
           component: ingestion
           runbook_url: https://github.com/RatesEngine/rates-engine/blob/main/docs/operations/runbooks/ingest-gap-detected.md
         annotations:
-          summary: "Data-coverage gap of {{ $value }} ledgers in {{ $labels.source }}"
+          summary: "Data-coverage gap of {{ $value }} ledgers in source={{ $labels.source }}"
           description: |
-            ratesengine_ingest_gap_max_size_ledgers{source="{{ $labels.source }}"}
+            max by (source) (ratesengine_ingest_gap_max_size_ledgers{source="{{ $labels.source }}"})
             = {{ $value }} ledgers — a contiguous block of {{ $labels.source }}
-            ingest is missing. Cursor inventory may read fine; this
-            alert reads the data table directly.
+            ingest is missing in one of its per-source hypertables.
+            Cursor inventory may read fine; this alert reads the data
+            tables directly.
 
             Resolve via:
-              ratesengine-ops find-data-gaps --config /etc/ratesengine.toml --output text
-            which prints the exact [from, to] ranges + ready-to-paste
-            `ratesengine-ops backfill` commands.
+              ratesengine-ops find-data-gaps --config /etc/ratesengine.toml --source {{ $labels.source }} --output text
+            for per-source diagnosis, then either
+              ratesengine-ops drain-cascade-window --from F --to T  (if every per-source table is short)
+              ratesengine-ops <source>-backfill --from F --to T     (if only one source is short)
 
             Runbook: https://github.com/RatesEngine/rates-engine/blob/main/docs/operations/runbooks/ingest-gap-detected.md
 

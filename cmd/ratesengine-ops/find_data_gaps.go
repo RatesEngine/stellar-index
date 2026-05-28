@@ -42,11 +42,23 @@ const findDataGapsDefaultMinGapSize = int64(1000)
 
 type findDataGapsReport struct {
 	ScannedAt           time.Time             `json:"scanned_at"`
+	Source              string                `json:"source"`
+	Table               string                `json:"table"`
 	MinGapSize          int64                 `json:"min_gap_size"`
 	FromLedger          int64                 `json:"from_ledger"`
 	ToLedger            int64                 `json:"to_ledger"`
 	Gaps                []timescale.LedgerGap `json:"gaps"`
 	TotalMissingLedgers int64                 `json:"total_missing_ledgers"`
+}
+
+// findDataGapsMultiReport groups one report per per-source target.
+// Emitted by `find-data-gaps --source all` (the default when no
+// --source is given). Operators reading JSON pipe it through `jq`
+// to filter by source; humans reading text get one block per
+// target.
+type findDataGapsMultiReport struct {
+	ScannedAt time.Time            `json:"scanned_at"`
+	Reports   []findDataGapsReport `json:"reports"`
 }
 
 func findDataGaps(args []string) error {
@@ -64,6 +76,10 @@ func findDataGaps(args []string) error {
 			"values surface more noise from quiet periods.")
 	output := fs.String("output", "text",
 		"output format: text (operator-friendly) or json (machine-readable plan)")
+	source := fs.String("source", "all",
+		"which per-source target(s) to scan: a single source name "+
+			"(e.g. blend-positions, soroban-events), \"all\" (every "+
+			"registered target — default), or a comma-separated subset")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -75,6 +91,11 @@ func findDataGaps(args []string) error {
 	}
 	if *output != "text" && *output != "json" {
 		return fmt.Errorf("-output (%q) must be \"text\" or \"json\"", *output)
+	}
+
+	targets, err := resolveFindDataGapsTargets(*source)
+	if err != nil {
+		return err
 	}
 
 	cfg, err := config.LoadWithEnv(*cfgPath)
@@ -103,57 +124,114 @@ func findDataGaps(args []string) error {
 		return fmt.Errorf("-to (%d) < -from (%d)", *to, *from)
 	}
 
-	gaps, err := store.FindSorobanEventsLedgerGaps(rootCtx, *from, *to, *minGapSize)
-	if err != nil {
-		return fmt.Errorf("find gaps: %w", err)
-	}
-	report := findDataGapsReport{
-		ScannedAt:  time.Now().UTC(),
-		MinGapSize: *minGapSize,
-		FromLedger: *from,
-		ToLedger:   *to,
-		Gaps:       gaps,
-	}
-	for _, g := range gaps {
-		report.TotalMissingLedgers += g.Size
+	multi := findDataGapsMultiReport{ScannedAt: time.Now().UTC()}
+	for _, target := range targets {
+		gaps, err := store.FindPerSourceLedgerGaps(rootCtx, target, *from, *to, *minGapSize)
+		if err != nil {
+			return fmt.Errorf("find gaps source=%s table=%s: %w", target.Source, target.Table, err)
+		}
+		report := findDataGapsReport{
+			ScannedAt:  multi.ScannedAt,
+			Source:     target.Source,
+			Table:      target.Table,
+			MinGapSize: *minGapSize,
+			FromLedger: *from,
+			ToLedger:   *to,
+			Gaps:       gaps,
+		}
+		for _, g := range gaps {
+			report.TotalMissingLedgers += g.Size
+		}
+		multi.Reports = append(multi.Reports, report)
 	}
 
 	switch *output {
 	case "json":
-		return writeFindDataGapsJSON(report)
+		return writeFindDataGapsJSON(multi)
 	default:
-		writeFindDataGapsText(report)
+		writeFindDataGapsMultiText(multi)
 		return nil
 	}
 }
 
-func writeFindDataGapsJSON(r findDataGapsReport) error {
-	enc := json.NewEncoder(os.Stdout)
-	enc.SetIndent("", "  ")
-	return enc.Encode(r)
+// resolveFindDataGapsTargets maps the --source flag value to the
+// concrete list of [timescale.GapDetectorTarget] to scan. "all"
+// returns every registered target; a single name matches by Source;
+// a comma-separated list filters the registry to that subset.
+// An unmatched name is a hard error so a typo doesn't silently scan
+// nothing.
+func resolveFindDataGapsTargets(source string) ([]timescale.GapDetectorTarget, error) {
+	if source == "" || source == "all" {
+		return timescale.DefaultGapDetectorTargets, nil
+	}
+	wanted := make(map[string]bool)
+	for _, s := range splitCSV(source) {
+		wanted[s] = true
+	}
+	out := make([]timescale.GapDetectorTarget, 0, len(wanted))
+	matched := make(map[string]bool, len(wanted))
+	for _, t := range timescale.DefaultGapDetectorTargets {
+		if wanted[t.Source] {
+			out = append(out, t)
+			matched[t.Source] = true
+		}
+	}
+	for name := range wanted {
+		if !matched[name] {
+			return nil, fmt.Errorf("-source %q does not match any registered gap-detector target", name)
+		}
+	}
+	return out, nil
 }
 
-func writeFindDataGapsText(r findDataGapsReport) {
+func writeFindDataGapsJSON(m findDataGapsMultiReport) error {
+	enc := json.NewEncoder(os.Stdout)
+	enc.SetIndent("", "  ")
+	return enc.Encode(m)
+}
+
+// writeFindDataGapsMultiText emits one report block per target.
+// Reports with zero gaps are still printed so the operator can
+// confirm every target was scanned.
+func writeFindDataGapsMultiText(m findDataGapsMultiReport) {
 	// fmt.Fprint{,f,ln} errors against os.Stdout are not actionable —
 	// a broken-pipe on operator-CLI output is the operator's terminal,
 	// not a system fault — so we swallow them via _, _ = ... rather
 	// than threading an error all the way up to main.
+	_, _ = fmt.Fprintf(os.Stdout, "find-data-gaps: %d targets scanned at %s\n",
+		len(m.Reports), m.ScannedAt.Format(time.RFC3339))
+	for _, r := range m.Reports {
+		writeFindDataGapsText(r)
+	}
+}
+
+func writeFindDataGapsText(r findDataGapsReport) {
 	_, _ = fmt.Fprintf(os.Stdout,
-		"find-data-gaps: scanned [%d, %d] for gaps >= %d ledgers\n",
-		r.FromLedger, r.ToLedger, r.MinGapSize)
+		"\n  source=%s table=%s ledgers=[%d, %d] min_gap_size=%d\n",
+		r.Source, r.Table, r.FromLedger, r.ToLedger, r.MinGapSize)
 	if len(r.Gaps) == 0 {
-		_, _ = fmt.Fprintln(os.Stdout, "  no gaps found — soroban_events coverage clean above the threshold")
+		_, _ = fmt.Fprintln(os.Stdout, "    no gaps found — coverage clean above the threshold")
 		return
 	}
-	_, _ = fmt.Fprintf(os.Stdout, "  %d gap(s), totalling %d missing ledgers:\n", len(r.Gaps), r.TotalMissingLedgers)
+	_, _ = fmt.Fprintf(os.Stdout, "    %d gap(s), totalling %d missing ledgers:\n", len(r.Gaps), r.TotalMissingLedgers)
 	for i, g := range r.Gaps {
-		_, _ = fmt.Fprintf(os.Stdout, "    %2d  [%d, %d]  size=%d ledgers\n", i+1, g.Start, g.End, g.Size)
+		_, _ = fmt.Fprintf(os.Stdout, "      %2d  [%d, %d]  size=%d ledgers\n", i+1, g.Start, g.End, g.Size)
 	}
-	_, _ = fmt.Fprintln(os.Stdout)
-	_, _ = fmt.Fprintln(os.Stdout, "  Targeted backfill plan:")
+	_, _ = fmt.Fprintln(os.Stdout, "    Targeted backfill plan:")
 	for i, g := range r.Gaps {
-		_, _ = fmt.Fprintf(os.Stdout,
-			"    %2d  ratesengine-ops backfill --config /etc/ratesengine.toml --from %d --to %d --source soroban-events\n",
-			i+1, g.Start, g.End)
+		// soroban-events uses the binary `backfill` subcommand (re-walk
+		// MinIO). Per-source classifier tables use their dedicated
+		// `<source>-backfill` subcommand (stream from soroban_events).
+		// The orchestrator `drain-cascade-window` covers all of the
+		// per-source subcommands in one shot.
+		if r.Source == "soroban-events" {
+			_, _ = fmt.Fprintf(os.Stdout,
+				"      %2d  ratesengine-ops backfill --config /etc/ratesengine.toml --from %d --to %d --source soroban-events\n",
+				i+1, g.Start, g.End)
+		} else {
+			_, _ = fmt.Fprintf(os.Stdout,
+				"      %2d  ratesengine-ops drain-cascade-window --config /etc/ratesengine.toml --from %d --to %d --sources %s\n",
+				i+1, g.Start, g.End, r.Source)
+		}
 	}
 }
