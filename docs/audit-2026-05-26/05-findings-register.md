@@ -273,8 +273,25 @@ runs; one row per finding.)
   (Soroban on-chain ingest frozen ~7h)
 - **Adversarial vector:** silent stale-data serving →
   violation of ADR-0015 last-closed-bucket contract
-- **Disposition:** `open`. Investigate which pair the probe
-  checked; cross-ref F-0016.
+- **Disposition:** `closed-as-historical` (2026-05-28). The
+  27 h freshness reading was the cascade-window worst case
+  on the pair F-0016 named (on-chain source frozen 7 h plus
+  the staleness-mirror bug from F-0032). All three
+  contributors are now resolved:
+  - F-0016-orig closed-as-historical (back-pressure cleared
+    operationally + duplicate-flood alerts at tasks #61 /
+    #62 / #67).
+  - F-0032 closed at task #57 (XLM/native order-independent
+    mirror).
+  - F-0104 closed at task #76 (`absent_over_time` guard on
+    the staleness alert itself).
+  Recurrence detection is alertable: any pair crossing 120 s
+  staleness fires `ratesengine_api_price_stale` page-tier;
+  any source inserting only duplicates fires
+  `ratesengine_ingestion_duplicate_flood`; any source going
+  inactive fires `ratesengine_ingestion_source_insert_stale`.
+  The audit's 27 h reading is no longer reachable without
+  one of those three pageing first.
 
 #### F-0013 — /v1/oracle/latest p95 271ms > 200ms
 
