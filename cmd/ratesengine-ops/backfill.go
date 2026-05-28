@@ -360,8 +360,19 @@ func runBackfillChunk(ctx context.Context, logger *slog.Logger, opts backfillOpt
 	}
 
 	streamCfg := pipeline.LedgerstreamConfig(cfg, opts.bucket)
+	// Count actual LCM callbacks so the chunk-complete log line can
+	// distinguish "this chunk walked N ledgers" from "the chunk
+	// covered an N-ledger range." F-0159 (2026-05-26): a backfill
+	// run against a bucket with no files in the target range logged
+	// `chunk complete ... ledgers=5331` and exited in 200ms — the
+	// `ledgers=` value was the chunk's [from,to] range size, not the
+	// count of ledgers actually walked. Operators read the log as a
+	// false-positive "backfill complete" and moved on without the
+	// gap being filled.
+	var walked uint64
 	streamErr := ledgerstream.Stream(ctx, streamCfg, startFrom, chunk.to,
 		func(lcm sdkxdr.LedgerCloseMeta) error {
+			walked++
 			if err := pipeline.ProcessLedger(ctx, disp, events, logger, lcm, cfg.Stellar.Passphrase()); err != nil {
 				return err
 			}
@@ -404,11 +415,29 @@ func runBackfillChunk(ctx context.Context, logger *slog.Logger, opts backfillOpt
 		return fmt.Errorf("stream: %w", streamErr)
 	}
 
+	// F-0159: report BOTH the chunk's range size and the count of
+	// ledgers actually walked. The old `ledgers=` field was the
+	// range size; if it didn't match `ledgers_walked` the bucket
+	// was missing files. Fail loudly on a complete miss across a
+	// non-zero range — that's almost always a bucket-mistargeting
+	// bug (wrong --bucket flag, wrong endpoint, wrong region) and
+	// the silent success was misleading enough to ship a
+	// false-positive "gap filled" signal in production.
+	chunkSize := chunk.to - chunk.from + 1
 	logger.Info("chunk complete",
 		"from", chunk.from,
 		"to", chunk.to,
-		"ledgers", chunk.to-chunk.from+1,
+		"chunk_size_ledgers", chunkSize,
+		"ledgers_walked", walked,
 	)
+	if chunkSize > 0 && walked == 0 {
+		return fmt.Errorf(
+			"backfill walked 0 of %d ledgers in range [%d,%d] from bucket %q — "+
+				"bucket likely has no files in this range; check --bucket and the "+
+				"galexie-archive/-live mirror for the target range",
+			chunkSize, chunk.from, chunk.to, opts.bucket,
+		)
+	}
 
 	// CAGG refresh path: skipped for the soroban-events pseudo-source
 	// (the soroban_events hypertable has no CAGGs built on top of it
