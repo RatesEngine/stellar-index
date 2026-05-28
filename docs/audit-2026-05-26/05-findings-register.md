@@ -199,8 +199,13 @@ runs; one row per finding.)
 - **Workstream:** W18 (deployment), W13 (operator tooling)
 - **Evidence:** R1-P01 transcript:
   `defindex-replay-rc66-20260521-222805.log 504M`
-- **Disposition:** `open`. Operator hygiene + logrotate config
-  for `/var/log/ratesengine/*.log` pattern.
+- **Disposition:** `closed` (Wave-1 task #44 shipped this
+  session, `a672fa32`). Logrotate config at
+  `configs/ansible/roles/archival-node/files/ratesengine.logrotate`
+  matches `/var/log/ratesengine/*.log` — weekly cadence, 8
+  rotations, 500M size cap, copytruncate. Picked up by the
+  archival-node Ansible role; manual cleanup of the existing
+  504MB defindex-replay file is a one-time operator task.
 
 #### F-0010 — operator dev artefacts on production (1.9G in /root)
 
@@ -272,8 +277,12 @@ runs; one row per finding.)
 - **Workstream:** W18
 - **Evidence:** `ls /etc/logrotate.d/` shows no
   `ratesengine` entry; `sdex-backfill` exists but is narrow.
-- **Disposition:** `open` — duplicates F-0009 root-cause;
-  remediation = add `/etc/logrotate.d/ratesengine`.
+- **Disposition:** `closed-by-PR-a672fa32` (2026-05-27).
+  Same fix as F-0009: `ratesengine.logrotate` deployed via
+  the archival-node Ansible role's `templates_logrotate`
+  task. Operator-side `systemctl reload logrotate.service`
+  picks up the new config without indexer/aggregator
+  restart.
 
 #### F-0016 — **REVISED HIGH** Stellar pair-level on-chain ingest 7h gap (NOT a frozen indexer)
 
@@ -497,9 +506,15 @@ F-0028 will track the soroban_events lag separately)
   # (e.g. the 42P10 ON CONFLICT mismatch we fixed in rc.79
   # could've left residue).
   ```
-- **Disposition:** `open`. Tightly coupled to F-0020 (back-pressure
-  saturation) — Postgres may be logging deadlocks / long
-  transactions / lock waits from the concurrent walks.
+- **Disposition:** `closed-by-task-45` (Wave-1 root-cause
+  investigation, this session). Confirmed coupling to F-0020:
+  the 11 GB spike correlated with the concurrent
+  soroban-events fill + verify-archive bootstrap that
+  saturated Postgres connections. Once those concurrent
+  jobs were paused, Postgres logging settled back to the
+  expected ~50 MB/day. No code change needed beyond the
+  F-0020 back-pressure operator-guidance; the log volume
+  is a symptom of the underlying saturation pattern.
 
 #### F-0024 — `/v1/price?asset=XLM` rejects shorthand asset code (API ergonomics gap)
 
@@ -843,15 +858,15 @@ F-0028 will track the soroban_events lag separately)
   silently degraded — brand-damaging credibility hit when
   they discover the inconsistency.
 - **Evidence:** live curl 2026-05-26 22:52 UTC
-- **Disposition:** `open` Wave 0. Two specific fixes:
-  1. Rollup logic should map "any service unknown OR zero-time"
-     to `overall: "degraded"` not "ok"
-  2. `flags.stale` should reflect the staleness of the data
-     used to compute it — the F-0036/F-0052 cascade means
-     this signal is itself stale.
+- **Disposition:** `closed` (Wave-0 task #23 shipped this
+  session). `internal/api/v1/status.go` rollup logic now
+  promotes "any service unknown / zero-time" to
+  `overall: "degraded"`, and `flags.stale` reflects the
+  Prometheus query age that backs the rollup. Customers
+  visiting status.ratesengine.net during a cascade now see
+  the same picture as `/v1/readyz`.
 - **Cross-ref:** F-0042 (POSITIVE: /v1/readyz correctly
-  reports MISCONF) — but /v1/status is the ONE customers
-  see, and it disagrees with /v1/readyz.
+  reports MISCONF) — now consistent with /v1/status.
 
 #### F-0053 — Prometheus TSDB on root partition `/var/lib/prometheus` (cascade-amplifier)
 
@@ -888,13 +903,15 @@ F-0028 will track the soroban_events lag separately)
   is structurally possible. Even if API key tier-control is
   intact (Stripe webhook works), un-billed signups still
   pollute the user table + email-notification quota.
-- **Disposition:** `open` Wave 0. Tradeoff to resolve:
-  fail-closed (signup rejects during Redis outage) vs
-  fail-open (current). For launch, recommend a degraded-mode
-  that returns 503 on signup when Redis writes are blocked,
-  AND emits a `signup_throttle_fail_open_total` metric so
-  this state is observable.
-- **Cross-ref:** F-0039, F-0050.
+- **Disposition:** `closed` (verified 2026-05-28). The
+  dwell-time inversion recommendation from F-0149 shipped in
+  Wave-0 task #21. `internal/auth/signup_ip_throttle.go` now
+  has `redisErrorSince` state — Redis errors fail-open for
+  the first `DefaultSignupThrottleDwellTime` (preserves the
+  transient-blip UX) and then return `ErrThrottleUnavailable`
+  which the handler maps to HTTP 503 with Retry-After.
+  Closes the J40 attack vector once the dwell-time elapses.
+- **Cross-ref:** F-0039, F-0050, F-0149.
 
 #### F-0050 — **HIGH** Global rate limit FAILS OPEN on Redis errors
 
@@ -913,13 +930,14 @@ F-0028 will track the soroban_events lag separately)
   fail-open choice
 - **Adversarial vector:** during F-0039 cascade, attackers
   can hammer all endpoints with no per-IP or per-key cap.
-- **Disposition:** `open` Wave 0. Combined with F-0049,
-  remediation: add a "Redis-degraded" mode that either
-  returns 503 (fail-closed) OR applies an aggressive
-  in-memory fallback rate limit (e.g. 30/min per IP),
-  AND emits `ratesengine_ratelimit_fail_open_total` so
-  the state is observable.
-- **Cross-ref:** F-0039, F-0049.
+- **Disposition:** `closed` (verified 2026-05-28). Same
+  dwell-time pattern as F-0049 — `internal/ratelimit/bucket.go`
+  now tracks `redisErrorSince` and returns
+  `ErrBucketUnavailable` after the dwell-time elapses. The
+  handler-side mapping to HTTP 503 + Retry-After closes the
+  bulk-scrape vector during sustained Redis MISCONF.
+  Shipped in Wave-0 task #21.
+- **Cross-ref:** F-0039, F-0049, F-0149.
 
 #### F-0048 — **CRITICAL** redis_exporter DOWN — no way to detect Redis MISCONF (F-0039 was silent for hours)
 
