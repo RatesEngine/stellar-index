@@ -1258,12 +1258,41 @@ F-0028 will track the soroban_events lag separately)
 - **Evidence:** rule grep produced these names; curl
   `:9464`, `:9465`, `:3000` metrics endpoints don't return
   them
-- **Disposition:** `open`. Per-metric investigation:
-  - Some may emit only on error (zero series == zero errors
-    — accepted)
-  - Some may emit from ratesengine-ops binary (not scraped
-    by Prometheus's main job)
-  - Some may be retired code paths
+- **Disposition:** `closed` (2026-05-28). Per-metric trace:
+  - `ratesengine_aggregator_fx_snap_fallback_total` — defined +
+    emitted in `internal/aggregate/orchestrator/triangulate.go`,
+    `leg` label is per-pair (unbounded by operator config), so
+    series only appears after the first FX fallback. Accepted
+    as emit-on-event.
+  - `ratesengine_aggregator_triangulations_total` — defined +
+    emitted in same package. **Pre-seeded** at zero for
+    `{outcome=ok|missing_leg|parse_error|redis_error}` in
+    `obs/metrics.go::init()` so alert PromQL is well-defined
+    before the first triangulation. Closes the audit's
+    "missing from scrape" complaint for this metric.
+  - `ratesengine_ledgerstream_tier_read_total` — defined +
+    emitted in `internal/ledgerstream/tiered.go` only when a
+    `TieredDataStore` is wired; cold-tier is not yet enabled
+    on r1 (per F-0014). Accepted as deliberately-inert until
+    the cold-tier rollout (operator task #5 in the open
+    backlog).
+  - `ratesengine_stellar_archive_publish_errors_total` —
+    intentionally reserved: the alert file's preamble at
+    `deploy/monitoring/rules/stellar.yml:20-30` documents that
+    r1 doesn't currently publish a history archive, so the
+    metric stays inert. Keeping the rule means operators
+    wiring publishing back on don't need a rule edit to start
+    surfacing the signal. Accepted as Phase-3 (Tier-1
+    validator) reservation.
+  - `ratesengine_stripe_platform_sync_errors_total` — defined
+    + emitted in `internal/api/v1/stripe_webhook.go`.
+    **Pre-seeded** at zero for
+    `{operation=get_account|upsert_subscription|account_update|list_keys|key_update}`
+    in `obs/metrics.go::init()`. Closes the audit's "missing
+    from scrape" complaint.
+  Regression pin: `TestZeroSeed_F0033` in
+  `internal/obs/metrics_test.go` asserts the 9 pre-seeded
+  series appear in scrape output at `0`.
 - **Cross-ref:** F-0027 cluster.
 
 #### F-0031 — Journal has 3-hour log gap for ratesengine-indexer

@@ -97,6 +97,30 @@ func init() {
 		AggregatorSupplyRefreshDurationSeconds,
 		AnomalyFreezeRecoverySweepDurationSeconds,
 	)
+
+	// F-0033 closure: pre-seed zero-valued series for the
+	// bounded-cardinality counters whose alert rules use rate() /
+	// increase() but whose label combinations never appear in
+	// /metrics output until the first event fires. Without
+	// pre-seeding, PromQL queries against e.g.
+	// `rate(ratesengine_aggregator_triangulations_total{outcome="ok"}[15m])`
+	// resolve to "no data" (gap, not zero) until the first
+	// triangulation succeeds — which makes `absent()` / `<= 0` checks
+	// ambiguous and the audit found multiple alerts whose underlying
+	// metric was "missing from scrape output." That was a Prometheus
+	// client-library quirk, not a code bug: counters only register a
+	// series after the first .Inc on a given label combo.
+	//
+	// Only counters with a *bounded, well-known* label set are
+	// pre-seeded here. AggregatorFXSnapFallbackTotal's `leg` label
+	// is per-pair (unbounded by operator config) so it stays
+	// emit-on-error.
+	for _, outcome := range []string{"ok", "missing_leg", "parse_error", "redis_error"} {
+		AggregatorTriangulationsTotal.WithLabelValues(outcome)
+	}
+	for _, op := range []string{"get_account", "upsert_subscription", "account_update", "list_keys", "key_update"} {
+		StripePlatformSyncErrorsTotal.WithLabelValues(op)
+	}
 }
 
 // Handler returns an http.Handler that serves Prometheus-formatted

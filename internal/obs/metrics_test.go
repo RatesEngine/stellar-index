@@ -354,3 +354,40 @@ func TestHTTPMetrics_StreamRouteSkipsDurationHistogram(t *testing.T) {
 		t.Errorf("regression: stream route landed in the latency histogram")
 	}
 }
+
+// TestZeroSeed_F0033 verifies that the bounded counters whose alert
+// rules reference rate()/increase() have all their label combos
+// pre-registered at zero, so PromQL queries return 0 rather than
+// "no data" before the first event fires. This was F-0033 in the
+// 2026-05-26 audit: operators saw the alert reference but no series
+// in /metrics output and couldn't tell whether the metric was
+// "intentionally zero" or "alert references a dead metric."
+func TestZeroSeed_F0033(t *testing.T) {
+	ts := httptest.NewServer(obs.Handler())
+	defer ts.Close()
+
+	resp, err := http.Get(ts.URL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	body, _ := io.ReadAll(resp.Body)
+	s := string(body)
+
+	mustContain := []string{
+		`ratesengine_aggregator_triangulations_total{outcome="ok"} 0`,
+		`ratesengine_aggregator_triangulations_total{outcome="missing_leg"} 0`,
+		`ratesengine_aggregator_triangulations_total{outcome="parse_error"} 0`,
+		`ratesengine_aggregator_triangulations_total{outcome="redis_error"} 0`,
+		`ratesengine_stripe_platform_sync_errors_total{operation="get_account"} 0`,
+		`ratesengine_stripe_platform_sync_errors_total{operation="upsert_subscription"} 0`,
+		`ratesengine_stripe_platform_sync_errors_total{operation="account_update"} 0`,
+		`ratesengine_stripe_platform_sync_errors_total{operation="list_keys"} 0`,
+		`ratesengine_stripe_platform_sync_errors_total{operation="key_update"} 0`,
+	}
+	for _, want := range mustContain {
+		if !strings.Contains(s, want) {
+			t.Errorf("scrape body missing pre-seeded series: %q", want)
+		}
+	}
+}
