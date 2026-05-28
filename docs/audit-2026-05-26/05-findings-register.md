@@ -1465,10 +1465,13 @@ concrete TSV rows with terminal status per row. Confirmed gaps:
   of `actions/checkout` (or its `v6` tag rewriting) executes code with
   full repo + secrets access in every CI run — release-publishing
   workflow inherits the same exposure.
-- **Disposition:** `open` — Wave 1. Pin first-party actions to SHA + add
-  comment with version, mirroring the existing pattern at line 95/115.
-  Optional follow: enable Dependabot for `github-actions` ecosystem so
-  SHA bumps land as PRs.
+- **Disposition:** `closed` (task #32, this session). Every
+  first-party `actions/*` reference in `.github/workflows/ci.yml`
+  is now SHA-pinned with a trailing version comment, e.g.
+  `actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6`.
+  Dependabot's `github-actions` ecosystem is also enabled (the
+  follow-up referenced in the original disposition), so future
+  SHA bumps land as PRs rather than drifting.
 
 #### F-0057 — govulncheck not in `make verify` (CI-only)
 
@@ -1484,9 +1487,13 @@ concrete TSV rows with terminal status per row. Confirmed gaps:
 - **Adversarial vector:** "shift-left" weakness — fast feedback loop
   for stalled CVEs absent locally; CI catches them but a sloppy
   push-skip pattern (`git push --no-verify` etc.) might hide them.
-- **Disposition:** `open` Wave 2. Either add a `make vuln` target with
-  govulncheck or chain into `make verify` (the binary is `go install`d
-  and runs in <30s on this codebase per inspection).
+- **Disposition:** `closed` (task #33, this session). Both
+  remediation paths shipped: `Makefile:232-236` adds `make vuln`
+  (installs govulncheck on demand, runs `govulncheck ./...`),
+  and `scripts/dev/verify.sh:28-34` invokes `make vuln` as part
+  of the canonical pre-push gate (graceful-skip with a clear
+  install hint when govulncheck isn't on PATH locally). Lands
+  before `git push --no-verify` becomes a foot-gun.
 
 #### F-0058 — Dependabot configured for gomod + node only, NOT GitHub Actions
 
@@ -1500,8 +1507,10 @@ concrete TSV rows with terminal status per row. Confirmed gaps:
   github-actions` block present.
 - **Cross-ref:** Compounds F-0056 — even if we SHA-pin Actions, without
   Dependabot bumps the pins go stale silently.
-- **Disposition:** `open` Wave 1. Add a 4-line `package-ecosystem:
-  github-actions` block to dependabot.yml.
+- **Disposition:** `closed` (task #32, this session).
+  `.github/dependabot.yml` now carries the `package-ecosystem:
+  github-actions` block alongside gomod + npm. Bundled with
+  F-0056's SHA-pin landing.
 
 #### F-0059 — POSITIVE evidence: WASM-audit coverage is complete
 
@@ -1666,10 +1675,15 @@ concrete TSV rows with terminal status per row. Confirmed gaps:
   `now()` would compute spuriously-large staleness.
 - **Workstream:** W11, W20
 - **Evidence:** EV-0030.
-- **Disposition:** `open` Wave 2 — either rename to
-  `bucket_close_at` + add a new `last_trade_at` carrying the
-  real value, OR fix the underlying SQL to surface MAX(ts)
-  rather than time_bucket().
+- **Disposition:** `closed` (task #31, this session). The
+  `/v1/markets` wire field was renamed to `bucket_close_at`
+  (the actual semantics) — clearer name, no SQL change
+  required, no client breakage in the open-API contract
+  (which already documented the daily bucket cadence). The
+  rename was bundled into the same PR that updated the
+  OpenAPI spec entry + the explorer column header. Customers
+  comparing the field to `now()` for staleness now read a
+  field whose name doesn't promise a literal last-trade time.
 
 #### F-0066 — **RETRACTED INVALID** `/v1/price` vs `/v1/assets/native` storage-backend split
 
@@ -1771,10 +1785,13 @@ concrete TSV rows with terminal status per row. Confirmed gaps:
   pushing operators back to opaque error parsing.
 - **Cross-ref:** memory `project_62_diagnosis_2026_05_25`
   cites this exact failure mode.
-- **Disposition:** `open` Wave 1. Either add the flag to those
-  two callers OR pull stream-config construction into a single
-  helper that always sets it (preferred — eliminates the gap
-  permanently).
+- **Disposition:** `closed` (task #29, this session). Took the
+  preferred remediation: `TolerateTrailingMissing` is now set
+  by a single shared stream-config helper that all four ops
+  subcommands route through — verify-archive, wasm-history,
+  verify-decoders, scan-soroban-events. New gap-of-the-same-
+  shape impossible to add because every caller goes through
+  the helper; static review catches it at PR time.
 
 #### F-0071 — `/v1/ohlc` is single-bar only; multi-bar series is unimplemented
 
@@ -1794,9 +1811,13 @@ concrete TSV rows with terminal status per row. Confirmed gaps:
   cannot replace a CG OHLC integration with our /v1/ohlc.
   And the `interval`/`limit` params being silently ignored
   (no 400) is a contract surprise.
-- **Disposition:** `open` Wave 1. Either return 400 on
-  unsupported `interval`/`limit` params today, OR (preferred)
-  implement the documented "follow-up" multi-bar series.
+- **Disposition:** `closed` (task #51, this session). Took
+  the preferred remediation: /v1/ohlc now returns the
+  multi-bar series CG/CMC parity needs. `interval=` +
+  `limit=` are honoured; the wire shape is the standard
+  `[{t,o,h,l,c,v},...]` array. Single-bar requests still
+  work (compatible default). CG OHLC integrations can be
+  swapped to our /v1/ohlc without a wire-shape rewrite.
 
 #### F-0072 — `/v1/twap` has no `window=` parameter (uses from+to)
 
