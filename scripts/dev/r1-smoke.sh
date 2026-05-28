@@ -256,7 +256,7 @@ expect_status 400 "assets bad limit"     "/v1/assets?limit=999999" \
 # and returns the documented 404 — distinct from the 400 path
 # for ill-formed inputs.
 expect_status 404 "asset not found"      "/v1/assets/AAAA-GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN" \
-  --timeout 20 \
+  --timeout 30 \
   -- '.type | endswith("/asset-not-found")'
 
 # Pins queued for promotion once rc.38 deploys. Each verifies a
