@@ -1100,9 +1100,14 @@ func computeSourceCoverage(cursors []timescale.Cursor, source string, genesis, t
 // liveLedgerstreamRange returns the live cursor's persisted coverage
 // span [first_ledger, last_ledger] (post-migration 0046). first=0
 // signals "first_ledger was NULL on disk" (pre-migration rows that
-// haven't been re-written by UpsertCursor's INSERT branch yet) —
-// extendWithLiveTail falls back to sourceGenesisLedger in that case.
-// hasCursor=false when no live cursor row exists at all.
+// haven't yet been touched by an UpsertCursor UPDATE — the UPDATE
+// branch COALESCE-populates first_ledger on the first write after
+// deploy, so this transient window typically lasts one live tick).
+// extendWithLiveTail contributes nothing to coverage in that case
+// — honest about "we don't yet know how far back this cursor
+// reaches" rather than the pre-2026-05-28 behaviour of falling
+// back to sourceGenesisLedger and silently crediting genesis-onward
+// coverage. hasCursor=false when no live cursor row exists at all.
 func liveLedgerstreamRange(cursors []timescale.Cursor) (first, last int64, hasCursor bool) {
 	for _, c := range cursors {
 		if c.Source != "ledgerstream" {
@@ -1143,15 +1148,21 @@ func liveLedgerstreamRange(cursors []timescale.Cursor) (first, last int64, hasCu
 //     density ceiling from ~98% to 100% on a fully-caught-up
 //     source (project_density_100pct_goal).
 //
-//   - **NULL first_ledger fallback.** When the live cursor row
-//     pre-dates migration 0046 (first_ledger = 0 on Cursor),
-//     we fall back to treating the live span as
-//     [genesis, last_ledger]. Matches the historical assumption
-//     that pre-rollout live ingest has been running since the
-//     source's deploy ledger. New live writes flip first_ledger
-//     to a real value via UpsertCursor's INSERT branch, so the
-//     fallback only applies during the brief mid-rollout window.
+//   - **NULL first_ledger handling (2026-05-28 honest-density fix).**
+//     When the live cursor row's first_ledger is NULL (pre-migration-0046
+//     row that hasn't been UPDATE'd yet) we now **decline to credit**
+//     any live span. The pre-2026-05-28 behaviour was to fall back to
+//     `[genesis, last_ledger]`, which silently inflated density to
+//     100% for every source. The fallback's stated premise ("the
+//     UPDATE branch flips first_ledger on next write") was wrong:
+//     the UPDATE branch left first_ledger untouched, so the NULL
+//     persisted forever and the fallback became a permanent lie that
+//     hid the F-0020 cascade-window ingest gap on r1.
+//     UpsertCursor now COALESCE-populates first_ledger on the first
+//     UPDATE after a NULL row, so this branch only applies in the
+//     seconds between deploy and the live indexer's first tick.
 //
+
 // Credit deliberately NOT awarded:
 //
 //   - **Interior sub-tip gaps via live-bridging (removed
@@ -1200,13 +1211,21 @@ func extendWithLiveTail(merged []coverageInterval, cursors []timescale.Cursor, g
 		return merged
 	}
 
-	// NULL first_ledger fallback (pre-migration-0046 rows): credit
-	// the live span starting from the source's genesis. Post-rollout
-	// the live indexer's first write flips first_ledger to a real
-	// value, so the fallback only applies during the transient
-	// roll-forward window.
+	// NULL first_ledger handling (2026-05-28 honest-density fix):
+	// previously this branch fell back to `liveStart = genesis`, which
+	// silently inflated every source's density to 100% for live cursor
+	// rows that pre-dated migration 0046 (the rollback case the audit
+	// observed on r1 post-rc.83). The fallback assumed
+	// `UpsertCursor`'s UPDATE branch would soon populate first_ledger
+	// — but the UPDATE branch did not touch the column, so the live
+	// cursor stayed NULL forever and the fallback became a permanent
+	// lie. UpsertCursor now COALESCE-populates first_ledger on the
+	// first UPDATE after deploy, so this branch should fire only for
+	// the seconds between deploy and the first live tick. Until then,
+	// don't credit any historical live span: backfill cursors are the
+	// only credit source, which is the honest answer.
 	if liveStart <= 0 {
-		liveStart = genesis
+		return merged
 	}
 	if liveStart < genesis {
 		liveStart = genesis

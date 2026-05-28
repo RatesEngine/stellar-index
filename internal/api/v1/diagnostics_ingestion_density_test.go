@@ -307,26 +307,33 @@ func TestComputeSourceDensity(t *testing.T) {
 			wantDensityMax: 0.702,
 		},
 		{
-			// Migration-0046 NULL fallback: FirstLedger=0 (pre-rollout
-			// row) → fall back to genesis. This is the 100%-mission
-			// path on r1 today: the live cursor pre-dates the column,
-			// and the operator's intent is "live ingest has been
-			// running since genesis", so we credit [genesis, last].
-			// Once UpsertCursor's INSERT branch lands and the live
-			// indexer re-creates the cursor (via a deliberate reset),
-			// the real FirstLedger replaces the fallback.
-			name: "NULL FirstLedger falls back to genesis (pre-migration rollout)",
+			// 2026-05-28 honest-density fix: a NULL FirstLedger no
+			// longer falls back to genesis. The previous fallback
+			// silently inflated density to 100% for sources whose
+			// live cursor pre-dated migration 0046 (live ran continuously
+			// but never re-INSERT'd the row, so first_ledger stayed
+			// NULL forever). After this change a NULL live cursor
+			// contributes no historical span — only backfill cursors
+			// credit coverage. UpsertCursor's UPDATE branch now
+			// COALESCE-populates first_ledger on the first write
+			// after deploy, so this branch only applies in the
+			// seconds between deploy and the first live tick.
+			name: "NULL FirstLedger contributes no historical span (honest)",
 			cursors: []timescale.Cursor{
 				{Source: "backfill", Sub: "1-300:sdex", LastLedger: 300, UpdatedAt: now},
 				{Source: "backfill", Sub: "700-750:sdex", LastLedger: 750, UpdatedAt: now},
-				{Source: "ledgerstream", Sub: "", LastLedger: 1000, UpdatedAt: now}, // FirstLedger=0 → fallback
+				{Source: "ledgerstream", Sub: "", LastLedger: 1000, UpdatedAt: now}, // FirstLedger=0 → no span
 			},
-			source:         "sdex",
-			genesis:        1,
-			tip:            1000,
-			wantCovered:    1000, // fallback live [1,1000] swallows the [301,699] island gap
-			wantDensityMin: 1.0,
-			wantDensityMax: 1.0,
+			source:  "sdex",
+			genesis: 1,
+			tip:     1000,
+			// Honest answer: [1,300] ∪ [700,750] = 300 + 51 = 351.
+			// The [301,699] and [751,1000] gaps stay exposed because
+			// the live cursor doesn't yet know how far back its own
+			// coverage extends.
+			wantCovered:    351,
+			wantDensityMin: 0.350,
+			wantDensityMax: 0.352,
 		},
 		{
 			name: "live cursor below tip with FirstLedger=genesis still covers full span",

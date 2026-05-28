@@ -19,12 +19,19 @@ import (
 // (also embedded in Sub as "<from>-<to>:<decoders>"). For the live
 // ledgerstream cursor it is the first ledger the live indexer
 // ingested in this region — populated on the first INSERT via
-// UpsertCursor; preserved by the ON CONFLICT DO UPDATE so the live
-// cursor's [FirstLedger, LastLedger] coverage span survives every
-// subsequent advance. Zero when the column is NULL on disk
-// (rows that pre-date migration 0046); the density-coverage
-// projection falls back to sourceGenesisLedger for NULL live
-// cursors. See migration 0046.
+// UpsertCursor and COALESCE-populated on the first UPDATE if a
+// pre-migration-0046 NULL row exists. Preserved by ON CONFLICT
+// DO UPDATE on every subsequent advance so the live cursor's
+// [FirstLedger, LastLedger] coverage span only grows forward.
+// Zero when the column is NULL on disk AND no UPDATE has yet
+// flipped it (the seconds between deploy and the first live
+// tick on a freshly-migrated cluster). The density-coverage
+// projection declines to credit any live span in that transient
+// window — honest about "we don't yet know how far back this
+// cursor reaches" — rather than the pre-2026-05-28 fallback to
+// sourceGenesisLedger which silently inflated density to 100%
+// for sources whose live cursor stayed NULL. See migration 0046
+// + UpsertCursor.
 type Cursor struct {
 	Source      string
 	Sub         string
@@ -112,18 +119,34 @@ func (s *Store) ListCursors(ctx context.Context) ([]Cursor, error) {
 //     region's live indexer ingested — the diagnostic density calc
 //     credits the [first_ledger, last_ledger] band as covered.
 //
-//   - UPDATE path: first_ledger is INTENTIONALLY NOT TOUCHED. The
-//     SET clause lists only last_ledger + last_updated, so the
-//     row's original first_ledger is preserved across every cursor
-//     advance. Live indexer restarts/resumes do not stomp it; the
-//     coverage anchor only ever moves backwards by an explicit
-//     operator action (DELETE + re-insert, not via this path).
+//   - UPDATE path: first_ledger is INTENTIONALLY PRESERVED via
+//     `COALESCE(ingestion_cursors.first_ledger, EXCLUDED.first_ledger)`.
+//     This is two behaviours rolled into one expression:
+//     (a) Non-NULL first_ledger (the steady-state case): COALESCE
+//     returns the existing value → cursor advances without
+//     moving its lower-bound coverage anchor. Live indexer
+//     restarts/resumes do not stomp it; the anchor only ever
+//     moves backwards by an explicit operator action
+//     (DELETE + re-insert, not via this path).
+//     (b) NULL first_ledger (pre-migration-0046 row that has
+//     never been INSERT'd since the column was added): the
+//     first UPDATE after deploy populates first_ledger with
+//     EXCLUDED.first_ledger (the supplied lastLedger). The
+//     live cursor's coverage span then becomes
+//     [first-write-after-deploy, last_ledger] — honest about
+//     "we started tracking from here", with no false claim
+//     to genesis-onwards coverage. The diagnostic density
+//     projection no longer needs a NULL fallback (it had
+//     been falling back to sourceGenesisLedger and silently
+//     inflating density to 100% for sources with NULL live
+//     cursors — F-0020 density audit, 2026-05-28).
 func (s *Store) UpsertCursor(ctx context.Context, source, sub string, lastLedger uint32) error {
 	const q = `
         INSERT INTO ingestion_cursors (source, sub_source, first_ledger, last_ledger, last_updated)
         VALUES ($1, $2, $3, $3, now())
         ON CONFLICT (source, sub_source)
-        DO UPDATE SET last_ledger  = EXCLUDED.last_ledger,
+        DO UPDATE SET first_ledger = COALESCE(ingestion_cursors.first_ledger, EXCLUDED.first_ledger),
+                      last_ledger  = EXCLUDED.last_ledger,
                       last_updated = EXCLUDED.last_updated
          WHERE EXCLUDED.last_ledger > ingestion_cursors.last_ledger
     `

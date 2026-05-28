@@ -15,6 +15,12 @@ against.
 
 ## [Unreleased]
 
+### Fixed
+
+- Density metric no longer falls back to `sourceGenesisLedger` when the live cursor's `first_ledger` is NULL. The fallback had been inflating per-source density to a dishonest 100% on the status page, hiding genuine ingest gaps (notably the F-0020 cascade-window soroban_events gap, ~103 K ledgers across two contiguous ranges). The pre-fix premise — "the UPDATE branch flips first_ledger on next write" — was wrong: the UPDATE branch left first_ledger untouched, so the NULL persisted forever and the fallback became a permanent lie. After this fix, a NULL live cursor contributes no historical span; the projection credits only the backfill-cursor union until the live cursor's first_ledger is populated.
+- `UpsertCursor` now COALESCE-populates `first_ledger` on the first UPDATE after a NULL row (pre-migration-0046 cluster post-deploy). The transient NULL→no-credit window closes on the live indexer's next tick rather than persisting forever; subsequent advances leave first_ledger pinned to the original value via COALESCE so the coverage anchor only ever moves backward through explicit operator action (DELETE + re-insert).
+- Cursor + diagnostic godoc rewritten to match the new contract — pre-2026-05-28 wording implied the fallback was transient and harmless; corrected to flag it as the source of the dishonest 100% reading the F-0020 audit surfaced.
+
 ## [v0.5.0-rc.84] — 2026-05-28
 
 Tested against Stellar Protocol 23 (Whisk).
