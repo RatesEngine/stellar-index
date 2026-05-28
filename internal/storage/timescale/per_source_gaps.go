@@ -27,6 +27,18 @@ type GapDetectorTarget struct {
 	Source       string
 	Table        string
 	LedgerColumn string
+
+	// WhereFilter is an optional additional SQL predicate ANDed into
+	// the gap-finding query's WHERE clause (without the leading
+	// "AND" — e.g. `source = 'sdex'`). Used when one table holds
+	// rows for multiple sources and we want to scan the slice that
+	// belongs to one source.
+	//
+	// SAFETY: like Table and LedgerColumn this is interpolated
+	// directly; it must come from [DefaultGapDetectorTargets] (a
+	// compile-time const) and never from user input. ADR-0030
+	// makes this invariant load-bearing.
+	WhereFilter string
 }
 
 // DefaultGapDetectorTargets is the registered set of per-source
@@ -58,6 +70,14 @@ var DefaultGapDetectorTargets = []GapDetectorTarget{
 	{Source: "blend-emissions", Table: "blend_emissions", LedgerColumn: "ledger"},
 	{Source: "blend-admin", Table: "blend_admin", LedgerColumn: "ledger"},
 	{Source: "soroban-events", Table: "soroban_events", LedgerColumn: "ledger"},
+	// SDEX is classic-DEX and does NOT flow through soroban_events.
+	// Its rows live in the unified `trades` hypertable alongside
+	// every other trade-emitting source; the WhereFilter slices
+	// only the SDEX subset for the gap scan. Before this target,
+	// SDEX had zero data-derived coverage signal — a symmetric F-
+	// 0020-class incident in the classic-DEX path would have gone
+	// undetected. (See ADR-0030.)
+	{Source: "sdex", Table: "trades", LedgerColumn: "ledger", WhereFilter: "source = 'sdex'"},
 }
 
 // FindPerSourceLedgerGaps finds contiguous ledger-coverage gaps
@@ -85,11 +105,15 @@ func (s *Store) FindPerSourceLedgerGaps(ctx context.Context, target GapDetectorT
 
 	// Identifier interpolation is safe-by-construction (callers pass
 	// a compile-time const). #nosec G201.
+	filter := ""
+	if target.WhereFilter != "" {
+		filter = " AND (" + target.WhereFilter + ")"
+	}
 	query := fmt.Sprintf(`
 		WITH ledgers AS (
 		    SELECT DISTINCT %[1]s AS ledger
 		    FROM %[2]s
-		    WHERE %[1]s BETWEEN $1 AND $2
+		    WHERE %[1]s BETWEEN $1 AND $2%[3]s
 		),
 		ordered AS (
 		    SELECT ledger, LAG(ledger) OVER (ORDER BY ledger) AS prev_l
@@ -102,7 +126,7 @@ func (s *Store) FindPerSourceLedgerGaps(ctx context.Context, target GapDetectorT
 		WHERE prev_l IS NOT NULL
 		  AND ledger - prev_l - 1 >= $3
 		ORDER BY gap_size DESC
-	`, target.LedgerColumn, target.Table)
+	`, target.LedgerColumn, target.Table, filter)
 
 	rows, err := s.db.QueryContext(ctx, query, from, to, minGapSize)
 	if err != nil {
