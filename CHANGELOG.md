@@ -15,9 +15,15 @@ against.
 
 ## [Unreleased]
 
+## [v0.5.0-rc.86] — 2026-05-28
+
+Tested against Stellar Protocol 23 (Whisk).
+
+Pre-deploy operator note: aggregator-only restart; no migrations.
+
 ### Fixed
 
-- Gap detector right-sized for live r1: timeout 60s → 15min, cadence 5min → 30min. The pre-this-PR sizing was against a synthetic 12M-row test fixture; the live r1 `soroban_events` table has ~50M distinct ledgers and the LAG()-over-DISTINCT scan measures 4m51s end-to-end (rc.85 live aggregator logged `pq: canceling statement due to user request (57014)` on every detector cycle). 30-min cadence × 5-min scan is ~17% of one aggregator-pool connection, sustainable; the paging alert latency stays within the ~45-60 min envelope appropriate for an "ingest halt" signal. Future optimisation may incrementally refresh a `soroban_event_ledgers` materialised view to bring scan cost back under a second.
+- Gap detector right-sized for live r1: timeout 60s → 15min, cadence 5min → 30min. The pre-rc.86 sizing was against a synthetic 12M-row test fixture; the live r1 `soroban_events` table has ~50M distinct ledgers and the LAG()-over-DISTINCT scan measures 4m51s end-to-end (rc.85 live aggregator logged `pq: canceling statement due to user request (57014)` on every detector cycle, meaning the gap gauges were never populated). 30-min cadence × 5-min scan is ~17% of one aggregator-pool connection, sustainable; paging-alert latency stays within the ~45-60 min envelope appropriate for an "ingest halt" signal. Future optimisation may incrementally refresh a `soroban_event_ledgers` materialised view to bring scan cost back under a second.
 
 ## [v0.5.0-rc.85] — 2026-05-28
 
