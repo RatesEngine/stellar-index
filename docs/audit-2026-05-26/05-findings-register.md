@@ -2029,9 +2029,18 @@ concrete TSV rows with terminal status per row. Confirmed gaps:
 - **Adversarial vector:** SSE+streaming clients on /twap or
   /ohlc see hard 404s during cache-cold storms while /price
   stays nominally up. Inconsistent failure profile.
-- **Disposition:** `open` Wave 2. Either extend priceFallback
-  to twap/ohlc surfaces or document the asymmetry explicitly
-  in `docs/methodology/twap-ohlc.md`.
+- **Disposition:** `closed-as-documented` (2026-05-28). Took
+  the second-path remediation: the audit's suggested
+  `docs/methodology/twap-ohlc.md` now exists and explains
+  why the asymmetry is intentional. Short version: TWAP and
+  OHLC over a window with zero trades are **undefined**, not
+  "stale" — quietly returning yesterday's TWAP into a
+  today-anchored stream would be a correctness regression,
+  not a robustness win. `/v1/price`'s LKG is a tip-shape
+  ("what's the latest, even if old?") which TWAP/OHLC's
+  window-bound aggregate semantics don't share. The
+  stablecoin-proxy fallback that DOES exist on both surfaces
+  is preserved and noted in the doc.
 
 #### F-0075 — Adverse pattern: false-positive critical finding cluster (audit methodology)
 
