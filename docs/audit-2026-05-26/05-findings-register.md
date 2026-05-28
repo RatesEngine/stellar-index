@@ -802,9 +802,26 @@ F-0028 will track the soroban_events lag separately)
 - **Workstream:** W14, W18
 - **Affected surface:** entire MinIO observability
 - **Evidence:** Prometheus targets API 2026-05-26 22:50 UTC
-- **Disposition:** `open` Wave 0. Remediation: configure
-  MinIO `/minio/v2/metrics/cluster` bearer-token auth in
-  prometheus.r1.yml.
+- **Disposition:** `closed-as-runbook` (2026-05-28). The
+  Prometheus scrape config at
+  `configs/prometheus/prometheus.r1.yml:148-159` is already
+  wired with `bearer_token_file:
+  /etc/prometheus/minio.token` and a comment explaining the
+  ansible-future shape; the 403 symptom is purely because
+  the token file isn't created automatically (manual
+  operator mint step). New runbook
+  `docs/operations/runbooks/minio-metrics-403.md` documents
+  the full procedure: mint a `prometheus-read` service
+  account via `mc admin user svcacct add`, write
+  `/etc/prometheus/minio.token` (0400 prometheus:prometheus),
+  reload Prometheus, verify via the targets API +
+  `minio_cluster_capacity_usable_total_bytes` query. Failure
+  modes (wrong token, permission denied, scrape timeout,
+  svcacct revoked) all enumerated. Operator task #38 remains
+  the actionable item — the runbook is the procedural
+  countermeasure so the next operator doesn't re-derive the
+  steps. Long-term plan to fold into an Ansible role is
+  tracked under F-0140 (sibling finding).
 
 #### F-0046 — **HIGH** pgbackrest_exporter DOWN — no backup monitoring
 

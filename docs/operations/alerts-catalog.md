@@ -282,9 +282,9 @@ override.
 | `ratesengine_redis_exporter_down` | `up{job="redis_exporter"}` | == 0 for > 2 min OR series absent for 5 min | **P1** | [exporter-down](runbooks/exporter-down.md) |
 | `ratesengine_postgres_exporter_down` | `up{job="postgres_exporter"}` | == 0 for > 2 min OR series absent for 5 min | **P1** | [exporter-down](runbooks/exporter-down.md) |
 | `ratesengine_pgbackrest_exporter_down` | `up{job="pgbackrest_exporter"}` | == 0 for > 2 min OR series absent for 5 min | **P1** | [exporter-down](runbooks/exporter-down.md) |
-| `ratesengine_minio_exporter_down` | `up{job="minio"}` | == 0 for > 2 min OR series absent for 5 min | **P1** | [exporter-down](runbooks/exporter-down.md) |
+| `ratesengine_minio_exporter_down` | `up{job="minio"}` | == 0 for > 2 min OR series absent for 5 min | **P1** | [exporter-down](runbooks/exporter-down.md) — or [minio-metrics-403](runbooks/minio-metrics-403.md) if the cause is a 403 (bearer-token gap) |
 
-The four `*_exporter_down` rules close the F-0085 cascade-blindness gap surfaced by the 2026-05-26 audit — each exporter feeds an alert family whose detection silently fails if the exporter dies first. Adding the meta-alert ensures any future cascade surfaces immediately even when the metric-producing exporter is the same process tree dying alongside the failure it's meant to detect.
+The four `*_exporter_down` rules close the F-0085 cascade-blindness gap surfaced by the 2026-05-26 audit — each exporter feeds an alert family whose detection silently fails if the exporter dies first. Adding the meta-alert ensures any future cascade surfaces immediately even when the metric-producing exporter is the same process tree dying alongside the failure it's meant to detect. The MinIO scrape specifically has a separate 403-shape failure (missing bearer-token file) documented in [minio-metrics-403](runbooks/minio-metrics-403.md) — operators paged by `ratesengine_minio_exporter_down` whose Prometheus `lastError` shows `HTTP status 403` should consult that runbook first.
 
 The `deadmansswitch` alert is inverse-logic: AlertManager routes it
 to a receiver that expects it every minute. If the receiver stops
