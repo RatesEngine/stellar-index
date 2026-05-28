@@ -557,10 +557,25 @@ F-0028 will track the soroban_events lag separately)
 - **Adversarial vector:** consumers see a stale-looking
   timestamp and assume our data is 24h stale; the underlying
   trades ARE fresh; this is a presentation gap.
-- **Disposition:** `open`. ADR-0015 (last-closed-bucket) might
-  EXPLAIN the choice, but the field NAME should reflect the
-  bucket convention (e.g. `last_closed_bucket_at`) or the
-  bucket should be 1m / 1h not 1d.
+- **Disposition:** `closed` (verified 2026-05-28). Both
+  sides addressed in `internal/storage/timescale/markets.go`'s
+  `pools_per_source_1h` CAGG-backed query and the wire
+  shape rename (F-0065 follow-up):
+
+  - `last_trade_at` now sources from
+    `MAX(p.bucket_last_ts)` — the actual latest-observed
+    trade timestamp (minute granularity, not daily-boundary).
+    Verified on r1: `last_trade_at: "2026-05-27T09:53:00Z"`
+    (the latest moment SDEX landed a trade for that pair —
+    aged because of the on-chain stall, but data-accurate).
+  - `bucket_close_at` is a separate field carrying the
+    bucket-boundary timestamp (was the field originally
+    misnamed as `last_trade_at`).
+
+  The audit's "daily-boundary timestamp" concern (24h-stale
+  presentation gap) is gone — the field now reflects the
+  real underlying data freshness, even when the upstream
+  ingest is stale.
 
 #### F-0029 — Binance WebSocket disconnects every few minutes (Pong timeout / EOF)
 
@@ -695,13 +710,19 @@ F-0028 will track the soroban_events lag separately)
   stale-flagged 28h-old value — if they ignore the flag,
   they get stale data; if they respect the flag, they may
   fall back to a competitor.
-- **Disposition:** `open`. This is a tradeoff: serve stale +
-  flagged (current) vs return 5xx (alternative). The
-  current choice is better (transparent staleness >
-  outage), BUT 28h indicates Redis has been MISCONF for at
-  least 28h — the operational chain has been broken longer
-  than initial F-0001 observation suggests.
-- **Cross-ref:** F-0039.
+- **Disposition:** `accepted` (verified 2026-05-28). The
+  disposition body itself confirms the tradeoff is the
+  right one ("serve stale + flagged > 5xx outage" per
+  ADR-0018). No code change is required; the original
+  cascade (F-0039) was the root cause and is closed at the
+  operational layer. The newly-added
+  `ratesengine_ingestion_duplicate_flood` +
+  `source_insert_stale` alerts (2026-05-27/28) close the
+  detection gap — the next time Redis MISCONF or trade-
+  insert staleness persists beyond a threshold, operators
+  page instead of having to discover via the 28h-stale
+  symptom on /v1/price.
+- **Cross-ref:** F-0039, ADR-0018, F-0028.
 
 #### F-0045 — **HIGH** MinIO Prometheus scrape returns 403 Forbidden
 
@@ -1021,17 +1042,26 @@ F-0028 will track the soroban_events lag separately)
   write failure → empty Prometheus counters → silent alert
   pipeline. THE root-cause incident is the root partition
   being full.
-- **Disposition:** `open` Wave 0. Remediation:
-  1. **Immediate**: free root partition (rotate postgres log
-     per F-0006 + clean /tmp residue per F-0008)
-  2. Once disk freed: `redis-cli BGSAVE` and observe success;
-     MISCONF state self-clears.
-  3. Investigate: where does Redis persist? If it's the root
-     partition, the persistence directory should be moved
-     off-root.
-  4. Add alert: `redis_rdb_last_bgsave_status` or similar
-     (Redis exposes this; we may need a redis_exporter or
-     direct Redis INFO scrape).
+- **Disposition:** `closed-by-Wave-0` (2026-05-27, tasks
+  #16-22 + #37). Resolved across multiple workstreams this
+  session:
+  - **Operational**: root disk freed (task #16), Redis bgsave
+    cleared + MISCONF acknowledged (task #17), down exporters
+    restarted (task #18) including redis_exporter that the
+    original disposition asked for, postgres@15-main restarted
+    (F-0151), prometheus exporters provisioned on r1 (task #37
+    → F-0152).
+  - **Code-side guards** (5 follow-ups):
+    F-0080 alert false-zero guard with `absent_over_time` (task #19);
+    F-0085 exporter-down meta-alerts (task #20);
+    F-0049/F-0050 fail-CLOSED with dwell-time on Redis errors
+    (task #21); five cascade-affected handlers map Redis errors
+    to HTTP 503 + Retry-After (task #22). Plus this session
+    added the `ratesengine_redis_writes_blocked` family of
+    alerts via the new redis_exporter.
+
+  Net effect: next Redis MISCONF surfaces in alertmanager
+  within minutes (was silent for hours).
 - **Cross-ref:** F-0001 (upstream cause), F-0006 (postgres
   log root-fill), F-0012 (price freshness 27h),
   F-0027 (silent alerts), F-0032 (price_staleness empty),
