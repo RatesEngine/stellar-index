@@ -15,6 +15,10 @@ against.
 
 ## [Unreleased]
 
+## [v0.5.0-rc.83] — 2026-05-28
+
+Tested against Stellar Protocol 23 (Whisk).
+
 ### Added
 
 - `ratesengine_api_price_stale` alert (both R1 overlay + multi-host) gets an `absent_over_time` OR-branch so the cascade-wedge case fires instead of going no-data silent (F-0104 closure). The staleness gauge is emitted by the aggregator at end-of-tick; when the aggregator wedges, the gauge stops being scraped, the series goes stale, and a bare `> 120` predicate sees no-data — i.e. the alert designed to catch exactly that cascade was itself a victim of it. New expr: `staleness > 120 OR absent_over_time(...[10m]) == 1`. Same pattern as aggregator_silent (F-0080) and the exporter-down meta-alerts (F-0085). Annotation updated so operators reading the page know to consult the aggregator-silent runbook when the gauge is absent rather than the price-stale runbook.
