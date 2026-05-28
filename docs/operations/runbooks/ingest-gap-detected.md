@@ -77,6 +77,7 @@ This is the F-0020 cascade pattern. Pause heavy walks (`soroban-events-fill.serv
 
 ## Related
 
+- `cascade-window-drain.md` — orchestrator runbook for repairing per-source classifier tables in a single command after the raw `soroban_events` landing zone has been filled.
 - `docs/operations/backfill-with-live-ingest.md` — operational posture for running backfills alongside live ingest (F-0020 closure).
 - F-0020 (audit-2026-05-26) — original cascade-window incident that motivated this detector.
 - `ratesengine-ops find-data-gaps` — the operator-facing diagnostic this alert points at.
