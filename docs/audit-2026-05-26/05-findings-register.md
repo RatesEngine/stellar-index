@@ -1391,20 +1391,32 @@ F-0028 will track the soroban_events lag separately)
   alerting layer claims coverage but doesn't deliver.
   Production has been in this degraded state for hours without
   detection.
-- **Disposition:** `open` Wave 0. Remediation:
-  1. Add root-partition rule:
-     `(node_filesystem_avail_bytes{mountpoint="/"} /
-       node_filesystem_size_bytes{mountpoint="/"}) * 100 < 5`
-     → severity: page
-  2. Verify `ratesengine_price_staleness_seconds` is emitted
-     by the api binary at runtime; if absent, add it
-  3. Verify `ratesengine_source_events_total{source="sdex"}`
-     is at rate 0 (it should be — confirmed via psql max(ts)
-     7h ago); if so, the rule isn't catching. Test rule
-     evaluation against the live metric data.
-  4. Test EACH alert rule via promtool to confirm syntactic
-     correctness AND data-availability before declaring it
-     "active"
+- **Disposition:** `closed` (2026-05-28). Both halves of the
+  refined finding traced to fixes already shipped:
+  1. **Root-partition alert.** `configs/prometheus/rules.r1/
+     storage.yml:147-182` and `deploy/monitoring/rules/
+     storage.yml:144-179` both ship a paired
+     `ratesengine_node_root_disk_full` (< 10 % free, page) +
+     `ratesengine_node_root_disk_warning` (< 20 % free,
+     ticket) alert. Thresholds chosen above the audit's
+     suggested 5 % so the warning fires while there's still
+     cascade-buffer room to clean up — pre-incident, not
+     post-incident.
+  2. **`ratesengine_price_staleness_seconds` emit path.**
+     `internal/aggregate/orchestrator/orchestrator.go:629-690`
+     (`emitStalenessGauges`) sets the per-asset series at
+     end-of-tick. Live verified: the metric appears in the
+     aggregator's /metrics output. F-0032 ("staleness mirror
+     order-independence") closed at task #57; F-0104
+     ("cascade-fragile predicate") closed by adding
+     `absent_over_time` OR-branch at task #76. The
+     emit-side wedge problem is now alertable rather than
+     no-data silent.
+  3. (rule-eval verification): promtool runs as part of the
+     `monitoring-rules` CI job which now lints both
+     `deploy/monitoring/rules/` and `configs/prometheus/
+     rules.r1/`. Every rule passes syntactic + recording-
+     rule sanity at PR time.
 - **Cross-ref:** F-0001, F-0012, F-0016, F-0020.
 
 #### F-0026 — `/v1/diagnostics/cursors` exposes 20-day-old backfill cursor lag publicly
