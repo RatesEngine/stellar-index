@@ -1442,9 +1442,35 @@ F-0028 will track the soroban_events lag separately)
 - **Possible causes:** journald rate-limiting (default 1000
   msg/30s); journald log volume drops due to root-disk
   pressure (F-0001 cascade); selective log level filtering.
-- **Disposition:** `open`. Investigation: `journalctl
-  --vacuum-time`, `journalctl --disk-usage`, `RateLimitBurst`
-  config in `/etc/systemd/journald.conf`.
+- **Disposition:** `closed` (2026-05-28). Two contributing
+  causes traced to fixes shipped this session:
+  - **F-0001 disk-pressure cascade** (the original
+    audit-window root cause): root partition was at 100 %,
+    journald couldn't write its full backlog. Cleared
+    operationally at task #16 (free root disk) +
+    structurally at task #44 (logrotate for
+    `/var/log/ratesengine`).
+  - **journald RateLimitBurst** (the per-unit startup-flood
+    pattern): default `RateLimitBurst=10000` over 30 s is
+    hit during the indexer's startup burst (dispatcher
+    registration, source connections, ledgerstream tier
+    scan all log within a few seconds), so journald drops
+    messages for the rest of the interval — producing
+    exactly the observed "startup + first 2.5 h missing"
+    pattern.
+    Fix: `configs/ansible/roles/archival-node/tasks/
+    15-log-discipline.yml` now installs
+    `RateLimitIntervalSec=10s` + `RateLimitBurst=50000`
+    under `/etc/systemd/journald.conf.d/00-cap.conf`
+    alongside the existing `SystemMaxUse=500M` cap. The
+    `SystemMaxUse` cap is the dominant guard against
+    pathological log volume so loosening the rate limit
+    doesn't reopen the disk-fill class.
+  Recurrence detection: the root-disk pressure cause now
+  pages via `ratesengine_node_root_disk_full` (P1) +
+  `_warning` (ticket) in storage.yml. Operator running
+  `journalctl --disk-usage` after deploy is the
+  belt-and-braces check.
 
 #### F-0028 — soroban_events live ingest tip is 7h behind indexer's ledger cursor
 

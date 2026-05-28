@@ -118,7 +118,7 @@
     mode: "0755"
   tags: [log-discipline, journald]
 
-- name: Install journald SystemMaxUse cap
+- name: Install journald SystemMaxUse cap + rate-limit bump
   ansible.builtin.copy:
     dest: /etc/systemd/journald.conf.d/00-cap.conf
     owner: root
@@ -126,19 +126,37 @@
     mode: "0644"
     content: |
       # Managed by ansible (archival-node role / 15-log-discipline.yml).
-      # Caps systemd-journald's persistent storage at 500 MB.
+      # Two policies, both informed by 2026-05-26 audit findings:
       #
-      # Pre-2026-05-10 the journal was unbounded and consumed
-      # 3.5 GB of /var/log on r1, contributing to the disk-fill
-      # incident. 500 MB matches the value the operator set
-      # manually on r1 during the recovery; codifying here so a
-      # rebuilt host gets the cap automatically.
+      # 1) Storage cap (F-0001 / 2026-05-10 incident).
+      #    Pre-fix the journal was unbounded and consumed 3.5 GB of
+      #    /var/log on r1, contributing to the disk-fill incident.
+      #    500 MB matches the value the operator set manually during
+      #    recovery.
+      #
+      # 2) Rate-limit bump (F-0031 — 2026-05-26 audit observed a 3 h
+      #    log gap on `journalctl -u ratesengine-indexer` despite the
+      #    indexer running continuously; startup logs were missing).
+      #    journald's default RateLimitBurst (10000 over 30 s) is hit
+      #    during the indexer's startup burst — dispatcher registration,
+      #    source connections, ledgerstream tier scan all log within
+      #    a few seconds. Once the burst limit hits, journald drops
+      #    messages for the remainder of the interval, producing the
+      #    audit's observed gap.
+      #    50000-over-10s is generous enough to never legitimately
+      #    drop messages from our binaries while still throttling
+      #    pathological flood scenarios (e.g. a log loop bug). The
+      #    SystemMaxUse cap above is the dominant guard against
+      #    pathological log volume.
       [Journal]
       SystemMaxUse=500M
       # SystemKeepFree=300M ensures the journal never consumes the
       # last 300 MB of free space on the journal's filesystem (a
       # final guardrail above SystemMaxUse).
       SystemKeepFree=300M
+      # Rate-limit override (F-0031 closure).
+      RateLimitIntervalSec=10s
+      RateLimitBurst=50000
   notify:
     - Restart systemd-journald
   tags: [log-discipline, journald]
