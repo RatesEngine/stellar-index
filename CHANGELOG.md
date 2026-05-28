@@ -15,6 +15,10 @@ against.
 
 ## [Unreleased]
 
+### Added
+
+- `ratesengine-ops resume-stalled` subcommand. Resumes every stalled backfill cursor with a remaining range in a single invocation, replacing the hand-rolled SQL+shell loop operators had been using to chase down the F-0020 cascade-residue gap. The subcommand reads `ingestion_cursors`, filters to `source LIKE 'backfill%'` rows whose `last_updated` is older than `--min-lag` (default 1 h) AND whose `last_ledger` is strictly less than the parsed `to` from `sub_source` (`<from>-<to>:<decoders>`), then for each plan invokes the same `runBackfillChunk` path the regular `backfill` subcommand uses, with `-resume` semantics. Flags: `--min-lag`, `--max-resumes` (safety cap), `--source-filter` (substring match against decoder CSV — e.g. `defindex` to target one source), `--bucket`, `--parallel`, `--refresh-caggs`, `--dry-run`. Per-cursor failures are logged and the loop continues; exit non-zero only when at least one cursor errored. Live dry-run on r1 found **167 candidate cursors**, **50 actionable** (cursors with remaining work) and **117 skipped** (stale-by-time only — at-target, never vacuumed); the 50 actionable plans are the dominant population of the 1-2% per-source density gap. Two test files pin the parser (`parseStalledCursor` — 10 cases covering well-formed multi/single-decoder, at-target skip, inconsistent-cursor skip, garbage sub_source, overflow, CSV sort) and the filter chain (`planResumeStalled` semantics — source-prefix → min-lag → source-filter → max-resumes precedence). Sequencing: cursors run serially in this first cut; concurrent operator invocations against disjoint `--source-filter` values are the parallel-across-cursors path. Aligns with the post-F-0020 operational posture documented in `docs/operations/backfill-with-live-ingest.md`.
+
 ## [v0.5.0-rc.83] — 2026-05-28
 
 Tested against Stellar Protocol 23 (Whisk).

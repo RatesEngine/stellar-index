@@ -260,6 +260,11 @@ func realMain() int { //nolint:gocyclo,gocognit,funlen // subcommand switch; eac
 			fmt.Fprintf(os.Stderr, "backfill: %v\n", err)
 			return 1
 		}
+	case "resume-stalled":
+		if err := resumeStalled(args[1:]); err != nil {
+			fmt.Fprintf(os.Stderr, "resume-stalled: %v\n", err)
+			return 1
+		}
 	case "rehydrate-galexie-archive":
 		if err := rehydrateGalexieArchive(args[1:]); err != nil {
 			fmt.Fprintf(os.Stderr, "rehydrate-galexie-archive: %v\n", err)
