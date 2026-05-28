@@ -327,6 +327,14 @@ func (s *Store) InsertTrade(ctx context.Context, t canonical.Trade) error {
 		return nil
 	}
 
+	// Stamp wall-clock when a fresh row actually lands. Pairs with
+	// obs.SourceLastEventUnix to detect the stuck-cursor /
+	// duplicate-flood pattern: when last_event_unix keeps climbing
+	// but last_insert_unix flat-lines, the cursor is processing
+	// events that produce only duplicate inserts. See the metric
+	// godoc + ratesengine_ingestion_duplicate_flood alert.
+	obs.SourceLastInsertUnix.WithLabelValues(t.Source).Set(float64(time.Now().Unix()))
+
 	// Phase 4 (per migration 0023's docblock): auto-register the
 	// classic-asset registry from observed trades. Errors are
 	// soft-failures — the trade row is committed, we just log+skip

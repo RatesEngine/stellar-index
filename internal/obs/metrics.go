@@ -33,6 +33,7 @@ func init() {
 		SourceEventsTotal,
 		SourceLagLedgers,
 		SourceLastEventUnix,
+		SourceLastInsertUnix,
 		SourceEnabled,
 		SourceMatchedEventsTotal,
 		SourceDecodeErrorsTotal,
@@ -195,6 +196,32 @@ var SourceLastEventUnix = prometheus.NewGaugeVec(
 	prometheus.GaugeOpts{
 		Name: "ratesengine_source_last_event_unix",
 		Help: "Timestamp of the most recent event per source (Unix seconds).",
+	},
+	[]string{"source"},
+)
+
+// SourceLastInsertUnix — per-source gauge, Unix-epoch wall-clock
+// timestamp of the most recent SUCCESSFUL trade row landed for the
+// source (i.e. InsertTrade returned with rowsInserted==1, not
+// `ON CONFLICT DO NOTHING`).
+//
+// Pairs with [SourceLastEventUnix] to detect the
+// stuck-cursor / replay-loop pattern: when the dispatcher matches
+// events (last_event_unix climbs) but ON CONFLICT short-circuits
+// every insert (last_insert_unix stops climbing), the gap between
+// the two grows. Direct alert template:
+//
+//	time() - ratesengine_source_last_insert_unix{source="sdex"} > 3600
+//
+// catches the live r1 2026-05-28 pattern (157 SDEX insert-attempts/
+// min, all duplicates, max(ts) 11 h old) within an hour of recurrence.
+// Complements the [TradeInsertOutcomeTotal] rate-shape alert with a
+// timestamp-shape signal that doesn't require sustained traffic to
+// fire.
+var SourceLastInsertUnix = prometheus.NewGaugeVec(
+	prometheus.GaugeOpts{
+		Name: "ratesengine_source_last_insert_unix",
+		Help: "Wall-clock timestamp of the most recent successfully-inserted trade row per source (Unix seconds). Stops advancing during a stuck-cursor / duplicate-flood pattern — the gap vs ratesengine_source_last_event_unix is the diagnostic signature.",
 	},
 	[]string{"source"},
 )

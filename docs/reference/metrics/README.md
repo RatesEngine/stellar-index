@@ -89,6 +89,27 @@ lag signal exists.
 Gauge, label `source`. Unix-seconds timestamp of the most recent
 event dispatched to the sink. Dashboards use it for a last-seen clock.
 
+### `ratesengine_source_last_insert_unix`
+
+Gauge, label `source`. Wall-clock Unix-seconds timestamp of the
+most recent SUCCESSFULLY-inserted trade row per source (i.e.
+`Store.InsertTrade` returned with `rowsInserted == 1`, not
+`ON CONFLICT DO NOTHING`).
+
+Pairs with `ratesengine_source_last_event_unix` to expose the
+stuck-cursor / duplicate-flood pattern: when the dispatcher matches
+events (last_event climbs) but every insert hits the ON CONFLICT
+short-circuit (last_insert flat-lines), the gap between the two
+grows. Direct alert template:
+
+    time() - ratesengine_source_last_insert_unix{source="sdex"} > 3600
+
+catches the live r1 2026-05-28 pattern (157 SDEX insert-attempts/
+min, every one a duplicate, max(ts) 11 h old) within an hour of
+recurrence. Complements `ratesengine_trade_insert_outcome_total`'s
+rate-shape signal with a timestamp-shape signal that doesn't
+require sustained traffic to fire.
+
 ### `ratesengine_source_matched_events_total`
 
 Counter, label `source`.
