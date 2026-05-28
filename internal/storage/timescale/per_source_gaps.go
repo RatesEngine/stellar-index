@@ -78,6 +78,11 @@ var DefaultGapDetectorTargets = []GapDetectorTarget{
 	// 0020-class incident in the classic-DEX path would have gone
 	// undetected. (See ADR-0030.)
 	{Source: "sdex", Table: "trades", LedgerColumn: "ledger", WhereFilter: "source = 'sdex'"},
+	// SDEX offer-state events (OfferCreated/OfferUpdated/OfferRemoved)
+	// land in their own hypertable — complement to the trade flow.
+	// An offer-events writer halt would not show up in the trades
+	// gauge above; the dedicated target catches it.
+	{Source: "sdex-offers", Table: "sdex_offer_events", LedgerColumn: "ledger"},
 }
 
 // FindPerSourceLedgerGaps finds contiguous ledger-coverage gaps

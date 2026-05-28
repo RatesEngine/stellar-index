@@ -1,5 +1,13 @@
 # Runbook: drain a cascade window across every per-source table
 
+## At a glance
+
+- **Severity:** P2 — operator action after a cascade incident, not a paging alert in itself
+- **Trigger:** [ingest-gap-detected](ingest-gap-detected.md) fires for one or more `source=` labels other than `soroban-events`, or `find-data-gaps --source all` reports per-source gaps
+- **Time to act:** within 1 hour of detection — gap doesn't grow but density stays sub-100% until drained
+- **Owner:** ratesengine on-call
+- **TL;DR fix:** `ratesengine-ops drain-cascade-window --config /etc/ratesengine.toml --from $FROM --to $TO`
+
 **When to use this runbook:** after a back-pressure incident (e.g. F-0020-class) leaves a contiguous ledger window short in one or more per-source classifier hypertables (`blend_*`, `comet_*`, `phoenix_*`, `sep41_transfers`, `soroswap_skim_events`, `cctp_events`, `rozo_events`) while the raw `soroban_events` landing zone is whole. Typical signal: the [ingest-gap-detected](ingest-gap-detected.md) alert fires for one or more `source=` labels other than `soroban-events`, or a manual `ratesengine-ops find-data-gaps --source <name>` reports a contiguous window.
 
 **Pre-flight:** confirm `soroban_events` is whole over the cascade range. If not, fill that first via `ratesengine-ops backfill --source soroban-events --from $FROM --to $TO --parallel 8`; the per-source decoders re-read from `soroban_events`, so a missing landing zone produces an apparent-success run that inserts nothing.

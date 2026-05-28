@@ -151,6 +151,8 @@ core; review the existing connectors before adding a new one.
 
 Plus fixtures in `test/fixtures/<name>/`.
 
+**Coverage invariant (ADR-0030).** If your source writes to a new per-source hypertable (any `CREATE TABLE *_events|*_liquidity|*_positions|*_emissions|*_admin|*_transfers|*_swaps|*_stake_events|*_supply_events|*_auctions` migration), you MUST register it in `internal/storage/timescale/per_source_gaps.go`'s `DefaultGapDetectorTargets` in the same PR. CI's `TestGapDetectorTargetsCoverAllPerSourceHypertables` fails otherwise. A new Soroban source's PR should also add a dedicated `<source>-backfill` subcommand following the `blend_backfill.go` pattern so the orchestrator (`ratesengine-ops drain-cascade-window`) can repair it.
+
 ---
 
 ## Commit style

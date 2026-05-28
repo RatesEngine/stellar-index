@@ -1,5 +1,13 @@
 # Runbook: SDEX data-coverage gap detected
 
+## At a glance
+
+- **Severity:** P1 — pages on-call
+- **Trigger:** `max by (source) (ratesengine_ingest_gap_max_size_ledgers{source="sdex"}) > 1000` for 15 min
+- **Time to act:** within 30 min
+- **Owner:** ratesengine on-call
+- **TL;DR fix:** confirm writer health → `ratesengine-ops backfill --source sdex --from $GAP --to $TIP --parallel 8`
+
 **Trigger:** `ratesengine_ingest_gap_max_size_ledgers{source="sdex"} > 1000` sustained 15 min.
 
 This is the SDEX-specific surface of [ingest-gap-detected](ingest-gap-detected.md). SDEX is classic-DEX and does NOT flow through `soroban_events`; its rows land in the unified `trades` hypertable filtered by `source = 'sdex'`. Symmetric to the Soroban path, an SDEX-side cascade (Postgres back-pressure halting the SDEX writer goroutine while the rest of ingest stays healthy) used to be invisible at the data layer. This alert closes that gap.

@@ -36,6 +36,9 @@ Short form:
    ADR-0002.
 4. **Monorepo with one `go.mod`.** ADR-0005.
 5. **Validator track post-launch targets Tier-1.** ADR-0004.
+6. **Per-source coverage invariant.** Every per-source hypertable
+   must register in `DefaultGapDetectorTargets` (same PR as the
+   migration). ADR-0030.
 
 ## Quick-start commands
 
