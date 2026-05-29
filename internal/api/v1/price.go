@@ -316,7 +316,17 @@ func (s *Server) handlePrice(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	snapshot, sources, stale, err := reader.LatestPrice(r.Context(), asset, quote)
+	// Try the user's literal (asset, quote) first; if not found, try
+	// known aliases. XLM in particular surfaces in two canonical
+	// forms across the codebase — `native` (per-network) and
+	// `crypto:XLM` (global ticker) — and the aggregator writes VWAP
+	// under whichever form matches its configured pair set. Without
+	// this loop, /v1/price?asset=native falls through to the
+	// triangulation fallback even though a fresh `crypto:XLM/fiat:USD`
+	// VWAP is sitting in cache. The 39-hour-stale signal we shipped
+	// on 2026-05-29 was exactly this — F-1308 fixed the staleness
+	// gauge but not the price-read path. ADR-0010 + F-1308.
+	snapshot, sources, stale, err := s.readPriceWithAliases(r.Context(), reader, asset, quote)
 	triangulated := false
 	if errors.Is(err, ErrPriceNotFound) {
 		var ok bool
@@ -497,6 +507,85 @@ func (s *Server) tryRedisVWAPFallback(ctx context.Context, asset, quote canonica
 		WindowSeconds: int(triangulationLookupWindow.Seconds()),
 	}
 	return snap, []string{}, isTriangulated, true
+}
+
+// assetAliases returns the list of canonical-asset forms equivalent
+// to `asset` that the price-read path should try, in priority order
+// (the literal input first, then known aliases). XLM is the only
+// asset with two canonical forms today: `native` (per-network
+// strkey-less form) and `crypto:XLM` (cross-network global ticker
+// form). Both appear in production trade rows depending on the
+// emitting source (SDEX writes `native`, every CEX writes
+// `crypto:XLM`); the aggregator VWAPs under whichever the configured
+// pair set names. Without the alias loop, /v1/price reading by one
+// form misses VWAPs published under the other.
+//
+// Keeping the function tiny and explicit rather than wiring it
+// through a broader asset-equivalence registry: this is the only
+// known pair today and a registry would over-design the problem.
+// Add a second case here (and a test) if a future asset acquires
+// a second canonical form.
+func assetAliases(asset canonical.Asset) []canonical.Asset {
+	out := []canonical.Asset{asset}
+	switch asset.String() {
+	case "native":
+		if alt, err := canonical.ParseAsset("crypto:XLM"); err == nil {
+			out = append(out, alt)
+		}
+	case "crypto:XLM":
+		if alt, err := canonical.ParseAsset("native"); err == nil {
+			out = append(out, alt)
+		}
+	}
+	return out
+}
+
+// readPriceWithAliases is the alias-aware wrapper around
+// reader.LatestPrice. It tries each (assetAlias, quote) pair in
+// order and returns the FIRST result that:
+//   - succeeds with err == nil, AND
+//   - is not stale (or if every alias is stale, the freshest one).
+//
+// Pre-this-helper the bare LatestPrice(native, fiat:USD) hit only
+// the `native` key and missed the `crypto:XLM` VWAP that CEX
+// trades populate. On 2026-05-29 this caused /v1/price?asset=native
+// to fall through to a 39h-stale triangulated SDEX bucket even
+// though fresh CEX data sat in cache under the alias key.
+func (s *Server) readPriceWithAliases(ctx context.Context, reader PriceReader, asset, quote canonical.Asset) (PriceSnapshot, []string, bool, error) {
+	aliases := assetAliases(asset)
+	var firstSnap PriceSnapshot
+	var firstSrcs []string
+	var firstErr error
+	freshFound := false
+	for _, a := range aliases {
+		snap, srcs, stale, err := reader.LatestPrice(ctx, a, quote)
+		if err != nil {
+			if firstErr == nil {
+				firstErr = err
+			}
+			continue
+		}
+		if !stale {
+			// Fresh hit — return immediately.
+			return snap, srcs, false, nil
+		}
+		// Stale — remember the first stale result as a fallback
+		// in case every alias is stale.
+		if !freshFound {
+			firstSnap, firstSrcs = snap, srcs
+			freshFound = true
+		}
+	}
+	if freshFound {
+		// Every alias was stale; return the first stale result so
+		// the caller still surfaces flags.stale=true rather than
+		// falling all the way through to priceFallback.
+		return firstSnap, firstSrcs, true, nil
+	}
+	// Every alias errored; return the first error so the caller's
+	// errors.Is(err, ErrPriceNotFound) branch still triggers
+	// priceFallback as before.
+	return PriceSnapshot{}, nil, false, firstErr
 }
 
 // priceFallback runs the post-Timescale-miss fallback chain for

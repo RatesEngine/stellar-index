@@ -1047,3 +1047,101 @@ func TestPrice_FiatCrossRate_NotFiatBothSides(t *testing.T) {
 		t.Errorf("status = %d, want 404 (fiat fallback shouldn't fire for native/fiat:USD)", resp.StatusCode)
 	}
 }
+
+// TestPrice_XLMAlias_NativeFallsThroughToCryptoXLM verifies that
+// /v1/price?asset=native&quote=fiat:USD picks up a VWAP published
+// under crypto:XLM/fiat:USD when no native/fiat:USD key exists.
+// This is the F-1308 / #87 customer-visible 39h-stale bug on
+// 2026-05-29: SDEX writes `native`, CEX writes `crypto:XLM`; the
+// aggregator's pair-set published under crypto:XLM only, and the
+// public surface queried by `native` and missed.
+func TestPrice_XLMAlias_NativeFallsThroughToCryptoXLM(t *testing.T) {
+	reader := &stubPriceReader{
+		snapshots: map[string]v1.PriceSnapshot{
+			"crypto:XLM/fiat:USD": {
+				AssetID:    "crypto:XLM",
+				Quote:      "fiat:USD",
+				Price:      "0.1500",
+				PriceType:  "vwap",
+				ObservedAt: time.Now().UTC(),
+			},
+		},
+		stale:   map[string]bool{"crypto:XLM/fiat:USD": false},
+		sources: map[string][]string{"crypto:XLM/fiat:USD": {"binance", "bitstamp", "coinbase"}},
+	}
+	srv := v1.New(v1.Options{Prices: reader})
+	ts := startHTTPTest(t, srv.Handler())
+
+	resp := mustGet(t, ts.URL+"/v1/price?asset=native&quote=fiat:USD")
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status %d, want 200", resp.StatusCode)
+	}
+	body, _ := readAll(resp)
+	if !strings.Contains(body, `"price":"0.1500"`) {
+		t.Errorf("expected price 0.1500 from crypto:XLM alias; got: %s", body)
+	}
+	if strings.Contains(body, `"stale":true`) {
+		t.Errorf("alias-served price should not flag stale=true; got: %s", body)
+	}
+	if strings.Contains(body, `"triangulated":true`) {
+		t.Errorf("alias-served price should not flag triangulated=true; got: %s", body)
+	}
+}
+
+// TestPrice_XLMAlias_CryptoXLMFallsThroughToNative verifies the
+// symmetric case — a customer querying with crypto:XLM picks up
+// VWAPs published under native.
+func TestPrice_XLMAlias_CryptoXLMFallsThroughToNative(t *testing.T) {
+	reader := &stubPriceReader{
+		snapshots: map[string]v1.PriceSnapshot{
+			"native/fiat:USD": {
+				AssetID:    "native",
+				Quote:      "fiat:USD",
+				Price:      "0.1500",
+				PriceType:  "vwap",
+				ObservedAt: time.Now().UTC(),
+			},
+		},
+		stale:   map[string]bool{"native/fiat:USD": false},
+		sources: map[string][]string{"native/fiat:USD": {"sdex"}},
+	}
+	srv := v1.New(v1.Options{Prices: reader})
+	ts := startHTTPTest(t, srv.Handler())
+
+	resp := mustGet(t, ts.URL+"/v1/price?asset=crypto:XLM&quote=fiat:USD")
+	if resp.StatusCode != http.StatusOK {
+		body, _ := readAll(resp)
+		t.Fatalf("status %d, want 200 (body: %s)", resp.StatusCode, body)
+	}
+}
+
+// TestPrice_XLMAlias_PrefersFreshOverStale checks the alias loop's
+// staleness ordering: literal-asset has a stale VWAP, alias has a
+// fresh one → return the fresh alias.
+func TestPrice_XLMAlias_PrefersFreshOverStale(t *testing.T) {
+	reader := &stubPriceReader{
+		snapshots: map[string]v1.PriceSnapshot{
+			"native/fiat:USD":     {AssetID: "native", Quote: "fiat:USD", Price: "0.1000", PriceType: "vwap", ObservedAt: time.Now().Add(-48 * time.Hour).UTC()},
+			"crypto:XLM/fiat:USD": {AssetID: "crypto:XLM", Quote: "fiat:USD", Price: "0.1500", PriceType: "vwap", ObservedAt: time.Now().UTC()},
+		},
+		stale: map[string]bool{
+			"native/fiat:USD":     true,
+			"crypto:XLM/fiat:USD": false,
+		},
+		sources: map[string][]string{
+			"native/fiat:USD":     {"sdex"},
+			"crypto:XLM/fiat:USD": {"binance"},
+		},
+	}
+	srv := v1.New(v1.Options{Prices: reader})
+	ts := startHTTPTest(t, srv.Handler())
+
+	resp := mustGet(t, ts.URL+"/v1/price?asset=native&quote=fiat:USD")
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status %d, want 200", resp.StatusCode)
+	}
+	body, _ := readAll(resp)
+	if !strings.Contains(body, `"price":"0.1500"`) {
+		t.Errorf("expected fresh crypto:XLM 0.1500; got: %s", body)
+	}
+}
