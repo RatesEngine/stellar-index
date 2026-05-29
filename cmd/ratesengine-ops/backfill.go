@@ -337,7 +337,11 @@ func runBackfillChunk(ctx context.Context, logger *slog.Logger, opts backfillOpt
 	sinkDone := make(chan struct{})
 	go func() {
 		defer close(sinkDone)
-		pipeline.PersistEvents(ctx, logger, store, events)
+		// Backfill always uses SinkModeAll — the projector only runs
+		// in the indexer, not in `ratesengine-ops backfill`, so this
+		// subcommand keeps writing every event class itself. See
+		// ADR-0032 § "Out of scope for projector".
+		pipeline.PersistEvents(ctx, logger, store, events, pipeline.SinkModeAll)
 	}()
 
 	// Ctx-cancel safety net for the raw-event sink (ADR-0029).

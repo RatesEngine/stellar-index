@@ -58,7 +58,7 @@ func TestPersistEvents_DrainsBufferedEventsOnShutdown(t *testing.T) {
 		// handleOneEvent change makes the default case dereference
 		// the store, this test surfaces it as a panic — which is
 		// the correct signal.
-		PersistEvents(ctx, logger, nil, in)
+		PersistEvents(ctx, logger, nil, in, SinkModeAll)
 	}()
 
 	// Close the channel so drain can exit cleanly without hitting
@@ -112,7 +112,7 @@ func TestPersistEvents_NormalCloseStillWorks(t *testing.T) {
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
-		PersistEvents(ctx, logger, nil, in)
+		PersistEvents(ctx, logger, nil, in, SinkModeAll)
 	}()
 
 	select {

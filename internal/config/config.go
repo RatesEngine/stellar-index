@@ -481,8 +481,16 @@ type IngestionConfig struct {
 // same per-source PKs and `ON CONFLICT DO NOTHING` absorbs the
 // duplicates so projector lag (vs the live tip) can be measured
 // before flipping the writer primary.
+//
+// Phase 4 introduces [PersistPerSource]. When `Enabled=true` AND
+// `PersistPerSource=false`, the dispatcher's events-goroutine STOPS
+// writing Soroban-derived events (`pipeline.SinkModeSkipProjected`)
+// — the projector becomes the sole writer for that subset. sdex,
+// external CEX/FX, band, and supply observers continue through the
+// events-goroutine because they don't flow through soroban_events.
 type ProjectorConfig struct {
-	Enabled bool `toml:"enabled" doc:"Master switch. When false the projector goroutines are not started." default:"false"`
+	Enabled          bool `toml:"enabled"            doc:"Master switch. When false the projector goroutines are not started." default:"false"`
+	PersistPerSource bool `toml:"persist_per_source" doc:"When false (Phase 4+), the dispatcher's events-goroutine skips Soroban-derived events so the projector is sole writer. Requires Enabled=true. Defaults true (Phase 3 parallel mode); operator flips to false once projector lag is verified low." default:"true"`
 }
 
 // AnomalyConfig configures both phases of ADR-0019 anomaly

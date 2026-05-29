@@ -70,6 +70,7 @@ the `env:` column.
 | `ingestion.cursor_store_scheme` | `string` | `postgres` | — | Where per-source cursors live — postgres / redis. |
 | `ingestion.live_seam_ledger` | `uint32` | `0` | — | First ledger in the live bucket. Below this, indexer reads from galexie-archive. 0 disables the archive bucket entirely. |
 | `ingestion.projector.enabled` | `bool` | `false` | — | Master switch. When false the projector goroutines are not started. |
+| `ingestion.projector.persist_per_source` | `bool` | `true` | — | When false (Phase 4+), the dispatcher's events-goroutine skips Soroban-derived events so the projector is sole writer. Requires Enabled=true. Defaults true (Phase 3 parallel mode); operator flips to false once projector lag is verified low. |
 
 ### `[oracle]`
 

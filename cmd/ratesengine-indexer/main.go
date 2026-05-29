@@ -377,20 +377,32 @@ func run(cfgPath string, dryRun bool) error {
 	metricsSrv := startMetricsServer(cfg.Obs, logger)
 
 	// ─── Sink goroutine ────────────────────────────────────────
+	// Sink mode depends on the projector config (ADR-0032 Phase 4):
+	//   - projector disabled OR persist_per_source=true →
+	//     SinkModeAll: write everything, parallel-mode with projector
+	//     if it's running.
+	//   - projector enabled AND persist_per_source=false →
+	//     SinkModeSkipProjected: skip Soroban-derived events so the
+	//     projector is sole writer for that subset; non-Soroban
+	//     events (sdex, external, band, supply observers) still
+	//     ride this path.
+	sinkMode := pipeline.SinkModeAll
+	if cfg.Ingestion.Projector.Enabled && !cfg.Ingestion.Projector.PersistPerSource {
+		sinkMode = pipeline.SinkModeSkipProjected
+		logger.Info("dispatcher events-goroutine: SKIP-PROJECTED mode — projector is sole writer for Soroban-derived events (ADR-0032 Phase 4)")
+	}
 	events := make(chan consumer.Event, 256)
 	sinkDone := make(chan struct{})
 	go func() {
 		defer close(sinkDone)
-		pipeline.PersistEvents(rootCtx, logger, store, events)
+		pipeline.PersistEvents(rootCtx, logger, store, events, sinkMode)
 	}()
 
 	// ─── Projector (ADR-0032) ──────────────────────────────────
-	// Phase 3: parallel-mode — projector tails soroban_events and
-	// writes per-source rows alongside the dispatcher's existing
-	// per-source sinks. ON CONFLICT DO NOTHING means whichever
-	// writer reaches the row first wins; the other no-ops. Phase 4
-	// (ADR-0032) will flip [persist_per_source]=false so the
-	// projector becomes sole writer.
+	// Phase 3 (parallel mode, persist_per_source=true): projector
+	// + dispatcher both write Soroban-derived events; PK
+	// duplicates resolved by ON CONFLICT DO NOTHING. Phase 4
+	// (persist_per_source=false): projector is sole writer.
 	var projectorDone chan struct{}
 	if cfg.Ingestion.Projector.Enabled {
 		registry, perr := projector.BuildRegistry(cfg.Ingestion.EnabledSources, cfg.Oracle, soroswapOpts...)

@@ -34,6 +34,37 @@ import (
 	"github.com/RatesEngine/rates-engine/internal/storage/timescale"
 )
 
+// SinkMode controls which event classes [PersistEvents] writes when
+// draining the dispatcher's events channel. Introduced for ADR-0032
+// Phase 4: once the projector becomes sole writer for Soroban-derived
+// events, the dispatcher's events-goroutine must stop writing them
+// (otherwise duplicate-PK errors flood + the writer-of-record is
+// ambiguous). Soroban-derived sinks (trades, blend_*, phoenix_*,
+// comet_*, soroswap_skim, sep41_*, cctp_events, rozo_events,
+// reflector/redstone oracle_updates) ride the projector path;
+// everything else (sdex trades, external CEX/FX, band oracle_updates,
+// supply observers writing LedgerEntry observations) still rides
+// the dispatcher path because those sources don't flow through
+// soroban_events.
+type SinkMode int
+
+const (
+	// SinkModeAll writes every consumer.Event the dispatcher emits.
+	// The projector ALWAYS uses this mode (it's the sole writer for
+	// the Soroban-derived subset, so it must persist them).
+	// Pre-Phase-4 the dispatcher's events-goroutine also uses this
+	// mode (parallel write with projector, ON CONFLICT DO NOTHING
+	// absorbs duplicates).
+	SinkModeAll SinkMode = iota
+
+	// SinkModeSkipProjected skips Soroban-derived events the
+	// projector handles (see [IsProjectedEvent]). Phase 4+ the
+	// dispatcher's events-goroutine uses this mode so the projector
+	// owns Soroban-derived writes outright; the events-goroutine
+	// continues handling sdex / external / band / supply observers.
+	SinkModeSkipProjected
+)
+
 // PersistEvents drains `in` and writes each event to its hypertable
 // via the supplied store. Returns when ctx is canceled and the
 // channel has been drained, or when the channel is closed.
@@ -56,18 +87,58 @@ import (
 // postgres calls would fail) bounded to 30s so a stuck shutdown
 // can't hang the binary forever; if the deadline trips, the
 // remaining buffered events are dropped and logged.
-func PersistEvents(ctx context.Context, logger *slog.Logger, store *timescale.Store, in <-chan consumer.Event) {
+//
+// The `mode` parameter is new with ADR-0032 Phase 4: see the
+// [SinkMode] godoc for why the dispatcher's events-goroutine
+// skips Soroban-derived events once the projector is sole writer.
+func PersistEvents(ctx context.Context, logger *slog.Logger, store *timescale.Store, in <-chan consumer.Event, mode SinkMode) {
 	for {
 		select {
 		case <-ctx.Done():
-			drainBufferedEvents(in, logger, store)
+			drainBufferedEvents(in, logger, store, mode)
 			return
 		case ev, ok := <-in:
 			if !ok {
 				return
 			}
+			if mode == SinkModeSkipProjected && IsProjectedEvent(ev) {
+				continue
+			}
 			HandleEvent(ctx, logger, store, ev)
 		}
+	}
+}
+
+// IsProjectedEvent reports whether the ADR-0032 projector handles
+// `ev`. Phase 4+ the dispatcher's events-goroutine skips these so
+// the projector owns the write outright. Non-projected events
+// (sdex, external CEX/FX, band, supply observers) continue through
+// the events-goroutine because they don't flow through
+// soroban_events.
+//
+// MUST stay in lockstep with `internal/projector/registry.go`
+// `buildSource` — every consumer.Event a registered source can emit
+// must return true here. ADR-0030 lint guard catches drift.
+func IsProjectedEvent(ev consumer.Event) bool {
+	switch ev.(type) {
+	case soroswap.TradeEvent, soroswap.SkimEvent,
+		aquarius.TradeEvent,
+		phoenix.TradeEvent, phoenix.LiquidityEvent, phoenix.StakeEvent,
+		comet.TradeEvent, comet.LiquidityEvent,
+		reflector.UpdateEvent, redstone.UpdateEvent,
+		blend.NewAuctionEvent, blend.FillAuctionEvent, blend.DeleteAuctionEvent,
+		blend.PositionEvent, blend.EmissionEvent, blend.AdminEvent,
+		cctp.Event, rozo.Event,
+		defindex.Event, defindex.VaultEvent,
+		sep41_supply.Event, sep41_transfers.Event:
+		return true
+	default:
+		// sdex.TradeEvent, external.TradeEvent, external.UpdateEvent,
+		// band.UpdateEvent, soroswap_router.Event (log-only), supply
+		// observers (accounts / trustlines / claimable_balances /
+		// liquidity_pools / sac_balances) — all out of scope for the
+		// projector per ADR-0032.
+		return false
 	}
 }
 
@@ -81,7 +152,7 @@ func PersistEvents(ctx context.Context, logger *slog.Logger, store *timescale.St
 // this exists is to keep writing past the parent's cancellation.
 //
 //nolint:contextcheck // intentional fresh context; see godoc above.
-func drainBufferedEvents(in <-chan consumer.Event, logger *slog.Logger, store *timescale.Store) {
+func drainBufferedEvents(in <-chan consumer.Event, logger *slog.Logger, store *timescale.Store, mode SinkMode) {
 	drainCtx, cancel := context.WithTimeout(context.Background(), drainTimeout)
 	defer cancel()
 	for {
@@ -89,6 +160,9 @@ func drainBufferedEvents(in <-chan consumer.Event, logger *slog.Logger, store *t
 		case ev, ok := <-in:
 			if !ok {
 				return
+			}
+			if mode == SinkModeSkipProjected && IsProjectedEvent(ev) {
+				continue
 			}
 			HandleEvent(drainCtx, logger, store, ev)
 		case <-drainCtx.Done():

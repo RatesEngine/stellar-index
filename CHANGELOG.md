@@ -15,6 +15,22 @@ against.
 
 ## [Unreleased]
 
+### Changed
+
+- **ADR-0032 Phase 4 — projector becomes sole writer for Soroban-
+  derived events.** New `[ingestion.projector] persist_per_source`
+  knob (default `true` = Phase 3 parallel mode); flipping to
+  `false` switches the dispatcher's events-goroutine to
+  `pipeline.SinkModeSkipProjected` so it stops writing the
+  Soroban-derived event subset. The projector becomes single
+  writer-of-record for `trades`, `blend_*`, `phoenix_*`,
+  `comet_*`, `soroswap_skim`, `cctp_events`, `rozo_events`,
+  `sep41_*`, `oracle_updates` (reflector + redstone). Non-projected
+  events (`sdex`, external CEX/FX, `band`, supply-observer
+  LedgerEntry observations) continue through the events-goroutine
+  unchanged. New `pipeline.IsProjectedEvent` is the dispatch
+  contract — table-driven test pins it.
+
 ### Added
 
 - **ADR-0032 Phase 3 — projector scaffold in parallel mode.** New
