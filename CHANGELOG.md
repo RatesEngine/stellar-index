@@ -15,6 +15,25 @@ against.
 
 ## [Unreleased]
 
+## [v0.5.0-rc.89] — 2026-05-29
+
+Tested against Stellar Protocol 23 (Whisk).
+
+Pre-deploy operator note: api + aggregator + ops binary restart. No migrations. The api restart picks up the XLM-alias fix that restores fresh /v1/price?asset=native; the aggregator restart picks up the per-target gap-detector sparsity overrides.
+
+### Fixed
+
+- **`/v1/price` is now alias-aware for XLM** (`native` ↔ `crypto:XLM`). The aggregator publishes VWAPs under whichever canonical form its configured pair set names — `crypto:XLM/fiat:USD` matches the CEX/oracle global-ticker convention — while the public surface accepts both forms. Pre-rc.89 a `/v1/price?asset=native` request would hit only the `native` key, miss the VWAP, and fall through to triangulated stablecoin SDEX (which on 2026-05-29 was 39 hours stale because SDEX had no XLM/USD activity in that period). The new `readPriceWithAliases` tries each canonical form in priority order, returns the first fresh hit, and only falls back to triangulation when every alias is genuinely empty or stale. Three regression tests pin native→crypto:XLM, crypto:XLM→native, and the "prefer-fresh-alias-over-stale-literal" ordering. Closes #87.
+- **`sep41-transfers-backfill` decode-error log dedupe**. The 2026-05-28 drain-cascade-window run flooded stderr with thousands of identical-shape errors from one mainnet contract that emits non-SEP-41-compliant `approve` events (U32 in spender slot). Keep one line per `(contract, error-kind)` tuple at first sight; final tally summary shows total counts. Closes #93.
+
+### Changed
+
+- **Per-target sparsity overrides on the gap detector**. Several per-source hypertables emit events much sparser than the global 1000-ledger threshold assumed: blend_auctions averages one event per ~735 ledgers, cctp/rozo are infrequent cross-chain hops, blend_emissions/admin/sep41_supply are operator-action events. New `MinGapSizeOverride` field on `GapDetectorTarget` shifts the page threshold per-source so the paging alert still distinguishes "writer wedged" from natural sparsity. Live r1 measurement informed each override: blend-auctions 50K, blend-emissions/admin/sep41-supply 100K, cctp/rozo 100K. Closes #88.
+
+### Documentation
+
+- `source-stopped` runbook now documents the "Reflector upstream-relayer-stuck" pattern surfaced by the 2026-05-28 investigation: contract emits fresh on-chain events but `oracle_updates.ts` stays pinned because Reflector's relayer pushes the same `last_update_timestamp` payload. Tells on-call this is an upstream-only issue, not a decoder bug.
+
 ## [v0.5.0-rc.88] — 2026-05-28
 
 Tested against Stellar Protocol 23 (Whisk).
