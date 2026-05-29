@@ -150,14 +150,15 @@ func scanOneGapDetectorTarget(ctx context.Context, store *Store, logger *slog.Lo
 		return
 	}
 
-	// ADR-0031: alongside the gap scan, count distinct ledgers so
-	// the data-derived density signal has its numerator. One extra
-	// SELECT per target per cycle — cheap relative to the LAG scan.
-	// If this query fails we don't poison the gap signal: emit the
-	// gap gauges anyway and skip the distinct/expected emission so
-	// the data-derived projection just reads as "stale" until the
-	// next cycle.
-	distinct, distinctErr := store.CountDistinctLedgers(scanCtx, target, 0, tip)
+	// ADR-0031: alongside the gap scan, count distinct ledgers from
+	// the source's GENESIS forward (not from 0) so the data-derived
+	// density signal has its numerator + denominator both aligned
+	// to the [genesis, tip] window. One extra SELECT per target per
+	// cycle — cheap relative to the LAG scan. If this query fails
+	// we don't poison the gap signal: emit the gap gauges anyway
+	// and skip the distinct/expected emission so the data-derived
+	// projection just reads as "stale" until the next cycle.
+	distinct, distinctErr := store.CountDistinctLedgers(scanCtx, target, target.Genesis, tip)
 	if distinctErr != nil {
 		logger.Warn("gap-detector: count-distinct failed (gap signal unaffected)",
 			"source", target.Source, "table", target.Table, "err", distinctErr, "tip", tip)
@@ -176,6 +177,21 @@ func scanOneGapDetectorTarget(ctx context.Context, store *Store, logger *slog.Lo
 	obs.IngestGapMaxSize.WithLabelValues(target.Source, target.Table).Set(float64(largest))
 	if distinctErr == nil {
 		obs.IngestSourceDistinctLedgers.WithLabelValues(target.Source, target.Table).Set(float64(distinct))
+		// ADR-0031 Phase 1: also persist the projection to
+		// source_coverage_snapshots so the API binary (separate
+		// process) can read fresh density numbers without re-running
+		// the heavy LAG-over-DISTINCT query at HTTP request time.
+		// One UPSERT per target per cycle.
+		expected := ExpectedLedgersFor(target.Genesis, tip)
+		cov := SourceCoverageFromCounts(
+			target.Source, target.Table,
+			distinct, expected, largest, int64(len(gaps)),
+			time.Now().UTC(),
+		)
+		if err := store.UpsertSourceCoverage(scanCtx, cov); err != nil {
+			logger.Warn("gap-detector: persist source_coverage_snapshot failed",
+				"source", target.Source, "table", target.Table, "err", err)
+		}
 	}
 	obs.IngestGapDetectorRunsTotal.WithLabelValues(target.Source, target.Table, "ok").Inc()
 	obs.IngestGapDetectorDurationSeconds.WithLabelValues(target.Source, target.Table, "ok").

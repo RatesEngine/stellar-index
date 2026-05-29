@@ -113,6 +113,21 @@ type CAGGCoverageView struct {
 	BucketCount    int64  `json:"bucket_count"`
 }
 
+// SourceCoverageReader is the ADR-0031 read seam for the
+// data-derived coverage projection. Production wiring is
+// timescale.Store.ListSourceCoverage which queries
+// source_coverage_snapshots — populated by the gap detector in the
+// aggregator binary after each cycle (every 30 min).
+//
+// Returns an empty slice + nil error during the first 30 min
+// after a fresh deploy (before the detector has written
+// anything). The diagnostic handler treats nil error + empty
+// slice as "no data yet, fall back to v1" — never as a coverage
+// regression.
+type SourceCoverageReader interface {
+	ListSourceCoverage(ctx context.Context) ([]timescale.SourceCoverage, error)
+}
+
 // BackfillCoverageRow is the per-source coverage projection.
 //
 // For on-chain (mapped) sources EarliestLedger / LatestLedger are
@@ -181,6 +196,34 @@ type BackfillCoverageRow struct {
 	// DensityPct. Exposed so the UI can render absolute "X / Y
 	// ledgers covered" rather than just a percentage.
 	ExpectedLedgers int64 `json:"expected_ledgers,omitempty"`
+
+	// ADR-0031 Phase 1 — shadow data-derived coverage. Populated
+	// when a row exists in source_coverage_snapshots (the gap
+	// detector writes there after each cycle); reads as the
+	// zero value otherwise (during the first 30 min after deploy
+	// before the detector has run).
+	//
+	// DensityPctV2 = `distinct_ledger / expected_ledger` from the
+	// per-source hypertable directly. Honest raw coverage. For
+	// dense sources (SDEX, Soroswap) approaches 1.0; for sparse
+	// sources (Blend auctions, CCTP) naturally low.
+	//
+	// GapFreePct = `1 - max_gap_ledgers / expected_ledger`. Goes
+	// to 1.0 when there's no contiguous gap above the per-target
+	// threshold (ADR-0030 + MinGapSizeOverride). Sparse sources
+	// running cleanly hit 1.0 here.
+	//
+	// CoverageSnapshotAge is how long ago the gap detector last
+	// wrote this row; surfaces "data is X minutes old" so the
+	// status page can mark stale snapshots.
+	//
+	// Phase 2 (~rc.93-94) deletes DensityPct + CoveredLedgers +
+	// ExpectedLedgers + CoveragePct and renames DensityPctV2 →
+	// DensityPct. For now both are present so we can verify
+	// agreement during the 7-day shadow window.
+	DensityPctV2          float64    `json:"density_pct_v2,omitempty"`
+	GapFreePct            float64    `json:"gap_free_pct,omitempty"`
+	CoverageSnapshotAt    *time.Time `json:"coverage_snapshot_at,omitempty"`
 }
 
 // sourceGenesisLedger is the operator-curated map of "what's the
@@ -604,6 +647,13 @@ func (s *Server) buildIngestionSnapshot(ctx context.Context) IngestionDiagnostic
 	// count comes from the always-on tally (out.entryCounts).
 	tip := out.Ledger.LatestLedger
 	out.BackfillCoverage = buildBackfillCoverage(out.rawCursors, cacheRows, out.entryCounts, tip)
+	// ADR-0031 Phase 1: overlay the data-derived coverage (v2) onto
+	// each row. Reads from source_coverage_snapshots populated by
+	// the gap detector. Best-effort — if the table is empty (fresh
+	// deploy) or the read fails, v2 fields remain zero and the
+	// status page falls back to v1 (cursor-derived). After Phase 2
+	// the cursor-derived path is deleted and v2 BECOMES density_pct.
+	s.overlaySourceCoverageV2(ctx, &out.BackfillCoverage)
 	if len(out.BackfillCoverage) > 0 {
 		// Assembled this request from live cursors — the headline
 		// density is as-of-now, not the (possibly stale/failed)
@@ -611,6 +661,92 @@ func (s *Server) buildIngestionSnapshot(ctx context.Context) IngestionDiagnostic
 		out.BackfillCoverageAt = time.Now().UTC().Format(time.RFC3339)
 	}
 	return out
+}
+
+// overlaySourceCoverageV2 reads source_coverage_snapshots and fills
+// the v2 fields (DensityPctV2, GapFreePct, CoverageSnapshotAt) on
+// every matching row. Doesn't fail the snapshot if the read fails
+// — the v1 cursor-derived numbers are still authoritative until
+// Phase 2 of the ADR-0031 rollout.
+//
+// Multi-table sources (blend has 4 tables; phoenix has 2) take
+// the per-source AGGREGATE: density_pct = MIN(per-table density)
+// because a single empty target means the source as a whole isn't
+// fully covered. gap_free_pct = MIN(per-table gap_free_pct) for
+// the same reason. The snapshot timestamp is the OLDEST per-table
+// last_updated — "how stale is the staleest read in this source's
+// aggregation".
+func (s *Server) overlaySourceCoverageV2(ctx context.Context, rows *[]BackfillCoverageRow) {
+	if s.coverageReader == nil {
+		return
+	}
+	snaps, err := s.coverageReader.ListSourceCoverage(ctx)
+	if err != nil {
+		s.logger.Warn("diagnostics/ingestion: source_coverage_snapshots read failed (v1 numbers still authoritative)", "err", err)
+		return
+	}
+	// Source-name → list of snapshots (one source may map to
+	// multiple tables, e.g. blend → 4).
+	bySource := make(map[string][]timescale.SourceCoverage, len(snaps))
+	for _, sn := range snaps {
+		// Snapshot's source name is a per-target name like
+		// "blend-positions"; map back to the diagnostic source
+		// name via the shared sourceFromTargetSource helper.
+		key := sourceFromTargetSource(sn.Source)
+		bySource[key] = append(bySource[key], sn)
+	}
+	for i := range *rows {
+		src := (*rows)[i].Source
+		ss, ok := bySource[src]
+		if !ok || len(ss) == 0 {
+			continue
+		}
+		// Aggregate across tables for multi-table sources.
+		density, gapFree := ss[0].DensityPct, ss[0].GapFreePct
+		oldest := ss[0].LastUpdated
+		for _, s := range ss[1:] {
+			if s.DensityPct < density {
+				density = s.DensityPct
+			}
+			if s.GapFreePct < gapFree {
+				gapFree = s.GapFreePct
+			}
+			if s.LastUpdated.Before(oldest) {
+				oldest = s.LastUpdated
+			}
+		}
+		(*rows)[i].DensityPctV2 = density
+		(*rows)[i].GapFreePct = gapFree
+		(*rows)[i].CoverageSnapshotAt = &oldest
+	}
+}
+
+// sourceFromTargetSource maps the gap-detector target name
+// (per-table) back to the diagnostic's source name (per-protocol).
+// "blend-positions" → "blend"; "phoenix-liquidity" → "phoenix"; etc.
+// 1-to-1 for most sources; the multi-table protocols (blend,
+// phoenix, sep41) need explicit mapping.
+func sourceFromTargetSource(targetSource string) string {
+	switch targetSource {
+	case "blend-positions", "blend-emissions", "blend-admin", "blend-auctions":
+		return "blend"
+	case "phoenix-liquidity", "phoenix-stake":
+		return "phoenix"
+	case "sep41-transfers", "sep41-supply":
+		// SEP-41 isn't a protocol-level source in the diagnostic
+		// view today; the per-table targets surface directly.
+		return targetSource
+	case "comet-liquidity":
+		return "comet"
+	case "soroswap-skim":
+		return "soroswap"
+	case "sdex-offers":
+		// sdex-offers projects from the SDEX classic-DEX ledger
+		// path but is reported separately as a target.
+		return targetSource
+	}
+	// Default 1:1 (sdex, soroban-events, cctp, rozo, ...)
+	return targetSource
 }
 
 // fillIngestionLedger reads network-stats and copies the four

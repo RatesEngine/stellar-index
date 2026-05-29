@@ -816,6 +816,7 @@ func run(cfgPath string, dryRun bool) error { //nolint:gocognit,funlen,gocyclo /
 		Issuers:              cachedIssuersReader,
 		SEP41Transfers:       store,
 		Cursors:              store,
+		CoverageReader:       store,
 		NetworkStats:         store,
 		// Wrap with a 60s TTL cache. The underlying SQL aggregations
 		// (24h trades-hypertable scan grouped by source) take 5-10s;

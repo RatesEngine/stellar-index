@@ -28,6 +28,16 @@ type GapDetectorTarget struct {
 	Table        string
 	LedgerColumn string
 
+	// Genesis is the first ledger at which this source could
+	// possibly have data — typically the contract's deploy
+	// ledger for Soroban sources, or 2 for SDEX (Stellar's
+	// first non-genesis ledger). Used by ADR-0031's data-derived
+	// density: expected = tip - Genesis + 1; density = distinct
+	// / expected. Sources without a known genesis (off-chain
+	// CEX/FX) shouldn't be in this registry; their freshness is
+	// surfaced through a different signal entirely.
+	Genesis int64
+
 	// WhereFilter is an optional additional SQL predicate ANDed into
 	// the gap-finding query's WHERE clause (without the leading
 	// "AND" — e.g. `source = 'sdex'`). Used when one table holds
@@ -87,39 +97,47 @@ func (t GapDetectorTarget) EffectiveMinGapSize() int64 {
 // because its scan is by far the most expensive (~5min on r1 vs
 // <30s for the per-source tables).
 var DefaultGapDetectorTargets = []GapDetectorTarget{
-	{Source: "sep41-transfers", Table: "sep41_transfers", LedgerColumn: "ledger"},
+	// Soroban era starts at L50,457,424 on pubnet. SEP-41 tokens
+	// have no single deploy-ledger genesis (the standard is
+	// implemented by every Soroban token); use the era boundary
+	// as the conservative lower bound — anything earlier has no
+	// SEP-41 emissions by definition.
+	{Source: "sep41-transfers", Table: "sep41_transfers", LedgerColumn: "ledger", Genesis: 50_457_424},
 	// SEP-41 supply events fire only on mint/burn/clawback — much
 	// rarer than transfers. Live r1: most token issuers go many
 	// hours without a supply mutation.
-	{Source: "sep41-supply", Table: "sep41_supply_events", LedgerColumn: "ledger", MinGapSizeOverride: 100000},
+	{Source: "sep41-supply", Table: "sep41_supply_events", LedgerColumn: "ledger", Genesis: 50_457_424, MinGapSizeOverride: 100000},
 	// CCTP / Rozo are cross-chain bridges with sparse traffic
 	// (hours-to-days between events). 100K-ledger gap threshold
 	// silences quiet-period false positives without losing
-	// "writer wedged for >1.5 days" pages.
-	{Source: "cctp", Table: "cctp_events", LedgerColumn: "ledger", MinGapSizeOverride: 100000},
-	{Source: "rozo", Table: "rozo_events", LedgerColumn: "ledger", MinGapSizeOverride: 100000},
+	// "writer wedged for >1.5 days" pages. CCTP/Rozo are new
+	// (2026-05-20 deploy) so the genesis is recent.
+	{Source: "cctp", Table: "cctp_events", LedgerColumn: "ledger", Genesis: 62_403_000, MinGapSizeOverride: 100000},
+	{Source: "rozo", Table: "rozo_events", LedgerColumn: "ledger", Genesis: 62_403_000, MinGapSizeOverride: 100000},
 	// comet_liquidity: pool-events are sparse; 2026-05-29 find-data-
 	// gaps showed 17 natural gaps across cascade-era data with max
 	// 7826 ledgers (~11h of natural pool silence). 50K threshold.
-	{Source: "comet-liquidity", Table: "comet_liquidity", LedgerColumn: "ledger", MinGapSizeOverride: 50000},
-	{Source: "soroswap-skim", Table: "soroswap_skim_events", LedgerColumn: "ledger"},
-	{Source: "phoenix-liquidity", Table: "phoenix_liquidity", LedgerColumn: "ledger"},
-	{Source: "phoenix-stake", Table: "phoenix_stake_events", LedgerColumn: "ledger"},
+	{Source: "comet-liquidity", Table: "comet_liquidity", LedgerColumn: "ledger", Genesis: 51_499_546, MinGapSizeOverride: 50000},
+	{Source: "soroswap-skim", Table: "soroswap_skim_events", LedgerColumn: "ledger", Genesis: 50_746_266},
+	{Source: "phoenix-liquidity", Table: "phoenix_liquidity", LedgerColumn: "ledger", Genesis: 51_572_016},
+	{Source: "phoenix-stake", Table: "phoenix_stake_events", LedgerColumn: "ledger", Genesis: 51_572_016},
 	// blend_auctions: live r1 (2026-05-28) showed 8049 distinct
 	// ledgers across a 5.9M-ledger span = one event per ~735
 	// ledgers. 2026-05-29 measurement bumped the 50K override to
 	// 100K because the observed max gap (53515) was just over the
 	// previous threshold — pages on natural sparsity.
-	{Source: "blend-auctions", Table: "blend_auctions", LedgerColumn: "ledger", MinGapSizeOverride: 100000},
+	{Source: "blend-auctions", Table: "blend_auctions", LedgerColumn: "ledger", Genesis: 51_499_546, MinGapSizeOverride: 100000},
 	// blend_positions: live ingest only started 2026-05-28 (rc.83
 	// migration); 7635-ledger max gap = pre-history boundary +
 	// natural sparsity. 50K threshold.
-	{Source: "blend-positions", Table: "blend_positions", LedgerColumn: "ledger", MinGapSizeOverride: 50000},
+	{Source: "blend-positions", Table: "blend_positions", LedgerColumn: "ledger", Genesis: 51_499_546, MinGapSizeOverride: 50000},
 	// blend_emissions: emissions update on operator action (rare).
 	// blend_admin: admin actions are rare by design.
-	{Source: "blend-emissions", Table: "blend_emissions", LedgerColumn: "ledger", MinGapSizeOverride: 100000},
-	{Source: "blend-admin", Table: "blend_admin", LedgerColumn: "ledger", MinGapSizeOverride: 100000},
-	{Source: "soroban-events", Table: "soroban_events", LedgerColumn: "ledger"},
+	{Source: "blend-emissions", Table: "blend_emissions", LedgerColumn: "ledger", Genesis: 51_499_546, MinGapSizeOverride: 100000},
+	{Source: "blend-admin", Table: "blend_admin", LedgerColumn: "ledger", Genesis: 51_499_546, MinGapSizeOverride: 100000},
+	// soroban-events spans the entire Soroban era from pubnet
+	// activation. Same lower bound as sep41-transfers.
+	{Source: "soroban-events", Table: "soroban_events", LedgerColumn: "ledger", Genesis: 50_457_424},
 	// SDEX is classic-DEX and does NOT flow through soroban_events.
 	// Its rows live in the unified `trades` hypertable alongside
 	// every other trade-emitting source; the WhereFilter slices
@@ -136,12 +154,12 @@ var DefaultGapDetectorTargets = []GapDetectorTarget{
 	// default would page constantly on historical data. A 1M-ledger
 	// gap (~1.5 weeks of network time) on SDEX still pages because
 	// recent SDEX is densely active (>1M trades / day on 2026-05-27).
-	{Source: "sdex", Table: "trades", LedgerColumn: "ledger", WhereFilter: "source = 'sdex'", MinGapSizeOverride: 1000000},
+	{Source: "sdex", Table: "trades", LedgerColumn: "ledger", WhereFilter: "source = 'sdex'", Genesis: 2, MinGapSizeOverride: 1000000},
 	// SDEX offer-state events (OfferCreated/OfferUpdated/OfferRemoved)
 	// land in their own hypertable — complement to the trade flow.
 	// An offer-events writer halt would not show up in the trades
 	// gauge above; the dedicated target catches it.
-	{Source: "sdex-offers", Table: "sdex_offer_events", LedgerColumn: "ledger"},
+	{Source: "sdex-offers", Table: "sdex_offer_events", LedgerColumn: "ledger", Genesis: 2},
 }
 
 // FindPerSourceLedgerGaps finds contiguous ledger-coverage gaps

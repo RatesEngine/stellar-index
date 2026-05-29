@@ -88,6 +88,7 @@ type Server struct {
 	issuers              IssuersReader
 	sep41Transfers       SEP41TransfersReader
 	cursors              CursorsReader
+	coverageReader       SourceCoverageReader
 	networkStats         NetworkStatsReader
 	sourcesStats         SourcesStatsReader
 	lending              LendingReader
@@ -386,6 +387,16 @@ type Options struct {
 	// ListCursors). Nil makes the endpoint return 503. Operator-
 	// facing diagnostic; powers the explorer /diagnostics page.
 	Cursors CursorsReader
+
+	// CoverageReader, when non-nil, backs the ADR-0031 shadow
+	// data-derived density on /v1/diagnostics/ingestion. Reads
+	// source_coverage_snapshots rows that the gap detector
+	// (in the aggregator binary) upserts every cycle. Production
+	// wiring is timescale.Store directly (ListSourceCoverage). Nil
+	// leaves DensityPctV2 / GapFreePct as zero in every response
+	// row; v1 cursor-derived density remains the authoritative
+	// signal during the Phase 1 shadow window.
+	CoverageReader SourceCoverageReader
 
 	// NetworkStats, when non-nil, backs GET /v1/network/stats —
 	// the consolidated home-page aggregate (24h volume, markets,
@@ -687,6 +698,7 @@ func New(opts Options) *Server {
 		issuers:              opts.Issuers,
 		sep41Transfers:       opts.SEP41Transfers,
 		cursors:              opts.Cursors,
+		coverageReader:       opts.CoverageReader,
 		networkStats:         opts.NetworkStats,
 		sourcesStats:         opts.SourcesStats,
 		lending:              opts.Lending,

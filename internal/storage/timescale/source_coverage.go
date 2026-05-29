@@ -146,3 +146,76 @@ func percentagesFromCounts(distinct, expected, maxGap int64) (density, gapFree f
 	}
 	return density, gapFree
 }
+
+// UpsertSourceCoverage writes one row into source_coverage_snapshots
+// for the given (source, table). Idempotent — overwrites the prior
+// row on PK conflict. Called by the gap detector after a successful
+// scan cycle so the diagnostic handler in the API binary can read
+// a fresh coverage projection without re-running the heavy
+// LAG-over-DISTINCT query at request time. ADR-0031.
+func (s *Store) UpsertSourceCoverage(ctx context.Context, cov SourceCoverage) error {
+	const q = `
+        INSERT INTO source_coverage_snapshots
+            (source, "table", distinct_ledgers, expected_ledgers,
+             max_gap_ledgers, gap_count, density_pct, gap_free_pct,
+             last_updated)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+        ON CONFLICT (source, "table") DO UPDATE
+          SET distinct_ledgers = EXCLUDED.distinct_ledgers,
+              expected_ledgers = EXCLUDED.expected_ledgers,
+              max_gap_ledgers  = EXCLUDED.max_gap_ledgers,
+              gap_count        = EXCLUDED.gap_count,
+              density_pct      = EXCLUDED.density_pct,
+              gap_free_pct     = EXCLUDED.gap_free_pct,
+              last_updated     = EXCLUDED.last_updated
+    `
+	if _, err := s.db.ExecContext(ctx, q,
+		cov.Source, cov.Table,
+		cov.DistinctLedgers, cov.ExpectedLedgers,
+		cov.MaxGapLedgers, cov.GapCount,
+		cov.DensityPct, cov.GapFreePct,
+		cov.LastUpdated,
+	); err != nil {
+		return fmt.Errorf("timescale: UpsertSourceCoverage: %w", err)
+	}
+	return nil
+}
+
+// ListSourceCoverage returns every row in source_coverage_snapshots
+// ordered by source. Called by the /v1/diagnostics/ingestion
+// handler at request time — single cheap query, no decoding.
+// Returns an empty slice + nil error if the table is empty (fresh
+// deploy before the first detector cycle has written anything).
+func (s *Store) ListSourceCoverage(ctx context.Context) ([]SourceCoverage, error) {
+	const q = `
+        SELECT source, "table", distinct_ledgers, expected_ledgers,
+               max_gap_ledgers, gap_count, density_pct, gap_free_pct,
+               last_updated
+          FROM source_coverage_snapshots
+         ORDER BY source ASC
+    `
+	rows, err := s.db.QueryContext(ctx, q)
+	if err != nil {
+		return nil, fmt.Errorf("timescale: ListSourceCoverage: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+
+	var out []SourceCoverage
+	for rows.Next() {
+		var c SourceCoverage
+		if err := rows.Scan(
+			&c.Source, &c.Table,
+			&c.DistinctLedgers, &c.ExpectedLedgers,
+			&c.MaxGapLedgers, &c.GapCount,
+			&c.DensityPct, &c.GapFreePct,
+			&c.LastUpdated,
+		); err != nil {
+			return nil, fmt.Errorf("timescale: ListSourceCoverage scan: %w", err)
+		}
+		out = append(out, c)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("timescale: ListSourceCoverage rows: %w", err)
+	}
+	return out, nil
+}
