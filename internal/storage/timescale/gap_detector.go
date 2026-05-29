@@ -133,7 +133,7 @@ func scanOneGapDetectorTarget(ctx context.Context, store *Store, logger *slog.Lo
 	scanCtx, cancel := context.WithTimeout(ctx, gapDetectorPerTargetTimeout)
 	defer cancel()
 
-	gaps, err := store.FindPerSourceLedgerGaps(scanCtx, target, 0, tip, GapDetectorMinGapSize)
+	gaps, err := store.FindPerSourceLedgerGaps(scanCtx, target, 0, tip, target.EffectiveMinGapSize())
 	if err != nil {
 		obs.IngestGapDetectorRunsTotal.WithLabelValues(target.Source, target.Table, "error").Inc()
 		obs.IngestGapDetectorDurationSeconds.WithLabelValues(target.Source, target.Table, "error").

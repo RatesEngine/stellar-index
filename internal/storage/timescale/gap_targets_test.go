@@ -149,3 +149,27 @@ func TestInferSourceName(t *testing.T) {
 		}
 	}
 }
+
+// TestEffectiveMinGapSize pins the per-target override semantics:
+// MinGapSizeOverride takes precedence when positive; default
+// returns the global GapDetectorMinGapSize.
+func TestEffectiveMinGapSize(t *testing.T) {
+	t.Parallel()
+	if got := (GapDetectorTarget{}).EffectiveMinGapSize(); got != GapDetectorMinGapSize {
+		t.Errorf("zero override: got %d, want global default %d", got, GapDetectorMinGapSize)
+	}
+	if got := (GapDetectorTarget{MinGapSizeOverride: 50000}).EffectiveMinGapSize(); got != 50000 {
+		t.Errorf("positive override: got %d, want 50000", got)
+	}
+	// Sanity-check that at least one registered target uses an override
+	// (sparsity tuning was the motivating use case).
+	overrideCount := 0
+	for _, t := range DefaultGapDetectorTargets {
+		if t.MinGapSizeOverride > 0 {
+			overrideCount++
+		}
+	}
+	if overrideCount == 0 {
+		t.Error("expected at least one target with MinGapSizeOverride > 0; check that blend-auctions / sep41-supply / cctp / rozo / blend-* sparse overrides survived a refactor")
+	}
+}

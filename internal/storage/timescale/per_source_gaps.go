@@ -39,6 +39,36 @@ type GapDetectorTarget struct {
 	// compile-time const) and never from user input. ADR-0030
 	// makes this invariant load-bearing.
 	WhereFilter string
+
+	// MinGapSizeOverride overrides [GapDetectorMinGapSize] for this
+	// target. Default 0 means "use the global default of 1000
+	// ledgers." Sparse sources (Blend auctions / admin events that
+	// only emit on operator action; CCTP/Rozo which see infrequent
+	// cross-chain hops) need a much higher threshold or every
+	// quiet stretch trips the page-tier alert as a false positive.
+	//
+	// Live r1 measurement (2026-05-29): blend_auctions has 8049
+	// distinct ledgers across a 5.9M-ledger span — one event per
+	// ~735 ledgers AVERAGE, so the 1000-ledger threshold is
+	// guaranteed to produce hundreds of "gaps" that aren't gaps.
+	// Use a per-target threshold tuned to the source's emit cadence.
+	//
+	// Setting this to a positive value DOES NOT make the source
+	// less monitored — it just shifts the page threshold to a
+	// number that distinguishes "natural sparsity" from "writer
+	// halted." A 500K-ledger gap on blend_auctions still pages.
+	MinGapSizeOverride int64
+}
+
+// EffectiveMinGapSize returns the threshold this target should use,
+// preferring [MinGapSizeOverride] if non-zero. Single source of
+// truth for both [FindPerSourceLedgerGaps] and the alert-rule
+// query layer.
+func (t GapDetectorTarget) EffectiveMinGapSize() int64 {
+	if t.MinGapSizeOverride > 0 {
+		return t.MinGapSizeOverride
+	}
+	return GapDetectorMinGapSize
 }
 
 // DefaultGapDetectorTargets is the registered set of per-source
@@ -58,17 +88,30 @@ type GapDetectorTarget struct {
 // <30s for the per-source tables).
 var DefaultGapDetectorTargets = []GapDetectorTarget{
 	{Source: "sep41-transfers", Table: "sep41_transfers", LedgerColumn: "ledger"},
-	{Source: "sep41-supply", Table: "sep41_supply_events", LedgerColumn: "ledger"},
-	{Source: "cctp", Table: "cctp_events", LedgerColumn: "ledger"},
-	{Source: "rozo", Table: "rozo_events", LedgerColumn: "ledger"},
+	// SEP-41 supply events fire only on mint/burn/clawback — much
+	// rarer than transfers. Live r1: most token issuers go many
+	// hours without a supply mutation.
+	{Source: "sep41-supply", Table: "sep41_supply_events", LedgerColumn: "ledger", MinGapSizeOverride: 100000},
+	// CCTP / Rozo are cross-chain bridges with sparse traffic
+	// (hours-to-days between events). 100K-ledger gap threshold
+	// silences quiet-period false positives without losing
+	// "writer wedged for >1.5 days" pages.
+	{Source: "cctp", Table: "cctp_events", LedgerColumn: "ledger", MinGapSizeOverride: 100000},
+	{Source: "rozo", Table: "rozo_events", LedgerColumn: "ledger", MinGapSizeOverride: 100000},
 	{Source: "comet-liquidity", Table: "comet_liquidity", LedgerColumn: "ledger"},
 	{Source: "soroswap-skim", Table: "soroswap_skim_events", LedgerColumn: "ledger"},
 	{Source: "phoenix-liquidity", Table: "phoenix_liquidity", LedgerColumn: "ledger"},
 	{Source: "phoenix-stake", Table: "phoenix_stake_events", LedgerColumn: "ledger"},
-	{Source: "blend-auctions", Table: "blend_auctions", LedgerColumn: "ledger"},
+	// blend_auctions: live r1 measurement showed 8049 distinct
+	// ledgers across a 5.9M-ledger span = one event per ~735
+	// ledgers. 50K-ledger threshold = ~70 events worth of expected
+	// gap; still pages when the auction stream wedges.
+	{Source: "blend-auctions", Table: "blend_auctions", LedgerColumn: "ledger", MinGapSizeOverride: 50000},
 	{Source: "blend-positions", Table: "blend_positions", LedgerColumn: "ledger"},
-	{Source: "blend-emissions", Table: "blend_emissions", LedgerColumn: "ledger"},
-	{Source: "blend-admin", Table: "blend_admin", LedgerColumn: "ledger"},
+	// blend_emissions: emissions update on operator action (rare).
+	// blend_admin: admin actions are rare by design.
+	{Source: "blend-emissions", Table: "blend_emissions", LedgerColumn: "ledger", MinGapSizeOverride: 100000},
+	{Source: "blend-admin", Table: "blend_admin", LedgerColumn: "ledger", MinGapSizeOverride: 100000},
 	{Source: "soroban-events", Table: "soroban_events", LedgerColumn: "ledger"},
 	// SDEX is classic-DEX and does NOT flow through soroban_events.
 	// Its rows live in the unified `trades` hypertable alongside
