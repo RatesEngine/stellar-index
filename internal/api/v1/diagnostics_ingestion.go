@@ -130,40 +130,38 @@ type SourceCoverageReader interface {
 
 // BackfillCoverageRow is the per-source coverage projection.
 //
-// For on-chain (mapped) sources EarliestLedger / LatestLedger are
-// the min/max of the MERGED backfill-cursor union — the actual
-// processed span, not a trades MIN/MAX. They're display context
-// only; DensityPct is the gap-aware number (a wide earliest..latest
-// with interior gaps still yields a low density). CEX/FX sources
-// report 0 / 0 (no Stellar ledger); `applies` distinguishes the two
-// cases for the UI (no point drawing a "coverage bar" for binance).
+// Post-ADR-0031 (Phase 2): DensityPct is the **data-derived**
+// signal — `distinct_ledger_count / (tip - genesis + 1)`, computed
+// by the gap detector in the aggregator binary and persisted to
+// `source_coverage_snapshots`. The diagnostic handler reads the
+// snapshot row at request time (single cheap query, no
+// recomputation).
+//
+// The change from cursor-derived to data-derived collapses the
+// drift surface that caused F-0020 and the 2026-05-29 "all
+// decoders < 100%" incident: cursors said "fine," data said
+// "missing," and the API surfaced cursor numbers. Post-this-PR
+// the API surfaces data; cursors remain as operational journal.
 //
 // GenesisLedger is the source's earliest-possible-data ledger —
-// 2 for SDEX (Stellar's genesis ledger 1 carries no operations so
-// no SDEX trade can live in it; ledger 2 is the first that can),
-// the contract deploy ledger for Soroban contracts, 0 ("not
-// applicable") for CEX/FX. Hardcoded in `sourceGenesisLedger`;
-// when an operator deploys a new source add a row there.
+// 2 for SDEX, the contract deploy ledger for Soroban contracts,
+// 0 ("not applicable") for CEX/FX. Hardcoded in
+// `sourceGenesisLedger`; when an operator deploys a new source
+// add a row there.
 //
-// DensityPct is the fraction of (genesis → tip) ledgers we've
-// SUCCESSFULLY PROCESSED for this source, measured via the union
-// of completed portions of backfill cursor ranges. When backfill
-// fully covers [genesis, tip], DensityPct = 1.0.
+// EarliestLedger / LatestLedger are display context — for
+// Soroban sources they're the first/last ledger we observed an
+// event from (taken from the source_coverage_snapshots row's
+// genesis/tip). For CEX/FX they're empty.
 //
-// Why cursor-based, not row-based: a sparse source like Comet
-// (~16k trades over 10.7M ledgers) naturally has ≥1 trade on only
-// 0.15% of its ledgers. A row-COUNT(DISTINCT ledger) metric would
-// peg at 0.15% even with perfect backfill, useless as a "are we
-// done" signal. Cursor coverage measures "did the indexer walk
-// this ledger?" — which is the question the operator actually
-// wants to answer.
+// CoveragePct (deprecated 2026-05-14) was the prior endpoint-span
+// metric. Removed in Phase 2; kept-zero only for transition.
 //
-// CoveragePct (deprecated 2026-05-14) is the prior endpoint-span
-// metric — `(LatestLedger - max(EarliestLedger, GenesisLedger) + 1)
-// / (tip - GenesisLedger + 1)`. Misleading: a source with one
-// trade at ledger 1 and one trade at tip with 99% gap in between
-// scored 100%. Kept as a transitional field; the status page reads
-// DensityPct instead.
+// GapFreePct (NEW Phase 1) is `1 - max_gap / expected`. Goes to
+// 1.0 when no contiguous gap above the per-target threshold
+// (ADR-0030 + MinGapSizeOverride). A sparse source running
+// cleanly hits 1.0 here even though its DensityPct is naturally
+// low. This is the "is something wrong" signal the alert reads.
 type BackfillCoverageRow struct {
 	Source         string `json:"source"`
 	Applies        bool   `json:"applies"`
@@ -197,33 +195,17 @@ type BackfillCoverageRow struct {
 	// ledgers covered" rather than just a percentage.
 	ExpectedLedgers int64 `json:"expected_ledgers,omitempty"`
 
-	// ADR-0031 Phase 1 — shadow data-derived coverage. Populated
-	// when a row exists in source_coverage_snapshots (the gap
-	// detector writes there after each cycle); reads as the
-	// zero value otherwise (during the first 30 min after deploy
-	// before the detector has run).
-	//
-	// DensityPctV2 = `distinct_ledger / expected_ledger` from the
-	// per-source hypertable directly. Honest raw coverage. For
-	// dense sources (SDEX, Soroswap) approaches 1.0; for sparse
-	// sources (Blend auctions, CCTP) naturally low.
-	//
-	// GapFreePct = `1 - max_gap_ledgers / expected_ledger`. Goes
-	// to 1.0 when there's no contiguous gap above the per-target
-	// threshold (ADR-0030 + MinGapSizeOverride). Sparse sources
-	// running cleanly hit 1.0 here.
-	//
-	// CoverageSnapshotAge is how long ago the gap detector last
-	// wrote this row; surfaces "data is X minutes old" so the
-	// status page can mark stale snapshots.
-	//
-	// Phase 2 (~rc.93-94) deletes DensityPct + CoveredLedgers +
-	// ExpectedLedgers + CoveragePct and renames DensityPctV2 →
-	// DensityPct. For now both are present so we can verify
-	// agreement during the 7-day shadow window.
-	DensityPctV2          float64    `json:"density_pct_v2,omitempty"`
-	GapFreePct            float64    `json:"gap_free_pct,omitempty"`
-	CoverageSnapshotAt    *time.Time `json:"coverage_snapshot_at,omitempty"`
+	// GapFreePct = `1 - max_gap_ledgers / expected_ledger` from the
+	// source_coverage_snapshots row. ADR-0031 Phase 2 — see godoc
+	// on this type for the full coverage model.
+	GapFreePct float64 `json:"gap_free_pct,omitempty"`
+
+	// CoverageSnapshotAt is the wall-clock time the gap detector
+	// last refreshed this row's data-derived numbers. Surfaces
+	// "data is X minutes old" so the status page can mark stale
+	// reads; nil if the row hasn't been written yet (first 30 min
+	// post-deploy before the detector's first cycle).
+	CoverageSnapshotAt *time.Time `json:"coverage_snapshot_at,omitempty"`
 }
 
 // sourceGenesisLedger is the operator-curated map of "what's the
@@ -646,13 +628,16 @@ func (s *Server) buildIngestionSnapshot(ctx context.Context) IngestionDiagnostic
 	// now only carries the off-chain row presence; the `entries`
 	// count comes from the always-on tally (out.entryCounts).
 	tip := out.Ledger.LatestLedger
-	out.BackfillCoverage = buildBackfillCoverage(out.rawCursors, cacheRows, out.entryCounts, tip)
-	// ADR-0031 Phase 1: overlay the data-derived coverage (v2) onto
-	// each row. Reads from source_coverage_snapshots populated by
-	// the gap detector. Best-effort — if the table is empty (fresh
-	// deploy) or the read fails, v2 fields remain zero and the
-	// status page falls back to v1 (cursor-derived). After Phase 2
-	// the cursor-derived path is deleted and v2 BECOMES density_pct.
+	out.BackfillCoverage = buildBackfillCoverage(cacheRows, out.entryCounts, tip)
+	// ADR-0031 Phase 2: the data-derived projection IS the headline
+	// signal. Overlay reads from source_coverage_snapshots (the gap
+	// detector upserts every cycle) and fills DensityPct +
+	// CoveredLedgers + GapFreePct + CoverageSnapshotAt on every
+	// matching row. If the snapshot table is empty (first 30 min
+	// post-deploy) the fields remain zero and the status page
+	// renders "Pending" — explicit signal that the detector hasn't
+	// run yet, not a misleading 100% (which is what the
+	// cursor-derived path used to claim).
 	s.overlaySourceCoverageV2(ctx, &out.BackfillCoverage)
 	if len(out.BackfillCoverage) > 0 {
 		// Assembled this request from live cursors — the headline
@@ -664,34 +649,36 @@ func (s *Server) buildIngestionSnapshot(ctx context.Context) IngestionDiagnostic
 }
 
 // overlaySourceCoverageV2 reads source_coverage_snapshots and fills
-// the v2 fields (DensityPctV2, GapFreePct, CoverageSnapshotAt) on
-// every matching row. Doesn't fail the snapshot if the read fails
-// — the v1 cursor-derived numbers are still authoritative until
-// Phase 2 of the ADR-0031 rollout.
+// DensityPct + CoveredLedgers + GapFreePct + CoverageSnapshotAt
+// on every matching row. ADR-0031 Phase 2 — this IS the
+// authoritative coverage signal.
 //
-// Multi-table sources (blend has 4 tables; phoenix has 2) take
+// Multi-table sources (blend has 4 tables, phoenix has 2) take
 // the per-source AGGREGATE: density_pct = MIN(per-table density)
 // because a single empty target means the source as a whole isn't
 // fully covered. gap_free_pct = MIN(per-table gap_free_pct) for
-// the same reason. The snapshot timestamp is the OLDEST per-table
-// last_updated — "how stale is the staleest read in this source's
-// aggregation".
+// the same reason. covered_ledgers = MIN(per-table distinct) so
+// the absolute number stays consistent with the percentage.
+// snapshot_at = OLDEST per-table last_updated — "how stale is
+// the stalest read in this source's aggregation".
+//
+// Soft-fail: a reader error or empty table leaves the row's
+// data-derived fields at zero. The UI should render "Pending"
+// for zero DensityPct + nil CoverageSnapshotAt rather than
+// claim 0% coverage.
+//
+//nolint:gocognit // linear pipeline; multi-table aggregation reads better inline than as a separate helper.
 func (s *Server) overlaySourceCoverageV2(ctx context.Context, rows *[]BackfillCoverageRow) {
 	if s.coverageReader == nil {
 		return
 	}
 	snaps, err := s.coverageReader.ListSourceCoverage(ctx)
 	if err != nil {
-		s.logger.Warn("diagnostics/ingestion: source_coverage_snapshots read failed (v1 numbers still authoritative)", "err", err)
+		s.logger.Warn("diagnostics/ingestion: source_coverage_snapshots read failed (rows show Pending)", "err", err)
 		return
 	}
-	// Source-name → list of snapshots (one source may map to
-	// multiple tables, e.g. blend → 4).
 	bySource := make(map[string][]timescale.SourceCoverage, len(snaps))
 	for _, sn := range snaps {
-		// Snapshot's source name is a per-target name like
-		// "blend-positions"; map back to the diagnostic source
-		// name via the shared sourceFromTargetSource helper.
 		key := sourceFromTargetSource(sn.Source)
 		bySource[key] = append(bySource[key], sn)
 	}
@@ -701,8 +688,8 @@ func (s *Server) overlaySourceCoverageV2(ctx context.Context, rows *[]BackfillCo
 		if !ok || len(ss) == 0 {
 			continue
 		}
-		// Aggregate across tables for multi-table sources.
 		density, gapFree := ss[0].DensityPct, ss[0].GapFreePct
+		covered := ss[0].DistinctLedgers
 		oldest := ss[0].LastUpdated
 		for _, s := range ss[1:] {
 			if s.DensityPct < density {
@@ -711,11 +698,15 @@ func (s *Server) overlaySourceCoverageV2(ctx context.Context, rows *[]BackfillCo
 			if s.GapFreePct < gapFree {
 				gapFree = s.GapFreePct
 			}
+			if s.DistinctLedgers < covered {
+				covered = s.DistinctLedgers
+			}
 			if s.LastUpdated.Before(oldest) {
 				oldest = s.LastUpdated
 			}
 		}
-		(*rows)[i].DensityPctV2 = density
+		(*rows)[i].DensityPct = density
+		(*rows)[i].CoveredLedgers = covered
 		(*rows)[i].GapFreePct = gapFree
 		(*rows)[i].CoverageSnapshotAt = &oldest
 	}
@@ -876,32 +867,24 @@ func (s *Server) fillIngestionEntryCounts(ctx context.Context, out *IngestionDia
 	out.entryCounts = counts
 }
 
-// buildBackfillCoverage produces the per-source coverage rows
-// CURSOR-FIRST.
+// buildBackfillCoverage produces the per-source coverage rows.
 //
-// For every on-chain source with a known genesis (sourceGenesisLedger)
-// it derives density / covered / expected / earliest / latest purely
-// from the union of completed backfill-cursor intervals. This path
-// needs NO trades scan, so it always populates — including during an
-// all-time backfill when the trades-hypertable coverage query is too
-// IO-contended to finish within its timeout. earliest/latest here are
-// the *processed* span (min/max of the merged cursor union), not a
-// trades MIN/MAX — honest for "what have we actually walked", and it
-// can never claim a gap is covered.
+// Post-ADR-0031: returns the row skeleton (source name, genesis,
+// entry count, expected ledgers); DensityPct / CoveredLedgers /
+// GapFreePct / EarliestLedger / LatestLedger / CoverageSnapshotAt
+// are filled in by `overlaySourceCoverageV2` reading from
+// source_coverage_snapshots after the parallel fillers complete.
+//
+// Single source of truth: data state. Cursors no longer enter the
+// coverage projection — they remain as operational journal,
+// surfaced by /v1/diagnostics/cursors but not interpreted here.
 //
 // entryCounts (source_entry_counts, the always-on tally) supplies
-// the `entries` column for every row — exact and available even
-// mid-backfill. cacheRows (the background-refreshed trades-scan
-// snapshot) now ONLY carries off-chain CEX/FX row presence (those
-// sources have no Stellar-ledger genesis and thus no cursor concept).
-// An empty/stale cache just drops the off-chain context rows — it
-// can no longer blank the whole snapshot, and the `entries` numbers
-// are unaffected (different source). Any cache source not in
-// sourceGenesisLedger keeps the legacy endpoint-span behaviour
-// (Applies + deprecated CoveragePct) so an un-mapped on-chain source
-// doesn't silently vanish; DensityPct stays 0 for it (no genesis →
-// no honest density, the signal to add it to sourceGenesisLedger).
-func buildBackfillCoverage(cursors []timescale.Cursor, cacheRows []timescale.BackfillCoverage, entryCounts map[string]int64, tip int64) []BackfillCoverageRow {
+// the `entries` column — exact and available even mid-backfill.
+// cacheRows ONLY carries off-chain CEX/FX row presence (those
+// sources have no Stellar-ledger genesis); empty cache just
+// drops the off-chain context rows.
+func buildBackfillCoverage(cacheRows []timescale.BackfillCoverage, entryCounts map[string]int64, tip int64) []BackfillCoverageRow {
 	out := make([]BackfillCoverageRow, 0, len(sourceGenesisLedger)+len(cacheRows))
 
 	sources := make([]string, 0, len(sourceGenesisLedger))
@@ -918,14 +901,11 @@ func buildBackfillCoverage(cursors []timescale.Cursor, cacheRows []timescale.Bac
 			Entries:       entryCounts[src],
 		}
 		if genesis > 0 && tip > 0 {
-			covered, density, earliest, latest := computeSourceCoverage(cursors, src, genesis, tip)
-			row.CoveredLedgers = covered
 			row.ExpectedLedgers = tip - genesis + 1
-			row.DensityPct = density
-			row.EarliestLedger = earliest
-			row.LatestLedger = latest
-			row.CoveragePct = computeCoveragePct(genesis, earliest, latest, tip)
 		}
+		// DensityPct, CoveredLedgers, GapFreePct, CoverageSnapshotAt,
+		// EarliestLedger, LatestLedger filled in by
+		// overlaySourceCoverageV2 from source_coverage_snapshots.
 		out = append(out, row)
 	}
 
@@ -941,42 +921,10 @@ func buildBackfillCoverage(cursors []timescale.Cursor, cacheRows []timescale.Bac
 			row.Applies = true
 			row.EarliestLedger = r.EarliestLedger
 			row.LatestLedger = r.LatestLedger
-			row.CoveragePct = computeCoveragePct(0, r.EarliestLedger, r.LatestLedger, tip)
 		}
 		out = append(out, row)
 	}
 	return out
-}
-
-// computeCoveragePct returns the fraction of the
-// (genesis → tip) interval we have any data for. Returns 0 if
-// genesis or tip aren't usable (cold start, missing config).
-// Capped at 1.0; any LatestLedger ≥ tip → 1.0 (covered to head).
-func computeCoveragePct(genesis, earliest, latest, tip int64) float64 {
-	if tip <= 0 || genesis <= 0 {
-		return 0
-	}
-	expectedSpan := tip - genesis + 1
-	if expectedSpan <= 0 {
-		return 0
-	}
-	covStart := earliest
-	if covStart < genesis {
-		covStart = genesis
-	}
-	covEnd := latest
-	if covEnd > tip {
-		covEnd = tip
-	}
-	if covEnd < covStart {
-		return 0
-	}
-	covered := covEnd - covStart + 1
-	pct := float64(covered) / float64(expectedSpan)
-	if pct > 1 {
-		pct = 1
-	}
-	return pct
 }
 
 // fillIngestionSupplyCoverage type-asserts that the wired
@@ -1086,344 +1034,6 @@ func parseBackfillSub(sub string) (decoder string, rangeEnd int64) {
 	endStr := rangePart[dashIdx+1:]
 	rangeEnd = parseInt64(endStr)
 	return decoder, rangeEnd
-}
-
-// parseBackfillSubFull splits "<start>-<end>:<decoder-set>" into all
-// three pieces. parseBackfillSub returns end-only because that's the
-// only piece aggregateBackfill needs; density projection needs the
-// start too. Returns (0, 0, "") on malformed input.
-func parseBackfillSubFull(sub string) (rangeStart, rangeEnd int64, decoder string) {
-	colonIdx := strings.IndexByte(sub, ':')
-	if colonIdx <= 0 || colonIdx == len(sub)-1 {
-		return 0, 0, ""
-	}
-	rangePart := sub[:colonIdx]
-	decoder = sub[colonIdx+1:]
-	dashIdx := strings.IndexByte(rangePart, '-')
-	if dashIdx <= 0 || dashIdx == len(rangePart)-1 {
-		return 0, 0, decoder
-	}
-	rangeStart = parseInt64(rangePart[:dashIdx])
-	rangeEnd = parseInt64(rangePart[dashIdx+1:])
-	return rangeStart, rangeEnd, decoder
-}
-
-// coverageInterval is [Start, End] inclusive on both ends.
-type coverageInterval struct {
-	Start, End int64
-}
-
-// mergeCoverageIntervals takes any set of intervals (possibly
-// overlapping, in any order) and returns a minimal sorted set of
-// non-overlapping intervals covering the same point set. Adjacent
-// intervals (End+1 == next.Start) are joined.
-//
-// Standard sweep-line merge, O(n log n) sort + O(n) walk. Fine for
-// the ~1000s of backfill cursors r1 carries today; an operator
-// with a million cursors would want something fancier.
-func mergeCoverageIntervals(intervals []coverageInterval) []coverageInterval {
-	if len(intervals) == 0 {
-		return nil
-	}
-	sorted := make([]coverageInterval, len(intervals))
-	copy(sorted, intervals)
-	sort.Slice(sorted, func(i, j int) bool { return sorted[i].Start < sorted[j].Start })
-	out := []coverageInterval{sorted[0]}
-	for _, iv := range sorted[1:] {
-		last := &out[len(out)-1]
-		if iv.Start <= last.End+1 {
-			if iv.End > last.End {
-				last.End = iv.End
-			}
-		} else {
-			out = append(out, iv)
-		}
-	}
-	return out
-}
-
-// sumCoverageIntervals returns the total ledger count in a
-// pre-merged interval set. Each interval contributes (End - Start
-// + 1) because the bounds are inclusive.
-func sumCoverageIntervals(intervals []coverageInterval) int64 {
-	var total int64
-	for _, iv := range intervals {
-		total += iv.End - iv.Start + 1
-	}
-	return total
-}
-
-// decoderSetContains reports whether the comma-separated decoder
-// list `set` contains the exact source name `source`. Substring
-// match would false-positive on prefixes (e.g. "reflector-dex" in
-// "reflector-dex-extended").
-func decoderSetContains(set, source string) bool {
-	for {
-		idx := strings.IndexByte(set, ',')
-		var part string
-		if idx == -1 {
-			part = set
-		} else {
-			part = set[:idx]
-		}
-		if part == source {
-			return true
-		}
-		if idx == -1 {
-			return false
-		}
-		set = set[idx+1:]
-	}
-}
-
-// computeSourceCoverage returns the cursor-based coverage for one
-// source: the union of completed portions of all backfill cursors
-// that include `source` in their decoder set, PLUS the live-ingest
-// tail, clamped to [genesis, tip].
-//
-// The "completed portion" of a range cursor `<start>-<end>` is
-// [start, min(last_ledger, end)] — if the range cursor's worker
-// only got partway through, only the partway portion counts.
-//
-// Live-ingest tail: the `ledgerstream` cursor tracks the network tip
-// in real time and live ingest is gap-free from its low-water to tip
-// (sequential walker + archivecompleteness daemon, ADR-0017). We
-// don't persist that low-water — see extendWithLiveTail. This closes
-// the "head band" between the top of the backfill union and the live
-// tip (so a fully-caught-up source reads ~100% and STAYS there as
-// the tip advances) AND interior gaps that lie entirely at/below the
-// live cursor and are bracketed by backfill coverage on both sides
-// (provably walked by the gap-free live tail — e.g. a stalled
-// backfill range, or a disjoint high gap-backfill island that
-// fragmented the union). It still never credits the
-// [genesis, firstBackfillStart] lower boundary and never gives a
-// never-backfilled source false credit.
-//
-// Returns (covered_ledger_count, density_pct, earliest, latest).
-// earliest/latest are the min Start / max End of the MERGED union —
-// the actual processed span, so they cannot imply a gap is covered
-// (density is the gap-aware number; earliest/latest are display
-// context). Density is covered / (tip - genesis + 1) capped at 1.0.
-// Zero genesis or non-positive expected range → all zero.
-func computeSourceCoverage(cursors []timescale.Cursor, source string, genesis, tip int64) (covered int64, density float64, earliest, latest int64) {
-	if genesis <= 0 || tip <= 0 || tip < genesis {
-		return 0, 0, 0, 0
-	}
-	expected := tip - genesis + 1
-
-	intervals := make([]coverageInterval, 0, len(cursors))
-	for _, c := range cursors {
-		iv, ok := cursorCoverageInterval(c, source, genesis, tip)
-		if !ok {
-			continue
-		}
-		intervals = append(intervals, iv)
-	}
-	merged := mergeCoverageIntervals(intervals)
-	merged = extendWithLiveTail(merged, cursors, genesis, tip)
-	covered = sumCoverageIntervals(merged)
-	if len(merged) > 0 {
-		earliest = merged[0].Start
-		latest = merged[len(merged)-1].End
-	}
-	density = float64(covered) / float64(expected)
-	if density > 1.0 {
-		density = 1.0
-	}
-	return covered, density, earliest, latest
-}
-
-// liveLedgerstreamRange returns the live cursor's persisted coverage
-// span [first_ledger, last_ledger] (post-migration 0046). first=0
-// signals "first_ledger was NULL on disk" (pre-migration rows that
-// haven't yet been touched by an UpsertCursor UPDATE — the UPDATE
-// branch COALESCE-populates first_ledger on the first write after
-// deploy, so this transient window typically lasts one live tick).
-// extendWithLiveTail contributes nothing to coverage in that case
-// — honest about "we don't yet know how far back this cursor
-// reaches" rather than the pre-2026-05-28 behaviour of falling
-// back to sourceGenesisLedger and silently crediting genesis-onward
-// coverage. hasCursor=false when no live cursor row exists at all.
-func liveLedgerstreamRange(cursors []timescale.Cursor) (first, last int64, hasCursor bool) {
-	for _, c := range cursors {
-		if c.Source != "ledgerstream" {
-			continue
-		}
-		if l := int64(c.LastLedger); l > last {
-			last = l
-			first = int64(c.FirstLedger)
-			hasCursor = true
-		}
-	}
-	return first, last, hasCursor
-}
-
-// extendWithLiveTail credits the live-ingest tail on top of the
-// backfill union. Live ingest is gap-free from its low-water to
-// tip (sequential walker + archivecompleteness daemon, ADR-0017)
-// — but **only for sources actively enabled in the indexer's
-// decoder set during that live walk**. The ledgerstream cursor
-// itself doesn't carry per-source attribution: it advances
-// regardless of which decoders were running. So we can only
-// credit the live cursor for a source's coverage in regions
-// where live ingest provably decoded it.
-//
-// Credit awarded (post-migration-0046, 100% density mission):
-//
-//   - **Persisted live span.** From the live cursor's
-//     `first_ledger` to min(liveTop, tip). first_ledger is the
-//     first ledger this region's live indexer wrote a cursor for
-//     (captured on the INSERT branch of UpsertCursor and
-//     preserved by ON CONFLICT DO UPDATE). The live cursor is
-//     gap-free from first_ledger to last_ledger by construction
-//     — sequential walker + archivecompleteness daemon — so the
-//     whole band is creditable. This closes the
-//     [genesis, backfill_low] sub-band that backfill cursors
-//     don't cover when live ingest has been running since
-//     before the first backfill range started, lifting the
-//     density ceiling from ~98% to 100% on a fully-caught-up
-//     source (project_density_100pct_goal).
-//
-//   - **NULL first_ledger handling (2026-05-28 honest-density fix).**
-//     When the live cursor row's first_ledger is NULL (pre-migration-0046
-//     row that hasn't been UPDATE'd yet) we now **decline to credit**
-//     any live span. The pre-2026-05-28 behaviour was to fall back to
-//     `[genesis, last_ledger]`, which silently inflated density to
-//     100% for every source. The fallback's stated premise ("the
-//     UPDATE branch flips first_ledger on next write") was wrong:
-//     the UPDATE branch left first_ledger untouched, so the NULL
-//     persisted forever and the fallback became a permanent lie that
-//     hid the F-0020 cascade-window ingest gap on r1.
-//     UpsertCursor now COALESCE-populates first_ledger on the first
-//     UPDATE after a NULL row, so this branch only applies in the
-//     seconds between deploy and the live indexer's first tick.
-//
-
-// Credit deliberately NOT awarded:
-//
-//   - **Interior sub-tip gaps via live-bridging (removed
-//     2026-05-20).** A gap between two merged backfill
-//     intervals USED to be bridged when its upper neighbour
-//     started ≤ liveTop. That bridging was over-eager (e.g.
-//     soroswap-router / defindex added to enabled_sources at
-//     rc.5x with live cursor already at ~62.5M — interior
-//     [60M, 62.5M] gap incorrectly credited). The fix in
-//     migration 0046 + persisted first_ledger is the
-//     RIGHT-WAY-AROUND replacement: a late-enabled source
-//     gets its live cursor's first_ledger set to that
-//     late-enable ledger on first write, so the live span
-//     starts at the late-enable ledger and the [60M, 62.5M]
-//     interior gap stays UNcovered. Operators close it via an
-//     explicit backfill, same as before.
-//
-// Honest-by-construction guards retained:
-//
-//   - merged empty (never backfilled, e.g. BackfillSafe=false
-//     Soroban source) → unchanged, stays 0%. The live cursor
-//     alone doesn't credit a never-backfilled source, because
-//     we still gate the live-span credit on the existence of
-//     at least one backfill anchor: the
-//     `decoderSetContains`-filter that built `merged` proves
-//     the source was an active decoder target at some point.
-//     A source that's never had a backfill range claimed for
-//     it has `merged == nil` and reads 0% — the right answer.
-//   - no live cursor (hasCursor=false: test fixture / region
-//     without live ingest) → unchanged.
-//   - nothing is ever credited above min(liveTop, tip).
-//   - nothing is ever credited below the source's genesis ledger
-//     (mergeCoverageIntervals + the clamp on liveStart).
-func extendWithLiveTail(merged []coverageInterval, cursors []timescale.Cursor, genesis, tip int64) []coverageInterval {
-	if len(merged) == 0 {
-		return merged
-	}
-	liveStart, liveTop, hasCursor := liveLedgerstreamRange(cursors)
-	if !hasCursor {
-		return merged
-	}
-	if liveTop > tip {
-		liveTop = tip
-	}
-	if liveTop <= 0 {
-		return merged
-	}
-
-	// NULL first_ledger handling (2026-05-28 honest-density fix):
-	// previously this branch fell back to `liveStart = genesis`, which
-	// silently inflated every source's density to 100% for live cursor
-	// rows that pre-dated migration 0046 (the rollback case the audit
-	// observed on r1 post-rc.83). The fallback assumed
-	// `UpsertCursor`'s UPDATE branch would soon populate first_ledger
-	// — but the UPDATE branch did not touch the column, so the live
-	// cursor stayed NULL forever and the fallback became a permanent
-	// lie. UpsertCursor now COALESCE-populates first_ledger on the
-	// first UPDATE after deploy, so this branch should fire only for
-	// the seconds between deploy and the first live tick. Until then,
-	// don't credit any historical live span: backfill cursors are the
-	// only credit source, which is the honest answer.
-	if liveStart <= 0 {
-		return merged
-	}
-	if liveStart < genesis {
-		liveStart = genesis
-	}
-	if liveStart > liveTop {
-		// Defensive: a non-sensical persisted span (first_ledger >
-		// last_ledger) shouldn't credit anything.
-		return merged
-	}
-
-	out := make([]coverageInterval, 0, len(merged)+1)
-	out = append(out, merged...)
-	out = append(out, coverageInterval{Start: liveStart, End: liveTop})
-
-	return mergeCoverageIntervals(out)
-}
-
-// computeSourceDensity is the (covered, density)-only view of
-// computeSourceCoverage, kept for callers/tests that don't need the
-// processed-span endpoints.
-func computeSourceDensity(cursors []timescale.Cursor, source string, genesis, tip int64) (int64, float64) {
-	covered, density, _, _ := computeSourceCoverage(cursors, source, genesis, tip)
-	return covered, density
-}
-
-// cursorCoverageInterval extracts the [start, min(last, end)]
-// completed portion of one backfill cursor, clamped to
-// [genesis, tip] and gated on the decoder set containing `source`.
-// Returns ok=false for non-backfill cursors, malformed sub_source,
-// decoder mismatch, or completed-portion below the start.
-//
-// Split out from computeSourceDensity to keep that function's
-// cognitive complexity below the linter ceiling — the per-cursor
-// logic is naturally branchy.
-func cursorCoverageInterval(c timescale.Cursor, source string, genesis, tip int64) (coverageInterval, bool) {
-	if c.Source != "backfill" {
-		return coverageInterval{}, false
-	}
-	rangeStart, rangeEnd, decoder := parseBackfillSubFull(c.Sub)
-	if decoder == "" || rangeStart == 0 || rangeEnd == 0 {
-		return coverageInterval{}, false
-	}
-	if !decoderSetContains(decoder, source) {
-		return coverageInterval{}, false
-	}
-	covEnd := int64(c.LastLedger)
-	if covEnd > rangeEnd {
-		covEnd = rangeEnd
-	}
-	if covEnd < rangeStart {
-		return coverageInterval{}, false
-	}
-	if rangeStart < genesis {
-		rangeStart = genesis
-	}
-	if covEnd > tip {
-		covEnd = tip
-	}
-	if covEnd < rangeStart {
-		return coverageInterval{}, false
-	}
-	return coverageInterval{Start: rangeStart, End: covEnd}, true
 }
 
 // parseInt64 returns 0 on parse failure — defensive default.
