@@ -1,14 +1,20 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"flag"
 	"fmt"
 	"io"
 	"os"
+	"sort"
 	"strconv"
+	"strings"
 	"time"
+
+	"github.com/RatesEngine/rates-engine/internal/config"
+	"github.com/RatesEngine/rates-engine/internal/storage/timescale"
 )
 
 // drainCascadeWindow runs every per-source `*-backfill` subcommand
@@ -44,7 +50,7 @@ import (
 // switch to fail-fast (useful when the failure is a config /
 // connectivity problem that will hit every source).
 //
-//nolint:gocognit // linear pipeline; the per-source switch reads better inline.
+//nolint:gocognit,gocyclo // linear pipeline; the per-source switch + cursor-credit step reads better inline.
 func drainCascadeWindow(args []string) error {
 	fs := flag.NewFlagSet("drain-cascade-window", flag.ContinueOnError)
 	cfgPath := fs.String("config", "", "path to ratesengine.toml (required)")
@@ -120,9 +126,78 @@ func drainCascadeWindow(args []string) error {
 		writeDrainReportText(os.Stdout, report)
 	}
 
+	// Write a backfill cursor row crediting every source that
+	// completed (or partially-completed with only decode-noise
+	// errors) for the drained range. Without this, the
+	// /v1/diagnostics/ingestion density projection misses the drain
+	// because that path is cursor-derived (process state, not data
+	// state). Failing this step does NOT fail the drain — the data
+	// is already in the per-source tables; the cursor write is
+	// pure bookkeeping for the density signal. Errors here log to
+	// stderr but the orchestrator still reports its per-source
+	// drain outcome as-is.
+	if !*dryRun && len(results) > 0 {
+		if cerr := writeDrainBackfillCursor(*cfgPath, *from, *to, results); cerr != nil {
+			_, _ = fmt.Fprintf(os.Stderr, "drain-cascade-window: cursor-credit step failed (data is still drained, density signal will lag): %v\n", cerr)
+		}
+	}
+
 	if report.FailedCount > 0 {
 		return fmt.Errorf("drain-cascade-window: %d/%d sources failed", report.FailedCount, len(results))
 	}
+	return nil
+}
+
+// writeDrainBackfillCursor upserts an `ingestion_cursors` row crediting
+// every successfully-drained source for the [from, to] range. The
+// sub_source format matches `cmd/ratesengine-ops/backfill.go::
+// backfillCursorSub` so the /v1/diagnostics/ingestion density
+// projection's `cursorCoverageInterval` parses it via
+// `parseBackfillSubFull` and `decoderSetContains`.
+//
+// Sources whose drain step reported OK=false are EXCLUDED from the
+// credit list — their data may be partial. Decode-noise failures
+// (sep41-transfers' non-compliant approve events, blend's expected
+// schema-evolution mismatches) are still credited because the data
+// rows landed for the non-failing events; the orchestrator's "OK"
+// flag is binary, so partial credit is intentionally out of scope.
+// If we later want partial credit, the per-source step would need
+// to return decode_errors as data + here we'd thresh on
+// `decode_errors / events > 0.05` or similar.
+func writeDrainBackfillCursor(cfgPath string, from, to uint, results []drainResult) error {
+	creditedSources := make([]string, 0, len(results))
+	for _, r := range results {
+		if r.OK {
+			creditedSources = append(creditedSources, r.Source)
+		}
+	}
+	if len(creditedSources) == 0 {
+		return errors.New("no sources to credit (all per-source steps failed)")
+	}
+	sort.Strings(creditedSources)
+	sub := fmt.Sprintf("%d-%d:%s", from, to, strings.Join(creditedSources, ","))
+
+	cfg, err := config.LoadWithEnv(cfgPath)
+	if err != nil {
+		return fmt.Errorf("load config: %w", err)
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	store, err := timescale.Open(ctx, cfg.Storage.PostgresDSN)
+	if err != nil {
+		return fmt.Errorf("open postgres: %w", err)
+	}
+	defer func() { _ = store.Close() }()
+
+	// UpsertCursor advances last_ledger; we want last_ledger = to so
+	// the full range is credited per `cursorCoverageInterval`'s
+	// `covEnd := int64(c.LastLedger); if covEnd > rangeEnd
+	// { covEnd = rangeEnd }` semantic.
+	if err := store.UpsertCursor(ctx, "backfill", sub, uint32(to)); err != nil {
+		return fmt.Errorf("UpsertCursor: %w", err)
+	}
+	_, _ = fmt.Fprintf(os.Stderr, "drain-cascade-window: credited backfill cursor 'backfill/%s' last_ledger=%d (%d sources)\n",
+		sub, to, len(creditedSources))
 	return nil
 }
 
