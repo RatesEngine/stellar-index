@@ -15,6 +15,33 @@ against.
 
 ## [Unreleased]
 
+## [v0.5.0-rc.100] — 2026-06-01
+
+Tested against Stellar Protocol 23 (Whisk).
+
+Pre-deploy operator note: aggregator restart picks up the cadence-aware gap-detector. No migrations. After deploy, confirm `pg_stat_activity` shows no concurrent `DISTINCT ledger FROM trades` scans accumulating across cycles.
+
+### Fixed
+
+- **Gap-detector no longer pile-drives postgres on huge tables.**
+  Live r1 incident 2026-05-29: three concurrent `SELECT DISTINCT
+  ledger FROM trades WHERE source='sdex'` scans accumulated over
+  successive gap-detector cycles because the Go-side ctx timeout
+  didn't propagate to PostgreSQL — the queries kept running and
+  starved trade-insert latency, lighting the `slo_latency_burn`
+  page. Two complementary fixes:
+  1. **Per-target ScanCadence override.** New
+     `GapDetectorTarget.ScanCadence` lets huge-table targets opt
+     into a longer scan cadence than the global 30-min interval.
+     SDEX trades and soroban_events now scan every 6 hours; light
+     targets keep the 30-min cadence for fast signal.
+  2. **SQL `SET LOCAL statement_timeout` backstop.**
+     `CountDistinctLedgers` and `FindPerSourceLedgerGaps` now wrap
+     their query in a transaction with a 5-min PG-side timeout.
+     If Go-side cancellation fails (the F-0020-cousin failure mode
+     we just observed), PostgreSQL itself aborts the query —
+     in-flight scans can no longer leak across cycles.
+
 ## [v0.5.0-rc.99] — 2026-05-29
 
 Tested against Stellar Protocol 23 (Whisk).

@@ -3,6 +3,7 @@ package timescale
 import (
 	"context"
 	"fmt"
+	"time"
 )
 
 // GapDetectorTarget identifies one (source, table) pair the
@@ -68,6 +69,23 @@ type GapDetectorTarget struct {
 	// number that distinguishes "natural sparsity" from "writer
 	// halted." A 500K-ledger gap on blend_auctions still pages.
 	MinGapSizeOverride int64
+
+	// ScanCadence overrides [GapDetectorInterval] for this target.
+	// Default 0 means "use the global default of 30 min." Use a
+	// LONGER cadence for huge-table targets where the LAG-DISTINCT
+	// scan is structurally slow (live r1 incident 2026-05-29: SDEX
+	// trades is ~62M rows and the scan takes > 15 min; running it
+	// every 30 min meant new cycles stacked on top of unfinished
+	// ones, lighting both the `slo_latency_burn` page and starving
+	// trade-insert latency). For these targets we accept a 6-hour
+	// signal cadence in exchange for postgres not being permanently
+	// saturated.
+	//
+	// The scan still has the per-target Go-side timeout (15 min) +
+	// the SQL `SET LOCAL statement_timeout` (5 min) backstop so a
+	// single cycle can't run unbounded; the cadence just bounds how
+	// often it's allowed to fire at all.
+	ScanCadence time.Duration
 }
 
 // EffectiveMinGapSize returns the threshold this target should use,
@@ -79,6 +97,16 @@ func (t GapDetectorTarget) EffectiveMinGapSize() int64 {
 		return t.MinGapSizeOverride
 	}
 	return GapDetectorMinGapSize
+}
+
+// EffectiveScanCadence returns the per-target scan cadence,
+// preferring [ScanCadence] if non-zero. Single source of truth
+// for the scheduler in [RunGapDetector].
+func (t GapDetectorTarget) EffectiveScanCadence() time.Duration {
+	if t.ScanCadence > 0 {
+		return t.ScanCadence
+	}
+	return GapDetectorInterval
 }
 
 // DefaultGapDetectorTargets is the registered set of per-source
@@ -136,8 +164,11 @@ var DefaultGapDetectorTargets = []GapDetectorTarget{
 	{Source: "blend-emissions", Table: "blend_emissions", LedgerColumn: "ledger", Genesis: 51_499_546, MinGapSizeOverride: 100000},
 	{Source: "blend-admin", Table: "blend_admin", LedgerColumn: "ledger", Genesis: 51_499_546, MinGapSizeOverride: 100000},
 	// soroban-events spans the entire Soroban era from pubnet
-	// activation. Same lower bound as sep41-transfers.
-	{Source: "soroban-events", Table: "soroban_events", LedgerColumn: "ledger", Genesis: 50_457_424},
+	// activation. Same lower bound as sep41-transfers. Long
+	// ScanCadence: 50M+ rows, scan dominates postgres for 5+ min
+	// per cycle so 30 min cadence starves trade-insert latency
+	// (live r1 incident 2026-05-29 → /goal directive).
+	{Source: "soroban-events", Table: "soroban_events", LedgerColumn: "ledger", Genesis: 50_457_424, ScanCadence: 6 * time.Hour},
 	// SDEX is classic-DEX and does NOT flow through soroban_events.
 	// Its rows live in the unified `trades` hypertable alongside
 	// every other trade-emitting source; the WhereFilter slices
@@ -154,7 +185,9 @@ var DefaultGapDetectorTargets = []GapDetectorTarget{
 	// default would page constantly on historical data. A 1M-ledger
 	// gap (~1.5 weeks of network time) on SDEX still pages because
 	// recent SDEX is densely active (>1M trades / day on 2026-05-27).
-	{Source: "sdex", Table: "trades", LedgerColumn: "ledger", WhereFilter: "source = 'sdex'", Genesis: 2, MinGapSizeOverride: 1000000},
+	// SDEX scans 62M trades rows — long ScanCadence so we don't
+	// pile concurrent runs on postgres (see soroban-events comment).
+	{Source: "sdex", Table: "trades", LedgerColumn: "ledger", WhereFilter: "source = 'sdex'", Genesis: 2, MinGapSizeOverride: 1000000, ScanCadence: 6 * time.Hour},
 	// SDEX offer-state events (OfferCreated/OfferUpdated/OfferRemoved)
 	// land in their own hypertable — complement to the trade flow.
 	// An offer-events writer halt would not show up in the trades
@@ -212,7 +245,25 @@ func (s *Store) FindPerSourceLedgerGaps(ctx context.Context, target GapDetectorT
 		ORDER BY gap_size DESC
 	`, target.LedgerColumn, target.Table, filter)
 
-	rows, err := s.db.QueryContext(ctx, query, from, to, minGapSize)
+	// SQL-level statement_timeout backstop: when the Go-side ctx
+	// times out mid-query the database/sql driver tries to cancel
+	// via PG's async cancellation protocol — best-effort. r1
+	// incident 2026-05-29: three concurrent SDEX scans accumulated
+	// over multiple cycles because Go cancellation didn't reach
+	// PG; the queries kept running and starved trade-insert
+	// latency. A session statement_timeout makes PG itself abort,
+	// no leak possible. 5 min is well below the gap-detector's
+	// per-target Go-side timeout so this never even fires in the
+	// happy path.
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return nil, fmt.Errorf("timescale: FindPerSourceLedgerGaps begin: %w", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+	if _, err := tx.ExecContext(ctx, "SET LOCAL statement_timeout = '300000'"); err != nil {
+		return nil, fmt.Errorf("timescale: FindPerSourceLedgerGaps SET: %w", err)
+	}
+	rows, err := tx.QueryContext(ctx, query, from, to, minGapSize)
 	if err != nil {
 		return nil, fmt.Errorf("timescale: FindPerSourceLedgerGaps %s [%d,%d, min %d]: %w",
 			target.Table, from, to, minGapSize, err)

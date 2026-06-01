@@ -77,8 +77,20 @@ func RunGapDetector(ctx context.Context, store *Store, logger *slog.Logger) erro
 		logger = slog.Default()
 	}
 
-	runOneGapDetectorCycle(ctx, store, logger, DefaultGapDetectorTargets)
+	// Per-target last-scan timestamps drive the per-target cadence
+	// gate. Without per-target tracking, every target either scans
+	// every cycle (pre-rc.100 behaviour — that's why SDEX +
+	// soroban-events kept stacking concurrent queries on postgres)
+	// or all targets stretch to the longest cadence. Per-target
+	// tracking lets us run light targets every 30 min while
+	// throttling huge-table targets (SDEX, soroban-events) to 6h.
+	lastScan := make(map[string]time.Time, len(DefaultGapDetectorTargets))
 
+	runOneGapDetectorCycleScheduled(ctx, store, logger, DefaultGapDetectorTargets, lastScan)
+
+	// Ticker fires at the LCD cadence (30 min). Each tick iterates
+	// every target and only scans those whose individual cadence
+	// has elapsed since the previous scheduled scan.
 	ticker := time.NewTicker(GapDetectorInterval)
 	defer ticker.Stop()
 
@@ -87,9 +99,42 @@ func RunGapDetector(ctx context.Context, store *Store, logger *slog.Logger) erro
 		case <-ctx.Done():
 			return ctx.Err()
 		case <-ticker.C:
-			runOneGapDetectorCycle(ctx, store, logger, DefaultGapDetectorTargets)
+			runOneGapDetectorCycleScheduled(ctx, store, logger, DefaultGapDetectorTargets, lastScan)
 		}
 	}
+}
+
+// targetKey is the dedupe identity for per-target last-scan
+// tracking. (source, table) matches the metric labels so the
+// bookkeeping aligns with the wire shape.
+func targetKey(t GapDetectorTarget) string {
+	return t.Source + "/" + t.Table
+}
+
+// runOneGapDetectorCycleScheduled wraps runOneGapDetectorCycle with
+// per-target cadence enforcement — only scans targets whose
+// EffectiveScanCadence has elapsed since the lastScan timestamp.
+// Skipped targets retain their previous metric values
+// (last-known-good); operators see the older signal until the next
+// allowed cycle, but the postgres-load incident class doesn't
+// recur.
+func runOneGapDetectorCycleScheduled(ctx context.Context, store *Store, logger *slog.Logger, targets []GapDetectorTarget, lastScan map[string]time.Time) {
+	now := time.Now()
+	due := make([]GapDetectorTarget, 0, len(targets))
+	for _, t := range targets {
+		key := targetKey(t)
+		cadence := t.EffectiveScanCadence()
+		if last, seen := lastScan[key]; seen && now.Sub(last) < cadence {
+			continue
+		}
+		due = append(due, t)
+		lastScan[key] = now
+	}
+	if len(due) == 0 {
+		logger.Debug("gap-detector: no targets due this cycle")
+		return
+	}
+	runOneGapDetectorCycle(ctx, store, logger, due)
 }
 
 // runOneGapDetectorCycle is one full pass over every target.

@@ -74,8 +74,22 @@ func (s *Store) CountDistinctLedgers(ctx context.Context, target GapDetectorTarg
 		target.LedgerColumn, target.Table, filter,
 	)
 
+	// SQL-level statement_timeout — see FindPerSourceLedgerGaps.
+	// CountDistinctLedgers hits the same (source, ledger) index
+	// path; on SDEX trades the scan is inherently expensive even
+	// with the index, and Go-side cancellation doesn't always
+	// propagate to PG. 5 min PG-side abort prevents accumulating
+	// in-flight scans across cycles.
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return 0, fmt.Errorf("timescale: CountDistinctLedgers begin: %w", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+	if _, err := tx.ExecContext(ctx, "SET LOCAL statement_timeout = '300000'"); err != nil {
+		return 0, fmt.Errorf("timescale: CountDistinctLedgers SET: %w", err)
+	}
 	var n int64
-	if err := s.db.QueryRowContext(ctx, query, from, to).Scan(&n); err != nil {
+	if err := tx.QueryRowContext(ctx, query, from, to).Scan(&n); err != nil {
 		return 0, fmt.Errorf("timescale: CountDistinctLedgers %s [%d,%d]: %w",
 			target.Table, from, to, err)
 	}
