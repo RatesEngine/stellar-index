@@ -147,8 +147,13 @@ var DefaultGapDetectorTargets = []GapDetectorTarget{
 	// 7826 ledgers (~11h of natural pool silence). 50K threshold.
 	{Source: "comet-liquidity", Table: "comet_liquidity", LedgerColumn: "ledger", Genesis: 51_499_546, MinGapSizeOverride: 50000},
 	{Source: "soroswap-skim", Table: "soroswap_skim_events", LedgerColumn: "ledger", Genesis: 50_746_266},
-	{Source: "phoenix-liquidity", Table: "phoenix_liquidity", LedgerColumn: "ledger", Genesis: 51_572_016},
-	{Source: "phoenix-stake", Table: "phoenix_stake_events", LedgerColumn: "ledger", Genesis: 51_572_016},
+	// phoenix-liquidity / phoenix-stake: events are user-action-triggered
+	// (provide/withdraw liquidity, bond/unbond stake) — multi-hour
+	// quiet windows are normal protocol behaviour, not data loss.
+	// 50000 ledgers ≈ 69 hours matches the observed sparsity ceiling
+	// on r1 2026-06-01.
+	{Source: "phoenix-liquidity", Table: "phoenix_liquidity", LedgerColumn: "ledger", Genesis: 51_572_016, MinGapSizeOverride: 50000},
+	{Source: "phoenix-stake", Table: "phoenix_stake_events", LedgerColumn: "ledger", Genesis: 51_572_016, MinGapSizeOverride: 50000},
 	// blend_auctions: live r1 (2026-05-28) showed 8049 distinct
 	// ledgers across a 5.9M-ledger span = one event per ~735
 	// ledgers. 2026-05-29 measurement bumped the 50K override to
@@ -204,7 +209,11 @@ var DefaultGapDetectorTargets = []GapDetectorTarget{
 	{Source: "aquarius", Table: "trades", LedgerColumn: "ledger", WhereFilter: "source = 'aquarius'", Genesis: 52_728_375, MinGapSizeOverride: 100000},
 	{Source: "soroswap", Table: "trades", LedgerColumn: "ledger", WhereFilter: "source = 'soroswap'", Genesis: 50_746_266, MinGapSizeOverride: 100000},
 	{Source: "phoenix", Table: "trades", LedgerColumn: "ledger", WhereFilter: "source = 'phoenix'", Genesis: 51_572_016, MinGapSizeOverride: 100000},
-	{Source: "comet", Table: "trades", LedgerColumn: "ledger", WhereFilter: "source = 'comet'", Genesis: 51_499_546, MinGapSizeOverride: 100000},
+	// comet: Balancer-v1 pool swaps are sparse — a 6-day quiet window
+	// on r1 2026-06-01 (110k ledgers) tripped the gap_free metric at
+	// 100k threshold. 200k ≈ 11.5 days fits the observed natural
+	// trading-quietness envelope.
+	{Source: "comet", Table: "trades", LedgerColumn: "ledger", WhereFilter: "source = 'comet'", Genesis: 51_499_546, MinGapSizeOverride: 200000},
 	// Oracle sources (reflector, band, redstone) write into the
 	// unified `oracle_updates` hypertable, sliced by `source`.
 	// Same pattern as the Soroban-DEX trades targets — per-source
