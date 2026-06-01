@@ -289,15 +289,17 @@ func (s *Store) FindPerSourceLedgerGaps(ctx context.Context, target GapDetectorT
 	// over multiple cycles because Go cancellation didn't reach
 	// PG; the queries kept running and starved trade-insert
 	// latency. A session statement_timeout makes PG itself abort,
-	// no leak possible. 5 min is well below the gap-detector's
-	// per-target Go-side timeout so this never even fires in the
-	// happy path.
+	// no leak possible. 13 min stays under the gap-detector's
+	// 15-min per-target Go-side timeout while leaving room for the
+	// heaviest scans (sdex's 2.7B-row + soroban_events's 12M+ ledger
+	// LAG-over-DISTINCT both exceeded the prior 5-min cap on r1
+	// 2026-06-01).
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return nil, fmt.Errorf("timescale: FindPerSourceLedgerGaps begin: %w", err)
 	}
 	defer func() { _ = tx.Rollback() }()
-	if _, err := tx.ExecContext(ctx, "SET LOCAL statement_timeout = '300000'"); err != nil {
+	if _, err := tx.ExecContext(ctx, "SET LOCAL statement_timeout = '780000'"); err != nil {
 		return nil, fmt.Errorf("timescale: FindPerSourceLedgerGaps SET: %w", err)
 	}
 	rows, err := tx.QueryContext(ctx, query, from, to, minGapSize)
