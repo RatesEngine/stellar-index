@@ -15,6 +15,25 @@ against.
 
 ## [Unreleased]
 
+## [v0.5.0-rc.104] — 2026-06-01
+
+Tested against Stellar Protocol 23 (Whisk).
+
+Pre-deploy operator note: aggregator restart on r1 picks up the new per-source gap-detector targets. Migration 0048 (source_coverage_snapshots) was hand-applied during the incident and needs to be marked at version 48 in schema_migrations (already done on r1).
+
+### Fixed
+
+- **Coverage snapshot rows for Soroban-DEX sources.**
+  Post-ADR-0031 Phase 2 removed the cursor-derived density and
+  routed `/v1/diagnostics/ingestion`'s coverage listing through
+  `source_coverage_snapshots`. The gap detector targets covered
+  SDEX (via `source = 'sdex'` WhereFilter on trades) but not the
+  Soroban-DEX sources (aquarius, soroswap, phoenix, comet) that
+  also land in the unified `trades` hypertable. Result on r1
+  2026-06-01: API reported 0% coverage for all four. Added the
+  matching per-source targets with appropriate genesis ledgers
+  and 100K-ledger sparsity overrides — matches the SDEX shape.
+
 ## [v0.5.0-rc.103] — 2026-06-01
 
 Tested against Stellar Protocol 23 (Whisk).

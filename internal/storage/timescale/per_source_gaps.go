@@ -193,6 +193,18 @@ var DefaultGapDetectorTargets = []GapDetectorTarget{
 	// An offer-events writer halt would not show up in the trades
 	// gauge above; the dedicated target catches it.
 	{Source: "sdex-offers", Table: "sdex_offer_events", LedgerColumn: "ledger", Genesis: 2},
+	// Soroban-DEX sources also write into the unified `trades`
+	// hypertable; each gets a per-source gap-detector target with
+	// a source-tagged WhereFilter. Without these the API's
+	// `backfill_coverage` listing reports 0% for those sources
+	// (live r1 incident 2026-06-01: post Phase 2 removal of the
+	// cursor-derived density path, the snapshot-derived path had
+	// no rows for these sources). Genesis matches each contract's
+	// pubnet deployment ledger.
+	{Source: "aquarius", Table: "trades", LedgerColumn: "ledger", WhereFilter: "source = 'aquarius'", Genesis: 52_728_375, MinGapSizeOverride: 100000},
+	{Source: "soroswap", Table: "trades", LedgerColumn: "ledger", WhereFilter: "source = 'soroswap'", Genesis: 50_746_266, MinGapSizeOverride: 100000},
+	{Source: "phoenix", Table: "trades", LedgerColumn: "ledger", WhereFilter: "source = 'phoenix'", Genesis: 51_572_016, MinGapSizeOverride: 100000},
+	{Source: "comet", Table: "trades", LedgerColumn: "ledger", WhereFilter: "source = 'comet'", Genesis: 51_499_546, MinGapSizeOverride: 100000},
 }
 
 // FindPerSourceLedgerGaps finds contiguous ledger-coverage gaps
