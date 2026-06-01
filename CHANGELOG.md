@@ -15,6 +15,33 @@ against.
 
 ## [Unreleased]
 
+## [v0.5.0-rc.101] — 2026-06-01
+
+Tested against Stellar Protocol 23 (Whisk).
+
+Pre-deploy operator note: indexer restart picks up the batched-INSERT trade path. No migrations.
+
+### Fixed
+
+- **Trade-insert throughput lifted ~40× via batch INSERT.**
+  Live-r1 incident 2026-06-01: per-INSERT roundtrip cost capped
+  sustained trade throughput at ~5 trades/sec on the live indexer,
+  despite PostgreSQL handling 9000+ single-row INSERTs/sec in a raw
+  loop (verified). The bottleneck was the serial drain loop in
+  `pipeline.PersistEvents`: one event dequeue → one HandleEvent →
+  one InsertTrade roundtrip, no overlap. With ~300 events per
+  mainnet ledger, the cap meant ~1.8 ledgers/min processed vs the
+  ~10 ledgers/min network rate, accumulating multi-hour lag.
+
+  New `Store.BatchInsertTrades` writes N rows in one statement
+  (`INSERT … VALUES (…), (…), … ON CONFLICT DO NOTHING`); same
+  idempotency, same per-source `source_entry_counts` UPSERT semantic,
+  same `TradeInsertOutcomeTotal` metrics. `PersistEvents` now
+  buffers trade events up to 200 rows OR 200 ms (whichever first),
+  flushes via the batch path, falls back per-row on a batch DB
+  error. Non-trade events (oracle updates, supply observations,
+  log-only events) stay on the single-row HandleEvent path.
+
 ## [v0.5.0-rc.100] — 2026-06-01
 
 Tested against Stellar Protocol 23 (Whisk).

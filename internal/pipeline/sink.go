@@ -91,21 +91,117 @@ const (
 // The `mode` parameter is new with ADR-0032 Phase 4: see the
 // [SinkMode] godoc for why the dispatcher's events-goroutine
 // skips Soroban-derived events once the projector is sole writer.
+//
+//nolint:gocognit // batched-drain loop has natural fan-out: ctx.Done, ticker, channel — splitting hurts readability of the flush invariants.
 func PersistEvents(ctx context.Context, logger *slog.Logger, store *timescale.Store, in <-chan consumer.Event, mode SinkMode) {
+	// Trade events buffer for BatchInsertTrades. Live-r1 incident
+	// 2026-06-01: per-INSERT roundtrip cost capped sustained
+	// throughput at ~5 trades/sec even though postgres-side can do
+	// 9000+/sec. Batching collapses N INSERTs into 1 statement and
+	// lifts throughput by roughly the batch factor. The buffer
+	// flushes on size cap, time tick, or context cancellation.
+	tradeBuf := make([]canonical.Trade, 0, tradeBatchSize)
+	flushTicker := time.NewTicker(tradeBatchFlushInterval)
+	defer flushTicker.Stop()
+
+	flush := func(fctx context.Context) {
+		if len(tradeBuf) == 0 {
+			return
+		}
+		batch := tradeBuf
+		tradeBuf = make([]canonical.Trade, 0, tradeBatchSize)
+		if err := store.BatchInsertTrades(fctx, batch); err != nil {
+			// On batch failure log + fall back per-row so we don't
+			// drop ledger data on a single transient PG hiccup. The
+			// per-row path is the slow one but it's still correct.
+			logger.Warn("batch trade insert failed; falling back per-row",
+				"batch_size", len(batch), "err", err)
+			for _, t := range batch {
+				persistTrade(fctx, logger, store, t)
+			}
+		}
+	}
+
 	for {
 		select {
 		case <-ctx.Done():
+			flush(ctx)
 			drainBufferedEvents(in, logger, store, mode)
 			return
+		case <-flushTicker.C:
+			flush(ctx)
 		case ev, ok := <-in:
 			if !ok {
+				flush(ctx)
 				return
 			}
 			if mode == SinkModeSkipProjected && IsProjectedEvent(ev) {
 				continue
 			}
+			// Trade events (Soroban-derived OR sdex OR external) all
+			// land in the same hypertable — batch them. Everything
+			// else (oracle updates, supply observations, log-only
+			// events) takes the per-event path which is fine because
+			// volumes are low.
+			if t, ok := tradeFromEvent(ev); ok {
+				// Per-source events_total + last_event_unix metrics
+				// still increment per event so freshness signals
+				// work the same in batched mode.
+				obs.SourceEventsTotal.WithLabelValues(t.Source).Inc()
+				obs.SourceLastEventUnix.WithLabelValues(t.Source).Set(float64(time.Now().Unix()))
+				tradeBuf = append(tradeBuf, t)
+				if len(tradeBuf) >= tradeBatchSize {
+					flush(ctx)
+				}
+				continue
+			}
 			HandleEvent(ctx, logger, store, ev)
 		}
+	}
+}
+
+// tradeBatchSize caps the trades-per-batch in BatchInsertTrades.
+// Sized to fit comfortably under PostgreSQL's max-bind-params limit
+// (32767 parameters); each row has 12 placeholders, so 200 rows =
+// 2400 placeholders — well under. Production throughput is roughly
+// linear in this until either PG's planning cost or the events
+// channel runs dry; 200 is the operating point validated post the
+// r1 2026-06-01 incident.
+const tradeBatchSize = 200
+
+// tradeBatchFlushInterval is the upper bound on staleness for events
+// stuck below the size threshold. With low-volume periods the buffer
+// fills slowly; this caps how long a trade waits before landing
+// regardless. 200ms keeps per-batch latency well under the SLA
+// freshness threshold while still amortising the per-roundtrip cost.
+const tradeBatchFlushInterval = 200 * time.Millisecond
+
+// tradeFromEvent returns the underlying canonical.Trade for any
+// event that targets the trades hypertable. Used by the PersistEvents
+// batcher to route trade-shaped events down the batch path while
+// leaving everything else (oracle updates, supply observations,
+// log-only events) on the single-row HandleEvent path.
+//
+// MUST stay in lockstep with HandleEvent — every event type whose
+// HandleEvent case calls persistTrade(...) must return its trade
+// here, otherwise the event silently falls through to HandleEvent's
+// per-event slow path (correctness-equivalent, performance bug).
+func tradeFromEvent(ev consumer.Event) (canonical.Trade, bool) {
+	switch e := ev.(type) {
+	case soroswap.TradeEvent:
+		return e.Trade, true
+	case aquarius.TradeEvent:
+		return e.Trade, true
+	case phoenix.TradeEvent:
+		return e.Trade, true
+	case comet.TradeEvent:
+		return e.Trade, true
+	case sdex.TradeEvent:
+		return e.Trade, true
+	case external.TradeEvent:
+		return e.Trade, true
+	default:
+		return canonical.Trade{}, false
 	}
 }
 
@@ -151,21 +247,45 @@ func IsProjectedEvent(ev consumer.Event) bool {
 // Deliberately does not take a context parameter — the whole reason
 // this exists is to keep writing past the parent's cancellation.
 //
-//nolint:contextcheck // intentional fresh context; see godoc above.
+//nolint:contextcheck,gocognit // intentional fresh context + batched-drain fan-out; see godoc above.
 func drainBufferedEvents(in <-chan consumer.Event, logger *slog.Logger, store *timescale.Store, mode SinkMode) {
 	drainCtx, cancel := context.WithTimeout(context.Background(), drainTimeout)
 	defer cancel()
+	tradeBuf := make([]canonical.Trade, 0, tradeBatchSize)
+	flushTrades := func() {
+		if len(tradeBuf) == 0 {
+			return
+		}
+		batch := tradeBuf
+		tradeBuf = make([]canonical.Trade, 0, tradeBatchSize)
+		if err := store.BatchInsertTrades(drainCtx, batch); err != nil {
+			logger.Warn("drain batch trade insert failed; falling back per-row",
+				"batch_size", len(batch), "err", err)
+			for _, t := range batch {
+				persistTrade(drainCtx, logger, store, t)
+			}
+		}
+	}
 	for {
 		select {
 		case ev, ok := <-in:
 			if !ok {
+				flushTrades()
 				return
 			}
 			if mode == SinkModeSkipProjected && IsProjectedEvent(ev) {
 				continue
 			}
+			if t, ok := tradeFromEvent(ev); ok {
+				tradeBuf = append(tradeBuf, t)
+				if len(tradeBuf) >= tradeBatchSize {
+					flushTrades()
+				}
+				continue
+			}
 			HandleEvent(drainCtx, logger, store, ev)
 		case <-drainCtx.Done():
+			flushTrades()
 			logger.Warn("PersistEvents drain deadline exceeded — buffered events dropped",
 				"buffered", len(in))
 			return

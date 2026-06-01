@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"math/big"
+	"strings"
 	"time"
 
 	"github.com/lib/pq"
@@ -350,6 +351,136 @@ func (s *Store) InsertTrade(ctx context.Context, t canonical.Trade) error {
 			_ = regErr
 		}
 	}
+	return nil
+}
+
+// BatchInsertTrades writes up to a few hundred trades in a single
+// SQL roundtrip. Live-r1 incident 2026-06-01: per-INSERT roundtrip
+// latency capped indexer throughput at ~5 inserts/sec despite
+// postgres-side capacity > 9000/sec (verified by raw psql loop).
+// Batching collapses N roundtrips into 1, lifting throughput by
+// roughly the batch factor.
+//
+// Same idempotency semantics as [Store.InsertTrade]:
+// `ON CONFLICT DO NOTHING` on the trade PK, and the
+// `source_entry_counts` UPSERT only bumps the per-source tally by
+// the number of rows actually inserted (so re-runs over already-
+// stored ledgers don't inflate the count).
+//
+// Caller-side filtering: rows are NOT pre-validated by this
+// function — callers MUST `Validate` each trade before queueing it
+// into a batch (the sink layer already does). USD-volume is computed
+// per row from the store's USD-volume resolver, same as the single
+// row path.
+//
+// Returns nil on success; on any DB error the whole batch fails and
+// the caller's outcome metric should reflect that. The error is
+// best-effort wrapped with `timescale: BatchInsertTrades: %w`. There
+// is no partial-success semantic — either every row is attempted (and
+// individual rows may be duplicate-absorbed), or the whole batch
+// fails.
+func (s *Store) BatchInsertTrades(ctx context.Context, trades []canonical.Trade) error {
+	if len(trades) == 0 {
+		return nil
+	}
+
+	// Build VALUES placeholders + args slice. Each row has 12 params
+	// (source, ledger, tx_hash, op_index, ts, base_asset, quote_asset,
+	// base_amount, quote_amount, usd_volume, maker, taker).
+	const colsPerRow = 12
+	args := make([]any, 0, len(trades)*colsPerRow)
+	valuesParts := make([]string, 0, len(trades))
+	for i, t := range trades {
+		base := i*colsPerRow + 1
+		valuesParts = append(valuesParts, fmt.Sprintf(
+			"($%d, $%d, $%d, $%d, $%d, $%d, $%d, $%d, $%d, $%d, NULLIF($%d, ''), NULLIF($%d, ''))",
+			base, base+1, base+2, base+3, base+4, base+5, base+6, base+7, base+8, base+9, base+10, base+11,
+		))
+		var usdVolume any
+		if v := tradeUSDVolume(ctx, t, s.usdVolumeQuoteSpec, s.usdVolumeFXResolver); v != nil {
+			usdVolume = *v
+		}
+		args = append(args,
+			t.Source, t.Ledger, t.TxHash, t.OpIndex, t.Timestamp.UTC(),
+			t.Pair.Base.String(), t.Pair.Quote.String(),
+			t.BaseAmount, t.QuoteAmount, usdVolume,
+			t.Maker, t.Taker,
+		)
+	}
+
+	// CTE shape:
+	//   ins → multi-row INSERT, RETURNING source for each row that
+	//         actually landed (i.e. wasn't a duplicate).
+	//   bump → aggregate landed rows per source, UPSERT into
+	//          source_entry_counts.
+	// The bump's SELECT … GROUP BY pattern is the multi-source twin
+	// of the single-row variant in InsertTrade.
+	//nolint:gosec // G201: VALUES placeholders constructed only from compile-time format string.
+	query := fmt.Sprintf(`
+        WITH ins AS (
+            INSERT INTO trades (
+                source, ledger, tx_hash, op_index, ts,
+                base_asset, quote_asset,
+                base_amount, quote_amount, usd_volume,
+                maker, taker
+            ) VALUES %s
+            ON CONFLICT (source, ledger, tx_hash, op_index, ts) DO NOTHING
+            RETURNING source
+        ), bump AS (
+            INSERT INTO source_entry_counts AS sec (source, entry_count, updated_at)
+            SELECT source, count(*), now() FROM ins GROUP BY source
+            ON CONFLICT (source) DO UPDATE
+              SET entry_count = sec.entry_count + EXCLUDED.entry_count,
+                  updated_at  = EXCLUDED.updated_at
+        )
+        SELECT source, count(*) FROM ins GROUP BY source
+    `, strings.Join(valuesParts, ", "))
+
+	rows, err := s.db.QueryContext(ctx, query, args...)
+	if err != nil {
+		return fmt.Errorf("timescale: BatchInsertTrades: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+
+	// Counts per source for outcome metrics: how many landed (new) +
+	// how many were absorbed by ON CONFLICT (duplicate).
+	perSourceNew := make(map[string]int, 4)
+	for rows.Next() {
+		var source string
+		var n int
+		if err := rows.Scan(&source, &n); err != nil {
+			return fmt.Errorf("timescale: BatchInsertTrades scan: %w", err)
+		}
+		perSourceNew[source] = n
+	}
+	if err := rows.Err(); err != nil {
+		return fmt.Errorf("timescale: BatchInsertTrades rows.Err: %w", err)
+	}
+
+	// Per-source totals (we know how many we sent per source from
+	// the input slice). Duplicates = sent - landed.
+	perSourceSent := make(map[string]int, len(perSourceNew))
+	for _, t := range trades {
+		perSourceSent[t.Source]++
+	}
+	now := float64(time.Now().Unix())
+	for source, sent := range perSourceSent {
+		landed := perSourceNew[source]
+		duplicate := sent - landed
+		if landed > 0 {
+			obs.TradeInsertOutcomeTotal.WithLabelValues(source, "new").Add(float64(landed))
+			obs.SourceLastInsertUnix.WithLabelValues(source).Set(now)
+		}
+		if duplicate > 0 {
+			obs.TradeInsertOutcomeTotal.WithLabelValues(source, "duplicate").Add(float64(duplicate))
+		}
+	}
+
+	// Asset-registry side effects: skip in the batch path. The
+	// registry is dedupe-cached per process, and a missing
+	// registration is soft-fail — it'll get picked up on the next
+	// single-row InsertTrade for the same asset (e.g. backfill
+	// subcommand). The hot batch path stays narrow.
 	return nil
 }
 
