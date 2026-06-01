@@ -1055,8 +1055,32 @@ completed); `upsert_subscription` → Postgres write failure;
 `account_update` → tier sync failure; `list_keys` / `key_update` →
 per-key rate-limit lift failure.
 
+### `ratesengine_markets_skipped_rows_total`
+
+Counter, no labels.
+
+Count of trades rows the `/v1/markets` scanner skipped because
+their `base_asset` / `quote_asset` failed to parse as canonical
+asset strings. The ingest pipeline only emits canonical asset
+codes, so any non-zero reading means something bypassed the
+normal write path (manual SQL insert, integration test residue,
+etc.) and the row should be cleaned up.
+
+**Any non-zero reading is alertable** — a single unparseable row
+used to 500 the entire `/v1/markets` surface and trip page-tier
+`api_error_rate_critical` + `slo_availability_burn_fast` alerts
+(2026-06-01 incident, one row with `base_asset='test'`). The
+handler now skips + bumps this counter instead of failing the
+whole response, but operators should still investigate + delete
+any row that increments this counter.
+
 ## Changelog
 
+- 2026-06-01 — added `ratesengine_markets_skipped_rows_total`
+  to surface non-canonical rows in the trades table that the
+  /v1/markets scanner is skipping. Closes the 2026-06-01
+  incident root cause (one stray test-row 500ed every markets
+  request).
 - 2026-05-27 — added postgres-pool resilience metrics
   (`ratesengine_postgres_ping_total` +
   `ratesengine_postgres_ping_failure_streak`) emitted by the

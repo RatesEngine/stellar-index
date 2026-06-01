@@ -15,6 +15,18 @@ against.
 
 ## [Unreleased]
 
+### Fixed
+
+- **/v1/markets no longer returns 500 on unparseable trades rows.**
+  A single stray row with `base_asset='test'` 500ed every markets
+  request on 2026-06-01, tripping page-tier `api_error_rate_critical`
+  + `slo_availability_burn_fast` until the row was hand-deleted.
+  The scanner now skips rows whose base/quote fail
+  `canonical.ParseAsset`, logs a WARN, and bumps the new
+  `ratesengine_markets_skipped_rows_total` counter so operators
+  can find and remove the offending row without serving 500s to
+  every consumer.
+
 ## [v0.5.0-rc.107] — 2026-06-01
 
 Tested against Stellar Protocol 23 (Whisk).

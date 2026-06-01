@@ -4,12 +4,14 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"log/slog"
 	"strings"
 	"time"
 
 	"github.com/lib/pq"
 
 	"github.com/RatesEngine/rates-engine/internal/canonical"
+	"github.com/RatesEngine/rates-engine/internal/obs"
 )
 
 // Market is one distinct (base, quote) pair summary with activity
@@ -464,7 +466,19 @@ func scanDistinctPairs(rows *sql.Rows, limit int) ([]Market, bool, error) {
 		}
 		m, err := buildMarketRow(baseRaw, quoteRaw, lastAt, bucketCloseAt, count24h, vol24hUSD)
 		if err != nil {
-			return nil, false, err
+			// Skip rows we can't parse rather than failing the whole
+			// response. A single malformed trades row (e.g. a manual
+			// insert with a non-canonical asset code) used to 500 the
+			// entire /v1/markets surface and trip page-tier alerts
+			// (2026-06-01 incident). The ingest pipeline only emits
+			// canonical asset strings, so reaching this branch means
+			// something bypassed the normal write path; surface it as
+			// a warning + counter so operators can find and remove it
+			// rather than serving a 500 to every consumer.
+			obs.MarketsSkippedRowsTotal.Inc()
+			slog.Default().Warn("markets: skipping unparseable trades row",
+				"base", baseRaw, "quote", quoteRaw, "err", err)
+			continue
 		}
 		if lastPrice.Valid && lastPrice.String != "" {
 			v := lastPrice.String

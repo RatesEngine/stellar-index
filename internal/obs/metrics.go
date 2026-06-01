@@ -99,6 +99,8 @@ func init() {
 
 		StripePlatformSyncErrorsTotal,
 
+		MarketsSkippedRowsTotal,
+
 		PostgresPingTotal,
 		PostgresPingFailureStreak,
 		TLSCertNotAfterUnix,
@@ -1468,4 +1470,22 @@ var StripePlatformSyncErrorsTotal = prometheus.NewCounterVec(
 		Help: "Stripe webhook platform-store side-effect failures, labelled by operation. Non-zero = bridge degraded; customer dashboard state drifting from Stripe billing state.",
 	},
 	[]string{"operation"},
+)
+
+// MarketsSkippedRowsTotal — count of trades rows the /v1/markets
+// scanner skipped because their base_asset / quote_asset failed
+// to parse as canonical asset strings. The ingest pipeline only
+// emits canonical asset codes, so any non-zero reading means
+// something bypassed the normal write path (manual SQL insert,
+// integration test residue, etc.). 2026-06-01 incident: a single
+// row with base_asset='test' tripped a page-tier api_error_rate
+// alert because the handler returned 500 on the unparseable row;
+// the handler now skips + bumps this counter instead, but a
+// rising value should still trigger a `DELETE FROM trades` clean-
+// up. Bounded label set (none) so the metric is always emitted.
+var MarketsSkippedRowsTotal = prometheus.NewCounter(
+	prometheus.CounterOpts{
+		Name: "ratesengine_markets_skipped_rows_total",
+		Help: "Count of trades rows skipped by the /v1/markets scanner because base/quote did not parse as canonical asset strings. Non-zero indicates non-pipeline writes; investigate and clean up.",
+	},
 )
