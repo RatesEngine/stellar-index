@@ -35,6 +35,16 @@ against.
   contract C here" is a *proven* quiet period, which is what lets the
   confidence signal stop guessing sparsity thresholds.
 
+- **Recognition check (ADR-0033 Phase 3 / Claim 2a).** New
+  `ratesengine-ops verify-recognition -from -to` pulls every distinct
+  `(contract_id, topic_0_sym)` shape from `soroban_events` and runs each
+  through the production decoder chain's real `Matches()` (no
+  hand-maintained topic list to drift). Any shape no decoder handles —
+  e.g. a topic a WASM upgrade added that we'd silently drop — is listed
+  and the command exits non-zero (cron/CI-gateable). Backed by
+  `dispatcher.Recognize` (side-effect-free), `Store.DistinctSorobanTopicSamples`,
+  and `internal/completeness.AuditRecognition`.
+
 ### Fixed
 
 - **`soroban_events` no longer silently drops events from multi-event

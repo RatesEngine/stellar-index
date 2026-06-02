@@ -178,6 +178,11 @@ func realMain() int { //nolint:gocyclo,gocognit,funlen // subcommand switch; eac
 			fmt.Fprintf(os.Stderr, "census-backfill: %v\n", err)
 			return 1
 		}
+	case "verify-recognition":
+		if err := verifyRecognition(args[1:]); err != nil {
+			fmt.Fprintf(os.Stderr, "verify-recognition: %v\n", err)
+			return 1
+		}
 	case "verify-external":
 		if err := verifyExternal(args[1:]); err != nil {
 			fmt.Fprintf(os.Stderr, "verify-external: %v\n", err)
@@ -649,6 +654,14 @@ Subcommands:
                           history so substrate continuity + hash-chain
                           checks cover [genesis, tip]. Idempotent
                           (ON CONFLICT DO UPDATE); checkpoints for resume.
+  verify-recognition -config PATH -from N -to N
+                          ADR-0033 Claim 2a: pull every distinct
+                          (contract, topic[0]) shape from soroban_events
+                          in the range and run each through the
+                          production decoder chain's Matches(). Lists any
+                          shape no decoder handles (a topic a WASM upgrade
+                          added that we'd silently drop) and exits non-zero
+                          if any exist. Cron/CI-gateable.
   seed-soroswap-pairs -config PATH [-rpc URL] [-timeout DUR]
                           Bootstrap the soroswap_pairs registry table
                           via stellar-rpc simulateTransaction. Walks the
