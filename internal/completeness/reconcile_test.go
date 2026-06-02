@@ -43,6 +43,20 @@ type fakeOutput struct{}
 func (fakeOutput) Source() string    { return "fake" }
 func (fakeOutput) EventKind() string { return "trade" }
 
+// twoKindDecoder emits one "x.trade" and one "x.liquidity" output per
+// matched event — the multi-table shape (one decoder, two destinations).
+type twoKindDecoder struct{}
+
+func (twoKindDecoder) Matches(ev events.Event) bool { return ev.ContractID == "MATCH" }
+func (twoKindDecoder) Decode(events.Event) ([]consumer.Event, error) {
+	return []consumer.Event{kindOutput("x.trade"), kindOutput("x.liquidity")}, nil
+}
+
+type kindOutput string
+
+func (k kindOutput) Source() string    { return "x" }
+func (k kindOutput) EventKind() string { return string(k) }
+
 func rowAt(ledger uint32, contractID string) sorobanevents.Row {
 	return sorobanevents.Row{
 		Ledger:          ledger,
@@ -78,6 +92,39 @@ func TestReDeriveOutputCounts(t *testing.T) {
 		if got[l] != w {
 			t.Errorf("ledger %d = %d, want %d", l, got[l], w)
 		}
+	}
+}
+
+func TestReDeriveOutputCountsByKind(t *testing.T) {
+	s := fakeStreamer{rows: []sorobanevents.Row{
+		rowAt(100, "MATCH"),   // → x.trade@100, x.liquidity@100
+		rowAt(100, "MATCH"),   // → x.trade@100, x.liquidity@100 (each kind = 2 @100)
+		rowAt(101, "NOMATCH"), // skipped
+		rowAt(102, "MATCH"),   // → x.trade@102, x.liquidity@102
+	}}
+	byKind, err := ReDeriveOutputCountsByKind(context.Background(), s, twoKindDecoder{}, nil, nil, 100, 102)
+	if err != nil {
+		t.Fatalf("ReDeriveOutputCountsByKind: %v", err)
+	}
+	if byKind["x.trade"][100] != 2 || byKind["x.trade"][102] != 1 {
+		t.Errorf("x.trade counts = %v, want {100:2,102:1}", byKind["x.trade"])
+	}
+	if byKind["x.liquidity"][100] != 2 || byKind["x.liquidity"][102] != 1 {
+		t.Errorf("x.liquidity counts = %v, want {100:2,102:1}", byKind["x.liquidity"])
+	}
+
+	// SumKinds projects to the table's kinds only — trades table sees
+	// only x.trade, not x.liquidity (the overcount bug this fixes).
+	trades := SumKinds(byKind, "x.trade")
+	if trades[100] != 2 || trades[102] != 1 || len(trades) != 2 {
+		t.Errorf("SumKinds(x.trade) = %v, want {100:2,102:1}", trades)
+	}
+	both := SumKinds(byKind, "x.trade", "x.liquidity")
+	if both[100] != 4 || both[102] != 2 {
+		t.Errorf("SumKinds(both) = %v, want {100:4,102:2}", both)
+	}
+	if len(SumKinds(byKind, "nonexistent.kind")) != 0 {
+		t.Error("SumKinds(unknown kind) should be empty")
 	}
 }
 

@@ -9,9 +9,6 @@ import (
 
 	"github.com/RatesEngine/rates-engine/internal/completeness"
 	"github.com/RatesEngine/rates-engine/internal/config"
-	"github.com/RatesEngine/rates-engine/internal/sources/aquarius"
-	"github.com/RatesEngine/rates-engine/internal/sources/comet"
-	"github.com/RatesEngine/rates-engine/internal/sources/phoenix"
 	"github.com/RatesEngine/rates-engine/internal/sources/soroswap"
 	"github.com/RatesEngine/rates-engine/internal/stellarrpc"
 	"github.com/RatesEngine/rates-engine/internal/storage/timescale"
@@ -66,39 +63,7 @@ func verifyReconciliation(args []string) error { //nolint:gocognit,gocyclo,funle
 
 	lo, hi := uint32(*from), uint32(*to)
 
-	// Build a reconciliation job per source. Each yields (expected,
-	// actual) per-ledger count maps; the diff + report is common.
-	type job struct {
-		name     string
-		expected func() (map[uint32]int, error)
-	}
-	soroswapDec := soroswap.NewDecoder()
-	sorobanJob := func(name string, dec completeness.Decoder) job {
-		return job{name: name, expected: func() (map[uint32]int, error) {
-			return completeness.ReDeriveOutputCounts(ctx, store, dec, nil, nil, lo, hi)
-		}}
-	}
-	jobs := []job{
-		sorobanJob("soroswap", soroswapDec),
-		sorobanJob("aquarius", aquarius.NewDecoder()),
-		sorobanJob("phoenix", phoenix.NewDecoder()),
-		sorobanJob("comet", comet.NewDecoder()),
-		{name: "sdex", expected: func() (map[uint32]int, error) {
-			// SDEX expected comes from the substrate census, which is
-			// only trustworthy where ledger_ingest_log is continuous.
-			gaps, gerr := store.FindLedgerIngestGaps(ctx, lo, hi)
-			if gerr != nil {
-				return nil, gerr
-			}
-			if len(gaps) > 0 {
-				return nil, fmt.Errorf("ledger_ingest_log has %d gap(s) in [%d,%d] — run `census-backfill` first (first gap %d-%d)",
-					len(gaps), lo, hi, gaps[0].Start, gaps[0].End)
-			}
-			return store.ClassicTradeEffectCountsByLedger(ctx, lo, hi)
-		}},
-	}
-
-	// Seed soroswap pairs so its re-derive resolves token identities.
+	catalogue, soroswapDec := buildReconciliationCatalogue(cfg)
 	if *only == "" || *only == "soroswap" {
 		if err := seedSoroswapForRecon(ctx, cfg, soroswapDec); err != nil {
 			fmt.Fprintf(os.Stderr, "verify-reconciliation: soroswap seed failed (%v) — soroswap counts may undercount pre-%d pairs\n", err, lo)
@@ -106,35 +71,57 @@ func verifyReconciliation(args []string) error { //nolint:gocognit,gocyclo,funle
 	}
 
 	anyGaps := false
-	for _, j := range jobs {
-		if *only != "" && j.name != *only {
+	for _, src := range catalogue {
+		if *only != "" && src.name != *only {
 			continue
 		}
-		expected, err := j.expected()
-		if err != nil {
-			return fmt.Errorf("%s: expected counts: %w", j.name, err)
-		}
-		actual, err := store.CountRowsByLedger(ctx, "trades", "ledger", "source='"+j.name+"'", lo, hi)
-		if err != nil {
-			return fmt.Errorf("%s: actual counts: %w", j.name, err)
-		}
-		gaps := completeness.ReconcileCounts(expected, actual)
-		expTotal, actTotal := sumCounts(expected), sumCounts(actual)
-		if len(gaps) == 0 {
-			fmt.Fprintf(os.Stderr, "verify-reconciliation: %-9s OK — expected=%d actual=%d across [%d,%d]\n",
-				j.name, expTotal, actTotal, lo, hi)
-			continue
-		}
-		anyGaps = true
-		fmt.Fprintf(os.Stderr, "verify-reconciliation: %-9s %d MISMATCHED ledger(s) (expected=%d actual=%d):\n",
-			j.name, len(gaps), expTotal, actTotal)
-		for i, g := range gaps {
-			if i >= *maxList {
-				_, _ = fmt.Fprintf(os.Stdout, "  … %d more (raise -max-list to see)\n", len(gaps)-*maxList)
-				break
+
+		// Re-derive once per source (bucketed by EventKind), or fetch the
+		// SDEX census; the per-target diff below projects the kinds for
+		// each table.
+		var byKind map[string]map[uint32]int
+		var censusExpected map[uint32]int
+		if src.census {
+			c, cerr := sdexCensusExpected(ctx, store, lo, hi)
+			if cerr != nil {
+				return fmt.Errorf("%s: %w", src.name, cerr)
 			}
-			_, _ = fmt.Fprintf(os.Stdout, "  source=%s ledger=%d expected=%d actual=%d (delta %+d)\n",
-				j.name, g.Ledger, g.Expected, g.Actual, g.Actual-g.Expected)
+			censusExpected = c
+		} else {
+			bk, derr := completeness.ReDeriveOutputCountsByKind(ctx, store, src.dec, src.contractIDs, src.topic0Syms, lo, hi)
+			if derr != nil {
+				return fmt.Errorf("%s: re-derive: %w", src.name, derr)
+			}
+			byKind = bk
+		}
+
+		for _, tgt := range src.targets {
+			expected := censusExpected
+			if !src.census {
+				expected = completeness.SumKinds(byKind, tgt.kinds...)
+			}
+			actual, aerr := store.CountRowsByLedger(ctx, tgt.table, "ledger", tgt.whereFilter, lo, hi)
+			if aerr != nil {
+				return fmt.Errorf("%s/%s: actual counts: %w", src.name, tgt.table, aerr)
+			}
+			gaps := completeness.ReconcileCounts(expected, actual)
+			label := src.name + "/" + tgt.table
+			expTotal, actTotal := sumCounts(expected), sumCounts(actual)
+			if len(gaps) == 0 {
+				fmt.Fprintf(os.Stderr, "verify-reconciliation: %-28s OK — expected=%d actual=%d\n", label, expTotal, actTotal)
+				continue
+			}
+			anyGaps = true
+			fmt.Fprintf(os.Stderr, "verify-reconciliation: %-28s %d MISMATCHED ledger(s) (expected=%d actual=%d):\n",
+				label, len(gaps), expTotal, actTotal)
+			for i, g := range gaps {
+				if i >= *maxList {
+					_, _ = fmt.Fprintf(os.Stdout, "  … %d more (raise -max-list to see)\n", len(gaps)-*maxList)
+					break
+				}
+				_, _ = fmt.Fprintf(os.Stdout, "  %s ledger=%d expected=%d actual=%d (delta %+d)\n",
+					label, g.Ledger, g.Expected, g.Actual, g.Actual-g.Expected)
+			}
 		}
 	}
 
@@ -142,6 +129,21 @@ func verifyReconciliation(args []string) error { //nolint:gocognit,gocyclo,funle
 		return fmt.Errorf("projection reconciliation found mismatches — see above (ADR-0033 Claim 2b)")
 	}
 	return nil
+}
+
+// sdexCensusExpected returns the SDEX per-ledger expected trade count
+// from the LCM census, guarded on ledger_ingest_log fully covering the
+// range (else the census is incomplete and reads as false gaps).
+func sdexCensusExpected(ctx context.Context, store *timescale.Store, lo, hi uint32) (map[uint32]int, error) {
+	gaps, err := store.FindLedgerIngestGaps(ctx, lo, hi)
+	if err != nil {
+		return nil, err
+	}
+	if len(gaps) > 0 {
+		return nil, fmt.Errorf("ledger_ingest_log has %d gap(s) in [%d,%d] — run `census-backfill` first (first gap %d-%d)",
+			len(gaps), lo, hi, gaps[0].Start, gaps[0].End)
+	}
+	return store.ClassicTradeEffectCountsByLedger(ctx, lo, hi)
 }
 
 func sumCounts(m map[uint32]int) int {

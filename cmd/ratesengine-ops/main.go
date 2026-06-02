@@ -678,9 +678,11 @@ Subcommands:
                           the real decoder) and diff per ledger against the
                           trades table. Lists ledgers where projected rows
                           went missing (or phantom rows appeared) and exits
-                          non-zero. Covers soroswap/aquarius/phoenix/comet
-                          (re-derive) + sdex (LCM census). Seeds soroswap
-                          pairs via RPC for accurate decode.
+                          non-zero. Covers every per-ledger source —
+                          trades (soroswap/aquarius/phoenix/comet), oracles
+                          (reflector/redstone), cctp/rozo/defindex, blend's
+                          four tables (re-derive bucketed by EventKind), and
+                          sdex (LCM census). Seeds soroswap pairs via RPC.
   compute-completeness -config PATH [-to N] [-source S]
                           ADR-0033 Phase 6: compute the per-source
                           completeness WATERMARK (substrate continuity +

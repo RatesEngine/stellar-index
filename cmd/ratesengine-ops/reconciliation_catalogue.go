@@ -1,0 +1,130 @@
+package main
+
+import (
+	"github.com/RatesEngine/rates-engine/internal/completeness"
+	"github.com/RatesEngine/rates-engine/internal/config"
+	"github.com/RatesEngine/rates-engine/internal/sources/aquarius"
+	"github.com/RatesEngine/rates-engine/internal/sources/blend"
+	"github.com/RatesEngine/rates-engine/internal/sources/cctp"
+	"github.com/RatesEngine/rates-engine/internal/sources/comet"
+	"github.com/RatesEngine/rates-engine/internal/sources/defindex"
+	"github.com/RatesEngine/rates-engine/internal/sources/phoenix"
+	"github.com/RatesEngine/rates-engine/internal/sources/redstone"
+	"github.com/RatesEngine/rates-engine/internal/sources/reflector"
+	"github.com/RatesEngine/rates-engine/internal/sources/rozo"
+	"github.com/RatesEngine/rates-engine/internal/sources/soroswap"
+)
+
+// reconTarget is one protocol table a source writes, plus the
+// EventKinds that route to it. Re-derive counts ONLY these kinds for
+// this table (a multi-table source like soroswap/phoenix/comet/blend
+// routes different kinds to different tables; counting all outputs
+// would overcount any single table).
+type reconTarget struct {
+	table       string
+	whereFilter string   // "" = whole table belongs to this source
+	kinds       []string // EventKind() values routing here; nil for census (sdex)
+}
+
+// reconSource is one source's reconciliation spec (ADR-0033 Claim 2b).
+type reconSource struct {
+	name        string
+	dec         completeness.Decoder // nil for census-only sources (sdex)
+	contractIDs []string             // SQL prefilter (oracles); empty = match-by-topic
+	topic0Syms  []string
+	targets     []reconTarget
+	census      bool   // sdex: expected = ledger_ingest_log.classic_trade_effect_count
+	genesis     uint32 // first-possible-data ledger; mirrors DefaultGapDetectorTargets (WASM-audit sourced)
+}
+
+// buildReconciliationCatalogue assembles the per-source reconciliation
+// set and returns the soroswap decoder separately so the caller can
+// seed its pair registry (its swap event omits token identities).
+//
+// Scope: every source whose decoder matches by TOPIC (so a soroban_events
+// re-derive reproduces it) or by a REAL contract address (oracles), plus
+// sdex via the LCM census. Deliberately EXCLUDED, with reasons:
+//   - sep41-transfers / sep41-supply: their decoders gate Matches() on a
+//     watched-contract list (the projector passes a synthetic identity),
+//     so a re-derive would reject every real event. They need either the
+//     real watched set or topic-based matching first.
+//   - band: event-less ContractCallDecoder (no soroban_events) — needs a
+//     band-specific census like sdex.
+//   - soroswap-router: event-less; reconciled from raw ledger meta, not
+//     soroban_events.
+func buildReconciliationCatalogue(cfg config.Config) ([]reconSource, *soroswap.Decoder) {
+	soroswapDec := soroswap.NewDecoder()
+
+	// genesis values mirror DefaultGapDetectorTargets (WASM-audit sourced).
+	cat := []reconSource{
+		{name: "soroswap", genesis: 50_746_266, dec: soroswapDec, targets: []reconTarget{
+			{"trades", "source = 'soroswap'", []string{"soroswap.trade"}},
+			{"soroswap_skim_events", "", []string{"soroswap.skim"}},
+		}},
+		{name: "aquarius", genesis: 52_728_375, dec: aquarius.NewDecoder(), targets: []reconTarget{
+			{"trades", "source = 'aquarius'", []string{"aquarius.trade"}},
+		}},
+		{name: "phoenix", genesis: 51_572_016, dec: phoenix.NewDecoder(), targets: []reconTarget{
+			{"trades", "source = 'phoenix'", []string{"phoenix.trade"}},
+			{"phoenix_liquidity", "", []string{"phoenix.liquidity"}},
+			{"phoenix_stake_events", "", []string{"phoenix.stake"}},
+		}},
+		{name: "comet", genesis: 51_499_546, dec: comet.NewDecoder(), targets: []reconTarget{
+			{"trades", "source = 'comet'", []string{"comet.trade"}},
+			{"comet_liquidity", "", []string{"comet.liquidity"}},
+		}},
+		{name: "cctp", genesis: 62_403_000, dec: cctp.NewDecoder(), targets: []reconTarget{
+			{"cctp_events", "", []string{"cctp.event"}},
+		}},
+		{name: "rozo", genesis: 62_403_000, dec: rozo.NewDecoder(), targets: []reconTarget{
+			{"rozo_events", "", []string{"rozo.event"}},
+		}},
+		{name: "defindex", genesis: 57_056_338, dec: defindex.NewDecoder(), targets: []reconTarget{
+			// Computed kinds: "defindex.{strategy,vault}.{deposit,withdraw}"
+			// (defindex.Event / VaultEvent EventKind()). Both layers land
+			// in defindex_flows (layer discriminator column).
+			{"defindex_flows", "", []string{
+				"defindex.strategy.deposit", "defindex.strategy.withdraw",
+				"defindex.vault.deposit", "defindex.vault.withdraw",
+			}},
+		}},
+		{name: "blend", genesis: 51_499_546, dec: blend.NewDecoder(), targets: []reconTarget{
+			{"blend_auctions", "", []string{blend.NewAuctionEventKind, blend.FillAuctionEventKind, blend.DeleteAuctionEventKind}},
+			{"blend_positions", "", []string{blend.PositionEventKind}},
+			{"blend_emissions", "", []string{blend.EmissionEventKind}},
+			{"blend_admin", "", []string{blend.AdminEventKind}},
+		}},
+		{name: "sdex", genesis: 2, census: true, targets: []reconTarget{
+			{"trades", "source = 'sdex'", nil},
+		}},
+	}
+
+	// Oracle sources: decoder needs a real contract address; include only
+	// when configured. The contract prefilter also makes the re-derive
+	// fast (uses the soroban_events contract index).
+	if a := cfg.Oracle.Reflector.DEXContract; a != "" {
+		cat = append(cat, reconSource{
+			name: "reflector-dex", genesis: 50_644_229, dec: reflector.NewDecoder(reflector.VariantDEX, a), contractIDs: []string{a},
+			targets: []reconTarget{{"oracle_updates", "source = 'reflector-dex'", []string{"reflector.update"}}},
+		})
+	}
+	if a := cfg.Oracle.Reflector.CEXContract; a != "" {
+		cat = append(cat, reconSource{
+			name: "reflector-cex", genesis: 50_644_239, dec: reflector.NewDecoder(reflector.VariantCEX, a), contractIDs: []string{a},
+			targets: []reconTarget{{"oracle_updates", "source = 'reflector-cex'", []string{"reflector.update"}}},
+		})
+	}
+	if a := cfg.Oracle.Reflector.FXContract; a != "" {
+		cat = append(cat, reconSource{
+			name: "reflector-fx", genesis: 56_733_481, dec: reflector.NewDecoder(reflector.VariantFX, a), contractIDs: []string{a},
+			targets: []reconTarget{{"oracle_updates", "source = 'reflector-fx'", []string{"reflector.update"}}},
+		})
+	}
+	if a := cfg.Oracle.Redstone.AdapterContract; a != "" {
+		cat = append(cat, reconSource{
+			name: "redstone", genesis: 58_758_722, dec: redstone.NewDecoder(a), contractIDs: []string{a},
+			targets: []reconTarget{{"oracle_updates", "source = 'redstone'", []string{"redstone.update"}}},
+		})
+	}
+	return cat, soroswapDec
+}

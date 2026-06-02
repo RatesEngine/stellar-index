@@ -79,6 +79,22 @@ against.
   pins it — so it is the honest 100%-confidence signal. `MinGapSizeOverride`
   is now documented as alerting-cadence only, off the confidence path.
 
+- **Projection reconciliation extended to all per-ledger sources +
+  multi-output fix (ADR-0033 future work).** `verify-reconciliation` and
+  `compute-completeness` now drive off a shared catalogue covering every
+  source that writes a per-ledger table — trades (soroswap/aquarius/
+  phoenix/comet), oracles (reflector ×3 / redstone), cctp/rozo/defindex,
+  and blend's four tables — plus sdex via the LCM census. The re-derive
+  now buckets outputs by `EventKind()` (`ReDeriveOutputCountsByKind` +
+  `SumKinds`) and reconciles **each table against only the kinds that
+  route to it** — fixing a latent overcount where multi-output sources
+  (soroswap/phoenix/comet also emit skim/liquidity/stake events to other
+  tables) were compared whole against `trades` alone. Recognition gaps
+  are now attributed per-source for contract-pinned sources (oracles),
+  with a system `recognition` snapshot for gaps on unowned contracts.
+  (sep41/band/soroswap-router remain out of scope — documented in the
+  catalogue.) Also chunk-prunes those queries via `SorobanEventsTimeBound`.
+
 ### Fixed
 
 - **`soroban_events` no longer silently drops events from multi-event

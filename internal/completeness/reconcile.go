@@ -87,6 +87,66 @@ func ReDeriveOutputCounts(
 	return counts, nil
 }
 
+// ReDeriveOutputCountsByKind is the multi-table generalization of
+// ReDeriveOutputCounts: it returns the re-derived output counts keyed by
+// the output's EventKind(), then by ledger. A single decoder routes
+// different output kinds to different tables (soroswap emits
+// "soroswap.trade" → trades AND "soroswap.skim" → soroswap_skim_events;
+// blend emits five kinds across four tables), so reconciliation per
+// table must count ONLY the kinds that land in that table — counting
+// every output would overcount any table that receives a subset.
+//
+// Stream once per source; SumKinds then projects the kinds for each
+// target table. Same soft-fail semantics as ReDeriveOutputCounts.
+func ReDeriveOutputCountsByKind(
+	ctx context.Context,
+	s SorobanEventStreamer,
+	dec Decoder,
+	contractIDs, topic0Syms []string,
+	from, to uint32,
+) (map[string]map[uint32]int, error) {
+	byKind := make(map[string]map[uint32]int)
+	err := s.StreamSorobanEvents(ctx, from, to, contractIDs, topic0Syms,
+		func(row sorobanevents.Row) error {
+			ev, rerr := sorobanevents.Reconstruct(row)
+			if rerr != nil {
+				return nil //nolint:nilerr // soft-fail like the projector.
+			}
+			if !dec.Matches(ev) {
+				return nil
+			}
+			outs, derr := dec.Decode(ev)
+			if derr != nil {
+				return nil //nolint:nilerr // deterministically-broken row; skip.
+			}
+			for _, out := range outs {
+				k := out.EventKind()
+				if byKind[k] == nil {
+					byKind[k] = make(map[uint32]int)
+				}
+				byKind[k][row.Ledger]++
+			}
+			return nil
+		})
+	if err != nil {
+		return nil, err
+	}
+	return byKind, nil
+}
+
+// SumKinds projects a by-kind count map down to a single per-ledger
+// count over the given EventKinds — the expected row count for the
+// table those kinds route to.
+func SumKinds(byKind map[string]map[uint32]int, kinds ...string) map[uint32]int {
+	out := make(map[uint32]int)
+	for _, k := range kinds {
+		for ledger, c := range byKind[k] {
+			out[ledger] += c
+		}
+	}
+	return out
+}
+
 // ReconcileCounts diffs expected (decoder re-derive) against actual
 // (protocol-table rows) per ledger and returns every ledger where they
 // disagree, sorted ascending. An empty result means every ledger the
