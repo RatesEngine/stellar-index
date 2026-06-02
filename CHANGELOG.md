@@ -45,6 +45,17 @@ against.
   `dispatcher.Recognize` (side-effect-free), `Store.DistinctSorobanTopicSamples`,
   and `internal/completeness.AuditRecognition`.
 
+- **Projection reconciliation (ADR-0033 Phase 4 / Claim 2b).** New
+  `ratesengine-ops verify-reconciliation -from -to [-source S]`
+  re-derives, per ledger, how many `trades` rows the real decoder would
+  emit from `soroban_events` (deterministic recomputation) and diffs
+  that against the rows actually present — localizing any projector drop
+  (or phantom row) to an exact ledger. Covers soroswap/aquarius/phoenix/
+  comet (seeds soroswap pairs via RPC). Backed by
+  `completeness.ReDeriveOutputCounts` / `ReconcileCounts` and
+  `Store.CountRowsByLedger`. Correlation sources reconcile correctly
+  because each logical record's events share one (ledger, tx, op).
+
 ### Fixed
 
 - **`soroban_events` no longer silently drops events from multi-event

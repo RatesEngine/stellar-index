@@ -183,6 +183,11 @@ func realMain() int { //nolint:gocyclo,gocognit,funlen // subcommand switch; eac
 			fmt.Fprintf(os.Stderr, "verify-recognition: %v\n", err)
 			return 1
 		}
+	case "verify-reconciliation":
+		if err := verifyReconciliation(args[1:]); err != nil {
+			fmt.Fprintf(os.Stderr, "verify-reconciliation: %v\n", err)
+			return 1
+		}
 	case "verify-external":
 		if err := verifyExternal(args[1:]); err != nil {
 			fmt.Fprintf(os.Stderr, "verify-external: %v\n", err)
@@ -662,6 +667,14 @@ Subcommands:
                           shape no decoder handles (a topic a WASM upgrade
                           added that we'd silently drop) and exits non-zero
                           if any exist. Cron/CI-gateable.
+  verify-reconciliation -config PATH -from N -to N [-source S] [-max-list N]
+                          ADR-0033 Claim 2b: re-derive how many trades
+                          each soroban_events range WOULD produce (running
+                          the real decoder) and diff per ledger against the
+                          trades table. Lists ledgers where projected rows
+                          went missing (or phantom rows appeared) and exits
+                          non-zero. Covers soroswap/aquarius/phoenix/comet
+                          (seeds soroswap pairs via RPC for accurate decode).
   seed-soroswap-pairs -config PATH [-rpc URL] [-timeout DUR]
                           Bootstrap the soroswap_pairs registry table
                           via stellar-rpc simulateTransaction. Walks the
