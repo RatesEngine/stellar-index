@@ -106,9 +106,12 @@ against.
   by `ON CONFLICT`. They now fan out via `canonical.FanoutOpIndex(op,
   event_index)` (op in the high 16 bits, the Phase-1 event_index in the
   low 16), matching the stride pattern SDEX already used. Forward fix;
-  historical aquarius/comet trades in collided ops need re-backfill
-  (delete-then-replay) to recover. (soroswap/phoenix group by
-  (ledger,tx,op) and need separate multi-hop analysis — not changed.)
+  historical collided ops need re-backfill (delete-then-replay) to
+  recover. **soroswap** now also fanned out (via the swap event's index
+  from the correlation buffer's `RawPair.Swap`). **phoenix** is still
+  pending: its 8-field `RawSwap` buffer may *merge* two swaps in one op
+  (router multi-hop) rather than just collide, so it needs buffer
+  analysis before the same fanout is applied.
 
 - **`soroban_events` no longer silently drops events from multi-event
   operations.** `event_index` was hardcoded to 0 at capture, so every
