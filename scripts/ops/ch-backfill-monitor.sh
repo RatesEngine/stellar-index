@@ -22,6 +22,7 @@ LOG=${LOG:-/var/log/ch-full-backfill.log}
 DRIVER_PAT=${DRIVER_PAT:-ch-full-backfill.sh}
 INTERVAL=${INTERVAL:-300}
 MIN_FREE_TIB=${MIN_FREE_TIB:-2.0}
+STEP=${STEP:-10}   # emit a progress line every STEP completed windows (plus the last)
 
 total_windows=$(( (TO - FROM + WINDOW) / WINDOW ))
 last_done=-1
@@ -46,12 +47,15 @@ $out
 EOF
 
   free_tib=$(awk -v b="${free:-0}" 'BEGIN{printf "%.2f", b/1099511627776}')
-  # Only emit a progress line when a window actually completes (≈one per
-  # window, not one per poll) — keeps notifications proportional over a
-  # multi-day run. Alerts + terminal states below always emit.
+  # Emit a progress line only at every STEP-th completed window (and the
+  # final one) — keeps notifications to a handful of milestones over a
+  # multi-day run instead of one per window. Alerts + terminal states below
+  # always emit, regardless of STEP.
   if [ "${done:-0}" != "$last_done" ]; then
-    echo "PROGRESS windows=${done:-0}/${total_windows} at=[${cur:-?}] lake=${lake:-?} pool_free=${free_tib}TiB driver_alive=${alive:-0}"
     last_done=${done:-0}
+    if [ "$(( done % STEP ))" -eq 0 ] || [ "${done:-0}" -ge "$total_windows" ]; then
+      echo "PROGRESS windows=${done:-0}/${total_windows} at=[${cur:-?}] lake=${lake:-?} pool_free=${free_tib}TiB driver_alive=${alive:-0}"
+    fi
   fi
 
   # Disk-pressure guard — the CH lake shares the ZFS pool with Postgres + MinIO.
