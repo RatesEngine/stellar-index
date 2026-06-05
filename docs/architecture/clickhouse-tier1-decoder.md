@@ -113,9 +113,22 @@ sparse early history — 169 B/l vs 246 KB/l, a 1456× span — is why the real
 figure is far lower.) Throughput: sparse early history ~4400 ledgers/s @
 `-parallel 8`; dense recent ~50 ledgers/s/worker.
 
-**Gate 2 — completeness:** ran on the 100k sample after re-backfill with the
-`CreatePassiveSellOfferResult` fix (1447 passive offers in range); FINAL/deduped
-CH counts vs the census oracle. (Result recorded on completion.)
+**Gate 2 — completeness: PASS.** Ran on the 100k sample after re-backfill with
+the `CreatePassiveSellOfferResult` fix (1447 passive offers in range);
+FINAL/deduped CH counts vs the census oracle. All 100,001 ledgers present;
+every count equals the census AND the actual CH row count:
+
+| count | census = CH-stored = CH-rows |
+|---|---|
+| transactions | 39,648,227 |
+| operations | 90,249,651 |
+| contract_events | 64,234,680 |
+| classic_trades | 11,768,315 (the count the passive-offer bug undercounted) |
+
+`extractor vs census: OK` on all 100,001 ledgers. (The command's *auto* linear
+footprint projection is unreliable once the lake holds mixed-density ranges —
+its denominator averages dense bytes over sparse early ledgers; use the §6.1
+per-era integration instead.)
 
 **Note — `ledger_entry_changes` deferred.** The footprint + both gates cover
 the 5 structural tables. Adding state-delta capture (the 6th table) would
