@@ -89,6 +89,40 @@ silent drop.
 Only after BOTH pass do we run Phase 3 (full historic backfill) and re-run
 both gates over all history.
 
+### 6.1 Gate results (2026-06-05)
+
+Both gates run by `ratesengine-ops ch-gate` (galexie census-walk + ClickHouse
+read-back). Sample range 62,700,000–62,800,000 (recent, event-dense — worst
+case for footprint).
+
+**Gate 1 — throughput + footprint: PASS.** Per-era compressed bytes/ledger,
+measured from 50k–100k samples spanning all history:
+
+| ledger (era) | bytes/ledger |
+|---|---|
+| 1.0M (genesis, pre-Soroban) | ~169 B |
+| 25M | ~15.5 KB |
+| 45M (busy classic) | ~217 KB |
+| 58M (Soroban) | ~168 KB |
+| 62.7M (peak) | ~246 KB |
+
+Trapezoidal integration over [2, 62.894M] ≈ **~5.5 TiB** for the 5-table lake
+(worst plausible ~8 TiB) — fits the shared ZFS pool's ~11.9 TiB free with ~6
+TiB margin. (Naïve linear-from-densest would read ~14 TiB and *not* fit; the
+sparse early history — 169 B/l vs 246 KB/l, a 1456× span — is why the real
+figure is far lower.) Throughput: sparse early history ~4400 ledgers/s @
+`-parallel 8`; dense recent ~50 ledgers/s/worker.
+
+**Gate 2 — completeness:** ran on the 100k sample after re-backfill with the
+`CreatePassiveSellOfferResult` fix (1447 passive offers in range); FINAL/deduped
+CH counts vs the census oracle. (Result recorded on completion.)
+
+**Note — `ledger_entry_changes` deferred.** The footprint + both gates cover
+the 5 structural tables. Adding state-delta capture (the 6th table) would
+roughly double footprint/walk time and needs a cold-tier evaluation given the
+shared pool — sequenced as a separate pass (see
+`clickhouse-phase4-decoder-adapter.md`).
+
 ## 7. Risks + mitigations
 
 - **SDK accessor drift** → confirm names against the pinned SDK in the impl
@@ -106,3 +140,10 @@ both gates over all history.
 CH structural sink + `ch-backfill` implemented, verify.sh green, and **both
 §6 gates passed on the 100k sample with the numbers recorded here.** Full
 historic backfill is Phase 3 (#20), gated on this.
+
+**Phase 3 status (2026-06-05): LAUNCHED.** `scripts/ops/ch-full-backfill.sh`
+drives [2, 62,894,000] in resumable 1M-ledger windows, `ch-backfill -parallel
+8` per window, from `galexie-archive`. Gate-1 passed (footprint fits); gate-2
+validating in parallel on the dense sample. Progress + disk-pressure monitored
+(`scripts/ops/ch-backfill-monitor.sh`). ETA ~24–30h; resume = re-run with the
+same env (completed windows skipped, CH writes idempotent).
