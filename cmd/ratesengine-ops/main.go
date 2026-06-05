@@ -183,6 +183,11 @@ func realMain() int { //nolint:gocyclo,gocognit,funlen // subcommand switch; eac
 			fmt.Fprintf(os.Stderr, "ch-backfill: %v\n", err)
 			return 1
 		}
+	case "ch-gate":
+		if err := chGate(args[1:]); err != nil {
+			fmt.Fprintf(os.Stderr, "ch-gate: %v\n", err)
+			return 1
+		}
 	case "verify-recognition":
 		if err := verifyRecognition(args[1:]); err != nil {
 			fmt.Fprintf(os.Stderr, "verify-recognition: %v\n", err)
@@ -669,6 +674,24 @@ Subcommands:
                           history so substrate continuity + hash-chain
                           checks cover [genesis, tip]. Idempotent
                           (ON CONFLICT DO UPDATE); checkpoints for resume.
+  ch-backfill -config PATH -from N -to N [-bucket NAME] [-ch-addr H:P] [-flush-every N] [-parallel N]
+                          ADR-0034 Phase 2: structurally decode [from,to]
+                          from galexie into the ClickHouse stellar.* Tier-1
+                          tables (ledgers/txs/ops/op_results/contract_events).
+                          Decoder-independent; retains raw XDR. Idempotent
+                          (ReplacingMergeTree), so re-running a range is safe.
+                          -parallel N runs N concurrent range-walkers (each
+                          its own Sink) — the throughput unlock for the full
+                          historic backfill.
+  ch-gate -config PATH -from N -to N [-bucket NAME] [-ch-addr H:P] [-project-to TIP]
+                          ADR-0034 Phase 2 §6 gates over a backfilled range:
+                          recompute the census + structural extract from
+                          galexie, assert extract==census, then read the
+                          range back from ClickHouse and assert STORED and
+                          ACTUAL row counts both equal the census. Reports
+                          compressed bytes/ledger + full-history projection
+                          and walk throughput. Writes nothing; exits non-zero
+                          if the completeness gate fails.
   verify-recognition -config PATH -from N -to N
                           ADR-0033 Claim 2a: pull every distinct
                           (contract, topic[0]) shape from soroban_events
