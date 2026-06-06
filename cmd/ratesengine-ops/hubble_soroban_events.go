@@ -18,7 +18,7 @@ import (
 // ─── ratesengine-ops hubble-soroban-events ─────────────────────────
 //
 // Per-ledger event-count primitive against
-// `hubble-public.crypto_stellar.history_contract_events` for a
+// `crypto-stellar.crypto_stellar.history_contract_events` for a
 // specified set of contract IDs, with an optional topic[0]/topic[1]
 // filter.
 //
@@ -204,9 +204,14 @@ func buildSorobanEventsQuery(
 	contracts []string,
 	topic0, topic1 string,
 ) (string, []bigquery.QueryParameter) {
-	q := "SELECT closed_at, ledger_sequence AS ledger, COUNT(*) AS n " +
-		"FROM `hubble-public.crypto_stellar.history_contract_events` " +
+	// COUNT(DISTINCT contract_event_xdr): Hubble's history_contract_events can
+	// carry duplicate rows from overlapping batch loads (observed 2× on some
+	// ranges), so a raw COUNT(*) over-reports. Dedup by the event's raw XDR —
+	// its identity — to match our one-row-per-event ClickHouse lake.
+	q := "SELECT closed_at, ledger_sequence AS ledger, COUNT(DISTINCT contract_event_xdr) AS n " +
+		"FROM `crypto-stellar.crypto_stellar.history_contract_events` " +
 		"WHERE ledger_sequence BETWEEN @from AND @to " +
+		"  AND type_string = 'ContractEventTypeContract' " +
 		"  AND contract_id IN UNNEST(@contracts) "
 
 	params := []bigquery.QueryParameter{

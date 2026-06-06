@@ -97,3 +97,8 @@ service-account*.json
 /.claude/
 /docs/reference/api/postman-collection.json
 /.wrangler/
+
+# GCP / BigQuery service-account keys — credentials, NEVER commit
+rates-engine-data-validation-*.json
+*.iam.gserviceaccount.com.json
+gcp-key*.json
