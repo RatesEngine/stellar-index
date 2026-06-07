@@ -44,10 +44,16 @@ type TableFootprint struct {
 // openRead dials ClickHouse for read-only gate queries.
 func openRead(ctx context.Context, addr string) (driver.Conn, error) {
 	conn, err := clickhouse.Open(&clickhouse.Options{
-		Addr:            []string{addr},
-		Auth:            clickhouse.Auth{Database: "stellar"},
-		Settings:        clickhouse.Settings{"max_execution_time": 0},
-		DialTimeout:     10 * time.Second,
+		Addr:        []string{addr},
+		Auth:        clickhouse.Auth{Database: "stellar"},
+		Settings:    clickhouse.Settings{"max_execution_time": 0},
+		DialTimeout: 10 * time.Second,
+		// ReadTimeout is per network read, not per query. A FINAL stream over a
+		// whole 1M-ledger partition can stall between blocks (merge compute) or
+		// while the consumer is busy writing each event to Postgres; the default
+		// (~5 min) trips with "i/o timeout" mid-stream. 1h tolerates the longest
+		// inter-block gap for full-history reprojection windows.
+		ReadTimeout:     time.Hour,
 		MaxOpenConns:    2,
 		MaxIdleConns:    1,
 		ConnMaxLifetime: time.Hour,

@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/RatesEngine/rates-engine/internal/config"
+	"github.com/RatesEngine/rates-engine/internal/consumer"
 	"github.com/RatesEngine/rates-engine/internal/dispatcher"
 	"github.com/RatesEngine/rates-engine/internal/events"
 	"github.com/RatesEngine/rates-engine/internal/pipeline"
@@ -98,7 +99,14 @@ func chRebuild(args []string) error { //nolint:gocognit,gocyclo,funlen // linear
 
 	written := map[string]int{} // source name -> events written (or counted in dry-run)
 
-	// ─── Event-based pass ────────────────────────────────────────────────
+	// Buffer decoded events during the CH stream, then write to Postgres AFTER
+	// the stream closes. Holding the CH FINAL stream open across slow per-row PG
+	// writes trips the client read timeout mid-stream; decoupling read from
+	// write keeps the CH connection short-lived. Windows are partition-aligned
+	// (1M) so a window's decoded set stays bounded in memory.
+	var buf []consumer.Event
+
+	// ─── Event-based pass (read → buffer) ────────────────────────────────
 	evStart := time.Now()
 	cherr := clickhouse.StreamContractEvents(ctx, *chAddr, lo, hi, func(ev events.Event) error {
 		for _, src := range cat {
@@ -115,21 +123,17 @@ func chRebuild(args []string) error { //nolint:gocognit,gocyclo,funlen // linear
 			if derr != nil {
 				continue // soft-fail, mirroring the projector + live path
 			}
-			for _, out := range outs {
-				if *write {
-					pipeline.HandleEvent(ctx, logger, store, out)
-				}
-				written[src.name]++
-			}
+			buf = append(buf, outs...)
 		}
 		return nil
 	})
 	if cherr != nil {
 		return fmt.Errorf("ch-rebuild: event stream: %w", cherr)
 	}
-	fmt.Fprintf(os.Stderr, "ch-rebuild: event pass done in %s\n", time.Since(evStart).Round(time.Second))
+	fmt.Fprintf(os.Stderr, "ch-rebuild: event read done in %s (%d events buffered)\n",
+		time.Since(evStart).Round(time.Second), len(buf))
 
-	// ─── SDEX op-based pass (opt-in) ─────────────────────────────────────
+	// ─── SDEX op-based pass (opt-in; read → buffer) ──────────────────────
 	if *includeSDEX && enabled("sdex") {
 		sdexDec := sdex.NewDecoder()
 		sStart := time.Now()
@@ -144,18 +148,25 @@ func chRebuild(args []string) error { //nolint:gocognit,gocyclo,funlen // linear
 				Op:       op.Op,
 				OpResult: op.OpResult,
 			})
-			for _, out := range outs {
-				if *write {
-					pipeline.HandleEvent(ctx, logger, store, out)
-				}
-				written["sdex"]++
-			}
+			buf = append(buf, outs...)
 			return nil
 		})
 		if serr != nil {
 			return fmt.Errorf("ch-rebuild: sdex op stream: %w", serr)
 		}
-		fmt.Fprintf(os.Stderr, "ch-rebuild: SDEX op pass done in %s\n", time.Since(sStart).Round(time.Second))
+		fmt.Fprintf(os.Stderr, "ch-rebuild: SDEX read done in %s\n", time.Since(sStart).Round(time.Second))
+	}
+
+	// ─── write the buffered events to Postgres ───────────────────────────
+	wStart := time.Now()
+	for _, ev := range buf {
+		if *write {
+			pipeline.HandleEvent(ctx, logger, store, ev)
+		}
+		written[ev.Source()]++
+	}
+	if *write {
+		fmt.Fprintf(os.Stderr, "ch-rebuild: wrote %d events in %s\n", len(buf), time.Since(wStart).Round(time.Second))
 	}
 
 	// ─── report ──────────────────────────────────────────────────────────
