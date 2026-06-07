@@ -1,6 +1,6 @@
 ---
 title: Phase 4 design — ClickHouse → decoder input adapter (re-derive Postgres)
-last_verified: 2026-06-05
+last_verified: 2026-06-07
 status: design
 ---
 
@@ -130,6 +130,59 @@ Tooling note: each oracle variant shares one `EventKind` but routes under a
 distinct source filter, so `ch-reproject` buckets re-derived output **per
 source** (and applies each source's `contractIDs` prefilter) — otherwise the
 three reflector variants merge into one count.
+
+## 4b. Execution (2026-06-07): served-tier shape + clean-slate rebuild
+
+**Served-tier shape (the right-sizing decision).** Data is split by access
+pattern:
+
+| data | home | why |
+|---|---|---|
+| CAGGs `prices_1m…1mo` | Postgres, **all history** | small, hot; the pricing API serves them; the Go aggregator + Timescale policy chain live here |
+| raw `trades` | Postgres, **90-day window** (original ADR-0006 design) | enough for live VWAP/OHLC recompute (largest bucket = 1mo) + recent per-trade API |
+| all 2.9 B raw trades + events + ops | **ClickHouse** | protocol deep-dives, full explorer, historical-raw — the tier built for it |
+| protocol entity tables | Postgres, rebuilt clean from CH | hot served entities; full event-level history in CH |
+
+The 0031 "preserve every raw trade forever" intent is honoured **by ClickHouse**
+(it holds all 2.9 B raw trades, completeness-certified) — Postgres is right-sized
+so the rebuild stays tractable and the OLTP-for-OLAP scale wall stays gone.
+
+**The clean-slate finding (why a repair/upsert is WRONG for trades).** The live
+AMM/projected trades were written through the collision-era `event_index = 0`
+bug (the "Phoenix 8 → 1" silent-loss), so their `op_index` fanout — and thus the
+trades PK `(source, ledger, tx_hash, op_index, ts)` — **differs from the correct
+CH re-derivation.** Empirically (62.70–62.71 M): an additive `ch-rebuild -write`
+*doubled* `aquarius` (1947 → 5090) because `ON CONFLICT` could not dedup
+mismatched keys. So recovery MUST be **clean-slate** (DELETE the mis-keyed live
+rows, then re-derive from CH) — exactly ADR-0034's "rebuild, not repair". After
+delete + rebuild the range converges (`aquarius` 3143 == 3143; phoenix / comet /
+cctp / defindex / blend all OK). Non-trade protocol tables (cctp, defindex,
+blend_*) were *missing* rows rather than mis-keyed, but clean-slate fixes both
+uniformly.
+
+**Scope.** Only the PROJECTED (soroban_events-derived) sources are mis-keyed and
+in scope: `aquarius / soroswap / phoenix / comet` trades + `soroswap_skim`,
+`phoenix_*`, `comet_liquidity`, `blend_*`, `cctp`, `rozo`, `defindex`. **NOT**
+`sdex` (op-derived directly from `operations`/`operation_results`, never through
+`soroban_events`, so correctly keyed — only the immaterial passive/one-side-zero
+fills are missing, recovered forward by the fixed decoder). **NOT** external /
+band (not CH-event-derived). reflector/redstone are already exact (1 event per
+update → no collision), so their clean-slate is a harmless no-op.
+
+**Procedure (`scripts/ops/ch-rebuild-projected.sh`).** Per 1 M-ledger window over
+`[50 M, 62.894 M]` (the CH backfill tip): DELETE the window's rows (trades
+source-filtered; protocol tables by ledger), then `ratesengine-ops ch-rebuild
+-write -sources <projected>`. Scoped ≤ 62.894 M so the **live tail (> 62.894 M)
+the indexer is still writing stays untouched**; the delete/rebuild range never
+overlaps the indexer's current writes, so ingestion keeps running. Resumable
+(per-window marker), `ON_ERROR_STOP`. After it completes, refresh the CAGGs over
+the rebuilt time range (they materialise from `trades`).
+
+**Forward-correctness dependency.** The live indexer (rc.107) still writes
+mis-keyed projected data forward (it lacks the `event_index` collision fix). The
+historical rebuild is durable (history is immutable), but forward data
+(> 62.894 M) stays mis-keyed until the collision-fixed indexer is deployed **or**
+the live feed is switched to the CH structural path. Tracked separately.
 
 ## 5. Sequencing / non-goals
 
