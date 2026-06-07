@@ -108,7 +108,9 @@ func chRebuild(args []string) error { //nolint:gocognit,gocyclo,funlen // linear
 
 	// ─── Event-based pass (read → buffer) ────────────────────────────────
 	evStart := time.Now()
-	cherr := clickhouse.StreamContractEvents(ctx, *chAddr, lo, hi, func(ev events.Event) error {
+	// Exclude the CAP-67 classic-token firehose — none of the projected DEX/
+	// lending sources consume it, and it's 99.99% of contract_events.
+	cherr := clickhouse.StreamContractEvents(ctx, *chAddr, lo, hi, clickhouse.ClassicTokenTopic0Syms, func(ev events.Event) error {
 		for _, src := range cat {
 			if src.dec == nil || !enabled(src.name) {
 				continue

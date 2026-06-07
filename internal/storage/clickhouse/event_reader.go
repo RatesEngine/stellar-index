@@ -3,10 +3,35 @@ package clickhouse
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/RatesEngine/rates-engine/internal/events"
 )
+
+// ClassicTokenTopic0Syms are the CAP-67 / SEP-41 token-event topic[0] symbols.
+// Under the r1 archive's uniform V4 meta these classic-asset transfer/mint/burn
+// events are synthesized for ALL history and utterly dominate contract_events
+// (446.91 M of 446.92 M rows in partition 50 — 99.9988 %). No protocol DEX /
+// lending decoder (soroswap/aquarius/phoenix/comet/blend/cctp/rozo/defindex)
+// consumes them, so a re-derivation pass for those sources can exclude them via
+// StreamContractEvents' excludeTopic0 arg, turning a 447 M-row partition scan
+// into a ~5 k-row one. (sep41_supply/sep41_transfers DO use these topics, so
+// never exclude them when re-deriving those sources.)
+var ClassicTokenTopic0Syms = []string{
+	"transfer", "mint", "burn", "clawback", "approve", "set_admin", "set_authorized",
+}
+
+// sqlQuoteList renders a string slice as a SQL IN list: 'a','b',... The inputs
+// are compile-time constants (topic symbols), so inlining carries no injection
+// risk and avoids driver-specific slice-binding for IN (?).
+func sqlQuoteList(ss []string) string {
+	q := make([]string, len(ss))
+	for i, s := range ss {
+		q[i] = "'" + s + "'"
+	}
+	return strings.Join(q, ",")
+}
 
 // StreamContractEvents is the Phase-4 input adapter (ADR-0034): it reads
 // stellar.contract_events for [from,to] inclusive, ordered by
@@ -29,20 +54,27 @@ import (
 // (ledger, tx_hash, op_index, event_index) and decoders use TxHash, not the
 // RPC-shape ID/tx-index. If a future decoder needs tx_index, add it to the
 // contract_events schema + extractor first.
-func StreamContractEvents(ctx context.Context, addr string, from, to uint32, fn func(events.Event) error) error {
+// excludeTopic0 (nil = no filter) drops events whose topic[0] symbol is in the
+// list — used to skip the CAP-67 classic-token firehose when re-deriving
+// protocol sources that don't consume it (see ClassicTokenTopic0Syms).
+func StreamContractEvents(ctx context.Context, addr string, from, to uint32, excludeTopic0 []string, fn func(events.Event) error) error {
 	conn, err := openRead(ctx, addr)
 	if err != nil {
 		return err
 	}
 	defer func() { _ = conn.Close() }()
 
-	rows, err := conn.Query(ctx, `
+	where := "WHERE ledger_seq BETWEEN ? AND ?"
+	if len(excludeTopic0) > 0 {
+		where += " AND topic_0_sym NOT IN (" + sqlQuoteList(excludeTopic0) + ")"
+	}
+	rows, err := conn.Query(ctx, fmt.Sprintf(`
 		SELECT ledger_seq, close_time, tx_hash, op_index, event_index,
 		       contract_id, event_type, topics_xdr, data_xdr, op_args_xdr,
 		       in_successful_call
 		FROM stellar.contract_events FINAL
-		WHERE ledger_seq BETWEEN ? AND ?
-		ORDER BY ledger_seq, tx_hash, op_index, event_index`, from, to)
+		%s
+		ORDER BY ledger_seq, tx_hash, op_index, event_index`, where), from, to)
 	if err != nil {
 		return fmt.Errorf("clickhouse: query contract_events [%d,%d]: %w", from, to, err)
 	}

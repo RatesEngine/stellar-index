@@ -77,7 +77,7 @@ func chReproject(args []string) error { //nolint:gocognit,gocyclo,funlen // line
 	// keeps each variant's output (and its contractIDs prefilter) separate.
 	chBySrc := make(map[string]map[string]map[uint32]int)
 	chStart := time.Now()
-	cherr := clickhouse.StreamContractEvents(ctx, *chAddr, lo, hi, func(ev events.Event) error {
+	cherr := clickhouse.StreamContractEvents(ctx, *chAddr, lo, hi, nil, func(ev events.Event) error {
 		for _, src := range cat {
 			if src.dec == nil { // census-only (sdex) — op-based, not in contract_events
 				continue
