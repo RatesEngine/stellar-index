@@ -61,6 +61,7 @@ the `env:` column.
 | `storage.s3_cold_secret_key_env` | `string` | _(required)_ | — | Env var holding cold-tier S3 secret key. Empty = anonymous reads. |
 | `storage.clickhouse_addr` | `string` | `127.0.0.1:9300` | — | ClickHouse native address host:port for the Tier-1 lake (ADR-0034); used by the indexer real-time dual-sink. |
 | `storage.clickhouse_live_sink` | `bool` | `false` | — | Enable the real-time ClickHouse dual-sink: the indexer writes each ledger's structural extract to CH inline (non-blocking), keeping the lake within ~seconds of the chain. Off by default. |
+| `storage.clickhouse_projector_source` | `bool` | `false` | — | Feed-switch: the projector reads forward events from the ClickHouse lake (contract_events) instead of Postgres soroban_events, enabling soroban_events decommission. Requires clickhouse_live_sink. Off by default. |
 
 ### `[ingestion]`
 

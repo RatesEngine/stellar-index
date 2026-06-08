@@ -445,6 +445,12 @@ type StorageConfig struct {
 	// drops. Off by default — flipping it on is the real-time activation.
 	ClickHouseAddr     string `toml:"clickhouse_addr" doc:"ClickHouse native address host:port for the Tier-1 lake (ADR-0034); used by the indexer real-time dual-sink." default:"127.0.0.1:9300"`
 	ClickHouseLiveSink bool   `toml:"clickhouse_live_sink" doc:"Enable the real-time ClickHouse dual-sink: the indexer writes each ledger's structural extract to CH inline (non-blocking), keeping the lake within ~seconds of the chain. Off by default." default:"false"`
+	// ClickHouseProjectorSource feed-switch (ADR-0034 #10): when true, the
+	// projector reads forward events from the CH lake's contract_events instead
+	// of the Postgres soroban_events landing zone, so soroban_events can be
+	// decommissioned. Requires the dual-sink (ClickHouseLiveSink) so CH is
+	// authoritative for forward events. Off by default.
+	ClickHouseProjectorSource bool `toml:"clickhouse_projector_source" doc:"Feed-switch: the projector reads forward events from the ClickHouse lake (contract_events) instead of Postgres soroban_events, enabling soroban_events decommission. Requires clickhouse_live_sink. Off by default." default:"false"`
 }
 
 // ColdTieringEnabled reports whether the cold-tier read path

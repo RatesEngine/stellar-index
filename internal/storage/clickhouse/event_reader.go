@@ -6,6 +6,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/ClickHouse/clickhouse-go/v2/lib/driver"
+
 	"github.com/RatesEngine/rates-engine/internal/events"
 )
 
@@ -54,6 +56,43 @@ func sqlQuoteList(ss []string) string {
 // (ledger, tx_hash, op_index, event_index) and decoders use TxHash, not the
 // RPC-shape ID/tx-index. If a future decoder needs tx_index, add it to the
 // contract_events schema + extractor first.
+// StreamContractEventsFiltered is the projector's forward-read source (ADR-0034
+// #10 feed-switch): it streams contract_events for [from,to] narrowed by a
+// per-source prefilter (contract_id IN / topic_0_sym IN — mirrors the Postgres
+// soroban_events path's prefilter), reconstructing each as an events.Event for
+// the source's decoder. NO FINAL: the projector reads small forward windows and
+// its downstream writes are idempotent (ON CONFLICT DO NOTHING), so a duplicate
+// event decodes to the same row and is absorbed — FINAL's full-partition merge
+// would be pure overhead here. Empty filters → match-by-Decoder.Matches alone
+// (coarser, but the window is BatchLimit-bounded).
+func StreamContractEventsFiltered(ctx context.Context, addr string, from, to uint32, contractIDs, topic0Syms []string, fn func(events.Event) error) error {
+	conn, err := openRead(ctx, addr)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = conn.Close() }()
+
+	where := "WHERE ledger_seq BETWEEN ? AND ?"
+	if len(contractIDs) > 0 {
+		where += " AND contract_id IN (" + sqlQuoteList(contractIDs) + ")"
+	}
+	if len(topic0Syms) > 0 {
+		where += " AND topic_0_sym IN (" + sqlQuoteList(topic0Syms) + ")"
+	}
+	rows, err := conn.Query(ctx, fmt.Sprintf(`
+		SELECT ledger_seq, close_time, tx_hash, op_index, event_index,
+		       contract_id, event_type, topics_xdr, data_xdr, op_args_xdr,
+		       in_successful_call
+		FROM stellar.contract_events
+		%s
+		ORDER BY ledger_seq, tx_hash, op_index, event_index`, where), from, to)
+	if err != nil {
+		return fmt.Errorf("clickhouse: query contract_events filtered [%d,%d]: %w", from, to, err)
+	}
+	defer func() { _ = rows.Close() }()
+	return scanContractEvents(rows, fn)
+}
+
 // excludeTopic0 (nil = no filter) drops events whose topic[0] symbol is in the
 // list — used to skip the CAP-67 classic-token firehose when re-deriving
 // protocol sources that don't consume it (see ClassicTokenTopic0Syms).
@@ -79,7 +118,13 @@ func StreamContractEvents(ctx context.Context, addr string, from, to uint32, exc
 		return fmt.Errorf("clickhouse: query contract_events [%d,%d]: %w", from, to, err)
 	}
 	defer func() { _ = rows.Close() }()
+	return scanContractEvents(rows, fn)
+}
 
+// scanContractEvents maps contract_events result rows to events.Event and
+// invokes fn for each. Shared by StreamContractEvents (FINAL, exclude-filter)
+// and StreamContractEventsFiltered (no-FINAL, per-source prefilter).
+func scanContractEvents(rows driver.Rows, fn func(events.Event) error) error {
 	for rows.Next() {
 		var (
 			ledger     uint32
@@ -98,7 +143,7 @@ func StreamContractEvents(ctx context.Context, addr string, from, to uint32, exc
 			&contractID, &eventType, &topics, &dataXDR, &opArgs, &inSucc); err != nil {
 			return fmt.Errorf("clickhouse: scan contract_event: %w", err)
 		}
-		ev := events.Event{
+		if err := fn(events.Event{
 			Type:                     eventType,
 			Ledger:                   ledger,
 			LedgerClosedAt:           closeTime.UTC().Format(time.RFC3339),
@@ -110,8 +155,7 @@ func StreamContractEvents(ctx context.Context, addr string, from, to uint32, exc
 			Topic:                    topics,
 			Value:                    dataXDR,
 			OpArgs:                   opArgs,
-		}
-		if err := fn(ev); err != nil {
+		}); err != nil {
 			return err
 		}
 	}

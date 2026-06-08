@@ -449,6 +449,17 @@ func run(cfgPath string, dryRun bool) error {
 			pipeline.HandleEvent(ctx, logger, store, ev)
 		}
 		proj := projector.New(store, registry, sinkFn, logger.With("component", "projector"))
+		// Feed-switch (ADR-0034 #10): read forward events from the CH lake
+		// (dual-sink-fed) instead of Postgres soroban_events, so the latter can
+		// be decommissioned. Off by default; requires the dual-sink running.
+		if cfg.Storage.ClickHouseProjectorSource {
+			chAddr := cfg.Storage.ClickHouseAddr
+			if chAddr == "" {
+				chAddr = "127.0.0.1:9300"
+			}
+			proj.SetClickHouseSource(chAddr)
+			logger.Info("projector reading from ClickHouse lake (soroban_events feed-switch)", "addr", chAddr)
+		}
 		projectorDone = make(chan struct{})
 		go func() {
 			defer close(projectorDone)

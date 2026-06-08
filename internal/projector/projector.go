@@ -45,8 +45,10 @@ import (
 
 	"github.com/RatesEngine/rates-engine/internal/consumer"
 	"github.com/RatesEngine/rates-engine/internal/dispatcher"
+	"github.com/RatesEngine/rates-engine/internal/events"
 	"github.com/RatesEngine/rates-engine/internal/obs"
 	"github.com/RatesEngine/rates-engine/internal/sources/sorobanevents"
+	"github.com/RatesEngine/rates-engine/internal/storage/clickhouse"
 	"github.com/RatesEngine/rates-engine/internal/storage/timescale"
 )
 
@@ -116,7 +118,21 @@ type Projector struct {
 	registry Registry
 	sink     SinkFunc
 	logger   *slog.Logger
+
+	// chAddr, when non-empty, switches the per-source read from the Postgres
+	// soroban_events landing zone to the ClickHouse Tier-1 lake's
+	// contract_events (ADR-0034 #10 feed-switch — the dual-sink feeds CH
+	// inline, so CH is authoritative for forward events and soroban_events can
+	// be decommissioned). The per-source cursor (last_ledger) is
+	// source-agnostic, so the switch is seamless. Empty = legacy
+	// soroban_events read.
+	chAddr string
 }
+
+// SetClickHouseSource switches the projector to read forward events from the
+// ClickHouse lake at addr instead of Postgres soroban_events (ADR-0034 #10).
+// Call before Run. Empty addr keeps the legacy soroban_events source.
+func (p *Projector) SetClickHouseSource(addr string) { p.chAddr = addr }
 
 // New constructs a Projector. Callers must call Run to start
 // the loop.
@@ -185,7 +201,7 @@ func (p *Projector) runOneSource(ctx context.Context, src Source) {
 // same rows (ON CONFLICT DO NOTHING absorbs the idempotent
 // repeats).
 //
-//nolint:gocognit // linear cycle (cursor read → tip → scan → cursor write); splitting into helpers would scatter the cycle's success/failure metric emissions and make the control flow harder to audit.
+//nolint:gocognit,funlen // linear cycle (cursor read → tip → scan → cursor write) with a source branch (soroban_events vs CH); splitting into helpers would scatter the cycle's success/failure metric emissions and make the control flow harder to audit.
 func (p *Projector) cycleOneSource(ctx context.Context, src Source) {
 	start := time.Now()
 	cycleCtx, cancel := context.WithTimeout(ctx, PerSourceTimeout)
@@ -234,38 +250,59 @@ func (p *Projector) cycleOneSource(ctx context.Context, src Source) {
 		decodeErrors   int
 		lastSeenLedger uint32
 	)
-	err = p.store.StreamSorobanEvents(cycleCtx, fromLedger, toLedger,
-		src.ContractIDs, src.Topic0Syms,
-		func(row sorobanevents.Row) error {
-			rowsScanned++
-			if row.Ledger > lastSeenLedger {
-				lastSeenLedger = row.Ledger
-			}
-			ev, rerr := sorobanevents.Reconstruct(row)
-			if rerr != nil {
-				// Skip a malformed row but keep the cursor advancing;
-				// the row is unrecoverable so re-reading it next cycle
-				// would just re-fail. Count it for visibility.
-				decodeErrors++
-				return nil //nolint:nilerr // intentional soft-fail; see comment.
-			}
-			if !src.Decoder.Matches(ev) {
+	// process runs the per-event decode + route, identical regardless of the
+	// read source (soroban_events or CH contract_events). Decode failures
+	// soft-fail (cursor still advances; the row is deterministically broken so
+	// a retry would re-fail) and are counted for visibility.
+	process := func(ev events.Event) {
+		if !src.Decoder.Matches(ev) {
+			return
+		}
+		outs, derr := src.Decoder.Decode(ev)
+		if derr != nil {
+			decodeErrors++
+			return
+		}
+		for _, out := range outs {
+			p.sink(cycleCtx, out)
+			eventsEmitted++
+		}
+	}
+
+	if p.chAddr != "" {
+		// CH feed-switch (#10): read contract_events directly (already an
+		// events.Event, no Reconstruct). No FINAL — small forward window +
+		// idempotent downstream writes absorb any duplicate.
+		err = clickhouse.StreamContractEventsFiltered(cycleCtx, p.chAddr, fromLedger, toLedger,
+			src.ContractIDs, src.Topic0Syms,
+			func(ev events.Event) error {
+				rowsScanned++
+				if ev.Ledger > lastSeenLedger {
+					lastSeenLedger = ev.Ledger
+				}
+				process(ev)
 				return nil
-			}
-			outs, derr := src.Decoder.Decode(ev)
-			if derr != nil {
-				// Same shape as above: a row that fails Decode is
-				// deterministically broken, so retry would be wasted
-				// work. Cursor advances; counter tracks the loss.
-				decodeErrors++
-				return nil //nolint:nilerr // intentional soft-fail; see comment.
-			}
-			for _, out := range outs {
-				p.sink(cycleCtx, out)
-				eventsEmitted++
-			}
-			return nil
-		})
+			})
+	} else {
+		err = p.store.StreamSorobanEvents(cycleCtx, fromLedger, toLedger,
+			src.ContractIDs, src.Topic0Syms,
+			func(row sorobanevents.Row) error {
+				rowsScanned++
+				if row.Ledger > lastSeenLedger {
+					lastSeenLedger = row.Ledger
+				}
+				ev, rerr := sorobanevents.Reconstruct(row)
+				if rerr != nil {
+					// Skip a malformed row but keep the cursor advancing; the
+					// row is unrecoverable so re-reading it next cycle would
+					// just re-fail. Count it for visibility.
+					decodeErrors++
+					return nil //nolint:nilerr // intentional soft-fail; see comment.
+				}
+				process(ev)
+				return nil
+			})
+	}
 	if err != nil {
 		p.logger.Warn("projector: stream failed", "source", src.Name, "err", err, "from", fromLedger, "to", toLedger)
 		obs.ProjectorRunsTotal.WithLabelValues(src.Name, "error").Inc()
