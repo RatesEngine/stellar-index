@@ -367,7 +367,14 @@ func run(cfgPath string, dryRun bool) error {
 	// drops under CH pressure). Off by default; the sink never blocks ingest.
 	var chLiveSink *clickhouse.LiveSink
 	if cfg.Storage.ClickHouseLiveSink {
-		chLiveSink, err = clickhouse.NewLiveSink(rootCtx, cfg.Storage.ClickHouseAddr, clickhouse.LiveSinkOptions{
+		// The struct-tag default is example/docs-only (not applied at runtime),
+		// so fall back to the local CH default if the operator enabled the sink
+		// without setting clickhouse_addr — avoids a "missing address" boot fail.
+		chAddr := cfg.Storage.ClickHouseAddr
+		if chAddr == "" {
+			chAddr = "127.0.0.1:9300"
+		}
+		chLiveSink, err = clickhouse.NewLiveSink(rootCtx, chAddr, clickhouse.LiveSinkOptions{
 			Logger: logger.With("component", "ch-live-sink"),
 		})
 		if err != nil {
