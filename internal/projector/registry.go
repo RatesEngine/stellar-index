@@ -64,6 +64,21 @@ var sep41TransferSyms = []string{
 	sep41_transfers.SymbolSetAuthorized,
 }
 
+// firehoseExcludeSyms is the SQL-layer exclusion the DEX/lending sources apply
+// so a far-behind catch-up window doesn't stream the CAP-67 classic-token
+// firehose (under the r1 archive's uniform V4 meta, ~99.8% of all
+// contract_events / soroban_events — transfer alone is ~88%). It's the
+// classic-token topic[0] set MINUS set_admin: every one of the eight sources
+// below was audited (events.go + classify) and none consumes any of these six,
+// so the exclusion is provably lossless — whereas blend DOES dispatch on
+// set_admin, so set_admin is deliberately retained (its volume is negligible —
+// not even in the top-20 topic_0_sym). This is an exclude-list rather than a
+// per-source include-list because several decoders match dynamic/prefixed
+// topic[0] symbols (e.g. phoenix "XYK Pool: …") that an include-list would miss.
+var firehoseExcludeSyms = []string{
+	"transfer", "mint", "burn", "clawback", "approve", "set_authorized",
+}
+
 //nolint:gocognit,gocyclo,funlen // dispatch switch; one case per source. Same shape as pipeline.BuildDispatcher (which carries the same exemption).
 func buildSource(name string, oracle config.OracleConfig, soroswapOpts ...soroswap.DecoderOption) (Source, bool, error) {
 	switch name {
@@ -71,43 +86,51 @@ func buildSource(name string, oracle config.OracleConfig, soroswapOpts ...sorosw
 		// Soroswap dispatches via topic[0] across all pairs in
 		// the registry; no contract-list prefilter needed.
 		return Source{
-			Name:    soroswap.SourceName,
-			Decoder: soroswap.NewDecoder(soroswapOpts...),
+			Name:              soroswap.SourceName,
+			Decoder:           soroswap.NewDecoder(soroswapOpts...),
+			ExcludeTopic0Syms: firehoseExcludeSyms,
 		}, true, nil
 	case aquarius.SourceName:
 		return Source{
-			Name:    aquarius.SourceName,
-			Decoder: aquarius.NewDecoder(),
+			Name:              aquarius.SourceName,
+			Decoder:           aquarius.NewDecoder(),
+			ExcludeTopic0Syms: firehoseExcludeSyms,
 		}, true, nil
 	case phoenix.SourceName:
 		return Source{
-			Name:    phoenix.SourceName,
-			Decoder: phoenix.NewDecoder(),
+			Name:              phoenix.SourceName,
+			Decoder:           phoenix.NewDecoder(),
+			ExcludeTopic0Syms: firehoseExcludeSyms,
 		}, true, nil
 	case comet.SourceName:
 		return Source{
-			Name:    comet.SourceName,
-			Decoder: comet.NewDecoder(),
+			Name:              comet.SourceName,
+			Decoder:           comet.NewDecoder(),
+			ExcludeTopic0Syms: firehoseExcludeSyms,
 		}, true, nil
 	case blend.SourceName:
 		return Source{
-			Name:    blend.SourceName,
-			Decoder: blend.NewDecoder(),
+			Name:              blend.SourceName,
+			Decoder:           blend.NewDecoder(),
+			ExcludeTopic0Syms: firehoseExcludeSyms,
 		}, true, nil
 	case cctp.SourceName:
 		return Source{
-			Name:    cctp.SourceName,
-			Decoder: cctp.NewDecoder(),
+			Name:              cctp.SourceName,
+			Decoder:           cctp.NewDecoder(),
+			ExcludeTopic0Syms: firehoseExcludeSyms,
 		}, true, nil
 	case rozo.SourceName:
 		return Source{
-			Name:    rozo.SourceName,
-			Decoder: rozo.NewDecoder(),
+			Name:              rozo.SourceName,
+			Decoder:           rozo.NewDecoder(),
+			ExcludeTopic0Syms: firehoseExcludeSyms,
 		}, true, nil
 	case defindex.SourceName:
 		return Source{
-			Name:    defindex.SourceName,
-			Decoder: defindex.NewDecoder(),
+			Name:              defindex.SourceName,
+			Decoder:           defindex.NewDecoder(),
+			ExcludeTopic0Syms: firehoseExcludeSyms,
 		}, true, nil
 	case sep41_transfers.SourceName:
 		// SEP-41 NewDecoder requires a non-nil watched-contracts

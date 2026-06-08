@@ -103,6 +103,22 @@ type Source struct {
 	// but simpler config. Mirrors `StreamSorobanEvents`'s args.
 	ContractIDs []string
 	Topic0Syms  []string
+
+	// ExcludeTopic0Syms drops events whose topic[0] symbol is in the
+	// list at the SQL layer (topic_0_sym NOT IN …). For the DEX/lending
+	// sources that dispatch by their own topic[0] symbols and have no
+	// contract/topic prefilter, this excludes the CAP-67 classic-token
+	// firehose (transfer/mint/burn/…) — which under the r1 archive's
+	// uniform V4 meta is 99.999% of contract_events / soroban_events. A
+	// caught-up source reads a tiny window so it never mattered, but a
+	// far-behind source scanning a 10k-ledger catch-up window would pull
+	// millions of firehose rows it then discards via Decoder.Matches,
+	// blowing the cycle budget and wedging the source (the aquarius case).
+	// Exclude-only and safe: these decoders never consume classic-token
+	// topics, so no protocol event is dropped. Leave nil for sources that
+	// DO consume those topics (sep41_*) or already prefilter by contract
+	// (reflector/redstone).
+	ExcludeTopic0Syms []string
 }
 
 // Registry is the set of sources the projector handles. Built
@@ -276,7 +292,7 @@ func (p *Projector) cycleOneSource(ctx context.Context, src Source) {
 		// events.Event, no Reconstruct). No FINAL — small forward window +
 		// idempotent downstream writes absorb any duplicate.
 		err = clickhouse.StreamContractEventsFiltered(cycleCtx, p.chAddr, fromLedger, toLedger,
-			src.ContractIDs, src.Topic0Syms,
+			src.ContractIDs, src.Topic0Syms, src.ExcludeTopic0Syms,
 			func(ev events.Event) error {
 				rowsScanned++
 				if ev.Ledger > lastSeenLedger {
@@ -287,7 +303,7 @@ func (p *Projector) cycleOneSource(ctx context.Context, src Source) {
 			})
 	} else {
 		err = p.store.StreamSorobanEvents(cycleCtx, fromLedger, toLedger,
-			src.ContractIDs, src.Topic0Syms,
+			src.ContractIDs, src.Topic0Syms, src.ExcludeTopic0Syms,
 			func(row sorobanevents.Row) error {
 				rowsScanned++
 				if row.Ledger > lastSeenLedger {

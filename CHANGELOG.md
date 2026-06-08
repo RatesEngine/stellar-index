@@ -169,6 +169,17 @@ against.
   gap-scans `stellar.ledgers` and back-fills holes below `CH_max`, not just
   the tip. Net: the lake self-heals and the projector never reads ahead of
   provably-complete CH.
+  - Also: the no-contract-prefilter DEX/lending projector sources
+    (soroswap/aquarius/phoenix/comet/blend/cctp/rozo/defindex) now exclude the
+    CAP-67 classic-token firehose (`transfer`/`mint`/`burn`/`clawback`/
+    `approve`/`set_authorized` — ~99.8% of all events under V4 meta) at the SQL
+    layer on both read paths. A caught-up source reads a tiny window so it never
+    mattered, but a far-behind source's 10k-ledger catch-up window was streaming
+    ~5M firehose rows it only discarded via `Decoder.Matches`, blowing the 60s
+    cycle budget and wedging the source (aquarius was stuck ~92k ledgers behind,
+    deadlock-storming the trades table). Exclude-only and audited lossless —
+    every one of the eight decoders was checked against the six symbols;
+    `set_admin` is deliberately retained because blend dispatches on it.
 
 - **`trades` no longer silently drops multi-trade-per-op trades
   (aquarius, comet).** The ADR-0033 projection reconciliation found

@@ -65,7 +65,13 @@ func sqlQuoteList(ss []string) string {
 // event decodes to the same row and is absorbed — FINAL's full-partition merge
 // would be pure overhead here. Empty filters → match-by-Decoder.Matches alone
 // (coarser, but the window is BatchLimit-bounded).
-func StreamContractEventsFiltered(ctx context.Context, addr string, from, to uint32, contractIDs, topic0Syms []string, fn func(events.Event) error) error {
+//
+// excludeTopic0Syms (nil = no exclusion) drops events whose topic[0] symbol is
+// in the list — used so the no-contract-prefilter DEX/lending sources skip the
+// CAP-67 classic-token firehose at the SQL layer instead of streaming it all
+// and discarding it via Decoder.Matches (see ClassicTokenTopic0Syms; matters
+// for a far-behind source's wide catch-up window).
+func StreamContractEventsFiltered(ctx context.Context, addr string, from, to uint32, contractIDs, topic0Syms, excludeTopic0Syms []string, fn func(events.Event) error) error {
 	conn, err := openRead(ctx, addr)
 	if err != nil {
 		return err
@@ -78,6 +84,9 @@ func StreamContractEventsFiltered(ctx context.Context, addr string, from, to uin
 	}
 	if len(topic0Syms) > 0 {
 		where += " AND topic_0_sym IN (" + sqlQuoteList(topic0Syms) + ")"
+	}
+	if len(excludeTopic0Syms) > 0 {
+		where += " AND topic_0_sym NOT IN (" + sqlQuoteList(excludeTopic0Syms) + ")"
 	}
 	rows, err := conn.Query(ctx, fmt.Sprintf(`
 		SELECT ledger_seq, close_time, tx_hash, op_index, event_index,

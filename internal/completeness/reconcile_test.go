@@ -15,7 +15,7 @@ import (
 type fakeStreamer struct{ rows []sorobanevents.Row }
 
 func (f fakeStreamer) StreamSorobanEvents(
-	_ context.Context, from, to uint32, _ []string, _ []string,
+	_ context.Context, from, to uint32, _ []string, _ []string, _ []string,
 	fn func(sorobanevents.Row) error,
 ) error {
 	for _, r := range f.rows {

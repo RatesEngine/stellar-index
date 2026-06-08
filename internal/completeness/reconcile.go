@@ -28,6 +28,7 @@ type SorobanEventStreamer interface {
 		from, to uint32,
 		contractIDs []string,
 		topic0Syms []string,
+		excludeTopic0Syms []string,
 		fn func(sorobanevents.Row) error,
 	) error
 }
@@ -63,7 +64,7 @@ func ReDeriveOutputCounts(
 	from, to uint32,
 ) (map[uint32]int, error) {
 	counts := make(map[uint32]int)
-	err := s.StreamSorobanEvents(ctx, from, to, contractIDs, topic0Syms,
+	err := s.StreamSorobanEvents(ctx, from, to, contractIDs, topic0Syms, nil,
 		func(row sorobanevents.Row) error {
 			ev, rerr := sorobanevents.Reconstruct(row)
 			if rerr != nil {
@@ -106,7 +107,7 @@ func ReDeriveOutputCountsByKind(
 	from, to uint32,
 ) (map[string]map[uint32]int, error) {
 	byKind := make(map[string]map[uint32]int)
-	err := s.StreamSorobanEvents(ctx, from, to, contractIDs, topic0Syms,
+	err := s.StreamSorobanEvents(ctx, from, to, contractIDs, topic0Syms, nil,
 		func(row sorobanevents.Row) error {
 			ev, rerr := sorobanevents.Reconstruct(row)
 			if rerr != nil {

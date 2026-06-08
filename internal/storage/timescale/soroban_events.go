@@ -134,6 +134,7 @@ func (s *Store) StreamSorobanEvents(
 	from, to uint32,
 	contractIDs []string,
 	topic0Syms []string,
+	excludeTopic0Syms []string,
 	fn func(sorobanevents.Row) error,
 ) error {
 	if to < from {
@@ -163,6 +164,15 @@ func (s *Store) StreamSorobanEvents(
 		baseIdx := 3 + len(contractIDs)
 		args = append(args, topic0Args(topic0Syms)...)
 		fmt.Fprintf(&sb, " AND topic_0_sym IN (%s)", placeholdersFrom(baseIdx, len(topic0Syms)))
+	}
+	// excludeTopic0Syms: drop the CAP-67 classic-token firehose at the SQL
+	// layer for the no-prefilter DEX/lending sources, so a far-behind source's
+	// wide catch-up window doesn't scan millions of rows it would only discard
+	// via Decoder.Matches (see projector.Source.ExcludeTopic0Syms).
+	if len(excludeTopic0Syms) > 0 {
+		baseIdx := len(args) + 1
+		args = append(args, topic0Args(excludeTopic0Syms)...)
+		fmt.Fprintf(&sb, " AND (topic_0_sym IS NULL OR topic_0_sym NOT IN (%s))", placeholdersFrom(baseIdx, len(excludeTopic0Syms)))
 	}
 	// Chunk-pruning (ADR-0033): soroban_events is partitioned by
 	// ledger_close_time, so `WHERE ledger BETWEEN` alone scans every
