@@ -435,6 +435,16 @@ type StorageConfig struct {
 	S3ColdBucketArchive string `toml:"s3_cold_bucket_archive" doc:"Cold-tier bucket + prefix for historical LCMs. Empty disables tiering. Production: aws-public-blockchain/v1.1/stellar/ledgers/pubnet" default:""`
 	S3ColdAccessKeyEnv  string `toml:"s3_cold_access_key_env" doc:"Env var holding cold-tier S3 access key. Empty = anonymous reads (correct for public buckets)." env:"" default:""`
 	S3ColdSecretKeyEnv  string `toml:"s3_cold_secret_key_env" doc:"Env var holding cold-tier S3 secret key. Empty = anonymous reads." env:"" default:""`
+
+	// ClickHouse Tier-1 lake (ADR-0034). When ClickHouseLiveSink is true the
+	// indexer's real-time dual-sink (internal/storage/clickhouse.LiveSink)
+	// writes each ledger's structural extract to ClickHouse inline, keeping the
+	// lake within ~seconds of the chain (real-time, for the block explorer) vs
+	// the ~10-min ch-live-catchup timer. The sink is non-blocking (drops under
+	// CH pressure rather than stalling ingest); the catch-up timer backstops
+	// drops. Off by default — flipping it on is the real-time activation.
+	ClickHouseAddr     string `toml:"clickhouse_addr" doc:"ClickHouse native address host:port for the Tier-1 lake (ADR-0034); used by the indexer real-time dual-sink." default:"127.0.0.1:9300"`
+	ClickHouseLiveSink bool   `toml:"clickhouse_live_sink" doc:"Enable the real-time ClickHouse dual-sink: the indexer writes each ledger's structural extract to CH inline (non-blocking), keeping the lake within ~seconds of the chain. Off by default." default:"false"`
 }
 
 // ColdTieringEnabled reports whether the cold-tier read path

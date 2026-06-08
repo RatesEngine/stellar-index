@@ -61,6 +61,7 @@ import (
 	externalkraken "github.com/RatesEngine/rates-engine/internal/sources/external/kraken"
 	externalpolygonforex "github.com/RatesEngine/rates-engine/internal/sources/external/polygonforex"
 	"github.com/RatesEngine/rates-engine/internal/sources/sorobanevents"
+	"github.com/RatesEngine/rates-engine/internal/storage/clickhouse"
 	"github.com/RatesEngine/rates-engine/internal/storage/timescale"
 	"github.com/RatesEngine/rates-engine/internal/version"
 )
@@ -358,6 +359,31 @@ func run(cfgPath string, dryRun bool) error {
 	logger.Info("soroban-events sink wired",
 		"buffer_size", 4096, "batch_size", 1000)
 
+	// ─── ClickHouse real-time dual-sink (ADR-0034 #18) ─────────
+	// When enabled, each ledger's structural extract is pushed to ClickHouse
+	// inline (non-blocking), keeping the Tier-1 lake within ~seconds of the
+	// chain for the real-time block explorer — vs the ~10-min ch-live-catchup
+	// timer (which stays as the completeness backstop for anything this sink
+	// drops under CH pressure). Off by default; the sink never blocks ingest.
+	var chLiveSink *clickhouse.LiveSink
+	if cfg.Storage.ClickHouseLiveSink {
+		chLiveSink, err = clickhouse.NewLiveSink(rootCtx, cfg.Storage.ClickHouseAddr, clickhouse.LiveSinkOptions{
+			Logger: logger.With("component", "ch-live-sink"),
+		})
+		if err != nil {
+			return fmt.Errorf("clickhouse live-sink: %w", err)
+		}
+		chLiveSink.Start()
+		defer func() {
+			chLiveSink.Stop()
+			logger.Info("ch live-sink drained on shutdown",
+				"written", chLiveSink.WrittenCount(),
+				"dropped", chLiveSink.DroppedCount(),
+				"errored", chLiveSink.ErroredCount())
+		}()
+		logger.Info("ClickHouse real-time dual-sink enabled", "addr", cfg.Storage.ClickHouseAddr)
+	}
+
 	setSourceEnabled(cfg.Ingestion.EnabledSources, true)
 	defer setSourceEnabled(cfg.Ingestion.EnabledSources, false)
 
@@ -461,7 +487,19 @@ func run(cfgPath string, dryRun bool) error {
 		streamErr <- ledgerstream.StreamArchiveThenLive(
 			rootCtx, archiveCfg, liveCfg, from, cfg.Ingestion.LiveSeamLedger, logger,
 			func(lcm sdkxdr.LedgerCloseMeta) error {
-				return processAndPersistCursor(rootCtx, disp, events, store, logger, lcm, cfg.Stellar.Passphrase())
+				if perr := processAndPersistCursor(rootCtx, disp, events, store, logger, lcm, cfg.Stellar.Passphrase()); perr != nil {
+					return perr
+				}
+				// Real-time CH fan-out: push the structural extract (non-blocking;
+				// a slow CH never stalls ingest — drops are backstopped by the
+				// catch-up timer). Extract is a 2nd decode of the LCM, negligible
+				// at the live rate.
+				if chLiveSink != nil {
+					if ext, eerr := clickhouse.ExtractLedger(lcm, cfg.Stellar.Passphrase()); eerr == nil {
+						chLiveSink.PushLedger(ext)
+					}
+				}
+				return nil
 			},
 		)
 	}()

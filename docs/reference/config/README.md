@@ -59,6 +59,8 @@ the `env:` column.
 | `storage.s3_cold_bucket_archive` | `string` | _(required)_ | — | Cold-tier bucket + prefix for historical LCMs. Empty disables tiering. Production: aws-public-blockchain/v1.1/stellar/ledgers/pubnet |
 | `storage.s3_cold_access_key_env` | `string` | _(required)_ | — | Env var holding cold-tier S3 access key. Empty = anonymous reads (correct for public buckets). |
 | `storage.s3_cold_secret_key_env` | `string` | _(required)_ | — | Env var holding cold-tier S3 secret key. Empty = anonymous reads. |
+| `storage.clickhouse_addr` | `string` | `127.0.0.1:9300` | — | ClickHouse native address host:port for the Tier-1 lake (ADR-0034); used by the indexer real-time dual-sink. |
+| `storage.clickhouse_live_sink` | `bool` | `false` | — | Enable the real-time ClickHouse dual-sink: the indexer writes each ledger's structural extract to CH inline (non-blocking), keeping the lake within ~seconds of the chain. Off by default. |
 
 ### `[ingestion]`
 
