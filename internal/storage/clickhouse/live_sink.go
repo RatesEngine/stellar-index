@@ -30,11 +30,20 @@ type LiveSinkOptions struct {
 // chain (vs the ~10-min ch-live-catchup timer, which remains as the completeness
 // backstop for anything this best-effort sink drops under pressure).
 //
-// Safety: PushLedger is NON-BLOCKING — on a full buffer it DROPS the ledger
-// (DroppedCount++) rather than back-pressuring into the live ingest loop. A slow
-// or down ClickHouse therefore can never stall Postgres ingest / pricing
-// freshness. Dropped ledgers are re-filled by the catch-up timer, so the lake
-// stays complete; only its real-time edge degrades under CH pressure.
+// Safety: PushLedger is NON-BLOCKING — on a full buffer it DROPS the whole
+// LedgerExtract (DroppedCount++) rather than back-pressuring into the live
+// ingest loop. A slow or down ClickHouse therefore can never stall Postgres
+// ingest / pricing freshness. Only the lake's real-time edge degrades under CH
+// pressure.
+//
+// Completeness: a drop (or a mid-flush write error) leaves a HOLE in the lake.
+// The ch-live-catchup timer heals holes — but ONLY if it gap-scans below
+// CH_max, not just extends the tip (a tip-only [CH_max+1,tip] catch-up can never
+// re-fill a hole the sink already wrote past). The real-time projector
+// (ADR-0034 #10) does NOT trust the lake to be hole-free: it reads
+// contract_events only up to ContiguousWatermark — the highest ledger with no
+// hole below it — so an unhealed drop stalls the projector at the hole rather
+// than silently losing the dropped ledger's events.
 type LiveSink struct {
 	sink    *Sink
 	logger  *slog.Logger

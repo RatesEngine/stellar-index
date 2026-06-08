@@ -225,8 +225,10 @@ func (p *Projector) cycleOneSource(ctx context.Context, src Source) {
 	// scan to "wherever soroban_events extends," which during a
 	// fresh deploy could be far ahead of where live writes have
 	// committed. Better to track ledgerstream so the projector
-	// never gets ahead of "what we promise is durable."
-	tip, err := p.resolveTip(cycleCtx)
+	// never gets ahead of "what we promise is durable." In CH
+	// feed-switch mode the bound is additionally clamped to the
+	// lake's provably-complete watermark (see resolveTip).
+	tip, err := p.resolveTip(cycleCtx, fromLedger)
 	if err != nil {
 		p.logger.Warn("projector: tip resolve failed", "source", src.Name, "err", err)
 		obs.ProjectorRunsTotal.WithLabelValues(src.Name, "error").Inc()
@@ -340,10 +342,19 @@ func (p *Projector) cycleOneSource(ctx context.Context, src Source) {
 	}
 }
 
-// resolveTip returns the live ledgerstream cursor's last_ledger
-// — the upper scan bound. Same approach as the gap detector
-// (gap_detector.go::resolveGapDetectorTip).
-func (p *Projector) resolveTip(ctx context.Context) (uint32, error) {
+// resolveTip returns the upper scan bound for one cycle. The base
+// bound is the live ledgerstream cursor's last_ledger — the same
+// approach as the gap detector (gap_detector.go::resolveGapDetectorTip)
+// — so the projector never gets ahead of durably-ingested ledgers.
+//
+// In CH feed-switch mode (chAddr set) the bound is additionally
+// clamped to the lake's contiguous-completeness watermark for
+// [from, …]: the live dual-sink can drop or partially write ledgers,
+// so reading past the first hole would silently lose that ledger's
+// events (the cursor advances to the bound unconditionally). Clamping
+// to the watermark stalls the source AT a hole until the catch-up
+// timer heals it, instead of skipping over it (ADR-0034 #10).
+func (p *Projector) resolveTip(ctx context.Context, from uint32) (uint32, error) {
 	c, err := p.store.GetCursor(ctx, "ledgerstream", "")
 	if err != nil {
 		if errors.Is(err, timescale.ErrNotFound) {
@@ -351,5 +362,15 @@ func (p *Projector) resolveTip(ctx context.Context) (uint32, error) {
 		}
 		return 0, fmt.Errorf("ledgerstream cursor: %w", err)
 	}
-	return c.LastLedger, nil
+	tip := c.LastLedger
+	if p.chAddr != "" {
+		wm, werr := clickhouse.ContiguousWatermark(ctx, p.chAddr, from)
+		if werr != nil {
+			return 0, fmt.Errorf("ch watermark: %w", werr)
+		}
+		if wm < tip {
+			tip = wm
+		}
+	}
+	return tip, nil
 }

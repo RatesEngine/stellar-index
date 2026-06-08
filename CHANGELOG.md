@@ -151,6 +151,25 @@ against.
 
 ### Fixed
 
+- **Real-time projector CH feed-switch no longer risks silent loss
+  (ADR-0034 #10).** The dual-sink (`clickhouse.LiveSink`) is best-effort:
+  it drops whole ledgers under buffer pressure and a flush can partially
+  fail, so the CH lake can have holes near the tip — and the prior
+  `ch-live-catchup` only extended `[CH_max+1, tip]`, which can never re-fill
+  a hole the sink already wrote past (verified: 48 orphaned ledgers,
+  `[62939016,62939063]`). Reading the projector forward from CH with the raw
+  ledgerstream tip as its bound would skip such holes and lose their protocol
+  events (the cursor advances unconditionally). Three changes make the
+  feed-switch safe by construction: (1) `Sink.Flush` now writes
+  `stellar.ledgers` **last**, making a ledgers row a per-ledger commit marker
+  (present ⟹ all of that ledger's tables are already durable); (2) the
+  projector clamps its CH-mode upper bound to `ContiguousWatermark` — the
+  highest ledger with no hole below it — so an unhealed drop stalls the
+  source at the hole instead of skipping it; (3) `ch-live-catchup.sh`
+  gap-scans `stellar.ledgers` and back-fills holes below `CH_max`, not just
+  the tip. Net: the lake self-heals and the projector never reads ahead of
+  provably-complete CH.
+
 - **`trades` no longer silently drops multi-trade-per-op trades
   (aquarius, comet).** The ADR-0033 projection reconciliation found
   aquarius emitting 5 trade events in one operation (a multi-pool swap)

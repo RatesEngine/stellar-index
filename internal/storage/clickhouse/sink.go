@@ -174,12 +174,20 @@ func (s *Sink) Add(ctx context.Context, e LedgerExtract) error {
 // Flush sends all buffered rows as one native batch per table, then clears
 // the buffers. A partial failure returns the error with buffers intact so the
 // caller can retry the same range (idempotent under ReplacingMergeTree).
+//
+// ORDERING IS LOAD-BEARING: stellar.ledgers is flushed LAST, after every other
+// table. The batches are independent INSERTs (no cross-table transaction), so a
+// flush can partially succeed. Writing ledgers last makes a ledgers row a
+// per-ledger COMMIT MARKER: if a ledger_seq is present in stellar.ledgers, all
+// of that ledger's txs/ops/results/events/changes are already durable in CH.
+// The real-time projector's completeness watermark (ADR-0034 #10,
+// ContiguousWatermark) relies on this invariant to read contract_events only up
+// to where the lake is provably complete — never racing ahead of a half-written
+// or dropped ledger. (Buffer-full drops in LiveSink.PushLedger drop the whole
+// LedgerExtract atomically, so they leave no ledgers row either.)
 func (s *Sink) Flush(ctx context.Context) error {
 	if len(s.ledgers) == 0 {
 		return nil
-	}
-	if err := s.flushLedgers(ctx); err != nil {
-		return err
 	}
 	if err := s.flushTxs(ctx); err != nil {
 		return err
@@ -194,6 +202,10 @@ func (s *Sink) Flush(ctx context.Context) error {
 		return err
 	}
 	if err := s.flushChanges(ctx); err != nil {
+		return err
+	}
+	// ledgers LAST — the commit marker. See the ORDERING note above.
+	if err := s.flushLedgers(ctx); err != nil {
 		return err
 	}
 	s.reset()
