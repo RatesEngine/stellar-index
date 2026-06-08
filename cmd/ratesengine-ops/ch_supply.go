@@ -8,24 +8,43 @@ import (
 	"sort"
 	"time"
 
+	"github.com/stellar/go-stellar-sdk/xdr"
+
 	"github.com/RatesEngine/rates-engine/internal/config"
 	"github.com/RatesEngine/rates-engine/internal/scval"
 	"github.com/RatesEngine/rates-engine/internal/storage/clickhouse"
 )
 
-// decodeFlowAmount extracts the i128 amount from a mint/burn/clawback event's
-// data body. Returns ok=false (not an error) on a non-i128 / undecodable body
-// so the supply scan can skip-and-continue without an err-return.
-func decodeFlowAmount(dataXDR string) (*big.Int, bool) {
+// decodeFlowAmount extracts the amount from a mint/burn/clawback event's data
+// body. Returns ok=false on an undecodable body (with a short reason for skip
+// diagnostics) so the supply scan can skip-and-continue without an err-return.
+func decodeFlowAmount(dataXDR string) (*big.Int, string, bool) {
 	sv, err := scval.Parse(dataXDR)
 	if err != nil {
-		return nil, false
+		return nil, "parse-error", false
 	}
-	amt, err := scval.AsAmountFromI128(sv)
-	if err != nil {
-		return nil, false
+	// Bare i128 (common shape).
+	if amt, err := scval.AsAmountFromI128(sv); err == nil {
+		return amt.BigInt(), "", true
 	}
-	return amt.BigInt(), true
+	// Map variant {amount, to_muxed_id, ...} — SEP-41/CAP-67 carry the amount in
+	// an `amount` field when a muxed destination is present (CLAUDE.md SEP-41
+	// note). Mirror sep41_transfers' type-test.
+	if sv.Type == xdr.ScValTypeScvMap {
+		entries, merr := scval.AsMap(sv)
+		if merr != nil {
+			return nil, "map-parse-error", false
+		}
+		amtVal, ok := scval.MapField(entries, "amount")
+		if !ok {
+			return nil, "map-no-amount", false
+		}
+		if amt, aerr := scval.AsAmountFromI128(amtVal); aerr == nil {
+			return amt.BigInt(), "", true
+		}
+		return nil, "map-amount-not-i128", false
+	}
+	return nil, sv.Type.String(), false
 }
 
 // chSupply derives total supply for EVERY token from the ClickHouse lake by
@@ -64,6 +83,7 @@ func chSupply(args []string) error {
 
 	supplyByContract := make(map[string]*big.Int)
 	flowsByContract := make(map[string]int)
+	skipByType := make(map[string]int)
 	var (
 		flows        uint64
 		decodeErrors uint64
@@ -74,11 +94,12 @@ func chSupply(args []string) error {
 	fmt.Fprintf(os.Stderr, "ch-supply: summing mint/burn/clawback flows for [%d,%d] from %s\n", lo, hi, *chAddr)
 	err := clickhouse.StreamMintBurnFlows(ctx, *chAddr, lo, hi, func(f clickhouse.MintBurnFlow) error {
 		flows++
-		v, ok := decodeFlowAmount(f.DataXDR)
+		v, skipType, ok := decodeFlowAmount(f.DataXDR)
 		if !ok {
 			// Undecodable / non-i128 body (some SEP-41 variants carry a map);
-			// skip rather than misparse. Rare for mint/burn.
+			// skip rather than misparse. skipType pinpoints the shape to handle.
 			decodeErrors++
+			skipByType[skipType]++
 			return nil
 		}
 		acc := supplyByContract[f.ContractID]
@@ -123,8 +144,9 @@ func chSupply(args []string) error {
 	})
 
 	fmt.Printf("\n=== ch-supply [%d,%d] ===\n", lo, hi)
-	fmt.Printf("flows: %d  decode-skipped: %d  tokens (distinct contracts): %d\n\n",
+	fmt.Printf("flows: %d  decode-skipped: %d  tokens (distinct contracts): %d\n",
 		flows, decodeErrors, len(supplyByContract))
+	fmt.Printf("skip-by-type: %v\n\n", skipByType)
 	fmt.Printf("%-58s %30s %12s\n", "contract", "supply (raw)", "flows")
 	for i, r := range rows {
 		if i >= *topN {
