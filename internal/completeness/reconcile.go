@@ -88,6 +88,52 @@ func ReDeriveOutputCounts(
 	return counts, nil
 }
 
+// EventStreamer yields decoded-ready [events.Event] directly — the ClickHouse
+// lake path, where contract_events ARE events.Event (no soroban_events Row +
+// Reconstruct round-trip). A clickhouse adapter over StreamContractEventsFiltered
+// satisfies it structurally.
+type EventStreamer interface {
+	StreamContractEvents(ctx context.Context, from, to uint32, contractIDs, topic0Syms []string, fn func(events.Event) error) error
+}
+
+// ReDeriveOutputCountsByKindFromEvents is [ReDeriveOutputCountsByKind] sourced
+// from the CH lake instead of Postgres soroban_events: it streams events.Event
+// straight from contract_events (no Reconstruct), decodes, and counts outputs
+// by EventKind() per ledger. Same soft-fail semantics (a row that fails Decode
+// is skipped, not fatal). Used by the CH-backed completeness verification so
+// projection reconciliation reads the certified lake, off the serving DB.
+func ReDeriveOutputCountsByKindFromEvents(
+	ctx context.Context,
+	es EventStreamer,
+	dec Decoder,
+	contractIDs, topic0Syms []string,
+	from, to uint32,
+) (map[string]map[uint32]int, error) {
+	byKind := make(map[string]map[uint32]int)
+	err := es.StreamContractEvents(ctx, from, to, contractIDs, topic0Syms,
+		func(ev events.Event) error {
+			if !dec.Matches(ev) {
+				return nil
+			}
+			outs, derr := dec.Decode(ev)
+			if derr != nil {
+				return nil //nolint:nilerr // deterministically-broken event; skip, don't abort.
+			}
+			for _, out := range outs {
+				k := out.EventKind()
+				if byKind[k] == nil {
+					byKind[k] = make(map[uint32]int)
+				}
+				byKind[k][ev.Ledger]++
+			}
+			return nil
+		})
+	if err != nil {
+		return nil, err
+	}
+	return byKind, nil
+}
+
 // ReDeriveOutputCountsByKind is the multi-table generalization of
 // ReDeriveOutputCounts: it returns the re-derived output counts keyed by
 // the output's EventKind(), then by ledger. A single decoder routes

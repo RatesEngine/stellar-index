@@ -11,6 +11,7 @@ import (
 	"github.com/RatesEngine/rates-engine/internal/completeness"
 	"github.com/RatesEngine/rates-engine/internal/config"
 	"github.com/RatesEngine/rates-engine/internal/pipeline"
+	"github.com/RatesEngine/rates-engine/internal/storage/clickhouse"
 	"github.com/RatesEngine/rates-engine/internal/storage/timescale"
 )
 
@@ -38,6 +39,8 @@ func computeCompleteness(args []string) error { //nolint:funlen,gocognit,gocyclo
 	cfgPath := fs.String("config", "", "Path to TOML config file (required)")
 	toFlag := fs.Uint("to", 0, "Tip ledger (inclusive); 0 = resolve from the live ledgerstream cursor")
 	only := fs.String("source", "", "Limit to one source (e.g. soroswap|blend|reflector-dex|sdex)")
+	useCH := fs.Bool("ch", false, "Read all three claims from the certified ClickHouse lake (substrate + recognition + projection re-derive) instead of Postgres soroban_events — fast, off the serving DB (ADR-0033 + ADR-0034)")
+	chAddr := fs.String("ch-addr", "127.0.0.1:9300", "ClickHouse native address (with -ch)")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -78,8 +81,22 @@ func computeCompleteness(args []string) error { //nolint:funlen,gocognit,gocyclo
 		}
 	}
 
+	// CH lake event source for projection re-derive (ADR-0034) when -ch.
+	var chStreamer completeness.EventStreamer
+	if *useCH {
+		chStreamer = clickhouse.ReconcileEventStreamer{Addr: *chAddr}
+	}
+
 	// ── Recognition (Claim 2a): one global scan, attributed per source ──
-	recGaps, recErr := computeRecognitionGaps(ctx, store, cfg, tip)
+	var (
+		recGaps []completeness.RecognitionGap
+		recErr  error
+	)
+	if *useCH {
+		recGaps, recErr = computeRecognitionGapsCH(ctx, cfg, *chAddr, tip)
+	} else {
+		recGaps, recErr = computeRecognitionGaps(ctx, store, cfg, tip)
+	}
 	if recErr != nil {
 		fmt.Fprintf(os.Stderr, "compute-completeness: recognition scan failed: %v\n", recErr)
 	}
@@ -99,6 +116,24 @@ func computeCompleteness(args []string) error { //nolint:funlen,gocognit,gocyclo
 		}
 	}
 
+	// Substrate (Claim 1) is a property of the lake, not a source — compute the
+	// earliest gap/break ONCE in -ch mode (over the whole Soroban-era range) and
+	// reuse per source. The CH lake is the certified authoritative substrate.
+	var chSubProblem uint32
+	var chSubHas bool
+	if *useCH {
+		p, has, d, serr := clickhouse.SubstrateProblem(ctx, *chAddr, 2, tip)
+		if serr != nil {
+			return fmt.Errorf("ch substrate: %w", serr)
+		}
+		chSubProblem, chSubHas = p, has
+		if has {
+			fmt.Fprintf(os.Stderr, "compute-completeness: CH substrate problem at %d (%s)\n", p, d)
+		} else {
+			fmt.Fprintln(os.Stderr, "compute-completeness: CH substrate intact [2,tip] — contiguous + hash-chained")
+		}
+	}
+
 	// ── Per-source watermark ────────────────────────────────────────
 	for _, src := range catalogue {
 		if *only != "" && src.name != *only {
@@ -109,23 +144,34 @@ func computeCompleteness(args []string) error { //nolint:funlen,gocognit,gocyclo
 		var detail []string
 
 		// Claim 1: substrate continuity + hash chain over [genesis, tip].
-		subGaps, err := store.FindLedgerIngestGaps(ctx, genesis, tip)
-		if err != nil {
-			return fmt.Errorf("%s: substrate gaps: %w", src.name, err)
-		}
-		breaks, err := store.VerifyLedgerHashChain(ctx, genesis, tip)
-		if err != nil {
-			return fmt.Errorf("%s: hash chain: %w", src.name, err)
-		}
-		substrateOK := len(subGaps) == 0 && len(breaks) == 0
-		for _, g := range subGaps {
-			problems = append(problems, uint32(g.Start))
-		}
-		for _, b := range breaks {
-			problems = append(problems, b.LedgerSeq)
-		}
-		if !substrateOK {
-			detail = append(detail, fmt.Sprintf("substrate: %d gap(s), %d chain break(s)", len(subGaps), len(breaks)))
+		var substrateOK bool
+		if *useCH {
+			// Reuse the once-computed lake substrate; it's this source's
+			// problem only if it falls at/after the source's genesis.
+			substrateOK = !chSubHas || chSubProblem < genesis
+			if !substrateOK {
+				problems = append(problems, chSubProblem)
+				detail = append(detail, fmt.Sprintf("substrate: lake gap/break at %d", chSubProblem))
+			}
+		} else {
+			subGaps, err := store.FindLedgerIngestGaps(ctx, genesis, tip)
+			if err != nil {
+				return fmt.Errorf("%s: substrate gaps: %w", src.name, err)
+			}
+			breaks, err := store.VerifyLedgerHashChain(ctx, genesis, tip)
+			if err != nil {
+				return fmt.Errorf("%s: hash chain: %w", src.name, err)
+			}
+			substrateOK = len(subGaps) == 0 && len(breaks) == 0
+			for _, g := range subGaps {
+				problems = append(problems, uint32(g.Start))
+			}
+			for _, b := range breaks {
+				problems = append(problems, b.LedgerSeq)
+			}
+			if !substrateOK {
+				detail = append(detail, fmt.Sprintf("substrate: %d gap(s), %d chain break(s)", len(subGaps), len(breaks)))
+			}
 		}
 
 		// Claim 2a: recognition gaps attributed to this source's contracts.
@@ -145,7 +191,7 @@ func computeCompleteness(args []string) error { //nolint:funlen,gocognit,gocyclo
 		projOK := false
 		if srW.Ledger >= genesis {
 			projHi := srW.Ledger
-			pgaps, perr := reconcileSourceProjection(ctx, store, src, genesis, projHi)
+			pgaps, perr := reconcileSourceProjection(ctx, store, chStreamer, src, genesis, projHi)
 			if perr != nil {
 				return fmt.Errorf("%s: projection: %w", src.name, perr)
 			}
@@ -206,7 +252,7 @@ func computeCompleteness(args []string) error { //nolint:funlen,gocognit,gocyclo
 // [genesis, hi] and returns the union of mismatched ledgers. SDEX uses
 // the LCM census; event sources re-derive (by kind) and project each
 // table's kinds.
-func reconcileSourceProjection(ctx context.Context, store *timescale.Store, src reconSource, genesis, hi uint32) ([]uint32, error) {
+func reconcileSourceProjection(ctx context.Context, store *timescale.Store, chStreamer completeness.EventStreamer, src reconSource, genesis, hi uint32) ([]uint32, error) {
 	var mismatched []uint32
 	if src.census {
 		expected, eerr := store.ClassicTradeEffectCountsByLedger(ctx, genesis, hi)
@@ -225,7 +271,15 @@ func reconcileSourceProjection(ctx context.Context, store *timescale.Store, src 
 		return mismatched, nil
 	}
 
-	byKind, derr := completeness.ReDeriveOutputCountsByKind(ctx, store, src.dec, src.contractIDs, src.topic0Syms, genesis, hi)
+	// Re-derive expected outputs: from the CH lake (certified, off the serving
+	// DB) when -ch, else from Postgres soroban_events.
+	var byKind map[string]map[uint32]int
+	var derr error
+	if chStreamer != nil {
+		byKind, derr = completeness.ReDeriveOutputCountsByKindFromEvents(ctx, chStreamer, src.dec, src.contractIDs, src.topic0Syms, genesis, hi)
+	} else {
+		byKind, derr = completeness.ReDeriveOutputCountsByKind(ctx, store, src.dec, src.contractIDs, src.topic0Syms, genesis, hi)
+	}
 	if derr != nil {
 		return nil, derr
 	}
@@ -240,6 +294,37 @@ func reconcileSourceProjection(ctx context.Context, store *timescale.Store, src 
 		}
 	}
 	return mismatched, nil
+}
+
+// computeRecognitionGapsCH is the CH-backed recognition audit: distinct
+// (contract, topic) shapes from the certified lake (excluding the CAP-67
+// classic-token firehose — sep41 isn't enabled, so it's out of protocol scope)
+// run through the dispatcher's Recognize(). Fast + off the serving DB vs the
+// Postgres soroban_events scan in computeRecognitionGaps.
+func computeRecognitionGapsCH(ctx context.Context, cfg config.Config, chAddr string, tip uint32) ([]completeness.RecognitionGap, error) {
+	disp, err := pipeline.BuildDispatcher(cfg.Ingestion.EnabledSources, cfg.Oracle)
+	if err != nil {
+		return nil, fmt.Errorf("build dispatcher: %w", err)
+	}
+	shapes, err := clickhouse.DistinctTopicShapes(ctx, chAddr, sorobanEraGenesis, tip, clickhouse.ClassicTokenTopic0Syms)
+	if err != nil {
+		return nil, err
+	}
+	var gaps []completeness.RecognitionGap
+	for _, s := range shapes {
+		if _, ok := disp.Recognize(s.Event()); ok {
+			continue
+		}
+		gaps = append(gaps, completeness.RecognitionGap{
+			ContractID: s.ContractID,
+			Topic0Sym:  s.Topic0Sym,
+			Count:      int64(s.Count),
+			MinLedger:  s.MinLedger,
+			MaxLedger:  s.MaxLedger,
+			Reason:     "no decoder matches",
+		})
+	}
+	return gaps, nil
 }
 
 // computeRecognitionGaps runs the global recognition audit over the
