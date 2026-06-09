@@ -138,6 +138,16 @@ func computeCompleteness(args []string) error { //nolint:funlen,gocognit,gocyclo
 		}
 	}
 
+	// Retention boundary for trade-target sources: trades is right-sized to
+	// ~90d (~1.55M ledgers), so projection for trade-protocols is verified
+	// within [retentionStart, tip] (where the served tier keeps decoded rows);
+	// the full-history coverage claim rests on the proven substrate. ~87d keeps
+	// the window safely inside the retained range (no boundary undercount).
+	var retentionStart uint32
+	if *useCH && tip > 1_500_000 {
+		retentionStart = tip - 1_500_000
+	}
+
 	// ── Per-source watermark ────────────────────────────────────────
 	for _, src := range catalogue {
 		if *only != "" && src.name != *only {
@@ -190,25 +200,48 @@ func computeCompleteness(args []string) error { //nolint:funlen,gocognit,gocyclo
 			detail = append(detail, "recognition: unhandled topic on this source's contract(s)")
 		}
 
-		// Bound projection to the substrate∧recognition-verified region.
+		// Substrate∧recognition watermark drives COVERAGE — coverage means "did
+		// we capture every event" (substrate is the proof). Projection is a
+		// fidelity claim on the served tier, evaluated separately so its keying
+		// artifacts / retention-scoping don't corrupt the coverage signal.
 		srW := completeness.ComputeWatermark(genesis, tip, problems)
 		projOK := false
-		if srW.Ledger >= genesis {
-			projHi := srW.Ledger
-			pgaps, perr := reconcileSourceProjection(ctx, store, chStreamer, src, genesis, projHi)
-			if perr != nil {
-				return fmt.Errorf("%s: projection: %w", src.name, perr)
+		var w completeness.Watermark
+		if *useCH {
+			if srW.Ledger >= genesis {
+				delta, pdetail, perr := reconcileProjectionAggregate(ctx, store, chStreamer, src, genesis, srW.Ledger, retentionStart)
+				if perr != nil {
+					return fmt.Errorf("%s: projection: %w", src.name, perr)
+				}
+				projOK = delta == 0
+				if !projOK {
+					detail = append(detail, "projection: "+pdetail)
+				}
+			} else {
+				detail = append(detail, "projection: not evaluated (earlier claim failed at genesis)")
 			}
-			projOK = len(pgaps) == 0
-			problems = append(problems, pgaps...)
-			if !projOK {
-				detail = append(detail, fmt.Sprintf("projection: %d mismatched ledger(s) in [%d,%d]", len(pgaps), genesis, projHi))
-			}
+			// Coverage = substrate∧recognition (proven data capture). complete
+			// additionally requires the served-tier projection to reconcile.
+			w = srW
+			w.Complete = srW.Complete && projOK
 		} else {
-			detail = append(detail, "projection: not evaluated (earlier claim failed at genesis)")
+			// Legacy Postgres path: strict per-ledger projection pins the watermark.
+			if srW.Ledger >= genesis {
+				pgaps, perr := reconcileSourceProjection(ctx, store, chStreamer, src, genesis, srW.Ledger)
+				if perr != nil {
+					return fmt.Errorf("%s: projection: %w", src.name, perr)
+				}
+				projOK = len(pgaps) == 0
+				problems = append(problems, pgaps...)
+				if !projOK {
+					detail = append(detail, fmt.Sprintf("projection: %d mismatched ledger(s) in [%d,%d]", len(pgaps), genesis, srW.Ledger))
+				}
+			} else {
+				detail = append(detail, "projection: not evaluated (earlier claim failed at genesis)")
+			}
+			w = completeness.ComputeWatermark(genesis, tip, problems)
 		}
 
-		w := completeness.ComputeWatermark(genesis, tip, problems)
 		if len(detail) == 0 {
 			detail = append(detail, "complete: substrate + recognition + projection verified to tip")
 		}
@@ -298,6 +331,84 @@ func reconcileSourceProjection(ctx context.Context, store *timescale.Store, chSt
 		}
 	}
 	return mismatched, nil
+}
+
+// reconcileProjectionAggregate is the CH-backed AGGREGATE projection check
+// (ADR-0033 Claim 2b, refined). It compares per-source/target TOTALS
+// (Σ CH-derived expected vs Σ served rows) over the verifiable scope, rather
+// than strict per-ledger counts. Strict per-ledger produces FALSE mismatches
+// for sources whose served `ledger` is keyed differently from the event ledger
+// — reflector's oracle_updates.ledger is the ORACLE TIMESTAMP's ledger, so a
+// per-ledger count by event ledger mis-keys by the oracle's staleness; the
+// aggregate is invariant to that shift while still catching any real net
+// loss/phantom. Returns the total absolute delta across targets (0 = clean).
+//
+// Scope: a source with a `trades` target is scoped to [retentionStart, hi] —
+// trades is right-sized to ~90d, so its decoded rows >retention don't exist in
+// the served tier (the raw events ARE captured: substrate proves that). We
+// verify the served tier is faithful within what it retains; the full-history
+// coverage claim rests on substrate. Pure entity/oracle sources verify the
+// whole [genesis, hi].
+func reconcileProjectionAggregate(ctx context.Context, store *timescale.Store, chStreamer completeness.EventStreamer, src reconSource, genesis, hi, retentionStart uint32) (int, string, error) {
+	lo := genesis
+	if hasTradesTarget(src) && retentionStart > genesis {
+		lo = retentionStart
+	}
+	var totalDelta int
+	var details []string
+
+	if src.census {
+		expected, eerr := store.ClassicTradeEffectCountsByLedger(ctx, lo, hi)
+		if eerr != nil {
+			return 0, "", eerr
+		}
+		for _, tgt := range src.targets {
+			actual, aerr := store.CountRowsByLedger(ctx, tgt.table, "ledger", tgt.whereFilter, lo, hi)
+			if aerr != nil {
+				return 0, "", aerr
+			}
+			e, a := sumCounts(expected), sumCounts(actual)
+			if d := absDiff(e, a); d != 0 {
+				totalDelta += d
+				details = append(details, fmt.Sprintf("%s: expected=%d served=%d Δ=%d [%d,%d]", tgt.table, e, a, d, lo, hi))
+			}
+		}
+		return totalDelta, strings.Join(details, "; "), nil
+	}
+
+	byKind, derr := completeness.ReDeriveOutputCountsByKindFromEvents(ctx, chStreamer, src.dec, src.contractIDs, src.topic0Syms, lo, hi)
+	if derr != nil {
+		return 0, "", derr
+	}
+	for _, tgt := range src.targets {
+		expected := completeness.SumKinds(byKind, tgt.kinds...)
+		actual, aerr := store.CountRowsByLedger(ctx, tgt.table, "ledger", tgt.whereFilter, lo, hi)
+		if aerr != nil {
+			return 0, "", aerr
+		}
+		e, a := sumCounts(expected), sumCounts(actual)
+		if d := absDiff(e, a); d != 0 {
+			totalDelta += d
+			details = append(details, fmt.Sprintf("%s: expected=%d served=%d Δ=%d [%d,%d]", tgt.table, e, a, d, lo, hi))
+		}
+	}
+	return totalDelta, strings.Join(details, "; "), nil
+}
+
+func hasTradesTarget(src reconSource) bool {
+	for _, t := range src.targets {
+		if t.table == "trades" {
+			return true
+		}
+	}
+	return src.census // sdex census also writes trades
+}
+
+func absDiff(a, b int) int {
+	if a > b {
+		return a - b
+	}
+	return b - a
 }
 
 // computeRecognitionGapsCH is the CH-backed recognition audit: distinct
