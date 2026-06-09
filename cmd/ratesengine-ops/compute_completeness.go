@@ -42,6 +42,7 @@ func computeCompleteness(args []string) error { //nolint:funlen,gocognit,gocyclo
 	useCH := fs.Bool("ch", false, "Read all three claims from the certified ClickHouse lake (substrate + recognition + projection re-derive) instead of Postgres soroban_events — fast, off the serving DB (ADR-0033 + ADR-0034)")
 	chAddr := fs.String("ch-addr", "127.0.0.1:9300", "ClickHouse native address (with -ch)")
 	skipSubstrate := fs.Bool("skip-substrate", false, "Trust the prior substrate certification (substrate_ok=true) instead of re-scanning the hash-chain — fast per-source iteration once substrate is proven")
+	skipRecognition := fs.Bool("skip-recognition", false, "Trust the prior recognition audit (recognition_ok=true) instead of re-scanning all topic shapes — the global DistinctTopicShapes scan is the load-heaviest step; skip it for gentle projection-only iteration once recognition is verified")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -93,9 +94,12 @@ func computeCompleteness(args []string) error { //nolint:funlen,gocognit,gocyclo
 		recGaps []completeness.RecognitionGap
 		recErr  error
 	)
-	if *useCH {
+	switch {
+	case *skipRecognition:
+		fmt.Fprintln(os.Stderr, "compute-completeness: -skip-recognition — trusting prior recognition audit (no shape scan)")
+	case *useCH:
 		recGaps, recErr = computeRecognitionGapsCH(ctx, cfg, *chAddr, tip)
-	} else {
+	default:
 		recGaps, recErr = computeRecognitionGaps(ctx, store, cfg, tip)
 	}
 	if recErr != nil {
@@ -259,7 +263,7 @@ func computeCompleteness(args []string) error { //nolint:funlen,gocognit,gocyclo
 	}
 
 	// ── System recognition snapshot (gaps on contracts no source owns) ──
-	if *only == "" {
+	if *only == "" && !*skipRecognition {
 		var earliest uint32
 		for _, g := range unattributed {
 			if earliest == 0 || g.MinLedger < earliest {
