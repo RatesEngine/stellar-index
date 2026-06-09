@@ -278,6 +278,8 @@ jobs:
           cache: true
       - name: ADR-0018 URL-discipline check
         run: go run ./scripts/ci/lint-openapi-urls openapi/rates-engine.v1.yaml
+      - name: ADR-0033 PK-discriminator check (coarse-PK data-loss guard)
+        run: go run ./scripts/ci/lint-pk-discriminators
       - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e  # v6
         with:
           node-version: "22"
