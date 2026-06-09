@@ -110,8 +110,23 @@ func ReDeriveOutputCountsByKindFromEvents(
 	from, to uint32,
 ) (map[string]map[uint32]int, error) {
 	byKind := make(map[string]map[uint32]int)
+	// Adjacent-duplicate skip: the CH stream is ORDER BY (ledger, tx_hash,
+	// op_index, event_index), so un-merged ReplacingMergeTree duplicate rows
+	// (re-run partitions 25/45/62) arrive consecutively. Dedup by identity vs
+	// the previous event — O(1) memory, and it lets the read stay no-FINAL
+	// (gentle) while counting correctly.
+	var (
+		haveLast bool
+		lL       uint32
+		lTx      string
+		lOp, lEv int
+	)
 	err := es.StreamContractEvents(ctx, from, to, contractIDs, topic0Syms,
 		func(ev events.Event) error {
+			if haveLast && ev.Ledger == lL && ev.OperationIndex == lOp && ev.EventIndex == lEv && ev.TxHash == lTx {
+				return nil // exact-identity duplicate part; count once
+			}
+			haveLast, lL, lTx, lOp, lEv = true, ev.Ledger, ev.TxHash, ev.OperationIndex, ev.EventIndex
 			if !dec.Matches(ev) {
 				return nil
 			}

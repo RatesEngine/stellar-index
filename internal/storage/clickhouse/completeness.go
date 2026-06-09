@@ -14,11 +14,14 @@ import (
 type ReconcileEventStreamer struct{ Addr string }
 
 // StreamContractEvents streams events.Event for [from,to] narrowed by the
-// source's prefilter, with FINAL — the reconcile COUNTS, so un-merged
-// ReplacingMergeTree duplicate parts (the re-run partitions 25/45/62) must be
-// deduped or they inflate the expected count into false projection mismatches.
+// source's prefilter. NO FINAL — that forces a full-range merge-on-read and is
+// far too heavy on the shared host. Un-merged ReplacingMergeTree duplicate parts
+// (the re-run partitions 25/45/62) would inflate counts, but the stream is
+// ORDER BY (ledger, tx_hash, op_index, event_index), so duplicates are ADJACENT
+// and the reconcile dedups them by identity in O(1) memory (see
+// ReDeriveOutputCountsByKindFromEvents). Correct + gentle, no OPTIMIZE needed.
 func (s ReconcileEventStreamer) StreamContractEvents(ctx context.Context, from, to uint32, contractIDs, topic0Syms []string, fn func(events.Event) error) error {
-	return StreamContractEventsFiltered(ctx, s.Addr, from, to, contractIDs, topic0Syms, nil, true, fn)
+	return StreamContractEventsFiltered(ctx, s.Addr, from, to, contractIDs, topic0Syms, nil, false, fn)
 }
 
 // ContiguousWatermark returns the highest ledger L such that stellar.ledgers
