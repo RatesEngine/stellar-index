@@ -36,8 +36,11 @@ type Trade struct {
 	TxHash string `json:"tx_hash"`
 
 	// OpIndex is the 0-based index of the operation within the
-	// transaction. For SDEX ManageOffer, this is the op that closed;
-	// for Soroban, it's the invoke-host-function op.
+	// transaction — fanned via FanoutOpIndex to also encode the
+	// per-trade discriminator (the in-op event/claim index), so multiple
+	// trades from one operation get distinct op_index values and never
+	// collide on the trades primary key. For SDEX ManageOffer this is the
+	// op that closed; for Soroban, the invoke-host-function op.
 	OpIndex uint32 `json:"op_index"`
 
 	// Timestamp is the ledger close time (UTC). Millisecond precision

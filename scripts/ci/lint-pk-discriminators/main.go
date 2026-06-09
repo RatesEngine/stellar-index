@@ -58,10 +58,10 @@ var allow = map[string]string{
 	"blend_auctions":        "OK: auction events are one-per-(ledger,tx,op); legacy table",
 	"comet_liquidity":       "OK: (event_kind, token) distinguishes per-token liquidity changes; completeness reconcile Δ=0",
 	"sep41_supply_events":   "OK: supply-observer snapshots keyed by observed_at, not per-event; SEP-41 observer not enabled (CLAUDE.md)",
-	"trades":                "TODO: coarse PK (source,ledger,tx,op,ts) — multi-trade ops collide (~7% loss). Fix = add trade_index. Tracked Phase 2.",
-	"phoenix_liquidity":     "TODO: PK keys on `action` not event_index — multi-action ops can collide. Tracked.",
-	"phoenix_stake_events":  "TODO: PK keys on `action` not event_index — multi-action ops can collide. Tracked.",
-	"soroswap_router_swaps": "TODO: PK (ledger_close_time,ledger,tx,op) — multi-swap routes collide. Tracked.",
+	"trades":                "OK: op_index is FANNED (canonical.FanoutOpIndex: opIndex<<16|event_index; SDEX opIdx*1024+claim_index) — encodes the per-trade discriminator, so multi-trade ops never collide",
+	"phoenix_liquidity":     "OK: (op_index, action) distinguishes provide/withdraw per op; completeness reconcile Δ=0",
+	"phoenix_stake_events":  "OK: (op_index, action) distinguishes bond/unbond per op; completeness reconcile Δ=0",
+	"soroswap_router_swaps": "TODO: PK (ledger_close_time,ledger,tx,op) — no per-route discriminator; verify multi-route ops. Tracked.",
 	"defindex_flows":        "TODO: PK keys on `layer` not event_index — verify Δ=70 source. Tracked.",
 }
 
