@@ -29,9 +29,11 @@ against.
   lake's drop→heal / re-backfill). The real-time dual-sink feeds it inline, so
   a token's supply (`Σmint − Σburn − Σclawback`, `SupplyForContract`) is always
   current with **no refresh job** and no read-time XDR decode. History is
-  seeded once from the existing lake via `ratesengine-ops ch-supply -seed-flows`
-  (decode CH `contract_events` → `supply_flows`); thereafter the dual-sink keeps
-  it live. The decode logic is shared between ingest and the seed so both
+  seeded once from the existing lake via `scripts/ops/ch-supply-flows-seed.sh`
+  (windowed + resumable wrapper over `ch-supply -seed-flows` — a single-shot
+  all-history seed exceeds the 1h CH read timeout and, lacking an ORDER BY,
+  leaves scattered holes; windowing bounds each read); thereafter the dual-sink
+  keeps it live. The decode logic is shared between ingest and the seed so both
   produce identical amounts.
 
 - **ClickHouse Tier-1 raw lake (ADR-0034, migration in progress).** New
