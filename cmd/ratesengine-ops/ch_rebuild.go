@@ -99,6 +99,7 @@ func chRebuild(args []string) error { //nolint:gocognit,gocyclo,funlen // linear
 	chAddr := fs.String("ch-addr", "127.0.0.1:9300", "ClickHouse native address")
 	only := fs.String("sources", "", "comma-separated source names to rebuild (default: all event-based)")
 	includeSDEX := fs.Bool("sdex", false, "also re-derive SDEX trades from operations (expensive: ~15.5B op decodes all-history)")
+	sdexGaps := fs.Bool("sdex-gaps", false, "with -sdex: re-derive ONLY the served gaps in [from,to] in one pass (each gap is an empty range → pure insert, no ON CONFLICT walk) — efficient drop-backlog recovery vs re-scanning the whole range")
 	write := fs.Bool("write", false, "actually write to Postgres (default: dry-run, count only)")
 	if err := fs.Parse(args); err != nil {
 		return err
@@ -199,24 +200,50 @@ func chRebuild(args []string) error { //nolint:gocognit,gocyclo,funlen // linear
 	if *includeSDEX && enabled("sdex") {
 		sdexDec := sdex.NewDecoder()
 		sStart := time.Now()
-		serr := clickhouse.StreamSDEXOps(ctx, *chAddr, lo, hi, func(op clickhouse.SDEXOp) error {
+		decodeRange := func(rlo, rhi uint32) error {
 			// SDEX Decode never returns a non-nil error (soft-fails per claim).
-			outs, _ := sdexDec.Decode(dispatcher.OpContext{
-				Ledger:   op.Ledger,
-				ClosedAt: op.ClosedAt,
-				TxHash:   op.TxHash,
-				TxSource: op.Source,
-				OpIndex:  int(op.OpIndex),
-				Op:       op.Op,
-				OpResult: op.OpResult,
+			return clickhouse.StreamSDEXOps(ctx, *chAddr, rlo, rhi, func(op clickhouse.SDEXOp) error {
+				outs, _ := sdexDec.Decode(dispatcher.OpContext{
+					Ledger:   op.Ledger,
+					ClosedAt: op.ClosedAt,
+					TxHash:   op.TxHash,
+					TxSource: op.Source,
+					OpIndex:  int(op.OpIndex),
+					Op:       op.Op,
+					OpResult: op.OpResult,
+				})
+				buf = append(buf, outs...)
+				return nil
 			})
-			buf = append(buf, outs...)
-			return nil
-		})
-		if serr != nil {
-			return fmt.Errorf("ch-rebuild: sdex op stream: %w", serr)
 		}
-		fmt.Fprintf(os.Stderr, "ch-rebuild: SDEX read done in %s\n", time.Since(sStart).Round(time.Second))
+		if *sdexGaps {
+			// Re-derive ONLY the served gaps in one pass: each gap is an empty
+			// ledger range, so the decode + write is a pure insert (no ON CONFLICT
+			// walk over the 121M served rows that makes a full-range pass slow).
+			// This clears the dual-sink drop backlog cheaply and safely.
+			targets, terr := resolveFindDataGapsTargets("sdex")
+			if terr != nil {
+				return fmt.Errorf("ch-rebuild: sdex gap targets: %w", terr)
+			}
+			var ng int
+			for _, tgt := range targets {
+				gaps, gerr := store.FindPerSourceLedgerGaps(ctx, tgt, int64(lo), int64(hi), 1)
+				if gerr != nil {
+					return fmt.Errorf("ch-rebuild: find sdex gaps: %w", gerr)
+				}
+				for _, g := range gaps {
+					if derr := decodeRange(uint32(g.Start), uint32(g.End)); derr != nil { //nolint:gosec // ledger seq fits uint32
+						return fmt.Errorf("ch-rebuild: sdex gap [%d,%d]: %w", g.Start, g.End, derr)
+					}
+					ng++
+				}
+			}
+			fmt.Fprintf(os.Stderr, "ch-rebuild: SDEX gap-only read done (%d gaps) in %s\n", ng, time.Since(sStart).Round(time.Second))
+		} else if derr := decodeRange(lo, hi); derr != nil {
+			return fmt.Errorf("ch-rebuild: sdex op stream: %w", derr)
+		} else {
+			fmt.Fprintf(os.Stderr, "ch-rebuild: SDEX read done in %s\n", time.Since(sStart).Round(time.Second))
+		}
 	}
 
 	// ─── write the buffered events to Postgres (trades batched) ──────────
