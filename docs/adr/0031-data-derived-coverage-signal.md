@@ -9,6 +9,13 @@ superseded_by: null
 
 # ADR-0031: Coverage signal is data-derived from authoritative stores
 
+> **Note (ADR-0033, 2026-06-02).** ADR-0033 introduced
+> `completeness_snapshots` (substrate continuity + recognition +
+> projection reconciliation) as the **authoritative** coverage
+> verdict. The data-derived gap detector described in this ADR is
+> now a **supporting** signal that feeds alerting, not the headline
+> completeness figure.
+
 ## Context
 
 The Rates Engine currently answers the question **"is range R covered

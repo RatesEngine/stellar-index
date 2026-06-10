@@ -217,7 +217,8 @@ The migration is staged so no per-source table loses coverage:
 3. **Phase 3** — delete `pipeline/sink.go` per-source `persist*`
    functions, delete the seven `*-backfill` subcommands, delete
    `drain-cascade-window`, delete the rc.89 cursor-credit fix
-   (`66efa65a`). Net delete.
+   (`66efa65a`). Net delete. *(The subcommand + `drain-cascade-window`
+   deletions landed in **Phase 5, rc.97** — they no longer exist.)*
 
 ## Consequences
 
@@ -312,7 +313,7 @@ The migration is staged so no per-source table loses coverage:
   - `internal/dispatcher/dispatcher.go:811` `dispatchOne`
   - `internal/sources/sorobanevents/dispatcher_adapter.go:165` `AsyncSink.PushEvent`
   - `internal/pipeline/sink.go:113` `handleOneEvent` (to be deleted)
-- **Existing backfill subcommands** (to be deleted in Phase 3):
+- **Former backfill subcommands** (deleted in Phase 5, rc.97):
   - `cmd/ratesengine-ops/{blend,cctp,comet_liquidity,phoenix,rozo,sep41_transfers,soroswap_skim}_backfill.go`
   - `cmd/ratesengine-ops/drain_cascade_window.go`
 - **EVERY-event policy:** project memory `project_every_event_principle`

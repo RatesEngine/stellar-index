@@ -18,11 +18,13 @@ severity: P3
 
 ## Why this exists
 
-ADR-0032 Phase 5 (rc.97) replaces the family of `*-backfill`
+ADR-0032 Phase 5 (rc.97) **deleted** the family of `*-backfill`
 operator subcommands (`cctp-backfill`, `rozo-backfill`,
 `soroswap-skim-backfill`, `comet-liquidity-backfill`,
 `phoenix-backfill`, `blend-backfill`, `sep41-transfers-backfill`,
-`drain-cascade-window`) with one cursor-rewind:
+`drain-cascade-window`). They no longer exist. `projector-replay`
+is the **only** catch-up path for projected (Soroban-derived)
+sources — one cursor-rewind:
 
 ```sh
 ratesengine-ops projector-replay -config /etc/ratesengine.toml \

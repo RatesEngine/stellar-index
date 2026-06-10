@@ -4,10 +4,12 @@ title: soroban_events raw-event landing zone
 status: Accepted
 date: 2026-05-25
 supersedes: []
-superseded_by: null
+superseded_by: [0034]
 ---
 
 # ADR-0029: `soroban_events` raw-event landing zone
+
+> ⚠️ **Superseded by ADR-0034 (2026-06-05).** This describes the Postgres `soroban_events` landing zone. The raw landing zone is now ClickHouse (the Tier-1 lake); the parallel live+backfill writer model is replaced by the single-writer projector (ADR-0032). Retained for historical context.
 
 ## Context
 

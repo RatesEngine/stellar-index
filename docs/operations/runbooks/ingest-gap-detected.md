@@ -62,7 +62,7 @@ One invocation per gap. Each ~92 K ledger gap takes 15-30 min on r1. Confirm the
 
 ### Wedged writer + growing gap
 
-This is the F-0020 cascade pattern. Pause heavy walks (`soroban-events-fill.service`, `verify-archive-tier-a.service`) per `docs/operations/backfill-with-live-ingest.md`, then:
+This is the F-0020 cascade pattern. Pause heavy walks (any running `ratesengine-ops backfill -source soroban-events` invocation — `pkill -INT -f 'ratesengine-ops backfill'`; `verify-archive-tier-a.service`) per `docs/operations/backfill-with-live-ingest.md`, then:
 
 1. Check Redis (`redis-cli info persistence` — `rdb_last_bgsave_status: ok`?).
 2. Check Postgres (`SELECT count(*) FROM pg_stat_activity;` — saturated?).

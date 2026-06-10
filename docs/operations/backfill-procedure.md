@@ -60,8 +60,14 @@ The fix landed 2026-05-13 (`feat(ops): auto-refresh CAGGs in
 backfill`): the backfill tool now calls
 `refresh_continuous_aggregate` over each chunk's actual ts range
 immediately after the insert loop, **before** the next retention
-cycle. Aggregates persist; the raw trades age out 90 days later
-as designed.
+cycle. Aggregates persist.
+
+> **Update (migration 0031, 2026-05-14):** the 90-day retention
+> policy on raw `trades` described above was REMOVED. Raw trades are
+> now retained indefinitely, so the aging-out failure mode no longer
+> occurs. The CAGG auto-refresh remains correct and is kept (it still
+> ensures historical buckets materialize promptly), but the
+> "trades age out 90 days later" outcome no longer happens.
 
 **Doesn't:**
 - Tail live ledgers — exits at `-to`.
@@ -359,9 +365,12 @@ wall-clock on a single R1 box at `-parallel 4`.
    psql ratesengine -c "CALL refresh_continuous_aggregate('prices_1mo', NULL, NULL);"
    ```
 
-   `prices_1m` / `prices_15m` have 30-day retention by design
-   (migration 0002), so refreshing them for historical ranges
-   is wasted work.
+   `prices_1m` / `prices_15m` previously had 30-day retention by
+   design (migration 0002), which is why refreshing them for
+   historical ranges used to be wasted work. **Migration 0031
+   (2026-05-14) removed that retention — they are now retained
+   indefinitely**, so refreshing them over historical ranges is no
+   longer wasted; include them if you need sub-hourly history.
 
 6. **Verify.** `/v1/chart?asset=native&quote=fiat:USD&timeframe=1y`
    should return a non-truncated point set; spot-check earliest

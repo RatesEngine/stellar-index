@@ -68,7 +68,7 @@ development. If one does, it's a bug.
 ├── .github/                   workflows + issue/PR templates
 │
 ├── cmd/                       binary entry points (six in total)
-│   ├── ratesengine-indexer/              ingestion pipeline: Galexie → Timescale
+│   ├── ratesengine-indexer/              ingestion pipeline: Galexie → ClickHouse raw lake + Timescale served tier (dual-sink, ADR-0034)
 │   ├── ratesengine-aggregator/           VWAP/TWAP + continuous aggregates
 │   ├── ratesengine-api/                  REST + SSE API server
 │   ├── ratesengine-ops/          admin CLI: backfill, detect-gaps, verify-archive, wasm-history, …
@@ -82,12 +82,14 @@ development. If one does, it's a bug.
 │   ├── ledgerstream/             archive/live LedgerCloseMeta streaming
 │   ├── dispatcher/               production ledger walker + decoder router
 │   ├── pipeline/                 shared ingest-pipeline glue used by both indexer + `ratesengine-ops backfill`
+│   ├── projector/                ONLY writer for Soroban-derived events — projects per-source tables from soroban_events (ADR-0031/0032)
+│   ├── completeness/             ADR-0033 coverage verification: substrate + recognition + projection reconcile → completeness_snapshots
 │   ├── events/                   transport-neutral Soroban contract-event types (RPC or LCM-extracted)
 │   ├── scval/                    narrow SCVal primitives wrapper around go-stellar-sdk/xdr
 │   ├── stellarrpc/               JSON-RPC client for diagnostics + fixture capture, not prod ingest
 │   ├── sources/                  one package per source (on-chain + CEX + FX)
 │   ├── aggregate/                VWAP/TWAP/outlier/triangulation
-│   ├── storage/                  TimescaleDB + Redis + MinIO adapters
+│   ├── storage/                  TimescaleDB (served tier) + ClickHouse (raw lake, ADR-0034) + Redis + MinIO adapters
 │   ├── archivecompleteness/      dual-archive completeness daemon (ADR-0017)
 │   ├── hashdb/                   on-disk (ledger_seq → sha256(LCM)) record; drift detector vs upstream rewrites
 │   ├── api/                      REST/SSE handlers (v1)
@@ -210,10 +212,32 @@ observers) continue writing through the dispatcher's events
 goroutine — they don't flow through `soroban_events` and have
 their own catch-up paths.
 
-**Coverage signal** is data-derived from the authoritative store,
-not cursor-derived (ADR-0031). The single source of truth is the
-gap-detector's `source_coverage_snapshots` table. Cursor-derived
-coverage helpers under `internal/api/v1` were deleted in rc.93/94.
+**Coverage signal** is data-derived, not cursor-derived (ADR-0031):
+cursor-derived helpers under `internal/api/v1` were deleted in
+rc.93/94. The authoritative coverage VERDICT is `completeness_snapshots`
+(ADR-0033: substrate + recognition + projection reconcile against the
+ClickHouse lake); the gap-detector's `source_coverage_snapshots` is a
+supporting signal.
+
+### 8. ClickHouse is the raw lake; Postgres is the served tier (ADR-0034)
+
+The certified raw history of every ledger + event lives in **ClickHouse**
+(`galexie → ClickHouse → decoders → Postgres`). **Postgres/TimescaleDB is
+the SERVED tier** — the recent working set the API queries, NOT the full
+archive. Re-backfilling Postgres for full history was abandoned as
+infeasible (OLTP-for-OLAP, billions of rows). Consequences:
+
+- **"100% coverage" = the ClickHouse substrate captured everything**
+  (provable: ledgers contiguous + hash-chained to genesis). The served
+  tier is verified faithful *within what it holds* (ADR-0033 projection
+  reconcile, retention-scoped).
+- **Raw `trades` are kept forever** in Postgres — migration 0031 removed
+  the old 90-day retention (storage is not a constraint). If you see a
+  `drop_after` retention policy on `trades`, it's drift — remove it.
+- **Continuous aggregates**: `prices_1h/4h/1d`+ are indefinite (daily
+  OHLC spans back to 2015); `prices_1m/15m` retention was also removed.
+- **Decoder backfills re-derive from the lake** (SQL / `ch-rebuild`), not
+  MinIO walks. Projected-source catch-up is `projector-replay`.
 
 ---
 

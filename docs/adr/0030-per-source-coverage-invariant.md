@@ -45,7 +45,7 @@ A table can be exempted only by adding it to `excludedFromGapDetector` with a do
 **Positive:**
 
 - A future cascade in any per-source table fires the same paging alert within ~45-60 min of formation. No new alerts to add per source.
-- The lint guard makes adding a new Soroban DeFi source a one-PR operation: migration + decoder + target registration + backfill subcommand, all in one mental unit. CI enforces the discipline.
+- The lint guard makes adding a new Soroban DeFi source a one-PR operation: migration + decoder + target registration + projector source registration, all in one mental unit. CI enforces the discipline.
 - The exclusion list documents *why* a table is exempt; future engineers don't have to guess whether `freeze_events` was forgotten or deliberate.
 
 **Negative:**

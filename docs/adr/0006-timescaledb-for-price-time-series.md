@@ -9,6 +9,8 @@ superseded_by: null
 
 # ADR-0006: TimescaleDB for price time-series storage
 
+> ⚠️ **Retention revised — see migration 0031 (2026-05-14).** The 90-day raw-trade retention and 30-day sub-hourly-aggregate retention described below were REMOVED. Raw trades and all price aggregates are now retained indefinitely. Hourly+ aggregates were always indefinite.
+
 ## Context
 
 Rates Engine must retain:

@@ -41,8 +41,15 @@ it protects.
    archive + replay source is MinIO. Three tiers, three failure
    domains.
 4. **No single machine's failure takes us below SLA.** Redundancy is
-   N+1 at minimum for every stateful component; N+2 for stellar-core
-   and stellar-rpc (ADR-0001/0004 influence).
+   N+1 at minimum for every stateful component; the Tier-1
+   three-validator aspiration (ADR-0004) provides N+2 for the
+   validator / history-archive layer.
+   > **Update (2026-04-23):** stellar-rpc was **removed from
+   > production ingest** and is now diagnostics-only (`rpc-probe` +
+   > fixture capture). The N+2 redundancy goal applies to the
+   > validators per ADR-0004; it does **not** describe stellar-rpc,
+   > which is no longer on the ingest path. The §3.2 sizing below
+   > predates this removal — see `docs/operations/r1-deployment-state.md`.
 5. **Every component has a "degraded mode" defined up front.** If
    Aquarius ingestion dies, what does `/v1/price?asset=…` return?
    The answer is in §9, not invented during an incident.

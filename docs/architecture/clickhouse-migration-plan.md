@@ -1,12 +1,12 @@
 ---
 title: Tiered data architecture — galexie → ClickHouse → decoders → Postgres
 last_verified: 2026-06-05
-status: proposed
+status: accepted
 ---
 
 # Migration plan: galexie → ClickHouse → protocol decoders → Postgres
 
-**Status: proposed.** A comprehensive, phased migration to the storage
+**Status: accepted (ADR-0034, 2026-06-05); migration in progress.** A comprehensive, phased migration to the storage
 architecture that supports BOTH the pricing proposal AND a full,
 searchable Stellar/Soroban explorer — without the bulk-reprocessing wall
 we hit with `soroban_events` and `trades` in Postgres.

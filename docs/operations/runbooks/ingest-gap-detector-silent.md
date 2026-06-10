@@ -69,8 +69,10 @@ Defer the detector restart until Postgres is healthy. Once `pg_isready` returns 
 Reduce concurrent walk parallelism per `docs/operations/backfill-with-live-ingest.md`:
 
 ```sh
-ssh root@<region-host> 'systemctl stop soroban-events-fill.service'
-# Wait for connection-count to drop, then resume at -parallel 4 instead of -parallel 12.
+# Stop the running fill (a manual operator invocation, not a systemd unit) —
+# find its PID and kill -INT it per backfill-with-live-ingest.md
+# "Stop a running fill walk". Then wait for connection-count to drop and
+# resume at -parallel 4 instead of -parallel 12.
 ```
 
 ## Known false-positive patterns

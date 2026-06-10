@@ -82,13 +82,14 @@ proven otherwise, and stop the heavy walker first.
 ### Stop a running fill walk
 
 ```sh
-# On r1 — find the fill PID.
-ps auxf | grep -E 'ratesengine-ops.*backfill' | grep -v grep
-# Then either kill -INT (graceful — drain in-flight rows then
-# exit) or systemctl stop if it's running as a unit:
-systemctl stop soroban-events-fill.service
-# Or pkill if it's a one-shot operator invocation:
-pkill -INT -f 'ratesengine-ops backfill'
+# On r1 — find the fill PID. The fill is a manual operator invocation
+# (`ratesengine-ops backfill -source soroban-events`), NOT a systemd unit;
+# there is no soroban-events-fill.service.
+ps -eo pid,args | grep '[r]atesengine-ops backfill'
+# kill -INT by the EXPLICIT PID (graceful — drains in-flight rows then exits).
+# Do NOT `pkill -f 'backfill'`: the pattern self-matches your own shell over
+# ssh and can kill the wrong process.
+kill -INT <pid>
 ```
 
 Either path lets the in-flight batch finish so cursor coherence
