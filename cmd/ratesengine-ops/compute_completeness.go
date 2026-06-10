@@ -43,6 +43,7 @@ func computeCompleteness(args []string) error { //nolint:funlen,gocognit,gocyclo
 	chAddr := fs.String("ch-addr", "127.0.0.1:9300", "ClickHouse native address (with -ch)")
 	skipSubstrate := fs.Bool("skip-substrate", false, "Trust the prior substrate certification (substrate_ok=true) instead of re-scanning the hash-chain — fast per-source iteration once substrate is proven")
 	skipRecognition := fs.Bool("skip-recognition", false, "Trust the prior recognition audit (recognition_ok=true) instead of re-scanning all topic shapes — the global DistinctTopicShapes scan is the load-heaviest step; skip it for gentle projection-only iteration once recognition is verified")
+	fromLedger := fs.Uint("from", 0, "INCREMENTAL verify: only check [from, tip], trusting [genesis, from] as already verified (substrate + recognition + projection all scoped to [from, tip]); the watermark still extends to tip when the window is clean. 0 = full verify from each source's genesis. The completeness timer passes min(watermark) from the prior snapshots so each run re-checks only new ledgers — minutes, not hours.")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -98,7 +99,11 @@ func computeCompleteness(args []string) error { //nolint:funlen,gocognit,gocyclo
 	case *skipRecognition:
 		fmt.Fprintln(os.Stderr, "compute-completeness: -skip-recognition — trusting prior recognition audit (no shape scan)")
 	case *useCH:
-		recGaps, recErr = computeRecognitionGapsCH(ctx, cfg, *chAddr, tip)
+		recFrom := uint32(sorobanEraGenesis)
+		if uint32(*fromLedger) > recFrom { //nolint:gosec // ledger seq fits uint32
+			recFrom = uint32(*fromLedger) //nolint:gosec // ledger seq fits uint32
+		}
+		recGaps, recErr = computeRecognitionGapsCH(ctx, cfg, *chAddr, recFrom, tip)
 	default:
 		recGaps, recErr = computeRecognitionGaps(ctx, store, cfg, tip)
 	}
@@ -130,7 +135,11 @@ func computeCompleteness(args []string) error { //nolint:funlen,gocognit,gocyclo
 	case *useCH && *skipSubstrate:
 		fmt.Fprintln(os.Stderr, "compute-completeness: -skip-substrate — trusting prior CH substrate certification (intact)")
 	case *useCH:
-		p, has, d, serr := clickhouse.SubstrateProblem(ctx, *chAddr, 2, tip)
+		subFrom := uint32(2)
+		if *fromLedger > 2 {
+			subFrom = uint32(*fromLedger) //nolint:gosec // ledger seq fits uint32
+		}
+		p, has, d, serr := clickhouse.SubstrateProblem(ctx, *chAddr, subFrom, tip)
 		if serr != nil {
 			return fmt.Errorf("ch substrate: %w", serr)
 		}
@@ -138,7 +147,7 @@ func computeCompleteness(args []string) error { //nolint:funlen,gocognit,gocyclo
 		if has {
 			fmt.Fprintf(os.Stderr, "compute-completeness: CH substrate problem at %d (%s)\n", p, d)
 		} else {
-			fmt.Fprintln(os.Stderr, "compute-completeness: CH substrate intact [2,tip] — contiguous + hash-chained")
+			fmt.Fprintf(os.Stderr, "compute-completeness: CH substrate intact [%d,tip] — contiguous + hash-chained\n", subFrom)
 		}
 	}
 
@@ -211,9 +220,15 @@ func computeCompleteness(args []string) error { //nolint:funlen,gocognit,gocyclo
 		srW := completeness.ComputeWatermark(genesis, tip, problems)
 		projOK := false
 		var w completeness.Watermark
+		// Incremental: only reconcile [from, srW.Ledger], trusting [genesis, from]
+		// as previously verified. projFrom = max(genesis, -from).
+		projFrom := genesis
+		if uint32(*fromLedger) > projFrom { //nolint:gosec // ledger seq fits uint32
+			projFrom = uint32(*fromLedger) //nolint:gosec // ledger seq fits uint32
+		}
 		if *useCH {
-			if srW.Ledger >= genesis {
-				delta, pdetail, perr := reconcileProjectionAggregate(ctx, store, chStreamer, src, genesis, srW.Ledger, retentionStart)
+			if srW.Ledger >= projFrom {
+				delta, pdetail, perr := reconcileProjectionAggregate(ctx, store, chStreamer, src, projFrom, srW.Ledger, retentionStart)
 				if perr != nil {
 					return fmt.Errorf("%s: projection: %w", src.name, perr)
 				}
@@ -420,12 +435,12 @@ func absDiff(a, b int) int {
 // classic-token firehose — sep41 isn't enabled, so it's out of protocol scope)
 // run through the dispatcher's Recognize(). Fast + off the serving DB vs the
 // Postgres soroban_events scan in computeRecognitionGaps.
-func computeRecognitionGapsCH(ctx context.Context, cfg config.Config, chAddr string, tip uint32) ([]completeness.RecognitionGap, error) {
+func computeRecognitionGapsCH(ctx context.Context, cfg config.Config, chAddr string, from, tip uint32) ([]completeness.RecognitionGap, error) {
 	disp, err := pipeline.BuildDispatcher(cfg.Ingestion.EnabledSources, cfg.Oracle)
 	if err != nil {
 		return nil, fmt.Errorf("build dispatcher: %w", err)
 	}
-	shapes, err := clickhouse.DistinctTopicShapes(ctx, chAddr, sorobanEraGenesis, tip, clickhouse.ClassicTokenTopic0Syms)
+	shapes, err := clickhouse.DistinctTopicShapes(ctx, chAddr, from, tip, clickhouse.ClassicTokenTopic0Syms)
 	if err != nil {
 		return nil, err
 	}

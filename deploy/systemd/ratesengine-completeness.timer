@@ -1,0 +1,12 @@
+[Unit]
+Description=Rates Engine — incremental completeness verify timer (hourly; keeps the status-page coverage verdict pinned to the current tip + catches regressions fast)
+
+[Timer]
+OnBootSec=20min
+OnUnitActiveSec=1h
+# Spread the start so the verify doesn't line up with other heavy timers.
+RandomizedDelaySec=5min
+Persistent=true
+
+[Install]
+WantedBy=timers.target

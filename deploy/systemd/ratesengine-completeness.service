@@ -1,0 +1,13 @@
+[Unit]
+Description=Rates Engine — incremental completeness verify (ADR-0033: substrate + recognition + projection vs the ClickHouse lake, since last watermark)
+After=clickhouse-server.service postgresql.service network-online.target
+Wants=clickhouse-server.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/completeness-incremental.sh
+# Read-only verify, but the projection re-derive can be CH-heavy — keep it gentle
+# so it never disturbs serving. Incremental scope keeps each run to minutes.
+Nice=15
+IOSchedulingClass=best-effort
+IOSchedulingPriority=7
