@@ -15,6 +15,18 @@ against.
 
 ## [Unreleased]
 
+## [v0.5.0-rc.108] — 2026-06-10
+
+Tested against Stellar Protocol 23 (Whisk).
+
+Operator notes:
+- The census + retention-scope completeness fixes take effect once the indexer
+  (and the `ratesengine-ops` binary) are deployed via `deploy.yml`. Until then
+  the live census still records both-zero no-ops.
+- The `trades` table must have NO retention policy (migration 0031 — keep raw
+  forever). If `timescaledb_information.jobs` shows a `policy_retention` on
+  `trades`, it's drift — `remove_retention_policy('trades')`.
+
 ### Added
 
 - **`GET /v1/assets/{asset_id}/supply` + explorer supply panel (ADR-0034).**
@@ -153,6 +165,26 @@ against.
   (sep41/band/soroswap-router remain out of scope — documented in the
   catalogue.) Also chunk-prunes those queries via `SorobanEventsTimeBound`.
 
+- **Incremental completeness verify + hourly timer (ADR-0033 standing guard).**
+  `compute-completeness` gains `-from <ledger>`: verify only `[from, tip]`,
+  trusting `[genesis, from]` as previously verified (substrate hash-chain,
+  recognition shape scan, and projection reconcile all scoped to the window);
+  the watermark still extends to tip when the window is clean. `scripts/ops/
+  completeness-incremental.sh` computes `from = min(watermark)` from the prior
+  snapshots, so each run re-checks only new ledgers — minutes, not the hours a
+  full genesis→tip sweep takes. It is READ-ONLY on served data (recomputes
+  `completeness_snapshots` only) and exits non-zero with the failing source +
+  range if a source regresses; repair (ch-rebuild over the range) stays a
+  deliberate action. Wired as `ratesengine-completeness.{service,timer}` (hourly,
+  niced). This is the runtime data-driven guard that keeps "verified 100%" true
+  as the tip advances; it complements the PR-time `lint-pk-discriminators`.
+
+- **`lint-pk-discriminators` CI guard.** A new `scripts/ci` lint that parses
+  per-source table PKs and fails the build if a table that can receive multiple
+  same-key events per operation lacks a per-event discriminator (the coarse-PK
+  data-loss class) — wired into `verify.sh` + `ci.yml`. Guards against
+  reintroducing the silent-drop bug fixed below for trades/blend/defindex.
+
 ### Changed
 
 - **Sources panel shows "Entries 24h" instead of "Trades 24h".** The
@@ -255,6 +287,34 @@ against.
   `ratesengine_markets_skipped_rows_total` counter so operators
   can find and remove the offending row without serving 500s to
   every consumer.
+
+- **SDEX census counts real trades, not both-zero no-op crosses.** The
+  projection census (`claimAtomCount`) counted EVERY claim atom — including the
+  both-zero no-op crosses stellar-core emits when an offer is touched in matching
+  but both legs round to 0 (dust offers / integer-rounding artifacts; ~1–2% of
+  SDEX claims). The decoder correctly drops those (one-side-zero KEPT), so the
+  census over-counted vs `COUNT(trades)` — violating its own invariant and
+  showing a spurious SDEX projection Δ. `realTradeCount` now mirrors the decoder
+  exactly (skip both-zero), in both mirrored copies (dispatcher/census.go +
+  clickhouse/extract.go). Going forward the live census equals the served trade
+  count; the historical retention window re-records once to match.
+
+- **SDEX projection reconcile floors at the actual retained boundary.** trades
+  is `drop_chunks`-managed, and `retentionStart = tip-1.5M` is ~100d at the
+  current ledger rate — ~10d / 150k ledgers below the oldest retained chunk. The
+  reconcile compared census>0 vs served=0 over that strip, manufacturing a
+  100%/20% "gap" in the lowest windows for rows retention deliberately dropped.
+  New `store.MinLedger` + `retentionFloor` scope the reconcile to where served
+  data actually begins; full-history coverage rests on the substrate (ADR-0033).
+
+- **`blend_positions` / `blend_emissions` / `blend_admin` / `defindex_flows` no
+  longer silently drop multi-event-per-op rows.** Same coarse-PK class as the
+  trades fanout above, on the per-source entity tables: their PKs lacked a
+  per-event discriminator, so a second same-kind event in one operation collided
+  on `ON CONFLICT` and was dropped. Migrations 0053–0055 add `event_index` (and,
+  for blend_positions, `(asset, user_address)`) to the PKs; the decoders +
+  sinks thread the in-tx `event_index` through. Forward fix; collided historical
+  rows recover via re-derive from the lake.
 
 ## [v0.5.0-rc.107] — 2026-06-01
 
