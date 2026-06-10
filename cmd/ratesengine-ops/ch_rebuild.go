@@ -165,8 +165,12 @@ func chRebuild(args []string) error { //nolint:gocognit,gocyclo,funlen // linear
 	// ─── Event-based pass (read → buffer) ────────────────────────────────
 	evStart := time.Now()
 	// Exclude the CAP-67 classic-token firehose — none of the projected DEX/
-	// lending sources consume it, and it's 99.99% of contract_events.
-	cherr := clickhouse.StreamContractEvents(ctx, *chAddr, lo, hi, clickhouse.ClassicTokenTopic0Syms, func(ev events.Event) error {
+	// lending sources consume it, and it's 99.99% of contract_events. Use
+	// FirehoseExcludeSyms (NOT ClassicTokenTopic0Syms): set_admin must be
+	// RETAINED because Blend/Comet emit a pool set_admin sharing that topic —
+	// excluding it wholesale dropped blend_admin's set_admin rows from the
+	// re-derive (matches the projector's firehoseExcludeSyms).
+	cherr := clickhouse.StreamContractEvents(ctx, *chAddr, lo, hi, clickhouse.FirehoseExcludeSyms, func(ev events.Event) error {
 		for _, src := range cat {
 			if src.dec == nil || !enabled(src.name) {
 				continue

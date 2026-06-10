@@ -24,6 +24,17 @@ var ClassicTokenTopic0Syms = []string{
 	"transfer", "mint", "burn", "clawback", "approve", "set_admin", "set_authorized",
 }
 
+// FirehoseExcludeSyms is ClassicTokenTopic0Syms MINUS set_admin — the exclusion
+// the DEX/lending re-derive paths (projector + ch-rebuild) must use, because
+// Blend (and Comet) emit a pool-level "set_admin" event that shares topic[0]
+// with the CAP-67 token set_admin. Excluding set_admin wholesale would silently
+// drop those protocol admin events (the bug behind blend_admin's missing
+// set_admin rows). set_admin's CAP-67 volume is negligible, so retaining it
+// costs nothing. Keep in lockstep with internal/projector.firehoseExcludeSyms.
+var FirehoseExcludeSyms = []string{
+	"transfer", "mint", "burn", "clawback", "approve", "set_authorized",
+}
+
 // sqlQuoteList renders a string slice as a SQL IN list: 'a','b',... The inputs
 // are compile-time constants (topic symbols), so inlining carries no injection
 // risk and avoids driver-specific slice-binding for IN (?).
