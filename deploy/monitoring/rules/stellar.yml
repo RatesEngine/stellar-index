@@ -17,17 +17,22 @@
 # below. Removing the rules now would force re-authoring them at
 # Phase-3; keeping them inert costs nothing.
 #
-# Two alerts in this file remain active on r1 today:
-#   - ratesengine_stellar_archive_publish_fail — references
-#     `ratesengine_stellar_archive_publish_errors_total`, which the
-#     stellar-archivist publish loop emits when a checkpoint upload
-#     fails. r1 doesn't currently publish a history archive, so this
-#     stays inert today, but operators wiring publishing back on
-#     don't need a rule edit to start surfacing the signal.
-#   - ratesengine_stellar_archive_divergence — references
-#     `ratesengine_archive_divergence_total`, which the
-#     verify-archive Tier-D job DOES emit on r1 (per
-#     `docs/operations/runbooks/archive-divergence.md`). Active.
+# Of the two archive alerts in this file:
+#   - ratesengine_stellar_archive_publish_fail references
+#     `ratesengine_stellar_archive_publish_errors_total`. NOTHING IN
+#     THIS CODEBASE EMITS THAT METRIC (F-1329; confirmed by grep over
+#     internal/ cmd/ scripts/ 2026-06-11) — there is no
+#     stellar-archivist publish loop wired to a Prometheus counter, so
+#     this rule is INERT regardless of deployment posture. It is
+#     listed in scripts/ci/lint-metric-refs.sh as a known-inert
+#     ratesengine_* reference (allowlisted there) until a publish-error
+#     emitter is added. r1 doesn't publish a history archive anyway.
+#   - ratesengine_stellar_archive_divergence is ACTIVE on r1: it now
+#     references `ratesengine_verify_archive_mismatches_total{reason=~"chain|sequence|checkpoint"}`
+#     (internal/obs/metrics.go) — the counter the verify-archive Tier-D
+#     job emits per chunk_idx + reason. The previous expr pointed at
+#     `ratesengine_archive_divergence_total`, a name nothing emits
+#     (F-1329); repointed 2026-06-11.
 
 groups:
   - name: ratesengine.stellar
@@ -93,7 +98,11 @@ groups:
             Not customer-visible but affects Tier-1 posture if sustained.
 
       - alert: ratesengine_stellar_archive_divergence
-        expr: ratesengine_archive_divergence_total > 0
+        # F-1329: repointed from the never-emitted
+        # `ratesengine_archive_divergence_total` to the real counter the
+        # verify-archive Tier-D job emits. `reason` ∈ {chain|sequence|checkpoint};
+        # any non-zero increase over a recent window is a hard correctness signal.
+        expr: increase(ratesengine_verify_archive_mismatches_total[1h]) > 0
         for: 0s
         labels:
           severity: page

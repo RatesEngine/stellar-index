@@ -25,6 +25,9 @@ if command -v promtool >/dev/null 2>&1; then
     echo "=== Monitoring ===" && make monitoring-check
 else
     echo "=== Monitoring (skipped — promtool not installed; install via 'brew install prometheus' or the Prometheus GH release) ==="
+    # The dead-metric-ref guard needs no promtool, so run it even when
+    # the promtool-dependent monitoring-check is skipped (F-1329).
+    echo "=== Metric refs ===" && ./scripts/ci/lint-metric-refs.sh
 fi
 # govulncheck (F-0057). Graceful-skip when not installed locally —
 # CI installs it via `make deps`. Mirrors the promtool pattern.

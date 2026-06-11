@@ -7,8 +7,13 @@ groups:
     interval: 30s
     rules:
 
+      # F-1329: the scrape job is `node_exporter` in both the multi-host
+      # (configs/ansible/.../prometheus.yml.j2) and r1
+      # (configs/prometheus/prometheus.r1.yml) configs — there is no
+      # `node` job, so `up{job="node"}` matched nothing and this alert
+      # was dead. (The r1 overlay twin already used `node_exporter`.)
       - alert: ratesengine_host_down
-        expr: up{job="node"} == 0
+        expr: up{job="node_exporter"} == 0
         for: 2m
         labels:
           severity: ticket
@@ -54,8 +59,15 @@ groups:
             allocations; Postgres shared_buffers is the usual culprit if
             the box also runs other workloads.
 
+      # F-1329: repointed from the never-emitted `node_zfs_pool_state`
+      # (with UPPERCASE state values + a `pool` label) to node_exporter's
+      # real ZFS collector metric `node_zfs_zpool_state`. That metric uses
+      # LOWERCASE state values (online|degraded|faulted|offline|removed|
+      # unavail|suspended) and labels the pool as `zpool`, with value 1 on
+      # the pool's current state. The old name had no producer, so this
+      # PAGE was silently dead through the 2026-05-17 zpool incident.
       - alert: ratesengine_zfs_pool_degraded
-        expr: node_zfs_pool_state{state=~"DEGRADED|FAULTED|UNAVAIL"} > 0
+        expr: node_zfs_zpool_state{state=~"degraded|faulted|unavail|suspended"} > 0
         for: 60s
         labels:
           severity: page
@@ -63,13 +75,31 @@ groups:
           component: infra
           runbook_url: https://github.com/RatesEngine/rates-engine/blob/main/docs/operations/runbooks/zfs-degraded.md
         annotations:
-          summary: "ZFS pool {{ $labels.pool }} is {{ $labels.state }} (SEV-1)"
+          summary: "ZFS pool {{ $labels.zpool }} is {{ $labels.state }} (SEV-1)"
           description: |
             The data ZFS pool reports {{ $labels.state }} — one or more drives
             have failed. raidz2 tolerates 2 failures, but every failure
             reduces the redundancy margin. Replace + resilver ASAP.
 
+      # ── INERT (F-1329) — NO PRODUCER ──────────────────────────────
+      # The two NVMe alerts below reference metrics that NOTHING on r1
+      # emits. `node_disk_io_errors_total` and `node_nvme_temperature_celsius`
+      # are NOT node_exporter metrics (the diskstats collector has no
+      # io-errors series, and node_exporter has no NVMe-thermal collector).
+      # SMART/NVMe health needs a `smartctl_exporter` or a textfile-collector
+      # script writing into /var/lib/node_exporter/textfile_collector — NEITHER
+      # is deployed today (configs/ansible confirms only sla-probe +
+      # supply-snapshot write textfiles). These rules therefore never have a
+      # series to evaluate; they are kept (so the alert + runbook survive for
+      # when a SMART exporter lands) but are INERT and DO NOT page.
+      #
+      # TRACKED in scripts/ci/lint-metric-refs.sh's KNOWN_INERT list. To
+      # un-inert: deploy smartctl_exporter (real metrics
+      # `smartctl_device_media_errors_total`, `smartctl_device_temperature{...}`)
+      # or a textfile script, then repoint the two exprs below at the real
+      # series + drop the entries from KNOWN_INERT.
       - alert: ratesengine_nvme_smart_warn
+        # INERT: node_disk_io_errors_total has no producer (see block above).
         expr: increase(node_disk_io_errors_total[1h]) > 0
         for: 1h
         labels:
@@ -85,6 +115,7 @@ groups:
             complaining yet.
 
       - alert: ratesengine_nvme_thermal_throttle
+        # INERT: node_nvme_temperature_celsius has no producer (see block above).
         expr: node_nvme_temperature_celsius > 70
         for: 5m
         labels:

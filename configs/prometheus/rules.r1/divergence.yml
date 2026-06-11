@@ -8,7 +8,23 @@ groups:
     interval: 60s
     rules:
 
+      # ── INERT (F-1329) — NO PRODUCER ──────────────────────────────
+      # The two price-divergence alerts below reference
+      # `ratesengine_our_price` / `ratesengine_reference_price` as
+      # Prometheus gauges. NOTHING EXPORTS THESE AS METRICS. The
+      # divergence worker (internal/divergence/worker.go) computes
+      # our_price / ref_price / delta_pct but writes them to Postgres
+      # (divergence_observations) + the Redis div:<asset> cache and
+      # surfaces them via the API's `flags.divergence_warning` — not via
+      # the Prometheus registry. The LIVE Prometheus signal for the same
+      # failure is `ratesengine_divergence_refresh_error_dominant` below,
+      # which DOES use an emitted metric. Exposing a per-asset price gauge
+      # would add high-cardinality series and is out of scope here. These
+      # two rules are kept (the runbook + intent survive) but INERT and
+      # TRACKED in scripts/ci/lint-metric-refs.sh's KNOWN_INERT list.
       - alert: ratesengine_price_divergence_warning
+        # INERT: ratesengine_our_price / ratesengine_reference_price have no
+        # Prometheus producer (divergence values live in PG + Redis, not the registry).
         expr: |
           abs(ratesengine_our_price - ratesengine_reference_price)
             / ratesengine_reference_price > 0.05
@@ -26,6 +42,8 @@ groups:
             Normal during rapid market moves; investigate if sustained.
 
       - alert: ratesengine_price_divergence_critical
+        # INERT: see the price_divergence_warning block above — no Prometheus
+        # producer for ratesengine_our_price / ratesengine_reference_price.
         expr: |
           abs(ratesengine_our_price - ratesengine_reference_price)
             / ratesengine_reference_price > 0.10

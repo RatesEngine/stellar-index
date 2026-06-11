@@ -6,8 +6,12 @@ groups:
     interval: 30s
     rules:
 
+      # F-1329: redis_exporter emits no `role` label, so
+      # `redis_up{role="master"}` matched no series and this PAGE was
+      # dead. `redis_up` (1 = exporter reached the server, 0 = it could
+      # not) is the direct liveness signal.
       - alert: ratesengine_redis_master_down
-        expr: redis_up{role="master"} == 0
+        expr: redis_up == 0
         for: 30s
         labels:
           severity: page
@@ -49,7 +53,18 @@ groups:
             Eviction rate exceeds 100/s sustained 5+ min. LRU pressure. API
             hit rates drop and Timescale fallback load rises.
 
+      # ── INERT (F-1329) — NOT APPLICABLE ON R1 ─────────────────────
+      # r1 is a SINGLE-NODE redis (no Sentinel, no replicas — see
+      # docs/operations/r1-deployment-state.md). There is no replication
+      # to monitor here, so this alert is intentionally INERT on the r1
+      # overlay. The multi-host twin (deploy/monitoring/rules/cache.yml)
+      # carries the live form: `redis_connected_slaves < 2` against the
+      # ADR-0024 1-primary-2-replica topology. The expr below references
+      # the never-emitted `redis_expected_slaves` precisely so it stays
+      # non-firing on r1; it is TRACKED in scripts/ci/lint-metric-refs.sh's
+      # KNOWN_INERT list. Drop both when r1 grows replicas.
       - alert: ratesengine_redis_replication_broken
+        # INERT on r1: redis_expected_slaves has no producer; single-node.
         expr: |
           redis_connected_slaves < on(instance) redis_expected_slaves
         for: 2m

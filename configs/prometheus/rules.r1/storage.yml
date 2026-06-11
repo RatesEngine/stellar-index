@@ -6,8 +6,14 @@ groups:
     interval: 30s
     rules:
 
+      # F-1329: the scrape job is `postgres_exporter` (not `postgres`)
+      # and postgres_exporter emits no `role` label, so the old
+      # `up{job="postgres",role="primary"}` selector matched no series
+      # and this PAGE was dead. postgres_exporter exposes `pg_up` (1 =
+      # the exporter reached the server, 0 = it could not) — the direct
+      # liveness signal for the single-node r1 primary.
       - alert: ratesengine_timescale_primary_down
-        expr: up{job="postgres",role="primary"} == 0
+        expr: pg_up == 0
         for: 30s
         labels:
           severity: page
@@ -226,7 +232,25 @@ groups:
             > 80 % of max_connections in use for 5+ minutes. PgBouncer should
             be smoothing this; check that the pool is healthy + sized right.
 
+      # ── INERT (F-1329) — NO PRODUCER ──────────────────────────────
+      # The two TimescaleDB-internal alerts below reference metrics that
+      # NOTHING emits today:
+      #   - ratesengine_cagg_last_refresh_unix /
+      #     ratesengine_cagg_refresh_interval_seconds (cagg-stale)
+      #   - ratesengine_uncompressed_chunks_older_than_7d (compression-lag)
+      # These describe TimescaleDB job-scheduler state
+      # (timescaledb_information.job_stats / .chunks). No periodic worker in
+      # this repo queries those views and re-exports them as Prometheus
+      # gauges, and postgres_exporter's default queries don't cover them
+      # either. The clean fix is a small custom postgres_exporter query
+      # (queries.yaml) or a textfile-collector SQL script — both real but
+      # larger than a rule edit. Until that producer exists these rules
+      # cannot fire; they are kept (signal matters) but INERT and TRACKED
+      # in scripts/ci/lint-metric-refs.sh's KNOWN_INERT list. To un-inert:
+      # add the producer, then drop the entries from KNOWN_INERT.
       - alert: ratesengine_timescale_cagg_stale
+        # INERT: ratesengine_cagg_last_refresh_unix /
+        # ratesengine_cagg_refresh_interval_seconds have no producer.
         expr: |
           (time() - ratesengine_cagg_last_refresh_unix) > 5 * ratesengine_cagg_refresh_interval_seconds
         for: 5m
@@ -243,6 +267,7 @@ groups:
             refreshes; check timescaledb job-scheduler health.
 
       - alert: ratesengine_timescale_compression_lag
+        # INERT: ratesengine_uncompressed_chunks_older_than_7d has no producer.
         expr: ratesengine_uncompressed_chunks_older_than_7d > 0
         for: 24h
         labels:
@@ -256,9 +281,24 @@ groups:
             Compression policy should run on chunks older than 7 days. If some
             aren't compressed, the timescaledb job scheduler may be misfiring.
 
+      # F-1329: repointed off the never-emitted
+      # `ratesengine_pgbackrest_last_success_unix` /
+      # `ratesengine_pgbackrest_expected_interval_seconds` pair (note the
+      # bogus `ratesengine_` prefix — the SCRAPED exporter is woblerr's
+      # pgbackrest_exporter, job `pgbackrest_exporter`, which emits
+      # `pgbackrest_*`). The exporter computes
+      # `pgbackrest_backup_since_last_completion_seconds` server-side as
+      # (now - last_backup_stop_time), one series per backup_type
+      # {full,diff,incr} per stanza — so it IS already "seconds since",
+      # no time()-subtraction. We take `min by (stanza)` so the freshest
+      # backup of ANY type satisfies the alert, and exclude the exporter's
+      # aggregate pseudo-stanzas so a per-stanza failure can't be masked.
+      # Backups can now page if they silently stop (the F-1329 gap).
       - alert: ratesengine_timescale_backup_failed
         expr: |
-          (time() - ratesengine_pgbackrest_last_success_unix) > 2 * ratesengine_pgbackrest_expected_interval_seconds
+          min by (stanza) (
+            pgbackrest_backup_since_last_completion_seconds{stanza!~"all-stanzas.*"}
+          ) > 25 * 3600
         for: 5m
         labels:
           severity: ticket
@@ -266,13 +306,16 @@ groups:
           component: storage
           runbook_url: https://github.com/RatesEngine/rates-engine/blob/main/docs/operations/runbooks/backup-failed.md
         annotations:
-          summary: "pgBackRest last success was {{ $value | humanizeDuration }} ago"
+          summary: "pgBackRest stanza {{ $labels.stanza }} last backup {{ $value | humanizeDuration }} ago"
           description: |
-            Backup has missed at least one expected cycle. Check pgBackRest
-            logs + MinIO connectivity.
+            Backup has missed at least one expected daily cycle (no completed
+            full/diff/incr in > 25 h). Check pgBackRest logs + MinIO connectivity.
 
       - alert: ratesengine_timescale_backup_none_24h
-        expr: (time() - ratesengine_pgbackrest_last_success_unix) > 24 * 3600
+        expr: |
+          min by (stanza) (
+            pgbackrest_backup_since_last_completion_seconds{stanza!~"all-stanzas.*"}
+          ) > 24 * 3600
         for: 5m
         labels:
           severity: page

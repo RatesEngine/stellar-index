@@ -213,8 +213,12 @@ verify-launch-ready-single-region: ## verify-launch-ready against the project's 
 	@$(GO) run ./scripts/ci/verify-launch-ready \
 		-skip-ids L4.14,L4.15,L4.16,L4.17,L5.6,L5.8
 
+.PHONY: lint-metric-refs
+lint-metric-refs: ## F-1329 dead-alert guard: every ratesengine_* expr token must resolve to an emitter or KNOWN_INERT
+	@./scripts/ci/lint-metric-refs.sh
+
 .PHONY: monitoring-check
-monitoring-check: ## Validate Prometheus rule files with promtool (multi-host + R1 overlay)
+monitoring-check: ## Validate Prometheus rule files with promtool (multi-host + R1 overlay) + dead-metric-ref guard
 	@if ! command -v promtool >/dev/null 2>&1; then \
 	  echo "promtool not found — install via 'brew install prometheus' or the Prometheus GH release"; \
 	  exit 1; \
@@ -228,6 +232,10 @@ monitoring-check: ## Validate Prometheus rule files with promtool (multi-host + 
 	@# CI-validated before merge.
 	@promtool check rules deploy/monitoring/rules/*.yml
 	@promtool check rules configs/prometheus/rules.r1/*.yml
+	@# F-1329: promtool only checks PromQL SYNTAX, not whether a metric
+	@# has a producer. This guard catches dead ratesengine_* references
+	@# (an alert that can never fire because nothing emits its metric).
+	@./scripts/ci/lint-metric-refs.sh
 
 .PHONY: vuln
 vuln: ## Run govulncheck against the module

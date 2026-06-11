@@ -6,8 +6,12 @@ groups:
     interval: 30s
     rules:
 
+      # F-1329: redis_exporter emits no `role` label, so
+      # `redis_up{role="master"}` matched no series and this PAGE was
+      # dead. `redis_up` (1 = exporter reached the server, 0 = it could
+      # not) is the direct liveness signal.
       - alert: ratesengine_redis_master_down
-        expr: redis_up{role="master"} == 0
+        expr: redis_up == 0
         for: 30s
         labels:
           severity: page
@@ -49,9 +53,17 @@ groups:
             Eviction rate exceeds 100/s sustained 5+ min. LRU pressure. API
             hit rates drop and Timescale fallback load rises.
 
+      # F-1329: `redis_expected_slaves` is defined NOWHERE (no exporter,
+      # no recording rule, no external label) — the comparison silently
+      # produced no series and this alert was dead. redis_exporter emits
+      # `redis_connected_slaves`; the EXPECTED count is the ADR-0024
+      # topology constant (1 primary + 2 replicas across cache-01..03),
+      # so we compare against the literal 2 instead of a phantom metric.
+      # (On the r1 single-node overlay this alert is INERT — see the
+      # rules.r1/cache.yml twin, which has no replicas to lose.)
       - alert: ratesengine_redis_replication_broken
         expr: |
-          redis_connected_slaves < on(instance) redis_expected_slaves
+          redis_connected_slaves < 2
         for: 2m
         labels:
           severity: ticket
@@ -61,5 +73,6 @@ groups:
         annotations:
           summary: "Redis master {{ $labels.instance }} missing replicas"
           description: |
-            Master reports fewer connected replicas than expected (< {{ $labels.expected }}).
-            Sentinel can't promote on failover if replicas are gone.
+            Master reports {{ $value }} connected replicas, fewer than the
+            ADR-0024 expected 2. Sentinel can't promote on failover if
+            replicas are gone.

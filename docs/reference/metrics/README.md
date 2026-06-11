@@ -36,38 +36,45 @@ extra resolution at the 200ms / 500ms SLO boundaries.
 
 ### `ratesengine_ingest_gap_ledgers`
 
-Gauge, labels `source`.
+Gauge, labels `source`, `table`.
 
 Total missing ledgers in contiguous data-coverage gaps >= the
-detector's `min-gap-size` threshold (1000 by default) per source.
-**Data-derived** complement to the cursor-derived density
-projection in `/v1/diagnostics/ingestion`: cursor coverage
-measures process state ("did we walk this ledger") and can read
-100% while data is missing; this gauge measures reality by
-querying `soroban_events` distinct-ledger coverage directly.
-Refreshed every 5 min by the gap detector goroutine in the
-aggregator binary (`internal/storage/timescale.RunGapDetector`).
-Source label values: `soroban-events` today; SDEX detection is a
-follow-up.
+detector's `min-gap-size` threshold (1000 by default) per
+(`source`, `table`). **Data-derived** complement to the
+cursor-derived density projection in `/v1/diagnostics/ingestion`:
+cursor coverage measures process state ("did we walk this ledger")
+and can read 100% while data is missing; this gauge measures
+reality by querying each per-source hypertable's distinct-ledger
+coverage directly. Refreshed periodically by the gap detector
+goroutine in the aggregator binary
+(`internal/storage/timescale.RunGapDetector`). The `table` label
+disambiguates the sources that share one hypertable (e.g. the
+trades-table sources `sdex` / `soroswap` / `phoenix` / `comet` /
+`aquarius`, or the `oracle_updates` sources `band` / `redstone` /
+`reflector-*`). 26 targets are registered today
+(`internal/storage/timescale/per_source_gaps.go`), spanning the
+Soroban projections, the classic SDEX path, and the off-chain
+oracle tables — NOT `soroban-events` alone.
 
 ### `ratesengine_ingest_gap_count`
 
-Gauge, labels `source`.
+Gauge, labels `source`, `table`.
 
-Number of contiguous gaps per source at the detector's most
-recent cycle. A single 100K-ledger gap and 100 ten-ledger gaps
-both report ≈100K in `ratesengine_ingest_gap_ledgers` but very
-different shapes; chart this alongside the size gauge to
-distinguish "one big halt" (cascade signature) from "many small
-drops" (flaky-write pattern).
+Number of contiguous gaps per (`source`, `table`) at the
+detector's most recent cycle. A single 100K-ledger gap and 100
+ten-ledger gaps both report ≈100K in
+`ratesengine_ingest_gap_ledgers` but very different shapes; chart
+this alongside the size gauge to distinguish "one big halt"
+(cascade signature) from "many small drops" (flaky-write pattern).
 
 ### `ratesengine_ingest_gap_max_size_ledgers`
 
-Gauge, labels `source`.
+Gauge, labels `source`, `table`.
 
-Size of the largest contiguous gap per source at the detector's
-most recent cycle. Drives the `ratesengine_ingest_gap_detected`
-P1 alert (fires when > 1000 sustained 15 min).
+Size of the largest contiguous gap per (`source`, `table`) at the
+detector's most recent cycle. Drives the
+`ratesengine_ingest_gap_detected` P1 alert (fires when > 1000
+sustained 15 min).
 
 ### `ratesengine_ingest_source_distinct_ledgers`
 
@@ -101,7 +108,7 @@ because every target uses the same tip in the same cycle.
 
 ### `ratesengine_ingest_gap_detector_runs_total`
 
-Counter, labels `source`, `outcome`.
+Counter, labels `source`, `table`, `outcome`.
 
 Periodic gap-detector cycle outcomes — `ok` on a clean scan,
 `error` on a transient Postgres / timeout failure. Operators
@@ -111,11 +118,13 @@ fires when this rate goes to zero.
 
 ### `ratesengine_ingest_gap_detector_duration_seconds`
 
-Histogram, labels `source`, `outcome`.
+Histogram, labels `source`, `table`, `outcome`.
 
 Wall-clock latency of one detector cycle. The LAG()-over-DISTINCT
-scan against ~12 M Soroban-era ledgers takes ~2-3 s on r1; the
-60s scan timeout is the upper bound.
+scan against the large hypertables is slow on r1 — the
+`soroban_events` scan measures ~300 s against ~50 M distinct
+ledgers, which is why the buckets extend to 600 s and the scan
+timeout was raised past the original 60 s cap.
 
 ### `ratesengine_projector_lag_ledgers`
 
