@@ -162,6 +162,19 @@ func (f *Flusher) flushAt(ctx context.Context, now time.Time) {
 		)
 	}
 
+	// G15-06: a climbing tx-event-read-error count means
+	// GetTransactionEvents is failing (e.g. an unsupported future meta
+	// version), silently dropping every tx's Soroban events. Surfaced at
+	// WARN so the break is visible rather than masquerading as clean
+	// (empty) ledgers that the completeness reconcile would still pass.
+	if delta := current.TxEventReadErrors - f.last.TxEventReadErrors; delta > 0 {
+		f.logger.Warn("dispatcher: tx-event read errors during this flush window — Soroban events being dropped",
+			"delta", delta,
+			"total", current.TxEventReadErrors,
+			"window", f.interval.String(),
+		)
+	}
+
 	if len(rows) > 0 {
 		if err := f.store.InsertDecoderStats(ctx, rows); err != nil {
 			f.logger.Warn("decoder-stats flush failed", "rows", len(rows), "err", err)
@@ -171,11 +184,12 @@ func (f *Flusher) flushAt(ctx context.Context, now time.Time) {
 	// Snapshot for next-tick delta computation. Make a copy of the
 	// maps so concurrent dispatcher writes can't mutate our reference.
 	f.last = dispatcher.Stats{
-		EventsSeen:    copyIntMap(current.EventsSeen),
-		DecodeErrors:  copyIntMap(current.DecodeErrors),
-		OrphanEvents:  copyIntMap(current.OrphanEvents),
-		UnmatchedHits: current.UnmatchedHits,
-		TxReadErrors:  current.TxReadErrors,
+		EventsSeen:        copyIntMap(current.EventsSeen),
+		DecodeErrors:      copyIntMap(current.DecodeErrors),
+		OrphanEvents:      copyIntMap(current.OrphanEvents),
+		UnmatchedHits:     current.UnmatchedHits,
+		TxReadErrors:      current.TxReadErrors,
+		TxEventReadErrors: current.TxEventReadErrors,
 	}
 }
 

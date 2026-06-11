@@ -109,10 +109,17 @@ func censusBackfill(args []string) error { //nolint:gocognit,gocyclo,funlen // l
 				fmt.Fprintf(os.Stderr, "census-backfill: ledger %d census: %v\n", lcm.LedgerSequence(), cerr)
 				return nil
 			}
-			if census.TxReadErrors > 0 {
+			// A ledger we could not fully read (a malformed tx, or a tx
+			// whose GetTransactionEvents failed — e.g. an unsupported
+			// future meta version) must NOT get an authoritative
+			// "complete" substrate row: its SorobanEventCount undercounts,
+			// so a projection reconcile against it would falsely pass
+			// (G15-06). Skip it; a later re-run on a fixed reader writes
+			// the real row.
+			if census.TxReadErrors > 0 || census.TxEventReadErrors > 0 {
 				skipped++
-				fmt.Fprintf(os.Stderr, "census-backfill: ledger %d had %d tx read errors; skipping substrate row\n",
-					census.LedgerSeq, census.TxReadErrors)
+				fmt.Fprintf(os.Stderr, "census-backfill: ledger %d had %d tx read errors + %d tx-event read errors; skipping substrate row\n",
+					census.LedgerSeq, census.TxReadErrors, census.TxEventReadErrors)
 				return nil
 			}
 			row := timescale.LedgerIngestRow{

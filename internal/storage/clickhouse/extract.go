@@ -54,7 +54,11 @@ func ExtractLedger(lcm xdr.LedgerCloseMeta, passphrase string) (LedgerExtract, e
 			break
 		}
 		if rerr != nil {
-			continue // skip + tolerate, mirroring CensusLedger
+			// Skip + tolerate, mirroring CensusLedger — but COUNT it so a
+			// silently-dropped tx is recoverable in the caller's signal
+			// (the ledger still writes, keeping the lake contiguous).
+			ext.TxReadErrors++
+			continue
 		}
 		extractTx(&ext, tx, seq, closeTime)
 	}
@@ -185,6 +189,12 @@ func appendOpResult(ext *LedgerExtract, seq uint32, txHash string, opIndex uint3
 func extractEvents(ext *LedgerExtract, tx ingest.LedgerTransaction, seq uint32, closeTime time.Time, txHash string, opArgs [][]string) {
 	txEvents, terr := tx.GetTransactionEvents()
 	if terr != nil {
+		// G15-06: an unsupported future TransactionMeta version makes this
+		// fail for every tx — count it so the lost events are visible
+		// instead of looking like a clean empty ledger. Tx-level CAP-67
+		// fee/diagnostic events (txEvents.TransactionEvents) are
+		// deliberately not captured here, matching the dispatcher + census.
+		ext.TxEventReadErrors++
 		return
 	}
 	for opIdx, opEvents := range txEvents.OperationEvents {

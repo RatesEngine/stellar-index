@@ -287,6 +287,18 @@ type Dispatcher struct {
 	// drop rate) was invisible until a downstream price gap
 	// triggered a manual investigation.
 	txReadErrors int
+
+	// txEventReadErrors counts transactions whose GetTransactionEvents()
+	// returned an error during ProcessLedger. The SDK returns an error
+	// for an unsupported TransactionMeta version — so on a future
+	// protocol meta bump EVERY tx's Soroban events would silently vanish
+	// (the event-dispatch block is gated on err==nil). Without this
+	// counter that break is invisible: soroban_events rows + the census
+	// count would both drop to zero in lock-step and the ADR-0033
+	// reconcile would still read "complete" (G15-06). A sustained climb
+	// here means Soroban ingestion is broken regardless of what the
+	// completeness verdict says.
+	txEventReadErrors int
 }
 
 // New constructs a Dispatcher with the given Soroban-event
@@ -422,6 +434,12 @@ type Stats struct {
 	// tx is dropped and the ledger continues; without this counter
 	// the only signal would be a downstream price gap days later).
 	TxReadErrors int
+	// TxEventReadErrors counts transactions whose GetTransactionEvents()
+	// failed (e.g. an unsupported future TransactionMeta version) —
+	// every such tx's Soroban events are dropped. A non-zero value means
+	// Soroban ingestion is broken even if the completeness reconcile
+	// still reads "complete" (G15-06).
+	TxEventReadErrors int
 }
 
 func (d *Dispatcher) Stats() Stats {
@@ -443,6 +461,7 @@ func (d *Dispatcher) Stats() Stats {
 	}
 	unmatched := d.unmatchedHits
 	txReadErrs := d.txReadErrors
+	txEventReadErrs := d.txEventReadErrors
 	d.statsMu.Unlock()
 
 	orphanCopied := map[string]int{}
@@ -456,11 +475,12 @@ func (d *Dispatcher) Stats() Stats {
 		}
 	}
 	return Stats{
-		EventsSeen:    seenCopied,
-		DecodeErrors:  decodeCopied,
-		OrphanEvents:  orphanCopied,
-		UnmatchedHits: unmatched,
-		TxReadErrors:  txReadErrs,
+		EventsSeen:        seenCopied,
+		DecodeErrors:      decodeCopied,
+		OrphanEvents:      orphanCopied,
+		UnmatchedHits:     unmatched,
+		TxReadErrors:      txReadErrs,
+		TxEventReadErrors: txEventReadErrs,
 	}
 }
 
@@ -541,7 +561,23 @@ func (d *Dispatcher) ProcessLedger(lcm xdr.LedgerCloseMeta, passphrase string) (
 		ops := tx.Envelope.Operations()
 
 		// ─── Soroban contract events ─────────────────────────
-		if txEvents, err := tx.GetTransactionEvents(); err == nil && len(txEvents.OperationEvents) > 0 {
+		// We process per-OPERATION events only. Tx-level events
+		// (txEvents.TransactionEvents — CAP-67 V4 fee/diagnostic events)
+		// are intentionally OUT OF SCOPE: they carry no price/supply
+		// signal, and the census (census.go) makes the identical choice
+		// so the ADR-0033 reconcile stays consistent. If that ever
+		// changes, change BOTH sites together.
+		txEvents, terr := tx.GetTransactionEvents()
+		switch {
+		case terr != nil:
+			// G15-06: an unsupported future TransactionMeta version makes
+			// this fail for every tx, silently dropping all Soroban
+			// events. Count it so the break is visible instead of
+			// masquerading as a clean (empty) ledger.
+			d.statsMu.Lock()
+			d.txEventReadErrors++
+			d.statsMu.Unlock()
+		case len(txEvents.OperationEvents) > 0:
 			for opIdx, opEvents := range txEvents.OperationEvents {
 				var args []string
 				if opIdx < len(invokeCalls) && invokeCalls[opIdx] != nil {

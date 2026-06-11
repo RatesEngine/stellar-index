@@ -130,6 +130,20 @@ type LedgerExtract struct {
 	Events      []ContractEventRow
 	Changes     []LedgerEntryChangeRow
 	SupplyFlows []SupplyFlowRow
+
+	// TxReadErrors / TxEventReadErrors count transactions this extract
+	// could NOT fully read (a malformed tx, or a tx whose
+	// GetTransactionEvents failed — e.g. an unsupported future
+	// TransactionMeta version). They are IN-MEMORY ONLY (not ClickHouse
+	// columns): the ledger is still written so the lake stays contiguous
+	// (contiguity is the substrate-continuity coverage proof — dropping
+	// the ledger would be worse), but a non-zero value means this
+	// ledger's Events/SorobanEventCount undercount. Callers surface a
+	// climb (a meta-version break drops EVERY tx's events in lock-step,
+	// which would otherwise look like a run of clean empty ledgers —
+	// G15-06).
+	TxReadErrors      int
+	TxEventReadErrors int
 }
 
 // Sink buffers extracts and flushes them to ClickHouse in batches. Not safe

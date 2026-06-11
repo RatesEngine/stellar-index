@@ -40,6 +40,15 @@ type Census struct {
 	// caller can decline to write an authoritative substrate row for
 	// a ledger we couldn't fully read.
 	TxReadErrors int
+
+	// TxEventReadErrors counts transactions whose GetTransactionEvents()
+	// failed (e.g. an unsupported future TransactionMeta version). Like
+	// TxReadErrors, a non-zero value means the census could NOT see this
+	// tx's Soroban events, so SorobanEventCount undercounts — the caller
+	// must decline to write an authoritative "complete" substrate row
+	// rather than let the projection reconcile pass against a count that
+	// silently dropped to zero in lock-step with the sink (G15-06).
+	TxEventReadErrors int
 }
 
 // CensusLedger walks a LedgerCloseMeta and tallies the
@@ -85,6 +94,14 @@ func CensusLedger(lcm xdr.LedgerCloseMeta, passphrase string) (Census, error) { 
 		}
 
 		// ─── Soroban contract events ─────────────────────────────
+		// Per-operation events only — tx-level CAP-67 fee/diagnostic
+		// events are out of scope here exactly as in the dispatcher
+		// (dispatcher.go), so the census count matches what the sink
+		// writes. G15-06: a GetTransactionEvents error (e.g. an
+		// unsupported future meta version) means we cannot count this
+		// tx's Soroban primitives — record it so the caller declines to
+		// write an authoritative substrate row for a ledger it couldn't
+		// fully read, instead of silently undercounting to zero.
 		if txEvents, terr := tx.GetTransactionEvents(); terr == nil {
 			for _, opEvents := range txEvents.OperationEvents {
 				for i := range opEvents {
@@ -93,6 +110,8 @@ func CensusLedger(lcm xdr.LedgerCloseMeta, passphrase string) (Census, error) { 
 					}
 				}
 			}
+		} else {
+			c.TxEventReadErrors++
 		}
 
 		// ─── Classic trade effects (ClaimAtoms) ──────────────────
