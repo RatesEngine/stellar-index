@@ -6,7 +6,11 @@
 //
 //	p95 ≤ 200 ms
 //	p99 ≤ 500 ms
-//	freshness ≤ 30 s   (Freighter RFP — price freshness)
+//	freshness ≤ 30 s   (Freighter RFP — price freshness, measured on
+//	                    /v1/price/tip, the rolling-window surface;
+//	                    /v1/price serves closed buckets per ADR-0015
+//	                    and is held to a structural 150 s bound — see
+//	                    defaultClosedBucketFreshTarget)
 //	availability ≥ 99.9 %  (sampled per-tick error rate)
 //
 // Closes Codex medium-7 / Task #52 / RFP coverage matrix rows
@@ -56,6 +60,20 @@ const (
 	defaultP99Target     = 500 * time.Millisecond
 	defaultFreshTarget   = 30 * time.Second
 	defaultAvailabilityT = 99.9 // percent
+
+	// defaultClosedBucketFreshTarget is the freshness bound applied to
+	// /v1/price specifically. /v1/price serves the most recent CLOSED
+	// bucket (ADR-0015 — the cross-region byte-identical surface), so
+	// its observed_at is STRUCTURALLY 30–150 s old: 60 s bucket width
+	// (prices_1m) + the CAGG refresh policy's 30 s end_offset + up to a
+	// 30 s schedule interval + refresh runtime. The RFP's ≤30 s
+	// freshness promise is served by /v1/price/tip (rolling-window,
+	// sub-second observed_at) and is measured there; this bound exists
+	// to catch the closed-bucket pipeline falling behind its design
+	// (aggregator down, CAGG refresh job stuck, trades-insert
+	// backpressure — the 2026-06-02/03 chunk-perf regression read
+	// 166–186 s and would correctly fail this).
+	defaultClosedBucketFreshTarget = 150 * time.Second
 )
 
 // endpoint captures one API surface to probe. Path is the URL
@@ -67,6 +85,11 @@ type endpoint struct {
 	Path     string
 	Query    map[string]string
 	Critical bool // when true, a single failure here fails the whole run
+	// FreshTarget overrides the run-level freshness SLA target for
+	// this endpoint when non-zero. Used by /price, whose closed-bucket
+	// contract (ADR-0015) makes the run-level 30 s target structurally
+	// unmeetable — see defaultClosedBucketFreshTarget.
+	FreshTarget time.Duration
 }
 
 // staticEndpoints are probed regardless of -pair flags — they
@@ -96,10 +119,17 @@ func staticEndpoints() []endpoint {
 }
 
 // pairEndpoints expands one (asset, quote) pair into the per-pair
-// endpoints we measure: /v1/price and /v1/oracle/latest are the
-// load-bearing customer surfaces; /v1/markets is included as a
-// representative listing surface.
-func pairEndpoints(asset, quote string) []endpoint {
+// endpoints we measure: /v1/price, /v1/price/tip and
+// /v1/oracle/latest are the load-bearing customer surfaces;
+// /v1/markets is included as a representative listing surface.
+//
+// The RFP freshness SLA (≤30 s) is measured on /price/tip — the
+// rolling-window surface built to deliver it. /price carries its own
+// structural bound (`closedBucketFresh`) because ADR-0015's
+// closed-bucket contract makes its observed_at 30–150 s old by
+// design; holding it to 30 s kept the probe red for weeks with zero
+// regression signal.
+func pairEndpoints(asset, quote string, closedBucketFresh time.Duration) []endpoint {
 	q := func(extra map[string]string) map[string]string {
 		out := map[string]string{"asset": asset, "quote": quote}
 		for k, v := range extra {
@@ -108,7 +138,8 @@ func pairEndpoints(asset, quote string) []endpoint {
 		return out
 	}
 	return []endpoint{
-		{Name: "price", Path: "/price", Query: q(nil), Critical: true},
+		{Name: "price", Path: "/price", Query: q(nil), Critical: true, FreshTarget: closedBucketFresh},
+		{Name: "price-tip", Path: "/price/tip", Query: q(nil), Critical: true},
 		{Name: "oracle-latest", Path: "/oracle/latest", Query: map[string]string{"asset": asset}},
 	}
 }
@@ -123,9 +154,14 @@ type stats struct {
 	AvailabilityPct float64      `json:"availability_pct"`
 	LatencyMS       latencyStats `json:"latency_ms"`
 	// ObservedAtFreshSec — for endpoints that return an observed_at
-	// timestamp (price), the median freshness in seconds. Zero
-	// when no observed_at field on this endpoint.
+	// timestamp (price, price-tip), the median freshness in seconds.
+	// Zero when no observed_at field on this endpoint.
 	ObservedAtFreshSec *float64 `json:"observed_at_fresh_sec,omitempty"`
+	// FreshnessTargetSec — the per-endpoint freshness target override
+	// (endpoint.FreshTarget) when one is set, so the JSON evidence
+	// records which bound the verdict held this endpoint to. Zero =
+	// the run-level sla.freshness_sec applied.
+	FreshnessTargetSec float64 `json:"freshness_target_sec,omitempty"`
 }
 
 type latencyStats struct {
@@ -169,7 +205,8 @@ func main() {
 		reportFormat = flag.String("report-format", "text", "Output format: text | json")
 		p95Target    = flag.Duration("p95-target", defaultP95Target, "p95 latency SLA target")
 		p99Target    = flag.Duration("p99-target", defaultP99Target, "p99 latency SLA target")
-		freshTarget  = flag.Duration("freshness-target", defaultFreshTarget, "Price-freshness SLA target")
+		freshTarget  = flag.Duration("freshness-target", defaultFreshTarget, "Price-freshness SLA target (applied to /price/tip — the rolling-window freshness surface)")
+		closedFresh  = flag.Duration("closed-bucket-freshness-target", defaultClosedBucketFreshTarget, "Freshness bound for /price, whose closed-bucket contract (ADR-0015) makes observed_at structurally 30-150s old")
 		availTarget  = flag.Float64("availability-target", defaultAvailabilityT, "Per-endpoint availability SLA target (percent)")
 		textfileOut  = flag.String("textfile-output", "", "Path to write Prometheus textfile (node_exporter textfile_collector format). Empty = no metrics emit.")
 		apiKey       = flag.String("api-key", defaultAPIKey, "API key for Authorization: Bearer header. Defaults to $RATESENGINE_PROBE_API_KEY. Without one the probe hits the anonymous-tier rate limit (60 req/min) and reads as a fail.")
@@ -202,7 +239,7 @@ func main() {
 			fmt.Fprintf(os.Stderr, "ratesengine-sla-probe: invalid -pair %q (want asset,quote)\n", p)
 			os.Exit(2)
 		}
-		endpoints = append(endpoints, pairEndpoints(parts[0], parts[1])...)
+		endpoints = append(endpoints, pairEndpoints(parts[0], parts[1], *closedFresh)...)
 	}
 
 	rep := runProbe(*baseURL, *apiKey, endpoints, *duration, *concurrency, slaTargets{
@@ -340,9 +377,10 @@ func aggregateEndpointStats(ep endpoint, ss []probeSample) stats {
 		}
 	}
 	st := stats{
-		Endpoint:        ep.Name,
-		Path:            ep.Path,
-		Samples:         len(ss),
+		Endpoint:           ep.Name,
+		Path:               ep.Path,
+		FreshnessTargetSec: ep.FreshTarget.Seconds(),
+		Samples:            len(ss),
 		Successes:       successes,
 		Errors:          len(ss) - successes,
 		AvailabilityPct: 100.0 * float64(successes) / float64(len(ss)),
@@ -389,8 +427,12 @@ func endpointFailures(st stats, sla slaTargets) []string {
 	if st.AvailabilityPct < sla.AvailabilityPct {
 		out = append(out, fmt.Sprintf("%s: availability=%.2f%% < target %.2f%%", st.Endpoint, st.AvailabilityPct, sla.AvailabilityPct))
 	}
-	if st.ObservedAtFreshSec != nil && *st.ObservedAtFreshSec > sla.FreshnessSec {
-		out = append(out, fmt.Sprintf("%s: freshness=%.1fs > target %.1fs", st.Endpoint, *st.ObservedAtFreshSec, sla.FreshnessSec))
+	freshTarget := sla.FreshnessSec
+	if st.FreshnessTargetSec > 0 {
+		freshTarget = st.FreshnessTargetSec
+	}
+	if st.ObservedAtFreshSec != nil && *st.ObservedAtFreshSec > freshTarget {
+		out = append(out, fmt.Sprintf("%s: freshness=%.1fs > target %.1fs", st.Endpoint, *st.ObservedAtFreshSec, freshTarget))
 	}
 	return out
 }

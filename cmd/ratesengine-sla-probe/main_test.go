@@ -228,16 +228,68 @@ func TestStaticEndpoints_AllCriticalIncluded(t *testing.T) {
 }
 
 func TestPairEndpoints_BuildsExpected(t *testing.T) {
-	es := pairEndpoints("native", "fiat:USD")
+	es := pairEndpoints("native", "fiat:USD", defaultClosedBucketFreshTarget)
 	names := make(map[string]bool)
 	for _, e := range es {
 		names[e.Name] = true
 		if e.Query["asset"] != "native" {
 			t.Errorf("%s: asset=%q want native", e.Name, e.Query["asset"])
 		}
+		switch e.Name {
+		case "price":
+			// /price is the ADR-0015 closed-bucket surface — it must
+			// carry the structural freshness override, NOT the 30 s
+			// RFP target (which it can never meet by design).
+			if e.FreshTarget != defaultClosedBucketFreshTarget {
+				t.Errorf("price: FreshTarget=%v want %v", e.FreshTarget, defaultClosedBucketFreshTarget)
+			}
+		case "price-tip":
+			// /price/tip is the RFP freshness surface — it must use
+			// the run-level target (no override).
+			if e.FreshTarget != 0 {
+				t.Errorf("price-tip: FreshTarget=%v want 0 (run-level SLA target)", e.FreshTarget)
+			}
+		}
 	}
 	if !names["price"] {
 		t.Error("pair endpoints missing 'price'")
+	}
+	if !names["price-tip"] {
+		t.Error("pair endpoints missing 'price-tip'")
+	}
+}
+
+// TestEndpointFailures_PerEndpointFreshnessOverride pins the
+// ADR-0015 split: a closed-bucket /price observation 80 s stale is
+// within its structural bound (no failure), while the same 80 s on
+// /price/tip — the RFP ≤30 s surface — fails.
+func TestEndpointFailures_PerEndpointFreshnessOverride(t *testing.T) {
+	sla := slaTargets{P95MS: 1000, P99MS: 1000, FreshnessSec: 30, AvailabilityPct: 99.0}
+	fresh := 80.0
+	base := stats{
+		Samples: 10, Successes: 10, AvailabilityPct: 100,
+		ObservedAtFreshSec: &fresh,
+	}
+
+	price := base
+	price.Endpoint = "price"
+	price.FreshnessTargetSec = defaultClosedBucketFreshTarget.Seconds()
+	if got := endpointFailures(price, sla); len(got) != 0 {
+		t.Errorf("price at 80s within 150s structural bound should pass, got %v", got)
+	}
+
+	tip := base
+	tip.Endpoint = "price-tip"
+	if got := endpointFailures(tip, sla); len(got) != 1 {
+		t.Errorf("price-tip at 80s must fail the 30s RFP target, got %v", got)
+	}
+
+	// And the structural bound still catches a real pipeline
+	// regression (the 2026-06-02/03 chunk-perf incident read 166-186s).
+	regressed := 170.0
+	price.ObservedAtFreshSec = &regressed
+	if got := endpointFailures(price, sla); len(got) != 1 {
+		t.Errorf("price at 170s must fail the 150s structural bound, got %v", got)
 	}
 }
 

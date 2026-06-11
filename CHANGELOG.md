@@ -17,6 +17,22 @@ against.
 
 ### Fixed
 
+- **sla-probe: measure the ≤30 s RFP freshness target on `/v1/price/tip`,
+  not `/v1/price`.** The probe held `/v1/price` to the Freighter RFP's 30 s
+  price-freshness target, but that surface serves the most recent CLOSED
+  bucket (ADR-0015 cross-region byte-identical contract): 60 s `prices_1m`
+  buckets + the CAGG refresh policy's 30 s `end_offset` + a 30 s schedule
+  interval make its `observed_at` structurally 30–150 s old. Result: the
+  probe failed every run since metrics began (≥14 days of Prometheus
+  history), drowning real regressions. The probe now also hits
+  `/v1/price/tip` — the rolling-window surface built to deliver the RFP
+  promise (sub-second `observed_at`) — and applies the 30 s target there,
+  while `/v1/price` is held to a structural 150 s bound
+  (`-closed-bucket-freshness-target`) that still catches the closed-bucket
+  pipeline falling behind (the 2026-06-02/03 chunk-perf regression read
+  166–186 s and would fail it). Per-endpoint freshness targets are recorded
+  in the JSON evidence as `freshness_target_sec`.
+
 - **soroswap-router: distinct swaps in one op were collapsed by a coarse PK
   (migration 0056).** A single InvokeContract op can carry multiple genuinely
   distinct router swaps (an aggregator splitting a trade, or a batch to several
