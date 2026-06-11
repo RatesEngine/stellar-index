@@ -68,27 +68,49 @@ func TestSetTrustedProxyCIDRs(t *testing.T) {
 	})
 }
 
-// TestFirstForwardedFor — the XFF header may carry a comma-separated
-// chain like `client, proxy1, proxy2`. We take the first entry,
-// trim whitespace, and validate it as an IP.
-func TestFirstForwardedFor(t *testing.T) {
+// TestRightmostUntrustedForwardedFor — the XFF header carries a
+// comma-separated chain like `client, proxy1, proxy2` where each
+// trusted proxy APPENDS the peer it saw. We walk RIGHT-TO-LEFT and
+// return the first entry NOT inside a trusted-proxy CIDR (the
+// closest untrusted hop). Taking the leftmost would let a client
+// forge its own value. (F-1338)
+func TestRightmostUntrustedForwardedFor(t *testing.T) {
+	resetTrustedProxyConfig(t)
+	// Trust the 10/8 proxy tier for these cases.
+	if err := SetTrustedProxyCIDRs([]string{"10.0.0.0/8"}); err != nil {
+		t.Fatalf("setup: %v", err)
+	}
+
 	cases := []struct {
 		name string
 		xff  string
 		want string
 	}{
-		{"single ipv4", "1.2.3.4", "1.2.3.4"},
-		{"chain returns first", "1.2.3.4, 5.6.7.8, 9.10.11.12", "1.2.3.4"},
-		{"first with whitespace", "  1.2.3.4  ", "1.2.3.4"},
+		// Single real client behind one trusted proxy: the proxy
+		// appended itself but here only the client is in the header.
+		{"single untrusted", "1.2.3.4", "1.2.3.4"},
+		// client, then a trusted proxy hop appended on the right.
+		{"client then trusted hop", "1.2.3.4, 10.0.0.5", "1.2.3.4"},
+		// Two trusted hops appended; the leftmost is the real client.
+		{"client then two trusted hops", "1.2.3.4, 10.0.0.5, 10.0.0.6", "1.2.3.4"},
+		// FORGED leftmost: attacker sent `9.9.9.9` as their own XFF;
+		// the proxy appended the attacker's real IP (8.8.8.8) plus
+		// the internal hop. Rightmost-untrusted must pick 8.8.8.8,
+		// NOT the forged 9.9.9.9.
+		{"forged leftmost loses", "9.9.9.9, 8.8.8.8, 10.0.0.5", "8.8.8.8"},
+		// All hops trusted → degenerate, caller falls back to peer.
+		{"all trusted", "10.0.0.5, 10.0.0.6", ""},
+		{"whitespace tolerated", "  1.2.3.4 , 10.0.0.5 ", "1.2.3.4"},
 		{"ipv6 single", "2001:db8::1", "2001:db8::1"},
 		{"empty header", "", ""},
-		{"malformed first", "not-an-ip, 5.6.7.8", ""},
+		// A malformed hop breaks the trust chain → "".
+		{"malformed rightmost", "1.2.3.4, not-an-ip", ""},
 		{"only comma", ",", ""},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			if got := firstForwardedFor(tc.xff); got != tc.want {
-				t.Errorf("firstForwardedFor(%q) = %q, want %q", tc.xff, got, tc.want)
+			if got := rightmostUntrustedForwardedFor(tc.xff); got != tc.want {
+				t.Errorf("rightmostUntrustedForwardedFor(%q) = %q, want %q", tc.xff, got, tc.want)
 			}
 		})
 	}
@@ -134,14 +156,37 @@ func TestRemoteIPFor(t *testing.T) {
 		}
 	})
 
-	t.Run("trusted peer honours XFF first entry", func(t *testing.T) {
+	t.Run("trusted peer honours rightmost-untrusted XFF entry", func(t *testing.T) {
 		_ = SetTrustedProxyCIDRs([]string{"10.0.0.0/8"})
 		req := httptest.NewRequest(http.MethodGet, "/", nil)
 		req.RemoteAddr = "10.0.0.5:1234"
+		// Appending proxy chain: real client 1.2.3.4, internal hop
+		// 10.0.0.5 appended on the right. Rightmost-untrusted = client.
 		req.Header.Set("X-Forwarded-For", "1.2.3.4, 10.0.0.5")
 		got := remoteIPFor(req)
 		if got != "1.2.3.4" {
-			t.Errorf("got %q, want 1.2.3.4 (XFF first entry)", got)
+			t.Errorf("got %q, want 1.2.3.4 (rightmost untrusted XFF entry)", got)
+		}
+	})
+
+	t.Run("forged leftmost XFF behind appending trusted proxy does NOT win", func(t *testing.T) {
+		// Attack: a hostile client SENDS `X-Forwarded-For: 9.9.9.9`.
+		// The trusted L7 proxy APPENDS the connection peer it saw
+		// (the attacker's real IP 8.8.8.8), then the internal hop
+		// 10.0.0.5 is appended. A leftmost parser would attribute the
+		// request to the forged 9.9.9.9 — spoofing rate-limit identity
+		// and bypassing per-key IP allowlists. The rightmost-untrusted
+		// walk must resolve to 8.8.8.8. (F-1338)
+		_ = SetTrustedProxyCIDRs([]string{"10.0.0.0/8"})
+		req := httptest.NewRequest(http.MethodGet, "/", nil)
+		req.RemoteAddr = "10.0.0.5:1234"
+		req.Header.Set("X-Forwarded-For", "9.9.9.9, 8.8.8.8, 10.0.0.5")
+		got := remoteIPFor(req)
+		if got == "9.9.9.9" {
+			t.Fatalf("forged leftmost XFF won: got %q (per-IP identity spoofed)", got)
+		}
+		if got != "8.8.8.8" {
+			t.Errorf("got %q, want 8.8.8.8 (rightmost untrusted hop)", got)
 		}
 	})
 

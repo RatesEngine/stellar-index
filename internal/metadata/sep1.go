@@ -121,10 +121,20 @@ func NewResolver(opts Options) *Resolver {
 
 	dialer := &net.Dialer{Timeout: 5 * time.Second}
 	transport := &http.Transport{
-		// Honour standard proxy env vars (corp proxies etc.) BUT
-		// still enforce SSRF — proxies can't bypass our guard
-		// because the guard runs pre-dial on the requested host.
-		Proxy: http.ProxyFromEnvironment,
+		// Proxy is DISABLED (nil) — these are direct-egress fetches of
+		// an issuer-controlled URL, and the SSRF guard lives in
+		// DialContext below.
+		//
+		// SECURITY (F-1336): if we honoured HTTP(S)_PROXY here, the
+		// transport would dial the PROXY's address (which passes the
+		// guard) and hand it the issuer-controlled target host in the
+		// CONNECT line / request URL. The guard would then NEVER see —
+		// let alone validate — the real target, because the proxy
+		// resolves and connects to it for us. An attacker who can set
+		// a home-domain could exfiltrate to internal hosts straight
+		// through a configured proxy. Pinning Proxy: nil forces every
+		// fetch through our own SSRF-checked dialer.
+		Proxy: nil,
 		DialContext: (&ssrfDialer{
 			inner:           dialer,
 			allowPrivateIPs: opts.AllowPrivateIPs,

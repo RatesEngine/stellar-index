@@ -263,7 +263,24 @@ cdn_enabled              = true
 #   - The Postman + curl examples to keep working (they bypass
 #     browser-enforced CORS).
 allowed_origins          = ["*"]
-trusted_proxy_cidrs      = []                  # empty = ignore X-Forwarded-For; set to immediate proxy CIDRs (for example ["10.0.0.0/8"])
+# trusted_proxy_cidrs — empty (default) = ignore X-Forwarded-For
+# entirely and use the direct TCP peer as the client IP. Set this to
+# the CIDR(s) of YOUR reverse proxy / load-balancer tier (the hops
+# between the internet and this server) so XFF is honoured, e.g.
+# ["10.0.0.0/8"].
+#
+# SECURITY (F-1338): X-Forwarded-For is walked RIGHT-TO-LEFT and the
+# first entry NOT inside any CIDR here is taken as the client IP (the
+# closest untrusted hop). This is safe even when your proxy APPENDS
+# to XFF (nginx `proxy_add_x_forwarded_for`, AWS ALB, Cloudflare,
+# Caddy — most L7 proxies do), because a client-forged leftmost value
+# is to the LEFT of your trusted hops and is ignored. List EVERY hop
+# in your proxy chain here; if you under-list, the rightmost-untrusted
+# walk will stop at your own un-listed proxy instead of the real
+# client. Leaving this empty is the safe default behind no proxy —
+# do NOT set it to your proxy CIDR unless requests actually transit
+# that proxy, or a direct attacker can spoof XFF.
+trusted_proxy_cidrs      = []
 
 # signup_require_email_verification (F-1218, codex audit-2026-05-13).
 # Default true (post-2026-05-13): /v1/signup-minted API keys cannot

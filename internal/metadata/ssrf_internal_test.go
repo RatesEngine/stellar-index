@@ -2,6 +2,7 @@ package metadata
 
 import (
 	"net"
+	"net/http"
 	"testing"
 )
 
@@ -71,6 +72,26 @@ func TestIsBlocked_CoversCloudMetadataAndReservedRanges(t *testing.T) {
 		if got != c.want {
 			t.Errorf("isBlocked(%s) = %v, want %v — %s", c.ip, got, c.want, c.why)
 		}
+	}
+}
+
+// TestResolverTransportDisablesProxy is the F-1336 regression. The
+// SEP-1 fetch transport MUST NOT honour HTTP(S)_PROXY: with a proxy
+// configured, the transport dials the PROXY (which passes our
+// DialContext SSRF guard) and hands it the issuer-controlled target
+// host, so the guard never validates the real target — letting an
+// attacker who controls a home-domain reach internal hosts straight
+// through the proxy. Pin Proxy == nil so every fetch is forced
+// through our own SSRF-checked dialer.
+func TestResolverTransportDisablesProxy(t *testing.T) {
+	r := NewResolver(Options{})
+	tr, ok := r.client.Transport.(*http.Transport)
+	if !ok {
+		t.Fatalf("resolver transport is %T, want *http.Transport", r.client.Transport)
+	}
+	if tr.Proxy != nil {
+		t.Error("SEP-1 transport.Proxy must be nil (F-1336): a configured " +
+			"HTTP(S)_PROXY would dial the proxy and bypass the SSRF guard on the target host")
 	}
 }
 

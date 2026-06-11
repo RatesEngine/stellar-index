@@ -227,16 +227,24 @@ func (r *Refresher) fetch(ctx context.Context, ids []string) (simplePriceRespons
 	q.Set("vs_currencies", "usd")
 	q.Set("include_market_cap", "true")
 	q.Set("include_24hr_change", "true")
-	if r.APIKey != "" {
-		q.Set("x_cg_pro_api_key", r.APIKey)
-	} else if r.DemoKey != "" {
-		q.Set("x_cg_demo_api_key", r.DemoKey)
-	}
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint+simplePricePath+"?"+q.Encode(), nil)
 	if err != nil {
 		return nil, fmt.Errorf("build request: %w", err)
 	}
 	req.Header.Set("Accept", "application/json")
+	// SECURITY (F-1337): pass the CoinGecko key via REQUEST HEADER,
+	// not a URL query param. As a query param (?x_cg_pro_api_key=…)
+	// the secret ends up embedded in the request URL, which leaks
+	// verbatim through *url.Error on any transport/timeout failure
+	// ("...?x_cg_pro_api_key=SECRET: context deadline exceeded") and
+	// into any access log that records the full URL. CoinGecko
+	// accepts the same keys as headers. Pro wins over Demo when both
+	// are set (matches the prior query-param precedence).
+	if r.APIKey != "" {
+		req.Header.Set("x-cg-pro-api-key", r.APIKey)
+	} else if r.DemoKey != "" {
+		req.Header.Set("x-cg-demo-api-key", r.DemoKey)
+	}
 
 	client := r.HTTPClient
 	if client == nil {

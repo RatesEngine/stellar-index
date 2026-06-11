@@ -224,6 +224,17 @@ func RateLimitBySubject(anonBucket, authBucket *ratelimit.Bucket, skip func(*htt
 // default applies). Operators can still floor the bucket via
 // `cfg.API.KeyRateLimitPerMin` — the override only raises (or
 // lowers) the per-key budget, never the global default.
+//
+// Anonymous keying is the resolved client IP ALONE (F-1335). The
+// anonymous Subject.Identifier is a sha256(IP|User-Agent) hash that
+// stays useful as a log/metric label, but it MUST NOT key the
+// throttle bucket: a client can rotate its User-Agent on every
+// request to mint unlimited distinct hashes, each its own bucket,
+// trivially bypassing the per-IP anonymous floor. We key on
+// anonymousRateLimitKey(r), which resolves the client IP through the
+// trusted-proxy XFF logic (forge-resistant per F-1338) directly from
+// the request — independent of whether the Logger middleware has
+// populated the remote-IP context value yet.
 func bucketKeyAndOverrideForRequest(r *http.Request, anonBucket, authBucket *ratelimit.Bucket) (*ratelimit.Bucket, string, int) {
 	if subject, ok := auth.SubjectFrom(r.Context()); ok && subject.Identifier != "" {
 		if subject.Tier != auth.TierAnonymous && subject.Tier != "" {
@@ -235,12 +246,31 @@ func bucketKeyAndOverrideForRequest(r *http.Request, anonBucket, authBucket *rat
 		if anonBucket == nil {
 			return nil, "", 0
 		}
-		return anonBucket, "anon:" + subject.Identifier, 0
+		// Anonymous: key on resolved IP ALONE, not subject.Identifier
+		// (which folds in the User-Agent — a client-rotatable value).
+		return anonBucket, anonymousRateLimitKey(r), 0
 	}
 	if anonBucket == nil {
 		return nil, "", 0
 	}
-	return anonBucket, RemoteIPFrom(r), 0
+	return anonBucket, anonymousRateLimitKey(r), 0
+}
+
+// anonymousRateLimitKey derives the per-IP throttle key for an
+// anonymous caller. IP-ONLY by design (F-1335) — see
+// [bucketKeyAndOverrideForRequest]. Uses [remoteIPFor] (the
+// forge-resistant XFF resolver, F-1338) rather than [RemoteIPFrom]
+// so the key is populated even when the Logger middleware that
+// caches remote_ip in context hasn't run. Falls back to "anon" only
+// when no IP can be resolved at all — collapsing such requests into a
+// single shared bucket is the safe (fail-closed) choice for a
+// throttle.
+func anonymousRateLimitKey(r *http.Request) string {
+	ip := remoteIPFor(r)
+	if ip == "" {
+		return "anon"
+	}
+	return "anon:" + ip
 }
 
 func authenticatedRateLimitKey(subject auth.Subject) string {

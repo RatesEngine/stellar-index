@@ -1,0 +1,54 @@
+# Cloudflare Pages reads this file from the build output and applies
+# the rules to every response. Same format as the status site
+# (web/status/public/_headers) and the explorer
+# (web/explorer/public/_headers); kept in sync intentionally.
+#
+# F-1332: the dashboard (app.ratesengine.net) shipped WITHOUT this
+# file while the status + explorer surfaces had one. The dashboard is
+# the MOST sensitive surface — session-cookie auth + one-time
+# plaintext API-key display — so it gets the same defence-in-depth
+# headers, plus a no-store cache directive (below) appropriate to a
+# surface that renders secrets.
+#
+# Security model: a static Next.js export with no third-party loads
+# at runtime. Every request the app makes goes to
+# api.ratesengine.net (set via NEXT_PUBLIC_API_BASE_URL at build
+# time, see next.config.mjs); everything else is local
+# self-references.
+
+/*
+  X-Content-Type-Options: nosniff
+  X-Frame-Options: DENY
+  Referrer-Policy: strict-origin-when-cross-origin
+  Permissions-Policy: accelerometer=(), camera=(), geolocation=(), microphone=(), payment=(), usb=()
+  # HSTS — pin HTTPS for one year, subdomains included. Safe because
+  # every *.ratesengine.net surface (api / app / status / docs / the
+  # explorer apex) is HTTPS-only at the edge. `preload` is
+  # intentionally OMITTED until the operator submits the apex to
+  # https://hstspreload.org/ (preload is irrevocable once browsers
+  # ship it, so we ratchet up in two steps).
+  Strict-Transport-Security: max-age=31536000; includeSubDomains
+  # CSP — same restrictive shape as the status site. 'unsafe-inline'
+  # is required for Next.js static-export bootstrap scripts and
+  # Tailwind inline styles; revisit if Next stops emitting them.
+  # connect-src lists the API origin so the dashboard's fetch() calls
+  # to /v1/account/* (with credentials: include — cross-subdomain
+  # cookie, see next.config.mjs) work. frame-ancestors 'none' is the
+  # modern equivalent of X-Frame-Options DENY — critical on this
+  # surface so a hostile page can't iframe the dashboard and
+  # clickjack the API-key reveal / account actions. form-action
+  # 'self' keeps any form POST on-origin.
+  Content-Security-Policy: default-src 'self'; connect-src 'self' https://api.ratesengine.net; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self' data:; object-src 'none'; base-uri 'self'; frame-ancestors 'none'; form-action 'self'
+  # no-store on the default rule: dashboard pages are
+  # authenticated and may render one-time plaintext API keys. Keeping
+  # them out of shared/browser caches stops a secret from surviving
+  # in a CDN edge cache or the back/forward cache after sign-out.
+  # Fingerprinted static assets opt back into long caching below.
+  Cache-Control: no-store
+
+# Fingerprinted Next.js assets — far-future cache. These are public,
+# content-addressed bundles (no secrets), so they override the
+# parent rule's no-store. CF Pages does this by default but the
+# explicit header doubles as documentation and is needed on Netlify.
+/_next/static/*
+  Cache-Control: public, max-age=31536000, immutable

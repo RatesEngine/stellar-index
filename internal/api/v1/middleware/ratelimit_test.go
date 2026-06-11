@@ -316,6 +316,48 @@ func TestRateLimitBySubject_AnonymousUsesAnonBucket(t *testing.T) {
 	}
 }
 
+// TestRateLimitBySubject_AnonymousSameIPDifferentUADoesNotBypass is
+// the F-1335 regression: the anonymous bucket must be keyed on the
+// resolved client IP ALONE. Pre-fix the key folded in a
+// sha256(IP|User-Agent) hash, so a client could rotate its
+// User-Agent on every request to mint unlimited distinct buckets and
+// sail past the per-IP anonymous throttle. Here two requests from the
+// SAME IP carry DIFFERENT User-Agents; with a budget of 1 the second
+// MUST be 429'd because both share one bucket.
+func TestRateLimitBySubject_AnonymousSameIPDifferentUADoesNotBypass(t *testing.T) {
+	rdb, _ := newRLRedis(t)
+	anonBucket := ratelimit.New(rdb, 1, time.Minute)
+	authBucket := ratelimit.New(rdb, 3, time.Minute)
+
+	h := middleware.RateLimitBySubject(anonBucket, authBucket, nil, nil)(okHandler())
+
+	// Same source IP; the two requests differ ONLY in User-Agent. The
+	// anonymous Subject.Identifier folds in the UA (sha256(IP|UA)), so
+	// if the bucket keyed on Identifier these would be two buckets.
+	reqWithUA := func(ua string) *http.Request {
+		r := httptest.NewRequest(http.MethodGet, "/", nil)
+		r.RemoteAddr = "203.0.113.7:5555"
+		r.Header.Set("User-Agent", ua)
+		// Mirror how the Auth middleware attaches the anonymous
+		// Subject: Identifier = per-IP+UA hash, Tier = anonymous.
+		subject := auth.Anonymous("anon-hash-for-" + ua)
+		return r.WithContext(auth.WithSubject(r.Context(), subject))
+	}
+
+	w := httptest.NewRecorder()
+	h.ServeHTTP(w, reqWithUA("curl/8.0"))
+	if w.Code != http.StatusOK {
+		t.Fatalf("first request status = %d, want 200", w.Code)
+	}
+
+	w = httptest.NewRecorder()
+	h.ServeHTTP(w, reqWithUA("Mozilla/5.0 (rotated)"))
+	if w.Code != http.StatusTooManyRequests {
+		t.Fatalf("second request (rotated UA, same IP) status = %d, want 429 — "+
+			"UA rotation bypassed the per-IP anonymous throttle (F-1335)", w.Code)
+	}
+}
+
 func TestSkipHealthAndMetrics(t *testing.T) {
 	cases := map[string]bool{
 		"/v1/healthz":      true,

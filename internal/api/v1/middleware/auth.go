@@ -260,14 +260,23 @@ func bearerOnly(r *http.Request) string {
 }
 
 // anonymousIdentifier builds a stable per-request identifier for
-// anonymous callers. Used as the rate-limit key when no credential
-// is presented. SHA-256(remoteIP + "|" + userAgent) — the hash
-// keeps identifying details out of metrics labels (cardinality)
-// while still bucketing per client.
+// anonymous callers, stored on the anonymous [auth.Subject]. Used as
+// a log / metric correlation label — NOT as the rate-limit key.
+// SHA-256(remoteIP + "|" + userAgent) — the hash keeps identifying
+// details out of metrics labels (cardinality) while still
+// distinguishing clients in logs.
+//
+// SECURITY (F-1335): the rate-limit bucket MUST NOT be keyed on this
+// value. Because it folds in the (client-controlled) User-Agent, a
+// caller could rotate its UA on every request to mint unlimited
+// distinct identifiers — one bucket each — and bypass the per-IP
+// anonymous throttle. The throttle key is derived separately from
+// the resolved client IP alone in
+// [bucketKeyAndOverrideForRequest] / anonymousRateLimitKey.
 //
 // We don't include port (RemoteAddr's :port slice) because that
 // rotates on every connection; we want the same caller's requests
-// to share a key.
+// to share an identifier.
 func anonymousIdentifier(r *http.Request) string {
 	ip := remoteIPFor(r)
 	ua := r.Header.Get("User-Agent")
