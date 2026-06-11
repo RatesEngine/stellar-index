@@ -955,6 +955,7 @@ func Default() Config {
 			S3BucketLive:       "galexie-live",
 			S3AccessKeyEnv:     "RATESENGINE_S3_ACCESS_KEY",
 			S3SecretKeyEnv:     "RATESENGINE_S3_SECRET_KEY",
+			ClickHouseAddr:     "127.0.0.1:9300",
 		},
 		Ingestion: IngestionConfig{
 			EnabledSources:     []string{"soroswap", "aquarius", "phoenix"},
@@ -962,6 +963,19 @@ func Default() Config {
 			BackfillBatchSize:  64,
 			CursorStoreScheme:  "postgres",
 			LiveSeamLedger:     0,
+			// Projector defaults to Phase-3 PARALLEL mode: when an
+			// operator enables it (Enabled=true) the dispatcher KEEPS
+			// writing Soroban-derived events (PersistPerSource=true) so
+			// nothing is lost while projector lag is verified. Leaving
+			// PersistPerSource at its zero-value (false) would silently
+			// select Phase-4 sole-writer mode the moment the projector is
+			// enabled — and the projector cannot yet serve the sep41
+			// domain (F-1316), so that would drop all sep41 rows. MUST
+			// stay true until the projector earns sole-writer status.
+			Projector: ProjectorConfig{
+				Enabled:          false,
+				PersistPerSource: true,
+			},
 		},
 		Oracle: OracleConfig{
 			// Reflector mainnet addresses are operator-supplied
@@ -991,11 +1005,14 @@ func Default() Config {
 			Chainlink:        ChainlinkVenueConfig{Enabled: false, FeedMap: map[string]ChainlinkFeedSetting{}},
 		},
 		Aggregate: AggregateConfig{
-			VWAPWindowSeconds:     300,
-			TWAPWindowSeconds:     300,
-			MinUSDVolume:          10_000,
-			OutlierSigmaThreshold: 4,
-			TriangulationEnabled:  true,
+			VWAPWindowSeconds:            300,
+			TWAPWindowSeconds:            300,
+			MinUSDVolume:                 10_000,
+			OutlierSigmaThreshold:        4,
+			TriangulationEnabled:         true,
+			IntervalSeconds:              30,
+			DivergenceMinIntervalSeconds: 300,
+			MaxTradesPerWindow:           10_000,
 		},
 		Anomaly: AnomalyConfig{
 			// Enabled defaults to false — operator opts in once
@@ -1010,11 +1027,19 @@ func Default() Config {
 			ListenAddr:          "0.0.0.0:3000",
 			ExternalBaseURL:     "https://api.ratesengine.net/v1",
 			AuthMode:            "none",
+			AuthBackend:         "redis",
 			AnonRateLimitPerMin: 60,
 			KeyRateLimitPerMin:  1000,
 			CDNEnabled:          true,
 			AllowedOrigins:      []string{"*"},
 			TrustedProxyCIDRs:   []string{},
+			// F-0051: probe the public TLS leaf certs by default so silent
+			// Let's Encrypt renewal failures surface before expiry (the
+			// alert series only exists when this is populated).
+			TLSCertProbeHosts: []string{"api.ratesengine.net", "status.ratesengine.net", "ratesengine.net"},
+			// F-1218: pre-launch safe default is to require email-ownership
+			// proof on signup-minted keys; operators opt out explicitly.
+			SignupRequireEmailVerification: true,
 			SEP10: SEP10Config{
 				SeedEnv:       "RATESENGINE_SEP10_SEED",
 				JWTSecretEnv:  "RATESENGINE_SEP10_JWT_SECRET",
@@ -1023,12 +1048,26 @@ func Default() Config {
 				ChallengeTTL:  15 * time.Minute,
 				JWTTTL:        1 * time.Hour,
 			},
+			Dashboard: DashboardConfig{
+				EmailFrom:           "Rates Engine <hello@ratesengine.net>",
+				ResendAPIKeyEnv:     "RATESENGINE_RESEND_API_KEY",
+				MagicLinkTTLMinutes: 15,
+				SessionTTLDays:      30,
+				CookieSecure:        true, // dev (http://localhost) overrides to false
+			},
 			Streaming: StreamingConfig{
 				Pairs:        [][]string{},
 				PollInterval: 5 * time.Second,
 			},
 		},
 		Divergence: defaultDivergenceConfig(),
+		Supply: SupplyConfig{
+			// Cadence is only consumed when AggregatorRefreshEnabled is
+			// flipped on; a non-zero default avoids time.NewTicker(0)
+			// panicking if an operator enables the worker without setting
+			// it (the validation gap behind G19-02).
+			AggregatorRefreshCadence: 5 * time.Minute,
+		},
 		Obs: ObsConfig{
 			MetricsListen: "127.0.0.1:9464",
 			LogLevel:      "info",

@@ -83,6 +83,14 @@ func (c Config) Validate() error {
 	if err := c.Obs.validate(); err != nil {
 		return err
 	}
+	// G19-02: Supply.Validate() was never wired here, so enabling the
+	// in-aggregator supply worker without a cadence reached
+	// time.NewTicker(0) at runtime. It's a no-op for the default
+	// (disabled) config and only enforces the <30s-cadence + reserve-set
+	// invariants when the operator opts in.
+	if err := c.Supply.Validate(); err != nil {
+		return err
+	}
 	// Cross-section checks: enabled sources must have the config
 	// they need. These can't live on the individual sub-structs
 	// because they span two sections (ingestion + oracle).
