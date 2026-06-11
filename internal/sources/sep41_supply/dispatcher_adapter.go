@@ -41,6 +41,16 @@ func NewDecoder(watched []string) (*Decoder, error) {
 	return &Decoder{watched: set}, nil
 }
 
+// NewFirehoseDecoder constructs a contract-agnostic Decoder that matches
+// EVERY SEP-41 mint/burn/clawback by topic alone, not by a watched
+// contract. The projector uses this (F-1316): it passed a synthetic
+// watched-contract that no real event could match, so Matches() rejected
+// every event and zero supply rows were projected. A nil watched set
+// means "match by classify() only".
+func NewFirehoseDecoder() *Decoder {
+	return &Decoder{watched: nil}
+}
+
 // Name implements [dispatcher.Decoder].
 func (*Decoder) Name() string { return SourceName }
 
@@ -58,8 +68,12 @@ func (d *Decoder) Matches(ev events.Event) bool {
 	if ev.Type != "contract" {
 		return false
 	}
-	if _, watched := d.watched[ev.ContractID]; !watched {
-		return false
+	// A nil watched set (firehose mode, used by the projector) matches
+	// every contract — topic classify() is the only gate.
+	if d.watched != nil {
+		if _, watched := d.watched[ev.ContractID]; !watched {
+			return false
+		}
 	}
 	return classify(&ev) != ""
 }

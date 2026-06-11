@@ -64,6 +64,16 @@ var sep41TransferSyms = []string{
 	sep41_transfers.SymbolSetAuthorized,
 }
 
+// sep41SupplySyms is the SQL-layer prefilter for the sep41_supply
+// projector source — without it the per-cycle catch-up window would
+// stream the entire CAP-67 firehose to prove which rows are mint/burn/
+// clawback (G16-07).
+var sep41SupplySyms = []string{
+	sep41_supply.SymbolMint,
+	sep41_supply.SymbolBurn,
+	sep41_supply.SymbolClawback,
+}
+
 // firehoseExcludeSyms is the SQL-layer exclusion the DEX/lending sources apply
 // so a far-behind catch-up window doesn't stream the CAP-67 classic-token
 // firehose (under the r1 archive's uniform V4 meta, ~99.8% of all
@@ -133,31 +143,26 @@ func buildSource(name string, oracle config.OracleConfig, soroswapOpts ...sorosw
 			ExcludeTopic0Syms: firehoseExcludeSyms,
 		}, true, nil
 	case sep41_transfers.SourceName:
-		// SEP-41 NewDecoder requires a non-nil watched-contracts
-		// list; the projector wants all-contracts coverage so we
-		// pass a single synthetic identity that no real contract
-		// will match. The decoder's `Matches` would normally gate
-		// on this list, but the projector uses Topic0Syms prefilter
-		// at the SQL layer + classify() at the decode-layer so
-		// matching by contract is redundant. Pre-existing pattern
-		// from sep41_transfers_backfill.go::buildSEP41DecoderContracts.
-		sep41Dec, err := sep41_transfers.NewDecoder([]string{"CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAABSC4"})
-		if err != nil {
-			return Source{}, false, err
-		}
+		// The projector wants all-contracts coverage. F-1316: this
+		// previously passed a single synthetic watched-contract that no
+		// real event could match, so the decoder's Matches() rejected
+		// every event and the projector wrote ZERO sep41_transfers rows
+		// (silent total loss in Phase-4 sole-writer mode). The firehose
+		// decoder matches by topic alone; the SQL Topic0Syms prefilter
+		// keeps the catch-up scan bounded.
 		return Source{
 			Name:       sep41_transfers.SourceName,
-			Decoder:    sep41Dec,
+			Decoder:    sep41_transfers.NewFirehoseDecoder(),
 			Topic0Syms: sep41TransferSyms,
 		}, true, nil
 	case sep41_supply.SourceName:
-		supplyDec, err := sep41_supply.NewDecoder([]string{"CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAABSC4"})
-		if err != nil {
-			return Source{}, false, err
-		}
+		// Firehose decoder (see sep41_transfers above) + a mint/burn/
+		// clawback SQL prefilter so the catch-up window doesn't stream
+		// the whole CAP-67 firehose (G16-07).
 		return Source{
-			Name:    sep41_supply.SourceName,
-			Decoder: supplyDec,
+			Name:       sep41_supply.SourceName,
+			Decoder:    sep41_supply.NewFirehoseDecoder(),
+			Topic0Syms: sep41SupplySyms,
 		}, true, nil
 	case reflector.SourceDEX:
 		if oracle.Reflector.DEXContract == "" {

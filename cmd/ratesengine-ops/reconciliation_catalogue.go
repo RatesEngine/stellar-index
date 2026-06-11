@@ -59,10 +59,14 @@ type reconSource struct {
 // soroswap-router) via the InvokeContract-op census (callDec path) — their
 // calls are re-derived from the lake by filtering body_xdr on the contract
 // bytes (stellar.operations has no contract_id column). Deliberately EXCLUDED:
-//   - sep41-transfers / sep41-supply: their decoders gate Matches() on a
-//     watched-contract list (the projector passes a synthetic identity),
-//     so a re-derive would reject every real event. They need either the
-//     real watched set or topic-based matching first.
+//   - sep41-transfers / sep41-supply: as of F-1316 their projector decoders
+//     match by TOPIC (NewFirehoseDecoder), so a soroban_events re-derive now
+//     reproduces them and they are eligible for inclusion. Adding them here
+//     is a follow-up: the reconTarget topic identifiers + genesis
+//     (50_457_424, per per_source_gaps.go) must be verified against the
+//     census topic-naming convention first so we don't emit false
+//     reconciliation deltas. Until then they're covered by the data-derived
+//     gap detector, not the ADR-0033 projection reconcile.
 func buildReconciliationCatalogue(cfg config.Config) ([]reconSource, *soroswap.Decoder) {
 	soroswapDec := soroswap.NewDecoder()
 

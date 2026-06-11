@@ -361,3 +361,45 @@ func TestDecoder_NameAndSource(t *testing.T) {
 		t.Errorf("Event.EventKind() = %q, want %q", e.EventKind(), EventKind)
 	}
 }
+
+// TestFirehoseDecoder_MatchesAnyContract pins F-1316: the projector's
+// firehose decoder must match SEP-41 transfer-class events from ANY
+// contract by topic alone. The watched-list NewDecoder would reject an
+// unwatched contract; the firehose variant must not.
+func TestFirehoseDecoder_MatchesAnyContract(t *testing.T) {
+	dec := NewFirehoseDecoder()
+	ev := transferEvent(t, "CSOMERANDOMCONTRACTNOTINANYWATCHEDSET00000000000000000000", 42)
+	if !dec.Matches(ev) {
+		t.Fatal("firehose decoder must match a transfer event from an arbitrary contract (F-1316)")
+	}
+	out, err := dec.Decode(ev)
+	if err != nil {
+		t.Fatalf("Decode: %v", err)
+	}
+	if len(out) != 1 {
+		t.Fatalf("emitted %d events, want 1", len(out))
+	}
+}
+
+// TestDecode_PopulatesEventIndex pins F-1324/G9-02: EventIndex must be
+// carried onto the row so multiple same-op events don't collapse on the
+// PK via ON CONFLICT.
+func TestDecode_PopulatesEventIndex(t *testing.T) {
+	dec := NewFirehoseDecoder()
+	ev := transferEvent(t, "CSOMERANDOMCONTRACTNOTINANYWATCHEDSET00000000000000000000", 42)
+	ev.EventIndex = 3
+	out, err := dec.Decode(ev)
+	if err != nil {
+		t.Fatalf("Decode: %v", err)
+	}
+	if len(out) != 1 {
+		t.Fatalf("emitted %d events, want 1", len(out))
+	}
+	got, ok := out[0].(Event)
+	if !ok {
+		t.Fatalf("event type %T, want sep41_transfers.Event", out[0])
+	}
+	if got.EventIndex != 3 {
+		t.Errorf("EventIndex = %d, want 3 (F-1324)", got.EventIndex)
+	}
+}

@@ -32,18 +32,31 @@ func NewDecoder(watched []string) (*Decoder, error) {
 	return &Decoder{watched: set}, nil
 }
 
+// NewFirehoseDecoder constructs a contract-agnostic Decoder that matches
+// EVERY SEP-41 transfer-class event by topic alone, not by a watched
+// contract. The projector uses this (F-1316): it passed a synthetic
+// watched-contract that no real event could match, so Matches() rejected
+// every event and the projector wrote zero rows. A nil watched set means
+// "match by classify() only".
+func NewFirehoseDecoder() *Decoder {
+	return &Decoder{watched: nil}
+}
+
 func (*Decoder) Name() string { return SourceName }
 
 // Matches returns true when topic[0] is one of transfer / approve
 // / set_admin / set_authorized on a watched contract. mint/burn/
 // clawback belong to sep41_supply and are skipped here so the
-// two observers don't double-process.
+// two observers don't double-process. A nil watched set (firehose
+// mode) matches every contract — the topic classify() is the only gate.
 func (d *Decoder) Matches(ev events.Event) bool {
 	if ev.Type != "contract" {
 		return false
 	}
-	if _, watched := d.watched[ev.ContractID]; !watched {
-		return false
+	if d.watched != nil {
+		if _, watched := d.watched[ev.ContractID]; !watched {
+			return false
+		}
 	}
 	return classify(&ev) != ""
 }
@@ -63,6 +76,11 @@ func (d *Decoder) Decode(ev events.Event) ([]consumer.Event, error) {
 		Ledger:     ev.Ledger,
 		TxHash:     ev.TxHash,
 		OpIndex:    uint32(ev.OperationIndex), //nolint:gosec // non-negative by Soroban spec.
+		// EventIndex disambiguates multiple SEP-41 events emitted by the
+		// same contract in one op (batch transfers, approve+transfer_from):
+		// it is part of the sep41_transfers PK (migration 0047), so leaving
+		// it 0 collapsed all-but-one of them via ON CONFLICT (F-1324/G9-02).
+		EventIndex: uint32(ev.EventIndex), //nolint:gosec // non-negative by Soroban spec.
 		ObservedAt: closedAt,
 		Kind:       kind,
 	}
