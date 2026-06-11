@@ -381,9 +381,9 @@ func aggregateEndpointStats(ep endpoint, ss []probeSample) stats {
 		Path:               ep.Path,
 		FreshnessTargetSec: ep.FreshTarget.Seconds(),
 		Samples:            len(ss),
-		Successes:       successes,
-		Errors:          len(ss) - successes,
-		AvailabilityPct: 100.0 * float64(successes) / float64(len(ss)),
+		Successes:          successes,
+		Errors:             len(ss) - successes,
+		AvailabilityPct:    100.0 * float64(successes) / float64(len(ss)),
 		LatencyMS: latencyStats{
 			P50:  percentile(latencies, 0.50),
 			P95:  percentile(latencies, 0.95),
