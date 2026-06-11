@@ -3,7 +3,9 @@ package main
 import (
 	"github.com/RatesEngine/rates-engine/internal/completeness"
 	"github.com/RatesEngine/rates-engine/internal/config"
+	"github.com/RatesEngine/rates-engine/internal/dispatcher"
 	"github.com/RatesEngine/rates-engine/internal/sources/aquarius"
+	"github.com/RatesEngine/rates-engine/internal/sources/band"
 	"github.com/RatesEngine/rates-engine/internal/sources/blend"
 	"github.com/RatesEngine/rates-engine/internal/sources/cctp"
 	"github.com/RatesEngine/rates-engine/internal/sources/comet"
@@ -13,6 +15,7 @@ import (
 	"github.com/RatesEngine/rates-engine/internal/sources/reflector"
 	"github.com/RatesEngine/rates-engine/internal/sources/rozo"
 	"github.com/RatesEngine/rates-engine/internal/sources/soroswap"
+	soroswap_router "github.com/RatesEngine/rates-engine/internal/sources/soroswap_router"
 )
 
 // reconTarget is one protocol table a source writes, plus the
@@ -33,8 +36,17 @@ type reconSource struct {
 	contractIDs []string             // SQL prefilter (oracles); empty = match-by-topic
 	topic0Syms  []string
 	targets     []reconTarget
-	census      bool   // sdex: expected = ledger_ingest_log.classic_trade_effect_count
+	census      bool   // sdex: expected = decoder re-derive over the lake's SDEX ops
 	genesis     uint32 // first-possible-data ledger; mirrors DefaultGapDetectorTargets (WASM-audit sourced)
+
+	// Event-less ContractCall sources (band, soroswap-router): no
+	// soroban_events landing zone, so the projection census is re-derived by
+	// streaming InvokeContract ops from the lake (filtered on callContract's
+	// bytes in body_xdr) and running callDec over each. callDec != nil selects
+	// the ContractCall census path. callContract is the C-strkey of the
+	// invoked contract (strkey-decoded to the body_xdr substring filter).
+	callDec      dispatcher.ContractCallDecoder
+	callContract string
 }
 
 // buildReconciliationCatalogue assembles the per-source reconciliation
@@ -42,16 +54,15 @@ type reconSource struct {
 // seed its pair registry (its swap event omits token identities).
 //
 // Scope: every source whose decoder matches by TOPIC (so a soroban_events
-// re-derive reproduces it) or by a REAL contract address (oracles), plus
-// sdex via the LCM census. Deliberately EXCLUDED, with reasons:
+// re-derive reproduces it) or by a REAL contract address (oracles); sdex via
+// the LCM op census; and the event-less ContractCall sources (band,
+// soroswap-router) via the InvokeContract-op census (callDec path) — their
+// calls are re-derived from the lake by filtering body_xdr on the contract
+// bytes (stellar.operations has no contract_id column). Deliberately EXCLUDED:
 //   - sep41-transfers / sep41-supply: their decoders gate Matches() on a
 //     watched-contract list (the projector passes a synthetic identity),
 //     so a re-derive would reject every real event. They need either the
 //     real watched set or topic-based matching first.
-//   - band: event-less ContractCallDecoder (no soroban_events) — needs a
-//     band-specific census like sdex.
-//   - soroswap-router: event-less; reconciled from raw ledger meta, not
-//     soroban_events.
 func buildReconciliationCatalogue(cfg config.Config) ([]reconSource, *soroswap.Decoder) {
 	soroswapDec := soroswap.NewDecoder()
 
@@ -126,5 +137,23 @@ func buildReconciliationCatalogue(cfg config.Config) ([]reconSource, *soroswap.D
 			targets: []reconTarget{{"oracle_updates", "source = 'redstone'", []string{"redstone.update"}}},
 		})
 	}
+
+	// Event-less ContractCall sources — census re-derived from the lake's
+	// InvokeContract ops (callDec path). band is gated on its configured
+	// StandardReference contract; soroswap-router uses the mainnet router
+	// const (matching how the indexer wires both decoders). genesis bounds the
+	// verify range; the empty pre-first-call prefix reconciles to zero.
+	if a := cfg.Oracle.Band.StandardReferenceContract; a != "" {
+		cat = append(cat, reconSource{
+			name: "band", genesis: 60_000_000, callContract: a, callDec: band.NewDecoder(a),
+			targets: []reconTarget{{"oracle_updates", "source = 'band'", nil}},
+		})
+	}
+	cat = append(cat, reconSource{
+		name: "soroswap-router", genesis: 50_746_272,
+		callContract: soroswap_router.MainnetRouter,
+		callDec:      soroswap_router.NewDecoder(soroswap_router.MainnetRouter),
+		targets:      []reconTarget{{"soroswap_router_swaps", "", nil}},
+	})
 	return cat, soroswapDec
 }

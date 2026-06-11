@@ -2,11 +2,14 @@ package main
 
 import (
 	"context"
+	"encoding/hex"
 	"flag"
 	"fmt"
 	"os"
 	"strings"
 	"time"
+
+	"github.com/stellar/go-stellar-sdk/strkey"
 
 	"github.com/RatesEngine/rates-engine/internal/completeness"
 	"github.com/RatesEngine/rates-engine/internal/config"
@@ -378,6 +381,35 @@ func reconcileProjectionAggregate(ctx context.Context, store *timescale.Store, c
 	var totalDelta int
 	var details []string
 
+	if src.callDec != nil {
+		// Event-less ContractCall source (band, soroswap-router): re-derive the
+		// census from the lake's InvokeContract ops (no soroban_events landing
+		// zone) and reconcile against the served tier (oracle_updates /
+		// soroswap_router_swaps) by the SAME decoder the live dispatcher routes.
+		// retentionFloor scopes to where served data begins (these tables are
+		// full-history, so it's just the first-call ledger, not a 90d boundary).
+		flo, ferr := retentionFloor(ctx, store, src, lo, hi)
+		if ferr != nil {
+			return 0, "", ferr
+		}
+		expected, eerr := reDeriveContractCallCensus(ctx, chAddr, src.callContract, src.callDec, flo, hi)
+		if eerr != nil {
+			return 0, "", eerr
+		}
+		for _, tgt := range src.targets {
+			actual, aerr := store.CountRowsByLedger(ctx, tgt.table, "ledger", tgt.whereFilter, flo, hi)
+			if aerr != nil {
+				return 0, "", aerr
+			}
+			e, a := sumCounts(expected), sumCounts(actual)
+			if d := absDiff(e, a); d != 0 {
+				totalDelta += d
+				details = append(details, fmt.Sprintf("%s: expected=%d served=%d Δ=%d [%d,%d]", tgt.table, e, a, d, flo, hi))
+			}
+		}
+		return totalDelta, strings.Join(details, "; "), nil
+	}
+
 	if src.census {
 		// Floor at the ACTUAL retained boundary (drop_chunks can retain less than
 		// retentionStart; census>0 vs served=0 below the oldest chunk is a
@@ -522,6 +554,64 @@ func reDeriveSDEXCensusViaDecoder(ctx context.Context, chAddr string, from, to u
 		}
 		for ledger, s := range seen {
 			out[ledger] += len(s)
+		}
+		if hi == to {
+			break
+		}
+	}
+	return out, nil
+}
+
+// reDeriveContractCallCensus re-derives the expected event count per ledger for
+// an event-less ContractCall source (band, soroswap-router) by streaming the
+// lake's InvokeContract ops that touch the source's contract and running the
+// source's ContractCallDecoder over each — byte-identical to the live
+// dispatcher's routing (dispatcher.ExtractContractCallTree + the decoder). With
+// no soroban_events landing zone, this IS the projection oracle. contractStrkey
+// is decoded to its 32-byte ID for the body_xdr substring filter. Windowed so
+// the successful-tx IN-set stays bounded.
+//
+// natural fan-out; splitting hurts the read (mirrors reDeriveSDEXCensusViaDecoder).
+//
+//nolint:gocognit // windowed stream → per-op call-tree → Matches/Decode is
+func reDeriveContractCallCensus(ctx context.Context, chAddr, contractStrkey string, dec dispatcher.ContractCallDecoder, from, to uint32) (map[uint32]int, error) {
+	out := make(map[uint32]int)
+	raw, err := strkey.Decode(strkey.VersionByteContract, contractStrkey)
+	if err != nil {
+		return nil, fmt.Errorf("decode contract strkey %s: %w", contractStrkey, err)
+	}
+	contractHex := hex.EncodeToString(raw)
+	const window = 250_000
+	for lo := from; lo <= to; lo += window {
+		hi := lo + window - 1
+		if hi > to {
+			hi = to
+		}
+		if err := clickhouse.StreamContractCallOps(ctx, chAddr, contractHex, lo, hi, func(op clickhouse.ContractCallOp) error {
+			for _, call := range dispatcher.ExtractContractCallTree(op.Op) {
+				if !dec.Matches(call.ContractID, call.FunctionName) {
+					continue
+				}
+				evs, derr := dec.Decode(dispatcher.ContractCallContext{
+					Ledger:       op.Ledger,
+					ClosedAt:     op.ClosedAt,
+					TxHash:       op.TxHash,
+					TxSource:     op.Source,
+					OpSource:     op.Source,
+					OpIndex:      int(op.OpIndex),
+					ContractID:   call.ContractID,
+					FunctionName: call.FunctionName,
+					Args:         call.Args,
+					CallPath:     call.CallPath,
+				})
+				if derr != nil {
+					continue // malformed call: skip + count per the decoder contract
+				}
+				out[op.Ledger] += len(evs)
+			}
+			return nil
+		}); err != nil {
+			return nil, err
 		}
 		if hi == to {
 			break
