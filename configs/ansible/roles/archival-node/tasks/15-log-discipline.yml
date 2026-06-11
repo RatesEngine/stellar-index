@@ -105,6 +105,16 @@
       # belt-and-braces guarantee that an accidental log_level
       # regression doesn't blow the disk again.
       if $programname == "loki" then stop
+      # clickhouse-server: on a full root, CH's log rotation throws and
+      # its async log channel wedges ("Cannot log message in
+      # OwnAsyncSplitChannel"), spamming ~80k lines/min to journald →
+      # rsyslog → /var/log/syslog and re-filling root in a self-
+      # sustaining loop (2026-06-11 recurrence of the 2026-05-10 class;
+      # crashed PG twice). CH's own log is also moved to ZFS below so
+      # the channel can't wedge; this filter keeps the journald flood
+      # off /var/log/syslog as belt-and-braces. journalctl -u
+      # clickhouse-server still has the messages.
+      if $programname == "clickhouse-server" then stop
   notify:
     - Reload rsyslog
   tags: [log-discipline, rsyslog]
@@ -173,3 +183,40 @@
     owner: root
     group: root
     mode: "0644"
+
+- name: Ensure ClickHouse log directory exists on the ZFS pool
+  # 2026-06-11 incident. CH's <log> defaulted to /var/log/clickhouse-server
+  # on the 49 GB root (1000M x 10 rotation). On a full root the rotation
+  # throws and the async log channel wedges ("Cannot log message in
+  # OwnAsyncSplitChannel"), spamming ~80k lines/min and re-filling root in a
+  # self-sustaining loop that crashed PG twice. /var/lib/clickhouse is the
+  # 9 TB ZFS pool, which never fills — moving CH's logs there removes the
+  # failure mode at the source.
+  ansible.builtin.file:
+    path: /var/lib/clickhouse/logs
+    state: directory
+    owner: clickhouse
+    group: clickhouse
+    mode: "0750"
+  tags: [log-discipline, clickhouse]
+
+- name: Move ClickHouse server logs off root onto the ZFS pool
+  ansible.builtin.copy:
+    dest: /etc/clickhouse-server/config.d/zzz-logpath.xml
+    owner: root
+    group: root
+    mode: "0644"
+    content: |
+      <clickhouse>
+          <!-- Managed by ansible (archival-node / 15-log-discipline.yml).
+               2026-06-11 incident fix: CH server logs on the 9TB ZFS pool,
+               not the chronically-tight 49G root. A full root must never be
+               able to wedge CH's log-rotation/async channel again. -->
+          <logger>
+              <log>/var/lib/clickhouse/logs/clickhouse-server.log</log>
+              <errorlog>/var/lib/clickhouse/logs/clickhouse-server.err.log</errorlog>
+          </logger>
+      </clickhouse>
+  notify:
+    - Restart clickhouse-server
+  tags: [log-discipline, clickhouse]

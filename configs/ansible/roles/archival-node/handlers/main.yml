@@ -23,6 +23,11 @@
     name: minio
     state: restarted
 
+- name: Restart clickhouse-server
+  ansible.builtin.systemd:
+    name: clickhouse-server
+    state: restarted
+
 - name: Restart ratesengine-indexer
   ansible.builtin.systemd:
     name: ratesengine-indexer
