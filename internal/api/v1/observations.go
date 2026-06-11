@@ -94,21 +94,25 @@ func (s *Server) handleObservations(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Fast-path for aggregator-only quote types (#29). `fiat:USD`
-	// (ADR-0010) and `crypto:BTC` (ADR-0014) are reference-currency
-	// abstractions: trades.quote_asset only ever stores concrete
-	// token assets (Stellar classic G-address+code or Soroban
-	// C-address). `LatestTradePerSource` for these quotes does an
-	// unbounded per-chunk fan-out over the entire trades hypertable
-	// proving emptiness — measured >60s on r1, blowing the 8s
-	// ceiling below → 503 (the status-page incident). The result is
-	// always an empty observations array; the meaningful signal for
-	// proxy/triangulated quotes is the triangulation hint, identical
-	// to the post-storage empty-result branch below. Short-circuit
-	// to that, no storage call. Semantically identical, ~60s
-	// cheaper, and #30's missing-index follow-up no longer load-
-	// bearing for the visible status-page hot key.
-	if pair.Quote.Type == canonical.AssetFiat || pair.Quote.Type == canonical.AssetCrypto {
+	// Fast-path for the synthesized USD reference quote (#29).
+	// `fiat:USD` (ADR-0010) is a reference-currency abstraction that is
+	// ALWAYS triangulated — no venue trades directly against it, so
+	// trades.quote_asset never holds the literal value `fiat:USD`. A
+	// `LatestTradePerSource` lookup for it does an unbounded per-chunk
+	// fan-out proving emptiness (measured >60s on r1, blowing the 8s
+	// ceiling below → 503, the status-page incident). The result is
+	// always an empty observations array; short-circuit to the
+	// triangulation-hint branch, no storage call.
+	//
+	// F-1325: this short-circuit was previously applied to EVERY fiat:*
+	// AND crypto:* quote — but that premise is false. CEX connectors
+	// write REAL trades quoted in `crypto:USDT`, `crypto:BTC`,
+	// `fiat:EUR` etc. (binance XLMUSDT/XLMBTC/BTCEUR → quote_asset =
+	// "crypto:USDT"/"crypto:BTC"/"fiat:EUR"), so suppressing those
+	// silently hid live CEX observations on the rawest API surface.
+	// Only `fiat:USD` is genuinely never a stored trade quote; everything
+	// else flows through the real (8s-bounded, index-covered) scan below.
+	if pair.Quote.Type == canonical.AssetFiat && pair.Quote.Code == "USD" {
 		s.writeEmptyObservationsFor(w, r, pair, source)
 		return
 	}

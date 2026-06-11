@@ -350,33 +350,49 @@ func (h *observationsCallTracker) OHLCSeries(_ context.Context, _ canonical.Pair
 	return nil, nil
 }
 
-// TestObservations_FiatCryptoQuoteShortCircuit — #29. fiat:* (ADR-0010)
-// and crypto:* (ADR-0014) are aggregator-only reference assets;
-// trades.quote_asset NEVER stores them. LatestTradePerSource on those
-// quotes does an unbounded per-chunk scan over the entire trades
-// hypertable proving emptiness (>60s on r1 → 503 via the 8s handler
-// ceiling — the visible status-page incident). The short-circuit
-// returns the canonical empty observations result without touching
-// storage; this test pins it via a History stub that errors if
-// called.
-func TestObservations_FiatCryptoQuoteShortCircuit(t *testing.T) {
+// TestObservations_FiatUSDQuoteShortCircuit — #29 / F-1325. Only the
+// synthesized USD reference quote (`fiat:USD`, ADR-0010) is never a
+// stored trade quote, so LatestTradePerSource for it does an unbounded
+// emptiness-proving scan (>60s on r1 → 503). The short-circuit returns
+// the canonical empty result without touching storage; this pins it via
+// a History stub that errors if called.
+func TestObservations_FiatUSDQuoteShortCircuit(t *testing.T) {
 	hist := &observationsCallTracker{}
 	srv := v1.New(v1.Options{History: hist})
 	tsv := startHTTPTest(t, srv.Handler())
 
-	for _, q := range []string{"fiat:USD", "fiat:EUR", "crypto:BTC"} {
-		resp := mustGet(t, tsv.URL+"/v1/observations?asset=native&quote="+q)
-		if resp.StatusCode != http.StatusOK {
-			t.Fatalf("quote=%s status=%d, want 200 (short-circuit)", q, resp.StatusCode)
-		}
-		body, _ := readAll(resp)
-		if !strings.Contains(body, `"data":[]`) {
-			t.Errorf("quote=%s: want empty data array, got: %s", q, body)
-		}
+	resp := mustGet(t, tsv.URL+"/v1/observations?asset=native&quote=fiat:USD")
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("fiat:USD status=%d, want 200 (short-circuit)", resp.StatusCode)
 	}
-
+	body, _ := readAll(resp)
+	if !strings.Contains(body, `"data":[]`) {
+		t.Errorf("fiat:USD: want empty data array, got: %s", body)
+	}
 	if n := hist.calls.Load(); n != 0 {
-		t.Fatalf("LatestTradePerSource called %d times; short-circuit must NOT call storage for fiat:/crypto: quotes", n)
+		t.Fatalf("LatestTradePerSource called %d times; fiat:USD must NOT touch storage", n)
+	}
+}
+
+// TestObservations_RealCexQuotesHitStorage pins F-1325: CEX connectors
+// write genuine trades quoted in crypto:USDT / crypto:BTC / fiat:EUR, so
+// observations for those quotes must NOT be short-circuited — they have
+// to query storage (the previous all-fiat/all-crypto short-circuit
+// silently suppressed live CEX observations on the rawest surface).
+func TestObservations_RealCexQuotesHitStorage(t *testing.T) {
+	for _, q := range []string{"crypto:USDT", "crypto:BTC", "fiat:EUR"} {
+		hist := &observationsCallTracker{}
+		srv := v1.New(v1.Options{History: hist})
+		tsv := startHTTPTest(t, srv.Handler())
+
+		// observationsCallTracker errors on LatestTradePerSource; we only
+		// assert that the handler ACTUALLY reached storage (a non-zero
+		// call count), proving the suppression is gone. The resulting
+		// status is irrelevant to the regression.
+		_ = mustGet(t, tsv.URL+"/v1/observations?asset=native&quote="+q)
+		if n := hist.calls.Load(); n == 0 {
+			t.Errorf("quote=%s: storage NOT queried — real CEX quote is still being short-circuited (F-1325)", q)
+		}
 	}
 }
 

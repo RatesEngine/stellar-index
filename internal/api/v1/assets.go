@@ -59,7 +59,21 @@ type AssetDetail struct {
 	Issuer     *string `json:"issuer,omitempty"`
 	ContractID *string `json:"contract_id,omitempty"`
 	HomeDomain *string `json:"home_domain,omitempty"`
-	Decimals   int     `json:"decimals"`
+	// Decimals is the on-chain smallest-unit scale (7 for classic /
+	// native stroops; per-contract for SEP-41). It is the divisor for
+	// EVERY unit computation — supply display AND market-cap / FDV math
+	// (MarketCapUSD = circulating × price / 10^Decimals). It MUST NOT be
+	// set from issuer-declared SEP-1 `display_decimals`, which is a
+	// wallet rounding hint, not a unit scale (F-1321: doing so inflated
+	// market_cap_usd by up to 10^(7-display_decimals)× on verified
+	// classic assets and was an issuer-controlled manipulation vector).
+	// Surface the display hint via DisplayDecimals instead.
+	Decimals int `json:"decimals"`
+	// DisplayDecimals is the issuer's SEP-1 `display_decimals` rounding
+	// hint (e.g. USDC declares 2) — a UI preference for how many
+	// fractional digits to show, NOT a unit scale. Omitted when the
+	// SEP-1 overlay didn't declare one. Never feeds amount math.
+	DisplayDecimals *int `json:"display_decimals,omitempty"`
 
 	// Class is the cross-chain asset class for catalogue-backed rows:
 	// "fiat" | "stablecoin" | "crypto". Omitted for Stellar-classic
@@ -480,8 +494,14 @@ func (s *Server) handleAssetListFromCoins(
 	issuer, cursor string,
 	limit int,
 ) {
+	// Overfetch-by-one: request limit+1 so the (limit+1)th row signals
+	// a next page. `limit` is validated to [1,500] by the caller, so the
+	// store sees at most 501 (F-1326: previously this passed `limit`
+	// itself, so len(rows) > limit was never true and /v1/assets never
+	// emitted a next cursor — only the first page of ~440K assets was
+	// reachable).
 	opts := timescale.ListCoinsOptions{
-		Limit:  limit,
+		Limit:  limit + 1,
 		Issuer: issuer,
 		Cursor: cursor,
 	}
@@ -1207,10 +1227,11 @@ func (s *Server) handleAssetGet(w http.ResponseWriter, r *http.Request) {
 		detail.Sep1Status = "not_fetched"
 	}
 
-	// F2 overlay — supply / market-cap / FDV. Best-effort; runs
-	// AFTER the SEP-1 overlay because applySep1Overlay may set
-	// detail.Decimals from the issuer's display_decimals
-	// declaration, which the market-cap math reads.
+	// F2 overlay — supply / market-cap / FDV. Best-effort. The
+	// market-cap math reads detail.Decimals, which is the on-chain
+	// scale (the SEP-1 overlay surfaces display_decimals separately and
+	// no longer touches Decimals — F-1321), so overlay ordering no
+	// longer affects the unit math.
 	s.applyF2Fields(r.Context(), &detail, parsed)
 
 	// Coin-equivalence overlay (R-018 final) — lifts price / top_markets
@@ -1555,10 +1576,17 @@ func (s *Server) applySep1Overlay(ctx context.Context, detail *AssetDetail, asse
 		detail.IsUnlimited = &unlim
 	}
 
+	// display_decimals is a UI rounding hint, NOT a unit scale — surface
+	// it on its own field and leave detail.Decimals as the on-chain scale
+	// (7 for classic) so supply display and market-cap math stay correct
+	// (F-1321). The non-standard SEP-1 `decimals` field is treated the
+	// same way: informational, never the amount divisor.
 	if match.DisplayDecimals > 0 {
-		detail.Decimals = match.DisplayDecimals
+		dd := match.DisplayDecimals
+		detail.DisplayDecimals = &dd
 	} else if match.Decimals > 0 {
-		detail.Decimals = match.Decimals
+		dd := match.Decimals
+		detail.DisplayDecimals = &dd
 	}
 }
 

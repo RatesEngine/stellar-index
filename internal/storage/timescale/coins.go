@@ -107,9 +107,17 @@ func (s *Store) ListCoins(ctx context.Context, limit int, issuer, cursor string)
 // (handler, integration tests) compile unchanged; new callers
 // pass ListCoinsOptions to opt into Q.
 func (s *Store) ListCoinsExt(ctx context.Context, opts ListCoinsOptions) ([]CoinRow, error) {
+	// Clamp to the documented page size, allowing one extra row for the
+	// caller's overfetch-by-one pagination sentinel (501, not 500).
+	// F-1326/G3-03: the previous `> 500 → 100` reset silently truncated
+	// a 501-row overfetch back to 100 and dropped the cursor — clamp to
+	// the ceiling instead of resetting to the default.
 	limit := opts.Limit
-	if limit <= 0 || limit > 500 {
+	switch {
+	case limit <= 0:
 		limit = 100
+	case limit > 501:
+		limit = 501
 	}
 	query, args := buildCoinsQuery(limit, opts.Issuer, opts.Cursor, opts.Q, opts.Order)
 	rows, err := s.db.QueryContext(ctx, query, args...)

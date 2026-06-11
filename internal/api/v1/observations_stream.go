@@ -131,7 +131,13 @@ func (s *Server) handleObservationsStream(w http.ResponseWriter, r *http.Request
 func (s *Server) computeObservations(
 	ctx context.Context, pair canonical.Pair, source, aggregate string,
 ) ([]canonical.Trade, error) {
-	trades, err := s.history.LatestTradePerSource(ctx, pair, source)
+	// Bound the trades scan even on the stream path (the request handler
+	// wraps its own 8s ceiling; the stream prelude + ticks previously had
+	// none, so a cold-cache lookup could hold the connection open
+	// unboundedly per tick — G2-04).
+	scanCtx, cancel := context.WithTimeout(ctx, observationsScanTimeout)
+	defer cancel()
+	trades, err := s.history.LatestTradePerSource(scanCtx, pair, source)
 	if err != nil {
 		return nil, err
 	}
@@ -140,6 +146,10 @@ func (s *Server) computeObservations(
 	}
 	return trades, nil
 }
+
+// observationsScanTimeout bounds a single LatestTradePerSource scan,
+// matching the request handler's 8s ceiling (observations.go #1082).
+const observationsScanTimeout = 8 * time.Second
 
 // runObservationsStreamProducer is the per-connection compute + push
 // loop. Emits the pre-computed initial event, then ticks every

@@ -89,8 +89,15 @@ func TestAssetGet_Sep1OverlayVerified(t *testing.T) {
 	if env.Data.AnchorAsset == nil || *env.Data.AnchorAsset != "USD" {
 		t.Errorf("anchor_asset not overlaid: %+v", env.Data.AnchorAsset)
 	}
-	if env.Data.Decimals != 2 {
-		t.Errorf("decimals = %d, want 2 (display_decimals)", env.Data.Decimals)
+	// F-1321: `decimals` is the on-chain unit scale (7 for classic) and
+	// must NOT be overwritten by the issuer's display_decimals — doing so
+	// inflated market-cap math by 10^5×. The rounding hint rides
+	// display_decimals instead.
+	if env.Data.Decimals != 7 {
+		t.Errorf("decimals = %d, want 7 (on-chain scale, NOT display_decimals)", env.Data.Decimals)
+	}
+	if env.Data.DisplayDecimals == nil || *env.Data.DisplayDecimals != 2 {
+		t.Errorf("display_decimals = %v, want 2", env.Data.DisplayDecimals)
 	}
 }
 
