@@ -17,6 +17,15 @@ against.
 
 ### Fixed
 
+- **Completeness census for the event-less ContractCall sources (band,
+  soroswap-router) now counts distinct served-PK identities, not raw events.**
+  The auth tree surfaces the same authorized call at multiple CallPaths for
+  multi-entry (co-signed) / nested-auth txs; the served tier dedups them via
+  `ON CONFLICT`, so a raw-event census over-counted and reported a phantom
+  projection Δ (soroswap-router: 107 of 157.3k). The census dedups on the same
+  `(tx_hash, op_index[, ts])` grain. An honesty guard logs any collision whose
+  row *content* differs — that would be the coarse PK collapsing genuinely
+  distinct rows (a schema-grain defect), surfaced loudly rather than buried.
 - **soroswap-router swaps with an unrepresentable `deadline` were silently
   dropped.** The router `deadline` arg is a user-supplied u64; some calls pass a
   sentinel/garbage value (≈3e18 s → year ~99 billion, or one that overflows

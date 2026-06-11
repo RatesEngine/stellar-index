@@ -16,7 +16,9 @@ import (
 	"github.com/RatesEngine/rates-engine/internal/consumer"
 	"github.com/RatesEngine/rates-engine/internal/dispatcher"
 	"github.com/RatesEngine/rates-engine/internal/pipeline"
+	"github.com/RatesEngine/rates-engine/internal/sources/band"
 	"github.com/RatesEngine/rates-engine/internal/sources/sdex"
+	soroswap_router "github.com/RatesEngine/rates-engine/internal/sources/soroswap_router"
 	"github.com/RatesEngine/rates-engine/internal/storage/clickhouse"
 	"github.com/RatesEngine/rates-engine/internal/storage/timescale"
 )
@@ -563,19 +565,93 @@ func reDeriveSDEXCensusViaDecoder(ctx context.Context, chAddr string, from, to u
 	return out, nil
 }
 
-// reDeriveContractCallCensus re-derives the expected event count per ledger for
-// an event-less ContractCall source (band, soroswap-router). With no
-// soroban_events landing zone, this IS the projection oracle: it counts the
-// events the source's ContractCallDecoder emits over the lake's InvokeContract
-// ops. Built on forEachContractCallEvent so it decodes byte-identically to the
-// ch-rebuild WRITE path — the only way a written-row re-verify reaches Δ=0.
+// contractCallRowID projects a ContractCall-source event onto the identity the
+// served tier stores it under — its table PK minus the per-ledger constants
+// (source + ledger_close_time, both fixed within a ledger). The auth tree
+// surfaces the SAME authorized call at multiple CallPaths for multi-entry
+// (co-signed) / nested-auth txs (see dispatcher.extractInvokeContractCallTrees:
+// "Duplicate calls across entries are accepted… dispatch-side dedup is the
+// consumer's concern via the CallPath identifier"). The served ON CONFLICT
+// dedups them, so the census must too — mirroring reDeriveSDEXCensusViaDecoder.
+//   - soroswap-router → soroswap_router_swaps PK (…, tx_hash, op_index): ts=0.
+//   - band            → oracle_updates PK (…, tx_hash, op_index, ts).
+type contractCallRowID struct {
+	tx string
+	op uint32
+	ts int64
+}
+
+// contractCallRowIdentity returns the served-row identity + a content signature
+// (every persisted column that isn't part of the identity). Two events with the
+// same identity but DIFFERENT content signature are genuinely distinct rows the
+// coarse PK collapses — i.e. real data loss, not an auth-tree duplicate — which
+// the census surfaces rather than silently dedups. ok=false for an event type
+// not routed through a ContractCall source (defensive; never expected here).
+func contractCallRowIdentity(ev consumer.Event) (id contractCallRowID, contentSig string, ok bool) {
+	switch e := ev.(type) {
+	case soroswap_router.Event:
+		s := e.Swap
+		op := uint32(s.OpIndex) //nolint:gosec // op_index is a small non-negative op position
+		sig := fmt.Sprintf("%s|%s|%v|%s|%s", s.Function, s.Recipient, s.Path, s.AmountIn.String(), s.AmountOut.String())
+		return contractCallRowID{tx: s.TxHash, op: op}, sig, true
+	case band.UpdateEvent:
+		u := e.Update
+		sig := fmt.Sprintf("%s|%s|%s|%d", u.Asset.String(), u.Quote.String(), u.Price.String(), u.Decimals)
+		return contractCallRowID{tx: u.TxHash, op: u.OpIndex, ts: u.Timestamp.Unix()}, sig, true
+	}
+	return contractCallRowID{}, "", false
+}
+
+// reDeriveContractCallCensus re-derives the expected row count per ledger for an
+// event-less ContractCall source (band, soroswap-router). With no soroban_events
+// landing zone, this IS the projection oracle. It counts DISTINCT served-PK
+// identities (contractCallRowID) — not raw events — so the auth-tree duplicates
+// the live path also dedups (via ON CONFLICT) don't read as a coverage gap.
+// Built on forEachContractCallEvent so it decodes byte-identically to the
+// ch-rebuild WRITE path; the write persists the same raw events and ON CONFLICT
+// collapses them to this exact set, so a written-row re-verify reaches Δ=0.
+//
+// Honesty guard: if two events share an identity but differ in content, the
+// coarse PK is collapsing genuinely-distinct rows (real loss, not a dup). That
+// would be a schema-grain defect, not a coverage gap — so we count it once (to
+// match served) but LOG it loudly so it's surfaced, never silently buried.
 func reDeriveContractCallCensus(ctx context.Context, chAddr, contractStrkey string, dec dispatcher.ContractCallDecoder, from, to uint32) (map[uint32]int, error) {
-	out := make(map[uint32]int)
-	err := forEachContractCallEvent(ctx, chAddr, contractStrkey, dec, from, to, func(ledger uint32, _ consumer.Event) error {
-		out[ledger]++
+	seen := make(map[uint32]map[contractCallRowID]string) // ledger → id → first content sig
+	var lossyCollisions int
+	err := forEachContractCallEvent(ctx, chAddr, contractStrkey, dec, from, to, func(ledger uint32, ev consumer.Event) error {
+		id, sig, ok := contractCallRowIdentity(ev)
+		if !ok {
+			return fmt.Errorf("reDeriveContractCallCensus: unexpected event type %T (no served-row identity)", ev)
+		}
+		ids := seen[ledger]
+		if ids == nil {
+			ids = make(map[contractCallRowID]string)
+			seen[ledger] = ids
+		}
+		if prev, dup := ids[id]; dup {
+			if prev != sig && lossyCollisions < 20 {
+				fmt.Fprintf(os.Stderr, "reDeriveContractCallCensus: CONTENT-DISTINCT PK collision at ledger=%d tx=%s op=%d — coarse PK collapsing distinct rows (schema-grain loss): %q vs %q\n",
+					ledger, id.tx, id.op, prev, sig)
+			}
+			if prev != sig {
+				lossyCollisions++
+			}
+			return nil
+		}
+		ids[id] = sig
 		return nil
 	})
-	return out, err
+	if err != nil {
+		return nil, err
+	}
+	if lossyCollisions > 0 {
+		fmt.Fprintf(os.Stderr, "reDeriveContractCallCensus: WARNING %d content-distinct PK collision(s) — served tier collapses these to one row each; needs a per-call PK discriminator to capture every distinct call\n", lossyCollisions)
+	}
+	out := make(map[uint32]int, len(seen))
+	for ledger, ids := range seen {
+		out[ledger] = len(ids)
+	}
+	return out, nil
 }
 
 // forEachContractCallEvent streams the lake's InvokeContract ops that touch
