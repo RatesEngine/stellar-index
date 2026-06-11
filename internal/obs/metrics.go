@@ -1271,8 +1271,13 @@ var AggregatorBaselineRefreshTotal = prometheus.NewCounterVec(
 //
 //   - asset_key: supply.AssetKey form ("XLM", "CODE:ISSUER" for
 //     classic credits, the bare contract C-strkey for SEP-41).
-//   - outcome ∈ {ok, no_ledger, no_observation, compute_error,
-//     write_error}.
+//   - outcome ∈ {ok, dormant, no_ledger, no_observation,
+//     compute_error, stale_component, missing_freshness,
+//     write_error}. `dormant` (F-1320) is a benign accept: a
+//     dormant asset whose component anchor is unchanged but current.
+//     `stale_component` is a real rejection (the freshness producer
+//     lagged); the supply-refresh alert excludes `dormant` and is
+//     keyed by asset_key so one stuck asset isn't masked.
 //
 // Steady-state is mostly `ok` per asset. Sustained `no_observation`
 // means the AccountEntry observer hasn't backfilled the watched
@@ -1283,7 +1288,7 @@ var AggregatorBaselineRefreshTotal = prometheus.NewCounterVec(
 var AggregatorSupplyRefreshTotal = prometheus.NewCounterVec(
 	prometheus.CounterOpts{
 		Name: "ratesengine_aggregator_supply_refresh_total",
-		Help: "Supply-snapshot refresh outcomes per (asset_key, outcome). Outcome ∈ {ok, no_ledger, no_observation, compute_error, write_error}.",
+		Help: "Supply-snapshot refresh outcomes per (asset_key, outcome). Outcome ∈ {ok, dormant, no_ledger, no_observation, compute_error, stale_component, missing_freshness, write_error}.",
 	},
 	[]string{"asset_key", "outcome"},
 )

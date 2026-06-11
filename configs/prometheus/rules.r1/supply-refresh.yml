@@ -98,11 +98,17 @@ groups:
             symmetric: pick Path A or Path B.
 
       - alert: ratesengine_aggregator_supply_refresh_error_dominant
+        # F-1320: aggregate PER ASSET (`by (asset_key)`), not fleet-wide —
+        # a single asset failing 100% of its ticks could never push the
+        # fleet-wide fraction past 50% while healthy siblings diluted it,
+        # so a permanently-stale asset was un-alertable. Also exclude the
+        # benign `dormant` outcome (a dormant asset's last observation IS
+        # current — accepted, not an error).
         expr: |
           (
-            sum(rate(ratesengine_aggregator_supply_refresh_total{outcome!="ok"}[5m]))
+            sum by (asset_key) (rate(ratesengine_aggregator_supply_refresh_total{outcome!~"ok|dormant"}[5m]))
             /
-            (sum(rate(ratesengine_aggregator_supply_refresh_total[5m])) > 0)
+            (sum by (asset_key) (rate(ratesengine_aggregator_supply_refresh_total[5m])) > 0)
           ) > 0.5
         for: 30m
         labels:
@@ -111,15 +117,16 @@ groups:
           component: supply
           runbook_url: https://github.com/RatesEngine/rates-engine/blob/main/docs/operations/runbooks/supply-refresh-error-dominant.md
         annotations:
-          summary: "supply refresher: > 50% of ticks have non-ok outcomes for ≥ 30m"
+          summary: "supply refresher: > 50% of ticks non-ok for asset {{ $labels.asset_key }} for ≥ 30m"
           description: |
-            More than half of the supply refresher's ticks are
-            failing — outcome ∈ {no_ledger, no_observation,
-            compute_error, write_error}. Steady-state should be
-            mostly `ok`; sustained error dominance indicates
-            operator config drift (watched_classic_assets parse
-            errors, sac_wrappers map missing entries) OR the
-            observer hasn't backfilled to a deep enough range OR
-            the storage layer is rejecting writes. Runbook:
-            split-by outcome label, inspect the dominant kind,
-            route to the corresponding root cause.
+            More than half of the supply refresher's ticks for
+            asset {{ $labels.asset_key }} are failing — outcome ∈
+            {no_ledger, no_observation, compute_error, write_error,
+            stale_component, missing_freshness} (the benign `dormant`
+            outcome is excluded). Steady-state should be mostly `ok`;
+            a single asset stuck here is usually a stalled freshness
+            producer (sustained `stale_component`) or operator config
+            drift (watched_classic_assets parse errors, sac_wrappers
+            map missing entries). Runbook: split by outcome, inspect
+            the dominant kind; for sustained `stale_component` on one
+            asset, see WithStaleComponentLedgersFor.

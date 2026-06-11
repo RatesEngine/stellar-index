@@ -48,8 +48,9 @@ const (
 	OutcomeKindNoLedger         OutcomeKind = "no_ledger"         // LedgerLookup error
 	OutcomeKindNoObservation    OutcomeKind = "no_observation"    // ChainReader fell through with no static fallback either
 	OutcomeKindComputeError     OutcomeKind = "compute_error"     // computer failed for non-observation reasons
-	OutcomeKindStaleComponent   OutcomeKind = "stale_component"   // F-1236: a component observation lags the snapshot ledger past the configured threshold
+	OutcomeKindStaleComponent   OutcomeKind = "stale_component"   // F-1236: a component observation lags the snapshot ledger past the configured threshold (and the observation is itself advancing past the gate — a genuinely stalled producer, not a dormant asset; see F-1320)
 	OutcomeKindMissingFreshness OutcomeKind = "missing_freshness" // F-1236 wave 60 (codex audit-2026-05-13): strict mode + MinComponentLedger==0 (no signal); reject rather than publish without a freshness anchor
+	OutcomeKindDormant          OutcomeKind = "dormant"           // F-1320: MinComponentLedger lags past threshold but is UNCHANGED tick-over-tick — the asset simply had no balance change, so its last observation IS the current supply; accepted (snapshot inserted)
 	OutcomeKindWriteError       OutcomeKind = "write_error"       // InsertSupply failed
 )
 
@@ -70,6 +71,12 @@ const DefaultStaleComponentLedgers uint32 = 1000
 // call. Composes ledger resolution + computer + inserter; the
 // aggregator drives it via a ticker in its own goroutine,
 // mirroring the baseline-refresher shape.
+//
+// One Refresher instance is bound to one watched asset (the
+// aggregator constructs a dedicated Refresher per asset in
+// buildSupplyRefreshers), so the per-asset dormancy memory below
+// is single-keyed in practice; we still key by AssetKey for
+// safety against a future shared-Refresher caller.
 type Refresher struct {
 	ledgers                 LedgerLookup
 	computer                SnapshotComputer
@@ -78,6 +85,21 @@ type Refresher struct {
 	staleComponentLedger    uint32
 	staleComponentByAsset   map[string]uint32
 	strictFreshnessRequired bool
+
+	// lastComponentLedger remembers, per asset_key, the
+	// MinComponentLedger of the most recent snapshot the gate
+	// evaluated. F-1320: the stale-component gate compares the
+	// (always-advancing) chain tip against MinComponentLedger,
+	// which for a DORMANT asset (no balance changes) freezes — so
+	// the gap grows past the threshold and stays there forever,
+	// permanently rejecting every future tick and silently
+	// freezing the asset's supply row. We break that by
+	// distinguishing "producer stalled" (MinComponentLedger keeps
+	// changing / first seen already-lagging) from "asset dormant"
+	// (MinComponentLedger UNCHANGED tick-over-tick — the last
+	// observation IS the current supply). Dormant snapshots are
+	// accepted (OutcomeKindDormant) rather than rejected.
+	lastComponentLedger map[string]uint32
 }
 
 // RefresherOption tunes a [Refresher].
@@ -149,6 +171,7 @@ func NewRefresher(ledgers LedgerLookup, computer SnapshotComputer, inserter Snap
 		inserter:             inserter,
 		logger:               logger,
 		staleComponentLedger: DefaultStaleComponentLedgers,
+		lastComponentLedger:  make(map[string]uint32),
 	}
 	for _, o := range opts {
 		o(r)
@@ -227,18 +250,84 @@ func (r *Refresher) Tick(ctx context.Context) Outcome {
 	if threshold > 0 && snap.MinComponentLedger > 0 {
 		if snap.LedgerSequence > snap.MinComponentLedger &&
 			snap.LedgerSequence-snap.MinComponentLedger > threshold {
-			err := fmt.Errorf("supply: stale component — snapshot ledger %d, min component ledger %d, gap %d > threshold %d",
-				snap.LedgerSequence, snap.MinComponentLedger,
-				snap.LedgerSequence-snap.MinComponentLedger, threshold)
-			r.logger.Warn("supply refresh: rejecting stale-component snapshot",
+			// F-1320: the gap exceeds the threshold. The original
+			// gate stopped here and rejected — but the gap is the
+			// chain tip (snap.LedgerSequence, always advancing)
+			// minus MinComponentLedger (sourced from change-driven
+			// observers). For a DORMANT asset — one with no balance
+			// changes — MinComponentLedger freezes while the tip
+			// advances, so the gap grows monotonically forever and
+			// every future tick is permanently rejected. The
+			// asset's supply row goes silently, permanently stale
+			// (observed on live PHO: gap grew 1017 -> 1324 and kept
+			// climbing).
+			//
+			// Distinguish the two real cases the gap can represent:
+			//
+			//   - PRODUCER STALLED — the observer that writes the
+			//     component tables is wedged. We can't fully prove
+			//     this from one snapshot, but the honest signal we
+			//     DO have within a per-asset Refresher is whether
+			//     MinComponentLedger is still moving. If it changed
+			//     since the last tick (advanced toward the tip, or
+			//     this is the first tick we've ever seen for the
+			//     asset and it is ALREADY lagging), treat the lag as
+			//     a genuine staleness signal and reject.
+			//
+			//   - ASSET DORMANT — MinComponentLedger is UNCHANGED
+			//     tick-over-tick. The component tables hold no newer
+			//     row because the asset simply had no balance
+			//     change; the last observation IS the current
+			//     supply. Re-stamping it at the current tip is
+			//     correct, not stale. Accept (OutcomeKindDormant),
+			//     so the supply row never freezes for a quiet asset.
+			//
+			// Operators who want a quiet asset to NOT re-stamp every
+			// tick (e.g. to keep the gate strict for a token they
+			// expect constant activity on) raise the per-asset
+			// threshold via WithStaleComponentLedgersFor so the gap
+			// never trips in the first place.
+			last, seen := r.lastComponentLedger[snap.AssetKey]
+			r.lastComponentLedger[snap.AssetKey] = snap.MinComponentLedger
+			dormant := seen && last == snap.MinComponentLedger
+			if !dormant {
+				err := fmt.Errorf("supply: stale component — snapshot ledger %d, min component ledger %d, gap %d > threshold %d",
+					snap.LedgerSequence, snap.MinComponentLedger,
+					snap.LedgerSequence-snap.MinComponentLedger, threshold)
+				r.logger.Warn("supply refresh: rejecting stale-component snapshot",
+					"asset", snap.AssetKey,
+					"snapshot_ledger", snap.LedgerSequence,
+					"min_component_ledger", snap.MinComponentLedger,
+					"gap", snap.LedgerSequence-snap.MinComponentLedger,
+					"threshold", threshold,
+					"threshold_source", thresholdSource,
+					"first_observation", !seen)
+				return Outcome{Kind: OutcomeKindStaleComponent, Err: err, Snapshot: snap}
+			}
+			// Dormant: last observation is current. Fall through to
+			// insert, but record the dormancy on the outcome so the
+			// aggregator's per-asset counter shows the asset is
+			// quiet (not failing) and operators don't chase a
+			// phantom staleness alert.
+			r.logger.Debug("supply refresh: accepting dormant-asset snapshot (component ledger unchanged)",
 				"asset", snap.AssetKey,
 				"snapshot_ledger", snap.LedgerSequence,
 				"min_component_ledger", snap.MinComponentLedger,
 				"gap", snap.LedgerSequence-snap.MinComponentLedger,
 				"threshold", threshold,
 				"threshold_source", thresholdSource)
-			return Outcome{Kind: OutcomeKindStaleComponent, Err: err, Snapshot: snap}
+			if err := r.inserter.InsertSupply(ctx, snap); err != nil {
+				r.logger.Error("supply refresh: insert failed",
+					"err", err, "asset", snap.AssetKey, "ledger", snap.LedgerSequence)
+				return Outcome{Kind: OutcomeKindWriteError, Err: err, Snapshot: snap}
+			}
+			return Outcome{Kind: OutcomeKindDormant, Snapshot: snap}
 		}
+		// Within threshold — the observation is fresh. Track it so
+		// a later move into the lagging band is correctly seen as a
+		// CHANGE (producer progressing/regressing), not as the
+		// "first observation already lagging" cold-start case.
+		r.lastComponentLedger[snap.AssetKey] = snap.MinComponentLedger
 	}
 
 	if err := r.inserter.InsertSupply(ctx, snap); err != nil {
