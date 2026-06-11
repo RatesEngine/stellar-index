@@ -7,7 +7,6 @@ import (
 	"fmt"
 
 	"github.com/google/uuid"
-	"github.com/lib/pq"
 
 	"github.com/RatesEngine/rates-engine/internal/platform"
 )
@@ -31,9 +30,19 @@ func NewBillingStore(s *Store) *BillingStore { return &BillingStore{s: s} }
 // Compile-time interface conformance.
 var _ platform.BillingStore = (*BillingStore)(nil)
 
-// AppendStripeEvent inserts the dedupe row. Returns
-// [platform.ErrAlreadyProcessed] when the stripe_event_id is
-// already present so the webhook handler skips re-processing.
+// AppendStripeEvent claims the dedupe row for processing. It returns
+// [platform.ErrAlreadyProcessed] ONLY when a prior delivery actually
+// COMPLETED (processed_at IS NOT NULL) so the webhook handler skips it.
+//
+// F-1322: it previously returned ErrAlreadyProcessed on mere row
+// EXISTENCE (any unique violation). A transient failure on the first
+// delivery (e.g. a Redis blip in the key-upgrade step) left the row
+// inserted with processed_at NULL; every Stripe retry then hit the
+// unique violation, was dup-acked 200, and the upgrade work was never
+// re-run — a paid customer was silently never upgraded. A row with
+// processed_at NULL is now treated as reprocessable: a new row inserts
+// cleanly, an existing-but-unfinished row returns nil so the handler
+// re-attempts, and only a finished row short-circuits.
 func (b *BillingStore) AppendStripeEvent(ctx context.Context, e platform.StripeEvent) error {
 	if e.StripeEventID == "" {
 		return errors.New("postgresstore: AppendStripeEvent: StripeEventID is empty")
@@ -44,22 +53,39 @@ func (b *BillingStore) AppendStripeEvent(ctx context.Context, e platform.StripeE
 		// schema for events we don't archive the body of.
 		payload = []byte(`{}`)
 	}
+	// Insert-or-observe in one round-trip: the CTE inserts when absent
+	// (returning processed_at = NULL, inserted = true) and otherwise the
+	// UNION arm reads the existing row's processed_at. We then decide
+	// reprocessable vs done in Go.
 	const q = `
-		INSERT INTO stripe_event_log
-		    (stripe_event_id, type, received_at, payload)
-		VALUES ($1, $2, COALESCE(NULLIF($3, '0001-01-01 00:00:00+00'::timestamptz), now()), $4)
+		WITH ins AS (
+			INSERT INTO stripe_event_log
+			    (stripe_event_id, type, received_at, payload)
+			VALUES ($1, $2, COALESCE(NULLIF($3, '0001-01-01 00:00:00+00'::timestamptz), now()), $4)
+			ON CONFLICT (stripe_event_id) DO NOTHING
+			RETURNING processed_at, TRUE AS inserted
+		)
+		SELECT processed_at, inserted FROM ins
+		UNION ALL
+		SELECT processed_at, FALSE AS inserted
+		  FROM stripe_event_log
+		 WHERE stripe_event_id = $1
+		   AND NOT EXISTS (SELECT 1 FROM ins)
 	`
-	_, err := b.s.db.ExecContext(ctx, q,
+	var processedAt sql.NullTime
+	var inserted bool
+	if err := b.s.db.QueryRowContext(ctx, q,
 		e.StripeEventID, e.Type, e.ReceivedAt, payload,
-	)
-	if err != nil {
-		var pqErr *pq.Error
-		if errors.As(err, &pqErr) && pqErr.Code == pgErrUniqueViolation {
-			return platform.ErrAlreadyProcessed
-		}
+	).Scan(&processedAt, &inserted); err != nil {
 		return fmt.Errorf("postgresstore: AppendStripeEvent %s: %w", e.StripeEventID, err)
 	}
-	return nil
+	if inserted {
+		return nil // fresh row — proceed to process
+	}
+	if processedAt.Valid {
+		return platform.ErrAlreadyProcessed // a prior delivery completed
+	}
+	return nil // existing but unfinished — reprocessable (F-1322)
 }
 
 // MarkStripeEventProcessed sets processed_at = now() on the

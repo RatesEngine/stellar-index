@@ -40,8 +40,15 @@ func newFakeStripeEventStore() *fakeStripeEventStore {
 func (f *fakeStripeEventStore) AppendStripeEvent(_ context.Context, e platform.StripeEvent) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	if _, exists := f.events[e.StripeEventID]; exists {
-		return platform.ErrAlreadyProcessed
+	// Mirror the F-1322-corrected production contract: short-circuit
+	// ONLY when a prior delivery actually completed (ProcessedAt set). A
+	// row left behind by a failed first attempt (ProcessedAt zero) is
+	// reprocessable.
+	if existing, exists := f.events[e.StripeEventID]; exists {
+		if !existing.ProcessedAt.IsZero() {
+			return platform.ErrAlreadyProcessed
+		}
+		return nil
 	}
 	f.events[e.StripeEventID] = e
 	return nil
@@ -437,6 +444,52 @@ func TestStripeWebhook_Dedupe_DuplicateEventDoesntReupgrade(t *testing.T) {
 	}
 	if got := len(mgr.updates); got != 1 {
 		t.Errorf("second post: updates = %d, want 1 (dedupe must skip upgrade)", got)
+	}
+}
+
+// TestStripeWebhook_Dedupe_FailedFirstDeliveryRetries pins F-1322: when
+// the FIRST delivery fails AFTER the dedupe row is claimed (e.g. the
+// key-list lookup errors), the dedupe row is left with processed_at
+// NULL. A Stripe retry MUST re-run the upgrade — the previous semantics
+// (ErrAlreadyProcessed on mere row existence) dup-acked the retry and
+// the paid customer was never upgraded.
+func TestStripeWebhook_Dedupe_FailedFirstDeliveryRetries(t *testing.T) {
+	now := time.Now().UTC()
+	mgr := &fakeStripeManager{
+		keys: map[string][]auth.APIKeyRecord{
+			"signup-retry": {{KeyID: "kid_retry", Identifier: "signup-retry", Tier: auth.TierAPIKey, RateLimitPerMin: 1000}},
+		},
+		// First delivery fails inside the upgrade path.
+		listErr: errors.New("transient redis blip"),
+	}
+	events := newFakeStripeEventStore()
+	ts := newStripeTestServerWithEvents(t, mgr, events, now)
+	body := `{"id":"evt_retry","type":"checkout.session.completed","data":{"object":{"id":"cs_retry","client_reference_id":"signup-retry","payment_status":"paid","metadata":{"tier":"pro"}}}}`
+	sig := stripeSign(t, body, testStripeSecret, now)
+
+	// First delivery: the upgrade fails, so the handler must NOT 200-OK
+	// the event as processed (the dedupe row stays unfinished).
+	resp1 := postStripe(t, ts, body, sig)
+	resp1.Body.Close()
+	if resp1.StatusCode == http.StatusOK {
+		t.Fatalf("first (failing) post: status = 200, want a non-2xx so Stripe retries")
+	}
+	if got := len(mgr.updates); got != 0 {
+		t.Fatalf("first post: updates = %d, want 0 (upgrade failed)", got)
+	}
+
+	// Clear the transient failure and let Stripe retry the same event.
+	mgr.mu.Lock()
+	mgr.listErr = nil
+	mgr.mu.Unlock()
+
+	resp2 := postStripe(t, ts, body, sig)
+	resp2.Body.Close()
+	if resp2.StatusCode != http.StatusOK {
+		t.Fatalf("retry: status = %d, want 200", resp2.StatusCode)
+	}
+	if got := len(mgr.updates); got != 1 {
+		t.Errorf("retry: updates = %d, want 1 — the upgrade must re-run after a failed first delivery (F-1322)", got)
 	}
 }
 
