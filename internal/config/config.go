@@ -928,6 +928,50 @@ type ObsConfig struct {
 // Default returns a Config pre-populated with every field's default
 // value. Used by the docs-config generator to show what operators
 // get out of the box, and as the starting point for config loading.
+// defaultAPIConfig is split out of Default() to keep that function under
+// the funlen ceiling; it holds the public-API / auth / dashboard defaults
+// (kept in lockstep with the `default:` struct tags — see
+// TestDefault_MatchesStructTags).
+func defaultAPIConfig() APIConfig {
+	return APIConfig{
+		ListenAddr:          "0.0.0.0:3000",
+		ExternalBaseURL:     "https://api.ratesengine.net/v1",
+		AuthMode:            "none",
+		AuthBackend:         "redis",
+		AnonRateLimitPerMin: 60,
+		KeyRateLimitPerMin:  1000,
+		CDNEnabled:          true,
+		AllowedOrigins:      []string{"*"},
+		TrustedProxyCIDRs:   []string{},
+		// F-0051: probe the public TLS leaf certs by default so silent
+		// Let's Encrypt renewal failures surface before expiry (the alert
+		// series only exists when this is populated).
+		TLSCertProbeHosts: []string{"api.ratesengine.net", "status.ratesengine.net", "ratesengine.net"},
+		// F-1218: pre-launch safe default is to require email-ownership
+		// proof on signup-minted keys; operators opt out explicitly.
+		SignupRequireEmailVerification: true,
+		SEP10: SEP10Config{
+			SeedEnv:       "RATESENGINE_SEP10_SEED",
+			JWTSecretEnv:  "RATESENGINE_SEP10_JWT_SECRET",
+			WebAuthDomain: "api.ratesengine.net",
+			HomeDomain:    "ratesengine.net",
+			ChallengeTTL:  15 * time.Minute,
+			JWTTTL:        1 * time.Hour,
+		},
+		Dashboard: DashboardConfig{
+			EmailFrom:           "Rates Engine <hello@ratesengine.net>",
+			ResendAPIKeyEnv:     "RATESENGINE_RESEND_API_KEY",
+			MagicLinkTTLMinutes: 15,
+			SessionTTLDays:      30,
+			CookieSecure:        true, // dev (http://localhost) overrides to false
+		},
+		Streaming: StreamingConfig{
+			Pairs:        [][]string{},
+			PollInterval: 5 * time.Second,
+		},
+	}
+}
+
 func Default() Config {
 	return Config{
 		Region: RegionConfig{
@@ -1023,43 +1067,7 @@ func Default() Config {
 				SourceCountMaxFreeze: 1,
 			},
 		},
-		API: APIConfig{
-			ListenAddr:          "0.0.0.0:3000",
-			ExternalBaseURL:     "https://api.ratesengine.net/v1",
-			AuthMode:            "none",
-			AuthBackend:         "redis",
-			AnonRateLimitPerMin: 60,
-			KeyRateLimitPerMin:  1000,
-			CDNEnabled:          true,
-			AllowedOrigins:      []string{"*"},
-			TrustedProxyCIDRs:   []string{},
-			// F-0051: probe the public TLS leaf certs by default so silent
-			// Let's Encrypt renewal failures surface before expiry (the
-			// alert series only exists when this is populated).
-			TLSCertProbeHosts: []string{"api.ratesengine.net", "status.ratesengine.net", "ratesengine.net"},
-			// F-1218: pre-launch safe default is to require email-ownership
-			// proof on signup-minted keys; operators opt out explicitly.
-			SignupRequireEmailVerification: true,
-			SEP10: SEP10Config{
-				SeedEnv:       "RATESENGINE_SEP10_SEED",
-				JWTSecretEnv:  "RATESENGINE_SEP10_JWT_SECRET",
-				WebAuthDomain: "api.ratesengine.net",
-				HomeDomain:    "ratesengine.net",
-				ChallengeTTL:  15 * time.Minute,
-				JWTTTL:        1 * time.Hour,
-			},
-			Dashboard: DashboardConfig{
-				EmailFrom:           "Rates Engine <hello@ratesengine.net>",
-				ResendAPIKeyEnv:     "RATESENGINE_RESEND_API_KEY",
-				MagicLinkTTLMinutes: 15,
-				SessionTTLDays:      30,
-				CookieSecure:        true, // dev (http://localhost) overrides to false
-			},
-			Streaming: StreamingConfig{
-				Pairs:        [][]string{},
-				PollInterval: 5 * time.Second,
-			},
-		},
+		API:        defaultAPIConfig(),
 		Divergence: defaultDivergenceConfig(),
 		Supply: SupplyConfig{
 			// Cadence is only consumed when AggregatorRefreshEnabled is

@@ -541,6 +541,22 @@ coverage gaps without per-pair cardinality cost — a sustained
 all-empty signal usually means the configured pair set has
 out-grown the live data.
 
+### `ratesengine_aggregator_window_truncated_total`
+
+Counter, no labels.
+
+Count of (pair, window) trade fetches that hit `MaxTradesPerWindow`
+(default 10,000) — i.e. the window held more trades than the
+per-query cap, so the VWAP was computed over only the **newest**
+`cap` of them (F-1319; the truncation keeps the most-recent slice, not
+the oldest). A non-zero rate means a busy pair/window is being
+aggregated over a partial slice. Chart `rate(...)` against
+`ratesengine_aggregator_vwap_writes_total`; sustained firing means the
+cap (or the window) needs raising, or that window should move to a
+SQL-side aggregate. Unlabelled to keep cardinality bounded — the
+per-pair lens lives in the WARN log line the orchestrator emits
+alongside each increment.
+
 ### `ratesengine_aggregator_stream_publish_total`
 
 Counter, label `outcome` (`ok` / `error`).
