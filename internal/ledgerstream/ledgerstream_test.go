@@ -104,6 +104,64 @@ func TestStream_boundedRange_filesystemDatastore(t *testing.T) {
 	}
 }
 
+// TestStream_singleLedgerBoundedRange pins the ch-live-catchup
+// tip-extend case: Stream(from=N, to=N) must walk exactly one
+// ledger. The SDK's ingest.ApplyLedgerMetadata rejects single-ledger
+// bounded ranges (`invalid end value for bounded range`), so Stream
+// routes them through the in-house hot-only walk — without that,
+// every catch-up run that fired exactly one ledger behind the
+// galexie tip failed (observed flapping on r1, 2026-06-11).
+func TestStream_singleLedgerBoundedRange(t *testing.T) {
+	tmp := t.TempDir()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	store, err := datastore.NewFilesystemDataStoreWithPath(tmp)
+	if err != nil {
+		t.Fatalf("open filesystem datastore: %v", err)
+	}
+	t.Cleanup(func() { _ = store.Close() })
+
+	cfg := datastore.DataStoreConfig{
+		Type: "Filesystem",
+		Params: map[string]string{
+			"destination_path": tmp,
+		},
+		Schema: datastore.DataStoreSchema{
+			LedgersPerFile:    1,
+			FilesPerPartition: 1,
+		},
+		NetworkPassphrase: "Test SDF Network ; September 2015",
+		Compression:       "zstd",
+	}
+	if _, _, err := datastore.PublishConfig(ctx, store, cfg); err != nil {
+		t.Fatalf("publish config: %v", err)
+	}
+
+	const seq = uint32(9)
+	writeLedgerFixture(t, ctx, store, cfg.Schema, seq)
+
+	got := make([]xdr.LedgerCloseMeta, 0, 1)
+	err = ledgerstream.Stream(ctx,
+		ledgerstream.Config{DataStore: cfg},
+		seq, seq,
+		func(lcm xdr.LedgerCloseMeta) error {
+			got = append(got, lcm)
+			return nil
+		},
+	)
+	if err != nil {
+		t.Fatalf("Stream(from=to=%d): %v", seq, err)
+	}
+	if len(got) != 1 {
+		t.Fatalf("callback invoked %d times, want 1", len(got))
+	}
+	if gotSeq := uint32(got[0].LedgerSequence()); gotSeq != seq {
+		t.Errorf("got seq %d, want %d", gotSeq, seq)
+	}
+}
+
 func TestStream_rejectsNilCallback(t *testing.T) {
 	err := ledgerstream.Stream(
 		context.Background(),

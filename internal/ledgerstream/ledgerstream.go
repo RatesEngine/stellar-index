@@ -209,9 +209,18 @@ func Stream(
 	}
 
 	var err error
-	if cfg.tieringEnabled() {
+	switch {
+	case cfg.tieringEnabled():
 		err = streamTiered(ctx, cfg, ledgerRange, buffered, callback)
-	} else {
+	case ledgerRange.Bounded() && ledgerRange.To() == ledgerRange.From():
+		// The SDK's ingest.ApplyLedgerMetadata rejects a bounded
+		// range of exactly one ledger (producer.go: `To() <=
+		// From()`) even though the SDK exports SingleLedgerRange.
+		// Walk it with our own backend loop instead — this is
+		// ch-live-catchup's tip-extend case whenever the timer
+		// fires exactly one ledger behind the galexie tip.
+		err = streamHot(ctx, cfg, ledgerRange, buffered, callback)
+	default:
 		err = ingest.ApplyLedgerMetadata(
 			ledgerRange,
 			ingest.PublisherConfig{
@@ -226,6 +235,25 @@ func Stream(
 		)
 	}
 	return maybeTolerateTrailingMissing(cfg, to, err)
+}
+
+// validateRange rejects malformed ranges before PrepareRange. A
+// bounded range of exactly one ledger (To == From) is VALID — the
+// SDK models it as a first-class concept
+// (ledgerbackend.SingleLedgerRange) and the walk loop handles it as
+// a single iteration. The previous `To() <= From()` check rejected
+// it, which made ch-live-catchup's tip-extend fail every time the
+// timer fired exactly one ledger behind the galexie tip (an
+// intermittent ~flap whenever the 10-min cadence landed on a
+// 1-ledger delta; observed on r1 2026-06-11).
+func validateRange(r ledgerbackend.Range) error {
+	if r.Bounded() && r.To() < r.From() {
+		return fmt.Errorf("ledgerstream: invalid end value for bounded range, must not be less than start")
+	}
+	if !r.Bounded() && r.To() > 0 {
+		return fmt.Errorf("ledgerstream: invalid end value for unbounded range, must be zero")
+	}
+	return nil
 }
 
 // maybeTolerateTrailingMissing converts a bounded-stream missing-
@@ -342,6 +370,12 @@ func streamTiered(
 		if cfg.Logger != nil {
 			cfg.Logger.WithField("err", err).Warn("ledgerstream: cold datastore init failed; falling back to hot-only single-source path")
 		}
+		if ledgerRange.Bounded() && ledgerRange.To() == ledgerRange.From() {
+			// ApplyLedgerMetadata rejects single-ledger bounded
+			// ranges (see the [Stream] dispatch) — reuse the
+			// already-open hot store via our own walk.
+			return walkDataStore(ctx, cfg, hot, ledgerRange, buffered, callback)
+		}
 		_ = hot.Close()
 		return ingest.ApplyLedgerMetadata(
 			ledgerRange,
@@ -357,17 +391,55 @@ func streamTiered(
 		)
 	}
 	tiered := NewTieredDataStore(hot, cold, cfg.Registry)
+	return walkDataStore(ctx, cfg, tiered, ledgerRange, buffered, callback)
+}
 
-	schema, err := datastore.LoadSchema(ctx, tiered, cfg.DataStore)
+// streamHot is the hot-only counterpart of [streamTiered]: same
+// backend construction + walk loop, but over cfg.DataStore alone
+// with no tiering wrapper. It exists because the SDK's
+// ingest.ApplyLedgerMetadata rejects a bounded range of exactly one
+// ledger (`To() <= From()` in producer.go) even though the SDK
+// itself exports ledgerbackend.SingleLedgerRange — so [Stream]
+// routes single-ledger non-tiered requests here instead.
+func streamHot(
+	ctx context.Context,
+	cfg Config,
+	ledgerRange ledgerbackend.Range,
+	buffered ledgerbackend.BufferedStorageBackendConfig,
+	callback func(xdr.LedgerCloseMeta) error,
+) error {
+	hot, err := datastore.NewDataStore(ctx, cfg.DataStore)
 	if err != nil {
-		_ = tiered.Close()
+		return fmt.Errorf("ledgerstream: hot datastore: %w", err)
+	}
+	return walkDataStore(ctx, cfg, hot, ledgerRange, buffered, callback)
+}
+
+// walkDataStore builds the buffered storage backend over `store`
+// and runs the GetLedger walk — the shared tail of [streamTiered]
+// and [streamHot]. Closes the backend (and thereby the store) on
+// return. Behavioural parity with the SDK's
+// ingest.ApplyLedgerMetadata loop: same from-clamp (max(2, From)),
+// same GetLedger loop, same error wrapping — except single-ledger
+// bounded ranges are accepted (see [validateRange]).
+func walkDataStore(
+	ctx context.Context,
+	cfg Config,
+	store datastore.DataStore,
+	ledgerRange ledgerbackend.Range,
+	buffered ledgerbackend.BufferedStorageBackendConfig,
+	callback func(xdr.LedgerCloseMeta) error,
+) error {
+	schema, err := datastore.LoadSchema(ctx, store, cfg.DataStore)
+	if err != nil {
+		_ = store.Close()
 		return fmt.Errorf("ledgerstream: load schema: %w", err)
 	}
 
 	var backend ledgerbackend.LedgerBackend
-	backend, err = ledgerbackend.NewBufferedStorageBackend(buffered, tiered, schema)
+	backend, err = ledgerbackend.NewBufferedStorageBackend(buffered, store, schema)
 	if err != nil {
-		_ = tiered.Close()
+		_ = store.Close()
 		return fmt.Errorf("ledgerstream: new buffered storage backend: %w", err)
 	}
 	if cfg.Registry != nil {
@@ -375,11 +447,8 @@ func streamTiered(
 	}
 	defer func() { _ = backend.Close() }()
 
-	if ledgerRange.Bounded() && ledgerRange.To() <= ledgerRange.From() {
-		return fmt.Errorf("ledgerstream: invalid end value for bounded range, must be greater than start")
-	}
-	if !ledgerRange.Bounded() && ledgerRange.To() > 0 {
-		return fmt.Errorf("ledgerstream: invalid end value for unbounded range, must be zero")
+	if err := validateRange(ledgerRange); err != nil {
+		return err
 	}
 
 	from := ledgerRange.From()

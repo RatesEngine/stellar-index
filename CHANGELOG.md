@@ -17,6 +17,16 @@ against.
 
 ### Fixed
 
+- **ledgerstream: a bounded range of exactly one ledger is valid.** The
+  tiered-path range validation rejected `To() == From()`, but the SDK models
+  a single-ledger bounded range as a first-class concept
+  (`ledgerbackend.SingleLedgerRange`) and the walk loop handles it as one
+  iteration. Practical impact: `ch-live-catchup`'s tip-extend failed every
+  time its 10-minute timer fired exactly one ledger behind the galexie tip
+  (`ch-backfill: invalid end value for bounded range` — ~half of r1 runs
+  flapped red on 2026-06-11). Inverted ranges (`To < From`) are still
+  rejected.
+
 - **loki (r1): chunk storage moved off the root filesystem to the ZFS pool
   (`/tmp/loki` → `data/loki` @ `/var/lib/loki`) + 30-day retention.** The
   quickstart-scaffold config stored Loki chunks on the 49 GB root via
