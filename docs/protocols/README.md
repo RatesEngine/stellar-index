@@ -65,3 +65,25 @@ date, so a team can tell us if a contract is missing or mis-attributed.
 > enumeration — enforcing a gate on an unverified set would silently drop
 > events, the one regression ADR-0035 forbids.
 | Comet | WASM-hash | ⏳ Pending (shared Balancer-v1 WASM, no factory namespace) | — |
+
+## External cross-checks — Dune dashboards
+
+Dune has Stellar datasets and community/team dashboards that serve as an
+independent cross-check for our contract enumerations and metrics
+([discover: blockchain:Stellar](https://dune.com/discover/content/popular?q=blockchain%3A%27Stellar%27&timeframe=30d&resource-type=dashboards)).
+Directly relevant:
+
+| Dashboard | Author | Use for us |
+|---|---|---|
+| [Soroswap.Finance](https://dune.com/paltalabs/soroswap) | @paltalabs (the team) | pair set + volume cross-check |
+| [DeFindex](https://dune.com/paltalabs/defindex) | @paltalabs (the team) | **vault enumeration** (our open Q) + TVL benchmark ($4.02M @ 2026-06-12) |
+| [Blend 🧪](https://dune.com/fergmolina/blend) | @fergmolina | pool set cross-check vs our 27-pool/2-factory enumeration |
+| [Aquarius ♒️](https://dune.com/fergmolina/aquarius) + [Aquarius Stellar](https://dune.com/claw) | community | **pool enumeration** (our open Q) |
+| Soroban AMMs on Stellar | @paltalabs | cross-AMM pool lists (phoenix/comet) |
+| Stellar Smart Contract Analysis | @stellar (SDF) | contract activity baseline |
+
+The contract addresses live in each dashboard's query SQL — retrievable
+via the Dune API (free tier key) or a logged-in query view, not from the
+public page render. When cross-checking metrics, mind the
+window-mismatch trap: Dune totals are often lifetime, ours are often
+windowed.
