@@ -47,6 +47,8 @@ const (
 // Mainnet contract addresses — verified during Phase-1 audit against
 // public/mainnet.contracts.json in soroswap-core.
 const (
+	// MainnetFactory is the current/primary Soroswap factory — the only
+	// one that has deployed pairs with swap activity.
 	MainnetFactory = "CA4HEQTL2WPEUYKYKCDOHCDNIV4QHNJ7EL4J4NQ6VADP7SYHVRYZ7AW2"
 	MainnetRouter  = "CAG5LRYQ5JVEUI5TEID72EYOVX44TTUJT5BQR2J6J77FH65PCCFAJDDH"
 
@@ -55,6 +57,36 @@ const (
 	// Useful for backfill short-cuts.
 	MainnetPairWASMHash = "18051456816b66f12e773a56f77c5794fac1b1fb7ab6e22d4fad5a412770f73e"
 )
+
+// MainnetFactories is the COMPLETE, empirically-verified set of Soroswap
+// factories on mainnet (ADR-0035). Like Blend, Soroswap has more than one
+// factory: the primary CA4HEQTL plus three early (launch-era) factories.
+// Verified from the r1 lake (2026-06-12) by decoding every
+// `SoroswapFactory:new_pair` event — the early factories created 21 pairs
+// between them, but NONE of those pairs have any swap event (they're
+// defunct launch-era pairs), so the primary-factory-only gate drops no
+// real trades today. They are included so the `new_pair` gate honors every
+// factory (directive: all factories + all factory-created contracts) and
+// the reconcile self-seeds the early pairs; a future trade on one of them
+// would then be captured rather than dropped. Re-run the enumeration if a
+// new factory appears.
+var MainnetFactories = []string{
+	MainnetFactory,
+	"CCIQM2O3YJQEKS7I77AS5IO3CU6UCBAUWHLWRBWVV336ZCSTKRNBKPHW", // early, 11 pairs
+	"CDBRTEJMOUJQHFZCAW4JPXZ75HCRHZAQXG75ZMGQ2LMNXA5ID7RQIFSX", // early, 6 pairs
+	"CCDATRT2EY6Y2KAZ7HM7BRZVZCB6RHL56PQUBWGBS2ML2JAK7VXFLCJY", // early, 4 pairs
+}
+
+// IsMainnetFactory reports whether contractID is one of the verified
+// Soroswap factories — the trust-root set the new_pair gate consults.
+func IsMainnetFactory(contractID string) bool {
+	for _, f := range MainnetFactories {
+		if f == contractID {
+			return true
+		}
+	}
+	return false
+}
 
 // Pre-encoded base64 SCVal blobs — byte-identical to what the
 // contract emits on topic positions. Computed at package init via

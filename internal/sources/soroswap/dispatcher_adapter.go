@@ -133,11 +133,12 @@ func (*Decoder) Name() string { return SourceName }
 // matching by topic alone would absorb other protocols' events as
 // Soroswap trades. We gate on CONTRACT IDENTITY:
 //
-//   - factory `new_pair` events match ONLY when emitted by the canonical
-//     Soroswap factory (MainnetFactory). This is the load-bearing gate:
-//     without it a foreign contract could inject a pair→tokens mapping
-//     into the registry and have its own swaps mis-attributed as
-//     Soroswap trades (G6-02 / F-1347).
+//   - factory `new_pair` events match ONLY when emitted by one of the
+//     canonical Soroswap factories (MainnetFactories — Soroswap has more
+//     than one; see that var). This is the load-bearing gate: without it a
+//     foreign contract could inject a pair→tokens mapping into the registry
+//     and have its own swaps mis-attributed as Soroswap trades (G6-02 /
+//     F-1347); with only ONE factory it would miss the others' pairs.
 //   - pair-contract events (swap/sync/deposit/withdraw/skim) match ONLY
 //     when the emitter is a REGISTERED Soroswap pair. The registry is
 //     seeded from factory new_pair events (live), a startup DB warm, and
@@ -156,7 +157,10 @@ func (d *Decoder) Matches(ev events.Event) bool {
 		return false
 	}
 	if kind == EventNewPair {
-		return ev.ContractID == MainnetFactory
+		// Soroswap has more than one factory (the primary + launch-era
+		// ones); gate on the full verified set so no factory's pairs are
+		// dropped (ADR-0035 multi-factory).
+		return IsMainnetFactory(ev.ContractID)
 	}
 	d.mu.RLock()
 	_, known := d.pairTokens[ev.ContractID]

@@ -33,9 +33,30 @@ func TestDecoder_Name(t *testing.T) {
 	}
 }
 
+// TestIsMainnetFactory_multiFactory pins ADR-0035: Soroswap has more than
+// one factory and new_pair must be honored from every verified factory (the
+// primary CA4HEQTL + the launch-era ones), and from nothing else.
+func TestIsMainnetFactory_multiFactory(t *testing.T) {
+	if len(MainnetFactories) < 2 {
+		t.Fatalf("expected >=2 Soroswap factories, got %v", MainnetFactories)
+	}
+	d := NewDecoder()
+	for _, f := range MainnetFactories {
+		ev := events.Event{Topic: []string{TopicPrefixFactory, TopicSymbolNewPair}, ContractID: f}
+		if !d.Matches(ev) {
+			t.Errorf("new_pair from verified factory %s: Matches=false, want true", f)
+		}
+	}
+	notFactory := makeContractStrkey(t, 0x33)
+	ev := events.Event{Topic: []string{TopicPrefixFactory, TopicSymbolNewPair}, ContractID: notFactory}
+	if d.Matches(ev) {
+		t.Error("new_pair from a non-factory: Matches=true, want false (injection guard)")
+	}
+}
+
 func TestDecoder_Matches_pairAndFactoryTopics(t *testing.T) {
 	// Contract-gated (F-1347): topic symbols aren't unique across
-	// protocols, so Matches() requires the emitter to be the canonical
+	// protocols, so Matches() requires the emitter to be a canonical
 	// factory (for new_pair) or a REGISTERED pair (for pair events).
 	d := NewDecoder()
 	registered := makeContractStrkey(t, 0x42)

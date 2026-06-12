@@ -223,6 +223,10 @@ Per-protocol, each as its own change with tests + a reconcile-seed
 update + a documented re-derive precondition:
 
 - [x] Soroswap (F-1347) — reference (own `soroswap_pairs` registry; carries tokens).
+  Multi-factory verified (2026-06-12): 4 factories on the lake, but the 3
+  early ones' 21 pairs have ZERO swaps (defunct), so the gate drops no real
+  trades; `new_pair` is gated on the full `MainnetFactories` set regardless,
+  so a future trade is captured.
 - [x] Blend (factory `deploy` → pool registry) — first consumer of the generic
   `childgate.Registry` + `protocol_contracts` table (migration 0061).
 - [ ] Phoenix — NEEDS WORK BEFORE GATING (see readiness below).
