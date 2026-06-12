@@ -49,7 +49,7 @@ func decodeWritePrices(e *events.Event, closedAt time.Time) ([]canonical.OracleU
 		return nil, fmt.Errorf("%w: %w", ErrMalformedPayload, err)
 	}
 
-	prices, err := decodeBody(e.Value)
+	prices, err := sdkDecodeBody(e.Value)
 	if err != nil {
 		return nil, fmt.Errorf("%w: %w", ErrMalformedPayload, err)
 	}
@@ -119,14 +119,10 @@ func decodeWritePrices(e *events.Event, closedAt time.Time) ([]canonical.OracleU
 }
 
 // ─── SCVal decoders ─────────────────────────────────────────────
-// Split out so tests can swap them via package-level vars if future
-// fixture work wants to isolate body decoding from args decoding.
-
-var (
-	decodeBody           = sdkDecodeBody
-	decodeFeedIDsFromArg = sdkDecodeFeedIDsFromArg
-	decodeUpdater        = sdkDecodeAddress
-)
+// sdkDecodeBody / sdkDecodeFeedIDsFromArg / sdkDecodeAddress are
+// called directly below. (A package-var indirection seam used to sit
+// here for test fixture-swapping; removed as unused — no test ever
+// swapped them.)
 
 // priceDataDecoded mirrors the adapter's PriceData struct
 // (common/src/lib.rs:12-18) at the canonical-types boundary. The
@@ -236,14 +232,16 @@ func decodePriceData(sv scval.ScVal) (priceDataDecoded, error) {
 }
 
 // feedIDsFromOpArgs parses the dispatcher-supplied InvokeContract
-// args, asserts they target write_prices, and returns the feed_ids
-// + updater strkey. Argument layout per adapter/lib.rs:78:
+// args and returns the feed_ids + updater strkey. Argument layout
+// per adapter/lib.rs:78:
 //
 //	write_prices(updater: Address, feed_ids: Vec<String>, payload: Bytes)
 //
 // We enforce arity ≥ 3 (extra args from a contract upgrade would
-// surface here) and function name == "write_prices" — anything else
-// and we refuse to guess.
+// surface here). We do NOT verify the function name was write_prices
+// — the dispatcher only plumbs the Args slice, not the function name
+// (see the WriteFnName note and the body comment below) — so this
+// leans on the dispatcher's contract-ID scoping instead.
 func feedIDsFromOpArgs(opArgs []string) (feedIDs []string, updater string, err error) {
 	// The InvokeContract wire layout stores the function name OUTSIDE
 	// the Args slice (it lives alongside them in InvokeContractArgs).
@@ -263,7 +261,7 @@ func feedIDsFromOpArgs(opArgs []string) (feedIDs []string, updater string, err e
 	if err != nil {
 		return nil, "", fmt.Errorf("args[0] updater: %w", err)
 	}
-	updater, err = decodeUpdater(addrSv)
+	updater, err = sdkDecodeAddress(addrSv)
 	if err != nil {
 		return nil, "", fmt.Errorf("args[0] updater: %w", err)
 	}
@@ -271,7 +269,7 @@ func feedIDsFromOpArgs(opArgs []string) (feedIDs []string, updater string, err e
 	if err != nil {
 		return nil, "", fmt.Errorf("args[1] feed_ids: %w", err)
 	}
-	feedIDs, err = decodeFeedIDsFromArg(feedsSv)
+	feedIDs, err = sdkDecodeFeedIDsFromArg(feedsSv)
 	if err != nil {
 		return nil, "", fmt.Errorf("args[1] feed_ids: %w", err)
 	}
@@ -304,13 +302,27 @@ func sdkDecodeAddress(sv scval.ScVal) (string, error) {
 	return scval.AsAddressStrkey(sv)
 }
 
+// sanityFutureWindow bounds how far past the ledger close a decoded
+// oracle timestamp may sit before we treat it as garbage and fall
+// back to the ledger close time. Absorbs clock skew without admitting
+// sentinel / overflow values that error the timestamptz INSERT
+// (cf. the soroswap-router deadline_ts fix).
+const sanityFutureWindow = 24 * time.Hour
+
 // pickTimestamp prefers the contract-supplied PackageTimestamp
 // (ms UNIX) but falls back to the ledger close time when the
 // contract reports 0 — a defensive case against a contract
-// upgrade that relaxes the "non-zero timestamp" invariant.
+// upgrade that relaxes the "non-zero timestamp" invariant — or when
+// the value is a sentinel / garbage far-future timestamp (same class
+// as the router deadline_ts overflow) that would error the
+// timestamptz INSERT.
 func pickTimestamp(packageMs uint64, closedAt time.Time) time.Time {
 	if packageMs == 0 {
 		return closedAt.UTC()
 	}
-	return time.UnixMilli(int64(packageMs)).UTC()
+	ts := time.UnixMilli(int64(packageMs)).UTC()
+	if ts.After(closedAt.Add(sanityFutureWindow)) {
+		return closedAt.UTC()
+	}
+	return ts
 }

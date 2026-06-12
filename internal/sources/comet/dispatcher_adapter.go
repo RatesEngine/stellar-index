@@ -1,8 +1,6 @@
 package comet
 
 import (
-	"time"
-
 	"github.com/RatesEngine/rates-engine/internal/consumer"
 	"github.com/RatesEngine/rates-engine/internal/events"
 )
@@ -47,11 +45,13 @@ func (d *Decoder) Decode(ev events.Event) ([]consumer.Event, error) {
 
 	closedAt, err := ev.EventClosedAt()
 	if err != nil {
-		// Comet events use ledger close time for the event
-		// timestamp (unlike oracles, there's no contract-declared
-		// timestamp in the body). Fall back to now() rather than
-		// dropping the entire event.
-		closedAt = time.Now().UTC()
+		// Comet events use ledger close time for the event timestamp
+		// (unlike oracles, there's no contract-declared timestamp in
+		// the body). Fail closed like the blend/phoenix/defindex
+		// siblings rather than substituting time.Now() — during a
+		// backfill replay that would stamp every event with the
+		// wall-clock of the replay run, not the historical ledger.
+		return nil, err
 	}
 
 	if kind == EventSwap {

@@ -3,6 +3,7 @@ package reflector
 import (
 	"math/big"
 	"testing"
+	"time"
 
 	"github.com/stellar/go-stellar-sdk/xdr"
 
@@ -121,9 +122,13 @@ func TestDecoder_Decode_emitsUpdatesForKnownSymbol(t *testing.T) {
 	}
 }
 
-func TestDecoder_Decode_malformedClosedAtFallsBackToNow(t *testing.T) {
-	// LedgerClosedAt empty — decoder falls back to time.Now() and
-	// the topic[2] oracle timestamp wins for the actual record.
+func TestDecoder_Decode_malformedClosedAtFailsClosed(t *testing.T) {
+	// LedgerClosedAt empty — decoder FAILS CLOSED (returns the error)
+	// rather than substituting time.Now(). closedAt is the fallback
+	// decodeUpdate uses when topic[2] is missing / out of its sanity
+	// window, so a wall-clock value here would mis-timestamp the row
+	// during a backfill replay. Matches the comet/blend/phoenix
+	// siblings.
 	usd := xdr.ScSymbol("USD")
 	symSv := xdr.ScVal{Type: xdr.ScValTypeScvSymbol, Sym: &usd}
 	body := encodeUpdateBody(t, []xdr.ScVal{symSv}, []*big.Int{big.NewInt(1_000_000_000_000)})
@@ -136,18 +141,43 @@ func TestDecoder_Decode_malformedClosedAtFallsBackToNow(t *testing.T) {
 		ContractID: adapterContract,
 		// LedgerClosedAt deliberately empty.
 	})
+	if err == nil {
+		t.Fatalf("Decode with empty LedgerClosedAt should error, got nil (out=%v)", out)
+	}
+	if out != nil {
+		t.Errorf("expected nil events on error, got %v", out)
+	}
+}
+
+func TestDecoder_Decode_topicTimestampWinsOverClosedAt(t *testing.T) {
+	// With a present LedgerClosedAt, the in-window topic[2] oracle
+	// timestamp is what lands on the OracleUpdate (the ledger close
+	// time is only a fallback when topic[2] is missing / out of the
+	// sanity window).
+	usd := xdr.ScSymbol("USD")
+	symSv := xdr.ScVal{Type: xdr.ScValTypeScvSymbol, Sym: &usd}
+	body := encodeUpdateBody(t, []xdr.ScVal{symSv}, []*big.Int{big.NewInt(1_000_000_000_000)})
+	const tsMs = 1_745_000_000_000
+	tsB64 := encodeTimestampTopic(t, tsMs)
+
+	d := NewDecoder(VariantCEX, adapterContract)
+	out, err := d.Decode(events.Event{
+		Topic:      []string{TopicSymbolReflector, TopicSymbolUpdate, tsB64},
+		Value:      body,
+		ContractID: adapterContract,
+		// Ledger close a few seconds after the oracle stamp — within
+		// the sanity window so topic[2] is accepted.
+		LedgerClosedAt: time.UnixMilli(tsMs + 3000).UTC().Format(time.RFC3339Nano),
+	})
 	if err != nil {
 		t.Fatalf("Decode: %v", err)
 	}
 	if len(out) != 1 {
 		t.Fatalf("got %d events, want 1", len(out))
 	}
-	// Update timestamp comes from topic[2] regardless of the
-	// closedAt fallback — verify it survived.
 	ue := out[0].(UpdateEvent)
-	if ue.Update.Timestamp.UnixMilli() != 1_745_000_000_000 {
-		t.Errorf("Timestamp = %v, want topic[2]'s ms value",
-			ue.Update.Timestamp)
+	if ue.Update.Timestamp.UnixMilli() != tsMs {
+		t.Errorf("Timestamp = %v, want topic[2]'s ms value", ue.Update.Timestamp)
 	}
 }
 

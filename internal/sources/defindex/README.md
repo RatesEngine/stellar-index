@@ -50,19 +50,22 @@ set. (The previous revision filtered on a mislabeled 3-contract
 events.go              — source name, topic prefix bytes, event symbols, StrategyFlow
 decode.go              — classify() + decodeFlow() → StrategyFlow
 dispatcher_adapter.go  — implements dispatcher.Decoder (topic-matched)
-consumer.go            — Sink for the pipeline-side log emit
 README.md              — this file
 ```
 
-## Phase A scope (what ships now)
+Persistence is owned by `internal/pipeline/sink.go`, which type-
+switches on the dispatched `Event` / `VaultEvent` and writes
+`defindex_flows` (migration 0050) at the `strategy` and `vault`
+layers.
+
+## Current scope (shipped)
 
 - Decode `("BlendStrategy","deposit"|"withdraw")` across all
-  emitters; emit a structured log line per event
-  (contract / direction / from / amount).
-- No persist yet — no `routed_via` tag, no `aggregator_exposures`
-  rows. `BackfillSafe` stays `false` until live decoding is
-  verified producing rows on r1 and the WASM is re-audited against
-  the real deployed hash `11329c24…988`.
+  emitters → `StrategyFlow`, plus the user-facing vault flows →
+  `VaultFlow`; both persist to `defindex_flows`.
+- `BackfillSafe` is `true` (audited 2026-05-19 against the real
+  deployed hash `11329c24…988`; see
+  `docs/operations/wasm-audits/defindex.md`).
 
 ## Phase B follow-ups
 

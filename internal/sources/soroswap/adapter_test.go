@@ -276,6 +276,27 @@ func TestDecoder_Decode_skimEmitsSkimEvent(t *testing.T) {
 	}
 }
 
+// TestDecoder_Decode_skimPropagatesEventIndex confirms the SkimEvent
+// carries the source event's in-op index rather than a hardcoded 0.
+// The migration 0043 PK includes event_index, so two skims in the
+// same op must keep distinct indices to avoid collapsing.
+func TestDecoder_Decode_skimPropagatesEventIndex(t *testing.T) {
+	d := NewDecoder()
+	pair := makeContractStrkey(t, 0x21)
+
+	ev := makeSkimEvent(t, pair, big.NewInt(1), big.NewInt(2))
+	ev.EventIndex = 3 // second skim within the same op, say
+
+	out, err := d.Decode(ev)
+	if err != nil {
+		t.Fatalf("Decode skim: %v", err)
+	}
+	se := out[0].(SkimEvent)
+	if se.EventIndex != 3 {
+		t.Errorf("EventIndex = %d, want 3 (propagated from the source event)", se.EventIndex)
+	}
+}
+
 func TestDecoder_Decode_skimDoesNotFeedSwapBuffer(t *testing.T) {
 	// A skim event is independent of the swap+sync correlation
 	// buffer. After processing a standalone skim, the buffer's

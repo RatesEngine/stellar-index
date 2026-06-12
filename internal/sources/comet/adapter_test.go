@@ -152,10 +152,13 @@ func TestDecoder_Decode_NoContractIDDiscrimination(t *testing.T) {
 	// match. This is the documented contract per CLAUDE.md.
 }
 
-func TestDecoder_Decode_FallbackTimestampOnMissingClosedAt(t *testing.T) {
-	// LedgerClosedAt is empty — the adapter must still return a valid
-	// trade by falling back to time.Now(). The fallback path is only
-	// exercised here; production always populates LedgerClosedAt.
+func TestDecoder_Decode_FailsClosedOnMissingClosedAt(t *testing.T) {
+	// LedgerClosedAt is empty — the adapter must FAIL CLOSED (return
+	// the error) rather than substituting time.Now(). A wall-clock
+	// fallback would mis-timestamp the row during a backfill replay,
+	// stamping every event with the replay run's time instead of the
+	// historical ledger close. Matches the blend/phoenix/defindex
+	// siblings. Production always populates LedgerClosedAt.
 	d := NewDecoder()
 	caller := accountStrkeyFromSeed(t, 0x10)
 	tokenIn := contractStrkeyFromSeed(t, 0x20)
@@ -168,11 +171,10 @@ func TestDecoder_Decode_FallbackTimestampOnMissingClosedAt(t *testing.T) {
 		// LedgerClosedAt deliberately empty.
 	}
 	out, err := d.Decode(ev)
-	if err != nil {
-		t.Fatalf("Decode: %v", err)
+	if err == nil {
+		t.Fatalf("Decode: expected an error on empty LedgerClosedAt, got nil (out=%v)", out)
 	}
-	te := out[0].(TradeEvent)
-	if te.Trade.Timestamp.IsZero() {
-		t.Error("Timestamp is zero — fallback should have set time.Now()")
+	if out != nil {
+		t.Errorf("Decode: expected nil events on error, got %v", out)
 	}
 }

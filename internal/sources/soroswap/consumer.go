@@ -41,7 +41,7 @@ type SkimEvent struct {
 	Ledger     uint32
 	TxHash     string
 	OpIndex    uint32
-	EventIndex uint32 // 0 — one skim event per op; reserved for future Soroban op shapes
+	EventIndex uint32 // position within the op; part of the migration 0043 PK so multiple skims per op don't collapse
 	ObservedAt time.Time
 	To         string // optional recipient strkey; "" → NULL
 	Amount0    canonical.Amount
@@ -71,11 +71,10 @@ var _ consumer.Event = SkimEvent{}
 // entry waiting for its partner before evicting as an orphan.
 //
 // Soroswap swap+sync are emitted in the same transaction — they
-// SHOULD always arrive within seconds of each other in the
-// dispatcher's in-order stream. Five minutes is a generous ceiling
-// that tolerates worst-case pagination lag (from an RPC-based
-// fixture-capture replay) without holding references to events
-// that will never resolve.
+// SHOULD always arrive adjacently in the dispatcher's in-order
+// stream. Five minutes is a generous ceiling that absorbs any
+// out-of-order quirk without holding references to events that will
+// never resolve.
 const defaultOrphanMaxAge = 5 * time.Minute
 
 type buffer struct {

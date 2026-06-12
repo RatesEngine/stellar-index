@@ -88,7 +88,11 @@ func assetKeyFromTrustLineAsset(a xdr.TrustLineAsset) (string, error) {
 			return "", errors.New("trustlines: nil AlphaNum4 with discriminant CreditAlphanum4")
 		}
 		code := trimTrailingNulls(a4.AssetCode[:])
-		issuer, err := strkey.Encode(strkey.VersionByteAccountID, a4.Issuer.Ed25519[:])
+		pk, ok := a4.Issuer.GetEd25519()
+		if !ok {
+			return "", fmt.Errorf("trustlines: alphanum4 issuer not Ed25519 (type=%d)", a4.Issuer.Type)
+		}
+		issuer, err := strkey.Encode(strkey.VersionByteAccountID, pk[:])
 		if err != nil {
 			return "", fmt.Errorf("trustlines: alphanum4 issuer encode: %w", err)
 		}
@@ -99,7 +103,11 @@ func assetKeyFromTrustLineAsset(a xdr.TrustLineAsset) (string, error) {
 			return "", errors.New("trustlines: nil AlphaNum12 with discriminant CreditAlphanum12")
 		}
 		code := trimTrailingNulls(a12.AssetCode[:])
-		issuer, err := strkey.Encode(strkey.VersionByteAccountID, a12.Issuer.Ed25519[:])
+		pk, ok := a12.Issuer.GetEd25519()
+		if !ok {
+			return "", fmt.Errorf("trustlines: alphanum12 issuer not Ed25519 (type=%d)", a12.Issuer.Type)
+		}
+		issuer, err := strkey.Encode(strkey.VersionByteAccountID, pk[:])
 		if err != nil {
 			return "", fmt.Errorf("trustlines: alphanum12 issuer encode: %w", err)
 		}

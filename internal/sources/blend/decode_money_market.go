@@ -155,13 +155,11 @@ type AdminEvent struct {
 
 // ─── classify (extended) ───────────────────────────────────────
 //
-// The original classify() in decode.go covered only the three
+// The original classify() in decode.go covers only the three
 // auction topics. classifyAny is the extended switch — every
-// topic the package declares is mapped to its Event* name.
-// Callers in this file use classifyAny; the original classify()
-// remains the dispatcher-side fast path for the auction adapter
-// (kept intact so the existing auction Decoder.Matches doesn't
-// flip behaviour for non-auction events).
+// topic the package declares is mapped to its Event* name. The
+// dispatcher adapter (Matches/Decode) uses classifyAny; classify()
+// is now only exercised by the auction-scoped decode_test.go cases.
 func classifyAny(e *events.Event) string { //nolint:gocyclo,cyclop // one case per Blend topic; flattening makes the dispatch table easier to audit against pool/src/events.rs + pool-factory/src/events.rs.
 	if len(e.Topic) == 0 {
 		return ""
@@ -823,8 +821,8 @@ var reserveConfigKeys = []struct {
 // any contract upgrade that drops a field fails loud rather than
 // silently writing partial data.
 //
-// `enabled` is a bool. The soroban-sdk emits booleans as ScvBool.
-// We handle the type-tag inline since scval doesn't expose AsBool.
+// `enabled` is a bool. The soroban-sdk emits booleans as ScvBool;
+// we decode it via scval.AsBool below.
 func decodeReserveConfig(sv scval.ScVal) (map[string]any, error) {
 	entries, err := scval.AsMap(sv)
 	if err != nil {

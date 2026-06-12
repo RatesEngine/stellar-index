@@ -165,6 +165,40 @@ func TestDecodeRelay_HappyPath(t *testing.T) {
 	}
 }
 
+// TestDecodeRelay_FarFutureResolveTimeClampsToClose confirms that a
+// sentinel / garbage far-future resolve_time (the same overflow
+// class as the soroswap-router deadline_ts) falls back to the ledger
+// close time instead of stamping a year-99-billion timestamp that
+// would overflow the timestamptz INSERT.
+func TestDecodeRelay_FarFutureResolveTimeClampsToClose(t *testing.T) {
+	const farFuture = uint64(3_000_000_000_000_000_000) // ~year 95 billion
+	closedAt := time.Date(2026, 6, 1, 12, 0, 0, 0, time.UTC)
+
+	args := []string{
+		encodeAddressArg(t, relayerG),
+		encodeSymbolRatesArg(t, []struct {
+			Symbol string
+			Rate   uint64
+		}{
+			{"BTC", 500_000_000_000_000},
+		}),
+		encodeU64Arg(t, farFuture),
+		encodeU64Arg(t, 1),
+	}
+	updates, err := decodeRelayArgs(FnRelay, args, adapterC,
+		52_000_000, "abcd", 0, "", "", closedAt)
+	if err != nil {
+		t.Fatalf("decodeRelayArgs: %v", err)
+	}
+	if len(updates) != 1 {
+		t.Fatalf("expected 1 update, got %d", len(updates))
+	}
+	if !updates[0].Timestamp.Equal(closedAt) {
+		t.Errorf("Timestamp = %v, want ledger close %v (far-future resolve_time should clamp)",
+			updates[0].Timestamp, closedAt)
+	}
+}
+
 func TestDecodeForceRelay_HappyPath(t *testing.T) {
 	// force_relay has 3 args (no `from`). Observer should fall back
 	// to opSource (here a G-strkey we pass directly).

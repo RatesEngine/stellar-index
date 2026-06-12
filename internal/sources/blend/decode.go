@@ -20,10 +20,11 @@ const auctionTopicArity = 3
 // classify picks the event kind from topic[0]. Returns "" for
 // non-Blend events so the dispatcher skips cheaply.
 //
-// Today the package only decodes auction events. Money-market /
-// admin / credit-risk decoders land in follow-up PRs; their topic
-// constants are defined in events.go so the classify() switch
-// below stays stable as more event-handlers are added.
+// classify covers only the three auction topics. The dispatcher
+// adapter routes through classifyAny (decode_money_market.go), which
+// also maps the money-market / admin / credit-risk topics now that
+// those decoders have shipped. classify is retained as the narrow
+// auction-only fast path used by the auction decode_test.go cases.
 func classify(e *events.Event) string {
 	if len(e.Topic) == 0 {
 		return ""

@@ -9,10 +9,10 @@ import (
 	"github.com/RatesEngine/rates-engine/internal/scval"
 )
 
-// RawPair is what a stellar-rpc event tells us about a swap/sync
-// pair BEFORE we decode the SCVal payload. We collect these by
-// (ledger, tx_hash, op_index) key, then finalise once we have both
-// the swap + its sync.
+// RawPair is what a dispatched Soroban event tells us about a
+// swap/sync pair BEFORE we decode the SCVal payload. We collect
+// these by (ledger, tx_hash, op_index) key, then finalise once we
+// have both the swap + its sync.
 type RawPair struct {
 	Ledger   uint32
 	TxHash   string

@@ -39,10 +39,11 @@ const seedThrottle = 300 * time.Millisecond
 // seconds of wall time at mild concurrency.
 //
 // Cold-start use case: the live dispatcher path records every future
-// new_pair event on the fly (see Decoder.recordNewPair), but pairs
-// created BEFORE the dispatcher's first ledger are invisible to
-// live events. This method fills that gap. Once seeded, the live
-// path keeps the registry in sync automatically.
+// new_pair event on the fly (see Decoder.SeedPair, fired from Decode
+// on each factory new_pair event), but pairs created BEFORE the
+// dispatcher's first ledger are invisible to live events. This method
+// fills that gap. Once seeded, the live path keeps the registry in
+// sync automatically.
 //
 // factoryContract is the C-strkey of the Soroswap factory. For
 // mainnet that's CA4HEQTL2WPEUYKYKCDOHCDNIV4QHNJ7EL4J4NQ6VADP7SYHVRYZ7AW2.

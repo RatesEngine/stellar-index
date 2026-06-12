@@ -129,8 +129,9 @@ func (*Decoder) Name() string { return SourceName }
 
 // Matches implements [dispatcher.Decoder]. Claims any Soroswap pair-
 // contract event (swap/sync/deposit/withdraw) or Soroswap factory
-// new_pair event. Non-trade events match so recordNewPair gets a
-// shot — but Decode returns zero outputs for those.
+// new_pair event. Non-trade events match so SeedPair gets a shot at
+// the factory new_pair payload — but Decode returns zero outputs for
+// those.
 func (*Decoder) Matches(ev events.Event) bool {
 	return classify(&ev) != ""
 }
@@ -171,7 +172,8 @@ func (d *Decoder) Decode(ev events.Event) ([]consumer.Event, error) {
 			Ledger:     ev.Ledger,
 			TxHash:     ev.TxHash,
 			OpIndex:    uint32(ev.OperationIndex),
-			EventIndex: 0,
+			//nolint:gosec // EventIndex is non-negative by Soroban spec.
+			EventIndex: uint32(ev.EventIndex),
 			ObservedAt: closedAt,
 			To:         fields.To,
 			Amount0:    fields.Amount0,

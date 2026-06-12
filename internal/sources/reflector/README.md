@@ -29,16 +29,21 @@ Verified from `reflector-contract/oracle/src/events.rs` during
 Phase 1.
 
 ```
-topic:  ["REFLECTOR", "update"]          (both Symbols, indexed)
-body:   Map{
-           "prices":   Vec<(Asset, i128)>   // [(asset, price), ...]
-           "timestamp": u64
-         }
+topic:  ["REFLECTOR", "update", <timestamp: u64 ms>]   (Symbols + a u64)
+body:   Map{ "update_data": Vec<(Val, i128)> }          // [(asset, price), ...]
 ```
 
+The timestamp lives in **topic[2]** as a u64 in **milliseconds**
+(the contract's internal scale — `oracle/src/price_oracle.rs`
+divides by 1000 to expose seconds via `last_timestamp`), NOT in the
+body. The body is a Map with a single `update_data` key holding the
+(asset, price) vector. (Earlier revisions of this README described a
+`body: Map{prices, timestamp}` shape — that was never the wire form;
+see `decodeUpdateBody` + `decodeUpdateTimestamp` in `decode.go`.)
+
 Decoding one event produces **one canonical.OracleUpdate per
-(asset, price) pair** in the prices vector. Typical event carries
-30–50 prices on the CEX contract, fewer on DEX + FX.
+(asset, price) pair** in the update_data vector. Typical event
+carries 30–50 prices on the CEX contract, fewer on DEX + FX.
 
 ## Quirks
 

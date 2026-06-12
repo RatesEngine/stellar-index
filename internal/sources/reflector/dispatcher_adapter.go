@@ -1,8 +1,6 @@
 package reflector
 
 import (
-	"time"
-
 	"github.com/RatesEngine/rates-engine/internal/consumer"
 	"github.com/RatesEngine/rates-engine/internal/events"
 )
@@ -80,9 +78,12 @@ func (d *Decoder) Matches(ev events.Event) bool {
 func (d *Decoder) Decode(ev events.Event) ([]consumer.Event, error) {
 	closedAt, err := ev.EventClosedAt()
 	if err != nil {
-		// Fall back to now() rather than failing the whole event —
-		// decodeUpdate prefers the topic[2] oracle timestamp anyway.
-		closedAt = time.Now().UTC()
+		// Fail closed rather than substituting time.Now(): closedAt
+		// is the fallback decodeUpdate uses when the topic[2] oracle
+		// timestamp is missing / out of its sanity window, so a
+		// wall-clock value here would mis-timestamp the row during a
+		// backfill replay (cf. the comet sibling).
+		return nil, err
 	}
 	updates, err := decodeUpdate(&ev, d.variant, d.decimals, d.observer, closedAt)
 	if err != nil {

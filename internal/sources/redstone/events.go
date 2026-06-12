@@ -59,10 +59,14 @@ const DefaultDecimals uint8 = 8
 // threshold).
 const DefaultResolutionSeconds = 24 * 60 * 60
 
-// WriteFnName is the adapter contract's update entry point. The
-// decoder only trusts OpArgs from calls to this function — anything
-// else and it treats the args as unrelated (e.g. a composed tx that
-// also calls a different Redstone method).
+// WriteFnName is the adapter contract's update entry point and the
+// only path that emits a REDSTONE-topic event. The dispatcher plumbs
+// only the InvokeContract Args slice (not the function name), so the
+// decoder cannot assert the call targeted this function directly —
+// it relies on the dispatcher's contract-ID scoping plus the
+// per-WASM-hash audit gate (see feedIDsFromOpArgs and
+// docs/architecture/contract-schema-evolution.md). Kept as
+// documentation of the invariant the contract-ID scoping leans on.
 const WriteFnName = "write_prices"
 
 // Event-topic constants.
@@ -97,11 +101,6 @@ var (
 	// path), or the dispatcher failed to populate them. Without
 	// args we have no feed IDs to zip.
 	ErrMissingOpArgs = errors.New("redstone: InvokeContract args unavailable")
-
-	// ErrWrongFunctionCall — the InvokeContract call targeted a
-	// function other than write_prices. Guard against decoding an
-	// unrelated composed call's args as feed IDs.
-	ErrWrongFunctionCall = errors.New("redstone: event not produced by a write_prices call")
 
 	// ErrFeedIDCountMismatch — len(feed_ids from args) != len(
 	// updated_feeds from event body). Happens when the adapter's

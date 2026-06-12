@@ -127,6 +127,17 @@ func decodeRouterArgs(
 		return nil, fmt.Errorf("%w: args[4] deadline: %w", ErrMalformedArgs, err)
 	}
 
+	// deadline == 0 is a "no deadline" sentinel, not a real
+	// 1970-01-01T00:00:00Z expiry. Leave DeadlineTs as the zero
+	// time.Time so the sink's IsZero() guard NULLs the column
+	// rather than storing the Unix epoch. (Without this, a 0
+	// deadline lands as 1970 — distinguishable in neither intent
+	// nor the IsZero guard from a missing value.)
+	var deadlineTs time.Time
+	if deadline != 0 {
+		deadlineTs = time.Unix(int64(deadline), 0).UTC()
+	}
+
 	// Map (a0, a1) → (AmountIn, AmountOut) per function shape.
 	amountIn, amountOut := a0, a1 // exact_tokens_for_tokens default
 	if fnName == FnSwapTokensForExactTokens {
@@ -147,7 +158,7 @@ func decodeRouterArgs(
 		Path:       path,
 		AmountIn:   amountIn,
 		AmountOut:  amountOut,
-		DeadlineTs: time.Unix(int64(deadline), 0).UTC(),
+		DeadlineTs: deadlineTs,
 	}, nil
 }
 

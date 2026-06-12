@@ -31,8 +31,9 @@ func (*Decoder) Name() string { return SourceName }
 
 // Matches implements [dispatcher.Decoder]. Returns true for every
 // Blend pool / pool-factory event the decoder handles — the three
-// auction events PLUS the 18 money-market / emission / credit-risk
-// / admin events covered by #25. classifyAny() returns the
+// auction events PLUS the 20 money-market / emission / credit-risk /
+// admin / pool-factory events covered by #25 (see classifyAny's
+// switch in decode_money_market.go). classifyAny() returns the
 // canonical Event* name for any matched topic[0], so a non-empty
 // classification is the match.
 //

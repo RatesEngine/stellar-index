@@ -22,6 +22,18 @@ const opIndexFanoutStride = 1024
 // shorter is by definition not our event.
 const reflectorTopicArity = 3
 
+// sanityFutureWindow bounds how far past the ledger close a decoded
+// oracle timestamp may sit before we treat it as garbage and fall
+// back to the ledger close time. Absorbs clock skew without admitting
+// sentinel / overflow values that error the timestamptz INSERT
+// (cf. the soroswap-router deadline_ts fix).
+const sanityFutureWindow = 24 * time.Hour
+
+// epochFloor is the lower sanity bound for a decoded oracle
+// timestamp — anything before it (e.g. a 0 / pre-epoch value) is
+// treated as garbage. Reflector launched well after 2020.
+var epochFloor = time.Unix(1_000_000_000, 0).UTC() // 2001-09-09
+
 // classify reports whether this is a Reflector "update" event. We
 // match topic[0]=REFLECTOR + topic[1]=update; anything else returns
 // false and the caller skips. We do NOT require topic[2] at this
@@ -85,7 +97,16 @@ func decodeUpdate(e *events.Event, variant Variant, decimals uint8, observer str
 	// of price updates.
 	ts := closedAt
 	if tsMs, terr := decodeUpdateTimestamp(e.Topic[2]); terr == nil {
-		ts = time.UnixMilli(int64(tsMs)).UTC()
+		decoded := time.UnixMilli(int64(tsMs)).UTC()
+		// Accept the contract timestamp only when it sits within a
+		// sane window of the ledger close. A sentinel / garbage
+		// far-future u64 (same class as the router deadline_ts
+		// overflow) would otherwise overflow timestamptz range and
+		// error the whole INSERT; a pre-epoch value would stamp a
+		// bogus row. Outside the window we keep the ledger close time.
+		if !decoded.Before(epochFloor) && !decoded.After(closedAt.Add(sanityFutureWindow)) {
+			ts = decoded
+		}
 	}
 
 	sourceName := variant.SourceName()

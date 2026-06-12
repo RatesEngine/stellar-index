@@ -157,6 +157,36 @@ func TestDecodeRouterArgs_pathTooShort(t *testing.T) {
 	}
 }
 
+// TestDecodeRouterArgs_zeroDeadlineYieldsZeroTime confirms a
+// deadline of 0 (a "no deadline" sentinel) leaves DeadlineTs as the
+// zero time.Time so the sink's IsZero() guard NULLs the column,
+// rather than stamping the 1970-01-01 epoch.
+func TestDecodeRouterArgs_zeroDeadlineYieldsZeroTime(t *testing.T) {
+	t.Parallel()
+	a := makeContractAddress(t, byte(0x30))
+	b := makeContractAddress(t, byte(0x31))
+	to := makeAccountAddress(t, byte(0x32))
+
+	args := []string{
+		mustB64(t, i128SCVal(big.NewInt(10))),
+		mustB64(t, i128SCVal(big.NewInt(20))),
+		mustB64(t, vecSCVal(addrSCVal(a), addrSCVal(b))),
+		mustB64(t, addrSCVal(to)),
+		mustB64(t, u64SCVal(0)), // deadline == 0 sentinel
+	}
+	swap, err := decodeRouterArgs(
+		FnSwapExactTokensForTokens, args,
+		MainnetRouter, 0, "tx", 0, "", "",
+		time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC),
+	)
+	if err != nil {
+		t.Fatalf("decodeRouterArgs: %v", err)
+	}
+	if !swap.DeadlineTs.IsZero() {
+		t.Errorf("DeadlineTs = %v, want zero time (so the sink NULLs the column)", swap.DeadlineTs)
+	}
+}
+
 // ─── SCVal builders for tests ─────────────────────────────────
 // Keep simple and self-contained — duplicates similar helpers in
 // other source packages but the test-time graph is small enough

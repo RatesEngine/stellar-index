@@ -29,6 +29,31 @@ func TestPickTimestamp_packageMsPreferred(t *testing.T) {
 	}
 }
 
+func TestPickTimestamp_farFutureClampsToClosedAt(t *testing.T) {
+	// A sentinel / garbage far-future packageMs (same overflow class
+	// as the soroswap-router deadline_ts) must fall back to the
+	// ledger close time instead of overflowing the timestamptz
+	// INSERT.
+	closedAt := time.Date(2026, 4, 26, 12, 0, 0, 0, time.UTC)
+	pkgMs := uint64(3_000_000_000_000_000) // ~year 96000
+	got := pickTimestamp(pkgMs, closedAt)
+	if !got.Equal(closedAt) {
+		t.Errorf("got %v, want %v (far-future packageMs should clamp to closedAt)", got, closedAt)
+	}
+}
+
+func TestPickTimestamp_withinWindowHonoured(t *testing.T) {
+	// A packageMs slightly after the ledger close (clock skew) but
+	// within the sanity window is still honoured.
+	closedAt := time.Date(2026, 4, 26, 12, 0, 0, 0, time.UTC)
+	pkgMs := uint64(closedAt.Add(time.Hour).UnixMilli())
+	got := pickTimestamp(pkgMs, closedAt)
+	want := time.UnixMilli(int64(pkgMs)).UTC()
+	if !got.Equal(want) {
+		t.Errorf("got %v, want %v (in-window value honoured)", got, want)
+	}
+}
+
 func TestPickTimestamp_resultIsUTC(t *testing.T) {
 	loc, err := time.LoadLocation("America/New_York")
 	if err != nil {

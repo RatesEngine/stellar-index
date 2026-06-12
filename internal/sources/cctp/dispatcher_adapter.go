@@ -99,5 +99,11 @@ func (*Decoder) Decode(ev events.Event) ([]consumer.Event, error) {
 		}
 		return []consumer.Event{eventFromMessageReceived(r, observedAt)}, nil
 	}
-	return nil, nil
+	// Unreachable while Classify and this switch stay in lockstep —
+	// Classify already returned non-empty above, and every kind it
+	// can return has a case. Returning the sentinel makes the
+	// defensive guard real: if a future Classify case lands without a
+	// matching switch arm, the dispatcher counts it as a decode error
+	// rather than silently dropping the event.
+	return nil, fmt.Errorf("%w: %s", ErrUnknownEvent, kind)
 }

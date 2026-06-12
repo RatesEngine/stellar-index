@@ -1,6 +1,7 @@
 package forex
 
 import (
+	"math"
 	"sort"
 	"strings"
 	"sync/atomic"
@@ -126,7 +127,10 @@ func buildSnapshot(rates map[string]float64, names map[string]string, publishedA
 }
 
 func isFiniteFloat(f float64) bool {
-	return f == f && f != f+1 // NaN check + crude inf check
+	// The old `f != f+1` inf check is wrong for |f| >= 2^53, where
+	// f+1 rounds back to f and a perfectly finite value reads as
+	// non-finite. Use the standard library predicates.
+	return !math.IsNaN(f) && !math.IsInf(f, 0)
 }
 
 // toTitle returns "United States Dollar" from "united states dollar".

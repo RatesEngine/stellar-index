@@ -120,10 +120,15 @@ the decoder already has the value to populate it.
 ### Q4 — Multihop expands to N×8 events
 
 A Phoenix multihop swap passes through N pools and emits 8 events
-per pool — so 16 events for a 2-hop, 24 for a 3-hop. Each operation
-in the transaction is a distinct op_index, so the correlation key
-already separates them: we end up with N complete trades for one
-multihop.
+per pool — so 16 events for a 2-hop, 24 for a 3-hop. A router
+multihop emits all N swaps within a **single** op_index (the router
+op), so op_index alone does NOT separate them. The decode buffer
+emits-and-clears each 8-field swap before the next, so each swap's
+first-field `event_index` is distinct; we fan the per-swap trade
+op_index out on that event_index (`canonical.FanoutOpIndex`) so the
+N trades for one multihop don't collide on the trades PK
+(ADR-0033, same as aquarius/comet/soroswap). See `RawSwap.EventIndex`
+in `decode.go`.
 
 ### Q5 — Stableswap pool contract emits a different schema
 

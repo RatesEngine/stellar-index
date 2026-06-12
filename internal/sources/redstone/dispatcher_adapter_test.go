@@ -52,11 +52,13 @@ func TestDecoder_Decode_happyPath(t *testing.T) {
 	}
 }
 
-func TestDecoder_Decode_malformedLedgerClosedAtFallsBackToNow(t *testing.T) {
+func TestDecoder_Decode_malformedLedgerClosedAtFailsClosed(t *testing.T) {
 	// LedgerClosedAt empty/invalid → EventClosedAt errors → adapter
-	// substitutes time.Now() rather than dropping the event.
-	// decodeWritePrices then prefers PackageTimestamp from each
-	// PriceData anyway, so the substitution is invisible downstream.
+	// FAILS CLOSED (returns the error) rather than substituting
+	// time.Now(). closedAt is pickTimestamp's fallback when a
+	// PriceData's PackageTimestamp is 0 / out of its sanity window, so
+	// a wall-clock value here would mis-timestamp the row during a
+	// backfill replay. Matches the comet/blend/phoenix siblings.
 	body := encodeWritePricesBody(t, relayerG,
 		[]*big.Int{big.NewInt(oneBTCAt8)}, 1, 2)
 	args := []string{
@@ -69,15 +71,15 @@ func TestDecoder_Decode_malformedLedgerClosedAtFallsBackToNow(t *testing.T) {
 		Value:          body,
 		OpArgs:         args,
 		ContractID:     adapterC,
-		LedgerClosedAt: "", // triggers the fallback branch
+		LedgerClosedAt: "", // triggers the fail-closed branch
 	}
 
 	out, err := NewDecoder(adapterC).Decode(ev)
-	if err != nil {
-		t.Fatalf("Decode with empty LedgerClosedAt should not error, got %v", err)
+	if err == nil {
+		t.Fatalf("Decode with empty LedgerClosedAt should error, got nil (out=%v)", out)
 	}
-	if len(out) != 1 {
-		t.Fatalf("got %d events, want 1", len(out))
+	if out != nil {
+		t.Errorf("expected nil events on error, got %v", out)
 	}
 }
 

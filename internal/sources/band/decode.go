@@ -17,6 +17,14 @@ import (
 // submission), well under 1024.
 const opIndexFanoutStride = 1024
 
+// sanityFutureWindow bounds how far past the ledger close a decoded
+// oracle timestamp may sit before we treat it as garbage and fall
+// back to the ledger close time. A real relayer payload is at or
+// before the ledger close; a small grace window absorbs clock skew
+// without admitting sentinel / overflow values that error the
+// timestamptz INSERT (cf. the soroswap-router deadline_ts fix).
+const sanityFutureWindow = 24 * time.Hour
+
 // decodeRelayArgs converts one Band relay/force_relay InvokeContract
 // call into a slice of canonical.OracleUpdate — one per (symbol,
 // rate) pair in symbol_rates.
@@ -105,9 +113,12 @@ func decodeRelayArgs( //nolint:gocognit,gocyclo,funlen // dispatch-heavy; splitt
 	ts := time.Unix(int64(resolveSeconds), 0).UTC()
 	// Defensive fallback: a relayer submitting resolve_time=0 (or
 	// pre-epoch values) would stamp a bogus timestamp on the row.
-	// Use ledger close time instead. Real-world Band payloads are
-	// always post-2020 UNIX timestamps.
-	if resolveSeconds < 1_000_000_000 {
+	// Symmetrically, a sentinel / garbage far-future u64 (e.g.
+	// ~3e18s, the same class as the router deadline_ts overflow) can
+	// overflow timestamptz range and error the whole INSERT. Clamp
+	// both ends to ledger close time. Real-world Band payloads are
+	// always post-2020 UNIX seconds at or before the ledger close.
+	if resolveSeconds < 1_000_000_000 || ts.After(closedAt.Add(sanityFutureWindow)) {
 		ts = closedAt
 	}
 

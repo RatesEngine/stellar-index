@@ -17,7 +17,7 @@ the body carries the new prices for every feed in that batch.
 | `updater` | Body Map | `Address` (relayer identity, ignored for VWAP — kept for audit) |
 | `updated_feeds` | Body Map → `Vec<PriceData>` | One row per feed updated this batch |
 | `price` (per feed) | `PriceData.price` | `U256` at fixed `DECIMALS = 8` |
-| `package_timestamp` / `write_timestamp` | `PriceData` | `u64` Unix seconds |
+| `package_timestamp` / `write_timestamp` | `PriceData` | `u64` Unix **milliseconds** (decoded via `time.UnixMilli`) |
 | **`feed_ids`** | **InvokeContract op args** (NOT the event body) | `Vec<String>` — see Q1 below |
 
 The decoder emits one `canonical.OracleUpdate` per `(feed_id, price)`

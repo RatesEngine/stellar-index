@@ -58,10 +58,9 @@ const (
 
 // Pre-encoded base64 SCVal blobs — byte-identical to what the
 // contract emits on topic positions. Computed at package init via
-// scval.MustEncodeString / MustEncodeSymbol. Used both for:
-//   - Byte-equality classification against live events (classify()).
-//   - The EventFilter.Topics slice passed to stellar-rpc, so the
-//     server drops non-matching events before streaming to us.
+// scval.MustEncodeString / MustEncodeSymbol. Used for byte-equality
+// classification against dispatched events (classify()) — no SCVal
+// parse on the hot path.
 //
 // Golden wire-format regression lives in internal/scval/scval_test.go
 // (TestGolden_symbolBytes). If the SDK encoder shifts, that test
@@ -86,13 +85,10 @@ var (
 	// (trades/sync we care about; others we ignore).
 	ErrUnknownEvent = errors.New("soroswap: unknown event topic")
 
-	// ErrOrphanSync — a sync event with no preceding swap in the
-	// same (ledger, tx_hash, op_index). Not a trade; drop.
-	ErrOrphanSync = errors.New("soroswap: orphan sync (no matching swap)")
-
 	// ErrSwapWithoutSync — a swap that didn't get its following
-	// sync. Could happen if the sync is in a later RPC page; the
-	// consumer's buffer should have caught this. Bug or truncation.
+	// sync. The dispatcher feeds events in-order; the decoder's
+	// swap+sync correlation buffer should pair them. Surfacing this
+	// means a bug or a truncated event stream.
 	ErrSwapWithoutSync = errors.New("soroswap: swap without sync")
 
 	// ErrMalformedPayload — event fields don't match the expected

@@ -110,7 +110,8 @@ var (
 	ErrNotReflectorEvent = errors.New("reflector: not a REFLECTOR.update event")
 
 	// ErrMalformedPayload — event body doesn't decode to the
-	// expected Map{prices, timestamp} shape.
+	// expected Map{"update_data": Vec<(Val, i128)>} shape (the
+	// timestamp lives in topic[2], not the body).
 	ErrMalformedPayload = errors.New("reflector: malformed event payload")
 
 	// ErrEmptyPrices — prices vector was empty. Reflector should

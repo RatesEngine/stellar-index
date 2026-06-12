@@ -93,9 +93,12 @@ func (r *RawSwap) assign(e *events.Event, fieldTopic string) error {
 	return nil
 }
 
-// groupKey is the (ledger, tx_hash, op_index) triple — a single
-// swap operation's events all share this key (Q4 multihops split
-// on op_index naturally).
+// groupKey is the (ledger, tx_hash, op_index) triple. The 8 field
+// events of one swap share this key. A router multihop emits
+// several 8-field swaps within ONE op (same key) — the buffer
+// emits-and-clears each swap before the next, then fans the trade
+// op_index out on the swap's first-field event_index (see
+// RawSwap.EventIndex) so they don't collide downstream.
 type groupKey struct {
 	Ledger  uint32
 	TxHash  string

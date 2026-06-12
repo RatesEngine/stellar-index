@@ -77,8 +77,11 @@ a decode error).
 
 `resolve_time` is `u64` UNIX seconds, per
 `band-soroban/src/storage/ref_data.rs:56` (compared against
-`env.ledger().timestamp()` which is seconds). The decoder
-multiplies to nanoseconds inside `canonical.OracleUpdate.PublishedAt`.
+`env.ledger().timestamp()` which is seconds). The decoder converts
+it with `time.Unix(resolveSeconds, 0)` and stores it on
+`canonical.OracleUpdate.Timestamp` (the field is `Timestamp`, not
+`PublishedAt`). Out-of-range values (0 / pre-epoch, or a sentinel
+far-future u64) fall back to the ledger close time.
 
 ### Q6 — Synthetic OpIndex fan-out
 
