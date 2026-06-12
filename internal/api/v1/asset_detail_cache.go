@@ -11,22 +11,20 @@ import (
 // assetDetailEntry holds a fully-rendered /v1/assets/{id} response
 // for serving warm requests inside the cache TTL.
 //
-// The cached payload is the full JSON wire bytes plus the response
-// headers we'd write — Content-Type, Cache-Control, the
-// X-Ratesengine-Flags header. Storing post-render avoids re-running
-// the F2 chain + coin-overlay + verified-currency overlay on every
-// hit.
+// The cached payload is the full JSON wire bytes (flags already
+// encoded into the envelope by renderAssetDetailEnvelope) plus the
+// time it was cached. Storing post-render avoids re-running the F2
+// chain + coin-overlay + verified-currency overlay on every hit.
 type assetDetailEntry struct {
 	body     []byte
-	flags    Flags
 	cachedAt time.Time
 }
 
 // assetDetailResponseCache is the response-level cache for
 // /v1/assets/{id}. Keyed by the normalised asset_id path segment
 // (post-`normaliseAssetIDInput`); value is the full pre-rendered
-// JSON bytes + Flags so writeJSON can re-render the wire headers
-// without re-running the handler chain.
+// JSON bytes so the warm path can replay the wire body without
+// re-running the handler chain.
 //
 // Why a response cache instead of per-reader caches: the underlying
 // readers fan out wide (Volume24hUSDForAsset, supply.LatestSupply,
@@ -88,9 +86,10 @@ func (c *assetDetailResponseCache) get(assetID string) (*assetDetailEntry, bool)
 // the same asset may both compute, both write — accepted as a
 // stampede cost rather than adding a single-flight layer here).
 //
-// Callers should pass an already-marshalled body; this avoids
-// holding the lock during JSON encoding.
-func (c *assetDetailResponseCache) put(assetID string, body []byte, flags Flags) {
+// Callers should pass an already-marshalled body (flags already
+// encoded into it by renderAssetDetailEnvelope); this avoids holding
+// the lock during JSON encoding.
+func (c *assetDetailResponseCache) put(assetID string, body []byte) {
 	if c == nil || c.ttl <= 0 {
 		return
 	}
@@ -98,7 +97,6 @@ func (c *assetDetailResponseCache) put(assetID string, body []byte, flags Flags)
 	defer c.mu.Unlock()
 	c.entries[assetID] = &assetDetailEntry{
 		body:     body,
-		flags:    flags,
 		cachedAt: time.Now(),
 	}
 }
@@ -113,13 +111,15 @@ func (c *assetDetailResponseCache) put(assetID string, body []byte, flags Flags)
 
 // renderAssetDetailEnvelope builds the wire bytes for an AssetDetail
 // response and returns them. Mirrors writeJSON / writeEnvelope so
-// the cached body matches the live writeJSON output byte-for-byte
-// (modulo the AsOf timestamp).
+// the cached body matches the live writeJSON output byte-for-byte.
 //
 // Used by the handleAssetGet cache path:
 //   - On cache miss: render to bytes, cache them, write to client.
-//   - On cache hit: read bytes from cache, splice fresh AsOf in,
-//     write to client.
+//   - On cache hit: replay the cached bytes verbatim. The AsOf
+//     timestamp is frozen at render time and served up to ttl stale
+//     — there is no AsOf re-splice (that would require re-parsing the
+//     body); ttl staleness sits well inside the closed-bucket
+//     contract (ADR-0015).
 //
 // Returns the raw envelope bytes (the `Data` field is the
 // AssetDetail).

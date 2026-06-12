@@ -140,6 +140,12 @@ func (s *Server) handleOHLC(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Capture the pre-filter length so Truncated reflects whether the
+	// WINDOW hit the cap — not whether the post-outlier-filter slice
+	// happens to equal it. Mirrors vwap.go; computing it after
+	// FilterOutliers would yield false negatives whenever the filter
+	// dropped any trade. See G2-05.
+	preFilter := len(trades)
 	if sigma > 0 {
 		trades = aggregate.FilterOutliers(trades, sigma)
 	}
@@ -171,7 +177,7 @@ func (s *Server) handleOHLC(w http.ResponseWriter, r *http.Request) {
 		BaseVolume:  bar.BaseVolume.String(),
 		QuoteVolume: bar.QuoteVolume.String(),
 		TradeCount:  bar.TradeCount,
-		Truncated:   len(trades) == maxTradesForOHLC,
+		Truncated:   preFilter == maxTradesForOHLC,
 	}, Flags{Triangulated: triangulated})
 }
 

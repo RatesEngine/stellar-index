@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
+	"sort"
 	"strconv"
 	"time"
 
@@ -225,6 +226,9 @@ func observationsStreamEvent(gen *streaming.Generator, trades []canonical.Trade)
 	for src := range srcSet {
 		srcs = append(srcs, src)
 	}
+	// Map iteration is unordered; sort so the `sources` array is
+	// byte-identical across ticks (the response-equality contract).
+	sort.Strings(srcs)
 
 	body, err := json.Marshal(observationsStreamPayload{
 		Data:    rows,

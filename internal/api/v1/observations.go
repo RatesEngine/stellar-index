@@ -3,6 +3,7 @@ package v1
 import (
 	"context"
 	"net/http"
+	"sort"
 	"time"
 
 	"github.com/RatesEngine/rates-engine/internal/canonical"
@@ -141,6 +142,9 @@ func (s *Server) handleObservations(w http.ResponseWriter, r *http.Request) {
 	for src := range srcSet {
 		srcs = append(srcs, src)
 	}
+	// Map iteration is unordered; sort so the `sources` array is
+	// byte-identical across requests (the response-equality contract).
+	sort.Strings(srcs)
 
 	// Single-source flag: true when exactly one source contributed
 	// (informational). Stale and Frozen stay false on this surface

@@ -9,9 +9,11 @@
 // import xdr (which would bypass the internal/scval wrapper). The
 // one shape, one boundary.
 //
-// Historically this type lived in internal/stellarrpc; stellarrpc
-// now re-exports it via a type alias for the source packages that
-// still run RPC-based consumer loops (to be retired in PR 165d).
+// Historically this type lived in internal/stellarrpc. It now lives
+// here and stellarrpc depends on it (its getEvents response embeds
+// []events.Event) — the old re-export alias and the RPC-based
+// consumer loops it served are gone; stellarrpc is a diagnostics /
+// fixture-capture client only, not a production ingest path.
 package events
 
 import (

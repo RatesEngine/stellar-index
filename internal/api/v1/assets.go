@@ -640,12 +640,11 @@ func (s *Server) handleAssetListExternalNetwork(w http.ResponseWriter, r *http.R
 		return
 	}
 	out := projectCatalogueForNetwork(s.verifiedCurrencies.All(), network)
-	// Offset pagination via cursor=<int>.
-	offset := 0
-	if cursor != "" {
-		if n, err := strconv.Atoi(cursor); err == nil && n > 0 {
-			offset = n
-		}
+	// Offset pagination via cursor=<int>. A malformed cursor 400s
+	// rather than silently restarting at page 1 (G3-10).
+	offset, ok := parseOffsetCursor(w, r, cursor)
+	if !ok {
+		return
 	}
 	if offset >= len(out) {
 		writeJSON(w, []AssetDetail{}, Flags{})
@@ -722,7 +721,7 @@ func (s *Server) handleAssetListFromCatalogue(w http.ResponseWriter, r *http.Req
 	caps := s.computeCatalogueMarketCaps(r.Context(), matched, class)
 	rows := projectCatalogueRows(matched, caps)
 	sortAssetDetailsByMarketCapDesc(rows)
-	writeCataloguePage(w, rows, limit, cursor)
+	writeCataloguePage(w, r, rows, limit, cursor)
 }
 
 // filterCatalogueByNetwork narrows the input slice to entries
@@ -817,15 +816,38 @@ func projectCatalogueRows(matched []*currency.VerifiedCurrency, caps []string) [
 	return rows
 }
 
+// parseOffsetCursor parses an offset-style pagination cursor. The
+// cursor is the integer offset emitted as pagination.next by the
+// catalogue listing paths. An empty cursor means "start at page 1".
+//
+// A non-empty, non-integer (or negative) cursor is a client error:
+// we 400 it rather than silently restarting at page 1, matching the
+// opaque-cursor markets.go pattern (G3-08/G3-10). Silently swallowing
+// it made a typo'd cursor look like a successful first page.
+//
+// Reports ok=false after writing a problem+json on parse failure.
+func parseOffsetCursor(w http.ResponseWriter, r *http.Request, cursor string) (int, bool) {
+	if cursor == "" {
+		return 0, true
+	}
+	n, err := strconv.Atoi(cursor)
+	if err != nil || n < 0 {
+		writeProblem(w, r,
+			"https://api.ratesengine.net/errors/invalid-cursor",
+			"Invalid cursor", http.StatusBadRequest,
+			"cursor must be the integer pagination.next value from a prior response, or omitted to start at page 1.")
+		return 0, false
+	}
+	return n, true
+}
+
 // writeCataloguePage applies offset-cursor pagination + writes the
 // envelope. Catalogue paging is small (≤45 rows per class) so offset
 // is sufficient.
-func writeCataloguePage(w http.ResponseWriter, rows []AssetDetail, limit int, cursor string) {
-	offset := 0
-	if cursor != "" {
-		if n, err := strconv.Atoi(cursor); err == nil && n > 0 {
-			offset = n
-		}
+func writeCataloguePage(w http.ResponseWriter, r *http.Request, rows []AssetDetail, limit int, cursor string) {
+	offset, ok := parseOffsetCursor(w, r, cursor)
+	if !ok {
+		return
 	}
 	if offset >= len(rows) {
 		writeJSON(w, []AssetDetail{}, Flags{})
@@ -1260,8 +1282,8 @@ func (s *Server) handleAssetGet(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, detail, flags)
 		return
 	}
-	s.assetDetailCache.put(cacheKey, body, flags)
-	writeCachedAssetDetail(w, &assetDetailEntry{body: body, flags: flags, cachedAt: time.Now()})
+	s.assetDetailCache.put(cacheKey, body)
+	writeCachedAssetDetail(w, &assetDetailEntry{body: body, cachedAt: time.Now()})
 }
 
 // resolveAssetDetail fetches the AssetDetail for parsed: from the
@@ -1590,10 +1612,12 @@ func (s *Server) applySep1Overlay(ctx context.Context, detail *AssetDetail, asse
 	}
 }
 
-// findMatchingCachedCurrency is the cached-payload twin of
-// [findMatchingCurrency] — same matching rules, walks the
-// [timescale.IssuerSep1Cached] currencies slice instead of the
-// live-fetched [metadata.SEP1].
+// findMatchingCachedCurrency returns the SEP-1 currency entry in a
+// cached issuer payload whose (code, issuer) matches the requested
+// classic asset, or nil when there is no match. Code comparison is
+// case-insensitive; issuer must match exactly. Walks the
+// [timescale.IssuerSep1Cached] currencies slice. (The live-fetched
+// twin that this once mirrored was removed.)
 func findMatchingCachedCurrency(sep *timescale.IssuerSep1Cached, asset canonical.Asset) *timescale.IssuerSep1Currency {
 	if asset.Type != canonical.AssetClassic {
 		return nil

@@ -90,8 +90,22 @@ type Trade struct {
 // ADR-0033 projection reconciliation (aquarius was dropping the 2nd+
 // trade of every multi-pool op). Requires events.Event.EventIndex
 // (threaded in ADR-0033 Phase 1).
+//
+// Panics (Must-style) if either input is negative or exceeds 0xFFFF.
+// This is the PK-collision primitive: silently masking an out-of-range
+// eventIndex (the old `& 0xFFFF`) or letting an out-of-range opIndex
+// shift into the event half would manufacture exactly the trade-ID
+// collisions this function exists to prevent — and a real ledger that
+// ever overflows 16 bits is a decoder bug we want surfaced loudly, not
+// a row silently dropped by ON CONFLICT.
 func FanoutOpIndex(opIndex, eventIndex int) uint32 {
-	return uint32(opIndex)<<16 | (uint32(eventIndex) & 0xFFFF)
+	if opIndex < 0 || opIndex > 0xFFFF {
+		panic(fmt.Sprintf("canonical: FanoutOpIndex opIndex %d out of range [0, 65535]", opIndex))
+	}
+	if eventIndex < 0 || eventIndex > 0xFFFF {
+		panic(fmt.Sprintf("canonical: FanoutOpIndex eventIndex %d out of range [0, 65535]", eventIndex))
+	}
+	return uint32(opIndex)<<16 | uint32(eventIndex)
 }
 
 // ID is the stable unique identifier used as the primary key in the

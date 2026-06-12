@@ -116,3 +116,89 @@ func TestComputeStreak_Up(t *testing.T) {
 		t.Errorf("got dir=%q days=%v, want up/4", dir, days)
 	}
 }
+
+// TestComputeSummary_ATLSkipsZero — a zero (or unparseable) point
+// mid-series must NOT corrupt ATL. Regression for G14-02: the old
+// `|| atlValue == 0` reset turned [100,5,0,90] into ATL=90.
+func TestComputeSummary_ATLSkipsZero(t *testing.T) {
+	now := time.Date(2026, 5, 4, 12, 0, 0, 0, time.UTC)
+	series := []TimedValue{
+		{At: now.Add(-3 * time.Hour), Value: "100"},
+		{At: now.Add(-2 * time.Hour), Value: "5"},
+		{At: now.Add(-1 * time.Hour), Value: "0"}, // bad/zero point
+		{At: now, Value: "90"},
+	}
+	row := computeSummary(Entity{Type: "coin", ID: "x"}, series, now)
+	if row.ATLValue == nil || *row.ATLValue != 5 {
+		t.Errorf("ATL = %v, want 5 (zero point must be skipped, not adopted)", row.ATLValue)
+	}
+	if row.ATHValue == nil || *row.ATHValue != 100 {
+		t.Errorf("ATH = %v, want 100", row.ATHValue)
+	}
+}
+
+// TestComputeAcceleration — direction-agnostic momentum. A steepening
+// downtrend must read "increasing" (momentum building), not "decreasing".
+// Regression for G14-01: signed comparison inverted for negative deltas.
+func TestComputeAcceleration(t *testing.T) {
+	base := time.Date(2026, 5, 4, 12, 0, 0, 0, time.UTC)
+	// build constructs a series from per-step values starting at v0.
+	build := func(v0 float64, steps ...float64) []TimedValue {
+		vals := []float64{v0}
+		for _, s := range steps {
+			vals = append(vals, vals[len(vals)-1]+s)
+		}
+		out := make([]TimedValue, len(vals))
+		for i, v := range vals {
+			out[i] = TimedValue{
+				At:    base.Add(time.Duration(i) * time.Minute),
+				Value: strconv.FormatFloat(v, 'f', -1, 64),
+			}
+		}
+		return out
+	}
+
+	// computeAcceleration compares the last quarter's mean step against
+	// the previous quarter's. With 9 points (8 steps) and q=2 that is
+	// the step ending the series vs the step two-quarters back, so the
+	// cases below vary the LAST step's magnitude relative to an earlier
+	// one. The key regression: a steepening DOWNtrend (more-negative
+	// last step) must read "increasing", not "decreasing".
+	for _, tc := range []struct {
+		name   string
+		series []TimedValue
+		want   string
+	}{
+		{
+			// Last step (+10) much bigger than the earlier baseline (+1).
+			name:   "steepening uptrend → increasing",
+			series: build(100, 1, 1, 1, 1, 1, 1, 1, 10),
+			want:   "increasing",
+		},
+		{
+			// Last step (-10) much more negative than the earlier (-1):
+			// the signed-comparison bug labelled this "decreasing".
+			name:   "steepening downtrend → increasing",
+			series: build(100, -1, -1, -1, -1, -1, -1, -1, -10),
+			want:   "increasing",
+		},
+		{
+			// Earlier step (-10) bigger than the last (-1): momentum waning.
+			name:   "softening downtrend → decreasing",
+			series: build(100, -1, -1, -1, -1, -1, -10, -1, -1),
+			want:   "decreasing",
+		},
+		{
+			// Constant slope — neither accelerating nor decelerating.
+			name:   "steady uptrend → flat",
+			series: build(100, 5, 5, 5, 5, 5, 5, 5, 5),
+			want:   "flat",
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := computeAcceleration(tc.series); got != tc.want {
+				t.Errorf("computeAcceleration = %q, want %q", got, tc.want)
+			}
+		})
+	}
+}

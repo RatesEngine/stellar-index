@@ -182,4 +182,31 @@ func TestFanoutOpIndex(t *testing.T) {
 	if c.FanoutOpIndex(0, 0) != 0 {
 		t.Errorf("c.FanoutOpIndex(0,0) = %d, want 0", c.FanoutOpIndex(0, 0))
 	}
+	// Boundary: 0xFFFF in each half is in range and packs cleanly.
+	if got := c.FanoutOpIndex(0xFFFF, 0xFFFF); got != 0xFFFFFFFF {
+		t.Errorf("c.FanoutOpIndex(0xFFFF,0xFFFF) = %d, want %d", got, uint32(0xFFFFFFFF))
+	}
+}
+
+// TestFanoutOpIndex_OutOfRangePanics — the PK-collision primitive must
+// panic rather than silently mask/wrap an out-of-range input (G18-04).
+func TestFanoutOpIndex_OutOfRangePanics(t *testing.T) {
+	for _, tc := range []struct {
+		name   string
+		op, ev int
+	}{
+		{"op too big", 0x10000, 0},
+		{"event too big", 0, 0x10000},
+		{"op negative", -1, 0},
+		{"event negative", 0, -1},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			defer func() {
+				if recover() == nil {
+					t.Errorf("FanoutOpIndex(%d,%d) did not panic", tc.op, tc.ev)
+				}
+			}()
+			_ = c.FanoutOpIndex(tc.op, tc.ev)
+		})
+	}
 }

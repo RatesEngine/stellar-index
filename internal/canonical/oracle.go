@@ -2,6 +2,7 @@ package canonical
 
 import (
 	"fmt"
+	"math"
 	"math/big"
 	"time"
 )
@@ -136,7 +137,10 @@ func (u OracleUpdate) Validate() error {
 	if u.Decimals > 38 {
 		return fmt.Errorf("%w: decimals %d exceeds NUMERIC precision limit (38)", ErrInvalidOracle, u.Decimals)
 	}
-	if u.Confidence < 0 || u.Confidence > 1 {
+	// NaN slips past the range comparison (every NaN comparison is
+	// false), so reject it explicitly — a NaN confidence would
+	// propagate into divergence_warning float math downstream.
+	if math.IsNaN(u.Confidence) || u.Confidence < 0 || u.Confidence > 1 {
 		return fmt.Errorf("%w: confidence %f out of [0,1]", ErrInvalidOracle, u.Confidence)
 	}
 	// Observer is optional (off-chain sources synthesise it empty),

@@ -3,6 +3,7 @@ package canonical_test
 import (
 	"encoding/json"
 	"errors"
+	"math"
 	"math/big"
 	"testing"
 	"time"
@@ -58,6 +59,7 @@ func TestOracle_Validate_errors(t *testing.T) {
 		"too many decimals": func(u *c.OracleUpdate) { u.Decimals = 40 },
 		"negative conf":     func(u *c.OracleUpdate) { u.Confidence = -0.1 },
 		"conf > 1":          func(u *c.OracleUpdate) { u.Confidence = 1.5 },
+		"NaN conf":          func(u *c.OracleUpdate) { u.Confidence = math.NaN() },
 		// Observer, when present, MUST be a valid G-strkey.
 		"short observer": func(u *c.OracleUpdate) { u.Observer = "GSHORT" },
 		"bad observer": func(u *c.OracleUpdate) {

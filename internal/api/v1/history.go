@@ -575,9 +575,15 @@ func (s *Server) handleHistorySinceInception(w http.ResponseWriter, r *http.Requ
 	// handlers already implement this fallback; without it, since-
 	// inception XLM/USD returns empty while chart/price/VWAP all
 	// surface data. Mirrors `chartStablecoinFallback` shape.
+	triangulated := false
 	if len(points) == 0 {
 		if fp, ok := s.historySinceInceptionStablecoinFallback(hCtx, pair, gran); ok {
 			points = fp
+			// The series was served via the X/<peg> proxy under the
+			// peg≈$1 assumption — that's a triangulated value, exactly
+			// as the chart/price siblings flag it (G2-13). Pre-fix this
+			// path wrote Flags{} and silently hid the proxy.
+			triangulated = true
 		}
 	}
 
@@ -592,7 +598,7 @@ func (s *Server) handleHistorySinceInception(w http.ResponseWriter, r *http.Requ
 		PriceType:   "vwap",
 		Granularity: gran,
 		Points:      wire,
-	}, Flags{})
+	}, Flags{Triangulated: triangulated})
 }
 
 // historySinceInceptionStablecoinFallback walks the operator's

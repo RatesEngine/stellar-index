@@ -660,9 +660,13 @@ func (s *Server) tryStablecoinFiatProxy(ctx context.Context, asset, quote canoni
 			// even though the asset-detail page surfaces an
 			// approximately-$1 enrichment price for the same asset.
 			// Return $1.0 with triangulated=true so the wire shape
-			// is consistent. SingleSource=true because the value
-			// is derived from the peg assumption, not from
-			// VWAP-contributing trades.
+			// is consistent. We return no sources (nil): the value is
+			// derived from the peg assumption, not from VWAP-
+			// contributing trades, so the handler's len(sources)==1
+			// rule leaves SingleSource=false — an empty source set is
+			// not "single-sourced". Flipping the flag would mean
+			// emitting a synthetic source into the wire `sources[]`
+			// array, which we deliberately don't do.
 			snap := PriceSnapshot{
 				AssetID:    asset.String(),
 				Quote:      quote.String(),
@@ -992,11 +996,12 @@ const priceBatchConcurrency = 16
 // batchRowResult is the per-id outcome computed by resolveBatchRow.
 // Exactly one of {ok, skip, fail} characterises a result.
 type batchRowResult struct {
-	snap    PriceSnapshot
-	sources []string
-	stale   bool
-	frozen  bool
-	asset   canonical.Asset
+	snap         PriceSnapshot
+	sources      []string
+	stale        bool
+	frozen       bool
+	triangulated bool
+	asset        canonical.Asset
 
 	ok   bool // a real price row — include in the envelope
 	skip bool // per-asset miss — omit, do NOT 404 the batch
@@ -1055,13 +1060,18 @@ func (s *Server) resolveBatchRow(ctx context.Context, r *http.Request, raw strin
 		// asymmetry caused asset_ids that returned 200 on
 		// /v1/price (e.g. USDT-G…) to be silently dropped from the
 		// batch envelope. R-005 in docs/review-2026-05-10.md.
-		if fs, fsrc, _, ok := s.priceFallback(ctx, asset, quote); ok {
+		if fs, fsrc, ftri, ok := s.priceFallback(ctx, asset, quote); ok {
 			// F-1254: priceFallback responses are by definition below
 			// the closed-bucket VWAP contract (last-trade / proxy /
 			// triangulation). Mark stale so callers can tell the
-			// batch row was a fallback.
+			// batch row was a fallback. Carry the triangulated bool
+			// through too (G2-16): the single-asset /v1/price path
+			// surfaces flags.triangulated for these same fallbacks, so
+			// the batch envelope must OR it in for parity rather than
+			// silently dropping it.
 			return batchRowResult{
-				snap: fs, sources: fsrc, stale: true, asset: asset, ok: true,
+				snap: fs, sources: fsrc, stale: true, triangulated: ftri,
+				asset: asset, ok: true,
 				frozen: s.lookupFrozen(r, asset, quote),
 			}
 		}
@@ -1133,6 +1143,7 @@ func (s *Server) lookupPriceBatch(w http.ResponseWriter, r *http.Request, ids []
 	anyStale := false
 	anyFrozen := false
 	anySingleSource := false
+	anyTriangulated := false
 	for i := range results {
 		row := results[i]
 		if !row.ok {
@@ -1140,6 +1151,9 @@ func (s *Server) lookupPriceBatch(w http.ResponseWriter, r *http.Request, ids []
 		}
 		if row.stale {
 			anyStale = true
+		}
+		if row.triangulated {
+			anyTriangulated = true
 		}
 		for _, src := range row.sources {
 			allSources[src] = struct{}{}
@@ -1171,6 +1185,7 @@ func (s *Server) lookupPriceBatch(w http.ResponseWriter, r *http.Request, ids []
 		Stale:        anyStale,
 		Frozen:       anyFrozen,
 		SingleSource: anySingleSource,
+		Triangulated: anyTriangulated,
 	}, srcs...)
 }
 

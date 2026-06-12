@@ -162,7 +162,8 @@ func (a Asset) IsZero() bool {
 	return a.Type == "" && a.Code == "" && a.Issuer == "" && a.ContractID == ""
 }
 
-// Validate returns nil if a is one of the three valid shapes; an
+// Validate returns nil if a is one of the six valid shapes (see the
+// [Asset] doc: native / classic / soroban / fiat / crypto / rwa); an
 // error otherwise.
 func (a Asset) Validate() error { //nolint:gocognit,gocyclo // dispatch-heavy; one case per AssetType, splitting would reduce linearity
 	switch a.Type {
@@ -224,8 +225,10 @@ func (a Asset) Equal(b Asset) bool {
 		a.ContractID == b.ContractID
 }
 
-// ParseAsset is the inverse of String. Accepts all three canonical
-// forms plus the `<code>:<issuer>` alias for classic assets.
+// ParseAsset is the inverse of String. Accepts all six canonical
+// forms (native / classic / soroban / fiat: / crypto: / rwa:) plus
+// the `<code>:<issuer>` alias for classic assets and the case-
+// insensitive "XLM" alias for native.
 func ParseAsset(s string) (Asset, error) {
 	if s == "" {
 		return Asset{}, fmt.Errorf("%w: empty asset identifier", ErrInvalidAsset)

@@ -17,6 +17,7 @@ import (
 	"context"
 	"errors"
 	"log/slog"
+	"math"
 	"sort"
 	"strconv"
 	"time"
@@ -245,11 +246,19 @@ func computeSummary(ent Entity, series []TimedValue, now time.Time) Row {
 	athValue, athAt := currentVal, current.At
 	atlValue, atlAt := currentVal, current.At
 	for _, p := range series {
-		v, _ := strconv.ParseFloat(p.Value, 64)
+		v, err := strconv.ParseFloat(p.Value, 64)
+		// Skip unparseable or zero points explicitly. A zero (or NaN
+		// from a malformed value) mid-series must not become the ATL:
+		// the previous `|| atlValue == 0` reset corrupted ATL whenever
+		// a single bad/zero point appeared ([100,5,0,90] yielded ATL=90
+		// instead of 5).
+		if err != nil || v == 0 {
+			continue
+		}
 		if v > athValue {
 			athValue, athAt = v, p.At
 		}
-		if v < atlValue || atlValue == 0 {
+		if v < atlValue {
 			atlValue, atlAt = v, p.At
 		}
 	}
@@ -370,9 +379,19 @@ func computeStreak(series []TimedValue) (string, *int) {
 }
 
 // computeAcceleration returns 'increasing' / 'flat' / 'decreasing'
-// based on the sign of the second derivative across the most-recent
-// 24h of the series. Increasing means recent moves are bigger than
-// older moves in the same direction (momentum building).
+// describing whether the MAGNITUDE of recent per-step moves is bigger
+// or smaller than the older moves — i.e. is momentum building. The
+// label is direction-agnostic: a steepening downtrend and a steepening
+// uptrend both report "increasing".
+//
+// We compare the absolute mean per-step delta of the last quarter
+// against the previous quarter with a ±5% deadband. Comparing the
+// signed deltas directly (the previous implementation) inverted for
+// negative trends — a steady downtrend's `last < prev*0.95` branch
+// fired and mislabelled it "decreasing" (and a steepening downtrend,
+// where last is MORE negative than prev, was labelled "decreasing"
+// when momentum was in fact building). Taking magnitudes first fixes
+// both.
 //
 // Defensive: returns empty string if series too short for the
 // comparison. Caller treats empty as NULL.
@@ -386,8 +405,8 @@ func computeAcceleration(series []TimedValue) string {
 	if q < 1 {
 		return ""
 	}
-	last := avgDelta(series[len(series)-q:])
-	prev := avgDelta(series[len(series)-2*q : len(series)-q])
+	last := math.Abs(avgDelta(series[len(series)-q:]))
+	prev := math.Abs(avgDelta(series[len(series)-2*q : len(series)-q]))
 	switch {
 	case last > prev*1.05:
 		return "increasing"

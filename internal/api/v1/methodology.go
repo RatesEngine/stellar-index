@@ -208,13 +208,3 @@ func (s *Server) handleMethodology(w http.ResponseWriter, r *http.Request) {
 
 	writeJSON(w, out, Flags{})
 }
-
-// canonicalFiatUSD is the canonical Asset for the USD fiat side
-// of every stablecoin peg. Hoisted for clarity over inlining
-// `canonical.Asset{Type: canonical.AssetFiat, Code: "USD"}` at
-// each call site.
-//
-// Currently inlined in handleMethodology; exposed as a package
-// var would let other handlers share. Kept as a comment for now
-// to flag the future-cleanup target without a behaviour change.
-var _ = canonical.Asset{Type: canonical.AssetFiat, Code: "USD"}

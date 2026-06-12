@@ -266,7 +266,7 @@ func (c *WebhookStore) EnqueueDelivery(ctx context.Context, d platform.WebhookDe
 // into the future as part of the claim. Any worker that subsequently
 // runs the same query won't see the row (its next_attempt_at is now
 // `now() + 5m`). On successful delivery [MarkDelivered] sets
-// `delivered_at`; on failure [RecordAttemptFailed] writes the
+// `delivered_at`; on failure [MarkAttemptFailed] writes the
 // genuine backoff back into next_attempt_at. If a worker crashes
 // after claiming but before either update, the lease expires after
 // 5 minutes and another worker can pick the row up — that's

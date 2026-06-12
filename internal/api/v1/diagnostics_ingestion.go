@@ -59,20 +59,17 @@ type IngestionDiagnostics struct {
 	Backfill []BackfillDecoderState `json:"backfill"`
 	// BackfillCoverage answers "what fraction of genesis→tip have we
 	// actually processed?" per source. The headline DensityPct (and
-	// covered/expected/earliest/latest) is derived CURSOR-FIRST from
-	// the union of completed backfill-cursor intervals — no trades
-	// scan — so it stays live even mid-backfill when the trades
-	// coverage query is too IO-contended to finish. trade_count is
+	// covered/expected/earliest/latest) is DATA-DERIVED per ADR-0031:
+	// distinct_ledger_count / (tip - genesis + 1), computed by the gap
+	// detector and persisted to source_coverage_snapshots, which the
+	// handler reads as a single cheap row (no trades scan, no cursor
+	// arithmetic). The cursor-derived path was removed in rc.93/94 —
+	// cursors are now an operational journal only. trade_count is
 	// best-effort enrichment from the background trades-scan cache.
 	// SECONDARY to Backfill: `Backfill` shows what backfill *is
 	// doing*; `BackfillCoverage` shows what we've actually walked.
 	BackfillCoverage   []BackfillCoverageRow `json:"backfill_coverage"`
 	BackfillCoverageAt string                `json:"backfill_coverage_as_of,omitempty"`
-	// rawCursors is stashed by fillIngestionBackfill so the cursor-
-	// first buildBackfillCoverage step has access without re-issuing
-	// ListCursors. Unexported + json:"-" so it never leaks to the
-	// wire — purely an in-process scratchpad.
-	rawCursors []timescale.Cursor `json:"-"`
 	// entryCounts is stashed by fillIngestionEntryCounts: the
 	// always-on per-source tally (source_entry_counts) that backs
 	// the `entries` column. Unexported scratchpad, never on the wire.
@@ -91,12 +88,14 @@ type IngestionDiagnostics struct {
 	// field across the filler goroutines.
 	degraded bool `json:"-"`
 	// CAGGCoverage is the time range of prices_1h — the canonical
-	// "long-lived" continuous aggregate. The raw trades hypertable
-	// has a 90-day retention so its MIN(ledger) only reports the
-	// recent window; prices_1h is retained forever (migration 0002)
-	// so its MIN(bucket) is the real "do we have historical OHLC
-	// since genesis?" answer. Powers /v1/chart and the since-
-	// inception history endpoint.
+	// "long-lived" continuous aggregate. It powers /v1/chart and the
+	// since-inception history endpoint. Note that under ADR-0034 the
+	// Postgres trades hypertable is the SERVED tier (recent working
+	// set), so its MIN(ledger) reports only what the served tier holds
+	// — prices_1h is the indefinite OHLC spine (back to 2015), making
+	// its MIN(bucket) the real "do we have historical OHLC since
+	// genesis?" answer; the certified full raw history lives in the
+	// ClickHouse lake.
 	CAGGCoverage CAGGCoverageView  `json:"cagg_coverage"`
 	FXBackfill   FXBackfillState   `json:"fx_backfill"`
 	MarketCap    MarketCapState    `json:"market_cap"`
@@ -613,12 +612,13 @@ func (s *Server) buildIngestionSnapshot(ctx context.Context) IngestionDiagnostic
 	out.MarketCap = projectMarketCapState(s.marketCaps)
 	// The background-refreshed trades-scan snapshot is now ONLY a
 	// best-effort enrichment source (per-source trade_count + the
-	// off-chain CEX/FX rows). The authoritative coverage/density is
-	// derived cursor-first after the parallel fillers run — see
-	// buildBackfillCoverage. Fetching it here (cheap RLock) keeps
-	// the read off the request critical path; an empty/stale cache
-	// no longer blanks the whole snapshot during an all-time
-	// backfill when the trades scan is too IO-contended to finish.
+	// off-chain CEX/FX row presence). The authoritative coverage/
+	// density is DATA-DERIVED (ADR-0031): overlaySourceCoverageV2
+	// reads source_coverage_snapshots after the parallel fillers run.
+	// Fetching the cache here (cheap RLock) keeps the read off the
+	// request critical path; an empty/stale cache no longer blanks the
+	// whole snapshot when the trades scan is too IO-contended to
+	// finish.
 	var cacheRows []timescale.BackfillCoverage
 	if s.backfillCoverage != nil {
 		cacheRows, _ = s.backfillCoverage.Snapshot()
@@ -662,16 +662,11 @@ func (s *Server) buildIngestionSnapshot(ctx context.Context) IngestionDiagnostic
 		out.degraded = true
 	}
 
-	// Build the coverage rows cursor-first now that the parallel
-	// fillers have populated the tip (fillIngestionLedger) and the
-	// raw cursors (fillIngestionBackfill). This is the authoritative
-	// path: density / covered / expected / earliest / latest for
-	// every on-chain source come from the union of completed
-	// backfill cursor intervals — no trades scan — so the snapshot
-	// populates DURING an all-time backfill instead of waiting for
-	// the IO-contended trades-coverage query to finish. cacheRows
-	// now only carries the off-chain row presence; the `entries`
-	// count comes from the always-on tally (out.entryCounts).
+	// Seed the per-source coverage rows now that the parallel fillers
+	// have populated the tip (fillIngestionLedger). buildBackfillCoverage
+	// builds the row skeleton from the cached off-chain row presence +
+	// the always-on entry tally (out.entryCounts); the authoritative
+	// density is overlaid below from the data-derived snapshot table.
 	tip := out.Ledger.LatestLedger
 	out.BackfillCoverage = buildBackfillCoverage(cacheRows, out.entryCounts, tip)
 	// ADR-0031 Phase 2: the data-derived projection IS the headline
@@ -682,13 +677,12 @@ func (s *Server) buildIngestionSnapshot(ctx context.Context) IngestionDiagnostic
 	// post-deploy) the fields remain zero and the status page
 	// renders "Pending" — explicit signal that the detector hasn't
 	// run yet, not a misleading 100% (which is what the
-	// cursor-derived path used to claim).
+	// removed cursor-derived path used to claim).
 	s.overlaySourceCoverageV2(ctx, &out.BackfillCoverage)
 	s.overlayCompleteness(ctx, &out.BackfillCoverage)
 	if len(out.BackfillCoverage) > 0 {
-		// Assembled this request from live cursors — the headline
-		// density is as-of-now, not the (possibly stale/failed)
-		// trades-scan cache time.
+		// Assembled this request — the headline density is as-of-now,
+		// not the (possibly stale/failed) trades-scan cache time.
 		out.BackfillCoverageAt = time.Now().UTC().Format(time.RFC3339)
 	}
 	return out
@@ -884,9 +878,6 @@ func (s *Server) fillIngestionBackfill(ctx context.Context, out *IngestionDiagno
 	}
 	out.Backfill = aggregateBackfill(rows)
 	out.Ledger.LagSeconds = ledgerStreamLagSeconds(rows)
-	// Stash for the post-fillers density-projection step. Cheap —
-	// just a slice of pointers; the recomputation reads it once.
-	out.rawCursors = rows
 }
 
 // fillIngestionFXCoverage type-asserts that the wired FX reader
@@ -915,9 +906,11 @@ func (s *Server) fillIngestionFXCoverage(ctx context.Context, out *IngestionDiag
 }
 
 // fillIngestionCAGGCoverage reads prices_1h's MIN/MAX bucket — the
-// real "do we have historical aggregates" answer (the raw trades
-// table only retains 90 days, but prices_1h is retained forever).
-// Type-asserts through fxHistory since timescale.Store satisfies
+// real "do we have historical aggregates" answer. Under ADR-0034 the
+// Postgres trades table is the served tier (recent working set), so
+// prices_1h (the indefinite OHLC spine) is the right place to read
+// historical span from. Type-asserts through fxHistory since
+// timescale.Store satisfies
 // every reader interface; the assertion gracefully no-ops on test
 // fakes that don't implement CAGGCoverageReader.
 func (s *Server) fillIngestionCAGGCoverage(ctx context.Context, out *IngestionDiagnostics) {

@@ -11,6 +11,6 @@
 //
 // Tests use testcontainers-go to spin a transient Postgres +
 // TimescaleDB container per package, matching the
-// internal/storage/timescale pattern. See store_test.go for the
-// shared fixture.
+// internal/storage/timescale pattern (see the per-store *_test.go
+// files, e.g. apikey_store_test.go).
 package postgresstore

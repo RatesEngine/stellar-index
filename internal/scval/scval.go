@@ -120,9 +120,11 @@ func EncodeArgsAsScVec(b64Args []string) ([]byte, error) {
 // — the schema commits to that exact shape (see EncodeArgsAsScVec)
 // so a mismatch indicates a corrupt row, not a decoder concern.
 //
-// Used by `ratesengine-ops <source>-backfill` subcommands that
-// reconstruct events.Event values from soroban_events rows and
-// feed them back through the live decoders.
+// Used by `ratesengine-ops projector-replay` (and the lake-replay
+// rebuild paths) that reconstruct events.Event values from
+// soroban_events rows and feed them back through the live decoders.
+// (The per-source `<source>-backfill` subcommands this once named
+// were deleted in ADR-0032 Phase 5.)
 func DecodeScVecToArgs(b []byte) ([]string, error) {
 	if len(b) == 0 {
 		return nil, nil
@@ -422,8 +424,9 @@ func AsMap(sv xdr.ScVal) ([]xdr.ScMapEntry, error) {
 }
 
 // MapField looks up a map entry whose key is Symbol(key). Returns
-// the value and true on hit, zero and false on miss — and
-// ErrScValMissingKey wrapped on a hard error if strict=true.
+// the value and true on hit, zero and false on miss. Use
+// [MustMapField] at sites where a miss is a schema violation that
+// should surface ErrScValMissingKey.
 //
 // This is the canonical "decode by field name, not by position"
 // entry point. Per docs/architecture/contract-schema-evolution.md,
