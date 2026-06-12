@@ -13,8 +13,21 @@ func TestGatedMetaFor_blend(t *testing.T) {
 	if !ok {
 		t.Fatal("blend should be a gated source")
 	}
-	if m.Factory != blend.MainnetPoolFactory {
-		t.Errorf("factory=%q want %q", m.Factory, blend.MainnetPoolFactory)
+	// Blend has MORE THAN ONE factory (it was redeployed) — both must be
+	// present, else the missing factory's pools are silently dropped.
+	if len(m.Factories) < 2 {
+		t.Errorf("blend factories=%v, want at least 2 (V1 + V2)", m.Factories)
+	}
+	wantFac := map[string]bool{blend.MainnetPoolFactory: false, blend.MainnetPoolFactoryV1: false}
+	for _, f := range m.Factories {
+		if _, ok := wantFac[f]; ok {
+			wantFac[f] = true
+		}
+	}
+	for f, seen := range wantFac {
+		if !seen {
+			t.Errorf("blend factory set missing %q", f)
+		}
 	}
 	if m.CreationSym != blend.EventDeploy {
 		t.Errorf("creationSym=%q want %q", m.CreationSym, blend.EventDeploy)
@@ -41,8 +54,8 @@ func TestGatedMetaFor_unknown(t *testing.T) {
 	if _, ok := GatedMetaFor("not-a-source"); ok {
 		t.Error("unknown source should not be gated")
 	}
-	if GatedFactory("not-a-source") != "" {
-		t.Error("GatedFactory of unknown source should be empty")
+	if GatedFactories("not-a-source") != nil {
+		t.Error("GatedFactories of unknown source should be nil")
 	}
 }
 

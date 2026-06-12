@@ -12,15 +12,16 @@ import (
 )
 
 // GatedMeta is the per-source description a factory-anchored decoder
-// (ADR-0035) needs to seed its childgate.Registry: the trust-root factory,
-// the topic_0_sym of the factory's creation event (which announces a new
-// child), the factory's genesis ledger (lower bound for the deploy walk),
-// and a constructor that builds the source's decoder with childgate
-// options applied.
+// (ADR-0035) needs to seed its childgate.Registry: the trust-root factory
+// SET (a protocol can have several factories — e.g. Blend was redeployed),
+// the topic_0_sym of the factories' creation event (which announces a new
+// child), the genesis ledger (lower bound for the deploy walk across all
+// factories), and a constructor that builds the source's decoder with
+// childgate options applied.
 type GatedMeta struct {
-	Factory     string // canonical factory C-strkey (gate trust root)
-	CreationSym string // topic_0_sym of the creation event (e.g. "deploy")
-	Genesis     uint32 // factory deploy ledger; lower bound for the fan-out walk
+	Factories   []string // canonical factory C-strkeys (gate trust roots)
+	CreationSym string   // topic_0_sym of the creation event (e.g. "deploy")
+	Genesis     uint32   // earliest factory deploy ledger; lower bound for the walk
 	// NewDecoder builds the source's decoder with the given childgate
 	// options (WithSeed / WithHook). Returned as a dispatcher.Decoder so
 	// the genesis-seed CLI can drive it generically.
@@ -38,7 +39,7 @@ type GatedMeta struct {
 // WASM, no factory namespace — ADR-0035 "Open: Comet").
 var gatedSources = map[string]GatedMeta{
 	blend.SourceName: {
-		Factory:     blend.MainnetPoolFactory,
+		Factories:   blend.MainnetPoolFactories,
 		CreationSym: blend.EventDeploy,
 		Genesis:     blend.FactoryGenesisLedger,
 		NewDecoder:  func(opts ...childgate.Option) dispatcher.Decoder { return blend.NewDecoder(opts...) },
@@ -63,9 +64,9 @@ func GatedSourceNames() []string {
 	return out
 }
 
-// GatedFactory returns the canonical factory C-strkey for a gated source,
-// or "" if the source is not factory-anchored.
-func GatedFactory(source string) string { return gatedSources[source].Factory }
+// GatedFactories returns the canonical factory C-strkey SET for a gated
+// source, or nil if the source is not factory-anchored.
+func GatedFactories(source string) []string { return gatedSources[source].Factories }
 
 // GatedRegistryOptions warms the childgate.Registry for every
 // factory-anchored source from the protocol_contracts table and returns a
@@ -98,17 +99,17 @@ func GatedRegistryOptions(
 		}
 		opts := []childgate.Option{childgate.WithSeed(ids)}
 		if withHook {
-			src, fac := source, meta.Factory // capture per iteration
-			opts = append(opts, childgate.WithHook(func(childID string, firstLedger uint32) {
+			src := source // capture per iteration
+			opts = append(opts, childgate.WithHook(func(childID, factoryID string, firstLedger uint32) {
 				hookTimeout, cancel := context.WithTimeout(hookCtx, upsertHookTimeout)
 				defer cancel()
-				if err := store.UpsertProtocolContract(hookTimeout, src, childID, fac, firstLedger); err != nil {
+				if err := store.UpsertProtocolContract(hookTimeout, src, childID, factoryID, firstLedger); err != nil {
 					logger.Warn("protocol_contracts upsert (live factory creation)",
-						"source", src, "child", childID, "ledger", firstLedger, "err", err)
+						"source", src, "child", childID, "factory", factoryID, "ledger", firstLedger, "err", err)
 				}
 			}))
 		}
-		logger.Info("gated registry warmed", "source", source, "factory", meta.Factory, "children", len(ids))
+		logger.Info("gated registry warmed", "source", source, "factories", meta.Factories, "children", len(ids))
 		out[source] = opts
 	}
 	return out, nil

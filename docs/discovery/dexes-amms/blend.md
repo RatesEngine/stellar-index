@@ -44,6 +44,30 @@ V2 is the current production version.
 
 ## Mainnet addresses (verified 2026-04-22 via stellar.expert API)
 
+> **Multiple pool factories (added 2026-06-12, ADR-0035).** Blend has
+> MORE THAN ONE pool factory on mainnet — the Phase-1 audit recorded only
+> the V2 factory below, but an **earlier factory** also deployed pools
+> that are still live. Empirically verified from the r1 lake: decoding
+> every `deploy` event and keeping the emitters whose body is an
+> `ScVal::Address` (the blend deploy shape) yields exactly two factories,
+> which together deploy 27 pools covering all 9 known auction-emitting
+> pools. The contract-identity gate (ADR-0035) MUST include both, or the
+> earlier factory's pools are silently dropped. Re-run the deploy-graph
+> enumeration if a third factory appears. The complete set lives in
+> `internal/sources/blend.MainnetPoolFactories`.
+
+### Pool Factory V1 (earlier — lake-verified 2026-06-12)
+
+```
+CCZD6ESMOGMPWH2KRO4O7RGTAPGTUPFWFQBELQSS7ZUK63V3TZWETGAG
+```
+
+- First `deploy` at ledger `51,499,915`; 17 pools deployed (range
+  51.5M–55.8M).
+- Deploys 4 of the 9 known auction-emitting pools (CDVQVKOY, CBP7NO6F,
+  CDE65QK2, CAQF5KNO) — exactly the pools the V2-only gate dropped.
+- Emits only `deploy` (pure factory signature), body = pool `Address`.
+
 ### Pool Factory V2
 
 ```
@@ -56,6 +80,8 @@ CDSYOAVXFY7SM5S64IZPPPYB4GVGGLMQVFREPSQQEZVIWXX5R23G4QSU
 - Validation: **verified** against
   `blend-capital/blend-contracts-v2`, package `pool-factory`,
   commit `c19abee5b9be4f49e0cda9057e87d343e5dcc095`.
+- First `deploy` at ledger `56,615,475`; 10 pools deployed (range
+  56.6M–62.9M).
 
 ### Backstop V2
 

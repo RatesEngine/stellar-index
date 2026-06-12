@@ -130,6 +130,40 @@ Soroswap already had the registry (`pairTokens`, seeded from `new_pair`
 for token resolution); the gate extends that existing dependency from
 the swap path to all pair-contract events.
 
+## A protocol can have MORE THAN ONE factory (empirical, 2026-06-12)
+
+The first cut of this ADR (and the Blend implementation) assumed one
+documented factory per protocol. **That is empirically false.** Verifying
+Blend against the r1 lake before deploy found it has **two** pool
+factories — the documented V2 (`CDSYOAVX…`) and an earlier, undocumented
+one (`CCZD6ESM…`) — that *both* deploy live pools. Gating on the single
+documented factory would have silently dropped the earlier factory's 4
+auction-emitting pools (the exact silent-loss this ADR forbids).
+
+Consequences for the model:
+
+- The factory trust root is a **SET**, not a scalar
+  (`childgate.WithFactories`, `MainnetPoolFactories`). The creation-event
+  gate is set membership (`Registry.IsFactory`), and the genesis seed
+  walks **every** factory's creation events.
+- The factory set must be **empirically verified complete**, not taken
+  from discovery docs (which are incomplete). The repeatable method:
+  decode every creation event in the lake (`deploy` / `new_pair` /
+  `create`), keep the emitters whose body matches the protocol's creation
+  shape, and confirm their children cover the protocol's known contracts.
+  For Blend: 2 factories, 27 pools, all 9 active pools accounted for.
+- **Verify each protocol's factory set against the lake before gating it.**
+  The clean provenance sources are unavailable on r1 — `ledger_entry_changes`
+  is empty (ADR-0034 exclusion) and `contract_wasm_history` is unpopulated —
+  so the `deploy`-event graph in `contract_events` is the authoritative
+  source. Factories whose pools were created **before** the lake's earliest
+  ledger (50.4M) can't be enumerated this way and need the WASM-audit
+  contract list instead (e.g. Phoenix, whose factory has zero lake events).
+- The residual risk is an undocumented factory appearing **after**
+  enumeration; mitigated by re-running the deploy-graph enumeration
+  periodically. WASM-hash gating would remove this risk entirely but needs
+  a complete contract→WASM index the lake does not currently provide.
+
 ## Consequences
 
 ### Coverage is now a hard function of registry completeness

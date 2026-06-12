@@ -36,17 +36,28 @@ package childgate
 import "sync"
 
 // Registry is a set of factory-descended child contract IDs (C-strkeys)
-// with an optional live-upsert persistence hook. The zero value is not
-// usable — construct with [New].
+// plus the protocol's factory trust-root set, with an optional live-upsert
+// persistence hook. The zero value is not usable — construct with [New].
+//
+// A protocol may have MORE THAN ONE factory (verified empirically: e.g.
+// Blend was redeployed and has two pool factories — an early one and the
+// documented V2 — that BOTH deploy real pools). Gating the creation event
+// on a single factory would silently drop the other factory's children, so
+// the factory trust root is a SET, not a scalar.
 type Registry struct {
-	mu   sync.RWMutex
-	set  map[string]struct{}
-	hook func(childID string, firstLedger uint32)
+	mu        sync.RWMutex
+	set       map[string]struct{} // discovered children (factory descendants)
+	factories map[string]struct{} // trust roots (hard-coded, verified)
+	hook      func(childID, factoryID string, firstLedger uint32)
 }
 
-// New constructs a Registry, applying any options (WithSeed, WithHook).
+// New constructs a Registry, applying any options (WithFactories, WithSeed,
+// WithHook).
 func New(opts ...Option) *Registry {
-	r := &Registry{set: make(map[string]struct{})}
+	r := &Registry{
+		set:       make(map[string]struct{}),
+		factories: make(map[string]struct{}),
+	}
 	for _, opt := range opts {
 		opt(r)
 	}
@@ -55,6 +66,22 @@ func New(opts ...Option) *Registry {
 
 // Option configures a Registry at construction time.
 type Option func(*Registry)
+
+// WithFactories sets the protocol's factory trust-root set — the contract
+// IDs whose creation events the decoder honors (and from which every child
+// is seeded). This is a verified, hard-coded SET (a protocol can have
+// several factories); see the per-source list in the decoder package. The
+// completeness of this set is load-bearing: a missing factory means its
+// children's events are silently dropped.
+func WithFactories(factoryIDs []string) Option {
+	return func(r *Registry) {
+		for _, id := range factoryIDs {
+			if id != "" {
+				r.factories[id] = struct{}{}
+			}
+		}
+	}
+}
 
 // WithSeed pre-loads the child set from a durable warm (the
 // `protocol_contracts` table). Does NOT fire the persistence hook — these
@@ -71,11 +98,12 @@ func WithSeed(childIDs []string) Option {
 
 // WithHook installs the live-upsert callback fired by Seed whenever a new
 // child is discovered from a factory creation event. The hook receives
-// the child's C-strkey and the ledger of the creation event. Keep it
-// cheap — it runs on the decode path (a queued/timeout-bounded
-// ExecContext is fine; a blocking network call is not). The hook is
-// invoked WITHOUT the registry lock held.
-func WithHook(fn func(childID string, firstLedger uint32)) Option {
+// the child's C-strkey, the C-strkey of the factory that deployed it (for
+// provenance — a protocol can have several factories), and the ledger of
+// the creation event. Keep it cheap — it runs on the decode path (a
+// queued/timeout-bounded ExecContext is fine; a blocking network call is
+// not). The hook is invoked WITHOUT the registry lock held.
+func WithHook(fn func(childID, factoryID string, firstLedger uint32)) Option {
 	return func(r *Registry) { r.hook = fn }
 }
 
@@ -89,13 +117,39 @@ func (r *Registry) Has(contractID string) bool {
 	return ok
 }
 
+// IsFactory reports whether contractID is one of the protocol's trust-root
+// factories. The decoder's Matches() consults this for the creation event
+// (e.g. Blend `deploy`) — only a genuine factory may announce a child, so a
+// foreign contract can't inject one into the registry.
+func (r *Registry) IsFactory(contractID string) bool {
+	r.mu.RLock()
+	_, ok := r.factories[contractID]
+	r.mu.RUnlock()
+	return ok
+}
+
+// Factories returns the protocol's factory trust-root set (sorted-agnostic;
+// callers needing order should sort). Used by the genesis-seed walk to
+// enumerate every factory whose creation events to replay.
+func (r *Registry) Factories() []string {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	out := make([]string, 0, len(r.factories))
+	for id := range r.factories {
+		out = append(out, id)
+	}
+	return out
+}
+
 // Seed registers a child contract (idempotent) and fires the persistence
 // hook (if any). The decoder calls this from Decode when it observes a
-// factory creation event. firstLedger is the ledger of that creation
-// event — recorded for operator visibility / ordering, not used by the
-// gate. The hook fires on every call (idempotent upsert downstream) so a
-// re-observed creation event refreshes the durable row harmlessly.
-func (r *Registry) Seed(childID string, firstLedger uint32) {
+// factory creation event. factoryID is the C-strkey of the factory that
+// deployed the child (the creation event's emitter) — recorded for
+// provenance. firstLedger is the ledger of that creation event — recorded
+// for operator visibility / ordering, not used by the gate. The hook fires
+// on every call (idempotent upsert downstream) so a re-observed creation
+// event refreshes the durable row harmlessly.
+func (r *Registry) Seed(childID, factoryID string, firstLedger uint32) {
 	if childID == "" {
 		return
 	}
@@ -104,7 +158,7 @@ func (r *Registry) Seed(childID string, firstLedger uint32) {
 	hook := r.hook
 	r.mu.Unlock()
 	if hook != nil {
-		hook(childID, firstLedger)
+		hook(childID, factoryID, firstLedger)
 	}
 }
 

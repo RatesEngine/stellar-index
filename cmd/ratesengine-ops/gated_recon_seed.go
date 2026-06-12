@@ -29,12 +29,12 @@ import (
 // The walk is cheap: factory creation events are rare and the
 // (contract_id, topic_0_sym) index on soroban_events serves the filter.
 func preseedFactoryChildren(ctx context.Context, store *timescale.Store, src reconSource, to uint32) error {
-	if src.factory == "" || src.dec == nil {
+	if len(src.factories) == 0 || src.dec == nil {
 		return nil
 	}
 	seeded := 0
 	err := store.StreamSorobanEvents(ctx, src.genesis, to,
-		[]string{src.factory}, []string{src.creationSym}, nil,
+		src.factories, []string{src.creationSym}, nil,
 		func(row sorobanevents.Row) error {
 			ev, rerr := sorobanevents.Reconstruct(row)
 			if rerr != nil {

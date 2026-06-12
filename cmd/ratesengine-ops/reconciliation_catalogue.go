@@ -39,15 +39,16 @@ type reconSource struct {
 	census      bool   // sdex: expected = decoder re-derive over the lake's SDEX ops
 	genesis     uint32 // first-possible-data ledger; mirrors DefaultGapDetectorTargets (WASM-audit sourced)
 
-	// Factory-anchored gating (ADR-0035): when factory != "", dec gates
-	// Matches() on a registry of factory-deployed children, so the
+	// Factory-anchored gating (ADR-0035): when factories is non-empty, dec
+	// gates Matches() on a registry of factory-deployed children, so the
 	// re-derive must seed that registry before counting. A re-derive that
-	// starts at `genesis` self-seeds in-stream (the factory's creation
+	// starts at `genesis` self-seeds in-stream (the factories' creation
 	// events precede every child's events and dec.Decode registers them);
 	// a re-derive over a custom sub-range does NOT, so the caller pre-walks
-	// the factory's creation events via preseedFactoryChildren. creationSym
-	// is the topic_0_sym of the creation event (e.g. blend "deploy").
-	factory     string
+	// every factory's creation events via preseedFactoryChildren. creationSym
+	// is the topic_0_sym of the creation event (e.g. blend "deploy"). A
+	// protocol can have several factories (Blend was redeployed).
+	factories   []string
 	creationSym string
 
 	// Event-less ContractCall sources (band, soroswap-router): no
@@ -122,7 +123,7 @@ func buildReconciliationCatalogue(cfg config.Config) ([]reconSource, *soroswap.D
 		}},
 		{
 			name: "blend", genesis: blend.FactoryGenesisLedger, dec: blend.NewDecoder(),
-			factory: blend.MainnetPoolFactory, creationSym: blend.EventDeploy,
+			factories: blend.MainnetPoolFactories, creationSym: blend.EventDeploy,
 			targets: []reconTarget{
 				{"blend_auctions", "", []string{blend.NewAuctionEventKind, blend.FillAuctionEventKind, blend.DeleteAuctionEventKind}},
 				{"blend_positions", "", []string{blend.PositionEventKind}},

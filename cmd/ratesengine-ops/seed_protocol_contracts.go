@@ -113,10 +113,11 @@ func seedOneGatedSource(ctx context.Context, store *timescale.Store, source stri
 	// Build the source's decoder with a hook that upserts each newly
 	// observed child into protocol_contracts — the SAME persistence path
 	// the live indexer uses, so the genesis walk and live ingest converge
-	// on identical rows.
+	// on identical rows. The factory that deployed each child is supplied by
+	// the decoder (a protocol can have several factories).
 	seeded := 0
-	hook := func(childID string, firstLedger uint32) {
-		if err := store.UpsertProtocolContract(ctx, source, childID, meta.Factory, firstLedger); err != nil {
+	hook := func(childID, factoryID string, firstLedger uint32) {
+		if err := store.UpsertProtocolContract(ctx, source, childID, factoryID, firstLedger); err != nil {
 			fmt.Fprintf(os.Stderr, "seed-protocol-contracts: %s upsert %s failed: %v\n", source, childID, err)
 			return
 		}
@@ -124,8 +125,10 @@ func seedOneGatedSource(ctx context.Context, store *timescale.Store, source stri
 	}
 	dec := meta.NewDecoder(childgate.WithHook(hook))
 
+	// Walk every factory's creation events in one lake scan (filter on the
+	// factory SET — Blend has more than one factory).
 	err := store.StreamSorobanEvents(ctx, meta.Genesis, hi,
-		[]string{meta.Factory}, []string{meta.CreationSym}, nil,
+		meta.Factories, []string{meta.CreationSym}, nil,
 		func(row sorobanevents.Row) error {
 			ev, rerr := sorobanevents.Reconstruct(row)
 			if rerr != nil {

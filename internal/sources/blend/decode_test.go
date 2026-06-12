@@ -16,18 +16,60 @@ import (
 )
 
 // makeDeployEvent builds a Pool-Factory `deploy` event announcing
-// poolAddr — ContractID is the factory (deploy is emitted BY the
-// factory; the new pool is carried in the body), so it passes the
-// ADR-0035 gate.
+// poolAddr from the V2 factory.
 func makeDeployEvent(t *testing.T, poolAddr string) events.Event {
 	t.Helper()
+	return makeDeployEventFrom(t, MainnetPoolFactory, poolAddr)
+}
+
+// makeDeployEventFrom builds a `deploy` event from a specific factory —
+// ContractID is the factory (deploy is emitted BY the factory; the new
+// pool is carried in the body), so it passes the ADR-0035 gate when the
+// factory is in MainnetPoolFactories.
+func makeDeployEventFrom(t *testing.T, factory, poolAddr string) events.Event {
+	t.Helper()
 	return events.Event{
-		ContractID:     MainnetPoolFactory,
+		ContractID:     factory,
 		Topic:          []string{TopicSymbolDeploy},
 		Value:          encodeScVal(t, addressScVal(t, poolAddr)),
 		Ledger:         51_600_000,
 		TxHash:         "blenddeploytx0",
 		LedgerClosedAt: "2026-04-29T12:00:00Z",
+	}
+}
+
+// TestDecoder_MultiFactory pins that BOTH Blend pool factories (the
+// empirically-verified V1 + V2) are honored: a deploy from EITHER
+// registers the pool, and a deploy from a non-factory does not. The V1
+// factory regression is the concrete bug this guards — V2-only gating
+// silently dropped the 4 pools V1 deployed.
+func TestDecoder_MultiFactory(t *testing.T) {
+	if len(MainnetPoolFactories) < 2 {
+		t.Fatalf("expected >=2 Blend factories, got %v", MainnetPoolFactories)
+	}
+	for _, factory := range MainnetPoolFactories {
+		d := NewDecoder()
+		pool := contractStrkeyFromSeed(t, 0x66)
+		supply := events.Event{Topic: []string{TopicSymbolSupply}, ContractID: pool}
+		if d.Matches(supply) {
+			t.Fatalf("pool matched before deploy (factory %s)", factory)
+		}
+		dep := makeDeployEventFrom(t, factory, pool)
+		if !d.Matches(dep) {
+			t.Fatalf("deploy from factory %s did not match", factory)
+		}
+		if _, err := d.Decode(dep); err != nil {
+			t.Fatalf("Decode(deploy from %s): %v", factory, err)
+		}
+		if !d.Matches(supply) {
+			t.Fatalf("pool not registered after deploy from factory %s", factory)
+		}
+	}
+	// A deploy from a contract that is NOT a Blend factory is rejected.
+	d := NewDecoder()
+	notFactory := contractStrkeyFromSeed(t, 0x77)
+	if d.Matches(makeDeployEventFrom(t, notFactory, contractStrkeyFromSeed(t, 0x88))) {
+		t.Error("deploy from a non-factory must not match (registry-injection guard)")
 	}
 }
 

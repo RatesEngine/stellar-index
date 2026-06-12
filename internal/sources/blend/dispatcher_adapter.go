@@ -37,7 +37,11 @@ type Decoder struct {
 // selector but the event surface is currently covered by a single
 // contract version (V2).
 func NewDecoder(opts ...childgate.Option) *Decoder {
-	return &Decoder{reg: childgate.New(opts...)}
+	// The factory trust-root set is intrinsic to the protocol (verified,
+	// hard-coded), so it's always installed first; caller opts (WithSeed /
+	// WithHook) layer the discovered children + persistence on top.
+	base := []childgate.Option{childgate.WithFactories(MainnetPoolFactories)}
+	return &Decoder{reg: childgate.New(append(base, opts...)...)}
 }
 
 // Name implements [dispatcher.Decoder].
@@ -48,9 +52,12 @@ func (*Decoder) Name() string { return SourceName }
 // `supply`/`claim`/`set_admin`/… topic (SACs and other DeFi do) must NOT
 // be attributed to Blend.
 //
-//   - `deploy` matches ONLY when emitted by the canonical Pool Factory.
-//     This is the trust root — without it a foreign contract could inject
-//     a pool into the registry and launder its own events as Blend's.
+//   - `deploy` matches ONLY when emitted by one of the canonical Pool
+//     Factories (MainnetPoolFactories — Blend has MORE THAN ONE; see that
+//     var). This is the trust root — without it a foreign contract could
+//     inject a pool into the registry and launder its own events as
+//     Blend's; with only ONE of the factories it would silently drop the
+//     other factory's pools.
 //   - every other event matches ONLY when emitted by a REGISTERED pool
 //     (a factory descendant). The registry is seeded from factory deploy
 //     events (live + DB warm + genesis walk), so a real pool is always
@@ -60,14 +67,17 @@ func (*Decoder) Name() string { return SourceName }
 // dropped, so registry completeness is a hard requirement. It is
 // guaranteed by the factory `deploy` events themselves living in the lake
 // (substrate-continuous per ADR-0033 Claim 1) — a missing pool would mean
-// a missing factory event, which continuity already rules out.
+// a missing factory event, which continuity already rules out — AND by
+// MainnetPoolFactories being the complete factory set (empirically
+// verified; an undocumented factory is the only residual risk, mitigated
+// by re-running the deploy-graph enumeration).
 func (d *Decoder) Matches(ev events.Event) bool {
 	kind := classifyAny(&ev)
 	if kind == "" {
 		return false
 	}
 	if kind == EventDeploy {
-		return ev.ContractID == MainnetPoolFactory
+		return d.reg.IsFactory(ev.ContractID)
 	}
 	return d.reg.Has(ev.ContractID)
 }
@@ -117,10 +127,11 @@ func (d *Decoder) Decode(ev events.Event) ([]consumer.Event, error) {
 			// the Matches gate. Seed fires the persistence hook, so the
 			// mapping survives a restart even after the projector cursor
 			// advances past this deploy ledger. Matches() already
-			// guaranteed this deploy came from MainnetPoolFactory, so the
-			// Target is a genuine Blend pool.
+			// guaranteed this deploy came from one of MainnetPoolFactories
+			// (e.ContractID), so the Target is a genuine Blend pool and
+			// e.ContractID is the deploying factory (provenance).
 			if e.Kind == EventDeploy && e.Target != "" {
-				d.reg.Seed(e.Target, ev.Ledger)
+				d.reg.Seed(e.Target, e.ContractID, ev.Ledger)
 			}
 		}
 	}

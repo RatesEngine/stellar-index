@@ -83,16 +83,40 @@ const (
 // docs/discovery/dexes-amms/blend.md and the Blend Capital
 // blend-contracts-v2 deploy manifest.
 const (
+	// MainnetPoolFactory is the documented Pool Factory V2. Blend was
+	// REDEPLOYED, so this is not the only factory — see MainnetPoolFactories.
 	MainnetPoolFactory = "CDSYOAVXFY7SM5S64IZPPPYB4GVGGLMQVFREPSQQEZVIWXX5R23G4QSU"
-	MainnetBackstop    = "CAQQR5SWBXKIGZKPBZDH3KM5GQ5GUTPKB7JAFCINLZBC5WXPJKRG3IM7"
+	// MainnetPoolFactoryV1 is the earlier pool factory. Verified empirically
+	// from the r1 lake (2026-06-12): it emits `deploy` events with an
+	// ScVal::Address body (the blend deploy shape) and its children include
+	// 4 of the 9 known auction-emitting Blend pools (CDVQVKOY, CBP7NO6F,
+	// CDE65QK2, CAQF5KNO) — pools the V2-only gate silently dropped. Its
+	// first deploy is at ledger 51_499_915.
+	MainnetPoolFactoryV1 = "CCZD6ESMOGMPWH2KRO4O7RGTAPGTUPFWFQBELQSS7ZUK63V3TZWETGAG"
+	MainnetBackstop      = "CAQQR5SWBXKIGZKPBZDH3KM5GQ5GUTPKB7JAFCINLZBC5WXPJKRG3IM7"
 )
 
-// FactoryGenesisLedger is the first ledger at which the Pool Factory V2
-// could have emitted a `deploy` (its own deploy ledger — 2025-04-14,
-// verified in docs/discovery/dexes-amms/blend.md). The pool-registry
-// genesis seed (ADR-0035) walks the factory's deploy events from here, and
-// the ADR-0033 reconcile uses it as the blend source genesis. No pool can
-// predate the factory, so this is the exact lower bound for the fan-out.
+// MainnetPoolFactories is the COMPLETE, empirically-verified set of Blend
+// pool factories on mainnet (ADR-0035). A protocol can have more than one
+// factory (Blend was redeployed); gating the `deploy` event on a single
+// factory silently drops the other factory's pools. Derived by decoding
+// every `deploy` event in the lake, keeping the emitters whose body is an
+// ScVal::Address (the blend deploy shape), and confirming their children
+// cover all 9 known Blend pools — both factories together deploy 27 pools,
+// all 9 active ones accounted for (verification: decode `deploy` bodies and
+// cross-reference the auction-emitting contracts; re-run if a third factory
+// appears). Order is irrelevant (set membership).
+var MainnetPoolFactories = []string{
+	MainnetPoolFactoryV1,
+	MainnetPoolFactory,
+}
+
+// FactoryGenesisLedger is the first ledger at which ANY Blend pool factory
+// could have emitted a `deploy` — the V1 factory's first deploy
+// (2025-04-14, ledger 51_499_915, rounded down). The pool-registry genesis
+// seed (ADR-0035) walks every factory's deploy events from here, and the
+// ADR-0033 reconcile uses it as the blend source genesis. No pool can
+// predate its factory, so this is the lower bound for the fan-out.
 const FactoryGenesisLedger uint32 = 51_499_546
 
 // Pre-encoded base64 SCVal::Symbol blobs, computed at init via
