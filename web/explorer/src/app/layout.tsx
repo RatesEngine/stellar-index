@@ -8,7 +8,7 @@ import { QueryProvider } from '@/components/QueryProvider';
 const SITE_URL = 'https://stellaratlas.xyz';
 const SITE_NAME = 'Stellar Atlas';
 const SITE_DESCRIPTION =
-  'Comprehensive Stellar-network pricing API. Browse every asset, every pair, every protocol — backed by an independent VWAP across on-chain DEXes, classic SDEX, and major exchanges.';
+  'The protocol explorer for the Stellar network. Every contract, every event, every trade — complete, verified, per-protocol on-chain data, plus an independent VWAP pricing API across on-chain DEXes, classic SDEX, and major exchanges.';
 
 export const metadata: Metadata = {
   metadataBase: new URL(SITE_URL),

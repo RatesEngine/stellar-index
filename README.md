@@ -12,16 +12,27 @@ security review, customer demo, production cutover).
 **License:** Apache-2.0.
 **Tested against:** Stellar pubnet protocol 23 (post-P23 / CAP-67 unified events).
 
-A publicly-accessible, aggregated, real-time and historical price API
-for every Stellar asset — classic and SEP-41 Soroban token.
+**Stellar Atlas is a protocol explorer for the Stellar network** —
+complete, verified, per-protocol on-chain data: every contract, every
+event, every trade, for every major protocol (SDEX, Soroswap, Aquarius,
+Phoenix, Comet, Blend, DeFindex, CCTP, Rozo, and the Reflector / Redstone
+/ Band oracles), captured from a certified raw ledger lake and
+attributed by contract identity (ADR-0035), with per-protocol
+verification pages at [docs/protocols/](docs/protocols/). It is evolving
+toward a comprehensive blockchain explorer for Stellar — classic/native
+and Soroban.
 
-Aggregates on-chain trades from **SDEX, Soroswap, Aquarius, Phoenix,
-Comet**, oracle feeds from **Reflector, Redstone, Band**, plus
-CEX + FX + reference aggregators, into one VWAP-first pricing layer
+Its flagship product is the **pricing API**: publicly-accessible,
+aggregated, real-time and historical prices for every Stellar asset —
+classic and SEP-41 Soroban token. On-chain trades + oracle feeds +
+CEX/FX/reference aggregators fused into one VWAP-first pricing layer
 served at p95 ≤ 200 ms. Full since-inception OHLC. Self-hostable.
 
-Built against the [Stellar Prices API RFP](docs/stellar-rfp.md) and
-the [Freighter asset-detail RFP](docs/freighter-rfp.md).
+The pricing API was built against the
+[Stellar Prices API RFP](docs/stellar-rfp.md) and the
+[Freighter asset-detail RFP](docs/freighter-rfp.md). The project began
+as **Rates Engine**; renamed and repositioned 2026-06-12
+([ADR-0036](docs/adr/0036-stellar-atlas-rebrand.md)).
 
 ---
 

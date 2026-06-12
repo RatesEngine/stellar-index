@@ -7,9 +7,18 @@ repo cold, **this file is your entry point**. Read this first.
 
 ## What this repo is
 
-**Stellar Atlas** is a Stellar-network pricing API. It ingests on-chain
-and off-chain price data, aggregates into VWAP / TWAP / OHLC, and
-serves the result through a public REST + SSE API.
+**Stellar Atlas** (formerly Rates Engine; renamed + repositioned
+2026-06-12, ADR-0036) is a **protocol explorer for the Stellar network**:
+complete, verified, per-protocol on-chain data — every contract, event,
+and trade for every major Stellar protocol — captured from a certified
+raw ledger lake (ADR-0034), verified for completeness (ADR-0033), and
+attributed by contract identity (ADR-0035; per-protocol verification
+pages live in docs/protocols/). Long-term it grows into a comprehensive
+blockchain explorer (classic/native + Soroban).
+
+Its flagship product is the **pricing API**: it ingests on-chain and
+off-chain price data, aggregates into VWAP / TWAP / OHLC, and serves
+the result through a public REST + SSE API.
 
 Built against two customer RFPs ([docs/stellar-rfp.md](docs/stellar-rfp.md),
 [docs/freighter-rfp.md](docs/freighter-rfp.md)) and the awarded

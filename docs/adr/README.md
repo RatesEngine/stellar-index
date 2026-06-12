@@ -77,6 +77,12 @@ See [_template.md](_template.md) for the boilerplate.
 | [0033](0033-completeness-verification-model.md) | Accepted | Completeness verification — substrate continuity, recognition, projection reconciliation | 2026-06-02 |
 | [0034](0034-tiered-clickhouse-architecture.md) | Accepted | Tiered data architecture — ClickHouse raw lake, Postgres served tier (supersedes 0029) | 2026-06-05 |
 | [0035](0035-factory-anchored-contract-gating.md) | Accepted | Factory-anchored contract gating for Soroban decoders (reverses match-broadly/filter-downstream) | 2026-06-12 |
+| [0036](0036-stellar-atlas-rebrand.md) | Accepted | Rebrand to Stellar Atlas; reposition as a protocol explorer | 2026-06-12 |
+
+> **Brand note:** ADRs 0001–0035 predate the Stellar Atlas rebrand
+> (ADR-0036) and intentionally keep the original **Rates Engine** name,
+> module paths, and binary names — they are immutable historical records.
+> The same applies to `docs/discovery/` and `docs/audit-*/`.
 
 ## Related
 

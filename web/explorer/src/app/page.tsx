@@ -20,13 +20,15 @@ export default function HomePage() {
           Independent · open · public-tier free
         </p>
         <h1 className="text-4xl font-semibold tracking-tight md:text-5xl">
-          Pricing for every currency, asset, and market.
+          The protocol explorer for the Stellar network.
         </h1>
         <p className="max-w-2xl text-base text-slate-600 dark:text-slate-400 md:text-lg">
-          Stellar Atlas ingests every trade across CEXes, on-chain DEXes,
-          and lending protocols, and serves a single VWAP through a public
-          REST API — alongside live world fiat rates. Every panel below
-          shows the exact API call that produced it.
+          Stellar Atlas captures every contract, every event, and every
+          trade across Stellar protocols — CEXes, on-chain DEXes, and
+          lending protocols — and serves verified per-protocol data plus a
+          single VWAP price through a public REST API, alongside live world
+          fiat rates. Every panel below shows the exact API call that
+          produced it.
         </p>
         <div className="flex flex-wrap gap-3 pt-2">
           <Link
