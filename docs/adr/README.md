@@ -76,6 +76,7 @@ See [_template.md](_template.md) for the boilerplate.
 | [0032](0032-per-source-tables-as-projections.md) | Accepted | Per-source tables are projections of soroban_events | 2026-05-29 |
 | [0033](0033-completeness-verification-model.md) | Accepted | Completeness verification — substrate continuity, recognition, projection reconciliation | 2026-06-02 |
 | [0034](0034-tiered-clickhouse-architecture.md) | Accepted | Tiered data architecture — ClickHouse raw lake, Postgres served tier (supersedes 0029) | 2026-06-05 |
+| [0035](0035-factory-anchored-contract-gating.md) | Accepted | Factory-anchored contract gating for Soroban decoders (reverses match-broadly/filter-downstream) | 2026-06-12 |
 
 ## Related
 

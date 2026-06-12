@@ -270,13 +270,16 @@ linked doc first.
   requires grouping all 8. →
   [docs/discovery/dexes-amms/phoenix.md](docs/discovery/dexes-amms/phoenix.md)
 - **Comet uses a shared `("POOL", <event>)` topic across every pool
-  contract**, not a per-protocol namespace. The decoder matches by
-  topic bytes, not pool contract ID — any pubnet contract that
+  contract**, not a per-protocol namespace. Any pubnet contract that
   deploys Balancer-v1 Comet code will look identical on the wire.
-  Operators who want narrow coverage (e.g. only Blend's backstop
-  pool) filter downstream by `Trade.Source = "comet"` +
-  contract-address context rather than at dispatch time. →
-  [docs/discovery/dexes-amms/comet.md](docs/discovery/dexes-amms/comet.md)
+  **As of ADR-0035, decoders gate `Matches()` on contract identity, not
+  topic bytes** — but Comet has no factory namespace to anchor on, so it
+  is the one open case: it adopts an operator-configured pool allowlist
+  or a WASM-hash gate rather than the factory-fan-out model the other
+  Soroban decoders use. Until that lands, narrow coverage is still a
+  downstream filter on `Trade.Source = "comet"` + contract address. →
+  [docs/discovery/dexes-amms/comet.md](docs/discovery/dexes-amms/comet.md),
+  [docs/adr/0035-factory-anchored-contract-gating.md](docs/adr/0035-factory-anchored-contract-gating.md)
 - **Reflector v3 has no on-chain `twap` or `x_*` methods.**
   Proposal says it does; it doesn't. We compute TWAP and cross-pair
   locally. →
