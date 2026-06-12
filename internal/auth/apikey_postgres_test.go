@@ -15,9 +15,9 @@ import (
 	"github.com/google/uuid"
 	"github.com/redis/go-redis/v9"
 
-	"github.com/RatesEngine/rates-engine/internal/auth"
-	"github.com/RatesEngine/rates-engine/internal/cachekeys"
-	"github.com/RatesEngine/rates-engine/internal/platform"
+	"github.com/StellarAtlas/stellar-atlas/internal/auth"
+	"github.com/StellarAtlas/stellar-atlas/internal/cachekeys"
+	"github.com/StellarAtlas/stellar-atlas/internal/platform"
 )
 
 func TestPostgresValidator_HappyPath_PostgresHit(t *testing.T) {

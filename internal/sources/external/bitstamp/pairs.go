@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/RatesEngine/rates-engine/internal/canonical"
+	"github.com/StellarAtlas/stellar-atlas/internal/canonical"
 )
 
 // DefaultPairs returns the Bitstamp symbol → canonical.Pair map for

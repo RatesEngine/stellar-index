@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/RatesEngine/rates-engine/internal/canonical"
+	"github.com/StellarAtlas/stellar-atlas/internal/canonical"
 )
 
 // TestQuoteIsUSDOrUSDPegged covers the predicate's three branches:

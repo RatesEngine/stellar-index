@@ -10,7 +10,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/lib/pq"
 
-	"github.com/RatesEngine/rates-engine/internal/platform"
+	"github.com/StellarAtlas/stellar-atlas/internal/platform"
 )
 
 // WebhookStore implements [platform.WebhookStore] against the

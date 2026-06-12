@@ -6,7 +6,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	mw "github.com/RatesEngine/rates-engine/internal/api/v1/middleware"
+	mw "github.com/StellarAtlas/stellar-atlas/internal/api/v1/middleware"
 )
 
 // flushSpy is the test fixture: a ResponseWriter that also implements

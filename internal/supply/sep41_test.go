@@ -6,8 +6,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/RatesEngine/rates-engine/internal/canonical"
-	"github.com/RatesEngine/rates-engine/internal/supply"
+	"github.com/StellarAtlas/stellar-atlas/internal/canonical"
+	"github.com/StellarAtlas/stellar-atlas/internal/supply"
 )
 
 // validContractID is a real, valid C-strkey we use across tests; the

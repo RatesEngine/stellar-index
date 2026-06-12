@@ -7,7 +7,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/RatesEngine/rates-engine/internal/canonical"
+	"github.com/StellarAtlas/stellar-atlas/internal/canonical"
 )
 
 // CometLiquidityKind discriminates the four Comet liquidity-mutating

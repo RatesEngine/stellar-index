@@ -12,7 +12,7 @@ import (
 	"testing"
 	"time"
 
-	v1 "github.com/RatesEngine/rates-engine/internal/api/v1"
+	v1 "github.com/StellarAtlas/stellar-atlas/internal/api/v1"
 )
 
 // stubCheck is a ReadyChecker that returns a configurable error.
@@ -549,7 +549,7 @@ func TestSecurityTxt(t *testing.T) {
 		"Contact: mailto:security@ratesengine.net",
 		"Expires: ",
 		"Canonical: https://ratesengine.net/.well-known/security.txt",
-		"Policy: https://github.com/RatesEngine/rates-engine/blob/main/SECURITY.md",
+		"Policy: https://github.com/StellarAtlas/stellar-atlas/blob/main/SECURITY.md",
 	} {
 		if !strings.Contains(s, want) {
 			t.Errorf("body missing %q", want)

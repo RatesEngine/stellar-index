@@ -7,7 +7,7 @@ import (
 	"fmt"
 	"math/big"
 
-	"github.com/RatesEngine/rates-engine/internal/sources/blend"
+	"github.com/StellarAtlas/stellar-atlas/internal/sources/blend"
 )
 
 // InsertBlendPositionEvent appends one money-market position-change

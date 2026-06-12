@@ -8,7 +8,7 @@ import (
 
 	"gopkg.in/yaml.v3"
 
-	"github.com/RatesEngine/rates-engine/internal/canonical"
+	"github.com/StellarAtlas/stellar-atlas/internal/canonical"
 )
 
 // TestOpenAPIExamplesParseAsCanonicalAssets walks the OpenAPI spec

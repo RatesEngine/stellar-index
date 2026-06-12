@@ -10,9 +10,9 @@ import (
 	"github.com/stellar/go-stellar-sdk/strkey"
 	"github.com/stellar/go-stellar-sdk/xdr"
 
-	"github.com/RatesEngine/rates-engine/internal/events"
-	"github.com/RatesEngine/rates-engine/internal/scval"
-	"github.com/RatesEngine/rates-engine/internal/sources/childgate"
+	"github.com/StellarAtlas/stellar-atlas/internal/events"
+	"github.com/StellarAtlas/stellar-atlas/internal/scval"
+	"github.com/StellarAtlas/stellar-atlas/internal/sources/childgate"
 )
 
 // makeDeployEvent builds a Pool-Factory `deploy` event announcing

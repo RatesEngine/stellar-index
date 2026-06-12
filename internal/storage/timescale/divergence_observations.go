@@ -5,7 +5,7 @@ import (
 	"database/sql"
 	"fmt"
 
-	"github.com/RatesEngine/rates-engine/internal/divergence"
+	"github.com/StellarAtlas/stellar-atlas/internal/divergence"
 )
 
 // LedgerProvider is defined by freeze_events.go (#560 landed first).

@@ -8,8 +8,8 @@ import (
 	"sort"
 	"time"
 
-	"github.com/RatesEngine/rates-engine/internal/config"
-	"github.com/RatesEngine/rates-engine/internal/storage/clickhouse"
+	"github.com/StellarAtlas/stellar-atlas/internal/config"
+	"github.com/StellarAtlas/stellar-atlas/internal/storage/clickhouse"
 )
 
 // chSupply derives total supply for EVERY token from the ClickHouse lake by

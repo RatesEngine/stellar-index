@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/RatesEngine/rates-engine/internal/storage/timescale"
+	"github.com/StellarAtlas/stellar-atlas/internal/storage/timescale"
 )
 
 // ledgerHashFor builds a deterministic 32-byte hash for a sequence so

@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/RatesEngine/rates-engine/internal/config"
+	"github.com/StellarAtlas/stellar-atlas/internal/config"
 )
 
 func TestValidate_DefaultPasses(t *testing.T) {

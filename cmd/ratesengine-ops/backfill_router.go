@@ -13,11 +13,11 @@ import (
 
 	sdkxdr "github.com/stellar/go-stellar-sdk/xdr"
 
-	"github.com/RatesEngine/rates-engine/internal/config"
-	"github.com/RatesEngine/rates-engine/internal/dispatcher"
-	"github.com/RatesEngine/rates-engine/internal/ledgerstream"
-	soroswap_router "github.com/RatesEngine/rates-engine/internal/sources/soroswap_router"
-	"github.com/RatesEngine/rates-engine/internal/storage/timescale"
+	"github.com/StellarAtlas/stellar-atlas/internal/config"
+	"github.com/StellarAtlas/stellar-atlas/internal/dispatcher"
+	"github.com/StellarAtlas/stellar-atlas/internal/ledgerstream"
+	soroswap_router "github.com/StellarAtlas/stellar-atlas/internal/sources/soroswap_router"
+	"github.com/StellarAtlas/stellar-atlas/internal/storage/timescale"
 )
 
 // backfillRouter walks Galexie ledger metadata for a range and

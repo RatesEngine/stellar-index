@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/RatesEngine/rates-engine/internal/sources/sorobanevents"
-	"github.com/RatesEngine/rates-engine/internal/storage/timescale"
+	"github.com/StellarAtlas/stellar-atlas/internal/sources/sorobanevents"
+	"github.com/StellarAtlas/stellar-atlas/internal/storage/timescale"
 )
 
 // preseedFactoryChildren seeds a factory-anchored reconcile source's

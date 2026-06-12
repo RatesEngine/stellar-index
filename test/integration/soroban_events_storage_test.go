@@ -10,8 +10,8 @@ import (
 
 	"github.com/stellar/go-stellar-sdk/strkey"
 
-	"github.com/RatesEngine/rates-engine/internal/sources/sorobanevents"
-	"github.com/RatesEngine/rates-engine/internal/storage/timescale"
+	"github.com/StellarAtlas/stellar-atlas/internal/sources/sorobanevents"
+	"github.com/StellarAtlas/stellar-atlas/internal/storage/timescale"
 )
 
 // TestSorobanEventsBatchInsert exercises the

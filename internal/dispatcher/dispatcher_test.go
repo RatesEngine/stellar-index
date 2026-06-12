@@ -6,10 +6,10 @@ import (
 
 	"github.com/stellar/go-stellar-sdk/xdr"
 
-	"github.com/RatesEngine/rates-engine/internal/canonical/discovery"
-	"github.com/RatesEngine/rates-engine/internal/consumer"
-	"github.com/RatesEngine/rates-engine/internal/events"
-	"github.com/RatesEngine/rates-engine/internal/scval"
+	"github.com/StellarAtlas/stellar-atlas/internal/canonical/discovery"
+	"github.com/StellarAtlas/stellar-atlas/internal/consumer"
+	"github.com/StellarAtlas/stellar-atlas/internal/events"
+	"github.com/StellarAtlas/stellar-atlas/internal/scval"
 )
 
 // ─── test-only decoder implementation ────────────────────────────

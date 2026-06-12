@@ -4,7 +4,7 @@ import (
 	"math"
 	"testing"
 
-	"github.com/RatesEngine/rates-engine/internal/aggregate/confidence"
+	"github.com/StellarAtlas/stellar-atlas/internal/aggregate/confidence"
 )
 
 func near(a, b, tol float64) bool {

@@ -6,8 +6,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/RatesEngine/rates-engine/internal/obs"
-	"github.com/RatesEngine/rates-engine/internal/storage/timescale"
+	"github.com/StellarAtlas/stellar-atlas/internal/obs"
+	"github.com/StellarAtlas/stellar-atlas/internal/storage/timescale"
 )
 
 // CachedIssuersReader wraps an [IssuersReader] with a per-process

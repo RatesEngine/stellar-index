@@ -10,11 +10,11 @@ import (
 	"strings"
 	"time"
 
-	"github.com/RatesEngine/rates-engine/internal/config"
-	"github.com/RatesEngine/rates-engine/internal/pipeline"
-	"github.com/RatesEngine/rates-engine/internal/sources/childgate"
-	"github.com/RatesEngine/rates-engine/internal/sources/sorobanevents"
-	"github.com/RatesEngine/rates-engine/internal/storage/timescale"
+	"github.com/StellarAtlas/stellar-atlas/internal/config"
+	"github.com/StellarAtlas/stellar-atlas/internal/pipeline"
+	"github.com/StellarAtlas/stellar-atlas/internal/sources/childgate"
+	"github.com/StellarAtlas/stellar-atlas/internal/sources/sorobanevents"
+	"github.com/StellarAtlas/stellar-atlas/internal/storage/timescale"
 )
 
 // seedProtocolContracts is the genesis bootstrap for a factory-anchored

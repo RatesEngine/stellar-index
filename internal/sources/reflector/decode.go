@@ -5,10 +5,10 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/RatesEngine/rates-engine/internal/canonical"
-	"github.com/RatesEngine/rates-engine/internal/events"
-	"github.com/RatesEngine/rates-engine/internal/obs"
-	"github.com/RatesEngine/rates-engine/internal/scval"
+	"github.com/StellarAtlas/stellar-atlas/internal/canonical"
+	"github.com/StellarAtlas/stellar-atlas/internal/events"
+	"github.com/StellarAtlas/stellar-atlas/internal/obs"
+	"github.com/StellarAtlas/stellar-atlas/internal/scval"
 )
 
 // opIndexFanoutStride spaces the synthetic op_index values emitted

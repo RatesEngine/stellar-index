@@ -6,7 +6,7 @@ package main
 import (
 	"testing"
 
-	"github.com/RatesEngine/rates-engine/internal/config"
+	"github.com/StellarAtlas/stellar-atlas/internal/config"
 )
 
 // TestNewBoundedLedgerStreamConfig_TolerateTrailingMissingDefault is the

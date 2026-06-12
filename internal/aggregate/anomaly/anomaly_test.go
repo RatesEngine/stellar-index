@@ -4,8 +4,8 @@ import (
 	"math/big"
 	"testing"
 
-	"github.com/RatesEngine/rates-engine/internal/aggregate/anomaly"
-	"github.com/RatesEngine/rates-engine/internal/canonical"
+	"github.com/StellarAtlas/stellar-atlas/internal/aggregate/anomaly"
+	"github.com/StellarAtlas/stellar-atlas/internal/canonical"
 )
 
 // rat is a small helper so the test cases read like prices.

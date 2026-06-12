@@ -10,10 +10,10 @@ import (
 
 	"github.com/prometheus/client_golang/prometheus/testutil"
 
-	"github.com/RatesEngine/rates-engine/internal/cachekeys"
-	"github.com/RatesEngine/rates-engine/internal/canonical"
-	"github.com/RatesEngine/rates-engine/internal/obs"
-	"github.com/RatesEngine/rates-engine/internal/storage/timescale"
+	"github.com/StellarAtlas/stellar-atlas/internal/cachekeys"
+	"github.com/StellarAtlas/stellar-atlas/internal/canonical"
+	"github.com/StellarAtlas/stellar-atlas/internal/obs"
+	"github.com/StellarAtlas/stellar-atlas/internal/storage/timescale"
 )
 
 // fakeFXStore is a minimal in-memory FXStore for unit tests. Records

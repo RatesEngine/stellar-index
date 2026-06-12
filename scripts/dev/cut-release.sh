@@ -133,7 +133,7 @@ if [[ "$DRY_RUN" == "--dry-run" ]]; then
   echo "  git push origin $TAG"
   echo ""
   echo "Then release.yml would fire and produce a GitHub Release at:"
-  echo "  https://github.com/RatesEngine/rates-engine/releases/tag/$TAG"
+  echo "  https://github.com/StellarAtlas/stellar-atlas/releases/tag/$TAG"
   exit 0
 fi
 
@@ -165,4 +165,4 @@ esac
 echo ""
 echo "Tag $TAG pushed. release.yml will fire shortly."
 echo "Track progress: gh run list --workflow release.yml --limit 5"
-echo "Release page:   https://github.com/RatesEngine/rates-engine/releases/tag/$TAG"
+echo "Release page:   https://github.com/StellarAtlas/stellar-atlas/releases/tag/$TAG"

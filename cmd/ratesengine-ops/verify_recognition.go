@@ -8,10 +8,10 @@ import (
 	"os"
 	"time"
 
-	"github.com/RatesEngine/rates-engine/internal/completeness"
-	"github.com/RatesEngine/rates-engine/internal/config"
-	"github.com/RatesEngine/rates-engine/internal/pipeline"
-	"github.com/RatesEngine/rates-engine/internal/storage/timescale"
+	"github.com/StellarAtlas/stellar-atlas/internal/completeness"
+	"github.com/StellarAtlas/stellar-atlas/internal/config"
+	"github.com/StellarAtlas/stellar-atlas/internal/pipeline"
+	"github.com/StellarAtlas/stellar-atlas/internal/storage/timescale"
 )
 
 // verifyRecognition implements ADR-0033 Claim 2a (recognition): it

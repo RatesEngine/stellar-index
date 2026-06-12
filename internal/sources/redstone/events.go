@@ -35,7 +35,7 @@ package redstone
 import (
 	"errors"
 
-	"github.com/RatesEngine/rates-engine/internal/scval"
+	"github.com/StellarAtlas/stellar-atlas/internal/scval"
 )
 
 // SourceName is the canonical string stamped on every OracleUpdate

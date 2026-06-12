@@ -4,7 +4,7 @@ import (
 	"context"
 	"math/big"
 
-	"github.com/RatesEngine/rates-engine/internal/canonical"
+	"github.com/StellarAtlas/stellar-atlas/internal/canonical"
 )
 
 // MetadataResolver is the read-side interface the [Overlay]

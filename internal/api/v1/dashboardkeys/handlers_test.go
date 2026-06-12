@@ -16,8 +16,8 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/RatesEngine/rates-engine/internal/api/v1/dashboardauth"
-	"github.com/RatesEngine/rates-engine/internal/platform"
+	"github.com/StellarAtlas/stellar-atlas/internal/api/v1/dashboardauth"
+	"github.com/StellarAtlas/stellar-atlas/internal/platform"
 )
 
 // Tests use a session pre-planted on the request context (via

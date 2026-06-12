@@ -1,6 +1,6 @@
 package accounts
 
-import "github.com/RatesEngine/rates-engine/internal/consumer"
+import "github.com/StellarAtlas/stellar-atlas/internal/consumer"
 
 // EventKind / Source on Observation implement [consumer.Event] so
 // the observer's outputs flow through the standard dispatcher →

@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/RatesEngine/rates-engine/internal/canonical"
+	"github.com/StellarAtlas/stellar-atlas/internal/canonical"
 )
 
 // Streamer.Start has two synchronous reject paths that don't touch

@@ -11,8 +11,8 @@ import (
 	"github.com/alicebob/miniredis/v2"
 	"github.com/redis/go-redis/v9"
 
-	"github.com/RatesEngine/rates-engine/internal/cachekeys"
-	"github.com/RatesEngine/rates-engine/internal/metadata"
+	"github.com/StellarAtlas/stellar-atlas/internal/cachekeys"
+	"github.com/StellarAtlas/stellar-atlas/internal/metadata"
 )
 
 func newCacheRedis(t *testing.T) (*redis.Client, *miniredis.Miniredis) {

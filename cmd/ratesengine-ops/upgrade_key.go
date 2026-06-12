@@ -8,9 +8,9 @@ import (
 	"os"
 	"time"
 
-	"github.com/RatesEngine/rates-engine/internal/auth"
-	"github.com/RatesEngine/rates-engine/internal/config"
-	"github.com/RatesEngine/rates-engine/internal/storage/redisclient"
+	"github.com/StellarAtlas/stellar-atlas/internal/auth"
+	"github.com/StellarAtlas/stellar-atlas/internal/config"
+	"github.com/StellarAtlas/stellar-atlas/internal/storage/redisclient"
 )
 
 // upgradeKey lifts (or lowers) the per-minute rate-limit on an

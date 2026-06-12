@@ -8,7 +8,7 @@ import (
 
 	"github.com/redis/go-redis/v9"
 
-	"github.com/RatesEngine/rates-engine/internal/obs"
+	"github.com/StellarAtlas/stellar-atlas/internal/obs"
 )
 
 // RedisSubscriber is the subset of the Redis client surface

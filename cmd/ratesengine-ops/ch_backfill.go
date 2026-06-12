@@ -12,9 +12,9 @@ import (
 	sdkxdr "github.com/stellar/go-stellar-sdk/xdr"
 	"golang.org/x/sync/errgroup"
 
-	"github.com/RatesEngine/rates-engine/internal/config"
-	"github.com/RatesEngine/rates-engine/internal/ledgerstream"
-	"github.com/RatesEngine/rates-engine/internal/storage/clickhouse"
+	"github.com/StellarAtlas/stellar-atlas/internal/config"
+	"github.com/StellarAtlas/stellar-atlas/internal/ledgerstream"
+	"github.com/StellarAtlas/stellar-atlas/internal/storage/clickhouse"
 )
 
 // runCHBackfill walks a bounded ledger range from galexie and writes the

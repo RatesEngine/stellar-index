@@ -13,9 +13,9 @@ import (
 	"github.com/stellar/go-stellar-sdk/ingest"
 	sdkxdr "github.com/stellar/go-stellar-sdk/xdr"
 
-	"github.com/RatesEngine/rates-engine/internal/config"
-	"github.com/RatesEngine/rates-engine/internal/ledgerstream"
-	"github.com/RatesEngine/rates-engine/internal/sources/sdex"
+	"github.com/StellarAtlas/stellar-atlas/internal/config"
+	"github.com/StellarAtlas/stellar-atlas/internal/ledgerstream"
+	"github.com/StellarAtlas/stellar-atlas/internal/sources/sdex"
 )
 
 // sdexClaimAudit walks a ledger range and runs every classic-DEX claim atom

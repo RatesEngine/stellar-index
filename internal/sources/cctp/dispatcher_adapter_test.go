@@ -6,8 +6,8 @@ import (
 
 	"github.com/stellar/go-stellar-sdk/xdr"
 
-	"github.com/RatesEngine/rates-engine/internal/consumer"
-	"github.com/RatesEngine/rates-engine/internal/events"
+	"github.com/StellarAtlas/stellar-atlas/internal/consumer"
+	"github.com/StellarAtlas/stellar-atlas/internal/events"
 )
 
 // depositForBurnEvent builds a complete, well-formed deposit_for_burn

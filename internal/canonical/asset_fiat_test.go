@@ -4,7 +4,7 @@ import (
 	"errors"
 	"testing"
 
-	c "github.com/RatesEngine/rates-engine/internal/canonical"
+	c "github.com/StellarAtlas/stellar-atlas/internal/canonical"
 )
 
 // TestIsKnownFiat_AllowList exercises the ADR-0010 allow-list. Each

@@ -4,8 +4,8 @@ import (
 	"log/slog"
 	"net/http"
 
-	"github.com/RatesEngine/rates-engine/internal/auth"
-	"github.com/RatesEngine/rates-engine/internal/usage"
+	"github.com/StellarAtlas/stellar-atlas/internal/auth"
+	"github.com/StellarAtlas/stellar-atlas/internal/usage"
 )
 
 // UsageTracker records per-request daily counters keyed on the

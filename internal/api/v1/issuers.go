@@ -10,7 +10,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/RatesEngine/rates-engine/internal/storage/timescale"
+	"github.com/StellarAtlas/stellar-atlas/internal/storage/timescale"
 )
 
 // IssuersReader is the seam the issuer handlers read through.

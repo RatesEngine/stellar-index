@@ -22,8 +22,8 @@ import (
 	"log/slog"
 	"time"
 
-	"github.com/RatesEngine/rates-engine/internal/dispatcher"
-	"github.com/RatesEngine/rates-engine/internal/storage/timescale"
+	"github.com/StellarAtlas/stellar-atlas/internal/dispatcher"
+	"github.com/StellarAtlas/stellar-atlas/internal/storage/timescale"
 )
 
 // StatsSource is the seam the flusher reads from. The Dispatcher

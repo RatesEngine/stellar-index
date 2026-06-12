@@ -31,7 +31,7 @@ import (
 	_ "github.com/golang-migrate/migrate/v4/database/postgres"
 	_ "github.com/golang-migrate/migrate/v4/source/file"
 
-	"github.com/RatesEngine/rates-engine/internal/version"
+	"github.com/StellarAtlas/stellar-atlas/internal/version"
 )
 
 func main() { //nolint:gocognit,gocyclo // dispatch-heavy; splitting would reduce linearity

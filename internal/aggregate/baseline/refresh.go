@@ -8,7 +8,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/RatesEngine/rates-engine/internal/canonical"
+	"github.com/StellarAtlas/stellar-atlas/internal/canonical"
 )
 
 // DefaultWindow is the size of the rolling training window per

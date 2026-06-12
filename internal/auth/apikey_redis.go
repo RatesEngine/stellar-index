@@ -11,7 +11,7 @@ import (
 
 	"github.com/redis/go-redis/v9"
 
-	"github.com/RatesEngine/rates-engine/internal/cachekeys"
+	"github.com/StellarAtlas/stellar-atlas/internal/cachekeys"
 )
 
 // RedisAPIKeyValidator implements [APIKeyValidator] backed by Redis.

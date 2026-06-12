@@ -3,9 +3,9 @@ package sdex
 import (
 	"github.com/stellar/go-stellar-sdk/xdr"
 
-	"github.com/RatesEngine/rates-engine/internal/canonical"
-	"github.com/RatesEngine/rates-engine/internal/consumer"
-	"github.com/RatesEngine/rates-engine/internal/dispatcher"
+	"github.com/StellarAtlas/stellar-atlas/internal/canonical"
+	"github.com/StellarAtlas/stellar-atlas/internal/consumer"
+	"github.com/StellarAtlas/stellar-atlas/internal/dispatcher"
 )
 
 // Decoder is the dispatcher-facing OpDecoder for classic SDEX

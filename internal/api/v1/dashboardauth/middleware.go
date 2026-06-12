@@ -10,7 +10,7 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/RatesEngine/rates-engine/internal/platform"
+	"github.com/StellarAtlas/stellar-atlas/internal/platform"
 )
 
 // touchTimeout caps the async TouchSession write — this is a

@@ -12,7 +12,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/RatesEngine/rates-engine/internal/canonical"
+	"github.com/StellarAtlas/stellar-atlas/internal/canonical"
 )
 
 // RESTEndpoint is the Binance Spot REST API base for klines +

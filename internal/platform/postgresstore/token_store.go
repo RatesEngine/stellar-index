@@ -9,7 +9,7 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/RatesEngine/rates-engine/internal/platform"
+	"github.com/StellarAtlas/stellar-atlas/internal/platform"
 )
 
 // TokenStore implements [platform.TokenStore] against Postgres.

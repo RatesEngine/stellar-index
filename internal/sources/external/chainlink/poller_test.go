@@ -14,7 +14,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/RatesEngine/rates-engine/internal/canonical"
+	"github.com/StellarAtlas/stellar-atlas/internal/canonical"
 )
 
 // TestAnswerUpdatedTopic0 sanity-checks the init() computation —

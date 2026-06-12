@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/RatesEngine/rates-engine/internal/canonical"
+	"github.com/StellarAtlas/stellar-atlas/internal/canonical"
 )
 
 // coinbaseCandleToTrade has three early-exit error branches the

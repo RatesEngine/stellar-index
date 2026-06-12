@@ -6,8 +6,8 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/RatesEngine/rates-engine/internal/canonical"
-	"github.com/RatesEngine/rates-engine/internal/sources/external"
+	"github.com/StellarAtlas/stellar-atlas/internal/canonical"
+	"github.com/StellarAtlas/stellar-atlas/internal/sources/external"
 )
 
 // OracleReader is the storage-side interface for /v1/oracle/latest

@@ -3,8 +3,8 @@ package redisclient_test
 import (
 	"testing"
 
-	"github.com/RatesEngine/rates-engine/internal/config"
-	"github.com/RatesEngine/rates-engine/internal/storage/redisclient"
+	"github.com/StellarAtlas/stellar-atlas/internal/config"
+	"github.com/StellarAtlas/stellar-atlas/internal/storage/redisclient"
 )
 
 func TestBuild_DisabledWhenAllEmpty(t *testing.T) {

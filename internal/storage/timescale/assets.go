@@ -7,7 +7,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/RatesEngine/rates-engine/internal/canonical"
+	"github.com/StellarAtlas/stellar-atlas/internal/canonical"
 )
 
 // DistinctAssets returns one page of assets that have appeared in

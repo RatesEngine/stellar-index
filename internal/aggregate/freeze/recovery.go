@@ -9,9 +9,9 @@ import (
 
 	"github.com/redis/go-redis/v9"
 
-	"github.com/RatesEngine/rates-engine/internal/cachekeys"
-	"github.com/RatesEngine/rates-engine/internal/canonical"
-	"github.com/RatesEngine/rates-engine/internal/obs"
+	"github.com/StellarAtlas/stellar-atlas/internal/cachekeys"
+	"github.com/StellarAtlas/stellar-atlas/internal/canonical"
+	"github.com/StellarAtlas/stellar-atlas/internal/obs"
 )
 
 // OpenFreezeLister enumerates the (asset, quote) pairs that the

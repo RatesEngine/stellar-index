@@ -10,16 +10,16 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/RatesEngine/rates-engine/internal/aggregate"
-	"github.com/RatesEngine/rates-engine/internal/api/streaming"
-	"github.com/RatesEngine/rates-engine/internal/api/v1/middleware"
-	"github.com/RatesEngine/rates-engine/internal/auth"
-	"github.com/RatesEngine/rates-engine/internal/canonical"
-	"github.com/RatesEngine/rates-engine/internal/currency"
-	"github.com/RatesEngine/rates-engine/internal/currency/marketcap"
-	"github.com/RatesEngine/rates-engine/internal/incidents"
-	"github.com/RatesEngine/rates-engine/internal/obs"
-	"github.com/RatesEngine/rates-engine/internal/version"
+	"github.com/StellarAtlas/stellar-atlas/internal/aggregate"
+	"github.com/StellarAtlas/stellar-atlas/internal/api/streaming"
+	"github.com/StellarAtlas/stellar-atlas/internal/api/v1/middleware"
+	"github.com/StellarAtlas/stellar-atlas/internal/auth"
+	"github.com/StellarAtlas/stellar-atlas/internal/canonical"
+	"github.com/StellarAtlas/stellar-atlas/internal/currency"
+	"github.com/StellarAtlas/stellar-atlas/internal/currency/marketcap"
+	"github.com/StellarAtlas/stellar-atlas/internal/incidents"
+	"github.com/StellarAtlas/stellar-atlas/internal/obs"
+	"github.com/StellarAtlas/stellar-atlas/internal/version"
 )
 
 // ReadyChecker is the interface /readyz polls to decide whether
@@ -1372,8 +1372,8 @@ func (s *Server) handleSecurityTxt(w http.ResponseWriter, _ *http.Request) {
 		"Expires: " + expires + "\n" +
 		"Preferred-Languages: en\n" +
 		"Canonical: https://ratesengine.net/.well-known/security.txt\n" +
-		"Policy: https://github.com/RatesEngine/rates-engine/blob/main/SECURITY.md\n" +
-		"Acknowledgments: https://github.com/RatesEngine/rates-engine/security/advisories\n"
+		"Policy: https://github.com/StellarAtlas/stellar-atlas/blob/main/SECURITY.md\n" +
+		"Acknowledgments: https://github.com/StellarAtlas/stellar-atlas/security/advisories\n"
 	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 	w.Header().Set("Cache-Control", "public, max-age=86400")
 	_, _ = w.Write([]byte(body))

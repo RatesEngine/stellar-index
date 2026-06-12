@@ -8,7 +8,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/RatesEngine/rates-engine/internal/api/v1/middleware"
+	"github.com/StellarAtlas/stellar-atlas/internal/api/v1/middleware"
 )
 
 // Envelope is the shape of every 2xx JSON response. See

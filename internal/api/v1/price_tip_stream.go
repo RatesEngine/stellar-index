@@ -7,8 +7,8 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/RatesEngine/rates-engine/internal/api/streaming"
-	"github.com/RatesEngine/rates-engine/internal/canonical"
+	"github.com/StellarAtlas/stellar-atlas/internal/api/streaming"
+	"github.com/StellarAtlas/stellar-atlas/internal/canonical"
 )
 
 // tipStreamProducerQueueDepth is the capacity of the per-connection

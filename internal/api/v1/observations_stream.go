@@ -8,8 +8,8 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/RatesEngine/rates-engine/internal/api/streaming"
-	"github.com/RatesEngine/rates-engine/internal/canonical"
+	"github.com/StellarAtlas/stellar-atlas/internal/api/streaming"
+	"github.com/StellarAtlas/stellar-atlas/internal/canonical"
 )
 
 // Observations-stream tunables. interval_seconds is the per-connection

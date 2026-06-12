@@ -3,7 +3,7 @@ package ecb
 import (
 	"testing"
 
-	"github.com/RatesEngine/rates-engine/internal/sources/external"
+	"github.com/StellarAtlas/stellar-atlas/internal/sources/external"
 )
 
 // Name + Class must agree with the registry. ECB is the

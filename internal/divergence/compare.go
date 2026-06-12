@@ -10,7 +10,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/RatesEngine/rates-engine/internal/canonical"
+	"github.com/StellarAtlas/stellar-atlas/internal/canonical"
 )
 
 // Result is the outcome of one divergence comparison. Carries

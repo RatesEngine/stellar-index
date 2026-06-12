@@ -7,7 +7,7 @@ import (
 	"math/big"
 	"time"
 
-	"github.com/RatesEngine/rates-engine/internal/canonical"
+	"github.com/StellarAtlas/stellar-atlas/internal/canonical"
 )
 
 // PriceAuthority labels which fallback tier produced a global-view

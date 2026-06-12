@@ -11,8 +11,8 @@ import (
 
 	_ "github.com/lib/pq"
 
-	"github.com/RatesEngine/rates-engine/internal/sources/blend"
-	"github.com/RatesEngine/rates-engine/internal/storage/timescale"
+	"github.com/StellarAtlas/stellar-atlas/internal/sources/blend"
+	"github.com/StellarAtlas/stellar-atlas/internal/storage/timescale"
 )
 
 // TestBlendPositionsRoundTrip exercises the InsertBlendPositionEvent

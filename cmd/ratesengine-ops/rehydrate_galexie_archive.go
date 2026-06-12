@@ -13,7 +13,7 @@ import (
 
 	"github.com/stellar/go-stellar-sdk/support/datastore"
 
-	"github.com/RatesEngine/rates-engine/internal/config"
+	"github.com/StellarAtlas/stellar-atlas/internal/config"
 )
 
 // ─── ratesengine-ops rehydrate-galexie-archive ──────────────────

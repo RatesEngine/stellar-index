@@ -49,8 +49,8 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/RatesEngine/rates-engine/internal/sources/frankfurter"
-	"github.com/RatesEngine/rates-engine/internal/storage/timescale"
+	"github.com/StellarAtlas/stellar-atlas/internal/sources/frankfurter"
+	"github.com/StellarAtlas/stellar-atlas/internal/storage/timescale"
 )
 
 func main() {

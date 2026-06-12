@@ -4,7 +4,7 @@ import (
 	"math/big"
 	"testing"
 
-	"github.com/RatesEngine/rates-engine/internal/events"
+	"github.com/StellarAtlas/stellar-atlas/internal/events"
 )
 
 // Decoder.Decode wraps decodeWritePrices and threads its updates

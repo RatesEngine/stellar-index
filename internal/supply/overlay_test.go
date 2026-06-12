@@ -6,8 +6,8 @@ import (
 	"math/big"
 	"testing"
 
-	"github.com/RatesEngine/rates-engine/internal/canonical"
-	"github.com/RatesEngine/rates-engine/internal/supply"
+	"github.com/StellarAtlas/stellar-atlas/internal/canonical"
+	"github.com/StellarAtlas/stellar-atlas/internal/supply"
 )
 
 // stubMetadataResolver is a minimal supply.MetadataResolver for

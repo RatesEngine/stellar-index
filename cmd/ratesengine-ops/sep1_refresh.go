@@ -8,9 +8,9 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/RatesEngine/rates-engine/internal/config"
-	"github.com/RatesEngine/rates-engine/internal/metadata"
-	"github.com/RatesEngine/rates-engine/internal/storage/timescale"
+	"github.com/StellarAtlas/stellar-atlas/internal/config"
+	"github.com/StellarAtlas/stellar-atlas/internal/metadata"
+	"github.com/StellarAtlas/stellar-atlas/internal/storage/timescale"
 )
 
 // sep1RefreshCmd resolves the SEP-1 stellar.toml for every issuer

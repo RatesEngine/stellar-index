@@ -8,7 +8,7 @@ import (
 
 	sdkxdr "github.com/stellar/go-stellar-sdk/xdr"
 
-	"github.com/RatesEngine/rates-engine/internal/events"
+	"github.com/StellarAtlas/stellar-atlas/internal/events"
 )
 
 // TestClassify_depositWithdraw covers the topic-byte equality path —

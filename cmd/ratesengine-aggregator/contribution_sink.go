@@ -3,8 +3,8 @@ package main
 import (
 	"context"
 
-	"github.com/RatesEngine/rates-engine/internal/aggregate/orchestrator"
-	"github.com/RatesEngine/rates-engine/internal/storage/timescale"
+	"github.com/StellarAtlas/stellar-atlas/internal/aggregate/orchestrator"
+	"github.com/StellarAtlas/stellar-atlas/internal/storage/timescale"
 )
 
 // contributionSink adapts the timescale Store to the

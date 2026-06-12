@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	v1 "github.com/RatesEngine/rates-engine/internal/api/v1"
+	v1 "github.com/StellarAtlas/stellar-atlas/internal/api/v1"
 )
 
 // TestSACWrappers_EmptyMapWhenUnconfigured pins the

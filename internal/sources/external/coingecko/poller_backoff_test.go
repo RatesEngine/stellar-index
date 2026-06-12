@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/RatesEngine/rates-engine/internal/canonical"
+	"github.com/StellarAtlas/stellar-atlas/internal/canonical"
 )
 
 // Pre-fix, an upstream 429 returned an error and the poll loop's

@@ -9,7 +9,7 @@ import (
 
 	"github.com/stellar/go-stellar-sdk/xdr"
 
-	"github.com/RatesEngine/rates-engine/internal/events"
+	"github.com/StellarAtlas/stellar-atlas/internal/events"
 )
 
 // encodeLiquidityBody builds a Map body for the join_pool / exit_pool /

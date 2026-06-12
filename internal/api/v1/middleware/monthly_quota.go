@@ -9,7 +9,7 @@ import (
 	"log/slog"
 	"net/http"
 
-	"github.com/RatesEngine/rates-engine/internal/auth"
+	"github.com/StellarAtlas/stellar-atlas/internal/auth"
 )
 
 // MonthToDateReader is the storage-side primitive the

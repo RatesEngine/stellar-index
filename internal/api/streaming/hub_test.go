@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/RatesEngine/rates-engine/internal/api/streaming"
+	"github.com/StellarAtlas/stellar-atlas/internal/api/streaming"
 )
 
 // drainNonblocking returns events from ch until either it has

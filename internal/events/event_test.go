@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/RatesEngine/rates-engine/internal/events"
+	"github.com/StellarAtlas/stellar-atlas/internal/events"
 )
 
 // TestEventClosedAt_RFC3339Parsing — the happy path: a well-formed

@@ -5,7 +5,7 @@ import (
 	"errors"
 	"time"
 
-	"github.com/RatesEngine/rates-engine/internal/canonical"
+	"github.com/StellarAtlas/stellar-atlas/internal/canonical"
 )
 
 // Reference is a pluggable external price reference. Each

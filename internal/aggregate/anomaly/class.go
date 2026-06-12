@@ -1,7 +1,7 @@
 package anomaly
 
 import (
-	"github.com/RatesEngine/rates-engine/internal/canonical"
+	"github.com/StellarAtlas/stellar-atlas/internal/canonical"
 )
 
 // AssetClass classifies an asset for anomaly threshold lookup. Stable

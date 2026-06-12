@@ -13,7 +13,7 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/RatesEngine/rates-engine/internal/platform"
+	"github.com/StellarAtlas/stellar-atlas/internal/platform"
 )
 
 // FanoutStore is the subset of [platform.WebhookStore] the fan-out

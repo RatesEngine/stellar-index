@@ -1,6 +1,6 @@
 package aggregate
 
-import "github.com/RatesEngine/rates-engine/internal/canonical"
+import "github.com/StellarAtlas/stellar-atlas/internal/canonical"
 
 // Stablecoin → fiat proxy mapping — **aggregator policy, not decoder
 // policy**.

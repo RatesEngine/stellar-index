@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"testing"
 
-	"github.com/RatesEngine/rates-engine/pkg/client"
+	"github.com/StellarAtlas/stellar-atlas/pkg/client"
 )
 
 // TestAssetDetail_DecodesFullWirePayload pins the SDK's [AssetDetail]

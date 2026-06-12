@@ -10,8 +10,8 @@ import (
 	"github.com/redis/go-redis/v9"
 	"golang.org/x/sync/singleflight"
 
-	"github.com/RatesEngine/rates-engine/internal/cachekeys"
-	"github.com/RatesEngine/rates-engine/internal/obs"
+	"github.com/StellarAtlas/stellar-atlas/internal/cachekeys"
+	"github.com/StellarAtlas/stellar-atlas/internal/obs"
 )
 
 // Cache wraps a [Resolver] with Redis-backed value caching +

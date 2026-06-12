@@ -8,7 +8,7 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/RatesEngine/rates-engine/internal/canonical"
+	"github.com/StellarAtlas/stellar-atlas/internal/canonical"
 )
 
 // OHLCSeriesBar is one bar in the multi-bar /v1/ohlc?interval=...

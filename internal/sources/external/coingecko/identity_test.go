@@ -3,7 +3,7 @@ package coingecko
 import (
 	"testing"
 
-	"github.com/RatesEngine/rates-engine/internal/sources/external"
+	"github.com/StellarAtlas/stellar-atlas/internal/sources/external"
 )
 
 // Coingecko is an aggregator (composite index over upstream venues),

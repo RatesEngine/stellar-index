@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	cfg "github.com/RatesEngine/rates-engine/internal/config"
+	cfg "github.com/StellarAtlas/stellar-atlas/internal/config"
 )
 
 func TestLoadReader_happyPath(t *testing.T) {

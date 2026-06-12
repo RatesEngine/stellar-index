@@ -9,13 +9,13 @@ import (
 
 	"github.com/redis/go-redis/v9"
 
-	"github.com/RatesEngine/rates-engine/internal/aggregate/baseline"
-	"github.com/RatesEngine/rates-engine/internal/aggregate/confidence"
-	"github.com/RatesEngine/rates-engine/internal/cachekeys"
-	"github.com/RatesEngine/rates-engine/internal/canonical"
-	"github.com/RatesEngine/rates-engine/internal/divergence"
-	"github.com/RatesEngine/rates-engine/internal/obs"
-	"github.com/RatesEngine/rates-engine/internal/sources/external"
+	"github.com/StellarAtlas/stellar-atlas/internal/aggregate/baseline"
+	"github.com/StellarAtlas/stellar-atlas/internal/aggregate/confidence"
+	"github.com/StellarAtlas/stellar-atlas/internal/cachekeys"
+	"github.com/StellarAtlas/stellar-atlas/internal/canonical"
+	"github.com/StellarAtlas/stellar-atlas/internal/divergence"
+	"github.com/StellarAtlas/stellar-atlas/internal/obs"
+	"github.com/StellarAtlas/stellar-atlas/internal/sources/external"
 )
 
 // divergenceMinSources is the floor on a cached divergence result's

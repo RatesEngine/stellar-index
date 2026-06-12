@@ -3,9 +3,9 @@ package cctp
 import (
 	"fmt"
 
-	"github.com/RatesEngine/rates-engine/internal/consumer"
-	"github.com/RatesEngine/rates-engine/internal/dispatcher"
-	"github.com/RatesEngine/rates-engine/internal/events"
+	"github.com/StellarAtlas/stellar-atlas/internal/consumer"
+	"github.com/StellarAtlas/stellar-atlas/internal/dispatcher"
+	"github.com/StellarAtlas/stellar-atlas/internal/events"
 )
 
 // Decoder is the dispatcher-facing view of Circle CCTP v2. It is a

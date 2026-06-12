@@ -3,7 +3,7 @@ package rozo
 import (
 	"time"
 
-	"github.com/RatesEngine/rates-engine/internal/consumer"
+	"github.com/StellarAtlas/stellar-atlas/internal/consumer"
 )
 
 // Event is the [consumer.Event] the Rozo Decoder emits — one per

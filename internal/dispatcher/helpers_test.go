@@ -9,7 +9,7 @@ import (
 	"github.com/stellar/go-stellar-sdk/strkey"
 	"github.com/stellar/go-stellar-sdk/xdr"
 
-	"github.com/RatesEngine/rates-engine/internal/consumer"
+	"github.com/StellarAtlas/stellar-atlas/internal/consumer"
 )
 
 // ─── strkey conversion helpers ─────────────────────────────────

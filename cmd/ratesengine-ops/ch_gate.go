@@ -10,10 +10,10 @@ import (
 
 	sdkxdr "github.com/stellar/go-stellar-sdk/xdr"
 
-	"github.com/RatesEngine/rates-engine/internal/config"
-	"github.com/RatesEngine/rates-engine/internal/dispatcher"
-	"github.com/RatesEngine/rates-engine/internal/ledgerstream"
-	"github.com/RatesEngine/rates-engine/internal/storage/clickhouse"
+	"github.com/StellarAtlas/stellar-atlas/internal/config"
+	"github.com/StellarAtlas/stellar-atlas/internal/dispatcher"
+	"github.com/StellarAtlas/stellar-atlas/internal/ledgerstream"
+	"github.com/StellarAtlas/stellar-atlas/internal/storage/clickhouse"
 )
 
 // chGate runs the ADR-0034 Phase-2 §6 gates over a backfilled ledger range:

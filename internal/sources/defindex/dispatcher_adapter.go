@@ -1,8 +1,8 @@
 package defindex
 
 import (
-	"github.com/RatesEngine/rates-engine/internal/consumer"
-	"github.com/RatesEngine/rates-engine/internal/events"
+	"github.com/StellarAtlas/stellar-atlas/internal/consumer"
+	"github.com/StellarAtlas/stellar-atlas/internal/events"
 )
 
 // Decoder implements dispatcher.Decoder (the event-based variant —

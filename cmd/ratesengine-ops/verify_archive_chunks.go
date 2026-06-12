@@ -15,8 +15,8 @@ import (
 	sdkxdr "github.com/stellar/go-stellar-sdk/xdr"
 	"golang.org/x/sync/errgroup"
 
-	"github.com/RatesEngine/rates-engine/internal/ledgerstream"
-	"github.com/RatesEngine/rates-engine/internal/obs"
+	"github.com/StellarAtlas/stellar-atlas/internal/ledgerstream"
+	"github.com/StellarAtlas/stellar-atlas/internal/obs"
 )
 
 // startVerifyArchiveMetrics spins up a tiny http.Server on addr

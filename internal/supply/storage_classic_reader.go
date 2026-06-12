@@ -7,7 +7,7 @@ import (
 	"math/big"
 	"time"
 
-	"github.com/RatesEngine/rates-engine/internal/canonical"
+	"github.com/StellarAtlas/stellar-atlas/internal/canonical"
 )
 
 // ClassicSupplyStore is the storage-side primitive set the

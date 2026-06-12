@@ -10,7 +10,7 @@ import (
 	"strings"
 	"testing"
 
-	mw "github.com/RatesEngine/rates-engine/internal/api/v1/middleware"
+	mw "github.com/StellarAtlas/stellar-atlas/internal/api/v1/middleware"
 )
 
 func setTrustedProxyCIDRs(t *testing.T, cidrs ...string) {

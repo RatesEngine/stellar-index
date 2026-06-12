@@ -3,8 +3,8 @@ package pipeline
 import (
 	"testing"
 
-	"github.com/RatesEngine/rates-engine/internal/config"
-	"github.com/RatesEngine/rates-engine/internal/dispatcher"
+	"github.com/StellarAtlas/stellar-atlas/internal/config"
+	"github.com/StellarAtlas/stellar-atlas/internal/dispatcher"
 )
 
 // realisticGStrkey is a syntactically-valid 56-char G-prefixed

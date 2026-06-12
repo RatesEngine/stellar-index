@@ -5,7 +5,7 @@ import (
 
 	"github.com/stellar/go-stellar-sdk/xdr"
 
-	"github.com/RatesEngine/rates-engine/internal/scval"
+	"github.com/StellarAtlas/stellar-atlas/internal/scval"
 )
 
 // SupplyFlowTopic0Syms are the topic[0] symbols whose events change a token's

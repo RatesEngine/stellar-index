@@ -7,11 +7,11 @@ import (
 	"os"
 	"time"
 
-	"github.com/RatesEngine/rates-engine/internal/completeness"
-	"github.com/RatesEngine/rates-engine/internal/config"
-	"github.com/RatesEngine/rates-engine/internal/sources/soroswap"
-	"github.com/RatesEngine/rates-engine/internal/stellarrpc"
-	"github.com/RatesEngine/rates-engine/internal/storage/timescale"
+	"github.com/StellarAtlas/stellar-atlas/internal/completeness"
+	"github.com/StellarAtlas/stellar-atlas/internal/config"
+	"github.com/StellarAtlas/stellar-atlas/internal/sources/soroswap"
+	"github.com/StellarAtlas/stellar-atlas/internal/stellarrpc"
+	"github.com/StellarAtlas/stellar-atlas/internal/storage/timescale"
 )
 
 // verifyReconciliation implements ADR-0033 Claim 2b (projection

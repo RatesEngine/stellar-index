@@ -1,7 +1,7 @@
 package blend
 
 import (
-	"github.com/RatesEngine/rates-engine/internal/consumer"
+	"github.com/StellarAtlas/stellar-atlas/internal/consumer"
 )
 
 // Auction events emitted by the Blend Decoder. These are NOT

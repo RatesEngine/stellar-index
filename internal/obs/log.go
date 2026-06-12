@@ -5,7 +5,7 @@ import (
 	"os"
 	"strings"
 
-	"github.com/RatesEngine/rates-engine/internal/config"
+	"github.com/StellarAtlas/stellar-atlas/internal/config"
 )
 
 // NewLogger builds the shared *slog.Logger every binary uses.

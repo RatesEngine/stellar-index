@@ -9,10 +9,10 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/RatesEngine/rates-engine/internal/currency/marketcap"
-	"github.com/RatesEngine/rates-engine/internal/sources/external"
-	"github.com/RatesEngine/rates-engine/internal/storage/timescale"
-	"github.com/RatesEngine/rates-engine/internal/version"
+	"github.com/StellarAtlas/stellar-atlas/internal/currency/marketcap"
+	"github.com/StellarAtlas/stellar-atlas/internal/sources/external"
+	"github.com/StellarAtlas/stellar-atlas/internal/storage/timescale"
+	"github.com/StellarAtlas/stellar-atlas/internal/version"
 )
 
 // FXCoverageReader is the seam the ingestion diagnostics reads

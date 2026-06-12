@@ -10,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/RatesEngine/rates-engine/internal/api/v1/middleware"
+	"github.com/StellarAtlas/stellar-atlas/internal/api/v1/middleware"
 )
 
 // TestWriteJSON_DefaultEnvelopeShape pins the wire shape every

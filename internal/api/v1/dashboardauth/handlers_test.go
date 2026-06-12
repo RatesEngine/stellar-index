@@ -16,8 +16,8 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/RatesEngine/rates-engine/internal/notify"
-	"github.com/RatesEngine/rates-engine/internal/platform"
+	"github.com/StellarAtlas/stellar-atlas/internal/notify"
+	"github.com/StellarAtlas/stellar-atlas/internal/platform"
 )
 
 // newTestRig wires the in-memory fakes + a noop sender into a

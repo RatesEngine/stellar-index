@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/RatesEngine/rates-engine/internal/canonical"
+	"github.com/StellarAtlas/stellar-atlas/internal/canonical"
 )
 
 func buildPairMap(t *testing.T) map[string]canonical.Pair {

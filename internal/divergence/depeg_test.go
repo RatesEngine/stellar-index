@@ -7,10 +7,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/RatesEngine/rates-engine/internal/aggregate"
-	"github.com/RatesEngine/rates-engine/internal/cachekeys"
-	"github.com/RatesEngine/rates-engine/internal/canonical"
-	"github.com/RatesEngine/rates-engine/internal/divergence"
+	"github.com/StellarAtlas/stellar-atlas/internal/aggregate"
+	"github.com/StellarAtlas/stellar-atlas/internal/cachekeys"
+	"github.com/StellarAtlas/stellar-atlas/internal/canonical"
+	"github.com/StellarAtlas/stellar-atlas/internal/divergence"
 )
 
 // TestStablecoinDepeg_DivergenceWorkerFires wires the stablecoin

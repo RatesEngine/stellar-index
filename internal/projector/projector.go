@@ -43,13 +43,13 @@ import (
 	"sync"
 	"time"
 
-	"github.com/RatesEngine/rates-engine/internal/consumer"
-	"github.com/RatesEngine/rates-engine/internal/dispatcher"
-	"github.com/RatesEngine/rates-engine/internal/events"
-	"github.com/RatesEngine/rates-engine/internal/obs"
-	"github.com/RatesEngine/rates-engine/internal/sources/sorobanevents"
-	"github.com/RatesEngine/rates-engine/internal/storage/clickhouse"
-	"github.com/RatesEngine/rates-engine/internal/storage/timescale"
+	"github.com/StellarAtlas/stellar-atlas/internal/consumer"
+	"github.com/StellarAtlas/stellar-atlas/internal/dispatcher"
+	"github.com/StellarAtlas/stellar-atlas/internal/events"
+	"github.com/StellarAtlas/stellar-atlas/internal/obs"
+	"github.com/StellarAtlas/stellar-atlas/internal/sources/sorobanevents"
+	"github.com/StellarAtlas/stellar-atlas/internal/storage/clickhouse"
+	"github.com/StellarAtlas/stellar-atlas/internal/storage/timescale"
 )
 
 // Interval is the catch-up cadence. The projector reads new

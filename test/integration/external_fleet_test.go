@@ -15,15 +15,15 @@ import (
 
 	"github.com/coder/websocket"
 
-	"github.com/RatesEngine/rates-engine/internal/canonical"
-	"github.com/RatesEngine/rates-engine/internal/consumer"
-	"github.com/RatesEngine/rates-engine/internal/sources/external"
-	externalbinance "github.com/RatesEngine/rates-engine/internal/sources/external/binance"
-	externalbitstamp "github.com/RatesEngine/rates-engine/internal/sources/external/bitstamp"
-	externalcoingecko "github.com/RatesEngine/rates-engine/internal/sources/external/coingecko"
-	externalecb "github.com/RatesEngine/rates-engine/internal/sources/external/ecb"
-	externalexchangerates "github.com/RatesEngine/rates-engine/internal/sources/external/exchangeratesapi"
-	"github.com/RatesEngine/rates-engine/internal/storage/timescale"
+	"github.com/StellarAtlas/stellar-atlas/internal/canonical"
+	"github.com/StellarAtlas/stellar-atlas/internal/consumer"
+	"github.com/StellarAtlas/stellar-atlas/internal/sources/external"
+	externalbinance "github.com/StellarAtlas/stellar-atlas/internal/sources/external/binance"
+	externalbitstamp "github.com/StellarAtlas/stellar-atlas/internal/sources/external/bitstamp"
+	externalcoingecko "github.com/StellarAtlas/stellar-atlas/internal/sources/external/coingecko"
+	externalecb "github.com/StellarAtlas/stellar-atlas/internal/sources/external/ecb"
+	externalexchangerates "github.com/StellarAtlas/stellar-atlas/internal/sources/external/exchangeratesapi"
+	"github.com/StellarAtlas/stellar-atlas/internal/storage/timescale"
 )
 
 // TestExternalFleet_EndToEnd is the Phase-2-ingestion closing-

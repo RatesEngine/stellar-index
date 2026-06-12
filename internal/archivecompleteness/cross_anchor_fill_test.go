@@ -13,7 +13,7 @@ import (
 	"sync/atomic"
 	"testing"
 
-	"github.com/RatesEngine/rates-engine/internal/archivecompleteness"
+	"github.com/StellarAtlas/stellar-atlas/internal/archivecompleteness"
 )
 
 // goodGzipBody is a minimal valid gzip stream the fake source

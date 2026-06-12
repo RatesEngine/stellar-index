@@ -3,7 +3,7 @@ package v1
 import (
 	"net/http"
 
-	"github.com/RatesEngine/rates-engine/internal/canonical"
+	"github.com/StellarAtlas/stellar-atlas/internal/canonical"
 )
 
 // handlePairs serves GET /v1/pairs?base=<id>&quote=<id>.

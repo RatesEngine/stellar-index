@@ -13,7 +13,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/RatesEngine/rates-engine/internal/canonical"
+	"github.com/StellarAtlas/stellar-atlas/internal/canonical"
 )
 
 // CoinGeckoReference looks up prices via CoinGecko's public

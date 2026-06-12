@@ -11,8 +11,8 @@ import (
 	"net/mail"
 	"strings"
 
-	"github.com/RatesEngine/rates-engine/internal/api/v1/middleware"
-	"github.com/RatesEngine/rates-engine/internal/auth"
+	"github.com/StellarAtlas/stellar-atlas/internal/api/v1/middleware"
+	"github.com/StellarAtlas/stellar-atlas/internal/auth"
 )
 
 // SignupTracker is the v1 boundary for "has this email already

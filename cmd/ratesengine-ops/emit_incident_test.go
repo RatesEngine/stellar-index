@@ -5,8 +5,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/RatesEngine/rates-engine/internal/incidents"
-	"github.com/RatesEngine/rates-engine/internal/platform"
+	"github.com/StellarAtlas/stellar-atlas/internal/incidents"
+	"github.com/StellarAtlas/stellar-atlas/internal/platform"
 )
 
 // TestFindIncidentForEmit_RefusesWrongStatus — operator-finger-

@@ -18,8 +18,8 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/RatesEngine/rates-engine/internal/api/v1/dashboardauth"
-	"github.com/RatesEngine/rates-engine/internal/platform"
+	"github.com/StellarAtlas/stellar-atlas/internal/api/v1/dashboardauth"
+	"github.com/StellarAtlas/stellar-atlas/internal/platform"
 )
 
 // MaxWebhooksPerAccount caps how many endpoints one account can

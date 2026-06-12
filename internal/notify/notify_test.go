@@ -9,7 +9,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/RatesEngine/rates-engine/internal/notify"
+	"github.com/StellarAtlas/stellar-atlas/internal/notify"
 )
 
 func TestValidate_HappyPath(t *testing.T) {

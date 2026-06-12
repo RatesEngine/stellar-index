@@ -9,7 +9,7 @@ import (
 	"math/big"
 	"time"
 
-	"github.com/RatesEngine/rates-engine/internal/sources/accounts"
+	"github.com/StellarAtlas/stellar-atlas/internal/sources/accounts"
 )
 
 // InsertAccountObservation appends one [accounts.Observation] to

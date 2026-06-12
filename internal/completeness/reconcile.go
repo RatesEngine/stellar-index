@@ -4,9 +4,9 @@ import (
 	"context"
 	"sort"
 
-	"github.com/RatesEngine/rates-engine/internal/consumer"
-	"github.com/RatesEngine/rates-engine/internal/events"
-	"github.com/RatesEngine/rates-engine/internal/sources/sorobanevents"
+	"github.com/StellarAtlas/stellar-atlas/internal/consumer"
+	"github.com/StellarAtlas/stellar-atlas/internal/events"
+	"github.com/StellarAtlas/stellar-atlas/internal/sources/sorobanevents"
 )
 
 // Decoder is the per-source decode surface the reconciler re-runs over

@@ -1,8 +1,8 @@
 package discovery
 
 import (
-	"github.com/RatesEngine/rates-engine/internal/events"
-	"github.com/RatesEngine/rates-engine/internal/scval"
+	"github.com/StellarAtlas/stellar-atlas/internal/events"
+	"github.com/StellarAtlas/stellar-atlas/internal/scval"
 )
 
 // SEP41EventType identifies which of the four SEP-41 event topics

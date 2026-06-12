@@ -8,8 +8,8 @@ import (
 	"testing"
 	"time"
 
-	c "github.com/RatesEngine/rates-engine/internal/canonical"
-	"github.com/RatesEngine/rates-engine/internal/storage/timescale"
+	c "github.com/StellarAtlas/stellar-atlas/internal/canonical"
+	"github.com/StellarAtlas/stellar-atlas/internal/storage/timescale"
 )
 
 // TestTradesInRangeAndMarkets covers the two read-paths backing

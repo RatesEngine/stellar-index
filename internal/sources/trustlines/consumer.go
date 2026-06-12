@@ -1,6 +1,6 @@
 package trustlines
 
-import "github.com/RatesEngine/rates-engine/internal/consumer"
+import "github.com/StellarAtlas/stellar-atlas/internal/consumer"
 
 func (Observation) EventKind() string { return ObservationKind }
 func (Observation) Source() string    { return SourceName }

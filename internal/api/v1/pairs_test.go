@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	v1 "github.com/RatesEngine/rates-engine/internal/api/v1"
+	v1 "github.com/StellarAtlas/stellar-atlas/internal/api/v1"
 )
 
 func TestPairs_MissingBase400(t *testing.T) {

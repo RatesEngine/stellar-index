@@ -9,8 +9,8 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/RatesEngine/rates-engine/internal/aggregate"
-	"github.com/RatesEngine/rates-engine/internal/canonical"
+	"github.com/StellarAtlas/stellar-atlas/internal/aggregate"
+	"github.com/StellarAtlas/stellar-atlas/internal/canonical"
 )
 
 // VWAPResult is the wire shape for /v1/vwap responses.

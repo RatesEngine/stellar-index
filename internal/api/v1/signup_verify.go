@@ -10,7 +10,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/RatesEngine/rates-engine/internal/auth"
+	"github.com/StellarAtlas/stellar-atlas/internal/auth"
 )
 
 // SignupVerifier is the v1 boundary for the email-ownership-

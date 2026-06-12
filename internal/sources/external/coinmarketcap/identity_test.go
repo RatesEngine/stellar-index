@@ -3,7 +3,7 @@ package coinmarketcap
 import (
 	"testing"
 
-	"github.com/RatesEngine/rates-engine/internal/sources/external"
+	"github.com/StellarAtlas/stellar-atlas/internal/sources/external"
 )
 
 // Name + Class are the metadata the aggregator's external.Registry

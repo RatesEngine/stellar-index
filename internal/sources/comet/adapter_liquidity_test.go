@@ -4,7 +4,7 @@ import (
 	"math/big"
 	"testing"
 
-	"github.com/RatesEngine/rates-engine/internal/events"
+	"github.com/StellarAtlas/stellar-atlas/internal/events"
 )
 
 // ─── Matches now claims four additional kinds ────────────────────

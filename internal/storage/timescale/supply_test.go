@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/RatesEngine/rates-engine/internal/supply"
+	"github.com/StellarAtlas/stellar-atlas/internal/supply"
 )
 
 // TestInsertSupply_RejectsZeroValueStruct — the supply-package

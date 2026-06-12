@@ -14,7 +14,7 @@ import (
 	"github.com/stellar/go-stellar-sdk/support/datastore"
 	"github.com/stellar/go-stellar-sdk/xdr"
 
-	"github.com/RatesEngine/rates-engine/internal/ledgerstream"
+	"github.com/StellarAtlas/stellar-atlas/internal/ledgerstream"
 )
 
 // TestStream_boundedRange_filesystemDatastore proves the SDK's

@@ -8,10 +8,10 @@ import (
 	"os"
 	"time"
 
-	"github.com/RatesEngine/rates-engine/internal/canonical"
-	"github.com/RatesEngine/rates-engine/internal/config"
-	"github.com/RatesEngine/rates-engine/internal/sources/external/chainlink"
-	"github.com/RatesEngine/rates-engine/internal/storage/timescale"
+	"github.com/StellarAtlas/stellar-atlas/internal/canonical"
+	"github.com/StellarAtlas/stellar-atlas/internal/config"
+	"github.com/StellarAtlas/stellar-atlas/internal/sources/external/chainlink"
+	"github.com/StellarAtlas/stellar-atlas/internal/storage/timescale"
 )
 
 // chainlinkFeedSetFromConfig — same shape + reasoning as the

@@ -8,9 +8,9 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/RatesEngine/rates-engine/internal/auth"
-	"github.com/RatesEngine/rates-engine/internal/obs"
-	"github.com/RatesEngine/rates-engine/internal/ratelimit"
+	"github.com/StellarAtlas/stellar-atlas/internal/auth"
+	"github.com/StellarAtlas/stellar-atlas/internal/obs"
+	"github.com/StellarAtlas/stellar-atlas/internal/ratelimit"
 )
 
 // MaxRateLimitKeyLen caps the caller-supplied KeyFn output so a

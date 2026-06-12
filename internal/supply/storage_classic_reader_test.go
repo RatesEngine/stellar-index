@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/RatesEngine/rates-engine/internal/canonical"
+	"github.com/StellarAtlas/stellar-atlas/internal/canonical"
 )
 
 // fakeClassicStore satisfies ClassicSupplyStore with in-memory

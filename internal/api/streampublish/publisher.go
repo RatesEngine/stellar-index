@@ -25,10 +25,10 @@ import (
 	"sync"
 	"time"
 
-	"github.com/RatesEngine/rates-engine/internal/api/streaming"
-	v1 "github.com/RatesEngine/rates-engine/internal/api/v1"
-	"github.com/RatesEngine/rates-engine/internal/canonical"
-	"github.com/RatesEngine/rates-engine/internal/obs"
+	"github.com/StellarAtlas/stellar-atlas/internal/api/streaming"
+	v1 "github.com/StellarAtlas/stellar-atlas/internal/api/v1"
+	"github.com/StellarAtlas/stellar-atlas/internal/canonical"
+	"github.com/StellarAtlas/stellar-atlas/internal/obs"
 )
 
 // PriceReader is the narrow read-side dependency the publisher

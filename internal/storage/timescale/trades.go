@@ -12,10 +12,10 @@ import (
 
 	"github.com/lib/pq"
 
-	"github.com/RatesEngine/rates-engine/internal/aggregate"
-	"github.com/RatesEngine/rates-engine/internal/canonical"
-	"github.com/RatesEngine/rates-engine/internal/obs"
-	"github.com/RatesEngine/rates-engine/internal/sources/external"
+	"github.com/StellarAtlas/stellar-atlas/internal/aggregate"
+	"github.com/StellarAtlas/stellar-atlas/internal/canonical"
+	"github.com/StellarAtlas/stellar-atlas/internal/obs"
+	"github.com/StellarAtlas/stellar-atlas/internal/sources/external"
 )
 
 // externalUSDVolumeDecimals is the off-chain quote-amount scale.

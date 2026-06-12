@@ -16,7 +16,7 @@
 package rozo
 
 import (
-	"github.com/RatesEngine/rates-engine/internal/scval"
+	"github.com/StellarAtlas/stellar-atlas/internal/scval"
 )
 
 // SourceName is the registry key for this source. Used in

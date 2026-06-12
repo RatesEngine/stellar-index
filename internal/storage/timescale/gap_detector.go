@@ -6,7 +6,7 @@ import (
 	"log/slog"
 	"time"
 
-	"github.com/RatesEngine/rates-engine/internal/obs"
+	"github.com/StellarAtlas/stellar-atlas/internal/obs"
 )
 
 // GapDetectorInterval is the cadence at which [RunGapDetector]

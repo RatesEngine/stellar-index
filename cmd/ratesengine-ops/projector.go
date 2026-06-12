@@ -8,8 +8,8 @@ import (
 	"os"
 	"time"
 
-	"github.com/RatesEngine/rates-engine/internal/config"
-	"github.com/RatesEngine/rates-engine/internal/storage/timescale"
+	"github.com/StellarAtlas/stellar-atlas/internal/config"
+	"github.com/StellarAtlas/stellar-atlas/internal/storage/timescale"
 )
 
 // projectorReplay rewinds the projector's per-source cursor so the

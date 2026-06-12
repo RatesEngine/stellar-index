@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/RatesEngine/rates-engine/internal/consumer"
+	"github.com/StellarAtlas/stellar-atlas/internal/consumer"
 )
 
 // fakeEvent is a consumer.Event that hits the sink's default

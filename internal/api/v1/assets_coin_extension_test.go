@@ -7,10 +7,10 @@ import (
 	"net/http"
 	"testing"
 
-	"github.com/RatesEngine/rates-engine/internal/canonical"
-	"github.com/RatesEngine/rates-engine/internal/storage/timescale"
+	"github.com/StellarAtlas/stellar-atlas/internal/canonical"
+	"github.com/StellarAtlas/stellar-atlas/internal/storage/timescale"
 
-	v1 "github.com/RatesEngine/rates-engine/internal/api/v1"
+	v1 "github.com/StellarAtlas/stellar-atlas/internal/api/v1"
 )
 
 // stubCoinsReaderExt implements v1.CoinsReader for the coin-extension

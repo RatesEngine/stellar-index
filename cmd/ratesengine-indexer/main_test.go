@@ -9,9 +9,9 @@ import (
 	"github.com/prometheus/client_golang/prometheus/testutil"
 	sdkxdr "github.com/stellar/go-stellar-sdk/xdr"
 
-	"github.com/RatesEngine/rates-engine/internal/consumer"
-	"github.com/RatesEngine/rates-engine/internal/dispatcher"
-	"github.com/RatesEngine/rates-engine/internal/obs"
+	"github.com/StellarAtlas/stellar-atlas/internal/consumer"
+	"github.com/StellarAtlas/stellar-atlas/internal/dispatcher"
+	"github.com/StellarAtlas/stellar-atlas/internal/obs"
 )
 
 func TestProcessAndPersistCursor_ReturnsDispatcherErrorBeforeCursorWrite(t *testing.T) {

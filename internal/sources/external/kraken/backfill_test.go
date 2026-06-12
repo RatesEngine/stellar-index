@@ -10,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/RatesEngine/rates-engine/internal/canonical"
+	"github.com/StellarAtlas/stellar-atlas/internal/canonical"
 )
 
 // synthesiseKrakenCandles builds a slice of Kraken-shape OHLC rows

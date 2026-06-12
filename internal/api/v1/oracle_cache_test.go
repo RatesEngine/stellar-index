@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/RatesEngine/rates-engine/internal/canonical"
+	"github.com/StellarAtlas/stellar-atlas/internal/canonical"
 )
 
 // fakeOracleUpstream is the in-memory stub the cache wrapper sits

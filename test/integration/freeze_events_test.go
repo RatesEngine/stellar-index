@@ -10,10 +10,10 @@ import (
 
 	_ "github.com/lib/pq"
 
-	"github.com/RatesEngine/rates-engine/internal/aggregate/anomaly"
-	"github.com/RatesEngine/rates-engine/internal/aggregate/freeze"
-	c "github.com/RatesEngine/rates-engine/internal/canonical"
-	"github.com/RatesEngine/rates-engine/internal/storage/timescale"
+	"github.com/StellarAtlas/stellar-atlas/internal/aggregate/anomaly"
+	"github.com/StellarAtlas/stellar-atlas/internal/aggregate/freeze"
+	c "github.com/StellarAtlas/stellar-atlas/internal/canonical"
+	"github.com/StellarAtlas/stellar-atlas/internal/storage/timescale"
 )
 
 // TestFreezeEventSink_LKGVWAPLandsOnRow exercises the F-1228 path:

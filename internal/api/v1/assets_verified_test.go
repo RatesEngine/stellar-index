@@ -6,8 +6,8 @@ import (
 	"strings"
 	"testing"
 
-	v1 "github.com/RatesEngine/rates-engine/internal/api/v1"
-	"github.com/RatesEngine/rates-engine/internal/currency"
+	v1 "github.com/StellarAtlas/stellar-atlas/internal/api/v1"
+	"github.com/StellarAtlas/stellar-atlas/internal/currency"
 )
 
 // otherRealIssuer is a real, CRC-valid Stellar G-strkey unrelated to

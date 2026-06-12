@@ -1,6 +1,6 @@
 package dispatcher
 
-import "github.com/RatesEngine/rates-engine/internal/events"
+import "github.com/StellarAtlas/stellar-atlas/internal/events"
 
 // Recognize reports whether any registered event decoder claims this
 // event, returning the matching decoder's name. It runs the SAME

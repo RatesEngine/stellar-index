@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/RatesEngine/rates-engine/internal/sources/accounts"
+	"github.com/StellarAtlas/stellar-atlas/internal/sources/accounts"
 )
 
 // TestInsertAccountObservation_RejectsEmptyAccountID — the

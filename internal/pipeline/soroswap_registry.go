@@ -6,9 +6,9 @@ import (
 	"log/slog"
 	"time"
 
-	"github.com/RatesEngine/rates-engine/internal/canonical"
-	"github.com/RatesEngine/rates-engine/internal/sources/soroswap"
-	"github.com/RatesEngine/rates-engine/internal/storage/timescale"
+	"github.com/StellarAtlas/stellar-atlas/internal/canonical"
+	"github.com/StellarAtlas/stellar-atlas/internal/sources/soroswap"
+	"github.com/StellarAtlas/stellar-atlas/internal/storage/timescale"
 )
 
 // upsertHookTimeout caps how long the live new_pair upsert is allowed

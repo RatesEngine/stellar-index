@@ -13,11 +13,11 @@ import (
 
 	_ "github.com/lib/pq" // postgres driver (ADR-0006)
 
-	"github.com/RatesEngine/rates-engine/internal/config"
-	"github.com/RatesEngine/rates-engine/internal/customerwebhook"
-	"github.com/RatesEngine/rates-engine/internal/incidents"
-	"github.com/RatesEngine/rates-engine/internal/platform"
-	"github.com/RatesEngine/rates-engine/internal/platform/postgresstore"
+	"github.com/StellarAtlas/stellar-atlas/internal/config"
+	"github.com/StellarAtlas/stellar-atlas/internal/customerwebhook"
+	"github.com/StellarAtlas/stellar-atlas/internal/incidents"
+	"github.com/StellarAtlas/stellar-atlas/internal/platform"
+	"github.com/StellarAtlas/stellar-atlas/internal/platform/postgresstore"
 )
 
 // findIncidentForEmit locates the incident named by `slug` in the

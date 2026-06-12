@@ -3,7 +3,7 @@ package cryptocompare
 import (
 	"testing"
 
-	"github.com/RatesEngine/rates-engine/internal/sources/external"
+	"github.com/StellarAtlas/stellar-atlas/internal/sources/external"
 )
 
 // CryptoCompare is an aggregator (composite index across upstream

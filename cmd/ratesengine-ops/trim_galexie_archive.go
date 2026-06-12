@@ -18,7 +18,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/stellar/go-stellar-sdk/support/datastore"
 
-	"github.com/RatesEngine/rates-engine/internal/config"
+	"github.com/StellarAtlas/stellar-atlas/internal/config"
 )
 
 // ─── ratesengine-ops trim-galexie-archive ──────────────────────

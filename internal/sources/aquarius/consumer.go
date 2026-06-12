@@ -1,8 +1,8 @@
 package aquarius
 
 import (
-	"github.com/RatesEngine/rates-engine/internal/canonical"
-	"github.com/RatesEngine/rates-engine/internal/consumer"
+	"github.com/StellarAtlas/stellar-atlas/internal/canonical"
+	"github.com/StellarAtlas/stellar-atlas/internal/consumer"
 )
 
 // TradeEvent is the [consumer.Event] Aquarius's Decoder emits on

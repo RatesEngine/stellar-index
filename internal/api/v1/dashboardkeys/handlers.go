@@ -17,8 +17,8 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/RatesEngine/rates-engine/internal/api/v1/dashboardauth"
-	"github.com/RatesEngine/rates-engine/internal/platform"
+	"github.com/StellarAtlas/stellar-atlas/internal/api/v1/dashboardauth"
+	"github.com/StellarAtlas/stellar-atlas/internal/platform"
 )
 
 // MaxKeysPerAccount caps how many active keys a single account

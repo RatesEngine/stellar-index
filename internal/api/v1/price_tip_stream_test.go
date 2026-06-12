@@ -11,8 +11,8 @@ import (
 	"testing"
 	"time"
 
-	v1 "github.com/RatesEngine/rates-engine/internal/api/v1"
-	"github.com/RatesEngine/rates-engine/internal/canonical"
+	v1 "github.com/StellarAtlas/stellar-atlas/internal/api/v1"
+	"github.com/StellarAtlas/stellar-atlas/internal/canonical"
 )
 
 // readTipStreamEvent reads one full SSE frame (id/event/data block)

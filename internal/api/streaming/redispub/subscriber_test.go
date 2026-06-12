@@ -11,9 +11,9 @@ import (
 	"github.com/alicebob/miniredis/v2"
 	"github.com/redis/go-redis/v9"
 
-	"github.com/RatesEngine/rates-engine/internal/api/streaming/redispub"
-	v1 "github.com/RatesEngine/rates-engine/internal/api/v1"
-	"github.com/RatesEngine/rates-engine/internal/canonical"
+	"github.com/StellarAtlas/stellar-atlas/internal/api/streaming/redispub"
+	v1 "github.com/StellarAtlas/stellar-atlas/internal/api/v1"
+	"github.com/StellarAtlas/stellar-atlas/internal/canonical"
 )
 
 // fakeHub captures Hub.Publish calls.

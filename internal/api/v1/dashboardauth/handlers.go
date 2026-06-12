@@ -17,9 +17,9 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/RatesEngine/rates-engine/internal/api/v1/middleware"
-	"github.com/RatesEngine/rates-engine/internal/notify"
-	"github.com/RatesEngine/rates-engine/internal/platform"
+	"github.com/StellarAtlas/stellar-atlas/internal/api/v1/middleware"
+	"github.com/StellarAtlas/stellar-atlas/internal/notify"
+	"github.com/StellarAtlas/stellar-atlas/internal/platform"
 )
 
 // EmailLocker serialises first-login provisioning per email so

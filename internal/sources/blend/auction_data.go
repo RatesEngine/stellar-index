@@ -3,8 +3,8 @@ package blend
 import (
 	"fmt"
 
-	"github.com/RatesEngine/rates-engine/internal/canonical"
-	"github.com/RatesEngine/rates-engine/internal/scval"
+	"github.com/StellarAtlas/stellar-atlas/internal/canonical"
+	"github.com/StellarAtlas/stellar-atlas/internal/scval"
 )
 
 // AuctionData wire-format keys. Verified against

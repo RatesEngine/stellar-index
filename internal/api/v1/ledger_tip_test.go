@@ -6,8 +6,8 @@ import (
 	"testing"
 	"time"
 
-	v1 "github.com/RatesEngine/rates-engine/internal/api/v1"
-	"github.com/RatesEngine/rates-engine/internal/storage/timescale"
+	v1 "github.com/StellarAtlas/stellar-atlas/internal/api/v1"
+	"github.com/StellarAtlas/stellar-atlas/internal/storage/timescale"
 )
 
 // Happy path: the ledgerstream cursor is projected into a tip view —

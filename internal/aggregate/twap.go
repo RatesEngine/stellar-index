@@ -4,7 +4,7 @@ import (
 	"math/big"
 	"time"
 
-	"github.com/RatesEngine/rates-engine/internal/canonical"
+	"github.com/StellarAtlas/stellar-atlas/internal/canonical"
 )
 
 // TWAP returns the time-weighted average price over the given

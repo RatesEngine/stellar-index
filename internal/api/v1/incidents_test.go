@@ -10,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/RatesEngine/rates-engine/internal/incidents"
+	"github.com/StellarAtlas/stellar-atlas/internal/incidents"
 )
 
 // TestHandleIncidentsAtom_LinkTarget pins the per-entry alternate

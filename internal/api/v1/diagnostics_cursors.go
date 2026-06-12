@@ -5,7 +5,7 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/RatesEngine/rates-engine/internal/storage/timescale"
+	"github.com/StellarAtlas/stellar-atlas/internal/storage/timescale"
 )
 
 // CursorsReader is the seam the /v1/diagnostics/cursors handler reads

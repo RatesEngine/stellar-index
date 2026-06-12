@@ -16,7 +16,7 @@
 //	import (
 //	    "context"
 //	    "fmt"
-//	    "github.com/RatesEngine/rates-engine/pkg/client"
+//	    "github.com/StellarAtlas/stellar-atlas/pkg/client"
 //	)
 //
 //	func main() {
@@ -103,5 +103,5 @@
 // runs a dashboard polling multiple regions. The Cursors method
 // exposes ingestion lag for the same reason.
 //
-// [ADR-0005]: https://github.com/RatesEngine/rates-engine/blob/main/docs/adr/0005-monorepo.md
+// [ADR-0005]: https://github.com/StellarAtlas/stellar-atlas/blob/main/docs/adr/0005-monorepo.md
 package client

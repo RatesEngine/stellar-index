@@ -11,7 +11,7 @@ import (
 
 	"github.com/redis/go-redis/v9"
 
-	"github.com/RatesEngine/rates-engine/internal/cachekeys"
+	"github.com/StellarAtlas/stellar-atlas/internal/cachekeys"
 )
 
 // APIKeyStore is the WRITER side of the API-key persistence

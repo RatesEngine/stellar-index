@@ -55,40 +55,40 @@ import (
 
 	"github.com/redis/go-redis/v9"
 
-	"github.com/RatesEngine/rates-engine/internal/aggregate"
-	"github.com/RatesEngine/rates-engine/internal/aggregate/confidence"
-	"github.com/RatesEngine/rates-engine/internal/aggregate/freeze"
-	"github.com/RatesEngine/rates-engine/internal/api/streaming"
-	"github.com/RatesEngine/rates-engine/internal/api/streaming/redispub"
-	"github.com/RatesEngine/rates-engine/internal/api/streampublish"
-	v1 "github.com/RatesEngine/rates-engine/internal/api/v1"
-	"github.com/RatesEngine/rates-engine/internal/api/v1/dashboardauth"
-	"github.com/RatesEngine/rates-engine/internal/api/v1/dashboardkeys"
-	"github.com/RatesEngine/rates-engine/internal/api/v1/dashboardwebhooks"
-	"github.com/RatesEngine/rates-engine/internal/api/v1/middleware"
-	"github.com/RatesEngine/rates-engine/internal/auth"
-	"github.com/RatesEngine/rates-engine/internal/auth/sep10"
-	"github.com/RatesEngine/rates-engine/internal/cachekeys"
-	"github.com/RatesEngine/rates-engine/internal/canonical"
-	"github.com/RatesEngine/rates-engine/internal/config"
-	"github.com/RatesEngine/rates-engine/internal/currency"
-	"github.com/RatesEngine/rates-engine/internal/currency/marketcap"
-	"github.com/RatesEngine/rates-engine/internal/customerwebhook"
-	"github.com/RatesEngine/rates-engine/internal/divergence"
-	"github.com/RatesEngine/rates-engine/internal/metadata"
-	"github.com/RatesEngine/rates-engine/internal/notify"
-	"github.com/RatesEngine/rates-engine/internal/obs"
-	"github.com/RatesEngine/rates-engine/internal/platform"
-	"github.com/RatesEngine/rates-engine/internal/platform/postgresstore"
-	"github.com/RatesEngine/rates-engine/internal/ratelimit"
-	"github.com/RatesEngine/rates-engine/internal/sources/external"
-	"github.com/RatesEngine/rates-engine/internal/sources/forex"
-	"github.com/RatesEngine/rates-engine/internal/storage/clickhouse"
-	"github.com/RatesEngine/rates-engine/internal/storage/redisclient"
-	"github.com/RatesEngine/rates-engine/internal/storage/timescale"
-	"github.com/RatesEngine/rates-engine/internal/supply"
-	"github.com/RatesEngine/rates-engine/internal/usage"
-	"github.com/RatesEngine/rates-engine/internal/version"
+	"github.com/StellarAtlas/stellar-atlas/internal/aggregate"
+	"github.com/StellarAtlas/stellar-atlas/internal/aggregate/confidence"
+	"github.com/StellarAtlas/stellar-atlas/internal/aggregate/freeze"
+	"github.com/StellarAtlas/stellar-atlas/internal/api/streaming"
+	"github.com/StellarAtlas/stellar-atlas/internal/api/streaming/redispub"
+	"github.com/StellarAtlas/stellar-atlas/internal/api/streampublish"
+	v1 "github.com/StellarAtlas/stellar-atlas/internal/api/v1"
+	"github.com/StellarAtlas/stellar-atlas/internal/api/v1/dashboardauth"
+	"github.com/StellarAtlas/stellar-atlas/internal/api/v1/dashboardkeys"
+	"github.com/StellarAtlas/stellar-atlas/internal/api/v1/dashboardwebhooks"
+	"github.com/StellarAtlas/stellar-atlas/internal/api/v1/middleware"
+	"github.com/StellarAtlas/stellar-atlas/internal/auth"
+	"github.com/StellarAtlas/stellar-atlas/internal/auth/sep10"
+	"github.com/StellarAtlas/stellar-atlas/internal/cachekeys"
+	"github.com/StellarAtlas/stellar-atlas/internal/canonical"
+	"github.com/StellarAtlas/stellar-atlas/internal/config"
+	"github.com/StellarAtlas/stellar-atlas/internal/currency"
+	"github.com/StellarAtlas/stellar-atlas/internal/currency/marketcap"
+	"github.com/StellarAtlas/stellar-atlas/internal/customerwebhook"
+	"github.com/StellarAtlas/stellar-atlas/internal/divergence"
+	"github.com/StellarAtlas/stellar-atlas/internal/metadata"
+	"github.com/StellarAtlas/stellar-atlas/internal/notify"
+	"github.com/StellarAtlas/stellar-atlas/internal/obs"
+	"github.com/StellarAtlas/stellar-atlas/internal/platform"
+	"github.com/StellarAtlas/stellar-atlas/internal/platform/postgresstore"
+	"github.com/StellarAtlas/stellar-atlas/internal/ratelimit"
+	"github.com/StellarAtlas/stellar-atlas/internal/sources/external"
+	"github.com/StellarAtlas/stellar-atlas/internal/sources/forex"
+	"github.com/StellarAtlas/stellar-atlas/internal/storage/clickhouse"
+	"github.com/StellarAtlas/stellar-atlas/internal/storage/redisclient"
+	"github.com/StellarAtlas/stellar-atlas/internal/storage/timescale"
+	"github.com/StellarAtlas/stellar-atlas/internal/supply"
+	"github.com/StellarAtlas/stellar-atlas/internal/usage"
+	"github.com/StellarAtlas/stellar-atlas/internal/version"
 )
 
 func main() {
@@ -2493,7 +2493,7 @@ func warnUnsafeBind(logger *slog.Logger, listenAddr string, trustedProxyCIDRs []
 		if len(trustedProxyCIDRs) == 0 {
 			logger.Warn("SECURITY: API is listening on a public interface with no trusted proxy CIDRs configured — direct :PORT requests bypass any TLS/WAF you have in front. Bind to 127.0.0.1 OR populate trusted_proxy_cidrs with your reverse proxy's source range.",
 				"listen", listenAddr,
-				"docs", "https://github.com/RatesEngine/rates-engine/blob/main/docs/operations/pre-launch-hardening.md")
+				"docs", "https://github.com/StellarAtlas/stellar-atlas/blob/main/docs/operations/pre-launch-hardening.md")
 			return
 		}
 		logger.Warn("API listening on a public interface; trusting forwarded headers from configured proxies. Confirm your reverse proxy strips client-supplied X-Forwarded-* headers before forwarding.",
@@ -2550,7 +2550,7 @@ func warnOpenCORS(logger *slog.Logger, allowedOrigins []string, authMode string)
 	case "apikey", "apikey_optional", "sep10":
 		logger.Warn("SECURITY: CORS allows every origin (\"*\") and auth_mode permits credentials — narrow [api].allowed_origins to your explorer / explorer hostnames before exposing the API publicly.",
 			"auth_mode", authMode,
-			"docs", "https://github.com/RatesEngine/rates-engine/blob/main/docs/operations/pre-launch-hardening.md")
+			"docs", "https://github.com/StellarAtlas/stellar-atlas/blob/main/docs/operations/pre-launch-hardening.md")
 	}
 }
 

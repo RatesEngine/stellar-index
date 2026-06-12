@@ -1,21 +1,21 @@
 package main
 
 import (
-	"github.com/RatesEngine/rates-engine/internal/completeness"
-	"github.com/RatesEngine/rates-engine/internal/config"
-	"github.com/RatesEngine/rates-engine/internal/dispatcher"
-	"github.com/RatesEngine/rates-engine/internal/sources/aquarius"
-	"github.com/RatesEngine/rates-engine/internal/sources/band"
-	"github.com/RatesEngine/rates-engine/internal/sources/blend"
-	"github.com/RatesEngine/rates-engine/internal/sources/cctp"
-	"github.com/RatesEngine/rates-engine/internal/sources/comet"
-	"github.com/RatesEngine/rates-engine/internal/sources/defindex"
-	"github.com/RatesEngine/rates-engine/internal/sources/phoenix"
-	"github.com/RatesEngine/rates-engine/internal/sources/redstone"
-	"github.com/RatesEngine/rates-engine/internal/sources/reflector"
-	"github.com/RatesEngine/rates-engine/internal/sources/rozo"
-	"github.com/RatesEngine/rates-engine/internal/sources/soroswap"
-	soroswap_router "github.com/RatesEngine/rates-engine/internal/sources/soroswap_router"
+	"github.com/StellarAtlas/stellar-atlas/internal/completeness"
+	"github.com/StellarAtlas/stellar-atlas/internal/config"
+	"github.com/StellarAtlas/stellar-atlas/internal/dispatcher"
+	"github.com/StellarAtlas/stellar-atlas/internal/sources/aquarius"
+	"github.com/StellarAtlas/stellar-atlas/internal/sources/band"
+	"github.com/StellarAtlas/stellar-atlas/internal/sources/blend"
+	"github.com/StellarAtlas/stellar-atlas/internal/sources/cctp"
+	"github.com/StellarAtlas/stellar-atlas/internal/sources/comet"
+	"github.com/StellarAtlas/stellar-atlas/internal/sources/defindex"
+	"github.com/StellarAtlas/stellar-atlas/internal/sources/phoenix"
+	"github.com/StellarAtlas/stellar-atlas/internal/sources/redstone"
+	"github.com/StellarAtlas/stellar-atlas/internal/sources/reflector"
+	"github.com/StellarAtlas/stellar-atlas/internal/sources/rozo"
+	"github.com/StellarAtlas/stellar-atlas/internal/sources/soroswap"
+	soroswap_router "github.com/StellarAtlas/stellar-atlas/internal/sources/soroswap_router"
 )
 
 // reconTarget is one protocol table a source writes, plus the

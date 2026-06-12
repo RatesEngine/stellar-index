@@ -4,7 +4,7 @@ import (
 	"errors"
 	"math/big"
 
-	"github.com/RatesEngine/rates-engine/internal/canonical"
+	"github.com/StellarAtlas/stellar-atlas/internal/canonical"
 )
 
 // ErrNoTrades is returned from [VWAP] when the input slice is empty

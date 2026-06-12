@@ -8,7 +8,7 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/RatesEngine/rates-engine/internal/auth"
+	"github.com/StellarAtlas/stellar-atlas/internal/auth"
 )
 
 // AuthMode is the operator-configured authentication policy. Maps

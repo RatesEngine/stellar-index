@@ -5,7 +5,7 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/RatesEngine/rates-engine/internal/storage/timescale"
+	"github.com/StellarAtlas/stellar-atlas/internal/storage/timescale"
 )
 
 // LendingReader is the storage-side seam for /v1/lending/pools.

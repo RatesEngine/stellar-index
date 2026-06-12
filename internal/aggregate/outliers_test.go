@@ -3,8 +3,8 @@ package aggregate_test
 import (
 	"testing"
 
-	"github.com/RatesEngine/rates-engine/internal/aggregate"
-	"github.com/RatesEngine/rates-engine/internal/canonical"
+	"github.com/StellarAtlas/stellar-atlas/internal/aggregate"
+	"github.com/StellarAtlas/stellar-atlas/internal/canonical"
 )
 
 func TestFilterOutliers_DropsFatTail(t *testing.T) {

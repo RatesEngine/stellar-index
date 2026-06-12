@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/RatesEngine/rates-engine/internal/events"
+	"github.com/StellarAtlas/stellar-atlas/internal/events"
 )
 
 // ReconcileEventStreamer adapts the CH contract_events read path to the

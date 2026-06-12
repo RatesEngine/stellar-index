@@ -5,7 +5,7 @@ import (
 	"errors"
 	"testing"
 
-	c "github.com/RatesEngine/rates-engine/internal/canonical"
+	c "github.com/StellarAtlas/stellar-atlas/internal/canonical"
 )
 
 const (

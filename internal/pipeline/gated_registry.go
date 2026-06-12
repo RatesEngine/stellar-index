@@ -5,10 +5,10 @@ import (
 	"fmt"
 	"log/slog"
 
-	"github.com/RatesEngine/rates-engine/internal/dispatcher"
-	"github.com/RatesEngine/rates-engine/internal/sources/blend"
-	"github.com/RatesEngine/rates-engine/internal/sources/childgate"
-	"github.com/RatesEngine/rates-engine/internal/storage/timescale"
+	"github.com/StellarAtlas/stellar-atlas/internal/dispatcher"
+	"github.com/StellarAtlas/stellar-atlas/internal/sources/blend"
+	"github.com/StellarAtlas/stellar-atlas/internal/sources/childgate"
+	"github.com/StellarAtlas/stellar-atlas/internal/storage/timescale"
 )
 
 // GatedMeta is the per-source description a factory-anchored decoder

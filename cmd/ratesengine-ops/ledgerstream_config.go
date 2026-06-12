@@ -6,8 +6,8 @@ package main
 import (
 	"github.com/stellar/go-stellar-sdk/support/datastore"
 
-	"github.com/RatesEngine/rates-engine/internal/config"
-	"github.com/RatesEngine/rates-engine/internal/ledgerstream"
+	"github.com/StellarAtlas/stellar-atlas/internal/config"
+	"github.com/StellarAtlas/stellar-atlas/internal/ledgerstream"
 )
 
 // newBoundedLedgerStreamConfig returns the ledgerstream.Config that

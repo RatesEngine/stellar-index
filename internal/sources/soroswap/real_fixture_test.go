@@ -11,8 +11,8 @@ import (
 
 	"github.com/stellar/go-stellar-sdk/strkey"
 
-	"github.com/RatesEngine/rates-engine/internal/canonical"
-	"github.com/RatesEngine/rates-engine/internal/events"
+	"github.com/StellarAtlas/stellar-atlas/internal/canonical"
+	"github.com/StellarAtlas/stellar-atlas/internal/events"
 )
 
 // Replay real Soroswap swap + sync fixtures captured from mainnet

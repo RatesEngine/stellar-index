@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/RatesEngine/rates-engine/internal/archivecompleteness"
+	"github.com/StellarAtlas/stellar-atlas/internal/archivecompleteness"
 )
 
 // TestWriteTextfile_BasicShape — happy path: a populated snapshot

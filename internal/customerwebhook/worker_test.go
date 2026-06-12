@@ -15,10 +15,10 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/RatesEngine/rates-engine/internal/customerwebhook"
-	"github.com/RatesEngine/rates-engine/internal/obs"
-	"github.com/RatesEngine/rates-engine/internal/obstest"
-	"github.com/RatesEngine/rates-engine/internal/platform"
+	"github.com/StellarAtlas/stellar-atlas/internal/customerwebhook"
+	"github.com/StellarAtlas/stellar-atlas/internal/obs"
+	"github.com/StellarAtlas/stellar-atlas/internal/obstest"
+	"github.com/StellarAtlas/stellar-atlas/internal/platform"
 )
 
 // fakeStore implements the worker's narrow DeliveryStore

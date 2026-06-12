@@ -9,7 +9,7 @@ package phoenix
 import (
 	"errors"
 
-	"github.com/RatesEngine/rates-engine/internal/scval"
+	"github.com/StellarAtlas/stellar-atlas/internal/scval"
 )
 
 // SourceName — stable identifier.

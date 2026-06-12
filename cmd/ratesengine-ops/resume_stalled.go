@@ -15,8 +15,8 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/RatesEngine/rates-engine/internal/config"
-	"github.com/RatesEngine/rates-engine/internal/storage/timescale"
+	"github.com/StellarAtlas/stellar-atlas/internal/config"
+	"github.com/StellarAtlas/stellar-atlas/internal/storage/timescale"
 )
 
 // resume-stalled — resume every stalled backfill cursor with a

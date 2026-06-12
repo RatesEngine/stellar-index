@@ -32,7 +32,7 @@ package blend
 import (
 	"errors"
 
-	"github.com/RatesEngine/rates-engine/internal/scval"
+	"github.com/StellarAtlas/stellar-atlas/internal/scval"
 )
 
 // SourceName constant — appears in metrics labels, registry keys,

@@ -11,8 +11,8 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/RatesEngine/rates-engine/internal/config"
-	"github.com/RatesEngine/rates-engine/internal/storage/timescale"
+	"github.com/StellarAtlas/stellar-atlas/internal/config"
+	"github.com/StellarAtlas/stellar-atlas/internal/storage/timescale"
 )
 
 // find-data-gaps — data-derived gap detector for Soroban-era ledger

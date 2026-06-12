@@ -4,7 +4,7 @@ import (
 	"context"
 	"log/slog"
 
-	"github.com/RatesEngine/rates-engine/internal/consumer"
+	"github.com/StellarAtlas/stellar-atlas/internal/consumer"
 )
 
 // Sink consumes RouterSwap events and persists them. For Phase A

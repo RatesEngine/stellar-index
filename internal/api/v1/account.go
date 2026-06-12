@@ -8,7 +8,7 @@ import (
 	"sort"
 	"time"
 
-	"github.com/RatesEngine/rates-engine/internal/auth"
+	"github.com/StellarAtlas/stellar-atlas/internal/auth"
 )
 
 // AccountStore is the v1 boundary against [auth.APIKeyStore].

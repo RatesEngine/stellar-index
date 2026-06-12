@@ -16,15 +16,15 @@ import (
 
 	sdkxdr "github.com/stellar/go-stellar-sdk/xdr"
 
-	"github.com/RatesEngine/rates-engine/internal/config"
-	"github.com/RatesEngine/rates-engine/internal/consumer"
-	"github.com/RatesEngine/rates-engine/internal/dispatcher"
-	"github.com/RatesEngine/rates-engine/internal/ledgerstream"
-	"github.com/RatesEngine/rates-engine/internal/pipeline"
-	"github.com/RatesEngine/rates-engine/internal/sources/external"
-	"github.com/RatesEngine/rates-engine/internal/sources/sorobanevents"
-	"github.com/RatesEngine/rates-engine/internal/sources/soroswap"
-	"github.com/RatesEngine/rates-engine/internal/storage/timescale"
+	"github.com/StellarAtlas/stellar-atlas/internal/config"
+	"github.com/StellarAtlas/stellar-atlas/internal/consumer"
+	"github.com/StellarAtlas/stellar-atlas/internal/dispatcher"
+	"github.com/StellarAtlas/stellar-atlas/internal/ledgerstream"
+	"github.com/StellarAtlas/stellar-atlas/internal/pipeline"
+	"github.com/StellarAtlas/stellar-atlas/internal/sources/external"
+	"github.com/StellarAtlas/stellar-atlas/internal/sources/sorobanevents"
+	"github.com/StellarAtlas/stellar-atlas/internal/sources/soroswap"
+	"github.com/StellarAtlas/stellar-atlas/internal/storage/timescale"
 )
 
 // SorobanEventsPseudoSource is the backfill-only source name that

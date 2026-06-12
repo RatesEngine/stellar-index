@@ -4,9 +4,9 @@ import (
 	"context"
 	"testing"
 
-	"github.com/RatesEngine/rates-engine/internal/canonical/discovery"
-	"github.com/RatesEngine/rates-engine/internal/events"
-	"github.com/RatesEngine/rates-engine/internal/scval"
+	"github.com/StellarAtlas/stellar-atlas/internal/canonical/discovery"
+	"github.com/StellarAtlas/stellar-atlas/internal/events"
+	"github.com/StellarAtlas/stellar-atlas/internal/scval"
 )
 
 // validContractID is a real, valid C-strkey reused across tests.

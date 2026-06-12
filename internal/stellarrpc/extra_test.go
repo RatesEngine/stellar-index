@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	rpc "github.com/RatesEngine/rates-engine/internal/stellarrpc"
+	rpc "github.com/StellarAtlas/stellar-atlas/internal/stellarrpc"
 )
 
 // ─── JSONRPCError.Error() ─────────────────────────────────────

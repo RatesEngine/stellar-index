@@ -9,8 +9,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/RatesEngine/rates-engine/internal/storage/timescale"
-	"github.com/RatesEngine/rates-engine/internal/supply"
+	"github.com/StellarAtlas/stellar-atlas/internal/storage/timescale"
+	"github.com/StellarAtlas/stellar-atlas/internal/supply"
 )
 
 // TestSupplyStorageRoundTrip exercises the InsertSupply →

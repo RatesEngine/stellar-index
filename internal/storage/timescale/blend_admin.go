@@ -6,7 +6,7 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/RatesEngine/rates-engine/internal/sources/blend"
+	"github.com/StellarAtlas/stellar-atlas/internal/sources/blend"
 )
 
 // InsertBlendAdminEvent appends one Blend admin / pool-config /

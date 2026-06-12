@@ -11,7 +11,7 @@ import (
 	"net/url"
 	"strings"
 
-	"github.com/RatesEngine/rates-engine/internal/auth"
+	"github.com/StellarAtlas/stellar-atlas/internal/auth"
 )
 
 // KeyPolicy returns a Middleware that enforces the per-key policy

@@ -9,8 +9,8 @@ import (
 	"net/netip"
 	"testing"
 
-	"github.com/RatesEngine/rates-engine/internal/api/v1/middleware"
-	"github.com/RatesEngine/rates-engine/internal/auth"
+	"github.com/StellarAtlas/stellar-atlas/internal/api/v1/middleware"
+	"github.com/StellarAtlas/stellar-atlas/internal/auth"
 )
 
 // TestKeyPolicy_AnonymousBypasses pins that anonymous traffic

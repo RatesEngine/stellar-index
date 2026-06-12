@@ -7,7 +7,7 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/RatesEngine/rates-engine/internal/auth"
+	"github.com/StellarAtlas/stellar-atlas/internal/auth"
 )
 
 // handleSEP10Challenge serves GET /v1/auth/sep10/challenge?account=G…

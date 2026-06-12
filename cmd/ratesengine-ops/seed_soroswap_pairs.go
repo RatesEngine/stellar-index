@@ -9,10 +9,10 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/RatesEngine/rates-engine/internal/config"
-	"github.com/RatesEngine/rates-engine/internal/sources/soroswap"
-	"github.com/RatesEngine/rates-engine/internal/stellarrpc"
-	"github.com/RatesEngine/rates-engine/internal/storage/timescale"
+	"github.com/StellarAtlas/stellar-atlas/internal/config"
+	"github.com/StellarAtlas/stellar-atlas/internal/sources/soroswap"
+	"github.com/StellarAtlas/stellar-atlas/internal/stellarrpc"
+	"github.com/StellarAtlas/stellar-atlas/internal/storage/timescale"
 )
 
 // seedSoroswapPairs reads every pair contract the Soroswap factory

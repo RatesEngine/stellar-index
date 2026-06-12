@@ -9,7 +9,7 @@ import (
 	"net"
 	"net/http"
 
-	"github.com/RatesEngine/rates-engine/internal/auth"
+	"github.com/StellarAtlas/stellar-atlas/internal/auth"
 )
 
 // KeyToucher is the storage-side primitive the [TouchUsage]

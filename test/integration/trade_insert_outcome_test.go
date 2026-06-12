@@ -10,9 +10,9 @@ import (
 
 	"github.com/prometheus/client_golang/prometheus/testutil"
 
-	c "github.com/RatesEngine/rates-engine/internal/canonical"
-	"github.com/RatesEngine/rates-engine/internal/obs"
-	"github.com/RatesEngine/rates-engine/internal/storage/timescale"
+	c "github.com/StellarAtlas/stellar-atlas/internal/canonical"
+	"github.com/StellarAtlas/stellar-atlas/internal/obs"
+	"github.com/StellarAtlas/stellar-atlas/internal/storage/timescale"
 )
 
 // TestTradeInsertOutcome_NewVsDuplicate pins the diagnostic metric

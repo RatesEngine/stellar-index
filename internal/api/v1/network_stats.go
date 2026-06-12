@@ -4,8 +4,8 @@ import (
 	"context"
 	"net/http"
 
-	"github.com/RatesEngine/rates-engine/internal/sources/external"
-	"github.com/RatesEngine/rates-engine/internal/storage/timescale"
+	"github.com/StellarAtlas/stellar-atlas/internal/sources/external"
+	"github.com/StellarAtlas/stellar-atlas/internal/storage/timescale"
 )
 
 // NetworkStatsReader is the seam the /v1/network/stats handler

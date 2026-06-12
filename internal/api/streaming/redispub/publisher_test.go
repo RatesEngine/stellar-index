@@ -9,8 +9,8 @@ import (
 
 	"github.com/redis/go-redis/v9"
 
-	"github.com/RatesEngine/rates-engine/internal/api/streaming/redispub"
-	"github.com/RatesEngine/rates-engine/internal/canonical"
+	"github.com/StellarAtlas/stellar-atlas/internal/api/streaming/redispub"
+	"github.com/StellarAtlas/stellar-atlas/internal/canonical"
 )
 
 // fakeRedis captures the (channel, message) of every Publish call

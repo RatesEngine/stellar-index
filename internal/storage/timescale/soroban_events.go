@@ -7,7 +7,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/RatesEngine/rates-engine/internal/sources/sorobanevents"
+	"github.com/StellarAtlas/stellar-atlas/internal/sources/sorobanevents"
 )
 
 // InsertSorobanEventsBatch persists a slice of raw Soroban event

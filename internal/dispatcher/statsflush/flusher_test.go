@@ -1,7 +1,7 @@
 package statsflush
 
 import (
-	"github.com/RatesEngine/rates-engine/internal/dispatcher"
+	"github.com/StellarAtlas/stellar-atlas/internal/dispatcher"
 )
 
 // stubStatsSource is a deterministic StatsSource for tests. The

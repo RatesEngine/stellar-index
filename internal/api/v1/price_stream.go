@@ -3,8 +3,8 @@ package v1
 import (
 	"net/http"
 
-	"github.com/RatesEngine/rates-engine/internal/api/streaming"
-	"github.com/RatesEngine/rates-engine/internal/canonical"
+	"github.com/StellarAtlas/stellar-atlas/internal/api/streaming"
+	"github.com/StellarAtlas/stellar-atlas/internal/canonical"
 )
 
 // PriceStreamTopic returns the Hub topic key for closed-bucket events

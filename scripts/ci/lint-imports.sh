@@ -79,7 +79,7 @@ RULES = [
     {
         "name": "A/no-rpc-in-ingest",
         "banned": [
-            "github.com/RatesEngine/rates-engine/internal/stellarrpc",
+            "github.com/StellarAtlas/stellar-atlas/internal/stellarrpc",
         ],
         "allow": [
             "internal/stellarrpc/",             # the package itself

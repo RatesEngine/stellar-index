@@ -14,7 +14,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/RatesEngine/rates-engine/internal/currency"
+	"github.com/StellarAtlas/stellar-atlas/internal/currency"
 )
 
 // Default CG endpoint + path. Free tier — no auth required for

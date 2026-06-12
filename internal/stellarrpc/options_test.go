@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	rpc "github.com/RatesEngine/rates-engine/internal/stellarrpc"
+	rpc "github.com/StellarAtlas/stellar-atlas/internal/stellarrpc"
 )
 
 // ─── Options + Endpoint accessor ────────────────────────────────

@@ -9,8 +9,8 @@ import (
 	"github.com/alicebob/miniredis/v2"
 	"github.com/redis/go-redis/v9"
 
-	"github.com/RatesEngine/rates-engine/internal/auth"
-	"github.com/RatesEngine/rates-engine/internal/auth/sep10"
+	"github.com/StellarAtlas/stellar-atlas/internal/auth"
+	"github.com/StellarAtlas/stellar-atlas/internal/auth/sep10"
 )
 
 // TestRedisReplayGuard_FirstClaimSucceeds_SecondReturnsUnauthorized

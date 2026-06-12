@@ -15,8 +15,8 @@ import (
 	"github.com/stellar/go-stellar-sdk/support/datastore"
 	sdkxdr "github.com/stellar/go-stellar-sdk/xdr"
 
-	"github.com/RatesEngine/rates-engine/internal/config"
-	"github.com/RatesEngine/rates-engine/internal/ledgerstream"
+	"github.com/StellarAtlas/stellar-atlas/internal/config"
+	"github.com/StellarAtlas/stellar-atlas/internal/ledgerstream"
 )
 
 // extractWasmFromGalexie pulls raw WASM bytes for one or more

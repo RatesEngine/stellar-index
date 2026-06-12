@@ -1,8 +1,8 @@
 package reflector
 
 import (
-	"github.com/RatesEngine/rates-engine/internal/canonical"
-	"github.com/RatesEngine/rates-engine/internal/consumer"
+	"github.com/StellarAtlas/stellar-atlas/internal/canonical"
+	"github.com/StellarAtlas/stellar-atlas/internal/consumer"
 )
 
 // UpdateEvent is the [consumer.Event] Reflector's Decoder emits

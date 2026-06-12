@@ -12,9 +12,9 @@ import (
 	"sync"
 	"time"
 
-	"github.com/RatesEngine/rates-engine/internal/canonical"
-	"github.com/RatesEngine/rates-engine/internal/currency"
-	"github.com/RatesEngine/rates-engine/internal/storage/timescale"
+	"github.com/StellarAtlas/stellar-atlas/internal/canonical"
+	"github.com/StellarAtlas/stellar-atlas/internal/currency"
+	"github.com/StellarAtlas/stellar-atlas/internal/storage/timescale"
 )
 
 // Sep1CachedReader is the narrow dependency /v1/assets/{id} uses to

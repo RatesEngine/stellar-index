@@ -9,7 +9,7 @@ import (
 	"net"
 	"time"
 
-	"github.com/RatesEngine/rates-engine/internal/obs"
+	"github.com/StellarAtlas/stellar-atlas/internal/obs"
 )
 
 // TLSCertProbeInterval is the cadence at which [RunTLSCertProbe]

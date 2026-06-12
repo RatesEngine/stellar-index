@@ -9,7 +9,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/RatesEngine/rates-engine/pkg/client"
+	"github.com/StellarAtlas/stellar-atlas/pkg/client"
 )
 
 // newTestServer wires an httptest.Server with the supplied handler

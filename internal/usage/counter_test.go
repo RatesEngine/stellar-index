@@ -9,7 +9,7 @@ import (
 	"github.com/alicebob/miniredis/v2"
 	"github.com/redis/go-redis/v9"
 
-	"github.com/RatesEngine/rates-engine/internal/usage"
+	"github.com/StellarAtlas/stellar-atlas/internal/usage"
 )
 
 func newRedis(t *testing.T) (*miniredis.Miniredis, *redis.Client) {

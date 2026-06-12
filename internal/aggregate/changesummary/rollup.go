@@ -22,7 +22,7 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/RatesEngine/rates-engine/internal/canonical"
+	"github.com/StellarAtlas/stellar-atlas/internal/canonical"
 )
 
 // Row is the storage-neutral shape the worker hands to the Sink.

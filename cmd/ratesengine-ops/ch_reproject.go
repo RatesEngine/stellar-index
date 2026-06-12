@@ -6,13 +6,13 @@ import (
 	"os"
 	"time"
 
-	"github.com/RatesEngine/rates-engine/internal/completeness"
-	"github.com/RatesEngine/rates-engine/internal/config"
-	"github.com/RatesEngine/rates-engine/internal/dispatcher"
-	"github.com/RatesEngine/rates-engine/internal/events"
-	"github.com/RatesEngine/rates-engine/internal/sources/sdex"
-	"github.com/RatesEngine/rates-engine/internal/storage/clickhouse"
-	"github.com/RatesEngine/rates-engine/internal/storage/timescale"
+	"github.com/StellarAtlas/stellar-atlas/internal/completeness"
+	"github.com/StellarAtlas/stellar-atlas/internal/config"
+	"github.com/StellarAtlas/stellar-atlas/internal/dispatcher"
+	"github.com/StellarAtlas/stellar-atlas/internal/events"
+	"github.com/StellarAtlas/stellar-atlas/internal/sources/sdex"
+	"github.com/StellarAtlas/stellar-atlas/internal/storage/clickhouse"
+	"github.com/StellarAtlas/stellar-atlas/internal/storage/timescale"
 )
 
 // chReproject is the ADR-0034 Phase-4 validation: it re-derives a ledger

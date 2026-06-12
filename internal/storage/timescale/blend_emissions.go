@@ -6,7 +6,7 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/RatesEngine/rates-engine/internal/sources/blend"
+	"github.com/StellarAtlas/stellar-atlas/internal/sources/blend"
 )
 
 // InsertBlendEmissionEvent appends one Blend emission / credit-

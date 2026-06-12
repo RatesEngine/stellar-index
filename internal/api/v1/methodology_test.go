@@ -4,8 +4,8 @@ import (
 	"net/http"
 	"testing"
 
-	v1 "github.com/RatesEngine/rates-engine/internal/api/v1"
-	"github.com/RatesEngine/rates-engine/internal/canonical"
+	v1 "github.com/StellarAtlas/stellar-atlas/internal/api/v1"
+	"github.com/StellarAtlas/stellar-atlas/internal/canonical"
 )
 
 // TestMethodology_BaselineShape pins the wire shape's required

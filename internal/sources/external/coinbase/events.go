@@ -33,7 +33,7 @@ package coinbase
 import (
 	"errors"
 
-	"github.com/RatesEngine/rates-engine/internal/sources/external"
+	"github.com/StellarAtlas/stellar-atlas/internal/sources/external"
 )
 
 // SourceName is stamped on every canonical.Trade this package emits.

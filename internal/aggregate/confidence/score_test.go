@@ -4,7 +4,7 @@ import (
 	"math"
 	"testing"
 
-	"github.com/RatesEngine/rates-engine/internal/aggregate/confidence"
+	"github.com/StellarAtlas/stellar-atlas/internal/aggregate/confidence"
 )
 
 // healthyInputs are the ADR-0019 worked-example values:

@@ -8,13 +8,13 @@ import (
 	"testing"
 	"time"
 
-	"github.com/RatesEngine/rates-engine/internal/canonical"
-	"github.com/RatesEngine/rates-engine/internal/dispatcher"
-	"github.com/RatesEngine/rates-engine/internal/events"
-	"github.com/RatesEngine/rates-engine/internal/sources/aquarius"
-	"github.com/RatesEngine/rates-engine/internal/sources/phoenix"
-	"github.com/RatesEngine/rates-engine/internal/sources/reflector"
-	"github.com/RatesEngine/rates-engine/internal/sources/soroswap"
+	"github.com/StellarAtlas/stellar-atlas/internal/canonical"
+	"github.com/StellarAtlas/stellar-atlas/internal/dispatcher"
+	"github.com/StellarAtlas/stellar-atlas/internal/events"
+	"github.com/StellarAtlas/stellar-atlas/internal/sources/aquarius"
+	"github.com/StellarAtlas/stellar-atlas/internal/sources/phoenix"
+	"github.com/StellarAtlas/stellar-atlas/internal/sources/reflector"
+	"github.com/StellarAtlas/stellar-atlas/internal/sources/soroswap"
 )
 
 // TestEndToEndRouting_withRealFixtures wires all four source

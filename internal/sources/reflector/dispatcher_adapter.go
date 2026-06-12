@@ -1,8 +1,8 @@
 package reflector
 
 import (
-	"github.com/RatesEngine/rates-engine/internal/consumer"
-	"github.com/RatesEngine/rates-engine/internal/events"
+	"github.com/StellarAtlas/stellar-atlas/internal/consumer"
+	"github.com/StellarAtlas/stellar-atlas/internal/events"
 )
 
 // Decoder is the dispatcher-facing view of one Reflector oracle

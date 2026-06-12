@@ -6,7 +6,7 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/RatesEngine/rates-engine/internal/sources/sorobanevents"
+	"github.com/StellarAtlas/stellar-atlas/internal/sources/sorobanevents"
 )
 
 // TopicSample is one representative soroban_events row for a distinct

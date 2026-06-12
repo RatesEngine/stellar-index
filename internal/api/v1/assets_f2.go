@@ -7,8 +7,8 @@ import (
 	"math/big"
 	"sync"
 
-	"github.com/RatesEngine/rates-engine/internal/canonical"
-	"github.com/RatesEngine/rates-engine/internal/supply"
+	"github.com/StellarAtlas/stellar-atlas/internal/canonical"
+	"github.com/StellarAtlas/stellar-atlas/internal/supply"
 )
 
 // SupplyLooker is the read-side interface the v1 server uses to

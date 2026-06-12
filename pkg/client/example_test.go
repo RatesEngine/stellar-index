@@ -8,7 +8,7 @@ import (
 	"net/http/httptest"
 	"time"
 
-	"github.com/RatesEngine/rates-engine/pkg/client"
+	"github.com/StellarAtlas/stellar-atlas/pkg/client"
 )
 
 // ExampleNew demonstrates the canonical SDK construction. The

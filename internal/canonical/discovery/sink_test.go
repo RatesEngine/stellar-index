@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/RatesEngine/rates-engine/internal/canonical/discovery"
+	"github.com/StellarAtlas/stellar-atlas/internal/canonical/discovery"
 )
 
 // fakeRecorder counts Record + IsKnown calls and lets tests inject

@@ -5,7 +5,7 @@ import (
 	"math"
 	"testing"
 
-	"github.com/RatesEngine/rates-engine/internal/aggregate/baseline"
+	"github.com/StellarAtlas/stellar-atlas/internal/aggregate/baseline"
 )
 
 func almostEqual(a, b float64) bool {

@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/RatesEngine/rates-engine/internal/supply"
+	"github.com/StellarAtlas/stellar-atlas/internal/supply"
 )
 
 // stubReader is a minimal [supply.ReserveBalanceReader] for tests.

@@ -7,7 +7,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/RatesEngine/rates-engine/internal/canonical"
+	"github.com/StellarAtlas/stellar-atlas/internal/canonical"
 )
 
 // ChangeSummaryRow mirrors the change_summary_5m table. Pointer

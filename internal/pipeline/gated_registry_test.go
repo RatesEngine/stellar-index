@@ -3,9 +3,9 @@ package pipeline
 import (
 	"testing"
 
-	"github.com/RatesEngine/rates-engine/internal/events"
-	"github.com/RatesEngine/rates-engine/internal/sources/blend"
-	"github.com/RatesEngine/rates-engine/internal/sources/childgate"
+	"github.com/StellarAtlas/stellar-atlas/internal/events"
+	"github.com/StellarAtlas/stellar-atlas/internal/sources/blend"
+	"github.com/StellarAtlas/stellar-atlas/internal/sources/childgate"
 )
 
 func TestGatedMetaFor_blend(t *testing.T) {

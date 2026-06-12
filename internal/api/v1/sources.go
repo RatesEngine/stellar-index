@@ -7,8 +7,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/RatesEngine/rates-engine/internal/sources/external"
-	"github.com/RatesEngine/rates-engine/internal/storage/timescale"
+	"github.com/StellarAtlas/stellar-atlas/internal/sources/external"
+	"github.com/StellarAtlas/stellar-atlas/internal/storage/timescale"
 )
 
 // SourcesStatsReader is the seam for /v1/sources?include=stats.

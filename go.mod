@@ -1,4 +1,4 @@
-module github.com/RatesEngine/rates-engine
+module github.com/StellarAtlas/stellar-atlas
 
 go 1.25.10
 

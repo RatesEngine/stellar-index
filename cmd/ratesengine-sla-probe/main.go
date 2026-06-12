@@ -50,7 +50,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/RatesEngine/rates-engine/internal/version"
+	"github.com/StellarAtlas/stellar-atlas/internal/version"
 )
 
 // SLA targets — match the RFP-stated thresholds. Configurable via

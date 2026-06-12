@@ -8,7 +8,7 @@ import (
 	"github.com/stellar/go-stellar-sdk/strkey"
 	"github.com/stellar/go-stellar-sdk/xdr"
 
-	"github.com/RatesEngine/rates-engine/internal/dispatcher"
+	"github.com/StellarAtlas/stellar-atlas/internal/dispatcher"
 )
 
 // G-strkeys used across the test file. Both are the canonical

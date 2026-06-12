@@ -11,8 +11,8 @@ import (
 	"testing"
 	"time"
 
-	v1 "github.com/RatesEngine/rates-engine/internal/api/v1"
-	"github.com/RatesEngine/rates-engine/internal/auth"
+	v1 "github.com/StellarAtlas/stellar-atlas/internal/api/v1"
+	"github.com/StellarAtlas/stellar-atlas/internal/auth"
 )
 
 // fakeSignupTracker is the handler-level test double for

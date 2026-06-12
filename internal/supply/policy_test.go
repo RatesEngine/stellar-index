@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/RatesEngine/rates-engine/internal/supply"
+	"github.com/StellarAtlas/stellar-atlas/internal/supply"
 )
 
 // TestLockedSet_IsEmpty — the IsEmpty discriminator drives a

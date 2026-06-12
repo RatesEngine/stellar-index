@@ -8,7 +8,7 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/RatesEngine/rates-engine/internal/canonical"
+	"github.com/StellarAtlas/stellar-atlas/internal/canonical"
 )
 
 // ChartSeries is the wire shape for /v1/chart. Mirrors the OpenAPI

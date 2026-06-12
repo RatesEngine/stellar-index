@@ -12,17 +12,17 @@ import (
 
 	"github.com/stellar/go-stellar-sdk/strkey"
 
-	"github.com/RatesEngine/rates-engine/internal/completeness"
-	"github.com/RatesEngine/rates-engine/internal/config"
-	"github.com/RatesEngine/rates-engine/internal/consumer"
-	"github.com/RatesEngine/rates-engine/internal/dispatcher"
-	"github.com/RatesEngine/rates-engine/internal/pipeline"
-	"github.com/RatesEngine/rates-engine/internal/sources/band"
-	"github.com/RatesEngine/rates-engine/internal/sources/childgate"
-	"github.com/RatesEngine/rates-engine/internal/sources/sdex"
-	soroswap_router "github.com/RatesEngine/rates-engine/internal/sources/soroswap_router"
-	"github.com/RatesEngine/rates-engine/internal/storage/clickhouse"
-	"github.com/RatesEngine/rates-engine/internal/storage/timescale"
+	"github.com/StellarAtlas/stellar-atlas/internal/completeness"
+	"github.com/StellarAtlas/stellar-atlas/internal/config"
+	"github.com/StellarAtlas/stellar-atlas/internal/consumer"
+	"github.com/StellarAtlas/stellar-atlas/internal/dispatcher"
+	"github.com/StellarAtlas/stellar-atlas/internal/pipeline"
+	"github.com/StellarAtlas/stellar-atlas/internal/sources/band"
+	"github.com/StellarAtlas/stellar-atlas/internal/sources/childgate"
+	"github.com/StellarAtlas/stellar-atlas/internal/sources/sdex"
+	soroswap_router "github.com/StellarAtlas/stellar-atlas/internal/sources/soroswap_router"
+	"github.com/StellarAtlas/stellar-atlas/internal/storage/clickhouse"
+	"github.com/StellarAtlas/stellar-atlas/internal/storage/timescale"
 )
 
 // sorobanEraGenesis is the first pubnet ledger with Soroban — the lower

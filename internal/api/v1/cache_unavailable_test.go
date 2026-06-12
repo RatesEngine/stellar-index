@@ -8,8 +8,8 @@ import (
 	"strings"
 	"testing"
 
-	v1 "github.com/RatesEngine/rates-engine/internal/api/v1"
-	"github.com/RatesEngine/rates-engine/internal/canonical"
+	v1 "github.com/StellarAtlas/stellar-atlas/internal/api/v1"
+	"github.com/StellarAtlas/stellar-atlas/internal/canonical"
 )
 
 // miscOnfErr models the wire-format MISCONF reply Redis returns when

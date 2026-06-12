@@ -5,7 +5,7 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/RatesEngine/rates-engine/internal/storage/timescale"
+	"github.com/StellarAtlas/stellar-atlas/internal/storage/timescale"
 )
 
 // LedgerTipView is the wire shape of /v1/ledger/tip and the data

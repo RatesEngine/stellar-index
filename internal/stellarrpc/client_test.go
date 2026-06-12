@@ -12,8 +12,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/RatesEngine/rates-engine/internal/events"
-	rpc "github.com/RatesEngine/rates-engine/internal/stellarrpc"
+	"github.com/StellarAtlas/stellar-atlas/internal/events"
+	rpc "github.com/StellarAtlas/stellar-atlas/internal/stellarrpc"
 )
 
 // mockRPC returns a test server that responds with the given result

@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/RatesEngine/rates-engine/internal/platform"
+	"github.com/StellarAtlas/stellar-atlas/internal/platform"
 )
 
 // fakeEmailLocker is the in-memory analogue of [auth.RedisSignupEmailLocker]

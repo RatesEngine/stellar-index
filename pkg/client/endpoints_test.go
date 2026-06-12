@@ -10,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/RatesEngine/rates-engine/pkg/client"
+	"github.com/StellarAtlas/stellar-atlas/pkg/client"
 )
 
 // TestHistorySinceInception_HappyPath — happy-path round-trip

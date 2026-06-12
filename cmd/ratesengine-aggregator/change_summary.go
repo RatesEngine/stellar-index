@@ -4,9 +4,9 @@ import (
 	"context"
 	"time"
 
-	"github.com/RatesEngine/rates-engine/internal/aggregate/changesummary"
-	"github.com/RatesEngine/rates-engine/internal/canonical"
-	"github.com/RatesEngine/rates-engine/internal/storage/timescale"
+	"github.com/StellarAtlas/stellar-atlas/internal/aggregate/changesummary"
+	"github.com/StellarAtlas/stellar-atlas/internal/canonical"
+	"github.com/StellarAtlas/stellar-atlas/internal/storage/timescale"
 )
 
 // changeSummaryPriceSource adapts the timescale Store to the

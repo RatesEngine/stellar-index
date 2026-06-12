@@ -8,7 +8,7 @@ import (
 	"time"
 	"unicode/utf8"
 
-	"github.com/RatesEngine/rates-engine/internal/incidents"
+	"github.com/StellarAtlas/stellar-atlas/internal/incidents"
 )
 
 // IncidentsList is the wire shape returned by /v1/incidents.

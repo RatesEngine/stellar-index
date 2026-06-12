@@ -7,7 +7,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/RatesEngine/rates-engine/internal/canonical/discovery"
+	"github.com/StellarAtlas/stellar-atlas/internal/canonical/discovery"
 )
 
 // RecordDiscovered persists a [discovery.Hit] to the

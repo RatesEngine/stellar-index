@@ -5,8 +5,8 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/RatesEngine/rates-engine/internal/events"
-	"github.com/RatesEngine/rates-engine/internal/scval"
+	"github.com/StellarAtlas/stellar-atlas/internal/events"
+	"github.com/StellarAtlas/stellar-atlas/internal/scval"
 )
 
 // ErrUnknownEvent flags an event whose topic[0] symbol isn't one

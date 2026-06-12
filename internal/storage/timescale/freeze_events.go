@@ -9,9 +9,9 @@ import (
 	"hash/fnv"
 	"time"
 
-	"github.com/RatesEngine/rates-engine/internal/aggregate/anomaly"
-	"github.com/RatesEngine/rates-engine/internal/aggregate/freeze"
-	"github.com/RatesEngine/rates-engine/internal/canonical"
+	"github.com/StellarAtlas/stellar-atlas/internal/aggregate/anomaly"
+	"github.com/StellarAtlas/stellar-atlas/internal/aggregate/freeze"
+	"github.com/StellarAtlas/stellar-atlas/internal/canonical"
 )
 
 // FreezeEventSink is the timescale-backed implementation of

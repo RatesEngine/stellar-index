@@ -7,8 +7,8 @@ import (
 	"net/http"
 	"testing"
 
-	v1 "github.com/RatesEngine/rates-engine/internal/api/v1"
-	"github.com/RatesEngine/rates-engine/internal/storage/timescale"
+	v1 "github.com/StellarAtlas/stellar-atlas/internal/api/v1"
+	"github.com/StellarAtlas/stellar-atlas/internal/storage/timescale"
 )
 
 // stubSep1Cache implements v1.Sep1CachedReader in-memory. Mirrors

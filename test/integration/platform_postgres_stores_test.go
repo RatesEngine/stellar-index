@@ -18,8 +18,8 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/RatesEngine/rates-engine/internal/platform"
-	"github.com/RatesEngine/rates-engine/internal/platform/postgresstore"
+	"github.com/StellarAtlas/stellar-atlas/internal/platform"
+	"github.com/StellarAtlas/stellar-atlas/internal/platform/postgresstore"
 )
 
 // TestPlatformPostgresStores exercises the AccountStore +

@@ -8,7 +8,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/RatesEngine/rates-engine/internal/storage/clickhouse"
+	"github.com/StellarAtlas/stellar-atlas/internal/storage/clickhouse"
 )
 
 type fakeTokenSupply struct {

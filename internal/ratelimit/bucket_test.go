@@ -10,7 +10,7 @@ import (
 	"github.com/alicebob/miniredis/v2"
 	"github.com/redis/go-redis/v9"
 
-	"github.com/RatesEngine/rates-engine/internal/ratelimit"
+	"github.com/StellarAtlas/stellar-atlas/internal/ratelimit"
 )
 
 func newRedis(t *testing.T) (*redis.Client, *miniredis.Miniredis) {

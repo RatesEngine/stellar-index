@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/RatesEngine/rates-engine/internal/events"
+	"github.com/StellarAtlas/stellar-atlas/internal/events"
 )
 
 // blockableWriter holds a release channel — InsertSorobanEventsBatch

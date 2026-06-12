@@ -6,7 +6,7 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/RatesEngine/rates-engine/internal/api/streaming"
+	"github.com/StellarAtlas/stellar-atlas/internal/api/streaming"
 )
 
 const (

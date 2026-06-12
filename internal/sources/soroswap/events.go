@@ -8,7 +8,7 @@ package soroswap
 import (
 	"errors"
 
-	"github.com/RatesEngine/rates-engine/internal/scval"
+	"github.com/StellarAtlas/stellar-atlas/internal/scval"
 )
 
 // Source name constant — appears in metrics labels, canonical.Trade.Source,

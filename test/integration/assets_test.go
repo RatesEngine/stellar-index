@@ -10,8 +10,8 @@ import (
 
 	"github.com/stellar/go-stellar-sdk/strkey"
 
-	c "github.com/RatesEngine/rates-engine/internal/canonical"
-	"github.com/RatesEngine/rates-engine/internal/storage/timescale"
+	c "github.com/StellarAtlas/stellar-atlas/internal/canonical"
+	"github.com/StellarAtlas/stellar-atlas/internal/storage/timescale"
 )
 
 // TestAssetsReader exercises DistinctAssets + HasAsset against a
