@@ -93,7 +93,19 @@ const (
 	// CDE65QK2, CAQF5KNO) — pools the V2-only gate silently dropped. Its
 	// first deploy is at ledger 51_499_915.
 	MainnetPoolFactoryV1 = "CCZD6ESMOGMPWH2KRO4O7RGTAPGTUPFWFQBELQSS7ZUK63V3TZWETGAG"
-	MainnetBackstop      = "CAQQR5SWBXKIGZKPBZDH3KM5GQ5GUTPKB7JAFCINLZBC5WXPJKRG3IM7"
+	// MainnetBackstop is the Backstop V2 singleton. Like the pool
+	// factories, the backstop was REDEPLOYED: V1 is below. Backstop
+	// events (queue_withdrawal/deposit/claim/distribute/donate/
+	// gulp_emissions/rw_zone*…) are a DIFFERENT event surface from the
+	// pools and are NOT yet decoded — known-uncaptured, on the
+	// EVERY-event backlog. Do NOT add backstops to the pool gate
+	// registry: pool decode paths would mis-decode their bodies.
+	MainnetBackstop = "CAQQR5SWBXKIGZKPBZDH3KM5GQ5GUTPKB7JAFCINLZBC5WXPJKRG3IM7"
+	// MainnetBackstopV1 — found 2026-06-12 via lake enumeration after a
+	// Dune dashboard (mootz12/blend-v2-events) surfaced the backstop
+	// event surface; profile (queue_withdrawal/gulp_emissions/…, ledgers
+	// 51.49M→62.08M) matches the backstop signature in the V1 era.
+	MainnetBackstopV1 = "CAO3AGAMZVRMHITL36EJ2VZQWKYRPWMQAPDQD5YEOF3GIF7T44U4JAL3"
 )
 
 // MainnetPoolFactories is the COMPLETE, empirically-verified set of Blend

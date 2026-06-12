@@ -78,3 +78,26 @@ Verified against `blend-contracts-v2` `pool/src/events.rs` /
 | `supply`, `withdraw`, `supply_collateral`, `withdraw_collateral`, `borrow`, `repay`, `flash_loan` | `blend_positions` |
 | `gulp`, `claim`, `reserve_emission_update`, `gulp_emissions`, `bad_debt`, `defaulted_debt` | `blend_emissions` |
 | `set_admin`, `update_pool`, `queue_set_reserve`, `cancel_set_reserve`, `set_reserve`, `set_status` | `blend_admin` |
+
+## Backstop singletons (2 — events known, NOT yet decoded)
+
+Like the pool factories, the Backstop was redeployed — V1 + V2 both have
+on-chain activity. Their event surface (different from the pools) is
+**not yet decoded by us** — listed here for completeness and so the
+Blend team can confirm. Lake-verified 2026-06-12; independently
+corroborated by the community Dune dashboards (mootz12/blend-v2-events
+shows the V2 backstop's ~92k event rows).
+
+| Backstop | Address | Lake events (top kinds) |
+|---|---|---|
+| V1 (**previously undocumented**) | `CAO3AGAMZVRMHITL36EJ2VZQWKYRPWMQAPDQD5YEOF3GIF7T44U4JAL3` | queue_withdrawal ×1,374 · gulp_emissions ×209 · dequeue_withdrawal ×143 · claim ×6 · rw_zone ×5 (51.49M→62.08M) |
+| V2 (documented) | `CAQQR5SWBXKIGZKPBZDH3KM5GQ5GUTPKB7JAFCINLZBC5WXPJKRG3IM7` | queue_withdrawal ×1,312 · deposit ×634 · claim ×570 · distribute ×247 · dequeue_withdrawal ×163 · donate ×132 · withdraw ×30 · gulp_emissions ×11 · rw_zone_add ×5 |
+
+> **Why they're not in the pool gate:** backstop event bodies differ
+> from the pool events sharing the same topic names (`claim`,
+> `withdraw`, `gulp_emissions`) — routing them through the pool decoder
+> would mis-decode. Pre-gate topic-matching either soft-errored or wrote
+> wrong-shaped rows for these; the 2026-06-12 re-derive purges those.
+> Proper capture = a dedicated backstop decoder (EVERY-event backlog).
+> **Blend team:** please confirm the V1 backstop address and whether an
+> Emitter-contract event surface exists that we should also cover.
