@@ -48,7 +48,20 @@ date, so a team can tell us if a contract is missing or mis-attributed.
 |---|---|---|---|
 | Blend | lake deploy-graph | ✅ Gated (2 factories, 27 pools) | [blend.md](blend.md) |
 | Soroswap | lake deploy-graph | ✅ Gated (4 factories) | [soroswap.md](soroswap.md) |
-| Phoenix | RPC view (pre-lake) | 🔎 Enumerated (factory + multihop + 11 pools) | [phoenix.md](phoenix.md) |
-| DeFindex | lake deploy-graph | 🔎 Enumerated (4 factories, 34 vaults, 7 strategies) — open: strategy fan-out | [defindex.md](defindex.md) |
+| Phoenix | RPC view (pre-lake) | ⏳ Enumerated (factory + multihop + 11 pools + 3 stake) — completeness needs team confirmation | [phoenix.md](phoenix.md) |
+| DeFindex | tx create_contract | ⏳ Enumerated (4 factories, 34 vaults, 7 strategies) — open: `create` event lacks vault address | [defindex.md](defindex.md) |
 | Aquarius | lake observation | ⏳ Enumerated (router + ~177 pools) — open: authoritative pool enumeration | [aquarius.md](aquarius.md) |
+
+> **Why blend + soroswap are gated but the rest aren't (yet):** the
+> factory-fan-out gate needs a way to enumerate the *complete* child set.
+> That's clean only when the creation event **carries the child's
+> address** — true for Blend (`deploy` → pool address) and Soroswap
+> (`new_pair` → pair address), both lake-verified complete. For the rest
+> the creation signal is absent or insufficient: Phoenix/Aquarius pools
+> predate our lake (50.46M); DeFindex's `create` event carries the vault's
+> *config* but not its address (0/34 vaults appear in the event bodies);
+> Comet has no factory namespace at all. Those four need the protocol team
+> to confirm the contract set (this page) or a view-function/WASM-hash
+> enumeration — enforcing a gate on an unverified set would silently drop
+> events, the one regression ADR-0035 forbids.
 | Comet | WASM-hash | ⏳ Pending (shared Balancer-v1 WASM, no factory namespace) | — |

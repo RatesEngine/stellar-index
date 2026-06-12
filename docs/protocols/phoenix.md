@@ -42,11 +42,31 @@ activity in our window.
 | `CCUCE5H5CKW3S7JBESGCES6ZGDMWLNRY3HOFET3OH33MXZWKXNJTKSM3` | no lake events |
 | `CDQLKNH3725BUP4HPKQKMM7OO62FDVXVTO7RCYPID527MZHJG2F3QBJW` | no lake events |
 
+## Stake contracts (3 — separate from the pools)
+
+`bond` / `unbond` events come from per-pool **stake contracts**, which are
+distinct addresses **not** returned by `query_pools()`. Found active in the
+lake:
+
+```
+CBRGNWGAC25CPLMOAMR7WBPOF5QTFA5RYXQH4DEJ4K65G2QFLTLMW7RO   bond ×24
+CAF3UJ45ZQJP6USFUIMVMGOUETUTXEC35R2247VJYIVQBGKTKBZKNBJ3   unbond ×21
+CBBUVHCEML7UE46XXZXLTMGKFMKX7KOC2XAKI3TW6WBQBKWMSARMU3YM   bond ×10
+```
+
+There may be more stake contracts (one per pool) that haven't emitted
+bond/unbond yet. **Please send the complete pool → stake-contract mapping.**
+
 **Note on completeness:** the `swap` topic is emitted by 49 distinct
 contracts in our lake (most are other AMMs), and `withdraw_liquidity` by
-75 — so we can't reverse-derive the Phoenix pool set from event topics
-alone. This list is the factory's `query_pools()` snapshot; **if Phoenix
-has deployed pools since 2026-05-01, please send the additions.**
+75 — so we **cannot** reverse-derive or verify the complete Phoenix pool
+set from event topics, and Phoenix's pool-creation events predate our lake,
+so we have no live signal for new pools. The pool list above is the
+factory's `query_pools()` snapshot (2026-05-01); a gate built on it would
+**silently drop** any pool or stake contract not on the list. This is why
+we need the team to confirm completeness (or a `query_pools()` we can
+re-poll) **before** enforcing the gate. **If Phoenix has deployed pools or
+stake contracts since 2026-05-01, please send the additions.**
 
 ## Events decoded
 

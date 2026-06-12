@@ -37,16 +37,32 @@ already exists (`migrations/0033_seed_defindex_vaults`).
 
 ## ⚠️ Open question (please advise)
 
-We need the **factory → vault → strategy** ownership chain to gate
-correctly:
+We verified the factory `create` events against the lake and found a
+gating obstacle: **the `create` event does not carry the new vault's own
+address.** The 4 factories emit 107 `create` events whose bodies hold the
+vault's *configuration* (assets, strategy addresses, manager/role
+addresses) — but **0 of the 34 vault-emitting contracts appear anywhere in
+those bodies.** So unlike Blend (`deploy` → pool address) or Soroswap
+(`new_pair` → pair address), we can't enumerate DeFindex vaults from the
+creation event; the vault's address is the deterministically-deployed
+contract, recorded in the transaction's `create_contract` op, not the
+event.
 
-1. Are the **34 vaults** all created by the 4 `DeFindexFactory` contracts
-   above (does every vault appear in a factory `create` event)?
-2. Are the **7 `BlendStrategy`** contracts **created by their vaults** (so
-   we can fan out factory → vault → strategy), or are they **shared /
-   independently deployed** strategy contracts a vault merely *points at*?
-   This determines whether strategy events can be attributed by factory
-   descent or need a separate allowlist.
+To gate correctly we need one of:
+
+1. A **factory view function** that lists deployed vault addresses (a
+   `query_vaults()` / registry), OR
+2. Confirmation that the vault address is recoverable from the `create`
+   event another way (e.g. a salt/deployer derivation), OR
+3. The **authoritative vault + strategy address list** directly.
+
+And separately: are the **7 `BlendStrategy`** contracts **created by their
+vaults** (fan-out), or **shared / independently deployed** (need their own
+allowlist)?
+
+> **Note:** DeFindex topics are namespaced (`DeFindexVault`,
+> `BlendStrategy`), so collision risk is low and the urgency is lower than
+> for Blend/Soroswap (whose generic `supply`/`swap` topics collide widely).
 
 ## Events decoded
 
