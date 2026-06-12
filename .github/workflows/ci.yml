@@ -30,6 +30,14 @@ on:
       - '.github/ISSUE_TEMPLATE/**'
       - '.github/PULL_REQUEST_TEMPLATE.md'
 
+# N2-01: scope the GITHUB_TOKEN to read-only at the workflow level.
+# No job here writes to the repo (tests, lint, build, artifact upload all
+# work with contents: read), and main is not branch-protection-enforced,
+# so a compromised transitive dep running in a job must not be able to
+# push. Jobs that need more must opt in explicitly.
+permissions:
+  contents: read
+
 env:
   GOFUMPT_VERSION: v0.8.0
   GOIMPORTS_VERSION: v0.42.0
@@ -205,8 +213,11 @@ jobs:
         run: make monitoring-check
 
   # ────────────────────────────────────────────────────────────────
-  # Security — fast scans on every PR.
-  # Heavier scans (trivy, SBOM) live in security.yml on a schedule.
+  # Security — fast scans on every PR: govulncheck + gitleaks (below).
+  # NOTE (N2-02): heavier scans (trivy image scan, SBOM) are NOT yet
+  # implemented — there is no security.yml. The previous comment claimed
+  # one existed on a schedule; it never did. Add a scheduled security.yml
+  # before the public flip if container/SBOM scanning is required.
   # ────────────────────────────────────────────────────────────────
 
   vuln:
@@ -271,7 +282,10 @@ jobs:
   openapi:
     name: openapi lint
     runs-on: ubuntu-latest
-    if: github.event_name == 'pull_request'
+    # N2-04: runs on push-to-main too — a direct push (the live-in-dev
+    # norm) that edits openapi/ or the handlers previously skipped Spectral
+    # + the generated-reference drift check, the exact bypass the push
+    # trigger above exists to close. The job is cheap.
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6
       - name: Spectral lint
