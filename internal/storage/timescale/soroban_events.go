@@ -383,6 +383,22 @@ func (s *Store) CountSorobanEventsInRange(ctx context.Context, from, to uint32) 
 	return n, nil
 }
 
+// MaxSorobanEventLedger returns the highest ledger present in
+// soroban_events. ok is false (with a nil error) when the table is empty.
+// Used by `seed-protocol-contracts` to default the upper bound of the
+// factory-creation walk to the lake tip.
+func (s *Store) MaxSorobanEventLedger(ctx context.Context) (uint32, bool, error) {
+	const q = `SELECT max(ledger) FROM soroban_events`
+	var maxL sql.NullInt64
+	if err := s.db.QueryRowContext(ctx, q).Scan(&maxL); err != nil {
+		return 0, false, fmt.Errorf("timescale: MaxSorobanEventLedger: %w", err)
+	}
+	if !maxL.Valid || maxL.Int64 < 0 {
+		return 0, false, nil
+	}
+	return uint32(maxL.Int64), true, nil
+}
+
 // nullString maps an empty string to SQL NULL and any other value
 // to a populated sql.NullString. Mirrors `nullNumeric` in
 // cctp_events.go.

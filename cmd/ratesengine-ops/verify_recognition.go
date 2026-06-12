@@ -4,6 +4,7 @@ import (
 	"context"
 	"flag"
 	"fmt"
+	"log/slog"
 	"os"
 	"time"
 
@@ -50,7 +51,16 @@ func verifyRecognition(args []string) error {
 	}
 	defer func() { _ = store.Close() }()
 
-	disp, err := pipeline.BuildDispatcher(cfg.Ingestion.EnabledSources, cfg.Oracle)
+	// Warm the factory-anchored gated registries (ADR-0035) read-only so a
+	// real protocol child's event shape is recognized and a FOREIGN
+	// emitter of the same topic is correctly flagged. Requires
+	// protocol_contracts seeded (`seed-protocol-contracts`).
+	gatedOpts, err := pipeline.GatedRegistryOptions(ctx, store, slog.Default(), ctx, false)
+	if err != nil {
+		return fmt.Errorf("gated registry warm: %w", err)
+	}
+
+	disp, err := pipeline.BuildDispatcher(cfg.Ingestion.EnabledSources, cfg.Oracle, gatedOpts)
 	if err != nil {
 		return fmt.Errorf("build dispatcher: %w", err)
 	}

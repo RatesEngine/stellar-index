@@ -4,6 +4,7 @@ import (
 	"context"
 	"flag"
 	"fmt"
+	"log/slog"
 	"os"
 	"sort"
 	"time"
@@ -11,6 +12,7 @@ import (
 	"github.com/RatesEngine/rates-engine/internal/config"
 	"github.com/RatesEngine/rates-engine/internal/pipeline"
 	"github.com/RatesEngine/rates-engine/internal/storage/clickhouse"
+	"github.com/RatesEngine/rates-engine/internal/storage/timescale"
 )
 
 // chRecognition is the ClickHouse-backed ADR-0033 Claim 2a (recognition) audit.
@@ -47,7 +49,23 @@ func chRecognition(args []string) error { //nolint:gocognit,funlen // linear: pa
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Minute)
 	defer cancel()
 
-	disp, err := pipeline.BuildDispatcher(cfg.Ingestion.EnabledSources, cfg.Oracle)
+	// Warm the factory-anchored gated registries (ADR-0035) read-only from
+	// protocol_contracts so real protocol children are recognized and a
+	// FOREIGN emitter of the same topic is flagged. The recognition shapes
+	// come from CH, but the child-contract registry lives in Postgres, so
+	// we open a short-lived store just to warm it. Requires
+	// protocol_contracts seeded (`seed-protocol-contracts`).
+	store, err := timescale.Open(ctx, cfg.Storage.PostgresDSN)
+	if err != nil {
+		return fmt.Errorf("storage open (gated registry warm): %w", err)
+	}
+	defer func() { _ = store.Close() }()
+	gatedOpts, err := pipeline.GatedRegistryOptions(ctx, store, slog.Default(), ctx, false)
+	if err != nil {
+		return fmt.Errorf("gated registry warm: %w", err)
+	}
+
+	disp, err := pipeline.BuildDispatcher(cfg.Ingestion.EnabledSources, cfg.Oracle, gatedOpts)
 	if err != nil {
 		return fmt.Errorf("build dispatcher: %w", err)
 	}

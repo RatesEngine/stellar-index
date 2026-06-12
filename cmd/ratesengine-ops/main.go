@@ -315,6 +315,11 @@ func realMain() int { //nolint:gocyclo,gocognit,funlen // subcommand switch; eac
 			fmt.Fprintf(os.Stderr, "seed-soroswap-pairs: %v\n", err)
 			return 1
 		}
+	case "seed-protocol-contracts":
+		if err := seedProtocolContracts(args[1:]); err != nil {
+			fmt.Fprintf(os.Stderr, "seed-protocol-contracts: %v\n", err)
+			return 1
+		}
 	case "seed-entry-counts":
 		if err := seedEntryCounts(args[1:]); err != nil {
 			fmt.Fprintf(os.Stderr, "seed-entry-counts: %v\n", err)
@@ -759,6 +764,14 @@ Subcommands:
                           token1) tuple. Run once on first deployment;
                           live new_pair events keep the table fresh
                           afterwards (see migrations/0016_create_soroswap_pairs.up.sql).
+  seed-protocol-contracts -config PATH -source NAME|all [-to LEDGER] [-timeout DUR]
+                          Bootstrap the protocol_contracts registry for a
+                          factory-anchored gated decoder (ADR-0035): walks
+                          the source's factory creation events (e.g. Blend
+                          pool-factory deploy) from the lake and upserts
+                          every child contract. Deploy precondition before
+                          relying on the gate; live creation events keep the
+                          table fresh afterwards.
                           ~3N+1 RPC calls at 300ms throttle, so wall-time
                           scales linearly with pair count (~3 min for 200
                           pairs). Idempotent — re-running is safe.

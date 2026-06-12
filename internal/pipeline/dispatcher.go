@@ -35,6 +35,7 @@ import (
 	"github.com/RatesEngine/rates-engine/internal/sources/band"
 	"github.com/RatesEngine/rates-engine/internal/sources/blend"
 	"github.com/RatesEngine/rates-engine/internal/sources/cctp"
+	"github.com/RatesEngine/rates-engine/internal/sources/childgate"
 	"github.com/RatesEngine/rates-engine/internal/sources/claimable_balances"
 	"github.com/RatesEngine/rates-engine/internal/sources/comet"
 	"github.com/RatesEngine/rates-engine/internal/sources/defindex"
@@ -83,7 +84,7 @@ import (
 // Empty soroswapOpts is fine for tests / contexts that don't need
 // persistence (the verify-decoders subcommand uses SeedFromFactoryRPC
 // instead and ignores postgres entirely).
-func BuildDispatcher(names []string, oracle config.OracleConfig, soroswapOpts ...soroswap.DecoderOption) (*dispatcher.Dispatcher, error) { //nolint:gocognit,gocyclo // linear case-table, splitting hurts readability
+func BuildDispatcher(names []string, oracle config.OracleConfig, gated map[string][]childgate.Option, soroswapOpts ...soroswap.DecoderOption) (*dispatcher.Dispatcher, error) { //nolint:gocognit,gocyclo // linear case-table, splitting hurts readability
 	var decoders []dispatcher.Decoder
 	var opDecoders []dispatcher.OpDecoder
 	var callDecoders []dispatcher.ContractCallDecoder
@@ -161,11 +162,13 @@ func BuildDispatcher(names []string, oracle config.OracleConfig, soroswapOpts ..
 		case sdex.SourceName:
 			opDecoders = append(opDecoders, sdex.NewDecoder())
 		case blend.SourceName:
-			// Blend matches by topic[0] across every Blend pool
-			// contract — the per-pool address is stamped into the
-			// decoded event but no contract-list filter is needed
-			// at dispatch time. See internal/sources/blend/README.md.
-			decoders = append(decoders, blend.NewDecoder())
+			// Blend gates Matches() on contract identity (ADR-0035):
+			// `deploy` only from the Pool Factory, every other event only
+			// from a factory-deployed pool. The pool registry is warmed
+			// from protocol_contracts via gated[blend] (empty when this
+			// path doesn't warm — e.g. backfill, where blend output is
+			// dropped by IsProjectedEvent anyway).
+			decoders = append(decoders, blend.NewDecoder(gated[blend.SourceName]...))
 		case cctp.SourceName:
 			// Circle CCTP v2 — stateless topic Decoder, gated on the
 			// three known CCTP contracts (deposit_for_burn /

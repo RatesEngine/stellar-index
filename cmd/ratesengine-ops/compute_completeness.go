@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"flag"
 	"fmt"
+	"log/slog"
 	"os"
 	"strings"
 	"time"
@@ -17,6 +18,7 @@ import (
 	"github.com/RatesEngine/rates-engine/internal/dispatcher"
 	"github.com/RatesEngine/rates-engine/internal/pipeline"
 	"github.com/RatesEngine/rates-engine/internal/sources/band"
+	"github.com/RatesEngine/rates-engine/internal/sources/childgate"
 	"github.com/RatesEngine/rates-engine/internal/sources/sdex"
 	soroswap_router "github.com/RatesEngine/rates-engine/internal/sources/soroswap_router"
 	"github.com/RatesEngine/rates-engine/internal/storage/clickhouse"
@@ -98,6 +100,18 @@ func computeCompleteness(args []string) error { //nolint:funlen,gocognit,gocyclo
 		chStreamer = clickhouse.ReconcileEventStreamer{Addr: *chAddr}
 	}
 
+	// Warm the factory-anchored gated registries (ADR-0035) so the
+	// recognition dispatcher correctly recognizes real protocol children
+	// (registered pools/vaults) and correctly flags FOREIGN emitters of
+	// the same topic as gaps. Read-only (withHook=false) — the audit must
+	// not mutate the registry. Depends on protocol_contracts being seeded
+	// (`ratesengine-ops seed-protocol-contracts`); an empty table would
+	// surface every real child shape as a false gap.
+	gatedOpts, gerr := pipeline.GatedRegistryOptions(ctx, store, slog.Default(), ctx, false)
+	if gerr != nil {
+		return fmt.Errorf("gated registry warm: %w", gerr)
+	}
+
 	// ── Recognition (Claim 2a): one global scan, attributed per source ──
 	var (
 		recGaps []completeness.RecognitionGap
@@ -111,9 +125,9 @@ func computeCompleteness(args []string) error { //nolint:funlen,gocognit,gocyclo
 		if uint32(*fromLedger) > recFrom { //nolint:gosec // ledger seq fits uint32
 			recFrom = uint32(*fromLedger) //nolint:gosec // ledger seq fits uint32
 		}
-		recGaps, recErr = computeRecognitionGapsCH(ctx, cfg, *chAddr, recFrom, tip)
+		recGaps, recErr = computeRecognitionGapsCH(ctx, cfg, *chAddr, gatedOpts, recFrom, tip)
 	default:
-		recGaps, recErr = computeRecognitionGaps(ctx, store, cfg, tip)
+		recGaps, recErr = computeRecognitionGaps(ctx, store, cfg, gatedOpts, tip)
 	}
 	if recErr != nil {
 		fmt.Fprintf(os.Stderr, "compute-completeness: recognition scan failed: %v\n", recErr)
@@ -721,8 +735,8 @@ func absDiff(a, b int) int {
 // classic-token firehose — sep41 isn't enabled, so it's out of protocol scope)
 // run through the dispatcher's Recognize(). Fast + off the serving DB vs the
 // Postgres soroban_events scan in computeRecognitionGaps.
-func computeRecognitionGapsCH(ctx context.Context, cfg config.Config, chAddr string, from, tip uint32) ([]completeness.RecognitionGap, error) {
-	disp, err := pipeline.BuildDispatcher(cfg.Ingestion.EnabledSources, cfg.Oracle)
+func computeRecognitionGapsCH(ctx context.Context, cfg config.Config, chAddr string, gated map[string][]childgate.Option, from, tip uint32) ([]completeness.RecognitionGap, error) {
+	disp, err := pipeline.BuildDispatcher(cfg.Ingestion.EnabledSources, cfg.Oracle, gated)
 	if err != nil {
 		return nil, fmt.Errorf("build dispatcher: %w", err)
 	}
@@ -749,8 +763,8 @@ func computeRecognitionGapsCH(ctx context.Context, cfg config.Config, chAddr str
 
 // computeRecognitionGaps runs the global recognition audit over the
 // Soroban era and returns every unrecognized event shape.
-func computeRecognitionGaps(ctx context.Context, store *timescale.Store, cfg config.Config, tip uint32) ([]completeness.RecognitionGap, error) {
-	disp, err := pipeline.BuildDispatcher(cfg.Ingestion.EnabledSources, cfg.Oracle)
+func computeRecognitionGaps(ctx context.Context, store *timescale.Store, cfg config.Config, gated map[string][]childgate.Option, tip uint32) ([]completeness.RecognitionGap, error) {
+	disp, err := pipeline.BuildDispatcher(cfg.Ingestion.EnabledSources, cfg.Oracle, gated)
 	if err != nil {
 		return nil, fmt.Errorf("build dispatcher: %w", err)
 	}

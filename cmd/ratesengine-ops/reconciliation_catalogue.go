@@ -39,6 +39,17 @@ type reconSource struct {
 	census      bool   // sdex: expected = decoder re-derive over the lake's SDEX ops
 	genesis     uint32 // first-possible-data ledger; mirrors DefaultGapDetectorTargets (WASM-audit sourced)
 
+	// Factory-anchored gating (ADR-0035): when factory != "", dec gates
+	// Matches() on a registry of factory-deployed children, so the
+	// re-derive must seed that registry before counting. A re-derive that
+	// starts at `genesis` self-seeds in-stream (the factory's creation
+	// events precede every child's events and dec.Decode registers them);
+	// a re-derive over a custom sub-range does NOT, so the caller pre-walks
+	// the factory's creation events via preseedFactoryChildren. creationSym
+	// is the topic_0_sym of the creation event (e.g. blend "deploy").
+	factory     string
+	creationSym string
+
 	// Event-less ContractCall sources (band, soroswap-router): no
 	// soroban_events landing zone, so the projection census is re-derived by
 	// streaming InvokeContract ops from the lake (filtered on callContract's
@@ -109,12 +120,16 @@ func buildReconciliationCatalogue(cfg config.Config) ([]reconSource, *soroswap.D
 				"defindex.vault.deposit", "defindex.vault.withdraw",
 			}},
 		}},
-		{name: "blend", genesis: 51_499_546, dec: blend.NewDecoder(), targets: []reconTarget{
-			{"blend_auctions", "", []string{blend.NewAuctionEventKind, blend.FillAuctionEventKind, blend.DeleteAuctionEventKind}},
-			{"blend_positions", "", []string{blend.PositionEventKind}},
-			{"blend_emissions", "", []string{blend.EmissionEventKind}},
-			{"blend_admin", "", []string{blend.AdminEventKind}},
-		}},
+		{
+			name: "blend", genesis: blend.FactoryGenesisLedger, dec: blend.NewDecoder(),
+			factory: blend.MainnetPoolFactory, creationSym: blend.EventDeploy,
+			targets: []reconTarget{
+				{"blend_auctions", "", []string{blend.NewAuctionEventKind, blend.FillAuctionEventKind, blend.DeleteAuctionEventKind}},
+				{"blend_positions", "", []string{blend.PositionEventKind}},
+				{"blend_emissions", "", []string{blend.EmissionEventKind}},
+				{"blend_admin", "", []string{blend.AdminEventKind}},
+			},
+		},
 		{name: "sdex", genesis: 2, census: true, targets: []reconTarget{
 			{"trades", "source = 'sdex'", nil},
 		}},

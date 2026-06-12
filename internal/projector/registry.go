@@ -8,6 +8,7 @@ import (
 	"github.com/RatesEngine/rates-engine/internal/sources/aquarius"
 	"github.com/RatesEngine/rates-engine/internal/sources/blend"
 	"github.com/RatesEngine/rates-engine/internal/sources/cctp"
+	"github.com/RatesEngine/rates-engine/internal/sources/childgate"
 	"github.com/RatesEngine/rates-engine/internal/sources/comet"
 	"github.com/RatesEngine/rates-engine/internal/sources/defindex"
 	"github.com/RatesEngine/rates-engine/internal/sources/phoenix"
@@ -35,10 +36,10 @@ import (
 // requires oracle config + that config is empty (e.g.
 // `reflector-dex` enabled but `oracle.reflector.dex_contract`
 // is "").
-func BuildRegistry(names []string, oracle config.OracleConfig, watchedSEP41 []string, soroswapOpts ...soroswap.DecoderOption) (Registry, error) {
+func BuildRegistry(names []string, oracle config.OracleConfig, watchedSEP41 []string, gated map[string][]childgate.Option, soroswapOpts ...soroswap.DecoderOption) (Registry, error) {
 	var sources []Source
 	for _, name := range names {
-		s, ok, err := buildSource(strings.ToLower(name), oracle, watchedSEP41, soroswapOpts...)
+		s, ok, err := buildSource(strings.ToLower(name), oracle, watchedSEP41, gated, soroswapOpts...)
 		if err != nil {
 			return Registry{}, err
 		}
@@ -91,7 +92,7 @@ var firehoseExcludeSyms = []string{
 }
 
 //nolint:gocognit,gocyclo,funlen // dispatch switch; one case per source. Same shape as pipeline.BuildDispatcher (which carries the same exemption).
-func buildSource(name string, oracle config.OracleConfig, watchedSEP41 []string, soroswapOpts ...soroswap.DecoderOption) (Source, bool, error) {
+func buildSource(name string, oracle config.OracleConfig, watchedSEP41 []string, gated map[string][]childgate.Option, soroswapOpts ...soroswap.DecoderOption) (Source, bool, error) {
 	switch name {
 	case soroswap.SourceName:
 		// Soroswap dispatches via topic[0] across all pairs in
@@ -120,9 +121,14 @@ func buildSource(name string, oracle config.OracleConfig, watchedSEP41 []string,
 			ExcludeTopic0Syms: firehoseExcludeSyms,
 		}, true, nil
 	case blend.SourceName:
+		// ADR-0035: contract-gated. gated[blend] warms the pool registry
+		// from protocol_contracts so the projector resumes with a complete
+		// gate across restarts (its cursor advances past factory deploy
+		// events). Empty registry → events dropped until seeded, so the
+		// genesis walk is a deploy precondition.
 		return Source{
 			Name:              blend.SourceName,
-			Decoder:           blend.NewDecoder(),
+			Decoder:           blend.NewDecoder(gated[blend.SourceName]...),
 			ExcludeTopic0Syms: firehoseExcludeSyms,
 		}, true, nil
 	case cctp.SourceName:

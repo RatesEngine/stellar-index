@@ -51,7 +51,7 @@ func TestRun_NilSinkReturnsError(t *testing.T) {
 // external CEX/FX) are silently skipped — they're handled
 // elsewhere per ADR-0032 § "Out of scope".
 func TestBuildRegistry_UnknownSourceIsSilent(t *testing.T) {
-	reg, err := BuildRegistry([]string{"sdex", "binance", "kraken", "band"}, oracleConfigEmpty(), nil)
+	reg, err := BuildRegistry([]string{"sdex", "binance", "kraken", "band"}, oracleConfigEmpty(), nil, nil)
 	if err != nil {
 		t.Fatalf("BuildRegistry: unexpected error: %v", err)
 	}
@@ -67,7 +67,7 @@ func TestBuildRegistry_UnknownSourceIsSilent(t *testing.T) {
 func TestBuildRegistry_SEP41NeedsWatchedSet(t *testing.T) {
 	names := []string{"sep41_transfers", "sep41_supply"}
 
-	reg, err := BuildRegistry(names, oracleConfigEmpty(), nil)
+	reg, err := BuildRegistry(names, oracleConfigEmpty(), nil, nil)
 	if err != nil {
 		t.Fatalf("BuildRegistry: %v", err)
 	}
@@ -75,7 +75,7 @@ func TestBuildRegistry_SEP41NeedsWatchedSet(t *testing.T) {
 		t.Fatalf("no watched sep41 contracts → expected 0 sources, got %d", len(reg.Sources))
 	}
 
-	reg, err = BuildRegistry(names, oracleConfigEmpty(), []string{"CWATCHEDCONTRACT0000000000000000000000000000000000000000"})
+	reg, err = BuildRegistry(names, oracleConfigEmpty(), []string{"CWATCHEDCONTRACT0000000000000000000000000000000000000000"}, nil)
 	if err != nil {
 		t.Fatalf("BuildRegistry (watched): %v", err)
 	}
@@ -89,7 +89,7 @@ func TestBuildRegistry_SEP41NeedsWatchedSet(t *testing.T) {
 // projector.Source entries. Order-dependent so we map names.
 func TestBuildRegistry_IncludesInScopeSources(t *testing.T) {
 	names := []string{"aquarius", "phoenix", "comet", "blend", "cctp", "rozo", "soroswap", "defindex"}
-	reg, err := BuildRegistry(names, oracleConfigEmpty(), nil)
+	reg, err := BuildRegistry(names, oracleConfigEmpty(), nil, nil)
 	if err != nil {
 		t.Fatalf("BuildRegistry: %v", err)
 	}

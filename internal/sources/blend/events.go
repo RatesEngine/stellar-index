@@ -87,6 +87,14 @@ const (
 	MainnetBackstop    = "CAQQR5SWBXKIGZKPBZDH3KM5GQ5GUTPKB7JAFCINLZBC5WXPJKRG3IM7"
 )
 
+// FactoryGenesisLedger is the first ledger at which the Pool Factory V2
+// could have emitted a `deploy` (its own deploy ledger — 2025-04-14,
+// verified in docs/discovery/dexes-amms/blend.md). The pool-registry
+// genesis seed (ADR-0035) walks the factory's deploy events from here, and
+// the ADR-0033 reconcile uses it as the blend source genesis. No pool can
+// predate the factory, so this is the exact lower bound for the fan-out.
+const FactoryGenesisLedger uint32 = 51_499_546
+
 // Pre-encoded base64 SCVal::Symbol blobs, computed at init via
 // scval.MustEncodeSymbol. Used for byte-equality classification
 // against incoming event topics (cheaper than re-decoding the

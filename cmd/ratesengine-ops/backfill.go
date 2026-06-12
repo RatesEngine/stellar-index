@@ -267,7 +267,12 @@ func buildChunkDispatcher(
 			return nil, nil, fmt.Errorf("soroswap registry: %w", err)
 		}
 	}
-	disp, err := pipeline.BuildDispatcher(realSources, cfg.Oracle, soroswapOpts...)
+	// gated=nil: backfill writes the raw soroban_events landing + the
+	// non-projected sinks; the projected sources' (blend, …) decoder output
+	// is dropped by pipeline.IsProjectedEvent, so an empty gate registry
+	// here only suppresses output that would be discarded anyway. The
+	// projector is the sole writer of those tables and warms its own gate.
+	disp, err := pipeline.BuildDispatcher(realSources, cfg.Oracle, nil, soroswapOpts...)
 	if err != nil {
 		return nil, nil, fmt.Errorf("build dispatcher: %w", err)
 	}

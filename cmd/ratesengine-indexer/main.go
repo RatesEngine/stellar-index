@@ -229,7 +229,17 @@ func run(cfgPath string, dryRun bool) error {
 	if err != nil {
 		return fmt.Errorf("soroswap registry: %w", err)
 	}
-	disp, err := pipeline.BuildDispatcher(cfg.Ingestion.EnabledSources, cfg.Oracle, soroswapOpts...)
+	// Factory-anchored gated decoders (blend, …): warm each one's
+	// childgate.Registry from protocol_contracts and arm a live-upsert
+	// hook so factory creation events persist as they stream (ADR-0035).
+	// Empty registry on a fresh deployment is fine — operators run
+	// `ratesengine-ops seed-protocol-contracts -source <name>` once to
+	// bootstrap. withHook=true: this is the writer path.
+	gatedOpts, err := pipeline.GatedRegistryOptions(rootCtx, store, logger, rootCtx, true)
+	if err != nil {
+		return fmt.Errorf("gated registries: %w", err)
+	}
+	disp, err := pipeline.BuildDispatcher(cfg.Ingestion.EnabledSources, cfg.Oracle, gatedOpts, soroswapOpts...)
 	if err != nil {
 		return fmt.Errorf("build dispatcher: %w", err)
 	}
@@ -456,7 +466,7 @@ func run(cfgPath string, dryRun bool) error {
 	// (persist_per_source=false): projector is sole writer.
 	var projectorDone chan struct{}
 	if cfg.Ingestion.Projector.Enabled {
-		registry, perr := projector.BuildRegistry(cfg.Ingestion.EnabledSources, cfg.Oracle, cfg.Supply.WatchedSEP41Contracts, soroswapOpts...)
+		registry, perr := projector.BuildRegistry(cfg.Ingestion.EnabledSources, cfg.Oracle, cfg.Supply.WatchedSEP41Contracts, gatedOpts, soroswapOpts...)
 		if perr != nil {
 			return fmt.Errorf("projector registry: %w", perr)
 		}
