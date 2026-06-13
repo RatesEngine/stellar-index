@@ -98,6 +98,7 @@ type Server struct {
 	sourcesStats            SourcesStatsReader
 	lending                 LendingReader
 	currencies              CurrenciesReader
+	explorer                ExplorerReader
 	fxHistory               FXHistoryReader
 	sessionPeeker           SessionPeeker
 	incidents               []incidents.Incident
@@ -462,6 +463,12 @@ type Options struct {
 	// currencies state.
 	Currencies CurrenciesReader
 
+	// Explorer, when non-nil, backs the network-explorer endpoints
+	// (ADR-0038): /v1/ledgers, /v1/tx, /v1/operations, /v1/contracts,
+	// /v1/search — reading the certified ClickHouse lake directly.
+	// *clickhouse.ExplorerReader satisfies it. Nil → those routes 503.
+	Explorer ExplorerReader
+
 	// FXHistory, when non-nil, lets /v1/chart serve fiat:fiat pairs
 	// from the fx_quotes hypertable for ranges beyond 7d. Leave nil
 	// to keep /v1/chart fiat:fiat in 7d-only mode.
@@ -747,6 +754,7 @@ func New(opts Options) *Server {
 		sourcesStats:            opts.SourcesStats,
 		lending:                 opts.Lending,
 		currencies:              opts.Currencies,
+		explorer:                opts.Explorer,
 		fxHistory:               opts.FXHistory,
 		sessionPeeker:           opts.SessionPeeker,
 		sep10:                   opts.SEP10,
@@ -1012,6 +1020,11 @@ func (s *Server) mountRoutes() { //nolint:funlen // route registration is intent
 	// arriving in real time.
 	s.mux.HandleFunc("GET /v1/ledger/tip", s.handleLedgerTip)
 	s.mux.HandleFunc("GET /v1/ledger/stream", s.handleLedgerStream)
+
+	// Network explorer (ADR-0038) — read the certified ClickHouse lake.
+	s.mux.HandleFunc("GET /v1/ledgers", s.handleLedgersList)
+	s.mux.HandleFunc("GET /v1/ledgers/{seq}", s.handleLedgerDetail)
+	s.mux.HandleFunc("GET /v1/ledgers/{seq}/transactions", s.handleLedgerTransactions)
 
 	s.mux.HandleFunc("GET /v1/incidents", s.handleIncidents)
 	s.mux.HandleFunc("GET /v1/incidents.atom", s.handleIncidentsAtom)

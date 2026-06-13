@@ -817,6 +817,21 @@ func run(cfgPath string, dryRun bool) error { //nolint:gocognit,funlen,gocyclo /
 		}
 	}
 
+	// Network-explorer reader (ADR-0038) — serves /v1/ledgers, /v1/tx,
+	// /v1/operations, /v1/contracts, /v1/search from the certified lake.
+	// Optional + non-fatal, same posture as the supply reader.
+	var explorerReader v1.ExplorerReader
+	if addr := cfg.Storage.ClickHouseAddr; addr != "" {
+		er, err := clickhouse.NewExplorerReader(rootCtx, addr)
+		if err != nil {
+			logger.Warn("explorer reader unavailable; /v1/ledgers etc. will 503", "addr", addr, "err", err)
+		} else {
+			defer func() { _ = er.Close() }()
+			explorerReader = er
+			logger.Info("explorer reader wired (ClickHouse lake, ADR-0038)", "addr", addr)
+		}
+	}
+
 	apiSrv := v1.New(v1.Options{
 		Logger:      logger.With("component", "api"),
 		ReadyChecks: checks,
@@ -853,6 +868,7 @@ func run(cfgPath string, dryRun bool) error { //nolint:gocognit,funlen,gocyclo /
 		Freeze:               freezeLooker,
 		Supply:               storeSupplyLooker{s: store},
 		TokenSupply:          tokenSupplyReader,
+		Explorer:             explorerReader,
 		Volume:               storeVolumeReader{s: store},
 		Change24h:            storeChange24hReader{s: store, pegs: usdPegs},
 		ChangeSummary:        store,
