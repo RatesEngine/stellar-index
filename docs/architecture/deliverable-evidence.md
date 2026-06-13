@@ -55,12 +55,28 @@ the served tier — a typo'd AQUA issuer and two CEX-quote-currency
 
 ## AC3 — Historical retention ≥ 1 yr (ideally since inception)
 
-- **Proof**: `/v1/history/since-inception` + `/v1/ohlc?interval=1d`
-  serve daily bars back to 2015 (SDEX genesis); probe report §history
-  shows daily series to 2021+ for XLM with full RFP timeframe ladder
-  (1m/15m/1h/4h/1d × 1h/24h/1w/1mo/1yr/all-time). 1h+ granularities
-  retained indefinitely (migration 0031 removed trades retention;
-  caggs indefinite).
+Verified live 2026-06-13:
+
+- **XLM/USD (headline pair)**: `/v1/history/since-inception?asset=native&quote=fiat:USD`
+  serves daily VWAP back to **2021-02-01** (5.4 yr — when reliable
+  on-chain USD anchoring began on Stellar) → ≫ the ≥1yr floor.
+- **SDEX since-inception**: `/v1/ohlc?interval=1d` against classic
+  anchor pairs serves daily bars back to 2016-2018 (e.g. XLM/anchor-USD
+  `USD-GDUKMG…` 2018-08, XLM/BTC-anchor 2017-07, XLM/EURT 2017-04); the
+  `prices_1d` continuous aggregate holds native pairs back to
+  **2015-11-18** (6.3 M rows). 1h+ granularities retained indefinitely
+  (migration 0031 removed trades retention; caggs indefinite). Raw
+  `trades` is the ~3-month served working set (ADR-0034); full history
+  lives in the ClickHouse lake + the indefinite caggs.
+- **Known limitation (documented, not AC-blocking)**:
+  `/v1/ohlc?quote=fiat:USD` — the *synthetic* USD quote — currently
+  serves only ~5 weeks (the aggregator began materialising the fiat:USD
+  daily cagg recently; it is not backfilled). The deep XLM/USD history
+  is served by `/v1/history/since-inception` (above). Backfilling the
+  synthetic-quote `prices_1d`/`prices_1h` caggs from the lake so the
+  standard OHLC endpoint matches is a **post-deliverable consistency
+  enhancement** — pre-agree with the customer that since-inception is
+  the canonical deep-history surface for synthetic quotes.
 
 ## AC4 — ≥ 1000 requests/min per client
 
