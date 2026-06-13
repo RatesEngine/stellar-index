@@ -226,7 +226,10 @@ func (s *Server) handleOHLCSeries(
 		To:        to,
 		Intervals: bars,
 	}
-	writeJSON(w, resp, Flags{})
+	// Fiat-quoted series are combined from USD/EUR-pegged stablecoin
+	// constituents (late-bound proxy) — flag it, mirroring the single-bar
+	// /v1/ohlc stablecoin-fallback path.
+	writeJSON(w, resp, Flags{Triangulated: pair.Quote.Type == canonical.AssetFiat && len(bars) > 0})
 }
 
 // parseOHLCSeriesFromTo parses from/to for the series mode with
@@ -298,6 +301,14 @@ func (s *Server) ohlcSeriesWithAliases(
 	from, to time.Time,
 	limit int,
 ) ([]OHLCSeriesBar, error) {
+	// Fiat-denominated quotes (fiat:USD, fiat:EUR, …) have no deep
+	// trade stream of their own — the multi-year history lives under the
+	// USD/EUR-pegged stablecoin pairs. Combine those constituents per
+	// bucket (matching the live aggregator's VWAP source set) instead of
+	// first-hit, which would serve only the recent direct CEX feed.
+	if pair.Quote.Type == canonical.AssetFiat {
+		return s.ohlcSeriesFiatCombined(ctx, pair, interval, from, to, limit)
+	}
 	for _, a := range assetAliases(pair.Base) {
 		for _, q := range assetAliases(pair.Quote) {
 			ap, perr := canonical.NewPair(a, q)

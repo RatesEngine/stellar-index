@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -34,7 +35,10 @@ func TestOHLCSeries_ReturnsIntervalsArray(t *testing.T) {
 	srv := v1.New(v1.Options{History: reader})
 	ts := httpTestServer(t, srv)
 
-	resp := mustGet(t, ts.URL+"/v1/ohlc?base=native&quote=fiat:USD&interval=1h&limit=24")
+	// Non-fiat quote → first-hit alias path (exact NUMERIC passthrough,
+	// no combine reformat). The fiat:USD combine path is covered by
+	// TestOHLCSeries_FiatCombinesUSDPeggedConstituents.
+	resp := mustGet(t, ts.URL+"/v1/ohlc?base=native&quote=crypto:BTC&interval=1h&limit=24")
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("status = %d, want 200", resp.StatusCode)
 	}
@@ -48,8 +52,8 @@ func TestOHLCSeries_ReturnsIntervalsArray(t *testing.T) {
 	if body.Data.Interval != "1h" {
 		t.Errorf("interval = %q, want 1h", body.Data.Interval)
 	}
-	if body.Data.Base != "native" || body.Data.Quote != "fiat:USD" {
-		t.Errorf("base/quote = %q/%q, want native/fiat:USD", body.Data.Base, body.Data.Quote)
+	if body.Data.Base != "native" || body.Data.Quote != "crypto:BTC" {
+		t.Errorf("base/quote = %q/%q, want native/crypto:BTC", body.Data.Base, body.Data.Quote)
 	}
 	if body.Data.Intervals[0].O != "0.16" || body.Data.Intervals[1].C != "0.175" {
 		t.Errorf("OHLC values wrong: %+v", body.Data.Intervals)
@@ -253,13 +257,98 @@ func TestOHLCSeries_AllSupportedIntervals(t *testing.T) {
 	}
 }
 
+// TestOHLCSeries_FiatCombinesUSDPeggedConstituents — a fiat:USD series
+// must COMBINE the USD-pegged constituent pairs per bucket (not first-hit
+// a single one), so the deep history under the stablecoin pairs surfaces.
+// Verifies the combine math: exact volume sum + max-high/min-low, and
+// base-volume-weighted open/close.
+func TestOHLCSeries_FiatCombinesUSDPeggedConstituents(t *testing.T) {
+	t0 := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+	reader := &stubHistoryReader{
+		ohlcSeriesFn: func(_ context.Context, pair canonical.Pair, _ string, _, _ time.Time, _ int) ([]v1.OHLCSeriesBar, error) {
+			b, q := pair.Base.String(), pair.Quote.String()
+			switch {
+			case b == "native" && q == "crypto:USDT":
+				return []v1.OHLCSeriesBar{mkSeriesBar(t0, "1.0", "1.1", "0.9", "1.05", "100", "100", 2)}, nil
+			case b == "crypto:XLM" && q == "fiat:USD":
+				return []v1.OHLCSeriesBar{mkSeriesBar(t0, "1.2", "1.3", "1.0", "1.25", "300", "360", 5)}, nil
+			}
+			return nil, nil
+		},
+	}
+	srv := v1.New(v1.Options{History: reader})
+	ts := httpTestServer(t, srv)
+
+	resp := mustGet(t, ts.URL+"/v1/ohlc?base=native&quote=fiat:USD&interval=1h")
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d", resp.StatusCode)
+	}
+	body, _ := readAll(resp)
+	var env struct {
+		Data v1.OHLCSeriesResponse `json:"data"`
+	}
+	if err := json.Unmarshal([]byte(body), &env); err != nil {
+		t.Fatalf("decode: %v (%s)", err, body)
+	}
+	if len(env.Data.Intervals) != 1 {
+		t.Fatalf("want 1 combined bucket, got %d: %s", len(env.Data.Intervals), body)
+	}
+	bar := env.Data.Intervals[0]
+	// Exact: n = 2+5, base = 100+300; high = max, low = min.
+	if bar.N != 7 {
+		t.Errorf("N = %d, want 7 (2+5)", bar.N)
+	}
+	if bar.VBase != "400" {
+		t.Errorf("v_base = %q, want 400 (100+300)", bar.VBase)
+	}
+	// base-volume-weighted open = (1.0*100 + 1.2*300)/400 = 1.15
+	if got := mustFloat(t, bar.O); !approxEq(got, 1.15) {
+		t.Errorf("open = %v, want ~1.15 (vol-weighted)", got)
+	}
+	// close = (1.05*100 + 1.25*300)/400 = 1.20
+	if got := mustFloat(t, bar.C); !approxEq(got, 1.20) {
+		t.Errorf("close = %v, want ~1.20 (vol-weighted)", got)
+	}
+	if got := mustFloat(t, bar.H); !approxEq(got, 1.3) {
+		t.Errorf("high = %v, want 1.3 (max)", got)
+	}
+	if got := mustFloat(t, bar.L); !approxEq(got, 0.9) {
+		t.Errorf("low = %v, want 0.9 (min)", got)
+	}
+}
+
+func mustFloat(t *testing.T, s string) float64 {
+	t.Helper()
+	f, err := strconv.ParseFloat(s, 64)
+	if err != nil {
+		t.Fatalf("parse %q: %v", s, err)
+	}
+	return f
+}
+
+func approxEq(a, b float64) bool {
+	d := a - b
+	if d < 0 {
+		d = -d
+	}
+	return d < 1e-6
+}
+
 // TestOHLCSeries_WireShapeFields — exhaustive field check for the
 // wire envelope so subtle JSON-tag changes get flagged.
 func TestOHLCSeries_WireShapeFields(t *testing.T) {
 	t0 := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+	// fiat:USD now COMBINES the USD-pegged constituents (the deep series
+	// lives under the stablecoin pairs). Make the stub pair-aware so only
+	// the direct native/fiat:USD pair carries the fixture — exercising the
+	// combine's single-source passthrough (exact O/H/L/C/v/n) so the wire
+	// shape assertion still holds.
 	reader := &stubHistoryReader{
-		ohlcBars: []v1.OHLCSeriesBar{
-			mkSeriesBar(t0, "1.0", "2.0", "0.5", "1.5", "100", "150", 3),
+		ohlcSeriesFn: func(_ context.Context, pair canonical.Pair, _ string, _, _ time.Time, _ int) ([]v1.OHLCSeriesBar, error) {
+			if pair.Base.String() == "native" && pair.Quote.String() == "fiat:USD" {
+				return []v1.OHLCSeriesBar{mkSeriesBar(t0, "1.0", "2.0", "0.5", "1.5", "100", "150", 3)}, nil
+			}
+			return nil, nil
 		},
 	}
 	srv := v1.New(v1.Options{History: reader})
@@ -268,7 +357,10 @@ func TestOHLCSeries_WireShapeFields(t *testing.T) {
 	resp := mustGet(t, ts.URL+"/v1/ohlc?base=native&quote=fiat:USD&interval=1h")
 	body, _ := readAll(resp)
 	// Series-mode wire field names — CG/CMC parity (`t,o,h,l,c,v_base,v_quote,n`).
-	for _, want := range []string{`"t":"`, `"o":"1.0"`, `"h":"2.0"`, `"l":"0.5"`, `"c":"1.5"`, `"v_base":"100"`, `"v_quote":"150"`, `"n":3`} {
+	// fiat:USD goes through the combine, which normalises prices to fixed
+	// decimals (ohlcPriceDigits) like the single-bar /v1/ohlc; v_base is an
+	// integer-string. Single-constituent bucket → values pass through exactly.
+	for _, want := range []string{`"t":"`, `"o":"1.0000000000"`, `"h":"2.0000000000"`, `"l":"0.5000000000"`, `"c":"1.5000000000"`, `"v_base":"100"`, `"v_quote":"150.0000000000"`, `"n":3`} {
 		if !strings.Contains(body, want) {
 			t.Errorf("body missing %q: %s", want, body)
 		}
