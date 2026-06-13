@@ -113,3 +113,21 @@ the cutover; next tag ships under the new names).
   unchanged, so monitoring continuity is unaffected).
 - **Local checkout**: `mv ~/code/stellarindex ~/code/stellarindex` at your
   convenience (note: Claude's per-project memory is keyed by path).
+
+## Post-cutover fix (2026-06-13): Prometheus rule-dir drift
+
+Both rename cutovers copied the renamed alert rules to
+`/etc/prometheus/rules.d/`, but r1's `prometheus.yml` loads
+`rule_files: /etc/prometheus/rules.r1/*.yml` — a DIFFERENT directory.
+So for ~18h post-rebrand, Prometheus kept loading the stale `rules.r1`
+copy whose alerts targeted the old `ratesengine-api` job + `ratesengine_*`
+metric names — which no longer exist after the metric-namespace rename.
+**Every one of the 116 alert rules was silently inert** (an absent-job
+`== 0` matches nothing, so `stellarindex_api_down` would never have fired
+on a real outage). Fixed by syncing `rules.d` → `rules.r1` + SIGHUP.
+
+**Lesson for future renames:** after swapping rule files, confirm the
+LOADED set via `curl localhost:9090/api/v1/rules`, not just the on-disk
+copy — and reload via `systemctl reload prometheus` (the HTTP
+`/-/reload` lifecycle API is disabled on r1). Alertmanager routing was
+unaffected (severity-based, brand-agnostic).
