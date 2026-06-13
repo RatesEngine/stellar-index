@@ -138,12 +138,17 @@ fetch the API client-side at runtime** (the explorer already fetches
   (~16 classic op types + invoke_host_function, raw fallback) +
   `GET /v1/operations?ledger=`. Decode verified live against real ledger
   ops (payments / offers / path-payments / change_trust).
-- **Phase A unit 2b (next):** `GET /v1/tx/{hash}` — needs a `tx_hash`
-  bloom skip-index on `stellar.transactions` (the table is
-  ORDER BY (ledger_seq, tx_index), so hash lookup would full-scan
-  otherwise). Index ADD is instant (covers new txs); a one-time
-  MATERIALIZE over the 10 B-row history is the backfill for old txs.
-  Once the tx's ledger_seq is known, ops/events/results are
-  ledger-scoped (partition-pruned, no index needed).
-- **Phase A unit 3 (planned):** `/v1/contracts/{c}` + `/v1/search`.
-- **Phases B–D:** planned per the roadmap above.
+- **Phase A unit 2b (shipped + deployed):** `GET /v1/tx/{hash}` (summary
+  + decoded ops w/ result codes + events). Added a `tx_hash` bloom
+  skip-index to `stellar.transactions` + MATERIALIZE'd across all history
+  (~2.5 min). Verified live on a 2022 tx (ledger 40 M) — cross-history
+  hash lookup is fast.
+- **Phase A unit 3 (shipped + deployed):** `GET /v1/search` (query
+  dispatcher) + `GET /v1/contracts/{c}` (per-contract event activity, via
+  a `contract_id` bloom skip-index on `stellar.contract_events`,
+  MATERIALIZE'd).
+- **Phase A — read surface COMPLETE + live:** ledgers, transactions,
+  operations (decoded), tx, contracts, search. Remaining Phase-A polish:
+  OpenAPI spec entries for the new paths.
+- **Phases B–D:** planned per the roadmap above (participant index,
+  account state + `ledger_entry_changes` backfill, explorer UI).
