@@ -150,5 +150,27 @@ fetch the API client-side at runtime** (the explorer already fetches
 - **Phase A — read surface COMPLETE + live:** ledgers, transactions,
   operations (decoded), tx, contracts, search. Remaining Phase-A polish:
   OpenAPI spec entries for the new paths.
-- **Phases B–D:** planned per the roadmap above (participant index,
-  account state + `ledger_entry_changes` backfill, explorer UI).
+- **Phase B v1 (shipped + deployed):** `GET /v1/accounts/{g}/transactions`
+  + `/operations` — an account's submitted/sourced activity, via
+  `source_account` bloom skip-indexes on transactions + operations
+  (MATERIALIZE'd). Verified live. Full incoming/participant activity is
+  the Phase B completion (a 23 B-op XDR-decode derive into
+  `operation_participants` — a multi-day backfill).
+- **Phase C substrate (shipped):** `extractEntryChanges` now populates
+  `ledger_entry_changes` in the lake (closes G12-03). Lives in the
+  indexer/ch-rebuild path. **Activation is operationally significant**
+  and operator-gated: (1) redeploy the indexer (starts live entry-change
+  capture — a real CH write-volume increase), (2) `ch-rebuild` the
+  history (billions of entry-change rows — multi-day compute/storage).
+- **Phase C read layer (planned):** an account-keyed current-state
+  surface (decode AccountEntry/TrustLine/Offer from the latest
+  entry-change per key) + `GET /v1/accounts/{g}` (balances) + UI account
+  page — built on the substrate once it's populated.
+- **Phase D UI (shipped):** `/ledgers`, `/ledger?seq`, `/tx?hash`,
+  `/contract?id` + search wiring (query-param pages, static-export-safe).
+- **OpenAPI (shipped):** all explorer endpoints documented.
+
+**Remaining = two operator-gated data jobs** (each multi-day, consumes r1
+for days, changes live ingest): the Phase B participant-index derive and
+the Phase C entry-change history backfill + its read layer. The code/UI
+for everything is in place; these are resource-significant backfills.
