@@ -22,19 +22,21 @@ const PAGE_SIZE = 50;
 
 /**
  * Client view for /contract?id=C…. Fetches /v1/contracts/{id} (the
- * contract's recent events) with "Load older" walking the
- * next_before cursor backwards.
+ * contract's recent events) with "Load older" walking the opaque
+ * next_cursor backwards. The cursor is the composite
+ * (ledger, op_index, event_index) keyset — a ledger-only cursor would
+ * drop the rest of a ledger that a busy contract straddles across a page.
  */
 export function ContractView() {
   const params = useSearchParams();
   const id = (params.get('id') ?? '').trim();
   const looksValid = CONTRACT_RE.test(id);
 
-  const [before, setBefore] = useState<number | undefined>(undefined);
+  const [cursor, setCursor] = useState<string | undefined>(undefined);
 
   const { data, isLoading, isError, error, isFetching } =
     useQuery<ContractResp>({
-      queryKey: ['/v1/contracts/{id}', id, before ?? 'tip'],
+      queryKey: ['/v1/contracts/{id}', id, cursor ?? 'tip'],
       enabled: id.length > 0 && looksValid,
       retry: false,
       placeholderData: keepPreviousData,
@@ -43,7 +45,7 @@ export function ContractView() {
           `/v1/contracts/${encodeURIComponent(id)}`,
           {
             limit: PAGE_SIZE,
-            ...(before !== undefined ? { before } : {}),
+            ...(cursor !== undefined ? { cursor } : {}),
           },
         );
         return env.data;
@@ -91,7 +93,7 @@ export function ContractView() {
 
   const source = asExample(`/v1/contracts/${id}`, {
     limit: PAGE_SIZE,
-    ...(before !== undefined ? { before } : {}),
+    ...(cursor !== undefined ? { cursor } : {}),
   });
 
   if (isError) {
@@ -168,12 +170,12 @@ export function ContractView() {
       <EventsPanel
         id={id}
         events={data.events}
-        nextBefore={data.next_before}
-        before={before}
+        nextCursor={data.next_cursor}
+        cursor={cursor}
         isFetching={isFetching}
-        onNewest={() => setBefore(undefined)}
+        onNewest={() => setCursor(undefined)}
         onOlder={() => {
-          if (data.next_before != null) setBefore(data.next_before);
+          if (data.next_cursor != null) setCursor(data.next_cursor);
         }}
         source={source}
       />
@@ -209,8 +211,8 @@ function Shell({
 
 function EventsPanel({
   events,
-  nextBefore,
-  before,
+  nextCursor,
+  cursor,
   isFetching,
   onNewest,
   onOlder,
@@ -218,8 +220,8 @@ function EventsPanel({
 }: {
   id: string;
   events: ContractResp['events'];
-  nextBefore?: number;
-  before?: number;
+  nextCursor?: string;
+  cursor?: string;
   isFetching: boolean;
   onNewest: () => void;
   onOlder: () => void;
@@ -304,7 +306,7 @@ function EventsPanel({
         <button
           type="button"
           onClick={onNewest}
-          disabled={before === undefined || isFetching}
+          disabled={cursor === undefined || isFetching}
           className="rounded-md border border-slate-200 px-3 py-1.5 text-slate-600 hover:border-brand-500 hover:text-brand-600 disabled:cursor-not-allowed disabled:opacity-40 dark:border-slate-700 dark:text-slate-300"
         >
           ← Newest
@@ -315,7 +317,7 @@ function EventsPanel({
         <button
           type="button"
           onClick={onOlder}
-          disabled={nextBefore == null || isFetching}
+          disabled={nextCursor == null || isFetching}
           className="rounded-md border border-slate-200 px-3 py-1.5 text-slate-600 hover:border-brand-500 hover:text-brand-600 disabled:cursor-not-allowed disabled:opacity-40 dark:border-slate-700 dark:text-slate-300"
         >
           Load older →

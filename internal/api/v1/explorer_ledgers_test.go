@@ -68,15 +68,15 @@ func (s *stubExplorerReader) EventsByTx(_ context.Context, _ uint32, _ string) (
 	return s.events, s.err
 }
 
-func (s *stubExplorerReader) ContractEventsRecent(_ context.Context, _ string, _ int, _ uint32) ([]clickhouse.ContractActivityRow, error) {
+func (s *stubExplorerReader) ContractEventsRecent(_ context.Context, _ string, _ int, _ clickhouse.ExplorerCursor) ([]clickhouse.ContractActivityRow, error) {
 	return s.contractEvents, s.err
 }
 
-func (s *stubExplorerReader) AccountTransactions(_ context.Context, _ string, _ int, _ uint32) ([]clickhouse.TxSummary, error) {
+func (s *stubExplorerReader) AccountTransactions(_ context.Context, _ string, _ int, _ clickhouse.ExplorerCursor) ([]clickhouse.TxSummary, error) {
 	return s.txs, s.err
 }
 
-func (s *stubExplorerReader) AccountOperations(_ context.Context, _ string, _ int, _ uint32) ([]clickhouse.OpRow, error) {
+func (s *stubExplorerReader) AccountOperations(_ context.Context, _ string, _ int, _ clickhouse.ExplorerCursor) ([]clickhouse.OpRow, error) {
 	return s.ops, s.err
 }
 
@@ -219,7 +219,9 @@ func TestExplorer_ContractDetail(t *testing.T) {
 		{Seq: 62999000, TxHash: "def", OpIndex: 0, EventIndex: 0, EventType: "contract", Topic0Sym: "mint"},
 	}}
 	base := explorerTestServer(t, reader)
-	resp := mustGet(t, base+"/v1/contracts/"+cid)
+	// limit=2 makes this a FULL page (n==limit) so a next_cursor is emitted —
+	// the composite (ledger, op_index, event_index) of the last (oldest) row.
+	resp := mustGet(t, base+"/v1/contracts/"+cid+"?limit=2")
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("status = %d", resp.StatusCode)
 	}
@@ -230,8 +232,8 @@ func TestExplorer_ContractDetail(t *testing.T) {
 	if body.Data.ContractID != cid || len(body.Data.Events) != 2 {
 		t.Fatalf("detail = %+v", body.Data)
 	}
-	if body.Data.Events[0].Topic0 != "transfer" || body.Data.NextBefore != 62999000 {
-		t.Errorf("events/cursor = %+v next=%d", body.Data.Events, body.Data.NextBefore)
+	if body.Data.Events[0].Topic0 != "transfer" || body.Data.NextCursor != "62999000.0.0" {
+		t.Errorf("events/cursor = %+v next=%q", body.Data.Events, body.Data.NextCursor)
 	}
 }
 

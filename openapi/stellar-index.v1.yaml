@@ -3494,12 +3494,16 @@ paths:
       summary: Per-contract recent on-chain event activity.
       description: |
         A contract's most-recent emitted events (newest first), keyset-paged
-        with `?before=<ledger>`. The SEP-41 transfer audit trail is at the
-        sibling `/contracts/{contract_id}/transfers`.
+        with `?cursor=<opaque>` (echo back the response's `next_cursor`). The
+        cursor is the composite `(ledger, op_index, event_index)` — a
+        ledger-only cursor would silently drop the rest of a ledger in which a
+        busy contract emits more than `limit` events. `next_cursor` is present
+        only when a full page is returned. The SEP-41 transfer audit trail is at
+        the sibling `/contracts/{contract_id}/transfers`.
       parameters:
         - { name: contract_id, in: path, required: true, description: C-strkey contract id., schema: { type: string } }
         - { name: limit, in: query, schema: { type: integer, minimum: 1, maximum: 500, default: 100 } }
-        - { name: before, in: query, schema: { type: integer } }
+        - { name: cursor, in: query, description: Opaque keyset cursor from a prior response's next_cursor., schema: { type: string } }
       responses:
         "200":
           description: Recent contract events.
@@ -3513,7 +3517,65 @@ paths:
                     properties:
                       contract_id: { type: string }
                       events: { type: array, items: { $ref: "#/components/schemas/ContractEvent" } }
-                      next_before: { type: integer }
+                      next_cursor: { type: string, description: Opaque cursor for the next (older) page; absent on the last page. }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "503": { $ref: "#/components/responses/ServiceUnavailable" }
+
+  /accounts/{g_strkey}/transactions:
+    get:
+      tags: [explorer]
+      summary: Transactions an account submitted (sourced), newest first.
+      description: |
+        The transactions for which this account is the source/fee-payer,
+        newest first, keyset-paged with `?cursor=<opaque>` (echo back
+        `next_cursor`). The cursor is the composite `(ledger, tx_index)`.
+
+        SCOPE: this is **sourced/submitted** activity only (`scope: "sourced"`).
+        Incoming/participant activity — where the account is a payment
+        destination, trustor, merge target, clawback victim, etc. — requires
+        the participant index (ADR-0038 Phase B completion) and is NOT included
+        here yet.
+      parameters:
+        - { name: g_strkey, in: path, required: true, description: G-strkey account id., schema: { type: string } }
+        - { name: limit, in: query, schema: { type: integer, minimum: 1, maximum: 200, default: 50 } }
+        - { name: cursor, in: query, description: Opaque keyset cursor from a prior response's next_cursor., schema: { type: string } }
+      responses:
+        "200":
+          description: Sourced transactions for the account.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { $ref: "#/components/schemas/AccountTransactions" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "503": { $ref: "#/components/responses/ServiceUnavailable" }
+
+  /accounts/{g_strkey}/operations:
+    get:
+      tags: [explorer]
+      summary: Operations an account sourced (decoded), newest first.
+      description: |
+        The operations whose effective source is this account, decoded
+        (human-readable fields), newest first, keyset-paged with
+        `?cursor=<opaque>` (echo back `next_cursor`). The cursor is the
+        composite `(ledger, tx_index, op_index)`.
+
+        SCOPE: **sourced** activity only (`scope: "sourced"`) — see the
+        transactions endpoint above for the participant-index caveat.
+      parameters:
+        - { name: g_strkey, in: path, required: true, description: G-strkey account id., schema: { type: string } }
+        - { name: limit, in: query, schema: { type: integer, minimum: 1, maximum: 200, default: 50 } }
+        - { name: cursor, in: query, description: Opaque keyset cursor from a prior response's next_cursor., schema: { type: string } }
+      responses:
+        "200":
+          description: Sourced operations for the account.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { $ref: "#/components/schemas/AccountOperations" }
         "400": { $ref: "#/components/responses/BadRequest" }
         "503": { $ref: "#/components/responses/ServiceUnavailable" }
 
@@ -3834,6 +3896,27 @@ components:
         event_index: { type: integer }
         event_type: { type: string }
         topic_0: { type: string }
+    AccountTransactions:
+      type: object
+      description: |
+        An account's sourced/submitted transactions (newest first), with an
+        opaque composite keyset cursor. `scope` is always "sourced" in this
+        phase — incoming/participant txs require the participant index.
+      properties:
+        account: { type: string, description: The G-strkey this listing is for. }
+        transactions: { type: array, items: { $ref: "#/components/schemas/TxSummary" } }
+        next_cursor: { type: string, description: "Opaque composite cursor (ledger.tx_index) for the next older page; absent on the last page." }
+        scope: { type: string, enum: [sourced], description: "Activity scope. \"sourced\" = the account is the tx source/fee-payer (not incoming)." }
+    AccountOperations:
+      type: object
+      description: |
+        An account's sourced operations, decoded (newest first), with an opaque
+        composite keyset cursor. `scope` is always "sourced" in this phase.
+      properties:
+        account: { type: string, description: The G-strkey this listing is for. }
+        operations: { type: array, items: { $ref: "#/components/schemas/Operation" } }
+        next_cursor: { type: string, description: "Opaque composite cursor (ledger.tx_index.op_index) for the next older page; absent on the last page." }
+        scope: { type: string, enum: [sourced], description: "Activity scope. \"sourced\" = the account is the op source." }
     DashboardKey:
       type: object
       description: |

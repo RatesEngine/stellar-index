@@ -47,6 +47,8 @@ servers:
 tags:
   - name: health
     description: Liveness + readiness.
+  - name: explorer
+    description: Network explorer — ledgers, transactions, operations, contracts, search (ADR-0038).
   - name: assets
     description: Asset catalogue + metadata.
   - name: price
@@ -3371,6 +3373,240 @@ paths:
               schema: { $ref: "#/components/schemas/Problem" }
         "503": { $ref: "#/components/responses/ServiceUnavailable" }
 
+  # ───────────────────────── Network explorer (ADR-0038) ─────────────────────
+  # Read the certified ClickHouse Tier-1 lake (full chain to genesis). Results
+  # are keyed on immutable identity (ledger_seq / tx_hash) so they're cacheable
+  # indefinitely. 503 when the deployment has no ClickHouse explorer reader.
+  /ledgers:
+    get:
+      tags: [explorer]
+      summary: Recent ledgers (descending, keyset-paged).
+      description: |
+        Recent closed ledgers, newest first. Keyset-page older with
+        `?before=<sequence>` (use the response's `next_before`).
+      parameters:
+        - { name: limit, in: query, schema: { type: integer, minimum: 1, maximum: 200, default: 50 } }
+        - { name: before, in: query, description: Return ledgers with sequence < this., schema: { type: integer } }
+      responses:
+        "200":
+          description: A page of ledger headers.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      ledgers: { type: array, items: { $ref: "#/components/schemas/Ledger" } }
+                      next_before: { type: integer }
+        "503": { $ref: "#/components/responses/ServiceUnavailable" }
+
+  /ledgers/{seq}:
+    get:
+      tags: [explorer]
+      summary: A single ledger header.
+      parameters:
+        - { name: seq, in: path, required: true, schema: { type: integer }, example: 63000000 }
+      responses:
+        "200":
+          description: Ledger header.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties: { data: { $ref: "#/components/schemas/Ledger" } }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "404": { description: Ledger not in the indexed range. }
+        "503": { $ref: "#/components/responses/ServiceUnavailable" }
+
+  /ledgers/{seq}/transactions:
+    get:
+      tags: [explorer]
+      summary: Transactions in a ledger.
+      parameters:
+        - { name: seq, in: path, required: true, schema: { type: integer }, example: 63000000 }
+        - { name: limit, in: query, schema: { type: integer, minimum: 1, maximum: 1000, default: 200 } }
+      responses:
+        "200":
+          description: The ledger's transactions.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      ledger: { type: integer }
+                      transactions: { type: array, items: { $ref: "#/components/schemas/TxSummary" } }
+        "503": { $ref: "#/components/responses/ServiceUnavailable" }
+
+  /tx/{hash}:
+    get:
+      tags: [explorer]
+      summary: Transaction detail — summary + decoded operations + events.
+      description: |
+        Full transaction: the summary, every operation decoded from XDR into
+        clean JSON (with its result code), and the contract events it emitted.
+      parameters:
+        - { name: hash, in: path, required: true, description: 64-char hex transaction hash., schema: { type: string } }
+      responses:
+        "200":
+          description: Transaction detail.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties: { data: { $ref: "#/components/schemas/TxDetail" } }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "404": { description: No transaction with that hash in the indexed range. }
+        "503": { $ref: "#/components/responses/ServiceUnavailable" }
+
+  /operations:
+    get:
+      tags: [explorer]
+      summary: Operations in a ledger (decoded).
+      description: |
+        A ledger's operations, each decoded from XDR. `?ledger=<seq>` selects
+        the ledger; omitted, it defaults to the latest ledger.
+      parameters:
+        - { name: ledger, in: query, description: Ledger sequence (defaults to tip)., schema: { type: integer } }
+        - { name: limit, in: query, schema: { type: integer, minimum: 1, maximum: 2000, default: 500 } }
+      responses:
+        "200":
+          description: Decoded operations.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      ledger: { type: integer }
+                      operations: { type: array, items: { $ref: "#/components/schemas/Operation" } }
+        "503": { $ref: "#/components/responses/ServiceUnavailable" }
+
+  /contracts/{contract_id}:
+    get:
+      tags: [explorer]
+      summary: Per-contract recent on-chain event activity.
+      description: |
+        A contract's most-recent emitted events (newest first), keyset-paged
+        with `?cursor=<opaque>` (echo back the response's `next_cursor`). The
+        cursor is the composite `(ledger, op_index, event_index)` — a
+        ledger-only cursor would silently drop the rest of a ledger in which a
+        busy contract emits more than `limit` events. `next_cursor` is present
+        only when a full page is returned. The SEP-41 transfer audit trail is at
+        the sibling `/contracts/{contract_id}/transfers`.
+      parameters:
+        - { name: contract_id, in: path, required: true, description: C-strkey contract id., schema: { type: string } }
+        - { name: limit, in: query, schema: { type: integer, minimum: 1, maximum: 500, default: 100 } }
+        - { name: cursor, in: query, description: Opaque keyset cursor from a prior response's next_cursor., schema: { type: string } }
+      responses:
+        "200":
+          description: Recent contract events.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      contract_id: { type: string }
+                      events: { type: array, items: { $ref: "#/components/schemas/ContractEvent" } }
+                      next_cursor: { type: string, description: Opaque cursor for the next (older) page; absent on the last page. }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "503": { $ref: "#/components/responses/ServiceUnavailable" }
+
+  /accounts/{g_strkey}/transactions:
+    get:
+      tags: [explorer]
+      summary: Transactions an account submitted (sourced), newest first.
+      description: |
+        The transactions for which this account is the source/fee-payer,
+        newest first, keyset-paged with `?cursor=<opaque>` (echo back
+        `next_cursor`). The cursor is the composite `(ledger, tx_index)`.
+
+        SCOPE: this is **sourced/submitted** activity only (`scope: "sourced"`).
+        Incoming/participant activity — where the account is a payment
+        destination, trustor, merge target, clawback victim, etc. — requires
+        the participant index (ADR-0038 Phase B completion) and is NOT included
+        here yet.
+      parameters:
+        - { name: g_strkey, in: path, required: true, description: G-strkey account id., schema: { type: string } }
+        - { name: limit, in: query, schema: { type: integer, minimum: 1, maximum: 200, default: 50 } }
+        - { name: cursor, in: query, description: Opaque keyset cursor from a prior response's next_cursor., schema: { type: string } }
+      responses:
+        "200":
+          description: Sourced transactions for the account.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { $ref: "#/components/schemas/AccountTransactions" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "503": { $ref: "#/components/responses/ServiceUnavailable" }
+
+  /accounts/{g_strkey}/operations:
+    get:
+      tags: [explorer]
+      summary: Operations an account sourced (decoded), newest first.
+      description: |
+        The operations whose effective source is this account, decoded
+        (human-readable fields), newest first, keyset-paged with
+        `?cursor=<opaque>` (echo back `next_cursor`). The cursor is the
+        composite `(ledger, tx_index, op_index)`.
+
+        SCOPE: **sourced** activity only (`scope: "sourced"`) — see the
+        transactions endpoint above for the participant-index caveat.
+      parameters:
+        - { name: g_strkey, in: path, required: true, description: G-strkey account id., schema: { type: string } }
+        - { name: limit, in: query, schema: { type: integer, minimum: 1, maximum: 200, default: 50 } }
+        - { name: cursor, in: query, description: Opaque keyset cursor from a prior response's next_cursor., schema: { type: string } }
+      responses:
+        "200":
+          description: Sourced operations for the account.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { $ref: "#/components/schemas/AccountOperations" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "503": { $ref: "#/components/responses/ServiceUnavailable" }
+
+  /search:
+    get:
+      tags: [explorer]
+      summary: Classify a query (tx / ledger / account / contract / asset).
+      description: |
+        Single-box search: detects the kind of `q` by its shape and returns the
+        canonical detail endpoint to route to. Pure classification (no lake read).
+      parameters:
+        - { name: q, in: query, required: true, description: Tx hash, ledger seq, G-account, C-contract, or asset id., schema: { type: string } }
+      responses:
+        "200":
+          description: Classified query.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      query: { type: string }
+                      kind: { type: string, enum: [transaction, ledger, account, contract, asset, unknown] }
+                      canonical: { type: string }
+                      href: { type: string }
+                      supported: { type: boolean }
+                      note: { type: string }
+        "400": { $ref: "#/components/responses/BadRequest" }
+
 components:
   securitySchemes:
     APIKeyAuth:
@@ -3595,6 +3831,92 @@ components:
             request_id: "70c8017d79651070fd16c2c9f065d846"
 
   schemas:
+    # ───────────────── Network explorer (ADR-0038) ─────────────────
+    Ledger:
+      type: object
+      description: A ledger header from the certified lake.
+      properties:
+        sequence: { type: integer }
+        close_time: { type: string, format: date-time }
+        hash: { type: string, description: Hex-encoded ledger hash. }
+        prev_hash: { type: string }
+        protocol_version: { type: integer }
+        tx_count: { type: integer }
+        op_count: { type: integer }
+        soroban_event_count: { type: integer }
+        total_coins: { type: string, description: XLM stroops as a string (exceeds 2^53). }
+        fee_pool: { type: string }
+        base_fee: { type: integer }
+        base_reserve: { type: integer }
+    TxSummary:
+      type: object
+      description: Transaction summary (in ledger + tx listings).
+      properties:
+        hash: { type: string }
+        ledger: { type: integer }
+        close_time: { type: string, format: date-time }
+        index: { type: integer }
+        source_account: { type: string }
+        fee_charged: { type: integer }
+        max_fee: { type: integer }
+        operation_count: { type: integer }
+        successful: { type: boolean }
+        result_code: { type: integer }
+        memo_type: { type: string, description: "Normalised: none|text|id|hash|return." }
+        memo: { type: string }
+    Operation:
+      type: object
+      description: An operation decoded from XDR into clean JSON.
+      properties:
+        ledger: { type: integer }
+        close_time: { type: string, format: date-time }
+        tx_hash: { type: string }
+        tx_index: { type: integer }
+        op_index: { type: integer }
+        type: { type: string, description: snake_case op type (e.g. payment, manage_sell_offer). }
+        source_account: { type: string }
+        fields: { type: object, additionalProperties: true, description: Decoded operation fields (amounts are strings, ADR-0003). }
+        raw_xdr: { type: string, description: Base64 body, present only for op types not yet field-decoded. }
+        result_code: { type: integer, description: Present only in the per-transaction view. }
+    TxDetail:
+      allOf:
+        - { $ref: "#/components/schemas/TxSummary" }
+        - type: object
+          properties:
+            operations: { type: array, items: { $ref: "#/components/schemas/Operation" } }
+            events: { type: array, items: { $ref: "#/components/schemas/ContractEvent" } }
+    ContractEvent:
+      type: object
+      description: A contract event (tx-detail + contract-activity views).
+      properties:
+        ledger: { type: integer }
+        close_time: { type: string, format: date-time }
+        tx_hash: { type: string }
+        op_index: { type: integer }
+        event_index: { type: integer }
+        event_type: { type: string }
+        topic_0: { type: string }
+    AccountTransactions:
+      type: object
+      description: |
+        An account's sourced/submitted transactions (newest first), with an
+        opaque composite keyset cursor. `scope` is always "sourced" in this
+        phase — incoming/participant txs require the participant index.
+      properties:
+        account: { type: string, description: The G-strkey this listing is for. }
+        transactions: { type: array, items: { $ref: "#/components/schemas/TxSummary" } }
+        next_cursor: { type: string, description: "Opaque composite cursor (ledger.tx_index) for the next older page; absent on the last page." }
+        scope: { type: string, enum: [sourced], description: "Activity scope. \"sourced\" = the account is the tx source/fee-payer (not incoming)." }
+    AccountOperations:
+      type: object
+      description: |
+        An account's sourced operations, decoded (newest first), with an opaque
+        composite keyset cursor. `scope` is always "sourced" in this phase.
+      properties:
+        account: { type: string, description: The G-strkey this listing is for. }
+        operations: { type: array, items: { $ref: "#/components/schemas/Operation" } }
+        next_cursor: { type: string, description: "Opaque composite cursor (ledger.tx_index.op_index) for the next older page; absent on the last page." }
+        scope: { type: string, enum: [sourced], description: "Activity scope. \"sourced\" = the account is the op source." }
     DashboardKey:
       type: object
       description: |

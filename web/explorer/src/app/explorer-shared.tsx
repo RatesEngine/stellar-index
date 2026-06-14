@@ -122,7 +122,11 @@ export interface ContractEvent {
 export interface ContractResp {
   contract_id: string;
   events: ContractEvent[];
-  next_before?: number;
+  // Opaque composite keyset cursor (ledger.op_index.event_index) for the
+  // next older page; echo back as ?cursor=. Replaces the old next_before —
+  // a ledger-only cursor lost rows when a contract emitted >limit events
+  // in one ledger. Treat as opaque.
+  next_cursor?: string;
 }
 
 // Account activity endpoints (ADR-0038 Phase B). `scope` documents
@@ -136,7 +140,8 @@ export interface ContractResp {
 export interface AccountTransactionsResp {
   account: string;
   transactions: LedgerTransaction[];
-  next_before?: number;
+  // Opaque composite keyset cursor (ledger.tx_index); echo back as ?cursor=.
+  next_cursor?: string;
   scope: string;
 }
 
@@ -145,7 +150,8 @@ export interface AccountTransactionsResp {
 export interface AccountOperationsResp {
   account: string;
   operations: TxOperation[];
-  next_before?: number;
+  // Opaque composite keyset cursor (ledger.tx_index.op_index); echo as ?cursor=.
+  next_cursor?: string;
   scope: string;
 }
 

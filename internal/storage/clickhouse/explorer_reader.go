@@ -210,20 +210,41 @@ func (r *ExplorerReader) OperationsByLedger(ctx context.Context, seq uint32, lim
 const txCols = `ledger_seq, close_time, tx_hash, tx_index, source_account,
 	fee_charged, max_fee, operation_count, successful, result_code, memo_type, memo`
 
+// ExplorerCursor is a composite keyset position for the descending explorer
+// listings that can hold MANY rows per ledger (contract events, account
+// txs/ops). A scalar ledger-only cursor silently drops the remainder of a
+// ledger that straddles a page boundary (a busy AMM emits >limit events in one
+// ledger; an MM submits >limit txs in one ledger); the full tuple makes paging
+// exact. The zero value (Ledger==0) means "from the newest" (no cursor — first
+// page). The A/B fields carry the 2nd/3rd ORDER BY columns and are interpreted
+// per-listing: txs use (ledger, tx_index); ops use (ledger, tx_index,
+// op_index); events use (ledger, op_index, event_index).
+type ExplorerCursor struct {
+	Ledger uint32 // ledger_seq — primary sort key (DESC)
+	A      uint32 // 2nd sort col: tx_index (txs/ops) | op_index (events)
+	B      uint32 // 3rd sort col: op_index (ops) | event_index (events); unused for txs
+}
+
+// IsSet reports whether the cursor points past the newest row (i.e. this is a
+// continuation page, not the first page).
+func (c ExplorerCursor) IsSet() bool { return c.Ledger > 0 }
+
 // AccountTransactions returns transactions SUBMITTED by an account (its
-// source/fee-payer), newest first, keyset-paged by ledger via beforeLedger.
-// Uses the source_account bloom skip-index. (Incoming/participant txs — where
-// the account is a destination etc. — require the participant index, Phase B
-// completion.)
-func (r *ExplorerReader) AccountTransactions(ctx context.Context, account string, limit int, beforeLedger uint32) ([]TxSummary, error) {
+// source/fee-payer), newest first, keyset-paged by the composite
+// (ledger_seq, tx_index) cursor. Uses the source_account bloom skip-index.
+// (Incoming/participant txs — where the account is a destination etc. —
+// require the participant index, Phase B completion.)
+func (r *ExplorerReader) AccountTransactions(ctx context.Context, account string, limit int, cur ExplorerCursor) ([]TxSummary, error) {
 	if limit <= 0 || limit > 200 {
 		limit = 50
 	}
 	q := `SELECT ` + txCols + ` FROM stellar.transactions WHERE source_account = ?`
 	args := []any{account}
-	if beforeLedger > 0 {
-		q += ` AND ledger_seq < ?`
-		args = append(args, beforeLedger)
+	if cur.IsSet() {
+		// Tuple comparison: strictly older than the (ledger, tx_index) we last
+		// served — never re-emits a served row, never skips an unserved one.
+		q += ` AND (ledger_seq, tx_index) < (?, ?)`
+		args = append(args, cur.Ledger, cur.A)
 	}
 	q += ` ORDER BY ledger_seq DESC, tx_index DESC LIMIT ?`
 	args = append(args, limit)
@@ -236,17 +257,18 @@ func (r *ExplorerReader) AccountTransactions(ctx context.Context, account string
 }
 
 // AccountOperations returns operations SOURCED by an account (effective op
-// source), newest first, keyset-paged by ledger. Uses the source_account bloom
-// skip-index on stellar.operations.
-func (r *ExplorerReader) AccountOperations(ctx context.Context, account string, limit int, beforeLedger uint32) ([]OpRow, error) {
+// source), newest first, keyset-paged by the composite (ledger_seq, tx_index,
+// op_index) cursor. Uses the source_account bloom skip-index on
+// stellar.operations.
+func (r *ExplorerReader) AccountOperations(ctx context.Context, account string, limit int, cur ExplorerCursor) ([]OpRow, error) {
 	if limit <= 0 || limit > 200 {
 		limit = 50
 	}
 	q := `SELECT ` + opCols + ` FROM stellar.operations WHERE source_account = ?`
 	args := []any{account}
-	if beforeLedger > 0 {
-		q += ` AND ledger_seq < ?`
-		args = append(args, beforeLedger)
+	if cur.IsSet() {
+		q += ` AND (ledger_seq, tx_index, op_index) < (?, ?, ?)`
+		args = append(args, cur.Ledger, cur.A, cur.B)
 	}
 	q += ` ORDER BY ledger_seq DESC, tx_index DESC, op_index DESC LIMIT ?`
 	args = append(args, limit)
@@ -333,17 +355,19 @@ type ContractActivityRow struct {
 // Relies on the contract_id bloom skip-index (contract_events is
 // ORDER BY (ledger_seq, tx_hash, ...), so a contract_id predicate would
 // otherwise full-scan). NOT FINAL — FINAL would defeat the skip-index.
-// beforeLedger>0 keyset-pages to older events.
-func (r *ExplorerReader) ContractEventsRecent(ctx context.Context, contractID string, limit int, beforeLedger uint32) ([]ContractActivityRow, error) {
+// A set cursor keyset-pages to older events by the composite
+// (ledger_seq, op_index, event_index) — a contract can emit many events in one
+// ledger, so a ledger-only cursor would drop the rest of a straddled ledger.
+func (r *ExplorerReader) ContractEventsRecent(ctx context.Context, contractID string, limit int, cur ExplorerCursor) ([]ContractActivityRow, error) {
 	if limit <= 0 || limit > 500 {
 		limit = 100
 	}
 	q := `SELECT ledger_seq, close_time, tx_hash, op_index, event_index, event_type, topic_0_sym
 		FROM stellar.contract_events WHERE contract_id = ?`
 	args := []any{contractID}
-	if beforeLedger > 0 {
-		q += ` AND ledger_seq < ?`
-		args = append(args, beforeLedger)
+	if cur.IsSet() {
+		q += ` AND (ledger_seq, op_index, event_index) < (?, ?, ?)`
+		args = append(args, cur.Ledger, cur.A, cur.B)
 	}
 	q += ` ORDER BY ledger_seq DESC, op_index DESC, event_index DESC LIMIT ?`
 	args = append(args, limit)

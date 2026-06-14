@@ -4,6 +4,7 @@ import (
 	"context"
 	"net/http"
 	"strconv"
+	"strings"
 
 	"github.com/StellarIndex/stellar-index/internal/storage/clickhouse"
 )
@@ -22,9 +23,9 @@ type ExplorerReader interface {
 	OperationsByTx(ctx context.Context, seq uint32, hash string) ([]clickhouse.OpRow, error)
 	OperationResultsByTx(ctx context.Context, seq uint32, hash string) (map[uint32]int32, error)
 	EventsByTx(ctx context.Context, seq uint32, hash string) ([]clickhouse.EventSummary, error)
-	ContractEventsRecent(ctx context.Context, contractID string, limit int, beforeLedger uint32) ([]clickhouse.ContractActivityRow, error)
-	AccountTransactions(ctx context.Context, account string, limit int, beforeLedger uint32) ([]clickhouse.TxSummary, error)
-	AccountOperations(ctx context.Context, account string, limit int, beforeLedger uint32) ([]clickhouse.OpRow, error)
+	ContractEventsRecent(ctx context.Context, contractID string, limit int, cur clickhouse.ExplorerCursor) ([]clickhouse.ContractActivityRow, error)
+	AccountTransactions(ctx context.Context, account string, limit int, cur clickhouse.ExplorerCursor) ([]clickhouse.TxSummary, error)
+	AccountOperations(ctx context.Context, account string, limit int, cur clickhouse.ExplorerCursor) ([]clickhouse.OpRow, error)
 }
 
 // explorerUnavailable writes the standard 503 when no explorer reader is wired
@@ -68,4 +69,54 @@ func parseUint32Query(w http.ResponseWriter, r *http.Request, name string) (uint
 		return 0, false
 	}
 	return uint32(n), true
+}
+
+// encodeCursor renders a composite keyset position as an opaque dotted-decimal
+// cursor string ("63000000.4.7") for ?cursor=. The component count matches the
+// listing's ORDER BY arity (2 for account txs, 3 for account ops + contract
+// events). Clients treat it as opaque and echo it back verbatim.
+func encodeCursor(parts ...uint32) string {
+	ss := make([]string, len(parts))
+	for i, p := range parts {
+		ss[i] = strconv.FormatUint(uint64(p), 10)
+	}
+	return strings.Join(ss, ".")
+}
+
+// parseExplorerCursor reads the optional ?cursor= opaque keyset cursor and
+// decodes it into an ExplorerCursor with exactly `parts` components (2 → account
+// txs; 3 → account ops + contract events). Absent → zero cursor (first page).
+// ok=false (after a problem+json) on a malformed value or a zero ledger (a real
+// cursor always points past an actual row).
+func parseExplorerCursor(w http.ResponseWriter, r *http.Request, parts int) (clickhouse.ExplorerCursor, bool) {
+	raw := r.URL.Query().Get("cursor")
+	if raw == "" {
+		return clickhouse.ExplorerCursor{}, true
+	}
+	bad := func() (clickhouse.ExplorerCursor, bool) {
+		writeProblem(w, r, "https://api.stellarindex.io/errors/invalid-cursor",
+			"Invalid cursor", http.StatusBadRequest,
+			"cursor must be an opaque value returned in a prior next_cursor")
+		return clickhouse.ExplorerCursor{}, false
+	}
+	segs := strings.Split(raw, ".")
+	if len(segs) != parts {
+		return bad()
+	}
+	vals := make([]uint32, parts)
+	for i, s := range segs {
+		n, err := strconv.ParseUint(s, 10, 32)
+		if err != nil {
+			return bad()
+		}
+		vals[i] = uint32(n)
+	}
+	if vals[0] == 0 {
+		return bad()
+	}
+	cur := clickhouse.ExplorerCursor{Ledger: vals[0], A: vals[1]}
+	if parts == 3 {
+		cur.B = vals[2]
+	}
+	return cur, true
 }

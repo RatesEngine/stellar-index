@@ -20,11 +20,14 @@ type ContractEventView struct {
 }
 
 // ContractDetailView is the wire response for GET /v1/contracts/{contract_id}:
-// the contract id + its most-recent events. NextBefore keyset-pages older.
+// the contract id + its most-recent events. NextCursor is the opaque keyset
+// cursor for the next (older) page — composite (ledger, op_index, event_index)
+// so a contract that emits many events in one ledger never loses rows across a
+// page boundary. Echo it back as ?cursor=. Set only when a full page returned.
 type ContractDetailView struct {
 	ContractID string              `json:"contract_id"`
 	Events     []ContractEventView `json:"events"`
-	NextBefore uint32              `json:"next_before,omitempty"`
+	NextCursor string              `json:"next_cursor,omitempty"`
 }
 
 // handleContractDetail serves GET /v1/contracts/{contract_id} — a contract's
@@ -46,11 +49,11 @@ func (s *Server) handleContractDetail(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	before, ok := parseUint32Query(w, r, "before")
+	cur, ok := parseExplorerCursor(w, r, 3) // (ledger, op_index, event_index)
 	if !ok {
 		return
 	}
-	rows, err := s.explorer.ContractEventsRecent(r.Context(), cid, limit, before)
+	rows, err := s.explorer.ContractEventsRecent(r.Context(), cid, limit, cur)
 	if err != nil {
 		if clientAborted(r, err) {
 			return
@@ -64,8 +67,11 @@ func (s *Server) handleContractDetail(w http.ResponseWriter, r *http.Request) {
 	for i, e := range rows {
 		out.Events[i] = contractEventView(e)
 	}
-	if n := len(rows); n > 0 {
-		out.NextBefore = rows[n-1].Seq
+	// Only emit a cursor on a full page — a short page is the last page, so a
+	// cursor there just costs the client one empty round-trip.
+	if n := len(rows); n == limit {
+		last := rows[n-1]
+		out.NextCursor = encodeCursor(last.Seq, last.OpIndex, last.EventIndex)
 	}
 	writeJSON(w, out, Flags{})
 }

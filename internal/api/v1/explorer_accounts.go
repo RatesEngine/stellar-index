@@ -7,22 +7,25 @@ import (
 )
 
 // AccountTransactionsView is the wire response for
-// GET /v1/accounts/{g_strkey}/transactions.
+// GET /v1/accounts/{g_strkey}/transactions. NextCursor is the opaque keyset
+// cursor for the next (older) page — composite (ledger, tx_index) so an account
+// that submits many txs in one ledger never loses rows across a page boundary.
 type AccountTransactionsView struct {
 	Account      string          `json:"account"`
 	Transactions []TxSummaryView `json:"transactions"`
-	NextBefore   uint32          `json:"next_before,omitempty"`
+	NextCursor   string          `json:"next_cursor,omitempty"`
 	// Scope documents that this is source/submitter activity (Phase B v1);
 	// incoming/participant activity needs the participant index.
 	Scope string `json:"scope"`
 }
 
 // AccountOperationsView is the wire response for
-// GET /v1/accounts/{g_strkey}/operations.
+// GET /v1/accounts/{g_strkey}/operations. NextCursor is the opaque keyset cursor
+// for the next (older) page — composite (ledger, tx_index, op_index).
 type AccountOperationsView struct {
 	Account    string   `json:"account"`
 	Operations []OpView `json:"operations"`
-	NextBefore uint32   `json:"next_before,omitempty"`
+	NextCursor string   `json:"next_cursor,omitempty"`
 	Scope      string   `json:"scope"`
 }
 
@@ -56,11 +59,11 @@ func (s *Server) handleAccountTransactions(w http.ResponseWriter, r *http.Reques
 	if !ok {
 		return
 	}
-	before, ok := parseUint32Query(w, r, "before")
+	cur, ok := parseExplorerCursor(w, r, 2) // (ledger, tx_index)
 	if !ok {
 		return
 	}
-	rows, err := s.explorer.AccountTransactions(r.Context(), g, limit, before)
+	rows, err := s.explorer.AccountTransactions(r.Context(), g, limit, cur)
 	if err != nil {
 		if clientAborted(r, err) {
 			return
@@ -74,8 +77,9 @@ func (s *Server) handleAccountTransactions(w http.ResponseWriter, r *http.Reques
 	for i, t := range rows {
 		out.Transactions[i] = txSummaryView(t)
 	}
-	if n := len(rows); n > 0 {
-		out.NextBefore = rows[n-1].Seq
+	if n := len(rows); n == limit {
+		last := rows[n-1]
+		out.NextCursor = encodeCursor(last.Seq, last.TxIndex)
 	}
 	writeJSON(w, out, Flags{})
 }
@@ -95,11 +99,11 @@ func (s *Server) handleAccountOperations(w http.ResponseWriter, r *http.Request)
 	if !ok {
 		return
 	}
-	before, ok := parseUint32Query(w, r, "before")
+	cur, ok := parseExplorerCursor(w, r, 3) // (ledger, tx_index, op_index)
 	if !ok {
 		return
 	}
-	rows, err := s.explorer.AccountOperations(r.Context(), g, limit, before)
+	rows, err := s.explorer.AccountOperations(r.Context(), g, limit, cur)
 	if err != nil {
 		if clientAborted(r, err) {
 			return
@@ -113,8 +117,9 @@ func (s *Server) handleAccountOperations(w http.ResponseWriter, r *http.Request)
 	for i, o := range rows {
 		out.Operations[i] = opView(o)
 	}
-	if n := len(rows); n > 0 {
-		out.NextBefore = rows[n-1].Seq
+	if n := len(rows); n == limit {
+		last := rows[n-1]
+		out.NextCursor = encodeCursor(last.Seq, last.TxIndex, last.OpIndex)
 	}
 	writeJSON(w, out, Flags{})
 }
