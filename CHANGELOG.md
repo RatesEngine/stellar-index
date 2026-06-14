@@ -19,6 +19,32 @@ against.
 
 ### Fixed
 
+- **SEP-41 supply: mint + clawback silently dropped post-P23 (data loss).**
+  `sep41_supply.decodeCounterparty` read the counterparty from a FIXED topic
+  index (mint/clawback → topic[2]) matching the legacy admin-prefixed SAC
+  shape. CAP-67 / Whisk (mainnet 2025-09-03) replaced that with
+  `["mint", to, sep0011_asset]` — counterparty at topic[1], a String at
+  topic[2] — so `AsAddressStrkey` errored on the String and the whole row was
+  dropped. r1-lake-verified: 99.96% of recent mints + 100% of clawbacks are the
+  CAP-67 shape, all lost; `total_supply` under-counted for every watched SEP-41
+  token. Now shape-aware (topic[2] is an Address ⇒ legacy/topic[2], else
+  CAP-67/bare-spec/topic[1]); burn was already correct. The old back-compat
+  test passed on a fabricated shape mainnet never emits; replaced with a
+  lake-faithful shape matrix. Historical recovery (re-derive from the lake) is
+  a deferred operator job. (audit-2026-06-14)
+- **Explorer pagination dropped rows at page boundaries.** Contract-event and
+  account tx/op listings cursored on `ledger_seq` only, but many rows can share
+  one ledger (a busy AMM emits >limit events/ledger), so a page boundary inside
+  a ledger silently skipped the remainder. Now a composite keyset cursor
+  (opaque `next_cursor`/`cursor`, ClickHouse tuple comparison). Ledger listing
+  keeps its correct integer `before`. (audit-2026-06-14, A11)
+- **Explorer UI: `result_code` rendered every op red.** The API emits
+  `result_code` as a JSON number (0 = success) but the TS typed it as string
+  and regex-tested it; success now derives from `=== 0`. Also: account
+  `source_account` links 404'd (pointed at `/issuers/{g}`, which static-exports
+  only ~100 issuers) — added a `/accounts?id=` query-param page; and
+  `total_coins` (~1e18 stroops) lost precision through `Number()` — now
+  BigInt-divided (ADR-0003). (audit-2026-06-14, A17)
 - **projector-replay silently no-oped** — the rewind called UpsertCursor,
   whose monotonic-forward guard (F-0020) matched zero rows on a backward
   write; the command printed success while the cursor stayed at tip. New
@@ -28,6 +54,16 @@ against.
 
 ### Added
 
+- **Network explorer (ADR-0038)** — a read API + UI over the certified
+  ClickHouse Tier-1 lake: `GET /v1/ledgers`, `/ledgers/{seq}/transactions`,
+  `/tx/{hash}`, `/operations`, `/contracts/{c}`, `/accounts/{g}/transactions`
+  + `/operations`, and `/search`. Classic XDR is decoded to clean JSON
+  (`internal/xdrjson`, amounts as strings per ADR-0003) and the served reads
+  use the lake's bloom skip-indexes (tx_hash, source_account, contract_id).
+  Next.js static-export UI: ledger / tx / contract / account pages + ⌘K
+  search. Account activity is sourced/submitted scope only (participant index
+  is Phase B/C). The two `/accounts/{g}/*` paths ship with OpenAPI
+  `AccountTransactions`/`AccountOperations` schemas (scope, next_cursor).
 - **GET /v1/coverage** — public per-source completeness verdicts
   (ADR-0033): the three claims (substrate/recognition/projection), the
   verified-to watermark, and the headline complete boolean, served from

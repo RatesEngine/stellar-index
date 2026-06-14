@@ -106,6 +106,55 @@ func clawbackEvent(t *testing.T, contract string, amount int64) events.Event {
 	}
 }
 
+// stringScVal builds an ScvString — the sep0011_asset topic carries a
+// SEP-11 asset STRING (e.g. "USDC:GA5..."), not a Symbol. Matches the
+// on-wire shape (lake-verified: topic[2] ScValType = String/0x0E).
+func stringScVal(s string) xdr.ScVal {
+	str := xdr.ScString(s)
+	return xdr.ScVal{Type: xdr.ScValTypeScvString, Str: &str}
+}
+
+// mintEventCAP67 builds the REAL post-P23 (CAP-67 / Whisk) mint shape:
+// ["mint", to(Addr), sep0011_asset(String)] — `to` at topic[1], the asset
+// String at topic[2]. This is the dominant mainnet shape (99.96% of recent
+// mints per the r1 lake) and is DISTINCT from the legacy mintEvent helper,
+// which prefixes the admin (`to` at topic[2]). The old decoder dropped this.
+func mintEventCAP67(t *testing.T, contract string, amount int64) events.Event {
+	t.Helper()
+	ev := mintEvent(t, contract, amount)
+	ev.Topic = []string{
+		encodeScVal(t, symbolScVal("mint")),
+		encodeScVal(t, addressScValG(t, gHolder)),   // to @ topic[1]
+		encodeScVal(t, stringScVal("USDC:"+gAdmin)), // sep0011_asset @ topic[2]
+	}
+	return ev
+}
+
+// clawbackEventCAP67 builds the REAL CAP-67 clawback shape:
+// ["clawback", from(Addr), sep0011_asset(String)] — `from` at topic[1].
+func clawbackEventCAP67(t *testing.T, contract string, amount int64) events.Event {
+	t.Helper()
+	ev := clawbackEvent(t, contract, amount)
+	ev.Topic = []string{
+		encodeScVal(t, symbolScVal("clawback")),
+		encodeScVal(t, addressScValG(t, gHolder)),   // from @ topic[1]
+		encodeScVal(t, stringScVal("USDC:"+gAdmin)), // sep0011_asset @ topic[2]
+	}
+	return ev
+}
+
+// mintEventBareSpec builds the bare SEP-41 spec mint: ["mint", to] (2 topics,
+// no admin, no asset) — `to` at topic[1].
+func mintEventBareSpec(t *testing.T, contract string, amount int64) events.Event {
+	t.Helper()
+	ev := mintEvent(t, contract, amount)
+	ev.Topic = []string{
+		encodeScVal(t, symbolScVal("mint")),
+		encodeScVal(t, addressScValG(t, gHolder)), // to @ topic[1]
+	}
+	return ev
+}
+
 func transferEvent(t *testing.T, contract string) events.Event {
 	t.Helper()
 	return events.Event{
@@ -267,95 +316,45 @@ func TestDecoder_DecodeNegativeAmount(t *testing.T) {
 	}
 }
 
-// TestDecoder_CAP67_FourTopic_BackCompat pins the CLAUDE.md surprise:
-// post-P23 (Whisk, mainnet 2025-09-03) SEP-41 supply events grew a
-// fourth topic carrying the SEP-11 asset string
-// (`sep0011_asset`). The decoder reads counterparty positionally
-// (topic[1] for burn, topic[2] for mint/clawback) and IGNORES the
-// optional 4th topic — but a future contributor reading the
-// shorter pre-P23 spec might naively assert topic length and
-// reject the post-P23 shape.
+// TestDecoder_CounterpartyAcrossShapes pins the shape-aware counterparty
+// decode across EVERY mainnet-observed topic shape (lake-verified on r1
+// 2026-06-15). The counterparty position is NOT fixed by topic count: the
+// legacy SAC form prefixes `admin` (counterparty at topic[2]), while the
+// CAP-67 / Whisk form (mainnet 2025-09-03, 99.96% of recent mints + 100% of
+// clawbacks) puts the counterparty at topic[1] and the sep0011_asset STRING at
+// topic[2]. The discriminator is the TYPE of topic[2] (Address ⇒ legacy).
 //
-// Lock the behaviour with explicit fixtures for both arities.
-// F-1242 (audit-2026-05-12).
-func TestDecoder_CAP67_FourTopic_BackCompat(t *testing.T) {
+// This supersedes the old back-compat test, whose "post-P23" fixture appended
+// sep0011 to the LEGACY admin-prefixed form (`["mint", admin, to, sep0011]`) —
+// a shape mainnet never emits — and so passed while the decoder silently
+// dropped every real CAP-67 mint + clawback (F-13xx, audit-2026-06-14).
+func TestDecoder_CounterpartyAcrossShapes(t *testing.T) {
 	d, _ := NewDecoder([]string{cWatched})
 
-	// Use XLM's pubnet SEP-11 representation as a realistic
-	// 4th-topic value (the field carries a SEP-11 asset string).
-	sep0011 := encodeScVal(t, symbolScVal("native"))
-
 	cases := []struct {
-		name            string
-		buildEvent      func(t *testing.T) events.Event
-		wantKind        string
-		wantCounterPty  string
-		wantOrigArity   int
-		extendArityWith string // the optional 4th topic
+		name       string
+		buildEvent func(t *testing.T) events.Event
+		wantKind   string
+		wantCpty   string
 	}{
-		{
-			name:            "mint pre-P23 (3 topics)",
-			buildEvent:      func(t *testing.T) events.Event { return mintEvent(t, cWatched, 100) },
-			wantKind:        SymbolMint,
-			wantCounterPty:  gHolder,
-			wantOrigArity:   3,
-			extendArityWith: "",
-		},
-		{
-			name: "mint post-P23 (4 topics inc. sep0011_asset)",
-			buildEvent: func(t *testing.T) events.Event {
-				ev := mintEvent(t, cWatched, 100)
-				ev.Topic = append(ev.Topic, sep0011)
-				return ev
-			},
-			wantKind:       SymbolMint,
-			wantCounterPty: gHolder,
-			wantOrigArity:  4,
-		},
-		{
-			name:           "burn pre-P23 (2 topics)",
-			buildEvent:     func(t *testing.T) events.Event { return burnEvent(t, cWatched, 100) },
-			wantKind:       SymbolBurn,
-			wantCounterPty: gHolder,
-			wantOrigArity:  2,
-		},
-		{
-			name: "burn post-P23 (3 topics inc. sep0011_asset)",
-			buildEvent: func(t *testing.T) events.Event {
-				ev := burnEvent(t, cWatched, 100)
-				ev.Topic = append(ev.Topic, sep0011)
-				return ev
-			},
-			wantKind:       SymbolBurn,
-			wantCounterPty: gHolder,
-			wantOrigArity:  3,
-		},
-		{
-			name:           "clawback pre-P23 (3 topics)",
-			buildEvent:     func(t *testing.T) events.Event { return clawbackEvent(t, cWatched, 100) },
-			wantKind:       SymbolClawback,
-			wantCounterPty: gHolder,
-			wantOrigArity:  3,
-		},
-		{
-			name: "clawback post-P23 (4 topics inc. sep0011_asset)",
-			buildEvent: func(t *testing.T) events.Event {
-				ev := clawbackEvent(t, cWatched, 100)
-				ev.Topic = append(ev.Topic, sep0011)
-				return ev
-			},
-			wantKind:       SymbolClawback,
-			wantCounterPty: gHolder,
-			wantOrigArity:  4,
-		},
+		// mint
+		{"mint legacy SAC [mint,admin,to]", func(t *testing.T) events.Event { return mintEvent(t, cWatched, 100) }, SymbolMint, gHolder},
+		{"mint CAP-67 [mint,to,sep0011]", func(t *testing.T) events.Event { return mintEventCAP67(t, cWatched, 100) }, SymbolMint, gHolder},
+		{"mint bare-spec [mint,to]", func(t *testing.T) events.Event { return mintEventBareSpec(t, cWatched, 100) }, SymbolMint, gHolder},
+		// clawback
+		{"clawback legacy [clawback,admin,from]", func(t *testing.T) events.Event { return clawbackEvent(t, cWatched, 100) }, SymbolClawback, gHolder},
+		{"clawback CAP-67 [clawback,from,sep0011]", func(t *testing.T) events.Event { return clawbackEventCAP67(t, cWatched, 100) }, SymbolClawback, gHolder},
+		// burn (topic[1]=from in every shape)
+		{"burn spec [burn,from]", func(t *testing.T) events.Event { return burnEvent(t, cWatched, 100) }, SymbolBurn, gHolder},
+		{"burn CAP-67 [burn,from,sep0011]", func(t *testing.T) events.Event {
+			ev := burnEvent(t, cWatched, 100)
+			ev.Topic = append(ev.Topic, encodeScVal(t, stringScVal("USDC:"+gAdmin)))
+			return ev
+		}, SymbolBurn, gHolder},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			ev := tc.buildEvent(t)
-			if len(ev.Topic) != tc.wantOrigArity {
-				t.Fatalf("test fixture arity = %d, expected %d", len(ev.Topic), tc.wantOrigArity)
-			}
-			outs, err := d.Decode(ev)
+			outs, err := d.Decode(tc.buildEvent(t))
 			if err != nil {
 				t.Fatalf("Decode: %v", err)
 			}
@@ -366,9 +365,8 @@ func TestDecoder_CAP67_FourTopic_BackCompat(t *testing.T) {
 			if out.Kind != tc.wantKind {
 				t.Errorf("Kind = %q, want %q", out.Kind, tc.wantKind)
 			}
-			if out.Counterparty != tc.wantCounterPty {
-				t.Errorf("Counterparty = %q, want %q (positional decode must ignore the 4th topic)",
-					out.Counterparty, tc.wantCounterPty)
+			if out.Counterparty != tc.wantCpty {
+				t.Errorf("Counterparty = %q, want %q", out.Counterparty, tc.wantCpty)
 			}
 		})
 	}

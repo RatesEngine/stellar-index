@@ -21,13 +21,23 @@
 //
 // # Topic shapes
 //
-// The SEP-41 spec emits three supply-affecting topic shapes
-// (post-P23 / CAP-67 — earlier shapes are equivalent for our
-// purposes since we read by topic[0] and amount-from-Value):
+// Supply-affecting events arrive in three on-chain shapes that
+// differ in counterparty POSITION — the topic count alone does
+// not disambiguate them (lake-verified on r1, 2026-06-15):
 //
-//	mint     ["mint", admin, to, sep0011_asset?]
-//	burn     ["burn", from,    sep0011_asset?]
-//	clawback ["clawback", admin, from, sep0011_asset?]
+//	legacy SAC    mint     ["mint", admin, to]                  (to @ topic[2])
+//	              clawback ["clawback", admin, from]            (from @ topic[2])
+//	CAP-67/Whisk  mint     ["mint", to, sep0011_asset]          (to @ topic[1])  ← dominant (≈99.96%)
+//	              clawback ["clawback", from, sep0011_asset]    (from @ topic[1]) ← dominant (100%)
+//	              burn     ["burn", from, sep0011_asset]         (from @ topic[1])
+//	bare SEP-41   mint     ["mint", to]                          (to @ topic[1])
+//	              burn     ["burn", from]                         (from @ topic[1])
+//
+// CAP-67 (Whisk, mainnet 2025-09-03) replaced the legacy admin-
+// prefixed SAC form with the SEP-41-spec form + a trailing
+// sep0011_asset STRING — so the same topic count (3) can carry
+// the counterparty at a DIFFERENT index. sep0011_asset is a
+// String (ScvString), not an Address.
 //
 // Body (event.Value) is the i128 amount in stroops (per the
 // asset's decimals — SEP-41 is decimal-agnostic at the wire
@@ -36,8 +46,9 @@
 //
 // # Counterparty extraction
 //
-// `mint` → topic[2] (`to`); `burn` → topic[1] (`from`);
-// `clawback` → topic[2] (`from`). The observer stamps this on
-// each row so operators can audit which holders the supply
-// came from / went to.
+// Shape-aware (see [decodeCounterparty]): the counterparty is
+// topic[2] iff topic[2] is an Address (legacy admin-prefixed
+// form), else topic[1] (CAP-67 / bare-spec); burn is always
+// topic[1]. The observer stamps this on each row so operators
+// can audit which holders the supply came from / went to.
 package sep41_supply

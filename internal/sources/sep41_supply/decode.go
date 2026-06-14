@@ -62,28 +62,54 @@ func decodeAmount(ev *events.Event) (*big.Int, error) {
 }
 
 // decodeCounterparty extracts the recipient (mint) or holder
-// (burn / clawback) Address from the topic vector. Topic[0] is
-// the event symbol; the counterparty position varies per kind:
+// (burn / clawback) Address from the topic vector. Topic[0] is the
+// event symbol; the counterparty POSITION depends on the on-chain
+// SHAPE, which changed across protocol versions — and the topic
+// COUNT alone does not disambiguate, so we branch on the TYPE of
+// topic[2]:
 //
-//	mint     topic[2] = to        (topic[1] is admin)
-//	burn     topic[1] = from
-//	clawback topic[2] = from      (topic[1] is admin)
+//	mint / clawback
+//	  legacy SAC     ["mint", admin(Addr), to(Addr)]            → counterparty = topic[2]
+//	  CAP-67 / spec  ["mint", to(Addr), sep0011_asset(String)]  → counterparty = topic[1]
+//	  bare SEP-41    ["mint", to(Addr)]                          → counterparty = topic[1]
+//	burn             ["burn", from(Addr) (, sep0011_asset)]      → counterparty = topic[1] (all shapes)
 //
-// Returns the strkey form. Older SEP-41 implementations may emit
-// shorter topic vectors; we surface ErrShortTopic so the caller
-// can drop the row rather than write garbage.
+// Discriminator: if topic[2] decodes as an Address, it is the legacy
+// admin-prefixed form and the counterparty is topic[2]; otherwise
+// topic[2] is the sep0011_asset String (CAP-67 / Whisk, mainnet
+// 2025-09-03) — or absent (bare spec) — and the counterparty is
+// topic[1]. Verified against the r1 lake (2026-06-15): 99.96% of
+// recent mints + 100% of clawbacks are the CAP-67 shape, which the
+// previous fixed-topic[2] decode DROPPED entirely (AsAddressStrkey
+// returns ErrScValType on the String → the whole row was lost →
+// total_supply under-counted). burn's topic[1] was correct all along.
+//
+// Older / shorter topic vectors surface ErrShortTopic so the caller
+// drops the row rather than writing garbage.
 func decodeCounterparty(ev *events.Event, kind string) (string, error) {
-	var idx int
 	switch kind {
-	case SymbolMint, SymbolClawback:
-		idx = 2
 	case SymbolBurn:
-		idx = 1
+		return addressAtTopic(ev, 1)
+	case SymbolMint, SymbolClawback:
+		// Legacy admin-prefixed form iff topic[2] is itself an Address;
+		// CAP-67 puts the sep0011_asset String there instead.
+		if len(ev.Topic) >= 3 {
+			if sv, err := scval.Parse(ev.Topic[2]); err == nil && sv.Type == xdr.ScValTypeScvAddress {
+				return scval.AsAddressStrkey(sv)
+			}
+		}
+		// CAP-67 (["mint", to, sep0011_asset]) or bare spec (["mint", to]).
+		return addressAtTopic(ev, 1)
 	default:
 		return "", fmt.Errorf("%w: %q", ErrUnknownSEP41Symbol, kind)
 	}
+}
+
+// addressAtTopic parses topic[idx] as an Address strkey, surfacing
+// ErrShortTopic when the vector is too short.
+func addressAtTopic(ev *events.Event, idx int) (string, error) {
 	if len(ev.Topic) <= idx {
-		return "", fmt.Errorf("%w: %s expects topic[%d], got len=%d", ErrShortTopic, kind, idx, len(ev.Topic))
+		return "", fmt.Errorf("%w: expects topic[%d], got len=%d", ErrShortTopic, idx, len(ev.Topic))
 	}
 	sv, err := scval.Parse(ev.Topic[idx])
 	if err != nil {

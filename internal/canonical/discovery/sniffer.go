@@ -16,8 +16,12 @@ const (
 	// position-3 was added post-P23 (CAP-67) for unified events.
 	EventTransfer SEP41EventType = "transfer"
 
-	// EventMint fires on `mint` events. Topic shape:
-	// ("mint", admin, to, sep0011_asset?).
+	// EventMint fires on `mint` events. Topic shape is shape-dependent:
+	// legacy SAC ("mint", admin, to); CAP-67/spec ("mint", to,
+	// sep0011_asset?) — the dominant mainnet form (the admin was dropped
+	// post-P23). The sniffer only reads topic[0], so the position shift is
+	// immaterial here; the supply observer's [sep41_supply.decodeCounterparty]
+	// handles it.
 	EventMint SEP41EventType = "mint"
 
 	// EventBurn fires on `burn` events. Topic shape:
@@ -25,9 +29,10 @@ const (
 	// — burn is voluntary, clawback is admin-driven.
 	EventBurn SEP41EventType = "burn"
 
-	// EventClawback fires on `clawback` events. Topic shape:
-	// ("clawback", admin, from, sep0011_asset?). Compliance-
-	// significant: a token with frequent clawbacks reads
+	// EventClawback fires on `clawback` events. Topic shape is
+	// shape-dependent: legacy SAC ("clawback", admin, from); CAP-67/spec
+	// ("clawback", from, sep0011_asset?) — the dominant mainnet form.
+	// Compliance-significant: a token with frequent clawbacks reads
 	// differently from one with frequent voluntary burns.
 	EventClawback SEP41EventType = "clawback"
 )
