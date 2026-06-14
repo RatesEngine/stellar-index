@@ -19,20 +19,17 @@ import (
 // Scope: ledgers, transactions, operations, operation_results, contract_events,
 // supply_flows.
 //
-// KNOWN GAP — ledger_entry_changes (G12-03, ADR-0034 accepted exclusion).
-// Extract.Changes is ALWAYS nil: this extractor does NOT attribute per-op
-// LedgerEntry mutations (created/updated/removed/state) from the tx-meta
-// changes streams. The stellar.ledger_entry_changes table is schema'd and
-// flushChanges runs every Flush, but over a permanently-empty slice — so the
-// lake currently has NO substrate to re-derive the LedgerEntry-based supply
-// observers (account/trustline/claimable/LP-reserve; ADR-0034's "re-derive
-// from the lake" promise). Those observers still run live off the dispatcher's
-// LedgerEntryChangeDecoder hook and write Postgres directly; they just can't be
-// rebuilt from CH. Closing the gap is a large change (walk each
-// LedgerTransaction's GetChanges() + the tx-meta v3/v4 op-change + fee-meta
-// streams, strkey-encode keys, base64 the entry/key XDR, attribute op_index
-// incl. -1 for fee/tx-level) and is deliberately deferred — see the
-// flushChanges docstring in sink.go and the ADR-0034 exclusion note.
+// ledger_entry_changes (was G12-03; CLOSED by ADR-0038 Phase C).
+// Extract.Changes is now populated by extractEntryChanges (see
+// extract_entry_changes.go): it walks the tx-meta v3/v4 op-change + fee-meta
+// streams exactly as dispatcher.walkEntryChanges does (fee/tx-level at
+// op_index -1, per-op changes at their index), base64s the entry+key XDR, and
+// tags change/entry type. This gives the lake the LedgerEntry substrate the
+// account-state explorer re-derives current balances/trustlines/offers/
+// contract-data from, and fulfils ADR-0034's "re-derive the LedgerEntry supply
+// observers from the lake" promise. Live capture starts when the indexer
+// running this extractor is redeployed; historical coverage comes from a
+// ch-rebuild over the range (billions of rows — the Phase C backfill).
 //
 // Resilient like dispatcher.CensusLedger: a per-tx read error is skipped +
 // tolerated, not fatal, so one bad tx can't lose a whole ledger.
@@ -106,6 +103,7 @@ func extractTx(ext *LedgerExtract, tx ingest.LedgerTransaction, seq uint32, clos
 
 	extractOps(ext, tx, seq, closeTime, txHash, txSource, txIndex, tx.Result.Successful())
 	extractEvents(ext, tx, seq, closeTime, txHash, opArgsByIndex(tx.Envelope.Operations()))
+	extractEntryChanges(ext, tx, seq, closeTime, txHash) // ADR-0038 Phase C substrate (closes G12-03)
 }
 
 // opArgsByIndex returns the base64-SCVal InvokeContract args per operation
