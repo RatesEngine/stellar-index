@@ -94,6 +94,7 @@ type Server struct {
 	protocolContractsReader ProtocolContractsReader
 	protocolStats           ProtocolStatsReader
 	protocolActivity        ProtocolActivityReader
+	protocolBespoke         ProtocolBespokeReader
 	soroswapPairs           SoroswapPairsReader
 	networkStats            NetworkStatsReader
 	sourcesStats            SourcesStatsReader
@@ -438,6 +439,12 @@ type Options struct {
 	// serves the detail view without the analytics fields.
 	ProtocolActivity ProtocolActivityReader
 
+	// ProtocolBespoke, when non-nil, backs the per-category bespoke
+	// analytics block on /v1/protocols/{name} (TVL/volume/AUM/flows/feeds)
+	// from the served-tier projected tables. Production wiring is
+	// timescale.Store. Nil serves the detail view without the bespoke block.
+	ProtocolBespoke ProtocolBespokeReader
+
 	// SoroswapPairs, when non-nil, supplies soroswap's contract list
 	// on /v1/protocols* from the soroswap_pairs registry (its pair
 	// set carries token identities and predates protocol_contracts).
@@ -758,6 +765,7 @@ func New(opts Options) *Server {
 		protocolContractsReader: opts.ProtocolContracts,
 		protocolStats:           opts.ProtocolStats,
 		protocolActivity:        opts.ProtocolActivity,
+		protocolBespoke:         opts.ProtocolBespoke,
 		soroswapPairs:           opts.SoroswapPairs,
 		networkStats:            opts.NetworkStats,
 		sourcesStats:            opts.SourcesStats,

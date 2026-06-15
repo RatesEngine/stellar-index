@@ -908,6 +908,7 @@ func run(cfgPath string, dryRun bool) error { //nolint:gocognit,funlen,gocyclo /
 		ProtocolContracts: store,
 		ProtocolStats:     store,
 		ProtocolActivity:  protocolActivityReader,
+		ProtocolBespoke:   store,
 		SoroswapPairs:     store,
 		NetworkStats:      store,
 		// Wrap with a 60s TTL cache. The underlying SQL aggregations

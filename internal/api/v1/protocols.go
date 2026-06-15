@@ -31,6 +31,37 @@ type ProtocolActivityReader interface {
 	ProtocolContractActivity(ctx context.Context, contractIDs []string, sinceLedger uint32) ([]clickhouse.ProtocolContractActivity, error)
 }
 
+// ProtocolBespokeReader builds the per-category bespoke analytics block from the
+// served-tier projected tables (TVL/volume/AUM/flows/feeds). Production wiring
+// is timescale.Store. Nil → the bespoke block is absent (the rest of the page
+// still serves).
+type ProtocolBespokeReader interface {
+	BuildProtocolBespoke(ctx context.Context, source, category string, windowDays int) (*timescale.BespokeBlock, error)
+}
+
+// bespokeFromStore maps the timescale-side block to the wire view (the two
+// shapes are intentionally identical; timescale can't import v1).
+func bespokeFromStore(b *timescale.BespokeBlock) *ProtocolBespoke {
+	if b == nil {
+		return nil
+	}
+	out := &ProtocolBespoke{Category: b.Category, Notes: b.Notes}
+	for _, k := range b.KPIs {
+		out.KPIs = append(out.KPIs, BespokeKPI{Label: k.Label, Value: k.Value, Unit: k.Unit, Hint: k.Hint})
+	}
+	for _, s := range b.Series {
+		pts := make([]BespokeSeriesPt, 0, len(s.Points))
+		for _, p := range s.Points {
+			pts = append(pts, BespokeSeriesPt{Date: p.Date, Value: p.Value})
+		}
+		out.Series = append(out.Series, BespokeSeries{Name: s.Name, Unit: s.Unit, Points: pts})
+	}
+	for _, t := range b.Tables {
+		out.Tables = append(out.Tables, BespokeTable{Title: t.Title, Columns: t.Columns, Rows: t.Rows})
+	}
+	return out
+}
+
 // ProtocolContractsReader is the read seam for the protocol_contracts
 // registry (ADR-0035 factory-anchored gating). Production wiring is
 // timescale.Store.ListProtocolContracts. Nil reader → contract lists
@@ -145,6 +176,63 @@ type ProtocolEventTypeView struct {
 	Count     int64  `json:"count"`
 }
 
+// ─── Bespoke per-category analytics (the Dune-surpassing block) ──────
+//
+// ProtocolBespoke is a generic rendering container — KPIs + named time-series
+// + named top-N tables — filled with content BESPOKE to each protocol's
+// category (lending shows TVL/borrows/utilization; a DEX shows swap volume +
+// top pairs; a vault shows AUM + flows; a bridge shows transfer volume by
+// domain; an oracle shows feeds + update cadence). The UI renders the three
+// shapes generically, so adding/retuning a category's metrics is a server-side
+// data change, not a new UI layout.
+
+// ProtocolBespoke is the category-specific analytics block on
+// GET /v1/protocols/{name}. Absent when no bespoke reader is wired or the
+// category has none yet.
+type ProtocolBespoke struct {
+	// Category is the metric family: dex | amm | lending | vault | bridge | oracle.
+	Category string `json:"category"`
+	// KPIs are the headline numbers (pre-formatted) for the metric cards.
+	KPIs []BespokeKPI `json:"kpis,omitempty"`
+	// Series are named time-series for the charts (e.g. "USD volume", "TVL").
+	Series []BespokeSeries `json:"series,omitempty"`
+	// Tables are named top-N tables (e.g. "Top pairs", "Supplied by asset").
+	Tables []BespokeTable `json:"tables,omitempty"`
+	// Notes are caveats/provenance lines rendered under the block.
+	Notes []string `json:"notes,omitempty"`
+}
+
+// BespokeKPI is one headline metric card. Value is PRE-FORMATTED (the server
+// owns formatting so the number is correct + ADR-0003-safe); Unit is advisory.
+type BespokeKPI struct {
+	Label string `json:"label"`
+	Value string `json:"value"`
+	Unit  string `json:"unit,omitempty"`
+	Hint  string `json:"hint,omitempty"`
+}
+
+// BespokeSeries is a named time-series for a chart.
+type BespokeSeries struct {
+	Name   string            `json:"name"`
+	Unit   string            `json:"unit,omitempty"`
+	Points []BespokeSeriesPt `json:"points"`
+}
+
+// BespokeSeriesPt is one (date, value) point. Value is a numeric STRING
+// (ADR-0003: amounts can exceed 2^53).
+type BespokeSeriesPt struct {
+	Date  string `json:"date"`
+	Value string `json:"value"`
+}
+
+// BespokeTable is a named top-N table — columns + string rows (the server
+// formats every cell).
+type BespokeTable struct {
+	Title   string     `json:"title"`
+	Columns []string   `json:"columns"`
+	Rows    [][]string `json:"rows"`
+}
+
 // ProtocolActivityPointView is one day of a protocol's event-activity series.
 type ProtocolActivityPointView struct {
 	Date   string `json:"date"`
@@ -182,6 +270,11 @@ type ProtocolDetailView struct {
 	// EventsTotal is the decoded contract-event count across every contract
 	// in the protocol over ActivityWindowDays (sum of EventBreakdown counts).
 	EventsTotal int64 `json:"events_total,omitempty"`
+
+	// Bespoke is the category-specific analytics block (TVL/volume/AUM/…) —
+	// the Dune-surpassing, tailored-per-protocol content. Absent when no
+	// bespoke reader is wired or the category has no bespoke metrics yet.
+	Bespoke *ProtocolBespoke `json:"bespoke,omitempty"`
 }
 
 // handleProtocolsList serves GET /v1/protocols — the protocol
@@ -230,9 +323,24 @@ func (s *Server) handleProtocolDetail(w http.ResponseWriter, r *http.Request) {
 		VerificationPage: meta.VerificationPage,
 	}
 	s.enrichProtocolAnalytics(ctx, meta, &view)
+	s.enrichBespoke(ctx, meta, &view)
 
 	w.Header().Set("Cache-Control", "public, max-age=60")
 	writeJSON(w, view, Flags{})
+}
+
+// enrichBespoke attaches the category-specific bespoke analytics block,
+// degrading to absent when the reader is nil or errors.
+func (s *Server) enrichBespoke(ctx context.Context, meta ProtocolMeta, view *ProtocolDetailView) {
+	if s.protocolBespoke == nil {
+		return
+	}
+	blk, err := s.protocolBespoke.BuildProtocolBespoke(ctx, meta.Name, meta.Category, protocolActivityWindowDays)
+	if err != nil {
+		s.logger.Warn("protocol bespoke build failed", "source", meta.Name, "category", meta.Category, "err", err)
+		return
+	}
+	view.Bespoke = bespokeFromStore(blk)
 }
 
 // classifyContractKinds tags each roster contract as "factory" (it is one of
