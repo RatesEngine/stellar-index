@@ -21,7 +21,7 @@ require (
 	github.com/golang-migrate/migrate/v4 v4.19.1 // Schema migrations; cmd/stellarindex-migrate (ADR-0006)
 	github.com/lib/pq v1.12.3 // Postgres driver (ADR-0006)
 	github.com/prometheus/client_golang v1.23.2 // /metrics + counters/gauges in internal/obs
-	github.com/redis/go-redis/v9 v9.19.0 // Redis client (ADR-0007) — rate-limit + SEP-1 cache
+	github.com/redis/go-redis/v9 v9.20.1 // Redis client (ADR-0007) — rate-limit + SEP-1 cache
 	github.com/testcontainers/testcontainers-go v0.42.0 // Integration-test Postgres container
 	github.com/testcontainers/testcontainers-go/modules/postgres v0.42.0 // Timescale-flavoured container helper
 	golang.org/x/sync v0.21.0 // singleflight for metadata/cache.go
