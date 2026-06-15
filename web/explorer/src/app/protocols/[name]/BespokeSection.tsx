@@ -280,9 +280,14 @@ function BespokeTablePanel({
   );
 }
 
-// Cell — renders a contract id as a mono, copyable link to the contract
-// explorer; everything else as plain text.
+// Cell — renders entity ids as mono, copyable, click-through links into the
+// explorer (contracts → /contract, accounts → /accounts); shortens any other
+// long id (e.g. a CODE-ISSUER canonical asset) copyably; everything else plain.
+// The store ships RAW ids — all shortening/linking is presentation, done here.
 function Cell({ value }: { value: string }) {
+  if (value === '' || value === '—') {
+    return <span className="text-slate-300 dark:text-slate-700">—</span>;
+  }
   if (isContractId(value)) {
     return (
       <Link
@@ -293,8 +298,20 @@ function Cell({ value }: { value: string }) {
       </Link>
     );
   }
-  if (value === '' || value === '—') {
-    return <span className="text-slate-300 dark:text-slate-700">—</span>;
+  if (isAccountId(value)) {
+    return (
+      <Link
+        href={`/accounts?id=${encodeURIComponent(value)}`}
+        className="text-brand-600 hover:underline"
+      >
+        <CopyHash value={value} head={8} tail={6} />
+      </Link>
+    );
+  }
+  // Long non-strkey id (e.g. "USDC-G…" canonical asset) — shorten + copy, no
+  // link (no asset-by-id route). Short labels ("native", codes) pass through.
+  if (value.length > 28) {
+    return <CopyHash value={value} head={10} tail={6} />;
   }
   return <span>{value}</span>;
 }
@@ -314,6 +331,11 @@ function toNumber(v: string): number {
 // isContractId — a Soroban C-strkey: starts with 'C', 56 chars, base32 body.
 function isContractId(v: string): boolean {
   return v.length === 56 && v[0] === 'C' && /^[A-Z2-7]+$/.test(v);
+}
+
+// isAccountId — a Stellar G-strkey account address: 'G', 56 chars, base32.
+function isAccountId(v: string): boolean {
+  return v.length === 56 && v[0] === 'G' && /^[A-Z2-7]+$/.test(v);
 }
 
 // looksNumeric — a cell is "numeric" for alignment if, once common money/count
