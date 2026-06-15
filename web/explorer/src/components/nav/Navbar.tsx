@@ -322,6 +322,12 @@ const BLOCKCHAIN_ITEMS: Item[] = [
     description: 'On-chain DEXes + every (venue, base, quote) pool we observe.',
   },
   {
+    label: 'Protocols',
+    href: '/protocols',
+    description:
+      'Every Stellar protocol — contract roster, event-type breakdown, verified completeness.',
+  },
+  {
     label: 'Lending',
     href: '/lending',
     description: 'Lending pools across every connected protocol.',
