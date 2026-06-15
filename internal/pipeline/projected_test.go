@@ -8,6 +8,7 @@ import (
 	"github.com/StellarIndex/stellar-index/internal/sources/aquarius"
 	"github.com/StellarIndex/stellar-index/internal/sources/band"
 	"github.com/StellarIndex/stellar-index/internal/sources/blend"
+	blend_backstop "github.com/StellarIndex/stellar-index/internal/sources/blend_backstop"
 	"github.com/StellarIndex/stellar-index/internal/sources/cctp"
 	"github.com/StellarIndex/stellar-index/internal/sources/comet"
 	"github.com/StellarIndex/stellar-index/internal/sources/defindex"
@@ -59,6 +60,7 @@ func TestIsProjectedEvent_TableDriven(t *testing.T) {
 		{"blend.PositionEvent", blend.PositionEvent{}, true},
 		{"blend.EmissionEvent", blend.EmissionEvent{}, true},
 		{"blend.AdminEvent", blend.AdminEvent{}, true},
+		{"blend_backstop.Event", blend_backstop.Event{}, true},
 		{"cctp.Event", cctp.Event{}, true},
 		{"rozo.Event", rozo.Event{}, true},
 		{"defindex.Event", defindex.Event{}, true},

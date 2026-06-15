@@ -34,6 +34,7 @@ import (
 	"github.com/StellarIndex/stellar-index/internal/sources/aquarius"
 	"github.com/StellarIndex/stellar-index/internal/sources/band"
 	"github.com/StellarIndex/stellar-index/internal/sources/blend"
+	blend_backstop "github.com/StellarIndex/stellar-index/internal/sources/blend_backstop"
 	"github.com/StellarIndex/stellar-index/internal/sources/cctp"
 	"github.com/StellarIndex/stellar-index/internal/sources/childgate"
 	"github.com/StellarIndex/stellar-index/internal/sources/claimable_balances"
@@ -169,6 +170,14 @@ func BuildDispatcher(names []string, oracle config.OracleConfig, gated map[strin
 			// path doesn't warm — e.g. backfill, where blend output is
 			// dropped by IsProjectedEvent anyway).
 			decoders = append(decoders, blend.NewDecoder(gated[blend.SourceName]...))
+		case blend_backstop.SourceName:
+			// Blend Backstop — stateless topic Decoder gated on the two
+			// known backstop contracts (V1 + V2). Its symbols OVERLAP
+			// with Blend pool events, so the contract gate (not the
+			// topic) disambiguates. Schemas lake-reverse-engineered
+			// 2026-06-15, pending Blend-team confirmation — live-capture
+			// only. See internal/sources/blend_backstop/README.md.
+			decoders = append(decoders, blend_backstop.NewDecoder())
 		case cctp.SourceName:
 			// Circle CCTP v2 — stateless topic Decoder, gated on the
 			// three known CCTP contracts (deposit_for_burn /

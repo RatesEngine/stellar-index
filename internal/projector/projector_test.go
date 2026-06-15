@@ -169,7 +169,7 @@ func TestBuildRegistry_SEP41NeedsWatchedSet(t *testing.T) {
 // sources list with on-chain Soroban protocols produces matching
 // projector.Source entries. Order-dependent so we map names.
 func TestBuildRegistry_IncludesInScopeSources(t *testing.T) {
-	names := []string{"aquarius", "phoenix", "comet", "blend", "cctp", "rozo", "soroswap", "defindex"}
+	names := []string{"aquarius", "phoenix", "comet", "blend", "blend_backstop", "cctp", "rozo", "soroswap", "defindex"}
 	reg, err := BuildRegistry(names, oracleConfigEmpty(), nil, nil)
 	if err != nil {
 		t.Fatalf("BuildRegistry: %v", err)

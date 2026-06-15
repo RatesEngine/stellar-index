@@ -7,6 +7,7 @@ import (
 	"github.com/StellarIndex/stellar-index/internal/dispatcher"
 	"github.com/StellarIndex/stellar-index/internal/sources/aquarius"
 	"github.com/StellarIndex/stellar-index/internal/sources/blend"
+	blend_backstop "github.com/StellarIndex/stellar-index/internal/sources/blend_backstop"
 	"github.com/StellarIndex/stellar-index/internal/sources/cctp"
 	"github.com/StellarIndex/stellar-index/internal/sources/childgate"
 	"github.com/StellarIndex/stellar-index/internal/sources/comet"
@@ -129,6 +130,12 @@ func buildSource(name string, oracle config.OracleConfig, watchedSEP41 []string,
 		return Source{
 			Name:              blend.SourceName,
 			Decoder:           blend.NewDecoder(gated[blend.SourceName]...),
+			ExcludeTopic0Syms: firehoseExcludeSyms,
+		}, true, nil
+	case blend_backstop.SourceName:
+		return Source{
+			Name:              blend_backstop.SourceName,
+			Decoder:           blend_backstop.NewDecoder(),
 			ExcludeTopic0Syms: firehoseExcludeSyms,
 		}, true, nil
 	case cctp.SourceName:

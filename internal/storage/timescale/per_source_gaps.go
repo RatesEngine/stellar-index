@@ -197,6 +197,11 @@ var DefaultGapDetectorTargets = []GapDetectorTarget{
 	// blend_admin: admin actions are rare by design.
 	{Source: "blend-emissions", Table: "blend_emissions", LedgerColumn: "ledger", Genesis: 51_499_546, MinGapSizeOverride: 100000},
 	{Source: "blend-admin", Table: "blend_admin", LedgerColumn: "ledger", Genesis: 51_499_546, MinGapSizeOverride: 100000},
+	// blend-backstop: the Backstop insurance module's event surface.
+	// Sparse (deposit/withdraw/draw/distribute are episodic, not
+	// per-ledger), so a wide override avoids paging on natural quiet.
+	// Genesis ≈ first backstop activity observed in the lake.
+	{Source: "blend-backstop", Table: "blend_backstop_events", LedgerColumn: "ledger", Genesis: 56_627_571, MinGapSizeOverride: 100000},
 	// soroban-events spans the entire Soroban era from pubnet
 	// activation. Same lower bound as sep41-transfers. Long
 	// ScanCadence: 50M+ rows, scan dominates postgres for 5+ min

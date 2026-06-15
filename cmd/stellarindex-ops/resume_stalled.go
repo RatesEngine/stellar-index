@@ -77,6 +77,7 @@ var sorobanDecoderNames = map[string]struct{}{
 	"aquarius":        {},
 	"band":            {},
 	"blend":           {},
+	"blend_backstop":  {},
 	"cctp":            {},
 	"comet":           {},
 	"defindex":        {},

@@ -14,6 +14,7 @@ import (
 	"github.com/StellarIndex/stellar-index/internal/sources/aquarius"
 	"github.com/StellarIndex/stellar-index/internal/sources/band"
 	"github.com/StellarIndex/stellar-index/internal/sources/blend"
+	blend_backstop "github.com/StellarIndex/stellar-index/internal/sources/blend_backstop"
 	"github.com/StellarIndex/stellar-index/internal/sources/cctp"
 	claimable_balances "github.com/StellarIndex/stellar-index/internal/sources/claimable_balances"
 	"github.com/StellarIndex/stellar-index/internal/sources/comet"
@@ -275,6 +276,7 @@ func IsProjectedEvent(ev consumer.Event) bool {
 		reflector.UpdateEvent, redstone.UpdateEvent,
 		blend.NewAuctionEvent, blend.FillAuctionEvent, blend.DeleteAuctionEvent,
 		blend.PositionEvent, blend.EmissionEvent, blend.AdminEvent,
+		blend_backstop.Event,
 		cctp.Event, rozo.Event,
 		defindex.Event, defindex.VaultEvent,
 		sep41_supply.Event, sep41_transfers.Event:
@@ -557,6 +559,8 @@ func HandleEvent(ctx context.Context, logger *slog.Logger, store *timescale.Stor
 		persistBlendEmissionEvent(ctx, logger, store, e)
 	case blend.AdminEvent:
 		persistBlendAdminEvent(ctx, logger, store, e)
+	case blend_backstop.Event:
+		persistBlendBackstopEvent(ctx, logger, store, e)
 	case cctp.Event:
 		persistCCTPEvent(ctx, logger, store, e)
 	case rozo.Event:
@@ -775,6 +779,33 @@ func persistBlendAdminEvent(ctx context.Context, logger *slog.Logger, store *tim
 		"contract_id", e.ContractID, "kind", e.Kind,
 		"admin", e.Admin, "target", e.Target, "asset", e.Asset,
 		"ledger", e.Ledger)
+}
+
+func persistBlendBackstopEvent(ctx context.Context, logger *slog.Logger, store *timescale.Store, e blend_backstop.Event) {
+	if err := store.InsertBlendBackstopEvent(ctx, timescale.BlendBackstopEvent{
+		ContractID:  e.ContractID,
+		Ledger:      e.Ledger,
+		TxHash:      e.TxHash,
+		OpIndex:     uint32(e.OpIndex),
+		EventIndex:  uint32(e.EventIndex),
+		ObservedAt:  e.ObservedAt,
+		EventType:   timescale.BlendBackstopEventType(e.EventType),
+		Pool:        e.Pool,
+		UserAddress: e.UserAddress,
+		Amount:      e.Amount,
+		Amount2:     e.Amount2,
+		Attributes:  e.Attributes,
+	}); err != nil {
+		obs.SourceInsertErrorsTotal.WithLabelValues(blend_backstop.SourceName, "blend_backstop_event").Inc()
+		logger.Error("insert Blend backstop event failed",
+			"contract_id", e.ContractID, "event_type", e.EventType,
+			"ledger", e.Ledger, "tx_hash", e.TxHash, "err", err)
+		return
+	}
+	bumpEntryCount(ctx, logger, store, blend_backstop.SourceName)
+	logger.Debug("Blend backstop event ingested",
+		"source", blend_backstop.SourceName, "event_type", e.EventType,
+		"contract_id", e.ContractID, "ledger", e.Ledger, "tx_hash", e.TxHash)
 }
 
 func persistCCTPEvent(ctx context.Context, logger *slog.Logger, store *timescale.Store, e cctp.Event) {
