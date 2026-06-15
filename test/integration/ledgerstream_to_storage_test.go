@@ -531,7 +531,12 @@ func runIngest(
 	err := ledgerstream.Stream(ctx, lsCfg, from, to, func(lcm xdr.LedgerCloseMeta) error {
 		outputs, err := disp.ProcessLedger(lcm, testPassphrase)
 		if err != nil {
-			t.Logf("dispatcher rejected ledger %d: %v", lcm.LedgerSequence(), err)
+			// FAIL, don't log-and-continue (audit-2026-06-14 A20): this is the
+			// load-bearing Galexie→ledgerstream→dispatcher→sink end-to-end test.
+			// Downgrading a ProcessLedger error to t.Logf meant a real decode
+			// regression (or a fixture that stops matching after an SDK bump)
+			// degraded to "got 0 events, want 1" with the cause only logged.
+			t.Errorf("dispatcher rejected ledger %d: %v", lcm.LedgerSequence(), err)
 			return nil
 		}
 		for _, ev := range outputs {

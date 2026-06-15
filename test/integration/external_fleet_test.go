@@ -147,19 +147,23 @@ func TestExternalFleet_EndToEnd(t *testing.T) {
 		for e := range events {
 			switch ev := e.(type) {
 			case external.TradeEvent:
+				// FAIL on insert error (audit-2026-06-14 A20): the CEX/FX fleet
+				// is exercised end-to-end only here, so a swallowed insert (e.g.
+				// a NUMERIC-scale/schema drift) would otherwise pass silently.
+				// t.Errorf (not Fatal) is goroutine-safe.
 				if err := store.InsertTrade(ctx, ev.Trade); err != nil {
-					t.Logf("InsertTrade: %v", err)
+					t.Errorf("InsertTrade: %v", err)
 					continue
 				}
 				insertedTrades++
 			case external.UpdateEvent:
 				if err := store.InsertOracleUpdate(ctx, ev.Update); err != nil {
-					t.Logf("InsertOracleUpdate: %v", err)
+					t.Errorf("InsertOracleUpdate: %v", err)
 					continue
 				}
 				insertedUpdates++
 			default:
-				t.Logf("unhandled event %T", e)
+				t.Errorf("unhandled event %T (a new event type slipped the fleet test)", e)
 			}
 		}
 	}()
