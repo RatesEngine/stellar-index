@@ -34,10 +34,10 @@ const maxDisasmOutputBytes = 2 << 20 // 2 MiB
 // buildWasmDisassembly fills info.Wat + info.Decompiled best-effort and appends
 // to info.ToolNote. It never fails the caller — a missing tool or a tool error
 // just leaves the corresponding field empty with an explanatory note.
-func buildWasmDisassembly(info *ContractWasmInfo, code []byte) {
-	wat, watNote := runWasmTool("wasm2wat", code, "--no-check")
+func buildWasmDisassembly(ctx context.Context, info *ContractWasmInfo, code []byte) {
+	wat, watNote := runWasmTool(ctx, "wasm2wat", code, "--no-check")
 	info.Wat = wat
-	dec, decNote := runWasmTool("wasm-decompile", code)
+	dec, decNote := runWasmTool(ctx, "wasm-decompile", code)
 	info.Decompiled = dec
 
 	notes := make([]string, 0, 2)
@@ -62,7 +62,7 @@ func buildWasmDisassembly(info *ContractWasmInfo, code []byte) {
 // both the input and the output through temp files. The temp files are removed
 // before returning; the cost is two tiny writes per (immutable, day-cached)
 // contract, amortised to ~nothing.
-func runWasmTool(tool string, code []byte, extraArgs ...string) (string, string) {
+func runWasmTool(ctx context.Context, tool string, code []byte, extraArgs ...string) (string, string) {
 	if _, err := exec.LookPath(tool); err != nil {
 		return "", tool + " not on PATH (install wabt to enable)"
 	}
@@ -73,13 +73,15 @@ func runWasmTool(tool string, code []byte, extraArgs ...string) (string, string)
 	}
 	defer cleanup()
 
-	ctx, cancel := context.WithTimeout(context.Background(), wasmToolTimeout)
+	ctx, cancel := context.WithTimeout(ctx, wasmToolTimeout)
 	defer cancel()
 
 	args := append([]string{}, extraArgs...)
 	args = append(args, "-o", outPath, inPath)
 
-	cmd := exec.CommandContext(ctx, tool, args...)
+	// G204: tool is one of two fixed wabt binary names ("wasm2wat" /
+	// "wasm-decompile"), never user input; args are temp paths we created.
+	cmd := exec.CommandContext(ctx, tool, args...) //nolint:gosec // see note above
 	var stderr strings.Builder
 	cmd.Stderr = &stderr
 	if err := cmd.Run(); err != nil {
@@ -93,7 +95,9 @@ func runWasmTool(tool string, code []byte, extraArgs ...string) (string, string)
 		return "", tool + " failed: " + truncate(msg, 200)
 	}
 
-	raw, err := os.ReadFile(outPath)
+	// G304: outPath is from os.CreateTemp above — a path we created, not
+	// caller-influenced.
+	raw, err := os.ReadFile(outPath) //nolint:gosec // see note above
 	if err != nil {
 		return "", tool + " output read failed: " + err.Error()
 	}

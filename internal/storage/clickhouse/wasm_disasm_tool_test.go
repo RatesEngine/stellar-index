@@ -1,6 +1,7 @@
 package clickhouse
 
 import (
+	"context"
 	"os/exec"
 	"strings"
 	"testing"
@@ -8,7 +9,7 @@ import (
 
 func TestBuildWasmDisassembly_BestEffort(t *testing.T) {
 	info := ContractWasmInfo{}
-	buildWasmDisassembly(&info, contractRegisterWasm)
+	buildWasmDisassembly(context.Background(), &info, contractRegisterWasm)
 
 	_, hasWat2 := exec.LookPath("wasm2wat")
 	if hasWat2 == nil {
@@ -31,7 +32,7 @@ func TestBuildWasmDisassembly_BestEffort(t *testing.T) {
 }
 
 func TestRunWasmTool_MissingTool(t *testing.T) {
-	out, note := runWasmTool("definitely-not-a-real-tool-xyz", contractRegisterWasm)
+	out, note := runWasmTool(context.Background(), "definitely-not-a-real-tool-xyz", contractRegisterWasm)
 	if out != "" {
 		t.Errorf("expected empty output for missing tool, got %d bytes", len(out))
 	}

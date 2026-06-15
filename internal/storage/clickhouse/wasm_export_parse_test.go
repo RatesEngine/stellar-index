@@ -76,8 +76,8 @@ func TestParseWasmExports_BadMagic(t *testing.T) {
 func TestParseWasmExports_MinimalModule(t *testing.T) {
 	// A bare valid module header (magic + version) with no sections: valid,
 	// zero exported functions.
-	min := []byte{0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00}
-	exports, err := parseWasmExports(min)
+	header := []byte{0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00}
+	exports, err := parseWasmExports(header)
 	if err != nil {
 		t.Fatalf("parseWasmExports(minimal): %v", err)
 	}

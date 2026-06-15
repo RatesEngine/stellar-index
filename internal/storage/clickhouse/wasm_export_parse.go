@@ -235,35 +235,42 @@ func parseImportSection(r *reader) (int, error) {
 		if err != nil {
 			return 0, err
 		}
-		switch kind {
-		case 0x00: // func: typeidx
-			if _, err := r.uvarint(); err != nil {
-				return 0, err
-			}
+		isFunc, err := skipImportDesc(r, kind)
+		if err != nil {
+			return 0, err
+		}
+		if isFunc {
 			funcs++
-		case 0x01: // table: reftype + limits
-			if _, err := r.byte(); err != nil {
-				return 0, err
-			}
-			if err := skipLimits(r); err != nil {
-				return 0, err
-			}
-		case 0x02: // memory: limits
-			if err := skipLimits(r); err != nil {
-				return 0, err
-			}
-		case 0x03: // global: valtype + mutability
-			if _, err := r.byte(); err != nil {
-				return 0, err
-			}
-			if _, err := r.byte(); err != nil {
-				return 0, err
-			}
-		default:
-			return 0, errBadSection
 		}
 	}
 	return funcs, nil
+}
+
+// skipImportDesc consumes one import's descriptor for the given external-kind
+// byte, length-walking non-function imports so the section cursor stays
+// aligned. Returns true when the import is a function (it occupies a func
+// index, shifting the local-func-index offset).
+func skipImportDesc(r *reader, kind byte) (bool, error) {
+	switch kind {
+	case 0x00: // func: typeidx
+		_, err := r.uvarint()
+		return err == nil, err
+	case 0x01: // table: reftype + limits
+		if _, err := r.byte(); err != nil {
+			return false, err
+		}
+		return false, skipLimits(r)
+	case 0x02: // memory: limits
+		return false, skipLimits(r)
+	case 0x03: // global: valtype + mutability
+		if _, err := r.byte(); err != nil {
+			return false, err
+		}
+		_, err := r.byte()
+		return false, err
+	default:
+		return false, errBadSection
+	}
 }
 
 func skipLimits(r *reader) error {
