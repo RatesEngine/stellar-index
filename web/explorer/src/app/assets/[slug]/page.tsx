@@ -6,6 +6,12 @@ import { Panel } from '@/components/reveal';
 import { asExample, API_BASE_URL } from '@/api/client';
 import { formatCompact, formatPrice } from '@/lib/format';
 import { SITE_OG_IMAGES, SITE_TWITTER_IMAGES } from '@/lib/seo';
+import {
+  Badge,
+  Breadcrumbs,
+  Callout,
+  Container,
+} from '@/components/ui';
 import { AssetClientFallback } from './AssetClientFallback';
 import { AssetTabs, ActiveTabSlot } from './AssetTabs';
 import { AssetAbout } from './AssetAbout';
@@ -532,18 +538,15 @@ export default async function AssetDetailPage({ params }: { params: Params }) {
     //   (b) build host couldn't reach the API — fall back to the
     //       client component to retry from the user's browser.
     return (
-      <div className="mx-auto max-w-7xl space-y-6 px-6 py-8">
+      <Container className="space-y-8 py-8 sm:py-10">
         <header className="space-y-3">
-          <nav className="text-xs text-ink-muted">
-            <Link href="/assets" className="hover:text-brand-600">
-              Assets
-            </Link>{' '}
-            / <span>{slug}</span>
-          </nav>
-          <h1 className="text-3xl font-semibold tracking-tight">{slug}</h1>
+          <Breadcrumbs
+            items={[{ label: 'Assets', href: '/assets' }, { label: slug }]}
+          />
+          <h1 className="text-h1 font-semibold text-ink">{slug}</h1>
         </header>
         <AssetClientFallback slug={slug} />
-      </div>
+      </Container>
     );
   }
 
@@ -606,7 +609,7 @@ export default async function AssetDetailPage({ params }: { params: Params }) {
     })),
   };
   return (
-    <div className="mx-auto max-w-7xl space-y-6 px-6 py-8">
+    <Container className="space-y-8 py-8 sm:py-10">
       <script
         type="application/ld+json"
         dangerouslySetInnerHTML={{ __html: JSON.stringify(breadcrumbLD) }}
@@ -616,27 +619,24 @@ export default async function AssetDetailPage({ params }: { params: Params }) {
         dangerouslySetInnerHTML={{ __html: JSON.stringify(faqLD) }}
       />
       <header className="space-y-3">
-        <nav className="text-xs text-ink-muted">
-          <Link href="/assets" className="hover:text-brand-600">
-            Assets
-          </Link>{' '}
-          /{' '}
-          <span className="text-ink-body">
-            {coin.code}
-          </span>
-        </nav>
+        <Breadcrumbs
+          items={[
+            { label: 'Assets', href: '/assets' },
+            { label: coin.code },
+          ]}
+        />
         <div className="flex flex-wrap items-baseline gap-4">
-          <h1 className="text-3xl font-semibold tracking-tight">
+          <h1 className="text-h1 font-semibold text-ink">
             {coin.code}
           </h1>
           {globalView?.name && globalView.name !== coin.code && (
-            <span className="text-lg text-ink-body">
+            <span className="text-lg text-ink-muted">
               {globalView.name}
             </span>
           )}
           {globalView && (
-            <span
-              className="inline-flex items-center gap-1 rounded-md bg-up-subtle px-2 py-0.5 text-[11px] font-medium uppercase tracking-wider text-up-strong"
+            <Badge
+              tone="ok"
               title={
                 globalView.verified_issuer
                   ? `Verified by ${globalView.verified_issuer}`
@@ -657,15 +657,10 @@ export default async function AssetDetailPage({ params }: { params: Params }) {
                 />
               </svg>
               Verified
-            </span>
+            </Badge>
           )}
           {detail?.type && (
-            <span
-              className="rounded-md bg-surface-subtle px-2 py-0.5 text-[11px] uppercase tracking-wider text-ink-body"
-              title="Asset type"
-            >
-              {detail.type}
-            </span>
+            <Badge title="Asset type">{detail.type}</Badge>
           )}
         </div>
         {globalView?.verified_issuer && (
@@ -683,16 +678,13 @@ export default async function AssetDetailPage({ params }: { params: Params }) {
           </p>
         )}
         {coin.issuer_scam_reason && (
-          <div
-            role="alert"
-            className="rounded-md border border-bad-300 bg-bad-50 p-3 text-sm text-bad-700"
-          >
-            <strong className="font-semibold">Known scam asset</strong> ·{' '}
-            {coin.issuer_scam_reason}. The issuer is on the
-            stellar.expert curated directory of malicious accounts —
-            do not trust this asset, do not establish trustlines, and
-            do not execute the prices below as if they reflected an
-            honest market.
+          <div role="alert">
+            <Callout tone="bad" title="Known scam asset">
+              {coin.issuer_scam_reason}. The issuer is on the stellar.expert
+              curated directory of malicious accounts — do not trust this asset,
+              do not establish trustlines, and do not execute the prices below as
+              if they reflected an honest market.
+            </Callout>
           </div>
         )}
         {detail?.unverified_warning && (
@@ -704,9 +696,7 @@ export default async function AssetDetailPage({ params }: { params: Params }) {
               <strong className="font-semibold">
                 Unverified {coin.code}
               </strong>
-              <span className="rounded bg-amber-200 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wider text-warn-700">
-                Ticker collision
-              </span>
+              <Badge tone="warn">Ticker collision</Badge>
             </div>
             <p>
               {detail.unverified_warning.note} The verified asset is
@@ -762,7 +752,7 @@ export default async function AssetDetailPage({ params }: { params: Params }) {
           }
         />
       </Suspense>
-    </div>
+    </Container>
   );
 }
 
@@ -1356,31 +1346,31 @@ function VerifiedCurrencyView({
   const chartAssetID = isFiat ? `fiat:${view.ticker}` : null;
   const priceNum = view.price_usd ? Number(view.price_usd) : null;
   return (
-    <div className="mx-auto max-w-7xl space-y-6 px-6 py-8">
-      <header className="space-y-2">
-        <nav className="text-xs text-ink-muted">
-          <Link href="/assets" className="hover:text-brand-600">
-            Assets
-          </Link>{' '}
-          / <span>{view.ticker}</span>
-        </nav>
-        <h1 className="flex flex-wrap items-baseline gap-3 text-3xl font-semibold tracking-tight">
+    <Container className="space-y-8 py-8 sm:py-10">
+      <header className="space-y-3">
+        <Breadcrumbs
+          items={[
+            { label: 'Assets', href: '/assets' },
+            { label: view.ticker },
+          ]}
+        />
+        <h1 className="flex flex-wrap items-baseline gap-3 text-h1 font-semibold text-ink">
           <span>{view.name}</span>
           <span className="font-mono text-base text-ink-muted">
             {view.ticker}
           </span>
-          <span className="rounded bg-surface-subtle px-2 py-0.5 text-xs font-medium uppercase tracking-wider text-ink-body">
+          <Badge>
             {(view as GlobalAssetView & { class?: string }).class ?? 'verified'}
-          </span>
+          </Badge>
         </h1>
         {priceNum != null && Number.isFinite(priceNum) && (
-          <div className="text-2xl font-mono">
+          <div className="font-mono text-2xl tnum text-ink">
             ${priceNum < 0.001 ? priceNum.toExponential(3) : priceNum.toFixed(priceNum >= 100 ? 2 : 6)}
             <span className="ml-2 text-xs text-ink-muted">USD</span>
           </div>
         )}
         {view.description && (
-          <p className="max-w-3xl text-sm text-ink-body">
+          <p className="max-w-prose text-[15px] leading-relaxed text-ink-muted">
             {view.description}
           </p>
         )}
@@ -1406,6 +1396,6 @@ function VerifiedCurrencyView({
           <code className="font-mono">{slug}</code>
         </p>
       )}
-    </div>
+    </Container>
   );
 }

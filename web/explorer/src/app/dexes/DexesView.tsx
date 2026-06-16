@@ -8,6 +8,17 @@ import { Panel } from '@/components/reveal';
 import { AssetLabel } from '@/components/AssetLabel';
 import { apiGet, asExample } from '@/api/client';
 import { formatCompact } from '@/lib/format';
+import {
+  Button,
+  Container,
+  PageHeader,
+  TBody,
+  TR,
+  Table,
+  Td,
+  Th,
+  THead,
+} from '@/components/ui';
 
 import { DexProtocolsTable } from './DexProtocolsTable';
 
@@ -118,22 +129,24 @@ export function DexesView() {
   const hasPrev = cursorStack.length > 0;
 
   return (
-    <div className="mx-auto max-w-7xl space-y-6 px-6 py-8">
-      <header className="space-y-2">
-        <h1 className="text-3xl font-semibold tracking-tight">DEXes</h1>
-        <p className="max-w-3xl text-sm text-ink-body">
-          Every Stellar DEX we ingest — Soroswap, Phoenix, Aquarius,
-          Comet, and the Stellar-native order book SDEX. The first
-          table summarises each protocol; the second lists every
-          (DEX, base, quote) pool we&apos;ve observed in the last 14
-          days. CEX trading pairs (Binance, Coinbase, Kraken,
-          Bitstamp) live at{' '}
-          <Link href="/exchanges" className="text-brand-600 hover:underline">
-            /exchanges
-          </Link>
-          ; &ldquo;pool&rdquo; is AMM/DEX terminology.
-        </p>
-      </header>
+    <Container className="space-y-8 py-8 sm:py-10">
+      <PageHeader
+        eyebrow="On-chain venues"
+        title="DEXes"
+        description={
+          <>
+            Every Stellar DEX we ingest — Soroswap, Phoenix, Aquarius, Comet,
+            and the Stellar-native order book SDEX. The first table summarises
+            each protocol; the second lists every (DEX, base, quote) pool
+            we&apos;ve observed in the last 14 days. CEX trading pairs (Binance,
+            Coinbase, Kraken, Bitstamp) live at{' '}
+            <Link href="/exchanges" className="text-brand-600 hover:underline">
+              /exchanges
+            </Link>
+            ; &ldquo;pool&rdquo; is AMM/DEX terminology.
+          </>
+        }
+      />
 
       <DexProtocolsTable />
 
@@ -182,9 +195,9 @@ export function DexesView() {
         </div>
 
         <div className="overflow-x-auto">
-          <table className="min-w-full divide-y divide-line text-sm">
-            <thead>
-              <tr className="text-left text-[10px] uppercase tracking-wider text-ink-muted">
+          <Table>
+            <THead>
+              <tr>
                 <Th>#</Th>
                 <Th>Venue</Th>
                 <Th>Base</Th>
@@ -194,8 +207,8 @@ export function DexesView() {
                 <Th align="right">24h trades</Th>
                 <Th align="right">Last trade</Th>
               </tr>
-            </thead>
-            <tbody className="divide-y divide-line-subtle">
+            </THead>
+            <TBody>
               {q.isLoading && !q.data && (
                 <tr>
                   <td colSpan={8} className="px-4 py-8 text-center text-sm text-ink-muted">
@@ -250,10 +263,7 @@ export function DexesView() {
                 const vol = p.volume_24h_usd ? Number(p.volume_24h_usd) : null;
                 const tone = SOURCE_TONE[p.source] ?? 'bg-surface-subtle text-ink-body';
                 return (
-                  <tr
-                    key={`${p.source}|${p.base}|${p.quote}`}
-                    className="hover:bg-surface-muted"
-                  >
+                  <TR key={`${p.source}|${p.base}|${p.quote}`}>
                     <Td>
                       <span className="font-mono text-[11px] text-ink-faint">
                         {offset}
@@ -312,33 +322,33 @@ export function DexesView() {
                         {formatRelative(p.last_trade_at)}
                       </span>
                     </Td>
-                  </tr>
+                  </TR>
                 );
               })}
-            </tbody>
-          </table>
+            </TBody>
+          </Table>
         </div>
 
-        <div className="flex items-center justify-between border-t border-line px-4 py-2 text-xs">
-          <button
-            type="button"
+        <div className="flex items-center justify-between border-t border-line px-4 py-3 text-xs">
+          <Button
+            variant="secondary"
+            size="sm"
             onClick={prevPage}
             disabled={!hasPrev}
-            className="rounded-md border border-line px-3 py-1 text-ink-body hover:border-brand-500 hover:text-brand-600 disabled:cursor-not-allowed disabled:opacity-40"
           >
             ← Previous
-          </button>
+          </Button>
           <span className="font-mono text-[11px] text-ink-faint">
             page {cursorStack.length + 1}
           </span>
-          <button
-            type="button"
+          <Button
+            variant="secondary"
+            size="sm"
             onClick={nextPage}
             disabled={!hasNext}
-            className="rounded-md border border-line px-3 py-1 text-ink-body hover:border-brand-500 hover:text-brand-600 disabled:cursor-not-allowed disabled:opacity-40"
           >
             Next →
-          </button>
+          </Button>
         </div>
       </Panel>
 
@@ -365,7 +375,7 @@ export function DexesView() {
         </Link>
         .
       </p>
-    </div>
+    </Container>
   );
 }
 
@@ -414,39 +424,6 @@ function SourceChip({
     >
       {label}
     </button>
-  );
-}
-
-function Th({
-  children,
-  align,
-}: {
-  children: React.ReactNode;
-  align?: 'left' | 'right';
-}) {
-  return (
-    <th
-      scope="col"
-      className={`px-4 py-2 ${align === 'right' ? 'text-right' : 'text-left'}`}
-    >
-      {children}
-    </th>
-  );
-}
-
-function Td({
-  children,
-  align,
-}: {
-  children: React.ReactNode;
-  align?: 'left' | 'right';
-}) {
-  return (
-    <td
-      className={`px-4 py-2 ${align === 'right' ? 'text-right' : 'text-left'}`}
-    >
-      {children}
-    </td>
   );
 }
 

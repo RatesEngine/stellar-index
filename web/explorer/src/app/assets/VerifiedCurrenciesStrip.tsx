@@ -1,6 +1,7 @@
 import Link from 'next/link';
 
 import { API_BASE_URL } from '@/api/client';
+import { Badge, SectionHeader } from '@/components/ui';
 
 /**
  * Mirror of `VerifiedCurrencyListItem` on the wire.
@@ -80,15 +81,15 @@ export function VerifiedCurrenciesStrip({
   });
 
   return (
-    <section className="space-y-3">
-      <div className="flex items-baseline justify-between">
-        <h2 className="text-sm font-medium uppercase tracking-wider text-ink-muted">
-          Verified currencies
-        </h2>
-        <span className="text-xs text-ink-muted">
-          {verified.length} verified · catalogue
-        </span>
-      </div>
+    <section className="space-y-4">
+      <SectionHeader
+        title="Verified currencies"
+        actions={
+          <Badge tone="ok" dot>
+            {verified.length} verified
+          </Badge>
+        }
+      />
       <div className="flex flex-wrap gap-2">
         {sorted.map((vc) => (
           <Link

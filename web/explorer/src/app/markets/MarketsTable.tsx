@@ -10,6 +10,7 @@ import { AssetLabel } from '@/components/AssetLabel';
 import { SourceSparkline } from '@/components/SourceSparkline';
 import { useMarkets } from '@/api/hooks';
 import { formatCompact } from '@/lib/format';
+import { Input, TBody, TR, Table, Td, Th, THead } from '@/components/ui';
 
 /**
  * Live-data markets table backed by `/v1/markets`.
@@ -95,13 +96,13 @@ export function MarketsTable() {
     >
       <div className="px-4 pb-3 pt-1">
         <div className="flex flex-wrap items-center gap-3 text-xs">
-          <input
+          <Input
             type="search"
             aria-label="Filter markets by base or quote asset"
             placeholder="Filter by base or quote asset…"
             value={filter}
             onChange={(e) => setFilter(e.target.value)}
-            className="w-72 rounded-md border border-line bg-surface px-2.5 py-1 font-mono text-[11px] placeholder:text-ink-faint focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
+            className="w-72 font-mono text-[11px]"
           />
           <span className="font-mono text-[11px] text-ink-muted">
             {sorted.length} of {data.markets.length} rows
@@ -118,9 +119,9 @@ export function MarketsTable() {
         </div>
       </div>
       <div className="overflow-x-auto">
-        <table className="min-w-full divide-y divide-line text-sm">
-          <thead>
-            <tr className="text-left text-[11px] uppercase tracking-wider text-ink-muted">
+        <Table>
+          <THead>
+            <tr>
               <Th>#</Th>
               <Th>
                 <SortHeader
@@ -156,15 +157,12 @@ export function MarketsTable() {
               <Th>24h chart</Th>
               <Th align="right">Last trade</Th>
             </tr>
-          </thead>
-          <tbody className="divide-y divide-line-subtle">
+          </THead>
+          <TBody>
             {sorted.map((m, i) => {
               const slug = `${m.base}~${m.quote}`;
               return (
-              <tr
-                key={`${m.base}|${m.quote}`}
-                className="hover:bg-surface-muted"
-              >
+              <TR key={`${m.base}|${m.quote}`}>
                 <Td>
                   <Link
                     href={`/markets/${encodeURIComponent(slug)}`}
@@ -214,11 +212,11 @@ export function MarketsTable() {
                     {formatRelative(m.last_trade_at)}
                   </span>
                 </Td>
-              </tr>
+              </TR>
               );
             })}
-          </tbody>
-        </table>
+          </TBody>
+        </Table>
       </div>
     </Panel>
   );
@@ -253,39 +251,6 @@ function SortHeader({
         {active ? '↓' : '↕'}
       </span>
     </button>
-  );
-}
-
-function Th({
-  children,
-  align,
-}: {
-  children: React.ReactNode;
-  align?: 'left' | 'right';
-}) {
-  return (
-    <th
-      className={`px-4 py-2 ${align === 'right' ? 'text-right' : 'text-left'}`}
-      scope="col"
-    >
-      {children}
-    </th>
-  );
-}
-
-function Td({
-  children,
-  align,
-}: {
-  children: React.ReactNode;
-  align?: 'left' | 'right';
-}) {
-  return (
-    <td
-      className={`px-4 py-3 ${align === 'right' ? 'text-right' : 'text-left'}`}
-    >
-      {children}
-    </td>
   );
 }
 

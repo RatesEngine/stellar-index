@@ -7,6 +7,19 @@ import { ChevronLeft, ChevronRight, Search } from 'lucide-react';
 
 import { useAssets, type AssetClassFilter, type Coin } from '@/api/hooks';
 import { formatCompact } from '@/lib/format';
+import {
+  Badge,
+  Button,
+  Callout,
+  EmptyState,
+  TBody,
+  TR,
+  Table,
+  TableWrap,
+  Td,
+  Th,
+  THead,
+} from '@/components/ui';
 
 /**
  * /assets directory table — the CMC/CoinGecko-style global asset
@@ -116,14 +129,14 @@ export function AssetsTable({
 
   if (isError) {
     return (
-      <div className="rounded-md border border-bad-300 bg-bad-50 p-4 text-sm text-bad-700">
-        Failed to load assets: {error instanceof Error ? error.message : 'unknown error'}
-      </div>
+      <Callout tone="bad" title="Failed to load assets">
+        {error instanceof Error ? error.message : 'unknown error'}
+      </Callout>
     );
   }
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-5">
       <FilterBar
         q={q}
         onQChange={setQ}
@@ -140,56 +153,54 @@ export function AssetsTable({
         }
       />
 
-      <div className="overflow-x-auto rounded-md border border-line bg-surface">
-        <table className="min-w-full text-sm">
-          <thead>
-            <tr className="border-b border-line bg-surface-muted text-left text-[11px] uppercase tracking-wider text-ink-muted">
-              <Th>#</Th>
-              <Th>Asset</Th>
-              <Th>Class</Th>
-              <Th align="right">Price</Th>
-              <Th align="right">1h %</Th>
-              <Th align="right">24h %</Th>
-              <Th align="right">7d %</Th>
-              <Th align="right">Market cap</Th>
-              <Th align="right">Volume 24h</Th>
-              <Th align="right">Circulating</Th>
-              <Th align="right">7d chart</Th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-line-subtle">
-            {isLoading && (
+      {!isLoading && assets.length === 0 ? (
+        <EmptyState
+          icon={<Search className="h-5 w-5" />}
+          title="No assets match this filter"
+          description="Try a different asset code, slug, issuer, or class."
+        />
+      ) : (
+        <TableWrap>
+          <Table>
+            <THead>
               <tr>
-                <td
-                  colSpan={11}
-                  className="py-12 text-center text-sm text-ink-muted"
-                >
-                  Loading…
-                </td>
+                <Th>#</Th>
+                <Th>Asset</Th>
+                <Th>Class</Th>
+                <Th align="right">Price</Th>
+                <Th align="right">1h %</Th>
+                <Th align="right">24h %</Th>
+                <Th align="right">7d %</Th>
+                <Th align="right">Market cap</Th>
+                <Th align="right">Volume 24h</Th>
+                <Th align="right">Circulating</Th>
+                <Th align="right">7d chart</Th>
               </tr>
-            )}
-            {!isLoading && assets.length === 0 && (
-              <tr>
-                <td
-                  colSpan={11}
-                  className="py-12 text-center text-sm text-ink-muted"
-                >
-                  No assets match this filter.
-                </td>
-              </tr>
-            )}
-            {!isLoading &&
-              assets.map((coin, idx) => (
-                <AssetRow
-                  key={coin.asset_id}
-                  coin={coin}
-                  rank={idx + 1}
-                  verified={verifiedSlugSet.has(coin.slug.toLowerCase())}
-                />
-              ))}
-          </tbody>
-        </table>
-      </div>
+            </THead>
+            <TBody>
+              {isLoading && (
+                <tr>
+                  <td
+                    colSpan={11}
+                    className="py-12 text-center text-sm text-ink-muted"
+                  >
+                    Loading…
+                  </td>
+                </tr>
+              )}
+              {!isLoading &&
+                assets.map((coin, idx) => (
+                  <AssetRow
+                    key={coin.asset_id}
+                    coin={coin}
+                    rank={idx + 1}
+                    verified={verifiedSlugSet.has(coin.slug.toLowerCase())}
+                  />
+                ))}
+            </TBody>
+          </Table>
+        </TableWrap>
+      )}
 
       <Pagination
         cursor={cursor}
@@ -310,9 +321,9 @@ function AssetRow({
         ? marketCapRaw
         : null;
   return (
-    <tr className="hover:bg-surface-muted">
+    <TR>
       <Td>
-        <span className="text-ink-faint">{rank}</span>
+        <span className="text-ink-faint tnum">{rank}</span>
       </Td>
       <Td>
         <Link
@@ -399,7 +410,7 @@ function AssetRow({
       <Td align="right">
         <RowSparkline points={coin.price_history_7d} />
       </Td>
-    </tr>
+    </TR>
   );
 }
 
@@ -407,21 +418,11 @@ function ClassBadge({ cls }: { cls?: string }) {
   if (!cls) {
     return <span className="text-xs text-ink-faint">—</span>;
   }
-  const tone =
-    cls === 'fiat'
-      ? 'bg-warn-50 text-warn-700'
-      : cls === 'stablecoin'
-        ? 'bg-up-subtle text-up'
-        : 'bg-brand-50 text-brand-700';
+  const tone: 'warn' | 'ok' | 'brand' =
+    cls === 'fiat' ? 'warn' : cls === 'stablecoin' ? 'ok' : 'brand';
   const label =
     cls === 'fiat' ? 'Fiat' : cls === 'stablecoin' ? 'Stablecoin' : 'Crypto';
-  return (
-    <span
-      className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium uppercase tracking-wider ${tone}`}
-    >
-      {label}
-    </span>
-  );
+  return <Badge tone={tone}>{label}</Badge>;
 }
 
 function RowSparkline({ points }: { points?: { t: string; p?: string | null }[] }) {
@@ -468,64 +469,28 @@ function Pagination({
   const hasNext = nextCursor !== '';
   return (
     <div className="flex items-center justify-between gap-2 px-1">
-      <button
-        type="button"
+      <Button
+        variant="secondary"
+        size="sm"
         disabled={!hasPrev}
         onClick={onPrev}
-        className="inline-flex items-center gap-1 rounded-md border border-line bg-surface px-3 py-1.5 text-xs text-ink-body hover:border-brand-500 hover:text-brand-600 disabled:opacity-40 disabled:hover:border-line disabled:hover:text-ink-body"
       >
         <ChevronLeft className="h-3.5 w-3.5" />
         Previous
-      </button>
+      </Button>
       <span className="text-xs text-ink-faint">
         {hasPrev || hasNext ? 'Cursor-paginated' : ' '}
       </span>
-      <button
-        type="button"
+      <Button
+        variant="secondary"
+        size="sm"
         disabled={!hasNext}
         onClick={onNext}
-        className="inline-flex items-center gap-1 rounded-md border border-line bg-surface px-3 py-1.5 text-xs text-ink-body hover:border-brand-500 hover:text-brand-600 disabled:opacity-40 disabled:hover:border-line disabled:hover:text-ink-body"
       >
         Next
         <ChevronRight className="h-3.5 w-3.5" />
-      </button>
+      </Button>
     </div>
-  );
-}
-
-function Th({
-  children,
-  align,
-  hint,
-}: {
-  children: React.ReactNode;
-  align?: 'left' | 'right';
-  hint?: string;
-}) {
-  return (
-    <th
-      className={`px-4 py-2.5 font-medium ${align === 'right' ? 'text-right' : 'text-left'}`}
-      scope="col"
-      title={hint}
-    >
-      {children}
-    </th>
-  );
-}
-
-function Td({
-  children,
-  align,
-}: {
-  children: React.ReactNode;
-  align?: 'left' | 'right';
-}) {
-  return (
-    <td
-      className={`px-4 py-3 ${align === 'right' ? 'text-right' : 'text-left'}`}
-    >
-      {children}
-    </td>
   );
 }
 

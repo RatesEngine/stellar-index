@@ -4,9 +4,17 @@ import { useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useQuery } from '@tanstack/react-query';
 
-import { Panel } from '@/components/reveal';
 import { apiGet, asExample } from '@/api/client';
 import { formatCompact } from '@/lib/format';
+import {
+  Badge,
+  Callout,
+  Container,
+  PageHeader,
+  Stat,
+  StatCell,
+  StatGrid,
+} from '@/components/ui';
 import { categoryTone, protocolMeta, PROTOCOLS } from './registry';
 
 // Mirrors internal/api/v1/protocols.go ProtocolView.
@@ -74,47 +82,37 @@ export function ProtocolsIndex() {
   const verifiedCount = cards.filter((c) => c.completeness?.complete).length;
 
   return (
-    <div className="mx-auto max-w-7xl space-y-6 px-6 py-8">
-      <header className="space-y-2">
-        <h1 className="text-3xl font-semibold tracking-tight">Protocols</h1>
-        <p className="max-w-3xl text-sm text-ink-body">
-          Every major Stellar protocol we index — DEXes, AMMs, lending, yield
-          vaults, bridges and oracles. Each protocol page carries its full
-          contract roster, the distribution of every event type it emits, and a
-          verified-completeness verdict against the certified ledger lake. Click
-          a card to drill in.
-        </p>
-        <div className="flex flex-wrap gap-x-6 gap-y-1 pt-1 text-xs text-ink-muted">
-          <span>
-            <span className="font-mono tabular-nums text-ink-body">
-              {cards.length}
-            </span>{' '}
-            protocols
-          </span>
-          <span>
-            <span className="font-mono tabular-nums text-ink-body">
-              {verifiedCount}
-            </span>{' '}
-            verified complete
-          </span>
-          <span>
-            <span className="font-mono tabular-nums text-ink-body">
-              {formatCompact(totalEvents24h)}
-            </span>{' '}
-            events · last 24h
-          </span>
-        </div>
-      </header>
+    <Container className="space-y-8 py-8 sm:py-10">
+      <PageHeader
+        eyebrow="Directory"
+        title="Protocols"
+        description="Every major Stellar protocol we index — DEXes, AMMs, lending, yield vaults, bridges and oracles. Each protocol page carries its full contract roster, the distribution of every event type it emits, and a verified-completeness verdict against the certified ledger lake. Click a card to drill in."
+      />
+
+      <StatGrid cols={3}>
+        <StatCell>
+          <Stat label="Protocols" value={cards.length.toLocaleString()} />
+        </StatCell>
+        <StatCell>
+          <Stat
+            label="Verified complete"
+            value={verifiedCount.toLocaleString()}
+          />
+        </StatCell>
+        <StatCell>
+          <Stat
+            label="Events · last 24h"
+            value={formatCompact(totalEvents24h)}
+          />
+        </StatCell>
+      </StatGrid>
 
       {isError && (
-        <Panel
-          title="Live stats unavailable"
-          bodyClassName="text-sm text-ink-body"
-        >
-          The protocol directory endpoint is unreachable, so the cards below show
-          the static registry without live counts. The per-protocol pages still
-          work.
-        </Panel>
+        <Callout tone="warn" title="Live stats unavailable">
+          The protocol directory endpoint is unreachable, so the cards below
+          show the static registry without live counts. The per-protocol pages
+          still work.
+        </Callout>
       )}
 
       {categories.length > 0 && (
@@ -140,7 +138,7 @@ export function ProtocolsIndex() {
           <ProtocolCardView key={c.name} card={c} />
         ))}
       </div>
-    </div>
+    </Container>
   );
 }
 
@@ -149,10 +147,10 @@ function ProtocolCardView({ card }: { card: ProtocolCard }) {
   return (
     <Link
       href={`/protocols/${encodeURIComponent(card.name)}`}
-      className="group flex flex-col rounded-lg border border-line bg-surface p-4 transition hover:border-brand-500 hover:shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500"
+      className="group flex flex-col rounded-card border border-line bg-surface p-5 shadow-card transition-shadow duration-150 hover:border-line-strong hover:shadow-elevated focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/60 focus-visible:ring-offset-2 focus-visible:ring-offset-surface-canvas"
     >
       <div className="flex items-start justify-between gap-2">
-        <h2 className="text-base font-semibold tracking-tight group-hover:text-brand-600">
+        <h2 className="text-h3 font-semibold text-ink group-hover:text-brand-600">
           {label}
         </h2>
         {card.category && (
@@ -163,24 +161,24 @@ function ProtocolCardView({ card }: { card: ProtocolCard }) {
           </span>
         )}
       </div>
-      <p className="mt-1.5 line-clamp-2 grow text-xs text-ink-muted">
+      <p className="mt-2 line-clamp-2 grow text-sm text-ink-muted">
         {card.description}
       </p>
-      <div className="mt-3 flex items-end justify-between">
-        <dl className="flex gap-5 text-xs">
+      <div className="mt-4 flex items-end justify-between">
+        <dl className="flex gap-6 text-xs">
           <div>
-            <dt className="text-[9px] uppercase tracking-wider text-ink-faint">
+            <dt className="text-[10px] font-medium uppercase tracking-wider text-ink-faint">
               Contracts
             </dt>
-            <dd className="font-mono tabular-nums text-ink-body">
+            <dd className="mt-0.5 font-mono tnum text-ink-body">
               {formatCompact(card.contract_count)}
             </dd>
           </div>
           <div>
-            <dt className="text-[9px] uppercase tracking-wider text-ink-faint">
+            <dt className="text-[10px] font-medium uppercase tracking-wider text-ink-faint">
               Events · 24h
             </dt>
-            <dd className="font-mono tabular-nums text-ink-body">
+            <dd className="mt-0.5 font-mono tnum text-ink-body">
               {formatCompact(card.events_24h)}
             </dd>
           </div>
@@ -197,20 +195,16 @@ function CardBadge({
   completeness?: { complete: boolean };
 }) {
   if (!completeness) {
-    return (
-      <span className="rounded bg-surface-subtle px-1.5 py-0.5 text-[9px] uppercase tracking-wider text-ink-faint">
-        unknown
-      </span>
-    );
+    return <Badge>unknown</Badge>;
   }
   return completeness.complete ? (
-    <span className="rounded bg-up-subtle px-1.5 py-0.5 text-[9px] font-medium uppercase tracking-wider text-up">
-      ✓ complete
-    </span>
+    <Badge tone="ok" dot>
+      complete
+    </Badge>
   ) : (
-    <span className="rounded bg-warn-50 px-1.5 py-0.5 text-[9px] font-medium uppercase tracking-wider text-warn-700">
+    <Badge tone="warn" dot>
       partial
-    </span>
+    </Badge>
   );
 }
 

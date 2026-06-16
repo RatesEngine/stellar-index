@@ -1,4 +1,6 @@
 import type { Metadata } from 'next';
+
+import { Container, PageHeader, SectionHeader } from '@/components/ui';
 import { BackfillSummary } from './BackfillSummary';
 import { CursorsTable } from './CursorsTable';
 import { HealthSummary } from './HealthSummary';
@@ -20,32 +22,34 @@ export const metadata: Metadata = {
  */
 export default function DiagnosticsPage() {
   return (
-    <div className="mx-auto max-w-7xl space-y-6 px-6 py-8">
-      <header className="space-y-2">
-        <h1 className="text-3xl font-semibold tracking-tight">Diagnostics</h1>
-        <p className="max-w-3xl text-sm text-ink-body">
-          Public system-health view. Today: live per-source ingest cursors
-          straight from <code className="font-mono">/v1/diagnostics/cursors</code>.
-          Decoder coverage, archive completeness, cross-region consistency, and
-          SLO burn rates plumb in as their endpoints ship.
-        </p>
-      </header>
+    <Container className="space-y-10 py-8 sm:py-10">
+      <PageHeader
+        eyebrow="System health"
+        title="Diagnostics"
+        description={
+          <>
+            Public system-health view. Today: live per-source ingest cursors
+            straight from{' '}
+            <code className="rounded bg-surface-subtle px-1 font-mono text-[13px]">
+              /v1/diagnostics/cursors
+            </code>
+            . Decoder coverage, archive completeness, cross-region consistency,
+            and SLO burn rates plumb in as their endpoints ship.
+          </>
+        }
+      />
 
-      <section className="space-y-2">
-        <h2 className="text-sm font-semibold uppercase tracking-wider text-ink-muted">
-          Live ingest
-        </h2>
+      <section className="space-y-4">
+        <SectionHeader title="Live ingest" />
         <HealthSummary />
       </section>
 
-      <section className="space-y-2">
-        <h2 className="text-sm font-semibold uppercase tracking-wider text-ink-muted">
-          Backfill workers
-        </h2>
+      <section className="space-y-4">
+        <SectionHeader title="Backfill workers" />
         <BackfillSummary />
       </section>
 
       <CursorsTable />
-    </div>
+    </Container>
   );
 }

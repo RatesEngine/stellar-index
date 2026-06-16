@@ -1,5 +1,7 @@
 import { Suspense } from 'react';
 import type { Metadata } from 'next';
+
+import { Container, PageHeader, Skeleton } from '@/components/ui';
 import { MarketsTable } from './MarketsTable';
 
 export const metadata: Metadata = {
@@ -18,19 +20,16 @@ export const metadata: Metadata = {
  */
 export default function MarketsPage() {
   return (
-    <div className="mx-auto max-w-7xl space-y-6 px-6 py-8">
-      <header className="space-y-2">
-        <h1 className="text-3xl font-semibold tracking-tight">Markets</h1>
-        <p className="max-w-3xl text-sm text-ink-body">
-          Every (base, quote) pair that has traded on Stellar in the last
-          14 days. Heatmap, per-venue sub-tables, and a live trade tape
-          land in subsequent passes.
-        </p>
-      </header>
+    <Container className="space-y-8 py-8 sm:py-10">
+      <PageHeader
+        eyebrow="Trading pairs"
+        title="Markets"
+        description="Every (base, quote) pair that has traded on Stellar in the last 14 days. Heatmap, per-venue sub-tables, and a live trade tape land in subsequent passes."
+      />
 
-      <Suspense fallback={null}>
+      <Suspense fallback={<Skeleton className="h-96 w-full" />}>
         <MarketsTable />
       </Suspense>
-    </div>
+    </Container>
   );
 }

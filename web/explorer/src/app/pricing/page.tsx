@@ -2,6 +2,14 @@ import type { Metadata } from 'next';
 import Link from 'next/link';
 import { Check, Minus } from 'lucide-react';
 
+import {
+  Badge,
+  ButtonLink,
+  Card,
+  CardBody,
+  Container,
+} from '@/components/ui';
+
 export const metadata: Metadata = {
   title: 'Pricing — plans, quotas, SLAs',
   description:
@@ -109,25 +117,30 @@ const TIERS: Tier[] = [
 
 export default function PricingPage() {
   return (
-    <div className="mx-auto max-w-7xl space-y-10 px-6 py-12">
-      <header className="space-y-3 text-center">
-        <h1 className="text-4xl font-semibold tracking-tight">Pricing</h1>
-        <p className="mx-auto max-w-2xl text-base text-ink-body">
+    <Container className="space-y-12 py-10 sm:py-14">
+      <header className="mx-auto max-w-2xl space-y-4 text-center">
+        <p className="text-xs font-medium uppercase tracking-wider text-brand-600">
+          Plans
+        </p>
+        <h1 className="text-h1 font-semibold text-ink md:text-display-sm">
+          Pricing
+        </h1>
+        <p className="text-lg leading-relaxed text-ink-muted">
           Same data on every tier. Free reads work without an account; paid
           plans unlock higher per-key rate limits, usage analytics, and
           dedicated SLAs.
         </p>
       </header>
 
-      <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
+      <div className="grid grid-cols-1 gap-5 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
         {TIERS.map((tier) => (
           <TierCard key={tier.name} tier={tier} />
         ))}
       </div>
 
-      <section className="rounded-xl border border-line bg-surface p-6 shadow-sm">
-        <h2 className="text-lg font-semibold">Honest notes</h2>
-        <ul className="mt-3 space-y-2 text-sm text-ink-body">
+      <Card className="p-6 sm:p-8">
+        <h2 className="text-h3 font-semibold text-ink">Honest notes</h2>
+        <ul className="mt-4 space-y-2.5 text-sm text-ink-body">
           <li>
             <strong className="text-ink-body">
               Free is not a trial.
@@ -164,81 +177,70 @@ export default function PricingPage() {
             commercial paperwork is ready.
           </li>
         </ul>
-      </section>
-    </div>
+      </Card>
+    </Container>
   );
 }
 
 function TierCard({ tier }: { tier: Tier }) {
+  const ctaVariant = tier.highlight ? 'primary' : 'secondary';
   return (
-    <div
-      className={`flex flex-col rounded-xl border p-5 shadow-sm transition-colors ${
-        tier.highlight
-          ? 'border-brand-500 bg-surface ring-1 ring-brand-500/30'
-          : 'border-line bg-surface'
-      }`}
-    >
-      <div className="mb-3 flex items-center justify-between">
-        <h3 className="text-lg font-semibold tracking-tight">{tier.name}</h3>
-        {tier.highlight && (
-          <span className="rounded-full bg-brand-600 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wider text-white">
-            Self-service
-          </span>
-        )}
-      </div>
-      <div>
-        <div className="font-mono text-3xl font-semibold tabular-nums">{tier.price}</div>
-        {tier.priceSubtitle && (
-          <div className="text-xs text-ink-muted">{tier.priceSubtitle}</div>
-        )}
-      </div>
-      <div className="mt-3 rounded-md bg-surface-muted px-3 py-2 font-mono text-xs text-ink-body">
-        {tier.rateLimit}
-      </div>
-      <p className="mt-3 text-sm text-ink-body">{tier.description}</p>
+    <Card className={tier.highlight ? 'ring-1 ring-brand-500/40' : undefined}>
+      <CardBody className="flex h-full flex-col">
+        <div className="mb-3 flex items-center justify-between gap-2">
+          <h3 className="text-h3 font-semibold text-ink">{tier.name}</h3>
+          {tier.highlight && <Badge tone="brand">Self-service</Badge>}
+        </div>
+        <div>
+          <div className="font-mono text-3xl font-semibold tnum text-ink">
+            {tier.price}
+          </div>
+          {tier.priceSubtitle && (
+            <div className="text-xs text-ink-muted">{tier.priceSubtitle}</div>
+          )}
+        </div>
+        <div className="mt-3 rounded-md bg-surface-muted px-3 py-2 font-mono text-xs text-ink-body">
+          {tier.rateLimit}
+        </div>
+        <p className="mt-3 text-sm text-ink-muted">{tier.description}</p>
 
-      <ul className="mt-4 space-y-1.5 text-sm">
-        {tier.features.map((f) => (
-          <li key={f} className="flex items-start gap-2 text-ink-body">
-            <Check className="mt-0.5 h-4 w-4 shrink-0 text-up" />
-            <span>{f}</span>
-          </li>
-        ))}
-        {tier.notFeatures?.map((f) => (
-          <li key={f} className="flex items-start gap-2 text-ink-faint">
-            <Minus className="mt-0.5 h-4 w-4 shrink-0" />
-            <span>{f}</span>
-          </li>
-        ))}
-      </ul>
+        <ul className="mt-4 space-y-1.5 text-sm">
+          {tier.features.map((f) => (
+            <li key={f} className="flex items-start gap-2 text-ink-body">
+              <Check className="mt-0.5 h-4 w-4 shrink-0 text-up" />
+              <span>{f}</span>
+            </li>
+          ))}
+          {tier.notFeatures?.map((f) => (
+            <li key={f} className="flex items-start gap-2 text-ink-faint">
+              <Minus className="mt-0.5 h-4 w-4 shrink-0" />
+              <span>{f}</span>
+            </li>
+          ))}
+        </ul>
 
-      <div className="mt-auto pt-4">
-        {tier.cta.href.startsWith('http') ? (
-          <a
-            href={tier.cta.href}
-            target="_blank"
-            rel="noreferrer noopener"
-            className={`inline-flex w-full items-center justify-center rounded-md px-3 py-2 text-sm font-medium ${
-              tier.highlight
-                ? 'bg-brand-600 text-white hover:bg-brand-700'
-                : 'border border-line text-ink-body hover:border-brand-500 hover:text-brand-600'
-            }`}
-          >
-            {tier.cta.label}
-          </a>
-        ) : (
-          <Link
-            href={tier.cta.href}
-            className={`inline-flex w-full items-center justify-center rounded-md px-3 py-2 text-sm font-medium ${
-              tier.highlight
-                ? 'bg-brand-600 text-white hover:bg-brand-700'
-                : 'border border-line text-ink-body hover:border-brand-500 hover:text-brand-600'
-            }`}
-          >
-            {tier.cta.label}
-          </Link>
-        )}
-      </div>
-    </div>
+        <div className="mt-auto pt-5">
+          {tier.cta.href.startsWith('http') ? (
+            <ButtonLink
+              href={tier.cta.href}
+              target="_blank"
+              rel="noreferrer noopener"
+              variant={ctaVariant}
+              className="w-full"
+            >
+              {tier.cta.label}
+            </ButtonLink>
+          ) : (
+            <ButtonLink
+              href={tier.cta.href}
+              variant={ctaVariant}
+              className="w-full"
+            >
+              {tier.cta.label}
+            </ButtonLink>
+          )}
+        </div>
+      </CardBody>
+    </Card>
   );
 }

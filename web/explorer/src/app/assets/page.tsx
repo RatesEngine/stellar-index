@@ -1,5 +1,7 @@
 import type { Metadata } from 'next';
 import { Suspense } from 'react';
+
+import { Container, PageHeader, Skeleton } from '@/components/ui';
 import { AssetsTable } from './AssetsTable';
 import {
   VerifiedCurrenciesStrip,
@@ -28,28 +30,16 @@ export default async function AssetsPage() {
   const verifiedSlugs = verified.map((v) => v.slug);
 
   return (
-    <div className="mx-auto max-w-7xl space-y-6 px-6 py-8">
-      <header className="space-y-2">
-        <h1 className="text-2xl font-semibold tracking-tight text-ink">
-          Assets
-        </h1>
-        <p className="max-w-3xl text-sm text-ink-body">
-          Every classic + Soroban asset observed on Stellar. Live price
-          via VWAP across on-chain DEXes, classic SDEX, and major
-          off-chain venues. Click through for live charts, recent
-          trades, supply detail, and issuer profile.
-        </p>
-      </header>
+    <Container className="space-y-8 py-8 sm:py-10">
+      <PageHeader
+        eyebrow="Directory"
+        title="Assets"
+        description="Every classic + Soroban asset observed on Stellar. Live price via VWAP across on-chain DEXes, classic SDEX, and major off-chain venues. Click through for live charts, recent trades, supply detail, and issuer profile."
+      />
       <VerifiedCurrenciesStrip verified={verified} />
-      <Suspense
-        fallback={
-          <div className="rounded-md border border-line bg-surface p-8 text-center text-sm text-ink-muted">
-            Loading…
-          </div>
-        }
-      >
+      <Suspense fallback={<Skeleton className="h-96 w-full" />}>
         <AssetsTable verifiedSlugs={verifiedSlugs} />
       </Suspense>
-    </div>
+    </Container>
   );
 }

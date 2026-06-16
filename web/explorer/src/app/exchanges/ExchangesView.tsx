@@ -7,6 +7,19 @@ import { Panel } from '@/components/reveal';
 import { apiGet, asExample } from '@/api/client';
 import { formatCompact } from '@/lib/format';
 import { SourceSparkline } from '@/components/SourceSparkline';
+import {
+  Container,
+  PageHeader,
+  Stat,
+  StatCell,
+  StatGrid,
+  TBody,
+  TR,
+  Table,
+  Td,
+  Th,
+  THead,
+} from '@/components/ui';
 
 interface VolumeBucket {
   hour: string;
@@ -59,20 +72,37 @@ export function ExchangesView() {
   const totalMarkets = rows.reduce((s, r) => s + (r.markets_count_24h ?? 0), 0);
 
   return (
-    <div className="mx-auto max-w-7xl space-y-6 px-6 py-8">
-      <header className="space-y-2">
-        <h1 className="text-3xl font-semibold tracking-tight">Exchanges</h1>
-        <p className="max-w-3xl text-sm text-ink-body">
-          Connected centralised exchanges feeding the Stellar Index
-          aggregator. Per-venue 24h USD volume, trade count, and
-          coverage. Click a venue for its full pair list. On-chain
-          DEXes and AMM pools live at{' '}
-          <Link href="/dexes" className="text-brand-600 hover:underline">
-            /dexes
-          </Link>
-          .
-        </p>
-      </header>
+    <Container className="space-y-8 py-8 sm:py-10">
+      <PageHeader
+        eyebrow="Centralised venues"
+        title="Exchanges"
+        description={
+          <>
+            Connected centralised exchanges feeding the Stellar Index
+            aggregator. Per-venue 24h USD volume, trade count, and coverage.
+            Click a venue for its full pair list. On-chain DEXes and AMM pools
+            live at{' '}
+            <Link href="/dexes" className="text-brand-600 hover:underline">
+              /dexes
+            </Link>
+            .
+          </>
+        }
+      />
+
+      {rows.length > 0 && (
+        <StatGrid cols={3}>
+          <StatCell>
+            <Stat label="24h volume" value={`$${formatCompact(totalVol)}`} />
+          </StatCell>
+          <StatCell>
+            <Stat label="24h trades" value={formatCompact(totalTrades)} />
+          </StatCell>
+          <StatCell>
+            <Stat label="Pairs covered" value={totalMarkets.toLocaleString()} />
+          </StatCell>
+        </StatGrid>
+      )}
 
       <Panel
         title={`${rows.length} centralised exchanges`}
@@ -85,9 +115,9 @@ export function ExchangesView() {
         bodyClassName="-mx-4"
       >
         <div className="overflow-x-auto">
-          <table className="min-w-full divide-y divide-line text-sm">
-            <thead>
-              <tr className="text-left text-[10px] uppercase tracking-wider text-ink-muted">
+          <Table>
+            <THead>
+              <tr>
                 <Th>#</Th>
                 <Th>Exchange</Th>
                 <Th align="right">24h volume</Th>
@@ -96,8 +126,8 @@ export function ExchangesView() {
                 <Th align="right">Pairs</Th>
                 <Th align="right">Share of CEX vol</Th>
               </tr>
-            </thead>
-            <tbody className="divide-y divide-line-subtle">
+            </THead>
+            <TBody>
               {q.isLoading && (
                 <tr>
                   <td colSpan={7} className="px-4 py-6 text-center text-sm text-ink-muted">
@@ -118,7 +148,7 @@ export function ExchangesView() {
                 const label = LABEL[r.name] ?? r.name;
                 const share = totalVol > 0 ? (vol / totalVol) * 100 : 0;
                 return (
-                  <tr key={r.name} className="hover:bg-surface-muted">
+                  <TR key={r.name}>
                     <Td>
                       <span className="font-mono text-[11px] text-ink-faint">{i + 1}</span>
                     </Td>
@@ -163,11 +193,11 @@ export function ExchangesView() {
                         </span>
                       </div>
                     </Td>
-                  </tr>
+                  </TR>
                 );
               })}
-            </tbody>
-          </table>
+            </TBody>
+          </Table>
         </div>
       </Panel>
 
@@ -182,7 +212,7 @@ export function ExchangesView() {
         page for the full list. Reach the per-pair candlestick view
         via any pair link below.
       </p>
-    </div>
+    </Container>
   );
 }
 
@@ -234,9 +264,9 @@ function AllCEXMarkets() {
       bodyClassName="-mx-4"
     >
       <div className="overflow-x-auto">
-        <table className="min-w-full divide-y divide-line text-sm">
-          <thead>
-            <tr className="text-left text-[10px] uppercase tracking-wider text-ink-muted">
+        <Table>
+          <THead>
+            <tr>
               <Th>#</Th>
               <Th>Venue</Th>
               <Th>Pair</Th>
@@ -244,8 +274,8 @@ function AllCEXMarkets() {
               <Th align="right">24h volume</Th>
               <Th align="right">24h trades</Th>
             </tr>
-          </thead>
-          <tbody className="divide-y divide-line-subtle">
+          </THead>
+          <TBody>
             {queries.isLoading && (
               <tr>
                 <td colSpan={6} className="px-4 py-6 text-center text-sm text-ink-muted">
@@ -265,10 +295,7 @@ function AllCEXMarkets() {
               const vol = m.volume_24h_usd ? Number(m.volume_24h_usd) : null;
               const tone = TONE[m.source ?? ''] ?? 'bg-surface-subtle text-ink-body';
               return (
-                <tr
-                  key={`${m.source}|${m.base}|${m.quote}`}
-                  className="hover:bg-surface-muted"
-                >
+                <TR key={`${m.source}|${m.base}|${m.quote}`}>
                   <Td>
                     <span className="font-mono text-[11px] text-ink-faint">{i + 1}</span>
                   </Td>
@@ -309,29 +336,12 @@ function AllCEXMarkets() {
                       {m.trade_count_24h > 0 ? formatCompact(m.trade_count_24h) : '0'}
                     </span>
                   </Td>
-                </tr>
+                </TR>
               );
             })}
-          </tbody>
-        </table>
+          </TBody>
+        </Table>
       </div>
     </Panel>
-  );
-}
-
-function Th({ children, align }: { children: React.ReactNode; align?: 'left' | 'right' }) {
-  return (
-    <th
-      scope="col"
-      className={`px-4 py-2 ${align === 'right' ? 'text-right' : 'text-left'}`}
-    >
-      {children}
-    </th>
-  );
-}
-
-function Td({ children, align }: { children: React.ReactNode; align?: 'left' | 'right' }) {
-  return (
-    <td className={`px-4 py-2 ${align === 'right' ? 'text-right' : 'text-left'}`}>{children}</td>
   );
 }
