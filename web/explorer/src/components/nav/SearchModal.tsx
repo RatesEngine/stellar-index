@@ -477,7 +477,7 @@ export function SearchModal() {
                             xmlns="http://www.w3.org/2000/svg"
                             viewBox="0 0 20 20"
                             fill="currentColor"
-                            className="h-3 w-3 text-emerald-600"
+                            className="h-3 w-3 text-up"
                             aria-hidden="true"
                           >
                             <path

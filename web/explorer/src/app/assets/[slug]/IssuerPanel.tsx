@@ -51,7 +51,7 @@ export function IssuerPanel({ gStrkey }: { gStrkey: string }) {
       {data.scam_reason && (
         <div
           role="alert"
-          className="rounded-md border border-red-300 bg-red-50 p-3 text-sm text-red-900"
+          className="rounded-md border border-bad-300 bg-bad-50 p-3 text-sm text-bad-700"
         >
           <strong className="font-semibold">Known scam issuer</strong> ·{' '}
           {data.scam_reason}. Every asset in the table below was
@@ -181,7 +181,7 @@ function FlagPill({ on, label }: { on?: boolean; label: string }) {
     );
   }
   const cls = on
-    ? 'bg-amber-100 text-amber-700'
+    ? 'bg-warn-50 text-warn-700'
     : 'bg-up-soft text-up-strong';
   return (
     <span

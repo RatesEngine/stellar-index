@@ -283,7 +283,7 @@ function CompletenessBadge({
   if (completeness.complete) {
     return (
       <span
-        className="rounded bg-emerald-100 px-2 py-0.5 text-[11px] font-medium uppercase tracking-wider text-emerald-800"
+        className="rounded bg-up-subtle px-2 py-0.5 text-[11px] font-medium uppercase tracking-wider text-up-strong"
         title={`Verified complete to ledger #${completeness.watermark_ledger.toLocaleString()} (ADR-0033 substrate + recognition + projection reconcile).`}
       >
         ✓ Verified complete
@@ -292,7 +292,7 @@ function CompletenessBadge({
   }
   return (
     <span
-      className="rounded bg-amber-100 px-2 py-0.5 text-[11px] font-medium uppercase tracking-wider text-amber-800"
+      className="rounded bg-warn-50 px-2 py-0.5 text-[11px] font-medium uppercase tracking-wider text-warn-700"
       title={`Partial coverage to ledger #${completeness.watermark_ledger.toLocaleString()}.`}
     >
       Partial coverage
@@ -660,7 +660,7 @@ const ROSTER_TOP_N = 25;
 function RoleChip({ kind }: { kind?: string }) {
   if (kind === 'factory') {
     return (
-      <span className="rounded bg-amber-100 px-1.5 py-0.5 text-[9px] font-medium uppercase tracking-wider text-amber-800">
+      <span className="rounded bg-warn-50 px-1.5 py-0.5 text-[9px] font-medium uppercase tracking-wider text-warn-700">
         factory
       </span>
     );

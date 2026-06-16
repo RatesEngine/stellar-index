@@ -94,7 +94,7 @@ export function VerifiedCurrenciesStrip({
           <Link
             key={vc.slug}
             href={`/assets/${vc.slug}`}
-            className="group inline-flex items-center gap-2 rounded-md border border-emerald-200 bg-surface px-3 py-1.5 text-sm font-medium text-ink transition hover:border-emerald-400 hover:bg-emerald-50"
+            className="group inline-flex items-center gap-2 rounded-md border border-up/30 bg-surface px-3 py-1.5 text-sm font-medium text-ink transition hover:border-up/40 hover:bg-up-subtle"
             title={
               vc.verified_issuer
                 ? `${vc.name} — ${vc.verified_issuer}`
@@ -105,7 +105,7 @@ export function VerifiedCurrenciesStrip({
               xmlns="http://www.w3.org/2000/svg"
               viewBox="0 0 20 20"
               fill="currentColor"
-              className="h-3.5 w-3.5 text-emerald-600"
+              className="h-3.5 w-3.5 text-up"
               aria-hidden="true"
             >
               <path

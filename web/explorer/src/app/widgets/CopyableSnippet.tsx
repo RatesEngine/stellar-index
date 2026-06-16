@@ -30,7 +30,7 @@ export function CopyableSnippet({ snippet }: { snippet: string }) {
         className="absolute right-2 top-2 rounded p-1 text-ink-faint hover:bg-ink hover:text-ink-faint"
       >
         {copied ? (
-          <Check className="h-3.5 w-3.5 text-emerald-400" />
+          <Check className="h-3.5 w-3.5 text-up" />
         ) : (
           <Copy className="h-3.5 w-3.5" />
         )}

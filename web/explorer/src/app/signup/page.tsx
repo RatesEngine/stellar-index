@@ -131,7 +131,7 @@ export default function SignupPage() {
         </ul>
       </section>
 
-      <section className="rounded-xl border border-amber-200 bg-amber-50 p-5 text-sm text-amber-900">
+      <section className="rounded-xl border border-warn-300 bg-warn-50 p-5 text-sm text-warn-700">
         <strong>Anonymous reads work without an account.</strong>{' '}
         If you&rsquo;re prototyping, just hit{' '}
         <a href="https://docs.stellarindex.io" className="underline">

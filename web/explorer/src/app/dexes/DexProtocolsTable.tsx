@@ -24,9 +24,9 @@ interface SourceRow {
 }
 
 const TONE: Record<string, string> = {
-  soroswap: 'bg-emerald-100 text-emerald-800',
-  phoenix: 'bg-amber-100 text-amber-800',
-  aquarius: 'bg-sky-100 text-sky-800',
+  soroswap: 'bg-up-subtle text-up-strong',
+  phoenix: 'bg-warn-50 text-warn-700',
+  aquarius: 'bg-brand-100 text-brand-800',
   sdex: 'bg-line text-ink',
   comet: 'bg-violet-100 text-violet-800',
 };

@@ -47,7 +47,7 @@ export function HomeTopMarkets() {
       <div className="overflow-hidden rounded-md border border-line bg-surface">
         {isError && top.length === 0 ? (
           <div className="px-4 py-6 text-center text-sm">
-            <span className="text-amber-700">
+            <span className="text-warn-700">
               Couldn&apos;t load top markets right now.
             </span>{' '}
             <Link href="/markets" className="text-brand-600 hover:underline">

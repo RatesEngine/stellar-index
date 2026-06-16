@@ -60,7 +60,7 @@ export default function ChangelogPage() {
       </header>
 
       {releases.length === 0 ? (
-        <div className="rounded-md border border-amber-200 bg-amber-50 p-6 text-sm text-amber-900">
+        <div className="rounded-md border border-warn-300 bg-warn-50 p-6 text-sm text-warn-700">
           CHANGELOG.md not found at build time — this page is a
           stub. See the{' '}
           <a
@@ -119,7 +119,7 @@ function ReleaseCard({ release }: { release: Release }) {
         </h2>
         <div className="flex items-center gap-2 text-xs">
           {isUnreleased ? (
-            <span className="rounded bg-amber-100 px-2 py-0.5 font-mono uppercase tracking-wider text-amber-800">
+            <span className="rounded bg-warn-50 px-2 py-0.5 font-mono uppercase tracking-wider text-warn-700">
               unreleased
             </span>
           ) : (
@@ -153,13 +153,13 @@ function ReleaseCard({ release }: { release: Release }) {
 function BlockSection({ block }: { block: { kind: string; lines: string[] } }) {
   const tone =
     block.kind === 'Added'
-      ? 'text-emerald-700'
+      ? 'text-up'
       : block.kind === 'Fixed'
-        ? 'text-sky-700'
+        ? 'text-brand-700'
         : block.kind === 'Changed'
-          ? 'text-amber-700'
+          ? 'text-warn-700'
           : block.kind === 'Removed' || block.kind === 'Deprecated'
-            ? 'text-rose-700'
+            ? 'text-down'
             : 'text-ink-body';
 
   // Strip the leading "- " bullet from list items so we can group

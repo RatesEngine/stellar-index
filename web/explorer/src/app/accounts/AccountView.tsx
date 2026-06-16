@@ -132,7 +132,7 @@ export function AccountView() {
             </a>
           </li>
         </ul>
-        <p className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+        <p className="rounded-md border border-warn-300 bg-warn-50 px-3 py-2 text-xs text-warn-700">
           Showing <strong>sourced/submitted</strong> activity only — the
           transactions this account submitted and the operations it sourced
           (the <code className="font-mono">scope</code> the API reports). Full
@@ -462,8 +462,8 @@ function SuccessBadge({ ok, code }: { ok: boolean; code?: number }) {
     <span
       className={`inline-flex items-center rounded px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wider ${
         ok
-          ? 'bg-emerald-50 text-emerald-700'
-          : 'bg-rose-50 text-rose-700'
+          ? 'bg-up-subtle text-up'
+          : 'bg-down-subtle text-down'
       }`}
       title={codeLabel ?? (ok ? 'success' : 'failed')}
     >

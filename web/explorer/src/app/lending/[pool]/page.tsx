@@ -186,7 +186,7 @@ export default async function LendingPoolPage({ params }: { params: Params }) {
 
       <header className="space-y-2">
         <div className="flex flex-wrap items-center gap-2">
-          <span className="rounded bg-emerald-100 px-1.5 py-0.5 text-[11px] font-medium uppercase tracking-wider text-emerald-800">
+          <span className="rounded bg-up-subtle px-1.5 py-0.5 text-[11px] font-medium uppercase tracking-wider text-up-strong">
             Blend
           </span>
           {label && (

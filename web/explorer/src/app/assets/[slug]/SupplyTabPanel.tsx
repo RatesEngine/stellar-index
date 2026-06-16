@@ -188,8 +188,8 @@ function OnChainSupply({ data, decimals }: { data: AssetSupply; decimals: number
   const burn = parseSmallest(data.burn_total, decimals);
   const clawback = parseSmallest(data.clawback_total, decimals);
   return (
-    <div className="rounded-lg border border-emerald-200 bg-emerald-50/50 p-3">
-      <h4 className="mb-2 text-xs font-semibold uppercase tracking-wider text-emerald-700">
+    <div className="rounded-lg border border-up/30 bg-up-subtle/50 p-3">
+      <h4 className="mb-2 text-xs font-semibold uppercase tracking-wider text-up">
         On-chain supply (live)
       </h4>
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
@@ -209,7 +209,7 @@ function OnChainSupply({ data, decimals }: { data: AssetSupply; decimals: number
           </>
         )}
       </div>
-      <p className="mt-2 text-[11px] text-emerald-700/80">
+      <p className="mt-2 text-[11px] text-up/80">
         {native
           ? 'Native XLM total from the ledger header — current to the latest ledger.'
           : 'Σ mint − burn − clawback from the supply_flows lake (ADR-0034), current to the latest ledger — no refresh lag.'}

@@ -140,7 +140,7 @@ export function IssuersTable() {
                     {row.scam_reason && (
                       <span
                         title={row.scam_reason}
-                        className="rounded bg-rose-100 px-1.5 py-0.5 text-[9px] font-medium uppercase tracking-wider text-rose-700"
+                        className="rounded bg-down-subtle px-1.5 py-0.5 text-[9px] font-medium uppercase tracking-wider text-down"
                       >
                         SCAM
                       </span>

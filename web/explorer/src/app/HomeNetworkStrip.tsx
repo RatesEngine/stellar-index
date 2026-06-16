@@ -3,6 +3,7 @@
 import Link from 'next/link';
 
 import { useCoins, useNetworkStats } from '@/api/hooks';
+import { Stat } from '@/components/ui';
 import { formatCompact } from '@/lib/format';
 
 /**
@@ -131,39 +132,36 @@ function Cell({
   mono?: boolean;
   href?: string;
 }) {
-  const subTone =
-    tone === 'up'
-      ? 'text-emerald-600'
-      : tone === 'down'
-        ? 'text-rose-600'
-        : 'text-ink-muted';
+  const subNode = sub ? (
+    <span
+      className={
+        tone === 'up' ? 'text-up' : tone === 'down' ? 'text-down' : 'text-ink-muted'
+      }
+    >
+      {sub}
+    </span>
+  ) : undefined;
   const inner = (
-    <>
-      <div className="text-[10px] uppercase tracking-wider text-ink-muted">
-        {label}
-      </div>
-      <div
-        className={`mt-1 truncate ${mono ? 'font-mono' : 'font-semibold'} text-lg tabular-nums`}
-        title={value}
-      >
-        {value}
-      </div>
-      {sub && (
-        <div className={`mt-0.5 text-[11px] ${subTone}`}>{sub}</div>
-      )}
-    </>
+    <Stat
+      label={label}
+      value={
+        <span className={`truncate ${mono ? 'font-mono' : ''}`} title={value}>
+          {value}
+        </span>
+      }
+      sub={subNode}
+    />
   );
-  const baseClass =
-    'block rounded-md border border-line bg-surface p-3';
+  const baseClass = 'block rounded-card border border-line bg-surface p-4';
   if (href) {
     return (
       <Link
         href={href}
-        className={`${baseClass} transition hover:border-brand-300 hover:shadow-sm`}
+        className={`${baseClass} shadow-card transition-all hover:border-line-strong hover:shadow-elevated`}
       >
         {inner}
       </Link>
     );
   }
-  return <div className={baseClass}>{inner}</div>;
+  return <div className={`${baseClass} shadow-card`}>{inner}</div>;
 }

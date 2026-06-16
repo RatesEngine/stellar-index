@@ -143,7 +143,7 @@ export function PairChart({
         </div>
       )}
       {error && !loading && (
-        <div className="flex h-[360px] items-center justify-center text-sm text-red-600">
+        <div className="flex h-[360px] items-center justify-center text-sm text-bad-700">
           {error === 'HTTP 404'
             ? 'No chart data for this pair + window yet'
             : `Chart data unavailable: ${error}`}

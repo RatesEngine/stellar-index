@@ -45,13 +45,13 @@ const SOURCE_NOTE: Record<string, string> = {
 // renders, just without a coloured chip — keeps the table working
 // when new sources land before this map gets updated.
 const SOURCE_TONE: Record<string, string> = {
-  soroswap: 'bg-emerald-100 text-emerald-800',
-  phoenix: 'bg-amber-100 text-amber-800',
-  aquarius: 'bg-sky-100 text-sky-800',
+  soroswap: 'bg-up-subtle text-up-strong',
+  phoenix: 'bg-warn-50 text-warn-700',
+  aquarius: 'bg-brand-100 text-brand-800',
   sdex: 'bg-line text-ink',
   comet: 'bg-violet-100 text-violet-800',
   binance: 'bg-yellow-100 text-yellow-800',
-  coinbase: 'bg-blue-100 text-blue-800',
+  coinbase: 'bg-brand-100 text-brand-800',
   kraken: 'bg-purple-100 text-purple-800',
   bitstamp: 'bg-teal-100 text-teal-800',
 };

@@ -134,7 +134,7 @@ function Health({
     status === 'ok'
       ? 'bg-up-DEFAULT'
       : status === 'degraded'
-        ? 'bg-amber-500'
+        ? 'bg-warn-500'
         : 'bg-down-DEFAULT';
   return (
     <div>

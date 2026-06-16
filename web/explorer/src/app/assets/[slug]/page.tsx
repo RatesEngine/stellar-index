@@ -636,7 +636,7 @@ export default async function AssetDetailPage({ params }: { params: Params }) {
           )}
           {globalView && (
             <span
-              className="inline-flex items-center gap-1 rounded-md bg-emerald-100 px-2 py-0.5 text-[11px] font-medium uppercase tracking-wider text-emerald-800"
+              className="inline-flex items-center gap-1 rounded-md bg-up-subtle px-2 py-0.5 text-[11px] font-medium uppercase tracking-wider text-up-strong"
               title={
                 globalView.verified_issuer
                   ? `Verified by ${globalView.verified_issuer}`
@@ -685,7 +685,7 @@ export default async function AssetDetailPage({ params }: { params: Params }) {
         {coin.issuer_scam_reason && (
           <div
             role="alert"
-            className="rounded-md border border-red-300 bg-red-50 p-3 text-sm text-red-900"
+            className="rounded-md border border-bad-300 bg-bad-50 p-3 text-sm text-bad-700"
           >
             <strong className="font-semibold">Known scam asset</strong> ·{' '}
             {coin.issuer_scam_reason}. The issuer is on the
@@ -698,13 +698,13 @@ export default async function AssetDetailPage({ params }: { params: Params }) {
         {detail?.unverified_warning && (
           <div
             role="alert"
-            className="rounded-md border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900"
+            className="rounded-md border border-warn-300 bg-warn-50 p-3 text-sm text-warn-700"
           >
             <div className="mb-1 flex items-center gap-2">
               <strong className="font-semibold">
                 Unverified {coin.code}
               </strong>
-              <span className="rounded bg-amber-200 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wider text-amber-900">
+              <span className="rounded bg-amber-200 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wider text-warn-700">
                 Ticker collision
               </span>
             </div>
@@ -713,7 +713,7 @@ export default async function AssetDetailPage({ params }: { params: Params }) {
               available at{' '}
               <Link
                 href={`/assets/${detail.unverified_warning.verified_slug}`}
-                className="font-medium underline hover:text-amber-700"
+                className="font-medium underline hover:text-warn-700"
               >
                 {detail.unverified_warning.verified_name}
               </Link>
@@ -816,12 +816,12 @@ function OverviewBody({
               );
             })()}
             {price?.flags?.stale && (
-              <span className="rounded bg-amber-100 px-2 py-0.5 text-[11px] uppercase tracking-wider text-amber-800">
+              <span className="rounded bg-warn-50 px-2 py-0.5 text-[11px] uppercase tracking-wider text-warn-700">
                 Stale
               </span>
             )}
             {price?.flags?.triangulated && (
-              <span className="rounded bg-sky-100 px-2 py-0.5 text-[11px] uppercase tracking-wider text-sky-800">
+              <span className="rounded bg-brand-100 px-2 py-0.5 text-[11px] uppercase tracking-wider text-brand-800">
                 Triangulated via XLM
               </span>
             )}
@@ -1214,7 +1214,7 @@ function peggedTo(code: string): string | null {
 
 function PeggedBadge({ currency }: { currency: string }) {
   return (
-    <span className="inline-flex items-center gap-1 rounded bg-sky-50 px-2 py-0.5 font-mono text-xs uppercase tracking-wider text-sky-700">
+    <span className="inline-flex items-center gap-1 rounded bg-brand-50 px-2 py-0.5 font-mono text-xs uppercase tracking-wider text-brand-700">
       <span className="text-[10px] opacity-70">PEG</span>
       {currency}
     </span>
@@ -1233,9 +1233,9 @@ function ChangePctLabel({
   if (!Number.isFinite(n)) return null;
   const tone =
     n > 0
-      ? 'bg-emerald-50 text-emerald-700'
+      ? 'bg-up-subtle text-up'
       : n < 0
-        ? 'bg-rose-50 text-rose-700'
+        ? 'bg-down-subtle text-down'
         : 'bg-surface-subtle text-ink-body';
   const sign = n > 0 ? '+' : '';
   return (
@@ -1308,11 +1308,11 @@ function Stat({
 }) {
   const accentColor =
     accentTone === 'emerald'
-      ? 'text-emerald-600'
+      ? 'text-up'
       : accentTone === 'amber'
-        ? 'text-amber-600'
+        ? 'text-warn-700'
         : accentTone === 'rose'
-          ? 'text-rose-600'
+          ? 'text-down'
           : 'text-ink-muted';
   return (
     <div>

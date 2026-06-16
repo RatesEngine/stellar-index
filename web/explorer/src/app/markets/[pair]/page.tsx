@@ -662,9 +662,9 @@ function shortAsset(canonical: string): string {
 function ChangeBadge({ pct, window }: { pct: number; window: string }) {
   const tone =
     pct > 0
-      ? 'bg-emerald-50 text-emerald-700'
+      ? 'bg-up-subtle text-up'
       : pct < 0
-        ? 'bg-rose-50 text-rose-700'
+        ? 'bg-down-subtle text-down'
         : 'bg-surface-subtle text-ink-body';
   const sign = pct > 0 ? '+' : '';
   return (

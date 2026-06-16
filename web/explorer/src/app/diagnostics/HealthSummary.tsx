@@ -126,11 +126,11 @@ function Cell({
 }) {
   const valueClass =
     tone === 'ok'
-      ? 'text-emerald-700'
+      ? 'text-up'
       : tone === 'warn'
-        ? 'text-amber-700'
+        ? 'text-warn-700'
         : tone === 'bad'
-          ? 'text-rose-700'
+          ? 'text-down'
           : '';
   return (
     <div className="rounded-md border border-line bg-surface p-3">

@@ -204,11 +204,11 @@ function CardBadge({
     );
   }
   return completeness.complete ? (
-    <span className="rounded bg-emerald-100 px-1.5 py-0.5 text-[9px] font-medium uppercase tracking-wider text-emerald-700">
+    <span className="rounded bg-up-subtle px-1.5 py-0.5 text-[9px] font-medium uppercase tracking-wider text-up">
       ✓ complete
     </span>
   ) : (
-    <span className="rounded bg-amber-100 px-1.5 py-0.5 text-[9px] font-medium uppercase tracking-wider text-amber-700">
+    <span className="rounded bg-warn-50 px-1.5 py-0.5 text-[9px] font-medium uppercase tracking-wider text-warn-700">
       partial
     </span>
   );

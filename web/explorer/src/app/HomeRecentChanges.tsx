@@ -143,13 +143,13 @@ function readRecentItems(n: number): ChangeItem[] {
 
 function kindTone(kind: string): string {
   if (kind === 'Added')
-    return 'bg-emerald-100 text-emerald-800';
+    return 'bg-up-subtle text-up-strong';
   if (kind === 'Fixed')
-    return 'bg-sky-100 text-sky-800';
+    return 'bg-brand-100 text-brand-800';
   if (kind === 'Changed')
-    return 'bg-amber-100 text-amber-800';
+    return 'bg-warn-50 text-warn-700';
   if (kind === 'Removed' || kind === 'Deprecated')
-    return 'bg-rose-100 text-rose-800';
+    return 'bg-down-subtle text-down-strong';
   return 'bg-surface-subtle text-ink-body';
 }
 

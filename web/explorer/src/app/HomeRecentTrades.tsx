@@ -95,7 +95,7 @@ export function HomeRecentTrades() {
               title="live feed"
             >
               <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75"></span>
-              <span className="relative inline-flex h-2 w-2 rounded-full bg-emerald-500"></span>
+              <span className="relative inline-flex h-2 w-2 rounded-full bg-up"></span>
             </span>
           </h2>
           <p className="text-sm text-ink-body">
@@ -106,7 +106,7 @@ export function HomeRecentTrades() {
       </div>
       <div className="overflow-hidden rounded-md border border-line bg-surface">
         {error && (
-          <div className="px-4 py-2 text-xs text-rose-700">
+          <div className="px-4 py-2 text-xs text-down">
             Live feed unreachable: {error}
           </div>
         )}

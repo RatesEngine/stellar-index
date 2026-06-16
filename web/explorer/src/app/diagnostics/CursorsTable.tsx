@@ -179,7 +179,7 @@ function LagPill({ seconds }: { seconds: number }) {
     seconds <= 60
       ? 'bg-up-soft text-up-strong'
       : seconds <= 600
-        ? 'bg-amber-100 text-amber-700'
+        ? 'bg-warn-50 text-warn-700'
         : 'bg-down-soft text-down-strong';
   return (
     <span

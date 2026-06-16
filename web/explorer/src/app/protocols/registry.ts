@@ -109,11 +109,11 @@ export function protocolMeta(name: string): ProtocolRegistryEntry | undefined {
 // registry adds a category before this map is updated).
 export const CATEGORY_TONE: Record<string, string> = {
   dex: 'bg-line text-ink',
-  amm: 'bg-emerald-100 text-emerald-800',
-  lending: 'bg-sky-100 text-sky-800',
+  amm: 'bg-up-subtle text-up-strong',
+  lending: 'bg-brand-100 text-brand-800',
   yield: 'bg-violet-100 text-violet-800',
-  bridge: 'bg-amber-100 text-amber-800',
-  oracle: 'bg-indigo-100 text-indigo-800',
+  bridge: 'bg-warn-50 text-warn-700',
+  oracle: 'bg-indigo-100 text-brand-800',
   token: 'bg-teal-100 text-teal-800',
 };
 

@@ -48,19 +48,19 @@ export function SignInForm({ mode = 'signin' }: { mode?: 'signin' | 'signup' }) 
 
   if (state.kind === 'sent') {
     return (
-      <div className="space-y-4 rounded-lg border border-emerald-200 bg-emerald-50 p-6 text-sm">
-        <div className="flex items-center gap-2 font-medium text-emerald-900">
+      <div className="space-y-4 rounded-lg border border-up/30 bg-up-subtle p-6 text-sm">
+        <div className="flex items-center gap-2 font-medium text-up-strong">
           <Check className="h-5 w-5" />
           Check your inbox.
         </div>
-        <p className="text-emerald-900/80">
+        <p className="text-up-strong/80">
           We sent a magic-link sign-in to{' '}
           <span className="font-mono font-medium">{state.email}</span>. The
           link is valid for 15 minutes — clicking it signs you in
           {mode === 'signup' ? ' and creates your account if it doesn’t already exist' : ''}
           .
         </p>
-        <p className="text-xs text-emerald-900/70">
+        <p className="text-xs text-up-strong/70">
           Didn&apos;t arrive? Check spam, or{' '}
           <button
             type="button"
@@ -96,7 +96,7 @@ export function SignInForm({ mode = 'signin' }: { mode?: 'signin' | 'signup' }) 
       </label>
 
       {state.kind === 'error' && (
-        <div className="flex items-start gap-2 rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-800">
+        <div className="flex items-start gap-2 rounded-md border border-bad-300 bg-bad-50 p-3 text-sm text-bad-700">
           <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
           <span>{state.message}</span>
         </div>

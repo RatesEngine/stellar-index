@@ -91,7 +91,7 @@ export function HomeCurrencies() {
         </Link>
       </div>
       {q.isError && (
-        <div className="rounded-md border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+        <div className="rounded-md border border-warn-300 bg-warn-50 px-4 py-3 text-sm text-warn-700">
           Couldn&apos;t load live currency rates. The full directory at{' '}
           <Link href="/assets" className="underline hover:no-underline">
             /assets
@@ -135,9 +135,9 @@ export function HomeCurrencies() {
                     <span
                       className={`font-mono text-[11px] tabular-nums ${
                         row.change_24h_pct > 0
-                          ? 'text-emerald-600'
+                          ? 'text-up'
                           : row.change_24h_pct < 0
-                            ? 'text-rose-600'
+                            ? 'text-down'
                             : 'text-ink-muted'
                       }`}
                       title="24h % change in USD value (daily-grain feed)"

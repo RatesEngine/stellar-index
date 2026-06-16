@@ -30,11 +30,11 @@ interface OracleStream {
 }
 
 const TONE: Record<string, string> = {
-  'reflector-dex': 'bg-emerald-100 text-emerald-800',
-  'reflector-cex': 'bg-sky-100 text-sky-800',
+  'reflector-dex': 'bg-up-subtle text-up-strong',
+  'reflector-cex': 'bg-brand-100 text-brand-800',
   'reflector-fx': 'bg-violet-100 text-violet-800',
-  redstone: 'bg-rose-100 text-rose-800',
-  band: 'bg-amber-100 text-amber-800',
+  redstone: 'bg-down-subtle text-down-strong',
+  band: 'bg-warn-50 text-warn-700',
 };
 
 export function OraclesView() {
@@ -156,7 +156,7 @@ export function OraclesView() {
                         className={`inline-block rounded px-1.5 py-0.5 text-[10px] uppercase tracking-wider ${
                           o.class === 'oracle'
                             ? 'bg-line text-ink-body'
-                            : 'bg-emerald-100 text-emerald-800'
+                            : 'bg-up-subtle text-up-strong'
                         }`}
                         title="Oracle observations are reported but never included in the canonical VWAP — that would import their methodology."
                       >

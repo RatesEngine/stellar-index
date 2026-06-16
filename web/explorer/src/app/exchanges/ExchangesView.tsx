@@ -25,7 +25,7 @@ interface SourceRow {
 
 const TONE: Record<string, string> = {
   binance: 'bg-yellow-100 text-yellow-800',
-  coinbase: 'bg-blue-100 text-blue-800',
+  coinbase: 'bg-brand-100 text-brand-800',
   kraken: 'bg-purple-100 text-purple-800',
   bitstamp: 'bg-teal-100 text-teal-800',
 };

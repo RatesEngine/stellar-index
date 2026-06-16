@@ -57,7 +57,7 @@ export function CallbackHandler() {
 
   if (state.kind === 'error') {
     return (
-      <div className="space-y-3 rounded-md border border-red-200 bg-red-50 p-4 text-sm text-red-800">
+      <div className="space-y-3 rounded-md border border-bad-300 bg-bad-50 p-4 text-sm text-bad-700">
         <div className="flex items-center justify-center gap-2 font-medium">
           <AlertCircle className="h-4 w-4" />
           Couldn&apos;t sign you in
@@ -75,7 +75,7 @@ export function CallbackHandler() {
     return (
       <div className="space-y-2 text-sm text-ink-body">
         <div className="flex items-center justify-center gap-2 font-medium text-ink">
-          <CheckCircle2 className="h-4 w-4 text-emerald-600" />
+          <CheckCircle2 className="h-4 w-4 text-up" />
           Signing you in…
         </div>
         <p>Verifying your link with the API. You&apos;ll be redirected to your account.</p>

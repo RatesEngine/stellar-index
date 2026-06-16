@@ -208,7 +208,7 @@ export default async function SourceDetailPage({
             </span>
           )}
           {source.paid && (
-            <span className="rounded bg-amber-100 px-2 py-0.5 text-[11px] uppercase tracking-wider text-amber-800">
+            <span className="rounded bg-warn-50 px-2 py-0.5 text-[11px] uppercase tracking-wider text-warn-700">
               paid
             </span>
           )}
@@ -453,9 +453,9 @@ function Stat({
 }) {
   const valueClass =
     tone === 'ok'
-      ? 'text-emerald-700'
+      ? 'text-up'
       : tone === 'warn'
-        ? 'text-amber-700'
+        ? 'text-warn-700'
         : '';
   return (
     <div>
@@ -499,11 +499,11 @@ function auditSlug(source: string): string {
 function ClassBadge({ cls }: { cls: Source['class'] }) {
   const tone =
     cls === 'exchange'
-      ? 'bg-emerald-100 text-emerald-800'
+      ? 'bg-up-subtle text-up-strong'
       : cls === 'oracle'
-        ? 'bg-sky-100 text-sky-800'
+        ? 'bg-brand-100 text-brand-800'
         : cls === 'aggregator'
-          ? 'bg-amber-100 text-amber-800'
+          ? 'bg-warn-50 text-warn-700'
           : 'bg-surface-subtle text-ink-body';
   return (
     <span
@@ -517,10 +517,10 @@ function ClassBadge({ cls }: { cls: Source['class'] }) {
 function LagBadge({ seconds }: { seconds: number }) {
   const tone =
     seconds <= 60
-      ? 'bg-emerald-50 text-emerald-700'
+      ? 'bg-up-subtle text-up'
       : seconds <= 600
-        ? 'bg-amber-50 text-amber-700'
-        : 'bg-rose-50 text-rose-700';
+        ? 'bg-warn-50 text-warn-700'
+        : 'bg-down-subtle text-down';
   const label =
     seconds < 60
       ? `${seconds.toFixed(0)}s`

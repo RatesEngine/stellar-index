@@ -365,8 +365,8 @@ function SuccessBadge({ ok, code }: { ok: boolean; code?: number }) {
     <span
       className={`inline-flex items-center rounded px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wider ${
         ok
-          ? 'bg-emerald-50 text-emerald-700'
-          : 'bg-rose-50 text-rose-700'
+          ? 'bg-up-subtle text-up'
+          : 'bg-down-subtle text-down'
       }`}
       title={codeLabel ?? (ok ? 'success' : 'failed')}
     >

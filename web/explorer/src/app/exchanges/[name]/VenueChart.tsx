@@ -164,7 +164,7 @@ export function VenueChart({ venue }: { venue: string }) {
         hint="Pair list unavailable"
         source={asExample('/v1/markets', { source: venue })}
       >
-        <div className="flex h-[360px] items-center justify-center px-4 text-center text-sm text-red-600">
+        <div className="flex h-[360px] items-center justify-center px-4 text-center text-sm text-bad-700">
           Couldn&apos;t load pairs for this venue ({pairsError}). Refresh to
           retry, or check{' '}
           <a
@@ -239,7 +239,7 @@ export function VenueChart({ venue }: { venue: string }) {
           </div>
         )}
         {error && !loading && (
-          <div className="flex h-[360px] items-center justify-center text-sm text-red-600">
+          <div className="flex h-[360px] items-center justify-center text-sm text-bad-700">
             {error === 'HTTP 404'
               ? 'No chart data for this pair + window yet'
               : `Chart data unavailable: ${error}`}

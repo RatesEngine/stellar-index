@@ -208,7 +208,7 @@ export function ChartPanel({
           </div>
         )}
         {error && !loading && (
-          <div className="flex h-[420px] items-center justify-center text-sm text-red-600">
+          <div className="flex h-[420px] items-center justify-center text-sm text-bad-700">
             {error === 'HTTP 404'
               ? 'No chart data for this asset + window yet'
               : `Chart data unavailable: ${error}`}
@@ -222,7 +222,7 @@ export function ChartPanel({
         {!loading && !error && data.length > 0 && (
           <>
             {meta?.truncated && meta.data_starts_at && (
-              <div className="mb-2 rounded border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+              <div className="mb-2 rounded border border-warn-300 bg-warn-50 px-3 py-2 text-xs text-warn-700">
                 Showing data from{' '}
                 <strong>{formatYMD(meta.data_starts_at)}</strong> — the
                 deployment hasn&apos;t accumulated the full {timeframe}{' '}

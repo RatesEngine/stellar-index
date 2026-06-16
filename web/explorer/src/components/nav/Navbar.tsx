@@ -477,11 +477,11 @@ function StatusPill() {
   const overall = status.data?.overall ?? 'unknown';
   const tone =
     overall === 'ok'
-      ? 'bg-emerald-500'
+      ? 'bg-up'
       : overall === 'degraded'
-        ? 'bg-amber-500'
+        ? 'bg-warn-500'
         : overall === 'down'
-          ? 'bg-rose-500'
+          ? 'bg-down'
           : 'bg-ink-faint';
   const title =
     overall === 'ok'

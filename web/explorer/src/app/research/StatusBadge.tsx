@@ -1,10 +1,10 @@
 import type { ADRStatus } from '@/lib/adr';
 
 const STYLES: Record<ADRStatus, string> = {
-  Accepted: 'bg-emerald-100 text-emerald-700',
-  Proposed: 'bg-amber-100 text-amber-700',
+  Accepted: 'bg-up-subtle text-up',
+  Proposed: 'bg-warn-50 text-warn-700',
   Superseded: 'bg-surface-subtle text-ink-body',
-  Rejected: 'bg-rose-100 text-rose-700',
+  Rejected: 'bg-down-subtle text-down',
 };
 
 export function StatusBadge({ status }: { status: ADRStatus }) {

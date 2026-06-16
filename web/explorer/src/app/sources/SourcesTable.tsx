@@ -232,10 +232,10 @@ function CursorAgo({
   // on what "live" means.
   const tone =
     cursor.lag_seconds < 60
-      ? 'text-emerald-600'
+      ? 'text-up'
       : cursor.lag_seconds < 600
-        ? 'text-amber-600'
-        : 'text-rose-600';
+        ? 'text-warn-700'
+        : 'text-down';
   return (
     <div className="text-right">
       <div className={`font-mono text-[11px] ${tone}`}>
@@ -266,7 +266,7 @@ function Pill({
     tone === 'up'
       ? 'bg-up-soft text-up-strong'
       : tone === 'amber'
-        ? 'bg-amber-100 text-amber-700'
+        ? 'bg-warn-50 text-warn-700'
         : 'bg-surface-subtle text-ink-body';
   return (
     <span

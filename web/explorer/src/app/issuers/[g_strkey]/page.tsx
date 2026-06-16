@@ -205,16 +205,16 @@ export default async function IssuerDetailPage({ params }: { params: Params }) {
         dangerouslySetInnerHTML={{ __html: JSON.stringify(breadcrumbLD) }}
       />
       {detail.scam_reason && (
-        <div className="rounded-lg border-2 border-rose-400 bg-rose-50 px-4 py-3">
+        <div className="rounded-lg border-2 border-down/40 bg-down-subtle px-4 py-3">
           <div className="flex items-baseline gap-2">
-            <span className="rounded bg-rose-600 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-white">
+            <span className="rounded bg-down px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-white">
               Warning
             </span>
-            <span className="text-sm font-medium text-rose-900">
+            <span className="text-sm font-medium text-down-strong">
               This issuer is flagged as malicious or unsafe.
             </span>
           </div>
-          <p className="mt-1.5 text-xs text-rose-800">
+          <p className="mt-1.5 text-xs text-down-strong">
             {detail.scam_reason}. Do not trust assets issued from this account.
             Source: stellar.expert directory.
           </p>
@@ -489,7 +489,7 @@ function FlagRow({ label, v }: { label: string; v: boolean | undefined }) {
   let tone: string;
   let text: string;
   if (v === true) {
-    tone = 'bg-amber-500';
+    tone = 'bg-warn-500';
     text = 'true';
   } else if (v === false) {
     tone = 'bg-line-strong';
@@ -561,9 +561,9 @@ function ChangeCell({ raw }: { raw?: string | null }) {
   if (!Number.isFinite(n)) return <span className="text-ink-faint">—</span>;
   const tone =
     n > 0
-      ? 'text-emerald-600'
+      ? 'text-up'
       : n < 0
-        ? 'text-rose-600'
+        ? 'text-down'
         : 'text-ink-muted';
   const sign = n > 0 ? '+' : '';
   return (

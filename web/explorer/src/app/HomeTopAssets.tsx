@@ -138,7 +138,7 @@ function Row({
                 xmlns="http://www.w3.org/2000/svg"
                 viewBox="0 0 20 20"
                 fill="currentColor"
-                className="h-3.5 w-3.5 text-emerald-600"
+                className="h-3.5 w-3.5 text-up"
                 aria-hidden="true"
               >
                 <path
@@ -241,9 +241,9 @@ function ChangePct({ raw }: { raw: string | null | undefined }) {
   if (!Number.isFinite(n)) return <Dash />;
   const tone =
     n > 0
-      ? 'text-emerald-600'
+      ? 'text-up'
       : n < 0
-        ? 'text-rose-600'
+        ? 'text-down'
         : 'text-ink-muted';
   const sign = n > 0 ? '+' : '';
   return (

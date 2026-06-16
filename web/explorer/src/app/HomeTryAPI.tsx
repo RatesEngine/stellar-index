@@ -188,7 +188,7 @@ export function HomeTryAPI() {
             aria-label="Run live"
             onClick={runLive}
             disabled={running}
-            className="rounded p-1 text-ink-faint hover:bg-ink hover:text-emerald-400 disabled:opacity-50"
+            className="rounded p-1 text-ink-faint hover:bg-ink hover:text-up disabled:opacity-50"
           >
             <Play className="h-3.5 w-3.5" />
           </button>
@@ -219,8 +219,8 @@ export function HomeTryAPI() {
           <div
             className={`flex items-center justify-between px-3 py-1 text-[10px] uppercase tracking-wider ${
               responseTone === 'ok'
-                ? 'bg-emerald-100/40 text-emerald-700'
-                : 'bg-rose-100/40 text-rose-700'
+                ? 'bg-up-subtle/40 text-up'
+                : 'bg-down-subtle/40 text-down'
             }`}
           >
             <span>response</span>

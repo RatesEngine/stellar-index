@@ -95,8 +95,8 @@ export function ReferencePriceAggregators() {
                   <span
                     className={`inline-block rounded px-1.5 py-0.5 text-[10px] uppercase tracking-wider ${
                       s.paid
-                        ? 'bg-amber-100 text-amber-800'
-                        : 'bg-emerald-100 text-emerald-800'
+                        ? 'bg-warn-50 text-warn-700'
+                        : 'bg-up-subtle text-up-strong'
                     }`}
                   >
                     {s.paid ? 'Paid feed' : 'Free tier'}

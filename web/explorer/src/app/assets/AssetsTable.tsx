@@ -116,7 +116,7 @@ export function AssetsTable({
 
   if (isError) {
     return (
-      <div className="rounded-md border border-red-200 bg-red-50 p-4 text-sm text-red-800">
+      <div className="rounded-md border border-bad-300 bg-bad-50 p-4 text-sm text-bad-700">
         Failed to load assets: {error instanceof Error ? error.message : 'unknown error'}
       </div>
     );
@@ -332,7 +332,7 @@ function AssetRow({
                 xmlns="http://www.w3.org/2000/svg"
                 viewBox="0 0 20 20"
                 fill="currentColor"
-                className="h-3.5 w-3.5 text-emerald-600"
+                className="h-3.5 w-3.5 text-up"
                 aria-hidden="true"
               >
                 <path
@@ -409,10 +409,10 @@ function ClassBadge({ cls }: { cls?: string }) {
   }
   const tone =
     cls === 'fiat'
-      ? 'bg-amber-50 text-amber-700'
+      ? 'bg-warn-50 text-warn-700'
       : cls === 'stablecoin'
-        ? 'bg-emerald-50 text-emerald-700'
-        : 'bg-sky-50 text-sky-700';
+        ? 'bg-up-subtle text-up'
+        : 'bg-brand-50 text-brand-700';
   const label =
     cls === 'fiat' ? 'Fiat' : cls === 'stablecoin' ? 'Stablecoin' : 'Crypto';
   return (
@@ -547,9 +547,9 @@ function ChangePct({ raw }: { raw: string | null | undefined }) {
   if (!Number.isFinite(n)) return <Dash />;
   const tone =
     n > 0
-      ? 'text-emerald-600'
+      ? 'text-up'
       : n < 0
-        ? 'text-rose-600'
+        ? 'text-down'
         : 'text-ink-muted';
   const sign = n > 0 ? '+' : '';
   return (

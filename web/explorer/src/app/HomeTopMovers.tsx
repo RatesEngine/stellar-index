@@ -69,7 +69,7 @@ function MoverColumn({
   return (
     <div className="overflow-hidden rounded-md border border-line bg-surface">
       <header className="flex items-baseline justify-between border-b border-line bg-surface-muted px-4 py-2 text-[11px] uppercase tracking-wider text-ink-muted">
-        <span className={tone === 'up' ? 'text-emerald-700' : 'text-rose-700'}>
+        <span className={tone === 'up' ? 'text-up' : 'text-down'}>
           {title}
         </span>
         <span>24h</span>
@@ -104,7 +104,7 @@ function MoverColumn({
                       xmlns="http://www.w3.org/2000/svg"
                       viewBox="0 0 20 20"
                       fill="currentColor"
-                      className="h-3 w-3 text-emerald-600"
+                      className="h-3 w-3 text-up"
                       aria-hidden="true"
                     >
                       <path
@@ -124,8 +124,8 @@ function MoverColumn({
               <span
                 className={`font-mono tabular-nums text-xs ${
                   Number(c.change_24h_pct) > 0
-                    ? 'text-emerald-600'
-                    : 'text-rose-600'
+                    ? 'text-up'
+                    : 'text-down'
                 }`}
               >
                 {Number(c.change_24h_pct) > 0 ? '+' : ''}

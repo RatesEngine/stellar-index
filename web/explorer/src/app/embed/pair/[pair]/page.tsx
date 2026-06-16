@@ -187,9 +187,9 @@ function ChangeChip({ pct, label }: { pct: number | null | undefined; label: str
   if (pct == null || !Number.isFinite(pct)) return null;
   const cls =
     pct > 0
-      ? 'bg-emerald-50 text-emerald-700'
+      ? 'bg-up-subtle text-up'
       : pct < 0
-        ? 'bg-rose-50 text-rose-700'
+        ? 'bg-down-subtle text-down'
         : 'bg-surface-subtle text-ink-body';
   return (
     <span className={`rounded px-1.5 py-0.5 font-mono text-[11px] tabular-nums ${cls}`}>

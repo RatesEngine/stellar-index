@@ -214,7 +214,7 @@ export function AccountDashboard() {
 
   if (state.kind === 'error') {
     return (
-      <div className="space-y-3 rounded-md border border-red-200 bg-red-50 p-4 text-sm text-red-800">
+      <div className="space-y-3 rounded-md border border-bad-300 bg-bad-50 p-4 text-sm text-bad-700">
         <div className="flex items-center gap-2 font-medium">
           <AlertCircle className="h-4 w-4" />
           Couldn&apos;t load your account
@@ -223,7 +223,7 @@ export function AccountDashboard() {
         <button
           type="button"
           onClick={() => void refresh()}
-          className="rounded-md border border-red-300 px-3 py-1 text-xs hover:bg-red-100"
+          className="rounded-md border border-bad-300 px-3 py-1 text-xs hover:bg-bad-50"
         >
           Retry
         </button>
@@ -266,8 +266,8 @@ export function AccountDashboard() {
       </div>
 
       {mintedKey && (
-        <div className="space-y-3 rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-sm">
-          <div className="flex items-center gap-2 font-medium text-emerald-900">
+        <div className="space-y-3 rounded-xl border border-up/30 bg-up-subtle p-4 text-sm">
+          <div className="flex items-center gap-2 font-medium text-up-strong">
             <CheckCircle2 className="h-4 w-4" />
             New API key minted — copy it now, you won&apos;t see it again.
           </div>
@@ -280,7 +280,7 @@ export function AccountDashboard() {
               aria-label="Copy"
             >
               {copied === 'minted' ? (
-                <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600" />
+                <CheckCircle2 className="h-3.5 w-3.5 text-up" />
               ) : (
                 <Copy className="h-3.5 w-3.5" />
               )}
@@ -337,7 +337,7 @@ export function AccountDashboard() {
                 Cancel
               </button>
             </div>
-            {mintError && <div className="text-xs text-red-600">{mintError}</div>}
+            {mintError && <div className="text-xs text-bad-700">{mintError}</div>}
           </form>
         )}
 
@@ -409,7 +409,7 @@ function RevokeButton({ keyID, onRevoked }: { keyID: string; onRevoked: () => vo
 
   if (error) {
     return (
-      <span className="text-[11px] text-red-600">
+      <span className="text-[11px] text-bad-700">
         {error}
         <button
           type="button"
@@ -426,7 +426,7 @@ function RevokeButton({ keyID, onRevoked }: { keyID: string; onRevoked: () => vo
       <button
         type="button"
         onClick={() => setConfirming(true)}
-        className="rounded-md border border-line px-2 py-1 text-[11px] text-ink-body hover:border-rose-400 hover:text-rose-600"
+        className="rounded-md border border-line px-2 py-1 text-[11px] text-ink-body hover:border-down/40 hover:text-down"
       >
         Revoke
       </button>
@@ -439,7 +439,7 @@ function RevokeButton({ keyID, onRevoked }: { keyID: string; onRevoked: () => vo
         type="button"
         onClick={handleRevoke}
         disabled={busy}
-        className="rounded-md bg-rose-600 px-2 py-1 font-medium text-white hover:bg-rose-700 disabled:opacity-50"
+        className="rounded-md bg-down px-2 py-1 font-medium text-white hover:bg-down-strong disabled:opacity-50"
       >
         {busy ? 'Revoking…' : 'Yes, revoke'}
       </button>

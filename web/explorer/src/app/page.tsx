@@ -1,6 +1,7 @@
 import Link from 'next/link';
-import { ArrowRight } from 'lucide-react';
+import { ArrowRight, Activity } from 'lucide-react';
 
+import { ButtonLink, Container } from '@/components/ui';
 import { HomeBlogStrip } from './HomeBlogStrip';
 import { HomeCurrencies } from './HomeCurrencies';
 import { NetworkLivePanel, SystemHealthLivePanel } from './HomeLivePanels';
@@ -14,59 +15,35 @@ import { HomeTryAPI } from './HomeTryAPI';
 
 export default function HomePage() {
   return (
-    <div className="mx-auto max-w-7xl space-y-12 px-6 py-10">
-      <header className="space-y-4 pb-2 pt-4">
-        <p className="font-mono text-xs uppercase tracking-widest text-brand-600">
+    <Container className="space-y-12 py-10 sm:py-14">
+      <header className="max-w-3xl space-y-5">
+        <p className="inline-flex items-center gap-2 rounded-full border border-line bg-surface px-3 py-1 text-xs font-medium text-ink-muted">
+          <span className="h-1.5 w-1.5 rounded-full bg-up" />
           Independent · open · public-tier free
         </p>
-        <h1 className="text-4xl font-semibold tracking-tight md:text-5xl">
+        <h1 className="text-display-sm font-semibold text-ink md:text-display">
           The protocol explorer for the Stellar network.
         </h1>
-        <p className="max-w-2xl text-base text-ink-body md:text-lg">
-          Stellar Index captures every contract, every event, and every
-          trade across Stellar protocols — CEXes, on-chain DEXes, and
-          lending protocols — and serves verified per-protocol data plus a
-          single VWAP price through a public REST API, alongside live world
-          fiat rates. Every panel below shows the exact API call that
-          produced it.
+        <p className="max-w-2xl text-lg leading-relaxed text-ink-muted">
+          Every contract, every event, and every trade across Stellar
+          protocols — CEXes, on-chain DEXes, and lending — served as verified
+          per-protocol data plus a single VWAP price through a public REST
+          API, alongside live world fiat rates. Every panel below shows the
+          exact API call that produced it.
         </p>
-        <div className="flex flex-wrap gap-3 pt-2">
-          <Link
-            href="/assets"
-            className="inline-flex items-center gap-1.5 rounded-md bg-brand-600 px-3.5 py-2 text-sm font-medium text-white hover:bg-brand-700"
-          >
+        <div className="flex flex-wrap items-center gap-3 pt-1">
+          <ButtonLink href="/assets" size="lg">
             Browse assets
-            <ArrowRight className="h-3.5 w-3.5" />
-          </Link>
-          <Link
-            href="/assets"
-            className="inline-flex items-center gap-1.5 rounded-md border border-line-strong px-3.5 py-2 text-sm font-medium text-ink-body hover:border-brand-500 hover:text-brand-600"
-          >
-            World currencies
-          </Link>
-          <Link
-            href="/exchanges"
-            className="inline-flex items-center gap-1.5 rounded-md border border-line-strong px-3.5 py-2 text-sm font-medium text-ink-body hover:border-brand-500 hover:text-brand-600"
-          >
-            Connected exchanges
-          </Link>
-          <a
-            href="https://docs.stellarindex.io"
-            className="inline-flex items-center gap-1.5 rounded-md border border-line-strong px-3.5 py-2 text-sm font-medium text-ink-body hover:border-brand-500 hover:text-brand-600"
-          >
+            <ArrowRight className="h-4 w-4" />
+          </ButtonLink>
+          <ButtonLink href="https://docs.stellarindex.io" variant="secondary" size="lg">
             API docs
-          </a>
+          </ButtonLink>
           <Link
             href="/methodology"
-            className="inline-flex items-center gap-1.5 rounded-md border border-line-strong px-3.5 py-2 text-sm font-medium text-ink-body hover:border-brand-500 hover:text-brand-600"
+            className="px-2 text-sm font-medium text-ink-muted transition-colors hover:text-brand-600"
           >
-            Read methodology
-          </Link>
-          <Link
-            href="/signup"
-            className="inline-flex items-center gap-1.5 rounded-md border border-line-strong px-3.5 py-2 text-sm font-medium text-ink-body hover:border-brand-500 hover:text-brand-600"
-          >
-            Create account
+            How it works →
           </Link>
         </div>
       </header>
@@ -78,22 +55,24 @@ export default function HomePage() {
         <SystemHealthLivePanel />
         <Link
           href="/diagnostics"
-          className="flex h-full flex-col justify-between rounded-xl border border-line bg-surface p-4 text-sm shadow-sm hover:border-brand-500"
+          className="group flex h-full flex-col justify-between rounded-card border border-line bg-surface p-5 shadow-card transition-all hover:border-line-strong hover:shadow-elevated"
         >
           <div>
-            <p className="text-[11px] font-medium uppercase tracking-wider text-ink-muted">
+            <p className="flex items-center gap-1.5 text-[11px] font-medium uppercase tracking-wider text-ink-muted">
+              <Activity className="h-3.5 w-3.5 text-ink-faint" />
               Diagnostics
             </p>
-            <p className="mt-2 text-xl font-semibold tracking-tight">
+            <p className="mt-2 text-h3 font-semibold text-ink">
               Watch the indexer tick.
             </p>
-            <p className="mt-1 text-xs text-ink-muted">
-              Per-source ingest cursors, refreshed every 15 seconds. See
+            <p className="mt-1 text-sm text-ink-muted">
+              Per-source ingest cursors, refreshed every 15 seconds — see
               every backfill chunk advance in real time.
             </p>
           </div>
-          <p className="mt-3 inline-flex items-center gap-1 text-xs text-brand-600">
-            Open diagnostics <ArrowRight className="h-3 w-3" />
+          <p className="mt-4 inline-flex items-center gap-1 text-sm font-medium text-brand-600">
+            Open diagnostics{' '}
+            <ArrowRight className="h-3.5 w-3.5 transition-transform group-hover:translate-x-0.5" />
           </p>
         </Link>
       </section>
@@ -112,18 +91,16 @@ export default function HomePage() {
 
       <HomeBlogStrip />
 
-      <section className="space-y-3">
+      <section className="space-y-4">
         <div className="space-y-1">
-          <h2 className="text-2xl font-semibold tracking-tight">
-            Try the API
-          </h2>
-          <p className="text-sm text-ink-body">
+          <h2 className="text-h2 font-semibold text-ink">Try the API</h2>
+          <p className="text-[15px] text-ink-muted">
             Public, no auth, no API key. Pick an example and paste it
             straight into a terminal.
           </p>
         </div>
         <HomeTryAPI />
       </section>
-    </div>
+    </Container>
   );
 }
