@@ -249,16 +249,30 @@ type CAGGCoverage struct {
 // index. Empty when the CAGG has not yet been materialised at all
 // (cold-start before any aggregator tick).
 func (s *Store) CAGGCoverageStats(ctx context.Context) (CAGGCoverage, error) {
-	const q = `SELECT MIN(bucket), MAX(bucket), COUNT(*) FROM prices_1h`
+	// MIN/MAX use the bucket index (~100ms on r1). The exact COUNT(*)
+	// over prices_1h was a full scan that grew to ~36s as the CAGG accrued
+	// ~175M rows (1h OHLC back to 2015) — and /v1/diagnostics/ingestion
+	// polls this every ~15s, so it hammered Postgres and tripped
+	// parallel-worker churn (the recurring "terminating parallel worker"
+	// log flood). BucketCount is a coverage stat, so TimescaleDB's
+	// chunk-metadata approximate_row_count (≈0.03% error on r1, instant)
+	// is more than precise enough and removes the scan.
+	const minMaxQ = `SELECT MIN(bucket), MAX(bucket) FROM prices_1h`
+	const countQ = `SELECT approximate_row_count('prices_1h')`
 	var (
 		minB, maxB sql.NullTime
 		count      int64
 	)
-	if err := s.db.QueryRowContext(ctx, q).Scan(&minB, &maxB, &count); err != nil {
+	if err := s.db.QueryRowContext(ctx, minMaxQ).Scan(&minB, &maxB); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return CAGGCoverage{}, nil
 		}
 		return CAGGCoverage{}, err
+	}
+	// A failed/unsupported approximate_row_count is non-fatal: the
+	// earliest/latest buckets still answer the coverage question.
+	if err := s.db.QueryRowContext(ctx, countQ).Scan(&count); err != nil {
+		count = 0
 	}
 	out := CAGGCoverage{BucketCount: count}
 	if minB.Valid {

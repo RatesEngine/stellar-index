@@ -220,8 +220,13 @@ var DefaultGapDetectorTargets = []GapDetectorTarget{
 	// activation. Same lower bound as sep41-transfers. Long
 	// ScanCadence: 50M+ rows, scan dominates postgres for 5+ min
 	// per cycle so 30 min cadence starves trade-insert latency
-	// (live r1 incident 2026-05-29 → /goal directive).
-	{Source: "soroban-events", Table: "soroban_events", LedgerColumn: "ledger", Genesis: 50_457_424, ScanCadence: 6 * time.Hour},
+	// (live r1 incident 2026-05-29 → /goal directive). 2026-06-16: the
+	// early Soroban era (just after genesis 50,457,424) is sparse —
+	// observed natural max gap 47,869 ledgers on r1 while recent data is
+	// dense (370M+ rows past L62M of 3.36B total). 100K override
+	// (~5.8 days) silences early-era sparsity; a recent writer wedge is
+	// caught faster by the per-projected-source targets + completeness.
+	{Source: "soroban-events", Table: "soroban_events", LedgerColumn: "ledger", Genesis: 50_457_424, ScanCadence: 6 * time.Hour, MinGapSizeOverride: 100000},
 	// SDEX is classic-DEX and does NOT flow through soroban_events.
 	// Its rows live in the unified `trades` hypertable alongside
 	// every other trade-emitting source; the WhereFilter slices
