@@ -51,8 +51,20 @@ groups:
             through {{ $labels.endpoint }}-specific diagnostics, then
             general API-latency triage.
 
+      # Per-endpoint thresholds: the RFP 30s freshness target applies to
+      # the TIP endpoint (/price/tip serves the open/in-progress bucket —
+      # observed ~4s on r1, comfortably under 30s). The plain /price
+      # endpoint serves the last CLOSED 1-minute bucket by design
+      # (ADR-0015 closed-bucket serving), so its freshness is structurally
+      # ~60-120s (observed max 119s) — that is NOT staleness, it is the
+      # consistency contract. Paging /price at 30s fired permanently on a
+      # healthy system; it pages at 180s instead (above the structural
+      # envelope) to catch a genuine aggregator→Redis→API stall.
       - alert: stellarindex_sla_probe_freshness_breach
-        expr: stellarindex_sla_probe_freshness_sec > 30
+        expr: |
+          stellarindex_sla_probe_freshness_sec{endpoint="price-tip"} > 30
+          or
+          stellarindex_sla_probe_freshness_sec{endpoint!="price-tip"} > 180
         for: 30m
         labels:
           severity: page
@@ -60,15 +72,14 @@ groups:
           component: api
           runbook_url: https://github.com/StellarIndex/stellar-index/blob/main/docs/operations/runbooks/sla-probe-freshness-breach.md
         annotations:
-          summary: "{{ $labels.endpoint }} price freshness {{ $value }}s exceeds RFP target (30s) sustained 30m"
+          summary: "{{ $labels.endpoint }} price freshness {{ $value }}s exceeds its target (tip: 30s RFP / closed-bucket /price: 180s structural)"
           description: |
-            The SLA probe's median observed_at freshness for
-            {{ $labels.endpoint }} has been > 30 s for ≥ 30 minutes.
-            Pricing data is going stale — consumers gating on
-            `flags.stale` may be backing off, but the wire contract
-            says the field is < 30 s for healthy operation. Runbook:
-            check aggregator → Redis → API path; bisect by which
-            stage's `observed_at` is lagging.
+            The SLA probe's observed_at freshness for {{ $labels.endpoint }}
+            has breached its target for ≥ 30 minutes. /price/tip is the
+            RFP-tracked fresh endpoint (target 30s); /price serves the last
+            closed 1-minute bucket so its bound is the 180s structural-stall
+            threshold, not 30s. Runbook: check the aggregator → Redis → API
+            path; bisect by which stage's `observed_at` is lagging.
 
       - alert: stellarindex_sla_probe_unit_failed_alert
         expr: stellarindex_sla_probe_unit_failed > 0

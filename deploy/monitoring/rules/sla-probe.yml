@@ -51,8 +51,15 @@ groups:
             through {{ $labels.endpoint }}-specific diagnostics, then
             general API-latency triage.
 
+      # Per-endpoint: 30s RFP applies to /price/tip (open bucket, ~4s);
+      # /price serves the last CLOSED 1-min bucket (ADR-0015) so its
+      # freshness is structurally ~60-120s — page it at 180s (genuine
+      # stall), not 30s (which fired permanently on a healthy system).
       - alert: stellarindex_sla_probe_freshness_breach
-        expr: stellarindex_sla_probe_freshness_sec > 30
+        expr: |
+          stellarindex_sla_probe_freshness_sec{endpoint="price-tip"} > 30
+          or
+          stellarindex_sla_probe_freshness_sec{endpoint!="price-tip"} > 180
         for: 30m
         labels:
           severity: page
