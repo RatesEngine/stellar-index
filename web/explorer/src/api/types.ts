@@ -103,28 +103,37 @@ export interface paths {
             };
             requestBody?: never;
             responses: {
-                /** @description Ready to serve. `checks[]` lists each dependency-ping result. */
+                /**
+                 * @description Ready to serve. `data.checks[]` lists each
+                 *     dependency-ping result. `data.status` is `ok` when
+                 *     every check passed, or `degraded` when a NON-critical
+                 *     dependency failed (the API still serves via fallback —
+                 *     e.g. Timescale covers a Redis cache miss per ADR-0007 —
+                 *     so the backend stays in the load-balancer pool;
+                 *     `flags.stale` is `true` in the degraded case).
+                 */
                 200: {
                     headers: {
                         [name: string]: unknown;
                     };
                     content: {
-                        "application/json": components["schemas"]["HealthResponse"];
+                        "application/json": components["schemas"]["ReadyEnvelope"];
                     };
                 };
                 /**
-                 * @description One or more serving-plane dependencies failed their
-                 *     ping under the deadline. `status` field is
-                 *     `degraded` and `flags.stale` is `true`; the
-                 *     response body carries the `checks` array so
-                 *     operators can see which dependency failed.
+                 * @description One or more CRITICAL serving-plane dependencies failed
+                 *     their ping under the deadline. The response is the same
+                 *     enveloped `ReadyResponse` shape as the 200 (NOT
+                 *     problem+json): `data.status` is `unready`, `flags.stale`
+                 *     is `true`, and `data.checks[]` carries the per-dependency
+                 *     breakdown so operators can see which dependency failed.
                  */
                 503: {
                     headers: {
                         [name: string]: unknown;
                     };
                     content: {
-                        "application/problem+json": components["schemas"]["Problem"];
+                        "application/json": components["schemas"]["ReadyEnvelope"];
                     };
                 };
             };
@@ -285,15 +294,14 @@ export interface paths {
         /**
          * List indexed assets.
          * @description Paginated list of every asset that has appeared (as base or
-         *     quote) in the trades hypertable. Cursor is opaque; limit
-         *     clamped server-side to [1, 500].
+         *     quote) in the trades hypertable. Cursor is opaque; `limit` is
+         *     rejected with 400 when outside [1, 500] (NOT clamped).
          *
-         *     The `type` / `code` / `issuer` filter params are planned but
-         *     not yet implemented — the current handler ignores any filter
-         *     params and returns the unfiltered page. See the TypeFilter,
-         *     CodeFilter, IssuerFilter schemas below for the planned
-         *     shape; they are not wired to any request until the filter
-         *     path ships.
+         *     The `asset_class` query param is the major dispatch (see its
+         *     own parameter below): `fiat` / `stablecoin` / `crypto` serve
+         *     a class-filtered view from the verified-currency catalogue;
+         *     `all` returns the unified cross-class listing; omitting it
+         *     returns the legacy classic-assets page.
          */
         get: {
             parameters: {
@@ -311,6 +319,20 @@ export interface paths {
                      */
                     cursor?: components["parameters"]["Cursor"];
                     limit?: components["parameters"]["Limit"];
+                    /**
+                     * @description Major dispatch for the listing. One of:
+                     *     - `fiat` — fiat currencies from the verified-currency catalogue.
+                     *     - `stablecoin` — fiat-pegged stablecoins from the catalogue.
+                     *     - `crypto` — cryptocurrencies from the catalogue. The
+                     *       aliases `blockchain`, `cryptocurrency`, and
+                     *       `cryptocurrencies` fold to `crypto` (the explorer's
+                     *       filter-chip label).
+                     *     - `all` — the unified cross-class listing (every catalogue
+                     *       class plus indexed Stellar assets).
+                     *
+                     *     Omitted: the legacy classic-assets page (unfiltered).
+                     */
+                    asset_class?: "fiat" | "stablecoin" | "crypto" | "blockchain" | "cryptocurrency" | "cryptocurrencies" | "all";
                     /**
                      * @description Filter the listing to assets minted by the supplied
                      *     issuer G-strkey. Sourced from the same ListCoinsExt
@@ -604,6 +626,67 @@ export interface paths {
                     };
                 };
                 404: components["responses"]["NotFound"];
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/assets/{asset_id}/supply": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Live per-token supply (mint − burn − clawback).
+         * @description Real-time total supply for any token, summed from the ClickHouse
+         *     `supply_flows` lake (decode-at-ingest, ADR-0034): Σmint − Σburn −
+         *     Σclawback over all history, kept current by the indexer's dual-sink
+         *     with no rollup refresh. Amounts are decimal strings in the asset's
+         *     smallest unit (ADR-0003); clients apply per-asset decimals for display.
+         *
+         *     Resolution: a Soroban contract id (`C…`) is used directly; a classic
+         *     asset (`CODE-ISSUER`) resolves to its Stellar-Asset-Contract via the
+         *     operator's configured SAC wrappers (404 if unmapped); `native` / `XLM`
+         *     returns the ledger header's `total_coins`
+         *     (`source=ledger_total_coins`), since XLM has no SAC mint/burn events.
+         */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    /**
+                     * @description Canonical asset identifier. One of `native`, `<code>-<issuer>`,
+                     *     `<code>:<issuer>` (alias), or `<contract_id>`. Strkeys
+                     *     validated per SEP-23. The handler is strict — short symbols
+                     *     like `XLM` or `USDC` are NOT accepted here; use `native` or
+                     *     the full `<code>-<G…>` form.
+                     * @example native
+                     */
+                    asset_id: components["parameters"]["AssetIdPath"];
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Live supply. */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["AssetSupplyEnvelope"];
+                    };
+                };
+                404: components["responses"]["NotFound"];
+                503: components["responses"]["ServiceUnavailable"];
             };
         };
         put?: never;
@@ -1240,13 +1323,14 @@ export interface paths {
                      */
                     base: components["parameters"]["Base"];
                     /**
-                     * @description Quote-side asset. Either a canonical asset identifier (`native`,
-                     *     `<code>-<issuer>`, contract ID) for crypto-quoted pairs, or
-                     *     the `fiat:<ISO-4217>` form for fiat quotes (e.g. `fiat:USD`,
-                     *     `fiat:EUR`). Default `fiat:USD`.
+                     * @description Quote-side asset (REQUIRED on this endpoint). Either a
+                     *     canonical asset identifier (`native`, `<code>-<issuer>`,
+                     *     contract ID) or the `fiat:<ISO-4217>` form (e.g. `fiat:USD`,
+                     *     `fiat:EUR`). Unlike the `/price` family, this endpoint does
+                     *     NOT default the quote — omitting it returns 400.
                      * @example fiat:USD
                      */
-                    quote?: components["parameters"]["Quote"];
+                    quote: components["parameters"]["QuoteRequired"];
                     from?: components["parameters"]["From"];
                     to?: components["parameters"]["To"];
                     limit?: number;
@@ -1458,21 +1542,37 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * Single OHLC bar for a pair over a window.
-         * @description Single-bar response for the window [from, to). Interval-series
-         *     (N bars, each interval-seconds wide) is a follow-up —
-         *     delivered via the aggregator's continuous-aggregate path.
+         * OHLC bar (single window or multi-bar series) for a pair.
+         * @description Two modes share this route — selected by the presence of the
+         *     `interval` query parameter:
          *
-         *     Defaults: `from = to - 1h`, `to = now`. `truncated=true` on
-         *     the response means the window had more trades than the
-         *     server's per-request cap (10000) and the bar reflects only
-         *     the chronologically-first N; narrow the window or wait for
-         *     CAGG-backed endpoints.
+         *     1. **Single-bar (default — back-compat)**: no `interval`. Returns
+         *        one OHLC bar (`OHLCBar`) for the window `[from, to)` computed
+         *        from raw trades. Single-bar mode 404s on an empty window.
+         *        `truncated=true` means the window exceeded the per-request cap
+         *        (10000 trades) and the bar reflects only the first N.
+         *        `outlier_sigma` (default 4σ) drops dust before bar computation;
+         *        `outlier_sigma=0` to opt into raw extremes.
          *
-         *     High/Low have no statistical robustness — a single dust
-         *     trade can dominate. The `outlier_sigma` filter (default 4σ)
-         *     drops outliers before bar computation; pass `outlier_sigma=0`
-         *     to opt into raw extremes.
+         *        Defaults: `from = to - 1h`, `to = now` (clamped to the
+         *        previous 30 s closed-bucket boundary per ADR-0015).
+         *
+         *     2. **Multi-bar series (CG/CMC parity, F-0071)**: `interval` is
+         *        one of `1m`, `5m`, `15m`, `30m`, `1h`, `4h`, `1d`, `1w`.
+         *        Returns `OHLCSeriesResponse` — an `intervals[]` array of
+         *        closed CAGG-backed bars sourced from `prices_<N>`. The
+         *        in-progress bucket is excluded (closed-bucket guard).
+         *        `limit` clamps the bar count (default 100, max 1000).
+         *        Empty window returns 200 + `{intervals: []}` (NOT 404 —
+         *        series clients expect a stable shape across pairs/windows).
+         *
+         *        Defaults (series mode):
+         *          - `to`   = now snapped DOWN to the interval's UTC boundary
+         *            (1m → :00, 1h → top of hour, 1d → 00:00 UTC).
+         *          - `from` = `to - limit * interval`.
+         *
+         *        5m, 30m, and 4h are CAGG-re-bucketed from finer-grain
+         *        continuous aggregates (5m/30m ← prices_1m, 4h ← prices_1h).
          */
         get: {
             parameters: {
@@ -1487,16 +1587,29 @@ export interface paths {
                      */
                     base: components["parameters"]["Base"];
                     /**
-                     * @description Quote-side asset. Either a canonical asset identifier (`native`,
-                     *     `<code>-<issuer>`, contract ID) for crypto-quoted pairs, or
-                     *     the `fiat:<ISO-4217>` form for fiat quotes (e.g. `fiat:USD`,
-                     *     `fiat:EUR`). Default `fiat:USD`.
+                     * @description Quote-side asset (REQUIRED on this endpoint). Either a
+                     *     canonical asset identifier (`native`, `<code>-<issuer>`,
+                     *     contract ID) or the `fiat:<ISO-4217>` form (e.g. `fiat:USD`,
+                     *     `fiat:EUR`). Unlike the `/price` family, this endpoint does
+                     *     NOT default the quote — omitting it returns 400.
                      * @example fiat:USD
                      */
-                    quote?: components["parameters"]["Quote"];
+                    quote: components["parameters"]["QuoteRequired"];
                     from?: components["parameters"]["From"];
                     to?: components["parameters"]["To"];
-                    /** @description Drop trades > N σ from window mean before computing the bar. Default 4σ. Pass 0 to disable (raw extremes, including dust). */
+                    /**
+                     * @description Bar width for multi-bar series mode. Omit for the
+                     *     single-bar response over `[from, to)`. Invalid intervals
+                     *     return 400 `errors/invalid-interval`.
+                     */
+                    interval?: "1m" | "5m" | "15m" | "30m" | "1h" | "4h" | "1d" | "1w";
+                    /**
+                     * @description Series-mode bar count (max 1000, default 100). Ignored in
+                     *     single-bar mode. Invalid values return 400
+                     *     `errors/limit-too-large`.
+                     */
+                    limit?: number;
+                    /** @description Drop trades > N σ from window mean before computing the bar (single-bar mode only). Default 4σ. Pass 0 to disable. */
                     outlier_sigma?: number;
                 };
                 header?: never;
@@ -1505,17 +1618,33 @@ export interface paths {
             };
             requestBody?: never;
             responses: {
-                /** @description Single OHLC bar. */
+                /**
+                 * @description OHLC response. Wire shape depends on mode:
+                 *     single-bar (no `interval`) returns `OHLCEnvelope`;
+                 *     multi-bar (`interval` set) returns
+                 *     `OHLCSeriesEnvelope`.
+                 */
                 200: {
                     headers: {
                         [name: string]: unknown;
                     };
                     content: {
-                        "application/json": components["schemas"]["OHLCEnvelope"];
+                        "application/json": components["schemas"]["OHLCEnvelope"] | components["schemas"]["OHLCSeriesEnvelope"];
                     };
                 };
                 400: components["responses"]["BadRequest"];
-                404: components["responses"]["NotFound"];
+                /**
+                 * @description Single-bar mode only — no trades in window. Series mode
+                 *     returns 200 with `intervals: []` instead.
+                 */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["Problem"];
+                    };
+                };
                 429: components["responses"]["RateLimited"];
                 500: components["responses"]["InternalError"];
                 503: components["responses"]["ServiceUnavailable"];
@@ -1559,13 +1688,14 @@ export interface paths {
                      */
                     base: components["parameters"]["Base"];
                     /**
-                     * @description Quote-side asset. Either a canonical asset identifier (`native`,
-                     *     `<code>-<issuer>`, contract ID) for crypto-quoted pairs, or
-                     *     the `fiat:<ISO-4217>` form for fiat quotes (e.g. `fiat:USD`,
-                     *     `fiat:EUR`). Default `fiat:USD`.
+                     * @description Quote-side asset (REQUIRED on this endpoint). Either a
+                     *     canonical asset identifier (`native`, `<code>-<issuer>`,
+                     *     contract ID) or the `fiat:<ISO-4217>` form (e.g. `fiat:USD`,
+                     *     `fiat:EUR`). Unlike the `/price` family, this endpoint does
+                     *     NOT default the quote — omitting it returns 400.
                      * @example fiat:USD
                      */
-                    quote?: components["parameters"]["Quote"];
+                    quote: components["parameters"]["QuoteRequired"];
                     from?: components["parameters"]["From"];
                     to?: components["parameters"]["To"];
                     /** @description Drop trades > N σ from window mean. 0 disables (default). */
@@ -1646,13 +1776,14 @@ export interface paths {
                      */
                     base: components["parameters"]["Base"];
                     /**
-                     * @description Quote-side asset. Either a canonical asset identifier (`native`,
-                     *     `<code>-<issuer>`, contract ID) for crypto-quoted pairs, or
-                     *     the `fiat:<ISO-4217>` form for fiat quotes (e.g. `fiat:USD`,
-                     *     `fiat:EUR`). Default `fiat:USD`.
+                     * @description Quote-side asset (REQUIRED on this endpoint). Either a
+                     *     canonical asset identifier (`native`, `<code>-<issuer>`,
+                     *     contract ID) or the `fiat:<ISO-4217>` form (e.g. `fiat:USD`,
+                     *     `fiat:EUR`). Unlike the `/price` family, this endpoint does
+                     *     NOT default the quote — omitting it returns 400.
                      * @example fiat:USD
                      */
-                    quote?: components["parameters"]["Quote"];
+                    quote: components["parameters"]["QuoteRequired"];
                     from?: components["parameters"]["From"];
                     to?: components["parameters"]["To"];
                 };
@@ -2124,28 +2255,30 @@ export interface paths {
             };
             requestBody?: never;
             responses: {
-                /** @description Array of issuer summaries. */
+                /** @description Array of issuer summaries (standard envelope; data is the array). */
                 200: {
                     headers: {
                         [name: string]: unknown;
                     };
                     content: {
-                        "application/json": {
-                            g_strkey: string;
-                            home_domain?: string;
-                            /**
-                             * @description Issuer's organisation name from SEP-1
-                             *     `[DOCUMENTATION].ORG_NAME`. Populated by
-                             *     the `stellarindex-ops sep1-refresh` job;
-                             *     empty until the issuer's stellar.toml
-                             *     has been resolved.
-                             */
-                            org_name?: string;
-                            /** Format: int64 */
-                            asset_count: number;
-                            /** Format: int64 */
-                            total_observation_count: number;
-                        }[];
+                        "application/json": components["schemas"]["EnvelopeMeta"] & {
+                            data: {
+                                g_strkey: string;
+                                home_domain?: string;
+                                /**
+                                 * @description Issuer's organisation name from SEP-1
+                                 *     `[DOCUMENTATION].ORG_NAME`. Populated by
+                                 *     the `stellarindex-ops sep1-refresh` job;
+                                 *     empty until the issuer's stellar.toml
+                                 *     has been resolved.
+                                 */
+                                org_name?: string;
+                                /** Format: int64 */
+                                asset_count: number;
+                                /** Format: int64 */
+                                total_observation_count: number;
+                            }[];
+                        };
                     };
                 };
                 400: components["responses"]["BadRequest"];
@@ -2192,45 +2325,138 @@ export interface paths {
             };
             requestBody?: never;
             responses: {
-                /** @description One issuer row plus issued-asset list. */
+                /** @description One issuer row plus issued-asset list (standard envelope). */
                 200: {
                     headers: {
                         [name: string]: unknown;
                     };
                     content: {
-                        "application/json": {
-                            g_strkey: string;
-                            home_domain?: string;
-                            /**
-                             * @description Issuer's organisation name from SEP-1
-                             *     `[DOCUMENTATION].ORG_NAME`. Same value the
-                             *     listing endpoint surfaces.
-                             */
-                            org_name?: string;
-                            auth_required?: boolean | null;
-                            auth_revocable?: boolean | null;
-                            auth_immutable?: boolean | null;
-                            auth_clawback?: boolean | null;
-                            /** Format: date-time */
-                            sep1_resolved_at?: string | null;
-                            sep1_payload?: {
-                                [key: string]: unknown;
-                            } | null;
-                            creation_ledger?: number | null;
-                            assets?: {
-                                asset_id?: string;
-                                code?: string;
-                                slug?: string;
-                                first_seen_ledger?: number;
-                                last_seen_ledger?: number;
-                                /** Format: int64 */
-                                observation_count?: number;
-                            }[];
+                        "application/json": components["schemas"]["EnvelopeMeta"] & {
+                            data: {
+                                g_strkey: string;
+                                home_domain?: string;
+                                /**
+                                 * @description Issuer's organisation name from SEP-1
+                                 *     `[DOCUMENTATION].ORG_NAME`. Same value the
+                                 *     listing endpoint surfaces.
+                                 */
+                                org_name?: string;
+                                auth_required?: boolean | null;
+                                auth_revocable?: boolean | null;
+                                auth_immutable?: boolean | null;
+                                auth_clawback?: boolean | null;
+                                /** Format: date-time */
+                                sep1_resolved_at?: string | null;
+                                sep1_payload?: {
+                                    [key: string]: unknown;
+                                } | null;
+                                creation_ledger?: number | null;
+                                assets?: {
+                                    asset_id?: string;
+                                    code?: string;
+                                    slug?: string;
+                                    first_seen_ledger?: number;
+                                    last_seen_ledger?: number;
+                                    /** Format: int64 */
+                                    observation_count?: number;
+                                }[];
+                            };
                         };
                     };
                 };
                 400: components["responses"]["BadRequest"];
                 404: components["responses"]["NotFound"];
+                429: components["responses"]["RateLimited"];
+                500: components["responses"]["InternalError"];
+                503: components["responses"]["ServiceUnavailable"];
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/contracts/{contract_id}/transfers": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Per-contract SEP-41 transfer audit trail.
+         * @description Returns the most-recent N (default 100, max 500)
+         *     audit-trail rows for the given SEP-41 token contract,
+         *     ordered newest-first. Includes every `transfer` /
+         *     `approve` / `set_admin` / `set_authorized` event the
+         *     decoder observed; `mint` / `burn` / `clawback` live
+         *     separately in supply analytics.
+         *
+         *     Powers the per-account net-position queries that
+         *     CoinGecko / CoinMarketCap structurally cannot offer —
+         *     they only see exchange-side flows, not on-chain
+         *     transfers.
+         *
+         *     F-0021 closure (audit-2026-05-26).
+         */
+        get: {
+            parameters: {
+                query?: {
+                    from?: string;
+                    to?: string;
+                    limit?: number;
+                };
+                header?: never;
+                path: {
+                    contract_id: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Per-contract audit-trail rows, newest-first (standard envelope). */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["EnvelopeMeta"] & {
+                            data: {
+                                contract_id: string;
+                                count: number;
+                                limit: number;
+                                from?: string;
+                                to?: string;
+                                transfers: {
+                                    ledger: number;
+                                    /** Format: date-time */
+                                    ledger_close_time: string;
+                                    tx_hash?: string;
+                                    op_index?: number;
+                                    event_index?: number;
+                                    /** @enum {string} */
+                                    event_kind: "transfer" | "approve" | "set_admin" | "set_authorized";
+                                    from?: string;
+                                    to?: string;
+                                    /**
+                                     * @description i128 amount as a decimal string (ADR-0003).
+                                     *     Populated for transfer + approve; omitted
+                                     *     for set_admin + set_authorized.
+                                     */
+                                    amount?: string;
+                                    /** @description approve.live_until_ledger. */
+                                    live_until_ledger?: number;
+                                    /** @description set_authorized.authorize. */
+                                    authorized?: boolean;
+                                }[];
+                            };
+                        };
+                    };
+                };
+                400: components["responses"]["BadRequest"];
                 429: components["responses"]["RateLimited"];
                 500: components["responses"]["InternalError"];
                 503: components["responses"]["ServiceUnavailable"];
@@ -2297,37 +2523,39 @@ export interface paths {
             };
             requestBody?: never;
             responses: {
-                /** @description One row from change_summary_5m. */
+                /** @description One row from change_summary_5m (standard envelope). */
                 200: {
                     headers: {
                         [name: string]: unknown;
                     };
                     content: {
-                        "application/json": {
-                            entity_type?: string;
-                            entity_id?: string;
-                            /** Format: date-time */
-                            refreshed_at?: string;
-                            current_value?: number;
-                            h1_value?: number | null;
-                            h1_delta_pct?: number | null;
-                            h24_value?: number | null;
-                            h24_delta_pct?: number | null;
-                            d7_value?: number | null;
-                            d7_delta_pct?: number | null;
-                            d30_value?: number | null;
-                            d30_delta_pct?: number | null;
-                            ath_value?: number | null;
-                            /** Format: date-time */
-                            ath_at?: string | null;
-                            atl_value?: number | null;
-                            /** Format: date-time */
-                            atl_at?: string | null;
-                            /** @enum {string|null} */
-                            streak_direction?: "up" | "down" | "flat" | null;
-                            streak_days?: number | null;
-                            /** @enum {string|null} */
-                            acceleration?: "increasing" | "flat" | "decreasing" | null;
+                        "application/json": components["schemas"]["EnvelopeMeta"] & {
+                            data: {
+                                entity_type?: string;
+                                entity_id?: string;
+                                /** Format: date-time */
+                                refreshed_at?: string;
+                                current_value?: number;
+                                h1_value?: number | null;
+                                h1_delta_pct?: number | null;
+                                h24_value?: number | null;
+                                h24_delta_pct?: number | null;
+                                d7_value?: number | null;
+                                d7_delta_pct?: number | null;
+                                d30_value?: number | null;
+                                d30_delta_pct?: number | null;
+                                ath_value?: number | null;
+                                /** Format: date-time */
+                                ath_at?: string | null;
+                                atl_value?: number | null;
+                                /** Format: date-time */
+                                atl_at?: string | null;
+                                /** @enum {string|null} */
+                                streak_direction?: "up" | "down" | "flat" | null;
+                                streak_days?: number | null;
+                                /** @enum {string|null} */
+                                acceleration?: "increasing" | "flat" | "decreasing" | null;
+                            };
                         };
                     };
                 };
@@ -2420,21 +2648,23 @@ export interface paths {
             };
             requestBody?: never;
             responses: {
-                /** @description Array of cursor entries, one per (source, sub_source). */
+                /** @description Array of cursor entries, one per (source, sub_source) (standard envelope; data is the array). */
                 200: {
                     headers: {
                         [name: string]: unknown;
                     };
                     content: {
-                        "application/json": {
-                            source: string;
-                            sub_source?: string;
-                            last_ledger: number;
-                            /** Format: date-time */
-                            last_updated: string;
-                            /** Format: int64 */
-                            lag_seconds: number;
-                        }[];
+                        "application/json": components["schemas"]["EnvelopeMeta"] & {
+                            data: {
+                                source: string;
+                                sub_source?: string;
+                                last_ledger: number;
+                                /** Format: date-time */
+                                last_updated: string;
+                                /** Format: int64 */
+                                lag_seconds: number;
+                            }[];
+                        };
                     };
                 };
                 /**
@@ -2453,6 +2683,213 @@ export interface paths {
                 429: components["responses"]["RateLimited"];
                 500: components["responses"]["InternalError"];
                 503: components["responses"]["ServiceUnavailable"];
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/diagnostics/ingestion": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Per-region ingestion snapshot — ledger tip, backfill, FX, supply, sources.
+         * @description One snapshot of the region's ingest state, composed from
+         *     the cursors table, network_stats CAGG, fx_quotes hypertable,
+         *     asset_supply_history, the in-memory market-cap cache, and
+         *     the static source registry. Designed as the single fetch
+         *     the public status page makes for its "Ingestion · <region>"
+         *     panel — so the page renders the whole panel without scraping
+         *     five separate endpoints.
+         *
+         *     Sections:
+         *       - `region`         — name + deployment (r1/production today).
+         *       - `version`        — what binary is running here.
+         *       - `ledger`         — live tip, lag, 24h volume, indexed assets/markets.
+         *       - `backfill`       — per-decoder ranges in progress, oldest lag.
+         *       - `fx_backfill`    — fx_quotes coverage (earliest/latest, total quotes).
+         *       - `market_cap`     — CoinGecko cache age + entries.
+         *       - `supply`         — counts per asset domain + most recent observation.
+         *       - `sources`        — every source in the registry joined with
+         *                            its trailing-24h trades/volume/markets.
+         *
+         *     Cache: `public, max-age=15`. The underlying readers change
+         *     on second-scale (cursor updates, supply ticks); 15s smooths
+         *     a refreshing status page without hiding degradation.
+         */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Snapshot of the region's ingest state (standard envelope). */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["EnvelopeMeta"] & {
+                            data: {
+                                region: {
+                                    /** @example r1 */
+                                    name: string;
+                                    /** @example production */
+                                    deployment: string;
+                                };
+                                version: {
+                                    /** @example v0.5.0-rc.50 */
+                                    version: string;
+                                    /** @example 2026-05-13T18:21:59Z */
+                                    build_date: string;
+                                    /** @example 539333827c1a25d3ecfdcda67aa9c9a6f30cf6d3 */
+                                    commit: string;
+                                    /** @example false */
+                                    dirty: string;
+                                    /** @example go1.25.10 */
+                                    go_version: string;
+                                };
+                                ledger: {
+                                    /** Format: int64 */
+                                    latest_ledger: number;
+                                    /** Format: int64 */
+                                    lag_seconds: number;
+                                    /** @description Decimal string per ADR-0003. */
+                                    volume_24h_usd?: string;
+                                    /** Format: int64 */
+                                    markets_count_24h: number;
+                                    /** Format: int64 */
+                                    assets_indexed: number;
+                                };
+                                backfill: {
+                                    /** @example sdex,soroswap */
+                                    decoder: string;
+                                    /** @description Total cursor rows for this decoder set. */
+                                    ranges_total: number;
+                                    /** @description last_ledger == range_end. */
+                                    ranges_complete: number;
+                                    /** @description Incomplete AND updated within the last 10 min — actively progressing. */
+                                    ranges_running: number;
+                                    /** @description Incomplete AND not updated for 10+ min — needs `-resume` restart. */
+                                    ranges_stalled: number;
+                                    /** @description Back-compat: ranges_running + ranges_stalled. */
+                                    ranges_active: number;
+                                    /** Format: date-time */
+                                    oldest_updated_at?: string;
+                                    /** Format: int64 */
+                                    oldest_lag_seconds: number;
+                                    /** Format: int64 */
+                                    newest_ledger: number;
+                                }[];
+                                /**
+                                 * @description Per-source min/max ledger + trade count from the
+                                 *     trades hypertable. Answers "do we have data
+                                 *     from genesis to tip?" — `applies=true` rows are
+                                 *     Stellar-ledger-bearing sources (sdex + Soroban
+                                 *     contracts); CEX/FX sources surface as
+                                 *     `applies=false`. Background-refreshed every
+                                 *     5 min; empty array until first refresh
+                                 *     completes after process start.
+                                 */
+                                backfill_coverage: {
+                                    /** @example sdex */
+                                    source: string;
+                                    /** @description False for CEX/FX sources whose trades have no Stellar ledger. */
+                                    applies: boolean;
+                                    /**
+                                     * Format: int64
+                                     * @description Operator-curated source genesis (1 for SDEX, contract deploy ledger for Soroban).
+                                     */
+                                    genesis_ledger?: number;
+                                    /** Format: int64 */
+                                    earliest_ledger?: number;
+                                    /** Format: int64 */
+                                    latest_ledger?: number;
+                                    /**
+                                     * Format: int64
+                                     * @description Always-on per-source ingested-entry tally — trades for exchange/DEX/CEX sources, oracle_updates for oracle sources (source_entry_counts, migration 0035). Exact even mid-backfill; renamed from trade_count 2026-05-15.
+                                     */
+                                    entries: number;
+                                    /** @description Fraction of (genesis → tip) range with any data. 1.0 = covered. Doesn't detect internal gaps. */
+                                    coverage_pct?: number;
+                                }[];
+                                /**
+                                 * Format: date-time
+                                 * @description When the backfill_coverage snapshot was last refreshed.
+                                 */
+                                backfill_coverage_as_of?: string;
+                                /**
+                                 * @description MIN/MAX bucket of `prices_1h`, the canonical
+                                 *     "long-lived" continuous aggregate. Real
+                                 *     source-of-truth for "do we have historical
+                                 *     OHLC since genesis?" — raw trades have a 90-day
+                                 *     retention but the hourly+ CAGGs are retained
+                                 *     forever (migration 0002).
+                                 */
+                                cagg_coverage?: {
+                                    /** Format: date-time */
+                                    earliest_bucket?: string;
+                                    /** Format: date-time */
+                                    latest_bucket?: string;
+                                    /** Format: int64 */
+                                    bucket_count: number;
+                                };
+                                fx_backfill: {
+                                    /** @example 1999-01-04 */
+                                    earliest_quote?: string;
+                                    /** @example 2026-05-13 */
+                                    latest_quote?: string;
+                                    /** Format: int64 */
+                                    total_quotes: number;
+                                    currencies_count: number;
+                                };
+                                market_cap: {
+                                    entries_count: number;
+                                    /** Format: date-time */
+                                    oldest_fetched_at?: string;
+                                    /** Format: date-time */
+                                    newest_fetched_at?: string;
+                                };
+                                supply: {
+                                    classic_assets_with_supply: number;
+                                    sep41_assets_with_supply: number;
+                                    /** Format: date-time */
+                                    last_snapshot_at?: string;
+                                    /** Format: int64 */
+                                    latest_ledger?: number;
+                                };
+                                sources: {
+                                    /** @example binance */
+                                    name: string;
+                                    /** @example exchange */
+                                    class: string;
+                                    /** @example cex */
+                                    subclass?: string;
+                                    include_in_vwap: boolean;
+                                    backfill_safe: boolean;
+                                    /** Format: int64 */
+                                    trade_count_24h: number;
+                                    volume_24h_usd?: string;
+                                    /** Format: int64 */
+                                    markets_count_24h: number;
+                                }[];
+                            };
+                        };
+                    };
+                };
+                429: components["responses"]["RateLimited"];
+                500: components["responses"]["InternalError"];
             };
         };
         put?: never;
@@ -2494,7 +2931,7 @@ export interface paths {
             };
             requestBody?: never;
             responses: {
-                /** @description List of past incidents, newest first. */
+                /** @description List of past incidents, newest first (standard envelope). */
                 200: {
                     headers: {
                         [name: string]: unknown;
@@ -2502,44 +2939,55 @@ export interface paths {
                     content: {
                         /**
                          * @example {
-                         *       "count": 1,
-                         *       "incidents": [
-                         *         {
-                         *           "slug": "2026-05-06-postgres-lock-table-full",
-                         *           "title": "[SEV-3] Indexer dropping ~1% of trades — Postgres lock-table-full",
-                         *           "severity": "SEV-3",
-                         *           "status": "resolved",
-                         *           "started_at": "2026-05-06T15:00:00Z",
-                         *           "resolved_at": "2026-05-06T22:39:00Z",
-                         *           "affected_components": [
-                         *             "indexer",
-                         *             "storage"
-                         *           ],
-                         *           "body_markdown": "## Identification\n\nSome trades arriving on coinbase, binance…"
-                         *         }
-                         *       ]
+                         *       "data": {
+                         *         "count": 1,
+                         *         "incidents": [
+                         *           {
+                         *             "slug": "2026-05-06-postgres-lock-table-full",
+                         *             "title": "[SEV-3] Indexer dropping ~1% of trades — Postgres lock-table-full",
+                         *             "severity": "SEV-3",
+                         *             "status": "resolved",
+                         *             "started_at": "2026-05-06T15:00:00Z",
+                         *             "resolved_at": "2026-05-06T22:39:00Z",
+                         *             "affected_components": [
+                         *               "indexer",
+                         *               "storage"
+                         *             ],
+                         *             "body_markdown": "## Identification\n\nSome trades arriving on coinbase, binance…"
+                         *           }
+                         *         ]
+                         *       },
+                         *       "as_of": "2026-05-06T22:40:00Z",
+                         *       "flags": {
+                         *         "stale": false,
+                         *         "reduced_redundancy": false,
+                         *         "triangulated": false,
+                         *         "divergence_warning": false
+                         *       }
                          *     }
                          */
-                        "application/json": {
-                            incidents: {
-                                /** @example 2026-05-06-postgres-lock-table-full */
-                                slug: string;
-                                title: string;
-                                /** @enum {string} */
-                                severity: "SEV-1" | "SEV-2" | "SEV-3";
-                                /** @enum {string} */
-                                status: "investigating" | "identified" | "monitoring" | "resolved";
-                                /** Format: date-time */
-                                started_at: string;
-                                /** Format: date-time */
-                                resolved_at?: string | null;
-                                affected_components?: string[];
-                                /** @description Optional reference to the internal post-mortem. */
-                                postmortem?: string;
-                                /** @description Markdown body — render with the renderer of your choice. */
-                                body_markdown: string;
-                            }[];
-                            count: number;
+                        "application/json": components["schemas"]["EnvelopeMeta"] & {
+                            data: {
+                                incidents: {
+                                    /** @example 2026-05-06-postgres-lock-table-full */
+                                    slug: string;
+                                    title: string;
+                                    /** @enum {string} */
+                                    severity: "SEV-1" | "SEV-2" | "SEV-3";
+                                    /** @enum {string} */
+                                    status: "investigating" | "identified" | "monitoring" | "resolved";
+                                    /** Format: date-time */
+                                    started_at: string;
+                                    /** Format: date-time */
+                                    resolved_at?: string | null;
+                                    affected_components?: string[];
+                                    /** @description Optional reference to the internal post-mortem. */
+                                    postmortem?: string;
+                                    /** @description Markdown body — render with the renderer of your choice. */
+                                    body_markdown: string;
+                                }[];
+                                count: number;
+                            };
                         };
                     };
                 };
@@ -2602,6 +3050,400 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/coverage": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Per-source completeness verdicts (ADR-0033) — the public trust surface.
+         * @description Every indexed source's latest completeness verdict: the three
+         *     provable claims (substrate continuity, recognition, projection
+         *     reconciliation) plus the headline `complete` boolean, the
+         *     verified-to watermark, and the first problem ledger when one
+         *     exists. This is the same audit the operators run — published, so
+         *     consumers can verify the "every protocol, verified complete"
+         *     claim instead of trusting a badge.
+         *
+         *     Verdicts change only when the completeness audit runs, so the
+         *     endpoint is cheap and served with `public, max-age=60`.
+         */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Latest verdict per source, source-sorted. */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["EnvelopeMeta"] & {
+                            data?: {
+                                sources: {
+                                    /** @example soroswap */
+                                    source: string;
+                                    complete: boolean;
+                                    substrate_ok: boolean;
+                                    recognition_ok: boolean;
+                                    projection_ok: boolean;
+                                    /** Format: int64 */
+                                    genesis_ledger: number;
+                                    /** Format: int64 */
+                                    watermark_ledger: number;
+                                    /** Format: int64 */
+                                    tip_ledger: number;
+                                    coverage_pct: number;
+                                    /** Format: int64 */
+                                    first_problem_ledger?: number;
+                                    detail?: string;
+                                    /** Format: date-time */
+                                    computed_at: string;
+                                }[];
+                                complete_sources: number;
+                                total_sources: number;
+                            };
+                        };
+                    };
+                };
+                /** @description No completeness reader wired on this deployment. */
+                503: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["Problem"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/protocols": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Protocol directory — one row per indexed protocol.
+         * @description The directory backing the explorer's Protocols pillar: every
+         *     indexed protocol's hand-curated identity (category, one-line
+         *     description, genesis ledger, verified factory / trust-root
+         *     contracts) joined with three dynamic columns — registered
+         *     contract-instance count (`protocol_contracts`; the
+         *     `soroswap_pairs` registry for soroswap), trailing-24h decoded
+         *     event count across the protocol's served tables, and the
+         *     latest ADR-0033 completeness verdict summary (the same
+         *     `completeness_snapshots` row `/coverage` serves in full).
+         *
+         *     The static registry always serves; each dynamic join degrades
+         *     independently to zero / absent when its reader isn't wired,
+         *     so the endpoint never 5xxes on a partial deployment. Served
+         *     with `public, max-age=60`.
+         */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Every indexed protocol, registry-ordered. */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["EnvelopeMeta"] & {
+                            data?: {
+                                protocols: components["schemas"]["ProtocolRow"][];
+                                total_protocols: number;
+                            };
+                        };
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/protocols/{name}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Protocol deep-dive — directory row + contract registry + event vocabulary.
+         * @description Everything the directory row carries plus the registered
+         *     contract instances (`protocol_contracts` rows with deploying
+         *     factory + first-observed ledger for ADR-0035-gated sources;
+         *     the pair registry with token identities for soroswap; empty
+         *     for sources without a registry), the `event_kinds` vocabulary
+         *     the decoder emits, and the repo-relative `verification_page`
+         *     when a public write-up exists. Served with
+         *     `public, max-age=60`.
+         */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    /** @description Canonical protocol name from the directory (`blend`, `soroswap`, …). */
+                    name: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description The protocol's full detail view. */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["EnvelopeMeta"] & {
+                            data?: components["schemas"]["ProtocolRow"] & {
+                                contracts: {
+                                    /** @description Instance C-strkey. */
+                                    contract_id: string;
+                                    /** @description Deploying factory C-strkey (gated sources only). */
+                                    factory_id?: string;
+                                    /**
+                                     * Format: int64
+                                     * @description First-observed ledger (absent when unknown).
+                                     */
+                                    first_ledger?: number;
+                                    /** @description Pair token0 C-strkey (soroswap only). */
+                                    token0?: string;
+                                    /** @description Pair token1 C-strkey (soroswap only). */
+                                    token1?: string;
+                                    /**
+                                     * @description Role within the protocol — a verified trust-root or a factory-deployed instance.
+                                     * @enum {string}
+                                     */
+                                    kind?: "factory" | "instance";
+                                    /**
+                                     * Format: int64
+                                     * @description Decoded contract-event count for this instance over activity_window_days (from the lake).
+                                     */
+                                    events?: number;
+                                    /**
+                                     * Format: date-time
+                                     * @description Close time of this instance's most recent event in the window.
+                                     */
+                                    last_seen?: string;
+                                }[];
+                                event_kinds: string[];
+                                /** @example docs/protocols/blend.md */
+                                verification_page?: string;
+                                /**
+                                 * @description Lookback (days) the lake-analytics fields below cover.
+                                 * @example 90
+                                 */
+                                activity_window_days?: number;
+                                /**
+                                 * Format: int64
+                                 * @description Total decoded contract events across the protocol over activity_window_days (sum of event_breakdown counts).
+                                 */
+                                events_total?: number;
+                                /** @description Event-type distribution (topic[0] symbol → count) over the window, descending — "which event types fired, and how often." */
+                                event_breakdown?: {
+                                    /** @example supply_collateral */
+                                    event_type?: string;
+                                    /** Format: int64 */
+                                    count?: number;
+                                }[];
+                                /** @description Daily decoded-event count over the window (the activity chart). */
+                                activity_series?: {
+                                    /** @example 2026-06-14 */
+                                    date?: string;
+                                    /** Format: int64 */
+                                    events?: number;
+                                }[];
+                            };
+                        };
+                    };
+                };
+                /** @description Unknown protocol name. */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["Problem"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/ledger/tip": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Live-ingest frontier — latest ingested ledger + lag.
+         * @description A deliberately lightweight slice of `/v1/diagnostics/ingestion`:
+         *     only the live-ingest frontier (highest ledger the indexer has
+         *     committed) and its wall-clock age. Lets a status page or
+         *     monitor poll "what ledger are we on" without pulling the full
+         *     ingestion snapshot (24h volume, backfill state, supply, the
+         *     source registry, …).
+         *
+         *     `latest_ledger` is read from the `ledgerstream` row of the
+         *     ingestion-cursors table — upserted once per ledger, so it is
+         *     the freshest tip signal available. It is NOT identical to
+         *     `/v1/diagnostics/ingestion`'s `ledger.latest_ledger`, which is
+         *     derived from prices_1m's `MAX(ledger_sequence)` and only
+         *     advances on ledgers that produced a trade row; the two agree
+         *     within a few ledgers in steady state.
+         *
+         *     Cache: `public, max-age=2` — the cursor advances every ~5s,
+         *     so a 2s edge cache smooths a refreshing status page without
+         *     hiding a stall. For push semantics use `/v1/ledger/stream`.
+         */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Current live-ingest frontier. */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["EnvelopeMeta"] & {
+                            data: {
+                                /**
+                                 * Format: int64
+                                 * @description Highest ledger the indexer has committed.
+                                 */
+                                latest_ledger: number;
+                                /**
+                                 * Format: date-time
+                                 * @description When that ledger's cursor was committed (RFC 3339).
+                                 */
+                                ingested_at: string;
+                                /**
+                                 * Format: int64
+                                 * @description Wall-clock age of the cursor commit.
+                                 */
+                                lag_seconds: number;
+                            };
+                        };
+                    };
+                };
+                500: components["responses"]["InternalError"];
+                503: components["responses"]["ServiceUnavailable"];
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/ledger/stream": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * SSE stream of the live-ingest frontier.
+         * @description Streaming counterpart of `/v1/ledger/tip`. Pushes a
+         *     `ledger_update` event each time the indexer commits a new
+         *     ledger, so a status page renders blocks arriving in real time
+         *     instead of polling.
+         *
+         *     - First event fires synchronously on connect with the current
+         *       tip.
+         *     - Recurring events fire once per new ledger (poll cadence
+         *       ~2s), plus a keepalive refresh every ~10s if the ledger has
+         *       not advanced — so `lag_seconds` stays current even during an
+         *       ingest stall.
+         *     - Heartbeats every 15 s as comment lines.
+         *     - Each event's `data` payload mirrors the `/v1/ledger/tip`
+         *       envelope (`data` + `as_of`) so one type decodes both the
+         *       polled and the streamed response.
+         *     - 503 pre-flight when no cursors reader is wired or the live
+         *       cursor has not been established yet — once the SSE body
+         *       starts there is no way to signal a non-200 status.
+         */
+        get: {
+            parameters: {
+                query?: never;
+                header?: {
+                    /** @description Opaque ID for resuming a previously-broken stream. */
+                    "Last-Event-ID"?: string;
+                };
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description SSE stream of ledger_update events. */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/event-stream": string;
+                    };
+                };
+                500: components["responses"]["InternalError"];
+                503: components["responses"]["ServiceUnavailable"];
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/network/stats": {
         parameters: {
             query?: never;
@@ -2636,7 +3478,7 @@ export interface paths {
             };
             requestBody?: never;
             responses: {
-                /** @description Aggregate stats. */
+                /** @description Aggregate stats (standard envelope). */
                 200: {
                     headers: {
                         [name: string]: unknown;
@@ -2644,46 +3486,57 @@ export interface paths {
                     content: {
                         /**
                          * @example {
-                         *       "volume_24h_usd": "5941104763.13358600",
-                         *       "markets_count_24h": 4934,
-                         *       "assets_indexed": 442190,
-                         *       "latest_ledger": 62450017,
-                         *       "exchange_sources": 11,
-                         *       "total_sources": 21
+                         *       "data": {
+                         *         "volume_24h_usd": "5941104763.13358600",
+                         *         "markets_count_24h": 4934,
+                         *         "assets_indexed": 442190,
+                         *         "latest_ledger": 62450017,
+                         *         "exchange_sources": 11,
+                         *         "total_sources": 21
+                         *       },
+                         *       "as_of": "2026-05-05T15:09:00.119Z",
+                         *       "flags": {
+                         *         "stale": false,
+                         *         "reduced_redundancy": false,
+                         *         "triangulated": false,
+                         *         "divergence_warning": false
+                         *       }
                          *     }
                          */
-                        "application/json": {
-                            /**
-                             * @description SUM(prices_1m.volume_usd) over the trailing
-                             *     24h. Decimal string per ADR-0003.
-                             */
-                            volume_24h_usd?: string | null;
-                            /** @description Distinct (base, quote) pairs with non-null volume in 24h. */
-                            markets_count_24h: number;
-                            /** @description Total rows in classic_assets. */
-                            assets_indexed: number;
-                            /** @description Max last_ledger across non-backfill sources. */
-                            latest_ledger: number;
-                            /**
-                             * @description Count of `class=exchange` sources REGISTERED in
-                             *     the binary's `internal/sources/external.Registry`
-                             *     map. Constant across regions running the same
-                             *     build; independent of operator config.
-                             */
-                            exchange_sources: number;
-                            /**
-                             * @description Count of ALL registered sources (every entry in
-                             *     `internal/sources/external.Registry`). Different
-                             *     from `/v1/status`'s `freshness.total_sources`,
-                             *     which counts only sources the operator has
-                             *     ENABLED at runtime — typically a strict subset.
-                             *     Today on r1: registry=21, enabled=17, active=15.
-                             *     The two `total_sources` measure different things
-                             *     by design; see the field doc on
-                             *     `internal/api/v1.NetworkStats` for the full
-                             *     semantic table.
-                             */
-                            total_sources: number;
+                        "application/json": components["schemas"]["EnvelopeMeta"] & {
+                            data: {
+                                /**
+                                 * @description SUM(prices_1m.volume_usd) over the trailing
+                                 *     24h. Decimal string per ADR-0003.
+                                 */
+                                volume_24h_usd?: string | null;
+                                /** @description Distinct (base, quote) pairs with non-null volume in 24h. */
+                                markets_count_24h: number;
+                                /** @description Total rows in classic_assets. */
+                                assets_indexed: number;
+                                /** @description Max last_ledger across non-backfill sources. */
+                                latest_ledger: number;
+                                /**
+                                 * @description Count of `class=exchange` sources REGISTERED in
+                                 *     the binary's `internal/sources/external.Registry`
+                                 *     map. Constant across regions running the same
+                                 *     build; independent of operator config.
+                                 */
+                                exchange_sources: number;
+                                /**
+                                 * @description Count of ALL registered sources (every entry in
+                                 *     `internal/sources/external.Registry`). Different
+                                 *     from `/v1/status`'s `freshness.total_sources`,
+                                 *     which counts only sources the operator has
+                                 *     ENABLED at runtime — typically a strict subset.
+                                 *     Today on r1: registry=21, enabled=17, active=15.
+                                 *     The two `total_sources` measure different things
+                                 *     by design; see the field doc on
+                                 *     `internal/api/v1.NetworkStats` for the full
+                                 *     semantic table.
+                                 */
+                                total_sources: number;
+                            };
                         };
                     };
                 };
@@ -2779,7 +3632,7 @@ export interface paths {
                      *     given class are returned. Useful for dashboards that
                      *     split the catalogue by role.
                      */
-                    class?: "exchange" | "aggregator" | "oracle" | "authority_sanity";
+                    class?: "exchange" | "aggregator" | "oracle" | "authority_sanity" | "lending" | "router";
                     /**
                      * @description Opt-in extras. `stats` populates each row's
                      *     `trade_count_24h` from a single GROUP BY on the trades
@@ -4409,10 +5262,683 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/ledgers": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Recent ledgers (descending, keyset-paged).
+         * @description Recent closed ledgers, newest first. Keyset-page older with
+         *     `?before=<sequence>` (use the response's `next_before`).
+         */
+        get: {
+            parameters: {
+                query?: {
+                    limit?: number;
+                    /** @description Return ledgers with sequence < this. */
+                    before?: number;
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description A page of ledger headers. */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            data?: {
+                                ledgers?: components["schemas"]["Ledger"][];
+                                next_before?: number;
+                            };
+                        };
+                    };
+                };
+                503: components["responses"]["ServiceUnavailable"];
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/ledgers/{seq}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** A single ledger header. */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    /** @example 63000000 */
+                    seq: number;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Ledger header. */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            data?: components["schemas"]["Ledger"];
+                        };
+                    };
+                };
+                400: components["responses"]["BadRequest"];
+                /** @description Ledger not in the indexed range. */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                503: components["responses"]["ServiceUnavailable"];
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/ledgers/{seq}/transactions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Transactions in a ledger. */
+        get: {
+            parameters: {
+                query?: {
+                    limit?: number;
+                };
+                header?: never;
+                path: {
+                    /** @example 63000000 */
+                    seq: number;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description The ledger's transactions. */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            data?: {
+                                ledger?: number;
+                                transactions?: components["schemas"]["TxSummary"][];
+                            };
+                        };
+                    };
+                };
+                503: components["responses"]["ServiceUnavailable"];
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/tx/{hash}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Transaction detail — summary + decoded operations + events.
+         * @description Full transaction: the summary, every operation decoded from XDR into
+         *     clean JSON (with its result code), and the contract events it emitted.
+         */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    /** @description 64-char hex transaction hash. */
+                    hash: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Transaction detail. */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            data?: components["schemas"]["TxDetail"];
+                        };
+                    };
+                };
+                400: components["responses"]["BadRequest"];
+                /** @description No transaction with that hash in the indexed range. */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                503: components["responses"]["ServiceUnavailable"];
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/operations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Operations in a ledger (decoded).
+         * @description A ledger's operations, each decoded from XDR. `?ledger=<seq>` selects
+         *     the ledger; omitted, it defaults to the latest ledger.
+         */
+        get: {
+            parameters: {
+                query?: {
+                    /** @description Ledger sequence (defaults to tip). */
+                    ledger?: number;
+                    limit?: number;
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Decoded operations. */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            data?: {
+                                ledger?: number;
+                                operations?: components["schemas"]["Operation"][];
+                            };
+                        };
+                    };
+                };
+                503: components["responses"]["ServiceUnavailable"];
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/contracts/{contract_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Per-contract recent on-chain event activity.
+         * @description A contract's most-recent emitted events (newest first), keyset-paged
+         *     with `?cursor=<opaque>` (echo back the response's `next_cursor`). The
+         *     cursor is the composite `(ledger, op_index, event_index)` — a
+         *     ledger-only cursor would silently drop the rest of a ledger in which a
+         *     busy contract emits more than `limit` events. `next_cursor` is present
+         *     only when a full page is returned. The SEP-41 transfer audit trail is at
+         *     the sibling `/contracts/{contract_id}/transfers`.
+         */
+        get: {
+            parameters: {
+                query?: {
+                    limit?: number;
+                    /** @description Opaque keyset cursor from a prior response's next_cursor. */
+                    cursor?: string;
+                };
+                header?: never;
+                path: {
+                    /** @description C-strkey contract id. */
+                    contract_id: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Recent contract events. */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            data?: {
+                                contract_id?: string;
+                                events?: components["schemas"]["ContractEvent"][];
+                                /** @description Opaque cursor for the next (older) page; absent on the last page. */
+                                next_cursor?: string;
+                            };
+                        };
+                    };
+                };
+                400: components["responses"]["BadRequest"];
+                503: components["responses"]["ServiceUnavailable"];
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/contracts/{contract_id}/wasm": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * A contract's on-chain WASM — metadata, exports, disassembly.
+         * @description The contract's deployed WebAssembly surfaced for the explorer's "see
+         *     the code" view. Resolved on demand from the certified ClickHouse lake
+         *     (ADR-0034): contract instance → wasm hash → `contract_code` bytes.
+         *
+         *     `exports` is the contract's exported function table — the names are its
+         *     public Soroban entry points (e.g. `swap`, `deposit`), parsed natively
+         *     in Go (always present). `params`/`results` are the low-level wasm ABI
+         *     value types (`i32`/`i64`/`f32`/`f64`), not the Rust signature.
+         *
+         *     `wat` (WAT disassembly) and `decompiled` (wasm-decompile's C-like
+         *     pseudocode — NOT reconstructed Rust) are BEST-EFFORT: present only when
+         *     the wabt toolchain is installed on the server, otherwise empty with the
+         *     reason in `source_note`. The response never 503s on missing tooling.
+         *
+         *     The wasm for a content-addressed hash is immutable, so the response is
+         *     cached for a day (`Cache-Control: public, max-age=86400`).
+         *
+         *     404 when the contract's wasm can't be assembled from the captured
+         *     `ledger_entry_changes` window — the contract-instance or contract-code
+         *     entry (created at deploy time, often years ago) is outside the live
+         *     capture window. This is a coverage limitation of the substrate, not an
+         *     error.
+         */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    /** @description C-strkey contract id. */
+                    contract_id: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description The contract's wasm view. */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            data?: {
+                                /** @description C-strkey contract id (echoed). */
+                                contract_id: string;
+                                /** @description Hex sha256 of the wasm module (content address). */
+                                wasm_hash: string;
+                                /** @description Size of the wasm module in bytes. */
+                                size_bytes: number;
+                                /** @description Exported functions — the contract's public entry points. */
+                                exports: {
+                                    /** @description Exported function name. */
+                                    name: string;
+                                    /** @description Wasm ABI param value types (i32/i64/f32/f64). */
+                                    params: string[];
+                                    /** @description Wasm ABI result value types. */
+                                    results: string[];
+                                }[];
+                                /** @description WAT disassembly; absent when wabt isn't installed on the server. */
+                                wat?: string;
+                                /** @description wasm-decompile pseudocode (C-like, NOT Rust); absent when wabt isn't installed. */
+                                decompiled?: string;
+                                /** @description Provenance + any degraded-stage explanation. */
+                                source_note: string;
+                            };
+                        };
+                    };
+                };
+                400: components["responses"]["BadRequest"];
+                404: components["responses"]["NotFound"];
+                503: components["responses"]["ServiceUnavailable"];
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/accounts/{g_strkey}/transactions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Transactions an account submitted (sourced), newest first.
+         * @description The transactions for which this account is the source/fee-payer,
+         *     newest first, keyset-paged with `?cursor=<opaque>` (echo back
+         *     `next_cursor`). The cursor is the composite `(ledger, tx_index)`.
+         *
+         *     SCOPE: this is **sourced/submitted** activity only (`scope: "sourced"`).
+         *     Incoming/participant activity — where the account is a payment
+         *     destination, trustor, merge target, clawback victim, etc. — requires
+         *     the participant index (ADR-0038 Phase B completion) and is NOT included
+         *     here yet.
+         */
+        get: {
+            parameters: {
+                query?: {
+                    limit?: number;
+                    /** @description Opaque keyset cursor from a prior response's next_cursor. */
+                    cursor?: string;
+                };
+                header?: never;
+                path: {
+                    /** @description G-strkey account id. */
+                    g_strkey: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Sourced transactions for the account. */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            data?: components["schemas"]["AccountTransactions"];
+                        };
+                    };
+                };
+                400: components["responses"]["BadRequest"];
+                503: components["responses"]["ServiceUnavailable"];
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/accounts/{g_strkey}/operations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Operations an account sourced (decoded), newest first.
+         * @description The operations whose effective source is this account, decoded
+         *     (human-readable fields), newest first, keyset-paged with
+         *     `?cursor=<opaque>` (echo back `next_cursor`). The cursor is the
+         *     composite `(ledger, tx_index, op_index)`.
+         *
+         *     SCOPE: **sourced** activity only (`scope: "sourced"`) — see the
+         *     transactions endpoint above for the participant-index caveat.
+         */
+        get: {
+            parameters: {
+                query?: {
+                    limit?: number;
+                    /** @description Opaque keyset cursor from a prior response's next_cursor. */
+                    cursor?: string;
+                };
+                header?: never;
+                path: {
+                    /** @description G-strkey account id. */
+                    g_strkey: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Sourced operations for the account. */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            data?: components["schemas"]["AccountOperations"];
+                        };
+                    };
+                };
+                400: components["responses"]["BadRequest"];
+                503: components["responses"]["ServiceUnavailable"];
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/search": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Classify a query (tx / ledger / account / contract / asset).
+         * @description Single-box search: detects the kind of `q` by its shape and returns the
+         *     canonical detail endpoint to route to. Pure classification (no lake read).
+         */
+        get: {
+            parameters: {
+                query: {
+                    /** @description Tx hash */
+                    q: string;
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Classified query. */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            data?: {
+                                query?: string;
+                                /** @enum {string} */
+                                kind?: "transaction" | "ledger" | "account" | "contract" | "asset" | "unknown";
+                                canonical?: string;
+                                href?: string;
+                                supported?: boolean;
+                                note?: string;
+                            };
+                        };
+                    };
+                };
+                400: components["responses"]["BadRequest"];
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /** @description A ledger header from the certified lake. */
+        Ledger: {
+            sequence?: number;
+            /** Format: date-time */
+            close_time?: string;
+            /** @description Hex-encoded ledger hash. */
+            hash?: string;
+            prev_hash?: string;
+            protocol_version?: number;
+            tx_count?: number;
+            op_count?: number;
+            soroban_event_count?: number;
+            /** @description XLM stroops as a string (exceeds 2^53). */
+            total_coins?: string;
+            fee_pool?: string;
+            base_fee?: number;
+            base_reserve?: number;
+        };
+        /** @description Transaction summary (in ledger + tx listings). */
+        TxSummary: {
+            hash?: string;
+            ledger?: number;
+            /** Format: date-time */
+            close_time?: string;
+            index?: number;
+            source_account?: string;
+            fee_charged?: number;
+            max_fee?: number;
+            operation_count?: number;
+            successful?: boolean;
+            result_code?: number;
+            /** @description Normalised: none|text|id|hash|return. */
+            memo_type?: string;
+            memo?: string;
+        };
+        /** @description An operation decoded from XDR into clean JSON. */
+        Operation: {
+            ledger?: number;
+            /** Format: date-time */
+            close_time?: string;
+            tx_hash?: string;
+            tx_index?: number;
+            op_index?: number;
+            /** @description snake_case op type (e.g. payment */
+            type?: string;
+            source_account?: string;
+            /** @description Decoded operation fields (amounts are strings */
+            fields?: {
+                [key: string]: unknown;
+            };
+            /** @description Base64 body */
+            raw_xdr?: string;
+            /** @description Present only in the per-transaction view. */
+            result_code?: number;
+        };
+        TxDetail: components["schemas"]["TxSummary"] & {
+            operations?: components["schemas"]["Operation"][];
+            events?: components["schemas"]["ContractEvent"][];
+        };
+        /** @description A contract event (tx-detail + contract-activity views). */
+        ContractEvent: {
+            ledger?: number;
+            /** Format: date-time */
+            close_time?: string;
+            tx_hash?: string;
+            op_index?: number;
+            event_index?: number;
+            event_type?: string;
+            topic_0?: string;
+        };
+        /**
+         * @description An account's sourced/submitted transactions (newest first), with an
+         *     opaque composite keyset cursor. `scope` is always "sourced" in this
+         *     phase — incoming/participant txs require the participant index.
+         */
+        AccountTransactions: {
+            /** @description The G-strkey this listing is for. */
+            account?: string;
+            transactions?: components["schemas"]["TxSummary"][];
+            /** @description Opaque composite cursor (ledger.tx_index) for the next older page; absent on the last page. */
+            next_cursor?: string;
+            /**
+             * @description Activity scope. "sourced" = the account is the tx source/fee-payer (not incoming).
+             * @enum {string}
+             */
+            scope?: "sourced";
+        };
+        /**
+         * @description An account's sourced operations, decoded (newest first), with an opaque
+         *     composite keyset cursor. `scope` is always "sourced" in this phase.
+         */
+        AccountOperations: {
+            /** @description The G-strkey this listing is for. */
+            account?: string;
+            operations?: components["schemas"]["Operation"][];
+            /** @description Opaque composite cursor (ledger.tx_index.op_index) for the next older page; absent on the last page. */
+            next_cursor?: string;
+            /**
+             * @description Activity scope. "sourced" = the account is the op source.
+             * @enum {string}
+             */
+            scope?: "sourced";
+        };
         /**
          * @description Dashboard view of an API key. Plaintext is NEVER on this
          *     shape — that's only on `CreateKeyResponse.plaintext`,
@@ -4735,9 +6261,66 @@ export interface components {
             sources?: string[];
             flags: components["schemas"]["Flags"];
         };
+        ProtocolRow: {
+            /** @example blend */
+            name: string;
+            /** @enum {string} */
+            category: "dex" | "amm" | "lending" | "yield" | "bridge" | "oracle" | "token";
+            description: string;
+            /**
+             * Format: int64
+             * @description First ledger this protocol could have data at.
+             */
+            genesis_ledger: number;
+            /** @description Verified factory / trust-root contract C-strkeys (ADR-0035); empty for factory-less sources. */
+            factories: string[];
+            /** @description Registered contract instances (protocol_contracts; soroswap_pairs for soroswap). */
+            contract_count: number;
+            /**
+             * Format: int64
+             * @description Trailing-24h decoded events across the protocol's served tables.
+             */
+            events_24h: number;
+            /** @description Latest ADR-0033 verdict summary; absent when no snapshot exists. Full verdict on /coverage. */
+            completeness?: {
+                complete: boolean;
+                /** Format: int64 */
+                watermark_ledger: number;
+            };
+        };
         HealthResponse: {
             /** @enum {string} */
             status: "ok" | "degraded";
+        };
+        ReadyResponse: {
+            /**
+             * @description `ok` when every dependency check passed; `degraded`
+             *     (HTTP 200) when a NON-critical dependency failed and the
+             *     API still serves via fallback; `unready` (HTTP 503) when
+             *     a CRITICAL dependency failed.
+             * @enum {string}
+             */
+            status: "ok" | "degraded" | "unready";
+            /** @description Human-readable process uptime, truncated to the second (e.g. `3h12m4s`). */
+            uptime: string;
+            /** @description Per-dependency ping results. Present on `/readyz`; absent on `/healthz`. */
+            checks?: {
+                /** @description Dependency name (e.g. `postgres`, `redis`). */
+                name: string;
+                /** @description True when the dependency answered its ping within the deadline. */
+                ok: boolean;
+                /** @description Failure reason; present only when `ok` is false. */
+                error?: string;
+            }[];
+            /**
+             * @description Static link (`/v1/status`) to the rich health rollup, so a
+             *     probe consumer following only `/readyz`/`/healthz` can find
+             *     the SLA-truth endpoint without out-of-band knowledge.
+             */
+            status_root?: string;
+        };
+        ReadyEnvelope: components["schemas"]["EnvelopeMeta"] & {
+            data: components["schemas"]["ReadyResponse"];
         };
         VersionResponse: components["schemas"]["EnvelopeMeta"] & {
             data: {
@@ -5142,13 +6725,51 @@ export interface components {
         AssetMetadataEnvelope: components["schemas"]["EnvelopeMeta"] & {
             data: components["schemas"]["AssetMetadata"];
         };
+        /**
+         * @description Live per-token supply from the decode-at-ingest supply_flows lake
+         *     (ADR-0034). Amounts are decimal strings in the asset's smallest unit.
+         */
+        AssetSupply: {
+            /** @description The requested asset_id, echoed back. */
+            asset_id: string;
+            /** @description The contract (Soroban token or classic SAC) supply is keyed by. Omitted for native XLM. */
+            contract_id?: string;
+            /** @description Decimal string. mint − burn − clawback (or the ledger total_coins for native). Never a JSON number (ADR-0003). */
+            total_supply: string;
+            /** @description Decimal string: Σ mint. Omitted for native. */
+            mint_total?: string;
+            /** @description Decimal string: Σ burn. Omitted for native. */
+            burn_total?: string;
+            /** @description Decimal string: Σ clawback. Omitted for native. */
+            clawback_total?: string;
+            /**
+             * Format: int64
+             * @description Number of supply-affecting events summed.
+             */
+            flow_count: number;
+            /**
+             * @description How total_supply was derived: mint/burn/clawback flows, or the ledger header total_coins (native XLM).
+             * @enum {string}
+             */
+            source: "mint_burn_flows" | "ledger_total_coins";
+        };
+        AssetSupplyEnvelope: components["schemas"]["EnvelopeMeta"] & {
+            data: components["schemas"]["AssetSupply"];
+        };
         Price: {
             asset_id: string;
             quote: string;
             /** @description Decimal string. Never JSON number. */
             price: string;
-            /** @enum {string} */
-            price_type: "vwap" | "twap" | "last_trade";
+            /**
+             * @description How the price was derived. `peg` is emitted on the
+             *     stablecoin self-peg path (`/v1/price?asset=<USD-pegged
+             *     classic>&quote=fiat:USD` returns `1.0` with
+             *     `flags.triangulated=true`) — see price.go
+             *     tryStablecoinFiatProxy.
+             * @enum {string}
+             */
+            price_type: "vwap" | "twap" | "last_trade" | "peg";
             /** Format: date-time */
             observed_at: string;
             /** @description Window size for vwap/twap; omitted for last_trade. */
@@ -5260,8 +6881,14 @@ export interface components {
                 timeframe: "1h" | "24h" | "1w" | "1mo" | "1y" | "all";
                 /** @enum {string} */
                 granularity: "1m" | "15m" | "1h" | "4h" | "1d" | "1w" | "1mo";
-                /** @enum {string} */
-                price_type: "vwap" | "twap";
+                /**
+                 * @description `vwap` for the default price chart; `market_cap`
+                 *     on the market-cap chart variant (chart.go
+                 *     handleChartMarketCap). `twap` is never emitted on
+                 *     this surface.
+                 * @enum {string}
+                 */
+                price_type: "vwap" | "market_cap";
                 points: components["schemas"]["HistoryPoint"][];
                 /**
                  * @description True when the requested timeframe extends before
@@ -5338,6 +6965,68 @@ export interface components {
         OHLCEnvelope: components["schemas"]["EnvelopeMeta"] & {
             data: components["schemas"]["OHLCBar"];
         };
+        /**
+         * @description One bar in a multi-bar /v1/ohlc?interval= response. Compact
+         *     wire field names (`t/o/h/l/c/v_base/v_quote/n`) match the
+         *     convention used by CoinGecko / CoinMarketCap so this endpoint
+         *     can be a drop-in replacement for those vendors' OHLC feeds.
+         *
+         *     `t` is the bucket-start timestamp aligned to UTC interval
+         *     boundaries (1h → top of hour, 1d → 00:00 UTC, 1w → Monday
+         *     00:00 UTC). Bucket end = `t + interval`.
+         */
+        OHLCSeriesBar: {
+            /**
+             * Format: date-time
+             * @description Bucket-start timestamp (UTC, interval-aligned).
+             */
+            t: string;
+            /** @description Open price (decimal string). */
+            o: string;
+            /** @description High price (decimal string). */
+            h: string;
+            /** @description Low price (decimal string). */
+            l: string;
+            /** @description Close price (decimal string). */
+            c: string;
+            /** @description Σ base_amount stroops over the bucket (decimal string). */
+            v_base: string;
+            /** @description Σ quote_amount stroops over the bucket (decimal string). */
+            v_quote: string;
+            /**
+             * Format: int64
+             * @description Trade count in the bucket.
+             */
+            n: number;
+            /** @description Reserved for future row-cap signalling; absent today. */
+            truncated?: boolean;
+        };
+        /** @description Multi-bar OHLC series response (F-0071). */
+        OHLCSeriesResponse: {
+            /** @description Canonical base asset id. */
+            base: string;
+            /** @description Canonical quote asset id. */
+            quote: string;
+            /** @enum {string} */
+            interval: "1m" | "5m" | "15m" | "30m" | "1h" | "4h" | "1d" | "1w";
+            /**
+             * Format: date-time
+             * @description Inclusive lower bound of the series window. When the
+             *     client omitted `from`, this is `to - limit*interval`.
+             */
+            from: string;
+            /**
+             * Format: date-time
+             * @description Exclusive upper bound. When the client omitted `to`, this
+             *     is now() snapped DOWN to the interval's UTC boundary —
+             *     ADR-0015 cross-region rate-equality guarantee.
+             */
+            to: string;
+            intervals: components["schemas"]["OHLCSeriesBar"][];
+        };
+        OHLCSeriesEnvelope: components["schemas"]["EnvelopeMeta"] & {
+            data: components["schemas"]["OHLCSeriesResponse"];
+        };
         VWAPResult: {
             /**
              * Format: date-time
@@ -5413,8 +7102,16 @@ export interface components {
         MarketRow: {
             base: string;
             quote: string;
-            /** Format: date-time */
+            /**
+             * Format: date-time
+             * @description Most recent trade timestamp for this pair (minute-precision for in-24h-active pairs via prices_1m; daily bucket-start fallback for pairs idle 24h+ but active in the 14d recency window). Use for staleness computations.
+             */
             last_trade_at: string;
+            /**
+             * Format: date-time
+             * @description Start-of-day UTC of the prices_1d bucket the pair was last active in. Aligns to midnight UTC by construction. Pre-2026-05-27 (F-0065) this value was incorrectly returned as `last_trade_at`; the field is preserved for callers that want the daily bucket reference, but do NOT use it for staleness.
+             */
+            bucket_close_at: string;
             /** @description Activity count in the trailing 24h window. */
             trade_count_24h: number;
             /** @description Trailing-24h USD volume summed from prices_1m. Decimal string. Null when no USD-equivalent trades. */
@@ -5477,7 +7174,7 @@ export interface components {
             };
             source_classes: {
                 /** @enum {string} */
-                name: "exchange" | "aggregator" | "oracle" | "authority_sanity";
+                name: "exchange" | "aggregator" | "oracle" | "authority_sanity" | "lending" | "router";
                 contributes_to_vwap: boolean;
                 description: string;
             }[];
@@ -5726,6 +7423,15 @@ export interface components {
          * @example fiat:USD
          */
         Quote: string;
+        /**
+         * @description Quote-side asset (REQUIRED on this endpoint). Either a
+         *     canonical asset identifier (`native`, `<code>-<issuer>`,
+         *     contract ID) or the `fiat:<ISO-4217>` form (e.g. `fiat:USD`,
+         *     `fiat:EUR`). Unlike the `/price` family, this endpoint does
+         *     NOT default the quote — omitting it returns 400.
+         * @example fiat:USD
+         */
+        QuoteRequired: string;
         Timeframe: "1h" | "24h" | "1w" | "1mo" | "1y" | "all";
         Granularity: "1m" | "15m" | "1h" | "4h" | "1d" | "1w" | "1mo";
         /**
