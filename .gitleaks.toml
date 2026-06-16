@@ -106,3 +106,33 @@ description = "Audit working-doc — quotes a Stellar G-strkey (Circle USDC issu
 paths = [
   '''docs/audit-2026-05-02/03-journeys\.md''',
 ]
+
+[[rules.allowlists]]
+description = "Test-only Stellar asset-key fixture (`USDC-G...`, Circle USDC's canonical CODE-ISSUER asset_id) used by the SAC-wrapper classic-supply handler test. The bare G-strkey portion trips gitleaks' generic-api-key entropy heuristic; same shape as the supply / dispatcher / issuers allowlists above. Public asset identifiers aren't credentials."
+paths = [
+  '''internal/api/v1/asset_supply_test\.go''',
+]
+
+[[rules.allowlists]]
+description = "Test-only Stellar C-strkey fixtures (synthetic pool + token contract IDs) used by the comet liquidity-storage integration test. Contract IDs are deterministic public ledger entries (hash of deployer + WASM), not credentials — same pattern as the supply/aggregators allowlists above."
+paths = [
+  '''test/integration/comet_liquidity_storage_test\.go''',
+]
+
+[[rules.allowlists]]
+description = "Circle CCTP mainnet contract IDs (TokenMessengerMinter / MessageTransmitter / CctpForwarder C-strkeys), verified against developers.circle.com and github.com/circlefin/stellar-cctp. These are public Soroban contract addresses (deterministic ledger entries), not credentials — the entropy heuristic trips on the 56-char base32 strkey."
+paths = [
+  '''internal/sources/cctp/events\.go''',
+]
+
+[[rules.allowlists]]
+description = "Test-only Redis lock-key fixture (`abcdef0123456789`) used by the signup-email-locker concurrency test. Fabricated 16-hex-char idempotency key; trips the entropy heuristic but is not a credential."
+paths = [
+  '''internal/auth/signup_email_locker_test\.go''',
+]
+
+[[rules.allowlists]]
+description = "Codex audit evidence doc — a cross-file-interactions findings table quoting public git commit SHAs (e.g. `e9e57cb2...`) and evidence/finding IDs inline. These high-entropy hex strings are commit references, not credentials."
+paths = [
+  '''docs/audit-2026-05-12-codex/evidence/cross-file-interactions\.md''',
+]
