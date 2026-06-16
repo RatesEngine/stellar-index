@@ -17,6 +17,22 @@ against.
 
 ## [Unreleased]
 
+### Changed
+
+- **Full web redesign — a unified light-mode design system across all three
+  surfaces (explorer, status, dashboard).** Modern, minimal, tech-forward:
+  Inter + JetBrains Mono (now actually loaded via next/font — they were
+  referenced but silently falling back to system-ui), a semantic token system
+  (brand / surface / line / ink / up / down / warn / bad / ok), hairline
+  borders over heavy shadows, generous whitespace, and one confident blue
+  accent. **Dark mode removed** (light only for now). New shared component
+  library (`web/explorer/src/components/ui`) + style guide
+  (`docs/architecture/design-system.md` + `/dev/styleguide`). The status page
+  is unified with the site UX, and the customer **dashboard was fleshed out**
+  into a real product surface (sidebar shell + Overview/Keys/Usage/Settings on
+  live API data). Fixed latent bugs found en route: `-DEFAULT`-suffixed colour
+  classes (generated no CSS) and off-palette chart colours.
+
 ### Fixed
 
 - **SEP-41 supply: mint + clawback silently dropped post-P23 (data loss).**
