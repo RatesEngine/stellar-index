@@ -2,33 +2,79 @@
 @tailwind components;
 @tailwind utilities;
 
-:root {
-  --font-sans: 'Inter', system-ui, sans-serif;
-  --font-mono: 'JetBrains Mono', ui-monospace, monospace;
+/* ─────────────────────────────────────────────────────────────────────────
+   Stellar Index — base layer (light mode only, v2 redesign 2026-06-17).
+   Fonts (Inter / JetBrains Mono) are loaded via next/font in layout.tsx and
+   exposed as --font-sans / --font-mono on <html>. Design tokens live in
+   tailwind.config.ts; see docs/architecture/design-system.md.
+   ───────────────────────────────────────────────────────────────────────── */
+
+@layer base {
+  html {
+    -webkit-text-size-adjust: 100%;
+    scroll-behavior: smooth;
+    /* Inter: enable contextual alternates + stylistic set so the type
+       reads crisp; numeric alignment is handled by the .tnum utility. */
+    font-feature-settings: 'cv11', 'ss01';
+    font-variant-ligatures: contextual;
+  }
+
+  body {
+    @apply bg-surface-canvas text-ink-body antialiased;
+    text-rendering: optimizeLegibility;
+  }
+
+  h1,
+  h2,
+  h3,
+  h4 {
+    @apply text-ink;
+    text-wrap: balance;
+  }
+
+  ::selection {
+    @apply bg-brand-600/15 text-ink;
+  }
+
+  /* Consistent, accessible focus ring across interactive elements. */
+  :focus-visible {
+    @apply outline-none ring-2 ring-brand-600/60 ring-offset-2 ring-offset-surface-canvas;
+  }
+
+  /* Hairline default border colour so `border` alone reads as a hairline. */
+  *,
+  ::before,
+  ::after {
+    border-color: theme('colors.line.DEFAULT');
+  }
 }
 
-html,
-body {
-  @apply bg-white text-slate-900 antialiased;
+@layer utilities {
+  /* Tabular (monospaced) figures for aligned numeric columns. */
+  .tnum {
+    font-variant-numeric: tabular-nums;
+    font-feature-settings: 'tnum';
+  }
 }
 
-/* Dark mode is class-based now (Tailwind darkMode: 'class'). The
-   inline init script in layout.tsx applies the class from
-   localStorage on first paint; absent a stored preference, it
-   falls back to the OS prefers-color-scheme so the default
-   behaviour matches what shipped before the toggle.
-   The matching CSS for html.dark's background + text colour is
-   below — Tailwind's dark: variants handle everything else. */
-html.dark,
-html.dark body {
-  @apply bg-slate-950 text-slate-100;
-}
-
-/* Time-machine pinned-mode overlay tint */
+/* Time-machine pinned-mode overlay tint (kept from v1). */
 [data-as-of] {
   background-image: linear-gradient(
     180deg,
-    rgba(254, 243, 199, 0.12) 0%,
-    transparent 100px
+    rgba(254, 243, 199, 0.16) 0%,
+    transparent 120px
   );
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+  *,
+  ::before,
+  ::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+  }
 }

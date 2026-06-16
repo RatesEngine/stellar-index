@@ -7,7 +7,6 @@ import { ChevronDown, LogOut, Menu, TrendingUp, User, X } from 'lucide-react';
 
 import { useMe, useStatus } from '@/api/hooks';
 import { SearchModal } from './SearchModal';
-import { ThemeToggle } from './ThemeToggle';
 
 export function Navbar() {
   const pathname = usePathname();
@@ -40,7 +39,6 @@ export function Navbar() {
           />
           <Dropdown label="About" items={ABOUT_ITEMS} />
           <SearchModal />
-          <ThemeToggle />
           <StatusPill />
           <SessionWidget />
         </div>
@@ -48,7 +46,6 @@ export function Navbar() {
         {/* Mobile controls */}
         <div className="flex items-center gap-1 md:hidden">
           <SearchModal />
-          <ThemeToggle />
           <StatusPill />
           <button
             type="button"

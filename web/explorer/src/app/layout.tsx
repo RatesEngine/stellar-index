@@ -1,9 +1,25 @@
 import type { Metadata } from 'next';
+import { Inter, JetBrains_Mono } from 'next/font/google';
 import './globals.css';
 import { Navbar } from '@/components/nav/Navbar';
 import { DegradedBanner } from '@/components/nav/DegradedBanner';
 import { Footer } from '@/components/nav/Footer';
 import { QueryProvider } from '@/components/QueryProvider';
+
+// Inter (UI) + JetBrains Mono (numeric / addresses / code). next/font
+// self-hosts both at build time — no runtime Google dependency, no layout
+// shift — and exposes them as the --font-sans / --font-mono CSS variables
+// the Tailwind theme reads.
+const inter = Inter({
+  subsets: ['latin'],
+  display: 'swap',
+  variable: '--font-sans',
+});
+const jetbrainsMono = JetBrains_Mono({
+  subsets: ['latin'],
+  display: 'swap',
+  variable: '--font-mono',
+});
 
 const SITE_URL = 'https://stellarindex.io';
 const SITE_NAME = 'Stellar Index';
@@ -89,22 +105,8 @@ export default function RootLayout({
 }: {
   children: React.ReactNode;
 }) {
-  // Inline theme-init script — sets html.dark BEFORE first paint
-  // based on localStorage (`re.theme` ∈ {light,dark,system}) or
-  // OS prefers-color-scheme as fallback. Without this users would
-  // see a flash of the wrong theme on page load.
-  const themeInit = `
-(function () {
-  try {
-    var v = localStorage.getItem('re.theme');
-    var prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
-    var dark = v === 'dark' || ((v === null || v === 'system') && prefersDark);
-    if (dark) document.documentElement.classList.add('dark');
-  } catch (_) {}
-})();
-`.trim();
   return (
-    <html lang="en">
+    <html lang="en" className={`${inter.variable} ${jetbrainsMono.variable}`}>
       <head>
         {/* Build identifier — same SHA + time as the footer badge,
             in machine-readable form. `curl -s stellarindex.io | grep
@@ -117,8 +119,6 @@ export default function RootLayout({
           name="re-build-time"
           content={process.env.NEXT_PUBLIC_BUILD_TIME ?? ''}
         />
-        {/* Set html.dark before first paint to avoid theme flash */}
-        <script dangerouslySetInnerHTML={{ __html: themeInit }} />
         {/* Schema.org JSON-LD — Organization + WebSite. Lets Google
             render the brand panel and a sitelinks search box at
             stellarindex.io pointing at /assets?q=…. */}
@@ -178,7 +178,7 @@ export default function RootLayout({
             hidden until focused. */}
         <a
           href="#main"
-          className="sr-only focus:not-sr-only focus:absolute focus:left-4 focus:top-4 focus:z-[100] focus:rounded-md focus:bg-white focus:px-3 focus:py-2 focus:text-sm focus:font-medium focus:text-brand-700 focus:shadow-lg dark:focus:bg-slate-900 dark:focus:text-brand-300"
+          className="sr-only focus:not-sr-only focus:absolute focus:left-4 focus:top-4 focus:z-[100] focus:rounded-md focus:bg-white focus:px-3 focus:py-2 focus:text-sm focus:font-medium focus:text-brand-700 focus:shadow-elevated"
         >
           Skip to main content
         </a>
