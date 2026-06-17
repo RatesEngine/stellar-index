@@ -4,7 +4,8 @@ import Link from 'next/link';
 import { SignInForm } from './SignInForm';
 
 export const metadata: Metadata = {
-  alternates: { canonical: '/signin' },
+  // Auth form — no SEO value; keep it out of the index (and the sitemap).
+  robots: { index: false, follow: false },
   title: 'Sign in — Stellar Index',
   description:
     'Sign in to your Stellar Index account. Magic-link email auth — no passwords.',

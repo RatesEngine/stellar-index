@@ -66,9 +66,10 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     '/blog',
     '/company',
     '/careers',
-    '/signin',
-    '/signup',
-    '/account',
+    // NOTE: auth/app routes (/signin, /signup, /account) are deliberately
+    // NOT listed — they're robots:noindex (no SEO value / private), and a
+    // noindex URL in the sitemap is a Search Console error
+    // ("Submitted URL marked 'noindex'").
   ].map((path) => ({
     url: siteURL(path),
     lastModified: now,

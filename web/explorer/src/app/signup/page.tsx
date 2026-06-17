@@ -6,7 +6,8 @@ import { API_BASE_URL } from '@/api/client';
 import { SignInForm } from '../signin/SignInForm';
 
 export const metadata: Metadata = {
-  alternates: { canonical: '/signup' },
+  // Auth form — no SEO value; keep it out of the index (and the sitemap).
+  robots: { index: false, follow: false },
   title: 'Create account — Stellar Index',
   description:
     'Create your Stellar Index account. Magic-link email auth — no passwords. Free tier included; paid plans unlock higher rate limits + dedicated SLAs.',
