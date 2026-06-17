@@ -1,9 +1,7 @@
 import type { Metadata } from 'next';
 import { Inter, JetBrains_Mono } from 'next/font/google';
 import './globals.css';
-import { Navbar } from '@/components/nav/Navbar';
-import { DegradedBanner } from '@/components/nav/DegradedBanner';
-import { Footer } from '@/components/nav/Footer';
+import { ConsoleShell } from '@/components/nav/ConsoleShell';
 import { QueryProvider } from '@/components/QueryProvider';
 
 // Inter (UI) + JetBrains Mono (numeric / addresses / code). next/font
@@ -183,12 +181,7 @@ export default function RootLayout({
           Skip to main content
         </a>
         <QueryProvider>
-          <Navbar />
-          <DegradedBanner />
-          <main id="main" className="flex-1">
-            {children}
-          </main>
-          <Footer />
+          <ConsoleShell>{children}</ConsoleShell>
         </QueryProvider>
       </body>
     </html>

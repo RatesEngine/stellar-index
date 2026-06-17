@@ -407,12 +407,12 @@ export function SearchModal() {
       <button
         type="button"
         onClick={() => setOpen(true)}
-        className="hidden items-center gap-2 rounded-md border border-line bg-surface px-2.5 py-1.5 text-xs text-ink-muted hover:border-brand-500 hover:text-brand-600 sm:inline-flex"
+        className="flex w-full items-center gap-2 rounded-lg border border-line bg-surface px-3 py-2 text-sm text-ink-muted shadow-xs transition-colors hover:border-line-strong hover:text-ink-body"
         aria-label="Open search"
       >
-        <Search className="h-3.5 w-3.5" />
-        Search
-        <kbd className="ml-2 rounded border border-line bg-surface-muted px-1 text-[10px] font-medium">
+        <Search className="h-4 w-4 shrink-0" />
+        <span>Search</span>
+        <kbd className="ml-auto rounded border border-line bg-surface-muted px-1.5 py-0.5 text-[10px] font-medium text-ink-faint">
           ⌘K
         </kbd>
       </button>
