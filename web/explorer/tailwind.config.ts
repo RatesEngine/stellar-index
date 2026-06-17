@@ -122,7 +122,7 @@ const config: Config = {
         focus: '0 0 0 3px rgb(31 74 224 / 0.20)',
       },
       maxWidth: {
-        page: '80rem', // 1280px — the standard content frame
+        page: '108rem', // 1728px — the console content frame (centered)
         prose: '46rem',
       },
       keyframes: {
