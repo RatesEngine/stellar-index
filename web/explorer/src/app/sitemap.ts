@@ -248,10 +248,14 @@ async function fetchLendingPools(): Promise<string[]> {
       signal: AbortSignal.timeout(5_000),
     });
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    // /v1/lending/pools returns the pool contract address in the `pool`
+    // field (matching the /lending/[pool] route's generateStaticParams).
+    // Reading `contract_id` here (the field doesn't exist) emitted
+    // `/lending/undefined` into the sitemap — a 404 Google penalises.
     const env = (await res.json()) as {
-      data: { contract_id: string }[];
+      data: { pool: string }[];
     };
-    return (env.data ?? []).map((p) => p.contract_id);
+    return (env.data ?? []).map((p) => p.pool).filter(Boolean);
   } catch {
     return [];
   }
