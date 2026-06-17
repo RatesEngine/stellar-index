@@ -17,6 +17,8 @@ against.
 
 ## [Unreleased]
 
+## [v0.5.0-rc.109] — 2026-06-17
+
 ### Changed
 
 - **Full web redesign — a unified light-mode design system across all three
