@@ -155,44 +155,27 @@ export type MeResponse = {
   tier?: string;
 };
 
-// useMe — null on the public explorer; MeResponse only when the
-// page is loaded with the dashboard cookie already in scope (e.g.
-// dashboard.stellarindex.io which is same-origin with its own
-// /v1/account/me).
+// useMe — returns the signed-in account (MeResponse) or null when
+// signed out. Drives the navbar session widget + the logged-in
+// Account nav group + the /account/* auth gate.
 //
-// On the public explorer at stellarindex.io we deliberately DO
-// NOT send `credentials: include`: the API's CORS middleware
-// (internal/api/v1/middleware/cors.go) explicitly does not emit
-// `Access-Control-Allow-Credentials: true`, and pre-2026-05-13
-// the explorer was sending credentialed cross-origin requests
-// against an API that refused them — every page load logged a
-// CORS error in the browser console (QA finding F-03 in
-// docs/review-2026-05-13-live-site-qa.md).
-//
-// Result: signed-in users on the explorer see the signed-out
-// "Sign in / Create account" CTAs in the navbar even when their
-// dashboard session is alive. That's the cost of avoiding the
-// cross-origin cookie architecture for now. Reinstating cross-
-// origin session detection is a separate workstream that has
-// to land:
-//   1. Cookie set by /v1/auth/callback with `Domain=.stellarindex.io`
-//      so it's visible to the explorer's apex.
-//   2. CORS middleware updated to emit
-//      `Access-Control-Allow-Credentials: true` for the explorer
-//      origin allow-list.
-//   3. SameSite=None+Secure on the cookie so Safari / Chrome
-//      include it on cross-origin requests.
+// Cross-origin session detection (F-03) is now wired: the explorer
+// at stellarindex.io sends a CREDENTIALED request to the API at
+// api.stellarindex.io (cross-origin, same-site). This works because
+//   1. the session cookie is set with Domain=.stellarindex.io
+//      (cookie_domain) so it's visible to the apex,
+//   2. the API CORS middleware emits Access-Control-Allow-Credentials
+//      for the explorer origin allow-list (allow_credentials=true),
+//   3. the cookie is SameSite=None;Secure so browsers send it on the
+//      cross-origin request.
+// A signed-out visitor gets 401 → null (navbar shows the sign-in CTAs).
 export function useMe() {
   return useQuery<MeResponse | null>({
-    queryKey: ['/v1/account/me', 'no-credentials'],
+    queryKey: ['/v1/account/me', 'credentialed'],
     queryFn: async () => {
       const url = `${API_BASE_URL_FOR_ME}/v1/account/me`;
       const res = await fetch(url, {
-        // Intentionally NO `credentials: include` — see comment
-        // above. Without it the request is non-credentialed and
-        // the API's plain Allow-Origin header satisfies CORS;
-        // the response is always 401 (no cookie sent) so this
-        // hook returns null, and the navbar renders signed-out.
+        credentials: 'include',
         headers: { Accept: 'application/json' },
       });
       if (res.status === 401) return null;

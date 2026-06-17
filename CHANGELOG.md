@@ -17,6 +17,16 @@ against.
 
 ## [Unreleased]
 
+### Changed
+
+- **Cross-origin session auth (F-03) — the in-site `/account` section now
+  authenticates on the apex.** The session cookie is issued `SameSite=None`
+  when `Secure` (prod), so the explorer at stellarindex.io can send it on
+  credentialed requests to the API at api.stellarindex.io; `useMe` + the
+  account API client send `credentials: include`. Requires `allow_credentials
+  = true` + `cookie_domain = ".stellarindex.io"` in the API config (set on r1).
+  Replaces the prior "explorer always renders signed-out" limitation.
+
 ## [v0.5.0-rc.109] — 2026-06-17
 
 ### Changed

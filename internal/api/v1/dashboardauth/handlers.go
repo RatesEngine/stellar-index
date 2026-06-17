@@ -275,6 +275,19 @@ func (h *Handlers) HandleLogin(w http.ResponseWriter, r *http.Request) {
 	_ = json.NewEncoder(w).Encode(loginResponse{Status: "sent"})
 }
 
+// sessionSameSite picks the session-cookie SameSite policy. The explorer at
+// stellarindex.io calls the API at api.stellarindex.io — cross-origin (same
+// site) — so the cookie must be SameSite=None for the browser to send it on
+// those credentialed requests (the in-site /account section). Browsers only
+// honour SameSite=None on Secure cookies; dev (http://localhost, Secure=false)
+// falls back to Lax. (F-03 cross-origin cookie work.)
+func sessionSameSite(secure bool) http.SameSite {
+	if secure {
+		return http.SameSiteNoneMode
+	}
+	return http.SameSiteLaxMode
+}
+
 // HandleCallback consumes a magic-link token, finds-or-creates
 // the user (single-org v1: each email gets one account on first
 // signup), and issues a session cookie.
@@ -355,7 +368,7 @@ func (h *Handlers) HandleCallback(w http.ResponseWriter, r *http.Request) {
 		Expires:  sess.ExpiresAt,
 		HttpOnly: true,
 		Secure:   h.cfg.CookieSecure,
-		SameSite: http.SameSiteLaxMode,
+		SameSite: sessionSameSite(h.cfg.CookieSecure),
 	})
 
 	// Redirect into the dashboard. Caller-supplied `next` URL
@@ -390,7 +403,7 @@ func (h *Handlers) HandleLogout(w http.ResponseWriter, r *http.Request) {
 		MaxAge:   -1,
 		HttpOnly: true,
 		Secure:   h.cfg.CookieSecure,
-		SameSite: http.SameSiteLaxMode,
+		SameSite: sessionSameSite(h.cfg.CookieSecure),
 	})
 	w.WriteHeader(http.StatusOK)
 }
