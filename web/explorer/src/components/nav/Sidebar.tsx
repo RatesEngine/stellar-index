@@ -29,7 +29,7 @@ import {
 } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 
-import { useMe, useStatus } from '@/api/hooks';
+import { useMe } from '@/api/hooks';
 import { cn } from '@/lib/cn';
 import { SearchModal } from './SearchModal';
 
@@ -82,6 +82,7 @@ const NAV: NavGroup[] = [
       { href: '/pricing', label: 'Pricing', icon: Tag },
       { href: '/methodology', label: 'Methodology', icon: BookOpen },
       { href: '/diagnostics', label: 'Diagnostics', icon: Activity },
+      { href: 'https://status.stellarindex.io', label: 'Status', icon: Activity, external: true },
     ],
   },
 ];
@@ -183,25 +184,11 @@ export function Sidebar() {
 
 function AccountCard({ onNavigate }: { onNavigate?: () => void }) {
   const me = useMe();
-  const status = useStatus();
-  const overall = status.data?.overall ?? 'unknown';
-  const statusTone =
-    overall === 'ok' ? 'bg-up' : overall === 'degraded' ? 'bg-warn-500' : overall === 'down' ? 'bg-down' : 'bg-ink-faint';
-
   const signedIn = !!(me.data && (me.data.user?.email || me.data.key_id));
   const email = me.data?.user?.email;
 
   return (
     <div className="space-y-2">
-      {/* Status line */}
-      <a
-        href="https://status.stellarindex.io"
-        className="flex items-center gap-2 rounded-md px-2 py-1 text-xs text-ink-muted hover:bg-surface-subtle"
-      >
-        <span className={cn('h-1.5 w-1.5 rounded-full', statusTone, overall === 'ok' && 'animate-pulse')} aria-hidden />
-        {overall === 'ok' ? 'All systems operational' : overall === 'degraded' ? 'Degraded performance' : overall === 'down' ? 'Major outage' : 'Status'}
-      </a>
-
       {signedIn ? (
         <AccountMenu email={email} />
       ) : (
