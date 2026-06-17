@@ -3,11 +3,11 @@ import type { ComponentProps, ReactNode } from 'react';
 
 import { cn } from '@/lib/cn';
 
-/** The standard content frame: centered, max-w-page, responsive padding. */
+/** The console content frame: full-width within the content column, with
+ *  responsive horizontal padding. (Not centered/capped — the sidebar already
+ *  bounds the width; data-dense pages use the full span.) */
 export function Container({ className, ...props }: ComponentProps<'div'>) {
-  return (
-    <div className={cn('mx-auto w-full max-w-page px-4 sm:px-6', className)} {...props} />
-  );
+  return <div className={cn('w-full px-4 sm:px-6 lg:px-8', className)} {...props} />;
 }
 
 /** Vertical section rhythm — generous, consistent whitespace between blocks. */

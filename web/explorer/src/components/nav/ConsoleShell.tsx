@@ -6,7 +6,6 @@ import { Menu, TrendingUp, X } from 'lucide-react';
 import { useEffect, useState, type ReactNode } from 'react';
 
 import { DegradedBanner } from './DegradedBanner';
-import { Footer } from './Footer';
 import { Sidebar, SidebarNav } from './Sidebar';
 
 /**
@@ -51,7 +50,6 @@ export function ConsoleShell({ children }: { children: ReactNode }) {
         <main id="main" className="flex-1">
           {children}
         </main>
-        <Footer />
       </div>
 
       {/* Mobile drawer */}
