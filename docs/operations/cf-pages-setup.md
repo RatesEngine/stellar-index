@@ -5,22 +5,44 @@ DNS + the `api.stellarindex.io` proxy:
 
 | Surface | Project | Domain |
 |---|---|---|
-| Explorer (incl. in-site `/account`) | `ratesengine-showcase` | `stellarindex.io` |
-| Status page | `ratesengine-status` | `status.stellarindex.io` |
+| Explorer (incl. in-site `/account`) | `stellarindex-showcase` | `stellarindex.io`, `www.stellarindex.io` |
+| Status page | `stellarindex-status` | `status.stellarindex.io` |
+| API docs | `stellarindex-docs` | `docs.stellarindex.io` |
+| Dashboard redirect (retired) | `stellarindex-app` | `app.stellarindex.io` → `301 /account` |
 | API (proxied) | (n/a — Caddy on r1) | `api.stellarindex.io` → `136.243.90.96` |
 
-> **CF project names are `ratesengine-*`, not `stellarindex-*`.** They
-> were never renamed in the 2026-06-12 rebrand — CF Pages project names
-> are immutable (see "Known discrepancy" below). The deploy workflows
-> (`explorer-deploy.yml`, `status-page.yml`) target the real
-> `ratesengine-*` names.
+> **The CF Pages projects were renamed `ratesengine-*` → `stellarindex-*`
+> on 2026-06-17.** Because CF Pages project names are immutable, the
+> "rename" was a recreate-move-over: new direct-upload `stellarindex-*`
+> projects were created + deployed, the `stellarindex.io` custom domains
+> detached from the old projects and re-attached to the new ones (DNS
+> CNAMEs repointed), and the old `ratesengine-*` projects deleted. The
+> deploy workflows (`explorer-deploy.yml`, `status-page.yml`) target the
+> `stellarindex-*` names.
+
+> **The new projects are DIRECT-UPLOAD, not git-connected.** Deploys
+> happen only via the `workflow_dispatch` workflows (wrangler
+> `pages deploy`), never auto-on-push. (The old projects were
+> git-connected and auto-deployed on every push, which is why they
+> accrued ~2,000 deployments each.) Creating a git-connected project via
+> the API fails on this account — `8000011 internal issue with your
+> Cloudflare Pages Git installation` — so direct-upload is the supported
+> path here.
 
 > **The standalone customer dashboard was retired (2026-06-17).** Login +
 > the account/keys/usage/settings/admin surfaces now live *in-site* at
-> `stellarindex.io/account/*` (explorer routes). The old
-> `ratesengine-dashboard` project / `app.stellarindex.io` domain is
-> redundant — retire it (redirect `app.` → `stellarindex.io/account`,
-> then delete the project). See "Retiring the dashboard surface" below.
+> `stellarindex.io/account/*` (explorer routes). `app.stellarindex.io`
+> now 301-redirects to `/account` via the tiny `stellarindex-app` Pages
+> project (a single `_redirects` file — `/* https://stellarindex.io/account 301`),
+> used because a zone-level redirect rule needs a Rulesets-scoped token
+> this account's deploy token lacks.
+
+> **The legacy `ratesengine.net` brand domains were dropped (2026-06-17).**
+> Every old project also carried `*.ratesengine.net` custom domains; they
+> were detached and now return CF 522 (their zone CNAMEs still point at
+> the now-deleted projects). To make them `NXDOMAIN`, delete the
+> `ratesengine.net` zone DNS records (separate zone; not in the
+> stellarindex.io-scoped deploy token).
 
 ## One-time prerequisite (already done)
 
@@ -137,16 +159,18 @@ and `/account` shows the signed-out shell. To turn login on:
 
 ## Fallback paths
 
-- **Per-project Wrangler CLI deploy** — when CF git integration
-  is paused (e.g. mid-rotation of the GitHub-app token):
+- **Per-project Wrangler CLI deploy** — the new projects are
+  direct-upload, so this is the primary path (not a fallback):
   ```sh
   cd web/explorer && pnpm build && \
-    wrangler pages deploy out --project-name ratesengine-showcase
+    wrangler pages deploy out --project-name stellarindex-showcase
+  # docs is a static dir, no build:
+  wrangler pages deploy docs/reference/api --project-name stellarindex-docs
   ```
 - **GitHub Actions workflow** — `explorer-deploy.yml` (explorer) and
   `status-page.yml` (status) deploy via `workflow_dispatch`. Trigger via
-  `gh workflow run explorer-deploy.yml --ref main`. Both target the real
-  `ratesengine-*` project names.
+  `gh workflow run explorer-deploy.yml --ref main`. Both target the
+  `stellarindex-*` project names.
 
 ## Troubleshooting
 
@@ -161,39 +185,48 @@ and `/account` shows the signed-out shell. To turn login on:
   for CF to issue the cert. Check
   `https://dash.cloudflare.com/<account>/pages/view/<project>/domains`.
 
-## Retiring the dashboard surface (`app.stellarindex.io`)
+## Dashboard retirement (`app.stellarindex.io`) — DONE 2026-06-17
 
 The standalone dashboard was consolidated into the explorer's
-`/account/*` routes (2026-06-17). `app.stellarindex.io` /
-`ratesengine-dashboard` is now redundant. Retire it gracefully —
-**redirect first, delete second** so any bookmark survives:
+`/account/*` routes; `web/dashboard/` was removed from the repo (CI job +
+Makefile targets too). `app.stellarindex.io` now **301-redirects to
+`https://stellarindex.io/account`** via the `stellarindex-app` Pages
+project, whose only content is a `_redirects` file:
 
-1. **Redirect `app.` → the in-site account.** A CF Bulk Redirect (or a
-   one-line `_redirects` deploy on the existing `ratesengine-dashboard`
-   project) sending `https://app.stellarindex.io/* →
-   https://stellarindex.io/account` keeps old links working:
-   ```
-   /*  https://stellarindex.io/account  301
-   ```
-2. **Once traffic is zero**, detach the `app.stellarindex.io` custom
-   domain and delete the `ratesengine-dashboard` Pages project. Project
-   deletion is irreversible (re-create + re-attach domain to undo), so
-   confirm before running it.
+```
+/*  https://stellarindex.io/account  301
+```
 
-The repo no longer builds the dashboard: `web/dashboard/` was removed,
-its CI job (`web-dashboard`) and Makefile targets deleted. No deploy
-workflow ever targeted it (CF git integration handled the build), so
-removal does not un-deploy the live copy — that's what step 2 is for.
+(A zone-level dynamic-redirect rule would be tidier but needs a
+Rulesets-scoped token; the deploy token only has Pages/DNS/Zone-read.)
 
-## Known discrepancy: CF projects still named `ratesengine-*`
+## The rename, as executed (2026-06-17)
 
-The repo + every code path now refers to "stellarindex" / "explorer",
-but the Cloudflare Pages projects are still `ratesengine-showcase`
-(stellarindex.io) and `ratesengine-status` (status.stellarindex.io) —
-they were never renamed in the 2026-06-12 rebrand. **CF Pages does not
-support project rename via API or dashboard.** A cutover (create new
-`stellarindex-*` project → reassign the custom domains → delete old
-project) would cause brief per-domain downtime for a CF-internal label
-no user ever sees. Not worth it on its own; fold it into the dashboard
-retirement above if a migration window opens. The deploy workflows
-point at the real `ratesengine-*` names, so deploys work as-is.
+`ratesengine-*` → `stellarindex-*`, recreate-move-over (CF Pages names
+are immutable). The exact sequence, for the next time a Pages project
+needs renaming:
+
+1. **Pre-create** the new direct-upload project:
+   `POST /accounts/{acct}/pages/projects {"name":"stellarindex-X","production_branch":"main"}`
+   (omit `source` → direct-upload; git-connected create fails with
+   `8000011` on this account).
+2. **Deploy** content to it (`wrangler pages deploy <dir> --project-name
+   stellarindex-X`, or the `workflow_dispatch` deploy workflow) and
+   verify `stellarindex-X.pages.dev` serves.
+3. **Move each custom domain** (a hostname can only be on one project):
+   `DELETE …/projects/ratesengine-X/domains/<host>` →
+   `POST …/projects/stellarindex-X/domains {"name":"<host>"}` →
+   `PATCH /zones/{zid}/dns_records/{id} {"content":"stellarindex-X.pages.dev"}`.
+   Activation + cert on the new project is ~30–60 s (expect transient
+   `522` during the window). Do the lowest-traffic host first as a canary.
+4. **Delete the old project.** Blocked by `8000076 too many deployments`
+   until you purge them — git-connected projects accrue ~1 deployment per
+   push (these had ~2,000 each). Loop `DELETE
+   …/projects/X/deployments/{id}?force=true` over every page, then delete
+   the project. (`/tmp/cf_purge.sh`-style; pace ~4 req/s for the API rate
+   limit.)
+
+`docs.stellarindex.io` was **dead** before this (no project claimed it;
+the API's own RFC-9457 404 body points users there) — fixed by standing
+up `stellarindex-docs` (serves `docs/reference/api/`) and attaching the
+hostname + a fresh CNAME.
