@@ -19,9 +19,9 @@
 // indexer-side sink writes them to per-protocol Blend storage
 // (auctions, positions, admin) rather than the trades hypertable.
 //
-// Stellar RFP commitment: Blend is named in the price-aggregation
-// scope but only as a "secondary validation source" per the
-// proposal — auction stress-prices contribute as reference points
+// Blend is in the price-aggregation
+// scope but only as a "secondary validation source" — auction
+// stress-prices contribute as reference points
 // on the asset detail surface, not into VWAP.
 //
 // Verified 2026-04-22 against pool/src/events.rs +

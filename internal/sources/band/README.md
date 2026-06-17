@@ -2,12 +2,11 @@
 
 Ingests on-chain price updates from
 [Band Protocol](https://www.bandprotocol.com)'s Soroban
-StandardReference contract. Primary Phase-1 reference:
-[`docs/discovery/oracles/band.md`](../../../docs/discovery/oracles/band.md).
+StandardReference contract.
 
 ## What this ingests
 
-Mainnet address (Phase-1 verified):
+Mainnet address (verified on-chain):
 
 | Contract | Address |
 | --- | --- |
@@ -133,7 +132,6 @@ function call slots into the same pattern.
 
 ## References
 
-- Discovery: [`docs/discovery/oracles/band.md`](../../../docs/discovery/oracles/band.md)
 - Band Soroban contract:
   <https://github.com/bandprotocol/band-std-reference-contracts-soroban>
 - ADR-0014 — crypto-ticker representation

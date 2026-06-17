@@ -6,9 +6,8 @@ status: living procedure
 
 # SEP-1 stellar.toml resolution — operational reference
 
-Companion to [`docs/discovery/data-sources/sep1-home-domain.md`](../discovery/data-sources/sep1-home-domain.md)
-(the design-time audit). This doc covers the **runtime** + **on-call**
-concerns that don't fit a design audit:
+This doc covers the **runtime** + **on-call** concerns of SEP-1
+resolution:
 
 - HTTP failure-mode handling per home-domain
 - Cache invalidation policy
@@ -245,7 +244,6 @@ as a future hardening item.
 
 ## References
 
-- Design doc: [`docs/discovery/data-sources/sep1-home-domain.md`](../discovery/data-sources/sep1-home-domain.md)
 - Cache schema: [ADR-0007](../adr/0007-redis-cache-schema.md)
   (`toml:<domain>` namespace, 15-min TTL)
 - Supply policy: [ADR-0011](../adr/0011-supply-algorithm.md) (uses

@@ -1,6 +1,6 @@
 # Blog posts
 
-Markdown files rendered at `ratesengine.net/blog`. Naming convention:
+Markdown files rendered at `stellarindex.io/blog`. Naming convention:
 
 ```
 docs/blog/<YYYY-MM-DD>-<slug>.md

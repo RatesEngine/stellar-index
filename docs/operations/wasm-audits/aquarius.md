@@ -121,7 +121,7 @@ Aquarius supports volatile / stableswap / concentrated pool types.
 The decoder is pool-agnostic — every pool type publishes the same
 4-topic + 3-tuple-body shape, so one decoder covers all three.
 **Concentrated pools** are tagged `ErrConcentratedWIP` in the source
-(Phase-1 audit found them as a feature-branch, no live mainnet
+(found as a feature-branch, no live mainnet
 pools). If concentrated pools ship live, this audit needs to
 re-verify the trade event shape — contract authors might extend the
 body with concentrated-tick info.
@@ -325,7 +325,6 @@ shared event emitter is compiled in unchanged.
 
 - Procedure: `docs/operations/wasm-audits/README.md`
 - Decoder source: `internal/sources/aquarius/{events,decode}.go`
-- Discovery doc: `docs/discovery/dexes-amms/aquarius.md`
 - Schema-evolution stance: `docs/architecture/contract-schema-evolution.md`
 - Backfill gate: `internal/sources/external/registry.go` —
   `Registry["aquarius"].BackfillSafe`

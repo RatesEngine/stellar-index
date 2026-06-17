@@ -1,13 +1,11 @@
 # Changelog
 
-All notable changes to Stellar Index (formerly Rates Engine; ADR-0036)
-will be documented in this file. Entries before 2026-06-12 reference the
-original Rates Engine naming as historical record.
+All notable changes to Stellar Index will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to dual versioning — SemVer for `pkg/*`
 and CalVer (`YYYY.MM.DD`) for binary releases. See
-[docs/discovery/repo-structure-plan.md §10](docs/discovery/repo-structure-plan.md)
+[docs/architecture/semver-policy.md](docs/architecture/semver-policy.md)
 for the rationale.
 
 Every release lists the Stellar protocol version it was tested
@@ -162,16 +160,9 @@ against.
 
 ### Changed
 
-- **Rebrand: Rates Engine -> Stellar Index** (ADR-0037; the same-day
-  interim name "Stellar Atlas", ADR-0036, was found taken and never
-  shipped durably). Module path
-  `github.com/StellarIndex/stellar-index`; binaries `stellarindex-*`; env
-  vars `STELLARINDEX_*`; Prometheus namespace `stellarindex_*`; domain
-  stellarindex.io. Repositioned as a protocol explorer for the Stellar
-  network (pricing API remains a flagship product) evolving toward a
-  comprehensive blockchain explorer. Historical archives (ADRs 0001-0035,
-  discovery, audits, dated entries below) intentionally keep the old name.
-  Migration plan + r1 cutover: `docs/operations/stellar-index-migration.md`.
+- Repositioned as a protocol explorer for the Stellar network (the pricing
+  API remains a flagship product) evolving toward a comprehensive blockchain
+  explorer.
 
 ### Removed
 
@@ -186,7 +177,7 @@ against.
   pure Stellar-asset trust registry: every non-Stellar `networks:` entry was
   stripped, so each browseable entry carries at most one (`stellar`) network
   entry. Reference-only coins (BTC/ETH/…/USDT) keep their `coingecko_id` /
-  `coinmarketcap_id` mappings — the proposal-scoped divergence/aggregator
+  `coinmarketcap_id` mappings — the divergence/aggregator
   reference-price pipeline is unaffected. Pre-v1, no production consumers.
 - **Cross-chain market-cap cache (`internal/currency/marketcap`) removed.** The
   CoinGecko-backed presentation-only cache (and its refresher goroutine + the
@@ -222,15 +213,15 @@ against.
   instead of the scaffold's `debug`. Applied live on r1 2026-06-11 with the
   existing 21 days of chunks migrated intact.
 
-- **sla-probe: measure the ≤30 s RFP freshness target on `/v1/price/tip`,
-  not `/v1/price`.** The probe held `/v1/price` to the Freighter RFP's 30 s
+- **sla-probe: measure the ≤30 s spec freshness target on `/v1/price/tip`,
+  not `/v1/price`.** The probe held `/v1/price` to the spec's 30 s
   price-freshness target, but that surface serves the most recent CLOSED
   bucket (ADR-0015 cross-region byte-identical contract): 60 s `prices_1m`
   buckets + the CAGG refresh policy's 30 s `end_offset` + a 30 s schedule
   interval make its `observed_at` structurally 30–150 s old. Result: the
   probe failed every run since metrics began (≥14 days of Prometheus
   history), drowning real regressions. The probe now also hits
-  `/v1/price/tip` — the rolling-window surface built to deliver the RFP
+  `/v1/price/tip` — the rolling-window surface built to deliver the spec's
   promise (sub-second `observed_at`) — and applies the 30 s target there,
   while `/v1/price` is held to a structural 150 s bound
   (`-closed-bucket-freshness-target`) that still catches the closed-bucket
@@ -290,7 +281,7 @@ Tested against Stellar Protocol 23 (Whisk).
 
 Operator notes:
 - The census + retention-scope completeness fixes take effect once the indexer
-  (and the `ratesengine-ops` binary) are deployed via `deploy.yml`. Until then
+  (and the `stellarindex-ops` binary) are deployed via `deploy.yml`. Until then
   the live census still records both-zero no-ops.
 - The `trades` table must have NO retention policy (migration 0031 — keep raw
   forever). If `timescaledb_information.jobs` shows a `policy_retention` on
@@ -336,9 +327,9 @@ Operator notes:
   infeasible. Ships the Tier-1 schema (`deploy/clickhouse/tier1_schema.sql`),
   the `internal/storage/clickhouse` structural sink + LCM extractor (reuses
   the proven `ingest`/`CensusLedger`/`sorobanevents.Capture` walk; stores raw
-  XDR, no SCVal decoding), and the `ratesengine-ops ch-backfill` command
+  XDR, no SCVal decoding), and the `stellarindex-ops ch-backfill` command
   (`-parallel N` for concurrent range-walkers — the historic-backfill
-  throughput unlock). The `ratesengine-ops ch-gate` command runs the §6 gates
+  throughput unlock). The `stellarindex-ops ch-gate` command runs the §6 gates
   over a backfilled range: it census-walks galexie, asserts the extractor
   matches the decoder-independent census oracle, then reads the range back out
   of ClickHouse and asserts the stored + actual row counts both equal the
@@ -366,7 +357,7 @@ Operator notes:
   post-persist by the live indexer, carrying the LCM-derived census
   (`soroban_event_count`, `classic_trade_effect_count` — counted
   decoder-independently from the LedgerCloseMeta) plus the header
-  hash-chain anchors. New `ratesengine-ops census-backfill -from -to`
+  hash-chain anchors. New `stellarindex-ops census-backfill -from -to`
   populates history. Storage queries `FindLedgerIngestGaps` (contiguity)
   and `VerifyLedgerHashChain` (cryptographic linkage) are Claim 1 of the
   completeness model — both run over the narrow record, never a trades
@@ -375,7 +366,7 @@ Operator notes:
   confidence signal stop guessing sparsity thresholds.
 
 - **Recognition check (ADR-0033 Phase 3 / Claim 2a).** New
-  `ratesengine-ops verify-recognition -from -to` pulls every distinct
+  `stellarindex-ops verify-recognition -from -to` pulls every distinct
   `(contract_id, topic_0_sym)` shape from `soroban_events` and runs each
   through the production decoder chain's real `Matches()` (no
   hand-maintained topic list to drift). Any shape no decoder handles —
@@ -385,7 +376,7 @@ Operator notes:
   and `internal/completeness.AuditRecognition`.
 
 - **Projection reconciliation (ADR-0033 Phase 4 / Claim 2b).** New
-  `ratesengine-ops verify-reconciliation -from -to [-source S]`
+  `stellarindex-ops verify-reconciliation -from -to [-source S]`
   re-derives, per ledger, how many `trades` rows the real decoder would
   emit from `soroban_events` (deterministic recomputation) and diffs
   that against the rows actually present — localizing any projector drop
@@ -405,7 +396,7 @@ Operator notes:
   + amount cross-check) remains the external defense-in-depth anchor.
 
 - **Completeness watermark verdict (ADR-0033 Phase 6 / headline).**
-  `ratesengine-ops compute-completeness` derives the per-source
+  `stellarindex-ops compute-completeness` derives the per-source
   completeness WATERMARK — the highest ledger where substrate continuity
   + hash chain (Claim 1) AND projection reconciliation (Claim 2b) both
   hold from genesis — plus a system recognition verdict (Claim 2a), and
@@ -444,7 +435,7 @@ Operator notes:
   full genesis→tip sweep takes. It is READ-ONLY on served data (recomputes
   `completeness_snapshots` only) and exits non-zero with the failing source +
   range if a source regresses; repair (ch-rebuild over the range) stays a
-  deliberate action. Wired as `ratesengine-completeness.{service,timer}` (hourly,
+  deliberate action. Wired as `stellarindex-completeness.{service,timer}` (hourly,
   niced). This is the runtime data-driven guard that keeps "verified 100%" true
   as the tip advances; it complements the PR-time `lint-pk-discriminators`.
 
@@ -462,7 +453,7 @@ Operator notes:
   silently rendered every source 0, and it was structurally 0 for the
   many registered sources that don't write trades (oracles, bridges,
   FX). It's replaced by a universal per-source trailing-24h event count
-  sourced from `increase(ratesengine_source_events_total[24h])` (the
+  sourced from `increase(stellarindex_source_events_total[24h])` (the
   same counter that backs `active_sources`) via a new
   `StatusBackend.SourceEntries24h` — cheap, reliable, and non-zero for
   every active source whether on-chain or external. New `entries_24h`
@@ -553,7 +544,7 @@ Operator notes:
   + `slo_availability_burn_fast` until the row was hand-deleted.
   The scanner now skips rows whose base/quote fail
   `canonical.ParseAsset`, logs a WARN, and bumps the new
-  `ratesengine_markets_skipped_rows_total` counter so operators
+  `stellarindex_markets_skipped_rows_total` counter so operators
   can find and remove the offending row without serving 500s to
   every consumer.
 
@@ -634,14 +625,14 @@ Pre-deploy operator note: indexer restart picks up the poller skip-doesn't-mean-
 
 ### Fixed
 
-- **`ratesengine_external_poller_stale` falsely firing on
+- **`stellarindex_external_poller_stale` falsely firing on
   chainlink.** Live-r1 incident 2026-06-01: chainlink poller
   reports ~36 min stale shortly after every indexer restart,
   even though it's polling correctly every 30s. Root cause:
   the runner's "skipped" branch (when the poller returns
   `nil, nil, nil` — by convention meaning "polled successfully
   but no new feed data") did NOT update
-  `ratesengine_external_poller_last_success_unix`. Chainlink's
+  `stellarindex_external_poller_last_success_unix`. Chainlink's
   Ethereum feeds update at most every 1 hour, so the vast
   majority of its 30-second polls naturally take the skip path.
   The alert read this as "the poller hasn't successfully
@@ -767,7 +758,7 @@ Pre-deploy operator note: aggregator restart picks up the cadence-aware gap-dete
 
 Tested against Stellar Protocol 23 (Whisk).
 
-Pre-deploy operator note: api + ops binary restart. Indexer + aggregator unchanged (projector is opt-in and defaults to off). After api restart, run `ratesengine-ops sep1-refresh -older-than 0` once to repopulate every issuer's `sep1_payload` JSONB column with the new Currencies shape; until then the per-asset overlay fields are empty.
+Pre-deploy operator note: api + ops binary restart. Indexer + aggregator unchanged (projector is opt-in and defaults to off). After api restart, run `stellarindex-ops sep1-refresh -older-than 0` once to repopulate every issuer's `sep1_payload` JSONB column with the new Currencies shape; until then the per-asset overlay fields are empty.
 
 ### Changed
 
@@ -777,7 +768,7 @@ Pre-deploy operator note: api + ops binary restart. Indexer + aggregator unchang
   which dominated p95 (~4s long tail on cold issuers — drove the
   `slo_latency_burn_medium` page 2026-05-29 11:30). The handler now
   reads the `issuers.sep1_payload` JSONB column populated by the
-  `ratesengine-ops sep1-refresh` cron, which is what /v1/issuers
+  `stellarindex-ops sep1-refresh` cron, which is what /v1/issuers
   already did. The `sep1-refresh` cron is extended to persist
   Currencies (per-asset metadata) so the overlay's Name /
   Description / Image / AnchorAsset fields stay populated on the
@@ -795,7 +786,7 @@ Pre-deploy operator note: api + ops binary restart. Indexer + aggregator unchang
 
 - **ADR-0032 Phase 5 — `projector-replay` operator subcommand.**
   Single SQL cursor-rewind:
-  `ratesengine-ops projector-replay -source <name> -from <ledger>`.
+  `stellarindex-ops projector-replay -source <name> -from <ledger>`.
   The projector goroutine catches up on its next cycle (≤ 5 s)
   and re-projects forward to the live tip. Replaces the family of
   `*-backfill` subcommands deleted in this release. New
@@ -805,7 +796,7 @@ Pre-deploy operator note: api + ops binary restart. Indexer + aggregator unchang
 ### Removed
 
 - **ADR-0032 Phase 5 — dead-code deletion.** Removed eight
-  redundant `ratesengine-ops` subcommands (~1500 LoC):
+  redundant `stellarindex-ops` subcommands (~1500 LoC):
   `cctp-backfill`, `rozo-backfill`, `soroswap-skim-backfill`,
   `comet-liquidity-backfill`, `phoenix-backfill`, `blend-backfill`,
   `sep41-transfers-backfill`, `drain-cascade-window`. All replaced
@@ -842,13 +833,13 @@ Pre-deploy operator note: api + ops binary restart. Indexer + aggregator unchang
   NOTHING absorbs duplicates, so projector lag versus the live
   tip can be measured before Phase 4 flips the writer primary.
   New `[ingestion.projector] enabled` config knob defaults to off;
-  `cmd/ratesengine-indexer/main.go` wires + drains the goroutine
+  `cmd/stellarindex-indexer/main.go` wires + drains the goroutine
   on shutdown.
 - **Projector observability.** Four new metrics
-  (`ratesengine_projector_lag_ledgers`, `_runs_total`,
+  (`stellarindex_projector_lag_ledgers`, `_runs_total`,
   `_events_decoded_total`, `_cycle_duration_seconds`) plus a
-  paired alert (`ratesengine_projector_lag_high` +
-  `ratesengine_projector_error_rate_high`, both P3) and the
+  paired alert (`stellarindex_projector_lag_high` +
+  `stellarindex_projector_error_rate_high`, both P3) and the
   `projector-lag` runbook.
 
 ## [v0.5.0-rc.89] — 2026-05-29
@@ -891,14 +882,14 @@ Pre-deploy operator note: api + aggregator + ops binaries together. No migration
 
 ### Added
 
-- **`ratesengine-ops drain-cascade-window` orchestrator subcommand.** One operator command runs all seven existing per-source `*-backfill` subcommands (sep41-transfers, cctp, rozo, soroswap-skim, comet-liquidity, blend, phoenix) over a `[from, to]` range in series, with `{--output text|json}` per-source result. Default `--halt-on-error=false` keeps a single decoder failure from stranding the other six; `--sources blend,phoenix` restricts to a subset. Replaces the seven-subcommand copy-paste loop currently required to repair a cascade window. New runbook `docs/operations/runbooks/cascade-window-drain.md` and cross-link from `ingest-gap-detected.md`. Sources without a dedicated subcommand (aquarius, reflector-*, redstone, soroswap-main, soroswap-router, defindex) need their own subcommands in a future PR; out of scope here.
+- **`stellarindex-ops drain-cascade-window` orchestrator subcommand.** One operator command runs all seven existing per-source `*-backfill` subcommands (sep41-transfers, cctp, rozo, soroswap-skim, comet-liquidity, blend, phoenix) over a `[from, to]` range in series, with `{--output text|json}` per-source result. Default `--halt-on-error=false` keeps a single decoder failure from stranding the other six; `--sources blend,phoenix` restricts to a subset. Replaces the seven-subcommand copy-paste loop currently required to repair a cascade window. New runbook `docs/operations/runbooks/cascade-window-drain.md` and cross-link from `ingest-gap-detected.md`. Sources without a dedicated subcommand (aquarius, reflector-*, redstone, soroswap-main, soroswap-router, defindex) need their own subcommands in a future PR; out of scope here.
 - **Per-source data-derived gap detection (14 targets).** The gap-detector goroutine now iterates every registered per-source hypertable each cycle, not just `soroban_events`. New `internal/storage/timescale/per_source_gaps.go` exports `GapDetectorTarget` + `DefaultGapDetectorTargets` (the registry) + `FindPerSourceLedgerGaps` (the parameterised LAG()-over-DISTINCT scan). 13 Soroban-era targets + SDEX (filtered via the new `WhereFilter` field on `GapDetectorTarget` so the trades hypertable's SDEX slice scans cleanly). Per-target 15-min timeout means one slow scan can't poison the rest of the cycle; each target emits its own `runs_total{table=...,outcome=...}` counter so operators can tell "this one target wedged" from "the whole worker died." `find-data-gaps --source <name|all|csv>` now scans the chosen target set.
 - **SDEX data-derived coverage signal.** Closes the only remaining unmonitored data path — the classic-DEX ingest pipeline doesn't flow through `soroban_events` and previously had zero data-derived coverage. New runbook `docs/operations/runbooks/sdex-gap-detected.md`.
 - **ADR-0030 per-source coverage invariant + lint guard.** `TestGapDetectorTargetsCoverAllPerSourceHypertables` introspects `migrations/*.up.sql` for `CREATE TABLE` statements matching the per-source naming pattern and fails CI if any are unregistered. Caught two real bugs on first run: `sdex_offer_events` (now registered as the `sdex-offers` target) and `api_usage_events` (exempted as HTTP usage logging, not Stellar-network ingest). The ADR codifies three sub-decisions: data-derived headline density (separate PR), `{source, table}` label set, and identifier-interpolation safety contract. `CONTRIBUTING.md` + `AGENTS.md` get the discipline as a connector-addition checklist.
 
 ### Changed
 
-- Metric labels on `ratesengine_ingest_gap_{ledgers,count,max_size_ledgers}` and the detector meta-metrics extended from `{source}` to `{source, table}`. Alert rule `ratesengine_ingest_gap_detected` now aggregates via `max by (source)` so paging dedup behaviour is unchanged. Histogram buckets for `ratesengine_ingest_gap_detector_duration_seconds` extended to 600s — the live r1 soroban_events scan is ~300s and the old 60s cap put every healthy scan in the overflow bucket.
+- Metric labels on `stellarindex_ingest_gap_{ledgers,count,max_size_ledgers}` and the detector meta-metrics extended from `{source}` to `{source, table}`. Alert rule `stellarindex_ingest_gap_detected` now aggregates via `max by (source)` so paging dedup behaviour is unchanged. Histogram buckets for `stellarindex_ingest_gap_detector_duration_seconds` extended to 600s — the live r1 soroban_events scan is ~300s and the old 60s cap put every healthy scan in the overflow bucket.
 
 ## [v0.5.0-rc.86] — 2026-05-28
 
@@ -920,9 +911,9 @@ Pre-deploy operator note: this release rolls out the api + aggregator + ops bina
 
 ### Added
 
-- `ratesengine-ops resume-stalled` now gates plans against the data-derived `FindSorobanEventsLedgerGaps` result. Pre-this-PR the subcommand trusted the cursor inventory as ground truth; the live r1 dry-run surfaced 50 "actionable" stalled cursors but the first one probed (sdex `[15394495, 30599999]`) had 19 M trade rows already in the trades hypertable from an overlapping sibling cursor. False positive. Post-this-PR the gate cuts r1's actionable plan count from 50 to **6** — and those 6 are exactly the cursors whose remaining range overlaps the F-0020 cascade gap (62,642,781 → 62,735,517). Two new flags: `--force-classic-cursors` (operator opt-in to trust the cursor inventory for SDEX, which doesn't yet have a per-source data-gap detector) and `--data-gap-min-size` (threshold for the gate query; defaults to 1000). Four new tests pin the gate logic. Closes the F-0020 follow-up that motivated `resume-stalled`'s ship in the first place: the subcommand is now data-aware.
-- Periodic data-derived gap detector + 5 new metrics + 2 new alerts. The aggregator binary now runs `internal/storage/timescale.RunGapDetector` as a goroutine that scans `soroban_events` every 5 min for contiguous ledger-coverage gaps >= 1000 ledgers. Five new gauges emit per-source: `ratesengine_ingest_gap_ledgers` (total missing), `ratesengine_ingest_gap_count` (interval count), `ratesengine_ingest_gap_max_size_ledgers` (largest single gap), `ratesengine_ingest_gap_detector_runs_total` + `ratesengine_ingest_gap_detector_duration_seconds` (meta-metrics for worker health). Two new alerts ship in both `deploy/monitoring/rules/ingestion.yml` and the R1 overlay: `ratesengine_ingest_gap_detected` (P1 page, fires on max_size > 1000 sustained 15 min) and `ratesengine_ingest_gap_detector_silent` (P2 ticket, fires when the meta-counter goes silent). Two new runbooks document triage + remediation: `docs/operations/runbooks/ingest-gap-detected.md` and `docs/operations/runbooks/ingest-gap-detector-silent.md`. The pre-this-worker world had no automated signal between "cursor inventory says clean" and "data table actually missing" — the F-0020 cascade-window soroban_events writer halt was invisible for the entire incident. Post-this-worker, the same scenario pages within ~6 min of the first detector cycle after the gap forms.
-- `ratesengine-ops find-data-gaps` subcommand. Scans `soroban_events` directly for contiguous ledger-coverage gaps and emits a targeted backfill plan. **Data-derived alternative to cursor-derived density** — cursor coverage measures process state ("did we walk this ledger") and can read 100% while data is missing; this subcommand measures reality. Flags: `--min-gap-size` (default 1000, filters out legitimate no-Soroban-activity stretches), `--from` / `--to` (range scope; default = first ledger in table → live cursor tip), `--output text|json` (text emits ready-to-paste `ratesengine-ops backfill` commands; json emits a plan-shaped document for `jq` piping). New store helper `timescale.Store.FindSorobanEventsLedgerGaps` uses a LAG() window function over `SELECT DISTINCT ledger` — cheap on the (ledger_close_time, ledger) btree. Live r1 run found the two F-0020 cascade-window gaps (62,642,781 → 62,735,517 = 92,737 ledgers + 62,746,866 → 62,757,524 = 10,659 ledgers; 103,396 missing total) — exact-match to the manual probe. Future periodic gap-detection metric + alert (`ratesengine_ingest_gap_ledgers{source}`) is the next layer; this CLI is the immediate operator utility. Four tests pin happy/empty paths + JSON snake_case contract + text-mode operator-facing format.
+- `stellarindex-ops resume-stalled` now gates plans against the data-derived `FindSorobanEventsLedgerGaps` result. Pre-this-PR the subcommand trusted the cursor inventory as ground truth; the live r1 dry-run surfaced 50 "actionable" stalled cursors but the first one probed (sdex `[15394495, 30599999]`) had 19 M trade rows already in the trades hypertable from an overlapping sibling cursor. False positive. Post-this-PR the gate cuts r1's actionable plan count from 50 to **6** — and those 6 are exactly the cursors whose remaining range overlaps the F-0020 cascade gap (62,642,781 → 62,735,517). Two new flags: `--force-classic-cursors` (operator opt-in to trust the cursor inventory for SDEX, which doesn't yet have a per-source data-gap detector) and `--data-gap-min-size` (threshold for the gate query; defaults to 1000). Four new tests pin the gate logic. Closes the F-0020 follow-up that motivated `resume-stalled`'s ship in the first place: the subcommand is now data-aware.
+- Periodic data-derived gap detector + 5 new metrics + 2 new alerts. The aggregator binary now runs `internal/storage/timescale.RunGapDetector` as a goroutine that scans `soroban_events` every 5 min for contiguous ledger-coverage gaps >= 1000 ledgers. Five new gauges emit per-source: `stellarindex_ingest_gap_ledgers` (total missing), `stellarindex_ingest_gap_count` (interval count), `stellarindex_ingest_gap_max_size_ledgers` (largest single gap), `stellarindex_ingest_gap_detector_runs_total` + `stellarindex_ingest_gap_detector_duration_seconds` (meta-metrics for worker health). Two new alerts ship in both `deploy/monitoring/rules/ingestion.yml` and the R1 overlay: `stellarindex_ingest_gap_detected` (P1 page, fires on max_size > 1000 sustained 15 min) and `stellarindex_ingest_gap_detector_silent` (P2 ticket, fires when the meta-counter goes silent). Two new runbooks document triage + remediation: `docs/operations/runbooks/ingest-gap-detected.md` and `docs/operations/runbooks/ingest-gap-detector-silent.md`. The pre-this-worker world had no automated signal between "cursor inventory says clean" and "data table actually missing" — the F-0020 cascade-window soroban_events writer halt was invisible for the entire incident. Post-this-worker, the same scenario pages within ~6 min of the first detector cycle after the gap forms.
+- `stellarindex-ops find-data-gaps` subcommand. Scans `soroban_events` directly for contiguous ledger-coverage gaps and emits a targeted backfill plan. **Data-derived alternative to cursor-derived density** — cursor coverage measures process state ("did we walk this ledger") and can read 100% while data is missing; this subcommand measures reality. Flags: `--min-gap-size` (default 1000, filters out legitimate no-Soroban-activity stretches), `--from` / `--to` (range scope; default = first ledger in table → live cursor tip), `--output text|json` (text emits ready-to-paste `stellarindex-ops backfill` commands; json emits a plan-shaped document for `jq` piping). New store helper `timescale.Store.FindSorobanEventsLedgerGaps` uses a LAG() window function over `SELECT DISTINCT ledger` — cheap on the (ledger_close_time, ledger) btree. Live r1 run found the two F-0020 cascade-window gaps (62,642,781 → 62,735,517 = 92,737 ledgers + 62,746,866 → 62,757,524 = 10,659 ledgers; 103,396 missing total) — exact-match to the manual probe. Future periodic gap-detection metric + alert (`stellarindex_ingest_gap_ledgers{source}`) is the next layer; this CLI is the immediate operator utility. Four tests pin happy/empty paths + JSON snake_case contract + text-mode operator-facing format.
 
 ### Fixed
 
@@ -936,7 +927,7 @@ Tested against Stellar Protocol 23 (Whisk).
 
 ### Added
 
-- `ratesengine-ops resume-stalled` subcommand. Resumes every stalled backfill cursor with a remaining range in a single invocation, replacing the hand-rolled SQL+shell loop operators had been using to chase down the F-0020 cascade-residue gap. The subcommand reads `ingestion_cursors`, filters to `source LIKE 'backfill%'` rows whose `last_updated` is older than `--min-lag` (default 1 h) AND whose `last_ledger` is strictly less than the parsed `to` from `sub_source` (`<from>-<to>:<decoders>`), then for each plan invokes the same `runBackfillChunk` path the regular `backfill` subcommand uses, with `-resume` semantics. Flags: `--min-lag`, `--max-resumes` (safety cap), `--source-filter` (substring match against decoder CSV — e.g. `defindex` to target one source), `--bucket`, `--parallel`, `--refresh-caggs`, `--dry-run`. Per-cursor failures are logged and the loop continues; exit non-zero only when at least one cursor errored. Live dry-run on r1 found **167 candidate cursors**, **50 actionable** (cursors with remaining work) and **117 skipped** (stale-by-time only — at-target, never vacuumed); the 50 actionable plans are the dominant population of the 1-2% per-source density gap. Two test files pin the parser (`parseStalledCursor` — 10 cases covering well-formed multi/single-decoder, at-target skip, inconsistent-cursor skip, garbage sub_source, overflow, CSV sort) and the filter chain (`planResumeStalled` semantics — source-prefix → min-lag → source-filter → max-resumes precedence). Sequencing: cursors run serially in this first cut; concurrent operator invocations against disjoint `--source-filter` values are the parallel-across-cursors path. Aligns with the post-F-0020 operational posture documented in `docs/operations/backfill-with-live-ingest.md`.
+- `stellarindex-ops resume-stalled` subcommand. Resumes every stalled backfill cursor with a remaining range in a single invocation, replacing the hand-rolled SQL+shell loop operators had been using to chase down the F-0020 cascade-residue gap. The subcommand reads `ingestion_cursors`, filters to `source LIKE 'backfill%'` rows whose `last_updated` is older than `--min-lag` (default 1 h) AND whose `last_ledger` is strictly less than the parsed `to` from `sub_source` (`<from>-<to>:<decoders>`), then for each plan invokes the same `runBackfillChunk` path the regular `backfill` subcommand uses, with `-resume` semantics. Flags: `--min-lag`, `--max-resumes` (safety cap), `--source-filter` (substring match against decoder CSV — e.g. `defindex` to target one source), `--bucket`, `--parallel`, `--refresh-caggs`, `--dry-run`. Per-cursor failures are logged and the loop continues; exit non-zero only when at least one cursor errored. Live dry-run on r1 found **167 candidate cursors**, **50 actionable** (cursors with remaining work) and **117 skipped** (stale-by-time only — at-target, never vacuumed); the 50 actionable plans are the dominant population of the 1-2% per-source density gap. Two test files pin the parser (`parseStalledCursor` — 10 cases covering well-formed multi/single-decoder, at-target skip, inconsistent-cursor skip, garbage sub_source, overflow, CSV sort) and the filter chain (`planResumeStalled` semantics — source-prefix → min-lag → source-filter → max-resumes precedence). Sequencing: cursors run serially in this first cut; concurrent operator invocations against disjoint `--source-filter` values are the parallel-across-cursors path. Aligns with the post-F-0020 operational posture documented in `docs/operations/backfill-with-live-ingest.md`.
 
 ## [v0.5.0-rc.83] — 2026-05-28
 
@@ -944,34 +935,34 @@ Tested against Stellar Protocol 23 (Whisk).
 
 ### Added
 
-- `ratesengine_api_price_stale` alert (both R1 overlay + multi-host) gets an `absent_over_time` OR-branch so the cascade-wedge case fires instead of going no-data silent (F-0104 closure). The staleness gauge is emitted by the aggregator at end-of-tick; when the aggregator wedges, the gauge stops being scraped, the series goes stale, and a bare `> 120` predicate sees no-data — i.e. the alert designed to catch exactly that cascade was itself a victim of it. New expr: `staleness > 120 OR absent_over_time(...[10m]) == 1`. Same pattern as aggregator_silent (F-0080) and the exporter-down meta-alerts (F-0085). Annotation updated so operators reading the page know to consult the aggregator-silent runbook when the gauge is absent rather than the price-stale runbook.
+- `stellarindex_api_price_stale` alert (both R1 overlay + multi-host) gets an `absent_over_time` OR-branch so the cascade-wedge case fires instead of going no-data silent (F-0104 closure). The staleness gauge is emitted by the aggregator at end-of-tick; when the aggregator wedges, the gauge stops being scraped, the series goes stale, and a bare `> 120` predicate sees no-data — i.e. the alert designed to catch exactly that cascade was itself a victim of it. New expr: `staleness > 120 OR absent_over_time(...[10m]) == 1`. Same pattern as aggregator_silent (F-0080) and the exporter-down meta-alerts (F-0085). Annotation updated so operators reading the page know to consult the aggregator-silent runbook when the gauge is absent rather than the price-stale runbook.
 - `http_request_success_duration_seconds` histogram (F-0105 closure). The middleware records into this metric only when the response status is < 500 and not 499 (client-aborted). The latency SLO recording rules in `slo.yml` (both R1 overlay + multi-host) now use `http_request_success_duration_seconds_bucket{le="0.2"}` for the fast-success numerator while keeping `http_request_duration_seconds_count` as the all-request denominator. Pre-this-PR a 5 ms 500 landed in the same histogram as a 5 ms 200 and reported as "good fast" against the SLO, even though the customer experience was a hard outage. After: a fast 5xx burns the latency budget (numerator excludes the error, denominator counts it). One new regression test pins `_success_duration_seconds_count` at 0 for a synthetic 500. Availability SLO (`http_requests_total{status_class=5xx}`) is unchanged; this PR only fixes the latency dimension.
 - `/v1/diagnostics/cursors` distinguishes transient storage errors (503 `cursors-transient` + `cursors-timeout`) from genuine 500s. Under the F-0039 cascade this operator-diagnostic was the most-needed surface but returned the same opaque 500 for "postgres briefly stalled" and "endpoint permanently broken" — operators couldn't tell whether to retry or escalate. Now: 5s ctx-timeout on the ListCursors call; deadline-exceeded → 503 `cursors-timeout`; `transientStorageErr` (driver-bad-connection / 57014 cancel / broken-pipe / EOF) → 503 `cursors-transient`; client-aborted is filtered; the residual 500 is reserved for genuinely-unknown errors. Two new tests pin transient → 503 and non-transient → 500. `handleCursors` extracts the seven-branch error map into `writeCursorsListError` to stay under the gocognit ceiling. Closes F-0094 (audit 2026-05-26).
-- Bounded-cardinality counters now pre-seed their well-known label combos at startup so alert PromQL is well-defined before the first event fires (F-0033 closure). `ratesengine_aggregator_triangulations_total` seeds `{outcome=ok|missing_leg|parse_error|redis_error}`; `ratesengine_stripe_platform_sync_errors_total` seeds `{operation=get_account|upsert_subscription|account_update|list_keys|key_update}`. Pre-this-PR `rate(...{outcome="ok"}[15m])` resolved to "no data" until the first triangulation landed — the audit found multiple alert rules whose underlying metric was "missing from scrape output" for this reason. The fix is `obs.init()`-time `.WithLabelValues(...)` (no-op `Inc`-less call) which is enough to publish the series at zero. Counters with unbounded per-pair labels (`AggregatorFXSnapFallbackTotal`) stay emit-on-error. New `TestZeroSeed_F0033` pins the 9 expected series at `0` in the scrape body. The other two metrics F-0033 flagged (`ratesengine_ledgerstream_tier_read_total`, `ratesengine_stellar_archive_publish_errors_total`) are intentionally inert today — both are documented in their respective files as Phase-3 / cold-tier reservations.
+- Bounded-cardinality counters now pre-seed their well-known label combos at startup so alert PromQL is well-defined before the first event fires (F-0033 closure). `stellarindex_aggregator_triangulations_total` seeds `{outcome=ok|missing_leg|parse_error|redis_error}`; `stellarindex_stripe_platform_sync_errors_total` seeds `{operation=get_account|upsert_subscription|account_update|list_keys|key_update}`. Pre-this-PR `rate(...{outcome="ok"}[15m])` resolved to "no data" until the first triangulation landed — the audit found multiple alert rules whose underlying metric was "missing from scrape output" for this reason. The fix is `obs.init()`-time `.WithLabelValues(...)` (no-op `Inc`-less call) which is enough to publish the series at zero. Counters with unbounded per-pair labels (`AggregatorFXSnapFallbackTotal`) stay emit-on-error. New `TestZeroSeed_F0033` pins the 9 expected series at `0` in the scrape body. The other two metrics F-0033 flagged (`stellarindex_ledgerstream_tier_read_total`, `stellarindex_stellar_archive_publish_errors_total`) are intentionally inert today — both are documented in their respective files as Phase-3 / cold-tier reservations.
 - Param-name aliasing extended across the rest of the `asset=`-canonical endpoints (F-0068, F-0091, F-0073 closure). `/v1/observations` and `/v1/chart` now both accept `base=` as an alias for `asset=`; passing both is a 400. `/v1/price/batch` accepts `pairs=` as an alias for `asset_ids=` so CG-style callers calling the request "pairs" reach the endpoint without a 400 detour; both-supplied is a 400. New shared resolver `resolveAssetOrBaseParam` in `price.go` factors out the asset/base alias logic so future `asset=`-canonical endpoints inherit the contract for free. Six new tests (chart × 2, observations × 2, price-batch × 2) pin alias-accepted + both-supplied-rejected. Closes F-0068, F-0073, F-0091 — completes the cluster started by F-0061.
 - `asset` and `base` query parameters are now interchangeable across `/v1/price` (`asset=` canonical, `base=` accepted) and every endpoint that flows through `parseBaseQuote` — `/v1/history`, `/v1/twap`, `/v1/vwap`, `/v1/ohlc` — (`base=` canonical, `asset=` accepted). Developers copying URLs between endpoints no longer get the F-0061 two-step rejection. Passing BOTH `base` and `asset` returns 400 `invalid-parameter` with a self-explanatory message about which form is canonical for the endpoint they're calling, avoiding silent precedence picks. The pre-existing helpful "this endpoint uses base/quote (not asset/quote)" detail string is replaced with the alias acceptance + the mutually-exclusive 400 — the redirect was a workaround the alias makes unnecessary. New tests pin (a) `asset=` accepted as `base=` alias on /v1/history, (b) both-supplied returns 400 with "mutually exclusive" in the body. `handlePrice` extraction into `parsePriceAssetParam` keeps the handler under the gocognit ceiling. Closes F-0061 (audit 2026-05-26).
 - `window=` query parameter on every endpoint that uses `parseFromTo` (so `/v1/twap`, `/v1/vwap`, `/v1/ohlc`, `/v1/history` — and any future endpoint that picks up the helper). Convenience shorthand for `from = to - window` so CG-style customers don't have to compute it; pre-this-PR the param was silently ignored and `/v1/twap?window=24h` returned a 1h-default 404 with no explanation. Accepts Go's [time.ParseDuration] units (`ns`, `us`, `ms`, `s`, `m`, `h`, including compound `1h30m`) plus a trailing-`d` shortcut for days (`7d` = 168h). Combining `window=` with an explicit `from` is now a 400 — they're conflicting controls for the same value, and rejecting it loudly catches the F-0072 surprise. Three new internal-test functions pin happy-path (hours / minutes / days / compound), conflict rejection, and reject-malformed (`garbage`, `1x`, `1d2h`, `-5h`, `0`). Closes F-0072 (audit 2026-05-26).
-- `ratesengine-ops backfill` chunk-complete log now reports both `chunk_size_ledgers` (the [from,to] range) and `ledgers_walked` (the LCM-callback count from the bucket). The previous `ledgers=N` field reported the range size — operators ran a backfill against an empty bucket (F-0159: `-bucket galexie-archive` for a range that lived only in `galexie-live`) and got `ledgers=5331` in the chunk-complete log after a 200ms run. With this change, the same scenario logs `chunk_size_ledgers=5331 ledgers_walked=0` and also returns an explicit error: `backfill walked 0 of 5331 ledgers in range [...] from bucket "galexie-archive" — bucket likely has no files in this range; check --bucket and the galexie-archive/-live mirror for the target range`. The chunk fails loudly instead of silently succeeding. Closes F-0159 (audit 2026-05-26).
-- TLS cert expiry self-probe (F-0051). API binary now runs a goroutine that `tls.Dial`s each configured public hostname every 6 h, extracts the leaf cert's `NotAfter`, and emits it as `ratesengine_tls_cert_not_after_unix{host}`. New alert `ratesengine_tls_cert_expiring_soon` (P2, both R1 overlay + multi-host) fires when `(NotAfter - time()) < 14 days` sustained 1 h. Default hosts list covers `api.ratesengine.net` + `status.ratesengine.net` + `ratesengine.net` (apex); operators override via `[api].tls_cert_probe_hosts`. Companion `ratesengine_tls_cert_probe_total{host, outcome}` counter exposes probe health (ok / dial_error / timeout / no_cert). Runbook at `docs/operations/runbooks/tls-cert-expiring-soon.md` documents 5-min triage, five likely root causes (ACME rate limit, DNS-01 failing, HTTP-01 firewall, disk full, Caddy crashed), and manual renewal sequence. Closes the "Caddy auto-renews but if it fails we don't know until expiry" gap. 5 unit tests pin the probe behaviour including a self-signed httptest TLS server for happy-path coverage.
-- Operator-config wiring for the new per-asset supply-refresh stale-component overrides: `[supply].stale_component_ledgers_by_asset` map (asset_key → ledger threshold) is now consumed by all three refresher builders (classic / SEP-41 / XLM). Operators set this in `ratesengine.toml` and the aggregator picks per-asset overrides at startup; empty map preserves the global default for every asset. Concrete deployment example documented in the config doc. F-0040 follow-up to library knob shipped earlier.
+- `stellarindex-ops backfill` chunk-complete log now reports both `chunk_size_ledgers` (the [from,to] range) and `ledgers_walked` (the LCM-callback count from the bucket). The previous `ledgers=N` field reported the range size — operators ran a backfill against an empty bucket (F-0159: `-bucket galexie-archive` for a range that lived only in `galexie-live`) and got `ledgers=5331` in the chunk-complete log after a 200ms run. With this change, the same scenario logs `chunk_size_ledgers=5331 ledgers_walked=0` and also returns an explicit error: `backfill walked 0 of 5331 ledgers in range [...] from bucket "galexie-archive" — bucket likely has no files in this range; check --bucket and the galexie-archive/-live mirror for the target range`. The chunk fails loudly instead of silently succeeding. Closes F-0159 (audit 2026-05-26).
+- TLS cert expiry self-probe (F-0051). API binary now runs a goroutine that `tls.Dial`s each configured public hostname every 6 h, extracts the leaf cert's `NotAfter`, and emits it as `stellarindex_tls_cert_not_after_unix{host}`. New alert `stellarindex_tls_cert_expiring_soon` (P2, both R1 overlay + multi-host) fires when `(NotAfter - time()) < 14 days` sustained 1 h. Default hosts list covers `api.stellarindex.io` + `status.stellarindex.io` + `stellarindex.io` (apex); operators override via `[api].tls_cert_probe_hosts`. Companion `stellarindex_tls_cert_probe_total{host, outcome}` counter exposes probe health (ok / dial_error / timeout / no_cert). Runbook at `docs/operations/runbooks/tls-cert-expiring-soon.md` documents 5-min triage, five likely root causes (ACME rate limit, DNS-01 failing, HTTP-01 firewall, disk full, Caddy crashed), and manual renewal sequence. Closes the "Caddy auto-renews but if it fails we don't know until expiry" gap. 5 unit tests pin the probe behaviour including a self-signed httptest TLS server for happy-path coverage.
+- Operator-config wiring for the new per-asset supply-refresh stale-component overrides: `[supply].stale_component_ledgers_by_asset` map (asset_key → ledger threshold) is now consumed by all three refresher builders (classic / SEP-41 / XLM). Operators set this in `stellarindex.toml` and the aggregator picks per-asset overrides at startup; empty map preserves the global default for every asset. Concrete deployment example documented in the config doc. F-0040 follow-up to library knob shipped earlier.
 - Per-asset stale-component threshold override for supply refresher (`supply.WithStaleComponentLedgersFor(assetKey, maxLag)`). F-0040 audit (2026-05-26): PHO governance-token snapshots were being rejected at gap ≈1190 ledgers (~100 min) because of the global 1000-ledger threshold; PHO is low-activity and 1200-ledger lag is normal. Operators can now relax the gate per-asset (e.g. `PHO → 5000`) without loosening the gate for high-activity XLM/USDC. Two new tests pin (a) the relaxed asset accepts what the global default rejects and (b) the override doesn't bleed into other assets. Caller wires per-asset overrides via `supply.NewRefresher(..., WithStaleComponentLedgersFor(...))`.
 - `make verify-r1-sync` now checks for pending Postgres migrations on r1 too. Compares the highest `migrations/NNNN_*.up.sql` number locally against `schema_migrations.version` on r1's Postgres and prints the exact scp+migrate-up command if local is ahead. Closes a real gap: rc.83 adds two columns/tables (migration 0046 `ingestion_cursors.first_ledger`, 0047 `sep41_transfers` hypertable) — without operator-applied migrations the new binary crashes on its first DB write. `feedback_migrations_not_auto_deployed` already documents the manual step; this surfaces drift before deploy instead of after.
-- `ratesengine_ingestion_source_insert_stale` Prometheus alert (P2, R1 overlay + multi-host). Fires when `ratesengine_source_last_insert_unix` hasn't advanced in >1 h while `source_enabled=1`. Timestamp-shape sibling to `ingestion_duplicate_flood` — catches low-volume sources (phoenix, comet) whose insert rate sits under the rate-shape alert's 0.5/s threshold. Reuses the existing duplicate-flood runbook (same root-cause cluster).
-- `ratesengine_source_last_insert_unix{source}` gauge — wall-clock Unix-seconds timestamp of the most recent successfully-inserted trade row per source. Emitted from `Store.InsertTrade` only on `rowsInserted == 1` (not on `ON CONFLICT DO NOTHING`). Pairs with `ratesengine_source_last_event_unix` (dispatcher-matched) to expose the stuck-cursor / duplicate-flood pattern: when the dispatcher keeps matching events but every insert short-circuits, `last_event_unix` climbs while `last_insert_unix` flat-lines. Direct alert template: `time() - ratesengine_source_last_insert_unix{source=X} > 3600`. Complements the rate-shape `trade_insert_outcome_total` alert with a timestamp-shape signal that fires even without sustained traffic.
-- `ratesengine_ingestion_duplicate_flood` Prometheus alert (P2, both R1 overlay + multi-host) and the matching runbook at `docs/operations/runbooks/ingestion-duplicate-flood.md`. Fires when a source has duplicate-insert rate > 0.5/s sustained 10 min with zero new-insert rate — the exact diagnostic signature of the live r1 2026-05-28 stuck-cursor pattern that the new `trade_insert_outcome_total` counter (below) exposes. Runbook documents 5-min triage (curl metrics, psql max-ts check), three likely causes (cursor jumped past data, stale event channel, replay loop), and per-cause remediation (targeted backfill, indexer restart, stop the loop).
-- `ratesengine_trade_insert_outcome_total{source, outcome}` counter — distinguishes `outcome=new` (the row actually landed) from `outcome=duplicate` (`ON CONFLICT DO NOTHING` short-circuited). The pre-existing `ratesengine_trade_inserts_total` counter is silent about dedupe, so a stuck-cursor / replay loop is invisible to operators. Live evidence on r1 (2026-05-28): 157 SDEX insert-attempts/min while the trades hypertable's `max(ts)` was 11 h old — all duplicates. Alert template: `rate({outcome="new"}[5m]) == 0 AND rate({outcome="duplicate"}[5m]) > 0`. Integration test pins both branches via existing `startTimescale` testcontainer.
+- `stellarindex_ingestion_source_insert_stale` Prometheus alert (P2, R1 overlay + multi-host). Fires when `stellarindex_source_last_insert_unix` hasn't advanced in >1 h while `source_enabled=1`. Timestamp-shape sibling to `ingestion_duplicate_flood` — catches low-volume sources (phoenix, comet) whose insert rate sits under the rate-shape alert's 0.5/s threshold. Reuses the existing duplicate-flood runbook (same root-cause cluster).
+- `stellarindex_source_last_insert_unix{source}` gauge — wall-clock Unix-seconds timestamp of the most recent successfully-inserted trade row per source. Emitted from `Store.InsertTrade` only on `rowsInserted == 1` (not on `ON CONFLICT DO NOTHING`). Pairs with `stellarindex_source_last_event_unix` (dispatcher-matched) to expose the stuck-cursor / duplicate-flood pattern: when the dispatcher keeps matching events but every insert short-circuits, `last_event_unix` climbs while `last_insert_unix` flat-lines. Direct alert template: `time() - stellarindex_source_last_insert_unix{source=X} > 3600`. Complements the rate-shape `trade_insert_outcome_total` alert with a timestamp-shape signal that fires even without sustained traffic.
+- `stellarindex_ingestion_duplicate_flood` Prometheus alert (P2, both R1 overlay + multi-host) and the matching runbook at `docs/operations/runbooks/ingestion-duplicate-flood.md`. Fires when a source has duplicate-insert rate > 0.5/s sustained 10 min with zero new-insert rate — the exact diagnostic signature of the live r1 2026-05-28 stuck-cursor pattern that the new `trade_insert_outcome_total` counter (below) exposes. Runbook documents 5-min triage (curl metrics, psql max-ts check), three likely causes (cursor jumped past data, stale event channel, replay loop), and per-cause remediation (targeted backfill, indexer restart, stop the loop).
+- `stellarindex_trade_insert_outcome_total{source, outcome}` counter — distinguishes `outcome=new` (the row actually landed) from `outcome=duplicate` (`ON CONFLICT DO NOTHING` short-circuited). The pre-existing `stellarindex_trade_inserts_total` counter is silent about dedupe, so a stuck-cursor / replay loop is invisible to operators. Live evidence on r1 (2026-05-28): 157 SDEX insert-attempts/min while the trades hypertable's `max(ts)` was 11 h old — all duplicates. Alert template: `rate({outcome="new"}[5m]) == 0 AND rate({outcome="duplicate"}[5m]) > 0`. Integration test pins both branches via existing `startTimescale` testcontainer.
 - DeFindex factory-layer topic recognition closes F-0018 (2026-05-28). New `PrefixFactory = "DeFindexFactory"` + `classifyFactory()` covering `create` / `n_fee`. `Decoder.Matches()` returns true for the factory topic prefix; `Decode()` returns `(nil, nil)` on a factory match — recognised but not decoded into a flow, so the dispatcher's drop-counter stops filing factory events as "unmatched topic". With the earlier strategy `harvest` + vault 9-topic admin/rebalance classifications already in place, every previously-`**NO**` defindex row in `inventory/every-event-coverage.tsv` is now `classification-only` coverage. Body decode (especially for `create` — the vault-spawn signal needs `events.Event.OpArgs` per Surprising-gotcha #2 in the WASM audit doc, since the body itself doesn't carry the new vault address) is Phase C. Two new tests pin (a) `classifyFactory()` byte-equality for both symbols + every reject path and (b) `Decoder.Decode` returning `(nil, nil)` rather than `ErrUnknownEvent` on a factory match.
 - DeFindex decoder enumerates the full upstream event surface (EVERY-event policy). `classify()` (strategy layer) adds `harvest`; `classifyVault()` adds the nine governance / admin / multiplexed-rebalance topics from the audit doc: `rescue`, `paused`, `unpaused`, `nreceiver`, `nmanager`, `nemanager`, `rbmanager`, `dfees`, `rebalance`. Classification only — no canonical Trade or VaultFlow produced for these yet; the goal is closed-set completeness so future per-event decoders (or the `soroban_events` landing zone, ADR-0029) can route on them. Test fixtures updated: the previous "harvest (not Phase A) → " case flips to a positive classification, and every new vault topic gains a per-name subtest.
 - Phoenix decoder's `classifyAny()` now enumerates the six previously-unclassified governance/lifecycle topics published by `phoenix-contracts/contracts/pool/src/contract.rs`: the four admin variants under topic[0]=`"XYK Pool: "` (admin-replacement-requested, replace-with-new-admin, undo-admin-change, accepted-new-admin) plus the two `"initialize"` variants (XYK LP token_a / token_b). Same EVERY-event policy rationale as the aquarius change below — these topics were silently dropped at the classification step despite Phoenix being `BackfillSafe=true`. Classification only; only swap continues to produce a `canonical.Trade`. `actionAdmin` + `actionInitialize` enum values added so future per-event decoders or the `soroban_events` landing zone (ADR-0029) can route on them.
 - Aquarius decoder's `classify()` now enumerates every topic published by `aquarius-amm/liquidity_pool_events/src/lib.rs` (verified 2026-05-27 against the upstream Rust). Eleven previously-unclassified topics (`reserves_sync`, `set_protocol_fee`, `claim_protocol_fee`, `kill_deposit`/`unkill_deposit`, `kill_swap`/`unkill_swap`, `kill_claim`/`unkill_claim`, `kill_gauges_claim`/`unkill_gauges_claim`) are now recognised. Per the EVERY-event policy (`project_every_event_principle`, 2026-05-25 — `classify()` is the authoritative completeness gate before flipping `BackfillSafe`), this closes a latent invariant violation: aquarius was already `BackfillSafe=true` but eleven event topics were silently dropped at the classification step. Only `trade` produces a `canonical.Trade` today; the new classifications make the topics visible to the `soroban_events` landing zone (ADR-0029) and any future per-event decoder. A `TestClassify_completenessVsUpstream` forcing function fails CI if a future `Event*` constant is added without wiring its `TopicSymbol*` into `classify()`.
-- SEP-41 transfer projection: new `sep41_transfers` hypertable (migration 0047) materialises every `transfer` / `approve` / `set_admin` / `set_authorized` event for a watched SEP-41 contract via a sibling-of-`sep41_supply` decoder at `internal/sources/sep41_transfers/`. New endpoint `GET /v1/contracts/{contract_id}/transfers?from=&to=&limit=` exposes the per-account audit trail with per-(contract, from) and per-(contract, to) indexes backing sub-100ms scans. `ratesengine-ops sep41-transfers-backfill -from -to` subcommand replays the soroban_events landing zone (ADR-0029) through the live decoder for historical coverage. Closes F-0021 partial-scope (audit-2026-05-26) and unlocks the per-account net-position Stellar moat that CG/CMC structurally cannot do (their data ingest doesn't observe on-chain transfers). Operator must apply migration 0047 manually (CLAUDE.md migrations-not-auto-deployed).
+- SEP-41 transfer projection: new `sep41_transfers` hypertable (migration 0047) materialises every `transfer` / `approve` / `set_admin` / `set_authorized` event for a watched SEP-41 contract via a sibling-of-`sep41_supply` decoder at `internal/sources/sep41_transfers/`. New endpoint `GET /v1/contracts/{contract_id}/transfers?from=&to=&limit=` exposes the per-account audit trail with per-(contract, from) and per-(contract, to) indexes backing sub-100ms scans. `stellarindex-ops sep41-transfers-backfill -from -to` subcommand replays the soroban_events landing zone (ADR-0029) through the live decoder for historical coverage. Closes F-0021 partial-scope (audit-2026-05-26) and unlocks the per-account net-position Stellar moat that CG/CMC structurally cannot do (their data ingest doesn't observe on-chain transfers). Operator must apply migration 0047 manually (CLAUDE.md migrations-not-auto-deployed).
 - `/v1/ohlc` now supports multi-bar series via `interval=1m|5m|15m|30m|1h|4h|1d|1w` + `limit=N` (max 1000, default 100). Closes the CG/CMC parity gap where consumers expected a series response instead of a single bar (F-0071). Single-bar behaviour preserved when `interval` is unset. Multi-bar mode reads the closed-bucket `prices_<N>` CAGGs (with re-bucketing via `time_bucket` for 5m/30m ← `prices_1m` and 4h ← `prices_1h`); the in-progress bucket is excluded per ADR-0015. Empty series returns 200 + `intervals: []` (NOT 404 — series clients expect a stable shape). Wire fields are compact (`t/o/h/l/c/v_base/v_quote/n`) matching CoinGecko / CoinMarketCap conventions.
 - Density coverage calc (`/v1/diagnostics/ingestion`) now includes the live ledgerstream cursor's coverage from `first_ledger` (newly persisted via migration 0046). Density_pct can now hit 1.0 on a perfectly-backfilled-plus-live-tail source. Previously the calc was backfill-cursor-only and capped at ~0.98 even at perfect ingestion (per `project_density_100pct_goal` mission). The `ingestion_cursors` table gains a `first_ledger` column populated for existing backfill cursors by parsing `from` out of `sub_source`; the live cursor's `first_ledger` is captured by `UpsertCursor`'s INSERT branch and preserved across every advance by the ON CONFLICT DO UPDATE clause. NULL `first_ledger` (pre-migration rows) falls back to `sourceGenesisLedger` so the live span is credited [genesis, last_ledger] until the indexer re-inserts.
 - docs-lint check that fails CI when any /v1/incidents entry has unchecked `[ ]` follow-up checkboxes AND the incident is older than 30 days (F-0099 forcing function). Closes the meta-failure-mode of post-mortem action items rotting indefinitely between recurrences of the same cascade — the 2026-05-10 SEV-2 shipped with 4 `[ ]` items and the same cascade recurred on 2026-05-26 with all four still unchecked.
 
 ### Changed
 
-- 2026-05-10-redis-writes-blocked-disk-full post-mortem: checked off the Prometheus root-FS alert follow-up (shipped in #1229 as `ratesengine_node_root_disk_warning` + `_full`) and the recovery-sequence runbook follow-up (`docs/operations/runbooks/redis-write-blocked-disk-full.md` landed in #1228). Remaining open follow-ups: `postgresql-common` logrotate audit and WASM-audit stderr-capture relocation.
+- 2026-05-10-redis-writes-blocked-disk-full post-mortem: checked off the Prometheus root-FS alert follow-up (shipped in #1229 as `stellarindex_node_root_disk_warning` + `_full`) and the recovery-sequence runbook follow-up (`docs/operations/runbooks/redis-write-blocked-disk-full.md` landed in #1228). Remaining open follow-ups: `postgresql-common` logrotate audit and WASM-audit stderr-capture relocation.
 
 ### Fixed
 
@@ -979,12 +970,12 @@ Tested against Stellar Protocol 23 (Whisk).
 - `/v1/assets/{id}` cold-cache latency for unknown classic assets dropped from ~4–5 s to single-digit ms. F-0157 perf root cause: `Store.HasAsset`'s `WHERE base_asset = $1 OR quote_asset = $1` over the 2.7 B-row trades hypertable had to seek every chunk's index even with EXISTS+LIMIT 1. New `hasClassicAsset` fast path routes `AssetClassic` to a primary-key lookup on the `classic_assets` registry (migration 0023). The registry is populated by `InsertTrade`'s `registerClassicAssetSeen` hook, so its presence is a strict subset of trade-table presence; unknown classic assets short-circuit without touching the hypertable. Other asset types fall through to the original scan unchanged. Integration test extended for the bogus-classic-asset path.
 - Smoke `expect_status` helper now actually supports a per-check timeout (`--timeout N` flag) — the comment claimed this for ages but the code was passing the global `$TIMEOUT` to every curl call. `asset not found` behaviour-pin bumped to 20 s because the cold-cache `/v1/assets/AAAA-G…` resolver takes 4-5 s and was occasionally crossing the global 10 s ceiling, surfacing as `FAIL asset not found — curl error` in live smoke runs. F-0157 reopened during a live smoke check and verified fixed via direct r1 run.
 - Aggregator divergence refresh is now gated by a configurable minimum interval (default 300 s = `cachekeys.DivergenceTTL`). F-0030 follow-up: the daily-batched lookup fix landed earlier was still ~10× over the CMC free-tier monthly cap (10K calls / month) because every aggregator tick (30 s on r1 × 12 pairs) drove one external lookup. The `div:<asset>` Redis entry has a 5-minute TTL, so a 5-minute refresh interval keeps the API's `flags.divergence_warning` cache continuously populated while burning ~one-tenth the external quota. New `aggregate.divergence_min_interval_seconds` config knob; zero preserves legacy every-tick behaviour. Two new unit tests pin the gate behaviour.
-- Production Content-Security-Policy on the explorer (`ratesengine.net` + `/embed/*`) and status site (`status.ratesengine.net`) no longer permits `http://localhost:3000` in `connect-src`. F-0054 audit (2026-05-26) flagged this as dev/prod config drift — the Next dev server doesn't read `_headers` anyway, so the localhost permit was pure leakage. New section 16 in `scripts/ci/lint-docs.sh` (`Content-Security-Policy:.*localhost` grep across `web/explorer/public/_headers` + `web/status/public/_headers`) fails CI on regression.
+- Production Content-Security-Policy on the explorer (`stellarindex.io` + `/embed/*`) and status site (`status.stellarindex.io`) no longer permits `http://localhost:3000` in `connect-src`. F-0054 audit (2026-05-26) flagged this as dev/prod config drift — the Next dev server doesn't read `_headers` anyway, so the localhost permit was pure leakage. New section 16 in `scripts/ci/lint-docs.sh` (`Content-Security-Policy:.*localhost` grep across `web/explorer/public/_headers` + `web/status/public/_headers`) fails CI on regression.
 - `/v1/oracle/latest` p95 latency: a new in-process `CachedOracleReader` layer (3 s TTL + single-flight) sits between the handler and the existing Redis cache, collapsing concurrent cold-miss stampedes and surviving Redis MISCONF. F-0013 audit (2026-05-26) measured p95 ~271 ms vs the 200 ms SLO. The underlying `DISTINCT ON (source)` query against `oracle_updates` has no covering index (sort is unavoidable post-asset-filter), and oracle data refreshes on a 10–60 s cadence, so a 3 s in-process TTL gives customer-visible freshness identical to a direct read while absorbing burst traffic. Key normalisation sorts the asset-strkey list so `[native, crypto:XLM]` and `[crypto:XLM, native]` share one slot. Mirrors the F-0011 `CachedIssuersReader` shape (delete-on-error, waiter-err-pointer single-flight). 8 unit tests added — the previous Redis-only `cachedOracleReader` shipped without unit-test coverage.
-- `ratesengine_price_staleness_seconds` XLM ↔ native mirror is now order-independent (F-0032 follow-up). The aggregator iterates `cfg.Pairs` and emits a staleness gauge per asset; the mirror code in `emitStalenessGauges` used to set the *other* form's gauge to the *current* pair's stale value as a side-effect, so whichever of `(crypto:XLM, native)` was iterated last won and the alert `ratesengine_api_price_stale` would fire (or not) based on iteration order. Post-fix both labels carry `MIN(stale_native, stale_crypto_XLM)` — the freshest form drives both. Added `TestEmitStalenessGauges_xlmNativeMirrorOrderIndependent` to lock in the invariant, plus `TestEmitStalenessGauges_growsAcrossTicks` as a baseline regression test (the metric was previously untested end-to-end).
-- `/v1/issuers` p95 latency: ~404ms → sub-millisecond on cache hit via in-process TTL + single-flight cache (F-0011, was over 200ms SLO target). EXPLAIN ANALYZE on r1 showed the listing's HashAggregate-over-58k-issuers + top-N heapsort hits ~196ms in PG alone before JSON marshalling; no index helps because the GROUP BY + sum(observation_count) requires a full hashagg regardless of access path. New `internal/api/v1.CachedIssuersReader` wraps `IssuersReader` with a 5min TTL + single-flight refresh on `ListIssuers` (passes `GetIssuer` + `ListIssuerAssets` through — those are point lookups already on indexed columns). Mirrors the `CachedSourcesStatsReader` / `CachedMarketsReader` shape; same `ratesengine_api_cache_ops_total{cache="issuers"}` instrumentation feeds the existing `api_cache_miss_rate_high` alert.
-- Binance + Bitstamp CEX WebSocket connections reconnect 12x faster (5s -> 60s exponential, was 60s blanket) and TCP keepalive is set on the dialer. Combined with verified PING/PONG auto-handling in the underlying coder/websocket v1.8.14 library, this reduces the per-cycle data-loss window from ~60s to ~5s. New metric `ratesengine_cex_stream_disconnect_total{source,reason}` surfaces disconnect cadence (F-0029).
-- Indexer's postgres connection pool now sets explicit pool-tuning constants (`internal/storage/timescale.PoolConnMaxLifetime` = 30 min, `PoolConnMaxIdleTime` = 5 min, `PoolMaxOpenConns` = 25, `PoolMaxIdleConns` = 5) via a new extracted `configurePool` helper, and the indexer's `watchPostgresPing` goroutine probes the pool every 60 s emitting `ratesengine_postgres_ping_total{outcome=ok|error}` plus the `ratesengine_postgres_ping_failure_streak` gauge. A new `ratesengine_postgres_ping_failing` page alert (in both `configs/prometheus/rules.r1/storage.yml` and `deploy/monitoring/rules/storage.yml`) fires when the error rate stays above 0.5/s for 2 min, with the new `docs/operations/runbooks/postgres-ping-failing.md`. Previously, a postgres outage that lasted past the natural conn lifetime left dead conns in the pool and the indexer would silently fail writes for hours until manually restarted — root cause of the ~14 h cascade-gap on 2026-05-26-27 (F-0151). The new lifetime forces fresh conns regularly; the ping surfaces stuck pools to alerting in minutes instead of hours.
+- `stellarindex_price_staleness_seconds` XLM ↔ native mirror is now order-independent (F-0032 follow-up). The aggregator iterates `cfg.Pairs` and emits a staleness gauge per asset; the mirror code in `emitStalenessGauges` used to set the *other* form's gauge to the *current* pair's stale value as a side-effect, so whichever of `(crypto:XLM, native)` was iterated last won and the alert `stellarindex_api_price_stale` would fire (or not) based on iteration order. Post-fix both labels carry `MIN(stale_native, stale_crypto_XLM)` — the freshest form drives both. Added `TestEmitStalenessGauges_xlmNativeMirrorOrderIndependent` to lock in the invariant, plus `TestEmitStalenessGauges_growsAcrossTicks` as a baseline regression test (the metric was previously untested end-to-end).
+- `/v1/issuers` p95 latency: ~404ms → sub-millisecond on cache hit via in-process TTL + single-flight cache (F-0011, was over 200ms SLO target). EXPLAIN ANALYZE on r1 showed the listing's HashAggregate-over-58k-issuers + top-N heapsort hits ~196ms in PG alone before JSON marshalling; no index helps because the GROUP BY + sum(observation_count) requires a full hashagg regardless of access path. New `internal/api/v1.CachedIssuersReader` wraps `IssuersReader` with a 5min TTL + single-flight refresh on `ListIssuers` (passes `GetIssuer` + `ListIssuerAssets` through — those are point lookups already on indexed columns). Mirrors the `CachedSourcesStatsReader` / `CachedMarketsReader` shape; same `stellarindex_api_cache_ops_total{cache="issuers"}` instrumentation feeds the existing `api_cache_miss_rate_high` alert.
+- Binance + Bitstamp CEX WebSocket connections reconnect 12x faster (5s -> 60s exponential, was 60s blanket) and TCP keepalive is set on the dialer. Combined with verified PING/PONG auto-handling in the underlying coder/websocket v1.8.14 library, this reduces the per-cycle data-loss window from ~60s to ~5s. New metric `stellarindex_cex_stream_disconnect_total{source,reason}` surfaces disconnect cadence (F-0029).
+- Indexer's postgres connection pool now sets explicit pool-tuning constants (`internal/storage/timescale.PoolConnMaxLifetime` = 30 min, `PoolConnMaxIdleTime` = 5 min, `PoolMaxOpenConns` = 25, `PoolMaxIdleConns` = 5) via a new extracted `configurePool` helper, and the indexer's `watchPostgresPing` goroutine probes the pool every 60 s emitting `stellarindex_postgres_ping_total{outcome=ok|error}` plus the `stellarindex_postgres_ping_failure_streak` gauge. A new `stellarindex_postgres_ping_failing` page alert (in both `configs/prometheus/rules.r1/storage.yml` and `deploy/monitoring/rules/storage.yml`) fires when the error rate stays above 0.5/s for 2 min, with the new `docs/operations/runbooks/postgres-ping-failing.md`. Previously, a postgres outage that lasted past the natural conn lifetime left dead conns in the pool and the indexer would silently fail writes for hours until manually restarted — root cause of the ~14 h cascade-gap on 2026-05-26-27 (F-0151). The new lifetime forces fresh conns regularly; the ping surfaces stuck pools to alerting in minutes instead of hours.
 - CoinGecko poller default cadence bumped from 60s to 300s; the connector already uses the `/simple/price` batch endpoint, so daily call volume drops from ~1,440/day to ~288/day with ample headroom for the market-cap refresher and divergence reference under a shared demo-tier IP cap. Closes the sustained "poller error … http 429 — backing off 59m59s" loop observed live on r1 (F-0030).
 - `internal/divergence/coingecko.go` now batches per-tick lookups into a single `/simple/price` call instead of one HTTP call per pair. Daily call volume drops from ~25,920 (9 pairs × every-30s tick) to ~2,880 (one batched call × every-30s tick) — well within the demo-tier 10K limit (F-0030 follow-up).
 - `galexie-archive-fill` Phase-1b auto-detection of trailing-edge partial partitions: file-count the latest `PARTIAL_CHECK_WINDOW=4` partitions per hourly fire and re-mirror any local partition that has fewer files than AWS. Closes the F-0158 trailing-partition-stuck failure mode where `comm -23 aws local` treated a partition with 416/64000 files as "present" and never revisited it. Recovered ~150k missing files in `FC42F7FF--62720000-62783999`, `FC43F1FF--62656000-62719999`, `FC44EBFF--62592000-62655999` on r1 same session.
@@ -1004,7 +995,7 @@ cascade surfaces in minutes instead of hours.
 - Ansible tasks to install redis_exporter + postgres_exporter + pgbackrest_exporter on r1 — closes the cascade-blind gap discovered during the 2026-05-26 audit (F-0152). Each exporter feeds an alert family that was previously dependent on absent scrape data.
 - `make vuln` target invoking `govulncheck ./...` + chained into `make verify` (F-0057).
 - `make verify-r1-sync` Makefile target + supporting `scripts/dev/verify-r1-sync.sh` script to md5-compare every tracked config path against deployed copy on r1 — operator-pre-deploy drift check (F-0142, Wave-1 follow-up to F-0133..F-0140 drift cluster).
-- Ansible task `17-ratesengine-healthchecks.yml` deploys smoke + heartbeat + sla-probe scripts + systemd units to r1 idempotently — eliminates the manual `install.sh` re-run risk class (F-0137 root cause of drift cluster F-0133..F-0136).
+- Ansible task `17-stellarindex-healthchecks.yml` deploys smoke + heartbeat + sla-probe scripts + systemd units to r1 idempotently — eliminates the manual `install.sh` re-run risk class (F-0137 root cause of drift cluster F-0133..F-0136).
 
 ### Changed
 
@@ -1013,7 +1004,7 @@ cascade surfaces in minutes instead of hours.
 
 ### Fixed
 
-- Guard `ratesengine_aggregator_silent` alert against absent-series silence under Redis-MISCONF cascade (F-0080).
+- Guard `stellarindex_aggregator_silent` alert against absent-series silence under Redis-MISCONF cascade (F-0080).
 - Cascade-affected handlers (`/v1/oracle/*`, `/v1/lending/pools`, `/v1/vwap`, `/v1/observations*`, `/v1/price/tip*`) now return HTTP 503 + Retry-After: 30 on Redis cache-unavailable errors instead of HTTP 500 internal-error (F-0086, F-0087, F-0089, F-0090, F-0145, F-0146).
 - `/v1/status` no longer reports `overall:"ok"` when every service signal is `unknown` (F-0055). Now computes overall from worst-case service state; sets `flags.stale:true` when not all-ok.
 - Pull `ledgerstream.Config` construction in ops subcommands into a single helper that always opts into `TolerateTrailingMissing`. Eliminates the trap (F-0070) where `verify-decoders` and `scan-soroban-events` could hit the rc.81 trailing-edge-missing-file failure that `verify-archive` and `wasm-history` already tolerated.
@@ -1030,7 +1021,7 @@ cascade surfaces in minutes instead of hours.
 
 ### Added
 
-- **`ratesengine-ops {cctp,rozo,soroswap-skim,comet-liquidity,phoenix,blend}-backfill`
+- **`stellarindex-ops {cctp,rozo,soroswap-skim,comet-liquidity,phoenix,blend}-backfill`
   subcommands (ADR-0029 §"SQL-backfill from soroban_events").**
   Complete per-source backfill set that re-feeds soroban_events
   rows through the live Go decoders to populate per-source
@@ -1074,7 +1065,7 @@ cascade surfaces in minutes instead of hours.
   error — the window check guards against masking real corruption.
   Default window 65536 (one Galexie 64k partition plus slack).
   Wired into the standard `LedgerstreamConfig` helper (so
-  `ratesengine-ops backfill` + the indexer's bounded preamble
+  `stellarindex-ops backfill` + the indexer's bounded preamble
   inherit it), the verify-archive walker (the timer can now
   re-enable), and the `wasm-history` walker. Delivery caveat
   documented on the Config field: the SDK cancels its internal
@@ -1139,7 +1130,7 @@ cascade surfaces in minutes instead of hours.
   standard token-event surface and are already claimed by
   `internal/sources/sep41_supply` when the pool is in scope.
   Historical fill plan: walk `soroban_events` (migration 0041)
-  for the pre-rc back-window — a `ratesengine-ops comet-backfill`
+  for the pre-rc back-window — a `stellarindex-ops comet-backfill`
   subcommand wrapping `decodeLiquidityEvent` is the cleanest path
   and is tracked as a follow-up. Updated wasm audit at
   `docs/operations/wasm-audits/comet.md`.
@@ -1208,7 +1199,7 @@ cascade surfaces in minutes instead of hours.
 ### Changed
 
 - **CCTP + Rozo flipped to `BackfillSafe = true` after WASM-history
-  audit (#21).** Walk on 2026-05-26: `ratesengine-ops wasm-history
+  audit (#21).** Walk on 2026-05-26: `stellarindex-ops wasm-history
   -from 60000000 -to 62642779 -parallel 4` across all 6 mainnet
   contracts (3 CCTP + 3 Rozo) — 5h02m wall, 2,642,780 ledgers
   scanned, ZERO WASM upgrades observed (output JSON `ranges=null`
@@ -1261,7 +1252,7 @@ cascade surfaces in minutes instead of hours.
   Phoenix/Soroswap gaps, plus every protocol we add ever) are
   now `INSERT … SELECT FROM soroban_events` SQL queries rather
   than MinIO walks. New backfill mode:
-  `ratesengine-ops backfill -source soroban-events -from N -to M`
+  `stellarindex-ops backfill -source soroban-events -from N -to M`
   populates the table for historical ranges without per-source
   decoding overhead. Compression after 7 days, segment-by
   contract_id. Initial estimated volume ~100-400 GB across the
@@ -1276,14 +1267,14 @@ cascade surfaces in minutes instead of hours.
   dropped output entirely for short-lived processes — a
   consequence of the consumer goroutine reading from the pipe in
   the background, never given a chance to drain before
-  `os.Exit()` killed it. Manifest: `ratesengine-ops backfill
+  `os.Exit()` killed it. Manifest: `stellarindex-ops backfill
   -dry-run` printed only the first line then ate the rest;
-  `ratesengine-ops backfill` errors printed nothing —
+  `stellarindex-ops backfill` errors printed nothing —
   diagnosable only by binary-rollback to rc.76. The wrap now
   returns a `flush func()` that dup2's the saved real-stderr
   back onto fd 2, closes the pipe writer, and waits on the
-  consumer's WaitGroup. main() in `cmd/ratesengine-indexer` and
-  `cmd/ratesengine-ops` is now a thin `os.Exit(realMain())`
+  consumer's WaitGroup. main() in `cmd/stellarindex-indexer` and
+  `cmd/stellarindex-ops` is now a thin `os.Exit(realMain())`
   shim — defers (including `defer flush()`) run inside realMain
   before main calls os.Exit with the returned code, so even
   error paths drain the pipe.
@@ -1330,7 +1321,7 @@ cascade surfaces in minutes instead of hours.
 
 - **`internal/config/validate.go` `KnownSources` was missing `cctp`
   + `rozo` (#40 / #41).** The two new sources were wired into
-  `cmd/ratesengine-indexer/main.go::buildSources` and their
+  `cmd/stellarindex-indexer/main.go::buildSources` and their
   hypertables migrated, but the boot-time `Validate` allow-list
   wasn't updated — so any operator who set
   `ingestion.enabled_sources = […, "cctp", "rozo"]` got
@@ -1358,7 +1349,7 @@ cascade surfaces in minutes instead of hours.
   chunks run. The new ledgers in `[old_tip, new_tip]` are picked
   up by the next nightly fire's `-from-last-verified` increment.
   Helper: `pinnedTipFromPriorRun` in
-  `cmd/ratesengine-ops/verify_archive_state.go`. 4 unit tests
+  `cmd/stellarindex-ops/verify_archive_state.go`. 4 unit tests
   covering happy path, no-prior, From/Workers mismatch, and the
   defensive To=0 case.
 
@@ -1376,7 +1367,7 @@ cascade surfaces in minutes instead of hours.
   it's making progress, the watchdog stays satisfied. The previous
   17h → 36h `TimeoutStartSec` raise from earlier in this Unreleased
   block is superseded by this change. `sd_notify` is a no-op when
-  `$NOTIFY_SOCKET` isn't set, so manual `ratesengine-ops verify-
+  `$NOTIFY_SOCKET` isn't set, so manual `stellarindex-ops verify-
   archive` invocations from a shell are unaffected. Adds
   `github.com/coreos/go-systemd/v22` as a Go dependency.
 
@@ -1421,7 +1412,7 @@ cascade surfaces in minutes instead of hours.
   via `datastore.FindLatestLedgerSequence`, but that — and the
   per-chunk workers' `BufferedStorageBackend.PrepareRange` for
   `BoundedRange` — both require `s3:ListBucket`. r1's
-  `ratesengine_reader` MinIO IAM grants `GetObject` only (single-
+  `stellarindex_reader` MinIO IAM grants `GetObject` only (single-
   chunk `UnboundedRange` doesn't need List, which is why the
   pre-rc.73 single-chunk-by-accident behaviour worked). The
   systemd nightly's `-workers 12 -to=0` therefore hit AccessDenied
@@ -1505,7 +1496,7 @@ cascade surfaces in minutes instead of hours.
   The monthly trim cadence that ages newly-cold ledgers out of local
   MinIO into the AWS public bucket. `compute-trim-cutoff.sh` derives
   the cutoff (indexer cursor − 90 days of ledgers) at run time, the
-  service invokes `ratesengine-ops trim-galexie-archive
+  service invokes `stellarindex-ops trim-galexie-archive
   -older-than-ledger ${CUTOFF} -verify-upstream -commit`, the timer
   fires on the 1st of each month at 03:17 UTC. The Ansible role
   installs the unit but **does not enable** it — per
@@ -1514,7 +1505,7 @@ cascade surfaces in minutes instead of hours.
   the operator runs `systemctl enable --now
   galexie-archive-trim.timer` by hand once that rollout completes.
 
-- **`ratesengine_ledgerstream_tier_both_missing` page-grade alert
+- **`stellarindex_ledgerstream_tier_both_missing` page-grade alert
   (#7).** ADR-0027's cold-tier failure mode (an LCM that is missing
   from BOTH the local hot tier AND the AWS public bucket cold tier)
   now alerts at page severity, with a runbook covering the
@@ -1526,7 +1517,7 @@ cascade surfaces in minutes instead of hours.
   net in place. The alert is silent until cold-tiering is enabled
   (the metric stays at zero before then).
 
-- **`ratesengine_source_matched_events_total` Prometheus metric.**
+- **`stellarindex_source_matched_events_total` Prometheus metric.**
   Per-source counter of inputs a decoder's `Matches()` claimed —
   the denominator of decoder error-rate. Mirrors the
   `decoder_stats_5m.events_seen` fix below onto Prometheus so the
@@ -1558,8 +1549,8 @@ cascade surfaces in minutes instead of hours.
   galexie's MinIO GetObject responses carry no such checksum, so a
   verify-archive chain walk (~1200 ledgers/s) emitted that line per
   read — ballooning `/tmp/va-full.log` to 1.65 GB and burying the
-  real verify-archive failure under noise. `ratesengine-indexer` and
-  `ratesengine-ops` now default `AWS_RESPONSE_CHECKSUM_VALIDATION` to
+  real verify-archive failure under noise. `stellarindex-indexer` and
+  `stellarindex-ops` now default `AWS_RESPONSE_CHECKSUM_VALIDATION` to
   `when_required` at process start (operator-set values are
   respected), so the SDK validates only when the operation requires
   it — S3 GetObject does not.
@@ -1647,7 +1638,7 @@ cascade surfaces in minutes instead of hours.
     own `/v1/assets/{id}` endpoints to warm caches; those requests
     are deliberately cold and were counted in the customer-facing
     latency histogram, dominating p95/p99. They now carry a
-    `ratesengine-prewarm/` User-Agent and are excluded from the SLO
+    `stellarindex-prewarm/` User-Agent and are excluded from the SLO
     histogram alongside the existing smoke + probe synthetic
     traffic.
 
@@ -1662,14 +1653,14 @@ cascade surfaces in minutes instead of hours.
   "duration" is the connection *lifetime* (minutes-to-hours), not
   request latency. The histogram tops out at 10s, so every closed
   stream landed in the `+Inf` bucket and pinned p99 at 10000ms —
-  burning the latency SLO and firing `ratesengine_api_latency_p99_high`
+  burning the latency SLO and firing `stellarindex_api_latency_p99_high`
   / `_p95_high`. A latent bug since the first stream endpoint, it
   became material once `/v1/ledger/stream` (#58) gave every
   status-page viewer a long-lived connection. Fix: the middleware now
   still counts streaming requests in `http_requests_total` but skips
   the duration observation for `/stream` routes.
 - **`galexie-archive` tip-lag alert false-fired every partition
-  cycle (#61).** `ratesengine_galexie_archive_tip_lag_high` (`> 5000`)
+  cycle (#61).** `stellarindex_galexie_archive_tip_lag_high` (`> 5000`)
   and `_severe` (`> 50000`, a page) predated the 64,000-ledger
   partition model: `galexie-archive-fill` mirrors only *complete*
   partitions, so the archive tip structurally lags live by 0–64,000
@@ -1718,14 +1709,14 @@ cascade surfaces in minutes instead of hours.
 ### Fixed
 
 - **SLA probe false-failed on `/v1/issuers` availability (#54).**
-  `ratesengine-sla-probe`'s worker loop recorded every `hit()`
+  `stellarindex-sla-probe`'s worker loop recorded every `hit()`
   result unconditionally — including the one request per worker
   still in flight when the run-duration context expired. That
   cancelled request was counted as a 2xx miss, so every run
   reported exactly `concurrency` phantom failures (~0.3% loss),
   over-attributed to the slowest endpoint (`/v1/issuers`, ~81ms —
   the widest window to be in flight when the deadline lands). It
-  was tripping `ratesengine_sla_probe_unit_failed` (P3) with no
+  was tripping `stellarindex_sla_probe_unit_failed` (P3) with no
   real breach: the API served 100% (server logs + 2,400 manual
   requests confirm), latency/freshness passed comfortably. Fix:
   discard samples whose request was cancelled by the run-duration
@@ -1783,7 +1774,7 @@ cascade surfaces in minutes instead of hours.
   `defindex.Event` (strategy layer) and not `defindex.VaultEvent`.
   Vault events flowed all the way through Matches+Decode, then fell
   into the unhandled-default branch and were dropped with a
-  `ratesengine_source_insert_errors_total{kind="unhandled",source="defindex"}`
+  `stellarindex_source_insert_errors_total{kind="unhandled",source="defindex"}`
   metric bump. (Caught when 246 strategy flow log lines appeared
   but zero vault flow lines — the metric counter was the smoking
   gun.) Added the missing case: counter bump + INFO log
@@ -2010,7 +2001,7 @@ cascade surfaces in minutes instead of hours.
   through to a 500. Combined with the sla-probe's threshold
   set at exactly 99.0%, a single transient per ~430-sample
   burst put availability under threshold and fired
-  `ratesengine_sla_probe_unit_failed_alert`. Fix: new
+  `stellarindex_sla_probe_unit_failed_alert`. Fix: new
   `transientStorageErr(err)` helper in `envelope.go` that
   classifies the three transient classes (SQLSTATE 57014 not
   carried by context cancellation, `driver: bad connection`
@@ -2089,7 +2080,7 @@ cascade surfaces in minutes instead of hours.
   every blend-auction persister (new / fill / delete). Shared
   helper `bumpEntryCount` logs failures at Warn — bump errors
   don't fail the underlying decode (operator's
-  `ratesengine-ops seed-entry-counts` reconciles drift). Other
+  `stellarindex-ops seed-entry-counts` reconciles drift). Other
   observer-driven sinks (account_observations,
   classic_supply_*, sep41_supply_events) are surfaced via the
   supply-observer pages per ADR-0023, not source-attributed
@@ -2276,7 +2267,7 @@ cascade surfaces in minutes instead of hours.
 
 ### Added
 
-- **`ratesengine-ops trim-galexie-archive` operator (#7
+- **`stellarindex-ops trim-galexie-archive` operator (#7
   implementation step 2b — second half of ADR-0027 §Step 2).**
   DESTRUCTIVE subcommand that deletes LCM files from the local hot
   tier (galexie-archive MinIO) whose entire ledger range is below
@@ -2293,7 +2284,7 @@ cascade surfaces in minutes instead of hours.
   **required** (no implicit cutoff); (5) cold tier MUST be
   configured (refuses to run otherwise — trim without a cold
   fallback is unrecoverable data loss). Rollback is mechanical:
-  `ratesengine-ops rehydrate-galexie-archive -from N -to N`
+  `stellarindex-ops rehydrate-galexie-archive -from N -to N`
   re-fetches from cold. Per-object `DeleteObject` (vs bulk
   `DeleteObjects`) so a partial failure leaves a clear position
   cursor — operator re-runs `--dry-run` to see what's left.
@@ -2307,7 +2298,7 @@ cascade surfaces in minutes instead of hours.
   full ADR-0027 §Step 2 is now complete (rehydrate from §2a +
   trim from §2b); §Steps 3-5 (flag-flip in r1's TOML, first bulk
   trim, monthly cadence) are operator-gated and follow.
-- **`ratesengine-ops rehydrate-galexie-archive` operator (#7
+- **`stellarindex-ops rehydrate-galexie-archive` operator (#7
   implementation step 2a — first half of ADR-0027 §Step 2).**
   Non-destructive subcommand that copies LCM files for a ledger
   range from the configured cold tier (`storage.s3_cold_*`) back
@@ -2383,8 +2374,8 @@ cascade surfaces in minutes instead of hours.
   `aws-public-blockchain`, the AWS Open Data Sponsorship bucket).
   `ListFilePaths` unions hot + cold with hot-wins dedup so a
   backfill spanning the tier boundary sees every partition.
-  Optional Prometheus metrics: `ratesengine_ledgerstream_tier_read_total{outcome="hot"|"cold"|"both_missing"}`
-  and `ratesengine_ledgerstream_cold_read_duration_seconds`. Not
+  Optional Prometheus metrics: `stellarindex_ledgerstream_tier_read_total{outcome="hot"|"cold"|"both_missing"}`
+  and `stellarindex_ledgerstream_cold_read_duration_seconds`. Not
   yet wired into `ledgerstream.Stream`'s Config — that integration
   is the next step (still behind the planned `LCM_TIER_ENABLED`
   feature flag per ADR-0027 §Sequencing).
@@ -2404,8 +2395,8 @@ cascade surfaces in minutes instead of hours.
   (cold tier check fails, `cold.Exists` warnings, pool capacity
   rise during trim, indexer `cold.GetFile` errors). Metrics
   reference points operators at
-  `ratesengine_ledgerstream_tier_read_total{outcome=...}` and
-  `ratesengine_ledgerstream_cold_read_duration_seconds` for
+  `stellarindex_ledgerstream_tier_read_total{outcome=...}` and
+  `stellarindex_ledgerstream_cold_read_duration_seconds` for
   real-time visibility.
 - **ADR-0027 (Proposed): LCM cache tiering — local
   galexie-archive as hot, `aws-public-blockchain` as cold (#7
@@ -2418,7 +2409,7 @@ cascade surfaces in minutes instead of hours.
   GET (amortised over 64-ledger partitions) for r1. ADR proposes a
   90 d hot window in local galexie-archive with cold reads
   falling back to AWS, a HEAD-verify-before-delete trim operator
-  (`ratesengine-ops trim-galexie-archive`), and a five-step
+  (`stellarindex-ops trim-galexie-archive`), and a five-step
   rollout that lands the dual-source read path under a feature
   flag before any deletion happens. Recovers ~3-4 TB at the 90 d
   cutoff, unblocking #30 (composite index on the 2.7B-row
@@ -2509,7 +2500,7 @@ cascade surfaces in minutes instead of hours.
   header. Refresh uses a detached `context.Background()`-derived
   ctx (`//nolint:gosec,contextcheck` — intentional, the parent is
   the api process lifetime, not any request). Launched alongside
-  the existing `prewarmCaches` goroutine in `cmd/ratesengine-api`.
+  the existing `prewarmCaches` goroutine in `cmd/stellarindex-api`.
 
 ### Added
 
@@ -2518,7 +2509,7 @@ cascade surfaces in minutes instead of hours.
   (`galexie_archive_tip_lag_ledgers` and friends) computed every
   5 min by `galexie-archive-tip-lag.{service,timer}` running
   `/usr/local/bin/galexie-archive-tip-lag`. The accompanying alert
-  pages (`ratesengine_galexie_archive_tip_lag_severe`) within hours
+  pages (`stellarindex_galexie_archive_tip_lag_severe`) within hours
   if the hourly `galexie-archive-fill.timer` silently breaks — the
   exact failure class that let #26 go undetected for 23 days.
   Rules added to BOTH `deploy/monitoring/rules/galexie-archive.yml`
@@ -2545,7 +2536,7 @@ cascade surfaces in minutes instead of hours.
   emissions); (2) **WASM re-audit PASS vs `11329c24…988`** —
   `wasm2wat` data-section scan confirms every required symbol
   present (`BlendStrategy`/`deposit`/`withdraw`/`from`/`amount`).
-  Unblocks `ratesengine-ops backfill --source=defindex` (still
+  Unblocks `stellarindex-ops backfill --source=defindex` (still
   operator-triggered + zpool-headroom-gated; coordinate with #35
   Soroban-era backfill resume and #7 LCM-tiering).
 
@@ -2596,7 +2587,7 @@ cascade surfaces in minutes instead of hours.
 
 ### Added
 
-- **`ratesengine-ops scan-soroban-events` — in-infra ground-truth
+- **`stellarindex-ops scan-soroban-events` — in-infra ground-truth
   event dumper (#28).** Streams a bounded galexie ledger range and
   prints every Soroban contract event as one JSON line
   (`contract_id`, decoded `topic[]`, body map keys + value types),
@@ -2661,7 +2652,7 @@ cascade surfaces in minutes instead of hours.
   ceiling 503s. New `internal/api/v1/history_cache.go`
   SWR-caches **`LatestTradePerSource` only** (every other
   `HistoryReader` method passes through), wired at 2 m TTL in
-  `cmd/ratesengine-api/main.go`. Mirrors the proven #22/#23
+  `cmd/stellarindex-api/main.go`. Mirrors the proven #22/#23
   pattern with one deliberate change: the cold fill is
   **detached** (own 30 s budget) so it outlives the 8 s request
   ceiling — the first caller(s) still 503 (bounded by their own
@@ -2853,13 +2844,13 @@ cascade surfaces in minutes instead of hours.
 - **`scripts/dev/api-latency-sweep.sh`** — granular latency profiler
   over the entire anonymous public GET surface (the "kitchen sink"):
   N samples/endpoint → p50/p95/p99/max, ranked slowest-first,
-  flagged against the RFP SLO (p95 < 200 ms) and a 1 s concern
+  flagged against the SLO (p95 < 200 ms) and a 1 s concern
   ceiling, exit code = endpoints over the ceiling. Portable
   (`API_BASE_URL` → run on-host for pure server compute, or from a
   VPS / against r2/r3 for network + cross-region), `CACHE_BUST=1`
   exposes uncached cost, `JSON=1` for machine diffing,
   `--spec-check` diffs coverage against `openapi/…v1.yaml` so it
-  can't rot. Complements `cmd/ratesengine-sla-probe` (focused RFP
+  can't rot. Complements `cmd/stellarindex-sla-probe` (focused spec
   pass/fail) with a broad diagnostic ranking. First r1 run
   surfaced `/v1/markets` (~8 s, failing), `/v1/assets/native`
   (~5 s), `/v1/assets` list cold-refresh stampede (1 ms/3.9 s).
@@ -2883,7 +2874,7 @@ cascade surfaces in minutes instead of hours.
   supersedes this whole path.
 - **`verify-archive-tier-a.service`: `TimeoutStartSec` 4h → 17h —
   fixes a bootstrap deadlock that kept
-  `ratesengine_verify_archive_unit_failed` firing permanently.** The
+  `stellarindex_verify_archive_unit_failed` firing permanently.** The
   binary self-bounds at `-max-runtime` (16h) and only writes the
   `-from-last-verified` state file on a clean exit; subsequent runs
   are then incremental (minutes). But systemd's `TimeoutStartSec`
@@ -2939,7 +2930,7 @@ cascade surfaces in minutes instead of hours.
 
 - **`/v1/diagnostics/ingestion` `entries` is no longer silently 0 for
   every source.** The `fxHistoryReader` adapter
-  (`cmd/ratesengine-api`) wraps `*timescale.Store` and forwards the
+  (`cmd/stellarindex-api`) wraps `*timescale.Store` and forwards the
   coverage-reader methods (`FXCoverageStats`, `CAGGCoverageStats`)
   but was **missing a `SourceEntryCounts` delegate**. So the
   request-time type assertion `s.fxHistory.(SourceEntryCountReader)`
@@ -2994,14 +2985,14 @@ cascade surfaces in minutes instead of hours.
   Rule 7).** `source_entry_counts` (migration 0035) was applied
   manually as the `postgres` superuser on r1, leaving it
   superuser-owned; the rc.55 indexer's always-on entry tally and
-  `ratesengine-ops seed-entry-counts` then hit `permission denied
+  `stellarindex-ops seed-entry-counts` then hit `permission denied
   for table source_entry_counts (42501)`. Root cause is operational,
-  not schema: `ratesengine-migrate` runs as the `ratesengine` app
-  role (`RATESENGINE_POSTGRES_DSN`), so on correctly-applied deploys
+  not schema: `stellarindex-migrate` runs as the `stellarindex` app
+  role (`STELLARINDEX_POSTGRES_DSN`), so on correctly-applied deploys
   (R2/R3/fresh) the table is app-owned by construction and needs no
   GRANT — only r1's manual-as-superuser application was the anomaly.
   Hot-fixed in place with `ALTER TABLE source_entry_counts OWNER TO
-  ratesengine` (canonical shape, matches `trades`); a follow-up
+  stellarindex` (canonical shape, matches `trades`); a follow-up
   GRANT migration was deliberately *not* added (it would error when
   run as the app role against a superuser-owned object and is a
   no-op otherwise — the fix is "apply as the app role", now a
@@ -3026,7 +3017,7 @@ cascade surfaces in minutes instead of hours.
   (`ON CONFLICT DO NOTHING` → 0 rows) never inflates the count.
   Reading it is O(20) regardless of trades/oracle_updates size, so
   it stays exact and available even mid-backfill, and it counts
-  oracle updates for oracle sources. New `ratesengine-ops
+  oracle updates for oracle sources. New `stellarindex-ops
   seed-entry-counts` authoritatively reconciles the tally from a
   full GROUP BY (run once post-backfill to fold in pre-counter
   history; SETs not ADDs, so re-running converges). Status-page
@@ -3184,7 +3175,7 @@ cascade surfaces in minutes instead of hours.
   every day; visible as a sustained load-average drag on r1). Past
   LCM files are immutable, so re-hashing them is wasted compute.
 
-  New scheme: ratesengine-ops verify-archive accepts
+  New scheme: stellarindex-ops verify-archive accepts
   `-state-file PATH -from-last-verified [-safety-overlap N]`.
   Reads the prior run's high-water mark from a small JSON file,
   computes `-from = max(2, last_verified - safety_overlap)`, and
@@ -3196,7 +3187,7 @@ cascade surfaces in minutes instead of hours.
   Default safety overlap: 5000 ledgers (~17h of chain) catches any
   anomalies that snuck in just before the last run's tip.
   systemd unit defaults updated:
-  `VERIFY_ARCHIVE_STATE_FILE=/var/lib/ratesengine/verify-archive-state.json`,
+  `VERIFY_ARCHIVE_STATE_FILE=/var/lib/stellarindex/verify-archive-state.json`,
   `VERIFY_ARCHIVE_MAX_RUNTIME=4h` (down from 16h). Typical
   incremental pass covers ~24h of new ledgers in minutes.
 
@@ -3244,7 +3235,7 @@ cascade surfaces in minutes instead of hours.
   drops an Alchemy URL (with embedded API key) into r1's TOML or via
   `CHAINLINK_RPC_URL` env. Bounded concurrency (8) per tick.
 
-  Backfill: new `ratesengine-ops backfill-chainlink` subcommand walks
+  Backfill: new `stellarindex-ops backfill-chainlink` subcommand walks
   `AnswerUpdated` event logs via chunked `eth_getLogs` (5k blocks /
   call, the safe default for Alchemy / Infura / QuickNode response-
   size caps). ~33k RPC calls and ~7h wall time for all-time backfill
@@ -3273,7 +3264,7 @@ cascade surfaces in minutes instead of hours.
   per-source identity preserved so cross-oracle comparison stays
   meaningful. Refresh policies match the trade ladder; no retention
   on sub-1h tiers (matches the operator's "store everything forever"
-  decision in migration 0031), indefinite for 1h+ per the proposal.
+  decision in migration 0031), indefinite for the 1h+ tiers.
 
 - **DeFindex vault decoder** (`internal/sources/defindex/`).
   Event-based decoder (`dispatcher.Decoder`, NOT
@@ -3403,10 +3394,10 @@ cascade surfaces in minutes instead of hours.
       no longer sends `credentials: include` against an API that
       explicitly refuses credentialed CORS. Cost: signed-in
       users see signed-out CTAs in the explorer navbar
-      (dashboard.ratesengine.net is unaffected — same-origin).
+      (dashboard.stellarindex.io is unaffected — same-origin).
       Inline comment documents the cross-origin cookie work
       needed to re-enable session detection (Domain=
-      .ratesengine.net + ACA-Credentials + SameSite=None).
+      .stellarindex.io + ACA-Credentials + SameSite=None).
     - **F-04** (`deep_link` API path leaked to next/link):
       `NetworksPanel` no longer feeds API `deep_link` values
       (e.g. `/v1/assets/USDC-GA5Z…`) into `<Link>`. Stellar
@@ -3460,7 +3451,7 @@ cascade surfaces in minutes instead of hours.
       of `prices_1h` data (root cause = the SDEX backfill bug
       from the previous session). Added an INFO log in
       `markPhase2Freeze` so operators can grep
-      `journalctl -u ratesengine-aggregator | grep "phase2 freeze"`
+      `journalctl -u stellarindex-aggregator | grep "phase2 freeze"`
       to see which pairs are firing. Updated the alert
       annotation (both repo + R1 overlay) to call out the
       cold-baseline pattern + triage steps.
@@ -3488,7 +3479,7 @@ cascade surfaces in minutes instead of hours.
   `ranges_active` count into `ranges_complete` (done),
   `ranges_running` (incomplete + updated within 10 min), and
   `ranges_stalled` (incomplete + idle > 10 min — needs
-  `ratesengine-ops backfill -resume`). Status page renders three
+  `stellarindex-ops backfill -resume`). Status page renders three
   separate columns with green/blue/red coloring. The old
   `ranges_active` field stays on the wire for back-compat.
 
@@ -3701,7 +3692,7 @@ cascade surfaces in minutes instead of hours.
   `TestRunSupplyRefresh_DurationMetricRecorded` pins the wave-90
   supply-refresh latency-histogram wiring, closing the deferred
   item from wave 94. Shipped via the existing
-  `cmd/ratesengine-aggregator/main_test.go` (which I had
+  `cmd/stellarindex-aggregator/main_test.go` (which I had
   forgotten existed at wave-94 time) — no refactor of wave 90
   required after all. The test pre-cancels the context before
   calling `runSupplyRefresh` so the immediate first tick runs
@@ -3728,7 +3719,7 @@ cascade surfaces in minutes instead of hours.
   `TestWorker_DeliveryDurationMetricRecorded` pins the wave-88
   customer-webhook latency-histogram wiring end-to-end —
   asserts a successful delivery produces a sample on
-  `ratesengine_customer_webhook_delivery_duration_seconds{outcome="delivered"}`.
+  `stellarindex_customer_webhook_delivery_duration_seconds{outcome="delivered"}`.
   Without this test, a future refactor could silently delete the
   timing call without any signal (the existing
   `TestWorker_DeliversOn2xx` asserts the counter side but not the
@@ -3738,7 +3729,7 @@ cascade surfaces in minutes instead of hours.
   an Observer (not a Collector) so `testutil.CollectAndCount`
   can't act on it directly.
 - New observability metric
-  `ratesengine_anomaly_freeze_recovery_sweep_duration_seconds`
+  `stellarindex_anomaly_freeze_recovery_sweep_duration_seconds`
   (Histogram, label `outcome`). Final wave-88/89/90/91 entry in
   the IO-heavy goroutine-worker latency-histogram series. Pairs
   with `_sweeps_total`; surfaces Postgres / Redis pressure as a
@@ -3750,7 +3741,7 @@ cascade surfaces in minutes instead of hours.
   30 s. No alert wired (existing recovery-sweep error counter
   covers correctness).
 - New observability metric
-  `ratesengine_aggregator_supply_refresh_duration_seconds`
+  `stellarindex_aggregator_supply_refresh_duration_seconds`
   (Histogram, label `outcome`). Same wave-88/89 pattern applied
   to a third worker — the supply.Refresher.Tick goroutine.
   Pairs with the existing per-asset_key `_total` counter; this
@@ -3759,12 +3750,12 @@ cascade surfaces in minutes instead of hours.
   (operators correlate per-asset latency via the per-tick log
   timestamps when needed). Steady-state ~50-200 ms per tick;
   buckets span 10 ms → 30 s. Wired in
-  `cmd/ratesengine-aggregator/main.go::runSupplyRefresh`. Closes
+  `cmd/stellarindex-aggregator/main.go::runSupplyRefresh`. Closes
   the latency-gap on the third (and final) operationally-meaningful
   IO-heavy goroutine worker after the wave-88 customer-webhook
   delivery and wave-89 divergence refresh metrics.
 - New observability metric
-  `ratesengine_divergence_refresh_duration_seconds` (Histogram,
+  `stellarindex_divergence_refresh_duration_seconds` (Histogram,
   label `outcome`). Per-pair divergence-refresh latency; pairs
   with the existing `_total` counter (counter says how often /
   whether successful, histogram says how long). The natural
@@ -3778,7 +3769,7 @@ cascade surfaces in minutes instead of hours.
   HTTP fan-out). Same wave-88 pattern applied to a different
   worker.
 - New observability metric
-  `ratesengine_customer_webhook_delivery_duration_seconds`
+  `stellarindex_customer_webhook_delivery_duration_seconds`
   (Histogram, label `outcome`). Latency of the outbound HTTP
   POST inside the customer-webhook delivery worker — closes
   the equivalent observability gap on the OUTBOUND side that
@@ -3795,7 +3786,7 @@ cascade surfaces in minutes instead of hours.
   for the "delivered p99 climbing while failing-rate stays
   green" case (customer endpoint going slow rather than
   failing). No new alert wired — the existing
-  `ratesengine_customer_webhook_delivery_failing` covers the
+  `stellarindex_customer_webhook_delivery_failing` covers the
   failing-rate signal; latency degradation surfaces in the
   dashboard.
 - New CI check: `scripts/ci/lint-docs.sh` now enforces that every
@@ -3812,7 +3803,7 @@ cascade surfaces in minutes instead of hours.
 
 ### Documentation
 
-- `docs/audit-2026-05-12-codex/07-remediation-plan.md` reconciled
+- Remediation plan reconciled
   against the findings register: 20 remediation rows flipped from
   `open` to `fixed` (5 with rich closure prose written inline, 15
   via batch status flip). The remediation-plan was N waves behind
@@ -3835,15 +3826,15 @@ cascade surfaces in minutes instead of hours.
   ha-plan.md §2.2 as the underlying reference the dr-activation
   runbook builds on. last_verified bumped to 2026-05-13.
 - Wave-85 hostname-bug sweep widening: a fresh grep on
-  `app.ratesengine.net` found three more places where the
+  `app.stellarindex.io` found three more places where the
   explorer was misattributed to the dashboard's hostname:
   `web/explorer/README.md` v1-fallback paragraph (rsync target +
   Cloudflare proxy URL), `docs/architecture/explorer-implementation-plan.md`
   showcase-domain row, and `docs/architecture/explorer-data-inventory.md`
   Domain (proposed) field plus an iframe embed example. Every
-  occurrence corrected to `ratesengine.net` (or in the
+  occurrence corrected to `stellarindex.io` (or in the
   implementation-plan row, kept as a parenthetical pointing
-  out the dashboard lives at the separate `app.ratesengine.net`
+  out the dashboard lives at the separate `app.stellarindex.io`
   with a cross-reference to web/dashboard/README.md). The embed
   example also migrated from `coin=stellar&quote=usdc` shape
   to the canonical `asset=native&quote=fiat:USD` shape (the
@@ -3851,10 +3842,10 @@ cascade surfaces in minutes instead of hours.
   too).
 - `web/explorer/README.md` factually corrected. Two real bugs:
   (1) the README claimed the explorer lives at
-  `app.ratesengine.net` — wrong; that's the dashboard's
+  `app.stellarindex.io` — wrong; that's the dashboard's
   hostname (per CLAUDE.md, the OpenAPI generated comment, and
   `web/dashboard/README.md`). Explorer lives at
-  `ratesengine.net`. (2) The README's "scaffold + everything is
+  `stellarindex.io`. (2) The README's "scaffold + everything is
   a stub; real panels arrive at Phase 7" framing was three
   rcs out of date — reality is 50+ shipped routes plus the
   R-018 phases 1.1-1.5 verified-currency catalogue work. The
@@ -3897,7 +3888,7 @@ cascade surfaces in minutes instead of hours.
     - `fx-history-missing.md` — added At-a-glance table.
     - `redis-write-blocked-disk-full.md` — added At-a-glance
       table including the alert pairing
-      (`ratesengine_aggregator_cache_write_errors`).
+      (`stellarindex_aggregator_cache_write_errors`).
     - `supply-snapshot-never-initialized.md` — renamed
       `## See also` → `## Related` and expanded entries to
       include the `internal/supply/refresher.go` implementation
@@ -3937,8 +3928,8 @@ cascade surfaces in minutes instead of hours.
   both the multi-host rule file AND the R1 overlay sibling.
 - The `POST /v1/webhooks/stripe` OpenAPI entry now documents the
   inbound observability surface: the
-  `ratesengine_stripe_platform_sync_errors_total{operation}`
-  counter, the `ratesengine_stripe_platform_sync_errors` alert,
+  `stellarindex_stripe_platform_sync_errors_total{operation}`
+  counter, the `stellarindex_stripe_platform_sync_errors` alert,
   and the `stripe-platform-sync-errors` runbook. Explains that
   the platform-store side effects (account tier / subscription
   upsert / per-key Postgres rate-limit lift) are best-effort and
@@ -3951,14 +3942,14 @@ cascade surfaces in minutes instead of hours.
   `incident.sev1` + `incident.resolved`), `AnomalyFreezeWebhookPayload`
   (covers `anomaly.freeze`), and `DivergenceFiringWebhookPayload`
   (covers `divergence.firing`). The wire-shape was implicit in the
-  Go producers (`cmd/ratesengine-ops/emit_incident.go`,
-  `cmd/ratesengine-aggregator/main.go`) but was nowhere in the
+  Go producers (`cmd/stellarindex-ops/emit_incident.go`,
+  `cmd/stellarindex-aggregator/main.go`) but was nowhere in the
   customer-facing OpenAPI surface — customers writing webhook
   handlers had no schema to write Zod/Pydantic/etc. validators
   against. The `DashboardWebhook.events` field description now
   cross-references the per-event payload schemas. Generated
-  artifacts regenerated: `docs/reference/api/rates-engine.v1.yaml`,
-  `examples/postman/rates-engine.postman_collection.json`,
+  artifacts regenerated: `docs/reference/api/stellar-index.v1.yaml`,
+  `examples/postman/stellar-index.postman_collection.json`,
   `web/explorer/src/api/types.ts`.
 - `web/status/README.md` — new top-level README for the public
   status page, matching the convention already established by
@@ -3986,8 +3977,8 @@ cascade surfaces in minutes instead of hours.
   fiat fix. Cross-references the wave-70 CG runbook section.
 - `runbooks/decode-errors.md` adds a new "Per-source quick
   reference" section pulling the per-source decode-regression
-  surprises from CLAUDE.md and `docs/discovery/dexes-amms` /
-  `docs/discovery/oracles` into a single operator-facing matrix.
+  surprises from CLAUDE.md and the per-protocol decode notes into a
+  single operator-facing matrix.
   Covers the seven sources whose ingest path has a known wire-
   level surprise that operators routinely re-discover the hard way
   (Soroswap SwapEvent/SyncEvent split, Phoenix 8-events-per-swap,
@@ -4032,7 +4023,7 @@ cascade surfaces in minutes instead of hours.
   R1 engineering surface is operator-deploy-ready" without
   conflating it with multi-region readiness. Backlog doc updated
   with both gate semantics. F-1206 audit closure note refreshed.
-- New observability metric `ratesengine_stripe_platform_sync_errors_total{operation}`
+- New observability metric `stellarindex_stripe_platform_sync_errors_total{operation}`
   surfacing failures in the Stripe webhook's platform-store side-effects path
   (the F-1219 fan-out into Postgres `accounts` / `subscriptions` /
   `api_keys`). Webhook deliberately does not 5xx on these failures — Stripe
@@ -4042,7 +4033,7 @@ cascade surfaces in minutes instead of hours.
   (`get_account` / `upsert_subscription` / `account_update` / `list_keys` /
   `key_update`). Wired through five failure sites across
   `applyPlatformSideEffects`, `handleStripeSubscriptionEvent`, and
-  `handleStripeInvoicePaid`. New `ratesengine_stripe_platform_sync_errors`
+  `handleStripeInvoicePaid`. New `stellarindex_stripe_platform_sync_errors`
   alert in both `deploy/monitoring/rules/api.yml` (multi-host) and
   `configs/prometheus/rules.r1/api.yml` (R1 overlay), plus runbook at
   `docs/operations/runbooks/stripe-platform-sync-errors.md`. Closes the
@@ -4103,8 +4094,8 @@ rc.48 deploy to R1.
 
 - **Multi-region tooling now handles single-region operation
   gracefully (F-1234).** Pre-R2/R3-bringup only R1 is deployed.
-  `scripts/dev/verify-cross-region.sh`, `ratesengine-ops
-  cross-region-check`, and `ratesengine-ops cross-region-monitor`
+  `scripts/dev/verify-cross-region.sh`, `stellarindex-ops
+  cross-region-check`, and `stellarindex-ops cross-region-monitor`
   all used to fail with "need at least 2 regions to compare"
   even when called against the only deployed region. Operators
   who triggered them got a confusing failure and learned to
@@ -4113,7 +4104,7 @@ rc.48 deploy to R1.
   notice and exits 0. The check fires for real once a second
   region URL is supplied. Default R1 URL in
   verify-cross-region.sh points at the live public hostname
-  (`api.ratesengine.net`); R2/R3 default empty.
+  (`api.stellarindex.io`); R2/R3 default empty.
 
 - **R1 prometheus.r1.yml scrape coverage + rule_files path
   (F-1219 + F-1220).** Added scrape jobs for redis_exporter
@@ -4131,7 +4122,7 @@ rc.48 deploy to R1.
 
 - **Prometheus multi-host ↔ R1 overlay drift caught at CI (F-1222).**
   Multi-host rules in `deploy/monitoring/rules/` use underscored
-  job labels (`ratesengine_api`) matching the multi-host ansible
+  job labels (`stellarindex_api`) matching the multi-host ansible
   scrape config; R1's single-host overlay at
   `configs/prometheus/rules.r1/` uses hyphenated labels matching
   the R1 systemd units. Editing only one half silently breaks the
@@ -4144,7 +4135,7 @@ rc.48 deploy to R1.
   names so no expression changes were needed.
 
 - **Tailored error for supply-observer backfill attempts (F-1243).**
-  `ratesengine-ops backfill accounts` (or any of the six supply
+  `stellarindex-ops backfill accounts` (or any of the six supply
   observers: `accounts`, `trustlines`, `claimable_balances`,
   `sac_balances`, `sep41_supply`, `liquidity_pools`) used to fail
   with the generic "WASM-hash audit pending" error — misleading,
@@ -4164,7 +4155,7 @@ rc.48 deploy to R1.
 - **Customer-webhook delivery worker wired into the API binary
   (F-1270 follow-up).** The worker that drains the
   `webhook_deliveries` queue (HMAC sign + POST + retry) now runs
-  as a goroutine in `cmd/ratesengine-api/main.go` whenever the
+  as a goroutine in `cmd/stellarindex-api/main.go` whenever the
   dashboard surface comes up (Postgres reachable). Pre-this:
   operator had to launch the worker as a separate process per
   the docblock "operator-launched via internal/customerwebhook.New".
@@ -4230,7 +4221,7 @@ rc.48 deploy to R1.
   the flag is caught immediately.
 
 - **API reference doc drift after rc.48 (F-1246).** Regenerated
-  `docs/reference/api/rates-engine.v1.yaml` to match the current
+  `docs/reference/api/stellar-index.v1.yaml` to match the current
   OpenAPI source — three residual `/v1/coins` references in the
   generated file (an `?issuer=` description, the home-page
   summary, and an error-envelope `instance` example) lingered
@@ -4239,7 +4230,7 @@ rc.48 deploy to R1.
 
 - **Postman collection drift (F-1247).** `make docs-postman` now
   writes to the customer-facing canonical at
-  `examples/postman/rates-engine.postman_collection.json` —
+  `examples/postman/stellar-index.postman_collection.json` —
   previously it wrote to a gitignored `docs/reference/api/...`
   path, so the tracked customer copy drifted silently every time
   the OpenAPI spec moved. The docs-site build pipeline runs its
@@ -4271,7 +4262,7 @@ rc.48 deploy to R1.
 
 ### Changed
 
-- **`ratesengine_ingestion_source_stopped` alert window widened
+- **`stellarindex_ingestion_source_stopped` alert window widened
   to 30m × 15m (F-1212b).** The pre-existing 5-min window
   produced routine false positives on low-volume Soroban / FX
   sources (blend auctions, ECB FX dailies, Band oracle pushes,
@@ -4280,17 +4271,17 @@ rc.48 deploy to R1.
   time; operators learned to ignore the family. The new window
   waits past the natural quiet-window cadence for these sources;
   total-outage coverage stays tight via the separate 3-min
-  `ratesengine_ingestion_all_sources_stopped` (P1). Rule updated
+  `stellarindex_ingestion_all_sources_stopped` (P1). Rule updated
   in both `deploy/monitoring/rules/ingestion.yml` and
   `configs/prometheus/rules.r1/ingestion.yml`. Runbook + alerts
   catalog updated to reflect the new threshold and rationale.
 
 ### Documented
 
-- **RFP F4.2 one-year retention catch-up procedure (F-1265).**
+- **spec F4.2 one-year retention catch-up procedure (F-1265).**
   `docs/operations/backfill-procedure.md` gains a new section
   walking through the 1-year catch-up backfill needed to meet
-  Freighter RFP F4.2's ≥1y retention commitment. Covers
+  the ≥1y retention commitment. Covers
   resolving the target ledger window from the Galexie archive
   manifest, sanity-checking upstream archive completeness, row-
   count estimation, the chunked-by-week run loop with `-resume`
@@ -4302,7 +4293,7 @@ rc.48 deploy to R1.
 ### Added
 
 - **R1 TOML supply.watched_* defaults (F-1266).** The
-  `archival-node` ansible role's `ratesengine.toml.j2` template
+  `archival-node` ansible role's `stellarindex.toml.j2` template
   gains a `[supply]` block with sensible launch-day defaults:
   `watched_classic_assets` populated with the top Stellar-classic
   verified currencies (USDC / EURC / AQUA / yXLM / VELO / BLND /
@@ -4324,7 +4315,7 @@ rc.48 deploy to R1.
   it from `redis.conf.j2` via `aclfile`, and:
   - Disables the legacy `default` user (`off nopass nocommands`)
     so no password-less access path remains.
-  - Creates a `ratesengine` application user with
+  - Creates a `stellarindex` application user with
     `+@read +@write +@scripting +@pubsub +@connection` minus the
     `@admin` + `@dangerous` families, scoped via `~prefix:*` to
     exactly the cache key prefixes the application uses (vwap,
@@ -4333,7 +4324,7 @@ rc.48 deploy to R1.
     channels (`&closed-bucket-*`, `&stream-*`).
   Application binaries get a new `[storage].redis_username` TOML
   key (default empty = legacy path; operators set it to
-  `ratesengine` when they flip the lockdown). `redisclient.Build`
+  `stellarindex` when they flip the lockdown). `redisclient.Build`
   threads it into both the FailoverClient and single-node code
   paths. Commented-out per-component (`re_aggregator` /
   `re_api` / `re_indexer`) users in the template show the
@@ -4352,7 +4343,7 @@ rc.48 deploy to R1.
   even though we had a fresh EURC/USDC VWAP one minute earlier.
   Now it inherits USD value through the peg chain. Wired
   alongside the Phase 1 quote spec in
-  `cmd/ratesengine-indexer/main.go` whenever
+  `cmd/stellarindex-indexer/main.go` whenever
   `usd_pegged_classic_assets` is non-empty (no new config
   knob). 7 unit tests cover defaults, cache hits, negative
   cache, TTL expiry, minute-bucket key stability. The
@@ -4380,13 +4371,13 @@ rc.48 deploy to R1.
   New `internal/customerwebhook` package drains the queue the
   store wrote in the prior commit: poll-loop drains
   ListPendingDeliveries, HMAC-SHA-256 signs the payload,
-  POSTs to the customer URL with `X-RatesEngine-Signature` +
-  `X-RatesEngine-Event` + `X-RatesEngine-Delivery-Id` headers,
+  POSTs to the customer URL with `X-StellarIndex-Signature` +
+  `X-StellarIndex-Event` + `X-StellarIndex-Delivery-Id` headers,
   marks delivered on 2xx, schedules retry on 5xx/network
   (exponential backoff 30s → 1h cap, 15-attempt budget),
   terminates on 4xx / disabled-webhook / missing-webhook /
   malformed-URL. New
-  `ratesengine_customer_webhook_delivery_attempts_total`
+  `stellarindex_customer_webhook_delivery_attempts_total`
   counter labelled by 10 outcomes; documented in metrics ref
   with two alert recipes. 5 unit tests cover the happy path,
   5xx-retry, 4xx-terminal, disabled-webhook, missing-webhook.
@@ -4415,7 +4406,7 @@ rc.48 deploy to R1.
   lookup succeeds — previously it only surfaced via the optional
   coins-overlay block (assets not in the coins catalogue had a
   null `price_usd` even though the same handler was already
-  fetching the price for `market_cap_usd`). Freighter wallet
+  fetching the price for `market_cap_usd`). wallet
   + retail apps that just want the current price no longer pay
   a second `/v1/price` round-trip on every asset-detail render.
   Extracted `populatePriceUSD` runs before the supply early-
@@ -4496,7 +4487,7 @@ rc.48 deploy to R1.
   MapVal}`; documented as such in the audit register.
 
 - **Per-request CORS observability metric (F-1244).** New
-  `ratesengine_api_cors_decisions_total{outcome}` counter wired
+  `stellarindex_api_cors_decisions_total{outcome}` counter wired
   into the CORS middleware. Outcomes: `no_origin` /
   `allowed_origin` / `allowed_wildcard` / `denied`. The
   pre-existing `warnOpenCORS` startup-only check fires once at
@@ -4504,7 +4495,7 @@ rc.48 deploy to R1.
   companion so operators can dashboard real cross-origin traffic
   and alert when a wildcard policy starts handling actual cross-
   origin requests in production (the silent failure mode of
-  `RATESENGINE_ALLOWED_ORIGINS=*` slipping in alongside
+  `STELLARINDEX_ALLOWED_ORIGINS=*` slipping in alongside
   credentialed auth_mode). Wired into the existing middleware
   without changing public CORS behaviour; one new test case covers
   all four outcomes.
@@ -4521,9 +4512,9 @@ rc.48 deploy to R1.
   the marker is gone (TTL elapsed → underlying anomaly cleared).
   Without it, durable rows accumulated forever and the explorer
   /anomalies timeline showed resolved freezes as still-firing.
-  New metrics `ratesengine_anomaly_freeze_recovered_total` and
-  `ratesengine_anomaly_freeze_recovery_sweeps_total{outcome}`,
-  new alert `ratesengine_anomaly_freeze_recovery_stalled` (P3),
+  New metrics `stellarindex_anomaly_freeze_recovered_total` and
+  `stellarindex_anomaly_freeze_recovery_sweeps_total{outcome}`,
+  new alert `stellarindex_anomaly_freeze_recovery_stalled` (P3),
   new runbook `freeze-recovery-stalled.md`. Two phase-1 + phase-2
   orchestrator callers updated to thread the prevVWAP through.
   3 new unit tests + extended existing freeze + orchestrator
@@ -4537,7 +4528,7 @@ rc.48 deploy to R1.
   lets a single IP bulk-mint 3,600 email→key_id pairs/hour via
   signup. The new throttle closes that vector without affecting
   other anonymous traffic; falls open on Redis errors. Wired in
-  `cmd/ratesengine-api/main.go` whenever Redis is available.
+  `cmd/stellarindex-api/main.go` whenever Redis is available.
   New `auth.ErrSignupRateLimited` sentinel + exported
   `middleware.RemoteIP` for handlers needing trusted-proxy-aware
   client IP outside the middleware chain. 5 unit tests
@@ -4557,7 +4548,7 @@ rc.48 deploy to R1.
   at-least-once delivery means the same event can land hours
   later — without this guard, a manual operator-side downgrade
   between original delivery and redelivery silently re-upgrades
-  the customer. Wired in `cmd/ratesengine-api/main.go` to the same
+  the customer. Wired in `cmd/stellarindex-api/main.go` to the same
   `*sql.DB` the timescale store uses; falls open to the legacy
   "rely on idempotent UpdateRateLimit" path when Postgres is
   absent. Two new unit tests pin the contract
@@ -4573,7 +4564,7 @@ rc.48 deploy to R1.
   (`sep10:seen:<base64-url-no-pad>`) with TTL = `ChallengeTTL`.
   A second submission of the same signed XDR finds the slot
   taken and returns `auth.ErrUnauthorized` instead of minting a
-  fresh JWT. Wired in `cmd/ratesengine-api/main.go` to the
+  fresh JWT. Wired in `cmd/stellarindex-api/main.go` to the
   same Redis client the rest of the auth subsystem uses;
   initial validator construction at `main.go:144` happens before
   rdb is available, so the validator is rebuilt with the guard
@@ -4581,8 +4572,8 @@ rc.48 deploy to R1.
   contracts (first claim ok, replay rejected, TTL expiry allows
   fresh claim, distinct hashes don't collide).
 
-- **`ratesengine_aggregator_vwap_cache_write_errors_total` metric**
-  + paired `ratesengine_aggregator_cache_write_errors` page-tier
+- **`stellarindex_aggregator_vwap_cache_write_errors_total` metric**
+  + paired `stellarindex_aggregator_cache_write_errors` page-tier
   alert. The May-10 SEV-2 (Redis BGSAVE blocked by full root FS for
   ~9 h → every cache `Set` returned MISCONF → `/v1/price` 404'd on
   every rewritten / triangulated / stablecoin-proxy pair) had **no
@@ -4609,7 +4600,7 @@ rc.48 deploy to R1.
   class. Now templated by `archival-node/templates/postgresql.conf.j2`
   with default `postgres_max_locks_per_transaction: 256` (4×
   headroom; 51,200-entry lock table at the current 200-connection
-  limit). Paired with new `ratesengine_timescale_lock_table_pressure`
+  limit). Paired with new `stellarindex_timescale_lock_table_pressure`
   Prometheus alert at 70% saturation so the next bump is
   forecast not forced — depends on `postgres_exporter` (not yet
   scraped on R1; rule lights up when the exporter lands).
@@ -4731,7 +4722,7 @@ rc.48 deploy to R1.
   `supply-snapshot`, `supply-refresh`, `archive-completeness`,
   `verify-archive`, `sla-probe` was permanently silent. The
   SLA-evidence chain specifically was broken end-to-end: the probe
-  binary supports `-textfile-output` (`cmd/ratesengine-sla-probe/textfile.go:190
+  binary supports `-textfile-output` (`cmd/stellarindex-sla-probe/textfile.go:190
   writeTextfileAtomic`) but the R1 wrapper at
   `configs/healthchecks/sla-probe.sh` never set it, the
   textfile-collector dir didn't exist, and `node_exporter` ran
@@ -4753,7 +4744,7 @@ rc.48 deploy to R1.
     not on R1).
 
 - **Source-stopped alert false-positive class on low-volume
-  Soroban contracts (F-1212b).** `ratesengine_ingestion_source_stopped`
+  Soroban contracts (F-1212b).** `stellarindex_ingestion_source_stopped`
   used a 5-min rate window which routinely false-fired on
   `band`, `blend`, `comet`, `ecb`, `phoenix` (legitimate 5+-minute
   gaps during quiet trading windows — the source-stopped runbook
@@ -4768,8 +4759,8 @@ rc.48 deploy to R1.
   `deploy/monitoring/rules/api.yml` / `aggregator.yml` /
   `ingestion.yml` / `slo.yml` / `meta.yml` referenced `job="api"`
   / `"aggregator"` / `"indexer"` but the multi-host ansible
-  prometheus role's scrape config uses `ratesengine_api` /
-  `ratesengine_aggregator` / `ratesengine_indexer` (underscores).
+  prometheus role's scrape config uses `stellarindex_api` /
+  `stellarindex_aggregator` / `stellarindex_indexer` (underscores).
   Rules would never have evaluated true on a multi-host deploy.
   Renamed the canonical multi-host labels to match the scrape
   config; `meta.yml`'s scrape-failing regex updated to the actual
@@ -4780,37 +4771,37 @@ rc.48 deploy to R1.
 
 - **rc.48 dead-route cleanup follow-up.** rc.48 removed the
   `/v1/coins` + `/v1/currencies` HTTP surface but left several
-  stale references behind: `cmd/ratesengine-sla-probe` was still
+  stale references behind: `cmd/stellarindex-sla-probe` was still
   probing `/coins` (would 404 after rc.48 deploy → SLA-probe
   perma-fail on availability); `examples/curl/04-coins.sh` +
   README still advertised the removed route; `web/status` synthetic
-  smoke probe still pointed at `/v1/coins?limit=1`; `openapi/rates-engine.v1.yaml`
+  smoke probe still pointed at `/v1/coins?limit=1`; `openapi/stellar-index.v1.yaml`
   carried 3 stale `/v1/coins` text references (incl. the rate-limit
   example's `instance` field); `internal/api/v1/server.go` Options
   doc comments still said "backs GET /v1/coins" / "backs /v1/currencies"
   even though the seams now feed `/v1/assets` and `/v1/chart`.
   All migrated to live equivalents:
-  - `cmd/ratesengine-sla-probe/main.go` `staticEndpoints` switches
+  - `cmd/stellarindex-sla-probe/main.go` `staticEndpoints` switches
     `/coins` → `/assets` (same fan-out coverage; comment explains
     the rc.47 → rc.48 → rc.49 progression).
   - `examples/curl/04-coins.sh` deleted; replaced with `04-assets.sh`
     using `?order=volume_24h_usd:desc`.
   - `web/status/src/app/page.tsx` synthetic-probe entry switched
     to `/v1/assets?limit=1` with the same Catalogue group.
-  - `openapi/rates-engine.v1.yaml` lines 193 / 1602 / 2608
+  - `openapi/stellar-index.v1.yaml` lines 193 / 1602 / 2608
     updated.
   - `internal/api/v1/server.go` Options.Coins / .Currencies /
     .FXHistory doc comments rewritten to describe the actual
     `/v1/assets` + `/v1/chart` consumers.
   Net: `make verify` clean; `go test ./internal/api/v1/...` +
-  `./cmd/ratesengine-sla-probe/...` green.
+  `./cmd/stellarindex-sla-probe/...` green.
   Closes audit findings F-1202, F-1210 (cosmetic doc-text portion),
-  F-1211, F-1223, F-1245 (smoke surface), F-RFP-0017.
+  F-1211, F-1223, F-1245 (smoke surface), F-SPEC-0017.
 
 ### Tooling
 
-- **`docs/reference/api/rates-engine.v1.yaml` regenerated**
-  from `openapi/rates-engine.v1.yaml` via `make docs-api`. The
+- **`docs/reference/api/stellar-index.v1.yaml` regenerated**
+  from `openapi/stellar-index.v1.yaml` via `make docs-api`. The
   checked-in copy had drifted ~990 lines (561 ins / 429 del) since
   the last regeneration. `web/explorer/src/api/types.ts` (the
   openapi-typescript output) auto-regenerated as a transitive
@@ -5376,7 +5367,7 @@ rc.48 deploy to R1.
   had no signal that something was wrong vs. the section just
   not existing. The new notice points to the full /currencies
   + /markets pages (which use a different fetch path) and to
-  status.ratesengine.net for ongoing incident context.
+  status.stellarindex.io for ongoing incident context.
 - **Dispatcher tx-read errors are no longer silently swallowed** —
   `internal/dispatcher/dispatcher.go::ProcessLedger`'s "skip
   malformed tx, keep processing the ledger" branch had no
@@ -5423,7 +5414,7 @@ rc.48 deploy to R1.
   (`pkg/client/example_test.go`). Round 2 of the godoc-coverage
   push — picks the next four highest-traffic methods that lacked
   examples on pkg.go.dev. PriceBatch (the recommended bulk path
-  per the Freighter RFP), Coins + Coin (what powers the
+  per the spec), Coins + Coin (what powers the
   explorer's `/assets` and `/assets/<slug>` pages), and Pair
   (per-source attribution for one market). Each example follows
   the established httptest + `// Output:` pattern so it's
@@ -5440,7 +5431,7 @@ rc.48 deploy to R1.
 - **Explorer redirects for `/incidents`, `/converter`,
   `/oracles/<name>`** (404-audit follow-up, 2026-05-10).
   `/incidents` and `/incident/<slug>` now bounce to
-  status.ratesengine.net (the canonical incidents host —
+  status.stellarindex.io (the canonical incidents host —
   postmortems live there, the explorer never had a listing
   page). `/converter` (the muscle-memory typo for `/convert`)
   and bare `/convert` now land on `/convert/USD/XLM/` instead
@@ -5454,7 +5445,7 @@ rc.48 deploy to R1.
   `/docs/<path>`). New 301 redirects send each to its canonical
   destination: `/pool*` → `/dexes/`, `/coin|/token*` →
   `/assets/`, `/price*` → `/markets/`, `/api/` →
-  `api.ratesengine.net`, `/docs*` → `docs.ratesengine.net`
+  `api.stellarindex.io`, `/docs*` → `docs.stellarindex.io`
   (splat-preserved deep-link). 19 new rules in
   `web/explorer/public/_redirects`. (PR #1232)
 - **`/llms.txt` for explorer** — llmstxt.org-spec discovery file
@@ -5534,12 +5525,12 @@ rc.48 deploy to R1.
 - **Three new Prometheus alert rules backing the 2026-05-10 incident
   postmortem** (#1228 ships the runbook + customer-facing post;
   this PR ships the rules that prevent silent recurrence):
-  - `ratesengine_node_root_disk_full` (P1) / `_warning` (P2) —
-    `ratesengine_timescale_disk_full` only watched
+  - `stellarindex_node_root_disk_full` (P1) / `_warning` (P2) —
+    `stellarindex_timescale_disk_full` only watched
     `/var/lib/postgresql` (own ZFS dataset, plenty of free space);
     the root FS that actually filled wasn't covered. New rule
     watches `mountpoint="/"`.
-  - `ratesengine_redis_writes_blocked` (P1) —
+  - `stellarindex_redis_writes_blocked` (P1) —
     `redis_rdb_last_bgsave_status == 0` for > 60 s. Catches the
     same incident from a different angle: Redis can't snapshot,
     refuses every write, aggregator VWAP cache stops refreshing,
@@ -5571,7 +5562,7 @@ rc.48 deploy to R1.
   / `.history_all` stay empty (customer-visible regression of
   task #104). New runbook at
   `docs/operations/runbooks/fx-history-missing.md` documents the
-  triage + 5-min recovery (scp migration → `ratesengine-migrate
+  triage + 5-min recovery (scp migration → `stellarindex-migrate
   up` → confirm forex worker resumes → optional 10y backfill via
   `scripts/ops/fx-history-backfill`). Cross-linked from
   alerts-catalog + external-poller-stale. Prevention notes
@@ -5650,7 +5641,7 @@ rc.48 deploy to R1.
 
 - **API binary's `/metrics` now refuses non-loopback callers
   (defense-in-depth)**. PR #1172 added the Caddy block at the
-  edge, but a probe today found `curl https://api.ratesengine.net/metrics`
+  edge, but a probe today found `curl https://api.stellarindex.io/metrics`
   still returning 1372 lines of Go runtime + per-source counter
   data — the operator hasn't re-applied the Caddyfile yet
   (operator action pending). Adds a Go-layer gate
@@ -5665,15 +5656,15 @@ rc.48 deploy to R1.
   belt-and-braces second layer that catches misconfiguration.
   (PR #1207)
 - **Caddy `Caddyfile.api` now 404s `/metrics` from the public
-  `api.ratesengine.net` host**. The API binary serves /metrics on
+  `api.stellarindex.io` host**. The API binary serves /metrics on
   :3000 alongside /v1/* (one ServeMux), and the catch-all
   `reverse_proxy` was forwarding the public hit straight through
-  — verified live: `curl -s https://api.ratesengine.net/metrics`
+  — verified live: `curl -s https://api.stellarindex.io/metrics`
   returns 8KB+ of Go runtime stats, request counters, and per-
   source ingest gauges that fingerprint the deployment for any
   attacker. Local Prometheus scraping uses
   `127.0.0.1:3000/metrics` per `prometheus.r1.yml` and is
-  unaffected; status.ratesengine.net is the right surface for
+  unaffected; status.stellarindex.io is the right surface for
   public transparency. Operator action: re-apply via
   `ansible-playbook configs/ansible/playbooks/r1.yml --tags caddy`.
 - **`Vary: Origin` now emitted on every CORS-enabled response in
@@ -5689,7 +5680,7 @@ rc.48 deploy to R1.
   Origin `<b>`, breaking that client too. Wildcard mode is
   unaffected (response is origin-independent so Vary would just
   defeat caching). Two regression tests pin both branches.
-- **`ratesengine_api_cache_ops_total{cache,op,result}` Prometheus
+- **`stellarindex_api_cache_ops_total{cache,op,result}` Prometheus
   counter** for in-memory cache wrappers
   (`v1.CachedMarketsReader`, …). Result is `hit` (returned cached
   value, including single-flight-wait callers) or `miss` (called
@@ -5702,7 +5693,7 @@ rc.48 deploy to R1.
   ("dex pools take forever"). With this counter an alert on
   `rate(...{result="miss"}[5m]) / rate(...[5m]) > 0.5` sustained
   catches the next drift in minutes instead of days. (PR #1196)
-- **Prometheus alert `ratesengine_api_cache_miss_rate_high`** wired
+- **Prometheus alert `stellarindex_api_cache_miss_rate_high`** wired
   to the new counter. Fires P2/ticket when miss rate > 50% sustained
   10 min on any (cache, op) with ≥ 0.1 req/s traffic. The traffic
   floor avoids flapping on quiet caches; the ratio (not absolute)
@@ -5712,7 +5703,7 @@ rc.48 deploy to R1.
   walks the operator through diffing prewarm vs handler args
   (which is what we did manually for #1185 / #1194 / #1195).
   (PR #1197)
-- **`ratesengine_api_cache_ops_total` extended to `coins` and
+- **`stellarindex_api_cache_ops_total` extended to `coins` and
   `sources_stats` cache wrappers.** PR #1196 only instrumented
   `markets`; this fills in the other two so the existing alert
   (#1197) catches drift on every cached endpoint, not just the
@@ -5814,7 +5805,7 @@ rc.48 deploy to R1.
   genuinely-empty venue. Now captures the error message into
   `pairsError` state and surfaces it as a red "Couldn't load
   pairs for this venue (HTTP 503). Refresh to retry, or check
-  status.ratesengine.net" panel — operators investigating a
+  status.stellarindex.io" panel — operators investigating a
   user-reported "exchange page is broken" can now distinguish
   data gap from infra gap at a glance. Same silent-drop family
   as the home-page fixes shipped in #1251. (PR #1254)
@@ -5901,7 +5892,7 @@ rc.48 deploy to R1.
   fallback** as `/v1/price` (#1217), `/v1/chart` (#1015), and the
   vwap+twap pair (#1219). Pre-fix, `/v1/ohlc?base=native&quote=fiat:USD`
   404'd "no trades in window" out-of-the-box on every fresh
-  deployment. Freighter RFP §3 names `/v1/ohlc` as a launch-blocker
+  deployment. the spec §3 names `/v1/ohlc` as a launch-blocker
   for the asset-detail surface, so this gap was visible to every
   asset detail page request. New `ohlcTradesWithStablecoinFallback`
   helper walks the operator's classic USD pegs in priority order;
@@ -6045,8 +6036,8 @@ rc.48 deploy to R1.
 - **Explorer home page now emits `<link rel="canonical">`**.
   Detail pages picked it up via #1094/#1095/#1097 but the root
   `/` was left without one, so search engines were free to treat
-  `https://ratesengine.net/`, `https://ratesengine.net` (no
-  trailing slash), and `https://ratesengine.net/index.html` as
+  `https://stellarindex.io/`, `https://stellarindex.io` (no
+  trailing slash), and `https://stellarindex.io/index.html` as
   separate pages and split link equity between them. Default
   `alternates.canonical: '/'` on the root layout fixes that;
   detail pages still override per-route in their own
@@ -6179,7 +6170,7 @@ rc.48 deploy to R1.
   protocol allows issuers to mint case-different classic codes
   and merging them would mask real mismatches.
 - **Every 401 response now includes `WWW-Authenticate: Bearer
-  realm="ratesengine.net"`** (RFC 7235 §3.1 conformance). Live
+  realm="stellarindex.io"`** (RFC 7235 §3.1 conformance). Live
   audit on r1 today: `/v1/account/me` returned 401 with no
   challenge header, leaving programmatic clients without a way
   to discover the accepted auth scheme. The auth-middleware
@@ -6216,7 +6207,7 @@ rc.48 deploy to R1.
   bookmarks indistinguishable from "you've reached the end".
   Handler now calls `timescale.ValidateCoinsCursor` before
   dispatch and returns `400 invalid-cursor` (problem+json,
-  `type=https://api.ratesengine.net/errors/invalid-cursor`)
+  `type=https://api.stellarindex.io/errors/invalid-cursor`)
   with a hint to drop the parameter or pass back a fresh
   `next_cursor`. Empty cursor (no parameter) is still valid.
   Same approach used by `/v1/history` since #1083. Other
@@ -6241,7 +6232,7 @@ rc.48 deploy to R1.
   pair suffix, optional digits-with-one-dot vol prefix). Wired
   into both `handleMarkets` and `handlePools` after `order_by`
   parsing — returns 400 problem+json with
-  `type=https://api.ratesengine.net/errors/invalid-cursor`.
+  `type=https://api.stellarindex.io/errors/invalid-cursor`.
   Pinned by 19 sub-tests across both orderings; companion to
   the same fix shipped on `/v1/coins` in #1134.
 - **`base/quote` endpoints (history, vwap, twap, ohlc, pairs,
@@ -6343,22 +6334,22 @@ rc.48 deploy to R1.
   coingecko.com produces a `x_cg_demo_api_key` that bypasses
   the unauthenticated-tier 429s. Read from env vars
   `COINGECKO_API_KEY` (Pro) or `COINGECKO_DEMO_API_KEY` (Demo)
-  in `cmd/ratesengine-indexer/main.go`; Pro wins when both are
+  in `cmd/stellarindex-indexer/main.go`; Pro wins when both are
   set. No TOML schema change. Operator action to fix the live
   r1 throttling: register a free key at
   https://www.coingecko.com/en/developers/dashboard, set
   `COINGECKO_DEMO_API_KEY=<key>` in
-  `/etc/ratesengine.toml.env` (or wherever the systemd unit
+  `/etc/stellarindex.toml.env` (or wherever the systemd unit
   pulls Environment= from), `systemctl restart
-  ratesengine-indexer`.
+  stellarindex-indexer`.
 - **External-poller observability**: new
-  `ratesengine_external_poller_polls_total{source, outcome}`
+  `stellarindex_external_poller_polls_total{source, outcome}`
   counter (`outcome` ∈ {success, error, skipped}) and
-  `ratesengine_external_poller_last_success_unix{source}` gauge
+  `stellarindex_external_poller_last_success_unix{source}` gauge
   emitted by the runner on every poll tick. Two new alerts:
-  `ratesengine_external_poller_stale` (P2, fires when no
+  `stellarindex_external_poller_stale` (P2, fires when no
   successful poll in 30 min for 5+ min) and
-  `ratesengine_external_poller_error_rate_high` (P3, fires when
+  `stellarindex_external_poller_error_rate_high` (P3, fires when
   error rate > 50 % sustained 15 min). Closes the blind spot
   shipped on r1 2026-05-09 where CoinGecko throttled for 13 h
   with no metric or alert — only a per-minute WARN log. New
@@ -6397,8 +6388,8 @@ rc.48 deploy to R1.
 
 ### Added
 
-- **Explorer redirects API paths to api.ratesengine.net**.
-  `ratesengine.net/v1/coins`, `/api/v1/coins`, and bare `/api`
+- **Explorer redirects API paths to api.stellarindex.io**.
+  `stellarindex.io/v1/coins`, `/api/v1/coins`, and bare `/api`
   used to land on the explorer's catch-all 404 — opaque dead-end
   for anyone debugging an integration who pasted the path
   without the `api.` subdomain. Three new 301 rules in
@@ -6505,7 +6496,7 @@ rc.48 deploy to R1.
   reach prod and break the Scalar Send button.
 - **CI**: `.github/workflows/api-audit.yml` — runs
   `scripts/dev/audit-public-api.sh` against
-  `https://api.ratesengine.net` on every push to `main` that
+  `https://api.stellarindex.io` on every push to `main` that
   touches `openapi/**`, `internal/api/**`, or the audit script
   itself, plus on manual workflow_dispatch with an optional
   `api_base_url` input. No schedule; the existing audit script
@@ -6514,7 +6505,7 @@ rc.48 deploy to R1.
   `/currencies/{ticker}` history panel. Builds an RFC 4180 CSV
   from the already-loaded series (no extra fetch) and triggers
   a browser download via a Blob URL. Filename is
-  `ratesengine-{TICKER}-USD-{range}.csv`; columns are
+  `stellarindex-{TICKER}-USD-{range}.csv`; columns are
   `date, 1_USD_in_TICKER, 1_TICKER_in_USD`.
 
 ### Fixed
@@ -6570,7 +6561,7 @@ rc.48 deploy to R1.
   responses are printed. Run against prod (default), R1, or
   local. Catches the documentation-vs-implementation drift class
   that produced the 2026-05-08 Scalar regression. Currently
-  green at 37/37 against `https://api.ratesengine.net`.
+  green at 37/37 against `https://api.stellarindex.io`.
 - **Explorer**: FAQPage JSON-LD on `/assets/{slug}` static pages —
   the same Q/A pairs the visible AssetFAQ panel renders are now
   also emitted as `<script type="application/ld+json">`
@@ -6661,7 +6652,7 @@ rc.48 deploy to R1.
   each scan ~24h of the trades hypertable on cold paths (5–10s);
   the rc.35/rc.36 caches drop them to <1ms but TTL expiry meant
   the first user request after a cache miss still paid the full
-  query cost. A 25s-cadence goroutine in cmd/ratesengine-api now
+  query cost. A 25s-cadence goroutine in cmd/stellarindex-api now
   re-runs the queries just inside the 30/60s TTLs so user
   requests always land on a warm cache.
 
@@ -6971,15 +6962,15 @@ rc.48 deploy to R1.
 ## [v0.5.0-rc.27] — 2026-05-07
 
 ### Fixed
-- **status.ratesengine.net stuck on "Status unknown"** — the
+- **status.stellarindex.io stuck on "Status unknown"** — the
   status site fetches `/v1/status` cross-origin from
-  `status.ratesengine.net` but only `ratesengine.net` and
-  `api.ratesengine.net` were in the API's `allowed_origins`. Add
+  `status.stellarindex.io` but only `stellarindex.io` and
+  `api.stellarindex.io` were in the API's `allowed_origins`. Add
   `status.`, `docs.`, `dashboard.`, and `www.` subdomains to the
   ansible template so future re-renders preserve the fix.
-  Production `/etc/ratesengine.toml` was hand-patched on r1
+  Production `/etc/stellarindex.toml` was hand-patched on r1
   immediately and the API was restarted; verified
-  `Access-Control-Allow-Origin: https://status.ratesengine.net`
+  `Access-Control-Allow-Origin: https://status.stellarindex.io`
   on responses.
 
 ### Added
@@ -7057,7 +7048,7 @@ roll forward verbatim.)
   `api.massive.com` (Polygon-shape REST). Hourly grain instead of
   daily, so `change_1h_pct` / `change_24h_pct` / `change_7d_pct`
   are honest rolling-window percentages. Operator must export
-  `MASSIVE_API_KEY` in `/etc/default/ratesengine` for the forex
+  `MASSIVE_API_KEY` in `/etc/default/stellarindex` for the forex
   worker to populate the cache; without it `/v1/currencies` serves
   the "warming up" empty state.
 - **`?include=sparkline7d` on `/v1/coins`** (#970). Attaches
@@ -7084,7 +7075,7 @@ roll forward verbatim.)
 - **/auth/callback handler on the explorer.** Magic-link emails
   point to `{DashboardBaseURL}/auth/callback?token=…`; this page
   is the missing landing handler for when DashboardBaseURL is
-  ratesengine.net. Reads the token, full-page-redirects to the
+  stellarindex.io. Reads the token, full-page-redirects to the
   API's /v1/auth/callback so Set-Cookie applies and the 303 lands
   the browser on /account logged in. Closes the magic-link loop on
   the explorer side.
@@ -7429,7 +7420,7 @@ roll forward verbatim.)
   the Diagnostics teaser's pattern. Wrapping the whole Panel in
   a Link would conflict with the source-reveal button, so the
   CTA sits at the bottom of the panel content instead.
-- **docs.ratesengine.net topbar: 3 new links.** Adds Methodology,
+- **docs.stellarindex.io topbar: 3 new links.** Adds Methodology,
   Go SDK, and Changelog to the docs site's topbar between Explorer
   and Status. Visitors landing on the API reference can now jump
   to the explainer, the typed SDK page, or the release feed
@@ -7584,10 +7575,10 @@ roll forward verbatim.)
   `/research/discovery/<slug>`. Each audit names the contract
   repo + commit checked, the upstream-source quirks we found,
   and how the decoder handles them. Allow-listed via a `CURATED`
-  array; the rest of `docs/discovery/` stays private.
+  array; the rest of the internal research notes stay private.
 - **SearchModal: missing pages.** Cmd-K search now lists the new
   `/methodology`, `/research`, `/changelog`, `/compare`,
-  `/signup`, and external `status.ratesengine.net` alongside the
+  `/signup`, and external `status.stellarindex.io` alongside the
   existing pages.
 - **`/markets` table: sortable Base + 24h volume columns.** Click
   the Base header to flip to alphabetical-by-pair (the API's
@@ -7653,7 +7644,7 @@ roll forward verbatim.)
   navbar.
 - **status site: per-incident postmortem pages.** Every incident
   in `internal/incidents/data/*.md` now renders as its own page
-  on `status.ratesengine.net/incident/<slug>`, generated from the
+  on `status.stellarindex.io/incident/<slug>`, generated from the
   same markdown corpus the `/v1/incidents` API serves. The
   Incident history section on the status home links each title
   to its full postmortem; the page surfaces severity / status /
@@ -7714,7 +7705,7 @@ roll forward verbatim.)
   endpoint calls. Useful for embed widgets / dashboards that just
   need a snapshot.
 - **Docs site polish: header bar + favicon + OG card.**
-  docs.ratesengine.net now has a slim header above the Scalar
+  docs.stellarindex.io now has a slim header above the Scalar
   reference with brand mark + "Explorer" / "Status" / "GitHub"
   navigation links so visitors can hop between the three sites
   without typing URLs. Adds favicon (`/icon.svg`) and 1200×630
@@ -7725,7 +7716,7 @@ roll forward verbatim.)
 - **`/embed/pair/{base~quote}` iframe pair widget.** Mirror of
   the asset embed shipped earlier — same chrome-less layout,
   shows the BASE / QUOTE label + live VWAP + 24h change pill +
-  sparkline + "Powered by Rates Engine" attribution. Pre-rendered
+  sparkline + "Powered by Stellar Index" attribution. Pre-rendered
   for the top 100 pairs by 24h USD volume.
 - **Home Try-the-API: language tabs (curl / JS / Python / Go).**
   Each example renders as a snippet in the chosen language; the
@@ -7736,11 +7727,11 @@ roll forward verbatim.)
   Chrome-less route (no navbar, no footer, no max-width) designed
   to be dropped into a customer site at any width. Renders the
   asset's code, USD price, 24h % change pill, sparkline, and 24h
-  USD volume — plus a "Powered by Rates Engine" attribution +
+  USD volume — plus a "Powered by Stellar Index" attribution +
   link back. Pre-rendered for every slug returned by `/v1/coins`.
   Recommended embed:
   ```html
-  <iframe src="https://ratesengine.net/embed/asset/USDC"
+  <iframe src="https://stellarindex.io/embed/asset/USDC"
           width="320" height="160"
           frameborder="0" sandbox="allow-scripts"></iframe>
   ```
@@ -7811,7 +7802,7 @@ roll forward verbatim.)
   `internal/incidents/data/` so the API binary can `go:embed`
   them and serve a parsed JSON corpus at `GET /v1/incidents`.
   YAML-frontmatter + markdown body; sorted `started_at` desc.
-  status.ratesengine.net's "Incident history" panel now fetches
+  status.stellarindex.io's "Incident history" panel now fetches
   this endpoint instead of reading a hardcoded array bundled
   with the page. New incident posts ship with the next API
   redeploy — no status-page rebuild required.
@@ -7836,7 +7827,7 @@ roll forward verbatim.)
 
 ### Added
 - **Status page: incident history populated.** First entry on
-  status.ratesengine.net under "Incident history" — the SEV-3
+  status.stellarindex.io under "Incident history" — the SEV-3
   Postgres lock-table-full event from 2026-05-06 (resolved
   22:39 UTC). Hand-maintained in `web/status/src/app/page.tsx`
   until the `/v1/incidents` API (reading from
@@ -7935,7 +7926,7 @@ roll forward verbatim.)
   computed from the last listing row, never from native — so
   pagination resumes correctly past the synthetic injection.
 - **Status page: real per-endpoint probes.** The Endpoints
-  matrix on status.ratesengine.net now fires a parallel probe
+  matrix on status.stellarindex.io now fires a parallel probe
   against every public endpoint on each 30-second poll (with
   safe minimum parameters — `?asset=native`, `?limit=1`, etc.)
   and renders a green/amber/red badge with measured latency.
@@ -8079,13 +8070,13 @@ roll forward verbatim.)
   (then trade-count-desc), matching Etherscan / Oklink convention.
 
 ### Changed
-- **docs.ratesengine.net migrated from Redocly to Scalar.** 788KB
+- **docs.stellarindex.io migrated from Redocly to Scalar.** 788KB
   inlined Redocly bundle replaced by a 1KB index.html that loads
   `@scalar/api-reference@1.34.10` from a pinned jsdelivr CDN URL
   and points it at a colocated YAML spec. CI drift check + Pages
   artefact both extended to track the YAML.
 - **Explorer navbar Status + API Docs links route to subdomains**
-  (`status.ratesengine.net`, `docs.ratesengine.net`) instead of
+  (`status.stellarindex.io`, `docs.stellarindex.io`) instead of
   404'ing on local `/status` + `/docs`. Footer + home + signup +
   not-found pages all updated.
 - **Cmd-K SearchModal** hits `/v1/coins?q=…` server-side
@@ -8229,7 +8220,7 @@ roll forward verbatim.)
   full ~440K-asset population. Wire shape changed to
   `{coins, next_cursor, limit}`. `pkg/client` SDK + OpenAPI
   spec updated.
-- **Custom Next.js status page.** `status.ratesengine.net`
+- **Custom Next.js status page.** `status.stellarindex.io`
   flips from cstate (Hugo) to a Next.js static-export at
   `web/status/`. Polls `/v1/status` every 30 s; renders
   overall banner + per-service heartbeats + p50/p95/p99
@@ -8247,7 +8238,7 @@ roll forward verbatim.)
   site is the canonical Stellar asset explorer (powered by
   our data); the directory name + Makefile targets + workflow
   names + CF Pages job labels are renamed to match. CF Pages
-  project itself stays `ratesengine-showcase` for now (CF
+  project itself stays `stellarindex-showcase` for now (CF
   doesn't support project rename).
 - **`/coins/` → `/assets/`** edge redirect (301) via
   `public/_redirects`. Asset detail pages remain at
@@ -8260,9 +8251,9 @@ roll forward verbatim.)
   explorer (24 GitHub-blob links across 9 pages).
 - **Cloudflare Pages bootstrap script.**
   `scripts/ops/cf-pages-bootstrap.sh` provisions all four
-  customer-facing surfaces (`ratesengine-showcase`,
-  `ratesengine-dashboard`, `ratesengine-status`,
-  `ratesengine-docs`) plus DNS + custom domains via the
+  customer-facing surfaces (`stellarindex-showcase`,
+  `stellarindex-dashboard`, `stellarindex-status`,
+  `stellarindex-docs`) plus DNS + custom domains via the
   Cloudflare API. Idempotent.
 
 ### Removed
@@ -8278,7 +8269,7 @@ roll forward verbatim.)
   `buildDashboardBundle` was wrapping nil concrete `*Handlers`
   pointers in non-nil `DashboardAuthMounter` interfaces, so
   the routes mounted but their handlers panicked on first
-  request. New `nilOrMounter` helper in `cmd/ratesengine-api`
+  request. New `nilOrMounter` helper in `cmd/stellarindex-api`
   returns true nil interfaces for empty bundles. Surface
   effect: dashboard routes now correctly 404 when not
   configured (instead of 500/401-ing on a half-mounted
@@ -8304,15 +8295,15 @@ Tested against Stellar protocol 23 (Whisk).
 
 ### Added
 - **SLA-probe Healthchecks.io coverage.** New
-  `ratesengine-sla-probe.timer` (15-min cadence) wraps the
-  existing `ratesengine-sla-probe` binary and reports pass/fail
-  against the RFP SLAs (p95 ≤ 200 ms, p99 ≤ 500 ms, freshness
+  `stellarindex-sla-probe.timer` (15-min cadence) wraps the
+  existing `stellarindex-sla-probe` binary and reports pass/fail
+  against the SLAs (p95 ≤ 200 ms, p99 ≤ 500 ms, freshness
   ≤ 30 s) to a Healthchecks.io URL. Closes the four-binary
   coverage gap from the launch backlog (the indexer, aggregator,
   api heartbeats already shipped; this completes the set with
   the SLA-evidence harness on the same Healthchecks pipeline).
   Configured via `HEALTHCHECKS_URL_SLA_PROBE` in
-  `/etc/default/ratesengine-healthchecks`; tuning knobs for
+  `/etc/default/stellarindex-healthchecks`; tuning knobs for
   duration / concurrency / pair via the same env file.
 - **Postgres-backed runtime auth validator with Redis
   read-through cache (Phase 1, Week 4 cutover).** New
@@ -8368,10 +8359,10 @@ Tested against Stellar protocol 23 (Whisk).
   next slice.
 - **Customer dashboard SPA scaffold (Phase 1, Week 3).** New
   Next.js 15 static-export app at `web/dashboard/` deployed to
-  `app.ratesengine.net` (Cloudflare Pages git-integration is the
+  `app.stellarindex.io` (Cloudflare Pages git-integration is the
   recommended publish path; CLI fallback covered by the existing
   showcase-deploy workflow shape). Cookie-based auth: every
-  request to `api.ratesengine.net` uses `credentials: 'include'`
+  request to `api.stellarindex.io` uses `credentials: 'include'`
   so the parent-domain session cookie set by
   `GET /v1/auth/callback` rides along cross-subdomain. Routes:
   `/` bounces by auth state; `/signin/` (magic-link request);
@@ -8382,7 +8373,7 @@ Tested against Stellar protocol 23 (Whisk).
   typecheck,lint}`), `verify.sh` extension, and a CI job mirror
   the web/explorer pattern.
 - **Magic-link auth flow (Phase 1, Week 2 part 2).** Customers can
-  sign in to the dashboard at `app.ratesengine.net` via a
+  sign in to the dashboard at `app.stellarindex.io` via a
   6-digit-code-or-link email — the same flow handles first-time
   signup (creates a free-tier account + owner user) and returning
   login. Three new endpoints under `/v1/auth/`: `POST /login`,
@@ -8390,7 +8381,7 @@ Tested against Stellar protocol 23 (Whisk).
   same `{status:"sent"}` whether or not the email matches an
   account, so attackers can't enumerate users. Callback validates
   + atomically consumes the token and sets an HttpOnly + Secure
-  + SameSite=Lax `ratesengine_session` cookie (default 30-day
+  + SameSite=Lax `stellarindex_session` cookie (default 30-day
   rolling lifetime). Logout is idempotent. Implementation in
   `internal/api/v1/dashboardauth/`; transactional email shipped
   via the new pluggable `internal/notify` package (concrete
@@ -8399,11 +8390,11 @@ Tested against Stellar protocol 23 (Whisk).
   flow can be exercised end-to-end). Companion `Middleware` plants
   a `SessionContext` on the request context for downstream
   dashboard handlers; `RequireSession` is the 401 gate. Wiring
-  in `cmd/ratesengine-api/main.go` is gated on
+  in `cmd/stellarindex-api/main.go` is gated on
   `[api.dashboard].base_url` being non-empty — empty leaves
   `/v1/auth/*` unmounted (404), Resend API key empty falls back
   to NoopSender with a startup warn (production sets
-  `RATESENGINE_RESEND_API_KEY`).
+  `STELLARINDEX_RESEND_API_KEY`).
 - **Platform v1 Postgres stores (Phase 1, Week 2 part 1).** New
   `internal/platform/postgresstore` package with concrete
   implementations of `AccountStore`, `UserStore` (incl. session
@@ -8460,7 +8451,7 @@ Tested against Stellar protocol 23 (Whisk).
   cron into a post-deploy gate. Surfaced as `make pre-launch-check`.
 - `docs/operations/pre-launch-hardening.md` — operator runbook
   for the config edits that should land before flipping public
-  DNS at `api.ratesengine.net`. Covers loopback bind, CORS
+  DNS at `api.stellarindex.io`. Covers loopback bind, CORS
   narrowing, Cloudflare proxy mode + trusted-proxy CIDR
   expansion, Stripe / Healthchecks.io / FX-key wiring, smoke
   from the open internet, and a backup baseline. Each step is
@@ -8474,15 +8465,15 @@ Tested against Stellar protocol 23 (Whisk).
 
 ### Fixed
 - HTTP metrics middleware now skips requests whose User-Agent
-  identifies a synthetic-monitoring probe (`ratesengine-smoke/`,
-  `ratesengine-probe/`). Previously the smoke timer's 5-minute
+  identifies a synthetic-monitoring probe (`stellarindex-smoke/`,
+  `stellarindex-probe/`). Previously the smoke timer's 5-minute
   cold-cache fan-out (13 endpoints, 4 of which are aggregator-
   derived ~600 ms cold) landed straight in the
   `http_request_duration_seconds` histogram and dominated the
-  SLO recording rule's slow-request ratio — `ratesengine_slo_latency_burn_*`
+  SLO recording rule's slow-request ratio — `stellarindex_slo_latency_burn_*`
   alerts kept firing even though customer-facing latency was
   sub-millisecond on warm cache. The smoke script now sends
-  `User-Agent: ratesengine-smoke/1`; the API drops the
+  `User-Agent: stellarindex-smoke/1`; the API drops the
   measurement for those requests so the SLO measures real
   customer experience. Verified live: smoke 13/13 still green;
   histogram empty of smoke entries; customer requests still
@@ -8532,7 +8523,7 @@ Tested against Stellar protocol 23 (Whisk).
   single `WHERE asset = ANY($1)` query against the union. Same
   `DISTINCT ON (source)` semantics. Verified live.
 - `/v1/price` for fiat-quoted pairs (`native + fiat:USD`) was
-  ~215 ms p95 — over the RFP 200 ms target. The `LatestPrice`
+  ~215 ms p95 — over the 200 ms target. The `LatestPrice`
   reader's no-rows-from-prices_1m fallback unconditionally
   queried `LatestTradesForPair`, which scanned hundreds of trades
   hypertable chunks looking for an `(asset, fiat:USD)` pair that
@@ -8544,14 +8535,14 @@ Tested against Stellar protocol 23 (Whisk).
   `/v1/price?asset=native` went from 215 ms to ~0.5–1.5 ms.
 - SLO latency recording rules in `deploy/monitoring/rules/slo.yml`
   (and the R1 overlay in `configs/prometheus/rules.r1/`) now scope
-  to the RFP-mandated pricing surface — `/v1/price`, `/v1/price/batch`,
+  to the spec-mandated pricing surface — `/v1/price`, `/v1/price/batch`,
   and the four SEP-40 oracle endpoints (`/v1/oracle/latest`,
   `/v1/oracle/lastprice`, `/v1/oracle/prices`,
   `/v1/oracle/x_last_price`). The previous deny-list filter
   (everything except `/metrics` / `/healthz` / `/readyz` / `/version`)
   folded catalogue and history endpoints (`/v1/assets`, `/v1/markets`,
   `/v1/history`, `/v1/ohlc`) into the same 99.9% budget, even though
-  the RFP only commits the pricing surface to ≤ 200 ms p95. Promtool
+  the spec only commits the pricing surface to ≤ 200 ms p95. Promtool
   validates the new rules; applied to R1 Prometheus.
 - `http_request_duration_seconds` and `http_requests_total` now
   carry the actual route pattern instead of a constant
@@ -8584,7 +8575,7 @@ Tested against Stellar protocol 23 (Whisk).
   side `q=` parameter; the existing `?issuer=` filter still works
   alongside it. Replaces the stale "static seed today" copy on
   the page footer with the live-data status.
-- `ratesengine-smoke.timer` — wraps `r1-smoke.sh` in a 5 min
+- `stellarindex-smoke.timer` — wraps `r1-smoke.sh` in a 5 min
   systemd timer that pings a Healthchecks.io URL with the full
   smoke output as the ping body. Catches schema regressions the
   metrics-port heartbeats can't see — e.g. `/v1/price` returning
@@ -8616,7 +8607,7 @@ Tested against Stellar protocol 23 (Whisk).
   responds. Closes the launch-readiness backlog item: the existing
   Healthchecks.io coverage was galexie/minio/postgres only —
   indexer/aggregator/api were unwatched. URLs come from
-  `/etc/default/ratesengine-healthchecks` (off-disk in git);
+  `/etc/default/stellarindex-healthchecks` (off-disk in git);
   empty values silently skip the ping so the timers can install
   before the dashboard URLs are wired. Installed live on R1.
 - `/v1/status` now surfaces the *names* of currently-firing alerts
@@ -8639,7 +8630,7 @@ Tested against Stellar protocol 23 (Whisk).
   empty placeholders. Postman collection regenerated.
 - Showcase /status page renders the new `/v1/status` rollup as an
   "SLA & live metrics" panel: p50 / p95 / p99 latency cards (with
-  the RFP-mandated p95 ≤ 200 ms target shown as a sublabel),
+  the spec-mandated p95 ≤ 200 ms target shown as a sublabel),
   active-source count, and an active-incident banner when
   Alertmanager has alerts firing. The panel hides itself when the
   backend isn't wired (`flags.stale=true`), so the page degrades
@@ -8725,7 +8716,7 @@ pipeline itself is what's being tested.
   for forensics. Backups land at
   `/usr/local/bin/<binary>.prev-<previous-tag>` with the most-recent
   5 retained. Uses sidecar files at
-  `/var/lib/ratesengine/deployed-versions/<binary>` to track the
+  `/var/lib/stellarindex/deployed-versions/<binary>` to track the
   current version (the binaries don't expose `--version` yet —
   separate launch-readiness item). Required GitHub secrets
   documented in `docs/operations/deploy-workflow.md`. R1 only for
@@ -8733,12 +8724,12 @@ pipeline itself is what's being tested.
   regions exist.
 ### Added
 
-- **`-version` flag on `ratesengine-{indexer,aggregator,api,sla-probe}`.**
+- **`-version` flag on `stellarindex-{indexer,aggregator,api,sla-probe}`.**
   All four long-running binaries now accept `-version` (and
   `--version`) and print the embedded version string then exit
   successfully. Output format is `<tag> (<build-date>, <go-version>)`,
   e.g. `v0.2.0 (2026-07-15T11:02:20Z, go1.25.9)`. Matches the
-  `version` subcommand the `ratesengine-{ops,migrate}` CLIs already
+  `version` subcommand the `stellarindex-{ops,migrate}` CLIs already
   shipped — every binary now has a non-invasive way to report what
   version it was built from. Resolves the deploy-workflow follow-up
   that previously required parsing journal output or sidecar files
@@ -8753,13 +8744,13 @@ pipeline itself is what's being tested.
   the operator instead of after the release workflow runs.
   `--dry-run` shows what would happen without committing. Pairs
   with the `make smoke-docker` target that runs `docker run --rm
-  ratesengine/<binary>:local --help` against every locally-built
+  stellarindex/<binary>:local --help` against every locally-built
   image — fast post-`make build-docker` sanity check that all six
   Dockerfiles produce a runnable artefact.
 
 ### Changed
 
-- **`Makefile`: `ratesengine-sla-probe` added to `BINARIES`.** The
+- **`Makefile`: `stellarindex-sla-probe` added to `BINARIES`.** The
   SLA-probe binary was implemented and shipped as a systemd unit
   but was never in the Makefile's BINARIES list, so `make build`
   silently skipped it. Adding it means `make build`, `make
@@ -8878,7 +8869,7 @@ pipeline itself is what's being tested.
   `USDC-GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN`,
   not the abstract `crypto:USDC` ticker the aggregator's stablecoin
   map keys on. Without this fix r1 sat at
-  `ratesengine_aggregator_vwap_writes_total = 0` for hours despite
+  `stellarindex_aggregator_vwap_writes_total = 0` for hours despite
   62k+ XLM trades per hour landing in the trades table — the
   expansion produced a source-pair list (`XLM/crypto:USDT`,
   `XLM/crypto:USDC`, …) that didn't match anything actually in the
@@ -8915,7 +8906,7 @@ pipeline itself is what's being tested.
   unaffected (the wrapper passes Write through verbatim outside the
   rewrite case). Bare-root `GET /` now returns a friendly welcome
   envelope (`{name, version, docs, openapi}`) — accidental visitors
-  hitting `api.ratesengine.net` get a useful response instead of a
+  hitting `api.stellarindex.io` get a useful response instead of a
   bare 404.
 
 - **API request-logger middleware skips 429 responses entirely.** A
@@ -8925,7 +8916,7 @@ pipeline itself is what's being tested.
   messages in a single 60 s probe-vs-rate-limiter window, dropping
   unrelated service messages operators would have wanted. 429
   visibility is preserved by the
-  `ratesengine_http_requests_total{status="429"}` counter; the
+  `stellarindex_http_requests_total{status="429"}` counter; the
   per-line WARN log carries no diagnostic value the metric doesn't
   already cover. Other 4xx responses (400, 401, 403, 404) still
   log at WARN.
@@ -8935,8 +8926,8 @@ pipeline itself is what's being tested.
 - **`[external]` configuration block + r1 enablement of free-tier
   CEX/aggregator/sanity venues.** Until today r1 ran on-chain-only
   because every off-chain venue defaulted to `enabled=false` and
-  `/etc/ratesengine.toml` had no `[external]` section. Closed
-  RFP §4.7 (CEX coverage) and the `crypto:XLM/fiat:USD` 404
+  `/etc/stellarindex.toml` had no `[external]` section. Closed
+  spec §4.7 (CEX coverage) and the `crypto:XLM/fiat:USD` 404
   tracked in `docs/operations/r1-deployment-state.md` §5a.
   Enabled six venues that need no API keys: binance / kraken /
   bitstamp / coinbase (CEX trade streamers, ClassExchange →
@@ -8978,7 +8969,7 @@ pipeline itself is what's being tested.
   files swapped from "ADA-as-known-unknown" to MATIC-as-known-
   unknown to keep negative-path coverage.
 
-- **`ratesengine-sla-probe -api-key` flag + `RATESENGINE_PROBE_API_KEY`
+- **`stellarindex-sla-probe -api-key` flag + `STELLARINDEX_PROBE_API_KEY`
   env-var.** Without authentication the probe hits the anonymous-tier
   rate limit (60 req/min) and reads availability < 0.1 % on every
   non-`/healthz` endpoint — verified against r1 today (66 k samples
@@ -9000,7 +8991,7 @@ pipeline itself is what's being tested.
   key, so re-enqueue is wasted work. Addresses the 99.4 % drop rate
   documented for r1 in #620 (845 k drops vs 4 921 recorded rows): in
   steady state the sink should now never drop. A new
-  `ratesengine_discovery_skipped_hits_total` counter exposes the
+  `stellarindex_discovery_skipped_hits_total` counter exposes the
   dedup hit rate. Drop semantics are unchanged for genuine buffer
   saturation; the seen-mark is rolled back on drop so a later push
   for the same key can retry. Behaviour change: tests that pushed
@@ -9089,7 +9080,7 @@ pipeline itself is what's being tested.
 ### Documentation
 
 - **`customer-demo-script.md` opens with the showcase URL.**
-  Pre-flight now lists `https://ratesengine.net` as one of the
+  Pre-flight now lists `https://stellarindex.io` as one of the
   required browser tabs; Stage 1 hands the customer the
   interactive explorer up front so the rest of the curl-based
   walk-through has a "click the panel, see the curl" parallel
@@ -9125,7 +9116,7 @@ pipeline itself is what's being tested.
   chunk window), error rate < 0.1 %, 5-minute soak. Companion
   to #610 — the SLA probe samples one of each; this scenario
   drives them under load. Deliberately separate from
-  `06-mixed-realistic.js` so the official Freighter-RFP SLA
+  `06-mixed-realistic.js` so the official SLA
   proof keeps its canonical traffic shape.
 
 ### Security
@@ -9134,7 +9125,7 @@ pipeline itself is what's being tested.
   `web/explorer/public/_headers` (CF Pages / Netlify format,
   copied verbatim into the build output) sets a restrictive
   Content-Security-Policy that limits `connect-src` to `self` +
-  `https://api.ratesengine.net` so a compromised script can't
+  `https://api.stellarindex.io` so a compromised script can't
   exfiltrate to a third party, plus `X-Content-Type-Options`,
   `X-Frame-Options: DENY` (with `frame-ancestors 'none'` mirroring
   it in CSP), `Referrer-Policy: strict-origin-when-cross-origin`,
@@ -9148,7 +9139,7 @@ pipeline itself is what's being tested.
 ### Fixed
 
 - **SLA probe covers the catalogue endpoints.** The probe
-  (`cmd/ratesengine-sla-probe`) only sampled `/v1/price`,
+  (`cmd/stellarindex-sla-probe`) only sampled `/v1/price`,
   `/v1/oracle/latest`, and the health/version surfaces. The
   showcase site fans out across `/v1/coins`, `/v1/issuers`,
   `/v1/markets`, and `/v1/diagnostics/cursors` on every page
@@ -9194,7 +9185,7 @@ pipeline itself is what's being tested.
 - **`getting-started.md` lists the interactive explorer.** The
   URL block at the top of the doc previously listed the API
   endpoint, reference docs, and status page but not the showcase
-  site itself. Added a `ratesengine.net` line so newcomers learn
+  site itself. Added a `stellarindex.io` line so newcomers learn
   about the explorer alongside the curl examples. Also bumps
   `last_verified` to 2026-05-04.
 
@@ -9248,7 +9239,7 @@ pipeline itself is what's being tested.
   preview deploy succeeded), T-0 step 5 (force a fresh build
   after API auth-mode flip so build-time `generateStaticParams`
   picks up production data), pass-condition entry for
-  `https://ratesengine.net`, and a Cross-references link to
+  `https://stellarindex.io`, and a Cross-references link to
   `explorer-deployment.md`. Closes the gap where the runbook
   knew about API + status page but not the showcase.
 
@@ -9258,7 +9249,7 @@ pipeline itself is what's being tested.
   bind, preview-deploy flow), Vercel/Netlify alternatives, the
   rsync-to-r1 fallback, and post-deploy verification checks.
   Closes the documentation gap between "the showcase code
-  exists in `web/explorer/`" and "ratesengine.net is live."
+  exists in `web/explorer/`" and "stellarindex.io is live."
 
 ### Added
 
@@ -9313,7 +9304,7 @@ pipeline itself is what's being tested.
 
 - **Footer adds Issuers, GitHub, and Changelog links.** Browse
   column now lists `/issuers`. Bottom strip exposes GitHub
-  (RatesEngine/rates-engine) and a direct Changelog link
+  (StellarIndex/stellar-index) and a direct Changelog link
   alongside the API URL — the latter two were missing despite
   the project being open-source from day one.
 
@@ -9398,7 +9389,7 @@ pipeline itself is what's being tested.
   integration quirk discovered during decoder development (e.g.
   Soroswap SwapEvent has no post-state reserves, Band's contract
   emits zero events, Phoenix swaps fan out across 8 events) and
-  links to the full audit notes in `docs/discovery/`. `/oracles`
+  links to the full decode notes for each integration. `/oracles`
   also explains the SEP-40 compatibility surface and divergence
   monitoring up front.
 
@@ -9542,7 +9533,7 @@ pipeline itself is what's being tested.
   Snapshot-and-delta semantics (not snapshot-and-clear) — resetting
   dispatcher counters from outside would race with concurrent
   decoder writes; the worker keeps its own "last seen" reference.
-  Wired into `cmd/ratesengine-indexer` as a goroutine bound to
+  Wired into `cmd/stellarindex-indexer` as a goroutine bound to
   the root context. Powers /v1/diagnostics/decoders + the
   showcase /diagnostics decoder-coverage table.
 - **Per-source contribution persister.** `aggregate.SourceContributions`
@@ -9550,7 +9541,7 @@ pipeline itself is what's being tested.
   a trade slice. `orchestrator.ContributionSink` is the optional sink
   the orchestrator invokes after every successful VWAP compute.
   Production wires a timescale-backed adapter (in
-  cmd/ratesengine-aggregator to avoid an import cycle) so the
+  cmd/stellarindex-aggregator to avoid an import cycle) so the
   showcase source-contribution donut on every price card reads
   from the `price_source_contributions` hypertable (migration 0026)
   rather than recomputing at request time. Best-effort: sink failures
@@ -9566,13 +9557,13 @@ pipeline itself is what's being tested.
   - **Cold start.** Pairs created before the indexer's first
     ledger were invisible — every swap on those pairs was
     silently dropped via the `skipped_unknown_pair` counter.
-  - **Parallel backfill.** `ratesengine-ops backfill -parallel N`
+  - **Parallel backfill.** `stellarindex-ops backfill -parallel N`
     runs N independent dispatchers; chunk 7 had no idea what
     tokens chunk 2's `new_pair` event introduced.
   Fix: new `soroswap_pairs` registry table (migration 0016),
   `Store.UpsertSoroswapPair` + `LoadSoroswapPairRegistry`, a
   decoder `WithPairUpsertHook` option, and a one-shot
-  `ratesengine-ops seed-soroswap-pairs` subcommand that walks
+  `stellarindex-ops seed-soroswap-pairs` subcommand that walks
   the factory via `simulateTransaction` and bootstraps the
   table. Indexer + every backfill chunk loads the table at boot
   and writes through on every live `new_pair` event. Existing
@@ -9599,12 +9590,11 @@ pipeline itself is what's being tested.
     one-level-too-shallow ADR refs. **1,227 of 1,228 relative
     `.md` links now resolve** (the 1 remaining is a literal
     `<<file>>.md` template placeholder).
-  - **CLAUDE.md repo tree** updated to include
-    `docs/audit-2026-05-02/` (was missing).
-  - **`docs/discovery/README.md`** gains an explicit
+  - **CLAUDE.md repo tree** updated to include the audit
+    workspace that was missing.
+  - The internal research-notes index gains an explicit
     "read-only since 2026-04-22" banner pointing at the
-    Phase 1 closure doc, removing the contradiction with
-    CLAUDE.md.
+    closure doc, removing the contradiction with CLAUDE.md.
   - **README.md status line** refreshed to reflect r1 live +
     multi-region as the remaining launch blocker.
   - ADR statuses spot-checked: 23 Accepted, ADR-0012 explicitly
@@ -9618,7 +9608,7 @@ pipeline itself is what's being tested.
 - **`pipeline.PersistEvents` drains the channel on shutdown** —
   the sink returned immediately on `ctx.Done()`, dropping any
   events still in the 256-deep buffer. Callers (live indexer +
-  `ratesengine-ops backfill`) advance their cursor AFTER
+  `stellarindex-ops backfill`) advance their cursor AFTER
   `ProcessLedger` enqueues to the channel, BEFORE the sink
   writes — so a SIGTERM mid-stream silently lost up to
   cap(channel) trade rows per pipeline while the cursor's
@@ -9634,7 +9624,7 @@ pipeline itself is what's being tested.
 
 ### Added
 
-- **`ratesengine-ops backfill -parallel N`** — backfill subcommand
+- **`stellarindex-ops backfill -parallel N`** — backfill subcommand
   splits its `[from, to]` range into N contiguous, non-overlapping
   chunks and runs each as a concurrent worker against a shared
   postgres pool. Each chunk gets its own dispatcher + ledgerstream
@@ -9653,16 +9643,16 @@ pipeline itself is what's being tested.
 ### Operations
 
 - **r1 first application bringup — indexer + aggregator + api
-  running end-to-end** — 2026-05-03 brought up the ratesengine
+  running end-to-end** — 2026-05-03 brought up the stellarindex
   application stack against r1 for the first time. Procedure
   captured in `docs/operations/r1-deployment-state.md
   §"2026-05-03 first application bringup"` so R2 + R3 follow
   the same path. Pieces:
   - Redis + TimescaleDB extension installed.
-  - `ratesengine` postgres role + DB created; 15/15 migrations
+  - `stellarindex` postgres role + DB created; 15/15 migrations
     applied.
   - 3 systemd units (indexer + aggregator + api) writing
-    against `/etc/default/ratesengine` for the secret env.
+    against `/etc/default/stellarindex` for the secret env.
   - Live ingest from L62,403,000+; closed-bucket VWAP serving
     against `/v1/price?asset=native&quote=USDC:GA5Z…` end-to-end.
   - Historical backfill `L50,457,424 → L62,400,000` running in
@@ -9717,9 +9707,9 @@ pipeline itself is what's being tested.
   `docs/architecture/launch-readiness-backlog.md`). Single-bar
   TWAP via `/v1/twap` remains shipped (true time-weighted compute
   from raw trades); only the multi-bar chart variant is the
-  deferred surface. Per the Stellar + Freighter RFPs the chart
+  deferred surface. Per the product spec the chart
   may be backed by "TWAP **or** VWAP" (either acceptable); the
-  proposal's "configurable VWAP and TWAP aggregation engine"
+  product spec's "configurable VWAP and TWAP aggregation engine"
   commitment is satisfied via `/v1/twap` + the VWAP→TWAP
   fallback in S4.4. Reopen L7.8 if a customer asks for
   TWAP-shaped charts.
@@ -9766,7 +9756,7 @@ pipeline itself is what's being tested.
   - **L4.15** R3 (Vultr Singapore) provisioning + bringup —
     Vultr Bare Metal + Vultr Object Storage hybrid.
   - **L4.16** Cloudflare Anycast + GeoIP routing for
-    `api.ratesengine.net`.
+    `api.stellarindex.io`.
   - **L4.17** Cross-region Postgres replication wired
     (sync R1→R2, async R1→R3).
   - **L5.8** Region-failover chaos test — kill R1, verify
@@ -9790,7 +9780,7 @@ pipeline itself is what's being tested.
     — drop-in `.upptimerc.yml` for the Upptime fork. Names the
     surfaces (API + readiness + SSE smoke + docs + r1/r2/r3
     origins), configures the public-page intro, routes incident
-    assignment. Operator copies to the new `ratesengine-status`
+    assignment. Operator copies to the new `stellarindex-status`
     repo + tweaks per the inline comments. Companion
     [`deploy/status-page/README.md`](deploy/status-page/README.md)
     points back at `docs/operations/status-page-setup.md` for
@@ -9842,7 +9832,7 @@ pipeline itself is what's being tested.
     regional outages from non-GitHub viewpoints, maintenance
     windows). We can graduate to a custom solution post-launch
     if customer feedback wants tighter brand integration — the
-    URL stays `status.ratesengine.net`, only the backend swaps.
+    URL stays `status.stellarindex.io`, only the backend swaps.
   - [`docs/operations/chaos-wave1-runbook.md`](docs/operations/chaos-wave1-runbook.md)
     — closes **L5.5**'s execution gap. The suite code is already
     shipped under `test/chaos/`; the runbook covers the pre-flight,
@@ -9889,7 +9879,7 @@ pipeline itself is what's being tested.
     expected-shape annotation so anomalies are spottable
     without re-deriving the metric semantics.
   - [`docs/operations/backfill-procedure.md`](docs/operations/backfill-procedure.md)
-    — operator runbook for `ratesengine-ops backfill`.
+    — operator runbook for `stellarindex-ops backfill`.
     Covers when to use it (newly-enabled source, discovered
     gap, region catch-up, post-WASM-audit replay), step-by-
     step (range pick → dry-run → run → resume → narrow-source
@@ -9945,11 +9935,11 @@ pipeline itself is what's being tested.
   `ClosedBucketEvent`, and republishes on the API binary's
   in-process `streaming.Hub` with the canonical
   `closed:<asset>/<quote>` topic key (matches
-  `internal/api/v1.PriceStreamTopic`). `cmd/ratesengine-api/main.go`
+  `internal/api/v1.PriceStreamTopic`). `cmd/stellarindex-api/main.go`
   constructs a Hub when Redis is available and runs the
   subscriber as a goroutine bound to the root context.
   - New metric
-    `ratesengine_api_stream_subscribe_total{outcome="ok"|"decode_error"|"malformed"}`.
+    `stellarindex_api_stream_subscribe_total{outcome="ok"|"decode_error"|"malformed"}`.
   - New tests: nil-input rejection; round-trip via miniredis
     that proves Hub.Publish fires with the correct topic and
     forwarded payload; sentinel test asserts the topic format
@@ -9963,15 +9953,15 @@ pipeline itself is what's being tested.
   successful (pair, window) VWAP cache write with the freshly-
   computed value + bucket-end timestamp. Best-effort:
   publish errors log + increment
-  `ratesengine_aggregator_stream_publish_total{outcome="error"}`
+  `stellarindex_aggregator_stream_publish_total{outcome="error"}`
   but never block the tick (the VWAP cache key is the
   source of truth; the stream is enrichment for SSE
   subscribers).
   - Production implementation: new package
     `internal/api/streaming/redispub/` with `Publisher`
-    (Redis `PUBLISH` to `ratesengine:closed-bucket:v1`) +
+    (Redis `PUBLISH` to `stellarindex:closed-bucket:v1`) +
     `ClosedBucketEvent` JSON wire shape.
-  - Wired in `cmd/ratesengine-aggregator/main.go` —
+  - Wired in `cmd/stellarindex-aggregator/main.go` —
     PUBLISH on a no-subscriber channel is a Redis no-op,
     so wiring is safe ahead of the matching API-side
     subscriber.
@@ -9980,7 +9970,7 @@ pipeline itself is what's being tested.
     `streaming.Hub` so `/v1/price/stream` SSE clients
     receive the fan-out.
 - **`change_24h_pct` populated on `/v1/assets/{id}`** — the field
-  was declared in OpenAPI (Freighter RFP §"Bulk query support"
+  was declared in OpenAPI (the spec §"Bulk query support"
   mentions a 24h % change alongside current price) but no Go code
   computed it. Closed: `internal/storage/timescale/aggregates.go`
   gains `ClosedVWAP1mAtOrBefore` to anchor the 24h-ago comparison
@@ -9993,12 +9983,12 @@ pipeline itself is what's being tested.
   current USD price exists for the asset or the 24h-ago bucket
   is unavailable (asset first traded < 24h ago, or pruned by
   retention). `pkg/client/types.go::AssetDetail` gains the field;
-  `cmd/ratesengine-api/main.go` constructs `storeChange24hReader`
+  `cmd/stellarindex-api/main.go` constructs `storeChange24hReader`
   and wires it via `Options.Change24h`.
 - **`/v1/price/stream` now serves closed-bucket events end-to-end**
   — the handler returned 503 unconditionally because the API
   binary never constructed a `streaming.Hub`, and no producer
-  ever called `Hub.Publish`. Closed: `cmd/ratesengine-api/main.go`
+  ever called `Hub.Publish`. Closed: `cmd/stellarindex-api/main.go`
   unconditionally constructs `streaming.NewHub(0)` and passes it
   via `Options.Hub`; new `internal/api/streampublish` package
   hosts a per-pair polling producer that watches the existing
@@ -10008,7 +9998,7 @@ pipeline itself is what's being tested.
   `pairs = [["native","fiat:USD"], …]`. Empty `pairs` leaves the
   producer disabled but still constructs the Hub so subscribers
   connect cleanly (heartbeats only). New
-  `ratesengine_stream_publish_total{stream="price_stream"}`
+  `stellarindex_stream_publish_total{stream="price_stream"}`
   counter signals fanout activity. The byte-identical-payload
   property required by ADR-0015 is verified by
   `TestPublisher_TwoSubscribersIdenticalPayload`.
@@ -10039,8 +10029,8 @@ pipeline itself is what's being tested.
   response's `Pagination.Next`. New `TradeRow` type in
   `pkg/client/types.go` mirrors the server's wire shape exactly.
 - **`pkg/client.Client.OHLC`** — single-bar OHLC over a window via
-  the SDK. Closes another gap from the code-vs-RFP audit:
-  Freighter RFP §V1 historical chart requirements explicitly list
+  the SDK. Closes another gap from the code-vs-spec audit:
+  the spec §V1 historical chart requirements explicitly list
   OHLC as a chart-UX path but the SDK only exposed
   `HistorySinceInception`. Both `Base` and `Quote` are required
   on `OHLCQuery` (the server doesn't default Quote to fiat:USD —
@@ -10060,8 +10050,8 @@ pipeline itself is what's being tested.
   fallback. SDK omits `window_seconds=0` from the URL so the
   default-of-5 path stays clean.
 - **`pkg/client.Client.PriceBatch`** — bulk price lookup via the
-  Go SDK. Closes the most impactful gap from a code-vs-RFP audit
-  of the SDK surface: Freighter RFP §"Bulk query support
+  Go SDK. Closes the most impactful gap from a code-vs-spec audit
+  of the SDK surface: the spec §"Bulk query support
   preferred (batch asset lookups)" was implemented server-side
   (`GET`/`POST /v1/price/batch`) but the SDK only exposed the
   single-asset `Client.Price`. SDK now routes ≤100 ids via GET
@@ -10104,8 +10094,7 @@ pipeline itself is what's being tested.
   authoring half; actual drill execution + writeups remain
   operator work against staging.
 - **Status-page scaffold + `sev-status-page-update` runbook** —
-  `status.ratesengine.net` was committed to in the proposal §IDR
-  and required by Freighter F3.5 / F3.6, but nothing in `deploy/`
+  `status.stellarindex.io` is a launch commitment, but nothing in `deploy/`
   pointed at the page or specified what an update should look
   like. New `deploy/status-page/cstate/` ships the cstate
   (Hugo-based) site config, the public component list (12
@@ -10113,7 +10102,7 @@ pipeline itself is what's being tested.
   backend layers), and the per-incident front-matter template.
   New `docs/operations/runbooks/sev-status-page-update.md`
   binds the update cadence (hourly during SEV-1, daily during
-  SEV-2 — matches the SEV-playbook + Freighter SLA), the
+  SEV-2 — matches the SEV-playbook), the
   safe-to-publish detail level, and the workstation-down
   fallback path. `docs/operations/sev-playbook.md` §5.1 now
   references both rather than dangling a TBD. Hosting target
@@ -10121,8 +10110,8 @@ pipeline itself is what's being tested.
   work — see [`deploy/status-page/README.md`](../deploy/status-page/README.md).
   Closes G4 in `docs/launch-task-list.md`.
 - **AlertManager Discord webhook (parallel fanout with Slack)** —
-  the proposal commits to alerts being "integrated into
-  discord/slack" but the Prometheus ansible role only wired
+  the alerting design routes alerts to both
+  Discord and Slack, but the Prometheus ansible role only wired
   Slack. New `alertmanager_discord_webhook_url` vault var; the
   warning + info routes now point at a unified `chat-fanout`
   receiver that emits to BOTH Slack and Discord when their
@@ -10171,7 +10160,7 @@ pipeline itself is what's being tested.
   - `2026-04-sev2-soroswap-decode-regression.md` — protocol-25
     SCVal type-tag enum extension breaks soroswap decoder;
     forward-fix path via `internal/scval` + golden fixture
-    + ordinary deploy + `ratesengine-ops backfill -source`;
+    + ordinary deploy + `stellarindex-ops backfill -source`;
     validated all 8 scenario criteria, all pass.
   - Promoted two action items into runbook updates in the same
     PR: `timescale-primary-down.md` Quick-diagnosis now leads
@@ -10220,7 +10209,7 @@ pipeline itself is what's being tested.
   when auth_mode=sep10 is configured but no validator
   implementation is wired". Both are stale: the production
   validator lives in `internal/auth/sep10` (separate package),
-  `cmd/ratesengine-api` wires it via `sep10.NewValidator`, and
+  `cmd/stellarindex-api` wires it via `sep10.NewValidator`, and
   the binary's actual fallback rule is "swap in Noop iff
   config is missing AND `auth_mode` is not `sep10`; otherwise
   hard-fail at startup." Both godocs rewritten to describe the
@@ -10290,7 +10279,7 @@ pipeline itself is what's being tested.
     not launch-blocking.
 - **`sev-playbook.md` §5.1 status-page section is no longer a
   Week-N stub** — the doc said `Public status page lives at
-  https://status.ratesengine.net (TBD — provisioning in Week
+  https://status.stellarindex.io (TBD — provisioning in Week
   8).` Reality: the cstate scaffold ships at
   `deploy/status-page/cstate/`; provisioning at the public
   domain is gated on L4.11 in the launch-readiness backlog.
@@ -10349,9 +10338,9 @@ pipeline itself is what's being tested.
     captive-core on the box) + `rs-stellar-archivist`.
   - **Removed**: `stellar-core` standalone daemon (kept
     inside Galexie as captive); `stellar-rpc` source removed,
-    binary retained only for the `ratesengine-ops rpc-probe`
+    binary retained only for the `stellarindex-ops rpc-probe`
     operator diagnostic that dials remote public endpoints.
-- **`ratesengine-ops supply snapshot -asset <non-native>` error
+- **`stellarindex-ops supply snapshot -asset <non-native>` error
   message no longer claims classic + SEP-41 computers are
   unshipped.** The error said *"classic + SEP-41 follow once
   their computers ship"*, contradicting both the docstring on
@@ -10461,7 +10450,7 @@ pipeline itself is what's being tested.
   to point at it.
 - **Phoenix decoder's `evictedOrphans` godoc reflects the shipped
   metric path** — comment said "Production wiring in
-  cmd/ratesengine-indexer will export this as
+  cmd/stellarindex-indexer will export this as
   obs.SourceOrphanEventsTotal once 165d lands". It already
   ships: the dispatcher reads `EvictedOrphans()` via an optional
   interface (`internal/dispatcher/dispatcher.go:339`), and the
@@ -10486,7 +10475,7 @@ pipeline itself is what's being tested.
   `OracleResolutionSeconds` in `internal/pipeline/dispatcher.go`,
   and chainlink-http lives in `internal/divergence/` —
   it's a divergence reference, not an oracle source, and
-  doesn't emit `ratesengine_oracle_*` metrics at all. Replaced
+  doesn't emit `stellarindex_oracle_*` metrics at all. Replaced
   the speculative list with the five actual label values.
 - **`docs/operations/sla-probe.md` aligned with shipped alerts** —
   the doc framed alert rules as a "planned follow-up" with
@@ -10510,7 +10499,7 @@ pipeline itself is what's being tested.
   three classes) and the bullet at the top of the doc updated to
   match. Same drift family as #494 (supply package doc.go).
   Continuation of the L6.5 doc-sweep.
-- **`ratesengine-ops --help` no longer advertises two subcommands
+- **`stellarindex-ops --help` no longer advertises two subcommands
   that don't exist** — the `usageBody` constant ended with a
   `TODO subcommands (land with their feature PRs):` block listing
   `cache-prime` (warm the Redis cache from Timescale — never
@@ -10519,7 +10508,7 @@ pipeline itself is what's being tested.
   `verify-archive` / `verify-decoders` / `verify-external` /
   `archive-completeness verify` / `cross-region-check` family
   that actually shipped). Dropped the block entirely so a fresh
-  operator running `ratesengine-ops --help` doesn't see promises
+  operator running `stellarindex-ops --help` doesn't see promises
   the binary can't keep. Continuation of the L6.5 doc-sweep.
 - **`internal/auth/sep10.go` SEP-10 flow comments cite the
   actual handler paths** — the godoc said `Client: GET
@@ -10549,7 +10538,7 @@ pipeline itself is what's being tested.
   package as initially shipped)` provides cross-anchor scan,
   `PR B will add native primary scanning + the fix mode`, and
   `PR C wires the verify mode + systemd timer`. All three modes
-  ship today: `cmd/ratesengine-ops/main.go` switches on
+  ship today: `cmd/stellarindex-ops/main.go` switches on
   `case "check"` / `"fix"` / `"verify"`, and
   `deploy/systemd/archive-completeness.{service,timer}` ship the
   timer. Doc rewritten to describe `# Modes (all shipped)` with
@@ -10615,7 +10604,7 @@ pipeline itself is what's being tested.
   `internal/cachekeys/keys.go` said the writer for `apikey:`
   records was `\`/v1/account/keys\` self-service handler (Phase
   5)`, but the handler shipped (#196). `docs/operations/
-  sep1-resolution.md` said `ratesengine_metadata_resolver_error_rate_high`
+  sep1-resolution.md` said `stellarindex_metadata_resolver_error_rate_high`
   is `"designed but not yet shipping" pending Phase-5 wiring of
   the metadata overlay into the asset handler` — the overlay IS
   wired (see the doc's own §"Resolution flow"). What's missing
@@ -10643,10 +10632,10 @@ pipeline itself is what's being tested.
   said `Per-source audit: enumerate every historical WASM hash
   for each of the four Soroban sources. Blocked on live mainnet
   RPC access (r1 stack is up; query hasn't been written).` and
-  `ratesengine-ops schema-audit CLI. Not scoped in Phase 1`. Both
+  `stellarindex-ops schema-audit CLI. Not scoped in Phase 1`. Both
   shipped: per-source audits live at
   `docs/operations/wasm-audits/` for Aquarius, Band, Blend,
-  Comet, Phoenix; the CLI is `ratesengine-ops wasm-history`,
+  Comet, Phoenix; the CLI is `stellarindex-ops wasm-history`,
   `wasm-history-merge-jsonl`, `extract-wasm-from-galexie` —
   walking from Galexie's MinIO output instead of stellar-rpc
   (which was removed from r1 on 2026-04-23). Section renamed to
@@ -10663,8 +10652,8 @@ pipeline itself is what's being tested.
   - Postgres-backed Recorder → `internal/storage/timescale/
     discovery.go` implements `Recorder` against the
     `discovered_assets` hypertable.
-  - Ops command + alert metric → `ratesengine-ops discovery`
-    subcommand exists; `ratesengine_ingestion_discovery_drops`
+  - Ops command + alert metric → `stellarindex-ops discovery`
+    subcommand exists; `stellarindex_ingestion_discovery_drops`
     alert lives in `deploy/monitoring/rules/ingestion.yml`.
   Section renamed to "Wired today" with concrete file pointers.
   Same drift family as #477 / #483 / #484. Continuation of the
@@ -10686,7 +10675,7 @@ pipeline itself is what's being tested.
   file with per-asset `name` / `desc` / `image` / `max_supply`
   overrides plus a `sep1_status: operator_override` wire status.
   None of that exists. The actual override is much narrower:
-  `[metadata.issuer_home_domains]` in `/etc/ratesengine.toml`
+  `[metadata.issuer_home_domains]` in `/etc/stellarindex.toml`
   maps issuer G-strkey → home-domain so the SEP-1 resolver can
   fetch the issuer's stellar.toml; per-field metadata comes from
   that toml, not an override. The `operator_override` status
@@ -10696,12 +10685,12 @@ pipeline itself is what's being tested.
   reloaded). Continuation of the L6.5 doc-sweep.
 - **`sep1-resolution.md` no longer hand-waves a `sep1-trace`
   subcommand as "Phase 5 deliverable"** — same drift as #481
-  (UsageRow). The doc said `ratesengine-ops sep1-trace -domain
+  (UsageRow). The doc said `stellarindex-ops sep1-trace -domain
   <home_domain> (Phase 5 deliverable; not yet implemented)
   would dump the full resolution path…`. We don't track
   follow-up work as "Phase 5" anymore; the comment now
   describes the gap concretely (`not in
-  cmd/ratesengine-ops/main.go's switch today`) and points the
+  cmd/stellarindex-ops/main.go's switch today`) and points the
   operator at the manual playbook. Continuation of the L6.5
   doc-sweep.
 - **`oracle-manipulation-defense.md` red-team-tests no longer
@@ -10721,7 +10710,7 @@ pipeline itself is what's being tested.
   of Week 4.` We're well past Week 4; the OpenAPI file ships as
   the binding contract today and 32+ handlers are wired against
   it. Frontmatter flipped to `ratified` with the right pointer
-  ("openapi/rates-engine.v1.yaml is the binding contract; this
+  ("openapi/stellar-index.v1.yaml is the binding contract; this
   doc records design intent"). §15 "Open questions (close by
   Week 4)" rewritten as a closure list — GraphQL→L7.5,
   SSE-not-WebSocket (shipped), proxy-not-rehost issuer images
@@ -10813,18 +10802,18 @@ pipeline itself is what's being tested.
   [NoopSEP10Validator] returns [ErrNotImplemented] from every
   method`. The real implementation has shipped at
   `internal/auth/sep10/` (Validator, Challenge, Verify,
-  VerifyJWT) and is wired in `cmd/ratesengine-api/main.go`'s
+  VerifyJWT) and is wired in `cmd/stellarindex-api/main.go`'s
   `buildSEP10Validator`; Noop is now correctly described as the
   fallback for non-`auth_mode=sep10` deployments. The aggregator
   orchestrator's "Deliberately out of scope for v1" list claimed
   stablecoin→fiat proxy, triangulation, divergence, and outlier
   filtering were all still pending — every one has shipped (the
-  ratesengine-aggregator binary wires each one through
+  stellarindex-aggregator binary wires each one through
   `orchestrator.Config` fields). Both godocs rewritten to
   describe what's actually wired today, with pointers at the
   packages doing the work. Same drift family as #475 / #476.
   Continuation of the L6.5 doc-sweep.
-- **`ratesengine-api` and `ratesengine-aggregator` package
+- **`stellarindex-api` and `stellarindex-aggregator` package
   docstrings match what each binary actually wires today** —
   the api binary's godoc said "Today: /v1/healthz, /v1/readyz,
   /v1/version — the infra-facing surface. The full endpoint
@@ -10840,12 +10829,12 @@ pipeline itself is what's being tested.
   block (`server.go` HandleFunc list, `orchestrator.Config`
   fields). Same drift family as #475 (ops binary). Continuation
   of the L6.5 doc-sweep.
-- **`ratesengine-ops` package docstring matches the actual
-  subcommand set** — the binary's `// Binary ratesengine-ops`
+- **`stellarindex-ops` package docstring matches the actual
+  subcommand set** — the binary's `// Binary stellarindex-ops`
   godoc said "admin CLI: backfill, gap-detect, cache-prime,
   docs-config" with the closing line "Today only `docs-config`
   is wired; the rest land with the corresponding implementation
-  PRs." Reality (per `cmd/ratesengine-ops/main.go`'s
+  PRs." Reality (per `cmd/stellarindex-ops/main.go`'s
   `switch args[0]` block): 18+ subcommands wired across ingest /
   archive integrity / Soroban discovery / supply / diagnostics /
   doc generation. The docstring also called the gap-detection
@@ -10909,13 +10898,13 @@ pipeline itself is what's being tested.
 - **`CLAUDE.md` repo-tree is now accurate** — the orientation
   file every AI agent reads cold claimed `cmd/ binary entry
   points (four in total)` while listing 5 entries; reality is 6
-  (the `ratesengine-sla-probe` binary that ships the SLA-evidence
+  (the `stellarindex-sla-probe` binary that ships the SLA-evidence
   harness was missing). The `internal/` enumeration was missing
   five packages: `archivecompleteness` (the dual-archive
   daemon — ADR-0017), `events` (transport-neutral Soroban event
   types), `hashdb` (drift-detector against upstream LCM
   rewrites), `pipeline` (shared ingest glue between indexer +
-  `ratesengine-ops backfill`), and `scval` (SCVal primitives
+  `stellarindex-ops backfill`), and `scval` (SCVal primitives
   wrapper). The `deploy/` description claimed "k8s / baremetal
   kits" but the actual subdirs are
   `docker-compose / monitoring / status-page / systemd` (no
@@ -10923,9 +10912,8 @@ pipeline itself is what's being tested.
   description tightened to call out the ansible
   `roles/inventory/playbooks/` shape; `test/` description
   expanded to mention the `load` (k6) and `chaos` trees;
-  `docs/audit-2026-04-29/` added to the tree (it's the
-  post-Phase-1 cross-cutting findings register that several
-  open PRs reference). Continuation of the L6.5 doc-sweep.
+  the cross-cutting findings-register workspace added to the tree
+  (several open PRs reference it). Continuation of the L6.5 doc-sweep.
 - **`repo-hygiene-plan.md` §15 IaC discipline now describes our
   actual stack** — the section listed Kubernetes manifests in
   `deploy/k8s/`, Helm charts, and "no inline shell heredocs in
@@ -10942,7 +10930,7 @@ pipeline itself is what's being tested.
   or were never built** — the coverage matrix's "deferred to
   Week 9" / "planned (Weeks 8–9)" lines now cite the actual k6
   suite at `test/load/`, the operator-driven backfill via
-  `ratesengine-ops backfill`, and the bare-metal+systemd+ansible
+  `stellarindex-ops backfill`, and the bare-metal+systemd+ansible
   deployment kit (the matrix had been promising `deploy/k8s`
   which doesn't exist and isn't our deployment shape). The
   hygiene plan's `scripts/ci/check-adr-numbering.sh` and
@@ -10997,13 +10985,13 @@ pipeline itself is what's being tested.
 - **Five indexer-side runbooks are bare-metal-native** —
   `source-stopped`, `cursor-stuck`, `orphan-events`,
   `discovery-drops`, and `decode-errors` each had a single stale
-  `kubectl rollout restart deploy/ratesengine-indexer` /
-  `kubectl logs deploy/ratesengine-indexer` invocation that
+  `kubectl rollout restart deploy/stellarindex-indexer` /
+  `kubectl logs deploy/stellarindex-indexer` invocation that
   doesn't run on r1. The indexer ships as
-  `ratesengine-indexer.service` per the `archival-node` ansible
+  `stellarindex-indexer.service` per the `archival-node` ansible
   role (ADR-0008). Restart commands now use `ssh root@indexer-01
-  "systemctl restart ratesengine-indexer"`; log commands use
-  `journalctl -u ratesengine-indexer`. Continuation of the L6.5
+  "systemctl restart stellarindex-indexer"`; log commands use
+  `journalctl -u stellarindex-indexer`. Continuation of the L6.5
   doc-sweep started in #460/#461/#462.
 - **Four more runbooks are bare-metal-native** — same drift as
   api-down and api-5xx: kubectl-flavoured diagnosis steps that
@@ -11047,7 +11035,7 @@ pipeline itself is what's being tested.
   (`kubectl rollout undo`, `kubectl logs`, `kubectl get pods`,
   …) from a pre-ADR-0008 cloud-sketch era. ADR-0008 ratifies
   colocated bare metal as the primary deployment shape; production
-  runs `ratesengine-api.service` on three hosts behind two
+  runs `stellarindex-api.service` on three hosts behind two
   HAProxy + keepalived load balancers — no Kubernetes anywhere.
   An operator paged at 3 AM following kubectl commands on this
   fleet would land on errors, not diagnosis. `api-down.md`
@@ -11108,10 +11096,10 @@ pipeline itself is what's being tested.
   rollback procedure that `release-process.md` §4.4 prescribes:
   stop the unit, copy the previous-release binary into place
   (kept by goreleaser packaging convention at
-  `/opt/ratesengine/release-<tag>/`), restart.
+  `/opt/stellarindex/release-<tag>/`), restart.
   `runbooks/ingestion-lag.md` step 4 carried `TODO(#0)` for the
   backfill subcommand — except the subcommand exists and has
-  for some time (`ratesengine-ops backfill -from N -to N
+  for some time (`stellarindex-ops backfill -from N -to N
   -source S`). Replaced the placeholder with the concrete
   two-step `detect-gaps` → `backfill` procedure operators run
   during incidents.
@@ -11140,10 +11128,10 @@ pipeline itself is what's being tested.
   italicised "_runbook tbd_" notes citing the existing ad-hoc
   coverage path (no creation of stub runbooks — the alerts they
   reference are post-launch / Phase-3 anyway).
-  `docs/architecture/ha-plan.md` §3.10 ratesengine-ops: fictional
+  `docs/architecture/ha-plan.md` §3.10 stellarindex-ops: fictional
   `ops-cli.md` doc replaced with a description of the binary's
   actual top-level subcommands, citing `--help` and the source
-  at `cmd/ratesengine-ops/main.go`.
+  at `cmd/stellarindex-ops/main.go`.
   Verification: re-ran the link sweep; zero broken links remain.
 
 - **SSE event-ID generator no longer wraps to duplicates after
@@ -11206,7 +11194,7 @@ pipeline itself is what's being tested.
   (`dex` / `cex` / `fx`, omitted for non-exchange classes) lets UI
   consumers group exchange venues without reverse-engineering the
   name prefix. `backfill_safe` surfaces the per-WASM-hash audit
-  state that gates `ratesengine-ops backfill` (CLAUDE.md "Soroban
+  state that gates `stellarindex-ops backfill` (CLAUDE.md "Soroban
   DeFi contracts upgrade in place"): operators can now read it
   off the API instead of grepping
   `internal/sources/external/registry.go`. Additive — no existing
@@ -11230,7 +11218,7 @@ pipeline itself is what's being tested.
   `lookupFrozen` consulted it, but with no looker installed the
   call always returned (false, nil) — operators relying on
   `flags.frozen` to detect frozen-LKG responses got permanent
-  `false`. Now `cmd/ratesengine-api/main.go` constructs
+  `false`. Now `cmd/stellarindex-api/main.go` constructs
   `freeze.NewLooker(rdb)` when Redis is configured (mirrors the
   existing pattern for confidence + triangulated lookers) and
   passes it through `Options.Freeze`. L3.13 in the launch-readiness
@@ -11245,7 +11233,7 @@ pipeline itself is what's being tested.
   Wired the orchestrator's Tick to call `RefreshPair` once per
   configured pair after VWAPs are written, using the
   shortest-window VWAP as "our price". Best-effort per-pair: errors
-  log + count via the new `ratesengine_divergence_refresh_total{outcome}`
+  log + count via the new `stellarindex_divergence_refresh_total{outcome}`
   counter (ok / no_vwap / parse_error / refresh_error) but never
   abort the Tick. New `orchestrator.DivergenceRefresher` interface
   is the seam (nil = pre-Phase no-op preserved); aggregator's
@@ -11253,7 +11241,7 @@ pipeline itself is what's being tested.
   binary already builds, mirroring the helper for now (a shared
   builder is one CHANGELOG fixme away when a third caller appears).
 
-- **`ratesengine_trade_inserts_total{source, usd_volume_populated}`
+- **`stellarindex_trade_inserts_total{source, usd_volume_populated}`
   counter for L2.2 phase 1 coverage**: per-source counter labelled
   by whether the trade's `usd_volume` column was populated at
   insert time. Operators flipping on
@@ -11330,7 +11318,7 @@ pipeline itself is what's being tested.
   `omitempty`-on-nil round-trip shape so a future regression
   fires before shipping.
 
-- **`ratesengine-aggregator` log-level + log-format now match the
+- **`stellarindex-aggregator` log-level + log-format now match the
   other binaries**: the aggregator's bespoke logger factory was
   case-sensitive on the `[obs] log_level` value (so `LogLevel =
   "DEBUG"` silently fell back to info), missed the `"warning"`
@@ -11338,7 +11326,7 @@ pipeline itself is what's being tested.
   recognised `"console"` (not `"text"`). Extracted the shared
   factory to `internal/obs.NewLogger(cfg, binaryName)` and pointed
   all three binaries at it. Side-effect: aggregator logs now also
-  carry the `binary=ratesengine-aggregator` slog attribute, so
+  carry the `binary=stellarindex-aggregator` slog attribute, so
   Loki dashboards can filter per-binary without grepping path
   prefixes (the indexer + api already had this stamp).
 
@@ -11346,15 +11334,15 @@ pipeline itself is what's being tested.
 
 - **Supply cross-check gauge wired into the aggregator's
   refresh loop (closes a half-shipped audit finding)**: the
-  `ratesengine_supply_cross_check_divergence_stroops` gauge and
-  the `ratesengine_supply_cross_check_total{outcome=…}` counter
+  `stellarindex_supply_cross_check_divergence_stroops` gauge and
+  the `stellarindex_supply_cross_check_total{outcome=…}` counter
   were declared in `internal/obs/metrics.go` and the supply alert
   in `deploy/monitoring/rules/supply.yml` referenced them, but no
   production code path emitted either — the alert was inert.
   Added `internal/supply.CrossCheckRefresher` (loads the latest
   classic + SAC snapshots per pair, runs `supply.CrossCheck`,
   emits the gauge + counter via a small `CrossCheckEmitter`
-  interface) and wired it into `ratesengine-aggregator` alongside
+  interface) and wired it into `stellarindex-aggregator` alongside
   the per-asset supply refreshers. Pairs are derived from the ∩ of
   `[supply].sac_wrappers`, `watched_classic_assets`, and
   `watched_sep41_contracts` — no new config knob. Runbook
@@ -11423,14 +11411,14 @@ pipeline itself is what's being tested.
   on-chain/off-chain sources doesn't reduce to a clean single-USD
   figure; the dominant launch case (XLM/USD) is in scope. Skip path
   emits new
-  `ratesengine_aggregator_dropped_windows_total{reason="min_usd_volume"}`
+  `stellarindex_aggregator_dropped_windows_total{reason="min_usd_volume"}`
   + bumps the existing `empty_windows_total` so freshness alerts
   see consistent state. Filter is OFF when `MinUSDVolume == 0` —
   preserves pre-filter behaviour for deployments that haven't
   tuned the threshold yet. Tested: thin window rejected; fat
   window published; non-USD pair exempt; filter-off bypass.
 
-- **`ratesengine-ops wasm-history-merge-jsonl` — recover from a
+- **`stellarindex-ops wasm-history-merge-jsonl` — recover from a
   crashed walk**: the existing `wasm-history -checkpoint-dir` flag
   has been writing per-worker JSONL transition logs since #185, but
   the matching merge tool that reconstructs the canonical JSON from
@@ -11440,7 +11428,7 @@ pipeline itself is what's being tested.
   see PR #368), we lost the in-memory state — the JSON only writes
   at end-of-run. Going forward, every multi-hour walk should pass
   `-checkpoint-dir`; if it crashes, recover with
-  `ratesengine-ops wasm-history-merge-jsonl -checkpoint-dir <dir> -to N`.
+  `stellarindex-ops wasm-history-merge-jsonl -checkpoint-dir <dir> -to N`.
   The merge logic mirrors the walker's end-of-run merge: per-contract
   sort by ledger, collapse adjacent same-hash transitions across
   worker boundaries, close the last range at `-to`. Half-written
@@ -11462,7 +11450,7 @@ pipeline itself is what's being tested.
   bash equivalent. Production-safety guard duplicated at runner +
   scenario-prologue level: every script refuses to run against a
   target whose host matches `*production*` /
-  `*api.ratesengine.net*` / `*prod.*`. Wave 2 (HA-shaped scenarios
+  `*api.stellarindex.io*` / `*prod.*`. Wave 2 (HA-shaped scenarios
   — Patroni replica promotion, Redis Sentinel failover, HAProxy +
   keepalived VIP flip) is gated on staging baremetal deploys and
   is deferred post-launch. Companion design note at
@@ -11490,13 +11478,13 @@ pipeline itself is what's being tested.
   `Config.FXStore` is wired. Snap misses
   (`timescale.ErrNoFXQuote`) fall back to the cached-VWAP path so
   chains stay published; new metric
-  `ratesengine_aggregator_fx_snap_fallback_total{leg=…}` counts
+  `stellarindex_aggregator_fx_snap_fallback_total{leg=…}` counts
   these. Alert
-  `ratesengine_aggregator_fx_snap_fallback_dominant` fires at >50%
+  `stellarindex_aggregator_fx_snap_fallback_dominant` fires at >50%
   fallback rate sustained for 30 m. Hard DB errors from the FX
   store skip publish for that tick (no chained-fiat output if we
   can't trust the FX leg). Wired by default in
-  `cmd/ratesengine-aggregator/main.go` (passes the existing
+  `cmd/stellarindex-aggregator/main.go` (passes the existing
   `*timescale.Store` as the `FXStore`); deployments without FX
   ingestion configured see no behavioural change because legs
   fall back uniformly. Companion runbook:
@@ -11510,7 +11498,7 @@ pipeline itself is what's being tested.
   MinIO via S3 backend (reusing the galexie S3 deployment); index
   is local BoltDB. Promtail agents ship the systemd journal from
   every host in `log_shippers` (the union of every other
-  inventory group: prometheus_pair / ratesengine_api / aggregator
+  inventory group: prometheus_pair / stellarindex_api / aggregator
   / indexer / haproxy_lb / redis_cluster / postgres_cluster).
   Single role file with two task surfaces — server tasks
   (`server-{01..05}.yml`) run on hosts in `log_aggregator`, agent
@@ -11566,7 +11554,7 @@ pipeline itself is what's being tested.
   closes the third launch-critical sub-role of #72 after Patroni
   (#344) and Redis Sentinel (#350). Two LB hosts share a
   floating VIP via keepalived VRRP, fronting the
-  `ratesengine-api` pool with `/v1/readyz`-based health checks
+  `stellarindex-api` pool with `/v1/readyz`-based health checks
   per `docs/architecture/ha-plan.md §3.1`. TLS terminates at the
   edge (HSTS on every response, Mozilla intermediate cipher
   suite); HAProxy's built-in Prometheus exporter is enabled on
@@ -11593,7 +11581,7 @@ pipeline itself is what's being tested.
   failover + Sentinel-driven Redis failover + keepalived-driven
   api-tier failover + HAProxy-driven api-pod redirection).
 
-- **`ratesengine-ops wasm-history` Tier 2 enhancements: storage-
+- **`stellarindex-ops wasm-history` Tier 2 enhancements: storage-
   rotation + ContractCode-upload tracking**: opt-in observers
   that ride alongside the existing executable-hash transition
   walker. Closes the "wide-net" goal called out in
@@ -11649,8 +11637,8 @@ pipeline itself is what's being tested.
   `redis.NewFailoverClient` when `redis_sentinel_addrs` is
   non-empty, falls back to `redis.NewClient` against
   `redis_addr` for dev / single-node, returns nil when both
-  unset. Both `cmd/ratesengine-api` and
-  `cmd/ratesengine-aggregator` now route through this builder
+  unset. Both `cmd/stellarindex-api` and
+  `cmd/stellarindex-aggregator` now route through this builder
   and log `redis configured mode={sentinel|single|disabled}`
   at startup. New `redis_sentinel_addrs` + `redis_master_name`
   config fields with validate-time assertion that
@@ -11662,7 +11650,7 @@ pipeline itself is what's being tested.
   15–30 s RTO) and §B manual-failover (the
   `redis-cli SENTINEL failover` escalation path), with
   Sentinel-aware diagnosis commands. The
-  `ratesengine_redis_sentinel_primary` gauge — emitted every
+  `stellarindex_redis_sentinel_primary` gauge — emitted every
   30 s by the role's textfile scraper — sums to 1 across hosts
   in steady-state and is the durable signal for split-brain
   detection.
@@ -11679,8 +11667,8 @@ pipeline itself is what's being tested.
   `run_attempt` so the run window is queryable from Grafana
   without guessing timestamps. Secrets required (configured in
   repo settings):
-  - `K6_TARGET_STAGING` — staging API base URL (e.g. `https://api.staging.ratesengine.net/v1`)
-  - `RATESENGINE_LOAD_API_KEY` — vault-minted load-test API key
+  - `K6_TARGET_STAGING` — staging API base URL (e.g. `https://api.staging.stellarindex.io/v1`)
+  - `STELLARINDEX_LOAD_API_KEY` — vault-minted load-test API key
   - `K6_PROMETHEUS_RW_SERVER_URL` — Prometheus remote-write endpoint
   After this PR, **Task #74 is closed** end-to-end (scaffold +
   every scenario + AlertManager silence + weekly schedule);
@@ -11716,7 +11704,7 @@ pipeline itself is what's being tested.
   running the design-note traffic blend (60% price / 15% batch /
   10% tip / 6% vwap / 4% history / 3% twap / 1% stream / 1%
   oracle) at 300 rps over a 10 min soak. Pass criteria align
-  with Freighter SLA (p95 < 200 ms; p99 < 500 ms; 99.9 % success
+  with the SLA (p95 < 200 ms; p99 < 500 ms; 99.9 % success
   rate).
   Companion `docs/operations/sla-proof-template.md` is the
   canonical artefact shape for Task #77 — operator copies to
@@ -11728,7 +11716,7 @@ pipeline itself is what's being tested.
   Wave 4 (weekly schedule) follow as separate PRs.
 
 - **k6 load test suite — Wave 1 scaffold (Task #74)**: lays the
-  foundation for the Freighter SLA proof (Task #77). New
+  foundation for the SLA proof (Task #77). New
   `test/load/` tree with `scenarios/lib/{env,pairs,thresholds,warmup}.js`
   shared helpers, the first two scenarios (`01-price-hot-path.js`,
   `02-vwap-twap.js`), `docker-compose.k6.yaml` runner, package
@@ -11737,7 +11725,7 @@ pipeline itself is what's being tested.
   `test-load-price`, `test-load-vwap`, and `test-load-check`
   (compile-check without running) — every target is gated by a
   production-target guard that refuses to run if `K6_TARGET`
-  resolves to `api.ratesengine.{net,io}` or `rates.stellar.org`.
+  resolves to `api.stellarindex.{net,io}` or `rates.stellar.org`.
   The same guard fires inside `scenarios/lib/env.js` so a direct
   `k6 run` cannot bypass it. Companion design note at
   `docs/architecture/k6-load-tests-design-note.md` (lays out the
@@ -11856,9 +11844,9 @@ pipeline itself is what's being tested.
 
 ### Fixed
 
-- **`ratesengine_oracle_resolution_seconds` is now actually
+- **`stellarindex_oracle_resolution_seconds` is now actually
   emitted.** The metric was registered in `internal/obs` and the
-  `ratesengine_oracle_stale` alert
+  `stellarindex_oracle_stale` alert
   (`deploy/monitoring/rules/divergence.yml`) depends on it — the
   expression is
   `(time() - oracle_last_update_unix) > 10 * oracle_resolution_seconds`.
@@ -11892,7 +11880,7 @@ pipeline itself is what's being tested.
 
 - **Aggregator binary now exposes `/metrics`** — closes a known
   gap surfaced by the half-shipped-config audit. The aggregator's
-  Prometheus counters (`ratesengine_aggregator_ticks_total`,
+  Prometheus counters (`stellarindex_aggregator_ticks_total`,
   `_vwap_writes_total`, `_empty_windows_total`,
   `_dropped_trades_total{reason}`, `_triangulations_total{outcome}`)
   registered into `internal/obs` at package init but no HTTP
@@ -11900,7 +11888,7 @@ pipeline itself is what's being tested.
   the alert rules in `deploy/monitoring/rules/aggregator.yml`
   (`aggregator_silent`, `aggregator_outlier_storm`,
   `aggregator_class_drop_spike`) could never fire.
-  `cmd/ratesengine-aggregator/main.go` now mirrors the indexer's
+  `cmd/stellarindex-aggregator/main.go` now mirrors the indexer's
   `startMetricsServer` pattern: bind `cfg.Obs.MetricsListen`,
   expose `GET /metrics` (Prometheus) + `GET /healthz`, and run
   graceful shutdown after `orch.Run` returns. Empty
@@ -11922,7 +11910,7 @@ pipeline itself is what's being tested.
   a message pointing operators to the truth ("reserved for the
   future tracing rollout and is not yet wired in this build; set
   to \"none\""). When the OTel exporter is wired in
-  `cmd/ratesengine-{api,indexer,aggregator}/main.go`, the
+  `cmd/stellarindex-{api,indexer,aggregator}/main.go`, the
   validation case is restored. The doc tag on `Obs.TraceExporter`
   + `Obs.TraceSample` and the `[obs]` block in
   `configs/example.toml` now state the ship truth so the
@@ -11950,7 +11938,7 @@ pipeline itself is what's being tested.
   shim that forwards to `CacheControlWithCDN(true)` so test sites
   and any external caller that imported the function don't break.
   `v1.Options.CDNEnabled` plumbs the config into the server;
-  `cmd/ratesengine-api/main.go` passes `cfg.API.CDNEnabled` at
+  `cmd/stellarindex-api/main.go` passes `cfg.API.CDNEnabled` at
   construction. New tests: `TestPolicyForPath_CDNDisabled` (18-row
   matrix verifying the s-maxage drop on every cacheable route) and
   `TestCacheControlWithCDN_FalseDropsSMaxAge` (handler-side
@@ -11959,12 +11947,12 @@ pipeline itself is what's being tested.
   CDN they don't run could later honour.
 
 - **Divergence service is now wired with references by default**:
-  the API binary (`cmd/ratesengine-api`) was constructing
+  the API binary (`cmd/stellarindex-api`) was constructing
   `divergence.NewService` with an empty `References` list, leaving
   the `divergence_warning` envelope flag inert in production —
   surfaced by a 2026-05-01 review pointing at S9.4 of the coverage
   matrix. New `[divergence]` config block in `internal/config/config.go`
-  + `cmd/ratesengine-api/main.go` `buildDivergenceReferences()`
+  + `cmd/stellarindex-api/main.go` `buildDivergenceReferences()`
   helper. CoinGecko reference is on by default (free tier, no
   auth required) so divergence detection fires out of the box.
   Chainlink reference is opt-in via
@@ -11973,7 +11961,7 @@ pipeline itself is what's being tested.
   feed addresses. `Threshold`, `MinSourcesForWarning`, and
   `PerReferenceTimeoutSeconds` are also surfaced for operator
   control. New tests
-  (`cmd/ratesengine-api/main_test.go::TestBuildDivergenceReferences_*`)
+  (`cmd/stellarindex-api/main_test.go::TestBuildDivergenceReferences_*`)
   cover the four wiring permutations: defaults / both-enabled /
   Chainlink-enabled-but-empty-FeedMap-skip / all-disabled.
   Boot log now emits
@@ -11983,10 +11971,10 @@ pipeline itself is what's being tested.
 - **Public-flip checklist is 16/16 verified (#342)**: the two
   rows in `docs/operations/public-flip.md` that required
   human-in-the-loop review (the `CLAUDE.md` private-archive
-  check and the `docs/discovery/` sensitive-content check) are
+  check and the internal research-notes sensitive-content check) are
   now ☑ with citations. CLAUDE.md got a pattern scan + manual
   spot-checks — 0 private references, 2 non-blocking editorial
-  recs noted; `docs/discovery/` got a 9-pattern sensitivity scan
+  recs noted; the research notes got a 9-pattern sensitivity scan
   across all 48 files — 0 hits in credential/PII categories,
   6 benign hits across qualitative categories. Task #78 moves
   from "checklist incomplete" to "execution-ready" — what's
@@ -12096,7 +12084,7 @@ pipeline itself is what's being tested.
 
 - **Supply-refresh runbooks acknowledge `asset_key` label (#320)**:
   PR #314 added the `asset_key` dimension to
-  `ratesengine_aggregator_supply_refresh_total`, but the
+  `stellarindex_aggregator_supply_refresh_total`, but the
   `supply-refresh-error-dominant.md` runbook still claimed
   *"Logs carry asset key; metric doesn't"* — operators following
   the runbook would skip a useful per-asset diagnosis path and go
@@ -12143,7 +12131,7 @@ pipeline itself is what's being tested.
   aggregator-resident path (#325)**: PR #318 established that
   `asset_supply_history` has two producers (systemd timer +
   aggregator-resident goroutine), but the
-  `ratesengine_supply_snapshot_stale` alert tracks only the
+  `stellarindex_supply_snapshot_stale` alert tracks only the
   timer-path's `last_success_timestamp` gauge. Deployments
   running exclusively the goroutine path would have this alert
   firing forever despite fresh snapshots landing. New top-of-
@@ -12311,7 +12299,7 @@ pipeline itself is what's being tested.
   S3.6 Blend stays ⚠ caveat (audit pending Task #53 — blocked on r1).
 
 - **`asset_key` label on the supply-refresh metric (#314)**:
-  extends `ratesengine_aggregator_supply_refresh_total` from
+  extends `stellarindex_aggregator_supply_refresh_total` from
   `(outcome)` to `(asset_key, outcome)` so operators with
   multiple watched assets can chart per-asset bootstrap progress
   + isolate failure modes per asset. Existing alerts in
@@ -12319,7 +12307,7 @@ pipeline itself is what's being tested.
   forward-compatible — `sum(rate(...))` and `max(timestamp(...))`
   both sum/max over the new label naturally. New
   `supplyRefresherBinding` struct in
-  `cmd/ratesengine-aggregator/main.go` pairs the `Refresher`
+  `cmd/stellarindex-aggregator/main.go` pairs the `Refresher`
   with its asset_key at goroutine-construction time;
   `runSupplyRefresh` labels the metric per-tick. Metrics
   reference doc updated.
@@ -12341,7 +12329,7 @@ pipeline itself is what's being tested.
 
 - **SEP-41 aggregator wiring — closes Task #56 (#312)**:
   extends `buildSupplyRefreshers` in
-  `cmd/ratesengine-aggregator/main.go` with a third per-asset
+  `cmd/stellarindex-aggregator/main.go` with a third per-asset
   loop alongside XLM (Algorithm 1) + classic
   (Algorithm 2): one `supply.Refresher` goroutine per entry in
   `[supply] watched_sep41_contracts` (Algorithm 3). New
@@ -12352,7 +12340,7 @@ pipeline itself is what's being tested.
   across PRs #309 → #310 → #311 → #312, completing
   ADR-0011's three-domain supply coverage end-to-end. The
   per-tick outcome counter
-  (`ratesengine_aggregator_supply_refresh_total{outcome}`) now
+  (`stellarindex_aggregator_supply_refresh_total{outcome}`) now
   labels for all three algorithms identically. Updated
   `docs/operations/supply-snapshot.md` to reflect shipped
   status across the three asset classes.
@@ -12435,7 +12423,7 @@ pipeline itself is what's being tested.
   aggregator's classic-supply refresh: `buildSupplyRefreshers`
   spawns one goroutine per watched asset alongside the existing
   XLM-only refresher; the per-tick outcome counter from #301
-  (`ratesengine_aggregator_supply_refresh_total`) labels by
+  (`stellarindex_aggregator_supply_refresh_total`) labels by
   outcome regardless of asset. Closes Task #55 across PRs
   #303 → #304 → #305 → #306 → #307.
 
@@ -12532,7 +12520,7 @@ pipeline itself is what's being tested.
   `[supply] aggregator_refresh_enabled = true`; cadence is
   `[supply] aggregator_refresh_cadence` (default 5m, validated
   ≥ 30s). Per-cycle outcomes emit as
-  `ratesengine_aggregator_supply_refresh_total{outcome}` —
+  `stellarindex_aggregator_supply_refresh_total{outcome}` —
   outcomes are `ok` / `no_ledger` / `no_observation` /
   `compute_error` / `write_error`. The systemd timer (#288)
   remains the path for operators that haven't enabled the
@@ -12631,18 +12619,18 @@ pipeline itself is what's being tested.
   `docs/operations/runbooks/sla-probe-*.md` and a row in
   `docs/operations/alerts-catalog.md`.
 
-- **`-textfile-output` flag on `ratesengine-sla-probe` (#293)**:
+- **`-textfile-output` flag on `stellarindex-sla-probe` (#293)**:
   follow-up to #283 / #290. Writes the per-run latency / availability
   / freshness / sample-count / verdict values as a Prometheus
   textfile (atomic `<path>.tmp`-then-rename) so node_exporter can
   scrape them via the textfile_collector. Metric set:
-  `ratesengine_sla_probe_latency_ms{endpoint,quantile}`,
-  `ratesengine_sla_probe_availability_pct{endpoint}`,
-  `ratesengine_sla_probe_freshness_sec{endpoint}`,
-  `ratesengine_sla_probe_samples{endpoint}`,
-  `ratesengine_sla_probe_run_duration_seconds`,
-  `ratesengine_sla_probe_unit_failed`,
-  `ratesengine_sla_probe_last_pass_timestamp` (only on pass — the
+  `stellarindex_sla_probe_latency_ms{endpoint,quantile}`,
+  `stellarindex_sla_probe_availability_pct{endpoint}`,
+  `stellarindex_sla_probe_freshness_sec{endpoint}`,
+  `stellarindex_sla_probe_samples{endpoint}`,
+  `stellarindex_sla_probe_run_duration_seconds`,
+  `stellarindex_sla_probe_unit_failed`,
+  `stellarindex_sla_probe_last_pass_timestamp` (only on pass — the
   staleness alert keys on previous-scrape value when current run
   fails). Systemd service updated with optional `TEXTFILE_OUTPUT`
   env-var; `ReadWritePaths` allows writes to the standard
@@ -12689,7 +12677,7 @@ pipeline itself is what's being tested.
   writer becomes goroutine-resident in the aggregator, this systemd
   unit becomes redundant.
 
-- **XLM supply-snapshot writer via `ratesengine-ops supply snapshot`
+- **XLM supply-snapshot writer via `stellarindex-ops supply snapshot`
   (#285)**: closes the write half of the supply pipeline. Read half
   shipped in #277 left `/v1/assets/{id}` F2 fields null because no
   producer was populating `asset_supply_history`; this PR plugs the
@@ -12706,28 +12694,28 @@ pipeline itself is what's being tested.
   `internal/config/schema.go` to recurse into `[]struct` fields so
   `docs-config` emits per-element rows for slices of structs.
 
-- **`/v1/chart` endpoint per Freighter RFP (#284)**: adds
-  `GET /v1/chart` matching the Freighter RFP V1 chart contract
+- **`/v1/chart` endpoint per the spec (#284)**: adds
+  `GET /v1/chart` matching the spec's V1 chart contract
   exactly: `(timeframe, granularity, price_type) → points[]`. ADR-0020
   documents the decision. New storage method `HistoryPointsInRange`
   adds a `[from, to)` bucket bound on top of the existing closed-
   bucket guard — no CAGG / migration changes. Default-granularity
-  table follows the RFP: 1h→1m, 24h→15m, 1w→1h, 1mo→4h, 1y→1d, all→1d;
+  table follows the spec: 1h→1m, 24h→15m, 1w→1h, 1mo→4h, 1y→1d, all→1d;
   operators can override granularity explicitly. `price_type=twap` is
   reserved and returns 400 today — flipping to 200 is gated on
   shipping a TWAP CAGG. Coverage matrix row F1.3 (Historical Price
   Chart) moves from partial to served.
 
-- **Executable SLA-evidence CLI `cmd/ratesengine-sla-probe` (#283)**:
-  drives load against a deployed Rates Engine API and reports per-
+- **Executable SLA-evidence CLI `cmd/stellarindex-sla-probe` (#283)**:
+  drives load against a deployed Stellar Index API and reports per-
   endpoint p50 / p95 / p99 latency, freshness against the price's
   `observed_at`, and availability — with a pass/fail verdict against
-  the RFP-stated SLA targets (p95 ≤ 200ms, p99 ≤ 500ms, freshness
+  the spec-stated SLA targets (p95 ≤ 200ms, p99 ≤ 500ms, freshness
   ≤ 30s, availability ≥ 99.9%). JSON or text output; exit code 1 on
   any SLA violation so it slots into CI / scheduled-job pipelines and
   trends over time. Closes Codex medium-7 / coverage-matrix rows
   S5.2, S9.1, S9.2, F3.1-F3.4 — the executable evidence the RFPs /
-  proposal asked for. Remaining rows (HA posture, SEV detection time)
+  product spec asked for. Remaining rows (HA posture, SEV detection time)
   need a production deployment to measure, not a pre-launch CLI.
 
 - **Chainlink HTTP divergence reference (#282)**: closes Codex
@@ -12777,7 +12765,7 @@ pipeline itself is what's being tested.
   correct either way.
 
 - **`volume_24h_usd` on `/v1/assets/{id}` (#278)**: closes Codex
-  Freighter-V2 high-1 trailing item. Adds the field end-to-end:
+  the V2 review high-1 trailing item. Adds the field end-to-end:
   new `Volume24hUSDForAsset` storage method sums
   `prices_1m.volume_usd` over pairs where the asset appears as
   base OR quote in the trailing 24h window (CAGG-served, 1440
@@ -12786,7 +12774,7 @@ pipeline itself is what's being tested.
   volume serves even when supply isn't yet wired (and vice versa).
 
 - **Supply snapshot reader wired (#277)**: closes audit F-0020 +
-  Codex Freighter-V2 high-1. The API binary was leaving
+  Codex the V2 review high-1. The API binary was leaving
   `v1.Options.Supply` nil, dead-coding the F2-fields path entirely.
   This change populates `total_supply` / `circulating_supply` /
   `max_supply` / `market_cap_usd` / `fdv_usd` / `supply_basis` on
@@ -12829,26 +12817,22 @@ pipeline itself is what's being tested.
   `InsertAuctionNew` / `InsertAuctionFill` / `InsertAuctionDelete`.
 
 - **Blend auction-event decoder skeleton (#273)**: first step of
-  the Blend integration committed in the Stellar RFP + ctx-
-  proposal price-aggregation scope. Per
-  `docs/discovery/dexes-amms/blend.md` Blend is **not** a spot
-  trading venue — we index for directional / state-change signals,
-  not VWAP. Ships the package skeleton and the auction-event
-  decoder surface (new_auction / fill_auction / delete_auction);
-  follow-up PRs added storage (#274) + dispatcher wiring (#275) +
-  the audit doc (#276).
+  the Blend integration in the price-aggregation scope. Blend is
+  **not** a spot trading venue — we index for directional /
+  state-change signals, not VWAP. Ships the package skeleton and the
+  auction-event decoder surface (new_auction / fill_auction /
+  delete_auction); follow-up PRs added storage (#274) + dispatcher
+  wiring (#275) + the decode notes (#276).
 
 - **Audit remediation wave for the 2026-04-29 cold adversarial
-  audit (#272)**: closes 20 of the 31 findings raised in the audit
-  workspace (`docs/audit-2026-04-29/`). Mix of correctness fixes,
-  monitoring truth, public-contract repair, and docs-truth
-  alignment. Highlights: F-0008 wired
+  audit (#272)**: closes 20 of the 31 findings raised in that audit.
+  Mix of correctness fixes, monitoring truth, public-contract
+  repair, and docs-truth alignment. Highlights: F-0008 wired
   `api.key_rate_limit_per_min` into a subject-aware authenticated
   bucket (anonymous and authed tiers now use distinct buckets);
   F-0028 + F-0031 closed via complementary correctness fixes.
-  See `docs/audit-2026-04-29/findings/` for the per-finding ledger.
 
-- **`extract-wasm-from-galexie` ratesengine-ops subcommand (#271)**:
+- **`extract-wasm-from-galexie` stellarindex-ops subcommand (#271)**:
   extracts raw WASM bytes for one or more contract-code hashes by
   walking the local galexie LCM archive — the truer source than
   RPC `getLedgerEntry` because it (1) works for evicted WASMs
@@ -12861,7 +12845,7 @@ pipeline itself is what's being tested.
   per-LCM scan picks `LedgerEntryChange` of type Created or
   Updated. Also adds the v2-audit template doc.
 
-- **systemd units for `ratesengine-{indexer,aggregator,api}` (L4.13)**:
+- **systemd units for `stellarindex-{indexer,aggregator,api}` (L4.13)**:
   long-running `Type=simple` service files for the three runtime
   binaries. Hardened (`ProtectSystem=full`, `PrivateTmp`, etc.),
   restart-on-failure with backoff, after-graph respects the
@@ -12882,8 +12866,8 @@ pipeline itself is what's being tested.
   surface there first). 8h max-runtime cap based on the
   parallel-chunk run profile observed today (5h47m for the full
   archive on 8 workers). Two new Prometheus alerts:
-  `ratesengine_verify_archive_unit_failed` (P3, ticket — last
-  run failed) and `ratesengine_verify_archive_run_stale` (P2,
+  `stellarindex_verify_archive_unit_failed` (P3, ticket — last
+  run failed) and `stellarindex_verify_archive_run_stale` (P2,
   page — no clean run in 36h+); both source from
   node_exporter's `--collector.systemd` so no application-side
   metrics work was needed. Two runbooks shipped. Backlog row
@@ -12953,7 +12937,7 @@ pipeline itself is what's being tested.
   `Reason="phase2:3_signal_AND confidence=… z=… sources=…"` so
   log lines + Redis marker JSON make the source legible without a
   new wire field. Class label on
-  `ratesengine_anomaly_freeze_engaged_total` consistent with
+  `stellarindex_anomaly_freeze_engaged_total` consistent with
   Phase 1 (uses the same Checker's classifier when wired). New
   exported `Checker.ClassOf` for that consistency.
 
@@ -12980,7 +12964,7 @@ pipeline itself is what's being tested.
   reference's hiccup as a multi-source signal). Best-effort:
   `divergence_read_error` / `divergence_decode_error` outcomes
   surface on the existing
-  `ratesengine_aggregator_confidence_compute_total` counter and
+  `stellarindex_aggregator_confidence_compute_total` counter and
   the confidence step continues with the neutral sentinel rather
   than blocking on a Redis blip. Two new tests confirm wiring
   (within-1% cached → CrossOracle factor 1.0, no cache → 0.7
@@ -12999,7 +12983,7 @@ pipeline itself is what's being tested.
   confidence path are logged + counted but never block the VWAP
   publish itself. New cache key `cachekeys.Confidence` /
   `ConfidenceTTL` (matches VWAP TTL). New Prometheus counter
-  `ratesengine_aggregator_confidence_compute_total` labelled by
+  `stellarindex_aggregator_confidence_compute_total` labelled by
   `{ok, skipped, baseline_missing, marshal_error, write_error}`.
   Cross-oracle divergence input still passes the "no data" sentinel
   pending the next slice (which wires the `div:<asset>` Redis key
@@ -13057,13 +13041,13 @@ pipeline itself is what's being tested.
   follow as separate slices.
 
 - **Baseline refresh wired into the aggregator binary (L2.5 final
-  slice — closes L2.5)**: `cmd/ratesengine-aggregator` now runs a
+  slice — closes L2.5)**: `cmd/stellarindex-aggregator` now runs a
   hourly baseline refresh loop alongside the orchestrator's
   per-tick VWAP cycle. Adapters wrap `*timescale.Store` to satisfy
   `baseline.VWAPSource` + `baseline.Sink`. The first refresh fires
   immediately on startup so a fresh deployment populates
   `volatility_baseline_1m` without waiting a full hour. Outcomes
-  emit through `ratesengine_aggregator_baseline_refresh_total`
+  emit through `stellarindex_aggregator_baseline_refresh_total`
   labelled by `{ok, not_enough_samples, read_error, write_error}`.
   Cadence (1h) and concurrency (4) are hardcoded for now —
   surfaceable as TOML knobs only if production usage shows we need
@@ -13228,7 +13212,7 @@ pipeline itself is what's being tested.
 
 - **`internal/archivecompleteness/` daemon (#200, #202, #203)**:
   three-PR trilogy implementing [ADR-0017](docs/adr/0017-archive-completeness-invariants.md).
-  `ratesengine-ops archive-completeness check` (PR A) — read-only
+  `stellarindex-ops archive-completeness check` (PR A) — read-only
   scan + JSON Report. `… fix` (PR B) — multi-source fallback
   fetcher with shuffled source order, atomic placement, gzip
   validation, zip-bomb guards. `… verify` (PR C) — daily-cron
@@ -13244,7 +13228,7 @@ pipeline itself is what's being tested.
   scopes, expires_at, revoked_at). Plaintext keys never enter
   Redis. Sentinel mapping: missing/revoked → `ErrUnauthorized`;
   `expires_at` past → `ErrTokenExpired` (middleware sets
-  WWW-Authenticate with refresh hint). Wired in `cmd/ratesengine-api`:
+  WWW-Authenticate with refresh hint). Wired in `cmd/stellarindex-api`:
   `auth_mode=apikey` + Redis reachable → real validator; without
   Redis → Noop fallback so every request 503s (correct fail-loud).
 
@@ -13285,8 +13269,8 @@ pipeline itself is what's being tested.
   pool-identification audit landed
   ([docs/operations/wasm-audits/comet.md](docs/operations/wasm-audits/comet.md)).
   The only known mainnet Comet deployment is Blend's backstop
-  pool `CAS3FL6T...` (per `docs/discovery/dexes-amms/comet.md`
-  open-item resolution and the L55,261,759 mainnet snapshot in
+  pool `CAS3FL6T...` (per the Comet open-item resolution and the
+  L55,261,759 mainnet snapshot in
   `blend-contracts/test-suites/`). Pool's WASM hash
   `8abc28913035c074...` fetched via `stellar contract fetch --id`
   and verified — all 5 SwapEvent body field names (`caller`,
@@ -13366,7 +13350,7 @@ pipeline itself is what's being tested.
   range, deploy-then-hotfix pattern) supports flipping the flag with
   a documented caveat that the b400f7a8 bytes were not disassembled
   inline. Backfill against historical Redstone ranges is now
-  permitted via `ratesengine-ops backfill`.
+  permitted via `stellarindex-ops backfill`.
 
 - **`band` source flipped `BackfillSafe: false → true`** —
   WASM-history audit landed
@@ -13377,7 +13361,7 @@ pipeline itself is what's being tested.
   confirms `relay` / `force_relay` function signatures + `(Symbol,
   u64)` Vec tuple order match the positional op-args reader. Backfill
   against historical Band ranges is now permitted via
-  `ratesengine-ops backfill`.
+  `stellarindex-ops backfill`.
 
 - **`soroswap` source flipped `BackfillSafe: false → true`** —
   WASM-history audit landed
@@ -13387,7 +13371,7 @@ pipeline itself is what's being tested.
   no `update_contract` events observed. Per-hash review against the
   live decoder confirms no schema divergence. Backfill against
   historical ranges is now permitted for `soroswap` via
-  `ratesengine-ops backfill`. Per-instance pair-WASM enumeration is
+  `stellarindex-ops backfill`. Per-instance pair-WASM enumeration is
   documented as a v2 audit follow-up. The remaining 6 on-chain Soroban
   sources (aquarius, phoenix, comet, reflector-{dex,cex,fx}, redstone,
   band) stay `BackfillSafe: false` until each source's audit lands.
@@ -13655,7 +13639,7 @@ pipeline itself is what's being tested.
     default 4.0) drops trades > σ from the window mean before
     VWAP. Applied after class + stablecoin steps so the σ
     arithmetic runs over comparable price values.
-  - **PR 26 (Prometheus metrics)**: `ratesengine_aggregator_*`
+  - **PR 26 (Prometheus metrics)**: `stellarindex_aggregator_*`
     counters — ticks (by outcome), VWAP writes, empty windows,
     dropped trades (by reason: `class` / `outlier`).
   - **PR 27 (alerts + runbooks)**: three Prometheus rules
@@ -13680,7 +13664,7 @@ pipeline itself is what's being tested.
   drop rate.
 
 - **PR 182 — Aggregator orchestrator v1** (2026-04-24): turns
-  `cmd/ratesengine-aggregator` from a deliberate `os.Exit(1)`
+  `cmd/stellarindex-aggregator` from a deliberate `os.Exit(1)`
   stub into a running binary. Rolling-window VWAP pre-computed
   on a ticker, written to Redis, consumed by the API's `/v1/price`
   — unblocks the path from "last trade, stale-flagged" degraded
@@ -13878,7 +13862,7 @@ pipeline itself is what's being tested.
   operator tool. Historical-data ingestion is now a single
   command away; no custom scripts or direct DB writes required.
 
-  - `cmd/ratesengine-ops/main.go`: new `backfill-external`
+  - `cmd/stellarindex-ops/main.go`: new `backfill-external`
     subcommand. Flags: `-config`, `-source`, `-pair`, `-from`,
     `-to`, `-granularity`, `-dry-run`, `-progress-every`.
     Dispatches on `-source` to build the right venue's Streamer,
@@ -13901,7 +13885,7 @@ pipeline itself is what's being tested.
     are visible without tail-f-ing logs.
   - **Example workflow** (in the binary's help text):
       ```
-      ratesengine-ops backfill-external \
+      stellarindex-ops backfill-external \
         -config configs/prod.toml \
         -source binance -pair XLMUSDT \
         -from 2024-01-01T00:00:00Z \
@@ -13913,7 +13897,7 @@ pipeline itself is what's being tested.
     Timescale's `ON CONFLICT DO NOTHING` dedups.
 
   Imports the four external venue packages; unlocks the
-  ratesengine-ops binary as the operator surface for every
+  stellarindex-ops binary as the operator surface for every
   Backfiller we've shipped.
 
 - **PR 177 — Kraken / Bitstamp / Coinbase historical backfill**
@@ -13976,7 +13960,7 @@ pipeline itself is what's being tested.
     trap — asserts quote = close × vol, not low × vol) (4 tests).
 
   **Not in this PR**:
-  - `ratesengine-ops backfill-external` CLI wrapper around the
+  - `stellarindex-ops backfill-external` CLI wrapper around the
     Backfiller interface. Next loop iteration.
   - ExchangeRatesApi / Polygon.io backfill — FX providers have
     different historical shapes (timeseries endpoints); deferred
@@ -14119,7 +14103,7 @@ pipeline itself is what's being tested.
     — respects the per-minute 6000-weight rate-limit budget (each
     klines call costs weight 2).
   - **Granularity support**: 1m / 3m / 5m / 15m / 30m / 1h / 2h
-    / 4h / 6h / 12h / 1d / 1w — covers the RFP's listed
+    / 4h / 6h / 12h / 1d / 1w — covers the spec's listed
     timeframes (1 min, 15 min, 1h, 4h, 1d, 1w) plus common
     intermediates. Unsupported Durations return an error before
     any HTTP call.
@@ -14133,7 +14117,7 @@ pipeline itself is what's being tested.
     HTTP-429 surfaces as error.
 
   **Not in this PR**:
-  - `ratesengine-ops backfill-external --source binance --pair
+  - `stellarindex-ops backfill-external --source binance --pair
     XLM/USDT --from ... --to ... --granularity 1h` CLI wiring —
     exposes Backfill via an operator command. Deferred to a
     follow-up once the ops binary grows the subcommand shape.
@@ -14189,7 +14173,7 @@ pipeline itself is what's being tested.
     unknown-product skip, malformed JSON, unknown-type ignore,
     tx-hash dash-normalisation, precision round-trip.
 
-  Both wired into `cmd/ratesengine-indexer` with their
+  Both wired into `cmd/stellarindex-indexer` with their
   `External.<venue>.Enabled` toggles (default false — no
   network egress on fresh deployments).
 
@@ -14210,7 +14194,7 @@ pipeline itself is what's being tested.
     precision but the i128 invariant (ADR-0003) says no floats
     on the price path.
   - **Default pair set**: XLM across all 6 Kraken fiats + BTC/USD
-    + ETH/USD. Covers the RFP's "major pairs" requirement for
+    + ETH/USD. Covers the spec's "major pairs" requirement for
     XLM without any per-operator tuning. Operator enables via
     `external.kraken.enabled = true` in config.
   - Indexer wiring mirrors Binance: `cfg.External.Kraken.Enabled`
@@ -14228,11 +14212,11 @@ pipeline itself is what's being tested.
   **Behaviour note**: Kraken delivers a ~50-trade snapshot on
   subscribe. We emit every entry to Timescale with its real
   historical timestamp — small backfill effect on first connect
-  that dedupes against future `ratesengine-ops backfill` runs
+  that dedupes against future `stellarindex-ops backfill` runs
   via the synthesised tx_hash (symbol + trade_id).
 
 - **PR 170 — Indexer wiring for external connectors** (2026-04-24):
-  external streamers now launch from the same `ratesengine-indexer`
+  external streamers now launch from the same `stellarindex-indexer`
   process, share the same event sink, and feed the same Timescale
   trades hypertable as on-chain decoders. End-to-end off-chain
   ingestion is operational (pending config opt-in).
@@ -14257,7 +14241,7 @@ pipeline itself is what's being tested.
     default to `enabled: false` — no network egress until
     operator opts in, eliminating a "fresh deployment
     accidentally streams from Binance" failure mode.
-  - `cmd/ratesengine-indexer/main.go`: new
+  - `cmd/stellarindex-indexer/main.go`: new
     `startExternalConnectors(ctx, cfg, events, logger)` helper
     builds enabled venues, calls `external.Run`, returns the
     wait func. Threaded into the shutdown sequence between
@@ -14352,7 +14336,7 @@ pipeline itself is what's being tested.
   - Backfill implementation for Binance (GET /api/v3/klines →
     synthesised `canonical.Trade` per candle; the interface is
     wired but the body is pending).
-  - Wiring into `cmd/ratesengine-indexer` — external connectors
+  - Wiring into `cmd/stellarindex-indexer` — external connectors
     launched alongside the dispatcher goroutine, sink type-switch
     gains `case external.TradeEvent` / `case external.UpdateEvent`.
   - Additional venues: Kraken, Bitstamp, Coinbase (reuse the
@@ -14392,7 +14376,7 @@ pipeline itself is what's being tested.
     `band-soroban/src/storage/ref_data.rs:56`).
   - `internal/config/`: new `BandOracleConfig{StandardReferenceContract}`,
     `"band"` in `KnownSources`, cross-section + strkey validation.
-  - `cmd/ratesengine-indexer/main.go`: `buildDispatcher` gains
+  - `cmd/stellarindex-indexer/main.go`: `buildDispatcher` gains
     `case band.SourceName: callDecoders = append(...)`; new
     `AddContractCallDecoder` loop at the end of the builder;
     sink type-switch adds `case band.UpdateEvent`.
@@ -14414,7 +14398,7 @@ pipeline itself is what's being tested.
   generalizes — any future Soroban source whose contract reads/
   writes storage without emitting events (Orbit supply, custom
   adapter contracts, future admin-only oracle paths) plugs into
-  the same hook. See `docs/discovery/oracles/band.md` for full
+  the same hook. See the Band decode notes for full
   analysis.
 
 - **PR 167 — Comet decoder** (2026-04-23): third on-chain DEX after
@@ -14430,7 +14414,7 @@ pipeline itself is what's being tested.
     name, so the decoder has zero state and no cross-event
     correlation. Matches the Aquarius shape most closely: one
     event → one trade, base = token_in, quote = token_out.
-  - `cmd/ratesengine-indexer/main.go`: buildDispatcher gains
+  - `cmd/stellarindex-indexer/main.go`: buildDispatcher gains
     `case comet.SourceName: ...`; sink type-switch gains
     `case comet.TradeEvent`. `config.KnownSources` adds `"comet"`.
   - `test/integration/ledgerstream_to_storage_test.go`: new
@@ -14499,7 +14483,7 @@ pipeline itself is what's being tested.
     events — all activity is on the single Adapter).
     `KnownSources` gains `"redstone"`; cross-section validation
     requires the contract address when the source is enabled.
-  - `cmd/ratesengine-indexer/main.go`: `buildDispatcher` registers
+  - `cmd/stellarindex-indexer/main.go`: `buildDispatcher` registers
     `redstone.NewDecoder(cfg.Oracle.Redstone.AdapterContract)`
     when the source is enabled; event-sink type-switch gains
     `case redstone.UpdateEvent: persistOracle(…)`.
@@ -14516,8 +14500,8 @@ pipeline itself is what's being tested.
     count mismatch, missing op args, unknown-feed per-entry skip,
     all-unknown empty updates, non-REDSTONE topic rejection.
 
-  **Not in this PR** (follow-ups tracked against
-  docs/discovery/oracles/redstone.md):
+  **Not in this PR** (follow-ups tracked against the Redstone
+  decode notes):
   - RWA feed mappings (BENJI, GILTS, CETES, TESOURO, USTRY, etc.)
     — needs a canonical asset variant for tokenized real-world
     assets.
@@ -14630,17 +14614,15 @@ pipeline itself is what's being tested.
 - Makefile targets `dev`, `dev-teardown`, `dev-seed`, `lint`,
   `test`, `test-integration`, `build`, `docs-all`, `verify`.
 - `.golangci.yml` strict lint config per
-  [engineering-standards.md §8](docs/discovery/engineering-standards.md).
+  [engineering-standards.md §8](docs/engineering-standards.md).
 - GitHub Actions `ci.yml`, PR template, CODEOWNERS,
   `dependabot.yml`.
-- Phase-1 discovery artefacts under `docs/discovery/`, closure
-  doc at `docs/discovery/phase1-closure.md`, RFP × proposal ×
-  delivery coverage matrix at `docs/architecture/coverage-matrix.md`.
+- Coverage matrix at `docs/architecture/coverage-matrix.md`.
 - HA + multi-region design: `docs/architecture/ha-plan.md`,
   `docs/architecture/infrastructure/{archival-node-spec,
   multi-region-topology, validator-rollout, hosting-options}.md`.
 - API design: `docs/reference/api-design.md` + OpenAPI spec at
-  `openapi/rates-engine.v1.yaml` (shared error responses,
+  `openapi/stellar-index.v1.yaml` (shared error responses,
   pagination, asset / price / history / OHLC / VWAP / TWAP /
   markets / oracle schemas — source of truth for the wire
   contract).
@@ -14659,7 +14641,7 @@ pipeline itself is what's being tested.
   `Validate` pipeline so env overrides are always validated.
   Startup error-log when `auth_mode != "none"` (auth middleware
   not yet wired). S3 config validated all-or-nothing.
-  `docs-config` subcommand on `ratesengine-ops` emits
+  `docs-config` subcommand on `stellarindex-ops` emits
   `docs/reference/config/README.md` with the mandatory
   generated-file banner.
 - `internal/stellarrpc/`: JSON-RPC client wrapping `getHealth`,
@@ -14668,7 +14650,7 @@ pipeline itself is what's being tested.
   mockable; identifiable `User-Agent`; post-decode sanity checks
   on GetEvents response (ledger bounds, event order). Tested
   against httptest.Server. `rpc-probe` subcommand on
-  `ratesengine-ops`.
+  `stellarindex-ops`.
 - `internal/consumer/`: stable `Source` interface (StreamLive /
   BackfillRange) that every on-chain, oracle, and CEX/FX source
   implements.
@@ -14714,26 +14696,26 @@ pipeline itself is what's being tested.
   days, retention 90 days), four secondary indexes, and
   `ingestion_cursors` table.
 - `migrations/0002_create_price_aggregates.{up,down}.sql` — the
-  seven RFP-grain continuous aggregates (1m/15m/1h/4h/1d/1w/1mo)
+  seven spec-grain continuous aggregates (1m/15m/1h/4h/1d/1w/1mo)
   with VWAP + TWAP + OHLC tuple + per-CAGG refresh & retention
   policies.
 - `migrations/0003_create_oracle_updates_hypertable.{up,down}.sql`
   — `oracle_updates` hypertable with compression + retention +
   `(asset_id, source, ts DESC)` index for "latest per source".
-- `cmd/ratesengine-migrate`: golang-migrate wrapper with
+- `cmd/stellarindex-migrate`: golang-migrate wrapper with
   subcommands `up`, `down [N]`, `status`, `version`, `force`,
-  `help`. DSN via `-dsn` flag or `RATESENGINE_POSTGRES_DSN` env.
-- `cmd/ratesengine-indexer`: orchestration binary for the source
+  `help`. DSN via `-dsn` flag or `STELLARINDEX_POSTGRES_DSN` env.
+- `cmd/stellarindex-indexer`: orchestration binary for the source
   pipeline with graceful shutdown, per-source supervisor +
   restart policy, and an embedded Prometheus scrape server on
   `obs.MetricsListen` so ingestion alerts actually have a target.
-- `cmd/ratesengine-api`: REST server binary with `-dry-run` (now
+- `cmd/stellarindex-api`: REST server binary with `-dry-run` (now
   pings Postgres + Redis for real), signal-driven graceful
   shutdown (30 s drain), SEP-1 cache wiring, optional CORS, and
   optional rate-limit middleware.
-- `cmd/ratesengine-aggregator`: scaffold for the VWAP/TWAP +
+- `cmd/stellarindex-aggregator`: scaffold for the VWAP/TWAP +
   continuous-aggregate refresh orchestrator.
-- `cmd/ratesengine-ops`: admin CLI with `docs-config`,
+- `cmd/stellarindex-ops`: admin CLI with `docs-config`,
   `rpc-probe`, backfill, and gap-detect subcommands.
 - `deploy/docker-compose/dev.yaml`: local TimescaleDB (pg15) +
   Redis 7 + MinIO with a one-shot bucket initialiser. Driven by
@@ -14821,7 +14803,7 @@ pipeline itself is what's being tested.
 
 ### Added — architecture / guardrails
 
-- **PR 165d**: `cmd/ratesengine-indexer/main.go` rewritten against
+- **PR 165d**: `cmd/stellarindex-indexer/main.go` rewritten against
   the Galexie → ledgerstream → dispatcher flow. No stellar-rpc
   client, no per-source orchestrator, no poll loops.
   - One goroutine drives `ledgerstream.Stream` with an
@@ -14858,7 +14840,7 @@ pipeline itself is what's being tested.
   violations removed as the refactors landed. The baseline
   header documents that re-adding an entry requires a PR note
   citing why the exception is temporary. `lint-imports.sh`
-  allowlist updated to include `cmd/ratesengine-indexer/` in
+  allowlist updated to include `cmd/stellarindex-indexer/` in
   rule B (the indexer passes `xdr.LedgerCloseMeta` through as
   legitimate binding glue).
 
@@ -14936,7 +14918,7 @@ pipeline itself is what's being tested.
 - **`scripts/ci/lint-imports.sh`** + `lint-imports.baseline` —
   build-time enforcement of three architectural boundaries:
   - A/no-rpc-in-ingest: `internal/stellarrpc` blocked outside the
-    package itself, `cmd/ratesengine-ops/`, `scripts/dev/`,
+    package itself, `cmd/stellarindex-ops/`, `scripts/dev/`,
     source `decode.go` files (transitional), and test files.
   - B/xdr-scoped-to-scval: `go-stellar-sdk/xdr` scoped to
     `internal/scval/`, `internal/ledgerstream/`,

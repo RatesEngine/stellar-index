@@ -6,7 +6,7 @@ import { GithubIcon } from '@/components/GithubIcon';
 export const metadata: Metadata = {
   title: 'Company — who we are',
   description:
-    'Stellar Index — vendor-neutral pricing infrastructure for the Stellar network. Built against the SDF + Freighter RFPs and the awarded CTX proposal. Apache-2.0, pre-v1.',
+    'Stellar Index — vendor-neutral pricing infrastructure for the Stellar network. Real-time and historical prices for every Stellar asset. Apache-2.0, pre-v1.',
   alternates: { canonical: '/company' },
 };
 
@@ -22,8 +22,8 @@ export default function CompanyPage() {
         </h1>
         <p className="text-base text-ink-body">
           Stellar Index is a public, vendor-neutral pricing surface for
-          the Stellar network. Built against the SDF and Freighter
-          RFPs and the awarded CTX proposal.
+          the Stellar network — complete, verified, per-protocol on-chain
+          data and an aggregated pricing API for every Stellar asset.
         </p>
       </header>
 
@@ -126,12 +126,8 @@ export default function CompanyPage() {
       <section className="space-y-3">
         <h2 className="text-2xl font-semibold tracking-tight">Funding</h2>
         <p className="text-sm text-ink-body">
-          The build was funded by the Stellar Community Fund via the
-          awarded{' '}
-          <Link href="/research/discovery" className="text-brand-600 hover:underline">
-            CTX proposal
-          </Link>
-          . Operating revenue from paid tiers covers ongoing
+          Development was supported by a grant from the Stellar Community
+          Fund. Operating revenue from paid tiers covers ongoing
           infrastructure + operator headcount; the public tier and the
           open-source codebase are perpetual commitments regardless of
           commercial outcomes.

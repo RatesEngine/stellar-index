@@ -38,7 +38,7 @@ JQ="${JQ:-jq}"
 CURL="${CURL:-curl}"
 WASM_HASH="${WASM_HASH:-unknown-wasm-hash}"
 
-# Factory contract ID (constant per docs/discovery/dexes-amms/soroswap.md).
+# Factory contract ID (constant per docs/protocols/soroswap.md).
 FACTORY_ID="CA4HEQTL2WPEUYKYKCDOHCDNIV4QHNJ7EL4J4NQ6VADP7SYHVRYZ7AW2"
 
 while getopts "e:n:s:h" opt; do

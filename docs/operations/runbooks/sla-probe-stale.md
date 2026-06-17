@@ -15,7 +15,7 @@ severity: P2
 | Severity | P2 (page) |
 | Detected by | `deploy/monitoring/rules/sla-probe.yml` |
 | Typical MTTR | 15 min |
-| Impact | We've lost the SLA-evidence trail required by the Freighter RFP. The API itself may be fine — this alert says we can't *prove* it. |
+| Impact | We've lost the SLA-evidence trail. The API itself may be fine — this alert says we can't *prove* it. |
 
 ## Symptoms
 

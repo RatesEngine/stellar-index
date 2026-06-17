@@ -1,6 +1,6 @@
 # Cloudflare Pages — bootstrap
 
-Provisions the customer-facing surfaces on Cloudflare Pages, plus
+Provisions the public-facing surfaces on Cloudflare Pages, plus
 DNS + the `api.stellarindex.io` proxy:
 
 | Surface | Project | Domain |
@@ -11,14 +11,13 @@ DNS + the `api.stellarindex.io` proxy:
 | Dashboard redirect (retired) | `stellarindex-app` | `app.stellarindex.io` → `301 /account` |
 | API (proxied) | (n/a — Caddy on r1) | `api.stellarindex.io` → `136.243.90.96` |
 
-> **The CF Pages projects were renamed `ratesengine-*` → `stellarindex-*`
-> on 2026-06-17.** Because CF Pages project names are immutable, the
-> "rename" was a recreate-move-over: new direct-upload `stellarindex-*`
-> projects were created + deployed, the `stellarindex.io` custom domains
-> detached from the old projects and re-attached to the new ones (DNS
-> CNAMEs repointed), and the old `ratesengine-*` projects deleted. The
-> deploy workflows (`explorer-deploy.yml`, `status-page.yml`) target the
-> `stellarindex-*` names.
+> **The CF Pages projects use the `stellarindex-*` names.** Because CF
+> Pages project names are immutable, changing a project name is a
+> recreate-move-over: new direct-upload projects are created + deployed,
+> the `stellarindex.io` custom domains detached from the old projects and
+> re-attached to the new ones (DNS CNAMEs repointed), and the old projects
+> deleted. The deploy workflows (`explorer-deploy.yml`, `status-page.yml`)
+> target the `stellarindex-*` names.
 
 > **The new projects are DIRECT-UPLOAD, not git-connected.** Deploys
 > happen only via the `workflow_dispatch` workflows (wrangler
@@ -29,7 +28,7 @@ DNS + the `api.stellarindex.io` proxy:
 > Cloudflare Pages Git installation` — so direct-upload is the supported
 > path here.
 
-> **The standalone customer dashboard was retired (2026-06-17).** Login +
+> **The standalone dashboard was retired (2026-06-17).** Login +
 > the account/keys/usage/settings/admin surfaces now live *in-site* at
 > `stellarindex.io/account/*` (explorer routes). `app.stellarindex.io`
 > now 301-redirects to `/account` via the tiny `stellarindex-app` Pages
@@ -37,8 +36,8 @@ DNS + the `api.stellarindex.io` proxy:
 > used because a zone-level redirect rule needs a Rulesets-scoped token
 > this account's deploy token lacks.
 
-> **The legacy `ratesengine.net` brand domains were dropped (2026-06-17).**
-> Every old project also carried `*.ratesengine.net` custom domains; they
+> **The `ratesengine.net` domains were dropped (2026-06-17).**
+> Some old projects also carried `*.ratesengine.net` custom domains; they
 > were detached and now return CF 522 (their zone CNAMEs still point at
 > the now-deleted projects). To make them `NXDOMAIN`, delete the
 > `ratesengine.net` zone DNS records (separate zone; not in the
@@ -200,11 +199,11 @@ project, whose only content is a `_redirects` file:
 (A zone-level dynamic-redirect rule would be tidier but needs a
 Rulesets-scoped token; the deploy token only has Pages/DNS/Zone-read.)
 
-## The rename, as executed (2026-06-17)
+## Renaming a Pages project (recreate-move-over)
 
-`ratesengine-*` → `stellarindex-*`, recreate-move-over (CF Pages names
-are immutable). The exact sequence, for the next time a Pages project
-needs renaming:
+CF Pages project names are immutable, so changing one is a
+recreate-move-over. The exact sequence, for the next time a Pages
+project needs renaming (`old-X` → `stellarindex-X`):
 
 1. **Pre-create** the new direct-upload project:
    `POST /accounts/{acct}/pages/projects {"name":"stellarindex-X","production_branch":"main"}`
@@ -214,7 +213,7 @@ needs renaming:
    stellarindex-X`, or the `workflow_dispatch` deploy workflow) and
    verify `stellarindex-X.pages.dev` serves.
 3. **Move each custom domain** (a hostname can only be on one project):
-   `DELETE …/projects/ratesengine-X/domains/<host>` →
+   `DELETE …/projects/old-X/domains/<host>` →
    `POST …/projects/stellarindex-X/domains {"name":"<host>"}` →
    `PATCH /zones/{zid}/dns_records/{id} {"content":"stellarindex-X.pages.dev"}`.
    Activation + cert on the new project is ~30–60 s (expect transient

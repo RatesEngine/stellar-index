@@ -141,4 +141,4 @@ they shipped. Future migrations: continue adding one row per
 - [ADR-0003 i128 no-truncation](../docs/adr/0003-i128-no-truncation.md)
 - [ADR-0006 TimescaleDB](../docs/adr/0006-timescaledb-for-price-time-series.md)
 - [HA plan §3.3](../docs/architecture/ha-plan.md) — hypertable + retention design
-- [Coverage matrix S6/S7](../docs/architecture/coverage-matrix.md) — RFP rows mapping to these schemas
+- [Coverage matrix S6/S7](../docs/architecture/coverage-matrix.md) — requirement rows mapping to these schemas

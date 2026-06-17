@@ -6,9 +6,8 @@ status: living doc
 
 # Per-contract schema evolution across versions
 
-Stellar's XDR protocol version is handled elsewhere
-([protocol-versions.md](../discovery/protocol-versions.md) — SDK
-dispatches LedgerCloseMeta V0/V1/V2 for us). This doc is about
+Stellar's XDR protocol version is handled elsewhere — the SDK
+dispatches LedgerCloseMeta V0/V1/V2 for us. This doc is about
 something different and less well-handled: **individual DeFi contracts
 (Soroswap, Phoenix, Aquarius, Reflector) ship their own versions, and
 those versions change the event schema our decoders parse.**
@@ -34,8 +33,7 @@ an upgrade; body schemas frequently do not. Ways this bites us:
 4. **Topic shape change.** CAP-67 (P23, 2025-09-03) added a 4th topic
    (`sep0011_asset`) to every classic asset movement event. Pre-P23
    events have three topics; post-P23 have four. We already handle
-   this in the classic-asset path
-   ([cap-67-unified-events.md](../discovery/notes/cap-67-unified-events.md)),
+   this in the classic-asset path,
    but the same pattern will recur per-contract.
 5. **Factory redeployment.** A Soroswap v2 could appear as a *new*
    factory contract. Old pairs keep emitting old events under the
@@ -79,9 +77,8 @@ an event stream that predates the current WASM.
     requires a longer retention window on r1.
 
 ### Phoenix
-- 8-events-per-swap pattern
-  ([phoenix.md](../discovery/dexes-amms/phoenix.md)).
-- Discovery doc does not record any earlier event shapes.
+- 8-events-per-swap pattern.
+- No earlier event shapes are recorded.
   **Unverified.**
 - `scripts/*.sh` in the phoenix-contracts repo mentions multiple
   deploy rounds; we haven't pinned the ledger cut-over for any
@@ -109,9 +106,8 @@ an event stream that predates the current WASM.
 
 ### Aquarius
 - Contracts have a **`UPGRADE_DELAY = 259200s` (3 days)** governance
-  window with emergency-mode bypass
-  ([aquarius.md §Upgrade delay](../discovery/dexes-amms/aquarius.md)).
-- Explicit Phase-1 guidance: *"always decode events by topic name,
+  window with emergency-mode bypass.
+- Guidance: *"always decode events by topic name,
   not by cached WASM hash."* WASM hash
   `8844a760cf16788117b2a5a91d736794b3869c302aee47f8fbbcd0cc1a1096fd`
   recorded for the 2024-07-25 deploy but will rotate.
@@ -145,8 +141,7 @@ an event stream that predates the current WASM.
 
 ### Reflector
 - **Three mainnet contracts** (DEX / CEX / FX), each independently
-  upgradeable via admin `update_contract`
-  ([reflector.md §Oracle upgrade](../discovery/oracles/reflector.md)).
+  upgradeable via admin `update_contract`.
 - Current source is v3 (Code4rena-audited 2025-10).
 - `version(env) -> u32` SEP-40 method exposes the contract version
   at read time — we should record it alongside every price ingest
@@ -163,8 +158,8 @@ an event stream that predates the current WASM.
     because SDK-encoded synthetic fixtures used the wrong shape; 4
     real mainnet captures (`test/fixtures/reflector/v6-2026-04-23/`)
     rejected all 4 synthetic-shape payloads.
-  - topic[2] timestamp is **u64 milliseconds**, not seconds. The
-    discovery doc correctly noted SEP-40's `last_timestamp()` method
+  - topic[2] timestamp is **u64 milliseconds**, not seconds. SEP-40's
+    `last_timestamp()` method
     converts to seconds for public reads, but the raw event carries
     the internal millisecond value
     (`price_oracle.rs:74` divides by 1000 to expose seconds).
@@ -225,9 +220,8 @@ Concretely:
       [`docs/operations/wasm-audits/`](../operations/wasm-audits/)
       covers Aquarius, Band, Blend, Comet, Phoenix (5 of 5
       Soroban-class sources we ship; Reflector is in scope but
-      its evidence lives under
-      [`docs/discovery/oracles/reflector.md`](../discovery/oracles/reflector.md)
-      from the Phase-1 audit). The historical "Blocked on live
+      its evidence lives in the Reflector source decoder's own
+      README). The historical "Blocked on live
       mainnet RPC access" framing is stale — stellar-rpc was
       removed from r1 on 2026-04-23 and the `wasm-history`
       family of `stellarindex-ops` subcommands enumerates from
@@ -264,8 +258,6 @@ link from here.
 
 ## References
 
-- [docs/discovery/protocol-versions.md](../discovery/protocol-versions.md)
-  — Stellar *protocol*-version handling (separate concern, well-solved).
 - [docs/adr/0013-go-stellar-sdk-xdr-for-scval.md](../adr/0013-go-stellar-sdk-xdr-for-scval.md)
   — SDK dep decision; migration plan §5 explicitly calls for
   per-event-shape fixtures.
@@ -273,8 +265,3 @@ link from here.
   — decoder rollout history (Task #164 context). All 8 source decoders
   are implemented as of 2026-04-26; the per-WASM-hash audit gate this
   doc covers is the remaining concern for full historical replay.
-- Per-source Phase-1 discovery:
-  [soroswap](../discovery/dexes-amms/soroswap.md),
-  [phoenix](../discovery/dexes-amms/phoenix.md),
-  [aquarius](../discovery/dexes-amms/aquarius.md),
-  [reflector](../discovery/oracles/reflector.md).

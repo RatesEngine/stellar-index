@@ -131,11 +131,10 @@ Doesn't add evidence beyond Tier B (same upstream source), but:
 - Surfaces GCS requester-pays / egress issues before an actual DR
   event.
 
-Command (planned): `stellarindex-ops verify-archive -tier sdf-sample --samples 1000`. Deferred pending public-read confirmation on the SDF bucket — see open items in [stellar-data-lakes.md](../discovery/data-sources/stellar-data-lakes.md).
+Command (planned): `stellarindex-ops verify-archive -tier sdf-sample --samples 1000`. Deferred pending public-read confirmation on the SDF bucket.
 
 Caveat: SDF's galexie bucket may not retain to genesis; check
-coverage before relying on it (open item in
-[stellar-data-lakes.md](../discovery/data-sources/stellar-data-lakes.md)).
+coverage before relying on it.
 
 ### Tier D — Multi-peer checkpoint cross-validation (optional, high-evidence)
 

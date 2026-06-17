@@ -52,7 +52,7 @@ Phase-3 validator work.
 |---------|------------------|-------|
 | postgresql@15-main | active | TimescaleDB extension installed 2026-05-03; all 15 migrations applied. `stellarindex` role + DB created. |
 | redis-server | active | Single-node, installed 2026-05-03 alongside the application bringup. |
-| ~~stellar-core~~ | **REMOVED 2026-04-23** | Primary daemon dropped — archive pipeline doesn't need it; see [archival-nodes.md](../discovery/data-sources/archival-nodes.md) for revival path in Phase 3. |
+| ~~stellar-core~~ | **REMOVED 2026-04-23** | Primary daemon dropped — archive pipeline doesn't need it; revival path is the Phase 3 Tier-1 validator rollout. |
 | ~~stellar-rpc~~ | **REMOVED 2026-04-23** | Redundant for our data path — our own indexer consumes galexie's MinIO output directly via `ingest.ApplyLedgerMetadata`. Public API is `/v1/price` + `/v1/vwap` + `/v1/twap` + `/v1/ohlc` + …, not `/rpc`. See §Architecture below. |
 | galexie | active, exporting | Own captive-core; uploading `FC4A....xdr.zst` objects to MinIO galexie-live at ~1/ledger. ~100 objects/5min at steady state. **The single stellar-core on the box.** |
 | minio | active | Buckets: `galexie-live`, `galexie-archive`, `backups`. `stellarindex-reader` MinIO user (read-only on both galexie buckets) created 2026-04-26; password rotated + persisted to `/etc/default/stellarindex` 2026-05-03. |
@@ -264,7 +264,7 @@ pgbackrest_exporter). The play is wired into `tasks/main.yml` after
    still the fallback.
 
 5f. **Self-service signup + apikey_optional auth wired.**
-   (Done 2026-05-05, PRs #662 #663 + r1 deploy.) A customer can now
+   (Done 2026-05-05, PRs #662 #663 + r1 deploy.) A user can now
    `POST /v1/signup {"email": "..."}` and get back a freshly-minted
    API key (Starter tier, 1000 req/min). The key authenticates on
    every subsequent request via `Authorization: Bearer <key>`.
@@ -446,7 +446,7 @@ pgbackrest_exporter). The play is wired into `tasks/main.yml` after
    `[external]` section was absent from `/etc/stellarindex.toml`
    and every venue defaulted to `enabled=false`. Closed both the
    `crypto:XLM/fiat:USD` 404 (gap noted in 5a above) and the
-   RFP §4.7 CEX-coverage commitment.
+   CEX-coverage requirement.
 
    Operator change: appended `[external]` block enabling six free
    venues (no API keys provisioned for the paid tier today):
@@ -567,8 +567,7 @@ These are all now fixed in the role, but noted so the lessons survive:
    path makes stellar-rpc exit on startup with "captive-core-config-path
    is required". The `SERVE_LEDGERS_FROM_DATASTORE` flag is an
    augmentation for historical-fallback reads, not a replacement
-   for captive-core-driven live ingestion. Closes the open item
-   in docs/discovery/data-sources/composable-data-platform.md.
+   for captive-core-driven live ingestion.
    **For Phase 1 we run captive + datastore-fallback (see
    templates/stellar-rpc.cfg.j2).** To get to 1-captive-core on
    the box, either wait for a stellar-rpc release that supports
@@ -642,7 +641,7 @@ and rolled R1 + applied operator-side config changes.
     flip when ready to migrate every binary to per-user auth
   - F-1265 (1-year `prices_1m` backfill) — operator runs the
     catch-up per `docs/operations/backfill-procedure.md`
-  - F-1267 (p95 over RFP target) — needs the multi-region
+  - F-1267 (p95 over the SLA target) — needs the multi-region
     cutover per `docs/architecture/r2-r3-bringup.md`
 
 ### 2026-05-12 F-1223 Caddyfile roll (post-rc.49)

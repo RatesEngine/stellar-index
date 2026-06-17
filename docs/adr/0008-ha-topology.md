@@ -24,7 +24,7 @@ superseded_by: null
 
 ## Context
 
-The Stellar RFP §Availability requires ≥ 99.99 % uptime
+The availability SLA requires ≥ 99.99 % uptime
 (coverage-matrix S9.1). At one nine of slack against full failure
 that's 52 min/year of downtime — well below the cost of a single
 cold-start of stellar-core's catchup-recent. So the HA target
@@ -91,9 +91,9 @@ maintenance window concurrently.
 
 ### 4. Stateless services scale horizontally; one leader-elected aggregator
 
-`ratesengine-api` runs as N=3 stateless instances behind HAProxy
-(keepalived VIP). `ratesengine-indexer` runs one process per
-configured source (per-source orchestration). `ratesengine-
+`stellarindex-api` runs as N=3 stateless instances behind HAProxy
+(keepalived VIP). `stellarindex-indexer` runs one process per
+configured source (per-source orchestration). `stellarindex-
 aggregator` runs **one active + one standby**, leader-elected via
 a Redis lease — only one instance writes to the trades hypertable
 at a time to avoid duplicate emissions.
@@ -194,8 +194,8 @@ load-bearing; the budget is informative.
    The 3× cost differential at our IOPS profile + the captive-core
    fleet's existing R640 provisioning make hybrid the right call.
 
-2. **Multi-region active/active at v1** — rejected. The 10-week
-   delivery window doesn't permit multi-master Postgres / Redis at
+2. **Multi-region active/active at v1** — rejected. The initial
+   build window doesn't permit multi-master Postgres / Redis at
    launch. ADR-0016 picks up cross-region read replicas with
    ADR-0015's closed-bucket invariance providing the
    "byte-equivalent across regions" property; that's enough for v1.

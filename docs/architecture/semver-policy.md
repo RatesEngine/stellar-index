@@ -239,7 +239,6 @@ new source in `internal/sources/<venue>/` is the normal flow.
 ## Cross-references
 
 - [ADR-0005](../adr/0005-monorepo.md) — monorepo / one-Go-module decision; the SemVer commitment on `pkg/*` lives here
-- [`docs/discovery/repo-structure-plan.md`](../discovery/repo-structure-plan.md) §10 — original rationale for the dual-versioning split (then CalVer; superseded by this doc 2026-05-05)
 - [`docs/operations/release-process.md`](../operations/release-process.md) — runbook the release engineer follows; implements this policy
 - [`.github/RELEASE_NOTES_TEMPLATE.md`](../../.github/RELEASE_NOTES_TEMPLATE.md) — fill-in template for GitHub Release notes
 - [`CHANGELOG.md`](../../CHANGELOG.md) — every release's entry follows the rules above

@@ -3,7 +3,7 @@ Public launch announcement. Send T-0 (immediately after the
 cut completes per launch-day-checklist.md §T-0 step 6).
 
 Channels:
-  - Email to the RFP contacts (Stellar + Freighter)
+  - Email to the launch contacts (Stellar + Freighter)
   - Slack: #stellar-index-public
   - Project handle (Twitter / Mastodon / wherever applicable)
   - Customer Slack/Discord presence if applicable
@@ -49,7 +49,7 @@ Status: <https://status.stellarindex.io>.
   `/v1/assets/{id}`.
 - Multi-region (FSN1, us-east-1, Singapore) — every region
   serves byte-identical closed-bucket values per ADR-0015.
-- SLA targets per the Freighter RFP: p95 ≤ 200 ms, p99 ≤
+- SLA targets: p95 ≤ 200 ms, p99 ≤
   500 ms, ≥ 99.9 % availability, ≤ 30 s freshness.
   Continuous evidence trail via the SLA probe;
   see <https://docs.stellarindex.io/sla>.

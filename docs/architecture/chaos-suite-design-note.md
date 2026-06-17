@@ -4,7 +4,6 @@ last_verified: 2026-05-01
 status: design ratified (Wave 1 shipped)
 related:
   - test/chaos/README.md
-  - docs/discovery/repo-structure-plan.md §"Chaos — test/chaos/"
   - docs/architecture/launch-readiness-backlog.md L5.5
   - docs/operations/sev-playbook.md §"Quarterly live chaos"
   - docs/architecture/k6-load-tests-design-note.md (companion: load suite)
@@ -20,8 +19,8 @@ in documented ways."
 
 ## Goal
 
-The customer-facing contract is one of the strongest in the
-proposal: **the API never silently serves bad data.** When a
+One of the strongest guarantees the API makes is this:
+**the API never silently serves bad data.** When a
 backing service fails, the response either degrades-with-flag
 (documented) or 5xxs loud (unmistakable). A 200-with-empty-`data`
 or 200-with-stale-stamps is the nightmare. This suite is the

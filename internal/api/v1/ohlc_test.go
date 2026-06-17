@@ -180,8 +180,8 @@ func (r *ohlcPairAwareReader) TradesInRange(_ context.Context, pair canonical.Pa
 // (#1218), /v1/vwap + /v1/twap (#1219), /v1/oracle/lastprice (#1220).
 //
 // Without this, /v1/ohlc?base=native&quote=fiat:USD 404s with
-// "no trades in window" out of the box — Freighter RFP §3 names
-// /v1/ohlc as a launch-blocking surface for the asset-detail page.
+// "no trades in window" out of the box — /v1/ohlc is
+// a launch-blocking surface for the asset-detail page.
 func TestOHLC_StablecoinFiatProxyFallback(t *testing.T) {
 	usdcClassic, err := canonical.ParseAsset("USDC-GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN")
 	if err != nil {

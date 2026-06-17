@@ -1,13 +1,13 @@
 ---
 adr: 0001
-title: Horizon is not in the Rates Engine architecture
+title: Horizon is not in the Stellar Index architecture
 status: Accepted
 date: 2026-04-22
 supersedes: []
 superseded_by: null
 ---
 
-# ADR-0001: Horizon is not in the Rates Engine architecture
+# ADR-0001: Horizon is not in the Stellar Index architecture
 
 > **Amendment (2026-06-12, F-1353 / D2-08).** Where this ADR (and
 > ADR-0008 / ADR-0013) enumerate `stellar-rpc` and the `stellar-core`
@@ -32,17 +32,17 @@ Two things shifted the ground under this:
    archived on 2025-12-16.** Horizon itself moved to a dedicated
    repo, but the Stellar developer narrative moved decisively to
    "use `stellar-rpc` + Galexie + the Ingest SDK for new builds."
-2. **Our customer (Stellar Foundation) has been actively promoting
+2. **The Stellar Foundation has been actively promoting
    Galexie + stellar-rpc + Composable Data Platform** as the
    ecosystem's forward path. Horizon is on a maintenance track, not
    a feature track.
 
-A user directive from 2026-04-22 also locked this: "Horizon is
+A project directive from 2026-04-22 also locked this: "Horizon is
 deprecated and we will not be using it."
 
 ## Decision
 
-Horizon is **not a component** of the Rates Engine architecture.
+Horizon is **not a component** of the Stellar Index architecture.
 
 - We do not **run** Horizon.
 - We do not **ingest from** Horizon.
@@ -72,7 +72,7 @@ The Stellar data sources we use are:
 **Negative**
 
 - We forgo Horizon-compatible semantics some clients may expect.
-  Mitigation: our OpenAPI spec is explicit about the Rates Engine
+  Mitigation: our OpenAPI spec is explicit about the Stellar Index
   contract; we don't market ourselves as a Horizon replacement.
 - We must implement trade / effect / operation decoding ourselves
   (via `stellar-extract`) rather than delegating to Horizon's
@@ -100,15 +100,10 @@ The Stellar data sources we use are:
    on a deprecated service for a production SLA.
 3. **Start with Horizon and migrate off later.** Rejected: the
    migration cost at scale would exceed the implementation cost of
-   going direct-to-ledger from day one. Discovery audit doc is
+   going direct-to-ledger from day one. Our architecture research is
    extensive enough that we know what we're building.
 
 ## References
 
-- Discovery narrative: [docs/discovery/decisions.md](../discovery/decisions.md)
-  §Horizon deprecated.
-- Stellar ecosystem direction:
-  [docs/discovery/data-sources/stellar-data-lakes.md](../discovery/data-sources/stellar-data-lakes.md),
-  [docs/discovery/data-sources/composable-data-platform.md](../discovery/data-sources/composable-data-platform.md).
 - `stellar/go` monorepo archival:
   <https://github.com/stellar/go> (shows "Archived" banner).

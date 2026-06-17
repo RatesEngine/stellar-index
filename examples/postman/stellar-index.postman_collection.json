@@ -4977,11 +4977,11 @@
       "description": "",
       "item": [
         {
-          "name": "Rolling-window chart series matching the Freighter RFP shape.",
+          "name": "Rolling-window chart series for an asset/quote pair.",
           "request": {
-            "name": "Rolling-window chart series matching the Freighter RFP shape.",
+            "name": "Rolling-window chart series for an asset/quote pair.",
             "description": {
-              "content": "Returns CLOSED CAGG buckets within a rolling time window for\none asset/quote pair, shaped as `(timeframe, granularity,\nprice_type) → points[]` per the Freighter RFP V1 chart\ncontract.\n\nDefaults: `quote=fiat:USD`, `timeframe=24h`,\n`granularity` per the timeframe table below, `price_type=vwap`.\n\nDefault-granularity table (per ADR-0020):\n\n| Timeframe | Default granularity |\n| --------- | ------------------- |\n| `1h`      | `1m`                |\n| `24h`     | `15m`               |\n| `1w`      | `1h`                |\n| `1mo`     | `4h`                |\n| `1y`      | `1d`                |\n| `all`     | `1d`                |\n\n`price_type=twap` returns 400 — multi-bar TWAP charts are\ndeferred to L7.8 (post-launch), see ADR-0020. Single-bar\nTWAP is available now via `/v1/twap` (true time-weighted\ncompute from raw trades); only the multi-bar chart variant\nis the deferred surface.\n",
+              "content": "Returns CLOSED CAGG buckets within a rolling time window for\none asset/quote pair, shaped as `(timeframe, granularity,\nprice_type) → points[]` per the V1 chart contract.\n\nDefaults: `quote=fiat:USD`, `timeframe=24h`,\n`granularity` per the timeframe table below, `price_type=vwap`.\n\nDefault-granularity table (per ADR-0020):\n\n| Timeframe | Default granularity |\n| --------- | ------------------- |\n| `1h`      | `1m`                |\n| `24h`     | `15m`               |\n| `1w`      | `1h`                |\n| `1mo`     | `4h`                |\n| `1y`      | `1d`                |\n| `all`     | `1d`                |\n\n`price_type=twap` returns 400 — multi-bar TWAP charts are\ndeferred to L7.8 (post-launch), see ADR-0020. Single-bar\nTWAP is available now via `/v1/twap` (true time-weighted\ncompute from raw trades); only the multi-bar chart variant\nis the deferred surface.\n",
               "type": "text/plain"
             },
             "url": {
@@ -10508,7 +10508,7 @@
           "request": {
             "name": "Machine-readable summary of the active aggregation policy.",
             "description": {
-              "content": "Returns a static projection of the aggregator's policy: the\nVWAP method, per-endpoint outlier filters, the operator's\nstablecoin → fiat-USD proxy allow-list, the four source\nclasses (exchange / aggregator / oracle / authority_sanity)\nand which contributes to the served price, the flat list of\nregistered venues with class / weight / VWAP-inclusion flags,\nand pointers to the long-form ADRs that govern each section.\n\nDesigned for transparency consumers (compliance, auditors,\nAI agents, integrators verifying RFP §10 \"open methodology\"\nclaims) who want to verify what the deployment is doing\nwithout parsing the explorer's HTML at /methodology or\nchasing ADR cross-refs. Sub-millisecond — no DB call;\nderived from compile-time constants + the in-memory source\nregistry + operator config.\n",
+              "content": "Returns a static projection of the aggregator's policy: the\nVWAP method, per-endpoint outlier filters, the operator's\nstablecoin → fiat-USD proxy allow-list, the four source\nclasses (exchange / aggregator / oracle / authority_sanity)\nand which contributes to the served price, the flat list of\nregistered venues with class / weight / VWAP-inclusion flags,\nand pointers to the long-form ADRs that govern each section.\n\nDesigned for transparency consumers (compliance, auditors,\nAI agents, integrators verifying our open-methodology\nclaims) who want to verify what the deployment is doing\nwithout parsing the explorer's HTML at /methodology or\nchasing ADR cross-refs. Sub-millisecond — no DB call;\nderived from compile-time constants + the in-memory source\nregistry + operator config.\n",
               "type": "text/plain"
             },
             "url": {

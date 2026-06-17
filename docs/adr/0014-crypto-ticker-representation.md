@@ -128,7 +128,7 @@ ADR-0010's fiat list).
 
 4. **Leave it and skip crypto symbols permanently** — rejected.
    Reflector's CEX oracle is a deliberate integration target
-   (RFP coverage); skipping it defeats the purpose.
+   (required coverage); skipping it defeats the purpose.
 
 ## Amendments
 
@@ -151,8 +151,6 @@ ADR for an addition._
     sibling variant.
   - ADR-0003 (i128 no-truncation) — crypto amounts still flow
     through the i128 path; no change.
-- Discovery doc: [docs/discovery/oracles/reflector.md](../discovery/oracles/reflector.md)
-  §CEX feed — lists observed asset tickers.
 - Implementation: `internal/canonical/asset_crypto.go` (allow-list
   + constructor), `internal/canonical/asset.go` (type + String +
   ParseAsset + Validate).

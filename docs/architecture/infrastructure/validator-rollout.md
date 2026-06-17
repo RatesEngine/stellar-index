@@ -22,9 +22,7 @@ the same.
 
 ## 1. What "Tier-1 Organisation" actually means
 
-Per SDF's `stellar-docs/docs/validators/tier-1-orgs.mdx` (read in
-Phase 1; cited in
-[discovery/data-sources/archival-nodes.md](../../discovery/data-sources/archival-nodes.md)):
+Per SDF's `stellar-docs/docs/validators/tier-1-orgs.mdx`:
 
 A Tier-1 Organisation is a **single organisation** running:
 
@@ -68,7 +66,7 @@ The conservative path:
    before we multiply them.
 
 Launching with three simultaneously is achievable but high-risk
-inside the 10-week window. The single-node phase is not optional —
+inside the initial build window. The single-node phase is not optional —
 it's a quality gate.
 
 ---

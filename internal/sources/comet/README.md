@@ -1,9 +1,7 @@
 # Comet connector
 
 Ingests trade + liquidity events from [Comet](https://github.com/CometDEX/comet-contracts-v1)
-— a Balancer-v1-derived weighted AMM running on Soroban. Primary
-Phase-1 reference:
-[`docs/discovery/dexes-amms/comet.md`](../../../docs/discovery/dexes-amms/comet.md).
+— a Balancer-v1-derived weighted AMM running on Soroban.
 
 ## What this ingests
 
@@ -19,8 +17,7 @@ so even a pubnet without a standalone Comet DEX gives us BLND
 pricing for free once this decoder runs.
 
 Whether there is a *separate* Comet DEX with public trading pools
-beyond Blend's backstop is an open question — see Open items in
-the discovery doc.
+beyond Blend's backstop is an open question.
 
 ## Topic shape — shared, not per-protocol
 
@@ -125,7 +122,7 @@ spot_price_out_per_in =
 Spot-price tracking would require a pool-state tracker capturing
 weight alongside reserves — out of scope for the trade-event
 decoder. v1 reports executed swap prices only; spot inference is
-a follow-up if a Phase-2+ requirement emerges.
+a follow-up if the requirement emerges.
 
 ### Q4 — `i128` everywhere
 
@@ -210,7 +207,6 @@ already-captured swap volume.
 
 ## References
 
-- Discovery: [`docs/discovery/dexes-amms/comet.md`](../../../docs/discovery/dexes-amms/comet.md)
 - WASM audit: [`docs/operations/wasm-audits/comet.md`](../../../docs/operations/wasm-audits/comet.md)
 - Comet contracts: <https://github.com/CometDEX/comet-contracts-v1>
 - Balancer v1 whitepaper (for the weighted-AMM math):

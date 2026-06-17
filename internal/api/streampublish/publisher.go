@@ -95,8 +95,8 @@ func New(hub *streaming.Hub, reader PriceReader, interval time.Duration, logger 
 
 // DefaultInterval is the per-pair poll cadence used when the
 // caller passes 0 / negative to [New]. 5 s detects a new 1-minute
-// closed bucket within 5 s of its end — well inside the Freighter
-// RFP's 30 s freshness target — without hammering the reader for
+// closed bucket within 5 s of its end — well inside the 30 s
+// freshness SLA target — without hammering the reader for
 // pairs that update once per minute.
 const DefaultInterval = 5 * time.Second
 

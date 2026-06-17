@@ -139,8 +139,7 @@ always real. But:
 ## Changelog
 
 - 2026-04-23 — initial draft. Urgency justified: this is a
-  correctness guarantee we've explicitly committed to in ADR-0004
-  + the CTX proposal.
+  correctness guarantee we've explicitly committed to in ADR-0004.
 - 2026-04-30 — top-of-file deployment-posture callout. r1 doesn't
   publish today (stellar-core removed 2026-04-23); the alert
   remains live via the cross-check script, but root causes /

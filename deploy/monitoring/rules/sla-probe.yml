@@ -10,13 +10,13 @@
 # Alert family:
 #
 #   - `stellarindex_sla_probe_p95_breach` — per-endpoint p95 latency
-#     above the RFP-stated 200 ms target for ≥ 2 consecutive runs
+#     above the SLA-stated 200 ms target for ≥ 2 consecutive runs
 #     (i.e. ≥ 30 min sustained). Page-worthy because this is a
 #     direct customer-visible SLA breach.
 #
 #   - `stellarindex_sla_probe_freshness_breach` — per-endpoint
 #     observed_at freshness > 30 s on the most recent run. The
-#     Freighter RFP V1 § Pricing pins 30 s; sustained breach is a
+#     V1 pricing SLA pins 30 s; sustained breach is a
 #     P2 page.
 #
 #   - `stellarindex_sla_probe_unit_failed_alert` — the verdict
@@ -42,16 +42,16 @@ groups:
           component: api
           runbook_url: https://github.com/StellarIndex/stellar-index/blob/main/docs/operations/runbooks/sla-probe-p95-breach.md
         annotations:
-          summary: "{{ $labels.endpoint }} p95 latency {{ $value }}ms exceeds RFP target (200ms) sustained 30m"
+          summary: "{{ $labels.endpoint }} p95 latency {{ $value }}ms exceeds SLA target (200ms) sustained 30m"
           description: |
-            The SLA probe's per-endpoint p95 has been above the RFP-stated
+            The SLA probe's per-endpoint p95 has been above the SLA-stated
             200 ms target for ≥ 30 minutes (2 timer firings). Customer
             impact: the Freighter detail page shows degraded responsiveness
             on {{ $labels.endpoint }} for the watched pair. Runbook walks
             through {{ $labels.endpoint }}-specific diagnostics, then
             general API-latency triage.
 
-      # Per-endpoint: 30s RFP applies to /price/tip (open bucket, ~4s);
+      # Per-endpoint: 30s SLA applies to /price/tip (open bucket, ~4s);
       # /price serves the last CLOSED 1-min bucket (ADR-0015) so its
       # freshness is structurally ~60-120s — page it at 180s (genuine
       # stall), not 30s (which fired permanently on a healthy system).
@@ -67,7 +67,7 @@ groups:
           component: api
           runbook_url: https://github.com/StellarIndex/stellar-index/blob/main/docs/operations/runbooks/sla-probe-freshness-breach.md
         annotations:
-          summary: "{{ $labels.endpoint }} price freshness {{ $value }}s exceeds RFP target (30s) sustained 30m"
+          summary: "{{ $labels.endpoint }} price freshness {{ $value }}s exceeds SLA target (30s) sustained 30m"
           description: |
             The SLA probe's median observed_at freshness for
             {{ $labels.endpoint }} has been > 30 s for ≥ 30 minutes.
@@ -114,6 +114,6 @@ groups:
           description: |
             Either the systemd timer isn't running, or every run since
             the last pass has failed. Without the probe, we lose the
-            SLA-evidence trail required by the Freighter RFP. Runbook:
+            SLA-evidence trail required by the SLA. Runbook:
             check systemd-unit status first; fall through to the
             per-breach runbooks if every run is genuinely failing.

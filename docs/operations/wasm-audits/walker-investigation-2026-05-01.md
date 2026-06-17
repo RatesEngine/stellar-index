@@ -38,8 +38,8 @@ related:
 2. **The 3 `ranges: null` "TTL-evicted" contracts I previously
    flagged are Reflector TESTNET addresses**, not mainnet
    anchors. They emit `ranges: null` because they don't exist on
-   mainnet. Cross-checked against
-   `docs/discovery/oracles/reflector.md:154` (testnet table) +
+   mainnet. Cross-checked against the Reflector testnet contract
+   table +
    `internal/sources/aquarius/events.go:37` (real Aquarius
    router). Reclassification:
 

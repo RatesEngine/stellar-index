@@ -1114,7 +1114,7 @@ func (s *Server) mountRoutes() { //nolint:funlen // route registration is intent
 	// ADR-0015 only closed buckets returned.
 	s.mux.HandleFunc("GET /v1/history/since-inception", s.handleHistorySinceInception)
 
-	// Rolling-window chart series matching the Freighter RFP shape
+	// Rolling-window chart series matching the V1 chart contract
 	// (timeframe, granularity, price_type). Per ADR-0020.
 	s.mux.HandleFunc("GET /v1/chart", s.handleChart)
 

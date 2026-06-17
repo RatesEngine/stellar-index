@@ -15,7 +15,7 @@ severity: P2
 | Severity | P2 (ticket at 10 %) / P3 (informational at 5 %) |
 | Detected by | `deploy/monitoring/rules/divergence.yml` |
 | Typical MTTR | 30 min – hours (depends on cause) |
-| Impact | Our aggregated price disagrees with a trusted reference (CoinGecko / CMC / Chainlink-HTTP). If we're wrong, every API consumer gets a wrong price — downstream wallets may display misleading USD values, and Freighter's RFP explicitly calls out cross-reference sanity as a correctness guarantee. |
+| Impact | Our aggregated price disagrees with a trusted reference (CoinGecko / CMC / Chainlink-HTTP). If we're wrong, every API consumer gets a wrong price — downstream wallets may display misleading USD values, and cross-reference sanity is one of our correctness guarantees. |
 
 ## Symptoms
 

@@ -104,7 +104,7 @@ signal lands.
 Source: `cmd/stellarindex-sla-probe` runs every 15 min via the
 systemd timer in `configs/healthchecks/stellarindex-sla-probe.timer`; metrics emitted
 to node_exporter's textfile_collector via `-textfile-output`.
-Per the Freighter RFP V1 §SLA targets — these are the synthetic
+Per the service SLA targets — these are the synthetic
 counterparts to the API-plane alerts above.
 
 | Name | Metric | Condition | Severity | Runbook |

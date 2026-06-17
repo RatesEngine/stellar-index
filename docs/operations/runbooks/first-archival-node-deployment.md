@@ -35,8 +35,6 @@ history into Timescale" without ever needing to wipe and start over.
   step-by-step Ansible-apply runbook (inserted as §3 below).
 - [archival-node-spec.md](../../architecture/infrastructure/archival-node-spec.md)
   — hardware + OS target.
-- [stellar-archivist.md](../../discovery/data-sources/stellar-archivist.md)
-  — `mirror` command reference + flag semantics.
 
 ---
 
@@ -606,8 +604,6 @@ is always safe; it only changes what's drifted.
 ## 11. References
 
 - [bootstrap-archival-node.md](bootstrap-archival-node.md) — §3 detail.
-- [stellar-archivist.md](../../discovery/data-sources/stellar-archivist.md) — mirror command reference.
-- [galexie.md](../../discovery/data-sources/galexie.md) — how Galexie writes to S3.
 - [archival-node-spec.md](../../architecture/infrastructure/archival-node-spec.md) — hardware + OS target.
 - ADR-0002 — MinIO S3-compat (why not local filesystem).
 - ADR-0004 — Tier-1 validator aspiration.

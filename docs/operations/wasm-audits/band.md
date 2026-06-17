@@ -46,7 +46,7 @@ match.
 
 The address is configured via `cfg.Oracle.Band.StandardReferenceContract`
 in `stellarindex.toml`; the value above is the published mainnet
-contract per `docs/discovery/oracles/band.md`.
+contract.
 
 ## Decoder expectations — Band is structurally unique
 
@@ -209,8 +209,8 @@ Pre-Soroban ledgers can't host the contract.
 
 - **Function signatures**: `relay(Address, Vec<(Symbol, u64)>, u64, u64)`
   and `force_relay(Vec<(Symbol, u64)>, u64, u64)` match the
-  positional reader in `internal/sources/band/decode.go`. Phase-1
-  source review at `docs/discovery/oracles/band.md` pins
+  positional reader in `internal/sources/band/decode.go`. The
+  source review pins
   `band-soroban@<release>` as the source of truth; the deployed
   WASM hash `6cdb9a3c…` corresponds to that source release (no
   rebuild post-deploy).
@@ -253,7 +253,6 @@ yet).
 
 - Procedure: `docs/operations/wasm-audits/README.md`
 - Decoder source: `internal/sources/band/{events,decode}.go`
-- Discovery doc: `docs/discovery/oracles/band.md`
 - Schema-evolution stance: `docs/architecture/contract-schema-evolution.md`
 - Backfill gate: `internal/sources/external/registry.go` —
   `Registry["band"].BackfillSafe`

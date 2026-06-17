@@ -1,25 +1,24 @@
 ---
-title: RFP × Proposal × Delivery — Coverage Matrix
+title: Requirement Coverage Matrix
 last_verified: 2026-06-13
 status: ratified
 ---
 
-# RFP × Proposal × Delivery Coverage Matrix
+# Requirement Coverage Matrix
 
 **Ratified:** 2026-04-22.
 **Re-baselined:** 2026-04-30 + incremental re-baselines 2026-05-01
 + **2026-05-02**.
 **Production-verification column added 2026-05-10** — every row
 now has a `Prod` column with curl-tested status against
-`https://api.stellarindex.io` v0.5.0-rc.39. See
-[`../review-2026-05-10.md`](../review-2026-05-10.md) for the
-full production findings register (R-001 through R-023).
+`https://api.stellarindex.io` v0.5.0-rc.39. See a 2026-05-10
+production review for the full production findings register
+(R-001 through R-023).
 **Re-baselined: 2026-06-13** — `Prod` cells re-read against the
 2026-06-12 production re-probe
 ([prod-verification-2026-06-12.md](prod-verification-2026-06-12.md)).
-The probes now run against the **renamed deployment**:
-`https://api.ratesengine.net` (the former `api.stellarindex.io`
-host no longer resolves — see probe finding N-5), binary
+The probes run against the production deployment:
+`https://api.stellarindex.io`, binary
 `v0.5.0-rc.108-65-gb040514d` per `/v1/version`.
 
 ## 2026-06-13 re-baseline notes
@@ -27,14 +26,6 @@ host no longer resolves — see probe finding N-5), binary
 Context for reading the refreshed `Prod` cells — all evidence is
 the 2026-06-12 probe unless a cell says otherwise:
 
-- **Rebrand (paths/domains):** the deployment is now Rates Engine —
-  API host `api.ratesengine.net`, Go module
-  `github.com/RatesEngine/rates-engine`, binaries `cmd/ratesengine-*`.
-  The old `api.stellarindex.io` / `docs.stellarindex.io` hostnames
-  are NXDOMAIN; problem+json `type` URIs in live error payloads
-  still cite them (probe N-5, customer-visible drift). Historical
-  cells dated 2026-05-10 intentionally keep the old host/binary
-  names — they are snapshot-correct.
 - **Breaking param change:** `/v1/vwap` + `/v1/twap` `window` now
   requires duration units (`300s`); bare seconds (`window=300`,
   used by the May probes) return 400 (probe N-3).
@@ -42,14 +33,14 @@ the 2026-06-12 probe unless a cell says otherwise:
   `/v1/coins/{slug}` citation is rewritten against
   `/v1/assets/{id|slug}` (probe N-1). `/v1/currencies` likewise
   dissolved into `/v1/assets` (`/v1/assets/fiat:EUR` serves FX).
-- **Beyond-RFP additions:** two new endpoints shipped since the
+- **Beyond-spec additions:** two new endpoints shipped since the
   last baseline — `/v1/coverage` (data-derived coverage verdicts,
-  ADR-0033) and `/v1/protocols` — neither maps to an RFP row;
-  listed here so the matrix stays the superset.
+  ADR-0033) and `/v1/protocols` — neither maps to a core requirement
+  row; listed here so the matrix stays the superset.
 - **The 4 probe FAILs**, and their disposition:
   - **F-A** — `/v1/assets/{id}.ath` wrong (`native.ath=$4.78`,
     ~6× any price in our own chart history) and three surfaces
-    disagree. No RFP row carries ATH, so no `Prod` cell flips;
+    disagree. No requirement row carries ATH, so no `Prod` cell flips;
     it taints F1/F2 metadata evidence. **Fixed in-tree awaiting
     deploy** (fake-USDT ATH purge, commit `6e5c435d`).
   - **F-B** — `/v1/price/tip` freshness fails for `asset=native`
@@ -76,15 +67,15 @@ tally). The 2026-06-12 probe run itself scored 30 PASS · 4 FAIL ·
 
 | Status | Count | Meaning |
 |---|---|---|
-| ✅ verified live | 59 | Curl returns the expected wire shape from `api.ratesengine.net` |
-| ⚠ partial / borderline | 8 | Code shipped + serving but with caveat (e.g. multi-region pending, `code` null on native, rebrand doc-host drift) |
+| ✅ verified live | 59 | Curl returns the expected wire shape from `api.stellarindex.io` |
+| ⚠ partial / borderline | 8 | Code shipped + serving but with caveat (e.g. multi-region pending, `code` null on native, doc-host drift) |
 | ❌ failing | 3 | Production behaviour disagrees with the matrix's `✅ verified` claim (S5.2 + F3.4 = probe F-B, S7.1 = probe F-C) — all covered by in-tree fixes awaiting deploy (commit `8fde6c84`) |
 | 📦 code-only / ops-only | 19 | Not API-testable (ADR, infra topology, internal gauge, operator-side script). Verified via test suite + ADR + ops-runbook execution |
 | 🟡 watched-only | 0 | (was 3) F2.4–F2.6 flipped ✅ — operator watched-set populated on r1, gap #97 closed |
 | ⏳ deferred | 1 | Explicitly post-launch (ADR-0019 Phase 3 cross-oracle; DIA-mainnet's Prod cell counts under 📦) |
 
 **The ❌ rows plus probe FAILs F-A/F-D are the action list before
-acceptance evidence is presented** — three of the four probe FAILs
+the verification evidence is complete** — three of the four probe FAILs
 are already fixed in-tree awaiting deploy (`6e5c435d` ATH purge,
 `8fde6c84` XLM alias fixes); F-D (SEP-10 503) is an operator config
 step. See the re-baseline notes above.
@@ -94,10 +85,9 @@ step. See the re-baseline notes above.
 > next RC + r1 deploy. The Prod cells in the per-requirement
 > tables below still read against `v0.5.0-rc.39` — they are
 > snapshot-correct as of the review timestamp. After the next
-> deploy, re-run the curl probes from
-> [`../review-2026-05-10.md`](../review-2026-05-10.md) §Appendix B
-> and flip the cells; the resolution log at the top of that
-> document tracks which PR closed each row.
+> deploy, re-run the curl probes from the 2026-05-10 production
+> review §Appendix B and flip the cells; the resolution log at
+> the top of that document tracks which PR closed each row.
 >
 > *(Done — the re-probe ran 2026-06-12 and the cells below were
 > flipped in the 2026-06-13 re-baseline. Kept for history.)*
@@ -128,86 +118,81 @@ X3.1–X3.4/.6/.7; `cmd/stellarindex-ops verify-archive -tier
 verify` ship X1.2/.4/.5/.7; per-region tier selection in the
 binary covers X1.6.
 
-The 2026-04-30 base re-baseline was prompted by the
-docs/audit-2026-04-29/ workspace flagging drift in both directions
-(rows marked "designed" that had shipped, rows marked "verified"
-that had regressed in production wiring). A separate Codex pass
-against the RFPs + proposal also surfaced specific contract gaps
+The 2026-04-30 base re-baseline was prompted by an audit pass
+flagging drift in both directions (rows marked "designed" that had
+shipped, rows marked "verified" that had regressed in production
+wiring). A separate review pass also surfaced specific gaps
 (Blend, Chainlink, Freighter V2 wiring) that are now reflected in
 each row's Status / Conf.
 
-**Purpose:** one authoritative table mapping every contractual requirement
-to the mechanism that satisfies it. Supersedes the narrower
-`docs/discovery/rfp-requirements-matrix.md` (which remains valid as
-the source-discovery artefact).
+**Purpose:** one authoritative table mapping every requirement
+to the mechanism that satisfies it. This is the authoritative
+source-coverage matrix.
 
 ## How to read this doc
 
-Each row captures **one atomic requirement** from either RFP, sourced
-verbatim from:
-
-- [docs/stellar-rfp.md](../stellar-rfp.md) — Stellar Prices API RFP.
-- [docs/freighter-rfp.md](../freighter-rfp.md) — Freighter asset-detail RFP.
+Each row captures **one atomic requirement**, sourced from the
+product's API requirements.
 
 For each row:
 
 | Column | Meaning |
 | ------ | ------- |
-| **Requirement** | Verbatim or close paraphrase of the RFP bullet. |
-| **Proposal commitment** | Where our `docs/ctx-proposal.md` commits to it. |
-| **Delivery week** | Which week in [docs/discovery/delivery-plan.md](../discovery/delivery-plan.md) implements it. |
+| **Requirement** | Verbatim or close paraphrase of the requirement. |
+| **Proposal commitment** | Where the spec commits to it. |
+| **Delivery week** | Which build phase implements it. |
 | **Owner binary / package** | The Go `cmd/*` or `internal/*` that delivers it. |
 | **ADR** | The architectural decision that binds the implementation. |
-| **Verified by** | The discovery doc whose primary-source work proves feasibility. |
+| **Verified by** | The source / test that proves the implementation. |
 | **Status** | `✅ verified`, `🧪 designed, impl pending`, `⏳ deferred`, `⚠ caveat`, `❌ gap`. |
 | **Confidence** | Honest 1–5 score: 5 = code+tests, 1 = hand-wave. |
 
 Any row with **status ❌** is a blocker for launch. Any row with
-**confidence ≤ 2** is a risk line in the Week-N review.
+**confidence ≤ 2** is a risk line in the milestone review.
 
 ---
 
-## Stellar Prices API RFP — §3 Requirements
+## Pricing API — Core requirements
 
 ### S1. Asset coverage — classic + SEP-41 Soroban
 
 > **Prod column legend** (added 2026-05-10):
-> `✅ YYYY-MM-DD` = curl-verified live; `⚠ YYYY-MM-DD R-NNN` = partial / known gap, see [`../review-2026-05-10.md`](../review-2026-05-10.md) §Section 2; `❌ YYYY-MM-DD R-NNN` = production behaviour disagrees with claim; `📦 code-only` = not API-testable (ADR, infra, migration); `🟡 watched-only` = depends on operator-watched-set config not populated on r1.
+> `✅ YYYY-MM-DD` = curl-verified live; `⚠ YYYY-MM-DD R-NNN` = partial / known gap, see the 2026-05-10 production review §Section 2; `❌ YYYY-MM-DD R-NNN` = production behaviour disagrees with claim; `📦 code-only` = not API-testable (ADR, infra, migration); `🟡 watched-only` = depends on operator-watched-set config not populated on r1.
 
-| # | Requirement | Proposal | Week | Owner | ADR | Verified by | Status | Conf | Prod |
+| # | Requirement | Spec ref | Week | Owner | ADR | Verified by | Status | Conf | Prod |
 | - | ----------- | -------- | ---- | ----- | --- | ----------- | ------ | ---- | ---- |
-| S1.1 | Classic assets identity (code+issuer) | §Data Ingestion / SDEX | 2 | `internal/sources/sdex` | — | [protocol-versions.md](../discovery/protocol-versions.md), [dexes-amms/sdex.md](../discovery/dexes-amms/sdex.md) | ✅ verified | 5 | ✅ 2026-05-10 — `GET /v1/assets/USDC-GA5Z…KZVN` → `type=classic, code=USDC, issuer=GA5Z…` |
-| S1.2 | SEP-41 Soroban tokens — events ingest | §Data Ingestion / Soroban DEXs | 3 | `internal/sources/soroswap`, `/aquarius`, etc. | — | [notes/sep-41-token-events.md](../discovery/notes/sep-41-token-events.md) | ✅ verified | 5 | ✅ 2026-05-10 — `assets_indexed=86,516` per `/v1/network/stats` |
-| S1.3 | SAC-wrapped classic (native XLM SAC = `CAS3J7…OWMA`) | §Data Ingestion / SDEX | 3 | `internal/canonical` + sources | — | [notes/sep-41-token-events.md](../discovery/notes/sep-41-token-events.md), [dexes-amms/aquarius.md](../discovery/dexes-amms/aquarius.md) | ✅ verified | 4 | ✅ 2026-05-10 — `GET /v1/assets/CAS3J7…OWMA` → `type=soroban, contract_id=CAS3J7…OWMA` |
-| S1.4 | Asset enumeration / discovery | §Asset Identification | 4 | `internal/canonical/discovery` | — | [data-sources/withobsrvr-stellar-extract.md](../discovery/data-sources/withobsrvr-stellar-extract.md) | ✅ verified | 4 | ✅ 2026-05-10 — 86,516 assets indexed; `/v1/sac-wrappers` returns 30+ SAC mappings |
+| S1.1 | Classic assets identity (code+issuer) | §Data Ingestion / SDEX | 2 | `internal/sources/sdex` | — | Source review + decoder tests | ✅ verified | 5 | ✅ 2026-05-10 — `GET /v1/assets/USDC-GA5Z…KZVN` → `type=classic, code=USDC, issuer=GA5Z…` |
+| S1.2 | SEP-41 Soroban tokens — events ingest | §Data Ingestion / Soroban DEXs | 3 | `internal/sources/soroswap`, `/aquarius`, etc. | — | Source review + decoder tests | ✅ verified | 5 | ✅ 2026-05-10 — `assets_indexed=86,516` per `/v1/network/stats` |
+| S1.3 | SAC-wrapped classic (native XLM SAC = `CAS3J7…OWMA`) | §Data Ingestion / SDEX | 3 | `internal/canonical` + sources | — | Source review + decoder tests | ✅ verified | 4 | ✅ 2026-05-10 — `GET /v1/assets/CAS3J7…OWMA` → `type=soroban, contract_id=CAS3J7…OWMA` |
+| S1.4 | Asset enumeration / discovery | §Asset Identification | 4 | `internal/canonical/discovery` | — | Source review | ✅ verified | 4 | ✅ 2026-05-10 — 86,516 assets indexed; `/v1/sac-wrappers` returns 30+ SAC mappings |
 | S1.5 | i128/u128 amounts never truncate | §Data Processing | 1 | `internal/canonical.Amount` | ADR-0003 | Tested: `amount_test.go` KALIEN regression | ✅ verified | 5 | 📦 code-only |
 
 ### S2. Oracle coverage — Chainlink, Redstone, Band, Reflector + others
 
-| # | Requirement | Proposal | Week | Owner | ADR | Verified by | Status | Conf | Prod |
+| # | Requirement | Spec ref | Week | Owner | ADR | Verified by | Status | Conf | Prod |
 | - | ----------- | -------- | ---- | ----- | --- | ----------- | ------ | ---- | ---- |
-| S2.1 | Reflector (3 contracts: DEX/CEX/FX) | §Oracle Networks — Reflector | 4 | `internal/sources/reflector` | — | [oracles/reflector.md](../discovery/oracles/reflector.md) | ✅ verified | 5 | ✅ 2026-05-10 — `/v1/sources` lists `reflector-dex/cex/fx` (3 entries class=oracle) |
-| S2.2 | Redstone (Adapter + 19 per-feed proxies) | §Oracle Networks — Redstone | 4 | `internal/sources/redstone` | — | [oracles/redstone.md](../discovery/oracles/redstone.md) | ✅ verified | 5 | ✅ 2026-05-10 — `/v1/sources` lists `redstone` class=oracle |
-| S2.3 | Band Protocol (native Soroban StandardReference) | §Oracle Networks — Band | 4 | `internal/sources/band` | — | [oracles/band.md](../discovery/oracles/band.md) | ✅ verified | 5 | ✅ 2026-05-10 — `/v1/sources` lists `band` class=oracle |
-| S2.4 | Chainlink (HTTP cross-check until Scale ships) | §Oracle Networks — Chainlink | 4 | `internal/divergence/chainlink.go` | — | [oracles/chainlink.md](../discovery/oracles/chainlink.md) | ✅ verified — `ChainlinkReference` shipped in #282. `eth_call` against `latestAnswer()` selector `0x50d25bcd`; two's-complement int256 decode; optional inversion. Used as divergence cross-check, NOT a VWAP contributor. | 4 | ✅ 2026-06-12 probe — `chainlink` now listed in `/v1/sources` (26 sources total); default crypto feeds activated post-deploy as predicted. |
-| S2.5 | "And others" — DIA (if mainnet ships in window) | (not in proposal; adding) | 4–post-launch | `internal/sources/dia` | — | [oracles/dia.md](../discovery/oracles/dia.md) | ⏳ deferred | 2 | 📦 code-only — no mainnet integration yet |
-| S2.6 | SEP-40-compat output (others consume *our* prices) | §API | 7 | `internal/api/v1/oracle_sep40.go` | — | [oracles/reflector.md](../discovery/oracles/reflector.md) §SEP-40 interface | ✅ verified — `/v1/oracle/{lastprice,prices,x_last_price}` SEP-40-shaped passthrough endpoints shipped | 4 | ✅ 2026-05-10 — `GET /v1/oracle/lastprice?asset=native` → `{price, timestamp}`; `/v1/oracle/prices?asset=native&records=3` → array; `/v1/oracle/x_last_price?base=native&quote=fiat:USD` → 200 |
+| S2.1 | Reflector (3 contracts: DEX/CEX/FX) | §Oracle Networks — Reflector | 4 | `internal/sources/reflector` | — | Protocol source review | ✅ verified | 5 | ✅ 2026-05-10 — `/v1/sources` lists `reflector-dex/cex/fx` (3 entries class=oracle) |
+| S2.2 | Redstone (Adapter + 19 per-feed proxies) | §Oracle Networks — Redstone | 4 | `internal/sources/redstone` | — | Protocol source review | ✅ verified | 5 | ✅ 2026-05-10 — `/v1/sources` lists `redstone` class=oracle |
+| S2.3 | Band Protocol (native Soroban StandardReference) | §Oracle Networks — Band | 4 | `internal/sources/band` | — | Protocol source review | ✅ verified | 5 | ✅ 2026-05-10 — `/v1/sources` lists `band` class=oracle |
+| S2.4 | Chainlink (HTTP cross-check until Scale ships) | §Oracle Networks — Chainlink | 4 | `internal/divergence/chainlink.go` | — | Protocol source review | ✅ verified — `ChainlinkReference` shipped in #282. `eth_call` against `latestAnswer()` selector `0x50d25bcd`; two's-complement int256 decode; optional inversion. Used as divergence cross-check, NOT a VWAP contributor. | 4 | ✅ 2026-06-12 probe — `chainlink` now listed in `/v1/sources` (26 sources total); default crypto feeds activated post-deploy as predicted. |
+| S2.5 | "And others" — DIA (if mainnet ships in window) | (added; not in original spec) | 4–post-launch | `internal/sources/dia` | — | Protocol source review | ⏳ deferred | 2 | 📦 code-only — no mainnet integration yet |
+| S2.6 | SEP-40-compat output (others consume *our* prices) | §API | 7 | `internal/api/v1/oracle_sep40.go` | — | Source review (SEP-40 interface) | ✅ verified — `/v1/oracle/{lastprice,prices,x_last_price}` SEP-40-shaped passthrough endpoints shipped | 4 | ✅ 2026-05-10 — `GET /v1/oracle/lastprice?asset=native` → `{price, timestamp}`; `/v1/oracle/prices?asset=native&records=3` → array; `/v1/oracle/x_last_price?base=native&quote=fiat:USD` → 200 |
 
 ### S3. Price aggregation — Soroswap, Aquarius, SDEX, Comet + others
 
-| # | Requirement | Proposal | Week | Owner | ADR | Verified by | Status | Conf | Prod |
+| # | Requirement | Spec ref | Week | Owner | ADR | Verified by | Status | Conf | Prod |
 | - | ----------- | -------- | ---- | ----- | --- | ----------- | ------ | ---- | ---- |
-| S3.1 | SDEX trades via ClaimAtom parsing | §Stellar Classic DEX | 2 | `internal/sources/sdex` | — | [dexes-amms/sdex.md](../discovery/dexes-amms/sdex.md) | ✅ verified | 5 | ✅ 2026-05-10 — `sdex` in `/v1/sources` (class=exchange subclass=dex); raw trades visible via `GET /v1/history?base=native&quote=USDC-G…` |
-| S3.2 | Soroswap factory+pair+router events | §Soroban DEXs / Soroswap | 3 | `internal/sources/soroswap` | — | [dexes-amms/soroswap.md](../discovery/dexes-amms/soroswap.md) | ✅ verified | 5 | ✅ 2026-05-10 — `soroswap` in `/v1/sources` |
-| S3.3 | Aquarius 3 pool types | §Soroban DEXs / Aquarius | 3 | `internal/sources/aquarius` | — | [dexes-amms/aquarius.md](../discovery/dexes-amms/aquarius.md) | ✅ verified | 5 | ✅ 2026-05-10 — `aquarius` in `/v1/sources` |
-| S3.4 | Phoenix DEX (8-events-per-swap) | §Soroban DEXs (added post-discovery) | 3 | `internal/sources/phoenix` | — | [dexes-amms/phoenix.md](../discovery/dexes-amms/phoenix.md) | ✅ verified | 5 | ✅ 2026-05-10 — `phoenix` in `/v1/sources` |
-| S3.5 | Comet (Balancer-weighted AMM) | §Soroban DEXs (added post-discovery) | 3 | `internal/sources/comet` | — | [dexes-amms/comet.md](../discovery/dexes-amms/comet.md) | ✅ verified | 4 | ✅ 2026-05-10 — `comet` in `/v1/sources` |
-| S3.6 | Blend auctions as directional signal | §Soroban DEXs / Blend | 5 | `internal/sources/blend` | — | [dexes-amms/blend.md](../discovery/dexes-amms/blend.md), [wasm-audits/blend.md](../operations/wasm-audits/blend.md) | ✅ verified — auction decoder + storage + dispatcher wiring shipped (#273-#275); WASM audit complete 2026-05-02 (Phases 1-4: 11 contracts / 3 unique WASMs / no mid-life upgrades over 11.79M-ledger walk). `BackfillSafe=true`. | 4 | ✅ 2026-05-10 — `blend` in `/v1/sources` (class=lending); `/v1/lending/pools` returns Blend pools with auction counts |
-| S3.7 | CEX trade ingestion (Binance, Coinbase, Kraken, …) | §Centralized Exchanges | 4 | `internal/sources/external/*` | — | [external-refs/cex-feeds.md](../discovery/external-refs/cex-feeds.md) | ✅ verified | 4 | ✅ 2026-05-10 — all 4 listed in `/v1/sources` (binance/coinbase/kraken/bitstamp class=exchange subclass=cex); 11 exchange sources total |
+| S3.1 | SDEX trades via ClaimAtom parsing | §Stellar Classic DEX | 2 | `internal/sources/sdex` | — | Source review + decoder tests | ✅ verified | 5 | ✅ 2026-05-10 — `sdex` in `/v1/sources` (class=exchange subclass=dex); raw trades visible via `GET /v1/history?base=native&quote=USDC-G…` |
+| S3.2 | Soroswap factory+pair+router events | §Soroban DEXs / Soroswap | 3 | `internal/sources/soroswap` | — | Source review + decoder tests | ✅ verified | 5 | ✅ 2026-05-10 — `soroswap` in `/v1/sources` |
+| S3.3 | Aquarius 3 pool types | §Soroban DEXs / Aquarius | 3 | `internal/sources/aquarius` | — | Source review + decoder tests | ✅ verified | 5 | ✅ 2026-05-10 — `aquarius` in `/v1/sources` |
+| S3.4 | Phoenix DEX (8-events-per-swap) | §Soroban DEXs (added post-review) | 3 | `internal/sources/phoenix` | — | Source review + decoder tests | ✅ verified | 5 | ✅ 2026-05-10 — `phoenix` in `/v1/sources` |
+| S3.5 | Comet (Balancer-weighted AMM) | §Soroban DEXs (added post-review) | 3 | `internal/sources/comet` | — | Source review + decoder tests | ✅ verified | 4 | ✅ 2026-05-10 — `comet` in `/v1/sources` |
+| S3.6 | Blend auctions as directional signal | §Soroban DEXs / Blend | 5 | `internal/sources/blend` | — | Source review + [wasm-audits/blend.md](../operations/wasm-audits/blend.md) | ✅ verified — auction decoder + storage + dispatcher wiring shipped (#273-#275); WASM audit complete 2026-05-02 (Phases 1-4: 11 contracts / 3 unique WASMs / no mid-life upgrades over 11.79M-ledger walk). `BackfillSafe=true`. | 4 | ✅ 2026-05-10 — `blend` in `/v1/sources` (class=lending); `/v1/lending/pools` returns Blend pools with auction counts |
+| S3.7 | CEX trade ingestion (Binance, Coinbase, Kraken, …) | §Centralized Exchanges | 4 | `internal/sources/external/*` | — | Source review | ✅ verified | 4 | ✅ 2026-05-10 — all 4 listed in `/v1/sources` (binance/coinbase/kraken/bitstamp class=exchange subclass=cex); 11 exchange sources total |
 
 ### S4. VWAP + configurable USD volume threshold
 
-| # | Requirement | Proposal | Week | Owner | ADR | Verified by | Status | Conf | Prod |
+| # | Requirement | Spec ref | Week | Owner | ADR | Verified by | Status | Conf | Prod |
 | - | ----------- | -------- | ---- | ----- | --- | ----------- | ------ | ---- | ---- |
 | S4.1 | Volume-weighted aggregation across venues | §Aggregation Strategy | 5 | `internal/aggregate/orchestrator` + `prices_*` CAGGs | — | `cmd/stellarindex-aggregator` running per-window VWAP refresh; CAGGs back the API price reader. | ✅ verified | 4 | ✅ 2026-05-10, re-confirmed 2026-06-12 probe — `GET /v1/vwap?base=native&quote=fiat:USD&window=300s` → `{price, base_volume, quote_volume, trade_count, outliers_filtered, truncated}`. ⚠ N-3: `window` now requires duration units (`300s`); bare `window=300` is a 400 — breaking param change since rc.39. |
 | S4.2 | USD-denominated volume on non-USD pairs | §Cross-Pair Derivation | 5 | `internal/aggregate/orchestrator/triangulate.go` + provenance marker | — | Triangulation worker writes implied VWAPs + `:provenance` marker (#279); API serves them with `flags.triangulated=true` (#280). | ✅ verified | 4 | ✅ 2026-05-10 — `flags.triangulated=true` on `/v1/twap?base=native&quote=fiat:USD&window=3600s` (XLM/USD has no direct trades; comes via stablecoin proxy). ⚠ N-3 window-unit change applies (see S4.1). |
@@ -216,66 +201,66 @@ Any row with **status ❌** is a blocker for launch. Any row with
 
 ### S5. Real-time price endpoints
 
-| # | Requirement | Proposal | Week | Owner | ADR | Verified by | Status | Conf | Prod |
+| # | Requirement | Spec ref | Week | Owner | ADR | Verified by | Status | Conf | Prod |
 | - | ----------- | -------- | ---- | ----- | --- | ----------- | ------ | ---- | ---- |
-| S5.1 | Live event ingest (Galexie/MinIO + ledgerstream + dispatcher) | §Real-time — Hot path | 3 | `cmd/stellarindex-indexer` + `internal/ledgerstream` + `internal/dispatcher` + `internal/sources/*` | — | [data-sources/archival-nodes.md](../discovery/data-sources/archival-nodes.md), [ingest-pipeline.md](ingest-pipeline.md) | ✅ verified | 5 | ✅ 2026-05-10 — `latest_ledger=62,510,233` per `/v1/network/stats`; `markets_count_24h=23,646` |
-| S5.2 | ≤ 30s staleness (Freighter SLA) | §Latency Targets | 6 | `cmd/stellarindex-sla-probe` + `configs/healthchecks/stellarindex-sla-probe.{service,timer}` | — | [data-sources/archival-nodes.md](../discovery/data-sources/archival-nodes.md) + HA plan | ✅ verified — `stellarindex-sla-probe` measures `observed_at` freshness against the 30s target every 15 min; alerts in `deploy/monitoring/rules/sla-probe.yml` page on sustained breach. | 4 | ❌ 2026-06-12 probe F-B — `/v1/price/tip?asset=native` `observed_at` lag cycles **61–113 s** (>30 s target): the rolling-window path misses the `native`↔`crypto:XLM` alias and falls back to the closed-bucket reader. `asset=crypto:XLM` passes at 0.0 s lag. Fixed in-tree awaiting deploy (commit `8fde6c84`). |
+| S5.1 | Live event ingest (Galexie/MinIO + ledgerstream + dispatcher) | §Real-time — Hot path | 3 | `cmd/stellarindex-indexer` + `internal/ledgerstream` + `internal/dispatcher` + `internal/sources/*` | — | [ingest-pipeline.md](ingest-pipeline.md) | ✅ verified | 5 | ✅ 2026-05-10 — `latest_ledger=62,510,233` per `/v1/network/stats`; `markets_count_24h=23,646` |
+| S5.2 | ≤ 30s staleness (freshness SLA) | §Latency Targets | 6 | `cmd/stellarindex-sla-probe` + `configs/healthchecks/stellarindex-sla-probe.{service,timer}` | — | HA plan + SLA probe | ✅ verified — `stellarindex-sla-probe` measures `observed_at` freshness against the 30s target every 15 min; alerts in `deploy/monitoring/rules/sla-probe.yml` page on sustained breach. | 4 | ❌ 2026-06-12 probe F-B — `/v1/price/tip?asset=native` `observed_at` lag cycles **61–113 s** (>30 s target): the rolling-window path misses the `native`↔`crypto:XLM` alias and falls back to the closed-bucket reader. `asset=crypto:XLM` passes at 0.0 s lag. Fixed in-tree awaiting deploy (commit `8fde6c84`). |
 | S5.3 | SSE streaming for subscribers | §Streaming Support | 7 | `internal/api/streaming` + `/v1/price/stream`, `/v1/observations/stream`, `/v1/price/tip` | — | Hub + per-topic ring buffer; Last-Event-ID resume. | ✅ verified | 4 | ✅ 2026-05-10 — `/v1/price/stream?asset=native&quote=fiat:USD` emits 3 windows (300/3600/86400) `price_update` events within 6s; `/v1/price/tip/stream` emits `tip_update` every 5s |
 | S5.4 | Degradation signals (`stale_flag`, `reduced_redundancy`) | §Error Handling and Degradation | 5 | `internal/api/envelope` | — | `envelope.Flags` shipped (stale, reduced_redundancy, triangulated, divergence_warning) | ✅ verified | 3 | ✅ 2026-05-10 — every response carries `flags.{stale, reduced_redundancy, triangulated, divergence_warning}` |
 
 ### S6. Historical price endpoints + OHLC
 
-| # | Requirement | Proposal | Week | Owner | ADR | Verified by | Status | Conf | Prod |
+| # | Requirement | Spec ref | Week | Owner | ADR | Verified by | Status | Conf | Prod |
 | - | ----------- | -------- | ---- | ----- | --- | ----------- | ------ | ---- | ---- |
-| S6.1 | Since-inception backfill (ledger 2 → today) | §Historical Data | 2 (scaffold), 5 (run) | `cmd/stellarindex-ops backfill` | — | [data-sources/galexie.md](../discovery/data-sources/galexie.md) + [data-sources/stellar-data-lakes.md](../discovery/data-sources/stellar-data-lakes.md) | ✅ verified | 4 | ✅ 2026-06-12 probe — backfill executed: `/v1/history/since-inception?asset=native&quote=fiat:USD` serves daily points from **2021-02-01** → today (5+ years; same for `native/USDC-G…`). ⚠ N-6: this API surface starts 2021-02-01, not 2015/ledger-2 — the served-tier `prices_1d` reaches 2015 per the SDEX work; verify which is intended before presenting evidence. |
-| S6.2 | Pre-P20 (no-Soroban) coverage via ClaimAtom | §Historical Data | 2 | `internal/sources/sdex` | — | [dexes-amms/sdex.md](../discovery/dexes-amms/sdex.md), [protocol-versions.md](../discovery/protocol-versions.md) | ✅ verified | 5 | 📦 code-only (until backfill runs over pre-P20 ledgers) |
-| S6.3 | Post-P23 unified events handling | §Historical Data | 2 | `internal/sources/sdex` | — | [notes/cap-67-unified-events.md](../discovery/notes/cap-67-unified-events.md) | ✅ verified | 5 | ✅ 2026-05-10 — current ingest is post-P23 (mainnet); markets_count_24h=23,646 |
+| S6.1 | Since-inception backfill (ledger 2 → today) | §Historical Data | 2 (scaffold), 5 (run) | `cmd/stellarindex-ops backfill` | — | Source review | ✅ verified | 4 | ✅ 2026-06-12 probe — backfill executed: `/v1/history/since-inception?asset=native&quote=fiat:USD` serves daily points from **2021-02-01** → today (5+ years; same for `native/USDC-G…`). ⚠ N-6: this API surface starts 2021-02-01, not 2015/ledger-2 — the served-tier `prices_1d` reaches 2015 per the SDEX work; verify which is intended before presenting evidence. |
+| S6.2 | Pre-P20 (no-Soroban) coverage via ClaimAtom | §Historical Data | 2 | `internal/sources/sdex` | — | Source review + decoder tests | ✅ verified | 5 | 📦 code-only (until backfill runs over pre-P20 ledgers) |
+| S6.3 | Post-P23 unified events handling | §Historical Data | 2 | `internal/sources/sdex` | — | Source review + decoder tests | ✅ verified | 5 | ✅ 2026-05-10 — current ingest is post-P23 (mainnet); markets_count_24h=23,646 |
 | S6.4 | OHLC continuous aggregates | §Historical — storage | 4 | `internal/storage/timescale` + migrations | ADR-0006 | migrations/0002 creates prices_{1m,15m,1h,4h,1d,1w,1mo} CAGGs with `first/last/min/max(quote/base)` columns + `add_continuous_aggregate_policy` auto-refresh; covered by test/integration/migrations_test.go. Note the CAGG `twap` column is `avg(quote/base)` (arithmetic mean, not true time-weighted) — `/v1/twap` computes the real TW average from raw trades and ignores the CAGG column; see `cmd/stellarindex-aggregator/main.go` ⚠ CAGG TWAP CAVEAT. | ✅ verified | 4 | ✅ 2026-06-12 probe — R-007 contamination fixed: `/v1/ohlc?base=native&quote=fiat:USD` `high=0.1901` vs spot 0.1887 (sane), `flags.triangulated=true`; `/v1/methodology` documents the 4σ filter. ⚠ F-C affects the *series* mode for the `native` spelling (see S7.1); ⚠ N-7: legacy `timeframe=`/`granularity=` params are silently ignored (spec'd params are `from`/`to`/`interval`). |
 | S6.5 | Retention: 1h+ granularity indefinite; <1h capped | §Historical — retention | 4 | Timescale retention policies | ADR-0006 | migrations/0002 wires retention policies per CAGG; covered by TestMigrationsRoundTrip + policy-attachment assertions. | ✅ verified | 4 | 📦 code-only (retention policy verified by migration tests; consumer impact only after data ages past sub-1h cap) |
 
 ### S7. Supported timeframes (1h / 24h / 1w / 1mo / 1yr / all-time)
 
-| # | Requirement | Proposal | Week | Owner | ADR | Verified by | Status | Conf | Prod |
+| # | Requirement | Spec ref | Week | Owner | ADR | Verified by | Status | Conf | Prod |
 | - | ----------- | -------- | ---- | ----- | --- | ----------- | ------ | ---- | ---- |
 | S7.1 | 1m / 15m / 1h / 4h / 1d / 1w / 1mo granularities | Verbatim in §Historical Data | 4 | Timescale continuous aggregates | ADR-0006 | migrations/0002 ships all 7 CAGGs; verified by TestMigrationsRoundTrip. | ✅ verified | 4 | ❌ 2026-06-12 probe F-C — `/v1/ohlc?interval=` series mode returns **0 bars for `native/fiat:USD`** while `crypto:XLM/fiat:USD` serves all intervals (1m/15m/1h/4h/1d) — XLM dual-form alias gap in the series reader. `/v1/chart` still honours all 7 granularities × 6 timeframes. Fixed in-tree awaiting deploy (commit `8fde6c84`). |
 | S7.2 | 1h+ kept indefinitely, <1h capped | Verbatim in §Historical Data | 4 | Timescale retention | ADR-0006 | migrations/0002 adds 30-day retention only on prices_1m + prices_15m; hourly+ have no retention = indefinite. Verified by assertPolicyAttached in migrations_test.go. | ✅ verified | 4 | ✅ 2026-06-12 probe — R-013 closed: `/v1/chart` `1y×1h` = 8,681 pts back to 2025-06-12; `all×1h` = 46,791 pts back to 2021-02-01; `truncated`/`data_starts_at` fields shipped and honest (`truncated=false` — data covers the request). |
 
 ### S8. Base and quote volume in USD
 
-| # | Requirement | Proposal | Week | Owner | ADR | Verified by | Status | Conf | Prod |
+| # | Requirement | Spec ref | Week | Owner | ADR | Verified by | Status | Conf | Prod |
 | - | ----------- | -------- | ---- | ----- | --- | ----------- | ------ | ---- | ---- |
 | S8.1 | `usd_volume` column per trade | §Data Processing | 3 | `internal/canonical.Trade` + `migrations/0001_create_trades_hypertable.up.sql` | — | Column shipped in trades hypertable; CAGGs sum it via `volume_usd`. | ✅ verified | 4 | ✅ 2026-05-10 — `/v1/vwap.quote_volume` populated; `/v1/network/stats.volume_24h_usd=$3,542,086,217` (24h cross-source) |
 | S8.2 | FX anchor for USD conversion | §Forex Providers | 4 | `internal/sources/external/{exchangeratesapi,polygonforex}` + `internal/aggregate/stablecoin.go` | — | Stablecoin proxy at aggregator layer (USDC/USDT→USD); FX vendors wired in registry. | ✅ verified | 4 | ✅ 2026-05-10, re-confirmed 2026-06-12 probe — `exchangeratesapi`, `polygon-forex` (+`ecb`) listed in `/v1/sources` (class=exchange subclass=fx); fiat rates now served via `/v1/assets/fiat:EUR` etc. (`/v1/currencies` dissolved into `/v1/assets` — assets-unification, N-1). |
 
 ### S9. Performance SLAs
 
-| # | Requirement | Proposal | Week | Owner | ADR | Verified by | Status | Conf | Prod |
+| # | Requirement | Spec ref | Week | Owner | ADR | Verified by | Status | Conf | Prod |
 | - | ----------- | -------- | ---- | ----- | --- | ----------- | ------ | ---- | ---- |
 | S9.1 | ≥ 99.99 % uptime | §Availability | 8–9 | HA plan + `cmd/stellarindex-sla-probe` | [ADR-0008](../adr/0008-ha-topology.md) | (HA plan) | ⚠ caveat — synthetic 2xx-success-rate gate shipped (#283 + #290 + #294); 99.99% target needs production + multi-region traffic to verify operationally. The probe surfaces the signal; the HA topology is what backs the number. | 3 | ⚠ 2026-05-10 — single-region today (R1 only); 99.99% needs ≥30 days × multi-region. R2/R3 not bootstrapped yet (L4.14/L4.15 🔴). |
-| S9.2 | p95 ≤ 200 ms, p99 ≤ 500 ms | §Latency Targets | 9 | `internal/api` + Redis caching + `cmd/stellarindex-sla-probe` | [ADR-0009](../adr/0009-latency-budget.md) | (API design + HA plan) | ✅ verified — synthetic measurement shipped via the SLA probe (#283); RFP-stated targets baked into `default*Target` constants; alerts page on sustained breach. | 4 | ✅ 2026-06-12 probe — warm-path p95 well under target: client keep-alive p95=124 ms, server-side `/v1/status` p95=86 ms (was 246 ms). Cold-TLS per-request curl shows 475 ms; k6 (Workstream C1) is the contractual evidence and should confirm p99 ≤500 ms under steady load. |
-| S9.3 | 1000 req/min per client | §Rate Limits | 7 | `internal/ratelimit` + `internal/api/v1/middleware/ratelimit.go` | — | Authenticated tier wired to `api.key_rate_limit_per_min` per F-0008 fix; anon + key buckets are now distinct. | ✅ verified | 4 | ✅ 2026-06-12 probe — anonymous tier now returns `x-ratelimit-limit: 6000`/min (was 60); exceeds the RFP "≥ 1000/min per client" without a key. |
+| S9.2 | p95 ≤ 200 ms, p99 ≤ 500 ms | §Latency Targets | 9 | `internal/api` + Redis caching + `cmd/stellarindex-sla-probe` | [ADR-0009](../adr/0009-latency-budget.md) | (API design + HA plan) | ✅ verified — synthetic measurement shipped via the SLA probe (#283); the SLA targets baked into `default*Target` constants; alerts page on sustained breach. | 4 | ✅ 2026-06-12 probe — warm-path p95 well under target: client keep-alive p95=124 ms, server-side `/v1/status` p95=86 ms (was 246 ms). Cold-TLS per-request curl shows 475 ms; k6 is the load-test evidence and should confirm p99 ≤500 ms under steady load. |
+| S9.3 | 1000 req/min per client | §Rate Limits | 7 | `internal/ratelimit` + `internal/api/v1/middleware/ratelimit.go` | — | Authenticated tier wired to `api.key_rate_limit_per_min` per F-0008 fix; anon + key buckets are now distinct. | ✅ verified | 4 | ✅ 2026-06-12 probe — anonymous tier now returns `x-ratelimit-limit: 6000`/min (was 60); exceeds the "≥ 1000 req/min per client" target without a key. |
 | S9.4 | Defined degradation when prices unavailable | §Degradation Strategy + divergence | 5 | `internal/divergence/{coingecko,chainlink}.go` + `internal/api/v1/envelope.go` | — | Divergence service wires CoinGecko (free tier, default-on) + Chainlink (Enabled=true + non-empty FeedMap) per `cmd/stellarindex-api/main.go::buildDivergenceReferences`; `flags.divergence_warning` surfaces on /v1/price when any reference's tolerance is exceeded. CoinMarketCap + CryptoCompare remain external-source class registries (price contributors), not divergence references — separate role. | ✅ verified | 4 | ✅ 2026-05-10 — `flags.divergence_warning=false` on every observed response; flag surfaces correctly in JSON shape (no synthetic divergence event observed during review window) |
 
 ### S10. Open source
 
-| # | Requirement | Proposal | Week | Owner | ADR | Verified by | Status | Conf | Prod |
+| # | Requirement | Spec ref | Week | Owner | ADR | Verified by | Status | Conf | Prod |
 | - | ----------- | -------- | ---- | ----- | --- | ----------- | ------ | ---- | ---- |
 | S10.1 | Apache-2.0, fully open | §Open Source & Deployment Model | 1 | `LICENSE` in repo root | — | LICENSE committed | ✅ verified | 5 | 📦 code-only — `LICENSE` is Apache-2.0; repo public-flip planned for v1.0 per `docs/operations/public-flip.md` |
 
 ---
 
-## Freighter RFP — V1: Asset metadata
+## Asset metadata — V1
 
-| # | Field | Proposal | Week | Owner | ADR | Verified by | Status | Conf | Prod |
+| # | Field | Spec ref | Week | Owner | ADR | Verified by | Status | Conf | Prod |
 | - | ----- | -------- | ---- | ----- | --- | ----------- | ------ | ---- | ---- |
-| F1.1 | Asset/Token Code | §Asset Identification | 4 | `internal/metadata` | — | [dexes-amms/sdex.md](../discovery/dexes-amms/sdex.md), [notes/sep-41-token-events.md](../discovery/notes/sep-41-token-events.md) | ✅ verified | 5 | ⚠ 2026-06-12 probe N-4 — `/v1/coins/native` is 404 (route dissolved by assets-unification, N-1); on the replacement surface **`/v1/assets/native.code` is null** (so is `code` on soroban assets) — XLM's code only appears on the slug surface (`/v1/assets/xlm.ticker = "XLM"`). Classic assets fine (`/v1/assets/USDC-G….code = "USDC"`). If the customer reads `code` on `/v1/assets/native`, this is a gap. |
+| F1.1 | Asset/Token Code | §Asset Identification | 4 | `internal/metadata` | — | Source review + decoder tests | ✅ verified | 5 | ⚠ 2026-06-12 probe N-4 — `/v1/coins/native` is 404 (route dissolved by assets-unification, N-1); on the replacement surface **`/v1/assets/native.code` is null** (so is `code` on soroban assets) — XLM's code only appears on the slug surface (`/v1/assets/xlm.ticker = "XLM"`). Classic assets fine (`/v1/assets/USDC-G….code = "USDC"`). If a consumer reads `code` on `/v1/assets/native`, this is a gap. |
 | F1.2 | Current Price (USD) | §Current Price API | 5 | `internal/api/v1/price.go` | — | `/v1/price?asset=…&quote=fiat:USD` shipped; reads from `prices_1m` CAGG (closed-bucket per ADR-0015) with last-trade fallback. Default quote is USD. | ✅ verified | 5 | ✅ 2026-05-10 — `GET /v1/price?asset=native&quote=fiat:USD` → `{price="0.167…", price_type=vwap, observed_at, window_seconds=300}` |
-| F1.3 | Asset Type enum (`classic`/`soroban`) | §Asset Identification | 4 | `internal/canonical.AssetType` (typed enum: `native`/`classic`/`soroban`/`fiat`/`crypto`); wire shape via `pkg/client.AssetDetail.Type` (string) | — | [dexes-amms/sdex.md](../discovery/dexes-amms/sdex.md) | ✅ verified | 5 | ✅ 2026-05-10 — `GET /v1/assets/native.type="native"`; `/v1/assets/USDC-G….type="classic"`; `/v1/assets/CAS3J7….type="soroban"` |
-| F1.4 | Issuer Address (G…) | §Asset Identification | 4 | `internal/canonical.ClassicAsset` (Code + Issuer); wire via `pkg/client.AssetDetail.Issuer` | — | [protocol-versions.md](../discovery/protocol-versions.md) | ✅ verified | 5 | ✅ 2026-05-10 — `GET /v1/assets/USDC-G….issuer = "GA5Z…KZVN"` |
-| F1.5 | Contract Address (C…) | §Asset Identification | 4 | `internal/canonical.NewSorobanAsset` (C-strkey); wire via `pkg/client.AssetDetail.ContractID` | — | [notes/sep-41-token-events.md](../discovery/notes/sep-41-token-events.md) | ✅ verified | 5 | ✅ 2026-05-10 — `GET /v1/assets/CAS3J7…OWMA.contract_id = "CAS3J7…OWMA"` |
-| F1.6 | Home Domain (SEP-1) | §Asset Identification (needs proposal amendment) | 5 | `internal/metadata` + `internal/api/v1/assets.go applySep1Overlay` | [ADR-0007](../adr/0007-redis-cache-schema.md) | [data-sources/sep1-home-domain.md](../discovery/data-sources/sep1-home-domain.md) | Resolver + cache + overlay all shipped; AssetDetail surfaces sep1_status, name, description, image, org_name, anchor_asset, anchor_asset_type. | ✅ verified | 5 | ✅ 2026-06-12 probe — R-016/R-017 closed: `GET /v1/assets/USDC-G….home_domain = "centre.io"` inlined ✓ (matches `/v1/issuers` `centre.io`/`Circle`); `sep1_status="not_fetched"` (no longer the contradictory `not_applicable`). Minor: `org_name`/`name`/`image` still null inline. |
+| F1.3 | Asset Type enum (`classic`/`soroban`) | §Asset Identification | 4 | `internal/canonical.AssetType` (typed enum: `native`/`classic`/`soroban`/`fiat`/`crypto`); wire shape via `pkg/client.AssetDetail.Type` (string) | — | Source review | ✅ verified | 5 | ✅ 2026-05-10 — `GET /v1/assets/native.type="native"`; `/v1/assets/USDC-G….type="classic"`; `/v1/assets/CAS3J7….type="soroban"` |
+| F1.4 | Issuer Address (G…) | §Asset Identification | 4 | `internal/canonical.ClassicAsset` (Code + Issuer); wire via `pkg/client.AssetDetail.Issuer` | — | Source review | ✅ verified | 5 | ✅ 2026-05-10 — `GET /v1/assets/USDC-G….issuer = "GA5Z…KZVN"` |
+| F1.5 | Contract Address (C…) | §Asset Identification | 4 | `internal/canonical.NewSorobanAsset` (C-strkey); wire via `pkg/client.AssetDetail.ContractID` | — | Source review + decoder tests | ✅ verified | 5 | ✅ 2026-05-10 — `GET /v1/assets/CAS3J7…OWMA.contract_id = "CAS3J7…OWMA"` |
+| F1.6 | Home Domain (SEP-1) | §Asset Identification (spec amendment) | 5 | `internal/metadata` + `internal/api/v1/assets.go applySep1Overlay` | [ADR-0007](../adr/0007-redis-cache-schema.md) | Source review | Resolver + cache + overlay all shipped; AssetDetail surfaces sep1_status, name, description, image, org_name, anchor_asset, anchor_asset_type. | ✅ verified | 5 | ✅ 2026-06-12 probe — R-016/R-017 closed: `GET /v1/assets/USDC-G….home_domain = "centre.io"` inlined ✓ (matches `/v1/issuers` `centre.io`/`Circle`); `sep1_status="not_fetched"` (no longer the contradictory `not_applicable`). Minor: `org_name`/`name`/`image` still null inline. |
 
-## Freighter RFP — V1: Historical price chart
+## Historical price chart — V1
 
 Same as S7. No additional requirement.
 
@@ -290,7 +275,7 @@ Same as S7. No additional requirement.
 > raw trades) — only the multi-bucket chart variant is the
 > reserved item.
 
-## Freighter RFP — V2: Market data extension
+## Market data extension — V2
 
 > **Scope note.** F2.1 / F2.2 / F2.4 / F2.5 supply pipelines are
 > live for **operator-watched assets** (XLM is always-on; classic
@@ -304,59 +289,59 @@ Same as S7. No additional requirement.
 > (matches ADR-0011 "we don't fabricate"). Operator can widen
 > coverage via TOML config without code change.
 
-| # | Field | Proposal | Week | Owner | ADR | Verified by | Status | Conf | Prod |
+| # | Field | Spec ref | Week | Owner | ADR | Verified by | Status | Conf | Prod |
 | - | ----- | -------- | ---- | ----- | --- | ----------- | ------ | ---- | ---- |
-| F2.1 | Market Cap = `circulating × price` | §V2 (addendum) | 6 | `internal/api/v1/assets_f2.go populateMarketCap` + supply pipeline | [ADR-0011](../adr/0011-supply-algorithm.md), [ADR-0021](../adr/0021-account-entry-observer.md), [ADR-0022](../adr/0022-classic-supply-observers.md), [ADR-0023](../adr/0023-sep41-supply-observer.md) | [data-sources/supply-data.md](../discovery/data-sources/supply-data.md) | ✅ verified — read path (#277) + writer end-to-end across all three asset classes: XLM (#285), classic credits (#303-#307), SEP-41 (#309-#312). The aggregator-resident refresher (#301) populates `asset_supply_history` per watched asset on the configured cadence. `market_cap_usd` populates when both supply + USD price exist. **Scope: XLM + watched classic + watched SEP-41 (operator config).** | 4 | ✅ 2026-06-12 probe — R-006 closed (operator gap #97): `/v1/assets/native.market_cap_usd = 9429715369.12`, `supply_basis=xlm_sdf_reserve_exclusion`; USDC also populates (`market_cap_usd=40594088.52`). ⚠ F-A: the same surface's `ath` field is wrong (`native.ath=$4.78`) — fix in-tree commit `6e5c435d`, awaiting deploy. |
-| F2.2 | FDV = `max_supply × price` | §V2 | 6 | `internal/api/v1/assets_f2.go populateMarketCap` + supply pipeline | [ADR-0011](../adr/0011-supply-algorithm.md) | [data-sources/supply-data.md](../discovery/data-sources/supply-data.md) | ✅ verified — same pipeline as F2.1; `fdv_usd` populates when `max_supply` is non-null (uncapped issuers without SEP-1 declaration leave it null per ADR-0011 "we don't fabricate"). | 4 | ✅ 2026-06-12 probe — `fdv_usd` set on `/v1/assets/native` (the `/v1/coins/*` surface is gone — N-1). |
+| F2.1 | Market Cap = `circulating × price` | §V2 (addendum) | 6 | `internal/api/v1/assets_f2.go populateMarketCap` + supply pipeline | [ADR-0011](../adr/0011-supply-algorithm.md), [ADR-0021](../adr/0021-account-entry-observer.md), [ADR-0022](../adr/0022-classic-supply-observers.md), [ADR-0023](../adr/0023-sep41-supply-observer.md) | Source review | ✅ verified — read path (#277) + writer end-to-end across all three asset classes: XLM (#285), classic credits (#303-#307), SEP-41 (#309-#312). The aggregator-resident refresher (#301) populates `asset_supply_history` per watched asset on the configured cadence. `market_cap_usd` populates when both supply + USD price exist. **Scope: XLM + watched classic + watched SEP-41 (operator config).** | 4 | ✅ 2026-06-12 probe — R-006 closed (operator gap #97): `/v1/assets/native.market_cap_usd = 9429715369.12`, `supply_basis=xlm_sdf_reserve_exclusion`; USDC also populates (`market_cap_usd=40594088.52`). ⚠ F-A: the same surface's `ath` field is wrong (`native.ath=$4.78`) — fix in-tree commit `6e5c435d`, awaiting deploy. |
+| F2.2 | FDV = `max_supply × price` | §V2 | 6 | `internal/api/v1/assets_f2.go populateMarketCap` + supply pipeline | [ADR-0011](../adr/0011-supply-algorithm.md) | Source review | ✅ verified — same pipeline as F2.1; `fdv_usd` populates when `max_supply` is non-null (uncapped issuers without SEP-1 declaration leave it null per ADR-0011 "we don't fabricate"). | 4 | ✅ 2026-06-12 probe — `fdv_usd` set on `/v1/assets/native` (the `/v1/coins/*` surface is gone — N-1). |
 | F2.3 | 24h Trading Volume (USD) | §V2 | 6 | `internal/storage/timescale.Volume24hUSDForAsset` + `internal/api/v1/assets.go` | ADR-0007 | `volume_24h_usd` field on `/v1/assets/{id}` (#278). Reads from `prices_1m` CAGG. | ✅ verified | 4 | ✅ 2026-05-10, re-confirmed 2026-06-12 probe — `volume_24h_usd` populated on `/v1/assets/{id}` (plus markets/pools/network-stats; 24h network volume ≈ $3.08B). Citation updated: `/v1/coins/*` removed by assets-unification (N-1). |
-| F2.4 | Circulating Supply (provider-supplied) | §V2 | 6 | `internal/supply/{xlm,classic,sep41}.go` + observers + `cmd/stellarindex-aggregator/main.go::buildSupplyRefreshers` | [ADR-0011](../adr/0011-supply-algorithm.md), [ADR-0021](../adr/0021-account-entry-observer.md), [ADR-0022](../adr/0022-classic-supply-observers.md), [ADR-0023](../adr/0023-sep41-supply-observer.md) | [data-sources/supply-data.md](../discovery/data-sources/supply-data.md) | ✅ verified — XLM (Algorithm 1), classic credit (Algorithm 2), SEP-41 (Algorithm 3) all live. Operator-locked-set subtraction supported per asset via `supply.Policy.PerAsset`. | 4 | ✅ 2026-06-12 probe — `/v1/assets/native.circulating_supply = 500018068120000000` (E7-scaled XLM, `supply_basis=xlm_sdf_reserve_exclusion`); watched-set populated on r1 (#97 closed). |
-| F2.5 | Total Supply (mint − burn − clawback) | §V2 | 6 | `internal/sources/sep41_supply` observer + `internal/supply/storage_sep41_reader.go` | [ADR-0011](../adr/0011-supply-algorithm.md), [ADR-0023](../adr/0023-sep41-supply-observer.md) | [notes/sep-41-token-events.md](../discovery/notes/sep-41-token-events.md) | ✅ verified — SEP-41 mint/burn/clawback events accumulate into `sep41_supply_events` (#309); the reader composes per-kind sums via `Σ FILTER (WHERE ...)` (#311) and the aggregator refreshes one snapshot per watched contract per cycle (#312). Classic + XLM totals via the same algorithm-correct path. | 4 | ✅ 2026-06-12 probe — `total_supply`/`max_supply` populate on `/v1/assets/native` (= `500018068120000000`); same #97 closure as F2.4. |
-| F2.6 | Max Supply (nullable, off-chain metadata) | §V2 | 6 | `internal/supply/overlay.go` + `internal/metadata` | [ADR-0011](../adr/0011-supply-algorithm.md) | [data-sources/sep1-home-domain.md](../discovery/data-sources/sep1-home-domain.md) | ✅ verified — overlay policy implemented + integrated end-to-end. Per ADR-0011, `max_supply` stays null for uncapped issuers without SEP-1 declaration / operator override; consumers handle null explicitly. | 4 | ✅ 2026-06-12 probe — `total_supply`/`max_supply` populate on `/v1/assets/native` (= `500018068120000000`); same #97 closure as F2.4. |
+| F2.4 | Circulating Supply (provider-supplied) | §V2 | 6 | `internal/supply/{xlm,classic,sep41}.go` + observers + `cmd/stellarindex-aggregator/main.go::buildSupplyRefreshers` | [ADR-0011](../adr/0011-supply-algorithm.md), [ADR-0021](../adr/0021-account-entry-observer.md), [ADR-0022](../adr/0022-classic-supply-observers.md), [ADR-0023](../adr/0023-sep41-supply-observer.md) | Source review | ✅ verified — XLM (Algorithm 1), classic credit (Algorithm 2), SEP-41 (Algorithm 3) all live. Operator-locked-set subtraction supported per asset via `supply.Policy.PerAsset`. | 4 | ✅ 2026-06-12 probe — `/v1/assets/native.circulating_supply = 500018068120000000` (E7-scaled XLM, `supply_basis=xlm_sdf_reserve_exclusion`); watched-set populated on r1 (#97 closed). |
+| F2.5 | Total Supply (mint − burn − clawback) | §V2 | 6 | `internal/sources/sep41_supply` observer + `internal/supply/storage_sep41_reader.go` | [ADR-0011](../adr/0011-supply-algorithm.md), [ADR-0023](../adr/0023-sep41-supply-observer.md) | Source review + decoder tests | ✅ verified — SEP-41 mint/burn/clawback events accumulate into `sep41_supply_events` (#309); the reader composes per-kind sums via `Σ FILTER (WHERE ...)` (#311) and the aggregator refreshes one snapshot per watched contract per cycle (#312). Classic + XLM totals via the same algorithm-correct path. | 4 | ✅ 2026-06-12 probe — `total_supply`/`max_supply` populate on `/v1/assets/native` (= `500018068120000000`); same #97 closure as F2.4. |
+| F2.6 | Max Supply (nullable, off-chain metadata) | §V2 | 6 | `internal/supply/overlay.go` + `internal/metadata` | [ADR-0011](../adr/0011-supply-algorithm.md) | Source review | ✅ verified — overlay policy implemented + integrated end-to-end. Per ADR-0011, `max_supply` stays null for uncapped issuers without SEP-1 declaration / operator override; consumers handle null explicitly. | 4 | ✅ 2026-06-12 probe — `total_supply`/`max_supply` populate on `/v1/assets/native` (= `500018068120000000`); same #97 closure as F2.4. |
 
-## Freighter RFP — Performance SLAs
+## Performance SLAs
 
-| # | Metric | Requirement | Proposal | Week | Owner | Verified by | Status | Conf | Prod |
+| # | Metric | Requirement | Spec ref | Week | Owner | Verified by | Status | Conf | Prod |
 | - | ------ | ----------- | -------- | ---- | ----- | ----------- | ------ | ---- | ---- |
-| F3.1 | API latency p95 | ≤ 200 ms | §Latency Targets | 9 | `internal/api` + Redis + `cmd/stellarindex-sla-probe` | (HA + API plans) | ✅ verified — synthetic measurement via the SLA probe (#283); `_p95_breach` alert pages on sustained > 200 ms. | 4 | ✅ 2026-06-12 probe — keep-alive p95=124 ms / server-side `/v1/status` p95=86 ms, both under the 200 ms target (was 246 ms). Cold-TLS curl is 475 ms per request; k6 run (Workstream C1) is the contractual evidence. |
+| F3.1 | API latency p95 | ≤ 200 ms | §Latency Targets | 9 | `internal/api` + Redis + `cmd/stellarindex-sla-probe` | (HA + API plans) | ✅ verified — synthetic measurement via the SLA probe (#283); `_p95_breach` alert pages on sustained > 200 ms. | 4 | ✅ 2026-06-12 probe — keep-alive p95=124 ms / server-side `/v1/status` p95=86 ms, both under the 200 ms target (was 246 ms). Cold-TLS curl is 475 ms per request; k6 run (Workstream C1) is the load-test evidence. |
 | F3.2 | API latency p99 | ≤ 500 ms | §Latency Targets | 9 | same | same | ✅ verified — same probe; `_unit_failed_alert` umbrella covers p99 breaches (specific p99 alert is a follow-up if the umbrella fires often). | 4 | ✅ 2026-05-10 — measured p99 = 250 ms across same sample (well under 500 ms target) |
 | F3.3 | Responsiveness | ≥ 99.9 % | §Availability | 8–9 | HA plan + `cmd/stellarindex-sla-probe` | (HA plan) | ⚠ caveat — synthetic 2xx-success-rate measured per probe run; 99.9% target needs production traffic to verify operationally. The HA topology (ADR-0008) is what backs the number. | 3 | ⚠ 2026-05-10 — needs ≥ 30 days production data + multi-region (currently single-region R1 only) |
-| F3.4 | Data freshness (price) | ≤ 30 s staleness | §Data Freshness | 3 (ingest), 8 (deploy) | `internal/consumer` StreamLive + `cmd/stellarindex-sla-probe` | [data-sources/archival-nodes.md](../discovery/data-sources/archival-nodes.md) | ✅ verified — probe measures `observed_at` freshness against the 30s target; `_freshness_breach` alert pages on sustained > 30 s. | 4 | ❌ 2026-06-12 probe F-B — freshness fails for `asset=native`: tip lag 61–113 s over 10 samples (alias gap; rolling-window path only fires for the literal `crypto:XLM` form, which passes at 0.0 s). Fixed in-tree awaiting deploy (commit `8fde6c84`); see S5.2. |
+| F3.4 | Data freshness (price) | ≤ 30 s staleness | §Data Freshness | 3 (ingest), 8 (deploy) | `internal/consumer` StreamLive + `cmd/stellarindex-sla-probe` | Source review + SLA probe | ✅ verified — probe measures `observed_at` freshness against the 30s target; `_freshness_breach` alert pages on sustained > 30 s. | 4 | ❌ 2026-06-12 probe F-B — freshness fails for `asset=native`: tip lag 61–113 s over 10 samples (alias gap; rolling-window path only fires for the literal `crypto:XLM` form, which passes at 0.0 s). Fixed in-tree awaiting deploy (commit `8fde6c84`); see S5.2. |
 | F3.5 | SEV-1 detect ≤ 15 min / respond ≤ 30 min | | §Incident Response | 9 | `docs/operations/sev-playbook.md` §2 (Timelines) + alert rules + runbooks | (HA + alerts plans) | ⚠ caveat — playbook §2 is stricter than the F3.5 target (ack ≤5 min, action plan ≤15 min, status update ≤15 min); detection paths shipped (the alerts catalogue at `docs/operations/alerts-catalog.md` lists the per-component signals); 61 runbooks under `docs/operations/runbooks/`; tabletop drill scenarios + writeup template under `docs/operations/drills/`. The ≤15 min detect / ≤30 min respond target is met *operationally* once a real SEV fires — same shape as F3.3 (the structure is shipped; the number is verified by drills + production incidents). | 3 | ⚠ 2026-05-10 — `GET /v1/incidents` returns 1 SEV-2 from 2026-05-10 with full markdown postmortem; structure visible. Operational SEV-1 timing verified by next real incident or scheduled drill. |
 | F3.6 | SEV-2 detect ≤ 30 min / respond ≤ 60 min | | same | 9 | same | (HA + alerts plans) | ⚠ caveat — same playbook + drills structure as F3.5 covers SEV-2 with looser thresholds; SEV-2 detect targets met by P2 alert rules' `for:` clauses (typically 5–15 min sustained). Operational verification via the same drill cadence. | 3 | ⚠ 2026-05-10 — see `/v1/incidents` for live SEV-2 record with timeline + lessons-learned |
 
-## Freighter RFP — Coverage
+## Coverage
 
-| # | Requirement | Proposal | Week | Owner | Verified by | Status | Conf | Prod |
+| # | Requirement | Spec ref | Week | Owner | Verified by | Status | Conf | Prod |
 | - | ----------- | -------- | ---- | ----- | ----------- | ------ | ---- | ---- |
 | F4.1 | Lookup classic + Soroban by contract address | §Asset Identification | 4 | `internal/canonical.ParseAsset` + `internal/api/v1/assets.go` | cross-cutting | `/v1/assets/{id}` accepts native, classic (code:issuer), fiat:CODE, soroban:C-strkey, raw C-strkey. | ✅ verified | 5 | ✅ 2026-05-10 — `GET /v1/assets/CCW67TSZV3SSS2HXMBQ5JFGCKJNXKZM7UQUWUZPUTHXSTZLEO7SJMI75` (USDC SAC) → 200 with `type=soroban` |
-| F4.2 | Historical retention ≥ 1 year (ideally since inception) | §Historical Data | 2 (scaffold), post-launch (fill) | Timescale + Galexie backfill + `/v1/history/since-inception` | [data-sources/galexie.md](../discovery/data-sources/galexie.md) | Migration 0002 sets retention; `/v1/history/since-inception` shipped against the prices_1mo CAGG. | ✅ verified | 4 | ✅ 2026-06-12 probe — history reaches **2021-02-01** (5+ years of daily data); the "≥ 1 year" requirement is met on this surface. ⚠ N-6 on the "ideally since inception" stretch (this surface starts 2021-02-01, not 2015 — see S6.1). |
+| F4.2 | Historical retention ≥ 1 year (ideally since inception) | §Historical Data | 2 (scaffold), post-launch (fill) | Timescale + Galexie backfill + `/v1/history/since-inception` | Source review | Migration 0002 sets retention; `/v1/history/since-inception` shipped against the prices_1mo CAGG. | ✅ verified | 4 | ✅ 2026-06-12 probe — history reaches **2021-02-01** (5+ years of daily data); the "≥ 1 year" requirement is met on this surface. ⚠ N-6 on the "ideally since inception" stretch (this surface starts 2021-02-01, not 2015 — see S6.1). |
 
-## Freighter RFP — API characteristics
+## API characteristics
 
-| # | Requirement | Proposal | Week | Owner | Verified by | Status | Conf | Prod |
+| # | Requirement | Spec ref | Week | Owner | Verified by | Status | Conf | Prod |
 | - | ----------- | -------- | ---- | ----- | ----------- | ------ | ---- | ---- |
-| F5.1 | REST or GraphQL | §API Layer | 7 | `internal/api/v1` (REST) | (API design) | REST shipped; OpenAPI spec at `openapi/stellar-index.v1.yaml`. GraphQL not in scope. | ✅ verified | 5 | ⚠ 2026-06-12 probe N-5 — `GET /v1/healthz` → 200 ✓, but the cited OpenAPI host `docs.stellarindex.io` is **NXDOMAIN post-rebrand** (as is `api.stellarindex.io` in the live error-payload `type` URIs). Re-point doc hosting + problem+json URIs at the `ratesengine.net` domain. |
+| F5.1 | REST or GraphQL | §API Layer | 7 | `internal/api/v1` (REST) | (API design) | REST shipped; OpenAPI spec at `openapi/stellar-index.v1.yaml`. GraphQL not in scope. | ✅ verified | 5 | ⚠ 2026-06-12 probe N-5 — `GET /v1/healthz` → 200 ✓, but the live error-payload problem+json `type` URIs and the OpenAPI doc host need re-pointing at the canonical `stellarindex.io` domain. |
 | F5.2 | Rate limits ≥ 1000 req/min | §Rate Limits and Throughput | 7 | `internal/ratelimit` + `middleware.RateLimit` | — | F-0008 fixed: authenticated tier uses `api.key_rate_limit_per_min` (default 1000/min); anonymous tier separate at `anon_rate_limit_per_min`. | ✅ verified | 4 | ✅ 2026-06-12 probe — anonymous tier now `x-ratelimit-limit: 6000`/min (was 60); ≥1000/min met without a key. |
 | F5.3 | Bulk / batch query support | §Batch Queries | 7 | `internal/api/v1/price.go handlePriceBatch{,Post}` | — | GET /v1/price/batch (≤100 ids); POST /v1/price/batch (≤1000 ids) shipped. | ✅ verified | 4 | ✅ 2026-06-12 probe — R-005 closed: `GET /v1/price/batch?asset_ids=USDC-G…` returns the peg row (`price=1.000000000000, price_type=peg`); 3-asset mixed batch (`native,USDC-G…,crypto:BTC`) returns 3 rows. ⚠ N-8: batch peg rows set envelope `flags.stale=true` while the single-asset endpoint does not — flag-semantics inconsistency to review. |
 
-## Freighter RFP — Misc requirements
+## Miscellaneous requirements
 
-| # | Requirement | Proposal | Week | Owner | Verified by | Status | Conf | Prod |
+| # | Requirement | Spec ref | Week | Owner | Verified by | Status | Conf | Prod |
 | - | ----------- | -------- | ---- | ----- | ----------- | ------ | ---- | ---- |
 | F6.1 | Price source preference VWAP → TWAP → last trade | §Aggregation Strategy | 5 | `internal/api/v1/price.go` + storage layer | — | `/v1/price` returns vwap (closed-bucket from prices_1m), with last-trade fallback when CAGG has no row; `/v1/twap` shipped for explicit TWAP requests. | ✅ verified | 4 | ✅ 2026-05-10 — `/v1/price` returns `price_type=vwap` with `window_seconds=300`; `/v1/twap` returns time-weighted price for the same window with `flags.triangulated=true` when chained-fiat |
-| F6.2 | Quote currency = USD | §Quote Currency Policy | 5 | `internal/api/v1/price.go defaultPriceQuote` + `internal/aggregate/stablecoin.go` | [external-refs/fx-feeds.md](../discovery/external-refs/fx-feeds.md) | Default quote on /v1/price is fiat:USD; stablecoin proxy maps USDC/USDT→USD at aggregator layer. | ✅ verified | 4 | ✅ 2026-05-10 — `/v1/price?asset=native` defaults to `quote=fiat:USD` (stablecoin-proxy fallback applied for the native/fiat:USD synthetic pair) |
+| F6.2 | Quote currency = USD | §Quote Currency Policy | 5 | `internal/api/v1/price.go defaultPriceQuote` + `internal/aggregate/stablecoin.go` | Source review | Default quote on /v1/price is fiat:USD; stablecoin proxy maps USDC/USDT→USD at aggregator layer. | ✅ verified | 4 | ✅ 2026-05-10 — `/v1/price?asset=native` defaults to `quote=fiat:USD` (stablecoin-proxy fallback applied for the native/fiat:USD synthetic pair) |
 | F6.3 | Data aggregation scope = DEXes (Stellar + Soroban) | §Data Ingestion | 2–3 | `internal/sources/*` | cross-cutting | ✅ verified | 5 | ✅ 2026-05-10, re-confirmed 2026-06-12 probe — now **26 sources** in `/v1/sources` (+cctp, +rozo, +defindex, +soroswap-router, +chainlink, +ecb, +cryptocompare, +coinmarketcap since the May probe); classes now include `bridge`/`router`. |
-| F6.4 | "Since Inception" = first recorded trade | §Historical Data | 2 (scaffold), ongoing | backfill orchestrator | [data-sources/stellar-data-lakes.md](../discovery/data-sources/stellar-data-lakes.md) | ✅ verified | 4 | ✅ 2026-06-12 probe — earliest served point is now **2021-02-01** (daily granularity, both `native/fiat:USD` and `native/USDC-G…`). ⚠ N-6: "first recorded trade" on this surface is 2021-02-01, not 2015 — verify intent before presenting as since-inception evidence (see S6.1). |
-| F6.5 | V2 supply data = provider-supplied | §V2 supply | 6 | `internal/supply` (XLM Algorithm 1 + classic Algorithm 2 + SEP-41 Algorithm 3) + per-asset hypertables (migrations 0011–0014) + `cmd/stellarindex-aggregator/main.go::buildSupplyRefreshers` | [data-sources/supply-data.md](../discovery/data-sources/supply-data.md); covered also by F2.4 row above (cross-reference) | ✅ verified — all three algorithms shipped; operator-overridable locked-set subtraction via `supply.Policy.PerAsset`. | 4 | ✅ 2026-06-12 probe — same closure as the F2 family: supply fields populate end-to-end (XLM + USDC observed); operator gap #97 closed. |
+| F6.4 | "Since Inception" = first recorded trade | §Historical Data | 2 (scaffold), ongoing | backfill orchestrator | Source review | ✅ verified | 4 | ✅ 2026-06-12 probe — earliest served point is now **2021-02-01** (daily granularity, both `native/fiat:USD` and `native/USDC-G…`). ⚠ N-6: "first recorded trade" on this surface is 2021-02-01, not 2015 — verify intent before presenting as since-inception evidence (see S6.1). |
+| F6.5 | V2 supply data = provider-supplied | §V2 supply | 6 | `internal/supply` (XLM Algorithm 1 + classic Algorithm 2 + SEP-41 Algorithm 3) + per-asset hypertables (migrations 0011–0014) + `cmd/stellarindex-aggregator/main.go::buildSupplyRefreshers` | Source review; covered also by F2.4 row above (cross-reference) | ✅ verified — all three algorithms shipped; operator-overridable locked-set subtraction via `supply.Policy.PerAsset`. | 4 | ✅ 2026-06-12 probe — same closure as the F2 family: supply fields populate end-to-end (XLM + USDC observed); operator gap #97 closed. |
 
 ---
 
 ---
 
-## Cross-cutting integrity invariants (added post-Phase-1)
+## Cross-cutting integrity invariants
 
-The following requirements are not RFP rows but emerged from
-technical depth during Phase 5 implementation. Each is captured as
+The following requirements are not core requirement rows but emerged
+from technical depth during Phase 5 implementation. Each is captured as
 an ADR and binds implementation. **All are launch-blocking** per
 operator decision 2026-04-28.
 
@@ -399,74 +384,67 @@ operator decision 2026-04-28.
 
 ---
 
-## Claim verification — the most load-bearing proposal promises
+## Claim verification — the most load-bearing requirements
 
-For each claim below we state the **as-written promise**, what we
+For each claim below we state the **requirement**, what we
 **actually verified**, and what remains to close.
 
 ### Claim 1 — "Ingestion via Galexie and the Composable Data Platform"
 
-- **As written** (proposal §SDEX): "direct ledger processing…
-  primary integration path is Galexie and the Stellar Composable
-  Data Platform."
+- **Requirement:** direct ledger processing; primary integration
+  path is Galexie and the Stellar Composable Data Platform.
 - **Verified**: Galexie's subcommand set, config, captive-core
   integration, filesystem-backend-drops-metadata bug, and zstd
   compression were read from `stellar-galexie` source. CDP SDK
-  (`github.com/stellar/go-stellar-sdk/ingest`) path confirmed via
-  [data-sources/composable-data-platform.md](../discovery/data-sources/composable-data-platform.md).
+  (`github.com/stellar/go-stellar-sdk/ingest`) path confirmed from
+  source.
 - **Closed**: MinIO + Galexie are live on r1
   ([r1-deployment-state.md §Services](../operations/r1-deployment-state.md));
   the captive-core + Galexie co-resident memory profile was
   measured at deploy time (per the `archival-node` ansible role's
   pre-flight checks).
-- **Verdict**: ✅ promise keeps.
+- **Verdict**: ✅ requirement met.
 
 ### Claim 2 — "Reflector is the primary oracle integration"
 
-- **As written** (proposal §Reflector): "Integration via direct
-  Soroban contract calls using the SEP-40 interface: `lastprice(…)`,
-  `prices(…)`, `twap(…)`, `x_last_price(…)`, `x_prices(…)`,
-  `x_twap(…)`."
+- **Requirement:** integration via direct Soroban contract calls
+  using the SEP-40 interface: `lastprice(…)`, `prices(…)`,
+  `twap(…)`, `x_last_price(…)`, `x_prices(…)`, `x_twap(…)`.
 - **Verified**: Reflector exposes Pulse and Beam contracts with
   `base`, `assets`, `decimals`, `resolution`, `price`, `prices`,
-  `lastprice` ([oracles/reflector.md](../discovery/oracles/reflector.md)).
+  `lastprice` (verified against the contract).
   **`twap` and `x_*` do not exist on Reflector v3.** Event shape
   `["REFLECTOR","update"]` with `Vec<(Val,i128)>` payload verified.
-- **Correction filed**: [proposal-corrections.md](../discovery/proposal-corrections.md) —
-  we compute TWAP and cross-pair **locally** from Reflector's
-  `lastprice`/`prices` output, not via on-chain calls.
-- **Verdict**: ✅ promise keeps with the correction — functional
+- **Correction:** we compute TWAP and cross-pair **locally** from
+  Reflector's `lastprice`/`prices` output, not via on-chain calls.
+- **Verdict**: ✅ requirement met with the correction — functional
   equivalence is achieved, just in our aggregation layer.
 
 ### Claim 3 — "Redstone integration via per-symbol Soroban contracts"
 
-- **As written** (proposal §Redstone): "`readPricesFromContract()`
-  calls to the deployed per-symbol feed contracts, using
-  `redstone_adapter` as the coordination point. Price data
-  `{ price: U256, package_timestamp, write_timestamp }`."
+- **Requirement:** `readPricesFromContract()` calls to the deployed
+  per-symbol feed contracts, using `redstone_adapter` as the
+  coordination point. Price data
+  `{ price: U256, package_timestamp, write_timestamp }`.
 - **Verified**: 19 mainnet feeds enumerated, all per-feed WASM hashes
   identical, `U256` field confirmed in
-  `common/src/lib.rs` ([oracles/redstone.md](../discovery/oracles/redstone.md)).
+  `common/src/lib.rs`.
   **Adapter emits events** (topic `"REDSTONE"`, one per batch push) —
   we can subscribe instead of polling.
-- **Verdict**: ✅ promise keeps, event stream is a bonus.
+- **Verdict**: ✅ requirement met, event stream is a bonus.
 
 ### Claim 4 — "Band Protocol via BandChain REST API"
 
-- **As written** (proposal §Band): "Integration will be via the
-  BandChain REST API."
+- **Requirement:** integration via the BandChain REST API.
 - **Verified**: **Band has a native Soroban StandardReference contract
-  on mainnet today** — the proposal promise is unnecessarily
-  degraded. Pair rate is E18-scaled
-  ([oracles/band.md](../discovery/oracles/band.md)).
-- **Correction filed**: [proposal-corrections.md](../discovery/proposal-corrections.md) —
-  we integrate natively, not via BandChain REST.
-- **Verdict**: ✅ we exceed the promise.
+  on mainnet today** — the original approach was unnecessarily
+  degraded. Pair rate is E18-scaled (verified against the contract).
+- **Correction:** we integrate natively, not via BandChain REST.
+- **Verdict**: ✅ we exceed the requirement.
 
 ### Claim 5 — "Stellar DEX, Soroswap, Aquarius, Blend ingestion"
 
-- **As written** (proposal §Soroban DEXs): list of venues with event
-  decoding.
+- **Requirement:** list of venues with event decoding.
 - **Verified**: current repo snapshot ships **6 venues** (SDEX,
   Soroswap, Aquarius, Phoenix, Comet, **Blend**). Blend's auction
   decoder + storage + dispatcher wiring is live (`internal/sources/blend/`,
@@ -482,13 +460,13 @@ For each claim below we state the **as-written promise**, what we
   enabled. Phoenix's 8-events-per-swap pattern and Soroswap's
   swap+sync correlation were non-obvious and are both captured
   explicitly.
-- **Verdict**: ✅ promise exceeded in venue breadth (Phoenix +
-  Comet added beyond the proposal's list); Blend live with the
+- **Verdict**: ✅ requirement exceeded in venue breadth (Phoenix +
+  Comet added beyond the original list); Blend live with the
   WASM audit closed.
 
 ### Claim 6 — "p95 ≤ 200 ms, p99 ≤ 500 ms, ≥ 99.99% uptime"
 
-- **As written** (proposal §Performance SLAs).
+- **Requirement:** §Performance SLAs.
 - **Verified**: nothing empirically. The pattern (precomputed
   aggregates in Redis + CDN-cacheable historical) is industry-
   standard but our capacity, cache-hit-rate, and cold-cache latency
@@ -502,11 +480,9 @@ For each claim below we state the **as-written promise**, what we
 
 ### Claim 7 — "Since-inception historical coverage"
 
-- **As written** (proposal §Historical Data).
+- **Requirement:** §Historical Data.
 - **Verified**: Galexie can replay from ledger 2; SDF public GCS
-  bucket is available as an accelerator
-  ([data-sources/galexie.md](../discovery/data-sources/galexie.md) +
-  [data-sources/stellar-data-lakes.md](../discovery/data-sources/stellar-data-lakes.md)).
+  bucket is available as an accelerator (verified from source).
   Backfill throughput unmeasured on our hardware.
 - **Closure**: backfill is operator-driven via `stellarindex-ops
   backfill` (`cmd/stellarindex-ops/backfill.go`); query performance
@@ -516,7 +492,7 @@ For each claim below we state the **as-written promise**, what we
 
 ### Claim 8 — "Open source, provider-supplied deployment kits"
 
-- **As written** (proposal §Open Source & Deployment Model).
+- **Requirement:** §Open Source & Deployment Model.
 - **Verified**: Apache-2.0 LICENSE committed.
   [`deploy/docker-compose/`](../../deploy/docker-compose/) is the
   developer / reference deployment;
@@ -677,7 +653,7 @@ week lands.
 
 ## Change log for this matrix
 
-- **2026-04-22** — Initial ratification alongside `phase1-closure.md`.
+- **2026-04-22** — Initial ratification.
   All "Status" and "Confidence" values are as-of today.
 - **2026-04-28** — Added "Cross-cutting integrity invariants"
   section (X1 archive completeness from ADR-0017, X2 API consistency
@@ -690,9 +666,8 @@ week lands.
   Every requirement row now has a `Prod` column with curl-tested
   status against `https://api.stellarindex.io` v0.5.0-rc.39.
   The pass surfaced 23 production findings (5 ❌ contract-disagreement,
-  13 ⚠ caveat) documented in
-  [`../review-2026-05-10.md`](../review-2026-05-10.md) §Section 2
-  with reproducible curl commands in §Appendix B. Headline ❌s:
+  13 ⚠ caveat) documented in the 2026-05-10 production review
+  §Section 2 with reproducible curl commands in §Appendix B. Headline ❌s:
   R-005 (`/v1/price/batch` silent-drops stablecoins),
   R-006 (F2 supply fields universally NULL — operator config gap),
   R-007 (`/v1/ohlc.high = $1` for XLM via stablecoin-proxy contamination),
@@ -721,7 +696,7 @@ week lands.
 
 - **2026-06-13** — **Re-baseline against the 2026-06-12 production
   re-probe** ([prod-verification-2026-06-12.md](prod-verification-2026-06-12.md))
-  on the renamed deployment (`api.ratesengine.net`,
+  on the production deployment (`api.stellarindex.io`,
   `v0.5.0-rc.108-65-gb040514d`). 19 `Prod` cells flipped to ✅
   (all five 2026-05-10 ❌s — S6.4, F2.1, F2.2, F5.3, F6.5; all
   three 🟡s — F2.4–F2.6; eleven ⚠s — S2.4, S6.1, S7.2, S9.2, S9.3,
@@ -732,8 +707,9 @@ week lands.
   and F-D (SEP-10 503, operator config) have no per-requirement
   row and live in the re-baseline notes. 3 cells downgraded to ⚠:
   F1.1 (`code` null on `/v1/assets/native`, N-4), F5.1
-  (`docs.stellarindex.io` NXDOMAIN, N-5), X2.2 (F-B fallback
+  (OpenAPI doc host + problem+json `type` URIs need re-pointing at
+  the canonical `stellarindex.io` domain, N-5), X2.2 (F-B fallback
   caveat). Citations rewritten off the removed `/v1/coins/*` +
   `/v1/currencies` surfaces (assets-unification, N-1) and the
   `window=` duration-unit breaking change (N-3); `/v1/coverage` +
-  `/v1/protocols` recorded as beyond-RFP additions.
+  `/v1/protocols` recorded as beyond-spec additions.

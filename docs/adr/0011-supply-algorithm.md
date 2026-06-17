@@ -20,7 +20,7 @@ superseded_by: null
 
 ## Context
 
-Freighter RFP §V2 (requirement F2.4 in
+The V2 spec (requirement F2.4 in
 `docs/architecture/coverage-matrix.md`) requires the API to publish
 `total_supply` / `circulating_supply` / `max_supply` for every
 asset we index. The numbers feed market-cap, FDV, and supply-pct
@@ -45,10 +45,7 @@ These can't share a single materialisation pipeline. Per ADR-0003
 all amounts are `*big.Int` / `NUMERIC` end-to-end (i128 safety) and
 strings on the wire.
 
-The full discovery is in
-[`docs/discovery/data-sources/supply-data.md`](../discovery/data-sources/supply-data.md);
-that doc is design-locked. This ADR is the immutable commitment to
-its policy.
+This ADR is the immutable commitment to the supply-derivation policy.
 
 ## Decision
 
@@ -194,7 +191,7 @@ than 1 stroop.
 
 2. **Trust upstream aggregators (CoinGecko / CMC) for circulating
    supply** — rejected. We're being graded on independence per the
-   RFP; importing a third-party number is what aggregators are for,
+   spec; importing a third-party number is what aggregators are for,
    and we're explicitly NOT one. Plus the third parties' policies
    for "locked" are opaque and inconsistent across assets.
 
@@ -203,7 +200,7 @@ than 1 stroop.
    per update is too brittle for production. YAML in the
    deployment repo is the right grain.
 
-4. **Don't publish `max_supply` at all** — rejected. RFP requires
+4. **Don't publish `max_supply` at all** — rejected. The spec requires
    it for FDV; consumers have to display "unknown" somehow, and
    `null` is a clearer signal than "0" or omitting the field.
 
@@ -218,12 +215,8 @@ than 1 stroop.
 
 ## References
 
-- [`docs/discovery/data-sources/supply-data.md`](../discovery/data-sources/supply-data.md)
-  — full design doc; this ADR ratifies the policy locked there.
-- [`docs/discovery/notes/sep-41-token-events.md`](../discovery/notes/sep-41-token-events.md)
-  — SEP-41 supply math.
-- [`docs/discovery/notes/cap-67-unified-events.md`](../discovery/notes/cap-67-unified-events.md)
-  — classic issuer mint/burn post-P23.
+- [`docs/architecture/supply-pipeline.md`](../architecture/supply-pipeline.md)
+  — the supply pipeline this ADR's policy drives.
 - [`docs/architecture/coverage-matrix.md`](../architecture/coverage-matrix.md)
   §F2.4 — the requirement this ADR closes.
 - [ADR-0003](0003-i128-no-truncation.md) — i128 invariant binding

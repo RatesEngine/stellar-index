@@ -23,7 +23,7 @@ locally. At 2026-05-20:
 
 Pool: 27.7 TB raw → ~13.85 TB usable (raidz2 ×2 parity). 12.5 TB
 used → 93% full, 1.35 TB free. The
-2026-05-17 SEV (`project_zpool_exhausted_2026_05_17`) showed what
+2026-05-17 SEV showed what
 happens at 100% — write amplification kills everything. We
 recovered losslessly via a compression cascade, but the headroom
 is now structurally tight: every new TimescaleDB chunk, every
@@ -115,12 +115,12 @@ or am I paying cross-Atlantic latency for ranges that should
 be hot?". A cold-rate spike on the live ingest path = trim
 window too tight; cold-rate on backfill is expected.
 
-### Trim operator (`ratesengine-ops trim-galexie-archive`)
+### Trim operator (`stellarindex-ops trim-galexie-archive`)
 
 New subcommand:
 
 ```
-ratesengine-ops trim-galexie-archive \
+stellarindex-ops trim-galexie-archive \
   --older-than 90d \
   --verify-upstream \
   --dry-run | --commit
@@ -143,7 +143,7 @@ ratesengine-ops trim-galexie-archive \
 ### Rollback
 
 If the cold-tier read path proves unreliable, rehydrating is
-mechanical: `ratesengine-ops rehydrate-galexie-archive --from <seq>
+mechanical: `stellarindex-ops rehydrate-galexie-archive --from <seq>
 --to <seq>` GETs ranges from AWS and writes them back to local
 MinIO. The local bucket layout is identical to the upstream
 (galexie uses the same partition scheme), so rehydration is
@@ -159,7 +159,7 @@ SHA-256 against AWS's published checksums per partition.
    `--dry-run` mode against the current archive. Verify the
    numbers match what we'd predict (~3-4 TB freeable at the
    90 d hot window with full-genesis-to-tip mirror).
-3. **Enable the dual-source flag in r1's `/etc/ratesengine.toml`.**
+3. **Enable the dual-source flag in r1's `/etc/stellarindex.toml`.**
    Hot-path remains the only source served until #4 deletes
    something cold; verifies live ingest behaviour unchanged.
 4. **First bulk trim — operator-triggered.** Trim

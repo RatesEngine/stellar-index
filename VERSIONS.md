@@ -1,22 +1,21 @@
 # Dependency versions — pinned snapshots
 
 **Purpose:** capture the exact commit SHAs, tags, and dates of every
-third-party repo we read during discovery. These are the snapshots
-every audit doc in this directory is **verified against**. If you
-re-audit later against a different SHA and the facts change, those
-changes need to flow into the audit docs.
+third-party repo this project reads or depends on, so the build and
+the integration facts (event topics, struct shapes, ABI surfaces) are
+reproducible. If you bump a pin to a different SHA and the facts
+change, those changes need to flow into the decode notes and tests
+that reference them.
 
-**Captured:** 2026-04-22.
-
-## Audited snapshots
+## Pinned snapshots
 
 | Repo | SHA | Last commit | Tag | Our dependency? |
 | ---- | --- | ----------- | --- | --------------- |
 | `stellar/stellar-galexie` | `6dec23e20802202e23d60a6505ead19898636e75` | 2026-04-01 | `galexie-v26.0.0` | Runtime binary — we run Galexie alongside our code, not link as a library. |
 | `stellar/rs-stellar-archivist` | `a6a25033dc2dd1783314ff5b009123e6bfc00e7a` | 2026-04-20 | (no tag yet) | Runtime binary — we call it from scripts. Pin SHA since no tag. |
 | `stellar/stellar-rpc` | `99a61f337b66635ba6f9d70d2403ee5faed1d7c1` | 2026-04-07 | (no tag visible locally) | Removed from r1 on 2026-04-23 — kept ONLY for the `stellarindex-ops rpc-probe` operator diagnostic that dials remote public endpoints; not on the data path. |
-| `stellar/go-stellar-sdk` | `475bbd9ab9e2da854eb49e81787d1525f433b040` | 2026-04-07 | `v0.5.0` | **Go library — direct dep.** SHA is the actual `v0.5.0` tag commit (go.mod pins `v0.5.0`). The prior entry recorded `9d52d04a` (2026-04-22), a later main-branch commit that is NOT the tag — corrected 2026-06-15 (audit Q2 drift). NOTE: `v0.6.0` is now published + UNAUDITED; upgrade requires a fresh compat pass before bumping go.mod. |
-| `withObsrvr/stellar-extract` | `e3658ced9023bc30f0e19871987dd50270dfe192` | 2026-04-20 | `v0.1.2` | **Reference only — not a dep today.** Phase-1 eyed it for SDEX trade extraction; we ended up implementing that path against the SDK directly (`internal/sources/sdex/decode.go`). Kept as the reference fixture source per CLAUDE.md. |
+| `stellar/go-stellar-sdk` | `475bbd9ab9e2da854eb49e81787d1525f433b040` | 2026-04-07 | `v0.5.0` | **Go library — direct dep.** SHA is the actual `v0.5.0` tag commit (go.mod pins `v0.5.0`). The prior entry recorded `9d52d04a` (2026-04-22), a later main-branch commit that is NOT the tag — corrected 2026-06-15. NOTE: `v0.6.0` is now published; an upgrade requires a fresh compat pass before bumping go.mod. |
+| `withObsrvr/stellar-extract` | `e3658ced9023bc30f0e19871987dd50270dfe192` | 2026-04-20 | `v0.1.2` | **Reference only — not a dep today.** We evaluated it for SDEX trade extraction but implemented that path against the SDK directly (`internal/sources/sdex/decode.go`). Kept as the reference fixture source per CLAUDE.md. |
 | `stellar/stellar-etl` | `427d2e2565c8cc98c7a2fbc65305a314c114aa33` | 2026-04-09 | `v2.8.18` | Reference implementation + test-fixture source. Not a dep. |
 | `withObsrvr/cdp-pipeline-workflow` | `741ac3d206be99dd22589b1ed4c6aa082f76c904` | 2026-04-16 | (no tag) | Not a dep. Reference only; contains verified bugs. |
 | `withObsrvr/nebu` | `72eca11c148c03ab1d18dd945e828ada8f3c61f3` | 2026-04-13 | (no tag) | Design inspiration. Not a dep. |
@@ -39,21 +38,20 @@ changes need to flow into the audit docs.
 At deploy-time we will pin these:
 
 ```go
-// go.mod — verified to resolve + build 2026-04-22 per the compat test
+// go.mod
 module github.com/StellarIndex/stellar-index
 go 1.25
 
 require (
-    github.com/stellar/go-stellar-sdk v0.5.0              // 9d52d04a (2026-04-22)
+    github.com/stellar/go-stellar-sdk v0.5.0
     // + our own deps (timescale driver, redis client, echo/chi, prometheus, etc.)
 )
 ```
 
-`withObsrvr/stellar-extract` was on the Phase-1 candidate list but
-didn't make it into go.mod — the SDEX trade-extraction logic is
-in `internal/sources/sdex/decode.go` running against the SDK
-directly. Reference link kept in the audited-snapshots table
-above.
+`withObsrvr/stellar-extract` was an early candidate but didn't make
+it into go.mod — the SDEX trade-extraction logic is in
+`internal/sources/sdex/decode.go` running against the SDK directly.
+Reference link kept in the pinned-snapshots table above.
 
 Runtime binaries / Debian packages:
 
@@ -91,7 +89,7 @@ gitleaks                          v8.21.2
 ```
 
 On-chain contracts we read (the WASM hashes are the strong pin;
-the repo SHA is how we audited the source that produced that hash):
+the repo SHA is how the source that produced that hash was verified):
 
 | Contract | Mainnet address | WASM hash (verified via stellar.expert) |
 | -------- | --------------- | --------------------------------------- |
@@ -107,30 +105,22 @@ the repo SHA is how we audited the source that produced that hash):
 | Reflector — External CEX/DEX | `CAFJZQWS…JLN34DLN` | (reflector hash) |
 | Reflector — Fiat FX | `CBKGPWGK…KOMJRN63` | (reflector hash) |
 
-Full address tables live in the per-protocol audit docs.
+Full address tables live in the per-protocol verification pages
+under `docs/protocols/`.
 
 ## How to keep this file honest
 
-Rule: **every claim in a `docs/discovery/**/*.md` audit doc must be
-re-verifiable by checking out the SHA in that row.** If an audit
+Rule: **every integration fact a decode note or test relies on must
+be re-verifiable by checking out the SHA in that row.** If a note
 cites `stellar-extract/trades.go:55-57`, that line reference must
 match at the pinned SHA `e3658ced…`.
 
-Process when upgrading a dep:
+Process when upgrading a dependency:
 
 1. Bump the SHA + tag + date in this file.
-2. `git diff` the repo between old and new SHA on the specific
-   files the audit doc references.
-3. Update the audit doc with any changed facts — file paths, line
+2. `git diff` the upstream repo between old and new SHA on the
+   specific files our decoders / notes reference.
+3. Update the decode notes with any changed facts — file paths, line
    numbers, struct shapes, event topics.
-4. Re-run fixture tests against the new version (per the fixture
-   plan in [adversarial-audit.md §7](adversarial-audit.md)).
-5. Commit the audit-doc updates in the same PR as the dep bump.
-
-## Related
-
-- [adversarial-audit.md](docs/discovery/adversarial-audit.md) §11 — the "claims
-  I stand behind" list is tied to these SHAs.
-- [rfp-requirements-matrix.md](docs/discovery/rfp-requirements-matrix.md) — the
-  RFP-requirement-to-audit-doc mapping implicitly depends on
-  these snapshots.
+4. Re-run fixture tests against the new version.
+5. Commit the note updates in the same PR as the dependency bump.

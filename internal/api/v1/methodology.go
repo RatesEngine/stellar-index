@@ -12,7 +12,7 @@ import (
 // machine-readable summary of the active aggregation policy.
 //
 // Designed for transparency consumers (compliance, auditors, AI
-// agents, integrators verifying RFP §10 "open methodology" claims)
+// agents, integrators verifying "open methodology" claims)
 // who want to verify what the deployment is doing without parsing
 // the explorer's HTML at /methodology or chasing ADR cross-refs.
 //

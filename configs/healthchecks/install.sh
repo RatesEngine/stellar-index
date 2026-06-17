@@ -63,7 +63,7 @@ HEALTHCHECKS_URL_AGGREGATOR=
 HEALTHCHECKS_URL_API=
 # API surface smoke test (5 min cadence, suggested grace 10 min):
 HEALTHCHECKS_URL_SMOKE=
-# SLA probe (RFP latency + freshness; 15 min cadence, grace 30 min):
+# SLA probe (latency + freshness; 15 min cadence, grace 30 min):
 HEALTHCHECKS_URL_SLA_PROBE=
 # SLA probe tuning (defaults match the binary's flag defaults).
 # SLA_PROBE_BASE_URL=http://localhost:3000/v1

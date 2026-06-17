@@ -550,5 +550,3 @@ They have:
   bring-up.
 - [ADR-0004 Tier-1 validator aspiration](../../adr/0004-tier1-validator-aspiration.md)
 - [ADR-0002 MinIO / S3-compat storage](../../adr/0002-minio-s3-compat-storage.md)
-- [Discovery — archival-nodes.md](../../discovery/data-sources/archival-nodes.md)
-- [Discovery — decisions.md](../../discovery/decisions.md)

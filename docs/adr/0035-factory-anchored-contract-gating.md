@@ -68,7 +68,7 @@ Concretely, per protocol:
 
 1. **Anchor on the factory.** Each protocol has one (or a small, known
    set of) factory/registry contract address(es), verified from the
-   `docs/discovery/` audit for that protocol. The factory address is a
+   per-protocol audit for that protocol. The factory address is a
    hard-coded constant (mainnet) — the trust root.
 
 2. **Fan out from the factory.** The factory's creation events

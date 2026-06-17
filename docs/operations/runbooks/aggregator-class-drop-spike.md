@@ -79,8 +79,7 @@ Capture for the postmortem:
 
 - The source-label list before/after the change.
 - The PR / commit that added or renamed the source.
-- Confirmation that the source's class assignment is intentional
-  (cite the venue's discovery doc under `docs/discovery/`).
+- Confirmation that the source's class assignment is intentional.
 
 ## Known false-positive patterns
 

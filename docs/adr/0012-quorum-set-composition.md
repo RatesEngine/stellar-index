@@ -15,12 +15,11 @@ validator rollout per ADR-0004. README index lists this number as
 
 ## Why this number exists
 
-The audit at `docs/audit-2026-05-12/05-findings-register.md`
-(F-1262) flagged the gap in the ADR numbering — `docs/adr/` jumped
+The ADR numbering had a gap — `docs/adr/` jumped
 0011 → 0013 with no file at 0012-*.md. ADR-0004 (the three-validator
 aspiration) references "the future Quorum-set composition ADR"; the
 README index at [docs/adr/README.md:56](README.md) has been listing
-the number as `Planned` since the early audits. This placeholder
+the number as `Planned`. This placeholder
 fills the numeric slot so anyone walking the directory sees an
 intentional reservation rather than a missing file.
 

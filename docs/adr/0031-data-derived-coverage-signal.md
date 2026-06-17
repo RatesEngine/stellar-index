@@ -18,7 +18,7 @@ superseded_by: null
 
 ## Context
 
-The Rates Engine currently answers the question **"is range R covered
+Stellar Index currently answers the question **"is range R covered
 for source S"** in four independent places:
 
 1. **Cursor inventory** — `ingestion_cursors` rows under
@@ -31,8 +31,8 @@ for source S"** in four independent places:
 2. **Data-derived gap detector** — `RunGapDetector`
    (`internal/storage/timescale/gap_detector.go:74`) scans every
    target in `DefaultGapDetectorTargets` every 30 min and emits
-   `ratesengine_ingest_gap_*` Prometheus gauges. The alert
-   `ratesengine_ingest_gap_detected` paginates on `max_size_ledgers > 1000`
+   `stellarindex_ingest_gap_*` Prometheus gauges. The alert
+   `stellarindex_ingest_gap_detected` paginates on `max_size_ledgers > 1000`
    (per-target overridable per ADR-0030).
 3. **Live cursor span** — `source='ledgerstream'` cursor's
    `first_ledger` to `last_ledger` is credited as covered for every
@@ -157,7 +157,7 @@ get." It's no longer interpreted as a coverage signal. Specifically:
 - `source='ledgerstream'` cursor — still drives the live indexer's
   resume point. **Operational state, not a coverage claim.**
 - `source='backfill'` rows — still tracks per-chunk progress for
-  `ratesengine-ops backfill`. **Operational journal.**
+  `stellarindex-ops backfill`. **Operational journal.**
 - The /v1/cursors handler still surfaces them (different purpose:
   "what's the system doing right now") but `/v1/diagnostics/ingestion`'s
   `backfill_coverage` becomes data-derived.
@@ -228,7 +228,7 @@ truth.**
 - Sources whose Soroban-event topic claims are narrower than the
   reality (e.g. a decoder that ignores `set_admin` events but the
   contract emits them) will show artificially low density. The
-  EVERY-event policy (project memory `project_every_event_principle`)
+  EVERY-event policy
   mitigates this — decoders MUST classify every topic the contract
   emits, even ones they route to a "noop" sink.
 - One migration to seed historical `distinct_ledger` counts so
@@ -270,8 +270,6 @@ truth.**
   (creates supporting indexes if any are missing; the
   `(contract_id, ledger DESC)` and `(topic_0_sym, ledger DESC)`
   indexes from ADR-0029 already cover most cases).
-- Memory ref: `project_cascade_detection_pattern`,
-  `project_density_genesis_precision`.
 - ADRs touched: supersedes (in spirit, not formally) cursor-derived
   density established implicitly in pre-rc.85 code; complements
   ADR-0030 (per-source coverage invariant); referenced by ADR-0032

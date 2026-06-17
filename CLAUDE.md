@@ -7,8 +7,7 @@ repo cold, **this file is your entry point**. Read this first.
 
 ## What this repo is
 
-**Stellar Index** (formerly Rates Engine; renamed + repositioned
-2026-06-12, ADR-0036/0037) is a **protocol explorer for the Stellar network**:
+**Stellar Index** is a **protocol explorer for the Stellar network**:
 complete, verified, per-protocol on-chain data — every contract, event,
 and trade for every major Stellar protocol — captured from a certified
 raw ledger lake (ADR-0034), verified for completeness (ADR-0033), and
@@ -21,10 +20,6 @@ refactor (docs/architecture/stellar-focus-refactor-plan.md).
 Its flagship product is the **pricing API**: it ingests on-chain and
 off-chain price data, aggregates into VWAP / TWAP / OHLC, and serves
 the result through a public REST + SSE API.
-
-Built against two customer RFPs ([docs/stellar-rfp.md](docs/stellar-rfp.md),
-[docs/freighter-rfp.md](docs/freighter-rfp.md)) and the awarded
-[docs/ctx-proposal.md](docs/ctx-proposal.md).
 
 The repo is Go (primary), Apache-2.0, pre-v1 at time of writing.
 
@@ -84,7 +79,7 @@ development. If one does, it's a bug.
 │   ├── stellarindex-api/                  REST + SSE API server
 │   ├── stellarindex-ops/          admin CLI: backfill, detect-gaps, verify-archive, wasm-history, …
 │   ├── stellarindex-migrate/      db migration runner
-│   └── stellarindex-sla-probe/    SLA-evidence harness: p50/p95/p99 latency + freshness pass/fail vs RFP targets
+│   └── stellarindex-sla-probe/    SLA-evidence harness: p50/p95/p99 latency + freshness pass/fail vs the latency + freshness SLA targets
 │
 ├── internal/                  private packages (Go-enforced, not importable externally)
 │   ├── canonical/                core types: Trade, Price, Asset, Pair, Amount
@@ -149,15 +144,10 @@ development. If one does, it's a bug.
     ├── adr/                      Architecture Decision Records (immutable)
     ├── reference/                auto-generated from OpenAPI + struct tags
     ├── operations/               runbooks (1 per alert), SEV playbook, release-process
-    ├── discovery/                Phase-1 audit archive (read-only, closed 2026-04-22)
     ├── methodology/              public methodology docs (how prices are computed/aggregated)
-    ├── blog/                     dated blog posts published to the explorer/site
-    ├── audit-2026-04-29/         post-Phase-1 cross-cutting findings register
-    ├── audit-2026-05-02/         second-pass audit working dir (May 2; codex review)
-    ├── audit-2026-05-12/         May-12 audit working dir
-    ├── audit-2026-05-12-codex/   May-12 codex-review pass
-    ├── audit-2026-05-26/         May-26 audit working dir
-    └── audit-2026-06-11/         June-11 full-product cold audit (findings register + per-slice evidence)
+    ├── protocols/               per-protocol verification pages (one per integrated protocol)
+    ├── engineering-standards.md  the non-negotiable engineering policy layer
+    └── blog/                     dated blog posts published to the explorer/site
 ```
 
 ---
@@ -268,18 +258,16 @@ infeasible (OLTP-for-OLAP, billions of rows). Consequences:
 
 ## Things that will surprise you
 
-Traps / counter-intuitive facts surfaced during Phase-1 discovery.
-If you're about to do something that touches any of these, read the
-linked doc first.
+Traps / counter-intuitive facts about Stellar and our dependencies.
+If you're about to do something that touches any of these, the
+linked design doc has the full detail.
 
 - **Soroswap's `SwapEvent` has no post-state reserves.** Reserves
   come in the immediately-following `SyncEvent`. Correlate by
-  `(ledger, tx_hash, op_index)`. →
-  [docs/discovery/dexes-amms/soroswap.md](docs/discovery/dexes-amms/soroswap.md)
+  `(ledger, tx_hash, op_index)`.
 - **Phoenix emits 8 events per swap** (one per field with a 2-tuple
   topic `("swap", "<field>")`). A single swap reconstruction
-  requires grouping all 8. →
-  [docs/discovery/dexes-amms/phoenix.md](docs/discovery/dexes-amms/phoenix.md)
+  requires grouping all 8.
 - **Comet uses a shared `("POOL", <event>)` topic across every pool
   contract**, not a per-protocol namespace. Any pubnet contract that
   deploys Balancer-v1 Comet code will look identical on the wire.
@@ -289,26 +277,21 @@ linked doc first.
   or a WASM-hash gate rather than the factory-fan-out model the other
   Soroban decoders use. Until that lands, narrow coverage is still a
   downstream filter on `Trade.Source = "comet"` + contract address. →
-  [docs/discovery/dexes-amms/comet.md](docs/discovery/dexes-amms/comet.md),
   [docs/adr/0035-factory-anchored-contract-gating.md](docs/adr/0035-factory-anchored-contract-gating.md)
-- **Reflector v3 has no on-chain `twap` or `x_*` methods.**
-  Proposal says it does; it doesn't. We compute TWAP and cross-pair
-  locally. →
-  [docs/discovery/oracles/reflector.md](docs/discovery/oracles/reflector.md)
+- **Reflector v3 has no on-chain `twap` or `x_*` methods.** Some
+  upstream docs imply it does; it doesn't. We compute TWAP and
+  cross-pair locally.
 - **Reflector is three separate contracts** (DEX / CEX / FX), not
-  one. →
-  [docs/discovery/oracles/reflector.md](docs/discovery/oracles/reflector.md)
+  one.
 - **Band stores pair rates at E18 scale**. Relayed single-asset
-  rates are at E9. →
-  [docs/discovery/oracles/band.md](docs/discovery/oracles/band.md)
+  rates are at E9.
 - **Band's Soroban contract emits zero events.** A conventional
   topic-match Decoder never fires on Band. We observe the
   `relay()` / `force_relay()` InvokeContract call instead via
   the dispatcher's `ContractCallDecoder` interface (PR 168). Any
   future Soroban source that updates storage without publishing
   events plugs into the same hook — match by (contract_id,
-  function_name), decode from op args. →
-  [docs/discovery/oracles/band.md](docs/discovery/oracles/band.md)
+  function_name), decode from op args.
 - **Off-chain sources (CEX/FX) live in `internal/sources/external/`,
   not `internal/sources/<venue>/`.** They run their own goroutines
   speaking HTTPS / WebSocket to vendor APIs — parallel to the
@@ -338,8 +321,7 @@ linked doc first.
   binding keeps data honest.
 - **Redstone Adapter DOES emit events** (topic `"REDSTONE"`) — one
   per batch push containing all updated feeds. Subscribe rather
-  than poll all 19 per-feed contracts. →
-  [docs/discovery/oracles/redstone.md](docs/discovery/oracles/redstone.md)
+  than poll all 19 per-feed contracts.
 - **Redstone's event body carries no feed_id.** `WritePrices
   { updater, updated_feeds: Vec<PriceData> }` gives prices +
   timestamps, not which feed each entry is. Feed IDs live in the
@@ -356,20 +338,16 @@ linked doc first.
   is `sep0011_asset`). It does NOT, however, parse pre-P23 classic
   movements: there is no operations+effects fallback for the era
   before unified events existed, so historical classic-asset movement
-  before P23 is not reconstructed from this path. →
-  [docs/discovery/notes/cap-67-unified-events.md](docs/discovery/notes/cap-67-unified-events.md)
+  before P23 is not reconstructed from this path.
 - **SEP-41 `transfer` data can be EITHER a simple `i128` OR a map**
   containing `amount` + `to_muxed_id`. Type-test before
-  `MustI128()`. →
-  [docs/discovery/notes/sep-41-token-events.md](docs/discovery/notes/sep-41-token-events.md)
+  `MustI128()`.
 - **stellar/go monorepo was archived 2025-12-16.** The new Go SDK
   lives at `github.com/stellar/go-stellar-sdk`. Horizon, Galexie,
-  stellar-rpc, stellar-archivist are each in their own repos now. →
-  [docs/discovery/data-sources/stellar-archivist.md](docs/discovery/data-sources/stellar-archivist.md)
+  stellar-rpc, stellar-archivist are each in their own repos now.
 - **`withObsrvr/cdp-pipeline-workflow` has verified correctness
   bugs** in its i128 decoding and SDEX trade extraction. We do
-  **not** inherit from it. →
-  [docs/discovery/data-sources/withobsrvr-cdp-pipeline-workflow.md](docs/discovery/data-sources/withobsrvr-cdp-pipeline-workflow.md)
+  **not** inherit from it.
 - **stellar-rpc is NOT in our production ingest path.** The
   standalone `stellar-rpc` and `stellar-core` watcher services were
   removed from r1 on 2026-04-23, along with the core prometheus
@@ -445,30 +423,28 @@ implement the `external.Connector` framework
 (`internal/sources/external/framework.go`), not `consumer.Source`.
 Copy the `binance` / `kraken` package as the template.
 
-1. Read [docs/discovery/external-refs/cex-feeds.md](docs/discovery/external-refs/cex-feeds.md).
-2. The predecessor production system (private) has per-venue reference
-   connectors with the vendors' real endpoints + pair conventions
-   documented — consult it when available.
-3. Create `internal/sources/external/<venue>/` following the
+1. Review the venue's public API docs for its real endpoints + pair
+   conventions before writing the parser.
+2. Create `internal/sources/external/<venue>/` following the
    actual per-package layout: `events.go` (wire types), `parse.go`
    (vendor JSON → `canonical.Trade`), `streamer.go` (live WS/REST;
    implements `external.Streamer`) and/or a poller, `backfill.go`
    (historical OHLC; implements `external.Backfiller`), and
    `pairs.go` (symbol map). Tests sit alongside as `*_test.go`.
-4. Implement the relevant `external.Connector` sub-interface(s) —
+3. Implement the relevant `external.Connector` sub-interface(s) —
    `Streamer` (live push, e.g. binance/kraken), `Poller` (REST quote
    board, used by the FX pollers), and/or `Backfiller` (historical
    candles). NOT `consumer.Source` — that's the legacy on-chain seam.
-5. Register the venue's `Metadata` (class / subclass / weight /
+4. Register the venue's `Metadata` (class / subclass / weight /
    `IncludeInVWAP` / `BackfillSafe`) in the `Registry` map in
    `internal/sources/external/registry.go`, then wire it into
    `buildExternal` in `cmd/stellarindex-indexer/main.go` (and the
    parallel block in `stellarindex-ops`) behind a `cfg.<Venue>.Enabled`
    gate.
-6. Fixtures are inline golden frames in the package's `*_test.go`
+5. Fixtures are inline golden frames in the package's `*_test.go`
    (e.g. `binance/streamer_test.go`) — there is no
    `test/fixtures/external/` directory.
-7. Add an ADR if the venue has unusual constraints (e.g. requires
+6. Add an ADR if the venue has unusual constraints (e.g. requires
    paid tier, or has licensing restrictions on redistribution).
 
 ### "Add a new on-chain Soroban DEX"
@@ -640,21 +616,11 @@ R2 / R3 are deferred — adding them is mechanical (4 secrets +
 
 - **What we decided + why:** [docs/adr/](docs/adr/) (numbered,
   immutable, accept-only-or-supersede).
-- **What we discovered about Stellar / our deps:**
-  [docs/discovery/](docs/discovery/). This is the Phase-1 audit
-  archive; read-only going forward but referenced often.
-- **What the customer asked for:**
-  [docs/stellar-rfp.md](docs/stellar-rfp.md) +
-  [docs/freighter-rfp.md](docs/freighter-rfp.md).
-- **What we committed to deliver:**
-  [docs/ctx-proposal.md](docs/ctx-proposal.md) + its corrections
-  register at [docs/discovery/proposal-corrections.md](docs/discovery/proposal-corrections.md).
-- **How every RFP row maps to a source:**
-  [docs/discovery/rfp-requirements-matrix.md](docs/discovery/rfp-requirements-matrix.md).
-- **Our 10-week calendar:**
-  [docs/discovery/delivery-plan.md](docs/discovery/delivery-plan.md).
+- **Narrative architecture:** [docs/architecture/](docs/architecture/).
+- **How every requirement maps to a source:**
+  [docs/architecture/coverage-matrix.md](docs/architecture/coverage-matrix.md).
 - **Engineering policy (mandatory reading before a PR):**
-  [docs/discovery/engineering-standards.md](docs/discovery/engineering-standards.md).
+  [docs/engineering-standards.md](docs/engineering-standards.md).
 
 ---
 
@@ -674,7 +640,7 @@ R2 / R3 are deferred — adding them is mechanical (4 secrets +
 
 Make the smallest possible PR that advances one thing and is easy
 to review. Never "ship and clean up later." See
-[docs/discovery/engineering-standards.md §2](docs/discovery/engineering-standards.md)
+[docs/engineering-standards.md §2](docs/engineering-standards.md)
 for the full Definition of Done.
 
 ---

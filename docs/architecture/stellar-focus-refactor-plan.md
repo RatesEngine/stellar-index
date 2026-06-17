@@ -1,13 +1,13 @@
 # Stellar-focus refactor plan
 
-> **Status:** Proposed — awaiting sign-off. No code changes yet.
+> **Status:** Proposed. No code changes yet.
 > **Date:** 2026-06-16
 > **Author:** cold-audit synthesis (4 parallel auditors: API+wire+SDK,
 > currency+aggregate+storage, explorer UI, docs+branding).
 > **Goal:** bring the product's *presentation* fully back to "the protocol
 > explorer for **the Stellar network**," removing the cross-chain /
 > multi-blockchain explorer surface that crept in via R-018 — **without**
-> touching the proposal-protected pricing pipeline.
+> touching the core pricing pipeline.
 
 ---
 
@@ -25,7 +25,7 @@ layer.** Four independent audits converged on the same conclusion:
   (`GlobalAssetView.networks[]`, `PerNetworkAssetView`), and (d) the explorer
   UI that browses them ( `/networks`, `/assets/{slug}/{network}`, network
   dropdowns, "Blockchain" nav).
-- **Nothing in the protected pricing pipeline is drift.** CoinGecko / CMC /
+- **Nothing in the core pricing pipeline is drift.** CoinGecko / CMC /
   Chainlink reference prices, CEX + FX feeds, the oracle feeds, VWAP / TWAP /
   OHLC / triangulation math, the divergence/anomaly cross-check, and the
   CCTP/Rozo bridge **Stellar-leg** decoders are all in-scope and stay.
@@ -56,16 +56,16 @@ shape early.)
 
 ## 2. What is PROTECTED (pricing scope — do NOT cut)
 
-Per `docs/ctx-proposal.md` and the standing guardrail, the following are
-proposal scope and **must survive untouched**. All four auditors confirmed
-none of these are drift:
+Per the standing guardrail, the following are core pricing scope and
+**must survive untouched**. All four auditors confirmed none of these are
+drift:
 
 | Area | Why it stays |
 |---|---|
-| `internal/aggregate/*` (VWAP/TWAP/OHLC/triangulate/outliers/stablecoin/global) | The pricing engine. Explicitly proposal scope. |
+| `internal/aggregate/*` (VWAP/TWAP/OHLC/triangulate/outliers/stablecoin/global) | The pricing engine. Explicitly core pricing scope. |
 | `internal/divergence/*` + CoinGecko/CMC/Chainlink **reference** prices | Cross-check / divergence / anomaly-detection signals (incl. non-Stellar reference pairs BTC/USD, ETH/USD). |
 | `internal/currency` `coingecko_id` / `coinmarketcap_id` fields + `CoinGeckoIDs()` / `CoinMarketCapIDs()` | Load-bearing for `aggregatorPairsFromCatalogue` + the CG/CMC pollers' reference pair set. |
-| BTC / ETH (and any other actual reference-pair) ticker→CG-id entries | The divergence layer needs a reference price for the proposal's non-Stellar reference pairs. **Keep the mapping, drop the browseable identity.** |
+| BTC / ETH (and any other actual reference-pair) ticker→CG-id entries | The divergence layer needs a reference price for the non-Stellar reference pairs. **Keep the mapping, drop the browseable identity.** |
 | CEX feeds (`internal/sources/external/*`) + FX pollers | Primary pricing inputs. |
 | Oracle feeds (reflector / band / redstone) | Stellar-side oracle ingest. |
 | CCTP / Rozo decoders (`internal/sources/cctp`, `…/rozo`) | These index the **Stellar leg** of bridge protocols; the cross-chain attributes are properties of the Stellar events. On-mission. |
@@ -263,5 +263,5 @@ cross-chain *asset-explorer* model, and it is shallow: embedded YAML + Go
 projection + a wire shape + UI — **no database, no pricing math, no data
 loss.** Execute Tiers 1→4 (or the §6 fallback) and the explorer is fully,
 consistently "the protocol explorer for the Stellar network," with the
-proposal-protected pricing pipeline (including non-Stellar *reference* prices)
+core pricing pipeline (including non-Stellar *reference* prices)
 entirely intact.

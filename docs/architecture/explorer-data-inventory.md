@@ -9,10 +9,10 @@ status: planning
 **Codename:** none yet — referred to as "the showcase" in this doc.
 **Domain:** `stellarindex.io` for the site (live on Cloudflare
 Pages). `docs.stellarindex.io` serves the auto-generated API
-reference. The customer dashboard at `app.stellarindex.io` is a
+reference. The user dashboard at `app.stellarindex.io` is a
 separate Next.js app under [`web/dashboard/`](../../web/dashboard/README.md).
 
-This doc is the **single planning artefact** for the customer-facing
+This doc is the **single planning artefact** for the user-facing
 explorer. It captures: who it's for, the design principles, the URL
 scheme, every page, every panel, every API call (existing or new),
 every schema addition, the build order, and the performance budget.
@@ -1561,7 +1561,7 @@ To answer before frontend scaffolding starts:
 - Chart timeframe × granularity: [ADR-0020](../adr/0020-chart-api-contract.md)
 - Anomaly + freeze policy: [ADR-0019](../adr/0019-anomaly-response-and-confidence-scoring.md)
 - Aggregation policy chain: [`aggregation-plan.md`](aggregation-plan.md)
-- Coverage matrix (RFP × delivery): [`coverage-matrix.md`](coverage-matrix.md)
+- Coverage matrix (requirement × delivery): [`coverage-matrix.md`](coverage-matrix.md)
 - CDN setup: [`../operations/cdn-setup.md`](../operations/cdn-setup.md)
 - Latency budget: [ADR-0009](../adr/0009-latency-budget.md)
 - SLA proof procedure: [`../operations/sla-proof-procedure.md`](../operations/sla-proof-procedure.md)

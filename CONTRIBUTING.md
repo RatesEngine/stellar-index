@@ -6,8 +6,8 @@ This project takes enterprise-grade engineering standards seriously.
 Before you write a line of code, please skim:
 
 1. **[CLAUDE.md](CLAUDE.md)** — repo orientation, layout, invariants.
-2. **[docs/discovery/engineering-standards.md](docs/discovery/engineering-standards.md)** — the policy.
-3. **[docs/discovery/repo-structure-plan.md](docs/discovery/repo-structure-plan.md)** — the layout rationale.
+2. **[docs/engineering-standards.md](docs/engineering-standards.md)** — the policy.
+3. **[docs/architecture/semver-policy.md](docs/architecture/semver-policy.md)** — the versioning + layout rationale.
 
 This document is a summary; the full policy is in the links above.
 
@@ -117,7 +117,7 @@ checks are enforced by CI; the judgement checks by your reviewer.
 - [ ] Every new alert has a runbook.
 - [ ] New feature flags have a scheduled removal date.
 
-Full rules: [engineering-standards.md §2.1](docs/discovery/engineering-standards.md).
+Full rules: [engineering-standards.md §2.1](docs/engineering-standards.md).
 
 ---
 
@@ -179,7 +179,7 @@ Three layers:
   Redis + MinIO. Run on label `ready-for-integration` + nightly.
 - **Load tests** — `test/load/`, k6 scripts. Run pre-release.
 
-See [engineering-standards.md §9 testing](docs/discovery/engineering-standards.md).
+See [engineering-standards.md §9 testing](docs/engineering-standards.md).
 
 ---
 
@@ -193,7 +193,7 @@ Every PR that changes code **must** update:
 
 **You cannot skip docs.** "Docs drift" is the death spiral of
 enterprise codebases. See
-[engineering-standards.md §5](docs/discovery/engineering-standards.md).
+[engineering-standards.md §5](docs/engineering-standards.md).
 
 ---
 
@@ -217,7 +217,7 @@ someone wrote something a particular way.
 
 - `CODEOWNERS` tells you who to ping for review.
 - ADRs in `docs/adr/` explain the major design choices.
-- `docs/discovery/` holds the Phase-1 audit artefacts and is a
+- `docs/architecture/` holds the narrative design docs and is a
   useful reference when you're trying to understand why something
   works the way it does.
 - If none of the above helps, open a discussion issue.

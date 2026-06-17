@@ -35,17 +35,15 @@ archival at launch and promote once the Tier-1 paperwork clears
 | History publisher | `stellar-core --writequorum` + cron | via core | yes | no | shares with core |
 | Galexie | `stellar-galexie` | yes (captive) | no | no | moderate |
 | stellar-rpc | `stellar-rpc` | yes (captive) | no | no | moderate |
-| Rates-engine indexer | `stellarindex-indexer` | no | no | no | negligible |
+| Stellar Index indexer | `stellarindex-indexer` | no | no | no | negligible |
 | Prometheus scrape | `node_exporter` + `stellar-core-prometheus-exporter` | no | no | no | tiny |
 | Log shipper | `promtail` | no | no | no | tiny |
 | Backup agent | `pgbackrest` / `mc` sidecar | no | no | no | bandwidth only |
 | HSM agent | `yubihsm-connector` (if validator-promoted) | no | no | no | tiny |
 
 Three distinct captive-core instances live on the host concurrently
-(native core, galexie's, stellar-rpc's). This has been flagged as a
-memory-pressure concern in
-[adversarial-audit.md §6d](../../discovery/adversarial-audit.md#64-galexie--stellar-rpc-co-resident-captive-cores)
-and is one of the reasons we over-provision RAM below.
+(native core, galexie's, stellar-rpc's). This is a memory-pressure
+concern and is one of the reasons we over-provision RAM below.
 
 ---
 
@@ -482,8 +480,6 @@ These must close before we cut purchase orders:
 
 - [ADR-0004 Tier-1 validator aspiration](../../adr/0004-tier1-validator-aspiration.md)
 - [ADR-0002 MinIO / S3-compat storage](../../adr/0002-minio-s3-compat-storage.md)
-- [Discovery — archival-nodes.md](../../discovery/data-sources/archival-nodes.md)
-- [Discovery — stellar-archivist.md](../../discovery/data-sources/stellar-archivist.md)
 - [HA plan](../ha-plan.md) — how three of these hang together
 - [Multi-region topology](multi-region-topology.md) — the 3-region
   architecture this node fits into

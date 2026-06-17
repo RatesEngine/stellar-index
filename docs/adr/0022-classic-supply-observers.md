@@ -163,7 +163,7 @@ Each Summer is a small interface satisfied by
 
 ### Aggregator integration
 
-`cmd/ratesengine-aggregator/main.go::buildSupplyRefresher`
+`cmd/stellarindex-aggregator/main.go::buildSupplyRefresher`
 extends to construct a `ClassicComputer` per watched classic
 asset alongside the existing `XLMComputer`. The refresher's
 existing `Tick` shape covers both — the per-tick goroutine just

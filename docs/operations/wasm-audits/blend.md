@@ -70,8 +70,8 @@ audit lives at the pool-instance level, not at the Pool Factory.
 
 ## Contracts under audit
 
-Per `docs/discovery/dexes-amms/blend.md` (verified 2026-04-22 via
-stellar.expert + the `blend-contracts-v2` deploy manifest):
+Verified 2026-04-22 via
+stellar.expert + the `blend-contracts-v2` deploy manifest:
 
 | Role | Contract | WASM hash (v2) |
 | --- | --- | --- |
@@ -471,7 +471,6 @@ Rationale:
 
 - Procedure: [`README.md`](README.md)
 - Decoder source: `internal/sources/blend/{events,decode,auction_data}.go`
-- Discovery doc: [`../../discovery/dexes-amms/blend.md`](../../discovery/dexes-amms/blend.md)
 - Schema-evolution stance: [`../../architecture/contract-schema-evolution.md`](../../architecture/contract-schema-evolution.md)
 - Backfill gate: `internal/sources/external/registry.go` —
   `Registry["blend"].BackfillSafe`

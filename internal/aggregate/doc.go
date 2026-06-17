@@ -35,7 +35,7 @@
 // drop any trade whose price is more than N standard deviations
 // from the unweighted mean. Over small windows with fat tails this
 // is less defensible than a MAD-based filter, but the σ form is
-// what the RFP cites. The σ-vs-MAD migration plan + on-call
+// what the methodology specifies. The σ-vs-MAD migration plan + on-call
 // guidance lives in
 // docs/operations/runbooks/aggregator-outlier-storm.md.
 //

@@ -105,7 +105,7 @@ const signupBodyMaxBytes = 4 * 1024
 
 // signupDefaultRateLimitPerMin — the Starter-tier budget. Matches
 // `[api].key_rate_limit_per_min` default in the config schema and
-// the RFP's "≥ 1000 requests per minute per client" commitment.
+// the API SLA's "≥ 1000 requests per minute per client" commitment.
 // Operator can override via Stripe-paid upgrades that mutate the
 // per-key RateLimitPerMin.
 const signupDefaultRateLimitPerMin = 1000

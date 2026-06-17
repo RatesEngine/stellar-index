@@ -13,14 +13,14 @@ superseded_by: null
 
 ## Context
 
-Rates Engine must retain:
+Stellar Index must retain:
 
 - Raw trades from on-chain (SDEX, Soroswap, Aquarius, Phoenix, Comet,
   Blend), oracle feeds (Reflector, Redstone, Band), CEXes, and FX
   providers — ~150 events/sec network-wide as of 2026-04, growing.
 - Derived aggregates at multiple grains (1m, 15m, 1h, 4h, 1d, 1w,
-  1mo VWAP / TWAP / OHLC) — the Freighter RFP fixes the timeframes
-  and requires 1-hour-and-above retention **indefinitely**.
+  1mo VWAP / TWAP / OHLC), with 1-hour-and-above retention
+  **indefinitely**.
 - Since-inception historical pricing backfilled from Galexie.
 
 The storage layer needs to satisfy, simultaneously:
@@ -38,13 +38,12 @@ The storage layer needs to satisfy, simultaneously:
    so every `/v1/history` read doesn't re-scan raw trades.
 6. **Operational maturity.** HA (streaming replication / failover),
    backup/restore, PITR, observability, community-known tuning
-   patterns. We have a 10-week window; we can't pioneer our storage
-   layer.
+   patterns. We can't pioneer our storage layer.
 
 The HA plan ([docs/architecture/ha-plan.md](../architecture/ha-plan.md))
 already assumes Patroni-managed Postgres-compatible storage and the
 coverage matrix + API design ([docs/reference/api-design.md](../reference/api-design.md))
-depend on continuous aggregates at the exact grains the RFP names.
+depend on continuous aggregates at the exact grains the API serves.
 We need an ADR to bind the choice rather than leaving "TimescaleDB
 (planned)" in a half-dozen downstream docs.
 
@@ -82,7 +81,7 @@ distant region. Backup via pgBackRest to MinIO with 5-min RPO.
 
 **Positive**
 
-- Continuous aggregates directly deliver the RFP's required
+- Continuous aggregates directly deliver the required
   timeframes + granularities without us maintaining a separate
   materialisation pipeline.
 - Hypertable compression yields ~10× reduction on raw trades
@@ -111,8 +110,7 @@ distant region. Backup via pgBackRest to MinIO with 5-min RPO.
   This is not a blocker per our Apache-2.0 repo license (we ship
   code, not Timescale binaries), but operators self-hosting must
   accept the TSL on the Timescale binary. Documented in
-  [deploy/docker-compose/README.md](../../deploy/docker-compose/README.md)
-  when it lands (Week 8).
+  [deploy/docker-compose/README.md](../../deploy/docker-compose/README.md).
 - **Single-primary write bottleneck.** Patroni gives us HA, not
   horizontal scale. If write throughput exceeds one Postgres
   primary we have to shard, which Timescale supports (distributed
@@ -191,8 +189,7 @@ distant region. Backup via pgBackRest to MinIO with 5-min RPO.
 5. **Amazon Timestream.** Rejected. AWS-locked; the multi-region
    story ([multi-region-topology.md](../architecture/infrastructure/multi-region-topology.md))
    requires colo / bare-metal. Open-source self-hosting is a
-   hard constraint from the proposal §Open Source & Deployment
-   Model. Timestream violates it.
+   hard project constraint. Timestream violates it.
 
 6. **Timescale Cloud (managed).** Rejected for the same self-host
    constraint. Revisit once we have a managed-offering tier of the
@@ -214,11 +211,6 @@ distant region. Backup via pgBackRest to MinIO with 5-min RPO.
     target.
   - ADR-0005 (monorepo) — Timescale is an operational dependency,
     not a Go-module dep.
-- Discovery doc:
-  - [infrastructure/README.md](../discovery/infrastructure/README.md)
-    (deferred scaffold).
-  - [data-sources/supply-data.md](../discovery/data-sources/supply-data.md)
-    (supply-history hypertable design).
 - HA + topology:
   - [ha-plan.md §3.3](../architecture/ha-plan.md) — Patroni topology.
   - [multi-region-topology.md §5](../architecture/infrastructure/multi-region-topology.md)

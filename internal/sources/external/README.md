@@ -30,7 +30,7 @@ by default.
 | [`binance`](binance/) | Streamer (WS aggTrade) | Highest-liquidity XLM fiat + crypto pairs | None | `@aggTrade` (not `@trade`) — same-millisecond same-price fills merged for ~5–10× lower throughput, lossless for VWAP |
 | [`kraken`](kraken/) | Streamer (WS v2 trade) | Strongest XLM fiat coverage (USD/EUR/GBP/AUD/CAD/CHF) | None | One-call subscription with array of channels; floats arrive as JSON numbers — decoder uses `json.Number` to bypass float64 on the price path |
 | [`bitstamp`](bitstamp/) | Streamer (WS live_trades) | EUR/GBP depth alongside Kraken; European retail liquidity profile | None | One-subscribe-per-channel; uses `price_str` / `amount_str` (preserves vendor precision); periodic server-initiated reconnect |
-| [`coinbase`](coinbase/) | Streamer (WS matches) | US price discovery for XLM/USD; net-new in Phase-2 | None for matches | Targets the **Exchange** API (ex-Pro), not Coinbase Advanced Trade |
+| [`coinbase`](coinbase/) | Streamer (WS matches) | US price discovery for XLM/USD | None for matches | Targets the **Exchange** API (ex-Pro), not Coinbase Advanced Trade |
 | [`exchangeratesapi`](exchangeratesapi/) | Poller (REST, 5-min cadence) | Triangulation source: XLM/USD × USD/EUR = XLM/EUR | API key | Authoritative first-party FX computation (interbank + ECB blend) — `ClassExchange`, not aggregator. Free tier (EUR base, hourly) unusable for prod |
 | [`polygonforex`](polygonforex/) | Poller (REST snapshot) | Top-tier FX reference; "authority that will not make mistakes" | API key | Aggregates interbank/institutional feeds (OANDA among them); Advanced tier ($199/mo) required for the snapshot endpoint we depend on |
 
@@ -130,10 +130,6 @@ Plus, in this package's root:
 4. Add an ADR if the venue has unusual constraints (paid tier,
    redistribution limits, cadence ceilings).
 
-The
-[`docs/discovery/external-refs/cex-feeds.md`](../../../docs/discovery/external-refs/cex-feeds.md)
-catalogue is the discovery anchor for picking new venues.
-
 ## References
 
 - [`framework.go`](framework.go) — `Streamer` / `Poller` /
@@ -142,7 +138,5 @@ catalogue is the discovery anchor for picking new venues.
   per-venue class + IncludeInVWAP
 - [`docs/architecture/aggregation-plan.md`](../../../docs/architecture/aggregation-plan.md)
   — how class metadata drives the orchestrator's filter chain
-- [`docs/discovery/external-refs/cex-feeds.md`](../../../docs/discovery/external-refs/cex-feeds.md)
-  — vendor-by-vendor capability matrix
 - API: [`GET /v1/sources`](../../../internal/api/v1/sources.go)
   surfaces this catalogue to consumers

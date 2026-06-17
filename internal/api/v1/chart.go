@@ -33,7 +33,7 @@ type ChartSeries struct {
 	RequestedFrom *time.Time         `json:"requested_from,omitempty"` // window start the consumer asked for; only populated when Truncated
 }
 
-// chartTimeframeSpec captures what each RFP-prescribed timeframe
+// chartTimeframeSpec captures what each prescribed timeframe
 // translates to: a window duration and a default granularity.
 // `all` has zero duration → no lower bound (since-inception).
 type chartTimeframeSpec struct {

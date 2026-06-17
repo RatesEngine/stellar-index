@@ -15,13 +15,13 @@ severity: P1
 | Severity | **P1** (page) |
 | Detected by | `deploy/monitoring/rules/slo.yml` |
 | Typical MTTR | 15–30 min |
-| Impact | We're burning the latency error budget at the **fast** rate (we'll spend a month's budget in ~1 hour at the current trajectory). The customer-visible signal is that p95 latency on `/v1/price` and adjacent surfaces has stepped above the Freighter RFP target of ≤ 200 ms for an extended-enough window that SLO compliance is at risk this quarter. |
+| Impact | We're burning the latency error budget at the **fast** rate (we'll spend a month's budget in ~1 hour at the current trajectory). The visible signal is that p95 latency on `/v1/price` and adjacent surfaces has stepped above the latency SLA target of ≤ 200 ms for an extended-enough window that SLO compliance is at risk this quarter. |
 
 ## Symptoms
 
 - Multi-window burn-rate detection: 5-min p95 burn AND 1-hour p95 burn both ≥ 14.4× the budget. (Per Google SRE workbook ch. 5; this is the "fast burn" archetype.)
 - `/v1/price` p95 > 0.5 s for ≥ 2 min (the underlying `stellarindex_api_latency_p95_high` alert fires alongside).
-- Customer-facing dashboards show synthetic-probe latency above SLA budget.
+- Dashboards show synthetic-probe latency above SLA budget.
 
 ## Quick diagnosis (≤ 5 min)
 
@@ -70,7 +70,7 @@ Capture for postmortem:
 - `api-latency.md` — when p95/p99 spike on a single endpoint without burning budget yet.
 - `pg-conns-saturated.md`, `cache-miss-rate-high.md` — common upstream causes.
 - ADR-0009 — API latency budget allocation.
-- F-1267 (audit-2026-05-12) — r1 currently runs at p95 = 246 ms structurally; multi-region cutover is the long-term fix.
+- Note: r1 currently runs at p95 = 246 ms structurally; multi-region cutover is the long-term fix.
 
 ## Changelog
 

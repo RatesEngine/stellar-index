@@ -11,7 +11,7 @@ superseded_by: null
 
 ## Context
 
-Each region of the Rates Engine fleet (R1 Frankfurt, R2 US-East,
+Each region of the Stellar Index fleet (R1 Frankfurt, R2 US-East,
 R3 Singapore per `infrastructure/multi-region-topology.md`) needs
 to ingest galexie ledger-meta data into its indexer. The naive
 plan — every region runs the same Hetzner-style "mirror everything

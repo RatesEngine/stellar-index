@@ -68,7 +68,6 @@ Originally flagged P2 (ticket) because the impact is bounded — the API keeps s
 
 - `decode-errors.md` — when we're receiving events but failing to parse them.
 - `source-stopped.md` — same root-cause class, different alert (trade sources vs oracle sources).
-- `docs/discovery/oracles/reflector.md` — Reflector-specific architecture notes.
 - ADR / internal/sources/reflector — where the oracle contract IDs are configured.
 
 ## Changelog

@@ -25,7 +25,7 @@ note backing the scenarios is
 
 ## What we're proving
 
-Per ADR-0009 and [Freighter RFP §SLA](../freighter-rfp.md):
+Per ADR-0009 (the service SLA targets):
 
 | Metric | Target | Source of truth |
 | --- | --- | --- |
@@ -63,7 +63,7 @@ Before kicking off the run:
 ```sh
 # Required env vars:
 export K6_TARGET=https://api.staging.stellarindex.io/v1
-export STELLARINDEX_LOAD_API_KEY="<paste from vault — load-test key, not customer key>"
+export STELLARINDEX_LOAD_API_KEY="<paste from vault — load-test key, not a production key>"
 
 # Optional — override the Prometheus output target if you want
 # the run isolated from the regular metrics stack:

@@ -126,8 +126,8 @@ type PriceSnapshot struct {
 	// Computed by the reader from the underlying trade or CAGG row.
 	Price string `json:"price"`
 
-	// PriceType is one of: "vwap", "twap", "last_trade", "peg" (see
-	// Freighter RFP §Misc). Freighter prefers VWAP > TWAP >
+	// PriceType is one of: "vwap", "twap", "last_trade", "peg".
+	// Freighter prefers VWAP > TWAP >
 	// last_trade; our reader picks the best available and reports it.
 	// "peg" is emitted on the stablecoin self-peg path
 	// (tryStablecoinFiatProxy) — a USD-pegged classic asset priced in

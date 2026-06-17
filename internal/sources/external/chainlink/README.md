@@ -24,7 +24,7 @@ gives us:
 - per-feed history queryable via `/v1/oracle/...` endpoints
 - continuous-aggregate (CAGG) coverage on the new `oracle_prices_*`
   ladder (migration 0034)
-- a 4th oracle in the freighter-RFP visibility surface
+- a 4th oracle in the oracle-visibility surface
 - attribution for the first time someone asks "what did Chainlink
   say about ETH/USD at this timestamp"
 
@@ -34,8 +34,8 @@ Each Chainlink AggregatorV3 contract exposes
 `latestRoundData() returns (uint80 roundId, int256 answer,
 uint256 startedAt, uint256 updatedAt, uint80 answeredInRound)`.
 
-We poll on a configurable cadence (default 30s — matches the proposal's
-30s freshness ceiling for current-price endpoints) and dedupe by
+We poll on a configurable cadence (default 30s — matches the 30s
+freshness ceiling for current-price endpoints) and dedupe by
 `(feed_address, roundId)`. Only a roundId we haven't seen before
 results in a `canonical.OracleUpdate` row — repeated polls of an
 unchanged feed are no-ops.

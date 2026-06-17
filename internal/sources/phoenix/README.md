@@ -1,9 +1,9 @@
 # Phoenix DEX connector
 
 Ingests trade events from [Phoenix](https://app.phoenix-hub.io) —
-a Stellar-native DEX with x·y=k + stableswap pools. Primary Phase-1
-reference:
-[`docs/discovery/dexes-amms/phoenix.md`](../../../docs/discovery/dexes-amms/phoenix.md).
+a Stellar-native DEX with x·y=k + stableswap pools. See the
+protocol verification page:
+[`docs/protocols/phoenix.md`](../../../docs/protocols/phoenix.md).
 
 ## What this ingests
 
@@ -58,7 +58,7 @@ handles:
 | 2-event | Soroswap | `swap` + `sync` (Q1) |
 | 8-event | **Phoenix** | one event per field |
 
-## Mainnet addresses (verified Phase-1)
+## Mainnet addresses (verified on-chain)
 
 | Contract | Address |
 | --- | --- |
@@ -66,7 +66,7 @@ handles:
 | Multihop | `CCLZRD4E72T7JCZCN3P7KNPYNXFYKQCL64ECLX7WP5GNVYPYJGU2IO2G` |
 | XLM SAC (Phoenix-specific) | `CDLZFC3SYJYDZT7K67VZ75HPJVIEUVNIXF47ZG2FB2RMQQVU2HHGCYSC` |
 
-Pools (listed Phase-1, assumed stable):
+Pools (assumed stable):
 
 | Pair | Pool |
 | --- | --- |

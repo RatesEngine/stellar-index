@@ -28,14 +28,14 @@
 # "p95 actually crossed the line" case (more direct signal during
 # incidents); SLO alerts here track the longer-term budget.
 #
-# SLO targets per ADR-0009 (latency budget) + Freighter RFP §SLA:
+# SLO targets per ADR-0009 (latency budget) + the SLA:
 #
 #   - Latency: 99.9% of /v1/price + /v1/oracle/* requests under 200 ms
 #     over 30 days. Steady-state target; cache-cold tail counts
 #     against the p99 contract (≤ 500 ms) but not this SLO.
 #   - Availability: 99.99% of API requests return non-5xx over 30
-#     days. RFP §S9.1 commits to 99.99% uptime; this SLO operationalises
-#     it.
+#     days. The availability SLA (S9.1) commits to 99.99% uptime; this
+#     SLO operationalises it.
 
 groups:
   - name: stellarindex.slo.latency
@@ -49,13 +49,13 @@ groups:
       # Pre-computed so the burn-rate alerts read scalars, not
       # joins of histograms.
       #
-      # Route filter: the RFP commits us to ≤ 200 ms for the
+      # Route filter: the SLA commits us to ≤ 200 ms for the
       # CUSTOMER-FACING PRICING surface only — /v1/price (+ batch)
       # and the SEP-40 oracle endpoints. Catalogue lookups
       # (/v1/assets, /v1/markets) and historical scans (/v1/history,
       # /v1/ohlc) have legitimately longer p95 because they walk
       # large hypertables; folding them into this SLO would burn
-      # the 99.9% budget on shapes the RFP doesn't target.
+      # the 99.9% budget on shapes the SLA doesn't target.
 
       - record: stellarindex:api_slow_request_ratio:5m
         expr: |
@@ -174,7 +174,7 @@ groups:
       #
       # "Error" = any non-5xx response. 4xx counts as success because
       # it's the client's fault, not ours. The SLO target is 99.99%
-      # over 30 days (per RFP §S9.1).
+      # over 30 days (per the availability SLA, S9.1).
 
       - record: stellarindex:api_error_ratio:5m
         expr: |

@@ -12,8 +12,8 @@ superseded_by: null
 ## Context
 
 R1's reverse-proxy topology is `Cloudflare edge → Caddy (origin
-TLS terminator) → ratesengine-api (localhost:3000)`. Customers
-hit `https://api.ratesengine.net`, which resolves to a CF
+TLS terminator) → stellarindex-api (localhost:3000)`. Clients
+hit `https://api.stellarindex.io`, which resolves to a CF
 anycast IP; CF terminates TLS at the edge then proxies to
 Caddy on r1's `:443`; Caddy terminates again locally and
 proxies to the API on `:3000`.

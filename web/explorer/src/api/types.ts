@@ -1346,11 +1346,10 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * Rolling-window chart series matching the Freighter RFP shape.
+         * Rolling-window chart series for an asset/quote pair.
          * @description Returns CLOSED CAGG buckets within a rolling time window for
          *     one asset/quote pair, shaped as `(timeframe, granularity,
-         *     price_type) → points[]` per the Freighter RFP V1 chart
-         *     contract.
+         *     price_type) → points[]` per the V1 chart contract.
          *
          *     Defaults: `quote=fiat:USD`, `timeframe=24h`,
          *     `granularity` per the timeframe table below, `price_type=vwap`.
@@ -3469,7 +3468,7 @@ export interface paths {
          *     and pointers to the long-form ADRs that govern each section.
          *
          *     Designed for transparency consumers (compliance, auditors,
-         *     AI agents, integrators verifying RFP §10 "open methodology"
+         *     AI agents, integrators verifying our open-methodology
          *     claims) who want to verify what the deployment is doing
          *     without parsing the explorer's HTML at /methodology or
          *     chasing ADR cross-refs. Sub-millisecond — no DB call;

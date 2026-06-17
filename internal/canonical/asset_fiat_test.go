@@ -13,7 +13,7 @@ import (
 // (lowercase, accidental whitespace, wrong length).
 func TestIsKnownFiat_AllowList(t *testing.T) {
 	t.Run("known codes pass", func(t *testing.T) {
-		// Sample of the codes we explicitly pre-RFP committed to
+		// Sample of the codes we explicitly committed to up front
 		// + a couple added post-Reflector-FX (ARS, CLP, …).
 		known := []string{"USD", "EUR", "GBP", "JPY", "CNY", "ARS", "MXN", "BRL"}
 		for _, code := range known {

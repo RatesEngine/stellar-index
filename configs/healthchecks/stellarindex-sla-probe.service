@@ -1,5 +1,5 @@
 [Unit]
-Description=Stellar Index SLA probe (RFP latency + freshness pass/fail)
+Description=Stellar Index SLA probe (latency + freshness pass/fail)
 Documentation=https://github.com/StellarIndex/stellar-index/blob/main/configs/healthchecks/README.md
 After=network-online.target
 Wants=network-online.target
@@ -13,8 +13,7 @@ NoNewPrivileges=true
 ProtectSystem=strict
 ProtectHome=true
 PrivateTmp=true
-# F-1300 (codex audit-2026-05-13): the wrapper defaults
-# SLA_PROBE_TEXTFILE_OUTPUT to
+# The wrapper defaults SLA_PROBE_TEXTFILE_OUTPUT to
 # /var/lib/node_exporter/textfile_collector/sla_probe.prom so the
 # alerts in deploy/monitoring/rules/sla-probe.yml have real series
 # to evaluate. ProtectSystem=strict makes /var read-only; without

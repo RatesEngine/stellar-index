@@ -3,8 +3,7 @@
 Ingests on-chain oracle updates from
 [RedStone](https://app.redstone.finance) — one Soroban Adapter
 contract owns price storage for every feed; thin per-feed proxies
-delegate reads to the Adapter. Primary Phase-1 reference:
-[`docs/discovery/oracles/redstone.md`](../../../docs/discovery/oracles/redstone.md).
+delegate reads to the Adapter.
 
 ## What this ingests
 
@@ -25,7 +24,7 @@ pair in the batch, with synthetic `op_index` values spaced by 1024
 so each feed in a batch keeps a unique identity in the
 `oracle_updates` table.
 
-Mainnet address (Phase-1 verified):
+Mainnet address (verified on-chain):
 
 | Contract | Address |
 | --- | --- |
@@ -52,9 +51,8 @@ the InvokeContract op envelope) and zips one-to-one against
 rejects a feed, the entry skips in `updated_feeds` without
 skipping in `feed_ids`, breaking the zip. The decoder treats a
 length mismatch as `ErrFeedIDCountMismatch` and skips the whole
-event rather than attributing prices to the wrong assets — see
-[`docs/discovery/oracles/redstone.md`](../../../docs/discovery/oracles/redstone.md)
-for the full analysis. Logged + counted under
+event rather than attributing prices to the wrong assets. Logged +
+counted under
 `stellarindex_source_decode_errors_total{source="redstone"}`.
 
 ### Q2 — Event body is wrapped in `ScVal::Bytes`
@@ -156,7 +154,6 @@ proper asset modelling.
 
 ## References
 
-- Discovery: [`docs/discovery/oracles/redstone.md`](../../../docs/discovery/oracles/redstone.md)
 - Adapter source: <https://github.com/redstone-finance/redstone-public-contracts>
   (path: `packages/stellar-connector/deployments/stellarMultiFeed/contracts/redstone-adapter/src/event.rs`)
 - ADR-0014 — crypto-ticker representation

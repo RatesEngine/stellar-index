@@ -15,8 +15,7 @@ current architecture.
 ## Sources
 
 - **Tillman (withObsrvr)** — indexing operator; author of
-  `stellar-extract`, `nebu`, `flowctl`. See
-  [discovery/data-sources/withobsrvr-overview.md](../discovery/data-sources/withobsrvr-overview.md).
+  `stellar-extract`, `nebu`, `flowctl`.
 - **orbitlens (StellarExpert)** — author of
   [StellarExpert](https://stellar.expert), one of the three largest
   explorers.
@@ -47,7 +46,7 @@ current architecture.
 > generally ok if historical stats for assets/accounts (transfers,
 > trades, balances) display at hourly or even daily granularity.*
 
-**Our status:** ✅ Partially addressed. The Freighter RFP history
+**Our status:** ✅ Partially addressed. Our history
 grain set (1m / 15m / 1h / 4h / 1d / 1w / 1mo) drives our planned
 CAGGs in `migrations/0002_create_price_aggregates.up.sql`. Retention
 policy is documented (sub-hourly for 30 days, hourly+ indefinitely).
@@ -84,7 +83,6 @@ an ID counter.
 > developed it before SDF presented this tool.*
 
 **Our status:** ✅ Galexie is our producer. Already running on r1.
-See [discovery/data-sources/galexie.md](../discovery/data-sources/galexie.md).
 
 ### 4. Look for databases with native i128 / i256 (ClickHouse noted)
 

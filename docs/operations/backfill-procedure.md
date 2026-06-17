@@ -283,14 +283,14 @@ If the archive genuinely doesn't cover the range, cross-anchor
 recovery is in `docs/operations/archival-node-bringup.md`
 §"Disaster recovery".
 
-## RFP F4.2 one-year retention catch-up (F-1265)
+## One-year retention catch-up (F-1265)
 
-The Freighter RFP F4.2 commitment is "Historical retention ≥ 1
-year (ideally since inception)". Pre-launch R1 only has the
+The service targets historical retention ≥ 1 year (ideally since
+inception). Pre-launch R1 only has the
 prices_1m data the indexer has filled since first deploy
 (~7 days at audit time 2026-05-12); `/v1/chart?timeframe=1y`
 truncates accordingly. This section walks through running the
-catch-up backfill so the RFP commitment is met on launch day.
+catch-up backfill so the retention target is met on launch day.
 
 ### When to run it
 

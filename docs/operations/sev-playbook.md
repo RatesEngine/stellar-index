@@ -11,9 +11,9 @@ status: ratified
 **Drilled:** quarterly tabletop exercise; monthly "chaos Friday"
 live test in staging.
 
-**Freighter RFP SLA this satisfies:** F3.5 (SEV-1 detect ≤ 15 min /
-respond ≤ 30 min / hourly updates) and F3.6 (SEV-2 detect ≤ 30 min /
-respond ≤ 60 min / triage ≤ 240 min / daily updates).
+**Service SLA this satisfies:** SEV-1 detect ≤ 15 min /
+respond ≤ 30 min / hourly updates, and SEV-2 detect ≤ 30 min /
+respond ≤ 60 min / triage ≤ 240 min / daily updates.
 
 ---
 
@@ -46,7 +46,7 @@ respond ≤ 60 min / triage ≤ 240 min / daily updates).
 
 ---
 
-## 2. Timelines (the contractual promises)
+## 2. Timelines (the SLA promises)
 
 | Severity | Detect by | Respond (ack) by | Triage complete by | Status update cadence |
 | -------- | --------- | ---------------- | ------------------ | --------------------- |
@@ -57,7 +57,7 @@ respond ≤ 60 min / triage ≤ 240 min / daily updates).
 
 "Detect" = our monitoring catches it. "Respond" = responder
 acknowledges the page. "Triage" = we know root cause + have an
-action plan. "Update" = public status page + customer
+action plan. "Update" = public status page + user
 notifications.
 
 ---
@@ -69,7 +69,7 @@ notifications.
 | Prometheus / AlertManager | Every alert in [alerts-catalog.md](alerts-catalog.md) | Instantly |
 | Synthetic probes (curl every 30 s from 3 regions) | Public-facing outages that bypass internal metrics | ≤ 30 s |
 | Cloudflare load-balancer health | Region-level failures | ≤ 45 s |
-| Customer report (email, Discord) | Whatever we missed | Variable |
+| User report (email, Discord) | Whatever we missed | Variable |
 | On-call rotation dashboard | Passive — reviewed every 15 min during oncall | — |
 
 Every SEV-1 has at least **two** independent detection channels (our
@@ -136,7 +136,7 @@ Topic of the channel carries:
 
 - **Incident Commander (IC)** — first responder auto-assumes until
   a manager joins and takes over.
-- **Communications lead** — posts status-page updates + customer
+- **Communications lead** — posts status-page updates + user
   Slack / Discord messages.
 - **Technical lead** — runs the actual diagnostics + fixes.
   On a small team (SEV-2) the IC can wear both IC + tech hats; on
@@ -151,7 +151,7 @@ incident — the tech lead. Everyone else watches + advises.
 
 A SEV-1 that's mitigated within 15 min but not root-caused until
 an hour later is a good outcome. A SEV-1 debugged in-flight while
-customers suffer is a bad one. Concrete mitigation tactics for
+users suffer is a bad one. Concrete mitigation tactics for
 common SEVs are in the per-runbook file.
 
 ### 4.5 Fixing vs reverting
@@ -180,9 +180,8 @@ hosted as a static Next.js export at
 [`web/status/`](../../web/status/), deployed to Cloudflare Pages
 on every push to `main`. Lives separately from the API so it
 survives any outage that takes down our infrastructure (which is
-exactly when customers need it). F-1211 (codex audit-2026-05-12):
-the prior cstate / Upptime scaffolds were removed in favour of
-this custom Next.js app — older references in
+exactly when users need it). The prior cstate / Upptime scaffolds
+were removed in favour of this custom Next.js app — older references in
 [`status-page-setup.md`](status-page-setup.md) and
 [`rollback.md`](rollback.md) describe the obsolete pipeline.
 
@@ -200,7 +199,7 @@ to `main` (the Cloudflare Pages deploy is automatic on push).
 the cadence (hourly / daily), the safe-to-publish detail level,
 and the workstation-down fallback path.
 
-**Customer-webhook fan-out** (F-1249, codex audit-2026-05-12):
+**Webhook fan-out** (F-1249):
 the dashboard exposes `incident.sev1` + `incident.resolved`
 hook subscriptions. Because the corpus is build-time embedded
 there is no in-process state-transition signal — fan-out is
@@ -255,10 +254,10 @@ Status-page states (modelled after Atlassian Statuspage):
 > restored. Root cause: {one-line summary}. We'll post a
 > full postmortem within {SEV-1: 72 h, SEV-2: 5 business days}.
 
-### 5.3 Customer Slack / Discord
+### 5.3 User Slack / Discord
 
 The `#stellarindex-ops` Slack (internal) is primary. Major
-customers have our direct channel for real-time updates during
+users have our direct channel for real-time updates during
 incidents. Update cadence there matches the status page.
 
 ### 5.4 What we do NOT say
@@ -287,7 +286,7 @@ Deadlines:
 Contents (mandatory sections):
 - **Summary** — 3-5 sentences.
 - **Timeline** — every action with ISO-8601 timestamps.
-- **Impact** — measured customer impact (requests failed, users
+- **Impact** — measured user impact (requests failed, users
   affected, data loss if any).
 - **Root cause(s)** — often multiple; list each.
 - **Contributing factors** — conditions that made the impact

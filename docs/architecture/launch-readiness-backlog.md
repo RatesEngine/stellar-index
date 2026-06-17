@@ -9,12 +9,9 @@ status: living document
 The canonical list of outstanding implementation work between
 today and launch. Sourced from:
 
-- [`coverage-matrix.md`](coverage-matrix.md) — RFP × ADR × code
+- [`coverage-matrix.md`](coverage-matrix.md) — requirement × ADR × code
   traceability with status per requirement
-- [`docs/discovery/delivery-plan.md`](../discovery/delivery-plan.md) —
-  the original 10-week calendar
 - ADRs 0017, 0018, 0019 — cross-cutting integrity invariants
-  added post-Phase-1
 - This session's design discussions (oracle manipulation,
   consistency surfaces, anomaly response)
 
@@ -129,7 +126,7 @@ Within each surface, ordered by dependency.
 | L6.2 | Release notes template + release-process runbook + automated release pipeline. [`.github/RELEASE_NOTES_TEMPLATE.md`](../../.github/RELEASE_NOTES_TEMPLATE.md) bakes the mandatory sections (Operator-action-required / Tested-against / pkg-versions / Migration / Added/Changed/Deprecated/Removed/Fixed/Security). [`docs/operations/release-process.md`](../operations/release-process.md) covers pre-flight, cut, post-flight, hotfix branching, and rollback. End-to-end automation: [`scripts/dev/cut-release.sh`](../../scripts/dev/cut-release.sh) guard-rail (PR #648), [`.github/workflows/release.yml`](../../.github/workflows/release.yml) cross-compiles + publishes (PR #645), [`.github/workflows/deploy.yml`](../../.github/workflows/deploy.yml) + [`docs/operations/deploy-workflow.md`](../operations/deploy-workflow.md) deploys via Ansible (PR #650), [`.github/workflows/release-validate.yml`](../../.github/workflows/release-validate.yml) catches release-pipeline regressions on PRs (PR #651). | Wk 10 | half-day | L6.1 | L6.4 | docs + workflows | ✅ |
 | L6.3 | Public-flip prep — strategy for migrating private repo content to new public repo ([`docs/operations/public-flip.md`](../operations/public-flip.md)). Pre-flip checklist (16 rows) verified 2026-04-30 (gitleaks clean, CODEOWNERS scrubbed, SECURITY.md current); cut-over mechanics scripted; 24-hour pre-cutover dry-run added 2026-05-03. Execution gates on the v1.0 launch signal (L6.4). | Wk 10 | hour planning | — | L6.4 | repo strategy | ✅ |
 | L6.5 | Documentation sweep — pre-launch pass executed 2026-05-03 (PR #545). Outcomes: 66 docs' `last_verified` bumped to current; 10 broken cross-doc links fixed (1227/1228 relative `.md` links resolve, 1 remaining is a literal template placeholder); CLAUDE.md repo tree refreshed; discovery archive banner clarified read-only-since-2026-04-22; ADR statuses spot-checked (23 Accepted, 0012 Reserved); 64 runbooks reviewed (3 inactive ones still carry explicit inactivity banners). Pre-cutover refresh runs as part of the L6.4 24h dry-run per `public-flip.md`. | Wk 10 | full day | All above | L6.4 | docs | ✅ |
-| L6.6 | Customer sign-off demo — pre-flight + 9-stage walk-through covering every public surface (closed-bucket pricing → tip → observations → history → SSE → asset detail → SDK) plus expected-Q&A. End-to-end script ready in [`docs/operations/customer-demo-script.md`](../operations/customer-demo-script.md); the customer leaves able to make their first real request unaided. | Wk 10 | external | L3.*, L4.*, L5.* | L6.4 | — | 🔴 |
+| L6.6 | API walkthrough demo — pre-flight + 9-stage walk-through covering every public surface (closed-bucket pricing → tip → observations → history → SSE → asset detail → SDK) plus expected-Q&A. End-to-end script ready in [`docs/operations/customer-demo-script.md`](../operations/customer-demo-script.md); a new integrator leaves able to make their first real request unaided. | Wk 10 | external | L3.*, L4.*, L5.* | L6.4 | — | 🔴 |
 | L6.7 | First 24-h post-launch watch | Wk 10 | day | L6.4 | — | rotating shifts | 🔴 |
 
 ## Post-launch (explicitly deferred)
@@ -140,10 +137,10 @@ Within each surface, ordered by dependency.
 | L7.2 | 99.99% uptime measurement | Needs ≥ 30 days production data; reported 90 days post-launch | ⏳ |
 | L7.3 | ADR-0019 Phase 3 cross-oracle factor | Depends on L2.10 (`internal/divergence/`) being production-quality first | ⏳ |
 | L7.4 | Tier-1 own-validator deployment (per ADR-0004) | Multi-week catchup; not required for V1 launch | ⏳ |
-| L7.5 | GraphQL surface alongside REST | Optional per RFP; defer until customer-driven | ⏳ |
+| L7.5 | GraphQL surface alongside REST | Optional; defer until user-driven | ⏳ |
 | L7.7 | `change_24h_pct` field on `/v1/assets/{id}` | Field is declared in OpenAPI as nullable; the other six F2 fields populate end-to-end (L3.5). Implementing it requires the aggregator to emit a closed-bucket pct delta the v1 orchestrator doesn't expose — either a new CAGG that captures the per-bucket open/close pair or a derived computation that joins two bucket-end VWAPs across the 24h window. Today the field is honestly null. (L7.6 reserved for SEP-41 stablecoin USD-volume per PR #517.) | ⏳ |
 | L7.6 | `usd_volume` for pure-SEP-41 (Soroban-native, no classic backer) stablecoins | Mainnet set is essentially empty today (USDC/USDT/EURC/EURB/MXNe/PYUSD are classic + SAC; L2.2 covers them via the SAC-wrapper map). Add a `[trades].usd_pegged_sep41_contracts` config surface if/when a Soroban-native stablecoin gains traction. | ⏳ |
-| L7.8 | `/v1/chart?price_type=twap` — multi-bar TWAP series for the historical chart UI | Single-bar TWAP is shipped via `/v1/twap` (true time-weighted compute from raw trades); only the multi-bar chart variant is deferred. Per [ADR-0020 §price_type handling](../adr/0020-chart-api-contract.md), `/v1/chart` returns a clean 400 for `price_type=twap` rather than (a) silently falling back to VWAP and mis-labeling the response, or (b) shipping an on-the-fly TWAP from the 1m CAGG that would compute differently from a future TWAP CAGG and create a one-time consumer-visible break. Implementing this is ~half a day: add `prices_twap_<gran>` CAGG migration, populate on aggregator tick, flip the 400 to 200 in the handler. The Stellar + Freighter RFPs both phrase the chart as "TWAP **or** VWAP" (either acceptable); the proposal commits to "configurable VWAP and TWAP aggregation engine" which the engine satisfies via `/v1/twap` + the VWAP→TWAP fallback in S4.4. Reopen this row when a customer asks for TWAP-shaped charts. | ⏳ |
+| L7.8 | `/v1/chart?price_type=twap` — multi-bar TWAP series for the historical chart UI | Single-bar TWAP is shipped via `/v1/twap` (true time-weighted compute from raw trades); only the multi-bar chart variant is deferred. Per [ADR-0020 §price_type handling](../adr/0020-chart-api-contract.md), `/v1/chart` returns a clean 400 for `price_type=twap` rather than (a) silently falling back to VWAP and mis-labeling the response, or (b) shipping an on-the-fly TWAP from the 1m CAGG that would compute differently from a future TWAP CAGG and create a one-time consumer-visible break. Implementing this is ~half a day: add `prices_twap_<gran>` CAGG migration, populate on aggregator tick, flip the 400 to 200 in the handler. The chart contract treats "TWAP **or** VWAP" as either-acceptable, and the engine offers configurable VWAP and TWAP aggregation via `/v1/twap` + the VWAP→TWAP fallback in S4.4. Reopen this row when a user asks for TWAP-shaped charts. | ⏳ |
 
 ---
 
@@ -184,12 +181,12 @@ all run in parallel with the aggregator critical path.
 Per operator decision 2026-04-28, all 🔴 / 🟡 items above ship
 before production cutover. Two consequences:
 
-1. **The 10-week original plan slips by ~1–2 weeks.** The pre-Phase-1
+1. **The original plan slips by ~1–2 weeks.** The early
    estimate didn't account for ADR-0017/0018/0019's added scope or
    for the ~1.5 weeks of confidence-scoring work in L2.5–L2.7.
    Realistic launch window: late July 2026 (vs original June 30).
 2. **No "soft launch" with stub responses.** Every endpoint serves
-   real, anomaly-protected data on day 1. Customers who tested
+   real, anomaly-protected data on day 1. Integrators who tested
    against staging see the same wire shape and behaviour at
    production cutover.
 

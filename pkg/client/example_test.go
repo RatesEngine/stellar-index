@@ -1167,8 +1167,8 @@ func ExampleClient_Cursors() {
 
 // ExampleClient_PriceBatch demonstrates the bulk pricing surface.
 // One round-trip returns prices for many assets — the recommended
-// path for portfolio + multi-asset views (per the Freighter RFP
-// §"Bulk query support preferred"). Cross-region consistent: every
+// path for portfolio + multi-asset views (bulk query support).
+// Cross-region consistent: every
 // returned snapshot is from the same closed-bucket window
 // `/v1/price` would have served for the same instant.
 //

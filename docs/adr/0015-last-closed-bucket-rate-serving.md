@@ -22,7 +22,7 @@ superseded_by: null
 
 ## Context
 
-The Rates Engine deploys to three geographically-separated regions
+Stellar Index deploys to three geographically-separated regions
 (Frankfurt / US-East / Singapore per `infrastructure/multi-region-topology.md`).
 Postgres replication is mixed: R1→R2 synchronous (~80 ms RTT
 makes the commit-time cost tolerable for batched per-ledger
@@ -43,7 +43,7 @@ Disagreement of that shape is unacceptable for a price API: a client
 hammering DNS-rotated regions would see the price flicker between
 versions.
 
-The Freighter RFP allows ≤30 s data freshness. The schema
+The SLA allows ≤30 s data freshness. The schema
 (migration 0002) already pre-computes VWAP/TWAP into 1-minute,
 15-minute, 1-hour, 4-hour, 1-day, 1-week, 1-month continuous
 aggregates. Once a CAGG row for `[12:00:00, 12:01:00]` has been

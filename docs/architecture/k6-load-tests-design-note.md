@@ -3,7 +3,6 @@ title: k6 load test suite (test/load/) — design note
 last_verified: 2026-05-02
 status: shipped (Task #74 — six scenarios in test/load/scenarios/; unblocks Task #77 p95 proof which is operator-bound)
 related:
-  - docs/freighter-rfp.md §SLA targets
   - docs/architecture/coverage-matrix.md S9.1 / S9.2
   - docs/operations/runbooks/api-latency.md (the alert this proves we don't trip)
   - deploy/monitoring/rules/slo.yml (multi-window SLO rules)
@@ -14,13 +13,13 @@ related:
 **Working draft on local-only branch
 `design/k6-load-tests-design-note`. Bootstraps Task #74
 implementation. Directly unblocks Task #77 (p95 ≤ 200 ms proof
-report), which is a Freighter RFP contract requirement.**
+report), which is a load-test SLA requirement.**
 
 ## What we're proving
 
 Two specific commitments under load:
 
-1. **Freighter SLA p95 ≤ 200 ms** (coverage matrix S9.2). The
+1. **Latency SLA p95 ≤ 200 ms** (coverage matrix S9.2). The
    public API serves p95 ≤ 200 ms across the realistic mix of
    `/v1/price`, `/v1/vwap`, `/v1/twap`, `/v1/history`, batch +
    stream surfaces under representative concurrency.
@@ -144,9 +143,9 @@ export const sla = {
 
 ## Traffic shape (`06-mixed-realistic.js`)
 
-The mixed scenario is what the Freighter SLA argument actually
-hangs on. Per-endpoint share informed by RFP traffic
-expectations + audit telemetry:
+The mixed scenario is what the latency SLA argument actually
+hangs on. Per-endpoint share informed by expected traffic
++ audit telemetry:
 
 | Endpoint | Share | Rationale |
 |---|---|---|
@@ -160,7 +159,7 @@ expectations + audit telemetry:
 | `/v1/oracle/lastprice` (SEP-40) | 1 % | Other oracles consuming us |
 
 These match neither *exactly* the launch traffic (we don't have
-that yet) nor any one customer's pattern; they're a defensible
+that yet) nor any one integrator's pattern; they're a defensible
 blend. Document the assumption explicitly in the scenario file
 so future tunings know what to update.
 
@@ -232,7 +231,7 @@ either way.
 
 Self-hosted is the default — single binary, runs anywhere.
 k6 Cloud is a paid escalation if the proof needs >5,000 concurrent
-VUs (unlikely; Freighter's expected load profile fits in
+VUs (unlikely; the expected load profile fits in
 self-hosted territory).
 
 ## Edge cases / gotchas
@@ -344,7 +343,7 @@ Each wave-PR is small enough for clean review + a single CI run.
    — too noisy for routine. Schedule mixed-realistic weekly;
    spike + 24h-soak only on operator-triggered runs.
 
-3. **Do we expose the k6 scenarios to customers as "you can
+3. **Do we expose the k6 scenarios to users as "you can
    reproduce our SLA claims"?** Open-source-friendly move; would
    ship to `pkg/loadtest` + a `scripts/run-sla-proof` wrapper.
    Defer until the public-flip (Task #78).

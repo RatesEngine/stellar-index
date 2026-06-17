@@ -69,21 +69,20 @@ In decreasing order of frequency:
 
 If the alert label points at one of these sources, the listed
 surprise is the single most common cause of decode regressions —
-worth checking BEFORE deeper diagnosis. The full long-form notes
-live in `docs/discovery/dexes-amms/` and `docs/discovery/oracles/`;
-this table is the operator-facing summary derived from them and
-the CLAUDE.md "Things that will surprise you" list.
+worth checking BEFORE deeper diagnosis. This table is the
+operator-facing summary derived from the CLAUDE.md "Things that
+will surprise you" list.
 
 | Source | Most common decode-regression cause | First place to look |
 | ------ | ----------------------------------- | ------------------- |
-| `soroswap` | `SwapEvent` has no post-state reserves; reserves come in the immediately-following `SyncEvent`. A missing/orphaned `SyncEvent` produces a partner-less swap that decodes but has no usable reserve context. | `discovery/dexes-amms/soroswap.md`; check `orphan-events` rate. |
-| `phoenix` | Phoenix emits **8 events per swap** (one per field with a 2-tuple topic `("swap", "<field>")`). A swap reconstruction that's short of all 8 looks malformed. | `discovery/dexes-amms/phoenix.md`; group by `(ledger, tx_hash, op_index)`. |
-| `comet` | Comet uses a shared `("POOL", <event>)` topic across **every** pool contract — the decoder matches by topic bytes, not pool contract ID. A new pubnet contract deploying Balancer-v1 Comet code will look identical on the wire. | `discovery/dexes-amms/comet.md`; filter downstream by `Trade.Source = "comet"` + contract-address context. |
-| `reflector` | Reflector is **three separate contracts** (DEX / CEX / FX) and has NO on-chain `twap` or `x_*` methods (proposal said it does; it doesn't). | `discovery/oracles/reflector.md`; check which Reflector contract is decoding. |
-| `band` | Band's Soroban contract emits **zero events** — observed via `relay()` / `force_relay()` `InvokeContract` op args through the dispatcher's `ContractCallDecoder` interface (PR 168). Pair rates are at E18 scale; relayed single-asset rates are at E9. | `discovery/oracles/band.md`; verify the `ContractCallDecoder` is wired. |
-| `redstone` | Adapter emits topic `"REDSTONE"` events but the body carries NO `feed_id`. Feed IDs live in the tx's `write_prices(updater, feed_ids, payload)` op args — plumbed through `events.Event.OpArgs` (PR 166). Length-mismatch between feed_ids and updated_feeds returns `ErrFeedIDCountMismatch`. | `discovery/oracles/redstone.md`; check the OpArgs plumbing. |
-| `sdex` (classic) | Post-P23 (mainnet 2025-09-03) every classic asset movement emits a unified transfer/mint/burn event with a 4th `sep0011_asset` topic. Pre-P23 you parse operations+effects. The decoder handles both — but a protocol bump can introduce a third event shape. | `discovery/notes/cap-67-unified-events.md`; check `protocolVersion` from `rpc-probe`. |
-| Any SEP-41 token | `transfer` event data can be EITHER a simple `i128` OR a map containing `amount` + `to_muxed_id`. Type-test before `MustI128()`. | `discovery/notes/sep-41-token-events.md`. |
+| `soroswap` | `SwapEvent` has no post-state reserves; reserves come in the immediately-following `SyncEvent`. A missing/orphaned `SyncEvent` produces a partner-less swap that decodes but has no usable reserve context. | Check the `orphan-events` rate. |
+| `phoenix` | Phoenix emits **8 events per swap** (one per field with a 2-tuple topic `("swap", "<field>")`). A swap reconstruction that's short of all 8 looks malformed. | Group by `(ledger, tx_hash, op_index)`. |
+| `comet` | Comet uses a shared `("POOL", <event>)` topic across **every** pool contract — the decoder matches by topic bytes, not pool contract ID. A new pubnet contract deploying Balancer-v1 Comet code will look identical on the wire. | Filter downstream by `Trade.Source = "comet"` + contract-address context. |
+| `reflector` | Reflector is **three separate contracts** (DEX / CEX / FX) and has NO on-chain `twap` or `x_*` methods (we compute TWAP and cross-pair locally). | Check which Reflector contract is decoding. |
+| `band` | Band's Soroban contract emits **zero events** — observed via `relay()` / `force_relay()` `InvokeContract` op args through the dispatcher's `ContractCallDecoder` interface (PR 168). Pair rates are at E18 scale; relayed single-asset rates are at E9. | Verify the `ContractCallDecoder` is wired. |
+| `redstone` | Adapter emits topic `"REDSTONE"` events but the body carries NO `feed_id`. Feed IDs live in the tx's `write_prices(updater, feed_ids, payload)` op args — plumbed through `events.Event.OpArgs` (PR 166). Length-mismatch between feed_ids and updated_feeds returns `ErrFeedIDCountMismatch`. | Check the OpArgs plumbing. |
+| `sdex` (classic) | Post-P23 (mainnet 2025-09-03) every classic asset movement emits a unified transfer/mint/burn event with a 4th `sep0011_asset` topic. Pre-P23 you parse operations+effects. The decoder handles both — but a protocol bump can introduce a third event shape. | Check `protocolVersion` from `rpc-probe`. |
+| Any SEP-41 token | `transfer` event data can be EITHER a simple `i128` OR a map containing `amount` + `to_muxed_id`. Type-test before `MustI128()`. | Type-test before `MustI128()`. |
 
 When a Soroban DEX/oracle source decode-errors immediately after a
 Stellar protocol bump or a known DEX redeploy: the source's WASM
@@ -104,14 +103,14 @@ This alert is P3 because there's no emergency runtime response — we can't un-d
 - [ ] Step 4 — if the cause is a regression (option 3): `git revert` the suspect commit and deploy. File an incident to retry the regressed change with a proper test.
 - [ ] Verification: `rate(...decode_errors_total[5m])` drops back under the 1/sec threshold within 5 min of mitigation.
 
-### Customer comms note when `class_drop_spike` co-fires
+### Comms note when `class_drop_spike` co-fires
 
 If `stellarindex_aggregator_class_drop_spike` fires alongside this
 alert, the affected source has dropped out of the VWAP for one or
 more pairs. The remaining sources continue to serve prices, but
 the smaller consensus may produce elevated
 `flags.divergence_warning` on the affected pairs. **Surface this
-in customer comms** — it explains why a customer might see a
+in status comms** — it explains why a consumer might see a
 warning flag without a corresponding price disruption. Template:
 "Affected pairs may show elevated `flags.divergence_warning`; price
 is still served correctly from remaining sources." See

@@ -101,7 +101,7 @@ corrected. If readyz reports red:
 ## Mitigation (≤ 15 min)
 
 - [ ] Step 1 — **declare SEV-1** in whatever incident channel you use.
-      Downtime is customer-visible and a breach of our Freighter SLA.
+      Downtime is user-visible and a breach of our service SLA.
 
 - [ ] Step 2 — find the root cause via the diagnosis above. Do NOT
       blindly `systemctl restart stellarindex-api` on a binary that's

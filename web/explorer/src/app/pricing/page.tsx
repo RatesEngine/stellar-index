@@ -145,9 +145,8 @@ export default function PricingPage() {
             <strong className="text-ink-body">
               Free is not a trial.
             </strong>{' '}
-            Anonymous reads are a permanent commitment — public-tier
-            access is what the SDF / Freighter RFP asked for and what
-            we shipped against.
+            Anonymous reads are a permanent commitment — open,
+            public-tier access is core to what Stellar Index is.
           </li>
           <li>
             <strong className="text-ink-body">

@@ -1,15 +1,12 @@
 # Reflector oracle connector
 
 First non-DEX source. Reflector is a decentralised oracle network
-native to Stellar/Soroban, SEP-40-compliant. Primary Phase-1
-reference:
-[`docs/discovery/oracles/reflector.md`](../../../docs/discovery/oracles/reflector.md).
+native to Stellar/Soroban, SEP-40-compliant.
 
 ## What this ingests
 
-**Reflector is three separate contracts**, not one — a correction
-flagged in Phase-1 against our proposal. Each contract's feed is
-a different upstream data source:
+**Reflector is three separate contracts**, not one. Each
+contract's feed is a different upstream data source:
 
 | Contract | Feed | Asset shape |
 | --- | --- | --- |
@@ -25,8 +22,7 @@ cursors, and divergence checks can break them out.
 
 ## Event model — one event, N updates
 
-Verified from `reflector-contract/oracle/src/events.rs` during
-Phase 1.
+Verified against `reflector-contract/oracle/src/events.rs`.
 
 ```
 topic:  ["REFLECTOR", "update", <timestamp: u64 ms>]   (Symbols + a u64)
@@ -56,9 +52,9 @@ in `canonical.OracleUpdate.Price` + the decimals in
 
 ### Q2 — No on-chain `twap` / `x_*` methods
 
-Our proposal originally claimed Reflector exposes `twap`, `x_twap`,
-`x_last_price` etc. on-chain. Phase-1 verified those methods do NOT
-exist on Reflector v3. We compute TWAP + cross-pair locally from
+Reflector is sometimes assumed to expose `twap`, `x_twap`,
+`x_last_price` etc. on-chain. Those methods do NOT exist on
+Reflector v3. We compute TWAP + cross-pair locally from
 `lastprice` / `prices` history. Not this package's job, but worth
 knowing when integrating: `internal/aggregate` handles that math.
 
@@ -78,9 +74,7 @@ so divergence analysis can detect a single relayer compromise.
 
 ### Q5 — Addresses
 
-Mainnet contract addresses (Reflector v3, public — see the
-address tables in
-[`docs/discovery/oracles/reflector.md`](../../../docs/discovery/oracles/reflector.md)):
+Mainnet contract addresses (Reflector v3, public):
 
 | Contract | Mainnet address | Owner |
 | --- | --- | --- |
@@ -89,8 +83,7 @@ address tables in
 | Reflector FX | `CBKGPWGKSKZF52CFHMTRR23TBWTPMRDIYZ4O2P5VS65BMHYH4DXMCJZC` | Reflector DAO |
 
 Verify via stellar.expert before pasting into config — the DAO
-can rotate addresses on a v4 spawn, in which case the discovery
-doc gets the update first.
+can rotate addresses on a v4 spawn.
 
 Operators set each via `[oracle.reflector]` in TOML; each gets
 its own Source instance via `NewDEX()` / `NewCEX()` / `NewFX()`

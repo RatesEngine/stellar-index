@@ -1,21 +1,20 @@
 # Stellar Index migration — plan + runbook
 
-**Decision (2026-06-12):** the product rebrands from **Rates Engine**
-(ratesengine.net) to **Stellar Index** (stellarindex.io). The rename ran
-TWICE the same day: first to "Stellar Atlas" (ADR-0036; migration + r1
-cutover fully executed), then — that name proved taken — to **Stellar
-Index** (ADR-0037; this doc reflects the final state, cutover re-run for
-the Atlas→Index hop). Positioning: Stellar Index is a **protocol explorer for the Stellar
-network** — deep, verified, per-protocol on-chain data (contracts,
-events, prices) — with the pricing API as one of its products, evolving
-toward a **comprehensive blockchain explorer** (native + Soroban).
-Recorded as ADR-0036 + ADR-0037.
+This doc records the deployment/config rename steps executed when the
+project's living surfaces (module path, binaries, metrics, env vars, DB
+role/db, domains) moved to the **Stellar Index** naming. It keeps the
+operational fidelity — job names, DB names, exactly what changed — so the
+mechanical rename is reproducible. Stellar Index is a **protocol explorer
+for the Stellar network** — deep, verified, per-protocol on-chain data
+(contracts, events, prices) — with the pricing API as one of its
+products, evolving toward a **comprehensive blockchain explorer** (native
++ Soroban).
 
 Decisions locked with the operator:
 
 - Go module path: `github.com/StellarIndex/stellar-index`
 - Binaries: `stellarindex-*` (indexer, aggregator, api, ops, migrate, sla-probe)
-- `audit-fixes-tier0` merges to main FIRST; rebrand lands on the merged base
+- `audit-fixes-tier0` merges to main FIRST; the rename lands on the merged base
 - Scope: full migration including the live r1 cutover
 
 ## Survey (what the rename touches)
@@ -23,27 +22,26 @@ Decisions locked with the operator:
 ~900 of 2,399 tracked files. The persisted-state surfaces that need a
 deliberate decision (not blind sed):
 
-| Surface | Current | Action |
+| Surface | Target | Action |
 |---|---|---|
 | Go module path | `github.com/StellarIndex/stellar-index` | rename in go.mod + every import |
 | Binaries / cmd dirs | `stellarindex-*` | rename dirs + Makefile + workflows + systemd |
-| Prometheus metrics | `stellarindex_*` namespace | rename to `stellarindex_*` + ALL rule files + runbooks (history discontinuity accepted — pre-launch, no consumers) |
-| Env vars | `STELLARINDEX_*` | rename to `STELLARINDEX_*` + r1 /etc/default files |
+| Prometheus metrics | `stellarindex_*` namespace | rename + ALL rule files + runbooks (history discontinuity accepted — pre-launch, no consumers) |
+| Env vars | `STELLARINDEX_*` | rename + r1 /etc/default files |
 | Postgres role + db (r1) | `stellarindex`/`stellarindex` | rename during cutover (services stopped) |
 | Redis keys | no brand prefix | no action |
 | DB cursor/source names | no brand | no action |
 | MinIO buckets | brand-free (galexie) | no action |
 | ClickHouse db | `stellar` | no action |
 | User-Agents | `stellarindex/1.0`, `stellar-index/...` | rename |
-| Emails | security@stellarindex.io | security@stellarindex.io (mailbox: operator) |
-| Domains | stellarindex.io (Cloudflare) | stellarindex.io; Caddy serves BOTH until DNS + Pages flip |
+| Emails | security@stellarindex.io | mailbox: operator |
+| Domains | stellarindex.io (Cloudflare) | Caddy serves both old + new until DNS + Pages flip |
 | GitHub | StellarIndex/stellar-index | repo rename now; org `StellarIndex` creation + transfer = operator step (redirects persist) |
 
 **Immutable archives are NOT rewritten**: `docs/adr/0001-0035`,
-`docs/discovery/`, `docs/audit-*/`, `CHANGELOG.md` history, and dated
-blog posts keep the old name as historical record (repo policy: ADRs are
-immutable). Their READMEs get a one-line banner pointing at ADR-0036.
-Everything *living* is renamed.
+`CHANGELOG.md` history, and dated blog posts keep the old name as
+historical record (repo policy: ADRs are immutable). Everything *living*
+is renamed.
 
 ## Phases
 
@@ -59,7 +57,7 @@ Everything *living* is renamed.
 6. **web/** — explorer, status, dashboard: branding, domains, copy.
 7. **Docs + repositioning** — README + CLAUDE.md rewritten around the
    protocol-explorer identity; SECURITY/CONTRIBUTING; docs/protocols pages;
-   archive banners; ADR-0036; CHANGELOG.
+   CHANGELOG.
 8. **Verify** — full `make verify`; fix fallout (lint-imports module path,
    docs lint, golden tests).
 9. **Git** — staged commits on main; `gh repo rename stellar-index`; push.
@@ -116,11 +114,11 @@ the cutover; next tag ships under the new names).
 
 ## Post-cutover fix (2026-06-13): Prometheus rule-dir drift
 
-Both rename cutovers copied the renamed alert rules to
+The cutover copied the renamed alert rules to
 `/etc/prometheus/rules.d/`, but r1's `prometheus.yml` loads
 `rule_files: /etc/prometheus/rules.r1/*.yml` — a DIFFERENT directory.
-So for ~18h post-rebrand, Prometheus kept loading the stale `rules.r1`
-copy whose alerts targeted the old `ratesengine-api` job + `ratesengine_*`
+So for ~18h post-cutover, Prometheus kept loading the stale `rules.r1`
+copy whose alerts targeted the old (pre-rename) `*-api` job + legacy
 metric names — which no longer exist after the metric-namespace rename.
 **Every one of the 116 alert rules was silently inert** (an absent-job
 `== 0` matches nothing, so `stellarindex_api_down` would never have fired

@@ -46,7 +46,7 @@ per-request RPC. The path forward is in-house observation from
 the LCM stream we already consume.
 
 The `wasm-history` walker
-([`cmd/ratesengine-ops/main.go::scanLCMForWasmChanges`](../../cmd/ratesengine-ops/main.go))
+([`cmd/stellarindex-ops/main.go::scanLCMForWasmChanges`](../../cmd/stellarindex-ops/main.go))
 proves the technique works: it iterates
 `LedgerEntryChange` rows from `tx.Operations[].Changes` and the
 fee-meta block, filters to `LedgerEntryDataType == ContractCode`,
@@ -138,7 +138,7 @@ Schema rationale:
 ### Backfill semantics
 
 Same path as every other source: an operator runs
-`ratesengine-ops backfill -source accounts -from N -to M` to
+`stellarindex-ops backfill -source accounts -from N -to M` to
 replay an LCM range. The dispatcher's existing range-walker
 delivers `LedgerEntryChange` rows in chronological order; the
 observer's `Decode` writes one row per matched change.
@@ -192,7 +192,7 @@ func (r *LCMReserveBalanceReader) ReserveBalanceTotal(
 The existing `supply.ConfigReserveBalanceReader` (shipped in
 #285) stays in tree as the bootstrap fallback — operators flip
 to the LCM reader by changing one line in
-`cmd/ratesengine-ops/supply.go::supplySnapshot`. Until the
+`cmd/stellarindex-ops/supply.go::supplySnapshot`. Until the
 observer has backfilled the configured reserve accounts to a
 deep enough range, the config reader remains the safer choice
 (its values are explicitly operator-blessed; the LCM reader
@@ -252,7 +252,7 @@ accounts are watched (via the existing
 - New dispatcher hook (`LedgerEntryChangeDecoder`) +
   `Dispatcher.AddEntryDecoder` registration.
 - New readers in `internal/metadata/` and `internal/supply/`.
-- Drive-by migration: `cmd/ratesengine-ops backfill` learns a
+- Drive-by migration: `cmd/stellarindex-ops backfill` learns a
   `-source accounts` flag.
 - `ConfigReserveBalanceReader` stays as the bootstrap fallback
   with a clearer comment pointing at this ADR. Operator-config-
@@ -278,6 +278,6 @@ accounts are watched (via the existing
   invariant Algorithm 1 needs the live reader for).
 - PR #285: ships `ConfigReserveBalanceReader` as the interim
   implementation this ADR replaces.
-- `cmd/ratesengine-ops/main.go::scanLCMForWasmChanges`:
+- `cmd/stellarindex-ops/main.go::scanLCMForWasmChanges`:
   reference implementation of the LedgerEntryChange iteration
   pattern.

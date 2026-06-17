@@ -285,7 +285,7 @@ func backfillTxHash(symbol string, closeMs int64) string {
 // string. Binance supports: 1s, 1m, 3m, 5m, 15m, 30m, 1h, 2h, 4h,
 // 6h, 8h, 12h, 1d, 3d, 1w, 1M.
 //
-// For v1 we expose the RFP-required granularities (1m, 15m, 1h, 4h,
+// For v1 we expose the required granularities (1m, 15m, 1h, 4h,
 // 1d, 1w) plus a couple of common intermediate buckets. Requests
 // outside the supported set return an error.
 func granularityToInterval(d time.Duration) (string, error) {

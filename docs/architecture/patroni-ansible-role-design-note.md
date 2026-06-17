@@ -360,7 +360,7 @@ Coverage matrix #11 (Patroni) flips ✅.
    no TLS between etcd and Patroni. For Phase-3 multi-region
    deployments where etcd might span regions, TLS becomes
    mandatory. Mark TODO in inventory comments; add to
-   `validator-rollout.md` Phase-3 acceptance criteria.
+   `validator-rollout.md` Phase-3 success criteria.
 
 6. **Patroni REST API is unauthenticated by default.** Role
    gates it behind firewall + Basic Auth via the

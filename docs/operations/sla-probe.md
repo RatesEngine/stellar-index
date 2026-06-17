@@ -11,20 +11,19 @@ Operational companion to the executable SLA-evidence CLI shipped in
 
 - What the probe is + why it runs continuously
 - Daily cron via `configs/healthchecks/stellarindex-sla-probe.{service,timer}`
-- The RFP-stated SLA targets the probe verifies against
+- The SLA targets the probe verifies against
 - Textfile-collector integration + the four shipped alerts
 
 ## Purpose
 
-The Freighter RFP and the awarded ctx-proposal both bind the API
-to four SLA targets:
+The API is bound to four SLA targets:
 
-| Metric                   | Target           | Source                     |
-| ------------------------ | ---------------- | -------------------------- |
-| p95 latency              | ≤ 200 ms         | Freighter RFP §SLA         |
-| p99 latency              | ≤ 500 ms         | Freighter RFP §SLA         |
-| Availability             | ≥ 99.9 %         | Freighter RFP §SLA         |
-| Price freshness          | ≤ 30 s staleness | Freighter RFP V1 § Pricing |
+| Metric                   | Target           | Source            |
+| ------------------------ | ---------------- | ----------------- |
+| p95 latency              | ≤ 200 ms         | service SLA       |
+| p99 latency              | ≤ 500 ms         | service SLA       |
+| Availability             | ≥ 99.9 %         | service SLA       |
+| Price freshness          | ≤ 30 s staleness | service SLA       |
 
 The SLA probe drives synthetic load against the deployed API,
 measures per-endpoint p50/p95/p99 latency, parses `observed_at`

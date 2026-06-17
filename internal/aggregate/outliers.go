@@ -104,7 +104,7 @@ func meanStdev(xs []float64) (mean, stdev float64) {
 		sumSq += d * d
 	}
 	// Sample stdev (Bessel's correction): /(n-1), not /n. Matches
-	// the Phase-1 RFP formula cited in docs/ctx-proposal.md.
+	// the Phase-1 formula cited in docs/ctx-proposal.md.
 	stdev = math.Sqrt(sumSq / float64(len(xs)-1))
 	return mean, stdev
 }

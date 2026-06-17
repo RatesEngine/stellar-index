@@ -4,8 +4,8 @@
 # stops or reports failure, operators get an email/Slack/SMS.
 #
 # This is LAYER 1 monitoring: external watcher survives local-box
-# death. It's the absolute minimum that would have caught the CTX
-# node's restart loops. Proper Prometheus/Alertmanager stack lives
+# death. It's the absolute minimum that would have caught an
+# unmonitored node's restart loops. Proper Prometheus/Alertmanager stack lives
 # on a separate box (TODO, Phase B).
 #
 # The ping URL is a shared secret (anyone with it can forge healthy

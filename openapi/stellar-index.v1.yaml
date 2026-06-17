@@ -798,12 +798,11 @@ paths:
   /chart:
     get:
       tags: [history]
-      summary: Rolling-window chart series matching the Freighter RFP shape.
+      summary: Rolling-window chart series for an asset/quote pair.
       description: |
         Returns CLOSED CAGG buckets within a rolling time window for
         one asset/quote pair, shaped as `(timeframe, granularity,
-        price_type) → points[]` per the Freighter RFP V1 chart
-        contract.
+        price_type) → points[]` per the V1 chart contract.
 
         Defaults: `quote=fiat:USD`, `timeframe=24h`,
         `granularity` per the timeframe table below, `price_type=vwap`.
@@ -2323,7 +2322,7 @@ paths:
         and pointers to the long-form ADRs that govern each section.
 
         Designed for transparency consumers (compliance, auditors,
-        AI agents, integrators verifying RFP §10 "open methodology"
+        AI agents, integrators verifying our open-methodology
         claims) who want to verify what the deployment is doing
         without parsing the explorer's HTML at /methodology or
         chasing ADR cross-refs. Sub-millisecond — no DB call;
@@ -4502,7 +4501,7 @@ components:
         max_number:        { type: string, nullable: true, description: "SEP-1-declared maximum supply ceiling (decimal string). Distinct from `max_supply` below which is operator/policy-derived." }
         is_unlimited:      { type: boolean, nullable: true, description: "Issuer asserts unbounded issuance. Null when the issuer didn't address supply at all; false when they declared a bounded supply." }
         # F2 fields — Market Cap / FDV / Circulating / Total / Max
-        # Supply per Freighter RFP V2 (ADR-0011).
+        # Supply (ADR-0011).
         #
         # Supply values are decimal strings in the asset's smallest
         # integer unit (stroops for XLM/classic; contract-defined for

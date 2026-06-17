@@ -11,10 +11,9 @@ superseded_by: null
 
 ## Context
 
-Stellar RFP §Performance and Freighter RFP §3 commit Rates Engine
-to **p95 ≤ 200 ms, p99 ≤ 500 ms** end-to-end on the public REST
-endpoints (coverage-matrix S9.2, F3.1, F3.2). Without an
-explicit per-component budget those numbers are aspirational;
+Stellar Index commits to **p95 ≤ 200 ms, p99 ≤ 500 ms** end-to-end
+on the public REST endpoints (coverage-matrix S9.2, F3.1, F3.2).
+Without an explicit per-component budget those numbers are aspirational;
 with one, every PR can be assessed against its share before it
 lands rather than discovered as latency drift after.
 
@@ -126,15 +125,14 @@ handler tests as `// budget: pXX = N ms`:
 - **Histogram alerts** on `http_request_duration_seconds_bucket`
   per route + status (per `internal/obs/metrics.go`). Existing
   alerts in alerts-catalog:
-  - `ratesengine_api_latency_p95_high` — > 500 ms p95 sustained
+  - `stellarindex_api_latency_p95_high` — > 500 ms p95 sustained
     > 2 min (2.5× the steady-state target — leaves room before
     paging on the P2)
-  - `ratesengine_api_latency_p99_high` — > 2 s p99 sustained
+  - `stellarindex_api_latency_p99_high` — > 2 s p99 sustained
     > 2 min (4× the cache-cold budget — paging threshold)
-- **Load-test gate** — Week 9 SLA-validation deliverable
+- **Load-test gate** — an SLA-validation load test
   exercises the budget under 2,000 rps on cache-served endpoints.
-  Failure to meet p95 ≤ 200 ms / p99 ≤ 500 ms blocks the
-  Phase-6b exit gate.
+  Failure to meet p95 ≤ 200 ms / p99 ≤ 500 ms blocks the release.
 - **Per-handler test budgets** — handlers that touch novel paths
   (new store method, new external dependency) should add a unit-
   level latency assertion in their test (e.g.
@@ -157,7 +155,7 @@ handler tests as `// budget: pXX = N ms`:
 
 - **Negative — the budget is conservative.** A 200 ms target with
   65 ms steady-state means most of the budget is headroom. We
-  could promise lower (say p95 ≤ 100 ms) but the RFP only asks
+  could promise lower (say p95 ≤ 100 ms) but the SLA only asks
   for 200 ms; over-promising costs us flexibility on tail
   events. Re-evaluate post-launch with real traffic data.
 
@@ -184,11 +182,11 @@ handler tests as `// budget: pXX = N ms`:
 ## Alternatives considered
 
 1. **No explicit budget — let load tests retroactively define
-   it.** Rejected. The RFP commits to a number; we should know
+   it.** Rejected. The SLA commits to a number; we should know
    in advance how we're meeting it, not discover by failure.
 
 2. **Stricter target (p95 ≤ 100 ms).** Considered; rejected for
-   v1. The RFP commitment is 200 ms; over-engineering to 100 ms
+   v1. The SLA commitment is 200 ms; over-engineering to 100 ms
    would push us into in-process cache territory that violates
    the ADR-0008 "Redis is the hot tier" decision.
 
@@ -211,7 +209,7 @@ handler tests as `// budget: pXX = N ms`:
 - [`docs/architecture/ha-plan.md`](../architecture/ha-plan.md)
   §10 launch-checklist — the load-test gate references this ADR.
 - [`docs/operations/alerts-catalog.md`](../operations/alerts-catalog.md)
-  §API plane — `ratesengine_api_latency_p95_high` and
+  §API plane — `stellarindex_api_latency_p95_high` and
   `_p99_high` thresholds derived from this budget.
 - ADR-0007 — Redis as hot-path cache; defines the keyspace + TTL
   semantics this budget assumes.

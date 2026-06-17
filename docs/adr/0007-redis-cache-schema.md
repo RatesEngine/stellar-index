@@ -18,7 +18,7 @@ superseded_by: null
 
 ## Context
 
-The API p95 ≤ 200 ms SLA (Freighter RFP §Performance) is only
+The API p95 ≤ 200 ms latency SLA is only
 achievable if the hot path is memory-cached. Round-tripping every
 `/v1/price` query through a Postgres continuous aggregate would
 cost 5–20 ms on the DB alone; under 2 000 rps burst that saturates
@@ -42,7 +42,7 @@ the aggregator, and the rate-limiter all depend on.
 ## Decision
 
 **Redis is the single hot-path cache + rate-limit store +
-ephemeral-state store for Rates Engine.** One cluster serves every
+ephemeral-state store for Stellar Index.** One cluster serves every
 workload listed below; no secondary Redis/Memcached/KV for any
 component.
 
@@ -61,7 +61,7 @@ Key schema:
 | `div:<asset_id>` | Latest divergence-detection result per asset | JSON | 5 min | divergence worker | api |
 | `health:<source>` | Per-source freshness gauge | JSON | 60 s | indexer | api, /metrics |
 
-Hash-tag `{ratesengine}` is NOT used — we accept cluster slot
+Hash-tag `{stellarindex}` is NOT used — we accept cluster slot
 distribution as the natural load spread. Re-evaluate if a future
 "must be on one node" workload appears.
 

@@ -1,18 +1,6 @@
 # Stellar Index
 
-**Status:** Pre-v1. Core system shipped end-to-end (ingestion +
-storage + REST API + aggregator: VWAP/TWAP, triangulation,
-anomaly response, multi-factor confidence, freeze policy, supply
-pipeline). r1 (Hetzner) live with all three application services
-running against the historical galexie archive (2026-05-03
-first-bringup). The public status page has shipped (`web/status/`).
-Remaining launch blockers are operational
-(R2/R3 multi-region provisioning, external
-security review, customer demo, production cutover).
-**License:** Apache-2.0.
-**Tested against:** Stellar pubnet protocol 23 (post-P23 / CAP-67 unified events).
-
-**Stellar Index is a protocol explorer for the Stellar network** —
+**Stellar Index is a protocol explorer and pricing API for the Stellar network** —
 complete, verified, per-protocol on-chain data: every contract, every
 event, every trade, for every major protocol (SDEX, Soroswap, Aquarius,
 Phoenix, Comet, Blend, DeFindex, CCTP, Rozo, and the Reflector / Redstone
@@ -28,11 +16,14 @@ classic and SEP-41 Soroban token. On-chain trades + oracle feeds +
 CEX/FX/reference aggregators fused into one VWAP-first pricing layer
 served at p95 ≤ 200 ms. Full since-inception OHLC. Self-hostable.
 
-The pricing API was built against the
-[Stellar Prices API RFP](docs/stellar-rfp.md) and the
-[Freighter asset-detail RFP](docs/freighter-rfp.md). The project began
-as **Rates Engine**; renamed and repositioned 2026-06-12
-([ADR-0037](docs/adr/0037-stellar-index-rebrand.md); briefly "Stellar Atlas", ADR-0036).
+**Status:** Pre-v1. The core system runs end-to-end — ingestion, raw
+ledger lake, served tier, REST + SSE API, and the aggregator (VWAP/TWAP,
+triangulation, anomaly response, multi-factor confidence, freeze policy,
+supply pipeline). A live deployment serves [stellarindex.io](https://stellarindex.io),
+[docs.stellarindex.io](https://docs.stellarindex.io), and a public
+[status page](https://status.stellarindex.io).
+**License:** Apache-2.0.
+**Tested against:** Stellar pubnet protocol 23 (post-P23 / CAP-67 unified events).
 
 ---
 
@@ -46,7 +37,7 @@ See **[CLAUDE.md](CLAUDE.md)**. It's your orientation map.
 
 - **Hosted UI / explorer:** the explorer (`web/explorer/`) is a
   static-export Next.js site rendered at
-  <https://stellarindex.io>. Browse coins, markets, issuers,
+  <https://stellarindex.io>. Browse assets, markets, issuers,
   sources, diagnostics; every panel reveals the exact API call
   that produced it. Build locally via
   `cd web/explorer && pnpm build` (output: `web/explorer/out/`).
@@ -69,17 +60,14 @@ See **[CLAUDE.md](CLAUDE.md)**. It's your orientation map.
   (TimescaleDB + Redis + MinIO). See
   [deploy/docker-compose/dev.yaml](deploy/docker-compose/dev.yaml).
 - **Contributors:** [CONTRIBUTING.md](CONTRIBUTING.md).
-- **Architects / reviewers:** [docs/discovery/](docs/discovery/) —
-  Phase-1 audit artefacts.
-  [docs/discovery/engineering-standards.md](docs/discovery/engineering-standards.md)
-  is the non-negotiable policy layer.
+- **Architecture / design:** [docs/architecture/](docs/architecture/)
+  (narrative designs) and [docs/adr/](docs/adr/) (Architecture Decision
+  Records). [docs/engineering-standards.md](docs/engineering-standards.md)
+  is the non-negotiable policy layer every change is held to.
 
 ---
 
 ## Layout
-
-See [docs/discovery/repo-structure-plan.md](docs/discovery/repo-structure-plan.md)
-for the rationale. Summary:
 
 ```
 cmd/                   binaries (indexer / aggregator / api / ops / migrate / sla-probe)
@@ -92,7 +80,7 @@ examples/              curl scripts + Postman collection for the public API
 deploy/                docker-compose (dev) / systemd (production) / monitoring (Prometheus rules) / status-page
 web/explorer/          Next.js static-export explorer rendered at stellarindex.io
 test/                  integration + load + chaos + fixtures
-docs/                  architecture / ADR / operations / reference / discovery
+docs/                  architecture / ADR / operations / reference / methodology
 ```
 
 ---
@@ -100,8 +88,7 @@ docs/                  architecture / ADR / operations / reference / discovery
 ## Core invariants (never violated)
 
 These are the architectural commitments that bind every PR. See
-[docs/discovery/decisions.md](docs/discovery/decisions.md) for the
-long-form rationale; each becomes a numbered ADR.
+[docs/adr/](docs/adr/) for the long-form rationale per decision.
 
 1. **i128 amounts never truncate to int64.** Token balances,
    reserves, prices from Soroban are `*big.Int` in Go, `NUMERIC` in
@@ -113,62 +100,47 @@ long-form rationale; each becomes a numbered ADR.
 4. **Monorepo with one `go.mod`.** ADR-0005.
 5. **Validator track post-launch targets three Tier-1 full
    validators with independent history archives.** ADR-0004.
+6. **ClickHouse is the raw lake; Postgres is the served tier.** ADR-0034.
 
 ---
 
-## Status
+## What's shipped
 
-- ✅ Phase 1 discovery complete. 45 audit docs in
-  [`docs/discovery/`](docs/discovery/).
-- ✅ Repo structure plan, engineering standards, 10-week delivery
-  plan locked.
-- ✅ Phase 2 ingestion scaffold: SDEX / Soroswap / Aquarius /
-  Phoenix / Comet / Reflector / Redstone / Band plus the external
-  CEX + FX fleet, TimescaleDB hypertables + continuous
-  aggregates, and the `ledgerstream -> dispatcher` indexer binary
-  with Prometheus scrape target.
-- ✅ REST + SSE API v1 surface (full list at
+- **Ingestion** — Galexie → dispatcher → per-source decoders for SDEX,
+  Soroswap, Aquarius, Phoenix, Comet, Blend, DeFindex, CCTP, Rozo, plus
+  the Reflector / Redstone / Band oracles and the external CEX + FX fleet.
+  Dual-sink into the ClickHouse raw lake (full history) and the
+  TimescaleDB served tier.
+- **REST + SSE API v1** (full list at
   [`docs/reference/api/index.html`](docs/reference/api/index.html)):
   pricing (`/price`, `/price/batch`, `/price/tip`, `/vwap`, `/twap`,
   `/observations`), historical (`/history`, `/history/since-inception`,
   `/ohlc`, `/chart`), catalogue (`/assets`, `/assets/{id}`, `/markets`,
-  `/pairs`, `/sources`), oracle passthrough (`/oracle/latest`,
-  `/oracle/prices`, `/oracle/lastprice`, `/oracle/x_last_price`),
-  account self-service (`/account/me`, `/account/usage`,
-  `/account/keys`), SEP-10 web auth (`/auth/sep10/challenge`,
-  `/auth/sep10/token`), SSE streams (`/price/stream`,
-  `/price/tip/stream`, `/observations/stream`), plus operator
-  endpoints (`/healthz`, `/readyz`, `/version`, `/metrics`).
-  Behind CORS, subject-aware rate limit (anon-IP + key-tier),
-  trusted-proxy CIDR allow-list, and per-route Cache-Control with
-  CDN-tier `s-maxage` gated on `api.cdn_enabled`.
-- ✅ Aggregation engine: VWAP/TWAP orchestrator with closed-bucket
-  Redis cache, cross-pair triangulation (X2.5 forex-snap), Phase 1+2
-  anomaly response, multi-factor confidence score, freeze policy.
-- ✅ Cross-source divergence detection (CoinGecko on by default,
-  Chainlink HTTP cross-check opt-in via FeedMap).
-- ✅ Three-algorithm supply pipeline (XLM via LCM AccountEntry
+  `/pairs`, `/sources`), oracle passthrough, account self-service,
+  SEP-10 web auth, SSE streams, plus operator endpoints
+  (`/healthz`, `/readyz`, `/version`, `/metrics`). Behind CORS, a
+  subject-aware rate limit (anon-IP + key-tier), a trusted-proxy CIDR
+  allow-list, and per-route Cache-Control with CDN-tier `s-maxage`.
+- **Aggregation engine** — VWAP/TWAP orchestrator with closed-bucket
+  Redis cache, cross-pair triangulation, anomaly response, a
+  multi-factor confidence score, and a freeze policy.
+- **Cross-source divergence detection** — CoinGecko on by default,
+  Chainlink HTTP cross-check opt-in.
+- **Three-algorithm supply pipeline** — XLM via LCM AccountEntry
   observer; classic via trustlines + claimable + LP + SAC observers;
-  SEP-41 via Soroban event observer) populating F2 fields on
-  `/v1/assets/{id}`.
-- ✅ Archive-completeness daemon (check / fix / verify modes) +
-  multi-tier archive verification (Tier A chain-link / Tier B
-  checkpoint / Tier D peer cross-compare / Tier E archivist).
-- ✅ Public status page (L4.11) — shipped at `web/status/`
-  (Cloudflare Pages static export).
-- ⏳ Production hardening: SEV-1/2 dry-run record (L5.7),
-  operational p95 ≤ 200ms proof (L5.* + Wk 9–10 launch tasks).
-
-**Production deadline:** 2026-06-30 per
-[docs/discovery/delivery-plan.md](docs/discovery/delivery-plan.md).
+  SEP-41 via Soroban event observer.
+- **Archive-completeness verification** — a check/fix/verify daemon plus
+  multi-tier archive verification (chain-link / checkpoint / peer
+  cross-compare / archivist).
+- **Public explorer + status page** — static-export Next.js, deployed to
+  Cloudflare Pages.
 
 ---
 
 ## Contact
 
 - Security: <security@stellarindex.io> — see [SECURITY.md](SECURITY.md)
-  for the disclosure process (the GPG key for encrypted reports is not
-  yet published; SECURITY.md tracks where it will land)
+  for the disclosure process.
 - Code: [CONTRIBUTING.md](CONTRIBUTING.md)
 - General: <hello@stellarindex.io>
 

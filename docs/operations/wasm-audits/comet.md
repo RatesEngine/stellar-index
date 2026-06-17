@@ -66,9 +66,8 @@ correctly.
 The Blend backstop is the **only known Comet pool on mainnet** at
 audit time. Sources:
 
-- `docs/discovery/dexes-amms/comet.md` flags "Whether there is a
-  standalone Comet DEX with public trading pools is open" —
-  Phase-1 found only the Blend backstop.
+- Whether there is a standalone Comet DEX with public trading
+  pools is open — we found only the Blend backstop.
 - The mainnet snapshot at L55,261,759 in
   `.discovery-repos/blend-contracts/test-suites/src/mainnet-55261759-snapshot.json`
   contains a single `Comet Pool Token` ledger entry, matching this
@@ -284,9 +283,8 @@ Rationale:
 
 - Procedure: `docs/operations/wasm-audits/README.md`
 - Decoder source: `internal/sources/comet/{events,decode}.go`
-- Discovery doc: `docs/discovery/dexes-amms/comet.md`
 - Schema-evolution stance: `docs/architecture/contract-schema-evolution.md`
 - Backfill gate: `internal/sources/external/registry.go` —
   `Registry["comet"].BackfillSafe`
-- Upstream contract source: published in operator-discovery — see
-  the Phase-1 capture under `.discovery-repos/comet-contracts/`
+- Upstream contract source: local checkout under
+  `.discovery-repos/comet-contracts/`

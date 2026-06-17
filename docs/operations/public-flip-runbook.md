@@ -1,8 +1,7 @@
-# Public open-source flip — operator runbook (AC5)
+# Public open-source flip — operator runbook
 
-Closes acceptance criterion AC5 ("completely Open Source … publicly
-accessible and reproducible", Stellar RFP §3 + ctx-proposal
-§Milestones). Strategy: a **fresh single-commit public repo** — never
+Makes the project completely open source — publicly accessible and
+reproducible. Strategy: a **fresh single-commit public repo** — never
 push the private history (it once contained a GCP key that GitHub
 push-protection caught; and the audit working dirs carry internal r1
 security evidence). See `public-flip-preflight-2026-06-12.md` for the
@@ -26,11 +25,7 @@ CLEAN pre-flight (no secrets / Apache-2.0 / VERSIONS current).
    ```
 
    Drops `docs/audit-*` + the predecessor analysis, genericises the
-   prod host IP, secret-sweeps, and runs `go build ./...`. Keeps the
-   customer-authored RFP/proposal docs by default — pass
-   `--drop-customer-docs` if redistribution rights aren't confirmed
-   (the Stellar Prices RFP is public; confirm the Freighter RFP +
-   ctx-proposal before a fully-public push, or drop them).
+   prod host IP, secret-sweeps, and runs `go build ./...`.
 
 2. **Init + push** the fresh history:
 
@@ -61,9 +56,9 @@ CLEAN pre-flight (no secrets / Apache-2.0 / VERSIONS current).
 
 ## What stays private
 
-- `RatesEngine/stellar-index` (the development repo, full history) stays
-  private as the operator's working repo. The public repo is a release
-  artifact, re-exported per release.
+- The development repo (full history) stays private as the operator's
+  working repo. The public repo is a release artifact, re-exported per
+  release.
 - The audit working dirs, the ansible operator inventories, and any
   `*-data-validation-*.json`-class credentials never leave the private
   side.

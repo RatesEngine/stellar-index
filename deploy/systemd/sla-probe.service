@@ -3,7 +3,7 @@
 # Drives `stellarindex-sla-probe` against the configured API base URL,
 # producing per-endpoint p50 / p95 / p99 latency, freshness, and
 # availability values, with a pass/fail verdict against the
-# RFP-stated SLA targets. Companion to sla-probe.timer which
+# stated SLA targets. Companion to sla-probe.timer which
 # schedules the cadence.
 #
 # Operator wiring:

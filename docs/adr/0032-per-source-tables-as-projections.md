@@ -40,8 +40,8 @@ gap-detection + manual backfill to converge them.
 
 The same per-source decoders are **also invoked** from seven
 dedicated backfill subcommands
-(`cmd/ratesengine-ops/{blend,phoenix,comet_liquidity,cctp,rozo,soroswap_skim,sep41_transfers}_backfill.go`)
-plus the rc.87 orchestrator (`cmd/ratesengine-ops/drain_cascade_window.go`).
+(`cmd/stellarindex-ops/{blend,phoenix,comet_liquidity,cctp,rozo,soroswap_skim,sep41_transfers}_backfill.go`)
+plus the rc.87 orchestrator (`cmd/stellarindex-ops/drain_cascade_window.go`).
 Each of those subcommands does the same thing: stream from
 `soroban_events`, call `dec.Decode(ev)`, write to the per-source
 table with `ON CONFLICT DO NOTHING`.
@@ -142,7 +142,7 @@ when (after raw landing, asynchronously).
 
 ### Operational surface
 
-`ratesengine-ops projector --source X --replay --from N --to M`
+`stellarindex-ops projector --source X --replay --from N --to M`
 replaces all seven `*-backfill` subcommands AND the
 `drain-cascade-window` orchestrator:
 
@@ -157,7 +157,7 @@ each source — or simpler, `projector --all-sources --replay --from N --to M`.
 ### Indexer binary structure
 
 ```
-cmd/ratesengine-indexer/
+cmd/stellarindex-indexer/
   main.go              — wires dispatcher + raw sink + projector
 internal/indexer/
   pipeline/            — dispatcher → raw-event sink (existing, simplified)
@@ -239,9 +239,9 @@ The migration is staged so no per-source table loses coverage:
   orchestrator + one cursor-credit hack become **one** `projector`
   command with `--replay` semantics.
 - **LoC delete estimate:** -1500 to -2000 LoC across:
-  - `cmd/ratesengine-ops/*_backfill.go` (7 files, ~150 LoC each = -1050)
-  - `cmd/ratesengine-ops/drain_cascade_window.go` (-280)
-  - `cmd/ratesengine-ops/drain_cascade_window_test.go` (-200)
+  - `cmd/stellarindex-ops/*_backfill.go` (7 files, ~150 LoC each = -1050)
+  - `cmd/stellarindex-ops/drain_cascade_window.go` (-280)
+  - `cmd/stellarindex-ops/drain_cascade_window_test.go` (-200)
   - `internal/pipeline/sink.go` per-source `persist*` (-600)
   - Plus delete the cursor-credit fix from commit `66efa65a`
     (-78 LoC including the writeDrainBackfillCursor function)
@@ -314,7 +314,5 @@ The migration is staged so no per-source table loses coverage:
   - `internal/sources/sorobanevents/dispatcher_adapter.go:165` `AsyncSink.PushEvent`
   - `internal/pipeline/sink.go:113` `handleOneEvent` (to be deleted)
 - **Former backfill subcommands** (deleted in Phase 5, rc.97):
-  - `cmd/ratesengine-ops/{blend,cctp,comet_liquidity,phoenix,rozo,sep41_transfers,soroswap_skim}_backfill.go`
-  - `cmd/ratesengine-ops/drain_cascade_window.go`
-- **EVERY-event policy:** project memory `project_every_event_principle`
-- **Cascade-detection pattern:** project memory `project_cascade_detection_pattern`
+  - `cmd/stellarindex-ops/{blend,cctp,comet_liquidity,phoenix,rozo,sep41_transfers,soroswap_skim}_backfill.go`
+  - `cmd/stellarindex-ops/drain_cascade_window.go`

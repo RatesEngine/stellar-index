@@ -1,18 +1,14 @@
 # Engineering standards
 
-**Status:** ✅ Design-locked policy. Every PR, every release, every
+**Status:** Design-locked policy. Every PR, every release, every
 piece of documentation, every doc reviewer, and every agent working
-on this codebase is bound by this doc. Complements
-[repo-structure-plan.md](repo-structure-plan.md) — the repo is the
+on this codebase is bound by this doc. The repo layout is the
 skeleton; these standards are the muscle.
 
-**User directive** (2026-04-22):
-
-> "Make sure we have a plan on how to keep the repo really free of
-> technical debt and designed to an enterprise level and easily
-> understood by agents and preventing docs drift etc."
-
-Four goals. This doc is accountable to each of them, enumerated:
+This project keeps the codebase free of technical debt, engineered to
+an enterprise level, easily understood by AI agents, and resistant to
+documentation drift. Four goals. This doc is accountable to each of
+them, enumerated:
 
 1. **Technical-debt-free** — never accumulate; pay as you go.
 2. **Enterprise-grade** — operational rigour, not heroics.
@@ -313,9 +309,9 @@ Contents:
 
 ## What this repo is
 
-Rates Engine — a Stellar asset pricing API. Ingests on-chain and
-off-chain price data, aggregates into VWAP/TWAP/OHLC, serves via
-REST + SSE.
+Stellar Index — a Stellar protocol explorer and asset pricing API.
+Ingests on-chain and off-chain price data, aggregates into
+VWAP/TWAP/OHLC, serves via REST + SSE.
 
 ## Build + test commands
 
@@ -364,13 +360,11 @@ openapi/            the API spec (source of truth for reference docs)
   correlated by (ledger, tx, op_index). See internal/sources/soroswap/README.md.
 - Phoenix emits 8 events per swap — use internal/sources/phoenix/correlator.go.
 - Reflector v3 has no on-chain twap/x_*. We compute locally.
-- Our `ctx-proposal.md` has outstanding corrections — see
-  docs/_archive/discovery/proposal-corrections.md.
 
 ## Where to ask for help
 
 - Code review: CODEOWNERS
-- Operations: #ratesengine-ops channel
+- Operations: the #ops channel
 - Architecture: ADR process (docs/adr/)
 ```
 
@@ -427,8 +421,8 @@ of truth is the doc.go so drift is impossible.
   full word, always lowercase.
 - Test names: `TestName_Scenario_ExpectedBehaviour` so you can
   grep for behaviour across the codebase.
-- Metric names: `ctx_<subsystem>_<noun>_<unit>` — e.g.
-  `ctx_ingest_trades_total{source="soroswap"}`.
+- Metric names: `stellarindex_<subsystem>_<noun>_<unit>` — e.g.
+  `stellarindex_ingest_trades_total{source="soroswap"}`.
 
 ### 4.4. Structured logs with stable field names
 
@@ -469,7 +463,7 @@ sentinels or WRAPS one. Callers use `errors.Is` to classify.
 
 ### 4.6. Machine-readable contracts everywhere
 
-- API: OpenAPI `openapi/rates-engine.v1.yaml`. Source of truth.
+- API: OpenAPI `openapi/stellar-index.v1.yaml`. Source of truth.
   Handlers validated against it in tests.
 - Config: JSON-Schema generated from Go struct tags at
   `docs/reference/config/schema.json`.
@@ -535,8 +529,8 @@ concrete types.
 
 ## 5. Doc-drift prevention (concrete)
 
-Complements `repo-structure-plan.md §6`. Restated compact-form and
-with agent-readability additions.
+The concrete mechanics of keeping documentation current, with
+agent-readability additions.
 
 ### 5.1. Every doc has exactly one status
 
@@ -816,11 +810,9 @@ be a standard, open a PR amending this file.
 
 ## 13. Related docs
 
-- [repo-structure-plan.md](repo-structure-plan.md) — the
-  mechanical layout this policy operates over.
-- [delivery-plan.md](delivery-plan.md) — the calendar this policy
-  is executed against.
-- [decisions.md](decisions.md) → ADRs — the specific architectural
-  choices the standards reinforce.
-- [adversarial-audit.md](adversarial-audit.md) — the honesty
-  mechanism; complements this doc's aspirational standards.
+- [CLAUDE.md](../CLAUDE.md) — the repo orientation map this policy
+  operates over.
+- [docs/adr/](adr/) — the specific architectural choices the
+  standards reinforce.
+- [docs/architecture/semver-policy.md](architecture/semver-policy.md)
+  — the versioning policy these standards back.

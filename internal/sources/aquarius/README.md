@@ -3,8 +3,8 @@
 Ingests Aquarius trade events from Soroban pool contracts. The live
 decoder is topic-driven and stateless: token identities are carried in
 the event topics, so the dispatcher adapter does not need router reads
-or a pool-token cache. Primary Phase-1 reference:
-[`docs/discovery/dexes-amms/aquarius.md`](../../../docs/discovery/dexes-amms/aquarius.md).
+or a pool-token cache. See the protocol verification page:
+[`docs/protocols/aquarius.md`](../../../docs/protocols/aquarius.md).
 
 ## What this ingests
 

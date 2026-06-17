@@ -47,7 +47,7 @@ hotfix-window analysis below.
 
 The address is configured via `cfg.Oracle.Redstone.AdapterContract`
 in `stellarindex.toml`; the value above is the published mainnet
-contract per `docs/discovery/oracles/redstone.md`. Redstone uses a
+contract. Redstone uses a
 **single Adapter contract** that owns price storage for every feed
 (plus thin per-feed proxies that read from the adapter — proxies
 emit no events and are not in scope for this audit).
@@ -118,8 +118,8 @@ Per CLAUDE.md, Redstone has **19 mainnet feeds**. Feed IDs from op
 args that aren't on the known-feeds allow-list are skipped per-entry
 with `ErrUnknownFeedID` (other feeds in the same event still land).
 A new feed listed on Redstone's mainnet adapter without our
-allow-list update is silently dropped — list lives in
-`docs/discovery/oracles/redstone.md`.
+allow-list update is silently dropped — the list lives in the
+package's known-feeds allow-list.
 
 ## Failure modes specific to Redstone
 
@@ -312,7 +312,6 @@ isn't shipped yet).
 
 - Procedure: `docs/operations/wasm-audits/README.md`
 - Decoder source: `internal/sources/redstone/{events,decode}.go`
-- Discovery doc: `docs/discovery/oracles/redstone.md`
 - Schema-evolution stance: `docs/architecture/contract-schema-evolution.md`
 - Backfill gate: `internal/sources/external/registry.go` —
   `Registry["redstone"].BackfillSafe`

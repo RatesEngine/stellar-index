@@ -6,14 +6,12 @@ last_verified: 2026-06-12
 
 # Production API re-verification — 2026-06-12
 
-Workstream B (B1) of
-[`../operations/deliverable-readiness-plan.md`](../operations/deliverable-readiness-plan.md):
-re-run of every curl probe from
-[`../review-2026-05-10.md`](../review-2026-05-10.md) §Appendix B plus
-fresh RFP-acceptance spot-probes, against the live production API.
+Re-run of every curl probe from the 2026-05-10 production review
+§Appendix B plus fresh production spot-probes, against the live
+production API.
 
-- **Base URL:** `https://api.ratesengine.net` (only resolving API
-  host — see finding N-5 on `api.stellarindex.io`).
+- **Base URL:** `https://api.stellarindex.io` (see finding N-5 on
+  error-payload host links).
 - **Deployed binary:** `v0.5.0-rc.108-65-gb040514d` (built
   2026-06-12T16:48:52Z, commit `b040514d`, `dirty=false`) per
   `/v1/version`.
@@ -56,7 +54,7 @@ every endpoint answered <2 s. R-022 (oracle/latest) re-probed in §2.
 R-023 `/v1/methodology` → **200** with machine-readable aggregation
 policy — **PASS** (was 404).
 
-## 2. Fresh RFP-critical spot probes
+## 2. Fresh key production spot probes
 
 | Probe | Expected | Observed | Verdict |
 |---|---|---|---|
@@ -111,16 +109,16 @@ inline.
   `native/fiat:USD`** while `crypto:XLM/fiat:USD` returns full
   bars — the same XLM dual-form alias gap
   (`internal/api/v1/ohlc_series.go` does not loop `assetAliases`).
-  The RFP-granularity evidence (1m/15m/1h/4h/1d) currently only
+  The granularity evidence (1m/15m/1h/4h/1d) currently only
   passes when the consumer spells XLM as `crypto:XLM`.
 - **F-D (carry-over): SEP-10 still 503** ("server signing seed isn't
   configured"). Open operator action since 2026-05-10; the matrix's
   L3.12 ✅ remains production-false.
-- **N-5 (rebrand drift, customer-visible):** every problem+json
-  `type` URI and 404 body still points at
-  `https://api.stellarindex.io/errors/…` and
-  `https://docs.stellarindex.io` — **both hostnames are NXDOMAIN
-  today**. Error-payload links from the live API resolve nowhere.
+- **N-5 (error-payload links broken):** every problem+json
+  `type` URI and 404 body points at error/doc hostnames that did
+  **not resolve** at probe time. Error-payload links from the live
+  API resolve nowhere; re-point them at the canonical
+  `stellarindex.io` domain.
 
 ### (b) Previously-⚠/❌ rows now passing
 
@@ -132,16 +130,16 @@ inline.
 - R-013 / S7.2 / F4.2 / F6.4 / S6.1 — history now reaches 2021-02-01 (5+ years, daily), 1y×1h fully served; F4.2's "≥1 year" is now met on this surface.
 - R-014 — volume-desc default sort.
 - R-016/R-017 — `home_domain` inlined on `/v1/assets/{id}`.
-- R-019 / S9.3 / F5.2 — anonymous tier 6000/min (>RFP 1000).
+- R-019 / S9.3 / F5.2 — anonymous tier 6000/min (>the 1000/min minimum).
 - R-022 (partial-as-designed), R-023 (`/v1/methodology` shipped).
 - S9.2 / F3.1 latency — warm-path p95 well under 200 ms (was 246 ms).
 
-### (c) Acceptance-criteria verdict
+### (c) Verification verdict
 
 | Criterion | Verdict | Evidence |
 |---|---|---|
 | Staleness ≤30 s on tip | **FAIL as-deployed for `asset=native`** (61–113 s); PASS for `asset=crypto:XLM` (0 s). Fix F-B (alias loop in `tipWindowVWAP` + tip stream), or pre-agree the C4 freshness definition pinning the `crypto:XLM` form. Do not present evidence until one of those lands. | §2 rows 2–3 |
-| p95 ≤200 ms | **PASS** on warm connections: client keep-alive p95=124 ms; server-side `/v1/status` p95=86 ms. Cold-TLS per-request curl shows 475 ms — k6 (Workstream C1) should be the contractual evidence. Server-side p99 (755 ms over a 5-min window that included this probe burst) needs the k6 run to confirm ≤500 ms under steady load. | §1 latency row |
+| p95 ≤200 ms | **PASS** on warm connections: client keep-alive p95=124 ms; server-side `/v1/status` p95=86 ms. Cold-TLS per-request curl shows 475 ms — k6 (Workstream C1) should be the authoritative evidence. Server-side p99 (755 ms over a 5-min window that included this probe burst) needs the k6 run to confirm ≤500 ms under steady load. | §1 latency row |
 | OHLC timeframes/granularities | **PASS for direct pairs** — 1m/15m/1h/4h/1d all serve via `?interval=` (plus 5m/30m/1w per spec) and `/v1/chart` honours all 7 granularities × 6 timeframes. **Blocked for `native/fiat:USD`** by F-C until the alias fix lands. Legacy `timeframe=`/`granularity=` params on `/v1/ohlc` are ignored, not erred (N-7). | §2 OHLC rows |
 | Asset metadata (code/price/type/issuer/contract/home_domain) | **PASS for classic** (all six observed on USDC). **⚠ `code` is null for `native` and soroban assets** (N-4) — XLM's code only appears on the slug surface (`/v1/assets/xlm.ticker`). If the customer reads `code` on `/v1/assets/native`, this is a gap. ATH (F-A) taints the wider F1/F2 metadata story. | §2 asset rows |
 
@@ -163,7 +161,7 @@ inline.
   presenting F6.4 evidence).
 - **N-7:** `/v1/ohlc` silently ignores unknown query params
   (`timeframe`/`granularity`) — consider 400-on-unknown-param for the
-  acceptance demo to avoid a customer "it ignored my granularity"
+  verification demo to avoid a consumer "it ignored my granularity"
   surprise.
 - **N-8:** `/v1/price/batch` peg rows set envelope `flags.stale=true`
   while the single-asset endpoint does not — flag-semantics

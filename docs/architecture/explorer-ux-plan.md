@@ -3,7 +3,6 @@ title: Stellar Index — explorer UX system (design of record)
 last_verified: 2026-06-12
 status: Accepted design; phased build
 related:
-  - docs/adr/0037-stellar-index-rebrand.md
   - docs/adr/0035-factory-anchored-contract-gating.md
   - docs/adr/0033-completeness-verification-model.md
   - docs/protocols/README.md

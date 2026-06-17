@@ -1,6 +1,6 @@
 -- 0002 up — continuous aggregates + refresh + retention.
 --
--- Implements the grain set named in the Freighter RFP's historical-
+-- Implements the grain set named in the historical-
 -- price table: 1m / 15m / 1h / 4h / 1d / 1w / 1mo. Each CAGG is a
 -- VWAP (volume-weighted) + TWAP (time-weighted) pre-computation
 -- that the /v1/history endpoint queries directly.
@@ -8,7 +8,7 @@
 -- Retention:
 --   - sub-hourly grains (1m, 15m) retained 30 days.
 --   - hourly+ grains (1h, 4h, 1d, 1w, 1mo) retained INDEFINITELY
---     — matches the RFP commitment for the all-time view.
+--     — matches the commitment for the all-time view.
 --
 -- Refresh policy:
 --   Each CAGG refreshes its "recent" slice on a cadence shorter than
@@ -102,7 +102,7 @@ SELECT add_continuous_aggregate_policy(
 SELECT add_retention_policy('prices_15m', INTERVAL '30 days');
 
 
--- 1-hour aggregate — RETAINED INDEFINITELY per RFP.
+-- 1-hour aggregate — RETAINED INDEFINITELY per the spec.
 CREATE MATERIALIZED VIEW prices_1h
 WITH (timescaledb.continuous) AS
 SELECT

@@ -17,7 +17,7 @@ import (
 // path against real TimescaleDB. Migration 0042. Inserts the two
 // shapes the decoder emits in production:
 //
-//  1. Phase-1 shape: amounts present, `to_address` NULL.
+//  1. Initial shape: amounts present, `to_address` NULL.
 //  2. Future-upgrade shape: amounts present, `to_address` populated.
 //
 // Asserts ON CONFLICT DO NOTHING idempotency (replay-safety) and
@@ -43,7 +43,7 @@ func TestSoroswapSkimEvent_Insert(t *testing.T) {
 		txHash[i] = 0xBE
 	}
 
-	// Phase-1 shape — no `to_address`.
+	// Initial shape — no `to_address`.
 	row1 := timescale.SoroswapSkimEvent{
 		ContractID:      pair,
 		Ledger:          52_000_000,

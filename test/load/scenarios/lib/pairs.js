@@ -1,8 +1,8 @@
 // Representative pair fixtures used by every scenario.
 //
 // Mix is intentional: XLM majors dominate (matches wallet-shaped
-// traffic per the Freighter RFP), with stablecoin majors and a
-// couple of long-tail assets to exercise non-cached paths.
+// traffic), with stablecoin majors and a couple of long-tail
+// assets to exercise non-cached paths.
 //
 // CRITICAL: every `asset` and `quote` here MUST be a form that
 // canonical.ParseAsset (internal/canonical/asset.go) accepts, or

@@ -127,7 +127,7 @@ where `USD/EUR` comes from a forex source per ADR-0010):
   orchestrator queries `timescale.Store.FXQuoteAtOrBefore(pair,
   bucketEnd, FXSources())` instead of reading the leg's cached VWAP.
   Misses fall back to cached VWAP and increment
-  `ratesengine_aggregator_fx_snap_fallback_total{leg=…}`; the alert
+  `stellarindex_aggregator_fx_snap_fallback_total{leg=…}`; the alert
   in `deploy/monitoring/rules/aggregator.yml` fires at 30 m sustained
   fallback dominance.
 - **`/v1/price/tip`**: forex factor is the freshest FX quote
@@ -221,7 +221,7 @@ prevent silent contract changes:
 
 4. **No realtime surface at all — closed-bucket only forever.**
    Rejected: real customer demand for sub-minute freshness on
-   ticker UIs. The RFP doesn't require it but the product does.
+   ticker UIs. The SLA doesn't require it but the product does.
 
 5. **Cap the `/v1/price/tip` last-good-price fallback at some max
    age (e.g. 1 hour) and 404 above that.** Rejected: introduces a

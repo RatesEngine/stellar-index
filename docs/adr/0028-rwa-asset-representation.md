@@ -12,9 +12,9 @@ superseded_by: null
 
 ## Context
 
-RedStone's Stellar push-feed deployment is **19 per-feed contracts**
-(see `docs/discovery/oracles/redstone.md`). 8 of them price crypto /
-stablecoin assets the decoder already models. The other 11 price
+RedStone's Stellar push-feed deployment is **19 per-feed contracts**.
+8 of them price crypto / stablecoin assets the decoder already
+models. The other 11 price
 **tokenized real-world assets**: tokenized treasuries and
 money-market funds, tokenized-BTC variants, and an inverse equity
 ETF.
@@ -176,10 +176,6 @@ for an addition._
 - Related ADRs: ADR-0010 (fiat), ADR-0014 (crypto) — sibling
   bare-ticker variants; ADR-0003 (i128 no-truncation) — RWA prices
   still flow the U256/i128 path unchanged.
-- Discovery: [docs/discovery/oracles/redstone.md](../discovery/oracles/redstone.md)
-  — the 19 feeds + per-feed contract IDs.
-- Capture: [[project_redstone_feed_ids]] — the exact on-chain
-  feed_id strings captured 2026-05-22.
 - Implementation: `internal/canonical/asset_rwa.go` (allow-list +
   constructor), `internal/canonical/asset.go` (type + String +
   ParseAsset + Validate), `internal/sources/redstone/decode.go`

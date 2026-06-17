@@ -90,7 +90,7 @@ paths = [
 ]
 
 [[rules.allowlists]]
-description = "Historical pre-rebrand spec names — gitleaks scans full repo history. openapi/stellar-index.v1.yaml + docs/reference/api/stellar-index.v1.yaml were renamed from rates-engine.v1.yaml during the Rates Engine -> Stellar Index rebrand (commit 142a4d6a). Past commits still carry the old paths with the SAME synthetic signup/dashboard OpenAPI example keys (k_... key_id + re_live_... plaintext) already allowlisted on the current names above. Allowlist the historical paths so full-history scans pass. Same rationale as the web/showcase historical allowlist."
+description = "Historical spec filenames — gitleaks scans full repo history. openapi/stellar-index.v1.yaml + docs/reference/api/stellar-index.v1.yaml were renamed from an earlier filename in a past commit. Those commits still carry the old paths with the SAME synthetic signup/dashboard OpenAPI example keys (k_... key_id + re_live_... plaintext) already allowlisted on the current names above. Allowlist the historical paths so full-history scans pass. Same rationale as the web/showcase historical allowlist."
 paths = [
   '''openapi/rates-engine\.v1\.yaml''',
   '''docs/reference/api/rates-engine\.v1\.yaml''',
@@ -109,7 +109,7 @@ paths = [
 ]
 
 [[rules.allowlists]]
-description = "Audit working-doc — quotes a Stellar G-strkey (Circle USDC issuer) inline in a user-journey writeup as one of the example issuers a customer would explore. Same entropy-heuristic false positive as the test-file allowlists; public account ID, not a credential."
+description = "Historical working-doc (removed from the tree, retained in git history) — quotes a Stellar G-strkey (Circle USDC issuer) inline in a user-journey writeup as one of the example issuers a user would explore. Same entropy-heuristic false positive as the test-file allowlists; public account ID, not a credential."
 paths = [
   '''docs/audit-2026-05-02/03-journeys\.md''',
 ]

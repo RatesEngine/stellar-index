@@ -181,12 +181,12 @@ func (r *StorageSEP41SupplyReader) SEP41SupplyAt(
 
 ### Aggregator integration
 
-`buildSupplyRefreshers` in `cmd/ratesengine-aggregator/main.go`
+`buildSupplyRefreshers` in `cmd/stellarindex-aggregator/main.go`
 (extended in #307) gains a third per-asset loop — one
 [`supply.Refresher`](../../internal/supply/refresher.go)
 goroutine per watched SEP-41 contract, alongside the existing
 XLM + per-classic refreshers. Same per-tick outcome counter
-(`ratesengine_aggregator_supply_refresh_total{outcome}`).
+(`stellarindex_aggregator_supply_refresh_total{outcome}`).
 
 ## Implementation plan (PRs)
 

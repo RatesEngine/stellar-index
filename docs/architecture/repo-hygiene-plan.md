@@ -11,7 +11,7 @@ status: ratified
 **Binds:** every PR, every deploy, every reviewer.
 
 This is the non-negotiable policy layer. Principles in
-[docs/discovery/engineering-standards.md](../discovery/engineering-standards.md)
+[docs/engineering-standards.md](../engineering-standards.md)
 remain authoritative for rationale; this doc is the **enforcement
 map** — what actually fails a build, what rots, and which lever
 operators pull when a rule bites unfairly.
@@ -75,7 +75,6 @@ status: ratified | draft | proposed
 | `docs/adr/` | Frontmatter present but **immutable**; the `date:` field is when the decision was made. Never "refreshed." | never |
 | `docs/reference/` | No — generated | n/a |
 | `docs/development/` | Recommended, not enforced | — |
-| `docs/discovery/` | Frozen (read-only archive per [phase1-closure.md](../discovery/phase1-closure.md)). Frontmatter present for completeness but not refreshed. | never |
 
 **Why:** any doc "actively claiming" to reflect current reality must
 be re-verified on a cadence. 90 days is the SRE-team cycle; 180 is
@@ -397,8 +396,8 @@ where mechanical; reviewer enforces the rest.
 | Error types | `<subsystem>: <action>` prefix |
 | Commit messages | imperative, `<scope>: <what>`; wrap at 72 |
 
-No `CTXOps` / `CtxOps` mixed-case variants. No `utils_misc.go`. No
-singular-vs-plural inconsistency on routes.
+No mixed-case acronym variants (e.g. `APIKey` / `ApiKey`). No
+`utils_misc.go`. No singular-vs-plural inconsistency on routes.
 
 ---
 
@@ -509,10 +508,6 @@ When code or a doc is removed:
 - Docs: move to `docs/_archive/<original-path>.md` with a
   `redirected-to:` frontmatter field. Never delete — historical
   context matters.
-- The existing `docs/discovery/` tree becomes read-only per
-  [phase1-closure.md](../discovery/phase1-closure.md) but stays in
-  place (not moved to `_archive/`) because references to it are
-  stable and expected.
 
 ---
 

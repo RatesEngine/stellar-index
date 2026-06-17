@@ -148,12 +148,12 @@ documented as intentional here so future contributors don't
 
 ## 5. Endpoint catalogue
 
-Grouped by RFP requirement. Numbered IDs (A.1, B.2) map back to the
+Grouped by requirement. Numbered IDs (A.1, B.2) map back to the
 [coverage matrix](../architecture/coverage-matrix.md).
 
 ### 5.1 Health & metadata
 
-| Method | Path | Purpose | RFP |
+| Method | Path | Purpose | Req |
 | ------ | ---- | ------- | --- |
 | GET | `/v1/healthz` | Shallow: process up. Returns `200 {"status":"ok"}`. | — |
 | GET | `/v1/readyz` | Deep: Timescale + Redis + captive-core reachable. | F3.* |
@@ -162,7 +162,7 @@ Grouped by RFP requirement. Numbered IDs (A.1, B.2) map back to the
 
 ### 5.2 Asset catalog
 
-| Method | Path | Purpose | RFP |
+| Method | Path | Purpose | Req |
 | ------ | ---- | ------- | --- |
 | GET | `/v1/assets` | List every indexed asset (paginated). The `?type=classic,soroban`, `?code=USDC`, `?issuer=G…` filter params are reserved in the OpenAPI spec but the handler currently ignores them and returns the unfiltered page. | F1.*, S1.1-3 |
 | GET | `/v1/assets/{asset_id}` | Asset detail with metadata: code, type, issuer, contract_id, home_domain, decimals, image (optional). | F1.*, S1.1-3 |
@@ -200,7 +200,7 @@ For Soroban-native tokens:
 
 ### 5.3 Current price
 
-| Method | Path | Purpose | RFP |
+| Method | Path | Purpose | Req |
 | ------ | ---- | ------- | --- |
 | GET | `/v1/price?asset_id=&quote=USD` | Current aggregated price. | F1.2, S5.1-4 |
 | GET | `/v1/price/batch?asset_ids=A,B,C&quote=USD` | Up to 100 assets in one call. | F5.3 |
@@ -231,7 +231,7 @@ Response `data` for `/v1/price`:
 
 ### 5.4 Historical price + OHLC
 
-| Method | Path | Purpose | RFP |
+| Method | Path | Purpose | Req |
 | ------ | ---- | ------- | --- |
 | GET | `/v1/history?base=&quote=&from=&to=&limit=` | Raw per-trade history for a pair in a time window. | S6.1 |
 | GET | `/v1/ohlc?base=&quote=&from=&to=` | Single OHLC bar for a pair over one window. | S6.1, F1 |
@@ -293,12 +293,12 @@ OHLC `/v1/ohlc`:
   "truncated": false
 }
 ```
-the table in the Freighter RFP. Invalid combinations → 400 with
+the table in the API spec. Invalid combinations → 400 with
 `type=https://api.stellarindex.io/errors/invalid-granularity`.
 
 ### 5.5 Streaming (SSE)
 
-| Method | Path | Purpose | RFP |
+| Method | Path | Purpose | Req |
 | ------ | ---- | ------- | --- |
 | GET | `/v1/price/stream` | SSE channel per asset. | S5.3 |
 | GET | `/v1/trades/stream` | Raw trade firehose (authenticated only). | — |
@@ -315,7 +315,7 @@ data: {"asset_id":"XLM-native","price":"0.12421","as_of":"2026-04-22T14:30:00.12
 
 ### 5.6 Markets (liquidity + venue breakdown)
 
-| Method | Path | Purpose | RFP |
+| Method | Path | Purpose | Req |
 | ------ | ---- | ------- | --- |
 | GET | `/v1/markets?asset_id=` | Which venues list this asset; current quote, 24h vol, last trade. | S3.* |
 | GET | `/v1/pairs?base=&quote=` | List of direct markets for a pair. | — |
@@ -324,7 +324,7 @@ data: {"asset_id":"XLM-native","price":"0.12421","as_of":"2026-04-22T14:30:00.12
 
 Others can consume *our* prices via a SEP-40-shaped read surface.
 
-| Method | Path | Purpose | RFP |
+| Method | Path | Purpose | Req |
 | ------ | ---- | ------- | --- |
 | GET | `/v1/oracle/lastprice?asset=` | SEP-40 `lastprice` equivalent. | S2.6 |
 | GET | `/v1/oracle/prices?asset=&records=N` | SEP-40 `prices`. | S2.6 |
@@ -387,7 +387,7 @@ mTLS for internal service-to-service only (see [HA plan §6](../architecture/ha-
 
 ### 7.1 Tier → rate-limit mapping
 
-The Freighter RFP commits "≥ 1000 requests/minute per client". The
+The SLA commits "≥ 1000 requests/minute per client". The
 "per client" wording means *per API key*, not per IP. Anonymous
 callers (no API key) are bucketed by IP at a much tighter cap so a
 single shared egress can't burn the public surface.

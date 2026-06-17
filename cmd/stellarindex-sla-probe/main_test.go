@@ -239,12 +239,12 @@ func TestPairEndpoints_BuildsExpected(t *testing.T) {
 		case "price":
 			// /price is the ADR-0015 closed-bucket surface — it must
 			// carry the structural freshness override, NOT the 30 s
-			// RFP target (which it can never meet by design).
+			// SLA target (which it can never meet by design).
 			if e.FreshTarget != defaultClosedBucketFreshTarget {
 				t.Errorf("price: FreshTarget=%v want %v", e.FreshTarget, defaultClosedBucketFreshTarget)
 			}
 		case "price-tip":
-			// /price/tip is the RFP freshness surface — it must use
+			// /price/tip is the freshness SLA surface — it must use
 			// the run-level target (no override).
 			if e.FreshTarget != 0 {
 				t.Errorf("price-tip: FreshTarget=%v want 0 (run-level SLA target)", e.FreshTarget)
@@ -262,7 +262,7 @@ func TestPairEndpoints_BuildsExpected(t *testing.T) {
 // TestEndpointFailures_PerEndpointFreshnessOverride pins the
 // ADR-0015 split: a closed-bucket /price observation 80 s stale is
 // within its structural bound (no failure), while the same 80 s on
-// /price/tip — the RFP ≤30 s surface — fails.
+// /price/tip — the ≤30 s SLA surface — fails.
 func TestEndpointFailures_PerEndpointFreshnessOverride(t *testing.T) {
 	sla := slaTargets{P95MS: 1000, P99MS: 1000, FreshnessSec: 30, AvailabilityPct: 99.0}
 	fresh := 80.0
@@ -281,7 +281,7 @@ func TestEndpointFailures_PerEndpointFreshnessOverride(t *testing.T) {
 	tip := base
 	tip.Endpoint = "price-tip"
 	if got := endpointFailures(tip, sla); len(got) != 1 {
-		t.Errorf("price-tip at 80s must fail the 30s RFP target, got %v", got)
+		t.Errorf("price-tip at 80s must fail the 30s freshness SLA target, got %v", got)
 	}
 
 	// And the structural bound still catches a real pipeline

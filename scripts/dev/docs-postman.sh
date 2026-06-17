@@ -2,14 +2,12 @@
 # Regenerate the Postman collection from openapi/stellar-index.v1.yaml.
 #
 # Writes to examples/postman/stellar-index.postman_collection.json
-# — the customer-facing canonical path (referenced by README.md +
-# the audit parity matrix, and the file customers actually
-# download from the repo).
+# — the user-facing canonical path (referenced by README.md, and the
+# file users actually download from the repo).
 #
-# Pre-F-1247 (audit-2026-05-12) the script wrote to
-# docs/reference/api/postman-collection.json (a gitignored docs-
-# site path) and left the tracked customer-facing copy drifting
-# silently. Now the script writes the canonical directly.
+# An earlier revision wrote to docs/reference/api/postman-collection.json
+# (a gitignored docs-site path) and left the tracked user-facing copy
+# drifting silently. Now the script writes the canonical directly.
 #
 # Uses openapi-to-postmanv2 via npx so contributors don't need a
 # global install (only Node is required). Pinned version so the

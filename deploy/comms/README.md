@@ -11,7 +11,7 @@ a blank page.
 
 | File | When to send | Where |
 |---|---|---|
-| [`launch-announcement.md`](launch-announcement.md) | T-0 (immediately after the cut completes) | Public — email to RFP contacts, Slack `#stellar-index-public`, project handle |
+| [`launch-announcement.md`](launch-announcement.md) | T-0 (immediately after the cut completes) | Public — email to launch contacts, Slack `#stellar-index-public`, project handle |
 | [`onboarding-email.md`](onboarding-email.md) | First customer signup post-launch | Direct reply to the request, or in-app onboarding |
 | [`incident-update.md`](incident-update.md) | Mid-incident customer-facing update | Status-page issue body + email to affected customers |
 | [`maintenance-window.md`](maintenance-window.md) | Pre-cut maintenance heads-up | Status page + customer email a day ahead of any planned change |

@@ -13,7 +13,7 @@ superseded_by: null
 > `docs/operations/runbooks/cascade-window-drain.md` runbook referenced
 > in the consequences/links below **was deleted** — the cascade-drain
 > orchestrator was retired and per-source catch-up is now
-> `ratesengine-ops projector-replay` (see
+> `stellarindex-ops projector-replay` (see
 > `docs/operations/runbooks/projector-replay.md`). The coverage
 > invariant itself stands.
 

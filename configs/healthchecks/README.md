@@ -34,7 +34,7 @@ A failed run pings `${URL}/fail` instead.
 ### 3. SLA probe — 15 min cadence
 
 `stellarindex-sla-probe.timer` runs `stellarindex-sla-probe`
-against the local API for ~30 s and asserts the RFP latency +
+against the local API for ~30 s and asserts the latency +
 freshness SLAs (p95 ≤ 200 ms, p99 ≤ 500 ms, freshness ≤ 30 s).
 Pass → ping `HEALTHCHECKS_URL_SLA_PROBE`; fail → ping `${URL}/fail`.
 The full JSON report rides as the ping body so operators can

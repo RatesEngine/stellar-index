@@ -14,8 +14,8 @@ last_verified: 2026-06-16
 > refactor — see `docs/architecture/stellar-focus-refactor-plan.md`. The
 > `/v1/coins → /v1/assets` consolidation itself stands; only the cross-chain
 > presentation was reverted. Non-Stellar coins that remain (BTC/ETH/…) are
-> pricing-reference only (`reference_only`), kept solely for the proposal's
-> divergence cross-check, and are not browseable entities. This doc is
+> pricing-reference only (`reference_only`), kept solely for pricing-reference
+> use in the divergence cross-check, and are not browseable entities. This doc is
 > retained as a historical record of the (now-reverted) multi-network design.
 
 # Multi-network assets migration

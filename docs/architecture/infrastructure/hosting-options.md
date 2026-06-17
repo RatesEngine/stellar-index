@@ -26,7 +26,7 @@ the shape of what we deploy; this doc answers *where* we deploy it.
 Colo has two costs: (a) *procurement time* — ordering hardware,
 shipping, racking, remote hands, network hand-off — all measured in
 weeks; (b) *ownership overhead* — spares, repairs, contract mgmt.
-In a 10-week delivery window (a) is the killer: a week of colo
+In the initial build window (a) is the killer: a week of colo
 wait is a week not ingesting ledgers.
 
 **Good news:** every "move fast" option delivers the same logical

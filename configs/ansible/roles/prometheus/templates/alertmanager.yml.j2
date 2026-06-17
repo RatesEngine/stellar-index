@@ -130,7 +130,7 @@ receivers:
           {{ "{{" }} end {{ "}}" }}
 {% endif %}
 {% if alertmanager_discord_webhook_url %}
-    # Parallel Discord fanout. The proposal commits to "discord/slack"
+    # Parallel Discord fanout for "discord/slack" alert integration
     # — this keeps both channels in lockstep when both webhooks are set.
     discord_configs:
       - webhook_url: {{ alertmanager_discord_webhook_url }}

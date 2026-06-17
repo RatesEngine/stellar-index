@@ -41,10 +41,9 @@ emitted metrics. Design rationale lives in
   - `alertmanager_discord_webhook_url` — Discord webhook URL
     (used for the `ticket` + `informational` routes via
     `chat-fanout`, parallel to Slack — operators can run either,
-    both, or neither). Per the proposal's commitment to
-    "integrated into discord/slack" alerting.
+    both, or neither). Supports Discord/Slack alert integration.
 
-  Note (F-1265, 2026-05-13): the template uses the shared
+  Note: the template uses the shared
   `page / ticket / informational` severity vocabulary that
   matches the standalone R1 config at
   `configs/alertmanager/alertmanager.r1.yml`. Earlier doc text
@@ -52,7 +51,7 @@ emitted metrics. Design rationale lives in
   gone from both files.
 
 - **Inventory must set `prometheus_sha256` and
-  `alertmanager_sha256`** (F-1285, codex audit-2026-05-13).
+  `alertmanager_sha256`**.
   `02-install.yml` asserts at role-start that both variables are
   set and exactly 64 chars, then pins the `get_url` checksum on
   the Prometheus and Alertmanager tarballs to those values. The

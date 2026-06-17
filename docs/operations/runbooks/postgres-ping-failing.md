@@ -19,8 +19,8 @@ severity: P1
 
 ## Why this exists
 
-F-0151 (audit-2026-05-26 / cascade 2026-05-26-27): a postgres
-outage during the disk-full SEV cascade brought
+During the disk-full SEV cascade of 2026-05-26-27, a postgres
+outage brought
 `postgresql@15-main.service` down for ~10 h. Postgres recovered
 when disk was freed, but the indexer's `*sql.DB` connection pool
 held stale conns and silently failed writes for an additional ~3 h
@@ -110,7 +110,6 @@ If postgres is UP but ping still fails:
 - `timescale-primary-down.md` — adjacent alert; this one fires
   when the DB is reachable from prometheus but not from the
   indexer.
-- F-0151 in `docs/audit-2026-05-26/05-findings-register.md`.
 
 ## Changelog
 

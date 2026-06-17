@@ -976,7 +976,7 @@ func (a baselineSinkAdapter) UpsertBaseline(
 }
 
 // defaultPairs is the v1 aggregator coverage set. XLM/BTC/ETH across
-// USD/EUR/GBP gives the RFP's major-pair coverage without per-
+// USD/EUR/GBP gives the major-pair coverage without per-
 // operator tuning. Parallel to cmd/stellarindex-indexer's
 // defaultAggregatorPairs (kept per-binary so each can evolve
 // independently).

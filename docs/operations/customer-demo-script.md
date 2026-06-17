@@ -1,16 +1,15 @@
 ---
-title: Customer sign-off demo script (L6.6)
+title: API walkthrough script
 last_verified: 2026-05-04
 status: operator runbook
 ---
 
-# Customer sign-off demo
+# API walkthrough script
 
-End-to-end demo walk-through for **L6.6** in the launch-readiness
-backlog. Goal: in 30 minutes, walk a customer through every
-surface they're likely to use, with concrete `curl` commands they
-can re-run later. The customer should leave able to make their
-first real request without further intervention.
+End-to-end demo walk-through of the API. Goal: in 30 minutes, walk a
+new user through every surface they're likely to use, with concrete
+`curl` commands they can re-run later. They should leave able to make
+their first real request without further intervention.
 
 ## Pre-flight (T-30 min)
 
@@ -47,7 +46,7 @@ Talking points:
   suitable for monitoring.
 - `version` exposes the CalVer tag — operators can tell at a
   glance which build is responding.
-- **Hand the customer `https://stellarindex.io`** — the
+- **Hand the user `https://stellarindex.io`** — the
   interactive explorer. Every panel reveals the API call that
   produced it via the `<>` button, so the rest of the walk-through
   has a "click the panel, see the curl" parallel they can follow
@@ -70,7 +69,7 @@ Talking points:
   meaningful signal.
 - **`confidence`** + **`confidence_factors`**: ADR-0019.
   Multi-factor score (0..1) with the per-factor decomposition
-  on the wire. Customers can read why confidence dropped.
+  on the wire. Consumers can read why confidence dropped.
 - **`sources`**: which venues contributed to this VWAP. Click
   through the names to `/v1/sources` for class metadata.
 
@@ -97,7 +96,7 @@ curl -sH "Authorization: Bearer $KEY" \
 ```
 
 Talking points:
-- The raw inputs the aggregator sees. Useful for customers
+- The raw inputs the aggregator sees. Useful for consumers
   who want to apply their own aggregation policy.
 - `?source=binance` filters to one venue; `?aggregate=latest`
   collapses to one row per source.
@@ -167,7 +166,7 @@ Common questions to expect:
   results dashboard.
 - **"How fast can we get to 99.99%?"** → Honest answer:
   measurement requires ≥ 30 days production data, reported
-  90 days post-launch (L7.2).
+  90 days post-launch.
 - **"What if we want a private deployment?"** → Apache-2.0
   source + ansible roles + bringup runbook are all public;
   point at `docs/operations/archival-node-bringup.md`.
@@ -175,20 +174,17 @@ Common questions to expect:
 ## Post-demo
 
 - [ ] **Share the recording** if recorded.
-- [ ] **Send `onboarding-email.md`** with the customer's
+- [ ] **Send `onboarding-email.md`** with the user's
       production API key (different from the demo key — rotate
       the demo key out same day).
 - [ ] **Open a feedback issue** capturing any surface that
       drew confusion or any feature request raised.
-- [ ] **L6.6 in `launch-readiness-backlog.md`** flips ✅ when
-      the customer signs off.
 
 ## Cross-references
 
 - [`docs/getting-started.md`](../getting-started.md) — the
   written walkthrough this demo follows.
 - [`deploy/comms/onboarding-email.md`](../../deploy/comms/onboarding-email.md)
-  — what to send the customer after.
+  — what to send a new user after.
 - [`launch-day-checklist.md`](launch-day-checklist.md) §T-3
   — schedule the demo.
-- L6.6 in [`launch-readiness-backlog.md`](../architecture/launch-readiness-backlog.md).

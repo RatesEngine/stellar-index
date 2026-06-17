@@ -318,7 +318,7 @@ Now the showcase starts taking shape. Can run parallel to phases 5-6 (endpoints 
 | 8.9 | `/pairs/{base}/{quote}` per-venue page: chart matrix, spread chart, liquidity migration, live tape | | L |
 | 8.10 | `/markets` directory: heatmap + sortable table | | M |
 
-**Phase 8 deliverable**: customer-facing core. Anyone can browse any asset and explore it deeply.
+**Phase 8 deliverable**: user-facing core. Anyone can browse any asset and explore it deeply.
 
 ### Phase 9 — Section directories + detail pages (M)
 
@@ -469,7 +469,7 @@ From the data-inventory doc §20, here's where each lands:
 
 - Data inventory (the WHAT): [`explorer-data-inventory.md`](explorer-data-inventory.md)
 - API source-of-truth: [`../../openapi/stellar-index.v1.yaml`](../../openapi/stellar-index.v1.yaml)
-- Coverage matrix (RFP × delivery): [`coverage-matrix.md`](coverage-matrix.md)
+- Coverage matrix (requirement × delivery): [`coverage-matrix.md`](coverage-matrix.md)
 - Aggregation policy: [`aggregation-plan.md`](aggregation-plan.md)
 - ADRs: [`../adr/`](../adr/)
 - CDN setup: [`../operations/cdn-setup.md`](../operations/cdn-setup.md)

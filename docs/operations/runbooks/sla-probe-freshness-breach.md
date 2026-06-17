@@ -15,7 +15,7 @@ severity: P2
 | Severity | P2 (page) |
 | Detected by | `deploy/monitoring/rules/sla-probe.yml` |
 | Typical MTTR | 30–90 min |
-| Impact | Customer-visible — the Freighter detail page shows stale prices. RFP target is `observed_at` ≤ 30 s; sustained breach means the wallet's price column is out of date. |
+| Impact | Detail-page consumers see stale prices. The target is `observed_at` ≤ 30 s; sustained breach means the price column is out of date. |
 
 ## Symptoms
 
@@ -121,7 +121,7 @@ reading the wrong key.
 - `cagg-stale.md` — Postgres-side staleness.
 - `core-lag.md` — indexer-side lag.
 - `aggregator-silent.md` — orchestrator not writing.
-- Freighter RFP V1 § Pricing — the 30s spec.
+- The service freshness SLA — the 30s spec.
 
 ## Changelog
 

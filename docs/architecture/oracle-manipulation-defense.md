@@ -8,13 +8,13 @@ status: living document
 
 A risk-and-defense reference for the engineering team. Documents
 known oracle-manipulation incidents in the broader DeFi space, the
-attack patterns common to them, and which layers of the Rates
-Engine architecture defend against each.
+attack patterns common to them, and which layers of the Stellar
+Index architecture defend against each.
 
-This doc is **not** a discovery-archive piece (Phase 1 closed
-2026-04-22 per CLAUDE.md). It lives in `docs/architecture/`
-specifically because the threat model evolves — new incidents
-inform new defenses, and this doc is the place to record both.
+This doc is a **living** piece, not a frozen reference. It lives
+in `docs/architecture/` specifically because the threat model
+evolves — new incidents inform new defenses, and this doc is the
+place to record both.
 
 ## Attack pattern (canonical shape)
 
@@ -56,9 +56,8 @@ maps to our defensive layers below.
   collateral pricing. Attacker borrowed against inflated
   collateral, withdrew, left bad debt.
 - **What the oracle did wrong:** Reflector v3's TWAP and cross-pair
-  computation are local (per `docs/discovery/oracles/reflector.md`
-  — "Reflector v3 has no on-chain `twap` or `x_*` methods. Proposal
-  says it does; it doesn't"). For a thin asset like USTRY, the
+  computation are local — Reflector v3 has no on-chain `twap` or
+  `x_*` methods, so we compute them ourselves. For a thin asset like USTRY, the
   cross-source consensus that protects liquid assets degrades to
   near-single-source reads. A manipulation on the only venue
   Reflector observed was sufficient.
@@ -545,9 +544,6 @@ list).
   the runbook that fires on adversarial outlier patterns.
 - [`docs/operations/runbooks/price-divergence.md`](../operations/runbooks/price-divergence.md) —
   the runbook that fires on cross-reference divergence.
-- [`docs/discovery/oracles/reflector.md`](../discovery/oracles/reflector.md) —
-  the existing Reflector audit (read-only Phase 1 archive); this
-  doc supplements with post-Phase-1 incident data.
 
 ## Maintenance
 

@@ -5,7 +5,7 @@
 # Based on the pattern from ~/code/loop-app/scripts/lint-docs.sh —
 # adapted for our Go + OpenAPI + Stellar-specific surface.
 #
-# Design principles (docs/discovery/engineering-standards.md §5):
+# Design principles (docs/engineering-standards.md §5):
 #
 #   1. Never two sources of truth.
 #   2. Explain why, not what.
@@ -103,11 +103,11 @@ fi
 #
 # `make docs-api` copies openapi/stellar-index.v1.yaml verbatim next to the
 # rendered index.html. CI's `openapi` job enforces this too — but that job is
-# PR-only + path-filtered, so a direct-to-main push (the live-in-development
-# cadence) that edits the spec without re-running `make docs-api` slips the
-# desync onto main (audit-2026-06-14 A19-02: the reference was 66 paths while
-# the spec shipped 73). This lint runs inside verify.sh on every push, so the
-# gap is closed locally regardless of the CI trigger.
+# PR-only + path-filtered, so a direct-to-main push that edits the spec
+# without re-running `make docs-api` slips the desync onto main (observed
+# once: the reference was 66 paths while the spec shipped 73). This lint
+# runs inside verify.sh on every push, so the gap is closed locally
+# regardless of the CI trigger.
 
 echo "Checking generated API reference sync..."
 if [ -f openapi/stellar-index.v1.yaml ] && [ -f docs/reference/api/stellar-index.v1.yaml ]; then
@@ -365,18 +365,17 @@ fi
 # Multi-host rules in `deploy/monitoring/rules/` use underscored job
 # names (matching the ansible multi-host scrape config). R1's single-
 # host overlay at `configs/prometheus/rules.r1/` mirrors the same
-# alerts with hyphenated job names. F-1222 (audit-2026-05-12) caught
-# silent drift between the two — editing the multi-host file alone
-# leaves R1 with a stale rule. This check flags any multi-host file
-# that has no matching R1 sibling so reviewers catch the drift at
-# CI time.
+# alerts with hyphenated job names. Silent drift between the two —
+# editing the multi-host file alone leaves R1 with a stale rule. This
+# check flags any multi-host file that has no matching R1 sibling so
+# reviewers catch the drift at CI time.
 
 echo "Checking Prometheus rule pairing (multi-host ↔ R1 overlay)..."
 if [ -d deploy/monitoring/rules ] && [ -d configs/prometheus/rules.r1 ]; then
   for r in deploy/monitoring/rules/*.yml; do
     fname="${r##*/}"
     if [ ! -f "configs/prometheus/rules.r1/$fname" ]; then
-      err "Multi-host rule file $r has no configs/prometheus/rules.r1/$fname sibling — see F-1222 in $r header. Either add an R1 overlay or remove this rule."
+      err "Multi-host rule file $r has no configs/prometheus/rules.r1/$fname sibling. Either add an R1 overlay or remove this rule."
     fi
   done
 fi
@@ -429,9 +428,9 @@ if [ -d docs/operations/runbooks ]; then
   done
 fi
 
-# ─── 15. Incident post-mortem follow-up forcing function (F-0099) ─────────
+# ─── 15. Incident post-mortem follow-up forcing function ──────────────────
 #
-# Fail if any customer-facing incident (internal/incidents/data/*.md,
+# Fail if any user-facing incident (internal/incidents/data/*.md,
 # served by /v1/incidents) is older than 30 days AND still has
 # unchecked `[ ]` checkboxes in its body. Closes the meta-failure-
 # mode where post-mortem action items rot indefinitely: the
@@ -483,17 +482,16 @@ fi
 
 # ─── 16. Production CSP must not permit http://localhost ──────────────────
 #
-# F-0054 (audit-2026-05-26): an earlier revision left
-# `http://localhost:3000` in the Cloudflare Pages CSP `connect-src` of
-# the explorer + status sites as a dev-convenience that leaked into
-# production. The Next dev server doesn't apply _headers anyway, so
-# the dev-build use case is moot; permitting localhost in prod CSP is
-# pure config drift between dev and prod. This guard fails CI if it
-# regresses.
+# An earlier revision left `http://localhost:3000` in the Cloudflare
+# Pages CSP `connect-src` of the explorer + status sites as a
+# dev-convenience that leaked into production. The Next dev server
+# doesn't apply _headers anyway, so the dev-build use case is moot;
+# permitting localhost in prod CSP is pure config drift between dev and
+# prod. This guard fails CI if it regresses.
 
 for hf in web/explorer/public/_headers web/status/public/_headers; do
   if [ -f "$hf" ] && grep -qE 'Content-Security-Policy:.*localhost' "$hf"; then
-    err "$hf permits 'localhost' in a Content-Security-Policy header — F-0054 forbids this in production builds. Remove the localhost permit; dev work uses 'next dev' which doesn't read _headers."
+    err "$hf permits 'localhost' in a Content-Security-Policy header — forbidden in production builds. Remove the localhost permit; dev work uses 'next dev' which doesn't read _headers."
   fi
 done
 

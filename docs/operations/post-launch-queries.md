@@ -57,7 +57,7 @@ histogram_quantile(0.99,
   sum by (le, route) (rate(http_request_duration_seconds_bucket[$range])))
 ```
 
-**Bar**: p95 ≤ 200ms, p99 ≤ 500ms (Freighter RFP §SLA). The SLA
+**Bar**: p95 ≤ 200ms, p99 ≤ 500ms (the service SLA). The SLA
 probe (`cmd/stellarindex-sla-probe`) is the formal evidence trail;
 this query is the on-call's continuous view.
 

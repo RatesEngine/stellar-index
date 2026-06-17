@@ -12,8 +12,8 @@ superseded_by: null
 ## Context
 
 The aggregation layer needs to price Stellar assets against
-off-chain fiat currencies (USD, EUR, GBP, JPY, CNY, BRL per the
-RFPs). These are NOT Stellar assets — there's no `code+issuer`
+off-chain fiat currencies (USD, EUR, GBP, JPY, CNY, BRL).
+These are NOT Stellar assets — there's no `code+issuer`
 (Circle's USDC is a classic Stellar asset, but "USD as a
 reference currency" is not).
 
@@ -77,7 +77,7 @@ Canonical wire form for fiat:
   ts)` work identically.
 
 Allow-listed codes (ISO-4217 three-letter plus a small extension
-set for the RFPs' "AQUA/BRL" case and currencies observed in live
+set for the "AQUA/BRL" case and currencies observed in live
 Reflector FX oracle traffic — see Amendments):
 
 ```
@@ -157,8 +157,8 @@ func (a Asset) Validate() error {
   (`internal/aggregate/triangulate.go`, future) has to handle
   fiat ↔ fiat rates as well as fiat ↔ Stellar-asset rates. Clean
   separation between the two via the `AssetType` tag.
-- Triangulation through a "synthetic USD anchor" (proposal §
-  Cross-Pair Derivation) is now just `AssetType = fiat, Code =
+- Triangulation through a "synthetic USD anchor" (cross-pair
+  derivation) is now just `AssetType = fiat, Code =
   USD` — a real value, not a string match.
 
 ## Alternatives considered

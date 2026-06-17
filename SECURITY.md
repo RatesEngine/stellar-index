@@ -6,10 +6,8 @@
 
 Report them privately via one of:
 
-1. **Email:** `security@stellarindex.io` (mailbox provisioning
-   in Week 1 per
-   [docs/discovery/delivery-plan.md](docs/discovery/delivery-plan.md)
-   — until then use GitHub Security Advisory below).
+1. **Email:** `security@stellarindex.io` (if the mailbox is not
+   yet provisioned, use the GitHub Security Advisory path below).
 2. **GitHub Security Advisory:** use the "Report a vulnerability"
    button on the Security tab of this repo.
 

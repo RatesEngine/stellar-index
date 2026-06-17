@@ -130,7 +130,7 @@ covers USDT / USDC / PYUSD / EUROC / EUROB / MXNe.
     OpenAPI documentation calls this out per surface (the
     `flags.triangulated` advisory for routes that triangulate;
     the proxy chain for the rest).
-  - Operator burden: keep `api.peg_aliases` in `/etc/ratesengine.toml`
+  - Operator burden: keep `api.peg_aliases` in `/etc/stellarindex.toml`
     in sync with the de-facto peg state. Documented in the
     config reference and the `price-divergence` runbook.
 - **Operational impact:** During a depeg event, the operator
@@ -148,7 +148,7 @@ covers USDT / USDC / PYUSD / EUROC / EUROB / MXNe.
   - Cross-region byte-identical contract (ADR-0015) requires
     every region to ship the SAME `api.peg_aliases`. Drift
     breaks the contract; the cross-region monitor checker
-    (`ratesengine-ops cross-region-check`) verifies the
+    (`stellarindex-ops cross-region-check`) verifies the
     config hash alongside per-pair price equality.
 
 ## Alternatives considered
@@ -200,8 +200,7 @@ covers USDT / USDC / PYUSD / EUROC / EUROB / MXNe.
   - PR #1219 — `/v1/chart` proxy fallback
 - Runbook: `docs/operations/runbooks/price-divergence.md`
   documents the operator response when a peg breaks.
-- Discovery: `docs/discovery/decisions.md` — the
-  late-binding policy was an implicit decision from the start
+- The late-binding policy was an implicit decision from the start
   but lacked a binding ADR until this one.
 - CLAUDE.md "Things that will surprise you" carries the
   short version for AI agents reading the repo cold.

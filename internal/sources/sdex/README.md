@@ -70,9 +70,6 @@ because the unified events don't include the cross-leg
 denomination and quote that an order-book or LP match
 naturally has.
 
-See
-[`docs/discovery/notes/cap-67-unified-events.md`](../../../docs/discovery/notes/cap-67-unified-events.md).
-
 ### Q5 — Reserve / volume normalisation is the ingest stamp
 
 SDEX trade amounts arrive at native Stellar precision — XLM at
@@ -116,8 +113,6 @@ fanout. Live ingest, backfill, and replay use the same path.)
 - ADR-0001 — "Horizon is not in our architecture"; explains why
   this package decodes raw XDR rather than calling a classic-DEX
   HTTP API.
-- [`docs/discovery/notes/cap-67-unified-events.md`](../../../docs/discovery/notes/cap-67-unified-events.md)
-  — interaction with the post-P23 unified-event surface.
 - Related source: [`soroswap`](../soroswap/README.md) (the
   Soroban-DEX equivalent). Soroswap and SDEX trade
   independently; both contribute to VWAP.

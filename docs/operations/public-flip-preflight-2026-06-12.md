@@ -1,6 +1,6 @@
 # Public-flip pre-flight sweep — 2026-06-12
 
-Workstream D of [deliverable-readiness-plan.md](deliverable-readiness-plan.md).
+Pre-flight sweep for the public open-source release.
 Scope: the **working tree only** (2,406 tracked files via `git ls-files`) —
 the flip strategy is a fresh-history export at v1.0, so private git history
 never ships and tree-state is the only thing that matters.
@@ -30,7 +30,7 @@ vendor token shapes (`sk_live`, `ghp_`, `xox[bp]-`, `re_…`, `AIza…`,
     `0x…` feed addresses) — public by definition.
   - Doc-comment prose (`internal/auth/store.go:187` describes the
     `sk_live_…` / `AKIA…` *pattern* for key-prefix design).
-  - Base64 image data URIs inside `docs/ctx-proposal.md` (false-positive
+  - Base64 image data URIs inside doc files (false-positive
     source for naive scans; verified not key material).
 - **No Stellar secret seeds** anywhere in tracked files.
 - **Ansible templates are fully variable-substituted** — e.g.
@@ -96,8 +96,8 @@ Verdict: **CLEAN**.
   `github.com/StellarIndex/stellar-index`, which matches the `go.mod`
   module path (`module github.com/StellarIndex/stellar-index`). The
   public repo MUST be created at exactly that org/name or `go install`
-  / `git clone` instructions break on day one (the private repo lives
-  at `RatesEngine/stellar-index` today).
+  / `git clone` instructions break on day one (the private development
+  repo lives under a different org today).
 
 Verdict: **NEEDS-ACTION** — one stale quickstart comment; repo-name
 constraint noted for the flip itself.
@@ -113,17 +113,16 @@ constraint noted for the flip itself.
 | Cluster | Files (examples) | Character |
 | --- | --- | --- |
 | Ops runbooks + configs READMEs | `configs/caddy/Caddyfile.api:8`, `configs/healthchecks/README.md:88-89`, `configs/prometheus/rules.r1/README.md:54-55`, `docs/operations/runbooks/{projector-lag,minio-metrics-403,external-poller-stale,fx-history-missing}.md`, `docs/operations/{deploy-workflow,cf-pages-setup,pre-launch-hardening,lcm-cache-tiering}.md`, `scripts/dev/r1-smoke.sh`, `scripts/ops/cf-pages-bootstrap.sh` | `ssh root@136.243.90.96` copy-paste commands |
-| Audit archives | `docs/audit-2026-05-12*/`, `docs/audit-2026-05-26/`, `docs/audit-2026-06-11/` (~25 files) | Live-probe evidence, **including security findings about the host** (F-1201 partial firewall hardening, externally-reachable ports 9000/11726 at probe time) |
+| Internal working archives | the internal audit/working-note directories (~25 files), kept out of the published tree | Live-probe evidence, **including security findings about the host** (F-1201 partial firewall hardening, externally-reachable ports 9000/11726 at probe time) |
 | Workflow comments | `.github/workflows/deploy.yml:9` ("e.g. 136.243.90.96") | Example value for a secret |
 
 The IP itself is semi-public (it is the A record for
 `api.stellarindex.io`), but publishing **root-SSH command lines plus an
 audit trail of the host's historical security weaknesses** is a different
 exposure class. Decide per cluster: (1) runbooks — replace the literal IP
-with `$R1_HOST` / `r1` (mechanical sed, keeps runbooks useful); (2) audit
-dirs — recommend **excluding `docs/audit-*` from the public export**
-(internal working artifacts, heavy on live-host evidence, also the bulk of
-the stale `ratesengine.net` branding); (3) workflow comment — harmless
+with `$R1_HOST` / `r1` (mechanical sed, keeps runbooks useful); (2) internal
+working archives — keep them **out of the public export** (internal working
+artifacts, heavy on live-host evidence); (3) workflow comment — harmless
 once (1)/(2) are decided, but trivial to genericise.
 
 ### 4b. Personal email — minor
@@ -136,32 +135,29 @@ once (1)/(2) are decided, but trivial to genericise.
 fixtures — fine. No other personal emails; everything else is
 `@example`/`@acme.example` test data or project-domain addresses.
 
-### 4c. Private-codebase / prior-customer references — decision required
+### 4c. Private-codebase references — decision required
 
-`~/code/rates` ("Dash Retail Rates", the predecessor private codebase) is
+`~/code/rates` (the predecessor private codebase) is
 referenced in: `CLAUDE.md:445-446` (CEX-connector recipe), shipped source
 comments `internal/sources/external/binance/events.go:11` and
-`internal/sources/external/coinbase/events.go:4`, `CHANGELOG.md:14013`,
-and `docs/discovery/{existing-ctx-rates.md,external-refs/cex-feeds.md,repo-structure-plan.md}`.
+`internal/sources/external/coinbase/events.go:4`, and `CHANGELOG.md:14013`.
 These point external readers at a local path they can't access and name a
-prior customer. Minimum: scrub the two shipped `.go` comments + the
-CLAUDE.md recipe step; decide whether `docs/discovery/existing-ctx-rates.md`
-(a teardown of someone else's production system) ships at all.
+predecessor system. Minimum: scrub the two shipped `.go` comments + the
+CLAUDE.md recipe step; decide whether the predecessor-system teardown
+notes ship at all.
 
-### 4d. RFP / proposal documents — rights check required
+### 4d. Internal working documents — excluded from export
 
-`docs/stellar-rfp.md`, `docs/freighter-rfp.md`, `docs/ctx-proposal.md` are
-third-party/customer-authored content (the proposal embeds base64 images
-and infra details, e.g. ctx-proposal.md:611). **No confidentiality or
-all-rights-reserved markings found** in any of the three, but absence of a
-marking is not a license to republish under Apache-2.0. Confirm
-redistribution rights before the flip, or replace with summaries +
-the requirements matrix (`docs/discovery/rfp-requirements-matrix.md`).
+A set of internal working documents (requirements and scoping notes)
+that embed base64 images and infra details are kept out of the public
+export. The first-party coverage summary
+(`docs/architecture/coverage-matrix.md`) carries the requirements
+mapping that external readers need.
 
-### 4e. Cosmetic: legacy `ratesengine.net` branding
+### 4e. Cosmetic: legacy-domain branding
 
 33 files still mention the old domain — concentrated in the dated audit
-dirs (19 files), `docs/discovery`, `docs/adr`, `docs/blog`. If `docs/audit-*`
+dirs (19 files), `docs/adr`, `docs/blog`. If `docs/audit-*`
 is excluded per 4a, the residue is small; historical artifacts may
 legitimately keep their original domain. No action strictly required.
 
@@ -228,14 +224,13 @@ notes the stellar/go monorepo archive + per-repo split.
    `docs/operations/**`, `configs/**` READMEs, `scripts/dev/r1-smoke.sh`,
    `scripts/ops/*.sh`, `.github/workflows/deploy.yml`. Keep the runbooks
    copy-pasteable via a single "set R1_HOST" preamble.
-3. **Confirm redistribution rights for the three customer documents**
-   (4d: `docs/stellar-rfp.md`, `docs/freighter-rfp.md`,
-   `docs/ctx-proposal.md`) — or swap them for first-party summaries +
-   the requirements matrix before export.
+3. **Exclude the internal working documents** (4d) from the export —
+   the first-party coverage summary
+   (`docs/architecture/coverage-matrix.md`) carries the requirements
+   mapping external readers need.
 4. **Scrub private-codebase references** (4c): the two shipped source
-   comments (`internal/sources/external/{binance,coinbase}/events.go`),
-   the `CLAUDE.md:445-446` recipe step, and decide the fate of
-   `docs/discovery/existing-ctx-rates.md`.
+   comments (`internal/sources/external/{binance,coinbase}/events.go`)
+   and the `CLAUDE.md:445-446` recipe step.
 5. **Fix `docs/getting-started.md:201`** ("+ API" is wrong — compose has
    no API service) and replace the `ash@ashfrancis.com` placeholders in
    the three `configs/ansible/inventory/r*.example.yml` files (3 + 4b).
@@ -243,8 +238,8 @@ notes the stellar/go monorepo archive + per-repo split.
    `github.com/StellarIndex/stellar-index` (matches `go.mod` module path
    and every clone/issues/releases link in README + getting-started);
    never push private history (per the standing fresh-export strategy).
-7. (Optional, cosmetic) Sweep residual `ratesengine.net` mentions outside
-   the audit dirs (`docs/adr`, `docs/blog`, `docs/discovery`) if a clean
+7. (Optional, cosmetic) Sweep residual legacy-domain mentions outside
+   the audit dirs (`docs/adr`, `docs/blog`) if a clean
    brand surface is wanted; dated artifacts may keep the old domain.
 
 — Generated by the pre-flight sweep, 2026-06-12. Read-only run; no files
@@ -256,10 +251,8 @@ other than this report were modified.
   references in binance/coinbase/CLAUDE.md; ansible example emails.
 - **Export-time rules for the flip script** (fresh-history export):
   exclude `docs/audit-*/` (six dirs — root-SSH evidence + historical
-  security findings) and `docs/discovery/existing-ctx-rates.md`-class
-  predecessor analyses if any remain; rewrite `136.243.90.96` →
-  `$R1_HOST` in everything exported (operator docs keep a private
-  overlay).
-- Operator: confirm redistribution rights for the three customer-
-  authored docs (stellar-rfp / freighter-rfp / ctx-proposal) before
-  including them; else export with a summary + link instead.
+  security findings) and predecessor-analysis notes if any remain;
+  rewrite `136.243.90.96` → `$R1_HOST` in everything exported
+  (operator docs keep a private overlay).
+- Operator: keep the internal working documents out of the export;
+  ship the first-party coverage summary instead.

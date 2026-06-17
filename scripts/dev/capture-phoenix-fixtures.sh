@@ -28,7 +28,7 @@ JQ="${JQ:-jq}"
 CURL="${CURL:-curl}"
 WASM_HASH="${WASM_HASH:-unknown-wasm-hash}"
 
-# Known Phoenix pool contracts (Phase-1 discovery doc). The capture
+# Known Phoenix pool contracts. The capture
 # script scopes by these contractIds to avoid pulling unrelated
 # events. Extend as new pools are deployed.
 PHOENIX_POOLS=(

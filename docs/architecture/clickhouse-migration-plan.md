@@ -7,7 +7,7 @@ status: accepted
 # Migration plan: galexie → ClickHouse → protocol decoders → Postgres
 
 **Status: accepted (ADR-0034, 2026-06-05); migration in progress.** A comprehensive, phased migration to the storage
-architecture that supports BOTH the pricing proposal AND a full,
+architecture that supports BOTH the pricing product AND a full,
 searchable Stellar/Soroban explorer — without the bulk-reprocessing wall
 we hit with `soroban_events` and `trades` in Postgres.
 
@@ -73,8 +73,8 @@ Alternatives I considered and rejected:
   but the pricing semantics (ADR-0015 closed-bucket serving, i128-as-
   NUMERIC, the outlier/triangulation/class-weight policy chain, the CAGG
   ladder, the Go aggregator) already work in Postgres/Timescale and are
-  small. Rewriting them in ClickHouse buys nothing and risks the proposal.
-  **Rejected** — keep pricing in Postgres.
+  small. Rewriting them in ClickHouse buys nothing and risks the core
+  pricing product. **Rejected** — keep pricing in Postgres.
 
 **ClickHouse wins** because it is columnar (cheap bulk scan + load),
 append-only with **merge-on-read dedup** (no `ON CONFLICT` random-IO, and
@@ -211,20 +211,20 @@ the oversize tuning, and mark the affected ADRs superseded/amended +
 update CLAUDE.md. Reclaim disk; end the scale pain. Nothing dead left
 behind.
 
-## 7. Proposal vs. explorer — sequencing (don't block the proposal)
+## 7. Pricing vs. explorer — sequencing (don't block the pricing product)
 
-The **pricing proposal is a small-data problem and is largely met on the
-current Postgres stack already**: forward ingest is fixed (no new loss),
-CAGGs are maintained, and the historical multi-event gaps are concentrated
-in AMM swaps that VWAP/OHLC over liquid pairs is robust to. **The cheap
-materiality check** (do the historical gaps move any served pricing
-number, vs the census?) likely confirms the proposal is met *now*, with
-the watermark to prove it — independent of this migration.
+The **core pricing surface is a small-data problem and is largely met on
+the current Postgres stack already**: forward ingest is fixed (no new
+loss), CAGGs are maintained, and the historical multi-event gaps are
+concentrated in AMM swaps that VWAP/OHLC over liquid pairs is robust to.
+**The cheap materiality check** (do the historical gaps move any served
+pricing number, vs the census?) likely confirms the pricing product is met
+*now*, with the watermark to prove it — independent of this migration.
 
-So: **the proposal ships on the existing stack; the ClickHouse migration
-is the explorer + evolvability foundation, built additively beside it.**
-Phases 4–5 also retroactively fix pricing correctness, but the proposal is
-not *blocked* on the full migration.
+So: **the pricing API ships on the existing stack; the ClickHouse
+migration is the explorer + evolvability foundation, built additively
+beside it.** Phases 4–5 also retroactively fix pricing correctness, but the
+pricing product is not *blocked* on the full migration.
 
 ## 8. Risks & mitigations
 
@@ -240,8 +240,8 @@ not *blocked* on the full migration.
   only the source changes; cover with the existing golden fixtures.
 - **Resource contention if co-located on r1.** Mitigate: resource limits
   or a sibling host; disk is ample (18 TB free).
-- **Scope creep.** Mitigate: the proposal is decoupled (§7) so the
-  multi-month explorer build never holds the proposal hostage.
+- **Scope creep.** Mitigate: the pricing product is decoupled (§7) so the
+  multi-month explorer build never holds the pricing product hostage.
 
 ## 9. ADR impact
 

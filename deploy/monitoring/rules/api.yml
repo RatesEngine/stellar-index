@@ -1,5 +1,5 @@
 ---
-# API serving-plane alerts — SLA enforcement per Freighter RFP.
+# API serving-plane alerts — SLA enforcement.
 #
 # Job-label convention (F-1222 audit-2026-05-12). The multi-host
 # rules in this directory use UNDERSCORED job names

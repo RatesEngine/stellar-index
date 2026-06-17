@@ -304,7 +304,6 @@ Rationale:
 
 - Procedure: `docs/operations/wasm-audits/README.md`
 - Decoder source: `internal/sources/phoenix/{events,decode}.go`
-- Discovery doc: `docs/discovery/dexes-amms/phoenix.md`
 - Schema-evolution stance: `docs/architecture/contract-schema-evolution.md`
 - Backfill gate: `internal/sources/external/registry.go` —
   `Registry["phoenix"].BackfillSafe`

@@ -1,8 +1,8 @@
 # Soroswap connector
 
 Ingests trade events from the [Soroswap](https://soroswap.finance/)
-Soroban DEX. Primary Phase-1 reference:
-[`docs/discovery/dexes-amms/soroswap.md`](../../../docs/discovery/dexes-amms/soroswap.md).
+Soroban DEX. See the protocol verification page:
+[`docs/protocols/soroswap.md`](../../../docs/protocols/soroswap.md).
 
 ## What this ingests
 
@@ -15,7 +15,7 @@ Soroswap has two contract types:
    `withdraw`, `skim`. We extract trades from `swap` + the
    immediately-following `sync` event (see *quirks* below).
 
-Mainnet addresses (verified during Phase 1 against
+Mainnet addresses (verified against
 `public/mainnet.contracts.json` in soroswap-core):
 
 | Contract | Address |
@@ -26,7 +26,8 @@ Mainnet addresses (verified during Phase 1 against
 
 Per-pair addresses are enumerated dynamically by walking the
 factory's `new_pair` events from a configured start ledger (or by
-checking `contractCodeHash` on-chain — see [soroswap.md §4].
+checking `contractCodeHash` on-chain — see
+[`docs/protocols/soroswap.md`](../../../docs/protocols/soroswap.md)).
 
 ## Quirks
 

@@ -15,7 +15,7 @@ severity: P2
 | Severity | P2 (page) |
 | Detected by | `deploy/monitoring/rules/sla-probe.yml` |
 | Typical MTTR | 15–60 min |
-| Impact | The Freighter detail page shows degraded responsiveness on the named endpoint. Direct customer-visible SLA breach (RFP target: p95 ≤ 200 ms). |
+| Impact | Detail-page consumers see degraded responsiveness on the named endpoint. Direct SLA breach (target: p95 ≤ 200 ms). |
 
 ## Symptoms
 
@@ -62,7 +62,7 @@ histograms see the same backend. The probe just adds:
 - [ ] Step 1 — Confirm the breach is real (not probe-host-only) per
       Quick diagnosis #2.
 - [ ] Step 2 — If probe-only: investigate the probe host's network
-      path; this is a probe issue, not a customer-impact alert.
+      path; this is a probe issue, not a real-impact alert.
 - [ ] Step 3 — If real: route to `api-latency.md` for the full
       latency-triage flow.
 - [ ] Verification: probe p95 returns under 200 ms for 30 min
@@ -80,7 +80,6 @@ histograms see the same backend. The probe just adds:
 
 - `api-latency.md` — the underlying latency-triage flow.
 - `sla-probe-stale.md` — when the probe stops running entirely.
-- Freighter SLA spec: `docs/freighter-rfp.md` §SLA.
 
 ## Changelog
 

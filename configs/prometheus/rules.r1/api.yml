@@ -1,5 +1,5 @@
 ---
-# API serving-plane alerts — SLA enforcement per Freighter RFP.
+# API serving-plane alerts — API SLA enforcement.
 
 groups:
   - name: stellarindex.api

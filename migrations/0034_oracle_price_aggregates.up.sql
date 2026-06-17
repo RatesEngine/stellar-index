@@ -1,9 +1,9 @@
 -- 0034 up — continuous aggregates for oracle_updates.
 --
 -- Sister to migration 0002 (price aggregates on trades). Same 7-tier
--- grain set per RFP (1m / 15m / 1h / 4h / 1d / 1w / 1mo); same
--- "indefinite for 1h+, retention TBD for sub-hourly" policy as the
--- proposal. Distinguished from prices_* by row semantics:
+-- grain set (1m / 15m / 1h / 4h / 1d / 1w / 1mo); same
+-- "indefinite for 1h+, retention TBD for sub-hourly" policy.
+-- Distinguished from prices_* by row semantics:
 --
 --   trades →  OHLC + VWAP + TWAP + volume (price-discovery events,
 --             aggregated by volume-weighting)

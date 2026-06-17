@@ -55,7 +55,7 @@ which can report 100% over a real gap:
    existence, not interior continuity), `verify-archive` (offline;
    verifies archive *files*, not that ingest consumed them), and the
    `ledgerstream` cursor — which advances **before** data is
-   persisted (`cmd/ratesengine-indexer` `processAndPersistCursor`),
+   persisted (`cmd/stellarindex-indexer` `processAndPersistCursor`),
    so a panic mid-write loses a ledger with the cursor already past
    it.
 
@@ -141,7 +141,7 @@ Two checks make the substrate self-evident:
 
 - **Contiguity** — the set of `ledger_seq` is unbroken from
   `genesis` to `W`. A cheap anti-join over this *narrow* table, never
-  an unbounded `trades` scan (see `feedback_no_unbounded_trade_scan`).
+  an unbounded `trades` scan.
 - **Hash-chain** — `prev_ledger_hash[N] == ledger_hash[N-1]` for all
   `N`, anchored every 64 ledgers to the SDF-signed checkpoint
   (the Tier-B logic `verify-archive` already implements). This turns
@@ -177,10 +177,10 @@ DISTINCT (contract_id, topic_0_sym) in soroban_events
 Any topic present in the raw data that the decoder does not claim is
 a **recognition gap** — surfaced as both a CI test (against a
 committed fixture of seen `(contract, topic)` pairs) and a live
-metric. This is the automated, on-chain-truth version of the
-hand-maintained `docs/audit-2026-05-26/inventory/every-event-coverage.tsv`,
+metric. This is the automated, on-chain-truth version of a
+hand-maintained event-coverage inventory,
 and it is what makes the "EVERY event for EVERY protocol" principle
-(`project_every_event_principle`) *enforceable* rather than
+*enforceable* rather than
 aspirational. It is also the check that catches in-place contract
 upgrades that add a topic
 (`docs/architecture/contract-schema-evolution.md`): the moment a new
@@ -233,7 +233,7 @@ classic_trade_effect_count[N] == COUNT(trades WHERE source='sdex' AND ledger=N)
 
 As defense in depth, protocol totals are periodically cross-checked
 against an external oracle (Hubble `history_trades`), windowed to
-match (see `feedback_metric_window_apples_oranges`). Full per-event
+match. Full per-event
 anti-join parity for SDEX would require materializing a classic-trade
 raw census; given pre-2024 SDEX volume, count-reconciliation plus the
 Hubble anchor is the chosen cost/confidence trade. We may add the
@@ -374,9 +374,5 @@ confidence; merge-as-you-go.
   - `migrations/0048_source_coverage_snapshots.up.sql`
 - Substrate fragments to unify:
   - `internal/hashdb/`, `internal/archivecompleteness/`,
-    `cmd/ratesengine-ops/verify_archive_*.go`
+    `cmd/stellarindex-ops/verify_archive_*.go`
 - Builds on: ADR-0029, ADR-0030, ADR-0031, ADR-0032.
-- Memory refs: `project_every_event_principle`,
-  `project_soroban_events_landing_zone`, `project_cascade_detection_pattern`,
-  `project_density_genesis_precision`, `feedback_no_unbounded_trade_scan`,
-  `feedback_metric_window_apples_oranges`.

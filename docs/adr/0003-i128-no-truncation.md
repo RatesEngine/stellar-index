@@ -29,8 +29,8 @@ as **`i128` or `u128`** — two 64-bit words, `hi` and `lo`.
 
 At the standard 7-decimal precision, any amount above
 **~922 billion tokens** (i64 max ÷ 10⁷) overflows `int64`. This is
-not theoretical: a real production incident shared during Phase-1
-discovery (2026-04-22) confirmed the blast radius.
+not theoretical: a real production incident observed in adjacent
+tooling (2026-04-22) confirmed the blast radius.
 
 > "The KALIEN balance is stored as an `i128` (two 64-bit words).
 > The actual value 40,000,005,972,900,000,000 exceeds i64 max
@@ -43,7 +43,7 @@ Stellar Expert's own response confirmed their analytics DB uses
 `int64` for most balances and that they were working on a fix at
 the time, but had no committed ship date.
 
-We also verified during discovery that `withObsrvr/cdp-pipeline-workflow`
+We also verified that `withObsrvr/cdp-pipeline-workflow`
 contains this exact class of bug — its Soroswap router processor
 reads `entry.Val.I128.Lo` and ignores `.Hi`, silently mis-recording
 every high-value swap.
@@ -136,10 +136,9 @@ verified-correct implementation in
 
 ## References
 
-- Discovery narrative:
-  [docs/discovery/decisions.md](../discovery/decisions.md) —
-  section "i128 / u128 must survive end-to-end with no truncation".
 - Reference correct implementation:
-  [docs/discovery/data-sources/withobsrvr-stellar-extract.md](../discovery/data-sources/withobsrvr-stellar-extract.md).
+  `withObsrvr/stellar-extract/scval_converter.go` — verified-correct
+  two's-complement `Int128Parts` handling.
 - Counter-example (the bug we refuse to ship):
-  [docs/discovery/data-sources/withobsrvr-cdp-pipeline-workflow.md](../discovery/data-sources/withobsrvr-cdp-pipeline-workflow.md).
+  `withObsrvr/cdp-pipeline-workflow` — its Soroswap router processor
+  reads only the low 64 bits of an `i128`.

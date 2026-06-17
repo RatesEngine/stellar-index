@@ -458,8 +458,8 @@ func TestAPI_OracleLatest(t *testing.T) {
 }
 
 // TestStorage_LatestAggregatorPricesForPair exercises the
-// Phase-1.2 reader Phase 1.3's `aggregator_avg` price-authority
-// tier consumes. Seeds three observations against (XLM, fiat:USD):
+// reader the `aggregator_avg` price-authority tier consumes.
+// Seeds three observations against (XLM, fiat:USD):
 // coingecko + coinmarketcap (both aggregator-class) and
 // reflector-cex (oracle-class). Asks the reader for aggregator
 // sources only and verifies (a) it returns one row per requested

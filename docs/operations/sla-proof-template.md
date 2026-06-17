@@ -3,7 +3,6 @@ title: SLA proof report — TEMPLATE
 last_verified: 2026-05-01
 status: template (copy to sla-proof-YYYY-MM-DD.md per run)
 related:
-  - docs/freighter-rfp.md §SLA targets
   - docs/architecture/k6-load-tests-design-note.md
   - test/load/scenarios/06-mixed-realistic.js
   - deploy/monitoring/rules/slo.yml
@@ -16,9 +15,9 @@ related:
 mixed-realistic run; fill in the `<<…>>` placeholders; commit
 alongside the CHANGELOG entry.
 
-The most recent passing report is the artefact Task #77 closes
-against and the public proof-of-SLA the customer-facing claim
-("p95 ≤ 200 ms; 99.9 % availability") refers to.
+The most recent passing report is the public proof-of-SLA the
+service's headline claim ("p95 ≤ 200 ms; 99.9 % availability")
+refers to.
 
 ## Run window
 

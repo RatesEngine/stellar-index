@@ -15,13 +15,11 @@ and the per-region storage strategy is captured in
 [ADR-0016](../adr/0016-per-region-storage-strategy.md). This plan
 is the **umbrella** that binds them.
 
-The HA story is constrained by three non-negotiable numbers from the
-RFPs:
+The HA story is constrained by three non-negotiable service targets:
 
-- **p95 ≤ 200 ms, p99 ≤ 500 ms** (Freighter §Performance SLA).
-- **≥ 99.9 % responsiveness** (Freighter) — we commit to **99.99 %**
-  per our proposal.
-- **≤ 30 s data freshness** (Freighter).
+- **p95 ≤ 200 ms, p99 ≤ 500 ms** (Performance SLA).
+- **≥ 99.9 % responsiveness** — we commit to **99.99 %**.
+- **≤ 30 s data freshness**.
 
 Every topology decision below is traced back to which of these numbers
 it protects.
@@ -30,8 +28,8 @@ it protects.
 
 ## 1. Design principles
 
-1. **Single-region HA first; multi-region DR second.** The 10-week
-   delivery window forces us to ship a strong single-region
+1. **Single-region HA first; multi-region DR second.** The initial
+   build window forces us to ship a strong single-region
    deployment at launch, with cold DR in cloud. Multi-region active/
    active is explicitly out of scope for v1.
 2. **Ingest must never block serving.** If the ingestion plane slows,
@@ -268,8 +266,7 @@ provisioned; cloud is pay-as-you-use for DR.
   - **VWAP precompute** — key `vwap:<pair>:<tf>` → value+
     computed-at, TTL matches the window.
   - **Rate-limit buckets** — key `rl:<api_key>:<min>`, TTL 120 s.
-  - **SEP-1 / home-domain cache** — key `toml:<domain>`, TTL 15 min
-    (matching design in [sep1-home-domain.md](../discovery/data-sources/sep1-home-domain.md)).
+  - **SEP-1 / home-domain cache** — key `toml:<domain>`, TTL 15 min.
   - **Asset-metadata cache** — key `meta:<asset>`, TTL 5 min.
   - **SSE subscriber registry** — key `sub:<channel>`, no TTL
     (heartbeat).
@@ -376,12 +373,12 @@ These are lower-bound estimates. Week 9 load-test supersedes them.
 ### 4.1 Traffic envelope
 
 Assume 50 wallets × 200 active users each = 10 000 daily actives.
-Freighter's asset-detail page makes ~5 API calls per render.
+A typical wallet asset-detail page makes ~5 API calls per render.
 Assume 10 renders per user per active day.
 
 - Baseline: 10 000 × 10 × 5 = **500 000 requests/day** = ~6 rps.
 - Peak (everyone checks during a market move): ~60 rps.
-- RFP minimum: 1 000 req/min per client = ~17 rps per client.
+- Service requirement: 1 000 req/min per client = ~17 rps per client.
 
 Capacity target: **500 rps sustained, 2 000 rps burst**. That is
 ~30× baseline; headroom protects us through a year of growth.
@@ -504,8 +501,8 @@ Restore time objectives:
 
 ## 9. Degradation modes (what we promise under failure)
 
-Contractually the RFP expects us to document "what happens when prices
-become unavailable, sources start to differ, etc." The API envelope
+We document "what happens when prices become unavailable, sources start
+to differ, etc." The API envelope
 (to be specified in [api-design.md](../reference/api-design.md) §Error envelope)
 carries four boolean flags:
 
@@ -592,7 +589,7 @@ shape used to size hardware in ADR-0008.
 | **Total steady state** | **~$5–8k / month** | | 
 
 Revenue model is out of scope (free public API; SDF grant funds).
-Cost envelope checked against the proposal's budget line.
+Cost envelope checked against the infrastructure budget.
 
 ---
 

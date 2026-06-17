@@ -16,7 +16,7 @@ severity: P1 at >5% / P2 at >1% / P1 at SLO burn-rate fast
 | Severity | **P1 at critical**, **P2 at high**; **P1** for fast/medium burn, P3 for slow burn |
 | Detected by | Prometheus rule on `http_requests_total{status=~"5.."}` rate |
 | Typical MTTR | 5–15 min for a bad-deploy revert; 30–60 min for a latent-bug forward fix |
-| Impact | Clients seeing request failures. Affects both the V1 Freighter API SLA ("responsiveness ≥ 99.9 %") and the RFP p95/p99 latency targets — every 5xx adds timeout retries that inflate queue time. |
+| Impact | Clients seeing request failures. Affects both the API availability SLA ("responsiveness ≥ 99.9 %") and the p95/p99 latency targets — every 5xx adds timeout retries that inflate queue time. |
 
 ## Burn-rate vs direct-threshold pages
 
@@ -140,9 +140,9 @@ one host out of HAProxy via the admin socket
 to the previous tag from
 `/usr/local/bin/stellarindex-api.prev-<previous-tag>` (the
 deploy task keeps the last 5; `/var/lib/stellarindex/deployed-versions/stellarindex-api`
-tracks the running version). F-1222 (codex audit-2026-05-12):
-the pre-fix prose pointed at `/opt/stellarindex/release-<tag>/`
-which the deploy task does not produce. After the binary
+tracks the running version). Note: the deploy task installs to
+`/usr/local/bin/`, not `/opt/stellarindex/release-<tag>/`.
+After the binary
 swap, restart the unit, re-enable in HAProxy, repeat for
 `api-02` and `api-03`. The two undrained hosts carry traffic
 during each swap.

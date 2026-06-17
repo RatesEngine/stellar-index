@@ -20,7 +20,7 @@ Three implementations exist in
 - `filesystem.go` — local directory.
 
 The filesystem backend looks like the obvious default for a
-self-hosted deployment. **It is not.** Phase-1 audit of
+self-hosted deployment. **It is not.** An audit of
 `filesystem.go` revealed:
 
 1. Galexie attaches **nine metadata keys** to every uploaded
@@ -46,7 +46,7 @@ metadata."
 
 ## Decision
 
-**Self-hosted Rates Engine deployments use an S3-compatible object
+**Self-hosted Stellar Index deployments use an S3-compatible object
 store — MinIO by default — not the local filesystem backend.**
 
 - MinIO runs on our own colo hardware (erasure-coded multi-drive)
@@ -57,7 +57,7 @@ store — MinIO by default — not the local filesystem backend.**
   `endpoint_url` overridden. SDF's own config example explicitly
   lists Cloudflare R2 as an S3-compatible example; MinIO works
   the same way.
-- Third-party operators running their own Rates Engine instance
+- Third-party operators running their own Stellar Index instance
   are free to use any S3-compatible backend (AWS S3, GCS,
   Cloudflare R2, Backblaze B2, Wasabi) — all are supported by
   the SDK code path we rely on.
@@ -118,8 +118,5 @@ explicitly documented as dev-only in our
 
 ## References
 
-- Discovery audit:
-  [docs/discovery/data-sources/galexie.md](../discovery/data-sources/galexie.md).
 - Datastore filesystem backend source:
-  `.discovery-repos/go-stellar-sdk/support/datastore/filesystem.go`.
-- SDF Galexie config example: cited in the discovery doc.
+  `go-stellar-sdk/support/datastore/filesystem.go`.

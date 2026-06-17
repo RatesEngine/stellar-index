@@ -11,8 +11,8 @@ package canonical
 
 // knownFiatCodes is the allow-list of 3-letter fiat codes. Extending
 // it is a one-line amendment to ADR-0010 (never a superseding ADR).
-// Codes chosen from ISO-4217 plus currencies the RFPs explicitly
-// name or that our CEX/FX connectors will price against.
+// Codes chosen from ISO-4217 plus currencies the spec explicitly
+// names or that our CEX/FX connectors will price against.
 //
 // 2026-04-23: extended after observing real Reflector FX oracle
 // traffic — ARS (seen in mainnet capture under v6-2026-04-23/), plus

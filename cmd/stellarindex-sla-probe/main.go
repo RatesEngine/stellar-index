@@ -2,20 +2,20 @@
 // suite. It drives load against a deployed Stellar Index API and
 // reports p50 / p95 / p99 latency per endpoint, freshness against
 // the currently-observed ledger, and a pass/fail verdict against
-// the RFP-stated SLA targets:
+// the stated SLA targets:
 //
 //	p95 ≤ 200 ms
 //	p99 ≤ 500 ms
-//	freshness ≤ 30 s   (Freighter RFP — price freshness, measured on
+//	freshness ≤ 30 s   (the price-freshness SLA, measured on
 //	                    /v1/price/tip, the rolling-window surface;
 //	                    /v1/price serves closed buckets per ADR-0015
 //	                    and is held to a structural 150 s bound — see
 //	                    defaultClosedBucketFreshTarget)
 //	availability ≥ 99.9 %  (sampled per-tick error rate)
 //
-// Closes Codex medium-7 / Task #52 / RFP coverage matrix rows
+// Closes Codex medium-7 / Task #52 / coverage matrix rows
 // S5.2, S9.1, S9.2, F3.1-F3.4. Provides the executable evidence
-// the RFPs / proposal asked for; the rest of those rows (HA
+// the SLAs require; the rest of those rows (HA
 // posture, SEV detection time) are operational SLAs that need a
 // production deployment to measure, not a pre-launch CLI.
 //
@@ -53,7 +53,7 @@ import (
 	"github.com/StellarIndex/stellar-index/internal/version"
 )
 
-// SLA targets — match the RFP-stated thresholds. Configurable via
+// SLA targets — match the stated thresholds. Configurable via
 // flags at runtime.
 const (
 	defaultP95Target     = 200 * time.Millisecond
@@ -66,7 +66,7 @@ const (
 	// bucket (ADR-0015 — the cross-region byte-identical surface), so
 	// its observed_at is STRUCTURALLY 30–150 s old: 60 s bucket width
 	// (prices_1m) + the CAGG refresh policy's 30 s end_offset + up to a
-	// 30 s schedule interval + refresh runtime. The RFP's ≤30 s
+	// 30 s schedule interval + refresh runtime. The ≤30 s
 	// freshness promise is served by /v1/price/tip (rolling-window,
 	// sub-second observed_at) and is measured there; this bound exists
 	// to catch the closed-bucket pipeline falling behind its design
@@ -123,7 +123,7 @@ func staticEndpoints() []endpoint {
 // /v1/oracle/latest are the load-bearing customer surfaces;
 // /v1/markets is included as a representative listing surface.
 //
-// The RFP freshness SLA (≤30 s) is measured on /price/tip — the
+// The freshness SLA (≤30 s) is measured on /price/tip — the
 // rolling-window surface built to deliver it. /price carries its own
 // structural bound (`closedBucketFresh`) because ADR-0015's
 // closed-bucket contract makes its observed_at 30–150 s old by

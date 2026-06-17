@@ -14,7 +14,7 @@ directory — see git history if you need the old version.
     - Per-service heartbeats (api, indexer, aggregator) with
       "last seen X ago" timestamps
     - Request-latency strip (p50 / p95 / p99 over 5 min,
-      coloured against RFP targets 50 / 200 / 500 ms)
+      coloured against SLA targets 50 / 200 / 500 ms)
     - Ingest freshness (last aggregator tick + active source
       count)
     - Active incidents — sourced from Alertmanager via

@@ -3,7 +3,7 @@
 # api-latency-sweep.sh — granular latency profile of the entire
 # anonymous public GET surface. The "kitchen sink": hit every
 # non-streaming, non-auth endpoint N times, compute p50/p95/p99/max,
-# rank slowest-first, flag anything over the RFP SLO (p95 < 200 ms)
+# rank slowest-first, flag anything over the SLO (p95 < 200 ms)
 # and a hard "cause for concern" ceiling (>1 s).
 #
 # This is a DIAGNOSTIC, not a contract test — r1-smoke.sh pins
@@ -42,7 +42,7 @@ CACHE_BUST="${CACHE_BUST:-0}"
 WARMUP="${WARMUP:-0}"
 JSON="${JSON:-0}"
 
-# RFP SLO p95 target = 200 ms. >1 s = "cause for concern" (CRIT).
+# SLO p95 target = 200 ms. >1 s = "cause for concern" (CRIT).
 WARN_MS=200
 CRIT_MS=1000
 

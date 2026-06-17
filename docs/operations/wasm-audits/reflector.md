@@ -56,7 +56,7 @@ FX), not one." Each variant maps to a distinct mainnet contract:
 | CEX | `reflector-cex` | `CAFJZQWSED6YAWZU3GWRTOCNPPCGBN32L7QV43XX5LZLFTK6JLN34DLN` |
 | FX  | `reflector-fx`  | `CBKGPWGKSKZF52CFHMTRR23TBWTPMRDIYZ4O2P5VS65BMHYH4DXMCJZC` |
 
-Three legacy / placeholder contract IDs from `docs/discovery/oracles/reflector.md`
+Three legacy / placeholder contract IDs
 (`CAVLP5DH…`, `CCYOZJCO…`, `CCSSOHTB…`) were also walked and
 produced **NO_EVENTS** — they are inactive on mainnet and not in
 the live decoder's contract list.
@@ -194,7 +194,7 @@ Two unique hashes total across all three contracts:
   has never been on any other.
 
 The DEX+CEX upgrade timing aligns with Reflector's documented
-v2→v3 transition (per `docs/discovery/oracles/reflector.md`). The
+v2→v3 transition. The
 v3-era binary is what every fixture in `internal/sources/reflector/`
 was captured against.
 
@@ -299,7 +299,6 @@ events. Backfill replays of L50,644,229 → L51,656,691 are safe.
 
 - Procedure: `docs/operations/wasm-audits/README.md`
 - Decoder source: `internal/sources/reflector/{events,decode}.go`
-- Discovery doc: `docs/discovery/oracles/reflector.md`
 - Schema-evolution stance: `docs/architecture/contract-schema-evolution.md`
 - Backfill gate: `internal/sources/external/registry.go` —
   `Registry["reflector-{dex,cex,fx}"].BackfillSafe` (three entries)

@@ -22,13 +22,13 @@
 # "p95 actually crossed the line" case (more direct signal during
 # incidents); SLO alerts here track the longer-term budget.
 #
-# SLO targets per ADR-0009 (latency budget) + Freighter RFP §SLA:
+# SLO targets per ADR-0009 (latency budget) + the API SLA:
 #
 #   - Latency: 99.9% of /v1/price + /v1/oracle/* requests under 200 ms
 #     over 30 days. Steady-state target; cache-cold tail counts
 #     against the p99 contract (≤ 500 ms) but not this SLO.
 #   - Availability: 99.99% of API requests return non-5xx over 30
-#     days. RFP §S9.1 commits to 99.99% uptime; this SLO operationalises
+#     days. The SLA commits to 99.99% uptime; this SLO operationalises
 #     it.
 
 groups:
@@ -160,7 +160,7 @@ groups:
       #
       # "Error" = any non-5xx response. 4xx counts as success because
       # it's the client's fault, not ours. The SLO target is 99.99%
-      # over 30 days (per RFP §S9.1).
+      # over 30 days (per the API SLA).
 
       - record: stellarindex:api_error_ratio:5m
         expr: |

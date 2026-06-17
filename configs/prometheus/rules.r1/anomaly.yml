@@ -79,7 +79,7 @@ groups:
                In this case the runbook is to widen the Phase 2
                z-score floor OR wait for the catch-up backfill to
                complete (docs/operations/backfill-procedure.md
-               §"RFP F4.2 one-year retention catch-up").
+               §"one-year retention catch-up").
 
             Triage:
               - `journalctl -u stellarindex-aggregator | grep "phase2 freeze"`

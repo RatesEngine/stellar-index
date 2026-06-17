@@ -225,7 +225,7 @@ curl -sS https://grafana.<dr-region>.stellarindex.io/api/dashboards/uid/slo \
 
 Specifically watch:
 - `http_request_duration_seconds` p95 < 200 ms (matches
-  Freighter SLA F3.1)
+  service SLA F3.1)
 - `http_requests_total{status=~"5.."}` rate < 0.1 % (F3.3)
 - `flags.stale=true` rate < 5 % (otherwise the aggregator's
   upstream sources aren't all reaching DR)

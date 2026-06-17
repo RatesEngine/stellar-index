@@ -6,7 +6,7 @@
 //
 // Pass criteria: p95 < 200 ms @ 100 rps for 5 min sustained per
 // endpoint. Lower RPS than the price hot path because the CAGG
-// path is heavier and customer traffic-share is ~9 %.
+// path is heavier and its traffic-share is ~9 %.
 //
 // Edge case (design note §4): the in-progress bucket flips at the
 // refresh tick. Run for ≥5 min so the measurement window straddles

@@ -134,7 +134,7 @@ This is v3 follow-up scope.
 
 ## See also
 
-- Phase-1 audit (originating this whole work):
+- Schema-evolution stance (originating this whole work):
   [`docs/architecture/contract-schema-evolution.md`](../../architecture/contract-schema-evolution.md)
 - Per-source v1 audits: this directory's `<source>.md` files.
 - Subcommand:

@@ -97,8 +97,7 @@ func (c *Client) PriceTip(ctx context.Context, q PriceTipQuery) (*Envelope[Price
 //     and silently chunking would mask staleness in unrelated
 //     subsets.
 //
-// Per the Freighter RFP §"Bulk query support preferred" — batch
-// is the recommended path for portfolio + multi-asset views.
+// Batch is the recommended path for portfolio + multi-asset views.
 type PriceBatchQuery struct {
 	AssetIDs []string
 	Quote    string // optional; server defaults to fiat:USD
@@ -278,7 +277,7 @@ type OHLCQuery struct {
 }
 
 // OHLC fetches a single open/high/low/close bar over the
-// [From, To) window. Per the Freighter RFP §V1 historical chart
+// [From, To) window. Per the V1 historical chart
 // requirements, this is the surface backing candlestick UIs.
 //
 // Window semantics:

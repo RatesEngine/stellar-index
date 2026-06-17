@@ -18,7 +18,7 @@ import (
 // facing rollup of system health. Distinct from /v1/healthz
 // (shallow liveness, k8s-style) and /v1/readyz (deep dependency
 // ping): /v1/status is what the public explorer status page
-// renders and what RFP-mandated "are the SLAs being met" pages
+// renders and what the "are the SLAs being met" pages
 // are built from.
 //
 // Operators inspecting /v1/diagnostics/cursors get more detail;

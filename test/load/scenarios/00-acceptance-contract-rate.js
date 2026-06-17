@@ -1,10 +1,10 @@
-// 00-acceptance-contract-rate.js — THE acceptance-criteria evidence run.
+// 00-acceptance-contract-rate.js — the SLA-baseline evidence run.
 //
-// Drives exactly the contractual load from the RFPs (ctx-proposal
-// §Milestones + Freighter SLAs): ≥1000 requests/min sustained, asserting
-// p95 ≤ 200 ms, p99 ≤ 500 ms, error rate < 0.1 %. This is deliberately
-// NOT a stress test — 06-mixed-realistic (300 req/s) probes the capacity
-// cliff; this scenario proves the contract on the production deployment.
+// Drives realistic sustained load (1000 requests/min per the API SLA):
+// ≥1000 requests/min sustained, asserting p95 ≤ 200 ms, p99 ≤ 500 ms,
+// error rate < 0.1 %. This is deliberately NOT a stress test —
+// 06-mixed-realistic (300 req/s) probes the capacity cliff; this scenario
+// proves the SLA baseline on the production deployment.
 //
 // Run it against a QUIESCENT host (no completeness audit / re-derives in
 // flight) — the evidence should reflect serving capacity, not batch-job
@@ -28,7 +28,7 @@ export const options = {
   scenarios: {
     contract: {
       executor: 'constant-arrival-rate',
-      rate: 17, // ≈1020 req/min — just over the contractual floor
+      rate: 17, // ≈1020 req/min — just over the SLA floor
       timeUnit: '1s',
       duration: '30m',
       preAllocatedVUs: 30,

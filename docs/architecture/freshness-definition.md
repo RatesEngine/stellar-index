@@ -1,12 +1,12 @@
 ---
 title: Price-freshness definition — the ≤30s SLA, precisely
 last_verified: 2026-06-13
-status: ratified-internally; pre-agree with customer before acceptance
+status: ratified-internally
 ---
 
 # Price freshness — what the ≤30s SLA means here
 
-The Freighter RFP requires **"Data Freshness (price) ≤ 30s staleness."**
+Our freshness SLA requires **≤ 30s price staleness.**
 This page pins exactly which endpoint satisfies that and why the API
 deliberately serves TWO freshness contracts (ADR-0015 / ADR-0018).
 
@@ -17,13 +17,13 @@ deliberately serves TWO freshness contracts (ADR-0015 / ADR-0018).
 | **`/v1/price/tip`** (+ `/price/tip/stream`) | rolling-window VWAP over the freshest trades, recomputed per request/tick | **≤ 5s** (CEX trades land sub-second; ingest cursor advances every ~5s ledger) |
 | `/v1/price` | **last-closed bucket** — never an in-progress bucket, so every region serves the byte-identical answer (ADR-0015) | 30–150s by design (1m bucket close + aggregation cycle) |
 
-**The RFP's ≤30s criterion is met by `/v1/price/tip`** — that is the
+**The ≤30s criterion is met by `/v1/price/tip`** — that is the
 "real-time or near-real-time" surface and the one a wallet's asset page
 should poll or stream. `/v1/price` trades freshness for cross-region
 determinism and cacheability: a closed bucket has one true value, which
 is what you want for anything that must agree across replicas, audits,
 or CDN caches. This split is deliberate architecture, not a freshness
-shortfall — both RFP examples (stellar.expert, steexp) display
+shortfall — both reference wallets (stellar.expert, steexp) display
 closed-interval data on comparable surfaces.
 
 ## Evidence
@@ -38,11 +38,11 @@ closed-interval data on comparable surfaces.
   (`docs/architecture/prod-verification-2026-06-12.md`) documents the
   pre-fix native-spelling gap and its closure.
 
-## What to agree with the customer (one sentence)
+## The integrator-facing summary (one sentence)
 
 > "Real-time price freshness ≤30s is served by `/v1/price/tip` (and its
 > SSE stream); `/v1/price` is the deterministic closed-bucket surface
 > with its own 30–150s semantics — integrators choose per use-case."
 
-Get an explicit 👍 on that sentence before the acceptance demo so the
-two-contract design reads as the feature it is, not a surprise.
+Surfacing that sentence in the docs makes the two-contract design read
+as the feature it is, not a surprise.

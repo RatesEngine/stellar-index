@@ -2,7 +2,7 @@
 //
 // # Why fixed-window, not token bucket or sliding window?
 //
-// Our API SLA is "1000 req/min per client" (Freighter RFP).
+// Our API SLA is "1000 req/min per client".
 // That's a minute-granular ceiling, not a smooth-rate budget. A
 // fixed 1-minute window keyed on `rl:<key>:<min>` matches the
 // contract exactly + costs one Redis round-trip per request.

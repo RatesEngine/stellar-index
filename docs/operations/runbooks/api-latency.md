@@ -15,7 +15,7 @@ severity: P2 (direct-threshold) / P1 (SLO burn-rate fast)
 | SLO burn-rate alerts | `stellarindex_slo_latency_burn_{fast,medium,slow}` (per ADR-0009 multi-window pattern) — `deploy/monitoring/rules/slo.yml` |
 | Severity | P2 (ticket) for direct-threshold; **P1** for fast/medium burn, P3 for slow burn |
 | Typical MTTR | 15–60 min |
-| Impact | Requests complete but slowly. Freighter's wallet feels sluggish; clients with tight timeouts may give up and retry. Not customer-visible as an outage, but breaches our SLA (p95 ≤ 200 ms, p99 ≤ 500 ms). |
+| Impact | Requests complete but slowly. Wallet clients feel sluggish; clients with tight timeouts may give up and retry. Not an outage, but breaches our SLA (p95 ≤ 200 ms, p99 ≤ 500 ms). |
 
 ## Burn-rate vs direct-threshold pages
 
@@ -154,7 +154,6 @@ psql -c "SELECT state, count(*), max(now()-query_start) AS oldest
 - `api-5xx.md` — errors, not slowness.
 - `redis-memory.md` / `cagg-stale.md` — common upstream causes.
 - `pg-conns-saturated.md` — when the pool is the bottleneck.
-- Freighter SLA spec in `docs/freighter-rfp.md` §Performance.
 
 ## Changelog
 

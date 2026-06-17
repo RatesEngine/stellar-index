@@ -219,7 +219,7 @@ func parseOHLCOutlierSigma(w http.ResponseWriter, r *http.Request) (float64, boo
 // Without this, /v1/ohlc?base=native&quote=fiat:USD 404s with "no
 // trades in window" out-of-the-box on every fresh deployment — same
 // root cause as #1217 (/v1/price), #1218 (/v1/price/tip), #1015
-// (/v1/chart). Freighter RFP §3 names /v1/ohlc as a launch-blocker
+// (/v1/chart). /v1/ohlc is a launch-blocker
 // for the asset-detail surface.
 func (s *Server) ohlcTradesWithStablecoinFallback(
 	ctx context.Context, pair canonical.Pair, from, to time.Time, maxTrades int,

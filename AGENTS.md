@@ -14,16 +14,12 @@
 | [SECURITY.md](SECURITY.md) | Vulnerability disclosure process |
 | [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md) | Contributor Covenant 2.1 |
 | [CHANGELOG.md](CHANGELOG.md) | Keep-a-Changelog format; Unreleased at top |
-| [VERSIONS.md](VERSIONS.md) | Pinned SHAs of every upstream dep we audit |
+| [VERSIONS.md](VERSIONS.md) | Pinned SHAs of every upstream dependency |
+| [docs/engineering-standards.md](docs/engineering-standards.md) | The enforcement policy |
+| [docs/architecture/semver-policy.md](docs/architecture/semver-policy.md) | Versioning + repo-layout rationale |
 | `docs/adr/` | Architecture Decision Records (numbered, immutable) |
-| `docs/discovery/` | Phase-1 audit archive (50+ docs; read-only going forward) |
-| `docs/discovery/engineering-standards.md` | The enforcement policy |
-| `docs/discovery/repo-structure-plan.md` | Why the repo is laid out the way it is |
-| `docs/discovery/delivery-plan.md` | 10-week calendar ending 2026-06-30 |
-| `docs/discovery/rfp-requirements-matrix.md` | Every RFP requirement → audit doc |
-| `docs/stellar-rfp.md` | Stellar Prices API RFP (customer source doc) |
-| `docs/freighter-rfp.md` | Freighter asset-detail RFP (customer source doc) |
-| `docs/ctx-proposal.md` | Awarded proposal (has known corrections in discovery/proposal-corrections.md) |
+| `docs/architecture/` | Narrative design docs |
+| `docs/protocols/` | Per-protocol verification pages |
 
 ## Invariants — never violate these
 

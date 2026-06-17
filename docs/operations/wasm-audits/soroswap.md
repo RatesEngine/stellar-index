@@ -288,8 +288,7 @@ under `evidence/r1-walk-2026-05-01/disasm/`.
 - No `update_current_contract_wasm` in the entire post-launch window
   rules out schema drift across this range.
 - Upstream contract source (`github.com/soroswap/core`, factory pkg)
-  was reviewed during Phase-1 audit (see
-  `docs/discovery/dexes-amms/soroswap.md`) and matches.
+  was reviewed and matches.
 - `TopicPrefixFactory = "SoroswapFactory"` byte-equal classification
   remains valid.
 
@@ -327,8 +326,8 @@ What this audit does **not** confirm:
 - Whether any individual deployed pair contract self-upgraded via
   its own `update_current_contract_wasm` after deployment. Pair
   contracts in soroswap-core's `pair/` Cargo crate do not expose an
-  upgrade entrypoint at the time of Phase-1 review (verified in
-  `docs/discovery/dexes-amms/soroswap.md`), making such an upgrade
+  upgrade entrypoint (verified during contract review), making such
+  an upgrade
   practically impossible without a coordinated factory + pair
   redeploy. **Empirically confirmed by the 2026-04-30 walk: zero
   per-pair upgrades observed across 194 instances.**
@@ -381,7 +380,6 @@ that isn't shipped yet).
 
 - Procedure: `docs/operations/wasm-audits/README.md`
 - Decoder source: `internal/sources/soroswap/{events,decode}.go`
-- Discovery doc: `docs/discovery/dexes-amms/soroswap.md`
 - Schema-evolution stance: `docs/architecture/contract-schema-evolution.md`
 - Backfill gate: `internal/sources/external/registry.go` —
   `Registry["soroswap"].BackfillSafe`

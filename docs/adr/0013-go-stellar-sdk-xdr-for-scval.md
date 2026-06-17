@@ -52,9 +52,10 @@ does NOT extend to XDR: the SCVal / ContractEvent definitions are
 large, interdependent, and regenerated whenever Stellar ships a new
 protocol version (P23 landed 2025-09-03 with CAP-67 unified events).
 Maintaining a hand-rolled fork would be Sisyphean — each protocol
-bump would drop a rebase on us, and Phase 1 discovery already
-flagged two correctness bugs in forked XDR code (`withObsrvr/cdp-pipeline-workflow`
-per [engineering-standards.md](../discovery/engineering-standards.md)).
+bump would drop a rebase on us, and our earlier investigation already
+flagged two correctness bugs in forked XDR code
+(`withObsrvr/cdp-pipeline-workflow`; see
+[engineering-standards.md](../engineering-standards.md)).
 
 ## Decision
 
@@ -93,7 +94,7 @@ needed for a specific feature, protected by CI lint.
 ## Alternatives considered
 
 1. **Hand-rolled SCVal parser** — rejected because every Stellar
-   protocol bump would invalidate our fork; Phase 1 discovery
+   protocol bump would invalidate our fork; our earlier investigation
    already identified two connectors in the wild with XDR bugs
    stemming from vendored forks.
 2. **Run Galexie output through a separate decoder process** — over-
@@ -120,12 +121,11 @@ PR doesn't re-derive it:
 4. Swap `canonical/strkey.go`'s local stub for SDK's `strkey` (TODO
    already flagged at line 21).
 5. Add golden-file fixtures in `test/fixtures/<venue>/` — real
-   base64 SCVal blobs captured from mainnet via `ratesengine-ops
+   base64 SCVal blobs captured from mainnet via `stellarindex-ops
    rpc-probe` for each event shape the decoder must handle.
 6. Per-venue decode_test.go should cover: valid happy path, i128
-   with negative values (signing semantics), SEP-41 transfer-map
-   shape (per [sep-41-token-events.md](../discovery/notes/sep-41-token-events.md)),
-   CAP-67 unified 4-topic shape (per [cap-67-unified-events.md](../discovery/notes/cap-67-unified-events.md)).
+   with negative values (signing semantics), the SEP-41 transfer-map
+   shape, and the CAP-67 unified 4-topic shape.
 
 ## Implementation status (2026-04-23)
 
@@ -151,9 +151,6 @@ PR 164a landed the scaffolding — Accepted status reflects that code.
 - Related ADRs: ADR-0001 (Horizon ruled out), ADR-0003 (i128 no
   truncation — must survive decoding path), ADR-0005 (monorepo
   structure — `internal/scval/` wrapper placement)
-- Discovery doc: [stellar-archivist.md](../discovery/data-sources/stellar-archivist.md)
-  (SDK re-homing), [soroswap.md §4](../discovery/dexes-amms/soroswap.md)
-  (swap+sync correlation)
 - Pinned versions: [VERSIONS.md](../../VERSIONS.md)
 - External: [CAP-67 unified events](https://github.com/stellar/stellar-protocol/blob/master/core/cap-0067.md),
   [SEP-41 token events](https://github.com/stellar/stellar-protocol/blob/master/ecosystem/sep-0041.md)

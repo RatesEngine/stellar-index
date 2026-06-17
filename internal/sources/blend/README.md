@@ -2,7 +2,8 @@
 
 This package decodes events from [Blend Capital's Soroban lending
 protocol](https://github.com/blend-capital/blend-contracts-v2).
-Discovery context: [`docs/discovery/dexes-amms/blend.md`](../../../docs/discovery/dexes-amms/blend.md).
+See the protocol verification page:
+[`docs/protocols/blend.md`](../../../docs/protocols/blend.md).
 
 ## What this is (and isn't)
 
@@ -24,7 +25,7 @@ unified trades hypertable.
 
 ## Scope of this package
 
-The auction-event surface — the primary signal per the proposal:
+The auction-event surface — the primary directional price signal:
 
 - `new_auction` — auction announcement
 - `fill_auction` — partial / full fill by an external filler
@@ -65,15 +66,14 @@ The auction-event surface — the primary signal per the proposal:
   WHERE contract_id IN (<pool contracts>) AND topic_0_sym IN
   (…)` once the `soroban_events` walk lands (ADR-0029 — table
   exists, walk job is in flight).
-- Reflector cross-validation (per proposal: "monitor Blend's
-  oracle price consumption via Reflector to cross-validate that
-  our aggregated prices are consistent with what the protocol is
-  using"). Out of scope until a customer asks for the
-  cross-check signal.
+- Reflector cross-validation — monitor Blend's oracle price
+  consumption via Reflector to cross-validate that our aggregated
+  prices are consistent with what the protocol is using. Out of
+  scope until a consumer needs the cross-check signal.
 
 ## Mainnet contracts
 
-Per `docs/discovery/dexes-amms/blend.md` (verified 2026-04-22):
+Verified on-chain 2026-04-22:
 
 | Role | Contract |
 | --- | --- |
@@ -182,7 +182,7 @@ The decoder is fail-loud per event:
 
 ## References
 
-- Discovery: [`docs/discovery/dexes-amms/blend.md`](../../../docs/discovery/dexes-amms/blend.md)
+- Protocol verification page: [`docs/protocols/blend.md`](../../../docs/protocols/blend.md)
 - Schema-evolution stance: [`docs/architecture/contract-schema-evolution.md`](../../../docs/architecture/contract-schema-evolution.md)
 - Upstream contracts: <https://github.com/blend-capital/blend-contracts-v2>
 - Local source-of-truth checkout: `.discovery-repos/blend-contracts/`

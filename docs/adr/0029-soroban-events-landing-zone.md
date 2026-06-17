@@ -13,9 +13,8 @@ superseded_by: [0034]
 
 ## Context
 
-The Rates Engine is committed to **granular coverage** — every bit
-of data for every major Stellar protocol (see project memory
-`project_full_indexing_future_scope`). Each protocol's ingest sits
+Stellar Index is committed to **granular coverage** — every bit
+of data for every major Stellar protocol. Each protocol's ingest sits
 behind a per-source decoder under `internal/sources/<venue>/` that
 matches by topic, decodes the SCVal body into a domain type, and
 writes to a per-protocol hypertable (`trades`, `blend_auctions`,
@@ -115,13 +114,13 @@ The sink implementation lives in
   insert into `soroban_events` via
   `timescale.Store.InsertSorobanEventsBatch`.
 
-Both the indexer (`cmd/ratesengine-indexer`) and the backfill
-subcommand (`cmd/ratesengine-ops backfill`) wire one `AsyncSink`
+Both the indexer (`cmd/stellarindex-indexer`) and the backfill
+subcommand (`cmd/stellarindex-ops backfill`) wire one `AsyncSink`
 per dispatcher.
 
 ### Backfill pseudo-source
 
-`ratesengine-ops backfill -source soroban-events -from N -to M
+`stellarindex-ops backfill -source soroban-events -from N -to M
 -parallel K` populates `soroban_events` for historical ranges
 without per-source decoding. The pseudo-source name is exclusive —
 running it alongside other sources is refused, because the
@@ -233,8 +232,6 @@ captures the data we don't yet know we'll want.
 
 ## References
 
-- Memo: `~/.claude/projects/-Users-ash-code-ratesengine/memory/project_soroban_events_landing_zone.md`
-- Memo: `project_full_indexing_future_scope` — the granular-coverage mission.
 - Migration: `migrations/0041_create_soroban_events.up.sql`
 - Package: `internal/sources/sorobanevents/`
 - Dispatcher hook: `internal/dispatcher/dispatcher.go::RawEventSink`

@@ -2,7 +2,7 @@
 #
 # Companion to sla-probe.service. Drives the executable SLA-evidence
 # CLI (cmd/stellarindex-sla-probe) on a fixed cadence so the
-# RFP-stated SLA targets are continuously verified rather than
+# stated SLA targets are continuously verified rather than
 # spot-checked.
 #
 # Cadence: every 15 minutes (`*:0/15`). Each run drives 30 s of load

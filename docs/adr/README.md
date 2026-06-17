@@ -77,21 +77,10 @@ See [_template.md](_template.md) for the boilerplate.
 | [0033](0033-completeness-verification-model.md) | Accepted | Completeness verification — substrate continuity, recognition, projection reconciliation | 2026-06-02 |
 | [0034](0034-tiered-clickhouse-architecture.md) | Accepted | Tiered data architecture — ClickHouse raw lake, Postgres served tier (supersedes 0029) | 2026-06-05 |
 | [0035](0035-factory-anchored-contract-gating.md) | Accepted | Factory-anchored contract gating for Soroban decoders (reverses match-broadly/filter-downstream) | 2026-06-12 |
-| [0036](0036-stellar-atlas-rebrand.md) | Superseded by [0037](0037-stellar-index-rebrand.md) | Rebrand to Stellar Atlas; reposition as a protocol explorer | 2026-06-12 |
-| [0037](0037-stellar-index-rebrand.md) | Accepted | Rebrand to Stellar Index (Atlas name was taken) | 2026-06-12 |
-
-> **Brand note:** ADRs 0001–0035 predate the brand renames (Rates Engine
-> → Stellar Atlas → **Stellar Index**; ADR-0036 + ADR-0037) and
-> intentionally keep the original **Rates Engine** name,
-> module paths, and binary names — they are immutable historical records.
-> The same applies to `docs/discovery/` and `docs/audit-*/`.
+| [0038](0038-network-explorer.md) | Accepted | Network explorer (full Stellar + Soroban) over the certified lake | 2026-06-14 |
 
 ## Related
 
-- [docs/discovery/decisions.md](../discovery/decisions.md) — the
-  Phase-1 decisions log these ADRs are extracted from. Read the
-  discovery doc for the narrative; read the ADRs for the binding
-  commitment.
-- [docs/discovery/engineering-standards.md](../discovery/engineering-standards.md)
+- [docs/engineering-standards.md](../engineering-standards.md)
   §5.5 — why decisions live in ADRs, not scattered architecture
   docs.

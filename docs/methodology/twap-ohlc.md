@@ -85,8 +85,8 @@ a near-equivalent pair, not against a different time window.
 
 ## Cascade-window behaviour
 
-Under the F-0039-style Redis MISCONF cascade (audit-2026-05-26),
-the `/v1/price` LKG path remained available because LKG values
+Under a Redis MISCONF cascade, the `/v1/price` LKG path remained
+available because LKG values
 live in Postgres (the cache layer being down doesn't lose them).
 `/v1/twap` and `/v1/ohlc` correctly returned 404 for windows
 where the cascade had blocked the underlying trade ingest — that
@@ -102,9 +102,9 @@ Operators investigating the asymmetry should:
 3. Use `/v1/diagnostics/cursors` for the authoritative per-source
    ingest state.
 
-The audit's framing — "SSE+streaming clients on /twap or /ohlc
+One observation — "SSE+streaming clients on /twap or /ohlc
 see hard 404s during cache-cold storms while /price stays
-nominally up" — was true but the right user-facing behaviour:
+nominally up" — is true but reflects the right user-facing behaviour:
 streaming TWAP clients SHOULD see 404 when no trades land in
 the streaming window, because the next valid TWAP doesn't exist
 yet. Quietly emitting yesterday's TWAP into a today-anchored
@@ -117,9 +117,7 @@ stream would be a correctness regression, not a robustness win.
 - `internal/api/v1/ohlc.go::ohlcTradesWithStablecoinFallback` — proxy fallback.
 - `internal/api/v1/price.go::handlePrice` — LKG-bearing tip path.
 - ADR-0015 — last-closed-bucket contract.
-- F-0074 (audit-2026-05-26) — original audit finding that closed
-  against this doc.
 
 ## Changelog
 
-- 2026-05-28 — initial draft (F-0074 closure).
+- 2026-05-28 — initial draft.

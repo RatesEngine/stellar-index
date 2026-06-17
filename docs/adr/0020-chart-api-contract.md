@@ -11,8 +11,7 @@ superseded_by: null
 
 ## Context
 
-The Freighter RFP ([docs/freighter-rfp.md](../freighter-rfp.md), V1
-"Historical Price Chart" table) prescribes a chart contract shaped
+The historical price chart use case requires a chart contract shaped
 as `(timeframe, granularity, price_type) → points[]`:
 
 | Timeframe      | Granularity (suggested) | Data Points | Price Type   |
@@ -32,14 +31,14 @@ The existing API surfaces some but not all of this:
 - `/v1/ohlc`, `/v1/vwap`, `/v1/twap` — single-bar aggregates over a
   window (not series).
 
-None map 1:1 to the RFP shape. The OpenAPI spec already declares
+None map 1:1 to the chart shape. The OpenAPI spec already declares
 the `timeframe` + `granularity` parameter components but neither is
 referenced by an operation — they were placeholders pending this
 decision.
 
 ## Decision
 
-Add a new `GET /v1/chart` endpoint that matches the RFP contract
+Add a new `GET /v1/chart` endpoint that matches the chart contract
 exactly:
 
 ```
@@ -78,7 +77,7 @@ them as separate endpoints lets them evolve independently.
 
 ### Default-granularity table (timeframe → granularity)
 
-When `granularity` is omitted, the handler picks per the RFP table:
+When `granularity` is omitted, the handler picks per the table above:
 
 | Timeframe | Default granularity | Approx points |
 |-----------|---------------------|---------------|
@@ -125,7 +124,7 @@ or `/v1/oracle/latest` (per-source).
 
 `historyMaxPoints = 50_000` (same as since-inception). At `1m`
 granularity this is ~35 days of data; well above the largest
-RFP-prescribed timeframe (1mo @ 4h = 180 points). Operators
+standard timeframe (1mo @ 4h = 180 points). Operators
 running an unusual `timeframe=1y&granularity=1m` request hit the
 cap and receive `flags.truncated=true`.
 

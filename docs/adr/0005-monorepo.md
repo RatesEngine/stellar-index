@@ -26,13 +26,13 @@ superseded_by: null
 
 ## Context
 
-The Rates Engine codebase has natural component boundaries:
+The Stellar Index codebase has natural component boundaries:
 
-- `ratesengine-indexer` — ingestion pipeline.
-- `ratesengine-aggregator` — VWAP/TWAP/OHLC computation.
-- `ratesengine-api` — REST + SSE server.
-- `ratesengine-ops` — admin CLI.
-- `ratesengine-migrate` — DB migration runner.
+- `stellarindex-indexer` — ingestion pipeline.
+- `stellarindex-aggregator` — VWAP/TWAP/OHLC computation.
+- `stellarindex-api` — REST + SSE server.
+- `stellarindex-ops` — admin CLI.
+- `stellarindex-migrate` — DB migration runner.
 - A Go client SDK that downstream consumers import.
 - A shared `types` surface they all depend on.
 
@@ -47,7 +47,7 @@ Two organisational shapes exist:
 ## Decision
 
 Single Go module, single repository:
-`github.com/RatesEngine/rates-engine`.
+`github.com/StellarIndex/stellar-index`.
 
 `internal/` holds private code (Go enforces non-importability).
 `pkg/` holds the narrow public surface — the client SDK and the
@@ -95,7 +95,7 @@ stable types API consumers depend on.
 - `pkg/*` is the stability boundary. Internal packages refactor
   freely; `pkg/*` evolves via SemVer.
 - `internal/canonical/` is the shared-type nexus — it's the first
-  Go package written (Week 1), because everything depends on it.
+  Go package written, because everything depends on it.
 
 ## Alternatives considered
 
@@ -103,8 +103,8 @@ stable types API consumers depend on.
    complexity (version pinning between internal modules, `go.work`
    coordination overhead) for negligible benefit at our team
    size.
-2. **Split repos: `ratesengine-types`, `ratesengine-indexer`,
-   `ratesengine-api`, `ratesengine-client-go`.** Rejected: the
+2. **Split repos: `stellarindex-types`, `stellarindex-indexer`,
+   `stellarindex-api`, `stellarindex-client-go`.** Rejected: the
    coordination tax on every cross-repo change outweighs the
    claimed isolation benefits. Revisit only if the team grows
    past ~5 contributors or if we ship a stable v1.x with
@@ -127,9 +127,6 @@ Absent those, stay monorepo.
 
 ## References
 
-- Discovery narrative:
-  [docs/discovery/repo-structure-plan.md](../discovery/repo-structure-plan.md)
-  § 1 "Decision: single repo (monorepo)".
 - Related ADRs: ADR-0003 (i128) — enforcement of invariants
   across packages benefits from monorepo; a split would require
   cross-repo custom lint.

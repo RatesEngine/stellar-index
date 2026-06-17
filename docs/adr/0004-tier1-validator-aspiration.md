@@ -11,12 +11,11 @@ superseded_by: null
 
 ## Context
 
-The Rates Engine delivery (10-week window ending 2026-06-30)
-requires us to run **non-validating** watcher nodes for data
-ingestion. Validator participation is **not** a Phase-1–7 deliverable.
+Stellar Index requires us to run **non-validating** watcher nodes
+for data ingestion. Validator participation is **not** required for
+the core indexing and pricing product.
 
-However, the project's long-term posture — per our proposal and
-per a user directive during Phase-1 discovery — is to become a
+However, the project's long-term posture is to become a
 **Tier-1 organisation** on the Stellar network: an organisation
 running **three geographically-separated full validators** with
 independent history archives, included in the quorum sets of enough
@@ -24,9 +23,7 @@ other Tier-1 organisations to be load-bearing for network safety
 and liveness.
 
 Stellar's validator / Tier-1 playbook is documented in
-`stellar-docs/docs/validators/tier-1-orgs.mdx`. Our Phase-1 audit
-captured the concrete path in
-[docs/discovery/data-sources/archival-nodes.md](../discovery/data-sources/archival-nodes.md).
+`stellar-docs/docs/validators/tier-1-orgs.mdx`.
 
 This ADR captures the commitment so infrastructure, procurement,
 and security decisions in the interim do not close off the
@@ -34,7 +31,7 @@ Tier-1 path.
 
 ## Decision
 
-Rates Engine's long-term operational posture is three Tier-1
+Stellar Index's long-term operational posture is three Tier-1
 full validators, geographically distributed, with:
 
 - **One validator in our Vancouver colo** (our existing R640 +
@@ -83,10 +80,10 @@ widespread inclusion within 12 months post-launch.
 **Operational impact**
 
 - Validator track runs as a **separate workstream** from the
-  Rates Engine API. Separate runbooks, separate SLOs, separate
+  Stellar Index API. Separate runbooks, separate SLOs, separate
   on-call.
 - Our three-validator identity is published via the same domain
-  (`ratesengine.net`) as the API — a compromise of the domain
+  (`stellarindex.io`) as the API — a compromise of the domain
   affects both.
 
 **Downstream design impact**
@@ -95,7 +92,7 @@ widespread inclusion within 12 months post-launch.
   public egress. MinIO cluster sized to handle external
   archive-fetch traffic on top of Galexie internal writes.
 - History archives are **published**, not just consumed. Our
-  `rs-stellar-archivist mirror` use is one-way during Phase-1
+  `rs-stellar-archivist mirror` use is one-way during the initial
   bootstrap; post-validator, we are also producing archives.
 - SEP-20 stellar.toml publication path must be secured like a
   production secret — a compromise lets an attacker redirect
@@ -123,19 +120,11 @@ directional, not contractual.
    is three for redundancy. Running one is weaker than running
    none — it suggests we care but aren't serious.
 3. **Run the three validators pre-launch.** Rejected: out of
-   scope for the 10-week delivery; HSM + geographic lead times
-   exceed the window; would divert attention from core
-   deliverables.
+   scope for the initial build; HSM + geographic lead times
+   exceed the window; would divert attention from the core
+   indexing and pricing product.
 
 ## References
 
-- Discovery narrative:
-  [docs/discovery/decisions.md](../discovery/decisions.md)
-  § "Tier-1 three-validator aspiration".
-- Self-hosting audit:
-  [docs/discovery/data-sources/archival-nodes.md](../discovery/data-sources/archival-nodes.md).
-- SEP-20 self-verification spec:
-  [docs/discovery/notes/seps-reference.md](../discovery/notes/seps-reference.md)
-  § SEP-20.
 - Stellar Tier-1 playbook (upstream):
   `stellar-docs/docs/validators/tier-1-orgs.mdx`.

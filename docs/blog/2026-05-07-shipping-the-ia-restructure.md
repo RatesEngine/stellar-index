@@ -1,7 +1,7 @@
 ---
 title: Shipping the IA restructure
 date: 2026-05-07
-author: Rates Engine team
+author: Stellar Index team
 summary: A look at the v0.5.0-rc.22 release — IA restructure, magic-link auth, /currencies launch, sparkline coverage across every per-source page, and the backend work behind it.
 ---
 
@@ -13,7 +13,7 @@ grouped IA we always wanted but kept deferring:
 - **Currencies** — top-level for the new world-fiat surface.
 - **Blockchain ▾** — Assets, Exchanges, Dexes, Lending,
   Aggregators, Oracles, Networks.
-- **API Docs** — straight to docs.ratesengine.net.
+- **API Docs** — straight to docs.stellarindex.io.
 - **About ▾** — Pricing, Blog, API status, Company, Careers,
   Contact.
 - **Sign in / Create account** — magic-link, no passwords.
@@ -47,7 +47,7 @@ endpoint didn't exist, we built it.
   alongside the existing 24h hourly series.
 - XLM/USD-fallback CTE on /v1/sources, /v1/pools, and the lending
   query — Soroban DEX trades against the XLM SAC wrapper used to
-  show `null` USD volume because the operator's USD-pegged Phase 1
+  show `null` USD volume because the operator's USD-pegged
   allow-list doesn't include XLM itself. The vol_24h CTE now derives
   from base/quote_amount × XLM/USD when the XLM SAC is on either
   side, so Phoenix / Aquarius / Comet pools show real volume.
@@ -152,5 +152,5 @@ list is in the [launch-readiness backlog][backlog].
 If you want to follow the per-release ledger, the [changelog feed][feed]
 is also available as Atom.
 
-[backlog]: https://github.com/RatesEngine/rates-engine/blob/main/docs/architecture/launch-readiness-backlog.md
-[feed]: https://ratesengine.net/changelog.atom
+[backlog]: https://github.com/StellarIndex/stellar-index/blob/main/docs/architecture/launch-readiness-backlog.md
+[feed]: https://stellarindex.io/changelog.atom

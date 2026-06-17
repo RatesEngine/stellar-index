@@ -1,6 +1,6 @@
 // Shared SLA thresholds. Every scenario imports from here so the
 // pass/fail bar is defined once and matches:
-//   - Freighter RFP §SLA targets: p95 ≤ 200 ms
+//   - API SLA targets: p95 ≤ 200 ms
 //   - ADR-0009 multi-window SLO: 99.9 % availability
 //
 // Endpoint tags (`endpoint:price` etc.) are set by each scenario
@@ -43,7 +43,7 @@ export const sla = {
     'http_req_failed': ['rate<0.005'],
   },
   catalogue: {
-    // Showcase catalogue endpoints — same SLA bar as other read
+    // Catalogue endpoints — same SLA bar as other read
     // surfaces. /v1/markets does a GROUP BY across the 14-day
     // chunk window so we allow a slightly looser p99 than
     // single-key lookups; everything else stays under the

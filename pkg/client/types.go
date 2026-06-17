@@ -313,7 +313,7 @@ type Source struct {
 // allow-list, source classes, registered venues, ADR refs.
 //
 // Designed for transparency consumers (compliance, auditors,
-// integrators verifying RFP §10 "open methodology" claims) who
+// integrators verifying "open methodology" claims) who
 // want to verify what the deployment is doing without parsing
 // the explorer's HTML or chasing ADR cross-refs.
 type Methodology struct {

@@ -31,7 +31,7 @@ different purposes and have been treated as separate ad-hoc concerns:
    traditional Stellar history archive (`bucket/`, `history/`,
    `ledger/`, `results/`, `scp/`, `transactions/`). Mirrored from
    `https://history.stellar.org/prd/core-live/core_live_001`. Used
-   by `ratesengine-ops verify-archive -tier checkpoint` to confirm
+   by `stellarindex-ops verify-archive -tier checkpoint` to confirm
    our LCM hashes match SDF's signed checkpoint hashes every 64
    ledgers.
 
@@ -186,9 +186,9 @@ R2 and R3 don't duplicate contracts 3 + 4 because:
   describes.
 - [`docs/operations/archive-completeness.md`](../operations/archive-completeness.md)
   — the implementation procedure (bootstrap + daily cron + the
-  `ratesengine-ops archive-completeness` tool).
+  `stellarindex-ops archive-completeness` tool).
 - [`docs/operations/galexie-backfill.md`](../operations/galexie-backfill.md)
   — the original backfill procedure; the completeness daemon
   reuses its `galexie-archive-fill` script for primary repair.
 - [`docs/operations/alerts-catalog.md`](../operations/alerts-catalog.md)
-  — the new `ratesengine_archive_*` alert family this ADR adds.
+  — the new `stellarindex_archive_*` alert family this ADR adds.

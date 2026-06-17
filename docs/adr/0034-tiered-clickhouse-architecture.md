@@ -70,13 +70,13 @@ stress-tested and rejected — see the plan doc §2.
 
 **Positive:** the scale wall is removed; bulk re-derivation is cheap and
 routine; the full explorer is unlocked on a proven columnar engine; the
-pricing proposal keeps its well-suited Postgres tier; provability
+pricing path keeps its well-suited Postgres tier; provability
 (ADR-0033 census) carries over and gets cheaper.
 
 **Negative / cost:** a new stateful service to operate (ClickHouse;
 mitigated by single-node-on-r1 to start, Parquet-on-MinIO durable copy,
 galexie backstop); a decoder input-adapter to read CH; a multi-month,
-phased build (additive — the proposal ships throughout).
+phased build (additive — the product ships throughout).
 
 **Decommissioning (no orphans):** the Postgres tier is *rebuilt* from
 ClickHouse, not repaired — all current Postgres protocol/event data is

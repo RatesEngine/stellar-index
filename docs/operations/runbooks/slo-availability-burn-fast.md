@@ -15,13 +15,13 @@ severity: P1
 | Severity | **P1** (page) |
 | Detected by | `deploy/monitoring/rules/slo.yml` |
 | Typical MTTR | 15–30 min |
-| Impact | We're burning the availability error budget at the **fast** rate. 5xx rate has spiked above the SLO budget for a 5-min/1-hour window combination — at this trajectory a month's budget is gone in ~1 hour. Customers see request failures; the Freighter RFP commits ≥ 99.9 % availability. |
+| Impact | We're burning the availability error budget at the **fast** rate. 5xx rate has spiked above the SLO budget for a 5-min/1-hour window combination — at this trajectory a month's budget is gone in ~1 hour. Consumers see request failures; the service SLA commits ≥ 99.9 % availability. |
 
 ## Symptoms
 
 - Multi-window detection: 5-min 5xx burn AND 1-hour 5xx burn both ≥ 14.4× the budget.
 - `stellarindex_api_error_rate_high` (P3) and likely `stellarindex_api_error_rate_critical` (P1) firing alongside.
-- Customer reports of intermittent 5xx.
+- Reports of intermittent 5xx.
 
 ## Quick diagnosis (≤ 5 min)
 

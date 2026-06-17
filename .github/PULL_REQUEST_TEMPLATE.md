@@ -2,7 +2,7 @@
 Thanks for the PR. Please fill in every section below. If a section
 is truly not applicable, say so explicitly — never delete a section.
 
-The full policy lives in docs/discovery/engineering-standards.md.
+The full policy lives in docs/engineering-standards.md.
 -->
 
 ## Summary
