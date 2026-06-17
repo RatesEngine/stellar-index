@@ -10,7 +10,6 @@ import {
 } from 'lucide-react';
 
 import { Badge, Card, Container, type BadgeTone } from '@/components/ui';
-import { SiteFooter, SiteHeader } from '@/components/SiteChrome';
 
 const API_BASE_URL =
   process.env.NEXT_PUBLIC_API_BASE_URL ?? 'https://api.stellarindex.io';
@@ -255,7 +254,10 @@ const PUBLIC_ENDPOINTS: PublicEndpoint[] = [
     path: '/v1/price/batch',
     group: 'Pricing',
     description: 'Batch lookup, up to 1000 assets',
-    probe: { kind: 'get', path: '/v1/price/batch?asset_ids=native&quote=fiat:USD' },
+    probe: {
+      kind: 'get',
+      path: '/v1/price/batch?asset_ids=native&quote=fiat:USD',
+    },
     tier: 'hot',
   },
   {
@@ -280,37 +282,55 @@ const PUBLIC_ENDPOINTS: PublicEndpoint[] = [
     // — XLM's USD price is a stablecoin-proxied USDC quote per the
     // aggregator policy. Use USDC SAC's underlying classic for
     // probe success.
-    probe: { kind: 'get', path: '/v1/vwap?base=native&quote=USDC-GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN' },
+    probe: {
+      kind: 'get',
+      path: '/v1/vwap?base=native&quote=USDC-GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN',
+    },
   },
   {
     path: '/v1/twap',
     group: 'Pricing',
     description: 'TWAP over a window',
-    probe: { kind: 'get', path: '/v1/twap?base=native&quote=USDC-GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN' },
+    probe: {
+      kind: 'get',
+      path: '/v1/twap?base=native&quote=USDC-GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN',
+    },
   },
   {
     path: '/v1/ohlc',
     group: 'Pricing',
     description: 'OHLC bar',
-    probe: { kind: 'get', path: '/v1/ohlc?base=native&quote=USDC-GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN' },
+    probe: {
+      kind: 'get',
+      path: '/v1/ohlc?base=native&quote=USDC-GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN',
+    },
   },
   {
     path: '/v1/chart',
     group: 'Pricing',
     description: 'Multi-bar chart series',
-    probe: { kind: 'get', path: '/v1/chart?asset=native&quote=fiat:USD&timeframe=24h&granularity=1h' },
+    probe: {
+      kind: 'get',
+      path: '/v1/chart?asset=native&quote=fiat:USD&timeframe=24h&granularity=1h',
+    },
   },
   {
     path: '/v1/history',
     group: 'Historical',
     description: 'Trade history within a window',
-    probe: { kind: 'get', path: '/v1/history?base=native&quote=fiat:USD&limit=1' },
+    probe: {
+      kind: 'get',
+      path: '/v1/history?base=native&quote=fiat:USD&limit=1',
+    },
   },
   {
     path: '/v1/observations',
     group: 'Historical',
     description: 'Per-source latest trade',
-    probe: { kind: 'get', path: '/v1/observations?asset=native&quote=fiat:USD' },
+    probe: {
+      kind: 'get',
+      path: '/v1/observations?asset=native&quote=fiat:USD',
+    },
   },
   {
     path: '/v1/network/stats',
@@ -322,7 +342,8 @@ const PUBLIC_ENDPOINTS: PublicEndpoint[] = [
   {
     path: '/v1/assets',
     group: 'Catalogue',
-    description: 'Asset directory (440K+ classic assets, with coin-overlay fields)',
+    description:
+      'Asset directory (440K+ classic assets, with coin-overlay fields)',
     probe: { kind: 'get', path: '/v1/assets?limit=1' },
   },
   {
@@ -616,55 +637,40 @@ export default function StatusPageClient({
   const overallTone = useMemo(() => toneFor(status?.overall), [status]);
 
   return (
-    <div className="flex min-h-screen flex-col">
-      <SiteHeader />
-      <main className="flex-1">
-        <Container className="max-w-5xl space-y-8 py-10">
-          <PageHead />
-          <OverallBanner
-            status={status?.overall ?? 'unknown'}
-            tone={overallTone}
-          />
-          {error && (
-            <Card className="border-bad-300 bg-bad-50 px-4 py-3 text-sm text-bad-700">
-              Status feed unreachable: {error}.{' '}
-              {status
-                ? 'Showing the last known snapshot below.'
-                : 'No snapshot has been received yet — independent endpoint probes below still show live results, and past incidents are loaded from the build-time corpus.'}
-            </Card>
-          )}
-          {loading && !status && !error && (
-            <Card className="px-4 py-8 text-center text-sm text-ink-faint">
-              Loading status…
-            </Card>
-          )}
-          {status && (
-            <>
-              <ServiceGrid services={status.services} />
-              <LatencyStrip latency={status.latency} />
-              <FreshnessRow freshness={status.freshness} />
-              <IngestionRegions
-                regions={REGIONS}
-                snapshots={ingestionByRegion}
-              />
-              <ActiveIncidents incidents={status.incidents.active} />
-            </>
-          )}
-          {/* EndpointMatrix and IncidentHistory render UNCONDITIONALLY —
+    <Container className="max-w-5xl space-y-8 py-10">
+      <PageHead />
+      <OverallBanner status={status?.overall ?? 'unknown'} tone={overallTone} />
+      {error && (
+        <Card className="border-bad-300 bg-bad-50 px-4 py-3 text-sm text-bad-700">
+          Status feed unreachable: {error}.{' '}
+          {status
+            ? 'Showing the last known snapshot below.'
+            : 'No snapshot has been received yet — independent endpoint probes below still show live results, and past incidents are loaded from the build-time corpus.'}
+        </Card>
+      )}
+      {loading && !status && !error && (
+        <Card className="px-4 py-8 text-center text-sm text-ink-faint">
+          Loading status…
+        </Card>
+      )}
+      {status && (
+        <>
+          <ServiceGrid services={status.services} />
+          <LatencyStrip latency={status.latency} />
+          <FreshnessRow freshness={status.freshness} />
+          <IngestionRegions regions={REGIONS} snapshots={ingestionByRegion} />
+          <ActiveIncidents incidents={status.incidents.active} />
+        </>
+      )}
+      {/* EndpointMatrix and IncidentHistory render UNCONDITIONALLY —
               they don't depend on the /v1/status feed. The matrix runs
               its own independent probes (so red badges show during an
               outage), and the history is seeded from the build-time
               corpus (so past incidents survive a full API outage). WB-02 */}
-          <EndpointMatrix
-            endpoints={PUBLIC_ENDPOINTS}
-            health={endpointHealth}
-          />
-          <IncidentHistory entries={incidentHistory} feed={incidentFeed} />
-          {status && <RegionMeta asOf={asOf} region={status.region} />}
-        </Container>
-      </main>
-      <SiteFooter />
-    </div>
+      <EndpointMatrix endpoints={PUBLIC_ENDPOINTS} health={endpointHealth} />
+      <IncidentHistory entries={incidentHistory} feed={incidentFeed} />
+      {status && <RegionMeta asOf={asOf} region={status.region} />}
+    </Container>
   );
 }
 
@@ -675,13 +681,10 @@ function PageHead() {
         <div className="mb-1.5 text-xs font-medium uppercase tracking-wider text-brand-600">
           System status
         </div>
-        <h1 className="text-h1 font-semibold text-ink">
-          Stellar Index status
-        </h1>
+        <h1 className="text-h1 font-semibold text-ink">Stellar Index status</h1>
         <p className="mt-2 max-w-prose text-[15px] leading-relaxed text-ink-muted">
-          Live service health, request latency, ingest freshness, and the
-          full public-endpoint matrix — probed independently from your
-          browser.
+          Live service health, request latency, ingest freshness, and the full
+          public-endpoint matrix — probed independently from your browser.
         </p>
       </div>
       <div className="flex items-center gap-2 whitespace-nowrap text-sm text-ink-muted">
@@ -777,16 +780,10 @@ function ServiceCard({ service }: { service: ServiceEntry }) {
   );
 }
 
-function LatencyStrip({
-  latency,
-}: {
-  latency: StatusResponse['latency'];
-}) {
+function LatencyStrip({ latency }: { latency: StatusResponse['latency'] }) {
   return (
     <section>
-      <SectionHead
-        aside={`${Math.round(latency.window_secs / 60)}-min window`}
-      >
+      <SectionHead aside={`${Math.round(latency.window_secs / 60)}-min window`}>
         Request latency
       </SectionHead>
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
@@ -808,8 +805,7 @@ function LatencyCell({
   target: number;
 }) {
   const pct = Math.min(100, (value / target) * 100);
-  const tone =
-    pct < 60 ? 'ok' : pct < 100 ? 'warn' : ('bad' as const);
+  const tone = pct < 60 ? 'ok' : pct < 100 ? 'warn' : ('bad' as const);
   const fg = {
     ok: 'text-ok-700',
     warn: 'text-warn-700',
@@ -826,7 +822,7 @@ function LatencyCell({
         {label}
       </div>
       <div className="mt-1 flex items-baseline gap-2">
-        <span className={`text-2xl font-semibold tnum ${fg}`}>
+        <span className={`tnum text-2xl font-semibold ${fg}`}>
           {value.toFixed(1)}
         </span>
         <span className="text-xs text-ink-muted">ms</span>
@@ -865,7 +861,7 @@ function FreshnessRow({
             Active sources
           </div>
           <div className="mt-1 flex items-baseline gap-2">
-            <span className="text-2xl font-semibold tnum text-ink">
+            <span className="tnum text-2xl font-semibold text-ink">
               {freshness.active_sources}
             </span>
             <span className="text-sm text-ink-muted">
@@ -1006,9 +1002,7 @@ type EndpointProbeResult =
 
 // probeEndpoint returns a closure so the same-shape probe runs
 // every poll without re-allocating the URL.
-function probeEndpoint(
-  ep: PublicEndpoint,
-): () => Promise<EndpointProbeResult> {
+function probeEndpoint(ep: PublicEndpoint): () => Promise<EndpointProbeResult> {
   if (ep.probe.kind === 'requires-auth' || ep.probe.kind === 'streaming') {
     const label = ep.probe.kind;
     return () => Promise.resolve({ kind: 'static', label });
@@ -1159,9 +1153,7 @@ function mergeIncidents(
   );
 }
 
-function severityBadgeTone(
-  s: IncidentHistoryEntry['severity'],
-): BadgeTone {
+function severityBadgeTone(s: IncidentHistoryEntry['severity']): BadgeTone {
   return s === 'major' ? 'bad' : s === 'minor' ? 'warn' : 'ok';
 }
 
@@ -1199,44 +1191,44 @@ function IncidentHistory({
         <ul className="space-y-3">
           {entries.map((e) => (
             <li key={e.slug || e.date + e.title}>
-            <Card interactive className="p-4">
-              <div className="flex items-center justify-between gap-3">
-                <div className="flex min-w-0 items-center gap-2">
-                  <Badge tone={severityBadgeTone(e.severity)}>
-                    {e.severity}
-                  </Badge>
-                  {e.slug ? (
-                    <a
-                      href={`/incident/${e.slug}/`}
-                      className="truncate font-medium text-ink hover:text-brand-600"
-                    >
-                      {e.title}
-                    </a>
-                  ) : (
-                    <span className="truncate font-medium text-ink">
-                      {e.title}
-                    </span>
-                  )}
+              <Card interactive className="p-4">
+                <div className="flex items-center justify-between gap-3">
+                  <div className="flex min-w-0 items-center gap-2">
+                    <Badge tone={severityBadgeTone(e.severity)}>
+                      {e.severity}
+                    </Badge>
+                    {e.slug ? (
+                      <a
+                        href={`/incident/${e.slug}/`}
+                        className="truncate font-medium text-ink hover:text-brand-600"
+                      >
+                        {e.title}
+                      </a>
+                    ) : (
+                      <span className="truncate font-medium text-ink">
+                        {e.title}
+                      </span>
+                    )}
+                  </div>
+                  <span className="shrink-0 font-mono text-xs text-ink-faint">
+                    {e.date}
+                  </span>
                 </div>
-                <span className="shrink-0 font-mono text-xs text-ink-faint">
-                  {e.date}
-                </span>
-              </div>
-              <p className="mt-2 text-sm leading-relaxed text-ink-muted">
-                {e.summary}
-              </p>
-              <p className="mt-1 text-xs text-ink-faint">
-                Resolved: {e.resolved}
-              </p>
-              {e.slug && (
-                <a
-                  href={`/incident/${e.slug}/`}
-                  className="mt-2 inline-block text-xs font-medium text-brand-600 hover:underline"
-                >
-                  Read full postmortem →
-                </a>
-              )}
-            </Card>
+                <p className="mt-2 text-sm leading-relaxed text-ink-muted">
+                  {e.summary}
+                </p>
+                <p className="mt-1 text-xs text-ink-faint">
+                  Resolved: {e.resolved}
+                </p>
+                {e.slug && (
+                  <a
+                    href={`/incident/${e.slug}/`}
+                    className="mt-2 inline-block text-xs font-medium text-brand-600 hover:underline"
+                  >
+                    Read full postmortem →
+                  </a>
+                )}
+              </Card>
             </li>
           ))}
         </ul>
@@ -1494,17 +1486,19 @@ function LedgerCard({
         label="24h volume"
         value={ledger.volume_24h_usd ? formatUSD(ledger.volume_24h_usd) : '—'}
       />
-      <Row label="Markets (24h)" value={ledger.markets_count_24h.toLocaleString()} />
-      <Row label="Assets indexed" value={ledger.assets_indexed.toLocaleString()} />
+      <Row
+        label="Markets (24h)"
+        value={ledger.markets_count_24h.toLocaleString()}
+      />
+      <Row
+        label="Assets indexed"
+        value={ledger.assets_indexed.toLocaleString()}
+      />
     </Panel>
   );
 }
 
-function FXBackfillCard({
-  fx,
-}: {
-  fx: IngestionSnapshot['fx_backfill'];
-}) {
+function FXBackfillCard({ fx }: { fx: IngestionSnapshot['fx_backfill'] }) {
   return (
     <Panel title="FX backfill (fx_quotes)">
       <Row
@@ -1555,7 +1549,8 @@ function MarketCapCard({ mc }: { mc: IngestionSnapshot['market_cap'] }) {
           mc.oldest_fetched_at
             ? `${formatAge(
                 Math.floor(
-                  (Date.now() - new Date(mc.oldest_fetched_at).getTime()) / 1000,
+                  (Date.now() - new Date(mc.oldest_fetched_at).getTime()) /
+                    1000,
                 ),
               )} ago`
             : '—'
@@ -1568,12 +1563,20 @@ function MarketCapCard({ mc }: { mc: IngestionSnapshot['market_cap'] }) {
 
 function SupplyCard({ supply }: { supply: IngestionSnapshot['supply'] }) {
   const ageS = supply.last_snapshot_at
-    ? Math.floor((Date.now() - new Date(supply.last_snapshot_at).getTime()) / 1000)
+    ? Math.floor(
+        (Date.now() - new Date(supply.last_snapshot_at).getTime()) / 1000,
+      )
     : null;
   return (
     <Panel title="Supply observers">
-      <Row label="Classic assets" value={supply.classic_assets_with_supply.toLocaleString()} />
-      <Row label="SEP-41 assets" value={supply.sep41_assets_with_supply.toLocaleString()} />
+      <Row
+        label="Classic assets"
+        value={supply.classic_assets_with_supply.toLocaleString()}
+      />
+      <Row
+        label="SEP-41 assets"
+        value={supply.sep41_assets_with_supply.toLocaleString()}
+      />
       <Row
         label="Latest snapshot"
         value={ageS == null ? '—' : `${formatAge(ageS)} ago`}
@@ -1593,8 +1596,8 @@ function BackfillCoverageTable({
   if (!rows || rows.length === 0) {
     return (
       <div className="rounded-lg border border-warn-300 bg-warn-50 p-3 text-xs text-warn-700">
-        Coverage snapshot pending — first refresh runs ~30s after process
-        start, then every 5 min.
+        Coverage snapshot pending — first refresh runs ~30s after process start,
+        then every 5 min.
       </div>
     );
   }
@@ -1613,15 +1616,15 @@ function BackfillCoverageTable({
         )}
       </div>
       <p className="mb-2 text-[11px] text-ink-faint">
-        <strong>Coverage</strong> = verified completeness (ADR-0033). A
-        green % is <strong>fully verified</strong>: the lake is hash-chained
-        to the tip (substrate), every event shape is recognized, AND the
-        served tier reconciles to the lake (Δ=0). <em>reconciling</em> (amber)
-        = data is captured in the lake but the served tier hasn&apos;t
-        reconciled yet — <em>captured, not yet verified</em>; the % shown is
-        capture, not the verdict. <em>unverified</em> = only a gap-free
-        liveness signal exists (the verifier hasn&apos;t run), which can read
-        ~100% for sparse or partially-indexed sources.
+        <strong>Coverage</strong> = verified completeness (ADR-0033). A green %
+        is <strong>fully verified</strong>: the lake is hash-chained to the tip
+        (substrate), every event shape is recognized, AND the served tier
+        reconciles to the lake (Δ=0). <em>reconciling</em> (amber) = data is
+        captured in the lake but the served tier hasn&apos;t reconciled yet —{' '}
+        <em>captured, not yet verified</em>; the % shown is capture, not the
+        verdict. <em>unverified</em> = only a gap-free liveness signal exists
+        (the verifier hasn&apos;t run), which can read ~100% for sparse or
+        partially-indexed sources.
       </p>
       <div className="overflow-hidden rounded-lg border border-line">
         <table className="w-full text-xs">
@@ -1659,7 +1662,8 @@ function BackfillCoverageTable({
               const pct =
                 (ran
                   ? (r.completeness_pct as number)
-                  : (r.coverage_pct ?? r.gap_free_pct ?? r.density_pct ?? 0)) * 100;
+                  : (r.coverage_pct ?? r.gap_free_pct ?? r.density_pct ?? 0)) *
+                100;
               const tone = !ran
                 ? ('pending' as const)
                 : !reconciled
@@ -1677,20 +1681,23 @@ function BackfillCoverageTable({
               };
               return (
                 <tr key={r.source}>
-                  <td className="px-3 py-2 font-mono text-ink-body">{r.source}</td>
-                  <td className="px-3 py-2 text-right font-mono tnum text-ink-muted">
+                  <td className="px-3 py-2 font-mono text-ink-body">
+                    {r.source}
+                  </td>
+                  <td className="tnum px-3 py-2 text-right font-mono text-ink-muted">
                     {r.genesis_ledger?.toLocaleString() ?? '—'}
                   </td>
-                  <td className="px-3 py-2 text-right font-mono tnum text-ink-body">
+                  <td className="tnum px-3 py-2 text-right font-mono text-ink-body">
                     {r.earliest_ledger?.toLocaleString() ?? '—'}
                   </td>
-                  <td className="px-3 py-2 text-right font-mono tnum text-ink-body">
+                  <td className="tnum px-3 py-2 text-right font-mono text-ink-body">
                     {r.latest_ledger?.toLocaleString() ?? '—'}
                   </td>
                   <td
                     className="px-3 py-2 text-right"
                     title={
-                      r.covered_ledgers !== undefined && r.expected_ledgers !== undefined
+                      r.covered_ledgers !== undefined &&
+                      r.expected_ledgers !== undefined
                         ? `${r.covered_ledgers.toLocaleString()} / ${r.expected_ledgers.toLocaleString()} ledgers covered by completed backfill ranges`
                         : undefined
                     }
@@ -1729,7 +1736,7 @@ function BackfillCoverageTable({
                       </span>
                     )}
                   </td>
-                  <td className="px-3 py-2 text-right tnum text-ink-muted">
+                  <td className="tnum px-3 py-2 text-right text-ink-muted">
                     {r.entries.toLocaleString()}
                   </td>
                 </tr>
@@ -1738,10 +1745,13 @@ function BackfillCoverageTable({
             {offChain.map((r) => (
               <tr key={r.source} className="text-ink-muted">
                 <td className="px-3 py-2 font-mono">{r.source}</td>
-                <td className="px-3 py-2 text-right text-[10px] italic" colSpan={4}>
+                <td
+                  className="px-3 py-2 text-right text-[10px] italic"
+                  colSpan={4}
+                >
                   off-chain — no Stellar ledger context
                 </td>
-                <td className="px-3 py-2 text-right tnum">
+                <td className="tnum px-3 py-2 text-right">
                   {r.entries.toLocaleString()}
                 </td>
               </tr>
@@ -1753,11 +1763,7 @@ function BackfillCoverageTable({
   );
 }
 
-function SourceHealthTable({
-  rows,
-}: {
-  rows: IngestionSnapshot['sources'];
-}) {
+function SourceHealthTable({ rows }: { rows: IngestionSnapshot['sources'] }) {
   // Defensive shape-handling — Go marshals nil slices as `null`,
   // not `[]`, so a typed-as-array field can still arrive as null.
   const safeRows = rows ?? [];
@@ -1781,23 +1787,27 @@ function SourceHealthTable({
           </thead>
           <tbody className="divide-y divide-line">
             {safeRows.map((r) => {
-              const classLabel = r.subclass ? `${r.class}/${r.subclass}` : r.class;
+              const classLabel = r.subclass
+                ? `${r.class}/${r.subclass}`
+                : r.class;
               const silent = r.include_in_vwap && r.entries_24h === 0;
               return (
                 <tr key={r.name}>
-                  <td className="px-3 py-2 font-mono text-ink-body">{r.name}</td>
+                  <td className="px-3 py-2 font-mono text-ink-body">
+                    {r.name}
+                  </td>
                   <td className="px-3 py-2 text-ink-muted">{classLabel}</td>
                   <td
-                    className={`px-3 py-2 text-right tnum ${
+                    className={`tnum px-3 py-2 text-right ${
                       silent ? 'text-bad-700' : 'text-ink-body'
                     }`}
                   >
                     {r.entries_24h.toLocaleString()}
                   </td>
-                  <td className="px-3 py-2 text-right tnum text-ink-muted">
+                  <td className="tnum px-3 py-2 text-right text-ink-muted">
                     {r.volume_24h_usd ? formatUSD(r.volume_24h_usd) : '—'}
                   </td>
-                  <td className="px-3 py-2 text-right tnum text-ink-muted">
+                  <td className="tnum px-3 py-2 text-right text-ink-muted">
                     {r.markets_count_24h.toLocaleString()}
                   </td>
                   <td className="px-3 py-2 text-center">

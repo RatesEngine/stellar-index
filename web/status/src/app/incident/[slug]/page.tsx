@@ -6,7 +6,6 @@ import { ArrowLeft, ExternalLink } from 'lucide-react';
 import { loadIncident, loadIncidents } from '@/lib/incidents';
 import { Markdown } from '@/lib/markdown';
 import { Badge, Card, Container, type BadgeTone } from '@/components/ui';
-import { SiteFooter, SiteHeader } from '@/components/SiteChrome';
 
 // Each incident postmortem rendered as its own static page so
 // every event has a permanent, shareable URL — the rest of the
@@ -19,9 +18,10 @@ import { SiteFooter, SiteHeader } from '@/components/SiteChrome';
 // "View source on GitHub" link is omitted entirely — linking the
 // private repo would 404 for every customer (WB-07). Trailing
 // slash trimmed so `${PUBLIC_REPO_URL}/blob/main/...` is clean.
-const PUBLIC_REPO_URL = (
-  process.env.NEXT_PUBLIC_PUBLIC_REPO_URL ?? ''
-).replace(/\/+$/, '');
+const PUBLIC_REPO_URL = (process.env.NEXT_PUBLIC_PUBLIC_REPO_URL ?? '').replace(
+  /\/+$/,
+  '',
+);
 
 export const dynamic = 'error';
 export const dynamicParams = false;
@@ -54,11 +54,7 @@ export default async function IncidentPage({
   if (!inc) notFound();
 
   const sevTone: BadgeTone =
-    inc.severity === 'SEV-1'
-      ? 'bad'
-      : inc.severity === 'SEV-2'
-        ? 'warn'
-        : 'ok';
+    inc.severity === 'SEV-1' ? 'bad' : inc.severity === 'SEV-2' ? 'warn' : 'ok';
   const statusTone: BadgeTone =
     inc.status === 'resolved'
       ? 'ok'
@@ -67,63 +63,57 @@ export default async function IncidentPage({
         : 'warn';
 
   return (
-    <div className="flex min-h-screen flex-col">
-      <SiteHeader />
-      <main className="flex-1">
-        <Container className="max-w-4xl space-y-6 py-10">
-          <Link
-            href="/"
-            className="inline-flex items-center gap-1.5 text-sm text-ink-muted hover:text-brand-600"
-          >
-            <ArrowLeft className="h-3.5 w-3.5" />
-            Back to status
-          </Link>
+    <Container className="max-w-4xl space-y-6 py-10">
+      <Link
+        href="/"
+        className="inline-flex items-center gap-1.5 text-sm text-ink-muted hover:text-brand-600"
+      >
+        <ArrowLeft className="h-3.5 w-3.5" />
+        Back to status
+      </Link>
 
-          <header className="space-y-4 border-b border-line pb-6">
-            <div className="flex flex-wrap items-center gap-2">
-              <Badge tone={sevTone} dot>
-                {inc.severity}
-              </Badge>
-              <Badge tone={statusTone}>{inc.status}</Badge>
-              {inc.affected_components.map((c) => (
-                <span
-                  key={c}
-                  className="inline-flex items-center rounded-full bg-surface-subtle px-2 py-0.5 font-mono text-[10px] text-ink-muted ring-1 ring-inset ring-line"
-                >
-                  {c}
-                </span>
-              ))}
-              <span className="ml-auto font-mono text-xs text-ink-faint">
-                {inc.date}
-              </span>
-            </div>
-            <h1 className="text-h2 font-semibold text-ink">{inc.title}</h1>
-            <Timeline started_at={inc.started_at} resolved_at={inc.resolved_at} />
-            {/* The repo is private until the v1.0 public flip, so a
+      <header className="space-y-4 border-b border-line pb-6">
+        <div className="flex flex-wrap items-center gap-2">
+          <Badge tone={sevTone} dot>
+            {inc.severity}
+          </Badge>
+          <Badge tone={statusTone}>{inc.status}</Badge>
+          {inc.affected_components.map((c) => (
+            <span
+              key={c}
+              className="inline-flex items-center rounded-full bg-surface-subtle px-2 py-0.5 font-mono text-[10px] text-ink-muted ring-1 ring-inset ring-line"
+            >
+              {c}
+            </span>
+          ))}
+          <span className="ml-auto font-mono text-xs text-ink-faint">
+            {inc.date}
+          </span>
+        </div>
+        <h1 className="text-h2 font-semibold text-ink">{inc.title}</h1>
+        <Timeline started_at={inc.started_at} resolved_at={inc.resolved_at} />
+        {/* The repo is private until the v1.0 public flip, so a
                 "View source" link would 404 for every customer. Gate it
                 behind a build-time env flag that holds the PUBLIC repo's
                 base URL (e.g. https://github.com/<org>/<repo>); when
                 unset, drop the link entirely (WB-07). */}
-            {PUBLIC_REPO_URL && (
-              <a
-                href={`${PUBLIC_REPO_URL}/blob/main/${inc.source_path}`}
-                target="_blank"
-                rel="noreferrer noopener"
-                className="inline-flex items-center gap-1 text-xs text-ink-faint hover:text-brand-600"
-              >
-                View source on GitHub
-                <ExternalLink className="h-3 w-3" />
-              </a>
-            )}
-          </header>
+        {PUBLIC_REPO_URL && (
+          <a
+            href={`${PUBLIC_REPO_URL}/blob/main/${inc.source_path}`}
+            target="_blank"
+            rel="noreferrer noopener"
+            className="inline-flex items-center gap-1 text-xs text-ink-faint hover:text-brand-600"
+          >
+            View source on GitHub
+            <ExternalLink className="h-3 w-3" />
+          </a>
+        )}
+      </header>
 
-          <article>
-            <Markdown source={stripDuplicateH1(inc.body)} />
-          </article>
-        </Container>
-      </main>
-      <SiteFooter />
-    </div>
+      <article>
+        <Markdown source={stripDuplicateH1(inc.body)} />
+      </article>
+    </Container>
   );
 }
 
@@ -142,7 +132,10 @@ function Timeline({
   return (
     <div className="grid grid-cols-1 gap-3 text-xs sm:grid-cols-3">
       <Cell label="Started" value={formatTs(started_at)} />
-      <Cell label="Resolved" value={resolved_at ? formatTs(resolved_at) : '—'} />
+      <Cell
+        label="Resolved"
+        value={resolved_at ? formatTs(resolved_at) : '—'}
+      />
       <Cell
         label="Duration"
         value={duration != null ? formatDuration(duration) : '—'}
@@ -165,7 +158,10 @@ function Cell({ label, value }: { label: string; value: string }) {
 function formatTs(iso: string): string {
   const d = new Date(iso);
   if (!Number.isFinite(d.getTime())) return iso;
-  return d.toISOString().replace('T', ' ').replace(/\.\d+Z$/, ' UTC');
+  return d
+    .toISOString()
+    .replace('T', ' ')
+    .replace(/\.\d+Z$/, ' UTC');
 }
 
 function formatDuration(ms: number): string {

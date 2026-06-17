@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import { Inter, JetBrains_Mono } from 'next/font/google';
 import './globals.css';
+import { ConsoleShell } from '@/components/ConsoleShell';
 
 // Inter (UI) + JetBrains Mono (numeric / addresses / code) — loaded exactly
 // like the explorer so the status page renders in the same type system.
@@ -59,7 +60,9 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en" className={`${inter.variable} ${jetbrainsMono.variable}`}>
-      <body className="min-h-screen bg-surface-canvas">{children}</body>
+      <body className="min-h-screen bg-surface-canvas">
+        <ConsoleShell>{children}</ConsoleShell>
+      </body>
     </html>
   );
 }
