@@ -1,0 +1,15 @@
+[Unit]
+Description=pgBackRest scheduled backup (stellarindex stanza)
+Documentation=https://github.com/StellarIndex/stellar-index/blob/main/docs/operations/runbooks/backup-failed.md
+After=postgresql.service network-online.target
+Wants=postgresql.service
+
+[Service]
+Type=oneshot
+User=postgres
+Group=postgres
+ExecStart=/usr/local/bin/pgbackrest-backup.sh
+# Keep backup I/O off the critical path of live ingest.
+Nice=10
+IOSchedulingClass=best-effort
+IOSchedulingPriority=7

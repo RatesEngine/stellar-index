@@ -1,0 +1,40 @@
+---
+# Scheduled pgBackRest backups for the stellarindex stanza.
+#
+# pgBackRest itself (stanza, repo, WAL archiving, retention=2) is
+# configured out-of-band; this task only installs the recurring backup
+# *schedule* — which was missing, so the single bootstrap full backup
+# aged past 24h and tripped `stellarindex_timescale_backup_none_24h`
+# (page) on the status page. Cadence: differential Mon–Sat + a full on
+# Sunday, daily at 02:00, which satisfies both the 24h (page) and 25h
+# (ticket) thresholds in rules.r1/storage.yml. WAL archiving (archive-async)
+# carries the 5-min RPO between backups.
+- name: Install pgBackRest backup wrapper
+  ansible.builtin.template:
+    src: pgbackrest-backup.sh.j2
+    dest: /usr/local/bin/pgbackrest-backup.sh
+    owner: root
+    group: root
+    mode: "0755"
+  when: pgbackrest_backup_enabled | default(true)
+
+- name: Install pgBackRest backup systemd units
+  ansible.builtin.template:
+    src: "systemd/{{ item }}.j2"
+    dest: "/etc/systemd/system/{{ item }}"
+    owner: root
+    group: root
+    mode: "0644"
+  loop:
+    - pgbackrest-backup.service
+    - pgbackrest-backup.timer
+  register: pgbackrest_backup_units
+  when: pgbackrest_backup_enabled | default(true)
+
+- name: Enable + start the pgBackRest backup timer
+  ansible.builtin.systemd:
+    name: pgbackrest-backup.timer
+    enabled: true
+    state: started
+    daemon_reload: "{{ pgbackrest_backup_units is changed }}"
+  when: pgbackrest_backup_enabled | default(true)

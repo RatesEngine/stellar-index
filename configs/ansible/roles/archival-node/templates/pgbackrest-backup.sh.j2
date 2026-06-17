@@ -1,0 +1,12 @@
+#!/usr/bin/env bash
+# Scheduled pgBackRest backup for the stellarindex stanza.
+# Weekly full (Sunday) + differential the rest of the week. Retention
+# (repo1-retention-full=2) prunes old full chains automatically.
+# Installed by the archival-node Ansible role; runs daily via
+# pgbackrest-backup.timer. Satisfies stellarindex_timescale_backup_none_24h
+# (24h, page) + _backup_failed (25h, ticket).
+set -euo pipefail
+STANZA=stellarindex
+if [ "$(date +%u)" -eq 7 ]; then TYPE=full; else TYPE=diff; fi
+echo "pgbackrest-backup: starting --type=$TYPE backup of $STANZA"
+exec pgbackrest --stanza="$STANZA" --type="$TYPE" backup

@@ -1,0 +1,10 @@
+[Unit]
+Description=Daily pgBackRest backup (full Sun / diff Mon-Sat)
+
+[Timer]
+OnCalendar=*-*-* 02:00:00
+RandomizedDelaySec=900
+Persistent=true
+
+[Install]
+WantedBy=timers.target

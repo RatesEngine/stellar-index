@@ -26,6 +26,11 @@
   when: run_postgres | bool
   tags: [postgres]
 
+- name: "pgBackRest backup schedule"
+  ansible.builtin.import_tasks: 18-pgbackrest-backup.yml
+  when: run_postgres | bool
+  tags: [postgres, pgbackrest, backup]
+
 - name: "stellar-core"
   ansible.builtin.import_tasks: 06-stellar-core.yml
   when: run_stellar_core | bool
