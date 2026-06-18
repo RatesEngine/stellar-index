@@ -52,6 +52,7 @@ const NAV: NavGroup[] = [
   {
     items: [
       { href: '/', label: 'Home', icon: LayoutDashboard, exact: true },
+      { href: '/network', label: 'Network', icon: Gauge },
       { href: '/transactions', label: 'Transactions', icon: Receipt },
       { href: '/operations', label: 'Operations', icon: ListTree },
       { href: '/ledgers', label: 'Ledgers', icon: Blocks },

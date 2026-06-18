@@ -17,6 +17,15 @@ against.
 
 ### Added
 
+- **Network throughput time-series + `/network` page, and the asset market-cap
+  timeline chart.** New `GET /v1/network/throughput?window_days=` returns daily
+  ledger / tx / op / Soroban-event counts from `stellar.ledgers` (the
+  time-series companion to the `/v1/network/stats` snapshot); a new explorer
+  `/network` page (+ nav entry) charts it with metric + window toggles and the
+  live snapshot tiles. The asset Supply tab's "market-cap timeline" placeholder
+  is now a real chart, served by the Item-1 `/v1/chart?price_type=market_cap`
+  endpoint (off-chain `crypto:*` reference assets keep a concise note).
+
 - **Operations directory + per-type stats.** `GET /v1/operations` without a
   `?ledger=` now returns the network-wide recent-operations directory (newest
   first, keyset-paged via `?cursor=`) plus `op_type_stats` — the per-op-type

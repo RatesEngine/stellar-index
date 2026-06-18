@@ -249,6 +249,50 @@ func (r *ExplorerReader) OperationTypeStats(ctx context.Context, windowLedgers u
 	return out, rows.Err()
 }
 
+// ThroughputBucket is one day's network throughput from stellar.ledgers.
+type ThroughputBucket struct {
+	Day     time.Time
+	Ledgers int64
+	Txs     int64
+	Ops     int64
+	Events  int64
+}
+
+// NetworkThroughput returns daily network throughput (ledger / tx / op
+// / Soroban-event counts) over the most-recent `windowDays` days,
+// ascending by day. Aggregates stellar.ledgers (which carries the
+// per-ledger counts) bounded to the tip via the ledger-window
+// predicate → partition-pruned. windowDays defaults to 30, capped 365.
+func (r *ExplorerReader) NetworkThroughput(ctx context.Context, windowDays int) ([]ThroughputBucket, error) {
+	if windowDays <= 0 || windowDays > 365 {
+		windowDays = 30
+	}
+	windowLedgers := uint32(windowDays) * 17280 // ~17280 ledgers/day at 5s
+	const q = `SELECT toStartOfDay(close_time) AS day,
+		toInt64(count())                  AS ledgers,
+		toInt64(sum(tx_count))            AS txs,
+		toInt64(sum(op_count))            AS ops,
+		toInt64(sum(soroban_event_count)) AS events
+		FROM stellar.ledgers
+		WHERE ledger_seq > (SELECT max(ledger_seq) FROM stellar.ledgers) - ?
+		GROUP BY day
+		ORDER BY day ASC`
+	rows, err := r.conn.Query(ctx, q, windowLedgers)
+	if err != nil {
+		return nil, fmt.Errorf("clickhouse: network throughput: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+	var out []ThroughputBucket
+	for rows.Next() {
+		var b ThroughputBucket
+		if err := rows.Scan(&b.Day, &b.Ledgers, &b.Txs, &b.Ops, &b.Events); err != nil {
+			return nil, fmt.Errorf("clickhouse: scan throughput: %w", err)
+		}
+		out = append(out, b)
+	}
+	return out, rows.Err()
+}
+
 // OperationsByLedger returns the operations in a ledger, ordered by
 // (tx_index, op_index). Ledger-scoped → partition-pruned + fast (no tx_hash
 // index needed).

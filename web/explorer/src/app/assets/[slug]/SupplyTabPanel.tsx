@@ -1,9 +1,20 @@
 'use client';
 
+import dynamic from 'next/dynamic';
+import { useQuery } from '@tanstack/react-query';
+
 import { Panel } from '@/components/reveal';
-import { asExample } from '@/api/client';
+import { apiGet, asExample } from '@/api/client';
 import { useAsset, useAssetSupply, type AssetSupply } from '@/api/hooks';
 import { formatCompact } from '@/lib/format';
+import { type Envelope } from '../../explorer-shared';
+
+// Lazy-load the chart (~155 KB lightweight-charts) — only the supply
+// tab needs it, and only when there's market-cap history to draw.
+const MarketCapLineChart = dynamic(
+  () => import('@/components/charts/LineChart').then((m) => m.LineChart),
+  { ssr: false, loading: () => <div className="h-[260px]" /> },
+);
 
 /**
  * SupplyTabPanel — backs the "Supply" tab on /assets/[slug].
@@ -115,7 +126,7 @@ export function SupplyTabPanel({ assetID }: { assetID: string }) {
             </div>
           )}
 
-          <MarketCapChartEmpty />
+          <MarketCapChart assetID={assetID} />
 
 
           {a.supply_basis && (
@@ -154,23 +165,51 @@ export function SupplyTabPanel({ assetID }: { assetID: string }) {
   );
 }
 
-// MarketCapChartEmpty surfaces a placeholder where the historical
-// market-cap chart will live. The data source for this is a join
-// between asset_supply_history (per ADR-0011) and the per-asset
-// USD price track — neither is fully backfilled yet for SEP-41
-// tokens, so today the panel renders an explanation rather than
-// an empty SVG. Once both sides land the chart replaces this body.
-function MarketCapChartEmpty() {
+// MarketCapChart renders the historical market-cap timeline for an
+// asset: daily USD price × daily circulating supply (the supply_1d
+// CAGG), served by GET /v1/chart?price_type=market_cap. On-chain assets
+// (native / classic / Soroban) chart; off-chain crypto:* reference
+// assets (no on-chain supply) return an empty series → a concise note.
+function MarketCapChart({ assetID }: { assetID: string }) {
+  const q = useQuery<{ points: { t: string; p: string }[] }>({
+    queryKey: ['/v1/chart', 'market_cap', assetID],
+    retry: false,
+    queryFn: async () => {
+      const env = await apiGet<Envelope<{ points: { t: string; p: string }[] }>>('/v1/chart', {
+        asset: assetID,
+        quote: 'fiat:USD',
+        price_type: 'market_cap',
+        timeframe: '1y',
+        granularity: '1d',
+      });
+      return env.data;
+    },
+    staleTime: 60_000,
+  });
+
+  const points = (q.data?.points ?? []).map((pt) => ({
+    time: Math.floor(Date.parse(pt.t) / 1000),
+    value: Number(pt.p),
+  }));
+
   return (
-    <div className="rounded-lg border border-dashed border-line-strong bg-surface-muted p-4 text-sm text-ink-body">
-      <h4 className="mb-1 font-semibold uppercase tracking-wider text-xs text-ink-muted">
+    <div className="rounded-lg border border-line bg-surface p-4">
+      <h4 className="mb-2 font-semibold uppercase tracking-wider text-xs text-ink-muted">
         Market-cap timeline
       </h4>
-      <p>
-        Coming once the supply-history hypertable backfills join up
-        with the per-asset USD price track. Today we surface only the
-        latest snapshot above.
-      </p>
+      {q.isLoading && <div className="h-[260px]" />}
+      {!q.isLoading && points.length < 2 && (
+        <p className="text-sm text-ink-muted">
+          No market-cap history for this asset — it needs both an on-chain
+          circulating supply and a USD price track over time.
+        </p>
+      )}
+      {points.length >= 2 && (
+        <MarketCapLineChart
+          data={points}
+          ariaLabel={`Daily USD market cap for ${assetID} over the last year`}
+        />
+      )}
     </div>
   );
 }

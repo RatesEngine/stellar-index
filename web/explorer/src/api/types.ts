@@ -3777,6 +3777,70 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/network/throughput": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Daily network throughput time-series.
+         * @description Per-day network counts over the trailing `?window_days=`
+         *     (default 30, max 365), ascending by day: ledgers closed,
+         *     transactions, operations, and Soroban contract-events.
+         *     Aggregated from the certified `stellar.ledgers` lake (which
+         *     carries the per-ledger counts), bounded to the tip so it stays
+         *     partition-pruned. The time-series companion to the snapshot at
+         *     `/v1/network/stats`; backs the explorer `/network` charts.
+         */
+        get: {
+            parameters: {
+                query?: {
+                    window_days?: number;
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Daily throughput buckets. */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            data?: {
+                                window_days?: number;
+                                buckets?: {
+                                    /** Format: date */
+                                    day?: string;
+                                    /** Format: int64 */
+                                    ledgers?: number;
+                                    /** Format: int64 */
+                                    txs?: number;
+                                    /** Format: int64 */
+                                    ops?: number;
+                                    /** Format: int64 */
+                                    events?: number;
+                                }[];
+                            };
+                        };
+                    };
+                };
+                503: components["responses"]["ServiceUnavailable"];
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/methodology": {
         parameters: {
             query?: never;

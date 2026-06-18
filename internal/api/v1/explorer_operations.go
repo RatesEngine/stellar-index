@@ -122,6 +122,51 @@ func (s *Server) handleOperations(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, out, Flags{})
 }
 
+// NetworkThroughputView is the wire response for GET
+// /v1/network/throughput — a daily time-series of network counts.
+type NetworkThroughputView struct {
+	WindowDays int                 `json:"window_days"`
+	Buckets    []ThroughputBucketV `json:"buckets"`
+}
+
+type ThroughputBucketV struct {
+	Day     string `json:"day"`
+	Ledgers int64  `json:"ledgers"`
+	Txs     int64  `json:"txs"`
+	Ops     int64  `json:"ops"`
+	Events  int64  `json:"events"`
+}
+
+// handleNetworkThroughput serves GET /v1/network/throughput — daily
+// ledger / transaction / operation / Soroban-event counts over the
+// trailing `?window_days=` (default 30, max 365), ascending by day.
+// The time-series companion to the /v1/network/stats snapshot.
+func (s *Server) handleNetworkThroughput(w http.ResponseWriter, r *http.Request) {
+	if s.explorer == nil {
+		s.explorerUnavailable(w, r)
+		return
+	}
+	windowDays := parseWindowDays(r, 30)
+	buckets, err := s.explorer.NetworkThroughput(r.Context(), windowDays)
+	if err != nil {
+		if clientAborted(r, err) {
+			return
+		}
+		s.logger.Error("explorer NetworkThroughput failed", "err", err)
+		writeProblem(w, r, "https://api.stellarindex.io/errors/internal",
+			"Internal error", http.StatusInternalServerError, "")
+		return
+	}
+	out := NetworkThroughputView{WindowDays: windowDays, Buckets: make([]ThroughputBucketV, len(buckets))}
+	for i, b := range buckets {
+		out.Buckets[i] = ThroughputBucketV{
+			Day:     b.Day.UTC().Format("2006-01-02"),
+			Ledgers: b.Ledgers, Txs: b.Txs, Ops: b.Ops, Events: b.Events,
+		}
+	}
+	writeJSON(w, out, Flags{})
+}
+
 // handleOperationsDirectory serves the no-ledger path: network-wide
 // recent operations (keyset-paged) + the trailing-24h op-type stats.
 func (s *Server) handleOperationsDirectory(w http.ResponseWriter, r *http.Request) {

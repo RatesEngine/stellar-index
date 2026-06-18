@@ -2521,6 +2521,44 @@ paths:
         "500": { $ref: "#/components/responses/InternalError" }
         "503": { $ref: "#/components/responses/ServiceUnavailable" }
 
+  /network/throughput:
+    get:
+      tags: [explorer]
+      summary: Daily network throughput time-series.
+      description: |
+        Per-day network counts over the trailing `?window_days=`
+        (default 30, max 365), ascending by day: ledgers closed,
+        transactions, operations, and Soroban contract-events.
+        Aggregated from the certified `stellar.ledgers` lake (which
+        carries the per-ledger counts), bounded to the tip so it stays
+        partition-pruned. The time-series companion to the snapshot at
+        `/v1/network/stats`; backs the explorer `/network` charts.
+      parameters:
+        - { name: window_days, in: query, schema: { type: integer, minimum: 1, maximum: 365, default: 30 } }
+      responses:
+        "200":
+          description: Daily throughput buckets.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      window_days: { type: integer }
+                      buckets:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            day:     { type: string, format: date }
+                            ledgers: { type: integer, format: int64 }
+                            txs:     { type: integer, format: int64 }
+                            ops:     { type: integer, format: int64 }
+                            events:  { type: integer, format: int64 }
+        "503": { $ref: "#/components/responses/ServiceUnavailable" }
+
   /methodology:
     get:
       tags: [meta]

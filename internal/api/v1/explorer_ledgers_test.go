@@ -15,6 +15,7 @@ type stubExplorerReader struct {
 	txs            []clickhouse.TxSummary
 	ops            []clickhouse.OpRow
 	opTypeStats    []clickhouse.OpTypeCount
+	throughput     []clickhouse.ThroughputBucket
 	opResults      map[uint32]int32
 	events         []clickhouse.EventSummary
 	contractEvents []clickhouse.ContractActivityRow
@@ -60,6 +61,10 @@ func (s *stubExplorerReader) RecentOperations(_ context.Context, _ int, _ clickh
 
 func (s *stubExplorerReader) OperationTypeStats(_ context.Context, _ uint32) ([]clickhouse.OpTypeCount, error) {
 	return s.opTypeStats, s.err
+}
+
+func (s *stubExplorerReader) NetworkThroughput(_ context.Context, _ int) ([]clickhouse.ThroughputBucket, error) {
+	return s.throughput, s.err
 }
 
 func (s *stubExplorerReader) TransactionByHash(_ context.Context, hash string) (clickhouse.TxSummary, bool, error) {
