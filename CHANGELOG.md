@@ -15,6 +15,19 @@ against.
 
 ## [Unreleased]
 
+### Added
+
+- **Soroban contract current-state reader (ADR-0039) — Blend reserve decoder +
+  interest model.** First half of #84: read on-chain contract state from the
+  lake instead of only events. New `internal/sources/blend/storage.go` decodes
+  Blend `ReserveData` / `ReserveConfig` / `PoolConfig` from Soroban storage (by
+  field name, mirroring the pool contract's `storage.rs`), and `interest.go`
+  ports the pool's interest-rate model (`interest.rs` / `reserve.rs`) —
+  utilization, borrow APR, supply APR — with fixed-point rounding that matches
+  the chain **bit-for-bit** (validated against the contract's own unit-test
+  vectors). ADR-0039 records the read-time-decode architecture. The lake reader
+  + real `/v1/lending/pools` TVL/util/APY wiring follow next.
+
 ## [v0.5.0-rc.120] — 2026-06-18
 
 ### Added
