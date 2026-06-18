@@ -17,6 +17,15 @@ against.
 
 ### Added
 
+- **Blend per-pool lending stats.** `/v1/lending/pools` now lists pools seen in
+  EITHER the auction OR position stream and adds a 30-day net-flow proxy per
+  pool (`net_supplied_30d` / `net_borrowed_30d` in token base-units +
+  `utilization_30d_pct`); the Lending protocol page gains a **Net position by
+  pool** table. These are event-derived WINDOW deltas, not all-time TVL or
+  on-chain utilisation — real current-state TVL + supply/borrow APYs
+  (reserve b_rate/d_rate) still need the Soroban pool-storage reader, which
+  these fields explicitly stand in for.
+
 - **Crypto market-cap-over-time.** `/v1/chart?price_type=market_cap` now
   serves on-chain (native / classic / Soroban) base assets instead of
   returning 501: each day's market cap = the existing daily USD price series

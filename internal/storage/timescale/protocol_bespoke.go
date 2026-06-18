@@ -265,6 +265,7 @@ func (s *Store) bespokeLending(ctx context.Context, source string, windowDays in
 		Notes: []string{
 			"Net supplied / net borrowed are signed running sums of unsigned blend_positions.token_amount over the window — supply/supply_collateral add, withdraw/withdraw_collateral subtract for supplied; borrow adds, repay subtracts for borrowed. They are WINDOW deltas, not all-time TVL (the served tier is retention-scoped); flash_loan is excluded.",
 			"Asset is a Soroban token contract id, shown shortened; amounts are in the token's base units (per-asset decimals).",
+			"Per-pool 'Util %' is the window borrow/supply ratio — a coarse proxy, not on-chain utilisation (which is current reserve borrowed/supplied). Real current-state TVL + supply/borrow APYs need the Soroban pool-storage reader (reserve b_rate/d_rate + totals from contract storage); this block is event-derived and window-scoped until that ships.",
 		},
 	}
 
@@ -330,6 +331,42 @@ func (s *Store) lendingPositionBlocks(ctx context.Context, blk *BespokeBlock, si
 	}
 	if len(tbl.Rows) > 0 {
 		blk.Tables = append(blk.Tables, tbl)
+	}
+
+	poolTbl, err := s.scanTable(ctx,
+		BespokeTable{Title: "Net position by pool", Columns: []string{"Pool", "Net supplied", "Net borrowed", "Util %", "Users", "Events"}},
+		`SELECT pool,
+		   COALESCE(sum(CASE
+		     WHEN event_kind IN ('supply','supply_collateral')    THEN token_amount
+		     WHEN event_kind IN ('withdraw','withdraw_collateral') THEN -token_amount
+		     ELSE 0 END),0)::text,
+		   COALESCE(sum(CASE
+		     WHEN event_kind = 'borrow' THEN token_amount
+		     WHEN event_kind = 'repay'  THEN -token_amount
+		     ELSE 0 END),0)::text,
+		   CASE WHEN COALESCE(sum(CASE
+		         WHEN event_kind IN ('supply','supply_collateral')    THEN token_amount
+		         WHEN event_kind IN ('withdraw','withdraw_collateral') THEN -token_amount
+		         ELSE 0 END),0) > 0
+		     THEN round(100.0 * COALESCE(sum(CASE
+		         WHEN event_kind = 'borrow' THEN token_amount
+		         WHEN event_kind = 'repay'  THEN -token_amount
+		         ELSE 0 END),0) / sum(CASE
+		         WHEN event_kind IN ('supply','supply_collateral')    THEN token_amount
+		         WHEN event_kind IN ('withdraw','withdraw_collateral') THEN -token_amount
+		         ELSE 0 END), 2)::text
+		     ELSE '—' END,
+		   count(DISTINCT user_address)::text,
+		   count(*)::text
+		 FROM blend_positions
+		 WHERE ledger_close_time > now() - $1::interval
+		 GROUP BY pool
+		 ORDER BY count(*) DESC LIMIT 25`, since)
+	if err != nil {
+		return err
+	}
+	if len(poolTbl.Rows) > 0 {
+		blk.Tables = append(blk.Tables, poolTbl)
 	}
 
 	series, err := s.scanDailySeries(ctx, `

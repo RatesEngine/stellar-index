@@ -1174,13 +1174,20 @@ paths:
   /lending/pools:
     get:
       tags: [protocols]
-      summary: Lending pools (Blend) observed in the auction stream.
+      summary: Lending pools (Blend) with auction + net-flow stats.
       description: |
-        One row per distinct Blend pool contract observed in the
-        auction stream, with 24h / all-time auction counts + 30d
-        unique users + last-seen timestamp. Per-pool TVL /
-        utilisation / supply-borrow APYs land via additional
-        fields once the pool-storage reader worker ships.
+        One row per distinct Blend pool contract observed in EITHER
+        the auction stream OR the position-event stream, with 24h /
+        all-time auction counts, 30d unique users, last-seen, plus a
+        30-day net-flow proxy for supply/borrow.
+
+        `net_supplied_30d` / `net_borrowed_30d` are window NET-FLOW
+        deltas (token base-units, summed across the pool's assets),
+        NOT all-time TVL or current reserve balances —
+        `utilization_30d_pct` is the window borrow/supply ratio
+        (omitted when net supply ≤ 0). Real current-state TVL +
+        supply/borrow APYs (reserve b_rate/d_rate) need the Soroban
+        pool-storage reader; these fields stand in until it ships.
       responses:
         "200":
           description: Array of LendingPool rows.
@@ -1191,7 +1198,18 @@ paths:
                 properties:
                   data:
                     type: array
-                    items: { type: object }
+                    items:
+                      type: object
+                      properties:
+                        protocol:            { type: string }
+                        pool:                { type: string }
+                        auctions_24h:        { type: integer, format: int64 }
+                        auctions_total:      { type: integer, format: int64 }
+                        unique_users_30d:    { type: integer, format: int64 }
+                        last_seen:           { type: string, format: date-time }
+                        net_supplied_30d:    { type: string, description: "Token base-units, 30d net-flow proxy (not TVL)." }
+                        net_borrowed_30d:    { type: string, description: "Token base-units, 30d net-flow proxy." }
+                        utilization_30d_pct: { type: number, nullable: true, description: "Window borrow/supply ratio %; null when net supply ≤ 0." }
 
   /oracle/streams:
     get:

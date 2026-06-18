@@ -294,39 +294,80 @@ type BlendAssetAmount struct {
 }
 
 // BlendPoolSummary is one row of the /v1/lending/pools listing.
-// Identifies a Blend pool contract observed in our auction
-// stream (any pool that has ever emitted a new/fill/delete
-// event into blend_auctions). Per-pool TVL / utilisation /
-// supply-borrow APYs land once the pool-storage reader worker
-// ships — surfaced via additional fields then.
+// Identifies a Blend pool contract observed in our event stream
+// (auctions and/or position events), with auction activity plus a
+// 30-day net-flow proxy for supply/borrow.
+//
+// NetSupplied30d / NetBorrowed30d are window NET-FLOW deltas from
+// blend_positions (token base-units, summed across the pool's
+// assets), NOT all-time TVL or current balances — the served tier is
+// retention-scoped, and event flow ≠ on-chain reserve state. Real
+// current-state TVL + supply/borrow APYs need the Soroban pool-
+// storage reader (reserve b_rate/d_rate + totals from
+// ledger_entry_changes); that's the follow-up these fields stand in
+// for.
 type BlendPoolSummary struct {
 	Pool           string
 	Auctions24h    int64
 	AuctionsTotal  int64
 	UniqueUsers30d int64
 	LastSeen       time.Time
+	NetSupplied30d string // token base-units, 30d net flow (proxy, not TVL)
+	NetBorrowed30d string // token base-units, 30d net flow (proxy)
 }
 
-// ListBlendPools returns one row per distinct pool contract
-// observed in blend_auctions, with auction counts and last-seen
-// timestamps. Sorted by AuctionsTotal desc so high-activity
-// pools surface first; ties broken by pool address for
-// deterministic output.
+// ListBlendPools returns one row per distinct pool contract observed
+// in EITHER blend_auctions OR blend_positions, with auction counts,
+// last-seen, and a 30-day net-flow proxy for supply/borrow. Sorted
+// by AuctionsTotal desc so high-activity pools surface first; ties
+// broken by pool address for deterministic output.
 //
-// 24h / 30d windows match the rest of the activity surfaces
-// (24h on /assets / /sources, 30d for the unique-user roll-up
-// since liquidations cluster).
+// 24h / 30d windows match the rest of the activity surfaces (24h on
+// /assets / /sources, 30d for the unique-user + net-flow roll-ups
+// since liquidations and positions cluster).
 func (s *Store) ListBlendPools(ctx context.Context) ([]BlendPoolSummary, error) {
 	const q = `
-        SELECT pool,
-               COUNT(*) FILTER (WHERE ts > NOW() - INTERVAL '24 hours') AS auctions_24h,
-               COUNT(*)                                                  AS auctions_total,
-               COUNT(DISTINCT user_address)
-                 FILTER (WHERE ts > NOW() - INTERVAL '30 days')          AS unique_users_30d,
-               MAX(ts)                                                   AS last_seen
-          FROM blend_auctions
-         GROUP BY pool
-         ORDER BY auctions_total DESC, pool ASC
+        WITH pools AS (
+            SELECT DISTINCT pool FROM blend_auctions
+            UNION
+            SELECT DISTINCT pool FROM blend_positions
+        ),
+        auc AS (
+            SELECT pool,
+                   COUNT(*) FILTER (WHERE ts > NOW() - INTERVAL '24 hours') AS a24,
+                   COUNT(*)                                                  AS atot,
+                   COUNT(DISTINCT user_address)
+                     FILTER (WHERE ts > NOW() - INTERVAL '30 days')          AS users30,
+                   MAX(ts)                                                   AS last_auction
+              FROM blend_auctions GROUP BY pool
+        ),
+        pos AS (
+            SELECT pool,
+                   COALESCE(sum(CASE
+                     WHEN event_kind IN ('supply','supply_collateral')    THEN token_amount
+                     WHEN event_kind IN ('withdraw','withdraw_collateral') THEN -token_amount
+                     ELSE 0 END) FILTER (WHERE ledger_close_time > NOW() - INTERVAL '30 days'),0) AS net_supplied,
+                   COALESCE(sum(CASE
+                     WHEN event_kind = 'borrow' THEN token_amount
+                     WHEN event_kind = 'repay'  THEN -token_amount
+                     ELSE 0 END) FILTER (WHERE ledger_close_time > NOW() - INTERVAL '30 days'),0) AS net_borrowed,
+                   COUNT(DISTINCT user_address)
+                     FILTER (WHERE ledger_close_time > NOW() - INTERVAL '30 days') AS pos_users30,
+                   MAX(ledger_close_time) AS last_position
+              FROM blend_positions GROUP BY pool
+        )
+        SELECT p.pool,
+               COALESCE(auc.a24, 0),
+               COALESCE(auc.atot, 0),
+               GREATEST(COALESCE(auc.users30, 0), COALESCE(pos.pos_users30, 0)),
+               GREATEST(COALESCE(auc.last_auction, 'epoch'::timestamptz),
+                        COALESCE(pos.last_position, 'epoch'::timestamptz)),
+               COALESCE(pos.net_supplied, 0)::text,
+               COALESCE(pos.net_borrowed, 0)::text
+          FROM pools p
+          LEFT JOIN auc ON auc.pool = p.pool
+          LEFT JOIN pos ON pos.pool = p.pool
+         ORDER BY COALESCE(auc.atot, 0) DESC, p.pool ASC
     `
 	rows, err := s.db.QueryContext(ctx, q)
 	if err != nil {
@@ -336,7 +377,8 @@ func (s *Store) ListBlendPools(ctx context.Context) ([]BlendPoolSummary, error) 
 	var out []BlendPoolSummary
 	for rows.Next() {
 		var p BlendPoolSummary
-		if err := rows.Scan(&p.Pool, &p.Auctions24h, &p.AuctionsTotal, &p.UniqueUsers30d, &p.LastSeen); err != nil {
+		if err := rows.Scan(&p.Pool, &p.Auctions24h, &p.AuctionsTotal, &p.UniqueUsers30d,
+			&p.LastSeen, &p.NetSupplied30d, &p.NetBorrowed30d); err != nil {
 			return nil, fmt.Errorf("timescale: ListBlendPools scan: %w", err)
 		}
 		out = append(out, p)

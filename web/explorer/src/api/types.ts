@@ -2011,12 +2011,19 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * Lending pools (Blend) observed in the auction stream.
-         * @description One row per distinct Blend pool contract observed in the
-         *     auction stream, with 24h / all-time auction counts + 30d
-         *     unique users + last-seen timestamp. Per-pool TVL /
-         *     utilisation / supply-borrow APYs land via additional
-         *     fields once the pool-storage reader worker ships.
+         * Lending pools (Blend) with auction + net-flow stats.
+         * @description One row per distinct Blend pool contract observed in EITHER
+         *     the auction stream OR the position-event stream, with 24h /
+         *     all-time auction counts, 30d unique users, last-seen, plus a
+         *     30-day net-flow proxy for supply/borrow.
+         *
+         *     `net_supplied_30d` / `net_borrowed_30d` are window NET-FLOW
+         *     deltas (token base-units, summed across the pool's assets),
+         *     NOT all-time TVL or current reserve balances —
+         *     `utilization_30d_pct` is the window borrow/supply ratio
+         *     (omitted when net supply ≤ 0). Real current-state TVL +
+         *     supply/borrow APYs (reserve b_rate/d_rate) need the Soroban
+         *     pool-storage reader; these fields stand in until it ships.
          */
         get: {
             parameters: {
@@ -2034,7 +2041,24 @@ export interface paths {
                     };
                     content: {
                         "application/json": {
-                            data?: Record<string, never>[];
+                            data?: {
+                                protocol?: string;
+                                pool?: string;
+                                /** Format: int64 */
+                                auctions_24h?: number;
+                                /** Format: int64 */
+                                auctions_total?: number;
+                                /** Format: int64 */
+                                unique_users_30d?: number;
+                                /** Format: date-time */
+                                last_seen?: string;
+                                /** @description Token base-units, 30d net-flow proxy (not TVL). */
+                                net_supplied_30d?: string;
+                                /** @description Token base-units, 30d net-flow proxy. */
+                                net_borrowed_30d?: string;
+                                /** @description Window borrow/supply ratio %; null when net supply ≤ 0. */
+                                utilization_30d_pct?: number | null;
+                            }[];
                         };
                     };
                 };

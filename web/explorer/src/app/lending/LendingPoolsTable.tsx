@@ -14,6 +14,21 @@ interface LendingPool {
   auctions_total: number;
   unique_users_30d: number;
   last_seen: string;
+  net_supplied_30d?: string;
+  net_borrowed_30d?: string;
+  utilization_30d_pct?: number | null;
+}
+
+// Compact display of a token base-units magnitude (string big-int).
+// Display-only; precision loss past 2^53 is fine for an at-a-glance
+// column (the API ships the exact decimal string).
+const compactNum = new Intl.NumberFormat('en-US', { notation: 'compact', maximumFractionDigits: 1 });
+
+function fmtNetFlow(s: string | undefined): string {
+  if (!s || s === '0') return '—';
+  const n = Number(s);
+  if (!Number.isFinite(n) || n === 0) return '—';
+  return compactNum.format(n);
 }
 
 // Curated metadata for every Blend mainnet contract we know of.
@@ -100,7 +115,7 @@ export function LendingPoolsTable() {
   return (
     <Panel
       title={`Pools${rows.length > 0 ? ` (${rows.length})` : ''}`}
-      hint="One row per Blend pool observed in the auction stream"
+      hint="One row per Blend pool. Net flow (30d) + util % are window event proxies in token base-units — not all-time TVL or on-chain utilisation (those need the pool-storage reader)."
       source={asExample('/v1/lending/pools', {})}
       bodyClassName="-mx-4"
     >
@@ -113,6 +128,8 @@ export function LendingPoolsTable() {
               <Th>Deployed</Th>
               <Th align="right">24h auctions</Th>
               <Th align="right">All-time auctions</Th>
+              <Th align="right">Net supplied (30d)</Th>
+              <Th align="right">Util %</Th>
               <Th align="right">Users (30d)</Th>
               <Th align="right">Last activity</Th>
             </tr>
@@ -120,14 +137,14 @@ export function LendingPoolsTable() {
           <tbody className="divide-y divide-line-subtle">
             {q.isLoading && (
               <tr>
-                <td colSpan={7} className="px-4 py-6 text-center text-sm text-ink-muted">
+                <td colSpan={9} className="px-4 py-6 text-center text-sm text-ink-muted">
                   Loading pools…
                 </td>
               </tr>
             )}
             {!q.isLoading && rows.length === 0 && (
               <tr>
-                <td colSpan={7} className="px-4 py-6 text-center text-sm text-ink-muted">
+                <td colSpan={9} className="px-4 py-6 text-center text-sm text-ink-muted">
                   No Blend pools have emitted auction events yet.
                 </td>
               </tr>
@@ -184,6 +201,16 @@ export function LendingPoolsTable() {
                   <Td align="right">
                     <span className="font-mono tabular-nums text-ink-body">
                       {p.auctions_total.toLocaleString()}
+                    </span>
+                  </Td>
+                  <Td align="right">
+                    <span className="font-mono tabular-nums text-ink-body" title={p.net_supplied_30d}>
+                      {fmtNetFlow(p.net_supplied_30d)}
+                    </span>
+                  </Td>
+                  <Td align="right">
+                    <span className="font-mono tabular-nums text-ink-body">
+                      {p.utilization_30d_pct != null ? `${p.utilization_30d_pct.toFixed(1)}%` : '—'}
                     </span>
                   </Td>
                   <Td align="right">

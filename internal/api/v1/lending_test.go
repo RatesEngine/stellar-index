@@ -58,6 +58,8 @@ func TestLendingPools_HappyPath(t *testing.T) {
 				AuctionsTotal:  5687,
 				UniqueUsers30d: 4,
 				LastSeen:       lastSeen,
+				NetSupplied30d: "1000",
+				NetBorrowed30d: "400",
 			},
 			{
 				Pool:           "CCCCIQSDILITHMM7PBSLVDT5MISSY7R26MNZXCX4H7J5JQ5FPIYOGYFS",
@@ -100,6 +102,16 @@ func TestLendingPools_HappyPath(t *testing.T) {
 	}
 	if !first.LastSeen.Equal(lastSeen) {
 		t.Errorf("LastSeen = %v, want %v", first.LastSeen, lastSeen)
+	}
+	if first.NetSupplied30d != "1000" || first.NetBorrowed30d != "400" {
+		t.Errorf("net-flow = (supplied=%q, borrowed=%q), want (1000, 400)", first.NetSupplied30d, first.NetBorrowed30d)
+	}
+	if first.Utilization30dPct == nil || *first.Utilization30dPct != 40 {
+		t.Errorf("Utilization30dPct = %v, want 40 (400/1000)", first.Utilization30dPct)
+	}
+	// Second pool has no net-flow fields set → utilisation omitted.
+	if env.Data[1].Utilization30dPct != nil {
+		t.Errorf("Utilization30dPct (pool 2) = %v, want nil (no net supply)", *env.Data[1].Utilization30dPct)
 	}
 }
 
