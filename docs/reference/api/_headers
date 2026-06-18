@@ -15,6 +15,22 @@
   Access-Control-Allow-Methods: GET, HEAD, OPTIONS
   Access-Control-Allow-Headers: Content-Type
   X-Content-Type-Options: nosniff
+  # Security headers — bring the docs host to parity with the
+  # explorer + status sites (web/{explorer,status}/public/_headers).
+  # These four are resource-loading-AGNOSTIC: they harden the host
+  # without restricting what the page may load, so they're safe even
+  # though the Scalar renderer pulls its bundle from cdn.jsdelivr.net.
+  # (A full Content-Security-Policy is deliberately NOT set here: a
+  # strict script-src 'self' would break Scalar's third-party CDN
+  # load, and a Scalar-tailored policy needs live browser testing —
+  # tracked as a follow-up. Clickjacking is already covered by the
+  # X-Frame-Options: DENY below, which every browser honours.)
+  X-Frame-Options: DENY
+  Referrer-Policy: strict-origin-when-cross-origin
+  Permissions-Policy: accelerometer=(), camera=(), geolocation=(), microphone=(), payment=(), usb=()
+  # HSTS — every *.stellarindex.io surface is HTTPS-only at the edge,
+  # so includeSubDomains is safe. `preload` omitted (matches siblings).
+  Strict-Transport-Security: max-age=31536000; includeSubDomains
 
 # YAML files specifically — declare the right Content-Type so
 # spec parsers don't fall back to the CF default (text/plain) and
